@@ -58,7 +58,7 @@ const ofCompare = { diffTest: "verify.diff.ts" } as const;
 const ofSort = { diffTest: "collections.diff.ts" } as const;
 const ofSearch = { diffTest: "choiceDependent.diff.ts" } as const;
 const ofCheck = { diffTest: "validation.diff.ts" } as const;
-const ofMoves = { diffTest: "run.diff.ts" } as const;
+const ofExplored = { diffTest: "run.diff.ts" } as const;
 const ofRenaming = {
   because:
     "a property of the renaming relation, which the identity theorems use and no run computes, so no spec or trace can exercise it",
@@ -137,7 +137,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
     scenario: "intoRegion",
   },
   modal_child_covers: { kindExample: "InvalidInput.coveredByModal" },
-  moves_enabled: ofMoves,
+  moves_enabled: ofExplored,
   no_violation_iff: ofCompare,
   only_clock_moves_time: network("delivered"),
   operate_agrees: ofAudit,
@@ -176,7 +176,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
       "states that two runs whose Given writes the same records in other orders are alike, which compares two runs that no fixture holds",
   },
   simulate_reported: network("leftInFlight"),
-  slots_complete: ofMoves,
+  slots_complete: ofExplored,
   sortByKey_equal_keys_in_canonical_order: ofSort,
   sortByKey_perm: ofSort,
   sortCanonical_perm: ofSort,
@@ -191,6 +191,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   subscribe_agrees: ofAudit,
   then_only_reports: network("unmetExpectation"),
   unchanged_answer_not_sent: { example: "service/Query/changed_answer_sent", scenario: "subscribed" },
+  uncovered_unreached: ofExplored,
   unlisted_emitted_event_halts: { kindExample: "Fault.unlistedEmittedEvent" },
   unwritten_not_created: { example: "sim/Run/keys", scenario: "givenKeyApart" },
 };

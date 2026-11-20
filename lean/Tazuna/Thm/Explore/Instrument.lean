@@ -59,6 +59,13 @@ theorem Agrees.filterMapM {α β : Type} {f : α → StateT C Id (Option β)} {g
     simp only [List.filterMapM.loop]
     exact Agrees.bind (hf y) (fun b => by cases b <;> exact ih _)
 
+theorem Agrees.forM {α : Type} {f : α → StateT C Id PUnit} {g : α → Id PUnit} (hf : ∀ a, Agrees (f a) (g a))
+    (xs : List α) : Agrees (xs.forM f) (xs.forM g) := by
+  induction xs with
+  | nil => exact Agrees.pure _
+  | cons x xs ih =>
+    exact Agrees.bind (hf x) fun _ => ih
+
 theorem Agrees.mapM {α β : Type} {f : α → StateT C Id β} {g : α → Id β} (hf : ∀ a, Agrees (f a) (g a))
     (xs : List α) : Agrees (xs.mapM f) (xs.mapM g) := by
   induction xs with
@@ -121,6 +128,7 @@ macro_rules
       | refine Agrees.map _ ?_
       | refine Agrees.foldlM (fun _ _ => ?_) _ _
       | refine Agrees.filterMapM (fun _ => ?_) _
+      | refine Agrees.forM (fun _ => ?_) _
       | with_reducible exact note_agrees _
       | with_reducible exact expectFound_agrees _ _
       | split
@@ -193,7 +201,6 @@ theorem closeFinal_agrees (step : Nat) (name : InstanceId) (r : Processing) :
   unfold closeFinal; refine withMachine_agrees (fun i r => ?_) r
   agree [h.close, sorted_agrees, h.closeEnsures, endWith_agrees (exitOne_agrees h _)]
 
-omit [MonadNote (StateT C Id)] in
 theorem request_agrees (step : Nat) (name : InstanceId) (state : String) (a : Activity) (r : Processing) :
     Agrees (request fsI st step name state a r) (request fs st step name state a r) := by
   unfold request; refine withMachine_agrees (fun i r => ?_) r; agree [h.input, sorted_agrees]
@@ -259,7 +266,6 @@ theorem microstep_agrees (step : Nat) (name : InstanceId) (chosen : List (Instan
   unfold microstep; refine withMachine_agrees (fun i r => ?_) r
   agree [note_agrees, transitionContent_agrees h, unlessHalted_agrees, exitOne_agrees h, enterOne_agrees h]
 
-omit [MonadNote (StateT C Id)] in
 theorem choose_agrees (s : State) (i : Instance) (extra : Extra) (ts : List Transition) :
     Agrees (choose fsI st s i extra ts) (choose fs st s i extra ts) := by
   induction ts with
@@ -385,8 +391,7 @@ theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
   refine settled_agrees h step _ (fun r => ?_) _
   obtain ⟨s, q⟩ := r
   cases w <;> unfold workBody <;>
-    agree [firstFalse_agrees (fun _ => h.automationBinding _ _ _ _ _),
-      firstFalse_agrees (fun _ => h.automationGuard _ _ _ _ _), h.react, sorted_agrees, answerTo_agrees h, startWork_agrees h, receiveWork_agrees h, doneWork_agrees h,
+    agree [firstFalse_agrees (fun _ => ?_), h.automationBinding, h.automationGuard, h.react, sorted_agrees, answerTo_agrees h, startWork_agrees h, receiveWork_agrees h, doneWork_agrees h,
       withMachine_agrees, applyCompletion_agrees h]
 
 theorem resolveChecked_agrees (s : State) (name : String) (raw : Value) :

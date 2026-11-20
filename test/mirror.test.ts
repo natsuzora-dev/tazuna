@@ -15,12 +15,12 @@ const tsPaths = (folder: string) =>
     .filter((file) => file.endsWith(".ts"))
     .map((file) => file.slice(0, -".ts".length));
 
-test("The .ts paths under src/service are the .lean paths under lean/Tazuna/Service with a lowercase first letter in each part (chart/exit.ts for Chart/Exit.lean), except InvalidInput.lean, Fault.lean, Step.lean, and Limits.lean, which generate TS in src/data", () => {
+test("The .ts paths under src/service are the .lean paths under lean/Tazuna/Service with a lowercase first letter in each part (chart/exit.ts for Chart/Exit.lean), except InvalidInput.lean, Fault.lean, Step.lean, Limits.lean, and Uncovered.lean, which generate TS in src/data", () => {
   assert.deepEqual(
     new Set(tsPaths("service")),
     new Set(
       leanModulePaths("Service")
-        .filter((path) => !["InvalidInput", "Fault", "Step", "Limits"].includes(path))
+        .filter((path) => !["InvalidInput", "Fault", "Step", "Limits", "Uncovered"].includes(path))
         .map(lowerFirst),
     ),
   );

@@ -19,7 +19,9 @@ def choose (st : Service) (s : State) (i : Instance) (extra : Extra) :
     match ← firstFalse (fs.guard (s.scopeOf i t.source) s.records t · extra) t.guards with
     | .error e => pure (.error (issueViolation (st.ref i.chart.name) e))
     | .ok none => pure (.ok (some t))
-    | .ok (some _) => choose st s i extra rest
+    | .ok (some c) =>
+      MonadNote.note (.reached (.guardFalse (st.ref i.chart.name) t.ref c))
+      choose st s i extra rest
 
 def firstLevel (st : Service) (s : State) (extra : Extra) : List (Instance × List Transition) →
     m (Except Fault (Option (InstanceId × Transition)))

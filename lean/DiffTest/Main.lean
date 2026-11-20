@@ -267,6 +267,8 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
   let ran : ActingIO Sim.World :=
     if executing then Sim.execute spec fsOf start sc else Sim.simulate spec fsOf start sc
   let (w, acting) ← ran.run {}
+  let reachedAll := w.states.foldl (fun acc (service, _) =>
+    (acting.collect service).reached.foldl (fun acc u => if acc.contains u then acc else acc ++ [u]) acc) []
   let (services, _) ← (w.states.mapM fun ((service, s) : String × State) => do
     let c := acting.collect service
     let running := match executing, s.halted, w.services.lookup service with
@@ -293,7 +295,13 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
             fault := next.bind fun
               | .error f => some (Finding.fault f).toViolation
               | .ok _ => none
-            state := running.map fun st => (Explore.stateValue st s).flatten } : SimulatedService)).run acting
+            state := running.map fun st => (Explore.stateValue st s).flatten
+            reached := if executing then
+                some (c.reached.mergeSort fun a b => decide ((ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical))
+              else none
+            uncovered := if executing && explore.isSome && service == sc.service then
+                some (Explore.uncovered spec reachedAll)
+              else none } : SimulatedService)).run acting
   pure (.simulated services w.violations w.halted)
 
 /-- A search, as TS writes it. -/

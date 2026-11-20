@@ -14,6 +14,7 @@ deriving Repr, Inhabited
 def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (raw : Value) :
     m Resolution := do
   let definition := st.ref name
+  MonadNote.note (.reached (.request definition))
   match ← fs.parseOutside st (.input definition) raw with
   | .error e => pure (.halted (issueViolation definition e))
   | .ok none => pure (.answered (.rejected { kind := .invalidInput }) [])
@@ -21,15 +22,21 @@ def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
     let rq ← expectFound s!"requirements of {name}" (st.requirements.lookup name)
     match ← firstFalse (fs.inputRequirement definition · input) rq.requires with
     | .error e => pure (.halted (issueViolation definition e))
-    | .ok (some reason) => pure (.answered (.rejected { kind := .requires, reason := some reason }) [])
+    | .ok (some reason) =>
+      MonadNote.note (.reached (.requiresRejection definition reason))
+      pure (.answered (.rejected { kind := .requires, reason := some reason }) [])
     | .ok none =>
       match ← fs.resolve name input s.records s.now with
       | .error e => pure (.halted (issueViolation definition e fun _ => .outputSchema definition))
       | .ok output =>
         match ← fs.queryEnsures name input output s.records with
         | .error e => pure (.halted (issueViolation definition e))
-        | .ok (some c) => pure (.answered (.fulfilled output) [st.failedEnsures name c])
-        | .ok none => pure (.answered (.fulfilled output) [])
+        | .ok (some c) =>
+          MonadNote.note (.reached (.successAnswer definition))
+          pure (.answered (.fulfilled output) [st.failedEnsures name c])
+        | .ok none =>
+          MonadNote.note (.reached (.successAnswer definition))
+          pure (.answered (.fulfilled output) [])
 
 def publishOne [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (sub : Subscription) :
     m State := do

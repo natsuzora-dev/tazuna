@@ -11,6 +11,7 @@ import type { Answer, LineId, Rejection, TraceLine } from "../../src/data/trace.
 import type { Run } from "../../src/data/traceFile.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
 import type { Uncomparable } from "../../src/data/uncomparable.generated.ts";
+import type { Uncovered } from "../../src/data/uncovered.generated.ts";
 import type { Json } from "../../src/data/values.ts";
 import type { ViolationValue } from "../../src/data/violation.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
@@ -710,6 +711,13 @@ export type SimulatedService = {
   readonly enabled?: Enabled;
   readonly moves?: readonly (readonly Line[])[];
   readonly fault?: ViolationValue;
+  /** When it runs as explore does, the parts that it reached, in the order of their canonical JSON. */
+  readonly reached?: readonly Uncovered[];
+  /**
+   * For the own service, with `explore`, what `test --coverage` reports when this run is the only one: the parts that no
+   * running service reached.
+   */
+  readonly uncovered?: readonly Uncovered[];
   /** The state that ChoiceDependent compares (Explore.stateValue), given with `enabled`. */
   readonly state?: Json;
 };

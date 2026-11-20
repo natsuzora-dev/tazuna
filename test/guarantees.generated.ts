@@ -128,6 +128,7 @@ export const guarantees = [
   "subscribe_agrees",
   "then_only_reports",
   "unchanged_answer_not_sent",
+  "uncovered_unreached",
   "unlisted_emitted_event_halts",
   "untaken_operation_changes_nothing",
   "unwritten_not_created",

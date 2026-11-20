@@ -47,7 +47,8 @@ def request (st : Service) (step : Nat) (name : InstanceId) (state : String) (a 
         let sent : Sent := { order := i.chart.order, requester := .state name state, activity := a, serial := some serial,
                              input, cause := step }
         pure ⟨s, { r.queue with round := r.queue.round ++ [sent] }⟩
-      else
+      else do
+        MonadNote.note (.reached (.request a.ref))
         pure ⟨r.state.await (a.requestLine input) (.state name state) a input, r.queue⟩
 
 def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) : Processing → m Processing :=

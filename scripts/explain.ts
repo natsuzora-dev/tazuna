@@ -32,7 +32,7 @@ const comment = String.raw`/\*\*((?:(?!\*/)[\s\S])*)\*/\s*`;
 
 /**
  * The doc comment of a kind's member of its group's union, or of the group's one member: `{ readonly kind: "<kind>"` in
- * a generated file, `Of<"<name>"` in a TS one. Uncovered documents the parts of Obligation, whose kinds it prefixes.
+ * a generated file, `Of<"<name>"` in a TS one.
  */
 function meaningOf(kind: Kind, group: Group): string {
   const name = kind.slice(group.length + 1);

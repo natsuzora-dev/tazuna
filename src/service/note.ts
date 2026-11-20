@@ -88,7 +88,6 @@ export interface RegionCheck {
  * - Lean's `read` (record parts read without asking Functions) has no member: readRecord reports those reads too.
  * - readNow and wroteNow are TS only: reading and advancing the time, which only the evaluation cache hears, since
  *   the time advances only between steps.
- * - reached is TS only: the coverage hits that explore reads.
  */
 export interface Note {
   stepBegins(step: number, name: StepName, started: InstanceId | undefined): void;

@@ -60,7 +60,11 @@ def refresh [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State
     if i.closed then pure s else
     match ← wantedShows st fs s i with
     | .error fault => pure (s.report (.fault fault))
-    | .ok wanted => pure (s.syncShows owner wanted)
+    | .ok wanted =>
+      let opened := s.openShows owner
+      wanted.forM fun w => if opened.any (fun p => p.requester.slot? == some w.slot && p.input == w.input) then pure ()
+        else MonadNote.note (.reached (.request w.activity.ref))
+      pure (s.syncShows owner wanted)
 
 def refreshScreens [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State :=
   s.machines.foldlM (fun s i => if s.halted.isSome || !i.chart.screen then pure s else refresh st fs s i.id) s

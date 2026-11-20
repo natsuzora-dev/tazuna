@@ -183,11 +183,22 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
   | .reaction a ((e :: _) :: _) _ _, ⟨s, q⟩ => do
     let faulted (issue : Issue) : Processing :=
       ⟨s.report (.fault (issueViolation (st.ref a.name) issue fun _ => .inputSchema (st.ref a.name) a.sends.ref)), q⟩
-    match ← firstFalse (fs.automationBinding a.name · e.payload s.records s.now) a.binds with
+    let definition := st.ref a.name
+    MonadNote.note (.reached (.automation definition))
+    let bound (b : String) := do
+      let r ← fs.automationBinding a.name b e.payload s.records s.now
+      if let .ok v := r then
+        MonadNote.note (.reached (if v then .automationBindingValue definition b else .automationBindingNull definition b))
+      pure r
+    let met (c : String) := do
+      let r ← fs.automationGuard a.name c e.payload s.records s.now
+      if let .ok v := r then MonadNote.note (.reached (.automationGuard definition c v))
+      pure r
+    match ← firstFalse bound a.binds with
     | .error issue => pure (faulted issue)
     | .ok (some _) => pure ⟨s, q⟩
     | .ok none =>
-    match ← firstFalse (fs.automationGuard a.name · e.payload s.records s.now) a.guard with
+    match ← firstFalse met a.guard with
     | .error issue => pure (faulted issue)
     | .ok (some _) => pure ⟨s, q⟩
     | .ok none =>
@@ -198,7 +209,9 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
       if a.sends.isOwn st.service then
         pure ⟨s, { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,
                                                   serial := none, input, cause := step }] }⟩
-      else pure ⟨s.await (.command a.sends.ref input) (.automation a.name) a.sends input, q⟩
+      else do
+        MonadNote.note (.reached (.request a.sends.ref))
+        pure ⟨s.await (.command a.sends.ref input) (.automation a.name) a.sends input, q⟩
   | .answered c answer _, ⟨s, q⟩ => do
     -- Whether the Queued is stale depends on whether the machine left the sending state, which matters only when the
     -- answer has a transition to take.

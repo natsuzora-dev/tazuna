@@ -10,7 +10,7 @@ import { nonCanonicalKinds as structureNonCanonicalKinds } from "./nonCanonical.
 import type { SourceNonCanonical } from "./nonCanonical.ts";
 import type { Restricted } from "./restricted.ts";
 import { uncomparableKinds } from "./uncomparable.generated.ts";
-import type { Uncovered } from "./uncovered.ts";
+import { uncoveredKinds } from "./uncovered.generated.ts";
 import { undecidedKinds } from "./undecided.generated.ts";
 import type { Group } from "./violation.ts";
 
@@ -73,20 +73,6 @@ const restrictedKinds = every<Restricted["kind"]>()([
   "Restricted.any",
   "Restricted.suppression",
   "Restricted.crossServiceImport",
-]);
-
-const uncoveredKinds = every<Uncovered["kind"]>()([
-  "Uncovered.request",
-  "Uncovered.successAnswer",
-  "Uncovered.bindsRejection",
-  "Uncovered.requiresRejection",
-  "Uncovered.automation",
-  "Uncovered.automationBindingValue",
-  "Uncovered.automationBindingNull",
-  "Uncovered.automationGuard",
-  "Uncovered.transition",
-  "Uncovered.guardFalse",
-  "Uncovered.state",
 ]);
 
 /** The kinds of each group. */

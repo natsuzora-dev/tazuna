@@ -38,11 +38,15 @@ def requirementsRejection [Monad m] [MonadNote m] (st : Service) (fs : Functions
   if refs.missing then return .ok (some { kind := .notFound })
   match ← firstFalse (fun b => fs.binding name b input records now) rq.binds with
   | .error e => return .error (issueViolation (st.ref name) e)
-  | .ok (some b) => return .ok (some { kind := .requires, reason := some b })
+  | .ok (some b) =>
+    MonadNote.note (.reached (.bindsRejection (st.ref name) b))
+    return .ok (some { kind := .requires, reason := some b })
   | .ok none =>
     match ← firstFalse (fun c => fs.requirement name c input records now) rq.requires with
     | .error e => return .error (issueViolation (st.ref name) e)
-    | .ok (some c) => return .ok (some { kind := .requires, reason := some c })
+    | .ok (some c) =>
+      MonadNote.note (.reached (.requiresRejection (st.ref name) c))
+      return .ok (some { kind := .requires, reason := some c })
     | .ok none => return .ok none
 
 def commandEnsures [Monad m] (st : Service) (fs : Functions m) (name : String) (input : Value) (before after : Records)

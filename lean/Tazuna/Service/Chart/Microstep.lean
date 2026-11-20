@@ -115,6 +115,7 @@ def enterOne (st : Service) (step : Nat) (filled : Bool) (name : InstanceId) (n 
   withMachine name fun i r => do
     MonadNote.note (.wroteState name n)
     let r := ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
+    MonadNote.note (.reached (.state (st.ref i.chart.name) n))
     let r ← fillByInitial fs st filled name n r
     if r.halted then pure r else
     let r ← runAssign fs st name (.entry n) (some n) .none none r
@@ -163,6 +164,7 @@ def microstep (st : Service) (step : Nat) (name : InstanceId) (chosen : List (In
     Processing → m Processing :=
   withMachine name fun i r => do
     if i.closed then pure r else
+    chosen.forM fun c => MonadNote.note (.reached (.transition (st.ref i.chart.name) c.2.ref))
     let holders := holdersOf chosen
     let pairs := regionPairs i.chart chosen
     let sourceHeld := chosen.map fun c => ((r.state.machine? c.1).map (·.heldAt c.2.source)).getD (.obj [])

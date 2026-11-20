@@ -4,26 +4,19 @@ import type { CheckedSpec } from "../check/spec.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { toJsonl } from "../data/trace.ts";
 import { type Run, sameRun, snapshotEntryPath, snapshotPath } from "../data/traceFile.ts";
-import type { Uncovered } from "../data/uncovered.ts";
 import { canonicalJson } from "../data/values.ts";
 import { type ReportedViolation, toReported } from "../data/violation.ts";
 import type { Named } from "../dsl/definition.ts";
 import { exploreLines, seenLines, valuesPerPayload } from "../explore/paths.ts";
 import { stepOrderChanges } from "../explore/stepOrders.ts";
-import * as automations from "../explore/uncovered/automations.ts";
-import * as charts from "../explore/uncovered/charts.ts";
-import * as requests from "../explore/uncovered/requests.ts";
-import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/found.ts";
+import { uncoveredParts } from "../explore/uncovered.ts";
+import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import { serviceViolations, simulateSpec, snapshotsOf } from "../sim/spec/simulate.ts";
 import { snapshotPairingViolation } from "../verify/pairing.ts";
 import { pairSnapshots, snapshotFolders, snapshotViolations } from "../verify/snapshot.ts";
-
-const uncoveredChecks: readonly {
-  readonly check: (spec: Spec, reached: Coverage) => readonly Found<Uncovered>[];
-}[] = [requests, automations, charts];
 
 export interface TestResult {
   readonly violations: readonly ReportedViolation[];
@@ -174,8 +167,9 @@ function simulateScenarios(
   return { violations, snapshotted };
 }
 
+/** The parts that `test --coverage` reports, each at its definition, in place order. */
 export const uncoveredOf = (spec: Spec, reached: Coverage): ReportedViolation[] =>
-  uncoveredChecks
-    .flatMap((c) => c.check(spec, reached))
+  uncoveredParts(spec.structure, reached)
+    .map((violation) => ({ violation, place: placeOf(spec, violation.definition) }))
     .sort((x, y) => comparePlaces(x.place, y.place))
     .map(reportedOfFound);

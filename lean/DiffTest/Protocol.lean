@@ -1,6 +1,7 @@
 import Tazuna.Explore.StepOrders
 import Tazuna.Explore.Enabled
 import Tazuna.Explore.Moves
+import Tazuna.Explore.Coverage
 import Tazuna.Explore.Instrument
 import Tazuna.Scenario.Given
 import Tazuna.Sim.InvalidScenario
@@ -195,6 +196,13 @@ structure SimulatedService where
   enabled : Option Explore.Enabled
   moves : Option (List (List Scenario.Line))
   fault : Option Violation
+  /-- When it runs as explore does, the parts that it reached, in the order of their canonical JSON. -/
+  reached : Option (List Uncovered)
+  /--
+  For the own service, with `explore`, what `test --coverage` reports when this run is the only one: the parts that no
+  running service reached.
+  -/
+  uncovered : Option (List Uncovered)
   /-- The state that ChoiceDependent compares (Explore.stateValue), given with `enabled`. -/
   state : Option Value
 

@@ -152,6 +152,8 @@ structure Collect where
   /-- For each message, the values that its afterMessage read: subscription answers and invariants. -/
   afters : List (Nat × Footprint) := []
   violations : List Violation := []
+  /-- The parts that the run reached, each once, in the order first reached. -/
+  reached : List Uncovered := []
 deriving Repr, Inhabited
 
 /--
@@ -247,6 +249,7 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
     | .microstepEnds check => c.checkRegions check
     | .afterMessageBegins message => { c with afterMessage := some message }
     | .afterMessageEnds => { c with afterMessage := none }
+    | .reached part => if c.reached.contains part then c else { c with reached := c.reached ++ [part] }
     | .bug _ => c
 
 /-- The functions that ask `fs` and carry each answer into `n` by `f`. -/

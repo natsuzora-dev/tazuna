@@ -1,6 +1,7 @@
 import Tazuna.Data.Time
 import Tazuna.Data.Trace
 import Tazuna.Service.Step
+import Tazuna.Service.Uncovered
 
 /-! This module defines the notes that the semantic run sends to the instrumentation. -/
 
@@ -59,6 +60,8 @@ inductive Note where
   /-- The start of the checks and subscription answers after message `message` (afterMessage), which no step runs. -/
   | afterMessageBegins (message : Nat)
   | afterMessageEnds
+  /-- The run reached `part`, which `test --coverage` then does not report. -/
+  | reached (part : Uncovered)
   /--
   A tazuna bug: the run reached a state that the semantics never reaches for a spec that its types accept, and goes on
   as if it had not. A listener that runs tazuna stops the run, as rustc stops on an internal compiler error.
