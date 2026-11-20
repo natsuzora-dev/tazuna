@@ -80,6 +80,19 @@
         "violation": "{\"kind\":\"ChoiceDependent.stepOrder\",\"definition\":{\"service\":\"waiter\",\"name\":\"m\"},\"data\":{\"firstStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"secondStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"originalOrder\":[],\"alternativeOrder\":[{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]}],\"difference\":{\"aspect\":\"state\",\"original\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":\"2026-10-25T06:00:00Z\"},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":\"2026-10-25T05:00:00Z\"}]}]},\"alternative\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":\"2026-10-25T06:00:00Z\"},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":\"2026-10-25T06:00:00Z\"}]}]}}},\"location\":{\"file\":\"waiter/waiter.ts\",\"line\":22},\"scenario\":{\"service\":\"waiter\",\"name\":\"once\"}}"
       }
     },
+    "Fault.atSchema": {
+      "meaning": "The `at` of the deadline `deadline` of state `state` computes a value that is no Temporal.Instant in whole milliseconds, which the run's time cannot hold.",
+      "example": {
+        "excerpt": {
+          "file": "alarms/alarms.ts",
+          "from": 5,
+          "to": 20,
+          "line": 5,
+          "text": "export const alarm = machine({\n  description: \"Ring at an instant half a millisecond past 10:00, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, ringing: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: {\n      after: {\n        ring: {\n          at: () => Temporal.Instant.from(\"2026-10-25T01:00:00.0005Z\"),\n          onFired: [{ target: \"ringing\" }],\n        },\n      },\n    },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"Fault.atSchema\",\"definition\":{\"service\":\"alarms\",\"name\":\"alarm\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"ring\"},\"location\":{\"file\":\"alarms/alarms.ts\",\"line\":5},\"scenario\":{\"service\":\"alarms\",\"name\":\"start\"}}"
+      }
+    },
     "Fault.contextSchema": {
       "meaning": "An assign of the chart writes a context that does not match its context schema.",
       "example": {

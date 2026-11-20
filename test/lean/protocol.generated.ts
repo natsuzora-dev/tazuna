@@ -118,8 +118,8 @@ export type Transition = {
   readonly trigger: Trigger;
   readonly index: number;
   readonly target: string | null;
-  /** Whether the transition has a guard. An unguarded transition holds without asking Functions. */
-  readonly guarded: boolean;
+  /** The guard's conditions, in order. A transition without any holds without asking Functions. */
+  readonly guards: readonly string[];
   readonly reenter: boolean;
 };
 
@@ -377,6 +377,7 @@ export type Question =
   | {
       readonly type: "resultEnsures";
       readonly target: DefinitionRef;
+      readonly condition: string;
       readonly input: Json;
       readonly output?: Json;
       readonly events: readonly Emit[];
@@ -400,6 +401,20 @@ export type Question =
       readonly now: string;
     }
   | {
+      readonly type: "automationBinding";
+      readonly automation: string;
+      readonly binding: string;
+      readonly payload: Json;
+      readonly now: string;
+    }
+  | {
+      readonly type: "automationGuard";
+      readonly automation: string;
+      readonly condition: string;
+      readonly payload: Json;
+      readonly now: string;
+    }
+  | {
       readonly type: "react";
       readonly automation: string;
       readonly payload: Json;
@@ -420,6 +435,7 @@ export type Question =
       readonly type: "guard";
       readonly scope: Scope;
       readonly transition: Transition;
+      readonly condition: string;
       readonly extra: Extra;
     }
   | {
@@ -564,7 +580,7 @@ export type Reply =
     }
   | {
       readonly type: "resultEnsures";
-      readonly failed?: string;
+      readonly ensured: "holds" | "fails" | "readsRecords";
     }
   | {
       readonly type: "invariant";
@@ -583,8 +599,16 @@ export type Reply =
       readonly output: Json;
     }
   | {
+      readonly type: "automationBinding";
+      readonly bound: boolean;
+    }
+  | {
+      readonly type: "automationGuard";
+      readonly holds: boolean;
+    }
+  | {
       readonly type: "react";
-      readonly input?: Json;
+      readonly input: Json;
       readonly created: readonly string[];
     }
   | {
@@ -597,7 +621,7 @@ export type Reply =
     }
   | {
       readonly type: "guard";
-      readonly passes: boolean;
+      readonly holds: boolean;
     }
   | {
       readonly type: "assign";
@@ -618,9 +642,10 @@ export type Reply =
       readonly type: "deadlines";
       readonly names: readonly string[];
     }
+  /** The instant as Temporal.Instant.prototype.toString writes it, or none when `at` computes no Instant. */
   | {
       readonly type: "deadlineTime";
-      readonly time: string;
+      readonly time?: string;
     }
   | {
       readonly type: "offers";

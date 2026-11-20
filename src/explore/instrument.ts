@@ -555,8 +555,8 @@ export class InstrumentedFunctions implements Functions {
     const call = (fs: Functions) => fs.queryEnsures(query, input, output, records);
     return this.audited(ref(this.st, query), "queryEnsures", () => call(this.fs), call, String);
   }
-  resultEnsures(target: DefinitionRef, input: Fields, output: unknown, events: readonly Emit[]) {
-    const call = (fs: Functions) => fs.resultEnsures(target, input, output, events);
+  resultEnsures(target: DefinitionRef, condition: string, input: Fields, output: unknown, events: readonly Emit[]) {
+    const call = (fs: Functions) => fs.resultEnsures(target, condition, input, output, events);
     return this.audited(target, "resultEnsures", () => call(this.fs), call, String);
   }
   invariant(entity: string, record: Fields) {
@@ -582,10 +582,30 @@ export class InstrumentedFunctions implements Functions {
       this.resolveAudit(query, input, records, now, resolved);
     return resolved;
   }
+  automationBinding(
+    automation: string,
+    binding: string,
+    payload: Fields,
+    records: RecordSource,
+    now: Temporal.Instant,
+  ) {
+    const call = (fs: Functions) => fs.automationBinding(automation, binding, payload, records, now);
+    return this.audited(ref(this.st, automation), "automationBinding", () => call(this.fs), call, String);
+  }
+  automationGuard(
+    automation: string,
+    condition: string,
+    payload: Fields,
+    records: RecordSource,
+    now: Temporal.Instant,
+  ) {
+    const call = (fs: Functions) => fs.automationGuard(automation, condition, payload, records, now);
+    return this.audited(ref(this.st, automation), "automationGuard", () => call(this.fs), call, String);
+  }
   react(automation: string, payload: Fields, records: RecordSource, now: Temporal.Instant, keys: Keys) {
     const call = (fs: Functions) => fs.react(automation, payload, records, now, keys);
     return this.audited(ref(this.st, automation), "react", () => call(this.fs), call, {
-      same: (x, y) => sameMade(keys, [x.written ?? null, x.created], [y.written ?? null, y.created]),
+      same: (x, y) => sameMade(keys, [x.written, x.created], [y.written, y.created]),
     });
   }
   comparable(query: string, answer: Answer): unknown {
@@ -595,8 +615,21 @@ export class InstrumentedFunctions implements Functions {
     const call = (fs: Functions) => fs.initialContext(machine, input);
     return this.audited(ref(this.st, machine), "initialContext", () => call(this.fs), call, text);
   }
-  guard(scope: Scope, records: RecordSource, transition: TransitionRef, extra: Fields, access: Access) {
-    return this.chartAudited(scope, access, "guard", (fs, a) => fs.guard(scope, records, transition, extra, a), String);
+  guard(
+    scope: Scope,
+    records: RecordSource,
+    transition: TransitionRef,
+    condition: string,
+    extra: Fields,
+    access: Access,
+  ) {
+    return this.chartAudited(
+      scope,
+      access,
+      "guard",
+      (fs, a) => fs.guard(scope, records, transition, condition, extra, a),
+      String,
+    );
   }
   assign(scope: Scope, records: RecordSource, assignment: Assignment, extra: Fields, keys: Keys, access: Access) {
     return this.chartAudited(

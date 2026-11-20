@@ -103,6 +103,7 @@ export function structureOf(
           references: references(d.input as Shape),
           binds: Object.keys(d.binds),
           requires: Object.keys(d.requires),
+          ensures: Object.keys(d.ensures),
         };
       if (d.kind === "query")
         return {
@@ -113,6 +114,7 @@ export function structureOf(
           input: schemaOf(d, d.input),
           output: d.output === undefined ? null : schemaOf(d, d.output),
           requires: Object.keys(d.requires),
+          ensures: Object.keys(d.ensures),
         };
       if (d.kind === "automation")
         return {

@@ -32,6 +32,7 @@ import {
   type Assignment,
   type Checked,
   type Edge,
+  type Ensured,
   Failed,
   type Functions,
   givenKeys,
@@ -41,11 +42,10 @@ import {
 } from "../../service/functions.ts";
 import { chartOf, mapOf } from "../../service/instance.ts";
 import type { Emit } from "../../service/message.ts";
-import type { Note } from "../../service/note.ts";
 import type { RecordSource, Row } from "../../service/records.ts";
 import { type ChartStructure, chartStructure, stateNamed } from "../../spec/structure.ts";
 import { isDescendant } from "../../spec/tree.ts";
-import { assumedEnsures } from "./contract.ts";
+import { ensured } from "./contract.ts";
 import { recordsView } from "./records.ts";
 
 // Every `input` and `payload` argument here is a decoded value.
@@ -99,21 +99,11 @@ function matching<T>(
   return new Failed({ kind: "schema", schema }, zodError(checked.error.issues));
 }
 
-/** Returns the binds values in order, up to the first that is null (`unbound`); `reached` hears each. */
-function bind(
-  binds: Binds<never>,
-  args: Fields,
-  reached: (binding: string, met: boolean) => void,
-): { readonly bound: Fields; readonly unbound?: string } {
-  const bound: Fields = {};
-  for (const [name, f] of Object.entries(binds as Binds<Fields>)) {
-    const value = f(args);
-    reached(name, value !== null && value !== undefined);
-    if (value === null || value === undefined) return { bound, unbound: name };
-    bound[name] = value;
-  }
-  return { bound };
-}
+/** Returns the binds values, which Lean asks for only once every binding is non-null. */
+const bound = (binds: Binds<never>, args: Fields): Fields =>
+  Object.fromEntries(Object.entries(binds as Binds<Fields>).map(([name, f]) => [name, f(args)]));
+
+const nonNull = (value: unknown): boolean => value !== null && value !== undefined;
 
 /** Returns the function `name` of `functions`, which Lean names from the structure, so that it always exists. */
 function named<F>(functions: Readonly<Record<string, F>> | undefined, name: string, what: string): F {
@@ -215,22 +205,20 @@ function indexOf(spec: Spec, service: string): Index {
   return index;
 }
 
-/** The spec functions of `service`, which answer Lean's questions; react's coverage hits go to `note`. */
+/** The spec functions of `service`, which answer Lean's questions. */
 export class SpecFunctions implements Functions {
   readonly st: Service;
   private readonly spec: Spec;
   private readonly service: string;
   private readonly owner: ServiceDefinition | undefined;
   private readonly index: Index;
-  private readonly note: Pick<Note, "reached"> | undefined;
 
-  constructor(spec: Spec, service: string, note?: Pick<Note, "reached">) {
+  constructor(spec: Spec, service: string) {
     this.spec = spec;
     this.service = service;
     this.owner = spec.services.get(service)?.definition;
     this.index = indexOf(spec, service);
     this.st = this.index.st;
-    this.note = note;
   }
 
   /** Returns the definition of one of `kinds` that `r` names. */
@@ -420,9 +408,8 @@ export class SpecFunctions implements Functions {
   }
 
   /** Returns the binds values, which every binding answered non-null before. */
-  private bound(command: AnyCommand, args: Fields): Fields | Failed {
-    const binding = attempt(() => bind(command.binds as Binds<never>, args, () => {}));
-    return binding instanceof Failed ? binding : binding.bound;
+  private bound(binds: Binds<never>, args: Fields): Fields | Failed {
+    return attempt(() => bound(binds, args));
   }
 
   parse(schema: Schema, value: unknown): Checked | Failed {
@@ -453,7 +440,7 @@ export class SpecFunctions implements Functions {
   binding(name: string, b: string, input: Fields, records: RecordSource, now: Temporal.Instant): boolean | Failed {
     const f = named(this.command(name).binds as Binds<Fields>, b, "binding");
     const value = attempt(() => f({ input, records: this.view(records), now }));
-    return value instanceof Failed ? value : value !== null && value !== undefined;
+    return value instanceof Failed ? value : nonNull(value);
   }
 
   requirement(
@@ -465,7 +452,7 @@ export class SpecFunctions implements Functions {
   ): boolean | Failed {
     const command = this.command(name);
     const args = { input, records: this.view(records), now };
-    const bound = this.bound(command, args);
+    const bound = this.bound(command.binds, args);
     if (bound instanceof Failed) return bound;
     const f = named(command.requires as Conditions<Fields>, condition, "requires condition");
     return attempt(() => Boolean(f({ ...args, bound })));
@@ -495,7 +482,7 @@ export class SpecFunctions implements Functions {
   ): readonly (readonly Emit[])[] | Failed {
     const command = this.command(name);
     const args = { input, records: this.view(records), now };
-    const bound = this.bound(command, args);
+    const bound = this.bound(command.binds, args);
     if (bound instanceof Failed) return bound;
     const f = command.decide as ((a: Fields) => readonly (DefinedEmit | Bag<DefinedEmit>)[]) | undefined;
     if (f === undefined) throw new Error(`the command ${name} of an external service has no decide`);
@@ -519,7 +506,7 @@ export class SpecFunctions implements Functions {
     const command = this.command(name);
     return attempt(() =>
       firstFailing(command.ensures as Conditions<Fields>, () => {
-        const bound = this.bound(command, { input, records: this.view(before), now });
+        const bound = this.bound(command.binds, { input, records: this.view(before), now });
         if (bound instanceof Failed) throw bound;
         return { input, records: this.view(after), bound };
       }),
@@ -534,15 +521,16 @@ export class SpecFunctions implements Functions {
   }
 
   /**
-   * Returns the first failing ensures of a request's result. An ensures that reads records is skipped. `output` counts
-   * only when the target has an output schema; a query's results have no events.
+   * Returns what one ensures of a request's target gives on the request's results. `output` counts only when the target
+   * has an output schema; a query's results have no events.
    */
   resultEnsures(
     request: DefinitionRef,
+    condition: string,
     input: Fields,
     output: unknown,
     events: readonly Emit[],
-  ): string | undefined | Failed {
+  ): Ensured | Failed {
     const target = this.definition<AnyCommand | AnyQuery>(["command", "query"], request).definition;
     const emits = events.map(
       (e): DefinedEmit => ({
@@ -556,7 +544,8 @@ export class SpecFunctions implements Functions {
       ...(target.output === undefined ? {} : { output }),
       ...(target.kind === "query" ? {} : { events: emits }),
     };
-    return attempt(() => assumedEnsures(target, results));
+    const f = named(target.ensures as Conditions<unknown>, condition, "ensures condition");
+    return attempt(() => ensured(f, results));
   }
 
   invariant(entity: string, record: Fields): string | undefined | Failed {
@@ -584,39 +573,52 @@ export class SpecFunctions implements Functions {
     );
   }
 
+  private automation(name: string): Automation {
+    return this.own<Automation>(["automation"], name).definition;
+  }
+
+  automationBinding(
+    name: string,
+    b: string,
+    payload: Fields,
+    records: RecordSource,
+    now: Temporal.Instant,
+  ): boolean | Failed {
+    const f = named(this.automation(name).binds as Binds<Fields>, b, "binding");
+    const value = attempt(() => f({ payload, records: this.view(records), now }));
+    return value instanceof Failed ? value : nonNull(value);
+  }
+
+  automationGuard(
+    name: string,
+    condition: string,
+    payload: Fields,
+    records: RecordSource,
+    now: Temporal.Instant,
+  ): boolean | Failed {
+    const a = this.automation(name);
+    const args = { payload, records: this.view(records), now };
+    const values = this.bound(a.binds, args);
+    if (values instanceof Failed) return values;
+    const f = named(a.guard as Conditions<Fields>, condition, "guard condition");
+    return attempt(() => Boolean(f({ ...args, bound: values })));
+  }
+
   react(
     name: string,
     payload: Fields,
     records: RecordSource,
     now: Temporal.Instant,
     keys: Keys,
-  ): { readonly written?: Json; readonly created: readonly string[] } | Failed {
-    const found = this.own<Automation>(["automation"], name);
-    const a = found.definition;
-    const definition = { service: found.service, name: found.name };
+  ): { readonly written: Json; readonly created: readonly string[] } | Failed {
+    const a = this.automation(name);
     const { createKey, created } = this.keysFrom(keys);
-    const reacted = attempt((): { readonly written: Json } | undefined => {
-      const base = { payload, records: this.view(records), now };
-      const binding = bind(a.binds, base, (b, met) =>
-        this.note?.reached({
-          kind: met ? "automationBindingValue" : "automationBindingNull",
-          definition,
-          data: { binding: b },
-        }),
-      );
-      if (binding.unbound !== undefined) return undefined;
-      const args = { ...base, bound: binding.bound };
-      for (const [condition, holds] of Object.entries(a.guard as Conditions<typeof args>)) {
-        const met = holds(args);
-        this.note?.reached({ kind: "automationGuard", definition, data: { condition, met } });
-        if (!met) return undefined;
-      }
-      return {
-        written: written(objectOf(a.command.definition.input), a.input?.({ ...args, createKey } as never) ?? {}),
-      };
-    });
-    if (reacted instanceof Failed) return reacted;
-    return reacted === undefined ? { created } : { written: reacted.written, created };
+    const args = { payload, records: this.view(records), now };
+    const values = this.bound(a.binds, args);
+    if (values instanceof Failed) return values;
+    const shape = objectOf(a.command.definition.input);
+    const given = attempt(() => written(shape, a.input?.({ ...args, bound: values, createKey } as never) ?? {}));
+    return given instanceof Failed ? given : { written: given, created };
   }
 
   comparable(name: string, answer: Answer): unknown {
@@ -645,24 +647,16 @@ export class SpecFunctions implements Functions {
     return context.value;
   }
 
-  /** Returns whether the guard holds, and reports a failing condition to `note` as a coverage hit. */
   guard(
     scope: Scope,
     records: RecordSource,
     transition: TransitionRef,
+    condition: string,
     extra: Fields,
     access: Access,
   ): boolean | Failed {
-    const conditions = this.transition(chartOf(scope.id), transition).guard;
-    const failing = attempt(() => firstFailing(conditions, () => this.args(scope, records, access, extra)));
-    if (failing instanceof Failed) return failing;
-    if (failing !== undefined)
-      this.note?.reached({
-        kind: "guardFalse",
-        definition: this.chartOf(chartOf(scope.id)).ref,
-        data: { transition, condition: failing },
-      });
-    return failing === undefined;
+    const f = named(this.transition(chartOf(scope.id), transition).guard, condition, "guard condition");
+    return attempt(() => Boolean(f(this.args(scope, records, access, extra) as never)));
   }
 
   /**
@@ -774,12 +768,16 @@ export class SpecFunctions implements Functions {
     return Object.keys(this.node(machine, state).after ?? {});
   }
 
-  deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): Temporal.Instant | Failed {
-    const d = this.node(chartOf(scope.id), this.stateOf(scope))?.after?.[name];
-    const at = d?.at as ((args: unknown) => unknown) | undefined;
-    // Instant.add rejects date units and gives whole milliseconds, as Lean's Time is.
-    if (at === undefined) return scope.now.add(d?.delay ?? {});
-    return attempt(() => at(this.args(scope, records, access)) as Temporal.Instant);
+  deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed {
+    const d = named(this.node(chartOf(scope.id), this.stateOf(scope)).after, name, "deadline");
+    const at = d.at as ((args: unknown) => unknown) | undefined;
+    if (at === undefined) {
+      if (d.delay === undefined) throw new Error(`the deadline ${name} has neither delay nor at`);
+      return scope.now.add(d.delay).toString();
+    }
+    const time = attempt(() => at(this.args(scope, records, access)));
+    if (time instanceof Failed) return time;
+    return time instanceof Temporal.Instant ? time.toString() : undefined;
   }
 
   /** Returns the offers of the state `scope.state`, or of the chart itself when it is null. */

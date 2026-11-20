@@ -4,13 +4,26 @@ import { LazyRecordSource } from "../records.ts";
 import { type Deadline, halt, type Instance, NoteAccess, type State, scopeOf } from "../state.ts";
 import type { Processing } from "./queue.ts";
 
+/** Lean's instantTime?: the instant that `text` writes, when Temporal writes it back as `text` in whole milliseconds. */
+function instantTime(text: string): Temporal.Instant | undefined {
+  try {
+    const instant = Temporal.Instant.from(text);
+    return instant.epochNanoseconds % 1_000_000n === 0n && instant.toString() === text ? instant : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Lean's addDeadlines: arms the `after` deadlines of `state`, each time fixed now (deadlineTime). */
 export function addDeadlines(r: Processing, instance: Instance, state: string, step: number): void {
   for (const name of r.functions.deadlines(instance.chart.name, state)) {
     const scope = scopeOf(r.state, instance, state);
     const records = new LazyRecordSource(r.state.records, r.note);
-    const time = r.functions.deadlineTime(scope, records, name, new NoteAccess(r, scope));
-    if (time instanceof Failed) halt(issueViolation(ref(r.st, instance.chart.name), time));
+    const definition = ref(r.st, instance.chart.name);
+    const computed = r.functions.deadlineTime(scope, records, name, new NoteAccess(r, scope));
+    if (computed instanceof Failed) halt(issueViolation(definition, computed));
+    const time = computed === undefined ? undefined : instantTime(computed);
+    if (time === undefined) halt({ kind: "Fault.atSchema", definition, data: { state, deadline: name } });
     r.state.deadlines.push({ time, machine: instance.id, state, name, armedBy: step });
   }
 }

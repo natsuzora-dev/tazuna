@@ -2,8 +2,7 @@ import type { Answer } from "../data/trace.generated.ts";
 import { type Obligation, rejectedBy } from "../data/uncovered.ts";
 import { withExtra } from "../data/violation.ts";
 import { ref, requirementsOf, type Service } from "./basic.ts";
-import { firstFalse } from "./contract.ts";
-import { type Checked, Failed, type Functions, issueViolation } from "./functions.ts";
+import { type Checked, Failed, type Functions, firstFalse, issueViolation } from "./functions.ts";
 import { recordSource } from "./records.ts";
 import { failedEnsures, halt, type Run, report, reportAll, write } from "./state.ts";
 

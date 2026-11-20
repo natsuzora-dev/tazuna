@@ -79,6 +79,15 @@ def renderTime (t : Time) : String :=
     "." ++ String.ofList ((pad 3 (ms % 1000)).toList.reverse.dropWhile (· == '0')).reverse
   s!"{pad 4 y}-{pad 2 mo}-{pad 2 d}T{pad 2 (ms / 3600000)}:{pad 2 (ms / 60000 % 60)}:{pad 2 (ms / 1000 % 60)}{fraction}Z"
 
+/--
+The time of `text`, an instant as Temporal.Instant.prototype.toString writes it, when it is in whole milliseconds:
+renderTime writes the time back as `text`.
+-/
+def instantTime? (text : String) : Option Time :=
+  match parseTime text with
+  | .ok t => if renderTime t == text then some t else none
+  | .error _ => none
+
 /-- An instant as the wire writes it, in the form that renderTime writes. Time is Int, so modules use it locally. -/
 def Time.toValue (t : Time) : Value := .str (renderTime t)
 

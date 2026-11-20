@@ -132,12 +132,11 @@ export class Listener implements Note, Evaluations {
 
 /**
  * Returns Lean's `instrument st fs ifs` over the spec's functions. A question asked again with Bags in reverse order
- * reads quietly, so neither the open step nor the evaluation cache hears its reads, and it asks functions without the
- * listener, so that it reaches no coverage.
+ * reads quietly, so neither the open step nor the evaluation cache hears its reads.
  */
 export function instrumented(spec: Spec, service: string, listener: Listener): InstrumentedFunctions {
-  const functions = new SpecFunctions(spec, service, listener);
-  const unheard = new SpecFunctions(spec, service);
-  const reversed: InstrumentFunctions["reversed"] = (call) => listener.quietly(() => reversedBags(() => call(unheard)));
+  const functions = new SpecFunctions(spec, service);
+  const reversed: InstrumentFunctions["reversed"] = (call) =>
+    listener.quietly(() => reversedBags(() => call(functions)));
   return new InstrumentedFunctions(functions.st, functions, { reversed }, listener.collected);
 }

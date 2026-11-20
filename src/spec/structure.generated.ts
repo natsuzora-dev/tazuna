@@ -140,6 +140,7 @@ export type Body =
       readonly references: readonly Reference[];
       readonly binds: readonly string[];
       readonly requires: readonly string[];
+      readonly ensures: readonly string[];
     }
   /**
    * A query. For a query of an external service, `rejects` lists the rejection kinds that it declares. For a query of
@@ -151,6 +152,7 @@ export type Body =
       readonly input: Json;
       readonly output: Json | null;
       readonly requires: readonly string[];
+      readonly ensures: readonly string[];
     }
   | {
       readonly kind: "automation";

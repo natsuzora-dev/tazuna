@@ -5,7 +5,7 @@ import type { Fields, Json } from "../../data/values.ts";
 import { automationAnswer } from "../automation.ts";
 import { ref } from "../basic.ts";
 import { processCommand } from "../command.ts";
-import { Failed, issueViolation } from "../functions.ts";
+import { Failed, firstFalse, issueViolation } from "../functions.ts";
 import { chartOf, type InstanceId } from "../instance.ts";
 import { byCaller, type Emitted } from "../message.ts";
 import { recordSource } from "../records.ts";
@@ -233,17 +233,29 @@ function workBody(r: Processing, work: Work, step: number): void {
       const event = firstEvent(work);
       const definition = ref(r.st, automation.name);
       r.note.reached({ kind: "automation", definition, data: {} });
-      const reacted = r.functions.react(
-        automation.name,
-        event.payload,
-        recordSource(r.state.records, r.note),
-        r.state.now,
-        nextKeys(r.state),
-      );
+      const records = recordSource(r.state.records, r.note);
+      const { now } = r.state;
+      const unbound = firstFalse((binding) => {
+        const bound = r.functions.automationBinding(automation.name, binding, event.payload, records, now);
+        if (bound instanceof Failed) return bound;
+        const kind = bound ? "automationBindingValue" : "automationBindingNull";
+        r.note.reached({ kind, definition, data: { binding } });
+        return bound;
+      }, automation.binds);
+      if (unbound instanceof Failed) halt(issueViolation(definition, unbound));
+      if (unbound !== undefined) return;
+      const failing = firstFalse((condition) => {
+        const met = r.functions.automationGuard(automation.name, condition, event.payload, records, now);
+        if (met instanceof Failed) return met;
+        r.note.reached({ kind: "automationGuard", definition, data: { condition, met } });
+        return met;
+      }, automation.guard);
+      if (failing instanceof Failed) halt(issueViolation(definition, failing));
+      if (failing !== undefined) return;
+      const reacted = r.functions.react(automation.name, event.payload, records, now, nextKeys(r.state));
       if (reacted instanceof Failed) halt(issueViolation(definition, reacted));
       createKeys(r.state, reacted.created);
       const input = reacted.written;
-      if (input === undefined) return;
       const activity = automation.sends;
       const requester: Requester = { kind: "automation", automation: automation.name };
       if (isOwn(activity, r.st.service))

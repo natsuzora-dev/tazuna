@@ -30,6 +30,8 @@ structure Automation where
   receives : Spec.Ref
   /-- The command that the automation sends, a `sends` activity. -/
   sends : Activity
+  binds : List String
+  guard : List String
 deriving DecidableEq, Repr, Inhabited
 
 /--
@@ -156,7 +158,7 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
         let (key, fields) ← entity e
         events := events ++ [(name, .delete e.name key fields)]
       | _, none => throw s!"the event {name} changes records without an entity"
-    | .command _ input _ _ references binds conditions =>
+    | .command _ input _ _ references binds conditions _ =>
       let refs ← references.mapM fun r =>
         match r.entity with
         | some e => pure (r.field, e)
@@ -164,13 +166,13 @@ def ofStructure (j : Spec.Structure) (service : String) : Except String Service 
       commands := commands ++ [name]
       schemas := schemas ++ [(.input d.ref, input)]
       requirements := requirements ++ [(name, { refs, binds, requires := conditions })]
-    | .query _ input output conditions =>
+    | .query _ input output conditions _ =>
       queries := queries ++ [name]
       schemas := schemas ++ [(.input d.ref, input)] ++ (output.map fun o => [(.output d.ref, o)]).getD []
       requirements := requirements ++ [(name, { requires := conditions })]
-    | .automation (some receives) (some command) _ _ =>
+    | .automation (some receives) (some command) binds guard =>
       let sends := Activity.sends name command
-      automations := automations ++ [({ name, order, receives, sends } : Automation)]
+      automations := automations ++ [({ name, order, receives, sends, binds, guard } : Automation)]
       if command.service != service then
         if let some input := j.definitions.findSome? fun d =>
             match d.body with

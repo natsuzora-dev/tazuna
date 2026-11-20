@@ -114,6 +114,18 @@ export type Fault =
         readonly map: string;
       };
     }
+  /**
+   * The `at` of the deadline `deadline` of state `state` computes a value that is no Temporal.Instant in whole
+   * milliseconds, which the run's time cannot hold.
+   */
+  | {
+      readonly kind: "Fault.atSchema";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly state: string;
+        readonly deadline: string;
+      };
+    }
   /** A function reads `held` (its state's parameter) under a name that the state does not have. */
   | {
       readonly kind: "Fault.unheld";
@@ -306,6 +318,7 @@ export const faultKinds = [
   "Fault.copyContextSchema",
   "Fault.contextSchema",
   "Fault.itemsSchema",
+  "Fault.atSchema",
   "Fault.unheld",
   "Fault.notOnly",
   "Fault.exception",
@@ -342,6 +355,7 @@ export const haltingFaultKinds = [
   "Fault.copyContextSchema",
   "Fault.contextSchema",
   "Fault.itemsSchema",
+  "Fault.atSchema",
   "Fault.unheld",
   "Fault.notOnly",
   "Fault.exception",

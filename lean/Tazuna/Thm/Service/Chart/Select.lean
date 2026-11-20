@@ -159,17 +159,14 @@ theorem choose_error_halts (s : State) (i : Instance) (extra : Extra) (ts : List
   induction ts with
   | nil => simp [choose] at h
   | cons t rest ih =>
-    simp only [choose] at h
+    simp only [choose, id_bind] at h
     split at h
-    · simp only [id_bind] at h
-      split at h
-      · rename_i e _
-        injection h with h
-        rw [← h]
-        exact issueViolation_halts_default _ e
-      · cases h
-      · exact ih h
+    · rename_i e _
+      injection h with h
+      rw [← h]
+      exact issueViolation_halts_default _ e
     · cases h
+    · exact ih h
 
 theorem firstLevel_error_halts (s : State) (extra : Extra) (levels : List (Instance × List Transition))
     (v : Fault) (h : firstLevel fs st s extra levels = .error v) : v.halts = true := by

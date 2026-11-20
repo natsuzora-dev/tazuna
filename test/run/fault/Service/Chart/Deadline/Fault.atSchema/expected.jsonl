@@ -1,0 +1,1 @@
+{"kind":"Fault.atSchema","definition":{"service":"alarms","name":"alarm"},"data":{"state":"waiting","deadline":"ring"},"location":{"file":"alarms/alarms.ts","line":5},"scenario":{"service":"alarms","name":"start"}}

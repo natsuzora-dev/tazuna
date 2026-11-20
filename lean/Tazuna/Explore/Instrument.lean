@@ -260,15 +260,17 @@ def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type}
   decide a b c d := f (fs.decide a b c d)
   ensures a b c d e := f (fs.ensures a b c d e)
   queryEnsures a b c d := f (fs.queryEnsures a b c d)
-  resultEnsures a b c d := f (fs.resultEnsures a b c d)
+  resultEnsures a b c d e := f (fs.resultEnsures a b c d e)
   invariant a b := f (fs.invariant a b)
   serviceInvariant a := f (fs.serviceInvariant a)
   chartInvariant a b := f (fs.chartInvariant a b)
   resolve a b c d := f (fs.resolve a b c d)
+  automationBinding a b c d e := f (fs.automationBinding a b c d e)
+  automationGuard a b c d e := f (fs.automationGuard a b c d e)
   react a b c d e := f (fs.react a b c d e)
   comparable a b := f (fs.comparable a b)
   initialContext a b := f (fs.initialContext a b)
-  guard a b c d := f (fs.guard a b c d)
+  guard a b c d e := f (fs.guard a b c d e)
   assign a b c d e := f (fs.assign a b c d e)
   input a b c d := f (fs.input a b c d)
   held a b c d e := f (fs.held a b c d e)
@@ -427,20 +429,23 @@ def instrument : Functions (StateT Collect m) :=
       audit (pure ()) (st.ref name) "ensures" (·.ensures name input before after now) (· == ·)
     queryEnsures := fun name input output records =>
       audit (collect none) (st.ref name) "queryEnsures" (·.queryEnsures name input output records) (· == ·)
-    resultEnsures := fun target input output events =>
-      audit (pure ()) target "resultEnsures" (·.resultEnsures target input output events) (· == ·)
+    resultEnsures := fun target c input output events =>
+      audit (pure ()) target "resultEnsures" (·.resultEnsures target c input output events) (· == ·)
     invariant := fun entity record => audit (pure ()) (st.ref entity) "invariant" (·.invariant entity record) (· == ·)
     chartInvariant := fun scope records =>
       audit (collect (some scope)) (st.ref scope.machine) "chartInvariant" (·.chartInvariant scope records) (· == ·)
     resolve := fun name input records now =>
       observe (fs.resolve name input records now) (resolveCollect st fs ifs name input records now)
+    automationBinding := fun name b payload records now =>
+      audit (collect none) (st.ref name) "automationBinding" (·.automationBinding name b payload records now) (· == ·)
+    automationGuard := fun name c payload records now =>
+      audit (collect none) (st.ref name) "automationGuard" (·.automationGuard name c payload records now) (· == ·)
     react := fun name payload records now keys =>
-      auditBy (collect none) (st.ref name) "react" (·.react name payload records now keys)
-        fun a b => sameMade keys (a.1.getD .null, a.2) (b.1.getD .null, b.2)
+      auditBy (collect none) (st.ref name) "react" (·.react name payload records now keys) (sameMade keys)
     initialContext := fun machine input =>
       audit (pure ()) (st.ref machine) "initialContext" (·.initialContext machine input) sameValue
-    guard := fun scope records t extra =>
-      audit (collect (some scope)) (st.ref scope.machine) "guard" (·.guard scope records t extra) (· == ·)
+    guard := fun scope records t c extra =>
+      audit (collect (some scope)) (st.ref scope.machine) "guard" (·.guard scope records t c extra) (· == ·)
     assign := fun scope records a extra keys =>
       auditBy (collect (some scope)) (st.ref scope.machine) "assign" (·.assign scope records a extra keys)
         fun a b => sameMade keys (.arr [a.1, a.2.1.getD .null], a.2.2) (.arr [b.1, b.2.1.getD .null], b.2.2)

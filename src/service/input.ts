@@ -7,6 +7,7 @@ import { withExtra } from "../data/violation.ts";
 import {
   assumptionMismatch,
   assumptionViolation,
+  ensuresOf,
   hasOutput,
   isAssumed,
   rejectionKinds,
@@ -21,8 +22,7 @@ import { deliverAnswer, dispatch } from "./chart/macrostep.ts";
 import { commandWork, type Processing, reactions, type Work } from "./chart/queue.ts";
 import { initialContextOf, newInstance } from "./chart/request.ts";
 import { processCommand } from "./command.ts";
-import { firstFalse } from "./contract.ts";
-import { Failed, issueViolation } from "./functions.ts";
+import { Failed, firstFailedResult, firstFalse, issueViolation } from "./functions.ts";
 import { answerAgain, keep, type Request } from "./idempotency.ts";
 import { chartOf, type InstanceId, topId } from "./instance.ts";
 import { type Emitted, idKey, type Line, sameLineId } from "./message.ts";
@@ -314,7 +314,10 @@ function checkAssumedAnswer(r: Run, x: Exchange, input: Fields, events: readonly
   const failedEnsures =
     decoded.result === "rejected" || failedRequires !== undefined
       ? undefined
-      : r.functions.resultEnsures(target, input, decoded.output, events);
+      : firstFailedResult(
+          (condition) => r.functions.resultEnsures(target, condition, input, decoded.output, events),
+          ensuresOf(r.st.structure, target),
+        );
   if (failedEnsures instanceof Failed) halt(issueViolation(target, failedEnsures));
   const broken = brokenAssumption(x.id, target, a, failedRequires, failedEnsures);
   if (broken !== undefined) report(r.state, broken);

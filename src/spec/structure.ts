@@ -133,6 +133,12 @@ export function requiresOf(structure: Structure, target: DefinitionRef): string[
   return definition?.kind === "command" || definition?.kind === "query" ? [...definition.requires] : [];
 }
 
+/** Returns the ensures conditions of the command or query `target`. */
+export function ensuresOf(structure: Structure, target: DefinitionRef): string[] {
+  const definition = structure.definitions.find((d) => sameRef(d, target));
+  return definition?.kind === "command" || definition?.kind === "query" ? [...definition.ensures] : [];
+}
+
 /**
  * Returns the reasons that a requires rejection of the command or query `target` may name: its binds, then its
  * requires.

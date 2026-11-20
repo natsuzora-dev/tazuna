@@ -14,8 +14,8 @@ structure Transition where
   trigger : Trigger
   index : Nat
   target : Option String
-  /-- Whether the transition has a guard. An unguarded transition holds without asking Functions. -/
-  guarded : Bool
+  /-- The guard's conditions, in order. A transition without any holds without asking Functions. -/
+  guards : List String
   reenter : Bool
 deriving DecidableEq, Repr, Inhabited
 
@@ -135,7 +135,7 @@ theorem find?_shape (n : String) : c.tree.state? n = (c.state? n).map (·.shape)
 end Chart
 
 def Transition.ofSpec (t : Spec.Transition) : Transition :=
-  { source := t.source, trigger := t.trigger, index := t.index, target := t.target, guarded := t.guarded,
+  { source := t.source, trigger := t.trigger, index := t.index, target := t.target, guards := t.guards,
     reenter := t.reenters }
 
 theorem Transition.targets_ofSpec (ts : List Spec.Transition) :

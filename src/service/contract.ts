@@ -4,21 +4,9 @@ import type { Unmet } from "../data/uncovered.ts";
 import type { Fields } from "../data/values.ts";
 import type { Located } from "../data/violation.ts";
 import { ref, requirementsOf } from "./basic.ts";
-import { Failed, issueViolation } from "./functions.ts";
+import { Failed, firstFalse, issueViolation } from "./functions.ts";
 import type { RecordSource } from "./records.ts";
 import { failedEnsures, halt, type Run } from "./state.ts";
-
-export function firstFalse(
-  test: (name: string) => boolean | Failed,
-  names: readonly string[],
-): string | undefined | Failed {
-  for (const name of names) {
-    const holds = test(name);
-    if (holds instanceof Failed) return holds;
-    if (!holds) return name;
-  }
-  return undefined;
-}
 
 /**
  * Returns the reason that the command `name` rejects its input before processing: a ref target that is missing, a binds

@@ -27,6 +27,8 @@ export interface Automation {
   readonly order: number;
   readonly receives: DefinitionRef;
   readonly sends: Activity;
+  readonly binds: readonly string[];
+  readonly guard: readonly string[];
 }
 
 /**
@@ -172,7 +174,7 @@ export function serviceOf(structure: Structure, service: string): Service {
         const { receives, command } = d;
         if (receives === null || command === null) throw new Error(`the automation ${name} has no event or command`);
         const sends: Activity = { keyword: "sends", key: name, target: command };
-        automations.push({ name, order, receives, sends });
+        automations.push({ name, order, receives, sends, binds: d.binds, guard: d.guard });
         break;
       }
       default:

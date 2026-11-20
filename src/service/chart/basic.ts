@@ -12,14 +12,15 @@ import {
 
 /**
  * A transition of a chart. `source` is the declaring state, or null for the chart's own `on`. `source`, `trigger`, and
- * `index` locate the guard and assign that Functions evaluates. An unguarded transition holds without asking Functions.
+ * `index` locate the guard and assign that Functions evaluates.
  */
 export interface Transition {
   readonly source: string | null;
   readonly trigger: Trigger;
   readonly index: number;
   readonly target: string | null;
-  readonly guarded: boolean;
+  /** The guard's conditions, in order. A transition without any holds without asking Functions. */
+  readonly guards: readonly string[];
   readonly reenter: boolean;
 }
 
@@ -83,7 +84,7 @@ function transitionOf(t: TransitionStructure): Transition {
     trigger: t.trigger,
     index: t.index,
     target: t.target,
-    guarded: t.guards.length > 0,
+    guards: t.guards,
     reenter: t.reenter === true,
   };
 }

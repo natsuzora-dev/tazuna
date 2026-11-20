@@ -133,8 +133,8 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
         | .ensures f => some f | _ => none
     queryEnsures := fun name input output records =>
       answered (.queryEnsures name input output) (records := records) fun | .queryEnsures f => some f | _ => none
-    resultEnsures := fun target input output events =>
-      answered (.resultEnsures target input output events) fun | .resultEnsures f => some f | _ => none
+    resultEnsures := fun target c input output events =>
+      answered (.resultEnsures target c input output events) fun | .resultEnsures e => some e | _ => none
     invariant := fun entity row => answered (.invariant entity row) fun | .invariant f => some f | _ => none
     serviceInvariant := fun records => do
       match ← answered .serviceInvariant (records := records) fun | .serviceInvariant f => some f | _ => none with
@@ -147,14 +147,20 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
       answered (.decide name input now) (records := records) fun | .decide groups => some groups | _ => none
     resolve := fun name input records now =>
       answered (.resolve name input now) (records := records) fun | .resolve output => some output | _ => none
+    automationBinding := fun name b payload records now =>
+      answered (.automationBinding name b payload now) (records := records) fun
+        | .automationBinding b => some b | _ => none
+    automationGuard := fun name c payload records now =>
+      answered (.automationGuard name c payload now) (records := records) fun
+        | .automationGuard h => some h | _ => none
     react := fun name payload records now keys =>
       answered (.react name payload now keys) (records := records) fun
         | .react input created => some (input, created) | _ => none
     comparable := fun name a => answered (.comparable name a) fun | .comparable v => some v | _ => none
     initialContext := fun name input =>
       answered (.initialContext name input) fun | .initialContext context => some context | _ => none
-    guard := fun scope records t extra =>
-      answered (.guard scope t extra) (records := records) fun | .guard passes => some passes | _ => none
+    guard := fun scope records t c extra =>
+      answered (.guard scope t c extra) (records := records) fun | .guard holds => some holds | _ => none
     assign := fun scope records a extra keys =>
       answered (.assign scope a extra keys) (records := records) fun
         | .assign context copy created => some (context, copy, created) | _ => none

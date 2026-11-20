@@ -63,6 +63,35 @@ export function issueViolation(
   }
 }
 
+/** Lean's firstFalse: the first of `names` that `test` finds false, in order. */
+export function firstFalse(
+  test: (name: string) => boolean | Failed,
+  names: readonly string[],
+): string | undefined | Failed {
+  for (const name of names) {
+    const holds = test(name);
+    if (holds instanceof Failed) return holds;
+    if (!holds) return name;
+  }
+  return undefined;
+}
+
+/** Lean's Ensured: what one ensures of a request's target gives on the request's results. */
+export type Ensured = "holds" | "fails" | "readsRecords";
+
+/** Lean's firstFailedResult: the first ensures of `names` that fails, skipping each that reads records. */
+export function firstFailedResult(
+  test: (name: string) => Ensured | Failed,
+  names: readonly string[],
+): string | undefined | Failed {
+  for (const name of names) {
+    const ensured = test(name);
+    if (ensured instanceof Failed) return ensured;
+    if (ensured === "fails") return name;
+  }
+  return undefined;
+}
+
 /** The scope of a copy: its decoded item key and its own context. */
 export interface CopyScope {
   readonly key: unknown;
@@ -192,21 +221,36 @@ export interface Functions {
     now: Temporal.Instant,
   ): string | undefined | Failed;
   queryEnsures(query: string, input: Fields, output: Fields, records: RecordSource): string | undefined | Failed;
+  /** Returns what the ensures `condition` of `target` gives on a request's results. */
   resultEnsures(
     target: DefinitionRef,
+    condition: string,
     input: Fields,
     output: unknown,
     events: readonly Emit[],
-  ): string | undefined | Failed;
+  ): Ensured | Failed;
   invariant(entity: string, record: Fields): string | undefined | Failed;
   serviceInvariant(records: RecordSource): string | undefined | Failed;
   chartInvariant(scope: Scope, records: RecordSource, access: Access): string | undefined | Failed;
   resolve(query: string, input: Fields, records: RecordSource, now: Temporal.Instant): unknown;
+  automationBinding(
+    automation: string,
+    binding: string,
+    payload: Fields,
+    records: RecordSource,
+    now: Temporal.Instant,
+  ): boolean | Failed;
+  automationGuard(
+    automation: string,
+    condition: string,
+    payload: Fields,
+    records: RecordSource,
+    now: Temporal.Instant,
+  ): boolean | Failed;
   /**
-   * Returns the input of the automation's command as the sender writes it, undefined when a binds value is null or the
-   * guard fails. `keys`
-   * holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and `created` holds the
-   * entities that react called createKey for, in call order.
+   * Returns the input of the automation's command as the sender writes it, once its guard holds. `keys` holds what
+   * createKey returns next per entity (an entity that `keys` lacks has none so far), and `created` holds the entities
+   * that react called createKey for, in call order.
    */
   react(
     automation: string,
@@ -214,18 +258,22 @@ export interface Functions {
     records: RecordSource,
     now: Temporal.Instant,
     keys: Keys,
-  ): { readonly written?: Json; readonly created: readonly string[] } | Failed;
+  ): { readonly written: Json; readonly created: readonly string[] } | Failed;
   /**
    * Returns a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements with
    * equal keys.
    */
   comparable(query: string, answer: Answer): unknown;
   initialContext(machine: string, input: Fields): Fields | Failed;
-  /** Evaluates a guard. `extra` is what caused the transition (its payload, output, or rejection), or {} for none. */
+  /**
+   * Evaluates one guard condition. `extra` is what caused the transition (its payload, output, or rejection), or {} for
+   * none.
+   */
   guard(
     scope: Scope,
     records: RecordSource,
     transition: TransitionRef,
+    condition: string,
     extra: Fields,
     access: Access,
   ): boolean | Failed;
@@ -261,8 +309,11 @@ export interface Functions {
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Fields | Failed;
   /** Returns the names of a state's `after` deadlines, in declaration order. */
   deadlines(machine: string, state: string): readonly string[];
-  /** Lean's deadlineTime: the time of a state's `after` deadline on entering it, `now` plus a delay or what `at` computes. */
-  deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): Temporal.Instant | Failed;
+  /**
+   * Lean's deadlineTime: the time of a state's `after` deadline on entering it, `now` plus a delay or what `at` computes,
+   * as Temporal writes it, or undefined when `at` computes no Instant.
+   */
+  deadlineTime(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed;
   offers(
     scope: Scope,
     records: RecordSource,

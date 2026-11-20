@@ -139,6 +139,18 @@ def issueViolation (owner : Spec.Ref) (e : Issue)
   | .schema s => mismatch s
 
 /--
+What one ensures of a request's target gives on the request's results: it holds, it fails, or it reads records, which
+are the target's own and not the caller's.
+-/
+inductive Ensured where
+  | holds
+  | fails
+  | readsRecords
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Ensured
+
+/--
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
 value or the Issue that stopped the code; deadlines (no author code), copyContext, and singleRecord (defaults, checked
 at load) always answer.
@@ -158,16 +170,18 @@ at load) always answer.
 - ensures: the name of the first failing ensures of an accepted command. Binds read the records before the event write
   (the third argument), and `records` in ensures reads those after it (the fourth argument).
 - queryEnsures: the name of the first failing ensures of a fulfilled query; `output` is the answer's output.
-- resultEnsures: the name of the first ensures of the command or query that a request names that fails on the request's
-  input, its answer's output, and its result events so far. An ensures that reads records is skipped, because it reads
-  the callee's records.
+- resultEnsures: what one ensures of the command or query that a request names gives on the request's input, its
+  answer's output, and its result events so far.
 - invariant, serviceInvariant, chartInvariant: the name of the first failing invariant of an entity record, the service,
   or a machine or screen instance. A service invariant reads only records, so it fails only by a throw, with the schema
   whose refinement or codec threw.
 - resolve: a query's output.
-- react: the input of the command that an automation sends for an event, as the sender writes it (only its codecs
-  run, encoding), or none when a binds value is null or the guard fails. `keys` holds what createKey returns next per entity (an entity that `keys` lacks has none so far), and
-  react also returns the entities that it called createKey for, in call order.
+- automationBinding: whether one binds value of an automation is non-null for the received payload.
+- automationGuard: whether one guard condition of an automation holds for the received payload, once every binds value
+  is non-null.
+- react: the input of the command that an automation sends for an event, once its guard holds, as the sender writes it
+  (only its codecs run, encoding). `keys` holds what createKey returns next per entity (an entity that `keys` lacks has
+  none so far), and react also returns the entities that it called createKey for, in call order.
 - comparable: a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements
   with equal keys.
 - initialContext: the initial context of a machine or screen started with the input (the parsed input of a screen that
@@ -189,7 +203,9 @@ at load) always answer.
 - held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
   of `n` and encoded. A transition's `with` reads what its assign reads.
 - deadlines: a state's `after` deadline names, in declaration order.
-- deadlineTime: the time of a state's `after` deadline on entering it: `now` plus a delay, or what `at` computes.
+- guard: whether one guard condition of a transition holds.
+- deadlineTime: the time of a state's `after` deadline on entering it, `now` plus a delay or what `at` computes, as
+  Temporal.Instant.prototype.toString writes it, or none when `at` computes no Instant.
 -/
 structure Functions (m : Type → Type) where
   parse : Schema → Value → m (Except Issue (Option Value))
@@ -201,22 +217,23 @@ structure Functions (m : Type → Type) where
   decide : String → Value → Records → Time → m (Except Issue (List (List Emit)))
   ensures : String → Value → Records → Records → Time → m (Except Issue (Option String))
   queryEnsures : String → Value → Value → Records → m (Except Issue (Option String))
-  resultEnsures : Spec.Ref → Value → Option Value → List Emit → m (Except Issue (Option String))
+  resultEnsures : Spec.Ref → String → Value → Option Value → List Emit → m (Except Issue Ensured)
   invariant : String → Value → m (Except Issue (Option String))
   serviceInvariant : Records → m (Except (Option Schema) (Option String))
   chartInvariant : Scope → Records → m (Except Issue (Option String))
   resolve : String → Value → Records → Time → m (Except Issue Value)
-  react : String → Value → Records → Time → Keys →
-    m (Except Issue (Option Value × List String))
+  automationBinding : String → String → Value → Records → Time → m (Except Issue Bool)
+  automationGuard : String → String → Value → Records → Time → m (Except Issue Bool)
+  react : String → Value → Records → Time → Keys → m (Except Issue (Value × List String))
   comparable : String → Answer → m (Except Issue Value)
   initialContext : String → Value → m (Except Issue Value)
-  guard : Scope → Records → Transition → Extra → m (Except Issue Bool)
+  guard : Scope → Records → Transition → String → Extra → m (Except Issue Bool)
   assign : Scope → Records → Assignment → Extra → Keys →
     m (Except Issue (Value × Option Value × List String))
   input : Scope → Records → Activity → Keys → m (Except Issue (Value × List String))
   held : Scope → Records → String → Edge → Extra → m (Except Issue Value)
   deadlines : String → String → m (List String)
-  deadlineTime : Scope → Records → String → m (Except Issue Time)
+  deadlineTime : Scope → Records → String → m (Except Issue (Option String))
   offers : Scope → Records → String → m (Except Issue (List Value))
   showInput : Scope → Records → Activity → m (Except Issue Value)
   items : Scope → Records → m (Except Issue (List (Value × Value)))
@@ -224,5 +241,31 @@ structure Functions (m : Type → Type) where
   singleRecord : String → m Value
   copyKey : String → String → Value → m (Except Issue (Option (Option Value)))
   close : Scope → Records → m (Except Issue (Value × Option String))
+
+/--
+The first of `names` that `test` finds false, in order: the semantics evaluates binds, requires and guards one by one
+and stops at the first null binding or false condition.
+-/
+def firstFalse {m : Type → Type} [Monad m] (test : String → m (Except Issue Bool)) :
+    List String → m (Except Issue (Option String))
+  | [] => pure (.ok none)
+  | n :: ns => do
+    match ← test n with
+    | .error e => pure (.error e)
+    | .ok true => firstFalse test ns
+    | .ok false => pure (.ok (some n))
+
+/--
+The first ensures of `names` that fails on a request's results, in order. An ensures that reads records is skipped,
+because it reads the target's records, which the caller does not have.
+-/
+def firstFailedResult {m : Type → Type} [Monad m] (test : String → m (Except Issue Ensured)) :
+    List String → m (Except Issue (Option String))
+  | [] => pure (.ok none)
+  | n :: ns => do
+    match ← test n with
+    | .error e => pure (.error e)
+    | .ok .fails => pure (.ok (some n))
+    | .ok .holds | .ok .readsRecords => firstFailedResult test ns
 
 end Tazuna.Service

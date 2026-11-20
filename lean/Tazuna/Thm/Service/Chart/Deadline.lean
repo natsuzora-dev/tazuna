@@ -23,7 +23,8 @@ theorem addDeadlines_fixed (step : Nat) (name : InstanceId) (n : String) (ds : L
       split
       · rfl
       · generalize fs.deadlineTime _ _ _ = r
-        rcases r with e | t <;> simp [Functor.map, report_eq, State.fixed]
+        rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;>
+          (try split) <;> simp [report_eq, State.fixed]
 
 theorem addDeadlines_lines (step : Nat) (name : InstanceId) (n : String) (ds : List String) :
     (addDeadlines st fs step name n ds s).lines = s.lines := by
@@ -40,7 +41,7 @@ theorem addDeadlines_lines (step : Nat) (name : InstanceId) (n : String) (ds : L
       split
       · rfl
       · generalize fs.deadlineTime _ _ _ = r
-        rcases r with e | t <;> simp [Functor.map]
+        rcases r with e | (_ | t) <;> simp only [Functor.map, Except.map, Option.bind] <;> (try split) <;> simp
 
 theorem takeDeadline_fixed (t : Deadline) : (s.takeDeadline t).1.fixed = s.fixed := rfl
 

@@ -76,15 +76,17 @@ structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : P
   decide : ∀ a b c d, Agrees (fsI.decide a b c d) (fs.decide a b c d)
   ensures : ∀ a b c d e, Agrees (fsI.ensures a b c d e) (fs.ensures a b c d e)
   queryEnsures : ∀ a b c d, Agrees (fsI.queryEnsures a b c d) (fs.queryEnsures a b c d)
-  resultEnsures : ∀ a b c d, Agrees (fsI.resultEnsures a b c d) (fs.resultEnsures a b c d)
+  resultEnsures : ∀ a b c d e, Agrees (fsI.resultEnsures a b c d e) (fs.resultEnsures a b c d e)
   invariant : ∀ a b, Agrees (fsI.invariant a b) (fs.invariant a b)
   serviceInvariant : ∀ a, Agrees (fsI.serviceInvariant a) (fs.serviceInvariant a)
   chartInvariant : ∀ a b, Agrees (fsI.chartInvariant a b) (fs.chartInvariant a b)
   resolve : ∀ a b c d, Agrees (fsI.resolve a b c d) (fs.resolve a b c d)
+  automationBinding : ∀ a b c d e, Agrees (fsI.automationBinding a b c d e) (fs.automationBinding a b c d e)
+  automationGuard : ∀ a b c d e, Agrees (fsI.automationGuard a b c d e) (fs.automationGuard a b c d e)
   react : ∀ a b c d e, Agrees (fsI.react a b c d e) (fs.react a b c d e)
   comparable : ∀ a b, Agrees (fsI.comparable a b) (fs.comparable a b)
   initialContext : ∀ a b, Agrees (fsI.initialContext a b) (fs.initialContext a b)
-  guard : ∀ a b c d, Agrees (fsI.guard a b c d) (fs.guard a b c d)
+  guard : ∀ a b c d e, Agrees (fsI.guard a b c d e) (fs.guard a b c d e)
   assign : ∀ a b c d e, Agrees (fsI.assign a b c d e) (fs.assign a b c d e)
   input : ∀ a b c d, Agrees (fsI.input a b c d) (fs.input a b c d)
   held : ∀ a b c d e, Agrees (fsI.held a b c d e) (fs.held a b c d e)
@@ -121,6 +123,14 @@ macro_rules
       | intro _))
 
 variable {fsI : Functions (StateT C Id)} {fs : Functions Id} {st : Service} [MonadNote (StateT C Id)]
+
+omit [MonadNote (StateT C Id)] in
+theorem firstFailedResult_agrees {test : String → StateT C Id (Except Issue Ensured)}
+    {test' : String → Id (Except Issue Ensured)} (ht : ∀ n, Agrees (test n) (test' n)) (ns : List String) :
+    Agrees (firstFailedResult test ns) (firstFailedResult test' ns) := by
+  induction ns with
+  | nil => exact Agrees.pure _
+  | cons n ns ih => simp only [firstFailedResult]; agree [ht, ih]
 
 omit [MonadNote (StateT C Id)] in
 theorem firstFalse_agrees {test : String → StateT C Id (Except Issue Bool)} {test' : String → Id (Except Issue Bool)}
@@ -250,7 +260,7 @@ theorem choose_agrees (s : State) (i : Instance) (extra : Extra) (ts : List Tran
     Agrees (choose fsI st s i extra ts) (choose fs st s i extra ts) := by
   induction ts with
   | nil => exact Agrees.pure _
-  | cons t rest ih => unfold choose; agree [h.guard, ih]
+  | cons t rest ih => unfold choose; agree [firstFalse_agrees (fun _ => h.guard _ _ _ _ _), ih]
 
 theorem firstLevel_agrees (s : State) (extra : Extra) (levels : List (Instance × List Transition)) :
     Agrees (firstLevel fsI st s extra levels) (firstLevel fs st s extra levels) := by
@@ -378,7 +388,8 @@ theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
   refine settled_agrees h step _ (fun r => ?_) _
   obtain ⟨s, q⟩ := r
   cases w <;> unfold workBody <;>
-    agree [h.react, h.normalize, answerTo_agrees h, startWork_agrees h, receiveWork_agrees h, doneWork_agrees h,
+    agree [firstFalse_agrees (fun _ => h.automationBinding _ _ _ _ _),
+      firstFalse_agrees (fun _ => h.automationGuard _ _ _ _ _), h.react, h.normalize, answerTo_agrees h, startWork_agrees h, receiveWork_agrees h, doneWork_agrees h,
       withMachine_agrees, applyCompletion_agrees h]
 
 omit [MonadNote (StateT C Id)] in
@@ -566,7 +577,8 @@ omit [MonadNote (StateT C Id)] in
 theorem checkAssumedAnswer_agrees (x : Exchange) (input : Value) (events : List Emit) (s : State) (a : Answer) :
     Agrees (checkAssumedAnswer st fsI x input events s a) (checkAssumedAnswer st fs x input events s a) := by
   unfold checkAssumedAnswer
-  agree [decodedAnswer_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resultEnsures]
+  agree [decodedAnswer_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _),
+    firstFailedResult_agrees (fun _ => h.resultEnsures _ _ _ _ _)]
 
 omit [MonadNote (StateT C Id)] in
 theorem checkExchanges_agrees (s : State) : Agrees (checkExchanges st fsI s) (checkExchanges st fs s) := by

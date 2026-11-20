@@ -180,19 +180,23 @@ def Work.settledMachine? : Work → Option InstanceId
 def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : Nat) : Work → Processing → m Processing
   | .reaction _ [] _ _, r | .reaction _ ([] :: _) _ _, r => pure r
   | .reaction a ((e :: _) :: _) _ _, ⟨s, q⟩ => do
-    let definition := st.ref a.name
+    let faulted (issue : Issue) : Processing := ⟨s.report (.fault (issueViolation (st.ref a.name) issue)), q⟩
+    match ← firstFalse (fs.automationBinding a.name · e.payload s.records s.now) a.binds with
+    | .error issue => pure (faulted issue)
+    | .ok (some _) => pure ⟨s, q⟩
+    | .ok none =>
+    match ← firstFalse (fs.automationGuard a.name · e.payload s.records s.now) a.guard with
+    | .error issue => pure (faulted issue)
+    | .ok (some _) => pure ⟨s, q⟩
+    | .ok none =>
     match ← fs.react a.name e.payload s.records s.now s.nextKeys with
-    | .error issue =>
-      pure ⟨s.report (.fault (issueViolation definition issue)), q⟩
-    | .ok (reacted, keys) =>
-    let s := s.createKeys keys
-    match reacted with
-    | none => pure ⟨s, q⟩
-    | some input =>
-        if a.sends.isOwn st.service then
-          pure ⟨s, { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,
-                                                    serial := none, input, cause := step }] }⟩
-        else pure ⟨s.await (.command a.sends.ref input) (.automation a.name) a.sends input, q⟩
+    | .error issue => pure (faulted issue)
+    | .ok (input, keys) =>
+      let s := s.createKeys keys
+      if a.sends.isOwn st.service then
+        pure ⟨s, { q with round := q.round ++ [{ order := a.order, requester := .automation a.name, activity := a.sends,
+                                                  serial := none, input, cause := step }] }⟩
+      else pure ⟨s.await (.command a.sends.ref input) (.automation a.name) a.sends input, q⟩
   | .answered c answer _, ⟨s, q⟩ => do
     -- Whether the Queued is stale depends on whether the machine left the sending state, which matters only when the
     -- answer has a transition to take.

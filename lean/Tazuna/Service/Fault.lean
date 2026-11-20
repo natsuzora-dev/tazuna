@@ -45,6 +45,11 @@ inductive Fault where
   | contextSchema (definition : Spec.Ref)
   /-- The items that the chart computes for the map `map` do not match their schema. -/
   | itemsSchema (definition : Spec.Ref) (map : String)
+  /--
+  The `at` of the deadline `deadline` of state `state` computes a value that is no Temporal.Instant in whole
+  milliseconds, which the run's time cannot hold.
+  -/
+  | atSchema (definition : Spec.Ref) (state deadline : String)
   /-- A function reads `held` (its state's parameter) under a name that the state does not have. -/
   | unheld (definition : Spec.Ref) (held : String)
   /-- A function calls `only()` on a bag with more than one element. -/
@@ -114,7 +119,8 @@ def Fault.halts : Fault → Bool
   | .emittedPayloadSchema .. | .unlistedEmittedEvent .. | .sameRecordInBag .. | .outputSchema ..
   | .inputSchema .. | .failedRequires .. | .heldSchema ..
   | .offersSchema .. | .initialContextSchema .. | .screenOutputSchema .. | .copyContextSchema .. | .contextSchema ..
-  | .itemsSchema .. | .unheld .. | .notOnly .. | .exception .. | .duplicateItemKey .. | .exceededCommandDepth ..
+  | .itemsSchema .. | .atSchema .. | .unheld .. | .notOnly .. | .exception .. | .duplicateItemKey ..
+  | .exceededCommandDepth ..
   | .exceededMessageCommands .. | .exceededAlwaysRounds .. | .exceededOnDoneSelections .. | .exceededMessageWork ..
   | .exceededDueDeadlines .. => true
   | .danglingRef .. | .danglingSingleRef .. | .failedEnsures .. | .failedEntityInvariant .. | .failedSingleInvariant ..

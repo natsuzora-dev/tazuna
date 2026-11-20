@@ -10,23 +10,23 @@ open Tazuna.Thm.Service.Command
 
 theorem commands_emit_own_events (s : Structure) :
     Commands.foreignEvents s = [] ↔
-      ∀ d ∈ s.definitions, ∀ rejects input output emits references binds requires,
-        d.body = .command rejects input output emits references binds requires →
+      ∀ d ∈ s.definitions, ∀ rejects input output emits references binds requires ensures,
+        d.body = .command rejects input output emits references binds requires ensures →
           ∀ e, some e ∈ emits → e.service = d.service := by
   simp only [Commands.foreignEvents, List.flatMap_eq_nil_iff]
   constructor
-  · intro h d hd rejects input output emits references binds requires hb e he
+  · intro h d hd rejects input output emits references binds requires ensures hb e he
     have hd' := h d hd
     rw [hb] at hd'
     have := List.filterMap_eq_nil_iff.mp hd' (some e) he
     exact Classical.byContradiction fun hne => by simp [hne] at this
   · intro h d hd
     cases hb : d.body with
-    | command rejects input output emits references binds requires =>
+    | command rejects input output emits references binds requires ensures =>
       refine List.filterMap_eq_nil_iff.mpr fun e he => ?_
       cases e with
       | none => rfl
-      | some e => simp [h d hd rejects input output emits references binds requires hb e he]
+      | some e => simp [h d hd rejects input output emits references binds requires ensures hb e he]
     | _ => rfl
 
 theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignEvents j = []) (st : Service)
@@ -48,9 +48,10 @@ theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignE
   obtain ⟨d, hd, hs, hm⟩ := Tazuna.Thm.Spec.Structure.emitsOf_mem j _ r ho
   have hsv : r.service = st.service := by
     cases hb : d.body with
-    | command rejects input output emits references binds requires =>
+    | command rejects input output emits references binds requires ensures =>
       simp only [hb] at hm
-      have := (commands_emit_own_events j).mp h d hd rejects input output emits references binds requires hb r hm
+      have := (commands_emit_own_events j).mp h d hd rejects input output emits references binds requires ensures hb r
+        hm
       simp only [sameRef, beq_iff_eq] at hs
       rw [this, show d.service = (st.ref name).service from congrArg Ref.service hs]
       rfl

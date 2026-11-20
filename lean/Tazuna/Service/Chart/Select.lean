@@ -15,13 +15,11 @@ variable [Monad m] [MonadNote m] (fs : Functions m)
 def choose (st : Service) (s : State) (i : Instance) (extra : Extra) :
     List Transition → m (Except Fault (Option Transition))
   | [] => pure (.ok none)
-  | t :: rest =>
-    if t.guarded then do
-      match ← fs.guard (s.scopeOf i t.source) s.records t extra with
-      | .error e => pure (.error (issueViolation (st.ref i.chart.name) e))
-      | .ok true => pure (.ok (some t))
-      | .ok false => choose st s i extra rest
-    else pure (.ok (some t))
+  | t :: rest => do
+    match ← firstFalse (fs.guard (s.scopeOf i t.source) s.records t · extra) t.guards with
+    | .error e => pure (.error (issueViolation (st.ref i.chart.name) e))
+    | .ok none => pure (.ok (some t))
+    | .ok (some _) => choose st s i extra rest
 
 def firstLevel (st : Service) (s : State) (extra : Extra) : List (Instance × List Transition) →
     m (Except Fault (Option (InstanceId × Transition)))

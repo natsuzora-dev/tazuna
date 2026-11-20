@@ -215,11 +215,13 @@ inductive Body where
   -/
   | command (rejects : Option (List RejectionKind)) (input : Value) (output : Option Value)
       (emits : List (Option Ref)) (references : List Reference) (binds : List String) («requires» : List String)
+      («ensures» : List String)
   /--
   A query. For a query of an external service, `rejects` lists the rejection kinds that it declares. For a query of
   a spec service, `rejects` is null.
   -/
   | query (rejects : Option (List RejectionKind)) (input : Value) (output : Option Value) («requires» : List String)
+      («ensures» : List String)
   | automation (receives : Option Ref) (command : Option Ref) (binds : List String) (guard : List String)
   | machine (chart : Chart)
   | screen (chart : Chart)
@@ -317,8 +319,8 @@ def Structure.rejectionKinds (s : Structure) (service : String) (r : Ref) : List
   let other (kinds : List RejectionKind) := if r.service == service then [] else kinds
   match (s.definitions.find? (·.ref == r)).map Definition.body with
   | some (.query (some kinds) ..) | some (.command (some kinds) ..) => kinds
-  | some (.query none _ _ conditions) => (if conditions.isEmpty then [] else [.requires]) ++ other [.unavailable]
-  | some (.command none _ _ emits references binds conditions) =>
+  | some (.query none _ _ conditions _) => (if conditions.isEmpty then [] else [.requires]) ++ other [.unavailable]
+  | some (.command none _ _ emits references binds conditions _) =>
     let writes := emits.any fun e => s.definitions.any fun d =>
       some d.ref == e && match d.body with
         | .event .create .. | .event .update .. => true
@@ -338,14 +340,20 @@ def Structure.emitsOf (s : Structure) (command : Option Ref) : List (Option Ref)
 /-- The requires conditions of the command or query `r`. -/
 def Structure.requiresOf (s : Structure) (r : Ref) : List String :=
   match (s.definitions.find? (·.ref == r)).map Definition.body with
-  | some (.command _ _ _ _ _ _ conditions) | some (.query _ _ _ conditions) => conditions
+  | some (.command _ _ _ _ _ _ conditions _) | some (.query _ _ _ conditions _) => conditions
+  | _ => []
+
+/-- The ensures conditions of the command or query `r`. -/
+def Structure.ensuresOf (s : Structure) (r : Ref) : List String :=
+  match (s.definitions.find? (·.ref == r)).map Definition.body with
+  | some (.command _ _ _ _ _ _ _ conditions) | some (.query _ _ _ _ conditions) => conditions
   | _ => []
 
 /-- The reasons that a requires rejection of the command or query `r` may name: its binds, then its requires. -/
 def Structure.rejectionReasons (s : Structure) (r : Ref) : List String :=
   match (s.definitions.find? (·.ref == r)).map Definition.body with
-  | some (.command _ _ _ _ _ binds conditions) => binds ++ conditions
-  | some (.query _ _ _ conditions) => conditions
+  | some (.command _ _ _ _ _ binds conditions _) => binds ++ conditions
+  | some (.query _ _ _ conditions _) => conditions
   | _ => []
 
 def Structure.hasOutput (s : Structure) (r : Ref) : Bool :=

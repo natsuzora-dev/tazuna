@@ -239,7 +239,7 @@ export class RunFunctions implements Answering {
       shown.set(slot, value === null ? null : decode(query.output ?? {}, value));
     }
     const input = chart.kind === "screen" ? decode(chart.input ?? {}, lean.input) : {};
-    const held = lean.state === null ? {} : decode(this.functions.node(chartOf(id), lean.state)?.held ?? {}, lean.held);
+    const held = lean.state === null ? {} : decode(this.functions.node(chartOf(id), lean.state).held ?? {}, lean.held);
     return {
       id,
       state: lean.state,
@@ -307,6 +307,12 @@ export class RunFunctions implements Answering {
     const before = enumerations();
     const reply = asked.reversed === true ? reversedBags(() => this.answered(asked)) : this.answered(asked);
     return enumerations() === before ? reply : { ...reply, enumerated: true };
+  }
+
+  /** Returns the payload of the event that the automation receives, as spec code receives it. */
+  private receivedOf(automation: string, payload: Json): Fields {
+    const a = this.functions.definition<Automation>(["automation"], { service: this.service, name: automation });
+    return decode(a.definition.receives.definition.payload, payload);
   }
 
   private answered(q: Question): Replied {
@@ -386,7 +392,10 @@ export class RunFunctions implements Answering {
           event: e.event,
           payload: this.decoded({ kind: "payload", event: e.event }, e.payload),
         }));
-        return this.replied(this.functions.resultEnsures(q.target, input, output, events), failed("resultEnsures"));
+        return this.replied(this.functions.resultEnsures(q.target, q.condition, input, output, events), (ensured) => ({
+          type: "resultEnsures",
+          ensured,
+        }));
       }
       case "invariant": {
         const fields = (this.owner.entities[q.entity] as AnyEntity).fields as Shape;
@@ -413,20 +422,39 @@ export class RunFunctions implements Answering {
             ),
           }),
         );
-      case "react": {
-        const a = this.functions.definition<Automation>(["automation"], {
-          service: this.service,
-          name: q.automation,
-        }).definition;
-        const payload = decode(a.receives.definition.payload, q.payload);
+      case "automationBinding":
         return this.replied(
-          this.functions.react(q.automation, payload, this.records, now(q), keysOf(q.keys)),
-          ({ written, created }) =>
-            written === undefined
-              ? { type: "react", created: [...created] }
-              : { type: "react", input: written, created: [...created] },
+          this.functions.automationBinding(
+            q.automation,
+            q.binding,
+            this.receivedOf(q.automation, q.payload),
+            this.records,
+            now(q),
+          ),
+          (bound) => ({ type: "automationBinding", bound }),
         );
-      }
+      case "automationGuard":
+        return this.replied(
+          this.functions.automationGuard(
+            q.automation,
+            q.condition,
+            this.receivedOf(q.automation, q.payload),
+            this.records,
+            now(q),
+          ),
+          (holds) => ({ type: "automationGuard", holds }),
+        );
+      case "react":
+        return this.replied(
+          this.functions.react(
+            q.automation,
+            this.receivedOf(q.automation, q.payload),
+            this.records,
+            now(q),
+            keysOf(q.keys),
+          ),
+          ({ written, created }) => ({ type: "react", input: written, created: [...created] }),
+        );
       case "comparable":
         return this.replied(this.functions.comparable(q.query, q.answer), (compared) => ({
           type: "comparable",
@@ -449,10 +477,11 @@ export class RunFunctions implements Answering {
               scope,
               this.records,
               transitionRef(q.transition),
+              q.condition,
               this.extraOf(chartOf(scope.id), q.transition.trigger, q.extra),
               access,
             ),
-            (passes) => ({ type: "guard", passes }),
+            (holds) => ({ type: "guard", holds }),
           ),
         );
       case "assign": {
@@ -468,7 +497,7 @@ export class RunFunctions implements Answering {
               const { copy } = scope;
               const chart = this.functions.chartOf(chartOf(scope.id)).named.definition;
               const map = mapOf(scope.id);
-              const shape = map === undefined ? {} : (this.functions.node(chartOf(scope.id), map)?.context ?? {});
+              const shape = map === undefined ? {} : (this.functions.node(chartOf(scope.id), map).context ?? {});
               return {
                 type: "assign",
                 context: encode(chart.context, context),
@@ -495,7 +524,7 @@ export class RunFunctions implements Answering {
           const machine = chartOf(scope.id);
           return this.replied(
             this.functions.held(scope, this.records, q.state, edge, this.extraOf(machine, trigger, q.extra), access),
-            (fields) => ({ type: "held", held: encode(this.functions.node(machine, q.state)?.held ?? {}, fields) }),
+            (fields) => ({ type: "held", held: encode(this.functions.node(machine, q.state).held ?? {}, fields) }),
           );
         });
       }
@@ -503,10 +532,9 @@ export class RunFunctions implements Answering {
         return { type: "deadlines", names: [...this.functions.deadlines(q.machine, q.state)] };
       case "deadlineTime":
         return this.scoped(q.scope, (scope, access) =>
-          this.replied(this.functions.deadlineTime(scope, this.records, q.name, access), (time) => ({
-            type: "deadlineTime",
-            time: time.toString(),
-          })),
+          this.replied(this.functions.deadlineTime(scope, this.records, q.name, access), (time) =>
+            time === undefined ? { type: "deadlineTime" } : { type: "deadlineTime", time },
+          ),
         );
       case "offers":
         return this.scoped(q.scope, (scope, access) =>

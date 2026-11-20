@@ -226,7 +226,8 @@ def checkAssumedAnswer [Monad m] (st : Service) (fs : Functions m) (x : Exchange
   | .error e => return s.report (.fault (issueViolation target e))
   | .ok failedRequires =>
   let ensured : Except Issue (Option String) ←
-    if decoded matches .rejected _ || failedRequires.isSome then pure (.ok none) else fs.resultEnsures target input decoded.output? events
+    if decoded matches .rejected _ || failedRequires.isSome then pure (.ok none) else
+      firstFailedResult (fs.resultEnsures target · input decoded.output? events) (st.«structure».ensuresOf target)
   match ensured with
   | .error e => return s.report (.fault (issueViolation target e))
   | .ok failedEnsures =>

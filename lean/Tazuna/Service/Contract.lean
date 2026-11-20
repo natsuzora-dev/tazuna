@@ -13,14 +13,6 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def firstFalse [Monad m] (test : String → m (Except Issue Bool)) : List String → m (Except Issue (Option String))
-  | [] => pure (.ok none)
-  | n :: ns => do
-    match ← test n with
-    | .error e => pure (.error e)
-    | .ok true => firstFalse test ns
-    | .ok false => pure (.ok (some n))
-
 structure RefCheck where
   reads : List RecordPart
   missing : Bool

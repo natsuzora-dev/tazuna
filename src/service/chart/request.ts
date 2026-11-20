@@ -2,8 +2,7 @@ import type { Activity, Requester } from "../../data/step.generated.ts";
 import type { Fields } from "../../data/values.ts";
 import { withExtra } from "../../data/violation.ts";
 import { ref, requirementsOf } from "../basic.ts";
-import { firstFalse } from "../contract.ts";
-import { Failed, issueViolation } from "../functions.ts";
+import { Failed, firstFalse, issueViolation } from "../functions.ts";
 import { type InstanceId, openedId, ownerId } from "../instance.ts";
 import { LazyRecordSource } from "../records.ts";
 import {

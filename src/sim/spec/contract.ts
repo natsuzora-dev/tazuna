@@ -1,6 +1,3 @@
-import type { Conditions } from "../../dsl/conditions.ts";
-import type { AnyCommand, AnyQuery, Emit } from "../../dsl/definition.ts";
-
 const readsRecords = Symbol("reads records");
 const unreadableRecords = new Proxy(
   {},
@@ -11,21 +8,15 @@ const unreadableRecords = new Proxy(
   },
 );
 
-function firstFailingIgnoringRecords(conditions: Conditions<unknown>, args: object): string | undefined {
-  for (const [name, condition] of Object.entries(conditions)) {
-    try {
-      if (!condition({ ...args, records: unreadableRecords })) return name;
-    } catch (error) {
-      if (error !== readsRecords) throw error;
-    }
-  }
-  return undefined;
-}
-
 /**
- * Returns the first ensures of the target that fails without reading records, skipping each ensures that reads them.
+ * Returns what the ensures `condition` gives on a request's results `args`: whether it holds, or that it reads records,
+ * which are the target's own and not the caller's.
  */
-export const assumedEnsures = (
-  target: AnyCommand | AnyQuery,
-  args: { readonly input: unknown; readonly output?: unknown; readonly events?: readonly Emit[] },
-): string | undefined => firstFailingIgnoringRecords(target.ensures as Conditions<unknown>, args);
+export function ensured(condition: (args: never) => boolean, args: object): "holds" | "fails" | "readsRecords" {
+  try {
+    return condition({ ...args, records: unreadableRecords } as never) ? "holds" : "fails";
+  } catch (error) {
+    if (error === readsRecords) return "readsRecords";
+    throw error;
+  }
+}

@@ -3,7 +3,7 @@ import { canonicalJson, type Fields } from "../../data/values.ts";
 import { transitionRef } from "../../spec/structure.ts";
 import { isInside, leaves, pathOf } from "../../spec/tree.ts";
 import { ref } from "../basic.ts";
-import { Failed, issueViolation } from "../functions.ts";
+import { Failed, firstFalse, issueViolation } from "../functions.ts";
 import { copyId, type InstanceId, mapOf } from "../instance.ts";
 import { valueName } from "../note.ts";
 import { LazyRecordSource } from "../records.ts";
@@ -38,13 +38,21 @@ export function choose(
   return transitions.find((t) => passes(r, instance, t, extra));
 }
 
+/** Returns whether every guard condition of `t` holds, and reports the first false one as a coverage hit. */
 function passes(r: Run, instance: Instance, t: Transition, extra: Fields): boolean {
-  if (!t.guarded) return true;
+  if (t.guards.length === 0) return true;
   const scope = scopeOf(r.state, instance, t.source);
   const records = new LazyRecordSource(r.state.records, r.note);
-  const passed = r.functions.guard(scope, records, transitionRef(t), extra, new NoteAccess(r, scope));
-  if (passed instanceof Failed) return halt(issueViolation(ref(r.st, instance.chart.name), passed));
-  return passed;
+  const transition = transitionRef(t);
+  const definition = ref(r.st, instance.chart.name);
+  const failing = firstFalse(
+    (condition) => r.functions.guard(scope, records, transition, condition, extra, new NoteAccess(r, scope)),
+    t.guards,
+  );
+  if (failing instanceof Failed) return halt(issueViolation(definition, failing));
+  if (failing !== undefined)
+    r.note.reached({ kind: "guardFalse", definition, data: { transition, condition: failing } });
+  return failing === undefined;
 }
 
 export function reaches(r: Run, copy: Instance, payload: unknown): boolean {
