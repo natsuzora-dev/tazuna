@@ -21,7 +21,7 @@ import type { Spec } from "../src/load/load.ts";
 import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { Halt } from "../src/service/state.ts";
 import { checkedRoot, fuzzFoundRoot, runExamples } from "../test/examples.ts";
-import { type Difference, executeEach, invalidLines, SameWorlds } from "../test/executed.ts";
+import { type Difference, executeEach, invalidLines, type Parent, SameWorlds } from "../test/executed.ts";
 import { Lean } from "../test/lean/lean.ts";
 
 const usage = "npm run fuzz -- [--seed <integer>] [--runs <count>] [--depth <moves>]";
@@ -203,6 +203,8 @@ function drawnValue(spec: Spec, line: Line): { shape: Shape; with: (value: unkno
 interface Found {
   readonly c: Case;
   readonly appended: readonly Line[];
+  /** How many of `appended` the execution that differs continued from. */
+  readonly from: number;
   readonly difference?: Difference;
   readonly error?: unknown;
 }
@@ -214,17 +216,18 @@ let executions = 0;
 /**
  * Draws a scenario and up to `depth` moves after it, each one that explore enables after the moves before it (with its
  * value drawn anew half of the time), a move of the clock, or a line no one could write. Executes every prefix in TS
- * with and without the evaluation cache and in Lean, and compares how TS and Lean fingerprints group its worlds.
+ * with and without the evaluation cache, continued from the prefix before it, and in Lean, and compares how TS and Lean
+ * fingerprints group its worlds.
  */
 const property = fc.property(fc.gen(), (g) => {
   const c = cases[g(fc.nat, cases.length - 1)] as Case;
   const { spec, sc } = c;
   let appended: Line[] = [];
-  const each = (): Executed => {
+  const each = (parent?: Parent): Executed => {
     executions += 1;
-    const { executed, difference } = executeEach(lean, spec, sc, appended, c.worlds);
+    const { executed, difference } = executeEach(lean, spec, sc, appended, c.worlds, parent);
     if (difference === undefined) return executed;
-    found = { c, appended, difference };
+    found = { c, appended, from: parent?.appended.length ?? 0, difference };
     throw new Error(`the execution differs from ${difference.against}`);
   };
   try {
@@ -255,11 +258,12 @@ const property = fc.property(fc.gen(), (g) => {
           if (drawn !== none) move = move.with(at, value.with(drawn));
         }
       }
+      const parent = executed.world.violations.length === 0 ? { executed, appended } : undefined;
       appended = [...appended, ...move];
-      executed = each();
+      executed = each(parent);
     }
   } catch (error) {
-    if (found?.appended !== appended) found = { c, appended, error };
+    if (found?.appended !== appended) found = { c, appended, from: 0, error };
     throw error;
   }
 });
@@ -287,10 +291,14 @@ console.error(
 );
 console.error(`reproduce: npm run fuzz -- --seed ${seed} --runs ${runs} --depth ${depth}`);
 if (found === undefined) throw result.errorInstance;
-const { c, appended, difference, error } = found;
+const { c, appended, from, difference, error } = found;
 mkdirSync(fuzzFoundRoot, { recursive: true });
 const file = join(fuzzFoundRoot, `${seed}.json`);
-const fixture = { spec: c.root, scenario: { ...c.sc, lines: [...c.sc.lines, ...appended] } };
+const fixture = {
+  spec: c.root,
+  scenario: { ...c.sc, lines: [...c.sc.lines, ...appended] },
+  from: c.sc.lines.length + from,
+};
 writeFileSync(file, `${JSON.stringify(fixture, null, 2)}\n`);
 console.error(`spec ${c.root}, ${appended.length} lines appended: ${JSON.stringify(appended)}`);
 console.error(difference === undefined ? String(error) : firstDifference(difference.ts, difference.other));

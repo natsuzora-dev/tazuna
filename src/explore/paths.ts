@@ -16,7 +16,7 @@ import { type Message, stateOf, type World } from "../sim/network.ts";
 import type { Cache } from "../sim/spec/cache.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import type { Listener } from "../sim/spec/listener.ts";
-import { executeSpec } from "../sim/spec/simulate.ts";
+import { executeSpec, executeSpecFrom } from "../sim/spec/simulate.ts";
 import { rejectionKinds } from "../spec/structure.ts";
 import { type Enabled, enabled } from "./enabled.ts";
 import { halted, worldFingerprint } from "./fingerprint.ts";
@@ -258,6 +258,24 @@ export const seenLines = (spec: Spec): Seen =>
 export const executeAppended = (spec: Spec, sc: Scenario, appended: readonly Line[], cache?: () => Cache): Executed =>
   executeSpec(spec, appended.length === 0 ? sc : { ...sc, lines: [...sc.lines, ...appended] }, [], cache);
 
+/**
+ * The execution of the scenario with `appended` and `move` after its lines, continued from `parent`, the execution with
+ * `appended`. The plain method is executeAppended, which replays every line.
+ */
+export const executeMove = (
+  spec: Spec,
+  sc: Scenario,
+  appended: readonly Line[],
+  parent: Executed,
+  move: Move,
+): Executed =>
+  executeSpecFrom(
+    spec,
+    { ...sc, lines: [...sc.lines, ...appended, ...move] },
+    parent,
+    sc.lines.length + appended.length,
+  );
+
 const invalidInput: ReadonlySet<string> = new Set(invalidInputKinds);
 
 /**
@@ -343,7 +361,7 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
       return [];
     }
     for (const move of moves) {
-      const child = executeAppended(spec, sc, [...appended, ...move]);
+      const child = executeMove(spec, sc, appended, executed, move);
       if (givable(executed, child)) made.set(move, child);
     }
     if (made.size > 0) children.set(executed, made);

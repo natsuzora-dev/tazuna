@@ -32,6 +32,11 @@ export class Listener implements Note, Evaluations {
     this.coverage = coverage;
   }
 
+  /** A copy for the next input, which hears apart from this listener. */
+  clone(): Listener {
+    return new Listener(this.spec, this.collected.clone(), this.cache.clone(), this.coverage.clone());
+  }
+
   /** Records a read of `key`. Inside `quietly` no read counts, so the callers skip building the key. */
   private read(key: ValueKey): void {
     const name = valueName(key);

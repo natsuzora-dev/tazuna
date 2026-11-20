@@ -189,6 +189,7 @@ tazuna detects a break of each assumption only in part or not at all.
   Diff tests compare the two only on tazuna's own example specs and traces, and for `test` on the paths of up to two moves after the example scenarios.
   The theorems are about the Lean definitions with pure spec functions (`Functions Id`), and about a scenario's start only through hypotheses such as distinct Given keys.
   `test` runs the definitions with the spec functions of the TypeScript runtime and passes `verify`'s comparison to the exploration, so its runs rest on this assumption.
+  `test` runs an explored path by continuing a copy of its parent path's execution, and the same diff tests compare that with running every line again.
   Two rules exist only in the TypeScript runtime, so no theorem covers them.
   Spec functions read the keys of an entity in one order, whatever order the records were written in, while the Lean definitions give spec functions the records in write order.
   The two runtimes agree there only when spec functions do not depend on the order of keys, as the spec functions assumption states.

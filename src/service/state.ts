@@ -317,6 +317,64 @@ export function newState(st: Service): State {
   };
 }
 
+/**
+ * A copy of `i` that a run can change apart from `i`; the chart, the ids and the values are shared. Every field is
+ * listed, so that a new field fails to compile until it is copied or shared here.
+ */
+const cloneInstance = (i: Instance): Instance => ({
+  chart: i.chart,
+  id: i.id,
+  context: i.context,
+  input: i.input,
+  entered: new Map(i.entered),
+  lastChildren: new Map(i.lastChildren),
+  closed: i.closed,
+  awaitingOnDone: i.awaitingOnDone,
+  shown: new Map(i.shown),
+  ...(i.startStep === undefined ? {} : { startStep: i.startStep }),
+  ...("itemKey" in i ? { itemKey: i.itemKey } : {}),
+  copyKeys: new Map(i.copyKeys),
+  held: new Map(i.held),
+});
+
+const cloneInstances = (instances: Map<InstanceId, Instance>): Map<InstanceId, Instance> =>
+  new Map([...instances].map(([id, i]) => [id, cloneInstance(i)]));
+
+/**
+ * A copy of `s` between messages that a run can continue apart from `s`. Every container is copied, and so is every
+ * object with a field that a run sets; objects with readonly fields only (lines, steps, rows, deadlines, values) are
+ * shared. Every field is listed, as in cloneInstance.
+ */
+export function cloneState(s: State): State {
+  return {
+    records: {
+      keyed: new Map([...s.records.keyed].map(([e, rows]) => [e, new Map(rows)])),
+      singles: new Map(s.records.singles),
+    },
+    commandAnswers: new Map(s.commandAnswers),
+    deliveries: new Set(s.deliveries),
+    createdEntities: [...s.createdEntities],
+    service: s.service,
+    started: s.started,
+    machines: cloneInstances(s.machines),
+    copies: cloneInstances(s.copies),
+    stack: [...s.stack],
+    deadlines: [...s.deadlines],
+    pending: s.pending.map((p) => ({ ...p })),
+    queued: s.queued.map((q) => ({ ...q })),
+    subscriptions: s.subscriptions.clone((v) => v),
+    now: s.now,
+    stepOrder: s.stepOrder,
+    serial: s.serial,
+    turn: s.turn,
+    lines: [...s.lines],
+    lineCounts: new Map(s.lineCounts),
+    steps: [...s.steps],
+    messageCount: s.messageCount,
+    violations: [...s.violations],
+  };
+}
+
 /** A line before `write` adds the time and, unless the line gives one, the id. */
 type UnwrittenLine = LineKind & { readonly id?: LineId };
 

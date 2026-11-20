@@ -935,19 +935,22 @@ function expect(
   });
 }
 
-/** Lean's World.execute, and with `looked`, World.stepFinding: what each look line found for Then is added to it. */
+/** Lean's World.step, and with `looked`, World.stepFinding: what the look line found for Then is added to it. */
+function step(w: World, sc: Scenario, l: Line, i: number, looked?: Found[]): void {
+  if (stopped(w)) return;
+  looked?.push(...found(w, sc.expectations, i, l));
+  try {
+    line(w, sc.service, sc.lines, i, l);
+  } catch (error) {
+    if (!(error instanceof Reported)) throw error;
+    reportTo(w, error.violation);
+  }
+}
+
+/** Lean's World.execute, and with `looked`, World.stepFinding. */
 function executeLines(w: World, sc: Scenario, looked?: Found[]): void {
   for (const service of w.services.keys()) if (!stopped(w)) act(w, { type: "startup" }, service, begin);
-  sc.lines.forEach((l, i) => {
-    if (stopped(w)) return;
-    looked?.push(...found(w, sc.expectations, i, l));
-    try {
-      line(w, sc.service, sc.lines, i, l);
-    } catch (error) {
-      if (!(error instanceof Reported)) throw error;
-      reportTo(w, error.violation);
-    }
-  });
+  for (const [i, l] of sc.lines.entries()) step(w, sc, l, i, looked);
 }
 
 /** Lean's execute. */
@@ -955,6 +958,15 @@ export function execute(structure: Structure, w: World, sc: Scenario): World {
   given(w, structure, sc);
   if (w.violations.length > 0) return w;
   executeLines(w, sc);
+  return w;
+}
+
+/**
+ * Continues `w`, which `execute` left after the lines of `sc` before `from`, with the lines from `from` on. Explore
+ * extends a path this way; the diff tests check that it ends as `execute` of all the lines does.
+ */
+export function executeFrom(w: World, sc: Scenario, from: number): World {
+  for (const [i, l] of sc.lines.entries()) if (i >= from) step(w, sc, l, i);
   return w;
 }
 

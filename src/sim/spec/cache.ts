@@ -86,6 +86,10 @@ export class Cache {
 
 /** The plain method that the cache must agree with: no evaluation is ever fresh, so each one runs again. */
 export class NoCache extends Cache {
+  override clone(): NoCache {
+    return new NoCache();
+  }
+
   override freshReads(): undefined {
     return undefined;
   }

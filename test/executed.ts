@@ -9,6 +9,7 @@ import {
   type Executed,
   enabledLines,
   executeAppended,
+  executeMove,
   type Move,
   seenLines,
   valuesPerPayload,
@@ -64,12 +65,12 @@ export function executedOutcome(spec: Spec, sc: Scenario, executed: Executed) {
 }
 
 /**
- * The run that an execution with the evaluation cache differs from: Lean's, or the TS run without the cache; or, for
- * `fingerprint`, two worlds that one of TS and Lean takes as the same and the other does not, with the other's two
- * fingerprints.
+ * The run that an execution with the evaluation cache differs from: Lean's, the TS run without the cache, or the TS run
+ * continued from its parent's execution (`incremental`); or, for `fingerprint`, two worlds that one of TS and Lean
+ * takes as the same and the other does not, with the other's two fingerprints.
  */
 export interface Difference {
-  readonly against: "lean" | "noCache" | "fingerprint";
+  readonly against: "lean" | "noCache" | "incremental" | "fingerprint";
   readonly ts: string;
   readonly other: string;
 }
@@ -90,9 +91,16 @@ export class SameWorlds {
   }
 }
 
+/** An execution of the scenario with `appended` after its lines, which a longer one can continue from. */
+export interface Parent {
+  readonly executed: Executed;
+  readonly appended: readonly Line[];
+}
+
 /**
- * Executes the scenario with `appended` after its lines in TS with the evaluation cache, in TS without it, and in Lean,
- * and adds the world to `worlds`. Returns the cached TS execution, and the first run whose outcome differs from it.
+ * Executes the scenario with `appended` after its lines in TS with the evaluation cache, in TS without it, in TS
+ * continued from `parent` when given (explore continues only a world without InvalidScenario violations), and in Lean, and adds the world to `worlds`. Returns the continued execution, or
+ * else the cached one, and the first run whose outcome differs from the cached one.
  */
 export function executeEach(
   lean: Lean,
@@ -100,13 +108,24 @@ export function executeEach(
   sc: Scenario,
   appended: readonly Line[],
   worlds: SameWorlds,
+  parent?: Parent,
 ): { readonly executed: Executed; readonly difference?: Difference } {
-  const executed = executeAppended(spec, sc, appended);
+  const replayed = executeAppended(spec, sc, appended);
+  const executed =
+    parent === undefined
+      ? replayed
+      : executeMove(spec, sc, parent.appended, parent.executed, appended.slice(parent.appended.length));
   const plainRun = executeAppended(spec, sc, appended, () => new NoCache());
   const extended = { ...sc, lines: [...sc.lines, ...appended] };
-  const ts = canonicalJson(executedOutcome(spec, extended, executed) as unknown as Json);
+  const ts = canonicalJson(executedOutcome(spec, extended, replayed) as unknown as Json);
   const uncached = canonicalJson(executedOutcome(spec, extended, plainRun) as unknown as Json);
   if (ts !== uncached) return { executed, difference: { against: "noCache", ts, other: uncached } };
+  if (parent !== undefined) {
+    const continued = canonicalJson(executedOutcome(spec, extended, executed) as unknown as Json);
+    if (continued !== ts) return { executed, difference: { against: "incremental", ts, other: continued } };
+    const [plain, other] = [worldFingerprint(replayed.world), worldFingerprint(executed.world)];
+    if (plain !== other) return { executed, difference: { against: "incremental", ts: plain, other } };
+  }
   const functions = new SimFunctions(spec, (part) => lean.read(part));
   const explore = {
     scenarios: spec.scenarios.map((s) => (s.definition as LoadedScenario).scenario),
@@ -115,7 +134,7 @@ export function executeEach(
   const { outcome, fingerprint } = lean.explored(spec, extended, functions, explore);
   const fromLean = canonicalJson(outcome);
   if (fromLean !== ts) return { executed, difference: { against: "lean", ts, other: fromLean } };
-  const merged = worlds.add(worldFingerprint(executed.world), fingerprint);
+  const merged = worlds.add(worldFingerprint(replayed.world), fingerprint);
   return merged === undefined ? { executed } : { executed, difference: merged };
 }
 
