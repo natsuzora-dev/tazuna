@@ -125,7 +125,7 @@ export interface Parent {
 
 /**
  * Executes the scenario with `appended` after its lines in TS with the evaluation cache, in TS without it, in TS
- * continued from `parent` when given (explore continues only a world without InvalidScenario violations), and in Lean, and adds the world to `worlds`. Returns the continued execution, or
+ * continued from `parent` when given, and in Lean, and adds the world to `worlds`. Returns the continued execution, or
  * else the cached one, and the first run whose outcome differs from the cached one.
  */
 export function executeEach(

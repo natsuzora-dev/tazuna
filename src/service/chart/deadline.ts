@@ -22,7 +22,7 @@ function instantTime(text: string): Temporal.Instant | undefined {
     : undefined;
 }
 
-/** Lean's addDeadlines: arms the `after` deadlines of `state`, each time fixed now: now plus its delay, or its `at`. */
+/** Lean's addDeadlines. */
 export function addDeadlines(
   r: Processing,
   instance: Instance,

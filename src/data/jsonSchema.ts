@@ -51,12 +51,10 @@ const isSchema = (value: unknown): value is JsonSchema =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * Returns `schema` with each union option that is a `$ref` written out as the schema that it names: Zod writes a
- * recursive schema as a `$ref`, which states no type or field, so Lean's `fits` would take any value for the option.
- * Only a union that sorts a value or holds a collection reads its options (sortCollections, Illegal.ambiguousUnion),
- * and such a union is outside every recursion, since a recursion holds no collection (Malformed.opaqueCollection). So
- * its `$ref` options enter a recursion from outside, and writing each out once gives every option that is read a type;
- * the written-out schema keeps its own references.
+ * Returns `schema` with each union option that is a `$ref` written out once: Zod writes a recursive schema as a `$ref`,
+ * which states no type, so Lean's `fits` would take any value for it. Once is enough: only a union that sorts or holds
+ * a collection reads its options, and a recursion holds no collection (Malformed.opaqueCollection), so such a union
+ * sits outside every recursion.
  */
 function inlineOptions(schema: JsonSchema): JsonSchema {
   const named = (ref: Json): Json | undefined => {
@@ -115,10 +113,7 @@ export const jsonSchema = (schema: z.ZodType): JsonSchema =>
     }) as JsonSchema,
   );
 
-/**
- * `schema` and each schema inside it that jsonSchema writes in its place: past optional, default, lazy, the input side of
- * a codec or pipe, and an opaque wrapper.
- */
+/** `schema` and each schema inside it that jsonSchema writes in its place. */
 export function writtenAs(schema: z.ZodType): z.ZodType[] {
   const node = schemaNode(schema);
   const inner =
@@ -132,7 +127,7 @@ export function writtenAs(schema: z.ZodType): z.ZodType[] {
   return inner === undefined ? [schema] : [schema, ...writtenAs(inner)];
 }
 
-/** The node of `schema` that jsonSchema writes for it: past each wrapper that jsonSchema writes as what it wraps. */
+/** The node that jsonSchema writes for `schema`. */
 const written = (schema: z.ZodType): SchemaNode => schemaNode(writtenAs(schema).at(-1) ?? schema);
 
 /**

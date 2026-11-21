@@ -76,8 +76,7 @@ const isPrefix = (outer: readonly SchemaStep[], inner: readonly SchemaStep[]): b
 
 /**
  * The explore of `service` with each domain of `written` at the nodes that it names, among the nodes that treeOf reads
- * of the schemas that the service's moves may carry. A domain that names no node is Malformed.unusedDomain. Two domains
- * that name one node, or one node and a node inside it, are Malformed.overlappingDomain.
+ * of the schemas that the service's moves may carry, with Malformed.unusedDomain and overlappingDomain.
  */
 export function placeDomains(
   structure: Structure,

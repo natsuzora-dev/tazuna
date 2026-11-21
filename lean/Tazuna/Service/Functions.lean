@@ -161,7 +161,7 @@ def Ensured.passes : Ensured → Bool
 /--
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
 value or the Issue that stopped the code. A value matches its schema only without a field that the schema lacks at any
-depth, whether it comes from outside or from a spec function: a field that nothing reads is the writer's mistake, so it is not
+depth, from outside or from a spec function alike: a field that nothing reads is the writer's mistake, so it is not
 dropped. A spec function's value is encoded by one rule: each codec encodes its part and checks what it takes, a part
 that it does not encode is a schema Issue, and no other check runs, since the run checks the value after it sorts it
 (Functions.sorting).
@@ -196,8 +196,8 @@ that it does not encode is a schema Issue, and no other check runs, since the ru
   none so far), and react also returns the entities that it called createKey for, in call order.
 - comparable: a query answer as verify compares it, ignoring bag and set order and the order of sortedBy elements
   with equal keys.
-- initialContext: the context that the initialContext of a machine or screen computes from the input (the parsed input of
-  a screen that opens opened, or `{}` when nothing opens it), encoded and in the order it was built, `{}` without one.
+- initialContext: the context that the initialContext of a machine or screen computes from the input (the parsed input
+  of a screen that opens opened, or `{}` when nothing opens it), encoded and in the order it was built, `{}` without one.
   A field that its schema does not encode is a schema Issue. initialContextOf fills in the defaults of the fields that
   it leaves out and parses it.
 - guard: whether one guard condition of a transition holds.
@@ -213,8 +213,8 @@ that it does not encode is a schema Issue, and no other check runs, since the ru
   order it was built.
 - closeEnsures: the name of the first failing ensures of a screen that closed with the input and the sorted output.
 - assign: the context after the assign, unchanged where there is none, checked, encoded and in the order it was built,
-  which Functions.sorting sorts. For a copy, copy context fields go to the copy and the rest to the owner, and assign returns
-  both. `keys` and the returned entities are as in react.
+  which Functions.sorting sorts. For a copy, copy context fields go to the copy and the rest to the owner, and assign
+  returns both. `keys` and the returned entities are as in react.
 - input: the input of the request that a state sends, or of the screen that it opens, on entry, as the sender writes
   it: only the receiver parses it. A sends input may call createKey; `keys` is as in react.
 - held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
@@ -255,7 +255,7 @@ structure Functions (m : Type → Type) where
   close : Scope → Records → m (Except Issue Value)
   closeEnsures : String → Value → Value → m (Except Issue (Option String))
 
-/-- `fs.parse` of a value that spec code made, sorted first (sortCollections), so that its checks read the order that the run keeps. -/
+/-- `fs.parse` of a value that spec code made, sorted first, so that its checks read the order that the run keeps. -/
 def Functions.parseSorted {m : Type → Type} [Monad m] [MonadNote m] (fs : Functions m) (st : Service)
     (schema : Schema) (v : Value) : m (Except Issue (Option Value)) := do
   fs.parse schema (← st.sorted schema v)

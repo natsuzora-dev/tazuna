@@ -55,11 +55,7 @@ import { recordsView } from "./records.ts";
 
 // Every `input` and `payload` argument here is a decoded value.
 
-/**
- * Runs author code and returns its value. A throw becomes a `thrown` Issue, of `schema` when the code is that schema's
- * refinement or codec; the Issue of a held read inside passes through, `only()` on more than one value is notOnly, and
- * an InternalError stops the run.
- */
+/** Runs author code and returns its value, or the Issue of what it threw; an InternalError stops the run. */
 function attempt<T>(f: () => T, schema?: Schema): T | Failed {
   try {
     return f();

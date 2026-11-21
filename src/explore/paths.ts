@@ -29,7 +29,7 @@ export interface Executed {
   readonly listeners: ReadonlyMap<string, Listener>;
 }
 
-/** The lines of one step of explore, which a path appends together: a message stated and the line delivering it. */
+/** Lean's Move. */
 export type Move = readonly Line[];
 
 /** Lean's Slot. */
@@ -152,7 +152,7 @@ const requestMoves = (target: DefinitionRef, query: boolean, input: Json): Move[
     { type: "request", kind, target, input: literal(input) },
   ]);
 
-/** Lean's exploreOf: the `explore()` of `service`, which load guarantees for a service with scenarios. */
+/** Lean's exploreOf. */
 export const exploreOf = (spec: Spec, service: string): ExploreStructure =>
   expectFound(
     `explore of ${service}`,
@@ -291,10 +291,7 @@ export const executeMove = (
 
 const invalidInput: ReadonlySet<string> = new Set(invalidInputKinds);
 
-/**
- * The violations of each running service of `child` that its execution added after the execution of `parent`: its own, those its
- * listener collected, and its halt.
- */
+/** The violations that each running service of `child` added since `parent`: its own, its listener's, and its halt. */
 function violationsSince(parent: Executed, child: Executed): Violation[] {
   return [...child.world.services].flatMap(([service, p]) => {
     const before = parent.world.services.get(service);
@@ -332,8 +329,8 @@ export interface ExploredLines {
 }
 
 /**
- * Adds what `executed` reached and `parent`, the execution it continues, had not: what its path reports (Space.out),
- * not what the path before it already reported, as merged_search_reports takes a report.
+ * Adds what `executed` reached and `parent`, the execution it continues, had not: only what its own path reports
+ * (Space.out), as merged_search_reports takes a report.
  */
 const coverageOf = (executed: Executed, reached: Coverage, parent?: Executed) => {
   if (halted(executed.world)) return;

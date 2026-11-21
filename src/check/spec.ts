@@ -145,7 +145,6 @@ export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promi
 
 /**
  * Type-checks the spec in the folder `root` with tsc on the nearest tsconfig.json at or above it, loads it, and checks
- * it, as a compiler compiles before it runs. When loading finds a Malformed violation, the structure goes unchecked:
- * Illegal, and the NonCanonical checks that read it.
+ * it. A Malformed violation leaves the structure unchecked: Illegal, and the NonCanonical checks that read it.
  */
 export const checkSpec = (root: string): Promise<SpecCheck> => checkSpecWith(root, typeCheck(root, process.cwd()));

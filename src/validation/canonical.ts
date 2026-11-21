@@ -15,7 +15,6 @@ import { isDescendant } from "../spec/tree.ts";
 const charts = (structure: Structure) =>
   structure.definitions.filter((d): d is ChartStructure => d.kind === "machine" || d.kind === "screen");
 
-// Like ESLint's prefer-const, this reports a definition that does not need its more general form.
 function statelessMachines(structure: Structure): NonCanonical[] {
   return charts(structure).flatMap((chart): NonCanonical[] => {
     if (chart.kind !== "machine") return [];
@@ -36,8 +35,6 @@ function statelessMachines(structure: Structure): NonCanonical[] {
   });
 }
 
-// SCXML defaults a transition to the state itself or a descendant to external, and XState v5 defaults it to
-// `reenter: false`. The defaults disagree, so the spec states it.
 function reenters(structure: Structure): NonCanonical[] {
   return charts(structure).flatMap((chart) => {
     const definition = { service: chart.service, name: chart.name };
@@ -77,7 +74,6 @@ const automations = (structure: Structure): NonCanonical[] =>
       : [onRejected({ service: d.service, name: d.name }, arrives, { kind: "automation" })];
   });
 
-/** A state that calls or sends writes `onRejected` exactly when an answer may be rejected. */
 const states = (structure: Structure): NonCanonical[] =>
   charts(structure).flatMap((chart) =>
     chart.states.flatMap((state) =>
@@ -92,7 +88,7 @@ const states = (structure: Structure): NonCanonical[] =>
     ),
   );
 
-/** Lean's Canonical.check: the NonCanonical violations that the structure shows. */
+/** Lean's Canonical.check. */
 export const check = (structure: Structure): NonCanonical[] => [
   ...statelessMachines(structure),
   ...reenters(structure),

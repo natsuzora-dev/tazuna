@@ -196,7 +196,6 @@ function restoredHeld(structure: Structure): Illegal[] {
   );
 }
 
-/** The deadlines of every chart that `holds` is true of, each as the Illegal violation of `kind`. */
 function delayViolations(
   structure: Structure,
   holds: (t: Deadline) => boolean,

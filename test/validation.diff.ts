@@ -29,7 +29,6 @@ const examples = [
   ...runExamples(),
 ];
 
-// A spec with a Malformed violation has no structure.
 const bases = (
   await Promise.all(
     examples.map(async (root) => {

@@ -6,8 +6,7 @@ open Tazuna.Data
 open Tazuna.Spec
 
 /--
-Whether the machine has one state, no context, and nothing to wait for, and turns one event into one command. Like
-ESLint's prefer-const, such a definition does not need its more general form.
+Whether the machine has one state, no context, and nothing to wait for, and turns one event into one command.
 -/
 def stateless (c : Chart) : Bool :=
   let waits := c.states.any fun st =>

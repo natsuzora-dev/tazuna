@@ -33,7 +33,7 @@ export type {
 export type ChartStructure = Extract<DefinitionStructure, { kind: "machine" | "screen" }>;
 type CommandStructure = Extract<DefinitionStructure, { kind: "command" }>;
 
-/** Lean's StateType.map?: what a map state adds, or undefined for any other state. */
+/** Lean's StateType.map?. */
 export const mapStateOf = (state: StateStructure | undefined): MapState | undefined =>
   state?.kind === "map" ? state.map : undefined;
 
@@ -84,7 +84,7 @@ export function chartStructure(structure: Structure, service: string, name: stri
   );
 }
 
-/** Lean's State.hasParameters: whether the state has parameters (`held`), which the edge that enters it fills. */
+/** Lean's State.hasParameters. */
 export const hasParameters = (st: StateStructure): boolean => st.held !== null;
 
 export function stateNamed(chart: ChartStructure, name: string): StateStructure | undefined {
@@ -139,7 +139,7 @@ export function emitsOf(structure: Structure, command: DefinitionRef): readonly 
   );
 }
 
-/** Lean's conditionsOf?: the requires and ensures conditions of `target`, or undefined when it is no command or query. */
+/** Lean's conditionsOf?. */
 export function conditionsOf(
   structure: Structure,
   target: DefinitionRef,
@@ -262,10 +262,10 @@ export function delayMs(d: Delay): bigint | undefined {
 const delayMsOf = (time: DeadlineTime): bigint | undefined =>
   time.kind === "delay" && time.delay !== null ? delayMs(time.delay) : undefined;
 
-/** Lean's DeadlineTime.isExact: whether the run can add the delay of `time` to an instant. */
+/** Lean's DeadlineTime.isExact. */
 export const isExact = (time: DeadlineTime): boolean => time.kind === "at" || delayMsOf(time) !== undefined;
 
-/** Lean's DeadlineTime.isNegative: whether the delay of `time` is below zero. */
+/** Lean's DeadlineTime.isNegative. */
 export const isNegative = (time: DeadlineTime): boolean => (delayMsOf(time) ?? 0n) < 0n;
 
 /** Lean's isKeyOf: whether `value` has the form `<entity>-<n>` of the `n`-th createKey value of the entity. */
@@ -293,7 +293,7 @@ export function schemaOwner(schema: Schema): DefinitionRef {
   }
 }
 
-/** Lean's Structure.schemaOf: the JSON Schema that `schema` names, or undefined when the structure has none. */
+/** Lean's Structure.schemaOf. */
 export function schemaIn(structure: Pick<Structure, "definitions">, schema: Schema): Json | undefined {
   const body = (r: DefinitionRef) => structure.definitions.find((d) => sameRef(d, r));
   const state = (chart: DefinitionRef, name: string) => {
@@ -339,7 +339,7 @@ export function schemaIn(structure: Pick<Structure, "definitions">, schema: Sche
 const ownDefinitions = (structure: Structure, service: string) =>
   structure.definitions.filter((d) => d.service === service);
 
-/** Lean's Structure.sentOf: the commands that the automations and charts of `service` send. */
+/** Lean's Structure.sentOf. */
 const sentOf = (structure: Structure, service: string): DefinitionRef[] =>
   ownDefinitions(structure, service).flatMap((d) =>
     d.kind === "automation"
@@ -349,7 +349,7 @@ const sentOf = (structure: Structure, service: string): DefinitionRef[] =>
         : [],
   );
 
-/** Lean's Structure.requestsOf: the commands and queries that the automations and charts of `service` send, each once. */
+/** Lean's Structure.requestsOf. */
 export function requestsOf(structure: Structure, service: string): DefinitionRef[] {
   const all = [
     ...sentOf(structure, service),
@@ -360,10 +360,7 @@ export function requestsOf(structure: Structure, service: string): DefinitionRef
   return all.filter((r, i) => all.findIndex((x) => sameRef(x, r)) === i);
 }
 
-/**
- * Lean's Structure.receivesOf: the events of other services' contracts that the definitions of `service` receive: an
- * automation's or a chart's event, or a result event of a command that an automation or a chart sends.
- */
+/** Lean's Structure.receivesOf. */
 export function receivesOf(structure: Structure, service: string): DefinitionRef[] {
   const listed = structure.contracts
     .filter((c) => c.service !== service)

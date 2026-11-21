@@ -3,8 +3,8 @@ import Tazuna.Thm.Guarantee
 
 /-!
 Merging the paths whose states have equal fingerprints loses no report, when equal fingerprints mean the same reports
-on every continuation, up to what the path to a state already reported. Breadth-first order extends each fingerprint first at its shallowest depth, so the state kept has
-at least as many inputs left as any state merged into it.
+on every continuation, up to what the path to a state already reported. Breadth-first order extends each fingerprint
+first at its shallowest depth, so the state kept has at least as many inputs left as any state merged into it.
 -/
 
 namespace Tazuna.Thm.Explore.Search

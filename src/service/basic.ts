@@ -91,17 +91,14 @@ export const changeOf = (st: Service, r: DefinitionRef): Change | undefined =>
 export const schemaOf = (st: Service, schema: Schema): Json =>
   expectFound(`schema ${JSON.stringify(schema)}`, schemaIn(st.structure, schema));
 
-/** Lean's Service.sorted: an encoded value with its collections sorted by the structure's schema. */
+/** Lean's Service.sorted. */
 export const sorted = (st: Service, schema: Schema, json: Json): Json => sortCollections(schemaOf(st, schema), json);
 
 export const uniqueOf = (st: Service, entity: string): readonly string[] => st.uniques.get(entity) ?? [];
 
 type EntityStructure = Extract<DefinitionStructure, { kind: "entity" }>;
 
-/**
- * Lean's ofStructure: the service `service` of the structure. An entity that an event changes or the service lists is
- * guaranteed by the loader (Malformed.unresolvedReference), so a lookup that finds none is an InternalError.
- */
+/** Lean's ofStructure, with an InternalError where Lean notes a bug. */
 export function serviceOf(structure: Structure, service: string): Service {
   const own = structure.definitions.map((d, order) => ({ d, order })).filter(({ d }) => d.service === service);
   const entityBody = (r: DefinitionRef): EntityStructure =>
@@ -191,7 +188,7 @@ export function serviceOf(structure: Structure, service: string): Service {
   };
 }
 
-/** Lean's requirementsOf: the requirements of each own command, query, and screen of `service`. */
+/** Lean's requirementsOf. */
 function requirementsOf(structure: Structure, service: string): ReadonlyMap<string, Requirements> {
   return new Map(
     structure.definitions.flatMap((d): [string, Requirements][] => {

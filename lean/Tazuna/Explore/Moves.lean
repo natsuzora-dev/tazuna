@@ -183,10 +183,9 @@ def rejections (reasons : List String) (kind : RejectionKind) : List Value :=
   if kind == .requires then reasons.map (rejectedAnswer kind ∘ some) else [rejectedAnswer kind none]
 
 /--
-The answers to a request: each output that the output tree gives (one answer without output when the target has none),
-then the rejections of each kind in `kinds` that does not blame the sender (blamesSender), since the own service checks
-the input of each request and gives it an id it never used (explored_sent_ids_distinct), a requires rejection once per
-reason in `reasons`.
+The answers to a request: each output that the output tree gives, then the rejections of each kind in `kinds`. A kind
+that blames the sender is left out, since the own service checks the input of each request and gives it an id it never
+used (explored_sent_ids_distinct).
 -/
 def answers (query : Bool) (outputs : Option Tree) (kinds : List RejectionKind) (reasons : List String) : List Value :=
   (match outputs with
@@ -194,11 +193,7 @@ def answers (query : Bool) (outputs : Option Tree) (kinds : List RejectionKind) 
     | some t => t.values.map (answerOf query true)) ++
   (kinds.filter (!·.blamesSender)).flatMap (rejections reasons)
 
-/--
-The moves that values fill `slot` with: for an answer, one per value of the target's output tree, then the rejections
-that the target may give (answers); for a request, an operation without offers, and an event, one per value of the
-schema's tree; for an operation with offers, one per offered payload.
--/
+/-- The moves that values fill `slot` with: one per value of its schema's tree, or per offered payload. -/
 def fill (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) : Slot → m (List Move)
   | .answer a msg => do
     let request ← requestOf msg

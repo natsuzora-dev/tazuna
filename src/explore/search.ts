@@ -20,10 +20,7 @@ export class Visited {
   }
 }
 
-/**
- * The probability that two of the fingerprints in some visited set of `sizes` share a hash, at most n(n - 1)/2 pairs
- * times 2^-64 for a set of n, or about n^2/2^65, when the hash acts as a random function.
- */
+/** The probability that two fingerprints in some visited set of `sizes` share a hash, if the hash acts at random. */
 export const collisionProbability = (sizes: readonly number[]): number =>
   sizes.reduce((p, n) => p + (n * (n - 1)) / 2 / 2 ** 64, 0);
 
@@ -45,8 +42,7 @@ export interface SearchOptions<I, R> {
 /**
  * Searches breadth-first, continuing each path from its parent's result, with a visited set of state fingerprints.
  * Yields each path with its result and its parent's result (none for the start); the caller stops the search by
- * leaving the loop. Lean's Space.merged, whose layers the queue takes in order. A path's result is made only when the
- * queue reaches it, so the results held at once are those of the parents whose children wait.
+ * leaving the loop. Lean's Space.merged, whose layers the queue takes in order.
  */
 export function* search<I, R>(
   options: SearchOptions<I, R>,

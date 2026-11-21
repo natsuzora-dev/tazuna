@@ -25,9 +25,7 @@ export interface Domain {
  * - A boolean, an enum, a literal, and null enumerate themselves, and a domain on one narrows it. Every other node needs
  *   a domain, or `check` reports `Illegal.undeclaredDomain`.
  *
- * A domain that names no node is `Malformed.unusedDomain`. Two domains that name one node, or one node and a node
- * inside it, are `Malformed.overlappingDomain`. A value that `schema` rejects, refinements included, is
- * `Malformed.domainValue`.
+ * A domain that names no node, overlaps another, or holds a value that `schema` rejects is Malformed.
  */
 export const domain = <S extends z.ZodType>(schema: S, values: readonly Exclude<z.input<S>, undefined>[]): Domain =>
   ({ schema, values }) as unknown as Domain;

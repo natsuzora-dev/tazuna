@@ -17,9 +17,8 @@ export function isDefinition(value: unknown): value is Definition {
 }
 
 /**
- * The shape of the values that `schema` checks, read from `d`, the definition that `schema` names: an input, an
- * output, an event payload, a control payload (none for a control without one), or an entity's fields. The schemas of
- * a chart's state are read from the chart's structure instead (SpecFunctions.shape).
+ * The shape of the values that `schema` checks, read from `d`, the definition that `schema` names. A chart state's
+ * schemas are read from the chart's structure instead (SpecFunctions.shape).
  */
 export function shapeIn(d: Definition, schema: Schema): Shape {
   const mismatch = () => new InternalError(`${JSON.stringify(schema)} names no schema of a ${d.kind}`);
@@ -260,7 +259,6 @@ export const none: NoneOffer = Object.freeze({}) as NoneOffer;
 
 type Offers = Keyed<((args: unknown) => readonly unknown[]) | AnyOffer>;
 
-/** A state: a map state has its copies' key shape and items, and the others have neither. */
 export type StateSpec = StateBehavior &
   (
     | {

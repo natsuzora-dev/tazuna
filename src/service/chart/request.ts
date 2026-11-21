@@ -25,10 +25,7 @@ import { type Chart, isOwn } from "./basic.ts";
 import { slots } from "./config.ts";
 import type { Processing } from "./queue.ts";
 
-/**
- * Lean's initialContextOf: what the initialContext of `chart` computes from `input`, with each field that it leaves out
- * taking its default, parsed, or a halt with what an Issue means.
- */
+/** Lean's initialContextOf. */
 export function initialContextOf(r: Processing, chart: string, input: Fields): Fields {
   const definition = ref(r.st, chart);
   const fault = (failed: Failed) =>
@@ -45,7 +42,7 @@ export function initialContextOf(r: Processing, chart: string, input: Fields): F
   return parsed.value;
 }
 
-/** Lean's Value.merge: the fields of `a` with those of `b` over them, or `b` when either is no object. */
+/** Lean's Value.merge. */
 function merged(a: unknown, b: Json): Json {
   const isObject = (v: unknown): v is Readonly<Record<string, Json>> =>
     v !== null && typeof v === "object" && !Array.isArray(v);

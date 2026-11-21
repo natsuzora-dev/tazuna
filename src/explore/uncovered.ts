@@ -79,7 +79,7 @@ function chartUncovered(reached: Coverage, d: Definition): Obligation[] {
   return [...(started ? transitions(d.on) : []), ...states].filter((o) => !reached.has(o));
 }
 
-/** Lean's uncovered: what `test --coverage` reports, by definition: requests, then automations, then charts. */
+/** Lean's uncovered. */
 export const uncoveredParts = (structure: Structure, reached: Coverage): Uncovered[] =>
   [requestsUncovered, automationUncovered, chartUncovered]
     .flatMap((check) => structure.definitions.flatMap((d) => check(reached, d)))

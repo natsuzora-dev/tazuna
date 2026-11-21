@@ -68,23 +68,23 @@ export function issueViolation(
   }
 }
 
-/** Lean's Functions.parseSorted: a value that spec code made, sorted and then parsed. */
+/** Lean's Functions.parseSorted. */
 export const parseSorted = (st: Service, fs: Functions, schema: Schema, json: Json): Checked | Failed =>
   fs.parse(schema, sorted(st, schema, json));
 
-/** Lean's lists: whether the command `command` lists the event of `e` in its emits. */
+/** Lean's lists. */
 export function lists(st: Service, command: string, e: { readonly event: DefinitionRef }): boolean {
   return emitsOf(st.structure, ref(st, command)).some((l) => sameRef(l, e.event));
 }
 
-/** Lean's Functions.checked: a value that spec code made, sorted and parsed, or a schema Issue. */
+/** Lean's Functions.checked. */
 function checked(st: Service, fs: Functions, schema: Schema, json: Json): Json | Failed {
   const parsed = parseSorted(st, fs, schema, json);
   if (parsed instanceof Failed) return parsed;
   return "error" in parsed ? new Failed({ kind: "schema", schema }, parsed.error) : (parsed.encoded as Json);
 }
 
-/** Lean's mapChecked: each of `xs` through `f`, in order, or the first Failed. */
+/** Lean's mapChecked. */
 function mapChecked<A, B>(xs: readonly A[], f: (x: A) => B | Failed): B[] | Failed {
   const ys: B[] = [];
   for (const x of xs) {
@@ -95,7 +95,7 @@ function mapChecked<A, B>(xs: readonly A[], f: (x: A) => B | Failed): B[] | Fail
   return ys;
 }
 
-/** Lean's Functions.sortingParse: `fs.parse` with the parsed value sorted, since parse writes defaults as written. */
+/** Lean's Functions.sortingParse. */
 function sortingParse(st: Service, fs: Functions): Functions["parse"] {
   return (schema, value) => {
     const parsed = fs.parse(schema, value);
@@ -211,7 +211,7 @@ export function parseOutside(st: Service, fs: Functions, schema: Schema, value: 
   return issue === undefined ? parsed : { error: zodError([issue]) };
 }
 
-/** Lean's firstFalse: the first of `names` that `test` finds false, in order. */
+/** Lean's firstFalse. */
 export function firstFalse<N, R extends boolean | Failed>(
   test: (name: N) => R,
   names: readonly N[],
@@ -339,10 +339,7 @@ export interface Functions {
     now: Temporal.Instant,
   ): boolean | Failed;
   inputRequirement(target: DefinitionRef, condition: string, input: Fields): boolean | Failed;
-  /**
-   * Lean's decide: the events in groups, the groups in order and the events of one group in none. Each payload of an
-   * event that the command lists is encoded by its event's schema in the order it was built; any other payload is null.
-   */
+  /** Lean's decide. */
   decide(
     command: string,
     input: Fields,
@@ -371,7 +368,7 @@ export interface Functions {
   invariant(entity: string, record: Fields): string | undefined | Failed;
   serviceInvariant(records: RecordSource): string | undefined | Failed;
   chartInvariant(scope: Scope, records: RecordSource, access: Access): string | undefined | Failed;
-  /** Lean's resolve: the output, encoded by its schema in the order it was built. */
+  /** Lean's resolve. */
   resolve(query: string, input: Fields, records: RecordSource, now: Temporal.Instant): Json | Failed;
   automationBinding(
     automation: string,
@@ -404,7 +401,7 @@ export interface Functions {
    * equal keys.
    */
   comparable(query: string, answer: Answer): unknown;
-  /** Lean's initialContext: what the initialContext of `machine` computes from `input`, encoded, or {} without one. */
+  /** Lean's initialContext. */
   initialContext(machine: string, input: Fields): Json | Failed;
   /**
    * Evaluates one guard condition. `extra` is what caused the transition (its payload, output, or rejection), or {} for
@@ -418,10 +415,7 @@ export interface Functions {
     extra: Fields,
     access: Access,
   ): boolean | Failed;
-  /**
-   * Lean's assign: the context after the assign, unchanged where there is none, checked and encoded. For a copy, copy
-   * context fields go to `copyContext` and the rest to `context`. `keys` and `created` are as in react.
-   */
+  /** Lean's assign, with a copy's context fields in `copyContext`. */
   assign(
     scope: Scope,
     records: RecordSource,
@@ -448,17 +442,17 @@ export interface Functions {
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Json | Failed;
   /** Lean's deadlineAt, with undefined for none. */
   deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed;
-  /** Lean's offers: the payloads, checked and encoded in the order they were built. */
+  /** Lean's offers. */
   offers(scope: Scope, records: RecordSource, control: string, access: Access): readonly Json[] | Failed;
   /** Returns the query input of a shows slot as the sender writes it. */
   showInput(scope: Scope, records: RecordSource, activity: Activity, access: Access): Json | Failed;
-  /** Lean's items: each item key, checked and encoded in the order they were built. The map state takes them as a set. */
+  /** Lean's items. */
   items(scope: Scope, records: RecordSource, access: Access): readonly Json[] | Failed;
-  /** Lean's defaults: the default value of each field of `schema` that declares one, encoded in the order it was built. */
+  /** Lean's defaults. */
   defaults(schema: Schema): Json | Failed;
-  /** Lean's close: the output of a screen that closes in a final state, checked and encoded in the order it was built. */
+  /** Lean's close. */
   close(scope: Scope, records: RecordSource, access: Access): Json | Failed;
-  /** Lean's closeEnsures: the first failing ensures of `screen`, which closed with `input` and the sorted `output`. */
+  /** Lean's closeEnsures. */
   closeEnsures(screen: string, input: Fields, output: Fields): string | undefined | Failed;
 }
 

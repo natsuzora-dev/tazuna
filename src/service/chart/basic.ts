@@ -83,13 +83,12 @@ function transitionOf(t: TransitionStructure): Transition {
   };
 }
 
-/** Returns the executable form of `a`. */
 const activityOf = (a: ActivityStructure): Activity =>
   a.keyword === "opens"
     ? { keyword: a.keyword, key: a.name, target: a.definition, modal: a.modal }
     : { keyword: a.keyword, key: a.name, target: a.definition };
 
-/** Lean's Chart.ofSpec: the executable chart of the structure `c`. */
+/** Lean's Chart.ofSpec. */
 export function executableChart(c: ChartStructure, order: number, opened: boolean): Chart {
   return {
     name: c.name,

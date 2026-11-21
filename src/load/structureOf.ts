@@ -45,11 +45,9 @@ function oneEntry(record: Readonly<Record<string, unknown>>): unknown {
 }
 
 /**
- * The structure, or what was found on the way where the structure would hold a placeholder. A reference that is missing
- * or names a definition of another kind is Malformed.unresolvedReference. A default that throws while its schema
- * converts, or that the defaults of a single entity or a map state's copy context fail, is Malformed.defaultSchema, one
- * per definition and one per map state. A value that no export names is left to unexportedDefinitions and owners, which
- * report it; `unnamed` lists where, so that load can tell when neither did.
+ * The structure, or what was found on the way where the structure would hold a placeholder (Malformed.unresolvedReference,
+ * defaultSchema). A value that no export names is left to unexportedDefinitions and owners, which report it; `unnamed`
+ * lists where, so that load can tell when neither did.
  */
 export type StructureOf =
   | { readonly kind: "built"; readonly structure: Omit<Structure, "explores"> }

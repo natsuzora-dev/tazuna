@@ -44,10 +44,7 @@ export const bag = <E extends z.ZodType>(element: E): CollectionSchema<E, "bag">
 export const set = <E extends z.ZodType>(element: E): CollectionSchema<E, "bag"> =>
   marked(element, setCheck as never, { kind: "set" });
 
-/**
- * The fields of `E` whose encoded value orders as their decoded one, which Lean's SortKey orders: a number with no
- * codec, or tazuna's datetime or date.
- */
+/** The fields of `E` whose encoded value orders as their decoded one, which Lean's SortKey orders. */
 type SortKeyOf<E extends z.ZodObject> = {
   [K in keyof E["shape"]]-?: E["shape"][K] extends typeof datetimeSchema | typeof dateSchema
     ? K
@@ -95,10 +92,7 @@ function unbagged(collection: Collection | undefined, value: unknown): unknown {
   return collection.kind === "sortedBy" && Array.isArray(value) ? value.flatMap((v) => bagValues(v) ?? [v]) : value;
 }
 
-/**
- * Lean's sortCollections: the encoded value `v` with each array sorted as its JSON Schema says, the elements of a bag or
- * set by canonical text and a sortedBy array by its key, with equal keys by canonical text.
- */
+/** Lean's sortCollections. */
 export function sortCollections(schema: unknown, v: Json): Json {
   const options = unionOptions(schema);
   if (options !== undefined) {

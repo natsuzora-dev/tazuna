@@ -81,8 +81,7 @@ function testSnapshots(
 
 /**
  * Simulates and explores `scenarios`, some or all of the spec's, then tests the snapshots (testSnapshots). A scenario
- * still written as an input list, which only verify's examples keep until verify runs the simulation, is not run: its snapshot is kept as it
- * is.
+ * still written as an input list, which only verify's examples keep, is not run, and its snapshot is kept.
  */
 export function testSpec(
   spec: CheckedSpec,

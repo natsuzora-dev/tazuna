@@ -4,7 +4,7 @@ import { isObject, type Json, sameJson } from "../data/values.ts";
 import type { Structure } from "./structure.generated.ts";
 import { type DefinitionStructure, type DomainStructure, receivesOf, requestsOf } from "./structure.ts";
 
-/** Lean's Tree: the values of a schema, as explore reads its JSON Schema with the declared domains. */
+/** Lean's Tree. */
 export type Tree =
   | { readonly kind: "listed"; readonly values: readonly Json[] }
   | { readonly kind: "union"; readonly options: readonly Tree[] }
@@ -19,7 +19,7 @@ interface Field {
 /** Lean's Undeclared. */
 export type Undeclared = readonly (readonly SchemaStep[])[];
 
-/** Lean's Except Undeclared Tree: the tree, or the paths of the nodes that no domain names and whose type is not finite. */
+/** Lean's Except Undeclared Tree. */
 export type TreeOf =
   | { readonly ok: true; readonly tree: Tree }
   | { readonly ok: false; readonly undeclared: Undeclared };

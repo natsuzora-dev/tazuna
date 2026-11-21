@@ -375,10 +375,7 @@ function startInstances(r: Processing): void {
   for (const c of starting(r.st)) startInstance(r, c);
 }
 
-/**
- * Lean's startRecords: writes the record of each single entity that Given left out, as the defaults of its fields, which
- * load checks (Malformed.defaultSchema).
- */
+/** Lean's startRecords. */
 function startRecords(r: Processing): void {
   const { singles } = r.state.records;
   for (const name of r.st.singles) {

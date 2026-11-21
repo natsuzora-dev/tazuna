@@ -66,8 +66,7 @@ export const executeSpec = (
 ): Made => made(spec, sc, execute, stepOrders, cache);
 
 /**
- * A copy of `m` between lines that a run can continue apart from `m`. Each processing gets a copy of its listener as
- * its note and evaluations, and functions instrumented over that copy. Messages are copied, since a run sets their
+ * A copy of `m` between lines that a run can continue apart from `m`. Messages are copied, since a run sets their
  * status; the logs that a run only appends to are copied and their entries shared. Every world and processing field is
  * listed, as in cloneState.
  */
@@ -113,9 +112,8 @@ function cloneMade(spec: Spec, m: Made): Made {
 
 /**
  * Continues the execution `parent` of the lines of `sc` before `from` with the lines from `from` on, leaving `parent`
- * as it is. The plain method is executeSpec of all the lines, which the diff tests compare it with. `parent` has no
- * InvalidScenario violation: when Given reports one, execute takes no line, and a world does not tell Given's
- * violations from a line's.
+ * as it is. `parent` has no InvalidScenario violation: when Given reports one, execute takes no line, and a world does
+ * not tell Given's violations from a line's.
  */
 export function executeSpecFrom(spec: Spec, sc: Scenario, parent: Made, from: number): Made {
   if (parent.world.violations.length > 0) throw new InternalError("continuing a world with InvalidScenario violations");
