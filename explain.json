@@ -561,6 +561,19 @@
         "violation": "{\"kind\":\"Illegal.automationCycle\",\"definition\":{\"service\":\"notifier\",\"name\":\"noticeAdded\"},\"data\":{\"chain\":[{\"service\":\"todo\",\"name\":\"readd\"}]},\"location\":{\"file\":\"notifier/notifier.ts\",\"line\":8}}"
       }
     },
+    "Illegal.defaultedMapKey": {
+      "meaning": "The schema at `path` of a map state's key declares a default, which never fills: items is typed by the key's output type, in which that field is required. `check` reports none exactly when no map state's key declares a default at any depth (`Checked.mapKeysUndefaulted`).",
+      "example": {
+        "excerpt": {
+          "file": "greeter/greeter.ts",
+          "from": 19,
+          "to": 36,
+          "line": 19,
+          "text": "export const perTask = machine({\n  description: \"Greet in each copy of a task\",\n  commands: { greet },\n  initial: \"rows\",\n  states: {\n    rows: {\n      type: \"map\",\n      key: { taskId: ref(Task), rank: z.int().default(0), label: z.object({ text: z.string().default(\"\") }) },\n      initial: \"greeting\",\n      states: { greeting: {}, done: {} },\n    },\n  },\n}).chart({\n  states: {\n    rows: { items: ({ records }) => records.Task.map((t) => ({ taskId: t.id, rank: 1, label: { text: t.id } })) },\n    greeting: { sends: { greet: { input: ({ key }) => key, onAccepted: [{ target: \"done\" }], onRejected: [] } } },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"Illegal.defaultedMapKey\",\"definition\":{\"service\":\"greeter\",\"name\":\"perTask\"},\"data\":{\"path\":[\"rows\",\"key\",\"rank\"]},\"location\":{\"file\":\"greeter/greeter.ts\",\"line\":19}}"
+      }
+    },
     "Illegal.foreignEvent": {
       "meaning": "The command lists in its emits `event`, an event of another service. `check` reports none exactly when every command lists only events of its own service (`commands_emit_own_events`), and then an accepted command emits only those (`accepted_command_emits_own_events`).",
       "example": {

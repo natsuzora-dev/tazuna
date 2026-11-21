@@ -51,6 +51,8 @@ structure Checked (s : Structure) : Prop where
     (path, .unorderedSortKey key) ∉ Schemas.issues x.1 x.2
   /-- Every two options of a union that holds a collection are `apart`, so no value fits both (`apart_disjoint`). -/
   unionsApart : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.schemasOf d, ∀ path, (path, .ambiguousUnion) ∉ Schemas.issues x.1 x.2
+  /-- No map state's key declares a default, which items, typed by the key's output type, never leaves to fill. -/
+  mapKeysUndefaulted : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.mapKeysOf d, Schemas.defaultPaths x.1 x.2 = []
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/
 @[guarantee] theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by
@@ -145,9 +147,9 @@ structure Checked (s : Structure) : Prop where
   rw [parents, controls, reasons, restored, delays, negative, schemas]
   simp only [and_assoc]
   constructor
-  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, m, sk, ua⟩
-    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng, sk, ua⟩
+  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, m, sk, ua, mk⟩
+    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng, sk, ua, mk⟩
   · intro h
-    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.9, h.12, h.13⟩
+    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.9, h.12, h.13, h.14⟩
 
 end Tazuna.Thm.Validation.Check

@@ -63,6 +63,7 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
     case "Illegal.inexactDelay":
     case "Illegal.negativeDelay":
     case "Illegal.unorderedSortKey":
+    case "Illegal.defaultedMapKey":
     case "Illegal.ambiguousUnion":
       return placeOf(spec, illegal.definition);
   }

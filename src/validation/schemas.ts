@@ -86,15 +86,35 @@ function schemasOf(d: DefinitionStructure): [string[], unknown][] {
   }
 }
 
+/** Lean's defaultPaths. */
+const defaultPaths = (path: readonly string[], schema: unknown): (readonly string[])[] => [
+  ...(field(schema, "default") === undefined ? [] : [path]),
+  ...children(schema).flatMap(([k, c]) => defaultPaths(k === undefined ? path : [...path, k], c)),
+];
+
+/** Lean's mapKeysOf. */
+const mapKeysOf = (d: DefinitionStructure): [string[], unknown][] =>
+  d.kind === "machine" || d.kind === "screen"
+    ? d.states.flatMap((st): [string[], unknown][] => (st.kind === "map" ? [[[st.name, "key"], st.map.key]] : []))
+    : [];
+
 export function check(structure: Structure): Illegal[] {
-  return structure.definitions.flatMap((d) =>
-    schemasOf(d).flatMap(([path, schema]) =>
-      issues(path, schema).map((issue): Illegal => {
-        const definition = { service: d.service, name: d.name };
-        return issue.kind === "unorderedSortKey"
-          ? { kind: "Illegal.unorderedSortKey", definition, data: { path: [...issue.path], key: issue.key } }
-          : { kind: "Illegal.ambiguousUnion", definition, data: { path: [...issue.path] } };
-      }),
-    ),
-  );
+  return structure.definitions.flatMap((d) => {
+    const definition = { service: d.service, name: d.name };
+    return [
+      ...schemasOf(d).flatMap(([path, schema]) =>
+        issues(path, schema).map(
+          (issue): Illegal =>
+            issue.kind === "unorderedSortKey"
+              ? { kind: "Illegal.unorderedSortKey", definition, data: { path: [...issue.path], key: issue.key } }
+              : { kind: "Illegal.ambiguousUnion", definition, data: { path: [...issue.path] } },
+        ),
+      ),
+      ...mapKeysOf(d).flatMap(([at, schema]) =>
+        defaultPaths(at, schema).map(
+          (path): Illegal => ({ kind: "Illegal.defaultedMapKey", definition, data: { path: [...path] } }),
+        ),
+      ),
+    ];
+  });
 }

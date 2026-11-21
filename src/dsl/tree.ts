@@ -37,7 +37,8 @@ type TreeNode =
   | {
       readonly type: "map";
       /**
-       * The shape of a copy's key. Expressions in a copy read it as `key`, and `active` outside the map state does not
+       * The shape of a copy's key, with no default at any depth, since items returns whole keys
+       * (`Illegal.defaultedMapKey`). Expressions in a copy read it as `key`, and `active` outside the map state does not
        * name a copy's states.
        */
       readonly key: Shape;

@@ -2,7 +2,8 @@ import Tazuna.Data.Collections
 import Tazuna.Validation.Illegal
 
 /-!
-The schema rules that keep each collection's order defined by its encoded value, which sortCollections orders.
+The schema rules that keep each collection's order defined by its encoded value, which sortCollections orders, and that
+keep every default in a map state's key out of reach.
 -/
 
 namespace Tazuna.Validation.Schemas
@@ -106,7 +107,22 @@ def illegal (d : Definition) : List String × Issue → Illegal
   | (path, .unorderedSortKey key) => .unorderedSortKey d.ref path key
   | (path, .ambiguousUnion) => .ambiguousUnion d.ref path
 
+/-- The paths at and below `path` whose schema declares a default. -/
+def defaultPaths (path : List String) (schema : Value) : List (List String) :=
+  ((schema.field? "default").toList.map fun _ => path) ++
+  (children schema).attach.flatMap fun ⟨c, _h⟩ => defaultPaths (path ++ c.1.toList) c.2
+termination_by sizeOf schema
+decreasing_by exact children_lt _h
+
+/-- The key schema of each map state of a definition, with the keyword path that holds it. -/
+def mapKeysOf (d : Definition) : List (List String × Value) :=
+  match d.body with
+  | .machine c | .screen c => c.states.filterMap fun st => st.type.map?.map fun m => ([st.name, "key"], m.key)
+  | _ => []
+
 def check (s : Structure) : List Illegal :=
-  s.definitions.flatMap fun d => (schemasOf d).flatMap fun x => (issues x.1 x.2).map (illegal d)
+  s.definitions.flatMap fun d =>
+    (schemasOf d).flatMap (fun x => (issues x.1 x.2).map (illegal d)) ++
+      (mapKeysOf d).flatMap fun x => (defaultPaths x.1 x.2).map (.defaultedMapKey d.ref)
 
 end Tazuna.Validation.Schemas

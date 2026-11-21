@@ -149,6 +149,18 @@ export type Illegal =
       };
     }
   /**
+   * The schema at `path` of a map state's key declares a default, which never fills: items is typed by the key's output
+   * type, in which that field is required. `check` reports none exactly when no map state's key declares a default at any
+   * depth (`Checked.mapKeysUndefaulted`).
+   */
+  | {
+      readonly kind: "Illegal.defaultedMapKey";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly path: readonly string[];
+      };
+    }
+  /**
    * The union at `path` of the definition's schemas holds a collection, and one value can fit two of its options by type,
    * const or enum, closed fields, and required fields, so the option whose order sorts the value would be a guess. `check`
    * reports none exactly when every such union tells its options apart (`Checked.unionsApart`).
@@ -174,5 +186,6 @@ export const illegalKinds = [
   "Illegal.inexactDelay",
   "Illegal.negativeDelay",
   "Illegal.unorderedSortKey",
+  "Illegal.defaultedMapKey",
   "Illegal.ambiguousUnion",
 ] as const;

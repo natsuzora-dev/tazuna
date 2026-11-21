@@ -90,6 +90,13 @@ const contexts = [
   },
 ];
 
+// Map key schemas for Schemas.check: no default, a default on a field, and a default below a field.
+const mapKeys = [
+  rows({ type: "string" }),
+  rows({ type: "integer", default: 0 }),
+  rows({ ...rows({ type: "string", default: "" }), default: {} }),
+];
+
 const pick = <T>(items: readonly T[], k: number): T | undefined => items[k % Math.max(items.length, 1)];
 const charts = (s: Structure) =>
   s.definitions.filter((d): d is ChartStructure => d.kind === "machine" || d.kind === "screen");
@@ -181,6 +188,13 @@ const mutations: Record<string, (s: Structure, k: Pick3) => void> = {
   context(s, [a, b]) {
     const chart = pick(charts(s), a);
     if (chart) (chart as { context: unknown }).context = pick(contexts, b);
+  },
+  mapKey(s, [a, b]) {
+    const state = pick(
+      charts(s).flatMap((c) => c.states.filter((st) => st.kind === "map")),
+      a,
+    );
+    if (state?.kind === "map") (state.map as { key: unknown }).key = pick(mapKeys, b);
   },
   emits(s, [a, b, c]) {
     const command = pick(
