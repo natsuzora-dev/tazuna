@@ -1,8 +1,7 @@
-import { domain, explore } from "@natsuzora-dev/tazuna";
-import { listScreen } from "./screens.ts";
+import { explore } from "@natsuzora-dev/tazuna";
 
 export const screensExplore = explore({
   service: "screens",
   depth: 2,
-  domains: [domain(listScreen.controls.pick.payload.taskId, ["task-1"])],
+  domains: [],
 });

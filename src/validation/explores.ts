@@ -1,12 +1,12 @@
 import type { Illegal } from "../data/illegal.generated.ts";
-import { declared, moveSchemas, rootTree } from "../spec/domains.ts";
-import type { Explore, Structure } from "../spec/structure.generated.ts";
-import { schemaOwner } from "../spec/structure.ts";
+import { domainOf, moveSchemas, rootTree } from "../spec/domains.ts";
+import type { Structure } from "../spec/structure.generated.ts";
+import { type ExploreStructure, schemaOwner } from "../spec/structure.ts";
 
 /** Lean's Explores.undeclared. */
-const undeclared = (structure: Structure, x: Explore): Illegal[] =>
+const undeclared = (structure: Structure, x: ExploreStructure): Illegal[] =>
   moveSchemas(structure, x.service).flatMap(([schema, json]) => {
-    const tree = rootTree(declared(x.domains, schema), json);
+    const tree = rootTree(domainOf(x.domains, schema), json);
     return tree.ok
       ? []
       : tree.undeclared.map(

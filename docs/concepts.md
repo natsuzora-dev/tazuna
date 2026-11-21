@@ -107,10 +107,13 @@ A value derived from records is a plain function that reads `records` where it i
 
 ## The spec bounds what `test` explores
 
-After each scenario, `test` explores every path of moves that the world enables, up to a depth, and each move writes its inputs from finite sets.
-The spec declares both in `explore()`: the depth, and a `domain()` of values for each input whose type is not finite, such as a string or a number.
+After each scenario, `test` explores every path of moves that the world enables, up to a depth, and each move writes its values from finite sets.
+The spec declares both in `explore()`: the depth, and a `domain()` of values for each schema whose type is not finite, such as a string or a number.
+A domain belongs to a schema, not to an input: it applies wherever the spec writes that schema, in every value that a move may carry.
+Those values are the inputs of the service's commands and queries, and the outputs, events, and control payloads that a peer or a user writes, since any other service may be external in some scenario.
 The bounds are typed by the schemas that they name and reviewed with the spec, as TLA+ keeps its bounds in the model's configuration, and `test` infers none of them.
-A small domain usually finds what a large one finds, so one or two values per input is a good start.
+For the same reason, a domain that names nothing, or two that name one schema, are mistakes that loading reports.
+A small domain usually finds what a large one finds, so one or two values per schema is a good start.
 
 ## Then states the intent, and the snapshot records the run
 

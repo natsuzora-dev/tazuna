@@ -161,7 +161,7 @@ def Explored.tree (st : Service) (x : Explored) (schema : Schema) : m Tree :=
   match st.schemaOf schema with
   | none => do MonadNote.note (.bug s!"no schema {repr schema}"); pure default
   | some json =>
-    match rootTree (declared x.domains schema) json with
+    match rootTree (domainOf x.domains schema) json with
     | .ok t => pure t
     | .error paths => do MonadNote.note (.bug s!"no domain of {repr schema} at {repr paths}"); pure default
 
@@ -170,8 +170,8 @@ The values of `schema` that explore may write: its JSON Schema has no node that 
 finite, and the declared domains and the finite types admit the value (Admitted).
 -/
 def Explored.Admits (st : Service) (x : Explored) (schema : Schema) (v : Value) : Prop :=
-  ∃ json t, st.schemaOf schema = some json ∧ rootTree (declared x.domains schema) json = .ok t ∧
-    Admitted (declared x.domains schema) (defsOf json) json [] v
+  ∃ json t, st.schemaOf schema = some json ∧ rootTree (domainOf x.domains schema) json = .ok t ∧
+    Admitted (domainOf x.domains schema) (defsOf json) json [] v
 
 /-- The rejections of kind `kind`: one per reason in `reasons` for requires, which decodedAnswer checks, else one. -/
 def rejections (reasons : List String) (kind : RejectionKind) : List Value :=

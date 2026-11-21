@@ -305,8 +305,8 @@ export type AssumptionMismatch =
     };
 
 /**
- * The values that explore gives the node at `path` of the JSON Schema of `schema`: the values of a `domain()` whose
- * schema is the one written there, or is a key of the same entity.
+ * The values that explore gives the node at `path` of the JSON Schema of `schema`: the values of the one `domain()` that
+ * names the node, which TS load decides from Zod object identity (Malformed.overlappingDomain).
  */
 export type Domain = {
   readonly schema: Schema;
@@ -318,6 +318,7 @@ export type Domain = {
 export type Explore = {
   readonly service: string;
   readonly depth: number;
+  /** The domains at the nodes of the schemas that the service's moves may carry, at most one per schema and path. */
   readonly domains: readonly Domain[];
 };
 

@@ -1,14 +1,16 @@
 import type { z } from "zod";
+import { expectFound } from "../data/internalError.ts";
 import { partAt, writtenAs } from "../data/jsonSchema.ts";
 import type { Malformed } from "../data/malformed.ts";
-import type { Schema, SchemaStep } from "../data/schema.generated.ts";
+import type { SchemaStep } from "../data/schema.generated.ts";
 import { schemaNode } from "../data/schemaNode.ts";
-import { type Json, objectOf, type Shape } from "../data/values.ts";
-import type { Definition, Named, Place } from "../dsl/definition.ts";
+import { type Json, objectOf } from "../data/values.ts";
+import { type Definition, type Named, type Place, shapeIn } from "../dsl/definition.ts";
 import { keyTarget } from "../dsl/entity.ts";
-import type { Explore as Declared, Domain as DeclaredDomain } from "../dsl/explore.ts";
-import type { Domain, Explore, Structure } from "../spec/structure.generated.ts";
-import { schemaIn } from "../spec/structure.ts";
+import type { Domain, Explore } from "../dsl/explore.ts";
+import { moveSchemas, rootTree } from "../spec/domains.ts";
+import type { Structure } from "../spec/structure.generated.ts";
+import { type DomainStructure, type ExploreStructure, schemaOwner } from "../spec/structure.ts";
 import type { Found } from "./found.ts";
 
 const isJson = (value: unknown): value is Json =>
@@ -22,8 +24,8 @@ const isJson = (value: unknown): value is Json =>
     Object.values(value as object).every(isJson));
 
 /** A domain value that is not JSON or that its schema rejects, refinements included, is Malformed.domainValue. */
-export function domainValues(service: string, declared: Declared, place: Place): Found<Malformed>[] {
-  return declared.domains.flatMap((d, domain) =>
+export function domainValues(service: string, written: Explore, place: Place): Found<Malformed>[] {
+  return written.domains.flatMap((d, domain) =>
     d.values.flatMap((value, index): Found<Malformed>[] => {
       let accepted: boolean;
       try {
@@ -54,85 +56,66 @@ function keyAt(schema: z.ZodType): unknown {
 }
 
 /** Whether `d` names the node whose Zod part is `part`: the schema written there, or a key of the same entity. */
-function names(d: DeclaredDomain, part: z.ZodType): boolean {
+function names(d: Domain, part: z.ZodType): boolean {
   const target = keyAt(d.schema);
   return writtenAs(part).includes(d.schema) || (target !== undefined && keyAt(part) === target);
 }
 
-const isObject = (v: Json | undefined): v is { readonly [key: string]: Json } =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
+/**
+ * The Zod part of `root` at `path` of its JSON Schema. Zod writes a nullable of a plain type as a list of types, and any
+ * other list of types once per type of one schema, whose option is that schema itself.
+ */
+const partFor = (root: z.ZodType, path: readonly SchemaStep[]): z.ZodType =>
+  path.reduce((at, step) => {
+    const node = schemaNode(writtenAs(at).at(-1) ?? at).type;
+    return step.kind === "option" && node !== "union" && node !== "nullable" ? at : partAt(at, [step]);
+  }, root);
 
 /**
- * The domains of `declared` at the nodes of the JSON Schema `json` of `schema`, whose Zod schema is `root`: each node
- * that treeOf reads, the first domain that names it, and no node below it.
+ * The explore of `service` with each domain of `written` at the nodes that it names, among the nodes that treeOf reads
+ * of the schemas that the service's moves may carry. A domain that names no node is Malformed.unusedDomain, and two
+ * domains that name one node are Malformed.overlappingDomain.
  */
-function domainsIn(declared: Declared, schema: Schema, json: Json, root: z.ZodType): Domain[] {
-  const found: Domain[] = [];
-  const walk = (s: Json, path: readonly SchemaStep[], part: z.ZodType): void => {
-    const d = declared.domains.find((x) => names(x, part));
-    if (d !== undefined) {
-      found.push({ schema, path, values: d.values as Json[] });
-      return;
-    }
-    if (!isObject(s)) return;
-    const into = (child: Json, step: SchemaStep) => walk(child, [...path, step], partAt(part, [step]));
-    const options = Array.isArray(s["anyOf"]) ? s["anyOf"] : Array.isArray(s["oneOf"]) ? s["oneOf"] : undefined;
-    if (options !== undefined) {
-      for (const [index, o] of options.entries()) into(o, { kind: "option", index });
-      return;
-    }
-    const type = s["type"];
-    // Zod writes a nullable of a plain type as a type list, and any other type list once per type of one schema.
-    if (Array.isArray(type)) {
-      const nullable = schemaNode(writtenAs(part).at(-1) ?? part).type === "nullable";
-      for (const [index, t] of type.entries()) {
-        const step: SchemaStep = { kind: "option", index };
-        walk({ ...s, type: t }, [...path, step], nullable ? partAt(part, [step]) : part);
-      }
-      return;
-    }
-    const properties = s["properties"];
-    if (type === "object" && isObject(properties))
-      for (const [name, p] of Object.entries(properties)) into(p, { kind: "field", name });
-  };
-  walk(json, [], root);
-  return found;
-}
-
-/** The shape of each schema that a move may carry: an input, an output, an event payload, or a control payload. */
-function shapes(definitions: readonly Named<Definition>[]): [Schema, Shape][] {
-  return definitions.flatMap(({ service, name, definition: d }): [Schema, Shape][] => {
-    const ref = { service, name };
-    switch (d.kind) {
-      case "command":
-      case "query":
-        return [
-          [{ kind: "input", definition: ref }, d.input],
-          ...(d.output === undefined ? [] : [[{ kind: "output", definition: ref }, d.output] as [Schema, Shape]]),
-        ];
-      case "event":
-        return [[{ kind: "payload", event: ref }, d.payload]];
-      case "screen":
-        return Object.entries(d.controls as Readonly<Record<string, { readonly payload?: Shape }>>).flatMap(
-          ([control, c]): [Schema, Shape][] =>
-            c.payload === undefined ? [] : [[{ kind: "control", screen: ref, control }, c.payload]],
-        );
-      default:
-        return [];
-    }
-  });
-}
-
-/** The explore of `service`, with each domain at the nodes that it names (Structure.explores). */
-export function exploreOf(
-  structure: Pick<Structure, "definitions">,
+export function placeDomains(
+  structure: Structure,
   definitions: readonly Named<Definition>[],
   service: string,
-  declared: Declared,
-): Explore {
-  const domains = shapes(definitions).flatMap(([schema, shape]) => {
-    const json = schemaIn(structure, schema);
-    return json === undefined ? [] : domainsIn(declared, schema, json, objectOf(shape));
-  });
-  return { service, depth: declared.depth, domains };
+  written: Explore,
+  place: Place,
+): { readonly explore: ExploreStructure; readonly malformed: readonly Found<Malformed>[] } {
+  const domains: DomainStructure[] = [];
+  const used = new Set<number>();
+  const overlapping = new Map<string, number[]>();
+  for (const [schema, json] of moveSchemas(structure, service)) {
+    const owner = schemaOwner(schema);
+    const named = expectFound(
+      `definition ${owner.service}.${owner.name}`,
+      definitions.find((d) => d.service === owner.service && d.name === owner.name),
+    );
+    const root = objectOf(shapeIn(named.definition, schema));
+    rootTree((path) => {
+      const part = partFor(root, path);
+      const naming = written.domains.flatMap((d, i) => (names(d, part) ? [i] : []));
+      for (const i of naming) used.add(i);
+      if (naming.length > 1) overlapping.set(naming.join(), naming);
+      const [first] = naming;
+      if (first === undefined) return undefined;
+      const values = expectFound(`domain ${first}`, written.domains[first]).values as Json[];
+      domains.push({ schema, path: [...path], values });
+      return values;
+    }, json);
+  }
+  const malformed = [
+    ...written.domains.flatMap((_, domain): Malformed[] =>
+      used.has(domain) ? [] : [{ kind: "Malformed.unusedDomain", definition: null, data: { service, domain } }],
+    ),
+    ...[...overlapping.values()].map(
+      (naming): Malformed => ({
+        kind: "Malformed.overlappingDomain",
+        definition: null,
+        data: { service, domains: naming },
+      }),
+    ),
+  ].map((violation) => ({ violation, place }));
+  return { explore: { service, depth: written.depth, domains }, malformed };
 }

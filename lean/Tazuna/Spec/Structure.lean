@@ -473,8 +473,8 @@ namespace Tazuna.Spec
 open Tazuna.Data
 
 /--
-The values that explore gives the node at `path` of the JSON Schema of `schema`: the values of a `domain()` whose
-schema is the one written there, or is a key of the same entity.
+The values that explore gives the node at `path` of the JSON Schema of `schema`: the values of the one `domain()` that
+names the node, which TS load decides from Zod object identity (Malformed.overlappingDomain).
 -/
 structure Domain where
   schema : Schema
@@ -488,6 +488,7 @@ derive_wire Domain
 structure Explore where
   service : String
   depth : Nat
+  /-- The domains at the nodes of the schemas that the service's moves may carry, at most one per schema and path. -/
   domains : List Domain
 deriving Repr, Inhabited
 

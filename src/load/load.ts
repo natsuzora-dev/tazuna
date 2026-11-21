@@ -20,7 +20,7 @@ import { isScenarioDefinition, type ScenarioDefinition, scenarioService } from "
 import type { Structure } from "../spec/structure.generated.ts";
 import type { DefinitionStructure } from "../spec/structure.ts";
 import { opaqueCollections } from "./collections.ts";
-import { domainValues, exploreOf } from "./explores.ts";
+import { domainValues, placeDomains } from "./explores.ts";
 import type { Found } from "./found.ts";
 import { caseCollisions, duplicateNames, type NamedExport, reservedNames } from "./names.ts";
 import { type DefinerExport, owners } from "./owners.ts";
@@ -256,14 +256,14 @@ export async function loadSpec(root: string): Promise<Loaded> {
     }
     return [{ name, service, place, definition: { schema, values: value as Constants["values"] } }];
   });
-  const explores = new Map<string, Explore>();
+  const explores = new Map<string, { readonly written: Explore; readonly place: Place }>();
   const exploreMalformed = foundExplores.flatMap(({ place, value }): Found<Malformed>[] => {
     const { service } = value;
     if (!services.has(service))
       return [{ violation: { kind: "Malformed.unknownService", definition: null, data: { name: service } }, place }];
     if (explores.has(service))
       return [{ violation: { kind: "Malformed.duplicateExplore", definition: null, data: { service } }, place }];
-    explores.set(service, value);
+    explores.set(service, { written: value, place });
     return domainValues(service, value, place);
   });
   const defined = foundScenarios.flatMap(({ name, place, value }): Named<ScenarioDefinition>[] => {
@@ -285,6 +285,12 @@ export async function loadSpec(root: string): Promise<Loaded> {
   });
   const names = new Map<unknown, Named<Definition>>(definitions.map((d) => [d.definition, d]));
   const built = structureOf(definitions, names, services, contracts);
+  const placed =
+    built.kind === "found"
+      ? []
+      : [...explores].map(([service, { written, place }]) =>
+          placeDomains({ ...built.structure, explores: [] }, definitions, service, written, place),
+        );
   const opaque = opaqueCollections(definitions, constants);
   const exported = new Set(found.map((d) => d.definition));
   const loaded = loadScenarios(root, defined, services, (d) => {
@@ -315,6 +321,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
     ...owned.malformed,
     ...unknownServices,
     ...exploreMalformed,
+    ...placed.flatMap((p) => p.malformed),
     ...missingExplores,
     ...reservedNames([...serviceNamed, ...defined]),
     ...caseCollisions(serviceNamed),
@@ -332,7 +339,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
     throw new InternalError(`${built.unnamed.join(", ")} names a value that no export names, and no check reports it`);
   const structure = {
     ...built.structure,
-    explores: [...explores].map(([service, declared]) => exploreOf(built.structure, definitions, service, declared)),
+    explores: placed.map((p) => p.explore),
   };
   return { kind: "structured", spec: { ...spec, structure } };
 }

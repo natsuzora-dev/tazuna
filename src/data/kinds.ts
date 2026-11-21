@@ -33,6 +33,8 @@ const malformedKinds = every<Malformed["kind"]>()([
   "Malformed.missingExplore",
   "Malformed.duplicateExplore",
   "Malformed.domainValue",
+  "Malformed.unusedDomain",
+  "Malformed.overlappingDomain",
   "Malformed.reservedNameCharacter",
   "Malformed.writtenCreatedKey",
   "Malformed.caseCollision",

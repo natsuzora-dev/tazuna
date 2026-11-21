@@ -1432,6 +1432,19 @@
         "violation": "{\"kind\":\"Malformed.opaqueCollection\",\"definition\":{\"service\":\"todo\",\"name\":\"marks\"},\"data\":{\"path\":[\"output\",\"tags\"],\"collection\":\"bag\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":14}}"
       }
     },
+    "Malformed.overlappingDomain": {
+      "meaning": "The domains at the indices `domains` of the `explore()` of `service` all name one node, so which values the node takes would depend on their order.",
+      "example": {
+        "excerpt": {
+          "file": "todo/explore.ts",
+          "from": 4,
+          "to": 8,
+          "line": 4,
+          "text": "export const todoExplore = explore({\n  service: \"todo\",\n  depth: 2,\n  domains: [domain(Task.fields.id, [\"task-1\"]), domain(Task.fields.title, [\"Buy milk\"]), domain(ref(Task), [\"task-2\"])],\n});"
+        },
+        "violation": "{\"kind\":\"Malformed.overlappingDomain\",\"definition\":null,\"data\":{\"service\":\"todo\",\"domains\":[0,2]},\"location\":{\"file\":\"todo/explore.ts\",\"line\":4}}"
+      }
+    },
     "Malformed.reservedNameCharacter": {
       "meaning": "The service or scenario name `name` contains `character`, one of the characters that separate the parts of tazuna's generated names (trace names, created keys, line ids, copy names, snapshot names).",
       "example": {
@@ -1560,6 +1573,19 @@
           "text": "export const retryTask = command({ input: { id: z.string() }, emits: [JSON.parse(\"0\") || addTask] }).decide(() => []);"
         },
         "violation": "{\"kind\":\"Malformed.unresolvedReference\",\"definition\":{\"service\":\"worklist\",\"name\":\"retryTask\"},\"data\":{\"path\":[\"emits\",0],\"expected\":\"event\"},\"location\":{\"file\":\"worklist/worklist.ts\",\"line\":18}}"
+      }
+    },
+    "Malformed.unusedDomain": {
+      "meaning": "The domain at index `domain` of the `explore()` of `service` names no node of a schema that the service's moves may carry: its schema is written nowhere there, or only inside an array, a record, or a node that another domain names.",
+      "example": {
+        "excerpt": {
+          "file": "todo/explore.ts",
+          "from": 5,
+          "to": 9,
+          "line": 5,
+          "text": "export const todoExplore = explore({\n  service: \"todo\",\n  depth: 2,\n  domains: [domain(Task.fields.id, [\"task-1\"]), domain(Task.fields.title, [\"Buy milk\"]), domain(z.string(), [\"Call\"])],\n});"
+        },
+        "violation": "{\"kind\":\"Malformed.unusedDomain\",\"definition\":null,\"data\":{\"service\":\"todo\",\"domain\":2},\"location\":{\"file\":\"todo/explore.ts\",\"line\":5}}"
       }
     },
     "Malformed.writtenCreatedKey": {

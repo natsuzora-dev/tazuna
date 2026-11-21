@@ -1,8 +1,8 @@
 import { expectFound } from "../data/internalError.ts";
 import type { Schema, SchemaStep } from "../data/schema.generated.ts";
 import { isObject, type Json, sameJson } from "../data/values.ts";
-import type { Domain, Structure } from "./structure.generated.ts";
-import { type DefinitionStructure, receivesOf, requestsOf } from "./structure.ts";
+import type { Structure } from "./structure.generated.ts";
+import { type DefinitionStructure, type DomainStructure, receivesOf, requestsOf } from "./structure.ts";
 
 /** Lean's Tree: the values of a schema, as explore reads its JSON Schema with the declared domains. */
 export type Tree =
@@ -171,9 +171,9 @@ function treeOf(
 /** Lean's rootTree. */
 export const rootTree = (declared: Declared, json: Json): TreeOf => treeOf(declared, defsOf(json), json, []);
 
-/** Lean's declared. */
-export const declared =
-  (domains: readonly Domain[], schema: Schema): Declared =>
+/** Lean's domainOf. */
+export const domainOf =
+  (domains: readonly DomainStructure[], schema: Schema): Declared =>
   (path) =>
     domains.find((d) => sameJson(d.schema, schema) && sameJson(d.path, path))?.values;
 

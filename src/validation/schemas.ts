@@ -1,7 +1,7 @@
 import type { Illegal } from "../data/illegal.generated.ts";
 import { allApart, field, propertyOf, requiredOf, unionOptions } from "../data/unionOptions.ts";
 import type { Structure } from "../spec/structure.generated.ts";
-import { type DefinitionStructure, schemaProperties } from "../spec/structure.ts";
+import { type DefinitionStructure, type StateStructure, schemaProperties } from "../spec/structure.ts";
 
 /** Lean's orderedKey. */
 function orderedKey(item: unknown, key: string): boolean {
@@ -52,6 +52,10 @@ function issues(path: readonly string[], schema: unknown): Issue[] {
   ];
 }
 
+/** Lean's mapKeyOf. */
+const mapKeyOf = (st: StateStructure): [string[], unknown][] =>
+  st.kind === "map" ? [[[st.name, "key"], st.map.key]] : [];
+
 /** Lean's schemasOf. */
 function schemasOf(d: DefinitionStructure): [string[], unknown][] {
   switch (d.kind) {
@@ -74,12 +78,8 @@ function schemasOf(d: DefinitionStructure): [string[], unknown][] {
           p === null ? [] : [[["controls", k, "payload"], p]],
         ),
         ...d.states.flatMap((st): [string[], unknown][] => [
-          ...(st.kind === "map"
-            ? ([
-                [[st.name, "key"], st.map.key],
-                [[st.name, "context"], st.map.context],
-              ] as [string[], unknown][])
-            : []),
+          ...mapKeyOf(st),
+          ...(st.kind === "map" ? [[[st.name, "context"], st.map.context] as [string[], unknown]] : []),
           ...(st.held === null ? [] : [[[st.name, "held"], st.held.schema] as [string[], unknown]]),
         ]),
       ];
@@ -94,9 +94,7 @@ const defaultPaths = (path: readonly string[], schema: unknown): (readonly strin
 
 /** Lean's mapKeysOf. */
 const mapKeysOf = (d: DefinitionStructure): [string[], unknown][] =>
-  d.kind === "machine" || d.kind === "screen"
-    ? d.states.flatMap((st): [string[], unknown][] => (st.kind === "map" ? [[[st.name, "key"], st.map.key]] : []))
-    : [];
+  d.kind === "machine" || d.kind === "screen" ? d.states.flatMap(mapKeyOf) : [];
 
 export function check(structure: Structure): Illegal[] {
   return structure.definitions.flatMap((d) => {

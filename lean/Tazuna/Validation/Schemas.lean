@@ -3,7 +3,7 @@ import Tazuna.Validation.Illegal
 
 /-!
 The schema rules that keep each collection's order defined by its encoded value, which sortCollections orders, and that
-keep every default in a map state's key out of reach.
+forbid a default in a map state's key.
 -/
 
 namespace Tazuna.Validation.Schemas
@@ -88,6 +88,9 @@ def issues (path : List String) (schema : Value) : List (List String × Issue) :
 termination_by sizeOf schema
 decreasing_by exact children_lt _h
 
+/-- The key schema of the map state `st`, with the keyword path that holds it. -/
+def mapKeyOf (st : State) : Option (List String × Value) := st.type.map?.map fun m => ([st.name, "key"], m.key)
+
 /-- The JSON Schemas of a definition, each with the keyword path that holds it. -/
 def schemasOf (d : Definition) : List (List String × Value) :=
   match d.body with
@@ -100,7 +103,7 @@ def schemasOf (d : Definition) : List (List String × Value) :=
     [(["context"], c.context), (["input"], c.input), (["output"], c.output)] ++
       c.controls.filterMap (fun (k, p) => p.map ((["controls", k, "payload"], ·))) ++
       c.states.flatMap fun st =>
-        (st.type.map?.map fun m => [([st.name, "key"], m.key), ([st.name, "context"], m.context)]).getD [] ++
+        (mapKeyOf st).toList ++ (st.type.map?.map fun m => [([st.name, "context"], m.context)]).getD [] ++
           (st.held.map fun h => [([st.name, "held"], h.schema)]).getD []
 
 def illegal (d : Definition) : List String × Issue → Illegal
@@ -117,7 +120,7 @@ decreasing_by exact children_lt _h
 /-- The key schema of each map state of a definition, with the keyword path that holds it. -/
 def mapKeysOf (d : Definition) : List (List String × Value) :=
   match d.body with
-  | .machine c | .screen c => c.states.filterMap fun st => st.type.map?.map fun m => ([st.name, "key"], m.key)
+  | .machine c | .screen c => c.states.filterMap mapKeyOf
   | _ => []
 
 def check (s : Structure) : List Illegal :=

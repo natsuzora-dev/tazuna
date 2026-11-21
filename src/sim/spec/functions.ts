@@ -12,20 +12,21 @@ import { type Fields, type Json, objectOf, type Shape, strictObjectOf } from "..
 import { thrown, zodError } from "../../data/violation.ts";
 import { stateAt, transitionAt } from "../../dsl/chart.ts";
 import { type Conditions, firstFailing } from "../../dsl/conditions.ts";
-import type {
-  AnyCommand,
-  AnyControl,
-  AnyEvent,
-  AnyQuery,
-  Automation,
-  Binds,
-  ChartSpec,
-  Emit as DefinedEmit,
-  Definition,
-  Named,
-  ServiceDefinition,
-  StateSpec,
-  TransitionSpec,
+import {
+  type AnyCommand,
+  type AnyControl,
+  type AnyEvent,
+  type AnyQuery,
+  type Automation,
+  type Binds,
+  type ChartSpec,
+  type Emit as DefinedEmit,
+  type Definition,
+  type Named,
+  type ServiceDefinition,
+  type StateSpec,
+  shapeIn,
+  type TransitionSpec,
 } from "../../dsl/definition.ts";
 import { type AnyEntity, type AnyKeyedEntity, type Ref, refTarget } from "../../dsl/entity.ts";
 import type { Spec } from "../../load/load.ts";
@@ -216,23 +217,17 @@ export class SpecFunctions implements Functions {
   shape(schema: Schema): Shape {
     switch (schema.kind) {
       case "input":
-      case "output": {
-        const found = this.definition<{ readonly input?: Shape; readonly output?: Shape }>(
-          ["command", "query", "screen"],
-          schema.definition,
-        ).definition;
-        if (schema.kind === "input") return found.input ?? {};
-        if (found.output === undefined) throw new InternalError(`${schema.definition.name} has no output`);
-        return found.output;
-      }
-      case "payload":
-        return this.definition<AnyEvent>(["event"], schema.event).definition.payload;
-      case "control":
-        return (
-          this.control(this.definition<ChartSpec>(["screen"], schema.screen).definition, schema.control).payload ?? {}
+      case "output":
+        return shapeIn(
+          this.definition<Definition>(["command", "query", "screen"], schema.definition).definition,
+          schema,
         );
+      case "payload":
+        return shapeIn(this.definition<Definition>(["event"], schema.event).definition, schema);
+      case "control":
+        return shapeIn(this.definition<Definition>(["screen"], schema.screen).definition, schema);
       case "record":
-        return this.definition<AnyEntity>(["entity"], schema.entity).definition.fields as Shape;
+        return shapeIn(this.definition<Definition>(["entity"], schema.entity).definition, schema);
       case "context":
         return this.chartOf(schema.chart.name).named.definition.context;
       case "mapContext":

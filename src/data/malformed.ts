@@ -49,6 +49,16 @@ export type Malformed =
    */
   | Of<"domainValue", null, { readonly service: string; readonly domain: number; readonly value: number }>
   /**
+   * The domain at index `domain` of the `explore()` of `service` names no node of a schema that the service's moves may
+   * carry: its schema is written nowhere there, or only inside an array, a record, or a node that another domain names.
+   */
+  | Of<"unusedDomain", null, { readonly service: string; readonly domain: number }>
+  /**
+   * The domains at the indices `domains` of the `explore()` of `service` all name one node, so which values the node
+   * takes would depend on their order.
+   */
+  | Of<"overlappingDomain", null, { readonly service: string; readonly domains: readonly number[] }>
+  /**
    * The service or scenario name `name` contains `character`, one of the characters that separate the parts of tazuna's
    * generated names (trace names, created keys, line ids, copy names, snapshot names).
    */

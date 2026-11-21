@@ -17,9 +17,8 @@ import type { Cache } from "../sim/spec/cache.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import type { Listener } from "../sim/spec/listener.ts";
 import { executeSpec, executeSpecFrom } from "../sim/spec/simulate.ts";
-import { declared, rootTree, treeValues } from "../spec/domains.ts";
-import type { Explore } from "../spec/structure.generated.ts";
-import { rejectionKinds, rejectionReasons } from "../spec/structure.ts";
+import { domainOf, rootTree, treeValues } from "../spec/domains.ts";
+import { type ExploreStructure, rejectionKinds, rejectionReasons } from "../spec/structure.ts";
 import { type Enabled, enabled } from "./enabled.ts";
 import { halted, worldFingerprint } from "./fingerprint.ts";
 import { search, Visited } from "./search.ts";
@@ -154,7 +153,7 @@ const requestMoves = (target: DefinitionRef, query: boolean, input: Json): Move[
   ]);
 
 /** Lean's exploreOf: the `explore()` of `service`, which load guarantees for a service with scenarios. */
-export const exploreOf = (spec: Spec, service: string): Explore =>
+export const exploreOf = (spec: Spec, service: string): ExploreStructure =>
   expectFound(
     `explore of ${service}`,
     spec.structure.explores.find((x) => x.service === service),
@@ -174,7 +173,7 @@ const answers = (
 /** Lean's fill, with the own service's declared domains. */
 function fill(
   spec: Spec,
-  domains: Explore["domains"],
+  domains: ExploreStructure["domains"],
   r: Processing,
   sc: Scenario,
   lines: readonly Line[],
@@ -184,7 +183,7 @@ function fill(
   const { st } = r;
   const own = sc.service;
   const values = (schema: Schema) => {
-    const tree = rootTree(declared(domains, schema), schemaOf(st, schema));
+    const tree = rootTree(domainOf(domains, schema), schemaOf(st, schema));
     if (!tree.ok)
       throw new InternalError(`no domain of ${JSON.stringify(schema)} at ${JSON.stringify(tree.undeclared)}`);
     return treeValues(tree.tree);
@@ -339,11 +338,10 @@ const coverageOf = (executed: Executed, reached: Coverage, parent?: Executed) =>
 };
 
 /**
- * Explores the scenario: executes its lines, and the paths that append up to the depth of its service's `explore()`
- * moves that face the own service,
- * breadth-first, without extending a path whose world an earlier path reached, discarding a path whose last line no one
- * could write (givable). Returns the violations of the running services that each path added, the step orders of its last
- * move's processings that change their result, and what the executions reached.
+ * Explores the scenario: executes its lines, and the paths that append moves that face the own service, up to the depth
+ * of its service's `explore()`, breadth-first, without extending a path whose world an earlier path reached, discarding
+ * a path whose last line no one could write (givable). Returns the violations of the running services that each path
+ * added, the step orders of its last move's processings that change their result, and what the executions reached.
  */
 export function exploreLines(spec: Spec, named: Named<LoadedScenario>): ExploredLines {
   const sc = named.definition.scenario;

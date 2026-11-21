@@ -293,8 +293,8 @@ end
 def rootTree (declared : List SchemaStep → Option (List Value)) (json : Value) : Except Undeclared Tree :=
   treeOf declared (defsOf json) json []
 
-/-- The values that the domains of `domains` declare for the node at `path` of `schema`. -/
-def declared (domains : List Domain) (schema : Schema) (path : List SchemaStep) : Option (List Value) :=
+/-- The values of the domain of the node at `path` of `schema`, which `domains` holds at most once. -/
+def domainOf (domains : List Domain) (schema : Schema) (path : List SchemaStep) : Option (List Value) :=
   (domains.find? fun d => d.schema == schema && d.path == path).map (·.values)
 
 /--

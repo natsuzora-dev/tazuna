@@ -1,17 +1,34 @@
 import type { z } from "zod";
 
-/** The values that explore gives the inputs of one schema, which `domain()` returns. */
+declare const made: unique symbol;
+
+/** The values that explore gives the nodes that one schema names, which only `domain()` makes. */
 export interface Domain {
+  readonly [made]: true;
   readonly schema: z.ZodType;
   readonly values: readonly unknown[];
 }
 
 /**
- * The values `values` for every input that explore writes where the spec writes `schema`, or, for an entity's key or
- * `ref()`, any schema of that entity's key. A boolean, an enum, a literal, null, and an optional field's absence need
- * no domain.
+ * The values `values` for every node that explore writes where the spec writes `schema`, the same Zod object, in any
+ * schema that a move of the explored service may carry: the input of an own command or query, the output of another
+ * service's command or query that the service sends (every other service may be external in some scenario, so this
+ * includes a peer that always runs), the payload of another service's event that the service receives, and the payload
+ * of a control that an own screen offers as `any`.
+ *
+ * - A domain sees through `optional`, `default`, `lazy`, and a codec's or pipe's input. An optional field, or one with a
+ *   default, is also left out.
+ * - On a `nullable`, a domain names the non-null option, and null is a value of its own.
+ * - A domain on a key schema of an entity, its key field or a `ref()` of it, names every key of that entity.
+ * - A domain names a whole array or record, and nothing inside one unless the domain names it whole.
+ * - A boolean, an enum, a literal, and null enumerate themselves, and a domain on one narrows it. Every other node needs
+ *   a domain, or `check` reports `Illegal.undeclaredDomain`.
+ *
+ * A domain that names no node is `Malformed.unusedDomain`, and two that name one node are
+ * `Malformed.overlappingDomain`. A value that `schema` rejects, refinements included, is `Malformed.domainValue`.
  */
-export const domain = <S extends z.ZodType>(schema: S, values: readonly z.input<S>[]): Domain => ({ schema, values });
+export const domain = <S extends z.ZodType>(schema: S, values: readonly Exclude<z.input<S>, undefined>[]): Domain =>
+  ({ schema, values }) as unknown as Domain;
 
 /** The bounds of the paths that `test` explores after the scenarios of the service named `service`. */
 export interface Explore {
@@ -25,8 +42,7 @@ const explores = new WeakSet<object>();
 
 /**
  * Defines the paths that `test` explores after each scenario of the service named `service`: every move that the
- * world enables, each input written from `domains`, up to `depth` moves. The name is written rather than taken from
- * the service's definer, as `constants()` does.
+ * world enables, each value written from `domains`, up to `depth` moves.
  */
 export function explore(options: Explore): Explore {
   if (!Number.isInteger(options.depth) || options.depth < 0)

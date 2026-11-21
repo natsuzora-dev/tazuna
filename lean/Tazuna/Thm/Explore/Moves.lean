@@ -81,7 +81,7 @@ theorem tree_mem (st : Service) (x : Explored) (schema : Schema) (v : Value) :
     · intro h; cases h
     · rintro ⟨_, _, hj', -⟩; cases hj'
   | some json =>
-    cases ht : rootTree (declared x.domains schema) json with
+    cases ht : rootTree (domainOf x.domains schema) json with
     | error paths =>
       simp only [ht]
       constructor
