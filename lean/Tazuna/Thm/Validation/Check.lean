@@ -55,8 +55,8 @@ structure Checked (s : Structure) : Prop where
   /-- No map state's key declares a default, which items, typed by the key's output type, never leaves to fill. -/
   mapKeysUndefaulted : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.mapKeysOf d, Schemas.defaultPaths x.1 x.2 = []
   /-- Every node of an infinite type that a move of an explore may carry has a domain, so explore gives it values. -/
-  domainsDeclared : ∀ x ∈ s.explores, ∀ schema ∈ Domains.moveSchemas s x.service, ∀ t,
-    Domains.schemaTree? s x schema = some t → t.undeclaredPaths = []
+  domainsDeclared : ∀ x ∈ s.explores, ∀ schema json, (schema, json) ∈ Domains.moveSchemas s x.service →
+    ∃ t, Domains.rootTree (Domains.declared x.domains schema) json = .ok t
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/
 @[guarantee] theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by

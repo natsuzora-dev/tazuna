@@ -1,20 +1,28 @@
+import { expectFound } from "../data/internalError.ts";
 import type { Schema, SchemaStep } from "../data/schema.generated.ts";
-import { canonicalJson, type Json, sameJson } from "../data/values.ts";
-import type { Domain, Explore, Structure } from "./structure.generated.ts";
-import { type DefinitionStructure, receivesOf, requestsOf, schemaIn } from "./structure.ts";
+import { isObject, type Json, sameJson } from "../data/values.ts";
+import type { Domain, Structure } from "./structure.generated.ts";
+import { type DefinitionStructure, receivesOf, requestsOf } from "./structure.ts";
 
 /** Lean's Tree: the values of a schema, as explore reads its JSON Schema with the declared domains. */
 export type Tree =
   | { readonly kind: "listed"; readonly values: readonly Json[] }
   | { readonly kind: "union"; readonly options: readonly Tree[] }
-  | { readonly kind: "object"; readonly fields: readonly Field[] }
-  | { readonly kind: "undeclared"; readonly path: readonly SchemaStep[] };
+  | { readonly kind: "object"; readonly fields: readonly Field[] };
 
 interface Field {
   readonly name: string;
   readonly required: boolean;
   readonly tree: Tree;
 }
+
+/** Lean's Undeclared. */
+export type Undeclared = readonly (readonly SchemaStep[])[];
+
+/** Lean's Except Undeclared Tree: the tree, or the paths of the nodes that no domain names and whose type is not finite. */
+export type TreeOf =
+  | { readonly ok: true; readonly tree: Tree }
+  | { readonly ok: false; readonly undeclared: Undeclared };
 
 /** Lean's Tree.values. */
 export function treeValues(t: Tree): Json[] {
@@ -25,8 +33,6 @@ export function treeValues(t: Tree): Json[] {
       return t.options.flatMap(treeValues);
     case "object":
       return fieldsValues(t.fields).map((entries) => Object.fromEntries(entries));
-    case "undeclared":
-      return [];
   }
 }
 
@@ -41,110 +47,167 @@ function fieldsValues(fields: readonly Field[]): (readonly [string, Json])[][] {
   ];
 }
 
-/** Lean's Tree.undeclaredPaths. */
-export function undeclaredPaths(t: Tree): (readonly SchemaStep[])[] {
-  switch (t.kind) {
-    case "listed":
-      return [];
-    case "union":
-      return t.options.flatMap(undeclaredPaths);
-    case "object":
-      return t.fields.flatMap((f) => undeclaredPaths(f.tree));
-    case "undeclared":
-      return [t.path];
-  }
+/** Lean's Node. */
+type Node =
+  | { readonly kind: "ref"; readonly name: string }
+  | { readonly kind: "union"; readonly options: readonly Json[] }
+  | { readonly kind: "types"; readonly types: readonly Json[] }
+  | { readonly kind: "finite"; readonly values: readonly Json[] }
+  | {
+      readonly kind: "object";
+      readonly properties: readonly (readonly [string, Json])[];
+      readonly required: readonly Json[];
+    }
+  | { readonly kind: "undeclared" };
+
+const undeclaredNode: Node = { kind: "undeclared" };
+
+/** Lean's typed. */
+function typed(s: Json, t: Json): Node {
+  const field = (key: string) => (isObject(s) ? s[key] : undefined);
+  if (t === "null") return { kind: "finite", values: [null] };
+  if (t === "boolean") return { kind: "finite", values: [false, true] };
+  if (t !== "object") return undeclaredNode;
+  const additional = field("additionalProperties");
+  if (isObject(additional) || additional === true) return undeclaredNode;
+  const properties = field("properties");
+  if (!isObject(properties)) return { kind: "finite", values: [{}] };
+  const required = field("required");
+  return { kind: "object", properties: Object.entries(properties), required: Array.isArray(required) ? required : [] };
 }
 
-/** Lean's declared: the first domain of `schema` at each path. */
-export function declared(
-  domains: readonly Domain[],
-  schema: Schema,
-): (path: readonly SchemaStep[]) => readonly Json[] | undefined {
-  const byPath = new Map(
-    domains
-      .filter((d) => sameJson(d.schema, schema))
-      .toReversed()
-      .map((d) => [canonicalJson(d.path), d.values] as const),
-  );
-  return (path) => byPath.get(canonicalJson(path));
+const defsPrefix = "#/$defs/";
+
+/** Lean's nodeOf. */
+function nodeOf(s: Json): Node {
+  const field = (key: string) => (isObject(s) ? s[key] : undefined);
+  const [ref, anyOf, oneOf, constant, values, type] = ["$ref", "anyOf", "oneOf", "const", "enum", "type"].map(field);
+  if (ref !== undefined)
+    return typeof ref === "string" && ref.startsWith(defsPrefix)
+      ? { kind: "ref", name: ref.slice(defsPrefix.length) }
+      : undeclaredNode;
+  if (anyOf !== undefined) return Array.isArray(anyOf) ? { kind: "union", options: anyOf } : undeclaredNode;
+  if (oneOf !== undefined) return Array.isArray(oneOf) ? { kind: "union", options: oneOf } : undeclaredNode;
+  if (constant !== undefined) return { kind: "finite", values: [constant] };
+  if (Array.isArray(values)) return { kind: "finite", values };
+  if (Array.isArray(type)) return { kind: "types", types: type };
+  return type === undefined ? undeclaredNode : typed(s, type);
 }
 
-type Schemaish = { readonly [key: string]: Json };
+/** Lean's defsOf. */
+const defsOf = (root: Json): readonly (readonly [string, Json])[] => {
+  const defs = isObject(root) ? root["$defs"] : undefined;
+  return isObject(defs) ? Object.entries(defs) : [];
+};
 
-const isObject = (v: Json | undefined): v is Schemaish => typeof v === "object" && v !== null && !Array.isArray(v);
+/** Lean's options and fields: the undeclared paths of `results`, in order, which are none exactly when all are trees. */
+const undeclaredOf = (results: readonly TreeOf[]): Undeclared => results.flatMap((r) => (r.ok ? [] : r.undeclared));
+
+const treesOf = (results: readonly TreeOf[]): Tree[] => results.flatMap((r) => (r.ok ? [r.tree] : []));
+
+type Declared = (path: readonly SchemaStep[]) => readonly Json[] | undefined;
 
 /** Lean's treeOf. */
-export function treeOf(
-  named: (path: readonly SchemaStep[]) => readonly Json[] | undefined,
+function treeOf(
+  declared: Declared,
+  defs: readonly (readonly [string, Json])[],
   s: Json,
   path: readonly SchemaStep[],
-): Tree {
-  const listed = named(path);
-  if (listed !== undefined) return { kind: "listed", values: listed };
-  const field = (key: string) => (isObject(s) ? s[key] : undefined);
-  const union = (options: readonly Json[]): Tree => ({
-    kind: "union",
-    options: options.map((o, index) => treeOf(named, o, [...path, { kind: "option", index }])),
-  });
-  const [anyOf, oneOf, constant, values, type] = ["anyOf", "oneOf", "const", "enum", "type"].map(field);
-  if (anyOf !== undefined) return Array.isArray(anyOf) ? union(anyOf) : { kind: "undeclared", path };
-  if (oneOf !== undefined) return Array.isArray(oneOf) ? union(oneOf) : { kind: "undeclared", path };
-  if (constant !== undefined) return { kind: "listed", values: [constant] };
-  if (Array.isArray(values)) return { kind: "listed", values };
-  if (Array.isArray(type)) return union(type.map((t) => ({ ...(s as Schemaish), type: t })));
-  if (type === "null") return { kind: "listed", values: [null] };
-  if (type === "boolean") return { kind: "listed", values: [false, true] };
-  if (type === "object") {
-    const additional = field("additionalProperties");
-    if (isObject(additional) || additional === true) return { kind: "undeclared", path };
-    const properties = field("properties");
-    if (!isObject(properties)) return { kind: "listed", values: [{}] };
-    const required = field("required");
-    return {
-      kind: "object",
-      fields: Object.entries(properties).map(([name, p]) => ({
-        name,
-        required: Array.isArray(required) && required.includes(name),
-        tree: treeOf(named, p, [...path, { kind: "field", name }]),
-      })),
-    };
+): TreeOf {
+  const listed = declared(path);
+  if (listed !== undefined) return { ok: true, tree: { kind: "listed", values: listed } };
+  const object = (n: Extract<Node, { kind: "object" }>, at: readonly SchemaStep[]): TreeOf => {
+    const results = n.properties.map(([name, p]) => treeOf(declared, defs, p, [...at, { kind: "field", name }]));
+    const undeclared = undeclaredOf(results);
+    if (undeclared.length > 0) return { ok: false, undeclared };
+    const fields = treesOf(results).map((tree, i): Field => {
+      const [name] = expectFound(`property ${i}`, n.properties[i]);
+      return { name, required: n.required.includes(name), tree };
+    });
+    return { ok: true, tree: { kind: "object", fields } };
+  };
+  const union = (results: readonly TreeOf[]): TreeOf => {
+    const undeclared = undeclaredOf(results);
+    return undeclared.length > 0
+      ? { ok: false, undeclared }
+      : { ok: true, tree: { kind: "union", options: treesOf(results) } };
+  };
+  const node = nodeOf(s);
+  switch (node.kind) {
+    case "ref": {
+      const entry = defs.find(([k]) => k === node.name);
+      return entry === undefined
+        ? { ok: false, undeclared: [path] }
+        : treeOf(
+            declared,
+            defs.filter(([k]) => k !== node.name),
+            entry[1],
+            path,
+          );
+    }
+    case "union":
+      return union(node.options.map((o, index) => treeOf(declared, defs, o, [...path, { kind: "option", index }])));
+    case "types":
+      return union(
+        node.types.map((t, index): TreeOf => {
+          const at: SchemaStep[] = [...path, { kind: "option", index }];
+          const values = declared(at);
+          if (values !== undefined) return { ok: true, tree: { kind: "listed", values } };
+          const n = typed(s, t);
+          if (n.kind === "finite") return { ok: true, tree: { kind: "listed", values: n.values } };
+          if (n.kind === "object") return object(n, at);
+          return { ok: false, undeclared: [at] };
+        }),
+      );
+    case "finite":
+      return { ok: true, tree: { kind: "listed", values: node.values } };
+    case "object":
+      return object(node, path);
+    case "undeclared":
+      return { ok: false, undeclared: [path] };
   }
-  return { kind: "undeclared", path };
 }
+
+/** Lean's rootTree. */
+export const rootTree = (declared: Declared, json: Json): TreeOf => treeOf(declared, defsOf(json), json, []);
+
+/** Lean's declared. */
+export const declared =
+  (domains: readonly Domain[], schema: Schema): Declared =>
+  (path) =>
+    domains.find((d) => sameJson(d.schema, schema) && sameJson(d.path, path))?.values;
 
 const ref = (d: DefinitionStructure) => ({ service: d.service, name: d.name });
 
 /** Lean's moveSchemas. */
-export function moveSchemas(structure: Structure, service: string): Schema[] {
+export function moveSchemas(structure: Structure, service: string): [Schema, Json][] {
   const own = structure.definitions.filter((d) => d.service === service);
+  const requested = requestsOf(structure, service);
+  const received = receivesOf(structure, service);
+  const named = (refs: readonly { service: string; name: string }[], d: DefinitionStructure) =>
+    refs.some((r) => r.service === d.service && r.name === d.name);
   const offersAny = (c: Extract<DefinitionStructure, { kind: "screen" }>, control: string) =>
     [Object.entries(c.offers), ...c.states.map((st) => Object.entries(st.offers))]
       .flat()
       .some(([k, o]) => k === control && o === "any");
   return [
-    ...own.flatMap((d): Schema[] =>
-      d.kind === "command" || d.kind === "query" ? [{ kind: "input", definition: ref(d) }] : [],
+    ...own.flatMap((d): [Schema, Json][] =>
+      d.kind === "command" || d.kind === "query" ? [[{ kind: "input", definition: ref(d) }, d.input]] : [],
     ),
-    ...requestsOf(structure, service).flatMap((r): Schema[] => {
-      if (r.service === service) return [];
-      const d = structure.definitions.find((x) => x.service === r.service && x.name === r.name);
-      return (d?.kind === "command" || d?.kind === "query") && d.output !== null
-        ? [{ kind: "output", definition: r }]
-        : [];
-    }),
-    ...receivesOf(structure, service).map((event): Schema => ({ kind: "payload", event })),
-    ...own.flatMap((d): Schema[] =>
+    ...structure.definitions.flatMap((d): [Schema, Json][] =>
+      d.service !== service && named(requested, d) && (d.kind === "command" || d.kind === "query") && d.output !== null
+        ? [[{ kind: "output", definition: ref(d) }, d.output]]
+        : [],
+    ),
+    ...structure.definitions.flatMap((d): [Schema, Json][] =>
+      named(received, d) && d.kind === "event" ? [[{ kind: "payload", event: ref(d) }, d.payload]] : [],
+    ),
+    ...own.flatMap((d): [Schema, Json][] =>
       d.kind === "screen"
-        ? Object.entries(d.controls).flatMap(([control, payload]): Schema[] =>
-            payload !== null && offersAny(d, control) ? [{ kind: "control", screen: ref(d), control }] : [],
+        ? Object.entries(d.controls).flatMap(([control, payload]): [Schema, Json][] =>
+            payload !== null && offersAny(d, control) ? [[{ kind: "control", screen: ref(d), control }, payload]] : [],
           )
         : [],
     ),
   ];
-}
-
-/** Lean's schemaTree?. */
-export function schemaTree(structure: Structure, explore: Explore, schema: Schema): Tree | undefined {
-  const json = schemaIn(structure, schema);
-  return json === undefined ? undefined : treeOf(declared(explore.domains, schema), json, []);
 }

@@ -153,9 +153,25 @@ def targetOf (st : Service) (target : Spec.Ref) : m AnswerShape := do
 def openedOf (x : Explored) (w : World) (o : Operation) : m Sim.Opened :=
   expectFound s!"opening of {repr o.id}" (w.opened.reverse.find? fun s => s.service == x.own && s.id == o.id)
 
-/-- The tree of `schema` under the declared domains (treeOf). -/
-def Explored.tree (st : Service) (x : Explored) (schema : Schema) : m Tree := do
-  pure (treeOf (declared x.domains schema) (← expectFound s!"schema {repr schema}" (st.schemaOf schema)) [])
+/--
+The tree of `schema` under the declared domains (rootTree). Check reports a node of a move schema that no domain names
+and whose type is not finite (Illegal.undeclaredDomain), so an undeclared schema here is a bug.
+-/
+def Explored.tree (st : Service) (x : Explored) (schema : Schema) : m Tree :=
+  match st.schemaOf schema with
+  | none => do MonadNote.note (.bug s!"no schema {repr schema}"); pure default
+  | some json =>
+    match rootTree (declared x.domains schema) json with
+    | .ok t => pure t
+    | .error paths => do MonadNote.note (.bug s!"no domain of {repr schema} at {repr paths}"); pure default
+
+/--
+The values of `schema` that explore may write: its JSON Schema has no node that no domain names and whose type is not
+finite, and the declared domains and the finite types admit the value (Admitted).
+-/
+def Explored.Admits (st : Service) (x : Explored) (schema : Schema) (v : Value) : Prop :=
+  ∃ json t, st.schemaOf schema = some json ∧ rootTree (declared x.domains schema) json = .ok t ∧
+    Admitted (declared x.domains schema) (defsOf json) json [] v
 
 /-- The rejections of kind `kind`: one per reason in `reasons` for requires, which decodedAnswer checks, else one. -/
 def rejections (reasons : List String) (kind : RejectionKind) : List Value :=
@@ -233,11 +249,11 @@ def Slot.Realizes (x : Explored) : Slot → Move → Prop
   | .restart, mv => mv = [.restart]
 
 /--
-The moves that fill a slot, with the values that the declared domains and the finite types admit (Tree.Admits): an
-answer with an output that the output tree admits (or without output, for a target without one) or a rejection of a
+The moves that fill a slot, with the values that the declared domains and the finite types admit (Explored.Admits): an
+answer with an output that the output schema admits (or without output, for a target without one) or a rejection of a
 kind that the target may give, but invalidInput, a requires rejection with a reason that the target lists; an
-operation with an offered payload, or one that the control's tree admits when the operation lists no offers; a request
-with an input and an event with a payload that their trees admit.
+operation with an offered payload, or one that the control's schema admits when the operation lists no offers; a
+request with an input and an event with a payload that their schemas admit.
 -/
 def Slot.Fills (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) : Slot → Move → Prop
   | .answer a msg, mv =>
@@ -245,18 +261,18 @@ def Slot.Fills (spec : Spec.Structure) (st : Service) (x : Explored) (w : World)
     let shape := Id.run (targetOf st target)
     ∃ answer, mv = answerMove msg.receiver (Id.run (requestOf msg)) answer (msg.status == .inFlight) x.lines.length ∧
       ((shape.output = none ∧ answer = answerOf shape.query false (.obj [])) ∨
-        (shape.output.isSome ∧ ∃ o, (Id.run (x.tree st (.output target))).Admits o ∧ answer = answerOf shape.query true o) ∨
-        ∃ k ∈ spec.rejectionKinds x.own target, k ≠ .invalidInput ∧ answer ∈ rejections (spec.rejectionReasons target) k)
+        (shape.output.isSome ∧ ∃ o, x.Admits st (.output target) o ∧ answer = answerOf shape.query true o) ∨
+        ∃ k ∈ spec.rejectionKinds x.own target, k ≠ .invalidInput ∧
+          answer ∈ rejections (spec.rejectionReasons target) k)
   | .at t, mv => mv = [.at { text := renderTime t, time := t }]
   | .operate o, mv => ∃ p,
       (match o.payloads with
         | some ps => p ∈ ps
-        | none => (Id.run (x.tree st (.control (st.ref o.screen) o.control))).Admits p) ∧
+        | none => x.Admits st (.control (st.ref o.screen) o.control) p) ∧
       mv = [.operate (.screen (Id.run (openedOf x w o)).origin (st.ref o.screen)) o.control (literal p)]
   | .unsubscribe i, mv => mv = [.unsubscribe none i]
-  | .request r query, mv => ∃ v, (Id.run (x.tree st (.input r))).Admits v ∧ mv ∈ requestMoves r query v
-  | .emit peer event, mv => ∃ v, (Id.run (x.tree st (.payload event))).Admits v ∧
-      mv = emitMove x.own peer event x.lines.length v
+  | .request r query, mv => ∃ v, x.Admits st (.input r) v ∧ mv ∈ requestMoves r query v
+  | .emit peer event, mv => ∃ v, x.Admits st (.payload event) v ∧ mv = emitMove x.own peer event x.lines.length v
   | .restart, mv => mv = [.restart]
 
 end Tazuna.Explore

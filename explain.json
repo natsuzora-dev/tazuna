@@ -679,7 +679,7 @@
       }
     },
     "Illegal.undeclaredDomain": {
-      "meaning": "The node at `path` of `schema`, which a move that the explore of `service` appends may carry (Explore.moveSchemas), has an infinite type and no domain, so explore gives it no value. `definition` holds the schema. `check` reports none exactly when every such node has a domain (`Checked.domainsDeclared`).",
+      "meaning": "The node at `path` of `schema` has an infinite type and no domain, so explore cannot write a value of `schema`. `schema` is one that a move that the explore of `service` appends may carry (Domains.moveSchemas): the input of an own command or query, the output of another service's command or query that the service sends, the payload of another service's event that it receives, or the payload of a control that an own screen offers as `any`. Every other service counts as external, since a scenario chooses which are. `definition` holds the schema. `check` reports none exactly when every such node has a domain (`Checked.domainsDeclared`).",
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",

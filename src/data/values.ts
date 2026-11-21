@@ -76,10 +76,11 @@ export function mapStrings(value: unknown, f: (s: string) => string): unknown {
   return value;
 }
 
+export const isObject = (v: unknown): v is { readonly [key: string]: Json } =>
+  v !== null && typeof v === "object" && !Array.isArray(v);
+
 /** Lean's Value.overlay: `value` with the fields of `over` in place, at any depth; any value but an object replaces. */
 export function overlay(value: unknown, over: unknown): unknown {
-  const isObject = (v: unknown): v is Record<string, unknown> =>
-    v !== null && typeof v === "object" && !Array.isArray(v);
   if (!isObject(value) || !isObject(over)) return over;
   return Object.fromEntries([
     ...Object.entries(value).map(([k, v]) => [k, Object.hasOwn(over, k) ? overlay(v, over[k]) : v]),

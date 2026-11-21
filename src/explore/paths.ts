@@ -17,7 +17,7 @@ import type { Cache } from "../sim/spec/cache.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import type { Listener } from "../sim/spec/listener.ts";
 import { executeSpec, executeSpecFrom } from "../sim/spec/simulate.ts";
-import { declared, treeOf, treeValues } from "../spec/domains.ts";
+import { declared, rootTree, treeValues } from "../spec/domains.ts";
 import type { Explore } from "../spec/structure.generated.ts";
 import { rejectionKinds, rejectionReasons } from "../spec/structure.ts";
 import { type Enabled, enabled } from "./enabled.ts";
@@ -171,12 +171,24 @@ const answers = (
   ...kinds.filter((k) => k !== "invalid-input").flatMap((k) => rejections(reasons, k)),
 ];
 
-/** Lean's fill. */
-function fill(spec: Spec, r: Processing, sc: Scenario, lines: readonly Line[], w: World, slot: Slot): Move[] {
+/** Lean's fill, with the own service's declared domains. */
+function fill(
+  spec: Spec,
+  domains: Explore["domains"],
+  r: Processing,
+  sc: Scenario,
+  lines: readonly Line[],
+  w: World,
+  slot: Slot,
+): Move[] {
   const { st } = r;
   const own = sc.service;
-  const { domains } = exploreOf(spec, own);
-  const values = (schema: Schema) => treeValues(treeOf(declared(domains, schema), schemaOf(st, schema), []));
+  const values = (schema: Schema) => {
+    const tree = rootTree(declared(domains, schema), schemaOf(st, schema));
+    if (!tree.ok)
+      throw new InternalError(`no domain of ${JSON.stringify(schema)} at ${JSON.stringify(tree.undeclared)}`);
+    return treeValues(tree.tree);
+  };
   switch (slot.kind) {
     case "answer": {
       const { awaiting: a, message: m } = slot;
@@ -243,15 +255,16 @@ function fill(spec: Spec, r: Processing, sc: Scenario, lines: readonly Line[], w
  * Lean's moves: returns a function that lists the moves after an executed world, each slot filled. It halts with the
  * fault of what the own service enables.
  */
-export const enabledLines =
-  (spec: Spec, sc: Scenario) =>
-  (lines: readonly Line[], { world: w }: Executed): Move[] => {
+export const enabledLines = (spec: Spec, sc: Scenario) => {
+  const { domains } = exploreOf(spec, sc.service);
+  return (lines: readonly Line[], { world: w }: Executed): Move[] => {
     const r = expectFound(`own service ${sc.service}`, w.services.get(sc.service)).processing;
     const e = enabled(r);
     return r.evaluations.quietly(() =>
-      slots(spec, r.st, sc, lines, w, e).flatMap((slot) => fill(spec, r, sc, lines, w, slot)),
+      slots(spec, r.st, sc, lines, w, e).flatMap((slot) => fill(spec, domains, r, sc, lines, w, slot)),
     );
   };
+};
 
 export const executeAppended = (spec: Spec, sc: Scenario, appended: readonly Line[], cache?: () => Cache): Executed =>
   executeSpec(spec, appended.length === 0 ? sc : { ...sc, lines: [...sc.lines, ...appended] }, [], cache);

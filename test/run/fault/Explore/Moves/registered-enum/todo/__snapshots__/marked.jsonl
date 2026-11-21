@@ -1,0 +1,2 @@
+{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"mark#1","name":"mark","input":{"taskId":"task-1","status":"open"}}
+{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"mark#1","answer":{"result":"accepted"}}

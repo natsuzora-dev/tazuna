@@ -1,4 +1,5 @@
 import Tazuna.Explore.Moves
+import Tazuna.Thm.Spec.Domains
 import Tazuna.Thm.Guarantee
 
 /-!
@@ -70,69 +71,30 @@ theorem slots_enabled (spec : Spec.Structure) (st : Service) (x : Explored) (w :
     exact .inl (.inr ⟨d, hd, by simpa [hb] using And.intro hext hrec⟩)
   | restart => exact .inr rfl
 
-mutual
-
-theorem Tree.mem_values : (t : Tree) → (v : Value) → (v ∈ t.values ↔ t.Admits v)
-  | .listed vs, v => ⟨fun h => .listed h, fun h => by cases h; assumption⟩
-  | .union os, v => by
-    show v ∈ os.values ↔ _
-    rw [Options.mem_values os v]
-    exact ⟨.union, fun h => by cases h; assumption⟩
-  | .object fs, v => by
-    show v ∈ fs.values.map Value.obj ↔ _
+/-- The values of the tree that fill enumerates for `schema` are those that Explored.Admits states. -/
+theorem tree_mem (st : Service) (x : Explored) (schema : Schema) (v : Value) :
+    v ∈ (Id.run (x.tree st schema)).values ↔ x.Admits st schema v := by
+  unfold Explored.tree Explored.Admits
+  cases hj : st.schemaOf schema with
+  | none =>
     constructor
-    · intro h
-      obtain ⟨vs, hvs, rfl⟩ := List.mem_map.mp h
-      exact .object ((Fields.mem_values fs vs).mp hvs)
-    · intro h
-      cases h with
-      | object hf => exact List.mem_map.mpr ⟨_, (Fields.mem_values fs _).mpr hf, rfl⟩
-  | .undeclared _, v => ⟨fun h => by simp [Tree.values] at h, fun h => by cases h⟩
-
-theorem Options.mem_values : (os : Options) → (v : Value) → (v ∈ os.values ↔ os.Admit v)
-  | .nil, v => ⟨fun h => by simp [Options.values] at h, fun h => by cases h⟩
-  | .cons t rest, v => by
-    show v ∈ t.values ++ rest.values ↔ _
-    rw [List.mem_append, Tree.mem_values t v, Options.mem_values rest v]
-    constructor
-    · rintro (h | h)
-      · exact .head h
-      · exact .tail h
-    · intro h
-      cases h with
-      | head h => exact .inl h
-      | tail h => exact .inr h
-
-theorem Fields.mem_values : (fs : Fields) → (vs : List (String × Value)) → (vs ∈ fs.values ↔ fs.Admit vs)
-  | .nil, vs => by
-    show vs ∈ [[]] ↔ _
-    constructor
-    · intro h
-      rw [List.mem_singleton.mp h]
-      exact .nil
-    · intro h
-      cases h
-      simp
-  | .cons name required t rest, vs => by
-    show vs ∈ (t.values.flatMap fun v => rest.values.map ((name, v) :: ·)) ++
-      (if required then [] else rest.values) ↔ _
-    constructor
-    · intro h
-      rcases List.mem_append.mp h with h | h
-      · obtain ⟨v, hv, h⟩ := List.mem_flatMap.mp h
-        obtain ⟨ws, hws, rfl⟩ := List.mem_map.mp h
-        exact .present ((Tree.mem_values t v).mp hv) ((Fields.mem_values rest ws).mp hws)
-      · cases required
-        · exact .absent ((Fields.mem_values rest vs).mp h)
-        · simp at h
-    · intro h
-      cases h with
-      | present ht hr =>
-        exact List.mem_append.mpr (.inl (List.mem_flatMap.mpr
-          ⟨_, (Tree.mem_values t _).mpr ht, List.mem_map.mpr ⟨_, (Fields.mem_values rest _).mpr hr, rfl⟩⟩))
-      | absent hr => exact List.mem_append.mpr (.inr (by simpa using (Fields.mem_values rest _).mpr hr))
-
-end
+    · intro h; cases h
+    · rintro ⟨_, _, hj', -⟩; cases hj'
+  | some json =>
+    cases ht : rootTree (declared x.domains schema) json with
+    | error paths =>
+      simp only [ht]
+      constructor
+      · intro h; cases h
+      · rintro ⟨_, _, hj', ht', -⟩; cases hj'; rw [ht] at ht'; cases ht'
+    | ok t =>
+      simp only [ht]
+      rw [Thm.Spec.Domains.Tree.mem_values]
+      show t.Admits v ↔ _
+      rw [Thm.Spec.Domains.treeOf_admits _ _ _ _ t ht v]
+      constructor
+      · exact fun ha => ⟨json, t, rfl, ht, ha⟩
+      · rintro ⟨_, _, hj', -, ha⟩; cases hj'; exact ha
 
 theorem mapM_id {α β : Type} (f : α → Id β) : ∀ xs : List α, Id.run (xs.mapM f) = xs.map fun a => Id.run (f a)
   | [] => rfl
@@ -181,7 +143,7 @@ theorem fill_iff (spec : Spec.Structure) (st : Service) (x : Explored) (w : Worl
         simp only [answers] at hans
         rcases List.mem_append.mp hans with h1 | h1
         · obtain ⟨o, ho, rfl⟩ := List.mem_map.mp h1
-          exact .inr (.inl ⟨rfl, o, (Tree.mem_values _ o).mp ho, rfl⟩)
+          exact .inr (.inl ⟨rfl, o, (tree_mem st x _ o).mp ho, rfl⟩)
         · obtain ⟨k, hk, hr⟩ := List.mem_flatMap.mp h1
           obtain ⟨hk, hne⟩ := List.mem_filter.mp hk
           exact .inr (.inr ⟨k, hk, by simpa using hne, hr⟩)
@@ -190,7 +152,7 @@ theorem fill_iff (spec : Spec.Structure) (st : Service) (x : Explored) (w : Worl
         simp only [answers]
         rcases h with ⟨hs, -⟩ | ⟨-, o, ho, rfl⟩ | ⟨k, hk, hne, hr⟩
         · simp at hs
-        · exact List.mem_append.mpr (.inl (List.mem_map.mpr ⟨o, (Tree.mem_values _ o).mpr ho, rfl⟩))
+        · exact List.mem_append.mpr (.inl (List.mem_map.mpr ⟨o, (tree_mem st x _ o).mpr ho, rfl⟩))
         · exact List.mem_append.mpr (.inr (List.mem_flatMap.mpr ⟨k, List.mem_filter.mpr ⟨hk, by simpa using hne⟩, hr⟩))
   | «at» t => show mv ∈ [_] ↔ _; simp [Slot.Fills]
   | operate o =>
@@ -210,16 +172,16 @@ theorem fill_iff (spec : Spec.Structure) (st : Service) (x : Explored) (w : Worl
       constructor
       · intro h
         obtain ⟨p, hp, rfl⟩ := List.mem_map.mp h
-        exact ⟨p, (Tree.mem_values _ p).mp hp, rfl⟩
+        exact ⟨p, (tree_mem st x _ p).mp hp, rfl⟩
       · rintro ⟨p, hp, rfl⟩
-        exact List.mem_map.mpr ⟨p, (Tree.mem_values _ p).mpr hp, rfl⟩
+        exact List.mem_map.mpr ⟨p, (tree_mem st x _ p).mpr hp, rfl⟩
   | unsubscribe i => show mv ∈ [_] ↔ _; simp [Slot.Fills]
   | request r query =>
     show mv ∈ (Id.run (x.tree st (.input r))).values.flatMap (requestMoves r query) ↔ _
-    simp only [List.mem_flatMap, Tree.mem_values, Slot.Fills]
+    simp only [List.mem_flatMap, tree_mem, Slot.Fills]
   | emit peer event =>
     show mv ∈ (Id.run (x.tree st (.payload event))).values.map (emitMove x.own peer event x.lines.length) ↔ _
-    simp only [List.mem_map, Tree.mem_values, Slot.Fills]
+    simp only [List.mem_map, tree_mem, Slot.Fills]
     constructor
     · rintro ⟨v, hv, rfl⟩; exact ⟨v, hv, rfl⟩
     · rintro ⟨v, hv, rfl⟩; exact ⟨v, hv, rfl⟩
