@@ -145,15 +145,16 @@ theorem fill_iff (spec : Spec.Structure) (st : Service) (x : Explored) (w : Worl
   cases s with
   | answer a msg =>
     simp only [fill, Slot.Fills, Id.run_bind]
-    generalize Id.run (targetOf st { service := a.target, name := a.name }) = kind
+    generalize Id.run (targetOf st { service := a.target, name := a.name }) = shape
     generalize Id.run (requestOf msg) = request
-    obtain ⟨query, output⟩ := kind
+    obtain ⟨query, output⟩ := shape
     let move := fun answer => answerMove msg.receiver request answer (msg.status == .inFlight) x.lines.length
     let kinds := spec.rejectionKinds x.own { service := a.target, name := a.name }
+    let reasons := spec.rejectionReasons { service := a.target, name := a.name }
     let tree := Id.run (x.tree st (.output { service := a.target, name := a.name }))
     cases output with
     | none =>
-      show mv ∈ (answers query none kinds).map move ↔ _
+      show mv ∈ (answers query none kinds reasons).map move ↔ _
       constructor
       · intro h
         obtain ⟨ans, hans, rfl⟩ := List.mem_map.mp h
@@ -161,18 +162,18 @@ theorem fill_iff (spec : Spec.Structure) (st : Service) (x : Explored) (w : Worl
         simp only [answers] at hans
         rcases List.mem_append.mp hans with h1 | h1
         · exact .inl ⟨rfl, List.mem_singleton.mp h1⟩
-        · obtain ⟨k, hk, rfl⟩ := List.mem_map.mp h1
+        · obtain ⟨k, hk, hr⟩ := List.mem_flatMap.mp h1
           obtain ⟨hk, hne⟩ := List.mem_filter.mp hk
-          exact .inr (.inr ⟨k, hk, by simpa using hne, rfl⟩)
+          exact .inr (.inr ⟨k, hk, by simpa using hne, hr⟩)
       · rintro ⟨ans, rfl, h⟩
         refine List.mem_map.mpr ⟨ans, ?_, rfl⟩
         simp only [answers]
-        rcases h with ⟨-, rfl⟩ | ⟨hs, -⟩ | ⟨k, hk, hne, rfl⟩
+        rcases h with ⟨-, rfl⟩ | ⟨hs, -⟩ | ⟨k, hk, hne, hr⟩
         · exact List.mem_append.mpr (.inl (List.mem_singleton.mpr rfl))
         · simp at hs
-        · exact List.mem_append.mpr (.inr (List.mem_map.mpr ⟨k, List.mem_filter.mpr ⟨hk, by simpa using hne⟩, rfl⟩))
+        · exact List.mem_append.mpr (.inr (List.mem_flatMap.mpr ⟨k, List.mem_filter.mpr ⟨hk, by simpa using hne⟩, hr⟩))
     | some out =>
-      show mv ∈ (answers query (some tree) kinds).map move ↔ _
+      show mv ∈ (answers query (some tree) kinds reasons).map move ↔ _
       constructor
       · intro h
         obtain ⟨ans, hans, rfl⟩ := List.mem_map.mp h
@@ -181,16 +182,16 @@ theorem fill_iff (spec : Spec.Structure) (st : Service) (x : Explored) (w : Worl
         rcases List.mem_append.mp hans with h1 | h1
         · obtain ⟨o, ho, rfl⟩ := List.mem_map.mp h1
           exact .inr (.inl ⟨rfl, o, (Tree.mem_values _ o).mp ho, rfl⟩)
-        · obtain ⟨k, hk, rfl⟩ := List.mem_map.mp h1
+        · obtain ⟨k, hk, hr⟩ := List.mem_flatMap.mp h1
           obtain ⟨hk, hne⟩ := List.mem_filter.mp hk
-          exact .inr (.inr ⟨k, hk, by simpa using hne, rfl⟩)
+          exact .inr (.inr ⟨k, hk, by simpa using hne, hr⟩)
       · rintro ⟨ans, rfl, h⟩
         refine List.mem_map.mpr ⟨ans, ?_, rfl⟩
         simp only [answers]
-        rcases h with ⟨hs, -⟩ | ⟨-, o, ho, rfl⟩ | ⟨k, hk, hne, rfl⟩
+        rcases h with ⟨hs, -⟩ | ⟨-, o, ho, rfl⟩ | ⟨k, hk, hne, hr⟩
         · simp at hs
         · exact List.mem_append.mpr (.inl (List.mem_map.mpr ⟨o, (Tree.mem_values _ o).mpr ho, rfl⟩))
-        · exact List.mem_append.mpr (.inr (List.mem_map.mpr ⟨k, List.mem_filter.mpr ⟨hk, by simpa using hne⟩, rfl⟩))
+        · exact List.mem_append.mpr (.inr (List.mem_flatMap.mpr ⟨k, List.mem_filter.mpr ⟨hk, by simpa using hne⟩, hr⟩))
   | «at» t => show mv ∈ [_] ↔ _; simp [Slot.Fills]
   | operate o =>
     simp only [fill, Slot.Fills, Id.run_bind]

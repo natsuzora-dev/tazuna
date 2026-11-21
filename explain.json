@@ -2477,7 +2477,7 @@
           "from": 32,
           "to": 38,
           "line": 32,
-          "text": "export const completeAdded = automation({\n  receives: { taskAdded },\n  commands: { completeTask },\n}).send({\n  binds: { added: ({ payload, records }) => records.Task.get(payload.id) },\n  input: ({ bound }) => ({ title: bound.added.title }),\n});"
+          "text": "export const completeAdded = automation({\n  receives: { taskAdded },\n  commands: { completeTask },\n}).send({\n  binds: { added: ({ payload, records }) => records.Task.get(payload.id) },\n  input: ({ bound }) => ({ taskId: bound.added.id }),\n});"
         },
         "violation": "{\"kind\":\"Uncovered.automationBindingNull\",\"definition\":{\"service\":\"backlog\",\"name\":\"completeAdded\"},\"data\":{\"binding\":\"added\"},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":32}}"
       }
@@ -2487,12 +2487,12 @@
       "example": {
         "excerpt": {
           "file": "backlog/backlog.ts",
-          "from": 32,
-          "to": 41,
-          "line": 32,
-          "text": "export const completeDuplicates = automation({\n  receives: { taskAdded },\n  commands: { completeTask },\n}).send({\n  binds: {\n    earlier: ({ payload, records }) =>\n      records.Task.filter((t) => t.title === payload.title && t.id !== payload.id).only(),\n  },\n  input: ({ bound }) => ({ title: bound.earlier.title }),\n});"
+          "from": 30,
+          "to": 39,
+          "line": 30,
+          "text": "export const completeDuplicates = automation({\n  receives: { taskAdded },\n  commands: { completeTask },\n}).send({\n  binds: {\n    earlier: ({ payload, records }) =>\n      records.Task.filter((t) => t.title === payload.title && t.id !== payload.id).only(),\n  },\n  input: ({ bound }) => ({ taskId: bound.earlier.id }),\n});"
         },
-        "violation": "{\"kind\":\"Uncovered.automationBindingValue\",\"definition\":{\"service\":\"backlog\",\"name\":\"completeDuplicates\"},\"data\":{\"binding\":\"earlier\"},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":32}}"
+        "violation": "{\"kind\":\"Uncovered.automationBindingValue\",\"definition\":{\"service\":\"backlog\",\"name\":\"completeDuplicates\"},\"data\":{\"binding\":\"earlier\"},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":30}}"
       }
     },
     "Uncovered.automationGuard": {
@@ -2503,7 +2503,7 @@
           "from": 32,
           "to": 38,
           "line": 32,
-          "text": "export const completeChores = automation({\n  receives: { taskAdded },\n  commands: { completeTask },\n}).send({\n  guard: { chore: ({ payload }) => payload.title.startsWith(\"Chore\") },\n  input: ({ payload }) => ({ title: payload.title }),\n});"
+          "text": "export const completeChores = automation({\n  receives: { taskAdded },\n  commands: { completeTask },\n}).send({\n  guard: { chore: ({ payload }) => payload.title.startsWith(\"Chore\") },\n  input: ({ payload }) => ({ taskId: payload.id }),\n});"
         },
         "violation": "{\"kind\":\"Uncovered.automationGuard\",\"definition\":{\"service\":\"backlog\",\"name\":\"completeChores\"},\"data\":{\"condition\":\"chore\",\"met\":true},\"location\":{\"file\":\"backlog/backlog.ts\",\"line\":32}}"
       }

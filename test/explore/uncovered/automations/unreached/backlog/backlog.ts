@@ -23,9 +23,9 @@ export const addTask = command({
 export const taskCompleted = updateEvent({ entity: Task, writes: ["isDone"] });
 
 export const completeTask = command({
-  input: { title: Task.fields.title },
+  input: { taskId: Task.fields.id },
   emits: [taskCompleted],
-  binds: { task: ({ input, records }) => records.Task.filter((t) => t.title === input.title).only() },
+  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
   requires: { notDone: ({ bound }) => !bound.task.isDone },
 }).decide(({ bound }) => [emit(taskCompleted, { id: bound.task.id, isDone: true })]);
 
@@ -35,7 +35,7 @@ export const completeChores = automation({
 }).send({
   binds: { added: ({ payload, records }) => records.Task.get(payload.id) },
   guard: { chore: ({ bound }) => bound.added.title.startsWith("Chore") },
-  input: ({ bound }) => ({ title: bound.added.title }),
+  input: ({ bound }) => ({ taskId: bound.added.id }),
 });
 
 export const completeDuplicates = automation({
@@ -46,7 +46,7 @@ export const completeDuplicates = automation({
     earlier: ({ payload, records }) =>
       records.Task.filter((t) => t.title === payload.title && t.id !== payload.id).only(),
   },
-  input: ({ bound }) => ({ title: bound.earlier.title }),
+  input: ({ bound }) => ({ taskId: bound.earlier.id }),
 });
 
 export const backlog = contract({ addTask, completeTask });

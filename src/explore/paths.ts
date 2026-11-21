@@ -19,7 +19,7 @@ import type { Listener } from "../sim/spec/listener.ts";
 import { executeSpec, executeSpecFrom } from "../sim/spec/simulate.ts";
 import { declared, treeOf, treeValues } from "../spec/domains.ts";
 import type { Explore } from "../spec/structure.generated.ts";
-import { rejectionKinds } from "../spec/structure.ts";
+import { rejectionKinds, rejectionReasons } from "../spec/structure.ts";
 import { type Enabled, enabled } from "./enabled.ts";
 import { halted, worldFingerprint } from "./fingerprint.ts";
 import { search, Visited } from "./search.ts";
@@ -121,7 +121,14 @@ function requestFact(m: Message): Fact {
 }
 
 /** Lean's rejectedAnswer. */
-const rejectedAnswer = (kind: RejectionKind): Json => ({ result: "rejected", rejection: { kind } });
+const rejectedAnswer = (kind: RejectionKind, reason?: string): Json => ({
+  result: "rejected",
+  rejection: reason === undefined ? { kind } : { kind, reason },
+});
+
+/** Lean's rejections. */
+const rejections = (reasons: readonly string[], kind: RejectionKind): Json[] =>
+  kind === "requires" ? reasons.map((reason) => rejectedAnswer(kind, reason)) : [rejectedAnswer(kind)];
 
 /** Lean's answerOf. */
 const answerOf = (query: boolean, hasOutput: boolean, output: Json): Json =>
@@ -154,9 +161,14 @@ export const exploreOf = (spec: Spec, service: string): Explore =>
   );
 
 /** Lean's answers. */
-const answers = (query: boolean, outputs: readonly Json[] | undefined, kinds: readonly RejectionKind[]): Json[] => [
+const answers = (
+  query: boolean,
+  outputs: readonly Json[] | undefined,
+  kinds: readonly RejectionKind[],
+  reasons: readonly string[],
+): Json[] => [
   ...(outputs === undefined ? [answerOf(query, false, {})] : outputs.map((o) => answerOf(query, true, o))),
-  ...kinds.filter((k) => k !== "invalid-input").map(rejectedAnswer),
+  ...kinds.filter((k) => k !== "invalid-input").flatMap((k) => rejections(reasons, k)),
 ];
 
 /** Lean's fill. */
@@ -177,9 +189,12 @@ function fill(spec: Spec, r: Processing, sc: Scenario, lines: readonly Line[], w
       if (d.kind !== "command" && d.kind !== "query")
         throw new InternalError(`${target.service}.${target.name} is no command or query`);
       const outputs = d.output === null ? undefined : values({ kind: "output", definition: target });
-      return answers(d.kind === "query", outputs, rejectionKinds(spec.structure, own, target)).map((answer) =>
-        answerMove(m.receiver, request, answer, m.status === "inFlight", lines.length),
-      );
+      return answers(
+        d.kind === "query",
+        outputs,
+        rejectionKinds(spec.structure, own, target),
+        rejectionReasons(spec.structure, target),
+      ).map((answer) => answerMove(m.receiver, request, answer, m.status === "inFlight", lines.length));
     }
     case "at":
       return [[{ type: "at", time: slot.time.toString() }]];

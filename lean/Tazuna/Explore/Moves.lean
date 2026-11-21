@@ -108,8 +108,9 @@ def requestFact? (msg : Message) : Option Fact :=
   | .subscribe target input => some (.request msg.origin .subscribe target (some (literal input)))
   | _ => none
 
-/-- The answer that rejects a request with `kind`. -/
-def rejectedAnswer (kind : RejectionKind) : Value := ToValue.toValue (Answer.rejected { kind })
+/-- The answer that rejects a request with `kind`, naming `reason`. -/
+def rejectedAnswer (kind : RejectionKind) (reason : Option String) : Value :=
+  ToValue.toValue (Answer.rejected { kind, reason })
 
 /-- The answer that a fulfilled query or accepted command gives with `output`, written only when it has one. -/
 def answerOf (query : Bool) (hasOutput : Bool) (output : Value) : Value :=
@@ -137,12 +138,17 @@ def exploreOf (spec : Spec.Structure) (service : String) : m Spec.Explore :=
 
 def requestOf (msg : Message) : m Fact := expectFound s!"request of {msg.id.text}" (requestFact? msg)
 
-/-- Whether the command or query `target` is a query, and its output schema. -/
-def targetOf (st : Service) (target : Spec.Ref) : m (Bool × Option Value) := do
+/-- How a command or query answers: fulfilled when it is a query, else accepted, with output when it has an output. -/
+structure AnswerShape where
+  query : Bool
+  output : Option Value
+deriving Inhabited
+
+def targetOf (st : Service) (target : Spec.Ref) : m AnswerShape := do
   match ← expectFound s!"definition {repr target}" (st.body? target) with
-  | .command c => pure (false, c.output)
-  | .query q => pure (true, q.output)
-  | _ => do MonadNote.note (.bug s!"{repr target} is no command or query"); pure (false, none)
+  | .command c => pure { query := false, output := c.output }
+  | .query q => pure { query := true, output := q.output }
+  | _ => do MonadNote.note (.bug s!"{repr target} is no command or query"); pure default
 
 def openedOf (x : Explored) (w : World) (o : Operation) : m Sim.Opened :=
   expectFound s!"opening of {repr o.id}" (w.opened.reverse.find? fun s => s.service == x.own && s.id == o.id)
@@ -151,31 +157,35 @@ def openedOf (x : Explored) (w : World) (o : Operation) : m Sim.Opened :=
 def Explored.tree (st : Service) (x : Explored) (schema : Schema) : m Tree := do
   pure (treeOf (declared x.domains schema) (← expectFound s!"schema {repr schema}" (st.schemaOf schema)) [])
 
+/-- The rejections of kind `kind`: one per reason in `reasons` for requires, which decodedAnswer checks, else one. -/
+def rejections (reasons : List String) (kind : RejectionKind) : List Value :=
+  if kind == .requires then reasons.map (rejectedAnswer kind ∘ some) else [rejectedAnswer kind none]
+
 /--
 The answers to a request: each output that the output tree gives (one answer without output when the target has none),
-then a rejection of each kind in `kinds` but invalidInput, which blames the request that the own service checked
-before it sent it (Structure.rejectionKinds).
+then the rejections of each kind in `kinds` but invalidInput, which blames the request that the own service checked
+before it sent it (Structure.rejectionKinds), a requires rejection once per reason in `reasons`.
 -/
-def answers (query : Bool) (outputs : Option Tree) (kinds : List RejectionKind) : List Value :=
+def answers (query : Bool) (outputs : Option Tree) (kinds : List RejectionKind) (reasons : List String) : List Value :=
   (match outputs with
     | none => [answerOf query false (.obj [])]
     | some t => t.values.map (answerOf query true)) ++
-  (kinds.filter (· != .invalidInput)).map rejectedAnswer
+  (kinds.filter (· != .invalidInput)).flatMap (rejections reasons)
 
 /--
-The moves that values fill `slot` with: for an answer, the answers that the target's output tree and the rejection
-kinds that the target may give (Structure.rejectionKinds) give; for a request, an operation without offers, and an
-event, the values of the schema's tree; for an operation with offers, the offered payloads.
+The moves that values fill `slot` with: for an answer, one per value of the target's output tree, then the rejections
+that the target may give (answers); for a request, an operation without offers, and an event, one per value of the
+schema's tree; for an operation with offers, one per offered payload.
 -/
 def fill (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) : Slot → m (List Move)
   | .answer a msg => do
     let request ← requestOf msg
     let target : Spec.Ref := { service := a.target, name := a.name }
-    let kind ← targetOf st target
-    let outputs ← match kind.2 with
+    let shape ← targetOf st target
+    let outputs ← match shape.output with
       | none => pure none
       | some _ => some <$> x.tree st (.output target)
-    pure ((answers kind.1 outputs (spec.rejectionKinds x.own target)).map fun answer =>
+    pure ((answers shape.query outputs (spec.rejectionKinds x.own target) (spec.rejectionReasons target)).map fun answer =>
       answerMove msg.receiver request answer (msg.status == .inFlight) x.lines.length)
   | .at t => pure [[.at { text := renderTime t, time := t }]]
   | .operate o => do
@@ -225,17 +235,18 @@ def Slot.Realizes (x : Explored) : Slot → Move → Prop
 /--
 The moves that fill a slot, with the values that the declared domains and the finite types admit (Tree.Admits): an
 answer with an output that the output tree admits (or without output, for a target without one) or a rejection of a
-kind that the target may give, but invalidInput; an operation with an offered payload, or one that the control's tree admits when the
-operation lists no offers; a request with an input and an event with a payload that their trees admit.
+kind that the target may give, but invalidInput, a requires rejection with a reason that the target lists; an
+operation with an offered payload, or one that the control's tree admits when the operation lists no offers; a request
+with an input and an event with a payload that their trees admit.
 -/
 def Slot.Fills (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) : Slot → Move → Prop
   | .answer a msg, mv =>
     let target : Spec.Ref := { service := a.target, name := a.name }
-    let kind := Id.run (targetOf st target)
+    let shape := Id.run (targetOf st target)
     ∃ answer, mv = answerMove msg.receiver (Id.run (requestOf msg)) answer (msg.status == .inFlight) x.lines.length ∧
-      ((kind.2 = none ∧ answer = answerOf kind.1 false (.obj [])) ∨
-        (kind.2.isSome ∧ ∃ o, (Id.run (x.tree st (.output target))).Admits o ∧ answer = answerOf kind.1 true o) ∨
-        ∃ k ∈ spec.rejectionKinds x.own target, k ≠ .invalidInput ∧ answer = rejectedAnswer k)
+      ((shape.output = none ∧ answer = answerOf shape.query false (.obj [])) ∨
+        (shape.output.isSome ∧ ∃ o, (Id.run (x.tree st (.output target))).Admits o ∧ answer = answerOf shape.query true o) ∨
+        ∃ k ∈ spec.rejectionKinds x.own target, k ≠ .invalidInput ∧ answer ∈ rejections (spec.rejectionReasons target) k)
   | .at t, mv => mv = [.at { text := renderTime t, time := t }]
   | .operate o, mv => ∃ p,
       (match o.payloads with

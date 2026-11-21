@@ -1,3 +1,4 @@
+{"kind":"Uncovered.bindsRejection","definition":{"service":"backlog","name":"completeTask"},"data":{"binding":"task"},"location":{"file":"backlog/backlog.ts","line":25}}
 {"kind":"Uncovered.guardFalse","definition":{"service":"backlog","name":"progress"},"data":{"transition":{"state":"busy","trigger":{"type":"on","key":"taskCompleted"},"index":0},"condition":"allDone"},"location":{"file":"backlog/backlog.ts","line":32}}
 {"kind":"Uncovered.transition","definition":{"service":"backlog","name":"progress"},"data":{"transition":{"state":"done","trigger":{"type":"on","key":"taskAdded"},"index":0}},"location":{"file":"backlog/backlog.ts","line":32}}
 {"kind":"Uncovered.state","definition":{"service":"backlog","name":"progress"},"data":{"state":"archived"},"location":{"file":"backlog/backlog.ts","line":32}}

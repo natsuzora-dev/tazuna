@@ -1,4 +1,4 @@
-import { emit, entity, service } from "@natsuzora-dev/tazuna";
+import { emit, entity, ref, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
@@ -23,11 +23,9 @@ export const addTask = command({
 export const taskCompleted = updateEvent({ entity: Task, writes: ["isDone"] });
 
 export const completeTask = command({
-  input: { title: Task.fields.title },
+  input: { taskId: ref(Task) },
   emits: [taskCompleted],
-  binds: { task: ({ input, records }) => records.Task.filter((t) => t.title === input.title).only() },
-  requires: { notDone: ({ bound }) => !bound.task.isDone },
-}).decide(({ bound }) => [emit(taskCompleted, { id: bound.task.id, isDone: true })]);
+}).decide(({ input }) => [emit(taskCompleted, { id: input.taskId, isDone: true })]);
 
 export const completeDuplicates = automation({
   receives: { taskAdded },
@@ -37,7 +35,7 @@ export const completeDuplicates = automation({
     earlier: ({ payload, records }) =>
       records.Task.filter((t) => t.title === payload.title && t.id !== payload.id).only(),
   },
-  input: ({ bound }) => ({ title: bound.earlier.title }),
+  input: ({ bound }) => ({ taskId: bound.earlier.id }),
 });
 
 export const backlog = contract({ addTask, completeTask });

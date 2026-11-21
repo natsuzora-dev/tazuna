@@ -23,9 +23,9 @@ export const addTask = command({
 export const taskCompleted = updateEvent({ entity: Task, writes: ["isDone"] });
 
 export const completeTask = command({
-  input: { title: Task.fields.title },
+  input: { taskId: Task.fields.id },
   emits: [taskCompleted],
-  binds: { task: ({ input, records }) => records.Task.filter((t) => t.title === input.title).only() },
+  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
   requires: { notDone: ({ bound }) => !bound.task.isDone },
 }).decide(({ bound }) => [emit(taskCompleted, { id: bound.task.id, isDone: true })]);
 
