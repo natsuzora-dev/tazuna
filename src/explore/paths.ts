@@ -2,7 +2,7 @@ import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { expectFound, InternalError } from "../data/internalError.ts";
 import { invalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
-import type { LineId, RejectionKind } from "../data/trace.generated.ts";
+import { blamesSenderKinds, type LineId, type RejectionKind } from "../data/trace.generated.ts";
 import type { Json } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import type { Named } from "../dsl/definition.ts";
@@ -159,6 +159,9 @@ export const exploreOf = (spec: Spec, service: string): ExploreStructure =>
     spec.structure.explores.find((x) => x.service === service),
   );
 
+/** Lean's RejectionKind.blamesSender. */
+const blamesSender: ReadonlySet<RejectionKind> = new Set(blamesSenderKinds);
+
 /** Lean's answers. */
 const answers = (
   query: boolean,
@@ -167,7 +170,7 @@ const answers = (
   reasons: readonly string[],
 ): Json[] => [
   ...(outputs === undefined ? [answerOf(query, false, {})] : outputs.map((o) => answerOf(query, true, o))),
-  ...kinds.filter((k) => k !== "invalid-input").flatMap((k) => rejections(reasons, k)),
+  ...kinds.filter((k) => !blamesSender.has(k)).flatMap((k) => rejections(reasons, k)),
 ];
 
 /** Lean's fill, with the own service's declared domains. */

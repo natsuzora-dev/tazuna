@@ -6,5 +6,5 @@ export const { command, contract } = externalService({ name: "device", descripti
 export const showNotification = command({
   input: { text: z.string() },
   emits: [],
-  rejects: ["invalid-input", "requires", "unavailable"],
+  rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
 });

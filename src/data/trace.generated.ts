@@ -147,3 +147,6 @@ export type TraceLine = z.infer<typeof traceLine>;
 
 /** The rejection kinds that blame the request, not the target's availability. */
 export const byCallerKinds = ["invalid-input", "reused-id", "not-found", "requires", "already-exists"] as const;
+
+/** The rejection kinds that blame how the sender wrote the request. */
+export const blamesSenderKinds = ["invalid-input", "reused-id"] as const;

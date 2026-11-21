@@ -19,6 +19,14 @@ def RejectionKind.byCaller : RejectionKind → Bool
   | .unavailable => false
   | _ => true
 
+/--
+Whether a rejection of this kind blames how the sender wrote the request: its input, or an id it already used. A sender
+that checks its input and numbers its requests, as a service does, never earns one.
+-/
+def RejectionKind.blamesSender : RejectionKind → Bool
+  | .invalidInput | .reusedId => true
+  | _ => false
+
 /-- The rejection of a request. verify compares `kind`, not `reason`. -/
 structure Rejection where
   kind : RejectionKind

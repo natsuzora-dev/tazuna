@@ -469,13 +469,19 @@ def limitsFile : String :=
     constant "stepOrderLimit" (doc% Tazuna.Explore.stepOrderLimit) Tazuna.Explore.stepOrderLimit ++
     constant "bindingLimit" (doc% Tazuna.Data.bindingLimit) Tazuna.Data.bindingLimit
 
-/-- The TS constant `byCallerKinds`: the rejection kinds, in declaration order, that blame the request. -/
-def byCallerKinds : String :=
-  "\n/** The rejection kinds that blame the request, not the target's availability. */\n" ++
-    constArray "byCallerKinds" ((samples% Tazuna.Data.RejectionKind).filterMap fun k =>
+/-- The TS constant `name`: the rejection kinds, in declaration order, that `p` holds for. -/
+def kindsWhere (name doc : String) (p : Tazuna.Data.RejectionKind → Bool) : String :=
+  s!"\n/** {doc} */\n" ++
+    constArray name ((samples% Tazuna.Data.RejectionKind).filterMap fun k =>
       match ToValue.toValue k with
-      | .str s => if k.byCaller then some s else none
+      | .str s => if p k then some s else none
       | _ => none)
+
+def rejectionKindSets : String :=
+  kindsWhere "byCallerKinds" "The rejection kinds that blame the request, not the target's availability."
+      Tazuna.Data.RejectionKind.byCaller ++
+    kindsWhere "blamesSenderKinds" "The rejection kinds that blame how the sender wrote the request."
+      Tazuna.Data.RejectionKind.blamesSender
 
 /--
 The names of the theorems that `@[guarantee]` tags in the modules under `lean/Tazuna/Thm` of `folder`, sorted. The
@@ -533,7 +539,7 @@ def files (guarantees : List String) : List (String × String) :=
    typescript% "src/data/choiceDependent.generated.ts",
    types% "src/data/transitionRef.generated.ts",
    types% "src/data/step.generated.ts",
-   appended (zod% "src/data/trace.generated.ts") byCallerKinds,
+   appended (zod% "src/data/trace.generated.ts") rejectionKindSets,
    ("src/data/limits.generated.ts", limitsFile),
    ("test/guarantees.generated.ts", guaranteesFile guarantees),
    types% "src/spec/structure.generated.ts",
