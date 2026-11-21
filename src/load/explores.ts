@@ -76,9 +76,8 @@ const isPrefix = (outer: readonly SchemaStep[], inner: readonly SchemaStep[]): b
 
 /**
  * The explore of `service` with each domain of `written` at the nodes that it names, among the nodes that treeOf reads
- * of the schemas that the service's moves may carry. A domain that names no node, or names a node inside a node that
- * another domain names, is never read and is Malformed.unusedDomain. Two domains that name one node are
- * Malformed.overlappingDomain.
+ * of the schemas that the service's moves may carry. A domain that names no node is Malformed.unusedDomain. Two domains
+ * that name one node, or one node and a node inside it, are Malformed.overlappingDomain.
  */
 export function placeDomains(
   structure: Structure,
@@ -89,7 +88,6 @@ export function placeDomains(
 ): { readonly explore: ExploreStructure; readonly malformed: readonly Found<Malformed>[] } {
   const domains: DomainStructure[] = [];
   const used = new Set<number>();
-  const shadowed = new Set<number>();
   const overlapping = new Map<string, number[]>();
   for (const [schema, json] of moveSchemas(structure, service)) {
     const owner = schemaOwner(schema);
@@ -106,13 +104,11 @@ export function placeDomains(
       return undefined;
     }, json);
     for (const { path, naming } of nodes.values()) {
-      const outer = [...nodes.values()].filter((n) => isPrefix(n.path, path)).flatMap((n) => n.naming);
-      if (outer.length > 0) {
-        for (const i of naming) if (!outer.includes(i)) shadowed.add(i);
-        continue;
-      }
       for (const i of naming) used.add(i);
-      if (naming.length > 1) overlapping.set(naming.join(), [...naming]);
+      const outer = [...nodes.values()].filter((n) => isPrefix(n.path, path)).flatMap((n) => n.naming);
+      const covering = [...new Set([...outer, ...naming])].sort((a, b) => a - b);
+      if (covering.length > 1) overlapping.set(covering.join(), covering);
+      if (outer.length > 0) continue;
       const first = expectFound("a naming domain", naming[0]);
       const values = expectFound(`domain ${first}`, written.domains[first]).values as Json[];
       domains.push({ schema, path, values });
@@ -120,9 +116,7 @@ export function placeDomains(
   }
   const malformed = [
     ...written.domains.flatMap((_, domain): Malformed[] =>
-      used.has(domain) && !shadowed.has(domain)
-        ? []
-        : [{ kind: "Malformed.unusedDomain", definition: null, data: { service, domain } }],
+      used.has(domain) ? [] : [{ kind: "Malformed.unusedDomain", definition: null, data: { service, domain } }],
     ),
     ...[...overlapping.values()].map(
       (naming): Malformed => ({

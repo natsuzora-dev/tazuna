@@ -49,14 +49,14 @@ export type Malformed =
    */
   | Of<"domainValue", null, { readonly service: string; readonly domain: number; readonly value: number }>
   /**
-   * The domain at index `domain` of the `explore()` of `service` is never read where the service's moves carry its
-   * schema: its schema is written nowhere there or only inside an array or a record, or it is written inside a node
-   * that another domain names, whose values explore writes whole.
+   * The domain at index `domain` of the `explore()` of `service` names no node of a schema that the service's moves may
+   * carry: its schema is written nowhere there, or only inside an array or a record.
    */
   | Of<"unusedDomain", null, { readonly service: string; readonly domain: number }>
   /**
-   * The domains at the indices `domains` of the `explore()` of `service` all name one node, so which values the node
-   * takes would depend on their order.
+   * The domains at the indices `domains` of the `explore()` of `service` cover one node: they name it, or one names it
+   * and another names a node around it, whose values explore writes whole. Which values the node takes would depend on
+   * which domain is read.
    */
   | Of<"overlappingDomain", null, { readonly service: string; readonly domains: readonly number[] }>
   /**

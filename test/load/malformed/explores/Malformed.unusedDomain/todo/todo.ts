@@ -13,11 +13,9 @@ export const { command, createEvent, given, scenario } = service({
   entities: { Task },
 });
 
-export const Label = z.object({ text: Task.fields.title });
-
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
-  input: { taskId: Task.fields.id, title: Task.fields.title, label: Label.optional() },
+  input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);

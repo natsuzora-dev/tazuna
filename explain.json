@@ -1433,14 +1433,14 @@
       }
     },
     "Malformed.overlappingDomain": {
-      "meaning": "The domains at the indices `domains` of the `explore()` of `service` all name one node, so which values the node takes would depend on their order.",
+      "meaning": "The domains at the indices `domains` of the `explore()` of `service` cover one node: they name it, or one names it and another names a node around it, whose values explore writes whole. Which values the node takes would depend on which domain is read.",
       "example": {
         "excerpt": {
           "file": "todo/explore.ts",
           "from": 4,
-          "to": 8,
+          "to": 13,
           "line": 4,
-          "text": "export const todoExplore = explore({\n  service: \"todo\",\n  depth: 2,\n  domains: [domain(Task.fields.id, [\"task-1\"]), domain(Task.fields.title, [\"Buy milk\"]), domain(ref(Task), [\"task-2\"])],\n});"
+          "text": "export const todoExplore = explore({\n  service: \"todo\",\n  depth: 2,\n  domains: [\n    domain(Task.fields.id, [\"task-1\"]),\n    domain(Task.fields.title, [\"Buy milk\"]),\n    domain(ref(Task), [\"task-2\"]),\n    domain(Label, [{ text: \"Home\" }]),\n  ],\n});"
         },
         "violation": "{\"kind\":\"Malformed.overlappingDomain\",\"definition\":null,\"data\":{\"service\":\"todo\",\"domains\":[0,2]},\"location\":{\"file\":\"todo/explore.ts\",\"line\":4}}"
       }
@@ -1576,16 +1576,16 @@
       }
     },
     "Malformed.unusedDomain": {
-      "meaning": "The domain at index `domain` of the `explore()` of `service` is never read where the service's moves carry its schema: its schema is written nowhere there or only inside an array or a record, or it is written inside a node that another domain names, whose values explore writes whole.",
+      "meaning": "The domain at index `domain` of the `explore()` of `service` names no node of a schema that the service's moves may carry: its schema is written nowhere there, or only inside an array or a record.",
       "example": {
         "excerpt": {
           "file": "todo/explore.ts",
           "from": 5,
-          "to": 14,
+          "to": 9,
           "line": 5,
-          "text": "export const todoExplore = explore({\n  service: \"todo\",\n  depth: 2,\n  domains: [\n    domain(Task.fields.id, [\"task-1\"]),\n    domain(Task.fields.title, [\"Buy milk\"]),\n    domain(z.string(), [\"Call\"]),\n    domain(Label, [{ text: \"Home\" }]),\n  ],\n});"
+          "text": "export const todoExplore = explore({\n  service: \"todo\",\n  depth: 2,\n  domains: [domain(Task.fields.id, [\"task-1\"]), domain(Task.fields.title, [\"Buy milk\"]), domain(z.string(), [\"Call\"])],\n});"
         },
-        "violation": "{\"kind\":\"Malformed.unusedDomain\",\"definition\":null,\"data\":{\"service\":\"todo\",\"domain\":1},\"location\":{\"file\":\"todo/explore.ts\",\"line\":5}}"
+        "violation": "{\"kind\":\"Malformed.unusedDomain\",\"definition\":null,\"data\":{\"service\":\"todo\",\"domain\":2},\"location\":{\"file\":\"todo/explore.ts\",\"line\":5}}"
       }
     },
     "Malformed.writtenCreatedKey": {

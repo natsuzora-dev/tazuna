@@ -112,7 +112,7 @@ The spec declares both in `explore()`: the depth, and a `domain()` of values for
 A domain belongs to a schema, not to an input: it applies wherever the spec writes that schema, in every value that a move may carry.
 Those values are the inputs of the service's commands and queries, and the outputs, events, and control payloads that a peer or a user writes, since any other service may be external in some scenario.
 The bounds are typed by the schemas that they name and reviewed with the spec, as TLA+ keeps its bounds in the model's configuration, and `test` infers none of them.
-For the same reason, loading reports a domain that is never read, because it names nothing or is written inside a schema that another domain names, and two domains that name one schema.
+For the same reason, a domain that names nothing, and two domains that cover one schema, by naming it or a schema around it, are mistakes that loading reports.
 A small domain usually finds what a large one finds, so one or two values per schema is a good start.
 
 ## Then states the intent, and the snapshot records the run
