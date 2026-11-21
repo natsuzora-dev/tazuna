@@ -1,10 +1,17 @@
 import { sortCollections } from "../data/collections.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { expectFound } from "../data/internalError.ts";
+import type { Schema } from "../data/schema.generated.ts";
 import type { Activity } from "../data/step.generated.ts";
 import type { Json } from "../data/values.ts";
 import type { KeyPosition, Structure } from "../spec/structure.generated.ts";
-import { type DefinitionStructure, isOpenedByScreen, mapStateOf, schemaProperties } from "../spec/structure.ts";
+import {
+  type DefinitionStructure,
+  isOpenedByScreen,
+  receivesOf,
+  schemaIn,
+  schemaProperties,
+} from "../spec/structure.ts";
 import { type Chart, executableChart } from "./chart/basic.ts";
 
 type Change =
@@ -38,16 +45,7 @@ export interface Automation {
  * A schema that values are checked against. `mapContext` is the copy context of the map state `map`, and `record` the
  * fields of the entity `entity`.
  */
-export type Schema =
-  | { readonly kind: "input"; readonly definition: DefinitionRef }
-  | { readonly kind: "payload"; readonly event: DefinitionRef }
-  | { readonly kind: "output"; readonly definition: DefinitionRef }
-  | { readonly kind: "control"; readonly screen: DefinitionRef; readonly control: string }
-  | { readonly kind: "held"; readonly chart: DefinitionRef; readonly state: string }
-  | { readonly kind: "context"; readonly chart: DefinitionRef }
-  | { readonly kind: "mapContext"; readonly chart: DefinitionRef; readonly map: string }
-  | { readonly kind: "mapKey"; readonly chart: DefinitionRef; readonly map: string }
-  | { readonly kind: "record"; readonly entity: DefinitionRef };
+export type { Schema };
 
 /**
  * The values of one service read from the structure. The lists that Lean looks up by name are maps.
@@ -86,69 +84,12 @@ export const ref = (st: Service, name: string): DefinitionRef => ({ service: st.
 export const changeOf = (st: Service, r: DefinitionRef): Change | undefined =>
   r.service === st.service ? st.events.get(r.name) : undefined;
 
-export function schemaOwner(schema: Schema): DefinitionRef {
-  switch (schema.kind) {
-    case "input":
-    case "output":
-      return schema.definition;
-    case "payload":
-      return schema.event;
-    case "control":
-      return schema.screen;
-    case "held":
-    case "context":
-    case "mapContext":
-    case "mapKey":
-      return schema.chart;
-    case "record":
-      return schema.entity;
-  }
-}
-
 /**
- * Lean's Service.schemaOf: the JSON Schema that `schema` names, read from the structure. The loader builds every schema that a run names, so a missing one is an InternalError.
+ * Lean's Service.schemaOf: the JSON Schema that `schema` names, read from the structure. The loader builds every schema
+ * that a run names, so a missing one is an InternalError.
  */
-export function schemaOf(st: Service, schema: Schema): unknown {
-  const body = (r: DefinitionRef) => st.structure.definitions.find((d) => sameRef(d, r));
-  const state = (chart: DefinitionRef, name: string) => {
-    const d = body(chart);
-    return d?.kind === "machine" || d?.kind === "screen" ? d.states.find((s) => s.name === name) : undefined;
-  };
-  const found = ((): unknown => {
-    switch (schema.kind) {
-      case "input":
-      case "output": {
-        const d = body(schema.definition);
-        if (d?.kind === "command" || d?.kind === "query") return d[schema.kind] ?? undefined;
-        return d?.kind === "machine" || d?.kind === "screen" ? d[schema.kind] : undefined;
-      }
-      case "payload": {
-        const d = body(schema.event);
-        return d?.kind === "event" ? d.payload : undefined;
-      }
-      case "control": {
-        const d = body(schema.screen);
-        if (d?.kind !== "screen" || !Object.hasOwn(d.controls, schema.control)) return undefined;
-        return d.controls[schema.control] ?? {};
-      }
-      case "held":
-        return state(schema.chart, schema.state)?.held?.schema;
-      case "context": {
-        const d = body(schema.chart);
-        return d?.kind === "machine" || d?.kind === "screen" ? d.context : undefined;
-      }
-      case "mapContext":
-        return mapStateOf(state(schema.chart, schema.map))?.context;
-      case "mapKey":
-        return mapStateOf(state(schema.chart, schema.map))?.key;
-      case "record": {
-        const d = body(schema.entity);
-        return d?.kind === "entity" ? d.fields : undefined;
-      }
-    }
-  })();
-  return expectFound(`schema ${JSON.stringify(schema)}`, found);
-}
+export const schemaOf = (st: Service, schema: Schema): Json =>
+  expectFound(`schema ${JSON.stringify(schema)}`, schemaIn(st.structure, schema));
 
 /** Lean's Service.sorted: an encoded value with its collections sorted by the structure's schema. */
 export const sorted = (st: Service, schema: Schema, json: Json): Json => sortCollections(schemaOf(st, schema), json);
@@ -224,31 +165,7 @@ export function serviceOf(structure: Structure, service: string): Service {
         break;
     }
   }
-  const listed = structure.contracts
-    .filter((c) => c.service !== service)
-    .flatMap((c) =>
-      Object.values(c.members).flatMap((r) =>
-        r !== null && structure.definitions.some((d) => d.kind === "event" && sameRef(d, r)) ? [r] : [],
-      ),
-    );
-  const heard = own.flatMap(({ d }) =>
-    d.kind === "automation"
-      ? [d.receives]
-      : d.kind === "machine" || d.kind === "screen"
-        ? Object.values(d.receives)
-        : [],
-  );
-  const sent = own.flatMap(({ d }) =>
-    d.kind === "automation"
-      ? [d.command]
-      : d.kind === "machine" || d.kind === "screen"
-        ? Object.values(d.commands)
-        : [],
-  );
-  const results = structure.definitions.flatMap((d) =>
-    d.kind === "command" && sent.some((c) => sameRef(c, d)) ? d.emits : [],
-  );
-  const receives = listed.filter((n) => [...heard, ...results].some((r) => sameRef(r, n)));
+  const receives = receivesOf(structure, service);
   const entities = expectFound(
     `service ${service}`,
     structure.services.find((s) => s.name === service),

@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "check": "npm run spec:test && npm run web:check",
-    "spec:test": "tazuna test spec --depth 2",
-    "spec:test:write": "tazuna test spec --depth 2 --update",
+    "spec:test": "tazuna test spec",
+    "spec:test:write": "tazuna test spec --update",
     "web:check": "npm run check --workspace todo-web"
   },
   "devDependencies": {

@@ -37,23 +37,6 @@ structure Automation where
   guard : List String
 deriving DecidableEq, Repr, Inhabited
 
-/--
-A schema that a definition declares. `mapContext` is the copy context of the map state `map`, and `record` the fields
-of the entity `entity`.
--/
-inductive Schema where
-  | input (definition : Spec.Ref)
-  | payload (event : Spec.Ref)
-  | output (definition : Spec.Ref)
-  | control (screen : Spec.Ref) (control : String)
-  | held (chart : Spec.Ref) (state : String)
-  | context (chart : Spec.Ref)
-  | mapContext (chart : Spec.Ref) (map : String)
-  | mapKey (chart : Spec.Ref) (map : String)
-  | record (entity : Spec.Ref)
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire Schema tag "kind"
 
 end Tazuna.Service
 
@@ -96,47 +79,12 @@ namespace Tazuna.Service
 
 open Tazuna.Data
 
-open Tazuna.Spec in
-def body? (st : Service) (r : Spec.Ref) : Option Body :=
-  (st.structure.definitions.find? (·.ref == r)).map (·.body)
+def body? (st : Service) (r : Spec.Ref) : Option Spec.Body := st.structure.body? r
 
-open Tazuna.Spec in
-def state? (st : Service) (chart : Spec.Ref) (state : String) : Option Spec.State :=
-  (st.body? chart).bind fun
-    | .machine c | .screen c => c.states.find? (·.name == state)
-    | _ => none
+def state? (st : Service) (chart : Spec.Ref) (state : String) : Option Spec.State := st.structure.state? chart state
 
-open Tazuna.Spec in
-/--
-The JSON Schema that `schema` names, read from the structure: a control without a payload's as an object without
-fields. None when the structure has no such schema.
--/
-def schemaOf (st : Service) : Schema → Option Value
-  | .input d => (st.body? d).bind fun
-    | .command c => some c.input
-    | .query q => some q.input
-    | .machine c | .screen c => some c.input
-    | _ => none
-  | .output d => (st.body? d).bind fun
-    | .command c => c.output
-    | .query q => q.output
-    | .machine c | .screen c => some c.output
-    | _ => none
-  | .payload e => (st.body? e).bind fun
-    | .event b => some b.payload
-    | _ => none
-  | .control screen control => (st.body? screen).bind fun
-    | .screen c => (c.controls.lookup control).map (·.getD (.obj []))
-    | _ => none
-  | .held chart state => ((st.state? chart state).bind (·.held)).map (·.schema)
-  | .context chart => (st.body? chart).bind fun
-    | .machine c | .screen c => some c.context
-    | _ => none
-  | .mapContext chart map => ((st.state? chart map).bind (·.type.map?)).map (·.context)
-  | .mapKey chart map => ((st.state? chart map).bind (·.type.map?)).map (·.key)
-  | .record entity => (st.body? entity).bind fun
-    | .entity b => some b.fields
-    | _ => none
+/-- The JSON Schema that `schema` names, read from the structure (Structure.schemaOf). -/
+def schemaOf (st : Service) (schema : Schema) : Option Value := st.structure.schemaOf schema
 
 /-- The value with its collections sorted by `schema`, which the structure holds (schemaOf). -/
 def sorted {m : Type → Type} [Monad m] [MonadNote m] (st : Service) (schema : Schema) (v : Value) : m Value := do
@@ -145,13 +93,6 @@ def sorted {m : Type → Type} [Monad m] [MonadNote m] (st : Service) (schema : 
 def chart? (st : Service) (name : String) : Option Chart := st.charts.find? (·.name == name)
 
 def ref (st : Service) (name : String) : Spec.Ref := { service := st.service, name }
-
-def Schema.owner : Schema → Spec.Ref
-  | .input d | .output d => d
-  | .payload e => e
-  | .control screen _ => screen
-  | .held chart .. | .context chart | .mapContext chart _ | .mapKey chart _ => chart
-  | .record entity => entity
 
 /-- How the event `r` changes records, when it is an own event. -/
 def changeOf (st : Service) (r : Spec.Ref) : Option Change :=
@@ -218,24 +159,7 @@ def ofStructure {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure)
       automations := automations ++
         [({ name, order, receives := a.receives, sends, binds := a.binds, guard := a.guard } : Automation)]
     | .machine _ | .screen _ => pure ()
-  let listed := j.contracts.filter (·.service != service) |>.flatMap fun c =>
-    c.members.filterMap fun (_, r) => r.bind fun r =>
-      if j.definitions.any (fun d => d.kind == "event" && d.ref == r) then some r else none
-  let heard := own.flatMap fun (d, _) =>
-    match d.body with
-    | .automation a => [a.receives]
-    | .machine c | .screen c => c.receives.map (·.2)
-    | _ => []
-  let sent := own.flatMap fun (d, _) =>
-    match d.body with
-    | .automation a => [a.command]
-    | .machine c | .screen c => c.commands.map (·.2)
-    | _ => []
-  let results := j.definitions.flatMap fun d =>
-    match d.body with
-    | .command c => if sent.contains d.ref then c.emits else []
-    | _ => []
-  let receives := listed.filter (heard ++ results).contains
+  let receives := j.receivesOf service
   let entities ← expectFound s!"service {service}" ((j.services.find? (·.name == service)).map (·.entities))
   let bodies ← entities.mapM fun e => do pure (e, ← entityBody { service, name := e })
   pure { service, «structure» := j, commands, queries, events, receives, automations, charts, entities,

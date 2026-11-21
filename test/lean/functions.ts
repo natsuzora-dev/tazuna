@@ -300,8 +300,6 @@ export class RunFunctions implements Answering {
           if ("error" in parsed) return { type: "parse" };
           return { type: "parse", value: parsed.encoded as Json };
         });
-      case "fits":
-        return this.replied(this.functions.fits(q.schema, q.path, q.value), (fits) => ({ type: "fits", fits }));
       case "unordered":
         return this.replied(this.functions.unordered(q.schema, q.value), (value) => ({
           type: "unordered",

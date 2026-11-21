@@ -1,8 +1,10 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { InvalidInput } from "../data/invalidInput.generated.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
+import type { Schema } from "../data/schema.generated.ts";
 import type { Answer, RejectionKind } from "../data/trace.generated.ts";
 import type { TransitionRef, Trigger } from "../data/transitionRef.generated.ts";
+import type { Json } from "../data/values.ts";
 import type {
   Activity as ActivityStructure,
   AssumptionMismatch,
@@ -265,4 +267,117 @@ export const isNegative = (time: DeadlineTime): boolean => (delayMsOf(time) ?? 0
 /** Lean's isKeyOf: whether `value` has the form `<entity>-<n>` of the `n`-th createKey value of the entity. */
 export function isKeyOf(entity: string, value: string): boolean {
   return value.startsWith(`${entity}-`) && /^[1-9][0-9]*$/.test(value.slice(entity.length + 1));
+}
+
+/** Lean's Schema.owner: the definition that declares `schema`. */
+export function schemaOwner(schema: Schema): DefinitionRef {
+  switch (schema.kind) {
+    case "input":
+    case "output":
+      return schema.definition;
+    case "payload":
+      return schema.event;
+    case "control":
+      return schema.screen;
+    case "held":
+    case "context":
+    case "mapContext":
+    case "mapKey":
+      return schema.chart;
+    case "record":
+      return schema.entity;
+  }
+}
+
+/** Lean's Structure.schemaOf: the JSON Schema that `schema` names, or undefined when the structure has none. */
+export function schemaIn(structure: Pick<Structure, "definitions">, schema: Schema): Json | undefined {
+  const body = (r: DefinitionRef) => structure.definitions.find((d) => sameRef(d, r));
+  const state = (chart: DefinitionRef, name: string) => {
+    const d = body(chart);
+    return d?.kind === "machine" || d?.kind === "screen" ? d.states.find((s) => s.name === name) : undefined;
+  };
+  const found = ((): unknown => {
+    switch (schema.kind) {
+      case "input":
+      case "output": {
+        const d = body(schema.definition);
+        if (d?.kind === "command" || d?.kind === "query") return d[schema.kind] ?? undefined;
+        return d?.kind === "machine" || d?.kind === "screen" ? d[schema.kind] : undefined;
+      }
+      case "payload": {
+        const d = body(schema.event);
+        return d?.kind === "event" ? d.payload : undefined;
+      }
+      case "control": {
+        const d = body(schema.screen);
+        if (d?.kind !== "screen" || !Object.hasOwn(d.controls, schema.control)) return undefined;
+        return d.controls[schema.control] ?? {};
+      }
+      case "held":
+        return state(schema.chart, schema.state)?.held?.schema;
+      case "context": {
+        const d = body(schema.chart);
+        return d?.kind === "machine" || d?.kind === "screen" ? d.context : undefined;
+      }
+      case "mapContext":
+        return mapStateOf(state(schema.chart, schema.map))?.context;
+      case "mapKey":
+        return mapStateOf(state(schema.chart, schema.map))?.key;
+      case "record": {
+        const d = body(schema.entity);
+        return d?.kind === "entity" ? d.fields : undefined;
+      }
+    }
+  })();
+  return found as Json | undefined;
+}
+
+const ownDefinitions = (structure: Structure, service: string) =>
+  structure.definitions.filter((d) => d.service === service);
+
+/** Lean's Structure.sentOf: the commands that the automations and charts of `service` send. */
+const sentOf = (structure: Structure, service: string): DefinitionRef[] =>
+  ownDefinitions(structure, service).flatMap((d) =>
+    d.kind === "automation"
+      ? [d.command]
+      : d.kind === "machine" || d.kind === "screen"
+        ? Object.values(d.commands)
+        : [],
+  );
+
+/** Lean's Structure.requestsOf: the commands and queries that the automations and charts of `service` send, each once. */
+export function requestsOf(structure: Structure, service: string): DefinitionRef[] {
+  const all = [
+    ...sentOf(structure, service),
+    ...ownDefinitions(structure, service).flatMap((d) =>
+      d.kind === "machine" || d.kind === "screen" ? Object.values(d.queries) : [],
+    ),
+  ];
+  return all.filter((r, i) => all.findIndex((x) => sameRef(x, r)) === i);
+}
+
+/**
+ * Lean's Structure.receivesOf: the events of other services' contracts that the definitions of `service` receive: an
+ * automation's or a chart's event, or a result event of a command that an automation or a chart sends.
+ */
+export function receivesOf(structure: Structure, service: string): DefinitionRef[] {
+  const listed = structure.contracts
+    .filter((c) => c.service !== service)
+    .flatMap((c) =>
+      Object.values(c.members).flatMap((r) =>
+        r !== null && structure.definitions.some((d) => d.kind === "event" && sameRef(d, r)) ? [r] : [],
+      ),
+    );
+  const heard = ownDefinitions(structure, service).flatMap((d) =>
+    d.kind === "automation"
+      ? [d.receives]
+      : d.kind === "machine" || d.kind === "screen"
+        ? Object.values(d.receives)
+        : [],
+  );
+  const sent = sentOf(structure, service);
+  const results = structure.definitions.flatMap((d) =>
+    d.kind === "command" && sent.some((c) => sameRef(c, d)) ? d.emits : [],
+  );
+  return listed.filter((n) => [...heard, ...results].some((r) => sameRef(r, n)));
 }

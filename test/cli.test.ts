@@ -57,8 +57,8 @@ test("tazuna writes an error and exits with 2 for an unknown command, a wrong nu
     [["check", "samples/todo/spec", "--update"], "unknown option --update for check"],
     [["view"], "wrong number of arguments for view"],
     [["view", "samples/todo/spec", "--port"], "missing value for --port"],
-    [["test", "samples/todo/spec", "--depth", "1", "--depth", "2"], "--depth given twice"],
-    [["test", "samples/todo/spec", "--depth", "1", "--update", "--update"], "--update given twice"],
+    [["test", "samples/todo/spec", "--depth", "1"], "unknown option --depth for test"],
+    [["test", "samples/todo/spec", "--update", "--update"], "--update given twice"],
     [["view", "samples/todo/spec", "--port", "1", "--port", "2"], "--port given twice"],
   ];
   for (const [args, message] of cases) {
@@ -69,15 +69,13 @@ test("tazuna writes an error and exits with 2 for an unknown command, a wrong nu
   }
 });
 
-test("tazuna writes an error and exits with 2 when the spec folder does not exist, the view port is not an integer from 0 to 65535, or the test depth is not a nonnegative integer", async () => {
+test("tazuna writes an error and exits with 2 when the spec folder does not exist or the view port is not an integer from 0 to 65535", async () => {
   const cases: [string[], string][] = [
     [["check", "samples/nope"], "no such folder samples/nope"],
-    [["test", "samples/nope", "--depth", "1"], "no such folder samples/nope"],
+    [["test", "samples/nope"], "no such folder samples/nope"],
     [["verify", "samples/nope", "traces"], "no such folder samples/nope"],
     [["verify", "samples/todo/spec", "nope"], "no such folder nope"],
     [["view", "samples/todo/spec", "--port", "http"], "invalid port http (expected an integer from 0 to 65535)"],
-    [["test", "samples/todo/spec", "--depth", "1.5"], "invalid depth 1.5 (expected a non-negative integer)"],
-    [["test", "samples/todo/spec", "--depth", "1e0"], "invalid depth 1e0 (expected a non-negative integer)"],
     [["view", "samples/todo/spec", "--port", "0x50"], "invalid port 0x50 (expected an integer from 0 to 65535)"],
   ];
   for (const [args, message] of cases) {
@@ -110,7 +108,7 @@ test("check, test, verify, and view write the tsc output to stderr and exit with
   try {
     for (const args of [
       ["check", folder],
-      ["test", folder, "--depth", "0"],
+      ["test", folder],
       ["verify", folder, folder],
       ["view", folder],
     ]) {
@@ -131,7 +129,7 @@ test("check and test write an error and exit with 2 when no tsconfig.json is abo
   try {
     for (const args of [
       ["check", outsideRepository],
-      ["test", outsideRepository, "--depth", "0"],
+      ["test", outsideRepository],
     ]) {
       const { code, out, err } = await runWithTsc(...args);
       assert.equal(code, 2);
@@ -141,7 +139,7 @@ test("check and test write an error and exit with 2 when no tsconfig.json is abo
     writeFileSync(join(outsideRepository, "tsconfig.json"), "{}\n");
     for (const args of [
       ["check", outsideRepository],
-      ["test", outsideRepository, "--depth", "0"],
+      ["test", outsideRepository],
     ]) {
       const { code, out, err } = await runWithTsc(...args);
       assert.equal(code, 2);
@@ -160,7 +158,7 @@ test("check, test, and verify write one line with the error and its place and ex
   try {
     for (const args of [
       ["check", folder],
-      ["test", folder, "--depth", "0"],
+      ["test", folder],
       ["verify", folder, folder],
     ]) {
       const { code, out, err } = await run(...args);
@@ -195,23 +193,23 @@ test("check writes one JSON line per violation to stdout and the count, or that 
   assert.deepEqual(clean.err, [`${sourcesOf(cleanFolder).length} files: no violations`]);
 });
 
-test("test writes how many scenarios it ran out of all and the depth, 1 unless --depth gives it, to stderr, and with --only runs only the named scenarios and leaves the snapshot entries named after the others unreported and unremoved", async () => {
+test("test writes how many scenarios it ran out of all to stderr, and with --only runs only the named scenarios and leaves the snapshot entries named after the others unreported and unremoved", async () => {
   const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "only-"));
   cpSync(join(import.meta.dirname, "verify/uncomparable/snapshot/unpaired"), project, { recursive: true });
   const folder = relative(root, project);
   const snapshots = join(project, "todo/__snapshots__");
   const snapshot = (name: string) => join(folder, "todo/__snapshots__", name);
   try {
-    const all = await run("test", folder, "--depth", "0");
+    const all = await run("test", folder);
     assert.equal(all.code, 1);
-    assert.deepEqual(all.err, ["2/2 scenarios, depth 0: 4 violations"]);
-    const other = await run("test", folder, "--depth", "0", "--only", "todo/addOneUnsnapshotted", "--update");
+    assert.deepEqual(all.err, ["2/2 scenarios: 4 violations"]);
+    const other = await run("test", folder, "--only", "todo/addOneUnsnapshotted", "--update");
     assert.equal(other.code, 0);
     assert.deepEqual(other.out, []);
     assert.deepEqual(other.err, [
       `Updated 1 snapshot: ${snapshot("addOneUnsnapshotted.jsonl")}`,
       `Removed 1 snapshot: ${snapshot("addTwo.jsonl")}`,
-      "1/2 scenarios (--only), depth 0: no violations",
+      "1/2 scenarios (--only): no violations",
     ]);
     assert.deepEqual(readdirSync(snapshots).toSorted(), [
       "addOne",
@@ -220,7 +218,7 @@ test("test writes how many scenarios it ran out of all and the depth, 1 unless -
       "addOneUnsnapshotted.jsonl",
     ]);
     writeFileSync(join(snapshots, "addOne.peer.jsonl"), "");
-    const one = await run("test", folder, "--depth", "0", "--only", "todo/addOne", "--update");
+    const one = await run("test", folder, "--only", "todo/addOne", "--update");
     assert.equal(one.code, 1);
     assert.deepEqual(
       one.out.map((line) => (JSON.parse(line) as { readonly kind: string }).kind),
@@ -228,13 +226,13 @@ test("test writes how many scenarios it ran out of all and the depth, 1 unless -
     );
     assert.ok(one.err.includes(`Removed 1 snapshot: ${snapshot("addOne.peer.jsonl")}`), one.err.join("\n"));
     const both = await run("test", folder, "--only", "todo/addOneUnsnapshotted", "--only", "todo/addOne");
-    assert.deepEqual(both.err.at(-1), "2/2 scenarios (--only), depth 1: 2 violations");
+    assert.deepEqual(both.err.at(-1), "2/2 scenarios (--only): 2 violations");
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
 });
 
-test("test --only explores the paths after the named scenario with the values of every scenario", async () => {
+test("test --only explores the paths after the named scenario within its service's explore()", async () => {
   const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "only-values-"));
   mkdirSync(join(project, "todo"));
   writeFileSync(
@@ -253,6 +251,18 @@ export const addTask = command({
 export const note = command({ input: { text: z.string() }, emits: [] }).decide(() => []);
 `,
   );
+  writeFileSync(
+    join(project, "todo/explore.ts"),
+    `import { domain, explore } from "@natsuzora-dev/tazuna";
+import { note, Task } from "./todo.ts";
+
+export const todoExplore = explore({
+  service: "todo",
+  depth: 1,
+  domains: [domain(Task.fields.id, ["task-2"]), domain(Task.fields.title, ["boom"]), domain(note.input.text, ["boom"])],
+});
+`,
+  );
   const given = '{ start: "2026-10-25T09:00:00+09:00", records: { Task: [] }, peers: [] }';
   writeFileSync(
     join(project, "todo/scenarios.ts"),
@@ -263,7 +273,7 @@ export const addMilk = scenario({ description: "Add", given: ${given}, when: (w)
 `,
   );
   try {
-    const { out } = await run("test", relative(root, project), "--depth", "1", "--only", "todo/addMilk");
+    const { out } = await run("test", relative(root, project), "--only", "todo/addMilk");
     assert.ok(
       out.some((line) => line.includes('"kind":"Fault.failedEnsures"')),
       out.join("\n"),
@@ -281,7 +291,7 @@ test("test writes an error and exits with 2 when --only names no scenario of the
     [["--only", "todo/addOne", "--coverage"], "--coverage cannot be given with --only"],
   ];
   for (const [args, message] of cases) {
-    const { code, out, err } = await run("test", folder, "--depth", "0", ...args);
+    const { code, out, err } = await run("test", folder, ...args);
     assert.equal(code, 2);
     assert.deepEqual(out, []);
     assert.deepEqual(err, [`tazuna: ${message}.`]);
@@ -318,7 +328,7 @@ test("test, verify, and view write the same violation lines and count as check a
   const checked = await run("check", folder);
   assert.notDeepEqual(checked.out, []);
   for (const args of [
-    ["test", folder, "--depth", "1"],
+    ["test", folder],
     ["verify", folder, folder],
     ["view", folder],
   ]) {
@@ -343,7 +353,7 @@ test("check reports each spec file that the program of the nearest tsconfig.json
     assert.equal(code, 1);
     assert.deepEqual(
       out.map((line) => JSON.parse(line)),
-      ["contract.ts", "machines.ts", "player.ts", "scenarios.ts"].map((file) => ({
+      ["contract.ts", "explore.ts", "machines.ts", "player.ts", "scenarios.ts"].map((file) => ({
         kind: "Malformed.unlistedFile",
         definition: null,
         data: { tsconfig: "../tsconfig.json" },
@@ -369,7 +379,7 @@ test("check skips node_modules folders and .d.ts files, and walks a symlinked fo
     const { code, out, err } = await run("check", folder);
     assert.equal(code, 0);
     assert.deepEqual(out, []);
-    assert.deepEqual(err, ["4 files: no violations"]);
+    assert.deepEqual(err, ["5 files: no violations"]);
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

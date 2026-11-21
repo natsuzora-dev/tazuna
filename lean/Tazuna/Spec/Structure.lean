@@ -428,15 +428,156 @@ def isKeyOf (e v : String) : Bool :=
   let digits := v.toList.drop head.length
   v.toList.take head.length == head && !digits.isEmpty && digits.all Char.isDigit && digits.head? != some '0'
 
+end Tazuna.Spec
+
+namespace Tazuna
+
+/--
+A schema that a definition declares. `mapContext` is the copy context of the map state `map`, and `record` the fields
+of the entity `entity`.
+-/
+inductive Schema where
+  | input (definition : Spec.Ref)
+  | payload (event : Spec.Ref)
+  | output (definition : Spec.Ref)
+  | control (screen : Spec.Ref) (control : String)
+  | held (chart : Spec.Ref) (state : String)
+  | context (chart : Spec.Ref)
+  | mapContext (chart : Spec.Ref) (map : String)
+  | mapKey (chart : Spec.Ref) (map : String)
+  | record (entity : Spec.Ref)
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Schema tag "kind"
+
+def Schema.owner : Schema → Spec.Ref
+  | .input d | .output d => d
+  | .payload e => e
+  | .control screen _ => screen
+  | .held chart .. | .context chart | .mapContext chart _ | .mapKey chart _ => chart
+  | .record entity => entity
+
+/-- A step into a JSON Schema: a property of an object, the items of an array, or an option of a union or a type list. -/
+inductive SchemaStep where
+  | field (name : String)
+  | items
+  | option (index : Nat)
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire SchemaStep tag "kind"
+
+end Tazuna
+
+namespace Tazuna.Spec
+
+open Tazuna.Data
+
+/--
+The values that explore gives the node at `path` of the JSON Schema of `schema`: the values of a `domain()` whose
+schema is the one written there, or is a key of the same entity.
+-/
+structure Domain where
+  schema : Schema
+  path : List SchemaStep
+  values : List Value
+deriving Repr, Inhabited
+
+derive_wire Domain
+
+/-- The `explore()` call of the service `service`: the most moves on a path after its scenarios, and its domains. -/
+structure Explore where
+  service : String
+  depth : Nat
+  domains : List Domain
+deriving Repr, Inhabited
+
+derive_wire Explore
+
 /-- The whole spec without function bodies and source locations, as TS `structureOf` writes it. -/
 structure Structure where
   services : List ServiceInfo
   contracts : List Contract
   /-- The definitions, in the order of the spec. -/
   definitions : List Definition
+  /-- The `explore()` calls, at most one per service. -/
+  explores : List Explore
 deriving Repr, Inhabited
 
 derive_wire Structure
+
+def Structure.body? (s : Structure) (r : Ref) : Option Body :=
+  (s.definitions.find? (·.ref == r)).map (·.body)
+
+def Structure.state? (s : Structure) (chart : Ref) (state : String) : Option State :=
+  (s.body? chart).bind fun
+    | .machine c | .screen c => c.states.find? (·.name == state)
+    | _ => none
+
+/--
+The JSON Schema that `schema` names: a control without a payload's as an object without fields. None when the
+structure has no such schema.
+-/
+def Structure.schemaOf (s : Structure) : Schema → Option Value
+  | .input d => (s.body? d).bind fun
+    | .command c => some c.input
+    | .query q => some q.input
+    | .machine c | .screen c => some c.input
+    | _ => none
+  | .output d => (s.body? d).bind fun
+    | .command c => c.output
+    | .query q => q.output
+    | .machine c | .screen c => some c.output
+    | _ => none
+  | .payload e => (s.body? e).bind fun
+    | .event b => some b.payload
+    | _ => none
+  | .control screen control => (s.body? screen).bind fun
+    | .screen c => (c.controls.lookup control).map (·.getD (.obj []))
+    | _ => none
+  | .held chart state => ((s.state? chart state).bind (·.held)).map (·.schema)
+  | .context chart => (s.body? chart).bind fun
+    | .machine c | .screen c => some c.context
+    | _ => none
+  | .mapContext chart map => ((s.state? chart map).bind (·.type.map?)).map (·.context)
+  | .mapKey chart map => ((s.state? chart map).bind (·.type.map?)).map (·.key)
+  | .record entity => (s.body? entity).bind fun
+    | .entity b => some b.fields
+    | _ => none
+
+/-- The commands that the automations and charts of `service` send. -/
+def Structure.sentOf (s : Structure) (service : String) : List Ref :=
+  (s.definitions.filter (·.service == service)).flatMap fun d =>
+    match d.body with
+    | .automation a => [a.command]
+    | .machine c | .screen c => c.commands.map (·.2)
+    | _ => []
+
+/-- The commands and queries that the automations and charts of `service` send, each once. -/
+def Structure.requestsOf (s : Structure) (service : String) : List Ref :=
+  (s.sentOf service ++ (s.definitions.filter (·.service == service)).flatMap fun d =>
+    match d.body with
+    | .machine c | .screen c => c.queries.map (·.2)
+    | _ => []).eraseDups
+
+/--
+The events of other services' contracts that the definitions of `service` receive: an automation's or a chart's
+event, or a result event of a command that an automation or a chart sends.
+-/
+def Structure.receivesOf (s : Structure) (service : String) : List Ref :=
+  let listed := s.contracts.filter (·.service != service) |>.flatMap fun c =>
+    c.members.filterMap fun (_, r) => r.bind fun r =>
+      if s.definitions.any (fun d => d.kind == "event" && d.ref == r) then some r else none
+  let heard := (s.definitions.filter (·.service == service)).flatMap fun d =>
+    match d.body with
+    | .automation a => [a.receives]
+    | .machine c | .screen c => c.receives.map (·.2)
+    | _ => []
+  let sent := s.sentOf service
+  let results := s.definitions.flatMap fun d =>
+    match d.body with
+    | .command c => if sent.contains d.ref then c.emits else []
+    | _ => []
+  listed.filter (heard ++ results).contains
 
 def Chart.state? (c : Chart) (n : String) : Option State := c.states.find? (·.name == n)
 

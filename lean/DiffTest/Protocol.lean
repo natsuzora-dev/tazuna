@@ -38,13 +38,6 @@ structure StepOrder where
 
 derive_wire StepOrder
 
-/-- What explore enumerates moves from besides the world: every scenario of the spec, and the values per payload. -/
-structure ExploreOptions where
-  scenarios : List Scenario
-  valuesPerPayload : Nat
-
-derive_wire ExploreOptions
-
 /-- What TS asks Lean to compute. A snapshot line is null for a blank line. -/
 inductive Request where
   | check («structure» : Spec.Structure)
@@ -63,7 +56,7 @@ inductive Request where
   `explore` too, the own service returns the moves that explore appends next.
   -/
   | simulate («structure» : Spec.Structure) (scenario : Scenario) (execute : Option Bool)
-      (stepOrders : Option (List StepOrder)) (explore : Option ExploreOptions)
+      (stepOrders : Option (List StepOrder)) (explore : Option Bool)
   | stepOrderChanges («structure» : Spec.Structure) (scenario : Scenario)
   /-- sortCollections of an encoded value by its JSON Schema. -/
   | sort (schema value : Value)
@@ -72,7 +65,7 @@ inductive Request where
   /-- scenarioTime? of a text, as renderTime writes the time. -/
   | scenarioTime (text : String)
   /-- Service.schemaOf of the service `service` of the structure. -/
-  | schemaOf («structure» : Spec.Structure) (service : String) (schema : Service.Schema)
+  | schemaOf («structure» : Spec.Structure) (service : String) (schema : Schema)
 
 derive_wire Request tag "type" skip_serializing_none
 
@@ -82,7 +75,6 @@ record that TS read while it answers.
 -/
 inductive Question where
   | parse (schema : Schema) (value : Value)
-  | fits (schema : Schema) (path : List SchemaStep) (value : Value)
   | unordered (schema : Schema) (value : Value)
   | binding (command binding : String) (input : Value) (now : Time)
   | requirement (command condition : String) (input : Value) (now : Time)
@@ -132,7 +124,6 @@ inductive Reply where
   | read (entity : String) (key field : Option String) (beforeEventWrite : Option Bool)
   | issue (issue : Issue)
   | parse (value : Option Value)
-  | fits (fits : Bool)
   | unordered (value : Value)
   | binding (bound : Bool)
   | requirement (holds : Bool)

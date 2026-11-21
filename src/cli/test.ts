@@ -7,7 +7,7 @@ import { type Run, sameRun, snapshotEntryPath, snapshotPath } from "../data/trac
 import { canonicalJson } from "../data/values.ts";
 import { type ReportedViolation, toReported } from "../data/violation.ts";
 import type { Named } from "../dsl/definition.ts";
-import { exploreLines, seenLines, valuesPerPayload } from "../explore/paths.ts";
+import { exploreLines } from "../explore/paths.ts";
 import { stepOrderChanges } from "../explore/stepOrders.ts";
 import { uncoveredParts } from "../explore/uncovered.ts";
 import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
@@ -80,17 +80,15 @@ function testSnapshots(
 }
 
 /**
- * Simulates and explores `scenarios`, some or all of the spec's, then tests the snapshots (testSnapshots). The explored
- * paths take their values from every scenario either way. A scenario still written as an
- * input list, which only verify's examples keep until verify runs the simulation, is not run: its snapshot is kept as it
+ * Simulates and explores `scenarios`, some or all of the spec's, then tests the snapshots (testSnapshots). A scenario
+ * still written as an input list, which only verify's examples keep until verify runs the simulation, is not run: its snapshot is kept as it
  * is.
  */
 export function testSpec(
   spec: CheckedSpec,
-  options: { readonly update: boolean; readonly depth: number; readonly scenarios: readonly Named<LoadedScenario>[] },
+  options: { readonly update: boolean; readonly scenarios: readonly Named<LoadedScenario>[] },
 ): TestResult {
   const { scenarios } = options;
-  const bounds = { depth: options.depth, valuesPerPayload };
   const reached = new Coverage();
   const simulated = simulateScenarios(spec, scenarios);
   const violations: ReportedViolation[] = [];
@@ -103,10 +101,9 @@ export function testSpec(
     violations.push(violation);
   };
   for (const violation of simulated.violations) report(violation);
-  const seenInLines = seenLines(spec);
   const visited: number[] = [];
   for (const named of scenarios) {
-    const explored = exploreLines(spec, named, seenInLines, bounds);
+    const explored = exploreLines(spec, named);
     reached.addAll(explored.reached);
     visited.push(explored.visited);
     const ref = { service: named.service, name: named.name };

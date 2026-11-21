@@ -23,12 +23,6 @@ export const folders = (dir: string): string[] =>
         .sort()
     : [];
 
-/**
- * The most moves on a path after each scenario when the examples run under test and the Lean oracle. 2, since 3
- * makes npm test and npm run lean:check several times slower.
- */
-export const depth = 2;
-
 export const isServiceFolder = (dir: string): boolean => readdirSync(dir).some((name) => name.endsWith(".ts"));
 
 /** A passed type check whose program includes every file, which the examples take in place of running tsc. */

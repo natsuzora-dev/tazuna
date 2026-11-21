@@ -4,14 +4,13 @@ import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import type { Ensured } from "../data/ensured.generated.ts";
 import type { Fault } from "../data/fault.generated.ts";
 import { expectFound } from "../data/internalError.ts";
-import type { SchemaStep } from "../data/jsonSchema.ts";
 import type { Activity } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Fields, Json } from "../data/values.ts";
 import { type Located, type ViolationError, withExtra, zodError } from "../data/violation.ts";
-import { emitsOf } from "../spec/structure.ts";
-import { ref, type Schema, type Service, schemaOf, schemaOwner, sorted } from "./basic.ts";
+import { emitsOf, schemaOwner } from "../spec/structure.ts";
+import { ref, type Schema, type Service, schemaOf, sorted } from "./basic.ts";
 import { chartOf, type InstanceId, mapOf, ownerId } from "./instance.ts";
 import type { Emit } from "./message.ts";
 import type { RecordSource } from "./records.ts";
@@ -113,7 +112,6 @@ export function sorting(st: Service, inner: Functions): Functions {
     answer instanceof Failed ? answer : { ...answer, input: sorted(st, schema, answer.input) };
   const fs: Functions = {
     parse,
-    fits: (...a) => inner.fits(...a),
     unordered: (...a) => inner.unordered(...a),
     decode: (...a) => inner.decode(...a),
     binding: (...a) => inner.binding(...a),
@@ -319,8 +317,6 @@ export type Checked = { readonly value: Fields; readonly encoded: unknown } | { 
  */
 export interface Functions {
   parse(schema: Schema, value: unknown): Checked | Failed;
-  /** Lean's fits: whether `value` matches the part of `schema` at `path` in its JSON Schema, read alone. */
-  fits(schema: Schema, path: readonly SchemaStep[], value: Json): boolean | Failed;
   /**
    * Returns a value from outside or of a trace line as a simulation compares it: canonical, with every bag and the
    * sortedBy elements with equal keys in canonical order.

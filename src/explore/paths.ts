@@ -2,13 +2,13 @@ import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { expectFound, InternalError } from "../data/internalError.ts";
 import { invalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
-import type { LineId } from "../data/trace.generated.ts";
+import type { LineId, RejectionKind } from "../data/trace.generated.ts";
 import type { Json } from "../data/values.ts";
 import type { Violation } from "../data/violation.ts";
 import type { Named } from "../dsl/definition.ts";
 import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
-import type { Schema, Service } from "../service/basic.ts";
+import { type Schema, type Service, schemaOf } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { sameLineId } from "../service/message.ts";
 import { Halt } from "../service/state.ts";
@@ -17,12 +17,13 @@ import type { Cache } from "../sim/spec/cache.ts";
 import { Coverage } from "../sim/spec/coverage.ts";
 import type { Listener } from "../sim/spec/listener.ts";
 import { executeSpec, executeSpecFrom } from "../sim/spec/simulate.ts";
+import { declared, treeOf, treeValues } from "../spec/domains.ts";
+import type { Explore } from "../spec/structure.generated.ts";
 import { rejectionKinds } from "../spec/structure.ts";
 import { type Enabled, enabled } from "./enabled.ts";
 import { halted, worldFingerprint } from "./fingerprint.ts";
 import { search, Visited } from "./search.ts";
 import { stepOrderChanges } from "./stepOrders.ts";
-import { distinct, nameOf, type Seen, seenOf, valuesFor } from "./values.ts";
 
 export interface Executed {
   readonly world: World;
@@ -119,14 +120,8 @@ function requestFact(m: Message): Fact {
   };
 }
 
-/** Lean's isAnswer. */
-const isAnswer = (v: Json): boolean =>
-  typeof v === "object" &&
-  v !== null &&
-  !Array.isArray(v) &&
-  typeof (v as { readonly [key: string]: Json })["result"] === "string";
-
-const unavailable: Json = { result: "rejected", rejection: { kind: "unavailable" } };
+/** Lean's rejectedAnswer. */
+const rejectedAnswer = (kind: RejectionKind): Json => ({ result: "rejected", rejection: { kind } });
 
 /** Lean's answerOf. */
 const answerOf = (query: boolean, hasOutput: boolean, output: Json): Json =>
@@ -151,43 +146,40 @@ const requestMoves = (target: DefinitionRef, query: boolean, input: Json): Move[
     { type: "request", kind, target, input: literal(input) },
   ]);
 
+/** Lean's exploreOf: the `explore()` of `service`, which load guarantees for a service with scenarios. */
+export const exploreOf = (spec: Spec, service: string): Explore =>
+  expectFound(
+    `explore of ${service}`,
+    spec.structure.explores.find((x) => x.service === service),
+  );
+
+/** Lean's answers. */
+const answers = (query: boolean, outputs: readonly Json[] | undefined, kinds: readonly RejectionKind[]): Json[] => [
+  ...(outputs === undefined ? [answerOf(query, false, {})] : outputs.map((o) => answerOf(query, true, o))),
+  ...kinds.filter((k) => k !== "invalid-input").map(rejectedAnswer),
+];
+
 /** Lean's fill. */
-function fill(
-  spec: Spec,
-  r: Processing,
-  sc: Scenario,
-  lines: readonly Line[],
-  seen: Seen,
-  n: number,
-  w: World,
-  slot: Slot,
-): Move[] {
-  const { st, functions: fs } = r;
+function fill(spec: Spec, r: Processing, sc: Scenario, lines: readonly Line[], w: World, slot: Slot): Move[] {
+  const { st } = r;
   const own = sc.service;
-  const values = (schema: Schema, listed: readonly Json[]) => valuesFor(st, fs, schema, listed, seen.words, n);
+  const { domains } = exploreOf(spec, own);
+  const values = (schema: Schema) => treeValues(treeOf(declared(domains, schema), schemaOf(st, schema), []));
   switch (slot.kind) {
     case "answer": {
       const { awaiting: a, message: m } = slot;
       const request = requestFact(m);
       const target = { service: a.target, name: a.name };
       const d = expectFound(
-        `definition ${nameOf(target)}`,
+        `definition ${target.service}.${target.name}`,
         spec.structure.definitions.find((x) => sameRef(x, target)),
       );
       if (d.kind !== "command" && d.kind !== "query")
-        throw new InternalError(`${nameOf(target)} is no command or query`);
-      const query = d.kind === "query";
-      const generated =
-        d.output === null
-          ? [answerOf(query, false, {})]
-          : values({ kind: "output", definition: target }, []).map((o) => answerOf(query, true, o));
-      const listed = (seen.answers.get(nameOf(target)) ?? []).filter(isAnswer);
-      const rejects = rejectionKinds(spec.structure, own, target).includes("unavailable") ? [unavailable] : [];
-      const first = listed[0] ?? generated[0];
-      const pool = distinct([...(first === undefined ? [] : [first]), ...rejects, ...listed, ...generated]);
-      return pool
-        .slice(0, n)
-        .map((answer) => answerMove(m.receiver, request, answer, m.status === "inFlight", lines.length));
+        throw new InternalError(`${target.service}.${target.name} is no command or query`);
+      const outputs = d.output === null ? undefined : values({ kind: "output", definition: target });
+      return answers(d.kind === "query", outputs, rejectionKinds(spec.structure, own, target)).map((answer) =>
+        answerMove(m.receiver, request, answer, m.status === "inFlight", lines.length),
+      );
     }
     case "at":
       return [[{ type: "at", time: slot.time.toString() }]];
@@ -199,12 +191,7 @@ function fill(
       );
       const screen = { service: own, name: o.screen };
       const payloads =
-        o.payloads === null
-          ? values(
-              { kind: "control", screen, control: o.control },
-              seen.payloads.get(`${nameOf(screen)}.${o.control}`) ?? [],
-            )
-          : (o.payloads as Json[]).slice(0, n);
+        o.payloads === null ? values({ kind: "control", screen, control: o.control }) : (o.payloads as Json[]);
       return payloads.map(
         (payload): Move => [
           {
@@ -219,12 +206,11 @@ function fill(
     case "unsubscribe":
       return [[{ type: "unsubscribe", subscription: slot.line }]];
     case "request":
-      return values(
-        { kind: "input", definition: slot.definition },
-        seen.messages.get(nameOf(slot.definition)) ?? [],
-      ).flatMap((input) => requestMoves(slot.definition, slot.query, input));
+      return values({ kind: "input", definition: slot.definition }).flatMap((input) =>
+        requestMoves(slot.definition, slot.query, input),
+      );
     case "emit":
-      return values({ kind: "payload", event: slot.event }, seen.messages.get(nameOf(slot.event)) ?? []).map(
+      return values({ kind: "payload", event: slot.event }).map(
         (payload): Move => [
           { type: "emit", peer: slot.peer, event: slot.event, payload: literal(payload) },
           {
@@ -240,21 +226,17 @@ function fill(
 
 /**
  * Lean's moves: returns a function that lists the moves after an executed world, each slot filled. It halts with the
- * fault of what the own service enables, or of a refinement that throws on a representative value.
+ * fault of what the own service enables.
  */
 export const enabledLines =
-  (spec: Spec, sc: Scenario, seen: Seen, n: number) =>
+  (spec: Spec, sc: Scenario) =>
   (lines: readonly Line[], { world: w }: Executed): Move[] => {
     const r = expectFound(`own service ${sc.service}`, w.services.get(sc.service)).processing;
     const e = enabled(r);
     return r.evaluations.quietly(() =>
-      slots(spec, r.st, sc, lines, w, e).flatMap((slot) => fill(spec, r, sc, lines, seen, n, w, slot)),
+      slots(spec, r.st, sc, lines, w, e).flatMap((slot) => fill(spec, r, sc, lines, w, slot)),
     );
   };
-
-/** The values that the scenarios of a spec write, which explore tries first. */
-export const seenLines = (spec: Spec): Seen =>
-  seenOf(spec.scenarios.map((s) => (s.definition as LoadedScenario).scenario));
 
 export const executeAppended = (spec: Spec, sc: Scenario, appended: readonly Line[], cache?: () => Cache): Executed =>
   executeSpec(spec, appended.length === 0 ? sc : { ...sc, lines: [...sc.lines, ...appended] }, [], cache);
@@ -306,14 +288,6 @@ const givable = (parent: Executed, child: Executed): boolean =>
   (child.world.halted === undefined || parent.world.halted !== undefined) &&
   !violationsSince(parent, child).some((v) => invalidInput.has(v.kind));
 
-export const valuesPerPayload = 2;
-
-export interface Bounds {
-  /** The most moves on a path after a scenario. */
-  readonly depth: number;
-  readonly valuesPerPayload: number;
-}
-
 interface FoundOnPath {
   readonly violation: Violation;
   readonly appended: readonly Line[];
@@ -337,19 +311,20 @@ const coverageOf = (executed: Executed, reached: Coverage, parent?: Executed) =>
 };
 
 /**
- * Explores the scenario: executes its lines, and the paths that append up to `depth` lines that face the own service,
+ * Explores the scenario: executes its lines, and the paths that append up to the depth of its service's `explore()`
+ * moves that face the own service,
  * breadth-first, without extending a path whose world an earlier path reached, discarding a path whose last line no one
  * could write (givable). Returns the violations of the running services that each path added, the step orders of its last
  * move's processings that change their result, and what the executions reached.
  */
-export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: Seen, bounds: Bounds): ExploredLines {
+export function exploreLines(spec: Spec, named: Named<LoadedScenario>): ExploredLines {
   const sc = named.definition.scenario;
   const base = executeAppended(spec, sc, []);
   const found: FoundOnPath[] = [];
   const reached = new Coverage();
   coverageOf(base, reached);
   if (halted(base.world) || base.world.violations.length > 0) return { found, reached, visited: 0 };
-  const enabledAfter = enabledLines(spec, sc, seen, bounds.valuesPerPayload);
+  const enabledAfter = enabledLines(spec, sc);
   const next = (path: readonly Move[], executed: Executed): Move[] => {
     if (halted(executed.world)) return [];
     try {
@@ -374,7 +349,7 @@ export function exploreLines(spec: Spec, named: Named<LoadedScenario>, seen: See
   const visited = new Visited();
   for (const { path, result, parent } of search<Move, Executed>({
     start: { path: [], result: base },
-    bound: bounds.depth,
+    bound: exploreOf(spec, sc.service).depth,
     step,
     next,
     merge: { fingerprint: (executed) => worldFingerprint(executed.world), visited },

@@ -1,0 +1,8 @@
+import { domain, explore } from "@natsuzora-dev/tazuna";
+import { Task } from "./todo.ts";
+
+export const ensuresBreakingTodoExplore = explore({
+  service: "ensuresBreakingTodo",
+  depth: 2,
+  domains: [domain(Task.fields.id, ["task-1"]), domain(Task.fields.title, ["milk"])],
+});

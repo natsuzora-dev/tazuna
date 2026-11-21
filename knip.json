@@ -15,7 +15,7 @@
       }
     },
     "samples/todo/spec": {
-      "entry": ["**/{scenarios,contract,automations,machines,*Screen}.ts"]
+      "entry": ["**/{scenarios,contract,automations,machines,explore,*Screen}.ts"]
     }
   },
   "ignoreBinaries": ["lake", "mkfifo"],

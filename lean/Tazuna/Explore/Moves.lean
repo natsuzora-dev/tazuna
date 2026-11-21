@@ -1,5 +1,5 @@
 import Tazuna.Explore.Enabled
-import Tazuna.Explore.Values
+import Tazuna.Spec.Domains
 import Tazuna.Sim.Network
 
 /-!
@@ -9,7 +9,7 @@ slots that the world enables (slots), and the moves that values fill each slot w
 
 namespace Tazuna.Explore
 
-open Tazuna.Data Tazuna.Service Tazuna.Sim Tazuna.Scenario
+open Tazuna.Data Tazuna.Spec.Domains Tazuna.Service Tazuna.Sim Tazuna.Scenario
 
 /-- The lines of one step of explore, which a path appends together: a message stated and the line delivering it. -/
 abbrev Move := List Scenario.Line
@@ -31,12 +31,11 @@ inductive Slot where
   | restart
 deriving Inhabited
 
-/-- What explore reads besides the world: the scenario, the lines so far, the scenarios' values, and how many to try. -/
+/-- What explore reads besides the world: the scenario, the lines so far, and the own service's declared domains. -/
 structure Explored where
   sc : Scenario
   lines : List Scenario.Line
-  seen : Seen
-  valuesPerPayload : Nat
+  domains : List Spec.Domain
 
 def Explored.own (x : Explored) : String := x.sc.service
 
@@ -109,13 +108,8 @@ def requestFact? (msg : Message) : Option Fact :=
   | .subscribe target input => some (.request msg.origin .subscribe target (some (literal input)))
   | _ => none
 
-/-- Whether a value that a scenario writes as an answer has a result, as explore takes it. -/
-def isAnswer (v : Value) : Bool :=
-  match v.field? "result" with
-  | some (.str _) => true
-  | _ => false
-
-def unavailable : Value := .obj [("result", .str "rejected"), ("rejection", .obj [("kind", .str "unavailable")])]
+/-- The answer that rejects a request with `kind`. -/
+def rejectedAnswer (kind : RejectionKind) : Value := ToValue.toValue (Answer.rejected { kind })
 
 /-- The answer that a fulfilled query or accepted command gives with `output`, written only when it has one. -/
 def answerOf (query : Bool) (hasOutput : Bool) (output : Value) : Value :=
@@ -137,57 +131,68 @@ def emitMove (own peer : String) (event : Spec.Ref) (k : Nat) (v : Value) : Move
 
 variable {m : Type → Type} [Monad m] [MonadNote m]
 
-local instance : MonadNote (ExceptT Fault m) := ⟨fun n => ExceptT.lift (MonadNote.note n)⟩
+/-- The `explore()` of `service`, which load guarantees for a service with scenarios (Malformed.missingExplore). -/
+def exploreOf (spec : Spec.Structure) (service : String) : m Spec.Explore :=
+  expectFound s!"explore of {service}" (spec.explores.find? (·.service == service))
+
+def requestOf (msg : Message) : m Fact := expectFound s!"request of {msg.id.text}" (requestFact? msg)
+
+/-- Whether the command or query `target` is a query, and its output schema. -/
+def targetOf (st : Service) (target : Spec.Ref) : m (Bool × Option Value) := do
+  match ← expectFound s!"definition {repr target}" (st.body? target) with
+  | .command c => pure (false, c.output)
+  | .query q => pure (true, q.output)
+  | _ => do MonadNote.note (.bug s!"{repr target} is no command or query"); pure (false, none)
+
+def openedOf (x : Explored) (w : World) (o : Operation) : m Sim.Opened :=
+  expectFound s!"opening of {repr o.id}" (w.opened.reverse.find? fun s => s.service == x.own && s.id == o.id)
+
+/-- The tree of `schema` under the declared domains (treeOf). -/
+def Explored.tree (st : Service) (x : Explored) (schema : Schema) : m Tree := do
+  pure (treeOf (declared x.domains schema) (← expectFound s!"schema {repr schema}" (st.schemaOf schema)) [])
 
 /--
-The moves that values fill `slot` with, up to `valuesPerPayload` per slot: for an answer, the first answer a scenario
-wrote (or else the first generated one), a rejection as unavailable when the target may give it, then the other written
-and generated answers; for a request, an operation without offers, and an event, the written values and then
-representative ones (valuesFor); for an operation with offers, the offered payloads.
+The answers to a request: each output that the output tree gives (one answer without output when the target has none),
+then a rejection of each kind in `kinds` but invalidInput, which blames the request that the own service checked
+before it sent it (Structure.rejectionKinds).
 -/
-def fill (spec : Spec.Structure) (st : Service) (fs : Functions m) (x : Explored) (w : World) : Slot → ExceptT Fault m (List Move)
+def answers (query : Bool) (outputs : Option Tree) (kinds : List RejectionKind) : List Value :=
+  (match outputs with
+    | none => [answerOf query false (.obj [])]
+    | some t => t.values.map (answerOf query true)) ++
+  (kinds.filter (· != .invalidInput)).map rejectedAnswer
+
+/--
+The moves that values fill `slot` with: for an answer, the answers that the target's output tree and the rejection
+kinds that the target may give (Structure.rejectionKinds) give; for a request, an operation without offers, and an
+event, the values of the schema's tree; for an operation with offers, the offered payloads.
+-/
+def fill (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) : Slot → m (List Move)
   | .answer a msg => do
-    let request ← expectFound s!"request of {msg.id.text}" (requestFact? msg)
+    let request ← requestOf msg
     let target : Spec.Ref := { service := a.target, name := a.name }
-    let (query, output) ← match ← expectFound s!"definition {repr target}" (st.body? target) with
-      | .command c => pure (false, c.output)
-      | .query q => pure (true, q.output)
-      | _ => do MonadNote.note (.bug s!"{repr target} is no command or query"); pure (false, none)
-    let generated ← match output with
-      | none => pure [answerOf query false (.obj [])]
-      | some _ => do
-        let outputs ← ExceptT.mk (valuesFor st fs (.output target) [] x.seen.words x.valuesPerPayload)
-        pure (outputs.map (answerOf query true))
-    let listed := (Written.lookup x.seen.answers target).filter isAnswer
-    let rejects := if (spec.rejectionKinds x.own target).contains .unavailable then [unavailable] else []
-    let pool := distinct ((listed.head?.orElse fun _ => generated.head?).toList ++ rejects ++ listed ++ generated)
-    pure ((pool.take x.valuesPerPayload).map fun answer =>
+    let kind ← targetOf st target
+    let outputs ← match kind.2 with
+      | none => pure none
+      | some _ => some <$> x.tree st (.output target)
+    pure ((answers kind.1 outputs (spec.rejectionKinds x.own target)).map fun answer =>
       answerMove msg.receiver request answer (msg.status == .inFlight) x.lines.length)
   | .at t => pure [[.at { text := renderTime t, time := t }]]
   | .operate o => do
-    let opened ← expectFound s!"opening of {repr o.id}"
-      (w.opened.reverse.find? fun s => s.service == x.own && s.id == o.id)
+    let opened ← openedOf x w o
     let screen := st.ref o.screen
     let payloads ← match o.payloads with
-      | some ps => pure (ps.take x.valuesPerPayload)
-      | none => ExceptT.mk (valuesFor st fs (.control screen o.control)
-          (Written.lookup x.seen.payloads (screen, o.control)) x.seen.words x.valuesPerPayload)
+      | some ps => pure ps
+      | none => do pure (← x.tree st (.control screen o.control)).values
     pure (payloads.map fun p => [.operate (.screen opened.origin screen) o.control (literal p)])
   | .unsubscribe i => pure [[.unsubscribe none i]]
-  | .request d query => do
-    let values ← ExceptT.mk
-      (valuesFor st fs (.input d) (Written.lookup x.seen.messages d) x.seen.words x.valuesPerPayload)
-    pure (values.flatMap (requestMoves d query))
-  | .emit peer event => do
-    let values ← ExceptT.mk
-      (valuesFor st fs (.payload event) (Written.lookup x.seen.messages event) x.seen.words x.valuesPerPayload)
-    pure (values.map (emitMove x.own peer event x.lines.length))
+  | .request d query => do pure ((← x.tree st (.input d)).values.flatMap (requestMoves d query))
+  | .emit peer event => do pure ((← x.tree st (.payload event)).values.map (emitMove x.own peer event x.lines.length))
   | .restart => pure [[.restart]]
 
 /-- The moves after `w`, which enables `e`: each slot filled, in slot order. -/
-def moves (spec : Spec.Structure) (st : Service) (fs : Functions m) (x : Explored) (w : World) (e : Enabled) :
-    ExceptT Fault m (List Move) := do
-  pure (← (slots spec st x w e).mapM (fill spec st fs x w)).flatten
+def moves (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) (e : Enabled) : m (List Move) := do
+  pure (← (slots spec st x w e).mapM (fill spec st x w)).flatten
 
 /--
 The condition under which the world `w`, which enables `e`, enables a slot: an answer answers a request the own service
@@ -215,6 +220,32 @@ def Slot.Realizes (x : Explored) : Slot → Move → Prop
   | .unsubscribe i, mv => mv = [.unsubscribe none i]
   | .request r query, mv => ∃ v, mv ∈ requestMoves r query v
   | .emit peer event, mv => ∃ v, mv = emitMove x.own peer event x.lines.length v
+  | .restart, mv => mv = [.restart]
+
+/--
+The moves that fill a slot, with the values that the declared domains and the finite types admit (Tree.Admits): an
+answer with an output that the output tree admits (or without output, for a target without one) or a rejection of a
+kind that the target may give, but invalidInput; an operation with an offered payload, or one that the control's tree admits when the
+operation lists no offers; a request with an input and an event with a payload that their trees admit.
+-/
+def Slot.Fills (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) : Slot → Move → Prop
+  | .answer a msg, mv =>
+    let target : Spec.Ref := { service := a.target, name := a.name }
+    let kind := Id.run (targetOf st target)
+    ∃ answer, mv = answerMove msg.receiver (Id.run (requestOf msg)) answer (msg.status == .inFlight) x.lines.length ∧
+      ((kind.2 = none ∧ answer = answerOf kind.1 false (.obj [])) ∨
+        (kind.2.isSome ∧ ∃ o, (Id.run (x.tree st (.output target))).Admits o ∧ answer = answerOf kind.1 true o) ∨
+        ∃ k ∈ spec.rejectionKinds x.own target, k ≠ .invalidInput ∧ answer = rejectedAnswer k)
+  | .at t, mv => mv = [.at { text := renderTime t, time := t }]
+  | .operate o, mv => ∃ p,
+      (match o.payloads with
+        | some ps => p ∈ ps
+        | none => (Id.run (x.tree st (.control (st.ref o.screen) o.control))).Admits p) ∧
+      mv = [.operate (.screen (Id.run (openedOf x w o)).origin (st.ref o.screen)) o.control (literal p)]
+  | .unsubscribe i, mv => mv = [.unsubscribe none i]
+  | .request r query, mv => ∃ v, (Id.run (x.tree st (.input r))).Admits v ∧ mv ∈ requestMoves r query v
+  | .emit peer event, mv => ∃ v, (Id.run (x.tree st (.payload event))).Admits v ∧
+      mv = emitMove x.own peer event x.lines.length v
   | .restart, mv => mv = [.restart]
 
 end Tazuna.Explore

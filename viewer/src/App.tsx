@@ -320,7 +320,7 @@ export function App({
               ) : scenario.error !== null ? (
                 <JsonView key={`${scenario.service}/${scenario.name}`} value={scenario.error} />
               ) : (
-                <p className="empty kind">no snapshot. tazuna test --depth &lt;n&gt; --update writes it</p>
+                <p className="empty kind">no snapshot. tazuna test --update writes it</p>
               ))}
             {missing && <Notice text={`${path.join("/")} not found`} />}
           </main>

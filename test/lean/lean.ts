@@ -14,7 +14,7 @@ import type { Schema } from "../../src/service/basic.ts";
 import type { StepOrder } from "../../src/sim/network.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
-import type { Asked, ExploreOptions, Reply, Request, Response } from "./protocol.generated.ts";
+import type { Asked, Reply, Request, Response } from "./protocol.generated.ts";
 
 const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-lean");
 
@@ -213,10 +213,9 @@ export class Lean {
     spec: Spec,
     scenario: Scenario,
     functions: Answering,
-    explore: ExploreOptions,
   ): { readonly outcome: Omit<Responded<"simulate">, "fingerprint">; readonly fingerprint: string } {
     const { fingerprint, ...outcome } = this.exchange(
-      { type: "simulate", structure: spec.structure, scenario, execute: true, explore },
+      { type: "simulate", structure: spec.structure, scenario, execute: true, explore: true },
       functions,
     );
     if (fingerprint === null) throw new Error("tazuna-lean gave no fingerprint for an explored world");

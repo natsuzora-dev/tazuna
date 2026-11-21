@@ -4,18 +4,11 @@ import { join, relative } from "node:path";
 import { after, test } from "node:test";
 import { z } from "zod";
 import { type Line, scenario } from "../src/data/scenario.generated.ts";
-import {
-  type Executed,
-  enabledLines,
-  executeAppended,
-  type Move,
-  seenLines,
-  valuesPerPayload,
-} from "../src/explore/paths.ts";
+import { type Executed, enabledLines, executeAppended, exploreOf, type Move } from "../src/explore/paths.ts";
 import { search } from "../src/explore/search.ts";
 import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { Halt } from "../src/service/state.ts";
-import { checkedRoot, depth, fuzzFoundRoot, runExamples } from "./examples.ts";
+import { checkedRoot, fuzzFoundRoot, runExamples } from "./examples.ts";
 import { executeEach, invalidLines, SameWorlds } from "./executed.ts";
 import { Lean } from "./lean/lean.ts";
 
@@ -31,9 +24,8 @@ const specs = await Promise.all(
 );
 
 for (const { name, spec } of specs) {
-  const seen = seenLines(spec);
   for (const named of spec.scenarios)
-    test(`${name}: ${named.service}/${named.name} and every path of up to ${depth} moves after it execute alike in TS and Lean, continued from the parent path and replayed, and TS and Lean fingerprints take the same worlds as the same`, (t) => {
+    test(`${name}: ${named.service}/${named.name} and every path of up to its explore depth after it execute alike in TS and Lean, continued from the parent path and replayed, and TS and Lean fingerprints take the same worlds as the same`, (t) => {
       const sc = (named.definition as LoadedScenario).scenario;
       const appendedOf = new Map<Executed, readonly Line[]>();
       const worlds = new SameWorlds();
@@ -51,7 +43,7 @@ for (const { name, spec } of specs) {
         );
         return executed;
       };
-      const enabledAfter = enabledLines(spec, sc, seen, valuesPerPayload);
+      const enabledAfter = enabledLines(spec, sc);
       const invalid = new WeakSet<Move>();
       const next = (path: readonly Move[], executed: Executed): Move[] => {
         const last = path.at(-1);
@@ -72,7 +64,7 @@ for (const { name, spec } of specs) {
       let paths = 0;
       for (const _ of search<Move, Executed>({
         start: { path: [], result: both([]) },
-        bound: depth,
+        bound: exploreOf(spec, sc.service).depth,
         step: (parent, path) => both(path.flat(), parent),
         next,
         merge: "none",

@@ -105,6 +105,13 @@ Data in a chart has one form per lifetime: `context` for what spans states, and 
 Because `held` stays fixed for the visit, a deadline's time and a guard of the state read the same value, and entering the state again is the only way to refresh it.
 A value derived from records is a plain function that reads `records` where it is needed.
 
+## The spec bounds what `test` explores
+
+After each scenario, `test` explores every path of moves that the world enables, up to a depth, and each move writes its inputs from finite sets.
+The spec declares both in `explore()`: the depth, and a `domain()` of values for each input whose type is not finite, such as a string or a number.
+The bounds are typed by the schemas that they name and reviewed with the spec, as TLA+ keeps its bounds in the model's configuration, and `test` infers none of them.
+A small domain usually finds what a large one finds, so one or two values per input is a good start.
+
 ## Then states the intent, and the snapshot records the run
 
 Then lists the facts that the scenario exists to check, and it does not have to list everything.

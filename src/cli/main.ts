@@ -25,7 +25,6 @@ type Invocation =
   | {
       readonly command: "test";
       readonly root: string;
-      readonly depth: number;
       readonly update: boolean;
       readonly coverage: boolean;
       /** The `<service>/<scenario>` names that --only selects; empty to run every scenario. */
@@ -105,13 +104,8 @@ const commands = {
     spec: true,
     positionals: [],
     description:
-      "Simulate every scenario, explore the paths of up to --depth moves after it, and search the step orders that no line writes: the steps of one message that no cause chain links, and the messages that one line delivers to one service, equal messages included. A move is one act that faces the own service, with the network lines that it needs, such as a client request, or an external peer's answer with the lines that deliver the request and the answer. test reports each violation once per kind, definition, data, and location, from the first path that reports it, taking the scenarios in order and each scenario's paths breadth-first. A violation that only an explored path reports lists the path's lines after the scenario in its appendedLines field. When a scenario's run does not halt, test compares the trace of each running service with its snapshot: <service>/__snapshots__/<scenario>.jsonl for the own service, and <service>/__snapshots__/<scenario>.<peer>.jsonl for each running peer that has lines. A scenario whose run did not halt and has no snapshot, a snapshot without a scenario, and any other entry of __snapshots__ are violations.",
+      "Simulate every scenario, explore the paths after it within the bounds of its service's explore(), and search the step orders that no line writes: the steps of one message that no cause chain links, and the messages that one line delivers to one service, equal messages included. A move is one act that faces the own service, with the network lines that it needs, such as a client request, or an external peer's answer with the lines that deliver the request and the answer. test reports each violation once per kind, definition, data, and location, from the first path that reports it, taking the scenarios in order and each scenario's paths breadth-first. A violation that only an explored path reports lists the path's lines after the scenario in its appendedLines field. When a scenario's run does not halt, test compares the trace of each running service with its snapshot: <service>/__snapshots__/<scenario>.jsonl for the own service, and <service>/__snapshots__/<scenario>.<peer>.jsonl for each running peer that has lines. A scenario whose run did not halt and has no snapshot, a snapshot without a scenario, and any other entry of __snapshots__ are violations.",
     options: {
-      "--depth": {
-        kind: "single",
-        value: "n",
-        description: "Explore paths of up to n moves after each scenario instead of 1.",
-      },
       "--update": {
         kind: "flag",
         description:
@@ -126,15 +120,13 @@ const commands = {
         kind: "repeatable",
         value: "service/scenario",
         description:
-          "Run only the scenario named exactly <service>/<scenario>, the service and name fields of a violation's scenario. The paths explored after it still take their values from every scenario. The snapshots of the scenarios that do not run, and the other entries named after them, are neither compared, reported, nor removed. --coverage needs every scenario, so it cannot be given with --only.",
+          "Run only the scenario named exactly <service>/<scenario>, the service and name fields of a violation's scenario. The snapshots of the scenarios that do not run, and the other entries named after them, are neither compared, reported, nor removed. --coverage needs every scenario, so it cannot be given with --only.",
       },
     },
     parse: ({ root, options }) => {
-      const depth = options["--depth"] ?? "1";
-      if (!/^\d+$/.test(depth)) return { misuse: `invalid depth ${depth} (expected a non-negative integer)` };
       const { "--coverage": coverage, "--update": update, "--only": only } = options;
       if (coverage && only.length > 0) return { misuse: "--coverage cannot be given with --only" };
-      return { command: "test", root, depth: Number(depth), update, coverage, only };
+      return { command: "test", root, update, coverage, only };
     },
   }),
   verify: command({
@@ -232,7 +224,7 @@ const help = [
   "",
   ...wrap(
     "",
-    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command but explain first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr one summary line, <what was checked>: <number of violations, or no violations>, where test's <what was checked> is how many scenarios it ran out of all and the depth, and the paths of the snapshots that test --update writes or removes. test keeps a 64-bit hash of each explored world's fingerprint, and when the probability that two of them share a hash is at least 1e-12, it writes that probability and the number of worlds to stderr before the summary line.",
+    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command but explain first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr one summary line, <what was checked>: <number of violations, or no violations>, where test's <what was checked> is how many scenarios it ran out of all, and the paths of the snapshots that test --update writes or removes. test keeps a 64-bit hash of each explored world's fingerprint, and when the probability that two of them share a hash is at least 1e-12, it writes that probability and the number of worlds to stderr before the summary line.",
   ),
   ...wrap(
     "",
@@ -336,12 +328,12 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
       return 0;
     }
     case "test": {
-      const { depth, only } = invocation;
+      const { only } = invocation;
       const nameOf = (s: { readonly service: string; readonly name: string }) => `${s.service}/${s.name}`;
       const unknown = only.find((name) => !spec.scenarios.some((s) => nameOf(s) === name));
       if (unknown !== undefined) return misused(`unknown scenario ${unknown}`);
       const scenarios = only.length === 0 ? spec.scenarios : spec.scenarios.filter((s) => only.includes(nameOf(s)));
-      const tested = testSpec(spec, { update: invocation.update, depth, scenarios });
+      const tested = testSpec(spec, { update: invocation.update, scenarios });
       for (const written of tested.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
       for (const removed of tested.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
       const violations = [...(invocation.coverage ? uncoveredOf(spec, tested.reached) : []), ...tested.violations];
@@ -354,7 +346,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
           )} kept as 64-bit fingerprints: collision probability at most ${collision.toPrecision(2)}`,
         );
       const ran = `${scenarios.length}/${spec.scenarios.length} scenarios${only.length === 0 ? "" : " (--only)"}`;
-      return report(io, spec.root, violations, `${ran}, depth ${depth}`);
+      return report(io, spec.root, violations, ran);
     }
     case "verify": {
       const verified = verifyTraces(spec, invocation.traces);

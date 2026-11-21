@@ -6,18 +6,9 @@ import type { Violation } from "../src/data/violation.ts";
 import { stateValue } from "../src/explore/choiceDependent.ts";
 import { enabled } from "../src/explore/enabled.ts";
 import { worldFingerprint } from "../src/explore/fingerprint.ts";
-import {
-  type Executed,
-  enabledLines,
-  executeAppended,
-  executeMove,
-  type Move,
-  seenLines,
-  valuesPerPayload,
-} from "../src/explore/paths.ts";
+import { type Executed, enabledLines, executeAppended, executeMove, type Move } from "../src/explore/paths.ts";
 import { uncoveredParts } from "../src/explore/uncovered.ts";
 import type { Spec } from "../src/load/load.ts";
-import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { Halt } from "../src/service/state.ts";
 import type { RunningService } from "../src/sim/network.ts";
 import { NoCache } from "../src/sim/spec/cache.ts";
@@ -38,7 +29,7 @@ const byCanonical = (a: unknown, b: unknown) => (canonicalJson(a) < canonicalJso
  */
 export function executedOutcome(spec: Spec, sc: Scenario, executed: Executed) {
   const { world, listeners } = executed;
-  const moves = enabledLines(spec, sc, seenLines(spec), valuesPerPayload);
+  const moves = enabledLines(spec, sc);
   const all = new Coverage();
   for (const l of listeners.values()) all.addAll(l.coverage);
   return {
@@ -160,11 +151,7 @@ export function executeEach(
     if (continued !== whole) return { executed, difference: { against: "incremental", ts: whole, other: continued } };
   }
   const functions = new SimFunctions(spec, (part) => lean.read(part));
-  const explore = {
-    scenarios: spec.scenarios.map((s) => (s.definition as LoadedScenario).scenario),
-    valuesPerPayload,
-  };
-  const { outcome, fingerprint } = lean.explored(spec, extended, functions, explore);
+  const { outcome, fingerprint } = lean.explored(spec, extended, functions);
   const fromLean = canonicalJson(outcome);
   if (fromLean !== ts) return { executed, difference: { against: "lean", ts, other: fromLean } };
   const merged = worlds.add(worldFingerprint(replayed.world), fingerprint);

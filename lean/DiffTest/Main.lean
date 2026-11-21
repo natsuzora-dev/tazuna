@@ -107,7 +107,7 @@ def answer {α : Type} (question : Question) (reply : Reply) (read : Reply → O
 /--
 The functions that ask TS, which answers with every Bag in reverse order when `reversed` is set, about the service
 `service` when given, or else the request's service. A parse logs nothing into `reads`: Functions.sorting asks it
-inside another answer, whose reads Instrument then reads. Nor does fits, which reads no records.
+inside another answer, whose reads Instrument then reads.
 -/
 def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool)
     (service : Option String := none) : Functions IO :=
@@ -119,10 +119,6 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
   { parse := fun schema value => do
       answer (.parse schema value) (← ask stdin stdout (← IO.mkRef {}) memo reversed service [] (.parse schema value)) fun
         | .parse v => some v | _ => none
-    fits := fun schema path value => do
-      let question := .fits schema path value
-      answer question (← ask stdin stdout (← IO.mkRef {}) memo reversed service [] question) fun
-        | .fits b => some b | _ => none
     unordered := fun schema value => answered (.unordered schema value) fun | .unordered v => some v | _ => none
     binding := fun name binding input records now =>
       answered (.binding name binding input now) (records := records) fun | .binding b => some b | _ => none
@@ -265,7 +261,7 @@ simulation's violations and halting violation. With `execute` true, the lines ta
 each running service that did not halt also returns what it enables next and its state as ChoiceDependent compares it.
 -/
 def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) (executing : Bool)
-    (stepOrders : List StepOrder) (explore : Option ExploreOptions) : IO Response := do
+    (stepOrders : List StepOrder) (exploring : Bool) : IO Response := do
   let start ← worldOf spec sc stepOrders
   let fsOf ← instrumentedOf stdin stdout start
   let ran : ActingIO Sim.World :=
@@ -282,13 +278,11 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
       | some st => do
         match ← Explore.enabled st (fsOf service) s with
         | .error f => pure (some (.error f))
-        | .ok e => match explore with
-          | some o =>
-            if service != sc.service then pure (some (.ok (e, none))) else
-            let x : Explore.Explored :=
-              { sc, lines := sc.lines, seen := Explore.seenOf o.scenarios, valuesPerPayload := o.valuesPerPayload }
-            pure (some ((← (Explore.moves spec st (fsOf service) x w e).run).map fun ms => (e, some ms)))
-          | none => pure (some (.ok (e, none)))
+        | .ok e =>
+          if !exploring || service != sc.service then pure (some (.ok (e, none))) else
+          let explore ← Explore.exploreOf spec sc.service
+          let x : Explore.Explored := { sc, lines := sc.lines, domains := explore.domains }
+          pure (some (.ok (e, some (← Explore.moves spec st x w e))))
       | none => pure none
     pure ({ service
             lines := s.lines.toList.map (Sim.traceLineOf service · [] [])
@@ -303,10 +297,10 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
             reached := if executing then
                 some (c.reached.mergeSort fun a b => decide ((ToValue.toValue a).canonical ≤ (ToValue.toValue b).canonical))
               else none
-            uncovered := if executing && explore.isSome && service == sc.service then
+            uncovered := if executing && exploring && service == sc.service then
                 some (Explore.uncovered spec reachedAll)
               else none } : SimulatedService)).run acting
-  let fingerprint ← if executing && explore.isSome then some <$> Explore.worldFingerprint w else pure none
+  let fingerprint ← if executing && exploring then some <$> Explore.worldFingerprint w else pure none
   pure (.simulated services w.violations w.halted fingerprint)
 
 /-- A search, as TS writes it. -/
@@ -356,7 +350,7 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .decodeLines values =>
     pure (.decodedLines (values.map fun v => (FromValue.fromValue v : Except String TraceLine).toOption))
   | .simulate s sc execute stepOrders explore =>
-    simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD []) explore
+    simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD []) (explore == some true)
   | .stepOrderChanges s sc => stepOrderChangesRequest stdin stdout s sc
   | .sort schema value => pure (.sorted (sortCollections schema value))
   | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))

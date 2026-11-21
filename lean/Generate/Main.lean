@@ -57,7 +57,8 @@ def sums : List (Name × List Name) :=
 
 /-- Each generated module, by repository path, and the Lean types that it declares, the root last. -/
 def modules : List (String × List Name) :=
-  [("src/data/illegal.generated.ts", [``Tazuna.Validation.Illegal]),
+  [("src/data/schema.generated.ts", [``Tazuna.Schema, ``Tazuna.SchemaStep]),
+   ("src/data/illegal.generated.ts", [``Tazuna.Validation.Illegal]),
    ("src/data/nonCanonical.generated.ts", [``Tazuna.Validation.OnRejectedAt, ``Tazuna.Validation.NonCanonical]),
    ("src/data/mismatch.generated.ts", [``Tazuna.Data.Subject, ``Tazuna.Verify.Mismatch]),
    ("src/data/uncomparable.generated.ts", [``Tazuna.Verify.Uncomparable]),
@@ -91,13 +92,14 @@ def modules : List (String × List Name) :=
      ``Tazuna.Spec.EntityBody, ``Tazuna.Spec.EventBody, ``Tazuna.Spec.CommandBody, ``Tazuna.Spec.QueryBody,
      ``Tazuna.Spec.AutomationBody, ``Tazuna.Spec.Body, ``Tazuna.Spec.Definition, ``Tazuna.Spec.Contract,
      ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
+     ``Tazuna.Spec.Domain, ``Tazuna.Spec.Explore,
      ``Tazuna.Spec.Structure]),
    ("test/lean/protocol.generated.ts",
-    [``Tazuna.Service.Schema, ``Tazuna.Service.SchemaStep, ``Tazuna.Service.Issue, ``Tazuna.Service.CopyScope, ``Tazuna.Service.Scope,
+    [``Tazuna.Service.Issue, ``Tazuna.Service.CopyScope, ``Tazuna.Service.Scope,
      ``Tazuna.Service.Transition, ``Tazuna.Service.Assignment, ``Tazuna.Service.Edge, ``Tazuna.Service.Extra, ``Tazuna.Service.Emit,
      ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys, ``Tazuna.Explore.Holder, ``Tazuna.Explore.Access,
      ``Tazuna.Verify.Part, ``Tazuna.Service.Operation, ``Tazuna.Explore.Awaiting, ``Tazuna.Explore.Enabled,
-     ``Tazuna.DiffTest.PairedService, ``Tazuna.DiffTest.StepOrder, ``Tazuna.DiffTest.ExploreOptions,
+     ``Tazuna.DiffTest.PairedService, ``Tazuna.DiffTest.StepOrder,
      ``Tazuna.DiffTest.Request, ``Tazuna.DiffTest.Question, ``Tazuna.DiffTest.Asked,
      ``Tazuna.DiffTest.Reply, ``Tazuna.DiffTest.Replied, ``Tazuna.DiffTest.Unpaired,
      ``Tazuna.DiffTest.SimulatedService, ``Tazuna.DiffTest.TriedOrder, ``Tazuna.DiffTest.SearchedProcessing,
@@ -508,7 +510,8 @@ def guaranteesFile (names : List String) : String :=
 def appended (file : String × String) (extra : String) : String × String := (file.1, file.2 ++ extra)
 
 def files (guarantees : List String) : List (String × String) :=
-  [typescript% "src/data/illegal.generated.ts",
+  [types% "src/data/schema.generated.ts",
+   typescript% "src/data/illegal.generated.ts",
    typescript% "src/data/nonCanonical.generated.ts",
    typescript% "src/data/mismatch.generated.ts",
    typescript% "src/data/uncomparable.generated.ts",

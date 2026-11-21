@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { basename, join, relative } from "node:path";
 import { test } from "node:test";
-import { depth, folders } from "./examples.ts";
+import { folders } from "./examples.ts";
 import { kindOfLine, recordsOf, testExamples } from "./expected.ts";
 
 const groups = { mismatch: "Mismatch", uncomparable: "Uncomparable" } as const;
@@ -14,7 +14,7 @@ const commands: Readonly<Record<string, readonly string[]>> = {
   external: verify,
   lines: verify,
   pairing: verify,
-  snapshot: ["test", ".", "--depth", String(depth)],
+  snapshot: ["test", "."],
 };
 
 const verifyRoot = join(import.meta.dirname, "verify");

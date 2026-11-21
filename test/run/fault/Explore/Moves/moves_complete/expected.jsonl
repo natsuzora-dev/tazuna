@@ -1,0 +1,1 @@
+{"kind":"Fault.failedEnsures","definition":{"service":"todo","name":"flag"},"data":{"condition":"urgentNoted"},"location":{"file":"todo/todo.ts","line":8},"scenario":{"service":"todo","name":"noted"},"appendedLines":[{"type":"request","kind":"command","target":{"service":"todo","name":"flag"},"input":{"value":{"taskId":"task-9","urgent":true},"holes":[]}}]}

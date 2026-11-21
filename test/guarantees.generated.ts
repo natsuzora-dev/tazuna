@@ -79,6 +79,7 @@ export const guarantees = [
   "microstep_enters_in_entry_order",
   "microstep_exits_in_exit_order",
   "modal_child_covers",
+  "moves_complete",
   "moves_enabled",
   "moving_line_keeps_others",
   "no_violation_iff",

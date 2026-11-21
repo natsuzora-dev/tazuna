@@ -55,8 +55,9 @@ A *binding* pairs the values that one run created with the values of another run
 
 ### Explored paths
 
-After each scenario, `test` explores paths of up to `--depth` moves, as `tazuna --help` defines them.
-An *explored path* uses values from the scenarios and new ids, and it neither resends a command nor redelivers an event.
+After each scenario, `test` explores paths of up to the `depth` that the service's `explore()` declares, as `tazuna --help` defines them.
+An *explored path* writes each input from the domains that `explore()` declares, or from its type when the type is finite, and it uses new ids and neither resends a command nor redelivers an event.
+A type is finite when it is a boolean, an enum, a literal, null, an object of finite types, or a union of them, and an optional field or one with a default may also be left out.
 
 ### Violations
 
@@ -174,12 +175,12 @@ When it reports nothing, the violation can still exist.
 
 | Detection | How it detects | What it leaves out |
 |---|---|---|
-| Violations on explored paths | It runs every explored path. | Paths longer than `--depth`, and values beyond the first two of each payload: the values that the scenarios write, then representative values of the schema (`valuesFor` in `lean/Tazuna/Explore/Values.lean`). A representative string is one of the scenarios' words or a filler, and a number is one of a fixed few, each the candidate that its own leaf's refinements accept. |
+| Violations on explored paths | It runs every explored path. | Paths longer than the `depth` of `explore()`, and values outside the declared domains. A move whose value the refinements of the whole input reject is a line that no one could write, and `test` discards it. |
 | `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that a spec function reaches by another name, or through a package that the spec imports. |
 | `BagOrderDependent` | It runs each spec function whose call visited a `Bag` of two or more values again with every `Bag` reversed, and compares the two results under a binding of created keys. | Orders of a `Bag` other than the written one and its reverse. Answers with too many bindings of created keys to compare, which it reports as `Undecided.reversedBagBindings`. |
 | `ChoiceDependent` | It searches the [step orders](#step-orders-that-test-searches) of each processing. | Orders beyond `Undecided.stepOrderLimit`, and the orders of a processing after its first violation. The order of two ready steps that are not message arrivals and run the same definition on equal values, such as one automation's reactions to two equal events, which the search takes as one step. Such steps differ only in the step that caused them. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the state is still compared. A state with too many bindings of created keys to compare, which it reports as `Undecided.stepOrderBindings`. A screen's input, the answers to its `shows` requests, and the order of open screens, which the opener and the answer lines set. |
 | `InvalidInput` | It checks an external peer's lines against the peer's contract. | Parts of the contract other than the requires that read only the input and the ensures that read no records. |
-| `Uncovered` | It marks the parts that a scenario's run or an explored path reaches. | Parts that only paths longer than `--depth` reach. |
+| `Uncovered` | It marks the parts that a scenario's run or an explored path reaches. | Parts that only paths longer than the `depth` of `explore()`, or values outside the declared domains, reach. |
 
 ## Assumptions
 
@@ -377,6 +378,6 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 
 | Property | Theorems |
 |---|---|
-| Each move that `test` appends after a scenario fills a slot that the world enables, with that slot's lines: an external peer's answer to a request that the own service awaits and has not ended, a clock line before or at the next deadline and not before now, an operation that an open screen accepts, the end of a client subscription that no line ended, a request to an own command or query, an event of an external peer that the own service receives, or a restart. Each slot that `Slot.Enabled` in `lean/Tazuna/Explore/Moves.lean` states is enumerated, which ties the enumeration to that statement and not to the lines that a run accepts. Values fill each slot only up to two per payload, so the values are not complete. | `moves_enabled`, `slots_complete` |
-| Extending only the first explored world of each fingerprint reports the same violations and reached parts as extending every path of up to `--depth` moves, under the fingerprints assumption. | `merged_search_reports` |
+| Each move that `test` appends after a scenario fills a slot that the world enables, with that slot's lines: an external peer's answer to a request that the own service awaits and has not ended, a clock line before or at the next deadline and not before now, an operation that an open screen accepts, the end of a client subscription that no line ended, a request to an own command or query, an event of an external peer that the own service receives, or a restart. Each slot that `Slot.Enabled` in `lean/Tazuna/Explore/Moves.lean` states is enumerated, which ties the enumeration to that statement and not to the lines that a run accepts. A move is enumerated exactly when it fills an enabled slot with values that the declared domains and the finite types admit (`Slot.Fills`): an answer's output, or a rejection of a kind that the target may give other than `invalid-input`, an operation's offered payload or payload, a request's input, and an event's payload. `treeOf` in `lean/Tazuna/Spec/Domains.lean`, which reads each schema's domains and finite types from its JSON Schema, is a definition that no theorem states. | `moves_enabled`, `slots_complete`, `moves_complete` |
+| Extending only the first explored world of each fingerprint reports the same violations and reached parts as extending every path of up to the `depth` of `explore()`, under the fingerprints assumption. | `merged_search_reports` |
 | `test --coverage` reports only parts outside the reached parts that the runs collect. No theorem states that the collected parts are what the runs reached. Lean and the TypeScript runtime collect the same parts on every explored path, which the diff test of explored paths compares. | `uncovered_unreached` |

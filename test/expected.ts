@@ -6,7 +6,7 @@ import { main } from "../src/cli/main.ts";
 import { groups } from "../src/data/groups.ts";
 import { parseKind } from "../src/data/kinds.ts";
 import type { Group, ReportedViolation } from "../src/data/violation.ts";
-import { depth, maskedStack, typeChecked } from "./examples.ts";
+import { maskedStack, typeChecked } from "./examples.ts";
 
 export const expected = "expected.jsonl";
 
@@ -57,7 +57,7 @@ async function compareWithExpected(
 
 /** Compares the violations that test reports on an example with its expected.jsonl. */
 export const exampleTest = (t: TestContext, example: string): Promise<void> =>
-  compareWithExpected(t, example, [["test", ".", "--depth", String(depth)]]);
+  compareWithExpected(t, example, [["test", "."]]);
 
 export const kindOfLine = (line: string) => (JSON.parse(line) as { readonly kind: string }).kind;
 

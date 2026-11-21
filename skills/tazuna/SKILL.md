@@ -18,7 +18,8 @@ Read the docs and the sample that ship with the installed package, in `node_modu
 
 1. The contract of each service: its entities, commands, queries, and events, as in `todo/contract.ts` of the sample.
 2. The scenarios that state what the service does, as in `todo/scenarios.ts` of the sample.
-3. The machines, screens, and automations that make the scenarios pass.
+3. The `explore()` of each service with scenarios, as in `todo/explore.ts` of the sample: a depth, and one or two domain values for each input that `check` names in `Illegal.undeclaredDomain`.
+4. The machines, screens, and automations that make the scenarios pass.
 
 ## Run the loop
 

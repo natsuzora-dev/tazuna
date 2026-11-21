@@ -2,6 +2,7 @@ import { z } from "zod";
 import { date, datetime } from "./datetime.ts";
 import { InternalError } from "./internalError.ts";
 import { collectionOf } from "./marks.ts";
+import type { SchemaStep } from "./schema.generated.ts";
 import { fieldSchema, holdsCodec, recursesEagerly, type SchemaNode, schemaNode, strict } from "./schemaNode.ts";
 import type { Json, Shape } from "./values.ts";
 
@@ -114,29 +115,25 @@ export const jsonSchema = (schema: z.ZodType): JsonSchema =>
     }) as JsonSchema,
   );
 
-/** Lean's SchemaStep: a step into a JSON Schema. */
-export type SchemaStep =
-  | { readonly kind: "field"; readonly name: string }
-  | { readonly kind: "items" }
-  | { readonly kind: "option"; readonly index: number };
+/**
+ * `schema` and each schema inside it that jsonSchema writes in its place: past optional, default, lazy, the input side of
+ * a codec or pipe, and an opaque wrapper.
+ */
+export function writtenAs(schema: z.ZodType): z.ZodType[] {
+  const node = schemaNode(schema);
+  const inner =
+    node.type === "optional" || node.type === "default" || node.type === "lazy"
+      ? node.inner
+      : node.type === "codec" || node.type === "pipe"
+        ? node.in
+        : node.type === "opaque"
+          ? node.inner
+          : undefined;
+  return inner === undefined ? [schema] : [schema, ...writtenAs(inner)];
+}
 
 /** The node of `schema` that jsonSchema writes for it: past each wrapper that jsonSchema writes as what it wraps. */
-function written(schema: z.ZodType): SchemaNode {
-  const node = schemaNode(schema);
-  switch (node.type) {
-    case "optional":
-    case "default":
-    case "lazy":
-      return written(node.inner);
-    case "codec":
-    case "pipe":
-      return written(node.in);
-    case "opaque":
-      return node.inner === undefined ? node : written(node.inner);
-    default:
-      return node;
-  }
-}
+const written = (schema: z.ZodType): SchemaNode => schemaNode(writtenAs(schema).at(-1) ?? schema);
 
 /**
  * The part of `schema` at `path` in its jsonSchema: a nullable is written as a union of what it wraps and null. A path

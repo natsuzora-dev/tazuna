@@ -6,17 +6,10 @@ import { z } from "zod";
 import { date, datetime } from "../src/data/datetime.ts";
 import type { Line, Scenario, Template } from "../src/data/scenario.generated.ts";
 import type { Answer } from "../src/data/trace.generated.ts";
-import type { Shape } from "../src/data/values.ts";
+import { type Shape, stringsOf } from "../src/data/values.ts";
 import { chartOf } from "../src/dsl/chart.ts";
 import type { AnyCommand, AnyEvent, AnyQuery } from "../src/dsl/definition.ts";
-import {
-  type Executed,
-  enabledLines,
-  executeAppended,
-  type Move,
-  seenLines,
-  valuesPerPayload,
-} from "../src/explore/paths.ts";
+import { type Executed, enabledLines, executeAppended, exploreOf, type Move } from "../src/explore/paths.ts";
 import type { Spec } from "../src/load/load.ts";
 import type { LoadedScenario } from "../src/load/scenarios.ts";
 import { Halt } from "../src/service/state.ts";
@@ -62,7 +55,6 @@ const cases: Case[] = (
   await Promise.all(
     roots.map(async (root) => {
       const spec = await checkedRoot(root);
-      const seen = seenLines(spec);
       return spec.scenarios.flatMap(({ definition }): Case[] => {
         const sc = (definition as LoadedScenario).scenario;
         // run.diff covers a scenario that stops by itself, and no move comes after it.
@@ -72,8 +64,8 @@ const cases: Case[] = (
             spec,
             root: relative(tazuna, root),
             sc,
-            words: seen.words,
-            enabledAfter: enabledLines(spec, sc, seen, valuesPerPayload),
+            words: [...new Set(exploreOf(spec, sc.service).domains.flatMap((d) => d.values.flatMap(stringsOf)))],
+            enabledAfter: enabledLines(spec, sc),
             worlds: new SameWorlds(),
           },
         ];
@@ -101,9 +93,9 @@ const instant = fc
   });
 
 /**
- * Returns an arbitrary of the values of `schema` beyond explore's two representatives, or of `none` for a schema kind
- * that explore's representatives do not handle either. Strings come mostly from the scenarios' words, so that they can
- * reach the values that guards compare.
+ * Returns an arbitrary of the values of `schema` beyond the declared domains, or of `none` for a schema kind that it
+ * does not draw. Strings come mostly from the strings of the own service's domains, so that they can reach the values
+ * that guards compare.
  */
 function arbitraryOf(schema: z.ZodType, words: readonly string[]): fc.Arbitrary<unknown> {
   if (schema === datetime) return instant;

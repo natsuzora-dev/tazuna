@@ -158,15 +158,6 @@ def Ensured.passes : Ensured → Bool
   | .holds | .readsRecords => true
   | .fails => false
 
-/-- A step into a JSON Schema: a property of an object, the items of an array, or an option of a union or a type list. -/
-inductive SchemaStep where
-  | field (name : String)
-  | items
-  | option (index : Nat)
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire SchemaStep tag "kind"
-
 /--
 The questions that the semantics asks about schemas and spec functions. Every question that runs author code answers its
 value or the Issue that stopped the code. A value matches its schema only without a field that the schema lacks at any
@@ -177,8 +168,6 @@ that it does not encode is a schema Issue, and no other check runs, since the ru
 - parse: a value from outside (a value that a scenario line writes, or a message of another service), or one that a
   spec function wrote, decoded and written back as JSON (only its codecs run, encoding) if it matches the schema (the
   canonical value), or none otherwise. It does not read a sortedBy array's key order (parseOutside).
-- fits: whether a value from outside matches the part of the schema at a path of steps into its JSON Schema, read
-  alone with its refinements, which the JSON Schema does not state.
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
   every bag in canonical order and sortedBy elements with equal keys in canonical order, so that a scenario never
   writes an order that the spec does not define.
@@ -236,7 +225,6 @@ that it does not encode is a schema Issue, and no other check runs, since the ru
 -/
 structure Functions (m : Type → Type) where
   parse : Schema → Value → m (Except Issue (Option Value))
-  fits : Schema → List SchemaStep → Value → m (Except Issue Bool)
   unordered : Schema → Value → m (Except Issue Value)
   binding : String → String → Value → Records → Time → m (Except Issue Bool)
   requirement : String → String → Value → Records → Time → m (Except Issue Bool)

@@ -31,20 +31,20 @@ test("test writes no snapshot, and test --update rewrites snapshots without comp
   const [scenario] = spec.scenarios;
   assert.ok(scenario !== undefined);
   rmSync(snapshotPath(spec, ownRun(scenario)));
-  const compared = testSpec(spec, { update: false, depth: 0, scenarios: spec.scenarios });
+  const compared = testSpec(spec, { update: false, scenarios: spec.scenarios });
   assert.deepEqual(compared.written, []);
   assert.ok(
     compared.violations.some((p) => p.kind === "Uncomparable.missingSnapshot" && sameRef(p.scenario ?? null, scenario)),
   );
   assert.ok(!existsSync(snapshotPath(spec, ownRun(scenario))));
-  const updated = testSpec(spec, { update: true, depth: 0, scenarios: spec.scenarios });
+  const updated = testSpec(spec, { update: true, scenarios: spec.scenarios });
   assert.deepEqual(unknownEntries(updated.violations).toSorted(), reported.toSorted());
   assert.deepEqual(
     updated.removed.toSorted(),
     obsolete.map((f) => join(snapshots, f)),
   );
   assert.deepEqual(
-    unknownEntries(testSpec(spec, { update: false, depth: 0, scenarios: spec.scenarios }).violations).toSorted(),
+    unknownEntries(testSpec(spec, { update: false, scenarios: spec.scenarios }).violations).toSorted(),
     reported.toSorted(),
   );
 });

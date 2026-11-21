@@ -87,6 +87,12 @@ inductive Illegal where
   reports none exactly when every such union tells its options apart (`Checked.unionsApart`).
   -/
   | ambiguousUnion (definition : Spec.Ref) (path : List String)
+  /--
+  The node at `path` of `schema`, which a move that the explore of `service` appends may carry (Explore.moveSchemas),
+  has an infinite type and no domain, so explore gives it no value. `definition` holds the schema. `check` reports none
+  exactly when every such node has a domain (`Checked.domainsDeclared`).
+  -/
+  | undeclaredDomain (definition : Spec.Ref) (service : String) (schema : Schema) (path : List SchemaStep)
 
 derive_group Illegal
 

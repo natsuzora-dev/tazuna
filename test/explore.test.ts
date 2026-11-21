@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { collisionProbability, Visited } from "../src/explore/search.ts";
-import { depth, groupExamples } from "./examples.ts";
+import { groupExamples } from "./examples.ts";
 import { testExamples } from "./expected.ts";
 
 describe("Uncovered examples", () => {
   const examples = groupExamples("explore", "uncovered");
 
-  testExamples(examples, "Uncovered", ["test", ".", "--depth", String(depth), "--coverage"]);
+  testExamples(examples, "Uncovered", ["test", ".", "--coverage"]);
 });
 
 test("the visited set takes a fingerprint as visited only once it was added", () => {
