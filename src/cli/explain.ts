@@ -1,6 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
+import { haltingFaultKinds } from "../data/fault.generated.ts";
 import { groups } from "../data/groups.ts";
+import { haltingInvalidInputKinds } from "../data/invalidInput.generated.ts";
+import { haltingInvalidScenarioKinds } from "../data/invalidScenario.generated.ts";
 import { isUserKind, parseKind, type UserKind } from "../data/kinds.ts";
 import type { Group } from "../data/violation.ts";
 
@@ -29,6 +32,13 @@ export interface Explanations {
 }
 
 export const explanationsPath = join(import.meta.dirname, "../../explain.json");
+
+/** The kinds that halt the run, for each group whose violations can. */
+const halting: Partial<Record<Group, ReadonlySet<string>>> = {
+  Fault: new Set(haltingFaultKinds),
+  InvalidInput: new Set(haltingInvalidInputKinds),
+  InvalidScenario: new Set(haltingInvalidScenarioKinds),
+};
 
 const fence = (lang: string, text: string) => `\`\`\`${lang}\n${text}\n\`\`\``;
 
@@ -74,6 +84,7 @@ export function explain(
     "",
     `- Reported by: ${reportedBy.map((c) => `\`${c}\``).join(", ")}`,
     `- Side at fault: ${fixedIn}`,
+    ...(halting[group] === undefined ? [] : [`- Halts the run: ${halting[group].has(kind) ? "yes" : "no"}`]),
     ...(example === undefined
       ? []
       : [
