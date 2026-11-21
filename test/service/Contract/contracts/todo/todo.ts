@@ -33,13 +33,17 @@ export const taskRenamed = updateEvent({
 export const addTask = command({
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
+  requires: { titleFree: ({ input, records }) => records.Task.every((t) => t.title !== input.title) },
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const renameTask = command({
   input: { taskId: ref(Task), title: Task.fields.title },
   emits: [taskRenamed],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
-  requires: { changesTitle: ({ input, bound }) => bound.task.title !== input.title },
+  requires: {
+    changesTitle: ({ input, bound }) => bound.task.title !== input.title,
+    titleFree: ({ input, records }) => records.Task.every((t) => t.id === input.taskId || t.title !== input.title),
+  },
   ensures: {
     renamed: ({ input, records, bound }) =>
       bound.task.title !== input.title && records.Task.get(input.taskId)?.title === input.title,

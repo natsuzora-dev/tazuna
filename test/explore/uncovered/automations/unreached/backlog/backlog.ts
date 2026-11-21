@@ -44,7 +44,7 @@ export const completeDuplicates = automation({
 }).send({
   binds: {
     earlier: ({ payload, records }) =>
-      records.Task.filter((t) => t.title === payload.title && t.id !== payload.id).only(),
+      records.Task.filter((t) => t.title === payload.title && t.id !== payload.id && !t.isDone).only(),
   },
   input: ({ bound }) => ({ taskId: bound.earlier.id }),
 });

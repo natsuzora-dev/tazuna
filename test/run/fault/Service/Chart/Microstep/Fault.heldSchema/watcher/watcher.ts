@@ -17,13 +17,13 @@ export const addTask = command({
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const watcher = machine({
-  description: "Watch the first task",
+  description: "Watch the task that was added last",
   receives: { taskAdded },
   initial: "idle",
   states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } },
 }).chart({
   states: {
-    idle: { on: { taskAdded: [{ target: "watching", with: { task: ({ records }) => records.Task.only() } }] } },
+    idle: { on: { taskAdded: [{ target: "watching", with: { task: ({ payload }) => payload } }] } },
     watching: { on: { taskAdded: [{ target: "idle" }] } },
   },
 });

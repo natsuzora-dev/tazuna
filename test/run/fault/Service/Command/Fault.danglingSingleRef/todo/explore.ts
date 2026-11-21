@@ -5,8 +5,8 @@ export const todoExplore = explore({
   service: "todo",
   depth: 2,
   domains: [
-    domain(Task.fields.id, ["task-1"]),
+    domain(Task.fields.id, ["task-1", "task-2"]),
     domain(Task.fields.title, ["Buy milk"]),
-    domain(Comment.fields.id, ["task-1"]),
+    domain(Comment.fields.id, ["task-1", "task-2"]),
   ],
 });
