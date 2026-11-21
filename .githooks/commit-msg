@@ -1,5 +1,2 @@
 #!/bin/sh
-if grep -q '^Claude-Session:' "$1"; then
-  echo "The commit message has a Claude-Session line. Remove it and commit again."
-  exit 1
-fi
+exec "$(dirname "$0")/private-scan" message "$1"

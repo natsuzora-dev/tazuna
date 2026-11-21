@@ -1,0 +1,71 @@
+#!/bin/sh
+# Stops personal data from entering a commit or leaving by push. The patterns live outside the repository, since the
+# repository is public and a pattern written here would publish what it guards.
+# Usage: private-scan staged | private-scan message <file> | private-scan commits <git rev-list arguments...>
+patterns="${TAZUNA_PRIVATE_PATTERNS:-$HOME/.config/tazuna/private-patterns}"
+if [ ! -s "$patterns" ]; then
+  echo "private-scan: $patterns is missing or empty. Write one pattern per line and try again."
+  exit 1
+fi
+# Built with printf so that this file holds none of them and passes its own scan.
+builtin=$(printf '/%s/\n' Users private/tmp home)
+report=$(mktemp)
+trap 'rm -f "$report"' EXIT
+
+# Writes each line of stdin that holds a pattern to the report, prefixed with $1. A file, not a variable, collects the
+# hits, because the last command of a pipeline runs in a subshell.
+scan() {
+  grep -i -F -e "$builtin" -f "$patterns" | sed "s|^|$1: |" >>"$report"
+}
+
+# The added lines of a diff on stdin, each prefixed with its file.
+added() {
+  awk '/^\+\+\+ b\//{file=substr($0,7);next} /^\+/{print file ": " substr($0,2)}'
+}
+
+noreply() {
+  case "$2" in
+    *@users.noreply.github.com) ;;
+    *) echo "$1: $2 is not a GitHub noreply address" >>"$report" ;;
+  esac
+}
+
+message() {
+  if grep -q '^Claude-Session:' "$2"; then
+    echo "$1: the message has a Claude-Session line" >>"$report"
+  fi
+  grep -v '^#' "$2" | scan "$1"
+}
+
+case "$1" in
+  staged)
+    noreply "author" "$(git var GIT_AUTHOR_IDENT | sed 's/.*<\(.*\)>.*/\1/')"
+    noreply "committer" "$(git var GIT_COMMITTER_IDENT | sed 's/.*<\(.*\)>.*/\1/')"
+    git diff --cached -U0 --no-color | added | scan "staged"
+    ;;
+  message)
+    message "message" "$2"
+    ;;
+  commits)
+    shift
+    tmp=$(mktemp)
+    for c in $(git rev-list "$@"); do
+      noreply "$c author" "$(git log -1 --format=%ae "$c")"
+      noreply "$c committer" "$(git log -1 --format=%ce "$c")"
+      git log -1 --format=%B "$c" >"$tmp"
+      message "$c message" "$tmp"
+      git show --format= -U0 --no-color --diff-merges=first-parent "$c" | added | scan "$c"
+    done
+    rm -f "$tmp"
+    ;;
+  *)
+    echo "usage: private-scan staged | message <file> | commits <git rev-list arguments...>"
+    exit 2
+    ;;
+esac
+
+if [ -s "$report" ]; then
+  cat "$report"
+  echo "private-scan: personal data found. Remove it and try again."
+  exit 1
+fi

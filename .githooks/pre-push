@@ -1,0 +1,11 @@
+#!/bin/sh
+# git gives one line per ref: <local ref> <local sha> <remote ref> <remote sha>.
+zero=0000000000000000000000000000000000000000
+while read -r _ local _ remote; do
+  [ "$local" = "$zero" ] && continue
+  if [ "$remote" = "$zero" ]; then
+    "$(dirname "$0")/private-scan" commits "$local" --not --remotes || exit 1
+  else
+    "$(dirname "$0")/private-scan" commits "$remote..$local" || exit 1
+  fi
+done
