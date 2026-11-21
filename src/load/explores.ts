@@ -4,7 +4,7 @@ import { partAt, writtenAs } from "../data/jsonSchema.ts";
 import type { Malformed } from "../data/malformed.ts";
 import type { SchemaStep } from "../data/schema.generated.ts";
 import { schemaNode } from "../data/schemaNode.ts";
-import { type Json, objectOf } from "../data/values.ts";
+import { type Json, objectOf, sameJson } from "../data/values.ts";
 import { type Definition, type Named, type Place, shapeIn } from "../dsl/definition.ts";
 import { keyTarget } from "../dsl/entity.ts";
 import type { Domain, Explore } from "../dsl/explore.ts";
@@ -71,10 +71,14 @@ const partFor = (root: z.ZodType, path: readonly SchemaStep[]): z.ZodType =>
     return step.kind === "option" && node !== "union" && node !== "nullable" ? at : partAt(at, [step]);
   }, root);
 
+const isPrefix = (outer: readonly SchemaStep[], inner: readonly SchemaStep[]): boolean =>
+  outer.length < inner.length && outer.every((step, i) => sameJson(step, inner[i] ?? null));
+
 /**
  * The explore of `service` with each domain of `written` at the nodes that it names, among the nodes that treeOf reads
- * of the schemas that the service's moves may carry. A domain that names no node is Malformed.unusedDomain, and two
- * domains that name one node are Malformed.overlappingDomain.
+ * of the schemas that the service's moves may carry. A domain that names no node, or names a node inside a node that
+ * another domain names, is never read and is Malformed.unusedDomain. Two domains that name one node are
+ * Malformed.overlappingDomain.
  */
 export function placeDomains(
   structure: Structure,
@@ -85,6 +89,7 @@ export function placeDomains(
 ): { readonly explore: ExploreStructure; readonly malformed: readonly Found<Malformed>[] } {
   const domains: DomainStructure[] = [];
   const used = new Set<number>();
+  const shadowed = new Set<number>();
   const overlapping = new Map<string, number[]>();
   for (const [schema, json] of moveSchemas(structure, service)) {
     const owner = schemaOwner(schema);
@@ -93,21 +98,31 @@ export function placeDomains(
       definitions.find((d) => d.service === owner.service && d.name === owner.name),
     );
     const root = objectOf(shapeIn(named.definition, schema));
+    const nodes = new Map<string, { readonly path: readonly SchemaStep[]; readonly naming: readonly number[] }>();
     rootTree((path) => {
       const part = partFor(root, path);
       const naming = written.domains.flatMap((d, i) => (names(d, part) ? [i] : []));
-      for (const i of naming) used.add(i);
-      if (naming.length > 1) overlapping.set(naming.join(), naming);
-      const [first] = naming;
-      if (first === undefined) return undefined;
-      const values = expectFound(`domain ${first}`, written.domains[first]).values as Json[];
-      domains.push({ schema, path: [...path], values });
-      return values;
+      if (naming.length > 0) nodes.set(JSON.stringify(path), { path: [...path], naming });
+      return undefined;
     }, json);
+    for (const { path, naming } of nodes.values()) {
+      const outer = [...nodes.values()].filter((n) => isPrefix(n.path, path)).flatMap((n) => n.naming);
+      if (outer.length > 0) {
+        for (const i of naming) if (!outer.includes(i)) shadowed.add(i);
+        continue;
+      }
+      for (const i of naming) used.add(i);
+      if (naming.length > 1) overlapping.set(naming.join(), [...naming]);
+      const first = expectFound("a naming domain", naming[0]);
+      const values = expectFound(`domain ${first}`, written.domains[first]).values as Json[];
+      domains.push({ schema, path, values });
+    }
   }
   const malformed = [
     ...written.domains.flatMap((_, domain): Malformed[] =>
-      used.has(domain) ? [] : [{ kind: "Malformed.unusedDomain", definition: null, data: { service, domain } }],
+      used.has(domain) && !shadowed.has(domain)
+        ? []
+        : [{ kind: "Malformed.unusedDomain", definition: null, data: { service, domain } }],
     ),
     ...[...overlapping.values()].map(
       (naming): Malformed => ({

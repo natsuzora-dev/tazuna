@@ -21,11 +21,13 @@ export interface Domain {
  * - On a `nullable`, a domain names the non-null option, and null is a value of its own.
  * - A domain on a key schema of an entity, its key field or a `ref()` of it, names every key of that entity.
  * - A domain names a whole array or record, and nothing inside one unless the domain names it whole.
+ * - A domain names a whole object too: explore writes its values whole and reads no domain inside it.
  * - A boolean, an enum, a literal, and null enumerate themselves, and a domain on one narrows it. Every other node needs
  *   a domain, or `check` reports `Illegal.undeclaredDomain`.
  *
- * A domain that names no node is `Malformed.unusedDomain`, and two that name one node are
- * `Malformed.overlappingDomain`. A value that `schema` rejects, refinements included, is `Malformed.domainValue`.
+ * A domain that names no node, or names a node inside a node that another domain names, is never read and is
+ * `Malformed.unusedDomain`. Two domains that name one node are `Malformed.overlappingDomain`. A value that `schema`
+ * rejects, refinements included, is `Malformed.domainValue`.
  */
 export const domain = <S extends z.ZodType>(schema: S, values: readonly Exclude<z.input<S>, undefined>[]): Domain =>
   ({ schema, values }) as unknown as Domain;

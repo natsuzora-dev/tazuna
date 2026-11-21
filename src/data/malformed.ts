@@ -49,8 +49,9 @@ export type Malformed =
    */
   | Of<"domainValue", null, { readonly service: string; readonly domain: number; readonly value: number }>
   /**
-   * The domain at index `domain` of the `explore()` of `service` names no node of a schema that the service's moves may
-   * carry: its schema is written nowhere there, or only inside an array, a record, or a node that another domain names.
+   * The domain at index `domain` of the `explore()` of `service` is never read where the service's moves carry its
+   * schema: its schema is written nowhere there or only inside an array or a record, or it is written inside a node
+   * that another domain names, whose values explore writes whole.
    */
   | Of<"unusedDomain", null, { readonly service: string; readonly domain: number }>
   /**
