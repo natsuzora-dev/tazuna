@@ -165,4 +165,16 @@ the start's writtenKey? lets the scenario write: the running service qualifies i
     (e, k) ∉ ((execute j fsOf start sc).state p).created :=
   unwritten_not_created hs (((execute_keepsKeys j start sc) p).1.trans ho) he hk hw
 
+/--
+No createKey value of a running service at the end of the lines of a scenario run from a world that World.start
+returns, whatever step orders test's search sets, equals a key of a keyed entity that the start lets the scenario write.
+-/
+@[guarantee] theorem start_unwritten_not_created (j : Spec.Structure) (sc : Scenario) (services : List (String × Service))
+    (stepOrders : List (Scenario.Origin × String × List StepName)) {p : String} {st : Service} (hs : (p, st) ∈ services)
+    {e k : String} (he : e ∈ st.entities) (hk : st.singles.contains e = false)
+    (hw : (World.startWith sc services).writtenKey? (.str k) = none) :
+    (e, k) ∉ ((execute j fsOf { World.startWith sc services with stepOrders } sc).state p).created :=
+  execute_unwritten_not_created (start := { World.startWith sc services with stepOrders }) j sc hs
+    (startWith_state sc services p).2 he hk hw
+
 end Tazuna.Thm.Sim.Keys

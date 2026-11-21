@@ -264,8 +264,9 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
     (stepOrders : List StepOrder) (exploring : Bool) : IO Response := do
   let start ← worldOf spec sc stepOrders
   let fsOf ← instrumentedOf stdin stdout start
+  let path : Explore.Explored := { sc, lines := sc.lines, domains := [] }
   let ran : ActingIO Sim.World :=
-    if executing then Sim.execute spec fsOf start sc else Sim.simulate spec fsOf start sc
+    if executing then path.world spec fsOf start else Sim.simulate spec fsOf start sc
   let (w, acting) ← ran.run {}
   let reachedAll := w.states.foldl (fun acc (service, _) =>
     (acting.collect service).reached.foldl (fun acc u => if acc.contains u then acc else acc ++ [u]) acc) []
@@ -281,8 +282,7 @@ def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : 
         | .ok e =>
           if !exploring || service != sc.service then pure (some (.ok (e, none))) else
           let explore ← Explore.exploreOf spec sc.service
-          let x : Explore.Explored := { sc, lines := sc.lines, domains := explore.domains }
-          pure (some (.ok (e, some (← Explore.moves spec st x w e))))
+          pure (some (.ok (e, some (← Explore.moves spec st { path with domains := explore.domains } w e))))
       | none => pure none
     pure ({ service
             lines := s.lines.toList.map (Sim.traceLineOf service · [] [])

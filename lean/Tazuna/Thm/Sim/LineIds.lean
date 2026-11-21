@@ -90,9 +90,10 @@ theorem keepsWorld_take (w : World) (own : String) (lines : List Scenario.Line) 
 
 /--
 No two requests that a running service sends carry one id, at any point of the lines of a scenario from a start where
-each running service's lines are numbered (as Given leaves them, with none): each `out` line keeps its place, and
-the service numbers each one it writes by its name and the count of the lines before it with that name, so its
-receiver never finds a request's id already used.
+each running service's lines are numbered (as `World.start` leaves them, with none): each `out` line keeps its place,
+and the service numbers each one it writes by its name and the count of the lines before it with that name. A request
+message carries its line's id (post_message), and its receiver keys ids by sender, so it never finds a request's id
+already used.
 -/
 @[guarantee] theorem sent_ids_distinct (j : Spec.Structure) (start : World) (sc : Scenario) (p : String)
     (h : Numbered (start.state p).service (start.state p).lines) :
@@ -103,5 +104,34 @@ receiver never finds a request's id already used.
   have hp := execute_keeps (ρ := idsRel) (fsOf := fsOf) (fun _ _ _ => keepsIds_begin _) (fun _ _ => .of_lines rfl)
     keepsWorld_take j start sc p
   exact ⟨hp.1, fun _ _ hik hk => numbered_ids_distinct (hp.2 h) hik hk⟩
+
+/--
+A message that World.post adds carries the line's id and sender: a receiver reads a request's id from its `out` line.
+-/
+@[guarantee] theorem post_message (w : World) (o : Scenario.Origin) (sender receiver : String) (l : Line)
+    (definition : Spec.Ref) :
+    ∃ new, (w.post o sender receiver l definition).messages = w.messages ++ new ∧
+      ∀ msg ∈ new, msg.id = l.id ∧ msg.sender = sender := by
+  rcases hr : w.role receiver with _ | role <;> simp only [World.post, World.report, hr]
+  · exact ⟨#[], by (repeat' split) <;> rfl, by simp⟩
+  · exact ⟨#[_], by rw [Array.push_eq_append], by simp⟩
+
+theorem startWith_numbered (sc : Scenario) (services : List (String × Service))
+    (stepOrders : List (Scenario.Origin × String × List StepName)) (p : String) :
+    let s := ({ World.startWith sc services with stepOrders } : World).state p
+    Numbered s.service s.lines := by
+  show Numbered _ ((World.startWith sc services).state p).lines
+  rw [(startWith_state sc services p).1]; exact numbered_empty _
+
+/--
+No two requests that a running service sends carry one id, in a run from a world that World.start returns, whatever
+step orders test's search sets: the start holds no lines.
+-/
+@[guarantee] theorem start_sent_ids_distinct (j : Spec.Structure) (sc : Scenario) (services : List (String × Service))
+    (stepOrders : List (Scenario.Origin × String × List StepName)) (p : String) :
+    let lines := ((execute j fsOf { World.startWith sc services with stepOrders } sc).state p).lines
+    ∀ i k (hik : i < k) (hk : k < lines.size), lines[i].dir = .out → lines[k].dir = .out →
+      lines[i].id ≠ lines[k].id :=
+  (sent_ids_distinct j _ sc p (startWith_numbered sc services stepOrders p)).2
 
 end Tazuna.Thm.Sim.LineIds

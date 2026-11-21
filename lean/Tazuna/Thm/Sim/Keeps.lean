@@ -287,6 +287,19 @@ theorem keepsWorld_given {ρ : StateRel} (hr : ∀ s rows, ρ.R s { s with recor
     · exact hr _ _
     · exact ρ.refl _
 
+/-- Each running service of a world that World.startWith gives holds no lines, and its state names it. -/
+theorem startWith_state (sc : Scenario) (services : List (String × Service)) (p : String) :
+    ((World.startWith sc services).state p).lines = #[] ∧ ((World.startWith sc services).state p).service = p := by
+  unfold World.startWith World.state
+  dsimp only
+  induction runningOf sc with
+  | nil => exact ⟨rfl, rfl⟩
+  | cons q l ih =>
+    rw [List.map_cons, List.lookup_cons]
+    split
+    · rename_i h; exact ⟨rfl, (beq_iff_eq.mp h).symm⟩
+    · exact ih
+
 /--
 The lines of a scenario keep `ρ` from the start, when beginning, Given's records and every line's steps keep it, as
 `take` states for the line.

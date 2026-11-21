@@ -1,5 +1,6 @@
 import Tazuna.Explore.Moves
 import Tazuna.Thm.Spec.Domains
+import Tazuna.Thm.Sim.LineIds
 import Tazuna.Thm.Guarantee
 
 /-!
@@ -228,5 +229,17 @@ theorem fills_realizes (spec : Spec.Structure) (st : Service) (x : Explored) (w 
     ∃ s ∈ slots spec st x w e, s.Enabled spec st x w e ∧ s.Realizes x mv := by
   obtain ⟨s, hs, hf⟩ := (moves_complete spec st x w e mv).mp h
   exact ⟨s, slots_complete _ _ _ _ _ s hs, hs, fills_realizes _ _ _ _ s mv hf⟩
+
+/--
+No two requests that the own service sends carry one id in the world that explore reads at an explored path, from a
+world that World.start returns, whatever step orders test's search sets: so no move answers the own service with
+`reused-id` (Slot.Fills).
+-/
+@[guarantee] theorem explored_sent_ids_distinct (spec : Spec.Structure) (fsOf : String → Functions Id)
+    (services : List (String × Service)) (stepOrders : List (Origin × String × List StepName)) (x : Explored) :
+    let lines := ((x.world spec fsOf { World.startWith x.sc services with stepOrders }).state x.own).lines
+    ∀ i k (hik : i < k) (hk : k < lines.size), lines[i].dir = .out → lines[k].dir = .out →
+      lines[i].id ≠ lines[k].id :=
+  (Thm.Sim.LineIds.sent_ids_distinct spec _ _ x.own (Thm.Sim.LineIds.startWith_numbered x.sc services stepOrders _)).2
 
 end Tazuna.Thm.Explore.Moves

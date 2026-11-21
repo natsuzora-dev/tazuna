@@ -181,6 +181,10 @@ def Numbered (service : String) (lines : Array Line) : Prop :=
   ∀ pre l, pre ++ [l] <+: lines.toList → l.dir = .out →
     l.id = .own s!"{l.body.idName service}#{namedCount service pre.toArray (l.body.idName service) + 1}"
 
+theorem numbered_empty (service : String) : Numbered service #[] := fun pre l h _ => by
+  have := h.length_le
+  simp at this
+
 theorem numbered_push {service : String} {lines : Array Line} {l : Line} :
     Numbered service (lines.push l) ↔ Numbered service lines ∧
       (l.dir = .out →

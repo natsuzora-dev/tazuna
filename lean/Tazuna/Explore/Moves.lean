@@ -1,6 +1,6 @@
 import Tazuna.Explore.Enabled
 import Tazuna.Spec.Domains
-import Tazuna.Sim.Network
+import Tazuna.Sim.Run
 
 /-!
 The moves that explore appends after a scenario's lines, all facing the own service. Enumeration has two layers: the
@@ -38,6 +38,11 @@ structure Explored where
   domains : List Spec.Domain
 
 def Explored.own (x : Explored) : String := x.sc.service
+
+/-- The world that explore reads at the explored path `x`: the scenario run from `start` with the path's lines. -/
+def Explored.world {m : Type → Type} [Monad m] [MonadNote m] [MonadActing m] (spec : Spec.Structure)
+    (fsOf : String → Functions m) (start : World) (x : Explored) : m World :=
+  execute spec fsOf start { x.sc with lines := x.lines }
 
 def Explored.externals (x : Explored) : List String :=
   x.sc.given.peers.filterMap fun p => if p.peer == .external then some p.service else none
@@ -180,8 +185,8 @@ def rejections (reasons : List String) (kind : RejectionKind) : List Value :=
 /--
 The answers to a request: each output that the output tree gives (one answer without output when the target has none),
 then the rejections of each kind in `kinds` that does not blame the sender (blamesSender), since the own service checks
-the input of each request and gives it an id it never used (sent_ids_distinct), a requires rejection once per reason in
-`reasons`.
+the input of each request and gives it an id it never used (explored_sent_ids_distinct), a requires rejection once per
+reason in `reasons`.
 -/
 def answers (query : Bool) (outputs : Option Tree) (kinds : List RejectionKind) (reasons : List String) : List Value :=
   (match outputs with
@@ -223,9 +228,10 @@ def moves (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) (e :
 
 /--
 The condition under which the world `w`, which enables `e`, enables a slot: an answer answers a request the own service
-awaits from an external peer (the first message of it, since ids are unique) and has not ended, a clock move is one of `times`, an operation is one that `e` lists, an
-end names a client subscription that no line ended, a request names an own command or query, an event is one that an
-external peer emits and the own service receives.
+awaits from an external peer (the first message of it, since its ids are distinct: explored_sent_ids_distinct) and has
+not ended, a clock move is one of `times`, an operation is one that `e` lists, an end names a client subscription that
+no line ended, a request names an own command or query, an event is one that an external peer emits and the own service
+receives.
 -/
 def Slot.Enabled (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) (e : Enabled) : Slot → Prop
   | .answer a msg => a ∈ e.awaiting ∧ w.messages.toList.find? (awaits w x.own a.id) = some msg ∧
@@ -252,9 +258,9 @@ def Slot.Realizes (x : Explored) : Slot → Move → Prop
 /--
 The moves that fill a slot, with the values that the declared domains and the finite types admit (Explored.Admits): an
 answer with an output that the output schema admits (or without output, for a target without one) or a rejection of a
-kind that the target may give and that does not blame the sender (sent_ids_distinct), a requires rejection with a
-reason that the target lists; an operation with an offered payload, or one that the control's schema admits when the
-operation lists no offers; a request with an input and an event with a payload that their schemas admit.
+kind that the target may give and that does not blame the sender (explored_sent_ids_distinct), a requires rejection
+with a reason that the target lists; an operation with an offered payload, or one that the control's schema admits when
+the operation lists no offers; a request with an input and an event with a payload that their schemas admit.
 -/
 def Slot.Fills (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) : Slot → Move → Prop
   | .answer a msg, mv =>

@@ -35,22 +35,27 @@ def peersOf (sc : Scenario) : List (String × Peer) :=
   sc.given.peers.foldl (init := []) fun ps p =>
     if p.service == sc.service || ps.any (·.1 == p.service) then ps else ps ++ [(p.service, p.peer)]
 
+/-- The services that run in `sc`: the own service, then each running peer of Given. -/
+def runningOf (sc : Scenario) : List String :=
+  sc.service :: (peersOf sc).filterMap fun (s, p) => match p with
+    | .run _ => some s
+    | _ => none
+
 /--
-The world before the startup: the roles that Given lists, and each running service at the start, whose name qualifies its
-createKey values.
+The world before the startup with the running services `services`: the roles that Given lists, and each running service
+at the start, whose name qualifies its createKey values.
 -/
-def World.start {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure) (sc : Scenario) : m World := do
-  let peers := peersOf sc
-  let roles := (sc.service, Role.own) :: peers.map fun (s, p) => (s, match p with
+def World.startWith (sc : Scenario) (services : List (String × Service)) : World :=
+  let roles := (sc.service, Role.own) :: (peersOf sc).map fun (s, p) => (s, match p with
     | .run _ => Role.run
     | .external => .external
     | .skip _ => .skip)
-  let running := sc.service :: peers.filterMap fun (s, p) => match p with
-    | .run _ => some s
-    | _ => none
-  let services ← running.mapM fun s => do pure (s, ← Service.ofStructure j s)
   let now := sc.given.start.time
-  pure { now, roles, services, states := running.map fun s => (s, { now, service := s }) }
+  { now, roles, services, states := (runningOf sc).map fun s => (s, { now, service := s }) }
+
+/-- The world before the startup: World.startWith with each running service of the structure `j`. -/
+def World.start {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure) (sc : Scenario) : m World := do
+  pure (World.startWith sc (← (runningOf sc).mapM fun s => do pure (s, ← Service.ofStructure j s)))
 
 /-- The records that Given writes for the running service `service`, in written order. -/
 def writtenRecords (sc : Scenario) (service : String) : List GivenRecord :=
