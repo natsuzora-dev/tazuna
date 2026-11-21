@@ -19,6 +19,11 @@ A message to or from a running service stays *in flight* until a line of `w.net`
 The simulation is deterministic.
 A scenario's *snapshot* is the trace of its own service, and each running peer's trace is a snapshot of its own.
 
+An `out` line of a snapshot can carry two fields that an implementation's trace does not:
+
+- `after` lists the ids of the earlier `out` lines since the last `in` line that the [send order](#steps-and-channels) puts before this line.
+- `created` lists the keys that `createKey` returned and that first appear, among the `out` lines, in this line.
+
 ### Steps and channels
 
 A *step* is one unit of work in a service's queue: a chart that receives one event, a deadline that fires, an automation that reacts to one event, or a command that runs.
@@ -30,10 +35,14 @@ A request and its end share the request's channel, and its answers travel back o
 The events that name one request as their `resultOf` travel on a channel of their own, so a result event may arrive before or after the request's answer.
 An event without `resultOf` travels on the channel of its sender and receiver.
 
+A command's `decide` returns an array of *event groups*.
+An `emit(...)` in the array is a group of one event, and a `Bag` of `emit(...)` values is a group of its events.
+The groups are in order, and the events of one group have no order.
+
 The spec fixes the send order of the messages on one request's channel and of the answers to one request.
 Of two events `a` and `b` on one channel, the spec sends `b` after `a` only in the following cases:
 
-- `b` comes from `a`'s step, in a later group of its `decide`.
+- `b` comes from `a`'s step, in a later event group of its `decide`.
 - `b` comes from a step that `a`'s step caused, such as a machine's step that receives `a`.
   This chain of causes is the *cause chain*, and the step that enters a state causes the steps of that state's deadlines.
 - `b` is sent at a later time than `a`, or while the service processes a later input.
@@ -55,18 +64,40 @@ A *binding* pairs the values that one run created with the values of another run
 
 ### Explored paths
 
-After each scenario, `test` explores paths of up to the `depth` that the service's `explore()` declares, as `tazuna --help` defines them.
-An *explored path* writes each input from the domains that `explore()` declares, or from its type when the type is finite, and it uses new request ids and neither resends a command nor redelivers an event.
+After each scenario, `test` explores paths of up to the `depth` that the service's `explore()` declares.
+The `depth` counts moves, and `tazuna --help` says which network lines a move brings with it.
+An *explored path* appends *moves* that the world enables:
+
+- an external peer's answer to a request that the own service awaits and has not ended
+- a clock line before or at the next deadline, and not before now
+- an operation that an open screen accepts
+- the end of a client subscription that no line ended
+- a request to an own command or query
+- an event of an external peer that the own service receives
+- a restart
+
+A move writes each value from the domains that `explore()` declares, or from its type when the type is finite.
 A type is finite when it is a boolean, an enum, a literal, null, an object of finite types, or a union of them.
 An optional field, or one with a default, may also be left out.
+An answer is an output, a rejection of each kind that the target may give, or a `requires` rejection for each reason that the target lists.
+Answers leave out `invalid-input` and `reused-id`, which blame the sender.
+The own service checks the input of each request that it sends and gives it an id that none of its earlier requests carries, restarts included, so an honest peer never gives them.
+An explored path uses new request ids and neither resends a command nor redelivers an event.
+
+The *explored world* of a path is the simulation at the end of the path.
+Its *fingerprint* is the part of it that `test` takes to decide what later paths report: the time, the messages in flight, and each running service's records, instances, deadlines, requests, subscriptions, and counts of line ids and created keys.
+A fingerprint leaves out the trace and the violations reported so far.
 
 ### Violations
 
 A *violation* is what a command reports.
-Its kind, such as `Fault.failedEnsures`, names its *group* before the dot.
-A run halts at a violation of a *halting* kind, which `halts` in `lean/Tazuna/Service/Fault.lean`, `lean/Tazuna/Service/InvalidInput.lean`, and `lean/Tazuna/Sim/InvalidScenario.lean` defines.
+Its kind, such as `Fault.failedEnsures`, names its *violation group* before the dot.
+A run halts at a violation of a *halting* kind.
+`tazuna explain <kind>` says whether a kind halts.
+
 A run that halts gets none of the checks at the end of a run: the expectations of Then, the check of the messages left in flight, and the checks of the exchanges with external services.
 The lines after the halt never took place, so those checks would read a cut-off record.
+Only kinds of the groups `Fault`, `InvalidInput`, and `InvalidScenario` halt, as `halts` in `lean/Tazuna/Service/Fault.lean`, `lean/Tazuna/Service/InvalidInput.lean`, and `lean/Tazuna/Sim/InvalidScenario.lean` decides.
 
 ## What a passing command means
 
@@ -78,7 +109,7 @@ A command *passes* when it reports no violation.
 - When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot.
   This holds for the own service and for each running peer that has an implementation.
 
-When the assumptions also hold, the implementation sends the messages that the spec defines for the lines of each scenario.
+When `test` and `verify` both pass and the assumptions hold, the implementation sends the messages that the spec defines for the lines of each scenario.
 tazuna guarantees nothing about lines that no scenario contains.
 
 ### Step orders that `test` searches
@@ -89,10 +120,11 @@ tazuna guarantees nothing about lines that no scenario contains.
 - the messages that one line delivers to one service
 - the steps of one message that no cause chain orders
 
-A machine receives each event of a group that `decide` returns in a step of its own, so the order of a group is one of these orders.
-Two steps conflict when what they read and write overlaps, and `test` runs only the orders of conflicting steps (dynamic partial-order reduction).
-A deadline due at the same time as another, and a message that a line delivers with others, is a message of its own.
-What such a message reads and writes includes every step of the message, and what the hold and invariant checks and the subscription answers after the message read (`involved` in `lean/Tazuna/Explore/Instrument.lean`).
+A machine receives each event of an event group in a step of its own, so the order of an event group is one of these orders.
+Each tied deadline, and each message of a line that delivers several, is ordered as one message with all its steps.
+Two steps or messages conflict when what they read and write overlaps.
+When `test` orders a whole message, what the message reads includes what the invariant checks and the subscription answers read after it.
+`test` runs only the orders of conflicting ones.
 
 `test` searches the step orders of each service's processing of each line separately, and each search stops at its first violation.
 When an order changes the outcome, `test` reports `ChoiceDependent`.
@@ -100,26 +132,28 @@ When an order changes the outcome, `test` reports `ChoiceDependent`.
 Two outcomes are the same when both halt with the same violation, or when neither halts and both of the following hold:
 
 - Their lines pair one to one with equal contents and the same `after` through the pairing.
-  The lines that a service wrote for the messages that one line delivered pair by message, as `verify` pairs a trace's `in` lines with the snapshot's, and not by when the service processed them.
+  The lines that a service wrote for the messages of one line pair by message, as `verify` pairs `in` lines, and not by when the service processed them.
 - The state that a later line reads is equal under one binding of created keys.
-  That state is the records and each open instance and copy: the active states, the children that a history state returns to, the context, the parameters (`held`) of each active state, and the pending deadlines, whose times a later clock line reads.
-  The binding maps each key that one run created to a key that the other run created for the same entity, never to another string, and it maps the key alike at every key position: in records, contexts, parameters, and map state item keys.
+  That state is the records and each open instance and copy: the active states, the children that a history state returns to, the context, the `held` data of each active state, and the pending deadlines, whose times a later clock line reads.
+  The binding maps each created key only to a key that the other run created for the same entity, and maps it alike at every key position: in records, contexts, `held` data, and map state item keys.
 
-Instances pair by their place.
+The open instances of one outcome pair with those of the other by name.
+An instance that no screen opens is named by its chart, and a map state copy by its owner, its map state, and its item key under the binding.
 A screen that another screen opens is named by its opener and by the state and key of that `opens`.
 A screen that the same state opens again takes the name of the one it replaces, so neither the order in which screens open nor how many times a state opened its screen changes a name.
 
 ### When a trace matches a snapshot
 
-A trace *matches* a snapshot when all of the following hold (`compare_matches`):
+A trace *matches* a snapshot when all of the following hold:
 
 - Its `in` lines pair in order with the snapshot's `in` lines, at equal times.
 - The `out` lines after each `in` line pair one to one with the snapshot's.
   In one pairing, each pair is equal under the binding and at an equal time, and the pairing keeps the order that each snapshot line's `after` names.
-  `after` names only lines on one channel, and never two events at one time of one group that `decide` returns or of steps that no cause chain links (`ordered_same_channel`, `group_lines_unordered`, `independent_unordered`).
+  `after` names only lines on one channel, and never two events at one time of one event group or of steps that no cause chain links.
   A trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel.
+  For events, this channel is coarser than the spec's: events to different receivers share it, and the `after` of a snapshot uses it too.
 - One binding maps each value that the snapshot creates to one implementation value over the whole comparison.
-  Paired lines have the same type, direction, and name, and their contents, and the ids of `in` lines and outgoing requests, are equal under the binding (`contentMatch_renamed`).
+  Paired lines have the same type, direction, and name, and their contents, and the ids of `in` lines and outgoing requests, are equal under the binding.
 
 An implementation that reuses an existing request id or key for a new one does not match.
 An implementation that uses a string of its input, such as an idempotency key, as a new key can match.
@@ -173,43 +207,57 @@ The side that breaks a contract is at fault: the caller for a precondition, and 
 A *detection* is a check that can miss violations.
 When a detection reports a violation, the violation is real.
 When it reports nothing, the violation can still exist.
+Each row below names one thing that a detection leaves out.
 
 | Detection | How it detects | What it leaves out |
 |---|---|---|
-| Violations on explored paths | It runs every explored path. | Paths longer than the `depth` of `explore()`, and values outside the declared domains. A value that each domain's schema accepts may still fail a refinement of the whole value. In a request, the own service rejects it as `invalid-input` and the path is kept. In an answer, an event, or a control payload, it is a line that no one could write, and `test` discards the path. |
+| Violations on explored paths | It runs every explored path. | Paths longer than the `depth` of `explore()`. |
+| Violations on explored paths | | Values outside the declared domains. |
+| Violations on explored paths | | Paths with an answer, an event, or a control payload whose parts each fit their domains but whose whole value fails a refinement of its schema. No one could write such a line, so `test` discards the path. A request with such a value stays, and the own service rejects it as `invalid-input`. |
 | `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that a spec function reaches by another name, or through a package that the spec imports. |
-| `BagOrderDependent` | It runs each spec function whose call visited a `Bag` of two or more values again with every `Bag` reversed, and compares the two results under a binding of created keys. | Orders of a `Bag` other than the written one and its reverse. Answers with too many bindings of created keys to compare, which it reports as `Undecided.reversedBagBindings`. |
-| `ChoiceDependent` | It searches the [step orders](#step-orders-that-test-searches) of each processing. | Orders beyond `Undecided.stepOrderLimit`, and the orders of a processing after its first violation. The order of two ready steps that are not message arrivals and run the same definition on equal values, such as one automation's reactions to two equal events, which the search takes as one step. Such steps differ only in the step that caused them. A difference in outputs that `verify` cannot compare, such as equal requests that get different answers, although the state is still compared. A state with too many bindings of created keys to compare, which it reports as `Undecided.stepOrderBindings`. A screen's input, the answers to its `shows` requests, and the order of open screens, which the opener and the answer lines set. |
-| `InvalidInput` | It checks an external peer's lines against the peer's contract. | Parts of the contract other than the requires that read only the input and the ensures that read no records. |
+| `BagOrderDependent` | It runs each spec function whose call visited a `Bag` of two or more values again with every `Bag` reversed, and compares the two results under a binding of created keys. | Orders of a `Bag` other than the written one and its reverse. |
+| `BagOrderDependent` | | Results with too many bindings of created keys to compare, which it reports as `Undecided.reversedBagBindings`. |
+| `ChoiceDependent` | It searches the [step orders](#step-orders-that-test-searches) of each processing. | Orders beyond `Undecided.stepOrderLimit`. |
+| `ChoiceDependent` | | The orders of a processing after its first violation. |
+| `ChoiceDependent` | | The order of two steps that wait in the service's queue at once, are not message arrivals, and run the same definition on equal values, such as one automation's reactions to two equal events. The search names a step by what it runs and not by the step that caused it, so it takes such steps as one. |
+| `ChoiceDependent` | | A difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The state is still compared. |
+| `ChoiceDependent` | | A state with too many bindings of created keys to compare, which it reports as `Undecided.stepOrderBindings`. |
+| `ChoiceDependent` | | A screen's input, the answers to its `shows` requests, and the order of open screens, which the opener and the answer lines set. |
+| `InvalidInput` | It checks an external peer's lines against the peer's contract. | A `requires` that reads more than the input, and an `ensures` that reads records. |
 | `Uncovered` | It marks the parts that a scenario's run or an explored path reaches. | Parts that only paths longer than the `depth` of `explore()`, or values outside the declared domains, reach. |
 
 ## Assumptions
 
 tazuna detects a break of each assumption only in part or not at all.
 
-- **Runtime.** The TypeScript runtime returns the same traces and violations as the Lean definitions.
+- **Runtime.** The TypeScript runtime that the commands run returns the same traces and violations as the Lean definitions.
   Diff tests compare the two only on tazuna's own example specs and traces, and for `test` on the paths of up to two moves after the example scenarios.
-  The theorems are about the Lean definitions with pure spec functions (`Functions Id`), and about a scenario's start only through hypotheses such as distinct Given keys.
-  `test` runs the definitions with the spec functions of the TypeScript runtime and passes `verify`'s comparison to the exploration, so its runs rest on this assumption.
-  `test` runs an explored path by continuing a copy of its parent path's execution, and the same diff tests compare the whole execution with running every line again.
-  Two rules exist only in the TypeScript runtime, so no theorem covers them.
-  Spec functions read the keys of an entity in one order, whatever order the records were written in, while the Lean definitions give spec functions the records in write order.
-  The two runtimes agree there only when spec functions do not depend on the order of keys, as the spec functions assumption states.
-  `check`'s `Malformed` and `Restricted` rules, and its `NonCanonical` rules that read the source, hold for the structure that loading builds, and no theorem states what loading guarantees of it.
-- **Definitions without a theorem.** No theorem states what three Lean definitions do.
-  The step-order search reaches every order of dependent steps that changes a message's outcome (`stepOrderSearch` in `lean/Tazuna/Explore/StepOrders.lean`).
-  A proof needs that steps whose reads and writes do not overlap commute, and that `involved` covers every read and write of every step.
-  The end-of-run checks of the exchanges with external services check what [Exchanges with external services](#exchanges-with-external-services) lists (`checkExchanges` in `lean/Tazuna/Service/Input.lean`).
-  No theorem ties each item of that list to the definition.
-  The cause chain is what `causedBy` in `lean/Tazuna/Sim/Order.lean` computes, and the theorems under [Ordering](#ordering) state only the `after` that it gives.
-- **Fingerprints.** Two explored worlds with the same fingerprint report alike on every later path of the same number of moves: what the first reports, the second reports too, or its own path reported already (`Congruent` in `lean/Tazuna/Thm/Explore/Search.lean`, for `worldFingerprint` in `lean/Tazuna/Explore/Fingerprint.lean`).
+  They also check that `test`, which runs an explored path by continuing the run of the path one move shorter, gets the run that replaying every line gives.
+- **Scenario start.** Some theorems hold only for a scenario whose start meets their hypotheses, such as Given records with distinct keys.
+  `test` checks Given before any line and reports `InvalidScenario.unlistedPeer`, `InvalidScenario.invalidRecord`, `InvalidScenario.duplicateRecord`, and `InvalidScenario.brokenGivenInvariant`.
+  After any of them, no line runs.
+  No theorem shows that a Given without these violations meets every hypothesis.
+- **Key order.** The TypeScript runtime gives spec functions the keys of an entity in one order, whatever order the records were written in, while the Lean definitions give the records in write order.
+  No theorem covers this rule, and the two runtimes agree only when spec functions do not depend on the order of keys.
+- **Loading.** tazuna loads a spec in TypeScript, and no theorem states what loading guarantees of the structure that it builds.
+  `check`'s `Malformed` and `Restricted` rules, and its `NonCanonical` rules that read the source, hold for that structure.
+  Loading also decides which schema a `domain()` names by Zod object identity, and no theorem covers that matching.
+- **Move schemas.** `test` enumerates no move whose schema holds a type that is not finite and has no domain.
+  `check` reports such a type in each schema that a move may carry as `Illegal.undeclaredDomain`, but no theorem shows that moves carry only the schemas that `check` reads.
+  If a move reads another such schema, `test` stops with an internal error.
+- **Step-order search.** The step-order search reaches every order of conflicting steps that changes a message's outcome.
+  No theorem proves it, and a proof needs two facts: steps that do not conflict give the same outcome in either order, and the conflict check sees every read and write of every step.
+- **Exchange checks.** The end-of-run checks of the exchanges with external services check what [Exchanges with external services](#exchanges-with-external-services) lists.
+  No theorem ties each item of that list to the checks.
+- **Cause chain.** The simulation computes the cause chain that [Steps and channels](#steps-and-channels) describes.
+  The theorems under [Ordering](#ordering) state only the `after` that the computed cause chain gives.
+- **Fingerprints.** Two explored worlds with the same fingerprint report alike on every later path of the same number of moves: what the first reports, the second reports too, or its own path reported already.
   A path reports the violations that it adds and the parts that it reaches first.
   `test` extends only the first explored world of each fingerprint, so its explored paths rest on this assumption.
-  No theorem proves the assumption of the fingerprint, and the diff test of explored paths checks only that the TypeScript runtime and Lean take the same worlds as the same.
+  No theorem proves it, and the diff test of explored paths checks only that the TypeScript runtime and Lean take the same worlds as the same.
   The assumption fails in one known case: a path that reported a `BagOrderDependent` violation of a definition reports no other one of that definition, so a world merged into its world can lose a second such violation.
-  `test` keeps a 64-bit hash of each fingerprint instead of its text, so two worlds whose fingerprints share a hash also count as one.
+- **Fingerprint hashes.** `test` keeps a 64-bit hash of each fingerprint instead of its text, so two worlds whose fingerprints share a hash also count as one.
   It writes the probability of that, as TLC does, when the probability is at least 1e-12.
-  The diff tests compare full fingerprints.
 - **Spec functions.** Spec functions are deterministic.
   They read no clock, random source, or mutable global state, and they receive the current time as an argument.
   A result of a spec function depends neither on the order in which a `Bag` visits its values nor on the order of keys, as a comparison such as `a.id < b.id` would.
@@ -239,27 +287,33 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 |---|---|
 | Then only adds violations. A scenario leaves the same traces, messages, and halt as the same scenario without Then, so a snapshot depends on Given and When alone. | `then_only_reports` |
 | The checks at the end of a run only add violations. | `simulate_reported` |
-| A line changes no message in flight except those that its handle names, and only a deliver, lose, or refuse line removes one. | `line_keeps_leftInFlight`, `moving_line_keeps_others` |
+| A line that is not a deliver, lose, or refuse line leaves every message in flight as it is. | `line_keeps_leftInFlight` |
+| A deliver, lose, or refuse line leaves every message in flight as it is, except those that its handle names. | `moving_line_keeps_others` |
 | Only a line that gives a running service something to process changes its state: a client's request, end, or resend, an operation, a clock or restart line, or a deliver, redeliver, or refuse line. | `line_keeps_states` |
-| A deliver line halts the simulation and delivers nothing when one of its messages has an earlier message in flight that must arrive first: on its channel, not named by the line, and not an event of a step that no cause chain links to its own. | `overtaking_delivery_halts` |
+| A deliver line halts the simulation and delivers nothing when an earlier message that the line does not name is still in flight and must arrive before one of the line's messages. An earlier message must arrive first when it travels on the same channel and, for two events of a running service, the [send order](#steps-and-channels) puts it first. | `overtaking_delivery_halts` |
 | An external peer's answer line that names a request that has not reached the peer halts the simulation. | `external_answer_needs_delivery` |
-| A halting `InvalidScenario` violation halts the simulation, and once the simulation halts, the steps of the later lines take no effect. | `halting_report_stops`, `lines_after_stop_ignored` |
+| A halting `InvalidScenario` violation halts the simulation. | `halting_report_stops` |
+| Once the simulation halts, the steps of the later lines take no effect. | `lines_after_stop_ignored` |
 | A halting `Fault` or `InvalidInput` of a running service halts the simulation. | `halting_finding_stops` |
 | A run that halts gets no checks of the exchanges with external services. | `stopped_run_skips_exchanges` |
 | A refuse line that names one request in flight loses the request and delivers the `unavailable` answer to its sender. | `refuse_answers_unavailable` |
 | Each line keeps every created key. | `execute_keepsKeys`, `created_kept` |
-| No two lines that a running service sends carry one id. Each line keeps the earlier lines of every running service, restarts included. Two lines never share an id because the service names each line it sends `<name>#<n>`, where `n` is one more than the number of its earlier lines of that name. This holds from any start whose lines are named this way, and a start that `World.start` returns has no lines, whatever step orders the step-order search sets. A message that a running service sends carries the id of its line, and a receiver judges ids per sender. | `sent_ids_distinct`, `start_sent_ids_distinct`, `post_message` |
+| Each line keeps the earlier lines of every running service, restarts included. | `sent_ids_distinct` |
+| No two lines that a running service sends carry one id, whatever step orders the step-order search sets. The service names each line that it sends `<name>#<n>`, where `n` is one more than the number of its earlier lines of that name. | `sent_ids_distinct`, `start_sent_ids_distinct` |
+| A message that a running service sends carries the id of its line, and a receiver judges ids per sender. | `post_message` |
 | The `n`-th created key of an entity is `<owner>/<Entity>-<n>`, so no two createKey calls of one service return the same key. | `created_form`, `created_distinct` |
-| No key that the scenario may write, such as a Given key, is ever created for an entity that is not a single entity. This needs the service's state to name the service as the owner of its keys, which holds in a run from a start that `World.start` returns. | `unwritten_not_created`, `execute_unwritten_not_created`, `start_unwritten_not_created` |
+| In a run of a scenario, `createKey` of a keyed entity never returns a key that the scenario may write, such as a Given key. | `unwritten_not_created`, `execute_unwritten_not_created`, `start_unwritten_not_created` |
 | The order in which Given writes the records does not matter. A scenario that writes the same records, no two with one key, in another order simulates alike. | `simulate_records_perm` |
-| The audits by which `test` finds `BagOrderDependent` and `ChoiceDependent` change no step of the pure definitions. A service whose spec functions are audited starts, processes each input, and checks the end of a run as it does with the same functions sorted (`Functions.sorting`) and not audited. | `instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkExchanges_agrees` |
-| An audited run of a whole scenario leaves the world that the plain run leaves, whatever the audit collected before. | `execute_agrees`, `simulate_agrees` |
+| To find `BagOrderDependent` and `ChoiceDependent` violations, `test` records what each spec function reads and writes and how it visits each `Bag`. The recording changes no step of a run: a service starts, processes each input, and checks the end of a run as it does without the recording. | `instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkExchanges_agrees` |
+| A run of a whole scenario with the recording leaves the world that the run without it leaves, whatever the recording collected before. | `execute_agrees`, `simulate_agrees` |
 
 ### Data validity
 
 | Property | Theorems |
 |---|---|
-| An accepted command emits exactly the events that its `decide` returned, each once, in the groups that `decide` returned. Every event is one that `emits` lists, and an unlisted event halts the run. Each payload has its collections sorted by the declared schema, is parsed by it, and is sorted again, since parsing fills defaults as the schema writes them. A run gets its spec functions only from `instrument`, which sorts them. | `accepted_emits_decided`, `decide_payloads_sorted`, `instrument_agrees`, `unlisted_emitted_event_halts` |
+| An accepted command emits exactly the events that its `decide` returned, each once, in the event groups that `decide` returned. | `accepted_emits_decided` |
+| Every emitted event is one that `emits` lists, and an unlisted event halts the run. | `accepted_emits_decided`, `unlisted_emitted_event_halts` |
+| Each emitted payload has its collections sorted by the declared schema, is parsed by it, and is sorted again, since parsing fills defaults as the schema writes them. | `decide_payloads_sorted`, `instrument_agrees` |
 | The service answers a query with the output of its `resolve`, its collections sorted by the declared schema, parsed by it, and sorted again. | `resolve_output_answered`, `sorting_resolve_parsed`, `instrument_agrees`, `requirements_lookup` |
 | When the input of a command or query does not fit its schema, the service rejects it with `invalid-input`. | `command_invalid_input_rejected`, `query_invalid_input_rejected` |
 | A spec service's `invalid-input` answer to another spec service is the sender's `Fault`. | `invalid_input_answer_blames_sender` |
@@ -279,8 +333,8 @@ The other rows are tazuna's own.
 | An operation that no transition takes changes nothing. | `untaken_operation_changes_nothing` |
 | A transition to a descendant of its source exits the source when it reenters, and keeps it otherwise. | `reenter_true_exits`, `reenter_false_not_exited` |
 | A stopped instance processes no event. | `stopped_machine_takes_no_event` |
-| The reach filter keeps every copy of a map state for an event without a key. | `keyless_payload_reaches_all` |
-| The reach filter keeps at most one copy for an event with a key when the copies have distinct keys. | `keyed_payload_reaches_at_most_one` |
+| An event whose payload lacks a key field of a map state reaches every copy of that map state. | `keyless_payload_reaches_all` |
+| An event whose payload has every key field of a map state reaches at most one copy of it, when the copies have distinct keys. | `keyed_payload_reaches_at_most_one` |
 
 ### Requests and deadlines of a state
 
@@ -333,13 +387,15 @@ The other rows are tazuna's own.
 | The elements of a `sortedBy` array sort to the same list in whatever order spec code built them, when no two distinct elements have the same canonical JSON. No theorem shows that only values that differ in field order do. | `sortByKey_perm` |
 | In a union that holds a collection and that `check` accepts, a value fits at most one option, so the option that sorts it is never a guess. | `apart_disjoint` |
 | A snapshot orders two `out` lines after one `in` line only when they travel on one channel. | `ordered_same_channel` |
-| A snapshot never orders two events at one time of one group that `decide` returns. | `group_lines_unordered` |
+| A snapshot never orders two events at one time of one event group. | `group_lines_unordered` |
 | A snapshot never orders two events at one time of steps that no cause chain links. | `independent_unordered` |
 
 ### Identity
 
 Request ids follow the `Idempotency-Key` HTTP header (IETF).
-No theorem shows that the bindings that `test` and `verify` end with pair no value of domain "" or keep each key in its entity's domain, which the last rows assume.
+The last four rows of the table state renamings under conditions on the binding.
+They apply to the binding that `test` or `verify` ends with only when that binding pairs only keys and request ids, and pairs each key with a key of its own entity.
+No theorem shows that it does.
 
 | Property | Theorems |
 |---|---|
@@ -350,10 +406,10 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 | The service answers a repeated query again, because a query has no identity. | `query_answered_again` |
 | When an event or an answer arrives again with the same id, the service does not process it again. | `redelivered_event_not_processed`, `redelivered_answer_not_processed` |
 | Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each key position as the binding pairs it, any other leaf equal, and bags and objects without repeated keys after reordering. | `matchValue_renamed`, `sameState_renamed` |
-| For a binding that pairs no value of domain "", that renaming is a renaming in the sense of the rows below. | `matchValue_strRenamed` |
+| For a binding that pairs only keys and request ids, that renaming is a renaming in the sense of the next three rows. | `matchValue_strRenamed` |
 | Every value renames to itself. | `renamed_refl` |
-| A renaming read backward is the inverse binding, when each binding keeps a key in its entity's domain. | `renamed_symm` |
-| Two renamings in a row are their composition, which is again one to one, when each binding keeps a key in its entity's domain. | `renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup` |
+| A renaming read backward is the inverse binding, when each binding pairs each key with a key of its own entity. | `renamed_symm` |
+| Two renamings in a row are their composition, which is again one to one, when each binding pairs each key with a key of its own entity. | `renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup` |
 
 ### Restart
 
@@ -370,16 +426,21 @@ No theorem shows that the bindings that `test` and `verify` end with pair no val
 |---|---|
 | A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields. | `compareSnapshot_eq_none_iff`, `compareSnapshot_reordered` |
 | A trace in which `verify` finds no violation matches its snapshot as [When a trace matches a snapshot](#when-a-trace-matches-a-snapshot) states. | `compare_matches`, `contentMatch_renamed` |
-| When `check` reports no `Illegal` violation, the spec keeps every structural rule that `Checked` lists, one per `Illegal` kind. | `check_eq_nil_iff` |
-| When `check` reports none of the `NonCanonical` kinds that read only the structure, each transition has a `reenter` exactly when it leads within its source, each automation and each calls or sends has `onRejected` exactly when an answer may be rejected, and no machine is stateless. | `canonical_check_eq_nil_iff` |
-| When the step-order search of a message reports nothing, each order that it ran was refused, because no queue could take it, or gives the same outcome as the execution that it came from. | `stepOrderSearch_same` |
-| The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and a state equal under a binding of created keys, or outputs that do not compare even with themselves and a state equal under a binding. The state is the records and the open instances, pending deadlines included. | `difference_same`, `compareTraces_ok`, `sameState_renamed` |
+| When `check` reports no `Illegal` violation, the spec keeps the structural rule of each `Illegal` kind. | `check_eq_nil_iff` |
+| When `check` reports none of the `NonCanonical` kinds that read only the structure, each transition has a `reenter` exactly when it leads within its source. | `canonical_check_eq_nil_iff` |
+| When `check` reports none of the `NonCanonical` kinds that read only the structure, each automation and each calls or sends has `onRejected` exactly when an answer may be rejected. | `canonical_check_eq_nil_iff` |
+| When `check` reports none of the `NonCanonical` kinds that read only the structure, no machine is stateless. | `canonical_check_eq_nil_iff` |
+| When the step-order search of a message reports nothing, each order that it ran either could not run, because no queue takes the steps in that order, or gives the same outcome as the execution that it came from. | `stepOrderSearch_same` |
+| The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and a state equal under a binding of created keys, as [Step orders that `test` searches](#step-orders-that-test-searches) defines. When `verify` cannot compare the first execution's outputs even with themselves, as the `ChoiceDependent` rows of [Detections](#detections) say, the same outcome means only a state equal under a binding. | `difference_same`, `compareTraces_ok`, `sameState_renamed` |
 | `verify` pairs the traces folder with the scenarios without a violation exactly when the folder holds only service subfolders, each file of a subfolder is a trace of an external service or is named after a scenario of its service, and each compared scenario of a service that is not external has a trace. | `no_violation_iff` |
 
 ### Exploration
 
 | Property | Theorems |
 |---|---|
-| Each move that `test` appends after a scenario fills a slot that the world enables, with that slot's lines: an external peer's answer to a request that the own service awaits and has not ended, a clock line before or at the next deadline and not before now, an operation that an open screen accepts, the end of a client subscription that no line ended, a request to an own command or query, an event of an external peer that the own service receives, or a restart. Each slot that `Slot.Enabled` in `lean/Tazuna/Explore/Moves.lean` states is enumerated, which ties the enumeration to that statement and not to the lines that a run accepts. A move is enumerated exactly when it fills an enabled slot with values that the declared domains and the finite types admit (`Slot.Fills`): an answer's output, or a rejection of a kind that the target may give other than `invalid-input` and `reused-id`, a `requires` rejection once per reason that the target lists, an operation's offered payload or payload, a request's input, and an event's payload. `invalid-input` and `reused-id` blame how the sender wrote the request (`RejectionKind.blamesSender`), and the own service checks the input of each request it sends and gives it an id that none of its earlier requests carries, across restarts too, so an honest peer never answers with them. Lean proves the ids distinct in `Explored.world`, the world that the scenario with the path's lines reaches from a start that `World.start` returns, which the diff test passes to the Lean moves. TS does not replay a path: it continues the world of the path one move shorter. The diff test of explored paths (`test/executed.ts`) checks that the continued world equals the replayed one, and no theorem states it. `Admitted` in `lean/Tazuna/Spec/Domains.lean` states the admitted values node by node: a declared domain's values, a constant, an enum, null, a boolean, an option of a union or of a list of types, the `$defs` entry that a `$ref` names, or an object whose fields are admitted. A node of an infinite type without a domain admits nothing, and `Slot.Fills` holds only for a schema with no such node. Check reports such a node in each schema of `moveSchemas` (`Illegal.undeclaredDomain`), but no theorem states that a move carries only those schemas. If fill reads another schema that has such a node, the run stops with an internal error. Which schema a `domain()` names is decided by TS load from Zod object identity, which cannot cross into Lean, so no theorem covers that matching. | `moves_enabled`, `slots_complete`, `moves_complete`, `explored_sent_ids_distinct` |
-| Extending only the first explored world of each fingerprint reports the same violations and reached parts as extending every path of up to the `depth` of `explore()`, under the fingerprints assumption. | `merged_search_reports` |
+| Each move that `test` appends after a scenario is one that [Explored paths](#explored-paths) lists and that the world enables. | `moves_enabled` |
+| `test` considers every move that the world enables, as [Explored paths](#explored-paths) lists them. No theorem ties that list to the lines that a run accepts. | `slots_complete` |
+| `test` appends a move exactly when the world enables it and the declared domains and the finite types admit its values. | `moves_complete` |
+| On an explored path, no two requests that the own service sends carry one id, restarts included and whatever step orders the step-order search sets, so no move answers the own service with `reused-id`. | `explored_sent_ids_distinct` |
+| When the fingerprints assumption holds, extending only the first explored world of each fingerprint reports the same violations and reached parts as extending every path of up to the `depth` of `explore()`. The row covers nothing where that assumption fails, as for a second `BagOrderDependent` violation of one definition. | `merged_search_reports` |
 | `test --coverage` reports only parts outside the reached parts that the runs collect. No theorem states that the collected parts are what the runs reached. Lean and the TypeScript runtime collect the same parts on every explored path, which the diff test of explored paths compares. | `uncovered_unreached` |

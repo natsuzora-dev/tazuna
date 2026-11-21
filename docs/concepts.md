@@ -9,7 +9,7 @@ A message that no line delivers, loses, refuses, or leaves in flight is `Invalid
 
 Two things depend on that.
 The simulation is deterministic, so a snapshot depends only on what the scenario wrote, and `test` can compare a run with it line by line.
-`drive`, which runs an implementation through a scenario from `@natsuzora-dev/tazuna/verify`, puts the implementation in the same world: the same start, the same clock, and the same inputs in the same order.
+`drive`, from `@natsuzora-dev/tazuna/verify`, puts the implementation in the same world: the same start, the same clock, and the same inputs in the same order.
 If tazuna picked a delivery order or a default record, the implementation would face a world that nobody wrote down, and a difference between the two runs would be nobody's fault.
 
 That world is the only control tazuna has over an implementation.
@@ -19,6 +19,7 @@ The implementation creates its keys and request ids in its own way, and `verify`
 
 A scenario has one *own* service, whose behavior it states.
 Every other service that the own service exchanges messages with is a peer, and Given lists each peer as running (`run`), external (`external`), or skipped (`skip`).
+A skipped peer takes no part in the run: a message to it stays in its sender's trace and is then dropped, so no line decides its fate, and no line may act for the peer.
 
 Apart from what the role decides, the own service and its peers follow the same rules.
 A message to or from the own service, a running peer, or an external peer arrives only by a line of the scenario, and a running peer's lines state the messages that its run sent.
@@ -51,7 +52,7 @@ That is how a scenario states a slow network, a lost answer, or a restart in the
 
 Messages on one channel arrive in the order in which they were sent, as on one TCP connection or one Kafka partition, and nothing orders two channels.
 The result events of a request travel on a channel of their own, as a Stripe webhook may arrive before the API response.
-The spec orders two events only along a cause chain, as Lamport's happens-before orders messages.
+The spec orders two events on one channel only when one happens before the other, as in Lamport's happens-before: the later event comes from a later event group of the same `decide`, from a step that the earlier event's step caused, or is sent at a later time or for a later input.
 Two steps that no cause chain links, such as the steps of two parallel regions, could run in two processes of a deployed system, and nothing orders the messages of two processes.
 Neither the snapshot nor `verify` records an order that a deployed system does not keep, so a spec cannot rely on one.
 [Terms](guarantees.md#terms) gives the exact rules.
@@ -72,11 +73,13 @@ tazuna removes some of these orders by construction and searches the rest.
 
 Records have no order, because a database returns rows in an order that the spec does not control.
 Spec functions receive the records of an entity as a `Bag`, and a spec that needs an order sorts by a key with `sortedBy`.
-tazuna writes the elements of a bag, set, or `sortedBy` array in the order of their encoded values, which the trace holds, whatever a codec decodes them to.
-For that reason `check` reports a `sortedBy` key whose encoded value is no number, instant, or date, and a union that holds a collection when one value can fit two of its options, since either would leave the order to a guess.
+tazuna writes the elements of a bag, set, or `sortedBy` array in the order of their encoded values.
+For that reason, `check` reports a `sortedBy` key whose encoded value is not a number, an instant, or a date, since such a key would leave the order to a guess.
+`check` also reports a union that holds a collection when one value can fit two of its options, since which option sorts the value would then be a guess.
 
-Some steps have no cause that orders them: deadlines of one service due at the same time (*tied* deadlines), the steps of one message that read and write the same data, and the events of one group that `decide` returns.
-`test` runs all of these orders in one search and reports `ChoiceDependent.stepOrder` for the first order that gives a different outcome, as Concuerror, loom, and shuttle stop at the first failing schedule.
+Some steps have no cause that orders them: deadlines of one service due at the same time (*tied* deadlines), the steps of one message that read and write the same data, and the events of one event group that `decide` returns.
+`test` searches these orders, runs only the orders of steps that conflict, and reports `Undecided.stepOrderLimit` when it stops at its limit with orders left.
+It reports `ChoiceDependent.stepOrder` for the first order that gives a different outcome, as Concuerror, loom, and shuttle stop at the first failing schedule.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
 
 Whether two orders give the same outcome depends on what each step changes.
@@ -87,7 +90,7 @@ The following examples show the difference:
 - Two deadlines that each add a task that a subscription returns do not, because the answer after the first deadline shows which one fired first.
 - Two events that move one machine to different states do not, even without a line, because the next event finds the machine in a different state.
 
-The same search covers the messages that one line delivers to one service, equal messages included, since each has its own id.
+The search also orders equal messages that one line delivers.
 For example, two copies of a map state that each reserve Monday for their task send equal requests, and a calendar that books the day for the first request it processes books a different task in each order.
 The requests then need content that tells them apart, such as the task's id.
 
@@ -107,12 +110,9 @@ A value derived from records is a plain function that reads `records` where it i
 
 ## The spec bounds what `test` explores
 
-After each scenario, `test` explores every path of moves that the world enables, up to a depth, and each move writes its values from finite sets.
-The spec declares both in `explore()`: the depth, and a `domain()` of values for each schema whose type is not finite, such as a string or a number.
-A domain belongs to a schema, not to an input: it applies wherever the spec writes that schema, in every value that a move may carry.
-Those values are the inputs of the service's commands and queries, and the outputs, events, and control payloads that a peer or a user writes, since any other service may be external in some scenario.
+The spec declares in `explore()` how far `test` explores after each scenario: the depth, and a `domain()` of values for each schema whose type is not finite, such as a string or a number.
+A domain belongs to a schema, not to an input.
 The bounds are typed by the schemas that they name and reviewed with the spec, as TLA+ keeps its bounds in the model's configuration, and `test` infers none of them.
-For the same reason, a domain that names nothing, and two domains that cover one schema, by naming it or a schema around it, are mistakes that loading reports.
 A small domain usually finds what a large one finds, so one or two values per schema is a good start.
 
 ## Then states the intent, and the snapshot records the run
