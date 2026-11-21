@@ -47,8 +47,7 @@ theorem growsBy_request (step : Nat) (name : InstanceId) (state : String) (a : A
   · exact Grows.of_lines (report_lines ..)
   · split
     · exact Grows.refl _
-    · refine ⟨#[_], Array.push_eq_append, ?_⟩
-      simp [State.createKeys]
+    · exact (Grows.of_lines (s' := r.state.createKeys _) rfl).trans rfl (await_grows ..)
 
 theorem sameLines_openScreen (step : Nat) (name : InstanceId) (state : String) (a : Activity) :
     SameLines (openScreen fs st step name state a) := by
@@ -63,7 +62,7 @@ theorem growsBy_activate (step : Nat) (name : InstanceId) (state : String) (a : 
     GrowsBy (activate fs st step name state a) := by
   unfold activate
   split
-  · exact (sameLines_openScreen step name state _).grows
+  · exact (sameLines_openScreen step name state _).grows (keeps_openScreen step name state _)
   · intro r; exact Grows.refl _
   · exact growsBy_request step name state _
   · exact growsBy_request step name state _

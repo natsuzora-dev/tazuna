@@ -235,4 +235,76 @@ theorem keepsWorld_line {ρ : StateRel} (w : World) (own : String) (lines : List
   · exact keepsWorld_report (.refl ρ w) _
   · exact h
 
+theorem keepsWorld_beginAll {ρ : StateRel} (hb : ∀ st (fs : Functions Id) s, ρ.R s (begin st fs s)) (w : World) :
+    KeepsWorld ρ w (w.beginAll fsOf) := by
+  unfold World.beginAll
+  rw [foldlM_id]
+  refine foldl_keeps (KeepsWorld ρ w) _ (fun v x hv => ?_) _ _ (.refl _ w)
+  dsimp only
+  split
+  · exact hv
+  · exact keepsWorld_act hv _ _ _ (fun st s => hb _ _ _)
+
+theorem keeps_lookup_map {ρ : StateRel} (l : List (String × State)) (g : String × State → String × State)
+    (h : ∀ a, (g a).1 = a.1 ∧ ρ.R a.2 (g a).2) (p : String) :
+    ρ.R ((l.lookup p).getD { service := p }) (((l.map g).lookup p).getD { service := p }) := by
+  induction l with
+  | nil => exact ρ.refl _
+  | cons a l ih =>
+    obtain ⟨q, x⟩ := a
+    obtain ⟨h₁, h₂⟩ := h (q, x)
+    show ρ.R ((List.lookup p ((q, x) :: l)).getD { service := p }) ((List.lookup p (g (q, x) :: _)).getD { service := p })
+    rw [show g (q, x) = (q, (g (q, x)).2) from Prod.ext h₁ rfl, List.lookup_cons, List.lookup_cons]
+    split
+    · exact h₂
+    · exact ih
+
+theorem keepsWorld_given {ρ : StateRel} (hr : ∀ s rows, ρ.R s { s with records := rows }) (w : World)
+    (j : Spec.Structure) (sc : Scenario) : KeepsWorld ρ w (w.given j fsOf sc) := by
+  unfold World.given
+  simp only [bind, pure]
+  rw [foldlM_id]
+  have hn : ∀ (rs : List InvalidScenario) (v : World), (rs.foldl World.note v).states = v.states := by
+    intro rs; induction rs with
+    | nil => intro v; rfl
+    | cons r rs ih => intro v; simp only [List.foldl_cons]; rw [ih]; rfl
+  refine foldl_keeps (KeepsWorld ρ w) _ (fun v x hv => ?_) _ _ (keepsWorld_states (.refl _ w) (hn _ _))
+  intro p
+  refine ρ.trans (hv p) ?_
+  have : ∀ (l : List (String × State)) (k : String) (rows : Records),
+      l.map (fun (q, s) => if q == k then (q, { s with records := rows }) else (q, s)) =
+        l.map fun a => (a.1, if a.1 == k then { a.2 with records := rows } else a.2) := by
+    intro l k rows; congr 1; funext a; obtain ⟨q, s⟩ := a; show ite _ _ _ = (q, ite _ _ _); cases q == k <;> rfl
+  split
+  split
+  all_goals
+    simp only [World.state, hn]
+    rw [this]
+    apply keeps_lookup_map
+    intro a
+    refine ⟨rfl, ?_⟩
+    split
+    · exact hr _ _
+    · exact ρ.refl _
+
+/--
+The lines of a scenario keep `ρ` from the start, when beginning, Given's records and every line's steps keep it, as
+`take` states for the line.
+-/
+theorem execute_keeps {ρ : StateRel} (hb : ∀ st (fs : Functions Id) s, ρ.R s (begin st fs s))
+    (hr : ∀ s rows, ρ.R s { s with records := rows })
+    (ht : ∀ (w : World) own lines i l, KeepsWorld ρ w (w.take fsOf own lines i l)) (j : Spec.Structure)
+    (start : World) (sc : Scenario) : KeepsWorld ρ start (execute j fsOf start sc) := by
+  unfold execute World.execute
+  simp only [bind, pure]
+  have hg := keepsWorld_given (fsOf := fsOf) hr start j sc
+  split
+  · exact hg
+  · rw [foldlM_id]
+    refine foldl_keeps (KeepsWorld ρ start) _ (fun v x hv => hv.trans ?_) _ _ (hg.trans (keepsWorld_beginAll hb _))
+    unfold World.step
+    split
+    · exact .refl _ _
+    · exact keepsWorld_line _ _ _ _ _ (ht _ _ _ _ _)
+
 end Tazuna.Thm.Sim.Keeps

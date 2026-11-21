@@ -113,6 +113,7 @@ export const guarantees = [
   "select_picked_by_leaf",
   "send_agrees",
   "send_keysDistinct",
+  "sent_ids_distinct",
   "service_invariant_reported_iff",
   "simulate_agrees",
   "simulate_records_perm",

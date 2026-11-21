@@ -65,8 +65,10 @@ theorem sameLines_runAssign (name : InstanceId) (a : Assignment) (scope : Option
   · simp [Processing.report]
   · split <;> rfl
 
-theorem endSubscription_grows (p : Pending) : Grows s (s.endSubscription p) :=
-  ⟨#[_], Array.push_eq_append, by simp⟩
+theorem endSubscription_grows (p : Pending) : Grows s (s.endSubscription p) := by
+  unfold State.endSubscription
+  dsimp only
+  exact (grows_write .out none (.unsubscribe p.id) () _ _).bridge rfl rfl
 
 theorem growsBy_endWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, GrowsBy (exit c n))
     (hk : ∀ c n, Keeps (exit c n)) (c : InstanceId) : GrowsBy (endWith exit c) := by
@@ -91,9 +93,10 @@ theorem growsBy_leaveWith {exit : InstanceId → String → Processing → Id Pr
     (fun c => keeps_unlessHalted (keeps_endWith hk c))
   have ga := sameLines_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none none r
   have na := (keeps_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none none).now r
+  have sa := (keeps_runAssign (st := st) (fs := fs) name (.exit n) (some n) .none none).service r
   split
-  · exact Grows.of_lines ga
-  · exact (Grows.of_lines ga).trans na ((gc _ _).bridge (by rfl) (by rfl))
+  · exact Grows.of_lines ga sa
+  · exact (Grows.of_lines ga sa).trans na ((gc _ _).bridge (by rfl) (by rfl))
 
 theorem growsBy_exitOne (fuel : Nat) (name : InstanceId) (n : String) : GrowsBy (exitOne fs st fuel name n) := by
   induction fuel generalizing name n with

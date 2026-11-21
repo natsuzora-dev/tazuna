@@ -33,9 +33,6 @@ theorem keeps_foldlM {α : Type} (f : State → α → Id State) (h : ∀ t x, K
     (s : State) : KeepsKeys s (xs.foldlM f s) := by
   rw [foldlM_id]; exact keeps_foldl _ h xs s
 
-@[simp] theorem report_service (s : State) (f : Finding) : (s.report f).service = s.service := by
-  unfold State.report; split <;> rfl
-
 @[simp] theorem report_createdEntities (s : State) (f : Finding) : (s.report f).createdEntities = s.createdEntities := by
   unfold State.report; split <;> rfl
 
@@ -56,9 +53,6 @@ macro "keys_close " h:term : tactic => `(tactic| (obtain ⟨hk1, hk2⟩ := $h; (
 
 theorem keeps_reportAll (s : State) (fs : List Fault) : KeepsKeys s (s.reportAll fs) :=
   keeps_foldl _ (fun t x => by split <;> keys_leaf) _ _
-
-@[simp] theorem reportAll_service (s : State) (fs : List Fault) : (s.reportAll fs).service = s.service :=
-  (keeps_reportAll s fs).1
 
 @[simp] theorem reportAll_createdEntities (s : State) (fs : List Fault) :
     (s.reportAll fs).createdEntities = s.createdEntities := by

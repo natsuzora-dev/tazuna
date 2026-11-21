@@ -180,7 +180,8 @@ def rejections (reasons : List String) (kind : RejectionKind) : List Value :=
 /--
 The answers to a request: each output that the output tree gives (one answer without output when the target has none),
 then the rejections of each kind in `kinds` that does not blame the sender (blamesSender), since the own service checks
-the input of each request and gives it an id it never used, a requires rejection once per reason in `reasons`.
+the input of each request and gives it an id it never used (sent_ids_distinct), a requires rejection once per reason in
+`reasons`.
 -/
 def answers (query : Bool) (outputs : Option Tree) (kinds : List RejectionKind) (reasons : List String) : List Value :=
   (match outputs with
@@ -251,9 +252,9 @@ def Slot.Realizes (x : Explored) : Slot → Move → Prop
 /--
 The moves that fill a slot, with the values that the declared domains and the finite types admit (Explored.Admits): an
 answer with an output that the output schema admits (or without output, for a target without one) or a rejection of a
-kind that the target may give and that does not blame the sender, a requires rejection with a reason that the target lists; an
-operation with an offered payload, or one that the control's schema admits when the operation lists no offers; a
-request with an input and an event with a payload that their schemas admit.
+kind that the target may give and that does not blame the sender (sent_ids_distinct), a requires rejection with a
+reason that the target lists; an operation with an offered payload, or one that the control's schema admits when the
+operation lists no offers; a request with an input and an event with a payload that their schemas admit.
 -/
 def Slot.Fills (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) : Slot → Move → Prop
   | .answer a msg, mv =>

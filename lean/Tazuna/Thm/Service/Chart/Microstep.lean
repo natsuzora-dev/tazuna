@@ -160,24 +160,31 @@ theorem growsBy_enterOne (step : Nat) (filled : Bool) (name : InstanceId) (n : S
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
   have hFn := (keeps_fillByInitial (st := st) (fs := fs) filled name n).now
     ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
+  have hFs := (keeps_fillByInitial (st := st) (fs := fs) filled name n).service
+    ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
   generalize fillByInitial fs st filled name n
-    ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩ = F at hFl hFn ⊢
+    ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
+    = F at hFl hFn hFs ⊢
   have ha := (sameLines_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none none F).trans hFl
   have hn := ((keeps_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none none).now F).trans hFn
+  have hs := ((keeps_runAssign (st := st) (fs := fs) name (.entry n) (some n) .none none).service F).trans hFs
   split
-  · exact Grows.of_lines hFl
+  · exact Grows.of_lines hFl hFs
   · split
-    · exact Grows.of_lines ha
+    · exact Grows.of_lines ha hs
     · split
-      · exact Grows.of_lines ha
+      · exact Grows.of_lines ha hs
       · split
         · split
           · split
-            · exact (Grows.of_lines ha).trans hn (growsBy_closeFinal st step name _)
-            · exact (Grows.of_lines ha).trans hn (growsBy_endWith (fun c n => growsBy_exitOne st.exitFuel c n)
+            · exact (Grows.of_lines ha hs).trans hn (growsBy_closeFinal st step name _)
+            · exact (Grows.of_lines ha hs).trans hn (growsBy_endWith (fun c n => growsBy_exitOne st.exitFuel c n)
                 (fun c n => keeps_exitOne st.exitFuel c n) name _)
-          · simp only [id_pure]; exact Grows.of_lines ((enterFinal_lines _ _ _ _).trans ha)
+          · simp only [id_pure]
+            exact Grows.of_lines ((enterFinal_lines _ _ _ _).trans ha)
+              ((congrArg Fixed.service (enterFinal_fixed _ _ _ _)).trans hs)
         · exact Grows.of_lines ((addDeadlines_lines _ _ _ _).trans ha)
+            ((congrArg Fixed.service (addDeadlines_fixed _ _ _ _)).trans hs)
 
 theorem growsBy_enter (step : Nat) (name : InstanceId) (targets : List String) : GrowsBy (enter fs st step name targets) := by
   unfold enter
@@ -207,19 +214,21 @@ theorem growsBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Insta
     have hA : ∀ sh es xs (r : Processing),
         Grows r.state (List.foldlM (m := Id) (transitionContent fs st extra sh es) r xs).1 :=
       fun sh es xs r => Grows.of_lines (foldlM_sameLines (fun c => sameLines_transitionContent extra sh es c) xs r)
+        (congrArg Fixed.service (kA sh es xs r))
     have hN : ∀ xs (r : Processing), Grows r.state (List.foldlM (m := Id) (fun r (e : (InstanceId × String) × Nat) =>
         unlessHalted (enterOne fs st step (targetedBy chosen e.1 e.2) e.1.1 e.1.2) r) r xs).1 :=
       foldlM_grows (fun (e : (InstanceId × String) × Nat) => growsBy_unlessHalted (growsBy_enterOne step _ e.1.1 e.1.2))
         (fun e => keeps_unlessHalted (keeps_enterOne step _ e.1.1 e.1.2))
     have h0 : ∀ (hs : List InstanceId) (f : InstanceId → Instance → Instance) (t : State),
         (hs.foldl (fun s h => s.setMachine h (f h)) t).lines = t.lines ∧
-          (hs.foldl (fun s h => s.setMachine h (f h)) t).now = t.now := by
+          (hs.foldl (fun s h => s.setMachine h (f h)) t).now = t.now ∧
+          (hs.foldl (fun s h => s.setMachine h (f h)) t).service = t.service := by
       intro hs f
       induction hs with
-      | nil => intro t; exact ⟨rfl, rfl⟩
+      | nil => intro t; exact ⟨rfl, rfl, rfl⟩
       | cons h hs ih => intro t; exact ih _
-    obtain ⟨l0, n0⟩ := h0 (holdersOf chosen) _ r.state
-    exact (Grows.of_lines l0).trans n0 ((hE _ _).trans (congrArg Fixed.now (kE _ _))
+    obtain ⟨l0, n0, s0⟩ := h0 (holdersOf chosen) _ r.state
+    exact (Grows.of_lines l0 s0).trans n0 ((hE _ _).trans (congrArg Fixed.now (kE _ _))
       ((hA _ _ _ _).trans (congrArg Fixed.now (kA _ _ _ _)) (hN _ _)))
 
 theorem documentOrder_owner_pairs (i : Instance) (pairs : List (InstanceId × String)) :

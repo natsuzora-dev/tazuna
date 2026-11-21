@@ -173,6 +173,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   select_picked_by_leaf: { example: "service/Chart/Select/leaf_selects_innermost", scenario: "rightRegionWins" },
   send_agrees: ofAudit,
   send_keysDistinct: { example: "service/Message/rejection-kinds", scenario: "commandRejections" },
+  sent_ids_distinct: { example: "service/Restart/requests", scenario: "requestsDiscarded" },
   service_invariant_reported_iff: { kindExample: "Fault.failedServiceInvariant" },
   simulate_agrees: ofAudit,
   simulate_records_perm: {

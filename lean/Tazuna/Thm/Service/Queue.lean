@@ -26,8 +26,9 @@ theorem afterMessage_fixed : (afterMessage st fs s).fixed = s.fixed := by
 theorem afterMessage_grows : Grows s (afterMessage st fs s) := by
   simp only [afterMessage, id_bind]
   split
-  · exact Grows.of_lines checkInvariants_lines
-  · exact (Grows.of_lines checkInvariants_lines).trans (congrArg Fixed.now checkInvariants_fixed) publish_grows
+  · exact Grows.of_lines checkInvariants_lines (congrArg Fixed.service checkInvariants_fixed)
+  · exact (Grows.of_lines checkInvariants_lines (congrArg Fixed.service checkInvariants_fixed)).trans
+      (congrArg Fixed.now checkInvariants_fixed) publish_grows
 
 theorem afterMessage_records : (afterMessage st fs s).records = s.records := congrArg Fixed.records afterMessage_fixed
 
@@ -70,7 +71,7 @@ theorem fireDue_keysDistinct (to : Time) (fuel : Nat) (tie : Option Time) (h : K
 
 @[guarantee] theorem message_outputs_at_its_time (n : Nat) (q : Queue) :
     ∃ new, (afterMessage st fs (drain st fs n s q)).lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now :=
-  (drain_grows n q).trans (drain_keeps_now n q) afterMessage_grows
+  ((drain_grows n q).trans (drain_keeps_now n q) afterMessage_grows).1
 
 
 /-- A clock advance that still has a deadline due after Limit.dueDeadlines deadlines halts with exceededDueDeadlines. -/

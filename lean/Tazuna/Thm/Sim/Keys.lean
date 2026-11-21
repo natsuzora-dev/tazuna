@@ -122,73 +122,10 @@ theorem keepsWorld_take (w : World) (own : String) (lines : List Scenario.Line) 
     | exact keeps_restart _
     | exact keeps_fireTo _ _ _ _
 
-/-- A line of When keeps every running service's createKey values: it may only add to them. -/
-theorem step_keepsKeys (w : World) (sc : Scenario) (l : Scenario.Line) (i : Nat) :
-    KeepsWorld keysRel w (w.step fsOf sc l i) := by
-  unfold World.step
-  split
-  · exact .refl _ w
-  · exact keepsWorld_line w _ _ i l (keepsWorld_take w _ _ i l)
-
-theorem keepsWorld_beginAll (w : World) : KeepsWorld keysRel w (w.beginAll fsOf) := by
-  unfold World.beginAll
-  rw [foldlM_id]
-  refine foldl_keeps (KeepsWorld keysRel w) _ (fun v x hv => ?_) _ _ (.refl _ w)
-  dsimp only
-  split
-  · exact hv
-  · exact keepsWorld_act hv _ _ _ (fun st s => keeps_begin _)
-
-theorem keeps_lookup_map (l : List (String × State)) (g : String × State → String × State)
-    (h : ∀ a, (g a).1 = a.1 ∧ KeepsKeys a.2 (g a).2) (p : String) :
-    KeepsKeys ((l.lookup p).getD { service := p }) (((l.map g).lookup p).getD { service := p }) := by
-  induction l with
-  | nil => exact .refl _
-  | cons a l ih =>
-    obtain ⟨q, x⟩ := a
-    obtain ⟨h₁, h₂⟩ := h (q, x)
-    show KeepsKeys ((List.lookup p ((q, x) :: l)).getD { service := p }) ((List.lookup p (g (q, x) :: _)).getD { service := p })
-    rw [show g (q, x) = (q, (g (q, x)).2) from Prod.ext h₁ rfl, List.lookup_cons, List.lookup_cons]
-    split
-    · exact h₂
-    · exact ih
-
-theorem keepsWorld_given (w : World) (j : Spec.Structure) (sc : Scenario) : KeepsWorld keysRel w (w.given j fsOf sc) := by
-  unfold World.given
-  simp only [bind, pure]
-  rw [foldlM_id]
-  have hn : ∀ (rs : List InvalidScenario) (v : World), (rs.foldl World.note v).states = v.states := by
-    intro rs; induction rs with
-    | nil => intro v; rfl
-    | cons r rs ih => intro v; simp only [List.foldl_cons]; rw [ih]; rfl
-  refine foldl_keeps (KeepsWorld keysRel w) _ (fun v x hv => ?_) _ _ (keepsWorld_states (.refl _ w) (hn _ _))
-  intro p
-  refine (hv p).trans ?_
-  have : ∀ (l : List (String × State)) (k : String) (rows : Records),
-      l.map (fun (q, s) => if q == k then (q, { s with records := rows }) else (q, s)) =
-        l.map fun a => (a.1, if a.1 == k then { a.2 with records := rows } else a.2) := by
-    intro l k rows; congr 1; funext a; obtain ⟨q, s⟩ := a; show ite _ _ _ = (q, ite _ _ _); cases q == k <;> rfl
-  split
-  split
-  all_goals
-    simp only [World.state, hn]
-    rw [this]
-    apply keeps_lookup_map
-    intro a
-    refine ⟨rfl, ?_⟩
-    split <;> exact .refl _
-
 /-- The lines of a scenario keep every running service's createKey values from the start: they may only add to them. -/
 @[guarantee] theorem execute_keepsKeys (j : Spec.Structure) (start : World) (sc : Scenario) :
-    KeepsWorld keysRel start (execute j fsOf start sc) := by
-  unfold execute World.execute
-  simp only [bind, pure]
-  have hg := keepsWorld_given (fsOf := fsOf) start j sc
-  split
-  · exact hg
-  · rw [foldlM_id]
-    refine foldl_keeps (KeepsWorld keysRel start) _ (fun v x hv => hv.trans (step_keepsKeys _ _ _ _)) _ _
-      (hg.trans (keepsWorld_beginAll _))
+    KeepsWorld keysRel start (execute j fsOf start sc) :=
+  execute_keeps (ρ := keysRel) (fun _ _ _ => keeps_begin _) (fun _ _ => KeepsKeys.refl _) keepsWorld_take j start sc
 
 theorem givenKeys_prefix (o : Option String) {es es' : List String} (h : es <+: es') :
     givenKeys { owner := o } es <+: givenKeys { owner := o } es' := by

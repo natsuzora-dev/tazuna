@@ -223,10 +223,7 @@ theorem growsBy_startWork (step : Nat) (name : InstanceId) : GrowsBy (startWork 
 
 theorem showAnswer_grows (name : InstanceId) (slot : String) (answer : Answer) (r : Processing) :
     Grows r.state (showAnswer st name slot answer r).state := by
-  refine Grows.of_lines ?_
-  unfold showAnswer
-  repeat' split
-  all_goals rfl
+  refine Grows.of_lines ?_ ?_ <;> unfold showAnswer <;> (repeat' split) <;> rfl
 
 theorem growsBy_answerTo (step : Nat) (a : Activity) (answer : Answer) (requester : Requester) :
     GrowsBy (answerTo fs st step a answer requester) := by
@@ -237,7 +234,8 @@ theorem growsBy_answerTo (step : Nat) (a : Activity) (answer : Answer) (requeste
     simp only [answerTo]
     repeat' split
     all_goals exact showAnswer_grows _ _ _ _
-  | automation n => exact Grows.of_lines (automationAnswer_lines _ _ _)
+  | automation n =>
+    exact Grows.of_lines (automationAnswer_lines _ _ _) (congrArg Fixed.service (automationAnswer_fixed _ _ _))
 
 @[guarantee] theorem stopped_machine_takes_no_event (step : Nat) (name : InstanceId) (key : String) (payload : Value) (r : Processing) (i : Instance)
     (hi : r.state.machine? name = some i) (hc : i.closed = true) :
@@ -296,8 +294,8 @@ theorem growsBy_workBody (step : Nat) (w : Work) : GrowsBy (workBody st fs step 
     repeat' split
     all_goals first
       | exact Grows.of_lines rfl
-      | exact ⟨#[_], Array.push_eq_append, by simp [State.createKeys]⟩
-      | (apply Grows.of_lines; simp)
+      | exact (Grows.of_lines (s' := s.createKeys _) rfl).trans rfl (await_grows ..)
+      | (apply Grows.of_lines <;> simp)
   | answered c answer cause =>
     simp only [workBody]
     repeat' split

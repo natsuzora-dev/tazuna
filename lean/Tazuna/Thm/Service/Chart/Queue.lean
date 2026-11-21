@@ -42,6 +42,12 @@ theorem Keeps.records {f : Processing → Id Processing} (h : Keeps f) (r : Proc
 theorem Keeps.now {f : Processing → Id Processing} (h : Keeps f) (r : Processing) : (f r).1.now = r.state.now :=
   congrArg Fixed.now (h r)
 
+@[simp] theorem report_state (r : Processing) (f : Finding) : (r.report f).state = r.state.report f := rfl
+
+theorem Keeps.service {f : Processing → Id Processing} (h : Keeps f) (r : Processing) :
+    (f r).1.service = r.state.service :=
+  congrArg Fixed.service (h r)
+
 theorem Keeps.started {f : Processing → Id Processing} (h : Keeps f) (r : Processing) : (f r).1.started = r.state.started :=
   congrArg Fixed.started (h r)
 
@@ -77,11 +83,13 @@ theorem Grows.comp {f g : Processing → Id Processing} (hf : GrowsBy f) (hk : K
 
 def SameLines (f : Processing → Id Processing) : Prop := ∀ r, (f r).1.lines = r.state.lines
 
-theorem SameLines.grows {f : Processing → Id Processing} (h : SameLines f) : GrowsBy f := fun r => Grows.of_lines (h r)
+theorem SameLines.grows {f : Processing → Id Processing} (h : SameLines f) (hk : Keeps f) : GrowsBy f :=
+  fun r => Grows.of_lines (h r) (hk.service r)
 
 theorem Grows.after {f : Processing → Id Processing} (hf : GrowsBy f) {r r' : Processing} (hl : r'.state.lines = r.state.lines)
-    (hn : r'.state.now = r.state.now) : Grows r.state (f r').1 :=
-  (Grows.of_lines hl).trans hn (hf r')
+    (hn : r'.state.now = r.state.now) (hs : r'.state.service = r.state.service := by first | rfl | simp) :
+    Grows r.state (f r').1 :=
+  (Grows.of_lines hl hs).trans hn (hf r')
 
 theorem sameLines_unlessHalted {f : Processing → Id Processing} (h : SameLines f) : SameLines (unlessHalted f) :=
   By.unlessHalted (R := fun s t => t.lines = s.lines) (fun _ => rfl) h

@@ -20,6 +20,17 @@ theorem keeps_fire (step : Nat) (t : Deadline) : Keeps (fire fs st step t) := by
     · rfl
     · exact keeps_applyCompletion _ _ _ _ r
 
+theorem growsBy_fire (step : Nat) (t : Deadline) : GrowsBy (fire fs st step t) := by
+  intro r
+  unfold fire
+  simp only [Tazuna.Thm.Service.Note.note_id, id_bind]
+  split
+  · exact Grows.of_lines rfl
+  · refine Grows.after (growsBy_withMachine (fun i r => ?_)) rfl rfl
+    split
+    · exact Grows.refl _
+    · exact growsBy_applyCompletion _ _ _ _ r
+
 @[guarantee] theorem fires_only_in_active_state (step : Nat) (t : Deadline) (r : Processing) (i : Instance)
     (hi : r.state.machine? t.machine = some i)
     (hn : (r.state.takeDeadline t).2 = false ∨ i.closed = true ∨ i.isIn t.state = false) :

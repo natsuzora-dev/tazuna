@@ -18,9 +18,10 @@ structure Fixed where
   records : Records
   now : Time
   started : Bool
+  service : String
 
 def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
-  ⟨s.commandAnswers, s.records, s.now, s.started⟩
+  ⟨s.commandAnswers, s.records, s.now, s.started, s.service⟩
 
 @[simp] theorem write_fixed (d : Dir) (g : Option LineId) (b : LineBody) (w : EmittedOf d b)
     (q : SenderOf d b) (r : RequestOf d b) : (s.write d g b w q r).1.fixed = s.fixed := rfl
@@ -58,6 +59,9 @@ def _root_.Tazuna.Service.State.fixed (s : State) : Fixed :=
   unfold State.report; split <;> rfl
 
 @[simp] theorem report_now (f : Finding) : (s.report f).now = s.now := by
+  unfold State.report; split <;> rfl
+
+@[simp] theorem report_service (f : Finding) : (s.report f).service = s.service := by
   unfold State.report; split <;> rfl
 
 theorem report_eq (f : Finding) :
@@ -118,6 +122,9 @@ theorem reportAll_preserves {α : Type} (g : State → α) (hg : ∀ (t : State)
 @[simp] theorem reportAll_now (fs : List Fault) : (s.reportAll fs).now = s.now :=
   reportAll_preserves State.now (fun _ _ => report_now ..) fs s
 
+@[simp] theorem reportAll_service (fs : List Fault) : (s.reportAll fs).service = s.service :=
+  reportAll_preserves (·.service) (fun _ _ => report_service ..) fs s
+
 @[simp] theorem setMachine_commandAnswers (name : InstanceId) (f : Instance → Instance) :
     (s.setMachine name f).commandAnswers = s.commandAnswers := rfl
 
@@ -166,27 +173,66 @@ theorem emitAll_clock (t : State) (r : Option LineId) (es : List (Emit × Emitte
   have h := emitAll_fixed (s := t) r es
   exact Prod.ext (congrArg Fixed.commandAnswers h) (congrArg Fixed.now h)
 
-def Grows (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now
+/--
+Each `out` line of `lines` has the id that State.write gives a line without one under `service`: its name and one more
+than the count of the lines before it with that name.
+-/
+def Numbered (service : String) (lines : Array Line) : Prop :=
+  ∀ pre l, pre ++ [l] <+: lines.toList → l.dir = .out →
+    l.id = .own s!"{l.body.idName service}#{namedCount service pre.toArray (l.body.idName service) + 1}"
 
-theorem Grows.refl (s : State) : Grows s s := ⟨#[], by simp, by simp⟩
+theorem numbered_push {service : String} {lines : Array Line} {l : Line} :
+    Numbered service (lines.push l) ↔ Numbered service lines ∧
+      (l.dir = .out →
+        l.id = .own s!"{l.body.idName service}#{namedCount service lines (l.body.idName service) + 1}") := by
+  refine ⟨fun h => ⟨fun pre x hp => h pre x (hp.trans (by simp)), h _ _ (by simp)⟩, fun ⟨h, hl⟩ pre x hp => ?_⟩
+  rcases List.prefix_concat_iff.mp (by simpa using hp) with he | hp
+  · obtain ⟨rfl, hx⟩ := List.append_inj' he rfl
+    cases hx
+    simpa using hl
+  · exact h pre x hp
 
-theorem Grows.of_lines {s s' : State} (h : s'.lines = s.lines) : Grows s s' := ⟨#[], by simp [h], by simp⟩
+/-- `s'` keeps the lines of `s`, adding lines at the time of `s`, and numbers its `out` lines as State.write does. -/
+def Grows (s s' : State) : Prop :=
+  (∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, l.time = s.now) ∧
+    (Numbered s.service s.lines → Numbered s'.service s'.lines)
+
+theorem Grows.refl (s : State) : Grows s s := ⟨⟨#[], by simp, by simp⟩, id⟩
+
+theorem Grows.of_lines {s s' : State} (h : s'.lines = s.lines) (hs : s'.service = s.service := by first | rfl | simp) :
+    Grows s s' :=
+  ⟨⟨#[], by simp [h], by simp⟩, by rw [h, hs]; exact id⟩
 
 theorem Grows.trans {a b c : State} (h₁ : Grows a b) (hn : b.now = a.now) (h₂ : Grows b c) : Grows a c := by
-  obtain ⟨n₁, e₁, t₁⟩ := h₁
-  obtain ⟨n₂, e₂, t₂⟩ := h₂
-  refine ⟨n₁ ++ n₂, by rw [e₂, e₁, Array.append_assoc], ?_⟩
+  obtain ⟨⟨n₁, e₁, t₁⟩, m₁⟩ := h₁
+  obtain ⟨⟨n₂, e₂, t₂⟩, m₂⟩ := h₂
+  refine ⟨⟨n₁ ++ n₂, by rw [e₂, e₁, Array.append_assoc], ?_⟩, m₂ ∘ m₁⟩
   intro l hl
   rcases Array.mem_append.mp hl with h | h
   · exact t₁ l h
   · rw [t₂ l h, hn]
 
-theorem Grows.bridge {a b c : State} (h : Grows b c) (hl : b.lines = a.lines) (hn : b.now = a.now) : Grows a c :=
-  (Grows.of_lines hl).trans hn h
+theorem Grows.bridge {a b c : State} (h : Grows b c) (hl : b.lines = a.lines) (hn : b.now = a.now)
+    (hs : b.service = a.service := by first | rfl | simp) : Grows a c :=
+  (Grows.of_lines hl hs).trans hn h
 
 theorem grows_write (d : Dir) (g : Option LineId) (b : LineBody) (w : EmittedOf d b := by exact ())
-    (q : SenderOf d b) (r : RequestOf d b) : Grows s (s.write d g b w q r).1 :=
-  ⟨#[_], Array.push_eq_append, by simp⟩
+    (q : SenderOf d b) (r : RequestOf d b) (hg : d = .out → g = none := by simp) : Grows s (s.write d g b w q r).1 :=
+  ⟨⟨#[_], Array.push_eq_append, by simp⟩, fun h => numbered_push.mpr ⟨h, fun hd => by
+    simp [State.write, State.lineId, hg hd]⟩⟩
+
+@[simp] theorem takeQueued_service (n : Nat) : (s.takeQueued n).1.service = s.service := rfl
+
+@[simp] theorem newCommandStep_service (c : Nat) (sender : Spec.Ref) :
+    (s.newCommandStep c sender).1.1.service = s.service := rfl
+
+@[simp] theorem await_service (b : LineBody) (q : Requester) (a : Activity) (i : Value) :
+    (s.await b q a i).service = s.service := rfl
+
+@[simp] theorem createKeys_service (es : List String) : (s.createKeys es).service = s.service := rfl
+
+theorem await_grows (b : LineBody) (q : Requester) (a : Activity) (i : Value) : Grows s (s.await b q a i) :=
+  (grows_write (s := s) .out none b default _ _).trans rfl (Grows.of_lines rfl)
 
 theorem foldl_grows {α : Type} (f : State → α → State) (h : ∀ t x, Grows t (f t x)) (hn : ∀ t x, (f t x).now = t.now)
     (xs : List α) (t : State) : Grows t (xs.foldl f t) := by
