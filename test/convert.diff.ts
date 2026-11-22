@@ -129,6 +129,7 @@ function sourceOf(stored: readonly Stored[], reads: ReadPart[]): RecordSource {
 
 const args = ["input", "records", "createKey"] as const;
 const keys: Keys = { owner: "fixtures", next: { Task: { count: 2 } } };
+const fields = Object.fromEntries(Object.entries(entities).map(([name, e]) => [name, Object.keys(e.fields)]));
 
 /** The schemas of a fixture's input of `shape` and of the records. */
 const typedOf = (shape: Shape): Typed => ({
@@ -164,7 +165,7 @@ for (const [i, { fixture, ir }] of converted.entries())
         } catch (error) {
           ts = { issue: error instanceof NotOnly ? "notOnly" : "thrown" };
         }
-        const evaluated = lean.evaluate(ir, json, stored, keys);
+        const evaluated = lean.evaluate(ir, json, stored, keys, fields);
         const { value, issue } = evaluated;
         assert.deepEqual(
           {

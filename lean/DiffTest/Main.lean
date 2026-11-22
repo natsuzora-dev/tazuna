@@ -432,8 +432,9 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .sort schema value => pure (.sorted (sortCollections schema value))
   | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))
   | .schemaOf s service schema => do pure (.schemaOf ((← Service.ofStructure s service).schemaOf schema))
-  | .evaluate body input records keys =>
-    let env : Ir.Env := { args := Ir.argsOf [(.input, .json input)], records := records.map Stored.row, keys }
+  | .evaluate body input records keys fields =>
+    let env : Ir.Env := { args := Ir.argsOf [(.input, .json input)], records := records.map Stored.row, keys,
+                          fields := fun e => (fields.lookup e).getD [] }
     let (answer, trace) := (do Ir.encode env (← Ir.eval env [] body)).run'
     let reads := trace.parts.map ReadPart.of
     let created := trace.created

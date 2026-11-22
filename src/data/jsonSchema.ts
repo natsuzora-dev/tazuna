@@ -48,42 +48,36 @@ const isSchema = (value: unknown): value is JsonSchema =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * Returns `schema` with each union option that is a `$ref` written out once: Zod writes a recursive schema as a `$ref`,
- * which states no type, so Lean's `fits` would take any value for it. Once is enough: only a union that sorts or holds
- * a collection reads its options, and a recursion holds no collection (Malformed.opaqueCollection), so such a union
- * sits outside every recursion.
+ * Returns `schema` with each `$ref` written out, and without `$defs` once nothing names them: Zod writes a schema that
+ * a registry names, or a recursion, as a `$ref`, which states no type, so Lean's parse and `fits` would know nothing of
+ * it. A `$ref` inside the schema that it names stays, since a recursion has no end; check reports z.lazy
+ * (Restricted.schema), so only an unchecked spec has one.
  */
-function inlineOptions(schema: JsonSchema): JsonSchema {
+function inlineRefs(schema: JsonSchema): JsonSchema {
+  const defs = schema["$defs"];
   const named = (ref: Json): Json | undefined => {
     if (ref === "#") return schema;
     const name = typeof ref === "string" && ref.startsWith("#/$defs/") ? ref.slice("#/$defs/".length) : undefined;
-    const defs = schema["$defs"];
     return name !== undefined && isSchema(defs) ? defs[name] : undefined;
   };
-  const option = (o: Json): Json => {
-    if (!isSchema(o) || o["$ref"] === undefined) return o;
-    const target = named(o["$ref"]);
-    if (!isSchema(target)) return o;
-    const { $defs: _, $schema: __, ...inlined } = target;
-    const { $ref: ___, ...own } = o;
-    return { ...inlined, ...own };
-  };
-  const walk = (value: Json): Json => {
-    if (Array.isArray(value)) return value.map(walk);
+  let kept = false;
+  const walk = (value: Json, inside: readonly Json[]): Json => {
+    if (Array.isArray(value)) return value.map((v) => walk(v, inside));
     if (!isSchema(value)) return value;
+    const ref = value["$ref"];
+    const target = ref === undefined ? undefined : named(ref);
+    if (isSchema(target) && !inside.includes(ref ?? null)) {
+      const { $defs: _, $schema: __, ...inlined } = target;
+      const { $ref: ___, ...own } = value;
+      return walk({ ...inlined, ...own }, [...inside, ref ?? null]);
+    }
+    if (ref !== undefined) kept = true;
     return Object.fromEntries(
-      Object.entries(value).map(([key, v]) => [
-        key,
-        (key === "anyOf" || key === "oneOf") && Array.isArray(v)
-          ? v.map((o) => {
-              const inlined = option(o);
-              return inlined === o ? walk(o) : inlined;
-            })
-          : walk(v),
-      ]),
+      Object.entries(value).flatMap(([key, v]) => (key === "$defs" ? [] : [[key, walk(v, inside)]])),
     );
   };
-  return walk(schema) as JsonSchema;
+  const inlined = walk(schema, []) as JsonSchema;
+  return kept && defs !== undefined ? { ...inlined, $defs: defs } : inlined;
 }
 
 /**
@@ -110,14 +104,14 @@ function validation(schema: z.ZodType): JsonSchema {
 }
 
 /**
- * The JSON Schema of `schema` as parsing reads it, with every object closed by `strict` and each union option written
- * out (inlineOptions).
+ * The JSON Schema of `schema` as parsing reads it, with every object closed by `strict` and each `$ref` written out
+ * (inlineRefs).
  */
 export const jsonSchema = (schema: z.ZodType): JsonSchema => jsonSchemaOf(schema, false);
 
 /** The JSON Schema of `schema`, with what Lean's parse reads beyond it (validation) when `validated`. */
 const jsonSchemaOf = (schema: z.ZodType, validated: boolean): JsonSchema =>
-  inlineOptions(
+  inlineRefs(
     z.toJSONSchema(strict(schema), {
       io: "input",
       unrepresentable: "any",

@@ -271,10 +271,16 @@ export class Lean {
 
   /**
    * The value of `body` with `input` as its only argument over `records` and createKey over `keys`, as Lean evaluates
-   * the IR, its reads, and the entities it made keys of.
+   * the IR, its reads, and the entities it made keys of. `fields` names each entity's fields, which a record writes.
    */
-  evaluate(body: Expr, input: Json, records: readonly Stored[], keys: Keys): Evaluated {
-    return this.exchange({ type: "evaluate", body, input, records, keys }).result;
+  evaluate(
+    body: Expr,
+    input: Json,
+    records: readonly Stored[],
+    keys: Keys,
+    fields: Readonly<Record<string, readonly string[]>>,
+  ): Evaluated {
+    return this.exchange({ type: "evaluate", body, input, records, keys, fields }).result;
   }
 
   /** `value` parsed by the JSON Schema `schema` as Lean parses, or undefined where Lean leaves the schema to Zod. */

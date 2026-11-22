@@ -246,11 +246,8 @@ class Conversion {
       const receiver = this.present(e.expression);
       if (e.name.text === "length" && (receiver === "string" || receiver === "array")) return true;
       if (e.name.text === "size" && (receiver === "bag" || receiver === "table")) return true;
-      const object = unwrapped(e.expression);
-      if (isIdentifier(object) && !scope.has(object.text)) {
-        const constant = this.constantField(object, e.name.text, e);
-        if (constant !== undefined) return constant.op === "lit" && Number.isSafeInteger(constant.value);
-      }
+      const constant = this.constantField(e.expression, e.name.text, e, scope);
+      if (constant !== undefined) return constant.op === "lit" && Number.isSafeInteger(constant.value);
     }
     if (isIdentifier(e) && !scope.has(e.text)) {
       const literal = this.constLiteral(e);
@@ -447,9 +444,28 @@ class Conversion {
     }
   }
 
+  /**
+   * The declaration of the value that `group` reads outside the function: a name, or a member of a contract, such as
+   * `todo.todoConstants`, which the contract lists under the name it declares.
+   */
+  private outsideDeclaration(group: Expression, scope: Scope): Node | undefined {
+    const g = unwrapped(group);
+    if (isIdentifier(g)) return scope.has(g.text) ? undefined : this.declarationOf(g);
+    if (!isPropertyAccessExpression(g) || !isIdentifier(g.name)) return undefined;
+    const owner = unwrapped(g.expression);
+    if (!isIdentifier(owner) || scope.has(owner.text)) return undefined;
+    const { checker } = this.source;
+    const member = checker.getSymbolAtLocation(g.name)?.valueDeclaration?.resolve();
+    if (member === undefined) return undefined;
+    if (isPropertyAssignment(member) && isIdentifier(member.initializer)) return this.declarationOf(member.initializer);
+    const value = isShorthandPropertyAssignment(member) ? checker.getShorthandAssignmentValueSymbol(member) : undefined;
+    const target = value !== undefined && value.flags & SymbolFlags.Alias ? checker.getAliasedSymbol(value) : value;
+    return target?.valueDeclaration?.resolve();
+  }
+
   /** The field `name` of the `constants()` group that `group` reads, as a literal, when it is a scalar. */
-  private constantField(group: Identifier, name: string, e: Node): Expr | undefined {
-    const d = this.declarationOf(group);
+  private constantField(group: Expression, name: string, e: Node, scope: Scope): Expr | undefined {
+    const d = this.outsideDeclaration(group, scope);
     if (d === undefined || !isVariableDeclaration(d) || !isIdentifier(d.name)) return undefined;
     const values = this.defined.constants.get(definedKey(d.getSourceFile().fileName, d.name.text));
     if (values === undefined) return undefined;
@@ -757,10 +773,8 @@ class Conversion {
       if (name === "createKey") this.fail(e, "reads createKey other than by a call");
       return this.argument(e, name);
     }
-    if (isIdentifier(target) && !scope.has(target.text)) {
-      const constant = this.constantField(target, name, e);
-      if (constant !== undefined) return constant;
-    }
+    const constant = this.constantField(target, name, e, scope);
+    if (constant !== undefined) return constant;
     const receiver = this.present(e.expression);
     const object = this.expression(e.expression, scope);
     const plain = (op: "strLen" | "size"): Expr => {

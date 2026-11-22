@@ -246,6 +246,7 @@ export const fixtures: readonly Fixture[] = [
     ({ input, records }) =>
       records.Task.filter((t) => t.done).size > 0 || records.Task.some((t) => t.title === input.title),
   ),
+  recordFixture("table", {}, fc.record({}), ({ records }) => ({ tasks: records.Task })),
   recordFixture("table", {}, fc.record({}), ({ records }) => records.Task.every((t) => t.at === null || t.at >= 0)),
   recordFixture("single", { n: z.number() }, fc.record({ n: number }), ({ input, records }) =>
     records.Settings.limit > input.n ? records.Settings.limit : input.n,

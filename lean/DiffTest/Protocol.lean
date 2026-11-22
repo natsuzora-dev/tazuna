@@ -74,8 +74,12 @@ inductive Request where
   | keyOrdered (schema value : Value)
   /-- Service.schemaOf of the service `service` of the structure. -/
   | schemaOf («structure» : Spec.Structure) (service : String) (schema : Schema)
-  /-- The value of an IR expression whose only argument is `input`, over `records`, with createKey over `keys`. -/
+  /--
+  The value of an IR expression whose only argument is `input`, over `records` whose entities have `fields` in their
+  schemas' order, with createKey over `keys`.
+  -/
   | evaluate (body : Ir.Expr) (input : Value) (records : List Stored) (keys : Keys)
+      (fields : List (String × List String))
   /-- `value` parsed by the JSON Schema `schema` as Lean's Data.parse does. -/
   | parse (schema : Value) (value : Value)
 

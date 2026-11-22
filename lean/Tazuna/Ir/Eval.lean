@@ -420,7 +420,7 @@ end
 
 /--
 The JSON of a value, none for `undefined`, as TS's encoding and JSON.stringify write it. A record reads every field of
-its entity, in the schema's order, as encoding the records view's record does; a table has no JSON.
+its entity, in the schema's order, as encoding the records view's record does, and a table is the list of its records.
 -/
 partial def encode (env : Env) : Val → EvalM (Option Value)
   | .undef => pure none
@@ -434,7 +434,7 @@ partial def encode (env : Env) : Val → EvalM (Option Value)
       | .json v => pure (some (name, v))
       | _ => pure none
     pure (some (.obj present))
-  | .table .. => throw (.thrown none)
+  | .table source entity => do encode env (.list (← elements (.table source entity)))
   | .tracked _ v => pure (some v)
   | .emit _ payload => do pure (some (.obj [("kind", .str "emit"), ("payload", (← encode env payload).getD .null)]))
   | .nonFinite _ => pure (some .null)

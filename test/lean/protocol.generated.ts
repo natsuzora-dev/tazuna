@@ -310,13 +310,17 @@ export type Request =
       readonly service: string;
       readonly schema: Schema;
     }
-  /** The value of an IR expression whose only argument is `input`, over `records`, with createKey over `keys`. */
+  /**
+   * The value of an IR expression whose only argument is `input`, over `records` whose entities have `fields` in their
+   * schemas' order, with createKey over `keys`.
+   */
   | {
       readonly type: "evaluate";
       readonly body: Expr;
       readonly input: Json;
       readonly records: readonly Stored[];
       readonly keys: Keys;
+      readonly fields: Readonly<Record<string, readonly string[]>>;
     }
   /** `value` parsed by the JSON Schema `schema` as Lean's Data.parse does. */
   | {
