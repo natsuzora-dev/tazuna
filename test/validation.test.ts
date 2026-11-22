@@ -7,10 +7,11 @@ import { testExamples } from "./expected.ts";
 
 const roots = { illegal: "Illegal", nonCanonical: "NonCanonical" } as const;
 
-test("The folder names directly under test/validation/<group> are the file names of src/validation except check.ts", () => {
-  const targets = readdirSync(join(import.meta.dirname, "../src/validation"))
-    .filter((file) => file !== "check.ts")
-    .map((file) => basename(file, ".ts"));
+test("The folder names directly under test/validation/<group> are the module names of lean/Tazuna/Validation with a lowercase first letter, except Check, Illegal and NonCanonical", () => {
+  const targets = readdirSync(join(import.meta.dirname, "../lean/Tazuna/Validation"))
+    .map((file) => basename(file, ".lean"))
+    .filter((name) => !["Check", "Illegal", "NonCanonical"].includes(name))
+    .map((name) => name.charAt(0).toLowerCase() + name.slice(1));
   const named = Object.keys(roots).flatMap((group) =>
     folders(join(import.meta.dirname, "validation", group)).map((folder) => basename(folder)),
   );

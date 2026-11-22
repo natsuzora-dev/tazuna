@@ -8,11 +8,9 @@ import { Converter } from "../src/convert/program.ts";
 import { bagValues, NotOnly } from "../src/data/bag.ts";
 import { decoded } from "../src/data/collections.ts";
 import { type Json, objectOf, type Shape } from "../src/data/values.ts";
-import { givenKeys } from "../src/service/functions.ts";
-import type { RecordSource } from "../src/service/records.ts";
-import { recordsView } from "../src/sim/spec/records.ts";
 import type { Expr } from "../src/spec/ir.generated.ts";
 import { defined, entities, fixtures, keyOf, outside } from "./convert/fixtures.ts";
+import { type RecordSource, recordsView } from "./convert/records.ts";
 import { Lean } from "./lean/lean.ts";
 
 const lean = new Lean();
@@ -156,7 +154,9 @@ for (const [i, { fixture, ir }] of converted.entries())
         const created: string[] = [];
         const createKey = (r: unknown) => {
           created.push(keyOf(r));
-          return givenKeys({ ...keys, next: Object.entries(keys.next) }, created).at(-1)?.[1];
+          const entity = created.at(-1) ?? "";
+          const count = (keys.next[entity]?.count ?? 0) + created.filter((c) => c === entity).length;
+          return `${keys.owner}/${entity}-${count}`;
         };
         let ts: { readonly value?: Json } | { readonly issue: "thrown" | "notOnly" };
         try {

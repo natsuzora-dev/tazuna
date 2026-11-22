@@ -1,6 +1,6 @@
 name = "tazuna-lean"
 version = "0.1.0"
-defaultTargets = ["Tazuna", "tazuna-lean", "tazuna-generate", "tazuna-axioms", "tazuna-graph"]
+defaultTargets = ["Tazuna", "Engine", "tazuna-engine", "tazuna-generate", "tazuna-axioms", "tazuna-graph"]
 
 [leanOptions]
 autoImplicit = false
@@ -14,13 +14,9 @@ globs = ["Tazuna.+"]
 name = "Engine"
 globs = ["Engine.+"]
 
-[[lean_lib]]
-name = "DiffTest"
-roots = ["DiffTest.Json", "DiffTest.Protocol"]
-
 [[lean_exe]]
-name = "tazuna-lean"
-root = "DiffTest.Main"
+name = "tazuna-engine"
+root = "Engine.Main"
 
 [[lean_exe]]
 name = "tazuna-generate"

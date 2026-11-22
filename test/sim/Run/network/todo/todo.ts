@@ -37,14 +37,14 @@ export const addTask = command({
 ]);
 
 export const addTasks = command({
-  input: { taskIds: z.array(Task.fields.id) },
+  input: { firstId: Task.fields.id, secondId: Task.fields.id },
   emits: [taskAddedRecorded, taskAdded],
-}).decide(({ input }) =>
-  input.taskIds.flatMap((taskId) => [
-    emit(taskAddedRecorded, { id: taskId, title: taskId, seen: false }),
-    emit(taskAdded, { taskId }),
-  ]),
-);
+}).decide(({ input }) => [
+  emit(taskAddedRecorded, { id: input.firstId, title: input.firstId, seen: false }),
+  emit(taskAdded, { taskId: input.firstId }),
+  emit(taskAddedRecorded, { id: input.secondId, title: input.secondId, seen: false }),
+  emit(taskAdded, { taskId: input.secondId }),
+]);
 
 export const markSeen = command({ input: { taskId: ref(Task) }, emits: [taskSeenRecorded] }).decide(({ input }) => [
   emit(taskSeenRecorded, { id: input.taskId, seen: true }),

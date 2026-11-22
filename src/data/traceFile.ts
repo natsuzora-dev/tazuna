@@ -18,8 +18,7 @@ export interface Run {
 }
 
 /** The name of a run's snapshot and trace file: the scenario's, or `<scenario>.<runner>` for a peer's run. */
-export const runStem = (run: Run): string =>
-  run.runner === run.service ? run.scenario : `${run.scenario}.${run.runner}`;
+const runStem = (run: Run): string => (run.runner === run.service ? run.scenario : `${run.scenario}.${run.runner}`);
 
 /** The path of a run's trace in a trace folder, and of its snapshot in the snapshot folder: `<service>/<stem>.jsonl`. */
 export const runFile = (run: Run): string => join(run.service, `${runStem(run)}.jsonl`);

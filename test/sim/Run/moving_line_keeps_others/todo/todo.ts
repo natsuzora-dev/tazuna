@@ -36,16 +36,6 @@ export const addTask = command({
   emit(taskAdded, { taskId: input.taskId }),
 ]);
 
-export const addTasks = command({
-  input: { taskIds: z.array(Task.fields.id) },
-  emits: [taskAddedRecorded, taskAdded],
-}).decide(({ input }) =>
-  input.taskIds.flatMap((taskId) => [
-    emit(taskAddedRecorded, { id: taskId, title: taskId, seen: false }),
-    emit(taskAdded, { taskId }),
-  ]),
-);
-
 export const markSeen = command({ input: { taskId: ref(Task) }, emits: [taskSeenRecorded] }).decide(({ input }) => [
   emit(taskSeenRecorded, { id: input.taskId, seen: true }),
 ]);

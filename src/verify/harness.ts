@@ -1,14 +1,13 @@
 import type { CheckedSpec } from "../check/spec.ts";
-import { Bag, Ref, Runs } from "../data/canonical.ts";
+import { ask } from "../cli/engine.ts";
+import type { ReadLine } from "../cli/protocol.generated.ts";
 import { InternalError } from "../data/internalError.ts";
 import { type TraceLine, traceLine } from "../data/trace.generated.ts";
 import type { Bindings, UntimedTraceLine } from "../data/trace.ts";
 import type { Run } from "../data/traceFile.ts";
 import { plain } from "../data/values.ts";
 import { traceName } from "../load/traceName.ts";
-import { givenRecordsOf } from "../sim/spec/simulate.ts";
 import type { Adapter, ForeignRequest, OutputSlot, Outputs } from "./adapter.ts";
-import { compareTrace, readLine } from "./compare.ts";
 import { readSnapshot } from "./snapshot.ts";
 
 interface Waiting extends ForeignRequest {
@@ -31,31 +30,48 @@ function required<F>(receive: F | undefined, type: string): F {
   return receive;
 }
 
-/** Returns `value` with each key reference that `bindings` binds replaced by its bound value, as plain JSON. */
-function substitutedRefs(bindings: Bindings, value: unknown): unknown {
-  if (value instanceof Ref) return bindings.get(value.value) ?? value.value;
-  if (value instanceof Bag) return value.items.map((v) => substitutedRefs(bindings, v));
-  if (value instanceof Runs) return value.runs.flatMap((r) => r.items.map((v) => substitutedRefs(bindings, v)));
-  if (Array.isArray(value)) return value.map((v) => substitutedRefs(bindings, v));
-  if (value !== null && typeof value === "object")
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, substitutedRefs(bindings, v)]));
-  return value;
+/** A value as verify reads it, tagged by its variant (Lean's CValue.tagged). */
+type Tagged =
+  | { readonly leaf: unknown }
+  | { readonly ref: readonly [string, string] }
+  | { readonly arr: readonly Tagged[] }
+  | { readonly bag: readonly Tagged[] }
+  | { readonly runs: readonly Tagged[] }
+  | { readonly obj: readonly (readonly [string, Tagged])[] };
+
+/** Returns `value` as plain JSON, with each key reference that `bindings` binds replaced by its bound value. */
+function substitutedRefs(bindings: Bindings, value: Tagged): unknown {
+  if ("leaf" in value) return value.leaf;
+  if ("ref" in value) return bindings.get(value.ref[1]) ?? value.ref[1];
+  if ("arr" in value) return value.arr.map((v) => substitutedRefs(bindings, v));
+  if ("bag" in value) return value.bag.map((v) => substitutedRefs(bindings, v));
+  if ("runs" in value) return value.runs.flatMap((r) => substitutedRefs(bindings, r) as unknown[]);
+  return Object.fromEntries(value.obj.map(([k, v]) => [k, substitutedRefs(bindings, v)]));
 }
 
 /**
- * The `in` line, as readLine reads it, with the snapshot values that the bindings bind replaced in its key positions:
+ * The `in` line as verify reads it, with the snapshot values that the bindings bind replaced in its key positions:
  * the answered request, resultOf and the key references of the content. Any other string stays as the snapshot has it.
  */
-function substitutedLine(bindings: Bindings, line: TraceLine): TraceLine {
-  const value = (v: unknown) => plain(substitutedRefs(bindings, v));
+function substitutedLine(bindings: Bindings, read: ReadLine): TraceLine {
+  const { line } = read;
+  const value = read.value === undefined ? undefined : plain(substitutedRefs(bindings, read.value as Tagged));
   const id = (s: string | undefined) => (s === undefined ? undefined : (bindings.get(s) ?? s));
+  const content =
+    value === undefined
+      ? {}
+      : line.type === "command" || line.type === "query" || line.type === "subscribe"
+        ? { input: value }
+        : line.type === "event" || line.type === "operation"
+          ? { payload: value }
+          : line.type === "answer" && "output" in line.answer
+            ? { answer: { ...line.answer, output: value } }
+            : {};
   return traceLine.parse({
     ...line,
     ...("to" in line ? { to: id(line.to) } : {}),
     ...("resultOf" in line && line.resultOf !== undefined ? { resultOf: id(line.resultOf) } : {}),
-    ...("input" in line && line.input !== undefined ? { input: value(line.input) } : {}),
-    ...("payload" in line && line.payload !== undefined ? { payload: value(line.payload) } : {}),
-    ...("answer" in line && line.answer !== undefined ? { answer: value(line.answer) } : {}),
+    ...content,
   });
 }
 
@@ -77,8 +93,8 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
     .scenario;
   if (scenario === undefined) throw new InternalError(`no scenario ${run.service}.${run.scenario}`);
   const snapshot = readSnapshot(spec, run);
-  const read = readLine(spec, runner);
-  const readSnapshotLines = snapshot.map((l) => read(l));
+  const [read] = ask("readLines", [{ structure: spec.structure, service: runner, lines: snapshot }]);
+  const readSnapshotLines = read?.lines ?? [];
   const lines: (TraceLine | undefined)[] = [];
   // Keyed by who gave the id, the implementation or the harness, so that neither id hides the other.
   const waiting = new Map<string, Waiting>();
@@ -148,7 +164,13 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
   const running = (work: Promise<void>) => void work.catch((error: unknown) => failures.push(error));
   const writeAnswer = (to: string, answer: unknown) =>
     write({ dir: "out", type: "answer", id: lineId("answer"), to, answer: plain(answer) } as UntimedTraceLine);
-  const comparedBefore = (k: number) => compareTrace(spec, runner, snapshot.slice(0, k), written());
+  const comparedBefore = (k: number) => {
+    const [verified] = ask("verifyTrace", [
+      { structure: spec.structure, service: runner, snapshot: snapshot.slice(0, k), trace: written() },
+    ]);
+    const [first] = verified?.bindings ?? [];
+    return { found: verified?.findings ?? [], first: new Map(Object.entries(first ?? {})) };
+  };
 
   async function give(line: TraceLine): Promise<void> {
     const { time: _, ...untimed } = line;
@@ -209,7 +231,8 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
     }
   }
 
-  await adapter.start(outputs, scenario.given.start, givenRecordsOf(spec, scenario, runner));
+  const [given] = ask("givenRecords", [{ structure: spec.structure, scenario, service: runner }]);
+  await adapter.start(outputs, scenario.given.start, given?.records ?? []);
   for (const [k, line] of snapshot.entries()) {
     if (line.dir === "out") continue;
     await adapter.settled();
@@ -220,7 +243,8 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
     const compared = comparedBefore(k);
     // The comparison compares nothing after an Uncomparable finding, so the later lines would go by no binding.
     if (compared.found.some(({ kind }) => kind.startsWith("Uncomparable."))) break;
-    await give(substitutedLine(compared.first, readSnapshotLines[k] ?? line));
+    const readLine = readSnapshotLines[k];
+    await give(readLine === undefined || readLine === null ? line : substitutedLine(compared.first, readLine));
   }
   await adapter.settled();
   for (const controller of subscriptions.values()) controller.abort();

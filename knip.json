@@ -23,6 +23,7 @@
     "type": true
   },
   "ignoreIssues": {
-    "src/data/scenario.generated.ts": ["types"]
+    "src/data/*.generated.ts": ["types"],
+    "src/spec/structure.generated.ts": ["types"]
   }
 }

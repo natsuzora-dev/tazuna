@@ -2,19 +2,14 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { test } from "node:test";
-import { InternalError } from "../src/data/internalError.ts";
+import { ask } from "../src/cli/engine.ts";
 import { invalidScenarioKinds } from "../src/data/invalidScenario.generated.ts";
 import { scenario } from "../src/data/scenario.generated.ts";
-import { serviceOf } from "../src/service/basic.ts";
-import { Failed, sorting } from "../src/service/functions.ts";
-import type { RecordSource } from "../src/service/records.ts";
-import { SpecFunctions } from "../src/sim/spec/functions.ts";
-import { outcomeOf, simulateSpec } from "../src/sim/spec/simulate.ts";
 import {
+  convertedSpec,
   folders,
   isServiceFolder,
   leanModulePaths,
-  loadedSpec,
   outcomeSuffix,
   scenarioSuffix,
   simExamples,
@@ -52,11 +47,12 @@ test("Every folder under test/sim is a Lean Sim module path or an example direct
 const outcomes = new Map<string, readonly string[]>();
 
 for (const { root, scenarios } of examples) {
-  const spec = await loadedSpec(root);
+  const spec = await convertedSpec(root);
   for (const name of scenarios)
     test(`${relative(tests, root)}/${name}: the simulation gives the outcome of ${name}${outcomeSuffix}`, (t) => {
       const sc = scenario.parse(JSON.parse(readFileSync(join(root, `${name}${scenarioSuffix}`), "utf8")));
-      const outcome = outcomeOf(simulateSpec(spec, sc));
+      const [outcome] = ask("simulate", [{ structure: spec.structure, scenario: sc }]);
+      if (outcome === undefined) throw new Error("the engine gave no outcome");
       outcomes.set(`${root}/${name}`, [
         ...outcome.violations.map((r) => r.kind),
         ...(outcome.halted === null ? [] : [outcome.halted.kind]),
@@ -83,35 +79,4 @@ test("Each InvalidScenario kind is in the expected outcome of some scenario unde
     invalidScenarioKinds.filter((kind) => !reported.has(kind)),
     [],
   );
-});
-
-test("An InternalError raised inside author code stops the question instead of becoming the author's thrown Issue", async () => {
-  const spec = await loadedSpec(join(tests, "../samples/todo/spec"));
-  const functions = new SpecFunctions(spec, "todo");
-  const broken = new InternalError("the records lost a row");
-  const records: RecordSource = {
-    keys: () => [],
-    exists: () => {
-      throw broken;
-    },
-    field: () => {
-      throw broken;
-    },
-  };
-  const now = Date.UTC(2026, 9, 25);
-  assert.throws(() => functions.binding("completeTask", "task", { taskId: "task-1" }, records, now), broken);
-});
-
-test("The sorting functions sort what parse fills with a default that the spec writes out of order", async () => {
-  const spec = await loadedSpec(join(tests, "service/Records/sorted-by"));
-  const fs = sorting(serviceOf(spec.structure, "todo"), new SpecFunctions(spec, "todo"));
-  const parsed = fs.parse({ kind: "input", definition: { service: "todo", name: "shelve" } }, {});
-  assert.ok(!(parsed instanceof Failed) && "encoded" in parsed);
-  assert.deepEqual(parsed.encoded, {
-    names: ["home", "shop"],
-    entries: [
-      { day: 1, title: "Buy milk" },
-      { day: 2, title: "Buy eggs" },
-    ],
-  });
 });

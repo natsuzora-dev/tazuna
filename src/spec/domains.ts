@@ -1,8 +1,8 @@
 import { expectFound } from "../data/internalError.ts";
 import type { Schema, SchemaStep } from "../data/schema.generated.ts";
-import { isObject, type Json, sameJson } from "../data/values.ts";
+import { isObject, type Json } from "../data/values.ts";
 import type { Structure } from "./structure.generated.ts";
-import { type DefinitionStructure, type DomainStructure, receivesOf, requestsOf } from "./structure.ts";
+import { type DefinitionStructure, receivesOf, requestsOf } from "./structure.ts";
 
 /** Lean's Tree. */
 export type Tree =
@@ -25,7 +25,7 @@ export type TreeOf =
   | { readonly ok: false; readonly undeclared: Undeclared };
 
 /** Lean's Tree.values. */
-export function treeValues(t: Tree): Json[] {
+function treeValues(t: Tree): Json[] {
   switch (t.kind) {
     case "listed":
       return [...t.values];
@@ -170,12 +170,6 @@ function treeOf(
 
 /** Lean's rootTree. */
 export const rootTree = (declared: Declared, json: Json): TreeOf => treeOf(declared, defsOf(json), json, []);
-
-/** Lean's domainOf. */
-export const domainOf =
-  (domains: readonly DomainStructure[], schema: Schema): Declared =>
-  (path) =>
-    domains.find((d) => sameJson(d.schema, schema) && sameJson(d.path, path))?.values;
 
 const ref = (d: DefinitionStructure) => ({ service: d.service, name: d.name });
 

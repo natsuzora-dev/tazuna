@@ -1,36 +1,11 @@
 import { existsSync, readdirSync } from "node:fs";
+import type { DefinitionRef } from "./definitionRef.ts";
+import type { Run } from "./traceFile.ts";
+import type { Uncomparable } from "./uncomparable.generated.ts";
 
 export interface Entry {
   readonly name: string;
   readonly kind: "file" | "folder" | "other";
-}
-
-export interface Pairing<T> {
-  /** The expected values whose name has a <name>.jsonl file, in their order. */
-  readonly paired: readonly T[];
-  /** The expected values whose name has no <name>.jsonl file, in their order. */
-  readonly missing: readonly T[];
-  /** The names of <name>.jsonl files that no expected name has, in the order of the entries. */
-  readonly extra: readonly string[];
-  /** The names of the entries that are not <name>.jsonl files, in the order of the entries. */
-  readonly unknown: readonly string[];
-}
-
-const extension = ".jsonl";
-
-const fileName = (e: Entry): string | undefined =>
-  e.kind === "file" && e.name.endsWith(extension) ? e.name.slice(0, -extension.length) : undefined;
-
-/** Pairs the expected values, by `name`, with the <name>.jsonl files among the entries. */
-export function pair<T>(name: (x: T) => string, expected: readonly T[], entries: readonly Entry[]): Pairing<T> {
-  const names = entries.flatMap((e) => fileName(e) ?? []);
-  const expectedNames = expected.map(name);
-  return {
-    paired: expected.filter((x) => names.includes(name(x))),
-    missing: expected.filter((x) => !names.includes(name(x))),
-    extra: names.filter((n) => !expectedNames.includes(n)),
-    unknown: entries.filter((e) => fileName(e) === undefined).map((e) => e.name),
-  };
 }
 
 /** Returns the entries of the folder sorted by name, or none when the folder does not exist. */
@@ -39,4 +14,31 @@ export function entriesOf(folder: string): Entry[] {
   return readdirSync(folder, { withFileTypes: true })
     .map((e): Entry => ({ name: e.name, kind: e.isFile() ? "file" : e.isDirectory() ? "folder" : "other" }))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+/** The subfolder `service` of the trace folder, or the snapshot folder of `service`. */
+export interface Folder {
+  readonly service: string;
+  readonly entries: readonly Entry[];
+}
+
+export type TraceEntry = { readonly kind: "traceEntry"; readonly service?: string; readonly entry: string };
+export type SnapshotEntry = { readonly kind: "snapshotEntry"; readonly service: string; readonly entry: string };
+export type ScenarioAt = { readonly kind: "scenario"; readonly scenario: DefinitionRef };
+
+/** An entry of the trace folder or of its subfolder `service`, an entry of the snapshot folder of `service`, or a scenario. */
+export type At = TraceEntry | SnapshotEntry | ScenarioAt;
+
+export interface PairingViolation<A extends At = At> {
+  readonly at: A;
+  readonly violation: Uncomparable;
+}
+
+export interface Expected {
+  readonly run: Run;
+  /**
+   * Whether the run is compared. A compared run's file is compared when present and reported when missing; the file of
+   * a run that is not compared is ignored.
+   */
+  readonly compared: boolean;
 }

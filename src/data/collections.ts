@@ -275,7 +275,7 @@ const optionSchemas = new WeakMap<readonly z.ZodType[], readonly JsonSchema[]>()
  * first that fits, if any. A plain union holds no codec, so the encoded value that `fits` reads differs from `value`
  * only by its Bags, which `fits` reads as arrays.
  */
-export function unionOption(node: Extract<SchemaNode, { type: "union" }>, value: unknown): z.ZodType | undefined {
+function unionOption(node: Extract<SchemaNode, { type: "union" }>, value: unknown): z.ZodType | undefined {
   const known = optionSchemas.get(node.options);
   const schemas = known ?? node.options.map(jsonSchema);
   if (known === undefined) optionSchemas.set(node.options, schemas);

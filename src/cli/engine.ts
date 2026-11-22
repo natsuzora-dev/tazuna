@@ -4,17 +4,31 @@ import { InternalError } from "../data/internalError.ts";
 import type { Request, Response } from "./protocol.generated.ts";
 
 /** The Lean engine, which runs every semantics of a command: the spec's functions as the structure's IR. */
-const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-lean");
+const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-engine");
 
 /** The response that each request gets. */
 const responses = {
+  check: "checked",
+  checkCanonical: "checkedCanonical",
+  pair: "paired",
+  pairSnapshots: "pairedSnapshots",
+  compareSnapshot: "comparedSnapshot",
+  afters: "afters",
+  decodeLines: "decodedLines",
+  simulate: "simulated",
   test: "tested",
   verifyTrace: "verifiedTrace",
   verifyExternal: "verifiedExternal",
-} as const satisfies Partial<Record<Request["type"], Response["type"]>>;
+  givenRecords: "given",
+  readLines: "read",
+  sort: "sorted",
+  keyOrdered: "keyOrdered",
+  evaluate: "evaluated",
+  parse: "parsed",
+} as const satisfies Record<Request["type"], Response["type"]>;
 
-type Asked = keyof typeof responses;
-type Answer<T extends Asked> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
+export type Asked = keyof typeof responses;
+export type Answer<T extends Asked> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
 
 /** The engine's answers to `requests`, in order, from one run of it, which reads one JSON line per request. */
 export function ask<T extends Asked>(

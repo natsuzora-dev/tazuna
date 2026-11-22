@@ -2,17 +2,13 @@ import { existsSync, readdirSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { type CheckedSpec, checkSpecWith, failureText } from "../src/check/spec.ts";
 import type { TypeCheck } from "../src/check/typeCheck.ts";
+import { Converter } from "../src/convert/program.ts";
 import type { ViolationError } from "../src/data/violation.ts";
 import { loadSpec, type Spec } from "../src/load/load.ts";
 
 export const serviceRoot = join(import.meta.dirname, "service");
 export const runRoot = join(import.meta.dirname, "run");
 export const simRoot = join(import.meta.dirname, "sim");
-/**
- * The scenarios that `npm run fuzz` shrank from a mismatch, each `{ spec, scenario }` with the spec's root relative to
- * the repository.
- */
-export const fuzzFoundRoot = join(import.meta.dirname, "fuzz-found");
 export const leanRoot = join(import.meta.dirname, "../lean/Tazuna");
 
 export const folders = (dir: string): string[] =>
@@ -42,6 +38,22 @@ export async function loadedSpec(root: string): Promise<Spec> {
   if (loaded.kind === "malformed")
     throw new Error(`${root}: ${loaded.malformed.map((f) => f.violation.kind).join(", ")}`);
   return loaded.spec;
+}
+
+/**
+ * Loads the spec of the example `root` with its functions converted to IR, without the checks that a sim example may
+ * fail on purpose, and throws when a function stays outside the IR.
+ */
+export async function convertedSpec(root: string): Promise<Spec> {
+  const spec = await loadedSpec(root);
+  const converter = new Converter();
+  try {
+    const { program, notConverted } = converter.program(spec);
+    if (notConverted.length > 0) throw new Error(`${root}: ${notConverted.map((n) => n.reason).join(", ")}`);
+    return { ...spec, structure: { ...spec.structure, program } };
+  } finally {
+    converter.close();
+  }
 }
 
 /** Returns the examples test/<folder>/<group>/<target>/<example> of `group`, or of every group without it. */

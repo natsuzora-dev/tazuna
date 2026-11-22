@@ -1,0 +1,43 @@
+import Engine.Verify
+import Tazuna.Sim.Given
+
+/-!
+What `drive` asks of the engine while it drives an implementation through a snapshot: the Given records that the
+implementation starts from, and the snapshot's lines read by their schemas, whose key references it substitutes by the
+bindings that verifying the trace so far keeps (verifyTrace).
+-/
+
+namespace Tazuna.Engine
+
+open Tazuna.Data Tazuna.Service Tazuna.Verify
+
+/-- A compared value as TS reads it: an object with one field, whose name tells the variant; fields as pairs. -/
+partial def CValue.tagged : CValue → Value
+  | .leaf v => .obj [("leaf", v)]
+  | .ref e v => .obj [("ref", .arr [.str e, .str v])]
+  | .arr xs => .obj [("arr", .arr (xs.map CValue.tagged))]
+  | .bag xs => .obj [("bag", .arr (xs.map CValue.tagged))]
+  | .runs xs => .obj [("runs", .arr (xs.map CValue.tagged))]
+  | .obj fs => .obj [("obj", .arr (fs.map fun (k, x) => .arr [.str k, CValue.tagged x]))]
+
+/-- The Given records of the running service `service` of `sc`, as its records hold them, valid and unclashing. -/
+def givenRecordsOf (spec : Spec.Structure) (sc : Scenario) (service : String) : IO (List Scenario.GivenRecord) := do
+  let st ← Service.ofStructure spec service
+  let fs := Ir.functionsOf st (← IO.mkRef {})
+  let (rows, _) ← Sim.givenRows st fs (fun _ => none) service (Sim.givenRecords sc service)
+  pure (rows.map fun r => { entity := r.entity, key := r.key, value := r.value })
+
+/-- A snapshot line as verify reads it: with its values compared, and its value tagged (CValue.tagged), if it has one. -/
+structure ReadLine where
+  line : TraceLine
+  value : Option Value
+
+derive_wire ReadLine serialize_only skip_serializing_none
+
+/-- Each line as verify reads it, or none for a blank line. -/
+def readSnapshotLines (spec : Spec.Structure) (service : String) (lines : List (Option TraceLine)) :
+    IO (List (Option ReadLine)) := do
+  let (read, _) ← Verify.readLines spec service (readIn spec) lines []
+  pure (read.map (·.map fun l => { line := l.toTraceLine, value := l.value.map CValue.tagged }))
+
+end Tazuna.Engine

@@ -50,12 +50,12 @@ function allowed(schema: unknown): readonly unknown[] | undefined {
 
 const admits = (schema: unknown, v: unknown): boolean => allowed(schema)?.some((c) => sameJson(c, v)) ?? true;
 
-export const requiredOf = (schema: unknown): string[] => {
+const requiredOf = (schema: unknown): string[] => {
   const required = field(schema, "required");
   return Array.isArray(required) ? required.filter((k): k is string => typeof k === "string") : [];
 };
 
-export const propertyOf = (schema: unknown, k: string): unknown => field(field(schema, "properties"), k);
+const propertyOf = (schema: unknown, k: string): unknown => field(field(schema, "properties"), k);
 
 const closed = (schema: unknown): boolean => field(schema, "additionalProperties") === false;
 
@@ -71,35 +71,3 @@ export function fits(option: unknown, v: unknown): boolean {
     }) && requiredOf(option).every((k) => field(v, k) !== undefined)
   );
 }
-
-const typeSamples = [null, false, 0, "", [], {}];
-
-/** Lean's disjoint. */
-function disjoint(xs: readonly unknown[] | undefined, ys: readonly unknown[] | undefined): boolean {
-  return xs !== undefined && ys !== undefined && xs.every((x) => !ys.some((y) => sameJson(x, y)));
-}
-
-const objectTyped = (schema: unknown): boolean => field(schema, "type") === "object";
-
-/** Lean's missesRequired. */
-const missesRequired = (a: unknown, b: unknown): boolean =>
-  closed(a) && requiredOf(b).some((k) => propertyOf(a, k) === undefined);
-
-/** Lean's apart. */
-function apart(a: unknown, b: unknown): boolean {
-  return (
-    typeSamples.every((w) => !(fitsType(a, w) && fitsType(b, w))) ||
-    disjoint(allowed(a), allowed(b)) ||
-    ((objectTyped(a) || objectTyped(b)) &&
-      ([...requiredOf(a), ...requiredOf(b)].some((k) => {
-        const [p, q] = [propertyOf(a, k), propertyOf(b, k)];
-        return p !== undefined && q !== undefined && disjoint(allowed(p), allowed(q));
-      }) ||
-        missesRequired(a, b) ||
-        missesRequired(b, a)))
-  );
-}
-
-/** Lean's allApart. */
-export const allApart = (options: readonly unknown[]): boolean =>
-  options.every((o, i) => options.slice(i + 1).every((p) => apart(o, p)));

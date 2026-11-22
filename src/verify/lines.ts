@@ -1,8 +1,8 @@
+import { ask } from "../cli/engine.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
-import { InternalError } from "../data/internalError.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { MalformedLine } from "../data/trace.ts";
-import { parseLines, steps } from "../data/trace.ts";
+import { parseLines } from "../data/trace.ts";
 import { readTrace } from "../data/traceFile.ts";
 import type { Uncomparable } from "../data/uncomparable.generated.ts";
 import type { Json } from "../data/values.ts";
@@ -10,7 +10,7 @@ import { type Placed, type ReportedViolation, toReported, type ViolationValue, z
 
 export type Found = ViolationValue & Placed & Pick<ReportedViolation, "error">;
 
-export const lineSchema = ({ lineNumber, issues }: MalformedLine): Found => {
+const lineSchema = ({ lineNumber, issues }: MalformedLine): Found => {
   const value: Uncomparable = { kind: "Uncomparable.lineSchema", definition: null, line: lineNumber, data: {} };
   return { ...value, error: zodError(issues) };
 };
@@ -27,29 +27,11 @@ export function readSnapshotViolations(path: string): {
 } {
   const values = readTrace(path);
   const { lines, malformed } = parseLines(values);
-  return { values, lines, violations: malformed.length > 0 ? malformed.map(lineSchema) : unknownAfters(lines) };
-}
-
-/** Lean's unknownAfters: each after id of an out line that names no earlier out line of its group. */
-export function unknownAfters(snapshot: readonly (TraceLine | undefined)[]): Uncomparable[] {
-  return steps(snapshot).flatMap(({ before }) =>
-    before.flatMap(({ line, at }, k) =>
-      (line.after ?? []).flatMap((id): Uncomparable[] =>
-        before.slice(0, k).some((o) => o.line.id === id)
-          ? []
-          : [{ kind: "Uncomparable.unknownAfter", definition: null, line: at, data: { lineId: id } }],
-      ),
-    ),
-  );
+  if (malformed.length > 0) return { values, lines, violations: malformed.map(lineSchema) };
+  const [afters] = ask("afters", [{ snapshot: lines.map((l) => l ?? null) }]);
+  return { values, lines, violations: afters?.findings ?? [] };
 }
 
 /** Returns each violation as a ReportedViolation in `file`, at the line that it names, or at the whole file. */
 export const violationsAt = (file: string, found: readonly Found[], scenario?: DefinitionRef): ReportedViolation[] =>
   found.map((v) => toReported(v, { file }, scenario === undefined ? {} : { scenario }));
-
-const lineOf = (v: Found): number => {
-  if (v.line === undefined) throw new InternalError(`the ${v.kind} violation has no trace line`);
-  return v.line;
-};
-
-export const byLine = (a: Found, b: Found): number => lineOf(a) - lineOf(b);

@@ -1,10 +1,17 @@
-import { BagValue } from "../../data/bag.ts";
-import type { Fields } from "../../data/values.ts";
-import type { AnyEntity } from "../../dsl/entity.ts";
-import type { RecordSource } from "../../service/records.ts";
+import { BagValue } from "../../src/data/bag.ts";
+import type { Fields } from "../../src/data/values.ts";
+import type { AnyEntity } from "../../src/dsl/entity.ts";
+
+/** The only access to records, where each call is a read. A single entity's fields take no key. */
+export interface RecordSource {
+  keys(entity: string): readonly string[];
+  exists(entity: string, key: string): boolean;
+  field(entity: string, key: string | undefined, field: string): unknown;
+}
 
 /**
- * Returns a view of the records that reads each value from `source`. Read granularity: get(key) reads existence; size,
+ * Returns a view of the records that reads each value from `source`, as spec functions read records when the converter
+ * test runs them in JS. Read granularity: get(key) reads existence; size,
  * filter and the other Bag methods read the key set; a field access reads that field; enumerating field names (spread)
  * reads every field. Field names come from the entity definition and are not reads. A table calls spec functions on its
  * records in the order of the source's keys.

@@ -67,23 +67,5 @@ export function stringsOf(value: unknown): string[] {
   return [];
 }
 
-/** Lean's Value.mapStrings: `value` with each string, excluding object field names, mapped by `f`. */
-export function mapStrings(value: unknown, f: (s: string) => string): unknown {
-  if (typeof value === "string") return f(value);
-  if (Array.isArray(value)) return value.map((v) => mapStrings(v, f));
-  if (value !== null && typeof value === "object")
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, mapStrings(v, f)]));
-  return value;
-}
-
 export const isObject = (v: unknown): v is { readonly [key: string]: Json } =>
   v !== null && typeof v === "object" && !Array.isArray(v);
-
-/** Lean's Value.overlay: `value` with the fields of `over` in place, at any depth; any value but an object replaces. */
-export function overlay(value: unknown, over: unknown): unknown {
-  if (!isObject(value) || !isObject(over)) return over;
-  return Object.fromEntries([
-    ...Object.entries(value).map(([k, v]) => [k, Object.hasOwn(over, k) ? overlay(v, over[k]) : v]),
-    ...Object.entries(over).filter(([k]) => !Object.hasOwn(value, k)),
-  ]);
-}

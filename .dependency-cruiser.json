@@ -84,14 +84,14 @@
     },
     {
       "name": "check",
-      "comment": "src/check imports only data, dsl, spec, load, convert, validation, and check",
+      "comment": "src/check imports only data, dsl, spec, load, convert, check, and the engine client",
       "severity": "error",
       "from": {
         "path": "^src/check/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|spec|load|convert|validation|check)/"
+        "pathNot": "^src/((data|dsl|spec|load|convert|check)/|cli/(engine|protocol\\.generated)\\.ts$)"
       }
     },
     {

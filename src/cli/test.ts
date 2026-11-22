@@ -21,8 +21,6 @@ export interface TestResult {
   readonly removed: readonly string[];
   /** The parts that no exploration reached, which test --coverage reports. */
   readonly uncovered: readonly ViolationValue[];
-  /** How many worlds the search after each scenario visited. */
-  readonly visited: readonly number[];
 }
 
 function writeSnapshot(spec: Spec, run: Run, lines: readonly TraceLine[]): string {
@@ -148,7 +146,6 @@ export function testSpec(
     ...snapshots,
     violations: [...violations, ...snapshots.violations],
     uncovered: tested.uncovered,
-    visited: tested.runs.map((r) => r.visited),
   };
 }
 

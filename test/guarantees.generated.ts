@@ -5,6 +5,7 @@ export const guarantees = [
   "accepted_command_writes_then_queues_reactions",
   "accepted_emits_decided",
   "always_rounds_limit_halts",
+  "always_step_independent",
   "ancestor_target_exits",
   "answerIn_agrees",
   "apart_disjoint",

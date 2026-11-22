@@ -209,6 +209,15 @@ def explore (spec : Spec.Structure) (sc : Scenario) : IO Explored := do
     queue := queue ++ (← extend (path ++ [move]) child).toArray
   pure { (← found.get) with visited := (← visited.get).size }
 
+/-- What a simulation shows of one running service: its trace lines, its violations, and its candidates. -/
+structure SimulatedService where
+  service : String
+  lines : List TraceLine
+  violations : List Violation
+  candidates : List (Nat × Nat)
+
+derive_wire SimulatedService serialize_only
+
 /-- What a running service of a scenario's simulation reports, and its trace as its snapshot holds it. -/
 structure ServiceRun where
   service : String
@@ -243,6 +252,21 @@ def runScenario (spec : Spec.Structure) (sc : Scenario) : IO (ScenarioRun × Lis
   pure ({ violations := world.violations.map (·.toViolation) ++ (world.halted.map (·.toViolation)).toList
           stepOrders := orders, services, halted := halted world, found := explored.found
           visited := explored.visited }, explored.reached)
+
+/--
+The simulation of `sc`: each running service's trace lines, violations and candidates, and the simulation's violations
+and its halting one.
+-/
+def simulate (spec : Spec.Structure) (sc : Scenario) :
+    IO (List SimulatedService × List Sim.InvalidScenario × Option Sim.InvalidScenario) := do
+  let start ← Sim.World.start spec sc
+  let (w, acting) ← (Sim.simulate spec (← instrumentedOf start) start sc).run {}
+  let services := w.states.map fun (service, s) =>
+    let c := acting.collect service
+    { service, lines := s.lines.toList.map (Sim.traceLineOf service · [] [])
+      violations := reportedViolations s c none
+      candidates := if (w.services.lookup service).isSome then candidates s c none else [] }
+  pure (services, w.violations, w.halted)
 
 /-- What test finds of each scenario, in order, and the parts of the spec that no exploration reached. -/
 def test (spec : Spec.Structure) (scenarios : List Scenario) : IO (List ScenarioRun × List Violation) := do

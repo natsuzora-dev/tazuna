@@ -20,27 +20,6 @@ export interface Placed {
   readonly line?: number;
 }
 
-/** The fields that only TS reports beside a violation's kind, definition, and data. */
-export interface Located {
-  readonly error?: ViolationError;
-  readonly location?: Location;
-}
-
-/**
- * Lean's Violation, with the fields that only TS reports. `definition` is the cause, or null when the subject is not a
- * definition.
- */
-export interface Violation extends ViolationValue, Located {}
-
-/** Returns `value` with the fields that only TS reports; an undefined field is left out. */
-export function withExtra<V>(value: V, extra: { readonly [K in keyof Located]?: Located[K] | undefined }): V & Located {
-  return {
-    ...value,
-    ...(extra.error === undefined ? {} : { error: extra.error }),
-    ...(extra.location === undefined ? {} : { location: extra.location }),
-  };
-}
-
 /** A violation's group: the part of its kind before the dot. */
 export type Group =
   | "Malformed"

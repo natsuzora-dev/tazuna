@@ -3,21 +3,11 @@ import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import type { Asked, Evaluated, Keys, Reply, Request, Response, Stored } from "../../src/cli/protocol.generated.ts";
-import type { Mismatch } from "../../src/data/mismatch.generated.ts";
-import type { Scenario } from "../../src/data/scenario.generated.ts";
-import type { TraceLine } from "../../src/data/trace.generated.ts";
-import { type FileLine, isMalformed } from "../../src/data/trace.ts";
-import type { Uncomparable } from "../../src/data/uncomparable.generated.ts";
+import type { Evaluated, Keys, Request, Response, Stored } from "../../src/cli/protocol.generated.ts";
 import type { Json } from "../../src/data/values.ts";
-import type { Spec } from "../../src/load/load.ts";
-import type { Schema } from "../../src/service/basic.ts";
-import type { StepOrder } from "../../src/sim/network.ts";
 import type { Expr } from "../../src/spec/ir.generated.ts";
-import type { Structure } from "../../src/spec/structure.generated.ts";
-import type { Answering, ReadRecord } from "./functions.ts";
 
-const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-lean");
+const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-engine");
 
 // No signal listeners: the tests talk to Lean synchronously, so a listener would not run until the synchronous work
 // ends, and the process would stop exiting on signals.
@@ -26,39 +16,20 @@ process.once("exit", () => {
   for (const child of running) child.kill();
 });
 
-export type VerifyViolation = Mismatch | Uncomparable;
-
-/** The response that each request gets. */
+/** The response that each request that these tests send gets. */
 const responses = {
-  check: "checked",
-  checkCanonical: "checkedCanonical",
-  verify: "verified",
-  checkExternal: "checkedExternal",
-  pair: "paired",
-  pairSnapshots: "pairedSnapshots",
-  compareSnapshot: "comparedSnapshot",
-  afters: "afters",
   decodeLines: "decodedLines",
-  simulate: "simulated",
-  stepOrderChanges: "stepOrderChanges",
   sort: "sorted",
   keyOrdered: "keyOrdered",
-  schemaOf: "schemaOf",
   evaluate: "evaluated",
   parse: "parsed",
-  test: "tested",
-  verifyTrace: "verifiedTrace",
-  verifyExternal: "verifiedExternal",
-} as const satisfies Record<Request["type"], Response["type"]>;
+} as const satisfies Partial<Record<Request["type"], Response["type"]>>;
 
-type Responded<T extends Request["type"]> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
-
-const fileLines = (lines: readonly FileLine[]) =>
-  lines.map((l) => (l === undefined ? null : isMalformed(l) ? "malformed" : l));
+type Responded<T extends keyof typeof responses> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
 
 /**
- * The tazuna-lean process. The spec functions are called synchronously and read records midway, so talking to Lean
- * must be synchronous too: stdin and stdout go through two named pipes, and readSync waits for each answer.
+ * The engine process, which a test asks many small questions inside one synchronous property check: stdin and stdout
+ * go through two named pipes, and readSync waits for each answer.
  */
 export class Lean {
   private readonly dir: string;
@@ -73,7 +44,7 @@ export class Lean {
   private readonly chunk = Buffer.alloc(65536);
 
   constructor() {
-    this.dir = mkdtempSync(join(tmpdir(), "tazuna-lean-"));
+    this.dir = mkdtempSync(join(tmpdir(), "tazuna-engine-"));
     const [input, output] = [join(this.dir, "in"), join(this.dir, "out")];
     execFileSync("mkfifo", [input, output]);
     // Opening a FIFO with r+ does not block on the other end. Only this process holds a write end of Lean's input, so
@@ -87,7 +58,6 @@ export class Lean {
     this.fromLean = openSync(output, "r");
     for (const fd of [leanInput, leanOutput, holder]) closeSync(fd);
   }
-
   /**
    * Closes the Lean process. Diff test files call this from after() and register their tests synchronously, after
    * loading specs: awaiting between registrations lets after() close Lean once the earlier tests finish.
@@ -99,160 +69,47 @@ export class Lean {
     closeSync(this.fromLean);
     rmSync(this.dir, { recursive: true, force: true });
   }
-
-  private send(message: Request | Reply): void {
+  private send(message: Request): void {
     writeSync(this.toLean, `${JSON.stringify(message)}\n`);
   }
-
-  private receive(): Response | Asked {
+  private receive(): Response {
     for (;;) {
       const end = this.buffered.indexOf("\n");
       if (end >= 0) {
         const line = this.parts.join("") + this.buffered.slice(0, end);
         this.parts = [];
         this.buffered = this.buffered.slice(end + 1);
-        return JSON.parse(line) as Response | Asked;
+        return JSON.parse(line) as Response;
       }
       this.parts.push(this.buffered);
       const n = readSync(this.fromLean, this.chunk);
-      if (n === 0) throw new Error("tazuna-lean exited");
+      if (n === 0) throw new Error("tazuna-engine exited");
       this.buffered = this.decoder.write(this.chunk.subarray(0, n));
     }
   }
 
-  /** Sends `request` and returns Lean's response, answering each question with `functions` meanwhile. */
-  private exchange<T extends Request["type"]>(
-    request: Extract<Request, { type: T }>,
-    functions?: Answering,
+  /** Sends `request` and returns the engine's response. */
+  private exchange<T extends keyof typeof responses>(
+    type: T,
+    request: Omit<Extract<Request, { type: T }>, "type">,
   ): Responded<T> {
-    this.send(request);
-    for (;;) {
-      const message = this.receive();
-      if (message.type === "error") throw new Error(`tazuna-lean: ${message.message}`);
-      if (message.type === responses[request.type as T]) {
-        const { type: _, ...response } = message;
-        return response as unknown as Responded<T>;
-      }
-      if (functions === undefined) throw new Error(`tazuna-lean asked ${JSON.stringify(message)} for ${request.type}`);
-      this.send(functions.answer(message as Asked));
-    }
-  }
-
-  read(part: Parameters<ReadRecord>[0]): unknown {
-    this.send({ type: "read", ...part });
-    const served = this.receive();
-    if (served.type !== "served") throw new Error(`tazuna-lean answered a read with ${JSON.stringify(served)}`);
-    return served.value;
-  }
-
-  verify(
-    spec: Spec,
-    service: string,
-    snapshot: readonly (TraceLine | undefined)[],
-    trace: readonly FileLine[],
-    functions: Answering,
-  ): Responded<"verify"> {
-    const lines = { snapshot: snapshot.map((l) => l ?? null), trace: fileLines(trace) };
-    return this.exchange({ type: "verify", structure: spec.structure, service, ...lines }, functions);
-  }
-
-  checkExternal(spec: Spec, service: string, trace: readonly FileLine[]): Responded<"checkExternal">["findings"] {
-    return this.exchange({ type: "checkExternal", structure: spec.structure, service, trace: fileLines(trace) })
-      .findings;
-  }
-
-  afters(snapshot: readonly (TraceLine | undefined)[]): Responded<"afters">["findings"] {
-    return this.exchange({ type: "afters", snapshot: snapshot.map((l) => l ?? null) }).findings;
+    this.send({ type, ...request } as unknown as Request);
+    const message = this.receive();
+    if (message.type === "error") throw new Error(`tazuna-engine: ${message.message}`);
+    if (message.type !== responses[type]) throw new Error(`tazuna-engine answered ${type} with ${message.type}`);
+    const { type: _, ...response } = message;
+    return response as unknown as Responded<T>;
   }
 
   decodeLines(values: readonly Json[]): Responded<"decodeLines">["lines"] {
-    return this.exchange({ type: "decodeLines", values }).lines;
+    return this.exchange("decodeLines", { values }).lines;
   }
-
-  pair(request: Omit<Extract<Request, { type: "pair" }>, "type">): Responded<"pair"> {
-    return this.exchange({ type: "pair", ...request });
-  }
-
-  pairSnapshots(request: Omit<Extract<Request, { type: "pairSnapshots" }>, "type">): Responded<"pairSnapshots"> {
-    return this.exchange({ type: "pairSnapshots", ...request });
-  }
-
-  compareSnapshot(
-    snapshot: readonly (Json | undefined)[],
-    run: readonly Json[],
-  ): Responded<"compareSnapshot">["mismatch"] {
-    return this.exchange({ type: "compareSnapshot", snapshot: snapshot.map((l) => l ?? null), run }).mismatch;
-  }
-
-  /** Lean's stepOrderChanges of the scenario executed from its startup: each search, what it ran, and what it found. */
-  stepOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): Responded<"stepOrderChanges">["searched"] {
-    return this.exchange({ type: "stepOrderChanges", structure: spec.structure, scenario }, functions).searched;
-  }
-
-  /**
-   * Simulates the scenario, or with `execute` runs its lines as explore does and returns what each service enables, and
-   * with `explore` the moves that explore appends next.
-   */
-  simulate(
-    spec: Spec,
-    scenario: Scenario,
-    functions: Answering,
-    execute = false,
-    stepOrders: readonly StepOrder[] = [],
-  ): Omit<Responded<"simulate">, "fingerprint"> {
-    const { fingerprint: _, ...outcome } = this.exchange(
-      {
-        type: "simulate",
-        structure: spec.structure,
-        scenario,
-        ...(execute ? { execute } : {}),
-        ...(stepOrders.length > 0 ? { stepOrders } : {}),
-      },
-      functions,
-    );
-    return outcome;
-  }
-
-  /** Executes `scenario` as explore does, and returns its outcome with the moves after it and its world's fingerprint. */
-  explored(
-    spec: Spec,
-    scenario: Scenario,
-    functions: Answering,
-  ): { readonly outcome: Omit<Responded<"simulate">, "fingerprint">; readonly fingerprint: string } {
-    const { fingerprint, ...outcome } = this.exchange(
-      {
-        type: "simulate",
-        structure: spec.structure,
-        scenario,
-        execute: true,
-        explore: true,
-      },
-      functions,
-    );
-    if (fingerprint === null) throw new Error("tazuna-lean gave no fingerprint for an explored world");
-    return { outcome, fingerprint };
-  }
-
-  check(structure: Structure): Responded<"check">["findings"] {
-    return this.exchange({ type: "check", structure }).findings;
-  }
-
-  checkCanonical(structure: Structure): Responded<"checkCanonical">["findings"] {
-    return this.exchange({ type: "checkCanonical", structure }).findings;
-  }
-
   sort(schema: Json, value: Json): Json {
-    return this.exchange({ type: "sort", schema, value }).value as Json;
+    return this.exchange("sort", { schema, value }).value as Json;
   }
-
   keyOrdered(schema: Json, value: Json): boolean {
-    return this.exchange({ type: "keyOrdered", schema, value }).ordered;
+    return this.exchange("keyOrdered", { schema, value }).ordered;
   }
-
-  schemaOf(structure: Structure, service: string, schema: Schema): Json | undefined {
-    return (this.exchange({ type: "schemaOf", structure, service, schema }).schema ?? undefined) as Json | undefined;
-  }
-
   /**
    * The value of `body` with `input` as its only argument over `records` and createKey over `keys`, as Lean evaluates
    * the IR, its reads, and the entities it made keys of. `fields` names each entity's fields, which a record writes.
@@ -264,12 +121,11 @@ export class Lean {
     keys: Keys,
     fields: Readonly<Record<string, readonly string[]>>,
   ): Evaluated {
-    return this.exchange({ type: "evaluate", body, input, records, keys, fields }).result;
+    return this.exchange("evaluate", { body, input, records, keys, fields }).result;
   }
-
   /** `value` parsed by the JSON Schema `schema` as Lean parses, or undefined where Lean leaves the schema to Zod. */
   parse(schema: Json, value: Json): Omit<Responded<"parse">, "supported"> | undefined {
-    const { supported, ...parsed } = this.exchange({ type: "parse", schema, value });
+    const { supported, ...parsed } = this.exchange("parse", { schema, value });
     return supported ? parsed : undefined;
   }
 }

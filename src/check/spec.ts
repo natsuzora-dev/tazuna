@@ -1,4 +1,5 @@
 import { join, relative, sep } from "node:path";
+import { ask } from "../cli/engine.ts";
 import { Converter } from "../convert/program.ts";
 import type { Illegal } from "../data/illegal.generated.ts";
 import { InternalError } from "../data/internalError.ts";
@@ -9,8 +10,6 @@ import type { ReportedViolation } from "../data/violation.ts";
 import type { Place } from "../dsl/definition.ts";
 import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/found.ts";
 import { type Loaded, type LoadedSpec, loadSpec, type Spec } from "../load/load.ts";
-import { check as canonical } from "../validation/canonical.ts";
-import { check as validate } from "../validation/check.ts";
 import * as answers from "./nonCanonical/answers.ts";
 import * as binds from "./nonCanonical/binds.ts";
 import * as constants from "./nonCanonical/constants.ts";
@@ -72,6 +71,16 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
     case "Illegal.undeclaredDomain":
       return placeOf(spec, illegal.definition);
   }
+}
+
+/** The NonCanonical and Illegal violations of the structure, which the engine finds, each at its place. */
+function structureViolations(spec: Spec): Found<NonCanonical | Illegal>[] {
+  const [canonical] = ask("checkCanonical", [{ structure: spec.structure }]);
+  const [checked] = ask("check", [{ structure: spec.structure }]);
+  return [
+    ...(canonical?.findings ?? []).map((violation) => ({ violation, place: placeOf(spec, violation.definition) })),
+    ...(checked?.findings ?? []).map((violation) => ({ violation, place: placeOfIllegal(spec, violation) })),
+  ];
 }
 
 /** Returns the header lines of Node's error and the first stack frame outside node: internals. */
@@ -152,17 +161,7 @@ export async function checkSpecWith(
   const syntax = syntaxChecks.flatMap((c) => c.check(spec));
   const found: Found<Malformed | NonCanonical | Restricted | Illegal>[] =
     loaded.kind === "structured" && unlisted.length === 0
-      ? [
-          ...syntax,
-          ...canonical(loaded.spec.structure).map((violation) => ({
-            violation,
-            place: placeOf(loaded.spec, violation.definition),
-          })),
-          ...validate(loaded.spec.structure).map((violation) => ({
-            violation,
-            place: placeOfIllegal(loaded.spec, violation),
-          })),
-        ]
+      ? [...syntax, ...structureViolations(loaded.spec)]
       : [...unlisted, ...(loaded.kind === "malformed" ? loaded.malformed : []), ...syntax];
   if (found.length === 0 && loaded.kind === "structured" && converter !== "unconverted") {
     const done = converted(loaded.spec, converter);

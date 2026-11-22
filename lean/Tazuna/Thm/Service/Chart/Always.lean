@@ -206,7 +206,7 @@ theorem settleFrom_idem (a b : Nat) (owner : InstanceId) (k k' : Nat) (r : Proce
 theorem unlessHalted_pure (r : Processing) : unlessHalted (pure : Processing → Id Processing) r = r := by
   unfold unlessHalted; split <;> rfl
 
-theorem always_step_independent (a b : Nat) (owner : InstanceId) (f : Processing → Id Processing) (r : Processing) :
+@[guarantee] theorem always_step_independent (a b : Nat) (owner : InstanceId) (f : Processing → Id Processing) (r : Processing) :
     let H k := settleFrom fs st b owner Limit.alwaysRounds.max
       (unlessHalted f (settleFrom fs st k owner Limit.alwaysRounds.max r))
     settleAround fs st b owner f (settleAround fs st a owner pure r) = H a ∧

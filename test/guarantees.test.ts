@@ -40,7 +40,7 @@ test("The theorems in the last cells under Proven properties are the theorems ta
 });
 
 /**
- * What runs a guarantee that has no fixture named after it. A fixture runs in TS and Lean, as every example does.
+ * What runs a guarantee that has no fixture named after it. A fixture runs in the engine, as every example does.
  *
  * - `kindExample`: the example of a violation kind that the theorem states.
  * - `example` and `scenario`: a scenario of an example, by its path under test, that exercises the theorem.
@@ -54,24 +54,37 @@ type Instead =
   | { readonly diffTest: string }
   | { readonly because: string };
 
-const ofCompare = { diffTest: "verify.diff.ts" } as const;
+const ofCompare = {
+  because:
+    "a property of verify's comparison over all traces, which the engine runs on every verify example; no one run shows all traces",
+} as const;
 const ofSort = { diffTest: "collections.diff.ts" } as const;
-const ofSearch = { diffTest: "choiceDependent.diff.ts" } as const;
-const ofCheck = { diffTest: "validation.diff.ts" } as const;
-const ofExplored = { diffTest: "run.diff.ts" } as const;
+const ofSearch = {
+  because:
+    "a property of the step-order search over all executions, which the engine runs on every test example; no one run shows all executions",
+} as const;
+const ofCheck = {
+  because:
+    "a property of the structure check over all structures, which the engine runs on every check; no one run shows all structures",
+} as const;
+const ofExplored = {
+  because:
+    "a property of exploration over all paths, which the engine runs on every test example; no one run shows all paths",
+} as const;
 const ofRenaming = {
   because:
     "a property of the renaming relation, which the identity theorems use and no run computes, so no spec or trace can exercise it",
 } as const;
 const ofAudit = {
   because:
-    "states that a run whose spec functions are audited equals the plain run; test and every diff test run audited, and no command runs the plain one",
+    "states that a run whose spec functions are instrumented equals the plain run; the engine runs instrumented, and no command runs the plain one",
 } as const;
 const network = (scenario: string) => ({ example: "sim/Run/network", scenario }) as const;
 
 const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   accepted_emits_decided: { example: "service/Records/decide_payloads_sorted", scenario: "listed" },
   always_rounds_limit_halts: { kindExample: "Fault.exceededAlwaysRounds" },
+  always_step_independent: ofSearch,
   answerIn_agrees: ofAudit,
   apart_disjoint: { kindExample: "Illegal.ambiguousUnion" },
   bag_or_set_array_sorted: ofSort,

@@ -75,21 +75,4 @@ def asList : Value → Except String (List Value)
   | .arr vs => pure vs
   | v => throw s!"expected an array, got {render v}"
 
-/--
-The compared value that `v` encodes as an object with one field, whose name tells the variant (leaf, arr, obj, bag,
-runs). Its fields are pairs, since a JS object moves integer-like keys first.
--/
-partial def CValue.decode (v : Value) : Except String CValue := do
-  match v with
-  | .obj [("leaf", x)] => pure (.leaf x)
-  | .obj [("ref", .arr [.str e, .str x])] => pure (.ref e x)
-  | .obj [("arr", xs)] => pure (.arr (← (← asList xs).mapM CValue.decode))
-  | .obj [("bag", xs)] => pure (.bag (← (← asList xs).mapM CValue.decode))
-  | .obj [("runs", xs)] => pure (.runs (← (← asList xs).mapM CValue.decode))
-  | .obj [("obj", fs)] => pure (.obj (← (← asList fs).mapM fun f => do
-      match ← asList f with
-      | [k, x] => pure (← FromValue.fromValue k, ← CValue.decode x)
-      | _ => throw s!"expected a field pair, got {render f}"))
-  | other => throw s!"expected a compared value, got {render other}"
-
 end Tazuna.Json

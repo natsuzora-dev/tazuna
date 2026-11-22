@@ -10,10 +10,8 @@
           "id": "addTasks#1",
           "name": "addTasks",
           "input": {
-            "taskIds": [
-              "task-1",
-              "task-2"
-            ]
+            "firstId": "task-1",
+            "secondId": "task-2"
           }
         },
         {
