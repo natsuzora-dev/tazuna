@@ -13,16 +13,16 @@ export const marksWithVisibleCollections = query({
 
 export const marks = query({
   output: {
-    tags: z.record(z.string(), bag(z.string())),
-    days: z.tuple([sortedBy(z.strictObject({ n: z.int() }), "n")]),
+    tags: bag(z.string()).readonly(),
+    days: sortedBy(z.strictObject({ n: z.int() }), "n").readonly(),
     ids: set(z.string()).readonly(),
   },
-}).resolve(() => ({ tags: {}, days: [[{ n: 1 }]], ids: [] }));
+}).resolve(() => ({ tags: [], days: [{ n: 1 }], ids: [] }));
 
 export const todo = contract({ marksWithVisibleCollections, marks });
 
 export const defaults = constants({
   service: "todo",
-  schema: z.strictObject({ days: z.tuple([set(z.string())]) }),
-  values: { days: [[]] },
+  schema: z.strictObject({ days: set(z.string()).readonly() }),
+  values: { days: [] },
 });

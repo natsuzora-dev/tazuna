@@ -138,31 +138,45 @@ export function childrenOf(node: SchemaNode): readonly z.ZodType[] {
 
 /**
  * The checks that Zod runs on a value of `schema` once its type matches, in its order, each as its definition's data: a
- * schema that is a check itself, such as z.int() or z.email(), runs first. A check that carries its own message, which
- * only Zod renders, is `{ check: "opaque" }`, and so is a refinement or an overwrite. A set's check is `{ check: "set" }`;
+ * schema that is a check itself, such as z.int() or z.email(), runs first. A check's message written as a string is its
+ * `message`; one that is a function, which only Zod renders, makes it `{ check: "opaque" }`, as a refinement or an
+ * overwrite does. A set's check is `{ check: "set" }`;
  * those of a bag and a sortedBy array check nothing.
  */
 export function checksOf(schema: z.ZodType): readonly Readonly<Record<string, CheckData>>[] {
   const own = schema._zod.traits.has("$ZodCheck") ? [schema as unknown as z.core.$ZodCheck] : [];
-  return [...own, ...(schema._zod.def.checks ?? [])].flatMap((c) => {
+  return [...own, ...(schema._zod.def.checks ?? [])].flatMap((c): Readonly<Record<string, CheckData>>[] => {
     const mark = markOf(c as z.core.$ZodCheck<never>);
     if (mark !== undefined) return mark.kind === "set" ? [{ check: "set" }] : [];
     const def = c._zod.def as unknown as Readonly<Record<string, unknown>>;
+    const message = constantMessage(def["error"]);
     if (
-      def["error"] !== undefined ||
-      def["abort"] === true ||
+      (def["error"] !== undefined && message === undefined) ||
       def["check"] === "custom" ||
       def["check"] === "overwrite"
     )
       return [{ check: "opaque" }];
     return [
-      Object.fromEntries(
-        Object.entries(def).filter(
-          ([key, v]) => !["when", "pattern", "type", "coerce", "checks"].includes(key) && isCheckData(v),
-        ),
-      ) as Record<string, CheckData>,
+      {
+        ...(Object.fromEntries(
+          Object.entries(def).filter(
+            ([key, v]) => !["when", "pattern", "type", "coerce", "checks"].includes(key) && isCheckData(v),
+          ),
+        ) as Record<string, CheckData>),
+        ...(message === undefined ? {} : { message }),
+      },
     ];
   });
+}
+
+/**
+ * The message of an error parameter that is a plain string, which Zod keeps as a function of no parameters, or
+ * undefined for a function that may read the issue.
+ */
+export function constantMessage(error: unknown): string | undefined {
+  if (typeof error !== "function" || error.length !== 0) return undefined;
+  const message: unknown = error();
+  return typeof message === "string" ? message : undefined;
 }
 
 /** A parameter of a check, which JSON holds. */
@@ -174,14 +188,6 @@ const isCheckData = (v: unknown): v is CheckData =>
 /** The schema of field `key` of an object node: its shape's, else the catchall, if any. */
 export const fieldSchema = (node: Extract<SchemaNode, { type: "object" }>, key: string): z.ZodType | undefined =>
   Object.hasOwn(node.shape, key) ? node.shape[key] : node.catchall;
-
-/** Whether a codec is at any depth of `schema`, `schema` included. */
-export function holdsCodec(schema: z.ZodType, seen = new Set<z.ZodType>()): boolean {
-  if (seen.has(schema)) return false;
-  seen.add(schema);
-  const node = schemaNode(schema);
-  return node.type === "codec" || childrenOf(node).some((child) => holdsCodec(child, seen));
-}
 
 const strictSchemas = new WeakMap<z.ZodType, z.ZodType>();
 const strictening = new Set<z.ZodType>();

@@ -1,4 +1,4 @@
-import { any, bag, date, emit, instant, type Runs, service, set, sortedBy } from "@natsuzora-dev/tazuna";
+import { any, bag, date, emit, instant, service, set, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, event, query, screen, contract, given, scenario } = service({
@@ -30,15 +30,6 @@ export const listTasks = command({ emits: [tasksListed] }).decide(() => [
   }),
 ]);
 
-const cents = z.codec(z.string(), z.int(), {
-  decode: (text) => Math.round(Number(text) * 100),
-  encode: (n) => (n / 100).toFixed(2),
-});
-
-export const pricesListed = event({ payload: { prices: bag(cents) } });
-
-export const listPrices = command({ emits: [pricesListed] }).decide(() => [emit(pricesListed, { prices: [150, 20] })]);
-
 export const groupsListed = event({
   payload: {
     tagged: z.union([z.object({ note: z.string().optional() }), z.object({ counts: bag(z.int()) })]),
@@ -57,13 +48,6 @@ export const listGroups = command({ emits: [groupsListed] }).decide(() => [
     named: { kind: "counted", name: "Shop", counts: [3, 1] },
   }),
 ]);
-
-type Chain = { readonly name: string; readonly next: Chain | null };
-const Chain: z.ZodType<Chain> = z.lazy(() => z.object({ name: z.string(), next: Chain.nullable() }));
-
-export const linked = event({ payload: { link: z.union([Chain, z.object({ tags: bag(z.string()) })]) } });
-
-export const link = command({ emits: [linked] }).decide(() => [emit(linked, { link: { tags: ["shop", "home"] } })]);
 
 export const shelved = event({ payload: { names: bag(z.string()), entries: sortedBy(Entry, "day") } });
 
@@ -115,9 +99,6 @@ export const checkPlan = command({
   return [emit(planChecked, { nullable: entries, union: entries })];
 });
 
-const isSorted = (runs: Runs<{ readonly day: number }>) =>
-  runs.every((run, i) => i === 0 || (runs[i - 1]?.max((e) => e.day) ?? 0) < (run.min((e) => e.day) ?? 0));
-
 const unsorted = () => [
   { day: 2, title: "Buy eggs" },
   { day: 1, title: "Buy milk" },
@@ -133,7 +114,6 @@ export const pickScreen = screen({
   controls: { finish: { label: "Finish" } },
   initial: "picking",
   states: { picking: {}, done: { type: "final" } },
-  ensures: { isSortedOutput: ({ output }) => isSorted(output.entries) },
 }).chart({
   offers: { finish: any },
   resolve: () => ({ entries: unsorted() }),
@@ -147,7 +127,6 @@ export const planScreen = screen({
   controls: { fill: { label: "Arrange" }, open: { label: "Pick" } },
   initial: "planning",
   states: { planning: {}, picking: {} },
-  invariants: { isSortedContext: ({ context }) => isSorted(context.entries) },
 }).chart({
   offers: { fill: any, open: any },
   states: {

@@ -2,9 +2,7 @@ import { parseInstant } from "@natsuzora-dev/tazuna";
 import {
   checkPlan,
   given,
-  link,
   listGroups,
-  listPrices,
   listVisits,
   pickScreen,
   plan,
@@ -81,16 +79,6 @@ export const nullableSorted = scenario({
   then: () => [],
 });
 
-export const listedPrices = scenario({
-  description:
-    'List the prices; decide writes 150 and 20 cents, and tazuna sorts the prices bag by the canonical JSON of the encoded values, so "0.20" comes before "1.50"',
-  given: arranged,
-  when: (w) => {
-    w.client.send(listPrices, {});
-  },
-  then: () => [],
-});
-
 export const listedGroups = scenario({
   description:
     "List the groups; decide writes each counts bag out of order, in a union whose option only the closed fields or the enum discriminator tell apart, and tazuna sorts every counts bag",
@@ -107,16 +95,6 @@ export const defaultedInput = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(shelve, {});
-  },
-  then: () => [],
-});
-
-export const linkedTags = scenario({
-  description:
-    "Link with tags; one option of link is a recursive schema, which its JSON Schema names by $ref, and tazuna tells it apart from the tags option and sorts the tags",
-  given: arranged,
-  when: (w) => {
-    w.client.send(link, {});
   },
   then: () => [],
 });

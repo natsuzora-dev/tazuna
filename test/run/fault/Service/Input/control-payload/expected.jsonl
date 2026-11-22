@@ -1,1 +1,0 @@
-{"kind":"Fault.exception","definition":{"service":"search","name":"searchScreen"},"data":{},"location":{"file":"search/search.ts","line":6},"scenario":{"service":"search","name":"searchEmpty"},"error":{"type":"thrownError","name":"Error","message":"a search needs a query","stack":"<stack>"}}

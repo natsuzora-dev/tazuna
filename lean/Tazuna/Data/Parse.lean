@@ -14,15 +14,19 @@ namespace Tazuna.Data
 /--
 An issue as Zod reports it: its fields in Zod's order, where `path` and `message` sit only when Zod made the issue
 with them, then its path and its message. `continues` is the issue's `continue`, which tells whether later checks run.
+`own` tells whether the schema being parsed made it, not a schema inside it, so the schema's message applies, and
+`authored` whether a check gave it its own message, which the schema's does not replace.
 -/
 structure ZodIssue where
   fields : List (String × Value)
   path : List Value := []
   message : String
   continues : Option Bool := none
+  own : Bool := true
+  authored : Bool := false
 deriving Inhabited
 
-def ZodIssue.under (key : Value) (i : ZodIssue) : ZodIssue := { i with path := key :: i.path }
+def ZodIssue.under (key : Value) (i : ZodIssue) : ZodIssue := { i with path := key :: i.path, own := false }
 
 /-- The issue as Zod's finalizeIssue writes it: a path and a message that the issue lacks come last. -/
 def ZodIssue.render (i : ZodIssue) : Value :=
@@ -37,6 +41,9 @@ structure Parsed where
   value : Option Value
   issues : List ZodIssue := []
 deriving Inhabited
+
+/-- The parse of a schema inside the one being parsed, whose issues that schema made. -/
+def Parsed.passed (p : Parsed) : Parsed := { p with issues := p.issues.map ({ · with own := false }) }
 
 /-- Whether a check without a `when` is skipped, as Zod's util.aborted: an issue that does not say it continues. -/
 def aborted (issues : List ZodIssue) : Bool := issues.any (·.continues != some true)
@@ -135,7 +142,7 @@ def knownKeywords : List String :=
   ["$schema", "type", "properties", "required", "additionalProperties", "items", "minItems", "maxItems", "minLength",
    "maxLength", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "format", "pattern",
    "enum", "const", "anyOf", "oneOf", "default", "uniqueItems", "description", "title", "examples",
-   "x-tazuna-checks", "x-tazuna-nullable", "x-tazuna-discriminator", "x-tazuna-bag",
+   "x-tazuna-checks", "x-tazuna-nullable", "x-tazuna-discriminator", "x-tazuna-message", "x-tazuna-bag",
    "x-tazuna-set", "x-tazuna-sorted-by"]
 
 /-- Whether an `allOf` holds only the patterns that JSON Schema writes for several string checks, as the checks say. -/
@@ -211,7 +218,7 @@ def originOf : Value → String
   | _ => "unknown"
 
 /-- The issues of one check on `v`, which the type took. -/
-def runCheck (c : Value) (v : Value) : List ZodIssue :=
+def checkIssues (c : Value) (v : Value) : List ZodIssue :=
   let num (k : String) : Lean.JsonNumber := match c.field? k with | some (.num n) => n | _ => 0
   let nat (k : String) : Nat := (num k).mantissa.toNat
   let inclusive := c.field? "inclusive" != some (.bool false)
@@ -302,6 +309,14 @@ def runCheck (c : Value) (v : Value) : List ZodIssue :=
     issues
   | _, _ => []
 
+/-- The issues of the check `c` on `v`, with the check's own message and abort, as Zod's check parameters give them. -/
+def runCheck (c : Value) (v : Value) : List ZodIssue :=
+  (checkIssues c v).map fun i =>
+    let i := if c.field? "abort" == some (.bool true) then { i with continues := some false } else i
+    match fieldStr c "message" with
+    | some m => { i with message := m, authored := true }
+    | none => i
+
 /-- Whether a check runs only on a value with a length, after any issue that does not say it stops (Zod's `when`). -/
 def hasWhen (c : Value) : Bool :=
   match fieldStr c "check" with
@@ -343,14 +358,21 @@ def discriminatorValues (key : String) (option : Value) : List Value :=
 
 mutual
 
-/-- `v` parsed by `schema` as Zod's safeParse does. -/
+/-- `v` parsed by `schema` as Zod's safeParse does, with the schema's own message on the issues that it makes. -/
 partial def parseValue (schema : Value) (v : Option Value) : ParseM Parsed := do
+  let p ← parseNode schema v
+  match fieldStr schema "x-tazuna-message" with
+  | some m =>
+    pure { p with issues := p.issues.map fun i => if i.own && !i.authored then { i with message := m } else i }
+  | none => pure p
+
+partial def parseNode (schema : Value) (v : Option Value) : ParseM Parsed := do
   match v, schema.field? "default" with
   | none, some d => return { value := some d }
   | _, _ => pure ()
   if schema.field? "x-tazuna-nullable" == some (.bool true) then
     if v == some .null then return { value := v }
-    return ← parseValue (nullableInner schema) v
+    return (← parseValue (nullableInner schema) v).passed
   if let some key := fieldStr schema "x-tazuna-discriminator" then
     if let some options := unionOptions schema then
       return ← parseDiscriminated key options v
@@ -413,12 +435,12 @@ partial def parseObject (schema : Value) (input : List (String × Value)) : Pars
 /-- A plain union, as Zod's handleUnionResults reads the options' results. -/
 partial def parseUnion (options : List Value) (v : Option Value) : ParseM Parsed := do
   match options with
-  | [one] => parseValue one v
+  | [one] => return (← parseValue one v).passed
   | _ =>
     let results ← options.mapM (parseValue · v)
     if let some ok := results.find? (·.issues.isEmpty) then return ok
     match results.filter (!aborted ·.issues) with
-    | [one] => pure one
+    | [one] => pure one.passed
     | _ =>
       pure { value := v, issues := [{ fields := [("code", .str "invalid_union"),
         ("errors", .arr (results.map fun r => .arr (r.issues.map ZodIssue.render)))], message := "Invalid input" }] }
@@ -428,7 +450,7 @@ partial def parseDiscriminated (key : String) (options : List Value) (v : Option
   let some (.obj fields) := v | return { value := v, issues := [invalidType "object" v] }
   let tag := fields.lookup key
   match options.find? fun o => tag.any fun t => (discriminatorValues key o).any (sameValue t) with
-  | some option => parseValue option v
+  | some option => return (← parseValue option v).passed
   | none =>
     let values := options.flatMap (discriminatorValues key)
     pure { value := v, issues := [{

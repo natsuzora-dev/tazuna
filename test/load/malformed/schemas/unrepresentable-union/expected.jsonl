@@ -1,4 +1,0 @@
-{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"readingTaken"},"data":{"path":["payload","kelvin"],"type":"union"},"location":{"file":"todo/todo.ts","line":12}}
-{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"readingTaken"},"data":{"path":["payload","nested","kelvin"],"type":"union"},"location":{"file":"todo/todo.ts","line":12}}
-{"kind":"Malformed.unrepresentableSchema","definition":{"service":"todo","name":"readingTaken"},"data":{"path":["payload","outer"],"type":"union"},"location":{"file":"todo/todo.ts","line":12}}
-{"kind":"Malformed.unrepresentableSchema","definition":null,"data":{"name":"limits","path":["most"],"type":"union"},"location":{"file":"todo/todo.ts","line":32}}

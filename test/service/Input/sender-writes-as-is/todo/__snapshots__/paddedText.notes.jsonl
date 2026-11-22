@@ -1,2 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"todo/notes.addNote#1","name":"addNote","input":{"text":" x "}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"todo/notes.addNote#1","answer":{"result":"accepted"}}

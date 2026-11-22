@@ -174,6 +174,9 @@ ref.self = (): SelfRef => {
   return schema as SelfRef;
 };
 
+/** Whether `schema` is a `ref.self()`, a z.lazy that reads its entity's key field once the entity is defined. */
+export const isSelfRef = (schema: z.ZodType): boolean => selfRefs.has(schema);
+
 /** Whether `schema` is a `ref.self()` that no `entity()` claimed, as one outside the fields of an entity is. */
 export const misplacedSelfRef = (schema: z.ZodType): boolean => selfRefs.has(schema) && !refTargets.has(schema);
 

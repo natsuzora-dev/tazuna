@@ -59,18 +59,16 @@ const rows = (key: object) => ({
 const contexts = [
   { type: "object", properties: { s: { type: "array", items: rows({ type: "integer" }), "x-tazuna-sorted-by": "k" } } },
   { type: "object", properties: { s: { type: "array", items: rows({ type: "string" }), "x-tazuna-sorted-by": "k" } } },
+  {
+    type: "object",
+    properties: { s: { type: "array", items: rows({ type: "string", format: "date" }), "x-tazuna-sorted-by": "k" } },
+  },
   { type: "object", properties: { u: { anyOf: [bagOf({ type: "number" }), { type: "null" }] } } },
   { type: "object", properties: { u: { anyOf: [rows({ type: "string" }), rows({ type: "string", const: "x" })] } } },
   { type: "object", properties: { u: { anyOf: [bagOf({ type: "number" }), bagOf({ type: "string" })] } } },
   {
     type: "object",
     properties: { u: { oneOf: [rows({ const: "a" }), { ...rows({ const: "b" }), items: bagOf({}) }] } },
-  },
-  {
-    type: "object",
-    properties: {
-      s: { type: "array", items: rows({ type: "integer", "x-tazuna-codec": true }), "x-tazuna-sorted-by": "k" },
-    },
   },
   {
     type: "object",

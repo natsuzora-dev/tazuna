@@ -1,5 +1,6 @@
 import {
   cryptoModules,
+  indexedMethods,
   localeMethods,
   memberObjects,
   nondeterministicGlobals,
@@ -23,6 +24,9 @@ interface Node {
   readonly source?: Node;
   readonly id?: Node & { readonly properties?: readonly Node[] };
   readonly init?: Node;
+  readonly callee?: Node;
+  readonly arguments?: readonly Node[];
+  readonly params?: readonly Node[];
   readonly typeAnnotation?: {
     readonly start: number;
     readonly end: number;
@@ -157,6 +161,30 @@ function assertions(source: SourceFile): Found<Restricted>[] {
   return found;
 }
 
+/** Reports each callback of an indexedMethods call that declares a second parameter, the index of the element. */
+function indexCallbacks(source: SourceFile): Found<Restricted>[] {
+  const found: Found<Restricted>[] = [];
+  const visit = (node: unknown): void => {
+    if (node === null || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    const n = node as Node;
+    const callee = n.type === "CallExpression" ? n.callee : undefined;
+    const method = callee?.type === "MemberExpression" && callee.property ? callee.property.name : undefined;
+    const [callback] = n.arguments ?? [];
+    if (isOneOf(indexedMethods, method) && callback?.params !== undefined && callback.params.length > 1)
+      found.push({
+        violation: { kind: "Restricted.indexCallback", definition: null, data: { method } },
+        place: placeIn(source, callback.params[1]?.start ?? callback.start ?? 0),
+      });
+    for (const value of Object.values(node)) visit(value);
+  };
+  visit(source.program);
+  return found;
+}
+
 export function check(spec: LoadedSpec): Found<Restricted>[] {
   const files = [...spec.sources, ...spec.imported];
   return [
@@ -164,5 +192,6 @@ export function check(spec: LoadedSpec): Found<Restricted>[] {
     ...files.flatMap(nondeterminism),
     ...files.flatMap(moduleState),
     ...files.flatMap(assertions),
+    ...files.flatMap(indexCallbacks),
   ];
 }

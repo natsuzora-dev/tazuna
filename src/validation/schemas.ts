@@ -7,11 +7,9 @@ import { type DefinitionStructure, type StateStructure, schemaProperties } from 
 function orderedKey(item: unknown, key: string): boolean {
   const p = propertyOf(item, key);
   if (p === undefined || !requiredOf(item).includes(key)) return false;
-  if (field(p, "default") !== undefined || field(p, "x-tazuna-codec") !== undefined) return false;
+  if (field(p, "default") !== undefined) return false;
   const [type, format] = [field(p, "type"), field(p, "format")];
-  return (
-    type === "number" || type === "integer" || (type === "string" && (format === "date-time" || format === "date"))
-  );
+  return type === "number" || type === "integer" || (type === "string" && format === "date");
 }
 
 /** Lean's children. */

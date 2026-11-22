@@ -19,15 +19,3 @@ export const emptyTitle = scenario({
   },
   then: () => [],
 });
-
-export const paddedTitle = scenario({
-  description:
-    "Add a task whose title is one space; noteAdded sends addNote with the text as written, and only notes parses it: one character passes min(1) before trim, and notes records the trimmed empty text in noteKept without checking it again; no violation",
-  given: arranged,
-  when: (w) => {
-    const added = w.client.send(addTask, { taskId: "task-1", title: " " });
-    const note = w.net.deliver(added.request(notes.addNote));
-    w.net.deliver(note.answer(note));
-  },
-  then: () => [],
-});

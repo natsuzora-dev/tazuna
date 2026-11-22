@@ -112,6 +112,18 @@ const fixtures: readonly { readonly shape: Shape; readonly fields: Readonly<Reco
       list: fc.array(instantValue, { maxLength: 2 }),
     },
   },
+  {
+    shape: {
+      m: z.string().min(2, "too short"),
+      s: z.string({ error: "no text" }).max(1),
+      o: z.strictObject({ a: z.int() }, { error: "no object" }),
+      u: z.union([z.string(), z.int()], { error: "no option" }),
+      e: z.enum(["a", "b"], { error: "no letter" }),
+      i: z.int({ error: "no integer" }).min(3, "below three"),
+      a: z.string().min(2, { error: "short", abort: true }).max(1),
+    },
+    fields: { m: scalar, s: scalar, o: json, u: scalar, e: scalar, i: scalar, a: scalar },
+  },
 ];
 
 /** A value of a fixture's shape: some fields left out, some given anything, and at times a field it lacks. */
@@ -144,8 +156,7 @@ for (const [i, { shape, fields }] of fixtures.entries())
     );
   });
 
-test("Lean leaves to Zod a schema whose checks it does not know, a refinement, an overwrite, an author's message, a codec of the author's, or a recursion", () => {
-  const upper = z.codec(z.string(), z.string(), { decode: (s) => s.toUpperCase(), encode: (s) => s });
+test("Lean leaves to Zod the schemas that check reports as Restricted: a string format, a refinement, an overwrite, a message that is a function, a record, or a recursion", () => {
   type Tree = { readonly children: readonly Tree[] };
   const tree: z.ZodType<Tree> = z.lazy(() => z.object({ children: z.array(tree) }));
   for (const field of [
@@ -153,9 +164,7 @@ test("Lean leaves to Zod a schema whose checks it does not know, a refinement, a
     z.string().regex(/a/),
     z.string().refine((s) => s !== ""),
     z.string().trim(),
-    z.string({ error: "no" }),
-    z.string().min(1, "too short"),
-    upper,
+    z.string({ error: (issue) => String(issue.input) }),
     tree,
     z.record(z.string(), z.int()),
     z.iso.datetime(),

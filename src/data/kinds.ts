@@ -78,6 +78,8 @@ const restrictedKinds = every<Restricted["kind"]>()([
   "Restricted.any",
   "Restricted.suppression",
   "Restricted.crossServiceImport",
+  "Restricted.indexCallback",
+  "Restricted.schema",
 ]);
 
 /** The kinds of each group. */

@@ -21,8 +21,6 @@ export const taskAdded = event({
     owners: z.map(z.string(), z.string()),
     ratio: z.nan().optional(),
     mark: z.symbol(),
-    length: z.string().transform((s) => s.length),
-    trimmed: z.string().pipe(z.string().trim()),
     seen: z.date(),
     ids: z.set(z.bigint()),
     first: box,

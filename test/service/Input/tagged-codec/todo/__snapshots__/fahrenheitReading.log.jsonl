@@ -1,3 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"todo/log.record#1","name":"record","input":{"reading":{"unit":"fahrenheit","kelvin":81,"at":1792886400000}}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"todo/log.record#1","answer":{"result":"accepted"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"readingKept#1","name":"readingKept","payload":{"reading":{"unit":"fahrenheit","kelvin":81,"at":1792886400000}},"resultOf":"todo/log.record#1"}

@@ -267,12 +267,12 @@
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
-          "from": 6,
-          "to": 13,
-          "line": 6,
-          "text": "export const titleLogged = event({\n  payload: {\n    title: z.string().refine((title) => {\n      if (title === \"\") throw new Error(\"a logged title needs text\");\n      return true;\n    }),\n  },\n});"
+          "from": 8,
+          "to": 10,
+          "line": 8,
+          "text": "export const logTitle = command({ input: { title: z.string(), from: date }, emits: [titleLogged] }).decide(\n  ({ input }) => [emit(titleLogged, { title: input.title, until: addDays(input.from, 3_000_000) })],\n);"
         },
-        "violation": "{\"kind\":\"Fault.exception\",\"definition\":{\"service\":\"todo\",\"name\":\"titleLogged\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":6},\"scenario\":{\"service\":\"todo\",\"name\":\"logEmpty\"},\"error\":{\"type\":\"thrownError\",\"name\":\"Error\",\"message\":\"a logged title needs text\",\"stack\":\"<stack>\"}}"
+        "violation": "{\"kind\":\"Fault.exception\",\"definition\":{\"service\":\"todo\",\"name\":\"logTitle\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"logFarDate\"},\"error\":{\"type\":\"thrownError\",\"name\":\"RangeError\",\"message\":\"addDays(2026-10-25, 3000000) names no date in years 0000 through 9999\",\"stack\":\"<stack>\"}}"
       }
     },
     "Fault.failedChartInvariant": {
@@ -1440,7 +1440,7 @@
           "from": 14,
           "to": 20,
           "line": 14,
-          "text": "export const marks = query({\n  output: {\n    tags: z.record(z.string(), bag(z.string())),\n    days: z.tuple([sortedBy(z.strictObject({ n: z.int() }), \"n\")]),\n    ids: set(z.string()).readonly(),\n  },\n}).resolve(() => ({ tags: {}, days: [[{ n: 1 }]], ids: [] }));"
+          "text": "export const marks = query({\n  output: {\n    tags: bag(z.string()).readonly(),\n    days: sortedBy(z.strictObject({ n: z.int() }), \"n\").readonly(),\n    ids: set(z.string()).readonly(),\n  },\n}).resolve(() => ({ tags: [], days: [{ n: 1 }], ids: [] }));"
         },
         "violation": "{\"kind\":\"Malformed.opaqueCollection\",\"definition\":{\"service\":\"todo\",\"name\":\"marks\"},\"data\":{\"path\":[\"output\",\"tags\"],\"collection\":\"bag\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":14}}"
       }
@@ -1550,14 +1550,14 @@
       }
     },
     "Malformed.unrepresentableSchema": {
-      "meaning": "The schema at `path` has a value that tazuna cannot write back as JSON, of the Zod type `type`: one that JSON cannot hold, such as `bigint` or `set`, a one-way `transform` (a `z.codec` has a way back), a `union` that holds a codec at some depth, or an `intersection`. Writing a value as JSON runs its codecs and no check, and picks a union's option by the written form, which a codec in a `z.union` changes; a `z.discriminatedUnion`'s tag is no codec. A codec or null is written `.nullable()`. An intersection's JSON Schema cannot reject a field that neither side names, so objects are joined with `.extend()`. A `getter` is an object that names itself in a getter of its shape, which tazuna cannot walk to its end; a recursion is written with `z.lazy`.",
+      "meaning": "The schema at `path` has a value that tazuna cannot write back as JSON, of the Zod type `type`: one that JSON cannot hold, such as `bigint` or `set`, or an `intersection`, whose JSON Schema cannot reject a field that neither side names, so objects are joined with `.extend()`. A `getter` is an object that names itself in a getter of its shape, which tazuna cannot walk to its end; an entity whose rows ref() each other holds such data.",
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
           "from": 16,
-          "to": 33,
+          "to": 31,
           "line": 16,
-          "text": "export const taskAdded = event({\n  payload: {\n    at: instant,\n    count: z.bigint(),\n    tags: z.set(z.string()),\n    owners: z.map(z.string(), z.string()),\n    ratio: z.nan().optional(),\n    mark: z.symbol(),\n    length: z.string().transform((s) => s.length),\n    trimmed: z.string().pipe(z.string().trim()),\n    seen: z.date(),\n    ids: z.set(z.bigint()),\n    first: box,\n    second: box,\n    sized: z.object({ name: z.string() }).and(z.object({ size: z.number() })),\n    tree,\n  },\n});"
+          "text": "export const taskAdded = event({\n  payload: {\n    at: instant,\n    count: z.bigint(),\n    tags: z.set(z.string()),\n    owners: z.map(z.string(), z.string()),\n    ratio: z.nan().optional(),\n    mark: z.symbol(),\n    seen: z.date(),\n    ids: z.set(z.bigint()),\n    first: box,\n    second: box,\n    sized: z.object({ name: z.string() }).and(z.object({ size: z.number() })),\n    tree,\n  },\n});"
         },
         "violation": "{\"kind\":\"Malformed.unrepresentableSchema\",\"definition\":{\"service\":\"todo\",\"name\":\"taskAdded\"},\"data\":{\"path\":[\"payload\",\"count\"],\"type\":\"bigint\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":16}}"
       }
@@ -2187,7 +2187,7 @@
       }
     },
     "Restricted.global": {
-      "meaning": "The file reads the global `global`, whose value depends on the environment, such as the clock or the process.",
+      "meaning": "The file reads the global `global`, whose value depends on the environment, such as the clock, the process, or the time zone rules of `Temporal`. A spec function reads time from `now` and holds it with tazuna's `instant`, `duration` and `date`; what needs a time zone, such as today's date, comes from an external service.",
       "example": {
         "excerpt": {
           "file": "todo/helpers.ts",
@@ -2197,6 +2197,19 @@
           "text": "export const now = () => Date.now();"
         },
         "violation": "{\"kind\":\"Restricted.global\",\"definition\":null,\"data\":{\"global\":\"Date\"},\"location\":{\"file\":\"todo/helpers.ts\",\"line\":1}}"
+      }
+    },
+    "Restricted.indexCallback": {
+      "meaning": "The file passes `method` a callback that reads the index of the element, its second parameter. A spec reads an order through a field that holds it, or through sortedBy and the methods of a Bag.",
+      "example": {
+        "excerpt": {
+          "file": "todo/todo.ts",
+          "from": 8,
+          "to": 10,
+          "line": 9,
+          "text": "export const numberTasks = command({ input: { titles: z.array(z.string()) }, emits: [tasksNumbered] }).decide(\n  ({ input }) => [emit(tasksNumbered, { titles: input.titles.map((title, i) => `${i + 1}. ${title}`) })],\n);"
+        },
+        "violation": "{\"kind\":\"Restricted.indexCallback\",\"definition\":null,\"data\":{\"method\":\"map\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":9}}"
       }
     },
     "Restricted.localeMethod": {
@@ -2213,7 +2226,7 @@
       }
     },
     "Restricted.member": {
-      "meaning": "The file reads `object.property`, such as `Math.random` or `Temporal.Now`, whose value changes between runs.",
+      "meaning": "The file reads `object.property`, such as `Math.random`, whose value changes between runs.",
       "example": {
         "excerpt": {
           "file": "todo/helpers.ts",
@@ -2249,6 +2262,19 @@
           "text": "export const first = (titles: readonly string[]) => titles[0]!;"
         },
         "violation": "{\"kind\":\"Restricted.nonNull\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/helpers.ts\",\"line\":1}}"
+      }
+    },
+    "Restricted.schema": {
+      "meaning": "The schema at `path` of the definition, or of the constants `name` when `definition` is null, uses `feature`, which Lean can neither parse nor encode to SMT. In its place: - `codec` (z.codec, a pipe, a transform): the value as the wire holds it, which spec functions compute from. - `refinement` (refine, superRefine, check): a requires or an invariant that states the condition. - `overwrite` (overwrite, trim, toLowerCase, toUpperCase, z.coerce): the value as given, with the condition in a   requires. - `stringFormat` (email, url, regex, uuid and the other formats but startsWith, endsWith, includes and date): a   z.string() whose format an external service or the implementation checks. - `record` (z.record): an array of objects with a key field, or an entity. - `tuple` (z.tuple): an object with a field per position. - `recursion` (z.lazy): an entity whose rows ref() each other. - `message`: an error message that is a function; a message written as a string stays.",
+      "example": {
+        "excerpt": {
+          "file": "todo/todo.ts",
+          "from": 9,
+          "to": 25,
+          "line": 9,
+          "text": "export const taskAdded = event({\n  payload: {\n    cents: z.codec(z.string(), z.int(), { decode: Number, encode: String }),\n    length: z.string().transform((s) => s.length),\n    title: z.string().refine((s) => s !== \"\"),\n    note: z.string().trim(),\n    count: z.coerce.number(),\n    owner: z.email(),\n    code: z.string().regex(/^[A-Z]+$/),\n    tags: z.record(z.string(), z.string()),\n    point: z.tuple([z.int(), z.int()]),\n    tree,\n    size: z.int().min(1, { error: (issue) => `at least 1, not ${String(issue.input)}` }),\n    named: z.string().min(1, \"a name has text\"),\n    startsWithA: z.string().startsWith(\"a\"),\n  },\n});"
+        },
+        "violation": "{\"kind\":\"Restricted.schema\",\"definition\":{\"service\":\"todo\",\"name\":\"taskAdded\"},\"data\":{\"path\":[\"payload\",\"cents\"],\"feature\":\"codec\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":9}}"
       }
     },
     "Restricted.suppression": {

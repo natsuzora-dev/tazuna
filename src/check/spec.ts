@@ -16,6 +16,7 @@ import * as constants from "./nonCanonical/constants.ts";
 import * as descriptions from "./nonCanonical/descriptions.ts";
 import * as keywords from "./nonCanonical/keywords.ts";
 import * as offers from "./nonCanonical/offers.ts";
+import * as schemas from "./restricted/schemas.ts";
 import * as sources from "./restricted/sources.ts";
 import { type TypeCheck, typeCheck } from "./typeCheck.ts";
 
@@ -42,6 +43,7 @@ const syntaxChecks: readonly { readonly check: (spec: LoadedSpec) => readonly Fo
   descriptions,
   keywords,
   offers,
+  schemas,
   sources,
 ];
 

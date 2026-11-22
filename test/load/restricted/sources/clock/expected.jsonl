@@ -1,5 +1,5 @@
 {"kind":"Restricted.member","definition":null,"data":{"object":"Math","property":"random"},"location":{"file":"todo/stamps.ts","line":1}}
-{"kind":"Restricted.member","definition":null,"data":{"object":"Temporal","property":"Now"},"location":{"file":"todo/stamps.ts","line":2}}
+{"kind":"Restricted.global","definition":null,"data":{"global":"Temporal"},"location":{"file":"todo/stamps.ts","line":2}}
 {"kind":"Restricted.global","definition":null,"data":{"global":"Date"},"location":{"file":"todo/stamps.ts","line":5}}
 {"kind":"Restricted.global","definition":null,"data":{"global":"Date"},"location":{"file":"todo/stamps.ts","line":6}}
 {"kind":"Restricted.global","definition":null,"data":{"global":"performance"},"location":{"file":"todo/stamps.ts","line":7}}
@@ -10,4 +10,4 @@
 {"kind":"Restricted.cryptoImport","definition":null,"data":{"module":"node:crypto"},"location":{"file":"todo/stamps.ts","line":16}}
 {"kind":"Restricted.global","definition":null,"data":{"global":"crypto"},"location":{"file":"todo/todo.ts","line":28}}
 {"kind":"Restricted.member","definition":null,"data":{"object":"Math","property":"random"},"location":{"file":"todo/todo.ts","line":29}}
-{"kind":"Restricted.member","definition":null,"data":{"object":"Temporal","property":"Now"},"location":{"file":"todo/todo.ts","line":30}}
+{"kind":"Restricted.global","definition":null,"data":{"global":"Temporal"},"location":{"file":"todo/todo.ts","line":30}}

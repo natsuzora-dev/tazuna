@@ -1,1 +1,0 @@
-{"kind":"Fault.exception","definition":{"service":"counters","name":"counterScreen"},"data":{},"location":{"file":"counters/screens.ts","line":6},"scenario":{"service":"counters","name":"start"},"error":{"type":"thrownError","name":"Error","message":"a count cannot start below zero","stack":"<stack>"}}
