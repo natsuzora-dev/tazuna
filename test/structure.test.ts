@@ -79,7 +79,16 @@ test("A screen has the JSON Schema of each control payload, the controls that ea
     complete: null,
     remind: {
       type: "object",
-      properties: { at: { type: "string", format: "date-time" } },
+      properties: {
+        at: {
+          type: "string",
+          format: "date-time",
+          "x-tazuna-checks": [
+            { check: "string_format", format: "datetime", offset: true, local: false, precision: null },
+          ],
+          "x-tazuna-time": "instant",
+        },
+      },
       required: ["at"],
     },
   });

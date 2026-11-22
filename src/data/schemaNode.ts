@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { markOf } from "./marks.ts";
 
 /**
  * The node form of a Zod schema, the one place that reads Zod's definitions. Any other type is opaque: `kind` is its
@@ -134,6 +135,41 @@ export function childrenOf(node: SchemaNode): readonly z.ZodType[] {
       return [node.inner];
   }
 }
+
+/**
+ * The checks that Zod runs on a value of `schema` once its type matches, in its order, each as its definition's data: a
+ * schema that is a check itself, such as z.int() or z.email(), runs first. A check that carries its own message, which
+ * only Zod renders, is `{ check: "opaque" }`, and so is a refinement or an overwrite. A set's check is `{ check: "set" }`;
+ * those of a bag and a sortedBy array check nothing.
+ */
+export function checksOf(schema: z.ZodType): readonly Readonly<Record<string, CheckData>>[] {
+  const own = schema._zod.traits.has("$ZodCheck") ? [schema as unknown as z.core.$ZodCheck] : [];
+  return [...own, ...(schema._zod.def.checks ?? [])].flatMap((c) => {
+    const mark = markOf(c as z.core.$ZodCheck<never>);
+    if (mark !== undefined) return mark.kind === "set" ? [{ check: "set" }] : [];
+    const def = c._zod.def as unknown as Readonly<Record<string, unknown>>;
+    if (
+      def["error"] !== undefined ||
+      def["abort"] === true ||
+      def["check"] === "custom" ||
+      def["check"] === "overwrite"
+    )
+      return [{ check: "opaque" }];
+    return [
+      Object.fromEntries(
+        Object.entries(def).filter(
+          ([key, v]) => !["when", "pattern", "type", "coerce", "checks"].includes(key) && isCheckData(v),
+        ),
+      ) as Record<string, CheckData>,
+    ];
+  });
+}
+
+/** A parameter of a check, which JSON holds. */
+export type CheckData = string | number | boolean | null | readonly CheckData[];
+
+const isCheckData = (v: unknown): v is CheckData =>
+  v === null || ["string", "number", "boolean"].includes(typeof v) || (Array.isArray(v) && v.every(isCheckData));
 
 /** The schema of field `key` of an object node: its shape's, else the catchall, if any. */
 export const fieldSchema = (node: Extract<SchemaNode, { type: "object" }>, key: string): z.ZodType | undefined =>

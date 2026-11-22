@@ -1,10 +1,18 @@
 import { z } from "zod";
-import { date, datetime } from "./datetime.ts";
+import { date, datetime, duration } from "./datetime.ts";
 import { InternalError } from "./internalError.ts";
 import { collectionOf } from "./marks.ts";
 import type { SchemaStep } from "./schema.generated.ts";
-import { fieldSchema, holdsCodec, recursesEagerly, type SchemaNode, schemaNode, strict } from "./schemaNode.ts";
-import type { Json, Shape } from "./values.ts";
+import {
+  checksOf,
+  fieldSchema,
+  holdsCodec,
+  recursesEagerly,
+  type SchemaNode,
+  schemaNode,
+  strict,
+} from "./schemaNode.ts";
+import { type Json, plain, type Shape } from "./values.ts";
 
 export type JsonSchema = { readonly [key: string]: Json };
 
@@ -89,11 +97,50 @@ function inlineOptions(schema: JsonSchema): JsonSchema {
   return walk(schema) as JsonSchema;
 }
 
+const timeKinds = new Map<unknown, string>([
+  [transformOf(datetime), "instant"],
+  [transformOf(date), "date"],
+  [transformOf(duration), "duration"],
+]);
+
+/**
+ * What Lean's parse reads of `schema` beyond its JSON Schema `written`, to validate as Zod does: the checks in Zod's
+ * order, which JSON Schema keywords do not keep; a nullable, which JSON Schema writes as a union with null; the
+ * discriminator of a discriminated union; the kind of a tazuna time codec, which decodes and encodes its text; and
+ * `x-tazuna-opaque` where only Zod can say what it does: a message of the author's, or a default that JSON cannot hold.
+ */
+function validation(schema: z.ZodType, written: Readonly<Record<string, unknown>>): JsonSchema {
+  const def = schema._zod.def as unknown as Readonly<Record<string, unknown>>;
+  const node = schemaNode(schema);
+  const checks = checksOf(schema);
+  const time = node.type === "codec" ? timeKinds.get(transformOf(schema)) : undefined;
+  // Zod leaves out the default of a schema that holds a codec, which its JSON Schema writes encoded.
+  const encodedDefault =
+    node.type === "default" && written["default"] === undefined
+      ? z.safeEncode(node.inner, def["defaultValue"])
+      : undefined;
+  const opaque =
+    def["error"] !== undefined || checks.some((c) => c["check"] === "opaque") || encodedDefault?.success === false;
+  return {
+    ...(encodedDefault?.success === true ? { default: plain(encodedDefault.data) } : {}),
+    ...(checks.length === 0 ? {} : { "x-tazuna-checks": checks }),
+    ...(node.type === "nullable" ? { "x-tazuna-nullable": true } : {}),
+    ...(node.type === "union" && node.discriminator !== undefined
+      ? { "x-tazuna-discriminator": node.discriminator }
+      : {}),
+    ...(time === undefined ? {} : { "x-tazuna-time": time }),
+    ...(opaque ? { "x-tazuna-opaque": true } : {}),
+  };
+}
+
 /**
  * The JSON Schema of `schema` as parsing reads it, with every object closed by `strict` and each union option written
  * out (inlineOptions).
  */
-export const jsonSchema = (schema: z.ZodType): JsonSchema =>
+export const jsonSchema = (schema: z.ZodType): JsonSchema => jsonSchemaOf(schema, false);
+
+/** The JSON Schema of `schema`, with what Lean's parse reads beyond it (validation) when `validated`. */
+const jsonSchemaOf = (schema: z.ZodType, validated: boolean): JsonSchema =>
   inlineOptions(
     z.toJSONSchema(strict(schema), {
       io: "input",
@@ -109,6 +156,7 @@ export const jsonSchema = (schema: z.ZodType): JsonSchema =>
         if (collection?.kind === "bag") ctx.jsonSchema["x-tazuna-bag"] = true;
         if (collection?.kind === "set") Object.assign(ctx.jsonSchema, { uniqueItems: true, "x-tazuna-set": true });
         if (collection?.kind === "sortedBy") ctx.jsonSchema["x-tazuna-sorted-by"] = collection.key;
+        if (validated) Object.assign(ctx.jsonSchema, validation(ctx.zodSchema as unknown as z.ZodType, ctx.jsonSchema));
       },
     }) as JsonSchema,
   );
@@ -152,7 +200,12 @@ export function partAt(schema: z.ZodType, path: readonly SchemaStep[]): z.ZodTyp
   }, schema);
 }
 
+/** The JSON Schema of an object of `shape` that the structure holds, with what Lean's parse reads beyond it. */
 export function objectSchema(shape: Shape): JsonSchema {
-  const { $schema: _, additionalProperties: __, ...schema } = jsonSchema(z.object(shape as Record<string, z.ZodType>));
+  const {
+    $schema: _,
+    additionalProperties: __,
+    ...schema
+  } = jsonSchemaOf(z.object(shape as Record<string, z.ZodType>), true);
   return schema;
 }

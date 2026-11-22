@@ -15,5 +15,7 @@ export const mark = (check: z.core.$ZodCheck<never>, collection: Collection): vo
   collections.set(check, collection);
 };
 
+export const markOf = (check: z.core.$ZodCheck<never>): Collection | undefined => collections.get(check);
+
 export const collectionOf = (schema: z.core.$ZodType): Collection | undefined =>
   (schema._zod.def.checks ?? []).map((c) => collections.get(c)).find((c) => c !== undefined);
