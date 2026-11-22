@@ -3,6 +3,7 @@ import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import type { Expr } from "../../src/convert/ir.generated.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
 import type { Scenario } from "../../src/data/scenario.generated.ts";
 import type { TraceLine } from "../../src/data/trace.generated.ts";
@@ -14,7 +15,7 @@ import type { Schema } from "../../src/service/basic.ts";
 import type { StepOrder } from "../../src/sim/network.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
-import type { Asked, Reply, Request, Response } from "./protocol.generated.ts";
+import type { Asked, Evaluated, Reply, Request, Response } from "./protocol.generated.ts";
 
 const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-lean");
 
@@ -245,5 +246,10 @@ export class Lean {
 
   schemaOf(structure: Structure, service: string, schema: Schema): Json | undefined {
     return (this.exchange({ type: "schemaOf", structure, service, schema }).schema ?? undefined) as Json | undefined;
+  }
+
+  /** The value of `body` with `input` as its only argument, as Lean evaluates the IR. */
+  evaluate(body: Expr, input: Json): Evaluated {
+    return this.exchange({ type: "evaluate", body, input }).result;
   }
 }

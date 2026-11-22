@@ -179,6 +179,18 @@
         "path": "^src/",
         "pathNot": "^src/(data|dsl|spec|load|check|view)/"
       }
+    },
+    {
+      "name": "convert",
+      "comment": "src/convert, which turns spec functions into IR, imports only data, dsl, load, and convert",
+      "severity": "error",
+      "from": {
+        "path": "^src/convert/"
+      },
+      "to": {
+        "path": "^src/",
+        "pathNot": "^src/(data|dsl|load|convert)/"
+      }
     }
   ],
   "options": {
