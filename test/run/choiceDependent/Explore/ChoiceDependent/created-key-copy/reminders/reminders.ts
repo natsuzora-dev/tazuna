@@ -1,4 +1,4 @@
-import { emit, entity, ref, service } from "@natsuzora-dev/tazuna";
+import { emit, entity, parseInstant, ref, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({ description: "A task", fields: { id: z.string(), text: z.string() }, key: "id" });
@@ -30,7 +30,7 @@ const clock = (text: string) =>
     states: {
       idle: { on: { armed: [{ target: "waiting" }] } },
       waiting: {
-        after: { due: { at: () => Temporal.Instant.from("2026-10-25T01:00:00Z"), onFired: [{ target: "adding" }] } },
+        after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "adding" }] } },
       },
       adding: {
         sends: {
@@ -60,9 +60,9 @@ export const reminder = machine({
       after: {
         remind: {
           at: ({ key, records }) =>
-            Temporal.Instant.from(
-              records.Task.get(key.taskId)?.text === "a" ? "2026-10-25T03:00:00Z" : "2026-10-25T04:00:00Z",
-            ),
+            records.Task.get(key.taskId)?.text === "a"
+              ? parseInstant("2026-10-25T03:00:00Z")
+              : parseInstant("2026-10-25T04:00:00Z"),
           onFired: [{ target: "reminded" }],
         },
       },

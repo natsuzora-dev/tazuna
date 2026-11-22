@@ -42,13 +42,9 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Relation
 
-/--
-What a comparison orders: numbers, as JS `<` does, or instants or dates, as `Temporal.Instant.compare` and
-`Temporal.PlainDate.compare` do, which a value holds in its encoded text.
--/
+/-- What a comparison orders: numbers, as JS `<` does, or date labels `YYYY-MM-DD`, by the day they name. -/
 inductive Order where
   | number
-  | instant
   | date
 deriving DecidableEq, Repr, Inhabited
 
@@ -140,15 +136,14 @@ inductive Expr where
   /-- `array.includes(value)` of an array of scalars, null or undefined. -/
   | includes (array value : Expr)
   /--
-  A template literal: each part as a string, as JS writes a string, number, boolean, null or undefined, joined. An
-  instant or date is its JSON text, which is what its `toString` writes.
+  A template literal: each part as a string, as JS writes a string, number, boolean, null or undefined, joined.
   -/
   | format (parts : List Expr)
   | arith (operation : Arith) (left right : Expr)
   /-- `+`, `-`, `*` or `/` of numbers, which the converter writes where `arith` does not hold them, as JS computes it. -/
   | decimal (operation : Decimal) (left right : Expr)
-  /-- `instant.add(...)` of a duration of `ms` milliseconds, which throws outside the range of instants. -/
-  | timeAdd (instant ms : Expr)
+  /-- `addDays(date, days)`: the date label `days` days after `date`, which throws outside years 0000 through 9999. -/
+  | addDays (date days : Expr)
   /-- `emit(event, payload)` of an event that the command lists. -/
   | emit (event : Spec.Ref) (payload : Expr)
   /--

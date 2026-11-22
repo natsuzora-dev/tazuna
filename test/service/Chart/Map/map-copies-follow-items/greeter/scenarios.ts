@@ -1,6 +1,7 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { addTasks, completeTask, given, scenario } from "./greeter.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: [] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: { Task: [] }, peers: [] });
 
 export const copiesInKeyOrder = scenario({
   description:
@@ -18,11 +19,11 @@ export const deadlineEndsWithCopy = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(addTasks, { taskIds: ["task-1"] });
-    w.clock.at("2026-10-25T10:30:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:30:00+09:00"));
     w.client.send(completeTask, { taskId: "task-1" });
-    w.clock.at("2026-10-25T11:30:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T11:30:00+09:00"));
     w.client.send(addTasks, { taskIds: ["task-2"] });
-    w.clock.at("2026-10-25T13:00:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T13:00:00+09:00"));
   },
   then: () => [],
 });

@@ -3,8 +3,8 @@ import { z } from "zod";
 import { type Defined, definedKey } from "../../src/convert/expression.ts";
 import type { Expr } from "../../src/convert/ir.generated.ts";
 import { bag } from "../../src/data/collections.ts";
-import { date, datetime } from "../../src/data/datetime.ts";
 import type { DefinitionRef } from "../../src/data/definitionRef.ts";
+import { addDays, date, instant as instantSchema } from "../../src/data/time.ts";
 import type { Json, Shape } from "../../src/data/values.ts";
 import { entity, type Records, type Ref, type Row, ref, refTarget, singleEntity } from "../../src/dsl/entity.ts";
 import { emit } from "../../src/dsl/event.ts";
@@ -34,9 +34,7 @@ const fixture = <S extends Shape>(
 // Few distinct values, so that equal ones and empty ones come up often.
 const text = fc.string({ maxLength: 3, unit: fc.constantFrom("a", "b", "é") });
 const number = fc.oneof(fc.integer({ min: -2, max: 2 }), fc.double({ min: -3, max: 3, noNaN: true }));
-const instant = fc
-  .integer({ min: 0, max: 3 })
-  .map((n) => Temporal.Instant.fromEpochMilliseconds(Date.UTC(2026, 0, 1) + n * 999).toString());
+const instant = fc.integer({ min: 0, max: 3 }).map((n) => Date.UTC(2026, 0, 1) + n * 999);
 const day = fc.integer({ min: 0, max: 3 }).map((n) => new Date(Date.UTC(2026, 0, 30 + n)).toISOString().slice(0, 10));
 const numbers = fc.array(number, { maxLength: 4 });
 
@@ -45,7 +43,7 @@ const itemOf = fc.record({ name: text });
 
 const Task = entity({
   description: "A task",
-  fields: { id: z.string(), title: z.string(), done: z.boolean(), at: datetime.nullable() },
+  fields: { id: z.string(), title: z.string(), done: z.boolean(), at: instantSchema.nullable() },
   key: "id",
 });
 const Settings = singleEntity({ description: "The settings", fields: { limit: z.number().default(0) } });
@@ -173,15 +171,12 @@ export const fixtures: readonly Fixture[] = [
   ),
   fixture(
     "compare",
-    { at: datetime, until: datetime.nullable() },
+    { at: instantSchema, until: instantSchema.nullable() },
     fc.record({ at: instant, until: fc.option(instant) }),
-    ({ input }) =>
-      input.until !== null && (Temporal.Instant.compare(input.at, input.until) > 0 || input.at.equals(input.until)),
+    ({ input }) => input.until !== null && (input.at > input.until || input.at === input.until),
   ),
   fixture("compare", { from: date, to: date }, fc.record({ from: day, to: day }), ({ input }) =>
-    Temporal.PlainDate.compare(input.from, input.to) !== 0
-      ? 0 >= Temporal.PlainDate.compare(input.from, input.to)
-      : input.to.equals(input.from),
+    input.from !== input.to ? input.from <= input.to : input.to >= input.from,
   ),
   fixture(
     "field",
@@ -251,9 +246,7 @@ export const fixtures: readonly Fixture[] = [
     ({ input, records }) =>
       records.Task.filter((t) => t.done).size > 0 || records.Task.some((t) => t.title === input.title),
   ),
-  recordFixture("table", {}, fc.record({}), ({ records }) =>
-    records.Task.every((t) => t.at === null || Temporal.Instant.compare(t.at, t.at) === 0),
-  ),
+  recordFixture("table", {}, fc.record({}), ({ records }) => records.Task.every((t) => t.at === null || t.at >= 0)),
   recordFixture("single", { n: z.number() }, fc.record({ n: number }), ({ input, records }) =>
     records.Settings.limit > input.n ? records.Settings.limit : input.n,
   ),
@@ -290,7 +283,7 @@ export const fixtures: readonly Fixture[] = [
   fixture("sum", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.sum((n) => n)),
   fixture("min", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.min((n) => n)),
   recordFixture("max", {}, fc.record({}), ({ records }) =>
-    records.Task.filter((t) => t.at !== null).max((t) => t.at as Temporal.Instant),
+    records.Task.filter((t) => t.at !== null).max((t) => t.at as number),
   ),
   recordFixture(
     "only",
@@ -315,22 +308,20 @@ export const fixtures: readonly Fixture[] = [
   ),
   fixture(
     "format",
-    { title: z.string(), n: z.number(), at: datetime, note: z.string().nullable().optional() },
+    { title: z.string(), n: z.number(), on: date, note: z.string().nullable().optional() },
     fc.record(
       {
         title: text,
         n: fc.oneof(number, fc.double({ noNaN: true, noDefaultInfinity: true })),
-        at: instant,
+        on: day,
         note: fc.option(text),
       },
-      { requiredKeys: ["title", "n", "at"] },
+      { requiredKeys: ["title", "n", "on"] },
     ),
-    ({ input }) => `${input.title}: ${input.n} at ${input.at} ${input.note} ${input.n > 0}` + input.title,
+    ({ input }) => `${input.title}: ${input.n} on ${input.on} ${input.note} ${input.n > 0}` + input.on,
   ),
-  fixture("lit", { at: datetime, on: date }, fc.record({ at: instant, on: day }), ({ input }) =>
-    Temporal.Instant.compare(input.at, Temporal.Instant.from("2026-01-01T09:00:01+09:00")) > 0
-      ? input.on.toString()
-      : Temporal.PlainDate.from("2026-01-31"),
+  fixture("lit", { at: instantSchema, on: date }, fc.record({ at: instant, on: day }), ({ input }) =>
+    input.at > 1_767_225_601_000 ? input.on : "2026-01-31",
   ),
   fixture(
     "arith",
@@ -362,14 +353,13 @@ export const fixtures: readonly Fixture[] = [
     ({ records }) => records.Task.filter((t) => t.title.length + 1 > 2).size * 3,
   ),
   fixture(
-    "timeAdd",
-    { at: datetime, n: z.int() },
-    fc.record({ at: instant, n: fc.integer({ min: -100, max: 100 }) }),
-    ({ input }) => [
-      input.at.add({ hours: input.n }),
-      input.at.subtract({ minutes: 2 }),
-      input.at.add({ milliseconds: input.n * 7 }),
-    ],
+    "addDays",
+    { on: date, n: z.int() },
+    fc.record({
+      on: fc.oneof(day, fc.constantFrom("0000-01-01", "9999-12-31", "2024-02-29")),
+      n: fc.integer({ min: -400, max: 400 }),
+    }),
+    ({ input }) => [addDays(input.on, input.n), addDays(input.on, -1) < input.on],
   ),
   recordFixture("createKey", { title: z.string() }, fc.record({ title: text }), ({ input, createKey }) => ({
     first: createKey(ref(Task)),
@@ -400,12 +390,12 @@ export const outside: readonly ((args: {
   readonly createKey: CreateKey;
 }) => unknown)[] = [
   ({ input }) => input.n % 2 === 1,
-  ({ input }) => Temporal.Now.instant().add({ hours: input.n }),
+  ({ input }) => Date.now() + input.n,
   ({ input }) => input.n ** 2,
   ({ input }) => input.title.trim() === "",
   ({ input }) => input.title < "b",
   ({ input }) => [...input.title].length === 1,
-  ({ input }) => input.title + Temporal.Now.instant(),
+  ({ input }) => input.title + new Date(input.n),
   async ({ input }) => input.n > 0,
   // biome-ignore lint/suspicious/noDoubleEquals: == on other than null coerces, which the IR does not.
   ({ input }) => input.n == 1,

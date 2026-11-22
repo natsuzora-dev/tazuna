@@ -1,11 +1,11 @@
-import { accepted, external, rejected } from "@natsuzora-dev/tazuna";
+import { accepted, external, parseInstant, rejected } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { scenario } from "./app.ts";
 
 export const grantRejected = scenario({
   description:
     "Link granted to a request that the device rejected; test reports resultOfUnacceptedRequest when the run ends, since the event cannot be that request's result",
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(device)] },
+  given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [external(device)] },
   when: (w) => {
     w.net.deliver(w.startup.request(device.requestPermission));
     w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), rejected("unavailable")));
@@ -17,7 +17,7 @@ export const grantRejected = scenario({
 export const denyUnlisted = scenario({
   description:
     "Link denied to the accepted request, whose command does not emit denied; test reports resultOfUnlistedEvent when the run ends",
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(device)] },
+  given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [external(device)] },
   when: (w) => {
     w.net.deliver(w.startup.request(device.requestPermission));
     w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), accepted()));
@@ -29,7 +29,7 @@ export const denyUnlisted = scenario({
 export const grantBeforeAnswer = scenario({
   description:
     "The device emits granted as the result of the permission request before app takes its answer; a result event may arrive before or after the answer, as a Stripe webhook may arrive before the API response. permission waits in asking, which takes no granted, so the event changes nothing; no violation",
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(device)] },
+  given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [external(device)] },
   when: (w) => {
     const request = w.startup.request(device.requestPermission);
     w.net.deliver(request);
@@ -43,7 +43,7 @@ export const grantBeforeAnswer = scenario({
 export const grantAfterAnswer = scenario({
   description:
     "The device accepts the permission request and then emits granted as its result; permission is allowed; no violation",
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(device)] },
+  given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [external(device)] },
   when: (w) => {
     const request = w.startup.request(device.requestPermission);
     w.net.deliver(request);
@@ -56,7 +56,7 @@ export const grantAfterAnswer = scenario({
 export const grantBeforeRejection = scenario({
   description:
     "The device emits granted as the result of the permission request and then rejects the request; the end of the run checks the event against the answer that came later, and test reports resultOfUnacceptedRequest",
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(device)] },
+  given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [external(device)] },
   when: (w) => {
     const request = w.startup.request(device.requestPermission);
     w.net.deliver(request);

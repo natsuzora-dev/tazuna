@@ -1,10 +1,10 @@
-import { datetime, emit, entity, service } from "@natsuzora-dev/tazuna";
+import { emit, entity, instant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { calendar } from "../calendar/contract.ts";
 
 export const Task = entity({
   description: "A task",
-  fields: { id: z.string(), title: z.string(), dueAt: datetime.nullable() },
+  fields: { id: z.string(), title: z.string(), dueAt: instant.nullable() },
   key: "id",
 });
 

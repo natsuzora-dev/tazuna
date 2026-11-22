@@ -10,7 +10,7 @@ export const keepsDeadline = machine({
   states: {
     waiting: {
       on: { taskAdded: [{ target: "waiting", reenter: false }] },
-      after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } },
+      after: { hour: { delay: 3_600_000, onFired: [{ target: "reminding" }] } },
     },
     reminding: {
       sends: { remind: { input: () => ({ by: "keepsDeadline" }), onAccepted: [{ target: "done" }] } },
@@ -28,7 +28,7 @@ export const restartsDeadline = machine({
   states: {
     waiting: {
       on: { taskAdded: [{ target: "waiting", reenter: true }] },
-      after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } },
+      after: { hour: { delay: 3_600_000, onFired: [{ target: "reminding" }] } },
     },
     reminding: {
       sends: {
@@ -49,7 +49,7 @@ export const keepsDeadlineToChild = machine({
   states: {
     waiting: {
       on: { taskAdded: [{ target: "noted", reenter: false }] },
-      after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } },
+      after: { hour: { delay: 3_600_000, onFired: [{ target: "reminding" }] } },
     },
     reminding: {
       sends: {
@@ -74,7 +74,7 @@ export const restartsDeadlineToChild = machine({
   states: {
     waiting: {
       on: { taskAdded: [{ target: "noted", reenter: true }] },
-      after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } },
+      after: { hour: { delay: 3_600_000, onFired: [{ target: "reminding" }] } },
     },
     reminding: {
       sends: {
@@ -105,7 +105,7 @@ export const keepsDeadlineInParallel = machine({
   states: {
     waiting: {
       on: { taskAdded: [{ target: "noted", reenter: false }] },
-      after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } },
+      after: { hour: { delay: 3_600_000, onFired: [{ target: "reminding" }] } },
     },
     reminding: {
       sends: {

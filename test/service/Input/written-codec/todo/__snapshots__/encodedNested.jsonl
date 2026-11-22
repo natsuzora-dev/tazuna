@@ -1,5 +1,5 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"priceItem#1","name":"priceItem","input":{"item":"milk","cents":250}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"priceItem#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"itemPriced#1","name":"itemPriced","payload":{"item":"milk","cents":250},"resultOf":"priceItem#1"}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"command","id":"ledger.record#1","name":"ledger.record","input":{"byItem":{"milk":"250"},"range":["250","250"]}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"ledger/answer#1","to":"ledger.record#1","answer":{"result":"accepted"}}
+{"time":1792886400000,"dir":"in","type":"command","id":"priceItem#1","name":"priceItem","input":{"item":"milk","cents":250}}
+{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"priceItem#1","answer":{"result":"accepted"}}
+{"time":1792886400000,"dir":"out","type":"event","id":"itemPriced#1","name":"itemPriced","payload":{"item":"milk","cents":250},"resultOf":"priceItem#1"}
+{"time":1792886400000,"dir":"out","type":"command","id":"ledger.record#1","name":"ledger.record","input":{"byItem":{"milk":"250"},"range":["250","250"]}}
+{"time":1792886400000,"dir":"in","type":"answer","id":"ledger/answer#1","to":"ledger.record#1","answer":{"result":"accepted"}}

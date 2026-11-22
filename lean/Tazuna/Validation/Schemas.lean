@@ -13,8 +13,7 @@ open Tazuna.Spec
 
 /--
 Whether the field `key` of `item` is required with no default, so every element written from outside has it, and is a
-number, or a string that holds an instant or a date, which SortKey orders, with no codec but tazuna's datetime and date,
-whose encoded order is their decoded order.
+number or a date label, which SortKey orders, with no codec.
 -/
 def orderedKey (item : Value) (key : String) : Bool :=
   match propertyOf item key with
@@ -22,7 +21,7 @@ def orderedKey (item : Value) (key : String) : Bool :=
     (requiredOf item).contains key && (p.field? "default").isNone && (p.field? "x-tazuna-codec").isNone &&
     match p.field? "type", p.field? "format" with
     | some (.str "number"), _ | some (.str "integer"), _ => true
-    | some (.str "string"), some (.str "date-time") | some (.str "string"), some (.str "date") => true
+    | some (.str "string"), some (.str "date") => true
     | _, _ => false
   | none => false
 

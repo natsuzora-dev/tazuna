@@ -1,4 +1,4 @@
-import { datetime, ref } from "@natsuzora-dev/tazuna";
+import { instant, ref } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { machine, note, Task } from "./todo.ts";
 
@@ -12,7 +12,7 @@ export const dayNoter = machine({
       type: "map",
       key: { taskId: ref(Task) },
       initial: "asking",
-      states: { asking: {}, writing: { held: { day: datetime } }, done: {} },
+      states: { asking: {}, writing: { held: { day: instant } }, done: {} },
     },
   },
 }).chart({
@@ -32,7 +32,7 @@ export const dayNoter = machine({
     writing: {
       sends: {
         note: {
-          input: ({ key, held }) => ({ taskId: key.taskId, text: held.day.toString() }),
+          input: ({ key, held }) => ({ taskId: key.taskId, text: `${held.day}` }),
           onAccepted: [{ target: "done" }],
           onRejected: [],
         },

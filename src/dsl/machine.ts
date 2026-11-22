@@ -1,5 +1,4 @@
 import type { Bag, Made } from "../data/bag.ts";
-import type { Delay } from "../data/datetime.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import type { Conditions, Named } from "./conditions.ts";
@@ -117,12 +116,12 @@ export type Transitions<Targets, Ctx, A> = readonly Transition<Targets, Ctx, A>[
 type NoAt = { readonly at?: never };
 type NoDelay = { readonly delay?: never };
 /**
- * A deadline, its time fixed when the state is entered. `at` does not read `now`, because a fixed length from now is a
- * `delay`. To move a deadline, enter its state again (`reenter: true`).
+ * A deadline, its time fixed when the state is entered: `now` plus `delay` milliseconds, or the instant that `at`
+ * computes. `at` does not read `now`, because a fixed length from now is a `delay`. To move a deadline, enter its state again (`reenter: true`).
  */
 type Deadline<Targets, Ctx, A> = {
   readonly onFired: Transitions<Targets, Ctx, A>;
-} & (({ readonly delay: Delay } & NoAt) | ({ readonly at: (args: Omit<A, "now">) => Temporal.Instant } & NoDelay));
+} & (({ readonly delay: number } & NoAt) | ({ readonly at: (args: Omit<A, "now">) => number } & NoDelay));
 export type Queries = Readonly<Record<string, AnyQuery>>;
 export type Commands = Readonly<Record<string, AnyCommand>>;
 

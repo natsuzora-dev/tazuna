@@ -6,6 +6,7 @@ import {
   notOffered,
   type OutputOf,
   offered,
+  parseInstant,
   requested,
   requestOf,
   run,
@@ -21,17 +22,17 @@ import { taskListScreen } from "./taskListScreen.ts";
 const milkRecord = {
   id: "task-1",
   title: "Buy milk",
-  createdAt: "2026-10-25T08:00:00+09:00",
+  createdAt: parseInstant("2026-10-25T08:00:00+09:00"),
   completedAt: null,
-  dueAt: "2026-10-26T18:00:00+09:00",
-  remindAt: "2026-10-26T18:00:00+09:00",
+  dueAt: parseInstant("2026-10-26T18:00:00+09:00"),
+  remindAt: parseInstant("2026-10-26T18:00:00+09:00"),
   reminderDecision: "decided",
 } as const;
 const completedEggsRecord = {
   id: "task-2",
   title: "Buy eggs",
-  createdAt: "2026-10-25T08:00:00+09:00",
-  completedAt: "2026-10-25T09:00:00+09:00",
+  createdAt: parseInstant("2026-10-25T08:00:00+09:00"),
+  completedAt: parseInstant("2026-10-25T09:00:00+09:00"),
   dueAt: null,
   remindAt: null,
   reminderDecision: "failed",
@@ -39,7 +40,7 @@ const completedEggsRecord = {
 
 const givenTasks = (Task: readonly (typeof milkRecord | typeof completedEggsRecord)[]) =>
   given({
-    start: "2026-10-25T10:00:00+09:00",
+    start: parseInstant("2026-10-25T10:00:00+09:00"),
     records: {},
     peers: [
       run(todo, { Task, Settings: { shouldRemind: true } }),
@@ -50,20 +51,25 @@ const givenTasks = (Task: readonly (typeof milkRecord | typeof completedEggsReco
 const milk = givenTasks([milkRecord]);
 const milkAndCompletedEggs = givenTasks([milkRecord, completedEggsRecord]);
 
-const milkRow = { taskId: "task-1", title: "Buy milk", dueAt: "2026-10-26T18:00:00+09:00", completedAt: null };
-const completedMilkRow = { ...milkRow, completedAt: "2026-10-25T10:00:00+09:00" };
+const milkRow = {
+  taskId: "task-1",
+  title: "Buy milk",
+  dueAt: parseInstant("2026-10-26T18:00:00+09:00"),
+  completedAt: null,
+};
+const completedMilkRow = { ...milkRow, completedAt: parseInstant("2026-10-25T10:00:00+09:00") };
 const completedEggsRow = {
   taskId: "task-2",
   title: "Buy eggs",
   dueAt: null,
-  completedAt: "2026-10-25T09:00:00+09:00",
+  completedAt: parseInstant("2026-10-25T09:00:00+09:00"),
 };
 const milkDetail = {
   title: "Buy milk",
   isCompleted: false,
-  dueAt: "2026-10-26T18:00:00+09:00",
-  createdAt: "2026-10-25T08:00:00+09:00",
-  remindAt: "2026-10-26T18:00:00+09:00",
+  dueAt: parseInstant("2026-10-26T18:00:00+09:00"),
+  createdAt: parseInstant("2026-10-25T08:00:00+09:00"),
+  remindAt: parseInstant("2026-10-26T18:00:00+09:00"),
 };
 
 const openList = milk.step((w, tasks: OutputOf<typeof todo.tasks>["tasks"] = [milkRow]) => {
@@ -351,8 +357,8 @@ export const changeDueFromDetail = scenario({
     const { tasksReached, detail, detailReached } = openDetail(w);
     const collapsed = w.user.look(detail);
     w.user.operate(detail, "dueToggle");
-    const past = w.user.operate(detail, "dueChoose", { dueAt: "2026-10-24T18:00:00+09:00" });
-    const future = w.user.operate(detail, "dueChoose", { dueAt: "2026-10-27T18:00:00+09:00" });
+    const past = w.user.operate(detail, "dueChoose", { dueAt: parseInstant("2026-10-24T18:00:00+09:00") });
+    const future = w.user.operate(detail, "dueChoose", { dueAt: parseInstant("2026-10-27T18:00:00+09:00") });
     const busy = w.user.look(detail);
     const futureReached = w.net.deliver(future.request(todo.changeDue));
     w.net.deliver(w.peer.todo.answer(future.request(todo.changeDue), accepted()));
@@ -362,9 +368,11 @@ export const changeDueFromDetail = scenario({
     return { collapsed, past, future, busy, after };
   },
   then: ({ collapsed, past, future, busy, after }) => [
-    notOffered(collapsed, "dueChoose", { dueAt: "2026-10-27T18:00:00+09:00" }),
+    notOffered(collapsed, "dueChoose", { dueAt: parseInstant("2026-10-27T18:00:00+09:00") }),
     requested(past, []),
-    requested(future, [requestOf(todo.changeDue, { taskId: "task-1", dueAt: "2026-10-27T18:00:00+09:00" })]),
+    requested(future, [
+      requestOf(todo.changeDue, { taskId: "task-1", dueAt: parseInstant("2026-10-27T18:00:00+09:00") }),
+    ]),
     notOffered(busy, "dueToggle"),
     notOffered(busy, "close"),
     notOffered(after, "dueClear"),
@@ -403,13 +411,13 @@ export const keepsSameDue = scenario({
   when: (w) => {
     const { detail } = openDetail(w);
     w.user.operate(detail, "dueToggle");
-    const same = w.user.operate(detail, "dueChoose", { dueAt: "2026-10-26T18:00:00+09:00" });
+    const same = w.user.operate(detail, "dueChoose", { dueAt: parseInstant("2026-10-26T18:00:00+09:00") });
     const look = w.user.look(detail);
     return { same, look };
   },
   then: ({ same, look }) => [
     requested(same, []),
-    notOffered(look, "dueChoose", { dueAt: "2026-10-27T18:00:00+09:00" }),
+    notOffered(look, "dueChoose", { dueAt: parseInstant("2026-10-27T18:00:00+09:00") }),
   ],
 });
 
@@ -625,10 +633,10 @@ export const retriesAfterRenameAndDueRejections = scenario({
     const rename2Reached = w.net.deliver(rename2.request(todo.renameTask));
     w.net.deliver(w.peer.todo.answer(rename2.request(todo.renameTask), accepted()));
     w.user.operate(detail, "dueToggle");
-    const due1 = w.user.operate(detail, "dueChoose", { dueAt: "2026-10-27T18:00:00+09:00" });
+    const due1 = w.user.operate(detail, "dueChoose", { dueAt: parseInstant("2026-10-27T18:00:00+09:00") });
     w.net.refuse(due1.request(todo.changeDue));
     w.user.operate(detail, "dueToggle");
-    const due2 = w.user.operate(detail, "dueChoose", { dueAt: "2026-10-27T18:00:00+09:00" });
+    const due2 = w.user.operate(detail, "dueChoose", { dueAt: parseInstant("2026-10-27T18:00:00+09:00") });
     const due2Reached = w.net.deliver(due2.request(todo.changeDue));
     w.net.deliver(w.peer.todo.answer(due2.request(todo.changeDue), accepted()));
     w.net.leaveInFlight(rename2Reached.answer(tasksReached));
@@ -639,7 +647,9 @@ export const retriesAfterRenameAndDueRejections = scenario({
   },
   then: ({ rename2, due2 }) => [
     requested(rename2, [requestOf(todo.renameTask, { taskId: "task-1", title: "Buy soy milk" })]),
-    requested(due2, [requestOf(todo.changeDue, { taskId: "task-1", dueAt: "2026-10-27T18:00:00+09:00" })]),
+    requested(due2, [
+      requestOf(todo.changeDue, { taskId: "task-1", dueAt: parseInstant("2026-10-27T18:00:00+09:00") }),
+    ]),
   ],
 });
 

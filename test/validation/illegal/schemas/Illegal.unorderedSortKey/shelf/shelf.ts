@@ -1,23 +1,10 @@
 import { emit, service, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const { command, event } = service({ name: "shelf", description: "List items by expiry" });
-
-const mirrored = (instant: Temporal.Instant) => Temporal.Instant.fromEpochMilliseconds(-instant.epochMilliseconds);
-
-const expiry = z.codec(z.iso.datetime({ offset: true }), z.instanceof(Temporal.Instant), {
-  decode: (text) => mirrored(Temporal.Instant.from(text)),
-  encode: (instant) => mirrored(instant).toString(),
-});
-
-export const itemsListed = event({
-  payload: { items: sortedBy(z.object({ name: z.string(), expiresAt: expiry }), "expiresAt") },
-});
+export const { command, event } = service({ name: "shelf", description: "List shelves by rank" });
 
 export const shelvesListed = event({
   payload: { shelves: sortedBy(z.object({ name: z.string(), rank: z.number().default(0) }), "rank") },
 });
 
-export const listItems = command({ emits: [itemsListed, shelvesListed] }).decide(() => [
-  emit(itemsListed, { items: [] }),
-]);
+export const listShelves = command({ emits: [shelvesListed] }).decide(() => [emit(shelvesListed, { shelves: [] })]);

@@ -170,12 +170,15 @@ instance : FromValue Bool := ⟨fun
   | .bool b => pure b
   | _ => throw "expected a boolean"⟩
 
+/-- Whether `m` is a safe integer, which Zod's z.int() takes: JSON numbers are doubles. -/
+def isSafeInteger (m : Int) : Bool := -9007199254740991 ≤ m && m ≤ 9007199254740991
+
 instance : FromValue Nat := ⟨fun
-  | .num ⟨m, 0⟩ => if m ≥ 0 then pure m.toNat else throw "expected a natural number"
+  | .num ⟨m, 0⟩ => if m ≥ 0 && isSafeInteger m then pure m.toNat else throw "expected a natural number"
   | _ => throw "expected a natural number"⟩
 
 instance : FromValue Int := ⟨fun
-  | .num ⟨m, 0⟩ => pure m
+  | .num ⟨m, 0⟩ => if isSafeInteger m then pure m else throw "expected a safe integer"
   | _ => throw "expected an integer"⟩
 
 instance : FromValue Value := ⟨pure⟩

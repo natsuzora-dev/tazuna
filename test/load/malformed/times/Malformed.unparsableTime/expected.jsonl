@@ -1,3 +1,0 @@
-{"kind":"Malformed.unparsableTime","definition":null,"data":{},"location":{"file":"todo/scenarios.ts","line":8},"scenario":{"service":"todo","name":"countAtEachTime"}}
-{"kind":"Malformed.unparsableTime","definition":null,"data":{},"location":{"file":"todo/scenarios.ts","line":10},"scenario":{"service":"todo","name":"countAtEachTime"}}
-{"kind":"Malformed.unparsableTime","definition":null,"data":{},"location":{"file":"todo/scenarios.ts","line":14},"scenario":{"service":"todo","name":"countAtEachTime"}}

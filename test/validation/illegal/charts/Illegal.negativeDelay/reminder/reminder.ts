@@ -8,6 +8,6 @@ export const reminder = machine({
   states: { waiting: {}, reminding: {} },
 }).chart({
   states: {
-    waiting: { after: { early: { delay: { hours: -1 }, onFired: [{ target: "reminding" }] } } },
+    waiting: { after: { early: { delay: -3_600_000, onFired: [{ target: "reminding" }] } } },
   },
 });

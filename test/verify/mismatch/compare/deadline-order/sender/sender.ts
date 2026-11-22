@@ -1,4 +1,4 @@
-import { emit, service } from "@natsuzora-dev/tazuna";
+import { emit, parseInstant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, machine, event, contract, given, scenario } = service({
@@ -20,7 +20,7 @@ export const pong = command({ input: { by: z.string() }, emits: [ponged] }).deci
   emit(ponged, { by: input.by }),
 ]);
 
-const pinger = (by: string, due: string) =>
+const pinger = (by: string, due: number) =>
   machine({
     description: `Ping as ${by} once armed, and pong at ${due}`,
     receives: { armed },
@@ -31,12 +31,12 @@ const pinger = (by: string, due: string) =>
     states: {
       idle: { on: { armed: [{ target: "pinging" }] } },
       pinging: { sends: { ping: { input: () => ({ by }), onAccepted: [{ target: "waiting" }] } } },
-      waiting: { after: { due: { at: () => Temporal.Instant.from(due), onFired: [{ target: "ponging" }] } } },
+      waiting: { after: { due: { at: () => due, onFired: [{ target: "ponging" }] } } },
       ponging: { sends: { pong: { input: () => ({ by }), onAccepted: [{ target: "done" }] } } },
     },
   });
 
-export const late = pinger("late", "2026-10-25T01:00:00Z");
-export const overdue = pinger("overdue", "2026-10-24T00:00:00Z");
+export const late = pinger("late", parseInstant("2026-10-25T01:00:00Z"));
+export const overdue = pinger("overdue", parseInstant("2026-10-24T00:00:00Z"));
 
 export const sender = contract({ arm, pinged, ponged });

@@ -1,12 +1,13 @@
 import { z } from "zod";
 import type { Bag, Made, MarkOf, Runs } from "../data/bag.ts";
 import { childrenOf, schemaNode } from "../data/schemaNode.ts";
+import type { DateLabel } from "../data/time.ts";
 import type { Shape } from "../data/values.ts";
 import type { Conditions, Named } from "./conditions.ts";
 
 export type DefaultedShape = Readonly<Record<string, z.ZodDefault<z.ZodType>>>;
 /** The type T with every nested object and array readonly, each bag and set a Bag, and each sortedBy array Runs. */
-export type Immutable<T> = T extends Temporal.Instant | Temporal.PlainDate | Temporal.Duration
+export type Immutable<T> = T extends DateLabel
   ? T
   : T extends readonly (infer E)[]
     ? [MarkOf<T>] extends [never]

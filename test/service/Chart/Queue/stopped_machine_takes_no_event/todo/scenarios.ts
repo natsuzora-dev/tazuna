@@ -1,7 +1,8 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { homeScreen } from "./screens.ts";
 import { dropTask, given, scenario } from "./todo.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [] });
 
 export const eventAfterClose = scenario({
   description:

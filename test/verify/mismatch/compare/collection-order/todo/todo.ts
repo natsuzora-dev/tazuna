@@ -1,4 +1,4 @@
-import { any, bag, datetime, emit, service, set, sortedBy } from "@natsuzora-dev/tazuna";
+import { any, bag, emit, instant, parseInstant, service, set, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, query, screen, event, contract, scenario } = service({
@@ -30,8 +30,8 @@ export const listTasks = command({ emits: [tasksListed] }).decide(() => [
   }),
 ]);
 
-const Slot = z.strictObject({ at: datetime, n: z.int() });
-const at = (hour: number) => Temporal.Instant.from(`2026-10-25T0${hour}:00:00Z`);
+const Slot = z.strictObject({ at: instant, n: z.int() });
+const at = (hour: number) => parseInstant("2026-10-25T00:00:00Z") + hour * 3_600_000;
 
 export const taskGroups = query({
   output: {

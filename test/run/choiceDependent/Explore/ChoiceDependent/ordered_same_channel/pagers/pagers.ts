@@ -1,4 +1,4 @@
-import { emit, service } from "@natsuzora-dev/tazuna";
+import { emit, parseInstant, service } from "@natsuzora-dev/tazuna";
 import { pager } from "../pager/contract.ts";
 
 export const { command, machine, event, contract, scenario } = service({
@@ -21,7 +21,7 @@ const pagerClock = (by: string) =>
     states: {
       idle: { on: { armed: [{ target: "waiting" }] } },
       waiting: {
-        after: { due: { at: () => Temporal.Instant.from("2026-10-25T01:00:00Z"), onFired: [{ target: "paging" }] } },
+        after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "paging" }] } },
       },
       paging: { sends: { page: { input: () => ({ by }), onAccepted: [{ target: "done" }] } } },
     },

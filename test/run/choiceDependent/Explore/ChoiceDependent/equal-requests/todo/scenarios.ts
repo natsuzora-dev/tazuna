@@ -1,9 +1,9 @@
-import { run } from "@natsuzora-dev/tazuna";
+import { parseInstant, run } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { addTasks, given, scenario } from "./todo.ts";
 
 const arranged = given({
-  start: "2026-10-25T10:00:00Z",
+  start: parseInstant("2026-10-25T10:00:00Z"),
   records: { Task: [] },
   peers: [run(calendar, { Booking: [] })],
 });

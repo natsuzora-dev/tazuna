@@ -81,8 +81,8 @@ test("An entity in viewModel has its key, its unique, its invariant names, the t
     );
   assert.deepEqual(fields("todo", "Task")?.slice(1, 4), [
     "title string The name of the task",
-    "createdAt datetime",
-    "completedAt datetime?",
+    "createdAt int",
+    "completedAt int?",
   ]);
   assert.deepEqual(fields("todo", "Task")?.at(-1), "reminderDecision enum");
   assert.deepEqual(fields("notifier", "OpenTask"), ["taskId string -> todo.Task"]);

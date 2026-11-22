@@ -8,6 +8,6 @@ export const ticker = machine({
   states: { ticking: {} },
 }).chart({
   states: {
-    ticking: { after: { minute: { delay: { minutes: 1 }, onFired: [{ target: "ticking", reenter: true }] } } },
+    ticking: { after: { minute: { delay: 60_000, onFired: [{ target: "ticking", reenter: true }] } } },
   },
 });

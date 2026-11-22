@@ -1,2 +1,1 @@
-{"kind":"Illegal.unorderedSortKey","definition":{"service":"shelf","name":"itemsListed"},"data":{"path":["payload","items"],"key":"expiresAt"},"location":{"file":"shelf/shelf.ts","line":13}}
-{"kind":"Illegal.unorderedSortKey","definition":{"service":"shelf","name":"shelvesListed"},"data":{"path":["payload","shelves"],"key":"rank"},"location":{"file":"shelf/shelf.ts","line":17}}
+{"kind":"Illegal.unorderedSortKey","definition":{"service":"shelf","name":"shelvesListed"},"data":{"path":["payload","shelves"],"key":"rank"},"location":{"file":"shelf/shelf.ts","line":6}}

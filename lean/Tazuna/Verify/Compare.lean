@@ -261,7 +261,7 @@ def matchContent (v : Values) (b : Binding) (s t : Line) : Matches b :=
 /-- The bindings under which snapshot line `s` compares equal with implementation line `t`: at the same time, and by
 matchContent. -/
 def matchLine (v : Values) (b : Binding) (s t : Line) : Matches b :=
-  if s.time.time == t.time.time then matchContent v b s t else some []
+  if s.time == t.time then matchContent v b s t else some []
 
 def json (v : Option CValue) : Value := (v.map (·.flatten)).getD .null
 
@@ -454,8 +454,8 @@ def pairChecks (relation : Bool) (snapshot trace : List Numbered) (pairNumbers :
   let pairs := pairNumbers.filterMap fun (i, j) => do
     pure (← snapshot.find? (·.index == i), ← trace.find? (·.index == j))
   let times := pairs.filterMap fun (s, t) =>
-    if s.line.time.time == t.line.time.time then none
-    else some (Finding.mismatch (.time t.index (Subject.of t.line.toTraceLine) s.line.time.text t.line.time.text))
+    if s.line.time == t.line.time then none
+    else some (Finding.mismatch (.time t.index (Subject.of t.line.toTraceLine) s.line.time t.line.time))
   let orders := snapshot.zipIdx.flatMap fun (s, k) =>
     match pairs.find? (·.1.index == s.index) with
     | none => []

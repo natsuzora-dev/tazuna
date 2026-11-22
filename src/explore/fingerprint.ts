@@ -14,7 +14,7 @@ const byKey = ([a]: readonly [string, unknown], [b]: readonly [string, unknown])
 function instanceFingerprint(instance: Instance): unknown {
   return {
     id: instance.id,
-    entered: [...instance.entered].map(([state, at]) => [state, at.toString()]),
+    entered: [...instance.entered].map(([state, at]) => [state, at]),
     context: instance.context,
     held: [...instance.held],
     input: instance.input,
@@ -58,7 +58,7 @@ function requestsFingerprint(r: Processing): unknown {
 function serviceFingerprint(r: Processing): string {
   const s = r.state;
   return canonicalJson({
-    now: s.now.toString(),
+    now: s.now,
     lineCounts: [...s.lineCounts].toSorted(byKey),
     keyCounts: keyCounts(s).toSorted(byKey),
     records: [
@@ -71,7 +71,7 @@ function serviceFingerprint(r: Processing): string {
       ...[...s.records.singles].map(([name, row]): [string, unknown] => [name, row.encoded]),
     ].toSorted(byKey),
     requests: requestsFingerprint(r),
-    deadlines: s.deadlines.map((t) => [t.machine, t.state, t.name, t.time.toString()]),
+    deadlines: s.deadlines.map((t) => [t.machine, t.state, t.name, t.time]),
     subscriptions: s.subscriptions.fingerprint(({ query, input }) => [query, input]),
     machines: [...s.machines.values()].map((instance) => [
       instanceFingerprint(instance),
@@ -104,7 +104,7 @@ export const halted = (w: World): boolean =>
 export function worldFingerprint(w: World): string {
   if (halted(w)) return "halted";
   return canonicalJson([
-    w.now.toString(),
+    w.now,
     [...w.services].map(([service, p]) => [service, serviceFingerprint(p.processing)]),
     w.messages.flatMap((m) => (m.status === "inFlight" ? [[m.sender, m.receiver, m.body as never]] : [])),
   ]);

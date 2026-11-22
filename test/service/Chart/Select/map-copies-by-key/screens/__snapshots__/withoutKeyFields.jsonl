@@ -1,5 +1,5 @@
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"todo/answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"taskIds":["task-1","task-2"]}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"operation","id":"listScreen.completeAll#1","name":"listScreen.completeAll"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.completeTask#1","name":"todo.completeTask","input":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"todo.completeTask#2","name":"todo.completeTask","input":{"taskId":"task-2"}}
+{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{}}
+{"time":1792890000000,"dir":"in","type":"answer","id":"todo/answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"taskIds":["task-1","task-2"]}}}
+{"time":1792890000000,"dir":"in","type":"operation","id":"listScreen.completeAll#1","name":"listScreen.completeAll"}
+{"time":1792890000000,"dir":"out","type":"command","id":"todo.completeTask#1","name":"todo.completeTask","input":{"taskId":"task-1"}}
+{"time":1792890000000,"dir":"out","type":"command","id":"todo.completeTask#2","name":"todo.completeTask","input":{"taskId":"task-2"}}

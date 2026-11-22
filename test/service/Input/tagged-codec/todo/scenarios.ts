@@ -1,8 +1,8 @@
-import { run } from "@natsuzora-dev/tazuna";
+import { parseInstant, run } from "@natsuzora-dev/tazuna";
 import { log } from "../log/contract.ts";
 import { given, scenario, takeReading } from "./todo.ts";
 
-const arranged = given({ start: "2026-10-25T09:00:00+09:00", records: {}, peers: [run(log, {})] });
+const arranged = given({ start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [run(log, {})] });
 
 export const fahrenheitReading = scenario({
   description:
@@ -10,7 +10,7 @@ export const fahrenheitReading = scenario({
   given: arranged,
   when: (w) => {
     const taken = w.client.send(takeReading, {
-      reading: { unit: "fahrenheit", kelvin: 81, at: "2026-10-25T09:00:00+09:00" },
+      reading: { unit: "fahrenheit", kelvin: 81, at: parseInstant("2026-10-25T09:00:00+09:00") },
     });
     const recorded = w.net.deliver(taken.request(log.record));
     w.net.deliver(recorded.answer(recorded));

@@ -35,7 +35,7 @@ export type Move = readonly Line[];
 /** Lean's Slot. */
 type Slot =
   | { readonly kind: "answer"; readonly awaiting: Enabled["awaiting"][number]; readonly message: Message }
-  | { readonly kind: "at"; readonly time: Temporal.Instant }
+  | { readonly kind: "at"; readonly time: number }
   | { readonly kind: "operate"; readonly operation: Enabled["operations"][number] }
   | { readonly kind: "unsubscribe"; readonly line: number }
   | { readonly kind: "request"; readonly definition: DefinitionRef; readonly query: boolean }
@@ -68,10 +68,10 @@ const openSubscription = (own: string, lines: readonly Line[], l: Line, i: numbe
   !lines.some((u) => u.type === "unsubscribe" && u.subscription === i);
 
 /** Lean's times. */
-function times(w: World, e: Enabled): Temporal.Instant[] {
+function times(w: World, e: Enabled): number[] {
   if (e.nextDeadline === undefined) return [];
-  const d = Temporal.Instant.from(e.nextDeadline);
-  return [d.subtract({ milliseconds: 1 }), d].filter((t) => Temporal.Instant.compare(w.now, t) <= 0);
+  const d = e.nextDeadline;
+  return [d - 1, d].filter((t) => w.now <= t);
 }
 
 /** Lean's slots. */
@@ -211,7 +211,7 @@ function fill(
       ).map((answer) => answerMove(m.receiver, request, answer, m.status === "inFlight", lines.length));
     }
     case "at":
-      return [[{ type: "at", time: slot.time.toString() }]];
+      return [[{ type: "at", time: slot.time }]];
     case "operate": {
       const o = slot.operation;
       const opened = expectFound(

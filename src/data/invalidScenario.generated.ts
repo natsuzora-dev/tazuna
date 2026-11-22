@@ -252,8 +252,8 @@ export type InvalidScenario =
       readonly definition: null;
       readonly data: {
         readonly scenarioLine: number;
-        readonly at: string;
-        readonly now: string;
+        readonly at: number;
+        readonly now: number;
       };
     }
   /**

@@ -1,4 +1,4 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"query","id":"q1","name":"nextWeek","input":{"from":"2026-10-25T00:00:00Z"}}
+{"time":1792886400000,"dir":"in","type":"query","id":"q1","name":"nextWeek","input":{"from":1792886400000}}
 booked 2026-10-26
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"e1","name":"moved","payload":{"day":"2026-10-26T00:00:00Z"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"q1"}
+{"time":1792886400000,"dir":"out","type":"event","id":"e1","name":"moved","payload":{"day":1792972800000}}
+{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"q1"}

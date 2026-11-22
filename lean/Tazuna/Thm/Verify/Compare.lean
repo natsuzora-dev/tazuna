@@ -136,7 +136,7 @@ theorem wayInv_paired {root : Binding} {dom : String → String} {set : List (Fr
 
 theorem matchLine_content {v : Values} {b : Binding} {s t : Line} {out : List (From b)}
     (h : matchLine v b s t = some out) {c : From b} (hc : c ∈ out) :
-    s.time.time = t.time.time ∧ matchContent v b s t = some out := by
+    s.time = t.time ∧ matchContent v b s t = some out := by
   unfold matchLine at h
   split at h
   · rename_i he; exact ⟨beq_iff_eq.mp he, h⟩
@@ -400,7 +400,7 @@ the snapshot line's through the pairing (sameAfter).
 def OutsMatch (dom : String → String) (relation : Bool) (b : Binding) (snapshot trace : List Numbered) : Prop :=
   ∃ pairs, Covers snapshot trace pairs ∧
     (∀ p ∈ pairs, ∃ s ∈ snapshot, s.index = p.1 ∧ ∃ t ∈ trace, t.index = p.2 ∧
-      s.line.time.time = t.line.time.time ∧ ContentMatch dom b s.line t.line ∧
+      s.line.time = t.line.time ∧ ContentMatch dom b s.line t.line ∧
       (relation = true → sameAfter snapshot trace pairs s t = true)) ∧
     ∀ sk ∈ snapshot.zipIdx, ∀ n ∈ mustFollow snapshot sk.1 sk.2, ∀ j j', (sk.1.index, j) ∈ pairs → (n, j') ∈ pairs →
       j' < j
@@ -414,7 +414,7 @@ theorem OutsMatch.mono {dom : String → String} {relation : Bool} {b b' : Bindi
 /-- What a way that pairChecks finds nothing in holds: equal times, the order that `after` names, and, when `relation`, the same `after`. -/
 theorem pairChecks_nil {relation : Bool} {snapshot trace : List Numbered} {pairs : List (Nat × Nat)}
     (h : pairChecks relation snapshot trace pairs = []) :
-    (∀ p ∈ linePairs snapshot trace pairs, p.1.line.time.time = p.2.line.time.time) ∧
+    (∀ p ∈ linePairs snapshot trace pairs, p.1.line.time = p.2.line.time) ∧
     (∀ sk ∈ snapshot.zipIdx, ∀ s₀ t, (linePairs snapshot trace pairs).find? (·.1.index == sk.1.index) = some (s₀, t) →
       ∀ n ∈ mustFollow snapshot sk.1 sk.2, ∀ s₁ before,
         (linePairs snapshot trace pairs).find? (·.1.index == n) = some (s₁, before) → before.index < t.index) ∧
@@ -592,7 +592,7 @@ theorem groups_nodup (lines : List (Option Line)) : ∀ g ∈ groups lines, (g.o
 /-- Two `in` lines, or none, that compare equal under a binding that `b` extends, at the same time. -/
 def InputMatch (dom : String → String) (b : Binding) : Option Numbered → Option Numbered → Prop
   | none, none => True
-  | some s, some t => s.line.time.time = t.line.time.time ∧ ContentMatch dom b s.line t.line
+  | some s, some t => s.line.time = t.line.time ∧ ContentMatch dom b s.line t.line
   | _, _ => False
 
 theorem InputMatch.mono {dom : String → String} {b b' : Binding} (h : b.Extends b') :

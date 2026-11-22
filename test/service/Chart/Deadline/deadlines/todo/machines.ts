@@ -12,7 +12,7 @@ export const reminder = machine({
     idle: { on: { taskAdded: [{ target: "waiting" }] } },
     waiting: {
       on: { taskCompleted: [{ target: "idle" }] },
-      after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } },
+      after: { hour: { delay: 3_600_000, onFired: [{ target: "reminding" }] } },
     },
     reminding: { sends: { remind: { onAccepted: [{ target: "idle" }] } } },
   },
@@ -32,7 +32,7 @@ export const counter = machine({
       on: { taskAdded: [{ assign: { tasks: ({ context }) => context.tasks + 1 } }] },
       after: {
         hour: {
-          delay: { hours: 1 },
+          delay: 3_600_000,
           onFired: [
             {
               guard: { hasManyTasks: ({ context }) => context.tasks >= 3 },

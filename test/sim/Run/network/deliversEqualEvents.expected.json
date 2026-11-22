@@ -4,7 +4,7 @@
       "service": "metronome",
       "lines": [
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "in",
           "type": "command",
           "id": "beat#1",
@@ -12,7 +12,7 @@
           "input": {}
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "out",
           "type": "answer",
           "id": "answer#1",
@@ -22,7 +22,7 @@
           }
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "out",
           "type": "event",
           "id": "tick#1",
@@ -31,7 +31,7 @@
           "resultOf": "beat#1"
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "out",
           "type": "event",
           "id": "tock#1",
@@ -40,7 +40,7 @@
           "resultOf": "beat#1"
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "out",
           "type": "event",
           "id": "tick#2",
@@ -56,7 +56,7 @@
       "service": "listener",
       "lines": [
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "in",
           "type": "event",
           "id": "metronome/tick#1",
@@ -64,7 +64,7 @@
           "payload": {}
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "in",
           "type": "event",
           "id": "metronome/tock#1",
@@ -72,7 +72,7 @@
           "payload": {}
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "in",
           "type": "event",
           "id": "metronome/tick#2",

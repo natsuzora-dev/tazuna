@@ -1,7 +1,7 @@
-import { date, datetime, ref } from "@natsuzora-dev/tazuna";
+import { instant, ref } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { recordReminderDecisionFailed, recordReminderTimeReached, setReminder } from "./commands.ts";
-import { machine, Task, todoConstants } from "./data.ts";
+import { machine, Task } from "./data.ts";
 import { dueChanged } from "./events.ts";
 
 export const reminder = machine({
@@ -15,7 +15,7 @@ export const reminder = machine({
       type: "map",
       key: { taskId: ref(Task) },
       initial: "waiting",
-      states: { waiting: { held: { remindAt: datetime } }, recording: {} },
+      states: { waiting: { held: { remindAt: instant } }, recording: {} },
     },
   },
 }).chart({
@@ -55,7 +55,7 @@ export const businessDayReminder = machine({
       type: "map",
       key: { taskId: ref(Task) },
       initial: "asking",
-      states: { asking: {}, scheduling: { held: { day: date } }, failing: {} },
+      states: { asking: {}, scheduling: { held: { startsAt: instant } }, failing: {} },
     },
   },
 }).chart({
@@ -67,8 +67,8 @@ export const businessDayReminder = machine({
     asking: {
       calls: {
         nextBusinessDay: {
-          input: ({ now }) => ({ from: now.toZonedDateTimeISO(todoConstants.timeZone).toPlainDate() }),
-          onFulfilled: [{ target: "scheduling", with: { day: ({ output }) => output.day } }],
+          input: ({ now }) => ({ after: now }),
+          onFulfilled: [{ target: "scheduling", with: { startsAt: ({ output }) => output.startsAt } }],
           onRejected: [{ target: "failing" }],
         },
       },
@@ -76,10 +76,7 @@ export const businessDayReminder = machine({
     scheduling: {
       sends: {
         setReminder: {
-          input: ({ key, held }) => ({
-            taskId: key.taskId,
-            remindAt: held.day.toZonedDateTime(todoConstants.timeZone).toInstant(),
-          }),
+          input: ({ key, held }) => ({ taskId: key.taskId, remindAt: held.startsAt }),
           onAccepted: [],
           onRejected: [],
         },

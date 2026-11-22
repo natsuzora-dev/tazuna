@@ -1,17 +1,16 @@
 import { expect, type Page } from "@playwright/test";
 import { todo } from "@todo/spec/todo";
 import type { z } from "zod";
+import { timeZone } from "../../src/time.ts";
 import type * as Held from "../doubles/held.ts";
 import { keepOpen, pushedStream } from "../doubles/pushedStream.ts";
 import { dueInputValue, TaskDetailPage } from "../support/pages/TaskDetailPage.ts";
 import { test } from "./fixtures.ts";
 
-const { timeZone } = todo.todoConstants;
-
 const browserTime = Temporal.ZonedDateTime.from({ timeZone, year: 2026, month: 11, day: 2, hour: 10, minute: 10 });
 const suggestion = browserTime.round({ smallestUnit: "hour", roundingMode: "floor" }).add({ hours: 1 });
 
-const inputValue = (at: Temporal.ZonedDateTime) => dueInputValue(at.toInstant());
+const inputValue = (at: Temporal.ZonedDateTime) => dueInputValue(at.epochMilliseconds);
 
 const shownDay = (at: Temporal.ZonedDateTime) => at.toLocaleString("en-US", { month: "short", day: "numeric" });
 
@@ -22,7 +21,7 @@ async function openDetail(page: Page, held: typeof Held) {
     title: "Buy milk",
     isCompleted: false,
     dueAt: null,
-    createdAt: browserTime.toInstant(),
+    createdAt: browserTime.epochMilliseconds,
     remindAt: null,
   };
   const details = new Set<(detail: TaskDetail) => void>();
@@ -80,7 +79,7 @@ test("Pressing Enter in the date and time field makes its value the due date", a
   const chosen = browserTime.toPlainDate().add({ days: 2 }).toZonedDateTime({ timeZone, plainTime: "09:00" });
 
   await detail.toggleDue();
-  await detail.chooseDue(chosen.toInstant());
+  await detail.chooseDue(chosen.epochMilliseconds);
   await expect(detail.dueInput).toBeHidden();
   await expect(detail.dueRow).toContainText(shownDay(chosen));
   await expect(detail.dueRow).toContainText("9:00");
@@ -127,10 +126,10 @@ test("Choosing a time after the limit keeps the due date and shows the latest ti
   held,
 }) => {
   const { detail, changeDueCount } = await openDetail(page, held);
-  const until = browserTime.add(todo.todoConstants.dueAheadLimit);
+  const until = browserTime.add({ milliseconds: todo.todoConstants.dueAheadLimit });
 
   await detail.toggleDue();
-  await detail.chooseDue(until.add({ days: 1 }).toInstant());
+  await detail.chooseDue(until.add({ days: 1 }).epochMilliseconds);
   await expect(detail.dueError).toContainText(`${shownDay(until)}, ${until.year}`);
   await expect(detail.dueInput).toBeVisible();
   expect(changeDueCount()).toBe(0);

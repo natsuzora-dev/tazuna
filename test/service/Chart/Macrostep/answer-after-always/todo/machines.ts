@@ -1,3 +1,4 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { machine, noteAnswer, taskAdded } from "./todo.ts";
 
@@ -16,7 +17,7 @@ export const planner = machine({
       always: [
         {
           guard: {
-            late: ({ now }) => Temporal.Instant.compare(now, Temporal.Instant.from("2026-10-25T02:00:00Z")) >= 0,
+            late: ({ now }) => now >= parseInstant("2026-10-25T02:00:00Z"),
           },
           target: "gaveUp",
         },

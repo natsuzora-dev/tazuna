@@ -41,7 +41,6 @@ inductive InvalidInput where
   | unusedStepOrder (entries : List StepName)
 deriving Repr
 
-local instance : ToValue Time := ⟨Time.toValue⟩
 
 derive_group InvalidInput flatten mismatch
 

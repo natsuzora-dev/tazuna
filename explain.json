@@ -75,20 +75,20 @@
           "from": 22,
           "to": 43,
           "line": 22,
-          "text": "export const m = machine({\n  description: \"e1 enters waiting, whose at reads due; e2 moves due\",\n  context: { due: datetime.nullable().default(null) },\n  receives: { e1, e2 },\n  commands: { ping },\n  initial: \"idle\",\n  states: { idle: {}, waiting: {}, pinging: {}, done: {} },\n}).chart({\n  on: { e2: [{ assign: { due: () => Temporal.Instant.from(\"2026-10-25T06:00:00Z\") } }] },\n  states: {\n    idle: { on: { e1: [{ target: \"waiting\" }] } },\n    waiting: {\n      after: {\n        due: {\n          at: ({ context }) => context.due ?? Temporal.Instant.from(\"2026-10-25T05:00:00Z\"),\n          onFired: [{ target: \"pinging\" }],\n        },\n      },\n    },\n    pinging: { sends: { ping: { input: () => ({}), onAccepted: [{ target: \"done\" }] } } },\n  },\n});"
+          "text": "export const m = machine({\n  description: \"e1 enters waiting, whose at reads due; e2 moves due\",\n  context: { due: instant.nullable().default(null) },\n  receives: { e1, e2 },\n  commands: { ping },\n  initial: \"idle\",\n  states: { idle: {}, waiting: {}, pinging: {}, done: {} },\n}).chart({\n  on: { e2: [{ assign: { due: () => parseInstant(\"2026-10-25T06:00:00Z\") } }] },\n  states: {\n    idle: { on: { e1: [{ target: \"waiting\" }] } },\n    waiting: {\n      after: {\n        due: {\n          at: ({ context }) => context.due ?? parseInstant(\"2026-10-25T05:00:00Z\"),\n          onFired: [{ target: \"pinging\" }],\n        },\n      },\n    },\n    pinging: { sends: { ping: { input: () => ({}), onAccepted: [{ target: \"done\" }] } } },\n  },\n});"
         },
-        "violation": "{\"kind\":\"ChoiceDependent.stepOrder\",\"definition\":{\"service\":\"waiter\",\"name\":\"m\"},\"data\":{\"firstStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"secondStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"originalOrder\":[],\"alternativeOrder\":[{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]}],\"difference\":{\"aspect\":\"state\",\"original\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":\"2026-10-25T06:00:00Z\"},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":\"2026-10-25T05:00:00Z\"}]}]},\"alternative\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":\"2026-10-25T06:00:00Z\"},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":\"2026-10-25T06:00:00Z\"}]}]}}},\"location\":{\"file\":\"waiter/waiter.ts\",\"line\":22},\"scenario\":{\"service\":\"waiter\",\"name\":\"once\"}}"
+        "violation": "{\"kind\":\"ChoiceDependent.stepOrder\",\"definition\":{\"service\":\"waiter\",\"name\":\"m\"},\"data\":{\"firstStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"secondStep\":{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},\"originalOrder\":[],\"alternativeOrder\":[{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e2\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]},{\"kind\":\"receive\",\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"received\":{\"key\":\"e1\",\"payload\":{}},\"delivered\":[[{\"key\":\"e1\",\"payload\":{}},{\"key\":\"e2\",\"payload\":{}}]]}],\"difference\":{\"aspect\":\"state\",\"original\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":1792908000000},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":1792904400000}]}]},\"alternative\":{\"records\":{\"Once\":{\"went\":true}},\"instances\":[{\"id\":{\"kind\":\"top\",\"chart\":\"m\"},\"states\":[\"waiting\"],\"history\":[],\"context\":{\"due\":1792908000000},\"held\":{},\"deadlines\":[{\"state\":\"waiting\",\"name\":\"due\",\"time\":1792908000000}]}]}}},\"location\":{\"file\":\"waiter/waiter.ts\",\"line\":22},\"scenario\":{\"service\":\"waiter\",\"name\":\"once\"}}"
       }
     },
     "Fault.atSchema": {
-      "meaning": "The `at` of the deadline `deadline` of state `state` computes a value that is no Temporal.Instant in whole milliseconds, which the run's time cannot hold.",
+      "meaning": "The `at` of the deadline `deadline` of state `state` computes a value that is no safe integer of milliseconds, which the run's time cannot hold.",
       "example": {
         "excerpt": {
           "file": "alarms/alarms.ts",
           "from": 5,
           "to": 20,
           "line": 5,
-          "text": "export const alarm = machine({\n  description: \"Ring at an instant half a millisecond past 10:00, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, ringing: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: {\n      after: {\n        ring: {\n          at: () => Temporal.Instant.from(\"2026-10-25T01:00:00.0005Z\"),\n          onFired: [{ target: \"ringing\" }],\n        },\n      },\n    },\n  },\n});"
+          "text": "export const alarm = machine({\n  description: \"Ring at an instant half a millisecond past 10:00, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, ringing: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: {\n      after: {\n        ring: {\n          at: () => parseInstant(\"2026-10-25T01:00:00Z\") + 0.5,\n          onFired: [{ target: \"ringing\" }],\n        },\n      },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.atSchema\",\"definition\":{\"service\":\"alarms\",\"name\":\"alarm\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"ring\"},\"location\":{\"file\":\"alarms/alarms.ts\",\"line\":5},\"scenario\":{\"service\":\"alarms\",\"name\":\"start\"}}"
       }
@@ -146,14 +146,14 @@
       }
     },
     "Fault.deadlineOutOfRange": {
-      "meaning": "The delay of the deadline `deadline` of state `state` takes its time past year 9999, which the run's time cannot hold (Time.inRange, the rule that an `at` meets too).",
+      "meaning": "The delay of the deadline `deadline` of state `state` takes its time past a safe integer, which the run's time cannot hold (Time.inRange, the rule that an `at` meets too).",
       "example": {
         "excerpt": {
           "file": "farReminder/farReminder.ts",
           "from": 5,
-          "to": 13,
+          "to": 14,
           "line": 5,
-          "text": "export const reminder = machine({\n  description: \"Remind eighty million hours after it starts, past the year 9999, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: { after: { far: { delay: { hours: 80_000_000 }, onFired: [{ target: \"reminding\" }] } } },\n  },\n});"
+          "text": "export const reminder = machine({\n  description:\n    \"Remind the largest safe integer of milliseconds after it starts, past every safe integer, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: { after: { far: { delay: 9_007_199_254_740_991, onFired: [{ target: \"reminding\" }] } } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.deadlineOutOfRange\",\"definition\":{\"service\":\"farReminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"far\"},\"location\":{\"file\":\"farReminder/farReminder.ts\",\"line\":5},\"scenario\":{\"service\":\"farReminder\",\"name\":\"start\"}}"
       }
@@ -215,12 +215,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 11,
-          "line": 3,
-          "text": "export const dayLater = scenario({\n  description:\n    \"Start the service and come back a day later; more than 1000 minutes have passed, so test reports exceededDueDeadlines\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(\"2026-10-26T09:00:00+09:00\");\n  },\n  then: () => [],\n});"
+          "from": 4,
+          "to": 12,
+          "line": 4,
+          "text": "export const dayLater = scenario({\n  description:\n    \"Start the service and come back a day later; more than 1000 minutes have passed, so test reports exceededDueDeadlines\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(parseInstant(\"2026-10-26T09:00:00+09:00\"));\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"Fault.exceededDueDeadlines\",\"definition\":null,\"data\":{\"limit\":1000},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"dayLater\"}}"
+        "violation": "{\"kind\":\"Fault.exceededDueDeadlines\",\"definition\":null,\"data\":{\"limit\":1000},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"dayLater\"}}"
       }
     },
     "Fault.exceededMessageCommands": {
@@ -241,12 +241,12 @@
       "example": {
         "excerpt": {
           "file": "loop/scenarios.ts",
-          "from": 3,
-          "to": 11,
-          "line": 3,
-          "text": "export const start = scenario({\n  description:\n    \"Start the home screen; it opens the done screen again each time the done screen is done, without end, so the start message runs more than 10000 work items and test reports exceededMessageWork\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.startup.screen(homeScreen);\n  },\n  then: () => [],\n});"
+          "from": 4,
+          "to": 12,
+          "line": 4,
+          "text": "export const start = scenario({\n  description:\n    \"Start the home screen; it opens the done screen again each time the done screen is done, without end, so the start message runs more than 10000 work items and test reports exceededMessageWork\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [] },\n  when: (w) => {\n    w.startup.screen(homeScreen);\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"Fault.exceededMessageWork\",\"definition\":null,\"data\":{\"limit\":10000},\"location\":{\"file\":\"loop/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"loop\",\"name\":\"start\"}}"
+        "violation": "{\"kind\":\"Fault.exceededMessageWork\",\"definition\":null,\"data\":{\"limit\":10000},\"location\":{\"file\":\"loop/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"loop\",\"name\":\"start\"}}"
       }
     },
     "Fault.exceededOnDoneSelections": {
@@ -614,16 +614,16 @@
       }
     },
     "Illegal.inexactDelay": {
-      "meaning": "The delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a value that Temporal does not read, so the run cannot add it to an instant in milliseconds. `check` reports none exactly when every delay has a length in milliseconds (`Checked.delaysExact`).",
+      "meaning": "The delay of the deadline `deadline` of `state` is no safe integer, so the run cannot add it to an instant in milliseconds. `check` reports none exactly when every delay is a safe integer (`Checked.delaysExact`).",
       "example": {
         "excerpt": {
           "file": "reminder/reminder.ts",
-          "from": 15,
-          "to": 24,
-          "line": 15,
-          "text": "export const reminder = machine({\n  description: \"Remind a day after it starts, and nudge half a millisecond after that\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: {}, done: {} },\n}).chart({\n  states: {\n    waiting: { after: { day: { delay: reminderConstants.remindAfter, onFired: [{ target: \"reminding\" }] } } },\n    reminding: { after: { nudge: { delay: reminderConstants.nudgeAfter, onFired: [{ target: \"done\" }] } } },\n  },\n});"
+          "from": 5,
+          "to": 15,
+          "line": 5,
+          "text": "export const reminder = machine({\n  description:\n    \"Remind 2^53 milliseconds after it starts, past every safe integer, and nudge half a millisecond after that\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: {}, done: {} },\n}).chart({\n  states: {\n    waiting: { after: { day: { delay: 2 ** 53, onFired: [{ target: \"reminding\" }] } } },\n    reminding: { after: { nudge: { delay: 0.5, onFired: [{ target: \"done\" }] } } },\n  },\n});"
         },
-        "violation": "{\"kind\":\"Illegal.inexactDelay\",\"definition\":{\"service\":\"reminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"day\"},\"location\":{\"file\":\"reminder/reminder.ts\",\"line\":15}}"
+        "violation": "{\"kind\":\"Illegal.inexactDelay\",\"definition\":{\"service\":\"reminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"day\"},\"location\":{\"file\":\"reminder/reminder.ts\",\"line\":5}}"
       }
     },
     "Illegal.missingParent": {
@@ -647,7 +647,7 @@
           "from": 5,
           "to": 13,
           "line": 5,
-          "text": "export const reminder = machine({\n  description: \"Remind an hour before it starts, which no clock reaches\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: {} },\n}).chart({\n  states: {\n    waiting: { after: { early: { delay: { hours: -1 }, onFired: [{ target: \"reminding\" }] } } },\n  },\n});"
+          "text": "export const reminder = machine({\n  description: \"Remind an hour before it starts, which no clock reaches\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: {} },\n}).chart({\n  states: {\n    waiting: { after: { early: { delay: -3_600_000, onFired: [{ target: \"reminding\" }] } } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Illegal.negativeDelay\",\"definition\":{\"service\":\"reminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"early\"},\"location\":{\"file\":\"reminder/reminder.ts\",\"line\":5}}"
       }
@@ -705,16 +705,16 @@
       }
     },
     "Illegal.unorderedSortKey": {
-      "meaning": "The sortedBy array at `path` of the definition's schemas sorts by `key`, which is optional or has a default, so an element from outside may leave it out and have no place in the order, or whose encoded value is no number, instant, or date, or which has a codec other than tazuna's datetime and date, so the order of the encoded values, which tazuna sorts by, may not be the order of the values. `check` reports none exactly when every sort key is required with no default and encoded as one of these with no other codec (`Checked.sortKeysOrdered`).",
+      "meaning": "The sortedBy array at `path` of the definition's schemas sorts by `key`, which is optional or has a default, so an element from outside may leave it out and have no place in the order, or whose value is no number or date label, so tazuna has no order to sort by. `check` reports none exactly when every sort key is required with no default and is one of these (`Checked.sortKeysOrdered`).",
       "example": {
         "excerpt": {
           "file": "shelf/shelf.ts",
-          "from": 13,
-          "to": 15,
-          "line": 13,
-          "text": "export const itemsListed = event({\n  payload: { items: sortedBy(z.object({ name: z.string(), expiresAt: expiry }), \"expiresAt\") },\n});"
+          "from": 6,
+          "to": 8,
+          "line": 6,
+          "text": "export const shelvesListed = event({\n  payload: { shelves: sortedBy(z.object({ name: z.string(), rank: z.number().default(0) }), \"rank\") },\n});"
         },
-        "violation": "{\"kind\":\"Illegal.unorderedSortKey\",\"definition\":{\"service\":\"shelf\",\"name\":\"itemsListed\"},\"data\":{\"path\":[\"payload\",\"items\"],\"key\":\"expiresAt\"},\"location\":{\"file\":\"shelf/shelf.ts\",\"line\":13}}"
+        "violation": "{\"kind\":\"Illegal.unorderedSortKey\",\"definition\":{\"service\":\"shelf\",\"name\":\"shelvesListed\"},\"data\":{\"path\":[\"payload\",\"shelves\"],\"key\":\"rank\"},\"location\":{\"file\":\"shelf/shelf.ts\",\"line\":6}}"
       }
     },
     "InvalidInput.answerOutputSchema": {
@@ -725,9 +725,9 @@
           "from": 5,
           "to": 14,
           "line": 5,
-          "text": "export const answerMalformedNextDay = scenario({\n  description:\n    \"Answer the next day with a day that is not a datetime; the output schema of nextDay rejects it, so test reports answerOutputSchema\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: \"tomorrow\" })));\n  },\n  then: () => [],\n});"
+          "text": "export const answerMalformedNextDay = scenario({\n  description:\n    \"Answer the next day with a day that is no whole millisecond; the output schema of nextDay rejects it, so test reports answerOutputSchema\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: 1.5 })));\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidInput.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"agenda\",\"name\":\"answerMalformedNextDay\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"invalid_format\",\"format\":\"datetime\",\"pattern\":\"/^(?:(?:\\\\d\\\\d[2468][048]|\\\\d\\\\d[13579][26]|\\\\d\\\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\\\d|30)|(?:02)-(?:0[1-9]|1\\\\d|2[0-8])))T(?:(?:[01]\\\\d|2[0-3]):[0-5]\\\\d:[0-5]\\\\d(?:\\\\.\\\\d+)?(?:Z|([+-](?:[01]\\\\d|2[0-3]):[0-5]\\\\d)))$/\",\"path\":[\"day\"],\"message\":\"Invalid ISO datetime\"}]}}"
+        "violation": "{\"kind\":\"InvalidInput.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"agenda\",\"name\":\"answerMalformedNextDay\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"int\",\"format\":\"safeint\",\"code\":\"invalid_type\",\"path\":[\"day\"],\"message\":\"Invalid input: expected int, received number\"}]}}"
       }
     },
     "InvalidInput.controlPayloadSchema": {
@@ -738,7 +738,7 @@
           "from": 5,
           "to": 12,
           "line": 5,
-          "text": "export const pickTwice = scenario({\n  description: \"Pick the name a twice; test reports controlPayloadSchema\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(catalog)] },\n  when: (w) => {\n    w.user.operate(w.startup.screen(shelfScreen), \"pick\", { names: [\"a\", \"a\"] });\n  },\n  then: () => [],\n});"
+          "text": "export const pickTwice = scenario({\n  description: \"Pick the name a twice; test reports controlPayloadSchema\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(catalog)] },\n  when: (w) => {\n    w.user.operate(w.startup.screen(shelfScreen), \"pick\", { names: [\"a\", \"a\"] });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.controlPayloadSchema\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"shelf\",\"name\":\"shelfScreen\"},\"control\":\"pick\"},\"location\":{\"file\":\"shelf/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"shelf\",\"name\":\"pickTwice\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"custom\",\"message\":\"duplicate element \\\"a\\\"\",\"path\":[\"names\",1]}]}}"
       }
@@ -748,12 +748,12 @@
       "example": {
         "excerpt": {
           "file": "screens/scenarios.ts",
-          "from": 5,
-          "to": 14,
-          "line": 5,
+          "from": 6,
+          "to": 15,
+          "line": 6,
           "text": "export const pickUnderDialog = scenario({\n  description: \"Pick a task while the dialog covers the list; test reports coveredByModal\",\n  given: arranged,\n  when: (w) => {\n    const list = w.startup.screen(listScreen);\n    w.user.operate(list, \"clear\");\n    w.user.operate(list, \"pick\", { taskId: \"task-1\" });\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidInput.coveredByModal\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"screens\",\"name\":\"listScreen\"},\"control\":\"pick\",\"child\":{\"service\":\"screens\",\"name\":\"confirmDialog\"}},\"location\":{\"file\":\"screens/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"screens\",\"name\":\"pickUnderDialog\"}}"
+        "violation": "{\"kind\":\"InvalidInput.coveredByModal\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"screens\",\"name\":\"listScreen\"},\"control\":\"pick\",\"child\":{\"service\":\"screens\",\"name\":\"confirmDialog\"}},\"location\":{\"file\":\"screens/scenarios.ts\",\"line\":6},\"scenario\":{\"service\":\"screens\",\"name\":\"pickUnderDialog\"}}"
       }
     },
     "InvalidInput.eventPayloadSchema": {
@@ -774,12 +774,12 @@
       "example": {
         "excerpt": {
           "file": "agenda/scenarios.ts",
-          "from": 17,
-          "to": 28,
-          "line": 17,
-          "text": "export const answerBeforeFrom = scenario({\n  description:\n    \"Answer a day before from; the answer breaks the assumed ensures afterFrom, so test reports failedAssumedEnsures when the run ends\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(\n      w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: \"2026-10-24T15:00:00Z\" })),\n    );\n  },\n  then: () => [],\n});"
+          "from": 20,
+          "to": 34,
+          "line": 20,
+          "text": "export const answerBeforeFrom = scenario({\n  description:\n    \"Answer a day before from; the answer breaks the assumed ensures afterFrom, so test reports failedAssumedEnsures when the run ends\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(\n      w.peer.calendar.answer(\n        w.startup.request(calendar.nextDay),\n        fulfilled({ day: parseInstant(\"2026-10-24T15:00:00Z\") }),\n      ),\n    );\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidInput.failedAssumedEnsures\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"condition\":\"afterFrom\"},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":17},\"scenario\":{\"service\":\"agenda\",\"name\":\"answerBeforeFrom\"}}"
+        "violation": "{\"kind\":\"InvalidInput.failedAssumedEnsures\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"condition\":\"afterFrom\"},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":20},\"scenario\":{\"service\":\"agenda\",\"name\":\"answerBeforeFrom\"}}"
       }
     },
     "InvalidInput.failedAssumedRequires": {
@@ -790,7 +790,7 @@
           "from": 5,
           "to": 21,
           "line": 5,
-          "text": "export const acceptBookingLater = scenario({\n  description:\n    \"Accept a booking an hour after the start of a day; this breaks the assumed requires startOfDay, so test reports failedAssumedRequires and does not check the booked event of another day against the assumed ensures sameDay\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.book));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), accepted()));\n    w.net.deliver(\n      w.peer.calendar.emit(\n        calendar.booked,\n        { day: \"2026-10-26T00:00:00Z\" },\n        { resultOf: w.startup.request(calendar.book) },\n      ),\n    );\n  },\n  then: () => [],\n});"
+          "text": "export const acceptBookingLater = scenario({\n  description:\n    \"Accept a booking an hour after the start of a day; this breaks the assumed requires startOfDay, so test reports failedAssumedRequires and does not check the booked event of another day against the assumed ensures sameDay\",\n  given: { start: parseInstant(\"2026-10-25T10:00:00+09:00\"), records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.book));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), accepted()));\n    w.net.deliver(\n      w.peer.calendar.emit(\n        calendar.booked,\n        { day: parseInstant(\"2026-10-26T00:00:00Z\") },\n        { resultOf: w.startup.request(calendar.book) },\n      ),\n    );\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.failedAssumedRequires\",\"definition\":null,\"data\":{\"requestId\":\"calendar.book#1\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"},\"condition\":\"startOfDay\"},\"location\":{\"file\":\"booking/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"booking\",\"name\":\"acceptBookingLater\"}}"
       }
@@ -803,7 +803,7 @@
           "from": 5,
           "to": 14,
           "line": 5,
-          "text": "export const rejectBookingAtStartOfDay = scenario({\n  description:\n    \"Reject a booking at the start of a day with requires; startOfDay holds, so test reports rejectedAssumedRequires\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.book));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), rejected(\"requires\", \"startOfDay\")));\n  },\n  then: () => [],\n});"
+          "text": "export const rejectBookingAtStartOfDay = scenario({\n  description:\n    \"Reject a booking at the start of a day with requires; startOfDay holds, so test reports rejectedAssumedRequires\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.book));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.book), rejected(\"requires\", \"startOfDay\")));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.rejectedAssumedRequires\",\"definition\":null,\"data\":{\"requestId\":\"calendar.book#1\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"}},\"location\":{\"file\":\"booking/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"booking\",\"name\":\"rejectBookingAtStartOfDay\"}}"
       }
@@ -814,9 +814,9 @@
         "excerpt": {
           "file": "agenda/scenarios.ts",
           "from": 5,
-          "to": 19,
+          "to": 22,
           "line": 5,
-          "text": "export const changedByQuery = scenario({\n  description:\n    \"Link dayChanged to the query nextDay, which the types reject; test reports resultOfNonCommand when the run ends, since only a command's request has result events\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(\n      w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: \"2026-10-25T15:00:00Z\" })),\n    );\n    w.net.deliver(\n      w.peer.calendar.emit(calendar.dayChanged, {}, { resultOf: unchecked(w.startup.request(calendar.nextDay)) }),\n    );\n  },\n  then: () => [],\n});"
+          "text": "export const changedByQuery = scenario({\n  description:\n    \"Link dayChanged to the query nextDay, which the types reject; test reports resultOfNonCommand when the run ends, since only a command's request has result events\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(\n      w.peer.calendar.answer(\n        w.startup.request(calendar.nextDay),\n        fulfilled({ day: parseInstant(\"2026-10-25T15:00:00Z\") }),\n      ),\n    );\n    w.net.deliver(\n      w.peer.calendar.emit(calendar.dayChanged, {}, { resultOf: unchecked(w.startup.request(calendar.nextDay)) }),\n    );\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.resultOfNonCommand\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"dayChanged\"},\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"agenda\",\"name\":\"changedByQuery\"}}"
       }
@@ -829,7 +829,7 @@
           "from": 5,
           "to": 15,
           "line": 5,
-          "text": "export const grantRejected = scenario({\n  description:\n    \"Link granted to a request that the device rejected; test reports resultOfUnacceptedRequest when the run ends, since the event cannot be that request's result\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), rejected(\"unavailable\")));\n    w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: w.startup.request(device.requestPermission) }));\n  },\n  then: () => [],\n});"
+          "text": "export const grantRejected = scenario({\n  description:\n    \"Link granted to a request that the device rejected; test reports resultOfUnacceptedRequest when the run ends, since the event cannot be that request's result\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), rejected(\"unavailable\")));\n    w.net.deliver(w.peer.device.emit(device.granted, {}, { resultOf: w.startup.request(device.requestPermission) }));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.resultOfUnacceptedRequest\",\"definition\":null,\"data\":{\"event\":{\"service\":\"device\",\"name\":\"granted\"},\"requestId\":\"device.requestPermission#1\",\"target\":{\"service\":\"device\",\"name\":\"requestPermission\"}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"app\",\"name\":\"grantRejected\"}}"
       }
@@ -842,7 +842,7 @@
           "from": 5,
           "to": 15,
           "line": 5,
-          "text": "export const denyUnlisted = scenario({\n  description:\n    \"Link denied to the accepted request, whose command does not emit denied; test reports resultOfUnlistedEvent when the run ends\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), accepted()));\n    w.net.deliver(w.peer.device.emit(device.denied, {}, { resultOf: w.startup.request(device.requestPermission) }));\n  },\n  then: () => [],\n});"
+          "text": "export const denyUnlisted = scenario({\n  description:\n    \"Link denied to the accepted request, whose command does not emit denied; test reports resultOfUnlistedEvent when the run ends\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), accepted()));\n    w.net.deliver(w.peer.device.emit(device.denied, {}, { resultOf: w.startup.request(device.requestPermission) }));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.resultOfUnlistedEvent\",\"definition\":null,\"data\":{\"event\":{\"service\":\"device\",\"name\":\"denied\"},\"requestId\":\"device.requestPermission#1\",\"target\":{\"service\":\"device\",\"name\":\"requestPermission\"}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"app\",\"name\":\"denyUnlisted\"}}"
       }
@@ -852,12 +852,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 11,
-          "line": 3,
-          "text": "export const subscribeTwice = scenario({\n  description:\n    \"Subscribe, and send that subscribe again with its id while it is open; the resent subscribe reuses the id of the open one\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    w.client.resend(w.client.subscribe(taskTitles, {}));\n  },\n  then: () => [],\n});"
+          "from": 4,
+          "to": 12,
+          "line": 4,
+          "text": "export const subscribeTwice = scenario({\n  description:\n    \"Subscribe, and send that subscribe again with its id while it is open; the resent subscribe reuses the id of the open one\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: { Task: [] }, peers: [] },\n  when: (w) => {\n    w.client.resend(w.client.subscribe(taskTitles, {}));\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidInput.reusedSubscriptionId\",\"definition\":null,\"data\":{\"subscriptionId\":\"taskTitles#1\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"subscribeTwice\"}}"
+        "violation": "{\"kind\":\"InvalidInput.reusedSubscriptionId\",\"definition\":null,\"data\":{\"subscriptionId\":\"taskTitles#1\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"subscribeTwice\"}}"
       }
     },
     "InvalidInput.unlistedRejectionKind": {
@@ -868,7 +868,7 @@
           "from": 5,
           "to": 14,
           "line": 5,
-          "text": "export const rejectNextDayNotFound = scenario({\n  description:\n    \"Reject the next day as not-found; nextDay cannot answer with that kind, so test reports unlistedRejectionKind\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), rejected(\"not-found\")));\n  },\n  then: () => [],\n});"
+          "text": "export const rejectNextDayNotFound = scenario({\n  description:\n    \"Reject the next day as not-found; nextDay cannot answer with that kind, so test reports unlistedRejectionKind\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), rejected(\"not-found\")));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.unlistedRejectionKind\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"rejection\":{\"kind\":\"not-found\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"agenda\",\"name\":\"rejectNextDayNotFound\"}}"
       }
@@ -878,12 +878,12 @@
       "example": {
         "excerpt": {
           "file": "screens/scenarios.ts",
-          "from": 5,
-          "to": 12,
-          "line": 5,
+          "from": 6,
+          "to": 13,
+          "line": 6,
           "text": "export const pickUnoffered = scenario({\n  description: \"Pick a task that the list does not show; test reports unofferedPayload\",\n  given: arranged,\n  when: (w) => {\n    w.user.operate(w.startup.screen(listScreen), \"pick\", { taskId: \"task-3\" });\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidInput.unofferedPayload\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"screens\",\"name\":\"listScreen\"},\"control\":\"pick\",\"payload\":{\"taskId\":\"task-3\"}},\"location\":{\"file\":\"screens/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"screens\",\"name\":\"pickUnoffered\"}}"
+        "violation": "{\"kind\":\"InvalidInput.unofferedPayload\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"screens\",\"name\":\"listScreen\"},\"control\":\"pick\",\"payload\":{\"taskId\":\"task-3\"}},\"location\":{\"file\":\"screens/scenarios.ts\",\"line\":6},\"scenario\":{\"service\":\"screens\",\"name\":\"pickUnoffered\"}}"
       }
     },
     "InvalidInput.unopenedScreen": {
@@ -891,12 +891,12 @@
       "example": {
         "excerpt": {
           "file": "screens/scenarios.ts",
-          "from": 5,
-          "to": 15,
-          "line": 5,
+          "from": 6,
+          "to": 16,
+          "line": 6,
           "text": "export const cancelUnopened = scenario({\n  description:\n    \"Cancel the dialog twice; the first cancel closes it, so the second operates a screen that is not open, and test reports unopenedScreen\",\n  given: arranged,\n  when: (w) => {\n    const dialog = w.user.operate(w.startup.screen(listScreen), \"clear\").screen(confirmDialog);\n    w.user.operate(dialog, \"cancel\");\n    w.user.operate(dialog, \"cancel\");\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidInput.unopenedScreen\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"screens\",\"name\":\"confirmDialog\"},\"control\":\"cancel\"},\"location\":{\"file\":\"screens/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"screens\",\"name\":\"cancelUnopened\"}}"
+        "violation": "{\"kind\":\"InvalidInput.unopenedScreen\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"screens\",\"name\":\"confirmDialog\"},\"control\":\"cancel\"},\"location\":{\"file\":\"screens/scenarios.ts\",\"line\":6},\"scenario\":{\"service\":\"screens\",\"name\":\"cancelUnopened\"}}"
       }
     },
     "InvalidInput.unopenedSubscription": {
@@ -907,7 +907,7 @@
           "from": 18,
           "to": 28,
           "line": 18,
-          "text": "export const unsubscribeAfterRestart = scenario({\n  description:\n    \"Subscribe to status, restart, and end the subscription; the restart drops the subscription, so test reports unopenedSubscription\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    const watching = w.client.subscribe(status, {});\n    w.host.restart();\n    w.client.unsubscribe(watching);\n  },\n  then: () => [],\n});"
+          "text": "export const unsubscribeAfterRestart = scenario({\n  description:\n    \"Subscribe to status, restart, and end the subscription; the restart drops the subscription, so test reports unopenedSubscription\",\n  given: { start: parseInstant(\"2026-10-25T10:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    const watching = w.client.subscribe(status, {});\n    w.host.restart();\n    w.client.unsubscribe(watching);\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidInput.unopenedSubscription\",\"definition\":null,\"data\":{\"subscriptionId\":\"status#1\"},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":18},\"scenario\":{\"service\":\"app\",\"name\":\"unsubscribeAfterRestart\"}}"
       }
@@ -920,7 +920,7 @@
           "from": 5,
           "to": 14,
           "line": 11,
-          "text": "export const deliverEitherMail = scenario({\n  description:\n    \"Add a task, which mails the owner and the team, and deliver a sendMail that the handle does not tell apart\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(mailer)] },\n  when: (w) => {\n    const add = w.client.send(addTask, { taskId: \"task-1\" });\n    w.net.deliver(add.request(mailer.sendMail));\n  },\n  then: () => [],\n});"
+          "text": "export const deliverEitherMail = scenario({\n  description:\n    \"Add a task, which mails the owner and the team, and deliver a sendMail that the handle does not tell apart\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(mailer)] },\n  when: (w) => {\n    const add = w.client.send(addTask, { taskId: \"task-1\" });\n    w.net.deliver(add.request(mailer.sendMail));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.ambiguousReference\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"fact\":{\"type\":\"request\",\"origin\":{\"type\":\"line\",\"index\":0},\"kind\":\"command\",\"target\":{\"service\":\"mailer\",\"name\":\"sendMail\"}},\"candidates\":[{\"sender\":\"todo\",\"receiver\":\"mailer\",\"id\":\"mailer.sendMail#1\",\"origin\":{\"type\":\"line\",\"index\":0}},{\"sender\":\"todo\",\"receiver\":\"mailer\",\"id\":\"mailer.sendMail#2\",\"origin\":{\"type\":\"line\",\"index\":0}}]},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":11},\"scenario\":{\"service\":\"todo\",\"name\":\"deliverEitherMail\"}}"
       }
@@ -933,7 +933,7 @@
           "from": 5,
           "to": 12,
           "line": 5,
-          "text": "export const neverAnswered = scenario({\n  description: \"The network delivers requestPermission, and no line answers it or leaves it unanswered\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n  },\n  then: () => [],\n});"
+          "text": "export const neverAnswered = scenario({\n  description: \"The network delivers requestPermission, and no line answers it or leaves it unanswered\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.awaitingAnswer\",\"definition\":null,\"data\":{\"message\":{\"sender\":\"app\",\"receiver\":\"device\",\"id\":\"device.requestPermission#1\",\"origin\":{\"type\":\"startup\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"app\",\"name\":\"neverAnswered\"}}"
       }
@@ -943,12 +943,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 8,
-          "line": 3,
-          "text": "export const untitled = scenario({\n  description: \"Given writes a task without a title, which the invariant titled of Task forbids\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [{ id: \"task-1\", title: \"\" }] }, peers: [] },\n  when: () => {},\n  then: () => [],\n});"
+          "from": 4,
+          "to": 13,
+          "line": 4,
+          "text": "export const untitled = scenario({\n  description: \"Given writes a task without a title, which the invariant titled of Task forbids\",\n  given: {\n    start: parseInstant(\"2026-10-25T09:00:00+09:00\"),\n    records: { Task: [{ id: \"task-1\", title: \"\" }] },\n    peers: [],\n  },\n  when: () => {},\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidScenario.brokenGivenInvariant\",\"definition\":null,\"data\":{\"service\":\"todo\",\"entity\":\"Task\",\"key\":\"task-1\",\"invariant\":\"titled\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"untitled\"}}"
+        "violation": "{\"kind\":\"InvalidScenario.brokenGivenInvariant\",\"definition\":null,\"data\":{\"service\":\"todo\",\"entity\":\"Task\",\"key\":\"task-1\",\"invariant\":\"titled\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"untitled\"}}"
       }
     },
     "InvalidScenario.differentPeerAnswer": {
@@ -959,7 +959,7 @@
           "from": 5,
           "to": 14,
           "line": 11,
-          "text": "export const rejectedNotify = scenario({\n  description: \"Add a task, which notifies notifier, and state that notifier rejects notify, though its run accepts it\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [run(notifier, {})] },\n  when: (w) => {\n    const add = w.client.send(addTask, { taskId: \"task-1\" });\n    const notifying = w.net.deliver(add.request(notifier.notify));\n    w.net.deliver(w.peer.notifier.answer(notifying, rejected(\"unavailable\")));\n  },\n  then: () => [],\n});"
+          "text": "export const rejectedNotify = scenario({\n  description: \"Add a task, which notifies notifier, and state that notifier rejects notify, though its run accepts it\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [run(notifier, {})] },\n  when: (w) => {\n    const add = w.client.send(addTask, { taskId: \"task-1\" });\n    const notifying = w.net.deliver(add.request(notifier.notify));\n    w.net.deliver(w.peer.notifier.answer(notifying, rejected(\"unavailable\")));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.differentPeerAnswer\",\"definition\":null,\"data\":{\"scenarioLine\":2,\"expected\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"unavailable\"}},\"actual\":{\"result\":\"accepted\"}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":11},\"scenario\":{\"service\":\"todo\",\"name\":\"rejectedNotify\"}}"
       }
@@ -969,12 +969,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 17,
-          "line": 3,
-          "text": "export const twoMilks = scenario({\n  description: \"Given writes two tasks with the key task-1\",\n  given: {\n    start: \"2026-10-25T09:00:00+09:00\",\n    records: {\n      Task: [\n        { id: \"task-1\", title: \"Buy milk\" },\n        { id: \"task-1\", title: \"Buy eggs\" },\n      ],\n    },\n    peers: [],\n  },\n  when: () => {},\n  then: () => [],\n});"
+          "from": 4,
+          "to": 18,
+          "line": 4,
+          "text": "export const twoMilks = scenario({\n  description: \"Given writes two tasks with the key task-1\",\n  given: {\n    start: parseInstant(\"2026-10-25T09:00:00+09:00\"),\n    records: {\n      Task: [\n        { id: \"task-1\", title: \"Buy milk\" },\n        { id: \"task-1\", title: \"Buy eggs\" },\n      ],\n    },\n    peers: [],\n  },\n  when: () => {},\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidScenario.duplicateRecord\",\"definition\":null,\"data\":{\"service\":\"todo\",\"entity\":\"Task\",\"key\":\"task-1\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"twoMilks\"}}"
+        "violation": "{\"kind\":\"InvalidScenario.duplicateRecord\",\"definition\":null,\"data\":{\"service\":\"todo\",\"entity\":\"Task\",\"key\":\"task-1\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"twoMilks\"}}"
       }
     },
     "InvalidScenario.invalidRecord": {
@@ -982,12 +982,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 10,
-          "line": 3,
-          "text": "export const untitled = scenario({\n  description: \"Given writes a task with an empty title, which the schema of Task rejects\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [{ id: \"task-1\", title: \"\" }] }, peers: [] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-2\", title: \"Buy milk\" });\n  },\n  then: () => [],\n});"
+          "from": 4,
+          "to": 15,
+          "line": 4,
+          "text": "export const untitled = scenario({\n  description: \"Given writes a task with an empty title, which the schema of Task rejects\",\n  given: {\n    start: parseInstant(\"2026-10-25T09:00:00+09:00\"),\n    records: { Task: [{ id: \"task-1\", title: \"\" }] },\n    peers: [],\n  },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-2\", title: \"Buy milk\" });\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidScenario.invalidRecord\",\"definition\":null,\"data\":{\"service\":\"todo\",\"entity\":\"Task\",\"key\":\"task-1\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"untitled\"}}"
+        "violation": "{\"kind\":\"InvalidScenario.invalidRecord\",\"definition\":null,\"data\":{\"service\":\"todo\",\"entity\":\"Task\",\"key\":\"task-1\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"untitled\"}}"
       }
     },
     "InvalidScenario.leftInFlight": {
@@ -998,7 +998,7 @@
           "from": 5,
           "to": 10,
           "line": 5,
-          "text": "export const undelivered = scenario({\n  description: \"notifier sends sendMail at the start, and no line delivers it or leaves it in flight\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(mailer)] },\n  when: () => {},\n  then: () => [],\n});"
+          "text": "export const undelivered = scenario({\n  description: \"notifier sends sendMail at the start, and no line delivers it or leaves it in flight\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(mailer)] },\n  when: () => {},\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.leftInFlight\",\"definition\":null,\"data\":{\"message\":{\"sender\":\"app\",\"receiver\":\"mailer\",\"id\":\"mailer.sendMail#1\",\"origin\":{\"type\":\"startup\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"app\",\"name\":\"undelivered\"}}"
       }
@@ -1008,12 +1008,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 12,
-          "line": 9,
-          "text": "export const copyMissingNote = scenario({\n  description:\n    \"Ask for the first note while no task has one, and add a task with that note, which the answer has no field for\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const noting = w.client.call(firstNote, {});\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\", note: noting.output.note });\n  },\n  then: () => [],\n});"
+          "from": 4,
+          "to": 13,
+          "line": 10,
+          "text": "export const copyMissingNote = scenario({\n  description:\n    \"Ask for the first note while no task has one, and add a task with that note, which the answer has no field for\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const noting = w.client.call(firstNote, {});\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\", note: noting.output.note });\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidScenario.missingField\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"path\":[\"note\"],\"value\":{}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":9},\"scenario\":{\"service\":\"todo\",\"name\":\"copyMissingNote\"}}"
+        "violation": "{\"kind\":\"InvalidScenario.missingField\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"path\":[\"note\"],\"value\":{}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"todo\",\"name\":\"copyMissingNote\"}}"
       }
     },
     "InvalidScenario.missingOutput": {
@@ -1021,12 +1021,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 12,
-          "line": 9,
-          "text": "export const copyRejected = scenario({\n  description:\n    \"Ask for the title of the task with an empty taskId, which todo rejects, and add a task with the title in the output of that answer, which has no output\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const asking = w.client.call(taskTitle, { taskId: \"\" });\n    w.client.send(addTask, { taskId: \"task-1\", title: asking.output.title });\n  },\n  then: () => [],\n});"
+          "from": 4,
+          "to": 13,
+          "line": 10,
+          "text": "export const copyRejected = scenario({\n  description:\n    \"Ask for the title of the task with an empty taskId, which todo rejects, and add a task with the title in the output of that answer, which has no output\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const asking = w.client.call(taskTitle, { taskId: \"\" });\n    w.client.send(addTask, { taskId: \"task-1\", title: asking.output.title });\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidScenario.missingOutput\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"fact\":{\"type\":\"line\",\"index\":0}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":9},\"scenario\":{\"service\":\"todo\",\"name\":\"copyRejected\"}}"
+        "violation": "{\"kind\":\"InvalidScenario.missingOutput\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"fact\":{\"type\":\"line\",\"index\":0}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"todo\",\"name\":\"copyRejected\"}}"
       }
     },
     "InvalidScenario.notDelivered": {
@@ -1037,7 +1037,7 @@
           "from": 5,
           "to": 12,
           "line": 9,
-          "text": "export const answerUndelivered = scenario({\n  description: \"The device answers requestPermission, which no line delivered\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), accepted()));\n  },\n  then: () => [],\n});"
+          "text": "export const answerUndelivered = scenario({\n  description: \"The device answers requestPermission, which no line delivered\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.peer.device.answer(w.startup.request(device.requestPermission), accepted()));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.notDelivered\",\"definition\":null,\"data\":{\"scenarioLine\":0,\"message\":{\"sender\":\"app\",\"receiver\":\"device\",\"id\":\"device.requestPermission#1\",\"origin\":{\"type\":\"startup\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":9},\"scenario\":{\"service\":\"app\",\"name\":\"answerUndelivered\"}}"
       }
@@ -1050,7 +1050,7 @@
           "from": 5,
           "to": 13,
           "line": 10,
-          "text": "export const deliverTwice = scenario({\n  description: \"The network delivers requestPermission twice\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.startup.request(device.requestPermission));\n  },\n  then: () => [],\n});"
+          "text": "export const deliverTwice = scenario({\n  description: \"The network delivers requestPermission twice\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.startup.request(device.requestPermission));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.notInFlight\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"message\":{\"sender\":\"app\",\"receiver\":\"device\",\"id\":\"device.requestPermission#1\",\"origin\":{\"type\":\"startup\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"app\",\"name\":\"deliverTwice\"}}"
       }
@@ -1063,9 +1063,9 @@
           "from": 5,
           "to": 13,
           "line": 10,
-          "text": "export const clockAtStart = scenario({\n  description: \"Leave requestPermission in flight, and advance the clock to the start, which is not later\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.clock.at(\"2026-10-25T09:00:00+09:00\");\n  },\n  then: () => [],\n});"
+          "text": "export const clockAtStart = scenario({\n  description: \"Leave requestPermission in flight, and advance the clock to the start, which is not later\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.clock.at(parseInstant(\"2026-10-25T09:00:00+09:00\"));\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidScenario.notLater\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"at\":\"2026-10-25T00:00:00Z\",\"now\":\"2026-10-25T00:00:00Z\"},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"app\",\"name\":\"clockAtStart\"}}"
+        "violation": "{\"kind\":\"InvalidScenario.notLater\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"at\":1792886400000,\"now\":1792886400000},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"app\",\"name\":\"clockAtStart\"}}"
       }
     },
     "InvalidScenario.overtaking": {
@@ -1076,7 +1076,7 @@
           "from": 5,
           "to": 15,
           "line": 12,
-          "text": "export const secondNoteFirst = scenario({\n  description:\n    \"Add two tasks, each of which todo notes, and deliver the second noted while the first is in flight on the same channel\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [run(listener, {})] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-1\" });\n    const second = w.client.send(addTask, { taskId: \"task-2\" });\n    w.net.deliver(second.event(noted));\n  },\n  then: () => [],\n});"
+          "text": "export const secondNoteFirst = scenario({\n  description:\n    \"Add two tasks, each of which todo notes, and deliver the second noted while the first is in flight on the same channel\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [run(listener, {})] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-1\" });\n    const second = w.client.send(addTask, { taskId: \"task-2\" });\n    w.net.deliver(second.event(noted));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.overtaking\",\"definition\":null,\"data\":{\"scenarioLine\":2,\"message\":{\"sender\":\"todo\",\"receiver\":\"listener\",\"id\":\"noted#2\",\"origin\":{\"type\":\"line\",\"index\":1}},\"earlier\":{\"sender\":\"todo\",\"receiver\":\"listener\",\"id\":\"noted#1\",\"origin\":{\"type\":\"line\",\"index\":0}}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":12},\"scenario\":{\"service\":\"todo\",\"name\":\"secondNoteFirst\"}}"
       }
@@ -1089,7 +1089,7 @@
           "from": 5,
           "to": 14,
           "line": 11,
-          "text": "export const answerTwice = scenario({\n  description: \"The device answers requestPermission twice\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    const request = w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(request, accepted()));\n    w.peer.device.answer(request, accepted());\n  },\n  then: () => [],\n});"
+          "text": "export const answerTwice = scenario({\n  description: \"The device answers requestPermission twice\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    const request = w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(request, accepted()));\n    w.peer.device.answer(request, accepted());\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.repeatedAnswer\",\"definition\":null,\"data\":{\"scenarioLine\":3,\"message\":{\"sender\":\"app\",\"receiver\":\"device\",\"id\":\"device.requestPermission#1\",\"origin\":{\"type\":\"startup\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":11},\"scenario\":{\"service\":\"app\",\"name\":\"answerTwice\"}}"
       }
@@ -1102,7 +1102,7 @@
           "from": 5,
           "to": 13,
           "line": 10,
-          "text": "export const leaveTwice = scenario({\n  description: \"Leave requestPermission in flight twice\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n  },\n  then: () => [],\n});"
+          "text": "export const leaveTwice = scenario({\n  description: \"Leave requestPermission in flight twice\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.repeatedInFlight\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"message\":{\"sender\":\"app\",\"receiver\":\"device\",\"id\":\"device.requestPermission#1\",\"origin\":{\"type\":\"startup\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"app\",\"name\":\"leaveTwice\"}}"
       }
@@ -1112,12 +1112,12 @@
       "example": {
         "excerpt": {
           "file": "app/scenarios.ts",
-          "from": 3,
-          "to": 8,
-          "line": 3,
-          "text": "export const noPeers = scenario({\n  description: \"notifier sends sendMail to mailer, and Given lists no peer\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: () => {},\n  then: () => [],\n});"
+          "from": 4,
+          "to": 9,
+          "line": 4,
+          "text": "export const noPeers = scenario({\n  description: \"notifier sends sendMail to mailer, and Given lists no peer\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [] },\n  when: () => {},\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidScenario.unlistedPeer\",\"definition\":null,\"data\":{\"service\":\"mailer\"},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"app\",\"name\":\"noPeers\"}}"
+        "violation": "{\"kind\":\"InvalidScenario.unlistedPeer\",\"definition\":null,\"data\":{\"service\":\"mailer\"},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"app\",\"name\":\"noPeers\"}}"
       }
     },
     "InvalidScenario.unlistedService": {
@@ -1128,7 +1128,7 @@
           "from": 5,
           "to": 13,
           "line": 10,
-          "text": "export const notifyWithoutDevice = scenario({\n  description: \"Add a task, which notifies notifier, whose run asks device for a permission, which Given does not list\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [run(notifier, {})] },\n  when: (w) => {\n    const add = w.client.send(addTask, { taskId: \"task-1\" });\n    w.net.deliver(add.request(notifier.notify));\n  },\n  then: () => [],\n});"
+          "text": "export const notifyWithoutDevice = scenario({\n  description: \"Add a task, which notifies notifier, whose run asks device for a permission, which Given does not list\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [run(notifier, {})] },\n  when: (w) => {\n    const add = w.client.send(addTask, { taskId: \"task-1\" });\n    w.net.deliver(add.request(notifier.notify));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.unlistedService\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"service\":\"device\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"todo\",\"name\":\"notifyWithoutDevice\"}}"
       }
@@ -1141,7 +1141,7 @@
           "from": 4,
           "to": 9,
           "line": 8,
-          "text": "export const addMilk = scenario({\n  description: \"Add a task, and state that todo rejects it, though todo accepts it\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => ({ add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) }),\n  then: ({ add }) => [answered(add, rejected(\"already-exists\"))],\n});"
+          "text": "export const addMilk = scenario({\n  description: \"Add a task, and state that todo rejects it, though todo accepts it\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: { Task: [] }, peers: [] },\n  when: (w) => ({ add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) }),\n  then: ({ add }) => [answered(add, rejected(\"already-exists\"))],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.unmetExpectation\",\"definition\":null,\"data\":{\"expectation\":0,\"expected\":[{\"result\":\"rejected\",\"rejection\":{\"kind\":\"already-exists\"}}],\"actual\":[{\"result\":\"accepted\"}]},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"addMilk\"}}"
       }
@@ -1154,7 +1154,7 @@
           "from": 5,
           "to": 15,
           "line": 12,
-          "text": "export const notifierAddsTask = scenario({\n  description: \"Add a task, which notifies notifier, and state that notifier sends addTask, which its run never sends\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [run(notifier, {})] },\n  when: (w) => {\n    const add = w.client.send(addTask, { taskId: \"task-1\" });\n    const notifying = w.net.deliver(add.request(notifier.notify));\n    w.net.deliver(w.peer.notifier.answer(notifying, accepted()));\n    w.peer.notifier.send(addTask, { taskId: \"task-2\" });\n  },\n  then: () => [],\n});"
+          "text": "export const notifierAddsTask = scenario({\n  description: \"Add a task, which notifies notifier, and state that notifier sends addTask, which its run never sends\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [run(notifier, {})] },\n  when: (w) => {\n    const add = w.client.send(addTask, { taskId: \"task-1\" });\n    const notifying = w.net.deliver(add.request(notifier.notify));\n    w.net.deliver(w.peer.notifier.answer(notifying, accepted()));\n    w.peer.notifier.send(addTask, { taskId: \"task-2\" });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.unpairedPeerLine\",\"definition\":null,\"data\":{\"scenarioLine\":4,\"peer\":\"notifier\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":12},\"scenario\":{\"service\":\"todo\",\"name\":\"notifierAddsTask\"}}"
       }
@@ -1167,7 +1167,7 @@
           "from": 5,
           "to": 13,
           "line": 10,
-          "text": "export const emitMuted = scenario({\n  description: \"Leave requestPermission in flight, and the device emits muted, which app does not receive\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.peer.device.emit(device.muted, {}, { resultOf: null });\n  },\n  then: () => [],\n});"
+          "text": "export const emitMuted = scenario({\n  description: \"Leave requestPermission in flight, and the device emits muted, which app does not receive\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.peer.device.emit(device.muted, {}, { resultOf: null });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.unreceivedEvent\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"event\":{\"service\":\"device\",\"name\":\"muted\"}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"app\",\"name\":\"emitMuted\"}}"
       }
@@ -1180,7 +1180,7 @@
           "from": 5,
           "to": 13,
           "line": 10,
-          "text": "export const grantUndelivered = scenario({\n  description: \"The device emits granted as the result of requestPermission, which no line delivered to it\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.peer.device.emit(device.granted, {}, { resultOf: w.startup.request(device.requestPermission) });\n  },\n  then: () => [],\n});"
+          "text": "export const grantUndelivered = scenario({\n  description: \"The device emits granted as the result of requestPermission, which no line delivered to it\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.peer.device.emit(device.granted, {}, { resultOf: w.startup.request(device.requestPermission) });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.unreceivedRequest\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"peer\":\"device\",\"fact\":{\"type\":\"request\",\"origin\":{\"type\":\"startup\"},\"kind\":\"command\",\"target\":{\"service\":\"device\",\"name\":\"requestPermission\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":10},\"scenario\":{\"service\":\"app\",\"name\":\"grantUndelivered\"}}"
       }
@@ -1193,7 +1193,7 @@
           "from": 5,
           "to": 15,
           "line": 12,
-          "text": "export const deliverUnsent = scenario({\n  description:\n    \"Leave requestPermission in flight, advance the clock, and deliver a requestPermission that the clock line sent, which it did not\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    const later = w.clock.at(\"2026-10-25T10:00:00+09:00\");\n    w.net.deliver(later.request(device.requestPermission));\n  },\n  then: () => [],\n});"
+          "text": "export const deliverUnsent = scenario({\n  description:\n    \"Leave requestPermission in flight, advance the clock, and deliver a requestPermission that the clock line sent, which it did not\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    const later = w.clock.at(parseInstant(\"2026-10-25T10:00:00+09:00\"));\n    w.net.deliver(later.request(device.requestPermission));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.unresolvedReference\",\"definition\":null,\"data\":{\"scenarioLine\":2,\"fact\":{\"type\":\"request\",\"origin\":{\"type\":\"line\",\"index\":1},\"kind\":\"command\",\"target\":{\"service\":\"device\",\"name\":\"requestPermission\"}}},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":12},\"scenario\":{\"service\":\"app\",\"name\":\"deliverUnsent\"}}"
       }
@@ -1206,7 +1206,7 @@
           "from": 5,
           "to": 14,
           "line": 9,
-          "text": "export const leaveThenDeliver = scenario({\n  description: \"Leave requestPermission in flight, and then deliver it and accept it\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    const request = w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(request, accepted()));\n  },\n  then: () => [],\n});"
+          "text": "export const leaveThenDeliver = scenario({\n  description: \"Leave requestPermission in flight, and then deliver it and accept it\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    const request = w.net.deliver(w.startup.request(device.requestPermission));\n    w.net.deliver(w.peer.device.answer(request, accepted()));\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.unusedInFlight\",\"definition\":null,\"data\":{\"scenarioLine\":0},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":9},\"scenario\":{\"service\":\"app\",\"name\":\"leaveThenDeliver\"}}"
       }
@@ -1219,7 +1219,7 @@
           "from": 4,
           "to": 12,
           "line": 11,
-          "text": "export const addMilk = scenario({\n  description:\n    \"Add a task, and state the events that todo emits, which its contract lists none of, so the expectation cannot fail\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    return { add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) };\n  },\n  then: ({ add }) => [emitted(add, [])],\n});"
+          "text": "export const addMilk = scenario({\n  description:\n    \"Add a task, and state the events that todo emits, which its contract lists none of, so the expectation cannot fail\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: { Task: [] }, peers: [] },\n  when: (w) => {\n    return { add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) };\n  },\n  then: ({ add }) => [emitted(add, [])],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.vacuousExpectation\",\"definition\":null,\"data\":{\"expectation\":0},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":11},\"scenario\":{\"service\":\"todo\",\"name\":\"addMilk\"}}"
       }
@@ -1232,7 +1232,7 @@
           "from": 5,
           "to": 14,
           "line": 11,
-          "text": "export const deviceRequestsItself = scenario({\n  description:\n    \"Leave requestPermission in flight, and the device sends requestPermission, a command of its own, which only a running service receives\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.peer.device.send(device.requestPermission, {});\n  },\n  then: () => [],\n});"
+          "text": "export const deviceRequestsItself = scenario({\n  description:\n    \"Leave requestPermission in flight, and the device sends requestPermission, a command of its own, which only a running service receives\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(device)] },\n  when: (w) => {\n    w.net.leaveInFlight(w.startup.request(device.requestPermission));\n    w.peer.device.send(device.requestPermission, {});\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"InvalidScenario.wrongRole\",\"definition\":null,\"data\":{\"scenarioLine\":1,\"service\":\"device\"},\"location\":{\"file\":\"app/scenarios.ts\",\"line\":11},\"scenario\":{\"service\":\"app\",\"name\":\"deviceRequestsItself\"}}"
       }
@@ -1255,12 +1255,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 10,
-          "to": 15,
-          "line": 10,
-          "text": "export const StartsDay = scenario({\n  description: \"Start at noon\",\n  given: { start: \"2026-10-25T12:00:00+09:00\", records: {}, peers: [] },\n  when: () => {},\n  then: () => [],\n});"
+          "from": 11,
+          "to": 16,
+          "line": 11,
+          "text": "export const StartsDay = scenario({\n  description: \"Start at noon\",\n  given: { start: parseInstant(\"2026-10-25T12:00:00+09:00\"), records: {}, peers: [] },\n  when: () => {},\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"Malformed.caseCollision\",\"definition\":null,\"data\":{\"name\":\"StartsDay\",\"collidesWith\":\"startsDay\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":10}}"
+        "violation": "{\"kind\":\"Malformed.caseCollision\",\"definition\":null,\"data\":{\"name\":\"StartsDay\",\"collidesWith\":\"startsDay\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":11}}"
       }
     },
     "Malformed.defaultSchema": {
@@ -1328,17 +1328,30 @@
         "violation": "{\"kind\":\"Malformed.duplicateService\",\"definition\":null,\"data\":{\"name\":\"todo\",\"elsewhere\":\"todo/data.ts\"},\"location\":{\"file\":\"todo/data.ts\",\"line\":7}}"
       }
     },
+    "Malformed.inexactTime": {
+      "meaning": "A time of the scenario, Given's start or a clock line's time, is no safe integer, so the run cannot hold it as an instant in milliseconds. The report is at the clock line, or at the scenario for Given's start.",
+      "example": {
+        "excerpt": {
+          "file": "todo/scenarios.ts",
+          "from": 6,
+          "to": 19,
+          "line": 11,
+          "text": "export const countAtEachTime = scenario({\n  description:\n    \"Count at a time with a fraction of a millisecond, at a time past every safe integer, and at a whole millisecond; all but the third are inexact\",\n  given: { start, records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(start + 0.5);\n    w.client.call(taskCount, {});\n    w.clock.at(2 ** 53);\n    w.client.call(taskCount, {});\n    w.clock.at(start + 60_000);\n    w.client.call(taskCount, {});\n  },\n  then: () => [],\n});"
+        },
+        "violation": "{\"kind\":\"Malformed.inexactTime\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":11},\"scenario\":{\"service\":\"todo\",\"name\":\"countAtEachTime\"}}"
+      }
+    },
     "Malformed.lineAfterWhen": {
       "meaning": "A line of the scenario was placed after its When returned, through a handle kept for later.",
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 11,
-          "line": 3,
-          "text": "export const placesLineInThen = scenario({\n  description: \"Keep the actors of When and place a line from Then; check reports lineAfterWhen\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => ({ w }),\n  then: ({ w }) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n    return [];\n  },\n});"
+          "from": 4,
+          "to": 12,
+          "line": 4,
+          "text": "export const placesLineInThen = scenario({\n  description: \"Keep the actors of When and place a line from Then; check reports lineAfterWhen\",\n  given: { start: parseInstant(\"2026-10-25T10:00:00+09:00\"), records: { Task: [] }, peers: [] },\n  when: (w) => ({ w }),\n  then: ({ w }) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n    return [];\n  },\n});"
         },
-        "violation": "{\"kind\":\"Malformed.lineAfterWhen\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"placesLineInThen\"}}"
+        "violation": "{\"kind\":\"Malformed.lineAfterWhen\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"placesLineInThen\"}}"
       }
     },
     "Malformed.listedTwice": {
@@ -1411,12 +1424,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 12,
-          "line": 3,
-          "text": "export const convertsObserved = scenario({\n  description:\n    \"Write the count that a query line observes into a title as a string; check reports misusedObserved for the line\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const counting = w.client.call(taskCount, {});\n    w.client.send(addTask, { taskId: \"task-1\", title: String(counting.output.count) });\n  },\n  then: () => [],\n});"
+          "from": 4,
+          "to": 13,
+          "line": 4,
+          "text": "export const convertsObserved = scenario({\n  description:\n    \"Write the count that a query line observes into a title as a string; check reports misusedObserved for the line\",\n  given: { start: parseInstant(\"2026-10-25T10:00:00+09:00\"), records: { Task: [] }, peers: [] },\n  when: (w) => {\n    const counting = w.client.call(taskCount, {});\n    w.client.send(addTask, { taskId: \"task-1\", title: String(counting.output.count) });\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"Malformed.misusedObserved\",\"definition\":null,\"data\":{\"use\":\"conversion\",\"path\":[\"count\"]},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"convertsObserved\"}}"
+        "violation": "{\"kind\":\"Malformed.misusedObserved\",\"definition\":null,\"data\":{\"use\":\"conversion\",\"path\":[\"count\"]},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"convertsObserved\"}}"
       }
     },
     "Malformed.opaqueCollection": {
@@ -1479,7 +1492,7 @@
           "from": 7,
           "to": 22,
           "line": 7,
-          "text": "export const listsUnknownPeers = scenario({\n  description:\n    \"List todo itself and an object that is no contract as peers; check reports unknownPeer for each, the latter with a null service\",\n  given: {\n    start: \"2026-10-25T10:00:00+09:00\",\n    records: { Task: [] },\n    peers: [\n      external(calendar),\n      skip(notifier, \"notifier's reactions are its own scenarios\"),\n      unchecked(skip(todo, \"todo is the own service\")),\n      skip(unchecked({}), \"no service\"),\n    ],\n  },\n  when: (w) => ({ add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) }),\n  then: () => [],\n});"
+          "text": "export const listsUnknownPeers = scenario({\n  description:\n    \"List todo itself and an object that is no contract as peers; check reports unknownPeer for each, the latter with a null service\",\n  given: {\n    start: parseInstant(\"2026-10-25T10:00:00+09:00\"),\n    records: { Task: [] },\n    peers: [\n      external(calendar),\n      skip(notifier, \"notifier's reactions are its own scenarios\"),\n      unchecked(skip(todo, \"todo is the own service\")),\n      skip(unchecked({}), \"no service\"),\n    ],\n  },\n  when: (w) => ({ add: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }) }),\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Malformed.unknownPeer\",\"definition\":null,\"data\":{\"service\":\"todo\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":7},\"scenario\":{\"service\":\"todo\",\"name\":\"listsUnknownPeers\"}}"
       }
@@ -1523,19 +1536,6 @@
         "violation": "{\"kind\":\"Malformed.unlistedFile\",\"definition\":null,\"data\":{\"tsconfig\":\"tsconfig.json\"},\"location\":{\"file\":\"todo/notes.ts\",\"line\":1}}"
       }
     },
-    "Malformed.unparsableTime": {
-      "meaning": "A time of the scenario, Given's start or a clock line's time, is not an ISO datetime with seconds and an offset, or has a part below a millisecond, so the run cannot read it as an instant in milliseconds. The report is at the clock line, or at the scenario for Given's start.",
-      "example": {
-        "excerpt": {
-          "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 18,
-          "line": 8,
-          "text": "export const countAtEachTime = scenario({\n  description:\n    \"Count at a time with ten fraction digits, at a time with a part below a millisecond, at a time with zeros below a millisecond, and at a time whose offset has no colon; all but the third are unparsable\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: {}, peers: [] },\n  when: (w) => {\n    w.clock.at(\"2026-10-25T09:02:00.1234567891+09:00\");\n    w.client.call(taskCount, {});\n    w.clock.at(\"2026-10-25T09:03:00.0009+09:00\");\n    w.client.call(taskCount, {});\n    w.clock.at(\"2026-10-25T09:04:00.001000+09:00\");\n    w.client.call(taskCount, {});\n    w.clock.at(\"2026-10-25T09:05:00+0900\");\n    w.client.call(taskCount, {});\n  },\n  then: () => [],\n});"
-        },
-        "violation": "{\"kind\":\"Malformed.unparsableTime\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"countAtEachTime\"}}"
-      }
-    },
     "Malformed.unreadableDeadline": {
       "meaning": "The deadline at `path` writes both a delay and `at`, or neither, so it has no one time. Only a value of type `any` gets it past the types.",
       "example": {
@@ -1544,7 +1544,7 @@
           "from": 5,
           "to": 21,
           "line": 5,
-          "text": "export const alarm = machine({\n  description: \"Ring after a minute and at a fixed time at once, past the types without a written any\",\n  initial: \"waiting\",\n  states: { waiting: {}, ringing: {} },\n}).chart({\n  states: {\n    waiting: {\n      after: {\n        ring: JSON.parse(\"0\") || {\n          delay: { minutes: 1 },\n          at: () => Temporal.Instant.from(\"2026-10-25T00:01:00Z\"),\n          onFired: [{ target: \"ringing\" }],\n        },\n      },\n    },\n  },\n});"
+          "text": "export const alarm = machine({\n  description: \"Ring after a minute and at a fixed time at once, past the types without a written any\",\n  initial: \"waiting\",\n  states: { waiting: {}, ringing: {} },\n}).chart({\n  states: {\n    waiting: {\n      after: {\n        ring: JSON.parse(\"0\") || {\n          delay: 60_000,\n          at: () => parseInstant(\"2026-10-25T00:01:00Z\"),\n          onFired: [{ target: \"ringing\" }],\n        },\n      },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"Malformed.unreadableDeadline\",\"definition\":{\"service\":\"alarms\",\"name\":\"alarm\"},\"data\":{\"path\":[\"states\",\"waiting\",\"after\",\"ring\"]},\"location\":{\"file\":\"alarms/alarms.ts\",\"line\":5}}"
       }
@@ -1557,7 +1557,7 @@
           "from": 16,
           "to": 33,
           "line": 16,
-          "text": "export const taskAdded = event({\n  payload: {\n    at: datetime,\n    count: z.bigint(),\n    tags: z.set(z.string()),\n    owners: z.map(z.string(), z.string()),\n    ratio: z.nan().optional(),\n    mark: z.symbol(),\n    length: z.string().transform((s) => s.length),\n    trimmed: z.string().pipe(z.string().trim()),\n    seen: z.date(),\n    ids: z.set(z.bigint()),\n    first: box,\n    second: box,\n    sized: z.object({ name: z.string() }).and(z.object({ size: z.number() })),\n    tree,\n  },\n});"
+          "text": "export const taskAdded = event({\n  payload: {\n    at: instant,\n    count: z.bigint(),\n    tags: z.set(z.string()),\n    owners: z.map(z.string(), z.string()),\n    ratio: z.nan().optional(),\n    mark: z.symbol(),\n    length: z.string().transform((s) => s.length),\n    trimmed: z.string().pipe(z.string().trim()),\n    seen: z.date(),\n    ids: z.set(z.bigint()),\n    first: box,\n    second: box,\n    sized: z.object({ name: z.string() }).and(z.object({ size: z.number() })),\n    tree,\n  },\n});"
         },
         "violation": "{\"kind\":\"Malformed.unrepresentableSchema\",\"definition\":{\"service\":\"todo\",\"name\":\"taskAdded\"},\"data\":{\"path\":[\"payload\",\"count\"],\"type\":\"bigint\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":16}}"
       }
@@ -1593,12 +1593,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 13,
-          "line": 3,
-          "text": "export const givenCreatedKey = scenario({\n  description:\n    \"Given holds a task under todo/Task-1, the form of the first key that todo creates for Task, so loading reports writtenCreatedKey at the scenario\",\n  given: {\n    start: \"2026-10-25T10:00:00+09:00\",\n    records: { Task: [{ id: \"todo/Task-1\", title: \"Buy milk\" }] },\n    peers: [],\n  },\n  when: () => ({}),\n  then: () => [],\n});"
+          "from": 4,
+          "to": 14,
+          "line": 4,
+          "text": "export const givenCreatedKey = scenario({\n  description:\n    \"Given holds a task under todo/Task-1, the form of the first key that todo creates for Task, so loading reports writtenCreatedKey at the scenario\",\n  given: {\n    start: parseInstant(\"2026-10-25T10:00:00+09:00\"),\n    records: { Task: [{ id: \"todo/Task-1\", title: \"Buy milk\" }] },\n    peers: [],\n  },\n  when: () => ({}),\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"Malformed.writtenCreatedKey\",\"definition\":null,\"data\":{\"key\":\"todo/Task-1\",\"entity\":{\"service\":\"todo\",\"name\":\"Task\"}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"givenCreatedKey\"}}"
+        "violation": "{\"kind\":\"Malformed.writtenCreatedKey\",\"definition\":null,\"data\":{\"key\":\"todo/Task-1\",\"entity\":{\"service\":\"todo\",\"name\":\"Task\"}},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"givenCreatedKey\"}}"
       }
     },
     "Mismatch.answerOutputSchema": {
@@ -1609,9 +1609,9 @@
           "from": 2,
           "to": 2,
           "line": 2,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q3\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-26\"}}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q3\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-26\"}}}"
         },
-        "violation": "{\"kind\":\"Mismatch.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"q3\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"invalid_format\",\"format\":\"datetime\",\"pattern\":\"/^(?:(?:\\\\d\\\\d[2468][048]|\\\\d\\\\d[13579][26]|\\\\d\\\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\\\d|30)|(?:02)-(?:0[1-9]|1\\\\d|2[0-8])))T(?:(?:[01]\\\\d|2[0-3]):[0-5]\\\\d:[0-5]\\\\d(?:\\\\.\\\\d+)?(?:Z|([+-](?:[01]\\\\d|2[0-3]):[0-5]\\\\d)))$/\",\"path\":[\"day\"],\"message\":\"Invalid ISO datetime\"}]}}"
+        "violation": "{\"kind\":\"Mismatch.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"q3\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"number\",\"code\":\"invalid_type\",\"path\":[\"day\"],\"message\":\"Invalid input: expected number, received string\"}]}}"
       }
     },
     "Mismatch.answerResult": {
@@ -1622,7 +1622,7 @@
           "from": 2,
           "to": 2,
           "line": 2,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"c1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{}}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"c1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{}}}"
         },
         "violation": "{\"kind\":\"Mismatch.answerResult\",\"definition\":null,\"data\":{\"requestId\":\"c1\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"},\"result\":\"fulfilled\"},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2}}"
       }
@@ -1635,7 +1635,7 @@
           "from": 3,
           "to": 3,
           "line": 3,
-          "text": "{\"time\":\"2026-10-25T01:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e1\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\"},\"resultOf\":\"addTask#1\"}"
+          "text": "{\"time\":1792890000000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e1\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\"},\"resultOf\":\"addTask#1\"}"
         },
         "violation": "{\"kind\":\"Mismatch.event\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e1\"},\"snapshot\":{\"taskId\":\"task-1\"},\"trace\":{\"taskId\":\"task-2\"}},\"location\":{\"file\":\"traces/notifier/announcesAdded.todo.jsonl\",\"line\":3},\"scenario\":{\"service\":\"notifier\",\"name\":\"announcesAdded\"}}"
       }
@@ -1648,9 +1648,9 @@
           "from": 3,
           "to": 3,
           "line": 3,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e7\",\"name\":\"booked\",\"resultOf\":\"c3\",\"payload\":{\"day\":1}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e7\",\"name\":\"booked\",\"resultOf\":\"c3\",\"payload\":{\"day\":\"tomorrow\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.eventPayloadSchema\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":3},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"string\",\"code\":\"invalid_type\",\"path\":[\"day\"],\"message\":\"Invalid input: expected string, received number\"}]}}"
+        "violation": "{\"kind\":\"Mismatch.eventPayloadSchema\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":3},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"number\",\"code\":\"invalid_type\",\"path\":[\"day\"],\"message\":\"Invalid input: expected number, received string\"}]}}"
       }
     },
     "Mismatch.failedAssumedEnsures": {
@@ -1661,7 +1661,7 @@
           "from": 2,
           "to": 2,
           "line": 2,
-          "text": "{\"time\":\"2026-10-26T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-25T00:00:00Z\"}}}"
+          "text": "{\"time\":1792972800000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":1792886400000}}}"
         },
         "violation": "{\"kind\":\"Mismatch.failedAssumedEnsures\",\"definition\":null,\"data\":{\"requestId\":\"q1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"condition\":\"afterFrom\"},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2}}"
       }
@@ -1674,7 +1674,7 @@
           "from": 2,
           "to": 2,
           "line": 2,
-          "text": "{\"time\":\"2026-10-26T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#4\",\"to\":\"q3\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-24T00:00:00Z\"}}}"
+          "text": "{\"time\":1792972800000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#4\",\"to\":\"q3\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":1792800000000}}}"
         },
         "violation": "{\"kind\":\"Mismatch.failedAssumedRequires\",\"definition\":null,\"data\":{\"requestId\":\"q3\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"condition\":\"isWeekday\"},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2}}"
       }
@@ -1687,9 +1687,9 @@
           "from": 4,
           "to": 4,
           "line": 4,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"id\":\"task-1\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#1\"}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"id\":\"task-1\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#1\"}"
         },
-        "violation": "{\"kind\":\"Mismatch.line\",\"definition\":null,\"data\":{\"snapshot\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"id\":\"task-1\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#1\"},\"trace\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"id\":\"task-1\",\"title\":\"Buy milk\"},\"resultOf\":\"addTask#1\"}},\"location\":{\"file\":\"todo/__snapshots__/addOneEdited.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneEdited\"}}"
+        "violation": "{\"kind\":\"Mismatch.line\",\"definition\":null,\"data\":{\"snapshot\":{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"id\":\"task-1\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#1\"},\"trace\":{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"id\":\"task-1\",\"title\":\"Buy milk\"},\"resultOf\":\"addTask#1\"}},\"location\":{\"file\":\"todo/__snapshots__/addOneEdited.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneEdited\"}}"
       }
     },
     "Mismatch.lineOrder": {
@@ -1700,7 +1700,7 @@
           "from": 4,
           "to": 4,
           "line": 4,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"scheduled#1\",\"name\":\"scheduled\",\"payload\":{\"taskId\":\"task-1\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"scheduled#1\",\"name\":\"scheduled\",\"payload\":{\"taskId\":\"task-1\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.lineOrder\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"scheduled\",\"id\":\"scheduled#1\"},\"before\":{\"type\":\"event\",\"name\":\"logged\",\"id\":\"logged#1\"}},\"location\":{\"file\":\"traces/todo/addTwice.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwice\"}}"
       }
@@ -1713,7 +1713,7 @@
           "from": 10,
           "to": 10,
           "line": 10,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"completeTask#2\",\"name\":\"completeTask\",\"input\":{\"taskId\":\"task-1\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"completeTask#2\",\"name\":\"completeTask\",\"input\":{\"taskId\":\"task-1\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.missingAnswer\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#2\"},\"snapshotLine\":11},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":10},\"scenario\":{\"service\":\"todo\",\"name\":\"answersWrongResults\"}}"
       }
@@ -1726,9 +1726,9 @@
           "from": 6,
           "to": 6,
           "line": 6,
-          "text": "{\"time\":\"2026-10-25T01:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}"
+          "text": "{\"time\":1792890000000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.missingLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"calendar.nextDay#2\"},\"content\":{\"from\":\"2026-10-25T01:00:00Z\"},\"snapshotLine\":9},\"location\":{\"file\":\"traces/todo/addHourlyWrongRequests.jsonl\",\"line\":6},\"scenario\":{\"service\":\"todo\",\"name\":\"addHourlyWrongRequests\"}}"
+        "violation": "{\"kind\":\"Mismatch.missingLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"calendar.nextDay#2\"},\"content\":{\"from\":1792890000000},\"snapshotLine\":9},\"location\":{\"file\":\"traces/todo/addHourlyWrongRequests.jsonl\",\"line\":6},\"scenario\":{\"service\":\"todo\",\"name\":\"addHourlyWrongRequests\"}}"
       }
     },
     "Mismatch.operation": {
@@ -1739,7 +1739,7 @@
           "from": 4,
           "to": 4,
           "line": 4,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"operation\",\"id\":\"taskScreen.open#1\",\"name\":\"taskScreen.open\",\"payload\":{\"taskId\":\"task-2\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"operation\",\"id\":\"taskScreen.open#1\",\"name\":\"taskScreen.open\",\"payload\":{\"taskId\":\"task-2\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.operation\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"operation\",\"name\":\"taskScreen.open\",\"id\":\"taskScreen.open#1\"},\"snapshot\":{\"taskId\":\"task-1\"},\"trace\":{\"taskId\":\"task-2\"}},\"location\":{\"file\":\"traces/todo/addOneOperated.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneOperated\"}}"
       }
@@ -1752,7 +1752,7 @@
           "from": 7,
           "to": 7,
           "line": 7,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"thread#1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"n2\",\"text\":\"reply\",\"replyTo\":\"n9\"},{\"id\":\"n1\",\"text\":\"first\",\"replyTo\":null}]}}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"thread#1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"n2\",\"text\":\"reply\",\"replyTo\":\"n9\"},{\"id\":\"n1\",\"text\":\"first\",\"replyTo\":null}]}}}"
         },
         "violation": "{\"kind\":\"Mismatch.output\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"thread#1\"},\"snapshot\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"notes/Note-1\",\"text\":\"first\",\"replyTo\":null},{\"id\":\"notes/Note-2\",\"text\":\"reply\",\"replyTo\":\"notes/Note-1\"}]}},\"trace\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"n2\",\"text\":\"reply\",\"replyTo\":\"n9\"},{\"id\":\"n1\",\"text\":\"first\",\"replyTo\":null}]}}},\"location\":{\"file\":\"traces/notes/replyToOther.jsonl\",\"line\":7},\"scenario\":{\"service\":\"notes\",\"name\":\"replyToOther\"}}"
       }
@@ -1765,7 +1765,7 @@
           "from": 2,
           "to": 2,
           "line": 2,
-          "text": "{\"time\":\"2026-10-26T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"q2\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"requires\",\"reason\":\"isWeekday\"}}}"
+          "text": "{\"time\":1792972800000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"q2\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"requires\",\"reason\":\"isWeekday\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.rejectedAssumedRequires\",\"definition\":null,\"data\":{\"requestId\":\"q2\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2}}"
       }
@@ -1778,7 +1778,7 @@
           "from": 7,
           "to": 7,
           "line": 7,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#3\",\"to\":\"completeTask#1\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"requires\",\"reason\":\"notDone\"}}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#3\",\"to\":\"completeTask#1\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"requires\",\"reason\":\"notDone\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.rejection\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#1\"},\"snapshot\":\"not-found\",\"trace\":\"requires\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":7},\"scenario\":{\"service\":\"todo\",\"name\":\"answersWrongResults\"}}"
       }
@@ -1791,7 +1791,7 @@
           "from": 3,
           "to": 3,
           "line": 3,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#5\",\"to\":\"c2\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"unavailable\"}}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#5\",\"to\":\"c2\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"unavailable\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.repeatedAnswer\",\"definition\":null,\"data\":{\"requestId\":\"c2\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":3}}"
       }
@@ -1804,7 +1804,7 @@
           "from": 4,
           "to": 4,
           "line": 4,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s2\",\"name\":\"todo.linked\",\"input\":{\"links\":[{\"from\":\"n1\",\"to\":\"n2\"},{\"from\":\"n2\",\"to\":\"n3\"}]}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s2\",\"name\":\"todo.linked\",\"input\":{\"links\":[{\"from\":\"n1\",\"to\":\"n2\"},{\"from\":\"n2\",\"to\":\"n3\"}]}}"
         },
         "violation": "{\"kind\":\"Mismatch.request\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.linked\",\"id\":\"s2\"},\"snapshot\":{\"links\":[{\"from\":\"screens/Draft-1\",\"to\":\"screens/Draft-2\"},{\"from\":\"screens/Draft-2\",\"to\":\"screens/Draft-1\"}]},\"trace\":{\"links\":[{\"from\":\"n1\",\"to\":\"n2\"},{\"from\":\"n2\",\"to\":\"n3\"}]}},\"location\":{\"file\":\"traces/screens/draftTwoBroken.jsonl\",\"line\":4},\"scenario\":{\"service\":\"screens\",\"name\":\"draftTwoBroken\"}}"
       }
@@ -1817,7 +1817,7 @@
           "from": 2,
           "to": 2,
           "line": 2,
-          "text": "{\"time\":\"2026-10-26T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-24T00:00:00Z\"}}}"
+          "text": "{\"time\":1792972800000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":1792800000000}}}"
         },
         "violation": "{\"kind\":\"Mismatch.requestInputSchema\",\"definition\":null,\"data\":{\"requestId\":\"q1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"unrecognized_keys\",\"keys\":[\"zone\"],\"path\":[],\"message\":\"Unrecognized key: \\\"zone\\\"\"}]}}"
       }
@@ -1830,7 +1830,7 @@
           "from": 5,
           "to": 5,
           "line": 5,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"addTask#2\",\"answer\":{\"result\":\"accepted\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"addTask#2\",\"answer\":{\"result\":\"accepted\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.result\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"addTask#2\"},\"snapshot\":\"rejected\",\"trace\":\"accepted\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"answersWrongResults\"}}"
       }
@@ -1843,7 +1843,7 @@
           "from": 8,
           "to": 8,
           "line": 8,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e4\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#2\"}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e4\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#2\"}"
         },
         "violation": "{\"kind\":\"Mismatch.resultOf\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e4\"},\"snapshot\":null,\"trace\":\"addTask#2\"},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"addThreeWrongEvents\"}}"
       }
@@ -1856,7 +1856,7 @@
           "from": 3,
           "to": 3,
           "line": 3,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e5\",\"name\":\"booked\",\"resultOf\":\"c1\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e5\",\"name\":\"booked\",\"resultOf\":\"c1\",\"payload\":{\"day\":1792972800000}}"
         },
         "violation": "{\"kind\":\"Mismatch.resultOfUnacceptedRequest\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"},\"requestId\":\"c1\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":3}}"
       }
@@ -1869,7 +1869,7 @@
           "from": 3,
           "to": 3,
           "line": 3,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e6\",\"name\":\"cancelled\",\"resultOf\":\"c2\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e6\",\"name\":\"cancelled\",\"resultOf\":\"c2\",\"payload\":{\"day\":1792972800000}}"
         },
         "violation": "{\"kind\":\"Mismatch.resultOfUnlistedEvent\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"cancelled\"},\"requestId\":\"c2\",\"target\":{\"service\":\"calendar\",\"name\":\"book\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":3}}"
       }
@@ -1882,9 +1882,9 @@
           "from": 5,
           "to": 5,
           "line": 5,
-          "text": "{\"time\":\"2026-10-25T00:00:05Z\",\"dir\":\"out\",\"type\":\"query\",\"id\":\"q1\",\"name\":\"calendar.nextDay\",\"input\":{\"from\":\"2026-10-25T00:00:00Z\"}}"
+          "text": "{\"time\":1792886405000,\"dir\":\"out\",\"type\":\"query\",\"id\":\"q1\",\"name\":\"calendar.nextDay\",\"input\":{\"from\":1792886400000}}"
         },
-        "violation": "{\"kind\":\"Mismatch.time\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"q1\"},\"snapshot\":\"2026-10-25T00:00:00Z\",\"trace\":\"2026-10-25T00:00:05Z\"},\"location\":{\"file\":\"traces/todo/addOneReordered.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneReordered\"}}"
+        "violation": "{\"kind\":\"Mismatch.time\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"q1\"},\"snapshot\":1792886400000,\"trace\":1792886405000},\"location\":{\"file\":\"traces/todo/addOneReordered.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneReordered\"}}"
       }
     },
     "Mismatch.unexpectedLine": {
@@ -1895,7 +1895,7 @@
           "from": 11,
           "to": 11,
           "line": 11,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e9\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-1\",\"title\":\"Buy tea\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e9\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-1\",\"title\":\"Buy tea\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.unexpectedLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e9\"}},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":11},\"scenario\":{\"service\":\"todo\",\"name\":\"addThreeWrongEvents\"}}"
       }
@@ -1908,7 +1908,7 @@
           "from": 10,
           "to": 10,
           "line": 10,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s5\",\"name\":\"todo.notesNamed\",\"input\":{\"prefix\":\"x\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s5\",\"name\":\"todo.notesNamed\",\"input\":{\"prefix\":\"x\"}}"
         },
         "violation": "{\"kind\":\"Mismatch.unexpectedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.notesNamed\",\"id\":\"s5\"},\"content\":{\"prefix\":\"x\"}},\"location\":{\"file\":\"traces/screens/draftAndOpen.jsonl\",\"line\":10},\"scenario\":{\"service\":\"screens\",\"name\":\"draftAndOpen\"}}"
       }
@@ -1921,7 +1921,7 @@
           "from": 1,
           "to": 1,
           "line": 1,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e2\",\"name\":\"audited\",\"payload\":{\"count\":0}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e2\",\"name\":\"audited\",\"payload\":{\"count\":0}}"
         },
         "violation": "{\"kind\":\"Mismatch.unlistedEvent\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"audited\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":1}}"
       }
@@ -1934,7 +1934,7 @@
           "from": 2,
           "to": 2,
           "line": 2,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"q4\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"not-found\"}}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"q4\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"not-found\"}}}"
         },
         "violation": "{\"kind\":\"Mismatch.unlistedRejectionKind\",\"definition\":null,\"data\":{\"requestId\":\"q4\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"},\"rejection\":{\"kind\":\"not-found\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2}}"
       }
@@ -1947,7 +1947,7 @@
           "from": 6,
           "to": 6,
           "line": 6,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"operation\",\"id\":\"noteScreen.open#1\",\"name\":\"noteScreen.open\"}"
+          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"operation\",\"id\":\"noteScreen.open#1\",\"name\":\"noteScreen.open\"}"
         },
         "violation": "{\"kind\":\"Mismatch.unopenedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.note\",\"id\":\"todo.note#1\"},\"content\":{\"id\":\"screens/Draft-1\"},\"snapshotLine\":9},\"location\":{\"file\":\"traces/screens/draftAndOpen.jsonl\",\"line\":6},\"scenario\":{\"service\":\"screens\",\"name\":\"draftAndOpen\"}}"
       }
@@ -1960,7 +1960,7 @@
           "from": 5,
           "to": 26,
           "line": 10,
-          "text": "export const writesAnswerLiterals = scenario({\n  description: \"Write each answer as an object literal; check reports answerLiteral for each\",\n  given: { start: \"2026-10-25T10:00:00+09:00\", records: { Task: [] }, peers: [external(payments)] },\n  when: (w) => {\n    w.net.deliver(\n      w.peer.payments.answer(w.startup.request(payments.createCharge), {\n        result: \"accepted\",\n        output: { chargeId: \"ch_1\" },\n      }),\n    );\n    return {\n      adding: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }),\n      rejectedAdding: w.client.send(addTask, { taskId: \"task-2\", title: \"\" }),\n      counting: w.client.call(taskCount, {}),\n    };\n  },\n  then: ({ adding, rejectedAdding, counting }) => [\n    answered(adding, { result: \"accepted\" }),\n    answered(rejectedAdding, { result: \"rejected\" as const, rejection: { kind: \"invalid-input\" } }),\n    answered(counting, { result: \"fulfilled\", output: { count: 0 } }),\n  ],\n});"
+          "text": "export const writesAnswerLiterals = scenario({\n  description: \"Write each answer as an object literal; check reports answerLiteral for each\",\n  given: { start: parseInstant(\"2026-10-25T10:00:00+09:00\"), records: { Task: [] }, peers: [external(payments)] },\n  when: (w) => {\n    w.net.deliver(\n      w.peer.payments.answer(w.startup.request(payments.createCharge), {\n        result: \"accepted\",\n        output: { chargeId: \"ch_1\" },\n      }),\n    );\n    return {\n      adding: w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" }),\n      rejectedAdding: w.client.send(addTask, { taskId: \"task-2\", title: \"\" }),\n      counting: w.client.call(taskCount, {}),\n    };\n  },\n  then: ({ adding, rejectedAdding, counting }) => [\n    answered(adding, { result: \"accepted\" }),\n    answered(rejectedAdding, { result: \"rejected\" as const, rejection: { kind: \"invalid-input\" } }),\n    answered(counting, { result: \"fulfilled\", output: { count: 0 } }),\n  ],\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.answerLiteral\",\"definition\":null,\"data\":{\"result\":\"accepted\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":10}}"
       }
@@ -2272,7 +2272,7 @@
           "from": 8,
           "to": 8,
           "line": 8,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"answer\",\"id\":\"calendar/answer#1\",\"to\":\"r1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-26T00:00:00Z\"}}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"answer\",\"id\":\"calendar/answer#1\",\"to\":\"r1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":1792972800000}}}"
         },
         "violation": "{\"kind\":\"Uncomparable.ambiguous\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"calendar.nextDay#1\"},\"snapshotLine\":8,\"candidates\":[6,7]},\"location\":{\"file\":\"traces/todo/twoDays.jsonl\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"twoDays\"}}"
       }
@@ -2285,7 +2285,7 @@
           "from": 29,
           "to": 29,
           "line": 29,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"query\",\"id\":\"seenTwice#1\",\"name\":\"seenTwice\",\"input\":{}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"query\",\"id\":\"seenTwice#1\",\"name\":\"seenTwice\",\"input\":{}}"
         },
         "violation": "{\"kind\":\"Uncomparable.bindingLimit\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"seenTwice#1\"},\"snapshotLine\":30,\"limit\":256},\"location\":{\"file\":\"traces/todo/seenSeven.jsonl\",\"line\":29},\"scenario\":{\"service\":\"todo\",\"name\":\"seenSeven\"}}"
       }
@@ -2298,9 +2298,9 @@
           "from": 4,
           "to": 4,
           "line": 4,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"x2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"x2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}}"
         },
-        "violation": "{\"kind\":\"Uncomparable.differentInput\",\"definition\":null,\"data\":{\"snapshotLine\":4,\"snapshot\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#1\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}},\"trace\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"x2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}}},\"location\":{\"file\":\"traces/todo/resend.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"resend\"}}"
+        "violation": "{\"kind\":\"Uncomparable.differentInput\",\"definition\":null,\"data\":{\"snapshotLine\":4,\"snapshot\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#1\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}},\"trace\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"x2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}}},\"location\":{\"file\":\"traces/todo/resend.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"resend\"}}"
       }
     },
     "Uncomparable.duplicateId": {
@@ -2311,7 +2311,7 @@
           "from": 4,
           "to": 4,
           "line": 4,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"c1\",\"name\":\"book\",\"input\":{\"day\":\"2026-10-27T00:00:00Z\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"c1\",\"name\":\"book\",\"input\":{\"day\":1793059200000}}"
         },
         "violation": "{\"kind\":\"Uncomparable.duplicateId\",\"definition\":null,\"data\":{\"id\":\"c1\",\"firstLine\":1},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":4}}"
       }
@@ -2324,7 +2324,7 @@
           "from": 2,
           "to": 2,
           "line": 2,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"addTask#1\",\"answer\":{\"result\":"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"addTask#1\",\"answer\":{\"result\":"
         },
         "violation": "{\"kind\":\"Uncomparable.lineSchema\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/__snapshots__/addOneCut.jsonl\",\"line\":2},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneCut\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"invalid_type\",\"expected\":\"object\",\"path\":[],\"message\":\"Invalid input: expected object, received string\"}]}}"
       }
@@ -2337,9 +2337,9 @@
           "from": 4,
           "to": 4,
           "line": 4,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"query\",\"id\":\"qc1\",\"name\":\"calendar.nextDay\",\"input\":{\"from\":\"2026-10-25T00:00:00Z\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"query\",\"id\":\"qc1\",\"name\":\"calendar.nextDay\",\"input\":{\"from\":1792886400000}}"
         },
-        "violation": "{\"kind\":\"Uncomparable.missingInput\",\"definition\":null,\"data\":{\"snapshot\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}},\"snapshotLine\":5},\"location\":{\"file\":\"traces/todo/addTwo.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwo\"}}"
+        "violation": "{\"kind\":\"Uncomparable.missingInput\",\"definition\":null,\"data\":{\"snapshot\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}},\"snapshotLine\":5},\"location\":{\"file\":\"traces/todo/addTwo.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwo\"}}"
       }
     },
     "Uncomparable.missingSnapshot": {
@@ -2347,12 +2347,12 @@
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",
-          "from": 3,
-          "to": 10,
-          "line": 3,
-          "text": "export const addOneUnsnapshotted = scenario({\n  description: \"Add a task; the scenario has no snapshot, so test reports missingSnapshot\",\n  given: { start: \"2026-10-25T09:00:00+09:00\", records: { Task: [] }, peers: [] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n  },\n  then: () => [],\n});"
+          "from": 4,
+          "to": 11,
+          "line": 4,
+          "text": "export const addOneUnsnapshotted = scenario({\n  description: \"Add a task; the scenario has no snapshot, so test reports missingSnapshot\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: { Task: [] }, peers: [] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"Uncomparable.missingSnapshot\",\"definition\":null,\"data\":{\"runner\":\"todo\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":3},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneUnsnapshotted\"}}"
+        "violation": "{\"kind\":\"Uncomparable.missingSnapshot\",\"definition\":null,\"data\":{\"runner\":\"todo\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneUnsnapshotted\"}}"
       }
     },
     "Uncomparable.missingTrace": {
@@ -2375,7 +2375,7 @@
           "from": 3,
           "to": 3,
           "line": 3,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e4\",\"name\":\"booked\",\"resultOf\":\"q2\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e4\",\"name\":\"booked\",\"resultOf\":\"q2\",\"payload\":{\"day\":1792972800000}}"
         },
         "violation": "{\"kind\":\"Uncomparable.resultOfNonCommand\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"},\"requestId\":\"q2\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":3}}"
       }
@@ -2388,7 +2388,7 @@
           "from": 1,
           "to": 1,
           "line": 1,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e3\",\"name\":\"booked\",\"resultOf\":\"c9\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e3\",\"name\":\"booked\",\"resultOf\":\"c9\",\"payload\":{\"day\":1792972800000}}"
         },
         "violation": "{\"kind\":\"Uncomparable.resultOfUnknownRequest\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"},\"requestId\":\"c9\"},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":1}}"
       }
@@ -2401,9 +2401,9 @@
           "from": 5,
           "to": 5,
           "line": 5,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"c2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"c2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}"
         },
-        "violation": "{\"kind\":\"Uncomparable.unexpectedInput\",\"definition\":null,\"data\":{\"trace\":{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"command\",\"id\":\"c2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}},\"location\":{\"file\":\"traces/todo/addOne.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"addOne\"}}"
+        "violation": "{\"kind\":\"Uncomparable.unexpectedInput\",\"definition\":null,\"data\":{\"trace\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"c2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}},\"location\":{\"file\":\"traces/todo/addOne.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"addOne\"}}"
       }
     },
     "Uncomparable.unknownAfter": {
@@ -2414,7 +2414,7 @@
           "from": 4,
           "to": 4,
           "line": 4,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-1\"},\"resultOf\":\"addTask#1\",\"after\":[\"taskAddedRecorded#1\",\"taskCountChanged#1\"]}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"taskAdded#1\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-1\"},\"resultOf\":\"addTask#1\",\"after\":[\"taskAddedRecorded#1\",\"taskCountChanged#1\"]}"
         },
         "violation": "{\"kind\":\"Uncomparable.unknownAfter\",\"definition\":null,\"data\":{\"lineId\":\"taskCountChanged#1\"},\"location\":{\"file\":\"todo/__snapshots__/addOneUnknownAfter.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneUnknownAfter\"}}"
       }
@@ -2427,7 +2427,7 @@
           "from": 1,
           "to": 1,
           "line": 1,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#3\",\"to\":\"q9\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-26T00:00:00Z\"}}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#3\",\"to\":\"q9\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":1792972800000}}}"
         },
         "violation": "{\"kind\":\"Uncomparable.unknownAnswer\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"q9\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":1}}"
       }
@@ -2440,7 +2440,7 @@
           "from": 1,
           "to": 1,
           "line": 1,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"out\",\"type\":\"event\",\"id\":\"e1\",\"name\":\"moved\",\"payload\":{\"day\":\"2026-10-26T00:00:00Z\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e1\",\"name\":\"moved\",\"payload\":{\"day\":1792972800000}}"
         },
         "violation": "{\"kind\":\"Uncomparable.unknownEvent\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"moved\",\"id\":\"e1\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":1}}"
       }
@@ -2453,7 +2453,7 @@
           "from": 1,
           "to": 1,
           "line": 1,
-          "text": "{\"time\":\"2026-10-25T00:00:00Z\",\"dir\":\"in\",\"type\":\"query\",\"id\":\"q1\",\"name\":\"nextWeek\",\"input\":{\"from\":\"2026-10-25T00:00:00Z\"}}"
+          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"query\",\"id\":\"q1\",\"name\":\"nextWeek\",\"input\":{\"from\":1792886400000}}"
         },
         "violation": "{\"kind\":\"Uncomparable.unknownRequest\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"nextWeek\",\"id\":\"q1\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":1}}"
       }

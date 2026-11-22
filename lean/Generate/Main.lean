@@ -42,8 +42,7 @@ def constArray (name : String) (values : List String) : String :=
 /-- The TS type of each Lean type that no generated file declares: a TS built-in, or a type of a hand-written module. -/
 def handTypes : List (Name × String × Option String) :=
   [(``String, "string", none), (``Nat, "number", none), (``Int, "number", none), (``Bool, "boolean", none),
-   (``Tazuna.Data.Time, "string", none),
-   (``Tazuna.Data.DateTime, "string", none), (``Tazuna.Data.Value, "Json", some "src/data/values.ts"),
+   (``Tazuna.Data.Time, "number", none), (``Tazuna.Data.Value, "Json", some "src/data/values.ts"),
    (``Tazuna.Spec.Ref, "DefinitionRef", some "src/data/definitionRef.ts"),
    (``Tazuna.Data.Violation, "ViolationValue", some "src/data/violation.ts"),
    (``Tazuna.Verify.At, "At", some "src/verify/pairing.ts"),
@@ -86,7 +85,7 @@ def modules : List (String × List Name) :=
     [``Tazuna.Data.RejectionKind, ``Tazuna.Data.Rejection, ``Tazuna.Data.Answer, ``Tazuna.Data.LineId,
      ``Tazuna.Data.TraceLine]),
    ("src/spec/structure.generated.ts",
-    [``Tazuna.Spec.Activity, ``Tazuna.Spec.Transition, ``Tazuna.Spec.Delay, ``Tazuna.Spec.DeadlineTime,
+    [``Tazuna.Spec.Activity, ``Tazuna.Spec.Transition, ``Tazuna.Spec.DeadlineTime,
      ``Tazuna.Spec.Deadline, ``Tazuna.Spec.MapState, ``Tazuna.Spec.StateType, ``Tazuna.Spec.Held, ``Tazuna.Spec.State,
      ``Tazuna.Spec.ChartFields, ``Tazuna.Spec.Reference, ``Tazuna.Spec.KeyPosition, ``Tazuna.Spec.ChangeKind, ``Tazuna.Spec.Change,
      ``Tazuna.Spec.EntityBody, ``Tazuna.Spec.EventBody, ``Tazuna.Spec.CommandBody, ``Tazuna.Spec.QueryBody,
@@ -320,8 +319,7 @@ partial def zodSchema (listed : List Name) : Expr → Emit String
   | .const ``Nat _ => return "z.int().nonnegative()"
   | .const ``Int _ => return "z.int()"
   | .const ``Tazuna.Data.Value _ => return "z.unknown()"
-  | .const ``Tazuna.Data.DateTime _ => return "z.iso.datetime({ offset: true })"
-  | .const ``Tazuna.Data.Time _ => return "z.string()"
+  | .const ``Tazuna.Data.Time _ => return "z.int()"
   | .app (.app (.const ``Prod _) a) b => return s!"z.tuple([{← zodSchema listed a}, {← zodSchema listed b}])"
   | .app (.const ``Tazuna.Data.FileLine _) a =>
     return s!"z.union([z.null(), z.literal(\"malformed\"), {← zodSchema listed a}])"

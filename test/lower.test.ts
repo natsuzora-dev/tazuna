@@ -26,7 +26,7 @@ const peers = [run(todo, { Task: [], Settings: { shouldRemind: true } }), extern
 function lowered(when: (w: When<typeof peers>) => unknown, then: (lines: never) => readonly never[] = () => []) {
   const definition = scenario({
     description: "lowered",
-    given: { start: "2026-10-25T10:00:00+09:00", records: {}, peers },
+    given: { start: 1_792_890_000_000, records: {}, peers },
     when,
     then: then as never,
   }) as ScenarioDefinition;
@@ -44,7 +44,7 @@ const line = (index: number) => ({ type: "line", index }) as const;
 test("A handle's observed value in a written value becomes a hole that reads the handle's fact", () => {
   const { lines } = lowered((w) => {
     const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
-    w.client.call(todo.taskDetail, { taskId: adding.request(calendar.nextBusinessDay).input.from });
+    w.client.call(todo.taskDetail, { taskId: adding.request(calendar.nextBusinessDay).input.after as never });
   });
   assert.deepEqual(lines[1], {
     type: "request",
@@ -65,7 +65,7 @@ test("A handle's observed value in a written value becomes a hole that reads the
                 target: { service: "calendar", name: "nextBusinessDay" },
               },
               part: "input",
-              path: ["from"],
+              path: ["after"],
             },
           },
         },
@@ -175,7 +175,7 @@ test("Then lowers each expectation about the line it names", () => {
   const { expectations } = lowered(
     (w) => ({ adding: w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" }) }),
     (({ adding }: { adding: never }) => [
-      requested(adding, [requestOf(calendar.nextBusinessDay, { from: "2026-10-25" })]),
+      requested(adding, [requestOf(calendar.nextBusinessDay, { after: 1_792_890_000_000 })]),
     ]) as never,
   );
   assert.deepEqual(expectations, [
@@ -186,7 +186,7 @@ test("Then lowers each expectation about the line it names", () => {
         {
           kind: "query",
           target: { service: "calendar", name: "nextBusinessDay" },
-          input: { value: { from: "2026-10-25" }, holes: [] },
+          input: { value: { after: 1_792_890_000_000 }, holes: [] },
         },
       ],
       ends: [],
@@ -213,7 +213,7 @@ for (const [use, misuse] of [
 test("A pick is the content itself, and an event's route comes after it", () => {
   const { lines } = lowered((w) => {
     const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
-    w.net.deliver(adding.request(calendar.nextBusinessDay, { from: "2026-10-25T00:00:00Z" }));
+    w.net.deliver(adding.request(calendar.nextBusinessDay, { after: 1_792_886_400_000 }));
     w.net.deliver(adding.event(todo.taskAdded, { taskId: "task-1" }, { to: todo }));
   });
   assert.deepEqual(lines.slice(1), [
@@ -224,7 +224,7 @@ test("A pick is the content itself, and an event's route comes after it", () => 
         origin: line(0),
         kind: "query",
         target: { service: "calendar", name: "nextBusinessDay" },
-        input: { value: { from: "2026-10-25T00:00:00Z" }, holes: [] },
+        input: { value: { after: 1_792_886_400_000 }, holes: [] },
       },
     },
     {

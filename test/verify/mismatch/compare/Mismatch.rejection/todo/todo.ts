@@ -1,4 +1,4 @@
-import { bag, datetime, emit, entity, ref, service } from "@natsuzora-dev/tazuna";
+import { bag, emit, entity, instant, parseInstant, ref, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
@@ -36,14 +36,14 @@ const part = z.union([z.strictObject({ name: z.string() }), z.strictObject({ siz
 
 export const taskCard = query({
   output: {
-    due: z.strictObject({ at: datetime, parts: z.array(z.strictObject({ name: z.string() })) }),
+    due: z.strictObject({ at: instant, parts: z.array(z.strictObject({ name: z.string() })) }),
     mark: z.discriminatedUnion("kind", [
       z.strictObject({ kind: z.literal("one"), part }),
       z.strictObject({ kind: z.literal("many"), parts: z.array(part).optional() }),
     ]),
   },
 }).resolve(() => ({
-  due: { at: Temporal.Instant.from("2026-10-25T01:00:00Z"), parts: [{ name: "Morning" }] },
+  due: { at: parseInstant("2026-10-25T01:00:00Z"), parts: [{ name: "Morning" }] },
   mark: { kind: "one" as const, part: { name: "Shop" } },
 }));
 

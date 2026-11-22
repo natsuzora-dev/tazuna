@@ -84,9 +84,9 @@ function Editing({
     if (!todo.TaskTitle.safeParse(title).success) return setDraft(null);
     rename.mutate({ taskId, title }, { onError: () => setDraft(null) });
   };
-  const chooseDue = (dueAt: Temporal.Instant | null) => {
+  const chooseDue = (dueAt: number | null) => {
     setDue("changing");
-    changeDueAt.mutate({ taskId, dueAt: dueAt?.toString() ?? null }, { onSettled: () => setDue("collapsed") });
+    changeDueAt.mutate({ taskId, dueAt }, { onSettled: () => setDue("collapsed") });
   };
 
   return (

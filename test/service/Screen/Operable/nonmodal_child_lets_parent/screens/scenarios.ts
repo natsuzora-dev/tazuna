@@ -1,7 +1,7 @@
-import { offered } from "@natsuzora-dev/tazuna";
+import { offered, parseInstant } from "@natsuzora-dev/tazuna";
 import { board, given, panel, scenario } from "./screens.ts";
 
-const arranged = given({ start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] });
+const arranged = given({ start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [] });
 
 export const bumpSecondPanel = scenario({
   description:

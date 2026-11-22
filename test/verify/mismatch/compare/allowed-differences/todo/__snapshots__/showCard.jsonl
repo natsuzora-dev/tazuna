@@ -1,2 +1,2 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"taskCard#1","name":"taskCard","input":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"taskCard#1","answer":{"result":"fulfilled","output":{"card":{"title":"Buy milk","detail":{"note":"2 bottles"}},"due":{"at":"2026-10-25T01:00:00Z","parts":[{"name":"morning"}]},"mark":{"kind":"one","part":{"name":"store"}}}}}
+{"time":1792890000000,"dir":"in","type":"query","id":"taskCard#1","name":"taskCard","input":{}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"taskCard#1","answer":{"result":"fulfilled","output":{"card":{"title":"Buy milk","detail":{"note":"2 bottles"}},"due":{"at":1792890000000,"parts":[{"name":"morning"}]},"mark":{"kind":"one","part":{"name":"store"}}}}}

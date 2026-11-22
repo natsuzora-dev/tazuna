@@ -1,9 +1,9 @@
-import { datetime, emit, entity, service } from "@natsuzora-dev/tazuna";
+import { emit, entity, instant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
   description: "A task",
-  fields: { id: z.string(), title: z.string(), createdAt: datetime },
+  fields: { id: z.string(), title: z.string(), createdAt: instant },
   key: "id",
 });
 
@@ -27,7 +27,7 @@ export const addTaskFromClock = command({
   emit(taskAdded, {
     id: crypto.randomUUID(),
     title: `${input.title} ${Math.random()}`,
-    createdAt: Temporal.Now.instant(),
+    createdAt: Temporal.Now.instant().epochMilliseconds,
   }),
 ]);
 

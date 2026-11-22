@@ -1,1 +1,1 @@
-{"kind":"Malformed.misusedObserved","definition":null,"data":{"use":"conversion","path":["count"]},"location":{"file":"todo/scenarios.ts","line":3},"scenario":{"service":"todo","name":"convertsObserved"}}
+{"kind":"Malformed.misusedObserved","definition":null,"data":{"use":"conversion","path":["count"]},"location":{"file":"todo/scenarios.ts","line":4},"scenario":{"service":"todo","name":"convertsObserved"}}

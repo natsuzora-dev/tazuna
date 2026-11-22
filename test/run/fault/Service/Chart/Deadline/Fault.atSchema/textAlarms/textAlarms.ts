@@ -3,7 +3,7 @@ import { service } from "@natsuzora-dev/tazuna";
 export const { machine, scenario } = service({ name: "textAlarms", description: "Ring the text alarms" });
 
 export const alarm = machine({
-  description: "Ring at an instant read from JSON, which stays a string and is no Instant",
+  description: "Ring at an instant read from JSON, which stays a string and is no integer",
   initial: "waiting",
   states: { waiting: {}, ringing: { type: "final" } },
 }).chart({

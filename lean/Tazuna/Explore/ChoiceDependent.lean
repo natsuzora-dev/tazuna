@@ -146,7 +146,7 @@ def instanceValue (st : Service) (deadlines : List Deadline) (i : Instance) : CV
     ("held", .obj ((i.held.mergeSort fun a b => decide (a.1 ≤ b.1)).map fun (n, v) =>
       (n, keyed (refsAt (heldKeys n)) [] v))),
     ("deadlines", .leaf (.arr (canonicalOrder ((deadlines.filter (·.machine == i.id)).map fun d =>
-      .obj [("state", .str d.state), ("name", .str d.name), ("time", Time.toValue d.time)]))))]
+      .obj [("state", .str d.state), ("name", .str d.name), ("time", ToValue.toValue d.time)]))))]
 
 /--
 The open instances as the relation compares them: a bag of instanceValue, in the order of their texts, since renamed

@@ -1,5 +1,4 @@
 import { defaultRow, encoded, sortCollections } from "../data/collections.ts";
-import type { Delay } from "../data/datetime.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { type JsonSchema, jsonSchema, objectSchema } from "../data/jsonSchema.ts";
 import type { Expected, Malformed } from "../data/malformed.ts";
@@ -244,23 +243,17 @@ function definitionStructure(
 }
 
 /**
- * Returns how the time of the deadline `d` is computed, with its delay as Temporal.Duration reads it, or null when it
- * does not. A deadline with both a delay and an `at` or neither, which only `any` gets past the types, is `unreadable`.
+ * Returns how the time of the deadline `d` is computed, with its delay in milliseconds, or null when the delay is no
+ * safe integer. A deadline with both a delay and an `at` or neither, which only `any` gets past the types, is
+ * `unreadable`.
  */
-function deadlineTimeOf(d: { readonly delay?: Delay; readonly at?: unknown }, unreadable: () => void): DeadlineTime {
+function deadlineTimeOf(d: { readonly delay?: unknown; readonly at?: unknown }, unreadable: () => void): DeadlineTime {
   if ((d.at === undefined) === (d.delay === undefined)) {
     unreadable();
-    return { kind: "delay", delay: null };
+    return { kind: "delay", ms: null };
   }
   if (d.delay === undefined) return { kind: "at" };
-  try {
-    const { years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds } =
-      Temporal.Duration.from(d.delay);
-    const delay = { years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds };
-    return { kind: "delay", delay };
-  } catch {
-    return { kind: "delay", delay: null };
-  }
+  return { kind: "delay", ms: Number.isSafeInteger(d.delay) ? (d.delay as number) : null };
 }
 
 const keysOf = (shape: Shape, ref: RefOf, at: Path) =>

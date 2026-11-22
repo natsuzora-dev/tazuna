@@ -4,7 +4,7 @@ import { z } from "zod";
 export const todoConstants = constants({
   service: "todo",
   schema: z.object({ titleLengthMax: z.int(), reminderOffsets: z.array(duration), defaultLabel: z.string() }),
-  values: { titleLengthMax: 80, reminderOffsets: ["PT10M", "PT1H"], defaultLabel: "inbox" },
+  values: { titleLengthMax: 80, reminderOffsets: [600_000, 3_600_000], defaultLabel: "inbox" },
 });
 
 export const Task = entity({

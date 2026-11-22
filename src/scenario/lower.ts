@@ -1,5 +1,4 @@
 import type { z } from "zod";
-import { inRange } from "../data/datetime.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { collectionOf } from "../data/marks.ts";
 import type {
@@ -60,7 +59,7 @@ export type LoweringViolation =
   /** A line was placed after When returned. */
   | { readonly kind: "lineAfterWhen" }
   /** The time of clock line `line` is not an instant in whole milliseconds. */
-  | { readonly kind: "unparsableTime"; readonly line: number }
+  | { readonly kind: "inexactTime"; readonly line: number }
   /** Line `line` uses an observed value in the way `use`, at the field `path`, instead of placing it whole. */
   | {
       readonly kind: "misusedObserved";
@@ -75,24 +74,6 @@ export interface Lowered {
   readonly stacks: readonly (string | undefined)[];
   readonly expectationStacks: readonly (string | undefined)[];
   readonly violations: readonly LoweringViolation[];
-}
-
-const documentedInstant = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:[0-5]\d(?:\.(?=\d)\d{0,3}0{0,6})?(?:Z|[+-]\d{2}:\d{2})$/;
-
-/**
- * Lean's scenarioTime?, as Temporal.Instant.prototype.toString writes it: the time of a start or clock line in the form
- * that tazuna documents, with seconds, a fraction of up to nine digits, and `Z` or an offset `±HH:MM`. A fraction below
- * a millisecond, or a time outside years 0000 to 9999, has none.
- */
-export function scenarioTime(time: string): string | undefined {
-  if (!documentedInstant.test(time)) return undefined;
-  try {
-    const t = Temporal.Instant.from(time);
-    return inRange(t.epochNanoseconds / 1_000_000n) ? t.toString() : undefined;
-  } catch (error) {
-    if (error instanceof RangeError) return undefined;
-    throw error;
-  }
 }
 
 class Unnamed extends Error {
@@ -425,10 +406,9 @@ export function lower(
         handle<Line>({ [lineIndex]: place({ type: "leaveInFlight", message: factOfHandle(message) }) }),
     },
     clock: {
-      at: (time: string) => {
-        const t = scenarioTime(time);
-        if (t === undefined) violations.push({ kind: "unparsableTime", line: lines.length });
-        return processing({ type: "at", time: t ?? time });
+      at: (time: number) => {
+        if (!Number.isSafeInteger(time)) violations.push({ kind: "inexactTime", line: lines.length });
+        return processing({ type: "at", time });
       },
     },
     host: { restart: () => processing({ type: "restart" }) },

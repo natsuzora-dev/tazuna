@@ -1,3 +1,5 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
+
 let added = 0;
 var last = "";
 const T = Temporal;
@@ -14,7 +16,7 @@ export const sorted = (titles: readonly string[]) => titles.toSorted((a, b) => a
 
 export const formatted = (n: number) => new Intl.NumberFormat("ja-JP").format(n);
 
-export const clocks = () => [T.Now.instant(), M.random(), Temporal.Instant.from("2026-10-25T00:00:00Z")];
+export const clocks = () => [T.Now.instant(), M.random(), parseInstant("2026-10-25T00:00:00Z")];
 
 export const shown = (count: number, at: Date, title: string) => [
   count.toLocaleString(),

@@ -1,9 +1,9 @@
-import { external } from "@natsuzora-dev/tazuna";
+import { external, parseInstant } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { addTask, given, scenario } from "./todo.ts";
 
 const arranged = given({
-  start: "2026-10-25T00:00:00Z",
+  start: parseInstant("2026-10-25T00:00:00Z"),
   records: { Task: [] },
   peers: [external(calendar)],
 });

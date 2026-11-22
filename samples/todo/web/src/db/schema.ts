@@ -1,10 +1,10 @@
 import type { ORPCErrorJSON } from "@orpc/client";
 import { customType, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-const instant = customType<{ data: Temporal.Instant; driverData: string }>({
+const instant = customType<{ data: number; driverData: string }>({
   dataType: () => "text",
-  toDriver: (value) => value.toString(),
-  fromDriver: (value) => Temporal.Instant.from(value),
+  toDriver: (ms) => Temporal.Instant.fromEpochMilliseconds(ms).toString(),
+  fromDriver: (text) => Temporal.Instant.from(text).epochMilliseconds,
 });
 
 export const tasks = sqliteTable("tasks", {

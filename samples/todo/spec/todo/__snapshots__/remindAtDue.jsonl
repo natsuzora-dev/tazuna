@@ -1,12 +1,12 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Buy milk","createdAt":"2026-10-25T01:00:00Z","completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"from":"2026-10-25"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.nextBusinessDay#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"reminderDecisionFailed#1","name":"reminderDecisionFailed","payload":{"id":"task-1","reminderDecision":"failed"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"changeDue#1","name":"changeDue","input":{"taskId":"task-1","dueAt":"2026-10-26T18:00:00+09:00"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"changeDue#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"dueChanged#1","name":"dueChanged","payload":{"id":"task-1","dueAt":"2026-10-26T09:00:00Z","remindAt":"2026-10-26T09:00:00Z","reminderDecision":"decided"},"resultOf":"changeDue#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"query","id":"taskDetail#1","name":"taskDetail","input":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"taskDetail#1","answer":{"result":"fulfilled","output":{"task":{"title":"Buy milk","isCompleted":false,"dueAt":"2026-10-26T09:00:00Z","createdAt":"2026-10-25T01:00:00Z","remindAt":"2026-10-26T09:00:00Z"}}}}
+{"time":1792890000000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"task-1","title":"Buy milk","createdAt":1792890000000,"completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
+{"time":1792890000000,"dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"after":1792890000000}}
+{"time":1792890000000,"dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.nextBusinessDay#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
+{"time":1792890000000,"dir":"out","type":"event","id":"reminderDecisionFailed#1","name":"reminderDecisionFailed","payload":{"id":"task-1","reminderDecision":"failed"}}
+{"time":1792890000000,"dir":"in","type":"command","id":"changeDue#1","name":"changeDue","input":{"taskId":"task-1","dueAt":1793005200000}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#3","to":"changeDue#1","answer":{"result":"accepted"}}
+{"time":1792890000000,"dir":"out","type":"event","id":"dueChanged#1","name":"dueChanged","payload":{"id":"task-1","dueAt":1793005200000,"remindAt":1793005200000,"reminderDecision":"decided"},"resultOf":"changeDue#1"}
+{"time":1792890000000,"dir":"in","type":"query","id":"taskDetail#1","name":"taskDetail","input":{"taskId":"task-1"}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#4","to":"taskDetail#1","answer":{"result":"fulfilled","output":{"task":{"title":"Buy milk","isCompleted":false,"dueAt":1793005200000,"createdAt":1792890000000,"remindAt":1793005200000}}}}

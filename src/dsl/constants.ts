@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { DateLabel } from "../data/time.ts";
 
 const schemas = new WeakMap<object, z.ZodObject>();
 const services = new WeakMap<object, string>();
@@ -7,7 +8,7 @@ declare const grouped: unique symbol;
 export type ConstantsGroup<T = unknown> = T & { readonly [grouped]: true };
 
 /** The type T with every nested object and array readonly. A bag stays an array, since implementations read it too. */
-type Frozen<T> = T extends Temporal.Instant | Temporal.PlainDate | Temporal.Duration
+type Frozen<T> = T extends DateLabel
   ? T
   : T extends readonly (infer E)[]
     ? readonly Frozen<E>[]

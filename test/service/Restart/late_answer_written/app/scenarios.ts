@@ -1,8 +1,8 @@
-import { accepted, external } from "@natsuzora-dev/tazuna";
+import { accepted, external, parseInstant } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { given, scenario } from "./app.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(device)] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [external(device)] });
 
 export const resultAfterRestart = scenario({
   description:

@@ -297,9 +297,6 @@ export interface Look<Sc = AnyScreen> extends Line {
   readonly looked: Sc;
 }
 
-/** An ISO datetime with seconds and an offset. */
-export type Instant = `${number}-${number}-${number}T${number}:${number}:${number}${"Z" | `+${string}` | `-${string}`}`;
-
 export interface Run<C = unknown> {
   readonly role: "run";
   readonly contract: C;
@@ -362,7 +359,8 @@ type CheckedPeers<P extends Peers, Own extends string> = {
 
 /** The arrangement: every running service begins at `start`, the own service `Own` from `records`. */
 export interface Given<R, P extends Peers, Own extends string = string> {
-  readonly start: Instant;
+  /** Milliseconds since the epoch; `parseInstant` reads an ISO text. */
+  readonly start: number;
   /** Every record of the own service. Nothing defaults, so a single entity's record is written too. */
   readonly records: R;
   /** Every service that exchanges messages with the own service. */
@@ -504,7 +502,7 @@ export interface When<
      * The clock advances to `time`, and every running service fires its deadlines due by then. Deadlines of one service
      * due at one time fire in every order that `test` searches.
      */
-    at(time: Instant): ProcessingLine<S, X>;
+    at(time: number): ProcessingLine<S, X>;
   };
   readonly host: {
     /** The host restarts the own service, which reopens its screens as new instances. */
@@ -684,7 +682,7 @@ export const raw = (value: unknown): Raw => Object.freeze({ [rawMark]: value }) 
 export interface ScenarioDefinition {
   readonly kind: "scenario";
   readonly description: string;
-  readonly given: { readonly start: string; readonly records: unknown; readonly peers: Peers };
+  readonly given: { readonly start: number; readonly records: unknown; readonly peers: Peers };
   readonly when: (w: When<Peers>) => unknown;
   /** Then, under another key, so that the definition is no thenable. */
   readonly expect: (lines: never) => readonly Expectation[];

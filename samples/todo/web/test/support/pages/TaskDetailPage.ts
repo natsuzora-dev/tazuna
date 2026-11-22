@@ -1,9 +1,8 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { todo } from "@todo/spec/todo";
+import { zoned } from "../../../src/time.ts";
 import { ScreenPage } from "./ScreenPage.ts";
 
-export const dueInputValue = (at: Temporal.Instant) =>
-  at.toZonedDateTimeISO(todo.todoConstants.timeZone).toPlainDateTime().toString({ smallestUnit: "minute" });
+export const dueInputValue = (at: number) => zoned(at).toPlainDateTime().toString({ smallestUnit: "minute" });
 
 export class TaskDetailPage extends ScreenPage {
   readonly closeLink: Locator;
@@ -60,7 +59,7 @@ export class TaskDetailPage extends ScreenPage {
     await this.dueRow.click();
   }
 
-  async chooseDue(dueAt: Temporal.Instant) {
+  async chooseDue(dueAt: number) {
     await this.dueInput.fill(dueInputValue(dueAt));
     await this.dueInput.press("Enter");
   }

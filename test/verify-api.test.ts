@@ -44,19 +44,19 @@ test("verifyTraces reports snapshot lines that do not fit the schema as violatio
 });
 
 test("decodeAnswer decodes the output of an answer with the output schema and returns an answer without output unchanged", () => {
-  const day = decodeAnswer(calendar.nextDay, { result: "fulfilled", output: { day: "2026-10-27T00:00:00Z" } });
-  assert.ok(day.result === "fulfilled" && day.output.day.equals(Temporal.Instant.from("2026-10-27T00:00:00Z")));
+  const day = decodeAnswer(calendar.nextDay, { result: "fulfilled", output: { day: Date.UTC(2026, 9, 27) } });
+  assert.ok(day.result === "fulfilled" && day.output.day === Date.UTC(2026, 9, 27));
   const unavailable = { result: "rejected", rejection: { kind: "unavailable" } } as const;
   assert.deepEqual(decodeAnswer(calendar.nextDay, unavailable), unavailable);
   const charge = decodeAnswer(createCharge, { result: "accepted", output: { chargeId: "ch_1" } });
   assert.ok(charge.result === "accepted" && charge.output.chargeId === "ch_1");
 });
 
-test("verifyTraces compares an external service trace under any name with the contract and reads Temporal values that JSON.stringify wrote", async () => {
+test("verifyTraces compares an external service trace under any name with the contract", async () => {
   const spec = await checkedRoot(join(import.meta.dirname, "verify/mismatch/external/assumptions"));
-  const time = "2026-10-26T00:00:00Z";
-  const monday = Temporal.Instant.from(time);
-  const kinds = (name: string, day: Temporal.Instant) => {
+  const time = Date.UTC(2026, 9, 26);
+  const monday = time;
+  const kinds = (name: string, day: number) => {
     const traces = join(copies, name);
     mkdirSync(join(traces, "calendar"), { recursive: true });
     const lines = [
@@ -66,7 +66,7 @@ test("verifyTraces compares an external service trace under any name with the co
     writeFileSync(join(traces, "calendar", `${name}.jsonl`), lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
     return verifyTraces(spec, traces).violations.map((p) => p.kind);
   };
-  assert.deepEqual(kinds("nextDay", monday.add({ hours: 24 })), []);
+  assert.deepEqual(kinds("nextDay", monday + 86_400_000), []);
   assert.deepEqual(kinds("sameDay", monday), ["Mismatch.failedAssumedEnsures"]);
 });
 
@@ -79,7 +79,7 @@ function shopAdapter(
   refunds: (chargeId: string) => string,
   { answersAfterCharge = false, requestId = (n: number) => `pay-${n}` } = {},
 ): Adapter {
-  let time: Temporal.Instant;
+  let time: number;
   let chargeId = "";
   let requests = 0;
   let outputs: Parameters<Adapter["start"]>[0];
@@ -174,7 +174,7 @@ const subscriptionAnswers = join(import.meta.dirname, "verify/mismatch/compare/s
 function droppingTodoAdapter(): Adapter {
   const titles: string[] = [];
   let open: { readonly push: () => void; readonly fail: () => void }[] = [];
-  let time = Temporal.Instant.fromEpochMilliseconds(0);
+  let time = 0;
   let outputs: Parameters<Adapter["start"]>[0] | undefined;
   return {
     async start(o, start) {

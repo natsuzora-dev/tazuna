@@ -31,7 +31,6 @@ import {
   operationParts,
   parseFileLines,
   resultOf,
-  sameTime,
   subjectOf,
   substituted,
   toOf,
@@ -179,7 +178,7 @@ function matchContent(v: Values, b: Binding, s: TraceLine, t: TraceLine): Matche
 
 /** Lean's matchLine. */
 const matchLine = (v: Values, b: Binding, s: TraceLine, t: TraceLine): Matches =>
-  sameTime(s, t) ? matchContent(v, b, s, t) : [];
+  s.time === t.time ? matchContent(v, b, s, t) : [];
 
 const json = (value: unknown): Json => plain(value);
 
@@ -332,7 +331,7 @@ function pairChecks(
     return s === undefined || t === undefined ? [] : [[s, t] as const];
   });
   const times = pairs.flatMap(([s, t]): Finding[] =>
-    sameTime(s.line, t.line)
+    s.line.time === t.line.time
       ? []
       : [
           {

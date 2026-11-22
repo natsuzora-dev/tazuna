@@ -113,7 +113,7 @@ const withoutNull = (schema: JsonSchema): JsonSchema => {
 function typeText(schema: JsonSchema): string {
   const s = withoutNull(schema);
   const type = Array.isArray(s["type"]) ? (s["type"] as string[]).join(" | ") : s["type"];
-  if (typeof s["format"] === "string") return s["format"] === "date-time" ? "datetime" : s["format"];
+  if (typeof s["format"] === "string") return s["format"];
   if (s["enum"] !== undefined) return "enum";
   if (s["anyOf"] !== undefined || s["oneOf"] !== undefined) return "union";
   if (type === "integer") return "int";

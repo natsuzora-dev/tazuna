@@ -1,4 +1,4 @@
-{"kind":"Uncomparable.missingSnapshot","definition":null,"data":{"runner":"todo"},"location":{"file":"todo/scenarios.ts","line":12},"scenario":{"service":"todo","name":"addOneUnsnapshotted"}}
+{"kind":"Uncomparable.missingSnapshot","definition":null,"data":{"runner":"todo"},"location":{"file":"todo/scenarios.ts","line":13},"scenario":{"service":"todo","name":"addOneUnsnapshotted"}}
 {"kind":"Uncomparable.unknownSnapshotEntry","definition":null,"data":{},"location":{"file":"todo/__snapshots__/addOne"}}
 {"kind":"Uncomparable.unknownSnapshotEntry","definition":null,"data":{},"location":{"file":"todo/__snapshots__/addOne.txt"}}
 {"kind":"Uncomparable.obsoleteSnapshot","definition":null,"data":{},"location":{"file":"todo/__snapshots__/addTwo.jsonl"}}

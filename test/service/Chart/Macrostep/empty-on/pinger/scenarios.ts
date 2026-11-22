@@ -1,9 +1,10 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { addTask, scenario } from "./pinger.ts";
 
 export const addOne = scenario({
   description:
     "Add a task; sending of pinger writes the transition of pinged as an empty array, so sending is not a state that handles pinged, and receiving pinged does not read sending. Even when the answer to ping exits sending, the receiving step and the answer step do not conflict",
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] },
+  given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [] },
   when: (w) => {
     w.client.send(addTask, { taskId: "task-1" });
   },

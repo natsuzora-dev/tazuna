@@ -510,7 +510,7 @@ export class InstrumentedFunctions implements Functions {
   }
 
   /** Lean's resolveCollect. */
-  private resolveAudit(name: string, input: Fields, records: RecordSource, now: Temporal.Instant, resolved: Json) {
+  private resolveAudit(name: string, input: Fields, records: RecordSource, now: number, resolved: Json) {
     const definition = ref(this.st, name);
     if (this.c.hasReportedOrder(definition)) return;
     const original = this.fs.comparable(name, { result: "fulfilled", output: resolved });
@@ -538,11 +538,11 @@ export class InstrumentedFunctions implements Functions {
   decode(schema: Schema, value: Json) {
     return this.fs.decode(schema, value);
   }
-  binding(command: string, binding: string, input: Fields, records: RecordSource, now: Temporal.Instant) {
+  binding(command: string, binding: string, input: Fields, records: RecordSource, now: number) {
     const call = (fs: Functions) => fs.binding(command, binding, input, records, now);
     return this.audited(ref(this.st, command), "binding", () => call(this.fs), call, String);
   }
-  requirement(command: string, condition: string, input: Fields, records: RecordSource, now: Temporal.Instant) {
+  requirement(command: string, condition: string, input: Fields, records: RecordSource, now: number) {
     const call = (fs: Functions) => fs.requirement(command, condition, input, records, now);
     return this.audited(ref(this.st, command), "requirement", () => call(this.fs), call, String);
   }
@@ -550,13 +550,13 @@ export class InstrumentedFunctions implements Functions {
     const call = (fs: Functions) => fs.inputRequirement(target, condition, input);
     return this.audited(target, "inputRequirement", () => call(this.fs), call, String);
   }
-  decide(command: string, input: Fields, records: RecordSource, now: Temporal.Instant) {
+  decide(command: string, input: Fields, records: RecordSource, now: number) {
     const call = (fs: Functions) => fs.decide(command, input, records, now);
     const groupTexts = (groups: readonly (readonly Decided[])[]) =>
       canonicalJson(groups.map((g) => g.map((e) => text(e)).toSorted(byCodePoint)));
     return this.audited(ref(this.st, command), "decide", () => call(this.fs), call, groupTexts);
   }
-  ensures(command: string, input: Fields, before: RecordSource, after: RecordSource, now: Temporal.Instant) {
+  ensures(command: string, input: Fields, before: RecordSource, after: RecordSource, now: number) {
     const call = (fs: Functions) => fs.ensures(command, input, before, after, now);
     return this.audited(ref(this.st, command), "ensures", () => call(this.fs), call, String);
   }
@@ -584,34 +584,22 @@ export class InstrumentedFunctions implements Functions {
       String,
     );
   }
-  resolve(query: string, input: Fields, records: RecordSource, now: Temporal.Instant) {
+  resolve(query: string, input: Fields, records: RecordSource, now: number) {
     const before = enumerations();
     const resolved = this.fs.resolve(query, input, records, now);
     if (!(resolved instanceof Failed) && enumerations() !== before)
       this.resolveAudit(query, input, records, now, resolved);
     return resolved;
   }
-  automationBinding(
-    automation: string,
-    binding: string,
-    payload: Fields,
-    records: RecordSource,
-    now: Temporal.Instant,
-  ) {
+  automationBinding(automation: string, binding: string, payload: Fields, records: RecordSource, now: number) {
     const call = (fs: Functions) => fs.automationBinding(automation, binding, payload, records, now);
     return this.audited(ref(this.st, automation), "automationBinding", () => call(this.fs), call, String);
   }
-  automationGuard(
-    automation: string,
-    condition: string,
-    payload: Fields,
-    records: RecordSource,
-    now: Temporal.Instant,
-  ) {
+  automationGuard(automation: string, condition: string, payload: Fields, records: RecordSource, now: number) {
     const call = (fs: Functions) => fs.automationGuard(automation, condition, payload, records, now);
     return this.audited(ref(this.st, automation), "automationGuard", () => call(this.fs), call, String);
   }
-  react(automation: string, payload: Fields, records: RecordSource, now: Temporal.Instant, keys: Keys) {
+  react(automation: string, payload: Fields, records: RecordSource, now: number, keys: Keys) {
     const call = (fs: Functions) => fs.react(automation, payload, records, now, keys);
     return this.audited(ref(this.st, automation), "react", () => call(this.fs), call, {
       same: (x, y) => sameMade(keys, [x.input, x.created], [y.input, y.created]),

@@ -56,11 +56,10 @@ export function executedOutcome(spec: Spec, sc: Scenario, executed: Executed) {
   };
 }
 
-/** `value` as data, each Map and Set as its entries in order and each Instant as its text. */
+/** `value` as data, each Map and Set as its entries in order. */
 function data(value: unknown, path: readonly object[] = []): Json {
   if (value === undefined) return null;
   if (value === null || typeof value !== "object") return value as Json;
-  if (value instanceof Temporal.Instant) return value.toString();
   if (path.includes(value)) throw new InternalError("an execution holds a cycle");
   const inner = (v: unknown) => data(v, [...path, value]);
   if (value instanceof Map) return ["Map", ...[...value].map(([k, v]) => [inner(k), inner(v)])];
@@ -169,7 +168,7 @@ export function invalidLines(spec: Spec, sc: Scenario, executed: Executed, enabl
   const answer = enabledLines.find((l) => l.type === "answer");
   const operate = enabledLines.find((l) => l.type === "operate");
   const lines: Line[] = [
-    { type: "at", time: executed.world.now.subtract({ milliseconds: 1 }).toString() },
+    { type: "at", time: executed.world.now - 1 },
     { type: "unsubscribe", subscription: 0 },
     ...(command === undefined
       ? []

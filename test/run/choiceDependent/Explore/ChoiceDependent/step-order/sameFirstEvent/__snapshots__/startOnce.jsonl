@@ -1,8 +1,8 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"start#1","name":"start","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"start#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"started#1","name":"started","payload":{},"resultOf":"start#1"}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2"},"after":["taskAdded#1"]}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"id":"task-1"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#4","name":"taskAdded","payload":{"id":"task-3"},"after":["taskAdded#3"]}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"counted#1","name":"counted","payload":{"seen":2},"after":["taskAdded#3","taskAdded#4"]}
+{"time":1792886400000,"dir":"in","type":"command","id":"start#1","name":"start","input":{}}
+{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"start#1","answer":{"result":"accepted"}}
+{"time":1792886400000,"dir":"out","type":"event","id":"started#1","name":"started","payload":{},"resultOf":"start#1"}
+{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1"}}
+{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2"},"after":["taskAdded#1"]}
+{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"id":"task-1"}}
+{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#4","name":"taskAdded","payload":{"id":"task-3"},"after":["taskAdded#3"]}
+{"time":1792886400000,"dir":"out","type":"event","id":"counted#1","name":"counted","payload":{"seen":2},"after":["taskAdded#3","taskAdded#4"]}

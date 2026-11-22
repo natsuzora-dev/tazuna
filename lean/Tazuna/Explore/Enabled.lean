@@ -21,8 +21,6 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Awaiting
 
-local instance : ToValue Time := ⟨Time.toValue⟩
-local instance : FromValue Time := ⟨Time.fromValue⟩
 
 structure Enabled where
   operations : List Operation

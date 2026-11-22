@@ -22,7 +22,7 @@ export const planner = machine({
     checkingLater: {
       calls: {
         holiday: {
-          input: ({ now }) => ({ day: now.add({ hours: 1 }) }),
+          input: ({ now }) => ({ day: now + 3_600_000 }),
           onFulfilled: [{ target: "done" }],
           onRejected: [{ target: "done" }],
         },

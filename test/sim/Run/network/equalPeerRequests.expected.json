@@ -4,7 +4,7 @@
       "service": "todo",
       "lines": [
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "in",
           "type": "command",
           "id": "addTask#1",
@@ -15,7 +15,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "answer",
           "id": "answer#1",
@@ -25,7 +25,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "event",
           "id": "taskAddedRecorded#1",
@@ -38,7 +38,7 @@
           "resultOf": "addTask#1"
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "event",
           "id": "taskAdded#1",
@@ -49,7 +49,7 @@
           "resultOf": "addTask#1"
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "event",
           "id": "noted#1",
@@ -57,7 +57,7 @@
           "payload": {}
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "command",
           "id": "calendar.book#1",
@@ -68,7 +68,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "in",
           "type": "command",
           "id": "addTask#2",
@@ -79,7 +79,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "answer",
           "id": "answer#2",
@@ -89,7 +89,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "event",
           "id": "taskAddedRecorded#2",
@@ -102,7 +102,7 @@
           "resultOf": "addTask#2"
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "event",
           "id": "taskAdded#2",
@@ -113,7 +113,7 @@
           "resultOf": "addTask#2"
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "event",
           "id": "noted#2",
@@ -128,7 +128,7 @@
       "service": "notifier",
       "lines": [
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "in",
           "type": "event",
           "id": "todo/taskAdded#1",
@@ -138,7 +138,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "command",
           "id": "todo.markSeen#1",
@@ -148,7 +148,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "command",
           "id": "todo.ping#1",
@@ -156,7 +156,7 @@
           "input": {}
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "in",
           "type": "event",
           "id": "todo/taskAdded#2",
@@ -166,7 +166,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "command",
           "id": "todo.markSeen#2",
@@ -176,7 +176,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "command",
           "id": "todo.ping#2",

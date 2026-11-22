@@ -44,7 +44,7 @@ export const homeScreen = screen({
     },
     home: { on: { openList: [{ target: "listing" }], openHelp: [{ target: "helping" }] } },
     listing: {
-      after: { minute: { delay: { minutes: 1 }, onFired: [{ target: "home" }] } },
+      after: { minute: { delay: 60_000, onFired: [{ target: "home" }] } },
       opens: { taskList: { modal: true, onDone: [{ target: "home" }] } },
     },
     helping: { opens: { help: { modal: false, onDone: [{ target: "home" }] } } },

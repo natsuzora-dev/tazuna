@@ -46,7 +46,7 @@ export interface EntityView extends Pick<Extract<DefinitionStructure, { kind: "e
 export interface FieldView {
   readonly name: string;
   /**
-   * The type text from JSON Schema: a format by its name (date-time as datetime), enum, int, an array as its element
+   * The type text from JSON Schema: a format by its name, enum, int, an array as its element
    * type plus [], and anyOf and oneOf as union. Null is left out and shows in `nullable`.
    */
   readonly type: string;

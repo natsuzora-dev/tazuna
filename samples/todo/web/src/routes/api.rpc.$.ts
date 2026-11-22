@@ -2,10 +2,8 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { SimpleCsrfProtectionHandlerPlugin } from "@orpc/server/plugins";
 import { createFileRoute } from "@tanstack/react-router";
 import { router } from "../orpc/router.ts";
-import { customJsonSerializers } from "../orpc/serializers.ts";
 
 const handler = new RPCHandler(router, {
-  customJsonSerializers,
   strictGetMethodPluginEnabled: false,
   plugins: [new SimpleCsrfProtectionHandlerPlugin()],
 });

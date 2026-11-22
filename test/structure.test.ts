@@ -81,12 +81,10 @@ test("A screen has the JSON Schema of each control payload, the controls that ea
       type: "object",
       properties: {
         at: {
-          type: "string",
-          format: "date-time",
-          "x-tazuna-checks": [
-            { check: "string_format", format: "datetime", offset: true, local: false, precision: null },
-          ],
-          "x-tazuna-time": "instant",
+          type: "integer",
+          minimum: -9007199254740991,
+          maximum: 9007199254740991,
+          "x-tazuna-checks": [{ check: "number_format", format: "safeint", abort: false }],
         },
       },
       required: ["at"],

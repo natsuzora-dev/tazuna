@@ -1,8 +1,8 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"},"resultOf":"addTask#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"pinTaskByTitle#1","name":"pinTaskByTitle","input":{"title":"Buy eggs"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"pinTaskByTitle#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"task"}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"pinTaskByTitle#2","name":"pinTaskByTitle","input":{"title":"Buy milk"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"pinTaskByTitle#2","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskPinned#1","name":"taskPinned","payload":{"pinned":"task-1","pins":1},"resultOf":"pinTaskByTitle#2"}
+{"time":1792890000000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"},"resultOf":"addTask#1"}
+{"time":1792890000000,"dir":"in","type":"command","id":"pinTaskByTitle#1","name":"pinTaskByTitle","input":{"title":"Buy eggs"}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#2","to":"pinTaskByTitle#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"task"}}}
+{"time":1792890000000,"dir":"in","type":"command","id":"pinTaskByTitle#2","name":"pinTaskByTitle","input":{"title":"Buy milk"}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#3","to":"pinTaskByTitle#2","answer":{"result":"accepted"}}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskPinned#1","name":"taskPinned","payload":{"pinned":"task-1","pins":1},"resultOf":"pinTaskByTitle#2"}

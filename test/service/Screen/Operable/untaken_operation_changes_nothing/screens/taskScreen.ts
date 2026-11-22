@@ -1,4 +1,4 @@
-import { datetime, none } from "@natsuzora-dev/tazuna";
+import { instant, none, parseInstant } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
 
@@ -6,13 +6,13 @@ export const taskScreen = screen({
   description: "A screen that shows one task and completes it when it is open",
   queries: { task: todo.task },
   commands: { completeTask: todo.completeTask },
-  controls: { complete: { label: "Complete" }, remind: { label: "Set reminder", payload: { at: datetime } } },
+  controls: { complete: { label: "Complete" }, remind: { label: "Set reminder", payload: { at: instant } } },
   initial: "open",
   states: { open: { initial: "idle", states: { idle: {}, completing: {}, completed: {} } } },
 }).chart({
   offers: {
     complete: ({ shown }) => (shown.task?.isCompleted === false ? [{}] : []),
-    remind: () => [{ at: Temporal.Instant.from("2026-10-25T03:00:00Z") }],
+    remind: () => [{ at: parseInstant("2026-10-25T03:00:00Z") }],
   },
   states: {
     open: { shows: { task: {} } },

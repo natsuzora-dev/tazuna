@@ -1,9 +1,9 @@
-import { datetime, emit, entity, ref, service } from "@natsuzora-dev/tazuna";
+import { emit, entity, instant, ref, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
   description: "A task of the user",
-  fields: { id: z.string(), completedAt: datetime.nullable() },
+  fields: { id: z.string(), completedAt: instant.nullable() },
   key: "id",
 });
 

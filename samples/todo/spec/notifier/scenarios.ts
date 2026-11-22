@@ -4,6 +4,7 @@ import {
   external,
   type OutRequest,
   type ProcessingLine,
+  parseInstant,
   rejected,
   requested,
   requestOf,
@@ -15,7 +16,7 @@ import { todo } from "../todo/contract.ts";
 import { given, scenario } from "./data.ts";
 
 const fresh = given({
-  start: "2026-10-25T10:00:00+09:00",
+  start: parseInstant("2026-10-25T10:00:00+09:00"),
   records: { OpenTask: [], NotificationPermission: { status: "undetermined" } },
   peers: [run(todo, { Task: [], Settings: { shouldRemind: true } }), external(calendar), external(device)],
 });
@@ -80,7 +81,7 @@ export const warnsWhenTooMany = scenario({
     shownUnanswered(w, tooMany);
     // task-0 to task-11 are 12 open tasks an hour and a half later.
     taskAddedReaches(w, 11);
-    const later = w.clock.at("2026-10-25T11:30:00+09:00");
+    const later = w.clock.at(parseInstant("2026-10-25T11:30:00+09:00"));
     shownUnanswered(w, later);
     taskCompletedReaches(w, 0);
     return { tooMany, later };
@@ -99,7 +100,7 @@ export const warnsAgainAfterNotificationAnswered = scenario({
     // task-0 to task-11 are 12 open tasks an hour later.
     taskAddedReaches(w, 11);
     deviceAnswers(w, tooMany.request(device.showNotification), rejected("unavailable"));
-    const hour = w.clock.at("2026-10-25T11:00:00+09:00");
+    const hour = w.clock.at(parseInstant("2026-10-25T11:00:00+09:00"));
     deviceAnswers(w, hour.request(device.showNotification), accepted());
     return { hour };
   },
@@ -129,7 +130,7 @@ export const countsReopenedTask = scenario({
   when: (w) => {
     deviceGrants(w, asked(taskAddedReaches(w, 1)));
     for (let n = 2; n <= 10; n += 1) taskAddedReaches(w, n);
-    w.clock.at("2026-10-25T10:01:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:01:00+09:00"));
     taskCompletedReaches(w, 1);
     // task-2 to task-11 are 10 open tasks, which notifier allows.
     const eleventh = taskAddedReaches(w, 11);
@@ -177,11 +178,11 @@ export const asksPermissionAgain = scenario({
   given: fresh,
   when: (w) => {
     deviceAnswers(w, asked(taskAddedReaches(w, 1)), rejected("unavailable"));
-    const retry1 = w.clock.at("2026-10-25T10:01:00+09:00");
+    const retry1 = w.clock.at(parseInstant("2026-10-25T10:01:00+09:00"));
     deviceAnswers(w, asked(retry1), rejected("unavailable"));
-    const retry2 = w.clock.at("2026-10-25T10:02:00+09:00");
+    const retry2 = w.clock.at(parseInstant("2026-10-25T10:02:00+09:00"));
     deviceAnswers(w, asked(retry2), rejected("unavailable"));
-    const noRetry = w.clock.at("2026-10-25T10:03:00+09:00");
+    const noRetry = w.clock.at(parseInstant("2026-10-25T10:03:00+09:00"));
     const second = taskAddedReaches(w, 2);
     deviceGrants(w, asked(second));
     const third = taskAddedReaches(w, 3);
@@ -216,7 +217,7 @@ export const stopsAskingWhenGrantedWhileRetrying = scenario({
   when: (w) => {
     deviceAnswers(w, asked(taskAddedReaches(w, 1)), rejected("unavailable"));
     deviceTells(w, device.notificationPermissionGranted, null);
-    const minute = w.clock.at("2026-10-25T10:01:00+09:00");
+    const minute = w.clock.at(parseInstant("2026-10-25T10:01:00+09:00"));
     return { minute };
   },
   then: ({ minute }) => [requested(minute, [])],
@@ -232,7 +233,7 @@ export const warnsAgainOnStart = scenario({
     shownUnanswered(w, tooMany);
     // task-0 to task-11 are 12 open tasks at the restart.
     taskAddedReaches(w, 11);
-    w.clock.at("2026-10-25T10:10:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:10:00+09:00"));
     const restart = w.host.restart();
     shownUnanswered(w, restart);
     return { restart };
@@ -246,7 +247,7 @@ export const asksPermissionAgainOnStart = scenario({
   given: fresh,
   when: (w) => {
     deviceAnswers(w, asked(taskAddedReaches(w, 1)), accepted());
-    w.clock.at("2026-10-25T10:05:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:05:00+09:00"));
     const restart = w.host.restart();
     deviceGrants(w, asked(restart));
     return { restart };
@@ -262,7 +263,7 @@ export const asksPermissionAgainOnStartWhileAsking = scenario({
     const asking = asked(taskAddedReaches(w, 1));
     w.net.deliver(asking);
     w.peer.device.leaveUnanswered(asking);
-    w.clock.at("2026-10-25T10:05:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:05:00+09:00"));
     const restart = w.host.restart();
     deviceGrants(w, asked(restart));
     return { restart };
@@ -289,7 +290,7 @@ export const asksNoPermissionOnStartWithoutOpenTasks = scenario({
   when: (w) => {
     deviceAnswers(w, asked(taskAddedReaches(w, 1)), accepted());
     taskCompletedReaches(w, 1);
-    w.clock.at("2026-10-25T10:05:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:05:00+09:00"));
     const restart = w.host.restart();
     return { restart };
   },

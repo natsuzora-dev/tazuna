@@ -60,7 +60,7 @@ inductive Line where
   The clock advances to `time`, and every running service fires its deadlines due by then; a tie of a service is
   internal to it (chooseDeadline).
   -/
-  | «at» (time : DateTime)
+  | «at» (time : Time)
   /-- The host restarts the own service, which reopens its screens as new instances. -/
   | restart
 deriving Repr, Inhabited

@@ -1,4 +1,4 @@
-import { any, datetime, none } from "@natsuzora-dev/tazuna";
+import { any, instant, none } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
 
@@ -12,7 +12,7 @@ export const taskDetailScreen = screen({
   // dueAt is the due date picked in the due row; null means the user removed it.
   context: {
     newTitle: todo.TaskTitle,
-    dueAt: datetime.nullable().default(null),
+    dueAt: instant.nullable().default(null),
   },
   receives: { taskDeleted: todo.taskDeleted },
   queries: { taskDetail: todo.taskDetail },
@@ -28,7 +28,7 @@ export const taskDetailScreen = screen({
     complete: { label: "Mark as complete" },
     reopen: { label: "Mark as incomplete" },
     dueToggle: { label: "Due" },
-    dueChoose: { label: "Date and time", payload: { dueAt: datetime } },
+    dueChoose: { label: "Date and time", payload: { dueAt: instant } },
     dueClear: { label: "Remove due date" },
     delete: { label: "Delete task" },
     close: { label: "Tasks" },
@@ -118,7 +118,7 @@ export const taskDetailScreen = screen({
             guard: {
               unchanged: ({ payload, shown }) => {
                 const dueAt = shown.taskDetail?.task?.dueAt;
-                return dueAt != null && Temporal.Instant.compare(payload.dueAt, dueAt) === 0;
+                return dueAt != null && payload.dueAt === dueAt;
               },
             },
             target: "collapsed",
@@ -126,11 +126,7 @@ export const taskDetailScreen = screen({
           {
             guard: {
               selectable: ({ payload, now }) =>
-                Temporal.Instant.compare(now, payload.dueAt) < 0 &&
-                Temporal.Instant.compare(
-                  payload.dueAt,
-                  now.toZonedDateTimeISO(todo.todoConstants.timeZone).add(todo.todoConstants.dueAheadLimit).toInstant(),
-                ) <= 0,
+                now < payload.dueAt && payload.dueAt <= now + todo.todoConstants.dueAheadLimit,
             },
             target: "changing",
             assign: { dueAt: ({ payload }) => payload.dueAt },

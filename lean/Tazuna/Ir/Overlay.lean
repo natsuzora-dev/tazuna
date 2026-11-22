@@ -12,8 +12,8 @@ open Tazuna.Data Tazuna.Service Tazuna.Explore
 /-- The arguments of a spec function that receives only `passed`; any other name is `undefined`. -/
 def argsOf (passed : List (Arg × Val)) (a : Arg) : Val := (passed.lookup a).getD .undef
 
-/-- An instant as a spec function's `now` holds it, in its JSON text. -/
-def instant (t : Time) : Val := .json (.str (renderTime t))
+/-- An instant as a spec function's `now` holds it: milliseconds since the epoch. -/
+def instant (t : Time) : Val := .json (.num ⟨t, 0⟩)
 
 /--
 The event list that a command's ensures reads on a request's results: each event as `{ kind: "emit", payload }`. TS
@@ -250,10 +250,8 @@ def Program.overlay {m : Type → Type} [Monad m] (p : Program) (st : Service) (
       match scope.state.bind fun s => one scope.machine (.deadline s name) with
       | none => fs.deadlineAt scope records name
       | some body =>
-        let time : EvalM (Option String) := do
-          match ← eval (chartEnv scope records) [] body with
-          | .json (.str time) => pure (some time)
-          | _ => pure none
+        let time : EvalM (Option Time) := do
+          pure ((integer? (← eval (chartEnv scope records) [] body)).filter isSafeInteger)
         answered "deadlineAt" time.run' (fs.deadlineAt scope records name)
     items := fun scope records =>
       match scope.state.bind fun s => one scope.machine (.items s) with

@@ -1,4 +1,3 @@
-import { todo } from "@todo/spec/todo";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { nextBusinessDay } from "../calendar/calendar.server.ts";
 import { changes, notifyChange } from "../changes.server.ts";
@@ -7,22 +6,16 @@ import { tasks } from "../db/schema.ts";
 import { showNotification } from "../device/device.server.ts";
 import { readReminderSettings } from "./queries.server.ts";
 
-const { timeZone } = todo.todoConstants;
-
 const calendarRequests = new Map<string, object>();
 
 export async function decideReminderTime(taskId: string): Promise<void> {
   const request = {};
   calendarRequests.set(taskId, request);
-  const result = await nextBusinessDay({ from: Temporal.Now.plainDateISO(timeZone) });
+  const result = await nextBusinessDay({ after: Date.now() });
   if (calendarRequests.get(taskId) !== request) return;
   calendarRequests.delete(taskId);
   db.update(tasks)
-    .set(
-      result.ok
-        ? { remindAt: result.day.toZonedDateTime(timeZone).toInstant(), reminderDecision: "decided" }
-        : { reminderDecision: "failed" },
-    )
+    .set(result.ok ? { remindAt: result.startsAt, reminderDecision: "decided" } : { reminderDecision: "failed" })
     .where(eq(tasks.id, taskId))
     .run();
   notifyChange();
@@ -40,9 +33,9 @@ function setReminderTimer(): void {
   clearTimeout(timer);
   const next = openTasksWithReminder()
     .map((t) => t.remindAt)
-    .toSorted(Temporal.Instant.compare)[0];
+    .toSorted((a, b) => a - b)[0];
   if (next === undefined) return;
-  const delay = Temporal.Now.instant().until(next).total("milliseconds");
+  const delay = next - Date.now();
   timer = setTimeout(remindDueTasks, Math.min(Math.max(delay, 0), longestDelay));
 }
 
@@ -56,8 +49,8 @@ function openTasksWithReminder() {
 }
 
 function remindDueTasks(): void {
-  const now = Temporal.Now.instant();
-  const due = openTasksWithReminder().filter((t) => Temporal.Instant.compare(t.remindAt, now) <= 0);
+  const now = Date.now();
+  const due = openTasksWithReminder().filter((t) => t.remindAt <= now);
   const { shouldRemind } = readReminderSettings();
   for (const task of due) {
     db.update(tasks).set({ remindAt: null }).where(eq(tasks.id, task.id)).run();

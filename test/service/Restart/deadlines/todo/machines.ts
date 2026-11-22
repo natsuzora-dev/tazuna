@@ -9,7 +9,7 @@ export const reminder = machine({
 }).chart({
   states: {
     idle: { on: { taskAdded: [{ target: "waiting" }] } },
-    waiting: { after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } } },
+    waiting: { after: { hour: { delay: 3_600_000, onFired: [{ target: "reminding" }] } } },
     reminding: { sends: { remind: { onAccepted: [] } } },
   },
 });

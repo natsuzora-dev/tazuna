@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { date, datetime, duration } from "./datetime.ts";
 import { InternalError } from "./internalError.ts";
 import { collectionOf } from "./marks.ts";
 import type { SchemaStep } from "./schema.generated.ts";
@@ -49,12 +48,6 @@ export function unrepresentableType(schema: z.ZodType): UnrepresentableType | un
   return node.type === "opaque" ? unrepresentableTypes.find((type) => type === node.kind) : undefined;
 }
 
-const transformOf = (schema: z.core.$ZodType): unknown =>
-  (schema._zod.def as { readonly transform?: unknown }).transform;
-
-/** The decode transforms of tazuna's datetime and date, whose encoded order is their decoded order; a clone keeps it. */
-const timeTransforms = new Set([datetime, date].map(transformOf));
-
 const isSchema = (value: unknown): value is JsonSchema =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -97,23 +90,15 @@ function inlineOptions(schema: JsonSchema): JsonSchema {
   return walk(schema) as JsonSchema;
 }
 
-const timeKinds = new Map<unknown, string>([
-  [transformOf(datetime), "instant"],
-  [transformOf(date), "date"],
-  [transformOf(duration), "duration"],
-]);
-
 /**
  * What Lean's parse reads of `schema` beyond its JSON Schema `written`, to validate as Zod does: the checks in Zod's
  * order, which JSON Schema keywords do not keep; a nullable, which JSON Schema writes as a union with null; the
- * discriminator of a discriminated union; the kind of a tazuna time codec, which decodes and encodes its text; and
- * `x-tazuna-opaque` where only Zod can say what it does: a message of the author's, or a default that JSON cannot hold.
+ * discriminator of a discriminated union; and `x-tazuna-opaque` where only Zod can say what it does: a message of the author's, or a default that JSON cannot hold.
  */
 function validation(schema: z.ZodType, written: Readonly<Record<string, unknown>>): JsonSchema {
   const def = schema._zod.def as unknown as Readonly<Record<string, unknown>>;
   const node = schemaNode(schema);
   const checks = checksOf(schema);
-  const time = node.type === "codec" ? timeKinds.get(transformOf(schema)) : undefined;
   // Zod leaves out the default of a schema that holds a codec, which its JSON Schema writes encoded.
   const encodedDefault =
     node.type === "default" && written["default"] === undefined
@@ -128,7 +113,6 @@ function validation(schema: z.ZodType, written: Readonly<Record<string, unknown>
     ...(node.type === "union" && node.discriminator !== undefined
       ? { "x-tazuna-discriminator": node.discriminator }
       : {}),
-    ...(time === undefined ? {} : { "x-tazuna-time": time }),
     ...(opaque ? { "x-tazuna-opaque": true } : {}),
   };
 }
@@ -145,13 +129,11 @@ const jsonSchemaOf = (schema: z.ZodType, validated: boolean): JsonSchema =>
     z.toJSONSchema(strict(schema), {
       io: "input",
       unrepresentable: "any",
-      // `format` already states the date, date-time and duration forms; Zod's regex `pattern` would repeat it.
+      // `format` already states the date form; Zod's regex `pattern` would repeat it.
       override: (ctx) => {
-        if (["date-time", "date", "duration"].includes(String(ctx.jsonSchema.format))) delete ctx.jsonSchema.pattern;
-        // A codec other than tazuna's time codecs may decode to another order, which a sortedBy key cannot have.
-        const node = schemaNode(ctx.zodSchema as unknown as z.ZodType);
-        if (node.type === "codec" && !timeTransforms.has(transformOf(ctx.zodSchema)))
-          ctx.jsonSchema["x-tazuna-codec"] = true;
+        if (ctx.jsonSchema.format === "date") delete ctx.jsonSchema.pattern;
+        // A codec may decode to another order, which a sortedBy key cannot have.
+        if (schemaNode(ctx.zodSchema as unknown as z.ZodType).type === "codec") ctx.jsonSchema["x-tazuna-codec"] = true;
         const collection = collectionOf(ctx.zodSchema);
         if (collection?.kind === "bag") ctx.jsonSchema["x-tazuna-bag"] = true;
         if (collection?.kind === "set") Object.assign(ctx.jsonSchema, { uniqueItems: true, "x-tazuna-set": true });

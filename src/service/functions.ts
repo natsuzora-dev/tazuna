@@ -249,7 +249,7 @@ export interface Scope {
   readonly shown: ReadonlyMap<string, unknown>;
   readonly input: Fields;
   readonly held: Fields;
-  readonly now: Temporal.Instant;
+  readonly now: number;
 }
 
 /**
@@ -324,28 +324,11 @@ export interface Functions {
   unordered(schema: Schema, value: unknown): unknown;
   /** Returns a value of `schema` from its checked encoding, as spec code receives it. */
   decode(schema: Schema, value: Json): Fields;
-  binding(
-    command: string,
-    binding: string,
-    input: Fields,
-    records: RecordSource,
-    now: Temporal.Instant,
-  ): boolean | Failed;
-  requirement(
-    command: string,
-    condition: string,
-    input: Fields,
-    records: RecordSource,
-    now: Temporal.Instant,
-  ): boolean | Failed;
+  binding(command: string, binding: string, input: Fields, records: RecordSource, now: number): boolean | Failed;
+  requirement(command: string, condition: string, input: Fields, records: RecordSource, now: number): boolean | Failed;
   inputRequirement(target: DefinitionRef, condition: string, input: Fields): boolean | Failed;
   /** Lean's decide. */
-  decide(
-    command: string,
-    input: Fields,
-    records: RecordSource,
-    now: Temporal.Instant,
-  ): readonly (readonly Decided[])[] | Failed;
+  decide(command: string, input: Fields, records: RecordSource, now: number): readonly (readonly Decided[])[] | Failed;
   /**
    * Returns the first failing ensures. Binds read `before`, the records before the event write; ensures read `after`.
    */
@@ -354,7 +337,7 @@ export interface Functions {
     input: Fields,
     before: RecordSource,
     after: RecordSource,
-    now: Temporal.Instant,
+    now: number,
   ): string | undefined | Failed;
   queryEnsures(query: string, input: Fields, output: Fields, records: RecordSource): string | undefined | Failed;
   /** Returns what the ensures `condition` of `target` gives on a request's results. */
@@ -369,20 +352,20 @@ export interface Functions {
   serviceInvariant(records: RecordSource): string | undefined | Failed;
   chartInvariant(scope: Scope, records: RecordSource, access: Access): string | undefined | Failed;
   /** Lean's resolve. */
-  resolve(query: string, input: Fields, records: RecordSource, now: Temporal.Instant): Json | Failed;
+  resolve(query: string, input: Fields, records: RecordSource, now: number): Json | Failed;
   automationBinding(
     automation: string,
     binding: string,
     payload: Fields,
     records: RecordSource,
-    now: Temporal.Instant,
+    now: number,
   ): boolean | Failed;
   automationGuard(
     automation: string,
     condition: string,
     payload: Fields,
     records: RecordSource,
-    now: Temporal.Instant,
+    now: number,
   ): boolean | Failed;
   /**
    * Returns the input of the automation's command as the sender writes it, once its guard holds. `keys` holds what
@@ -393,7 +376,7 @@ export interface Functions {
     automation: string,
     payload: Fields,
     records: RecordSource,
-    now: Temporal.Instant,
+    now: number,
     keys: Keys,
   ): { readonly input: Json; readonly created: readonly string[] } | Failed;
   /**
@@ -441,7 +424,7 @@ export interface Functions {
    */
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access): Json | Failed;
   /** Lean's deadlineAt, with undefined for none. */
-  deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed;
+  deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): number | undefined | Failed;
   /** Lean's offers. */
   offers(scope: Scope, records: RecordSource, control: string, access: Access): readonly Json[] | Failed;
   /** Returns the query input of a shows slot as the sender writes it. */

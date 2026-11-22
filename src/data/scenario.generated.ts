@@ -230,7 +230,7 @@ const line = z.discriminatedUnion("type", [
    */
   z.object({
     type: z.literal("at"),
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
   }),
   /** The host restarts the own service, which reopens its screens as new instances. */
   z.object({
@@ -360,7 +360,7 @@ const peerEntry = z.discriminatedUnion("role", [
 export type PeerEntry = z.infer<typeof peerEntry>;
 
 const given = z.object({
-  start: z.iso.datetime({ offset: true }),
+  start: z.int(),
   records: z.array(givenRecord),
   peers: z.array(peerEntry),
 });

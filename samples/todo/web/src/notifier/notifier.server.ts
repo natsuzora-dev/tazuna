@@ -58,7 +58,7 @@ function startWarnedPeriod(): void {
   warnedPeriod = setTimeout(() => {
     warnedPeriod = undefined;
     warnIfTooMany();
-  }, notifierConstants.warnedPeriod.total("milliseconds"));
+  }, notifierConstants.warnedPeriod);
 }
 
 // One request goes to device at a time, since requestNotificationPermission writes the permission that
@@ -89,7 +89,7 @@ async function askPermission(): Promise<void> {
     attempts = 0;
   } else if (attempts < notifierConstants.permissionAttempts) {
     flow = "retrying";
-    retry = setTimeout(askPermission, notifierConstants.permissionRetryDelay.total("milliseconds"));
+    retry = setTimeout(askPermission, notifierConstants.permissionRetryDelay);
   } else {
     toIdle();
   }

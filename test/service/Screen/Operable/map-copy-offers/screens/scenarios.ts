@@ -1,9 +1,9 @@
-import { external, fulfilled, notOffered, offered } from "@natsuzora-dev/tazuna";
+import { external, fulfilled, notOffered, offered, parseInstant } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { given, scenario } from "./data.ts";
 import { listScreen } from "./listScreen.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(todo)] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [external(todo)] });
 
 const deliveredList = arranged.step((w, ...taskIds: string[]) => {
   const tasks = w.startup.subscription(todo.tasks);

@@ -1,9 +1,9 @@
-import { datetime, emit, entity, ref, service } from "@natsuzora-dev/tazuna";
+import { emit, entity, instant, ref, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
   description: "A task of the user",
-  fields: { id: z.string(), completedAt: datetime.nullable() },
+  fields: { id: z.string(), completedAt: instant.nullable() },
   key: "id",
 });
 
@@ -61,7 +61,7 @@ export const perTask = machine({
       },
     },
     greeting: { sends: { greet: { input: ({ key }) => key, onAccepted: [{ target: "waiting" }], onRejected: [] } } },
-    waiting: { after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } } },
+    waiting: { after: { hour: { delay: 3_600_000, onFired: [{ target: "reminding" }] } } },
     reminding: { sends: { remind: { input: ({ key }) => key, onAccepted: [{ target: "done" }], onRejected: [] } } },
   },
 });

@@ -220,7 +220,7 @@ export class RunFunctions implements Answering {
       shown,
       input,
       held,
-      now: Temporal.Instant.from(lean.now),
+      now: lean.now,
     };
   }
 
@@ -293,7 +293,7 @@ export class RunFunctions implements Answering {
       (type: Exclude<Extract<Reply, { failed?: string }>["type"], "close">) =>
       (f: string | undefined): Replied =>
         ({ type, ...(f === undefined ? {} : { failed: f }) }) as Replied;
-    const now = (q: { readonly now: string }) => Temporal.Instant.from(q.now);
+    const now = (q: { readonly now: number }) => q.now;
     switch (q.type) {
       case "parse":
         return this.replied(this.functions.parse(q.schema, q.value), (parsed) => {

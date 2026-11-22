@@ -1,4 +1,4 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"status#1","name":"status","input":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"status#1","answer":{"result":"fulfilled","output":{"ready":true}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"restart","id":"restart#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"unsubscribe","id":"unsubscribe#1","to":"status#1"}
+{"time":1792890000000,"dir":"in","type":"subscribe","id":"status#1","name":"status","input":{}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"status#1","answer":{"result":"fulfilled","output":{"ready":true}}}
+{"time":1792890000000,"dir":"in","type":"restart","id":"restart#1"}
+{"time":1792890000000,"dir":"in","type":"unsubscribe","id":"unsubscribe#1","to":"status#1"}

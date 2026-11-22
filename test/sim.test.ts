@@ -98,7 +98,7 @@ test("An InternalError raised inside author code stops the question instead of b
       throw broken;
     },
   };
-  const now = Temporal.Instant.from("2026-10-25T00:00:00Z");
+  const now = Date.UTC(2026, 9, 25);
   assert.throws(() => functions.binding("completeTask", "task", { taskId: "task-1" }, records, now), broken);
 });
 

@@ -24,10 +24,6 @@ export function contentOf(line: TraceLine): unknown {
   }
 }
 
-/** Returns whether two lines have the same instant; the +09:00 and Z spellings of one instant are equal. */
-export const sameTime = (a: TraceLine, b: TraceLine): boolean =>
-  Temporal.Instant.compare(Temporal.Instant.from(a.time), Temporal.Instant.from(b.time)) === 0;
-
 export const nameOf = (l: TraceLine): string | undefined => ("name" in l ? l.name : undefined);
 
 export const toOf = (l: TraceLine): string | undefined => ("to" in l ? l.to : undefined);

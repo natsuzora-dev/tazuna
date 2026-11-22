@@ -8,7 +8,7 @@ import type { Named, Place, ServiceDefinition } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import { contractService } from "../dsl/service.ts";
 import type { ScenarioDefinition } from "../scenario/define.ts";
-import { type LoweringViolation, lower, scenarioTime } from "../scenario/lower.ts";
+import { type LoweringViolation, lower } from "../scenario/lower.ts";
 import { isKeyOf } from "../spec/structure.ts";
 import type { Found } from "./found.ts";
 
@@ -82,8 +82,8 @@ function loweringMalformed(scenario: DefinitionRef, p: LoweringViolation): Malfo
       };
     case "lineAfterWhen":
       return { kind: "Malformed.lineAfterWhen", definition: null, scenario, data: {} };
-    case "unparsableTime":
-      return { kind: "Malformed.unparsableTime", definition: null, scenario, data: {} };
+    case "inexactTime":
+      return { kind: "Malformed.inexactTime", definition: null, scenario, data: {} };
     case "misusedObserved":
       return { kind: "Malformed.misusedObserved", definition: null, scenario, data: { use: p.use, path: p.path } };
   }
@@ -91,7 +91,7 @@ function loweringMalformed(scenario: DefinitionRef, p: LoweringViolation): Malfo
 
 /** The line of When that a lowering violation is at, when it is at one. */
 const lineOf = (p: LoweringViolation): number | undefined =>
-  p.kind === "unparsableTime" || p.kind === "misusedObserved" ? p.line : undefined;
+  p.kind === "inexactTime" || p.kind === "misusedObserved" ? p.line : undefined;
 
 export function loadScenarios(
   root: string,
@@ -117,8 +117,8 @@ export function loadScenarios(
       if (entry.role === "skip") return [{ service, role: "skip", because: entry.because }];
       return [{ service, role: "run", records: givenRecords(entitiesOf(service), entry.records) }];
     });
-    const start = scenarioTime(definition.given.start);
-    if (start === undefined) report({ kind: "Malformed.unparsableTime", definition: null, scenario: ref, data: {} });
+    if (!Number.isSafeInteger(definition.given.start))
+      report({ kind: "Malformed.inexactTime", definition: null, scenario: ref, data: {} });
     const lowered = lower(definition, refOf, (contract) => {
       const owner = contractService(contract);
       return owner === undefined ? undefined : serviceNames.get(owner);
@@ -146,7 +146,7 @@ export function loadScenarios(
         scenario: {
           service: own,
           given: {
-            start: start ?? definition.given.start,
+            start: definition.given.start,
             records: givenRecords(entitiesOf(own), definition.given.records),
             peers,
           },

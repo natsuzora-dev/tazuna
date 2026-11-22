@@ -1,3 +1,4 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { machine, remind, taskAdded } from "./planner.ts";
 
@@ -23,7 +24,7 @@ export const reminder = machine({
       },
       after: {
         due: {
-          at: ({ context }) => Temporal.Instant.from("2026-10-25T01:00:00Z").add({ hours: context.hours }),
+          at: ({ context }) => parseInstant("2026-10-25T01:00:00Z") + context.hours * 3_600_000,
           onFired: [{ target: "reminding" }],
         },
       },
@@ -46,7 +47,7 @@ export const fixedReminder = machine({
       on: { taskAdded: [{ assign: { hours: ({ context }) => context.hours + 1 } }] },
       after: {
         due: {
-          at: ({ context }) => Temporal.Instant.from("2026-10-25T01:00:00Z").add({ hours: context.hours }),
+          at: ({ context }) => parseInstant("2026-10-25T01:00:00Z") + context.hours * 3_600_000,
           onFired: [{ target: "reminding" }],
         },
       },

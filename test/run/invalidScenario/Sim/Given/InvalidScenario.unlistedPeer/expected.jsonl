@@ -1,1 +1,1 @@
-{"kind":"InvalidScenario.unlistedPeer","definition":null,"data":{"service":"mailer"},"location":{"file":"app/scenarios.ts","line":3},"scenario":{"service":"app","name":"noPeers"}}
+{"kind":"InvalidScenario.unlistedPeer","definition":null,"data":{"service":"mailer"},"location":{"file":"app/scenarios.ts","line":4},"scenario":{"service":"app","name":"noPeers"}}

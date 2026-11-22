@@ -4,7 +4,7 @@
       "service": "notes",
       "lines": [
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "command",
           "id": "tags.register#1",
@@ -14,7 +14,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "in",
           "type": "event",
           "id": "tags/registered#1",
@@ -32,7 +32,7 @@
       "service": "tags",
       "lines": [
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "in",
           "type": "command",
           "id": "notes/tags.register#1",
@@ -42,7 +42,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "answer",
           "id": "answer#1",
@@ -52,7 +52,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "event",
           "id": "registered#1",
@@ -63,7 +63,7 @@
           "resultOf": "notes/tags.register#1"
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "command",
           "id": "notes.attach#1",
@@ -74,7 +74,7 @@
           }
         },
         {
-          "time": "2026-10-25T01:00:00Z",
+          "time": 1792890000000,
           "dir": "out",
           "type": "event",
           "id": "labelAddedRecorded#1",

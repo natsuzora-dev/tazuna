@@ -3,8 +3,8 @@ import { after, test } from "node:test";
 import fc from "fast-check";
 import { z } from "zod";
 import { bag, fromJson, keyOrderIssue, set, sortCollections, sortedBy, toJson } from "../src/data/collections.ts";
-import { date, datetime } from "../src/data/datetime.ts";
 import { jsonSchema } from "../src/data/jsonSchema.ts";
+import { date } from "../src/data/time.ts";
 import { canonicalJson, type Json, plain } from "../src/data/values.ts";
 import { Lean } from "./lean/lean.ts";
 
@@ -25,12 +25,7 @@ const cents = z.codec(z.string(), z.int(), {
 
 const keys: readonly Node[] = [
   { schema: z.int(), value: fc.integer({ min: -2, max: 2 }), codec: false },
-  {
-    schema: datetime,
-    value: fc.constantFrom("2026-10-25T09:00:00+09:00", "2026-10-25T00:00:00.5Z", "2026-10-24T23:00:00Z"),
-    codec: true,
-  },
-  { schema: date, value: fc.constantFrom("2026-10-25", "2026-10-24", "2026-11-01"), codec: true },
+  { schema: date, value: fc.constantFrom("2026-10-25", "2026-10-24", "2026-11-01"), codec: false },
 ];
 
 const leaves: readonly Node[] = [

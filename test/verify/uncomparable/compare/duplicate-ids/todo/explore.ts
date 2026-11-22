@@ -1,4 +1,4 @@
-import { datetime, domain, explore } from "@natsuzora-dev/tazuna";
+import { domain, explore, instant, parseInstant } from "@natsuzora-dev/tazuna";
 import { Task } from "./todo.ts";
 
 export const todoExplore = explore({
@@ -7,6 +7,6 @@ export const todoExplore = explore({
   domains: [
     domain(Task.fields.id, ["task-1"]),
     domain(Task.fields.title, ["Buy milk"]),
-    domain(datetime, ["2026-10-26T00:00:00Z"]),
+    domain(instant, [parseInstant("2026-10-26T00:00:00Z")]),
   ],
 });

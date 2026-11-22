@@ -1,10 +1,10 @@
-import { external, fulfilled, rejected } from "@natsuzora-dev/tazuna";
+import { external, fulfilled, parseInstant, rejected } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { scenario } from "./agenda.ts";
 
 export const answer = scenario({
   description: "Answer the start of a day, then reject an hour later with requires; no violation",
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
+  given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.holiday));
     const l0 = w.net.deliver(
@@ -19,7 +19,7 @@ export const answer = scenario({
 export const rejectStartOfDay = scenario({
   description:
     "Reject the start of a day with requires, then answer an hour later; startOfDay holds for the first and fails for the second, so test reports rejectedAssumedRequires and failedAssumedRequires",
-  given: { start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(calendar)] },
+  given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [external(calendar)] },
   when: (w) => {
     w.net.deliver(w.startup.request(calendar.holiday));
     const l0 = w.net.deliver(

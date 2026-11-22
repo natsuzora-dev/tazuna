@@ -72,11 +72,11 @@ type NextBusinessDay = typeof calendar.nextBusinessDay;
 const calendarToApp = (answer: QueryAnswer<z.output<z.ZodObject<NextBusinessDay["output"]>>>): CalendarResult =>
   answer.result === "rejected"
     ? { ok: false, error: calendarErrors.error(answer.rejection) }
-    : { ok: true, day: answer.output.day };
+    : { ok: true, startsAt: answer.output.startsAt };
 
 const calendarToSpec = (result: CalendarResult): QueryAnswer =>
   result.ok
-    ? { result: "fulfilled", output: { day: result.day } }
+    ? { result: "fulfilled", output: { startsAt: result.startsAt } }
     : { result: "rejected", rejection: calendarErrors.rejection(result.error) };
 
 const deviceErrors = errorTable({ unavailable: { kind: "unavailable" } });

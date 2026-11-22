@@ -1,9 +1,9 @@
-import { run } from "@natsuzora-dev/tazuna";
+import { parseInstant, run } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { given, scenario } from "./data.ts";
 import { homeScreen } from "./screens.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [run(todo, {})] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [run(todo, {})] });
 
 export const listClosedByParent = scenario({
   description:
@@ -16,7 +16,7 @@ export const listClosedByParent = scenario({
     const firstList = w.user.operate(home, "openList").subscription(todo.tasks);
     const first = w.net.deliver(firstList);
     w.net.leaveInFlight(first.answer(first));
-    const closing = w.clock.at("2026-10-25T10:02:00+09:00");
+    const closing = w.clock.at(parseInstant("2026-10-25T10:02:00+09:00"));
     w.net.leaveInFlight(closing.end(firstList));
     const second = w.net.deliver(w.user.operate(home, "openList").subscription(todo.tasks));
     w.net.leaveInFlight(second.answer(second));

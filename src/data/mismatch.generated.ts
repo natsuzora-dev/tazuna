@@ -159,8 +159,8 @@ export type Mismatch =
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshot: string;
-        readonly trace: string;
+        readonly snapshot: number;
+        readonly trace: number;
       };
     }
   /** The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. */

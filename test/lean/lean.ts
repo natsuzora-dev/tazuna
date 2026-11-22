@@ -44,7 +44,6 @@ const responses = {
   stepOrderChanges: "stepOrderChanges",
   sort: "sorted",
   keyOrdered: "keyOrdered",
-  scenarioTime: "scenarioTime",
   schemaOf: "schemaOf",
   evaluate: "evaluated",
   parse: "parsed",
@@ -264,10 +263,6 @@ export class Lean {
 
   keyOrdered(schema: Json, value: Json): boolean {
     return this.exchange({ type: "keyOrdered", schema, value }).ordered;
-  }
-
-  scenarioTime(text: string): string | undefined {
-    return this.exchange({ type: "scenarioTime", text }).time ?? undefined;
   }
 
   schemaOf(structure: Structure, service: string, schema: Schema): Json | undefined {

@@ -46,6 +46,7 @@ import {
 import { SignatureKind, SymbolFlags, type Type, TypeFlags, type TypeReference } from "typescript/unstable/sync";
 import { z } from "zod";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import { instant, parseInstant } from "../data/time.ts";
 import type { Json } from "../data/values.ts";
 import type { Expr, Field } from "./ir.generated.ts";
 import type { Source } from "./sources.ts";
@@ -57,7 +58,6 @@ import type { Source } from "./sources.ts";
 export type Arg = Extract<Expr, { readonly op: "arg" }>["arg"] | "records" | "createKey";
 type Special = "records" | "createKey";
 type Relation = Extract<Expr, { readonly op: "compare" }>["relation"];
-type Order = Extract<Expr, { readonly op: "compare" }>["order"];
 
 /** What the converter tells apart in a TS type: a member of a union, by how the IR reads its JSON. */
 type Kind =
@@ -66,7 +66,6 @@ type Kind =
   | "boolean"
   | "null"
   | "undefined"
-  | "instant"
   | "date"
   | "array"
   /** An array with no element type, such as `[]`, which reads as a Bag does in a union with one. */
@@ -126,17 +125,9 @@ const elementSchema = (schema: z.ZodType | undefined): z.ZodType | undefined => 
   return array instanceof z.ZodArray ? (array.element as z.ZodType) : undefined;
 };
 
-/** The milliseconds of each unit of a Temporal duration that an instant adds. */
-const unitMs: ReadonlyMap<string, number> = new Map([
-  ["hours", 3_600_000],
-  ["minutes", 60_000],
-  ["seconds", 1000],
-  ["milliseconds", 1],
-]);
-
-/** Whether `file` is tazuna's module `module` of the DSL, as source or as declarations. */
+/** Whether `file` is tazuna's module `module`, such as `dsl/service`, as source or as declarations. */
 const isTazunaModule = (file: string, module: string): boolean =>
-  new RegExp(`[/\\\\](src|dist)[/\\\\]dsl[/\\\\]${module}\\.(d\\.)?ts$`).test(file);
+  new RegExp(`[/\\\\](src|dist)[/\\\\]${module.replace("/", "[/\\\\]")}\\.(d\\.)?ts$`).test(file);
 
 type Helper = ArrowFunction | FunctionExpression | FunctionDeclaration;
 
@@ -155,25 +146,12 @@ const decimals: ReadonlyMap<SyntaxKind, Extract<Expr, { readonly op: "decimal" }
   [SyntaxKind.SlashToken, "div"],
 ]);
 
-const flipped: Readonly<Record<Relation, Relation>> = { lt: "gt", le: "ge", gt: "lt", ge: "le", eq: "eq" };
-
 const relations: ReadonlyMap<SyntaxKind, Relation> = new Map([
   [SyntaxKind.LessThanToken, "lt"],
   [SyntaxKind.LessThanEqualsToken, "le"],
   [SyntaxKind.GreaterThanToken, "gt"],
   [SyntaxKind.GreaterThanEqualsToken, "ge"],
   [SyntaxKind.EqualsEqualsEqualsToken, "eq"],
-]);
-
-const temporalCompares: ReadonlyMap<string, Order> = new Map([
-  ["Temporal.Instant.compare", "instant"],
-  ["Temporal.PlainDate.compare", "date"],
-]);
-
-/** The Temporal parsers that a spec calls on a literal, which the converter runs, giving the JSON text. */
-const temporalParsers: ReadonlyMap<string, (text: string) => string> = new Map([
-  ["Temporal.Instant.from", (text: string) => Temporal.Instant.from(text).toString()],
-  ["Temporal.PlainDate.from", (text: string) => Temporal.PlainDate.from(text).toString()],
 ]);
 
 const stringSearches = { startsWith: "startsWith", endsWith: "endsWith", includes: "strIncludes" } as const;
@@ -221,6 +199,11 @@ class Conversion {
     this.typed = typed;
   }
 
+  /** The schema of the argument `name`; `now` is an instant. */
+  private argSchema(name: string): z.ZodType | undefined {
+    return name === "now" ? instant : this.typed.args[name];
+  }
+
   private declaredAt(name: Node): string {
     return `${name.getSourceFile().fileName}:${name.pos}`;
   }
@@ -240,7 +223,7 @@ class Conversion {
         return entity !== undefined && this.only(e) === "table" ? z.array(entity) : entity;
       }
       const object = unwrapped(e.expression);
-      if (isIdentifier(object) && scope.get(object.text) === "args") return this.typed.args[name];
+      if (isIdentifier(object) && scope.get(object.text) === "args") return this.argSchema(name);
       return fieldSchema(this.schemaOf(e.expression, scope), name);
     }
     if (isCallExpression(e) && isPropertyAccessExpression(e.expression) && isIdentifier(e.expression.name)) {
@@ -328,6 +311,7 @@ class Conversion {
 
   private kind(type: Type): Kind {
     if (type.isIntersectionType()) {
+      if (type.getTypes().some((t) => t.getSymbol()?.name === "DateBrand")) return "date";
       // A value of `string & Brand` is a string, and one of several object types is an object.
       const kinds = new Set(type.getTypes().map((t) => this.kind(t)));
       kinds.delete("object");
@@ -342,8 +326,6 @@ class Conversion {
     if (flags & (TypeFlags.Undefined | TypeFlags.Void)) return "undefined";
     if (!(flags & TypeFlags.Object)) return "other";
     const name = type.getSymbol()?.name;
-    if (name === "Instant") return "instant";
-    if (name === "PlainDate") return "date";
     if (name === "Table") return "table";
     if (name === "Bag" || name === "BagValue") return "bag";
     if (name === "Emit") return "emit";
@@ -402,7 +384,7 @@ class Conversion {
     const definer = declaration.initializer === undefined ? undefined : unwrapped(declaration.initializer);
     const service = definer !== undefined && isCallExpression(definer) ? unwrapped(definer.expression) : undefined;
     const declared = service !== undefined && isIdentifier(service) ? this.declarationOf(service) : undefined;
-    return declared !== undefined && isTazunaModule(declared.getSourceFile().fileName, "service");
+    return declared !== undefined && isTazunaModule(declared.getSourceFile().fileName, "dsl/service");
   }
 
   /** The function that `name` reads outside the function, which the converter inlines where it is called. */
@@ -478,17 +460,19 @@ class Conversion {
     return { op: "lit", value };
   }
 
-  /** A const of a literal outside the function, as that literal. */
+  /** A const of a literal outside the function, as that literal; `parseInstant` of a literal is one. */
   private constLiteral(name: Identifier): Expr | undefined {
     const value = this.constValue(name);
     if (value === undefined) return undefined;
+    const callee = isCallExpression(value) ? unwrapped(value.expression) : undefined;
     const literal =
       value.kind === SyntaxKind.TrueKeyword ||
       value.kind === SyntaxKind.FalseKeyword ||
       value.kind === SyntaxKind.NullKeyword ||
       isStringLiteral(value) ||
       isNoSubstitutionTemplateLiteral(value) ||
-      isNumericLiteral(value);
+      isNumericLiteral(value) ||
+      (callee !== undefined && isIdentifier(callee) && this.isTimeFunction(callee, "parseInstant"));
     return literal ? this.expression(value, new Map()) : undefined;
   }
 
@@ -520,7 +504,7 @@ class Conversion {
       scope,
       then,
       this.specials,
-      (name) => this.typed.args[name],
+      (name) => this.argSchema(name),
     );
   }
 
@@ -648,8 +632,8 @@ class Conversion {
       const parts: Expr[] = e.head.text === "" ? [] : [{ op: "lit", value: e.head.text }];
       for (const span of e.templateSpans) {
         const kinds = [...this.kinds(span.expression)];
-        if (!kinds.every((k) => scalars.has(k) || k === "instant" || k === "date"))
-          this.fail(span.expression, "writes in a template other than a scalar, instant or date");
+        if (!kinds.every((k) => scalars.has(k) || k === "date"))
+          this.fail(span.expression, "writes in a template other than a scalar or date");
         parts.push(this.expression(span.expression, scope));
         if (span.literal.text !== "") parts.push({ op: "lit", value: span.literal.text });
       }
@@ -699,9 +683,8 @@ class Conversion {
     if (operator === SyntaxKind.BarBarToken) return { op: "or", ...both() };
     if (operator === SyntaxKind.QuestionQuestionToken) return { op: "coalesce", ...both() };
     if (operator === SyntaxKind.PlusToken && (this.only(left) === "string" || this.only(right) === "string")) {
-      // + reads an Instant or a PlainDate through valueOf, which throws, unlike a template.
-      if (![left, right].every((side) => [...this.kinds(side)].every((k) => scalars.has(k))))
-        this.fail(node, "adds to a string other than a scalar");
+      if (![left, right].every((side) => [...this.kinds(side)].every((k) => scalars.has(k) || k === "date")))
+        this.fail(node, "adds to a string other than a scalar or date");
       return { op: "format", parts: [this.expression(left, scope), this.expression(right, scope)] };
     }
     if (operator === SyntaxKind.EqualsEqualsToken || operator === SyntaxKind.ExclamationEqualsToken) {
@@ -730,36 +713,22 @@ class Conversion {
     const relation = relations.get(negated ? SyntaxKind.EqualsEqualsEqualsToken : operator);
     if (relation === undefined) this.fail(node, "has an operator outside the IR");
     const not = (e: Expr): Expr => (negated ? { op: "not", operand: e } : e);
-    const temporal =
-      this.temporalCompare(left, right, relation, scope) ?? this.temporalCompare(right, left, flipped[relation], scope);
-    if (temporal !== undefined) return not(temporal);
     if (relation === "eq") {
-      const scalar = (e: Expression) => [...this.kinds(e)].every((k) => scalars.has(k));
+      const scalar = (e: Expression) => [...this.kinds(e)].every((k) => scalars.has(k) || k === "date");
       if (!this.isNullish(left, scope) && !this.isNullish(right, scope) && !(scalar(left) && scalar(right)))
         this.fail(node, "compares with === other than scalars, null or undefined");
       return not({ op: "eq", ...both() });
     }
-    if (this.only(left) !== "number" || this.only(right) !== "number") this.fail(node, "orders other than numbers");
-    return { op: "compare", relation, order: "number", ...both() };
+    const order = this.only(left);
+    if ((order !== "number" && order !== "date") || this.only(right) !== order)
+      this.fail(node, "orders other than two numbers or two dates");
+    return { op: "compare", relation, order, ...both() };
   }
 
   /** Whether `e` is the literal null or undefined. */
   private isNullish(e: Expression, scope: Scope): boolean {
     const u = unwrapped(e);
     return u.kind === SyntaxKind.NullKeyword || (isIdentifier(u) && u.text === "undefined" && !scope.has(u.text));
-  }
-
-  /** `Temporal.X.compare(a, b) relation 0`, when `call` is that call and `zero` is 0. */
-  private temporalCompare(call: Expression, zero: Expression, relation: Relation, scope: Scope): Expr | undefined {
-    const c = unwrapped(call);
-    const z = unwrapped(zero);
-    if (!isCallExpression(c) || !isNumericLiteral(z) || Number(z.text) !== 0) return undefined;
-    const order = temporalCompares.get(this.text(c.expression));
-    if (order === undefined) return undefined;
-    const [a, b, ...rest] = c.arguments;
-    if (a === undefined || b === undefined || rest.length > 0 || this.only(a) !== order || this.only(b) !== order)
-      this.fail(c, `compares other than two ${order}s`);
-    return { op: "compare", relation, order, left: this.expression(a, scope), right: this.expression(b, scope) };
   }
 
   /** Whether `node` is the records argument, by its name or as a field of the arguments object. */
@@ -811,18 +780,7 @@ class Conversion {
     const callee = unwrapped(e.expression);
     if (isIdentifier(callee) && callee.text === "emit" && !scope.has("emit")) return this.emitted(e, scope);
     if (this.isCreateKey(callee, scope)) return this.createKey(e);
-    if (isIdentifier(callee) && callee.text !== "Boolean" && !scope.has(callee.text))
-      return this.inlined(callee, e, scope);
-    if (e.arguments.length === 0 && isPropertyAccessExpression(callee) && isIdentifier(callee.name)) {
-      const receiver = this.only(callee.expression);
-      if (callee.name.text === "only" && (receiver === "bag" || receiver === "table"))
-        return { op: "only", collection: this.expression(callee.expression, scope) };
-      // An instant or a date is its JSON text, which is what toString writes.
-      if (callee.name.text === "toString" && (receiver === "instant" || receiver === "date"))
-        return this.expression(callee.expression, scope);
-    }
-    const parsed = temporalParsers.get(this.text(callee));
-    if (parsed !== undefined && !scope.has("Temporal")) {
+    if (isIdentifier(callee) && !scope.has(callee.text) && this.isTimeFunction(callee, "parseInstant")) {
       const [text, ...more] = e.arguments;
       const literal = text === undefined ? undefined : unwrapped(text);
       if (
@@ -830,12 +788,26 @@ class Conversion {
         more.length > 0 ||
         !(isStringLiteral(literal) || isNoSubstitutionTemplateLiteral(literal))
       )
-        this.fail(e, `calls ${this.text(callee)} with other than a string literal`);
+        this.fail(e, "calls parseInstant with other than a string literal");
       try {
-        return { op: "lit", value: parsed(literal.text) };
+        return { op: "lit", value: parseInstant(literal.text) };
       } catch {
-        this.fail(e, `calls ${this.text(callee)} with a text that it rejects`);
+        this.fail(e, "calls parseInstant with a text that it rejects");
       }
+    }
+    if (isIdentifier(callee) && !scope.has(callee.text) && this.isTimeFunction(callee, "addDays")) {
+      const [date, days, ...more] = e.arguments;
+      if (date === undefined || days === undefined || more.length > 0 || this.only(date) !== "date")
+        this.fail(e, "calls addDays with other than a date and days");
+      if (!this.isInt(days, scope)) this.fail(e, "calls addDays with other than an integer of days");
+      return { op: "addDays", date: this.expression(date, scope), days: this.expression(days, scope) };
+    }
+    if (isIdentifier(callee) && callee.text !== "Boolean" && !scope.has(callee.text))
+      return this.inlined(callee, e, scope);
+    if (e.arguments.length === 0 && isPropertyAccessExpression(callee) && isIdentifier(callee.name)) {
+      const receiver = this.only(callee.expression);
+      if (callee.name.text === "only" && (receiver === "bag" || receiver === "table"))
+        return { op: "only", collection: this.expression(callee.expression, scope) };
     }
     const [argument, ...rest] = e.arguments;
     if (argument === undefined || rest.length > 0) this.fail(e, "calls with other than one argument");
@@ -852,34 +824,6 @@ class Conversion {
         string: this.expression(callee.expression, scope),
         search: this.expression(argument, scope),
       };
-    }
-    if (method === "equals" && (receiver === "instant" || receiver === "date")) {
-      if (this.only(argument) !== receiver) this.fail(e, `calls equals with other than a ${receiver}`);
-      return {
-        op: "compare",
-        relation: "eq",
-        order: receiver,
-        left: this.expression(callee.expression, scope),
-        right: this.expression(argument, scope),
-      };
-    }
-    if ((method === "add" || method === "subtract") && receiver === "instant") {
-      const duration = unwrapped(argument);
-      const [unit, ...units] = isObjectLiteralExpression(duration) ? duration.properties : [];
-      const ms =
-        unit !== undefined && isPropertyAssignment(unit) && isIdentifier(unit.name)
-          ? unitMs.get(unit.name.text)
-          : undefined;
-      // A duration of several units can mix signs, which Temporal rejects.
-      if (unit === undefined || units.length > 0 || ms === undefined || !isPropertyAssignment(unit))
-        this.fail(e, `calls ${method} with other than one unit of hours, minutes, seconds or milliseconds`);
-      if (!this.isInt(unit.initializer, scope)) this.fail(e, `calls ${method} with other than an integer`);
-      const count = this.expression(unit.initializer, scope);
-      const scaled: Expr =
-        ms === 1 ? count : { op: "arith", operation: "mul", left: count, right: { op: "lit", value: ms } };
-      const signed: Expr =
-        method === "add" ? scaled : { op: "arith", operation: "sub", left: { op: "lit", value: 0 }, right: scaled };
-      return { op: "timeAdd", instant: this.expression(callee.expression, scope), ms: signed };
     }
     if (method === "includes" && receiver === "array") {
       if (![...this.kinds(argument)].every((k) => scalars.has(k)))
@@ -901,8 +845,7 @@ class Conversion {
       return { op: "sum", ...this.visited(method, callee.expression, argument, scope) };
     if ((method === "min" || method === "max" || method === "sortedBy") && collection === "bag") {
       const key = this.only(this.callbackBody(method, argument));
-      if (key !== "number" && key !== "instant" && key !== "date")
-        this.fail(e, `calls ${method} with other than a key`);
+      if (key !== "number" && key !== "date") this.fail(e, `calls ${method} with other than a key`);
       return { op: method, order: key, ...this.visited(method, callee.expression, argument, scope) };
     }
     if (method === "concat" && collection === "bag") {
@@ -922,6 +865,17 @@ class Conversion {
   }
 
   /** Whether `callee` is createKey, by its name or as a field of the arguments object. */
+  /** Whether `callee` is tazuna's time function `name`, which the converter evaluates itself. */
+  private isTimeFunction(callee: Identifier, name: string): boolean {
+    const d = this.declarationOf(callee);
+    return (
+      d !== undefined &&
+      isFunctionDeclaration(d) &&
+      d.name?.text === name &&
+      isTazunaModule(d.getSourceFile().fileName, "data/time")
+    );
+  }
+
   private isCreateKey(callee: Expression, scope: Scope): boolean {
     if (isIdentifier(callee)) return scope.get(callee.text) === "createKey";
     if (!isPropertyAccessExpression(callee) || !isIdentifier(callee.name) || callee.name.text !== "createKey")
@@ -962,7 +916,7 @@ class Conversion {
     const callee = unwrapped(e.expression);
     const ref = isIdentifier(callee) ? this.declarationOf(callee) : undefined;
     if (ref === undefined || !isFunctionDeclaration(ref) || ref.name?.text !== "ref") return undefined;
-    if (!isTazunaModule(ref.getSourceFile().fileName, "entity")) return undefined;
+    if (!isTazunaModule(ref.getSourceFile().fileName, "dsl/entity")) return undefined;
     const target = unwrapped(e.arguments[0] as Expression);
     const d = isIdentifier(target) ? this.declarationOf(target) : undefined;
     if (d === undefined || !isVariableDeclaration(d) || !isIdentifier(d.name)) return undefined;

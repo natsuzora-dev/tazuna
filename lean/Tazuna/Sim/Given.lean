@@ -50,7 +50,7 @@ def World.startWith (sc : Scenario) (services : List (String × Service)) : Worl
     | .run _ => Role.run
     | .external => .external
     | .skip _ => .skip)
-  let now := sc.given.start.time
+  let now := sc.given.start
   { now, roles, services, states := (runningOf sc).map fun s => (s, { now, service := s }) }
 
 /-- The world before the startup: World.startWith with each running service of the structure `j`. -/

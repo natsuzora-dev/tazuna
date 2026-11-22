@@ -1,2 +1,2 @@
-{"kind":"Malformed.caseCollision","definition":null,"data":{"name":"StartsDay","collidesWith":"startsDay"},"location":{"file":"todo/scenarios.ts","line":10}}
+{"kind":"Malformed.caseCollision","definition":null,"data":{"name":"StartsDay","collidesWith":"startsDay"},"location":{"file":"todo/scenarios.ts","line":11}}
 {"kind":"Malformed.caseCollision","definition":null,"data":{"name":"todo","collidesWith":"Todo"},"location":{"file":"todo/todo.ts","line":3}}

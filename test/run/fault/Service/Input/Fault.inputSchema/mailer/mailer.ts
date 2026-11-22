@@ -1,4 +1,4 @@
-import { datetime, externalService } from "@natsuzora-dev/tazuna";
+import { externalService, instant } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, contract } = externalService({ name: "mailer", description: "Send mails" });
@@ -10,7 +10,7 @@ export const sendMail = command({
 });
 
 export const scheduleMail = command({
-  input: { at: datetime },
+  input: { at: instant },
   emits: [],
   rejects: ["invalid-input", "unavailable", "reused-id"],
 });

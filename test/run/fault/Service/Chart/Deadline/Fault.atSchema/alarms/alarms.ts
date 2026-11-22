@@ -1,4 +1,4 @@
-import { service } from "@natsuzora-dev/tazuna";
+import { parseInstant, service } from "@natsuzora-dev/tazuna";
 
 export const { machine, scenario } = service({ name: "alarms", description: "Ring the alarms" });
 
@@ -11,7 +11,7 @@ export const alarm = machine({
     waiting: {
       after: {
         ring: {
-          at: () => Temporal.Instant.from("2026-10-25T01:00:00.0005Z"),
+          at: () => parseInstant("2026-10-25T01:00:00Z") + 0.5,
           onFired: [{ target: "ringing" }],
         },
       },

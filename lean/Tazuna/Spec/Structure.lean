@@ -109,38 +109,10 @@ deriving Repr, Inhabited
 
 derive_wire KeyPosition
 
-/--
-A deadline's delay, as Temporal.Duration reads it: the count of each unit. TS reads it and Lean decides what it means
-(delayMs?).
--/
-structure Delay where
-  years : Int
-  months : Int
-  weeks : Int
-  days : Int
-  hours : Int
-  minutes : Int
-  seconds : Int
-  milliseconds : Int
-  microseconds : Int
-  nanoseconds : Int
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire Delay
-
-/--
-The length of `d` in milliseconds, which the run adds to an instant, or none when a date unit, which has no fixed
-length for an instant, or a part below a millisecond, which the run's time cannot count, is not zero.
--/
-def delayMs? (d : Delay) : Option Int :=
-  if d.years == 0 && d.months == 0 && d.weeks == 0 && d.days == 0 && d.microseconds == 0 && d.nanoseconds == 0 then
-    some (((d.hours * 60 + d.minutes) * 60 + d.seconds) * 1000 + d.milliseconds)
-  else none
-
 /-- How a deadline's time is computed. -/
 inductive DeadlineTime where
-  /-- `now` plus the delay, or null when Temporal.Duration does not read the delay. -/
-  | delay (delay : Option Delay)
+  /-- `now` plus the delay in milliseconds, or null when the delay is no safe integer. -/
+  | delay (ms : Option Int)
   /-- What its `at` function computes. -/
   | «at»
 deriving DecidableEq, Repr, Inhabited
@@ -149,12 +121,12 @@ derive_wire DeadlineTime tag "kind"
 
 /-- Whether the run can add the delay of `time` to an instant: true for an `at`, which computes an instant. -/
 def DeadlineTime.isExact : DeadlineTime → Bool
-  | .delay d => (d.bind delayMs?).isSome
+  | .delay ms => ms.isSome
   | .at => true
 
 /-- Whether the delay of `time` is below zero, which would arm the deadline before its state was entered. -/
 def DeadlineTime.isNegative : DeadlineTime → Bool
-  | .delay d => (d.bind delayMs?).any (· < 0)
+  | .delay ms => ms.any (· < 0)
   | .at => false
 
 structure Deadline where

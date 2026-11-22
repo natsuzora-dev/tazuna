@@ -10,7 +10,7 @@ export const notifierConstants = constants({
     permissionAttempts: z.int(),
     permissionRetryDelay: duration,
   }),
-  values: { openTaskLimit: 10, warnedPeriod: "PT1H", permissionAttempts: 3, permissionRetryDelay: "PT1M" },
+  values: { openTaskLimit: 10, warnedPeriod: 3_600_000, permissionAttempts: 3, permissionRetryDelay: 60_000 },
 });
 
 export const OpenTask = entity({

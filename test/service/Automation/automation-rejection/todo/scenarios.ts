@@ -1,9 +1,9 @@
-import { accepted, external, rejected } from "@natsuzora-dev/tazuna";
+import { accepted, external, parseInstant, rejected } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { addTask, given, scenario } from "./todo.ts";
 
 const arranged = given({
-  start: "2026-10-25T10:00:00+09:00",
+  start: parseInstant("2026-10-25T10:00:00+09:00"),
   records: { Task: [] },
   peers: [external(device)],
 });

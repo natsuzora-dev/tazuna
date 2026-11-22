@@ -1,4 +1,4 @@
-import { emit, entity, ref, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { emit, entity, parseInstant, ref, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Mark = entity({ description: "A mark", fields: { id: z.string() }, key: "id" });
@@ -41,7 +41,7 @@ const clock = (name: string) =>
     states: {
       idle: { on: { armed: [{ target: "waiting" }] } },
       waiting: {
-        after: { due: { at: () => Temporal.Instant.from("2026-10-25T01:00:00Z"), onFired: [{ target: "marking" }] } },
+        after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "marking" }] } },
       },
       marking: {
         sends: {

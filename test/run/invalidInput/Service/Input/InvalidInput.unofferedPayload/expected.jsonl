@@ -1,1 +1,1 @@
-{"kind":"InvalidInput.unofferedPayload","definition":null,"data":{"screen":{"service":"screens","name":"listScreen"},"control":"pick","payload":{"taskId":"task-3"}},"location":{"file":"screens/scenarios.ts","line":5},"scenario":{"service":"screens","name":"pickUnoffered"}}
+{"kind":"InvalidInput.unofferedPayload","definition":null,"data":{"screen":{"service":"screens","name":"listScreen"},"control":"pick","payload":{"taskId":"task-3"}},"location":{"file":"screens/scenarios.ts","line":6},"scenario":{"service":"screens","name":"pickUnoffered"}}

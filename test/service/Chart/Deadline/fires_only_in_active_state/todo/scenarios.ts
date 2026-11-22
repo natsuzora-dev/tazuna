@@ -1,6 +1,7 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { addTask, completeTask, given, scenario } from "./todo.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [] });
 
 export const completedInTime = scenario({
   description:
@@ -8,11 +9,11 @@ export const completedInTime = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(addTask, { taskId: "task-1" });
-    w.clock.at("2026-10-25T10:30:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:30:00+09:00"));
     w.client.send(completeTask, { taskId: "task-1" });
-    w.clock.at("2026-10-25T12:00:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T12:00:00+09:00"));
     w.client.send(addTask, { taskId: "task-2" });
-    w.clock.at("2026-10-25T13:30:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T13:30:00+09:00"));
   },
   then: () => [],
 });

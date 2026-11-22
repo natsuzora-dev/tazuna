@@ -47,7 +47,7 @@ export const reminderWithoutEmptyKeywords = machine({
 }).chart({
   states: {
     idle: { on: { taskAdded: [{ target: "waiting" }] } },
-    waiting: { after: { hour: { delay: { hours: 1 }, onFired: [{ target: "idle" }] } } },
+    waiting: { after: { hour: { delay: 3_600_000, onFired: [{ target: "idle" }] } } },
   },
 });
 

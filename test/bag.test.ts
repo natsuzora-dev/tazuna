@@ -4,6 +4,7 @@ import { z } from "zod";
 import { type Bag, BagValue, bagValues, enumerations, NotOnly, reversedBags } from "../src/data/bag.ts";
 import { bag, bagged, sortCollections } from "../src/data/collections.ts";
 import { jsonSchema } from "../src/data/jsonSchema.ts";
+import type { DateLabel } from "../src/data/time.ts";
 
 const bagOf = <T>(items: readonly T[]): Bag<T> => new BagValue(() => items);
 const numbers = (bag: Bag<number>) => bag.sortedBy((n) => n).map((run) => [run.min((n) => n), run.size]);
@@ -41,10 +42,13 @@ test("some and every call the predicate on every value", () => {
 });
 
 test("min and max return the key and throw on NaN, sum takes only safe integers", () => {
-  const days = bagOf([Temporal.PlainDate.from("2026-03-01"), Temporal.PlainDate.from("2026-01-31")]);
-  assert.equal(days.min((d) => d)?.toString(), "2026-01-31");
+  const days = bagOf(["2026-03-01", "2026-01-31"] as DateLabel[]);
   assert.equal(
-    days.max((d) => d.day),
+    days.min((d) => d),
+    "2026-01-31",
+  );
+  assert.equal(
+    days.max((d) => Number(d.slice(8))),
     31,
   );
   assert.equal(

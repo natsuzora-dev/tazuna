@@ -15,8 +15,8 @@ const { TASK_ALREADY_EXISTS, TASK_NOT_FOUND, ALREADY_COMPLETED, NOT_COMPLETED, D
 
 const findTask = (taskId: string) => db.select().from(taskTable).where(eq(taskTable.id, taskId)).get();
 
-const reminderKeptOnReopen = (remindAt: Temporal.Instant | null) =>
-  remindAt !== null && Temporal.Instant.compare(remindAt, Temporal.Now.instant()) > 0 ? remindAt : null;
+const reminderKeptOnReopen = (remindAt: number | null) =>
+  remindAt !== null && remindAt > Date.now() ? remindAt : null;
 
 async function* answers<T>(read: () => T, signal: AbortSignal | undefined): AsyncGenerator<T> {
   const changed = changes.subscribe("changed", { signal });
@@ -30,9 +30,7 @@ export const todoRouter = {
     .errors({ TASK_ALREADY_EXISTS })
     .handler(({ input: { taskId, title }, errors, context }) => {
       if (findTask(taskId) !== undefined) throw errors.TASK_ALREADY_EXISTS();
-      db.insert(taskTable)
-        .values({ id: taskId, title, createdAt: Temporal.Now.instant(), reminderDecision: "pending" })
-        .run();
+      db.insert(taskTable).values({ id: taskId, title, createdAt: Date.now(), reminderDecision: "pending" }).run();
       notifyChange();
       publish({ name: "taskAdded", payload: { taskId } }, context.headers);
       void decideReminderTime(taskId);
@@ -45,7 +43,7 @@ export const todoRouter = {
       const task = findTask(taskId);
       if (task === undefined) throw errors.TASK_NOT_FOUND();
       if (task.completedAt !== null) throw errors.ALREADY_COMPLETED();
-      db.update(taskTable).set({ completedAt: Temporal.Now.instant() }).where(eq(taskTable.id, taskId)).run();
+      db.update(taskTable).set({ completedAt: Date.now() }).where(eq(taskTable.id, taskId)).run();
       notifyChange();
       publish({ name: "taskCompleted", payload: { taskId } }, context.headers);
     }),
@@ -90,7 +88,7 @@ export const todoRouter = {
     .errors({ TASK_NOT_FOUND, DUE_IN_PAST })
     .handler(({ input: { taskId, dueAt }, errors }) => {
       if (findTask(taskId) === undefined) throw errors.TASK_NOT_FOUND();
-      if (dueAt !== null && Temporal.Instant.compare(dueAt, Temporal.Now.instant()) <= 0) throw errors.DUE_IN_PAST();
+      if (dueAt !== null && dueAt <= Date.now()) throw errors.DUE_IN_PAST();
       if (dueAt === null) {
         db.update(taskTable)
           .set({ dueAt: null, remindAt: null, reminderDecision: "pending" })

@@ -68,12 +68,12 @@ def requestsValue (s : State) : m Value := do
   let inputs := traced.map (·.2.2)
   pure (.obj [("pending", .arr (traced.map fun (p, time, before) =>
       .arr [ToValue.toValue p.id, ToValue.toValue p.activity.ref, requesterValue p.requester, p.input, .bool p.stale,
-        ToValue.toValue (rank turns p.turn), Time.toValue time, ToValue.toValue (rank inputs before),
+        ToValue.toValue (rank turns p.turn), ToValue.toValue time, ToValue.toValue (rank inputs before),
         .bool (lines.any (answersOrEnds p.id))])),
     ("queued", .arr (s.queued.map fun q => .arr [ToValue.toValue q.machine, .str q.state, .bool q.stale]))])
 
 def instanceValue (i : Instance) : Value :=
-  .obj [("id", ToValue.toValue i.id), ("entered", .arr (i.entered.map fun (n, t) => .arr [.str n, Time.toValue t])),
+  .obj [("id", ToValue.toValue i.id), ("entered", .arr (i.entered.map fun (n, t) => .arr [.str n, ToValue.toValue t])),
     ("context", i.context), ("held", .arr (i.held.map fun (n, v) => .arr [.str n, v])), ("input", i.input),
     ("lastChildren", .arr (i.lastChildren.map fun (n, cs) => .arr [.str n, ToValue.toValue cs])),
     ("shown", .arr (i.shown.map fun (n, v) => .arr [.str n, v])), ("closed", .bool i.closed)]
@@ -100,10 +100,10 @@ variable {m : Type → Type} [Monad m] [MonadNote m]
 open Fingerprint in
 /-- The state of one running service that explore merges paths by. -/
 def serviceFingerprint (s : State) : m Value := do
-  pure (.obj [("now", Time.toValue s.now), ("lineCounts", countsOf (s.lines.toList.map (·.body.idName s.service))),
+  pure (.obj [("now", ToValue.toValue s.now), ("lineCounts", countsOf (s.lines.toList.map (·.body.idName s.service))),
     ("keyCounts", countsOf s.createdEntities), ("records", recordsValue s.records), ("requests", ← requestsValue s),
     ("deadlines", .arr (s.deadlines.map fun d =>
-      .arr [ToValue.toValue d.machine, .str d.state, .str d.name, Time.toValue d.time])),
+      .arr [ToValue.toValue d.machine, .str d.state, .str d.name, ToValue.toValue d.time])),
     ("subscriptions", .arr (s.subscriptions.map fun u =>
       .arr [ToValue.toValue u.id, .arr [.str u.query, u.input], ToValue.toValue u.last])),
     ("machines", machinesValue s), ("stack", ToValue.toValue s.stack),
@@ -120,7 +120,7 @@ All halted worlds are one, since explore extends none of them.
 def worldFingerprint (w : World) : m String := do
   if w.halted.isSome || w.states.any (·.2.halted.isSome) then return "halted"
   let states ← w.states.mapM fun (n, s) => do pure (Value.arr [.str n, ← serviceFingerprint s])
-  pure (Value.arr [Time.toValue w.now, .arr states,
+  pure (Value.arr [ToValue.toValue w.now, .arr states,
     .arr (w.messages.toList.filterMap fun m =>
       if m.status == .inFlight then some (.arr [.str m.sender, .str m.receiver, bodyValue m.body]) else none)]).canonical
 

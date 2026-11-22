@@ -1,11 +1,11 @@
-import { datetime, emit, service } from "@natsuzora-dev/tazuna";
+import { emit, instant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { automation, command, event, contract, scenario } = service({ name: "todo", description: "Keep tasks" });
 
-export const taskAdded = event({ payload: { taskId: z.string(), addedAt: datetime } });
+export const taskAdded = event({ payload: { taskId: z.string(), addedAt: instant } });
 export const logged = event({
-  payload: { taskId: z.string(), loggedAt: datetime },
+  payload: { taskId: z.string(), loggedAt: instant },
 });
 
 export const addTask = command({

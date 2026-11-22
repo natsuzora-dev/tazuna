@@ -1,5 +1,9 @@
-import { datetime, externalService } from "@natsuzora-dev/tazuna";
+import { externalService, instant, parseInstant } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
+
+// The starts of the days that the scenarios use; a calendar knows them, and tazuna computes no calendar.
+const day25 = parseInstant("2026-10-25T00:00:00Z");
+const day26 = parseInstant("2026-10-26T00:00:00Z");
 
 export const { command, query, event, contract } = externalService({
   name: "calendar",
@@ -7,18 +11,18 @@ export const { command, query, event, contract } = externalService({
 });
 
 export const holiday = query({
-  input: { day: datetime },
+  input: { day: instant },
   output: { isHoliday: z.boolean() },
   rejects: ["invalid-input", "requires", "unavailable"],
-  requires: { startOfDay: ({ input }) => input.day.toZonedDateTimeISO("UTC").hour === 0 },
+  requires: { startOfDay: ({ input }) => input.day === day25 || input.day === day26 },
 });
 
-export const booked = event({ payload: { day: datetime } });
+export const booked = event({ payload: { day: instant } });
 
 export const book = command({
-  input: { day: datetime },
+  input: { day: instant },
   emits: [booked],
   rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
-  requires: { startOfDay: ({ input }) => input.day.toZonedDateTimeISO("UTC").hour === 0 },
-  ensures: { sameDay: ({ input, events }) => events.every((e) => e.payload.day.equals(input.day)) },
+  requires: { startOfDay: ({ input }) => input.day === day25 || input.day === day26 },
+  ensures: { sameDay: ({ input, events }) => events.every((e) => e.payload.day === input.day) },
 });

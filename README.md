@@ -56,8 +56,8 @@ Run the commands in the folder of your `package.json`.
      description: "Complete a task twice; todo rejects the second completeTask by requires notCompleted",
      given: noTasks,
      when: (w) => {
-       addMilk(w, "2026-10-26");
-       w.clock.at("2026-10-25T10:01:00+09:00");
+       addMilk(w, startOf("2026-10-26"));
+       w.clock.at(parseInstant("2026-10-25T10:01:00+09:00"));
        const first = w.client.send(completeTask, { taskId: "task-1" });
        const second = w.client.send(completeTask, { taskId: "task-1" });
        return { first, second };
@@ -72,7 +72,7 @@ Run the commands in the folder of your `package.json`.
    ```
 
    `given` sets where the scenario starts, `when` lists its lines in order, and `then` states what `todo` did on those lines.
-   `noTasks` and `addMilk` are defined earlier in the same file.
+   `noTasks`, `addMilk` and `startOf` are defined earlier in the same file.
 
 4. Run the scenarios:
 
@@ -89,7 +89,7 @@ Run the commands in the folder of your `package.json`.
    The output is a violation line, followed by `65/65 scenarios: 1 violation`:
 
    ```json
-   {"kind":"InvalidScenario.unmetExpectation","definition":null,"data":{"expectation":0,"expected":[{"result":"rejected","rejection":{"kind":"requires","reason":"notCompleted"}}],"actual":[{"result":"accepted"}]},"location":{"file":"spec/todo/scenarios.ts","line":64},"scenario":{"service":"todo","name":"completeTwice"}}
+   {"kind":"InvalidScenario.unmetExpectation","definition":null,"data":{"expectation":0,"expected":[{"result":"rejected","rejection":{"kind":"requires","reason":"notCompleted"}}],"actual":[{"result":"accepted"}]},"location":{"file":"spec/todo/scenarios.ts","line":68},"scenario":{"service":"todo","name":"completeTwice"}}
    ```
 
 6. Ask tazuna what the violation means:

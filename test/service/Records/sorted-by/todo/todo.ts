@@ -1,4 +1,4 @@
-import { any, bag, date, datetime, emit, type Runs, service, set, sortedBy } from "@natsuzora-dev/tazuna";
+import { any, bag, date, emit, instant, type Runs, service, set, sortedBy } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, event, query, screen, contract, given, scenario } = service({
@@ -85,7 +85,7 @@ export const planTasks = command({
   emits: [tasksPlanned],
 }).decide(({ input }) => [emit(tasksPlanned, { entries: input.entries })]);
 
-export const Visit = z.object({ at: datetime, on: date, title: z.string() });
+export const Visit = z.object({ at: instant, on: date, title: z.string() });
 
 export const visitsListed = event({
   payload: { byTime: sortedBy(Visit, "at"), byDay: sortedBy(Visit, "on") },
@@ -93,9 +93,9 @@ export const visitsListed = event({
 
 export const listVisits = command({ emits: [visitsListed] }).decide(({ now }) => {
   const visits = [
-    { at: now.add({ hours: 2 }), on: Temporal.PlainDate.from("2026-10-25"), title: "Go to the bakery" },
-    { at: now, on: Temporal.PlainDate.from("2026-10-27"), title: "Go to the station" },
-    { at: now.add({ hours: 1 }), on: Temporal.PlainDate.from("2026-10-26"), title: "Go to the field" },
+    { at: now + 2 * 3_600_000, on: "2026-10-25", title: "Go to the bakery" },
+    { at: now, on: "2026-10-27", title: "Go to the station" },
+    { at: now + 3_600_000, on: "2026-10-26", title: "Go to the field" },
   ];
   return [emit(visitsListed, { byTime: visits, byDay: visits })];
 });

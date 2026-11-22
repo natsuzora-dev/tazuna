@@ -383,11 +383,11 @@ function offeredAt(r: Processing, o: Opened, control: string, payload: unknown):
 }
 
 /** Lean's fireTo. */
-function fireTo(time: Temporal.Instant): (r: Processing) => void {
+function fireTo(time: number): (r: Processing) => void {
   return (r) => {
     const s = r.state;
     fireDue(r, time);
-    if (Temporal.Instant.compare(time, s.now) > 0) {
+    if (time > s.now) {
       s.now = time;
       r.note.wroteNow();
     }
@@ -708,12 +708,12 @@ function take(w: World, own: string, lines: readonly Line[], i: number, l: Line)
       });
     }
     case "at": {
-      const time = Temporal.Instant.from(l.time);
-      if (Temporal.Instant.compare(time, w.now) <= 0)
+      const time = l.time;
+      if (time <= w.now)
         return reportedHere({
           kind: "InvalidScenario.notLater",
           definition: null,
-          data: { scenarioLine: i, at: time.toString(), now: w.now.toString() },
+          data: { scenarioLine: i, at: time, now: w.now },
         });
       for (const service of w.services.keys()) {
         if (stopped(w)) break;

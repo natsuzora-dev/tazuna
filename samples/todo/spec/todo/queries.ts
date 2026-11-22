@@ -7,7 +7,7 @@ const Filter = z.enum(["open", "completed", "all"]).meta({
     "open selects the tasks that are not completed, completed selects the completed tasks, and all selects every task",
 });
 
-const matches = (filter: z.infer<typeof Filter>, completedAt: Temporal.Instant | null) =>
+const matches = (filter: z.infer<typeof Filter>, completedAt: number | null) =>
   filter === "all" || (filter === "open" ? completedAt === null : completedAt !== null);
 
 // tasks does not group by due date: overdue or due today changes with time alone, but a subscription is recomputed

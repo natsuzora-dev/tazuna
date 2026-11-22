@@ -74,7 +74,7 @@ def TraceLine.Body.resultOf? : TraceLine.Body → Option String
 
 /-- One line of a trace file, as an implementation writes it for `tazuna verify`. -/
 structure TraceLine where
-  time : DateTime
+  time : Time
   body : TraceLine.Body
   after : Option (List String)
   created : Option (List String)

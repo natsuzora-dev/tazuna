@@ -5,7 +5,7 @@ import { todo } from "@todo/spec/todo";
 import { useRef } from "react";
 import { orpc } from "../orpc/client.ts";
 import type { router } from "../orpc/router.ts";
-import { formatDateTime, formatTime, timeZone, useNow } from "../time.ts";
+import { formatDateTime, formatTime, useNow, zoned } from "../time.ts";
 
 export const Route = createFileRoute("/_list/")({ component: TaskList });
 
@@ -26,16 +26,14 @@ const groupLabels = new Map<Group, string>([
   ["completed", "Completed"],
 ]);
 
-function groupOf({ dueAt, completedAt }: Task, now: Temporal.Instant): Group {
+function groupOf({ dueAt, completedAt }: Task, now: number): Group {
   if (completedAt !== null) return "completed";
   if (dueAt === null) return "none";
-  if (Temporal.Instant.compare(dueAt, now) <= 0) return "late";
-  const day = (at: Temporal.Instant) => at.toZonedDateTimeISO(timeZone).toPlainDate();
-  return day(dueAt).equals(day(now)) ? "today" : "later";
+  if (dueAt <= now) return "late";
+  return zoned(dueAt).toPlainDate().equals(zoned(now).toPlainDate()) ? "today" : "later";
 }
 
-const byDue = (a: Task, b: Task) =>
-  a.dueAt === null || b.dueAt === null ? 0 : Temporal.Instant.compare(a.dueAt, b.dueAt);
+const byDue = (a: Task, b: Task) => (a.dueAt === null || b.dueAt === null ? 0 : a.dueAt - b.dueAt);
 
 function TaskList() {
   const { filter = "open" } = list.useSearch();
@@ -113,7 +111,7 @@ function TaskList() {
   );
 }
 
-function Groups({ tasks, now, isBusy }: { tasks: readonly Task[]; now: Temporal.Instant; isBusy: boolean }) {
+function Groups({ tasks, now, isBusy }: { tasks: readonly Task[]; now: number; isBusy: boolean }) {
   if (tasks.length === 0) return <p className="status">No tasks</p>;
   const grouped = Map.groupBy(tasks, (t) => groupOf(t, now));
   return [...groupLabels].flatMap(([group, label]) => {
@@ -140,7 +138,7 @@ function Row({
 }: {
   task: Task;
   group: Group;
-  now: Temporal.Instant;
+  now: number;
   isBusy: boolean;
 }) {
   const complete = useMutation(orpc.todo.completeTask.mutationOptions());
@@ -167,9 +165,7 @@ function Row({
         {title}
       </Link>
       {dueAt !== null && (
-        <span className={`chip is-${group}`}>
-          {group === "today" ? formatTime(dueAt.toZonedDateTimeISO(timeZone)) : formatDateTime(dueAt, now)}
-        </span>
+        <span className={`chip is-${group}`}>{group === "today" ? formatTime(dueAt) : formatDateTime(dueAt, now)}</span>
       )}
     </li>
   );

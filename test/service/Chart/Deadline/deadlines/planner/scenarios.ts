@@ -1,6 +1,7 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { addTask, given, scenario } from "./planner.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [] });
 
 export const deadlineMoved = scenario({
   description:
@@ -8,9 +9,9 @@ export const deadlineMoved = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(addTask, { taskId: "task-1" });
-    w.clock.at("2026-10-25T12:30:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T12:30:00+09:00"));
     w.client.send(addTask, { taskId: "task-2" });
-    w.clock.at("2026-10-25T14:30:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T14:30:00+09:00"));
   },
   then: () => [],
 });
@@ -20,7 +21,7 @@ export const deadlinePassed = scenario({
     "Add the task now at 11:30; reminder enters waiting again with its deadline at 10:00, which has passed, so reminder notifies at 11:30, when planner finishes processing addTask",
   given: arranged,
   when: (w) => {
-    w.clock.at("2026-10-25T11:30:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T11:30:00+09:00"));
     w.client.send(addTask, { taskId: "now" });
   },
   then: () => [],

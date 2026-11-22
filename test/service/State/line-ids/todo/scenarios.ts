@@ -1,6 +1,11 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { addTask, given, scenario } from "./todo.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: { Task: [], Note: [], Tag: [] }, peers: [] });
+const arranged = given({
+  start: parseInstant("2026-10-25T10:00:00+09:00"),
+  records: { Task: [], Note: [], Tag: [] },
+  peers: [],
+});
 
 export const twoTasks = scenario({
   description:

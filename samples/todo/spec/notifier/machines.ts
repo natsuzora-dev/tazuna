@@ -48,7 +48,7 @@ const resetAttempts = { assign: { attempts: () => 0 } };
 export const notification = machine({
   description:
     "Request notification permission from the user while it is undetermined, and show each warning as a notification if permission is granted",
-  context: { attempts: z.number().default(0), count: z.number().default(0) },
+  context: { attempts: z.int().default(0), count: z.number().default(0) },
   receives: { openTaskRecorded, tooManyWarned },
   commands: {
     requestNotificationPermission: device.requestNotificationPermission,

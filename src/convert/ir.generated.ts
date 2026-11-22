@@ -77,7 +77,7 @@ export type Expr =
   | {
       readonly op: "compare";
       readonly relation: "lt" | "le" | "gt" | "ge" | "eq";
-      readonly order: "number" | "instant" | "date";
+      readonly order: "number" | "date";
       readonly left: Expr;
       readonly right: Expr;
     }
@@ -181,14 +181,14 @@ export type Expr =
   /** A Bag's least key, `undefined` when it is empty. */
   | {
       readonly op: "min";
-      readonly order: "number" | "instant" | "date";
+      readonly order: "number" | "date";
       readonly collection: Expr;
       readonly name: string;
       readonly body: Expr;
     }
   | {
       readonly op: "max";
-      readonly order: "number" | "instant" | "date";
+      readonly order: "number" | "date";
       readonly collection: Expr;
       readonly name: string;
       readonly body: Expr;
@@ -201,7 +201,7 @@ export type Expr =
   /** A Bag's values in groups of equal key, in ascending key order. */
   | {
       readonly op: "sortedBy";
-      readonly order: "number" | "instant" | "date";
+      readonly order: "number" | "date";
       readonly collection: Expr;
       readonly name: string;
       readonly body: Expr;
@@ -218,10 +218,7 @@ export type Expr =
       readonly array: Expr;
       readonly value: Expr;
     }
-  /**
-   * A template literal: each part as a string, as JS writes a string, number, boolean, null or undefined, joined. An
-   * instant or date is its JSON text, which is what its `toString` writes.
-   */
+  /** A template literal: each part as a string, as JS writes a string, number, boolean, null or undefined, joined. */
   | {
       readonly op: "format";
       readonly parts: readonly Expr[];
@@ -239,11 +236,11 @@ export type Expr =
       readonly left: Expr;
       readonly right: Expr;
     }
-  /** `instant.add(...)` of a duration of `ms` milliseconds, which throws outside the range of instants. */
+  /** `addDays(date, days)`: the date label `days` days after `date`, which throws outside years 0000 through 9999. */
   | {
-      readonly op: "timeAdd";
-      readonly instant: Expr;
-      readonly ms: Expr;
+      readonly op: "addDays";
+      readonly date: Expr;
+      readonly days: Expr;
     }
   /** `emit(event, payload)` of an event that the command lists. */
   | {

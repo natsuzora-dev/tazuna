@@ -1,5 +1,4 @@
 import type { Bag } from "../data/bag.ts";
-import type { Delay } from "../data/datetime.ts";
 import { InternalError } from "../data/internalError.ts";
 import type { Schema } from "../data/schema.generated.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
@@ -155,8 +154,8 @@ export interface ServiceDefinition {
 }
 
 export interface Now {
-  /** The time of the message in progress. */
-  readonly now: Temporal.Instant;
+  /** The time of the message in progress, in milliseconds since the epoch. */
+  readonly now: number;
 }
 
 /** The function that creates a new key. The implementation decides the key's form. */
@@ -231,8 +230,8 @@ export interface TransitionSpec {
 }
 
 interface DeadlineSpec {
-  readonly delay?: Delay;
-  readonly at?: (args: unknown) => Temporal.Instant;
+  readonly delay?: number;
+  readonly at?: (args: unknown) => number;
   readonly onFired: readonly TransitionSpec[];
 }
 

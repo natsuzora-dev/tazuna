@@ -1,8 +1,8 @@
-import { datetime, emit, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { emit, instant, parseInstant, service, singleEntity } from "@natsuzora-dev/tazuna";
 
 export const Setting = singleEntity({
   description: "When the waiter pongs",
-  fields: { due: datetime.nullable().default(null) },
+  fields: { due: instant.nullable().default(null) },
 });
 
 export const { automation, command, machine, event, updateEvent, contract, given, scenario } = service({
@@ -19,7 +19,7 @@ export const ponged = event({});
 export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
 
 export const setDue = command({ emits: [dueChanged, dueSet] }).decide(() => [
-  emit(dueChanged, { due: Temporal.Instant.from("2026-10-24T00:00:00Z") }),
+  emit(dueChanged, { due: parseInstant("2026-10-24T00:00:00Z") }),
   emit(dueSet, {}),
 ]);
 
@@ -39,7 +39,7 @@ export const waiter = machine({
       on: { dueChanged: [{ target: "waiting", reenter: true }] },
       after: {
         due: {
-          at: ({ records }) => records.Setting.due ?? Temporal.Instant.from("2099-01-01T00:00:00Z"),
+          at: ({ records }) => records.Setting.due ?? parseInstant("2099-01-01T00:00:00Z"),
           onFired: [{ target: "ponging" }],
         },
       },

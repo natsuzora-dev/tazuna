@@ -89,7 +89,7 @@ export type PayloadShape<Ev extends AnyEvent> =
           ? S
           : never;
 
-/** A payload in trace form: datetime and date values are strings, also in nested fields. */
+/** A payload in trace form: each codec's value encoded, also in nested fields. */
 export type EncodedPayload<Ev extends AnyEvent> = z.input<
   z.ZodObject<{ -readonly [K in keyof PayloadShape<Ev>]: PayloadShape<Ev>[K] }>
 >;

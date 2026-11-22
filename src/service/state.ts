@@ -114,7 +114,7 @@ export interface Instance {
   context: Fields;
   readonly input: Fields;
   /** The active states and their entry times, in entry order. */
-  readonly entered: Map<string, Temporal.Instant>;
+  readonly entered: Map<string, number>;
   /** For each parent, the children that were active when the parent last exited. */
   readonly lastChildren: Map<string, string[]>;
   /** Whether the instance entered a root final state and stopped. */
@@ -146,7 +146,7 @@ export interface Chosen {
 
 /** An `after` deadline of an active state, its time fixed when the state was entered. */
 export interface Deadline {
-  readonly time: Temporal.Instant;
+  readonly time: number;
   readonly machine: InstanceId;
   readonly state: string;
   readonly name: string;
@@ -185,13 +185,11 @@ interface Queued {
 
 /** Lean's Tie: the deadlines due at one time, or the messages that one line delivers, the first in step `first`. */
 export type Tie =
-  | { readonly kind: "deadlines"; readonly time: Temporal.Instant }
+  | { readonly kind: "deadlines"; readonly time: number }
   | { readonly kind: "arrivals"; readonly first: number };
 
 export const sameTie = (a: Tie, b: Tie): boolean =>
-  a.kind === "deadlines"
-    ? b.kind === "deadlines" && a.time.equals(b.time)
-    : b.kind === "arrivals" && a.first === b.first;
+  a.kind === "deadlines" ? b.kind === "deadlines" && a.time === b.time : b.kind === "arrivals" && a.first === b.first;
 
 /**
  * Lean's StepOrigin: what began a step. A root step has no cause: an input's first step, or a screen's settling. A
@@ -270,7 +268,7 @@ interface Process {
  *   uses.
  */
 export interface State extends Durable, Process {
-  now: Temporal.Instant;
+  now: number;
   /** The entries of the current input's `stepOrder` that the internal queue has not used yet. */
   stepOrder: readonly StepName[];
   serial: number;
@@ -305,7 +303,7 @@ export function newState(st: Service): State {
     createdEntities: [],
     service: st.service,
     ...newProcess(),
-    now: Temporal.Instant.fromEpochMilliseconds(0),
+    now: 0,
     stepOrder: [],
     serial: 0,
     turn: 0,
@@ -402,7 +400,7 @@ export function write(s: State, line: UnwrittenLine): LineId {
   const name = idName(s.service, line);
   const id = lineId(s, line.id, name);
   s.lineCounts.set(name, (s.lineCounts.get(name) ?? 0) + 1);
-  s.lines.push({ time: s.now.toString(), ...line, id });
+  s.lines.push({ time: s.now, ...line, id });
   return id;
 }
 

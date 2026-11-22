@@ -127,9 +127,7 @@ function instanceValue(st: Service, deadlines: readonly Deadline[], i: Instance,
         }),
     ),
     deadlines: canonicalOrder(
-      deadlines
-        .filter((d) => d.machine === i.id)
-        .map((d) => ({ state: d.state, name: d.name, time: d.time.toString() })),
+      deadlines.filter((d) => d.machine === i.id).map((d) => ({ state: d.state, name: d.name, time: d.time })),
     ),
   };
 }

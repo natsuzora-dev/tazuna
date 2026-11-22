@@ -1,2 +1,2 @@
-{"kind":"Malformed.writtenCreatedKey","definition":null,"data":{"key":"todo/Task-1","entity":{"service":"todo","name":"Task"}},"location":{"file":"todo/scenarios.ts","line":3},"scenario":{"service":"todo","name":"givenCreatedKey"}}
-{"kind":"Malformed.writtenCreatedKey","definition":null,"data":{"key":"todo/Task-2","entity":{"service":"todo","name":"Task"}},"location":{"file":"todo/scenarios.ts","line":20},"scenario":{"service":"todo","name":"sentCreatedKey"}}
+{"kind":"Malformed.writtenCreatedKey","definition":null,"data":{"key":"todo/Task-1","entity":{"service":"todo","name":"Task"}},"location":{"file":"todo/scenarios.ts","line":4},"scenario":{"service":"todo","name":"givenCreatedKey"}}
+{"kind":"Malformed.writtenCreatedKey","definition":null,"data":{"key":"todo/Task-2","entity":{"service":"todo","name":"Task"}},"location":{"file":"todo/scenarios.ts","line":21},"scenario":{"service":"todo","name":"sentCreatedKey"}}

@@ -1,6 +1,6 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{},"resultOf":"addTask#1"}
-{"time":"2026-10-25T01:30:00Z","dir":"in","type":"time","id":"time#1"}
-{"time":"2026-10-25T01:30:00Z","dir":"in","type":"restart","id":"restart#1"}
-{"time":"2026-10-25T03:00:00Z","dir":"in","type":"time","id":"time#2"}
+{"time":1792890000000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{},"resultOf":"addTask#1"}
+{"time":1792891800000,"dir":"in","type":"time","id":"time#1"}
+{"time":1792891800000,"dir":"in","type":"restart","id":"restart#1"}
+{"time":1792897200000,"dir":"in","type":"time","id":"time#2"}

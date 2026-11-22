@@ -1,3 +1,4 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { screen } from "./data.ts";
 
@@ -13,8 +14,7 @@ export const listScreen = screen({
       always: [
         {
           guard: {
-            atEleven: ({ now }) =>
-              Temporal.Instant.compare(now, Temporal.Instant.from("2026-10-25T11:00:00+09:00")) >= 0,
+            atEleven: ({ now }) => now >= parseInstant("2026-10-25T11:00:00+09:00"),
           },
           target: "closed",
         },

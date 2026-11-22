@@ -49,7 +49,7 @@ def traceLineOf (service : String) (line : Line) (after : List LineId) (created 
     | .time => .time .in id
     | .restart => .restart .in id
     | .operation screen control nth payload => .operation dir id (operationName (name screen) control) nth payload
-  { time := { text := renderTime line.time, time := line.time }
+  { time := line.time
     body
     after := if after.isEmpty then none else some (after.map (·.text))
     created := if created.isEmpty then none else some created }

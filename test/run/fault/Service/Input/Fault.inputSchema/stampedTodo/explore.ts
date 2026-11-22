@@ -1,4 +1,4 @@
-import { datetime, domain, explore } from "@natsuzora-dev/tazuna";
+import { domain, explore, instant, parseInstant } from "@natsuzora-dev/tazuna";
 import { addTask, setReminder } from "./todo.ts";
 
 export const stampedTodoExplore = explore({
@@ -7,6 +7,6 @@ export const stampedTodoExplore = explore({
   domains: [
     domain(addTask.input.taskId, ["task-1"]),
     domain(setReminder.input.taskId, ["task-1"]),
-    domain(datetime, ["2026-10-25T00:00:00Z"]),
+    domain(instant, [parseInstant("2026-10-25T00:00:00Z")]),
   ],
 });

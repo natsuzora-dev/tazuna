@@ -1,4 +1,4 @@
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.holiday#1","name":"calendar.holiday","input":{"day":"2026-10-25T00:00:00Z"}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.holiday#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"startOfDay"}}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.holiday#2","name":"calendar.holiday","input":{"day":"2026-10-25T01:00:00Z"}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"calendar/answer#2","to":"calendar.holiday#2","answer":{"result":"fulfilled","output":{"isHoliday":true}}}
+{"time":1792886400000,"dir":"out","type":"query","id":"calendar.holiday#1","name":"calendar.holiday","input":{"day":1792886400000}}
+{"time":1792886400000,"dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.holiday#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"startOfDay"}}}
+{"time":1792886400000,"dir":"out","type":"query","id":"calendar.holiday#2","name":"calendar.holiday","input":{"day":1792890000000}}
+{"time":1792886400000,"dir":"in","type":"answer","id":"calendar/answer#2","to":"calendar.holiday#2","answer":{"result":"fulfilled","output":{"isHoliday":true}}}

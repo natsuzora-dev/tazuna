@@ -8,7 +8,6 @@ import {
   type TanstackQueryOperationContext,
 } from "@orpc/tanstack-query";
 import type { router } from "./router.ts";
-import { customJsonSerializers } from "./serializers.ts";
 
 interface ClientContext extends ClientRetryPluginContext, TanstackQueryOperationContext {
   readonly idempotencyKey?: string;
@@ -26,7 +25,6 @@ const link = new RPCLink<ClientContext>({
         ? next({ ...options, context: { ...options.context, idempotencyKey: crypto.randomUUID() } })
         : next(),
   ],
-  customJsonSerializers,
   plugins: [
     new ClientRetryPlugin({
       default: {

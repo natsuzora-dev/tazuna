@@ -64,7 +64,7 @@ const ops = [
   "format",
   "arith",
   "decimal",
-  "timeAdd",
+  "addDays",
 ] as const satisfies readonly Expr["op"][];
 const listsEveryOp: [Exclude<Expr["op"], (typeof ops)[number]>] extends [never] ? true : false = true;
 
@@ -83,13 +83,12 @@ const isEmit = (value: unknown): value is { readonly payload: unknown } =>
   value !== null && typeof value === "object" && (value as { readonly kind?: unknown }).kind === "emit";
 
 /**
- * A value that a TS function returned, as JSON.stringify writes it: a Bag as its values, an instant or date as its text,
- * and an undefined field left out.
+ * A value that a TS function returned, as JSON.stringify writes it: a Bag as its values, and an undefined field left
+ * out.
  */
 function jsonOf(value: unknown): Json | undefined {
   const values = bagValues(value);
   if (values !== undefined) return values.map((v) => jsonOf(v) ?? null);
-  if (value instanceof Temporal.Instant || value instanceof Temporal.PlainDate) return value.toString();
   if (isEmit(value)) return { kind: "emit", payload: jsonOf(value.payload) ?? null };
   if (Array.isArray(value)) return value.map((v) => jsonOf(v) ?? null);
   if (value !== null && typeof value === "object")

@@ -1,4 +1,4 @@
-import { datetime, emit, service } from "@natsuzora-dev/tazuna";
+import { emit, instant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, machine, event, contract, given, scenario } = service({
@@ -8,7 +8,7 @@ export const { command, machine, event, contract, given, scenario } = service({
 
 export const taskAdded = event({ payload: { taskId: z.string() } });
 export const taskCompleted = event({ payload: { taskId: z.string() } });
-export const dayNoted = event({ payload: { day: datetime } });
+export const dayNoted = event({ payload: { day: instant } });
 
 export const addTask = command({
   input: { taskId: z.string() },
@@ -21,7 +21,7 @@ export const completeTask = command({
 }).decide(({ input }) => [emit(taskCompleted, { taskId: input.taskId })]);
 
 export const noteDay = command({
-  input: { day: datetime },
+  input: { day: instant },
   emits: [dayNoted],
 }).decide(({ input }) => [emit(dayNoted, { day: input.day })]);
 

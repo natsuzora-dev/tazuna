@@ -1,4 +1,4 @@
-import { constants, datetime, service } from "@natsuzora-dev/tazuna";
+import { constants, instant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { event, contract } = service({ name: "todo", description: "Keep the tasks" });
@@ -12,8 +12,8 @@ const fahrenheit = z.codec(z.number(), z.number(), {
 export const readingTaken = event({
   payload: {
     kelvin: z.union([celsius, fahrenheit]),
-    due: z.union([datetime, z.null()]),
-    deep: z.union([z.object({ at: datetime }), z.object({ count: z.number() })]),
+    due: z.union([instant, z.null()]),
+    deep: z.union([z.object({ at: instant }), z.object({ count: z.number() })]),
     nested: z.discriminatedUnion("unit", [
       z.object({ unit: z.literal("celsius"), kelvin: z.union([celsius, z.null()]) }),
       z.object({ unit: z.literal("none") }),

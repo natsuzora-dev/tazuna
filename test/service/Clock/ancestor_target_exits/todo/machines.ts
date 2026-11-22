@@ -1,3 +1,4 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { machine, remind, taskAdded } from "./todo.ts";
 
@@ -13,13 +14,11 @@ export const reminder = machine({
   states: {
     idle: { on: { taskAdded: [{ target: "active" }] } },
     waiting: {
-      after: { hour: { delay: { hours: 1 }, onFired: [{ target: "reminding" }] } },
+      after: { hour: { delay: 3_600_000, onFired: [{ target: "reminding" }] } },
       always: [
         {
           guard: {
-            atEleven: ({ now, context }) =>
-              !context.restarted &&
-              Temporal.Instant.compare(now, Temporal.Instant.from("2026-10-25T11:00:00+09:00")) >= 0,
+            atEleven: ({ now, context }) => !context.restarted && now >= parseInstant("2026-10-25T11:00:00+09:00"),
           },
           target: "active",
           assign: { restarted: () => true },

@@ -374,11 +374,11 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       if w.leftInFlight.any (·.2 == k) then return w.report (.repeatedInFlight i msg.describe)
       pure { w with leftInFlight := w.leftInFlight ++ [(i, k)] }
   | .at time => do
-    if time.time ≤ w.now then return w.report (.notLater i time.time w.now)
+    if time ≤ w.now then return w.report (.notLater i time w.now)
     let w ← w.services.foldlM (init := w) fun w (service, _) =>
       if w.stopped then pure w else
-      w.act fsOf (.line i) service (fireTo time.time)
-    pure { w with now := time.time }
+      w.act fsOf (.line i) service (fireTo time)
+    pure { w with now := time }
   | .restart => w.act fsOf (.line i) own restart
 
 /--

@@ -35,7 +35,7 @@ import {
   bag,
   constants,
   created,
-  datetime,
+  date,
   emit,
   emitted,
   endOf,
@@ -45,9 +45,11 @@ import {
   externalService,
   fulfilled,
   type InputOf,
+  instant,
   type KindOf,
   none,
   type OutputOf,
+  parseInstant,
   type RecordsOf,
   type RequestLine,
   type RowOf,
@@ -114,13 +116,13 @@ deleteEvent({ entity: Settings });
 // @ts-expect-error an event's entity belongs to the emitting service's entities
 createEvent({ entity: Note });
 
-const now = Temporal.Now.instant();
+const now = Date.UTC(2026, 9, 25);
 // @ts-expect-error an update event's payload has every field in writes
 emit(dueChanged, { id: "task-1" });
-const tomorrow = now.add({ hours: 24 });
+const tomorrow = now + 86_400_000;
 emit(dueChanged, { id: "task-1", dueAt: tomorrow, remindAt: tomorrow, reminderDecision: "decided" });
 
-// @ts-expect-error a payload emitted by decide holds times as Temporal.Instant
+// @ts-expect-error a payload holds an instant as milliseconds
 emit(dueChanged, { id: "task-1", dueAt: "2026-10-25T10:00:00+09:00", remindAt: null, reminderDecision: "pending" });
 
 command({ emits: [taskCompletedRecorded] }).decide(() => [
@@ -165,13 +167,13 @@ query({ output: { n: z.number() } }).resolve(({ records }) => {
   records.Task.sortedBy((t) => t.title);
   // @ts-expect-error a nullable value is not a sort key
   records.Task.min((t) => t.dueAt);
-  const due: Bag<Temporal.Instant> = records.Task.map((t) => t.dueAt).filter((d) => d !== null);
+  const due: Bag<number> = records.Task.map((t) => t.dueAt).filter((d) => d !== null);
   return { n: due.size };
 });
 
 // A bag output takes a Bag, and a sortedBy output takes Runs; an array output, whose order means something, takes no Bag.
 query({ output: { ids: bag(ref(Task)) } }).resolve(({ records }) => ({ ids: records.Task.map((t) => t.id) }));
-query({ output: { tasks: sortedBy(z.object({ id: ref(Task), createdAt: datetime }), "createdAt") } }).resolve(
+query({ output: { tasks: sortedBy(z.object({ id: ref(Task), createdAt: instant }), "createdAt") } }).resolve(
   ({ records }) => ({
     tasks: records.Task.map((t) => ({ id: t.id, createdAt: t.createdAt })).sortedBy((t) => t.createdAt),
   }),
@@ -181,7 +183,7 @@ query({ output: { ids: z.array(ref(Task)) } }).resolve(({ records }) => ({ ids: 
 
 // A bag, set or sortedBy value that spec code receives is a Bag or Runs, and spec code may give it back as it is.
 query({
-  input: { ids: set(ref(Task)), tasks: sortedBy(z.object({ id: ref(Task), createdAt: datetime }), "createdAt") },
+  input: { ids: set(ref(Task)), tasks: sortedBy(z.object({ id: ref(Task), createdAt: instant }), "createdAt") },
   output: { ids: bag(ref(Task)), earliest: bag(ref(Task)) },
   ensures: {
     // @ts-expect-error a received bag has no length
@@ -377,9 +379,9 @@ automation({ receives: { dueChanged }, commands: { setReminder } }).send({
 });
 
 const dueTasks = query({
-  input: { from: datetime, until: datetime },
+  input: { from: instant, until: instant },
   output: {},
-  requires: { fromBeforeUntil: ({ input }) => Temporal.Instant.compare(input.from, input.until) < 0 },
+  requires: { fromBeforeUntil: ({ input }) => input.from < input.until },
 }).resolve(() => ({}));
 
 machine({
@@ -551,8 +553,8 @@ machine({
 
 const dueScreen = screen({
   description: "",
-  input: { from: datetime, until: datetime },
-  output: { choice: z.object({ dueAt: datetime }).nullable() },
+  input: { from: instant, until: instant },
+  output: { choice: z.object({ dueAt: instant }).nullable() },
   initial: "closed",
   states: { closed: { type: "final" } },
 }).chart({ resolve: () => ({ choice: null }) });
@@ -685,42 +687,31 @@ machine({ description: "", initial: "a", states: { a: {}, b: {} } }).chart({
   states: {
     a: {
       after: {
-        minute: { delay: { minutes: 1 }, onFired: [{ target: "b" }] },
+        minute: { delay: 60_000, onFired: [{ target: "b" }] },
         created: {
-          at: ({ records }) =>
-            records.Task.min((t) => t.createdAt)?.add({ minutes: 1 }) ?? Temporal.Instant.fromEpochMilliseconds(0),
+          at: ({ records }) => (records.Task.min((t) => t.createdAt) ?? 0) + 60_000,
           onFired: [{ target: "b" }],
         },
         // @ts-expect-error at does not read now; a fixed length from now is a delay
-        fromNow: { at: ({ now }) => now.add({ minutes: 1 }), onFired: [{ target: "b" }] },
+        fromNow: { at: ({ now }) => now + 60_000, onFired: [{ target: "b" }] },
         // @ts-expect-error delay and at together
-        both: {
-          delay: { minutes: 1 },
-          at: () => Temporal.Instant.fromEpochMilliseconds(0),
-          onFired: [{ target: "b" }],
-        },
+        both: { delay: 60_000, at: () => 0, onFired: [{ target: "b" }] },
         // @ts-expect-error neither delay nor at
         neither: { onFired: [{ target: "b" }] },
         // @ts-expect-error no onFired
-        noTransitions: { delay: { minutes: 1 } },
+        noTransitions: { delay: 60_000 },
       },
     },
   },
 });
 
-// A delay is written in hours, minutes, seconds and milliseconds, or is a Temporal.Duration.
+// A delay is a number of milliseconds, such as a duration constant.
 machine({ description: "", initial: "a", states: { a: {}, b: {} } }).chart({
   states: {
     a: {
       after: {
-        units: { delay: { hours: 1, minutes: 2, seconds: 3, milliseconds: 4 }, onFired: [{ target: "b" }] },
-        constant: { delay: Temporal.Duration.from("PT5S"), onFired: [{ target: "b" }] },
-        // @ts-expect-error a day has no fixed length for an instant
-        day: { delay: { days: 1 }, onFired: [{ target: "b" }] },
-        // @ts-expect-error a date unit beside time units
-        weekAndHour: { delay: { weeks: 1, hours: 1 }, onFired: [{ target: "b" }] },
-        // @ts-expect-error the run counts whole milliseconds
-        microsecond: { delay: { microseconds: 1 }, onFired: [{ target: "b" }] },
+        // @ts-expect-error a delay is milliseconds, not units
+        units: { delay: { hours: 1 }, onFired: [{ target: "b" }] },
       },
     },
   },
@@ -1057,14 +1048,14 @@ contract({ limits: { limit: 10 } });
 // A bag constant stays an array, since an implementation reads constants too.
 void constants({ service: "types", schema: z.object({ tags: bag(z.string()) }), values: { tags: ["a"] } }).tags.length;
 
-// A sortedBy key is a number, date or datetime field.
-sortedBy(z.strictObject({ n: z.int(), at: datetime }), "at");
+// A sortedBy key is a number or date field.
+sortedBy(z.strictObject({ n: z.int(), at: instant, on: date }), "on");
 
 // @ts-expect-error a sortedBy key is not a string field, since string order differs by language
 sortedBy(z.strictObject({ title: z.string() }), "title");
 
 const cents = z.codec(z.string(), z.int(), { decode: Number, encode: String });
-// @ts-expect-error a sortedBy key has no codec but tazuna's datetime and date, since a codec may decode to another order
+// @ts-expect-error a sortedBy key has no codec, since a codec may decode to another order
 sortedBy(z.strictObject({ price: cents }), "price");
 
 // Map copy expressions read key, the copy context and the instance context; assign writes to each.
@@ -1079,7 +1070,7 @@ machine({
     reminding: {
       type: "map",
       key: { id: ref(Task) },
-      context: { remindAt: datetime.nullable().default(null) },
+      context: { remindAt: instant.nullable().default(null) },
       initial: "waiting",
       states: { waiting: {}, setting: {} },
     },
@@ -1141,9 +1132,9 @@ machine({ description: "", initial: "reminding", states: { reminding } }).chart(
 // @ts-expect-error copy context field names do not clash with instance context field names
 machine({
   description: "",
-  context: { remindAt: datetime.nullable().default(null) },
+  context: { remindAt: instant.nullable().default(null) },
   initial: "reminding",
-  states: { reminding: { ...reminding, context: { remindAt: datetime.nullable().default(null) } } },
+  states: { reminding: { ...reminding, context: { remindAt: instant.nullable().default(null) } } },
 });
 // @ts-expect-error a map state has no map state below it
 machine({
@@ -1232,9 +1223,9 @@ rowsScreen.chart({
 // @ts-expect-error screen copy context field names do not clash with screen context field names
 screen({
   description: "",
-  context: { remindAt: datetime.nullable().default(null) },
+  context: { remindAt: instant.nullable().default(null) },
   initial: "reminding",
-  states: { reminding: { ...reminding, context: { remindAt: datetime.nullable().default(null) } } },
+  states: { reminding: { ...reminding, context: { remindAt: instant.nullable().default(null) } } },
 });
 
 // A unit is a sanctioned ECMA-402 single unit or two of them joined by -per-.
@@ -1319,7 +1310,7 @@ externalService({ name: "a/b", description: "" });
 scenarioOfScreens({
   description: "types",
   given: {
-    start: "2026-10-25T10:00:00+09:00",
+    start: parseInstant("2026-10-25T10:00:00+09:00"),
     records: {},
     peers: [external(calendarPeer), skip(devicePeer, "the screens never reach the device")],
   },
@@ -1334,7 +1325,7 @@ scenarioOfScreens({
 scenarioOfScreens({
   description: "types",
   given: {
-    start: "2026-10-25T10:00:00+09:00",
+    start: parseInstant("2026-10-25T10:00:00+09:00"),
     records: {},
     // @ts-expect-error the own service is no peer (unknownPeer)
     peers: [skip(screensPeer, "the own service")],
@@ -1347,7 +1338,7 @@ scenarioOfScreens({
 scenarioOfScreens({
   description: "types",
   given: {
-    start: "2026-10-25T10:00:00+09:00",
+    start: parseInstant("2026-10-25T10:00:00+09:00"),
     records: {},
     peers: [
       run(todoPeer, { Task: [], Settings: { shouldRemind: true } }),
@@ -1380,7 +1371,7 @@ scenarioOfScreens({
 scenarioOfScreens({
   description: "types",
   given: {
-    start: "2026-10-25T10:00:00+09:00",
+    start: parseInstant("2026-10-25T10:00:00+09:00"),
     records: {},
     peers: [run(todoPeer, { Task: [], Settings: { shouldRemind: true } }), external(calendarPeer)],
   },
@@ -1390,11 +1381,11 @@ scenarioOfScreens({
     const look = w.user.look(list);
     const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
     const asking = adding.request(calendarPeer.nextBusinessDay);
-    w.net.deliver(adding.request(calendarPeer.nextBusinessDay, { from: "2026-10-25" }));
+    w.net.deliver(adding.request(calendarPeer.nextBusinessDay, { after: parseInstant("2026-10-25T10:00:00+09:00") }));
     // @ts-expect-error a pick has fields of the input only
-    void adding.request(calendarPeer.nextBusinessDay, { input: { from: "2026-10-25" } });
+    void adding.request(calendarPeer.nextBusinessDay, { input: { after: parseInstant("2026-10-25T10:00:00+09:00") } });
     // @ts-expect-error the client reaches running services only, not an external peer
-    w.client.call(calendarPeer.nextBusinessDay, { from: "2026-10-25" });
+    w.client.call(calendarPeer.nextBusinessDay, { after: parseInstant("2026-10-25T10:00:00+09:00") });
     // @ts-expect-error a client line reaches its receiver directly; no message is delivered
     w.net.deliver(adding);
     // @ts-expect-error only a request can fail
@@ -1428,7 +1419,7 @@ scenarioOfScreens({
     emitted(look, []),
     // @ts-expect-error endOf takes a subscription, not a command
     requested(adding, [endOf(adding.request(calendarPeer.nextBusinessDay))]),
-    requested(adding, [requestOf(calendarPeer.nextBusinessDay, { from: "2026-10-25" })]),
+    requested(adding, [requestOf(calendarPeer.nextBusinessDay, { after: parseInstant("2026-10-25T10:00:00+09:00") })]),
     // @ts-expect-error Then states requests only to the peers that Given lists
     requested(adding, [requestOf(devicePeer.requestNotificationPermission, {})]),
     // @ts-expect-error Then states only the own service's events
@@ -1460,7 +1451,7 @@ scenarioOfScreens({
 scenarioOfTodo({
   description: "types",
   given: {
-    start: "2026-10-25T10:00:00+09:00",
+    start: parseInstant("2026-10-25T10:00:00+09:00"),
     records: { Task: [], Settings: { shouldRemind: true } },
     peers: [external(calendarPeer), external(devicePeer)],
   },
@@ -1479,16 +1470,20 @@ scenarioOfTodo({
 
 // A shared Given is checked where it is written, and its steps place lines with its services and the own service.
 const withTodo = givenOfScreens({
-  start: "2026-10-25T10:00:00+09:00",
+  start: parseInstant("2026-10-25T10:00:00+09:00"),
   records: {},
   peers: [run(todoPeer, { Task: [], Settings: { shouldRemind: true } }), external(calendarPeer)],
 });
-// @ts-expect-error a start is an ISO datetime with an offset
+// @ts-expect-error a start is milliseconds since the epoch
 givenOfScreens({ start: "yesterday", records: {}, peers: [] });
-// @ts-expect-error the own service is no peer (unknownPeer)
-givenOfScreens({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [skip(screensPeer, "the own service")] });
 givenOfScreens({
-  start: "2026-10-25T10:00:00+09:00",
+  start: parseInstant("2026-10-25T10:00:00+09:00"),
+  records: {},
+  // @ts-expect-error the own service is no peer (unknownPeer)
+  peers: [skip(screensPeer, "the own service")],
+});
+givenOfScreens({
+  start: parseInstant("2026-10-25T10:00:00+09:00"),
   records: {},
   // @ts-expect-error a service is a peer once, in one role
   peers: [external(calendarPeer), skip(calendarPeer, "listed twice")],

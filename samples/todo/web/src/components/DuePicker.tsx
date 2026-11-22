@@ -1,21 +1,16 @@
 import { todo } from "@todo/spec/todo";
 import { useState } from "react";
-import { formatDateTime, timeZone } from "../time.ts";
+import { formatDateTime, timeZone, zoned } from "../time.ts";
 
-const localDateTime = (at: Temporal.Instant) =>
-  at.toZonedDateTimeISO(timeZone).toPlainDateTime().toString({ smallestUnit: "minute" });
+const localDateTime = (at: number) => zoned(at).toPlainDateTime().toString({ smallestUnit: "minute" });
 
-const untilOf = (now: Temporal.Instant) =>
-  now.toZonedDateTimeISO(timeZone).add(todo.todoConstants.dueAheadLimit).toInstant();
+const untilOf = (now: number) => now + todo.todoConstants.dueAheadLimit;
 
-function suggestionOf(now: Temporal.Instant): Temporal.Instant {
-  const nextHour = now
-    .toZonedDateTimeISO(timeZone)
+function suggestionOf(now: number): number {
+  const nextHour = zoned(now)
     .round({ smallestUnit: "hour", roundingMode: "floor" })
-    .add({ hours: 1 })
-    .toInstant();
-  const until = untilOf(now);
-  return Temporal.Instant.compare(nextHour, until) <= 0 ? nextHour : until;
+    .add({ hours: 1 }).epochMilliseconds;
+  return Math.min(nextHour, untilOf(now));
 }
 
 export function DuePicker({
@@ -25,21 +20,20 @@ export function DuePicker({
   onCollapse,
 }: {
   id: string;
-  dueAt: Temporal.Instant | null;
-  onChoose: (dueAt: Temporal.Instant | null) => void;
+  dueAt: number | null;
+  onChoose: (dueAt: number | null) => void;
   onCollapse: () => void;
 }) {
-  const [openedAt] = useState(() => Temporal.Now.instant());
+  const [openedAt] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
 
   const choose = (value: string) => {
     if (dueAt !== null && value === localDateTime(dueAt)) return onCollapse();
-    const chosen = Temporal.PlainDateTime.from(value).toZonedDateTime(timeZone).toInstant();
-    const now = Temporal.Now.instant();
+    const chosen = Temporal.PlainDateTime.from(value).toZonedDateTime(timeZone).epochMilliseconds;
+    const now = Date.now();
     const until = untilOf(now);
-    if (Temporal.Instant.compare(chosen, now) <= 0) setError("Choose a time in the future");
-    else if (Temporal.Instant.compare(chosen, until) > 0)
-      setError(`Choose a due date on or before ${formatDateTime(until, now)}`);
+    if (chosen <= now) setError("Choose a time in the future");
+    else if (chosen > until) setError(`Choose a due date on or before ${formatDateTime(until, now)}`);
     else onChoose(chosen);
   };
 

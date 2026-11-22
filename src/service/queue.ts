@@ -37,19 +37,19 @@ function endMessage(r: Processing): void {
 }
 
 /** Lean's fireDue: fires the deadlines due by `to`, each tie chosen by chooseDeadline. */
-export function fireDue(r: Processing, to: Temporal.Instant): void {
+export function fireDue(r: Processing, to: number): void {
   const s = r.state;
   let fired = 0;
-  let tie: Temporal.Instant | undefined;
+  let tie: number | undefined;
   for (let e = earliestDeadline(s.deadlines, to); e !== undefined; e = earliestDeadline(s.deadlines, to)) {
     if (fired === limits.dueDeadlines)
       report(s, { kind: "Fault.exceededDueDeadlines", definition: null, data: { limit: limits.dueDeadlines } });
     fired += 1;
     const { time } = e;
-    const due = s.deadlines.filter((t) => t.time.equals(time));
-    tie = due.length > 1 || tie?.equals(time) === true ? time : undefined;
+    const due = s.deadlines.filter((t) => t.time === time);
+    tie = due.length > 1 || tie === time ? time : undefined;
     const deadline = chooseDeadline(r, e, due, tie !== undefined);
-    if (Temporal.Instant.compare(deadline.time, s.now) > 0) {
+    if (deadline.time > s.now) {
       s.now = deadline.time;
       r.note.wroteNow();
     }

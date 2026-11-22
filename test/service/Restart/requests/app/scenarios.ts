@@ -1,8 +1,8 @@
-import { accepted, external } from "@natsuzora-dev/tazuna";
+import { accepted, external, parseInstant } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { given, scenario } from "./app.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(device)] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [external(device)] });
 
 export const firstRestart = scenario({
   description:
@@ -28,7 +28,7 @@ export const requestsDiscarded = scenario({
     const first = w.startup.request(device.requestPermission);
     w.net.deliver(first);
     w.peer.device.leaveUnanswered(first);
-    w.clock.at("2026-10-25T10:05:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:05:00+09:00"));
     const second = w.host.restart().request(device.requestPermission);
     w.net.deliver(second);
     w.net.deliver(w.peer.device.answer(second, accepted()));

@@ -45,7 +45,7 @@ export function ordered(lines: readonly Line[], steps: readonly StepInfo[], a: n
   if (channel === undefined || other === undefined || !sameJson(channel, other)) return false;
   if (la.type !== "event" || la.dir !== "out" || lb.type !== "event" || lb.dir !== "out") return true;
   const [ea, eb] = [la.emitted, lb.emitted];
-  if (Temporal.Instant.compare(la.time, lb.time) < 0) return true;
+  if (la.time < lb.time) return true;
   return ea.step === eb.step ? ea.group !== eb.group : causedBy(steps, ea.step, eb.step);
 }
 

@@ -1,7 +1,7 @@
-import { emitted, eventOf, raw } from "@natsuzora-dev/tazuna";
+import { emitted, eventOf, parseInstant, raw } from "@natsuzora-dev/tazuna";
 import { addItem, given, itemAdded, scenario } from "./todo.ts";
 
-const arranged = given({ start: "2026-10-25T09:00:00+09:00", records: {}, peers: [] });
+const arranged = given({ start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [] });
 
 export const writtenAsIs = scenario({
   description:

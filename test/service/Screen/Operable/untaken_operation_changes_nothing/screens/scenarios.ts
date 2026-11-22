@@ -1,9 +1,9 @@
-import { accepted, external, fulfilled, type ProcessingLine } from "@natsuzora-dev/tazuna";
+import { accepted, external, fulfilled, type ProcessingLine, parseInstant } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { given, scenario } from "./data.ts";
 import { taskScreen } from "./taskScreen.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(todo)] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [external(todo)] });
 
 const deliverTaskSubscription = arranged.step((w) => w.net.deliver(w.startup.subscription(todo.task)));
 const deliverShown = arranged.step((w, isCompleted: boolean) =>

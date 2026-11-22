@@ -43,7 +43,7 @@ function messageText(entry: MessageEntry, l: Exclude<TraceLine, { type: "time" }
 }
 
 export const entryText = (entry: FlowEntry, l: TraceLine) =>
-  entry.type === "time" || l.type === "time" ? l.time : messageText(entry, l);
+  entry.type === "time" || l.type === "time" ? new Date(l.time).toISOString() : messageText(entry, l);
 
 interface Picking {
   readonly picked: number | null;
@@ -130,7 +130,7 @@ function Time({ data: { index, line } }: NodeProps<TimeNode>) {
   const { pressed, onClick } = usePick(index);
   return (
     <button type="button" className="time" aria-pressed={pressed} onClick={onClick}>
-      {line.time}
+      {new Date(line.time).toISOString()}
     </button>
   );
 }

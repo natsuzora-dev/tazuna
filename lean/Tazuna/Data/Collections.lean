@@ -12,7 +12,6 @@ namespace Tazuna.Data
 /-- The key that orders an element. Keys of different kinds compare equal. -/
 inductive SortKey where
   | num (mantissa : Int) (exponent : Nat)
-  | instant (ms : Int)
   | date (days : Int)
   | other
 deriving DecidableEq, Repr, Inhabited
@@ -20,17 +19,13 @@ deriving DecidableEq, Repr, Inhabited
 def SortKey.of : Value → SortKey
   | .num n => .num n.mantissa n.exponent
   | .str s =>
-    match parseTime s with
-    | .ok t => .instant t
-    | .error _ =>
-      match parseDate s with
-      | .ok d => .date d
-      | .error _ => .other
+    match parseDate? s with
+    | some d => .date d
+    | none => .other
   | _ => .other
 
 def SortKey.lt : SortKey → SortKey → Bool
   | .num m e, .num m' e' => decide (m * 10 ^ e' < m' * 10 ^ e)
-  | .instant a, .instant b => decide (a < b)
   | .date a, .date b => decide (a < b)
   | _, _ => false
 

@@ -1,4 +1,4 @@
-import { constants, datetime, service } from "@natsuzora-dev/tazuna";
+import { constants, instant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { event, contract } = service({ name: "todo", description: "Keep the tasks" });
@@ -15,7 +15,7 @@ const tree: z.ZodType<Tree> = z.object({
 
 export const taskAdded = event({
   payload: {
-    at: datetime,
+    at: instant,
     count: z.bigint(),
     tags: z.set(z.string()),
     owners: z.map(z.string(), z.string()),

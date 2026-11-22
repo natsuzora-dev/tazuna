@@ -1,3 +1,3 @@
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"command","id":"calendar.book#1","name":"calendar.book","input":{"day":"2026-10-25T01:00:00Z"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.book#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"event","id":"calendar/booked#1","name":"calendar.booked","payload":{"day":"2026-10-26T00:00:00Z"},"resultOf":"calendar.book#1"}
+{"time":1792890000000,"dir":"out","type":"command","id":"calendar.book#1","name":"calendar.book","input":{"day":1792890000000}}
+{"time":1792890000000,"dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.book#1","answer":{"result":"accepted"}}
+{"time":1792890000000,"dir":"in","type":"event","id":"calendar/booked#1","name":"calendar.booked","payload":{"day":1792972800000},"resultOf":"calendar.book#1"}

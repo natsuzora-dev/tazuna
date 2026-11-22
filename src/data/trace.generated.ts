@@ -50,7 +50,7 @@ export type LineId = z.infer<typeof lineId>;
 
 export const traceLine = z.discriminatedUnion("type", [
   z.object({
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
     dir: z.enum(["in", "out"]),
     type: z.literal("command"),
     id: z.string(),
@@ -60,7 +60,7 @@ export const traceLine = z.discriminatedUnion("type", [
     created: z.array(z.string()).exactOptional(),
   }),
   z.object({
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
     dir: z.enum(["in", "out"]),
     type: z.literal("query"),
     id: z.string(),
@@ -70,7 +70,7 @@ export const traceLine = z.discriminatedUnion("type", [
     created: z.array(z.string()).exactOptional(),
   }),
   z.object({
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
     dir: z.enum(["in", "out"]),
     type: z.literal("subscribe"),
     id: z.string(),
@@ -80,7 +80,7 @@ export const traceLine = z.discriminatedUnion("type", [
     created: z.array(z.string()).exactOptional(),
   }),
   z.object({
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
     dir: z.enum(["in", "out"]),
     type: z.literal("answer"),
     id: z.string(),
@@ -90,7 +90,7 @@ export const traceLine = z.discriminatedUnion("type", [
     created: z.array(z.string()).exactOptional(),
   }),
   z.object({
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
     dir: z.enum(["in", "out"]),
     type: z.literal("unsubscribe"),
     id: z.string(),
@@ -99,7 +99,7 @@ export const traceLine = z.discriminatedUnion("type", [
     created: z.array(z.string()).exactOptional(),
   }),
   z.object({
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
     dir: z.enum(["in", "out"]),
     type: z.literal("event"),
     id: z.string(),
@@ -114,7 +114,7 @@ export const traceLine = z.discriminatedUnion("type", [
    * more than one is open.
    */
   z.object({
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
     dir: z.enum(["in", "out"]),
     type: z.literal("operation"),
     id: z.string(),
@@ -125,7 +125,7 @@ export const traceLine = z.discriminatedUnion("type", [
     created: z.array(z.string()).exactOptional(),
   }),
   z.object({
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
     dir: z.enum(["in"]),
     type: z.literal("time"),
     id: z.string(),
@@ -133,7 +133,7 @@ export const traceLine = z.discriminatedUnion("type", [
     created: z.array(z.string()).exactOptional(),
   }),
   z.object({
-    time: z.iso.datetime({ offset: true }),
+    time: z.int(),
     dir: z.enum(["in"]),
     type: z.literal("restart"),
     id: z.string(),

@@ -57,9 +57,8 @@ inductive Illegal where
   -/
   | restoredHeld (definition : Spec.Ref) (state history : String)
   /--
-  The delay of the deadline `deadline` of `state` has a date unit, a part below a millisecond, or a value that Temporal
-  does not read, so the run cannot add it to an instant in milliseconds. `check` reports none exactly when every delay
-  has a length in milliseconds (`Checked.delaysExact`).
+  The delay of the deadline `deadline` of `state` is no safe integer, so the run cannot add it to an instant in
+  milliseconds. `check` reports none exactly when every delay is a safe integer (`Checked.delaysExact`).
   -/
   | inexactDelay (definition : Spec.Ref) (state deadline : String)
   /--
@@ -69,10 +68,9 @@ inductive Illegal where
   | negativeDelay (definition : Spec.Ref) (state deadline : String)
   /--
   The sortedBy array at `path` of the definition's schemas sorts by `key`, which is optional or has a default, so an
-  element from outside may leave it out and have no place in the order, or whose encoded value is no number, instant, or
-  date, or which has a codec other than tazuna's datetime and date, so the order of the encoded values, which tazuna
-  sorts by, may not be the order of the values. `check` reports none exactly when every sort key is required with no
-  default and encoded as one of these with no other codec (`Checked.sortKeysOrdered`).
+  element from outside may leave it out and have no place in the order, or whose value is no number or date label, so
+  tazuna has no order to sort by. `check` reports none exactly when every sort key is required with no default and is
+  one of these (`Checked.sortKeysOrdered`).
   -/
   | unorderedSortKey (definition : Spec.Ref) (path : List String) (key : String)
   /--

@@ -25,10 +25,10 @@ export interface InputMessage {
  */
 export interface Adapter {
   /** Starts the implementation at `time` with the Given records, each value as the trace writes values. */
-  readonly start: (outputs: Outputs, time: Temporal.Instant, records: readonly GivenRecord[]) => Promise<void>;
-  readonly now: () => Temporal.Instant;
+  readonly start: (outputs: Outputs, time: number, records: readonly GivenRecord[]) => Promise<void>;
+  readonly now: () => number;
   /** Moves the implementation's clock to `time`, firing its timers due by then in its own order. */
-  readonly advanceTo: (time: Temporal.Instant) => Promise<void>;
+  readonly advanceTo: (time: number) => Promise<void>;
   /**
    * Resolves when the implementation has settled: it has no work left that it can do before it gets a message or the
    * clock moves, such as a callback or a timer due at the current time. Work that waits for an answer from another

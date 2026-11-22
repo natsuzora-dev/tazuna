@@ -39,7 +39,7 @@ export const hourly = machine({
   states: { waiting: {}, noting: {}, done: {} },
 }).chart({
   states: {
-    waiting: { after: { hour: { delay: { hours: 1 }, onFired: [{ target: "noting" }] } } },
+    waiting: { after: { hour: { delay: 3_600_000, onFired: [{ target: "noting" }] } } },
     noting: {
       sends: {
         addNote: {

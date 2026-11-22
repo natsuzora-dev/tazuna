@@ -102,14 +102,10 @@ def same : Val → Val → Bool
   | .nonFinite a, .nonFinite b => a == b
   | _, _ => false
 
-/-- The number, ms or days that `order` reads of a value to compare it, as a numerator over 10 ^ the exponent. -/
+/-- The number or days that `order` reads of a value to compare it, as a numerator over 10 ^ the exponent. -/
 def ordinal (order : Order) : Val → Option (Int × Nat)
   | .json (.num n) => if order == .number then some (n.mantissa, n.exponent) else none
-  | .json (.str s) =>
-    match order with
-    | .instant => (parseTime s).toOption.map (·, 0)
-    | .date => (parseDate s).toOption.map (·, 0)
-    | .number => none
+  | .json (.str s) => if order == .date then (parseDate? s).map (·, 0) else none
   | _ => none
 
 def Relation.holds {α : Type} [LT α] [LE α] [BEq α] [DecidableRel (α := α) (· < ·)] [DecidableRel (α := α) (· ≤ ·)]
@@ -394,11 +390,13 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
     match double? left, double? (← eval env vars b) with
     | some x, some y => pure (.ofDouble (operation.apply x y))
     | _, _ => thrown
-  | .timeAdd t d => do
-    let instant ← eval env vars t
-    match ordinal .instant instant, integer? (← eval env vars d) with
-    | some (start, _), some ms =>
-      if Time.inRange (start + ms) then pure (.json (.str (renderTime (start + ms)))) else thrown
+  | .addDays d n => do
+    let date ← eval env vars d
+    match ordinal .date date, integer? (← eval env vars n) with
+    | some (days, _), some more =>
+      match renderDate? (days + more) with
+      | some label => pure (.json (.str label))
+      | none => thrown
     | _, _ => thrown
   | .createKey entity => do
     modify fun t => { t with created := t.created ++ [entity] }

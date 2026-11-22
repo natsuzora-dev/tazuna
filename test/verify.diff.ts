@@ -213,12 +213,7 @@ const mutations: Record<string, (lines: Line[], k: Pick3) => Line[]> = {
   time: (lines, [a, b]) =>
     lines.map((l, i) => {
       if (i !== a % lines.length) return l;
-      const instant = Temporal.Instant.from(l["time"] as string);
-      const time =
-        b % 3 === 0
-          ? instant.toZonedDateTimeISO("+09:00").toString({ timeZoneName: "never" })
-          : instant.add({ milliseconds: b % 3 === 1 ? 1000 : -1 }).toString();
-      return { ...l, time };
+      return { ...l, time: (l["time"] as number) + (b % 2 === 0 ? 1000 : -1) };
     }),
   answer: (lines, [a, b]) =>
     lines.map((l, i) => {
@@ -369,7 +364,7 @@ describe("Content comparison", () => {
     assert.ok(spec !== undefined, folder);
     return { spec, service, snapshot: snapshot as unknown as TraceLine[] };
   };
-  const at = "2026-10-25T00:00:00Z";
+  const at = Date.UTC(2026, 9, 25);
   const addTask = (id: string, n: number): Line => ({
     time: at,
     dir: "in",
@@ -524,7 +519,7 @@ describe("Content comparison", () => {
   });
 
   test("TS and Lean pair equal lines of one group by their time and by their after order", () => {
-    const later = "2026-10-25T01:00:00Z";
+    const later = Date.UTC(2026, 9, 25, 1);
     const byTime = caseOf("compare/order", "todo", [
       addTask("addTask#1", 1),
       nextDay("calendar.nextDay#1"),

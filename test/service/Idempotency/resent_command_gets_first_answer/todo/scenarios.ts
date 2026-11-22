@@ -1,9 +1,9 @@
-import { run } from "@natsuzora-dev/tazuna";
+import { parseInstant, run } from "@natsuzora-dev/tazuna";
 import { notifier } from "../notifier/contract.ts";
 import { addTask, given, scenario, taskAdded } from "./todo.ts";
 
 const arranged = given({
-  start: "2026-10-25T09:00:00+09:00",
+  start: parseInstant("2026-10-25T09:00:00+09:00"),
   records: { Task: [] },
   peers: [run(notifier, { OpenTask: [] })],
 });

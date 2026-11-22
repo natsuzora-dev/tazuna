@@ -34,7 +34,7 @@ derive_wire PeerEntry flatten peer
 
 /-- The arrangement: every running service begins at `start`, the own service from `records`. -/
 structure Given where
-  start : DateTime
+  start : Time
   records : List GivenRecord
   peers : List PeerEntry
 deriving Repr, Inhabited

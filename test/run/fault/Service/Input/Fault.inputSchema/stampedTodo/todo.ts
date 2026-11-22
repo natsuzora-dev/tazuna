@@ -1,4 +1,4 @@
-import { datetime, emit, service } from "@natsuzora-dev/tazuna";
+import { emit, instant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { automation, command, event, scenario } = service({
@@ -6,7 +6,7 @@ export const { automation, command, event, scenario } = service({
   description: "Remind the tasks",
 });
 
-const due: Temporal.Instant = JSON.parse('"2026-10-26T00:00:00Z"');
+const due: number = JSON.parse('"2026-10-26T00:00:00Z"');
 
 export const taskAdded = event({ payload: { taskId: z.string() } });
 export const reminderSet = event({ payload: { taskId: z.string() } });
@@ -17,7 +17,7 @@ export const addTask = command({
 }).decide(({ input }) => [emit(taskAdded, { taskId: input.taskId })]);
 
 export const setReminder = command({
-  input: { taskId: z.string(), at: datetime },
+  input: { taskId: z.string(), at: instant },
   emits: [reminderSet],
 }).decide(({ input }) => [emit(reminderSet, { taskId: input.taskId })]);
 

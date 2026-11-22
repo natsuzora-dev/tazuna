@@ -1,25 +1,27 @@
-import { todo } from "@todo/spec/todo";
 import { useEffect, useState } from "react";
 
-export const { timeZone } = todo.todoConstants;
+/** The app shows and decides calendar days in Tokyo; the spec holds instants as milliseconds and knows no zone. */
+export const timeZone = "Asia/Tokyo";
 
-export function useNow(): Temporal.Instant | null {
-  const [now, setNow] = useState<Temporal.Instant | null>(null);
+/** The instant `ms` in the app's time zone. */
+export const zoned = (ms: number) => Temporal.Instant.fromEpochMilliseconds(ms).toZonedDateTimeISO(timeZone);
+
+export function useNow(): number | null {
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
-    setNow(Temporal.Now.instant());
-    const timer = setInterval(() => setNow(Temporal.Now.instant()), 60_000);
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
   return now;
 }
 
-export const formatTime = (at: Temporal.ZonedDateTime) =>
-  at.toLocaleString("en-US", { hour: "numeric", minute: "2-digit" });
+export const formatTime = (at: number) => zoned(at).toLocaleString("en-US", { hour: "numeric", minute: "2-digit" });
 
-export function formatDateTime(at: Temporal.Instant, now: Temporal.Instant | null) {
-  const zoned = at.toZonedDateTimeISO(timeZone);
-  const isThisYear = now === null || now.toZonedDateTimeISO(timeZone).year === zoned.year;
-  return zoned.toLocaleString("en-US", {
+export function formatDateTime(at: number, now: number | null) {
+  const day = zoned(at);
+  const isThisYear = now === null || zoned(now).year === day.year;
+  return day.toLocaleString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",

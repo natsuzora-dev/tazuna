@@ -1,3 +1,3 @@
-import { datetime, domain, explore } from "@natsuzora-dev/tazuna";
+import { domain, explore, instant } from "@natsuzora-dev/tazuna";
 
-export const agendaExplore = explore({ service: "agenda", depth: 2, domains: [domain(datetime, [])] });
+export const agendaExplore = explore({ service: "agenda", depth: 2, domains: [domain(instant, [])] });

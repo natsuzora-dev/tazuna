@@ -103,7 +103,7 @@ export type LineKind =
 
 /** Lean's Line: a line of a run, which traceLineOf turns into a trace line. */
 export type Line = LineKind & {
-  readonly time: string;
+  readonly time: number;
   readonly id: LineId;
 };
 

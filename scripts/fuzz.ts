@@ -3,8 +3,8 @@ import { join, relative } from "node:path";
 import { parseArgs } from "node:util";
 import fc from "fast-check";
 import { z } from "zod";
-import { date, datetime } from "../src/data/datetime.ts";
 import type { Line, Scenario, Template } from "../src/data/scenario.generated.ts";
+import { date, instant } from "../src/data/time.ts";
 import type { Answer } from "../src/data/trace.generated.ts";
 import { type Shape, stringsOf } from "../src/data/values.ts";
 import { chartOf } from "../src/dsl/chart.ts";
@@ -79,18 +79,7 @@ const none = Symbol("none");
 const numbers = [0, 1, 2, -1, 0.5, 10, 1000, 0.1, 1e21, 2 ** 53, 5e-324];
 
 /** An instant around the scenarios' dates, written in UTC or with an offset, with or without fractional seconds. */
-const instant = fc
-  .tuple(
-    fc.integer({ min: Date.UTC(2026, 9, 24), max: Date.UTC(2026, 9, 28) }),
-    fc.constantFrom(0, 9 * 60, -(5 * 60 + 30)),
-    fc.boolean(),
-  )
-  .map(([ms, offset, fraction]) => {
-    const local = new Date(ms + offset * 60_000).toISOString().slice(0, fraction ? 23 : 19);
-    const zone = Math.abs(offset);
-    const hhmm = `${String(Math.floor(zone / 60)).padStart(2, "0")}:${String(zone % 60).padStart(2, "0")}`;
-    return `${local}${offset === 0 ? "Z" : `${offset < 0 ? "-" : "+"}${hhmm}`}`;
-  });
+const instantValue = fc.integer({ min: Date.UTC(2026, 9, 24), max: Date.UTC(2026, 9, 28) });
 
 /**
  * Returns an arbitrary of the values of `schema` beyond the declared domains, or of `none` for a schema kind that it
@@ -98,7 +87,7 @@ const instant = fc
  * that guards compare.
  */
 function arbitraryOf(schema: z.ZodType, words: readonly string[]): fc.Arbitrary<unknown> {
-  if (schema === datetime) return instant;
+  if (schema === instant) return instantValue;
   if (schema === date) return fc.constantFrom("2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27");
   if (schema instanceof z.ZodNullable)
     return fc.option(arbitraryOf(schema.unwrap() as z.ZodType, words), { nil: null });
@@ -236,7 +225,7 @@ const property = fc.property(fc.gen(), (g) => {
       const kind = g(moveKind);
       let move: Move;
       if (kind === "clock" || moves.length === 0) {
-        const time = executed.world.now.add({ milliseconds: g(clockStep) }).toString();
+        const time = executed.world.now + g(clockStep);
         move = [{ type: "at", time }];
       } else if (kind === "invalid") {
         const invalid = invalidLines(spec, sc, executed, moves.flat());

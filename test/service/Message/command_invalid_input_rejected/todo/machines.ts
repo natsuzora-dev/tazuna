@@ -23,6 +23,6 @@ export const notifier = machine({
         },
       },
     },
-    retrying: { after: { minute: { delay: { minutes: 1 }, onFired: [{ target: "notifying" }] } } },
+    retrying: { after: { minute: { delay: 60_000, onFired: [{ target: "notifying" }] } } },
   },
 });

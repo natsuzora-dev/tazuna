@@ -1,10 +1,10 @@
-import { accepted, external, fulfilled, notOffered, type ProcessingLine } from "@natsuzora-dev/tazuna";
+import { accepted, external, fulfilled, notOffered, type ProcessingLine, parseInstant } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { given, scenario } from "./data.ts";
 import { editScreen } from "./editScreen.ts";
 import { taskScreen } from "./taskScreen.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [external(todo)] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [external(todo)] });
 
 const deliverTaskSubscription = arranged.step((w) => w.net.deliver(w.startup.subscription(todo.task)));
 const deliverShown = arranged.step((w, isCompleted: boolean) =>
@@ -81,17 +81,6 @@ export const parentlessSideBySide = scenario({
     const complete = completing.request(todo.completeTask);
     w.net.deliver(complete);
     w.peer.todo.leaveUnanswered(complete);
-  },
-  then: () => [],
-});
-
-export const datetimeOffers = scenario({
-  description:
-    "Operate remind on taskScreen; its offers return the at as a Temporal.Instant, and the list of accepted operations and the operation line of the trace hold that at as an ISO 8601 string",
-  given: arranged,
-  when: (w) => {
-    w.user.operate(w.startup.screen(taskScreen), "remind", { at: "2026-10-25T03:00:00Z" });
-    deliverNeverShown(w);
   },
   then: () => [],
 });

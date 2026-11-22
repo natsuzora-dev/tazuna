@@ -1,9 +1,9 @@
-import { notOffered, type OutSubscription, requested, run, subscriptionOf } from "@natsuzora-dev/tazuna";
+import { notOffered, type OutSubscription, parseInstant, requested, run, subscriptionOf } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { given, scenario } from "./data.ts";
 import { homeScreen, taskListScreen } from "./screens.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [run(todo, {})] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [run(todo, {})] });
 
 const deliverSubscription = arranged.step((w, sub: OutSubscription) => {
   const reached = w.net.deliver(sub);

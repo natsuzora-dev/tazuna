@@ -431,7 +431,6 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .stepOrderChanges s sc program => stepOrderChangesRequest stdin stdout s sc (program.getD {})
   | .sort schema value => pure (.sorted (sortCollections schema value))
   | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))
-  | .scenarioTime text => pure (.scenarioTime ((scenarioTime? text).map renderTime))
   | .schemaOf s service schema => do pure (.schemaOf ((← Service.ofStructure s service).schemaOf schema))
   | .evaluate body input records keys =>
     let env : Ir.Env := { args := Ir.argsOf [(.input, .json input)], records := records.map Stored.row, keys }

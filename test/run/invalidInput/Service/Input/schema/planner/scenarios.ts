@@ -1,8 +1,8 @@
-import { type AnswerOf, external, rejected } from "@natsuzora-dev/tazuna";
+import { type AnswerOf, external, parseInstant, rejected } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { given, scenario } from "./planner.ts";
 
-const arranged = given({ start: "2026-10-25T09:00:00+09:00", records: {}, peers: [external(todo)] });
+const arranged = given({ start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [external(todo)] });
 
 const answered = arranged.step((w, answer: AnswerOf<typeof todo.addTask>) => {
   const adding = w.startup.request(todo.addTask);

@@ -1,7 +1,7 @@
-import { accepted, answered, fulfilled } from "@natsuzora-dev/tazuna";
+import { accepted, answered, fulfilled, parseInstant } from "@natsuzora-dev/tazuna";
 import { addTask, given, scenario, taskCount } from "./todo.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: [] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: { Task: [] }, peers: [] });
 
 export const recordsStay = scenario({
   description:
@@ -9,7 +9,7 @@ export const recordsStay = scenario({
   given: arranged,
   when: (w) => {
     const adding = w.client.send(addTask, { taskId: "t1" });
-    w.clock.at("2026-10-25T10:05:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:05:00+09:00"));
     w.host.restart();
     const counting = w.client.call(taskCount, {});
     const resent = w.client.resend(adding);

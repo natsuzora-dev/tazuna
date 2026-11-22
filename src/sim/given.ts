@@ -48,7 +48,7 @@ function peersOf(sc: Scenario): PeerEntry[] {
 
 /** Lean's World.start: `processingFor` makes each running service's processing. */
 export function start(sc: Scenario, processingFor: (service: string) => Processing): World {
-  const now = Temporal.Instant.from(sc.given.start);
+  const now = sc.given.start;
   const peers = peersOf(sc);
   const roles = new Map<string, Role>([[sc.service, "own"], ...peers.map((p) => [p.service, p.role] as const)]);
   const running = [sc.service, ...peers.flatMap((p) => (p.role === "run" ? [p.service] : []))];

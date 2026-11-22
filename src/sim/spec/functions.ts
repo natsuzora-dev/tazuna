@@ -451,23 +451,11 @@ export class SpecFunctions implements Functions {
     return decoded(objectOf(this.shape(schema)), value) as Fields;
   }
 
-  binding(
-    name: string,
-    binding: string,
-    input: Fields,
-    records: RecordSource,
-    now: Temporal.Instant,
-  ): boolean | Failed {
+  binding(name: string, binding: string, input: Fields, records: RecordSource, now: number): boolean | Failed {
     return this.nonNullBinding(this.command(name).binds, binding, { input, records: this.view(records), now });
   }
 
-  requirement(
-    name: string,
-    condition: string,
-    input: Fields,
-    records: RecordSource,
-    now: Temporal.Instant,
-  ): boolean | Failed {
+  requirement(name: string, condition: string, input: Fields, records: RecordSource, now: number): boolean | Failed {
     const command = this.command(name);
     return this.boundHolds(command.binds, command.requires, condition, { input, records: this.view(records), now });
   }
@@ -488,12 +476,7 @@ export class SpecFunctions implements Functions {
     return named === undefined ? { service: this.service, name: "?" } : { service: named.service, name: named.name };
   }
 
-  decide(
-    name: string,
-    input: Fields,
-    records: RecordSource,
-    now: Temporal.Instant,
-  ): readonly (readonly Decided[])[] | Failed {
+  decide(name: string, input: Fields, records: RecordSource, now: number): readonly (readonly Decided[])[] | Failed {
     const command = this.command(name);
     const args = { input, records: this.view(records), now };
     const bound = this.bound(command.binds, args);
@@ -525,7 +508,7 @@ export class SpecFunctions implements Functions {
     input: Fields,
     before: RecordSource,
     after: RecordSource,
-    now: Temporal.Instant,
+    now: number,
   ): string | undefined | Failed {
     const command = this.command(name);
     return attempt(() =>
@@ -587,7 +570,7 @@ export class SpecFunctions implements Functions {
     return attempt(() => firstFailing(invariants, () => this.args(scope, records, access)));
   }
 
-  resolve(name: string, input: Fields, records: RecordSource, now: Temporal.Instant): Json | Failed {
+  resolve(name: string, input: Fields, records: RecordSource, now: number): Json | Failed {
     const { definition: query, service } = this.query(name);
     const resolved = attempt(() =>
       (query.resolve as (a: unknown) => unknown)({ input, records: this.view(records), now }),
@@ -606,7 +589,7 @@ export class SpecFunctions implements Functions {
     binding: string,
     payload: Fields,
     records: RecordSource,
-    now: Temporal.Instant,
+    now: number,
   ): boolean | Failed {
     return this.nonNullBinding(this.automation(name).binds, binding, { payload, records: this.view(records), now });
   }
@@ -616,7 +599,7 @@ export class SpecFunctions implements Functions {
     condition: string,
     payload: Fields,
     records: RecordSource,
-    now: Temporal.Instant,
+    now: number,
   ): boolean | Failed {
     const a = this.automation(name);
     return this.boundHolds(a.binds, a.guard, condition, { payload, records: this.view(records), now });
@@ -626,7 +609,7 @@ export class SpecFunctions implements Functions {
     name: string,
     payload: Fields,
     records: RecordSource,
-    now: Temporal.Instant,
+    now: number,
     keys: Keys,
   ): { readonly input: Json; readonly created: readonly string[] } | Failed {
     const a = this.automation(name);
@@ -788,13 +771,13 @@ export class SpecFunctions implements Functions {
     return encodedAnswer({ kind: "held", chart: ref, state }, strictObjectOf(shape), values);
   }
 
-  deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): string | undefined | Failed {
+  deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access): number | undefined | Failed {
     const d = named(this.node(chartOf(scope.id), this.stateOf(scope)).after, name, "deadline");
     const at = d.at as ((args: unknown) => unknown) | undefined;
     if (at === undefined) throw new InternalError(`the deadline ${name} has no at`);
     const time = attempt(() => at(this.args(scope, records, access)));
     if (time instanceof Failed) return time;
-    return time instanceof Temporal.Instant ? time.toString() : undefined;
+    return Number.isSafeInteger(time) ? (time as number) : undefined;
   }
 
   /** Returns the offers of the state `scope.state`, or of the chart itself when it is null. */

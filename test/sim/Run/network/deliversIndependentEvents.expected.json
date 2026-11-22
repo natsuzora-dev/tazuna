@@ -4,7 +4,7 @@
       "service": "metronome",
       "lines": [
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "in",
           "type": "command",
           "id": "addBeats#1",
@@ -17,7 +17,7 @@
           }
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "out",
           "type": "answer",
           "id": "answer#1",
@@ -27,7 +27,7 @@
           }
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "out",
           "type": "event",
           "id": "beatAdded#1",
@@ -38,7 +38,7 @@
           "resultOf": "addBeats#1"
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "out",
           "type": "event",
           "id": "beatAdded#2",
@@ -49,7 +49,7 @@
           "resultOf": "addBeats#1"
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "out",
           "type": "event",
           "id": "marked#1",
@@ -59,7 +59,7 @@
           }
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "out",
           "type": "event",
           "id": "marked#2",
@@ -76,7 +76,7 @@
       "service": "listener",
       "lines": [
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "in",
           "type": "event",
           "id": "metronome/marked#2",
@@ -86,7 +86,7 @@
           }
         },
         {
-          "time": "2026-10-25T00:00:00Z",
+          "time": 1792886400000,
           "dir": "in",
           "type": "event",
           "id": "metronome/marked#1",

@@ -1,6 +1,7 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { addTask, given, scenario } from "./todo.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [] });
 
 export const dueDeadlineFires = scenario({
   description:
@@ -8,7 +9,7 @@ export const dueDeadlineFires = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(addTask, {});
-    w.clock.at("2026-10-25T11:00:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T11:00:00+09:00"));
     w.host.restart();
   },
   then: () => [],
@@ -20,9 +21,9 @@ export const laterDeadlineDiscarded = scenario({
   given: arranged,
   when: (w) => {
     w.client.send(addTask, {});
-    w.clock.at("2026-10-25T10:30:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T10:30:00+09:00"));
     w.host.restart();
-    w.clock.at("2026-10-25T12:00:00+09:00");
+    w.clock.at(parseInstant("2026-10-25T12:00:00+09:00"));
   },
   then: () => [],
 });

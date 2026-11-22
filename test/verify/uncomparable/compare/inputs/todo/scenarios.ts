@@ -1,9 +1,9 @@
-import { external, fulfilled } from "@natsuzora-dev/tazuna";
+import { external, fulfilled, parseInstant } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { addTask, given, scenario } from "./todo.ts";
 
 const arranged = given({
-  start: "2026-10-25T00:00:00Z",
+  start: parseInstant("2026-10-25T00:00:00Z"),
   records: { Task: [] },
   peers: [external(calendar)],
 });
@@ -43,7 +43,7 @@ export const answerDay = scenario({
   when: (w) => {
     const day = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
     w.net.deliver(day);
-    w.net.deliver(w.peer.calendar.answer(day, fulfilled({ day: "2026-10-26T00:00:00Z" })));
+    w.net.deliver(w.peer.calendar.answer(day, fulfilled({ day: parseInstant("2026-10-26T00:00:00Z") })));
   },
   then: () => [],
 });

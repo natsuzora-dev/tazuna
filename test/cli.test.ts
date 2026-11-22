@@ -263,7 +263,7 @@ export const todoExplore = explore({
 });
 `,
   );
-  const given = '{ start: "2026-10-25T09:00:00+09:00", records: { Task: [] }, peers: [] }';
+  const given = "{ start: 1_792_886_400_000, records: { Task: [] }, peers: [] }";
   writeFileSync(
     join(project, "todo/scenarios.ts"),
     `import { addTask, note, scenario } from "./todo.ts";
@@ -326,7 +326,7 @@ test("explain writes an error and exits with 2 for a name that is no violation k
 });
 
 test("test, verify, and view write the same violation lines and count as check and do nothing else when check reports violations", async () => {
-  const folder = "test/load/malformed/times/Malformed.unparsableTime";
+  const folder = "test/load/malformed/times/Malformed.inexactTime";
   const checked = await run("check", folder);
   assert.notDeepEqual(checked.out, []);
   for (const args of [

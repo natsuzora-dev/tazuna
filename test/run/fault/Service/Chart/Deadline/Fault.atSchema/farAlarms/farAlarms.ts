@@ -3,7 +3,7 @@ import { service } from "@natsuzora-dev/tazuna";
 export const { machine, scenario } = service({ name: "farAlarms", description: "Ring the far alarms" });
 
 export const alarm = machine({
-  description: "Ring in the year 10000, which the run's time cannot hold",
+  description: "Ring at 2^53 milliseconds, past every safe integer, which the run's time cannot hold",
   initial: "waiting",
   states: { waiting: {}, ringing: { type: "final" } },
 }).chart({
@@ -11,7 +11,7 @@ export const alarm = machine({
     waiting: {
       after: {
         ring: {
-          at: () => Temporal.Instant.from("+010000-01-01T00:00:00Z"),
+          at: () => 9_007_199_254_740_992,
           onFired: [{ target: "ringing" }],
         },
       },

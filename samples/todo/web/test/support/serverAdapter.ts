@@ -28,7 +28,7 @@ interface CallOptions {
 
 type Procedure = (input: unknown, options: CallOptions) => Promise<unknown>;
 
-const instant = (value: unknown) => (typeof value === "string" ? Temporal.Instant.from(value) : null);
+const instant = (value: unknown) => (typeof value === "number" ? value : null);
 
 /** Writes the Given records into the app's database, as the app stores them. */
 function seed(db: typeof Db.db, records: readonly GivenRecord[]): void {
@@ -40,7 +40,7 @@ function seed(db: typeof Db.db, records: readonly GivenRecord[]): void {
           .values({
             id: String(row["id"]),
             title: String(row["title"]),
-            createdAt: Temporal.Instant.from(String(row["createdAt"])),
+            createdAt: Number(row["createdAt"]),
             completedAt: instant(row["completedAt"]),
             dueAt: instant(row["dueAt"]),
             remindAt: instant(row["remindAt"]),
@@ -145,14 +145,14 @@ export function serverAdapter(service: "todo" | "notifier"): Adapter {
   };
   return {
     async start(appOutputs, time, records) {
-      vi.useFakeTimers({ now: time.epochMilliseconds });
+      vi.useFakeTimers({ now: time });
       onTestFinished(() => void vi.useRealTimers());
       outputs = appOutputs;
       await load(undefined, records);
     },
-    now: () => Temporal.Now.instant(),
+    now: () => Date.now(),
     async advanceTo(time) {
-      const until = time.epochMilliseconds - Date.now();
+      const until = time - Date.now();
       if (until > 0) await vi.advanceTimersByTimeAsync(until);
     },
     // The app does its work in callbacks and fake timers, so it has settled when running the timers due now and then

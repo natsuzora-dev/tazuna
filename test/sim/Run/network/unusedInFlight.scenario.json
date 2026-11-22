@@ -1,7 +1,7 @@
 {
   "service": "todo",
   "given": {
-    "start": "2026-10-25T01:00:00.000Z",
+    "start": 1792890000000,
     "records": [
       {
         "entity": "Settings",
@@ -254,7 +254,7 @@
     },
     {
       "type": "at",
-      "time": "2026-10-25T02:00:00.000Z"
+      "time": 1792893600000
     },
     {
       "type": "leaveInFlight",

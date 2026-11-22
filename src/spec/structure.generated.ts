@@ -44,29 +44,12 @@ export type Transition = {
   readonly reenter: boolean | null;
 };
 
-/**
- * A deadline's delay, as Temporal.Duration reads it: the count of each unit. TS reads it and Lean decides what it means
- * (delayMs?).
- */
-export type Delay = {
-  readonly years: number;
-  readonly months: number;
-  readonly weeks: number;
-  readonly days: number;
-  readonly hours: number;
-  readonly minutes: number;
-  readonly seconds: number;
-  readonly milliseconds: number;
-  readonly microseconds: number;
-  readonly nanoseconds: number;
-};
-
 /** How a deadline's time is computed. */
 export type DeadlineTime =
-  /** `now` plus the delay, or null when Temporal.Duration does not read the delay. */
+  /** `now` plus the delay in milliseconds, or null when the delay is no safe integer. */
   | {
       readonly kind: "delay";
-      readonly delay: Delay | null;
+      readonly ms: number | null;
     }
   /** What its `at` function computes. */
   | {

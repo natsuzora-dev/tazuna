@@ -1,6 +1,7 @@
+import { parseInstant } from "@natsuzora-dev/tazuna";
 import { given, pause, play, queueTrack, scenario, skip } from "./player.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: { Track: [] }, peers: [] });
+const arranged = given({ start: parseInstant("2026-10-25T10:00:00+09:00"), records: { Track: [] }, peers: [] });
 
 export const historyReset = scenario({
   description:

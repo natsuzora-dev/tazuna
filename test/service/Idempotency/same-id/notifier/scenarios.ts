@@ -1,11 +1,11 @@
-import { run } from "@natsuzora-dev/tazuna";
+import { parseInstant, run } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { scenario } from "./notifier.ts";
 
 export const redelivered = scenario({
   description: "Receive todo.taskAdded twice with the same id; notifier does not process the second",
   given: {
-    start: "2026-10-25T09:00:00+09:00",
+    start: parseInstant("2026-10-25T09:00:00+09:00"),
     records: { OpenTask: [] },
     peers: [run(todo, { Task: [] })],
   },

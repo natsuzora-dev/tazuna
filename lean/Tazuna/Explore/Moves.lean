@@ -204,7 +204,7 @@ def fill (spec : Spec.Structure) (st : Service) (x : Explored) (w : World) : Slo
       | some _ => some <$> x.tree st (.output target)
     pure ((answers shape.query outputs (spec.rejectionKinds x.own target) (spec.rejectionReasons target)).map fun answer =>
       answerMove msg.receiver request answer (msg.status == .inFlight) x.lines.length)
-  | .at t => pure [[.at { text := renderTime t, time := t }]]
+  | .at t => pure [[.at t]]
   | .operate o => do
     let opened ← openedOf x w o
     let screen := st.ref o.screen
@@ -243,7 +243,7 @@ def Slot.Enabled (spec : Spec.Structure) (st : Service) (x : Explored) (w : Worl
 /-- The shape of a move that fills a slot: the lines it appends, with only the written values open. -/
 def Slot.Realizes (x : Explored) : Slot → Move → Prop
   | .answer _ msg, mv => ∃ request answer delivering, mv = answerMove msg.receiver request answer delivering x.lines.length
-  | .at t, mv => mv = [.at { text := renderTime t, time := t }]
+  | .at t, mv => mv = [.at t]
   | .operate o, mv => ∃ screen payload, mv = [.operate screen o.control (literal payload)]
   | .unsubscribe i, mv => mv = [.unsubscribe none i]
   | .request r query, mv => ∃ v, mv ∈ requestMoves r query v
@@ -266,7 +266,7 @@ def Slot.Fills (spec : Spec.Structure) (st : Service) (x : Explored) (w : World)
         (shape.output.isSome ∧ ∃ o, x.Admits st (.output target) o ∧ answer = answerOf shape.query true o) ∨
         ∃ k ∈ spec.rejectionKinds x.own target, k.blamesSender = false ∧
           answer ∈ rejections (spec.rejectionReasons target) k)
-  | .at t, mv => mv = [.at { text := renderTime t, time := t }]
+  | .at t, mv => mv = [.at t]
   | .operate o, mv => ∃ p,
       (match o.payloads with
         | some ps => p ∈ ps

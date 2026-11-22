@@ -1,9 +1,9 @@
-import { skip } from "@natsuzora-dev/tazuna";
+import { parseInstant, skip } from "@natsuzora-dev/tazuna";
 import { screens } from "../screens/contract.ts";
 import { addTask, completeTask, given, openRows, scenario, signal } from "./todo.ts";
 
 const arranged = given({
-  start: "2026-10-25T10:00:00+09:00",
+  start: parseInstant("2026-10-25T10:00:00+09:00"),
   records: { Task: [], Signal: [] },
   peers: [skip(screens, "the screens' subscriptions are the screens' scenario")],
 });

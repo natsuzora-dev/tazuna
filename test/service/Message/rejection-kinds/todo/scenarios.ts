@@ -1,8 +1,12 @@
-import { accepted, type Caused, external, raw, rejected } from "@natsuzora-dev/tazuna";
+import { accepted, type Caused, external, parseInstant, raw, rejected } from "@natsuzora-dev/tazuna";
 import { device } from "../device/contract.ts";
 import { addTask, completeTask, given, scenario, swapTitles, titledCount } from "./todo.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: { Task: [] }, peers: [external(device)] });
+const arranged = given({
+  start: parseInstant("2026-10-25T10:00:00+09:00"),
+  records: { Task: [] },
+  peers: [external(device)],
+});
 
 const deliverAndAccept = arranged.step((w, line: Caused) => {
   const notification = line.request(device.showNotification);
@@ -47,7 +51,7 @@ export const unavailableAnswer = scenario({
     const notification = add.request(device.showNotification);
     w.net.deliver(notification);
     w.net.deliver(w.peer.device.answer(notification, rejected("unavailable")));
-    deliverAndAccept(w, w.clock.at("2026-10-25T10:01:00+09:00"));
+    deliverAndAccept(w, w.clock.at(parseInstant("2026-10-25T10:01:00+09:00")));
   },
   then: () => [],
 });

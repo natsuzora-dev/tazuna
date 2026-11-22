@@ -10,7 +10,6 @@ import type {
   AssumptionMismatch,
   DeadlineTime,
   Definition as DefinitionStructure,
-  Delay,
   Domain as DomainStructure,
   Explore as ExploreStructure,
   MapState,
@@ -249,24 +248,11 @@ export function schemaProperties(schema: unknown): string[] {
   return properties !== null && typeof properties === "object" ? Object.keys(properties) : [];
 }
 
-/**
- * Lean's delayMs?: the length of `d` in milliseconds, or undefined when a date unit or a part below one is not 0. It
- * counts in bigint, as Lean counts in Int, since the parts may add up past 2^53.
- */
-export function delayMs(d: Delay): bigint | undefined {
-  const { years, months, weeks, days, hours, minutes, seconds, milliseconds, microseconds, nanoseconds } = d;
-  if ([years, months, weeks, days, microseconds, nanoseconds].some((n) => n !== 0)) return undefined;
-  return ((BigInt(hours) * 60n + BigInt(minutes)) * 60n + BigInt(seconds)) * 1000n + BigInt(milliseconds);
-}
-
-const delayMsOf = (time: DeadlineTime): bigint | undefined =>
-  time.kind === "delay" && time.delay !== null ? delayMs(time.delay) : undefined;
-
 /** Lean's DeadlineTime.isExact. */
-export const isExact = (time: DeadlineTime): boolean => time.kind === "at" || delayMsOf(time) !== undefined;
+export const isExact = (time: DeadlineTime): boolean => time.kind === "at" || time.ms !== null;
 
 /** Lean's DeadlineTime.isNegative. */
-export const isNegative = (time: DeadlineTime): boolean => (delayMsOf(time) ?? 0n) < 0n;
+export const isNegative = (time: DeadlineTime): boolean => time.kind === "delay" && (time.ms ?? 0) < 0;
 
 /** Lean's isKeyOf: whether `value` has the form `<entity>-<n>` of the `n`-th createKey value of the entity. */
 export function isKeyOf(entity: string, value: string): boolean {

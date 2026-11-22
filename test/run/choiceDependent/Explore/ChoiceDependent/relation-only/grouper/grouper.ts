@@ -1,4 +1,4 @@
-import { emit, entity, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { emit, entity, parseInstant, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Mark = singleEntity({ description: "Whether mark ran", fields: { set: z.boolean().default(false) } });
@@ -27,7 +27,7 @@ export const pair = command({ emits: [paired] }).decide(({ records }) =>
 
 const waiting = {
   after: {
-    due: { at: () => Temporal.Instant.from("2026-10-25T01:00:00Z"), onFired: [{ target: "sending" as const }] },
+    due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "sending" as const }] },
   },
 };
 

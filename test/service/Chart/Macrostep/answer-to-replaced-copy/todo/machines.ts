@@ -1,4 +1,4 @@
-import { ref } from "@natsuzora-dev/tazuna";
+import { parseInstant, ref } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { calendar } from "../calendar/contract.ts";
 import { machine, Task } from "./todo.ts";
@@ -18,9 +18,7 @@ export const perTask = machine({
       always: [
         {
           guard: {
-            atEleven: ({ now, context }) =>
-              !context.restarted &&
-              Temporal.Instant.compare(now, Temporal.Instant.from("2026-10-25T11:00:00+09:00")) >= 0,
+            atEleven: ({ now, context }) => !context.restarted && now >= parseInstant("2026-10-25T11:00:00+09:00"),
           },
           target: "rows",
           reenter: true,

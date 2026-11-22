@@ -51,9 +51,6 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire CopyScope
 
-local instance : ToValue Time := ⟨Time.toValue⟩
-local instance : FromValue Time := ⟨Time.fromValue⟩
-
 /--
 The values passed to machine and screen expressions; TS builds the expressions' arguments from them and the records.
 `id` is the evaluating instance or copy. `state` is the state that declares the expression (`none` for the chart's own
@@ -220,8 +217,8 @@ that it does not encode is a schema Issue, and no other check runs, since the ru
 - held: the parameters of the state `n` that an edge enters, which its `with` computes, checked against the held schema
   of `n`, encoded and in the order they were built, which Functions.sorting sorts. A transition's `with` reads what its
   assign reads.
-- deadlineAt: what the `at` of a state's `after` deadline computes on entering it, as
-  Temporal.Instant.prototype.toString writes it, or none when it computes no Instant.
+- deadlineAt: what the `at` of a state's `after` deadline computes on entering it, or none when it computes no safe
+  integer.
 -/
 structure Functions (m : Type → Type) where
   parse : Schema → Value → m (Except Issue (Option Value))
@@ -247,7 +244,7 @@ structure Functions (m : Type → Type) where
     m (Except Issue (Value × Option Value × List String))
   input : Scope → Records → Activity → Keys → m (Except Issue (Value × List String))
   held : Scope → Records → String → Edge → Extra → m (Except Issue Value)
-  deadlineAt : Scope → Records → String → m (Except Issue (Option String))
+  deadlineAt : Scope → Records → String → m (Except Issue (Option Time))
   offers : Scope → Records → String → m (Except Issue (List Value))
   showInput : Scope → Records → Activity → m (Except Issue Value)
   items : Scope → Records → m (Except Issue (List Value))

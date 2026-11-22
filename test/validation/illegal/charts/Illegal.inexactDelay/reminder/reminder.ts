@@ -1,24 +1,15 @@
-import { constants, duration, service } from "@natsuzora-dev/tazuna";
-import { z } from "zod";
+import { service } from "@natsuzora-dev/tazuna";
 
 export const { machine } = service({ name: "reminder", description: "Remind after a while" });
 
-export const reminderConstants = constants({
-  service: "reminder",
-  schema: z.object({ remindAfter: duration, nudgeAfter: duration }),
-  values: {
-    remindAfter: "P1D",
-    nudgeAfter: "PT0.0005S",
-  },
-});
-
 export const reminder = machine({
-  description: "Remind a day after it starts, and nudge half a millisecond after that",
+  description:
+    "Remind 2^53 milliseconds after it starts, past every safe integer, and nudge half a millisecond after that",
   initial: "waiting",
   states: { waiting: {}, reminding: {}, done: {} },
 }).chart({
   states: {
-    waiting: { after: { day: { delay: reminderConstants.remindAfter, onFired: [{ target: "reminding" }] } } },
-    reminding: { after: { nudge: { delay: reminderConstants.nudgeAfter, onFired: [{ target: "done" }] } } },
+    waiting: { after: { day: { delay: 2 ** 53, onFired: [{ target: "reminding" }] } } },
+    reminding: { after: { nudge: { delay: 0.5, onFired: [{ target: "done" }] } } },
   },
 });

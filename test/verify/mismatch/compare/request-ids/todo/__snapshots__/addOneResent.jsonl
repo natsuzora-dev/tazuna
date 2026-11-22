@@ -1,5 +1,5 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk","dueAt":null},"resultOf":"addTask#1"}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.nextDay#1","answer":{"result":"fulfilled","output":{"day":"2026-10-26T00:00:00Z"}}}
+{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
+{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk","dueAt":null},"resultOf":"addTask#1"}
+{"time":1792886400000,"dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":1792886400000}}
+{"time":1792886400000,"dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.nextDay#1","answer":{"result":"fulfilled","output":{"day":1792972800000}}}

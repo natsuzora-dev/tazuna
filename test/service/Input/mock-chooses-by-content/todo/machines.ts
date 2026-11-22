@@ -35,7 +35,7 @@ export const planner = machine({
     secondAsking: {
       calls: {
         nextDay: {
-          input: ({ now }) => ({ from: now.add({ hours: 2 }), constructor: { name: "planner" } }),
+          input: ({ now }) => ({ from: now + 7_200_000, constructor: { name: "planner" } }),
           ...done("secondDone"),
         },
       },
@@ -43,7 +43,7 @@ export const planner = machine({
     laterAsking: {
       calls: {
         nextDay: {
-          input: ({ now }) => ({ from: now.add({ hours: 1 }), constructor: { name: "planner" } }),
+          input: ({ now }) => ({ from: now + 3_600_000, constructor: { name: "planner" } }),
           ...done("laterDone"),
         },
       },

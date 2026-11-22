@@ -1,7 +1,7 @@
 {
   "service": "todo",
   "given": {
-    "start": "2026-10-25T01:00:00.000Z",
+    "start": 1792890000000,
     "records": [],
     "peers": [
       {

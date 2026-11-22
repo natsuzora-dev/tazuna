@@ -1,11 +1,11 @@
-/** A value that orders others: a number or a point in time, not a string, whose order differs across languages. */
-export type SortKey = number | Temporal.Instant | Temporal.PlainDate;
+import type { DateLabel } from "./time.ts";
+/** A value that orders others: a number or a date label, whose text orders as its day does. */
+export type SortKey = number | DateLabel;
 
 /** Compares two keys. NaN throws, as it is neither less than, equal to nor greater than another number. */
 export function compareKeys(a: unknown, b: unknown): number {
   if (Number.isNaN(a) || Number.isNaN(b)) throw new RangeError("NaN is not a sort key");
-  if (a instanceof Temporal.Instant && b instanceof Temporal.Instant) return Temporal.Instant.compare(a, b);
-  if (a instanceof Temporal.PlainDate && b instanceof Temporal.PlainDate) return Temporal.PlainDate.compare(a, b);
+  if (typeof a === "string" && typeof b === "string") return a < b ? -1 : a > b ? 1 : 0;
   return typeof a === "number" && typeof b === "number" ? a - b : 0;
 }
 
@@ -16,14 +16,12 @@ export type Marked<T, M extends "bag" | "sortedBy"> = T & { readonly [collection
 /** The mark of an array type that a bag, set or sortedBy schema outputs, or never for another type. */
 export type MarkOf<T> = typeof collectionMark extends keyof T ? NonNullable<T[typeof collectionMark]> : never;
 
-type Leaf = Temporal.Instant | Temporal.PlainDate | Temporal.Duration;
-
 /**
- * A value as spec functions may produce one that they receive as `T`: a Bag also takes an array, and Runs also take a
- * Bag or an array of values and Bags.
+ * A value as spec functions may produce one that they receive as `T`: a date also takes a string, which its schema
+ * checks, a Bag also takes an array, and Runs also take a Bag or an array of values and Bags.
  */
-export type Made<T> = T extends Leaf
-  ? T
+export type Made<T> = T extends DateLabel
+  ? T | string
   : T extends Bag<infer E>
     ? Bag<Made<E>> | readonly Made<E>[]
     : T extends readonly (infer E)[]

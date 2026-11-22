@@ -1,1 +1,1 @@
-{"kind":"InvalidScenario.notLater","definition":null,"data":{"scenarioLine":1,"at":"2026-10-25T00:00:00Z","now":"2026-10-25T00:00:00Z"},"location":{"file":"app/scenarios.ts","line":10},"scenario":{"service":"app","name":"clockAtStart"}}
+{"kind":"InvalidScenario.notLater","definition":null,"data":{"scenarioLine":1,"at":1792886400000,"now":1792886400000},"location":{"file":"app/scenarios.ts","line":10},"scenario":{"service":"app","name":"clockAtStart"}}

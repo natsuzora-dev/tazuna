@@ -19,7 +19,7 @@ async function playDevice(
 ): Promise<TraceLine[]> {
   const trace: TraceLine[] = [];
   const lineId = lineIds();
-  const record = (line: UntimedTraceLine) => trace.push({ ...line, time: Temporal.Now.instant().toString() });
+  const record = (line: UntimedTraceLine) => trace.push({ ...line, time: Date.now() });
   const { sendToPage } = await app.runner.import<typeof Pages>("/src/device/pages.server.ts");
   const askingPermission: string[] = [];
   held.whenHeld({

@@ -1,4 +1,4 @@
-import { datetime, emit, ref } from "@natsuzora-dev/tazuna";
+import { emit, instant, ref } from "@natsuzora-dev/tazuna";
 import { command, Settings, Task } from "./data.ts";
 import {
   dueChanged,
@@ -61,7 +61,7 @@ export const reopenTask = command({
       id: input.taskId,
       completedAt: null,
       // A reminder time that passed while the task was completed is dropped, so the reopened task is not reminded.
-      remindAt: remindAt !== null && Temporal.Instant.compare(remindAt, now) > 0 ? remindAt : null,
+      remindAt: remindAt !== null && remindAt > now ? remindAt : null,
     }),
     emit(taskReopened, { taskId: input.taskId }),
   ];
@@ -81,10 +81,10 @@ export const deleteTask = command({
 ]);
 
 export const changeDue = command({
-  input: { taskId: ref(Task), dueAt: datetime.nullable() },
+  input: { taskId: ref(Task), dueAt: instant.nullable() },
   emits: [dueChanged, dueCleared],
   requires: {
-    notPast: ({ input, now }) => input.dueAt === null || Temporal.Instant.compare(input.dueAt, now) > 0,
+    notPast: ({ input, now }) => input.dueAt === null || input.dueAt > now,
   },
 }).decide(({ input }) => [
   // Clearing the due date leaves the reminder to businessDayReminder, as for a task added without one.
@@ -99,7 +99,7 @@ export const changeReminders = command({
 }).decide(({ input }) => [emit(remindersChanged, { shouldRemind: input.shouldRemind })]);
 
 export const setReminder = command({
-  input: { taskId: ref(Task), remindAt: datetime },
+  input: { taskId: ref(Task), remindAt: instant },
   emits: [reminderScheduled],
 }).decide(({ input }) => [
   emit(reminderScheduled, { id: input.taskId, remindAt: input.remindAt, reminderDecision: "decided" }),
@@ -116,9 +116,7 @@ export const recordReminderTimeReached = command({
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
   requires: {
     due: ({ bound, now }) =>
-      bound.task.completedAt === null &&
-      bound.task.remindAt !== null &&
-      Temporal.Instant.compare(bound.task.remindAt, now) <= 0,
+      bound.task.completedAt === null && bound.task.remindAt !== null && bound.task.remindAt <= now,
   },
 }).decide(({ bound }) => [
   emit(reminderTimeReachedRecorded, { id: bound.task.id, remindAt: null }),

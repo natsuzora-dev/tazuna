@@ -1,7 +1,7 @@
-import { datetime, emit, entity, service } from "@natsuzora-dev/tazuna";
+import { emit, entity, instant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const Task = entity({ description: "A task", fields: { id: z.string(), at: datetime }, key: "id" });
+export const Task = entity({ description: "A task", fields: { id: z.string(), at: instant }, key: "id" });
 
 export const { command, createEvent, contract, scenario } = service({
   name: "stampedTodo",
@@ -11,7 +11,7 @@ export const { command, createEvent, contract, scenario } = service({
 
 export const taskAdded = createEvent({ entity: Task });
 
-const stored: Temporal.Instant = JSON.parse('"2026-10-25T00:00:00Z"');
+const stored: number = JSON.parse('"2026-10-25T00:00:00Z"');
 
 export const addTask = command({
   input: { taskId: Task.fields.id },

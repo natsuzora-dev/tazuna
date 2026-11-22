@@ -89,7 +89,7 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
 
   const place = () => ({ at: lines.push(undefined) - 1, time: adapter.now() });
   const write = (line: UntimedTraceLine, { at, time } = place()) => {
-    lines[at] = { ...line, time: time.toString() } as TraceLine;
+    lines[at] = { ...line, time } as TraceLine;
   };
   const wait = (
     request: ForeignRequest,
@@ -209,13 +209,12 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
     }
   }
 
-  await adapter.start(outputs, Temporal.Instant.from(scenario.given.start), givenRecordsOf(spec, scenario, runner));
+  await adapter.start(outputs, scenario.given.start, givenRecordsOf(spec, scenario, runner));
   for (const [k, line] of snapshot.entries()) {
     if (line.dir === "out") continue;
-    const time = Temporal.Instant.from(line.time);
     await adapter.settled();
-    if (!time.equals(adapter.now())) {
-      await adapter.advanceTo(time);
+    if (line.time !== adapter.now()) {
+      await adapter.advanceTo(line.time);
       await adapter.settled();
     }
     const compared = comparedBefore(k);

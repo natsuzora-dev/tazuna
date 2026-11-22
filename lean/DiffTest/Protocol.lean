@@ -21,8 +21,6 @@ namespace Tazuna.DiffTest
 
 open Tazuna.Data Tazuna.Service
 
-local instance : ToValue Time := ⟨Time.toValue⟩
-local instance : FromValue Time := ⟨Time.fromValue⟩
 
 /-- A service of a `pair` request, and whether it is external. -/
 structure PairedService where
@@ -74,8 +72,6 @@ inductive Request where
   | sort (schema value : Value)
   /-- keyOrdered of an encoded value by its JSON Schema. -/
   | keyOrdered (schema value : Value)
-  /-- scenarioTime? of a text, as renderTime writes the time. -/
-  | scenarioTime (text : String)
   /-- Service.schemaOf of the service `service` of the structure. -/
   | schemaOf («structure» : Spec.Structure) (service : String) (schema : Schema)
   /-- The value of an IR expression whose only argument is `input`, over `records`, with createKey over `keys`. -/
@@ -162,7 +158,7 @@ inductive Reply where
   | assign (context : Value) (copy : Option Value) (created : List String)
   | input (input : Value) (created : List String)
   | held (held : Value)
-  | deadlineAt (time : Option String)
+  | deadlineAt (time : Option Time)
   | offers (payloads : List Value)
   | showInput (input : Value)
   | items (keys : List Value)
@@ -280,7 +276,6 @@ inductive Response where
   | stepOrderChanges (searched : List SearchedProcessing)
   | sorted (value : Value)
   | keyOrdered (ordered : Bool)
-  | scenarioTime (time : Option String)
   | schemaOf (schema : Option Value)
   | evaluated (result : Evaluated)
   /-- Whether Lean parses by the schema, and then the value, Zod's issues, or whether a codec threw. -/

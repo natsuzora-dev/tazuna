@@ -3,8 +3,8 @@ import { after, test } from "node:test";
 import fc from "fast-check";
 import { z } from "zod";
 import { bag, set, sortedBy, toJson } from "../src/data/collections.ts";
-import { date, datetime, duration } from "../src/data/datetime.ts";
 import { objectSchema } from "../src/data/jsonSchema.ts";
+import { date, duration, instant } from "../src/data/time.ts";
 import { type Json, plain, type Shape, strictObjectOf } from "../src/data/values.ts";
 import { Lean } from "./lean/lean.ts";
 
@@ -39,28 +39,11 @@ const json: fc.Arbitrary<Json> = fc.letrec<{ value: Json }>((tie) => ({
     fc.dictionary(fc.constantFrom("a", "k", "x", "1"), tie("value"), { maxKeys: 3 }),
   ),
 })).value;
-const instant = fc.constantFrom(
-  "2026-01-01T09:00:00+09:00",
-  "2026-01-01T00:00:00.120Z",
-  "2026-02-29T00:00:00Z",
-  "2024-02-29T23:59:59.123456789-01:30",
-  "2024-02-29T23:59:59.1234567891Z",
-  "0000-01-01T00:30:00+01:00",
-  "2026-01-01T00:00Z",
-  "2026-01-01",
+const instantValue = fc.oneof(
+  fc.constantFrom(1_767_225_600_000, -1, 0.5, 2 ** 53, "2026-01-01T00:00:00Z"),
+  fc.integer({ min: -3, max: 3 }),
 );
-const day = fc.constantFrom("2026-01-31", "2026-02-30", "2024-02-29", "26-01-01");
-const length = fc.constantFrom(
-  "PT10S",
-  "P1Y2M3DT4H5M6.70S",
-  "P2W",
-  "PT1,5S",
-  "P0D",
-  "P1W2D",
-  "PT",
-  "P",
-  "PT1.0000000001S",
-);
+const day = fc.constantFrom("2026-01-31", "2026-02-30", "2024-02-29", "0000-02-29", "26-01-01", 20260131);
 
 /** A schema's fields and values of them: often of the field's own kind, sometimes anything. */
 const fixtures: readonly { readonly shape: Shape; readonly fields: Readonly<Record<string, fc.Arbitrary<Json>>> }[] = [
@@ -120,13 +103,13 @@ const fixtures: readonly { readonly shape: Shape; readonly fields: Readonly<Reco
     },
   },
   {
-    shape: { at: datetime, on: date, for: duration, maybe: datetime.optional(), list: z.array(datetime) },
+    shape: { at: instant, on: date, for: duration, maybe: instant.optional(), list: z.array(instant) },
     fields: {
-      at: instant,
+      at: instantValue,
       on: day,
-      for: length,
-      maybe: fc.oneof(instant, scalar),
-      list: fc.array(instant, { maxLength: 2 }),
+      for: instantValue,
+      maybe: fc.oneof(instantValue, scalar),
+      list: fc.array(instantValue, { maxLength: 2 }),
     },
   },
 ];

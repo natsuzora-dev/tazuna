@@ -1,10 +1,10 @@
-import { datetime, emit, entity, ref, service, singleEntity } from "@natsuzora-dev/tazuna";
+import { emit, entity, instant, ref, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { calendar } from "../calendar/contract.ts";
 
 export const Task = entity({
   description: "A task of the user",
-  fields: { id: z.string(), due: datetime.nullable() },
+  fields: { id: z.string(), due: instant.nullable() },
   key: "id",
 });
 
@@ -29,7 +29,7 @@ export const addTasks = command({
 }).decide(({ input }) => input.taskIds.map((id) => emit(taskAdded, { id, due: null })));
 
 export const setDue = command({
-  input: { taskId: ref(Task), due: datetime },
+  input: { taskId: ref(Task), due: instant },
   emits: [dueSet, lastSet],
 }).decide(({ input }) => [emit(dueSet, { id: input.taskId, due: input.due }), emit(lastSet, { taskId: input.taskId })]);
 
@@ -44,7 +44,7 @@ export const dueSetter = machine({
       type: "map",
       key: { taskId: ref(Task) },
       initial: "asking",
-      states: { asking: {}, setting: { held: { day: datetime } }, done: {} },
+      states: { asking: {}, setting: { held: { day: instant } }, done: {} },
     },
   },
 }).chart({

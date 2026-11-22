@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
-import type { date as dateSchema, datetime as datetimeSchema } from "./datetime.ts";
 import { InternalError } from "./internalError.ts";
 import { type JsonSchema, jsonSchema } from "./jsonSchema.ts";
 import { type Collection, collectionOf, mark } from "./marks.ts";
 import { fieldSchema, type SchemaNode, schemaNode } from "./schemaNode.ts";
+import { type DateLabel, date } from "./time.ts";
 import { field, fits, unionOptions } from "./unionOptions.ts";
 import { byCodePoint, canonicalJson, type Fields, type Json, plain, type Shape } from "./values.ts";
 
@@ -46,7 +46,7 @@ export const set = <E extends z.ZodType>(element: E): CollectionSchema<E, "bag">
 
 /** The fields of `E` whose encoded value orders as their decoded one, which Lean's SortKey orders. */
 type SortKeyOf<E extends z.ZodObject> = {
-  [K in keyof E["shape"]]-?: E["shape"][K] extends typeof datetimeSchema | typeof dateSchema
+  [K in keyof E["shape"]]-?: E["shape"][K] extends typeof date
     ? K
     : E["shape"][K] extends { readonly _zod: { readonly def: { readonly type: "pipe" } } }
       ? never
@@ -59,16 +59,7 @@ type SortKeyOf<E extends z.ZodObject> = {
 /** Lean's SortKey.of: the key that orders an encoded value, as a TS SortKey, whose compareKeys orders it as Lean. */
 function encodedKey(json: unknown): SortKey | undefined {
   if (typeof json === "number") return json;
-  if (typeof json !== "string") return undefined;
-  try {
-    return Temporal.Instant.fromEpochMilliseconds(Temporal.Instant.from(json).epochMilliseconds);
-  } catch {
-    try {
-      return Temporal.PlainDate.from(json);
-    } catch {
-      return undefined;
-    }
-  }
+  return typeof json === "string" && date.safeParse(json).success ? (json as DateLabel) : undefined;
 }
 
 /** The key `key` of each element of a sortedBy array of `element`, read from its encoded value as Lean reads it. */

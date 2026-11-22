@@ -114,8 +114,8 @@ export type Fault =
       };
     }
   /**
-   * The `at` of the deadline `deadline` of state `state` computes a value that is no Temporal.Instant in whole
-   * milliseconds, which the run's time cannot hold.
+   * The `at` of the deadline `deadline` of state `state` computes a value that is no safe integer of milliseconds, which
+   * the run's time cannot hold.
    */
   | {
       readonly kind: "Fault.atSchema";
@@ -126,8 +126,8 @@ export type Fault =
       };
     }
   /**
-   * The delay of the deadline `deadline` of state `state` takes its time past year 9999, which the run's time cannot hold
-   * (Time.inRange, the rule that an `at` meets too).
+   * The delay of the deadline `deadline` of state `state` takes its time past a safe integer, which the run's time cannot
+   * hold (Time.inRange, the rule that an `at` meets too).
    */
   | {
       readonly kind: "Fault.deadlineOutOfRange";

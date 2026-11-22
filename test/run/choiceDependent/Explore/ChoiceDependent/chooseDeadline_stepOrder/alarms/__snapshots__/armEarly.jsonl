@@ -1,6 +1,6 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"arm#1","name":"arm","input":{}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"arm#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"rang#1","name":"rang","payload":{"by":"first"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"rang#2","name":"rang","payload":{"by":"second"}}
-{"time":"2026-10-25T01:30:00Z","dir":"in","type":"time","id":"time#1"}
+{"time":1792886400000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{}}
+{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"arm#1","answer":{"result":"accepted"}}
+{"time":1792886400000,"dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
+{"time":1792890000000,"dir":"out","type":"event","id":"rang#1","name":"rang","payload":{"by":"first"}}
+{"time":1792890000000,"dir":"out","type":"event","id":"rang#2","name":"rang","payload":{"by":"second"}}
+{"time":1792891800000,"dir":"in","type":"time","id":"time#1"}

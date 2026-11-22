@@ -59,7 +59,7 @@ interface Slot {
 
 const codecs = new WeakMap<Shape, boolean>();
 
-/** Whether a value of `shape` holds a codec other than tazuna's time codecs, whose decoded value JSON does not show. */
+/** Whether a value of `shape` holds a codec, whose decoded value JSON does not show. */
 function holdsCodec(shape: Shape): boolean {
   const known = codecs.get(shape);
   if (known !== undefined) return known;

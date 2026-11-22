@@ -1,4 +1,4 @@
-import { datetime } from "@natsuzora-dev/tazuna";
+import { instant } from "@natsuzora-dev/tazuna";
 import { calendar } from "../calendar/contract.ts";
 import { machine, noteDay, taskAdded, taskCompleted } from "./todo.ts";
 
@@ -8,7 +8,7 @@ export const dayNoter = machine({
   queries: { nextDay: calendar.nextDay },
   commands: { noteDay },
   initial: "waiting",
-  states: { waiting: {}, asking: {}, noting: { held: { day: datetime } } },
+  states: { waiting: {}, asking: {}, noting: { held: { day: instant } } },
 }).chart({
   states: {
     waiting: { on: { taskAdded: [{ target: "asking" }] } },

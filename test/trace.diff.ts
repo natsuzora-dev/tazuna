@@ -58,27 +58,7 @@ function rewrite(value: Json, path: Path, f: (v: Json) => Json | undefined): Jso
   );
 }
 
-const fixedTimes = [
-  "2026-10-25T09:00:00+24:00",
-  "2026-10-25T09:00:00+09:60",
-  "2026-10-25T09:00:00+0900",
-  "2026-10-25T09:00:00-05:00",
-  "2026-00-25T09:00:00Z",
-  "2026-13-25T09:00:00Z",
-  "2026-1x-25T09:00:00Z",
-  "2026-10-00T09:00:00Z",
-  "2026-04-31T09:00:00Z",
-  "2026-10-25T24:00:00Z",
-  "2026-10-25T09:60:00Z",
-  "2026-10-25T09:00:60Z",
-  "1900-02-29T09:00:00Z",
-  "2000-02-29T09:00:00Z",
-  "2100-02-29T09:00:00Z",
-  "2026-10-25T09:00:00.5Z",
-  "2026-10-25T09:00:00.123456789Z",
-  "2026-10-25T09:00:00z",
-  "2026-10-25T09:00Z",
-];
+const fixedTimes = [0, -1, 0.5, 2 ** 53, 9_007_199_254_740_991, -9_007_199_254_740_991, "2026-10-25T09:00:00Z"];
 
 const mutations: Record<string, (line: Json) => Json[]> = {
   fieldRemoved: (line) => fieldPaths(line).map((p) => rewrite(line, p, () => undefined)),
@@ -91,15 +71,9 @@ const mutations: Record<string, (line: Json) => Json[]> = {
   unknownString: (line) =>
     fieldPaths(line).map((p) => rewrite(line, p, (v) => (typeof v === "string" ? "unknownString" : v))),
   time: (line) =>
-    [
-      (t: string) => t.replace(/(Z|[+-]\d\d:\d\d)$/, ""),
-      (t: string) => t.replace(/:\d\d(?=(\.\d+)?(Z|[+-]\d\d:\d\d)$)/, ""),
-      (t: string) => t.replace(/Z$/, "z"),
-      (t: string) => t.replace(/(Z|[+-]\d\d:\d\d)$/, ".$1"),
-      (t: string) => t.replace(/T\d\d/, "T24"),
-      (t: string) => t.replace(/^\d{4}-\d\d-\d\d/, "2026-02-30"),
-      (t: string) => t.replace(/^\d{4}-\d\d-\d\d/, "2024-02-29"),
-    ].map((f) => rewrite(line, ["time"], (v) => (typeof v === "string" ? f(v) : v))),
+    [(t: number) => t + 0.5, (t: number) => -t, (t: number) => String(t)].map((f) =>
+      rewrite(line, ["time"], (v) => (typeof v === "number" ? f(v) : v)),
+    ),
 };
 
 test("The generated Zod traceLine and the decoder derived from the Lean TraceLine both reject, or both read to the same value with the same field order, each line of the example traces and snapshots and each mutation of it", (t) => {

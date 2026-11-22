@@ -1,4 +1,4 @@
-import { emit, service } from "@natsuzora-dev/tazuna";
+import { emit, parseInstant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { command, machine, event, contract, scenario } = service({
@@ -29,7 +29,7 @@ const clock = (by: string) =>
     states: {
       idle: { on: { armed: [{ target: "waiting" }] } },
       waiting: {
-        after: { due: { at: () => Temporal.Instant.from("2026-10-25T01:00:00Z"), onFired: [{ target: "ringing" }] } },
+        after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "ringing" }] } },
       },
       ringing: { sends: { ring: { input: () => ({ by }), onAccepted: [{ target: "done" }] } } },
     },

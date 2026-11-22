@@ -1,4 +1,4 @@
-import { bag, emit, entity, service } from "@natsuzora-dev/tazuna";
+import { bag, emit, entity, parseInstant, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({ description: "A task of the user", fields: { id: z.string() }, key: "id" });
@@ -30,4 +30,4 @@ export const hasTasks = query({
 
 export const isLate = query({
   output: { late: z.boolean() },
-}).resolve(({ now }) => ({ late: Temporal.Instant.compare(now, Temporal.Instant.from("2026-10-25T02:00:00Z")) >= 0 }));
+}).resolve(({ now }) => ({ late: now >= parseInstant("2026-10-25T02:00:00Z") }));

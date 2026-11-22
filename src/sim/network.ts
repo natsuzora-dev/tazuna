@@ -87,7 +87,7 @@ export interface RunningService {
 
 /** Lean's World. The running services are in `services`, the own service first. */
 export interface World {
-  now: Temporal.Instant;
+  now: number;
   readonly roles: ReadonlyMap<string, Role>;
   readonly services: ReadonlyMap<string, RunningService>;
   readonly messages: Message[];

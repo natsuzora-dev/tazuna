@@ -27,12 +27,12 @@ export interface Enabled {
     readonly sender: string;
   }[];
   /** The time of the next deadline, absent when there is none. */
-  readonly nextDeadline?: string;
+  readonly nextDeadline?: number;
 }
 
-function nextDeadline(s: State): Temporal.Instant | undefined {
-  return s.deadlines.reduce<Temporal.Instant | undefined>(
-    (best, t) => (best === undefined || Temporal.Instant.compare(t.time, best) < 0 ? t.time : best),
+function nextDeadline(s: State): number | undefined {
+  return s.deadlines.reduce<number | undefined>(
+    (best, t) => (best === undefined || t.time < best ? t.time : best),
     undefined,
   );
 }
@@ -50,7 +50,7 @@ export function enabled(r: Processing): Enabled {
         target: p.activity.target.service,
         sender: sender(p.requester),
       })),
-      ...(next === undefined ? {} : { nextDeadline: next.toString() }),
+      ...(next === undefined ? {} : { nextDeadline: next }),
     };
   });
 }

@@ -1,9 +1,13 @@
-import { requested, requestOf, run } from "@natsuzora-dev/tazuna";
+import { parseInstant, requested, requestOf, run } from "@natsuzora-dev/tazuna";
 import { todo } from "../todo/contract.ts";
 import { given, scenario } from "./data.ts";
 import { counterScreen } from "./screens.ts";
 
-const arranged = given({ start: "2026-10-25T10:00:00+09:00", records: {}, peers: [run(todo, { Task: [] })] });
+const arranged = given({
+  start: parseInstant("2026-10-25T10:00:00+09:00"),
+  records: {},
+  peers: [run(todo, { Task: [] })],
+});
 
 export const staleAnswerRedelivered = scenario({
   description:

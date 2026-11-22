@@ -39,7 +39,7 @@ inductive Mismatch where
   /-- The line comes before the line `before`, which its snapshot line must follow. -/
   | lineOrder (line : Nat) (subject before : Subject)
   /-- The line has another time than the snapshot's. -/
-  | time (line : Nat) (subject : Subject) (snapshot trace : String)
+  | time (line : Nat) (subject : Subject) (snapshot trace : Time)
   /-- The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. -/
   | resultOf (line : Nat) (subject : Subject) (snapshot trace : Option String)
   /-- The run of test, not a trace, differs from the snapshot at its line `line`. A missing line is null. -/

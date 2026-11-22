@@ -6,7 +6,7 @@ import Tazuna.Data.UnionOptions
 Parsing a value by its JSON Schema as Zod's safeParse does, for the schemas whose JSON Schema says all that Zod checks
 (`supported`): the value that the parse gives, encoded again as JSON, or the issues that Zod reports, field for field
 and in Zod's order. TS writes what JSON Schema leaves out as `x-tazuna-*` keywords: the checks in Zod's order, a
-nullable, a discriminator, a tazuna time codec, and `x-tazuna-opaque` where only Zod knows what happens.
+nullable, a discriminator, and `x-tazuna-opaque` where only Zod knows what happens.
 -/
 
 namespace Tazuna.Data
@@ -44,7 +44,7 @@ def aborted (issues : List ZodIssue) : Bool := issues.any (·.continues != some 
 /-- Whether even a check with a `when` is skipped, as Zod's util.explicitlyAborted: an issue that says it stops. -/
 def explicitlyAborted (issues : List ZodIssue) : Bool := issues.any (·.continues == some false)
 
-/-- An author's code or a codec's transform threw, as a refinement of Temporal's does on a fraction past nanoseconds. -/
+/-- An author's code or a codec's transform threw, as a refinement can. -/
 abbrev ParseM := Except Unit
 
 /-- The type that Zod's util.parsedType names for a value, `undefined` for none. -/
@@ -101,119 +101,10 @@ def multipleOf (value step : Float) : Bool :=
   let magnitude := if ratio.abs > 1 then ratio.abs else 1
   (ratio - rounded).abs < 4 * 2.220446049250313e-16 * magnitude
 
-/-- The text of `n`, `width` digits wide. -/
-def digits (width : Nat) (n : Nat) : String :=
-  let s := toString n
-  String.ofList (List.replicate (width - s.length) '0') ++ s
-
-/-- Zod's pattern of z.iso.datetime({ offset: true }), z.iso.date() and z.iso.duration(), as an issue writes it. -/
+/-- Zod's pattern of z.iso.date(), as an issue writes it. -/
 def datePattern : String :=
   "(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))"
 
-def formatPattern : String → String
-  | "datetime" => "/^" ++ datePattern ++
-      "T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$/"
-  | "date" => "/^" ++ datePattern ++ "$/"
-  | _ => "/^P(?:(\\d+W)|(?!.*W)(?=\\d|T\\d)(\\d+Y)?(\\d+M)?(\\d+D)?(T(?=\\d)(\\d+H)?(\\d+M)?(\\d+([.,]\\d+)?S)?)?)$/"
-
-def formatName : String → String
-  | "datetime" => "ISO datetime"
-  | "date" => "ISO date"
-  | _ => "ISO duration"
-
-/-- Whether z.iso.date() accepts `text`. -/
-def isDate (text : String) : Bool := isOffsetDateTime (text ++ "T00:00:00Z") && text.length == 10
-
-/-- The parts of a duration that z.iso.duration() accepts: each unit's digits, and the seconds' fraction digits. -/
-structure DurationParts where
-  units : List (Char × Nat) := []
-  fraction : List Char := []
-
-/-- Digits at the head of `cs`, and what follows them. -/
-def leadingNumber (cs : List Char) : Option (Nat × List Char) :=
-  let ds := cs.takeWhile Char.isDigit
-  if ds.isEmpty then none else some ((String.ofList ds).toNat!, cs.drop ds.length)
-
-/-- The units at the head of `cs` that come in the order of `allowed`, each once, and what follows them. -/
-def durationUnits (allowed : List Char) (cs : List Char) : List (Char × Nat) × List Char :=
-  match allowed with
-  | [] => ([], cs)
-  | u :: later =>
-    match leadingNumber cs with
-    | some (n, c :: rest) =>
-      if c == u then
-        let (more, after) := durationUnits later rest
-        ((u, n) :: more, after)
-      else durationUnits later cs
-    | _ => ([], cs)
-
-/-- The parts of `text` when z.iso.duration() accepts it. -/
-def durationParts? (text : String) : Option DurationParts := do
-  let cs := text.toList
-  guard (cs.head? == some 'P')
-  let number := leadingNumber
-  let body := cs.drop 1
-  match number body with
-  | some (n, ['W']) => pure { units := [('W', n)] }
-  | _ =>
-    let (date, rest) := durationUnits ['Y', 'M', 'D'] body
-    match rest with
-    | [] => if date.isEmpty then none else pure { units := date }
-    | 'T' :: time =>
-      let (hm, rest) := durationUnits ['H', 'M'] time
-      let (seconds, fraction, rest) ← match number rest with
-        | some (s, sep :: more) =>
-          if sep == 'S' then some ([('S', s)], [], more)
-          else if sep == '.' || sep == ',' then
-            let f := more.takeWhile Char.isDigit
-            if !f.isEmpty && more.drop f.length == ['S'] then some ([('S', s)], f, []) else none
-          else none
-        | _ => some ([], [], rest)
-      guard (rest.isEmpty && !(hm ++ seconds).isEmpty)
-      pure { units := date ++ [('T', 0)] ++ hm ++ seconds, fraction }
-    | _ => none
-
-/-- The text of `Temporal.Duration.from(text).toString()`, or a throw where Temporal rejects the duration. -/
-def durationText (p : DurationParts) : ParseM String := do
-  if p.fraction.length > 9 then throw ()
-  let unit (u : Char) (after : Bool) : Nat :=
-    let afterT := p.units.dropWhile (·.1 != 'T')
-    ((if after then afterT else p.units.takeWhile (·.1 != 'T')).lookup u).getD 0
-  let (years, months, weeks, days) := (unit 'Y' false, unit 'M' false, unit 'W' false, unit 'D' false)
-  let (hours, minutes, seconds) := (unit 'H' true, unit 'M' true, unit 'S' true)
-  if years ≥ 2 ^ 32 || months ≥ 2 ^ 32 || weeks ≥ 2 ^ 32 then throw ()
-  if days * 86400 + hours * 3600 + minutes * 60 + seconds ≥ 2 ^ 53 then throw ()
-  let fraction := String.ofList ((p.fraction.reverse.dropWhile (· == '0')).reverse)
-  let part (n : Nat) (u : String) := if n == 0 then "" else toString n ++ u
-  let date := part years "Y" ++ part months "M" ++ part weeks "W" ++ part days "D"
-  let secondsText := if seconds == 0 && fraction.isEmpty then "" else
-    toString seconds ++ (if fraction.isEmpty then "" else "." ++ fraction) ++ "S"
-  let time := part hours "H" ++ part minutes "M" ++ secondsText
-  pure (if date.isEmpty && time.isEmpty then "PT0S" else "P" ++ date ++ (if time.isEmpty then "" else "T" ++ time))
-
-/-- The text of `Temporal.Instant.from(text).toString()` for a text that z.iso.datetime({ offset: true }) accepts. -/
-def instantText (text : String) : ParseM String := do
-  let cs := text.toList
-  let fraction := if cs[19]? == some '.' then (cs.drop 20).takeWhile Char.isDigit else []
-  if fraction.length > 9 then throw ()
-  let num (a b : Nat) : Int := (String.ofList ((cs.drop a).take (b - a))).toNat!
-  let rest := cs.drop (19 + (if fraction.isEmpty then 0 else fraction.length + 1))
-  let offset : Int := match rest with
-    | [sign, a, b, ':', c, d] =>
-      let m := (String.ofList [a, b]).toNat! * 60 + (String.ofList [c, d]).toNat!
-      if sign == '-' then -m else m
-    | _ => 0
-  let nanos : Int := (String.ofList ((fraction ++ List.replicate 9 '0').take 9)).toNat!
-  let seconds := (((daysFromCivil (num 0 4) (num 5 7) (num 8 10) * 24 + num 11 13) * 60 + num 14 16 - offset) * 60 +
-    num 17 19)
-  let days := seconds / 86400
-  let daySeconds := (seconds % 86400).toNat
-  let (y, mo, d) := civilFromDays days
-  let year := if 0 ≤ y && y ≤ 9999 then digits 4 y.toNat else (if y < 0 then "-" else "+") ++ digits 6 y.natAbs
-  let subsecond := String.ofList ((digits 9 nanos.toNat).toList.reverse.dropWhile (· == '0')).reverse
-  pure (s!"{year}-{digits 2 mo.toNat}-{digits 2 d.toNat}T{digits 2 (daySeconds / 3600)}:" ++
-    s!"{digits 2 (daySeconds / 60 % 60)}:{digits 2 (daySeconds % 60)}" ++
-    (if subsecond.isEmpty then "" else "." ++ subsecond) ++ "Z")
 
 def fieldStr (schema : Value) (key : String) : Option String :=
   match schema.field? key with
@@ -235,10 +126,7 @@ def supportedCheck (c : Value) : Bool :=
     match fieldStr c "format" with
     | some "starts_with" | some "ends_with" => true
     | some "includes" => c.field? "position" == none
-    | some "datetime" =>
-      c.field? "offset" == some (.bool true) && c.field? "local" == some (.bool false) &&
-        c.field? "precision" == some .null
-    | some "date" | some "duration" => true
+    | some "date" => true
     | _ => false
   | _ => false
 
@@ -247,7 +135,7 @@ def knownKeywords : List String :=
   ["$schema", "type", "properties", "required", "additionalProperties", "items", "minItems", "maxItems", "minLength",
    "maxLength", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "format", "pattern",
    "enum", "const", "anyOf", "oneOf", "default", "uniqueItems", "description", "title", "examples",
-   "x-tazuna-checks", "x-tazuna-nullable", "x-tazuna-discriminator", "x-tazuna-time", "x-tazuna-bag",
+   "x-tazuna-checks", "x-tazuna-nullable", "x-tazuna-discriminator", "x-tazuna-bag",
    "x-tazuna-set", "x-tazuna-sorted-by"]
 
 /-- Whether an `allOf` holds only the patterns that JSON Schema writes for several string checks, as the checks say. -/
@@ -275,14 +163,8 @@ def nullableInner (schema : Value) : Value :=
 partial def supported (schema : Value) : Bool :=
   match schema with
   | .obj fields =>
-    fields.all (fun (k, v) =>
-      knownKeywords.contains k || (k == "allOf" && patternsOnly v) ||
-      -- A duration is a codec to a sort key, since its text does not order as its length does.
-      (k == "x-tazuna-codec" && schema.field? "x-tazuna-time" == some (.str "duration"))) &&
+    fields.all (fun (k, v) => knownKeywords.contains k || (k == "allOf" && patternsOnly v)) &&
     (checksOf schema).all supportedCheck &&
-    (match schema.field? "x-tazuna-time" with
-      | none | some (.str "instant") | some (.str "date") | some (.str "duration") => true
-      | _ => false) &&
     (match schema.field? "additionalProperties" with
       | none | some (.bool false) => true
       | _ => false) &&
@@ -407,13 +289,9 @@ def runCheck (c : Value) (v : Value) : List ZodIssue :=
       if (List.range (s.length + 1)).any (fun i => p.toList.isPrefixOf (s.toList.drop i)) then []
       else failed "includes" p "include"
     | _ =>
-      let ok := match format with
-        | "datetime" => isOffsetDateTime s
-        | "date" => isDate s
-        | _ => (durationParts? s).isSome
-      if ok then [] else
+      if (parseDate? s).isSome then [] else
       [checkIssue [("origin", .str "string"), ("code", .str "invalid_format"), ("format", .str format),
-        ("pattern", .str (formatPattern format))] s!"Invalid {formatName format}"]
+        ("pattern", .str ("/^" ++ datePattern ++ "$/"))] "Invalid ISO date"]
   | some "set", .arr vs =>
     let (_, issues) := vs.zipIdx.foldl (fun ((seen : List String), (issues : List ZodIssue)) (x, i) =>
       let text := x.canonical
@@ -457,16 +335,6 @@ def sizeCaps (checks : List Value) : List (Value × Nat) :=
     | some "max_length", some (.num n), _ | some "length_equals", _, some (.num n) => some (c, n.mantissa.toNat)
     | _, _, _ => none
 
-/-- The value of the time codec `kind` for a text that its format took, as the codec decodes and encodes it. -/
-def timeValue (kind : String) (s : String) : ParseM Value :=
-  match kind with
-  | "instant" => do pure (.str (← instantText s))
-  | "duration" =>
-    match durationParts? s with
-    | some p => do pure (.str (← durationText p))
-    | none => pure (.str s)
-  | _ => pure (.str s)
-
 /-- The discriminator values of an option: its field's `const` or `enum`. -/
 def discriminatorValues (key : String) (option : Value) : List Value :=
   match propertyOf option key with
@@ -495,11 +363,7 @@ partial def parseValue (schema : Value) (v : Option Value) : ParseM Parsed := do
       | _ => s!"Invalid option: expected one of {"|".intercalate (values.map primitiveText)}"
     return { value := v, issues := [{ fields := [("code", .str "invalid_value"), ("values", .arr values)], message }] }
   let typed ← parseType schema v
-  let checked := runChecks (checksOf schema) typed
-  match fieldStr schema "x-tazuna-time", checked.value with
-  | some kind, some (.str s) =>
-    if checked.issues.isEmpty then pure { value := some (← timeValue kind s) } else pure checked
-  | _, _ => pure checked
+  pure (runChecks (checksOf schema) typed)
 
 partial def parseType (schema : Value) (v : Option Value) : ParseM Parsed := do
   let expect (name : String) (ok : Bool) : Parsed :=

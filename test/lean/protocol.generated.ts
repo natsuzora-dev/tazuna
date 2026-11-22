@@ -64,7 +64,7 @@ export type Scope = {
   readonly shown: Readonly<Record<string, Json>>;
   readonly input: Json;
   readonly held: Json;
-  readonly now: string;
+  readonly now: number;
 };
 
 /**
@@ -199,7 +199,7 @@ export type Awaiting = {
 export type Enabled = {
   readonly operations: readonly Operation[];
   readonly awaiting: readonly Awaiting[];
-  readonly nextDeadline?: string;
+  readonly nextDeadline?: number;
 };
 
 /** A service of a `pair` request, and whether it is external. */
@@ -303,11 +303,6 @@ export type Request =
       readonly schema: Json;
       readonly value: Json;
     }
-  /** scenarioTime? of a text, as renderTime writes the time. */
-  | {
-      readonly type: "scenarioTime";
-      readonly text: string;
-    }
   /** Service.schemaOf of the service `service` of the structure. */
   | {
       readonly type: "schemaOf";
@@ -350,14 +345,14 @@ export type Question =
       readonly command: string;
       readonly binding: string;
       readonly input: Json;
-      readonly now: string;
+      readonly now: number;
     }
   | {
       readonly type: "requirement";
       readonly command: string;
       readonly condition: string;
       readonly input: Json;
-      readonly now: string;
+      readonly now: number;
     }
   | {
       readonly type: "inputRequirement";
@@ -369,13 +364,13 @@ export type Question =
       readonly type: "decide";
       readonly command: string;
       readonly input: Json;
-      readonly now: string;
+      readonly now: number;
     }
   | {
       readonly type: "ensures";
       readonly command: string;
       readonly input: Json;
-      readonly now: string;
+      readonly now: number;
     }
   | {
       readonly type: "queryEnsures";
@@ -407,27 +402,27 @@ export type Question =
       readonly type: "resolve";
       readonly query: string;
       readonly input: Json;
-      readonly now: string;
+      readonly now: number;
     }
   | {
       readonly type: "automationBinding";
       readonly automation: string;
       readonly binding: string;
       readonly payload: Json;
-      readonly now: string;
+      readonly now: number;
     }
   | {
       readonly type: "automationGuard";
       readonly automation: string;
       readonly condition: string;
       readonly payload: Json;
-      readonly now: string;
+      readonly now: number;
     }
   | {
       readonly type: "react";
       readonly automation: string;
       readonly payload: Json;
-      readonly now: string;
+      readonly now: number;
       readonly keys: Keys;
     }
   | {
@@ -631,7 +626,7 @@ export type Reply =
     }
   | {
       readonly type: "deadlineAt";
-      readonly time?: string;
+      readonly time?: number;
     }
   | {
       readonly type: "offers";
@@ -794,10 +789,6 @@ export type Response =
   | {
       readonly type: "keyOrdered";
       readonly ordered: boolean;
-    }
-  | {
-      readonly type: "scenarioTime";
-      readonly time: string | null;
     }
   | {
       readonly type: "schemaOf";

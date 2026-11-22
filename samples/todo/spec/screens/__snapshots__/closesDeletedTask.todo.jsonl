@@ -1,9 +1,9 @@
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"screens/todo.tasks#1","name":"tasks","input":{"filter":"open"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"task-1","title":"Buy milk","dueAt":"2026-10-26T09:00:00Z","completedAt":null}]}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"subscribe","id":"screens/todo.reminderSettings#1","name":"reminderSettings","input":{}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"screens/todo.reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":true}}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"deleteTask#1","name":"deleteTask","input":{"taskId":"task-1"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"deleteTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskDeletedRecorded#1","name":"taskDeletedRecorded","payload":{"id":"task-1"},"resultOf":"deleteTask#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskDeleted#1","name":"taskDeleted","payload":{"taskId":"task-1"},"resultOf":"deleteTask#1","after":["taskDeletedRecorded#1"]}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#4","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[]}}}
+{"time":1792890000000,"dir":"in","type":"subscribe","id":"screens/todo.tasks#1","name":"tasks","input":{"filter":"open"}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"task-1","title":"Buy milk","dueAt":1793005200000,"completedAt":null}]}}}
+{"time":1792890000000,"dir":"in","type":"subscribe","id":"screens/todo.reminderSettings#1","name":"reminderSettings","input":{}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#2","to":"screens/todo.reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":true}}}
+{"time":1792890000000,"dir":"in","type":"command","id":"deleteTask#1","name":"deleteTask","input":{"taskId":"task-1"}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#3","to":"deleteTask#1","answer":{"result":"accepted"}}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskDeletedRecorded#1","name":"taskDeletedRecorded","payload":{"id":"task-1"},"resultOf":"deleteTask#1"}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskDeleted#1","name":"taskDeleted","payload":{"taskId":"task-1"},"resultOf":"deleteTask#1","after":["taskDeletedRecorded#1"]}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#4","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[]}}}

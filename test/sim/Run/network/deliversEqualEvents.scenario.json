@@ -1,7 +1,7 @@
 {
   "service": "metronome",
   "given": {
-    "start": "2026-10-25T00:00:00Z",
+    "start": 1792886400000,
     "records": [],
     "peers": [
       {

@@ -1,14 +1,14 @@
-{"time":"2026-10-25T00:00:00Z","dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk","dueAt":null},"resultOf":"addTask#1"}
-{"time":"2026-10-25T00:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":"2026-10-25T00:00:00Z"}}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"time","id":"time#1"}
-{"time":"2026-10-25T01:00:00Z","dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2","title":"Buy eggs"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","title":"Buy eggs","dueAt":null},"resultOf":"addTask#2"}
-{"time":"2026-10-25T01:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#2","name":"calendar.nextDay","input":{"from":"2026-10-25T01:00:00Z"}}
-{"time":"2026-10-25T02:00:00Z","dir":"in","type":"time","id":"time#2"}
-{"time":"2026-10-25T02:00:00Z","dir":"in","type":"command","id":"addTask#3","name":"addTask","input":{"taskId":"task-3","title":"Buy tea"}}
-{"time":"2026-10-25T02:00:00Z","dir":"out","type":"answer","id":"answer#3","to":"addTask#3","answer":{"result":"accepted"}}
-{"time":"2026-10-25T02:00:00Z","dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"id":"task-3","title":"Buy tea","dueAt":null},"resultOf":"addTask#3"}
-{"time":"2026-10-25T02:00:00Z","dir":"out","type":"query","id":"calendar.nextDay#3","name":"calendar.nextDay","input":{"from":"2026-10-25T02:00:00Z"}}
+{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
+{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk","dueAt":null},"resultOf":"addTask#1"}
+{"time":1792886400000,"dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":1792886400000}}
+{"time":1792890000000,"dir":"in","type":"time","id":"time#1"}
+{"time":1792890000000,"dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2","title":"Buy eggs"}}
+{"time":1792890000000,"dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","title":"Buy eggs","dueAt":null},"resultOf":"addTask#2"}
+{"time":1792890000000,"dir":"out","type":"query","id":"calendar.nextDay#2","name":"calendar.nextDay","input":{"from":1792890000000}}
+{"time":1792893600000,"dir":"in","type":"time","id":"time#2"}
+{"time":1792893600000,"dir":"in","type":"command","id":"addTask#3","name":"addTask","input":{"taskId":"task-3","title":"Buy tea"}}
+{"time":1792893600000,"dir":"out","type":"answer","id":"answer#3","to":"addTask#3","answer":{"result":"accepted"}}
+{"time":1792893600000,"dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"id":"task-3","title":"Buy tea","dueAt":null},"resultOf":"addTask#3"}
+{"time":1792893600000,"dir":"out","type":"query","id":"calendar.nextDay#3","name":"calendar.nextDay","input":{"from":1792893600000}}

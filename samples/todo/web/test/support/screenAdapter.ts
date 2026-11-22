@@ -119,7 +119,7 @@ export function screenAdapter(page: Page, held: typeof Held): Adapter & { readon
   };
   let unansweredCommands = 0;
   const unshownAnswers = new Map<AnyQuery, () => Promise<void>>();
-  let time: Temporal.Instant;
+  let time: number;
   const sent: Sent[] = [];
   const unbound: Unbound[] = [];
   const eventStreams = new Set<(event: TodoEvent) => void>();
@@ -231,14 +231,14 @@ export function screenAdapter(page: Page, held: typeof Held): Adapter & { readon
           receive({ call, write: () => undefined });
         },
       });
-      await page.clock.setFixedTime(time.epochMilliseconds);
+      await page.clock.setFixedTime(time);
       await list.goto();
     },
     now: () => time,
     async advanceTo(to) {
-      if (to.equals(time)) return;
+      if (to === time) return;
       time = to;
-      await page.clock.setFixedTime(time.epochMilliseconds);
+      await page.clock.setFixedTime(time);
     },
     async settled() {
       // The browser does not signal when a request from a React effect is sent, so wait, up to settleBound, until the
