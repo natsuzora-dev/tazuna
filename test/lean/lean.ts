@@ -3,7 +3,8 @@ import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import type { Expr } from "../../src/convert/ir.generated.ts";
+import type { Expr, Program } from "../../src/convert/ir.generated.ts";
+import { Converter } from "../../src/convert/program.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
 import type { Scenario } from "../../src/data/scenario.generated.ts";
 import type { TraceLine } from "../../src/data/trace.generated.ts";
@@ -68,6 +69,9 @@ export class Lean {
   private parts: string[] = [];
   private readonly decoder = new StringDecoder("utf8");
   private readonly chunk = Buffer.alloc(65536);
+  /** The converter of the specs whose functions Lean evaluates, started on the first simulation. */
+  private converter: Converter | undefined;
+  private readonly programs = new WeakMap<Spec, Program>();
 
   constructor() {
     this.dir = mkdtempSync(join(tmpdir(), "tazuna-lean-"));
@@ -90,11 +94,22 @@ export class Lean {
    * loading specs: awaiting between registrations lets after() close Lean once the earlier tests finish.
    */
   close(): void {
+    this.converter?.close();
     this.child.kill();
     running.delete(this.child);
     closeSync(this.toLean);
     closeSync(this.fromLean);
     rmSync(this.dir, { recursive: true, force: true });
+  }
+
+  /** The spec functions of `spec` that Lean evaluates itself; the rest it asks TS. */
+  private programOf(spec: Spec): Program {
+    const known = this.programs.get(spec);
+    if (known !== undefined) return known;
+    this.converter ??= new Converter();
+    const { program } = this.converter.program(spec);
+    this.programs.set(spec, program);
+    return program;
   }
 
   private send(message: Request | Reply): void {
@@ -183,7 +198,9 @@ export class Lean {
 
   /** Lean's stepOrderChanges of the scenario executed from its startup: each search, what it ran, and what it found. */
   stepOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): Responded<"stepOrderChanges">["searched"] {
-    return this.exchange({ type: "stepOrderChanges", structure: spec.structure, scenario }, functions).searched;
+    const program = this.programOf(spec);
+    return this.exchange({ type: "stepOrderChanges", structure: spec.structure, scenario, program }, functions)
+      .searched;
   }
 
   /**
@@ -204,6 +221,7 @@ export class Lean {
         scenario,
         ...(execute ? { execute } : {}),
         ...(stepOrders.length > 0 ? { stepOrders } : {}),
+        program: this.programOf(spec),
       },
       functions,
     );
@@ -217,7 +235,14 @@ export class Lean {
     functions: Answering,
   ): { readonly outcome: Omit<Responded<"simulate">, "fingerprint">; readonly fingerprint: string } {
     const { fingerprint, ...outcome } = this.exchange(
-      { type: "simulate", structure: spec.structure, scenario, execute: true, explore: true },
+      {
+        type: "simulate",
+        structure: spec.structure,
+        scenario,
+        execute: true,
+        explore: true,
+        program: this.programOf(spec),
+      },
       functions,
     );
     if (fingerprint === null) throw new Error("tazuna-lean gave no fingerprint for an explored world");
