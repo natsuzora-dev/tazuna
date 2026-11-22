@@ -332,6 +332,35 @@ export const fixtures: readonly Fixture[] = [
       ? input.on.toString()
       : Temporal.PlainDate.from("2026-01-31"),
   ),
+  fixture(
+    "arith",
+    { n: z.int(), items: bag(z.object({ k: z.int().default(0) })), d: z.number() },
+    fc.record({
+      n: fc.integer({ min: -9, max: 9 }),
+      items: fc.array(fc.record({ k: fc.integer({ min: -3, max: 3 }) }), { maxLength: 3 }),
+      d: number,
+    }),
+    ({ input }) => {
+      const { n } = input;
+      return input.items.some((i) => i.k * 2 - -n === 3 + input.items.size) ? -n : n + input.items.sum((i) => i.k) - 1;
+    },
+  ),
+  recordFixture(
+    "arith",
+    {},
+    fc.record({}),
+    ({ records }) => records.Task.filter((t) => t.title.length + 1 > 2).size * 3,
+  ),
+  fixture(
+    "timeAdd",
+    { at: datetime, n: z.int() },
+    fc.record({ at: instant, n: fc.integer({ min: -100, max: 100 }) }),
+    ({ input }) => [
+      input.at.add({ hours: input.n }),
+      input.at.subtract({ minutes: 2 }),
+      input.at.add({ milliseconds: input.n * 7 }),
+    ],
+  ),
   recordFixture("createKey", { title: z.string() }, fc.record({ title: text }), ({ input, createKey }) => ({
     first: createKey(ref(Task)),
     second: input.title === "" ? createKey(ids.task) : null,
@@ -361,6 +390,8 @@ export const outside: readonly ((args: {
   readonly createKey: CreateKey;
 }) => unknown)[] = [
   ({ input }) => input.n + 1 > 2,
+  ({ input }) => Temporal.Now.instant().add({ hours: input.n }),
+  ({ input }) => input.ns.length / 2,
   ({ input }) => input.title.trim() === "",
   ({ input }) => input.title < "b",
   ({ input }) => [...input.title].length === 1,

@@ -211,6 +211,18 @@ def jsNumber (x : Lean.JsonNumber) : String := Id.run do
       (if k == 1 then s else split 1) ++ "e" ++ exp
   return (if x.mantissa < 0 then "-" else "") ++ body
 
+def Arith.apply : Arith → Int → Int → Int
+  | .add, a, b => a + b
+  | .sub, a, b => a - b
+  | .mul, a, b => a * b
+
+/-- The integer that a number is. -/
+def integer? : Val → Option Int
+  | .json (.num n) =>
+    let d : Int := 10 ^ n.exponent
+    if n.mantissa % d == 0 then some (n.mantissa / d) else none
+  | _ => none
+
 /-- The string that JS writes for a scalar, null or undefined in a template literal. -/
 def jsString : Val → EvalM String
   | .undef => pure "undefined"
@@ -352,6 +364,17 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
   | .format parts => do
     let texts ← (← evalAll env vars parts).mapM jsString
     pure (.json (.str (String.join texts)))
+  | .arith operation a b => do
+    let left ← eval env vars a
+    match integer? left, integer? (← eval env vars b) with
+    | some x, some y => pure (.json (.num (operation.apply x y)))
+    | _, _ => thrown
+  | .timeAdd t d => do
+    let instant ← eval env vars t
+    match ordinal .instant instant, integer? (← eval env vars d) with
+    | some (start, _), some ms =>
+      if Time.inRange (start + ms) then pure (.json (.str (renderTime (start + ms)))) else thrown
+    | _, _ => thrown
   | .createKey entity => do
     modify fun t => { t with created := t.created ++ [entity] }
     match (givenKeys env.keys (← get).created).getLast? with

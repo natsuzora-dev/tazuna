@@ -44,6 +44,7 @@ import {
   SyntaxKind,
 } from "typescript/unstable/ast";
 import { SignatureKind, SymbolFlags, type Type, TypeFlags, type TypeReference } from "typescript/unstable/sync";
+import { z } from "zod";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Json } from "../data/values.ts";
 import type { Expr, Field } from "./ir.generated.ts";
@@ -97,6 +98,42 @@ export interface Defined {
 
 export const definedKey = (file: string, name: string): string => `${file}#${name}`;
 
+/**
+ * The schemas that a function's values come from, where the converter knows them: they tell an integer from a decimal,
+ * which the TS type `number` does not.
+ */
+export interface Typed {
+  readonly args: Readonly<Partial<Record<string, z.ZodType>>>;
+  readonly entities: Readonly<Record<string, z.ZodType>>;
+}
+
+const untyped: Typed = { args: {}, entities: {} };
+
+/** The schema of the values of `schema` apart from a default, undefined and null. */
+function present(schema: z.ZodType | undefined): z.ZodType | undefined {
+  if (schema instanceof z.ZodDefault || schema instanceof z.ZodOptional || schema instanceof z.ZodNullable)
+    return present(schema.unwrap() as z.ZodType);
+  return schema;
+}
+
+const fieldSchema = (schema: z.ZodType | undefined, name: string): z.ZodType | undefined => {
+  const object = present(schema);
+  return object instanceof z.ZodObject ? (object.shape as Record<string, z.ZodType>)[name] : undefined;
+};
+
+const elementSchema = (schema: z.ZodType | undefined): z.ZodType | undefined => {
+  const array = present(schema);
+  return array instanceof z.ZodArray ? (array.element as z.ZodType) : undefined;
+};
+
+/** The milliseconds of each unit of a Temporal duration that an instant adds. */
+const unitMs: ReadonlyMap<string, number> = new Map([
+  ["hours", 3_600_000],
+  ["minutes", 60_000],
+  ["seconds", 1000],
+  ["milliseconds", 1],
+]);
+
 /** Whether `file` is tazuna's module `module` of the DSL, as source or as declarations. */
 const isTazunaModule = (file: string, module: string): boolean =>
   new RegExp(`[/\\\\](src|dist)[/\\\\]dsl[/\\\\]${module}\\.(d\\.)?ts$`).test(file);
@@ -104,6 +141,12 @@ const isTazunaModule = (file: string, module: string): boolean =>
 type Helper = ArrowFunction | FunctionExpression | FunctionDeclaration;
 
 const declared = (scope: Scope, name: string): Scope => new Map([...scope, [name, "variable"]]);
+
+const arithmetic: ReadonlyMap<SyntaxKind, Extract<Expr, { readonly op: "arith" }>["operation"]> = new Map([
+  [SyntaxKind.PlusToken, "add"],
+  [SyntaxKind.MinusToken, "sub"],
+  [SyntaxKind.AsteriskToken, "mul"],
+]);
 
 const flipped: Readonly<Record<Relation, Relation>> = { lt: "gt", le: "ge", gt: "lt", ge: "le", eq: "eq" };
 
@@ -151,6 +194,9 @@ class Conversion {
   /** The events that a decide's command lists, in the order of its `emits`. */
   private readonly events: readonly DefinitionRef[];
   private readonly defined: Defined;
+  private readonly typed: Typed;
+  /** The schema of each variable whose values come from one, by where its name is declared. */
+  private readonly schemas = new Map<string, z.ZodType>();
   /** The argument that a name of the arguments object reads, once convertFunction knows the arguments. */
   private argument: (node: Node, name: string) => Expr = (node) => this.fail(node, "reads its arguments");
   /** The special arguments that the function receives. */
@@ -161,10 +207,69 @@ class Conversion {
   private readonly inlining: Helper[] = [];
   private fresh = 0;
 
-  constructor(source: Source, events: readonly DefinitionRef[], defined: Defined) {
+  constructor(source: Source, events: readonly DefinitionRef[], defined: Defined, typed: Typed) {
     this.source = source;
     this.events = events;
     this.defined = defined;
+    this.typed = typed;
+  }
+
+  private declaredAt(name: Node): string {
+    return `${name.getSourceFile().fileName}:${name.pos}`;
+  }
+
+  /** The schema that the values of `node` come from, where the converter can follow them to one. */
+  private schemaOf(node: Expression, scope: Scope): z.ZodType | undefined {
+    const e = unwrapped(node);
+    if (isIdentifier(e)) {
+      if (scope.get(e.text) !== "variable") return undefined;
+      const d = this.declarationOf(e) as (Node & { readonly name?: Node }) | undefined;
+      return d?.name === undefined ? undefined : this.schemas.get(this.declaredAt(d.name));
+    }
+    if (isPropertyAccessExpression(e) && isIdentifier(e.name)) {
+      const name = e.name.text;
+      if (this.isRecords(e.expression, scope)) {
+        const entity = this.typed.entities[name];
+        return entity !== undefined && this.only(e) === "table" ? z.array(entity) : entity;
+      }
+      const object = unwrapped(e.expression);
+      if (isIdentifier(object) && scope.get(object.text) === "args") return this.typed.args[name];
+      return fieldSchema(this.schemaOf(e.expression, scope), name);
+    }
+    if (isCallExpression(e) && isPropertyAccessExpression(e.expression) && isIdentifier(e.expression.name)) {
+      const collection = this.schemaOf(e.expression.expression, scope);
+      const method = e.expression.name.text;
+      if (method === "filter") return collection;
+      if (method === "get" || method === "only") return elementSchema(collection);
+    }
+    return undefined;
+  }
+
+  /** Whether the values of `node` are integers: by its schema, a literal, or a size, length, sum or integer arithmetic. */
+  private isInt(node: Expression, scope: Scope): boolean {
+    const e = unwrapped(node);
+    if (isNumericLiteral(e)) return Number.isSafeInteger(Number(e.text));
+    if (isPrefixUnaryExpression(e)) return e.operator === SyntaxKind.MinusToken && this.isInt(e.operand, scope);
+    if (isBinaryExpression(e))
+      return arithmetic.has(e.operatorToken.kind) && this.isInt(e.left, scope) && this.isInt(e.right, scope);
+    if (isPropertyAccessExpression(e) && isIdentifier(e.name)) {
+      const receiver = this.present(e.expression);
+      if (e.name.text === "length" && (receiver === "string" || receiver === "array")) return true;
+      if (e.name.text === "size" && (receiver === "bag" || receiver === "table")) return true;
+      const object = unwrapped(e.expression);
+      if (isIdentifier(object) && !scope.has(object.text)) {
+        const constant = this.constantField(object, e.name.text, e);
+        if (constant !== undefined) return constant.op === "lit" && Number.isSafeInteger(constant.value);
+      }
+    }
+    if (isIdentifier(e) && !scope.has(e.text)) {
+      const literal = this.constLiteral(e);
+      return literal?.op === "lit" && Number.isSafeInteger(literal.value);
+    }
+    if (isCallExpression(e) && isPropertyAccessExpression(e.expression) && isIdentifier(e.expression.name))
+      if (e.expression.name.text === "sum" && this.collection(e.expression.expression) === "bag") return true;
+    const schema = present(this.schemaOf(e, scope));
+    return schema instanceof z.ZodNumber && schema.isInt === true;
   }
 
   /** The texts of the `emits` of `command({ emits }).decide(f)`, where `f` is the function converted. */
@@ -319,10 +424,12 @@ class Conversion {
     this.inlining.push(f);
     try {
       const lets: (readonly [string, Expr])[] = [];
+      const schemas: (z.ZodType | undefined)[] = [];
       const passed = e.arguments.map((a) => {
         if (isSpreadElement(a)) this.fail(a, "spreads arguments");
         const u = unwrapped(a);
         const kind = isIdentifier(u) ? scope.get(u.text) : undefined;
+        schemas.push(this.schemaOf(a, scope));
         if (kind === "args" || kind === "records") return kind;
         if (kind === "createKey") this.fail(a, "passes createKey");
         const name = `#${this.fresh++}`;
@@ -343,7 +450,7 @@ class Conversion {
           if (given === "records") this.fail(p, "destructures records");
           return this.fromArgs(p.name, inner, (s) => bind(i + 1, s));
         }
-        return this.bound(p.name, { op: "var", name: given }, inner, (s) => bind(i + 1, s));
+        return this.bound(p.name, { op: "var", name: given }, inner, (s) => bind(i + 1, s), schemas[i]);
       };
       return lets.reduceRight<Expr>((body, [name, value]) => ({ op: "let", name, value, body }), bind(0, new Map()));
     } finally {
@@ -400,7 +507,14 @@ class Conversion {
 
   /** `then` under the variables that `pattern` destructures from the arguments object. */
   private fromArgs(pattern: BindingName, scope: Scope, then: (scope: Scope) => Expr): Expr {
-    return this.destructured(pattern, (name) => this.argument(pattern, name), scope, then, this.specials);
+    return this.destructured(
+      pattern,
+      (name) => this.argument(pattern, name),
+      scope,
+      then,
+      this.specials,
+      (name) => this.typed.args[name],
+    );
   }
 
   /** `then` under the variables that `pattern` binds from the fields that `field` reads. */
@@ -410,6 +524,7 @@ class Conversion {
     scope: Scope,
     then: (scope: Scope) => Expr,
     specials: ReadonlySet<Special> = new Set(),
+    schema: (name: string) => z.ZodType | undefined = () => undefined,
   ): Expr {
     if (!isObjectBindingPattern(pattern) || pattern.elements.length === 0)
       this.fail(pattern, "destructures other than a non-empty object pattern");
@@ -425,15 +540,19 @@ class Conversion {
         return bind(i + 1, new Map([...scope, [element.name.text, key.text as Special]]));
       }
       const value = field(key.text);
-      return this.bound(element.name, value, scope, (inner) => bind(i + 1, inner));
+      return this.bound(element.name, value, scope, (inner) => bind(i + 1, inner), schema(key.text));
     };
     return bind(0, scope);
   }
 
-  /** `then` with `name` bound to `value`. */
-  private bound(name: BindingName, value: Expr, scope: Scope, then: (scope: Scope) => Expr): Expr {
-    if (isIdentifier(name)) return { op: "let", name: name.text, value, body: then(declared(scope, name.text)) };
-    return this.destructured(name, (field) => ({ op: "field", object: value, name: field }), scope, then);
+  /** `then` with `name` bound to `value`, whose values come from `schema`. */
+  private bound(name: BindingName, value: Expr, scope: Scope, then: (scope: Scope) => Expr, schema?: z.ZodType): Expr {
+    if (isIdentifier(name)) {
+      if (schema !== undefined) this.schemas.set(this.declaredAt(name), schema);
+      return { op: "let", name: name.text, value, body: then(declared(scope, name.text)) };
+    }
+    const object = (field: string): Expr => ({ op: "field", object: value, name: field });
+    return this.destructured(name, object, scope, then, new Set(), (field) => fieldSchema(schema, field));
   }
 
   private block(statements: readonly Statement[], scope: Scope): Expr {
@@ -450,7 +569,9 @@ class Conversion {
         const d = list.declarations[i];
         if (d === undefined) return this.block(rest, scope);
         if (d.initializer === undefined) this.fail(d, "declares a const without a value");
-        return this.bound(d.name, this.expression(d.initializer, scope), scope, (inner) => declare(i + 1, inner));
+        const value = this.expression(d.initializer, scope);
+        const schema = this.schemaOf(d.initializer, scope);
+        return this.bound(d.name, value, scope, (inner) => declare(i + 1, inner), schema);
       };
       return declare(0, scope);
     }
@@ -494,6 +615,8 @@ class Conversion {
       const operand = unwrapped(e.operand);
       if (e.operator === SyntaxKind.MinusToken && isNumericLiteral(operand))
         return this.number(e, -Number(operand.text));
+      if (e.operator === SyntaxKind.MinusToken && this.isInt(operand, scope))
+        return { op: "arith", operation: "sub", left: { op: "lit", value: 0 }, right: this.expression(operand, scope) };
       this.fail(e, "has a prefix operator other than !");
     }
     if (isConditionalExpression(e))
@@ -579,6 +702,12 @@ class Conversion {
       };
       const body: Expr = operator === SyntaxKind.EqualsEqualsToken ? isNullish : { op: "not", operand: isNullish };
       return { op: "let", name, value: this.expression(nullish, scope), body };
+    }
+    const operation = arithmetic.get(operator);
+    if (operation !== undefined) {
+      if (!this.isInt(left, scope) || !this.isInt(right, scope))
+        this.fail(node, "does arithmetic on other than integers of the schemas");
+      return { op: "arith", operation, ...both() };
     }
     const negated = operator === SyntaxKind.ExclamationEqualsEqualsToken;
     const relation = relations.get(negated ? SyntaxKind.EqualsEqualsEqualsToken : operator);
@@ -717,6 +846,24 @@ class Conversion {
         right: this.expression(argument, scope),
       };
     }
+    if ((method === "add" || method === "subtract") && receiver === "instant") {
+      const duration = unwrapped(argument);
+      const [unit, ...units] = isObjectLiteralExpression(duration) ? duration.properties : [];
+      const ms =
+        unit !== undefined && isPropertyAssignment(unit) && isIdentifier(unit.name)
+          ? unitMs.get(unit.name.text)
+          : undefined;
+      // A duration of several units can mix signs, which Temporal rejects.
+      if (unit === undefined || units.length > 0 || ms === undefined || !isPropertyAssignment(unit))
+        this.fail(e, `calls ${method} with other than one unit of hours, minutes, seconds or milliseconds`);
+      if (!this.isInt(unit.initializer, scope)) this.fail(e, `calls ${method} with other than an integer`);
+      const count = this.expression(unit.initializer, scope);
+      const scaled: Expr =
+        ms === 1 ? count : { op: "arith", operation: "mul", left: count, right: { op: "lit", value: ms } };
+      const signed: Expr =
+        method === "add" ? scaled : { op: "arith", operation: "sub", left: { op: "lit", value: 0 }, right: scaled };
+      return { op: "timeAdd", instant: this.expression(callee.expression, scope), ms: signed };
+    }
     if (method === "includes" && receiver === "array") {
       if (![...this.kinds(argument)].every((k) => scalars.has(k)))
         this.fail(e, "calls includes with other than a scalar");
@@ -836,12 +983,17 @@ class Conversion {
     const name = isIdentifier(parameter.name) ? parameter.name.text : `$${f.pos}`;
     const inner = declared(scope, name);
     const converted = this.expression(collection, scope);
+    const element = elementSchema(this.schemaOf(collection, scope));
+    if (element !== undefined && isIdentifier(parameter.name))
+      this.schemas.set(this.declaredAt(parameter.name), element);
     this.callbacks++;
     try {
       return {
         collection: converted,
         name,
-        body: isIdentifier(parameter.name) ? body(inner) : this.bound(parameter.name, { op: "var", name }, inner, body),
+        body: isIdentifier(parameter.name)
+          ? body(inner)
+          : this.bound(parameter.name, { op: "var", name }, inner, body, element),
       };
     } finally {
       this.callbacks--;
@@ -858,9 +1010,10 @@ export function converted(
   args: readonly Arg[],
   events: readonly DefinitionRef[] = [],
   defined: Defined = { constants: new Map(), entities: new Map() },
+  typed: Typed = untyped,
 ): Expr | { readonly unconverted: string } {
   try {
-    return new Conversion(source, events, defined).convertFunction(source.node, args);
+    return new Conversion(source, events, defined, typed).convertFunction(source.node, args);
   } catch (error) {
     if (error instanceof Unconverted) return { unconverted: error.message };
     throw error;

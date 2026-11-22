@@ -226,6 +226,18 @@ export type Expr =
       readonly op: "format";
       readonly parts: readonly Expr[];
     }
+  | {
+      readonly op: "arith";
+      readonly operation: "add" | "sub" | "mul";
+      readonly left: Expr;
+      readonly right: Expr;
+    }
+  /** `instant.add(...)` of a duration of `ms` milliseconds, which throws outside the range of instants. */
+  | {
+      readonly op: "timeAdd";
+      readonly instant: Expr;
+      readonly ms: Expr;
+    }
   /** `emit(event, payload)` of an event that the command lists. */
   | {
       readonly op: "emit";

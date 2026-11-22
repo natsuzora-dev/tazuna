@@ -65,6 +65,15 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Collection
 
+/-- An integer operation, exact: the converter writes one only on integers that schemas or literals give. -/
+inductive Arith where
+  | add
+  | sub
+  | mul
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Arith
+
 mutual
 
 /-- An expression. `and`, `or` and `coalesce` give an operand's value and skip the other, as JS `&&`, `||` and `??`. -/
@@ -125,6 +134,9 @@ inductive Expr where
   instant or date is its JSON text, which is what its `toString` writes.
   -/
   | format (parts : List Expr)
+  | arith (operation : Arith) (left right : Expr)
+  /-- `instant.add(...)` of a duration of `ms` milliseconds, which throws outside the range of instants. -/
+  | timeAdd (instant ms : Expr)
   /-- `emit(event, payload)` of an event that the command lists. -/
   | emit (event : Spec.Ref) (payload : Expr)
   /--

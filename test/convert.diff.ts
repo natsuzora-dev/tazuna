@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import fc from "fast-check";
+import { z } from "zod";
+import type { Typed } from "../src/convert/expression.ts";
 import type { Expr } from "../src/convert/ir.generated.ts";
 import { Converter } from "../src/convert/program.ts";
 import { bagValues, NotOnly } from "../src/data/bag.ts";
 import { decoded } from "../src/data/collections.ts";
-import { type Json, objectOf } from "../src/data/values.ts";
+import { type Json, objectOf, type Shape } from "../src/data/values.ts";
 import { givenKeys } from "../src/service/functions.ts";
 import type { RecordSource } from "../src/service/records.ts";
 import { recordsView } from "../src/sim/spec/records.ts";
@@ -60,6 +62,8 @@ const ops = [
   "createKey",
   "includes",
   "format",
+  "arith",
+  "timeAdd",
 ] as const satisfies readonly Expr["op"][];
 const listsEveryOp: [Exclude<Expr["op"], (typeof ops)[number]>] extends [never] ? true : false = true;
 
@@ -126,9 +130,16 @@ function sourceOf(stored: readonly Stored[], reads: ReadPart[]): RecordSource {
 const args = ["input", "records", "createKey"] as const;
 const keys: Keys = { owner: "fixtures", next: { Task: { count: 2 } } };
 
+/** The schemas of a fixture's input of `shape` and of the records. */
+const typedOf = (shape: Shape): Typed => ({
+  args: { input: z.object(shape) },
+  entities: { Task: z.object(entities.Task.fields), Settings: z.object(entities.Settings.fields) },
+});
+const outsideTyped = typedOf({ n: z.number(), title: z.string(), ns: z.array(z.number()) });
+
 const converted = fixtures.map((fixture) => ({
   fixture,
-  ir: converter.convert(fixture.f, args, fixture.events, defined),
+  ir: converter.convert(fixture.f, args, { events: fixture.events ?? [], defined, typed: typedOf(fixture.shape) }),
 }));
 
 for (const [i, { fixture, ir }] of converted.entries())
@@ -178,6 +189,6 @@ test("every operation of the IR has a fixture", () => {
 
 for (const [i, f] of outside.entries())
   test(`function ${i} with a construct outside the IR stays TS`, () => {
-    const ir = converter.convert(f, args, [], defined);
+    const ir = converter.convert(f, args, { defined, typed: outsideTyped });
     assert.ok("unconverted" in ir, JSON.stringify(ir));
   });
