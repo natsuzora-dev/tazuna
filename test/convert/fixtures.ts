@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { z } from "zod";
+import type { Stored } from "../../src/cli/protocol.generated.ts";
 import { type Defined, definedKey } from "../../src/convert/expression.ts";
-import type { Expr } from "../../src/convert/ir.generated.ts";
 import { bag } from "../../src/data/collections.ts";
 import type { DefinitionRef } from "../../src/data/definitionRef.ts";
 import { addDays, date, instant as instantSchema } from "../../src/data/time.ts";
@@ -9,7 +9,7 @@ import type { Json, Shape } from "../../src/data/values.ts";
 import { entity, type Records, type Ref, type Row, ref, refTarget, singleEntity } from "../../src/dsl/entity.ts";
 import { emit } from "../../src/dsl/event.ts";
 import { service } from "../../src/dsl/service.ts";
-import type { Stored } from "../lean/protocol.generated.ts";
+import type { Expr } from "../../src/spec/ir.generated.ts";
 
 /**
  * A function whose IR has `op`, inputs of `shape` as JSON holds them, the records it reads of `entities`, and the

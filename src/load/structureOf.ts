@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import { defaultRow, encoded, sortCollections } from "../data/collections.ts";
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { type JsonSchema, jsonSchema, objectSchema } from "../data/jsonSchema.ts";
@@ -14,7 +15,7 @@ import {
   type Services,
   type StateSpec,
 } from "../dsl/definition.ts";
-import { refTarget } from "../dsl/entity.ts";
+import { keyTarget, refTarget } from "../dsl/entity.ts";
 import type { DeadlineTime, StateType, Structure } from "../spec/structure.generated.ts";
 import type {
   ActivityStructure,
@@ -49,7 +50,7 @@ function oneEntry(record: Readonly<Record<string, unknown>>): unknown {
  * lists where, so that load can tell when neither did.
  */
 export type StructureOf =
-  | { readonly kind: "built"; readonly structure: Omit<Structure, "explores"> }
+  | { readonly kind: "built"; readonly structure: Omit<Structure, "explores" | "program"> }
   | { readonly kind: "found"; readonly malformed: readonly Found<Malformed>[]; readonly unnamed: readonly string[] };
 
 /**
@@ -96,7 +97,7 @@ export function structureOf(
     );
     if (!found) malformed.push({ violation, place: named.place, error });
   };
-  const structure: Omit<Structure, "explores"> = {
+  const structure: Omit<Structure, "explores" | "program"> = {
     services: [...services].map(([name, s]) => ({
       name,
       external: s.definition.external,
@@ -128,9 +129,14 @@ export function structureOf(
         else unnamed.push(`the ${definition.kind} ${service}.${name} at ${path.join(".")}`);
         return unresolved;
       };
+      const keyName = (schema: z.ZodType): string | undefined => {
+        const entity = keyTarget(schema);
+        const named = entity === undefined ? undefined : names.get(entity);
+        return named === undefined ? undefined : `${named.service}/${named.name}`;
+      };
       const schemaOf = (owner: Definition, shape: Shape, map?: string): JsonSchema => {
         try {
-          return objectSchema(shape);
+          return objectSchema(shape, keyName);
         } catch (error) {
           defaultSchema(owner, map, thrown(error));
           return {};

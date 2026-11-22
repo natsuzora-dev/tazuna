@@ -52,7 +52,7 @@
   ],
   "scripts": {
     "build": "vite build viewer",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run lean:check && npm run samples:check",
+    "check": "npm run lint && npm run typecheck && npm run lean:check && npm run test && npm run samples:check",
     "hooks": "git config core.hooksPath .githooks",
     "lean:check": "(cd lean && export PATH=\"$HOME/.elan/bin:$PATH\" && lake build --wfail && lake exe tazuna-axioms && lake exe tazuna-generate ..) && node --test --test-randomize 'test/*.diff.ts'",
     "lean:write": "cd lean && export PATH=\"$HOME/.elan/bin:$PATH\" && lake build && lake exe tazuna-generate --write ..",

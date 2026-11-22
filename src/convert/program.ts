@@ -8,8 +8,6 @@ import type { Conditions } from "../dsl/conditions.ts";
 import type { AnyCommand, AnyQuery, Automation, ChartSpec, Place } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
-import { chartStructure, stateNamed, transitionRef } from "../spec/structure.ts";
-import { type Arg, converted, type Defined, definedKey, type Typed } from "./expression.ts";
 import type {
   ChartFns,
   Condition,
@@ -19,7 +17,9 @@ import type {
   Fn,
   Program,
   Site,
-} from "./ir.generated.ts";
+} from "../spec/ir.generated.ts";
+import { chartStructure, stateNamed, transitionRef } from "../spec/structure.ts";
+import { type Arg, converted, type Defined, definedKey, type Typed } from "./expression.ts";
 import { type Location, Locator } from "./located.ts";
 import { Sources } from "./sources.ts";
 

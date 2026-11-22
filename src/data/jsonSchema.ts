@@ -109,8 +109,15 @@ function validation(schema: z.ZodType): JsonSchema {
  */
 export const jsonSchema = (schema: z.ZodType): JsonSchema => jsonSchemaOf(schema, false);
 
-/** The JSON Schema of `schema`, with what Lean's parse reads beyond it (validation) when `validated`. */
-const jsonSchemaOf = (schema: z.ZodType, validated: boolean): JsonSchema =>
+/**
+ * The JSON Schema of `schema`, with what Lean's parse reads beyond it (validation) when `validated`, and the entity of
+ * each key reference that `keyName` names as `x-tazuna-key`.
+ */
+const jsonSchemaOf = (
+  schema: z.ZodType,
+  validated: boolean,
+  keyName: (schema: z.ZodType) => string | undefined = () => undefined,
+): JsonSchema =>
   inlineRefs(
     z.toJSONSchema(strict(schema), {
       io: "input",
@@ -123,6 +130,8 @@ const jsonSchemaOf = (schema: z.ZodType, validated: boolean): JsonSchema =>
         if (collection?.kind === "set") Object.assign(ctx.jsonSchema, { uniqueItems: true, "x-tazuna-set": true });
         if (collection?.kind === "sortedBy") ctx.jsonSchema["x-tazuna-sorted-by"] = collection.key;
         if (validated) Object.assign(ctx.jsonSchema, validation(ctx.zodSchema as unknown as z.ZodType));
+        const key = keyName(ctx.zodSchema as unknown as z.ZodType);
+        if (key !== undefined) ctx.jsonSchema["x-tazuna-key"] = key;
       },
     }) as JsonSchema,
   );
@@ -166,12 +175,15 @@ export function partAt(schema: z.ZodType, path: readonly SchemaStep[]): z.ZodTyp
   }, schema);
 }
 
-/** The JSON Schema of an object of `shape` that the structure holds, with what Lean's parse reads beyond it. */
-export function objectSchema(shape: Shape): JsonSchema {
+/**
+ * The JSON Schema of an object of `shape` that the structure holds, with what Lean's parse reads beyond it, and the
+ * entity `<service>/<name>` that `keyName` gives each key reference, by which verify reads a key as a reference.
+ */
+export function objectSchema(shape: Shape, keyName?: (schema: z.ZodType) => string | undefined): JsonSchema {
   const {
     $schema: _,
     additionalProperties: __,
     ...schema
-  } = jsonSchemaOf(z.object(shape as Record<string, z.ZodType>), true);
+  } = jsonSchemaOf(z.object(shape as Record<string, z.ZodType>), true, keyName);
   return schema;
 }

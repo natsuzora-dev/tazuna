@@ -1,4 +1,5 @@
 import Tazuna.Explore.StepOrders
+import Engine.Verify
 import Tazuna.Ir.Expr
 import Tazuna.Explore.Enabled
 import Tazuna.Explore.Moves
@@ -62,12 +63,19 @@ inductive Request where
   | decodeLines (values : List Value)
   /--
   With `execute`, the lines take place as explore runs them, and each service also returns what it enables; with
-  `explore` too, the own service returns the moves that explore appends next. `program` holds the spec functions that
-  Lean evaluates itself instead of asking TS.
+  `explore` too, the own service returns the moves that explore appends next. Lean evaluates the spec functions that
+  the structure's program holds itself instead of asking TS.
   -/
   | simulate («structure» : Spec.Structure) (scenario : Scenario) (execute : Option Bool)
-      (stepOrders : Option (List StepOrder)) (explore : Option Bool) (program : Option Ir.Program)
-  | stepOrderChanges («structure» : Spec.Structure) (scenario : Scenario) (program : Option Ir.Program)
+      (stepOrders : Option (List StepOrder)) (explore : Option Bool)
+  | stepOrderChanges («structure» : Spec.Structure) (scenario : Scenario)
+  /-- What test finds of each scenario, and the parts that no exploration reached (Engine.test). -/
+  | test («structure» : Spec.Structure) (scenarios : List Scenario)
+  /-- The violations of a trace against its snapshot, and the bindings that the comparison ends with. -/
+  | verifyTrace («structure» : Spec.Structure) (service : String) (snapshot : List (Option TraceLine))
+      (trace : List (FileLine TraceLine))
+  /-- The violations of an external service's trace against its contract (Engine.verifyExternal). -/
+  | verifyExternal («structure» : Spec.Structure) (service : String) (trace : List (FileLine TraceLine))
   /-- sortCollections of an encoded value by its JSON Schema. -/
   | sort (schema value : Value)
   /-- keyOrdered of an encoded value by its JSON Schema. -/
@@ -178,12 +186,6 @@ structure Replied where
 derive_wire Reply tag "type" skip_serializing_none
 derive_wire Replied flatten reply skip_serializing_none
 
-instance : ToValue Verify.Finding := ⟨fun
-  | .mismatch m => ToValue.toValue m
-  | .uncomparable u => ToValue.toValue u
-  | .after line subject snapshot trace =>
-    .obj [("after", .obj [("line", ToValue.toValue line), ("subject", ToValue.toValue subject),
-      ("snapshot", ToValue.toValue snapshot), ("trace", ToValue.toValue trace)])]⟩
 
 /-- A pairing violation and where it is. -/
 structure Unpaired where
@@ -280,6 +282,9 @@ inductive Response where
   | keyOrdered (ordered : Bool)
   | schemaOf (schema : Option Value)
   | evaluated (result : Evaluated)
+  | tested (runs : List Engine.ScenarioRun) (uncovered : List Violation)
+  | verifiedTrace (findings : List Verify.Finding) (bindings : List (List (String × String)))
+  | verifiedExternal (findings : List Verify.Finding)
   /-- Whether Lean parses by the schema, and then the value, Zod's issues, or whether a codec threw. -/
   | parsed (supported : Bool) (value : Option Value) (issues : Option (List Value)) (thrown : Bool)
   | error (message : String)

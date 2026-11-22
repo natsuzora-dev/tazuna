@@ -143,7 +143,7 @@ export const snapshotsOf = ({ world }: Made): ReadonlyMap<string, readonly Trace
  * Lean's reportedViolations of a running service: its own violations, then those its listener collected, then its
  * halt.
  */
-export function serviceViolations({ world, listeners }: Made, service: string): Violation[] {
+function serviceViolations({ world, listeners }: Made, service: string): Violation[] {
   const p = world.services.get(service);
   if (p === undefined) return [];
   return [

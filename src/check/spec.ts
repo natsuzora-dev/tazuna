@@ -116,13 +116,15 @@ function unlistedFiles(
 }
 
 /**
- * The Restricted.function violations of a spec that passes every other check: what `converter` leaves outside the IR.
- * Without a converter, one runs for this spec alone.
+ * The spec with its functions converted to IR, or the Restricted.function violations of what `converter` leaves
+ * outside the IR. Without a converter, one runs for this spec alone.
  */
-function outsideIr(spec: Spec, converter: Converter | undefined): Found<Restricted>[] {
+function converted(spec: Spec, converter: Converter | undefined): Spec | Found<Restricted>[] {
   const own = converter ?? new Converter();
   try {
-    return functions.check(spec, own.program(spec).notConverted);
+    const { program, notConverted } = own.program(spec);
+    const outside = functions.check(spec, notConverted);
+    return outside.length > 0 ? outside : { ...spec, structure: { ...spec.structure, program } };
   } finally {
     if (converter === undefined) own.close();
   }
@@ -162,8 +164,11 @@ export async function checkSpecWith(
           })),
         ]
       : [...unlisted, ...(loaded.kind === "malformed" ? loaded.malformed : []), ...syntax];
-  if (found.length === 0 && loaded.kind === "structured" && converter !== "unconverted")
-    found.push(...outsideIr(loaded.spec, converter));
+  if (found.length === 0 && loaded.kind === "structured" && converter !== "unconverted") {
+    const done = converted(loaded.spec, converter);
+    if (!Array.isArray(done)) return { kind: "checked", spec: done as CheckedSpec };
+    found.push(...done);
+  }
   if (found.length === 0) return { kind: "checked", spec: loaded.spec as CheckedSpec };
   const violations = found.sort(({ place: x }, { place: y }) => comparePlaces(x, y)).map(reportedOfFound);
   return { kind: "violations", files: spec.sources.length, violations };

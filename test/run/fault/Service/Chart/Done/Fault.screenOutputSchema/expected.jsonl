@@ -1,1 +1,1 @@
-{"kind":"Fault.screenOutputSchema","definition":{"service":"closer","name":"doneScreen"},"data":{},"location":{"file":"closer/closer.ts","line":6},"scenario":{"service":"closer","name":"closeDone"},"error":{"type":"zod","issues":[{"origin":"number","code":"too_small","minimum":0,"inclusive":true,"path":["count"],"message":"Too small: expected number to be >=0"}]}}
+{"kind":"Fault.screenOutputSchema","definition":{"service":"closer","name":"doneScreen"},"data":{},"location":{"file":"closer/closer.ts","line":6},"scenario":{"service":"closer","name":"closeDone"}}

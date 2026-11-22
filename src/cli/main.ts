@@ -339,7 +339,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
       const tested = testSpec(spec, { update: invocation.update, scenarios });
       for (const written of tested.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
       for (const removed of tested.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
-      const violations = [...(invocation.coverage ? uncoveredOf(spec, tested.reached) : []), ...tested.violations];
+      const violations = [...(invocation.coverage ? uncoveredOf(spec, tested.uncovered) : []), ...tested.violations];
       const collision = collisionProbability(tested.visited);
       if (collision >= reportedCollision)
         io.error(

@@ -1,5 +1,5 @@
 import Tazuna.Data.Wire
-import Tazuna.Spec.Structure
+import Tazuna.Spec.Definition
 
 /-!
 The intermediate representation of spec function bodies: data that Lean evaluates in place of the TS function. TS

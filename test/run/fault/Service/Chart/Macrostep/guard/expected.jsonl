@@ -1,1 +1,1 @@
-{"kind":"Fault.exception","definition":{"service":"todo","name":"watcher"},"data":{},"location":{"file":"todo/todo.ts","line":14},"scenario":{"service":"todo","name":"addDue"},"error":{"type":"thrownError","name":"RangeError","message":"addDays(2026-10-25, 3000000) names no date in years 0000 through 9999","stack":"<stack>"}}
+{"kind":"Fault.exception","definition":{"service":"todo","name":"watcher"},"data":{},"location":{"file":"todo/todo.ts","line":14},"scenario":{"service":"todo","name":"addDue"}}

@@ -1,28 +1,26 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { CheckedSpec } from "../check/spec.ts";
+import { InternalError } from "../data/internalError.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { toJsonl } from "../data/trace.ts";
 import { type Run, sameRun, snapshotEntryPath, snapshotPath } from "../data/traceFile.ts";
 import { canonicalJson } from "../data/values.ts";
-import { type ReportedViolation, toReported } from "../data/violation.ts";
+import { type Location, type ReportedViolation, toReported, type ViolationValue } from "../data/violation.ts";
 import type { Named } from "../dsl/definition.ts";
-import { exploreLines } from "../explore/paths.ts";
-import { stepOrderChanges } from "../explore/stepOrders.ts";
-import { uncoveredParts } from "../explore/uncovered.ts";
 import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
-import { Coverage } from "../sim/spec/coverage.ts";
-import { serviceViolations, simulateSpec, snapshotsOf } from "../sim/spec/simulate.ts";
 import { snapshotPairingViolation } from "../verify/pairing.ts";
 import { pairSnapshots, snapshotFolders, snapshotViolations } from "../verify/snapshot.ts";
+import { ask } from "./engine.ts";
 
 export interface TestResult {
   readonly violations: readonly ReportedViolation[];
   readonly written: readonly string[];
   readonly removed: readonly string[];
-  readonly reached: Coverage;
+  /** The parts that no exploration reached, which test --coverage reports. */
+  readonly uncovered: readonly ViolationValue[];
   /** How many worlds the search after each scenario visited. */
   readonly visited: readonly number[];
 }
@@ -80,16 +78,29 @@ function testSnapshots(
 }
 
 /**
- * Simulates and explores `scenarios`, some or all of the spec's, then tests the snapshots (testSnapshots). A scenario
- * still written as an input list, which only verify's examples keep, is not run, and its snapshot is kept.
+ * Where a violation that a running service reports is: a failed service invariant, or a throw of one, at the
+ * service, since a service is no definition; any other at its definition, or at the scenario without one.
+ */
+function placeOfReported(spec: Spec, named: Named<LoadedScenario>, v: ViolationValue, service?: string): Location {
+  const atService =
+    v.kind === "Fault.failedServiceInvariant" || (v.kind === "Fault.exception" && v.definition === null);
+  const servicePlace = service === undefined ? undefined : spec.services.get(service)?.place;
+  if (atService && servicePlace !== undefined) return servicePlace;
+  return v.definition === null ? named.place : placeOf(spec, v.definition);
+}
+
+/**
+ * Simulates and explores `scenarios`, some or all of the spec's, in the engine, then tests the snapshots
+ * (testSnapshots). Each violation is reported once per kind, definition, data and location: first those of the
+ * scenarios' simulations, in order, then those of the paths after them.
  */
 export function testSpec(
   spec: CheckedSpec,
   options: { readonly update: boolean; readonly scenarios: readonly Named<LoadedScenario>[] },
 ): TestResult {
   const { scenarios } = options;
-  const reached = new Coverage();
-  const simulated = simulateScenarios(spec, scenarios);
+  const [tested] = ask("test", [{ structure: spec.structure, scenarios: scenarios.map((s) => s.definition.scenario) }]);
+  if (tested === undefined) throw new InternalError("the engine gave no answer to test");
   const violations: ReportedViolation[] = [];
   const reported = new Set<string>();
   // Two violations count as one when they differ only in `error`.
@@ -99,77 +110,51 @@ export function testSpec(
     reported.add(key);
     violations.push(violation);
   };
-  for (const violation of simulated.violations) report(violation);
-  const visited: number[] = [];
-  for (const named of scenarios) {
-    const explored = exploreLines(spec, named);
-    reached.addAll(explored.reached);
-    visited.push(explored.visited);
-    const ref = { service: named.service, name: named.name };
-    for (const { violation, appended } of explored.found)
-      report(
-        toReported(
-          violation,
-          violation.location ?? (violation.definition === null ? named.place : placeOf(spec, violation.definition)),
-          { scenario: ref, appendedLines: appended },
-        ),
-      );
-  }
-  const skipped = spec.scenarios.filter((s) => !scenarios.includes(s));
-  const snapshots = testSnapshots(spec, simulated.snapshotted, options.update, skipped);
-  return { ...snapshots, violations: [...violations, ...snapshots.violations], reached, visited };
-}
-
-/**
- * Simulates each of `scenarios` and returns the violations that it reports, each at the line it names, with the step orders
- * that change the result of one of its processings, and the trace of each running service when the simulation did not
- * halt: the own service's, and each running peer's that has lines.
- */
-function simulateScenarios(
-  spec: Spec,
-  scenarios: readonly Named<LoadedScenario>[],
-): {
-  readonly violations: ReportedViolation[];
-  readonly snapshotted: Snapshotted[];
-} {
-  const violations: ReportedViolation[] = [];
   const snapshotted: Snapshotted[] = [];
-  for (const named of scenarios) {
-    const { scenario, linePlaces, expectationPlaces } = named.definition;
-    const ref = { service: named.service, name: named.name };
-    const simulated = simulateSpec(spec, scenario);
-    const { world } = simulated;
-    const snapshots = snapshotsOf(simulated);
+  const runs = scenarios.map((named, i) => {
+    const run = tested.runs[i];
+    if (run === undefined) throw new InternalError(`the engine gave no run of ${named.service}/${named.name}`);
+    return { named, run, ref: { service: named.service, name: named.name } };
+  });
+  for (const { named, run, ref } of runs) {
+    const { linePlaces, expectationPlaces } = named.definition;
     // A violation that names an expectation is at the expectation, which is what the scenario wrote wrong.
-    const at = ({ data }: (typeof world.violations)[number]) =>
-      "expectation" in data
-        ? expectationPlaces[data.expectation]
-        : "scenarioLine" in data && data.scenarioLine !== null
-          ? linePlaces[data.scenarioLine]
+    const at = ({ data }: ViolationValue) =>
+      typeof data["expectation"] === "number"
+        ? expectationPlaces[data["expectation"]]
+        : typeof data["scenarioLine"] === "number"
+          ? linePlaces[data["scenarioLine"]]
           : undefined;
-    for (const violation of [...world.violations, ...(world.halted === undefined ? [] : [world.halted])])
-      violations.push(toReported(violation, at(violation) ?? named.place, { scenario: ref }));
-    const halted = world.halted !== undefined || [...world.services.values()].some((p) => p.halted !== undefined);
-    for (const v of stepOrderChanges(spec, scenario, simulated, 0))
-      violations.push(toReported(v, v.location ?? named.place, { scenario: ref }));
-    for (const service of world.services.keys()) {
-      for (const v of serviceViolations(simulated, service))
-        violations.push(
-          toReported(v, v.location ?? (v.definition === null ? named.place : placeOf(spec, v.definition)), {
-            scenario: ref,
-          }),
-        );
-      const lines = snapshots.get(service) ?? [];
-      const run = { service: named.service, scenario: named.name, runner: service };
-      if (service === named.service || lines.length > 0) snapshotted.push({ run, lines: halted ? undefined : lines });
+    for (const v of run.violations) report(toReported(v, at(v) ?? named.place, { scenario: ref }));
+    for (const v of run.stepOrders) report(toReported(v, placeOf(spec, v.definition), { scenario: ref }));
+    for (const { service, violations: own, lines } of run.services) {
+      for (const v of own) report(toReported(v, placeOfReported(spec, named, v, service), { scenario: ref }));
+      const snapshotRun = { service: named.service, scenario: named.name, runner: service };
+      if (service === named.service || lines.length > 0)
+        snapshotted.push({ run: snapshotRun, lines: run.halted ? undefined : lines });
     }
   }
-  return { violations, snapshotted };
+  for (const { named, run, ref } of runs)
+    for (const { violation, service, appended } of run.found)
+      report(
+        toReported(violation, placeOfReported(spec, named, violation, service), {
+          scenario: ref,
+          appendedLines: appended,
+        }),
+      );
+  const skipped = spec.scenarios.filter((s) => !scenarios.includes(s));
+  const snapshots = testSnapshots(spec, snapshotted, options.update, skipped);
+  return {
+    ...snapshots,
+    violations: [...violations, ...snapshots.violations],
+    uncovered: tested.uncovered,
+    visited: tested.runs.map((r) => r.visited),
+  };
 }
 
 /** The parts that `test --coverage` reports, each at its definition, in place order. */
-export const uncoveredOf = (spec: Spec, reached: Coverage): ReportedViolation[] =>
-  uncoveredParts(spec.structure, reached)
+export const uncoveredOf = (spec: Spec, uncovered: readonly ViolationValue[]): ReportedViolation[] =>
+  uncovered
     .map((violation) => ({ violation, place: placeOf(spec, violation.definition) }))
     .sort((x, y) => comparePlaces(x.place, y.place))
     .map(reportedOfFound);

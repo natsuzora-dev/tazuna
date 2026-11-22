@@ -101,7 +101,7 @@ test("A screen has the JSON Schema of each control payload, the controls that ea
   });
 });
 
-test("Entities, commands and events have the JSON Schema of their fields, input and payload and references to the events they emit and to entities", async () => {
+test("Entities, commands and events have the JSON Schema of their fields, input and payload, with the entity of each key, and references to the events they emit and to entities", async () => {
   const spec = await subject("Contract/contracts");
   const byName = (name: string) => spec.structure.definitions.find((d) => d.name === name);
   assert.deepEqual(byName("Task"), {
@@ -111,7 +111,7 @@ test("Entities, commands and events have the JSON Schema of their fields, input 
     key: "id",
     fields: {
       type: "object",
-      properties: { id: { type: "string" }, title: { type: "string" } },
+      properties: { id: { type: "string", "x-tazuna-key": "todo/Task" }, title: { type: "string" } },
       required: ["id", "title"],
     },
     unique: [],

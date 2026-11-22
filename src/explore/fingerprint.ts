@@ -97,7 +97,7 @@ function serviceFingerprint(r: Processing): string {
   });
 }
 
-export const halted = (w: World): boolean =>
+const halted = (w: World): boolean =>
   w.halted !== undefined || [...w.services.values()].some((p) => p.halted !== undefined);
 
 /** Lean's worldFingerprint. */

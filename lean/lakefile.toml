@@ -11,6 +11,10 @@ name = "Tazuna"
 globs = ["Tazuna.+"]
 
 [[lean_lib]]
+name = "Engine"
+globs = ["Engine.+"]
+
+[[lean_lib]]
 name = "DiffTest"
 roots = ["DiffTest.Json", "DiffTest.Protocol"]
 

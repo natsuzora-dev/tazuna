@@ -1,1 +1,1 @@
-{"kind":"Mismatch.answerOutputSchema","definition":null,"data":{"requestId":"q3","target":{"service":"calendar","name":"nextDay"}},"location":{"file":"traces/calendar/requests.jsonl","line":2},"error":{"type":"zod","issues":[{"expected":"number","code":"invalid_type","path":["day"],"message":"Invalid input: expected number, received string"}]}}
+{"kind":"Mismatch.answerOutputSchema","definition":null,"data":{"requestId":"q3","target":{"service":"calendar","name":"nextDay"}},"location":{"file":"traces/calendar/requests.jsonl","line":2}}

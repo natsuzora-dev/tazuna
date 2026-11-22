@@ -5,6 +5,7 @@ import type { Schema } from "../data/schema.generated.ts";
 import type { Answer, RejectionKind } from "../data/trace.generated.ts";
 import type { TransitionRef, Trigger } from "../data/transitionRef.generated.ts";
 import type { Json } from "../data/values.ts";
+import type { Program } from "./ir.generated.ts";
 import type {
   Activity as ActivityStructure,
   AssumptionMismatch,
@@ -30,6 +31,25 @@ export type {
   TransitionStructure,
 };
 export type ChartStructure = Extract<DefinitionStructure, { kind: "machine" | "screen" }>;
+
+/** The program of a loaded spec, empty until check converts the spec functions to IR. */
+export const unconverted: Program = {
+  inputRequirement: [],
+  resultEnsures: [],
+  invariant: [],
+  closeEnsures: [],
+  binding: [],
+  requirement: [],
+  ensures: [],
+  queryEnsures: [],
+  serviceInvariant: [],
+  automationBinding: [],
+  automationGuard: [],
+  resolve: [],
+  decide: [],
+  react: [],
+  chart: [],
+};
 type CommandStructure = Extract<DefinitionStructure, { kind: "command" }>;
 
 /** Lean's StateType.map?. */

@@ -9,7 +9,8 @@ const source = (folder: string, path: string) => readFileSync(join(leanRoot, fol
 /** For each folder, the folders under Tazuna whose modules its files may import. */
 const allowedImports: Readonly<Record<string, readonly string[]>> = {
   Data: ["Data"],
-  Spec: ["Data", "Spec"],
+  // The structure holds the program, whose IR names only data and the definitions of Spec.
+  Spec: ["Data", "Spec", "Ir/Expr"],
   Validation: ["Data", "Spec", "Validation"],
   Service: ["Data", "Spec", "Service"],
   Scenario: ["Data", "Spec", "Scenario"],

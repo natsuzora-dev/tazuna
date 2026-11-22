@@ -96,14 +96,14 @@
     },
     {
       "name": "verify",
-      "comment": "src/verify imports only data, dsl, spec, load, check, sim, and verify",
+      "comment": "src/verify imports only data, dsl, spec, load, check, sim, verify, and the engine client",
       "severity": "error",
       "from": {
         "path": "^src/verify/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|spec|load|check|verify|sim)/"
+        "pathNot": "^src/((data|dsl|spec|load|check|verify|sim)/|cli/(engine|protocol\\.generated)\\.ts$)"
       }
     },
     {

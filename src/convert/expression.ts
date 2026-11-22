@@ -48,7 +48,7 @@ import { z } from "zod";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { instant, parseInstant } from "../data/time.ts";
 import type { Json } from "../data/values.ts";
-import type { Expr, Field } from "./ir.generated.ts";
+import type { Expr, Field } from "../spec/ir.generated.ts";
 import type { Source, SpecFunctionNode } from "./sources.ts";
 
 /**

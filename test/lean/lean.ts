@@ -3,8 +3,7 @@ import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
-import type { Expr, Program } from "../../src/convert/ir.generated.ts";
-import { Converter } from "../../src/convert/program.ts";
+import type { Asked, Evaluated, Keys, Reply, Request, Response, Stored } from "../../src/cli/protocol.generated.ts";
 import type { Mismatch } from "../../src/data/mismatch.generated.ts";
 import type { Scenario } from "../../src/data/scenario.generated.ts";
 import type { TraceLine } from "../../src/data/trace.generated.ts";
@@ -14,9 +13,9 @@ import type { Json } from "../../src/data/values.ts";
 import type { Spec } from "../../src/load/load.ts";
 import type { Schema } from "../../src/service/basic.ts";
 import type { StepOrder } from "../../src/sim/network.ts";
+import type { Expr } from "../../src/spec/ir.generated.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
-import type { Asked, Evaluated, Keys, Reply, Request, Response, Stored } from "./protocol.generated.ts";
 
 const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-lean");
 
@@ -47,6 +46,9 @@ const responses = {
   schemaOf: "schemaOf",
   evaluate: "evaluated",
   parse: "parsed",
+  test: "tested",
+  verifyTrace: "verifiedTrace",
+  verifyExternal: "verifiedExternal",
 } as const satisfies Record<Request["type"], Response["type"]>;
 
 type Responded<T extends Request["type"]> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
@@ -69,9 +71,6 @@ export class Lean {
   private parts: string[] = [];
   private readonly decoder = new StringDecoder("utf8");
   private readonly chunk = Buffer.alloc(65536);
-  /** The converter of the specs whose functions Lean evaluates, started on the first simulation. */
-  private converter: Converter | undefined;
-  private readonly programs = new WeakMap<Spec, Program>();
 
   constructor() {
     this.dir = mkdtempSync(join(tmpdir(), "tazuna-lean-"));
@@ -94,22 +93,11 @@ export class Lean {
    * loading specs: awaiting between registrations lets after() close Lean once the earlier tests finish.
    */
   close(): void {
-    this.converter?.close();
     this.child.kill();
     running.delete(this.child);
     closeSync(this.toLean);
     closeSync(this.fromLean);
     rmSync(this.dir, { recursive: true, force: true });
-  }
-
-  /** The spec functions of `spec` that Lean evaluates itself; the rest it asks TS. */
-  private programOf(spec: Spec): Program {
-    const known = this.programs.get(spec);
-    if (known !== undefined) return known;
-    this.converter ??= new Converter();
-    const { program } = this.converter.program(spec);
-    this.programs.set(spec, program);
-    return program;
   }
 
   private send(message: Request | Reply): void {
@@ -198,9 +186,7 @@ export class Lean {
 
   /** Lean's stepOrderChanges of the scenario executed from its startup: each search, what it ran, and what it found. */
   stepOrderChanges(spec: Spec, scenario: Scenario, functions: Answering): Responded<"stepOrderChanges">["searched"] {
-    const program = this.programOf(spec);
-    return this.exchange({ type: "stepOrderChanges", structure: spec.structure, scenario, program }, functions)
-      .searched;
+    return this.exchange({ type: "stepOrderChanges", structure: spec.structure, scenario }, functions).searched;
   }
 
   /**
@@ -221,7 +207,6 @@ export class Lean {
         scenario,
         ...(execute ? { execute } : {}),
         ...(stepOrders.length > 0 ? { stepOrders } : {}),
-        program: this.programOf(spec),
       },
       functions,
     );
@@ -241,7 +226,6 @@ export class Lean {
         scenario,
         execute: true,
         explore: true,
-        program: this.programOf(spec),
       },
       functions,
     );

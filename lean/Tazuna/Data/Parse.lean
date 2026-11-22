@@ -143,7 +143,7 @@ def knownKeywords : List String :=
    "maxLength", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf", "format", "pattern",
    "enum", "const", "anyOf", "oneOf", "default", "uniqueItems", "description", "title", "examples",
    "x-tazuna-checks", "x-tazuna-nullable", "x-tazuna-discriminator", "x-tazuna-message", "x-tazuna-bag",
-   "x-tazuna-set", "x-tazuna-sorted-by"]
+   "x-tazuna-set", "x-tazuna-sorted-by", "x-tazuna-key"]
 
 /-- Whether an `allOf` holds only the patterns that JSON Schema writes for several string checks, as the checks say. -/
 def patternsOnly : Value → Bool

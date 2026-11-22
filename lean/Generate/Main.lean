@@ -93,10 +93,10 @@ def modules : List (String × List Name) :=
      ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
      ``Tazuna.Spec.Domain, ``Tazuna.Spec.Explore,
      ``Tazuna.Spec.Structure]),
-   ("src/convert/ir.generated.ts",
+   ("src/spec/ir.generated.ts",
     [``Tazuna.Ir.Arg, ``Tazuna.Ir.Expr, ``Tazuna.Ir.Field, ``Tazuna.Ir.Condition, ``Tazuna.Ir.Conditions, ``Tazuna.Ir.Fn,
      ``Tazuna.Ir.Entry, ``Tazuna.Ir.Site, ``Tazuna.Ir.ChartFns, ``Tazuna.Ir.Program]),
-   ("test/lean/protocol.generated.ts",
+   ("src/cli/protocol.generated.ts",
     [``Tazuna.Service.Issue, ``Tazuna.Service.CopyScope, ``Tazuna.Service.Scope,
      ``Tazuna.Service.Transition, ``Tazuna.Service.Assignment, ``Tazuna.Service.Edge, ``Tazuna.Service.Extra, ``Tazuna.Service.Emit,
      ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys, ``Tazuna.Explore.Holder, ``Tazuna.Explore.Access,
@@ -105,7 +105,8 @@ def modules : List (String × List Name) :=
      ``Tazuna.DiffTest.Request, ``Tazuna.DiffTest.Question, ``Tazuna.DiffTest.Asked,
      ``Tazuna.DiffTest.Reply, ``Tazuna.DiffTest.Replied, ``Tazuna.DiffTest.Unpaired,
      ``Tazuna.DiffTest.SimulatedService, ``Tazuna.DiffTest.TriedOrder, ``Tazuna.DiffTest.SearchedProcessing,
-     ``Tazuna.DiffTest.ReadPart, ``Tazuna.DiffTest.Evaluated, ``Tazuna.DiffTest.Response])]
+     ``Tazuna.DiffTest.ReadPart, ``Tazuna.DiffTest.Evaluated, ``Tazuna.Engine.Found, ``Tazuna.Engine.ServiceRun,
+     ``Tazuna.Engine.ScenarioRun, ``Tazuna.DiffTest.Response])]
 
 def declaredIn (path : String) : MetaM (List Name) := do
   let some types := modules.lookup path | throwError "modules has no {path}"
@@ -548,8 +549,8 @@ def files (guarantees : List String) : List (String × String) :=
    ("src/data/limits.generated.ts", limitsFile),
    ("test/guarantees.generated.ts", guaranteesFile guarantees),
    types% "src/spec/structure.generated.ts",
-   types% "src/convert/ir.generated.ts",
-   types% "test/lean/protocol.generated.ts"]
+   types% "src/spec/ir.generated.ts",
+   types% "src/cli/protocol.generated.ts"]
 
 /--
 The entry point. Without `--write`, it exits 1 when a file differs from the Lean definitions or is missing, and writes

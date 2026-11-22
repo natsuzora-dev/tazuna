@@ -18,7 +18,7 @@ import { type Explore, isExplore } from "../dsl/explore.ts";
 import { contractService, definerService, isContract } from "../dsl/service.ts";
 import { isScenarioDefinition, type ScenarioDefinition, scenarioService } from "../scenario/define.ts";
 import type { Structure } from "../spec/structure.generated.ts";
-import type { DefinitionStructure } from "../spec/structure.ts";
+import { type DefinitionStructure, unconverted } from "../spec/structure.ts";
 import { opaqueCollections } from "./collections.ts";
 import { domainValues, placeDomains } from "./explores.ts";
 import type { Found } from "./found.ts";
@@ -289,7 +289,13 @@ export async function loadSpec(root: string): Promise<Loaded> {
     built.kind === "found"
       ? []
       : [...explores].map(([service, { written, place }]) =>
-          placeDomains({ ...built.structure, explores: [] }, definitions, service, written, place),
+          placeDomains(
+            { ...built.structure, explores: [], program: unconverted },
+            definitions,
+            service,
+            written,
+            place,
+          ),
         );
   const opaque = opaqueCollections(definitions, constants);
   const exported = new Set(found.map((d) => d.definition));
@@ -340,6 +346,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
   const structure = {
     ...built.structure,
     explores: placed.map((p) => p.explore),
+    program: unconverted,
   };
   return { kind: "structured", spec: { ...spec, structure } };
 }

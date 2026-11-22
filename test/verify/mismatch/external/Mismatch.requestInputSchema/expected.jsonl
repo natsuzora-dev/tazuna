@@ -1,1 +1,1 @@
-{"kind":"Mismatch.requestInputSchema","definition":null,"data":{"requestId":"q1","target":{"service":"calendar","name":"nextDay"}},"location":{"file":"traces/calendar/requests.jsonl","line":2},"error":{"type":"zod","issues":[{"code":"unrecognized_keys","keys":["zone"],"path":[],"message":"Unrecognized key: \"zone\""}]}}
+{"kind":"Mismatch.requestInputSchema","definition":null,"data":{"requestId":"q1","target":{"service":"calendar","name":"nextDay"}},"location":{"file":"traces/calendar/requests.jsonl","line":2}}

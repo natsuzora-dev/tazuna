@@ -77,7 +77,7 @@
           "line": 6,
           "text": "export const picker = machine({\n  description: \"Pick tags when the service starts\",\n  context: { picked: set(z.string()).default([]) },\n  initial: \"picking\",\n  states: { picking: {} },\n}).chart({ states: { picking: { entry: { assign: { picked: () => [\"a\", \"a\"] } } } } });"
         },
-        "violation": "{\"kind\":\"Fault.contextSchema\",\"definition\":{\"service\":\"picks\",\"name\":\"picker\"},\"data\":{},\"location\":{\"file\":\"picks/picks.ts\",\"line\":6},\"scenario\":{\"service\":\"picks\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"custom\",\"message\":\"duplicate element \\\"a\\\"\",\"path\":[\"picked\",1]}]}}"
+        "violation": "{\"kind\":\"Fault.contextSchema\",\"definition\":{\"service\":\"picks\",\"name\":\"picker\"},\"data\":{},\"location\":{\"file\":\"picks/picks.ts\",\"line\":6},\"scenario\":{\"service\":\"picks\",\"name\":\"start\"}}"
       }
     },
     "Fault.copyContextSchema": {
@@ -90,7 +90,7 @@
           "line": 6,
           "text": "export const tagCounter = machine({\n  description: \"Count the visits of each tag, and set the count below the minimum when a copy starts\",\n  initial: \"counting\",\n  states: {\n    counting: {\n      type: \"map\",\n      key: { tag: z.string() },\n      context: { visits: z.number().min(1).default(1) },\n      initial: \"idle\",\n      states: { idle: {} },\n    },\n  },\n}).chart({\n  states: { counting: { items: () => [{ tag: \"home\" }] }, idle: { entry: { assign: { visits: () => 0 } } } },\n});"
         },
-        "violation": "{\"kind\":\"Fault.copyContextSchema\",\"definition\":{\"service\":\"counters\",\"name\":\"tagCounter\"},\"data\":{\"map\":\"counting\"},\"location\":{\"file\":\"counters/counters.ts\",\"line\":6},\"scenario\":{\"service\":\"counters\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"number\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"visits\"],\"message\":\"Too small: expected number to be >=1\"}]}}"
+        "violation": "{\"kind\":\"Fault.copyContextSchema\",\"definition\":{\"service\":\"counters\",\"name\":\"tagCounter\"},\"data\":{\"map\":\"counting\"},\"location\":{\"file\":\"counters/counters.ts\",\"line\":6},\"scenario\":{\"service\":\"counters\",\"name\":\"start\"}}"
       }
     },
     "Fault.danglingRef": {
@@ -155,7 +155,7 @@
           "line": 14,
           "text": "export const addTask = command({\n  input: { taskId: Task.fields.id },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: \"\" })]);"
         },
-        "violation": "{\"kind\":\"Fault.emittedPayloadSchema\",\"definition\":{\"service\":\"emptyTitleTodo\",\"name\":\"addTask\"},\"data\":{\"event\":{\"service\":\"emptyTitleTodo\",\"name\":\"taskAdded\"}},\"location\":{\"file\":\"emptyTitleTodo/todo.ts\",\"line\":14},\"scenario\":{\"service\":\"emptyTitleTodo\",\"name\":\"addOne\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"title\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
+        "violation": "{\"kind\":\"Fault.emittedPayloadSchema\",\"definition\":{\"service\":\"emptyTitleTodo\",\"name\":\"addTask\"},\"data\":{\"event\":{\"service\":\"emptyTitleTodo\",\"name\":\"taskAdded\"}},\"location\":{\"file\":\"emptyTitleTodo/todo.ts\",\"line\":14},\"scenario\":{\"service\":\"emptyTitleTodo\",\"name\":\"addOne\"}}"
       }
     },
     "Fault.exceededAlwaysRounds": {
@@ -246,7 +246,7 @@
           "line": 8,
           "text": "export const logTitle = command({ input: { title: z.string(), from: date }, emits: [titleLogged] }).decide(\n  ({ input }) => [emit(titleLogged, { title: input.title, until: addDays(input.from, 3_000_000) })],\n);"
         },
-        "violation": "{\"kind\":\"Fault.exception\",\"definition\":{\"service\":\"todo\",\"name\":\"logTitle\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"logFarDate\"},\"error\":{\"type\":\"thrownError\",\"name\":\"RangeError\",\"message\":\"addDays(2026-10-25, 3000000) names no date in years 0000 through 9999\",\"stack\":\"<stack>\"}}"
+        "violation": "{\"kind\":\"Fault.exception\",\"definition\":{\"service\":\"todo\",\"name\":\"logTitle\"},\"data\":{},\"location\":{\"file\":\"todo/todo.ts\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"logFarDate\"}}"
       }
     },
     "Fault.failedChartInvariant": {
@@ -337,7 +337,7 @@
           "line": 19,
           "text": "export const watcher = machine({\n  description: \"Watch the first task\",\n  receives: { taskAdded },\n  initial: \"running\",\n  states: {\n    running: { initial: \"watching\", states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } } },\n  },\n}).chart({\n  states: {\n    running: { initial: { with: { task: ({ records }) => records.Task.only() } } },\n    watching: { on: { taskAdded: [{ target: \"idle\" }] } },\n  },\n});"
         },
-        "violation": "{\"kind\":\"Fault.heldSchema\",\"definition\":{\"service\":\"noTaskWatcher\",\"name\":\"watcher\"},\"data\":{\"state\":\"watching\"},\"location\":{\"file\":\"noTaskWatcher/watcher.ts\",\"line\":19},\"scenario\":{\"service\":\"noTaskWatcher\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"object\",\"code\":\"invalid_type\",\"path\":[\"task\"],\"message\":\"Invalid input: expected object, received undefined\"}]}}"
+        "violation": "{\"kind\":\"Fault.heldSchema\",\"definition\":{\"service\":\"noTaskWatcher\",\"name\":\"watcher\"},\"data\":{\"state\":\"watching\"},\"location\":{\"file\":\"noTaskWatcher/watcher.ts\",\"line\":19},\"scenario\":{\"service\":\"noTaskWatcher\",\"name\":\"start\"}}"
       }
     },
     "Fault.initialContextSchema": {
@@ -350,7 +350,7 @@
           "line": 9,
           "text": "export const limits = machine({\n  description: \"Hold the limit\",\n  context: { limit: z.number().min(1).default(0) },\n  initial: \"holding\",\n  states: { holding: {} },\n}).chart({});"
         },
-        "violation": "{\"kind\":\"Fault.initialContextSchema\",\"definition\":{\"service\":\"zeroLimits\",\"name\":\"limits\"},\"data\":{},\"location\":{\"file\":\"zeroLimits/limits.ts\",\"line\":9},\"scenario\":{\"service\":\"zeroLimits\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"number\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"limit\"],\"message\":\"Too small: expected number to be >=1\"}]}}"
+        "violation": "{\"kind\":\"Fault.initialContextSchema\",\"definition\":{\"service\":\"zeroLimits\",\"name\":\"limits\"},\"data\":{},\"location\":{\"file\":\"zeroLimits/limits.ts\",\"line\":9},\"scenario\":{\"service\":\"zeroLimits\",\"name\":\"start\"}}"
       }
     },
     "Fault.inputSchema": {
@@ -363,7 +363,7 @@
           "line": 6,
           "text": "export const notifier = machine({\n  description: \"Mail the user, whose address is not known yet\",\n  commands: { sendMail: mailer.sendMail },\n  initial: \"sending\",\n  states: { sending: {}, done: { type: \"final\" } },\n}).chart({\n  states: {\n    sending: {\n      sends: {\n        sendMail: {\n          input: () => ({ to: \"\" }),\n          onAccepted: [{ target: \"done\" }],\n          onRejected: [{ target: \"done\" }],\n        },\n      },\n    },\n  },\n});"
         },
-        "violation": "{\"kind\":\"Fault.inputSchema\",\"definition\":{\"service\":\"app\",\"name\":\"notifier\"},\"data\":{\"target\":{\"service\":\"mailer\",\"name\":\"sendMail\"}},\"location\":{\"file\":\"app/app.ts\",\"line\":6},\"scenario\":{\"service\":\"app\",\"name\":\"unanswered\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"to\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
+        "violation": "{\"kind\":\"Fault.inputSchema\",\"definition\":{\"service\":\"app\",\"name\":\"notifier\"},\"data\":{\"target\":{\"service\":\"mailer\",\"name\":\"sendMail\"}},\"location\":{\"file\":\"app/app.ts\",\"line\":6},\"scenario\":{\"service\":\"app\",\"name\":\"unanswered\"}}"
       }
     },
     "Fault.itemsSchema": {
@@ -376,7 +376,7 @@
           "line": 6,
           "text": "export const tagWatcher = machine({\n  description: \"Watch each tag, one of which is empty\",\n  initial: \"watching\",\n  states: { watching: { type: \"map\", key: { tag: z.string().min(1) }, initial: \"idle\", states: { idle: {} } } },\n}).chart({ states: { watching: { items: () => [{ tag: \"home\" }, { tag: \"\" }] } } });"
         },
-        "violation": "{\"kind\":\"Fault.itemsSchema\",\"definition\":{\"service\":\"tags\",\"name\":\"tagWatcher\"},\"data\":{\"map\":\"watching\"},\"location\":{\"file\":\"tags/tags.ts\",\"line\":6},\"scenario\":{\"service\":\"tags\",\"name\":\"start\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"tag\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
+        "violation": "{\"kind\":\"Fault.itemsSchema\",\"definition\":{\"service\":\"tags\",\"name\":\"tagWatcher\"},\"data\":{\"map\":\"watching\"},\"location\":{\"file\":\"tags/tags.ts\",\"line\":6},\"scenario\":{\"service\":\"tags\",\"name\":\"start\"}}"
       }
     },
     "Fault.notOnly": {
@@ -402,7 +402,7 @@
           "line": 6,
           "text": "export const listScreen = screen({\n  description: \"A list that offers a task with an empty id\",\n  controls: { pick: { label: \"Pick\", payload: { taskId: z.string().min(1) } } },\n  initial: \"listing\",\n  states: { listing: {} },\n}).chart({ offers: { pick: () => [{ taskId: \"\" }] } });"
         },
-        "violation": "{\"kind\":\"Fault.offersSchema\",\"definition\":{\"service\":\"picker\",\"name\":\"listScreen\"},\"data\":{\"control\":\"pick\",\"state\":null},\"location\":{\"file\":\"picker/picker.ts\",\"line\":6},\"scenario\":{\"service\":\"picker\",\"name\":\"pickListed\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"taskId\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
+        "violation": "{\"kind\":\"Fault.offersSchema\",\"definition\":{\"service\":\"picker\",\"name\":\"listScreen\"},\"data\":{\"control\":\"pick\",\"state\":null},\"location\":{\"file\":\"picker/picker.ts\",\"line\":6},\"scenario\":{\"service\":\"picker\",\"name\":\"pickListed\"}}"
       }
     },
     "Fault.outputSchema": {
@@ -415,7 +415,7 @@
           "line": 12,
           "text": "export const item = query({\n  input: { itemId: z.string() },\n  output: { title: z.string().min(1) },\n}).resolve(({ input, records }) => ({ title: records.Item.get(input.itemId)?.title ?? \"\" }));"
         },
-        "violation": "{\"kind\":\"Fault.outputSchema\",\"definition\":{\"service\":\"items\",\"name\":\"item\"},\"data\":{},\"location\":{\"file\":\"items/items.ts\",\"line\":12},\"scenario\":{\"service\":\"items\",\"name\":\"lookUpItem\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"title\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
+        "violation": "{\"kind\":\"Fault.outputSchema\",\"definition\":{\"service\":\"items\",\"name\":\"item\"},\"data\":{},\"location\":{\"file\":\"items/items.ts\",\"line\":12},\"scenario\":{\"service\":\"items\",\"name\":\"lookUpItem\"}}"
       }
     },
     "Fault.rejectedAutomationCommand": {
@@ -467,7 +467,7 @@
           "line": 6,
           "text": "export const doneScreen = screen({\n  description: \"A screen that closes with a negative count\",\n  output: { count: z.number().nonnegative() },\n  controls: { close: { label: \"Close\" } },\n  initial: \"open\",\n  states: { open: {}, closed: { type: \"final\" } },\n}).chart({\n  offers: { close: any },\n  resolve: () => ({ count: -1 }),\n  states: { open: { on: { close: [{ target: \"closed\" }] } } },\n});"
         },
-        "violation": "{\"kind\":\"Fault.screenOutputSchema\",\"definition\":{\"service\":\"closer\",\"name\":\"doneScreen\"},\"data\":{},\"location\":{\"file\":\"closer/closer.ts\",\"line\":6},\"scenario\":{\"service\":\"closer\",\"name\":\"closeDone\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"number\",\"code\":\"too_small\",\"minimum\":0,\"inclusive\":true,\"path\":[\"count\"],\"message\":\"Too small: expected number to be >=0\"}]}}"
+        "violation": "{\"kind\":\"Fault.screenOutputSchema\",\"definition\":{\"service\":\"closer\",\"name\":\"doneScreen\"},\"data\":{},\"location\":{\"file\":\"closer/closer.ts\",\"line\":6},\"scenario\":{\"service\":\"closer\",\"name\":\"closeDone\"}}"
       }
     },
     "Fault.unheld": {
@@ -688,7 +688,7 @@
           "line": 5,
           "text": "export const answerMalformedNextDay = scenario({\n  description:\n    \"Answer the next day with a day that is no whole millisecond; the output schema of nextDay rejects it, so test reports answerOutputSchema\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(calendar)] },\n  when: (w) => {\n    w.net.deliver(w.startup.request(calendar.nextDay));\n    w.net.deliver(w.peer.calendar.answer(w.startup.request(calendar.nextDay), fulfilled({ day: 1.5 })));\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidInput.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"agenda\",\"name\":\"answerMalformedNextDay\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"int\",\"format\":\"safeint\",\"code\":\"invalid_type\",\"path\":[\"day\"],\"message\":\"Invalid input: expected int, received number\"}]}}"
+        "violation": "{\"kind\":\"InvalidInput.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"calendar.nextDay#1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"agenda/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"agenda\",\"name\":\"answerMalformedNextDay\"}}"
       }
     },
     "InvalidInput.controlPayloadSchema": {
@@ -701,7 +701,7 @@
           "line": 5,
           "text": "export const pickTwice = scenario({\n  description: \"Pick the name a twice; test reports controlPayloadSchema\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: {}, peers: [external(catalog)] },\n  when: (w) => {\n    w.user.operate(w.startup.screen(shelfScreen), \"pick\", { names: [\"a\", \"a\"] });\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidInput.controlPayloadSchema\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"shelf\",\"name\":\"shelfScreen\"},\"control\":\"pick\"},\"location\":{\"file\":\"shelf/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"shelf\",\"name\":\"pickTwice\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"custom\",\"message\":\"duplicate element \\\"a\\\"\",\"path\":[\"names\",1]}]}}"
+        "violation": "{\"kind\":\"InvalidInput.controlPayloadSchema\",\"definition\":null,\"data\":{\"screen\":{\"service\":\"shelf\",\"name\":\"shelfScreen\"},\"control\":\"pick\"},\"location\":{\"file\":\"shelf/scenarios.ts\",\"line\":5},\"scenario\":{\"service\":\"shelf\",\"name\":\"pickTwice\"}}"
       }
     },
     "InvalidInput.coveredByModal": {
@@ -727,7 +727,7 @@
           "line": 7,
           "text": "export const receiveAddedEmptyTitle = scenario({\n  description:\n    \"Receive an added task with an empty title; the payload schema of taskAdded rejects it, so test reports eventPayloadSchema\",\n  given: arranged,\n  when: (w) => {\n    w.net.deliver(w.peer.todo.emit(todo.taskAdded, { taskId: \"task-1\", title: \"\" }, { resultOf: null }));\n  },\n  then: () => [],\n});"
         },
-        "violation": "{\"kind\":\"InvalidInput.eventPayloadSchema\",\"definition\":null,\"data\":{\"event\":{\"service\":\"todo\",\"name\":\"taskAdded\"}},\"location\":{\"file\":\"notifier/scenarios.ts\",\"line\":7},\"scenario\":{\"service\":\"notifier\",\"name\":\"receiveAddedEmptyTitle\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"title\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
+        "violation": "{\"kind\":\"InvalidInput.eventPayloadSchema\",\"definition\":null,\"data\":{\"event\":{\"service\":\"todo\",\"name\":\"taskAdded\"}},\"location\":{\"file\":\"notifier/scenarios.ts\",\"line\":7},\"scenario\":{\"service\":\"notifier\",\"name\":\"receiveAddedEmptyTitle\"}}"
       }
     },
     "InvalidInput.failedAssumedEnsures": {
@@ -1572,7 +1572,7 @@
           "line": 2,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q3\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":\"2026-10-26\"}}}"
         },
-        "violation": "{\"kind\":\"Mismatch.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"q3\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"number\",\"code\":\"invalid_type\",\"path\":[\"day\"],\"message\":\"Invalid input: expected number, received string\"}]}}"
+        "violation": "{\"kind\":\"Mismatch.answerOutputSchema\",\"definition\":null,\"data\":{\"requestId\":\"q3\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2}}"
       }
     },
     "Mismatch.answerResult": {
@@ -1611,7 +1611,7 @@
           "line": 3,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e7\",\"name\":\"booked\",\"resultOf\":\"c3\",\"payload\":{\"day\":\"tomorrow\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.eventPayloadSchema\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":3},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"number\",\"code\":\"invalid_type\",\"path\":[\"day\"],\"message\":\"Invalid input: expected number, received string\"}]}}"
+        "violation": "{\"kind\":\"Mismatch.eventPayloadSchema\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":3}}"
       }
     },
     "Mismatch.failedAssumedEnsures": {
@@ -1780,7 +1780,7 @@
           "line": 2,
           "text": "{\"time\":1792972800000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#1\",\"to\":\"q1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":1792800000000}}}"
         },
-        "violation": "{\"kind\":\"Mismatch.requestInputSchema\",\"definition\":null,\"data\":{\"requestId\":\"q1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"unrecognized_keys\",\"keys\":[\"zone\"],\"path\":[],\"message\":\"Unrecognized key: \\\"zone\\\"\"}]}}"
+        "violation": "{\"kind\":\"Mismatch.requestInputSchema\",\"definition\":null,\"data\":{\"requestId\":\"q1\",\"target\":{\"service\":\"calendar\",\"name\":\"nextDay\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":2}}"
       }
     },
     "Mismatch.result": {

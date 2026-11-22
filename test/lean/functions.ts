@@ -1,4 +1,16 @@
 import type { z } from "zod";
+import type {
+  Asked,
+  Extra,
+  Holder,
+  Access as LeanAccess,
+  Issue as LeanIssue,
+  Keys as LeanKeys,
+  Scope as LeanScope,
+  Question,
+  Replied,
+  Reply,
+} from "../../src/cli/protocol.generated.ts";
 import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
 import { bagged, fromJson } from "../../src/data/collections.ts";
 import type { DefinitionRef } from "../../src/data/definitionRef.ts";
@@ -27,18 +39,6 @@ import type { RecordSource } from "../../src/service/records.ts";
 import { SpecFunctions } from "../../src/sim/spec/functions.ts";
 import { transitionRef } from "../../src/spec/structure.ts";
 import { keyPositionsOf } from "../../src/verify/compare.ts";
-import type {
-  Asked,
-  Extra,
-  Holder,
-  Access as LeanAccess,
-  Issue as LeanIssue,
-  Keys as LeanKeys,
-  Scope as LeanScope,
-  Question,
-  Replied,
-  Reply,
-} from "./protocol.generated.ts";
 
 /** The Keys of Lean's: the owner, if any, and what createKey returns next by entity. */
 const keysOf = ({ owner, next }: LeanKeys): Keys => ({

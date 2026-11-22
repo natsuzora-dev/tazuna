@@ -1,28 +1,19 @@
 import { type DefinitionRef, sameRef } from "../data/definitionRef.ts";
 import { expectFound, InternalError } from "../data/internalError.ts";
-import { invalidInputKinds } from "../data/invalidInput.generated.ts";
 import type { Fact, Line, Scenario, Template } from "../data/scenario.generated.ts";
 import { blamesSenderKinds, type LineId, type RejectionKind } from "../data/trace.generated.ts";
 import type { Json } from "../data/values.ts";
-import type { Violation } from "../data/violation.ts";
-import type { Named } from "../dsl/definition.ts";
 import type { Spec } from "../load/load.ts";
-import type { LoadedScenario } from "../load/scenarios.ts";
 import { type Schema, type Service, schemaOf } from "../service/basic.ts";
 import type { Processing } from "../service/chart/queue.ts";
 import { sameLineId } from "../service/message.ts";
-import { Halt } from "../service/state.ts";
 import { type Message, stateOf, type World } from "../sim/network.ts";
 import type { Cache } from "../sim/spec/cache.ts";
-import { Coverage } from "../sim/spec/coverage.ts";
 import type { Listener } from "../sim/spec/listener.ts";
 import { executeSpec, executeSpecFrom } from "../sim/spec/simulate.ts";
 import { domainOf, rootTree, treeValues } from "../spec/domains.ts";
 import { type ExploreStructure, rejectionKinds, rejectionReasons } from "../spec/structure.ts";
 import { type Enabled, enabled } from "./enabled.ts";
-import { halted, worldFingerprint } from "./fingerprint.ts";
-import { search, Visited } from "./search.ts";
-import { stepOrderChanges } from "./stepOrders.ts";
 
 export interface Executed {
   readonly world: World;
@@ -288,105 +279,3 @@ export const executeMove = (
     parent,
     sc.lines.length + appended.length,
   );
-
-const invalidInput: ReadonlySet<string> = new Set(invalidInputKinds);
-
-/** The violations that each running service of `child` added since `parent`: its own, its listener's, and its halt. */
-function violationsSince(parent: Executed, child: Executed): Violation[] {
-  return [...child.world.services].flatMap(([service, p]) => {
-    const before = parent.world.services.get(service);
-    const was = before?.processing.state.violations.length ?? 0;
-    const collected = child.listeners.get(service)?.collected.violations ?? [];
-    const collectedWas = parent.listeners.get(service)?.collected.violations.length ?? 0;
-    return [
-      ...p.processing.state.violations.slice(was),
-      ...collected.slice(collectedWas),
-      ...(p.halted !== undefined && before?.halted === undefined ? [p.halted] : []),
-    ];
-  });
-}
-
-/**
- * Returns whether the lines appended after `parent` are lines that someone could write: no report of the simulation
- * and no InvalidInput violation of a running service. explore discards the others.
- */
-const givable = (parent: Executed, child: Executed): boolean =>
-  child.world.violations.length === parent.world.violations.length &&
-  (child.world.halted === undefined || parent.world.halted !== undefined) &&
-  !violationsSince(parent, child).some((v) => invalidInput.has(v.kind));
-
-interface FoundOnPath {
-  readonly violation: Violation;
-  readonly appended: readonly Line[];
-}
-
-export interface ExploredLines {
-  readonly found: readonly FoundOnPath[];
-  /** What the scenario's execution and every path reached, except an execution that halted. */
-  readonly reached: Coverage;
-  /** How many worlds the search visited, by fingerprint. */
-  readonly visited: number;
-}
-
-/**
- * Adds what `executed` reached and `parent`, the execution it continues, had not: only what its own path reports
- * (Space.out), as merged_search_reports takes a report.
- */
-const coverageOf = (executed: Executed, reached: Coverage, parent?: Executed) => {
-  if (halted(executed.world)) return;
-  for (const [service, l] of executed.listeners) reached.addAll(l.coverage, parent?.listeners.get(service)?.coverage);
-};
-
-/**
- * Explores the scenario: executes its lines, and the paths that append moves that face the own service, up to the depth
- * of its service's `explore()`, breadth-first, without extending a path whose world an earlier path reached, discarding
- * a path whose last line no one could write (givable). Returns the violations of the running services that each path
- * added, the step orders of its last move's processings that change their result, and what the executions reached.
- */
-export function exploreLines(spec: Spec, named: Named<LoadedScenario>): ExploredLines {
-  const sc = named.definition.scenario;
-  const base = executeAppended(spec, sc, []);
-  const found: FoundOnPath[] = [];
-  const reached = new Coverage();
-  coverageOf(base, reached);
-  if (halted(base.world) || base.world.violations.length > 0) return { found, reached, visited: 0 };
-  const enabledAfter = enabledLines(spec, sc);
-  const next = (path: readonly Move[], executed: Executed): Move[] => {
-    if (halted(executed.world)) return [];
-    try {
-      return enabledAfter([...sc.lines, ...path.flat()], executed);
-    } catch (error) {
-      // What the own service enables next is evaluated after the path, so a Fault there is the path's.
-      if (!(error instanceof Halt)) throw error;
-      found.push({ violation: error.violation, appended: path.flat() });
-      return [];
-    }
-  };
-  const step = (parent: Executed, path: readonly Move[]): Executed | undefined => {
-    const child = executeMove(
-      spec,
-      sc,
-      path.slice(0, -1).flat(),
-      parent,
-      expectFound("the last move of a path", path.at(-1)),
-    );
-    return givable(parent, child) ? child : undefined;
-  };
-  const visited = new Visited();
-  for (const { path, result, parent } of search<Move, Executed>({
-    start: { path: [], result: base },
-    bound: exploreOf(spec, sc.service).depth,
-    step,
-    next,
-    merge: { fingerprint: (executed) => worldFingerprint(executed.world), visited },
-  })) {
-    if (parent === undefined) continue;
-    const appended = path.flat();
-    coverageOf(result, reached, parent);
-    for (const violation of violationsSince(parent, result)) found.push({ violation, appended });
-    const from = sc.lines.length + path.slice(0, -1).flat().length;
-    for (const violation of stepOrderChanges(spec, { ...sc, lines: [...sc.lines, ...appended] }, result, from))
-      found.push({ violation, appended });
-  }
-  return { found, reached, visited: visited.size };
-}

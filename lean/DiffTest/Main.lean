@@ -6,6 +6,7 @@ import Tazuna.Ir.Overlay
 import Tazuna.Sim.Run
 import Tazuna.Data.Parse
 import Tazuna.Validation.Canonical
+import Engine.Verify
 
 /-!
 tazuna-lean exchanges one JSON value per line with TS over stdio (precedents: leanprover-community/repl, the Lean LSP).
@@ -19,7 +20,7 @@ that Lean serves for the reads that TS made then are the same now: a TS reply de
 values.
 -/
 
-open Tazuna Tazuna.Data Tazuna.Service Tazuna.Explore Tazuna.Json Tazuna.DiffTest
+open Tazuna Tazuna.Data Tazuna.Service Tazuna.Explore Tazuna.Json Tazuna.DiffTest Tazuna.Engine
 
 structure Log where
   parts : List RecordPart := []
@@ -199,39 +200,6 @@ def verify (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (service : Stri
   let compared ← Verify.verifyLines spec service (askComparable stdin stdout (← IO.mkRef {})) snapshot trace id
   pure (.verified compared.findings (compared.bindings.map (·.strings)))
 
-/-- What an instrumented simulation collects: one Collect per running service, and the service whose processing runs. -/
-structure Acting where
-  current : String := ""
-  collects : List (String × Collect) := []
-
-abbrev ActingIO := StateT Acting IO
-
-def Acting.collect (a : Acting) (service : String) : Collect := (a.collects.lookup service).getD {}
-
-/-- `x` run on the Collect of `service`. -/
-def focus {α : Type} (service : String) (x : StateT Collect IO α) : ActingIO α := fun a => do
-  let (r, c) ← x.run (a.collect service)
-  pure (r, { a with collects := (service, c) :: a.collects.filter (·.1 != service) })
-
-instance : MonadNote ActingIO where
-  note
-    | .bug message => throw (IO.userError message)
-    | n => do focus (← get).current (MonadNote.note n : StateT Collect IO Unit)
-
-instance : Sim.MonadActing ActingIO where
-  acting service x := do
-    let previous := (← get).current
-    modify ({ · with current := service })
-    let r ← x
-    modify ({ · with current := previous })
-    pure r
-
-/-- The notes of a run outside a simulation, of which tazuna-lean hears only a bug, and stops on it. -/
-instance : MonadNote IO where
-  note
-    | .bug message => throw (IO.userError message)
-    | _ => pure ()
-
 /-- The text of an answer, for the message of a mismatch. -/
 def describe {ε α : Type} [Repr ε] [Repr α] : Except ε α → String
   | .ok a => s!"{repr a}"
@@ -305,7 +273,7 @@ def structural (stdin stdout : IO.FS.Stream) (memo : Memo) (service : String) (s
 The functions of each running service of `start`, instrumented as Instrument does, which collect into that service's
 Collect. Each question to TS names its service. The run asks only running services.
 -/
-def instrumentedOf (stdin stdout : IO.FS.Stream) (program : Ir.Program) (start : Sim.World) :
+def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) :
     IO (String → Functions ActingIO) := do
   let reads ← IO.mkRef {}
   let memo ← IO.mkRef {}
@@ -314,7 +282,8 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (program : Ir.Program) (start :
     match start.services.lookup service with
     | none => fs.hoist fun _ => throw (IO.userError s!"the run asked {service}, which does not run")
     | some st =>
-      let overlaid (fs : Functions IO) := structural stdin stdout memo service st (program.overlay st (shadowed reads) fs)
+      let overlaid (fs : Functions IO) :=
+        structural stdin stdout memo service st (st.structure.program.overlay st (shadowed reads) fs)
       let ifs : InstrumentFunctions IO := {
         lastReads := do pure (← reads.get).parts
         lastAccess := do pure (((← reads.get).replied.bind (·.access)).getD {}) }
@@ -332,9 +301,9 @@ simulation's violations and halting violation. With `execute` true, the lines ta
 each running service that did not halt also returns what it enables next and its state as ChoiceDependent compares it.
 -/
 def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) (executing : Bool)
-    (stepOrders : List StepOrder) (exploring : Bool) (program : Ir.Program) : IO Response := do
+    (stepOrders : List StepOrder) (exploring : Bool) : IO Response := do
   let start ← worldOf spec sc stepOrders
-  let fsOf ← instrumentedOf stdin stdout program start
+  let fsOf ← instrumentedOf stdin stdout start
   let path : Explore.Explored := { sc, lines := sc.lines, domains := [] }
   let ran : ActingIO Sim.World :=
     if executing then path.world spec fsOf start else Sim.simulate spec fsOf start sc
@@ -385,12 +354,12 @@ def searchedOf (r : Searched) : SearchedProcessing :=
 The reply to request `stepOrderChanges`, which takes a structure and a scenario and returns stepOrderChanges of the
 scenario executed, from its startup: every search, with each step order it ran and its verdict, and what it found.
 -/
-def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario)
-    (program : Ir.Program) : IO Response := do
+def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) :
+    IO Response := do
   let executeWith (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Execution := do
     let start ← Sim.World.start spec sc
     let start := { start with stepOrders }
-    let ran : ActingIO Sim.World := Sim.execute spec (← instrumentedOf stdin stdout program start) start sc
+    let ran : ActingIO Sim.World := Sim.execute spec (← instrumentedOf stdin stdout start) start sc
     let (w, acting) ← ran.run {}
     pure { world := w, collect := acting.collect }
   let reads ← IO.mkRef {}
@@ -421,10 +390,16 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
     pure (.afters (Verify.unknownAfters lines))
   | .decodeLines values =>
     pure (.decodedLines (values.map fun v => (FromValue.fromValue v : Except String TraceLine).toOption))
-  | .simulate s sc execute stepOrders explore program =>
+  | .simulate s sc execute stepOrders explore =>
     simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD []) (explore == some true)
-      (program.getD {})
-  | .stepOrderChanges s sc program => stepOrderChangesRequest stdin stdout s sc (program.getD {})
+  | .stepOrderChanges s sc => stepOrderChangesRequest stdin stdout s sc
+  | .test s scenarios => do
+    let (runs, uncovered) ← Engine.test s scenarios
+    pure (.tested runs uncovered)
+  | .verifyTrace s service snapshot trace => do
+    let (findings, bindings) ← Engine.verifyTrace s service snapshot trace
+    pure (.verifiedTrace findings bindings)
+  | .verifyExternal s service trace => do pure (.verifiedExternal (← Engine.verifyExternal s service trace))
   | .sort schema value => pure (.sorted (sortCollections schema value))
   | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))
   | .schemaOf s service schema => do pure (.schemaOf ((← Service.ofStructure s service).schemaOf schema))
