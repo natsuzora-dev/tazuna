@@ -58,6 +58,8 @@ const ops = [
   "concat",
   "emit",
   "createKey",
+  "includes",
+  "format",
 ] as const satisfies readonly Expr["op"][];
 const listsEveryOp: [Exclude<Expr["op"], (typeof ops)[number]>] extends [never] ? true : false = true;
 

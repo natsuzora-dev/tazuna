@@ -206,10 +206,25 @@ export type Expr =
       readonly name: string;
       readonly body: Expr;
     }
+  /** Two Bags or arrays together; an array spread, `[...a, b]`, is the concat of `a` and `[b]`. */
   | {
       readonly op: "concat";
       readonly left: Expr;
       readonly right: Expr;
+    }
+  /** `array.includes(value)` of an array of scalars, null or undefined. */
+  | {
+      readonly op: "includes";
+      readonly array: Expr;
+      readonly value: Expr;
+    }
+  /**
+   * A template literal: each part as a string, as JS writes a string, number, boolean, null or undefined, joined. An
+   * instant or date is its JSON text, which is what its `toString` writes.
+   */
+  | {
+      readonly op: "format";
+      readonly parts: readonly Expr[];
     }
   /** `emit(event, payload)` of an event that the command lists. */
   | {

@@ -304,6 +304,34 @@ export const fixtures: readonly Fixture[] = [
   recordFixture("sortedBy", {}, fc.record({}), ({ records }) =>
     records.Task.map((t) => ({ title: t.title, done: t.done ? 1 : 0 })).sortedBy((x) => x.done),
   ),
+  fixture("concat", { ns: z.array(z.number()), n: z.number() }, fc.record({ ns: numbers, n: number }), ({ input }) => [
+    input.n,
+    ...input.ns,
+    ...[input.n > 0],
+    ...input.ns,
+  ]),
+  fixture("includes", { ns: z.array(z.number()), n: z.number() }, fc.record({ ns: numbers, n: number }), ({ input }) =>
+    input.ns.includes(input.n),
+  ),
+  fixture(
+    "format",
+    { title: z.string(), n: z.number(), at: datetime, note: z.string().nullable().optional() },
+    fc.record(
+      {
+        title: text,
+        n: fc.oneof(number, fc.double({ noNaN: true, noDefaultInfinity: true })),
+        at: instant,
+        note: fc.option(text),
+      },
+      { requiredKeys: ["title", "n", "at"] },
+    ),
+    ({ input }) => `${input.title}: ${input.n} at ${input.at} ${input.note} ${input.n > 0}` + input.title,
+  ),
+  fixture("lit", { at: datetime, on: date }, fc.record({ at: instant, on: day }), ({ input }) =>
+    Temporal.Instant.compare(input.at, Temporal.Instant.from("2026-01-01T09:00:01+09:00")) > 0
+      ? input.on.toString()
+      : Temporal.PlainDate.from("2026-01-31"),
+  ),
   recordFixture("createKey", { title: z.string() }, fc.record({ title: text }), ({ input, createKey }) => ({
     first: createKey(ref(Task)),
     second: input.title === "" ? createKey(ids.task) : null,
@@ -335,8 +363,8 @@ export const outside: readonly ((args: {
   ({ input }) => input.n + 1 > 2,
   ({ input }) => input.title.trim() === "",
   ({ input }) => input.title < "b",
-  ({ input }) => `${input.title}!` === "a!",
-  ({ input }) => [...[input.n]].length === 1,
+  ({ input }) => [...input.title].length === 1,
+  ({ input }) => input.title + Temporal.Now.instant(),
   async ({ input }) => input.n > 0,
   // biome-ignore lint/suspicious/noDoubleEquals: == on other than null coerces, which the IR does not.
   ({ input }) => input.n == 1,

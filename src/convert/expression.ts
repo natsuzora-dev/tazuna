@@ -32,6 +32,7 @@ import {
   isShorthandPropertyAssignment,
   isSpreadElement,
   isStringLiteral,
+  isTemplateExpression,
   isVariableDeclaration,
   isVariableDeclarationList,
   isVariableStatement,
@@ -117,6 +118,12 @@ const relations: ReadonlyMap<SyntaxKind, Relation> = new Map([
 const temporalCompares: ReadonlyMap<string, Order> = new Map([
   ["Temporal.Instant.compare", "instant"],
   ["Temporal.PlainDate.compare", "date"],
+]);
+
+/** The Temporal parsers that a spec calls on a literal, which the converter runs, giving the JSON text. */
+const temporalParsers: ReadonlyMap<string, (text: string) => string> = new Map([
+  ["Temporal.Instant.from", (text: string) => Temporal.Instant.from(text).toString()],
+  ["Temporal.PlainDate.from", (text: string) => Temporal.PlainDate.from(text).toString()],
 ]);
 
 const stringSearches = { startsWith: "startsWith", endsWith: "endsWith", includes: "strIncludes" } as const;
@@ -379,8 +386,9 @@ class Conversion {
       isBlock(f.body) ? this.block([...f.body.statements], scope) : this.expression(f.body as Expression, scope);
     this.specials = new Set(args.filter((a): a is Special => a === "records" || a === "createKey"));
     this.argument = (node, name) => {
-      if (!(args as readonly string[]).includes(name) || this.specials.has(name as Special))
-        this.fail(node, `reads ${name}`);
+      if (name === "records" || this.specials.has(name as Special)) this.fail(node, `reads ${name}`);
+      // TS passes an arguments object without the name, whose field is undefined.
+      if (!(args as readonly string[]).includes(name)) return { op: "undef" };
       return { op: "arg", arg: name as Exclude<Arg, Special> };
     };
     if (parameter === undefined) return body(new Map());
@@ -498,17 +506,41 @@ class Conversion {
     if (isBinaryExpression(e)) return this.binary(e.left, e.operatorToken.kind, e.right, e, scope);
     if (isPropertyAccessExpression(e)) return this.access(e, scope);
     if (isObjectLiteralExpression(e)) return { op: "obj", fields: e.properties.map((p) => this.property(p, scope)) };
-    if (isArrayLiteralExpression(e))
-      return {
-        op: "arr",
-        values: e.elements.map((v) => {
-          if (isSpreadElement(v) || v.kind === SyntaxKind.OmittedExpression)
-            this.fail(v, "spreads or skips in an array");
-          return this.expression(v, scope);
-        }),
-      };
+    if (isArrayLiteralExpression(e)) return this.array(e.elements, scope);
+    if (isTemplateExpression(e)) {
+      const parts: Expr[] = e.head.text === "" ? [] : [{ op: "lit", value: e.head.text }];
+      for (const span of e.templateSpans) {
+        const kinds = [...this.kinds(span.expression)];
+        if (!kinds.every((k) => scalars.has(k) || k === "instant" || k === "date"))
+          this.fail(span.expression, "writes in a template other than a scalar, instant or date");
+        parts.push(this.expression(span.expression, scope));
+        if (span.literal.text !== "") parts.push({ op: "lit", value: span.literal.text });
+      }
+      return { op: "format", parts };
+    }
     if (isCallExpression(e)) return this.call(e, scope);
     this.fail(e, "is no expression of the IR");
+  }
+
+  /** An array literal; each spread of an array is a concat, so the values keep the written order. */
+  private array(elements: readonly Expression[], scope: Scope): Expr {
+    const chunks: Expr[] = [];
+    let values: Expr[] = [];
+    for (const v of elements) {
+      if (v.kind === SyntaxKind.OmittedExpression) this.fail(v, "skips in an array");
+      if (!isSpreadElement(v)) {
+        values.push(this.expression(v, scope));
+        continue;
+      }
+      if (this.collection(v.expression) !== "array") this.fail(v, "spreads other than an array");
+      if (values.length > 0) chunks.push({ op: "arr", values });
+      values = [];
+      chunks.push(this.expression(v.expression, scope));
+    }
+    if (chunks.length === 0) return { op: "arr", values };
+    if (values.length > 0 || chunks.length === 1) chunks.push({ op: "arr", values });
+    const [first, ...rest] = chunks as [Expr, ...Expr[]];
+    return rest.reduce((left, right) => ({ op: "concat", left, right }), first);
   }
 
   private property(p: ObjectLiteralElementLike, scope: Scope): Field {
@@ -529,6 +561,12 @@ class Conversion {
     if (operator === SyntaxKind.AmpersandAmpersandToken) return { op: "and", ...both() };
     if (operator === SyntaxKind.BarBarToken) return { op: "or", ...both() };
     if (operator === SyntaxKind.QuestionQuestionToken) return { op: "coalesce", ...both() };
+    if (operator === SyntaxKind.PlusToken && (this.only(left) === "string" || this.only(right) === "string")) {
+      // + reads an Instant or a PlainDate through valueOf, which throws, unlike a template.
+      if (![left, right].every((side) => [...this.kinds(side)].every((k) => scalars.has(k))))
+        this.fail(node, "adds to a string other than a scalar");
+      return { op: "format", parts: [this.expression(left, scope), this.expression(right, scope)] };
+    }
     if (operator === SyntaxKind.EqualsEqualsToken || operator === SyntaxKind.ExclamationEqualsToken) {
       const nullish = this.isNullish(right, scope) ? left : this.isNullish(left, scope) ? right : undefined;
       if (nullish === undefined) this.fail(node, "compares with == other than null or undefined");
@@ -633,6 +671,25 @@ class Conversion {
       const receiver = this.only(callee.expression);
       if (callee.name.text === "only" && (receiver === "bag" || receiver === "table"))
         return { op: "only", collection: this.expression(callee.expression, scope) };
+      // An instant or a date is its JSON text, which is what toString writes.
+      if (callee.name.text === "toString" && (receiver === "instant" || receiver === "date"))
+        return this.expression(callee.expression, scope);
+    }
+    const parsed = temporalParsers.get(this.text(callee));
+    if (parsed !== undefined && !scope.has("Temporal")) {
+      const [text, ...more] = e.arguments;
+      const literal = text === undefined ? undefined : unwrapped(text);
+      if (
+        literal === undefined ||
+        more.length > 0 ||
+        !(isStringLiteral(literal) || isNoSubstitutionTemplateLiteral(literal))
+      )
+        this.fail(e, `calls ${this.text(callee)} with other than a string literal`);
+      try {
+        return { op: "lit", value: parsed(literal.text) };
+      } catch {
+        this.fail(e, `calls ${this.text(callee)} with a text that it rejects`);
+      }
     }
     const [argument, ...rest] = e.arguments;
     if (argument === undefined || rest.length > 0) this.fail(e, "calls with other than one argument");
@@ -658,6 +715,15 @@ class Conversion {
         order: receiver,
         left: this.expression(callee.expression, scope),
         right: this.expression(argument, scope),
+      };
+    }
+    if (method === "includes" && receiver === "array") {
+      if (![...this.kinds(argument)].every((k) => scalars.has(k)))
+        this.fail(e, "calls includes with other than a scalar");
+      return {
+        op: "includes",
+        array: this.expression(callee.expression, scope),
+        value: this.expression(argument, scope),
       };
     }
     if (method === "get" && receiver === "table") {

@@ -116,7 +116,15 @@ inductive Expr where
   | only (collection : Expr)
   /-- A Bag's values in groups of equal key, in ascending key order. -/
   | sortedBy (order : Order) (collection : Expr) (name : String) (body : Expr)
+  /-- Two Bags or arrays together; an array spread, `[...a, b]`, is the concat of `a` and `[b]`. -/
   | concat (left right : Expr)
+  /-- `array.includes(value)` of an array of scalars, null or undefined. -/
+  | includes (array value : Expr)
+  /--
+  A template literal: each part as a string, as JS writes a string, number, boolean, null or undefined, joined. An
+  instant or date is its JSON text, which is what its `toString` writes.
+  -/
+  | format (parts : List Expr)
   /-- `emit(event, payload)` of an event that the command lists. -/
   | emit (event : Spec.Ref) (payload : Expr)
   /--
