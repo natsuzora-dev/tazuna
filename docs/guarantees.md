@@ -215,8 +215,6 @@ Each row below names one thing that a detection leaves out.
 | Violations on explored paths | | Values outside the declared domains. |
 | Violations on explored paths | | Paths with an answer, an event, or a control payload whose parts each fit their domains but whose whole value fails a refinement of its schema. No one could write such a line, so `test` discards the path. A request with such a value stays, and the own service rejects it as `invalid-input`. |
 | `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that a spec function reaches by another name, or through a package that the spec imports. |
-| `BagOrderDependent` | It runs each spec function whose call visited a `Bag` of two or more values again with every `Bag` reversed, and compares the two results under a binding of created keys. | Orders of a `Bag` other than the written one and its reverse. |
-| `BagOrderDependent` | | Results with too many bindings of created keys to compare, which it reports as `Undecided.reversedBagBindings`. |
 | `ChoiceDependent` | It searches the [step orders](#step-orders-that-test-searches) of each processing. | Orders beyond `Undecided.stepOrderLimit`. |
 | `ChoiceDependent` | | The orders of a processing after its first violation. |
 | `ChoiceDependent` | | The order of two steps that wait in the service's queue at once, are not message arrivals, and run the same definition on equal values, such as one automation's reactions to two equal events. The search names a step by what it runs and not by the step that caused it, so it takes such steps as one. |
@@ -255,7 +253,6 @@ tazuna detects a break of each assumption only in part or not at all.
   A path reports the violations that it adds and the parts that it reaches first.
   `test` extends only the first explored world of each fingerprint, so its explored paths rest on this assumption.
   No theorem proves it, and the diff test of explored paths checks only that the TypeScript runtime and Lean take the same worlds as the same.
-  The assumption fails in one known case: a path that reported a `BagOrderDependent` violation of a definition reports no other one of that definition, so a world merged into its world can lose a second such violation.
 - **Fingerprint hashes.** `test` keeps a 64-bit hash of each fingerprint instead of its text, so two worlds whose fingerprints share a hash also count as one.
   It writes the probability of that, as TLC does, when the probability is at least 1e-12.
 - **Spec functions.** Spec functions are deterministic.
@@ -304,7 +301,7 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 | The `n`-th created key of an entity is `<owner>/<Entity>-<n>`, so no two createKey calls of one service return the same key. | `created_form`, `created_distinct` |
 | In a run of a scenario, `createKey` of a keyed entity never returns a key that the scenario may write, such as a Given key. | `unwritten_not_created`, `execute_unwritten_not_created`, `start_unwritten_not_created` |
 | The order in which Given writes the records does not matter. A scenario that writes the same records, no two with one key, in another order simulates alike. | `simulate_records_perm` |
-| To find `BagOrderDependent` and `ChoiceDependent` violations, `test` records what each spec function reads and writes and how it visits each `Bag`. The recording changes no step of a run: a service starts, processes each input, and checks the end of a run as it does without the recording. | `instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkExchanges_agrees` |
+| To find `BagOrderDependent` and `ChoiceDependent` violations, `test` records what each spec function reads and writes. The recording changes no step of a run: a service starts, processes each input, and checks the end of a run as it does without the recording. | `instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkExchanges_agrees` |
 | A run of a whole scenario with the recording leaves the world that the run without it leaves, whatever the recording collected before. | `execute_agrees`, `simulate_agrees` |
 
 ### Data validity

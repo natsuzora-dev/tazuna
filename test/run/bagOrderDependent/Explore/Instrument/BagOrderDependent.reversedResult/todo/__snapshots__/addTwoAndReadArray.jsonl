@@ -1,8 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"},"resultOf":"addTask#1"}
-{"time":1792886400000,"dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2","title":"Buy eggs"}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","title":"Buy eggs"},"resultOf":"addTask#2"}
-{"time":1792886400000,"dir":"in","type":"query","id":"titlesInArray#1","name":"titlesInArray","input":{}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#3","to":"titlesInArray#1","answer":{"result":"fulfilled","output":{"titles":["Buy milk","Buy eggs"]}}}

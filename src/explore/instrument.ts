@@ -1,32 +1,25 @@
-import { bagValues, enumerations } from "../data/bag.ts";
 import type { BagOrderDependent } from "../data/bagOrderDependent.generated.ts";
-import { emptyBinding, matchesSameness, matchValue, type Sameness, sameness } from "../data/binding.ts";
-import { Bag, Ref } from "../data/canonical.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { InternalError } from "../data/internalError.ts";
-import { bindingLimit } from "../data/limits.generated.ts";
 import type { Activity, StepName } from "../data/step.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import type { TransitionRef } from "../data/transitionRef.generated.ts";
 import type { Undecided } from "../data/undecided.generated.ts";
-import { byCodePoint, canonicalJson, type Fields, type Json, plain, sameJson } from "../data/values.ts";
-import { type Located, type ViolationError, withExtra } from "../data/violation.ts";
-import { ref, type Schema, type Service } from "../service/basic.ts";
+import type { Fields, Json } from "../data/values.ts";
+import type { Located } from "../data/violation.ts";
+import type { Schema, Service } from "../service/basic.ts";
 import {
   type Access,
   type Assignment,
-  type Decided,
   type Edge,
-  Failed,
   type Functions,
-  givenKeys,
   type Holder,
   holderId,
   type Keys,
   type Scope,
   sorting,
 } from "../service/functions.ts";
-import { chartOf, type InstanceId, within } from "../service/instance.ts";
+import { type InstanceId, within } from "../service/instance.ts";
 import type { Emit } from "../service/message.ts";
 import { type Note, type RegionCheck, type RegionPair, sameStep, type ValueKey, valueName } from "../service/note.ts";
 import type { RecordSource } from "../service/records.ts";
@@ -168,8 +161,6 @@ export class Collect
       | "afterMessageEnds"
     >
 {
-  /** The definitions already reported by orderAudit, as JSON. */
-  private readonly reportedOrder = new Set<string>();
   private transition: number | undefined;
   private readonly transitions = new Map<number, TransitionAccess>();
   /** For each step that began and has not ended, outermost first, the instance or copy that it starts. */
@@ -202,22 +193,11 @@ export class Collect
       this.arrival !== undefined;
     if (open) throw new InternalError("copying a Collect while a step, microstep or afterMessage is open");
     const copy = new Collect();
-    for (const name of this.reportedOrder) copy.reportedOrder.add(name);
     for (const [step, access] of this.steps) copy.steps.set(step, access);
     for (const [message, access] of this.afters) copy.afters.set(message, access);
     copy.violations.push(...this.violations);
     for (const key of this.reported) copy.reported.add(key);
     return copy;
-  }
-
-  hasReportedOrder(definition: DefinitionRef): boolean {
-    return this.reportedOrder.has(JSON.stringify(definition));
-  }
-
-  reportOrder(definition: DefinitionRef, v: (BagOrderDependent | Undecided) & Located): void {
-    this.reportedOrder.add(JSON.stringify(definition));
-    this.reported.add(reportedKey(v));
-    this.violations.push(v);
   }
 
   private accessOf(part: number): TransitionAccess {
@@ -369,164 +349,16 @@ export class Collect
   }
 }
 
-/**
- * Lean's InstrumentFunctions without lastReads and lastAccess, which the TS run tells as it reads, and lastEnumerated,
- * which `enumerations` tells. `reversed` returns what `call` answers with every Bag in reverse order, without telling
- * what it reads or reaching coverage.
- */
-export interface InstrumentFunctions {
-  reversed<T>(call: (fs: Functions) => T): T;
-}
-
-/** The Access of an answer asked again, which tells nothing. */
-const silent: Access = { context: () => {}, active: () => {}, assigned: () => {}, shown: () => {}, now: () => {} };
-
-/** Returns `value` with each Bag as the array of its values, as Lean's Value holds it. */
-function unbagged(value: unknown): unknown {
-  const values = bagValues(value);
-  if (values !== undefined) return values.map(unbagged);
-  if (Array.isArray(value)) return value.map(unbagged);
-  if (value === null || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) return value;
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, unbagged(v)]));
-}
-
-/** Lean's canonical: the canonical JSON of a value whose Bags are arrays. */
-const text = (value: unknown): string => canonicalJson(unbagged(value));
-
-/** Lean's madeValue: a value with each array as a Bag and each key that the call created (`keys`) as a Ref. */
-function madeValue(keys: ReadonlyMap<string, string>, value: unknown): unknown {
-  if (Array.isArray(value)) return new Bag(value.map((v) => madeValue(keys, v)));
-  const entity = typeof value === "string" ? keys.get(value) : undefined;
-  if (entity !== undefined) return new Ref(entity, value as string);
-  if (value === null || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, madeValue(keys, v)]));
-}
-
-/** What an audit compares of two answers: the texts that a function gives them, or a relation (Lean's `same`). */
-type Same<T> = ((answer: T) => string) | { readonly same: (a: T, b: T) => Sameness };
-
-/** Lean's sameMade: whether two values that calls made are equal up to a renaming of the keys that they created. */
-function sameMade(
-  keys: Keys,
-  a: readonly [unknown, readonly string[]],
-  b: readonly [unknown, readonly string[]],
-): Sameness {
-  const entities = (created: readonly string[]) => canonicalJson(created.toSorted(byCodePoint));
-  if (entities(a[1]) !== entities(b[1])) return "different";
-  if (a[1].length === 0) return sameness(text(a[0]) === text(b[0]));
-  const domains = new Map(givenKeys(keys, a[1]).map(([entity, key]) => [key, entity]));
-  const others = new Map(givenKeys(keys, b[1]).map(([entity, key]) => [key, entity]));
-  const values = {
-    domain: (s: string) => domains.get(s) ?? "",
-    fresh: new Set(domains.keys()),
-    image: (s: string, t: string) => others.get(t) === domains.get(s),
-  };
-  return matchesSameness(
-    matchValue(
-      values,
-      emptyBinding,
-      madeValue(domains, plain(unbagged(a[0]))),
-      madeValue(others, plain(unbagged(b[0]))),
-    ),
-  );
-}
-
-/** Lean's textSet: the texts without order or repetition. */
-const textSet = (texts: readonly string[]): string => canonicalJson([...new Set(texts)].toSorted(byCodePoint));
-
-/** Lean's `instrument`, which returns the same values as `sorting(st, fs)`. */
+/** Lean's `instrument`, which returns the same values as `sorting(st, fs)` and collects what each call accesses. */
 export class InstrumentedFunctions implements Functions {
   readonly st: Service;
   private readonly fs: Functions;
-  private readonly ifs: InstrumentFunctions;
   private readonly c: Collect;
 
-  constructor(st: Service, fs: Functions, ifs: InstrumentFunctions, c: Collect) {
+  constructor(st: Service, fs: Functions, c: Collect) {
     this.st = st;
     this.fs = sorting(st, fs);
-    this.ifs = ifs;
     this.c = c;
-  }
-
-  /** Lean's `ifs.reversed.sorting st` in `instrument`. */
-  private reversed<T>(call: (fs: Functions) => T): T {
-    return this.ifs.reversed((fs) => call(sorting(this.st, fs)));
-  }
-
-  /**
-   * Lean's `audit` in `instrument`: returns what `answer` answers and, when that call ran a Bag callback, audits the
-   * answer as orderAudit does, asking `again` of the functions with Bags in reverse order and telling the two answers
-   * apart by `compared`.
-   */
-  private audited<T>(
-    definition: DefinitionRef,
-    question: string,
-    answer: () => T | Failed,
-    again: (fs: Functions) => T | Failed,
-    compared: Same<T>,
-  ): T | Failed {
-    const before = enumerations();
-    const answered = answer();
-    if (answered instanceof Failed || enumerations() === before || this.c.hasReportedOrder(definition)) return answered;
-    const reversed = this.reversed(again);
-    const data = { function: question };
-    if (reversed instanceof Failed)
-      this.c.reportOrder(
-        definition,
-        withExtra({ kind: "BagOrderDependent.reversedException", definition, data }, { error: reversed.error }),
-      );
-    else {
-      const same =
-        typeof compared === "function"
-          ? sameness(compared(answered) === compared(reversed))
-          : compared.same(answered, reversed);
-      if (same === "different")
-        this.c.reportOrder(definition, { kind: "BagOrderDependent.reversedResult", definition, data });
-      if (same === "uncomparable")
-        this.c.reportOrder(definition, {
-          kind: "Undecided.reversedBagBindings",
-          definition,
-          data: { ...data, limit: bindingLimit },
-        });
-    }
-    return answered;
-  }
-
-  /** Lean's audited for a question about a chart, whose access goes to the open transition part. */
-  private chartAudited<T>(
-    scope: Scope,
-    access: Access,
-    question: string,
-    call: (fs: Functions, access: Access) => T | Failed,
-    compared: Same<T>,
-  ): T | Failed {
-    return this.audited(
-      ref(this.st, chartOf(scope.id)),
-      question,
-      () => call(this.fs, this.c.collecting(scope, access)),
-      (fs) => call(fs, silent),
-      compared,
-    );
-  }
-
-  /** Lean's resolveCollect. */
-  private resolveAudit(name: string, input: Fields, records: RecordSource, now: number, resolved: Json) {
-    const definition = ref(this.st, name);
-    if (this.c.hasReportedOrder(definition)) return;
-    const original = this.fs.comparable(name, { result: "fulfilled", output: resolved });
-    if (original instanceof Failed) return;
-    const data = { function: "resolve" };
-    const exception = (error: ViolationError | undefined) =>
-      this.c.reportOrder(
-        definition,
-        withExtra({ kind: "BagOrderDependent.reversedException", definition, data }, { error }),
-      );
-    const reversed = this.reversed((fs) => fs.resolve(name, input, records, now));
-    if (reversed instanceof Failed) return exception(reversed.error);
-    const reordered = this.fs.comparable(name, { result: "fulfilled", output: reversed });
-    if (reordered instanceof Failed) return exception(reordered.error);
-    if (!sameJson(original, reordered))
-      this.c.reportOrder(definition, { kind: "BagOrderDependent.reversedResult", definition, data });
   }
 
   parse(schema: Schema, value: unknown) {
@@ -539,78 +371,52 @@ export class InstrumentedFunctions implements Functions {
     return this.fs.decode(schema, value);
   }
   binding(command: string, binding: string, input: Fields, records: RecordSource, now: number) {
-    const call = (fs: Functions) => fs.binding(command, binding, input, records, now);
-    return this.audited(ref(this.st, command), "binding", () => call(this.fs), call, String);
+    return this.fs.binding(command, binding, input, records, now);
   }
   requirement(command: string, condition: string, input: Fields, records: RecordSource, now: number) {
-    const call = (fs: Functions) => fs.requirement(command, condition, input, records, now);
-    return this.audited(ref(this.st, command), "requirement", () => call(this.fs), call, String);
+    return this.fs.requirement(command, condition, input, records, now);
   }
   inputRequirement(target: DefinitionRef, condition: string, input: Fields) {
-    const call = (fs: Functions) => fs.inputRequirement(target, condition, input);
-    return this.audited(target, "inputRequirement", () => call(this.fs), call, String);
+    return this.fs.inputRequirement(target, condition, input);
   }
   decide(command: string, input: Fields, records: RecordSource, now: number) {
-    const call = (fs: Functions) => fs.decide(command, input, records, now);
-    const groupTexts = (groups: readonly (readonly Decided[])[]) =>
-      canonicalJson(groups.map((g) => g.map((e) => text(e)).toSorted(byCodePoint)));
-    return this.audited(ref(this.st, command), "decide", () => call(this.fs), call, groupTexts);
+    return this.fs.decide(command, input, records, now);
   }
   ensures(command: string, input: Fields, before: RecordSource, after: RecordSource, now: number) {
-    const call = (fs: Functions) => fs.ensures(command, input, before, after, now);
-    return this.audited(ref(this.st, command), "ensures", () => call(this.fs), call, String);
+    return this.fs.ensures(command, input, before, after, now);
   }
   queryEnsures(query: string, input: Fields, output: Fields, records: RecordSource) {
-    const call = (fs: Functions) => fs.queryEnsures(query, input, output, records);
-    return this.audited(ref(this.st, query), "queryEnsures", () => call(this.fs), call, String);
+    return this.fs.queryEnsures(query, input, output, records);
   }
   resultEnsures(target: DefinitionRef, condition: string, input: Fields, output: unknown, events: readonly Emit[]) {
-    const call = (fs: Functions) => fs.resultEnsures(target, condition, input, output, events);
-    return this.audited(target, "resultEnsures", () => call(this.fs), call, String);
+    return this.fs.resultEnsures(target, condition, input, output, events);
   }
   invariant(entity: string, record: Fields) {
-    const call = (fs: Functions) => fs.invariant(entity, record);
-    return this.audited(ref(this.st, entity), "invariant", () => call(this.fs), call, String);
+    return this.fs.invariant(entity, record);
   }
   serviceInvariant(records: RecordSource) {
     return this.fs.serviceInvariant(records);
   }
   chartInvariant(scope: Scope, records: RecordSource, access: Access) {
-    return this.audited(
-      ref(this.st, chartOf(scope.id)),
-      "chartInvariant",
-      () => this.fs.chartInvariant(scope, records, access),
-      (fs) => fs.chartInvariant(scope, records, silent),
-      String,
-    );
+    return this.fs.chartInvariant(scope, records, this.c.collecting(scope, access));
   }
   resolve(query: string, input: Fields, records: RecordSource, now: number) {
-    const before = enumerations();
-    const resolved = this.fs.resolve(query, input, records, now);
-    if (!(resolved instanceof Failed) && enumerations() !== before)
-      this.resolveAudit(query, input, records, now, resolved);
-    return resolved;
+    return this.fs.resolve(query, input, records, now);
   }
   automationBinding(automation: string, binding: string, payload: Fields, records: RecordSource, now: number) {
-    const call = (fs: Functions) => fs.automationBinding(automation, binding, payload, records, now);
-    return this.audited(ref(this.st, automation), "automationBinding", () => call(this.fs), call, String);
+    return this.fs.automationBinding(automation, binding, payload, records, now);
   }
   automationGuard(automation: string, condition: string, payload: Fields, records: RecordSource, now: number) {
-    const call = (fs: Functions) => fs.automationGuard(automation, condition, payload, records, now);
-    return this.audited(ref(this.st, automation), "automationGuard", () => call(this.fs), call, String);
+    return this.fs.automationGuard(automation, condition, payload, records, now);
   }
   react(automation: string, payload: Fields, records: RecordSource, now: number, keys: Keys) {
-    const call = (fs: Functions) => fs.react(automation, payload, records, now, keys);
-    return this.audited(ref(this.st, automation), "react", () => call(this.fs), call, {
-      same: (x, y) => sameMade(keys, [x.input, x.created], [y.input, y.created]),
-    });
+    return this.fs.react(automation, payload, records, now, keys);
   }
   comparable(query: string, answer: Answer): unknown {
     return this.fs.comparable(query, answer);
   }
   initialContext(machine: string, input: Fields) {
-    const call = (fs: Functions) => fs.initialContext(machine, input);
-    return this.audited(ref(this.st, machine), "initialContext", () => call(this.fs), call, text);
+    return this.fs.initialContext(machine, input);
   }
   guard(
     scope: Scope,
@@ -620,76 +426,36 @@ export class InstrumentedFunctions implements Functions {
     extra: Fields,
     access: Access,
   ) {
-    return this.chartAudited(
-      scope,
-      access,
-      "guard",
-      (fs, a) => fs.guard(scope, records, transition, condition, extra, a),
-      String,
-    );
+    return this.fs.guard(scope, records, transition, condition, extra, this.c.collecting(scope, access));
   }
   assign(scope: Scope, records: RecordSource, assignment: Assignment, extra: Fields, keys: Keys, access: Access) {
-    return this.chartAudited(
-      scope,
-      access,
-      "assign",
-      (fs, a) => fs.assign(scope, records, assignment, extra, keys, a),
-      {
-        same: (x, y) =>
-          sameMade(
-            keys,
-            [[x.context, x.copyContext ?? null], x.created],
-            [[y.context, y.copyContext ?? null], y.created],
-          ),
-      },
-    );
+    return this.fs.assign(scope, records, assignment, extra, keys, this.c.collecting(scope, access));
   }
   input(scope: Scope, records: RecordSource, activity: Activity, keys: Keys, access: Access) {
-    return this.chartAudited(scope, access, "input", (fs, a) => fs.input(scope, records, activity, keys, a), {
-      same: (x, y) => sameMade(keys, [x.input, x.created], [y.input, y.created]),
-    });
+    return this.fs.input(scope, records, activity, keys, this.c.collecting(scope, access));
   }
   held(scope: Scope, records: RecordSource, state: string, edge: Edge, extra: Fields, access: Access) {
-    return this.chartAudited(scope, access, "held", (fs, a) => fs.held(scope, records, state, edge, extra, a), text);
+    return this.fs.held(scope, records, state, edge, extra, this.c.collecting(scope, access));
   }
   deadlineAt(scope: Scope, records: RecordSource, name: string, access: Access) {
-    return this.chartAudited(scope, access, "deadlineAt", (fs, a) => fs.deadlineAt(scope, records, name, a), String);
+    return this.fs.deadlineAt(scope, records, name, this.c.collecting(scope, access));
   }
   offers(scope: Scope, records: RecordSource, control: string, access: Access) {
-    return this.chartAudited(
-      scope,
-      access,
-      "offers",
-      (fs, a) => fs.offers(scope, records, control, a),
-      (payloads) => textSet(payloads.map(canonicalJson)),
-    );
+    return this.fs.offers(scope, records, control, this.c.collecting(scope, access));
   }
   showInput(scope: Scope, records: RecordSource, activity: Activity, access: Access) {
-    return this.chartAudited(
-      scope,
-      access,
-      "showInput",
-      (fs, a) => fs.showInput(scope, records, activity, a),
-      canonicalJson,
-    );
+    return this.fs.showInput(scope, records, activity, this.c.collecting(scope, access));
   }
   items(scope: Scope, records: RecordSource, access: Access) {
-    return this.chartAudited(
-      scope,
-      access,
-      "items",
-      (fs, a) => fs.items(scope, records, a),
-      (keys) => textSet(keys.map(canonicalJson)),
-    );
+    return this.fs.items(scope, records, this.c.collecting(scope, access));
   }
   defaults(schema: Schema) {
     return this.fs.defaults(schema);
   }
   close(scope: Scope, records: RecordSource, access: Access) {
-    return this.chartAudited(scope, access, "close", (fs, a) => fs.close(scope, records, a), text);
+    return this.fs.close(scope, records, this.c.collecting(scope, access));
   }
   closeEnsures(screen: string, input: Fields, output: Fields) {
-    const call = (fs: Functions) => fs.closeEnsures(screen, input, output);
-    return this.audited(ref(this.st, screen), "closeEnsures", () => call(this.fs), call, String);
+    return this.fs.closeEnsures(screen, input, output);
   }
 }

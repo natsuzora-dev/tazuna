@@ -123,10 +123,9 @@ inductive Question where
   | comparableValue (kind : String) (definition : Spec.Ref) (part : Verify.Part) (value : Value)
   | served (value : Option Value)
 
-/-- A question with the service it is about, which TS answers with every Bag in reverse order when `reversed`. -/
+/-- A question with the service it is about. -/
 structure Asked where
   service : Option String := none
-  reversed : Option Bool := none
   question : Question
 
 derive_wire Question tag "type" skip_serializing_none
@@ -171,11 +170,10 @@ inductive Reply where
   | closeEnsures (failed : Option String)
   | comparableValue (value : Value)
 
-/-- A reply, with what the chart expressions read and assigned, and whether a Bag of two or more ran a callback. -/
+/-- A reply, with what the chart expressions read and assigned. -/
 structure Replied where
   reply : Reply
   access : Option Explore.Access
-  enumerated : Option Bool
 
 derive_wire Reply tag "type" skip_serializing_none
 derive_wire Replied flatten reply skip_serializing_none

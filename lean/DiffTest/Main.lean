@@ -86,9 +86,9 @@ partial def exchange (stdin stdout : IO.FS.Stream) (reads : Reads) (records befo
 The reply to `question`, with the parts read in `reads`: the one in `memo` when Lean serves every read recorded with it
 the same value now, otherwise the one TS gives, which `memo` then records.
 -/
-def ask (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool) (service : Option String)
+def ask (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (service : Option String)
     (records : Records) (question : Question) (before : Records := []) : IO Reply := do
-  let asked : Asked := { service, reversed := if reversed then some true else none, question }
+  let asked : Asked := { service, question }
   let line := render (ToValue.toValue asked)
   if let some answered := (← memo.get)[line]? then
     let served := answered.reads.map fun (read, value) => (serveRead records before read, value)
@@ -108,19 +108,18 @@ def answer {α : Type} (question : Question) (reply : Reply) (read : Reply → O
     | none => throw (IO.userError s!"TS answered {question.type} with {reply.type}")
 
 /--
-The functions that ask TS, which answers with every Bag in reverse order when `reversed` is set, about the service
-`service` when given, or else the request's service. A parse logs nothing into `reads`: Functions.sorting asks it
+The functions that ask TS about the service `service` when given, or else the request's service. A parse logs nothing into `reads`: Functions.sorting asks it
 inside another answer, whose reads Instrument then reads.
 -/
-def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (reversed : Bool)
-    (service : Option String := none) : Functions IO :=
+def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (service : Option String := none) :
+    Functions IO :=
   let asking (records : Records) (question : Question) (before : Records := []) :=
-    ask stdin stdout reads memo reversed service records question before
+    ask stdin stdout reads memo service records question before
   let answered {α : Type} (question : Question) (read : Reply → Option α) (records : Records := [])
       (before : Records := []) : IO (Except Issue α) := do
     answer question (← asking records question before) read
   { parse := fun schema value => do
-      answer (.parse schema value) (← ask stdin stdout (← IO.mkRef {}) memo reversed service [] (.parse schema value)) fun
+      answer (.parse schema value) (← ask stdin stdout (← IO.mkRef {}) memo service [] (.parse schema value)) fun
         | .parse v _ => some v | _ => none
     unordered := fun schema value => answered (.unordered schema value) fun | .unordered v => some v | _ => none
     binding := fun name binding input records now =>
@@ -246,8 +245,7 @@ def sameAnswer {ε α : Type} [BEq ε] [BEq α] : Except ε α → Except ε α 
 /--
 The answer that Lean evaluated, with what it read, after checking it against `beneath`, TS's answer to the same
 question: both answer alike, read the same record parts in the same order, and read and assign the same chart values,
-or tazuna-lean stops. The read log then holds what the evaluation read, and no enumeration of a Bag: no IR operation
-can tell the order in which a Bag visits its values, so orderAudit has nothing to find.
+or tazuna-lean stops. The read log then holds what the evaluation read.
 -/
 def shadowed (reads : Reads) : Ir.Answered IO := fun callback (answer, trace) beneath => do
   let ts ← beneath
@@ -256,7 +254,7 @@ def shadowed (reads : Reads) : Ir.Answered IO := fun callback (answer, trace) be
   unless sameAnswer answer ts && trace.parts == log.parts && trace.access == access do
     throw (IO.userError
       s!"IR answers {callback} with {describe answer} reading {repr trace.parts} {repr trace.access}, TS with {describe ts} reading {repr log.parts} {repr access}")
-  reads.set { parts := trace.parts, replied := log.replied.map fun r => { r with enumerated := none } }
+  reads.set { parts := trace.parts, replied := log.replied }
   pure answer
 
 instance : BEq (Except (List Value) Value) := ⟨sameAnswer⟩
@@ -283,7 +281,7 @@ def structural (stdin stdout : IO.FS.Stream) (memo : Memo) (service : String) (s
       let some parsed := (st.schemaOf schema).bind (Data.parse · value) | fs.parse schema value
       let lean := thrownBy schema parsed
       let ts : Except Issue (Except (List Value) Value) ←
-        match ← ask stdin stdout (← IO.mkRef {}) memo false service [] (.parse schema value) with
+        match ← ask stdin stdout (← IO.mkRef {}) memo service [] (.parse schema value) with
         | .issue issue => pure (.error issue)
         | .parse (some v) _ => pure (.ok (.ok v))
         | .parse none issues => pure (.ok (.error (issues.getD [])))
@@ -312,16 +310,14 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (program : Ir.Program) (start :
   let reads ← IO.mkRef {}
   let memo ← IO.mkRef {}
   pure fun service =>
-    let fs := functions stdin stdout reads memo false (some service)
+    let fs := functions stdin stdout reads memo (some service)
     match start.services.lookup service with
     | none => fs.hoist fun _ => throw (IO.userError s!"the run asked {service}, which does not run")
     | some st =>
       let overlaid (fs : Functions IO) := structural stdin stdout memo service st (program.overlay st (shadowed reads) fs)
       let ifs : InstrumentFunctions IO := {
         lastReads := do pure (← reads.get).parts
-        lastAccess := do pure (((← reads.get).replied.bind (·.access)).getD {})
-        lastEnumerated := do pure (((← reads.get).replied.bind (·.enumerated)) == some true)
-        reversed := overlaid (functions stdin stdout reads memo true (some service)) }
+        lastAccess := do pure (((← reads.get).replied.bind (·.access)).getD {}) }
       (instrument st (overlaid fs) ifs).hoist (focus service)
 
 /-- The start of the world of `sc`, with the step orders that the request names. -/

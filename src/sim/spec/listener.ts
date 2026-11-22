@@ -1,7 +1,6 @@
-import { reversedBags } from "../../data/bag.ts";
 import type { StepName } from "../../data/step.generated.ts";
 import type { Obligation } from "../../data/uncovered.ts";
-import { type Collect, InstrumentedFunctions, type InstrumentFunctions } from "../../explore/instrument.ts";
+import { type Collect, InstrumentedFunctions } from "../../explore/instrument.ts";
 import type { Spec } from "../../load/load.ts";
 import type { InstanceId } from "../../service/instance.ts";
 import { type Note, type RecordPart, type RegionCheck, type ValueKey, valueName } from "../../service/note.ts";
@@ -135,12 +134,8 @@ export class Listener implements Note, Evaluations {
   }
 }
 
-/**
- * Returns Lean's `instrument st fs ifs` over the spec's functions. A question asked again with Bags in reverse order
- * reads quietly, so neither the open step nor the evaluation cache hears its reads.
- */
+/** Returns Lean's `instrument st fs ifs` over the spec's functions. */
 export function instrumented(spec: Spec, service: string, listener: Listener): InstrumentedFunctions {
   const own = new SpecFunctions(spec, service);
-  const reversed: InstrumentFunctions["reversed"] = (call) => listener.quietly(() => reversedBags(() => call(own)));
-  return new InstrumentedFunctions(own.st, own, { reversed }, listener.collected);
+  return new InstrumentedFunctions(own.st, own, listener.collected);
 }

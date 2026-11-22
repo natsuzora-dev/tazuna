@@ -1,5 +1,4 @@
 import type { z } from "zod";
-import { enumerations, reversedBags } from "../../src/data/bag.ts";
 import { Bag, comparable as comparableValue, Ref, Runs } from "../../src/data/canonical.ts";
 import { bagged, fromJson } from "../../src/data/collections.ts";
 import type { DefinitionRef } from "../../src/data/definitionRef.ts";
@@ -270,14 +269,8 @@ export class RunFunctions implements Answering {
     return { ...ask(this.scopeOf(lean), told), access };
   }
 
-  /**
-   * Answers Lean's question, with every Bag in reverse order when it has `reversed`, and tells whether a Bag of two or
-   * more values ran a callback while answering, as Lean's lastEnumerated asks.
-   */
   answer(asked: Asked): Replied {
-    const before = enumerations();
-    const reply = asked.reversed === true ? reversedBags(() => this.answered(asked)) : this.answered(asked);
-    return enumerations() === before ? reply : { ...reply, enumerated: true };
+    return this.answered(asked);
   }
 
   /** Returns the payload of the event that the automation receives, as spec code receives it. */

@@ -1,1 +1,0 @@
-{"kind":"BagOrderDependent.reversedResult","definition":{"service":"todo","name":"titlesInArray"},"data":{"function":"resolve"},"location":{"file":"todo/todo.ts","line":23},"scenario":{"service":"todo","name":"addTwoAndReadArray"}}

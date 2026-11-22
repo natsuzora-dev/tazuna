@@ -76,9 +76,6 @@ export type Matches = readonly Binding[] | undefined;
 /** Lean's Sameness: how two values compare up to a renaming. */
 export type Sameness = "same" | "different" | "uncomparable";
 
-/** Lean's Sameness.of. */
-export const sameness = (b: boolean): Sameness => (b ? "same" : "different");
-
 /** Lean's Matches.sameness. */
 export const matchesSameness = (m: Matches): Sameness =>
   m === undefined ? "uncomparable" : m.length > 0 ? "same" : "different";

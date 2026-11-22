@@ -28,23 +28,6 @@ export type Undecided =
       readonly data: {
         readonly limit: number;
       };
-    }
-  /**
-   * Comparing the result of the spec function `function` of `definition` with its result when every `Bag` visits its
-   * values in reverse order held more than `limit` (`bindingLimit`) bindings of the keys that the results created, so
-   * whether they differ is not known.
-   */
-  | {
-      readonly kind: "Undecided.reversedBagBindings";
-      readonly definition: DefinitionRef;
-      readonly data: {
-        readonly function: string;
-        readonly limit: number;
-      };
     };
 
-export const undecidedKinds = [
-  "Undecided.stepOrderLimit",
-  "Undecided.stepOrderBindings",
-  "Undecided.reversedBagBindings",
-] as const;
+export const undecidedKinds = ["Undecided.stepOrderLimit", "Undecided.stepOrderBindings"] as const;

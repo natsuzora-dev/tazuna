@@ -512,10 +512,9 @@ export type Question =
       readonly value?: Json;
     };
 
-/** A question with the service it is about, which TS answers with every Bag in reverse order when `reversed`. */
+/** A question with the service it is about. */
 export type Asked = {
   readonly service?: string;
-  readonly reversed?: boolean;
 } & Question;
 
 /**
@@ -661,10 +660,9 @@ export type Reply =
       readonly value: Json;
     };
 
-/** A reply, with what the chart expressions read and assigned, and whether a Bag of two or more ran a callback. */
+/** A reply, with what the chart expressions read and assigned. */
 export type Replied = {
   readonly access?: Access;
-  readonly enumerated?: boolean;
 } & Reply;
 
 /** A pairing violation and where it is. */

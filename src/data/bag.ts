@@ -36,34 +36,9 @@ export type Made<T> = T extends DateLabel
 
 let itemsOf: (bag: BagValue<unknown>) => readonly unknown[];
 
-// Module state rather than an argument, because the Bags that a call reads were built before the call: its input,
-// context and constants.
-let reversing = false;
-let enumerated = 0;
-
 /** The values of a Bag, or undefined for any other value. */
 export const bagValues = (value: unknown): readonly unknown[] | undefined =>
   value instanceof BagValue ? itemsOf(value) : undefined;
-
-/**
- * The number of times so far that a Bag of two or more values ran a callback, the only way that spec code can see the
- * order in which a Bag visits its values.
- */
-export const enumerations = (): number => enumerated;
-
-/**
- * Returns `f()` with every Bag of records or of a decoded value visiting its values in reverse order, as orderAudit
- * calls a spec function again. A Bag that a method returns keeps the order of the values that it was made from.
- */
-export function reversedBags<T>(f: () => T): T {
-  const outer = reversing;
-  reversing = true;
-  try {
-    return f();
-  } finally {
-    reversing = outer;
-  }
-}
 
 /** Groups `items` by equal keys of `f`, in ascending key order, each group in the order of `items`. */
 export function runsOf<T>(items: readonly T[], f: (value: T) => SortKey): T[][] {
@@ -112,8 +87,6 @@ export class NotOnly extends Error {}
 /** A Bag whose values come from `items` on each read, so that a records view hears every read of its keys. */
 export class BagValue<T> implements Bag<T> {
   readonly #items: () => readonly T[];
-  /** Whether reversedBags reverses the values, false for a Bag that a method returns. */
-  #reversible = true;
 
   constructor(items: () => readonly T[]) {
     this.#items = items;
@@ -124,9 +97,7 @@ export class BagValue<T> implements Bag<T> {
   }
 
   static #of<T>(items: readonly T[]): Bag<T> {
-    const bag = new BagValue(() => items);
-    bag.#reversible = false;
-    return bag;
+    return new BagValue(() => items);
   }
 
   static #itemsOf<T>(values: Bag<T> | readonly T[]): readonly T[] {
@@ -136,15 +107,7 @@ export class BagValue<T> implements Bag<T> {
   }
 
   #values(): readonly T[] {
-    const items = this.#items();
-    return reversing && this.#reversible ? items.toReversed() : items;
-  }
-
-  /** The values, for a method that runs a callback on each. */
-  #visited(): readonly T[] {
-    const items = this.#values();
-    if (items.length > 1) enumerated += 1;
-    return items;
+    return this.#items();
   }
 
   get size(): number {
@@ -154,20 +117,20 @@ export class BagValue<T> implements Bag<T> {
   filter<S extends T>(predicate: (value: T) => value is S): Bag<S>;
   filter(predicate: (value: T) => boolean): Bag<T>;
   filter(predicate: (value: T) => boolean): Bag<T> {
-    return BagValue.#of(this.#visited().filter((v) => predicate(v)));
+    return BagValue.#of(this.#values().filter((v) => predicate(v)));
   }
 
   map<U>(f: (value: T) => U): Bag<U> {
-    return BagValue.#of(this.#visited().map((v) => f(v)));
+    return BagValue.#of(this.#values().map((v) => f(v)));
   }
 
   flatMap<U>(f: (value: T) => Bag<U> | readonly U[]): Bag<U> {
-    return BagValue.#of(this.#visited().flatMap((v) => BagValue.#itemsOf(f(v))));
+    return BagValue.#of(this.#values().flatMap((v) => BagValue.#itemsOf(f(v))));
   }
 
   // Every value is visited, so a closure that the predicate mutates cannot tell where the search stopped.
   some(predicate: (value: T) => boolean): boolean {
-    return this.#visited()
+    return this.#values()
       .map((v) => predicate(v))
       .includes(true);
   }
@@ -175,14 +138,14 @@ export class BagValue<T> implements Bag<T> {
   every<S extends T>(predicate: (value: T) => value is S): this is Bag<S>;
   every(predicate: (value: T) => boolean): boolean;
   every(predicate: (value: T) => boolean): boolean {
-    return !this.#visited()
+    return !this.#values()
       .map((v) => predicate(v))
       .includes(false);
   }
 
   // Neither which value fails nor whether a partial sum overflows may depend on the order, so only the whole sum counts.
   sum(f: (value: T) => number): number {
-    const ns = this.#visited().map((v) => f(v));
+    const ns = this.#values().map((v) => f(v));
     if (!ns.every((n) => Number.isSafeInteger(n))) throw new RangeError("sum of a value that is not a safe integer");
     const total = Number(ns.reduce((t, n) => t + BigInt(n), 0n));
     if (!Number.isSafeInteger(total)) throw new RangeError(`sum ${total} is not a safe integer`);
@@ -190,13 +153,13 @@ export class BagValue<T> implements Bag<T> {
   }
 
   min<K extends SortKey>(f: (value: T) => K): K | undefined {
-    return this.#visited()
+    return this.#values()
       .map((v) => f(v))
       .reduce<K | undefined>((m, k) => (m === undefined || compareKeys(k, m) < 0 ? k : m), undefined);
   }
 
   max<K extends SortKey>(f: (value: T) => K): K | undefined {
-    return this.#visited()
+    return this.#values()
       .map((v) => f(v))
       .reduce<K | undefined>((m, k) => (m === undefined || compareKeys(k, m) > 0 ? k : m), undefined);
   }
@@ -208,7 +171,7 @@ export class BagValue<T> implements Bag<T> {
   }
 
   sortedBy(f: (value: T) => SortKey): Runs<T> {
-    return runsOf(this.#visited(), f).map((r) => BagValue.#of(r));
+    return runsOf(this.#values(), f).map((r) => BagValue.#of(r));
   }
 
   concat(other: Bag<T>): Bag<T> {

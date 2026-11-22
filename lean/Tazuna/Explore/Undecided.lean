@@ -21,12 +21,6 @@ inductive Undecided where
   bindings of created keys at one step, so whether the order changes the state is not known.
   -/
   | stepOrderBindings (definition : Spec.Ref) (limit : Nat)
-  /--
-  Comparing the result of the spec function `function` of `definition` with its result when every `Bag` visits its
-  values in reverse order held more than `limit` (`bindingLimit`) bindings of the keys that the results created, so
-  whether they differ is not known.
-  -/
-  | reversedBagBindings (definition : Spec.Ref) (function : String) (limit : Nat)
 deriving Repr, Inhabited
 
 derive_group Undecided

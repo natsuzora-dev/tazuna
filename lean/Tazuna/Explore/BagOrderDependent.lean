@@ -6,21 +6,10 @@ namespace Tazuna.Explore
 open Tazuna.Data Tazuna.Service
 
 /--
-A result, found while the run evaluates, that depends on an order the spec does not fix. No `BagOrderDependent`
-violation halts the run. In `reversedException` and `reversedResult`, `test` ran the spec function
-`function` again with every `Bag` visiting its values in reverse order. `definition` is the definition whose code holds
-the function: the command, query, automation, entity, or chart. In `bothAssign` and `assignRead`, `definition` is the
-chart of the conflicting transitions.
+A result, found while the run evaluates, that depends on an order the spec does not fix: the order of parallel regions.
+No `BagOrderDependent` violation halts the run. `definition` is the chart of the conflicting transitions.
 -/
 inductive BagOrderDependent where
-  /--
-  The second run of the function, or the check of a query's output or of its comparable value after it, failed. It
-  threw, gave a value that does not match its schema, read a held value that its state does not hold, or called
-  `only()` on more than one value.
-  -/
-  | reversedException (definition : Spec.Ref) (function : String)
-  /-- The result of the second run differs from the first. -/
-  | reversedResult (definition : Spec.Ref) (function : String)
   /--
   Two transitions in parallel regions of `state`, taken on one event, both assign the context field `field`, so the
   result depends on the order of the regions.
