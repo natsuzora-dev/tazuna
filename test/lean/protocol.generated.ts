@@ -322,6 +322,12 @@ export type Request =
       readonly input: Json;
       readonly records: readonly Stored[];
       readonly keys: Keys;
+    }
+  /** `value` parsed by the JSON Schema `schema` as Lean's Data.parse does. */
+  | {
+      readonly type: "parse";
+      readonly schema: Json;
+      readonly value: Json;
     };
 
 /**
@@ -529,9 +535,11 @@ export type Reply =
       readonly type: "issue";
       readonly issue: Issue;
     }
+  /** The value, or Zod's issues when it does not match. */
   | {
       readonly type: "parse";
       readonly value?: Json;
+      readonly issues?: readonly Json[];
     }
   | {
       readonly type: "unordered";
@@ -798,6 +806,14 @@ export type Response =
   | {
       readonly type: "evaluated";
       readonly result: Evaluated;
+    }
+  /** Whether Lean parses by the schema, and then the value, Zod's issues, or whether a codec threw. */
+  | {
+      readonly type: "parsed";
+      readonly supported: boolean;
+      readonly value: Json | null;
+      readonly issues: readonly Json[] | null;
+      readonly thrown: boolean;
     }
   | {
       readonly type: "error";

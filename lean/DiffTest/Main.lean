@@ -4,6 +4,7 @@ import DiffTest.Protocol
 import Tazuna.Explore.StepOrders
 import Tazuna.Ir.Overlay
 import Tazuna.Sim.Run
+import Tazuna.Data.Parse
 import Tazuna.Validation.Canonical
 
 /-!
@@ -120,7 +121,7 @@ def functions (stdin stdout : IO.FS.Stream) (reads : Reads) (memo : Memo) (rever
     answer question (← asking records question before) read
   { parse := fun schema value => do
       answer (.parse schema value) (← ask stdin stdout (← IO.mkRef {}) memo reversed service [] (.parse schema value)) fun
-        | .parse v => some v | _ => none
+        | .parse v _ => some v | _ => none
     unordered := fun schema value => answered (.unordered schema value) fun | .unordered v => some v | _ => none
     binding := fun name binding input records now =>
       answered (.binding name binding input now) (records := records) fun | .binding b => some b | _ => none
@@ -258,6 +259,50 @@ def shadowed (reads : Reads) : Ir.Answered IO := fun callback (answer, trace) be
   reads.set { parts := trace.parts, replied := log.replied.map fun r => { r with enumerated := none } }
   pure answer
 
+instance : BEq (Except (List Value) Value) := ⟨sameAnswer⟩
+
+/-- `lean`, after checking that TS answered `question` alike, or tazuna-lean stops. -/
+def checkedAgainst {α : Type} [BEq α] [Repr α] (question : String) (lean ts : Except Issue α) : IO (Except Issue α) := do
+  unless sameAnswer lean ts do
+    throw (IO.userError s!"Lean answers {question} with {describe lean}, TS with {describe ts}")
+  pure lean
+
+/--
+`fs` with the structural questions that Lean answers by Data.Parse wherever the schema says all that Zod checks, each
+after checking it against TS's answer, Zod's issues included, or tazuna-lean stops; elsewhere TS's.
+-/
+def structural (stdin stdout : IO.FS.Stream) (memo : Memo) (service : String) (st : Service) (fs : Functions IO) :
+    Functions IO :=
+  let schemaFor (schema : Schema) : Option Value :=
+    (st.schemaOf schema).map rootSchema |>.filter supported
+  let thrownBy (schema : Schema) {α : Type} : ParseM α → Except Issue α
+    | .ok a => .ok a
+    | .error () => .error (.thrown (some schema))
+  { fs with
+    parse := fun schema value => do
+      let some parsed := (st.schemaOf schema).bind (Data.parse · value) | fs.parse schema value
+      let lean := thrownBy schema parsed
+      let ts : Except Issue (Except (List Value) Value) ←
+        match ← ask stdin stdout (← IO.mkRef {}) memo false service [] (.parse schema value) with
+        | .issue issue => pure (.error issue)
+        | .parse (some v) _ => pure (.ok (.ok v))
+        | .parse none issues => pure (.ok (.error (issues.getD [])))
+        | reply => throw (IO.userError s!"TS answered parse with {reply.type}")
+      let checked ← checkedAgainst s!"parse of {(ToValue.toValue value).canonical}" lean ts
+      pure (checked.map (·.toOption))
+    unordered := fun schema value => do
+      let some json := schemaFor schema | fs.unordered schema value
+      checkedAgainst "unordered" (thrownBy schema (unorderedBy json value)) (← fs.unordered schema value)
+    comparable := fun query answer => do
+      let output := .output (st.ref query)
+      let json := (st.schemaOf output).map rootSchema
+      if !(json.all supported) then return ← fs.comparable query answer
+      checkedAgainst "comparable" (thrownBy output (comparableText json (ToValue.toValue answer)))
+        (← fs.comparable query answer)
+    defaults := fun schema => do
+      let some json := schemaFor schema | fs.defaults schema
+      checkedAgainst "defaults" (.ok (defaultsOf json)) (← fs.defaults schema) }
+
 /--
 The functions of each running service of `start`, instrumented as Instrument does, which collect into that service's
 Collect. Each question to TS names its service. The run asks only running services.
@@ -271,7 +316,7 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (program : Ir.Program) (start :
     match start.services.lookup service with
     | none => fs.hoist fun _ => throw (IO.userError s!"the run asked {service}, which does not run")
     | some st =>
-      let overlaid := program.overlay st (shadowed reads)
+      let overlaid (fs : Functions IO) := structural stdin stdout memo service st (program.overlay st (shadowed reads) fs)
       let ifs : InstrumentFunctions IO := {
         lastReads := do pure (← reads.get).parts
         lastAccess := do pure (((← reads.get).replied.bind (·.access)).getD {})
@@ -396,6 +441,11 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
     pure (match answer with
       | .ok value => .evaluated { value, issue := none, reads, created }
       | .error issue => .evaluated { value := none, issue, reads, created })
+  | .parse schema value => pure (match Data.parse schema value with
+    | none => .parsed false none none false
+    | some (.error ()) => .parsed true none none true
+    | some (.ok (.ok v)) => .parsed true (some v) none false
+    | some (.ok (.error issues)) => .parsed true none (some issues) false)
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 

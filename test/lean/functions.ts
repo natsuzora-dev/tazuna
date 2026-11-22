@@ -5,7 +5,7 @@ import { bagged, fromJson } from "../../src/data/collections.ts";
 import type { DefinitionRef } from "../../src/data/definitionRef.ts";
 import { InternalError } from "../../src/data/internalError.ts";
 import type { Trigger } from "../../src/data/transitionRef.generated.ts";
-import { canonicalJson, type Fields, type Json, objectOf, type Shape } from "../../src/data/values.ts";
+import { canonicalJson, type Fields, type Json, objectOf, plain, type Shape } from "../../src/data/values.ts";
 import type { AnyCommand, AnyEvent, AnyQuery, Automation, ServiceDefinition } from "../../src/dsl/definition.ts";
 import type { AnyEntity } from "../../src/dsl/entity.ts";
 import type { Spec } from "../../src/load/load.ts";
@@ -297,7 +297,11 @@ export class RunFunctions implements Answering {
     switch (q.type) {
       case "parse":
         return this.replied(this.functions.parse(q.schema, q.value), (parsed) => {
-          if ("error" in parsed) return { type: "parse" };
+          if ("error" in parsed)
+            return {
+              type: "parse",
+              ...(parsed.error.type === "zod" ? { issues: plain(parsed.error.issues) as Json[] } : {}),
+            };
           return { type: "parse", value: parsed.encoded as Json };
         });
       case "unordered":

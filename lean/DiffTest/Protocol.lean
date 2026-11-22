@@ -80,6 +80,8 @@ inductive Request where
   | schemaOf («structure» : Spec.Structure) (service : String) (schema : Schema)
   /-- The value of an IR expression whose only argument is `input`, over `records`, with createKey over `keys`. -/
   | evaluate (body : Ir.Expr) (input : Value) (records : List Stored) (keys : Keys)
+  /-- `value` parsed by the JSON Schema `schema` as Lean's Data.parse does. -/
+  | parse (schema : Value) (value : Value)
 
 derive_wire Request tag "type" skip_serializing_none
 
@@ -137,7 +139,8 @@ to the question of the same name.
 inductive Reply where
   | read (entity : String) (key field : Option String) (beforeEventWrite : Option Bool)
   | issue (issue : Issue)
-  | parse (value : Option Value)
+  /-- The value, or Zod's issues when it does not match. -/
+  | parse (value : Option Value) (issues : Option (List Value))
   | unordered (value : Value)
   | binding (bound : Bool)
   | requirement (holds : Bool)
@@ -280,6 +283,8 @@ inductive Response where
   | scenarioTime (time : Option String)
   | schemaOf (schema : Option Value)
   | evaluated (result : Evaluated)
+  /-- Whether Lean parses by the schema, and then the value, Zod's issues, or whether a codec threw. -/
+  | parsed (supported : Bool) (value : Option Value) (issues : Option (List Value)) (thrown : Bool)
   | error (message : String)
 
 derive_wire Response tag "type" serialize_only

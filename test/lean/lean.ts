@@ -47,6 +47,7 @@ const responses = {
   scenarioTime: "scenarioTime",
   schemaOf: "schemaOf",
   evaluate: "evaluated",
+  parse: "parsed",
 } as const satisfies Record<Request["type"], Response["type"]>;
 
 type Responded<T extends Request["type"]> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
@@ -279,5 +280,11 @@ export class Lean {
    */
   evaluate(body: Expr, input: Json, records: readonly Stored[], keys: Keys): Evaluated {
     return this.exchange({ type: "evaluate", body, input, records, keys }).result;
+  }
+
+  /** `value` parsed by the JSON Schema `schema` as Lean parses, or undefined where Lean leaves the schema to Zod. */
+  parse(schema: Json, value: Json): Omit<Responded<"parse">, "supported"> | undefined {
+    const { supported, ...parsed } = this.exchange({ type: "parse", schema, value });
+    return supported ? parsed : undefined;
   }
 }

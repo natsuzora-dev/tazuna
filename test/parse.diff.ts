@@ -1,0 +1,181 @@
+import assert from "node:assert/strict";
+import { after, test } from "node:test";
+import fc from "fast-check";
+import { z } from "zod";
+import { bag, set, sortedBy, toJson } from "../src/data/collections.ts";
+import { date, datetime, duration } from "../src/data/datetime.ts";
+import { objectSchema } from "../src/data/jsonSchema.ts";
+import { type Json, plain, type Shape, strictObjectOf } from "../src/data/values.ts";
+import { Lean } from "./lean/lean.ts";
+
+const lean = new Lean();
+after(() => lean.close());
+
+/** What TS's parse gives for `value`: the value encoded again, Zod's issues, or a throw. */
+function parsedByZod(shape: Shape, value: Json): { value?: Json; issues?: Json; thrown: boolean } {
+  const object = strictObjectOf(shape);
+  try {
+    const parsed = object.safeParse(value);
+    return parsed.success
+      ? { value: plain(toJson(object, parsed.data)), thrown: false }
+      : { issues: plain(parsed.error.issues), thrown: false };
+  } catch {
+    return { thrown: true };
+  }
+}
+
+const text = fc.string({ maxLength: 4, unit: fc.constantFrom("a", "b", "x", "é", "😀") });
+const scalar = fc.oneof(
+  text,
+  fc.integer({ min: -3, max: 3 }),
+  fc.double({ noNaN: true, noDefaultInfinity: true, min: -1e3, max: 1e3 }),
+  fc.constantFrom(2 ** 60, -(2 ** 60), 0.5, null, true, false),
+);
+const json: fc.Arbitrary<Json> = fc.letrec<{ value: Json }>((tie) => ({
+  value: fc.oneof(
+    { depthSize: "small" },
+    scalar,
+    fc.array(tie("value"), { maxLength: 3 }),
+    fc.dictionary(fc.constantFrom("a", "k", "x", "1"), tie("value"), { maxKeys: 3 }),
+  ),
+})).value;
+const instant = fc.constantFrom(
+  "2026-01-01T09:00:00+09:00",
+  "2026-01-01T00:00:00.120Z",
+  "2026-02-29T00:00:00Z",
+  "2024-02-29T23:59:59.123456789-01:30",
+  "2024-02-29T23:59:59.1234567891Z",
+  "0000-01-01T00:30:00+01:00",
+  "2026-01-01T00:00Z",
+  "2026-01-01",
+);
+const day = fc.constantFrom("2026-01-31", "2026-02-30", "2024-02-29", "26-01-01");
+const length = fc.constantFrom(
+  "PT10S",
+  "P1Y2M3DT4H5M6.70S",
+  "P2W",
+  "PT1,5S",
+  "P0D",
+  "P1W2D",
+  "PT",
+  "P",
+  "PT1.0000000001S",
+);
+
+/** A schema's fields and values of them: often of the field's own kind, sometimes anything. */
+const fixtures: readonly { readonly shape: Shape; readonly fields: Readonly<Record<string, fc.Arbitrary<Json>>> }[] = [
+  {
+    shape: { s: z.string().min(1).max(3), n: z.number().positive(), i: z.int().min(-1), b: z.boolean() },
+    fields: { s: text, n: scalar, i: scalar, b: scalar },
+  },
+  {
+    shape: {
+      p: z.string().startsWith("x").endsWith("a"),
+      q: z.string().includes("b").length(2),
+      m: z.number().multipleOf(0.1).lt(5),
+      w: z.number().int().max(2),
+    },
+    fields: { p: text, q: text, m: scalar, w: scalar },
+  },
+  {
+    shape: {
+      o: z.string().optional(),
+      d: z.string().default("d"),
+      u: z.string().nullable(),
+      v: z.int().nullable().optional(),
+      e: z.enum(["a", "b"]).default("a"),
+      l: z.literal(1),
+      ls: z.literal(["a", 2]),
+      k: z.unknown(),
+    },
+    fields: { o: text, d: text, u: scalar, v: scalar, e: text, l: scalar, ls: scalar, k: json },
+  },
+  {
+    shape: {
+      u: z.union([z.string().min(2), z.int()]),
+      w: z.union([z.string(), z.boolean()]),
+      n: z.union([z.object({ a: z.string() }), z.null()]),
+      d: z.discriminatedUnion("k", [
+        z.object({ k: z.literal("a") }),
+        z.object({ k: z.literal("x"), x: z.int() }),
+        z.object({ k: z.literal(1), a: z.string().optional() }),
+      ]),
+    },
+    fields: { u: scalar, w: scalar, n: json, d: json },
+  },
+  {
+    shape: {
+      a: z.array(z.int()).min(1).max(2),
+      b: bag(z.string().max(1)),
+      s: set(z.object({ a: z.int() })).max(2),
+      r: sortedBy(z.object({ at: z.int(), x: z.string().optional() }), "at"),
+      o: z.object({ x: z.object({ y: z.string() }), z: z.array(z.string()).optional() }),
+    },
+    fields: {
+      a: fc.array(scalar, { maxLength: 3 }),
+      b: fc.array(text, { maxLength: 3 }),
+      s: fc.array(fc.record({ a: fc.integer({ min: 0, max: 1 }) }), { maxLength: 3 }),
+      r: fc.array(fc.record({ at: fc.integer({ min: 0, max: 2 }) }), { maxLength: 3 }),
+      o: json,
+    },
+  },
+  {
+    shape: { at: datetime, on: date, for: duration, maybe: datetime.optional(), list: z.array(datetime) },
+    fields: {
+      at: instant,
+      on: day,
+      for: length,
+      maybe: fc.oneof(instant, scalar),
+      list: fc.array(instant, { maxLength: 2 }),
+    },
+  },
+];
+
+/** A value of a fixture's shape: some fields left out, some given anything, and at times a field it lacks. */
+const valuesOf = (fields: Readonly<Record<string, fc.Arbitrary<Json>>>): fc.Arbitrary<Json> =>
+  fc.oneof(
+    { weight: 4, arbitrary: fc.record(fields, { requiredKeys: [] }) as fc.Arbitrary<Json> },
+    {
+      weight: 1,
+      arbitrary: fc.record(Object.fromEntries([...Object.keys(fields), "extra"].map((k) => [k, json])), {
+        requiredKeys: [],
+      }) as fc.Arbitrary<Json>,
+    },
+    { weight: 1, arbitrary: json },
+  );
+
+for (const [i, { shape, fields }] of fixtures.entries())
+  test(`fixture ${i}: Lean parses by its JSON Schema as Zod parses, issues and encoding included`, () => {
+    const schema = objectSchema(shape) as Json;
+    fc.assert(
+      fc.property(valuesOf(fields), (value) => {
+        const parsed = lean.parse(schema, value);
+        assert.ok(parsed !== undefined, "Lean parses by the schema");
+        const { value: v, issues, thrown } = parsed;
+        assert.deepEqual(
+          { ...(v === undefined || v === null ? {} : { value: v }), ...(issues ? { issues } : {}), thrown },
+          parsedByZod(shape, value),
+        );
+      }),
+      { numRuns: 300 },
+    );
+  });
+
+test("Lean leaves to Zod a schema whose checks it does not know, a refinement, an overwrite, an author's message, a codec of the author's, or a recursion", () => {
+  const upper = z.codec(z.string(), z.string(), { decode: (s) => s.toUpperCase(), encode: (s) => s });
+  type Tree = { readonly children: readonly Tree[] };
+  const tree: z.ZodType<Tree> = z.lazy(() => z.object({ children: z.array(tree) }));
+  for (const field of [
+    z.email(),
+    z.string().regex(/a/),
+    z.string().refine((s) => s !== ""),
+    z.string().trim(),
+    z.string({ error: "no" }),
+    z.string().min(1, "too short"),
+    upper,
+    tree,
+    z.record(z.string(), z.int()),
+    z.iso.datetime(),
+  ])
+    assert.equal(lean.parse(objectSchema({ field }) as Json, {}), undefined, JSON.stringify(objectSchema({ field })));
+});
