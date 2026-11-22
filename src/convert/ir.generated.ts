@@ -232,6 +232,13 @@ export type Expr =
       readonly left: Expr;
       readonly right: Expr;
     }
+  /** `+`, `-`, `*` or `/` of numbers, which the converter writes where `arith` does not hold them, as JS computes it. */
+  | {
+      readonly op: "decimal";
+      readonly operation: "add" | "sub" | "mul" | "div";
+      readonly left: Expr;
+      readonly right: Expr;
+    }
   /** `instant.add(...)` of a duration of `ms` milliseconds, which throws outside the range of instants. */
   | {
       readonly op: "timeAdd";

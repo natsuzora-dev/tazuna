@@ -63,6 +63,7 @@ const ops = [
   "includes",
   "format",
   "arith",
+  "decimal",
   "timeAdd",
 ] as const satisfies readonly Expr["op"][];
 const listsEveryOp: [Exclude<Expr["op"], (typeof ops)[number]>] extends [never] ? true : false = true;

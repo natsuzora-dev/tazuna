@@ -74,6 +74,16 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Arith
 
+/-- A JS number operation, which rounds as IEEE binary64 does: JS numbers are doubles. -/
+inductive Decimal where
+  | add
+  | sub
+  | mul
+  | div
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Decimal
+
 mutual
 
 /-- An expression. `and`, `or` and `coalesce` give an operand's value and skip the other, as JS `&&`, `||` and `??`. -/
@@ -135,6 +145,8 @@ inductive Expr where
   -/
   | format (parts : List Expr)
   | arith (operation : Arith) (left right : Expr)
+  /-- `+`, `-`, `*` or `/` of numbers, which the converter writes where `arith` does not hold them, as JS computes it. -/
+  | decimal (operation : Decimal) (left right : Expr)
   /-- `instant.add(...)` of a duration of `ms` milliseconds, which throws outside the range of instants. -/
   | timeAdd (instant ms : Expr)
   /-- `emit(event, payload)` of an event that the command lists. -/

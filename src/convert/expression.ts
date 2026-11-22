@@ -148,6 +148,13 @@ const arithmetic: ReadonlyMap<SyntaxKind, Extract<Expr, { readonly op: "arith" }
   [SyntaxKind.AsteriskToken, "mul"],
 ]);
 
+const decimals: ReadonlyMap<SyntaxKind, Extract<Expr, { readonly op: "decimal" }>["operation"]> = new Map([
+  [SyntaxKind.PlusToken, "add"],
+  [SyntaxKind.MinusToken, "sub"],
+  [SyntaxKind.AsteriskToken, "mul"],
+  [SyntaxKind.SlashToken, "div"],
+]);
+
 const flipped: Readonly<Record<Relation, Relation>> = { lt: "gt", le: "ge", gt: "lt", ge: "le", eq: "eq" };
 
 const relations: ReadonlyMap<SyntaxKind, Relation> = new Map([
@@ -617,6 +624,13 @@ class Conversion {
         return this.number(e, -Number(operand.text));
       if (e.operator === SyntaxKind.MinusToken && this.isInt(operand, scope))
         return { op: "arith", operation: "sub", left: { op: "lit", value: 0 }, right: this.expression(operand, scope) };
+      if (e.operator === SyntaxKind.MinusToken && this.only(operand) === "number")
+        return {
+          op: "decimal",
+          operation: "sub",
+          left: { op: "lit", value: 0 },
+          right: this.expression(operand, scope),
+        };
       this.fail(e, "has a prefix operator other than !");
     }
     if (isConditionalExpression(e))
@@ -704,10 +718,13 @@ class Conversion {
       return { op: "let", name, value: this.expression(nullish, scope), body };
     }
     const operation = arithmetic.get(operator);
-    if (operation !== undefined) {
-      if (!this.isInt(left, scope) || !this.isInt(right, scope))
-        this.fail(node, "does arithmetic on other than integers of the schemas");
+    if (operation !== undefined && this.isInt(left, scope) && this.isInt(right, scope))
       return { op: "arith", operation, ...both() };
+    const decimal = decimals.get(operator);
+    if (decimal !== undefined) {
+      if (this.only(left) !== "number" || this.only(right) !== "number")
+        this.fail(node, "does arithmetic on other than numbers");
+      return { op: "decimal", operation: decimal, ...both() };
     }
     const negated = operator === SyntaxKind.ExclamationEqualsEqualsToken;
     const relation = relations.get(negated ? SyntaxKind.EqualsEqualsEqualsToken : operator);

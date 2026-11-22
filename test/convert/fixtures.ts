@@ -345,6 +345,16 @@ export const fixtures: readonly Fixture[] = [
       return input.items.some((i) => i.k * 2 - -n === 3 + input.items.size) ? -n : n + input.items.sum((i) => i.k) - 1;
     },
   ),
+  fixture(
+    "decimal",
+    { d: z.number(), e: z.number(), n: z.int() },
+    fc.record({ d: number, e: fc.oneof(number, fc.constant(0)), n: fc.integer({ min: -9, max: 9 }) }),
+    ({ input }) => {
+      const { d, e, n } = input;
+      const ratio = d / e;
+      return [d + 0.1, d - e * 3.7, n / 3, -d, ratio, ratio > 1, ratio === d, `${d * 1e21} ${ratio}`, { q: e / n }];
+    },
+  ),
   recordFixture(
     "arith",
     {},
@@ -389,9 +399,9 @@ export const outside: readonly ((args: {
   readonly input: Row<{ n: z.ZodNumber; title: z.ZodString; ns: z.ZodArray<z.ZodNumber> }>;
   readonly createKey: CreateKey;
 }) => unknown)[] = [
-  ({ input }) => input.n + 1 > 2,
+  ({ input }) => input.n % 2 === 1,
   ({ input }) => Temporal.Now.instant().add({ hours: input.n }),
-  ({ input }) => input.ns.length / 2,
+  ({ input }) => input.n ** 2,
   ({ input }) => input.title.trim() === "",
   ({ input }) => input.title < "b",
   ({ input }) => [...input.title].length === 1,
