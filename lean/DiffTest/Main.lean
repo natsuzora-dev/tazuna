@@ -243,16 +243,19 @@ def sameAnswer {ε α : Type} [BEq ε] [BEq α] : Except ε α → Except ε α 
   | _, _ => false
 
 /--
-The answer that Lean evaluated, `ir` with the parts of the records that it read, after checking it against `beneath`,
-TS's answer to the same question: both answer alike and read the same parts in the same order, or tazuna-lean stops.
-The read log then holds the evaluation's parts, and no access, since no callback with IR reads a scope.
+The answer that Lean evaluated, with what it read, after checking it against `beneath`, TS's answer to the same
+question: both answer alike, read the same record parts in the same order, and read and assign the same chart values,
+or tazuna-lean stops. The read log then holds what the evaluation read, and no enumeration of a Bag: no IR operation
+can tell the order in which a Bag visits its values, so orderAudit has nothing to find.
 -/
-def shadowed (reads : Reads) : Ir.Answered IO := fun callback (answer, parts) beneath => do
+def shadowed (reads : Reads) : Ir.Answered IO := fun callback (answer, trace) beneath => do
   let ts ← beneath
-  let read := (← reads.get).parts
-  unless sameAnswer answer ts && parts == read do
-    throw (IO.userError s!"IR answers {callback} with {describe answer} reading {repr parts}, TS with {describe ts} reading {repr read}")
-  reads.set { parts }
+  let log ← reads.get
+  let access := (log.replied.bind (·.access)).getD {}
+  unless sameAnswer answer ts && trace.parts == log.parts && trace.access == access do
+    throw (IO.userError
+      s!"IR answers {callback} with {describe answer} reading {repr trace.parts} {repr trace.access}, TS with {describe ts} reading {repr log.parts} {repr access}")
+  reads.set { parts := trace.parts, replied := log.replied.map fun r => { r with enumerated := none } }
   pure answer
 
 /--
@@ -387,9 +390,9 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .schemaOf s service schema => do pure (.schemaOf ((← Service.ofStructure s service).schemaOf schema))
   | .evaluate body input records =>
     let env : Ir.Env := { args := Ir.argsOf [(.input, .json input)], records := records.map Stored.row }
-    let (answer, parts) := (Ir.eval env [] body).run'
-    let reads := parts.map ReadPart.of
-    pure (match answer >>= Ir.Val.encoded with
+    let (answer, trace) := (do Ir.encode env (← Ir.eval env [] body)).run'
+    let reads := trace.parts.map ReadPart.of
+    pure (match answer with
       | .ok value => .evaluated { value, issue := none, reads }
       | .error issue => .evaluated { value := none, issue, reads })
 where

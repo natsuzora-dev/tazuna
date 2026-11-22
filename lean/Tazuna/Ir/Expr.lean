@@ -20,6 +20,14 @@ inductive Arg where
   | now
   /-- The binds values of a command or automation, by name. -/
   | bound
+  | context
+  | shown
+  | active
+  | held
+  /-- The key of a map state's copy. -/
+  | key
+  /-- The rejection that a transition takes, as `{ kind }`. -/
+  | rejection
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Arg
@@ -137,6 +145,49 @@ deriving Repr, Inhabited
 
 derive_wire Conditions
 
+/-- Where in a state a transition that enters a state with parameters starts: a transition, or its parent's initial. -/
+inductive Entry where
+  | transition (transition : Spec.TransitionRef)
+  | initial (parent : String)
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Entry tag "kind"
+
+/-- Where a machine or screen writes functions, as the question that evaluates them names the place. -/
+inductive Site where
+  /-- The chart's invariants. -/
+  | invariants
+  /-- The guard conditions of a transition. -/
+  | guards (transition : Spec.TransitionRef)
+  /-- The `at` of a deadline of a state. -/
+  | deadline (state name : String)
+  /-- The items of a map state. -/
+  | items (state : String)
+  /-- The offers of a control in a state, or in the chart itself. -/
+  | offers (state : Option String) (control : String)
+  /-- The input of an activity of a state, by its keyword: `calls`, `sends`, `shows` or `opens`. -/
+  | input (state keyword key : String)
+  /-- The parameters of `state` that an entry fills, in the order of the state's held schema. -/
+  | held (entry : Entry) (state : String)
+  | initialContext
+  /-- A screen's resolve. -/
+  | close
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Site tag "kind"
+
+/--
+The converted functions of one site of a chart, all of them in the order the question reads them. A site of one
+function names it with the empty string.
+-/
+structure ChartFns where
+  chart : Spec.Ref
+  site : Site
+  functions : List Condition
+deriving Repr, Inhabited
+
+derive_wire ChartFns
+
 /-- A converted spec function of a definition that has one, such as a query's resolve. -/
 structure Fn where
   definition : Spec.Ref
@@ -164,6 +215,7 @@ structure Program where
   automationBinding : List Conditions := []
   automationGuard : List Conditions := []
   resolve : List Fn := []
+  chart : List ChartFns := []
 deriving Repr, Inhabited
 
 derive_wire Program

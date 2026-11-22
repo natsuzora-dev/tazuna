@@ -2,6 +2,7 @@ import Tazuna.Data.Time
 import Tazuna.Ir.Expr
 import Tazuna.Service.Functions
 import Tazuna.Service.Note
+import Tazuna.Explore.Instrument
 
 /-!
 The evaluator of IR expressions. Values stay as JSON encodes them: the converter has chosen each operation by the TS type
@@ -11,7 +12,18 @@ field only when an expression reads it, so an evaluation reads the parts of the 
 
 namespace Tazuna.Ir
 
-open Tazuna.Data Tazuna.Service
+open Tazuna.Data Tazuna.Service Tazuna.Explore
+
+/-- A value of a chart function's arguments that notes each field that an expression reads, as TS's arguments do. -/
+inductive Tracked where
+  /-- The context; a field of `copied` is the copy's. -/
+  | context (copied : List String)
+  | shown
+  /-- Whether each state is active; a state of `copied` is the copy's. -/
+  | active (copied : List String)
+  /-- The parameters of `state`: reading one reads the state's visit, and reading a name it lacks is unheld. -/
+  | held (holder : Holder) (state : Option String)
+deriving Inhabited
 
 /-- A value as an expression sees it. -/
 inductive Val where
@@ -27,25 +39,34 @@ inductive Val where
   /-- A Bag or array that an operation made. -/
   | list (values : List Val)
   | obj (fields : List (String × Val))
+  | tracked (tracked : Tracked) (value : Value)
 deriving Inhabited
 
 def Val.ofOption : Option Value → Val
   | some v => .json v
   | none => .undef
 
-/-- What an expression reads besides its variables. -/
+/-- What an expression reads besides its variables, and the field names of each entity, in its schema's order. -/
 structure Env where
   args : Arg → Val := fun _ => .undef
   records : Records := []
+  fields : String → List String := fun _ => []
 
-/-- An evaluation, which notes each part of the records that it reads, in order and once, also when an Issue stops it. -/
-abbrev EvalM := ExceptT Issue (StateM (List RecordPart))
+/-- What an evaluation read: the parts of the records, in order and once, and the chart values, in order. -/
+structure Trace where
+  parts : List RecordPart := []
+  access : Access := {}
+
+/-- An evaluation, which notes what it reads, also when an Issue stops it. -/
+abbrev EvalM := ExceptT Issue (StateM Trace)
 
 def note (part : RecordPart) : EvalM Unit :=
-  modify fun parts => if part ∈ parts then parts else parts ++ [part]
+  modify fun t => if part ∈ t.parts then t else { t with parts := t.parts ++ [part] }
 
-/-- The value of `x` and the parts of the records that it read. -/
-def EvalM.run' {α : Type} (x : EvalM α) : Except Issue α × List RecordPart := (ExceptT.run x).run []
+def touch (f : Access → Access) : EvalM Unit := modify fun t => { t with access := f t.access }
+
+/-- The value of `x` and what it read. -/
+def EvalM.run' {α : Type} (x : EvalM α) : Except Issue α × Trace := (ExceptT.run x).run {}
 
 /-- Whether JS takes the value as true: all but `undefined`, null, false, 0 and the empty string. -/
 def truthy : Val → Bool
@@ -101,6 +122,22 @@ def fieldOf (v : Val) (name : String) : EvalM Val :=
     let row := source.find? fun r => r.entity == entity && r.key == key
     pure (.ofOption (row.bind (·.value.field? name)))
   | .obj fields => pure ((fields.lookup name).getD .undef)
+  | .tracked tracked v =>
+    match v.field? name, tracked with
+    | none, .held .. => throw (.unheld name)
+    | none, _ => pure .undef
+    | some x, .context copied => do
+      touch fun a => { a with context := a.context ++ [(if name ∈ copied then .copy else .owner, name)] }
+      pure (.json x)
+    | some x, .shown => do
+      touch fun a => { a with shown := a.shown ++ [name] }
+      pure (.json x)
+    | some x, .active copied => do
+      touch fun a => { a with active := a.active ++ [(if name ∈ copied then .copy else .owner, name)] }
+      pure (.json x)
+    | some x, .held holder state => do
+      if let some s := state then touch fun a => { a with active := a.active ++ [(holder, s)] }
+      pure (.json x)
   | _ => pure .undef
 
 /-- The values that a callback method visits. Visiting a table reads its keys and visits its records in key order. -/
@@ -282,20 +319,27 @@ def evalFields (env : Env) (vars : List (String × Val)) : List Field → EvalM 
 
 end
 
-/-- The JSON of a value, none for `undefined`, as JSON.stringify writes it; a record or table has none. -/
-partial def Val.encoded : Val → Except Issue (Option Value)
+/--
+The JSON of a value, none for `undefined`, as TS's encoding and JSON.stringify write it. A record reads every field of
+its entity, in the schema's order, as encoding the records view's record does; a table has no JSON.
+-/
+partial def encode (env : Env) : Val → EvalM (Option Value)
   | .undef => pure none
   | .json v => pure (some v)
-  | .list vs => do pure (some (.arr (← vs.mapM fun v => do pure ((← v.encoded).getD .null))))
+  | .list vs => do pure (some (.arr (← vs.mapM fun v => do pure ((← encode env v).getD .null))))
   | .obj fields => do
-    pure (some (.obj (← fields.filterMapM fun (name, v) => do pure ((← v.encoded).map (name, ·)))))
-  | .row .. | .table .. => throw (.thrown none)
+    pure (some (.obj (← fields.filterMapM fun (name, v) => do pure ((← encode env v).map (name, ·)))))
+  | .row source entity key => do
+    let present ← (env.fields entity).filterMapM fun name => do
+      match ← fieldOf (.row source entity key) name with
+      | .json v => pure (some (name, v))
+      | _ => pure none
+    pure (some (.obj present))
+  | .table .. => throw (.thrown none)
+  | .tracked _ v => pure (some v)
 
 /-- The JSON that TS's encoding of a spec function's value gives: null for `undefined`, as JSON.stringify writes it. -/
-def answerOf (v : Val) : EvalM Value :=
-  match v.encoded with
-  | .ok json => pure (json.getD .null)
-  | .error issue => throw issue
+def answerOf (env : Env) (v : Val) : EvalM Value := do pure ((← encode env v).getD .null)
 
 /-- The name of the first of `conditions` whose value is not truthy, in order, as TS `firstFailing` finds it. -/
 def firstFailing (env : Env) : List Condition → EvalM (Option String)

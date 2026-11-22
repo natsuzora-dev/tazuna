@@ -1,12 +1,23 @@
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { objectSchema } from "../data/jsonSchema.ts";
 import type { Shape } from "../data/values.ts";
+import { stateAt, transitionAt } from "../dsl/chart.ts";
 import type { Conditions } from "../dsl/conditions.ts";
 import type { AnyCommand, AnyQuery, Automation, ChartSpec } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
+import { chartStructure, stateNamed, transitionRef } from "../spec/structure.ts";
 import { type Arg, converted } from "./expression.ts";
-import type { Condition, Conditions as ConvertedConditions, Expr, Fn, Program } from "./ir.generated.ts";
+import type {
+  ChartFns,
+  Condition,
+  Conditions as ConvertedConditions,
+  Entry,
+  Expr,
+  Fn,
+  Program,
+  Site,
+} from "./ir.generated.ts";
 import { Locator } from "./located.ts";
 import { Sources } from "./sources.ts";
 
@@ -18,8 +29,8 @@ interface NotConverted {
   readonly reason: string;
 }
 
-/** The Program lists of named conditions, and those of one function per definition. */
-type ConditionsCallback = Exclude<keyof Program, FnCallback>;
+/** The Program lists of named conditions, those of one function per definition, and the chart functions. */
+type ConditionsCallback = Exclude<keyof Program, FnCallback | "chart">;
 type FnCallback = "resolve";
 
 export interface Converted {
@@ -77,6 +88,118 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         args: ["input", "records", "now"],
         shapes: [query.input, query.output, ...entities],
       });
+    }
+  }
+  return slots;
+}
+
+/** The functions of one site of a chart, by name; a function that the chart leaves out is TS's `{}`, or none. */
+interface ChartSlot {
+  readonly chart: DefinitionRef;
+  readonly site: Site;
+  readonly functions: readonly (readonly [string, SpecFunction | undefined])[];
+  readonly args: readonly Arg[];
+  /** Whether the question reads every function of the site, as `firstFailing` or a held object does. */
+  readonly whole: boolean;
+}
+
+const scopeArgs: readonly Arg[] = ["context", "input", "shown", "key", "records", "active", "now", "held"];
+const causeArgs: readonly Arg[] = [...scopeArgs, "payload", "output", "rejection"];
+const empty: Expr = { op: "obj", fields: [] };
+const keywords = ["calls", "sends", "shows", "opens"] as const;
+
+function chartSlotsOf(spec: Spec): ChartSlot[] {
+  if (JSON.stringify(spec.structure).includes('"x-tazuna-codec"')) return [];
+  const slots: ChartSlot[] = [];
+  for (const { service, name, definition: d } of spec.definitions) {
+    if (d.kind !== "machine" && d.kind !== "screen") continue;
+    const chartSpec = d as ChartSpec;
+    const structure = chartStructure(spec.structure, service, name);
+    if (structure === undefined) continue;
+    const chart = { service, name };
+    const fns = (functions: Readonly<Record<string, unknown>> | undefined) =>
+      Object.entries(functions ?? {}) as [string, SpecFunction][];
+    slots.push(
+      { chart, site: { kind: "invariants" }, functions: fns(chartSpec.invariants), args: scopeArgs, whole: true },
+      {
+        chart,
+        site: { kind: "initialContext" },
+        functions: [["", chartSpec.initialContext]],
+        args: ["input"],
+        whole: true,
+      },
+      { chart, site: { kind: "close" }, functions: [["", chartSpec.resolve]], args: scopeArgs, whole: true },
+    );
+    const offers = (state: string | null, offered: Readonly<Record<string, unknown>> | undefined) => {
+      for (const [control, f] of Object.entries(offered ?? {}))
+        if (typeof f === "function")
+          slots.push({
+            chart,
+            site: { kind: "offers", state, control },
+            functions: [["", f as SpecFunction]],
+            args: scopeArgs,
+            whole: true,
+          });
+    };
+    offers(null, chartSpec.offers);
+    const held = (
+      entry: Entry,
+      state: string,
+      fills: Readonly<Record<string, unknown>> | undefined,
+      args: readonly Arg[],
+    ) => {
+      const target = stateNamed(structure, state);
+      if (target?.held === null || target === undefined) return;
+      const shape = stateAt(chartSpec, target.path).held as Shape | undefined;
+      const names = Object.keys(shape ?? {});
+      if (names.some((n) => typeof fills?.[n] !== "function")) return;
+      const functions = names.map((n) => [n, fills?.[n] as SpecFunction] as const);
+      slots.push({ chart, site: { kind: "held", entry, state }, functions, args, whole: true });
+    };
+    for (const t of [...structure.on, ...structure.states.flatMap((s) => s.transitions)]) {
+      const ref = transitionRef(t);
+      const written = transitionAt(chartSpec, structure, ref);
+      slots.push({
+        chart,
+        site: { kind: "guards", transition: ref },
+        functions: fns(written.guard),
+        args: causeArgs,
+        whole: false,
+      });
+      if (t.target !== null) held({ kind: "transition", transition: ref }, t.target, written.with, causeArgs);
+    }
+    for (const s of structure.states) {
+      const node = stateAt(chartSpec, s.path);
+      if (s.initial !== null) held({ kind: "initial", parent: s.name }, s.initial, node.initialWith, scopeArgs);
+      for (const deadline of s.deadlines) {
+        const at = node.after?.[deadline.name]?.at as SpecFunction | undefined;
+        if (at !== undefined)
+          slots.push({
+            chart,
+            site: { kind: "deadline", state: s.name, name: deadline.name },
+            functions: [["", at]],
+            args: scopeArgs,
+            whole: true,
+          });
+      }
+      if (node.type === "map")
+        slots.push({
+          chart,
+          site: { kind: "items", state: s.name },
+          functions: [["", node.items as SpecFunction]],
+          args: scopeArgs,
+          whole: true,
+        });
+      offers(s.name, node.offers);
+      for (const keyword of keywords)
+        for (const [key, activity] of Object.entries(node[keyword] ?? {}))
+          slots.push({
+            chart,
+            site: { kind: "input", state: s.name, keyword, key },
+            functions: [["", (activity as { readonly input?: SpecFunction }).input]],
+            args: scopeArgs,
+            whole: true,
+          });
     }
   }
   return slots;
@@ -284,6 +407,25 @@ export class Converter {
         notConverted.push({ callback: slot.callback, definition: slot.definition, reason: body.unconverted });
       else fns[slot.callback].push({ definition: slot.definition, body });
     }
-    return { program: { ...lists, ...fns }, notConverted };
+    const chart: ChartFns[] = [];
+    for (const slot of chartSlotsOf(spec)) {
+      const functions: Condition[] = [];
+      const failed: NotConverted[] = [];
+      for (const [name, f] of slot.functions) {
+        const body = f === undefined ? empty : this.convert(f, slot.args);
+        if ("unconverted" in body)
+          failed.push({
+            callback: "chart",
+            definition: slot.chart,
+            name: `${slot.site.kind} ${name}`,
+            reason: body.unconverted,
+          });
+        else functions.push({ name, body });
+      }
+      notConverted.push(...failed);
+      if (slot.whole ? failed.length === 0 : functions.length > 0)
+        chart.push({ chart: slot.chart, site: slot.site, functions });
+    }
+    return { program: { ...lists, ...fns, chart }, notConverted };
   }
 }

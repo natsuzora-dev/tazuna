@@ -95,7 +95,8 @@ def modules : List (String × List Name) :=
      ``Tazuna.Spec.Domain, ``Tazuna.Spec.Explore,
      ``Tazuna.Spec.Structure]),
    ("src/convert/ir.generated.ts",
-    [``Tazuna.Ir.Expr, ``Tazuna.Ir.Field, ``Tazuna.Ir.Condition, ``Tazuna.Ir.Conditions, ``Tazuna.Ir.Fn, ``Tazuna.Ir.Program]),
+    [``Tazuna.Ir.Arg, ``Tazuna.Ir.Expr, ``Tazuna.Ir.Field, ``Tazuna.Ir.Condition, ``Tazuna.Ir.Conditions, ``Tazuna.Ir.Fn,
+     ``Tazuna.Ir.Entry, ``Tazuna.Ir.Site, ``Tazuna.Ir.ChartFns, ``Tazuna.Ir.Program]),
    ("test/lean/protocol.generated.ts",
     [``Tazuna.Service.Issue, ``Tazuna.Service.CopyScope, ``Tazuna.Service.Scope,
      ``Tazuna.Service.Transition, ``Tazuna.Service.Assignment, ``Tazuna.Service.Edge, ``Tazuna.Service.Extra, ``Tazuna.Service.Emit,
@@ -216,7 +217,9 @@ def declaration (type : Name) : Write String := do
         after.map fun f => (none, .field f)
       pure (← findDocString? (← getEnv) c.ctor, ← object "      " properties)
   match ← wireShape type with
-  | .enum ctors => return doc ++ s!"export type {name} = {" | ".intercalate (ctors.map fun c => s!"\"{c.name}\"")};\n"
+  | .enum ctors =>
+    let line := s!"export type {name} = {" | ".intercalate (ctors.map fun c => s!"\"{c.name}\"")};"
+    return doc ++ if line.length ≤ 120 then line ++ "\n" else union name "" (ctors.map fun c => (none, s!"\"{c.name}\""))
   | .object _ fields => return doc ++ s!"export type {name} = {← object "  " (← fieldDocs fields)};\n"
   | .tagged tag ctors => return union name doc (← variants tag ctors)
   | .untagged ctors =>
