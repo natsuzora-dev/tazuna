@@ -1,14 +1,24 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { type TestContext, test } from "node:test";
+import { after, type TestContext, test } from "node:test";
 import { main } from "../src/cli/main.ts";
+import { Converter } from "../src/convert/program.ts";
 import { groups } from "../src/data/groups.ts";
 import { parseKind } from "../src/data/kinds.ts";
 import type { Group, ReportedViolation } from "../src/data/violation.ts";
 import { maskedStack, typeChecked } from "./examples.ts";
 
 export const expected = "expected.jsonl";
+
+let shared: Converter | undefined;
+after(() => shared?.close());
+
+/** The converter that the examples of this test file share, since each converter starts tsgo. */
+const converter = (): Converter => {
+  shared ??= new Converter();
+  return shared;
+};
 
 const summaryOnly = /^[^:\n]+: (?:no violations|\d+ violations?)$/;
 
@@ -34,7 +44,7 @@ export async function recordsOf(example: string, runs: readonly (readonly string
       },
       error: (line) => assert.match(line, summaryOnly, `tazuna ${args.join(" ")}`),
       // An example with a tsconfig.json of its own runs tsc, for the violations that only tsc's program shows.
-      ...(existsSync(join(example, "tsconfig.json")) ? {} : { typeCheck: () => typeChecked }),
+      ...(existsSync(join(example, "tsconfig.json")) ? {} : { typeCheck: () => typeChecked, converter: converter() }),
     });
   }
   return logged;

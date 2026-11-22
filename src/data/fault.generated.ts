@@ -380,3 +380,6 @@ export const haltingFaultKinds = [
   "Fault.exceededMessageWork",
   "Fault.exceededDueDeadlines",
 ] as const;
+
+/** The kinds that no spec that check passes can produce. */
+export const internalFaultKinds = ["Fault.unlistedEmittedEvent"] as const;

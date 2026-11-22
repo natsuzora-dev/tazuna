@@ -15,6 +15,9 @@ const refund = { service: "shop", scenario: "refundCreatedCharge", runner: "shop
 mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
 const copies = mkdtempSync(join(import.meta.dirname, ".fixtures", "verify-api-"));
 after(() => rmSync(copies, { recursive: true, force: true }));
+// tsc's include skips the dot folder .fixtures, so the copies get a tsconfig.json of their own, by which the converter
+// types their functions.
+writeFileSync(join(copies, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
 const copyOfCommandOutput = (name: string) => {
   const copy = join(copies, name);
   cpSync(commandOutput, copy, { recursive: true });

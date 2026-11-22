@@ -1,6 +1,6 @@
 import { bagOrderDependentKinds } from "./bagOrderDependent.generated.ts";
 import { choiceDependentKinds } from "./choiceDependent.generated.ts";
-import { faultKinds } from "./fault.generated.ts";
+import { faultKinds, internalFaultKinds } from "./fault.generated.ts";
 import { illegalKinds } from "./illegal.generated.ts";
 import { internalInvalidInputKinds, invalidInputKinds } from "./invalidInput.generated.ts";
 import { internalInvalidScenarioKinds, invalidScenarioKinds } from "./invalidScenario.generated.ts";
@@ -80,6 +80,7 @@ const restrictedKinds = every<Restricted["kind"]>()([
   "Restricted.crossServiceImport",
   "Restricted.indexCallback",
   "Restricted.schema",
+  "Restricted.function",
 ]);
 
 /** The kinds of each group. */
@@ -130,6 +131,7 @@ export const kinds: readonly Kind[] = [...parsed.values()].map((p) => p.kind);
 export const internalKinds = [
   ...internalInvalidScenarioKinds,
   ...internalInvalidInputKinds,
+  ...internalFaultKinds,
 ] as const satisfies readonly Kind[];
 
 /** A kind that a user meets: one of the kinds except internalKinds. */

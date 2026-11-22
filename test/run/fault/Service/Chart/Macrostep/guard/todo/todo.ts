@@ -1,19 +1,18 @@
-import { emit, service } from "@natsuzora-dev/tazuna";
-import { z } from "zod";
+import { addDays, date, emit, service } from "@natsuzora-dev/tazuna";
 
 export const { command, machine, event, contract, scenario } = service({
   name: "todo",
   description: "Watch the added tasks",
 });
 
-export const taskAdded = event({ payload: { title: z.string() } });
+export const taskAdded = event({ payload: { due: date } });
 
-export const addTask = command({ input: { title: z.string() }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { title: input.title }),
+export const addTask = command({ input: { due: date }, emits: [taskAdded] }).decide(({ input }) => [
+  emit(taskAdded, { due: input.due }),
 ]);
 
 export const watcher = machine({
-  description: "Stop at the first titled task",
+  description: "Stop at the first task due before year 10000",
   receives: { taskAdded },
   initial: "watching",
   states: { watching: {}, done: { type: "final" } },
@@ -23,12 +22,7 @@ export const watcher = machine({
       on: {
         taskAdded: [
           {
-            guard: {
-              titled: ({ payload }) => {
-                if (payload.title === "") throw new Error("the task has no title");
-                return true;
-              },
-            },
+            guard: { dueBeforeYearTenThousand: ({ payload }) => addDays(payload.due, 3_000_000) > payload.due },
             target: "done",
           },
         ],

@@ -18,26 +18,44 @@ export const ring = command({ input: { by: z.string() }, emits: [rang] }).decide
   emit(rang, { by: input.by }),
 ]);
 
-const clock = (by: string) =>
-  machine({
-    description: `Ring the alarm as ${by} at 10:00 once armed`,
-    receives: { armed },
-    commands: { ring },
-    initial: "idle",
-    states: { idle: {}, waiting: {}, ringing: {}, done: { type: "final" } },
-  }).chart({
-    states: {
-      idle: { on: { armed: [{ target: "waiting" }] } },
-      waiting: {
-        after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "ringing" }] } },
-      },
-      ringing: {
-        sends: { ring: { input: () => ({ by }), onAccepted: [{ target: "done" }], onRejected: [{ target: "done" }] } },
+export const first = machine({
+  description: `Ring the alarm as first at 10:00 once armed`,
+  receives: { armed },
+  commands: { ring },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, ringing: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "ringing" }] } },
+    },
+    ringing: {
+      sends: {
+        ring: { input: () => ({ by: "first" }), onAccepted: [{ target: "done" }], onRejected: [{ target: "done" }] },
       },
     },
-  });
+  },
+});
 
-export const first = clock("first");
-export const second = clock("second");
+export const second = machine({
+  description: `Ring the alarm as second at 10:00 once armed`,
+  receives: { armed },
+  commands: { ring },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, ringing: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "ringing" }] } },
+    },
+    ringing: {
+      sends: {
+        ring: { input: () => ({ by: "second" }), onAccepted: [{ target: "done" }], onRejected: [{ target: "done" }] },
+      },
+    },
+  },
+});
 
 export const alarms = contract({ arm });

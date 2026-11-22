@@ -1,4 +1,5 @@
 import { join, relative, sep } from "node:path";
+import { Converter } from "../convert/program.ts";
 import type { Illegal } from "../data/illegal.generated.ts";
 import { InternalError } from "../data/internalError.ts";
 import type { Malformed } from "../data/malformed.ts";
@@ -16,6 +17,7 @@ import * as constants from "./nonCanonical/constants.ts";
 import * as descriptions from "./nonCanonical/descriptions.ts";
 import * as keywords from "./nonCanonical/keywords.ts";
 import * as offers from "./nonCanonical/offers.ts";
+import * as functions from "./restricted/functions.ts";
 import * as schemas from "./restricted/schemas.ts";
 import * as sources from "./restricted/sources.ts";
 import { type TypeCheck, typeCheck } from "./typeCheck.ts";
@@ -113,8 +115,28 @@ function unlistedFiles(
     }));
 }
 
-/** checkSpec after `typeChecked`, the type check of `root`. */
-export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promise<SpecCheck> {
+/**
+ * The Restricted.function violations of a spec that passes every other check: what `converter` leaves outside the IR.
+ * Without a converter, one runs for this spec alone.
+ */
+function outsideIr(spec: Spec, converter: Converter | undefined): Found<Restricted>[] {
+  const own = converter ?? new Converter();
+  try {
+    return functions.check(spec, own.program(spec).notConverted);
+  } finally {
+    if (converter === undefined) own.close();
+  }
+}
+
+/**
+ * checkSpec after `typeChecked`, the type check of `root`. `converter` reads the spec functions; a caller that checks
+ * many specs passes one, since each converter starts tsgo. With "unconverted", the spec functions stay unchecked.
+ */
+export async function checkSpecWith(
+  root: string,
+  typeChecked: TypeCheck,
+  converter?: Converter | "unconverted",
+): Promise<SpecCheck> {
   if (typeChecked.kind !== "passed") return typeChecked;
   let loaded: Loaded;
   try {
@@ -140,6 +162,8 @@ export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promi
           })),
         ]
       : [...unlisted, ...(loaded.kind === "malformed" ? loaded.malformed : []), ...syntax];
+  if (found.length === 0 && loaded.kind === "structured" && converter !== "unconverted")
+    found.push(...outsideIr(loaded.spec, converter));
   if (found.length === 0) return { kind: "checked", spec: loaded.spec as CheckedSpec };
   const violations = found.sort(({ place: x }, { place: y }) => comparePlaces(x, y)).map(reportedOfFound);
   return { kind: "violations", files: spec.sources.length, violations };
@@ -147,6 +171,9 @@ export async function checkSpecWith(root: string, typeChecked: TypeCheck): Promi
 
 /**
  * Type-checks the spec in the folder `root` with tsc on the nearest tsconfig.json at or above it, loads it, and checks
- * it. A Malformed violation leaves the structure unchecked: Illegal, and the NonCanonical checks that read it.
+ * it. A Malformed violation leaves the structure unchecked: Illegal, and the NonCanonical checks that read it. The spec
+ * functions stay unchecked: `drive` runs them as JS, and a test runner that transforms the spec files, as vitest
+ * does, hides their source positions from the converter.
  */
-export const checkSpec = (root: string): Promise<SpecCheck> => checkSpecWith(root, typeCheck(root, process.cwd()));
+export const checkSpec = (root: string): Promise<SpecCheck> =>
+  checkSpecWith(root, typeCheck(root, process.cwd()), "unconverted");

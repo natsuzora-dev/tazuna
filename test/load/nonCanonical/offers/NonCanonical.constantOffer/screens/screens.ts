@@ -18,7 +18,7 @@ export const pickScreen = screen({
     picked: {
       offers: {
         close: () => [],
-        pick: ({ shown }) => (Object.keys(shown).length === 0 ? [{ title: "Buy bread" }] : []),
+        pick: ({ now }) => (now > 0 ? [{ title: "Buy bread" }] : []),
       },
     },
     done: {

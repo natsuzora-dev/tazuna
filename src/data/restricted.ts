@@ -108,4 +108,17 @@ export type Restricted =
    * - `recursion` (z.lazy): an entity whose rows ref() each other.
    * - `message`: an error message that is a function; a message written as a string stays.
    */
-  | Of<"schema", SchemaPlace | (SchemaPlace & { readonly name: string }), DefinitionRef | null>;
+  | Of<"schema", SchemaPlace | (SchemaPlace & { readonly name: string }), DefinitionRef | null>
+  /**
+   * A spec function of the definition holds a construct that tazuna can neither execute in Lean nor encode to SMT,
+   * which `reason` names with the construct's source. In its place:
+   * - a statement other than `const`, `if` and `return`, such as `let`, a loop, or `push`: an expression, such as
+   *   `map`, `filter` or `sum` of a Bag.
+   * - `throw`: a `requires`, guard, or invariant that states the condition.
+   * - a name declared outside the function, such as a parameter of a function that builds definitions: a constant,
+   *   or a value that the input, the records or the context hold, with one definition per value.
+   * - a call that the IR does not have, such as `trim`, `Object.keys`, `flatMap` or `JSON.parse`: the value held in
+   *   a field, or a helper declared with `const` at the top of the file.
+   * - an event that the command's `emits` does not list: the event added to `emits`.
+   */
+  | Of<"function", { readonly reason: string }, DefinitionRef>;

@@ -28,7 +28,7 @@ export const archiveTitle = command({
   input: { title: Archive.fields.title },
   emits: [titleArchived],
 }).decide(({ input, records }) => [
-  records.Task.filter((t) => t.title === input.title).map(() => emit(titleArchived, { title: input.title })),
+  records.Task.filter((t) => t.title === input.title).map((t) => emit(titleArchived, { title: t.title })),
 ]);
 
 export const todo = contract({ addTask, archiveTitle });

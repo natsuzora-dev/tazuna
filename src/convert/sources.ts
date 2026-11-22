@@ -1,28 +1,25 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import {
   type ArrowFunction,
   type FunctionExpression,
   isArrowFunction,
   isFunctionExpression,
+  isMethodDeclaration,
+  type MethodDeclaration,
   type Node,
 } from "typescript/unstable/ast";
 import { API, type Checker, type Project } from "typescript/unstable/sync";
 import type { Location } from "./located.ts";
 
+/** A spec function as it can be written: an arrow, a function expression, or a method of an object literal. */
+export type SpecFunctionNode = ArrowFunction | FunctionExpression | MethodDeclaration;
+
 /** A spec function's syntax, the file it is in, and the checker that types it. */
 export interface Source {
-  readonly node: ArrowFunction | FunctionExpression;
+  readonly node: SpecFunctionNode;
   readonly file: Node;
   readonly text: string;
   readonly checker: Checker;
-}
-
-function nearestTsconfig(folder: string): string | undefined {
-  const tsconfig = join(folder, "tsconfig.json");
-  if (existsSync(tsconfig)) return tsconfig;
-  const parent = dirname(folder);
-  return parent === folder ? undefined : nearestTsconfig(parent);
 }
 
 const lineStarts = (text: string): number[] => {
@@ -32,38 +29,39 @@ const lineStarts = (text: string): number[] => {
 };
 
 /** The innermost function of `root` whose text holds `offset`. */
-function functionAt(root: Node, offset: number): ArrowFunction | FunctionExpression | undefined {
-  let found: ArrowFunction | FunctionExpression | undefined;
+function functionAt(root: Node, offset: number): SpecFunctionNode | undefined {
+  let found: SpecFunctionNode | undefined;
   const visit = (node: Node): void => {
     if (offset < node.pos || node.end <= offset) return;
-    if (isArrowFunction(node) || isFunctionExpression(node)) found = node;
+    if (isArrowFunction(node) || isFunctionExpression(node) || isMethodDeclaration(node)) found = node;
     node.forEachChild(visit);
   };
   visit(root);
   return found;
 }
 
-/** The TypeScript programs of spec files, one per tsconfig.json, each served by a tsgo process. */
+/**
+ * The TypeScript programs of spec files, served by one tsgo process: each file's configured project, the one whose
+ * tsconfig.json holds it, or else an inferred project, as an editor opens a file.
+ */
 export class Sources {
-  private readonly apis: API[] = [];
+  private api: API | undefined;
   private readonly projects = new Map<string, Project | undefined>();
 
   close(): void {
-    for (const api of this.apis) api.close();
+    this.api?.close();
   }
 
-  private projectOf(tsconfig: string): Project | undefined {
-    if (this.projects.has(tsconfig)) return this.projects.get(tsconfig);
-    const api = new API({ cwd: dirname(tsconfig) });
-    this.apis.push(api);
-    const project = api.updateSnapshot({ openProject: tsconfig }).getProject(tsconfig);
-    this.projects.set(tsconfig, project);
+  private projectOf(file: string): Project | undefined {
+    if (this.projects.has(file)) return this.projects.get(file);
+    this.api ??= new API({ cwd: dirname(file) });
+    const project = this.api.updateSnapshot({ openFiles: [file] }).getDefaultProjectForFile(file);
+    this.projects.set(file, project);
     return project;
   }
 
   sourceAt(location: Location): Source | undefined {
-    const tsconfig = nearestTsconfig(dirname(location.file));
-    const project = tsconfig === undefined ? undefined : this.projectOf(tsconfig);
+    const project = this.projectOf(location.file);
     const file = project?.program.getSourceFile(location.file);
     if (project === undefined || file === undefined) return undefined;
     const start = lineStarts(file.text)[location.line];

@@ -26,23 +26,34 @@ export const detailScreen = screen({
   states: { showing: {} },
 }).chart({ initialContext: ({ input }) => ({ side: input.side }) });
 
-const panel = (side: string) =>
-  screen({
-    description: `The ${side} panel: on ready it claims the board, then opens a detail screen`,
-    receives: { ready },
-    commands: { claim },
-    screens: { detailScreen },
-    initial: "idle",
-    states: { idle: {}, claiming: {}, open: {} },
-  }).chart({
-    states: {
-      idle: { on: { ready: [{ target: "claiming" }] } },
-      claiming: { sends: { claim: { onAccepted: [{ target: "open" }], onRejected: [] } } },
-      open: { opens: { detailScreen: { modal: false, input: () => ({ side }), onDone: [] } } },
-    },
-  });
+export const leftPanel = screen({
+  description: `The left panel: on ready it claims the board, then opens a detail screen`,
+  receives: { ready },
+  commands: { claim },
+  screens: { detailScreen },
+  initial: "idle",
+  states: { idle: {}, claiming: {}, open: {} },
+}).chart({
+  states: {
+    idle: { on: { ready: [{ target: "claiming" }] } },
+    claiming: { sends: { claim: { onAccepted: [{ target: "open" }], onRejected: [] } } },
+    open: { opens: { detailScreen: { modal: false, input: () => ({ side: "left" }), onDone: [] } } },
+  },
+});
 
-export const leftPanel = panel("left");
-export const rightPanel = panel("right");
+export const rightPanel = screen({
+  description: `The right panel: on ready it claims the board, then opens a detail screen`,
+  receives: { ready },
+  commands: { claim },
+  screens: { detailScreen },
+  initial: "idle",
+  states: { idle: {}, claiming: {}, open: {} },
+}).chart({
+  states: {
+    idle: { on: { ready: [{ target: "claiming" }] } },
+    claiming: { sends: { claim: { onAccepted: [{ target: "open" }], onRejected: [] } } },
+    open: { opens: { detailScreen: { modal: false, input: () => ({ side: "right" }), onDone: [] } } },
+  },
+});
 
 export const panels = contract({ announce });

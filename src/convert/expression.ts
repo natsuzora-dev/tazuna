@@ -49,7 +49,7 @@ import type { DefinitionRef } from "../data/definitionRef.ts";
 import { instant, parseInstant } from "../data/time.ts";
 import type { Json } from "../data/values.ts";
 import type { Expr, Field } from "./ir.generated.ts";
-import type { Source } from "./sources.ts";
+import type { Source, SpecFunctionNode } from "./sources.ts";
 
 /**
  * An argument of a spec function: one that the IR names, `records`, which only the record operations read, or
@@ -350,7 +350,7 @@ class Conversion {
   }
 
   /** Fails on an async or generator function, whose call returns an object however its body ends. */
-  private synchronous(f: Helper): void {
+  private synchronous(f: Helper | SpecFunctionNode): void {
     if (f.modifiers?.some((m) => m.kind === SyntaxKind.AsyncKeyword) || (!isArrowFunction(f) && f.asteriskToken))
       this.fail(f, "is async or a generator");
   }
@@ -492,12 +492,14 @@ class Conversion {
     return literal ? this.expression(value, new Map()) : undefined;
   }
 
-  convertFunction(f: ArrowFunction | FunctionExpression, args: readonly Arg[]): Expr {
+  convertFunction(f: SpecFunctionNode, args: readonly Arg[]): Expr {
     this.synchronous(f);
     const [parameter, ...rest] = f.parameters;
     if (rest.length > 0) this.fail(f, "takes more than its arguments object");
+    const written = f.body;
+    if (written === undefined) this.fail(f, "has no body");
     const body = (scope: Scope): Expr =>
-      isBlock(f.body) ? this.block([...f.body.statements], scope) : this.expression(f.body as Expression, scope);
+      isBlock(written) ? this.block([...written.statements], scope) : this.expression(written as Expression, scope);
     this.specials = new Set(args.filter((a): a is Special => a === "records" || a === "createKey"));
     this.argument = (node, name) => {
       if (this.specials.has(name as Special)) this.fail(node, `reads ${name}`);

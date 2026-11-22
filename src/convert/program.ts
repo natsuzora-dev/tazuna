@@ -20,16 +20,23 @@ import type {
   Program,
   Site,
 } from "./ir.generated.ts";
-import { Locator } from "./located.ts";
+import { type Location, Locator } from "./located.ts";
 import { Sources } from "./sources.ts";
 
-/** A spec function that stays TS: the Program list it would join, whose condition it is (if any), and why. */
-interface NotConverted {
+/**
+ * A spec function outside the IR: the Program list it would join, whose condition it is (if any), why, and where its
+ * source starts when the converter found it.
+ */
+export interface NotConverted {
   readonly callback: keyof Program;
   readonly definition: DefinitionRef;
   readonly name?: string;
   readonly reason: string;
+  readonly location?: Location;
 }
+
+/** Why a function stays outside the IR, and where its source starts when the converter found it. */
+type Unconverted = { readonly unconverted: string; readonly location?: Location };
 
 /** The Program lists of named conditions, those of one function per definition, and the chart functions. */
 type ConditionsCallback = Exclude<keyof Program, FnCallback | "chart">;
@@ -67,6 +74,8 @@ interface FnSlot {
   readonly binds?: ConditionsCallback;
   readonly typed: Typed;
 }
+
+const located = (u: Unconverted) => (u.location === undefined ? {} : { location: u.location });
 
 const sameRef = (a: DefinitionRef, b: DefinitionRef) => a.service === b.service && a.name === b.name;
 
@@ -464,12 +473,13 @@ export class Converter {
       defined = this.defined,
       typed,
     }: { readonly events?: readonly DefinitionRef[]; readonly defined?: Defined; readonly typed?: Typed } = {},
-  ): Expr | { readonly unconverted: string } {
+  ): Expr | Unconverted {
     const location = this.locator.located(f);
     const source = location === undefined ? undefined : this.sources.sourceAt(location);
-    return source === undefined
-      ? { unconverted: "has no source that the converter finds" }
-      : converted(source, args, events, defined, typed);
+    if (source === undefined)
+      return { unconverted: "has no source that the converter finds", ...(location && { location }) };
+    const body = converted(source, args, events, defined, typed);
+    return "unconverted" in body && location !== undefined ? { ...body, location } : body;
   }
 
   /** The IR of the spec functions of the callbacks that Lean evaluates, and those that stay TS. */
@@ -507,10 +517,10 @@ export class Converter {
       const failed: NotConverted[] = [];
       for (const [name, f] of entries) {
         const at = { callback: slot.callback, definition: slot.definition, name };
-        const body = binds
+        const body: Expr | Unconverted = binds
           ? this.convert(f, slot.args, { typed: slot.typed })
           : { unconverted: "reads binds that stay TS" };
-        if ("unconverted" in body) failed.push({ ...at, reason: body.unconverted });
+        if ("unconverted" in body) failed.push({ ...at, reason: body.unconverted, ...located(body) });
         else conditions.push({ name, body });
       }
       notConverted.push(...failed);
@@ -524,13 +534,18 @@ export class Converter {
       if (slot.f === undefined && slot.callback !== "react") continue;
       const { f } = slot;
       const binds = slot.binds === undefined || lists[slot.binds].some((g) => sameRef(g.definition, slot.definition));
-      const body = binds
+      const body: Expr | Unconverted = binds
         ? f === undefined
           ? empty
           : this.convert(f, slot.args, { events: slot.events ?? [], typed: slot.typed })
         : { unconverted: "reads binds that stay TS" };
       if ("unconverted" in body)
-        notConverted.push({ callback: slot.callback, definition: slot.definition, reason: body.unconverted });
+        notConverted.push({
+          callback: slot.callback,
+          definition: slot.definition,
+          reason: body.unconverted,
+          ...located(body),
+        });
       else fns[slot.callback].push({ definition: slot.definition, body });
     }
     const chart: ChartFns[] = [];
@@ -545,6 +560,7 @@ export class Converter {
             definition: slot.chart,
             name: `${slot.site.kind} ${name}`,
             reason: body.unconverted,
+            ...located(body),
           });
         else functions.push({ name, body });
       }

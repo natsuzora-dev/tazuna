@@ -20,23 +20,34 @@ export const pong = command({ input: { by: z.string() }, emits: [ponged] }).deci
   emit(ponged, { by: input.by }),
 ]);
 
-const pinger = (by: string, due: number) =>
-  machine({
-    description: `Ping as ${by} once armed, and pong at ${due}`,
-    receives: { armed },
-    commands: { ping, pong },
-    initial: "idle",
-    states: { idle: {}, pinging: {}, waiting: {}, ponging: {}, done: { type: "final" } },
-  }).chart({
-    states: {
-      idle: { on: { armed: [{ target: "pinging" }] } },
-      pinging: { sends: { ping: { input: () => ({ by }), onAccepted: [{ target: "waiting" }] } } },
-      waiting: { after: { due: { at: () => due, onFired: [{ target: "ponging" }] } } },
-      ponging: { sends: { pong: { input: () => ({ by }), onAccepted: [{ target: "done" }] } } },
-    },
-  });
+export const late = machine({
+  description: "Ping as late once armed, and pong at 2026-10-25T01:00:00Z",
+  receives: { armed },
+  commands: { ping, pong },
+  initial: "idle",
+  states: { idle: {}, pinging: {}, waiting: {}, ponging: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "pinging" }] } },
+    pinging: { sends: { ping: { input: () => ({ by: "late" }), onAccepted: [{ target: "waiting" }] } } },
+    waiting: { after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "ponging" }] } } },
+    ponging: { sends: { pong: { input: () => ({ by: "late" }), onAccepted: [{ target: "done" }] } } },
+  },
+});
 
-export const late = pinger("late", parseInstant("2026-10-25T01:00:00Z"));
-export const overdue = pinger("overdue", parseInstant("2026-10-24T00:00:00Z"));
+export const overdue = machine({
+  description: "Ping as overdue once armed, and pong at 2026-10-24T00:00:00Z",
+  receives: { armed },
+  commands: { ping, pong },
+  initial: "idle",
+  states: { idle: {}, pinging: {}, waiting: {}, ponging: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "pinging" }] } },
+    pinging: { sends: { ping: { input: () => ({ by: "overdue" }), onAccepted: [{ target: "waiting" }] } } },
+    waiting: { after: { due: { at: () => parseInstant("2026-10-24T00:00:00Z"), onFired: [{ target: "ponging" }] } } },
+    ponging: { sends: { pong: { input: () => ({ by: "overdue" }), onAccepted: [{ target: "done" }] } } },
+  },
+});
 
 export const sender = contract({ arm, pinged, ponged });

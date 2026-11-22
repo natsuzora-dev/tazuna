@@ -1,28 +1,22 @@
 import { entity, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
+export const Task = entity({ description: "A task", fields: { id: z.string(), points: z.int() }, key: "id" });
 
-export const { machine, scenario } = service({ name: "todo", description: "Watch the first task", entities: { Task } });
+export const { machine, scenario } = service({
+  name: "todo",
+  description: "Watch the points of the tasks",
+  entities: { Task },
+});
 
 export const watcher = machine({
-  description: "Copy the title of the first task",
-  context: { title: z.string().default("") },
+  description: "Copy the total points of the tasks",
+  context: { total: z.int().default(0) },
   initial: "running",
-  states: { running: { initial: "watching", states: { watching: { held: { task: z.object(Task.fields) } } } } },
+  states: { running: { initial: "watching", states: { watching: { held: { total: z.int() } } } } },
 }).chart({
   states: {
-    running: {
-      initial: {
-        with: {
-          task: ({ records }) => {
-            const task = records.Task.only();
-            if (task === undefined) throw new Error("there is no task to watch");
-            return task;
-          },
-        },
-      },
-    },
-    watching: { entry: { assign: { title: ({ held }) => held.task.title } } },
+    running: { initial: { with: { total: ({ records }) => records.Task.sum((task) => task.points) } } },
+    watching: { entry: { assign: { total: ({ held }) => held.total } } },
   },
 });

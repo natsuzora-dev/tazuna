@@ -131,4 +131,12 @@ def Fault.halts : Fault → Bool
   | .danglingRef .. | .danglingSingleRef .. | .failedEnsures .. | .failedEntityInvariant .. | .failedSingleInvariant ..
   | .failedServiceInvariant .. | .failedChartInvariant .. | .rejectedAutomationCommand .. | .rejectedShows .. => false
 
+/--
+Whether no spec that `tazuna check` passes can produce the violation, as InvalidScenario.internal says: the IR names
+only the events that a command's emits list.
+-/
+def Fault.internal : Fault → Bool
+  | .unlistedEmittedEvent .. => true
+  | _ => false
+
 end Tazuna.Service

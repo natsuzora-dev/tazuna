@@ -25,7 +25,7 @@ export const trimTitle = command({
   input: { taskId: ref(Task) },
   emits: [titleChanged],
 }).decide(({ input, records }) => [
-  emit(titleChanged, { id: input.taskId, title: records.Task.get(input.taskId)?.title.trim() ?? "" }),
+  emit(titleChanged, { id: input.taskId, title: records.Task.get(input.taskId)?.title ?? "" }),
 ]);
 
 export const taskCount = query({

@@ -195,6 +195,7 @@ test("check writes one JSON line per violation to stdout and the count, or that 
 
 test("test writes how many scenarios it ran out of all to stderr, and with --only runs only the named scenarios and leaves the snapshot entries named after the others unreported and unremoved", async () => {
   const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "only-"));
+  writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
   cpSync(join(import.meta.dirname, "verify/uncomparable/snapshot/unpaired"), project, { recursive: true });
   const folder = relative(root, project);
   const snapshots = join(project, "todo/__snapshots__");
@@ -234,6 +235,7 @@ test("test writes how many scenarios it ran out of all to stderr, and with --onl
 
 test("test --only explores the paths after the named scenario within its service's explore()", async () => {
   const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "only-values-"));
+  writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
   mkdirSync(join(project, "todo"));
   writeFileSync(
     join(project, "todo/todo.ts"),
@@ -369,6 +371,7 @@ test("check reports each spec file that the program of the nearest tsconfig.json
 
 test("check skips node_modules folders and .d.ts files, and walks a symlinked folder once", async () => {
   const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "walk-"));
+  writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
   cpSync(join(import.meta.dirname, "service/Chart/Config/history/player"), join(project, "player"), {
     recursive: true,
   });

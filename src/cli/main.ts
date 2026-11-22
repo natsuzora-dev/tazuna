@@ -2,6 +2,7 @@ import { statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { checkSpecWith, failureText } from "../check/spec.ts";
 import { type TypeCheck, typeCheck } from "../check/typeCheck.ts";
+import type { Converter } from "../convert/program.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import { collisionProbability } from "../explore/search.ts";
 import { verifyTraces } from "../verify/index.ts";
@@ -17,6 +18,8 @@ interface Io {
   /** The built viewer folder; defaults to viewerFolder. */
   readonly viewer?: string;
   readonly typeCheck?: (specRoot: string, cwd: string) => TypeCheck;
+  /** The converter of spec functions to share across commands; without one, each command runs its own. */
+  readonly converter?: Converter;
 }
 
 /** A command's arguments, parsed before the spec is checked. */
@@ -307,7 +310,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
   }
   const { root } = invocation;
   const specRoot = resolve(io.cwd, root);
-  const result = await checkSpecWith(specRoot, (io.typeCheck ?? typeCheck)(specRoot, io.cwd));
+  const result = await checkSpecWith(specRoot, (io.typeCheck ?? typeCheck)(specRoot, io.cwd), io.converter);
   if (result.kind === "typeErrors") {
     io.error(failureText(result, root));
     return 1;

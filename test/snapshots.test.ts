@@ -12,6 +12,9 @@ mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
 const copy = mkdtempSync(join(import.meta.dirname, ".fixtures", "snapshots-"));
 after(() => rmSync(copy, { recursive: true, force: true }));
 cpSync(join(import.meta.dirname, "service/Query/changed_answer_sent"), copy, { recursive: true });
+// tsc's include skips the dot folder .fixtures, so the copy gets a tsconfig.json of its own, by which the converter
+// types its functions.
+writeFileSync(join(copy, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
 writeFileSync(join(copy, "todo/__snapshots__/removed.jsonl"), "");
 mkdirSync(join(copy, "todo/__snapshots__/notes"));
 

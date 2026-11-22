@@ -1,1 +1,0 @@
-{"kind":"Fault.initialContextSchema","definition":{"service":"counters","name":"counterScreen"},"data":{},"location":{"file":"counters/screens.ts","line":10},"scenario":{"service":"counters","name":"start"},"error":{"type":"zod","issues":[{"expected":"number","code":"invalid_type","path":["since"],"message":"Invalid input: expected number, received string"}]}}

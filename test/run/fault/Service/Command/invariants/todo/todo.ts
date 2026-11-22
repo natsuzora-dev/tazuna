@@ -5,7 +5,7 @@ export const Task = entity({
   description: "A task",
   fields: { id: z.string(), title: z.string() },
   key: "id",
-  invariants: { titleNotBlank: ({ record }) => record.title.trim() !== "" },
+  invariants: { titleNotBlank: ({ record }) => record.title !== "" },
 });
 
 export const { command, createEvent, contract, scenario } = service({
@@ -24,7 +24,7 @@ export const addTask = command({
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
   requires: {
-    titleNotBlank: ({ input }) => input.title.trim() !== "",
+    titleNotBlank: ({ input }) => input.title !== "",
     newTitle: ({ input, records }) => records.Task.every((t) => t.title !== input.title),
   },
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);

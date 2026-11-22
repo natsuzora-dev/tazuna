@@ -20,32 +20,52 @@ export const setLast = command({
   emits: [moved],
 }).decide(({ input }) => [emit(moved, { id: input.id })]);
 
-const clock = (make: boolean) =>
-  machine({
-    description: make ? "Set a created token at 10:00" : "Clear the token at 10:00",
-    receives: { armed },
-    commands: { setLast },
-    initial: "idle",
-    states: { idle: {}, waiting: {}, setting: {}, done: { type: "final" } },
-  }).chart({
-    states: {
-      idle: { on: { armed: [{ target: "waiting" }] } },
-      waiting: {
-        after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "setting" }] } },
-      },
-      setting: {
-        sends: {
-          setLast: {
-            input: ({ createKey }) => ({ id: make ? createKey(ref(Note)) : "" }),
-            onAccepted: [{ target: "done" }],
-            onRejected: [{ target: "done" }],
-          },
+export const first = machine({
+  description: "Clear the token at 10:00",
+  receives: { armed },
+  commands: { setLast },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, setting: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "setting" }] } },
+    },
+    setting: {
+      sends: {
+        setLast: {
+          input: () => ({ id: "" }),
+          onAccepted: [{ target: "done" }],
+          onRejected: [{ target: "done" }],
         },
       },
     },
-  });
+  },
+});
 
-export const first = clock(false);
-export const second = clock(true);
+export const second = machine({
+  description: "Set a created token at 10:00",
+  receives: { armed },
+  commands: { setLast },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, setting: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "setting" }] } },
+    },
+    setting: {
+      sends: {
+        setLast: {
+          input: ({ createKey }) => ({ id: createKey(ref(Note)) }),
+          onAccepted: [{ target: "done" }],
+          onRejected: [{ target: "done" }],
+        },
+      },
+    },
+  },
+});
 
 export const tokens = contract({ arm });

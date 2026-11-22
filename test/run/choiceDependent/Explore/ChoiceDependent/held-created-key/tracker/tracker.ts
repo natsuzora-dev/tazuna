@@ -18,33 +18,53 @@ export const add = command({ input: { id: Task.fields.id, text: Task.fields.text
   ({ input }) => [emit(added, { id: input.id, text: input.text })],
 );
 
-const clock = (text: string) =>
-  machine({
-    description: `Add task ${text} at 10:00 once armed`,
-    receives: { armed },
-    commands: { add },
-    initial: "idle",
-    states: { idle: {}, waiting: {}, adding: {}, done: { type: "final" } },
-  }).chart({
-    states: {
-      idle: { on: { armed: [{ target: "waiting" }] } },
-      waiting: {
-        after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "adding" }] } },
-      },
-      adding: {
-        sends: {
-          add: {
-            input: ({ createKey }) => ({ id: createKey(ref(Task)), text }),
-            onAccepted: [{ target: "done" }],
-            onRejected: [{ target: "done" }],
-          },
+export const first = machine({
+  description: `Add task a at 10:00 once armed`,
+  receives: { armed },
+  commands: { add },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, adding: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "adding" }] } },
+    },
+    adding: {
+      sends: {
+        add: {
+          input: ({ createKey }) => ({ id: createKey(ref(Task)), text: "a" }),
+          onAccepted: [{ target: "done" }],
+          onRejected: [{ target: "done" }],
         },
       },
     },
-  });
+  },
+});
 
-export const first = clock("a");
-export const second = clock("b");
+export const second = machine({
+  description: `Add task b at 10:00 once armed`,
+  receives: { armed },
+  commands: { add },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, adding: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "adding" }] } },
+    },
+    adding: {
+      sends: {
+        add: {
+          input: ({ createKey }) => ({ id: createKey(ref(Task)), text: "b" }),
+          onAccepted: [{ target: "done" }],
+          onRejected: [{ target: "done" }],
+        },
+      },
+    },
+  },
+});
 
 export const tracking = machine({
   description: "Track the first added task in the parameters of watching",

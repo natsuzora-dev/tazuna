@@ -118,7 +118,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   failed_ensures_blames_command: { kindExample: "Fault.failedEnsures" },
   fireDue_agrees: ofAudit,
   first_answer_after_restart_kept: ofCompare,
-  halting_finding_stops: { kindExample: "Fault.unlistedEmittedEvent" },
+  halting_finding_stops: { kindExample: "Fault.emittedPayloadSchema" },
   halting_report_stops: network("linesAfterHalt"),
   independent_unordered: network("deliversIndependentEvents"),
   instrument_agrees: ofAudit,
@@ -201,7 +201,10 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   then_only_reports: network("unmetExpectation"),
   unchanged_answer_not_sent: { example: "service/Query/changed_answer_sent", scenario: "subscribed" },
   uncovered_unreached: ofExplored,
-  unlisted_emitted_event_halts: { kindExample: "Fault.unlistedEmittedEvent" },
+  unlisted_emitted_event_halts: {
+    because:
+      "no spec that check passes emits an event that its command does not list, since the IR names only listed events; the theorem keeps the semantics total over every Functions",
+  },
   unwritten_not_created: { example: "sim/Run/keys", scenario: "givenKeyApart" },
 };
 

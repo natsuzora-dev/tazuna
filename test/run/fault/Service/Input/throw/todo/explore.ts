@@ -1,8 +1,13 @@
 import { domain, explore } from "@natsuzora-dev/tazuna";
-import { Task } from "./todo.ts";
+import { dueAfter, Task } from "./todo.ts";
 
 export const todoExplore = explore({
   service: "todo",
   depth: 2,
-  domains: [domain(Task.fields.id, ["task-9"]), domain(Task.fields.title, ["task-9"])],
+  domains: [
+    domain(Task.fields.id, ["task-9"]),
+    domain(Task.fields.title, ["task-9"]),
+    domain(dueAfter.input.from, ["2026-10-25"]),
+    domain(dueAfter.input.days, [3_000_000]),
+  ],
 });

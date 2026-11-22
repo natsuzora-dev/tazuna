@@ -534,7 +534,9 @@ def files (guarantees : List String) : List (String × String) :=
         internal "InvalidScenario" ((samples.filter (·.internal)).map (·.kind))),
    zod% "src/data/scenario.generated.ts",
    appended (typescript% "src/data/fault.generated.ts")
-     (halting "Fault" (((groupSamples% Tazuna.Service.Fault).filter (·.halts)).map (·.kind))),
+     (let samples := groupSamples% Tazuna.Service.Fault
+      halting "Fault" ((samples.filter (·.halts)).map (·.kind)) ++
+        internal "Fault" ((samples.filter (·.internal)).map (·.kind))),
    types% "src/data/ensured.generated.ts",
    typescript% "src/data/bagOrderDependent.generated.ts",
    typescript% "src/data/undecided.generated.ts",

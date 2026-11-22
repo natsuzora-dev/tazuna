@@ -84,14 +84,14 @@
     },
     {
       "name": "check",
-      "comment": "src/check imports only data, dsl, spec, load, validation, and check",
+      "comment": "src/check imports only data, dsl, spec, load, convert, validation, and check",
       "severity": "error",
       "from": {
         "path": "^src/check/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/(data|dsl|spec|load|validation|check)/"
+        "pathNot": "^src/(data|dsl|spec|load|convert|validation|check)/"
       }
     },
     {

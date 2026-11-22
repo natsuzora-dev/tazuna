@@ -1,22 +1,17 @@
-import { service } from "@natsuzora-dev/tazuna";
+import { bag, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const { screen, scenario } = service({
   name: "throwingRequires",
-  description: "Open a picker whose requires throws on count 0",
+  description: "Open a picker whose requires faults on points that sum to no safe integer",
 });
 
 export const pickScreen = screen({
-  description: "Pick a number below a positive count",
-  input: { count: z.number() },
+  description: "Pick a number below the positive total of the points",
+  input: { points: bag(z.int()) },
   initial: "picking",
   states: { picking: {} },
-  requires: {
-    positive: ({ input }) => {
-      if (input.count === 0) throw new Error("there is nothing to pick");
-      return input.count > 0;
-    },
-  },
+  requires: { positive: ({ input }) => input.points.sum((p) => p) > 0 },
 }).chart({});
 
 export const homeScreen = screen({
@@ -26,6 +21,14 @@ export const homeScreen = screen({
   states: { picking: {}, done: { type: "final" } },
 }).chart({
   states: {
-    picking: { opens: { pickScreen: { modal: true, input: () => ({ count: 0 }), onDone: [{ target: "done" }] } } },
+    picking: {
+      opens: {
+        pickScreen: {
+          modal: true,
+          input: () => ({ points: [5_000_000_000_000_000, 5_000_000_000_000_000] }),
+          onDone: [{ target: "done" }],
+        },
+      },
+    },
   },
 });

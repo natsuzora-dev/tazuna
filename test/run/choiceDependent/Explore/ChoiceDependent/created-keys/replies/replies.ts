@@ -32,32 +32,52 @@ export const post = command({
   emit(moved, { id: input.id }),
 ]);
 
-const clock = (by: string) =>
-  machine({
-    description: `Post a note as ${by} at 10:00 once armed`,
-    receives: { armed },
-    commands: { post },
-    initial: "idle",
-    states: { idle: {}, waiting: {}, posting: {}, done: { type: "final" } },
-  }).chart({
-    states: {
-      idle: { on: { armed: [{ target: "waiting" }] } },
-      waiting: {
-        after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "posting" }] } },
-      },
-      posting: {
-        sends: {
-          post: {
-            input: ({ createKey }) => ({ id: createKey(ref(Note)), text: by }),
-            onAccepted: [{ target: "done" }],
-            onRejected: [{ target: "done" }],
-          },
+export const first = machine({
+  description: `Post a note as first at 10:00 once armed`,
+  receives: { armed },
+  commands: { post },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, posting: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "posting" }] } },
+    },
+    posting: {
+      sends: {
+        post: {
+          input: ({ createKey }) => ({ id: createKey(ref(Note)), text: "first" }),
+          onAccepted: [{ target: "done" }],
+          onRejected: [{ target: "done" }],
         },
       },
     },
-  });
+  },
+});
 
-export const first = clock("first");
-export const second = clock("second");
+export const second = machine({
+  description: `Post a note as second at 10:00 once armed`,
+  receives: { armed },
+  commands: { post },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, posting: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "posting" }] } },
+    },
+    posting: {
+      sends: {
+        post: {
+          input: ({ createKey }) => ({ id: createKey(ref(Note)), text: "second" }),
+          onAccepted: [{ target: "done" }],
+          onRejected: [{ target: "done" }],
+        },
+      },
+    },
+  },
+});
 
 export const replies = contract({ arm });

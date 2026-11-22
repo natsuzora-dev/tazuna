@@ -15,6 +15,6 @@ export const addTask = command({
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
   ensures: { keepsTitle: ({ input, records }) => records.Task.get(input.taskId)?.title === input.title },
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title.toUpperCase() })]);
+}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: `${input.title}!` })]);
 
 export const ensuresBreakingTodo = contract({ addTask });

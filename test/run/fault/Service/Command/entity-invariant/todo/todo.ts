@@ -1,16 +1,11 @@
-import { emit, entity, service } from "@natsuzora-dev/tazuna";
+import { addDays, date, emit, entity, service } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
 export const Task = entity({
   description: "A task",
-  fields: { id: z.string(), title: z.string() },
+  fields: { id: z.string(), due: date },
   key: "id",
-  invariants: {
-    titled: ({ record }) => {
-      if (record.title === "") throw new Error("the task has no title");
-      return true;
-    },
-  },
+  invariants: { dueBeforeYearTenThousand: ({ record }) => addDays(record.due, 3_000_000) > record.due },
 });
 
 export const { command, createEvent, contract, scenario } = service({
@@ -22,8 +17,8 @@ export const { command, createEvent, contract, scenario } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
-  input: { taskId: Task.fields.id, title: Task.fields.title },
+  input: { taskId: Task.fields.id, due: Task.fields.due },
   emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
+}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, due: input.due })]);
 
 export const todo = contract({ addTask });

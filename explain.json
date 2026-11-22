@@ -203,9 +203,9 @@
         "excerpt": {
           "file": "chains/chains.ts",
           "from": 8,
-          "to": 39,
+          "to": 41,
           "line": 8,
-          "text": "export const pinger = machine({\n  description: \"Run 11 chains of 100 pings at the start, each ping sent when the one before is accepted\",\n  commands: { ping },\n  initial: \"chains\",\n  states: {\n    chains: {\n      type: \"map\",\n      key: { chain: z.number() },\n      context: { pings: z.number().default(1) },\n      initial: \"pinging\",\n      states: { pinging: {} },\n    },\n  },\n}).chart({\n  states: {\n    chains: { items: () => Array.from({ length: 11 }, (_, chain) => ({ chain })) },\n    pinging: {\n      sends: {\n        ping: {\n          onAccepted: [\n            {\n              guard: { hasMore: ({ context }) => context.pings < 100 },\n              target: \"pinging\",\n              reenter: true,\n              assign: { pings: ({ context }) => context.pings + 1 },\n            },\n          ],\n        },\n      },\n    },\n  },\n});"
+          "text": "export const pinger = machine({\n  description: \"Run 11 chains of 100 pings at the start, each ping sent when the one before is accepted\",\n  commands: { ping },\n  initial: \"chains\",\n  states: {\n    chains: {\n      type: \"map\",\n      key: { chain: z.number() },\n      context: { pings: z.number().default(1) },\n      initial: \"pinging\",\n      states: { pinging: {} },\n    },\n  },\n}).chart({\n  states: {\n    chains: {\n      items: () => [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((chain) => ({ chain })),\n    },\n    pinging: {\n      sends: {\n        ping: {\n          onAccepted: [\n            {\n              guard: { hasMore: ({ context }) => context.pings < 100 },\n              target: \"pinging\",\n              reenter: true,\n              assign: { pings: ({ context }) => context.pings + 1 },\n            },\n          ],\n        },\n      },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.exceededMessageCommands\",\"definition\":{\"service\":\"chains\",\"name\":\"pinger\"},\"data\":{\"limit\":1000},\"location\":{\"file\":\"chains/chains.ts\",\"line\":8},\"scenario\":{\"service\":\"chains\",\"name\":\"start\"}}"
       }
@@ -270,7 +270,7 @@
           "from": 14,
           "to": 18,
           "line": 14,
-          "text": "export const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n  ensures: { keepsTitle: ({ input, records }) => records.Task.get(input.taskId)?.title === input.title },\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title.toUpperCase() })]);"
+          "text": "export const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n  ensures: { keepsTitle: ({ input, records }) => records.Task.get(input.taskId)?.title === input.title },\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: `${input.title}!` })]);"
         },
         "violation": "{\"kind\":\"Fault.failedEnsures\",\"definition\":{\"service\":\"ensuresBreakingTodo\",\"name\":\"addTask\"},\"data\":{\"condition\":\"keepsTitle\"},\"location\":{\"file\":\"ensuresBreakingTodo/todo.ts\",\"line\":14},\"scenario\":{\"service\":\"ensuresBreakingTodo\",\"name\":\"addTwo\"}}"
       }
@@ -283,7 +283,7 @@
           "from": 4,
           "to": 9,
           "line": 4,
-          "text": "export const Task = entity({\n  description: \"A task\",\n  fields: { id: z.string(), title: z.string() },\n  key: \"id\",\n  invariants: { titleNotBlank: ({ record }) => record.title.trim() !== \"\" },\n});"
+          "text": "export const Task = entity({\n  description: \"A task\",\n  fields: { id: z.string(), title: z.string() },\n  key: \"id\",\n  invariants: { titleNotBlank: ({ record }) => record.title !== \"\" },\n});"
         },
         "violation": "{\"kind\":\"Fault.failedEntityInvariant\",\"definition\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"Task\"},\"data\":{\"recordKey\":\"task-1\",\"condition\":\"titleNotBlank\",\"command\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"addTask\"}},\"location\":{\"file\":\"invariantsBreakingTodo/todo.ts\",\"line\":4},\"scenario\":{\"service\":\"invariantsBreakingTodo\",\"name\":\"addBlank\"}}"
       }
@@ -413,9 +413,9 @@
           "from": 12,
           "to": 15,
           "line": 12,
-          "text": "export const item = query({\n  input: { itemId: z.string() },\n  output: Item.fields,\n}).resolve(({ input, records }) => Reflect.get(records.Item, input.itemId));"
+          "text": "export const item = query({\n  input: { itemId: z.string() },\n  output: { title: z.string().min(1) },\n}).resolve(({ input, records }) => ({ title: records.Item.get(input.itemId)?.title ?? \"\" }));"
         },
-        "violation": "{\"kind\":\"Fault.outputSchema\",\"definition\":{\"service\":\"items\",\"name\":\"item\"},\"data\":{},\"location\":{\"file\":\"items/items.ts\",\"line\":12},\"scenario\":{\"service\":\"items\",\"name\":\"lookUpItem\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"expected\":\"object\",\"code\":\"invalid_type\",\"path\":[],\"message\":\"Invalid input: expected object, received null\"}]}}"
+        "violation": "{\"kind\":\"Fault.outputSchema\",\"definition\":{\"service\":\"items\",\"name\":\"item\"},\"data\":{},\"location\":{\"file\":\"items/items.ts\",\"line\":12},\"scenario\":{\"service\":\"items\",\"name\":\"lookUpItem\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"string\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"title\"],\"message\":\"Too small: expected string to have >=1 characters\"}]}}"
       }
     },
     "Fault.rejectedAutomationCommand": {
@@ -452,7 +452,7 @@
           "from": 27,
           "to": 32,
           "line": 27,
-          "text": "export const archiveTitle = command({\n  input: { title: Archive.fields.title },\n  emits: [titleArchived],\n}).decide(({ input, records }) => [\n  records.Task.filter((t) => t.title === input.title).map(() => emit(titleArchived, { title: input.title })),\n]);"
+          "text": "export const archiveTitle = command({\n  input: { title: Archive.fields.title },\n  emits: [titleArchived],\n}).decide(({ input, records }) => [\n  records.Task.filter((t) => t.title === input.title).map((t) => emit(titleArchived, { title: t.title })),\n]);"
         },
         "violation": "{\"kind\":\"Fault.sameRecordInBag\",\"definition\":{\"service\":\"todo\",\"name\":\"archiveTitle\"},\"data\":{\"entity\":{\"service\":\"todo\",\"name\":\"Archive\"},\"recordKey\":\"Buy milk\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":27},\"scenario\":{\"service\":\"todo\",\"name\":\"archiveShared\"}}"
       }
@@ -481,19 +481,6 @@
           "text": "export const watcher = machine({\n  description: \"Watch the first task, reading a held value that its state does not have\",\n  context: { title: z.string().default(\"\") },\n  receives: { taskAdded },\n  initial: \"idle\",\n  states: { idle: {}, watching: { held: { task: z.object(Task.fields) } } },\n}).chart({\n  states: {\n    idle: { on: { taskAdded: [{ target: \"watching\", with: { task: ({ records }) => records.Task.only() } }] } },\n    watching: {\n      entry: { assign: { title: latestTitle } },\n      on: { taskAdded: [{ target: \"idle\" }] },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.unheld\",\"definition\":{\"service\":\"todo\",\"name\":\"watcher\"},\"data\":{\"held\":\"latest\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":41},\"scenario\":{\"service\":\"todo\",\"name\":\"addOne\"}}"
-      }
-    },
-    "Fault.unlistedEmittedEvent": {
-      "meaning": "The command emits an event that its emits do not list. `event` is null when the event is no definition.",
-      "example": {
-        "excerpt": {
-          "file": "notes/notes.ts",
-          "from": 9,
-          "to": 12,
-          "line": 9,
-          "text": "export const addNote = command({\n  input: { noteId: z.string() },\n  emits: [noteAdded],\n}).decide(({ input }) => [emit(noteDrafted, { noteId: input.noteId })]);"
-        },
-        "violation": "{\"kind\":\"Fault.unlistedEmittedEvent\",\"definition\":{\"service\":\"notes\",\"name\":\"addNote\"},\"data\":{\"event\":null},\"location\":{\"file\":\"notes/notes.ts\",\"line\":9},\"scenario\":{\"service\":\"notes\",\"name\":\"addOne\"}}"
       }
     },
     "Illegal.alwaysCycle": {
@@ -1947,7 +1934,7 @@
           "from": 6,
           "to": 33,
           "line": 12,
-          "text": "export const pickScreen = screen({\n  description: \"Pick a title, writing constant offers as functions, methods, and parenthesized arrays\",\n  controls: { close: { label: \"Close\" }, pick: { label: \"Pick\", payload: { title: z.string() } } },\n  initial: \"open\",\n  states: { open: {}, picked: {}, done: {} },\n}).chart({\n  offers: { close: () => [{}], pick: () => [] },\n  states: {\n    open: {\n      offers: { close: any, pick: () => [{ title: \"Buy milk\" }] },\n      on: { pick: [{ target: \"picked\" }], close: [{ target: \"done\" }] },\n    },\n    picked: {\n      offers: {\n        close: () => [],\n        pick: ({ shown }) => (Object.keys(shown).length === 0 ? [{ title: \"Buy bread\" }] : []),\n      },\n    },\n    done: {\n      offers: {\n        close() {\n          return [];\n        },\n        pick: () => [],\n      },\n    },\n  },\n});"
+          "text": "export const pickScreen = screen({\n  description: \"Pick a title, writing constant offers as functions, methods, and parenthesized arrays\",\n  controls: { close: { label: \"Close\" }, pick: { label: \"Pick\", payload: { title: z.string() } } },\n  initial: \"open\",\n  states: { open: {}, picked: {}, done: {} },\n}).chart({\n  offers: { close: () => [{}], pick: () => [] },\n  states: {\n    open: {\n      offers: { close: any, pick: () => [{ title: \"Buy milk\" }] },\n      on: { pick: [{ target: \"picked\" }], close: [{ target: \"done\" }] },\n    },\n    picked: {\n      offers: {\n        close: () => [],\n        pick: ({ now }) => (now > 0 ? [{ title: \"Buy bread\" }] : []),\n      },\n    },\n    done: {\n      offers: {\n        close() {\n          return [];\n        },\n        pick: () => [],\n      },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"NonCanonical.constantOffer\",\"definition\":{\"service\":\"screens\",\"name\":\"pickScreen\"},\"data\":{\"state\":null,\"control\":\"close\",\"marker\":\"any\"},\"location\":{\"file\":\"screens/screens.ts\",\"line\":12}}"
       }
@@ -2158,6 +2145,19 @@
           "text": "export const loadCrypto = () => import(\"node:crypto\");"
         },
         "violation": "{\"kind\":\"Restricted.cryptoImport\",\"definition\":null,\"data\":{\"module\":\"node:crypto\"},\"location\":{\"file\":\"todo/helpers.ts\",\"line\":1}}"
+      }
+    },
+    "Restricted.function": {
+      "meaning": "A spec function of the definition holds a construct that tazuna can neither execute in Lean nor encode to SMT, which `reason` names with the construct's source. In its place: - a statement other than `const`, `if` and `return`, such as `let`, a loop, or `push`: an expression, such as   `map`, `filter` or `sum` of a Bag. - `throw`: a `requires`, guard, or invariant that states the condition. - a name declared outside the function, such as a parameter of a function that builds definitions: a constant,   or a value that the input, the records or the context hold, with one definition per value. - a call that the IR does not have, such as `trim`, `Object.keys`, `flatMap` or `JSON.parse`: the value held in   a field, or a helper declared with `const` at the top of the file. - an event that the command's `emits` does not list: the event added to `emits`.",
+      "example": {
+        "excerpt": {
+          "file": "todo/todo.ts",
+          "from": 14,
+          "to": 20,
+          "line": 17,
+          "text": "export const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n}).decide(({ input }) => {\n  if (input.title === \"\") throw new Error(\"a task needs a title\");\n  return [emit(taskAdded, { id: input.taskId, title: input.title })];\n});"
+        },
+        "violation": "{\"kind\":\"Restricted.function\",\"definition\":{\"service\":\"todo\",\"name\":\"addTask\"},\"data\":{\"reason\":\"has a statement other than const, if and return: throw new Error(\\\"a task needs a title\\\");\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":17}}"
       }
     },
     "Restricted.global": {

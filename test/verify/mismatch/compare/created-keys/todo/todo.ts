@@ -41,12 +41,12 @@ export const seenIds = query({
   },
 }).resolve(({ records }) => {
   const ids = records.Seen.map((s) => s.id);
-  const seenOf = (taskId: string) => records.Seen.filter((s) => s.taskId === taskId).map((s) => s.id);
-  const listed = ["task-1", "task-2"].flatMap((taskId) => {
-    const one = seenOf(taskId);
-    return one.size === 1 ? (one.only() ?? []) : [];
-  });
-  return { repeated: ids.concat(seenOf("task-1")), none: [], ids, listed };
+  const firstSeen = records.Seen.filter((s) => s.taskId === "task-1").map((s) => s.id);
+  const secondSeen = records.Seen.filter((s) => s.taskId === "task-2").map((s) => s.id);
+  const firstOnly = firstSeen.size === 1 ? firstSeen.only() : undefined;
+  const secondOnly = secondSeen.size === 1 ? secondSeen.only() : undefined;
+  const listed = [...(firstOnly === undefined ? [] : [firstOnly]), ...(secondOnly === undefined ? [] : [secondOnly])];
+  return { repeated: ids.concat(firstSeen), none: [], ids, listed };
 });
 
 export const seenTwice = query({ output: { repeated: bag(ref(Seen)) } }).resolve(({ records }) => ({

@@ -11,7 +11,7 @@ export const { query, contract, scenario } = service({
 
 export const item = query({
   input: { itemId: z.string() },
-  output: Item.fields,
-}).resolve(({ input, records }) => Reflect.get(records.Item, input.itemId));
+  output: { title: z.string().min(1) },
+}).resolve(({ input, records }) => ({ title: records.Item.get(input.itemId)?.title ?? "" }));
 
 export const items = contract({ item });

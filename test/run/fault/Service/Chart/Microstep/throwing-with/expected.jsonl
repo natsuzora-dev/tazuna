@@ -1,1 +1,1 @@
-{"kind":"Fault.exception","definition":{"service":"todo","name":"watcher"},"data":{},"location":{"file":"todo/todo.ts","line":8},"scenario":{"service":"todo","name":"start"},"error":{"type":"thrownError","name":"Error","message":"there is no task to watch","stack":"<stack>"}}
+{"kind":"Fault.exception","definition":{"service":"todo","name":"watcher"},"data":{},"location":{"file":"todo/todo.ts","line":12},"scenario":{"service":"todo","name":"start"},"error":{"type":"thrownError","name":"RangeError","message":"sum 10000000000000000 is not a safe integer","stack":"<stack>"}}

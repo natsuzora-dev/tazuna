@@ -29,32 +29,52 @@ export const taskIds = query({
   output: { taskIds: bag(Task.fields.id) },
 }).resolve(({ records }) => ({ taskIds: records.Task.map((t) => t.id) }));
 
-const clock = (text: string) =>
-  machine({
-    description: `Add task ${text} at 10:00 once armed`,
-    receives: { armed },
-    commands: { addTask },
-    initial: "idle",
-    states: { idle: {}, waiting: {}, adding: {}, done: { type: "final" } },
-  }).chart({
-    states: {
-      idle: { on: { armed: [{ target: "waiting" }] } },
-      waiting: {
-        after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "adding" }] } },
-      },
-      adding: {
-        sends: {
-          addTask: {
-            input: ({ createKey }) => ({ taskId: createKey(ref(Task)), text }),
-            onAccepted: [{ target: "done" }],
-            onRejected: [{ target: "done" }],
-          },
+export const first = machine({
+  description: `Add task a at 10:00 once armed`,
+  receives: { armed },
+  commands: { addTask },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, adding: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "adding" }] } },
+    },
+    adding: {
+      sends: {
+        addTask: {
+          input: ({ createKey }) => ({ taskId: createKey(ref(Task)), text: "a" }),
+          onAccepted: [{ target: "done" }],
+          onRejected: [{ target: "done" }],
         },
       },
     },
-  });
+  },
+});
 
-export const first = clock("a");
-export const second = clock("b");
+export const second = machine({
+  description: `Add task b at 10:00 once armed`,
+  receives: { armed },
+  commands: { addTask },
+  initial: "idle",
+  states: { idle: {}, waiting: {}, adding: {}, done: { type: "final" } },
+}).chart({
+  states: {
+    idle: { on: { armed: [{ target: "waiting" }] } },
+    waiting: {
+      after: { due: { at: () => parseInstant("2026-10-25T01:00:00Z"), onFired: [{ target: "adding" }] } },
+    },
+    adding: {
+      sends: {
+        addTask: {
+          input: ({ createKey }) => ({ taskId: createKey(ref(Task)), text: "b" }),
+          onAccepted: [{ target: "done" }],
+          onRejected: [{ target: "done" }],
+        },
+      },
+    },
+  },
+});
 
 export const plain = contract({ arm, taskIds });

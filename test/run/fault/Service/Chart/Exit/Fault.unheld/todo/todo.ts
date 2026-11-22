@@ -16,11 +16,11 @@ export const addTask = command({
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
-// held is typed as a Record so that any name type-checks.
-const title = (args: { readonly held: Readonly<Record<string, { readonly title: string }>> }) =>
-  args.held["task"]?.title ?? "";
-const latestTitle = (args: { readonly held: Readonly<Record<string, { readonly title: string }>> }) =>
-  args.held["latest"]?.title ?? "";
+// held is typed with an optional field so that the held values of watching, which lack it, type-check.
+const title = (args: { readonly held: { readonly task?: { readonly title: string } } }) => args.held.task?.title ?? "";
+const latestTitle = (args: {
+  readonly held: { readonly task?: unknown; readonly latest?: { readonly title: string } };
+}) => args.held.latest?.title ?? "";
 
 export const firstTaskWatcher = machine({
   description: "Watch the first task",

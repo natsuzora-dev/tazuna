@@ -5,7 +5,7 @@ export const Task = entity({
   description: "A task",
   fields: { id: z.string(), title: z.string() },
   key: "id",
-  invariants: { titleNotBlank: ({ record }) => record.title.trim() !== "" },
+  invariants: { titleNotBlank: ({ record }) => record.title !== "" },
 });
 
 export const Tally = singleEntity({
