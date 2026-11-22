@@ -54,6 +54,8 @@ structure Env where
   fields : String → List String := fun _ => []
   /-- What createKey returns next. -/
   keys : Keys := {}
+  /-- Whether the records are another service's, which a read stops at (`Trace.readHidden`). -/
+  hidden : Bool := false
 
 /--
 What an evaluation read and made: the parts of the records, in order and once, the chart values, in order, and the
@@ -64,6 +66,8 @@ structure Trace where
   access : Access := {}
   /-- The entities that createKey made a key of, in call order. -/
   created : List String := []
+  /-- Whether the evaluation stopped at reading records that `Env.hidden` hides. -/
+  readHidden : Bool := false
 
 /-- An evaluation, which notes what it reads, also when an Issue stops it. -/
 abbrev EvalM := ExceptT Issue (StateM Trace)
@@ -112,6 +116,11 @@ def Relation.holds (r : Relation) (a b : Int) : Bool :=
   | .eq => a == b
 
 def thrown {α : Type} : EvalM α := throw (.thrown none)
+
+/-- The stop at reading hidden records, as TS's unreadable records throw on the first property read. -/
+def readHidden {α : Type} : EvalM α := do
+  modify fun t => { t with readHidden := true }
+  thrown
 
 /-- A string operation's operands, or the TypeError of reading a property of null or undefined. -/
 def strings (string search : Val) : EvalM (String × String) :=
@@ -313,8 +322,12 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
   | .every .bag c x body => do
     let results ← (← elements (← eval env vars c)).mapM fun v => eval env ((x, v) :: vars) body
     pure (.json (.bool !(results.any (same · (.json (.bool false))))))
-  | .table entity => pure (.table env.records entity)
-  | .single entity => pure (.row env.records entity none)
+  | .table entity => do
+    if env.hidden then readHidden
+    pure (.table env.records entity)
+  | .single entity => do
+    if env.hidden then readHidden
+    pure (.row env.records entity none)
   | .lookup t k => do
     let table ← eval env vars t
     match table, ← eval env vars k with

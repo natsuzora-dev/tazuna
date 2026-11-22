@@ -9,7 +9,7 @@ import type { Conditions } from "../dsl/conditions.ts";
 import type { AnyCommand, AnyQuery, Automation, ChartSpec, Place } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
-import { chartStructure, stateNamed, transitionRef } from "../spec/structure.ts";
+import { type ChartStructure, chartStructure, stateNamed, transitionRef } from "../spec/structure.ts";
 import { type Arg, converted, type Defined, definedKey, type Typed } from "./expression.ts";
 import type {
   ChartFns,
@@ -166,14 +166,36 @@ const assignArgs: readonly Arg[] = [...causeArgs, "createKey"];
 const empty: Expr = { op: "obj", fields: [] };
 const keywords = ["calls", "sends", "shows", "opens"] as const;
 
+/**
+ * The shapes of the values that a chart's functions read or make: its own schemas, those of the messages it takes and
+ * sends, and the records of its service.
+ */
+function chartShapes(spec: Spec, service: string, chart: ChartSpec, structure: ChartStructure): (Shape | undefined)[] {
+  const entities = (spec.services.get(service)?.definition.entities ?? {}) as Readonly<Record<string, AnyEntity>>;
+  const states = structure.states.map((s) => stateAt(chart, s.path));
+  return [
+    chart.context,
+    chart.input,
+    chart.output,
+    ...Object.values(chart.controls ?? {}).map((c) => c.payload),
+    ...Object.values(chart.receives).map((e) => e.payload),
+    ...Object.values(chart.queries ?? {}).flatMap((q) => [q.input, q.output]),
+    ...Object.values(chart.commands).flatMap((c) => [c.input, c.output]),
+    ...Object.values(chart.screens ?? {}).flatMap((s) => [s.input, s.output]),
+    ...states.flatMap((s) => [s.held as Shape | undefined, s.context, s.type === "map" ? s.key : undefined]),
+    ...Object.values(entities).map((e) => e.fields),
+  ];
+}
+
 function chartSlotsOf(spec: Spec): ChartSlot[] {
-  if (JSON.stringify(spec.structure).includes('"x-tazuna-codec"')) return [];
   const slots: ChartSlot[] = [];
   for (const { service, name, definition: d } of spec.definitions) {
     if (d.kind !== "machine" && d.kind !== "screen") continue;
     const chartSpec = d as ChartSpec;
     const structure = chartStructure(spec.structure, service, name);
     if (structure === undefined) continue;
+    if (chartShapes(spec, service, chartSpec, structure).some((shape) => shape !== undefined && holdsCodec(shape)))
+      continue;
     const chart = { service, name };
     const contexts = [chartSpec.context, ...structure.states.map((st) => stateAt(chartSpec, st.path).context)];
     // A copy's field over the owner's of another schema could be either.
@@ -359,7 +381,7 @@ function slotsOf(spec: Spec): Slot[] {
           callback: "resultEnsures",
           definition,
           conditions: target.ensures,
-          args: ["input", "output", "events"],
+          args: ["input", "output", "events", "records"],
           shapes: [target.input, target.output, ...payloads],
           whole: false,
           typed: typed({ input: target.input, output: target.output }),

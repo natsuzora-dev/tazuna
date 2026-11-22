@@ -141,8 +141,8 @@ def Program.overlay {m : Type → Type} [Monad m] (p : Program) (st : Service) (
           | some (.command _) => some (emitted events)
           | _ => none
         let args := argsOf [(.input, .json input), (.output, .ofOption read), (.events, .ofOption list)]
-        answered "resultEnsures"
-          ((fun h => if h then Ensured.holds else .fails) <$> holds { args } cond).run'
+        let (answer, trace) := ((fun h => if h then Ensured.holds else .fails) <$> holds { args, hidden := true } cond).run'
+        answered "resultEnsures" (if trace.readHidden then .ok .readsRecords else answer, trace)
           (fs.resultEnsures target c input output events)
     invariant := fun entity record =>
       match all p.invariant (st.ref entity) with

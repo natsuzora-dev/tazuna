@@ -493,7 +493,7 @@ class Conversion {
       isBlock(f.body) ? this.block([...f.body.statements], scope) : this.expression(f.body as Expression, scope);
     this.specials = new Set(args.filter((a): a is Special => a === "records" || a === "createKey"));
     this.argument = (node, name) => {
-      if (name === "records" || this.specials.has(name as Special)) this.fail(node, `reads ${name}`);
+      if (this.specials.has(name as Special)) this.fail(node, `reads ${name}`);
       // TS passes an arguments object without the name, whose field is undefined.
       if (!(args as readonly string[]).includes(name)) return { op: "undef" };
       return { op: "arg", arg: name as Exclude<Arg, Special> };
@@ -767,7 +767,7 @@ class Conversion {
     const target = unwrapped(e.expression);
     if (isIdentifier(target) && scope.get(target.text) === "args") {
       if (optional) this.fail(e, "reads its arguments with ?.");
-      if (name === "records") this.fail(e, "reads records other than an entity of it");
+      if (name === "records" && this.specials.has("records")) this.fail(e, "reads records other than an entity of it");
       if (name === "createKey") this.fail(e, "reads createKey other than by a call");
       return this.argument(e, name);
     }
