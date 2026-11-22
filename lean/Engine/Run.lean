@@ -56,7 +56,7 @@ def instrumentedOf (start : Sim.World) : IO (String → Functions ActingIO) := d
   let last ← IO.mkRef {}
   pure fun service =>
     match start.services.lookup service with
-    | none => Ir.unansweredFunctions.hoist liftM
+    | none => (Ir.functionsOf default last).hoist liftM
     | some st => (instrument st (Ir.functionsOf st last) (Ir.instrumentOf last)).hoist (focus service)
 
 /-- A world with what each running service's instrumented functions collected on the way to it. -/
