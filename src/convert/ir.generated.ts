@@ -210,6 +210,12 @@ export type Expr =
       readonly op: "concat";
       readonly left: Expr;
       readonly right: Expr;
+    }
+  /** `emit(event, payload)` of an event that the command lists. */
+  | {
+      readonly op: "emit";
+      readonly event: DefinitionRef;
+      readonly payload: Expr;
     };
 
 export type Field = {
@@ -324,5 +330,7 @@ export type Program = {
   readonly automationBinding: readonly Conditions[];
   readonly automationGuard: readonly Conditions[];
   readonly resolve: readonly Fn[];
+  /** A command's decide, where its binds have an entry. */
+  readonly decide: readonly Fn[];
   readonly chart: readonly ChartFns[];
 };

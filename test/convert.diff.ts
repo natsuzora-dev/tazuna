@@ -55,6 +55,7 @@ const ops = [
   "only",
   "sortedBy",
   "concat",
+  "emit",
 ] as const satisfies readonly Expr["op"][];
 const listsEveryOp: [Exclude<Expr["op"], (typeof ops)[number]>] extends [never] ? true : false = true;
 
@@ -68,6 +69,10 @@ function opsOf(value: unknown, found = new Set<string>()): Set<string> {
   return found;
 }
 
+/** An emit, which Lean writes without its event: the shadow check of the diff tests compares the events. */
+const isEmit = (value: unknown): value is { readonly payload: unknown } =>
+  value !== null && typeof value === "object" && (value as { readonly kind?: unknown }).kind === "emit";
+
 /**
  * A value that a TS function returned, as JSON.stringify writes it: a Bag as its values, an instant or date as its text,
  * and an undefined field left out.
@@ -76,6 +81,7 @@ function jsonOf(value: unknown): Json | undefined {
   const values = bagValues(value);
   if (values !== undefined) return values.map((v) => jsonOf(v) ?? null);
   if (value instanceof Temporal.Instant || value instanceof Temporal.PlainDate) return value.toString();
+  if (isEmit(value)) return { kind: "emit", payload: jsonOf(value.payload) ?? null };
   if (Array.isArray(value)) return value.map((v) => jsonOf(v) ?? null);
   if (value !== null && typeof value === "object")
     return Object.fromEntries(
@@ -113,7 +119,10 @@ function sourceOf(stored: readonly Stored[], reads: ReadPart[]): RecordSource {
   };
 }
 
-const converted = fixtures.map((fixture) => ({ fixture, ir: converter.convert(fixture.f, ["input", "records"]) }));
+const converted = fixtures.map((fixture) => ({
+  fixture,
+  ir: converter.convert(fixture.f, ["input", "records"], fixture.events),
+}));
 
 for (const [i, { fixture, ir }] of converted.entries())
   test(`fixture ${i} (${fixture.op}) converts to IR with ${fixture.op}, which Lean evaluates as TS runs the function on random inputs`, () => {

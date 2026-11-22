@@ -117,6 +117,8 @@ inductive Expr where
   /-- A Bag's values in groups of equal key, in ascending key order. -/
   | sortedBy (order : Order) (collection : Expr) (name : String) (body : Expr)
   | concat (left right : Expr)
+  /-- `emit(event, payload)` of an event that the command lists. -/
+  | emit (event : Spec.Ref) (payload : Expr)
 
 structure Field where
   name : String
@@ -215,6 +217,8 @@ structure Program where
   automationBinding : List Conditions := []
   automationGuard : List Conditions := []
   resolve : List Fn := []
+  /-- A command's decide, where its binds have an entry. -/
+  decide : List Fn := []
   chart : List ChartFns := []
 deriving Repr, Inhabited
 

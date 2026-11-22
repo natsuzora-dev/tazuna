@@ -194,6 +194,21 @@ def Program.overlay {m : Type → Type} [Monad m] (p : Program) (st : Service) (
       | some f =>
         let env := { fields := fieldsOf st, args := argsOf [(.input, .json input), (.now, instant now)], records }
         answered "resolve" (valueIn env f.body).run' (fs.resolve name input records now)
+    decide := fun name input records now =>
+      match p.decide.find? (·.definition == st.ref name) with
+      | none => fs.decide name input records now
+      | some f =>
+        let env := { fields := fieldsOf st, args := argsOf [(.input, .json input), (.now, instant now)], records }
+        let emitted (env : Env) : Val → EvalM Emit
+          | .emit event payload => do pure { event, payload := ← answerOf env payload }
+          | _ => thrown
+        let decided : EvalM (List (List Emit)) := withBound env (binds p.binding (st.ref name)) fun env => do
+          match ← eval env [] f.body with
+          | .list items => items.mapM fun
+            | .list group => group.mapM (emitted env)
+            | e => do pure [← emitted env e]
+          | _ => thrown
+        answered "decide" decided.run' (fs.decide name input records now)
     chartInvariant := fun scope records =>
       match site scope.machine .invariants with
       | none => fs.chartInvariant scope records

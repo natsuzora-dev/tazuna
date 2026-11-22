@@ -37,6 +37,7 @@ import {
   SyntaxKind,
 } from "typescript/unstable/ast";
 import { SignatureKind, type Type, TypeFlags } from "typescript/unstable/sync";
+import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Expr, Field } from "./ir.generated.ts";
 import type { Source } from "./sources.ts";
 
@@ -93,12 +94,56 @@ const unwrapped = (node: Expression): Expression =>
     ? unwrapped(node.expression)
     : node;
 
+/** The nodes of `root` that hold `node`, outermost first, `node` excluded. */
+function ancestorsOf(root: Node, node: Node): Node[] {
+  const path: Node[] = [];
+  const visit = (n: Node): void => {
+    if (n === node || node.pos < n.pos || n.end < node.end) return;
+    path.push(n);
+    n.forEachChild(visit);
+  };
+  visit(root);
+  return path;
+}
+
 /** Converts one spec function by its syntax and the checker's types. */
 class Conversion {
   private readonly source: Source;
+  /** The events that a decide's command lists, in the order of its `emits`. */
+  private readonly events: readonly DefinitionRef[];
 
-  constructor(source: Source) {
+  constructor(source: Source, events: readonly DefinitionRef[]) {
     this.source = source;
+    this.events = events;
+  }
+
+  /** The texts of the `emits` of `command({ emits }).decide(f)`, where `f` is the function converted. */
+  private emitsTexts(): readonly string[] {
+    const decide = ancestorsOf(this.source.file, this.source.node)
+      .filter(isCallExpression)
+      .findLast((c) => {
+        const callee = unwrapped(c.expression);
+        return isPropertyAccessExpression(callee) && isIdentifier(callee.name) && callee.name.text === "decide";
+      });
+    const callee = decide === undefined ? undefined : unwrapped(decide.expression);
+    const command =
+      callee !== undefined && isPropertyAccessExpression(callee) ? unwrapped(callee.expression) : undefined;
+    const [definition] = command !== undefined && isCallExpression(command) ? command.arguments : [];
+    if (definition === undefined || !isObjectLiteralExpression(definition)) return [];
+    const emits = definition.properties.find(
+      (p) => isPropertyAssignment(p) && isIdentifier(p.name) && p.name.text === "emits",
+    );
+    if (emits === undefined || !isPropertyAssignment(emits) || !isArrayLiteralExpression(emits.initializer)) return [];
+    return emits.initializer.elements.map((e) => this.text(e));
+  }
+
+  private emitted(e: CallExpression, scope: Scope): Expr {
+    const [event, payload, ...rest] = e.arguments;
+    if (event === undefined || payload === undefined || rest.length > 0)
+      this.fail(e, "emits with other than two arguments");
+    const ref = this.events[this.emitsTexts().indexOf(this.text(event))];
+    if (ref === undefined) this.fail(e, "emits an event that its command's emits does not name as written");
+    return { op: "emit", event: ref, payload: this.expression(payload, scope) };
   }
 
   private text(node: Node): string {
@@ -364,6 +409,7 @@ class Conversion {
   private call(e: CallExpression, scope: Scope): Expr {
     if (e.flags & NodeFlags.OptionalChain) this.fail(e, "calls in an optional chain");
     const callee = unwrapped(e.expression);
+    if (isIdentifier(callee) && callee.text === "emit" && !scope.has("emit")) return this.emitted(e, scope);
     if (e.arguments.length === 0 && isPropertyAccessExpression(callee) && isIdentifier(callee.name)) {
       const receiver = this.only(callee.expression);
       if (callee.name.text === "only" && (receiver === "bag" || receiver === "table"))
@@ -457,10 +503,17 @@ class Conversion {
   }
 }
 
-/** The IR of the function of `source` that receives `args`, or the construct outside the IR that it has. */
-export function converted(source: Source, args: readonly Arg[]): Expr | { readonly unconverted: string } {
+/**
+ * The IR of the function of `source` that receives `args`, or the construct outside the IR that it has. A decide's
+ * `events` are those its command lists.
+ */
+export function converted(
+  source: Source,
+  args: readonly Arg[],
+  events: readonly DefinitionRef[] = [],
+): Expr | { readonly unconverted: string } {
   try {
-    return new Conversion(source).convertFunction(source.node, args);
+    return new Conversion(source, events).convertFunction(source.node, args);
   } catch (error) {
     if (error instanceof Unconverted) return { unconverted: error.message };
     throw error;

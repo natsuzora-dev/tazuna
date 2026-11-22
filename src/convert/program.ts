@@ -31,7 +31,7 @@ interface NotConverted {
 
 /** The Program lists of named conditions, those of one function per definition, and the chart functions. */
 type ConditionsCallback = Exclude<keyof Program, FnCallback | "chart">;
-type FnCallback = "resolve";
+type FnCallback = "resolve" | "decide";
 
 export interface Converted {
   readonly program: Program;
@@ -71,7 +71,11 @@ interface FnSlot {
   readonly f: SpecFunction | undefined;
   readonly args: readonly Arg[];
   readonly shapes: readonly (Shape | undefined)[];
+  /** The events that a decide's command lists. */
+  readonly events?: readonly DefinitionRef[];
 }
+
+const sameRef = (a: DefinitionRef, b: DefinitionRef) => a.service === b.service && a.name === b.name;
 
 function fnSlotsOf(spec: Spec): FnSlot[] {
   const slots: FnSlot[] = [];
@@ -87,6 +91,20 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         f: query.resolve as SpecFunction | undefined,
         args: ["input", "records", "now"],
         shapes: [query.input, query.output, ...entities],
+      });
+    }
+    if (d.kind === "command") {
+      const command = d as AnyCommand;
+      slots.push({
+        callback: "decide",
+        definition: { service, name },
+        f: command.decide as SpecFunction | undefined,
+        args: ["input", "records", "now", "bound"],
+        shapes: [command.input, ...command.emits.map((e) => e.payload), ...entities],
+        events: command.emits.flatMap((e) => {
+          const named = spec.names.get(e);
+          return named === undefined ? [] : [{ service: named.service, name: named.name }];
+        }),
       });
     }
   }
@@ -354,10 +372,16 @@ export class Converter {
   }
 
   /** The IR of `f`, a spec function that receives `args`, or the reason that it stays TS. */
-  convert(f: SpecFunction, args: readonly Arg[]): Expr | { readonly unconverted: string } {
+  convert(
+    f: SpecFunction,
+    args: readonly Arg[],
+    events: readonly DefinitionRef[] = [],
+  ): Expr | { readonly unconverted: string } {
     const location = this.locator.located(f);
     const source = location === undefined ? undefined : this.sources.sourceAt(location);
-    return source === undefined ? { unconverted: "has no source that the converter finds" } : converted(source, args);
+    return source === undefined
+      ? { unconverted: "has no source that the converter finds" }
+      : converted(source, args, events);
   }
 
   /** The IR of the spec functions of the callbacks that Lean evaluates, and those that stay TS. */
@@ -398,11 +422,16 @@ export class Converter {
         lists[slot.callback].push({ definition: slot.definition, conditions });
       if (failed.length === 0) convertedBinds.add(slot);
     }
-    const fns: Record<FnCallback, Fn[]> = { resolve: [] };
+    const fns: Record<FnCallback, Fn[]> = { resolve: [], decide: [] };
     for (const slot of fnSlotsOf(spec)) {
       if (slot.f === undefined) continue;
       const codec = slot.shapes.some((shape) => shape !== undefined && holdsCodec(shape));
-      const body = codec ? { unconverted: "receives a value of a codec" } : this.convert(slot.f, slot.args);
+      const binds = slot.callback !== "decide" || lists.binding.some((g) => sameRef(g.definition, slot.definition));
+      const body = codec
+        ? { unconverted: "receives a value of a codec" }
+        : binds
+          ? this.convert(slot.f, slot.args, slot.events)
+          : { unconverted: "reads binds that stay TS" };
       if ("unconverted" in body)
         notConverted.push({ callback: slot.callback, definition: slot.definition, reason: body.unconverted });
       else fns[slot.callback].push({ definition: slot.definition, body });

@@ -3,17 +3,24 @@ import { z } from "zod";
 import type { Expr } from "../../src/convert/ir.generated.ts";
 import { bag } from "../../src/data/collections.ts";
 import { date, datetime } from "../../src/data/datetime.ts";
+import type { DefinitionRef } from "../../src/data/definitionRef.ts";
 import type { Json, Shape } from "../../src/data/values.ts";
 import { entity, type Records, type Row, singleEntity } from "../../src/dsl/entity.ts";
+import { emit } from "../../src/dsl/event.ts";
+import { service } from "../../src/dsl/service.ts";
 import type { Stored } from "../lean/protocol.generated.ts";
 
-/** A function whose IR has `op`, inputs of `shape` as JSON holds them, and the records it reads of `entities`. */
+/**
+ * A function whose IR has `op`, inputs of `shape` as JSON holds them, the records it reads of `entities`, and the
+ * events that it emits, as its command lists them.
+ */
 export interface Fixture {
   readonly op: Expr["op"];
   readonly shape: Shape;
   readonly input: fc.Arbitrary<{ readonly [field: string]: Json }>;
   readonly records: fc.Arbitrary<readonly Stored[]>;
   readonly f: (args: never) => unknown;
+  readonly events?: readonly DefinitionRef[];
 }
 
 const fixture = <S extends Shape>(
@@ -68,6 +75,16 @@ const recordFixture = <S extends Shape>(
 ): Fixture => ({ op, shape, input, records: storedOf, f });
 
 const keyed = fc.record({ id: fc.constantFrom("a", "b", "d"), title: text });
+
+const { command, event } = service({ name: "fixtures", description: "The fixtures' events", entities });
+const noted = event({ payload: { title: z.string() } });
+const counted = event({ payload: { n: z.number() } });
+const noting = command({ input: { title: z.string(), bag: bag(z.number()) }, emits: [noted, counted] }).decide(
+  ({ input }) => [
+    input.title === "" ? emit(counted, { n: 0 }) : emit(noted, { title: input.title }),
+    input.bag.map((n) => emit(counted, { n })),
+  ],
+);
 
 export const fixtures: readonly Fixture[] = [
   fixture("undef", { note: z.string().optional() }, fc.record({ note: text }, { requiredKeys: [] }), ({ input }) =>
@@ -243,6 +260,17 @@ export const fixtures: readonly Fixture[] = [
   recordFixture("concat", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input, records }) =>
     input.bag.concat(records.Task.map((t) => t.title.length)),
   ),
+  {
+    op: "emit",
+    shape: noting.input,
+    input: fc.record({ title: text, bag: numbers }),
+    records: fc.constant([]),
+    f: noting.decide as (args: never) => unknown,
+    events: [
+      { service: "fixtures", name: "noted" },
+      { service: "fixtures", name: "counted" },
+    ],
+  },
 ];
 
 /** Functions with a construct outside the IR, each of which stays TS. */

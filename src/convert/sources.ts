@@ -10,9 +10,10 @@ import {
 import { API, type Checker, type Project } from "typescript/unstable/sync";
 import type { Location } from "./located.ts";
 
-/** A spec function's syntax, and the checker that types it. */
+/** A spec function's syntax, the file it is in, and the checker that types it. */
 export interface Source {
   readonly node: ArrowFunction | FunctionExpression;
+  readonly file: Node;
   readonly text: string;
   readonly checker: Checker;
 }
@@ -67,6 +68,6 @@ export class Sources {
     if (project === undefined || file === undefined) return undefined;
     const start = lineStarts(file.text)[location.line];
     const node = start === undefined ? undefined : functionAt(file, start + location.column);
-    return node === undefined ? undefined : { node, text: file.text, checker: project.checker };
+    return node === undefined ? undefined : { node, file, text: file.text, checker: project.checker };
   }
 }

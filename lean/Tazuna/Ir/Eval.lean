@@ -40,6 +40,7 @@ inductive Val where
   | list (values : List Val)
   | obj (fields : List (String × Val))
   | tracked (tracked : Tracked) (value : Value)
+  | emit (event : Spec.Ref) (payload : Val)
 deriving Inhabited
 
 def Val.ofOption : Option Value → Val
@@ -304,6 +305,7 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
     let right ← eval env vars b
     let vs ← elements left
     pure (.list (vs ++ (← elements right)))
+  | .emit event payload => do pure (.emit event (← eval env vars payload))
 
 def evalAll (env : Env) (vars : List (String × Val)) : List Expr → EvalM (List Val)
   | [] => pure []
@@ -337,6 +339,7 @@ partial def encode (env : Env) : Val → EvalM (Option Value)
     pure (some (.obj present))
   | .table .. => throw (.thrown none)
   | .tracked _ v => pure (some v)
+  | .emit _ payload => do pure (some (.obj [("kind", .str "emit"), ("payload", (← encode env payload).getD .null)]))
 
 /-- The JSON that TS's encoding of a spec function's value gives: null for `undefined`, as JSON.stringify writes it. -/
 def answerOf (env : Env) (v : Val) : EvalM Value := do pure ((← encode env v).getD .null)
