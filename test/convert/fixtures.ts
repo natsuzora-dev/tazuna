@@ -76,7 +76,7 @@ const recordFixture = <S extends Shape>(
 
 const keyed = fc.record({ id: fc.constantFrom("a", "b", "d"), title: text });
 
-const { command, event } = service({ name: "fixtures", description: "The fixtures' events", entities });
+const { command, condition, event } = service({ name: "fixtures", description: "The fixtures' events", entities });
 const noted = event({ payload: { title: z.string() } });
 const counted = event({ payload: { n: z.number() } });
 const noting = command({ input: { title: z.string(), bag: bag(z.number()) }, emits: [noted, counted] }).decide(
@@ -85,6 +85,14 @@ const noting = command({ input: { title: z.string(), bag: bag(z.number()) }, emi
     input.bag.map((n) => emit(counted, { n })),
   ],
 );
+
+// Helpers that a fixture calls, which the converter inlines.
+const between = (n: number, low: number, high: number) => low <= n && n <= high;
+const tasksDone = condition(({ records }) => records.Task.every((t) => t.done));
+function named(item: { readonly name: string } | null, name: string) {
+  return item?.name === name;
+}
+const limit = 1;
 
 export const fixtures: readonly Fixture[] = [
   fixture("undef", { note: z.string().optional() }, fc.record({ note: text }, { requiredKeys: [] }), ({ input }) =>
@@ -118,6 +126,22 @@ export const fixtures: readonly Fixture[] = [
     ({ input }) => input.note ?? input.title,
   ),
   fixture("not", { n: z.number() }, fc.record({ n: number }), ({ input }) => !input.n),
+  recordFixture("not", {}, fc.record({}), (args) => !tasksDone(args as never)),
+  fixture("let", { ns: z.array(z.number()), n: z.number() }, fc.record({ ns: numbers, n: number }), ({ input }) =>
+    input.ns.some((n) => between(input.n, n, limit)),
+  ),
+  fixture(
+    "let",
+    { items: z.array(z.object(item).nullable()), name: z.string() },
+    fc.record({ items: fc.array(fc.option(itemOf), { maxLength: 3 }), name: text }),
+    (args) => args.input.items.filter((i) => named(i, args.input.name)).length,
+  ),
+  fixture(
+    "or",
+    { a: z.string().nullable().optional(), n: z.number().nullable() },
+    fc.record({ a: fc.option(text), n: fc.option(number) }, { requiredKeys: ["n"] }),
+    ({ input }) => (input.a == null ? input.n != null : input.a),
+  ),
   fixture(
     "eq",
     { a: z.string(), n: z.number().nullable() },
@@ -238,6 +262,9 @@ export const fixtures: readonly Fixture[] = [
     ({ input }) => [input.title, input.note],
   ),
   fixture("map", { ns: z.array(z.number()) }, fc.record({ ns: numbers }), ({ input }) => input.ns.map((n) => n > 0)),
+  fixture("map", { bag: bag(z.number()).optional() }, fc.record({ bag: numbers }, { requiredKeys: [] }), ({ input }) =>
+    (input.bag ?? []).filter((n) => n > 0).map((n) => n < 2),
+  ),
   recordFixture("map", {}, fc.record({}), ({ records }) => records.Task.map((t) => ({ id: t.id, done: t.done }))),
   recordFixture("sum", {}, fc.record({}), ({ records }) => records.Task.sum((t) => (t.done ? 1 : 0))),
   fixture("sum", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.sum((n) => n)),
@@ -273,6 +300,8 @@ export const fixtures: readonly Fixture[] = [
   },
 ];
 
+const looping = (n: number): boolean => n > 0 && looping(n);
+
 /** Functions with a construct outside the IR, each of which stays TS. */
 export const outside: readonly ((args: { readonly input: Row<{ n: z.ZodNumber; title: z.ZodString }> }) => unknown)[] =
   [
@@ -281,6 +310,9 @@ export const outside: readonly ((args: { readonly input: Row<{ n: z.ZodNumber; t
     ({ input }) => input.title < "b",
     ({ input }) => `${input.title}!` === "a!",
     ({ input }) => [...[input.n]].length === 1,
-    (args) => args.input.n > 0,
     async ({ input }) => input.n > 0,
+    // biome-ignore lint/suspicious/noDoubleEquals: == on other than null coerces, which the IR does not.
+    ({ input }) => input.n == 1,
+    (args) => [args].length === 1,
+    ({ input }) => looping(input.n),
   ];

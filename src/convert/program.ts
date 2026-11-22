@@ -1,13 +1,15 @@
+import { join } from "node:path";
+import { encoded } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { objectSchema } from "../data/jsonSchema.ts";
-import type { Shape } from "../data/values.ts";
+import type { Json, Shape } from "../data/values.ts";
 import { stateAt, transitionAt } from "../dsl/chart.ts";
 import type { Conditions } from "../dsl/conditions.ts";
 import type { AnyCommand, AnyQuery, Automation, ChartSpec } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
 import { chartStructure, stateNamed, transitionRef } from "../spec/structure.ts";
-import { type Arg, converted } from "./expression.ts";
+import { type Arg, type Constants, constantsKey, converted } from "./expression.ts";
 import type {
   ChartFns,
   Condition,
@@ -365,6 +367,7 @@ function slotsOf(spec: Spec): Slot[] {
 export class Converter {
   private readonly locator = new Locator();
   private readonly sources = new Sources();
+  private constants: Constants = new Map();
 
   close(): void {
     this.locator.close();
@@ -381,11 +384,19 @@ export class Converter {
     const source = location === undefined ? undefined : this.sources.sourceAt(location);
     return source === undefined
       ? { unconverted: "has no source that the converter finds" }
-      : converted(source, args, events);
+      : converted(source, args, events, this.constants);
   }
 
   /** The IR of the spec functions of the callbacks that Lean evaluates, and those that stay TS. */
   program(spec: Spec): Converted {
+    this.constants = new Map(
+      spec.constants.flatMap(({ name, place, definition }) => {
+        const json = encoded(definition.schema, definition.values);
+        return "encoded" in json
+          ? [[constantsKey(join(spec.root, place.file), name), json.encoded as Readonly<Record<string, Json>>]]
+          : [];
+      }),
+    );
     const lists: Record<ConditionsCallback, ConvertedConditions[]> = {
       inputRequirement: [],
       resultEnsures: [],

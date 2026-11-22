@@ -3,14 +3,18 @@ import {
   type BindingName,
   type CallExpression,
   type Expression,
+  type FunctionDeclaration,
   type FunctionExpression,
+  type Identifier,
   isArrayLiteralExpression,
   isArrowFunction,
   isAsExpression,
   isBinaryExpression,
+  isBindingElement,
   isBlock,
   isCallExpression,
   isConditionalExpression,
+  isFunctionDeclaration,
   isFunctionExpression,
   isIdentifier,
   isIfStatement,
@@ -28,6 +32,8 @@ import {
   isShorthandPropertyAssignment,
   isSpreadElement,
   isStringLiteral,
+  isVariableDeclaration,
+  isVariableDeclarationList,
   isVariableStatement,
   type Node,
   NodeFlags,
@@ -36,8 +42,9 @@ import {
   type Statement,
   SyntaxKind,
 } from "typescript/unstable/ast";
-import { SignatureKind, type Type, TypeFlags } from "typescript/unstable/sync";
+import { SignatureKind, SymbolFlags, type Type, TypeFlags, type TypeReference } from "typescript/unstable/sync";
 import type { DefinitionRef } from "../data/definitionRef.ts";
+import type { Json } from "../data/values.ts";
 import type { Expr, Field } from "./ir.generated.ts";
 import type { Source } from "./sources.ts";
 
@@ -56,6 +63,8 @@ type Kind =
   | "instant"
   | "date"
   | "array"
+  /** An array with no element type, such as `[]`, which reads as a Bag does in a union with one. */
+  | "empty"
   | "bag"
   | "table"
   | "emit"
@@ -67,8 +76,18 @@ const scalars: ReadonlySet<Kind> = new Set(["string", "number", "boolean", "null
 /** A construct outside the IR, with the source text it is in. */
 class Unconverted extends Error {}
 
-/** The names that a function body can read: a variable, or the records argument. */
-type Scope = ReadonlyMap<string, "variable" | "records">;
+/**
+ * The names that a function body can read: a variable, the records argument, or the arguments object of a function that
+ * takes it whole, whose fields read as the arguments do.
+ */
+type Scope = ReadonlyMap<string, "variable" | "records" | "args">;
+
+/** The values of `constants()` groups, encoded, by the file and name of the const that holds them. */
+export type Constants = ReadonlyMap<string, Readonly<Record<string, Json>>>;
+
+export const constantsKey = (file: string, name: string): string => `${file}#${name}`;
+
+type Helper = ArrowFunction | FunctionExpression | FunctionDeclaration;
 
 const declared = (scope: Scope, name: string): Scope => new Map([...scope, [name, "variable"]]);
 
@@ -111,10 +130,19 @@ class Conversion {
   private readonly source: Source;
   /** The events that a decide's command lists, in the order of its `emits`. */
   private readonly events: readonly DefinitionRef[];
+  private readonly constants: Constants;
+  /** The argument that a name of the arguments object reads, once convertFunction knows the arguments. */
+  private argument: (node: Node, name: string) => Expr = (node) => this.fail(node, "reads its arguments");
+  /** Whether the arguments hold records, which only the record operations read. */
+  private records = false;
+  /** The helpers being inlined, innermost last, so that a recursive one stays TS. */
+  private readonly inlining: Helper[] = [];
+  private fresh = 0;
 
-  constructor(source: Source, events: readonly DefinitionRef[]) {
+  constructor(source: Source, events: readonly DefinitionRef[], constants: Constants) {
     this.source = source;
     this.events = events;
+    this.constants = constants;
   }
 
   /** The texts of the `emits` of `command({ emits }).decide(f)`, where `f` is the function converted. */
@@ -147,7 +175,7 @@ class Conversion {
   }
 
   private text(node: Node): string {
-    return this.source.text.slice(node.pos, node.end).trim();
+    return node.getSourceFile().text.slice(node.pos, node.end).trim();
   }
 
   private fail(node: Node, reason: string): never {
@@ -158,10 +186,20 @@ class Conversion {
     const type = this.source.checker.getTypeAtLocation(node);
     if (type === undefined) return new Set(["other"]);
     const members = type.isUnionType() ? type.getTypes() : [type];
-    return new Set(members.map((t) => this.kind(t)));
+    const kinds = new Set(members.map((t) => this.kind(t)));
+    if (!kinds.delete("empty")) return kinds;
+    if (!kinds.has("bag") && !kinds.has("table")) kinds.add("array");
+    return kinds;
   }
 
   private kind(type: Type): Kind {
+    if (type.isIntersectionType()) {
+      // A value of `string & Brand` is a string, and one of several object types is an object.
+      const kinds = new Set(type.getTypes().map((t) => this.kind(t)));
+      kinds.delete("object");
+      const [kind, ...rest] = kinds;
+      return kind === undefined ? "object" : rest.length === 0 && scalars.has(kind) ? kind : "other";
+    }
     const { flags } = type;
     if (flags & TypeFlags.StringLike) return "string";
     if (flags & TypeFlags.NumberLike) return "number";
@@ -176,7 +214,10 @@ class Conversion {
     if (name === "Bag" || name === "BagValue") return "bag";
     if (name === "Emit") return "emit";
     const { checker } = this.source;
-    if (checker.isArrayType(type) || checker.isTupleType(type)) return "array";
+    if (checker.isArrayType(type) || checker.isTupleType(type)) {
+      const elements = checker.getTypeArguments(type as TypeReference);
+      return elements.every((t) => t.flags & TypeFlags.Never) ? "empty" : "array";
+    }
     if (checker.getSignaturesOfType(type, SignatureKind.Call).length > 0) return "other";
     return "object";
   }
@@ -196,9 +237,124 @@ class Conversion {
   }
 
   /** Fails on an async or generator function, whose call returns an object however its body ends. */
-  private synchronous(f: ArrowFunction | FunctionExpression): void {
-    if (f.modifiers?.some((m) => m.kind === SyntaxKind.AsyncKeyword) || (isFunctionExpression(f) && f.asteriskToken))
+  private synchronous(f: Helper): void {
+    if (f.modifiers?.some((m) => m.kind === SyntaxKind.AsyncKeyword) || (!isArrowFunction(f) && f.asteriskToken))
       this.fail(f, "is async or a generator");
+  }
+
+  /** The declaration of the value that `name` reads outside the function, through imports. */
+  private declarationOf(name: Identifier): Node | undefined {
+    const { checker } = this.source;
+    const symbol = checker.getSymbolAtLocation(name);
+    const target = symbol !== undefined && symbol.flags & SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
+    return target?.valueDeclaration?.resolve();
+  }
+
+  /** The value of the const that `name` reads, unless it is declared otherwise. */
+  private constValue(name: Identifier): Expression | undefined {
+    const d = this.declarationOf(name);
+    if (d === undefined || !isVariableDeclaration(d) || !isVariableDeclarationList(d.parent)) return undefined;
+    return d.parent.flags & NodeFlags.Const && d.initializer !== undefined ? unwrapped(d.initializer) : undefined;
+  }
+
+  /** Whether `callee` is tazuna's `condition` of a service, which returns its function as it is. */
+  private isConditionWrapper(callee: Expression): boolean {
+    const d = isIdentifier(callee) ? this.declarationOf(callee) : undefined;
+    if (d === undefined || !isBindingElement(d)) return false;
+    const key = d.propertyName ?? d.name;
+    const declaration = d.parent.parent;
+    if (key === undefined || !isIdentifier(key) || key.text !== "condition" || !isVariableDeclaration(declaration))
+      return false;
+    const definer = declaration.initializer === undefined ? undefined : unwrapped(declaration.initializer);
+    const service = definer !== undefined && isCallExpression(definer) ? unwrapped(definer.expression) : undefined;
+    const declared = service !== undefined && isIdentifier(service) ? this.declarationOf(service) : undefined;
+    return (
+      declared !== undefined && /[/\\](src|dist)[/\\]dsl[/\\]service\.(d\.)?ts$/.test(declared.getSourceFile().fileName)
+    );
+  }
+
+  /** The function that `name` reads outside the function, which the converter inlines where it is called. */
+  private helper(name: Identifier): Helper | undefined {
+    const d = this.declarationOf(name);
+    if (d !== undefined && isFunctionDeclaration(d)) return d.body === undefined ? undefined : d;
+    const value = this.constValue(name);
+    if (value !== undefined && (isArrowFunction(value) || isFunctionExpression(value))) return value;
+    if (value === undefined || !isCallExpression(value) || !this.isConditionWrapper(unwrapped(value.expression)))
+      return undefined;
+    const [f, ...rest] = value.arguments;
+    const wrapped = f === undefined || rest.length > 0 ? undefined : unwrapped(f);
+    return wrapped !== undefined && (isArrowFunction(wrapped) || isFunctionExpression(wrapped)) ? wrapped : undefined;
+  }
+
+  /**
+   * The body of the helper that `e` calls, under its parameters. The arguments evaluate first, in order, as a call
+   * evaluates them before the body runs; a name that the body reads is the helper's, never the caller's.
+   */
+  private inlined(callee: Identifier, e: CallExpression, scope: Scope): Expr {
+    const f = this.helper(callee);
+    if (f === undefined) this.fail(e, "calls a function outside the IR");
+    if (this.inlining.includes(f)) this.fail(e, "calls a helper recursively");
+    this.synchronous(f);
+    if (e.arguments.length !== f.parameters.length) this.fail(e, "calls a helper with other than its parameters");
+    this.inlining.push(f);
+    try {
+      const lets: (readonly [string, Expr])[] = [];
+      const passed = e.arguments.map((a) => {
+        if (isSpreadElement(a)) this.fail(a, "spreads arguments");
+        const u = unwrapped(a);
+        const kind = isIdentifier(u) ? scope.get(u.text) : undefined;
+        if (kind === "args" || kind === "records") return kind;
+        const name = `#${this.fresh++}`;
+        lets.push([name, this.expression(a, scope)]);
+        return name;
+      });
+      const bind = (i: number, inner: Scope): Expr => {
+        const p = f.parameters[i];
+        if (p === undefined) {
+          const body = f.body as NonNullable<Helper["body"]>;
+          return isBlock(body) ? this.block([...body.statements], inner) : this.expression(body, inner);
+        }
+        if (p.dotDotDotToken !== undefined || p.initializer !== undefined)
+          this.fail(p, "takes a parameter with a rest or a default");
+        const given = passed[i] as string;
+        if (given === "args" || given === "records") {
+          if (isIdentifier(p.name)) return bind(i + 1, new Map([...inner, [p.name.text, given]]));
+          if (given === "records") this.fail(p, "destructures records");
+          return this.fromArgs(p.name, inner, (s) => bind(i + 1, s));
+        }
+        return this.bound(p.name, { op: "var", name: given }, inner, (s) => bind(i + 1, s));
+      };
+      return lets.reduceRight<Expr>((body, [name, value]) => ({ op: "let", name, value, body }), bind(0, new Map()));
+    } finally {
+      this.inlining.pop();
+    }
+  }
+
+  /** The field `name` of the `constants()` group that `group` reads, as a literal, when it is a scalar. */
+  private constantField(group: Identifier, name: string, e: Node): Expr | undefined {
+    const d = this.declarationOf(group);
+    if (d === undefined || !isVariableDeclaration(d) || !isIdentifier(d.name)) return undefined;
+    const values = this.constants.get(constantsKey(d.getSourceFile().fileName, d.name.text));
+    if (values === undefined) return undefined;
+    const value = values[name];
+    const kind = this.only(e);
+    if (value === undefined || typeof value === "object" || kind === undefined || !scalars.has(kind))
+      this.fail(e, "reads a constant other than a scalar");
+    return { op: "lit", value };
+  }
+
+  /** A const of a literal outside the function, as that literal. */
+  private constLiteral(name: Identifier): Expr | undefined {
+    const value = this.constValue(name);
+    if (value === undefined) return undefined;
+    const literal =
+      value.kind === SyntaxKind.TrueKeyword ||
+      value.kind === SyntaxKind.FalseKeyword ||
+      value.kind === SyntaxKind.NullKeyword ||
+      isStringLiteral(value) ||
+      isNoSubstitutionTemplateLiteral(value) ||
+      isNumericLiteral(value);
+    return literal ? this.expression(value, new Map()) : undefined;
   }
 
   convertFunction(f: ArrowFunction | FunctionExpression, args: readonly Arg[]): Expr {
@@ -207,15 +363,21 @@ class Conversion {
     if (rest.length > 0) this.fail(f, "takes more than its arguments object");
     const body = (scope: Scope): Expr =>
       isBlock(f.body) ? this.block([...f.body.statements], scope) : this.expression(f.body as Expression, scope);
+    this.records = args.includes("records");
+    this.argument = (node, name) => {
+      if (!(args as readonly string[]).includes(name) || name === "records") this.fail(node, `reads ${name}`);
+      return { op: "arg", arg: name as Exclude<Arg, "records"> };
+    };
     if (parameter === undefined) return body(new Map());
     if (parameter.dotDotDotToken !== undefined || parameter.initializer !== undefined)
       this.fail(parameter, "takes its arguments with a rest or a default");
-    if (!isObjectBindingPattern(parameter.name)) this.fail(parameter, "takes its arguments without destructuring");
-    const named = (name: string): Expr => {
-      if (!(args as readonly string[]).includes(name) || name === "records") this.fail(parameter, `reads ${name}`);
-      return { op: "arg", arg: name as Exclude<Arg, "records"> };
-    };
-    return this.destructured(parameter.name, named, new Map(), body, args.includes("records"));
+    if (isIdentifier(parameter.name)) return body(new Map([[parameter.name.text, "args"]]));
+    return this.fromArgs(parameter.name, new Map(), body);
+  }
+
+  /** `then` under the variables that `pattern` destructures from the arguments object. */
+  private fromArgs(pattern: BindingName, scope: Scope, then: (scope: Scope) => Expr): Expr {
+    return this.destructured(pattern, (name) => this.argument(pattern, name), scope, then, this.records);
   }
 
   /** `then` under the variables that `pattern` binds from the fields that `field` reads. */
@@ -296,8 +458,11 @@ class Conversion {
     if (isIdentifier(e)) {
       const declaration = scope.get(e.text);
       if (declaration === "records") this.fail(e, "reads records other than an entity of it");
+      if (declaration === "args") this.fail(e, "reads its arguments other than by a name");
       if (declaration === "variable") return { op: "var", name: e.text };
       if (e.text === "undefined") return { op: "undef" };
+      const literal = this.constLiteral(e);
+      if (literal !== undefined) return literal;
       this.fail(e, "reads a name declared outside the function");
     }
     if (isPrefixUnaryExpression(e)) {
@@ -348,6 +513,19 @@ class Conversion {
     if (operator === SyntaxKind.AmpersandAmpersandToken) return { op: "and", ...both() };
     if (operator === SyntaxKind.BarBarToken) return { op: "or", ...both() };
     if (operator === SyntaxKind.QuestionQuestionToken) return { op: "coalesce", ...both() };
+    if (operator === SyntaxKind.EqualsEqualsToken || operator === SyntaxKind.ExclamationEqualsToken) {
+      const nullish = this.isNullish(right, scope) ? left : this.isNullish(left, scope) ? right : undefined;
+      if (nullish === undefined) this.fail(node, "compares with == other than null or undefined");
+      const name = `#${this.fresh++}`;
+      const value: Expr = { op: "var", name };
+      const isNullish: Expr = {
+        op: "or",
+        left: { op: "eq", left: value, right: { op: "lit", value: null } },
+        right: { op: "eq", left: value, right: { op: "undef" } },
+      };
+      const body: Expr = operator === SyntaxKind.EqualsEqualsToken ? isNullish : { op: "not", operand: isNullish };
+      return { op: "let", name, value: this.expression(nullish, scope), body };
+    }
     const negated = operator === SyntaxKind.ExclamationEqualsEqualsToken;
     const relation = relations.get(negated ? SyntaxKind.EqualsEqualsEqualsToken : operator);
     if (relation === undefined) this.fail(node, "has an operator outside the IR");
@@ -356,17 +534,19 @@ class Conversion {
       this.temporalCompare(left, right, relation, scope) ?? this.temporalCompare(right, left, flipped[relation], scope);
     if (temporal !== undefined) return not(temporal);
     if (relation === "eq") {
-      const literal = (e: Expression) => {
-        const u = unwrapped(e);
-        return u.kind === SyntaxKind.NullKeyword || (isIdentifier(u) && u.text === "undefined" && !scope.has(u.text));
-      };
       const scalar = (e: Expression) => [...this.kinds(e)].every((k) => scalars.has(k));
-      if (!literal(left) && !literal(right) && !(scalar(left) && scalar(right)))
+      if (!this.isNullish(left, scope) && !this.isNullish(right, scope) && !(scalar(left) && scalar(right)))
         this.fail(node, "compares with === other than scalars, null or undefined");
       return not({ op: "eq", ...both() });
     }
     if (this.only(left) !== "number" || this.only(right) !== "number") this.fail(node, "orders other than numbers");
     return { op: "compare", relation, order: "number", ...both() };
+  }
+
+  /** Whether `e` is the literal null or undefined. */
+  private isNullish(e: Expression, scope: Scope): boolean {
+    const u = unwrapped(e);
+    return u.kind === SyntaxKind.NullKeyword || (isIdentifier(u) && u.text === "undefined" && !scope.has(u.text));
   }
 
   /** `Temporal.X.compare(a, b) relation 0`, when `call` is that call and `zero` is 0. */
@@ -382,15 +562,34 @@ class Conversion {
     return { op: "compare", relation, order, left: this.expression(a, scope), right: this.expression(b, scope) };
   }
 
+  /** Whether `node` is the records argument, by its name or as a field of the arguments object. */
+  private isRecords(node: Expression, scope: Scope): boolean {
+    const e = unwrapped(node);
+    if (isIdentifier(e)) return scope.get(e.text) === "records";
+    if (!isPropertyAccessExpression(e) || !isIdentifier(e.name) || e.name.text !== "records" || !this.records)
+      return false;
+    const object = unwrapped(e.expression);
+    return isIdentifier(object) && scope.get(object.text) === "args";
+  }
+
   private access(e: PropertyAccessExpression, scope: Scope): Expr {
     const optional = e.questionDotToken !== undefined;
     if (e.flags & NodeFlags.OptionalChain && !optional) this.fail(e, "continues an optional chain");
     if (!isIdentifier(e.name)) this.fail(e, "reads a private name");
     const name = e.name.text;
-    const records = unwrapped(e.expression);
-    if (isIdentifier(records) && scope.get(records.text) === "records") {
+    if (this.isRecords(e.expression, scope)) {
       if (optional) this.fail(e, "reads an entity of records with ?.");
       return { op: this.only(e) === "table" ? "table" : "single", entity: name };
+    }
+    const target = unwrapped(e.expression);
+    if (isIdentifier(target) && scope.get(target.text) === "args") {
+      if (optional) this.fail(e, "reads its arguments with ?.");
+      if (name === "records") this.fail(e, "reads records other than an entity of it");
+      return this.argument(e, name);
+    }
+    if (isIdentifier(target) && !scope.has(target.text)) {
+      const constant = this.constantField(target, name, e);
+      if (constant !== undefined) return constant;
     }
     const receiver = this.present(e.expression);
     const object = this.expression(e.expression, scope);
@@ -410,6 +609,8 @@ class Conversion {
     if (e.flags & NodeFlags.OptionalChain) this.fail(e, "calls in an optional chain");
     const callee = unwrapped(e.expression);
     if (isIdentifier(callee) && callee.text === "emit" && !scope.has("emit")) return this.emitted(e, scope);
+    if (isIdentifier(callee) && callee.text !== "Boolean" && !scope.has(callee.text))
+      return this.inlined(callee, e, scope);
     if (e.arguments.length === 0 && isPropertyAccessExpression(callee) && isIdentifier(callee.name)) {
       const receiver = this.only(callee.expression);
       if (callee.name.text === "only" && (receiver === "bag" || receiver === "table"))
@@ -445,7 +646,7 @@ class Conversion {
       if (this.only(argument) !== "string") this.fail(e, "gets a record by other than a string");
       return { op: "lookup", table: this.expression(callee.expression, scope), key: this.expression(argument, scope) };
     }
-    const collection = receiver === "array" ? "array" : receiver === "bag" || receiver === "table" ? "bag" : undefined;
+    const collection = this.collection(callee.expression);
     if ((method === "filter" || method === "some" || method === "every" || method === "map") && collection)
       return { op: method, visit: collection, ...this.visited(method, callee.expression, argument, scope) };
     if (method === "sum" && collection === "bag")
@@ -463,6 +664,13 @@ class Conversion {
       return { op: "concat", left: this.expression(callee.expression, scope), right: this.expression(argument, scope) };
     }
     this.fail(e, `calls ${method}, which the IR has not`);
+  }
+
+  /** How a callback method visits `node`: as an array, or as a Bag, which a table is. */
+  private collection(node: Node): "array" | "bag" | undefined {
+    const kinds = [...this.kinds(node)];
+    if (kinds.every((k) => k === "array")) return "array";
+    return kinds.every((k) => k === "bag" || k === "table") ? "bag" : undefined;
   }
 
   /** The arrow function that a callback method takes, with one plain parameter. */
@@ -511,9 +719,10 @@ export function converted(
   source: Source,
   args: readonly Arg[],
   events: readonly DefinitionRef[] = [],
+  constants: Constants = new Map(),
 ): Expr | { readonly unconverted: string } {
   try {
-    return new Conversion(source, events).convertFunction(source.node, args);
+    return new Conversion(source, events, constants).convertFunction(source.node, args);
   } catch (error) {
     if (error instanceof Unconverted) return { unconverted: error.message };
     throw error;
