@@ -26,7 +26,9 @@ const fixture = <S extends Shape>(
 // Few distinct values, so that equal ones and empty ones come up often.
 const text = fc.string({ maxLength: 3, unit: fc.constantFrom("a", "b", "é") });
 const number = fc.oneof(fc.integer({ min: -2, max: 2 }), fc.double({ min: -3, max: 3, noNaN: true }));
-const instant = fc.integer({ min: 0, max: 3 }).map((n) => new Date(Date.UTC(2026, 0, 1) + n * 999).toISOString());
+const instant = fc
+  .integer({ min: 0, max: 3 })
+  .map((n) => Temporal.Instant.fromEpochMilliseconds(Date.UTC(2026, 0, 1) + n * 999).toString());
 const day = fc.integer({ min: 0, max: 3 }).map((n) => new Date(Date.UTC(2026, 0, 30 + n)).toISOString().slice(0, 10));
 const numbers = fc.array(number, { maxLength: 4 });
 
@@ -206,6 +208,41 @@ export const fixtures: readonly Fixture[] = [
     keyed,
     ({ input, records }) => records.Task.get(input.id) === undefined || records.Task.get(input.id)!.title === "a",
   ),
+  fixture(
+    "obj",
+    { title: z.string(), note: z.string().optional() },
+    fc.record({ title: text, note: text }, { requiredKeys: ["title"] }),
+    ({ input }) => ({ a: input.title, b: input.note, c: { d: input.title === "a" } }),
+  ),
+  fixture(
+    "arr",
+    { title: z.string(), note: z.string().optional() },
+    fc.record({ title: text, note: text }, { requiredKeys: ["title"] }),
+    ({ input }) => [input.title, input.note],
+  ),
+  fixture("map", { ns: z.array(z.number()) }, fc.record({ ns: numbers }), ({ input }) => input.ns.map((n) => n > 0)),
+  recordFixture("map", {}, fc.record({}), ({ records }) => records.Task.map((t) => ({ id: t.id, done: t.done }))),
+  recordFixture("sum", {}, fc.record({}), ({ records }) => records.Task.sum((t) => (t.done ? 1 : 0))),
+  fixture("sum", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.sum((n) => n)),
+  fixture("min", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.min((n) => n)),
+  recordFixture("max", {}, fc.record({}), ({ records }) =>
+    records.Task.filter((t) => t.at !== null).max((t) => t.at as Temporal.Instant),
+  ),
+  recordFixture(
+    "only",
+    { title: z.string() },
+    fc.record({ title: text }),
+    ({ input, records }) => records.Task.filter((t) => t.title === input.title).only()?.id,
+  ),
+  fixture("sortedBy", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) =>
+    input.bag.sortedBy((n) => n),
+  ),
+  recordFixture("sortedBy", {}, fc.record({}), ({ records }) =>
+    records.Task.map((t) => ({ title: t.title, done: t.done ? 1 : 0 })).sortedBy((x) => x.done),
+  ),
+  recordFixture("concat", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input, records }) =>
+    input.bag.concat(records.Task.map((t) => t.title.length)),
+  ),
 ];
 
 /** Functions with a construct outside the IR, each of which stays TS. */
@@ -215,7 +252,7 @@ export const outside: readonly ((args: { readonly input: Row<{ n: z.ZodNumber; t
     ({ input }) => input.title.trim() === "",
     ({ input }) => input.title < "b",
     ({ input }) => `${input.title}!` === "a!",
-    ({ input }) => [input.n].length === 1,
+    ({ input }) => [...[input.n]].length === 1,
     (args) => args.input.n > 0,
     async ({ input }) => input.n > 0,
   ];

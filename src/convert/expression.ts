@@ -4,6 +4,7 @@ import {
   type CallExpression,
   type Expression,
   type FunctionExpression,
+  isArrayLiteralExpression,
   isArrowFunction,
   isAsExpression,
   isBinaryExpression,
@@ -17,28 +18,32 @@ import {
   isNoSubstitutionTemplateLiteral,
   isNumericLiteral,
   isObjectBindingPattern,
+  isObjectLiteralExpression,
   isParenthesizedExpression,
   isPrefixUnaryExpression,
   isPropertyAccessExpression,
+  isPropertyAssignment,
   isReturnStatement,
   isSatisfiesExpression,
+  isShorthandPropertyAssignment,
+  isSpreadElement,
   isStringLiteral,
   isVariableStatement,
   type Node,
   NodeFlags,
+  type ObjectLiteralElementLike,
   type PropertyAccessExpression,
   type Statement,
   SyntaxKind,
 } from "typescript/unstable/ast";
 import { SignatureKind, type Type, TypeFlags } from "typescript/unstable/sync";
-import type { Expr } from "./ir.generated.ts";
+import type { Expr, Field } from "./ir.generated.ts";
 import type { Source } from "./sources.ts";
 
 /** An argument of a spec function: one that the IR names, or `records`, which only the record operations read. */
 export type Arg = Extract<Expr, { readonly op: "arg" }>["arg"] | "records";
 type Relation = Extract<Expr, { readonly op: "compare" }>["relation"];
 type Order = Extract<Expr, { readonly op: "compare" }>["order"];
-type Visit = Extract<Expr, { readonly op: "every" }>["visit"];
 
 /** What the converter tells apart in a TS type: a member of a union, by how the IR reads its JSON. */
 type Kind =
@@ -266,8 +271,26 @@ class Conversion {
       };
     if (isBinaryExpression(e)) return this.binary(e.left, e.operatorToken.kind, e.right, e, scope);
     if (isPropertyAccessExpression(e)) return this.access(e, scope);
+    if (isObjectLiteralExpression(e)) return { op: "obj", fields: e.properties.map((p) => this.property(p, scope)) };
+    if (isArrayLiteralExpression(e))
+      return {
+        op: "arr",
+        values: e.elements.map((v) => {
+          if (isSpreadElement(v) || v.kind === SyntaxKind.OmittedExpression)
+            this.fail(v, "spreads or skips in an array");
+          return this.expression(v, scope);
+        }),
+      };
     if (isCallExpression(e)) return this.call(e, scope);
     this.fail(e, "is no expression of the IR");
+  }
+
+  private property(p: ObjectLiteralElementLike, scope: Scope): Field {
+    if (isShorthandPropertyAssignment(p) && p.objectAssignmentInitializer === undefined && isIdentifier(p.name))
+      return { name: p.name.text, value: this.expression(p.name, scope) };
+    if (isPropertyAssignment(p) && (isIdentifier(p.name) || isStringLiteral(p.name)))
+      return { name: p.name.text, value: this.expression(p.initializer, scope) };
+    this.fail(p, "has an object member other than a named field");
   }
 
   private number(node: Node, n: number): Expr {
@@ -341,6 +364,11 @@ class Conversion {
   private call(e: CallExpression, scope: Scope): Expr {
     if (e.flags & NodeFlags.OptionalChain) this.fail(e, "calls in an optional chain");
     const callee = unwrapped(e.expression);
+    if (e.arguments.length === 0 && isPropertyAccessExpression(callee) && isIdentifier(callee.name)) {
+      const receiver = this.only(callee.expression);
+      if (callee.name.text === "only" && (receiver === "bag" || receiver === "table"))
+        return { op: "only", collection: this.expression(callee.expression, scope) };
+    }
     const [argument, ...rest] = e.arguments;
     if (argument === undefined || rest.length > 0) this.fail(e, "calls with other than one argument");
     if (isIdentifier(callee) && callee.text === "Boolean" && !scope.has("Boolean"))
@@ -371,34 +399,57 @@ class Conversion {
       if (this.only(argument) !== "string") this.fail(e, "gets a record by other than a string");
       return { op: "lookup", table: this.expression(callee.expression, scope), key: this.expression(argument, scope) };
     }
-    if (
-      (method === "filter" || method === "some" || method === "every") &&
-      (receiver === "array" || receiver === "bag" || receiver === "table")
-    )
-      return this.visit(method, receiver === "array" ? "array" : "bag", callee.expression, argument, scope);
+    const collection = receiver === "array" ? "array" : receiver === "bag" || receiver === "table" ? "bag" : undefined;
+    if ((method === "filter" || method === "some" || method === "every" || method === "map") && collection)
+      return { op: method, visit: collection, ...this.visited(method, callee.expression, argument, scope) };
+    if (method === "sum" && collection === "bag")
+      return { op: "sum", ...this.visited(method, callee.expression, argument, scope) };
+    if ((method === "min" || method === "max" || method === "sortedBy") && collection === "bag") {
+      const key = this.only(this.callbackBody(method, argument));
+      if (key !== "number" && key !== "instant" && key !== "date")
+        this.fail(e, `calls ${method} with other than a key`);
+      return { op: method, order: key, ...this.visited(method, callee.expression, argument, scope) };
+    }
+    if (method === "concat" && collection === "bag") {
+      const other = this.only(argument);
+      if (other !== "bag" && other !== "table" && other !== "array")
+        this.fail(e, "concats other than a Bag or an array");
+      return { op: "concat", left: this.expression(callee.expression, scope), right: this.expression(argument, scope) };
+    }
     this.fail(e, `calls ${method}, which the IR has not`);
   }
 
-  private visit(
-    op: "filter" | "some" | "every",
-    visit: Visit,
-    collection: Expression,
-    callback: Expression,
-    scope: Scope,
-  ): Expr {
+  /** The arrow function that a callback method takes, with one plain parameter. */
+  private callback(method: string, callback: Expression): ArrowFunction {
     const f = unwrapped(callback);
-    if (!isArrowFunction(f)) this.fail(f, `calls ${op} with other than an arrow function`);
+    if (!isArrowFunction(f)) this.fail(f, `calls ${method} with other than an arrow function`);
     this.synchronous(f);
     const [parameter, ...rest] = f.parameters;
     if (parameter === undefined || rest.length > 0 || parameter.dotDotDotToken !== undefined || parameter.initializer)
-      this.fail(f, `calls ${op} with other than one plain parameter`);
+      this.fail(f, `calls ${method} with other than one plain parameter`);
+    return f;
+  }
+
+  /** The expression that a callback returns, whose type is the key of min, max and sortedBy. */
+  private callbackBody(method: string, callback: Expression): Expression {
+    const f = this.callback(method, callback);
+    if (isBlock(f.body)) this.fail(f, `calls ${method} with a block body`);
+    return f.body as Expression;
+  }
+
+  private visited(
+    method: string,
+    collection: Expression,
+    callback: Expression,
+    scope: Scope,
+  ): { readonly collection: Expr; readonly name: string; readonly body: Expr } {
+    const f = this.callback(method, callback);
+    const parameter = f.parameters[0] as NonNullable<(typeof f.parameters)[0]>;
     const body = (inner: Scope): Expr =>
       isBlock(f.body) ? this.block([...f.body.statements], inner) : this.expression(f.body as Expression, inner);
     const name = isIdentifier(parameter.name) ? parameter.name.text : `$${f.pos}`;
     const inner = declared(scope, name);
     return {
-      op,
-      visit,
       collection: this.expression(collection, scope),
       name,
       body: isIdentifier(parameter.name) ? body(inner) : this.bound(parameter.name, { op: "var", name }, inner, body),

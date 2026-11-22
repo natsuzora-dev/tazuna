@@ -57,6 +57,8 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Collection
 
+mutual
+
 /-- An expression. `and`, `or` and `coalesce` give an operand's value and skip the other, as JS `&&`, `||` and `??`. -/
 inductive Expr where
   | undef
@@ -92,9 +94,32 @@ inductive Expr where
   | single (entity : String)
   /-- `table.get(key)`: the record, which reads whether it exists, or `undefined`. -/
   | lookup (table key : Expr)
-deriving Repr, Inhabited
+  /-- An object literal, its fields in written order. -/
+  | obj (fields : List Field)
+  /-- An array literal. -/
+  | arr (values : List Expr)
+  | map (visit : Collection) (collection : Expr) (name : String) (body : Expr)
+  /-- A Bag's sum, which throws unless every value and the sum are safe integers. -/
+  | sum (collection : Expr) (name : String) (body : Expr)
+  /-- A Bag's least key, `undefined` when it is empty. -/
+  | min (order : Order) (collection : Expr) (name : String) (body : Expr)
+  | max (order : Order) (collection : Expr) (name : String) (body : Expr)
+  /-- A Bag's one value, `undefined` when it is empty; more values are the Issue `notOnly`. -/
+  | only (collection : Expr)
+  /-- A Bag's values in groups of equal key, in ascending key order. -/
+  | sortedBy (order : Order) (collection : Expr) (name : String) (body : Expr)
+  | concat (left right : Expr)
 
-derive_wire_mutual (Expr tag "op")
+structure Field where
+  name : String
+  value : Expr
+
+end
+
+deriving instance Repr for Expr, Field
+instance : Inhabited Expr := ⟨.undef⟩
+
+derive_wire_mutual (Expr tag "op") (Field)
 
 /-- A converted condition, such as a requires, ensures, guard or invariant, or a binds value. -/
 structure Condition where
@@ -111,6 +136,14 @@ structure Conditions where
 deriving Repr, Inhabited
 
 derive_wire Conditions
+
+/-- A converted spec function of a definition that has one, such as a query's resolve. -/
+structure Fn where
+  definition : Spec.Ref
+  body : Expr
+deriving Repr, Inhabited
+
+derive_wire Fn
 
 /--
 The spec functions that TS converted, by the Functions callback that evaluates them. A callback that runs every
@@ -130,6 +163,7 @@ structure Program where
   serviceInvariant : List Conditions := []
   automationBinding : List Conditions := []
   automationGuard : List Conditions := []
+  resolve : List Fn := []
 deriving Repr, Inhabited
 
 derive_wire Program

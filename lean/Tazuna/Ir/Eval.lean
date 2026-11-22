@@ -112,6 +112,39 @@ def elements : Val → EvalM (List Val)
     pure ((source.keys entity).map fun k => .row source entity (some k))
   | _ => thrown
 
+/-- A key as a numerator over 10 ^ the exponent, which `order` reads of a value, or the TypeError that JS would throw. -/
+def keyOf (order : Order) (v : Val) : EvalM (Int × Nat) :=
+  match ordinal order v with
+  | some k => pure k
+  | none => thrown
+
+def keyLt (a b : Int × Nat) : Bool := a.1 * 10 ^ b.2 < b.1 * 10 ^ a.2
+
+/-- The integer that a number is, when it is a safe integer, as `Number.isSafeInteger` takes it. -/
+def safeInteger? : Val → Option Int
+  | .json (.num n) =>
+    let d : Int := 10 ^ n.exponent
+    if n.mantissa % d == 0 && (n.mantissa / d).natAbs < 2 ^ 53 then some (n.mantissa / d) else none
+  | _ => none
+
+/-- The least key of `keyed` under `lt`, the first of equal ones, as a Bag's min reduces the keys in visit order. -/
+def least (lt : Int × Nat → Int × Nat → Bool) : List (Val × (Int × Nat)) → Val
+  | [] => .undef
+  | k :: ks => (ks.foldl (fun m k => if lt k.2 m.2 then k else m) k).1
+
+/-- Groups of equal key in ascending key order, each in the order of `keyed`, as TS's runsOf makes them. -/
+def runs (keyed : List (Val × (Int × Nat))) : List (List Val) :=
+  let sorted := keyed.mergeSort fun a b => !keyLt b.2 a.2
+  let groups := sorted.foldl (fun (acc : List (List (Val × (Int × Nat)))) k =>
+    match acc with
+    | (g :: gs) => match g.head? with
+      | some h => if !keyLt h.2 k.2 && !keyLt k.2 h.2 then (g ++ [k]) :: gs else [k] :: g :: gs
+      | none => [k] :: gs
+    | [] => [[k]]) []
+  groups.reverse.map (·.map (·.1))
+
+mutual
+
 /--
 The value of `e` in `env` with the variables `vars`. A property of null or undefined is the TypeError `thrown none`, as
 JS throws it; so is a variable that no binder declares, which the converter never writes.
@@ -200,6 +233,54 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
       note (.record entity key)
       pure (if source.any (fun r => r.entity == entity && r.key == some key) then .row source entity (some key) else .undef)
     | _, _ => thrown
+  | .obj fields => do pure (.obj (← evalFields env vars fields))
+  | .arr values => do pure (.list (← evalAll env vars values))
+  | .map _ c x body => do
+    let vs ← elements (← eval env vars c)
+    pure (.list (← vs.mapM fun v => eval env ((x, v) :: vars) body))
+  | .sum c x body => do
+    let ns ← (← elements (← eval env vars c)).mapM fun v => eval env ((x, v) :: vars) body
+    let some (ints : List Int) := ns.mapM safeInteger? | thrown
+    let total : Int := ints.foldl (· + ·) 0
+    if total.natAbs < 2 ^ 53 then pure (.json (.num total)) else thrown
+  | .min order c x body => do
+    let keyed ← (← elements (← eval env vars c)).mapM fun v => do
+      let k ← eval env ((x, v) :: vars) body
+      pure (k, ← keyOf order k)
+    pure (least keyLt keyed)
+  | .max order c x body => do
+    let keyed ← (← elements (← eval env vars c)).mapM fun v => do
+      let k ← eval env ((x, v) :: vars) body
+      pure (k, ← keyOf order k)
+    pure (least (fun a b => keyLt b a) keyed)
+  | .only c => do
+    match ← elements (← eval env vars c) with
+    | [] => pure .undef
+    | [v] => pure v
+    | _ => throw .notOnly
+  | .sortedBy order c x body => do
+    let keyed ← (← elements (← eval env vars c)).mapM fun v => do
+      pure (v, ← keyOf order (← eval env ((x, v) :: vars) body))
+    pure (.list ((runs keyed).map .list))
+  | .concat a b => do
+    let left ← eval env vars a
+    let right ← eval env vars b
+    let vs ← elements left
+    pure (.list (vs ++ (← elements right)))
+
+def evalAll (env : Env) (vars : List (String × Val)) : List Expr → EvalM (List Val)
+  | [] => pure []
+  | e :: es => do
+    let v ← eval env vars e
+    pure (v :: (← evalAll env vars es))
+
+def evalFields (env : Env) (vars : List (String × Val)) : List Field → EvalM (List (String × Val))
+  | [] => pure []
+  | ⟨name, e⟩ :: fs => do
+    let v ← eval env vars e
+    pure ((name, v) :: (← evalFields env vars fs))
+
+end
 
 /-- The JSON of a value, none for `undefined`, as JSON.stringify writes it; a record or table has none. -/
 partial def Val.encoded : Val → Except Issue (Option Value)
@@ -209,6 +290,12 @@ partial def Val.encoded : Val → Except Issue (Option Value)
   | .obj fields => do
     pure (some (.obj (← fields.filterMapM fun (name, v) => do pure ((← v.encoded).map (name, ·)))))
   | .row .. | .table .. => throw (.thrown none)
+
+/-- The JSON that TS's encoding of a spec function's value gives: null for `undefined`, as JSON.stringify writes it. -/
+def answerOf (v : Val) : EvalM Value :=
+  match v.encoded with
+  | .ok json => pure (json.getD .null)
+  | .error issue => throw issue
 
 /-- The name of the first of `conditions` whose value is not truthy, in order, as TS `firstFailing` finds it. -/
 def firstFailing (env : Env) : List Condition → EvalM (Option String)

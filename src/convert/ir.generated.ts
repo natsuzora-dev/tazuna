@@ -136,7 +136,69 @@ export type Expr =
       readonly op: "lookup";
       readonly table: Expr;
       readonly key: Expr;
+    }
+  /** An object literal, its fields in written order. */
+  | {
+      readonly op: "obj";
+      readonly fields: readonly Field[];
+    }
+  /** An array literal. */
+  | {
+      readonly op: "arr";
+      readonly values: readonly Expr[];
+    }
+  | {
+      readonly op: "map";
+      readonly visit: "array" | "bag";
+      readonly collection: Expr;
+      readonly name: string;
+      readonly body: Expr;
+    }
+  /** A Bag's sum, which throws unless every value and the sum are safe integers. */
+  | {
+      readonly op: "sum";
+      readonly collection: Expr;
+      readonly name: string;
+      readonly body: Expr;
+    }
+  /** A Bag's least key, `undefined` when it is empty. */
+  | {
+      readonly op: "min";
+      readonly order: "number" | "instant" | "date";
+      readonly collection: Expr;
+      readonly name: string;
+      readonly body: Expr;
+    }
+  | {
+      readonly op: "max";
+      readonly order: "number" | "instant" | "date";
+      readonly collection: Expr;
+      readonly name: string;
+      readonly body: Expr;
+    }
+  /** A Bag's one value, `undefined` when it is empty; more values are the Issue `notOnly`. */
+  | {
+      readonly op: "only";
+      readonly collection: Expr;
+    }
+  /** A Bag's values in groups of equal key, in ascending key order. */
+  | {
+      readonly op: "sortedBy";
+      readonly order: "number" | "instant" | "date";
+      readonly collection: Expr;
+      readonly name: string;
+      readonly body: Expr;
+    }
+  | {
+      readonly op: "concat";
+      readonly left: Expr;
+      readonly right: Expr;
     };
+
+export type Field = {
+  readonly name: string;
+  readonly value: Expr;
+};
 
 /** A converted condition, such as a requires, ensures, guard or invariant, or a binds value. */
 export type Condition = {
@@ -148,6 +210,12 @@ export type Condition = {
 export type Conditions = {
   readonly definition: DefinitionRef;
   readonly conditions: readonly Condition[];
+};
+
+/** A converted spec function of a definition that has one, such as a query's resolve. */
+export type Fn = {
+  readonly definition: DefinitionRef;
+  readonly body: Expr;
 };
 
 /**
@@ -168,4 +236,5 @@ export type Program = {
   readonly serviceInvariant: readonly Conditions[];
   readonly automationBinding: readonly Conditions[];
   readonly automationGuard: readonly Conditions[];
+  readonly resolve: readonly Fn[];
 };

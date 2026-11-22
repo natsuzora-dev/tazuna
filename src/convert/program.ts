@@ -6,17 +6,21 @@ import type { AnyCommand, AnyQuery, Automation, ChartSpec } from "../dsl/definit
 import type { AnyEntity } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
 import { type Arg, converted } from "./expression.ts";
-import type { Condition, Conditions as ConvertedConditions, Expr, Program } from "./ir.generated.ts";
+import type { Condition, Conditions as ConvertedConditions, Expr, Fn, Program } from "./ir.generated.ts";
 import { Locator } from "./located.ts";
 import { Sources } from "./sources.ts";
 
-/** A spec function that stays TS: the Program list it would join, whose condition it is, and why. */
+/** A spec function that stays TS: the Program list it would join, whose condition it is (if any), and why. */
 interface NotConverted {
   readonly callback: keyof Program;
   readonly definition: DefinitionRef;
-  readonly name: string;
+  readonly name?: string;
   readonly reason: string;
 }
+
+/** The Program lists of named conditions, and those of one function per definition. */
+type ConditionsCallback = Exclude<keyof Program, FnCallback>;
+type FnCallback = "resolve";
 
 export interface Converted {
   readonly program: Program;
@@ -27,7 +31,7 @@ type SpecFunction = (args: never) => unknown;
 
 /** The conditions of one definition that a callback evaluates, with the arguments and their schemas. */
 interface Slot {
-  readonly callback: keyof Program;
+  readonly callback: ConditionsCallback;
   readonly definition: DefinitionRef;
   readonly conditions: Conditions<never> | undefined;
   readonly args: readonly Arg[];
@@ -47,6 +51,35 @@ function holdsCodec(shape: Shape): boolean {
   const holds = JSON.stringify(objectSchema(shape)).includes('"x-tazuna-codec"');
   codecs.set(shape, holds);
   return holds;
+}
+
+/** The one function of a definition that a callback evaluates, with its arguments and their schemas. */
+interface FnSlot {
+  readonly callback: FnCallback;
+  readonly definition: DefinitionRef;
+  readonly f: SpecFunction | undefined;
+  readonly args: readonly Arg[];
+  readonly shapes: readonly (Shape | undefined)[];
+}
+
+function fnSlotsOf(spec: Spec): FnSlot[] {
+  const slots: FnSlot[] = [];
+  for (const { service, name, definition: d } of spec.definitions) {
+    const entities = Object.values(
+      (spec.services.get(service)?.definition.entities ?? {}) as Readonly<Record<string, AnyEntity>>,
+    ).map((e) => e.fields);
+    if (d.kind === "query") {
+      const query = d as AnyQuery;
+      slots.push({
+        callback: "resolve",
+        definition: { service, name },
+        f: query.resolve as SpecFunction | undefined,
+        args: ["input", "records", "now"],
+        shapes: [query.input, query.output, ...entities],
+      });
+    }
+  }
+  return slots;
 }
 
 function slotsOf(spec: Spec): Slot[] {
@@ -206,7 +239,7 @@ export class Converter {
 
   /** The IR of the spec functions of the callbacks that Lean evaluates, and those that stay TS. */
   program(spec: Spec): Converted {
-    const lists: Record<keyof Program, ConvertedConditions[]> = {
+    const lists: Record<ConditionsCallback, ConvertedConditions[]> = {
       inputRequirement: [],
       resultEnsures: [],
       invariant: [],
@@ -242,6 +275,15 @@ export class Converter {
         lists[slot.callback].push({ definition: slot.definition, conditions });
       if (failed.length === 0) convertedBinds.add(slot);
     }
-    return { program: lists, notConverted };
+    const fns: Record<FnCallback, Fn[]> = { resolve: [] };
+    for (const slot of fnSlotsOf(spec)) {
+      if (slot.f === undefined) continue;
+      const codec = slot.shapes.some((shape) => shape !== undefined && holdsCodec(shape));
+      const body = codec ? { unconverted: "receives a value of a codec" } : this.convert(slot.f, slot.args);
+      if ("unconverted" in body)
+        notConverted.push({ callback: slot.callback, definition: slot.definition, reason: body.unconverted });
+      else fns[slot.callback].push({ definition: slot.definition, body });
+    }
+    return { program: { ...lists, ...fns }, notConverted };
   }
 }

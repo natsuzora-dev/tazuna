@@ -3,7 +3,7 @@ import { after, test } from "node:test";
 import fc from "fast-check";
 import type { Expr } from "../src/convert/ir.generated.ts";
 import { Converter } from "../src/convert/program.ts";
-import { bagValues } from "../src/data/bag.ts";
+import { bagValues, NotOnly } from "../src/data/bag.ts";
 import { decoded } from "../src/data/collections.ts";
 import { type Json, objectOf } from "../src/data/values.ts";
 import type { RecordSource } from "../src/service/records.ts";
@@ -46,6 +46,15 @@ const ops = [
   "table",
   "single",
   "lookup",
+  "obj",
+  "arr",
+  "map",
+  "sum",
+  "min",
+  "max",
+  "only",
+  "sortedBy",
+  "concat",
 ] as const satisfies readonly Expr["op"][];
 const listsEveryOp: [Exclude<Expr["op"], (typeof ops)[number]>] extends [never] ? true : false = true;
 
@@ -59,14 +68,22 @@ function opsOf(value: unknown, found = new Set<string>()): Set<string> {
   return found;
 }
 
-/** A value that a TS function returned, as JSON holds it: a Bag as its values, an instant or date as its text. */
+/**
+ * A value that a TS function returned, as JSON.stringify writes it: a Bag as its values, an instant or date as its text,
+ * and an undefined field left out.
+ */
 function jsonOf(value: unknown): Json | undefined {
   const values = bagValues(value);
   if (values !== undefined) return values.map((v) => jsonOf(v) ?? null);
   if (value instanceof Temporal.Instant || value instanceof Temporal.PlainDate) return value.toString();
   if (Array.isArray(value)) return value.map((v) => jsonOf(v) ?? null);
   if (value !== null && typeof value === "object")
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, jsonOf(v) ?? null]));
+    return Object.fromEntries(
+      Object.entries(value).flatMap(([k, v]) => {
+        const json = jsonOf(v);
+        return json === undefined ? [] : [[k, json]];
+      }),
+    );
   return value as Json | undefined;
 }
 
@@ -108,12 +125,12 @@ for (const [i, { fixture, ir }] of converted.entries())
         const json = JSON.parse(JSON.stringify(generated)) as Json;
         const reads: ReadPart[] = [];
         const records = recordsView(entities, sourceOf(stored, reads));
-        let ts: { readonly value?: Json } | { readonly issue: "thrown" };
+        let ts: { readonly value?: Json } | { readonly issue: "thrown" | "notOnly" };
         try {
           const value = jsonOf(fixture.f({ input: decoded(schema, json), records } as never));
-          ts = value === undefined ? {} : { value };
-        } catch {
-          ts = { issue: "thrown" };
+          ts = value === undefined ? {} : { value: JSON.parse(JSON.stringify(value)) as Json };
+        } catch (error) {
+          ts = { issue: error instanceof NotOnly ? "notOnly" : "thrown" };
         }
         const { value, issue, reads: leanReads } = lean.evaluate(ir, json, stored);
         assert.deepEqual(

@@ -129,6 +129,12 @@ def Program.overlay {m : Type → Type} [Monad m] (p : Program) (st : Service) (
       | some cond =>
         let env := { args := argsOf [(.payload, .json payload), (.now, instant now)], records }
         answered "automationGuard" (withBound env (binds p.automationBinding (st.ref name)) (holds · cond)).run'
-          (fs.automationGuard name c payload records now) }
+          (fs.automationGuard name c payload records now)
+    resolve := fun name input records now =>
+      match p.resolve.find? (·.definition == st.ref name) with
+      | none => fs.resolve name input records now
+      | some f =>
+        let env := { args := argsOf [(.input, .json input), (.now, instant now)], records }
+        answered "resolve" (do answerOf (← eval env [] f.body)).run' (fs.resolve name input records now) }
 
 end Tazuna.Ir
