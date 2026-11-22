@@ -215,6 +215,13 @@ export type StepOrder = {
   readonly order: readonly StepName[];
 };
 
+/** A record that an `evaluate` request gives: the key is absent for a single entity's. */
+export type Stored = {
+  readonly entity: string;
+  readonly key?: string;
+  readonly value: Json;
+};
+
 /** What TS asks Lean to compute. A snapshot line is null for a blank line. */
 export type Request =
   | {
@@ -308,11 +315,12 @@ export type Request =
       readonly service: string;
       readonly schema: Schema;
     }
-  /** The value of an IR expression whose only argument is `input`. */
+  /** The value of an IR expression whose only argument is `input`, over `records`. */
   | {
       readonly type: "evaluate";
       readonly body: Expr;
       readonly input: Json;
+      readonly records: readonly Stored[];
     };
 
 /**
@@ -696,10 +704,18 @@ export type SearchedProcessing = {
   readonly found: ViolationValue | null;
 };
 
-/** The value of an IR expression, absent for `undefined`, or the Issue that stopped it. */
+/** A part of the records that an evaluation read, as a `read` reply names it. */
+export type ReadPart = {
+  readonly entity: string;
+  readonly key?: string;
+  readonly field?: string;
+};
+
+/** The value of an IR expression, absent for `undefined`, or the Issue that stopped it, and the parts it read. */
 export type Evaluated = {
   readonly value?: Json;
   readonly issue?: Issue;
+  readonly reads: readonly ReadPart[];
 };
 
 /** What Lean answers a Request with, the constructor named after the request's. */

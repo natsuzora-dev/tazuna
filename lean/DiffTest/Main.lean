@@ -232,6 +232,29 @@ instance : MonadNote IO where
     | .bug message => throw (IO.userError message)
     | _ => pure ()
 
+/-- The text of an answer, for the message of a mismatch. -/
+def describe {ε α : Type} [Repr ε] [Repr α] : Except ε α → String
+  | .ok a => s!"{repr a}"
+  | .error e => s!"the Issue {repr e}"
+
+def sameAnswer {ε α : Type} [BEq ε] [BEq α] : Except ε α → Except ε α → Bool
+  | .ok a, .ok b => a == b
+  | .error a, .error b => a == b
+  | _, _ => false
+
+/--
+The answer that Lean evaluated, `ir` with the parts of the records that it read, after checking it against `beneath`,
+TS's answer to the same question: both answer alike and read the same parts in the same order, or tazuna-lean stops.
+The read log then holds the evaluation's parts, and no access, since no callback with IR reads a scope.
+-/
+def shadowed (reads : Reads) : Ir.Answered IO := fun callback (answer, parts) beneath => do
+  let ts ← beneath
+  let read := (← reads.get).parts
+  unless sameAnswer answer ts && parts == read do
+    throw (IO.userError s!"IR answers {callback} with {describe answer} reading {repr parts}, TS with {describe ts} reading {repr read}")
+  reads.set { parts }
+  pure answer
+
 /--
 The functions of each running service of `start`, instrumented as Instrument does, which collect into that service's
 Collect. Each question to TS names its service. The run asks only running services.
@@ -245,7 +268,7 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (program : Ir.Program) (start :
     match start.services.lookup service with
     | none => fs.hoist fun _ => throw (IO.userError s!"the run asked {service}, which does not run")
     | some st =>
-      let overlaid := program.overlay st (reads.set {})
+      let overlaid := program.overlay st (shadowed reads)
       let ifs : InstrumentFunctions IO := {
         lastReads := do pure (← reads.get).parts
         lastAccess := do pure (((← reads.get).replied.bind (·.access)).getD {})
@@ -362,10 +385,13 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))
   | .scenarioTime text => pure (.scenarioTime ((scenarioTime? text).map renderTime))
   | .schemaOf s service schema => do pure (.schemaOf ((← Service.ofStructure s service).schemaOf schema))
-  | .evaluate body input =>
-    pure (match Ir.eval (Ir.argsOf [(.input, some input)]) [] body with
-      | .ok value => .evaluated { value, issue := none }
-      | .error issue => .evaluated { value := none, issue })
+  | .evaluate body input records =>
+    let env : Ir.Env := { args := Ir.argsOf [(.input, .json input)], records := records.map Stored.row }
+    let (answer, parts) := (Ir.eval env [] body).run'
+    let reads := parts.map ReadPart.of
+    pure (match answer >>= Ir.Val.encoded with
+      | .ok value => .evaluated { value, issue := none, reads }
+      | .error issue => .evaluated { value := none, issue, reads })
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 

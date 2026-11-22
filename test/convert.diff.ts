@@ -6,8 +6,11 @@ import { Converter } from "../src/convert/program.ts";
 import { bagValues } from "../src/data/bag.ts";
 import { decoded } from "../src/data/collections.ts";
 import { type Json, objectOf } from "../src/data/values.ts";
-import { fixtures, outside } from "./convert/fixtures.ts";
+import type { RecordSource } from "../src/service/records.ts";
+import { recordsView } from "../src/sim/spec/records.ts";
+import { entities, fixtures, outside } from "./convert/fixtures.ts";
 import { Lean } from "./lean/lean.ts";
+import type { ReadPart, Stored } from "./lean/protocol.generated.ts";
 
 const lean = new Lean();
 const converter = new Converter();
@@ -40,6 +43,9 @@ const ops = [
   "filter",
   "some",
   "every",
+  "table",
+  "single",
+  "lookup",
 ] as const satisfies readonly Expr["op"][];
 const listsEveryOp: [Exclude<Expr["op"], (typeof ops)[number]>] extends [never] ? true : false = true;
 
@@ -64,7 +70,33 @@ function jsonOf(value: unknown): Json | undefined {
   return value as Json | undefined;
 }
 
-const converted = fixtures.map((fixture) => ({ fixture, ir: converter.convert(fixture.f, ["input"]) }));
+/** `stored` as TS's records view reads them, with each part it reads noted once in `reads`, as Lean's read log does. */
+function sourceOf(stored: readonly Stored[], reads: ReadPart[]): RecordSource {
+  const note = (part: ReadPart) => {
+    if (!reads.some((r) => r.entity === part.entity && r.key === part.key && r.field === part.field)) reads.push(part);
+  };
+  const keyed = (entity: string) => stored.filter((s) => s.entity === entity && s.key !== undefined);
+  return {
+    keys: (entity) => {
+      note({ entity });
+      return keyed(entity)
+        .map((s) => s.key as string)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    },
+    exists: (entity, key) => {
+      note({ entity, key });
+      return keyed(entity).some((s) => s.key === key);
+    },
+    field: (entity, key, field) => {
+      note(key === undefined ? { entity, field } : { entity, key, field });
+      const row = stored.find((s) => s.entity === entity && s.key === key);
+      const shape = entities[entity as keyof typeof entities].fields;
+      return row === undefined ? undefined : (decoded(objectOf(shape), row.value) as Record<string, unknown>)[field];
+    },
+  };
+}
+
+const converted = fixtures.map((fixture) => ({ fixture, ir: converter.convert(fixture.f, ["input", "records"]) }));
 
 for (const [i, { fixture, ir }] of converted.entries())
   test(`fixture ${i} (${fixture.op}) converts to IR with ${fixture.op}, which Lean evaluates as TS runs the function on random inputs`, () => {
@@ -72,17 +104,25 @@ for (const [i, { fixture, ir }] of converted.entries())
     assert.ok(opsOf(ir).has(fixture.op), JSON.stringify(ir));
     const schema = objectOf(fixture.shape);
     fc.assert(
-      fc.property(fixture.input, (generated) => {
+      fc.property(fixture.input, fixture.records, (generated, stored) => {
         const json = JSON.parse(JSON.stringify(generated)) as Json;
+        const reads: ReadPart[] = [];
+        const records = recordsView(entities, sourceOf(stored, reads));
         let ts: { readonly value?: Json } | { readonly issue: "thrown" };
         try {
-          const value = jsonOf(fixture.f({ input: decoded(schema, json) } as never));
+          const value = jsonOf(fixture.f({ input: decoded(schema, json), records } as never));
           ts = value === undefined ? {} : { value };
         } catch {
           ts = { issue: "thrown" };
         }
-        const { value, issue } = lean.evaluate(ir, json);
-        assert.deepEqual(issue === undefined ? (value === undefined ? {} : { value }) : { issue: issue.kind }, ts);
+        const { value, issue, reads: leanReads } = lean.evaluate(ir, json, stored);
+        assert.deepEqual(
+          {
+            answer: issue === undefined ? (value === undefined ? {} : { value }) : { issue: issue.kind },
+            reads: leanReads,
+          },
+          { answer: ts, reads },
+        );
       }),
     );
   });
@@ -98,6 +138,6 @@ test("every operation of the IR has a fixture", () => {
 
 for (const [i, f] of outside.entries())
   test(`function ${i} with a construct outside the IR stays TS`, () => {
-    const ir = converter.convert(f, ["input"]);
+    const ir = converter.convert(f, ["input", "records"]);
     assert.ok("unconverted" in ir, JSON.stringify(ir));
   });

@@ -94,17 +94,17 @@ def modules : List (String × List Name) :=
      ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
      ``Tazuna.Spec.Domain, ``Tazuna.Spec.Explore,
      ``Tazuna.Spec.Structure]),
-   ("src/convert/ir.generated.ts", [``Tazuna.Ir.Expr, ``Tazuna.Ir.Condition, ``Tazuna.Ir.Program]),
+   ("src/convert/ir.generated.ts", [``Tazuna.Ir.Expr, ``Tazuna.Ir.Condition, ``Tazuna.Ir.Conditions, ``Tazuna.Ir.Program]),
    ("test/lean/protocol.generated.ts",
     [``Tazuna.Service.Issue, ``Tazuna.Service.CopyScope, ``Tazuna.Service.Scope,
      ``Tazuna.Service.Transition, ``Tazuna.Service.Assignment, ``Tazuna.Service.Edge, ``Tazuna.Service.Extra, ``Tazuna.Service.Emit,
      ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys, ``Tazuna.Explore.Holder, ``Tazuna.Explore.Access,
      ``Tazuna.Verify.Part, ``Tazuna.Service.Operation, ``Tazuna.Explore.Awaiting, ``Tazuna.Explore.Enabled,
-     ``Tazuna.DiffTest.PairedService, ``Tazuna.DiffTest.StepOrder,
+     ``Tazuna.DiffTest.PairedService, ``Tazuna.DiffTest.StepOrder, ``Tazuna.DiffTest.Stored,
      ``Tazuna.DiffTest.Request, ``Tazuna.DiffTest.Question, ``Tazuna.DiffTest.Asked,
      ``Tazuna.DiffTest.Reply, ``Tazuna.DiffTest.Replied, ``Tazuna.DiffTest.Unpaired,
      ``Tazuna.DiffTest.SimulatedService, ``Tazuna.DiffTest.TriedOrder, ``Tazuna.DiffTest.SearchedProcessing,
-     ``Tazuna.DiffTest.Evaluated, ``Tazuna.DiffTest.Response])]
+     ``Tazuna.DiffTest.ReadPart, ``Tazuna.DiffTest.Evaluated, ``Tazuna.DiffTest.Response])]
 
 def declaredIn (path : String) : MetaM (List Name) := do
   let some types := modules.lookup path | throwError "modules has no {path}"

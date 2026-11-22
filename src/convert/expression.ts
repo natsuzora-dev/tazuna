@@ -34,8 +34,8 @@ import { SignatureKind, type Type, TypeFlags } from "typescript/unstable/sync";
 import type { Expr } from "./ir.generated.ts";
 import type { Source } from "./sources.ts";
 
-/** An argument of a spec function, as the IR names it. */
-export type Arg = Extract<Expr, { readonly op: "arg" }>["arg"];
+/** An argument of a spec function: one that the IR names, or `records`, which only the record operations read. */
+export type Arg = Extract<Expr, { readonly op: "arg" }>["arg"] | "records";
 type Relation = Extract<Expr, { readonly op: "compare" }>["relation"];
 type Order = Extract<Expr, { readonly op: "compare" }>["order"];
 type Visit = Extract<Expr, { readonly op: "every" }>["visit"];
@@ -51,6 +51,7 @@ type Kind =
   | "date"
   | "array"
   | "bag"
+  | "table"
   | "emit"
   | "object"
   | "other";
@@ -60,7 +61,10 @@ const scalars: ReadonlySet<Kind> = new Set(["string", "number", "boolean", "null
 /** A construct outside the IR, with the source text it is in. */
 class Unconverted extends Error {}
 
-type Scope = ReadonlySet<string>;
+/** The names that a function body can read: a variable, or the records argument. */
+type Scope = ReadonlyMap<string, "variable" | "records">;
+
+const declared = (scope: Scope, name: string): Scope => new Map([...scope, [name, "variable"]]);
 
 const flipped: Readonly<Record<Relation, Relation>> = { lt: "gt", le: "ge", gt: "lt", ge: "le", eq: "eq" };
 
@@ -118,6 +122,7 @@ class Conversion {
     const name = type.getSymbol()?.name;
     if (name === "Instant") return "instant";
     if (name === "PlainDate") return "date";
+    if (name === "Table") return "table";
     if (name === "Bag" || name === "BagValue") return "bag";
     if (name === "Emit") return "emit";
     const { checker } = this.source;
@@ -152,15 +157,15 @@ class Conversion {
     if (rest.length > 0) this.fail(f, "takes more than its arguments object");
     const body = (scope: Scope): Expr =>
       isBlock(f.body) ? this.block([...f.body.statements], scope) : this.expression(f.body as Expression, scope);
-    if (parameter === undefined) return body(new Set());
+    if (parameter === undefined) return body(new Map());
     if (parameter.dotDotDotToken !== undefined || parameter.initializer !== undefined)
       this.fail(parameter, "takes its arguments with a rest or a default");
     if (!isObjectBindingPattern(parameter.name)) this.fail(parameter, "takes its arguments without destructuring");
     const named = (name: string): Expr => {
-      if (!(args as readonly string[]).includes(name)) this.fail(parameter, `reads ${name}`);
-      return { op: "arg", arg: name as Arg };
+      if (!(args as readonly string[]).includes(name) || name === "records") this.fail(parameter, `reads ${name}`);
+      return { op: "arg", arg: name as Exclude<Arg, "records"> };
     };
-    return this.destructured(parameter.name, named, new Set(), body);
+    return this.destructured(parameter.name, named, new Map(), body, args.includes("records"));
   }
 
   /** `then` under the variables that `pattern` binds from the fields that `field` reads. */
@@ -169,6 +174,7 @@ class Conversion {
     field: (name: string) => Expr,
     scope: Scope,
     then: (scope: Scope) => Expr,
+    records = false,
   ): Expr {
     if (!isObjectBindingPattern(pattern) || pattern.elements.length === 0)
       this.fail(pattern, "destructures other than a non-empty object pattern");
@@ -179,6 +185,10 @@ class Conversion {
         this.fail(element, "destructures with a rest or a default");
       const key = element.propertyName ?? element.name;
       if (!isIdentifier(key)) this.fail(element, "destructures a computed name");
+      if (records && key.text === "records") {
+        if (!isIdentifier(element.name)) this.fail(element, "destructures records");
+        return bind(i + 1, new Map([...scope, [element.name.text, "records"]]));
+      }
       const value = field(key.text);
       return this.bound(element.name, value, scope, (inner) => bind(i + 1, inner));
     };
@@ -187,7 +197,7 @@ class Conversion {
 
   /** `then` with `name` bound to `value`. */
   private bound(name: BindingName, value: Expr, scope: Scope, then: (scope: Scope) => Expr): Expr {
-    if (isIdentifier(name)) return { op: "let", name: name.text, value, body: then(new Set([...scope, name.text])) };
+    if (isIdentifier(name)) return { op: "let", name: name.text, value, body: then(declared(scope, name.text)) };
     return this.destructured(name, (field) => ({ op: "field", object: value, name: field }), scope, then);
   }
 
@@ -234,7 +244,9 @@ class Conversion {
     if (isStringLiteral(e) || isNoSubstitutionTemplateLiteral(e)) return { op: "lit", value: e.text };
     if (isNumericLiteral(e)) return this.number(e, Number(e.text));
     if (isIdentifier(e)) {
-      if (scope.has(e.text)) return { op: "var", name: e.text };
+      const declaration = scope.get(e.text);
+      if (declaration === "records") this.fail(e, "reads records other than an entity of it");
+      if (declaration === "variable") return { op: "var", name: e.text };
       if (e.text === "undefined") return { op: "undef" };
       this.fail(e, "reads a name declared outside the function");
     }
@@ -307,6 +319,11 @@ class Conversion {
     if (e.flags & NodeFlags.OptionalChain && !optional) this.fail(e, "continues an optional chain");
     if (!isIdentifier(e.name)) this.fail(e, "reads a private name");
     const name = e.name.text;
+    const records = unwrapped(e.expression);
+    if (isIdentifier(records) && scope.get(records.text) === "records") {
+      if (optional) this.fail(e, "reads an entity of records with ?.");
+      return { op: this.only(e) === "table" ? "table" : "single", entity: name };
+    }
     const receiver = this.present(e.expression);
     const object = this.expression(e.expression, scope);
     const plain = (op: "strLen" | "size"): Expr => {
@@ -315,7 +332,7 @@ class Conversion {
     };
     if (name === "length" && receiver === "string") return plain("strLen");
     if (name === "length" && receiver === "array") return plain("size");
-    if (name === "size" && receiver === "bag") return plain("size");
+    if (name === "size" && (receiver === "bag" || receiver === "table")) return plain("size");
     if (receiver === "object" || (receiver === "emit" && (name === "kind" || name === "payload")))
       return { op: optional ? "fieldOpt" : "field", object, name };
     this.fail(e, `reads ${name} of a value outside the IR`);
@@ -350,11 +367,15 @@ class Conversion {
         right: this.expression(argument, scope),
       };
     }
+    if (method === "get" && receiver === "table") {
+      if (this.only(argument) !== "string") this.fail(e, "gets a record by other than a string");
+      return { op: "lookup", table: this.expression(callee.expression, scope), key: this.expression(argument, scope) };
+    }
     if (
       (method === "filter" || method === "some" || method === "every") &&
-      (receiver === "array" || receiver === "bag")
+      (receiver === "array" || receiver === "bag" || receiver === "table")
     )
-      return this.visit(method, receiver, callee.expression, argument, scope);
+      return this.visit(method, receiver === "array" ? "array" : "bag", callee.expression, argument, scope);
     this.fail(e, `calls ${method}, which the IR has not`);
   }
 
@@ -374,7 +395,7 @@ class Conversion {
     const body = (inner: Scope): Expr =>
       isBlock(f.body) ? this.block([...f.body.statements], inner) : this.expression(f.body as Expression, inner);
     const name = isIdentifier(parameter.name) ? parameter.name.text : `$${f.pos}`;
-    const inner = new Set([...scope, name]);
+    const inner = declared(scope, name);
     return {
       op,
       visit,

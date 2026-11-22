@@ -14,7 +14,7 @@ export type Expr =
     }
   | {
       readonly op: "arg";
-      readonly arg: "input" | "output" | "events" | "record";
+      readonly arg: "input" | "output" | "events" | "record" | "payload" | "now" | "bound";
     }
   | {
       readonly op: "var";
@@ -120,22 +120,52 @@ export type Expr =
       readonly collection: Expr;
       readonly name: string;
       readonly body: Expr;
+    }
+  /** `records.<entity>` of a keyed entity: a Bag of its records, which reads its keys when an operation visits it. */
+  | {
+      readonly op: "table";
+      readonly entity: string;
+    }
+  /** `records.<entity>` of a single entity. */
+  | {
+      readonly op: "single";
+      readonly entity: string;
+    }
+  /** `table.get(key)`: the record, which reads whether it exists, or `undefined`. */
+  | {
+      readonly op: "lookup";
+      readonly table: Expr;
+      readonly key: Expr;
     };
 
-/** A named condition of a definition, such as one requires condition of a query. */
+/** A converted condition, such as a requires, ensures, guard or invariant, or a binds value. */
 export type Condition = {
-  readonly definition: DefinitionRef;
   readonly name: string;
   readonly body: Expr;
 };
 
+/** The converted conditions of one definition, in the order the spec writes them. */
+export type Conditions = {
+  readonly definition: DefinitionRef;
+  readonly conditions: readonly Condition[];
+};
+
 /**
- * The spec functions that TS converted, by the Functions callback that evaluates them. `invariants` and `closeEnsures`
- * hold every condition of an entity or screen in the order the spec writes them, or none of them.
+ * The spec functions that TS converted, by the Functions callback that evaluates them. A callback that runs every
+ * condition of a definition, such as `invariant`, holds all of them or no entry for the definition; so do `binding` and
+ * `automationBinding`, since a requires, guard or ensures reads every binds value, and those hold entries only where the
+ * binds have one. A service invariant names its service as its definition.
  */
 export type Program = {
-  readonly requires: readonly Condition[];
-  readonly ensures: readonly Condition[];
-  readonly invariants: readonly Condition[];
-  readonly closeEnsures: readonly Condition[];
+  readonly inputRequirement: readonly Conditions[];
+  readonly resultEnsures: readonly Conditions[];
+  readonly invariant: readonly Conditions[];
+  readonly closeEnsures: readonly Conditions[];
+  readonly binding: readonly Conditions[];
+  readonly requirement: readonly Conditions[];
+  readonly ensures: readonly Conditions[];
+  readonly queryEnsures: readonly Conditions[];
+  readonly serviceInvariant: readonly Conditions[];
+  readonly automationBinding: readonly Conditions[];
+  readonly automationGuard: readonly Conditions[];
 };

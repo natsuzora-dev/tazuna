@@ -4,13 +4,15 @@ import type { Expr } from "../../src/convert/ir.generated.ts";
 import { bag } from "../../src/data/collections.ts";
 import { date, datetime } from "../../src/data/datetime.ts";
 import type { Json, Shape } from "../../src/data/values.ts";
-import type { Row } from "../../src/dsl/entity.ts";
+import { entity, type Records, type Row, singleEntity } from "../../src/dsl/entity.ts";
+import type { Stored } from "../lean/protocol.generated.ts";
 
-/** A function whose IR has `op`, and inputs of `shape` as JSON holds them. */
+/** A function whose IR has `op`, inputs of `shape` as JSON holds them, and the records it reads of `entities`. */
 export interface Fixture {
   readonly op: Expr["op"];
   readonly shape: Shape;
   readonly input: fc.Arbitrary<{ readonly [field: string]: Json }>;
+  readonly records: fc.Arbitrary<readonly Stored[]>;
   readonly f: (args: never) => unknown;
 }
 
@@ -19,7 +21,7 @@ const fixture = <S extends Shape>(
   shape: S,
   input: fc.Arbitrary<{ readonly [field: string]: Json }>,
   f: (args: { readonly input: Row<S> }) => unknown,
-): Fixture => ({ op, shape, input, f });
+): Fixture => ({ op, shape, input, records: fc.constant([]), f });
 
 // Few distinct values, so that equal ones and empty ones come up often.
 const text = fc.string({ maxLength: 3, unit: fc.constantFrom("a", "b", "é") });
@@ -30,6 +32,40 @@ const numbers = fc.array(number, { maxLength: 4 });
 
 const item = { name: z.string() };
 const itemOf = fc.record({ name: text });
+
+export const entities = {
+  Task: entity({
+    description: "A task",
+    fields: { id: z.string(), title: z.string(), done: z.boolean(), at: datetime.nullable() },
+    key: "id",
+  }),
+  Settings: singleEntity({ description: "The settings", fields: { limit: z.number().default(0) } }),
+};
+
+const storedOf = fc
+  .tuple(
+    fc.uniqueArray(
+      fc.record({ id: fc.constantFrom("a", "b", "c"), title: text, done: fc.boolean(), at: fc.option(instant) }),
+      {
+        selector: (t) => t.id,
+        maxLength: 3,
+      },
+    ),
+    fc.record({ limit: number }),
+  )
+  .map(([tasks, settings]): readonly Stored[] => [
+    ...tasks.map((value) => ({ entity: "Task", key: value.id, value })),
+    { entity: "Settings", value: settings },
+  ]);
+
+const recordFixture = <S extends Shape>(
+  op: Expr["op"],
+  shape: S,
+  input: fc.Arbitrary<{ readonly [field: string]: Json }>,
+  f: (args: { readonly input: Row<S>; readonly records: Records<typeof entities> }) => unknown,
+): Fixture => ({ op, shape, input, records: storedOf, f });
+
+const keyed = fc.record({ id: fc.constantFrom("a", "b", "d"), title: text });
 
 export const fixtures: readonly Fixture[] = [
   fixture("undef", { note: z.string().optional() }, fc.record({ note: text }, { requiredKeys: [] }), ({ input }) =>
@@ -144,6 +180,31 @@ export const fixtures: readonly Fixture[] = [
   ),
   fixture("every", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) =>
     input.bag.every((n) => n > -1),
+  ),
+  recordFixture(
+    "table",
+    { title: z.string() },
+    fc.record({ title: text }),
+    ({ input, records }) =>
+      records.Task.filter((t) => t.done).size > 0 || records.Task.some((t) => t.title === input.title),
+  ),
+  recordFixture("table", {}, fc.record({}), ({ records }) =>
+    records.Task.every((t) => t.at === null || Temporal.Instant.compare(t.at, t.at) === 0),
+  ),
+  recordFixture("single", { n: z.number() }, fc.record({ n: number }), ({ input, records }) =>
+    records.Settings.limit > input.n ? records.Settings.limit : input.n,
+  ),
+  recordFixture(
+    "lookup",
+    { id: z.string(), title: z.string() },
+    keyed,
+    ({ input, records }) => records.Task.get(input.id)?.done === true || records.Task.get(input.id)?.title,
+  ),
+  recordFixture(
+    "lookup",
+    { id: z.string() },
+    keyed,
+    ({ input, records }) => records.Task.get(input.id) === undefined || records.Task.get(input.id)!.title === "a",
   ),
 ];
 

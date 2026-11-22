@@ -16,6 +16,10 @@ inductive Arg where
   | output
   | events
   | record
+  | payload
+  | now
+  /-- The binds values of a command or automation, by name. -/
+  | bound
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Arg
@@ -82,28 +86,50 @@ inductive Expr where
   | filter (visit : Collection) (collection : Expr) (name : String) (body : Expr)
   | some (visit : Collection) (collection : Expr) (name : String) (body : Expr)
   | every (visit : Collection) (collection : Expr) (name : String) (body : Expr)
+  /-- `records.<entity>` of a keyed entity: a Bag of its records, which reads its keys when an operation visits it. -/
+  | table (entity : String)
+  /-- `records.<entity>` of a single entity. -/
+  | single (entity : String)
+  /-- `table.get(key)`: the record, which reads whether it exists, or `undefined`. -/
+  | lookup (table key : Expr)
 deriving Repr, Inhabited
 
 derive_wire_mutual (Expr tag "op")
 
-/-- A named condition of a definition, such as one requires condition of a query. -/
+/-- A converted condition, such as a requires, ensures, guard or invariant, or a binds value. -/
 structure Condition where
-  definition : Spec.Ref
   name : String
   body : Expr
 deriving Repr, Inhabited
 
 derive_wire Condition
 
+/-- The converted conditions of one definition, in the order the spec writes them. -/
+structure Conditions where
+  definition : Spec.Ref
+  conditions : List Condition
+deriving Repr, Inhabited
+
+derive_wire Conditions
+
 /--
-The spec functions that TS converted, by the Functions callback that evaluates them. `invariants` and `closeEnsures`
-hold every condition of an entity or screen in the order the spec writes them, or none of them.
+The spec functions that TS converted, by the Functions callback that evaluates them. A callback that runs every
+condition of a definition, such as `invariant`, holds all of them or no entry for the definition; so do `binding` and
+`automationBinding`, since a requires, guard or ensures reads every binds value, and those hold entries only where the
+binds have one. A service invariant names its service as its definition.
 -/
 structure Program where
-  «requires» : List Condition := []
-  ensures : List Condition := []
-  invariants : List Condition := []
-  closeEnsures : List Condition := []
+  inputRequirement : List Conditions := []
+  resultEnsures : List Conditions := []
+  invariant : List Conditions := []
+  closeEnsures : List Conditions := []
+  binding : List Conditions := []
+  requirement : List Conditions := []
+  ensures : List Conditions := []
+  queryEnsures : List Conditions := []
+  serviceInvariant : List Conditions := []
+  automationBinding : List Conditions := []
+  automationGuard : List Conditions := []
 deriving Repr, Inhabited
 
 derive_wire Program

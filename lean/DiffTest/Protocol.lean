@@ -39,6 +39,16 @@ structure StepOrder where
 
 derive_wire StepOrder
 
+/-- A record that an `evaluate` request gives: the key is absent for a single entity's. -/
+structure Stored where
+  entity : String
+  key : Option String
+  value : Value
+
+derive_wire Stored skip_serializing_none
+
+def Stored.row (s : Stored) : Service.Row := { entity := s.entity, key := s.key, value := s.value }
+
 /-- What TS asks Lean to compute. A snapshot line is null for a blank line. -/
 inductive Request where
   | check («structure» : Spec.Structure)
@@ -68,8 +78,8 @@ inductive Request where
   | scenarioTime (text : String)
   /-- Service.schemaOf of the service `service` of the structure. -/
   | schemaOf («structure» : Spec.Structure) (service : String) (schema : Schema)
-  /-- The value of an IR expression whose only argument is `input`. -/
-  | evaluate (body : Ir.Expr) (input : Value)
+  /-- The value of an IR expression whose only argument is `input`, over `records`. -/
+  | evaluate (body : Ir.Expr) (input : Value) (records : List Stored)
 
 derive_wire Request tag "type" skip_serializing_none
 
@@ -223,10 +233,24 @@ structure SearchedProcessing where
 
 derive_wire SearchedProcessing serialize_only
 
-/-- The value of an IR expression, absent for `undefined`, or the Issue that stopped it. -/
+/-- A part of the records that an evaluation read, as a `read` reply names it. -/
+structure ReadPart where
+  entity : String
+  key : Option String
+  field : Option String
+
+derive_wire ReadPart serialize_only skip_serializing_none
+
+def ReadPart.of : RecordPart → ReadPart
+  | .keys entity => { entity, key := none, field := none }
+  | .record entity key => { entity, key := some key, field := none }
+  | .field entity key field => { entity, key, field := some field }
+
+/-- The value of an IR expression, absent for `undefined`, or the Issue that stopped it, and the parts it read. -/
 structure Evaluated where
   value : Option Value
   issue : Option Issue
+  reads : List ReadPart
 
 derive_wire Evaluated serialize_only skip_serializing_none
 
