@@ -6,11 +6,12 @@ import { Converter } from "../src/convert/program.ts";
 import { bagValues, NotOnly } from "../src/data/bag.ts";
 import { decoded } from "../src/data/collections.ts";
 import { type Json, objectOf } from "../src/data/values.ts";
+import { givenKeys } from "../src/service/functions.ts";
 import type { RecordSource } from "../src/service/records.ts";
 import { recordsView } from "../src/sim/spec/records.ts";
-import { entities, fixtures, outside } from "./convert/fixtures.ts";
+import { defined, entities, fixtures, keyOf, outside } from "./convert/fixtures.ts";
 import { Lean } from "./lean/lean.ts";
-import type { ReadPart, Stored } from "./lean/protocol.generated.ts";
+import type { Keys, ReadPart, Stored } from "./lean/protocol.generated.ts";
 
 const lean = new Lean();
 const converter = new Converter();
@@ -56,6 +57,7 @@ const ops = [
   "sortedBy",
   "concat",
   "emit",
+  "createKey",
 ] as const satisfies readonly Expr["op"][];
 const listsEveryOp: [Exclude<Expr["op"], (typeof ops)[number]>] extends [never] ? true : false = true;
 
@@ -119,9 +121,12 @@ function sourceOf(stored: readonly Stored[], reads: ReadPart[]): RecordSource {
   };
 }
 
+const args = ["input", "records", "createKey"] as const;
+const keys: Keys = { owner: "fixtures", next: { Task: { count: 2 } } };
+
 const converted = fixtures.map((fixture) => ({
   fixture,
-  ir: converter.convert(fixture.f, ["input", "records"], fixture.events),
+  ir: converter.convert(fixture.f, args, fixture.events, defined),
 }));
 
 for (const [i, { fixture, ir }] of converted.entries())
@@ -134,20 +139,27 @@ for (const [i, { fixture, ir }] of converted.entries())
         const json = JSON.parse(JSON.stringify(generated)) as Json;
         const reads: ReadPart[] = [];
         const records = recordsView(entities, sourceOf(stored, reads));
+        const created: string[] = [];
+        const createKey = (r: unknown) => {
+          created.push(keyOf(r));
+          return givenKeys({ ...keys, next: Object.entries(keys.next) }, created).at(-1)?.[1];
+        };
         let ts: { readonly value?: Json } | { readonly issue: "thrown" | "notOnly" };
         try {
-          const value = jsonOf(fixture.f({ input: decoded(schema, json), records } as never));
+          const value = jsonOf(fixture.f({ input: decoded(schema, json), records, createKey } as never));
           ts = value === undefined ? {} : { value: JSON.parse(JSON.stringify(value)) as Json };
         } catch (error) {
           ts = { issue: error instanceof NotOnly ? "notOnly" : "thrown" };
         }
-        const { value, issue, reads: leanReads } = lean.evaluate(ir, json, stored);
+        const evaluated = lean.evaluate(ir, json, stored, keys);
+        const { value, issue } = evaluated;
         assert.deepEqual(
           {
             answer: issue === undefined ? (value === undefined ? {} : { value }) : { issue: issue.kind },
-            reads: leanReads,
+            reads: evaluated.reads,
+            created: evaluated.created,
           },
-          { answer: ts, reads },
+          { answer: ts, reads, created },
         );
       }),
     );
@@ -164,6 +176,6 @@ test("every operation of the IR has a fixture", () => {
 
 for (const [i, f] of outside.entries())
   test(`function ${i} with a construct outside the IR stays TS`, () => {
-    const ir = converter.convert(f, ["input", "records"]);
+    const ir = converter.convert(f, args, [], defined);
     assert.ok("unconverted" in ir, JSON.stringify(ir));
   });

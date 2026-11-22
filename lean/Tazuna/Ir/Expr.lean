@@ -119,6 +119,11 @@ inductive Expr where
   | concat (left right : Expr)
   /-- `emit(event, payload)` of an event that the command lists. -/
   | emit (event : Spec.Ref) (payload : Expr)
+  /--
+  `createKey(ref(entity))`: the next key of the entity, which the evaluation notes as created. The converter writes it
+  only where TS passes createKey, and never inside a callback, so the keys made follow the written order.
+  -/
+  | createKey (entity : String)
 
 structure Field where
   name : String
@@ -174,6 +179,10 @@ inductive Site where
   | initialContext
   /-- A screen's resolve. -/
   | close
+  /-- The assign of a transition, by field, in the order the spec writes them. -/
+  | transitionAssign (transition : Spec.TransitionRef)
+  | entryAssign (state : String)
+  | exitAssign (state : String)
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Site tag "kind"
@@ -219,6 +228,8 @@ structure Program where
   resolve : List Fn := []
   /-- A command's decide, where its binds have an entry. -/
   decide : List Fn := []
+  /-- An automation's input of the command it sends, where its binds have an entry. -/
+  react : List Fn := []
   chart : List ChartFns := []
 deriving Repr, Inhabited
 

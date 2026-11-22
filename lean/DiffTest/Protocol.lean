@@ -78,8 +78,8 @@ inductive Request where
   | scenarioTime (text : String)
   /-- Service.schemaOf of the service `service` of the structure. -/
   | schemaOf («structure» : Spec.Structure) (service : String) (schema : Schema)
-  /-- The value of an IR expression whose only argument is `input`, over `records`. -/
-  | evaluate (body : Ir.Expr) (input : Value) (records : List Stored)
+  /-- The value of an IR expression whose only argument is `input`, over `records`, with createKey over `keys`. -/
+  | evaluate (body : Ir.Expr) (input : Value) (records : List Stored) (keys : Keys)
 
 derive_wire Request tag "type" skip_serializing_none
 
@@ -246,11 +246,15 @@ def ReadPart.of : RecordPart → ReadPart
   | .record entity key => { entity, key := some key, field := none }
   | .field entity key field => { entity, key, field := some field }
 
-/-- The value of an IR expression, absent for `undefined`, or the Issue that stopped it, and the parts it read. -/
+/--
+The value of an IR expression, absent for `undefined`, or the Issue that stopped it, the parts it read, and the
+entities that createKey made a key of.
+-/
 structure Evaluated where
   value : Option Value
   issue : Option Issue
   reads : List ReadPart
+  created : List String
 
 derive_wire Evaluated serialize_only skip_serializing_none
 

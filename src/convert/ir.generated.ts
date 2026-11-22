@@ -216,6 +216,14 @@ export type Expr =
       readonly op: "emit";
       readonly event: DefinitionRef;
       readonly payload: Expr;
+    }
+  /**
+   * `createKey(ref(entity))`: the next key of the entity, which the evaluation notes as created. The converter writes it
+   * only where TS passes createKey, and never inside a callback, so the keys made follow the written order.
+   */
+  | {
+      readonly op: "createKey";
+      readonly entity: string;
     };
 
 export type Field = {
@@ -299,6 +307,19 @@ export type Site =
   /** A screen's resolve. */
   | {
       readonly kind: "close";
+    }
+  /** The assign of a transition, by field, in the order the spec writes them. */
+  | {
+      readonly kind: "transitionAssign";
+      readonly transition: TransitionRef;
+    }
+  | {
+      readonly kind: "entryAssign";
+      readonly state: string;
+    }
+  | {
+      readonly kind: "exitAssign";
+      readonly state: string;
     };
 
 /**
@@ -332,5 +353,7 @@ export type Program = {
   readonly resolve: readonly Fn[];
   /** A command's decide, where its binds have an entry. */
   readonly decide: readonly Fn[];
+  /** An automation's input of the command it sends, where its binds have an entry. */
+  readonly react: readonly Fn[];
   readonly chart: readonly ChartFns[];
 };

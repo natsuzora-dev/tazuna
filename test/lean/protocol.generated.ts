@@ -315,12 +315,13 @@ export type Request =
       readonly service: string;
       readonly schema: Schema;
     }
-  /** The value of an IR expression whose only argument is `input`, over `records`. */
+  /** The value of an IR expression whose only argument is `input`, over `records`, with createKey over `keys`. */
   | {
       readonly type: "evaluate";
       readonly body: Expr;
       readonly input: Json;
       readonly records: readonly Stored[];
+      readonly keys: Keys;
     };
 
 /**
@@ -711,11 +712,15 @@ export type ReadPart = {
   readonly field?: string;
 };
 
-/** The value of an IR expression, absent for `undefined`, or the Issue that stopped it, and the parts it read. */
+/**
+ * The value of an IR expression, absent for `undefined`, or the Issue that stopped it, the parts it read, and the
+ * entities that createKey made a key of.
+ */
 export type Evaluated = {
   readonly value?: Json;
   readonly issue?: Issue;
   readonly reads: readonly ReadPart[];
+  readonly created: readonly string[];
 };
 
 /** What Lean answers a Request with, the constructor named after the request's. */

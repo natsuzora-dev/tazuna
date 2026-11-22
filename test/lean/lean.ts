@@ -16,7 +16,7 @@ import type { Schema } from "../../src/service/basic.ts";
 import type { StepOrder } from "../../src/sim/network.ts";
 import type { Structure } from "../../src/spec/structure.generated.ts";
 import type { Answering, ReadRecord } from "./functions.ts";
-import type { Asked, Evaluated, Reply, Request, Response, Stored } from "./protocol.generated.ts";
+import type { Asked, Evaluated, Keys, Reply, Request, Response, Stored } from "./protocol.generated.ts";
 
 const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-lean");
 
@@ -273,8 +273,11 @@ export class Lean {
     return (this.exchange({ type: "schemaOf", structure, service, schema }).schema ?? undefined) as Json | undefined;
   }
 
-  /** The value of `body` with `input` as its only argument over `records`, as Lean evaluates the IR, and its reads. */
-  evaluate(body: Expr, input: Json, records: readonly Stored[] = []): Evaluated {
-    return this.exchange({ type: "evaluate", body, input, records }).result;
+  /**
+   * The value of `body` with `input` as its only argument over `records` and createKey over `keys`, as Lean evaluates
+   * the IR, its reads, and the entities it made keys of.
+   */
+  evaluate(body: Expr, input: Json, records: readonly Stored[], keys: Keys): Evaluated {
+    return this.exchange({ type: "evaluate", body, input, records, keys }).result;
   }
 }

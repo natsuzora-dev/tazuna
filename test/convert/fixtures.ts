@@ -1,11 +1,12 @@
 import fc from "fast-check";
 import { z } from "zod";
+import { type Defined, definedKey } from "../../src/convert/expression.ts";
 import type { Expr } from "../../src/convert/ir.generated.ts";
 import { bag } from "../../src/data/collections.ts";
 import { date, datetime } from "../../src/data/datetime.ts";
 import type { DefinitionRef } from "../../src/data/definitionRef.ts";
 import type { Json, Shape } from "../../src/data/values.ts";
-import { entity, type Records, type Row, singleEntity } from "../../src/dsl/entity.ts";
+import { entity, type Records, type Ref, type Row, ref, refTarget, singleEntity } from "../../src/dsl/entity.ts";
 import { emit } from "../../src/dsl/event.ts";
 import { service } from "../../src/dsl/service.ts";
 import type { Stored } from "../lean/protocol.generated.ts";
@@ -42,14 +43,29 @@ const numbers = fc.array(number, { maxLength: 4 });
 const item = { name: z.string() };
 const itemOf = fc.record({ name: text });
 
-export const entities = {
-  Task: entity({
-    description: "A task",
-    fields: { id: z.string(), title: z.string(), done: z.boolean(), at: datetime.nullable() },
-    key: "id",
-  }),
-  Settings: singleEntity({ description: "The settings", fields: { limit: z.number().default(0) } }),
+const Task = entity({
+  description: "A task",
+  fields: { id: z.string(), title: z.string(), done: z.boolean(), at: datetime.nullable() },
+  key: "id",
+});
+const Settings = singleEntity({ description: "The settings", fields: { limit: z.number().default(0) } });
+export const entities = { Task, Settings };
+
+/** What a loaded spec of the fixtures would define: the entity Task. */
+export const defined: Defined = {
+  constants: new Map(),
+  entities: new Map([[definedKey(import.meta.filename, "Task"), "Task"]]),
 };
+
+/** The entity that createKey makes a key of for `r`, which throws, as TS's createKey does, unless it is ref(Task). */
+export function keyOf(r: unknown): string {
+  if (refTarget(r as Ref<typeof Task>) !== Task) throw new TypeError("createKey takes ref() of an entity of the spec");
+  return "Task";
+}
+
+type CreateKey = (r: Ref<typeof Task>) => string;
+const TaskId = ref(Task);
+const ids = { task: TaskId };
 
 const storedOf = fc
   .tuple(
@@ -71,7 +87,11 @@ const recordFixture = <S extends Shape>(
   op: Expr["op"],
   shape: S,
   input: fc.Arbitrary<{ readonly [field: string]: Json }>,
-  f: (args: { readonly input: Row<S>; readonly records: Records<typeof entities> }) => unknown,
+  f: (args: {
+    readonly input: Row<S>;
+    readonly records: Records<typeof entities>;
+    readonly createKey: CreateKey;
+  }) => unknown,
 ): Fixture => ({ op, shape, input, records: storedOf, f });
 
 const keyed = fc.record({ id: fc.constantFrom("a", "b", "d"), title: text });
@@ -284,6 +304,11 @@ export const fixtures: readonly Fixture[] = [
   recordFixture("sortedBy", {}, fc.record({}), ({ records }) =>
     records.Task.map((t) => ({ title: t.title, done: t.done ? 1 : 0 })).sortedBy((x) => x.done),
   ),
+  recordFixture("createKey", { title: z.string() }, fc.record({ title: text }), ({ input, createKey }) => ({
+    first: createKey(ref(Task)),
+    second: input.title === "" ? createKey(ids.task) : null,
+    third: createKey(TaskId),
+  })),
   recordFixture("concat", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input, records }) =>
     input.bag.concat(records.Task.map((t) => t.title.length)),
   ),
@@ -303,16 +328,21 @@ export const fixtures: readonly Fixture[] = [
 const looping = (n: number): boolean => n > 0 && looping(n);
 
 /** Functions with a construct outside the IR, each of which stays TS. */
-export const outside: readonly ((args: { readonly input: Row<{ n: z.ZodNumber; title: z.ZodString }> }) => unknown)[] =
-  [
-    ({ input }) => input.n + 1 > 2,
-    ({ input }) => input.title.trim() === "",
-    ({ input }) => input.title < "b",
-    ({ input }) => `${input.title}!` === "a!",
-    ({ input }) => [...[input.n]].length === 1,
-    async ({ input }) => input.n > 0,
-    // biome-ignore lint/suspicious/noDoubleEquals: == on other than null coerces, which the IR does not.
-    ({ input }) => input.n == 1,
-    (args) => [args].length === 1,
-    ({ input }) => looping(input.n),
-  ];
+export const outside: readonly ((args: {
+  readonly input: Row<{ n: z.ZodNumber; title: z.ZodString; ns: z.ZodArray<z.ZodNumber> }>;
+  readonly createKey: CreateKey;
+}) => unknown)[] = [
+  ({ input }) => input.n + 1 > 2,
+  ({ input }) => input.title.trim() === "",
+  ({ input }) => input.title < "b",
+  ({ input }) => `${input.title}!` === "a!",
+  ({ input }) => [...[input.n]].length === 1,
+  async ({ input }) => input.n > 0,
+  // biome-ignore lint/suspicious/noDoubleEquals: == on other than null coerces, which the IR does not.
+  ({ input }) => input.n == 1,
+  (args) => [args].length === 1,
+  ({ input }) => looping(input.n),
+  ({ input, createKey }) => input.ns.map(() => createKey(TaskId)),
+  ({ createKey }) => [createKey].length,
+  ({ createKey }) => createKey(Task.fields.id as never),
+];

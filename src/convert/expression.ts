@@ -48,8 +48,12 @@ import type { Json } from "../data/values.ts";
 import type { Expr, Field } from "./ir.generated.ts";
 import type { Source } from "./sources.ts";
 
-/** An argument of a spec function: one that the IR names, or `records`, which only the record operations read. */
-export type Arg = Extract<Expr, { readonly op: "arg" }>["arg"] | "records";
+/**
+ * An argument of a spec function: one that the IR names, `records`, which only the record operations read, or
+ * `createKey`, which only a call reads.
+ */
+export type Arg = Extract<Expr, { readonly op: "arg" }>["arg"] | "records" | "createKey";
+type Special = "records" | "createKey";
 type Relation = Extract<Expr, { readonly op: "compare" }>["relation"];
 type Order = Extract<Expr, { readonly op: "compare" }>["order"];
 
@@ -77,15 +81,24 @@ const scalars: ReadonlySet<Kind> = new Set(["string", "number", "boolean", "null
 class Unconverted extends Error {}
 
 /**
- * The names that a function body can read: a variable, the records argument, or the arguments object of a function that
- * takes it whole, whose fields read as the arguments do.
+ * The names that a function body can read: a variable, the records argument, createKey, or the arguments object of a
+ * function that takes it whole, whose fields read as the arguments do.
  */
-type Scope = ReadonlyMap<string, "variable" | "records" | "args">;
+type Scope = ReadonlyMap<string, "variable" | Special | "args">;
 
-/** The values of `constants()` groups, encoded, by the file and name of the const that holds them. */
-export type Constants = ReadonlyMap<string, Readonly<Record<string, Json>>>;
+/** What the spec defines outside its functions, each by the file and name of the const that holds it. */
+export interface Defined {
+  /** The values of `constants()` groups, encoded. */
+  readonly constants: ReadonlyMap<string, Readonly<Record<string, Json>>>;
+  /** The names of entities. */
+  readonly entities: ReadonlyMap<string, string>;
+}
 
-export const constantsKey = (file: string, name: string): string => `${file}#${name}`;
+export const definedKey = (file: string, name: string): string => `${file}#${name}`;
+
+/** Whether `file` is tazuna's module `module` of the DSL, as source or as declarations. */
+const isTazunaModule = (file: string, module: string): boolean =>
+  new RegExp(`[/\\\\](src|dist)[/\\\\]dsl[/\\\\]${module}\\.(d\\.)?ts$`).test(file);
 
 type Helper = ArrowFunction | FunctionExpression | FunctionDeclaration;
 
@@ -130,19 +143,21 @@ class Conversion {
   private readonly source: Source;
   /** The events that a decide's command lists, in the order of its `emits`. */
   private readonly events: readonly DefinitionRef[];
-  private readonly constants: Constants;
+  private readonly defined: Defined;
   /** The argument that a name of the arguments object reads, once convertFunction knows the arguments. */
   private argument: (node: Node, name: string) => Expr = (node) => this.fail(node, "reads its arguments");
-  /** Whether the arguments hold records, which only the record operations read. */
-  private records = false;
+  /** The special arguments that the function receives. */
+  private specials: ReadonlySet<Special> = new Set();
+  /** How many callbacks of a collection method hold the expression being converted. */
+  private callbacks = 0;
   /** The helpers being inlined, innermost last, so that a recursive one stays TS. */
   private readonly inlining: Helper[] = [];
   private fresh = 0;
 
-  constructor(source: Source, events: readonly DefinitionRef[], constants: Constants) {
+  constructor(source: Source, events: readonly DefinitionRef[], defined: Defined) {
     this.source = source;
     this.events = events;
-    this.constants = constants;
+    this.defined = defined;
   }
 
   /** The texts of the `emits` of `command({ emits }).decide(f)`, where `f` is the function converted. */
@@ -268,9 +283,7 @@ class Conversion {
     const definer = declaration.initializer === undefined ? undefined : unwrapped(declaration.initializer);
     const service = definer !== undefined && isCallExpression(definer) ? unwrapped(definer.expression) : undefined;
     const declared = service !== undefined && isIdentifier(service) ? this.declarationOf(service) : undefined;
-    return (
-      declared !== undefined && /[/\\](src|dist)[/\\]dsl[/\\]service\.(d\.)?ts$/.test(declared.getSourceFile().fileName)
-    );
+    return declared !== undefined && isTazunaModule(declared.getSourceFile().fileName, "service");
   }
 
   /** The function that `name` reads outside the function, which the converter inlines where it is called. */
@@ -304,6 +317,7 @@ class Conversion {
         const u = unwrapped(a);
         const kind = isIdentifier(u) ? scope.get(u.text) : undefined;
         if (kind === "args" || kind === "records") return kind;
+        if (kind === "createKey") this.fail(a, "passes createKey");
         const name = `#${this.fresh++}`;
         lets.push([name, this.expression(a, scope)]);
         return name;
@@ -334,7 +348,7 @@ class Conversion {
   private constantField(group: Identifier, name: string, e: Node): Expr | undefined {
     const d = this.declarationOf(group);
     if (d === undefined || !isVariableDeclaration(d) || !isIdentifier(d.name)) return undefined;
-    const values = this.constants.get(constantsKey(d.getSourceFile().fileName, d.name.text));
+    const values = this.defined.constants.get(definedKey(d.getSourceFile().fileName, d.name.text));
     if (values === undefined) return undefined;
     const value = values[name];
     const kind = this.only(e);
@@ -363,10 +377,11 @@ class Conversion {
     if (rest.length > 0) this.fail(f, "takes more than its arguments object");
     const body = (scope: Scope): Expr =>
       isBlock(f.body) ? this.block([...f.body.statements], scope) : this.expression(f.body as Expression, scope);
-    this.records = args.includes("records");
+    this.specials = new Set(args.filter((a): a is Special => a === "records" || a === "createKey"));
     this.argument = (node, name) => {
-      if (!(args as readonly string[]).includes(name) || name === "records") this.fail(node, `reads ${name}`);
-      return { op: "arg", arg: name as Exclude<Arg, "records"> };
+      if (!(args as readonly string[]).includes(name) || this.specials.has(name as Special))
+        this.fail(node, `reads ${name}`);
+      return { op: "arg", arg: name as Exclude<Arg, Special> };
     };
     if (parameter === undefined) return body(new Map());
     if (parameter.dotDotDotToken !== undefined || parameter.initializer !== undefined)
@@ -377,7 +392,7 @@ class Conversion {
 
   /** `then` under the variables that `pattern` destructures from the arguments object. */
   private fromArgs(pattern: BindingName, scope: Scope, then: (scope: Scope) => Expr): Expr {
-    return this.destructured(pattern, (name) => this.argument(pattern, name), scope, then, this.records);
+    return this.destructured(pattern, (name) => this.argument(pattern, name), scope, then, this.specials);
   }
 
   /** `then` under the variables that `pattern` binds from the fields that `field` reads. */
@@ -386,7 +401,7 @@ class Conversion {
     field: (name: string) => Expr,
     scope: Scope,
     then: (scope: Scope) => Expr,
-    records = false,
+    specials: ReadonlySet<Special> = new Set(),
   ): Expr {
     if (!isObjectBindingPattern(pattern) || pattern.elements.length === 0)
       this.fail(pattern, "destructures other than a non-empty object pattern");
@@ -397,9 +412,9 @@ class Conversion {
         this.fail(element, "destructures with a rest or a default");
       const key = element.propertyName ?? element.name;
       if (!isIdentifier(key)) this.fail(element, "destructures a computed name");
-      if (records && key.text === "records") {
-        if (!isIdentifier(element.name)) this.fail(element, "destructures records");
-        return bind(i + 1, new Map([...scope, [element.name.text, "records"]]));
+      if (specials.has(key.text as Special)) {
+        if (!isIdentifier(element.name)) this.fail(element, `destructures ${key.text}`);
+        return bind(i + 1, new Map([...scope, [element.name.text, key.text as Special]]));
       }
       const value = field(key.text);
       return this.bound(element.name, value, scope, (inner) => bind(i + 1, inner));
@@ -458,6 +473,7 @@ class Conversion {
     if (isIdentifier(e)) {
       const declaration = scope.get(e.text);
       if (declaration === "records") this.fail(e, "reads records other than an entity of it");
+      if (declaration === "createKey") this.fail(e, "reads createKey other than by a call");
       if (declaration === "args") this.fail(e, "reads its arguments other than by a name");
       if (declaration === "variable") return { op: "var", name: e.text };
       if (e.text === "undefined") return { op: "undef" };
@@ -566,8 +582,8 @@ class Conversion {
   private isRecords(node: Expression, scope: Scope): boolean {
     const e = unwrapped(node);
     if (isIdentifier(e)) return scope.get(e.text) === "records";
-    if (!isPropertyAccessExpression(e) || !isIdentifier(e.name) || e.name.text !== "records" || !this.records)
-      return false;
+    if (!isPropertyAccessExpression(e) || !isIdentifier(e.name) || e.name.text !== "records") return false;
+    if (!this.specials.has("records")) return false;
     const object = unwrapped(e.expression);
     return isIdentifier(object) && scope.get(object.text) === "args";
   }
@@ -585,6 +601,7 @@ class Conversion {
     if (isIdentifier(target) && scope.get(target.text) === "args") {
       if (optional) this.fail(e, "reads its arguments with ?.");
       if (name === "records") this.fail(e, "reads records other than an entity of it");
+      if (name === "createKey") this.fail(e, "reads createKey other than by a call");
       return this.argument(e, name);
     }
     if (isIdentifier(target) && !scope.has(target.text)) {
@@ -609,6 +626,7 @@ class Conversion {
     if (e.flags & NodeFlags.OptionalChain) this.fail(e, "calls in an optional chain");
     const callee = unwrapped(e.expression);
     if (isIdentifier(callee) && callee.text === "emit" && !scope.has("emit")) return this.emitted(e, scope);
+    if (this.isCreateKey(callee, scope)) return this.createKey(e);
     if (isIdentifier(callee) && callee.text !== "Boolean" && !scope.has(callee.text))
       return this.inlined(callee, e, scope);
     if (e.arguments.length === 0 && isPropertyAccessExpression(callee) && isIdentifier(callee.name)) {
@@ -673,6 +691,54 @@ class Conversion {
     return kinds.every((k) => k === "bag" || k === "table") ? "bag" : undefined;
   }
 
+  /** Whether `callee` is createKey, by its name or as a field of the arguments object. */
+  private isCreateKey(callee: Expression, scope: Scope): boolean {
+    if (isIdentifier(callee)) return scope.get(callee.text) === "createKey";
+    if (!isPropertyAccessExpression(callee) || !isIdentifier(callee.name) || callee.name.text !== "createKey")
+      return false;
+    const object = unwrapped(callee.expression);
+    return isIdentifier(object) && scope.get(object.text) === "args" && this.specials.has("createKey");
+  }
+
+  /**
+   * `createKey(r)`, where `r` is written as `ref(E)` of an entity `E`, directly or through consts and object fields. A
+   * key made in a callback would follow the order that the collection visits, so createKey stays out of callbacks.
+   */
+  private createKey(e: CallExpression): Expr {
+    if (this.callbacks > 0) this.fail(e, "calls createKey in a callback");
+    const [r, ...rest] = e.arguments;
+    const entity = r === undefined || rest.length > 0 ? undefined : this.refEntity(r, new Set());
+    if (entity === undefined) this.fail(e, "calls createKey with other than ref() of an entity");
+    return { op: "createKey", entity };
+  }
+
+  /** The entity that `node` is ref() of, following consts and object fields to the ref() call. */
+  private refEntity(node: Expression, seen: Set<Node>): string | undefined {
+    const e = unwrapped(node);
+    if (seen.has(e)) return undefined;
+    seen.add(e);
+    if (isIdentifier(e)) {
+      const value = this.constValue(e);
+      return value === undefined ? undefined : this.refEntity(value, seen);
+    }
+    if (isPropertyAccessExpression(e) && isIdentifier(e.name)) {
+      const d = this.source.checker.getSymbolAtLocation(e.name)?.valueDeclaration?.resolve();
+      if (d !== undefined && isPropertyAssignment(d)) return this.refEntity(d.initializer, seen);
+      if (d !== undefined && isShorthandPropertyAssignment(d) && isIdentifier(d.name))
+        return this.refEntity(d.name, seen);
+      return undefined;
+    }
+    if (!isCallExpression(e) || e.arguments.length !== 1) return undefined;
+    const callee = unwrapped(e.expression);
+    const ref = isIdentifier(callee) ? this.declarationOf(callee) : undefined;
+    if (ref === undefined || !isFunctionDeclaration(ref) || ref.name?.text !== "ref") return undefined;
+    if (!isTazunaModule(ref.getSourceFile().fileName, "entity")) return undefined;
+    const target = unwrapped(e.arguments[0] as Expression);
+    const d = isIdentifier(target) ? this.declarationOf(target) : undefined;
+    if (d === undefined || !isVariableDeclaration(d) || !isIdentifier(d.name)) return undefined;
+    return this.defined.entities.get(definedKey(d.getSourceFile().fileName, d.name.text));
+  }
+
   /** The arrow function that a callback method takes, with one plain parameter. */
   private callback(method: string, callback: Expression): ArrowFunction {
     const f = unwrapped(callback);
@@ -703,11 +769,17 @@ class Conversion {
       isBlock(f.body) ? this.block([...f.body.statements], inner) : this.expression(f.body as Expression, inner);
     const name = isIdentifier(parameter.name) ? parameter.name.text : `$${f.pos}`;
     const inner = declared(scope, name);
-    return {
-      collection: this.expression(collection, scope),
-      name,
-      body: isIdentifier(parameter.name) ? body(inner) : this.bound(parameter.name, { op: "var", name }, inner, body),
-    };
+    const converted = this.expression(collection, scope);
+    this.callbacks++;
+    try {
+      return {
+        collection: converted,
+        name,
+        body: isIdentifier(parameter.name) ? body(inner) : this.bound(parameter.name, { op: "var", name }, inner, body),
+      };
+    } finally {
+      this.callbacks--;
+    }
   }
 }
 
@@ -719,10 +791,10 @@ export function converted(
   source: Source,
   args: readonly Arg[],
   events: readonly DefinitionRef[] = [],
-  constants: Constants = new Map(),
+  defined: Defined = { constants: new Map(), entities: new Map() },
 ): Expr | { readonly unconverted: string } {
   try {
-    return new Conversion(source, events, constants).convertFunction(source.node, args);
+    return new Conversion(source, events, defined).convertFunction(source.node, args);
   } catch (error) {
     if (error instanceof Unconverted) return { unconverted: error.message };
     throw error;

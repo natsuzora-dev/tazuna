@@ -78,11 +78,30 @@ def valuesOf (env : Env) (v : Val) : EvalM (List Value) := do
 
 def valuesIn (env : Env) (body : Expr) : EvalM (List Value) := do valuesOf env (← eval env [] body)
 
-/-- The field names of an entity of the service, in its schema's order. -/
-def fieldsOf (st : Service) (entity : String) : List String :=
-  match (st.schemaOf (.record (st.ref entity))).bind (·.field? "properties") with
+/-- The field names of the objects of `schema`, in its order. -/
+def propertiesOf (st : Service) (schema : Schema) : List String :=
+  match (st.schemaOf schema).bind (·.field? "properties") with
   | some (.obj properties) => properties.map (·.1)
   | _ => []
+
+/-- The field names of an entity of the service, in its schema's order. -/
+def fieldsOf (st : Service) (entity : String) : List String := propertiesOf st (.record (st.ref entity))
+
+/-- The site of the assign of `a`. -/
+def assignSite : Assignment → Site
+  | .transition t => .transitionAssign t.ref
+  | .entry state => .entryAssign state
+  | .exit state => .exitAssign state
+
+/--
+`base` with `assigned` spread over it, as JS `{ ...base, ...assigned }` builds it: a field of both keeps its place with
+the assigned value, and the other assigned fields follow in order.
+-/
+def spread (base : Value) (assigned : List (String × Val)) : Val :=
+  let own := match base with
+    | .obj fields => fields.map fun (name, v) => (name, (assigned.lookup name).getD (.json v))
+    | _ => []
+  .obj (own ++ assigned.filter fun (name, _) => !(own.any (·.1 == name)))
 
 /-- `x` in `env` with `bound`, which TS computes from every binds value before a requires or guard reads it. -/
 def withBound {α : Type} (env : Env) (binds : List Condition) (x : Env → EvalM α) : EvalM α := do
@@ -209,6 +228,14 @@ def Program.overlay {m : Type → Type} [Monad m] (p : Program) (st : Service) (
             | e => do pure [← emitted env e]
           | _ => thrown
         answered "decide" decided.run' (fs.decide name input records now)
+    react := fun name payload records now keys =>
+      match p.react.find? (·.definition == st.ref name) with
+      | none => fs.react name payload records now keys
+      | some f =>
+        let env := { fields := fieldsOf st, args := argsOf [(.payload, .json payload), (.now, instant now)], records, keys }
+        let given : EvalM (Value × List String) := withBound env (binds p.automationBinding (st.ref name)) fun env => do
+          pure (← valueIn env f.body, (← get).created)
+        answered "react" given.run' (fs.react name payload records now keys)
     chartInvariant := fun scope records =>
       match site scope.machine .invariants with
       | none => fs.chartInvariant scope records
@@ -247,7 +274,8 @@ def Program.overlay {m : Type → Type} [Monad m] (p : Program) (st : Service) (
       match scope.state.bind fun s => one scope.machine (inputSite s a) with
       | none => fs.input scope records a keys
       | some body =>
-        let given : EvalM (Value × List String) := do pure (← valueIn (chartEnv scope records) body, [])
+        let given : EvalM (Value × List String) := do
+          pure (← valueIn { chartEnv scope records with keys } body, (← get).created)
         answered "input" given.run' (fs.input scope records a keys)
     held := fun scope records n edge extra =>
       let entry : Entry := match edge with
@@ -260,6 +288,24 @@ def Program.overlay {m : Type → Type} [Monad m] (p : Program) (st : Service) (
         let values : EvalM Value := do
           answerOf env (.obj (← params.mapM fun c => do pure (c.name, ← eval env [] c.body)))
         answered "held" values.run' (fs.held scope records n edge extra)
+    assign := fun scope records a extra keys =>
+      match site scope.machine (assignSite a) with
+      | none => fs.assign scope records a extra keys
+      | some fields =>
+        let env := { chartEnv scope records extra with keys }
+        let copyFields := match scope.id.map? with
+          | some map => propertiesOf st (.mapContext (st.ref scope.machine) map)
+          | none => []
+        let assigned : EvalM (Value × Option Value × List String) := do
+          let values ← fields.mapM fun c => do pure (c.name, ← eval env [] c.body)
+          let (own, outer) := values.partition (·.1 ∈ copyFields)
+          let copy ← match scope.copy with
+            | some c => some <$> answerOf env (spread c.context own)
+            | none => pure none
+          let context ← answerOf env (spread scope.context outer)
+          touch fun a => { a with assigned := a.assigned ++ own.map (Holder.copy, ·.1) ++ outer.map (Holder.owner, ·.1) }
+          pure (context, copy, (← get).created)
+        answered "assign" assigned.run' (fs.assign scope records a extra keys)
     initialContext := fun machine input =>
       match one machine .initialContext with
       | none => fs.initialContext machine input

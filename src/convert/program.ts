@@ -5,11 +5,11 @@ import { objectSchema } from "../data/jsonSchema.ts";
 import type { Json, Shape } from "../data/values.ts";
 import { stateAt, transitionAt } from "../dsl/chart.ts";
 import type { Conditions } from "../dsl/conditions.ts";
-import type { AnyCommand, AnyQuery, Automation, ChartSpec } from "../dsl/definition.ts";
+import type { AnyCommand, AnyQuery, Automation, ChartSpec, Place } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
 import { chartStructure, stateNamed, transitionRef } from "../spec/structure.ts";
-import { type Arg, type Constants, constantsKey, converted } from "./expression.ts";
+import { type Arg, converted, type Defined, definedKey } from "./expression.ts";
 import type {
   ChartFns,
   Condition,
@@ -33,7 +33,7 @@ interface NotConverted {
 
 /** The Program lists of named conditions, those of one function per definition, and the chart functions. */
 type ConditionsCallback = Exclude<keyof Program, FnCallback | "chart">;
-type FnCallback = "resolve" | "decide";
+type FnCallback = "resolve" | "decide" | "react";
 
 export interface Converted {
   readonly program: Program;
@@ -75,6 +75,8 @@ interface FnSlot {
   readonly shapes: readonly (Shape | undefined)[];
   /** The events that a decide's command lists. */
   readonly events?: readonly DefinitionRef[];
+  /** The binds that the function reads as `bound`, which convert first. */
+  readonly binds?: ConditionsCallback;
 }
 
 const sameRef = (a: DefinitionRef, b: DefinitionRef) => a.service === b.service && a.name === b.name;
@@ -102,11 +104,27 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         definition: { service, name },
         f: command.decide as SpecFunction | undefined,
         args: ["input", "records", "now", "bound"],
+        binds: "binding",
         shapes: [command.input, ...command.emits.map((e) => e.payload), ...entities],
         events: command.emits.flatMap((e) => {
           const named = spec.names.get(e);
           return named === undefined ? [] : [{ service: named.service, name: named.name }];
         }),
+      });
+    }
+    if (d.kind === "automation") {
+      const automation = d as Automation;
+      slots.push({
+        callback: "react",
+        definition: { service, name },
+        f: automation.input,
+        args: ["payload", "records", "now", "bound", "createKey"],
+        shapes: [
+          ...Object.values(automation.receives).map((e) => e.payload),
+          ...Object.values(automation.commands).map((c) => c.input),
+          ...entities,
+        ],
+        binds: "automationBinding",
       });
     }
   }
@@ -125,6 +143,7 @@ interface ChartSlot {
 
 const scopeArgs: readonly Arg[] = ["context", "input", "shown", "key", "records", "active", "now", "held"];
 const causeArgs: readonly Arg[] = [...scopeArgs, "payload", "output", "rejection"];
+const assignArgs: readonly Arg[] = [...causeArgs, "createKey"];
 const empty: Expr = { op: "obj", fields: [] };
 const keywords = ["calls", "sends", "shows", "opens"] as const;
 
@@ -179,17 +198,42 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
     for (const t of [...structure.on, ...structure.states.flatMap((s) => s.transitions)]) {
       const ref = transitionRef(t);
       const written = transitionAt(chartSpec, structure, ref);
-      slots.push({
-        chart,
-        site: { kind: "guards", transition: ref },
-        functions: fns(written.guard),
-        args: causeArgs,
-        whole: false,
-      });
+      slots.push(
+        {
+          chart,
+          site: { kind: "guards", transition: ref },
+          functions: fns(written.guard),
+          args: causeArgs,
+          whole: false,
+        },
+        {
+          chart,
+          site: { kind: "transitionAssign", transition: ref },
+          functions: fns(written.assign),
+          args: assignArgs,
+          whole: true,
+        },
+      );
       if (t.target !== null) held({ kind: "transition", transition: ref }, t.target, written.with, causeArgs);
     }
     for (const s of structure.states) {
       const node = stateAt(chartSpec, s.path);
+      slots.push(
+        {
+          chart,
+          site: { kind: "entryAssign", state: s.name },
+          functions: fns(node.entry?.assign),
+          args: assignArgs,
+          whole: true,
+        },
+        {
+          chart,
+          site: { kind: "exitAssign", state: s.name },
+          functions: fns(node.exit?.assign),
+          args: assignArgs,
+          whole: true,
+        },
+      );
       if (s.initial !== null) held({ kind: "initial", parent: s.name }, s.initial, node.initialWith, scopeArgs);
       for (const deadline of s.deadlines) {
         const at = node.after?.[deadline.name]?.at as SpecFunction | undefined;
@@ -217,7 +261,7 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
             chart,
             site: { kind: "input", state: s.name, keyword, key },
             functions: [["", (activity as { readonly input?: SpecFunction }).input]],
-            args: scopeArgs,
+            args: keyword === "sends" ? [...scopeArgs, "createKey"] : scopeArgs,
             whole: true,
           });
     }
@@ -367,36 +411,43 @@ function slotsOf(spec: Spec): Slot[] {
 export class Converter {
   private readonly locator = new Locator();
   private readonly sources = new Sources();
-  private constants: Constants = new Map();
+  private defined: Defined = { constants: new Map(), entities: new Map() };
 
   close(): void {
     this.locator.close();
     this.sources.close();
   }
 
-  /** The IR of `f`, a spec function that receives `args`, or the reason that it stays TS. */
+  /**
+   * The IR of `f`, a spec function that receives `args`, or the reason that it stays TS. `defined` is what the spec
+   * defines outside its functions, which program() finds itself.
+   */
   convert(
     f: SpecFunction,
     args: readonly Arg[],
     events: readonly DefinitionRef[] = [],
+    defined: Defined = this.defined,
   ): Expr | { readonly unconverted: string } {
     const location = this.locator.located(f);
     const source = location === undefined ? undefined : this.sources.sourceAt(location);
     return source === undefined
       ? { unconverted: "has no source that the converter finds" }
-      : converted(source, args, events, this.constants);
+      : converted(source, args, events, defined);
   }
 
   /** The IR of the spec functions of the callbacks that Lean evaluates, and those that stay TS. */
   program(spec: Spec): Converted {
-    this.constants = new Map(
-      spec.constants.flatMap(({ name, place, definition }) => {
-        const json = encoded(definition.schema, definition.values);
-        return "encoded" in json
-          ? [[constantsKey(join(spec.root, place.file), name), json.encoded as Readonly<Record<string, Json>>]]
-          : [];
-      }),
-    );
+    const key = ({ name, place }: { readonly name: string; readonly place: Place }) =>
+      definedKey(join(spec.root, place.file), name);
+    this.defined = {
+      constants: new Map(
+        spec.constants.flatMap((c) => {
+          const json = encoded(c.definition.schema, c.definition.values);
+          return "encoded" in json ? [[key(c), json.encoded as Readonly<Record<string, Json>>]] : [];
+        }),
+      ),
+      entities: new Map(spec.definitions.filter((d) => d.definition.kind === "entity").map((d) => [key(d), d.name])),
+    };
     const lists: Record<ConditionsCallback, ConvertedConditions[]> = {
       inputRequirement: [],
       resultEnsures: [],
@@ -433,15 +484,19 @@ export class Converter {
         lists[slot.callback].push({ definition: slot.definition, conditions });
       if (failed.length === 0) convertedBinds.add(slot);
     }
-    const fns: Record<FnCallback, Fn[]> = { resolve: [], decide: [] };
+    const fns: Record<FnCallback, Fn[]> = { resolve: [], decide: [], react: [] };
     for (const slot of fnSlotsOf(spec)) {
-      if (slot.f === undefined) continue;
+      // An automation without input sends `{}`; a command without decide is an external service's.
+      if (slot.f === undefined && slot.callback !== "react") continue;
+      const { f } = slot;
       const codec = slot.shapes.some((shape) => shape !== undefined && holdsCodec(shape));
-      const binds = slot.callback !== "decide" || lists.binding.some((g) => sameRef(g.definition, slot.definition));
+      const binds = slot.binds === undefined || lists[slot.binds].some((g) => sameRef(g.definition, slot.definition));
       const body = codec
         ? { unconverted: "receives a value of a codec" }
         : binds
-          ? this.convert(slot.f, slot.args, slot.events)
+          ? f === undefined
+            ? empty
+            : this.convert(f, slot.args, slot.events)
           : { unconverted: "reads binds that stay TS" };
       if ("unconverted" in body)
         notConverted.push({ callback: slot.callback, definition: slot.definition, reason: body.unconverted });

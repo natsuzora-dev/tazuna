@@ -388,13 +388,14 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
   | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))
   | .scenarioTime text => pure (.scenarioTime ((scenarioTime? text).map renderTime))
   | .schemaOf s service schema => do pure (.schemaOf ((← Service.ofStructure s service).schemaOf schema))
-  | .evaluate body input records =>
-    let env : Ir.Env := { args := Ir.argsOf [(.input, .json input)], records := records.map Stored.row }
+  | .evaluate body input records keys =>
+    let env : Ir.Env := { args := Ir.argsOf [(.input, .json input)], records := records.map Stored.row, keys }
     let (answer, trace) := (do Ir.encode env (← Ir.eval env [] body)).run'
     let reads := trace.parts.map ReadPart.of
+    let created := trace.created
     pure (match answer with
-      | .ok value => .evaluated { value, issue := none, reads }
-      | .error issue => .evaluated { value := none, issue, reads })
+      | .ok value => .evaluated { value, issue := none, reads, created }
+      | .error issue => .evaluated { value := none, issue, reads, created })
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 

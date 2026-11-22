@@ -52,11 +52,18 @@ structure Env where
   args : Arg → Val := fun _ => .undef
   records : Records := []
   fields : String → List String := fun _ => []
+  /-- What createKey returns next. -/
+  keys : Keys := {}
 
-/-- What an evaluation read: the parts of the records, in order and once, and the chart values, in order. -/
+/--
+What an evaluation read and made: the parts of the records, in order and once, the chart values, in order, and the
+keys it created.
+-/
 structure Trace where
   parts : List RecordPart := []
   access : Access := {}
+  /-- The entities that createKey made a key of, in call order. -/
+  created : List String := []
 
 /-- An evaluation, which notes what it reads, also when an Issue stops it. -/
 abbrev EvalM := ExceptT Issue (StateM Trace)
@@ -306,6 +313,11 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
     let vs ← elements left
     pure (.list (vs ++ (← elements right)))
   | .emit event payload => do pure (.emit event (← eval env vars payload))
+  | .createKey entity => do
+    modify fun t => { t with created := t.created ++ [entity] }
+    match (givenKeys env.keys (← get).created).getLast? with
+    | some (_, key) => pure (.json (.str key))
+    | none => thrown
 
 def evalAll (env : Env) (vars : List (String × Val)) : List Expr → EvalM (List Val)
   | [] => pure []
