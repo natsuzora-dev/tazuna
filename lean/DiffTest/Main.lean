@@ -2,6 +2,7 @@ import Std.Data.HashMap
 import DiffTest.Json
 import DiffTest.Protocol
 import Tazuna.Explore.StepOrders
+import Tazuna.Ir.Overlay
 import Tazuna.Sim.Run
 import Tazuna.Validation.Canonical
 
@@ -9,9 +10,10 @@ import Tazuna.Validation.Canonical
 tazuna-lean exchanges one JSON value per line with TS over stdio (precedents: leanprover-community/repl, the Lean LSP).
 DiffTest/Protocol.lean defines the messages.
 
-Service asks TS for a spec function's value whenever it needs one. While computing it, TS sends `read` for each record
-a TS function reads; Lean serves the value from its own records and remembers the parts read, which Instrument records
-in the accesses of steps. Within one run tree, Lean reuses the reply that TS gave to the same question when the values
+Service asks TS for a spec function's value whenever it needs one, unless the request's program holds the function as
+IR, which Lean evaluates itself (Ir.Program.overlay). While computing it, TS sends `read` for each record a TS function
+reads; Lean serves the value from its own records and remembers the parts read, which Instrument records in the
+accesses of steps. Within one run tree, Lean reuses the reply that TS gave to the same question when the values
 that Lean serves for the reads that TS made then are the same now: a TS reply depends only on the question and those
 values.
 -/
@@ -234,7 +236,8 @@ instance : MonadNote IO where
 The functions of each running service of `start`, instrumented as Instrument does, which collect into that service's
 Collect. Each question to TS names its service. The run asks only running services.
 -/
-def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (String → Functions ActingIO) := do
+def instrumentedOf (stdin stdout : IO.FS.Stream) (program : Ir.Program) (start : Sim.World) :
+    IO (String → Functions ActingIO) := do
   let reads ← IO.mkRef {}
   let memo ← IO.mkRef {}
   pure fun service =>
@@ -242,12 +245,13 @@ def instrumentedOf (stdin stdout : IO.FS.Stream) (start : Sim.World) : IO (Strin
     match start.services.lookup service with
     | none => fs.hoist fun _ => throw (IO.userError s!"the run asked {service}, which does not run")
     | some st =>
+      let overlaid := program.overlay st (reads.set {})
       let ifs : InstrumentFunctions IO := {
         lastReads := do pure (← reads.get).parts
         lastAccess := do pure (((← reads.get).replied.bind (·.access)).getD {})
         lastEnumerated := do pure (((← reads.get).replied.bind (·.enumerated)) == some true)
-        reversed := functions stdin stdout reads memo true (some service) }
-      (instrument st fs ifs).hoist (focus service)
+        reversed := overlaid (functions stdin stdout reads memo true (some service)) }
+      (instrument st (overlaid fs) ifs).hoist (focus service)
 
 /-- The start of the world of `sc`, with the step orders that the request names. -/
 def worldOf (spec : Spec.Structure) (sc : Scenario) (stepOrders : List StepOrder) : IO Sim.World := do
@@ -261,9 +265,9 @@ simulation's violations and halting violation. With `execute` true, the lines ta
 each running service that did not halt also returns what it enables next and its state as ChoiceDependent compares it.
 -/
 def simulateRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) (executing : Bool)
-    (stepOrders : List StepOrder) (exploring : Bool) : IO Response := do
+    (stepOrders : List StepOrder) (exploring : Bool) (program : Ir.Program) : IO Response := do
   let start ← worldOf spec sc stepOrders
-  let fsOf ← instrumentedOf stdin stdout start
+  let fsOf ← instrumentedOf stdin stdout program start
   let path : Explore.Explored := { sc, lines := sc.lines, domains := [] }
   let ran : ActingIO Sim.World :=
     if executing then path.world spec fsOf start else Sim.simulate spec fsOf start sc
@@ -314,11 +318,12 @@ def searchedOf (r : Searched) : SearchedProcessing :=
 The reply to request `stepOrderChanges`, which takes a structure and a scenario and returns stepOrderChanges of the
 scenario executed, from its startup: every search, with each step order it ran and its verdict, and what it found.
 -/
-def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario) : IO Response := do
+def stepOrderChangesRequest (stdin stdout : IO.FS.Stream) (spec : Spec.Structure) (sc : Scenario)
+    (program : Ir.Program) : IO Response := do
   let executeWith (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) : IO Execution := do
     let start ← Sim.World.start spec sc
     let start := { start with stepOrders }
-    let ran : ActingIO Sim.World := Sim.execute spec (← instrumentedOf stdin stdout start) start sc
+    let ran : ActingIO Sim.World := Sim.execute spec (← instrumentedOf stdin stdout program start) start sc
     let (w, acting) ← ran.run {}
     pure { world := w, collect := acting.collect }
   let reads ← IO.mkRef {}
@@ -349,13 +354,18 @@ def respond (stdin stdout : IO.FS.Stream) : DiffTest.Request → IO Response
     pure (.afters (Verify.unknownAfters lines))
   | .decodeLines values =>
     pure (.decodedLines (values.map fun v => (FromValue.fromValue v : Except String TraceLine).toOption))
-  | .simulate s sc execute stepOrders explore =>
+  | .simulate s sc execute stepOrders explore program =>
     simulateRequest stdin stdout s sc (execute == some true) (stepOrders.getD []) (explore == some true)
-  | .stepOrderChanges s sc => stepOrderChangesRequest stdin stdout s sc
+      (program.getD {})
+  | .stepOrderChanges s sc program => stepOrderChangesRequest stdin stdout s sc (program.getD {})
   | .sort schema value => pure (.sorted (sortCollections schema value))
   | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))
   | .scenarioTime text => pure (.scenarioTime ((scenarioTime? text).map renderTime))
   | .schemaOf s service schema => do pure (.schemaOf ((← Service.ofStructure s service).schemaOf schema))
+  | .evaluate body input =>
+    pure (match Ir.eval (Ir.argsOf [(.input, some input)]) [] body with
+      | .ok value => .evaluated { value, issue := none }
+      | .error issue => .evaluated { value := none, issue })
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 

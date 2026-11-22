@@ -1,4 +1,5 @@
 import Tazuna.Explore.StepOrders
+import Tazuna.Ir.Expr
 import Tazuna.Explore.Enabled
 import Tazuna.Explore.Moves
 import Tazuna.Explore.Coverage
@@ -53,11 +54,12 @@ inductive Request where
   | decodeLines (values : List Value)
   /--
   With `execute`, the lines take place as explore runs them, and each service also returns what it enables; with
-  `explore` too, the own service returns the moves that explore appends next.
+  `explore` too, the own service returns the moves that explore appends next. `program` holds the spec functions that
+  Lean evaluates itself instead of asking TS.
   -/
   | simulate («structure» : Spec.Structure) (scenario : Scenario) (execute : Option Bool)
-      (stepOrders : Option (List StepOrder)) (explore : Option Bool)
-  | stepOrderChanges («structure» : Spec.Structure) (scenario : Scenario)
+      (stepOrders : Option (List StepOrder)) (explore : Option Bool) (program : Option Ir.Program)
+  | stepOrderChanges («structure» : Spec.Structure) (scenario : Scenario) (program : Option Ir.Program)
   /-- sortCollections of an encoded value by its JSON Schema. -/
   | sort (schema value : Value)
   /-- keyOrdered of an encoded value by its JSON Schema. -/
@@ -66,6 +68,8 @@ inductive Request where
   | scenarioTime (text : String)
   /-- Service.schemaOf of the service `service` of the structure. -/
   | schemaOf («structure» : Spec.Structure) (service : String) (schema : Schema)
+  /-- The value of an IR expression whose only argument is `input`. -/
+  | evaluate (body : Ir.Expr) (input : Value)
 
 derive_wire Request tag "type" skip_serializing_none
 
@@ -219,6 +223,13 @@ structure SearchedProcessing where
 
 derive_wire SearchedProcessing serialize_only
 
+/-- The value of an IR expression, absent for `undefined`, or the Issue that stopped it. -/
+structure Evaluated where
+  value : Option Value
+  issue : Option Issue
+
+derive_wire Evaluated serialize_only skip_serializing_none
+
 /-- What Lean answers a Request with, the constructor named after the request's. -/
 inductive Response where
   | checked (findings : List Validation.Illegal)
@@ -240,6 +251,7 @@ inductive Response where
   | keyOrdered (ordered : Bool)
   | scenarioTime (time : Option String)
   | schemaOf (schema : Option Value)
+  | evaluated (result : Evaluated)
   | error (message : String)
 
 derive_wire Response tag "type" serialize_only

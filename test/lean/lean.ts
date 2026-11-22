@@ -44,6 +44,7 @@ const responses = {
   keyOrdered: "keyOrdered",
   scenarioTime: "scenarioTime",
   schemaOf: "schemaOf",
+  evaluate: "evaluated",
 } as const satisfies Record<Request["type"], Response["type"]>;
 
 type Responded<T extends Request["type"]> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;

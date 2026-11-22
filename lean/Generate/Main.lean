@@ -94,6 +94,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
      ``Tazuna.Spec.Domain, ``Tazuna.Spec.Explore,
      ``Tazuna.Spec.Structure]),
+   ("src/convert/ir.generated.ts", [``Tazuna.Ir.Expr, ``Tazuna.Ir.Condition, ``Tazuna.Ir.Program]),
    ("test/lean/protocol.generated.ts",
     [``Tazuna.Service.Issue, ``Tazuna.Service.CopyScope, ``Tazuna.Service.Scope,
      ``Tazuna.Service.Transition, ``Tazuna.Service.Assignment, ``Tazuna.Service.Edge, ``Tazuna.Service.Extra, ``Tazuna.Service.Emit,
@@ -103,7 +104,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.DiffTest.Request, ``Tazuna.DiffTest.Question, ``Tazuna.DiffTest.Asked,
      ``Tazuna.DiffTest.Reply, ``Tazuna.DiffTest.Replied, ``Tazuna.DiffTest.Unpaired,
      ``Tazuna.DiffTest.SimulatedService, ``Tazuna.DiffTest.TriedOrder, ``Tazuna.DiffTest.SearchedProcessing,
-     ``Tazuna.DiffTest.Response])]
+     ``Tazuna.DiffTest.Evaluated, ``Tazuna.DiffTest.Response])]
 
 def declaredIn (path : String) : MetaM (List Name) := do
   let some types := modules.lookup path | throwError "modules has no {path}"
@@ -543,6 +544,7 @@ def files (guarantees : List String) : List (String × String) :=
    ("src/data/limits.generated.ts", limitsFile),
    ("test/guarantees.generated.ts", guaranteesFile guarantees),
    types% "src/spec/structure.generated.ts",
+   types% "src/convert/ir.generated.ts",
    types% "test/lean/protocol.generated.ts"]
 
 /--
