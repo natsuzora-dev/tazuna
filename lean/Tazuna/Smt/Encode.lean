@@ -248,10 +248,6 @@ def leastIn (lt : Term → Term → Term) : Term → Term → List Visit → Ter
     let k := b.scalarOf.1
     leastIn lt (.or found g) (.ite (.and g (.or (.not found) (lt k m))) k m) visits
 
-/-- The term that holds when a key of a visited value is no integer, which an integer min or max throws on. -/
-def keysBad (visits : List Visit) : Term :=
-  disj (visits.map fun q => .and q.1 (.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))))
-
 /-- The first item whose term holds, `undefined` when none does. -/
 def firstIn : List (Term × SVal) → SVal
   | [] => .scalar undefT
@@ -270,12 +266,14 @@ def dateT (t : Term) : Term := .and (.isStr t) (dateValidT (.strOf t))
 
 /--
 That the scalar `t` is a date label (`dateT`), read off the day number where `t` is the label of one that the encoding
-made: a day variable, or a sum such as addDays makes.
+made (a day variable, or a sum such as addDays makes), and computed where `t` is a literal, such as the `undefined` that
+an empty min starts from, whose string the solver would otherwise leave unconstrained.
 -/
 def isDateOf : Term → Term
   | .mkStr (.dateLabel (.var x .int)) => inRangeT (.var x .int)
   | .mkStr (.dateLabel (.add a b)) => inRangeT (.add a b)
   | .ite c a b => .ite c (isDateOf a) (isDateOf b)
+  | .lit v => .lit (.bool (match v with | .val (.str s) => isDateLabel s | _ => false))
   | t => dateT t
 
 /-- The day number of the date label `t`, read off as `isDateOf` reads it, else parsed. -/
@@ -283,7 +281,22 @@ def dayOf : Term → Term
   | .mkStr (.dateLabel (.var x .int)) => .var x .int
   | .mkStr (.dateLabel (.add a b)) => .add a b
   | .ite c a b => .ite c (dayOf a) (dayOf b)
+  | .lit v => .lit (.int (match v with | .val (.str s) => daysFromCivil (labelYear s) (labelMonth s) (labelDay s) | _ => 0))
   | t => dayT (.strOf t)
+
+/-- That the scalar `t` is a key of `order`, as ordinal reads one: an integer, or a date label. -/
+def keyOkT : Order → Term → Term
+  | .number => .isInt
+  | .date => isDateOf
+
+/-- The key of `order` that the scalar `t` is, when keyOkT holds: the integer, or the date's day number. -/
+def keyT : Order → Term → Term
+  | .number => .intOf
+  | .date => dayOf
+
+/-- The term that holds when a key of a visited value is no key of `order`, which a min or max throws on. -/
+def keysBad (order : Order) (visits : List Visit) : Term :=
+  disj (visits.map fun q => .and q.1 (.or q.2.2.1.scalarOf.2 (.not (keyOkT order q.2.2.1.scalarOf.1))))
 
 def relT (r : Relation) (a b : Term) : Term :=
   match r with
@@ -470,20 +483,18 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
     let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
     let (total, bad) := sumIn visits
     pure (.scalar (.mkInt total), .or ec (.or (thrownIn visits) (.or bad (.not (safeT total)))))
-  | .min .number c x body => do
+  | .min order c x body => do
     let (vc, ec) ← seval env vars c
     let some items := vc.items env.records | throw "a min of what may be no collection"
     let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
-    pure (.scalar (leastIn (fun k m => .lt (.intOf k) (.intOf m)) ff undefT visits),
-      .or ec (.or (thrownIn visits) (keysBad visits)))
-  | .max .number c x body => do
+    pure (.scalar (leastIn (fun k m => .lt (keyT order k) (keyT order m)) ff undefT visits),
+      .or ec (.or (thrownIn visits) (keysBad order visits)))
+  | .max order c x body => do
     let (vc, ec) ← seval env vars c
     let some items := vc.items env.records | throw "a max of what may be no collection"
     let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
-    pure (.scalar (leastIn (fun k m => .lt (.intOf m) (.intOf k)) ff undefT visits),
-      .or ec (.or (thrownIn visits) (keysBad visits)))
-  | .min .date .. => throw "a min of dates"
-  | .max .date .. => throw "a max of dates"
+    pure (.scalar (leastIn (fun k m => .lt (keyT order m) (keyT order k)) ff undefT visits),
+      .or ec (.or (thrownIn visits) (keysBad order visits)))
   | .only c => do
     let (vc, ec) ← seval env vars c
     let some items := vc.items env.records | throw "an only of what may be no collection"

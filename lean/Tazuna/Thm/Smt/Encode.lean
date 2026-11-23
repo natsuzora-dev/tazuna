@@ -573,6 +573,10 @@ theorem isDateOf_holds (M : Model) (t : Term) :
   · rename_i c a b iha ihb
     simp only [Term.holds, Term.denote] at iha ihb ⊢
     by_cases hc : (c.denote M).toBool <;> simp [hc, iha, ihb]
+  · rename_i v
+    cases v <;> try rfl
+    rename_i sc
+    cases sc <;> rfl
   · exact dateT_holds M _
 
 theorem label_day (M : Model) (z : Term) (s : String) (hn : ∃ n, z.denote M = .int n)
@@ -594,6 +598,9 @@ theorem dayOf_denote (M : Model) (t : Term) (s : String) (h : (t.denote M).toSca
     by_cases hc : (c.denote M).toBool <;> simp only [hc, ite_true, Bool.false_eq_true, ite_false] at h ⊢
     · exact iha h
     · exact ihb h
+  · rename_i v
+    cases v <;> simp only [Term.denote, Lit.toScalar] at h <;> try (cases h)
+    all_goals rfl
   · exact dayT_strOf M _ s h
 
 theorem dateCompare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal) (s : Trace) :
@@ -1249,20 +1256,54 @@ theorem least_eq (lt : Int × Nat → Int × Nat → Bool) (l : List (Val × (In
   | nil => rfl
   | cons k ks => simp only [least, List.foldl_cons, accStep, foldl_accStep]; rfl
 
-/-- That a min's or max's terms `found` and `m` stand for the key `acc` so far. -/
-def LeastRel (M : Model) (acc : Option (Val × (Int × Nat))) (found m : Term) : Prop :=
+/-- What ordinal reads of a scalar term as a key of `order`: the key that keyT gives, when keyOkT holds. -/
+theorem key_ordinal (M : Model) (order : Order) (t : Term) :
+    ordinal order ((t.denote M).toScalar.toVal) =
+      if (keyOkT order t).holds M then some (((keyT order t).denote M).toInt, 0) else none := by
+  cases order
+  · rw [toVal_ordinal]
+    cases hx : (t.denote M).toScalar <;> simp [keyOkT, keyT, holds_isInt, hx, denote_intOf]
+  · rw [toVal_ordinal_date]
+    simp only [keyOkT, keyT, isDateOf_holds]
+    cases hx : (t.denote M).toScalar <;> simp only [Bool.false_eq_true, ite_false]
+    rename_i x
+    unfold parseDate?
+    by_cases hv : isDateLabel x = true
+    · simp [hv, dayOf_denote M t x hx hv, Lit.toInt]
+    · simp [hv]
+
+/-- The key that keyT gives is an integer term where keyOkT holds. -/
+theorem keyT_int (M : Model) (order : Order) (t : Term) (h : (keyOkT order t).holds M = true) :
+    (keyT order t).denote M = .int ((keyT order t).denote M).toInt := by
+  cases order
+  · rfl
+  · simp only [keyOkT, isDateOf_holds] at h
+    cases hx : (t.denote M).toScalar <;> simp only [hx, Bool.false_eq_true] at h
+    rename_i x
+    simp [keyT, dayOf_denote M t x hx h, Lit.toInt]
+
+theorem keyT_ite (M : Model) (order : Order) (c a b : Term) :
+    (keyT order (.ite c a b)).denote M = if c.holds M then (keyT order a).denote M else (keyT order b).denote M := by
+  cases order
+  · by_cases hc : (c.denote M).toBool <;> simp [keyT, Term.denote, Term.holds, hc]
+  · simp only [keyT, dayOf, Term.denote]
+
+/-- That a min's or max's terms `found` and `m` stand for the key `acc` so far, a key of `order`. -/
+def LeastRel (M : Model) (order : Order) (acc : Option (Val × (Int × Nat))) (found m : Term) : Prop :=
   match acc with
   | none => found.holds M = false ∧ (m.denote M).toScalar = .undef
-  | some (kv, kk) => found.holds M = true ∧ ∃ n, (m.denote M).toScalar = .int n ∧ kv = .json (.num ⟨n, 0⟩) ∧ kk = (n, 0)
+  | some (kv, kk) =>
+    found.holds M = true ∧ (m.denote M).toScalar.toVal = kv ∧ (keyT order m).denote M = .int kk.1 ∧ kk.2 = 0
 
-theorem leastIn_conc (M : Model) (recs : Records) (lt : Term → Term → Term) (plt : Int × Nat → Int × Nat → Bool)
-    (hlt : ∀ a b : Term, ∀ x y : Int, (Term.intOf a).denote M = .int x → (Term.intOf b).denote M = .int y →
+theorem leastIn_conc (M : Model) (recs : Records) (order : Order) (lt : Term → Term → Term)
+    (plt : Int × Nat → Int × Nat → Bool)
+    (hlt : ∀ a b : Term, ∀ x y : Int, (keyT order a).denote M = .int x → (keyT order b).denote M = .int y →
       (lt a b).holds M = plt (x, 0) (y, 0)) :
     ∀ (visits : List Visit) (acc : Option (Val × (Int × Nat))) (found m : Term),
-      (keysBad visits).holds M = false → LeastRel M acc found m →
+      (keysBad order visits).holds M = false → LeastRel M order acc found m →
       ((leastIn lt found m visits).denote M).toScalar.toVal =
         ((((visits.filter (·.1.holds M)).map fun q =>
-          (q.2.2.1.conc M recs, (((Term.intOf q.2.2.1.scalarOf.1).denote M).toInt, 0))).foldl (accStep plt) acc).map
+          (q.2.2.1.conc M recs, (((keyT order q.2.2.1.scalarOf.1).denote M).toInt, 0))).foldl (accStep plt) acc).map
           (·.1)).getD .undef
   | [], acc, found, m, _, hr => by
     simp only [leastIn, List.filter_nil, List.map_nil, List.foldl_nil]
@@ -1270,8 +1311,8 @@ theorem leastIn_conc (M : Model) (recs : Records) (lt : Term → Term → Term) 
     | none => obtain ⟨_, hm⟩ := hr; simp [hm, Scalar.toVal, Scalar.toValue?, Val.ofOption]
     | some a =>
       obtain ⟨kv, kk⟩ := a
-      obtain ⟨_, n, hm, rfl, rfl⟩ := hr
-      simp [hm, Scalar.toVal, Scalar.toValue?, Val.ofOption]
+      obtain ⟨_, hm, _, _⟩ := hr
+      simp [hm]
   | (g, v, b, e) :: visits, acc, found, m, hbad, hr => by
     simp only [keysBad, List.map_cons, disj_cons, holds_or, Bool.or_eq_false_iff] at hbad
     obtain ⟨hb, hrest⟩ := hbad
@@ -1280,58 +1321,62 @@ theorem leastIn_conc (M : Model) (recs : Records) (lt : Term → Term → Term) 
     · simp only [holds_and, hg, Bool.true_and, holds_or, holds_not, Bool.or_eq_false_iff, Bool.not_eq_false'] at hb
       obtain ⟨hs, hi⟩ := hb
       rcases scalar_cases M recs b with ⟨_, hc⟩ | ⟨h, _⟩
-      · rw [holds_isInt] at hi
-        cases hx : (b.scalarOf.1.denote M).toScalar with
-        | undef | null | bool _ | str _ => simp [hx] at hi
-        | int n =>
-        have hk : (Term.intOf b.scalarOf.1).denote M = .int n := by simp [Term.denote, hx]
+      · have hk := keyT_int M order b.scalarOf.1 hi
+        generalize hn : ((keyT order b.scalarOf.1).denote M).toInt = n at hk
         simp only [List.filter_cons, hg, ite_true, List.map_cons, List.foldl_cons]
-        refine leastIn_conc M recs lt plt hlt visits _ _ _ (by simpa [keysBad] using hrest) ?_
-        rw [hc, hx]
-        simp only [hk, Lit.toInt]
-        have hv : Scalar.toVal (.int n) = .json (.num ⟨n, 0⟩) := rfl
+        refine leastIn_conc M recs order lt plt hlt visits _ _ _ (by simpa [keysBad] using hrest) ?_
+        rw [hc, hn]
         cases acc with
         | none =>
           obtain ⟨hf, _⟩ := hr
-          refine ⟨by simp [holds_or, hg], n, ?_, hv, rfl⟩
-          rw [denote_ite]
-          simp [holds_and, holds_or, holds_not, hg, hf, hx]
+          have hcond : (Term.and g (.or (.not found) (lt b.scalarOf.1 m))).holds M = true := by
+            simp [holds_and, holds_or, holds_not, hg, hf]
+          refine ⟨by simp [holds_or, hg], ?_, ?_, by simp⟩
+          · rw [denote_ite, hcond]; rfl
+          · rw [keyT_ite, hcond]; exact hk
         | some a =>
           obtain ⟨kv, kk⟩ := a
-          obtain ⟨hf, mn, hm, rfl, rfl⟩ := hr
-          have hmk : (Term.intOf m).denote M = .int mn := by simp [Term.denote, hm]
+          obtain ⟨hf, hm, hmk, hk0⟩ := hr
+          obtain ⟨mn, k0⟩ := kk
+          simp only at hmk hk0
+          subst hk0
           have hl := hlt b.scalarOf.1 m n mn hk hmk
           simp only [LeastRel, accStep]
           by_cases hc' : plt (n, 0) (mn, 0)
-          · simp only [hc', ite_true]
-            refine ⟨by simp [holds_or, hf], n, ?_, hv, rfl⟩
-            rw [denote_ite]
-            simp [holds_and, holds_or, holds_not, hg, hf, hl, hc', hx]
-          · simp only [hc', Bool.false_eq_true, ite_false]
-            refine ⟨by simp [holds_or, hf], mn, ?_, rfl, rfl⟩
-            rw [denote_ite]
-            simp [holds_and, holds_or, holds_not, hg, hf, hl, hc', hm]
+          · have hcond : (Term.and g (.or (.not found) (lt b.scalarOf.1 m))).holds M = true := by
+              simp [holds_and, holds_or, holds_not, hg, hl, hc']
+            simp only [hc', ite_true]
+            refine ⟨by simp [holds_or, hf], ?_, ?_, by simp⟩
+            · rw [denote_ite, hcond]; rfl
+            · rw [keyT_ite, hcond]; exact hk
+          · have hcond : (Term.and g (.or (.not found) (lt b.scalarOf.1 m))).holds M = false := by
+              simp [holds_and, holds_or, holds_not, hg, hf, hl, hc']
+            simp only [hc', Bool.false_eq_true, ite_false]
+            refine ⟨by simp [holds_or, hf], ?_, ?_, by simp⟩
+            · rw [denote_ite, hcond]; exact hm
+            · rw [keyT_ite, hcond]; exact hmk
       · simp [h] at hs
     · simp only [List.filter_cons, hg, Bool.false_eq_true, ite_false]
-      refine leastIn_conc M recs lt plt hlt visits acc _ _ (by simpa [keysBad] using hrest) ?_
+      have hcond : (Term.and g (.or (.not found) (lt b.scalarOf.1 m))).holds M = false := by simp [holds_and, hg]
+      refine leastIn_conc M recs order lt plt hlt visits acc _ _ (by simpa [keysBad] using hrest) ?_
       cases acc with
       | none =>
         obtain ⟨hf, hm⟩ := hr
-        exact ⟨by simp [holds_or, hf, hg], by rw [denote_ite]; simp [holds_and, hg, hm]⟩
+        exact ⟨by simp [holds_or, hf, hg], by rw [denote_ite, hcond]; exact hm⟩
       | some a =>
         obtain ⟨kv, kk⟩ := a
-        obtain ⟨hf, n, hm, h1, h2⟩ := hr
-        exact ⟨by simp [holds_or, hf], n, by rw [denote_ite]; simp [holds_and, hg, hm], h1, h2⟩
+        obtain ⟨hf, hm, hmk, hk0⟩ := hr
+        exact ⟨by simp [holds_or, hf], by rw [denote_ite, hcond]; exact hm, by rw [keyT_ite, hcond]; exact hmk, hk0⟩
 
-theorem keyOf_conc (M : Model) (recs : Records) (b : SVal) :
-    Ir.keyOf .number (b.conc M recs) =
-      if (Term.or b.scalarOf.2 (.not (.isInt b.scalarOf.1))).holds M then thrown
-      else pure (((Term.intOf b.scalarOf.1).denote M).toInt, 0) := by
+theorem keyOf_conc (M : Model) (recs : Records) (order : Order) (b : SVal) :
+    Ir.keyOf order (b.conc M recs) =
+      if (Term.or b.scalarOf.2 (.not (keyOkT order b.scalarOf.1))).holds M then thrown
+      else pure (((keyT order b.scalarOf.1).denote M).toInt, 0) := by
   rcases scalar_cases M recs b with ⟨h, hc⟩ | ⟨h, hn⟩
   · rw [hc]
-    cases hx : (b.scalarOf.1.denote M).toScalar <;>
-      simp [Ir.keyOf, toVal_ordinal, holds_or, holds_not, h, holds_isInt, hx, denote_intOf]
-  · simp [Ir.keyOf, nonScalar_ordinal .number hn, holds_or, h]
+    simp only [Ir.keyOf, key_ordinal, holds_or, holds_not, h, Bool.false_or]
+    cases (keyOkT order b.scalarOf.1).holds M <;> rfl
+  · simp [Ir.keyOf, nonScalar_ordinal order hn, holds_or, h]
 
 theorem disj_split (M : Model) (B : Visit → Term) : ∀ visits : List Visit,
     (disj (visits.map fun q => .and q.1 (.or q.2.2.2 (B q)))).holds M =
@@ -2010,7 +2055,6 @@ mutual
         (fun b => by rw [same_conc M (env.records.conc M)]; rfl)]
       simp [visited, List.filter_map, Function.comp_def]
   | vars, .some .array .., r, h, s | vars, .every .array .., r, h, s
-  | vars, .min .date .., r, h, s | vars, .max .date .., r, h, s
   | vars, .sortedBy .., r, h, s | vars, .format _, r, h, s | vars, .decimal .., r, h, s
   | vars, .createKey _, r, h, s => by simp [seval] at h
   | vars, .sum c x body, r, h, s => by
@@ -2067,7 +2111,7 @@ mutual
         · simp only [ht, ite_false]
           show (Term.or _ _).holds M = true
           simp [holds_or, holds_not, safeT_holds, ht]
-  | vars, .min .number c x body, r, h, s => by
+  | vars, .min order c x body, r, h, s => by
     simp only [seval, bind, Except.bind] at h
     split at h
     · contradiction
@@ -2085,8 +2129,8 @@ mutual
       · rename_i v hv; cases hq; exact ⟨rfl, rfl, hv⟩) items visits hvisits
     simp only [eval]
     refine visits_op (hx := seval_agrees M env fields vars c rc hrc) (hi := hitems)
-      (L := visits.map fun q => (q.1, q.2.1, .or q.2.2.2 (.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))), q))
-      (φ := fun q => (q.2.2.1.conc M (env.records.conc M), (((Term.intOf q.2.2.1.scalarOf.1).denote M).toInt, 0)))
+      (L := visits.map fun q => (q.1, q.2.1, .or q.2.2.2 (.or q.2.2.1.scalarOf.2 (.not (keyOkT order q.2.2.1.scalarOf.1))), q))
+      (φ := fun q => (q.2.2.1.conc M (env.records.conc M), (((keyT order q.2.2.1.scalarOf.1).denote M).toInt, 0)))
       (by simp [List.map_map, Function.comp_def, ← hL]) ?_ ?_ ?_ s
     · intro q hq _ s1
       simp only [List.mem_map] at hq
@@ -2106,32 +2150,31 @@ mutual
       | ok w =>
         obtain ⟨he, rfl⟩ := hb'
         dsimp only
-        rw [run_bind, keyOf_conc]
-        by_cases hk : (Term.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))).holds M
+        rw [run_bind, keyOf_conc M _ order]
+        by_cases hk : (Term.or q.2.2.1.scalarOf.2 (.not (keyOkT order q.2.2.1.scalarOf.1))).holds M
         · simp only [hk, ite_true, run_thrown, Yields]; simp [holds_or, hk]
         · simp only [hk, Bool.false_eq_true, ite_false, run_pure, Yields]
           refine ⟨?_, ?_⟩ <;> simp_all [holds_or]
     · intro he
       rw [List.map_map] at he
       simp only [Function.comp_def] at he
-      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1)))] at he
+      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (keyOkT order q.2.2.1.scalarOf.1)))] at he
       simp only [holds_or, keysBad]
       rcases he with he | he <;> simp_all
     · intro h1 h2 s1
       rw [List.map_map] at h2
       simp only [Function.comp_def] at h2
-      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1)))] at h2
+      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (keyOkT order q.2.2.1.scalarOf.1)))] at h2
       simp only [Bool.or_eq_false_iff] at h2
       obtain ⟨h2, h3⟩ := h2
       simp only [run_pure]
       refine ⟨by simp [holds_or, keysBad, h1, h2, h3], ?_⟩
-      rw [least_eq, conc_scalar, leastIn_conc M (env.records.conc M) _ keyLt ?_ visits none ff undefT
+      rw [least_eq, conc_scalar, leastIn_conc M (env.records.conc M) order _ keyLt ?_ visits none ff undefT
         (by simpa [keysBad] using h3) ⟨holds_ff M, rfl⟩]
       · simp [List.filter_map, Function.comp_def]
       · intro a b x y ha hb
-        simp only [Term.denote, Lit.int.injEq] at ha hb
         simp [keyLt, Term.holds, Term.denote, Lit.toBool, Lit.toInt, ha, hb]
-  | vars, .max .number c x body, r, h, s => by
+  | vars, .max order c x body, r, h, s => by
     simp only [seval, bind, Except.bind] at h
     split at h
     · contradiction
@@ -2149,8 +2192,8 @@ mutual
       · rename_i v hv; cases hq; exact ⟨rfl, rfl, hv⟩) items visits hvisits
     simp only [eval]
     refine visits_op (hx := seval_agrees M env fields vars c rc hrc) (hi := hitems)
-      (L := visits.map fun q => (q.1, q.2.1, .or q.2.2.2 (.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))), q))
-      (φ := fun q => (q.2.2.1.conc M (env.records.conc M), (((Term.intOf q.2.2.1.scalarOf.1).denote M).toInt, 0)))
+      (L := visits.map fun q => (q.1, q.2.1, .or q.2.2.2 (.or q.2.2.1.scalarOf.2 (.not (keyOkT order q.2.2.1.scalarOf.1))), q))
+      (φ := fun q => (q.2.2.1.conc M (env.records.conc M), (((keyT order q.2.2.1.scalarOf.1).denote M).toInt, 0)))
       (by simp [List.map_map, Function.comp_def, ← hL]) ?_ ?_ ?_ s
     · intro q hq _ s1
       simp only [List.mem_map] at hq
@@ -2170,30 +2213,29 @@ mutual
       | ok w =>
         obtain ⟨he, rfl⟩ := hb'
         dsimp only
-        rw [run_bind, keyOf_conc]
-        by_cases hk : (Term.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))).holds M
+        rw [run_bind, keyOf_conc M _ order]
+        by_cases hk : (Term.or q.2.2.1.scalarOf.2 (.not (keyOkT order q.2.2.1.scalarOf.1))).holds M
         · simp only [hk, ite_true, run_thrown, Yields]; simp [holds_or, hk]
         · simp only [hk, Bool.false_eq_true, ite_false, run_pure, Yields]
           refine ⟨?_, ?_⟩ <;> simp_all [holds_or]
     · intro he
       rw [List.map_map] at he
       simp only [Function.comp_def] at he
-      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1)))] at he
+      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (keyOkT order q.2.2.1.scalarOf.1)))] at he
       simp only [holds_or, keysBad]
       rcases he with he | he <;> simp_all
     · intro h1 h2 s1
       rw [List.map_map] at h2
       simp only [Function.comp_def] at h2
-      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1)))] at h2
+      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (keyOkT order q.2.2.1.scalarOf.1)))] at h2
       simp only [Bool.or_eq_false_iff] at h2
       obtain ⟨h2, h3⟩ := h2
       simp only [run_pure]
       refine ⟨by simp [holds_or, keysBad, h1, h2, h3], ?_⟩
-      rw [least_eq, conc_scalar, leastIn_conc M (env.records.conc M) _ (fun a b => keyLt b a) ?_ visits none ff undefT
+      rw [least_eq, conc_scalar, leastIn_conc M (env.records.conc M) order _ (fun a b => keyLt b a) ?_ visits none ff undefT
         (by simpa [keysBad] using h3) ⟨holds_ff M, rfl⟩]
       · simp [List.filter_map, Function.comp_def]
       · intro a b x y ha hb
-        simp only [Term.denote, Lit.int.injEq] at ha hb
         simp [keyLt, Term.holds, Term.denote, Lit.toBool, Lit.toInt, ha, hb]
   | vars, .only c, r, h, s => by
     simp only [seval, bind, Except.bind] at h
