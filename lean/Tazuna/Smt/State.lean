@@ -5,7 +5,7 @@ import Tazuna.Semantics.Eval.Functions
 The symbolic records of a service within its bounds, what the semantics guarantees of every state, and a command's step
 over them. Each keyed entity has as many slots as its `creates` bound: a slot is used once a record was created in it and
 live while the record exists, so keys are never reused. These encodings carry no proof; prove replays each answer that
-it reports in the semantics (Prove.replay).
+it reports in the semantics (Prove's replayStep and the other replay functions).
 -/
 
 namespace Tazuna.Smt
@@ -199,6 +199,10 @@ def SRecords.named (st : Service) (creates : List (String × Nat)) (pre : String
 
 /-- The variable that tells whether a slot was ever used. -/
 def usedVar (pre e : String) (i : Nat) : Term := boolVar s!"{pre}.{e}.{i}.used"
+
+/-- The used variable of each slot of `r`, whose variables are named after `pre`, by entity. -/
+def SRecords.usedVars (r : SRecords) (pre : String) : List (String × List Term) :=
+  r.keyed.map fun (e, slots) => (e, (List.range slots.length).map (usedVar pre e))
 
 /-- That `a` and `b` hold the same key: equal values of each key field. -/
 def Slot.sameKey (a b : Slot) : Term :=
@@ -699,20 +703,30 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
          refs := conj refs, binds := bindTerms.map (·.2), requires := requireChecks,
          paths := decidedPaths decided, emitted := stepped.emitted }
 
+/-- The time of a state, `clock`, an instant as every time is (Time.inRange). -/
+def clockFacts : Facts :=
+  { vars := [("clock", .int)],
+    asserts := [.le (intLit (-maxInstant)) (.var "clock" .int), .le (.var "clock" .int) (intLit maxInstant)],
+    fit := .exact }
+
+def clockT : Term := .var "clock" .int
+
+def nowT : Term := .var "now" .int
+
 /--
-The step of command `name` of `svc` from `pre` at the time `clock`, whose slots of each entity are used as `used` says.
-The step's time is no earlier than `clock`: the semantics never moves time back (Sim's clock line reports `notLater`,
-and verify's replay keeps the later time), which no theorem states yet.
+The time of a step, `now`, an instant no earlier than the state's time: the semantics never moves time back (Sim's clock
+line reports `notLater`, and verify's replay keeps the later time), which no theorem states yet.
 -/
-def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used : List (String × List Term))
+def nowFacts : Facts :=
+  { vars := [("now", .int)], asserts := [.le (intLit (-maxInstant)) nowT, .le nowT (intLit maxInstant), .le clockT nowT],
+    fit := .exact }
+
+/-- The step of command `name` of `svc` from `pre` at the time `nowT`, whose slots of each entity are used as `used` says. -/
+def stepOf (svc : Service) (p : Program) (pre : SRecords) (used : List (String × List Term))
     (name : String) : Except String Step := do
   let (input, inputFacts) := inputOf svc name
   let (caller, callerFacts) := callerVars
-  let now := Term.var "now" .int
-  let nowFacts : Facts :=
-    { vars := [("now", .int)], asserts := [Term.le (intLit (-maxInstant)) now, .le now (intLit maxInstant), .le clock now],
-      fit := .exact }
-  let step ← stepWith svc p pre used name input caller now ""
+  let step ← stepWith svc p pre used name input caller nowT ""
   pure { step with facts := inputFacts ++ callerFacts ++ nowFacts ++ step.facts }
 
 /-- The term that holds when the ensures `c` of a step's command fails, or throws, after the step. -/

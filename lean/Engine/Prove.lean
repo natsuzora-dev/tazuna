@@ -225,23 +225,9 @@ def failsOn (r : SRecords) (now : Term) (c : Checked) : Except String Term := do
   | .single e => fails (recordEnv ((r.singles.lookup e).getD []) now)
   | .service => fails (recordsEnv r now)
 
-/-- The time of a state, `clock`, an instant as every time is (Time.inRange). -/
-def clockFacts : Facts :=
-  { vars := [("clock", .int)],
-    asserts := [.le (intLit (-maxInstant)) (.var "clock" .int), .le (.var "clock" .int) (intLit maxInstant)],
-    fit := .exact }
-
-def clockT : Term := .var "clock" .int
-
-def nowT : Term := .var "now" .int
 
 /-- A time after the state's, which a response reads when time passes with no message. -/
 def laterT : Term := .var "later" .int
-
-/-- The time of a step, `now`, an instant no earlier than the state's time. -/
-def nowFacts : Facts :=
-  { vars := [("now", .int)], asserts := [.le (intLit (-maxInstant)) nowT, .le nowT (intLit maxInstant), .le clockT nowT],
-    fit := .exact }
 
 /--
 The initial records: no record of a keyed entity, and each single entity's record of its schema defaults. A default that
@@ -294,13 +280,13 @@ def inductionOf (j : Ir.Structure) (service : String) : IO Induction := do
   let checked := invariantsOf st p
   let fs := Eval.Program.toFunctions p st fun _ => pure ()
   let charts ← st.charts.filterMapM (chartCaseOf st fs)
-  let creates := ((j.bounds.find? (·.service == service)).map (·.creates)).getD []
+  let creates := Ir.createsOf j.bounds service
   let pre := SRecords.named st creates "pre"
-  let used := pre.keyed.map fun (e, slots) => (e, (List.range slots.length).map (usedVar "pre" e))
+  let used := pre.usedVars "pre"
   let holds := conj (checked.filterMap fun c => (failsOn pre clockT c).toOption.map .not)
   let blocked := unbounded j st
   pure { st, creates, pre, facts := pre.facts st "pre" ++ clockFacts, holds,
-         steps := st.commands.map fun c => (c, stepOf st p pre clockT used c),
+         steps := st.commands.map fun c => (c, stepOf st p pre used c),
          answers := (st.queries.filter fun q => !(conditionsOf p.queryEnsures (st.ref q)).isEmpty).map fun q =>
            (q, answerOf st p pre clockT q),
          checked, responses := responsesOf st p, charts, blocked,

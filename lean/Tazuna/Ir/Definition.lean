@@ -492,6 +492,10 @@ in the spirit of Alloy's small-scope hypothesis that most counterexamples have s
 -/
 def defaultItems : Nat := 2
 
+/-- The creates bound of each entity of the service `service`; none when it has no `bounds()`. -/
+def createsOf (bounds : List Bounds) (service : String) : List (String × Nat) :=
+  ((bounds.find? (·.service == service)).map (·.creates)).getD []
+
 /-- The `items` bound of the service `service`. -/
 def itemsOf (bounds : List Bounds) (service : String) : Nat :=
   ((bounds.find? (·.service == service)).bind (·.items)).getD defaultItems

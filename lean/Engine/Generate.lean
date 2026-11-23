@@ -234,14 +234,14 @@ structure Search where
 
 def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Search := do
   let st ← specService j service
-  let creates := ((j.bounds.find? (·.service == service)).map (·.creates)).getD []
+  let creates := Ir.createsOf j.bounds service
   -- A client sends a request whose callers list someone outside the service (fromOutside).
   let fromClients (name : String) : Bool :=
     ((st.requirements.lookup name).map (·.callers)).getD [] |>.any (· != .service service)
   -- The answers of the services that it sends requests to vary with their records, so their creates count too.
   let requested := ((st.charts.flatMap fun c => c.states.flatMap (·.activities)) ++ st.automations.map (·.sends)).filterMap
     fun a => if a matches .opens .. || a.ref.service == service then none else some a.ref.service
-  let read := creates ++ requested.eraseDups.flatMap fun s => ((j.bounds.find? (·.service == s)).map (·.creates)).getD []
+  let read := creates ++ requested.eraseDups.flatMap (Ir.createsOf j.bounds)
   pure { spec := j, st, creates, depth := depth.getD (read.foldl (· + ·.2) 0 + 1),
          blocked := unbounded j st,
          sendable := (st.commands ++ st.queries).filter fromClients,
@@ -489,7 +489,7 @@ its target takes reach it: the service's own automations and charts send too.
 def Search.anyState (x : Search) (part : Uncovered) : Except String (Query × Bool) := do
   let p := x.st.structure.program
   let pre := SRecords.named x.st x.creates "pre"
-  let used := pre.keyed.map fun (e, slots) => (e, (List.range slots.length).map (usedVar "pre" e))
+  let used := pre.usedVars "pre"
   let facts := pre.facts x.st "pre" ++ clockFacts ++ nowFacts
   let d := part.ref
   let (goal, more) ← if x.st.commands.contains d.name then do
