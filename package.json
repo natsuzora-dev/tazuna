@@ -14,6 +14,9 @@
     "samples/todo/web"
   ],
   "imports": {
+    "#engine": {
+      "tazuna:source": "./lean/.lake/build/bin/tazuna-engine"
+    },
     "#cli": {
       "tazuna:source": "./src/cli/bin.ts",
       "default": "./dist/cli/bin.js"
@@ -62,7 +65,8 @@
     "samples:check": "npm run check --workspace todo",
     "test": "node --test --test-randomize 'test/unit/*.test.ts' 'test/fixtures/*.test.ts'",
     "test:write": "node --test --test-randomize --test-update-snapshots 'test/unit/*.test.ts' 'test/fixtures/*.test.ts'",
-    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p viewer"
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p viewer",
+    "version": "node scripts/engine-packages.ts && npm install --package-lock-only --ignore-scripts --no-audit --no-fund && git add npm package.json package-lock.json"
   },
   "dependencies": {
     "oxc-parser": "^0.154.0",
@@ -99,5 +103,12 @@
   "allowScripts": {
     "@swc/core@1.16.22": true,
     "fsevents@2.3.3": true
+  },
+  "optionalDependencies": {
+    "@natsuzora-dev/tazuna-engine-darwin-arm64": "0.6.1",
+    "@natsuzora-dev/tazuna-engine-darwin-x64": "0.6.1",
+    "@natsuzora-dev/tazuna-engine-linux-arm64": "0.6.1",
+    "@natsuzora-dev/tazuna-engine-linux-x64": "0.6.1",
+    "@natsuzora-dev/tazuna-engine-win32-x64": "0.6.1"
   }
 }

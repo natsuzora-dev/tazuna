@@ -21,6 +21,10 @@ Read the docs and samples of the version you installed, in `node_modules/@natsuz
    npm install -D @natsuzora-dev/tazuna typescript zod @types/node
    ```
 
+   npm also installs tazuna's engine, a native binary, from the optional dependency that matches your platform, so you need no Lean toolchain.
+   tazuna ships the engine for macOS on Apple silicon and Intel, Linux on arm64 and x64 with glibc, and Windows on x64.
+   Keep optional dependencies installed, since tazuna has no engine to run without them.
+
 2. Make your package an ES module package, since tazuna ships only ES modules:
 
    ```sh

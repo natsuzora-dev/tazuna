@@ -3,11 +3,12 @@ import { closeSync, mkdtempSync, openSync, readSync, rmSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import { fileURLToPath } from "node:url";
 import type { Evaluated, Keys, Request, Response, Stored } from "../../src/cli/protocol.generated.ts";
 import type { Json } from "../../src/data/values.ts";
 import type { Expr } from "../../src/spec/ir.generated.ts";
 
-const executable = join(import.meta.dirname, "../../lean/.lake/build/bin/tazuna-engine");
+const executable = fileURLToPath(import.meta.resolve("#engine"));
 
 // No signal listeners: the tests talk to Lean synchronously, so a listener would not run until the synchronous work
 // ends, and the process would stop exiting on signals.

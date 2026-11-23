@@ -1,0 +1,26 @@
+{
+  "name": "@natsuzora-dev/tazuna-engine-win32-x64",
+  "version": "0.6.1",
+  "description": "The engine of @natsuzora-dev/tazuna for win32-x64.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/natsuzora-dev/tazuna.git"
+  },
+  "license": "MIT",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "tazuna-engine.exe"
+  ],
+  "scripts": {
+    "prepack": "node ../../scripts/stage-engine.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
