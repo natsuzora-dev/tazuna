@@ -664,7 +664,8 @@ def replayPair (x : Induction) (fs : Functions IO) (pair : Pair) (o : Orders) (M
   | .ok (records, given, clock) =>
   let now := (M "now").toInt
   let payload := Value.obj (present M o.payload)
-  let react (a : Automation) (created : List String) : IO (Option (Value × List String)) := do
+  let otherPayload := Value.obj (present M o.otherPayload)
+  let react (a : Automation) (payload : Value) (created : List String) : IO (Option (Value × List String)) := do
     for b in a.binds do
       unless (← fs.automationBinding a.name b payload records now) matches .ok true do return none
     for g in a.guard do
@@ -673,8 +674,9 @@ def replayPair (x : Induction) (fs : Functions IO) (pair : Pair) (o : Orders) (M
     match ← fs.react a.name payload records now keys with
     | .ok (input, made) => pure (some (input, created ++ made))
     | .error _ => pure none
-  let some (first, created) ← react pair.first [] | return .error s!"{pair.first.name} does not react in the semantics"
-  let some (second, _) ← react pair.second created | return .error s!"{pair.second.name} does not react in the semantics"
+  let some (first, created) ← react pair.first payload [] | return .error s!"{pair.first.name} does not react in the semantics"
+  let some (second, _) ← react pair.second otherPayload created
+    | return .error s!"{pair.second.name} does not react in the semantics"
   let run (rs : Records) (a : Automation) (input : Value) : IO (Records × Bool) := do
     match ← evaluate st fs rs now a.sends.ref.name input (.service st.service) with
     | .accepted written _ _ => pure (written, true)
@@ -691,7 +693,9 @@ def replayPair (x : Induction) (fs : Functions IO) (pair : Pair) (o : Orders) (M
   let secondStep := StepName.command pair.second.sends (.automation pair.second.name) second
   let found := Explore.ChoiceDependent.stepOrder (st.ref pair.first.name) firstStep secondStep (outcome r12 a1 b1)
     (outcome r21 a2 b2)
-  return .ok { given, clock, command := none, input := none, now := some now, taken := some payload,
+  let taken := if pair.first.receives == pair.second.receives then payload
+    else .obj [("first", payload), ("second", otherPayload)]
+  return .ok { given, clock, command := none, input := none, now := some now, taken := some taken,
                violations := [found.toViolation] }
 
 /-- The out lines that `s` wrote after its first `from` lines, without their ids, in canonical order: what two orders compare. -/
@@ -702,6 +706,15 @@ def outsOf (s : Service.State) («from» : Nat) : List Value :=
       | .query t v _ => some (.obj [("query", ToValue.toValue t), ("input", v)])
       | .event e v _ => some (.obj [("event", ToValue.toValue e), ("payload", v)])
       | b => some (.obj [("line", .str (repr b).pretty)])).mergeSort fun a b => decide (a.canonical ≤ b.canonical)
+
+/-- Whether `target` is a query, which a fulfilled answer answers, rather than a command. -/
+def isQuery (st : Service) (target : Ir.Ref) : Bool :=
+  (st.structure.definitions.find? (·.ref == target)).any fun d => d.body matches .query _
+
+/-- The string that the value term `t` holds under `M`, or the empty string. -/
+def kindText (M : Model) (t : Term) : String := match t.denote M with
+  | .val (.str k) => k
+  | _ => ""
 
 /--
 The replay of a model of a tie's query in the semantics: from the decoded records and machines, the two deadlines fire
@@ -736,6 +749,23 @@ def replayTie (x : Induction) (fs : Functions IO) (tie : Tie) (o : TieOrders) (M
     a.halted.isSome == b.halted.isSome &&
       (a.halted.isSome || (recordsText a.records == recordsText b.records &&
         (outsOf a base.lines.size).map (·.canonical) == (outsOf b base.lines.size).map (·.canonical)))
+  let answerOf (target : Ir.Ref) (g : Given) : Ir.Answer :=
+    let output := Value.obj (present M g.fields)
+    if Term.holds M g.accepted then
+      if isQuery st target then .fulfilled output else .accepted (if g.fields.isEmpty then none else some output)
+    else
+      .rejected { kind := rejectionKindOf (kindText M g.kind) }
+  let pendingOf (target : Ir.Ref) (id : String) : Option Pending := do
+    let activity : Service.Activity := if isQuery st target then .calls target.name target else .sends target.name target
+    match requesterOf st target with
+    | .ok (.state chart state key) =>
+      let activity := (((st.charts.find? (·.name == chart)).bind (·.state? state)).bind
+        (·.activities.find? (·.key == key))).getD activity
+      pure { id := .own id, activity, requester := .state (.top chart) state, input := .obj [], turn := 0 }
+    | .ok (.automation name) =>
+      let activity := ((st.automations.find? (·.name == name)).map (·.sends)).getD activity
+      pure { id := .own id, activity, requester := .automation name, input := .obj [], turn := 0 }
+    | .error _ => none
   let (steps, taken, s1, s2) ← match tie with
     | .deadlines a b =>
       let deadline (d : DeadlineRef) (order : Nat) : Service.Deadline :=
@@ -745,15 +775,25 @@ def replayTie (x : Induction) (fs : Functions IO) (tie : Tie) (o : TieOrders) (M
       pure ((StepName.deadline (.top a.chart) a.state a.name, StepName.deadline (.top b.chart) b.state b.name), none,
         ← run [deadline a 1, deadline b 2], ← run [deadline b 2, deadline a 1])
     | .arrivals a b =>
-      let payloads := o.payloads.map fun fields => Value.obj (present M fields)
-      let pa := payloads.getD 0 (.obj [])
-      let pb := payloads.getD 1 (.obj [])
-      let arrive (s : Service.State) (e : Ir.Ref) (id : String) (payload : Value) :=
-        receive st fs s e (.received e.service id) payload none
       let s := { base with now }
+      let ga := o.given.getD 0 {}
+      let gb := o.given.getD 1 {}
+      let shownOf (arrival : Arrival) (g : Given) : Value := match arrival with
+        | .event _ => .obj (present M g.fields)
+        | .answer target => ToValue.toValue (answerOf target g)
+      -- Each answer's request waits from the start, as the state's requester sent it before.
+      let pending := ([(a, "a"), (b, "b")].filterMap fun (arrival, id) => match arrival with
+        | .answer target => (pendingOf target id).map ((id, ·))
+        | .event _ => none)
+      let s := { s with pending := pending.map (·.2) }
+      let arrive (s : Service.State) (arrival : Arrival) (id : String) (g : Given) : IO Service.State :=
+        match arrival, pending.lookup id with
+        | .answer target, some p => answerRequest st fs s none p (answerOf target g)
+        | .answer _, none => pure s
+        | .event e, _ => receive st fs s e (.received e.service id) (.obj (present M g.fields)) none
       pure ((StepName.arrival a.ref s!"{a.ref.service}/a", StepName.arrival b.ref s!"{b.ref.service}/b"),
-        some (Value.obj [("first", pa), ("second", pb)]),
-        ← arrive (← arrive s a.ref "a" pa) b.ref "b" pb, ← arrive (← arrive s b.ref "b" pb) a.ref "a" pa)
+        some (Value.obj [("first", shownOf a ga), ("second", shownOf b gb)]),
+        ← arrive (← arrive s a "a" ga) b "b" gb, ← arrive (← arrive s b "b" gb) a "a" ga)
   if same s1 s2 then return .error "the semantics ends the same in both orders"
   let found := Explore.ChoiceDependent.stepOrder (tieProperty st tie).definition steps.1 steps.2 (outcome s1)
     (outcome s2)
@@ -876,6 +916,15 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
         .asks [.of (ask [o.gap]) (withinEncoding "a step of the pair can write a value that the encoding does not hold"),
                .of (ask [.not o.gap, o.differ]) fun a =>
                  verdictOf a facts.fit (replayPair x fs pair o ·) "between the two orders"])
+  -- A tie starts from a state where every machine invariant holds too, as the induction of each assumes them all.
+  let machinesHold := conj (x.charts.filterMap fun cc => do
+    let .ok m := cc.model | none
+    let context := (contextProps x.st cc.chart.name).map fun pr => (pr.1, ctxVar cc.chart.name pr.1)
+    pure (conj (m.configs.toList.zipIdx.map fun (active, k) =>
+      let env := ({ context, active } : SMachine).env cc.chart x.pre clockT none
+      match chartHolds env cc.invariants with
+      | .ok holds => Term.or (.not (.eq (cfgVar cc.chart.name) (intLit (Int.ofNat k)))) holds
+      | .error _ => tt)))
   let ties := x.ties.map fun (tie, orders) =>
     (tieProperty x.st tie, match orders with
       | .error why => .decided (.undecided s!"the tie has no encoding: {why}")
@@ -883,7 +932,7 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
         let facts := x.facts ++ nowFacts ++ o.facts
         let ask (goal : List Term) : Query :=
           { vars := facts.vars,
-            asserts := facts.asserts ++ [x.holds, o.pre, .not o.first.beyond, .not o.second.beyond] ++ goal }
+            asserts := facts.asserts ++ [x.holds, machinesHold, o.pre, .not o.first.beyond, .not o.second.beyond] ++ goal }
         let cut := Term.or o.first.cut o.second.cut
         let gap := Term.or o.first.gap o.second.gap
         -- The chains leave out faults, such as a failing invariant after a command, which other properties report.

@@ -80,6 +80,8 @@ inductive Job where
   | react (automation : Automation) (guard : Term) (payload : List (String × Term))
   /-- The answer to a state's own command. -/
   | answered (sender : Sender) (accepted : Bool)
+  /-- The answer from another service to the request of a state's activity `key`, and what its transition takes. -/
+  | replied (chart state key : String) (accepted : Bool) (taken : Option (Arg × SVal))
 
 /-- A path of a chain: the term that holds when the run takes it, and the state of the service and of its message. -/
 structure Path where
@@ -282,21 +284,32 @@ def fireDeadline (ce : ChainEnv) (x : Path) (chart state name : String) : Except
     if mach.exited.contains state || !(model.configs[config]!).contains state then return [x]
     takeThen ce x chart (edgesOn model config (.after name) (some state)) none (settle ce chart chainLimit)
 
-/-- The paths after the answer to a state's own command, settled before and after (Service.handle). -/
-def answer (ce : ChainEnv) (x : Path) (chart state key : String) (exitsBefore : Nat) (accepted : Bool) :
-    Except String (List Path) := do
-  let paths ← settle ce chart chainLimit x
+/--
+The paths after the answer to the request of activity `key` of `state`, settled before and after (Service.handle): an
+answer to an own command, whose rejection kind each path names, or one from another service that takes `reply`.
+-/
+def answer (ce : ChainEnv) (x : Path) (chart state key : String) (exitsBefore : Nat) (accepted : Bool)
+    (reply : Option (Option (Arg × SVal)) := none) : Except String (List Path) := do
+  let matters (m : ChartModel) (k : Nat) := (m.configs[k]!).contains state || !(edgesOn m k .always).isEmpty
+  let paths ← andThen (← touch ce x chart matters) (settle ce chart chainLimit)
   andThen paths fun x => do
-    let some (mach, config) := x.fixed? chart | throw s!"no fixed configuration of {chart}"
+    let some (mach, config) := x.fixed? chart | return [x]
     let some model := ce.models.lookup chart | throw s!"no model of {chart}"
-    if (mach.exited.drop exitsBefore).contains state then return [x]
-    let trigger := Ir.Trigger.sends key (if accepted then .onAccepted else .onRejected)
-    let (pre, x) := x.next
-    let (taken, facts) ← if accepted then pure (none, Facts.none) else do
-      let (t, f) ← takenOf ce.st s!"{pre}tk" [] .rejection
-      -- An invalid input halts the sender before any transition (rejectedInput?), so the kind is another one.
-      pure (t, { f with asserts := f.asserts ++ [.not (.eq (valVar s!"{pre}tk.kind") (.mkStr (strLit "invalid-input")))] })
-    let x := { x with facts := x.facts ++ [(pre, facts)] }
+    if (mach.exited.drop exitsBefore).contains state || !(model.configs[config]!).contains state then return [x]
+    let calls := ((model.chart.state? state).map (·.activities.any fun
+      | .calls k _ => k == key
+      | _ => false)).getD false
+    let trigger := if calls then Ir.Trigger.calls key (if accepted then .onFulfilled else .onRejected)
+      else .sends key (if accepted then .onAccepted else .onRejected)
+    let (taken, x) ← match reply with
+      | some taken => pure (taken, x)
+      | none =>
+        let (pre, x) := x.next
+        let (taken, facts) ← if accepted then pure (none, Facts.none) else do
+          let (t, f) ← takenOf ce.st s!"{pre}tk" [] .rejection
+          -- An invalid input halts the sender before any transition (rejectedInput?), so the kind is another one.
+          pure (t, { f with asserts := f.asserts ++ [.not (.eq (valVar s!"{pre}tk.kind") (.mkStr (strLit "invalid-input")))] })
+        pure (taken, { x with facts := x.facts ++ [(pre, facts)] })
     takeThen ce x chart (edgesOn model config trigger (some state)) taken (settle ce chart chainLimit)
 
 /-- The work that the events of an accepted command cause (commandWork): each machine's evaluation, then each automation's reaction. -/
@@ -423,6 +436,7 @@ def stepQueue (ce : ChainEnv) (x : Path) : Except String (List Path) := do
     | .react a g payload => react ce x a g payload
     | .answered (.state chart state key exitsBefore) accepted => answer ce x chart state key exitsBefore accepted
     | .answered (.automation _) _ => pure [x]
+    | .replied chart state key accepted taken => answer ce x chart state key 0 accepted (some taken)
   | [] =>
     match x.commands ++ sortWaiting x.round with
     | w :: rest =>
@@ -451,6 +465,7 @@ def Job.shape : Job → String
     s!"receive {c} {e.map (·.2.1)} {fields}"
   | .react a _ p => s!"react {a.name} {p.map (·.1)}"
   | .answered s ok => s!"answered {s.shape} {ok}"
+  | .replied c s k ok _ => s!"replied {c} {s} {k} {ok}"
 
 /-- The charts whose states the internal queue names: a state that sent an own command, or entered with activities to send. -/
 def Path.pinned (x : Path) : List String :=
@@ -458,7 +473,10 @@ def Path.pinned (x : Path) : List String :=
     | .state c .. => [c]
     | .automation _ => []
   x.entered.map (·.1) ++ (x.round ++ x.commands).flatMap (sender ·.sender) ++
-    x.jobs.flatMap fun | .answered s _ => sender s | _ => []
+    x.jobs.flatMap fun
+      | .answered s _ => sender s
+      | .replied c .. => [c]
+      | _ => []
 
 /--
 What two paths must share to be joined: whether they halted or were cut, each machine's exits, the configuration of
@@ -541,14 +559,23 @@ def drain (ce : ChainEnv) : Nat → List Path → Except String (List Path)
     let merged := merge stepped
     drain ce fuel merged
 
+/-- How a message can start: the term that holds when it does, and its first work, or that the service halts on it. -/
+structure Start where
+  cond : Term := tt
+  jobs : List Job := []
+  halts : Bool := false
+
 /--
-The paths after a message that starts with `jobs`, counted from no step. Of the states each machine exited, only those
-in `watched` matter after the message: a later deadline of them no longer fires.
+The paths after a message that starts in one of `starts`, counted from no step. Of the states each machine exited, only
+those in `watched` matter after the message: a later deadline of them no longer fires, and a later answer to their
+request is stale.
 -/
-def message (ce : ChainEnv) (watched : List (String × String)) (paths : List Path) (jobs : List Job) :
+def message (ce : ChainEnv) (watched : List (String × String)) (paths : List Path) (starts : List Start) :
     Except String (List Path) := do
   let (stopped, going) := paths.partition (·.stopped)
-  let ended := (← drain ce (2 * chainLimit + 2) (going.map ({ · with jobs, steps := 0 }))).map fun x =>
+  let begun := live (going.flatMap fun x => starts.zipIdx.map fun (b, i) =>
+    { x.fork b.cond s!"s{i}" with jobs := b.jobs, steps := 0, halted := b.halts })
+  let ended := (← drain ce (2 * chainLimit + 2) begun).map fun x =>
     { x with machines := x.machines.map fun (c, m) => (c, { m with exited := m.exited.filter fun n => watched.contains (c, n) }) }
   pure (merge (stopped ++ ended))
 
@@ -628,9 +655,25 @@ inductive Tie where
 def inMap (c : Service.Chart) (n : String) : Bool :=
   (((c.state? n).map (·.spec.path.dropLast)).getD []).any fun a => (c.state? a).any (·.spec.kind == .map)
 
+/-- Who waits for the answer to a request to another service: a state's activity, or an automation. -/
+inductive AnswerTo where
+  | state (chart state key : String)
+  | automation (name : String)
+
+/-- The one requester in `st` of requests to `target`, or why there is none or more than one. -/
+def requesterOf (st : Service) (target : Ir.Ref) : Except String AnswerTo := do
+  let states := st.charts.flatMap fun c => c.states.flatMap fun cs => cs.activities.filterMap fun
+    | .calls k r | .sends k r => if r == target then some (AnswerTo.state c.name cs.spec.name k) else none
+    | _ => none
+  let automations := (st.automations.filter (·.sends.ref == target)).map (AnswerTo.automation ·.name)
+  match states ++ automations with
+  | [r] => pure r
+  | [] => throw s!"no requester of {target.service}.{target.name}"
+  | _ => throw s!"an answer to {target.service}.{target.name}, which several states or automations request, so its requester is unknown"
+
 /--
 The ties of `st`, each pair once: two deadlines that can be armed together (one deadline with itself only inside a map,
-whose copies each arm it), and two arrivals, one with itself among them.
+whose copies each arm it), and two arrivals, one with itself among them unless a state waits for it.
 -/
 def tiesOf (st : Service) : List Tie :=
   let deadlines := st.charts.flatMap fun c => c.states.flatMap fun cs =>
@@ -649,18 +692,96 @@ def tiesOf (st : Service) : List Tie :=
     (st.automations.filter (!·.sends.isOwn st.service)).map (Arrival.answer ·.sends.ref)
   let arrivals := (events ++ requested).eraseDups
   let pairs {α : Type} (xs : List α) : List (α × α) := xs.zipIdx.flatMap fun (a, i) => (xs.drop i).map (a, ·)
+  -- A state waits for one answer at a time: entering it again makes the earlier request stale.
+  let twice : Arrival → Bool
+    | .answer r => match requesterOf st r with
+      | .ok (.automation _) => true
+      | _ => false
+    | .event _ => true
   ((pairs deadlines).filter (fun (a, b) => together a b)).map (fun (a, b) => Tie.deadlines a b) ++
-    (pairs arrivals).map fun (a, b) => .arrivals a b
+    ((pairs arrivals).filter fun (a, b) => a != b || twice a).map fun (a, b) => .arrivals a b
+
+/--
+What a message from another service carries, each a variable named after the message: an event's payload; or an
+answer, whether it accepts, its output, and its rejection's kind.
+-/
+structure Given where
+  fields : List (String × Term) := []
+  accepted : Term := tt
+  kind : Term := undefT
+
+/-- A message from another service as a tie compares it: how it starts, what the state must hold for it, and what it carries. -/
+structure Arriving where
+  starts : List Start
+  pre : Term := tt
+  watched : List (String × String) := []
+  given : Given
+  facts : Facts
+
+/-- The term that holds when a machine of `chart` is in a configuration with `state` active. -/
+def activeIn (models : List (String × ChartModel)) (chart state : String) : Term := match models.lookup chart with
+  | some m => disj ((m.configs.toList.zipIdx.filter (·.1.contains state)).map fun (_, k) =>
+      Term.eq (cfgVar chart) (intLit (Int.ofNat k)))
+  | none => ff
+
+/--
+The arrival `a` with its variables named after `x`. An answer arrives for a request that waits: the requesting state is
+active, as leaving it makes the request stale. A rejection as invalid input, from a service that parsed the input
+itself, is the requester's fault (rejectedInput?), and so is any rejection but `unavailable` of an automation's command
+(automationAnswer); the service halts on either.
+-/
+def arrivingOf (ce : ChainEnv) (a : Arrival) (x : String) : Except String Arriving := do
+  let st := ce.st
+  match a with
+  | .event e =>
+    let (fields, facts) := payloadOf e
+    pure { starts := [{ jobs := arrivalWork ce e fields }], given := { fields }, facts }
+  | .answer target =>
+    let requester ← requesterOf st target
+    let accepted := Term.var s!"{x}.accepted" .bool
+    let kind := valVar s!"{x}.kind"
+    let listed := (st.structure.rejectionKinds st.service target).map fun k => match ToValue.toValue k with
+      | .str t => t
+      | v => v.canonical
+    let invalid := !st.structure.isAssumed target
+    let kinds := listed ++ if invalid then ["invalid-input"] else []
+    let isKind (k : String) : Term := .eq kind (.mkStr (strLit k))
+    let rejection : Option (Arg × SVal) := some (.rejection, .json (SJson.ofTerms [("kind", kind)]))
+    let output := if (st.schemaOf (.output target)).isSome then payloadOfSchema (.output target) else ([], Facts.none)
+    let facts := { output.2 with vars := output.2.vars ++ [(s!"{x}.accepted", .bool), (s!"{x}.kind", .val)],
+                                 asserts := output.2.asserts ++ [.or accepted (disj (kinds.map isKind))] }
+    let outputTaken : Option (Arg × SVal) :=
+      if output.1.isEmpty then none else some (.output, .json (SJson.ofTerms output.1))
+    let faulted := if invalid then isKind "invalid-input" else ff
+    let given : Given := { fields := output.1, accepted, kind }
+    match requester with
+    | .state chart state key =>
+      pure { starts := [{ cond := accepted, jobs := [.replied chart state key true outputTaken] },
+                        { cond := conj [.not accepted, .not faulted], jobs := [.replied chart state key false rejection] },
+                        { cond := .and (.not accepted) faulted, halts := true }],
+             pre := activeIn ce.models chart state, watched := [(chart, state)], given, facts }
+    | .automation _ =>
+      pure { starts := [{ cond := .or accepted (isKind "unavailable") },
+                        { cond := .and (.not accepted) (.not (isKind "unavailable")), halts := true }],
+             given, facts }
+where
+  payloadOfSchema (schema : Schema) : List (String × Term) × Facts :=
+    let props := propertiesWith ((ce.st.schemaOf schema).getD (.obj []))
+    let terms := props.map fun pr => (pr.1, propertyVar s!"{x}.{pr.1}" pr)
+    let holds := props.map fun pr => fieldHolds (((terms.lookup pr.1).map (·.1)).getD undefT) pr
+    (terms.map fun (f, t, _) => (f, t),
+     { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term), fit := Fit.all (holds.map (·.fit)) })
+  payloadOf (e : Ir.Ref) := payloadOfSchema (.payload e)
 
 /-- A tie's two orders from one state: the first message then the second, and the second then the first. -/
 structure TieOrders where
   facts : Facts
-  /-- What the state must hold for the tie: each deadline's state active. -/
+  /-- What the state must hold for the tie: each deadline's state active, and each requester of an answer. -/
   pre : Term
   first : Ending
   second : Ending
-  /-- The payload of each arriving event, by its fields, none for a deadline. -/
-  payloads : List (List (String × Term))
+  /-- What each arriving message carries, none for a deadline. -/
+  given : List Given
 
 def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String × List Term)) (now : Term) (tie : Tie) :
     Except String TieOrders := do
@@ -669,33 +790,22 @@ def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String
     | .ok m => pure (c.name, m)
     | .error why => throw s!"{c.name}: {why}"
   let ce : ChainEnv := { st, p, models, now }
-  let orders (watched : List (String × String)) (a b : List Job) : Except String (Ending × Ending) := do
-    let run (name : String) (x y : List Job) : Except String Ending := do
+  let orders (watched : List (String × String)) (a b : List Start) : Except String (Ending × Ending) := do
+    let run (name : String) (x y : List Start) : Except String Ending := do
       let paths ← message ce watched [{ name, pc := tt, records := pre, used, machines := startMachines ce }] x
       pure (Ending.of pre (← message ce watched paths y))
     pure (← run "o1" a b, ← run "o2" b a)
   match tie with
   | .deadlines a b =>
-    let active (d : DeadlineRef) : Term := match models.lookup d.chart with
-      | some m => disj ((m.configs.toList.zipIdx.filter (·.1.contains d.state)).map fun (_, k) =>
-          Term.eq (cfgVar d.chart) (intLit (Int.ofNat k)))
-      | none => ff
-    let (first, second) ← orders [(a.chart, a.state), (b.chart, b.state)] [.deadline a.chart a.state a.name]
-      [.deadline b.chart b.state b.name]
-    pure { facts := machineFacts ce ++ first.facts ++ second.facts, pre := .and (active a) (active b), first, second,
-           payloads := [] }
-  | .arrivals (.event a) (.event b) =>
-    let payloadOf (e : Ir.Ref) (x : String) : List (String × Term) × Facts :=
-      let props := propertiesWith ((st.schemaOf (.payload e)).getD (.obj []))
-      let terms := props.map fun pr => (pr.1, propertyVar s!"{x}.{pr.1}" pr)
-      let holds := props.map fun pr => fieldHolds (((terms.lookup pr.1).map (·.1)).getD undefT) pr
-      (terms.map fun (f, t, _) => (f, t),
-       { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term), fit := Fit.all (holds.map (·.fit)) })
-    let (pa, fa) := payloadOf a "pa"
-    let (pb, fb) := payloadOf b "pb"
-    let (first, second) ← orders [] (arrivalWork ce a pa) (arrivalWork ce b pb)
-    pure { facts := machineFacts ce ++ fa ++ fb ++ first.facts ++ second.facts, pre := tt, first, second,
-           payloads := [pa, pb] }
-  | .arrivals .. => throw "an answer's arrival, which prove does not encode yet: it needs the pending requests in the state"
+    let (first, second) ← orders [(a.chart, a.state), (b.chart, b.state)]
+      [{ jobs := [.deadline a.chart a.state a.name] }] [{ jobs := [.deadline b.chart b.state b.name] }]
+    pure { facts := machineFacts ce ++ first.facts ++ second.facts,
+           pre := .and (activeIn models a.chart a.state) (activeIn models b.chart b.state), first, second, given := [] }
+  | .arrivals a b =>
+    let ga ← arrivingOf ce a "pa"
+    let gb ← arrivingOf ce b "pb"
+    let (first, second) ← orders (ga.watched ++ gb.watched) ga.starts gb.starts
+    pure { facts := machineFacts ce ++ ga.facts ++ gb.facts ++ first.facts ++ second.facts, pre := .and ga.pre gb.pre,
+           first, second, given := [ga.given, gb.given] }
 
 end Tazuna.Smt

@@ -2,7 +2,7 @@ import Tazuna.Smt.State
 
 /-!
 Step-order pairs: two steps that can be pending together, which no line orders, encoded in both orders from one state.
-The pairs so far are two automations that react to the same event. The encodings carry no proof; prove replays each
+The pairs so far are two automations that react to one message: the same event, or two events that one command emits. The encodings carry no proof; prove replays each
 answer that it reports in the semantics.
 -/
 
@@ -11,17 +11,23 @@ namespace Tazuna.Smt
 open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Eval Tazuna.Semantics.Service
 
 /--
-Two automations that react to the same event. Both reactions read the records before either command runs, since the
-internal queue takes work before commands; no line orders the two commands, which the queue may take in either order.
+Two automations that react to one message: the same event, or two events that one command can emit together. Both
+reactions read the records before either command runs, since the internal queue takes work before commands; no line
+orders the two commands, which the queue may take in either order.
 -/
 structure Pair where
   first : Automation
   second : Automation
 
-/-- The pairs of automations of `st` that react to the same event, each pair once, in definition order. -/
+/-- The pairs of automations of `st` that can react to one message, each pair once, in definition order. -/
 def pairsOf (st : Service) : List Pair :=
+  let together (e f : Ir.Ref) : Bool := e == f || st.structure.definitions.any fun d =>
+    d.service == st.service && match d.body with
+      | .command c => c.emits.contains e && c.emits.contains f
+      | _ => false
   st.automations.zipIdx.flatMap fun (a, i) =>
-    (st.automations.drop (i + 1)).filterMap fun b => if a.receives == b.receives then some { first := a, second := b } else none
+    (st.automations.drop (i + 1)).filterMap fun b =>
+      if together a.receives b.receives then some { first := a, second := b } else none
 
 /--
 The react body of an automation with each createKey replaced by the field `k<i>` of the argument `key`, in written
@@ -106,7 +112,9 @@ structure Orders where
   within : Term
   gap : Term
   differ : Term
+  /-- The payload of the event that each automation receives, the same one for the same event. -/
   payload : List (String × Term)
+  otherPayload : List (String × Term)
   first : Reaction
   second : Reaction
 
@@ -116,14 +124,18 @@ def ordersOf (st : Service) (p : Program) (pre : SRecords) (used : List (String 
     if !a.sends.isOwn st.service then throw s!"{a.name} sends a request to another service, whose order prove does not compare yet"
   let fc := pair.first.sends.ref.name
   let sc := pair.second.sends.ref.name
-  let props := propertiesWith ((st.schemaOf (.payload pair.first.receives)).getD (.obj []))
-  let terms := props.map fun pr => (pr.1, propertyVar s!"pay.{pr.1}" pr)
-  let payload := terms.map fun (f, t, _) => (f, t)
-  let holds := props.map fun pr => fieldHolds ((payload.lookup pr.1).getD undefT) pr
-  let payloadFacts : Facts := { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term),
-                                fit := Fit.all (holds.map (·.fit)) }
+  let payloadOf (e : Ir.Ref) (x : String) : List (String × Term) × Facts :=
+    let props := propertiesWith ((st.schemaOf (.payload e)).getD (.obj []))
+    let terms := props.map fun pr => (pr.1, propertyVar s!"{x}.{pr.1}" pr)
+    let payload := terms.map fun (f, t, _) => (f, t)
+    let holds := props.map fun pr => fieldHolds ((payload.lookup pr.1).getD undefT) pr
+    (payload, { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term), fit := Fit.all (holds.map (·.fit)) })
+  let (payload, firstFacts) := payloadOf pair.first.receives "pay"
+  let (otherPayload, otherFacts) := if pair.first.receives == pair.second.receives then (payload, Facts.none)
+    else payloadOf pair.second.receives "pay2"
+  let payloadFacts := firstFacts ++ otherFacts
   let a ← reactionOf st p pre now (.json (SJson.ofTerms payload)) pair.first "ra"
-  let b ← reactionOf st p pre now (.json (SJson.ofTerms payload)) pair.second "rb"
+  let b ← reactionOf st p pre now (.json (SJson.ofTerms otherPayload)) pair.second "rb"
   let accepted (r : Reaction) (step : Step) : Term := .and r.valid step.accepted
   let after (r : Reaction) (step : Step) (records : SRecords) (used : List (String × List Term)) :
       SRecords × List (String × List Term) :=
@@ -145,6 +157,6 @@ def ordersOf (st : Service) (p : Program) (pre : SRecords) (used : List (String 
          gap := disj (steps.map (·.gap)),
          differ := disj [.not (r12.same r21), .not (.eq (accepted a a1) (accepted a a2)),
            .not (.eq (accepted b b1) (accepted b b2))],
-         payload, first := a, second := b }
+         payload, otherPayload, first := a, second := b }
 
 end Tazuna.Smt

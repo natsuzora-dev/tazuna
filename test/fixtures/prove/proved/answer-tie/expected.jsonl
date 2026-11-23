@@ -1,0 +1,2 @@
+{"service":"lamp","property":{"kind":"arrivalTie","definition":{"service":"power","name":"cut"},"other":{"service":"power","name":"cut"}},"creates":{},"items":2,"verdict":{"kind":"proved"},"location":{"file":"power/power.ts","line":10}}
+{"service":"lamp","property":{"kind":"arrivalTie","definition":{"service":"power","name":"cut"},"other":{"service":"power","name":"turnOn"}},"creates":{},"items":2,"verdict":{"kind":"proved"},"location":{"file":"power/power.ts","line":10}}
