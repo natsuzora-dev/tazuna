@@ -260,7 +260,8 @@ export type Replayed = {
 
 /**
  * What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
- * ensures of a command or query; or that a ref field of an entity never names a missing record.
+ * ensures of a command or query; that a ref field of an entity never names a missing record; or that the order of two
+ * steps that can be pending together, such as two automations that react to one event, changes no outcome.
  */
 export type Property =
   | {
@@ -277,6 +278,11 @@ export type Property =
       readonly kind: "danglingRef";
       readonly definition: DefinitionRef;
       readonly field: string;
+    }
+  | {
+      readonly kind: "stepOrder";
+      readonly definition: DefinitionRef;
+      readonly other: DefinitionRef;
     };
 
 /**

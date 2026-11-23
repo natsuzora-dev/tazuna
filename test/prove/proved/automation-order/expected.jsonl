@@ -1,0 +1,1 @@
+{"service":"board","property":{"kind":"stepOrder","definition":{"service":"board","name":"replyA"},"other":{"service":"board","name":"replyB"}},"creates":{},"verdict":{"kind":"proved"},"location":{"file":"board/board.ts","line":31}}

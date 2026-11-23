@@ -346,6 +346,8 @@ structure Step where
   /-- That the command accepts: no rejection and no throw before the integrity check. -/
   accepted : Term
   post : SRecords
+  /-- The slots of each entity used after the step. -/
+  used : List (String × List Term)
   /-- That the step creates past the bounds. -/
   beyond : Term
   /-- That the step writes what the encoding does not hold, or a record outside its schema. -/
@@ -354,18 +356,13 @@ structure Step where
   bound : SVal
 
 /--
-The step of command `name` of `svc` from `pre` at the time `clock`, whose slots of each entity are used as `used` says.
-The step's time is no earlier than `clock`: the semantics never moves time back (Sim's clock line reports `notLater`,
-and verify's replay keeps the later time), which no theorem states yet.
+The step of command `name` from `pre` with the input `input` at the time `now`, as stepOf builds it; the variables that
+name its terms start with `names`, so that two steps can sit in one query.
 -/
-def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used : List (String × List Term))
-    (name : String) : Except String Step := do
+def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String × List Term)) (name : String)
+    (input : List (String × Term)) (now : Term) (names : String) : Except String Step := do
   let some rq := svc.requirements.lookup name | throw s!"no requirements of {name}"
-  let (input, inputFacts) := inputOf svc name
-  let now := Term.var "now" .int
-  let nowFacts : Facts :=
-    { vars := [("now", .int)], asserts := [Term.le (intLit (-safeInteger)) now, .le now (intLit safeInteger), .le clock now] }
-  let facts := inputFacts ++ nowFacts
+  let facts : Facts := {}
   let args (bound : Option SVal) : Arg → Option SVal
     | .input => some (.json input)
     | .now => some (.scalar (.mkInt now))
@@ -394,15 +391,29 @@ def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used :
     | _ => throw "a decide that returns no array literal"
   let start : Stepped := { records := pre, used }
   let applied : ExceptT String Named Stepped := items.zipIdx.foldlM (init := start) fun st (item, k) => do
-    let st ← st.emitAll svc s!"emit{k}" item
-    (st.named s!"post{k}" : Named Stepped)
+    let st ← st.emitAll svc s!"{names}emit{k}" item
+    (st.named s!"{names}post{k}" : Named Stepped)
   let (stepped, defs) := applied.run.run []
   let stepped ← stepped
   let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty), asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t }
   let accepted := conj (refs ++ bindTerms.map (·.2.2) ++ requireTerms ++
     [.not decideErr, .not (stepped.records.duplicated svc)])
-  pure { facts := facts ++ named, input, now, accepted, post := stepped.records, beyond := stepped.beyond,
-         gap := .or stepped.gap (stepped.records.outsideSchema svc), bound }
+  pure { facts := facts ++ named, input, now, accepted, post := stepped.records, used := stepped.used,
+         beyond := stepped.beyond, gap := .or stepped.gap (stepped.records.outsideSchema svc), bound }
+
+/--
+The step of command `name` of `svc` from `pre` at the time `clock`, whose slots of each entity are used as `used` says.
+The step's time is no earlier than `clock`: the semantics never moves time back (Sim's clock line reports `notLater`,
+and verify's replay keeps the later time), which no theorem states yet.
+-/
+def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used : List (String × List Term))
+    (name : String) : Except String Step := do
+  let (input, inputFacts) := inputOf svc name
+  let now := Term.var "now" .int
+  let nowFacts : Facts :=
+    { vars := [("now", .int)], asserts := [Term.le (intLit (-safeInteger)) now, .le now (intLit safeInteger), .le clock now] }
+  let step ← stepWith svc p pre used name input now ""
+  pure { step with facts := inputFacts ++ nowFacts ++ step.facts }
 
 /-- The term that holds when the ensures `c` of a step's command fails, or throws, after the step. -/
 def Step.ensuresFails (step : Step) (c : Condition) : Except String Term := do
