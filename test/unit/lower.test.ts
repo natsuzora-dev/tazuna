@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { calendar } from "../samples/todo/spec/calendar/contract.ts";
-import { device } from "../samples/todo/spec/device/contract.ts";
-import { scenario } from "../samples/todo/spec/screens/data.ts";
-import { taskListScreen } from "../samples/todo/spec/screens/taskListScreen.ts";
-import { todo } from "../samples/todo/spec/todo/contract.ts";
-import type { DefinitionRef } from "../src/data/definitionRef.ts";
-import { created, external, raw, requested, requestOf, run } from "../src/index.ts";
-import type { ScenarioDefinition, When } from "../src/scenario/define.ts";
-import { lower } from "../src/scenario/lower.ts";
+import { calendar } from "../../samples/todo/spec/calendar/contract.ts";
+import { device } from "../../samples/todo/spec/device/contract.ts";
+import { scenario } from "../../samples/todo/spec/screens/data.ts";
+import { taskListScreen } from "../../samples/todo/spec/screens/taskListScreen.ts";
+import { todo } from "../../samples/todo/spec/todo/contract.ts";
+import type { DefinitionRef } from "../../src/data/definitionRef.ts";
+import { created, external, raw, requested, requestOf, run } from "../../src/index.ts";
+import type { ScenarioDefinition, When } from "../../src/scenario/define.ts";
+import { lower } from "../../src/scenario/lower.ts";
 
 const refs = new Map<unknown, DefinitionRef>([
   ...Object.entries(todo).map(([name, d]) => [d, { service: "todo", name }] as const),

@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-const repo = join(import.meta.dirname, "..");
+const repo = join(import.meta.dirname, "../..");
 const lean = join(repo, "lean");
 const thmDir = join(lean, "Tazuna/Thm");
 

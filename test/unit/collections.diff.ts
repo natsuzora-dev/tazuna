@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import fc from "fast-check";
 import { z } from "zod";
-import { bag, fromJson, keyOrderIssue, set, sortCollections, sortedBy, toJson } from "../src/data/collections.ts";
-import { jsonSchema } from "../src/data/jsonSchema.ts";
-import { date } from "../src/data/time.ts";
-import { canonicalJson, type Json, plain } from "../src/data/values.ts";
-import { Lean } from "./lean/lean.ts";
+import { bag, fromJson, keyOrderIssue, set, sortCollections, sortedBy, toJson } from "../../src/data/collections.ts";
+import { jsonSchema } from "../../src/data/jsonSchema.ts";
+import { date } from "../../src/data/time.ts";
+import { canonicalJson, type Json, plain } from "../../src/data/values.ts";
+import { Lean } from "./lean.ts";
 
 const lean = new Lean();
 after(() => lean.close());

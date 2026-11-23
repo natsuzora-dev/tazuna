@@ -1,14 +1,14 @@
 import { z } from "zod";
-import { calendar as calendarPeer } from "../samples/todo/spec/calendar/contract.ts";
-import { contract as externalContract, query as externalQuery } from "../samples/todo/spec/calendar/data.ts";
-import { device as devicePeer } from "../samples/todo/spec/device/contract.ts";
-import { command as externalCommand } from "../samples/todo/spec/device/data.ts";
-import { screens as screensPeer } from "../samples/todo/spec/screens/contract.ts";
-import { given as givenOfScreens, scenario as scenarioOfScreens } from "../samples/todo/spec/screens/data.ts";
-import { taskDetailScreen } from "../samples/todo/spec/screens/taskDetailScreen.ts";
-import { taskListScreen } from "../samples/todo/spec/screens/taskListScreen.ts";
-import { addTask, completeTask, setReminder } from "../samples/todo/spec/todo/commands.ts";
-import { todo as todoPeer } from "../samples/todo/spec/todo/contract.ts";
+import { calendar as calendarPeer } from "../../samples/todo/spec/calendar/contract.ts";
+import { contract as externalContract, query as externalQuery } from "../../samples/todo/spec/calendar/data.ts";
+import { device as devicePeer } from "../../samples/todo/spec/device/contract.ts";
+import { command as externalCommand } from "../../samples/todo/spec/device/data.ts";
+import { screens as screensPeer } from "../../samples/todo/spec/screens/contract.ts";
+import { given as givenOfScreens, scenario as scenarioOfScreens } from "../../samples/todo/spec/screens/data.ts";
+import { taskDetailScreen } from "../../samples/todo/spec/screens/taskDetailScreen.ts";
+import { taskListScreen } from "../../samples/todo/spec/screens/taskListScreen.ts";
+import { addTask, completeTask, setReminder } from "../../samples/todo/spec/todo/commands.ts";
+import { todo as todoPeer } from "../../samples/todo/spec/todo/contract.ts";
 import {
   automation,
   command,
@@ -16,7 +16,7 @@ import {
   Settings,
   scenario as scenarioOfTodo,
   Task,
-} from "../samples/todo/spec/todo/data.ts";
+} from "../../samples/todo/spec/todo/data.ts";
 import {
   dueChanged,
   taskAdded,
@@ -24,8 +24,8 @@ import {
   taskCompletedRecorded,
   taskDeleted,
   taskDeletedRecorded,
-} from "../samples/todo/spec/todo/events.ts";
-import { tasks } from "../samples/todo/spec/todo/queries.ts";
+} from "../../samples/todo/spec/todo/events.ts";
+import { tasks } from "../../samples/todo/spec/todo/queries.ts";
 import {
   type AnswerOf,
   accepted,
@@ -64,7 +64,7 @@ import {
   singleEntity,
   skip,
   sortedBy,
-} from "../src/index.ts";
+} from "../../src/index.ts";
 
 const { machine, screen, createEvent, updateEvent, deleteEvent, contract } = service({
   name: "test",

@@ -3,15 +3,15 @@ import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { test } from "node:test";
-import { explain } from "../src/cli/explain.ts";
-import { main } from "../src/cli/main.ts";
-import { groups as groupInfos } from "../src/data/groups.ts";
-import { groupNames, isUserKind, parseKind } from "../src/data/kinds.ts";
+import { explain } from "../../src/cli/explain.ts";
+import { main } from "../../src/cli/main.ts";
+import { groups as groupInfos } from "../../src/data/groups.ts";
+import { groupNames, isUserKind, parseKind } from "../../src/data/kinds.ts";
+import { builtExplanations, typeChecked } from "../fixtures/fixtures.ts";
 import { leanRoot } from "./examples.ts";
-import { builtExplanations, typeChecked } from "./fixtures/fixtures.ts";
 import { guarantees as tagged } from "./guarantees.generated.ts";
 
-const root = join(import.meta.dirname, "..");
+const root = join(import.meta.dirname, "../..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 /** The paths of the files that npm packs, relative to the package root. */
@@ -355,8 +355,8 @@ test("The README tutorial's broken scenario gives the violation line and summary
   const [shown] = readmeBlocks.filter((b) => b.language === "json" && b.code.startsWith('{"kind"'));
   assert.ok(shown !== undefined && summary !== undefined);
   const violation = JSON.parse(shown.code) as { readonly kind: string; readonly scenario: { readonly name: string } };
-  mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
-  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "readme-"));
+  mkdirSync(join(import.meta.dirname, "../.fixtures"), { recursive: true });
+  const project = mkdtempSync(join(import.meta.dirname, "../.fixtures", "readme-"));
   try {
     cpSync(join(root, sample), join(project, "spec"), {
       recursive: true,

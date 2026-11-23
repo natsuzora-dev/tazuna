@@ -1,11 +1,11 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { Converter } from "../src/convert/program.ts";
-import type { Spec } from "../src/load/load.ts";
-import { folders, loadedSpec } from "./fixtures/fixtures.ts";
+import { Converter } from "../../src/convert/program.ts";
+import type { Spec } from "../../src/load/load.ts";
+import { folders, loadedSpec } from "../fixtures/fixtures.ts";
 
 export const simRoot = join(import.meta.dirname, "sim");
-export const leanRoot = join(import.meta.dirname, "../lean/Tazuna");
+export const leanRoot = join(import.meta.dirname, "../../lean/Tazuna");
 
 /** Returns the paths of the Lean modules relative to Tazuna/<folder>, such as Chart/Always in Service. */
 export const leanModulePaths = (folder: string): string[] =>

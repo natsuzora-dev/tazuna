@@ -543,7 +543,7 @@ def files (guarantees : List String) : List (String × String) :=
    types% "src/data/transitionRef.generated.ts",
    types% "src/data/step.generated.ts",
    zod% "src/data/trace.generated.ts",
-   ("test/guarantees.generated.ts", guaranteesFile guarantees),
+   ("test/unit/guarantees.generated.ts", guaranteesFile guarantees),
    types% "src/spec/structure.generated.ts",
    types% "src/spec/ir.generated.ts",
    types% "src/cli/protocol.generated.ts"]

@@ -2,7 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
   "plugins": ["./lint/sameJson.grit"],
   "files": {
-    "includes": ["**", "!**/routeTree.gen.ts", "!lean/lake-manifest.json", "!test/sim/**/*.expected.json"]
+    "includes": ["**", "!**/routeTree.gen.ts", "!lean/lake-manifest.json", "!test/unit/sim/**/*.expected.json"]
   },
   "vcs": {
     "enabled": true,
@@ -86,7 +86,7 @@
       }
     },
     {
-      "includes": ["**/scenarios.ts", "test/lower.test.ts", "test/types.ts"],
+      "includes": ["**/scenarios.ts", "test/unit/lower.test.ts", "test/unit/types.ts"],
       "linter": {
         "rules": {
           "suspicious": {

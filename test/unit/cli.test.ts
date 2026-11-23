@@ -5,16 +5,16 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
-import type { Explanation } from "../src/cli/explain.ts";
-import { main } from "../src/cli/main.ts";
-import { traceLine } from "../src/data/trace.generated.ts";
-import { builtExplanations, typeChecked } from "./fixtures/fixtures.ts";
+import type { Explanation } from "../../src/cli/explain.ts";
+import { main } from "../../src/cli/main.ts";
+import { traceLine } from "../../src/data/trace.generated.ts";
+import { builtExplanations, typeChecked } from "../fixtures/fixtures.ts";
 
-const root = join(import.meta.dirname, "..");
+const root = join(import.meta.dirname, "../..");
 
 // An empty index.html stands in for the built viewer, so the tests pass without building it.
-mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
-const viewer = mkdtempSync(join(import.meta.dirname, ".fixtures", "viewer-"));
+mkdirSync(join(import.meta.dirname, "../.fixtures"), { recursive: true });
+const viewer = mkdtempSync(join(import.meta.dirname, "../.fixtures", "viewer-"));
 writeFileSync(join(viewer, "index.html"), "");
 after(() => rmSync(viewer, { recursive: true, force: true }));
 
@@ -103,7 +103,7 @@ test("view writes an error and exits with 2 when another program uses the port",
 });
 
 test("check, test, verify, and view write the tsc output to stderr and exit with 1 when tsc reports errors for the nearest tsconfig.json above the spec folder", async () => {
-  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "type-error-"));
+  const project = mkdtempSync(join(import.meta.dirname, "../.fixtures", "type-error-"));
   writeFileSync(join(project, "tsconfig.json"), "{}\n");
   writeFileSync(join(project, "count.ts"), 'export const count: number = "one";\n');
   const folder = relative(root, project);
@@ -154,7 +154,7 @@ test("check and test write an error and exit with 2 when no tsconfig.json is abo
 });
 
 test("check, test, and verify write one line with the error and its place and exit with 2 when a spec file throws when imported", async () => {
-  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "import-error-"));
+  const project = mkdtempSync(join(import.meta.dirname, "../.fixtures", "import-error-"));
   writeFileSync(join(project, "broken.ts"), 'throw new Error("no spec here");\n');
   const folder = relative(root, project);
   try {
@@ -196,9 +196,9 @@ test("check writes one JSON line per violation to stdout and the count, or that 
 });
 
 test("test writes how many scenarios it ran out of all to stderr, and with --only runs only the named scenarios and leaves the snapshot entries named after the others unreported and unremoved", async () => {
-  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "only-"));
+  const project = mkdtempSync(join(import.meta.dirname, "../.fixtures", "only-"));
   writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
-  cpSync(join(import.meta.dirname, "fixtures/test/Uncomparable/unpaired"), project, { recursive: true });
+  cpSync(join(import.meta.dirname, "../fixtures/test/Uncomparable/unpaired"), project, { recursive: true });
   const folder = relative(root, project);
   const snapshots = join(project, "todo/__snapshots__");
   const snapshot = (name: string) => join(folder, "todo/__snapshots__", name);
@@ -297,11 +297,11 @@ test("test, verify, and view write the same violation lines and count as check a
 });
 
 test("check reports each spec file that the program of the nearest tsconfig.json leaves out", async () => {
-  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "unlisted-"));
+  const project = mkdtempSync(join(import.meta.dirname, "../.fixtures", "unlisted-"));
   writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.base.json", "include": ["src"] }\n');
   mkdirSync(join(project, "src"));
   writeFileSync(join(project, "src/app.ts"), "export {};\n");
-  cpSync(join(import.meta.dirname, "fixtures/test/noViolations/history/player"), join(project, "spec/player"), {
+  cpSync(join(import.meta.dirname, "../fixtures/test/noViolations/history/player"), join(project, "spec/player"), {
     recursive: true,
   });
   const folder = relative(root, join(project, "spec"));
@@ -323,9 +323,9 @@ test("check reports each spec file that the program of the nearest tsconfig.json
 });
 
 test("check skips node_modules folders and .d.ts files, and walks a symlinked folder once", async () => {
-  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "walk-"));
+  const project = mkdtempSync(join(import.meta.dirname, "../.fixtures", "walk-"));
   writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
-  cpSync(join(import.meta.dirname, "fixtures/test/noViolations/history/player"), join(project, "player"), {
+  cpSync(join(import.meta.dirname, "../fixtures/test/noViolations/history/player"), join(project, "player"), {
     recursive: true,
   });
   mkdirSync(join(project, "node_modules/helper"), { recursive: true });

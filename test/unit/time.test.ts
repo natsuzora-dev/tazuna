@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fc from "fast-check";
-import { addDays, type DateLabel, parseInstant } from "../src/data/time.ts";
+import { addDays, type DateLabel, parseInstant } from "../../src/data/time.ts";
 
 test("parseInstant reads an ISO text with seconds and Z or an offset as Date.parse does, and rejects other texts", () => {
   const pad = (n: number, width = 2) => String(n).padStart(width, "0");

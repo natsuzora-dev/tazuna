@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { typeCheck } from "../src/check/typeCheck.ts";
+import { typeCheck } from "../../src/check/typeCheck.ts";
 
-const root = join(import.meta.dirname, "..");
+const root = join(import.meta.dirname, "../..");
 
 /** The tsc output for `source`, a file next to the spec of the ToDo sample's todo service. */
 function errorsOf(source: string): string {
-  mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
-  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "type-errors-"));
+  mkdirSync(join(import.meta.dirname, "../.fixtures"), { recursive: true });
+  const project = mkdtempSync(join(import.meta.dirname, "../.fixtures", "type-errors-"));
   try {
     writeFileSync(
       join(project, "tsconfig.json"),

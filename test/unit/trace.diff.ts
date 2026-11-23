@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { traceLine } from "../src/data/trace.generated.ts";
-import { readTrace } from "../src/data/traceFile.ts";
-import type { Json } from "../src/data/values.ts";
-import { Lean } from "./lean/lean.ts";
+import { traceLine } from "../../src/data/trace.generated.ts";
+import { readTrace } from "../../src/data/traceFile.ts";
+import type { Json } from "../../src/data/values.ts";
+import { Lean } from "./lean.ts";
 
 const leanProcess = new Lean();
 after(() => leanProcess.close());
@@ -20,7 +20,7 @@ function traceFiles(folder: string): string[] {
 }
 
 const lines = ["test", "samples"]
-  .flatMap((folder) => traceFiles(join(import.meta.dirname, "..", folder)))
+  .flatMap((folder) => traceFiles(join(import.meta.dirname, "../..", folder)))
   .flatMap((file) => readTrace(file).filter((v) => v !== undefined));
 
 type Path = readonly (string | number)[];

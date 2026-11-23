@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Spec } from "../src/load/load.ts";
-import { type ChartStructure, chartStructure, stateNamed } from "../src/spec/structure.ts";
-import { isDescendant, parallelBetween } from "../src/spec/tree.ts";
-import { fixture, loadedSpec } from "./fixtures/fixtures.ts";
+import type { Spec } from "../../src/load/load.ts";
+import { type ChartStructure, chartStructure, stateNamed } from "../../src/spec/structure.ts";
+import { isDescendant, parallelBetween } from "../../src/spec/tree.ts";
+import { fixture, loadedSpec } from "../fixtures/fixtures.ts";
 
 const subject = async (name: string) => await loadedSpec(fixture("test", "noViolations", name));
 const chartOf = (spec: Spec, service: string, name: string): ChartStructure => {

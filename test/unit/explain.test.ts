@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { join, relative } from "node:path";
 import { test } from "node:test";
-import { exampleFolders, explanations } from "../scripts/explain.ts";
-import { explain } from "../src/cli/explain.ts";
-import { isUserKind, kinds } from "../src/data/kinds.ts";
-import { builtExplanations, expectedOf, kindOfLine } from "./fixtures/fixtures.ts";
+import { exampleFolders, explanations } from "../../scripts/explain.ts";
+import { explain } from "../../src/cli/explain.ts";
+import { isUserKind, kinds } from "../../src/data/kinds.ts";
+import { builtExplanations, expectedOf, kindOfLine } from "../fixtures/fixtures.ts";
 
 const maxExcerptLines = 40;
 const built = explanations();
@@ -33,7 +33,7 @@ test("Each kind that a user meets has one example, the fixture named after it, w
         const reported = expectedOf(dir).map(kindOfLine);
         return reported.length === 0 || reported.some((k) => k !== kind);
       })
-      .map(([, dir]) => relative(join(import.meta.dirname, ".."), dir)),
+      .map(([, dir]) => relative(join(import.meta.dirname, "../.."), dir)),
     [],
   );
 });

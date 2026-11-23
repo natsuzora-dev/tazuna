@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { BagValue } from "../src/data/bag.ts";
-import { bag, encoded } from "../src/data/collections.ts";
-import { strict } from "../src/data/schemaNode.ts";
-import { canonicalJson } from "../src/data/values.ts";
+import { BagValue } from "../../src/data/bag.ts";
+import { bag, encoded } from "../../src/data/collections.ts";
+import { strict } from "../../src/data/schemaNode.ts";
+import { canonicalJson } from "../../src/data/values.ts";
 
 test("canonicalJson of a copy key sorts object keys in UTF-16 order", () => {
   assert.equal(

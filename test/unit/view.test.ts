@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { viewModel } from "../src/view/model.ts";
-import type { StateView, TransitionView } from "../src/view/types.ts";
-import { checkedRoot } from "./fixtures/fixtures.ts";
+import { viewModel } from "../../src/view/model.ts";
+import type { StateView, TransitionView } from "../../src/view/types.ts";
+import { checkedRoot } from "../fixtures/fixtures.ts";
 
 test("The model that viewModel builds from samples/todo/spec holds, for each service, its kind, its description, the services whose contracts it uses, and the number of definitions of each kind", async () => {
-  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../samples/todo/spec")), "samples/todo/spec");
+  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../../samples/todo/spec")), "samples/todo/spec");
   assert.deepEqual(
     model.services.map((s) => {
       const counts: Record<string, number> = {};
@@ -55,7 +55,7 @@ test("The model that viewModel builds from samples/todo/spec holds, for each ser
 });
 
 test("viewModel turns, in the definition JSON, Zod schemas into JSON Schema, functions into source strings, and other definitions into references by kind, service, and name", async () => {
-  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../samples/todo/spec")), "samples/todo/spec");
+  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../../samples/todo/spec")), "samples/todo/spec");
   const addTask = model.services.find((s) => s.name === "todo")?.definitions.find((d) => d.name === "addTask");
   const definition = addTask?.definition as Readonly<Record<string, unknown>>;
   assert.equal(definition["service"], "todo");
@@ -71,7 +71,7 @@ test("viewModel turns, in the definition JSON, Zod schemas into JSON Schema, fun
 });
 
 test("An entity in viewModel has its key, its unique, its invariant names, the type, nullable flag, and description of each field, and the entity that ref() points to", async () => {
-  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../samples/todo/spec")), "samples/todo/spec");
+  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../../samples/todo/spec")), "samples/todo/spec");
   const entity = (service: string, name: string) =>
     model.services.find((s) => s.name === service)?.definitions.find((d) => d.name === name)?.entity;
   const fields = (service: string, name: string) =>
@@ -126,7 +126,7 @@ function chartLines(state: StateView, depth = 0): string[] {
 }
 
 test("A chart in viewModel has the state tree of its machine or screen, and the activities and transitions of each state with the trigger kind, guard names, and id of each transition", async () => {
-  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../samples/todo/spec")), "samples/todo/spec");
+  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../../samples/todo/spec")), "samples/todo/spec");
   const chart = (name: string) => {
     const state = model.services.flatMap((s) => s.definitions).find((d) => d.name === name)?.chart;
     assert.ok(state);
@@ -194,7 +194,7 @@ test("A chart in viewModel has the state tree of its machine or screen, and the 
 });
 
 test("A scenario in viewModel has, for each snapshot line, the sender and receiver lifelines of the sequence diagram", async () => {
-  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../samples/todo/spec")), "samples/todo/spec");
+  const model = viewModel(await checkedRoot(join(import.meta.dirname, "../../samples/todo/spec")), "samples/todo/spec");
   const flow = (service: string, name: string) => {
     const scenario = model.scenarios.find((s) => s.service === service && s.name === name);
     assert.ok(scenario?.trace);
@@ -243,10 +243,10 @@ test("A scenario in viewModel has, for each snapshot line, the sender and receiv
 });
 
 test("For a scenario whose snapshot has a line outside the trace line schema, viewModel holds the line number and reason instead of the trace, and reads the traces of the other scenarios", async () => {
-  mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
-  const copy = mkdtempSync(join(import.meta.dirname, ".fixtures", "view-"));
+  mkdirSync(join(import.meta.dirname, "../.fixtures"), { recursive: true });
+  const copy = mkdtempSync(join(import.meta.dirname, "../.fixtures", "view-"));
   try {
-    cpSync(join(import.meta.dirname, "../samples/todo/spec"), copy, { recursive: true });
+    cpSync(join(import.meta.dirname, "../../samples/todo/spec"), copy, { recursive: true });
     writeFileSync(join(copy, "todo/__snapshots__/completeTwice.jsonl"), '{"time":"2026-10-25T01:00:00Z"}\nnot json\n');
     const model = viewModel(await checkedRoot(copy), copy);
     const scenario = (name: string) => model.scenarios.find((s) => s.service === "todo" && s.name === name);

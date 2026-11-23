@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { parseSync } from "oxc-parser";
 
-const src = join(import.meta.dirname, "../src");
+const src = join(import.meta.dirname, "../../src");
 
 function documentedNames(file: string): Set<string> {
   const text = readFileSync(join(src, file), "utf8");

@@ -3,9 +3,9 @@ import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, w
 import { get } from "node:http";
 import { join } from "node:path";
 import { test } from "node:test";
-import { loadViewModel } from "../src/view/load.ts";
-import { serveViewer } from "../src/view/server.ts";
-import type { ViewEvent, ViewModel } from "../src/view/types.ts";
+import { loadViewModel } from "../../src/view/load.ts";
+import { serveViewer } from "../../src/view/server.ts";
+import type { ViewEvent, ViewModel } from "../../src/view/types.ts";
 
 /** Returns with /events already open, so no change notice after the return is missed. */
 async function listen(url: string): Promise<AsyncGenerator<ViewEvent>> {
@@ -26,12 +26,12 @@ async function listen(url: string): Promise<AsyncGenerator<ViewEvent>> {
 }
 
 async function withCopy(body: (copy: string, viewer: string) => Promise<void>): Promise<void> {
-  mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
-  const copy = mkdtempSync(join(import.meta.dirname, ".fixtures", "watch-"));
-  const viewer = mkdtempSync(join(import.meta.dirname, ".fixtures", "viewer-"));
+  mkdirSync(join(import.meta.dirname, "../.fixtures"), { recursive: true });
+  const copy = mkdtempSync(join(import.meta.dirname, "../.fixtures", "watch-"));
+  const viewer = mkdtempSync(join(import.meta.dirname, "../.fixtures", "viewer-"));
   try {
     writeFileSync(join(viewer, "index.html"), "");
-    cpSync(join(import.meta.dirname, "../samples/todo/spec"), copy, { recursive: true });
+    cpSync(join(import.meta.dirname, "../../samples/todo/spec"), copy, { recursive: true });
     // tsc's include skips the dot folder .fixtures, so the copy gets a tsconfig.json of its own.
     writeFileSync(join(copy, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
     await body(copy, viewer);
@@ -82,8 +82,8 @@ test("The view server reloads the spec in a child process when a spec file chang
 });
 
 test("The view server answers 400 to a request whose path is no URL path, such as //, and keeps serving", async () => {
-  mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
-  const viewer = mkdtempSync(join(import.meta.dirname, ".fixtures", "viewer-"));
+  mkdirSync(join(import.meta.dirname, "../.fixtures"), { recursive: true });
+  const viewer = mkdtempSync(join(import.meta.dirname, "../.fixtures", "viewer-"));
   writeFileSync(join(viewer, "index.html"), "");
   const model = { spec: "viewer", services: [], scenarios: [] };
   const server = await serveViewer({ root: viewer, path: "viewer", cwd: process.cwd(), model }, 0, viewer);

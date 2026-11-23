@@ -26,7 +26,7 @@ def modules : IO (Array Name) := do
 
 /--
 The entry point, run in `lean/` after `lake build`. It prints one line per declaration of `Tazuna`: kind, module, name,
-then the declarations of `Tazuna` that it uses. test/theorems.diff.ts reads it.
+then the declarations of `Tazuna` that it uses. test/unit/theorems.diff.ts reads it.
 -/
 def main : IO Unit := do
   initSearchPath (← findSysroot)

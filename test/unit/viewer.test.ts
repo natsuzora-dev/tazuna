@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { tones } from "../viewer/src/tone.ts";
+import { tones } from "../../viewer/src/tone.ts";
 
-const src = join(import.meta.dirname, "../viewer/src");
+const src = join(import.meta.dirname, "../../viewer/src");
 const read = (file: string) => readFileSync(join(src, file), "utf8").replaceAll(/\/\*[\s\S]*?\*\//g, "");
 const css = read("style.css");
 const tsx = readdirSync(src)

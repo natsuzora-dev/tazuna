@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 
-const root = join(import.meta.dirname, "..");
+const root = join(import.meta.dirname, "../..");
 
 /** Each Biome plugin in biome.json, with expressions it reports and expressions it leaves alone. */
 const examples: Record<string, { readonly reported: readonly string[]; readonly clean: readonly string[] }> = {

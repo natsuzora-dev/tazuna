@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { cpSync, type Dirent, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { testSpec } from "../src/cli/test.ts";
-import { sameRef } from "../src/data/definitionRef.ts";
-import { ownRun, snapshotPath } from "../src/data/traceFile.ts";
-import type { ReportedViolation } from "../src/data/violation.ts";
-import { checkedRoot, fixture } from "./fixtures/fixtures.ts";
+import { testSpec } from "../../src/cli/test.ts";
+import { sameRef } from "../../src/data/definitionRef.ts";
+import { ownRun, snapshotPath } from "../../src/data/traceFile.ts";
+import type { ReportedViolation } from "../../src/data/violation.ts";
+import { checkedRoot, fixture } from "../fixtures/fixtures.ts";
 
-mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
-const copy = mkdtempSync(join(import.meta.dirname, ".fixtures", "snapshots-"));
+mkdirSync(join(import.meta.dirname, "../.fixtures"), { recursive: true });
+const copy = mkdtempSync(join(import.meta.dirname, "../.fixtures", "snapshots-"));
 after(() => rmSync(copy, { recursive: true, force: true }));
 cpSync(fixture("test", "noViolations", "changed_answer_sent"), copy, { recursive: true });
 // tsc's include skips the dot folder .fixtures, so the copy gets a tsconfig.json of its own, by which the converter
