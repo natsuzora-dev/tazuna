@@ -3,6 +3,7 @@ import { join, relative, resolve } from "node:path";
 import { checkSpecWith, failureText } from "../check/spec.ts";
 import { type TypeCheck, typeCheck } from "../check/typeCheck.ts";
 import type { Converter } from "../convert/program.ts";
+import { parseKind } from "../data/kinds.ts";
 import type { ReportedViolation, ViolationValue } from "../data/violation.ts";
 import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
@@ -151,7 +152,7 @@ const commands = {
     spec: true,
     positionals: [],
     description:
-      "Prove each invariant of each spec service by induction within the bounds of its service's bounds(): it holds of the initial records, the single entities' records of their schema defaults, at any time, and after each command, with any input at any time no earlier than the records' time, from any records within the bounds of which every invariant holds and every record fits its schema. From those records, prove also proves that each command's and query's ensures holds and that no command leaves a ref naming a missing record. prove writes one JSON line per property, with its verdict: proved; counterexample, with the records and their time, the command or query, its input and time, and the violations that the spec reports on replaying them; or undecided, with the reason, such as the solver reaching its resource limit or a construct that prove does not encode. A machine's or screen's invariant is undecided. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant. prove exits with 1 on a counterexample, else with 2 when a property is undecided, and else with 0.",
+      "Prove each invariant of each spec service by induction within the bounds of its service's bounds(): it holds of the initial records, the single entities' records of their schema defaults, at any time, and after each command, with any input at any time no earlier than the records' time, from any records within the bounds of which every invariant holds and every record fits its schema. From those records, prove also proves that each command's and query's ensures holds and that no command leaves a ref naming a missing record. prove writes one JSON line per property, with its verdict: proved; counterexample, with the records and their time, the command or query, its input and time, and the violations that the spec reports on replaying them; or undecided, with the reason, such as the solver reaching its resource limit or a construct that prove does not encode. A machine's or screen's invariant is undecided. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant. prove exits with 1 on a counterexample, else with 3 when a property is undecided, and else with 0.",
     options: {},
     parse: ({ root }) => ({ command: "prove", root }),
   }),
@@ -268,7 +269,7 @@ const help = [
   ),
   ...wrap(
     "",
-    "The exit code is 1 when tsc reports an error or a command reports a violation, 2 on a usage error, and 0 otherwise.",
+    "The exit code is 1 when tsc reports an error, a command reports a violation other than Undecided, or prove finds a counterexample; 2 on a usage error; 3 when test reports only Undecided violations or prove leaves a property undecided, as an SMT solver answers unknown; and 0 otherwise.",
   ),
 ].join("\n");
 
@@ -285,21 +286,25 @@ function record(io: Io, specRoot: string, r: ReportedViolation): string {
   return JSON.stringify({ ...r, location: { ...r.location, file: relative(io.cwd, join(specRoot, r.location.file)) } });
 }
 
+/** The exit code of a command that found a counterexample or violation, else left something undecided, else neither. */
+const exitCode = (violated: boolean, undecided: boolean) => (violated ? 1 : undecided ? 3 : 0);
+
 /**
  * Writes the violation lines to stdout, and to stderr the summary `<subject>: <result>`, such as `3 files: no violations`.
  */
 function report(io: Io, specRoot: string, violations: readonly ReportedViolation[], subject: string): number {
   for (const p of violations) io.log(record(io, specRoot, p));
   io.error(`${subject}: ${violations.length === 0 ? "no violations" : count(violations.length, "violation")}`);
-  return violations.length === 0 ? 0 : 1;
+  const undecided = (v: ReportedViolation) => parseKind(v.kind)?.group === "Undecided";
+  return exitCode(
+    violations.some((v) => !undecided(v)),
+    violations.length > 0,
+  );
 }
 
 const isName = (command: string): command is Name => Object.hasOwn(commands, command);
 
-/**
- * Writes prove's lines to stdout and the count of each verdict to stderr. A counterexample exits with 1, and else an
- * undecided property with 2.
- */
+/** Writes prove's lines to stdout and the count of each verdict to stderr. */
 function reportProved(io: Io, specRoot: string, lines: readonly ProveLine[]): number {
   for (const l of lines)
     io.log(
@@ -310,7 +315,7 @@ function reportProved(io: Io, specRoot: string, lines: readonly ProveLine[]): nu
   io.error(
     `${count(lines.length, "property", "properties")}: ${counted("proved")} proved, ${count(counterexamples, "counterexample")}, ${counted("undecided")} undecided`,
   );
-  return counterexamples > 0 ? 1 : counted("undecided") > 0 ? 2 : 0;
+  return exitCode(counterexamples > 0, counted("undecided") > 0);
 }
 
 /** Writes generate's lines to stdout, and to stderr the count of each outcome and the inputs written and removed. */

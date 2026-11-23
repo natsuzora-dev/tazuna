@@ -348,3 +348,9 @@ test("Every line of the snapshots under samples conforms to traceLine", () => {
     for (const line of readFileSync(join(samples, file), "utf8").trim().split("\n"))
       assert.ok(traceLine.safeParse(JSON.parse(line)).success, `${file}: ${line}`);
 });
+
+test("test exits with 3 when it reports only Undecided violations, as prove does with an undecided property", async () => {
+  const { code, out } = await run("test", "test/run/undecided/Explore/StepOrders/Undecided.stepOrderLimit");
+  assert.equal(code, 3);
+  assert.ok(out.length > 0 && out.every((line) => line.includes('"kind":"Undecided.')), out.join("\n"));
+});

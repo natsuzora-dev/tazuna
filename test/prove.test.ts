@@ -9,7 +9,7 @@ const proveRoot = join(import.meta.dirname, "prove");
 const verdicts = ["proved", "counterexample", "undecided"] as const;
 
 /** The exit code of prove when every property has the verdict. */
-const exitCodes = { proved: 0, counterexample: 1, undecided: 2 } as const;
+const exitCodes = { proved: 0, counterexample: 1, undecided: 3 } as const;
 
 const jsonl = (lines: readonly string[]) => lines.map((line) => `${line}\n`).join("");
 
