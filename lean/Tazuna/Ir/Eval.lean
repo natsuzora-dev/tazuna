@@ -177,13 +177,21 @@ def fieldOf (v : Val) (name : String) : EvalM Val :=
       pure (.json x)
   | _ => pure .undef
 
-/-- The values that a callback method visits. Visiting a table reads its keys and visits its records in key order. -/
+/--
+The keys of the records of `entity`, in the order that the records hold them. A Bag has no order, and no operation
+exposes the order in which it visits one (`Functions.comparable` ignores it), so a table visits its records as they
+are held: prove's slots hold them in the same order.
+-/
+def heldKeys (records : Records) (entity : String) : List String :=
+  (records.filter (·.entity == entity)).filterMap (·.key)
+
+/-- The values that a callback method visits. Visiting a table reads its keys and visits its records as they are held. -/
 def elements : Val → EvalM (List Val)
   | .json (.arr vs) => pure (vs.map .json)
   | .list vs => pure vs
   | .table source entity => do
     note (.keys entity)
-    pure ((source.keys entity).map fun k => .row source entity (some k))
+    pure ((heldKeys source entity).map fun k => .row source entity (some k))
   | _ => thrown
 
 /-- A key as a numerator over 10 ^ the exponent, which `order` reads of a value, or the TypeError that JS would throw. -/
@@ -311,8 +319,8 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
       pure (.json (.num (source.keys entity).length))
     | _ => thrown
   | .filter _ c x body => do
-    let vs ← elements (← eval env vars c)
-    pure (.list (← vs.filterM fun v => do pure (truthy (← eval env ((x, v) :: vars) body))))
+    let tested ← (← elements (← eval env vars c)).mapM fun v => do pure (v, truthy (← eval env ((x, v) :: vars) body))
+    pure (.list (tested.filterMap fun (v, kept) => if kept then some v else none))
   | .some .array c x body => do
     let vs ← elements (← eval env vars c)
     pure (.json (.bool (← vs.anyM fun v => do pure (truthy (← eval env ((x, v) :: vars) body)))))

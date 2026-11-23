@@ -108,9 +108,7 @@ function sourceOf(stored: readonly Stored[], reads: ReadPart[]): RecordSource {
   return {
     keys: (entity) => {
       note({ entity });
-      return keyed(entity)
-        .map((s) => s.key as string)
-        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+      return keyed(entity).map((s) => s.key as string);
     },
     exists: (entity, key) => {
       note({ entity, key });

@@ -90,7 +90,7 @@ theorem truthy_conc (M : Model) (recs : Records) : ∀ v : SVal, v.truthy.holds 
   | .ite c a b => by
     rw [SVal.truthy, holds_ite, conc_ite, truthy_conc M recs a, truthy_conc M recs b]
     split <;> rfl
-  | .json _ | .row .. | .single _ | .table _ | .obj _ | .list _ | .emit .. => rfl
+  | .json _ | .row .. | .single _ | .table _ | .obj _ | .list _ | .bag _ | .emit .. => rfl
 
 /-- Whether a value is `undefined` or null, which `??` and `?.` test. -/
 def isNullish : Val → Bool
@@ -105,7 +105,7 @@ theorem nullish_conc (M : Model) (recs : Records) : ∀ v : SVal, v.nullish.hold
   | .ite c a b => by
     rw [SVal.nullish, holds_ite, conc_ite, nullish_conc M recs a, nullish_conc M recs b]
     split <;> rfl
-  | .json _ | .row .. | .single _ | .table _ | .obj _ | .list _ | .emit .. => rfl
+  | .json _ | .row .. | .single _ | .table _ | .obj _ | .list _ | .bag _ | .emit .. => rfl
 
 theorem sameT_holds (M : Model) (a b : Term) :
     (sameT a b).holds M = same (a.denote M).toScalar.toVal (b.denote M).toScalar.toVal := by
@@ -134,12 +134,13 @@ theorem same_conc (M : Model) (recs : Records) :
   | .scalar a, .scalar b => by simp [SVal.same, SVal.conc, sameT_holds]
   | .scalar _, .json _ => by simp [SVal.same, SVal.conc, same_json_right, holds_ff]
   | .scalar t, .row .. | .scalar t, .single _ | .scalar t, .table _ | .scalar t, .obj _ | .scalar t, .list _
+  | .scalar t, .bag _
   | .scalar t, .emit .. => by
     simp only [SVal.same, holds_ff, SVal.conc]
     cases (t.denote M).toScalar <;> rfl
   | .json _, w => by
     cases w <;> simp [SVal.same, SVal.conc, same_json_left, holds_ff]
-  | .row .., w | .single _, w | .table _, w | .obj _, w | .list _, w | .emit .., w => by
+  | .row .., w | .single _, w | .table _, w | .obj _, w | .list _, w | .bag _, w | .emit .., w => by
     cases w <;> simp [SVal.same, SVal.conc, same, holds_ff]
 
 theorem scalarOf_conc (M : Model) (recs : Records) : ∀ v : SVal,
@@ -156,7 +157,7 @@ theorem scalarOf_conc (M : Model) (recs : Records) : ∀ v : SVal,
         simp_all [conc_scalar]
     · intro h
       split at h <;> rename_i hc <;> simp only [hc, ite_true] <;> simp_all
-  | .json _ | .row .. | .single _ | .table _ | .obj _ | .list _ | .emit .. => by
+  | .json _ | .row .. | .single _ | .table _ | .obj _ | .list _ | .bag _ | .emit .. => by
     simp [SVal.scalarOf, holds_tt, SVal.conc, NonScalar]
 
 
@@ -320,7 +321,7 @@ theorem field_conc (M : Model) (r : SRecords) (name : String) (s : Trace) : ∀ 
   | .obj fs, _ => by
     simp only [SVal.conc, fieldOf, SVal.field, run_pure, concFields_lookup]
     cases fs.lookup name <;> rfl
-  | .table _, _ | .list _, _ | .emit .., _ => rfl
+  | .table _, _ | .list _, _ | .bag _, _ | .emit .., _ => rfl
   | .ite c a b, h => by
     simp only [SVal.field, conc_ite] at h ⊢
     split
@@ -616,8 +617,17 @@ theorem lookup_op (M : Model) (r : SRecords) (vk : SVal) (s : Trace) : ∀ vt : 
   | .scalar t => by
     simp only [SVal.lookup, SVal.conc]
     cases (t.denote M).toScalar <;> simp [Scalar.toVal, Scalar.toValue?, Val.ofOption, run_thrown, Agrees, holds_tt]
-  | .json _ | .row .. | .single _ | .obj _ | .list _ | .emit .. => by
+  | .json _ | .row .. | .single _ | .obj _ | .list _ | .bag _ | .emit .. => by
     simp [SVal.lookup, SVal.conc, run_thrown, Agrees, holds_tt]
+
+theorem countIn_denote (M : Model) (recs : Records) : ∀ items : List (Term × SVal),
+    (countIn items).denote M = .int (SVal.concItems M recs items).length
+  | [] => rfl
+  | (g, v) :: items => by
+    simp only [countIn, Term.denote, countIn_denote M recs items, Lit.toInt, intLit]
+    by_cases hg : g.holds M
+    · simp only [Term.holds] at hg; simp [SVal.concItems, Term.holds, hg]; omega
+    · simp only [Term.holds] at hg; simp [SVal.concItems, Term.holds, hg]
 
 theorem size_op (M : Model) (r : SRecords) (s : Trace) : ∀ v : SVal,
     Agrees M (r.conc M) (SVal.size r v)
@@ -643,6 +653,11 @@ theorem size_op (M : Model) (r : SRecords) (s : Trace) : ∀ v : SVal,
       | cons _ _ ih => simp [SVal.concAll, ih]
     simp [conc_mkInt, Term.denote, Lit.toInt, intLit, this]
     rfl
+  | .bag items => by
+    simp only [SVal.size, SVal.conc, run_pure]
+    refine ⟨holds_ff M, ?_⟩
+    simp only [conc_mkInt, countIn_denote M (r.conc M), Lit.toInt]
+    rfl
   | .ite c a b => by
     have ha := size_op M r s a
     have hb := size_op M r s b
@@ -666,6 +681,15 @@ theorem any_same_conc (M : Model) (recs : Records) (vv : SVal) : ∀ vs : List S
     simp only [SVal.includes, SVal.concAll, List.any_cons, List.map_cons, disj, List.foldr_cons] at ih ⊢
     rw [holds_or, same_conc M recs v vv, ih]
 
+theorem any_same_items (M : Model) (recs : Records) (vv : SVal) : ∀ items : List (Term × SVal),
+    (SVal.concItems M recs items).any (same · (vv.conc M recs)) = (SVal.includes vv (.bag items)).1.holds M
+  | [] => rfl
+  | (g, v) :: items => by
+    have ih := any_same_items M recs vv items
+    simp only [SVal.includes, List.map_cons, disj, List.foldr_cons] at ih ⊢
+    rw [holds_or, holds_and, ← ih, same_conc M recs v vv]
+    by_cases hg : g.holds M <;> simp [SVal.concItems, hg]
+
 theorem concAll_append (M : Model) (recs : Records) (xs ys : List SVal) :
     SVal.concAll M recs (xs ++ ys) = SVal.concAll M recs xs ++ SVal.concAll M recs ys := by
   induction xs with
@@ -678,6 +702,8 @@ theorem elements_op (M : Model) (recs : Records) (vv : SVal) (s : Trace) : ∀ v
         L.any (same · (vv.conc M recs)) = (SVal.includes vv va).1.holds M)
   | .list vs => by
     refine ⟨fun h => by simp [SVal.includes, holds_ff] at h, fun _ => ⟨_, rfl, any_same_conc M recs vv vs⟩⟩
+  | .bag items => by
+    refine ⟨fun h => by simp [SVal.includes, holds_ff] at h, fun _ => ⟨_, rfl, any_same_items M recs vv items⟩⟩
   | .table e => by
     refine ⟨fun h => by simp [SVal.includes, holds_ff] at h, fun _ => ⟨_, run_note_pure _ _ s, ?_⟩⟩
     simp [SVal.includes, holds_ff, same]
@@ -692,6 +718,472 @@ theorem elements_op (M : Model) (recs : Records) (vv : SVal) (s : Trace) : ∀ v
     cases (t.denote M).toScalar <;> rfl
   | .json _ | .row .. | .single _ | .obj _ | .emit .. => by
     refine ⟨fun _ => ⟨.thrown none, rfl⟩, fun h => by simp [SVal.includes, holds_tt] at h⟩
+
+/-! ### Collections: the values an operation visits, and a callback on each -/
+
+theorem concItems_eq (M : Model) (recs : Records) : ∀ items : List (Term × SVal),
+    SVal.concItems M recs items = (items.filter (·.1.holds M)).map (·.2.conc M recs)
+  | [] => rfl
+  | (g, v) :: items => by
+    by_cases hg : g.holds M <;> simp [SVal.concItems, hg, concItems_eq M recs items]
+
+theorem concItems_append (M : Model) (recs : Records) (xs ys : List (Term × SVal)) :
+    SVal.concItems M recs (xs ++ ys) = SVal.concItems M recs xs ++ SVal.concItems M recs ys := by
+  simp [concItems_eq]
+
+theorem liveRows_heldKeys (M : Model) (e : String) (ss : List Slot) :
+    (liveRows M e ss).filterMap (·.key) = (ss.filter (·.live.holds M)).map fun s => (s.key.denote M).toStr := by
+  simp [liveRows, List.filterMap_map, Function.comp_def, Slot.row]
+
+/-- A table's records as the semantics holds them: its live slots in slot order. -/
+theorem heldKeys_conc (M : Model) (r : SRecords) (e : String) :
+    heldKeys (r.conc M) e = ((r.slotsOf e).filter (·.live.holds M)).map fun s => (s.key.denote M).toStr := by
+  simp only [heldKeys, SRecords.conc, List.filter_append, List.filterMap_append]
+  have hs : ((r.singles.map fun (e, fields) => ({ entity := e, key := none, value := .obj (present M fields) } : Row)).filter
+      (·.entity == e)).filterMap (·.key) = [] := by
+    rw [List.filterMap_eq_nil_iff]
+    intro row hrow
+    simp only [List.mem_filter, List.mem_map] at hrow
+    obtain ⟨⟨_, _, rfl⟩, _⟩ := hrow
+    rfl
+  rw [hs, List.append_nil, SRecords.slotsOf]
+  induction r.keyed with
+  | nil => rfl
+  | cons p ps ih =>
+    obtain ⟨e', slots⟩ := p
+    simp only [List.flatMap_cons, List.filter_append, List.filterMap_append, List.filter_cons]
+      at ih ⊢
+    rw [ih]
+    by_cases he : e' = e
+    · subst he
+      have h1 := liveRows_filter_self M e' slots
+      have h2 := liveRows_heldKeys M e' slots
+      simp only [liveRows] at h1 h2
+      simp [h1, h2]
+    · have := liveRows_filter_other M e e' he slots
+      simp only [liveRows] at this
+      simp [*]
+
+theorem concItems_map_tt (M : Model) (recs : Records) (vs : List SVal) :
+    SVal.concItems M recs (vs.map (tt, ·)) = SVal.concAll M recs vs := by
+  induction vs with
+  | nil => rfl
+  | cons v vs ih => simp [SVal.concItems, SVal.concAll, holds_tt, ih]
+
+theorem concItems_guard (M : Model) (recs : Records) (c : Term) (xs : List (Term × SVal)) :
+    SVal.concItems M recs (xs.map fun (g, v) => (.and c g, v)) =
+      if c.holds M then SVal.concItems M recs xs else [] := by
+  induction xs with
+  | nil => split <;> rfl
+  | cons x xs ih =>
+    obtain ⟨g, v⟩ := x
+    by_cases hc : c.holds M <;> simp_all [SVal.concItems, holds_and]
+
+/-- What an operation visits in a collection that has items: their values, in order. -/
+theorem items_elements (M : Model) (r : SRecords) (s : Trace) : ∀ (v : SVal) (items : List (Term × SVal)),
+    v.items r = some items → (run (elements (v.conc M (r.conc M))) s).1 = .ok (SVal.concItems M (r.conc M) items)
+  | .list vs, items, h => by
+    cases h; simp [SVal.conc, elements, run_pure, concItems_map_tt]
+  | .bag is, items, h => by cases h; simp [SVal.conc, elements, run_pure]
+  | .table e, items, h => by
+    cases h
+    simp only [SVal.conc, elements]
+    rw [run_note_pure, heldKeys_conc, concItems_eq]
+    simp [List.filter_map, Function.comp_def, SVal.conc]
+  | .ite c a b, items, h => by
+    simp only [SVal.items, bind, Option.bind] at h
+    cases ha : a.items r with
+    | none => simp [ha] at h
+    | some xs =>
+      cases hb : b.items r with
+      | none => simp [ha, hb] at h
+      | some ys =>
+        simp only [ha, hb, pure, Option.some.injEq] at h
+        subst h
+        rw [concItems_append, concItems_guard, concItems_guard, conc_ite]
+        by_cases hc : c.holds M
+        · simp [hc, holds_not, items_elements M r s a xs ha]
+        · simp only [hc, Bool.false_eq_true, ite_false, holds_not, Bool.not_false, ite_true, List.nil_append]
+          exact items_elements M r s b ys hb
+  | .scalar _, _, h | .json _, _, h | .row .., _, h | .single _, _, h | .obj _, _, h | .emit .., _, h => by
+    simp [SVal.items] at h
+
+/-- That `x` throws exactly when `t` holds, and otherwise gives `b`. -/
+def Yields {β : Type} (M : Model) (t : Term) (b : β) (x : Except Issue β) : Prop :=
+  match x with
+  | .error _ => t.holds M = true
+  | .ok a => t.holds M = false ∧ a = b
+
+/-- A callback's results on the visited values, from `mapM`: a throw when one throws, else each result in order. -/
+theorem mapM_visits {β γ : Type} (M : Model) (recs : Records) (f : Val → EvalM β) (φ : γ → β) :
+    ∀ (L : List (Term × SVal × Term × γ)),
+      (∀ q ∈ L, q.1.holds M = true → ∀ s, Yields M q.2.2.1 (φ q.2.2.2) (run (f (q.2.1.conc M recs)) s).1) →
+      ∀ s, Yields M (disj (L.map fun q => .and q.1 q.2.2.1)) ((L.filter (·.1.holds M)).map (φ ·.2.2.2))
+        (run ((SVal.concItems M recs (L.map fun q => (q.1, q.2.1))).mapM f) s).1
+  | [], _, s => by simp [SVal.concItems, run_pure, disj, holds_ff, Yields]
+  | q :: L, h, s => by
+    obtain ⟨g, v, e, y⟩ := q
+    have ih := mapM_visits M recs f φ L (fun q hq => h q (List.mem_cons_of_mem _ hq))
+    by_cases hg : g.holds M
+    · have hc : SVal.concItems M recs ((g, v) :: L.map fun q => (q.1, q.2.1)) =
+          v.conc M recs :: SVal.concItems M recs (L.map fun q => (q.1, q.2.1)) := by simp [SVal.concItems, hg]
+      simp only [List.map_cons]
+      rw [hc, List.mapM_cons, run_bind]
+      have hq := h (g, v, e, y) List.mem_cons_self hg s
+      rcases hr : run (f (v.conc M recs)) s with ⟨x, s1⟩
+      rw [hr] at hq
+      cases x with
+      | error =>
+        simp only [Yields] at hq ⊢
+        simp [disj, holds_or, holds_and, hg, hq]
+      | ok b =>
+        simp only [Yields] at hq
+        obtain ⟨he, rfl⟩ := hq
+        dsimp only
+        rw [run_bind]
+        have ih1 := ih s1
+        rcases hr2 : run ((SVal.concItems M recs (L.map fun q => (q.1, q.2.1))).mapM f) s1 with ⟨x2, s2⟩
+        rw [hr2] at ih1
+        try rw [hr2]
+        cases x2 with
+        | error =>
+          simp only [Yields] at ih1 ⊢
+          simp only [disj, List.foldr_cons, holds_or, holds_and, hg, he, Bool.true_and, Bool.false_or] at ih1 ⊢
+          exact ih1
+        | ok bs =>
+          simp only [Yields] at ih1 ⊢
+          obtain ⟨h1, h2⟩ := ih1
+          simp only [run_pure]
+          refine ⟨?_, by simp [hg, h2]⟩
+          simp only [disj, List.foldr_cons, holds_or, holds_and, hg, he, Bool.true_and, Bool.false_or] at h1 ⊢
+          exact h1
+    · have hc : SVal.concItems M recs ((g, v) :: L.map fun q => (q.1, q.2.1)) =
+          SVal.concItems M recs (L.map fun q => (q.1, q.2.1)) := by simp [SVal.concItems, hg]
+      simp only [List.map_cons]
+      rw [hc]
+      have ih1 := ih s
+      rcases hr : run ((SVal.concItems M recs (L.map fun q => (q.1, q.2.1))).mapM f) s with ⟨x, s1⟩
+      rw [hr] at ih1
+      try rw [hr]
+      have hd : (disj ((g.and e) :: L.map fun q => .and q.1 q.2.2.1)).holds M =
+          (disj (L.map fun q => .and q.1 q.2.2.1)).holds M := by
+        simp [disj, holds_or, holds_and, hg]
+      cases x with
+      | error => simp only [Yields] at ih1 ⊢; rw [hd]; exact ih1
+      | ok bs =>
+        simp only [Yields] at ih1 ⊢
+        obtain ⟨h1, h2⟩ := ih1
+        exact ⟨by rw [hd]; exact h1, by simp [hg, h2]⟩
+
+/-- The visits that a callback method's encoding makes: each item with the callback's encoding on its value. -/
+theorem visits_ok (env : SEnv) (vars : List (String × SVal)) (x : String) (body : Expr)
+    (F : Term × SVal → Except String Visit)
+    (hF : ∀ i q, F i = .ok q → q.1 = i.1 ∧ q.2.1 = i.2 ∧ seval env ((x, i.2) :: vars) body = .ok q.2.2) :
+    ∀ (items : List (Term × SVal)) (visits : List Visit), items.mapM F = .ok visits →
+      visits.map (fun q => (q.1, q.2.1)) = items ∧ ∀ q ∈ visits, seval env ((x, q.2.1) :: vars) body = .ok q.2.2
+  | [], visits, h => by cases h; exact ⟨rfl, by simp⟩
+  | i :: items, visits, h => by
+    simp only [List.mapM_cons, bind, Except.bind, pure, Except.pure] at h
+    split at h
+    · contradiction
+    rename_i q hq
+    split at h
+    · contradiction
+    rename_i rest hrest
+    cases h
+    obtain ⟨h1, h2⟩ := visits_ok env vars x body F hF items rest hrest
+    obtain ⟨e1, e2, e3⟩ := hF i q hq
+    refine ⟨by simp [h1, e1, e2], ?_⟩
+    intro q' hq'
+    simp only [List.mem_cons] at hq'
+    rcases hq' with rfl | hq'
+    · rw [e2]; exact e3
+    · exact h2 q' hq'
+
+/-- A callback method's evaluation: the collection, the values it visits, the callback on each, then `k` on the results. -/
+theorem visits_op {β γ : Type} {M : Model} {r : SRecords} {x : EvalM Val} {vc : SVal} {ec : Term}
+    {items : List (Term × SVal)} {f : Val → EvalM β} {φ : γ → β} {L : List (Term × SVal × Term × γ)}
+    {k : List β → EvalM Val} {res : SRes}
+    (hx : ∀ s, Agrees M (r.conc M) (vc, ec) (run x s).1)
+    (hi : vc.items r = some items)
+    (hL : L.map (fun q => (q.1, q.2.1)) = items)
+    (hf : ∀ q ∈ L, q.1.holds M = true → ∀ s, Yields M q.2.2.1 (φ q.2.2.2) (run (f (q.2.1.conc M (r.conc M))) s).1)
+    (herr : ec.holds M = true ∨ (disj (L.map fun q => .and q.1 q.2.2.1)).holds M = true → res.2.holds M = true)
+    (hk : ec.holds M = false → (disj (L.map fun q => .and q.1 q.2.2.1)).holds M = false →
+      ∀ s, Agrees M (r.conc M) res (run (k ((L.filter (·.1.holds M)).map (φ ·.2.2.2))) s).1)
+    (s : Trace) :
+    Agrees M (r.conc M) res (run (x >>= fun v => elements v >>= fun vs => vs.mapM f >>= k) s).1 := by
+  refine agrees_bind (P := Agrees M _ res) hx (fun h _ => herr (.inl h)) ?_ s
+  intro s1 h1
+  rw [run_bind]
+  rcases hr : run (elements (vc.conc M (r.conc M))) s1 with ⟨y, s2⟩
+  have he := items_elements M r s1 vc items hi
+  rw [hr] at he
+  obtain rfl : y = _ := he
+  try rw [hr]
+  dsimp only
+  rw [run_bind]
+  have hm := mapM_visits M (r.conc M) f φ L hf s2
+  rw [hL] at hm
+  rcases hr2 : run (List.mapM f (SVal.concItems M (r.conc M) items)) s2 with ⟨z, s3⟩
+  rw [hr2] at hm
+  try rw [hr2]
+  cases z with
+  | error => simp only [Yields] at hm; exact herr (.inr hm)
+  | ok bs => simp only [Yields] at hm; obtain ⟨h2, rfl⟩ := hm; exact hk h1 h2 s3
+
+/-- An evaluation followed by a pure step yields that step on the value its encoding agrees on. -/
+theorem yields_pure {β : Type} {M : Model} {recs : Records} {y : EvalM Val} {rb : SRes} (g : Val → β)
+    (h : ∀ s, Agrees M recs rb (run y s).1) (s : Trace) :
+    Yields M rb.2 (g (rb.1.conc M recs)) (run (y >>= fun w => pure (g w)) s).1 := by
+  rw [run_bind]
+  have := h s
+  rcases hr : run y s with ⟨x, s1⟩
+  rw [hr] at this
+  try rw [hr]
+  cases x with
+  | error => exact this
+  | ok w => obtain ⟨h1, rfl⟩ := this; exact ⟨h1, rfl⟩
+
+/-- The callback's results on visits as `mapM_visits` takes them: each with its visit. -/
+abbrev visited (visits : List Visit) : List (Term × SVal × Term × Visit) := visits.map fun q => (q.1, q.2.1, q.2.2.2, q)
+
+theorem thrownIn_eq (visits : List Visit) :
+    thrownIn visits = disj ((visited visits).map fun q => .and q.1 q.2.2.1) := by
+  simp [thrownIn, List.map_map, Function.comp_def]
+
+theorem filter_kept (M : Model) (recs : Records) : ∀ visits : List Visit,
+    (((visits.filter (·.1.holds M)).map fun q => (q.2.1.conc M recs, q.2.2.1.truthy.holds M)).filterMap
+        fun (v, kept) => if kept then some v else none) =
+      SVal.concItems M recs (visits.map fun q => (.and q.1 q.2.2.1.truthy, q.2.1))
+  | [] => rfl
+  | (g, v, b, e) :: visits => by
+    have ih := filter_kept M recs visits
+    by_cases hg : g.holds M <;> by_cases ht : b.truthy.holds M <;>
+      simp [SVal.concItems, holds_and, hg, ht, ih]
+
+theorem disj_cons (a : Term) (l : List Term) : disj (a :: l) = .or a (disj l) := rfl
+
+theorem yields_of_agrees {M : Model} {recs : Records} {r : SRes} {x : Except Issue Val} (h : Agrees M recs r x) :
+    Yields M r.2 (r.1.conc M recs) x := by
+  cases x with
+  | error => exact h
+  | ok v => exact h
+
+theorem any_visits (M : Model) (recs : Records) (P : SVal → Term) (p : Val → Bool)
+    (hP : ∀ b, (P b).holds M = p (b.conc M recs)) : ∀ visits : List Visit,
+    ((visits.filter (·.1.holds M)).map (·.2.2.1.conc M recs)).any p =
+      (disj (visits.map fun q => .and q.1 (P q.2.2.1))).holds M
+  | [] => rfl
+  | (g, v, b, e) :: visits => by
+    have ih := any_visits M recs P p hP visits
+    rw [List.map_cons, disj_cons, holds_or, holds_and, ← ih]
+    by_cases hg : g.holds M <;> simp [hg, hP]
+
+theorem map_visits (M : Model) (recs : Records) (visits : List Visit) :
+    (visits.filter (·.1.holds M)).map (·.2.2.1.conc M recs) =
+      SVal.concItems M recs (visits.map fun q => (q.1, q.2.2.1)) := by
+  simp [concItems_eq, List.filter_map, Function.comp_def]
+
+/-! ### only, sum, min and max on the visited values -/
+
+theorem disj_guards (M : Model) (recs : Records) : ∀ items : List (Term × SVal),
+    (disj (items.map (·.1))).holds M = decide (1 ≤ (SVal.concItems M recs items).length)
+  | [] => rfl
+  | (g, v) :: items => by
+    rw [List.map_cons, disj_cons, holds_or, disj_guards M recs items]
+    by_cases hg : g.holds M <;> simp [SVal.concItems, hg]
+
+theorem twoIn_holds (M : Model) (recs : Records) : ∀ items : List (Term × SVal),
+    (twoIn items).holds M = decide (2 ≤ (SVal.concItems M recs items).length)
+  | [] => rfl
+  | (g, v) :: items => by
+    rw [twoIn, holds_or, holds_and, disj_guards M recs items, twoIn_holds M recs items]
+    by_cases hg : g.holds M <;> simp [SVal.concItems, hg]
+    omega
+
+theorem firstIn_conc (M : Model) (recs : Records) : ∀ items : List (Term × SVal),
+    (firstIn items).conc M recs = ((SVal.concItems M recs items).head?).getD .undef
+  | [] => rfl
+  | (g, v) :: items => by
+    rw [firstIn, conc_ite, firstIn_conc M recs items]
+    by_cases hg : g.holds M <;> simp [SVal.concItems, hg]
+
+theorem safe_iff (x : Int) : (decide (-2 ^ 53 < x) && decide (x < 2 ^ 53)) = decide (x.natAbs < 2 ^ 53) := by
+  rw [← Bool.decide_and]
+  exact decide_eq_decide.mpr (by omega)
+
+theorem safeT_holds (M : Model) (t : Term) :
+    (safeT t).holds M = decide ((t.denote M).toInt.natAbs < 2 ^ 53) := by
+  simp only [safeT, Term.holds, Term.denote, Lit.toBool, intLit, Lit.toInt]
+  exact safe_iff _
+
+/-- What `safeInteger?` takes of a value that an encoding agrees on: its integer, when the term of a bad key fails. -/
+theorem safeInteger_conc (M : Model) (recs : Records) (b : SVal) :
+    safeInteger? (b.conc M recs) =
+      if (Term.or b.scalarOf.2 (.not (.and (.isInt b.scalarOf.1) (safeT (.intOf b.scalarOf.1))))).holds M then none
+      else some ((Term.intOf b.scalarOf.1).denote M).toInt := by
+  rcases scalar_cases M recs b with ⟨h, hc⟩ | ⟨h, hn⟩
+  · rw [hc]
+    cases hx : (b.scalarOf.1.denote M).toScalar <;>
+      simp [Scalar.toVal, Scalar.toValue?, Val.ofOption, safeInteger?, holds_or, holds_not, holds_and, h, holds_isInt,
+        hx, safeT_holds, denote_intOf]
+    rename_i n
+    by_cases hn : n.natAbs < 2 ^ 53 <;> simp [hn]
+  · have : safeInteger? (b.conc M recs) = none := by
+      revert hn; cases b.conc M recs with
+      | json j => cases j <;> simp [NonScalar, safeInteger?]
+      | _ => simp [NonScalar, safeInteger?]
+    rw [this]; simp [holds_or, h]
+
+theorem sum_visits (M : Model) (recs : Records) : ∀ (visits : List Visit) (a : Int),
+    match ((visits.filter (·.1.holds M)).map (·.2.2.1.conc M recs)).mapM safeInteger? with
+    | none => (sumIn visits).2.holds M = true
+    | some ints => (sumIn visits).2.holds M = false ∧ ints.foldl (· + ·) a = a + ((sumIn visits).1.denote M).toInt
+  | [], a => by simp [sumIn, holds_ff, intLit, Term.denote, Lit.toInt]
+  | (g, v, b, e) :: visits, a => by
+    by_cases hg : g.holds M
+    · simp only [List.filter_cons, hg, ite_true, List.map_cons, List.mapM_cons, safeInteger_conc]
+      by_cases hb : (Term.or b.scalarOf.2 (.not (.and (.isInt b.scalarOf.1) (safeT (.intOf b.scalarOf.1))))).holds M
+      · simp only [hb, ite_true]
+        simp [sumIn, holds_or, holds_and, hg, hb]
+      · simp only [hb, Bool.false_eq_true, ite_false]
+        have ih := sum_visits M recs visits (a + ((Term.intOf b.scalarOf.1).denote M).toInt)
+        revert ih
+        cases hm : ((visits.filter (·.1.holds M)).map (·.2.2.1.conc M recs)).mapM safeInteger? with
+        | none => intro ih; simp [sumIn, holds_or, holds_and, hg, ih]
+        | some ints =>
+          intro ih
+          obtain ⟨h1, h2⟩ := ih
+          refine ⟨by simp only [sumIn, holds_or, holds_and, hg, h1] at hb ⊢; simpa using hb, ?_⟩
+          simp only [List.foldl_cons, h2, sumIn, Term.denote, Lit.toInt, Term.holds] at *
+          simp only [hg, ite_true]
+          omega
+    · simp only [List.filter_cons, hg, Bool.false_eq_true, ite_false]
+      have ih := sum_visits M recs visits a
+      revert ih
+      cases ((visits.filter (·.1.holds M)).map (·.2.2.1.conc M recs)).mapM safeInteger? with
+      | none => intro ih; simp [sumIn, holds_or, holds_and, hg, ih]
+      | some ints =>
+        intro ih
+        obtain ⟨h1, h2⟩ := ih
+        refine ⟨by simp [sumIn, holds_or, holds_and, hg, h1], ?_⟩
+        rw [h2]
+        simp only [Term.holds] at hg
+        simp [sumIn, Term.denote, hg, intLit, Lit.toInt]
+
+/-- A key that a min or max is building: none before the first value, else the least key so far and its value. -/
+def accStep (lt : Int × Nat → Int × Nat → Bool) (acc : Option (Val × (Int × Nat))) (k : Val × (Int × Nat)) :
+    Option (Val × (Int × Nat)) :=
+  some (match acc with
+    | none => k
+    | some m => if lt k.2 m.2 then k else m)
+
+theorem foldl_accStep (lt : Int × Nat → Int × Nat → Bool) : ∀ (ks : List (Val × (Int × Nat))) (k : Val × (Int × Nat)),
+    ks.foldl (accStep lt) (some k) = some (ks.foldl (fun m k => if lt k.2 m.2 then k else m) k)
+  | [], _ => rfl
+  | k' :: ks, k => by simp only [List.foldl_cons, accStep]; exact foldl_accStep lt ks _
+
+theorem least_eq (lt : Int × Nat → Int × Nat → Bool) (l : List (Val × (Int × Nat))) :
+    least lt l = ((l.foldl (accStep lt) none).map (·.1)).getD .undef := by
+  cases l with
+  | nil => rfl
+  | cons k ks => simp only [least, List.foldl_cons, accStep, foldl_accStep]; rfl
+
+/-- That a min's or max's terms `found` and `m` stand for the key `acc` so far. -/
+def LeastRel (M : Model) (acc : Option (Val × (Int × Nat))) (found m : Term) : Prop :=
+  match acc with
+  | none => found.holds M = false ∧ (m.denote M).toScalar = .undef
+  | some (kv, kk) => found.holds M = true ∧ ∃ n, (m.denote M).toScalar = .int n ∧ kv = .json (.num ⟨n, 0⟩) ∧ kk = (n, 0)
+
+theorem leastIn_conc (M : Model) (recs : Records) (lt : Term → Term → Term) (plt : Int × Nat → Int × Nat → Bool)
+    (hlt : ∀ a b : Term, ∀ x y : Int, (Term.intOf a).denote M = .int x → (Term.intOf b).denote M = .int y →
+      (lt a b).holds M = plt (x, 0) (y, 0)) :
+    ∀ (visits : List Visit) (acc : Option (Val × (Int × Nat))) (found m : Term),
+      (keysBad visits).holds M = false → LeastRel M acc found m →
+      ((leastIn lt found m visits).denote M).toScalar.toVal =
+        ((((visits.filter (·.1.holds M)).map fun q =>
+          (q.2.2.1.conc M recs, (((Term.intOf q.2.2.1.scalarOf.1).denote M).toInt, 0))).foldl (accStep plt) acc).map
+          (·.1)).getD .undef
+  | [], acc, found, m, _, hr => by
+    simp only [leastIn, List.filter_nil, List.map_nil, List.foldl_nil]
+    cases acc with
+    | none => obtain ⟨_, hm⟩ := hr; simp [hm, Scalar.toVal, Scalar.toValue?, Val.ofOption]
+    | some a =>
+      obtain ⟨kv, kk⟩ := a
+      obtain ⟨_, n, hm, rfl, rfl⟩ := hr
+      simp [hm, Scalar.toVal, Scalar.toValue?, Val.ofOption]
+  | (g, v, b, e) :: visits, acc, found, m, hbad, hr => by
+    simp only [keysBad, List.map_cons, disj_cons, holds_or, Bool.or_eq_false_iff] at hbad
+    obtain ⟨hb, hrest⟩ := hbad
+    simp only [leastIn]
+    by_cases hg : g.holds M
+    · simp only [holds_and, hg, Bool.true_and, holds_or, holds_not, Bool.or_eq_false_iff, Bool.not_eq_false'] at hb
+      obtain ⟨hs, hi⟩ := hb
+      rcases scalar_cases M recs b with ⟨_, hc⟩ | ⟨h, _⟩
+      · rw [holds_isInt] at hi
+        cases hx : (b.scalarOf.1.denote M).toScalar with
+        | undef | null | bool _ | str _ => simp [hx] at hi
+        | int n =>
+        have hk : (Term.intOf b.scalarOf.1).denote M = .int n := by simp [Term.denote, hx]
+        simp only [List.filter_cons, hg, ite_true, List.map_cons, List.foldl_cons]
+        refine leastIn_conc M recs lt plt hlt visits _ _ _ (by simpa [keysBad] using hrest) ?_
+        rw [hc, hx]
+        simp only [hk, Lit.toInt]
+        have hv : Scalar.toVal (.int n) = .json (.num ⟨n, 0⟩) := rfl
+        cases acc with
+        | none =>
+          obtain ⟨hf, _⟩ := hr
+          refine ⟨by simp [holds_or, hg], n, ?_, hv, rfl⟩
+          rw [denote_ite]
+          simp [holds_and, holds_or, holds_not, hg, hf, hx]
+        | some a =>
+          obtain ⟨kv, kk⟩ := a
+          obtain ⟨hf, mn, hm, rfl, rfl⟩ := hr
+          have hmk : (Term.intOf m).denote M = .int mn := by simp [Term.denote, hm]
+          have hl := hlt b.scalarOf.1 m n mn hk hmk
+          simp only [LeastRel, accStep]
+          by_cases hc' : plt (n, 0) (mn, 0)
+          · simp only [hc', ite_true]
+            refine ⟨by simp [holds_or, hf], n, ?_, hv, rfl⟩
+            rw [denote_ite]
+            simp [holds_and, holds_or, holds_not, hg, hf, hl, hc', hx]
+          · simp only [hc', Bool.false_eq_true, ite_false]
+            refine ⟨by simp [holds_or, hf], mn, ?_, rfl, rfl⟩
+            rw [denote_ite]
+            simp [holds_and, holds_or, holds_not, hg, hf, hl, hc', hm]
+      · simp [h] at hs
+    · simp only [List.filter_cons, hg, Bool.false_eq_true, ite_false]
+      refine leastIn_conc M recs lt plt hlt visits acc _ _ (by simpa [keysBad] using hrest) ?_
+      cases acc with
+      | none =>
+        obtain ⟨hf, hm⟩ := hr
+        exact ⟨by simp [holds_or, hf, hg], by rw [denote_ite]; simp [holds_and, hg, hm]⟩
+      | some a =>
+        obtain ⟨kv, kk⟩ := a
+        obtain ⟨hf, n, hm, h1, h2⟩ := hr
+        exact ⟨by simp [holds_or, hf], n, by rw [denote_ite]; simp [holds_and, hg, hm], h1, h2⟩
+
+theorem keyOf_conc (M : Model) (recs : Records) (b : SVal) :
+    Ir.keyOf .number (b.conc M recs) =
+      if (Term.or b.scalarOf.2 (.not (.isInt b.scalarOf.1))).holds M then thrown
+      else pure (((Term.intOf b.scalarOf.1).denote M).toInt, 0) := by
+  rcases scalar_cases M recs b with ⟨h, hc⟩ | ⟨h, hn⟩
+  · rw [hc]
+    cases hx : (b.scalarOf.1.denote M).toScalar <;>
+      simp [Ir.keyOf, toVal_ordinal, holds_or, holds_not, h, holds_isInt, hx, denote_intOf]
+  · simp [Ir.keyOf, nonScalar_ordinal .number hn, holds_or, h]
+
+theorem disj_split (M : Model) (B : Visit → Term) : ∀ visits : List Visit,
+    (disj (visits.map fun q => .and q.1 (.or q.2.2.2 (B q)))).holds M =
+      ((thrownIn visits).holds M || (disj (visits.map fun q => .and q.1 (B q))).holds M)
+  | [] => rfl
+  | q :: visits => by
+    have ih := disj_split M B visits
+    simp only [thrownIn] at ih ⊢
+    rw [List.map_cons, List.map_cons, List.map_cons, disj_cons, disj_cons, disj_cons, holds_or, holds_or, holds_or, ih]
+    simp only [holds_and, holds_or]
+    cases q.1.holds M <;> cases q.2.2.2.holds M <;> cases (B q).holds M <;> simp
 
 /-- The environment that `env` is under `M`, with the field names `fields`, which no encoded operation reads. -/
 def concEnv (M : Model) (env : SEnv) (fields : String → List String) : Env :=
@@ -1105,7 +1597,30 @@ mutual
       rw [hxs, hys]
       simp only [SVal.conc, elements, run_pure, run_bind]
       exact ⟨by simp [holds_or, h1, h2], by simp [SVal.conc, concAll_append]⟩
-    · contradiction
+    · split at h
+      case h_2 => contradiction
+      rename_i xs ys hxs hys
+      cases h
+      simp only [eval]
+      refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars a ra hra) (fun h1 _ => by simp [Agrees, holds_or, h1]) ?_ s
+      intro s1 h1
+      refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars b rb hrb)
+        (fun h2 e => by simp [Agrees, holds_or, h2]) ?_ s1
+      intro s2 h2
+      rw [run_bind]
+      rcases hr : run (elements (ra.1.conc M (env.records.conc M))) s2 with ⟨y, s3⟩
+      have he := items_elements M env.records s2 ra.1 xs hxs
+      rw [hr] at he
+      obtain rfl : y = _ := he
+      try rw [hr]
+      dsimp only
+      rw [run_bind]
+      rcases hr2 : run (elements (rb.1.conc M (env.records.conc M))) s3 with ⟨z, s4⟩
+      have he2 := items_elements M env.records s3 rb.1 ys hys
+      rw [hr2] at he2
+      obtain rfl : z = _ := he2
+      try rw [hr2]
+      exact ⟨by simp [holds_or, h1, h2], by simp [SVal.conc, concItems_append]⟩
   | vars, .includes a b, r, h, s => by
     simp only [seval, bind, Except.bind] at h
     split at h
@@ -1160,10 +1675,362 @@ mutual
     refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars a ra hra) (fun h1 _ => by simp [Agrees, h1]) ?_ s
     intro s1 h1
     exact ⟨h1, by simp [SVal.conc]⟩
-  | vars, .filter .., r, h, s | vars, .some .., r, h, s | vars, .every .., r, h, s | vars, .map .., r, h, s
-  | vars, .sum .., r, h, s | vars, .min .., r, h, s | vars, .max .., r, h, s | vars, .only _, r, h, s
+  | vars, .filter _ c x body, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i rc hrc
+    split at h
+    case h_2 => contradiction
+    rename_i items hitems
+    split at h
+    · contradiction
+    rename_i visits hvisits
+    cases h
+    obtain ⟨hL, hb⟩ := visits_ok env vars x body _ (fun i q hq => by
+      split at hq
+      · contradiction
+      · rename_i v hv; cases hq; exact ⟨rfl, rfl, hv⟩) items visits hvisits
+    simp only [eval]
+    refine visits_op (hx := seval_agrees M env fields vars c rc hrc) (hi := hitems)
+      (L := visited visits) (φ := fun q => (q.2.1.conc M (env.records.conc M), q.2.2.1.truthy.holds M))
+      (by simp [visited, List.map_map, Function.comp_def, ← hL]) ?_ ?_ ?_ s
+    · intro q hq _ s1
+      simp only [List.mem_map] at hq
+      obtain ⟨q, hq, rfl⟩ := hq
+      have := yields_pure (fun w => (q.2.1.conc M (env.records.conc M), truthy w))
+        (seval_agrees M env fields ((x, q.2.1) :: vars) body q.2.2 (hb q hq)) s1
+      rw [truthy_conc M (env.records.conc M)]
+      exact this
+    · intro he
+      rw [← thrownIn_eq visits] at he
+      simp only [holds_or]
+      rcases he with he | he <;> simp [he]
+    · intro h1 h2 s1
+      rw [← thrownIn_eq visits] at h2
+      simp only [run_pure, List.filter_map, Function.comp_def, List.map_map]
+      refine ⟨by simp [holds_or, h1, h2], ?_⟩
+      simp only [SVal.conc]
+      rw [← filter_kept]
+  | vars, .map _ c x body, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i rc hrc
+    split at h
+    case h_2 => contradiction
+    rename_i items hitems
+    split at h
+    · contradiction
+    rename_i visits hvisits
+    cases h
+    obtain ⟨hL, hb⟩ := visits_ok env vars x body _ (fun i q hq => by
+      split at hq
+      · contradiction
+      · rename_i v hv; cases hq; exact ⟨rfl, rfl, hv⟩) items visits hvisits
+    simp only [eval]
+    refine visits_op (hx := seval_agrees M env fields vars c rc hrc) (hi := hitems)
+      (L := visited visits) (φ := fun q => q.2.2.1.conc M (env.records.conc M))
+      (by simp [visited, List.map_map, Function.comp_def, ← hL]) ?_ ?_ ?_ s
+    · intro q hq _ s1
+      simp only [visited, List.mem_map] at hq
+      obtain ⟨q, hq, rfl⟩ := hq
+      exact yields_of_agrees (seval_agrees M env fields ((x, q.2.1) :: vars) body q.2.2 (hb q hq) s1)
+    · intro he
+      rw [← thrownIn_eq visits] at he
+      simp only [holds_or]
+      rcases he with he | he <;> simp [he]
+    · intro h1 h2 s1
+      rw [← thrownIn_eq visits] at h2
+      refine ⟨by simp [holds_or, h1, h2], ?_⟩
+      simp only [SVal.conc, visited, List.filter_map, Function.comp_def, List.map_map, ← map_visits]
+  | vars, .some .bag c x body, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i rc hrc
+    split at h
+    case h_2 => contradiction
+    rename_i items hitems
+    split at h
+    · contradiction
+    rename_i visits hvisits
+    cases h
+    obtain ⟨hL, hb⟩ := visits_ok env vars x body _ (fun i q hq => by
+      split at hq
+      · contradiction
+      · rename_i v hv; cases hq; exact ⟨rfl, rfl, hv⟩) items visits hvisits
+    simp only [eval]
+    refine visits_op (hx := seval_agrees M env fields vars c rc hrc) (hi := hitems)
+      (L := visited visits) (φ := fun q => q.2.2.1.conc M (env.records.conc M))
+      (by simp [visited, List.map_map, Function.comp_def, ← hL]) ?_ ?_ ?_ s
+    · intro q hq _ s1
+      simp only [visited, List.mem_map] at hq
+      obtain ⟨q, hq, rfl⟩ := hq
+      exact yields_of_agrees (seval_agrees M env fields ((x, q.2.1) :: vars) body q.2.2 (hb q hq) s1)
+    · intro he
+      rw [← thrownIn_eq visits] at he
+      simp only [holds_or]
+      rcases he with he | he <;> simp [he]
+    · intro h1 h2 s1
+      rw [← thrownIn_eq visits] at h2
+      refine ⟨by simp [holds_or, h1, h2], ?_⟩
+      rw [conc_mkBool, ← any_visits M (env.records.conc M) (·.same trueT) (same · (.json (.bool true)))
+        (fun b => by rw [same_conc M (env.records.conc M)]; rfl)]
+      simp [visited, List.filter_map, Function.comp_def]
+  | vars, .every .bag c x body, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i rc hrc
+    split at h
+    case h_2 => contradiction
+    rename_i items hitems
+    split at h
+    · contradiction
+    rename_i visits hvisits
+    cases h
+    obtain ⟨hL, hb⟩ := visits_ok env vars x body _ (fun i q hq => by
+      split at hq
+      · contradiction
+      · rename_i v hv; cases hq; exact ⟨rfl, rfl, hv⟩) items visits hvisits
+    simp only [eval]
+    refine visits_op (hx := seval_agrees M env fields vars c rc hrc) (hi := hitems)
+      (L := visited visits) (φ := fun q => q.2.2.1.conc M (env.records.conc M))
+      (by simp [visited, List.map_map, Function.comp_def, ← hL]) ?_ ?_ ?_ s
+    · intro q hq _ s1
+      simp only [visited, List.mem_map] at hq
+      obtain ⟨q, hq, rfl⟩ := hq
+      exact yields_of_agrees (seval_agrees M env fields ((x, q.2.1) :: vars) body q.2.2 (hb q hq) s1)
+    · intro he
+      rw [← thrownIn_eq visits] at he
+      simp only [holds_or]
+      rcases he with he | he <;> simp [he]
+    · intro h1 h2 s1
+      rw [← thrownIn_eq visits] at h2
+      refine ⟨by simp [holds_or, h1, h2], ?_⟩
+      rw [conc_mkBool, holds_not, ← any_visits M (env.records.conc M) (·.same falseT) (same · (.json (.bool false)))
+        (fun b => by rw [same_conc M (env.records.conc M)]; rfl)]
+      simp [visited, List.filter_map, Function.comp_def]
+  | vars, .some .array .., r, h, s | vars, .every .array .., r, h, s
+  | vars, .min .date .., r, h, s | vars, .max .date .., r, h, s
   | vars, .sortedBy .., r, h, s | vars, .format _, r, h, s | vars, .decimal .., r, h, s | vars, .addDays .., r, h, s
   | vars, .createKey _, r, h, s => by simp [seval] at h
+  | vars, .sum c x body, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i rc hrc
+    split at h
+    case h_2 => contradiction
+    rename_i items hitems
+    split at h
+    · contradiction
+    rename_i visits hvisits
+    cases h
+    obtain ⟨hL, hb⟩ := visits_ok env vars x body _ (fun i q hq => by
+      split at hq
+      · contradiction
+      · rename_i v hv; cases hq; exact ⟨rfl, rfl, hv⟩) items visits hvisits
+    simp only [eval]
+    refine visits_op (hx := seval_agrees M env fields vars c rc hrc) (hi := hitems)
+      (L := visited visits) (φ := fun q => q.2.2.1.conc M (env.records.conc M))
+      (by simp [visited, List.map_map, Function.comp_def, ← hL]) ?_ ?_ ?_ s
+    · intro q hq _ s1
+      simp only [visited, List.mem_map] at hq
+      obtain ⟨q, hq, rfl⟩ := hq
+      exact yields_of_agrees (seval_agrees M env fields ((x, q.2.1) :: vars) body q.2.2 (hb q hq) s1)
+    · intro he
+      rw [← thrownIn_eq visits] at he
+      simp only [holds_or]
+      rcases he with he | he <;> simp [he]
+    · intro h1 h2 s1
+      rw [← thrownIn_eq visits] at h2
+      have hns : ((visited visits).filter (·.1.holds M)).map (fun q => q.2.2.2.2.2.1.conc M (env.records.conc M)) =
+          (visits.filter (·.1.holds M)).map (·.2.2.1.conc M (env.records.conc M)) := by
+        simp [visited, List.filter_map, Function.comp_def]
+      rw [hns]
+      have hs := sum_visits M (env.records.conc M) visits 0
+      revert hs
+      cases hm : ((visits.filter (·.1.holds M)).map (·.2.2.1.conc M (env.records.conc M))).mapM safeInteger? with
+      | none =>
+        intro hs
+        simp only at hs
+        show (Term.or _ _).holds M = true
+        simp [holds_or, hs]
+      | some ints =>
+        intro hs
+        obtain ⟨hb1, hb2⟩ := hs
+        dsimp only
+        rw [hb2, Int.zero_add]
+        by_cases ht : (((sumIn visits).1).denote M).toInt.natAbs < 2 ^ 53
+        · simp only [ht, ite_true, run_pure]
+          refine ⟨by simp [holds_or, holds_not, h1, h2, hb1, safeT_holds, ht], ?_⟩
+          simp [conc_mkInt, Lean.JsonNumber.fromInt]
+        · simp only [ht, ite_false]
+          show (Term.or _ _).holds M = true
+          simp [holds_or, holds_not, safeT_holds, ht]
+  | vars, .min .number c x body, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i rc hrc
+    split at h
+    case h_2 => contradiction
+    rename_i items hitems
+    split at h
+    · contradiction
+    rename_i visits hvisits
+    cases h
+    obtain ⟨hL, hb⟩ := visits_ok env vars x body _ (fun i q hq => by
+      split at hq
+      · contradiction
+      · rename_i v hv; cases hq; exact ⟨rfl, rfl, hv⟩) items visits hvisits
+    simp only [eval]
+    refine visits_op (hx := seval_agrees M env fields vars c rc hrc) (hi := hitems)
+      (L := visits.map fun q => (q.1, q.2.1, .or q.2.2.2 (.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))), q))
+      (φ := fun q => (q.2.2.1.conc M (env.records.conc M), (((Term.intOf q.2.2.1.scalarOf.1).denote M).toInt, 0)))
+      (by simp [List.map_map, Function.comp_def, ← hL]) ?_ ?_ ?_ s
+    · intro q hq _ s1
+      simp only [List.mem_map] at hq
+      obtain ⟨q, hq, rfl⟩ := hq
+      have hb' : Agrees M (env.records.conc M) q.2.2 (run (eval (concEnv M env fields)
+          ((x, q.2.1.conc M (env.records.conc M)) :: concVars M (env.records.conc M) vars) body) s1).1 :=
+        seval_agrees M env fields ((x, q.2.1) :: vars) body q.2.2 (hb q hq) s1
+      rw [run_bind]
+      rcases hr : run (eval (concEnv M env fields)
+          ((x, q.2.1.conc M (env.records.conc M)) :: concVars M (env.records.conc M) vars) body) s1 with ⟨y, s2⟩
+      rw [hr] at hb'
+      try rw [hr]
+      cases y with
+      | error =>
+        have he : q.2.2.2.holds M = true := hb'
+        simp only [Yields]; simp [holds_or, he]
+      | ok w =>
+        obtain ⟨he, rfl⟩ := hb'
+        dsimp only
+        rw [run_bind, keyOf_conc]
+        by_cases hk : (Term.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))).holds M
+        · simp only [hk, ite_true, run_thrown, Yields]; simp [holds_or, hk]
+        · simp only [hk, Bool.false_eq_true, ite_false, run_pure, Yields]
+          refine ⟨?_, ?_⟩ <;> simp_all [holds_or]
+    · intro he
+      rw [List.map_map] at he
+      simp only [Function.comp_def] at he
+      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1)))] at he
+      simp only [holds_or, keysBad]
+      rcases he with he | he <;> simp_all
+    · intro h1 h2 s1
+      rw [List.map_map] at h2
+      simp only [Function.comp_def] at h2
+      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1)))] at h2
+      simp only [Bool.or_eq_false_iff] at h2
+      obtain ⟨h2, h3⟩ := h2
+      simp only [run_pure]
+      refine ⟨by simp [holds_or, keysBad, h1, h2, h3], ?_⟩
+      rw [least_eq, conc_scalar, leastIn_conc M (env.records.conc M) _ keyLt ?_ visits none ff undefT
+        (by simpa [keysBad] using h3) ⟨holds_ff M, rfl⟩]
+      · simp [List.filter_map, Function.comp_def]
+      · intro a b x y ha hb
+        simp only [Term.denote, Lit.int.injEq] at ha hb
+        simp [keyLt, Term.holds, Term.denote, Lit.toBool, Lit.toInt, ha, hb]
+  | vars, .max .number c x body, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i rc hrc
+    split at h
+    case h_2 => contradiction
+    rename_i items hitems
+    split at h
+    · contradiction
+    rename_i visits hvisits
+    cases h
+    obtain ⟨hL, hb⟩ := visits_ok env vars x body _ (fun i q hq => by
+      split at hq
+      · contradiction
+      · rename_i v hv; cases hq; exact ⟨rfl, rfl, hv⟩) items visits hvisits
+    simp only [eval]
+    refine visits_op (hx := seval_agrees M env fields vars c rc hrc) (hi := hitems)
+      (L := visits.map fun q => (q.1, q.2.1, .or q.2.2.2 (.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))), q))
+      (φ := fun q => (q.2.2.1.conc M (env.records.conc M), (((Term.intOf q.2.2.1.scalarOf.1).denote M).toInt, 0)))
+      (by simp [List.map_map, Function.comp_def, ← hL]) ?_ ?_ ?_ s
+    · intro q hq _ s1
+      simp only [List.mem_map] at hq
+      obtain ⟨q, hq, rfl⟩ := hq
+      have hb' : Agrees M (env.records.conc M) q.2.2 (run (eval (concEnv M env fields)
+          ((x, q.2.1.conc M (env.records.conc M)) :: concVars M (env.records.conc M) vars) body) s1).1 :=
+        seval_agrees M env fields ((x, q.2.1) :: vars) body q.2.2 (hb q hq) s1
+      rw [run_bind]
+      rcases hr : run (eval (concEnv M env fields)
+          ((x, q.2.1.conc M (env.records.conc M)) :: concVars M (env.records.conc M) vars) body) s1 with ⟨y, s2⟩
+      rw [hr] at hb'
+      try rw [hr]
+      cases y with
+      | error =>
+        have he : q.2.2.2.holds M = true := hb'
+        simp only [Yields]; simp [holds_or, he]
+      | ok w =>
+        obtain ⟨he, rfl⟩ := hb'
+        dsimp only
+        rw [run_bind, keyOf_conc]
+        by_cases hk : (Term.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))).holds M
+        · simp only [hk, ite_true, run_thrown, Yields]; simp [holds_or, hk]
+        · simp only [hk, Bool.false_eq_true, ite_false, run_pure, Yields]
+          refine ⟨?_, ?_⟩ <;> simp_all [holds_or]
+    · intro he
+      rw [List.map_map] at he
+      simp only [Function.comp_def] at he
+      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1)))] at he
+      simp only [holds_or, keysBad]
+      rcases he with he | he <;> simp_all
+    · intro h1 h2 s1
+      rw [List.map_map] at h2
+      simp only [Function.comp_def] at h2
+      rw [disj_split M (fun q => .or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1)))] at h2
+      simp only [Bool.or_eq_false_iff] at h2
+      obtain ⟨h2, h3⟩ := h2
+      simp only [run_pure]
+      refine ⟨by simp [holds_or, keysBad, h1, h2, h3], ?_⟩
+      rw [least_eq, conc_scalar, leastIn_conc M (env.records.conc M) _ (fun a b => keyLt b a) ?_ visits none ff undefT
+        (by simpa [keysBad] using h3) ⟨holds_ff M, rfl⟩]
+      · simp [List.filter_map, Function.comp_def]
+      · intro a b x y ha hb
+        simp only [Term.denote, Lit.int.injEq] at ha hb
+        simp [keyLt, Term.holds, Term.denote, Lit.toBool, Lit.toInt, ha, hb]
+  | vars, .only c, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i rc hrc
+    split at h
+    case h_2 => contradiction
+    rename_i items hitems
+    cases h
+    simp only [eval]
+    refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars c rc hrc)
+      (fun h1 _ => by simp [Agrees, holds_or, h1]) ?_ s
+    intro s1 h1
+    rw [run_bind]
+    rcases hr : run (elements (rc.1.conc M (env.records.conc M))) s1 with ⟨y, s2⟩
+    have he := items_elements M env.records s1 rc.1 items hitems
+    rw [hr] at he
+    obtain rfl : y = _ := he
+    try rw [hr]
+    dsimp only
+    have h2 := twoIn_holds M (env.records.conc M) items
+    have h3 := firstIn_conc M (env.records.conc M) items
+    revert h2 h3
+    cases SVal.concItems M (env.records.conc M) items with
+    | nil => intro h2 h3; exact ⟨by simp [holds_or, h1, h2], by simp [h3]⟩
+    | cons v l =>
+      cases l with
+      | nil => intro h2 h3; exact ⟨by simp [holds_or, h1, h2], by simp [h3]⟩
+      | cons w l =>
+        intro h2 _
+        show (Term.or rc.2 (twoIn items)).holds M = true
+        simp [holds_or, h2]
+
 
 theorem sevalAll_agrees (M : Model) (env : SEnv) (fields : String → List String) (vars : List (String × SVal)) :
     ∀ (es : List Expr) (r : List SVal × Term), sevalAll env vars es = .ok r → ∀ s,

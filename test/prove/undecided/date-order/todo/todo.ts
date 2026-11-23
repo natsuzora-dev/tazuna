@@ -1,0 +1,24 @@
+import { date, emit, entity, service } from "@natsuzora-dev/tazuna";
+import { z } from "zod";
+
+export const Task = entity({
+  description: "A task",
+  fields: { id: z.string(), startsOn: date, endsOn: date },
+  key: "id",
+  invariants: { endsAfterStart: ({ record }) => record.endsOn >= record.startsOn },
+});
+
+export const { command, createEvent, bounds } = service({
+  name: "todo",
+  description: "Keep the tasks",
+  entities: { Task },
+});
+
+export const taskAdded = createEvent({ entity: Task });
+
+export const addTask = command({
+  input: { taskId: Task.fields.id, startsOn: date },
+  emits: [taskAdded],
+}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, startsOn: input.startsOn, endsOn: input.startsOn })]);
+
+export const todoBounds = bounds({ creates: { Task: 2 } });

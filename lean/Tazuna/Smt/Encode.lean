@@ -63,6 +63,11 @@ inductive SVal where
   | table (entity : String)
   | obj (fields : List (String × SVal))
   | list (values : List SVal)
+  /--
+  A collection that an operation on a Bag made: each value with the term that holds when the value is in it, in the
+  order that the operation visits them.
+  -/
+  | bag (items : List (Term × SVal))
   | emit (event : Spec.Ref) (payload : SVal)
   | ite (c : Term) (a b : SVal)
 deriving Repr, Inhabited
@@ -78,6 +83,7 @@ def SVal.conc (M : Model) (records : Records) : SVal → Val
   | .table e => .table records e
   | .obj fields => .obj (SVal.concFields M records fields)
   | .list vs => .list (SVal.concAll M records vs)
+  | .bag items => .list (SVal.concItems M records items)
   | .emit event payload => .emit event (payload.conc M records)
   | .ite c a b => if c.holds M then a.conc M records else b.conc M records
 
@@ -88,6 +94,12 @@ def SVal.concAll (M : Model) (records : Records) : List SVal → List Val
 def SVal.concFields (M : Model) (records : Records) : List (String × SVal) → List (String × Val)
   | [] => []
   | (n, v) :: fs => (n, v.conc M records) :: SVal.concFields M records fs
+
+/-- The values of the items whose terms hold under `M`, in order. -/
+def SVal.concItems (M : Model) (records : Records) : List (Term × SVal) → List Val
+  | [] => []
+  | (g, v) :: items => if g.holds M then v.conc M records :: SVal.concItems M records items
+    else SVal.concItems M records items
 
 end
 
@@ -146,6 +158,11 @@ def rowField (key : Term) (name : String) : List Slot → Term
   | [] => undefT
   | s :: ss => .ite (.and s.live (.eq (.mkStr s.key) (.mkStr key))) (jsonField name s.fields) (rowField key name ss)
 
+/-- The number of items whose terms hold. -/
+def countIn : List (Term × SVal) → Term
+  | [] => intLit 0
+  | (g, _) :: items => .add (.ite g (intLit 1) (intLit 0)) (countIn items)
+
 /-- The number of live slots. -/
 def liveCount : List Slot → Term
   | [] => intLit 0
@@ -177,16 +194,76 @@ def SVal.lookup (r : SRecords) (key : SVal) : SVal → SVal × Term
 def SVal.size (r : SRecords) : SVal → SVal × Term
   | .table e => (.scalar (.mkInt (liveCount (r.slotsOf e))), ff)
   | .list vs => (.scalar (.mkInt (intLit vs.length)), ff)
+  | .bag items => (.scalar (.mkInt (countIn items)), ff)
   | .ite c a b => (.ite c (a.size r).1 (b.size r).1, .ite c (a.size r).2 (b.size r).2)
   | _ => (.scalar undefT, tt)
 
 /-- `array.includes(value)` and the term that holds when it throws. A table's records are never `===` to a value. -/
 def SVal.includes (value : SVal) : SVal → Term × Term
   | .list vs => (disj (vs.map (·.same value)), ff)
+  | .bag items => (disj (items.map fun (g, v) => .and g (v.same value)), ff)
   | .table _ => (ff, ff)
   | .ite c a b =>
     (.ite c (SVal.includes value a).1 (SVal.includes value b).1, .ite c (SVal.includes value a).2 (SVal.includes value b).2)
   | _ => (ff, tt)
+
+/--
+The values that an operation visits in a collection, each with the term that holds when it is there, in visit order: a
+table's records in slot order, which is the order that `SRecords.conc` holds them in. None for what may be no collection.
+-/
+def SVal.items (r : SRecords) : SVal → Option (List (Term × SVal))
+  | .list vs => some (vs.map (tt, ·))
+  | .bag items => some items
+  | .table e => some ((r.slotsOf e).map fun s => (s.live, .row e s.key))
+  | .ite c a b => do
+    let xs ← a.items r
+    let ys ← b.items r
+    pure (xs.map (fun (g, v) => (.and c g, v)) ++ ys.map fun (g, v) => (.and (.not c) g, v))
+  | _ => none
+
+/-- An item of a callback method: the term that holds when the value is visited, the value, and the callback's result. -/
+abbrev Visit := Term × SVal × (SVal × Term)
+
+/-- The term that holds when the callback throws on a visited value. -/
+def thrownIn (visits : List Visit) : Term := disj (visits.map fun q => .and q.1 q.2.2.2)
+
+/-- A safe integer bound: `Number.isSafeInteger` takes integers whose magnitude is below `2 ^ 53`. -/
+def safeT (t : Term) : Term := .and (.lt (intLit (-(2 ^ 53))) t) (.lt t (intLit (2 ^ 53)))
+
+/-- The sum of the integers that the visited values give, and the term that holds when one is no safe integer. -/
+def sumIn : List Visit → Term × Term
+  | [] => (intLit 0, ff)
+  | (g, _, (b, _)) :: visits =>
+    let (x, bad) := b.scalarOf
+    let (total, rest) := sumIn visits
+    (.add (.ite g (.intOf x) (intLit 0)) total, .or (.and g (.or bad (.not (.and (.isInt x) (safeT (.intOf x)))))) rest)
+
+/--
+The least key of the visited values under `lt`, the first of equal ones, as `least` finds it: `found` holds once a value
+was visited, and `m` is the key so far, `undefined` before.
+-/
+def leastIn (lt : Term → Term → Term) : Term → Term → List Visit → Term
+  | _, m, [] => m
+  | found, m, (g, _, (b, _)) :: visits =>
+    let k := b.scalarOf.1
+    leastIn lt (.or found g) (.ite (.and g (.or (.not found) (lt k m))) k m) visits
+
+/-- The term that holds when a key of a visited value is no integer, which an integer min or max throws on. -/
+def keysBad (visits : List Visit) : Term :=
+  disj (visits.map fun q => .and q.1 (.or q.2.2.1.scalarOf.2 (.not (.isInt q.2.2.1.scalarOf.1))))
+
+/-- The first item whose term holds, `undefined` when none does. -/
+def firstIn : List (Term × SVal) → SVal
+  | [] => .scalar undefT
+  | (g, v) :: items => .ite g v (firstIn items)
+
+/-- The term that holds when the terms of two items hold. -/
+def twoIn : List (Term × SVal) → Term
+  | [] => ff
+  | (g, _) :: items => .or (.and g (disj (items.map (·.1)))) (twoIn items)
+
+def trueT : SVal := .scalar (.lit (.val (.bool true)))
+def falseT : SVal := .scalar (.lit (.val (.bool false)))
 
 def relT (r : Relation) (a b : Term) : Term :=
   match r with
@@ -319,7 +396,10 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
     let (vb, eb) ← seval env vars b
     match va, vb with
     | .list xs, .list ys => pure (.list (xs ++ ys), .or ea eb)
-    | _, _ => throw "a concat of other than two arrays"
+    | _, _ =>
+      match va.items env.records, vb.items env.records with
+      | some xs, some ys => pure (.bag (xs ++ ys), .or ea eb)
+      | _, _ => throw "a concat of what may be no collection"
   | .includes a v => do
     let (va, ea) ← seval env vars a
     let (vv, ev) ← seval env vars v
@@ -335,15 +415,54 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
   | .emit event payload => do
     let (v, e) ← seval env vars payload
     pure (.emit event v, e)
-  | .filter .. => throw "filter"
-  | .some .. => throw "some"
-  | .every .. => throw "every"
-  | .map .. => throw "map"
-  | .sum .. => throw "sum"
-  | .min .. => throw "min"
-  | .max .. => throw "max"
-  | .only .. => throw "only"
-  | .sortedBy .. => throw "sortedBy"
+  | .filter _ c x body => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "a filter of what may be no collection"
+    let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
+    pure (.bag (visits.map fun (g, v, b, _) => (.and g b.truthy, v)), .or ec (thrownIn visits))
+  | .some .bag c x body => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "a some of what may be no collection"
+    let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
+    pure (.scalar (.mkBool (disj (visits.map fun (g, _, b, _) => .and g (b.same trueT)))), .or ec (thrownIn visits))
+  | .every .bag c x body => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "an every of what may be no collection"
+    let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
+    pure (.scalar (.mkBool (.not (disj (visits.map fun (g, _, b, _) => .and g (b.same falseT))))),
+      .or ec (thrownIn visits))
+  | .some .array .. => throw "an array's some"
+  | .every .array .. => throw "an array's every"
+  | .map _ c x body => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "a map of what may be no collection"
+    let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
+    pure (.bag (visits.map fun (g, _, b, _) => (g, b)), .or ec (thrownIn visits))
+  | .sum c x body => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "a sum of what may be no collection"
+    let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
+    let (total, bad) := sumIn visits
+    pure (.scalar (.mkInt total), .or ec (.or (thrownIn visits) (.or bad (.not (safeT total)))))
+  | .min .number c x body => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "a min of what may be no collection"
+    let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
+    pure (.scalar (leastIn (fun k m => .lt (.intOf k) (.intOf m)) ff undefT visits),
+      .or ec (.or (thrownIn visits) (keysBad visits)))
+  | .max .number c x body => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "a max of what may be no collection"
+    let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
+    pure (.scalar (leastIn (fun k m => .lt (.intOf m) (.intOf k)) ff undefT visits),
+      .or ec (.or (thrownIn visits) (keysBad visits)))
+  | .min .date .. => throw "a min of dates"
+  | .max .date .. => throw "a max of dates"
+  | .only c => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "an only of what may be no collection"
+    pure (firstIn items, .or ec (twoIn items))
+  | .sortedBy .. => throw "sortedBy, whose groups the encoding does not hold"
   | .format .. => throw "a template literal"
   | .decimal .. => throw "decimal arithmetic"
   | .addDays .. => throw "addDays"
