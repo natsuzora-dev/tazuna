@@ -12,7 +12,7 @@ import { type Found, violationsAt } from "./lines.ts";
 
 export { type CheckedSpec, checkSpec, failureText, type SpecCheck } from "../check/spec.ts";
 export type { GivenRecord } from "../data/scenario.generated.ts";
-export { type Run, runFile } from "../data/traceFile.ts";
+export { type InputRun, type Run, runFile } from "../data/traceFile.ts";
 export {
   type Adapter,
   commandRequest,
@@ -25,7 +25,7 @@ export {
   Unsettled,
 } from "./adapter.ts";
 export { drive, type LogLine, lineIds } from "./harness.ts";
-export { snapshotRuns } from "./snapshot.ts";
+export { inputRuns, snapshotRuns } from "./snapshot.ts";
 
 /** A log's lines as the engine reads them: null for a blank line, "malformed" for one the line schema rejects. */
 const fileLines = (lines: readonly FileLine[]) =>

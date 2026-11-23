@@ -1,4 +1,4 @@
-import { relative } from "node:path";
+import { join, relative } from "node:path";
 import { ask } from "../cli/engine.ts";
 import { InternalError } from "../data/internalError.ts";
 import {
@@ -11,7 +11,7 @@ import {
 } from "../data/pairing.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { jsonLine } from "../data/trace.ts";
-import { parseSnapshotFile, type Run, snapshotFolder, snapshotPath } from "../data/traceFile.ts";
+import { type InputRun, parseSnapshotFile, type Run, snapshotFolder, snapshotPath } from "../data/traceFile.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import type { Spec } from "../load/load.ts";
 import { readSnapshotViolations, violationsAt } from "./lines.ts";
@@ -73,6 +73,20 @@ function withSnapshot(spec: Spec, runs: readonly Run[]): Run[] {
  */
 export const snapshotRuns = (spec: Spec): Run[] => withSnapshot(spec, possibleRuns(spec));
 
+/**
+ * Returns the run of each input that `tazuna generate` wrote to `folder`: each .jsonl file in the folder of a spec
+ * service. `drive` drives an implementation of that service through it.
+ */
+export function inputRuns(spec: Spec, folder: string): InputRun[] {
+  return spec.structure.services
+    .filter((s) => !s.external)
+    .flatMap(({ name }) =>
+      entriesOf(join(folder, name))
+        .filter((e) => e.kind === "file" && e.name.endsWith(".jsonl"))
+        .map((e) => ({ runner: name, input: e.name.slice(0, -".jsonl".length), path: join(folder, name, e.name) })),
+    );
+}
+
 export function snapshotViolations(spec: Spec, run: Run, lines: readonly TraceLine[]): ReportedViolation[] {
   const path = snapshotPath(spec, run);
   const file = relative(spec.root, path);
@@ -85,9 +99,12 @@ export function snapshotViolations(spec: Spec, run: Run, lines: readonly TraceLi
   return mismatch === undefined ? [] : violationsAt(file, [mismatch], scenarioOf(run));
 }
 
-/** Reads the lines of a run's snapshot. Throws when the snapshot is missing or has a line that is not a trace line. */
-export function readSnapshot(spec: Spec, run: Run): TraceLine[] {
-  const path = snapshotPath(spec, run);
+/**
+ * Reads the lines of a run's snapshot, or of an input's file. Throws when the file is missing or has a line that is not a
+ * trace line.
+ */
+export function readSnapshot(spec: Spec, run: Run | InputRun): TraceLine[] {
+  const path = "path" in run ? run.path : snapshotPath(spec, run);
   const { lines, malformed } = parseSnapshotFile(path);
   if (malformed.length > 0)
     throw new Error(

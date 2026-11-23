@@ -1,0 +1,2 @@
+{"time":0,"dir":"in","type":"query","id":"reminderSettings#1","name":"reminderSettings","input":{}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":true}}}

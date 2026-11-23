@@ -1,0 +1,11 @@
+{"time":26157,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"A","title":"A"}}
+{"time":26157,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":26157,"dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"A","title":"A","createdAt":26157,"completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
+{"time":26157,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"A"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
+{"time":26157,"dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"after":26157}}
+{"time":26158,"dir":"in","type":"command","id":"completeTask#1","name":"completeTask","input":{"taskId":"A"}}
+{"time":26158,"dir":"out","type":"answer","id":"answer#2","to":"completeTask#1","answer":{"result":"accepted"}}
+{"time":26158,"dir":"out","type":"event","id":"taskCompletedRecorded#1","name":"taskCompletedRecorded","payload":{"id":"A","completedAt":26158},"resultOf":"completeTask#1"}
+{"time":26158,"dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"A"},"resultOf":"completeTask#1","after":["taskCompletedRecorded#1"]}
+{"time":26158,"dir":"in","type":"command","id":"completeTask#2","name":"completeTask","input":{"taskId":"A"}}
+{"time":26158,"dir":"out","type":"answer","id":"answer#3","to":"completeTask#2","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"notCompleted"}}}

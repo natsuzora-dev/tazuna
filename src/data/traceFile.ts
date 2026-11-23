@@ -17,14 +17,28 @@ export interface Run {
   readonly runner: string;
 }
 
+/**
+ * A run that an input of `tazuna generate` records: the file at `path`, `<runner>/<input>.jsonl` in generate's output
+ * folder, made by the implementation of `runner` from the initial state.
+ */
+export interface InputRun {
+  readonly runner: string;
+  readonly input: string;
+  readonly path: string;
+}
+
 /** The name of a run's snapshot: the scenario's, or `<scenario>.<runner>` for a peer's run. */
 const runStem = (run: Run): string => (run.runner === run.service ? run.scenario : `${run.scenario}.${run.runner}`);
 
 /**
- * A path in a traces folder for the log of a run, in the folder of the run's runner: `<runner>/<service>/<scenario>.jsonl`.
+ * A path in a traces folder for the log of a run, in the folder of the run's runner: `<runner>/<service>/<scenario>.jsonl`,
+ * or `<runner>/inputs/<input>.jsonl` for an input of generate.
  * verify reads any file in the runner's folder as its log, whatever its name.
  */
-export const runFile = (run: Run): string => join(run.runner, run.service, `${run.scenario}.jsonl`);
+export const runFile = (run: Run | InputRun): string =>
+  "path" in run
+    ? join(run.runner, "inputs", `${run.input}.jsonl`)
+    : join(run.runner, run.service, `${run.scenario}.jsonl`);
 
 export const sameRun = (a: Run, b: Run): boolean =>
   a.service === b.service && a.scenario === b.scenario && a.runner === b.runner;

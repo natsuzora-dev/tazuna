@@ -9,6 +9,8 @@ import { readReminderSettings } from "./queries.server.ts";
 const calendarRequests = new Map<string, object>();
 
 export async function decideReminderTime(taskId: string): Promise<void> {
+  // The spec asks the calendar once per pending decision: clearing the due date while it asks asks no second time.
+  if (calendarRequests.has(taskId)) return;
   const request = {};
   calendarRequests.set(taskId, request);
   const result = await nextBusinessDay({ after: Date.now() });

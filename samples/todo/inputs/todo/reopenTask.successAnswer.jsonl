@@ -1,0 +1,13 @@
+{"time":13824,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"","title":"A"}}
+{"time":13824,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":13824,"dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"","title":"A","createdAt":13824,"completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
+{"time":13824,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":""},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
+{"time":13824,"dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"after":13824}}
+{"time":13825,"dir":"in","type":"command","id":"completeTask#1","name":"completeTask","input":{"taskId":""}}
+{"time":13825,"dir":"out","type":"answer","id":"answer#2","to":"completeTask#1","answer":{"result":"accepted"}}
+{"time":13825,"dir":"out","type":"event","id":"taskCompletedRecorded#1","name":"taskCompletedRecorded","payload":{"id":"","completedAt":13825},"resultOf":"completeTask#1"}
+{"time":13825,"dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":""},"resultOf":"completeTask#1","after":["taskCompletedRecorded#1"]}
+{"time":13825,"dir":"in","type":"command","id":"reopenTask#1","name":"reopenTask","input":{"taskId":""}}
+{"time":13825,"dir":"out","type":"answer","id":"answer#3","to":"reopenTask#1","answer":{"result":"accepted"}}
+{"time":13825,"dir":"out","type":"event","id":"taskReopenedRecorded#1","name":"taskReopenedRecorded","payload":{"id":"","completedAt":null,"remindAt":null},"resultOf":"reopenTask#1"}
+{"time":13825,"dir":"out","type":"event","id":"taskReopened#1","name":"taskReopened","payload":{"taskId":""},"resultOf":"reopenTask#1","after":["taskReopenedRecorded#1"]}

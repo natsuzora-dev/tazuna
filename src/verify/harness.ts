@@ -5,7 +5,7 @@ import { InternalError } from "../data/internalError.ts";
 import type { GivenRecord } from "../data/scenario.generated.ts";
 import { type TraceLine, traceLine } from "../data/trace.generated.ts";
 import type { Bindings, UntimedTraceLine } from "../data/trace.ts";
-import type { Run } from "../data/traceFile.ts";
+import type { InputRun, Run } from "../data/traceFile.ts";
 import { plain } from "../data/values.ts";
 import { traceName } from "../load/traceName.ts";
 import type { Adapter, ForeignRequest, OutputSlot, Outputs } from "./adapter.ts";
@@ -89,6 +89,7 @@ export type LogLine = StartLine | TraceLine;
 /**
  * Drives the implementation through the run as the simulation ran it, and returns the log at the implementation's
  * boundary: its start line, then its trace. The implementation starts at the scenario's start from the Given records,
+ * or, for an input of generate, from no records at the time of the input's first line,
  * then gets the snapshot's `in` lines one by one: before each, the harness waits until the implementation has settled
  * (Adapter.settled), and moves the clock to the line's time. A command, query or subscription does not hold the
  * harness: its answer is an output that the log gets when the implementation gives it, maybe after later inputs. A
@@ -98,11 +99,13 @@ export type LogLine = StartLine | TraceLine;
  * the log uncomparable, the harness gives no more lines. Comparing reads values by their schemas alone, so drive runs
  * no spec function, and verify's replay of the log is what checks it.
  */
-export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Promise<LogLine[]> {
+export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Adapter): Promise<LogLine[]> {
   const { runner } = run;
-  const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === run.scenario)?.definition
-    .scenario;
-  if (scenario === undefined) throw new InternalError(`no scenario ${run.service}.${run.scenario}`);
+  const scenario =
+    "path" in run
+      ? undefined
+      : spec.scenarios.find((s) => s.service === run.service && s.name === run.scenario)?.definition.scenario;
+  if (!("path" in run) && scenario === undefined) throw new InternalError(`no scenario ${run.service}.${run.scenario}`);
   const snapshot = readSnapshot(spec, run);
   const [read] = ask("readLines", [{ structure: spec.structure, service: runner, lines: snapshot }]);
   const readSnapshotLines = read?.lines ?? [];
@@ -175,8 +178,15 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
   const running = (work: Promise<void>) => void work.catch((error: unknown) => failures.push(error));
   const writeAnswer = (to: string, answer: unknown) =>
     write({ dir: "out", type: "answer", id: lineId("answer"), to, answer: plain(answer) } as UntimedTraceLine);
-  const [given] = ask("givenRecords", [{ structure: spec.structure, scenario, service: runner }]);
-  const start: StartLine = { type: "start", time: scenario.given.start, records: given?.records ?? [] };
+  // An input of generate starts from the initial state, no records, at the time of its first line.
+  const start: StartLine =
+    scenario === undefined
+      ? { type: "start", time: snapshot[0]?.time ?? 0, records: [] }
+      : {
+          type: "start",
+          time: scenario.given.start,
+          records: ask("givenRecords", [{ structure: spec.structure, scenario, service: runner }])[0]?.records ?? [],
+        };
   const comparedBefore = (k: number) => {
     const [compared] = ask("bindings", [
       { structure: spec.structure, service: runner, snapshot: snapshot.slice(0, k), trace: written() },
