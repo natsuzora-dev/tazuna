@@ -134,10 +134,12 @@ Some properties are undecided by design:
 - two deadlines of one service that can be due at the same time
 - two messages from other services that can arrive at once: events that the service receives, and answers to requests that it waits for, each with its requesting state active
 
+In that state, every waiting deadline falls due after the time of the orders, except the two deadlines of a tie.
 Each order runs each message to its end: the deadline's or event's transitions, the always transitions that follow, the own commands, the automations and machines that their events wake, and the activities of the states entered.
 `prove` follows at most 8 steps of each message.
 When a third own command can wait in the same round, the two may run after it, so `prove` takes as an automation's input any that it computes from any records within the bounds, and as an activity's input any that fits its schema.
-Two orders end the same when both halt, or when neither halts and both leave the same records and machine configurations and write the same out lines, in any order.
+Two orders end the same when both halt, or when neither halts and both leave the same service state and write the same out lines, in any order.
+The service state is all that a later message can read: the records, and each machine's active states, context, waiting deadlines with their times, and requests to other services that await an answer, with their inputs.
 When they differ, `prove` reports `ChoiceDependent` in its counterexample.
 `prove` does not compare yet the orders of the following pairs:
 
