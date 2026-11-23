@@ -220,30 +220,36 @@ def offerGoals (fs : Functions ReplayM) (st : Service) (s : Service.State) (i : 
       goals := goals ++ [conj [.not err, .not notSized, .not notScalar, .lt (intLit 0) (.intOf n)]]
   pure goals
 
-/-- One spec service's search. -/
+/-- One spec service's search, within bounds that give every keyed entity a creates bound. -/
 structure Search where
   spec : Ir.Structure
   st : Service
   creates : List (String × Nat)
-  /-- Why the service cannot grow, if it cannot: keyed entities without bounds(). -/
-  blocked : Option String
   depth : Nat
   /-- The commands and queries that a client sends. -/
   sendable : List String
   targets : List Uncovered
 
-def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Search := do
+/--
+A spec service's targets, with the search for them, or with why it has none: its bounds leave out a keyed entity, so a
+search would refuse every create of it, and no part that needs its records could be reached or shown unreachable.
+-/
+inductive Searchable where
+  | blocked (service : String) (creates : List (String × Nat)) (targets : List Uncovered) (why : String)
+  | search (x : Search)
+
+def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Searchable := do
   let st ← specService j service
   let creates := Ir.createsOf j.bounds service
+  let targets := ((targets j).filter (·.part.ref.service == service)).map (·.part)
+  if let some why := unbounded j st then return .blocked service creates targets why
   let fromClients (name : String) : Bool :=
     ((st.requirements.lookup name).map (·.callers)).getD [] |>.any (· != .service service)
   let requested := ((st.charts.flatMap fun c => c.states.flatMap (·.activities)) ++ st.automations.map (·.sends)).filterMap
     fun a => if a matches .opens .. || a.ref.service == service then none else some a.ref.service
   let read := creates ++ requested.eraseDups.flatMap (Ir.createsOf j.bounds)
-  pure { spec := j, st, creates, depth := depth.getD (read.foldl (· + ·.2) 0 + 1),
-         blocked := unbounded j st,
-         sendable := (st.commands ++ st.queries).filter fromClients,
-         targets := ((targets j).filter (·.part.ref.service == service)).map (·.part) }
+  pure (.search { spec := j, st, creates, depth := depth.getD (read.foldl (· + ·.2) 0 + 1),
+                  sendable := (st.commands ++ st.queries).filter fromClients, targets })
 
 /-- A state of the search: the semantics' state after `inputs`, what the run collected, and the records it created per entity. -/
 structure Node where
@@ -525,7 +531,10 @@ def reduce (candidates : List Candidate) : List Candidate := Id.run do
 
 /-- The own spec services' searches, asking `solve` for the solver's output on each script, in order. -/
 def generateOf (j : Ir.Structure) (depth : Option Nat) (solve : List String → IO (List String)) : IO Generation := do
-  let searches ← (specServices j).mapM (searchOf j depth)
+  let searchables ← (specServices j).mapM (searchOf j depth)
+  let searches := searchables.filterMap fun
+    | .search x => some x
+    | .blocked .. => none
   let searched : SolveM (List (Search × Found × List (Uncovered × Smt.Answer × Bool))) := searches.mapM fun x => do
     let found ← x.run
     let unreached := x.targets.filter fun t => t.ofRequest && !found.first.any (·.1 == t)
@@ -543,17 +552,23 @@ def generateOf (j : Ir.Structure) (depth : Option Nat) (solve : List String → 
       candidates := candidates ++ [{ service := x.st.service, name := inputName part, lines,
                                      covers := reached.filter x.targets.contains : Candidate }]
   let kept := reduce candidates
-  let outcomes := all.flatMap fun (x, found, proofs) => x.targets.map fun part =>
+  let searchedOutcomes (x : Search) (found : Found) (proofs : List (Uncovered × Smt.Answer × Bool)) := x.targets.map fun part =>
     let outcome := match kept.find? (fun c => c.service == x.st.service && c.covers.contains part), proofs.find? (·.1 == part) with
       | some c, _ => .reached c.name
       | none, some (_, .unsat, true) => .unreachable
       | none, _ =>
-        match x.blocked, found.broken.lookup part with
-        | some why, _ => .notEncodable why
-        | none, some why => if found.sought.contains part then .notReached x.depth else .notEncodable why
-        | none, none => .notReached x.depth
+        match found.broken.lookup part with
+        | some why => if found.sought.contains part then .notReached x.depth else .notEncodable why
+        | none => .notReached x.depth
     ({ target := part.toViolation, creates := x.creates, items := Ir.itemsOf j.bounds x.st.service, outcome } :
       TargetOutcome)
+  let outcomes := searchables.flatMap fun
+    | .blocked service creates targets why => targets.map fun part =>
+      ({ target := part.toViolation, creates, items := Ir.itemsOf j.bounds service, outcome := .notEncodable why } :
+        TargetOutcome)
+    | .search x => match all.find? (·.1.st.service == x.st.service) with
+      | some (_, found, proofs) => searchedOutcomes x found proofs
+      | none => []
   return { targets := outcomes,
            inputs := kept.map fun c => { service := c.service, name := c.name, lines := c.lines } }
 

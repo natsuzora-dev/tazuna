@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { type TestContext, test } from "node:test";
@@ -114,9 +114,9 @@ for (const verdict of kinds.prove)
       );
     });
 
-/** The files under `folder`, at any depth, relative to it, in name order. */
+/** The files under `folder`, at any depth, relative to it, in name order, none when it is missing. */
 const filesUnder = (folder: string): string[] =>
-  readdirSync(folder, { recursive: true, withFileTypes: true })
+  (existsSync(folder) ? readdirSync(folder, { recursive: true, withFileTypes: true }) : [])
     .filter((e) => e.isFile())
     .map((e) => relative(folder, join(e.parentPath, e.name)))
     .sort();
