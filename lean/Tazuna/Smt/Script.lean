@@ -1,8 +1,10 @@
+import Std.Data.HashMap
 import Tazuna.Smt.Term
 
 /-!
 The SMT-LIB script of a query, which TS hands to Z3 as text, and the reading of Z3's answer: `sat` with the values of
-the declared variables, `unsat`, or `unknown`. Each term prints as the SMT-LIB operation that `Term.denote` gives it.
+the declared variables, `unsat`, or `unknown`. Each term prints as the SMT-LIB operation that `Term.denote` gives it,
+each compound term once as a definition.
 -/
 
 namespace Tazuna.Smt
@@ -41,34 +43,73 @@ def Lit.smt : Lit → String
   | .str s => strLiteral s
   | .val v => v.smt
 
-def Term.smt : Term → String
-  | .var x _ => symbol x
-  | .lit v => v.smt
-  | .not a => s!"(not {a.smt})"
-  | .and a b => s!"(and {a.smt} {b.smt})"
-  | .or a b => s!"(or {a.smt} {b.smt})"
-  | .ite c a b => s!"(ite {c.smt} {a.smt} {b.smt})"
-  | .eq a b => s!"(= {a.smt} {b.smt})"
-  | .lt a b => s!"(< {a.smt} {b.smt})"
-  | .le a b => s!"(<= {a.smt} {b.smt})"
-  | .add a b => s!"(+ {a.smt} {b.smt})"
-  | .sub a b => s!"(- {a.smt} {b.smt})"
-  | .mul a b => s!"(* {a.smt} {b.smt})"
-  | .len a => s!"(str.len {a.smt})"
-  | .prefixOf a b => s!"(str.prefixof {a.smt} {b.smt})"
-  | .suffixOf a b => s!"(str.suffixof {a.smt} {b.smt})"
-  | .contains a b => s!"(str.contains {a.smt} {b.smt})"
-  | .mkBool a => s!"(vbool {a.smt})"
-  | .mkInt a => s!"(vint {a.smt})"
-  | .mkStr a => s!"(vstr {a.smt})"
-  | .isUndef a => s!"((_ is vundef) {a.smt})"
-  | .isNull a => s!"((_ is vnull) {a.smt})"
-  | .isBool a => s!"((_ is vbool) {a.smt})"
-  | .isInt a => s!"((_ is vint) {a.smt})"
-  | .isStr a => s!"((_ is vstr) {a.smt})"
-  | .boolOf a => s!"(vbool_v {a.smt})"
-  | .intOf a => s!"(vint_v {a.smt})"
-  | .strOf a => s!"(vstr_v {a.smt})"
+/-- A compound term's SMT-LIB operator and its operands. -/
+def Term.parts : Term → String × List Term
+  | .var .. | .lit _ => ("", [])
+  | .not a => ("not", [a])
+  | .and a b => ("and", [a, b])
+  | .or a b => ("or", [a, b])
+  | .ite c a b => ("ite", [c, a, b])
+  | .eq a b => ("=", [a, b])
+  | .lt a b => ("<", [a, b])
+  | .le a b => ("<=", [a, b])
+  | .add a b => ("+", [a, b])
+  | .sub a b => ("-", [a, b])
+  | .mul a b => ("*", [a, b])
+  | .len a => ("str.len", [a])
+  | .prefixOf a b => ("str.prefixof", [a, b])
+  | .suffixOf a b => ("str.suffixof", [a, b])
+  | .contains a b => ("str.contains", [a, b])
+  | .mkBool a => ("vbool", [a])
+  | .mkInt a => ("vint", [a])
+  | .mkStr a => ("vstr", [a])
+  | .isUndef a => ("(_ is vundef)", [a])
+  | .isNull a => ("(_ is vnull)", [a])
+  | .isBool a => ("(_ is vbool)", [a])
+  | .isInt a => ("(_ is vint)", [a])
+  | .isStr a => ("(_ is vstr)", [a])
+  | .boolOf a => ("vbool_v", [a])
+  | .intOf a => ("vint_v", [a])
+  | .strOf a => ("vstr_v", [a])
+
+/-- The sort of a term. -/
+def Term.sort : Term → Ty
+  | .var _ sort => sort
+  | .lit (.bool _) => .bool
+  | .lit (.int _) => .int
+  | .lit (.str _) => .str
+  | .lit (.val _) => .val
+  | .ite _ a _ => a.sort
+  | .add .. | .sub .. | .mul .. | .len _ | .intOf _ => .int
+  | .strOf _ => .str
+  | .mkBool _ | .mkInt _ | .mkStr _ => .val
+  | _ => .bool
+
+/-- The definitions of the compound terms printed so far, each once, by its text with its operands named. -/
+structure Shared where
+  names : Std.HashMap String String := {}
+  defs : Array String := #[]
+
+/--
+`t` as SMT-LIB text: a variable or literal as itself, and a compound term as the name of a definition that is made once
+for equal terms. The encoding repeats subterms, such as a record's field read in each condition that reads it, so
+printing each occurrence in full made scripts of tens of megabytes.
+-/
+partial def Term.shared (t : Term) : StateM Shared String := do
+  match t with
+  | .var x _ => pure (symbol x)
+  | .lit v => pure v.smt
+  | _ =>
+    let (op, operands) := t.parts
+    let names ← operands.mapM Term.shared
+    let text := s!"({op} {" ".intercalate names})"
+    let s ← get
+    match s.names.get? text with
+    | some name => pure name
+    | none =>
+      let name := s!"|t{s.defs.size}|"
+      set ({ names := s.names.insert text name, defs := s.defs.push s!"(define-fun {name} () {t.sort.smt} {text})" } : Shared)
+      pure name
 
 /-- A satisfiability question: its variables and the terms that must all hold. -/
 structure Query where
@@ -81,9 +122,10 @@ def datatypeV : String :=
 
 /-- The script that asks Z3 whether `q` is satisfiable within `timeout` milliseconds, and for its model. -/
 def Query.script (q : Query) (timeout : Nat) : String :=
+  let (asserted, shared) := (q.asserts.mapM Term.shared).run {}
   let lines := [s!"(set-option :timeout {timeout})", "(set-logic ALL)", datatypeV] ++
-    q.vars.map (fun (x, t) => s!"(declare-const {symbol x} {t.smt})") ++
-    q.asserts.map (fun a => s!"(assert {a.smt})") ++ ["(check-sat)"] ++
+    q.vars.map (fun (x, t) => s!"(declare-const {symbol x} {t.smt})") ++ shared.defs.toList ++
+    asserted.map (fun a => s!"(assert {a})") ++ ["(check-sat)"] ++
     (if q.vars.isEmpty then [] else [s!"(get-value ({" ".intercalate (q.vars.map (symbol ·.1))}))"])
   "\n".intercalate lines ++ "\n"
 
