@@ -63,7 +63,7 @@ def reactionOf (st : Service) (p : Program) (pre : SRecords) (now : Term) (paylo
   let keys := made.zipIdx.map fun (_, i) => (s!"k{i}", valVar s!"{names}.k{i}")
   let fresh := made.zipIdx.flatMap fun (e, i) =>
     let k := valVar s!"{names}.k{i}"
-    [Term.isStr k, .not (keyIn (.strOf k) (pre.slotsOf e))]
+    [Term.isStr k, .not (keyIn k (pre.slotsOf e))]
   let base : SEnv := { records := pre, args := fun
     | .payload => some payload
     | .now => some (.scalar (.mkInt now))
@@ -92,10 +92,7 @@ def reactionOf (st : Service) (p : Program) (pre : SRecords) (now : Term) (paylo
 
 /-- That two symbolic records hold the same records: each live slot of one has a live slot of the other equal to it. -/
 def SRecords.same (a b : SRecords) : Term :=
-  let sameKey (x y : Slot) : List Term := match x.key, y.key with
-    | .text a, .text b => [.eq a b]
-    | _, _ => []
-  let sameSlot (x y : Slot) := conj ([y.live] ++ sameKey x y ++ x.fields.map fun (f, t) => .eq t ((y.fields.lookup f).getD undefT))
+  let sameSlot (x y : Slot) := conj ([y.live] ++ x.fields.map fun (f, t) => .eq t ((y.fields.lookup f).getD undefT))
   let within (a b : SRecords) := conj (a.keyed.flatMap fun (e, slots) =>
     slots.map fun x => .or (.not x.live) (disj ((b.slotsOf e).map (sameSlot x))))
   conj [within a b, within b a, conj (a.singles.flatMap fun (e, fields) =>

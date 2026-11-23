@@ -150,16 +150,9 @@ def recordTerms (st : Service) (creates created : List (String × Nat)) (records
     let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.keyText ≤ b.keyText)
     let names := st.keyFieldsOf e
     let live ← rows.mapM fun r => do
-      let key ← match names, r.key with
-        | [_], some (.str k) => do pure (SlotKey.text (.strOf (← litTerm (.str k))))
-        | [_], _ => throw "a key that is no string"
-        | _, _ => pure (SlotKey.fields names)
-      pure ({ live := tt, key, fields := ← fieldsOfRow e r.value } : Slot)
+      pure ({ live := tt, key := .of names, fields := ← fieldsOfRow e r.value } : Slot)
     let free := (creates.lookup e).getD 0 - (created.lookup e).getD 0
-    let emptyKey := match names with
-      | [_] => SlotKey.text (.lit (.str ""))
-      | _ => .fields names
-    let empty : Slot := { live := ff, key := emptyKey, fields := (Eval.fieldsOf st e).map (·, undefT) }
+    let empty : Slot := { live := ff, key := .of names, fields := (Eval.fieldsOf st e).map (·, undefT) }
     pure (e, live ++ (List.range free).map fun _ => empty)
   let singles ← st.singles.mapM fun e => do
     let value := ((records.find? (·.entity == e)).map (·.value)).getD (.obj [])
@@ -337,7 +330,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
           match input.lookup field, pre.keyed.lookup target.name with
           | some (.scalar v), some slots =>
             let live := slots.filterMap fun sl => match sl.live, sl.key with
-              | .lit (.bool true), .text k => some (.eq (.strOf v) k)
+              | .lit (.bool true), .field f => some (.eq v ((sl.fields.lookup f).getD undefT))
               | _, _ => none
             some (live, mayBeNullish field || slots.any fun sl => !(sl.live matches .lit _))
           | _, _ => none

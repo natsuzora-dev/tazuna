@@ -13,7 +13,6 @@ namespace Tazuna.Smt
 open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Eval Tazuna.Semantics.Service
 
 def boolVar (x : String) : Term := .var x .bool
-def strVar (x : String) : Term := .var x .str
 def valVar (x : String) : Term := .var x .val
 
 /-- What a symbolic state or step adds: its variables and the terms that must hold. -/
@@ -150,19 +149,13 @@ def fieldVar (schema : Value) (x f : String) : Term × List (String × Ty) :=
   | some p => propertyVar x p
   | none => (valVar x, [(x, .val)])
 
-/-- The key of a slot of the entity `e`: the String variable `x`, or the key fields when they are several. -/
-def slotKey (st : Service) (e x : String) : SlotKey :=
-  match st.keyFieldsOf e with
-  | [_] => .text (strVar x)
-  | names => .fields names
-
 /-- The symbolic records of `st` within `creates`, its variables named after `pre`. -/
 def SRecords.named (st : Service) (creates : List (String × Nat)) (pre : String) : SRecords :=
   { keyFields := st.keyFields,
     keyed := (st.entities.filter (!st.singles.contains ·)).map fun e =>
       (e, (List.range ((creates.lookup e).getD 0)).map fun i =>
         let base := s!"{pre}.{e}.{i}"
-        { live := boolVar s!"{base}.live", key := slotKey st e s!"{base}.key",
+        { live := boolVar s!"{base}.live", key := .of (st.keyFieldsOf e),
           fields := (fieldsOf st e).map fun f => (f, (fieldVar (entitySchema st e) s!"{base}.{f}" f).1) })
     singles := st.singles.map fun e =>
       (e, (fieldsOf st e).map fun f => (f, (fieldVar (entitySchema st e) s!"{pre}.{e}.{f}" f).1)) }
@@ -170,18 +163,12 @@ def SRecords.named (st : Service) (creates : List (String × Nat)) (pre : String
 /-- The variable that tells whether a slot was ever used. -/
 def usedVar (pre e : String) (i : Nat) : Term := boolVar s!"{pre}.{e}.{i}.used"
 
-/-- The key field of the keyed entity `e`, none for an entity with several key fields, which slots do not encode. -/
-def keyField (st : Service) (e : String) : Option String :=
-  match st.structure.body? (st.ref e) with
-  | some (.entity { key := some [k], .. }) => some k
-  | _ => none
-
-/-- That `a` and `b` hold the same key: equal String keys, or equal values of each key field. -/
+/-- That `a` and `b` hold the same key: equal values of each key field. -/
 def Slot.sameKey (a b : Slot) : Term :=
-  match a.key, b.key with
-  | .text x, .text y => .eq x y
-  | .fields names, _ => conj (names.map fun f => .eq ((a.fields.lookup f).getD undefT) ((b.fields.lookup f).getD undefT))
-  | .text _, .fields _ => ff
+  let names := match a.key with
+    | .field n => [n]
+    | .fields names => names
+  conj (names.map fun f => .eq ((a.fields.lookup f).getD undefT) ((b.fields.lookup f).getD undefT))
 
 /-- That the live slots of `slots` have distinct keys. -/
 def distinctKeys : List Slot → List Term
@@ -207,17 +194,11 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
   for (e, slots) in r.keyed do
     let props := propertiesWith (entitySchema st e)
     for (s, i) in slots.zipIdx do
-      let keyVar := match s.key with
-        | .text _ => [(s!"{pre}.{e}.{i}.key", Ty.str)]
-        | .fields _ => []
-      facts := facts ++ { vars := [(s!"{pre}.{e}.{i}.live", .bool), (s!"{pre}.{e}.{i}.used", .bool)] ++ keyVar ++ s.fields.flatMap fun (f, _) => (fieldVar (entitySchema st e) s!"{pre}.{e}.{i}.{f}" f).2 }
+      facts := facts ++ { vars := [(s!"{pre}.{e}.{i}.live", .bool), (s!"{pre}.{e}.{i}.used", .bool)] ++ s.fields.flatMap fun (f, _) => (fieldVar (entitySchema st e) s!"{pre}.{e}.{i}.{f}" f).2 }
       let used := usedVar pre e i
       let earlier := if i == 0 then [] else [Term.or (.not used) (usedVar pre e (i - 1))]
-      let keyTerm := match keyField st e, s.key with
-        | some k, .text t => [Term.eq ((s.fields.lookup k).getD undefT) (.mkStr t)]
-        | _, _ => []
       let schemas := props.map fun p => fieldHolds ((s.fields.lookup p.1).getD undefT) p
-      let whenLive := (keyTerm ++ schemas.map (·.term)).map (Term.or (.not s.live))
+      let whenLive := (schemas.map (·.term)).map (Term.or (.not s.live))
       let asserts := [Term.or (.not s.live) used] ++ earlier ++ whenLive
       facts := facts ++ { asserts, exact := schemas.all (·.exact), complete := schemas.all (·.complete) }
     facts := facts ++ { asserts := distinctKeys slots ++ (uniqueClash (st.uniqueOf e) slots).map .not }
@@ -226,7 +207,7 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
         let targets := r.slotsOf target
         let asserts := slots.map fun s =>
           let v := (s.fields.lookup field).getD undefT
-          Term.or (.not (.and s.live (.not (nullishT v)))) (keyIn (.strOf v) targets)
+          Term.or (.not (.and s.live (.not (nullishT v)))) (keyIn v targets)
         facts := facts ++ { asserts }
   for (e, fields) in r.singles do
     let props := propertiesWith (entitySchema st e)
@@ -257,9 +238,7 @@ def SRecords.mapSlots (r : SRecords) (entity : String) (f : List Slot → List S
 
 def Slot.ite (c : Term) (a b : Slot) : Slot :=
   { live := .ite c a.live b.live,
-    key := match a.key, b.key with
-      | .text x, .text y => .text (.ite c x y)
-      | k, _ => k,
+    key := a.key,
     fields := a.fields.map fun (f, t) => (f, .ite c t ((b.fields.lookup f).getD undefT)) }
 
 def SRecords.ite (c : Term) (a b : SRecords) : SRecords :=
@@ -284,50 +263,35 @@ def Stepped.ite (c : Term) (a b : Stepped) : Stepped :=
     beyond := .ite c a.beyond b.beyond, gap := .ite c a.gap b.gap }
 
 /-- The record that `payload` creates in the first unused slot of `entity`, which leaves the bounds when none is. -/
-def Stepped.create (st : Stepped) (entity : String) (key : Term) (payload : List (String × Term)) : Stepped :=
+def Stepped.create (st : Stepped) (entity : String) (payload : List (String × Term)) : Stepped :=
   let slots := (st.records.keyed.lookup entity).getD []
   let used := (st.used.lookup entity).getD []
   let chosen (i : Nat) : Term := conj ([.not ((used[i]?).getD tt)] ++ if i == 0 then [] else [(used[i - 1]?).getD tt])
   let slots' := slots.zipIdx.map fun (s, i) =>
-    { live := .or s.live (chosen i),
-      key := match s.key with
-        | .text t => .text (.ite (chosen i) key t)
-        | k => k,
-      fields := s.fields.map fun (f, t) => (f, .ite (chosen i) ((payload.lookup f).getD undefT) t) }
+    { s with live := .or s.live (chosen i),
+             fields := s.fields.map fun (f, t) => (f, .ite (chosen i) ((payload.lookup f).getD undefT) t) }
   { records := st.records.mapSlots entity fun _ => slots',
     used := st.used.map fun (e, us) => if e == entity then (e, us.zipIdx.map fun (u, i) => .or u (chosen i)) else (e, us),
     beyond := .or st.beyond ((used.getLast?).getD tt) }
 
 /-- The records after the event `event` with `payload`, as Records.evolve changes them. -/
 def Stepped.apply (svc : Service) (st : Stepped) (event : Ir.Ref) (payload : List (String × Term)) : Stepped :=
-  let keyOf (fields : List String) : Term := .strOf (match fields with
-    | [f] => (payload.lookup f).getD undefT
-    | _ => undefT)
-  -- A key of several fields is compared field by field (hasPayloadKey), any scalar each.
-  let keyGap (fields : List String) : Stepped := match fields with
-    | [f] => { st with gap := .or st.gap (.not (.isStr ((payload.lookup f).getD undefT))) }
-    | _ => st
-  let hasPayloadKey (s : Slot) (key : Term) : Term := match s.key with
-    | .text t => .eq t key
-    | .fields names => conj (names.map fun f => .eq ((s.fields.lookup f).getD undefT) ((payload.lookup f).getD undefT))
+  let hasPayloadKey (fields : List String) (s : Slot) : Term :=
+    conj (fields.map fun f => .eq ((s.fields.lookup f).getD undefT) ((payload.lookup f).getD undefT))
   match svc.changeOf event with
-  | some (.create entity keyFields _) => (keyGap keyFields).create entity (keyOf keyFields) payload
+  | some (.create entity _ _) => st.create entity payload
   | some (.update entity keyFields _) =>
-    let st := keyGap keyFields
-    let key := keyOf keyFields
     let slots := (st.records.keyed.lookup entity).getD []
-    let hit (s : Slot) := Term.and s.live (hasPayloadKey s key)
+    let hit (s : Slot) := Term.and s.live (hasPayloadKey keyFields s)
     let updated := st.records.mapSlots entity fun ss => ss.map fun s =>
       { s with fields := s.fields.map fun (f, t) => (f, match payload.lookup f with
         | some v => .ite (hit s) v t
         | none => t) }
     let found := disj (slots.map hit)
-    Stepped.ite found { st with records := updated } (st.create entity key payload)
+    Stepped.ite found { st with records := updated } (st.create entity payload)
   | some (.delete entity keyFields _) =>
-    let st := keyGap keyFields
-    let key := keyOf keyFields
     { st with records := st.records.mapSlots entity fun ss => ss.map fun s =>
-      { s with live := .and s.live (.not (hasPayloadKey s key)) } }
+      { s with live := .and s.live (.not (hasPayloadKey keyFields s)) } }
   | some (.set entity _) =>
     { st with records := { st.records with singles := st.records.singles.map fun (e, fields) =>
       if e == entity then (e, fields.map fun (f, t) => (f, (payload.lookup f).getD t)) else (e, fields) } }
@@ -371,10 +335,7 @@ def Stepped.named (st : Stepped) (p : String) : Named Stepped := do
     let slots ← slots.zipIdx.mapM fun (s, i) => do
       let base := s!"{p}.{e}.{i}"
       let live ← nameAs s!"{base}.live" .bool s.live
-      let key ← match s.key with
-        | .text t => do pure (SlotKey.text (← nameAs s!"{base}.key" .str t))
-        | k => pure k
-      pure ({ live, key,
+      pure ({ live, key := s.key,
               fields := ← s.fields.mapM fun (f, t) => do pure (f, ← nameValue s!"{base}.{f}" t) } : Slot)
     pure (e, slots)
   let singles ← st.records.singles.mapM fun (e, fields) => do
@@ -528,7 +489,7 @@ target lists the caller's kind, and an entity caller's record is live.
 def admitted (callers : List Ir.CallerType) (pre : SRecords) (caller : List (String × Term)) : Term :=
   let f (n : String) := (caller.lookup n).getD undefT
   disj (callers.map fun
-    | .entity e => conj [.eq (f "entity") (.mkStr (strLit e)), .isStr (f "key"), keyIn (.strOf (f "key")) (pre.slotsOf e)]
+    | .entity e => conj [.eq (f "entity") (.mkStr (strLit e)), .isStr (f "key"), keyIn (f "key") (pre.slotsOf e)]
     | .service s => .eq (f "service") (.mkStr (strLit s)))
 
 /-- A binding or condition that a request checks in order: its name, the term that holds when its evaluation throws, and its value's term that holds when it passes. -/
@@ -621,7 +582,7 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
       let names := svc.keyFieldsOf target.name
       -- A ref to an entity whose key is several fields holds a key object, which names a record by its key fields.
       let rec named : SJson → Except String Term
-        | .scalar v => pure (if names.length < 2 then .or (nullishT v) (keyIn (.strOf v) slots) else nullishT v)
+        | .scalar v => pure (if names.length < 2 then .or (nullishT v) (keyIn v slots) else nullishT v)
         | .obj fields => do
           let key ← names.mapM fun n => match SVal.ofJson (SJson.field n fields) with
             | .scalar t => pure (n, t)
@@ -682,7 +643,7 @@ def Step.ensuresFails (step : Step) (c : Condition) : Except String Term := do
 def SRecords.dangling (r : SRecords) (entity field target : String) : Term :=
   let danglingAt (live : Term) (fields : List (String × Term)) : Term :=
     let v := (fields.lookup field).getD undefT
-    conj [live, .not (nullishT v), .or (.not (.isStr v)) (.not (keyIn (.strOf v) (r.slotsOf target)))]
+    conj [live, .not (nullishT v), .not (keyIn v (r.slotsOf target))]
   disj ((r.slotsOf entity).map (fun s => danglingAt s.live s.fields) ++ ((r.singles.lookup entity).map (danglingAt tt)).toList)
 
 /--
