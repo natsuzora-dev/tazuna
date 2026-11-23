@@ -62,7 +62,7 @@
           "from": 5,
           "to": 20,
           "line": 5,
-          "text": "export const alarm = machine({\n  description: \"Ring at 2^53 milliseconds, past every safe integer, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, ringing: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: {\n      after: {\n        ring: {\n          at: () => 9_007_199_254_740_991 + 1,\n          onFired: [{ target: \"ringing\" }],\n        },\n      },\n    },\n  },\n});"
+          "text": "export const alarm = machine({\n  description: \"Ring a millisecond past the last instant that a Date holds, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, ringing: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: {\n      after: {\n        ring: {\n          at: () => 8_640_000_000_000_001,\n          onFired: [{ target: \"ringing\" }],\n        },\n      },\n    },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.atSchema\",\"definition\":{\"service\":\"farAlarms\",\"name\":\"alarm\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"ring\"},\"location\":{\"file\":\"farAlarms/farAlarms.ts\",\"line\":5},\"scenario\":{\"service\":\"farAlarms\",\"name\":\"start\"}}"
       }
@@ -120,14 +120,14 @@
       }
     },
     "Fault.deadlineOutOfRange": {
-      "meaning": "The delay of the deadline `deadline` of state `state` takes its time past a safe integer, which the run's time cannot hold (Time.inRange, the rule that an `at` meets too).",
+      "meaning": "The delay of the deadline `deadline` of state `state` takes its time past the range of an instant, which the run's time cannot hold (Time.inRange, the rule that an `at` meets too).",
       "example": {
         "excerpt": {
           "file": "farReminder/farReminder.ts",
           "from": 5,
           "to": 14,
           "line": 5,
-          "text": "export const reminder = machine({\n  description:\n    \"Remind the largest safe integer of milliseconds after it starts, past every safe integer, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: { after: { far: { delay: 9_007_199_254_740_991, onFired: [{ target: \"reminding\" }] } } },\n  },\n});"
+          "text": "export const reminder = machine({\n  description:\n    \"Remind 100,000,000 days after it starts, past the last instant that a Date holds, which the run's time cannot hold\",\n  initial: \"waiting\",\n  states: { waiting: {}, reminding: { type: \"final\" } },\n}).chart({\n  states: {\n    waiting: { after: { far: { delay: 8_640_000_000_000_000, onFired: [{ target: \"reminding\" }] } } },\n  },\n});"
         },
         "violation": "{\"kind\":\"Fault.deadlineOutOfRange\",\"definition\":{\"service\":\"farReminder\",\"name\":\"reminder\"},\"data\":{\"state\":\"waiting\",\"deadline\":\"far\"},\"location\":{\"file\":\"farReminder/farReminder.ts\",\"line\":5},\"scenario\":{\"service\":\"farReminder\",\"name\":\"start\"}}"
       }
@@ -1277,7 +1277,7 @@
       }
     },
     "Malformed.inexactTime": {
-      "meaning": "A time of the scenario, Given's start or a clock line's time, is no safe integer, so the run cannot hold it as an instant in milliseconds. The report is at the clock line, or at the scenario for Given's start.",
+      "meaning": "A time of the scenario, Given's start or a clock line's time, is no instant: whole milliseconds within the range of an ECMAScript Date. The report is at the clock line, or at the scenario for Given's start.",
       "example": {
         "excerpt": {
           "file": "todo/scenarios.ts",

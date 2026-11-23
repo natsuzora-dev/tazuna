@@ -1,7 +1,16 @@
 import { z } from "zod";
 
-/** An instant: milliseconds since 1970-01-01T00:00:00Z. Compare with `<` and add a `duration` with `+`. */
-export const instant = z.int();
+/** The farthest instant from the epoch that an ECMAScript Date holds, in either direction: 100,000,000 days. */
+const maxInstant = 8.64e15;
+
+/**
+ * An instant: milliseconds since 1970-01-01T00:00:00Z, within the range of an ECMAScript Date. Compare with `<` and add
+ * a `duration` with `+`.
+ */
+export const instant = z.int().min(-maxInstant).max(maxInstant);
+
+/** Whether `time` is an instant: whole milliseconds within the range of an ECMAScript Date. */
+export const isInstant = (time: number): boolean => Number.isInteger(time) && Math.abs(time) <= maxInstant;
 
 /** A length of time in milliseconds. */
 export const duration = z.int();

@@ -74,8 +74,11 @@ def renderDate? (days : Int) : Option String :=
 def firstDay : Int := -719528
 def lastDay : Int := 2932896
 
-/-- Whether `t` is a safe integer, as an instant on the wire must be. -/
-def Time.inRange (t : Time) : Bool := isSafeInteger t
+/-- The farthest instant from the epoch that an ECMAScript Date holds, in either direction: 100,000,000 days. -/
+def maxInstant : Int := 8640000000000000
+
+/-- Whether `t` is an instant, as `instant` declares it: within the range of an ECMAScript Date. -/
+def Time.inRange (t : Time) : Bool := -maxInstant ≤ t && t ≤ maxInstant
 
 /-- `t`, when it is in range (Time.inRange). -/
 def instantTime? (t : Time) : Option Time := if t.inRange then some t else none

@@ -51,8 +51,8 @@ inductive Fault where
   -/
   | atSchema (definition : Spec.Ref) (state deadline : String)
   /--
-  The delay of the deadline `deadline` of state `state` takes its time past a safe integer, which the run's time cannot
-  hold (Time.inRange, the rule that an `at` meets too).
+  The delay of the deadline `deadline` of state `state` takes its time past the range of an instant, which the run's time
+  cannot hold (Time.inRange, the rule that an `at` meets too).
   -/
   | deadlineOutOfRange (definition : Spec.Ref) (state deadline : String)
   /-- A function reads `held` (its state's parameter) under a name that the state does not have. -/

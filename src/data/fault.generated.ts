@@ -126,8 +126,8 @@ export type Fault =
       };
     }
   /**
-   * The delay of the deadline `deadline` of state `state` takes its time past a safe integer, which the run's time cannot
-   * hold (Time.inRange, the rule that an `at` meets too).
+   * The delay of the deadline `deadline` of state `state` takes its time past the range of an instant, which the run's time
+   * cannot hold (Time.inRange, the rule that an `at` meets too).
    */
   | {
       readonly kind: "Fault.deadlineOutOfRange";

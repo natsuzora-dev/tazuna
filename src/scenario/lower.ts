@@ -11,6 +11,7 @@ import type {
   ValueRef,
 } from "../data/scenario.generated.ts";
 import { schemaNode } from "../data/schemaNode.ts";
+import { isInstant } from "../data/time.ts";
 import type { Shape } from "../data/values.ts";
 import type { AnyCommand, AnyEvent, AnyQuery, AnyScreen } from "../dsl/definition.ts";
 import {
@@ -407,7 +408,7 @@ export function lower(
     },
     clock: {
       at: (time: number) => {
-        if (!Number.isSafeInteger(time)) violations.push({ kind: "inexactTime", line: lines.length });
+        if (!isInstant(time)) violations.push({ kind: "inexactTime", line: lines.length });
         return processing({ type: "at", time });
       },
     },

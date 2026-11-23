@@ -161,10 +161,10 @@ def failsOn (r : SRecords) (now : Term) (c : Checked) : Except String Term := do
   | .single e => fails (recordEnv ((r.singles.lookup e).getD []) now)
   | .service => fails (recordsEnv r now)
 
-/-- The time of a state, `clock`, a safe integer as every time is. -/
+/-- The time of a state, `clock`, an instant as every time is (Time.inRange). -/
 def clockFacts : Facts :=
   { vars := [("clock", .int)],
-    asserts := [.le (intLit (-safeInteger)) (.var "clock" .int), .le (.var "clock" .int) (intLit safeInteger)] }
+    asserts := [.le (intLit (-maxInstant)) (.var "clock" .int), .le (.var "clock" .int) (intLit maxInstant)] }
 
 def clockT : Term := .var "clock" .int
 
@@ -173,9 +173,9 @@ def nowT : Term := .var "now" .int
 /-- A time after the state's, which a response reads when time passes with no message. -/
 def laterT : Term := .var "later" .int
 
-/-- The time of a step, `now`, a safe integer no earlier than the state's time. -/
+/-- The time of a step, `now`, an instant no earlier than the state's time. -/
 def nowFacts : Facts :=
-  { vars := [("now", .int)], asserts := [.le (intLit (-safeInteger)) nowT, .le nowT (intLit safeInteger), .le clockT nowT] }
+  { vars := [("now", .int)], asserts := [.le (intLit (-maxInstant)) nowT, .le nowT (intLit maxInstant), .le clockT nowT] }
 
 /--
 The initial records: no record of a keyed entity, and each single entity's record of its schema defaults. A default that

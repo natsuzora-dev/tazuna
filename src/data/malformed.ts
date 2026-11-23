@@ -112,8 +112,8 @@ export type Malformed =
    */
   | Of<"unreadableDeadline", DefinitionRef, { readonly path: readonly (string | number)[] }>
   /**
-   * A time of the scenario, Given's start or a clock line's time, is no safe integer, so the run cannot hold it as an
-   * instant in milliseconds. The report is at the clock line, or at the scenario for Given's start.
+   * A time of the scenario, Given's start or a clock line's time, is no instant: whole milliseconds within the range of
+   * an ECMAScript Date. The report is at the clock line, or at the scenario for Given's start.
    */
   | (Of<"inexactTime", null, Readonly<Record<string, never>>> & { readonly scenario: DefinitionRef })
   /** Given lists as a peer the own service's contract or no contract (null). */

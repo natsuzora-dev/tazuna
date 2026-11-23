@@ -30,8 +30,6 @@ instance : Append Facts where
   append a b := { vars := a.vars ++ b.vars, asserts := a.asserts ++ b.asserts, exact := a.exact && b.exact,
                   complete := a.complete && b.complete }
 
-def safeInteger : Int := 9007199254740991
-
 def checksKnown : Value → Bool
   | .arr checks => checks.all fun c => match c.field? "check" with
     | some (Value.str "min_length") | some (Value.str "max_length") => true
@@ -488,7 +486,7 @@ def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used :
   let (input, inputFacts) := inputOf svc name
   let now := Term.var "now" .int
   let nowFacts : Facts :=
-    { vars := [("now", .int)], asserts := [Term.le (intLit (-safeInteger)) now, .le now (intLit safeInteger), .le clock now] }
+    { vars := [("now", .int)], asserts := [Term.le (intLit (-maxInstant)) now, .le now (intLit maxInstant), .le clock now] }
   let step ← stepWith svc p pre used name input now ""
   pure { step with facts := inputFacts ++ nowFacts ++ step.facts }
 

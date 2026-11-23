@@ -10,7 +10,7 @@ variable {m : Type → Type}
 The state with the `after` deadlines of state `n` of instance `name` armed by step `step`. Each time is fixed now, as
 XState and SCXML evaluate a delay when the state is entered: `now` plus the delay, or what `at` computes (deadlineAt).
 A spec moves a deadline by entering its state again. Both times must be instants that the run's time holds
-(Time.inRange): a delay past a safe integer is deadlineOutOfRange, and an `at` that computes no such instant is atSchema.
+(Time.inRange): a delay past the range of an instant is deadlineOutOfRange, and an `at` that computes no such instant is atSchema.
 check accepts only a delay in whole milliseconds (Illegal.inexactDelay), so the lookup of its length finds one
 (deadlines_exact).
 -/

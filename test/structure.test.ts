@@ -82,9 +82,13 @@ test("A screen has the JSON Schema of each control payload, the controls that ea
       properties: {
         at: {
           type: "integer",
-          minimum: -9007199254740991,
-          maximum: 9007199254740991,
-          "x-tazuna-checks": [{ check: "number_format", format: "safeint", abort: false }],
+          minimum: -8640000000000000,
+          maximum: 8640000000000000,
+          "x-tazuna-checks": [
+            { check: "number_format", format: "safeint", abort: false },
+            { check: "greater_than", inclusive: true, value: -8640000000000000 },
+            { check: "less_than", inclusive: true, value: 8640000000000000 },
+          ],
         },
       },
       required: ["at"],

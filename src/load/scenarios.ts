@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Malformed } from "../data/malformed.ts";
 import type { GivenRecord, PeerEntry, Scenario } from "../data/scenario.generated.ts";
+import { isInstant } from "../data/time.ts";
 import { plain, stringsOf } from "../data/values.ts";
 import type { Named, Place, ServiceDefinition } from "../dsl/definition.ts";
 import type { AnyEntity } from "../dsl/entity.ts";
@@ -117,7 +118,7 @@ export function loadScenarios(
       if (entry.role === "skip") return [{ service, role: "skip", because: entry.because }];
       return [{ service, role: "run", records: givenRecords(entitiesOf(service), entry.records) }];
     });
-    if (!Number.isSafeInteger(definition.given.start))
+    if (!isInstant(definition.given.start))
       report({ kind: "Malformed.inexactTime", definition: null, scenario: ref, data: {} });
     const lowered = lower(definition, refOf, (contract) => {
       const owner = contractService(contract);
