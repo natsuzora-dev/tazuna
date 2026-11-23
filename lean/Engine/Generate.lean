@@ -273,116 +273,167 @@ def fingerprint (n : Node) : String :=
     r (s.queued.map fun q => (q.machine, q.state, q.stale)), r (s.subscriptions.map fun u => (u.query, u.input, u.last)),
     r s.stack, r s.obligations, r s.createdEntities, r s.started, r n.created]
 
-/-- The inputs that the search tries at `n` while the targets `open_` are not reached. -/
-def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List Uncovered) : ReplayM (List Want) := do
+/--
+For each ref field of the input of command `name` that names a keyed entity, the terms that pin it to each live record
+of that entity, and whether the field may also name no live record: it may be nullish, or a slot's liveness is open.
+-/
+def pinnedRefGoals (st : Service) (pre : SRecords) (input : List (String × SJson)) (name : String) :
+    List (List Term × Bool) :=
+  let refFields := ((st.requirements.lookup name).map (·.refs)).getD []
+  let inputFields := propertiesWith ((st.schemaOf (.input (st.ref name))).getD (.obj []))
+  let mayBeNullish (field : String) := match inputFields.find? (·.1 == field) with
+    | some (_, s, required) => !required || s.field? "x-tazuna-nullable" == some (.bool true)
+    | none => true
+  refFields.filterMap fun (field, target) =>
+    match input.lookup field, pre.keyed.lookup target.name with
+    | some (.scalar v), some slots =>
+      let live := slots.filterMap fun sl => match sl.live, sl.key with
+        | .lit (.bool true), .field f => some (.eq v ((sl.fields.lookup f).getD undefT))
+        | _, _ => none
+      some (live, mayBeNullish field || slots.any fun sl => !(sl.live matches .lit _))
+    | _, _ => none
+
+/-- The term that holds when the step creates a record in a slot that no record holds before it: a fresh key. -/
+def freshKeyGoal (step : Step) (used : List (String × List Term)) : Term :=
+  disj (step.used.flatMap fun (e, post) =>
+    (((used.lookup e).getD []).zip post).filterMap fun (u, p) => if u == ff then some p else none)
+
+/--
+The goals of the accepting paths of `step`, each list the goals of one input in the order the solver tries them.
+Without ref inputs, a path seeks a fresh key first, so that later inputs meet several records, since the solver
+otherwise tends to pick an existing record's key, which updates it. With ref inputs, a path tries each live record for
+each ref, and no live record at all only when every ref may name none.
+-/
+def acceptingGoals (step : Step) (used : List (String × List Term)) (pinned : List (List Term × Bool)) :
+    List (List Term) :=
+  let pins := pinned.flatMap (·.1)
+  let noRecord := if pinned.all (·.2) then [Term.not (disj pins)] else []
+  let fresh := freshKeyGoal step used
+  (advancing step).flatMap fun g =>
+    if pins.isEmpty then [(if fresh == ff then [] else [.and g fresh]) ++ [g]]
+    else (pins ++ noRecord).map fun pin => [.and g pin]
+
+/--
+The requests that a client can send: one for each target of the request still open, and one for each path through a
+command's decide that accepts. Any input reaches a request target, so the solver seeks only its answers.
+-/
+def requestWants (x : Search) (n : Node) (open_ : List Uncovered)
+    (terms : Except String (SRecords × List (String × List Term))) (name : String) : List Want :=
   let st := x.st
   let p := st.structure.program
   let s := n.state
   let now := intLit s.now
-  let mut wants : List Want := []
-  let terms := recordTerms st x.creates n.created s.records
-  for name in x.sendable do
-    let all := open_.filter fun t => t.ofRequest && t.ref.name == name
-    let mine := all.filter (!· matches .request _)
-    let id := nextNumber n.inputs name
-    let isQuery := st.queries.contains name
-    let line (input : List (String × SJson)) (caller : List (String × Term)) (M : Model) :=
-      requestLine isQuery s.now name id (.obj (SJson.concFields M input)) ((callerIn M caller).getD (.service ""))
-    match terms with
-    | .error why => wants := wants ++ all.map (.broken · s!"the state's records have no encoding: {why}")
-    | .ok (pre, used) =>
-    if isQuery then
-      match answerOf st p pre now name "in" with
-      | .error why => wants := wants ++ all.map (.broken · s!"the query has no encoding: {why}")
-      | .ok a =>
-        let facts := a.facts ++ fromOutside st a.caller
-        wants := wants ++ mine.filterMap fun t =>
-          (answerGoal a t).map fun g => .solve [queryOf facts g] (line a.input a.caller) (some t)
-    else
-      let (input, inputFacts) := inputOf st name "in"
-      let (caller, callerFacts) := callerVars "in.caller"
-      match stepWith st p pre used name input caller now "s." with
-      | .error why => wants := wants ++ all.map (.broken · s!"the command has no encoding: {why}")
-      | .ok step =>
-        let facts := inputFacts ++ callerFacts ++ fromOutside st caller ++ step.facts
-        let refFields := ((st.requirements.lookup name).map (·.refs)).getD []
-        let inputFields := propertiesWith ((st.schemaOf (.input (st.ref name))).getD (.obj []))
-        let mayBeNullish (field : String) := match inputFields.find? (·.1 == field) with
-          | some (_, s, required) => !required || s.field? "x-tazuna-nullable" == some (.bool true)
-          | none => true
-        let pinned : List (List Term × Bool) := refFields.filterMap fun (field, target) =>
-          match input.lookup field, pre.keyed.lookup target.name with
-          | some (.scalar v), some slots =>
-            let live := slots.filterMap fun sl => match sl.live, sl.key with
-              | .lit (.bool true), .field f => some (.eq v ((sl.fields.lookup f).getD undefT))
-              | _, _ => none
-            some (live, mayBeNullish field || slots.any fun sl => !(sl.live matches .lit _))
-          | _, _ => none
-        let pins := pinned.flatMap (·.1)
-        let noRecord := if pinned.all (·.2) then [Term.not (disj pins)] else []
-        let creates := disj (step.used.flatMap fun (e, post) =>
-          (((used.lookup e).getD []).zip post).filterMap fun (u, p) => if u == ff then some p else none)
-        wants := wants ++
-          mine.filterMap (fun t => (stepGoal step t).map fun g => .solve [queryOf facts g] (line input caller) (some t)) ++
-          (advancing step).flatMap fun g =>
-            if pins.isEmpty then
-              [.solve ((if creates == ff then [] else [queryOf facts (.and g creates)]) ++ [queryOf facts g]) (line input caller) none]
-            else (pins ++ noRecord).map fun pin => .solve [queryOf facts (.and g pin)] (line input caller) none
-  for pd in s.pending.filter (!·.stale) do
-    let target := pd.activity.ref
-    let query := (st.structure.body? target) matches some (.query _)
-    let id := s!"{target.service}/answer#{nextNumber n.inputs s!"{target.service}/answer"}"
-    let answerLine (a : Ir.Answer) : TraceLine := { time := s.now, after := none, created := none, body := .answer .in id pd.id.text a }
-    if st.structure.hasOutput target then
-      let (output, facts) := objectOf st (.output target) "out"
-      let promise := (promised st pd.input target output).toOption.getD tt
-      let line (M : Model) := answerLine (if query then .fulfilled (.obj (SJson.concFields M output))
-        else .accepted (some (.obj (SJson.concFields M output))))
-      let opens ← match pd.requester with
-        | .slot m slot => match s.machine? m with
-          | some i => offerGoals fs st s i slot output
-          | none => pure []
-        | _ => pure []
-      wants := wants ++ (tt :: opens).map fun g => .solve [queryOf facts (.and promise g)] line none
-    else wants := wants ++ [.line (answerLine (if query then .fulfilled (.obj []) else .accepted none))]
-    for kind in (st.structure.rejectionKinds st.service target).filter (!·.blamesSender) do
-      let reasons := if kind == .requires then (st.structure.rejectionReasons target).map some else [none]
-      wants := wants ++ reasons.map fun reason => .line (answerLine (.rejected { kind, reason }))
-  for event in st.receives do
-    let some (.event _) := st.structure.body? event | continue
-    let name := s!"{event.service}.{event.name}"
-    let id := s!"{event.service}/{event.name}#{nextNumber n.inputs s!"{event.service}/{event.name}"}"
-    let (payload, facts) := objectOf st (.payload event) "pay"
-    let line (M : Model) : TraceLine :=
-      { time := s.now, after := none, created := none, body := .event .in id name (.obj (SJson.concFields M payload)) none }
-    let mut goals := [(facts, tt)]
-    if let .ok (pre, used) := terms then
-      for a in st.automations.filter (·.receives == event) do
-        let .ok r := reactionOf st p pre now (.json payload) a "r" | continue
-        let base := facts ++ r.facts
-        goals := goals ++ [(base, .not r.fires)]
-        if a.sends.isOwn st.service then
-          match stepWith st p pre used a.sends.ref.name (SJson.ofTerms r.input) (callerTerms (.service st.service)) now "rs." with
-          | .ok step => goals := goals ++ (advancing step).map fun g => (base ++ step.facts, conj [r.fires, r.valid, g])
-          | .error _ => goals := goals ++ [(base, r.fires)]
-        else goals := goals ++ [(base, r.fires)]
-    wants := wants ++ goals.map fun (f, g) => .solve [queryOf f g] line none
-  for resource in s.stack.eraseDups do
-    let .ok ops ← operationsOf fs st s resource | continue
-    for op in ops do
-      let name := s!"{op.screen}.{op.control}"
-      let line (payload : Value) : TraceLine :=
-        { time := s.now, after := none, created := none,
-          body := .operation .in s!"operation#{nextNumber n.inputs "operation"}" name (s.nthOpen resource) (some payload) }
-      match op.payloads with
-      | some ps => wants := wants ++ ps.map (.line ∘ line)
-      | none =>
-        let (payload, facts) := objectOf st (.control (st.ref op.screen) op.control) "op"
-        wants := wants ++ [.solve [queryOf facts tt] (fun M => line (.obj (SJson.concFields M payload))) none]
-  wants := wants ++ [.line { time := s.now, after := none, created := none, body := .restart .in s!"restart#{nextNumber n.inputs "restart"}" }]
-  if let some t := (s.deadlines.map (·.time)).filter (s.now ≤ ·) |>.min? then
-    wants := wants ++ [.line { time := t, after := none, created := none, body := .time .in s!"time#{nextNumber n.inputs "time"}" }]
+  let all := open_.filter fun t => t.ofRequest && t.ref.name == name
+  let mine := all.filter (!· matches .request _)
+  let id := nextNumber n.inputs name
+  let isQuery := st.queries.contains name
+  let line (input : List (String × SJson)) (caller : List (String × Term)) (M : Model) :=
+    requestLine isQuery s.now name id (.obj (SJson.concFields M input)) ((callerIn M caller).getD (.service ""))
+  match terms with
+  | .error why => all.map (.broken · s!"the state's records have no encoding: {why}")
+  | .ok (pre, used) =>
+  if isQuery then
+    match answerOf st p pre now name "in" with
+    | .error why => all.map (.broken · s!"the query has no encoding: {why}")
+    | .ok a =>
+      let facts := a.facts ++ fromOutside st a.caller
+      mine.filterMap fun t => (answerGoal a t).map fun g => .solve [queryOf facts g] (line a.input a.caller) (some t)
+  else
+    let (input, inputFacts) := inputOf st name "in"
+    let (caller, callerFacts) := callerVars "in.caller"
+    match stepWith st p pre used name input caller now "s." with
+    | .error why => all.map (.broken · s!"the command has no encoding: {why}")
+    | .ok step =>
+      let facts := inputFacts ++ callerFacts ++ fromOutside st caller ++ step.facts
+      mine.filterMap (fun t => (stepGoal step t).map fun g => .solve [queryOf facts g] (line input caller) (some t)) ++
+        (acceptingGoals step used (pinnedRefGoals st pre input name)).map fun goals =>
+          .solve (goals.map (queryOf facts ·)) (line input caller) none
+
+/--
+The answers to a request of the service that waits: an output within the schema, one that makes each offers of the
+screen slot that waits for it list a payload, and each rejection that the target may give.
+-/
+def answerWants (fs : Functions ReplayM) (st : Service) (n : Node) (pd : Service.Pending) : ReplayM (List Want) := do
+  let s := n.state
+  let target := pd.activity.ref
+  let query := (st.structure.body? target) matches some (.query _)
+  let id := s!"{target.service}/answer#{nextNumber n.inputs s!"{target.service}/answer"}"
+  let answerLine (a : Ir.Answer) : TraceLine := { time := s.now, after := none, created := none, body := .answer .in id pd.id.text a }
+  let mut wants := []
+  if st.structure.hasOutput target then
+    let (output, facts) := objectOf st (.output target) "out"
+    let promise := (promised st pd.input target output).toOption.getD tt
+    let line (M : Model) := answerLine (if query then .fulfilled (.obj (SJson.concFields M output))
+      else .accepted (some (.obj (SJson.concFields M output))))
+    let opens ← match pd.requester with
+      | .slot m slot => match s.machine? m with
+        | some i => offerGoals fs st s i slot output
+        | none => pure []
+      | _ => pure []
+    wants := (tt :: opens).map fun g => .solve [queryOf facts (.and promise g)] line none
+  else wants := [.line (answerLine (if query then .fulfilled (.obj []) else .accepted none))]
+  for kind in (st.structure.rejectionKinds st.service target).filter (!·.blamesSender) do
+    let reasons := if kind == .requires then (st.structure.rejectionReasons target).map some else [none]
+    wants := wants ++ reasons.map fun reason => .line (answerLine (.rejected { kind, reason }))
   pure wants
+
+/-- The event `event` of another service that the service receives: any payload, and one for each branch of each automation that receives it. -/
+def eventWants (st : Service) (n : Node) (terms : Except String (SRecords × List (String × List Term))) (event : Ir.Ref) :
+    List Want := Id.run do
+  let some (.event _) := st.structure.body? event | return []
+  let s := n.state
+  let p := st.structure.program
+  let now := intLit s.now
+  let name := s!"{event.service}.{event.name}"
+  let id := s!"{event.service}/{event.name}#{nextNumber n.inputs s!"{event.service}/{event.name}"}"
+  let (payload, facts) := objectOf st (.payload event) "pay"
+  let line (M : Model) : TraceLine :=
+    { time := s.now, after := none, created := none, body := .event .in id name (.obj (SJson.concFields M payload)) none }
+  let mut goals := [(facts, tt)]
+  if let .ok (pre, used) := terms then
+    for a in st.automations.filter (·.receives == event) do
+      let .ok r := reactionOf st p pre now (.json payload) a "r" | continue
+      let base := facts ++ r.facts
+      goals := goals ++ [(base, .not r.fires)]
+      if a.sends.isOwn st.service then
+        match stepWith st p pre used a.sends.ref.name (SJson.ofTerms r.input) (callerTerms (.service st.service)) now "rs." with
+        | .ok step => goals := goals ++ (advancing step).map fun g => (base ++ step.facts, conj [r.fires, r.valid, g])
+        | .error _ => goals := goals ++ [(base, r.fires)]
+      else goals := goals ++ [(base, r.fires)]
+  return goals.map fun (f, g) => .solve [queryOf f g] line none
+
+/-- The operations of the screens open on `resource`: each offered payload, or any payload within the control's schema. -/
+def operationWants (fs : Functions ReplayM) (st : Service) (n : Node) (resource : InstanceId) : ReplayM (List Want) := do
+  let s := n.state
+  let .ok ops ← operationsOf fs st s resource | return []
+  return ops.flatMap fun op =>
+    let name := s!"{op.screen}.{op.control}"
+    let line (payload : Value) : TraceLine :=
+      { time := s.now, after := none, created := none,
+        body := .operation .in s!"operation#{nextNumber n.inputs "operation"}" name (s.nthOpen resource) (some payload) }
+    match op.payloads with
+    | some ps => ps.map (.line ∘ line)
+    | none =>
+      let (payload, facts) := objectOf st (.control (st.ref op.screen) op.control) "op"
+      [.solve [queryOf facts tt] (fun M => line (.obj (SJson.concFields M payload))) none]
+
+/-- A restart of the service process, which keeps the durable state, and the clock moving to the next deadline. -/
+def clockWants (n : Node) : List Want :=
+  let s := n.state
+  .line { time := s.now, after := none, created := none, body := .restart .in s!"restart#{nextNumber n.inputs "restart"}" } ::
+    match (s.deadlines.map (·.time)).filter (s.now ≤ ·) |>.min? with
+    | some t => [.line { time := t, after := none, created := none, body := .time .in s!"time#{nextNumber n.inputs "time"}" }]
+    | none => []
+
+/-- The inputs that the search tries at `n` while the targets `open_` are not reached. -/
+def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List Uncovered) : ReplayM (List Want) := do
+  let st := x.st
+  let s := n.state
+  let terms := recordTerms st x.creates n.created s.records
+  let answers ← (s.pending.filter (!·.stale)).flatMapM (answerWants fs st n)
+  let operations ← s.stack.eraseDups.flatMapM (operationWants fs st n)
+  pure (x.sendable.flatMap (requestWants x n open_ terms) ++ answers ++ st.receives.flatMap (eventWants st n terms) ++
+    operations ++ clockWants n)
 
 /-- A search that asks the solver through the function it reads, and keeps the solver's output on each script asked so far. -/
 abbrev SolveM := ReaderT (List String → IO (List String)) (StateT (Std.HashMap String String) IO)
@@ -396,9 +447,7 @@ def solveAll (queries : List Query) : SolveM (List Smt.Answer) := do
     if outputs.length != missing.length then throw (IO.userError s!"the solver gave {outputs.length} outputs for {missing.length} scripts")
     modify fun cache => (missing.zip outputs).foldl (fun c (k, v) => c.insert k v) cache
   let cache ← get
-  pure ((queries.zip scripts).map fun (q, script) =>
-    let text := cache.getD script ""
-    if q.vars.isEmpty && (text.trimAscii.toString.startsWith "sat") then .sat [] else Smt.Answer.read text)
+  pure (scripts.map fun script => Smt.Answer.read (cache.getD script ""))
 
 /-- The records created by moving from `before` to `after`: the keys of each entity that `after` holds and `before` does not. -/
 def createdBetween (before after : Records) (created : List (String × Nat)) : List (String × Nat) :=

@@ -152,7 +152,7 @@ def responsesOf (st : Service) (p : Ir.Program) : List Checked :=
     let expects := ((p.responseExpect.find? (·.definition == st.ref e)).map (·.conditions)).getD []
     let whens := ((p.responseWhen.find? (·.definition == st.ref e)).map (·.conditions)).getD []
     -- missingBodies stops prove before a when lacks its expect.
-    (whens.zip expects).map fun (w, x) =>
+    whens.filterMap fun w => (expects.find? (·.name == w.name)).map fun x =>
       { ref := .response (st.ref e) w.name, holder := if st.singles.contains e then .single e else .keyed e,
         condition := { name := w.name, body := .or (.not w.body) x.body } }
 

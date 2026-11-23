@@ -223,13 +223,17 @@ inductive Answer where
   | unknown (reason : String)
 deriving Inhabited
 
-/-- The answer that Z3's output `text` gives: its first line, and with `sat` the values that get-value printed. -/
+/--
+The answer that Z3's output `text` gives: its first line, and with `sat` the values that get-value printed, or none
+when the script asked for no values.
+-/
 def Answer.read (text : String) : Answer :=
   let chars := text.toList.dropWhile Char.isWhitespace
   let first := String.ofList (chars.takeWhile (!·.isWhitespace))
   match first with
   | "unsat" => .unsat
   | "sat" =>
+    if (chars.drop 3).all Char.isWhitespace then .sat [] else
     match readSexp (chars.drop 3) with
     | some (.list pairs, _) =>
       let values := pairs.filterMap fun
