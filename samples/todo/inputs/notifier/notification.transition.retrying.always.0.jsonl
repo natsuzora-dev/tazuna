@@ -1,6 +1,7 @@
-{"time":0,"dir":"in","type":"event","id":"device/notificationPermissionGranted#1","name":"device.notificationPermissionGranted","payload":{"at":0}}
-{"time":0,"dir":"out","type":"event","id":"permissionChoiceRecorded#1","name":"permissionChoiceRecorded","payload":{"status":"granted","at":0}}
 {"time":0,"dir":"in","type":"event","id":"todo/taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"A","at":-8639999999967715}}
 {"time":0,"dir":"out","type":"event","id":"taskChangeRecorded#1","name":"taskChangeRecorded","payload":{"taskId":"A","at":-8639999999967715,"change":"opened"}}
+{"time":0,"dir":"in","type":"restart","id":"restart#1"}
 {"time":0,"dir":"out","type":"command","id":"device.requestNotificationPermission#1","name":"device.requestNotificationPermission","input":{},"caller":{"service":"notifier"}}
 {"time":0,"dir":"in","type":"answer","id":"device/answer#1","to":"device.requestNotificationPermission#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
+{"time":0,"dir":"in","type":"event","id":"device/notificationPermissionGranted#1","name":"device.notificationPermissionGranted","payload":{"at":0}}
+{"time":0,"dir":"out","type":"event","id":"permissionChoiceRecorded#1","name":"permissionChoiceRecorded","payload":{"status":"granted","at":0}}
