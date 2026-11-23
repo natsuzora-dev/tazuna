@@ -70,8 +70,4 @@ partial def render : Value → String
   | .arr vs => "[" ++ ",".intercalate (vs.map render) ++ "]"
   | .obj fs => "{" ++ ",".intercalate (fs.map fun (k, v) => Lean.Json.renderString k ++ ":" ++ render v) ++ "}"
 
-def asList : Value → Except String (List Value)
-  | .arr vs => pure vs
-  | v => throw s!"expected an array, got {render v}"
-
 end Tazuna.Json

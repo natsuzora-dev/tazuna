@@ -66,13 +66,6 @@ def Structure.sentOf (s : Structure) (service : String) : List Ref :=
     | .machine c | .screen c => c.commands.map (·.2)
     | _ => []
 
-/-- The commands and queries that the automations and charts of `service` send, each once. -/
-def Structure.requestsOf (s : Structure) (service : String) : List Ref :=
-  (s.sentOf service ++ (s.definitions.filter (·.service == service)).flatMap fun d =>
-    match d.body with
-    | .machine c | .screen c => c.queries.map (·.2)
-    | _ => []).eraseDups
-
 /--
 The events of other services' contracts that the definitions of `service` receive: an automation's or a chart's
 event, or a result event of a command that an automation or a chart sends.

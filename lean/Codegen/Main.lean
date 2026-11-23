@@ -473,14 +473,6 @@ elab "constructorDocs% " t:ident : term => do
 elab "sources% " cs:ident+ : term => do
   return toExpr (← modulePaths (← cs.toList.mapM fun c => realizeGlobalConstNoOverloadWithInfo c.raw))
 
-/-- The TS constant `name`: the rejection kinds, in declaration order, that `p` holds for. -/
-def kindsWhere (name doc : String) (p : Tazuna.Ir.RejectionKind → Bool) : String :=
-  s!"\n/** {doc} */\n" ++
-    constArray name ((samples% Tazuna.Ir.RejectionKind).filterMap fun k =>
-      match ToValue.toValue k with
-      | .str s => if p k then some s else none
-      | _ => none)
-
 /--
 The names of the theorems that `@[guarantee]` tags in the modules under `lean/Tazuna/Thm` of `folder`, sorted. The
 modules are found at run time, as tazuna-axioms finds them, so a new module needs no import here; `lake exe` gives the

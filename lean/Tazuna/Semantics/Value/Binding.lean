@@ -198,11 +198,6 @@ deriving DecidableEq, Repr
 
 def Sameness.of (b : Bool) : Sameness := if b then .same else .different
 
-def Matches.sameness {b : Binding} : Matches b → Sameness
-  | some (_ :: _) => .same
-  | some [] => .different
-  | none => .uncomparable
-
 /-- Same when one comparison is same, else uncomparable when one is, else different. -/
 def Sameness.any (all : List Sameness) : Sameness :=
   if all.contains .same then .same else if all.contains .uncomparable then .uncomparable else .different

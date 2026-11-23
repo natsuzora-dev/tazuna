@@ -102,11 +102,6 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire TraceLine flatten body skip_serializing_none
 
-def isEventLine (l : TraceLine) : Bool :=
-  match l.body with
-  | .event .. => true
-  | _ => false
-
 /-- Pairs of a snapshot string and the trace string that stands for it. -/
 abbrev Bindings := List (String × String)
 

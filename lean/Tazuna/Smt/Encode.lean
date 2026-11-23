@@ -208,7 +208,6 @@ def arrItems (len : Term) : Nat → List SJson → List (Term × SVal)
   | i, j :: js =>
     (.lt (.lit (.int i)) len, SVal.ofJson (.ite j.undefT (.scalar (.lit (.val .null))) j)) :: arrItems len (i + 1) js
 
-def mkBoolT (t : Term) : Term := .mkBool t
 def intLit (n : Int) : Term := .lit (.int n)
 def strLit (s : String) : Term := .lit (.str s)
 
