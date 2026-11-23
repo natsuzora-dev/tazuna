@@ -35,8 +35,9 @@ Spec functions receive the records of an entity as a `Bag`, and a spec that need
 `minBy` and `maxBy` pick one record by a key, and a tie is `Fault.notOnly`, as `only` reports a bag with more than one value.
 
 Some steps have no cause that orders them: two automations that react to one message, deadlines of one service due at the same time, and events or answers from other services that arrive at once.
-Whether their order changes the outcome is a property of the whole spec, so `prove` checks it, not `test`: from any state within the bounds, it runs both orders to the end of each message and reports `ChoiceDependent.stepOrder` in a counterexample when the records, the lines written out, or whether the service halts differ.
-`test` runs each scenario in one fixed order.
+Whether their order changes the outcome is a property of the whole spec, so `prove` checks it, not `test`.
+`prove` runs both orders from any state within the bounds and reports `ChoiceDependent.stepOrder` when they end differently.
+A pair that `prove` does not compare yet is an undecided property, as [Orders that `prove` compares](guarantees.md#orders-that-prove-compares) lists.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
 
 Whether two orders give the same outcome depends on what each step changes:
@@ -104,7 +105,6 @@ A subscription lives as long as the process that serves it, as a WebSocket does,
 
 Each command and query lists its `callers`: entities whose records act as users, such as `User`, and services, such as `"notifier"`.
 Spec functions read the `caller` beside the input, so a `requires` can let only a task's owner complete it.
-A caller outside the list gets a `permission-denied` rejection, and a caller key with no record gets `not-found`.
 A scenario states who sends each request, as in `w.client.as("screens").send(...)`.
 
 The spec decides who may do what, and authentication stays outside it, as a Cedar policy reads a principal that something else signed in.
@@ -112,7 +112,7 @@ The list also tells `generate` which requests an outsider can send.
 
 ## A record is named by its key
 
-An entity's `key` is one field, such as `key: "id"`, or a tuple of fields, such as `key: ["userId", "groupId"]`, whose value is an object of those fields.
+An entity's `key` can be a tuple of fields, such as `key: ["userId", "groupId"]`.
 A composite key states what makes a record unique, so a spec never builds an id from parts as text.
 
 An input field of type `ref(E)` names a record, and spec functions read that record as `refs.<field>`, as Laravel binds a route parameter to its model.
@@ -120,16 +120,14 @@ A command that reads `refs.taskId` needs no lookup that may miss, and its reject
 
 ## Bounds set how far `prove` and `generate` look
 
-Each service declares in `bounds()` how many records of each keyed entity a run may create, and how many items an array or `Bag` of an input, payload, or answer may hold.
-`prove` proves each property for every state within the bounds, and `generate` searches inputs within them.
+`prove` proves each property for every state within the service's [bounds](guarantees.md#bounds), and `generate` searches inputs within them.
 A small bound usually finds what a large one finds, as Alloy's small-scope hypothesis says, so start with two or three records per entity.
 The bounds are typed by the entities that they name and reviewed with the spec, as TLA+ keeps its bounds in the model's configuration.
 
 ## Invariants and responses state what must hold
 
-An invariant holds of a record, or of the whole service, in every state, and reads the record and `now`.
-A response states a bounded promise: once `when` holds of a record and `expect` does not, `expect` must hold within `within` milliseconds, or the record must leave.
-A missed response is `Fault.missedResponse` in `test` and `verify`.
+An invariant holds of a record, or of the whole service, in every state.
+A response states a bounded promise, which a record keeps in time or by leaving.
 A spec has no unbounded liveness, such as "eventually", because no finite run shows it broken.
 
 ## A counterexample is a decision about the spec
@@ -141,17 +139,14 @@ The second part also starts from states that no run reaches, so a counterexample
 - A real bug. Fix the behavior.
 - A state that no run reaches. State the fact that rules it out as another invariant, or stop storing the value that can contradict another.
 
-In the ToDo sample, without the invariant `createdBeforeNow`, `prove` reports a counterexample of `completedAfterCreated`: a task created after the current time, which `completeTask` then completes before its creation.
-No run reaches that state, because `todo` creates each task at `now`.
-The spec states that fact as `createdBeforeNow: record.createdAt <= now`, and both invariants are then proved.
+[Prove the invariants](../README.md#prove-the-invariants) in the README walks through a counterexample of the second kind in the ToDo sample.
 
 tazuna never asks you for a fact about its own semantics, such as that the clock never moves back.
 It assumes such facts, and [Assumptions](guarantees.md#assumptions) lists them.
 
 ## Every command writes structured output
 
-`check`, `test`, `verify`, `prove`, and `generate` write one JSON line per result to stdout and a one-line summary to stderr, and `explain` writes one JSON line.
-The usual reader is a program or a coding agent.
+Every command writes JSON lines, because the usual reader is a program or a coding agent.
 tazuna transforms a result only when a later step needs it, as `prove` decodes a solver's model to replay it in the semantics, and never only for readability: it does not shrink a counterexample.
 
 ## Each tool reports one kind of mistake
@@ -170,9 +165,7 @@ The fix writes the choice into the spec or the scenario, so that the spec and th
 
 ## Any log of the implementation can be checked
 
-`verify` replays each trace in Lean: the spec takes the trace's `in` lines in order, and `verify` compares the trace's `out` lines with the spec's.
-A trace can come from anywhere: `drive` running a scenario's snapshot or a generated input, or the implementation's own tests.
-`verify --coverage` reports the parts of the spec that no trace reached, and `generate` writes inputs that reach most of them.
+`verify` compares the `out` lines of a trace with the spec's for the trace's `in` lines, so the trace can come from anywhere: `drive` running a scenario's snapshot or a generated input, or the implementation's own tests.
 
 ## Then states the intent, and the snapshot records the run
 

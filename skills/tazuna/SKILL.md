@@ -16,7 +16,7 @@ Read the docs and the sample that ship with the installed package, in `node_modu
 
 ## Write in this order
 
-1. The contract of each service: its entities with their keys and invariants, as in `todo/data.ts` of the sample, and its commands, queries, and events with their callers, which `todo/contract.ts` lists.
+1. The contract of each service: its entities with their keys and invariants, as in `todo/data.ts` of the sample, and its commands, queries, and events with their callers, which `todo/contract.ts` gathers.
 2. The bounds of each service, as in `todo/bounds.ts`.
 3. The scenarios that state what the service does, as in `todo/scenarios.ts`.
 4. The machines, screens, and automations that make the scenarios pass.

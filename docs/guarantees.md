@@ -67,7 +67,6 @@ A *binding* pairs the values that one run created with the values of another run
 
 A service's *bounds* are the numbers that its `bounds()` declares: `creates`, the most records of each keyed entity that a run creates, and `items`, the most items in each array or `Bag` of an input, payload, or answer.
 A state is *within the bounds* when it holds at most `creates` records of each entity.
-`prove` and `generate` write the bounds that they used on each result line.
 
 ### Violations
 
@@ -83,8 +82,6 @@ Only kinds of the groups `Fault`, `InvalidInput`, and `InvalidScenario` halt, as
 ## What a passing command means
 
 A command *passes* when it reports no violation and `prove` reports no counterexample.
-A command exits with 0 when it passes, with 1 when it reports a violation or a counterexample or tsc reports an error, with 3 when `prove` leaves a property undecided, and with 2 on a usage error.
-`generate` exits with 0 whatever it finds.
 
 - When `check` passes, every spec file type-checks under the nearest `tsconfig.json`, every spec function translates into an expression, and the spec has no violation of the groups that `check` reports.
 - When `test` without `--only` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, and each running service's trace equals its snapshot.
@@ -109,7 +106,7 @@ tazuna guarantees nothing about inputs that no trace contains.
   The state may be one that no run reaches, as [A counterexample is a decision about the spec](concepts.md#a-counterexample-is-a-decision-about-the-spec) explains.
 - `undecided` means that `prove` gives no verdict, for the reason that the line states, such as a construct that it does not encode or the solver's resource limit.
 
-A spec holds no fractional numbers, since `check` reports them as `Restricted.schema`, so no verdict rests on floating-point arithmetic.
+A spec holds no fractional numbers, so no verdict rests on floating-point arithmetic.
 
 Some properties are undecided by design:
 
@@ -130,7 +127,6 @@ Some properties are undecided by design:
 
 ### Orders that `prove` compares
 
-The spec decides every choice, so an outcome that depends on an order that no line writes is a violation.
 `prove` compares, from any state where the invariants hold, both orders of:
 
 - two automations that react to one event, or to two events that one command emits
@@ -141,14 +137,11 @@ Each order runs each message to its end: the deadline's or event's transitions, 
 `prove` follows at most 8 steps of each message.
 Two orders end the same when both halt, or when neither halts and both leave the same records and write the same out lines, in any order.
 When they differ, `prove` reports `ChoiceDependent` in its counterexample.
-When a message can take more than 8 steps, the pair is undecided.
-`prove` does not compare yet the orders of the following pairs, and lists each pair that the spec can have as an undecided property:
+`prove` does not compare yet the orders of the following pairs:
 
 - the events of one event group that one machine or automation takes (`groupOrder`)
 - two own commands that states send in one round, and the answers to them (`roundOrder`)
 - a deadline and a message from another service that arrives when it is due (`deadlineArrivalTie`)
-
-`test` runs each scenario in one order: deadlines due at the same time fire in the order they were armed, the messages that one line delivers arrive in the order they were sent, and a message's queue takes its waiting steps in queue order.
 
 ### When a trace matches the spec
 
@@ -221,7 +214,7 @@ Each row below names one thing that a detection leaves out.
 | `prove` | It proves each property for the states within the bounds. | States with more records of an entity than `creates`, and arrays and bags with more items than `items`. |
 | `prove` | | Strings with a character after U+2FFFF, which Z3's strings cannot hold. |
 | `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that module code reaches by another name, or through a package that the spec imports. |
-| `ChoiceDependent` | `prove` compares [both orders](#orders-that-prove-compares) of each pair from any state. | The pairs that `prove` lists as undecided: the orders that it does not compare yet, pairs in a service with a screen or a parallel, final, history or map state, and messages longer than 8 steps. |
+| `ChoiceDependent` | `prove` compares [both orders](#orders-that-prove-compares) of each pair from any state. | The pairs that [`prove` leaves undecided](#what-a-prove-verdict-means). |
 | `ChoiceDependent` | | Faults inside a message, such as a failing invariant after a command, which other properties report. |
 | `InvalidInput` | It checks an external peer's lines against the peer's contract. | A `requires` that reads more than the input, and an `ensures` that reads records. |
 

@@ -6,7 +6,7 @@ tazuna turns the spec into data that Lean 4 defines the meaning of, and the `taz
 
 - `check` checks the spec without running it.
 - `test` runs the scenarios and compares each run with its snapshot.
-- `prove` proves the spec's invariants with the Z3 solver, or reports a counterexample.
+- `prove` uses the Z3 solver to prove the spec's invariants and that steps with no order between them give one outcome, or reports a counterexample.
 - `generate` writes inputs that reach the parts of the spec that no scenario reaches.
 - `verify` replays an implementation's traces and compares its outputs with the spec's.
 
@@ -82,7 +82,7 @@ Run the commands in the folder of your `package.json`.
    ```
 
    `given` sets where the scenario starts, `when` lists its lines in order, and `then` states what `todo` did on those lines.
-   `noTasks`, `addMilk` and `startOf` are defined earlier in the same file.
+   `noTasks`, `addMilk`, and `startOf` are defined earlier in the same file.
 
 4. Run the scenarios:
 
@@ -131,12 +131,13 @@ In this section, we prove the sample's invariants, remove one, and read the coun
 
    Each line names a property, such as the invariant `createdBeforeNow` of `Task`, and its verdict.
    The invariants and ensures of `todo` are proved.
+   Many pairs of steps are undecided, because `prove` does not compare or encode them yet, as [Guarantees](docs/guarantees.md#what-a-prove-verdict-means) lists.
 
 2. Open `spec/todo/data.ts`, delete the line of the invariant `createdBeforeNow`, and prove the spec again.
    The invariant `completedAfterCreated` now has a counterexample: a task whose `createdAt` is after the current time, which `completeTask` completes before its creation.
 
 3. No run of `todo` reaches that state, because `todo` creates each task at the current time.
-   `prove` checks each command from any records where the invariants hold, so it needs that fact as an invariant.
+   `prove` checks each command from any records where the invariants hold, so it needs that fact as an invariant, as [A counterexample is a decision about the spec](docs/concepts.md#a-counterexample-is-a-decision-about-the-spec) explains.
    Put the line back, and prove the spec again to see that `completedAfterCreated` is proved.
 
 ## Lay out a project
