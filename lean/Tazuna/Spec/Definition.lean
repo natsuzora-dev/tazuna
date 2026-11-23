@@ -445,25 +445,14 @@ namespace Tazuna.Spec
 open Tazuna.Data
 
 /--
-The values that explore gives the node at `path` of the JSON Schema of `schema`: the values of the one `domain()` that
-names the node, which TS load decides from Zod object identity (Malformed.overlappingDomain).
+The `bounds()` of the service `service`: the most records of each of its keyed entities that prove creates, keys never
+reused.
 -/
-structure Domain where
-  schema : Schema
-  path : List SchemaStep
-  values : List Value
-deriving Repr, Inhabited
-
-derive_wire Domain
-
-/-- The `explore()` call of the service `service`: the most moves on a path after its scenarios, and its domains. -/
-structure Explore where
+structure Bounds where
   service : String
-  depth : Nat
-  /-- The domains at the nodes of the schemas that the service's moves may carry, at most one per schema and path. -/
-  domains : List Domain
+  creates : List (String × Nat)
 deriving Repr, Inhabited
 
-derive_wire Explore
+derive_wire Bounds
 
 end Tazuna.Spec

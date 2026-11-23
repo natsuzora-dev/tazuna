@@ -1,1 +1,0 @@
-{"kind":"Illegal.undeclaredDomain","definition":{"service":"todo","name":"addTask"},"data":{"service":"todo","schema":{"kind":"input","definition":{"service":"todo","name":"addTask"}},"path":[{"kind":"field","name":"title"}]},"location":{"file":"todo/todo.ts","line":18}}

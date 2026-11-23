@@ -90,7 +90,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Spec.EntityBody, ``Tazuna.Spec.EventBody, ``Tazuna.Spec.CommandBody, ``Tazuna.Spec.QueryBody,
      ``Tazuna.Spec.AutomationBody, ``Tazuna.Spec.Body, ``Tazuna.Spec.Definition, ``Tazuna.Spec.Contract,
      ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
-     ``Tazuna.Spec.Domain, ``Tazuna.Spec.Explore,
+     ``Tazuna.Spec.Bounds,
      ``Tazuna.Spec.Structure]),
    ("src/spec/ir.generated.ts",
     [``Tazuna.Ir.Arg, ``Tazuna.Ir.Expr, ``Tazuna.Ir.Field, ``Tazuna.Ir.Condition, ``Tazuna.Ir.Conditions, ``Tazuna.Ir.Fn,
@@ -98,7 +98,7 @@ def modules : List (String × List Name) :=
    ("src/cli/protocol.generated.ts",
     [``Tazuna.Service.Issue, ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys,
      ``Tazuna.Engine.Stored, ``Tazuna.Engine.StartLine, ``Tazuna.Engine.Log, ``Tazuna.Engine.Request, ``Tazuna.Engine.Unpaired,
-     ``Tazuna.Engine.SimulatedService, ``Tazuna.Engine.ReadPart, ``Tazuna.Engine.Evaluated, ``Tazuna.Engine.Found,
+     ``Tazuna.Engine.SimulatedService, ``Tazuna.Engine.ReadPart, ``Tazuna.Engine.Evaluated,
      ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Replayed,
      ``Tazuna.Engine.Response])]
 

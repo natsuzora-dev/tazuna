@@ -233,58 +233,6 @@ test("test writes how many scenarios it ran out of all to stderr, and with --onl
   }
 });
 
-test("test --only explores the paths after the named scenario within its service's explore()", async () => {
-  const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "only-values-"));
-  writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
-  mkdirSync(join(project, "todo"));
-  writeFileSync(
-    join(project, "todo/todo.ts"),
-    `import { emit, entity, service } from "@natsuzora-dev/tazuna";
-import { z } from "zod";
-
-export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
-export const { command, createEvent, scenario } = service({ name: "todo", description: "Keep", entities: { Task } });
-export const taskAdded = createEvent({ entity: Task });
-export const addTask = command({
-  input: { taskId: Task.fields.id, title: Task.fields.title },
-  emits: [taskAdded],
-  ensures: { notBoom: ({ input }) => input.title !== "boom" },
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
-export const note = command({ input: { text: z.string() }, emits: [] }).decide(() => []);
-`,
-  );
-  writeFileSync(
-    join(project, "todo/explore.ts"),
-    `import { domain, explore } from "@natsuzora-dev/tazuna";
-import { note, Task } from "./todo.ts";
-
-export const todoExplore = explore({
-  service: "todo",
-  depth: 1,
-  domains: [domain(Task.fields.id, ["task-2"]), domain(Task.fields.title, ["boom"]), domain(note.input.text, ["boom"])],
-});
-`,
-  );
-  const given = "{ start: 1_792_886_400_000, records: { Task: [] }, peers: [] }";
-  writeFileSync(
-    join(project, "todo/scenarios.ts"),
-    `import { addTask, note, scenario } from "./todo.ts";
-
-export const noteBoom = scenario({ description: "Note boom", given: ${given}, when: (w) => { w.client.send(note, { text: "boom" }); }, then: () => [] });
-export const addMilk = scenario({ description: "Add", given: ${given}, when: (w) => { w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }); }, then: () => [] });
-`,
-  );
-  try {
-    const { out } = await run("test", relative(root, project), "--only", "todo/addMilk");
-    assert.ok(
-      out.some((line) => line.includes('"kind":"Fault.failedEnsures"')),
-      out.join("\n"),
-    );
-  } finally {
-    rmSync(project, { recursive: true, force: true });
-  }
-});
-
 test("test writes an error and exits with 2 when --only names no scenario of the spec", async () => {
   const folder = "test/verify/uncomparable/snapshot/unpaired";
   const cases: [string[], string][] = [
@@ -356,7 +304,7 @@ test("check reports each spec file that the program of the nearest tsconfig.json
     assert.equal(code, 1);
     assert.deepEqual(
       out.map((line) => JSON.parse(line)),
-      ["contract.ts", "explore.ts", "machines.ts", "player.ts", "scenarios.ts"].map((file) => ({
+      ["contract.ts", "machines.ts", "player.ts", "scenarios.ts"].map((file) => ({
         kind: "Malformed.unlistedFile",
         definition: null,
         data: { tsconfig: "../tsconfig.json" },
@@ -383,7 +331,7 @@ test("check skips node_modules folders and .d.ts files, and walks a symlinked fo
     const { code, out, err } = await run("check", folder);
     assert.equal(code, 0);
     assert.deepEqual(out, []);
-    assert.deepEqual(err, ["5 files: no violations"]);
+    assert.deepEqual(err, ["4 files: no violations"]);
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

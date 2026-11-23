@@ -50,7 +50,7 @@ function oneEntry(record: Readonly<Record<string, unknown>>): unknown {
  * lists where, so that load can tell when neither did.
  */
 export type StructureOf =
-  | { readonly kind: "built"; readonly structure: Omit<Structure, "explores" | "program"> }
+  | { readonly kind: "built"; readonly structure: Omit<Structure, "bounds" | "program"> }
   | { readonly kind: "found"; readonly malformed: readonly Found<Malformed>[]; readonly unnamed: readonly string[] };
 
 /**
@@ -97,7 +97,7 @@ export function structureOf(
     );
     if (!found) malformed.push({ violation, place: named.place, error });
   };
-  const structure: Omit<Structure, "explores" | "program"> = {
+  const structure: Omit<Structure, "bounds" | "program"> = {
     services: [...services].map(([name, s]) => ({
       name,
       external: s.definition.external,

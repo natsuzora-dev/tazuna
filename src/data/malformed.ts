@@ -37,28 +37,10 @@ export type Malformed =
    * contracts and scenarios carry as a type, names one service.
    */
   | Of<"duplicateService", null, { readonly name: string; readonly elsewhere: string }>
-  /** The `constants()` or `explore()` call names `name`, which no service definer has. */
+  /** The `constants()` call names `name`, which no service definer has. */
   | Of<"unknownService", null, { readonly name: string }>
-  /** The service `service` has scenarios and no `explore()`, which bounds the paths that `test` explores after them. */
-  | Of<"missingExplore", null, { readonly service: string }>
-  /** Another `explore()` call names the service `service` too. */
-  | Of<"duplicateExplore", null, { readonly service: string }>
-  /**
-   * The value at index `value` of the domain at index `domain` of the `explore()` of `service` is not JSON, which a
-   * scenario line writes, or the domain's schema rejects it, refinements included.
-   */
-  | Of<"domainValue", null, { readonly service: string; readonly domain: number; readonly value: number }>
-  /**
-   * The domain at index `domain` of the `explore()` of `service` names no node of a schema that the service's moves may
-   * carry: its schema is written nowhere there, or only inside an array or a record.
-   */
-  | Of<"unusedDomain", null, { readonly service: string; readonly domain: number }>
-  /**
-   * The domains at the indices `domains` of the `explore()` of `service` cover one node: they name it, or one names it
-   * and another names a node around it, whose values explore writes whole. Which values the node takes would depend on
-   * which domain is read.
-   */
-  | Of<"overlappingDomain", null, { readonly service: string; readonly domains: readonly number[] }>
+  /** Another `bounds()` call of the service `service` was exported too. */
+  | Of<"duplicateBounds", null, { readonly service: string }>
   /**
    * The service or scenario name `name` contains `character`, one of the characters that separate the parts of tazuna's
    * generated names (trace names, created keys, line ids, copy names, snapshot names).

@@ -14,7 +14,6 @@ export { any, none } from "./dsl/definition.ts";
 export type { Immutable, RowOf } from "./dsl/entity.ts";
 export { entity, ref, singleEntity } from "./dsl/entity.ts";
 export { emit } from "./dsl/event.ts";
-export { domain, explore } from "./dsl/explore.ts";
 export { externalService, service } from "./dsl/service.ts";
 export { unchecked } from "./dsl/unchecked.ts";
 export type { Unit } from "./dsl/unit.ts";

@@ -1,6 +1,4 @@
 import type { Bag } from "../data/bag.ts";
-import { InternalError } from "../data/internalError.ts";
-import type { Schema } from "../data/schema.generated.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import { definitionKinds } from "../spec/structure.ts";
@@ -13,36 +11,6 @@ const kinds = new Set<unknown>(definitionKinds);
 
 export function isDefinition(value: unknown): value is Definition {
   return typeof value === "object" && value !== null && kinds.has((value as { readonly kind?: unknown }).kind);
-}
-
-/**
- * The shape of the values that `schema` checks, read from `d`, the definition that `schema` names. A chart state's
- * schemas are read from the chart's structure instead (SpecFunctions.shape).
- */
-export function shapeIn(d: Definition, schema: Schema): Shape {
-  const mismatch = () => new InternalError(`${JSON.stringify(schema)} names no schema of a ${d.kind}`);
-  switch (schema.kind) {
-    case "input":
-      if (d.kind === "command" || d.kind === "query" || d.kind === "screen") return d.input;
-      throw mismatch();
-    case "output":
-      if ((d.kind === "command" || d.kind === "query" || d.kind === "screen") && d.output !== undefined)
-        return d.output;
-      throw mismatch();
-    case "payload":
-      if (d.kind === "event") return d.payload;
-      throw mismatch();
-    case "control": {
-      const control = d.kind === "screen" ? d.controls?.[schema.control] : undefined;
-      if (control === undefined) throw mismatch();
-      return control.payload ?? {};
-    }
-    case "record":
-      if (d.kind === "entity") return d.fields as Shape;
-      throw mismatch();
-    default:
-      throw mismatch();
-  }
 }
 
 export interface Place {

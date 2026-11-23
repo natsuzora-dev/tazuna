@@ -124,26 +124,6 @@ theorem growsBy_sendEntered : GrowsBy (sendEntered fs st) := fun r =>
 def EnteredFrom (s s' : State) : Prop :=
   ∀ n i', s'.machine? n = some i' → i'.entered = [] ∨ ∃ i, s.machine? n = some i ∧ i.closed = i'.closed ∧ i.entered = i'.entered
 
-theorem EnteredFrom.append {s s' : State} (c : Instance) (hc : c.entered = []) (hm : s'.machines = s.machines ++ [c])
-    (hk : s'.copies = s.copies) : EnteredFrom s s' := by
-  intro n i' h
-  simp only [State.machine?, hm, hk, List.append_assoc, List.find?_append] at h
-  simp only [State.machine?, List.find?_append]
-  cases hs : s.machines.find? (·.id == n) with
-  | some x =>
-    rw [hs] at h
-    obtain rfl : x = i' := by simpa using h
-    exact .inr ⟨x, rfl, rfl, rfl⟩
-  | none =>
-    rw [hs] at h
-    cases hcf : [c].find? (·.id == n) with
-    | some y =>
-      rw [hcf] at h
-      have : y = c := by simp only [List.find?] at hcf; split at hcf <;> simp_all
-      simp only [Option.some_or, Option.or_some, Option.getD_none, Option.some.injEq] at h
-      exact .inl (h ▸ this ▸ hc)
-    | none => rw [hcf] at h; exact .inr ⟨i', by simpa using h, rfl, rfl⟩
-
 theorem EnteredFrom.active {s s' : State} (h : EnteredFrom s s') {name : InstanceId} {n : String} {i' : Instance}
     (hi : s'.machine? name = some i') (hc : i'.closed = false) (hn : i'.isIn n = true) :
     ∃ i, s.machine? name = some i ∧ i.closed = false ∧ i.isIn n = true := by

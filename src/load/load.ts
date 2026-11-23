@@ -5,6 +5,7 @@ import { parseSync } from "oxc-parser";
 import type { z } from "zod";
 import { InternalError } from "../data/internalError.ts";
 import type { Malformed } from "../data/malformed.ts";
+import { type BoundsOptions, boundsService } from "../dsl/bounds.ts";
 import { constantsSchema, constantsService } from "../dsl/constants.ts";
 import {
   type Contract,
@@ -14,13 +15,12 @@ import {
   type Place,
   type ServiceDefinition,
 } from "../dsl/definition.ts";
-import { type Explore, isExplore } from "../dsl/explore.ts";
+import type { Entities } from "../dsl/entity.ts";
 import { contractService, definerService, isContract } from "../dsl/service.ts";
 import { isScenarioDefinition, type ScenarioDefinition, scenarioService } from "../scenario/define.ts";
 import type { Structure } from "../spec/structure.generated.ts";
 import { type DefinitionStructure, unconverted } from "../spec/structure.ts";
 import { opaqueCollections } from "./collections.ts";
-import { domainValues, placeDomains } from "./explores.ts";
 import type { Found } from "./found.ts";
 import { caseCollisions, duplicateNames, type NamedExport, reservedNames } from "./names.ts";
 import { type DefinerExport, owners } from "./owners.ts";
@@ -208,7 +208,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
   const found: Omit<Named<Definition>, "service">[] = [];
   const foundContracts: { readonly place: Place; readonly value: Readonly<Record<string, unknown>> }[] = [];
   const foundConstants: { readonly name: string; readonly place: Place; readonly value: unknown }[] = [];
-  const foundExplores: { readonly place: Place; readonly value: Explore }[] = [];
+  const foundBounds: { readonly place: Place; readonly value: BoundsOptions<Entities> }[] = [];
   const foundScenarios: { readonly name: string; readonly place: Place; readonly value: ScenarioDefinition }[] = [];
   const sources: SourceFile[] = [];
   const definerExports: DefinerExport[] = [];
@@ -233,7 +233,8 @@ export async function loadSpec(root: string): Promise<Loaded> {
       else if (isContract(value)) foundContracts.push({ place, value });
       else if (constantsSchema(value) !== undefined && !foundConstants.some((c) => c.value === value))
         foundConstants.push({ name, place, value });
-      else if (isExplore(value) && !foundExplores.some((x) => x.value === value)) foundExplores.push({ place, value });
+      else if (boundsService(value) !== undefined && !foundBounds.some((x) => x.value === value))
+        foundBounds.push({ place, value: value as BoundsOptions<Entities> });
     }
   }
   const owned = owners(found, definerExports);
@@ -256,15 +257,14 @@ export async function loadSpec(root: string): Promise<Loaded> {
     }
     return [{ name, service, place, definition: { schema, values: value as Constants["values"] } }];
   });
-  const explores = new Map<string, { readonly written: Explore; readonly place: Place }>();
-  const exploreMalformed = foundExplores.flatMap(({ place, value }): Found<Malformed>[] => {
-    const { service } = value;
-    if (!services.has(service))
-      return [{ violation: { kind: "Malformed.unknownService", definition: null, data: { name: service } }, place }];
-    if (explores.has(service))
-      return [{ violation: { kind: "Malformed.duplicateExplore", definition: null, data: { service } }, place }];
-    explores.set(service, { written: value, place });
-    return domainValues(service, value, place);
+  const bounds = new Map<string, Readonly<Record<string, number>>>();
+  const boundsMalformed = foundBounds.flatMap(({ place, value }): Found<Malformed>[] => {
+    const service = ownerName(boundsService(value));
+    if (service === undefined) return [];
+    if (bounds.has(service))
+      return [{ violation: { kind: "Malformed.duplicateBounds", definition: null, data: { service } }, place }];
+    bounds.set(service, value.creates);
+    return [];
   });
   const defined = foundScenarios.flatMap(({ name, place, value }): Named<ScenarioDefinition>[] => {
     const service = ownerName(scenarioService(value));
@@ -277,7 +277,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
     ownerName(contractService(value)) ??
     ownerName(scenarioService(value)) ??
     constants.find((c) => c.definition.values === value)?.service ??
-    (isExplore(value) && services.has(value.service) ? value.service : undefined);
+    ownerName(boundsService(value));
   const namedExports = fileExports.flatMap(({ name, place, value }): NamedExport[] => {
     const service = serviceOf(value);
     const named = isDefinition(value) || isScenarioDefinition(value) || constantsSchema(value) !== undefined;
@@ -285,18 +285,6 @@ export async function loadSpec(root: string): Promise<Loaded> {
   });
   const names = new Map<unknown, Named<Definition>>(definitions.map((d) => [d.definition, d]));
   const built = structureOf(definitions, names, services, contracts);
-  const placed =
-    built.kind === "found"
-      ? []
-      : [...explores].map(([service, { written, place }]) =>
-          placeDomains(
-            { ...built.structure, explores: [], program: unconverted },
-            definitions,
-            service,
-            written,
-            place,
-          ),
-        );
   const opaque = opaqueCollections(definitions, constants);
   const exported = new Set(found.map((d) => d.definition));
   const loaded = loadScenarios(root, defined, services, (d) => {
@@ -316,19 +304,11 @@ export async function loadSpec(root: string): Promise<Loaded> {
     names,
     services,
   };
-  const missingExplores = [...new Set(defined.map((s) => s.service))].flatMap((service): Found<Malformed>[] => {
-    const place = services.get(service)?.place;
-    return explores.has(service) || place === undefined
-      ? []
-      : [{ violation: { kind: "Malformed.missingExplore", definition: null, data: { service } }, place }];
-  });
   const malformed = [
     ...duplicateNames(namedExports),
     ...owned.malformed,
     ...unknownServices,
-    ...exploreMalformed,
-    ...placed.flatMap((p) => p.malformed),
-    ...missingExplores,
+    ...boundsMalformed,
     ...reservedNames([...serviceNamed, ...defined]),
     ...caseCollisions(serviceNamed),
     ...[...services.keys()].flatMap((service) => caseCollisions(defined.filter((s) => s.service === service))),
@@ -345,7 +325,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
     throw new InternalError(`${built.unnamed.join(", ")} names a value that no export names, and no check reports it`);
   const structure = {
     ...built.structure,
-    explores: placed.map((p) => p.explore),
+    bounds: [...bounds].map(([service, creates]) => ({ service, creates })),
     program: unconverted,
   };
   return { kind: "structured", spec: { ...spec, structure } };

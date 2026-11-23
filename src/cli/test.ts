@@ -86,9 +86,8 @@ function placeOfReported(spec: Spec, named: Named<LoadedScenario>, v: ViolationV
 }
 
 /**
- * Simulates and explores `scenarios`, some or all of the spec's, in the engine, then tests the snapshots
- * (testSnapshots). Each violation is reported once per kind, definition, data and location: first those of the
- * scenarios' simulations, in order, then those of the paths after them.
+ * Simulates `scenarios`, some or all of the spec's, in the engine, then tests the snapshots (testSnapshots). Each
+ * violation is reported once per kind, definition, data and location, in the order of the scenarios.
  */
 export function testSpec(
   spec: CheckedSpec,
@@ -130,14 +129,6 @@ export function testSpec(
         snapshotted.push({ run: snapshotRun, lines: run.halted ? undefined : lines });
     }
   }
-  for (const { named, run, ref } of runs)
-    for (const { violation, service, appended } of run.found)
-      report(
-        toReported(violation, placeOfReported(spec, named, violation, service), {
-          scenario: ref,
-          appendedLines: appended,
-        }),
-      );
   const skipped = spec.scenarios.filter((s) => !scenarios.includes(s));
   const snapshots = testSnapshots(spec, snapshotted, options.update, skipped);
   return { ...snapshots, violations: [...violations, ...snapshots.violations] };

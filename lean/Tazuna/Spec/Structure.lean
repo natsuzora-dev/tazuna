@@ -14,8 +14,8 @@ structure Structure where
   contracts : List Contract
   /-- The definitions, in the order of the spec. -/
   definitions : List Definition
-  /-- The `explore()` calls, at most one per service. -/
-  explores : List Explore
+  /-- The `bounds()` calls, at most one per service. -/
+  bounds : List Bounds := []
   program : Ir.Program := {}
 deriving Repr, Inhabited
 

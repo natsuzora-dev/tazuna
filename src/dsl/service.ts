@@ -2,6 +2,7 @@ import type { z } from "zod";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import { type GivenDefiner, givenDefiner, type ScenarioDefiner, scenarioDefiner } from "../scenario/define.ts";
+import { type BoundsDefiner, boundsDefiner } from "./bounds.ts";
 import type { Conditions, Named, Present } from "./conditions.ts";
 import type { ConstantsGroup } from "./constants.ts";
 import type { Contract, RecordsData } from "./contract.ts";
@@ -110,6 +111,8 @@ interface Definers<Es extends Entities, N extends string> {
   scenario: ScenarioDefiner<RecordsData<Es>, N>;
   /** Defines a Given that scenarios share (GivenDefiner). */
   given: GivenDefiner<RecordsData<Es>, N>;
+  /** Defines the bounds of the states that `prove` checks the service's invariants in, at most one per service. */
+  bounds: BoundsDefiner<Es>;
   /**
    * Returns `condition` as is, typed with the service's records, so that guards and `requires` of the service share
    * one function.
@@ -380,6 +383,7 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
   const scenario = scenarioDefiner(owner);
   const given = givenDefiner();
   const condition = <F>(f: F): F => f;
+  const bounds = boundsDefiner(owner);
   register(owner, [
     command,
     query,
@@ -390,6 +394,7 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
     scenario,
     given,
     condition,
+    bounds,
     ...Object.values(events),
   ]);
   return {
@@ -402,6 +407,7 @@ function definers(owner: ServiceDefinition): Definers<Entities, string> {
     scenario,
     given,
     condition,
+    bounds,
     ...events,
   } as unknown as Definers<Entities, string>;
 }

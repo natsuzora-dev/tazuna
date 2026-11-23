@@ -4,7 +4,7 @@ import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import type { NonCanonical } from "../data/nonCanonical.generated.ts";
 import type { At, Expected, Folder } from "../data/pairing.ts";
-import type { GivenRecord, Line, Scenario } from "../data/scenario.generated.ts";
+import type { GivenRecord, Scenario } from "../data/scenario.generated.ts";
 import type { Schema } from "../data/schema.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { Run } from "../data/traceFile.ts";
@@ -213,13 +213,6 @@ export type Evaluated = {
   readonly created: readonly string[];
 };
 
-/** A violation that an explored path reports, with the lines that the path appended to the scenario. */
-export type Found = {
-  readonly violation: ViolationValue;
-  readonly service?: string;
-  readonly appended: readonly Line[];
-};
-
 /** What a running service of a scenario's simulation reports, and its trace as its snapshot holds it. */
 export type ServiceRun = {
   readonly service: string;
@@ -227,7 +220,7 @@ export type ServiceRun = {
   readonly lines: readonly TraceLine[];
 };
 
-/** What test finds of one scenario: its simulation, the step orders of its processings, and the paths after it. */
+/** What test finds of one scenario: its simulation and the step orders of its processings. */
 export type ScenarioRun = {
   /** The simulation's InvalidScenario violations, then its halting one. */
   readonly violations: readonly ViolationValue[];
@@ -235,8 +228,6 @@ export type ScenarioRun = {
   readonly services: readonly ServiceRun[];
   /** Whether the simulation or a running service halted, so that no snapshot is compared or written. */
   readonly halted: boolean;
-  readonly found: readonly Found[];
-  readonly visited: number;
 };
 
 /** A snapshot line as verify reads it: with its values compared, and its value tagged (CValue.tagged), if it has one. */

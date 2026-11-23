@@ -1,6 +1,5 @@
 import Lean.Data.Json.Parser
 import Lean.Data.Json.Printer
-import Tazuna.Explore.Enabled
 import Tazuna.Explore.Instrument
 import Tazuna.Validation.Check
 import Tazuna.Verify.External

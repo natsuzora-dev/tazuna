@@ -43,6 +43,7 @@ export const {
   contract,
   given,
   scenario,
+  bounds,
 } = service({
   name: "todo",
   description: "Keep the user's tasks and remind the user of them",

@@ -639,19 +639,6 @@
         "violation": "{\"kind\":\"Illegal.restoredHeld\",\"definition\":{\"service\":\"player\",\"name\":\"player\"},\"data\":{\"state\":\"playing\",\"history\":\"back\"},\"location\":{\"file\":\"player/player.ts\",\"line\":39}}"
       }
     },
-    "Illegal.undeclaredDomain": {
-      "meaning": "The node at `path` of `schema` has an infinite type and no domain, so explore cannot write a value of `schema`. `schema` is one that a move that the explore of `service` appends may carry (Domains.moveSchemas): the input of an own command or query, the output of another service's command or query that the service sends, the payload of another service's event that it receives, or the payload of a control that an own screen offers as `any`. Every other service counts as external, since a scenario chooses which are. `definition` holds the schema. `check` reports none exactly when every such node has a domain (`Checked.domainsDeclared`).",
-      "example": {
-        "excerpt": {
-          "file": "todo/todo.ts",
-          "from": 18,
-          "to": 21,
-          "line": 18,
-          "text": "export const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);"
-        },
-        "violation": "{\"kind\":\"Illegal.undeclaredDomain\",\"definition\":{\"service\":\"todo\",\"name\":\"addTask\"},\"data\":{\"service\":\"todo\",\"schema\":{\"kind\":\"input\",\"definition\":{\"service\":\"todo\",\"name\":\"addTask\"}},\"path\":[{\"kind\":\"field\",\"name\":\"title\"}]},\"location\":{\"file\":\"todo/todo.ts\",\"line\":18}}"
-      }
-    },
     "Illegal.unlistedControl": {
       "meaning": "The chart's own offers have no entry for `control`. They list every control, `any` for every payload, so that what a state does not offer is written, not left out.",
       "example": {
@@ -1237,30 +1224,17 @@
         "violation": "{\"kind\":\"Malformed.defaultSchema\",\"definition\":{\"service\":\"stats\",\"name\":\"Stats\"},\"data\":{},\"location\":{\"file\":\"stats/stats.ts\",\"line\":4},\"error\":{\"type\":\"zod\",\"issues\":[{\"origin\":\"number\",\"code\":\"too_small\",\"minimum\":1,\"inclusive\":true,\"path\":[\"completed\"],\"message\":\"Too small: expected number to be >=1\"}]}}"
       }
     },
-    "Malformed.domainValue": {
-      "meaning": "The value at index `value` of the domain at index `domain` of the `explore()` of `service` is not JSON, which a scenario line writes, or the domain's schema rejects it, refinements included.",
+    "Malformed.duplicateBounds": {
+      "meaning": "Another `bounds()` call of the service `service` was exported too.",
       "example": {
         "excerpt": {
-          "file": "todo/explore.ts",
-          "from": 4,
-          "to": 8,
-          "line": 4,
-          "text": "export const todoExplore = explore({\n  service: \"todo\",\n  depth: 2,\n  domains: [domain(Task.fields.id, [\"task-1\"]), domain(Task.fields.title, [\"Buy milk\", \"\"])],\n});"
+          "file": "todo/bounds.ts",
+          "from": 5,
+          "to": 5,
+          "line": 5,
+          "text": "export const manyTasks = bounds({ creates: { Task: 5 } });"
         },
-        "violation": "{\"kind\":\"Malformed.domainValue\",\"definition\":null,\"data\":{\"service\":\"todo\",\"domain\":1,\"value\":1},\"location\":{\"file\":\"todo/explore.ts\",\"line\":4}}"
-      }
-    },
-    "Malformed.duplicateExplore": {
-      "meaning": "Another `explore()` call names the service `service` too.",
-      "example": {
-        "excerpt": {
-          "file": "todo/explore.ts",
-          "from": 10,
-          "to": 14,
-          "line": 10,
-          "text": "export const deeperExplore = explore({\n  service: \"todo\",\n  depth: 3,\n  domains: [domain(Task.fields.id, [\"task-1\"]), domain(Task.fields.title, [\"Buy milk\"])],\n});"
-        },
-        "violation": "{\"kind\":\"Malformed.duplicateExplore\",\"definition\":null,\"data\":{\"service\":\"todo\"},\"location\":{\"file\":\"todo/explore.ts\",\"line\":10}}"
+        "violation": "{\"kind\":\"Malformed.duplicateBounds\",\"definition\":null,\"data\":{\"service\":\"todo\"},\"location\":{\"file\":\"todo/bounds.ts\",\"line\":5}}"
       }
     },
     "Malformed.duplicateName": {
@@ -1367,19 +1341,6 @@
         "violation": "{\"kind\":\"Malformed.missingDefiner\",\"definition\":null,\"data\":{\"name\":\"noted\"},\"location\":{\"file\":\"todo/data.ts\",\"line\":5}}"
       }
     },
-    "Malformed.missingExplore": {
-      "meaning": "The service `service` has scenarios and no `explore()`, which bounds the paths that `test` explores after them.",
-      "example": {
-        "excerpt": {
-          "file": "todo/todo.ts",
-          "from": 10,
-          "to": 14,
-          "line": 10,
-          "text": "export const { command, createEvent, given, scenario } = service({\n  name: \"todo\",\n  description: \"Keep tasks\",\n  entities: { Task },\n});"
-        },
-        "violation": "{\"kind\":\"Malformed.missingExplore\",\"definition\":null,\"data\":{\"service\":\"todo\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":10}}"
-      }
-    },
     "Malformed.misusedObserved": {
       "meaning": "The line `input` of the scenario uses the observed value at the field `path` of a handle in the way `use` (LoweringViolation's ObservedUse) instead of placing it whole in a value. The value exists only when the scenario runs.",
       "example": {
@@ -1404,19 +1365,6 @@
           "text": "export const marks = query({\n  output: {\n    tags: bag(z.string()).readonly(),\n    days: sortedBy(z.strictObject({ n: z.int() }), \"n\").readonly(),\n    ids: set(z.string()).readonly(),\n  },\n}).resolve(() => ({ tags: [], days: [{ n: 1 }], ids: [] }));"
         },
         "violation": "{\"kind\":\"Malformed.opaqueCollection\",\"definition\":{\"service\":\"todo\",\"name\":\"marks\"},\"data\":{\"path\":[\"output\",\"tags\"],\"collection\":\"bag\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":14}}"
-      }
-    },
-    "Malformed.overlappingDomain": {
-      "meaning": "The domains at the indices `domains` of the `explore()` of `service` cover one node: they name it, or one names it and another names a node around it, whose values explore writes whole. Which values the node takes would depend on which domain is read.",
-      "example": {
-        "excerpt": {
-          "file": "todo/explore.ts",
-          "from": 4,
-          "to": 13,
-          "line": 4,
-          "text": "export const todoExplore = explore({\n  service: \"todo\",\n  depth: 2,\n  domains: [\n    domain(Task.fields.id, [\"task-1\"]),\n    domain(Task.fields.title, [\"Buy milk\"]),\n    domain(ref(Task), [\"task-2\"]),\n    domain(Label, [{ text: \"Home\" }]),\n  ],\n});"
-        },
-        "violation": "{\"kind\":\"Malformed.overlappingDomain\",\"definition\":null,\"data\":{\"service\":\"todo\",\"domains\":[0,2]},\"location\":{\"file\":\"todo/explore.ts\",\"line\":4}}"
       }
     },
     "Malformed.reservedNameCharacter": {
@@ -1459,7 +1407,7 @@
       }
     },
     "Malformed.unknownService": {
-      "meaning": "The `constants()` or `explore()` call names `name`, which no service definer has.",
+      "meaning": "The `constants()` call names `name`, which no service definer has.",
       "example": {
         "excerpt": {
           "file": "todo/data.ts",
@@ -1534,19 +1482,6 @@
           "text": "export const retryTask = command({ input: { id: z.string() }, emits: [JSON.parse(\"0\") || addTask] }).decide(() => []);"
         },
         "violation": "{\"kind\":\"Malformed.unresolvedReference\",\"definition\":{\"service\":\"worklist\",\"name\":\"retryTask\"},\"data\":{\"path\":[\"emits\",0],\"expected\":\"event\"},\"location\":{\"file\":\"worklist/worklist.ts\",\"line\":18}}"
-      }
-    },
-    "Malformed.unusedDomain": {
-      "meaning": "The domain at index `domain` of the `explore()` of `service` names no node of a schema that the service's moves may carry: its schema is written nowhere there, or only inside an array or a record.",
-      "example": {
-        "excerpt": {
-          "file": "todo/explore.ts",
-          "from": 5,
-          "to": 9,
-          "line": 5,
-          "text": "export const todoExplore = explore({\n  service: \"todo\",\n  depth: 2,\n  domains: [domain(Task.fields.id, [\"task-1\"]), domain(Task.fields.title, [\"Buy milk\"]), domain(z.string(), [\"Call\"])],\n});"
-        },
-        "violation": "{\"kind\":\"Malformed.unusedDomain\",\"definition\":null,\"data\":{\"service\":\"todo\",\"domain\":2},\"location\":{\"file\":\"todo/explore.ts\",\"line\":5}}"
       }
     },
     "Malformed.writtenCreatedKey": {

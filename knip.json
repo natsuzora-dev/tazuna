@@ -9,7 +9,7 @@
       }
     },
     "samples/todo/spec": {
-      "entry": ["**/{scenarios,contract,automations,machines,explore,*Screen}.ts"]
+      "entry": ["**/{scenarios,contract,automations,machines,bounds,*Screen}.ts"]
     }
   },
   "ignoreBinaries": ["lake", "mkfifo"],

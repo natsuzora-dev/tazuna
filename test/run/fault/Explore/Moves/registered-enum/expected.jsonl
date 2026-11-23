@@ -1,1 +1,0 @@
-{"kind":"Fault.failedEnsures","definition":{"service":"todo","name":"mark"},"data":{"condition":"stillOpen"},"location":{"file":"todo/todo.ts","line":10},"scenario":{"service":"todo","name":"marked"},"appendedLines":[{"type":"request","kind":"command","target":{"service":"todo","name":"mark"},"input":{"value":{"taskId":"task-1","status":"done"},"holes":[]}}]}

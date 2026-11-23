@@ -1,15 +1,12 @@
 import Tazuna.Ir.Functions
 import Tazuna.Verify.Read
 import Tazuna.Explore.StepOrders
-import Tazuna.Explore.Moves
-import Tazuna.Explore.Enabled
-import Tazuna.Explore.Fingerprint
 import Tazuna.Sim.Run
 import Tazuna.Sim.Trace
 
 /-!
-The runs that the CLI's test command asks of the engine: each scenario simulated, the step orders of its processings
-searched, and the paths after it explored, with what every running service reports. The spec functions run as the
+The runs that the CLI's test command asks of the engine: each scenario simulated and the step orders of its processings
+searched, with what every running service reports. The spec functions run as the
 structure's IR (Ir.functionsOf).
 -/
 
@@ -92,114 +89,9 @@ def stepOrderViolations (spec : Spec.Structure) (sc : Scenario) (executed : Exec
 
 def halted (w : Sim.World) : Bool := w.halted.isSome || w.states.any (·.2.halted.isSome)
 
-/-- A violation with the running service whose list it is in, if any. -/
-structure Reported where
-  violation : Violation
-  service : Option String
-
 /-- What a running service reports: its own violations, then those its instrument collected, then its halt. -/
 def reportedOf (r : Ran) (service : String) (s : State) : List Violation :=
   reportedViolations s (r.acting.collect service) none
-
-/-- The violations that the running services of `child` added since `parent`, which `child` continues. -/
-def addedSince (parent child : Ran) : List Reported :=
-  child.world.states.flatMap fun (service, s) =>
-    let before := parent.world.state service
-    let collected := (child.acting.collect service).violations
-    let was := (parent.acting.collect service).violations.length
-    let halt := match s.halted, before.halted with
-      | some f, none => [f.toViolation]
-      | _, _ => []
-    ((s.violations.drop before.violations.length).map (·.toViolation) ++ collected.drop was ++ halt).map
-      ({ violation := ·, service := some service })
-
-/--
-Whether the lines appended after `parent` are lines that someone could write: no report of the simulation and no
-InvalidInput violation of a running service. explore discards the others.
--/
-def givable (parent child : Ran) : Bool :=
-  child.world.violations.length == parent.world.violations.length &&
-    (child.world.halted.isNone || parent.world.halted.isSome) &&
-    !(addedSince parent child).any (·.violation.kind.startsWith "InvalidInput.")
-
-/-- A violation that an explored path reports, with the lines that the path appended to the scenario. -/
-structure Found where
-  violation : Violation
-  service : Option String
-  appended : List Scenario.Line
-
-derive_wire Found serialize_only skip_serializing_none
-
-/-- What explore found after a scenario, and how many worlds it visited. -/
-structure Explored where
-  found : List Found := []
-  visited : Nat := 0
-
-/--
-Explores the scenario: executes its lines, and the paths that append moves facing the own service, up to the depth of
-its service's `explore()`, breadth-first, without extending a path whose world an earlier path reached, and discarding
-a path whose last line no one could write (givable). Each path continues its parent's execution. It reports the
-violations that each path added, the step orders of its last move's processings that change their result, and the
-fault of computing the moves after it.
--/
-def explore (spec : Spec.Structure) (sc : Scenario) : IO Explored := do
-  let start ← Sim.World.start spec sc
-  let fsOf ← instrumentedOf start
-  let domains := (← exploreOf spec sc.service).domains
-  let bound := (← exploreOf spec sc.service).depth
-  let (world, acting) ← (Sim.execute spec fsOf start sc).run {}
-  let base : Ran := { world, acting }
-  let x : Explored := {}
-  if halted base.world || !base.world.violations.isEmpty then return x
-  let own := sc.service
-  let movesAfter (appended : List Scenario.Line) (r : Ran) : IO (Except Violation (List Move)) := do
-    if halted r.world then return .ok []
-    let some st := r.world.services.lookup own | return .ok []
-    let s := r.world.state own
-    let ran : ActingIO (Except Violation (List Move)) := do
-      match ← Explore.enabled st (fsOf own) s with
-      | .error f => pure (.error (Finding.fault f).toViolation)
-      | .ok e => pure (.ok (← Explore.moves spec st { sc, lines := sc.lines ++ appended, domains } r.world e))
-    pure (← ran.run' r.acting)
-  let continued (parent : Ran) (appended : List Scenario.Line) (move : Move) : IO Ran := do
-    let lines := sc.lines ++ appended ++ move
-    let full := { sc with lines }
-    let ran : ActingIO Sim.World :=
-      ((lines.zipIdx).drop (sc.lines.length + appended.length)).foldlM (init := parent.world) fun w (l, i) =>
-        w.step fsOf full l i
-    let (world, acting) ← ran.run parent.acting
-    pure { world, acting }
-  let found ← IO.mkRef x
-  let visited ← IO.mkRef ({} : Std.HashSet String)
-  -- As search.ts extends a path: within the depth, at a fresh fingerprint, with the moves after it queued.
-  let extend (path : List Move) (r : Ran) : IO (List (List Move × Ran × Move)) := do
-    if path.length >= bound then return []
-    let fingerprint ← worldFingerprint r.world
-    if (← visited.get).contains fingerprint then return []
-    visited.modify (·.insert fingerprint)
-    let appended := path.flatten
-    match ← movesAfter appended r with
-    | .error v =>
-      found.modify fun x => { x with found := x.found ++ [{ violation := v, service := some own, appended }] }
-      return []
-    | .ok moves => return moves.map (path, r, ·)
-  let mut queue := (← extend [] base).toArray
-  let mut i := 0
-  while h : i < queue.size do
-    let (path, parent, move) := queue[i]
-    i := i + 1
-    let appended := path.flatten
-    let child ← continued parent appended move
-    if !givable parent child then continue
-    let added := appended ++ move
-    let orders ← stepOrderViolations spec { sc with lines := sc.lines ++ added } child.execution
-      (sc.lines.length + appended.length)
-    found.modify fun x =>
-      { x with found := x.found ++ (addedSince parent child).map (fun rep =>
-          { violation := rep.violation, service := rep.service, appended := added }) ++
-        orders.map ({ violation := ·, service := none, appended := added }) }
-    queue := queue ++ (← extend (path ++ [move]) child).toArray
-  pure { (← found.get) with visited := (← visited.get).size }
 
 /-- What a simulation shows of one running service: its trace lines, its violations, and its candidates. -/
 structure SimulatedService where
@@ -218,7 +110,7 @@ structure ServiceRun where
 
 derive_wire ServiceRun serialize_only
 
-/-- What test finds of one scenario: its simulation, the step orders of its processings, and the paths after it. -/
+/-- What test finds of one scenario: its simulation and the step orders of its processings. -/
 structure ScenarioRun where
   /-- The simulation's InvalidScenario violations, then its halting one. -/
   violations : List Violation
@@ -226,12 +118,10 @@ structure ScenarioRun where
   services : List ServiceRun
   /-- Whether the simulation or a running service halted, so that no snapshot is compared or written. -/
   halted : Bool
-  found : List Found
-  visited : Nat
 
 derive_wire ScenarioRun serialize_only
 
-/-- The simulation, step-order search and exploration of `sc`. -/
+/-- The simulation and step-order search of `sc`. -/
 def runScenario (spec : Spec.Structure) (sc : Scenario) : IO ScenarioRun := do
   let start ← Sim.World.start spec sc
   let (world, acting) ← (Sim.simulate spec (← instrumentedOf start) start sc).run {}
@@ -240,10 +130,8 @@ def runScenario (spec : Spec.Structure) (sc : Scenario) : IO ScenarioRun := do
   let services := world.states.map fun (service, s) =>
     { service, violations := reportedOf simulated service s
       lines := (Sim.trace s).map fun (l, after, created) => Sim.traceLineOf service l after created }
-  let explored ← explore spec sc
   pure { violations := world.violations.map (·.toViolation) ++ (world.halted.map (·.toViolation)).toList
-         stepOrders := orders, services, halted := halted world, found := explored.found
-         visited := explored.visited }
+         stepOrders := orders, services, halted := halted world }
 
 /--
 The simulation of `sc`: each running service's trace lines, violations and candidates, and the simulation's violations

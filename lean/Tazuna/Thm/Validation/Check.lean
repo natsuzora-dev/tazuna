@@ -4,7 +4,6 @@ import Tazuna.Thm.Validation.Charts
 import Tazuna.Thm.Validation.Commands
 import Tazuna.Thm.Validation.Contracts
 import Tazuna.Thm.Validation.Schemas
-import Tazuna.Thm.Validation.Explores
 import Tazuna.Thm.Guarantee
 
 /-!
@@ -54,9 +53,6 @@ structure Checked (s : Structure) : Prop where
   unionsApart : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.schemasOf d, ∀ path, (path, .ambiguousUnion) ∉ Schemas.issues x.1 x.2
   /-- No map state's key declares a default, which items, typed by the key's output type, never leaves to fill. -/
   mapKeysUndefaulted : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.mapKeysOf d, Schemas.defaultPaths x.1 x.2 = []
-  /-- Every node of an infinite type that a move of an explore may carry has a domain, so explore gives it values. -/
-  domainsDeclared : ∀ x ∈ s.explores, ∀ schema json, (schema, json) ∈ Domains.moveSchemas s x.service →
-    ∃ t, Domains.rootTree (Domains.domainOf x.domains schema) json = .ok t
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/
 @[guarantee] theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by
@@ -148,13 +144,12 @@ structure Checked (s : Structure) : Prop where
         simpa using h d hd c hc st hst t ht
       · rfl
   have schemas := Tazuna.Thm.Validation.Schemas.schemas_ordered s
-  have explores := Tazuna.Thm.Validation.Explores.domains_declared s
-  rw [parents, controls, reasons, restored, delays, negative, schemas, explores]
+  rw [parents, controls, reasons, restored, delays, negative, schemas]
   simp only [and_assoc]
   constructor
-  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, m, sk, ua, mk, dd⟩
-    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng, sk, ua, mk, dd⟩
+  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, m, sk, ua, mk⟩
+    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng, sk, ua, mk⟩
   · intro h
-    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.9, h.12, h.13, h.14, h.15⟩
+    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.9, h.12, h.13, h.14⟩
 
 end Tazuna.Thm.Validation.Check

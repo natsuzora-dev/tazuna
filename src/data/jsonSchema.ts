@@ -1,16 +1,6 @@
 import { z } from "zod";
-import { InternalError } from "./internalError.ts";
 import { collectionOf } from "./marks.ts";
-import type { SchemaStep } from "./schema.generated.ts";
-import {
-  checksOf,
-  constantMessage,
-  fieldSchema,
-  recursesEagerly,
-  type SchemaNode,
-  schemaNode,
-  strict,
-} from "./schemaNode.ts";
+import { checksOf, constantMessage, recursesEagerly, schemaNode, strict } from "./schemaNode.ts";
 import type { Json, Shape } from "./values.ts";
 
 export type JsonSchema = { readonly [key: string]: Json };
@@ -135,45 +125,6 @@ const jsonSchemaOf = (
       },
     }) as JsonSchema,
   );
-
-/** `schema` and each schema inside it that jsonSchema writes in its place. */
-export function writtenAs(schema: z.ZodType): z.ZodType[] {
-  const node = schemaNode(schema);
-  const inner =
-    node.type === "optional" || node.type === "default" || node.type === "lazy"
-      ? node.inner
-      : node.type === "codec" || node.type === "pipe"
-        ? node.in
-        : node.type === "opaque"
-          ? node.inner
-          : undefined;
-  return inner === undefined ? [schema] : [schema, ...writtenAs(inner)];
-}
-
-/** The node that jsonSchema writes for `schema`. */
-const written = (schema: z.ZodType): SchemaNode => schemaNode(writtenAs(schema).at(-1) ?? schema);
-
-/**
- * The part of `schema` at `path` in its jsonSchema: a nullable is written as a union of what it wraps and null. A path
- * that the JSON Schema has and `schema` lacks is an InternalError.
- */
-export function partAt(schema: z.ZodType, path: readonly SchemaStep[]): z.ZodType {
-  return path.reduce((at, step) => {
-    const node = written(at);
-    const part =
-      step.kind === "field" && node.type === "object"
-        ? fieldSchema(node, step.name)
-        : step.kind === "items" && node.type === "array"
-          ? node.element
-          : step.kind === "option" && node.type === "union"
-            ? node.options[step.index]
-            : step.kind === "option" && node.type === "nullable"
-              ? [node.inner, z.null()][step.index]
-              : undefined;
-    if (part === undefined) throw new InternalError(`no part at ${JSON.stringify(step)} of a ${node.type} schema`);
-    return part;
-  }, schema);
-}
 
 /**
  * The JSON Schema of an object of `shape` that the structure holds, with what Lean's parse reads beyond it, and the

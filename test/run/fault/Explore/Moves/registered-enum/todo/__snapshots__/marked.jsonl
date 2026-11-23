@@ -1,2 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"mark#1","name":"mark","input":{"taskId":"task-1","status":"open"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"mark#1","answer":{"result":"accepted"}}

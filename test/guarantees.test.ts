@@ -67,10 +67,6 @@ const ofCheck = {
   because:
     "a property of the structure check over all structures, which the engine runs on every check; no one run shows all structures",
 } as const;
-const ofExplored = {
-  because:
-    "a property of exploration over all paths, which the engine runs on every test example; no one run shows all paths",
-} as const;
 const ofRenaming = {
   because:
     "a property of the renaming relation, which the identity theorems use and no run computes, so no spec or trace can exercise it",
@@ -126,7 +122,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
     because:
       "a statement about the order that exitOrder computes for every state tree; microstep_exits_in_exit_order relates it to runs",
   },
-  explored_sent_ids_distinct: ofExplored,
   external_answer_needs_delivery: { kindExample: "InvalidScenario.notDelivered" },
   failed_ensures_blames_command: { kindExample: "Fault.failedEnsures" },
   fireDue_agrees: ofAudit,
@@ -150,12 +145,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
     example: "service/Chart/Config/exit-transition-entry-order",
     scenario: "intoRegion",
   },
-  merged_search_reports: {
-    because:
-      "a property of breadth-first search over any space whose fingerprint keeps what later paths report; run.diff.ts compares the fingerprint itself in TS and Lean",
-  },
   modal_child_covers: { kindExample: "InvalidInput.coveredByModal" },
-  moves_enabled: ofExplored,
   only_clock_moves_time: network("delivered"),
   operate_agrees: ofAudit,
   overtaking_delivery_halts: { kindExample: "InvalidScenario.overtaking" },
@@ -195,7 +185,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
       "states that two runs whose Given writes the same records in other orders are alike, which compares two runs that no fixture holds",
   },
   simulate_reported: network("leftInFlight"),
-  slots_complete: ofExplored,
   sortByKey_equal_keys_in_canonical_order: ofSort,
   sortByKey_perm: ofSort,
   sortCanonical_perm: ofSort,

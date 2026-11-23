@@ -240,9 +240,6 @@ tazuna detects a break of each assumption only in part or not at all.
 - **Loading.** tazuna loads a spec in TypeScript, and no theorem states what loading guarantees of the structure that it builds.
   `check`'s `Malformed` and `Restricted` rules, and its `NonCanonical` rules that read the source, hold for that structure.
   Loading also decides which schema a `domain()` names by Zod object identity, and no theorem covers that matching.
-- **Move schemas.** `test` enumerates no move whose schema holds a type that is not finite and has no domain.
-  `check` reports such a type in each schema that a move may carry as `Illegal.undeclaredDomain`, but no theorem shows that moves carry only the schemas that `check` reads.
-  If a move reads another such schema, `test` stops with an internal error.
 - **Step-order search.** The step-order search reaches every order of conflicting steps that changes a message's outcome.
   No theorem proves it, and a proof needs two facts: steps that do not conflict give the same outcome in either order, and the conflict check sees every read and write of every step.
 - **Exchange checks.** The end-of-run checks of the exchanges with external services check what [Exchanges with external services](#exchanges-with-external-services) lists.
@@ -435,9 +432,4 @@ No theorem shows that it does.
 
 | Property | Theorems |
 |---|---|
-| Each move that `test` appends after a scenario is one that [Explored paths](#explored-paths) lists and that the world enables. | `moves_enabled` |
-| `test` considers every move that the world enables, as [Explored paths](#explored-paths) lists them. No theorem ties that list to the lines that a run accepts. | `slots_complete` |
-| `test` appends a move exactly when the world enables it and the declared domains and the finite types admit its values. | `moves_complete` |
-| On an explored path, no two requests that the own service sends carry one id, restarts included and whatever step orders the step-order search sets, so no move answers the own service with `reused-id`. | `explored_sent_ids_distinct` |
-| When the fingerprints assumption holds, extending only the first explored world of each fingerprint reports the same violations and reached parts as extending every path of up to the `depth` of `explore()`. The row covers nothing where that assumption fails, as for a second `BagOrderDependent` violation of one definition. | `merged_search_reports` |
 | `verify --coverage` reports only parts outside the reached parts that the replays collect. No theorem states that the collected parts are what the replays reached. | `uncovered_unreached` |

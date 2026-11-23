@@ -66,6 +66,3 @@ export function stringsOf(value: unknown): string[] {
   if (value !== null && typeof value === "object") return Object.values(value).flatMap(stringsOf);
   return [];
 }
-
-export const isObject = (v: unknown): v is { readonly [key: string]: Json } =>
-  v !== null && typeof v === "object" && !Array.isArray(v);

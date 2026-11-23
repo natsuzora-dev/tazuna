@@ -1,10 +1,7 @@
 import Engine.Drive
 import Tazuna.Ir.Expr
-import Tazuna.Explore.Enabled
-import Tazuna.Explore.Moves
 import Tazuna.Explore.Coverage
 import Tazuna.Explore.Instrument
-import Tazuna.Explore.Fingerprint
 import Tazuna.Scenario.Given
 import Tazuna.Sim.InvalidScenario
 import Tazuna.Validation.Illegal

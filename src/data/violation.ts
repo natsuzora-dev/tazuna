@@ -1,6 +1,5 @@
 import type { z } from "zod";
 import type { DefinitionRef } from "./definitionRef.ts";
-import type { Line } from "./scenario.generated.ts";
 import { type Json, plain } from "./values.ts";
 
 export type Data = Readonly<Record<string, Json>>;
@@ -71,13 +70,11 @@ export function thrown(value: unknown): ViolationError {
 export const zodError = (issues: readonly z.core.$ZodIssue[]): ViolationError => ({ type: "zod", issues });
 
 /**
- * A reported violation, with its location. `scenario` is the scenario that the violation is about, and `appendedLines`
- * the lines appended to it before the violation.
+ * A reported violation, with its location. `scenario` is the scenario that the violation is about.
  */
 export interface ReportedViolation extends ViolationValue {
   readonly location: Location;
   readonly scenario?: DefinitionRef;
-  readonly appendedLines?: readonly Line[];
   readonly error?: ViolationError;
 }
 
@@ -88,7 +85,7 @@ export interface ReportedViolation extends ViolationValue {
 export function toReported(
   v: ViolationValue & Placed & Pick<ReportedViolation, "error">,
   at: Location,
-  extra: Pick<ReportedViolation, "scenario" | "appendedLines"> = {},
+  extra: Pick<ReportedViolation, "scenario"> = {},
 ): ReportedViolation {
   const line = v.line ?? at.line;
   const scenario = v.scenario ?? extra.scenario;
@@ -98,7 +95,6 @@ export function toReported(
     data: v.data,
     location: { file: at.file, ...(line === undefined ? {} : { line }) },
     ...(scenario === undefined ? {} : { scenario }),
-    ...(extra.appendedLines === undefined ? {} : { appendedLines: extra.appendedLines }),
     ...(v.error === undefined ? {} : { error: v.error }),
   };
 }
