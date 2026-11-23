@@ -1,0 +1,8 @@
+{"target":{"kind":"Uncovered.request","definition":{"service":"members","name":"addUser"},"data":{}},"outcome":{"kind":"reached","input":"join.successAnswer"},"location":{"file":"members/members.ts","line":24}}
+{"target":{"kind":"Uncovered.successAnswer","definition":{"service":"members","name":"addUser"},"data":{}},"outcome":{"kind":"reached","input":"join.successAnswer"},"location":{"file":"members/members.ts","line":24}}
+{"target":{"kind":"Uncovered.request","definition":{"service":"members","name":"addGroup"},"data":{}},"outcome":{"kind":"reached","input":"join.successAnswer"},"location":{"file":"members/members.ts","line":28}}
+{"target":{"kind":"Uncovered.successAnswer","definition":{"service":"members","name":"addGroup"},"data":{}},"outcome":{"kind":"reached","input":"join.successAnswer"},"location":{"file":"members/members.ts","line":28}}
+{"target":{"kind":"Uncovered.request","definition":{"service":"members","name":"join"},"data":{}},"outcome":{"kind":"reached","input":"join.successAnswer"},"location":{"file":"members/members.ts","line":32}}
+{"target":{"kind":"Uncovered.successAnswer","definition":{"service":"members","name":"join"},"data":{}},"outcome":{"kind":"reached","input":"join.successAnswer"},"location":{"file":"members/members.ts","line":32}}
+{"target":{"kind":"Uncovered.request","definition":{"service":"members","name":"leave"},"data":{}},"outcome":{"kind":"reached","input":"leave.successAnswer"},"location":{"file":"members/members.ts","line":38}}
+{"target":{"kind":"Uncovered.successAnswer","definition":{"service":"members","name":"leave"},"data":{}},"outcome":{"kind":"reached","input":"leave.successAnswer"},"location":{"file":"members/members.ts","line":38}}

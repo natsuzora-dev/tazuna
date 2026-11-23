@@ -22,10 +22,19 @@ def Scalar.toValue? : Scalar → Option Value
 
 def Scalar.toVal (v : Scalar) : Val := Val.ofOption v.toValue?
 
+/--
+How a slot holds its record's key: a String term, or, for an entity whose key is the fields `names`, two or more, the
+slot's values of those fields.
+-/
+inductive SlotKey where
+  | text (t : Term)
+  | fields (names : List String)
+deriving Repr, Inhabited
+
 /-- A record slot of a keyed entity: whether a record is in it, its key, and its fields, each a `V`. -/
 structure Slot where
   live : Term
-  key : Term
+  key : SlotKey
   fields : List (String × Term)
 deriving Repr, Inhabited
 
@@ -39,8 +48,14 @@ deriving Repr, Inhabited
 def present (M : Model) (fields : List (String × Term)) : List (String × Value) :=
   fields.filterMap fun (n, t) => ((t.denote M).toScalar.toValue?).map (n, ·)
 
+/-- The key of the record in `s` under `M`, as Row.key holds it: for several key fields, the object of their values. -/
+def Slot.keyValue (M : Model) (s : Slot) : Value :=
+  match s.key with
+  | .text t => .str (t.denote M).toStr
+  | .fields names => .obj (names.map fun n => (n, ((Value.obj (present M s.fields)).field? n).getD .null))
+
 def Slot.row (M : Model) (entity : String) (s : Slot) : Row :=
-  { entity, key := some (.str (s.key.denote M).toStr), value := .obj (present M s.fields) }
+  { entity, key := some (s.keyValue M), value := .obj (present M s.fields) }
 
 /-- The records that `r` holds under `M`: the live slots of each keyed entity, then the single entities' records. -/
 def SRecords.conc (M : Model) (r : SRecords) : Records :=
@@ -149,14 +164,26 @@ def jsonField (name : String) : List (String × Term) → Term
   | [] => undefT
   | (n, t) :: fs => if n == name then .ite (.isUndef t) (jsonField name fs) t else jsonField name fs
 
+/-- Whether the key of `s` under `M` is the string `k`; a key of several fields is an object. -/
+def Slot.keyIs (M : Model) (s : Slot) (k : String) : Bool :=
+  match s.key with
+  | .text t => decide ((t.denote M).toStr = k)
+  | .fields _ => false
+
+/-- Whether `s` is live with the String key `key`; a key of several fields is an object, never a string. -/
+def Slot.hasKey (s : Slot) (key : Term) : Term :=
+  match s.key with
+  | .text t => .and s.live (.eq (.mkStr t) (.mkStr key))
+  | .fields _ => ff
+
 /-- Whether the key of a live slot of `slots` is `key`. -/
 def keyIn (key : Term) (slots : List Slot) : Term :=
-  disj (slots.map fun s => .and s.live (.eq (.mkStr s.key) (.mkStr key)))
+  disj (slots.map (·.hasKey key))
 
 /-- The field `name` of the first live slot of `slots` whose key is `key`, `undefined` when none is. -/
 def rowField (key : Term) (name : String) : List Slot → Term
   | [] => undefT
-  | s :: ss => .ite (.and s.live (.eq (.mkStr s.key) (.mkStr key))) (jsonField name s.fields) (rowField key name ss)
+  | s :: ss => .ite (s.hasKey key) (jsonField name s.fields) (rowField key name ss)
 
 /-- The number of items whose terms hold. -/
 def countIn : List (Term × SVal) → Term
@@ -220,7 +247,10 @@ table's records in slot order, which is the order that `SRecords.conc` holds the
 def SVal.items (r : SRecords) : SVal → Option (List (Term × SVal))
   | .list vs => some (vs.map (tt, ·))
   | .bag items => some items
-  | .table e => some ((r.slotsOf e).map fun s => (s.live, .row e s.key))
+  -- A record whose key is several fields has no SVal.row.
+  | .table e => (r.slotsOf e).mapM fun s => match s.key with
+    | .text t => some (s.live, .row e t)
+    | .fields _ => none
   | .ite c a b => do
     let xs ← a.items r
     let ys ← b.items r

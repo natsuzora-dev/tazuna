@@ -143,13 +143,18 @@ def recordTerms (st : Service) (creates created : List (String × Nat)) (records
   let keyedEntities := st.entities.filter (!st.singles.contains ·)
   let keyed ← keyedEntities.mapM fun e => do
     let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.keyText ≤ b.keyText)
+    let names := st.keyFieldsOf e
     let live ← rows.mapM fun r => do
-      let key ← match r.key with
-        | some (.str k) => litTerm (.str k)
-        | _ => throw "a key that is no string"
-      pure ({ live := tt, key := .strOf key, fields := ← fieldsOfRow e r.value } : Slot)
+      let key ← match names, r.key with
+        | [_], some (.str k) => do pure (SlotKey.text (.strOf (← litTerm (.str k))))
+        | [_], _ => throw "a key that is no string"
+        | _, _ => pure (SlotKey.fields names)
+      pure ({ live := tt, key, fields := ← fieldsOfRow e r.value } : Slot)
     let free := (creates.lookup e).getD 0 - (created.lookup e).getD 0
-    let empty : Slot := { live := ff, key := .lit (.str ""), fields := (Ir.fieldsOf st e).map (·, undefT) }
+    let emptyKey := match names with
+      | [_] => SlotKey.text (.lit (.str ""))
+      | _ => .fields names
+    let empty : Slot := { live := ff, key := emptyKey, fields := (Ir.fieldsOf st e).map (·, undefT) }
     pure (e, live ++ (List.range free).map fun _ => empty)
   let singles ← st.singles.mapM fun e => do
     let value := ((records.find? (·.entity == e)).map (·.value)).getD (.obj [])
@@ -224,7 +229,7 @@ def searchOf (j : Spec.Structure) (depth : Option Nat) (service : String) : IO S
   let fromClients (name : String) : Bool :=
     ((st.requirements.lookup name).map (·.callers)).getD [] |>.any (· != .service service)
   pure { spec := j, st, creates, depth := depth.getD (creates.foldl (· + ·.2) 0 + 1),
-         blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else compositeKeyed st,
+         blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else none,
          sendable := (st.commands ++ st.queries).filter fromClients,
          targets := ((targets j).filter (·.part.ref.service == service)).map (·.part) }
 

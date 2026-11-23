@@ -195,18 +195,24 @@ theorem rowField_conc (M : Model) (e name : String) (k : Term) : ∀ ss : List S
   | s :: ss => by
     have ih := rowField_conc M e name k ss
     rw [rowField, denote_ite]
+    cases hsk : s.key with
+    | fields names =>
+      have hc : (s.hasKey k).holds M = false := by simp only [Slot.hasKey, hsk]; rfl
+      rw [hc]; simp only [Bool.false_eq_true, ↓reduceIte]; rw [ih]
+      by_cases hl : s.live.holds M <;> simp [liveRows, hl, Slot.row, Slot.keyValue, hsk]
+    | text t =>
     by_cases hl : s.live.holds M
-    · by_cases hk : (s.key.denote M).toStr = (k.denote M).toStr
-      · have hc : (Term.and s.live (.eq (.mkStr s.key) (.mkStr k))).holds M = true := by
-          simp [holds_and, hl, mkStr_eq_holds, hk]
+    · by_cases hk : (t.denote M).toStr = (k.denote M).toStr
+      · have hc : (s.hasKey k).holds M = true := by
+          simp [Slot.hasKey, hsk, holds_and, hl, mkStr_eq_holds, hk]
         rw [hc]; simp only [↓reduceIte]
-        simp [liveRows, hl, Slot.row, hk, toVal_toValue?, jsonField_conc]
-      · have hc : (Term.and s.live (.eq (.mkStr s.key) (.mkStr k))).holds M = false := by
-          simp [holds_and, hl, mkStr_eq_holds, hk]
+        simp [liveRows, hl, Slot.row, Slot.keyValue, hsk, hk, toVal_toValue?, jsonField_conc]
+      · have hc : (s.hasKey k).holds M = false := by
+          simp [Slot.hasKey, hsk, holds_and, hl, mkStr_eq_holds, hk]
         rw [hc]; simp only [Bool.false_eq_true, ↓reduceIte]; rw [ih]
-        simp [liveRows, hl, Slot.row, hk]
-    · have hc : (Term.and s.live (.eq (.mkStr s.key) (.mkStr k))).holds M = false := by
-        simp [holds_and, hl]
+        simp [liveRows, hl, Slot.row, Slot.keyValue, hsk, hk]
+    · have hc : (s.hasKey k).holds M = false := by
+        simp [Slot.hasKey, hsk, holds_and, hl]
       rw [hc]; simp only [Bool.false_eq_true, ↓reduceIte]; rw [ih]
       simp [liveRows, hl]
 
@@ -332,30 +338,42 @@ theorem field_conc (M : Model) (r : SRecords) (name : String) (s : Trace) : ∀ 
 
 theorem find_liveRows_isSome (M : Model) (e x : String) : ∀ ss : List Slot,
     ((liveRows M e ss).find? (fun row => row.entity == e && row.key == some (.str x))).isSome =
-      ss.any (fun s => s.live.holds M && decide ((s.key.denote M).toStr = x))
+      ss.any (fun s => s.live.holds M && s.keyIs M x)
   | [] => rfl
   | s :: ss => by
     have ih := find_liveRows_isSome M e x ss
     by_cases hl : s.live.holds M
     · have hlr : liveRows M e (s :: ss) = Slot.row M e s :: liveRows M e ss := by simp [liveRows, hl]
       rw [hlr, List.find?_cons, List.any_cons, hl]
-      by_cases hk : (s.key.denote M).toStr = x
-      · have hp : ((Slot.row M e s).entity == e && (Slot.row M e s).key == some (.str x)) = true := by simp [Slot.row, hk]
-        simp [hp, hk]
-      · have hp : ((Slot.row M e s).entity == e && (Slot.row M e s).key == some (.str x)) = false := by simp [Slot.row, hk]
+      cases hsk : s.key with
+      | fields names =>
+        have hp : ((Slot.row M e s).entity == e && (Slot.row M e s).key == some (.str x)) = false := by
+          simp [Slot.row, Slot.keyValue, hsk]
         rw [hp]
-        simp [ih, hk]
+        simp [ih, Slot.keyIs, hsk]
+      | text t =>
+      by_cases hk : (t.denote M).toStr = x
+      · have hp : ((Slot.row M e s).entity == e && (Slot.row M e s).key == some (.str x)) = true := by
+          simp [Slot.row, Slot.keyValue, hsk, hk]
+        simp [hp, Slot.keyIs, hsk, hk]
+      · have hp : ((Slot.row M e s).entity == e && (Slot.row M e s).key == some (.str x)) = false := by
+          simp [Slot.row, Slot.keyValue, hsk, hk]
+        rw [hp]
+        simp [ih, Slot.keyIs, hsk, hk]
     · have hlr : liveRows M e (s :: ss) = liveRows M e ss := by simp [liveRows, hl]
       rw [hlr, ih, List.any_cons]
       simp [hl]
 
 theorem keyIn_holds (M : Model) (k : Term) : ∀ ss : List Slot,
-    (keyIn k ss).holds M = ss.any (fun s => s.live.holds M && decide ((s.key.denote M).toStr = (k.denote M).toStr))
+    (keyIn k ss).holds M = ss.any (fun s => s.live.holds M && s.keyIs M (k.denote M).toStr)
   | [] => rfl
   | s :: ss => by
     have ih := keyIn_holds M k ss
     simp only [keyIn, disj, List.map_cons, List.foldr_cons] at ih ⊢
-    rw [holds_or, ih, holds_and, mkStr_eq_holds, List.any_cons]
+    rw [holds_or, ih, List.any_cons]
+    cases hsk : s.key with
+    | fields names => simp only [Slot.hasKey, hsk, Slot.keyIs, Bool.and_false]; rfl
+    | text t => simp only [Slot.hasKey, hsk, Slot.keyIs]; rw [holds_and, mkStr_eq_holds]
 
 theorem liveRows_filter_self (M : Model) (e : String) (ss : List Slot) :
     (liveRows M e ss).filter (·.entity == e) = liveRows M e ss := by
@@ -894,12 +912,12 @@ theorem concItems_append (M : Model) (recs : Records) (xs ys : List (Term × SVa
   simp [concItems_eq]
 
 theorem liveRows_heldKeys (M : Model) (e : String) (ss : List Slot) :
-    (liveRows M e ss).filterMap (·.key) = (ss.filter (·.live.holds M)).map fun s => .str (s.key.denote M).toStr := by
+    (liveRows M e ss).filterMap (·.key) = (ss.filter (·.live.holds M)).map (·.keyValue M) := by
   simp [liveRows, List.filterMap_map, Function.comp_def, Slot.row]
 
 /-- A table's records as the semantics holds them: its live slots in slot order. -/
 theorem heldKeys_conc (M : Model) (r : SRecords) (e : String) :
-    heldKeys (r.conc M) e = ((r.slotsOf e).filter (·.live.holds M)).map fun s => .str (s.key.denote M).toStr := by
+    heldKeys (r.conc M) e = ((r.slotsOf e).filter (·.live.holds M)).map (·.keyValue M) := by
   simp only [heldKeys, SRecords.conc, List.filter_append, List.filterMap_append]
   have hs : ((r.singles.map fun (e, fields) => ({ entity := e, key := none, value := .obj (present M fields) } : Row)).filter
       (·.entity == e)).filterMap (·.key) = [] := by
@@ -941,6 +959,25 @@ theorem concItems_guard (M : Model) (recs : Records) (c : Term) (xs : List (Term
     obtain ⟨g, v⟩ := x
     by_cases hc : c.holds M <;> simp_all [SVal.concItems, holds_and]
 
+/-- A table's items, when every slot holds a String key: each live slot's record. -/
+theorem table_items (M : Model) (recs : Records) (e : String) : ∀ (ss : List Slot) (items : List (Term × SVal)),
+    ss.mapM (fun s => match s.key with | .text t => some (s.live, SVal.row e t) | .fields _ => none) = some items →
+      SVal.concItems M recs items = (ss.filter (·.live.holds M)).map fun s => Val.row recs e (some (s.keyValue M))
+  | [], items, h => by cases h; rfl
+  | s :: ss, items, h => by
+    rw [List.mapM_cons] at h
+    cases hsk : s.key with
+    | fields names => simp [hsk] at h
+    | text t =>
+      simp only [hsk, bind, Option.bind] at h
+      cases hr : ss.mapM (fun s => match s.key with | .text t => some (s.live, SVal.row e t) | .fields _ => none) with
+      | none => simp [hr] at h
+      | some rest =>
+        simp only [hr, pure, Option.some.injEq] at h
+        subst h
+        have ih := table_items M recs e ss rest hr
+        by_cases hl : s.live.holds M <;> simp [SVal.concItems, hl, ih, SVal.conc, Slot.keyValue, hsk]
+
 /-- What an operation visits in a collection that has items: their values, in order. -/
 theorem items_elements (M : Model) (r : SRecords) (s : Trace) : ∀ (v : SVal) (items : List (Term × SVal)),
     v.items r = some items → (run (elements (v.conc M (r.conc M))) s).1 = .ok (SVal.concItems M (r.conc M) items)
@@ -948,10 +985,9 @@ theorem items_elements (M : Model) (r : SRecords) (s : Trace) : ∀ (v : SVal) (
     cases h; simp [SVal.conc, elements, run_pure, concItems_map_tt]
   | .bag is, items, h => by cases h; simp [SVal.conc, elements, run_pure]
   | .table e, items, h => by
-    cases h
     simp only [SVal.conc, elements]
-    rw [run_note_pure, heldKeys_conc, concItems_eq]
-    simp [List.filter_map, Function.comp_def, SVal.conc]
+    rw [run_note_pure, heldKeys_conc, table_items M (r.conc M) e (r.slotsOf e) items h]
+    simp [Function.comp_def]
   | .ite c a b, items, h => by
     simp only [SVal.items, bind, Option.bind] at h
     cases ha : a.items r with
