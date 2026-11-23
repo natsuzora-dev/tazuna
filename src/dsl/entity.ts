@@ -223,6 +223,18 @@ export function keyTarget(schema: z.ZodType): AnyKeyedEntity | undefined {
 
 export type Entities = Readonly<Record<string, AnyEntity>>;
 
+/**
+ * The record that each top-level `ref(entity)` field of the input shape `I` names, for each entity of `Es`: a command
+ * rejects with `not-found` before it runs any function when one is missing, so each is there.
+ */
+export type Refs<I, Es extends Entities> = {
+  readonly [K in keyof I as I[K] extends Ref<infer E> ? (E extends Es[keyof Es] ? K : never) : never]: I[K] extends Ref<
+    infer E
+  >
+    ? RowOf<E>
+    : never;
+};
+
 /** The records of a keyed entity, without order. */
 interface Table<E extends AnyKeyedEntity> extends Bag<RowOf<E>> {
   get(key: KeyValue<E>): RowOf<E> | undefined;

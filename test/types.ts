@@ -145,6 +145,15 @@ command({
 // A function extracted from an expression takes records as RowOf.
 const isOpen = (task: RowOf<typeof Task>) => task.completedAt === null;
 const shouldRemind = (settings: RowOf<typeof Settings>) => settings.shouldRemind;
+command({
+  input: { taskId: ref(Task), other: ref(Task).nullable() },
+  emits: [],
+  requires: { open: ({ refs }) => refs.taskId.completedAt === null },
+}).decide(({ refs }) => {
+  // @ts-expect-error refs holds only the records of required ref fields, which not-found guarantees
+  refs.other;
+  return refs.taskId.title === "" ? [] : [];
+});
 command({ emits: [] }).decide(({ records }) => {
   records.Task.filter(isOpen);
   shouldRemind(records.Settings);

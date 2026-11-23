@@ -54,7 +54,7 @@ import type { Source, SpecFunctionNode } from "./sources.ts";
  * An argument of a spec function: one that the IR names, `records`, which only the record operations read, or
  * `createKey`, which only a call reads.
  */
-export type Arg = Extract<Expr, { readonly op: "arg" }>["arg"] | "records" | "createKey";
+export type Arg = Extract<Expr, { readonly op: "arg" }>["arg"] | "records" | "createKey" | "refs";
 type Special = "records" | "createKey";
 type Relation = Extract<Expr, { readonly op: "compare" }>["relation"];
 
@@ -143,6 +143,8 @@ class Conversion {
   /** The events that a decide's command lists, in the order of its `emits`. */
   private readonly events: readonly DefinitionRef[];
   private readonly defined: Defined;
+  /** The entity of each top-level ref field of the input, whose record `refs` holds under the field's name. */
+  private readonly refs: ReadonlyMap<string, string>;
   /** The argument that a name of the arguments object reads, once convertFunction knows the arguments. */
   private argument: (node: Node, name: string) => Expr = (node) => this.fail(node, "reads its arguments");
   /** The special arguments that the function receives. */
@@ -153,10 +155,11 @@ class Conversion {
   private readonly inlining: Helper[] = [];
   private fresh = 0;
 
-  constructor(source: Source, events: readonly DefinitionRef[], defined: Defined) {
+  constructor(source: Source, events: readonly DefinitionRef[], defined: Defined, refs: ReadonlyMap<string, string>) {
     this.source = source;
     this.events = events;
     this.defined = defined;
+    this.refs = refs;
   }
 
   /** The texts of the `emits` of `command({ emits }).decide(f)`, where `f` is the function converted. */
@@ -405,13 +408,26 @@ class Conversion {
       if (this.specials.has(name as Special)) this.fail(node, `reads ${name}`);
       // TS passes an arguments object without the name, whose field is undefined.
       if (!(args as readonly string[]).includes(name)) return { op: "undef" };
-      return { op: "arg", arg: name as Exclude<Arg, Special> };
+      if (name === "refs") return this.refsObject();
+      return { op: "arg", arg: name as Exclude<Arg, Special | "refs"> };
     };
     if (parameter === undefined) return body(new Map());
     if (parameter.dotDotDotToken !== undefined || parameter.initializer !== undefined)
       this.fail(parameter, "takes its arguments with a rest or a default");
     if (isIdentifier(parameter.name)) return body(new Map([[parameter.name.text, "args"]]));
     return this.fromArgs(parameter.name, new Map(), body);
+  }
+
+  /** `refs`: the record of each top-level ref field of the input, looked up by the key that the field holds. */
+  private refsObject(): Expr {
+    const input: Expr = { op: "arg", arg: "input" };
+    return {
+      op: "obj",
+      fields: [...this.refs].map(([name, entity]) => ({
+        name,
+        value: { op: "lookup", table: { op: "table", entity }, key: { op: "field", object: input, name } },
+      })),
+    };
   }
 
   /** `then` under the variables that `pattern` destructures from the arguments object. */
@@ -865,16 +881,17 @@ class Conversion {
 
 /**
  * The IR of the function of `source` that receives `args`, or the construct outside the IR that it has. A decide's
- * `events` are those its command lists.
+ * `events` are those its command lists; `refs` names the entity of each top-level ref field of the input.
  */
 export function converted(
   source: Source,
   args: readonly Arg[],
   events: readonly DefinitionRef[] = [],
   defined: Defined = { constants: new Map(), entities: new Map() },
+  refs: ReadonlyMap<string, string> = new Map(),
 ): Expr | { readonly unconverted: string } {
   try {
-    return new Conversion(source, events, defined).convertFunction(source.node, args);
+    return new Conversion(source, events, defined, refs).convertFunction(source.node, args);
   } catch (error) {
     if (error instanceof Unconverted) return { unconverted: error.message };
     throw error;

@@ -38,8 +38,7 @@ export const addTask = command({
 export const completeTask = command({
   input: { taskId: ref(Task) },
   emits: [taskCompletedRecorded, taskCompleted],
-  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
-  requires: { notCompleted: ({ bound }) => bound.task.completedAt === null },
+  requires: { notCompleted: ({ refs }) => refs.taskId.completedAt === null },
   ensures: {
     completed: ({ input, records }) => records.Task.get(input.taskId)?.completedAt !== null,
   },
@@ -51,11 +50,10 @@ export const completeTask = command({
 export const reopenTask = command({
   input: { taskId: ref(Task) },
   emits: [taskReopenedRecorded, taskReopened],
-  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
-  requires: { completed: ({ bound }) => bound.task.completedAt !== null },
+  requires: { completed: ({ refs }) => refs.taskId.completedAt !== null },
   ensures: { reopened: ({ input, records }) => records.Task.get(input.taskId)?.completedAt === null },
-}).decide(({ input, bound, now }) => {
-  const { remindAt } = bound.task;
+}).decide(({ input, refs, now }) => {
+  const { remindAt } = refs.taskId;
   return [
     emit(taskReopenedRecorded, {
       id: input.taskId,
@@ -113,12 +111,11 @@ export const recordReminderDecisionFailed = command({
 export const recordReminderTimeReached = command({
   input: { taskId: ref(Task) },
   emits: [reminderTimeReachedRecorded, reminderTimeReached],
-  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
   requires: {
-    due: ({ bound, now }) =>
-      bound.task.completedAt === null && bound.task.remindAt !== null && bound.task.remindAt <= now,
+    due: ({ refs, now }) =>
+      refs.taskId.completedAt === null && refs.taskId.remindAt !== null && refs.taskId.remindAt <= now,
   },
-}).decide(({ bound }) => [
-  emit(reminderTimeReachedRecorded, { id: bound.task.id, remindAt: null }),
-  emit(reminderTimeReached, { title: bound.task.title }),
+}).decide(({ refs }) => [
+  emit(reminderTimeReachedRecorded, { id: refs.taskId.id, remindAt: null }),
+  emit(reminderTimeReached, { title: refs.taskId.title }),
 ]);

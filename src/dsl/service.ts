@@ -22,7 +22,7 @@ import type {
   Query,
   ServiceDefinition,
 } from "./definition.ts";
-import type { Entities, MadeRow, Records, Row } from "./entity.ts";
+import type { Entities, MadeRow, Records, Refs, Row } from "./entity.ts";
 import {
   type CreateEventDefiner,
   type DeleteEventDefiner,
@@ -51,12 +51,12 @@ interface Definers<Es extends Entities, N extends string> {
     /** The events that the command emits, of this service only (`Illegal.foreignEvent`). */
     emits: readonly Ev[];
     /** The values that `requires`, `decide`, and `ensures` read as `bound`. */
-    binds?: Binds<{ input: Input<I>; records: Records<Es> } & Now, B> & Present<Bn>;
+    binds?: Binds<{ input: Input<I>; refs: Refs<I, Es>; records: Records<Es> } & Now, B> & Present<Bn>;
     /**
      * Checked after `binds`, each in written order. The first that fails names the rejection reason. No key of either
      * may be an array index such as `1`, which JavaScript lists before the other keys (`Illegal.indexReason`).
      */
-    requires?: Named<Rq, { input: Input<I>; records: Records<Es>; bound: Bound<B> } & Now>;
+    requires?: Named<Rq, { input: Input<I>; refs: Refs<I, Es>; records: Records<Es>; bound: Bound<B> } & Now>;
     /** `records` holds the records after the events. `bound` holds the values from before them. */
     ensures?: Named<En, { input: Input<I>; records: Records<Es>; bound: Bound<B> }>;
   }): CommandSetup<I, Ev, B, Rq, Es, N>;
@@ -130,13 +130,13 @@ interface CommandSetup<
   N extends string,
 > {
   decide(
-    decide: (args: { input: Input<I>; records: Records<Es>; bound: Bound<B> } & Now) => Emits<Ev>,
+    decide: (args: { input: Input<I>; refs: Refs<I, Es>; records: Records<Es>; bound: Bound<B> } & Now) => Emits<Ev>,
   ): Command<I, Ev, keyof B & string, Rq, undefined, undefined> & Owned<N>;
 }
 
 interface QuerySetup<I extends Shape, O extends Shape, Rq extends string, Es extends Entities, N extends string> {
   resolve(
-    resolve: (args: { input: Input<I>; records: Records<Es> } & Now) => MadeRow<O>,
+    resolve: (args: { input: Input<I>; refs: Refs<I, Es>; records: Records<Es> } & Now) => MadeRow<O>,
   ): Query<I, O, Rq, undefined> & Owned<N>;
 }
 

@@ -1,11 +1,12 @@
 import { join } from "node:path";
+import { z } from "zod";
 import { encoded } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Json, Shape } from "../data/values.ts";
 import { stateAt, transitionAt } from "../dsl/chart.ts";
 import type { Conditions } from "../dsl/conditions.ts";
 import type { AnyCommand, AnyQuery, Automation, ChartSpec, Place } from "../dsl/definition.ts";
-import type { AnyEntity } from "../dsl/entity.ts";
+import { type AnyEntity, refTarget } from "../dsl/entity.ts";
 import type { Spec } from "../load/load.ts";
 import type {
   ChartFns,
@@ -76,6 +77,21 @@ const located = (u: Unconverted) => (u.location === undefined ? {} : { location:
 
 const sameRef = (a: DefinitionRef, b: DefinitionRef) => a.service === b.service && a.name === b.name;
 
+/** The entity of each top-level `ref(entity)` field of the input of `d`, for the entities of its own service. */
+function refsOf(spec: Spec, d: DefinitionRef): ReadonlyMap<string, string> {
+  const definition = spec.definitions.find((x) => sameRef(x, d))?.definition;
+  if (definition?.kind !== "command" && definition?.kind !== "query") return new Map();
+  const entities = Object.entries(spec.services.get(d.service)?.definition.entities ?? {});
+  return new Map(
+    Object.entries((definition as AnyCommand | AnyQuery).input as Shape).flatMap(([field, schema]) => {
+      if (schema instanceof z.ZodNullable || schema instanceof z.ZodDefault) return [];
+      const target = refTarget(schema);
+      const entity = entities.find(([, e]) => e === target)?.[0];
+      return entity === undefined ? [] : [[field, entity] as const];
+    }),
+  );
+}
+
 function fnSlotsOf(spec: Spec): FnSlot[] {
   const slots: FnSlot[] = [];
   for (const { service, name, definition: d } of spec.definitions) {
@@ -85,7 +101,7 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         callback: "resolve",
         definition: { service, name },
         f: query.resolve as SpecFunction | undefined,
-        args: ["input", "records", "now"],
+        args: ["input", "refs", "records", "now"],
       });
     }
     if (d.kind === "command") {
@@ -94,7 +110,7 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         callback: "decide",
         definition: { service, name },
         f: command.decide as SpecFunction | undefined,
-        args: ["input", "records", "now", "bound"],
+        args: ["input", "refs", "records", "now", "bound"],
         binds: "binding",
         events: command.emits.flatMap((e) => {
           const named = spec.names.get(e);
@@ -298,7 +314,7 @@ function slotsOf(spec: Spec): Slot[] {
           callback: "binding",
           definition,
           conditions: target.binds as Conditions<never>,
-          args: ["input", "records", "now"],
+          args: ["input", "refs", "records", "now"],
           whole: true,
         };
         slots.push(
@@ -307,7 +323,7 @@ function slotsOf(spec: Spec): Slot[] {
             callback: "requirement",
             definition,
             conditions: target.requires,
-            args: ["input", "records", "now", "bound"],
+            args: ["input", "refs", "records", "now", "bound"],
             whole: false,
             binds,
           },
@@ -416,7 +432,8 @@ export class Converter {
 
   /**
    * The IR of `f`, a spec function that receives `args`, or the reason that it stays TS. A decide's `events` are those
-   * its command lists; `defined` is what the spec defines outside its functions, which program() finds itself.
+   * its command lists; `defined` is what the spec defines outside its functions, which program() finds itself; `refs`
+   * names the entity of each top-level ref field of the input.
    */
   convert(
     f: SpecFunction,
@@ -424,13 +441,18 @@ export class Converter {
     {
       events = [],
       defined = this.defined,
-    }: { readonly events?: readonly DefinitionRef[]; readonly defined?: Defined } = {},
+      refs = new Map(),
+    }: {
+      readonly events?: readonly DefinitionRef[];
+      readonly defined?: Defined;
+      readonly refs?: ReadonlyMap<string, string>;
+    } = {},
   ): Expr | Unconverted {
     const location = this.locator.located(f);
     const source = location === undefined ? undefined : this.sources.sourceAt(location);
     if (source === undefined)
       return { unconverted: "has no source that the converter finds", ...(location && { location }) };
-    const result = converted(source, args, events, defined);
+    const result = converted(source, args, events, defined, refs);
     return "unconverted" in result && location !== undefined ? { ...result, location } : result;
   }
 
@@ -471,7 +493,9 @@ export class Converter {
       const failed: NotConverted[] = [];
       for (const [name, f] of entries) {
         const at = { callback: slot.callback, definition: slot.definition, name };
-        const result = binds ? this.convert(f, slot.args) : { unconverted: "reads binds that stay TS" };
+        const result = binds
+          ? this.convert(f, slot.args, { refs: refsOf(spec, slot.definition) })
+          : { unconverted: "reads binds that stay TS" };
         if ("unconverted" in result) failed.push({ ...at, reason: result.unconverted, ...located(result) });
         else conditions.push({ name, body: result });
       }
@@ -489,7 +513,7 @@ export class Converter {
       const body: Expr | Unconverted = binds
         ? f === undefined
           ? empty
-          : this.convert(f, slot.args, { events: slot.events ?? [] })
+          : this.convert(f, slot.args, { events: slot.events ?? [], refs: refsOf(spec, slot.definition) })
         : { unconverted: "reads binds that stay TS" };
       if ("unconverted" in body)
         notConverted.push({
