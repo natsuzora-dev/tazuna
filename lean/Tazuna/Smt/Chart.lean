@@ -231,34 +231,40 @@ def SMachine.assign (m : SMachine) (env : SEnv) (fields : List Condition) : Exce
     err := .or err e
   pure ({ m with context := m.context.map fun (n, t) => (n, (written.lookup n).getD t) }, err)
 
-/-- A microstep's symbolic result: the machine after it and the term that holds when it halts. -/
+/--
+A microstep's symbolic result: the machine after it, the term that holds when it halts, and the fit of that term, which
+reads the context's schema.
+-/
 structure Moved where
   machine : SMachine
   halted : Term
+  fit : Fit
 
 /--
 The machine after `exits`, the assign of `transition` and `entries`, in the order of Service.microstep: each exit's
-assign before the state leaves, and each entry's assign after the state is active.
+assign before the state leaves, and each entry's assign after the state is active. An assign halts when it throws, or
+when the context it writes fails its schema (contextMismatch); the encoding checks the fields that the machine holds.
 -/
 def SMachine.move (m : SMachine) (svc : Service) (p : Program) (c : Service.Chart) (records : SRecords) (now : Term)
     (taken : Option (Arg × SVal)) (transition : Option Service.Transition) (exits entries : List String) : Except String Moved := do
   let mut m := m
   let mut halted := ff
+  let mut fit := Fit.exact
+  let props := propertiesWith ((svc.schemaOf (.context (svc.ref c.name))).getD (.obj []))
   let site (s : Site) : List Condition := (siteOf svc p c s).getD []
-  for n in exits do
-    let (m', e) ← m.assign (m.env c records now taken) (site (.exitAssign n))
-    m := { m' with active := m'.active.filter (· != n) }
-    halted := .or halted e
-  if let some t := transition then
-    let (m', e) ← m.assign (m.env c records now taken) (site (.transitionAssign t.ref))
-    m := m'
-    halted := .or halted e
-  for n in entries do
-    m := { m with active := m.active ++ [n] }
-    let (m', e) ← m.assign (m.env c records now taken) (site (.entryAssign n))
-    m := m'
-    halted := .or halted e
-  pure { machine := { m with active := c.tree.entryOrder m.active }, halted }
+  let assigns := exits.map (fun n => (some n, false, site (.exitAssign n))) ++
+    (transition.map fun t => (none, false, site (.transitionAssign t.ref))).toList ++
+    entries.map fun n => (some n, true, site (.entryAssign n))
+  for (state, entering, fields) in assigns do
+    if entering then m := { m with active := m.active ++ state.toList }
+    let (m', e) ← m.assign (m.env c records now taken) fields
+    m := if entering then m' else { m' with active := m'.active.filter (some · != state) }
+    let fits := if fields.isEmpty then [] else props.filterMap fun pr => (m.context.lookup pr.1).map (fieldHolds · pr)
+    halted := disj [halted, e, .not (conj (fits.map (·.term)))]
+    fit := Fit.all ([fit] ++ fits.map (·.fit))
+  -- A halt that the terms miss, or one that they add, decides a microstep wrongly either way.
+  pure { machine := { m with active := c.tree.entryOrder m.active }, halted,
+         fit := if fit == .exact then .exact else .loose }
 
 /-- The rejection kinds as the `kind` of a rejection holds them. -/
 def rejectionKinds : List String :=

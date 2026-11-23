@@ -335,13 +335,15 @@ structure Stepped where
   gap : Term := ff
   /-- The events emitted so far, in order, each with the term that holds when it is emitted and its payload. -/
   emitted : List (Term × Ir.Ref × List (String × Term)) := []
+  /-- That two events of one event group write one record, which halts the command (sameRecordInBag). -/
+  clash : Term := ff
 
 /-- The state `a` where `c` holds and `b` elsewhere, both steps on from a state that had emitted `common` events. -/
 def Stepped.ite (c : Term) (a b : Stepped) (common : Nat) : Stepped :=
   let under (g : Term) (es : List (Term × Ir.Ref × List (String × Term))) := es.map fun (h, e, p) => (Term.and g h, e, p)
   { records := .ite c a.records b.records,
     used := a.used.map fun (e, us) => (e, (us.zip ((b.used.lookup e).getD [])).map fun (x, y) => .ite c x y),
-    beyond := .ite c a.beyond b.beyond, gap := .ite c a.gap b.gap,
+    beyond := .ite c a.beyond b.beyond, gap := .ite c a.gap b.gap, clash := .ite c a.clash b.clash,
     emitted := a.emitted.take common ++ under c (a.emitted.drop common) ++ under (.not c) (b.emitted.drop common) }
 
 /-- The record that `payload` creates in the first unused slot of `entity`, which leaves the bounds when none is. -/
@@ -426,7 +428,7 @@ def Stepped.named (st : Stepped) (p : String) : Named Stepped := do
   let used ← st.used.mapM fun (e, us) => do
     pure (e, ← us.zipIdx.mapM fun (u, i) => nameAs s!"{p}.{e}.{i}.used" .bool u)
   pure { records := { keyed, singles, keyFields := st.records.keyFields }, used, beyond := ← nameAs s!"{p}.beyond" .bool st.beyond,
-         gap := ← nameAs s!"{p}.gap" .bool st.gap, emitted := st.emitted }
+         gap := ← nameAs s!"{p}.gap" .bool st.gap, emitted := st.emitted, clash := ← nameAs s!"{p}.clash" .bool st.clash }
 
 /-- The payload of an emit as scalar fields, and the term that holds when one is no scalar. -/
 def payloadOf : SVal → Except String (List (String × Term) × Term)
@@ -583,6 +585,17 @@ structure Check where
   throws : Term
   passes : Term
 
+/-- That `payload` fits the payload schema of the event `event`, which the semantics checks of each emitted event. -/
+def payloadHolds (svc : Service) (event : Ir.Ref) (payload : List (String × Term)) : Holds :=
+  let holds := (propertiesWith ((svc.schemaOf (.payload event)).getD (.obj []))).map fun pr =>
+    fieldHolds ((payload.lookup pr.1).getD undefT) pr
+  { term := conj (holds.map (·.term)), fit := Fit.all (holds.map (·.fit)) }
+
+/-- That one of `checks`, each its throw and its pass term, throws when they run in order up to the first that fails. -/
+def throwsFirst (checks : List (Term × Term)) : Term :=
+  (checks.foldl (fun (before, any) (throws, passes) =>
+    (Term.and before (.and (.not throws) passes), Term.or any (.and before throws))) (tt, ff)).2
+
 /-- A command's symbolic step from the records `pre`. -/
 structure Step where
   facts : Facts
@@ -593,6 +606,11 @@ structure Step where
   now : Term
   /-- That the command accepts: no rejection and no throw before the integrity check. -/
   accepted : Term
+  /--
+  That the command halts: a check, its decide or its ensures throws, an emitted payload fails its schema, two events of one
+  group write one record, or an invariant throws on the records after it, each only where the run gets that far.
+  -/
+  halted : Holds
   post : SRecords
   /-- The slots of each entity used after the step. -/
   used : List (String × List Term)
@@ -640,10 +658,25 @@ def Stepped.decided (svc : Service) (names : String) (st : Stepped) (k : String)
     (st.named s!"{names}post{k}{i}" : Named Stepped)
   | .ite c a b => do
     pure (Stepped.ite c (← st.decided svc names s!"{k}y" a) (← st.decided svc names s!"{k}n" b) st.emitted.length)
-  | .bag items => items.zipIdx.foldlM (init := st) fun st ((g, item), i) => do
-    let st' ← st.emitAll svc s!"{names}emit{k}{i}" item
-    (Stepped.ite g st' st st.emitted.length |>.named s!"{names}post{k}{i}" : Named Stepped)
+  | .bag items => do
+    let after ← items.zipIdx.foldlM (init := st) fun st ((g, item), i) => do
+      let st' ← st.emitAll svc s!"{names}emit{k}{i}" item
+      (Stepped.ite g st' st st.emitted.length |>.named s!"{names}post{k}{i}" : Named Stepped)
+    pure { after with clash := .or after.clash (written svc (after.emitted.drop st.emitted.length)) }
   | _ => throw "a decide that returns no array"
+where
+  /-- That two of `group`'s events write one record: the same entity, and the same key unless a single entity's. -/
+  written (svc : Service) (group : List (Term × Ir.Ref × List (String × Term))) : Term :=
+    let target (e : Ir.Ref) : Option (String × List String) := match svc.changeOf e with
+      | some (.create entity keyFields _) | some (.update entity keyFields _) | some (.delete entity keyFields _) =>
+        some (entity, keyFields)
+      | some (.set entity _) => some (entity, [])
+      | _ => none
+    disj (group.zipIdx.flatMap fun ((g, e, p), i) => (group.drop (i + 1)).filterMap fun (h, f, q) => do
+      let (entity, keyFields) ← target e
+      let (other, _) ← target f
+      if entity != other then none
+      pure (conj ([g, h] ++ keyFields.map fun k => .eq ((p.lookup k).getD undefT) ((q.lookup k).getD undefT))))
 
 /--
 The step of command `name` from `pre` with the input `input` from `caller` at the time `now`, as stepOf builds it; the
@@ -696,9 +729,31 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let stepped ← stepped
   let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty), asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t,
                          fit := .exact }
-  let accepted := conj (admitted :: refs ++ bindTerms.map (held ·.2) ++ requireChecks.map held ++
-    [.not decideErr, .not (stepped.records.duplicated svc)])
-  pure { facts := facts ++ named, input, caller, now, accepted, post := stepped.records, used := stepped.used,
+  let checked := admitted :: refs ++ bindTerms.map (held ·.2) ++ requireChecks.map held
+  let accepted := conj (checked ++ [.not decideErr, .not (stepped.records.duplicated svc)])
+  let post := stepped.records
+  let throwsIn (env : SEnv) (conditions : List Condition) : Except String Term := do
+    pure (throwsFirst (← conditions.mapM fun c => do
+      let (v, e) ← seval env [] c.body
+      pure (e, v.truthy)))
+  let ensuresEnv : SEnv := { args := args (some bound), records := post }
+  let ensuresThrows ← throwsIn ensuresEnv (((p.ensures.find? (·.definition == svc.ref name)).map (·.conditions)).getD [])
+  let invariantThrows ← svc.entities.mapM fun e =>
+    if svc.singles.contains e then throwsIn (recordEnv ((post.singles.lookup e).getD []) now) (invariantsOf svc p e)
+    else do pure (disj (← (post.slotsOf e).mapM fun s => do
+      pure (Term.and s.live (← throwsIn (recordEnv s.fields now) (invariantsOf svc p e)))))
+  let serviceThrows ← throwsIn (recordsEnv post now) (serviceInvariantsOf svc p)
+  let payloads := stepped.emitted.map fun (g, e, payload) =>
+    let holds := payloadHolds svc e payload
+    (Term.and g (.not holds.term), holds.fit)
+  let halted := Term.or
+    (throwsFirst ([(ff, admitted)] ++ refs.map (ff, ·) ++ (bindTerms.map (·.2) ++ requireChecks).map fun c => (c.throws, c.passes)))
+    (conj [conj checked, disj ([decideErr, stepped.clash] ++ payloads.map (·.1) ++
+      [conj [.not (stepped.records.duplicated svc), disj ([ensuresThrows, serviceThrows] ++ invariantThrows)]])])
+  -- A halt that the terms miss, or one that they add, lets two runs end alike in the encoding and not in the semantics.
+  let haltedFit := if payloads.all (·.2 == .exact) then Fit.exact else .loose
+  pure { facts := facts ++ named, input, caller, now, accepted, halted := { term := halted, fit := haltedFit },
+         post := stepped.records, used := stepped.used,
          beyond := stepped.beyond, gap := .or stepped.gap (stepped.records.outsideSchema svc), bound, admitted,
          refs := conj refs, binds := bindTerms.map (·.2), requires := requireChecks,
          paths := decidedPaths decided, emitted := stepped.emitted }

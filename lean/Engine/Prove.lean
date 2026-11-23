@@ -431,7 +431,7 @@ def Induction.chartQueries (x : Induction) (cc : ChartCase) (k : Ir.Condition) :
   let start : ChartStep × Query × Fit :=
     (.start, { vars := x.facts.vars,
                asserts := x.facts.asserts ++ [x.holds, .not started.halted] ++ startFits.map (·.term) ++ [startFails] },
-     Fit.all ([x.facts.fit, .of (!cc.sliced) true] ++ startFits.map (·.fit)))
+     Fit.all ([x.facts.fit, .of (!cc.sliced) true, started.fit] ++ startFits.map (·.fit)))
   let guardsOf (t : Service.Transition) : List Ir.Condition := (siteOf st p c (.guards t.ref)).getD []
   let edges ← m.edges.zipIdx.mapM fun (e, i) => do
     let (pre, ctxFacts) := cc.pre (m.configs[e.source]!)
@@ -450,7 +450,7 @@ def Induction.chartQueries (x : Induction) (cc : ChartCase) (k : Ir.Condition) :
       { vars := facts.vars,
         asserts := facts.asserts ++ [x.holds, holdsPre] ++ earlier ++ [ok, .not halted, .not moved.halted] ++
           postFits.map (·.term) ++ [fails] }
-    pure ((ChartStep.edge i, q, Fit.all ([facts.fit, .of (!cc.sliced) true] ++ postFits.map (·.fit))) :
+    pure ((ChartStep.edge i, q, Fit.all ([facts.fit, .of (!cc.sliced) true, moved.fit] ++ postFits.map (·.fit))) :
       ChartStep × Query × Fit)
   pure ([start] ++ edges)
 

@@ -218,6 +218,7 @@ def take (ce : ChainEnv) (x : Path) (chart : String) (edges : List Edge) (taken 
     let y := (x.fork (conj [before, ok, notT halted]) s!"e{i}").setMach chart
       { configs := [e.target], config := intLit (Int.ofNat e.target), context := moved.machine.context,
         exited := mach.exited ++ e.exits }
+    let y := { y with facts := y.facts ++ [(s!"{y.name}.fit", { Facts.none with fit := moved.fit })] }
     out := out ++ [{ y.fork moved.halted "h" with halted := true },
                    ← enterAll ce (y.fork (notT moved.halted) "") chart moved.machine e.entries]
     before := conj [before, notT ok, notT halted]
@@ -330,17 +331,19 @@ def runCommand (ce : ChainEnv) (x : Path) (w : Waiting) : Except String (List Pa
   let (names, x) := x.next
   let step ← stepWith ce.st ce.p x.records x.used w.command (SJson.ofTerms w.input) (callerTerms (.service ce.st.service))
     ce.now names
+  let x := { x with facts := x.facts ++ [(names, { step.facts with fit := step.facts.fit.join step.halted.fit })] }
   let answered (accepted : Bool) : List Job := match w.sender with
     | .state .. => [.answered w.sender accepted]
     | .automation _ => []
-  -- An automation's rejected command, or any command rejected as invalid input, is the sender's fault (automationAnswer).
+  let halts := step.halted.term
+  -- A command rejected as invalid input is the sender's fault, which halts (rejectedInput?).
   let invalid := { x.fork (notT w.valid) "i" with halted := true }
-  let rejected := x.fork (andT w.valid (notT step.accepted)) "r"
-  let rejected := match w.sender with
-    | .state .. => { rejected with jobs := rejected.jobs ++ answered false }
-    | .automation _ => { rejected with halted := true }
-  let ok := x.fork (andT w.valid step.accepted) "a"
-  let ok := { ok with records := step.post, used := step.used, facts := ok.facts ++ [(names, step.facts)],
+  let halted := { x.fork (andT w.valid halts) "h" with halted := true }
+  -- An automation's rejected command is a violation that does not halt (automationAnswer), and nothing waits for it.
+  let rejected := x.fork (andT w.valid (andT (notT step.accepted) (notT halts))) "r"
+  let rejected := { rejected with jobs := rejected.jobs ++ answered false }
+  let ok := x.fork (andT w.valid (andT step.accepted (notT halts))) "a"
+  let ok := { ok with records := step.post, used := step.used,
                       gap := .or ok.gap (.and ok.pc step.gap), beyond := .or ok.beyond (.and ok.pc step.beyond),
                       outs := ok.outs ++ step.emitted.zipIdx.map fun (((g, e, payload) : Term × Ir.Ref × List (String × Term)), (i : Nat)) =>
                         ({ id := s!"{names}{i}", guard := .and ok.pc g, kind := .event, definition := e,
@@ -351,7 +354,7 @@ def runCommand (ce : ChainEnv) (x : Path) (w : Waiting) : Except String (List Pa
   let none_ := ok.fork (notT any) "q"
   let accepted := if step.emitted.isEmpty then [{ ok with jobs := ok.jobs ++ answered true }]
     else [{ some_ with jobs := some_.jobs ++ work ++ answered true }, { none_ with jobs := none_.jobs ++ answered true }]
-  pure (live ([invalid, rejected] ++ accepted))
+  pure (live ([invalid, halted, rejected] ++ accepted))
 
 /-- The paths after the automation `a` reacts to `payload` when the guard `g` holds (Service.workBody). -/
 def react (ce : ChainEnv) (x : Path) (a : Automation) (g : Term) (payload : List (String × Term)) :
