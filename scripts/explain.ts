@@ -90,11 +90,22 @@ function excerptOf(dir: string, { file, line }: Reported["location"]): Excerpt |
   };
 }
 
+interface ProveLine extends Reported {
+  readonly verdict: { readonly case?: { readonly violations: readonly Json[] } };
+}
+
+/** The violation that a line of an example reports: the line itself, or the first violation of prove's counterexample. */
+export function violationOfLine(line: string): Json {
+  const parsed = JSON.parse(line) as Json;
+  const found = (parsed as Partial<ProveLine>).verdict?.case?.violations[0];
+  return found ?? parsed;
+}
+
 /** The first violation that the example `dir` reports, and the excerpt at its location if it names a line. */
 function exampleOf(dir: string): Example {
   const [line = "{}"] = readFileSync(join(dir, expected), "utf8").split("\n");
   const excerpt = excerptOf(dir, (JSON.parse(line) as Reported).location);
-  return { ...(excerpt === undefined ? {} : { excerpt }), violation: JSON.parse(line) as Json };
+  return { ...(excerpt === undefined ? {} : { excerpt }), violation: violationOfLine(line) };
 }
 
 /** The data of explain.json, from the doc comments in src/data and the fixtures. */

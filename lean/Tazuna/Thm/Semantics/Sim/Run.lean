@@ -690,9 +690,9 @@ A clock line publishes the subscription answers that the new time changes: after
 service that did not halt writes the time line and publishes.
 -/
 @[guarantee] theorem clock_publishes (time : Time) (st : Service) (fs : Functions Id) (s : Service.State)
-    (h : (observeResponses st fs ((fireDue st fs time Limit.dueDeadlines.max none s).passTime st time)).halted = none) :
+    (h : (observeResponses st fs ((fireDue st fs time Limit.dueDeadlines.max s).passTime st time)).halted = none) :
     fireTo time st fs s =
-      publish st fs ((observeResponses st fs ((fireDue st fs time Limit.dueDeadlines.max none s).passTime st time)).write
+      publish st fs ((observeResponses st fs ((fireDue st fs time Limit.dueDeadlines.max s).passTime st time)).write
         .in none .time).1 := by
   simp [fireTo, h]
 

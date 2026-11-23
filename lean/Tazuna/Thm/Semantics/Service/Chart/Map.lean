@@ -14,7 +14,7 @@ theorem keeps_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : 
   unfold startCopy
   apply keeps_withMachine
   intro o r
-  simp only [id_bind, note_id, id_pure]
+  simp only [id_bind, id_pure]
   split
   · exact keeps_enter _ _ _ _
   · rfl
@@ -54,51 +54,12 @@ theorem syncCopies_fixed (step : Nat) (owner : InstanceId) (r : Processing) :
     exact foldl_pair_keeps (fun acc map => ((syncMap fs st step owner acc.1 map).1, acc.2 || (syncMap fs st step owner acc.1 map).2))
       (fun acc map => syncMap_fixed step owner acc.1 map) _ _
 
-theorem syncMap_unchanged (step : Nat) (owner : InstanceId) (r : Processing) (map : String)
-    (h : (syncMap fs st step owner r map).2 = false) : (syncMap fs st step owner r map).1 = r := by
-  by_cases hr : r.halted = true
-  · simp [syncMap, hr]
-  · cases ho : r.state.machine? owner with
-    | none => simp [syncMap, hr, ho]
-    | some o =>
-      cases hi : fs.items (r.state.scopeOf o (some map)) r.state.records with
-      | error v => simp [syncMap, hr, ho, hi] at h
-      | ok keys =>
-        cases hd : firstDuplicate id (sortItemKeys keys) with
-        | some k => simp [syncMap, hr, ho, hi, hd] at h
-        | none =>
-        by_cases he : o.copyKeysOf map = sortItemKeys keys
-        · simp [syncMap, hr, ho, hi, hd, he]
-        · simp [syncMap, hr, ho, hi, hd, he] at h
-
-theorem foldl_unchanged {α : Type} (g : Processing → α → Processing × Bool) (hg : ∀ r x, (g r x).2 = false → (g r x).1 = r)
-    (xs : List α) (acc : Processing × Bool)
-    (h : (xs.foldl (fun acc x => ((g acc.1 x).1, acc.2 || (g acc.1 x).2)) acc).2 = false) :
-    acc.2 = false ∧ (xs.foldl (fun acc x => ((g acc.1 x).1, acc.2 || (g acc.1 x).2)) acc).1 = acc.1 := by
-  induction xs generalizing acc with
-  | nil => exact ⟨h, rfl⟩
-  | cons x xs ih =>
-    simp only [List.foldl_cons] at h ⊢
-    obtain ⟨h1, h2⟩ := ih _ h
-    simp only [Bool.or_eq_false_iff] at h1
-    rw [h2, hg _ _ h1.2]
-    exact ⟨h1.1, rfl⟩
-
-theorem syncCopies_unchanged (step : Nat) (owner : InstanceId) (r : Processing)
-    (h : (syncCopies fs st step owner r).2 = false) : (syncCopies fs st step owner r).1 = r := by
-  unfold syncCopies at h ⊢
-  split at h
-  · rfl
-  · rw [foldlM_id] at h ⊢
-    exact (foldl_unchanged (fun r map => syncMap fs st step owner r map) (fun r map => syncMap_unchanged step owner r map)
-      _ (r, false) h).2
-
 theorem growsBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key : Value) :
     GrowsBy (startCopy fs st step owner map key) := by
   unfold startCopy
   apply growsBy_withMachine
   intro o r
-  simp only [id_bind, note_id, id_pure]
+  simp only [id_bind, id_pure]
   split
   · exact (growsBy_enter _ _ _ _).bridge (by rfl) (by rfl)
   · exact Grows.of_lines rfl

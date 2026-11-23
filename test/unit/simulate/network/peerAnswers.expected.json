@@ -72,8 +72,7 @@
           "id": "time#1"
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "todo",
@@ -220,8 +219,7 @@
           "id": "time#1"
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [

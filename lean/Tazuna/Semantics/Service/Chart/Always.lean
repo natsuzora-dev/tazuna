@@ -48,7 +48,6 @@ the step (for a copy, the copy's owner).
 def settled (st : Service) (step : Nat) : Option InstanceId → (Processing → m Processing) → Processing → m Processing
   | none, f, r => f r
   | some name, f, r => do
-    MonadNote.note (.settlesAround (name.owner))
     settleAround fs st step (name.owner) f r
 
 end

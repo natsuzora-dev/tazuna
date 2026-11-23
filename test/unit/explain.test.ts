@@ -64,9 +64,9 @@ test("explain gives the kind's meaning, group, reporters, side at fault, and exa
   assert.deepEqual(example, built.kinds["Fault.failedEnsures"].example);
   assert.deepEqual(explain("Fault.data"), { misuse: "unknown kind Fault.data" });
   assert.deepEqual(explain("constructor"), { misuse: "unknown kind constructor" });
-  assert.deepEqual(explain("InvalidInput.unreadyStep"), {
+  assert.deepEqual(explain("InvalidInput.unownedTarget"), {
     misuse:
-      "InvalidInput.unreadyStep is internal to tazuna, and a spec that check passes never reports it. Report it as a bug",
+      "InvalidInput.unownedTarget is internal to tazuna, and a spec that check passes never reports it. Report it as a bug",
   });
   assert.deepEqual(explain("Fault.failedEnsures", "/missing/explain.json"), {
     misuse: "/missing/explain.json is missing. Reinstall tazuna",

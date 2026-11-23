@@ -1,7 +1,0 @@
-{"time":1792922400000,"dir":"in","type":"command","id":"todo/calendar.reserve#1","name":"reserve","input":{"day":"Mon"},"caller":{"service":"todo"}}
-{"time":1792922400000,"dir":"out","type":"answer","id":"answer#1","to":"todo/calendar.reserve#1","answer":{"result":"accepted"}}
-{"time":1792922400000,"dir":"out","type":"event","id":"booked#1","name":"booked","payload":{"day":"Mon"},"resultOf":"todo/calendar.reserve#1"}
-{"time":1792922400000,"dir":"in","type":"command","id":"todo/calendar.reserve#2","name":"reserve","input":{"day":"Mon"},"caller":{"service":"todo"}}
-{"time":1792922400000,"dir":"out","type":"answer","id":"answer#2","to":"todo/calendar.reserve#2","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"free"}}}
-{"time":1792922400000,"dir":"in","type":"command","id":"todo/calendar.reserve#3","name":"reserve","input":{"day":"Mon"},"caller":{"service":"todo"}}
-{"time":1792922400000,"dir":"out","type":"answer","id":"answer#3","to":"todo/calendar.reserve#3","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"free"}}}

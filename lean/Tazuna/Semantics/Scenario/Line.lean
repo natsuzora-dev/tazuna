@@ -58,8 +58,8 @@ inductive Line where
   /-- The message `message` is undelivered at the end. -/
   | leaveInFlight (message : Fact)
   /--
-  The clock advances to `time`, and every running service fires its deadlines due by then; a tie of a service is
-  internal to it (chooseDeadline).
+  The clock advances to `time`, and every running service fires its deadlines due by then, those due at one time in
+  the order they were armed (fireDue).
   -/
   | «at» (time : Time)
   /-- The host restarts the own service, which reopens its screens as new instances. -/

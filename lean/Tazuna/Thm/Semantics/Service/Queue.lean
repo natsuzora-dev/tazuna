@@ -32,9 +32,9 @@ theorem afterMessage_keysDistinct (h : KeysDistinct s.records) : KeysDistinct (a
   rw [afterMessage_records]
   exact h
 
-theorem fireDue_keysDistinct (to : Time) (fuel : Nat) (tie : Option Time) (h : KeysDistinct s.records) :
-    KeysDistinct (fireDue st fs to fuel tie s).records := by
-  induction fuel generalizing s tie with
+theorem fireDue_keysDistinct (to : Time) (fuel : Nat) (h : KeysDistinct s.records) :
+    KeysDistinct (fireDue st fs to fuel s).records := by
+  induction fuel generalizing s with
   | zero => simp only [fireDue]; split <;> exact h
   | succ fuel ih =>
     rw [fireDue]
@@ -43,29 +43,23 @@ theorem fireDue_keysDistinct (to : Time) (fuel : Nat) (tie : Option Time) (h : K
     · split
       · exact h
       · dsimp only
-        split
-        · simpa using h
-        · rename_i hc
-          obtain ⟨_, rfl⟩ := chooseDeadline_orders hc
-          try simp only [id_bind, endMessage_id]
-          refine ih _ ?_
-          rw [observeResponses_records]
-          exact afterMessage_keysDistinct (drain_keysDistinct _ _ (by
-            rw [(keeps_settled _ _ (keeps_fire _ _)).records]; simpa using h))
+        try simp only [id_bind, endMessage_id]
+        refine ih ?_
+        rw [observeResponses_records]
+        exact afterMessage_keysDistinct (drain_keysDistinct _ _ (by
+          rw [(keeps_settled _ _ (keeps_fire _ _)).records]; simpa using h))
 
 @[guarantee] theorem message_keysDistinct (q : Queue) (h : KeysDistinct s.records) : KeysDistinct (message st fs s q).records := by
   simp only [message, finish, id_bind, endMessage_id]
-  exact fireDue_keysDistinct _ _ _ (by rw [observeResponses_records]; exact afterMessage_keysDistinct (drain_keysDistinct _ _ h))
+  exact fireDue_keysDistinct _ _ (by rw [observeResponses_records]; exact afterMessage_keysDistinct (drain_keysDistinct _ _ h))
 
-@[guarantee] theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (tie : Option Time) (e t : Service.Deadline) (s' : Service.State)
-    (hh : s.halted = none) (he : earliestDeadline s.deadlines to = some e)
-    (hc : chooseDeadline s e (s.deadlines.filter (·.time == e.time))
-      (1 < (s.deadlines.filter (·.time == e.time)).length || tie == e.time) = .ok (t, s')) :
-    ∃ s₁ q tie', fireDue st fs to (fuel + 1) tie s =
-        fireDue st fs to fuel tie' (observeResponses st fs (afterMessage st fs (drain st fs Limit.messageWork.max s₁ q))) ∧
-      s₁.now = max s'.now t.time := by
-  refine ⟨_, _, _, by simp only [fireDue, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, he, hc, Tazuna.Thm.Semantics.Service.Note.note_id,
-      id_pure, endMessage_id, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, id_bind]; rfl, ?_⟩
+@[guarantee] theorem deadline_message_at_its_time (to : Time) (fuel : Nat) (t : Service.Deadline)
+    (hh : s.halted = none) (he : earliestDeadline s.deadlines to = some t) :
+    ∃ s₁ q, fireDue st fs to (fuel + 1) s =
+        fireDue st fs to fuel (observeResponses st fs (afterMessage st fs (drain st fs Limit.messageWork.max s₁ q))) ∧
+      s₁.now = max s.now t.time := by
+  refine ⟨_, _, by simp only [fireDue, hh, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, he,
+      endMessage_id, id_bind]; rfl, ?_⟩
   rw [(keeps_settled _ _ (keeps_fire _ t)).now _]
   simp
 
@@ -75,9 +69,9 @@ theorem fireDue_keysDistinct (to : Time) (fuel : Nat) (tie : Option Time) (h : K
 
 
 /-- A clock advance that still has a deadline due after Limit.dueDeadlines deadlines halts with exceededDueDeadlines. -/
-@[guarantee] theorem due_deadlines_limit_halts (to : Time) (tie : Option Time) (hs : s.halted = none)
+@[guarantee] theorem due_deadlines_limit_halts (to : Time) (hs : s.halted = none)
     (hd : (earliestDeadline s.deadlines to).isSome = true) :
-    (fireDue st fs to 0 tie s).halted = some (.fault (.exceededDueDeadlines Limit.dueDeadlines.max)) := by
+    (fireDue st fs to 0 s).halted = some (.fault (.exceededDueDeadlines Limit.dueDeadlines.max)) := by
   simp only [fireDue, hs, Option.isNone_none, hd, Bool.and_self, ite_true]
   exact report_halted _ rfl
 

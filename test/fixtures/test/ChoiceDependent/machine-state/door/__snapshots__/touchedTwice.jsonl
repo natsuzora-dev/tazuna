@@ -1,5 +1,0 @@
-{"time":1792918800000,"dir":"in","type":"command","id":"touch#1","name":"touch","input":{"by":["a","b"]},"caller":{"service":"client"}}
-{"time":1792918800000,"dir":"out","type":"answer","id":"answer#1","to":"touch#1","answer":{"result":"accepted"}}
-{"time":1792918800000,"dir":"out","type":"event","id":"used#1","name":"used","payload":{"used":true},"resultOf":"touch#1"}
-{"time":1792918800000,"dir":"out","type":"event","id":"touched#1","name":"touched","payload":{"by":"a"},"resultOf":"touch#1","after":["used#1"]}
-{"time":1792918800000,"dir":"out","type":"event","id":"touched#2","name":"touched","payload":{"by":"b"},"resultOf":"touch#1","after":["used#1"]}

@@ -113,7 +113,6 @@ def fillByInitial (st : Service) (filled : Bool) (name : InstanceId) (n : String
 /-- The processing after instance `name` enters state `n`; `filled` is as in fillByInitial. -/
 def enterOne (st : Service) (step : Nat) (filled : Bool) (name : InstanceId) (n : String) : Processing → m Processing :=
   withMachine name fun i r => do
-    MonadNote.note (.wroteState name n)
     let r := ⟨r.state.setMachine name fun i => { i with entered := setEntered i.entered n r.state.now }, r.queue⟩
     MonadNote.note (.reached (.state (st.ref i.chart.name) n))
     let r ← fillByInitial fs st filled name n r

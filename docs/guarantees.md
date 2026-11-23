@@ -83,7 +83,7 @@ Only kinds of the groups `Fault`, `InvalidInput`, and `InvalidScenario` halt, as
 ## What a passing command means
 
 A command *passes* when it reports no violation and `prove` reports no counterexample.
-A command exits with 0 when it passes, with 1 when it reports a violation other than `Undecided` or a counterexample or tsc reports an error, with 3 when it reports only `Undecided` violations or undecided properties, and with 2 on a usage error.
+A command exits with 0 when it passes, with 1 when it reports a violation or a counterexample or tsc reports an error, with 3 when `prove` leaves a property undecided, and with 2 on a usage error.
 `generate` exits with 0 whatever it finds.
 
 - When `check` passes, every spec file type-checks under the nearest `tsconfig.json`, every spec function translates into an expression, and the spec has no violation of the groups that `check` reports.
@@ -114,8 +114,7 @@ Some properties are undecided by design:
 
 - A response is proved only when `when` implies `expect` in the initial records, after each command, and as time passes.
   A response that a deadline or a later step meets in time is undecided, unless the service has no automation and no chart, in which case `prove` reports a counterexample that states its progress assumption in `assumes`.
-- A step-order property compares two automations that react to one event.
-  Two deadlines due at the same time, and two messages that arrive together, have no property, so `prove` checks neither order.
+- A pair of deadlines or events whose message can take more than 8 steps is undecided, as is the arrival order of two answers.
 - An invariant of a screen, or of a machine with parallel, final, history, or map states or with `held` data, is undecided.
 
 ### What `generate` writes
@@ -126,35 +125,22 @@ Some properties are undecided by design:
 - `unreachable` means that no state within the bounds lets the part's request reach the part, so no run within the bounds reaches it.
 - `notReached` and `notEncodable` mean only that the search found no input. The part may still be reachable.
 
-### Step orders that `test` searches
+### Orders that `prove` compares
 
-`test` searches the orders that no line writes:
+The spec decides every choice, so an outcome that depends on an order that no line writes is a violation.
+`prove` compares, from any state where the invariants hold, both orders of:
 
-- the deadlines of one service due at the same time
-- the messages that one line delivers to one service
-- the steps of one message that no cause chain orders
+- two automations that react to one event
+- two deadlines of one service that can be due at the same time
+- two events from other services that can arrive at once
 
-A machine receives each event of an event group in a step of its own, so the order of an event group is one of these orders.
-Each tied deadline, and each message of a line that delivers several, is ordered as one message with all its steps.
-Two steps or messages conflict when what they read and write overlaps.
-When `test` orders a whole message, what the message reads includes what the invariant checks and the subscription answers read after it.
-`test` runs only the orders of conflicting ones.
+Each order runs each message to its end: the deadline's or event's transitions, the always transitions that follow, the own commands, the automations and machines that their events wake, and the activities of the states entered.
+`prove` follows at most 8 steps of each message.
+Two orders end the same when both halt, or when neither halts and both leave the same records and write the same out lines, in any order.
+When they differ, `prove` reports `ChoiceDependent` in its counterexample.
+When a message can take more than 8 steps, the pair is undecided.
 
-`test` searches the step orders of each service's processing of each line separately, and each search stops at its first violation.
-When an order changes the outcome, `test` reports `ChoiceDependent`.
-
-Two outcomes are the same when both halt with the same violation, or when neither halts and both of the following hold:
-
-- Their lines pair one to one with equal contents and the same `after` through the pairing.
-  The lines that a service wrote for the messages of one line pair by message, as `verify` pairs `in` lines, and not by when the service processed them.
-- The state that a later line reads is equal under one binding of created keys.
-  That state is the records and each open instance and copy: the active states, the children that a history state returns to, the context, the `held` data of each active state, and the pending deadlines, whose times a later clock line reads.
-  The binding maps each created key only to a key that the other run created for the same entity, and maps it alike at every key position: in records, contexts, `held` data, and map state item keys.
-
-The open instances of one outcome pair with those of the other by name.
-An instance that no screen opens is named by its chart, and a map state copy by its owner, its map state, and its item key under the binding.
-A screen that another screen opens is named by its opener and by the state and key of that `opens`.
-A screen that the same state opens again takes the name of the one it replaces, so neither the order in which screens open nor how many times a state opened its screen changes a name.
+`test` runs each scenario in one order: deadlines due at the same time fire in the order they were armed, the messages that one line delivers arrive in the order they were sent, and a message's queue takes its waiting steps in queue order.
 
 ### When a trace matches the spec
 
@@ -178,7 +164,6 @@ The counts in a bag can decide a binding: the spec's `[K1, K1, K2]` against the 
 Keys that only a later line tells apart wait for that line.
 When the bindings cannot decide what the implementation gets, or a trace cannot be compared at all, `verify` reports an `Uncomparable` kind.
 
-`test` compares outcomes the same way, `after` included, so a spec without a `ChoiceDependent` violation fixes the `after` that `verify` checks.
 An implementation's trace has no `after` or `created`, and `verify` reports a trace line that has either as `Uncomparable.lineSchema`.
 
 ### Exchanges with external services
@@ -211,8 +196,7 @@ The side that breaks a contract is at fault: the caller for a precondition, and 
 | `InvalidInput` | `test`, `verify` | The scenario, or for `verify` the trace: a message that no sender could give the running service, including an external peer's answer that breaks the peer's contract. |
 | `Fault` | `test`, `verify`, `prove` | The spec. |
 | `RegionOrderDependent` | `test`, `verify` | The spec. |
-| `ChoiceDependent` | `test`, `verify`, `prove` | The spec. |
-| `Undecided` | `test` | Neither side: the check stopped at a limit of tazuna. A smaller processing, or fewer created keys that only their keys tell apart, lets it decide. |
+| `ChoiceDependent` | `prove` | The spec. |
 | `Uncovered` | `verify --coverage` | The tests that write the traces. |
 | `Mismatch` | `test`, `verify` | The implementation or external service whose trace differs, or, for `test`, the snapshot that differs from its scenario's simulation. |
 | `Uncomparable` | `test`, `verify` | The trace that the spec cannot replay or compare in one way, or an entry of the traces folder that is no trace, or, for `test`, a snapshot without a scenario or a scenario without a snapshot. |
@@ -229,13 +213,9 @@ Each row below names one thing that a detection leaves out.
 | `prove` | It proves each property for the states within the bounds. | States with more records of an entity than `creates`, and arrays and bags with more items than `items`. |
 | `prove` | | Strings with a character after U+2FFFF, which Z3's strings cannot hold. |
 | `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that module code reaches by another name, or through a package that the spec imports. |
-| `ChoiceDependent` | It searches the [step orders](#step-orders-that-test-searches) of each processing. | Orders beyond `Undecided.stepOrderLimit`. |
-| `ChoiceDependent` | | The orders of a processing after its first violation. |
-| `ChoiceDependent` | | The order of two steps that wait in the service's queue at once, are not message arrivals, and run the same definition on equal values, such as one automation's reactions to two equal events. The search names a step by what it runs and not by the step that caused it, so it takes such steps as one. |
-| `ChoiceDependent` | | A difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The state is still compared. |
-| `ChoiceDependent` | | A state with too many bindings of created keys to compare, which it reports as `Undecided.stepOrderBindings`. |
-| `ChoiceDependent` | | A screen's input, the answers to its `shows` requests, and the order of open screens, which the opener and the answer lines set. |
-| `ChoiceDependent` | | In `prove`, every pair of steps other than two automations that react to one event. |
+| `ChoiceDependent` | `prove` compares [both orders](#orders-that-prove-compares) of each pair from any state. | The order of other steps of one message, such as two machines that react to one event or the events of one event group. |
+| `ChoiceDependent` | | The arrival order of answers to the service's requests, and pairs in a service with a screen or a parallel, final, history or map state, which `prove` leaves undecided. |
+| `ChoiceDependent` | | Faults inside a message, such as a failing invariant after a command, which other properties report. |
 | `InvalidInput` | It checks an external peer's lines against the peer's contract. | A `requires` that reads more than the input, and an `ensures` that reads records. |
 
 ## Assumptions
@@ -253,8 +233,8 @@ tazuna detects a break of each assumption only in part or not at all.
   `test` checks Given before any line and reports `InvalidScenario.unlistedPeer`, `InvalidScenario.invalidRecord`, `InvalidScenario.duplicateRecord`, and `InvalidScenario.brokenGivenInvariant`.
   After any of them, no line runs.
   No theorem shows that a Given without these violations meets every hypothesis.
-- **Step-order search.** The step-order search reaches every order of conflicting steps that changes a message's outcome.
-  No theorem proves it, and a proof needs two facts: steps that do not conflict give the same outcome in either order, and the conflict check sees every read and write of every step.
+- **Message chains.** `prove` follows a message's steps in the queue order of the semantics, and replays each counterexample of an order pair in the semantics.
+  No theorem proves that the chain it follows is the semantics' chain, so a pair it proves rests on that encoding.
 - **Exchange checks.** The end-of-run checks of the exchanges with external services check what [Exchanges with external services](#exchanges-with-external-services) lists.
   No theorem ties each item of that list to the checks.
 - **Cause chain.** The simulation computes the cause chain that [Steps and channels](#steps-and-channels) describes.
@@ -302,12 +282,12 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 | A refuse line that names one request in flight loses the request and delivers the `unavailable` answer to its sender. | `refuse_answers_unavailable` |
 | Each line keeps every created key. | `execute_keepsKeys`, `created_kept` |
 | Each line keeps the earlier lines of every running service, restarts included. | `sent_ids_distinct` |
-| No two lines that a running service sends carry one id, whatever step orders the step-order search sets. The service names each line that it sends `<name>#<n>`, where `n` is one more than the number of its earlier lines of that name. | `sent_ids_distinct`, `start_sent_ids_distinct` |
+| No two lines that a running service sends carry one id. The service names each line that it sends `<name>#<n>`, where `n` is one more than the number of its earlier lines of that name. | `sent_ids_distinct`, `start_sent_ids_distinct` |
 | A message that a running service sends carries the id of its line, and a receiver judges ids per sender. | `post_message` |
 | The `n`-th created key of an entity is `<owner>/<Entity>-<n>`, so no two createKey calls of one service return the same key. | `created_form`, `created_distinct` |
 | In a run of a scenario, `createKey` of a keyed entity never returns a key that the scenario may write, such as a Given key. | `unwritten_not_created`, `execute_unwritten_not_created`, `start_unwritten_not_created` |
 | The order in which Given writes the records does not matter. A scenario that writes the same records, no two with one key, in another order simulates alike. | `simulate_records_perm` |
-| To find `RegionOrderDependent` and `ChoiceDependent` violations, the semantics records what each spec function reads and writes. The recording changes no step of a run: a service starts, processes each input, and checks the end of a run as it does without the recording. | `instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkExchanges_agrees` |
+| To find `RegionOrderDependent` violations, the semantics records what each chart function reads and assigns. The recording changes no step of a run: a service starts, processes each input, and checks the end of a run as it does without the recording. | `instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkExchanges_agrees` |
 | A run of a whole scenario with the recording leaves the world that the run without it leaves, whatever the recording collected before. | `execute_agrees`, `simulate_agrees` |
 
 ### Data validity
@@ -367,7 +347,6 @@ The other rows are tazuna's own.
 | The steps of a message never change the current time. | `drain_keeps_now` |
 | Every line that the steps of a message and the checks after them write carries the current time. | `message_outputs_at_its_time` |
 | A deadline due by the time that the clock moves to fires as a message of its own, at its time. | `deadline_message_at_its_time` |
-| Deadlines of one service due at the same time fire in the step order that `test` searches, whichever line moved the time. | `chooseDeadline_stepOrder` |
 | Only a clock line moves the current time of a running service, which every line that the service writes carries. | `only_clock_moves_time` |
 | A clock line publishes the subscription answers that the new time changes. | `clock_publishes` |
 
@@ -408,7 +387,7 @@ No theorem shows that it does.
 | The service rejects a command that reuses an id with another input, whatever the order of object fields. | `reused_id_rejected` |
 | The service answers a repeated query again, because a query has no identity. | `query_answered_again` |
 | When an event or an answer arrives again with the same id, the service does not process it again. | `redelivered_event_not_processed`, `redelivered_answer_not_processed` |
-| Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each key position as the binding pairs it, any other leaf equal, and bags and objects without repeated keys after reordering. | `matchValue_renamed`, `sameState_renamed` |
+| Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each key position as the binding pairs it, any other leaf equal, and bags and objects without repeated keys after reordering. | `matchValue_renamed` |
 | For a binding that pairs only keys and request ids, that renaming is a renaming in the sense of the next three rows. | `matchValue_strRenamed` |
 | Every value renames to itself. | `renamed_refl` |
 | A renaming read backward is the inverse binding, when each binding pairs each key with a key of its own entity. | `renamed_symm` |
@@ -433,9 +412,6 @@ No theorem shows that it does.
 | When `check` reports none of the `NonCanonical` kinds that read only the structure, each transition has a `reenter` exactly when it leads within its source. | `canonical_check_eq_nil_iff` |
 | When `check` reports none of the `NonCanonical` kinds that read only the structure, each automation and each calls or sends has `onRejected` exactly when an answer may be rejected. | `canonical_check_eq_nil_iff` |
 | When `check` reports none of the `NonCanonical` kinds that read only the structure, no machine is stateless. | `canonical_check_eq_nil_iff` |
-| When the step-order search of a message reports nothing, each order that it ran either could not run, because no queue takes the steps in that order, or gives the same outcome as the execution that it came from. | `stepOrderSearch_same` |
-| The step-order search does not swap two steps of which one is an `always` round of an instance that the other settles around: either order gives the same processing. | `always_step_independent` |
-| The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and a state equal under a binding of created keys, as [Step orders that `test` searches](#step-orders-that-test-searches) defines. When `verify` cannot compare the first execution's outputs even with themselves, as the `ChoiceDependent` rows of [Detections](#detections) say, the same outcome means only a state equal under a binding. | `difference_same`, `compareTraces_ok`, `sameState_renamed` |
 
 ### Coverage
 

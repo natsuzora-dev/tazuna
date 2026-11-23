@@ -21,8 +21,6 @@ structure StateRel where
   R : Service.State → Service.State → Prop
   refl : ∀ s, R s s
   trans : ∀ {a b c}, R a b → R b c → R a c
-  stepOrder : ∀ x o, R x { x with stepOrder := o }
-  checkStepOrder : ∀ x, R x (checkStepOrder x)
   arriveFrom : ∀ (st : Service) (fs : Functions Id) (s : Service.State) sender id body, R s (arriveFrom st fs s sender id body)
   arriveAll : ∀ (st : Service) (fs : Functions Id) arrivals (s : Service.State), R s (arriveAll st fs arrivals s)
   requestOf : ∀ type name id v caller (st : Service) (fs : Functions Id) (s : Service.State),
@@ -114,9 +112,7 @@ theorem keepsWorld_act {ρ : StateRel} {w w' : World} (h : KeepsWorld ρ w w') (
       | none => exact ρ.refl _
       | some x =>
         simp only [Option.map_some, Option.getD_some]
-        split
-        · exact ρ.trans (ρ.trans (ρ.stepOrder x _) (hf _ _)) (ρ.checkStepOrder _)
-        · exact ρ.trans (ρ.stepOrder x _) (hf _ _)
+        exact hf _ _
     · rw [lookup_map_ne _ _ _ _ (by simpa using hp)]
       exact ρ.refl _
 

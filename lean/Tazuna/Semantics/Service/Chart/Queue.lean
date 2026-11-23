@@ -74,15 +74,6 @@ inductive Ready where
 deriving Repr, Inhabited
 
 /--
-The ways to take the first item of groups `gs`: any item of the first group, since a group has no order. The first way is
-`gs` itself.
--/
-def Groups.choices {α : Type} : List (List α) → List (List (List α))
-  | (e :: g) :: gs =>
-    ((e :: g) :: gs) :: (List.range g.length).filterMap fun k => g[k]?.map fun x => (x :: e :: g.eraseIdx k) :: gs
-  | gs => [gs]
-
-/--
 The groups left after the step `step` took the first item of `gs`, with their cause: the rest of the group keeps
 `cause`; the next group waits for the group before it, so the step causes it.
 -/
@@ -91,12 +82,6 @@ def Groups.rest {α : Type} (cause step : Nat) : List (List α) → Option (List
   | [_] :: g :: gs => some (g :: gs, step)
   | _ => none
 
-/-- The ways to take work `w`: a receive or reaction work takes any event of its first group first. -/
-def Work.choices : Work → List Work
-  | .receive machine gs d cause => (Groups.choices gs).map (.receive machine · d cause)
-  | .reaction a gs d cause => (Groups.choices gs).map (.reaction a · d cause)
-  | w => [w]
-
 /-- The work left after the step `step` took the first event of `w`. None for work other than receive and reaction. -/
 def Work.rest (step : Nat) : Work → Option Work
   | .receive machine gs d cause => (Groups.rest cause step gs).map fun (gs, c) => .receive machine gs d c
@@ -104,11 +89,11 @@ def Work.rest (step : Nat) : Work → Option Work
   | _ => none
 
 /--
-What the queue can take next, in queue order, each with the position of its task or command: the ways to take the
-tasks in arrival order, then the commands, with the round joined to them in sender-definition order.
+What the queue can take next, in queue order, each with the position of its task or command: the tasks in arrival
+order, then the commands, with the round joined to them in sender-definition order.
 -/
 def Queue.entries (q : Queue) : List (Ready × Nat) :=
-  (q.tasks.zipIdx.flatMap fun (w, i) => w.choices.map (.work ·, i)) ++
+  (q.tasks.zipIdx.map fun (w, i) => (.work w, i)) ++
     (q.commands ++ sortSent q.round).zipIdx.map fun (c, j) => (.command c, q.tasks.length + j)
 
 /-- The queue without the task or command at position `i`. Taking a command joins the round to the commands. -/
@@ -121,28 +106,11 @@ def Queue.putBack (q : Queue) (i : Nat) : Option Work → Queue
   | some w => { q with tasks := q.tasks.insertIdx i w }
   | none => q
 
-/--
-The entry that the queue takes next, its position, the queue without it, and the entries of `stepOrder` left; none when
-nothing is ready. While entries remain, it is the first ready one that the next entry names (`name` names each);
-otherwise it is the first in queue order. An entry that names a deadline is for a tie of deadlines after the message
-(chooseDeadline), and one that names an arrival is for the next message of a tie (arriveAll), so until then the queue
-takes the first in queue order and keeps the entry.
--/
-def Queue.take (q : Queue) (name : Ready → StepName) : List StepName →
-    Except InvalidInput (Option (Ready × Nat × Queue × List StepName))
-  | [] =>
-    match q.entries with
-    | (r, i) :: _ => .ok (some (r, i, q.without i, []))
-    | [] => .ok none
-  | named :: rest =>
-    match q.entries with
-    | [] => .ok none
-    | (first, p) :: others =>
-      match ((first, p) :: others).find? (name ·.1 == named) with
-      | some (r, i) => .ok (some (r, i, q.without i, rest))
-      | none =>
-        if named.isDeadline || named.isArrival then .ok (some (first, p, q.without p, named :: rest))
-        else .error (.unreadyStep named (((first, p) :: others).map (name ·.1)))
+/-- The entry that the queue takes next, the first in queue order, its position, and the queue without it; none when nothing is ready. -/
+def Queue.take (q : Queue) : Option (Ready × Nat × Queue) :=
+  match q.entries with
+  | (r, i) :: _ => some (r, i, q.without i)
+  | [] => none
 
 structure Processing where
   state : State

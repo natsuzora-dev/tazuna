@@ -290,17 +290,14 @@ def Program.toFunctions (p : Program) (st : Service) (read : Trace → IO Unit) 
     close := fun scope records => evaluated "close" <|
       (one scope.machine .close).map fun body => (valueIn (chartEnv scope records) body).run' }
 
-/-- What the latest evaluation read: the record parts and the chart values, which Instrument collects. -/
-structure LastRead where
-  parts : List RecordPart := []
-  access : Access := {}
-
-/-- The functions of the running service `st`: Program.toFunctions of its program, which leaves what each read in `last`. -/
-def functionsOf (st : Service) (last : IO.Ref LastRead) : Functions IO :=
-  Program.toFunctions st.structure.program st fun trace => last.set { parts := trace.parts, access := trace.access }
+/--
+The functions of the running service `st`: Program.toFunctions of its program, which leaves the chart values that each
+call read and assigned in `last`.
+-/
+def functionsOf (st : Service) (last : IO.Ref Access) : Functions IO :=
+  Program.toFunctions st.structure.program st fun trace => last.set trace.access
 
 /-- What Instrument reads besides Functions, from `last`. -/
-def instrumentOf (last : IO.Ref LastRead) : InstrumentFunctions IO :=
-  { lastReads := do pure (← last.get).parts, lastAccess := do pure (← last.get).access }
+def instrumentOf (last : IO.Ref Access) : InstrumentFunctions IO := { lastAccess := last.get }
 
 end Tazuna.Semantics.Eval

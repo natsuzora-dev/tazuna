@@ -1,5 +1,0 @@
-{"time":1792918800000,"dir":"in","type":"command","id":"announce#1","name":"announce","input":{},"caller":{"service":"client"}}
-{"time":1792918800000,"dir":"out","type":"answer","id":"answer#1","to":"announce#1","answer":{"result":"accepted"}}
-{"time":1792918800000,"dir":"out","type":"event","id":"ready#1","name":"ready","payload":{},"resultOf":"announce#1"}
-{"time":1792918800000,"dir":"out","type":"event","id":"claimed#1","name":"claimed","payload":{"used":true}}
-{"time":1792918800000,"dir":"out","type":"event","id":"claimed#2","name":"claimed","payload":{"used":true}}

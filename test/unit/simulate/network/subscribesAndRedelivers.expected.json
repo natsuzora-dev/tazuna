@@ -147,8 +147,7 @@
           "to": "tasks#1"
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "notifier",
@@ -206,8 +205,7 @@
           "payload": {}
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [],

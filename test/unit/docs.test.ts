@@ -95,8 +95,13 @@ const unknownKinds = (path: string, text: string, pattern: RegExp, internal = tr
 
 test("Each violation kind that a shipped markdown file names is a kind of its group that a user meets", () => {
   assert.deepEqual(
-    unknownKinds("x", "`Fault.data`, `InvalidInput.unreadyStep`, and `Fault.failedEnsures`", /`(\w+)\.(\w+)`/g, false),
-    ["x Fault.data", "x InvalidInput.unreadyStep"],
+    unknownKinds(
+      "x",
+      "`Fault.data`, `InvalidInput.unownedTarget`, and `Fault.failedEnsures`",
+      /`(\w+)\.(\w+)`/g,
+      false,
+    ),
+    ["x Fault.data", "x InvalidInput.unownedTarget"],
   );
   assert.deepEqual(
     shipped.flatMap(({ path, text }) => unknownKinds(path, text, /`(\w+)\.(\w+)`/g, false)),

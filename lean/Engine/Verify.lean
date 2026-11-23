@@ -97,7 +97,7 @@ The state after the clock moves to `time` with no line of its own: the deadlines
 answers that the new time changes are sent.
 -/
 def advance (st : Service) (fs : Functions ReplayM) (time : Time) (s : Service.State) : ReplayM Service.State := do
-  let s ← fireDue st fs time Limit.dueDeadlines.max none s
+  let s ← fireDue st fs time Limit.dueDeadlines.max s
   let s := { s with now := max s.now time }
   if s.halted.isSome then pure s else publish st fs s
 

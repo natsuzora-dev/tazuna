@@ -1,7 +1,0 @@
-{"time":1792893600000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{},"caller":{"service":"client"}}
-{"time":1792893600000,"dir":"out","type":"answer","id":"answer#1","to":"arm#1","answer":{"result":"accepted"}}
-{"time":1792893600000,"dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
-{"time":1792893600000,"dir":"out","type":"event","id":"posted#1","name":"posted","payload":{"id":"replies/Note-1","text":"first","replyTo":null},"created":["replies/Note-1"]}
-{"time":1792893600000,"dir":"out","type":"event","id":"moved#1","name":"moved","payload":{"id":"replies/Note-1"},"after":["posted#1"]}
-{"time":1792893600000,"dir":"out","type":"event","id":"posted#2","name":"posted","payload":{"id":"replies/Note-2","text":"second","replyTo":"replies/Note-1"},"created":["replies/Note-2"]}
-{"time":1792893600000,"dir":"out","type":"event","id":"moved#2","name":"moved","payload":{"id":"replies/Note-2"},"after":["posted#2"]}

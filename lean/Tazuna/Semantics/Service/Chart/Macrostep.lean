@@ -10,8 +10,7 @@ always transitions (settled). The order within one message (run-to-completion) f
 internal queue first processes work caused by steps; whenever work runs out, commands sent to its own service in the
 meantime (a round) are appended to the command queue in sender-definition order and processed one by one. When both
 are empty (end of macrostep), the activities of entered states are sent (sendEntered) and the work and commands that
-they cause are processed. No cause orders the work and commands waiting at one time, so the input's `stepOrder` may take
-any of them first (Queue.take).
+they cause are processed. The queue takes the work and commands waiting at one time in queue order (Queue.take).
 -/
 
 namespace Tazuna.Semantics.Service
@@ -20,39 +19,11 @@ open Tazuna.Ir
 
 variable {m : Type → Type}
 
-def handlingStateReads (i : Instance) (key : String) (leaves : List (InstanceId × Option String)) : List (InstanceId × String) :=
-  let handling := (i.chart.states.filter fun cs => !(i.chart.transitionsAt (some cs.spec.name) (.on key)).isEmpty).map
-    (·.spec.name)
-  let holders := i.id :: dedupe ((leaves.map (·.1)).filter (· != i.id))
-  holders.flatMap fun h => handling.map (h, ·)
-
-def mapStateReads (i : Instance) : List (InstanceId × String) :=
-  let tree := i.chart.tree
-  (i.active.filter (tree.kindOf · == some .map)).map (i.id, ·)
-
-def Work.name : Work → StepName
-  | .reaction a ((e :: _) :: _) d _ => .reaction a.name a.receives e.payload (d.map (·.map (·.payload)))
-  | .reaction a _ d _ => .reaction a.name a.receives .null (d.map (·.map (·.payload)))
-  | .answered c answer _ => .answer c.activity c.requester c.input (ToValue.toValue answer)
-  | .start name _ => .start name
-  | .receive name ((e :: _) :: _) d _ => .receive name e d
-  | .receive name _ _ _ => .always name
-  | .onDone name _ => .onDone name
-  | .opensDone name state key _ _ _ => .opensDone name state key
-
-def Ready.name : Ready → StepName
-  | .work w => w.name
-  | .command c => .command c.activity c.requester c.input
-
 def Work.origin : Work → StepOrigin
   | .reaction _ _ _ cause | .answered _ _ cause | .receive _ _ _ cause | .onDone _ cause | .opensDone _ _ _ _ _ cause =>
     .caused cause
   | .start _ (some cause) => .caused cause
   | .start _ none => .root
-
-def Work.started : Work → Option InstanceId
-  | .start name _ => some name
-  | _ => none
 
 /-- The transitions of `i` at `state` that take `answer` to activity `a`. -/
 def Instance.answerTransitions (i : Instance) (state : String) (a : Activity) (answer : Answer) : List Transition :=
@@ -72,7 +43,6 @@ def applyCompletion (st : Service) (step : Nat) (name : InstanceId) (ts : List T
 
 def handle (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) (answer : Answer) : Processing → m Processing :=
   withMachine name fun i r => do
-    MonadNote.note (.readStates [(name, state)])
     if i.closed || !i.isIn state then pure r else
     let ts := i.answerTransitions state a answer
     match answer with
@@ -89,8 +59,6 @@ def dispatch (st : Service) (step : Nat) (name : InstanceId) (key : String) (pay
     match ← eventLeaves fs st r.state i payload with
     | .error fault => pure (r.report (.fault fault))
     | .ok leaves =>
-    let reads := handlingStateReads i key leaves ++ mapStateReads i
-    MonadNote.note (.readStates reads)
     match ← select fs st r.state i (.on key) (.payload payload) leaves with
     | .error fault => pure (r.report (.fault fault))
     -- An event that no transition takes is discarded, as in SCXML.
@@ -106,7 +74,6 @@ def receiveWork (st : Service) (step : Nat) (name : InstanceId) (groups : List (
 
 def done (st : Service) (step : Nat) (name : InstanceId) (n : String) : Processing → m Processing :=
   withMachine name fun i r => do
-    MonadNote.note (.readStates [(name, n)])
     if i.closed || !i.isIn n then pure r
     else applyCompletion fs st step name (i.chart.transitionsAt (some n) .onDone) .none r
 
@@ -162,8 +129,6 @@ def showAnswer (st : Service) (name : InstanceId) (slot : String) (answer : Answ
 def answerTo (st : Service) (step : Nat) (activity : Activity) (answer : Answer) : Requester → Processing → m Processing
   | .state name state => handle fs st step name state activity answer
   | .slot name slot => fun r => do
-    if answer matches .fulfilled _ && (r.state.machine? name).isSome then
-      MonadNote.note (.wroteShown name slot)
     pure (showAnswer st name slot answer r)
   | .automation a => fun r => pure ⟨automationAnswer st a answer r.state, r.queue⟩
 
@@ -214,11 +179,6 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
         MonadNote.note (.reached (.request a.sends.ref))
         pure ⟨s.await (.command a.sends.ref input (.service st.service)) (.automation a.name) a.sends input, q⟩
   | .answered c answer _, ⟨s, q⟩ => do
-    -- Whether the Queued is stale depends on whether the machine left the sending state, which matters only when the
-    -- answer has a transition to take.
-    if let .state name state := c.requester then
-      if (s.machine? name).any fun i => !(i.answerTransitions state c.activity answer).isEmpty then
-        MonadNote.note (.readStates [(name, state)])
     let (s, live) := match c.serial with
       | some serial => s.takeQueued serial
       | none => (s, true)
@@ -230,7 +190,6 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
   | .onDone name _, r => doneWork fs st step name Limit.onDoneSelections.max r
   | .opensDone name state key output serial _, ⟨s, q⟩ => do
     let (s, live) := s.takeQueued serial
-    MonadNote.note (.readStates [(name, state)])
     if !live then pure ⟨s, q⟩ else
     withMachine name (fun i r =>
       applyCompletion fs st step name (i.chart.transitionsAt (some state) (.opens key)) (.output output) r)
@@ -251,10 +210,8 @@ subscriptions that change `shown` is not a step, so the step has no cause.
 def settleScreen [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (name : InstanceId) (r : Processing) :
     m Processing :=
   if r.halted then pure r else do
-  let (s, step) := r.state.newStep .root (barrier := true)
-  MonadNote.note (.stepBegins step (.always name) none)
+  let (s, step) := r.state.newStep .root
   let r ← settle fs st step name ⟨s, r.queue⟩
-  MonadNote.note .stepEnds
   pure r
 
 def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat) (s : State) (q : Queue) : m State :=
@@ -266,25 +223,20 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
     pure (if refreshed.halted.isNone && !(shownChanged s refreshed).isEmpty then
       refreshed.report (.fault (.exceededMessageWork Limit.messageWork.max)) else refreshed)
   | fuel + 1 =>
-    match q.take Ready.name s.stepOrder with
-    | .error invalid => pure (s.report (.invalidInput invalid))
-    | .ok (some (.work w, i, rest, stepOrder)) => do
-      let (s, step) := { s with stepOrder }.newStep w.origin
-      MonadNote.note (.stepBegins step w.name w.started)
+    match q.take with
+    | some (.work w, i, rest) => do
+      let (s, step) := s.newStep w.origin
       let r ← runWork st fs s (rest.putBack i (w.rest step)) step w
-      MonadNote.note .stepEnds
       drain st fs fuel r.state r.queue
-    | .ok (some (.command c, _, rest, stepOrder)) => do
-      let ((s, step), runaway) := { s with stepOrder }.newCommandStep c.cause (st.ref c.requester.sender)
+    | some (.command c, _, rest) => do
+      let ((s, step), runaway) := s.newCommandStep c.cause (st.ref c.requester.sender)
       match runaway with
       | some exceeded => pure (s.report (.fault exceeded))
       | none =>
-        MonadNote.note (.stepBegins step (Ready.command c).name none)
         let pc ← processCommand st fs s c.activity.ref.name c.input (s.callerOf c.requester) none step
-        MonadNote.note .stepEnds
         drain st fs fuel pc.1
           { rest with tasks := rest.tasks ++ commandWork st pc.1 pc.2.2 step ++ [.answered c pc.2.1 step] }
-    | .ok none =>
+    | none =>
       if !q.entered.isEmpty then do
         let r ← sendEntered fs st ⟨s, q⟩
         drain st fs fuel r.state r.queue

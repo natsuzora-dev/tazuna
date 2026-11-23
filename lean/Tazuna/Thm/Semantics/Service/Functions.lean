@@ -15,10 +15,6 @@ theorem issueViolation_halts (owner : Ir.Ref) (e : Issue) (mismatch : Schema →
   split
   all_goals first | rfl | exact hm _
 
-theorem issueViolation_halts_default (owner : Ir.Ref) (e : Issue) :
-    (issueViolation owner e).halts = true :=
-  issueViolation_halts owner e _ fun _ => rfl
-
 theorem not_issue_of_not_halts {owner : Ir.Ref} {e : Issue} {mismatch : Schema → Fault}
     (hm : ∀ s, (mismatch s).halts = true) {f : Fault} (hr : f.halts = false)
     (h : f = issueViolation owner e mismatch) : False := by

@@ -60,10 +60,6 @@ const ofCompare = {
     "a property of verify's comparison over all traces, which the engine runs on every verify example; no one run shows all traces",
 } as const;
 const ofSort = { diffTest: "unit/collections.diff.ts" } as const;
-const ofSearch = {
-  because:
-    "a property of the step-order search over all executions, which the engine runs on every test example; no one run shows all executions",
-} as const;
 const ofCheck = {
   because:
     "a property of the structure check over all structures, which the engine runs on every check; no one run shows all structures",
@@ -81,7 +77,6 @@ const network = (scenario: string) => ({ example: "unit/simulate/network", scena
 const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   accepted_emits_decided: { example: "fixtures/test/noViolations/decide_payloads_sorted", scenario: "listed" },
   always_rounds_limit_halts: { kindExample: "Fault.exceededAlwaysRounds" },
-  always_step_independent: ofSearch,
   answerIn_agrees: ofAudit,
   apart_disjoint: { kindExample: "Illegal.ambiguousUnion" },
   bag_or_set_array_sorted: ofSort,
@@ -94,7 +89,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   command_limit_halts: { kindExample: "Fault.exceededCommandDepth" },
   compareSnapshot_eq_none_iff: ofCompare,
   compareSnapshot_reordered: ofCompare,
-  compareTraces_ok: ofSearch,
   compare_matches: ofCompare,
   compose_fst_nodup: ofRenaming,
   compose_snd_nodup: ofRenaming,
@@ -107,7 +101,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   },
   deadline_message_at_its_time: { example: "fixtures/test/noViolations/chart-deadlines", scenario: "deadlinePassed" },
   deadlines_exact: { example: "fixtures/test/noViolations/chart-deadlines", scenario: "deadlinePassed" },
-  difference_same: ofSearch,
   done_selections_limit_halts: { kindExample: "Fault.exceededOnDoneSelections" },
   drain_keeps_now: { example: "fixtures/test/noViolations/chart-deadlines", scenario: "deadlinePassed" },
   due_deadlines_limit_halts: { kindExample: "Fault.exceededDueDeadlines" },
@@ -133,6 +126,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   failed_ensures_blames_command: { kindExample: "Fault.failedEnsures" },
   fireDue_agrees: ofAudit,
   first_answer_after_restart_kept: ofCompare,
+  group_lines_unordered: network("deliversIndependentEvents"),
   halting_finding_stops: { kindExample: "Fault.emittedPayloadSchema" },
   halting_report_stops: network("linesAfterHalt"),
   independent_unordered: network("deliversIndependentEvents"),
@@ -161,6 +155,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   modal_child_covers: { kindExample: "InvalidInput.coveredByModal" },
   only_clock_moves_time: network("delivered"),
   operate_agrees: ofAudit,
+  ordered_same_channel: network("overtaking"),
   overtaking_delivery_halts: { kindExample: "InvalidScenario.overtaking" },
   parse_render: {
     because: "a property of every day number, which no run computes; the convert diff tests run both functions",
@@ -194,7 +189,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
       "states that a restart's result does not depend on the state it discards, which compares two runs that no fixture holds; restart_keeps runs the restart",
   },
   reused_id_rejected: { example: "fixtures/test/noViolations/same-id", scenario: "changedInput" },
-  sameState_renamed: ofCompare,
   select_follows_leaves: { example: "fixtures/test/noViolations/leaf_selects_innermost", scenario: "leftRegionWins" },
   select_picked_by_leaf: { example: "fixtures/test/noViolations/leaf_selects_innermost", scenario: "rightRegionWins" },
   send_agrees: ofAudit,
@@ -222,7 +216,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   },
   start_sent_ids_distinct: { example: "fixtures/test/noViolations/requests", scenario: "requestsDiscarded" },
   start_unwritten_not_created: { example: "unit/simulate/keys", scenario: "givenKeyApart" },
-  stepOrderSearch_same: ofSearch,
   stopped_run_skips_exchanges: network("overtaking"),
   subscribe_agrees: ofAudit,
   then_only_reports: network("unmetExpectation"),

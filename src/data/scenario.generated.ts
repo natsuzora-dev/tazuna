@@ -243,8 +243,8 @@ const line = z.discriminatedUnion("type", [
     message: fact,
   }),
   /**
-   * The clock advances to `time`, and every running service fires its deadlines due by then; a tie of a service is
-   * internal to it (chooseDeadline).
+   * The clock advances to `time`, and every running service fires its deadlines due by then, those due at one time in
+   * the order they were armed (fireDue).
    */
   z.object({
     type: z.literal("at"),

@@ -29,7 +29,6 @@ export type Group =
   | "Fault"
   | "RegionOrderDependent"
   | "ChoiceDependent"
-  | "Undecided"
   | "Mismatch"
   | "Uncomparable"
   | "Uncovered"

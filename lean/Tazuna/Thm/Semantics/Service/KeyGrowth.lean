@@ -143,7 +143,7 @@ theorem keysBy_endWith {exit : InstanceId → String → Processing → Id Proce
 theorem keysBy_leaveWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, KeysBy (exit c n))
     (name : InstanceId) (n : String) : KeysBy (leaveWith fs st exit name n) := by
   intro r
-  simp only [leaveWith, id_bind, note_id]
+  simp only [leaveWith, id_bind]
   have h1 := keysBy_runAssign (fs := fs) (st := st) name (.exit n) (some n) .none none r
   split
   · exact h1
@@ -295,7 +295,7 @@ theorem keysBy_activateEntered (e : InstanceId × String × Nat) : KeysBy (activ
   repeat' split
   all_goals first
     | exact .refl _
-    | (simp only [id_bind, note_id, id_pure]
+    | (simp only
        refine KeepsKeys.trans ?_ (keysBy_foldlM (fun a => keysBy_unlessHalted (keysBy_activate _ _ _ a)) _ _)
        keys_leaf)
 
@@ -308,7 +308,7 @@ theorem keysBy_startCopy (step : Nat) (owner : InstanceId) (map : String) (key :
     KeysBy (startCopy fs st step owner map key) := by
   apply keysBy_withMachine
   intro o r
-  simp only [id_bind, note_id, id_pure]
+  simp only [id_bind, id_pure]
   split
   · refine KeepsKeys.trans ?_ (keysBy_enter _ _ _ _)
     keys_leaf
@@ -338,7 +338,7 @@ theorem keys_startCopies (step : Nat) (owner : InstanceId) (map : String) (xs : 
 
 theorem keys_syncMap (step : Nat) (owner : InstanceId) (r : Processing) (map : String) :
     KeepsKeys r.state (syncMap fs st step owner r map).1.state := by
-  simp only [syncMap, id_bind, note_id, id_pure]
+  simp only [syncMap, id_bind, id_pure]
   repeat' split
   · exact .refl _
   · exact .refl _
@@ -395,7 +395,7 @@ theorem keysBy_settled (step : Nat) (name : Option InstanceId) {f : Processing �
   cases name with
   | none => exact hf r
   | some n =>
-    simp only [settled, settleAround, id_bind, note_id]
+    simp only [settled, settleAround, id_bind]
     exact (keysBy_settleFrom _ _ _ r).trans ((keysBy_unlessHalted hf _).trans (keysBy_settleFrom _ _ _ _))
 
 theorem keeps_syncShows (s : Service.State) (owner : InstanceId) (wanted : List Wanted) :
@@ -452,14 +452,13 @@ theorem keysBy_handle (step : Nat) (name : InstanceId) (state : String) (a : Ser
     KeysBy (handle fs st step name state a answer) := by
   apply keysBy_withMachine
   intro i r
-  simp only [id_bind, note_id]
   repeat' split
   all_goals first | exact .refl _ | exact keysBy_applyCompletion _ _ _ _ r
 
 theorem keysBy_dispatch (step : Nat) (name : InstanceId) (key : String) (payload : Value) :
     KeysBy (dispatch fs st step name key payload) := by
   intro r
-  simp only [dispatch, id_bind, note_id]
+  simp only [dispatch, id_bind]
   repeat' split
   all_goals first | exact .refl _ | exact keysBy_microstep _ _ _ _ r | keys_leaf
 
@@ -474,7 +473,6 @@ theorem keysBy_receiveWork (step : Nat) (name : InstanceId) (groups : List (List
 theorem keysBy_done (step : Nat) (name : InstanceId) (n : String) : KeysBy (done fs st step name n) := by
   apply keysBy_withMachine
   intro i r
-  simp only [id_bind, note_id]
   split
   · exact .refl _
   · exact keysBy_applyCompletion _ _ _ _ r
@@ -509,7 +507,7 @@ theorem keysBy_answerTo (step : Nat) (a : Service.Activity) (answer : Answer) (r
   cases requester with
   | state name state => exact keysBy_handle _ _ _ _ _ r
   | slot name slot =>
-    simp only [answerTo, showAnswer, id_bind, note_id]
+    simp only [answerTo, showAnswer]
     repeat' split
     all_goals keys_leaf
   | automation n => exact keeps_automationAnswer _ _ _
@@ -544,7 +542,7 @@ theorem keysBy_workBody (step : Nat) (w : Work) : KeysBy (workBody st fs step w)
   | receive name received d c => exact keysBy_receiveWork _ _ _ _
   | onDone name c => exact keysBy_doneWork _ _ _ _
   | opensDone name state key output serial c =>
-    simp only [workBody, id_bind, note_id]
+    simp only [workBody]
     split
     · keys_leaf
     · refine KeepsKeys.trans ?_ (keysBy_withMachine (fun i r => keysBy_applyCompletion _ _ _ _ r) _)
@@ -552,7 +550,7 @@ theorem keysBy_workBody (step : Nat) (w : Work) : KeysBy (workBody st fs step w)
 
 theorem keysBy_settleScreen (name : InstanceId) : KeysBy (settleScreen st fs name) := by
   intro r
-  simp only [settleScreen, id_bind, note_id]
+  simp only [settleScreen]
   split
   · exact .refl _
   · refine KeepsKeys.trans ?_ (keysBy_settle _ _ _)
@@ -567,7 +565,7 @@ theorem keeps_drain (n : Nat) (s : Service.State) (q : Queue) : KeepsKeys s (dra
       | exact .refl _
       | exact keeps_refreshScreens _
   | succ n ih =>
-    simp only [drain, id_bind, note_id]
+    simp only [drain, id_bind]
     repeat' split
     all_goals first
       | exact .refl _
@@ -588,7 +586,7 @@ theorem keeps_drain (n : Nat) (s : Service.State) (q : Queue) : KeepsKeys s (dra
 
 theorem keysBy_fire (step : Nat) (t : Service.Deadline) : KeysBy (fire fs st step t) := by
   intro r
-  simp only [fire, id_bind, note_id]
+  simp only [fire]
   split
   · keys_leaf
   · refine KeepsKeys.trans ?_ (keysBy_withMachine (fun i r => by
@@ -607,9 +605,9 @@ theorem keeps_afterMessage (s : Service.State) : KeepsKeys s (afterMessage st fs
   · exact .refl _
   · exact keeps_publish _
 
-theorem keeps_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : Service.State) :
-    KeepsKeys s (fireDue st fs to fuel tie s) := by
-  induction fuel generalizing s tie with
+theorem keeps_fireDue (to : Time) (fuel : Nat) (s : Service.State) :
+    KeepsKeys s (fireDue st fs to fuel s) := by
+  induction fuel generalizing s with
   | zero => simp only [fireDue]; split <;> keys_leaf
   | succ fuel ih =>
     rw [fireDue]
@@ -618,21 +616,17 @@ theorem keeps_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : Service.
     · split
       · exact .refl _
       · dsimp only
-        split
-        · keys_leaf
-        · rename_i hc
-          obtain ⟨_, rfl⟩ := Tazuna.Thm.Semantics.Service.Clock.chooseDeadline_orders hc
-          simp only [id_bind, note_id]
-          refine KeepsKeys.trans ?_ (ih _ _)
-          refine KeepsKeys.trans ?_ (keeps_observe _)
-          refine KeepsKeys.trans ?_ (keeps_afterMessage _)
-          refine KeepsKeys.trans ?_ (keeps_drain _ _ _)
-          refine KeepsKeys.trans ?_ (keysBy_settled _ _ (keysBy_fire _ _) _)
-          keys_leaf
+        simp only [id_bind]
+        refine KeepsKeys.trans ?_ (ih _)
+        refine KeepsKeys.trans ?_ (keeps_observe _)
+        refine KeepsKeys.trans ?_ (keeps_afterMessage _)
+        refine KeepsKeys.trans ?_ (keeps_drain _ _ _)
+        refine KeepsKeys.trans ?_ (keysBy_settled _ _ (keysBy_fire _ _) _)
+        keys_leaf
 
 theorem keeps_message (s : Service.State) (q : Queue) : KeepsKeys s (message st fs s q) := by
   simp only [message, finish, id_bind]
-  exact (keeps_drain _ _ _).trans ((keeps_afterMessage _).trans ((keeps_observe _).trans (keeps_fireDue _ _ _ _)))
+  exact (keeps_drain _ _ _).trans ((keeps_afterMessage _).trans ((keeps_observe _).trans (keeps_fireDue _ _ _)))
 
 /-- Closes an equation between the keys of `t` and of `s`, where `t` is `s` with fields other than the keys changed. -/
 macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, State.violate,

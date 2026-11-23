@@ -4,6 +4,7 @@ import Tazuna.Smt.State
 import Tazuna.Smt.Chart
 import Tazuna.Smt.Pair
 import Tazuna.Smt.Chain
+import Tazuna.Semantics.Explore.ChoiceDependent
 
 /-!
 prove: the base case and the inductive step of each invariant of each spec service, within the service's bounds, and
@@ -273,7 +274,7 @@ structure Induction where
   /-- Each pair of steps that can be pending together, with its two orders, or why they have no encoding. -/
   pairs : List (Pair × Except String Orders)
   /-- Each tie of two messages, with its two orders, or why they have no encoding. -/
-  ties : List (Smt.Tie × Except String TieOrders)
+  ties : List (Tie × Except String TieOrders)
   /-- Why the service has no induction, such as missing bounds. -/
   blocked : Option String
 
@@ -300,7 +301,7 @@ def inductionOf (j : Ir.Structure) (service : String) : IO Induction := do
 def pairProperty (st : Service) (pair : Pair) : Property := .stepOrder (st.ref pair.first.name) (st.ref pair.second.name)
 
 /-- The property of a tie: that the order of its two messages changes no outcome. -/
-def tieProperty (st : Service) : Smt.Tie → Property
+def tieProperty (st : Service) : Tie → Property
   | .deadlines a b => .deadlineTie (st.ref a.chart) a.state a.name (st.ref b.chart) b.state b.name
   | .arrivals a b => .arrivalTie a.ref b.ref
 
@@ -688,8 +689,8 @@ def replayPair (x : Induction) (fs : Functions IO) (pair : Pair) (o : Orders) (M
     .obj [("records", givenOf st rs), ("accepted", .obj [(pair.first.name, .bool x), (pair.second.name, .bool y)])]
   let firstStep := StepName.command pair.first.sends (.automation pair.first.name) first
   let secondStep := StepName.command pair.second.sends (.automation pair.second.name) second
-  let found := Explore.ChoiceDependent.stepOrder (st.ref pair.first.name) firstStep secondStep [firstStep, secondStep]
-    [secondStep, firstStep] (.state (outcome r12 a1 b1) (outcome r21 a2 b2))
+  let found := Explore.ChoiceDependent.stepOrder (st.ref pair.first.name) firstStep secondStep (outcome r12 a1 b1)
+    (outcome r21 a2 b2)
   return .ok { given, clock, command := none, input := none, now := some now, taken := some payload,
                violations := [found.toViolation] }
 
@@ -708,7 +709,7 @@ one after the other at the model's time, the first then the second and the other
 one time in the order they stand; or the two events arrive one after the other. The two orders must differ in whether
 the service halts, in the records, or in the lines it writes out.
 -/
-def replayTie (x : Induction) (fs : Functions IO) (tie : Smt.Tie) (o : TieOrders) (M : Model) :
+def replayTie (x : Induction) (fs : Functions IO) (tie : Tie) (o : TieOrders) (M : Model) :
     IO (Except String Counterexample) := do
   let st := x.st
   match x.stateOf M with
@@ -739,7 +740,7 @@ def replayTie (x : Induction) (fs : Functions IO) (tie : Smt.Tie) (o : TieOrders
     | .deadlines a b =>
       let deadline (d : DeadlineRef) (order : Nat) : Service.Deadline :=
         { time := now, order, machine := .top d.chart, state := d.state, name := d.name, armedBy := 0 }
-      let run (ds : List Service.Deadline) := fireDue st fs now Limit.dueDeadlines.max none
+      let run (ds : List Service.Deadline) := fireDue st fs now Limit.dueDeadlines.max
         { base with deadlines := ds, deadlineCount := 2 }
       pure ((StepName.deadline (.top a.chart) a.state a.name, StepName.deadline (.top b.chart) b.state b.name), none,
         ← run [deadline a 1, deadline b 2], ← run [deadline b 2, deadline a 1])
@@ -754,8 +755,8 @@ def replayTie (x : Induction) (fs : Functions IO) (tie : Smt.Tie) (o : TieOrders
         some (Value.obj [("first", pa), ("second", pb)]),
         ← arrive (← arrive s a.ref "a" pa) b.ref "b" pb, ← arrive (← arrive s b.ref "b" pb) a.ref "a" pa)
   if same s1 s2 then return .error "the semantics ends the same in both orders"
-  let found := Explore.ChoiceDependent.stepOrder (tieProperty st tie).definition steps.1 steps.2 [steps.1, steps.2]
-    [steps.2, steps.1] (.state (outcome s1) (outcome s2))
+  let found := Explore.ChoiceDependent.stepOrder (tieProperty st tie).definition steps.1 steps.2 (outcome s1)
+    (outcome s2)
   return .ok { given, clock, command := none, input := none, now := some now, machine := some (.obj shown), taken,
                violations := [found.toViolation] }
 

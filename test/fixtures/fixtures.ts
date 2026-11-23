@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { after } from "node:test";
-import { explanations } from "../../scripts/explain.ts";
+import { explanations, violationOfLine } from "../../scripts/explain.ts";
 import { type CheckedSpec, checkSpecWith, failureText } from "../../src/check/spec.ts";
 import type { TypeCheck } from "../../src/check/typeCheck.ts";
 import { main } from "../../src/cli/main.ts";
@@ -92,7 +92,7 @@ export const expectedOf = (root: string): string[] =>
     .split("\n")
     .filter((line) => line !== "");
 
-export const kindOfLine = (line: string) => (JSON.parse(line) as { readonly kind: string }).kind;
+export const kindOfLine = (line: string) => (violationOfLine(line) as { readonly kind: string }).kind;
 
 let shared: Converter | undefined;
 after(() => shared?.close());

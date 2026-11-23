@@ -15,14 +15,6 @@ inductive RecordPart where
   | field (entity : String) (key : Option Value) (name : String)
 deriving DecidableEq, Repr, Inhabited
 
-/-- A value that steps read and write. Being in a state also stands for the copy set of a map state. -/
-inductive ValueKey where
-  | record (part : RecordPart)
-  | context (id : InstanceId) (field : String)
-  | state (id : InstanceId) (state : String)
-  | shown (id : InstanceId) (slot : String)
-deriving DecidableEq, Repr, Inhabited
-
 structure RegionPair where
   first : Nat
   second : Nat
@@ -38,28 +30,8 @@ structure RegionCheck where
 deriving DecidableEq, Repr, Inhabited
 
 inductive Note where
-  /-- The record parts that `definition` read without asking Functions. -/
-  | read (definition : Ir.Ref) (parts : List RecordPart)
-  | stepBegins (step : Nat) (name : StepName) (started : Option InstanceId)
-  | stepEnds
-  /--
-  The arrival of a message of a tie in step `step`, whose processing outside any step (such as its decide) belongs to
-  that step, until arrivalEnds.
-  -/
-  | arrivalBegins (step : Nat) (name : StepName)
-  | arrivalEnds
-  /-- The evaluation of the always transitions of `owner` and its copies before and after the work of the open step. -/
-  | settlesAround (owner : InstanceId)
-  /-- A read by the open step of whether instances or copies are in the given states. -/
-  | readStates (states : List (InstanceId × String))
-  | wroteState (id : InstanceId) (state : String)
-  | wroteCopies (id : InstanceId) (map : String)
-  | wroteShown (id : InstanceId) (slot : String)
   | transitionPart (part : Nat)
   | microstepEnds (check : RegionCheck)
-  /-- The start of the checks and subscription answers after message `message` (afterMessage), which no step runs. -/
-  | afterMessageBegins (message : Nat)
-  | afterMessageEnds
   /-- The run reached `part`, which `verify --coverage` then does not report. -/
   | reached (part : Uncovered)
   /--

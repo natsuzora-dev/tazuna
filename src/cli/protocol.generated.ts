@@ -220,12 +220,11 @@ export type Unpaired = {
   readonly violation: Uncomparable;
 };
 
-/** What a simulation shows of one running service: its trace lines, its violations, and its candidates. */
+/** What a simulation shows of one running service: its trace lines and its violations. */
 export type SimulatedService = {
   readonly service: string;
   readonly lines: readonly TraceLine[];
   readonly violations: readonly ViolationValue[];
-  readonly candidates: readonly (readonly [number, number])[];
 };
 
 /** A part of the records that an evaluation read, as a `read` reply names it. */
@@ -253,11 +252,10 @@ export type ServiceRun = {
   readonly lines: readonly TraceLine[];
 };
 
-/** What test finds of one scenario: its simulation and the step orders of its processings. */
+/** What test finds of one scenario. */
 export type ScenarioRun = {
   /** The simulation's InvalidScenario violations, then its halting one. */
   readonly violations: readonly ViolationValue[];
-  readonly stepOrders: readonly ViolationValue[];
   readonly services: readonly ServiceRun[];
   /** Whether the simulation or a running service halted, so that no snapshot is compared or written. */
   readonly halted: boolean;

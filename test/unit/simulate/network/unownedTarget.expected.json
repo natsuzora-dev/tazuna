@@ -14,14 +14,12 @@
             }
           }
         }
-      ],
-      "candidates": []
+      ]
     },
     {
       "service": "notifier",
       "lines": [],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [],

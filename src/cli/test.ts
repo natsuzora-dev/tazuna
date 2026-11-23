@@ -122,7 +122,6 @@ export function testSpec(
           ? linePlaces[data["scenarioLine"]]
           : undefined;
     for (const v of run.violations) report(toReported(v, at(v) ?? named.place, { scenario: ref }));
-    for (const v of run.stepOrders) report(toReported(v, placeOf(spec, v.definition), { scenario: ref }));
     for (const { service, violations: own, lines } of run.services) {
       for (const v of own) report(toReported(v, placeOfReported(spec, named, v, service), { scenario: ref }));
       const snapshotRun = { service: named.service, scenario: named.name, runner: service };

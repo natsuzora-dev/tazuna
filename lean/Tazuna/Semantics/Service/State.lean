@@ -90,28 +90,14 @@ structure Queued where
   stale : Bool := false
 deriving DecidableEq, Repr, Inhabited
 
-/--
-A tie of steps that no cause orders, which test's search takes in every order: the deadlines of a service due at one
-time, or the messages that one line delivers to the service, the first of which arrived in step `first`.
--/
-inductive Tie where
-  | deadlines (time : Time)
-  | arrivals (first : Nat)
-deriving DecidableEq, Repr, Inhabited
-
 /-- What began a step. -/
 inductive StepOrigin where
   /-- No step: an input's first step, or a screen's settling. -/
   | root
   /-- The step `cause`, whose message the step continues. -/
   | caused (cause : Nat)
-  /--
-  A deadline: `armedBy` is the step that armed it, which caused it as `cause` does but in an earlier message, and `tie`
-  its tie with the other deadlines due at its time, if any.
-  -/
-  | deadline (armedBy : Nat) (tie : Option Tie)
-  /-- The arrival of a message of the tie `tie`. -/
-  | arrival (tie : Tie)
+  /-- A deadline: `armedBy` is the step that armed it, which caused it as `cause` does but in an earlier message. -/
+  | deadline (armedBy : Nat)
 deriving DecidableEq, Repr, Inhabited
 
 /-- The step that caused this one in its message, if any. -/
@@ -119,22 +105,14 @@ def StepOrigin.cause : StepOrigin → Option Nat
   | .caused c => some c
   | _ => none
 
-/-- The tie of a deadline or arrival step, if any. -/
-def StepOrigin.tie : StepOrigin → Option Tie
-  | .deadline _ tie => tie
-  | .arrival tie => some tie
-  | _ => none
-
 /--
 A step of a run. `message` is the message number, inherited from the cause. `command` is whether the step processes an
-own-service command. `barrier` is whether the step comes after every earlier step of the same message and before every
-later one.
+own-service command.
 -/
 structure StepInfo where
   origin : StepOrigin
   message : Nat
   command : Bool := false
-  barrier : Bool := false
 deriving DecidableEq, Repr, Inhabited
 
 
@@ -186,8 +164,6 @@ structure State extends Durable, Process where
   /-- The open obligations of responses, in opening order; a response's observer, which a restart keeps. -/
   obligations : List Obligation := []
   deadlineCount : Nat := 0
-  /-- The entries of the current input's `stepOrder` that the internal queue has not used yet. -/
-  stepOrder : List StepName := []
   serial : Nat := 0
   /-- The number of the next request to start waiting. -/
   turn : Nat := 0
@@ -233,12 +209,12 @@ def State.createKeys (s : State) (entities : List String) : State :=
 
 def State.newMessage (s : State) : State := { s with messageCount := s.messageCount + 1 }
 
-def State.newStep (s : State) (origin : StepOrigin) (barrier := false) (message : Option Nat := none) : State × Nat :=
+def State.newStep (s : State) (origin : StepOrigin) (message : Option Nat := none) : State × Nat :=
   let message := message.getD (match origin.cause.bind (s.steps[·]?) with
     | some c => c.message
     | none => s.messageCount)
   let step := s.steps.size
-  ({ s with steps := s.steps.push { origin, message, barrier } }, step)
+  ({ s with steps := s.steps.push { origin, message } }, step)
 
 /-- The number of command steps in the cause chain of `step`, including `step`. -/
 def State.commandDepth (s : State) (step : Nat) : Nat :=

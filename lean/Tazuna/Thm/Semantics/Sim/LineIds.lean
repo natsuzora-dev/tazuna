@@ -46,22 +46,18 @@ theorem keepsIds_arriveFrom (st : Service) (fs : Functions Id) (s : Service.Stat
 theorem keepsIds_arriveAll (st : Service) (fs : Functions Id) (arrivals : List Arrival) (s : Service.State) :
     KeepsIds s (arriveAll st fs arrivals s) := by
   unfold arriveAll
-  suffices ∀ first arrivals s, KeepsIds s (arriveAll.go st fs first arrivals s) from this _ _ s
-  intro first arrivals s
-  fun_induction arriveAll.go st fs first arrivals s
-  all_goals simp only [bind, pure]
-  all_goals first
-    | exact .refl _
-    | exact .of_lines (by simp)
-    | (rename_i hx ih; refine KeepsIds.trans ?_ (ih _)
-       refine KeepsIds.trans ?_ (keepsIds_arriveFrom st fs _ _ _ _)
-       have hs := congrArg Prod.fst hx; simp only at hs; rw [← hs]
-       exact .of_lines rfl)
+  induction arrivals generalizing s with
+  | nil => exact .refl _
+  | cons a more ih =>
+    rw [arriveAll.go]
+    split
+    · exact .refl _
+    · exact (keepsIds_arriveFrom st fs _ _ _ _).trans (ih _)
 
 theorem keepsIds_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : Service.State) :
     KeepsIds s (fireTo time st fs s) := by
   simp only [fireTo, id_bind]
-  refine (keepsIds_fireDue (st := st) (fs := fs) time Limit.dueDeadlines.max none s).trans ?_
+  refine (keepsIds_fireDue (st := st) (fs := fs) time Limit.dueDeadlines.max s).trans ?_
   split
   · exact .of_lines (by simp)
   · refine KeepsIds.trans ?_ publish_grows.keepsIds
@@ -72,8 +68,6 @@ abbrev idsRel : StateRel where
   R := KeepsIds
   refl := .refl
   trans := .trans
-  stepOrder _ _ := .of_lines rfl
-  checkStepOrder x := by unfold checkStepOrder; split <;> exact .of_lines (by simp)
   arriveFrom := keepsIds_arriveFrom
   arriveAll := keepsIds_arriveAll
   requestOf type _ _ _ _ _ _ _ := by cases type <;> first
@@ -116,22 +110,21 @@ A message that World.post adds carries the line's id and sender: a receiver read
   · exact ⟨#[], by (repeat' split) <;> rfl, by simp⟩
   · exact ⟨#[_], by rw [Array.push_eq_append], by simp⟩
 
-theorem startWith_numbered (sc : Scenario) (services : List (String × Service))
-    (stepOrders : List (Scenario.Origin × String × List StepName)) (p : String) :
-    let s := ({ World.startWith sc services with stepOrders } : World).state p
+theorem startWith_numbered (sc : Scenario) (services : List (String × Service)) (p : String) :
+    let s := (World.startWith sc services).state p
     Numbered s.service s.lines := by
   show Numbered _ ((World.startWith sc services).state p).lines
   rw [(startWith_state sc services p).1]; exact numbered_empty _
 
 /--
-No two requests that a running service sends carry one id, in a run from a world that World.start returns, whatever
-step orders test's search sets: the start holds no lines.
+No two requests that a running service sends carry one id, in a run from a world that World.start returns: the start
+holds no lines.
 -/
 @[guarantee] theorem start_sent_ids_distinct (j : Ir.Structure) (sc : Scenario) (services : List (String × Service))
-    (stepOrders : List (Scenario.Origin × String × List StepName)) (p : String) :
-    let lines := ((execute j fsOf { World.startWith sc services with stepOrders } sc).state p).lines
+    (p : String) :
+    let lines := ((execute j fsOf (World.startWith sc services) sc).state p).lines
     ∀ i k (hik : i < k) (hk : k < lines.size), lines[i].dir = .out → lines[k].dir = .out →
       lines[i].id ≠ lines[k].id :=
-  (sent_ids_distinct j _ sc p (startWith_numbered sc services stepOrders p)).2
+  (sent_ids_distinct j _ sc p (startWith_numbered sc services p)).2
 
 end Tazuna.Thm.Semantics.Sim.LineIds

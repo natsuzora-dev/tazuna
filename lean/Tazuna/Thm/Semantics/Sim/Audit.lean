@@ -269,22 +269,15 @@ theorem arriveFrom_agrees (q : String) (st : Service) (s : Service.State) (sende
   agreeE [send_agrees (h q), call_agrees (h q), subscribe_agrees (h q), endSubscription_agrees (h q),
     answerIn_agrees (h q), receive_agrees (h q)]
 
-theorem arriveAll_go_agrees (q : String) (st : Service) (first : Nat) (arrivals : List Arrival) (s : Service.State) :
-    Agrees (arriveAll.go st (fsOfI q) first arrivals s) (arriveAll.go st (fsOf q) first arrivals s) := by
-  cases arrivals with
+theorem arriveAll_go_agrees (q : String) (st : Service) (arrivals : List Arrival) (s : Service.State) :
+    Agrees (arriveAll.go st (fsOfI q) arrivals s) (arriveAll.go st (fsOf q) arrivals s) := by
+  induction arrivals generalizing s with
   | nil => unfold arriveAll.go; exact Agrees.pure _
-  | cons next more =>
+  | cons a more ih =>
     rw [arriveAll.go, arriveAll.go]
     split
     · exact Agrees.pure _
-    · dsimp only
-      split
-      · exact Agrees.pure _
-      · refine Agrees.bind (note_agrees _) fun _ => Agrees.bind (arriveFrom_agrees h q _ _ _ _ _) fun _ =>
-          Agrees.bind (note_agrees _) fun _ => ?_
-        exact arriveAll_go_agrees q st first _ _
-termination_by arrivals.length
-decreasing_by simp only [List.length_eraseIdx_of_lt (Fin.isLt _)]; simp
+    · exact Agrees.bind (arriveFrom_agrees h q _ _ _ _ _) fun _ => ih _
 
 theorem requestOf_agrees (q : String) (type : Scenario.RequestType) (target : Ir.Ref) (id : Option LineId)
     (v : Value) (caller : Caller) (st : Service) (s : Service.State) :
@@ -315,7 +308,7 @@ theorem deliver_agrees (w : World) (o : Scenario.Origin) (receiver : String) (ks
   dsimp only
   split
   · exact act_agrees hact _ _ _ (fun _ _ => arriveFrom_agrees h _ _ _ _ _ _)
-  · exact act_agrees hact _ _ _ (fun _ _ => by unfold arriveAll; exact arriveAll_go_agrees h _ _ _ _ _)
+  · exact act_agrees hact _ _ _ (fun _ _ => by unfold arriveAll; exact arriveAll_go_agrees h _ _ _ _)
 
 theorem clientRequest_agrees (w : World) (i : Nat) (type : Scenario.RequestType) (target : Ir.Ref)
     (input : Template) (sameIdAs : Option Nat) (caller : Option Caller) :

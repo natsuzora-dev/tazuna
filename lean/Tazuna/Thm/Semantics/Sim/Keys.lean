@@ -38,10 +38,7 @@ in any state whose values `p` qualifies.
 
 variable {fsOf : String → Functions Id}
 
-theorem keeps_stepOrder (x : Service.State) (o : List StepName) : KeepsKeys x { x with stepOrder := o } := .refl _
 
-theorem keeps_checkStepOrder (x : Service.State) : KeepsKeys x (checkStepOrder x) := by
-  unfold checkStepOrder; split <;> keys_leaf
 
 theorem keeps_answerIn (st : Service) (fs : Functions Id) (s : Service.State) (id to : LineId) (a : Answer) :
     KeepsKeys s (answerIn st fs s id to a) := by
@@ -74,22 +71,18 @@ theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : Service.State) 
 theorem keeps_arriveAll (st : Service) (fs : Functions Id) (arrivals : List Arrival) (s : Service.State) :
     KeepsKeys s (arriveAll st fs arrivals s) := by
   unfold arriveAll
-  suffices ∀ first arrivals s, KeepsKeys s (arriveAll.go st fs first arrivals s) from this _ _ s
-  intro first arrivals s
-  fun_induction arriveAll.go st fs first arrivals s
-  all_goals simp only [bind, pure]
-  all_goals first
-    | exact .refl _
-    | keys_leaf
-    | (rename_i hx ih; refine KeepsKeys.trans ?_ (ih _)
-       refine KeepsKeys.trans (KeepsKeys.trans ?_ (keeps_arriveFrom st fs _ _ _ _)) ⟨rfl, List.prefix_refl _⟩
-       have hs := congrArg Prod.fst hx; simp only at hs; rw [← hs]
-       keys_leaf)
+  induction arrivals generalizing s with
+  | nil => exact .refl _
+  | cons a more ih =>
+    rw [arriveAll.go]
+    split
+    · exact .refl _
+    · exact (keeps_arriveFrom st fs _ _ _ _).trans (ih _)
 
 theorem keeps_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : Service.State) :
     KeepsKeys s (fireTo time st fs s) := by
   simp only [fireTo, id_bind]
-  have h := keeps_fireDue (st := st) (fs := fs) time Limit.dueDeadlines.max none s
+  have h := keeps_fireDue (st := st) (fs := fs) time Limit.dueDeadlines.max s
   split
   · keys_close h
   · refine KeepsKeys.trans ?_ (keeps_publish _)
@@ -108,8 +101,6 @@ abbrev keysRel : StateRel where
   R := KeepsKeys
   refl := .refl
   trans := .trans
-  stepOrder := keeps_stepOrder
-  checkStepOrder := keeps_checkStepOrder
   arriveFrom := keeps_arriveFrom
   arriveAll := keeps_arriveAll
   requestOf := keeps_requestOf
@@ -168,14 +159,14 @@ the start's writtenKey? lets the scenario write: the running service qualifies i
 
 /--
 No createKey value of a running service at the end of the lines of a scenario run from a world that World.start
-returns, whatever step orders test's search sets, equals a key of a keyed entity that the start lets the scenario write.
+returns equals a key of a keyed entity that the start lets the scenario write.
 -/
 @[guarantee] theorem start_unwritten_not_created (j : Ir.Structure) (sc : Scenario) (services : List (String × Service))
-    (stepOrders : List (Scenario.Origin × String × List StepName)) {p : String} {st : Service} (hs : (p, st) ∈ services)
+    {p : String} {st : Service} (hs : (p, st) ∈ services)
     {e k : String} (he : e ∈ st.entities) (hk : st.singles.contains e = false)
     (hw : (World.startWith sc services).writtenKey? (.str k) = none) :
-    (e, k) ∉ ((execute j fsOf { World.startWith sc services with stepOrders } sc).state p).created :=
-  execute_unwritten_not_created (start := { World.startWith sc services with stepOrders }) j sc hs
+    (e, k) ∉ ((execute j fsOf (World.startWith sc services) sc).state p).created :=
+  execute_unwritten_not_created (start := World.startWith sc services) j sc hs
     (startWith_state sc services p).2 he hk hw
 
 end Tazuna.Thm.Semantics.Sim.Keys

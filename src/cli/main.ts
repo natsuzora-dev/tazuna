@@ -3,7 +3,6 @@ import { join, relative, resolve } from "node:path";
 import { checkSpecWith, failureText } from "../check/spec.ts";
 import { type TypeCheck, typeCheck } from "../check/typeCheck.ts";
 import type { Converter } from "../convert/program.ts";
-import { parseKind } from "../data/kinds.ts";
 import type { ReportedViolation, ViolationValue } from "../data/violation.ts";
 import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
@@ -271,7 +270,7 @@ const help = [
   ),
   ...wrap(
     "",
-    "The exit code is 1 when tsc reports an error, a command reports a violation other than Undecided, or prove finds a counterexample; 2 on a usage error; 3 when test reports only Undecided violations or prove leaves a property undecided, as an SMT solver answers unknown; and 0 otherwise.",
+    "The exit code is 1 when tsc reports an error, a command reports a violation, or prove finds a counterexample; 2 on a usage error; 3 when prove leaves a property undecided, as an SMT solver answers unknown; and 0 otherwise.",
   ),
 ].join("\n");
 
@@ -297,11 +296,7 @@ const exitCode = (violated: boolean, undecided: boolean) => (violated ? 1 : unde
 function report(io: Io, specRoot: string, violations: readonly ReportedViolation[], subject: string): number {
   for (const p of violations) io.log(record(io, specRoot, p));
   io.error(`${subject}: ${violations.length === 0 ? "no violations" : count(violations.length, "violation")}`);
-  const undecided = (v: ReportedViolation) => parseKind(v.kind)?.group === "Undecided";
-  return exitCode(
-    violations.some((v) => !undecided(v)),
-    violations.length > 0,
-  );
+  return exitCode(violations.length > 0, false);
 }
 
 const isName = (command: string): command is Name => Object.hasOwn(commands, command);

@@ -198,8 +198,7 @@
           "id": "time#1"
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "notifier",
@@ -273,8 +272,7 @@
           "id": "time#1"
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [],

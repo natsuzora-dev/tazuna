@@ -115,7 +115,6 @@ def leaveWith (st : Service) (exit : InstanceId → String → Processing → m 
     (r : Processing) : m Processing := do
   let r ← runAssign fs st name (.exit n) (some n) .none none r
   if r.halted then pure r else
-  MonadNote.note (.wroteState name n)
   let s := r.state.leaveState name n
   (s.childrenOf name n).foldlM (fun r c => unlessHalted (endWith exit c) r) ⟨s, r.queue⟩
 

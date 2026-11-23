@@ -27,7 +27,6 @@ def firstLevel (st : Service) (s : State) (extra : Extra) : List (Instance × Li
     m (Except Fault (Option (InstanceId × Transition)))
   | [] => pure (.ok none)
   | (i, ts) :: rest => do
-    MonadNote.note (.readStates ((ts.head?.bind (·.source)).map (i.id, ·)).toList)
     match ← choose fs st s i extra ts with
     | .error v => pure (.error v)
     | .ok (some t) => pure (.ok (some (i.id, t)))

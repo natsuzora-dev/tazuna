@@ -84,54 +84,10 @@ export type Activity =
     };
 
 /**
- * A step as the internal queue and the search name it. The search treats two steps with equal names as one, so a name
- * holds what the step runs and what its work came with, but not the step that caused it or the Queued it answers. A
- * receive or reaction step takes one event, of the groups `delivered` that its work received; a name must not depend on
- * which events of those groups other steps took, since the search reorders them. `answer` is the answer as written.
+ * A step whose order prove compares (ChoiceDependent): an own command that an automation sends, a deadline of a state
+ * that fires, or the arrival of a message from another service, by the id that the receiver's trace writes for it.
  */
 export type StepName =
-  | {
-      readonly kind: "start";
-      readonly id: InstanceId;
-    }
-  | {
-      readonly kind: "receive";
-      readonly id: InstanceId;
-      readonly received: Received;
-      readonly delivered: readonly (readonly Received[])[];
-    }
-  | {
-      readonly kind: "always";
-      readonly id: InstanceId;
-    }
-  | {
-      readonly kind: "onDone";
-      readonly id: InstanceId;
-    }
-  | {
-      readonly kind: "opensDone";
-      readonly id: InstanceId;
-      readonly state: string;
-      readonly key: string;
-    }
-  | {
-      readonly kind: "activities";
-      readonly id: InstanceId;
-      readonly state: string;
-    }
-  | {
-      readonly kind: "deadline";
-      readonly id: InstanceId;
-      readonly state: string;
-      readonly name: string;
-    }
-  | {
-      readonly kind: "reaction";
-      readonly automation: string;
-      readonly event: DefinitionRef;
-      readonly payload: Json;
-      readonly delivered: readonly (readonly Json[])[];
-    }
   | {
       readonly kind: "command";
       readonly activity: Activity;
@@ -139,16 +95,11 @@ export type StepName =
       readonly input: Json;
     }
   | {
-      readonly kind: "answer";
-      readonly activity: Activity;
-      readonly sender: Requester;
-      readonly input: Json;
-      readonly answer: Json;
+      readonly kind: "deadline";
+      readonly id: InstanceId;
+      readonly state: string;
+      readonly name: string;
     }
-  /**
-   * The arrival of the message `message` of a tie (Tie.arrivals), its id as the receiver's trace writes it, which carries
-   * `definition`'s request or event, or answers or ends one.
-   */
   | {
       readonly kind: "arrival";
       readonly definition: DefinitionRef;

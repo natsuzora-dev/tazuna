@@ -9,7 +9,7 @@ every instrumented definition agree with its plain one.
 
 namespace Tazuna.Thm.Semantics.Explore.Instrument
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore Tazuna.Semantics.Sim Tazuna.Thm.Ir.List
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore Tazuna.Thm.Ir.List
 
 variable {C : Type}
 
@@ -162,10 +162,11 @@ theorem endWith_agrees {e : InstanceId → String → Processing → StateT C Id
     (c : InstanceId) (r : Processing) : Agrees (endWith e c r) (endWith e' c r) := by
   unfold endWith; refine withMachine_agrees (fun i r => ?_) r; agree [unlessHalted_agrees, he]
 
-theorem callerRejection_agrees (st : Service) (records : Records) (definition : Ir.Ref)
+omit [MonadNote (StateT C Id)] in
+theorem callerRejection_agrees (st : Service) (records : Records)
     (callers : List Ir.CallerType) (caller : Caller) :
-    Agrees (callerRejection st records definition callers caller : StateT C Id _)
-      (callerRejection st records definition callers caller : Id _) := by
+    Agrees (callerRejection st records callers caller : StateT C Id _)
+      (callerRejection st records callers caller : Id _) := by
   unfold callerRejection; agree [note_agrees]
 
 theorem sorted_agrees (schema : Schema) (v : Value) :
@@ -503,9 +504,9 @@ theorem observeResponses_agrees (s : Service.State) :
 theorem endMessage_agrees (s : Service.State) : Agrees (endMessage st fsI s) (endMessage st fs s) := by
   unfold endMessage; agree [note_agrees, afterMessage_agrees h, observeResponses_agrees h]
 
-@[guarantee] theorem fireDue_agrees (to : Time) (fuel : Nat) (tie : Option Time) (s : Service.State) :
-    Agrees (fireDue st fsI to fuel tie s) (fireDue st fs to fuel tie s) := by
-  induction fuel generalizing s tie with
+@[guarantee] theorem fireDue_agrees (to : Time) (fuel : Nat) (s : Service.State) :
+    Agrees (fireDue st fsI to fuel s) (fireDue st fs to fuel s) := by
+  induction fuel generalizing s with
   | zero => unfold fireDue; agree []
   | succ fuel ih => unfold fireDue; agree [note_agrees, settled_agrees h, fire_agrees h, drain_agrees h, endMessage_agrees h, ih]
 
@@ -616,7 +617,7 @@ end Tazuna.Thm.Semantics.Explore.Instrument
 
 namespace Tazuna.Thm.Semantics.Explore.Instrument
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore Tazuna.Semantics.Sim Tazuna.Thm.Ir.List
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore Tazuna.Thm.Ir.List
 
 variable {C : Type} {st : Service} {fs : Functions Id} {ifs : InstrumentFunctions Id}
 

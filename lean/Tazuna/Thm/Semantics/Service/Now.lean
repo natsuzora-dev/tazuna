@@ -41,20 +41,12 @@ theorem earliestDeadline_le {ds : List Service.Deadline} {to : Time} {e : Servic
         · exact hd
         · exact hi _ rfl
 
-theorem chooseDeadline_due {s s' : Service.State} {tied : Bool} {first t : Service.Deadline} {due : List Service.Deadline}
-    (h : chooseDeadline s first due tied = .ok (t, s')) : t = first ∨ t ∈ due := by
-  unfold chooseDeadline at h
-  repeat' split at h
-  all_goals (try simp only [Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h)
-  all_goals (try obtain ⟨rfl, -⟩ := h)
-  all_goals first | exact .inl rfl | (right; exact List.mem_of_find?_eq_some ‹_›)
-
 theorem afterMessage_now (s : Service.State) : (afterMessage st fs s).now = s.now := congrArg Fixed.now afterMessage_fixed
 
 /-- Firing the deadlines due by a time no later than the current time keeps the current time. -/
-theorem fireDue_now (to : Time) (fuel : Nat) (tie : Option Time) (s : Service.State) (h : to ≤ s.now) :
-    (fireDue st fs to fuel tie s).now = s.now := by
-  induction fuel generalizing s tie with
+theorem fireDue_now (to : Time) (fuel : Nat) (s : Service.State) (h : to ≤ s.now) :
+    (fireDue st fs to fuel s).now = s.now := by
+  induction fuel generalizing s with
   | zero => simp only [fireDue]; split <;> simp
   | succ fuel ih =>
     rw [fireDue]
@@ -62,29 +54,20 @@ theorem fireDue_now (to : Time) (fuel : Nat) (tie : Option Time) (s : Service.St
     · rfl
     · split
       · rfl
-      · rename_i e he
+      · rename_i t he
         dsimp only
-        split
-        · simp
-        · rename_i t s' hc
-          have ht : t.time ≤ s.now := by
-            rcases chooseDeadline_due hc with rfl | hm
-            · exact Int.le_trans (earliestDeadline_le he) h
-            · have := (List.mem_filter.mp hm).2
-              simp only [beq_iff_eq] at this
-              rw [this]; exact Int.le_trans (earliestDeadline_le he) h
-          obtain ⟨_, rfl⟩ := Tazuna.Thm.Semantics.Service.Clock.chooseDeadline_orders hc
-          simp only [id_bind, note_id, endMessage_id]
-          rw [ih]
-          all_goals rw [Tazuna.Thm.Semantics.Service.Response.observeResponses_now, afterMessage_now, drain_keeps_now,
-            (keeps_settled _ _ (keeps_fire _ _)).now]
-          all_goals simp only [newStep_now, newMessage_now, Tazuna.Thm.Semantics.Service.Response.passTime_now, Int.max_eq_left ht]
-          all_goals first | rfl | exact h
+        have ht : t.time ≤ s.now := Int.le_trans (earliestDeadline_le he) h
+        simp only [id_bind, endMessage_id]
+        rw [ih]
+        all_goals rw [Tazuna.Thm.Semantics.Service.Response.observeResponses_now, afterMessage_now, drain_keeps_now,
+          (keeps_settled _ _ (keeps_fire _ _)).now]
+        all_goals simp only [newStep_now, newMessage_now, Tazuna.Thm.Semantics.Service.Response.passTime_now, Int.max_eq_left ht]
+        all_goals first | rfl | exact h
 
 /-- A message keeps the current time: its work does, and the deadlines it lets fire are due by then. -/
 theorem message_now (s : Service.State) (q : Queue) : (message st fs s q).now = s.now := by
   simp only [message, finish, id_bind, endMessage_id]
-  rw [fireDue_now _ _ _ _ (Int.le_refl _), Tazuna.Thm.Semantics.Service.Response.observeResponses_now, afterMessage_now,
+  rw [fireDue_now _ _ _ (Int.le_refl _), Tazuna.Thm.Semantics.Service.Response.observeResponses_now, afterMessage_now,
     drain_keeps_now]
 
 theorem processCommand_now (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (n : Nat) (s : Service.State) :

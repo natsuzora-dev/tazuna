@@ -3,14 +3,12 @@
     {
       "service": "notes",
       "lines": [],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "tags",
       "lines": [],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [

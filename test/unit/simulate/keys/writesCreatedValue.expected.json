@@ -73,8 +73,7 @@
           }
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "tags",
@@ -178,8 +177,7 @@
           }
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [],

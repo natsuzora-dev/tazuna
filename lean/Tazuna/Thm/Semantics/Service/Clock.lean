@@ -12,7 +12,7 @@ variable {st : Service} {fs : Functions Id}
 theorem keeps_fire (step : Nat) (t : Service.Deadline) : Keeps (fire fs st step t) := by
   intro r
   unfold fire
-  simp only [Tazuna.Thm.Semantics.Service.Note.note_id, id_bind]
+  simp only
   split
   · rfl
   · refine (keeps_withMachine (fun i r => ?_) _).trans (takeDeadline_fixed t)
@@ -23,7 +23,7 @@ theorem keeps_fire (step : Nat) (t : Service.Deadline) : Keeps (fire fs st step 
 theorem growsBy_fire (step : Nat) (t : Service.Deadline) : GrowsBy (fire fs st step t) := by
   intro r
   unfold fire
-  simp only [Tazuna.Thm.Semantics.Service.Note.note_id, id_bind]
+  simp only
   split
   · exact Grows.of_lines rfl
   · refine Grows.after (growsBy_withMachine (fun i r => ?_)) rfl rfl
@@ -36,7 +36,7 @@ theorem growsBy_fire (step : Nat) (t : Service.Deadline) : GrowsBy (fire fs st s
     (hn : (r.state.takeDeadline t).2 = false ∨ i.closed = true ∨ i.isIn t.state = false) :
     fire fs st step t r = ⟨(r.state.takeDeadline t).1, r.queue⟩ := by
   unfold fire withMachine
-  simp only [Tazuna.Thm.Semantics.Service.Note.note_id, id_bind]
+  simp only
   split
   · rfl
   · split
@@ -46,29 +46,5 @@ theorem growsBy_fire (step : Nat) (t : Service.Deadline) : GrowsBy (fire fs st s
       · simp_all
       · simp [hm, hn]
       · simp [hm, hn]
-
-/--
-In a tie, whichever line advanced the time, the next entry of the input's `stepOrder` chooses which of the tied
-deadlines fires, as it chooses the internal queue's next step.
--/
-@[guarantee] theorem chooseDeadline_stepOrder (s : Service.State) (first t : Service.Deadline) (due : List Service.Deadline) (named : StepName)
-    (rest : List StepName) (ho : s.stepOrder = named :: rest) (h : due.find? (·.step == named) = some t) :
-    chooseDeadline s first due true = .ok (t, { s with stepOrder := rest }) := by
-  have hn : named.isArrival = false := by
-    have := List.find?_some h
-    simp only [beq_iff_eq] at this
-    rw [← this]
-    rfl
-  simp [chooseDeadline, ho, h, hn]
-
-/-- Choosing a deadline changes only the step order entries left. -/
-theorem chooseDeadline_orders {s s' : Service.State} {tied : Bool} {first t : Service.Deadline} {due : List Service.Deadline}
-    (h : chooseDeadline s first due tied = .ok (t, s')) :
-    ∃ o, s' = { s with stepOrder := o } := by
-  unfold chooseDeadline at h
-  repeat' split at h
-  all_goals (try simp only [Except.ok.injEq, Prod.mk.injEq, reduceCtorEq] at h)
-  all_goals (try obtain ⟨-, rfl⟩ := h)
-  all_goals exact ⟨_, rfl⟩
 
 end Tazuna.Thm.Semantics.Service.Clock

@@ -114,7 +114,7 @@ theorem publish_answers_only_open_subscriptions :
 @[guarantee] theorem resolve_output_answered (name : String) (raw input output : Value) (caller : Caller)
     (failed : Option String) (rq : Requirements) (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok (some input))
     (hq : st.requirements.lookup name = some rq)
-    (hc : (callerRejection st s.records (st.ref name) rq.callers caller : Id _) = none)
+    (hc : (callerRejection st s.records rq.callers caller : Id _) = none)
     (hr : firstFalse (fs.inputRequirement (st.ref name) · input) rq.requires = .ok none)
     (hv : fs.resolve name input caller s.records s.now = .ok output)
     (he : fs.queryEnsures name input caller output s.records = .ok failed) :

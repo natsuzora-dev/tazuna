@@ -87,8 +87,7 @@
           }
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "notifier",
@@ -128,8 +127,7 @@
           }
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [],

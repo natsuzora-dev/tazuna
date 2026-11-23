@@ -23,12 +23,7 @@ export const groups = {
   },
   Fault: { reportedBy: ["test", "verify", "prove"], fixedIn: "The spec." },
   RegionOrderDependent: { reportedBy: ["test", "verify"], fixedIn: "The spec." },
-  ChoiceDependent: { reportedBy: ["test", "verify", "prove"], fixedIn: "The spec." },
-  Undecided: {
-    reportedBy: ["test"],
-    fixedIn:
-      "Neither side: the check stopped at a limit of tazuna. A smaller processing, or fewer created keys that only their keys tell apart, lets it decide.",
-  },
+  ChoiceDependent: { reportedBy: ["prove"], fixedIn: "The spec." },
   Uncovered: { reportedBy: ["verify --coverage"], fixedIn: "The tests that write the traces." },
   Mismatch: {
     reportedBy: ["test", "verify"],

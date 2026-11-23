@@ -35,10 +35,6 @@ inductive InvalidInput where
   | coveredByModal (screen : Ir.Ref) (control : String) (child : Ir.Ref)
   /-- No active state of the screen offers the payload of the operation input. -/
   | unofferedPayload (screen : Ir.Ref) (control : String) (payload : Value)
-  /-- The stepOrder entry `named` is not among the steps that can begin next, `candidates`. -/
-  | unreadyStep (named : StepName) (candidates : List StepName)
-  /-- No step choice during the input used the stepOrder `entries`. -/
-  | unusedStepOrder (entries : List StepName)
 deriving Repr
 
 
@@ -48,21 +44,19 @@ derive_group InvalidInput flatten mismatch
 Whether the violation halts the run, which it does when the scenario as written describes no run, or not one run, from
 this input on, so that later inputs would build on a history no run has: the input is one that no sender could give
 (it cannot be written as a trace line), it states a cause that did not occur (an event's resultOf naming a request that
-cannot have the event as its result), or the step order written for it does not fit the run (an entry that names
-nothing that can begin next, or an entry it leaves unused). An input that a sender can give, such as a subscription
+cannot have the event as its result). An input that a sender can give, such as a subscription
 id it reuses on a retry or an answer that breaks the receiver's assumption, is written as given and the run goes on.
 -/
 def InvalidInput.halts : InvalidInput → Bool
   | .unownedTarget .. | .eventPayloadSchema .. | .controlPayloadSchema ..
   | .assumption _ _ (.unlistedRejectionKind _) | .assumption _ _ .answerOutputSchema | .unlistedRejectionReason ..
-  | .unknownControl .. | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .unreadyStep ..
-  | .unusedStepOrder .. | .resultOf .. => true
+  | .unknownControl .. | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. | .resultOf .. => true
   | .reusedSubscriptionId .. | .unopenedSubscription .. | .assumption _ _ .rejectedAssumedRequires
   | .assumption _ _ (.failedAssumedRequires _) | .assumption _ _ (.failedAssumedEnsures _) => false
 
 /-- Whether no spec that `tazuna check` passes can produce the violation, as InvalidScenario.internal says. -/
 def InvalidInput.internal : InvalidInput → Bool
-  | .unownedTarget .. | .unlistedRejectionReason .. | .unknownControl .. | .unreadyStep .. | .unusedStepOrder .. => true
+  | .unownedTarget .. | .unlistedRejectionReason .. | .unknownControl .. => true
   | .eventPayloadSchema .. | .controlPayloadSchema .. | .reusedSubscriptionId .. | .unopenedSubscription ..
   | .assumption .. | .resultOf .. | .unopenedScreen .. | .coveredByModal .. | .unofferedPayload .. => false
 

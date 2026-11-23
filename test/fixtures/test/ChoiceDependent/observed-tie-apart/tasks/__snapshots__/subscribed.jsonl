@@ -1,7 +1,0 @@
-{"time":1792893600000,"dir":"in","type":"subscribe","id":"title#1","name":"title","input":{},"caller":{"service":"client"}}
-{"time":1792893600000,"dir":"out","type":"answer","id":"answer#1","to":"title#1","answer":{"result":"fulfilled","output":{"title":""}}}
-{"time":1792893600000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{},"caller":{"service":"client"}}
-{"time":1792893600000,"dir":"out","type":"answer","id":"answer#2","to":"arm#1","answer":{"result":"accepted"}}
-{"time":1792893600000,"dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
-{"time":1792893600000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"a"}}
-{"time":1792893600000,"dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"b"}}

@@ -52,8 +52,7 @@
           "resultOf": "beat#1"
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "listener",
@@ -83,8 +82,7 @@
           "payload": {}
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [],

@@ -202,7 +202,7 @@ gives the implementation. A subscription answer that the new time changes is sen
 -/
 def fireTo (time : Time) : Service → Functions m → Service.State → m Service.State :=
   fun st fs s => do
-    let s ← fireDue st fs time Limit.dueDeadlines.max none s
+    let s ← fireDue st fs time Limit.dueDeadlines.max s
     let s ← observeResponses st fs (s.passTime st time)
     if s.halted.isSome then pure s else publish st fs (s.write .in none .time).1
 

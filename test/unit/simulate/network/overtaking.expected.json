@@ -130,14 +130,12 @@
           "payload": {}
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "notifier",
       "lines": [],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [],

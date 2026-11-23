@@ -26,14 +26,6 @@ const helpers: Partial<Record<Command, Readonly<Record<string, string>>>> = {
   check: { outside: "the modules that Restricted/imported-module imports from outside its spec" },
 };
 
-/** The kinds of another group that a case reports besides those of its own kind, each case with the reason. */
-const otherGroupKinds: Readonly<Record<string, { readonly kinds: readonly string[]; readonly because: string }>> = {
-  "test/ChoiceDependent/halted-later": {
-    kinds: ["Fault.outputSchema"],
-    because: "the fault halts the scenario at its last line, and the stepOrder of its first line is still reported",
-  },
-};
-
 const commands = Object.keys(kinds) as Command[];
 
 test("The folders under test/fixtures are the commands, and those under each command are its kinds, each with a case", () => {
@@ -96,9 +88,8 @@ async function violationsTest(t: TestContext, command: "check" | "test" | "verif
     join(root, expected),
     { serializers: [jsonl] },
   );
-  const allowed = otherGroupKinds[relative(fixturesRoot, root)]?.kinds ?? [];
   assert.deepEqual(
-    violations.map((v) => v.kind).filter((k) => !k.startsWith(`${kind}.`) && !allowed.includes(k)),
+    violations.map((v) => v.kind).filter((k) => !k.startsWith(`${kind}.`)),
     [],
   );
 }

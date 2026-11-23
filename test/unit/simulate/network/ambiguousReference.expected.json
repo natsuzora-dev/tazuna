@@ -106,20 +106,17 @@
           }
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "notifier",
       "lines": [],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "audit",
       "lines": [],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [],

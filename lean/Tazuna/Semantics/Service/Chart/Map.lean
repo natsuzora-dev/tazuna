@@ -26,11 +26,9 @@ def startCopy (st : Service) (step : Nat) (owner : InstanceId) (map : String) (k
     let copy : Instance := { chart := o.chart, id, context, input := o.input, itemKey := some key }
     let started : State := { r.state with copies := r.state.copies.filter (·.id != id) ++ [copy] }
     let (s, copyStep) := started.newStep (.caused step)
-    MonadNote.note (.stepBegins copyStep (.start id) (some id))
     let r ← match (o.chart.state? map).bind (·.spec.initial) with
       | some initial => enter fs st copyStep id [initial] ⟨s, r.queue⟩
       | none => pure ⟨s, r.queue⟩
-    MonadNote.note .stepEnds
     pure r
 
 def exitLeftCopy (st : Service) (owner : InstanceId) (map : String) (itemKeys : List Value) (r : Processing) (k : Value) :
@@ -50,7 +48,6 @@ def syncMap (st : Service) (step : Nat) (owner : InstanceId) (r : Processing) (m
   match r.state.machine? owner with
   | none => pure (r, false)
   | some o => do
-    MonadNote.note (.readStates [(o.id, map)])
     match ← fs.items (r.state.scopeOf o (some map)) r.state.records with
     | .error e =>
       pure (r.report (.fault (issueViolation (st.ref o.chart.name) e fun _ =>
@@ -62,7 +59,6 @@ def syncMap (st : Service) (step : Nat) (owner : InstanceId) (r : Processing) (m
       | some k => pure (r.report (.fault (.duplicateItemKey (st.ref o.chart.name) map k)), true)
       | none =>
       if current == itemKeys then pure (r, false) else do
-      MonadNote.note (.wroteCopies o.id map)
       let r ← current.reverse.foldlM (exitLeftCopy fs st o.id map itemKeys) r
       let r ← (newKeys current itemKeys).foldlM (fun r k => unlessHalted (startCopy fs st step owner map k) r) r
       pure (⟨r.state.setMachine owner fun o => { o with copyKeys := setCopyKeys o.copyKeys map itemKeys }, r.queue⟩, true)

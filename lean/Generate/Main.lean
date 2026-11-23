@@ -4,7 +4,6 @@ import Tazuna.Semantics.Service.Limits
 import Tazuna.Ir.Trace
 import Tazuna.Semantics.Explore.ChoiceDependent
 import Tazuna.Semantics.Explore.RegionOrderDependent
-import Tazuna.Semantics.Explore.Undecided
 import Tazuna.Semantics.Service.Fault
 import Tazuna.Semantics.Service.InvalidInput
 import Tazuna.Semantics.Service.Note
@@ -71,10 +70,9 @@ def modules : List (String × List Name) :=
      ``Tazuna.Semantics.Scenario]),
    ("src/data/fault.generated.ts", [``Tazuna.Semantics.Service.Fault]),
    ("src/data/regionOrderDependent.generated.ts", [``Tazuna.Semantics.Explore.RegionOrderDependent]),
-   ("src/data/undecided.generated.ts", [``Tazuna.Semantics.Explore.Undecided]),
    ("src/data/uncovered.generated.ts", [``Tazuna.Semantics.Service.Uncovered]),
    ("src/data/choiceDependent.generated.ts",
-    [``Tazuna.Semantics.Explore.Difference, ``Tazuna.Semantics.Explore.ChoiceDependent]),
+    [``Tazuna.Semantics.Explore.ChoiceDependent]),
    ("src/data/transitionRef.generated.ts",
     [``Tazuna.Ir.CallOutcome, ``Tazuna.Ir.SendOutcome, ``Tazuna.Ir.Trigger, ``Tazuna.Ir.TransitionRef]),
    ("src/data/step.generated.ts",
@@ -537,7 +535,6 @@ def files (guarantees : List String) : List (String × String) :=
       halting "Fault" ((samples.filter (·.halts)).map (·.kind)) ++
         internal "Fault" ((samples.filter (·.internal)).map (·.kind))),
    typescript% "src/data/regionOrderDependent.generated.ts",
-   typescript% "src/data/undecided.generated.ts",
    typescript% "src/data/uncovered.generated.ts",
    typescript% "src/data/choiceDependent.generated.ts",
    types% "src/data/transitionRef.generated.ts",

@@ -138,7 +138,7 @@ def InvalidScenario.halts : InvalidScenario → Bool
 
 /--
 Whether no spec that `tazuna check` passes can produce the violation: the DSL's types reject what it reports, check
-reports it first as a Malformed kind, or only test's own step-order search writes the input that it checks. The
+reports it first as a Malformed kind. The
 simulation keeps such kinds as the validation of its input, which tazuna's own data scenarios reach without types or
 check. Explain leaves them out.
 -/

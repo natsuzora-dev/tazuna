@@ -11,7 +11,6 @@ import { regionOrderDependentKinds } from "./regionOrderDependent.generated.ts";
 import type { Restricted } from "./restricted.ts";
 import { uncomparableKinds } from "./uncomparable.generated.ts";
 import { uncoveredKinds } from "./uncovered.generated.ts";
-import { undecidedKinds } from "./undecided.generated.ts";
 import type { Group } from "./violation.ts";
 
 /** `list` when it holds every member of `U`; a missing member is a type error that names it. */
@@ -93,7 +92,6 @@ export const kindsOf = {
   Fault: faultKinds,
   RegionOrderDependent: regionOrderDependentKinds,
   ChoiceDependent: choiceDependentKinds,
-  Undecided: undecidedKinds,
   Uncovered: uncoveredKinds,
   Mismatch: mismatchKinds,
   Uncomparable: uncomparableKinds,
@@ -113,7 +111,6 @@ export const groupNames = every<Group>()([
   "Fault",
   "RegionOrderDependent",
   "ChoiceDependent",
-  "Undecided",
   "Uncovered",
   "Mismatch",
   "Uncomparable",

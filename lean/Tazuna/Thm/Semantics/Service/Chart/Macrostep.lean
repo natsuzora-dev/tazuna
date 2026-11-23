@@ -418,11 +418,11 @@ theorem drain_keysDistinct (n : Nat) (q : Queue) (h : KeysDistinct s.records) :
     (hs : sent.stale = true) (ha : ∀ reason, answer ≠ .rejected { kind := .invalidInput, reason }) :
     workBody st fs step (.answered c answer cause) ⟨s, q⟩ = ⟨(s.takeQueued serial).1, q⟩ := by
   rcases answer with _ | _ | ⟨kind, reason⟩
-  · simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]; split <;> rfl
-  · simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]; split <;> rfl
+  · simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]
+  · simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]
   · cases kind
     · exact absurd rfl (ha reason)
-    all_goals simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]; split <;> rfl
+    all_goals simp [workBody, State.takeQueued, rejectedInput?, hc, hq, hs]
 @[guarantee] theorem drain_keeps_now (n : Nat) (q : Queue) : (drain st fs n s q).now = s.now :=
   congrArg Prod.snd (drain_clock n q)
 
@@ -449,16 +449,15 @@ theorem newCommandStep_limit (cause : Nat) (sender : Ir.Ref) (f : Fault)
 A command whose chain of own-service commands is deeper than Limit.commandDepth, or that is one too many of its message
 (Limit.messageCommands), halts with the Fault of that limit, which names the command's sender.
 -/
-@[guarantee] theorem command_limit_halts (n : Nat) (q rest : Queue) (c : Sent) (i : Nat) (order : List StepName)
-    (f : Fault) (hs : s.halted = none) (ht : q.take Ready.name s.stepOrder = .ok (some (.command c, i, rest, order)))
-    (hf : ({ s with stepOrder := order }.newCommandStep c.cause (st.ref c.requester.sender)).2 = some f) :
+@[guarantee] theorem command_limit_halts (n : Nat) (q rest : Queue) (c : Sent) (i : Nat)
+    (f : Fault) (hs : s.halted = none) (ht : q.take = some (.command c, i, rest))
+    (hf : (s.newCommandStep c.cause (st.ref c.requester.sender)).2 = some f) :
     (drain st fs (n + 1) s q).halted = some (.fault f) ∧
       (f = .exceededCommandDepth (st.ref c.requester.sender) Limit.commandDepth.max ∨
         f = .exceededMessageCommands (st.ref c.requester.sender) Limit.messageCommands.max) := by
   have hl := newCommandStep_limit _ _ f hf
   refine ⟨?_, hl⟩
   have hh : f.halts = true := by rcases hl with rfl | rfl <;> rfl
-  simp only [hs] at hf
   simp only [drain, hs, Option.isSome_none, Bool.false_eq_true, ite_false, ht, hf]
   exact report_halted _ hh
 

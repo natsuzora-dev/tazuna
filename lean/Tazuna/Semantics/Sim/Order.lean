@@ -28,7 +28,7 @@ cause is the step that armed it.
 def causedBy (s : Service.State) (earlier later : Nat) : Bool :=
   later == earlier ||
     match s.steps[later]?.map (·.origin) with
-    | some (StepOrigin.caused c) | some (StepOrigin.deadline c _) => if c < later then causedBy s earlier c else false
+    | some (StepOrigin.caused c) | some (StepOrigin.deadline c) => if c < later then causedBy s earlier c else false
     | _ => false
 termination_by later
 

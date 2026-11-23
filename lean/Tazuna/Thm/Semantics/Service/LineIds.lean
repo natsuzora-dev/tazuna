@@ -111,9 +111,9 @@ theorem growsBy_deliverAnswer (step : Nat) (p : Pending) (answer : Answer) :
   · exact Grows.after (growsBy_answerTo _ _ _ _) hl hn hs
   · exact Grows.of_lines hl hs
 
-theorem keepsIds_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : Service.State) :
-    KeepsIds s (fireDue st fs to fuel tie s) := by
-  induction fuel generalizing s tie with
+theorem keepsIds_fireDue (to : Time) (fuel : Nat) (s : Service.State) :
+    KeepsIds s (fireDue st fs to fuel s) := by
+  induction fuel generalizing s with
   | zero => simp only [fireDue]; split <;> exact .of_lines (by simp)
   | succ fuel ih =>
     rw [fireDue]
@@ -122,22 +122,18 @@ theorem keepsIds_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : Servi
     · split
       · exact .refl _
       · dsimp only
-        split
-        · exact .of_lines (report_lines _)
-        · rename_i hc
-          obtain ⟨_, rfl⟩ := chooseDeadline_orders hc
-          simp only [id_bind, note_id, endMessage_id]
-          refine KeepsIds.trans ?_ (ih _ _)
-          refine KeepsIds.trans ?_ Tazuna.Thm.Semantics.Service.Response.observeResponses_grows.keepsIds
-          refine KeepsIds.trans ?_ afterMessage_grows.keepsIds
-          refine KeepsIds.trans ?_ (drain_grows _ _).keepsIds
-          refine KeepsIds.trans ?_ (growsBy_settled _ _ (growsBy_fire _ _) (keeps_fire _ _) _).keepsIds
-          exact .of_lines (by simp [State.newMessage, State.newStep]) (by simp [State.newMessage, State.newStep])
+        simp only [id_bind, endMessage_id]
+        refine KeepsIds.trans ?_ (ih _)
+        refine KeepsIds.trans ?_ Tazuna.Thm.Semantics.Service.Response.observeResponses_grows.keepsIds
+        refine KeepsIds.trans ?_ afterMessage_grows.keepsIds
+        refine KeepsIds.trans ?_ (drain_grows _ _).keepsIds
+        refine KeepsIds.trans ?_ (growsBy_settled _ _ (growsBy_fire _ _) (keeps_fire _ _) _).keepsIds
+        exact .of_lines (by simp [State.newMessage, State.newStep]) (by simp [State.newMessage, State.newStep])
 
 theorem keepsIds_message (s : Service.State) (q : Queue) : KeepsIds s (message st fs s q) := by
   simp only [message, finish, id_bind, endMessage_id]
   exact ((drain_grows _ _).trans (drain_keeps_now _ _) afterMessage_grows).keepsIds.trans
-    (Tazuna.Thm.Semantics.Service.Response.observeResponses_grows.keepsIds.trans (keepsIds_fireDue _ _ _ _))
+    (Tazuna.Thm.Semantics.Service.Response.observeResponses_grows.keepsIds.trans (keepsIds_fireDue _ _ _))
 
 theorem keepsIds_send (name : Ir.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : Service.State) :
     KeepsIds s (send st fs s name id raw caller) := by

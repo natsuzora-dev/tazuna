@@ -692,20 +692,4 @@ def verifyLines {m : Type → Type} [Monad m] (s : Structure) (service : String)
   let (actual, _) ← readLines s service ask (withoutResends lines) outputByRequestId
   pure (compare expected (withoutRepeatedAnswers actual) cut (internalEvent s service) renamed relation)
 
-/--
-The comparison by which test's step-order search compares two runs' trace lines of `service` (Explore's Compare, with
-each finding as the difference that it shows): verify's (verifyLines), with `after` (`relation`), reporting its first
-finding by line. `ask` reads a value by its
-definition's schema.
--/
-def compareTraces {m : Type → Type} [Monad m] (spec : Structure) (service : String)
-    (ask : Definition → Part → Value → m CValue) :
-    (Values → Values) → List TraceLine → List TraceLine → m (Except Finding (List Binding)) :=
-  fun renamed expected actual => do
-    let compared ← verifyLines spec service ask (expected.map some) (actual.map .line) renamed true
-    let numbered := compared.findings.map fun f => (f.line, f)
-    pure (match (numbered.mergeSort fun a b => decide (a.1 ≤ b.1)).head? with
-      | some (_, v) => .error v
-      | none => .ok compared.bindings)
-
 end Tazuna.Semantics.Verify

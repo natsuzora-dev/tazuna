@@ -28,8 +28,7 @@
           "resultOf": "tags.register#1"
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "tags",
@@ -94,8 +93,7 @@
           }
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [

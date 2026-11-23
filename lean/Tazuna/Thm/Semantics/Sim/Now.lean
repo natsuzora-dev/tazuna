@@ -41,23 +41,19 @@ theorem arriveFrom_now (st : Service) (fs : Functions Id) (s : Service.State) (s
 theorem arriveAll_now (st : Service) (fs : Functions Id) (arrivals : List Arrival) (s : Service.State) :
     (arriveAll st fs arrivals s).now = s.now := by
   unfold arriveAll
-  suffices ∀ first arrivals s, (arriveAll.go st fs first arrivals s).now = s.now from this _ _ s
-  intro first arrivals s
-  fun_induction arriveAll.go st fs first arrivals s
-  all_goals simp only [bind, pure]
-  all_goals first
-    | rfl
-    | simp
-    | (rename_i hx ih; rw [ih, arriveFrom_now]
-       have hs := congrArg Prod.fst hx; simp only at hs; rw [← hs]; rfl)
+  induction arrivals generalizing s with
+  | nil => rfl
+  | cons a more ih =>
+    rw [arriveAll.go]
+    split
+    · rfl
+    · exact (ih _).trans (arriveFrom_now _ _ _ _ _ _)
 
 /-- Keeping the current time, which every input of a line but a clock advance does. -/
 abbrev nowRel : StateRel where
   R s t := t.now = s.now
   refl _ := rfl
   trans h₁ h₂ := h₂.trans h₁
-  stepOrder _ _ := rfl
-  checkStepOrder x := by unfold checkStepOrder; split <;> simp
   arriveFrom := arriveFrom_now
   arriveAll := arriveAll_now
   requestOf type _ _ _ _ _ _ _ := by cases type <;> first

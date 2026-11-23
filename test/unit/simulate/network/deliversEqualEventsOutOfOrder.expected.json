@@ -52,14 +52,12 @@
           "resultOf": "beat#1"
         }
       ],
-      "violations": [],
-      "candidates": []
+      "violations": []
     },
     {
       "service": "listener",
       "lines": [],
-      "violations": [],
-      "candidates": []
+      "violations": []
     }
   ],
   "violations": [],
