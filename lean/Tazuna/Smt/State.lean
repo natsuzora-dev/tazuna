@@ -297,16 +297,26 @@ def serviceInvariantsOf (st : Service) (p : Program) : List Condition :=
 def SRecords.mapSlots (r : SRecords) (entity : String) (f : List Slot → List Slot) : SRecords :=
   { r with keyed := r.keyed.map fun (e, slots) => if e == entity then (e, f slots) else (e, slots) }
 
+/--
+`ite c a b`, or `a` when both branches are the same variable or literal. Branches that a split left untouched stay one
+variable, so that joining paths names only the data that differ; other terms are not compared, which costs a walk.
+-/
+def iteT (c a b : Term) : Term :=
+  match a, b with
+  | .var x _, .var y _ => if x == y then a else .ite c a b
+  | .lit x, .lit y => if x == y then a else .ite c a b
+  | _, _ => .ite c a b
+
 def Slot.ite (c : Term) (a b : Slot) : Slot :=
-  { live := .ite c a.live b.live,
+  { live := iteT c a.live b.live,
     key := a.key,
-    fields := a.fields.map fun (f, t) => (f, .ite c t ((b.fields.lookup f).getD undefT)) }
+    fields := a.fields.map fun (f, t) => (f, iteT c t ((b.fields.lookup f).getD undefT)) }
 
 def SRecords.ite (c : Term) (a b : SRecords) : SRecords :=
   { keyFields := a.keyFields,
     keyed := a.keyed.map fun (e, slots) => (e, (slots.zip ((b.keyed.lookup e).getD [])).map fun (x, y) => x.ite c y),
     singles := a.singles.map fun (e, fields) =>
-      (e, fields.map fun (f, t) => (f, .ite c t ((((b.singles.lookup e).getD []).lookup f).getD undefT))) }
+      (e, fields.map fun (f, t) => (f, iteT c t ((((b.singles.lookup e).getD []).lookup f).getD undefT))) }
 
 /--
 A step's symbolic state: the records, the slots used so far, the term that holds when the step creates past the bounds,

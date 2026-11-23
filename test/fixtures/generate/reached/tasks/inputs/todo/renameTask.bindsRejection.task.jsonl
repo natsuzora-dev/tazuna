@@ -1,2 +1,2 @@
-{"time":0,"dir":"in","type":"command","id":"renameTask#1","name":"renameTask","input":{"taskId":"A","title":"A"},"caller":{"service":"client"}}
+{"time":0,"dir":"in","type":"command","id":"renameTask#1","name":"renameTask","input":{"taskId":"l","title":"c"},"caller":{"service":"client"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#1","to":"renameTask#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"task"}}}

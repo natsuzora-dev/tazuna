@@ -43,11 +43,20 @@ structure Out where
   definition : Ir.Ref
   fields : List (String × Term)
 
-/-- A machine in a chain: its configuration in the chart's model, its context, and the states that it exited so far. -/
+/--
+A machine in a chain: the configurations of the chart's model that it can be in and the term of which one it is, its
+context, and the states that it exited so far. A path fixes one configuration only when a step reads it, so that paths
+that differ only in a machine's configuration join, and the steps that do not read it are followed once.
+-/
 structure Mach where
-  config : Nat
+  configs : List Nat
+  config : Term
   context : List (String × Term)
   exited : List String := []
+
+def Mach.fixed? (m : Mach) : Option Nat := match m.configs with
+  | [k] => some k
+  | _ => none
 
 /-- The sender of an own command: a state's `sends`, with the place in its machine's exits when it sent, or an automation. -/
 inductive Sender where
@@ -92,8 +101,6 @@ structure Path where
   beyond : Term := ff
   /-- The facts of the path's variables, each group under the unique name of the step that made it, which forks share. -/
   facts : List (String × Facts) := []
-  /-- The configurations that each chart it has not read yet is not in. -/
-  excluded : List (String × List Nat) := []
   fresh : Nat := 0
 
 /-- What a chain reads of the service: the spec, each chart's model, and the time of the message. -/
@@ -137,6 +144,11 @@ def next (x : Path) : String × Path := (s!"{x.name}.{x.fresh}.", { x with fresh
 
 def mach? (x : Path) (chart : String) : Option Mach := x.machines.lookup chart
 
+/-- The machine of `chart` with the one configuration that the path fixes, none while it can be in several. -/
+def fixed? (x : Path) (chart : String) : Option (Mach × Nat) := do
+  let m ← x.mach? chart
+  pure (m, ← m.fixed?)
+
 def setMach (x : Path) (chart : String) (m : Mach) : Path :=
   { x with machines := x.machines.filter (·.1 != chart) ++ [(chart, m)] }
 
@@ -147,23 +159,27 @@ def stopped (x : Path) : Bool := x.halted || x.cut
 
 end Path
 
+/-- Each machine of a state, in any configuration of its model, as machineFacts names it. -/
+def startMachines (ce : ChainEnv) : List (String × Mach) :=
+  ce.models.map fun (c, m) =>
+    (c, { configs := List.range m.configs.size, config := cfgVar c,
+          context := (contextProps ce.st c).map fun pr => (pr.1, ctxVar c pr.1) })
+
 /--
-The paths in which `chart` is in each configuration where `matters` says the work can change it, the first time the
-chain reads it, and one where it is in none of them, which leaves the chart unread.
+The paths in which `chart` is in each configuration where `matters` says the work can change it, and one where it is in
+none of them, which leaves its configuration open.
 -/
 def touch (ce : ChainEnv) (x : Path) (chart : String) (matters : ChartModel → Nat → Bool) : Except String (List Path) := do
-  if (x.mach? chart).isSome then return [x]
+  let some mach := x.mach? chart | throw s!"no machine {chart}"
+  if mach.fixed?.isSome then return [x]
   let some m := ce.models.lookup chart | throw s!"no model of {chart}"
-  let excluded := (x.excluded.lookup chart).getD []
-  let open_ := (List.range m.configs.size).filter (· ∉ excluded)
-  let (read, unread) := open_.partition (matters m)
-  let isConfig (k : Nat) : Term := .eq (cfgVar chart) (intLit (Int.ofNat k))
+  let (read, unread) := mach.configs.partition (matters m)
+  if read.isEmpty then return [x]
+  let isConfig (k : Nat) : Term := .eq mach.config (intLit (Int.ofNat k))
   let touched := read.map fun k =>
-    (x.fork (isConfig k) s!"c{k}").setMach chart
-      { config := k, context := (contextProps ce.st chart).map fun pr => (pr.1, ctxVar chart pr.1) }
+    (x.fork (isConfig k) s!"c{k}").setMach chart { mach with configs := [k], config := intLit (Int.ofNat k) }
   let rest := if unread.isEmpty then [] else
-    [{ x.fork (conj (read.map (notT ∘ isConfig))) "c" with
-       excluded := x.excluded.filter (·.1 != chart) ++ [(chart, excluded ++ read)] }]
+    [(x.fork (conj (read.map (notT ∘ isConfig))) "c").setMach chart { mach with configs := unread }]
   pure (touched ++ rest)
 
 /-- The input of an activity or a react as scalar fields, or why it has none. -/
@@ -185,10 +201,10 @@ path per edge, and one that halts when a guard or an assign throws; and the path
 -/
 def take (ce : ChainEnv) (x : Path) (chart : String) (edges : List Edge) (taken : Option (Arg × SVal)) :
     Except String (List Path × Path) := do
-  let some mach := x.mach? chart | throw s!"no machine {chart}"
+  let some (mach, config) := x.fixed? chart | throw s!"no fixed configuration of {chart}"
   let some model := ce.models.lookup chart | throw s!"no model of {chart}"
   let c := model.chart
-  let pre : SMachine := { context := mach.context, active := model.configs[mach.config]! }
+  let pre : SMachine := { context := mach.context, active := model.configs[config]! }
   let env := pre.env c x.records ce.now taken
   let mut before := tt
   let mut halts := ff
@@ -198,7 +214,8 @@ def take (ce : ChainEnv) (x : Path) (chart : String) (edges : List Edge) (taken 
     halts := .or halts (andT before halted)
     let moved ← pre.move ce.st ce.p c x.records ce.now taken (some e.transition) e.exits e.entries
     let y := (x.fork (conj [before, ok, notT halted]) s!"e{i}").setMach chart
-      { config := e.target, context := moved.machine.context, exited := mach.exited ++ e.exits }
+      { configs := [e.target], config := intLit (Int.ofNat e.target), context := moved.machine.context,
+        exited := mach.exited ++ e.exits }
     out := out ++ [{ y.fork moved.halted "h" with halted := true },
                    ← enterAll ce (y.fork (notT moved.halted) "") chart moved.machine e.entries]
     before := conj [before, notT ok, notT halted]
@@ -240,9 +257,9 @@ def edgesOn (model : ChartModel) (k : Nat) (trigger : Ir.Trigger) (source : Opti
 def settle (ce : ChainEnv) (chart : String) : Nat → Path → Except String (List Path)
   | fuel, x => do
     if x.stopped then return [x]
-    let some mach := x.mach? chart | return [x]
+    let some (_, config) := x.fixed? chart | return [x]
     let some model := ce.models.lookup chart | throw s!"no model of {chart}"
-    let edges := edgesOn model mach.config .always
+    let edges := edgesOn model config .always
     if edges.isEmpty then return [x]
     let (moved, idle) ← take ce x chart edges none
     let moved := live moved
@@ -259,18 +276,18 @@ def fireDeadline (ce : ChainEnv) (x : Path) (chart state name : String) : Except
   let matters (m : ChartModel) (k : Nat) := (m.configs[k]!).contains state || !(edgesOn m k .always).isEmpty
   let paths ← andThen (← touch ce x chart matters) (settle ce chart chainLimit)
   andThen paths fun x => do
-    let some mach := x.mach? chart | return [x]
+    let some (mach, config) := x.fixed? chart | return [x]
     let some model := ce.models.lookup chart | throw s!"no model of {chart}"
     -- Exiting the state took its deadline away, even when the state was entered again.
-    if mach.exited.contains state || !(model.configs[mach.config]!).contains state then return [x]
-    takeThen ce x chart (edgesOn model mach.config (.after name) (some state)) none (settle ce chart chainLimit)
+    if mach.exited.contains state || !(model.configs[config]!).contains state then return [x]
+    takeThen ce x chart (edgesOn model config (.after name) (some state)) none (settle ce chart chainLimit)
 
 /-- The paths after the answer to a state's own command, settled before and after (Service.handle). -/
 def answer (ce : ChainEnv) (x : Path) (chart state key : String) (exitsBefore : Nat) (accepted : Bool) :
     Except String (List Path) := do
   let paths ← settle ce chart chainLimit x
   andThen paths fun x => do
-    let some mach := x.mach? chart | throw s!"no machine {chart}"
+    let some (mach, config) := x.fixed? chart | throw s!"no fixed configuration of {chart}"
     let some model := ce.models.lookup chart | throw s!"no model of {chart}"
     if (mach.exited.drop exitsBefore).contains state then return [x]
     let trigger := Ir.Trigger.sends key (if accepted then .onAccepted else .onRejected)
@@ -280,7 +297,7 @@ def answer (ce : ChainEnv) (x : Path) (chart state key : String) (exitsBefore : 
       -- An invalid input halts the sender before any transition (rejectedInput?), so the kind is another one.
       pure (t, { f with asserts := f.asserts ++ [.not (.eq (valVar s!"{pre}tk.kind") (.mkStr (strLit "invalid-input")))] })
     let x := { x with facts := x.facts ++ [(pre, facts)] }
-    takeThen ce x chart (edgesOn model mach.config trigger (some state)) taken (settle ce chart chainLimit)
+    takeThen ce x chart (edgesOn model config trigger (some state)) taken (settle ce chart chainLimit)
 
 /-- The work that the events of an accepted command cause (commandWork): each machine's evaluation, then each automation's reaction. -/
 def commandWork (ce : ChainEnv) (emitted : List (Term × Ir.Ref × List (String × Term))) : Except String (List Job) := do
@@ -347,10 +364,10 @@ def receive (ce : ChainEnv) (x : Path) (chart : String) (event : Option (Term ×
   | none => pure paths
   | some (g, key, payload) =>
     andThen paths fun x => do
-      let some mach := x.mach? chart | return [x]
+      let some (_, config) := x.fixed? chart | return [x]
       let some model := ce.models.lookup chart | throw s!"no model of {chart}"
       let taken := some (Arg.payload, SVal.json (SJson.ofTerms payload))
-      let dispatched ← takeThen ce (x.fork g "d") chart (edgesOn model mach.config (.on key)) taken
+      let dispatched ← takeThen ce (x.fork g "d") chart (edgesOn model config (.on key)) taken
         (settle ce chart chainLimit)
       pure (dispatched ++ live [x.fork (notT g) "u"])
 
@@ -361,12 +378,12 @@ def sendEntered (ce : ChainEnv) (x : Path) : Except String Path := do
     | some m => (m.chart.states.map (·.spec.name)).filterMap fun n => if x.entered.contains (c, n) then some (c, n) else none
     | none => []
   ordered.foldlM (init := { x with entered := [] }) fun x (chart, n) => do
-    let some mach := x.mach? chart | pure x
+    let some (mach, config) := x.fixed? chart | throw s!"no fixed configuration of {chart}"
     let some model := ce.models.lookup chart | pure x
-    if !(model.configs[mach.config]!).contains n then return x
+    if !(model.configs[config]!).contains n then return x
     let c := model.chart
     let some cs := c.state? n | pure x
-    let m : SMachine := { context := mach.context, active := model.configs[mach.config]! }
+    let m : SMachine := { context := mach.context, active := model.configs[config]! }
     cs.activities.foldlM (init := x) fun x a => do
       let keyword := match a with
         | .calls .. => "calls"
@@ -435,57 +452,84 @@ def Job.shape : Job → String
   | .react a _ p => s!"react {a.name} {p.map (·.1)}"
   | .answered s ok => s!"answered {s.shape} {ok}"
 
-/-- What two paths must share to be joined: whether they halted or were cut, each machine's configuration and exits, and the shape of the internal queue. -/
+/-- The charts whose states the internal queue names: a state that sent an own command, or entered with activities to send. -/
+def Path.pinned (x : Path) : List String :=
+  let sender : Sender → List String
+    | .state c .. => [c]
+    | .automation _ => []
+  x.entered.map (·.1) ++ (x.round ++ x.commands).flatMap (sender ·.sender) ++
+    x.jobs.flatMap fun | .answered s _ => sender s | _ => []
+
+/--
+What two paths must share to be joined: whether they halted or were cut, each machine's exits, the configuration of
+each machine whose states the queue names, and the shape of the internal queue.
+-/
 def Path.control (x : Path) : String :=
   if x.halted || x.cut then s!"{x.halted} {x.cut}" else
-  let machines := (x.machines.map fun (c, m) => (c, m.config, m.exited)).mergeSort fun a b => decide (a.1 ≤ b.1)
-  let excluded := x.excluded.mergeSort fun a b => decide (a.1 ≤ b.1)
-  s!"{machines} {excluded} {if x.idle then 0 else x.steps} {x.jobs.map (·.shape)} {x.round.map (·.shape)} " ++
+  let pinned := x.pinned
+  let machines := (x.machines.map fun (c, m) => (c, if pinned.contains c then m.fixed? else none, m.exited)).mergeSort
+    fun a b => decide (a.1 ≤ b.1)
+  s!"{machines} {if x.idle then 0 else x.steps} {x.jobs.map (·.shape)} {x.round.map (·.shape)} " ++
     s!"{x.commands.map (·.shape)} {x.entered}"
 
 def iteFields (c : Term) (a b : List (String × Term)) : List (String × Term) :=
-  a.map fun (f, t) => (f, Term.ite c t ((b.lookup f).getD t))
+  a.map fun (f, t) => (f, iteT c t ((b.lookup f).getD t))
 
 def Waiting.join (c : Term) (a b : Waiting) : Waiting :=
-  { a with input := iteFields c a.input b.input, valid := .ite c a.valid b.valid }
+  { a with input := iteFields c a.input b.input, valid := iteT c a.valid b.valid }
 
 def Job.join (c : Term) : Job → Job → Job
-  | .receive ch (some (g, k, p)), .receive _ (some (h, _, q)) => .receive ch (some (.ite c g h, k, iteFields c p q))
-  | .react a g p, .react _ h q => .react a (.ite c g h) (iteFields c p q)
+  | .receive ch (some (g, k, p)), .receive _ (some (h, _, q)) => .receive ch (some (iteT c g h, k, iteFields c p q))
+  | .react a g p, .react _ h q => .react a (iteT c g h) (iteFields c p q)
   | j, _ => j
 
-/-- One path for `a` and `b`, which have the same control and disjoint terms: each datum the one of the path taken. -/
-def Path.join (a b : Path) : Path :=
-  let c := a.pc
-  let records := SRecords.ite c a.records b.records
-  let used := a.used.map fun (e, us) => (e, (us.zip ((b.used.lookup e).getD [])).map fun (x, y) => Term.ite c x y)
+/-- `a` with `b` joined in, which has the same control and a disjoint term: each datum `b`'s where `b`'s term holds. -/
+def Path.absorb (a b : Path) : Path :=
+  let c := b.pc
+  let pick (x y : Term) : Term := iteT c y x
   let other (m f : String) (t : Term) : Term := ((((b.mach? m).map (·.context)).getD []).lookup f).getD t
-  let name := a.name ++ "m"
-  -- Each joined datum is a variable, so that later joins nest variables and the terms stay small.
-  let ((joined, machines), defs) := (do
-    let joined ← ({ records, used } : Stepped).named name
-    let machines ← a.machines.mapM fun (m, x) => do
-      pure (m, { x with context := ← x.context.mapM fun (f, t) => do
-        pure (f, ← nameValue s!"{name}.ctx.{m}.{f}" (Term.ite c t (other m f t))) })
-    pure (joined, machines) : Named (Stepped × List (String × Mach))).run []
-  let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty),
-                         asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t, fit := .exact }
   let keys : Std.HashSet String := a.facts.foldl (fun s (k, _) => s.insert k) ∅
   -- An out line's guard holds only on the paths that wrote it, so one from before the paths split is kept once.
   let ids : Std.HashSet String := a.outs.foldl (fun s o => s.insert o.id) ∅
-  let outs := a.outs ++ b.outs.filter (!ids.contains ·.id)
-  { a with name, pc := Term.or a.pc b.pc, records := joined.records, used := joined.used, machines, outs,
-           jobs := (a.jobs.zip b.jobs).map fun (x, y) => x.join c y,
-           round := (a.round.zip b.round).map fun (x, y) => x.join c y,
-           commands := (a.commands.zip b.commands).map fun (x, y) => x.join c y,
+  { a with pc := Term.or a.pc b.pc, records := SRecords.ite c b.records a.records,
+           used := a.used.map fun (e, us) => (e, (us.zip ((b.used.lookup e).getD [])).map fun (x, y) => pick x y),
+           machines := a.machines.map fun (m, x) =>
+             let y := (b.mach? m).getD x
+             (m, { x with configs := (x.configs ++ y.configs).eraseDups.mergeSort, config := pick x.config y.config,
+                          context := x.context.map fun (f, t) => (f, pick t (other m f t)) }),
+           outs := a.outs ++ b.outs.filter (!ids.contains ·.id),
+           jobs := (b.jobs.zip a.jobs).map fun (y, x) => y.join c x,
+           round := (b.round.zip a.round).map fun (y, x) => y.join c x,
+           commands := (b.commands.zip a.commands).map fun (y, x) => y.join c x,
            gap := Term.or a.gap b.gap, beyond := Term.or a.beyond b.beyond,
-           facts := a.facts ++ b.facts.filter (!keys.contains ·.1) ++ [(name, named)] }
+           facts := a.facts ++ b.facts.filter (!keys.contains ·.1) }
+
+/--
+One path for `x` and `rest`, which have the same control and disjoint terms. Each datum that differs among them is
+a variable, so that later joins nest variables and the terms stay small; one that does not stays as it is.
+-/
+def Path.joinAll (x : Path) (rest : List Path) : Path :=
+  if rest.isEmpty then x else
+  let j := rest.foldl Path.absorb x
+  let name := x.name ++ "m"
+  let ((joined, machines), defs) := (do
+    let joined ← ({ records := j.records, used := j.used } : Stepped).named name
+    let machines ← j.machines.mapM fun (m, x) => do
+      pure (m, { x with config := ← nameAs s!"{name}.cfg.{m}" .int x.config,
+                        context := ← x.context.mapM fun (f, t) => do pure (f, ← nameValue s!"{name}.ctx.{m}.{f}" t) })
+    pure (joined, machines) : Named (Stepped × List (String × Mach))).run []
+  let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty),
+                         asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t, fit := .exact }
+  { j with name, records := joined.records, used := joined.used, machines, facts := j.facts ++ [(name, named)] }
 
 /-- `paths` with the paths of equal control joined, so that the steps after them are followed once. -/
 def merge (paths : List Path) : List Path :=
-  paths.foldl (fun acc x => match acc.findIdx? (·.control == x.control) with
-    | some i => acc.modify i (·.join x)
-    | none => acc ++ [x]) []
+  let groups := paths.foldl (fun (acc : Array (String × Path × Array Path)) x =>
+    let k := x.control
+    match acc.findIdx? (·.1 == k) with
+    | some i => acc.modify i fun (k, first, rest) => (k, first, rest.push x)
+    | none => acc.push (k, x, #[])) #[]
+  groups.toList.map fun (_, first, rest) => first.joinAll rest.toList
 
 /-- The paths after the internal queues of `paths` run out (Service.drain), at most `fuel` steps, the paths of equal control joined after each step. -/
 def drain (ce : ChainEnv) : Nat → List Path → Except String (List Path)
@@ -493,7 +537,9 @@ def drain (ce : ChainEnv) : Nat → List Path → Except String (List Path)
   | fuel + 1, paths => do
     let (rest, busy) := paths.partition fun x => x.stopped || x.idle
     if busy.isEmpty then return paths
-    drain ce fuel (merge (rest ++ live (← busy.flatMapM (stepQueue ce))))
+    let stepped := rest ++ live (← busy.flatMapM (stepQueue ce))
+    let merged := merge stepped
+    drain ce fuel merged
 
 /--
 The paths after a message that starts with `jobs`, counted from no step. Of the states each machine exited, only those
@@ -625,7 +671,7 @@ def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String
   let ce : ChainEnv := { st, p, models, now }
   let orders (watched : List (String × String)) (a b : List Job) : Except String (Ending × Ending) := do
     let run (name : String) (x y : List Job) : Except String Ending := do
-      let paths ← message ce watched [{ name, pc := tt, records := pre, used }] x
+      let paths ← message ce watched [{ name, pc := tt, records := pre, used, machines := startMachines ce }] x
       pure (Ending.of pre (← message ce watched paths y))
     pure (← run "o1" a b, ← run "o2" b a)
   match tie with
