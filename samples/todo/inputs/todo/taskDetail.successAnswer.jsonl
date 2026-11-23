@@ -1,2 +1,2 @@
-{"time":0,"dir":"in","type":"query","id":"taskDetail#1","name":"taskDetail","input":{"taskId":"!0!"},"caller":{"service":"screens"}}
+{"time":0,"dir":"in","type":"query","id":"taskDetail#1","name":"taskDetail","input":{"taskId":"A"},"caller":{"service":"screens"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#1","to":"taskDetail#1","answer":{"result":"fulfilled","output":{"task":null}}}

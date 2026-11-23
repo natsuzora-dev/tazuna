@@ -60,7 +60,7 @@ test("viewModel turns, in the definition JSON, Zod schemas into JSON Schema, fun
   const definition = addTask?.definition as Readonly<Record<string, unknown>>;
   assert.equal(definition["service"], "todo");
   assert.deepEqual(definition["input"], {
-    taskId: { type: "string" },
+    taskId: { type: "string", minLength: 1 },
     title: { type: "string", minLength: 1, description: "The name of the task" },
   });
   assert.match(String(definition["decide"]), /^\(\{ input, now \}\) =>/);

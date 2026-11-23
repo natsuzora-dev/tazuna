@@ -121,10 +121,6 @@ export const recordReminderTimeReached = command({
   callers: ["todo"],
   input: { taskId: ref(Task) },
   emits: [reminderTimeReachedRecorded, reminderTimeReached],
-  requires: {
-    due: ({ refs, now }) =>
-      refs.taskId.completedAt === null && refs.taskId.remindAt !== null && refs.taskId.remindAt <= now,
-  },
 }).decide(({ refs }) => [
   emit(reminderTimeReachedRecorded, { id: refs.taskId.id, remindAt: null }),
   emit(reminderTimeReached, { title: refs.taskId.title }),

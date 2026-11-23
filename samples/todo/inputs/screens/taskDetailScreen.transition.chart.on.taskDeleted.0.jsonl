@@ -1,0 +1,7 @@
+{"time":0,"dir":"out","type":"subscribe","id":"todo.reminderSettings#1","name":"todo.reminderSettings","input":{},"caller":{"service":"screens"}}
+{"time":0,"dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"},"caller":{"service":"screens"}}
+{"time":0,"dir":"in","type":"answer","id":"todo/answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"A","title":"A","dueAt":-8639999999985320,"completedAt":-8639999999991635}]}}}
+{"time":0,"dir":"in","type":"operation","id":"taskListScreen.openTask#1","name":"taskListScreen.openTask","payload":{"taskId":"A","title":"A"}}
+{"time":0,"dir":"out","type":"subscribe","id":"todo.taskDetail#1","name":"todo.taskDetail","input":{"taskId":"A"},"caller":{"service":"screens"}}
+{"time":0,"dir":"in","type":"event","id":"todo/taskDeleted#1","name":"todo.taskDeleted","payload":{"taskId":"A"}}
+{"time":0,"dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"todo.taskDetail#1"}

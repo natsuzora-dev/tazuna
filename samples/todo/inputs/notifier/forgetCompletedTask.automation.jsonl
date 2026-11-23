@@ -1,1 +1,1 @@
-{"time":0,"dir":"in","type":"event","id":"todo/taskCompleted#1","name":"todo.taskCompleted","payload":{"taskId":"!0!"}}
+{"time":0,"dir":"in","type":"event","id":"todo/taskCompleted#1","name":"todo.taskCompleted","payload":{"taskId":"A"}}

@@ -4,7 +4,7 @@ import { z } from "zod";
 export const Task = entity({
   description: "A task of the user",
   fields: {
-    id: z.string(),
+    id: z.string().min(1),
     title: z.string().min(1).meta({ description: "The name of the task" }),
     createdAt: instant,
     completedAt: instant.nullable(),

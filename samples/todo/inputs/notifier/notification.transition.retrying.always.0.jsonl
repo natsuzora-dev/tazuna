@@ -1,5 +1,5 @@
-{"time":0,"dir":"in","type":"event","id":"todo/taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"!0!"}}
-{"time":0,"dir":"out","type":"event","id":"openTaskRecorded#1","name":"openTaskRecorded","payload":{"taskId":"!0!"}}
+{"time":0,"dir":"in","type":"event","id":"todo/taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"A"}}
+{"time":0,"dir":"out","type":"event","id":"openTaskRecorded#1","name":"openTaskRecorded","payload":{"taskId":"A"}}
 {"time":0,"dir":"out","type":"command","id":"device.requestNotificationPermission#1","name":"device.requestNotificationPermission","input":{},"caller":{"service":"notifier"}}
 {"time":0,"dir":"in","type":"answer","id":"device/answer#1","to":"device.requestNotificationPermission#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":0,"dir":"in","type":"event","id":"device/notificationPermissionGranted#1","name":"device.notificationPermissionGranted","payload":{}}
