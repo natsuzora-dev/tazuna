@@ -3,4 +3,3 @@
 {"kind":"Uncovered.request","definition":{"service":"backlog","name":"completeTask"},"data":{},"location":{"file":"backlog/backlog.ts","line":25}}
 {"kind":"Uncovered.request","definition":{"service":"backlog","name":"renameTask"},"data":{},"location":{"file":"backlog/backlog.ts","line":34}}
 {"kind":"Uncovered.request","definition":{"service":"backlog","name":"taskTitles"},"data":{},"location":{"file":"backlog/backlog.ts","line":41}}
-{"kind":"Uncovered.request","definition":{"service":"device","name":"showNotification"},"data":{},"location":{"file":"device/device.ts","line":6}}
