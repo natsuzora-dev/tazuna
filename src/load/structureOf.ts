@@ -183,7 +183,6 @@ function definitionStructure(
       const target = refTarget(schema);
       return target === undefined ? [] : [{ field, entity: ref(target, [key, field], "keyedEntity") }];
     });
-  // A listed entity is one of the service's own, which the types of `callers` allow alone.
   const callersOf = (callers: readonly CallerType[]): StructureCallerType[] =>
     callers.map((c, i) =>
       typeof c === "string" ? { service: c } : { entity: ref(c, ["callers", i], "keyedEntity").name },

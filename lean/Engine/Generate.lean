@@ -235,10 +235,8 @@ structure Search where
 def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Search := do
   let st ← specService j service
   let creates := Ir.createsOf j.bounds service
-  -- A client sends a request whose callers list someone outside the service (fromOutside).
   let fromClients (name : String) : Bool :=
     ((st.requirements.lookup name).map (·.callers)).getD [] |>.any (· != .service service)
-  -- The answers of the services that it sends requests to vary with their records, so their creates count too.
   let requested := ((st.charts.flatMap fun c => c.states.flatMap (·.activities)) ++ st.automations.map (·.sends)).filterMap
     fun a => if a matches .opens .. || a.ref.service == service then none else some a.ref.service
   let read := creates ++ requested.eraseDups.flatMap (Ir.createsOf j.bounds)
@@ -277,10 +275,8 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
   let now := intLit s.now
   let mut wants : List Want := []
   let terms := recordTerms st x.creates n.created s.records
-  -- Requests: each target of the request still open, and each path through a command's decide that accepts.
   for name in x.sendable do
     let all := open_.filter fun t => t.ofRequest && t.ref.name == name
-    -- Any input to the request reaches its request target, so the solver seeks only its answers.
     let mine := all.filter (!· matches .request _)
     let id := nextNumber n.inputs name
     let isQuery := st.queries.contains name
@@ -303,9 +299,6 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
       | .error why => wants := wants ++ all.map (.broken · s!"the command has no encoding: {why}")
       | .ok step =>
         let facts := inputFacts ++ callerFacts ++ fromOutside st caller ++ step.facts
-        -- An accepting path seeks a new record first: a key that no record holds, so that later inputs meet several
-        -- records. The solver otherwise tends to pick an existing record's key, which updates it. A path with ref inputs
-        -- instead tries each live record for each ref, and no live record at all only when every ref may be nullish.
         let refFields := ((st.requirements.lookup name).map (·.refs)).getD []
         let inputFields := propertiesWith ((st.schemaOf (.input (st.ref name))).getD (.obj []))
         let mayBeNullish (field : String) := match inputFields.find? (·.1 == field) with
@@ -329,7 +322,6 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
             if pins.isEmpty then
               [.solve ((if creates == ff then [] else [queryOf facts (.and g creates)]) ++ [queryOf facts g]) (line input caller) none]
             else (pins ++ noRecord).map fun pin => .solve [queryOf facts (.and g pin)] (line input caller) none
-  -- Answers to the service's requests that wait: an output within the schema, and each rejection the target may give.
   for pd in s.pending.filter (!·.stale) do
     let target := pd.activity.ref
     let query := (st.structure.body? target) matches some (.query _)
@@ -340,7 +332,6 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
       let promise := (promised st pd.input target output).toOption.getD tt
       let line (M : Model) := answerLine (if query then .fulfilled (.obj (SJson.concFields M output))
         else .accepted (some (.obj (SJson.concFields M output))))
-      -- An answer to a screen's shows slot may open operations: each offers that it can make list a payload.
       let opens ← match pd.requester with
         | .slot m slot => match s.machine? m with
           | some i => offerGoals fs st s i slot output
@@ -351,7 +342,6 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
     for kind in (st.structure.rejectionKinds st.service target).filter (!·.blamesSender) do
       let reasons := if kind == .requires then (st.structure.rejectionReasons target).map some else [none]
       wants := wants ++ reasons.map fun reason => .line (answerLine (.rejected { kind, reason }))
-  -- Events of other services that the service receives: any payload, and one that takes each branch of each automation.
   for event in st.receives do
     let some (.event _) := st.structure.body? event | continue
     let name := s!"{event.service}.{event.name}"
@@ -371,7 +361,6 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
           | .error _ => goals := goals ++ [(base, r.fires)]
         else goals := goals ++ [(base, r.fires)]
     wants := wants ++ goals.map fun (f, g) => .solve [queryOf f g] line none
-  -- Operations of the open screens: each offered payload, or any payload within the control's schema.
   for resource in s.stack.eraseDups do
     let .ok ops ← operationsOf fs st s resource | continue
     for op in ops do
@@ -384,9 +373,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
       | none =>
         let (payload, facts) := objectOf st (.control (st.ref op.screen) op.control) "op"
         wants := wants ++ [.solve [queryOf facts tt] (fun M => line (.obj (SJson.concFields M payload))) none]
-  -- A restart of the service process, which keeps the durable state.
   wants := wants ++ [.line { time := s.now, after := none, created := none, body := .restart .in s!"restart#{nextNumber n.inputs "restart"}" }]
-  -- Time: the clock moves to the next deadline.
   if let some t := (s.deadlines.map (·.time)).filter (s.now ≤ ·) |>.min? then
     wants := wants ++ [.line { time := t, after := none, created := none, body := .time .in s!"time#{nextNumber n.inputs "time"}" }]
   pure wants
@@ -405,7 +392,6 @@ def solveAll (queries : List Query) : SolveM (List Smt.Answer) := do
   let cache ← get
   pure ((queries.zip scripts).map fun (q, script) =>
     let text := cache.getD script ""
-    -- With no variable, the script asks for no model.
     if q.vars.isEmpty && (text.trimAscii.toString.startsWith "sat") then .sat [] else Smt.Answer.read text)
 
 /-- The records created by moving from `before` to `after`: the keys of each entity that `after` holds and `before` does not. -/
@@ -473,7 +459,6 @@ def Search.run (x : Search) : SolveM Found := do
         if created.any fun (e, c) => c > (x.creates.lookup e).getD 0 then continue
         let inputs := n.inputs ++ [l]
         let fresh := c'.reached.filter fun t => x.targets.contains t && !found.first.any (·.1 == t)
-        -- The target that the query sought comes first, so that the input is named after it.
         let sought := match w with
           | .solve _ _ (some t) => if fresh.contains t then [t] else []
           | _ => []

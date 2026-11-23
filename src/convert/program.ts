@@ -506,7 +506,6 @@ export class Converter {
     }
     const fns: Record<FnCallback, Fn[]> = { resolve: [], decide: [], react: [] };
     for (const slot of fnSlotsOf(spec)) {
-      // An automation without input sends `{}`; a command without decide is an external service's.
       if (slot.f === undefined && slot.callback !== "react") continue;
       const { f } = slot;
       const binds = slot.binds === undefined || lists[slot.binds].some((g) => sameRef(g.definition, slot.definition));

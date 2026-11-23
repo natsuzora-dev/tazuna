@@ -919,7 +919,6 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
     | some (.ok step) => pure step
     | some (.error why) => throw (.undecided s!"the command {c} has no encoding: {why}")
     | none => throw (.undecided s!"the command {c} has no step")
-  -- Whether a step of `c` stays within the encoding, which every property that the step can fail needs.
   let gap (c : String) (step : Step) : Obligation := .of (x.query step step.gap)
     (withinEncoding s!"the command {c} can write a value that the encoding does not hold, such as a record outside its schema")
   let afterSteps (prop : Property) (commands : List String) : Plan := Plan.all <| (commands.map fun c => do

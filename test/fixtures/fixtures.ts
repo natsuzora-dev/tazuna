@@ -124,7 +124,6 @@ export async function run(
     error: (line) => {
       if (!summary.test(line)) throw new Error(`tazuna ${args.join(" ")} wrote ${line} to stderr`);
     },
-    // A fixture with a tsconfig.json of its own runs tsc, for the violations that only tsc's program shows.
     ...(existsSync(join(root, "tsconfig.json")) ? {} : { typeCheck: () => typeChecked, converter: converter() }),
   });
   return { lines, code };

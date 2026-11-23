@@ -90,7 +90,6 @@ type Scope = ReadonlyMap<string, "variable" | Special | "args">;
 export interface Defined {
   /** The values of `constants()` groups, encoded. */
   readonly constants: ReadonlyMap<string, Readonly<Record<string, Json>>>;
-  /** The names of entities. */
   readonly entities: ReadonlyMap<string, string>;
 }
 
@@ -147,7 +146,6 @@ class Conversion {
   private readonly refs: ReadonlyMap<string, string>;
   /** The argument that a name of the arguments object reads, once convertFunction knows the arguments. */
   private argument: (node: Node, name: string) => Expr = (node) => this.fail(node, "reads its arguments");
-  /** The special arguments that the function receives. */
   private specials: ReadonlySet<Special> = new Set();
   /** How many callbacks of a collection method hold the expression being converted. */
   private callbacks = 0;
@@ -212,7 +210,6 @@ class Conversion {
   private kind(type: Type): Kind {
     if (type.isIntersectionType()) {
       if (type.getTypes().some((t) => t.getSymbol()?.name === "DateBrand")) return "date";
-      // A value of `string & Brand` is a string, and one of several object types is an object.
       const kinds = new Set(type.getTypes().map((t) => this.kind(t)));
       kinds.delete("object");
       const [kind, ...rest] = kinds;
@@ -406,7 +403,6 @@ class Conversion {
     this.specials = new Set(args.filter((a): a is Special => a === "records" || a === "createKey"));
     this.argument = (node, name) => {
       if (this.specials.has(name as Special)) this.fail(node, `reads ${name}`);
-      // TS passes an arguments object without the name, whose field is undefined.
       if (!(args as readonly string[]).includes(name)) return { op: "undef" };
       if (name === "refs") return this.refsObject();
       return { op: "arg", arg: name as Exclude<Arg, Special | "refs"> };
@@ -734,7 +730,6 @@ class Conversion {
       };
     }
     if (method === "get" && receiver === "table") {
-      // A key of several fields is an object.
       const key = this.only(argument);
       if (key !== "string" && key !== "object") this.fail(e, "gets a record by other than a string or a key object");
       return { op: "lookup", table: this.expression(callee.expression, scope), key: this.expression(argument, scope) };
@@ -752,7 +747,6 @@ class Conversion {
     if ((method === "minBy" || method === "maxBy") && collection === "bag") {
       const key = this.only(this.callbackBody(method, argument));
       if (key !== "number" && key !== "date") this.fail(e, `calls ${method} with other than a key`);
-      // The value whose key is the least (greatest): the one value of that key, so that a tie is Fault.notOnly.
       const visited = this.visited(method, callee.expression, argument, scope);
       const extreme = `#${this.fresh++}`;
       const atExtreme: Expr = { op: "eq", left: visited.body, right: { op: "var", name: extreme } };

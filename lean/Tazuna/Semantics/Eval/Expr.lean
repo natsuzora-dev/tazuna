@@ -319,7 +319,6 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
       pure (if source.any (fun r => r.entity == entity && r.key == some (.str key)) then .row source entity (some (.str key))
         else .undef)
     | .table source entity, k@(.json (.obj _)) | .table source entity, k@(.obj _) => do
-      -- The key of an entity with several key fields, an object.
       let some k := keyObject? k | thrown
       let key := canonicalKey (env.keyFields entity) k
       note (.record entity key)

@@ -156,7 +156,6 @@ def replay (spec : Ir.Structure) (log : Log) : ReplayM Replayed := do
   let mut s ← begin st fs { now := time, service := log.service, records := rows, user }
   let inputs (s : Service.State) := s.lines.toList.countP (·.dir == .in)
   let mut taken := log.lines.length
-  -- A resend and the answer to it stand for the request that they repeat (withoutResends), so the spec takes neither.
   for (l, k) in (withoutResends lines).zipIdx do
     let some l := l | continue
     if l.body.dir == .out then continue
@@ -232,7 +231,6 @@ def verifyExternal (spec : Ir.Structure) (service : String) (trace : List (FileL
       if answered >= sentBefore line then continue
       answered := answered + 1
       if flagged.contains line then continue
-      -- An answer without the output that its target declares fails the output schema.
       let output : Option (Option Value) := match answer with
         | .rejected _ => none
         | .accepted o => if spec.hasOutput target then some o else none

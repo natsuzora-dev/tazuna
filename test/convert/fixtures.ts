@@ -31,7 +31,6 @@ const fixture = <S extends Shape>(
   f: (args: { readonly input: Row<S> }) => unknown,
 ): Fixture => ({ op, shape, input, records: fc.constant([]), f });
 
-// Few distinct values, so that equal ones and empty ones come up often.
 const text = fc.string({ maxLength: 3, unit: fc.constantFrom("a", "b", "é") });
 const number = fc.integer({ min: -3, max: 3 });
 const instant = fc.integer({ min: 0, max: 3 }).map((n) => Date.UTC(2026, 0, 1) + n * 999);
@@ -106,7 +105,6 @@ const noting = command({
   input.bag.map((n) => emit(counted, { n })),
 ]);
 
-// Helpers that a fixture calls, which the converter inlines.
 const between = (n: number, low: number, high: number) => low <= n && n <= high;
 const tasksDone = condition(({ records }) => records.Task.every((t) => t.done));
 function named(item: { readonly name: string } | null, name: string) {

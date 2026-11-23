@@ -638,7 +638,6 @@ def Stepped.decided (svc : Service) (names : String) (st : Stepped) (k : String)
     (st.named s!"{names}post{k}{i}" : Named Stepped)
   | .ite c a b => do
     pure (Stepped.ite c (← st.decided svc names s!"{k}y" a) (← st.decided svc names s!"{k}n" b) st.emitted.length)
-  -- An array that an operation made, such as a spread of a choice between arrays: each item where it is present.
   | .bag items => items.zipIdx.foldlM (init := st) fun st ((g, item), i) => do
     let st' ← st.emitAll svc s!"{names}emit{k}{i}" item
     (Stepped.ite g st' st st.emitted.length |>.named s!"{names}post{k}{i}" : Named Stepped)
@@ -666,7 +665,6 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
     if target.service == svc.service && (pre.keyed.lookup target.name).isSome then
       let slots := pre.slotsOf target.name
       let names := svc.keyFieldsOf target.name
-      -- A ref to an entity whose key is several fields holds a key object, which names a record by its key fields.
       let rec named : SJson → Except String Term
         | .scalar v => pure (if names.length < 2 then .or (nullishT v) (keyIn v slots) else nullishT v)
         | .obj fields => do

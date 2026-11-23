@@ -361,7 +361,6 @@ def SVal.items (r : SRecords) : SVal → Option (List (Term × SVal))
   | .table e => some ((r.slotsOf e).map fun s => match s.key with
     | .field n => (s.live, .row e (jsonField n s.fields))
     | .fields names => (s.live, .krow e (names.map fun n => (n, jsonField n s.fields))))
-  -- A choice that no variable decides, such as `x ?? []` on an `undefined` literal, is its one branch.
   | .ite c a b =>
     if c.closed then if c.holds fun _ => .bool false then a.items r else b.items r
     else do

@@ -326,8 +326,6 @@ partial def zodSchema (listed : List Name) : Lean.Expr → Emit String
     if let .enum ctors ← wireShape name then
       modify fun e => { e with inlined := if name ∈ e.inlined then e.inlined else e.inlined ++ [name] }
       return enumSchema ctors
-    -- A union of records of strings and JSON values that another module declares, such as Caller, is written in place
-    -- as an enum is.
     if let .untagged ctors ← wireShape name then
       let scalar (f : WireField) : Option String := match f with
         | .required _ (.const ``String _) => some "z.string()"

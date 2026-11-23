@@ -605,7 +605,6 @@ def Ending.of (start : SRecords) (paths : List Path) : Ending :=
   let finished := paths.filter (!·.cut)
   { records := finished.foldr (fun x r => .ite x.pc x.records r) start,
     halted := disj ((finished.filter (·.halted)).map (·.pc)),
-    -- An out line's guard holds only on the paths that wrote it, which share it after they split.
     outs := (finished.foldl (fun (seen, outs) x => x.outs.foldl (fun (seen, outs) o =>
       if seen.contains o.id then (seen, outs) else (seen.insert o.id, outs ++ [o])) (seen, outs))
       ((∅ : Std.HashSet String), ([] : List Out))).2,

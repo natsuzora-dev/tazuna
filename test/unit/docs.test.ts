@@ -367,7 +367,6 @@ test("The README tutorial's broken scenario gives the violation line and summary
       recursive: true,
       filter: (src) => !src.includes("node_modules"),
     });
-    // The copy sits one folder deeper than the sample, so its tsconfig.json reaches the repository's one more level up.
     writeFileSync(
       join(project, "spec/tsconfig.json"),
       '{ "extends": "../../../../tsconfig.json", "include": ["."] }\n',

@@ -182,7 +182,6 @@ export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Ada
   const running = (work: Promise<void>) => void work.catch((error: unknown) => failures.push(error));
   const writeAnswer = (to: string, answer: unknown) =>
     write({ dir: "out", type: "answer", id: lineId("answer"), to, answer: plain(answer) } as UntimedTraceLine);
-  // An input of generate starts from the initial state, no records, at the time of its first line.
   const start: StartLine =
     scenario === undefined
       ? { type: "start", time: snapshot[0]?.time ?? 0, records: [] }

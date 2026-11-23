@@ -19,7 +19,6 @@ const checksOn = (schema: z.ZodType): readonly z.core.$ZodCheck[] => [
 ];
 
 function checkFeature(check: z.core.$ZodCheck): Feature | undefined {
-  // The check of a bag, set or sortedBy array is tazuna's mark.
   if (markOf(check as z.core.$ZodCheck<never>) !== undefined) return undefined;
   const def = check._zod.def as unknown as Readonly<Record<string, unknown>>;
   if (def["check"] === "custom") return "refinement";

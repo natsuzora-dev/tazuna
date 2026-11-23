@@ -171,7 +171,6 @@ export function entity<
   for (const f of keyFields)
     if (selfRefs.has(fields[f] as z.ZodType)) throw new TypeError("the key field of an entity cannot be ref.self()");
   // A clone, so that a schema that the key field shares with other fields does not mark them as key positions too.
-  // Only a key of one field holds the keys that createKey makes, so only its field is a key position.
   const single = typeof definition.key === "string" ? definition.key : undefined;
   const key = single === undefined ? undefined : (fields[single] as z.ZodType).clone();
   if (single !== undefined && key !== undefined) {
