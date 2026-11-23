@@ -8,10 +8,10 @@ import { main } from "../../src/cli/main.ts";
 import { groups as groupInfos } from "../../src/data/groups.ts";
 import { groupNames, isUserKind, parseKind } from "../../src/data/kinds.ts";
 import { builtExplanations, typeChecked } from "../fixtures/fixtures.ts";
-import { leanRoot } from "./examples.ts";
 import { guarantees as tagged } from "./guarantees.generated.ts";
 
 const root = join(import.meta.dirname, "../..");
+const leanRoot = join(root, "lean/Tazuna");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 /** The paths of the files that npm packs, relative to the package root. */

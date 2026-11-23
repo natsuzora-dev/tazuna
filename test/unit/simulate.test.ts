@@ -5,35 +5,20 @@ import { test } from "node:test";
 import { ask } from "../../src/cli/engine.ts";
 import { invalidScenarioKinds } from "../../src/data/invalidScenario.generated.ts";
 import { scenario } from "../../src/data/scenario.generated.ts";
-import { folders, isServiceFolder } from "../fixtures/fixtures.ts";
-import { convertedSpec, leanModulePaths, outcomeSuffix, scenarioSuffix, simExamples, simRoot } from "./examples.ts";
+import { isServiceFolder } from "../fixtures/fixtures.ts";
+import { convertedSpec, outcomeSuffix, scenarioSuffix, simExamples } from "./simulate.ts";
 
 const tests = import.meta.dirname;
 const examples = simExamples();
 
-test("Every folder under test/sim is a Lean Sim module path or an example directly under one, and each example holds only service folders and pairs of <name>.scenario.json and <name>.expected.json", () => {
-  const modules = leanModulePaths("Sim");
-  const examplePaths = new Set(examples.map(({ root }) => relative(simRoot, root)));
-  const onModulePath = (path: string) => modules.some((module) => `${module}/`.startsWith(`${path}/`));
-  const misplaced = readdirSync(simRoot, { recursive: true, withFileTypes: true }).filter((entry) => {
-    const parent = relative(simRoot, entry.parentPath);
-    const path = join(parent, entry.name);
-    const inExample = [...examplePaths].some((e) => path.startsWith(`${e}/`));
-    if (inExample) return false;
-    if (examplePaths.has(path)) return false;
-    return !(entry.isDirectory() && onModulePath(path));
-  });
-  assert.deepEqual(
-    misplaced.map((e) => relative(simRoot, join(e.parentPath, e.name))),
-    [],
-  );
+test("Each example holds only service folders and pairs of <name>.scenario.json and <name>.expected.json", () => {
   for (const { root, scenarios } of examples)
     for (const entry of readdirSync(root, { withFileTypes: true })) {
       const name = entry.name;
       const pairs = scenarios.some((s) => name === `${s}${scenarioSuffix}` || name === `${s}${outcomeSuffix}`);
       assert.ok(entry.isDirectory() ? isServiceFolder(join(root, name)) : pairs, relative(tests, join(root, name)));
     }
-  assert.ok(folders(simRoot).length > 0);
+  assert.ok(examples.length > 0);
 });
 
 const outcomes = new Map<string, readonly string[]>();
@@ -55,7 +40,7 @@ for (const { root, scenarios } of examples) {
     });
 }
 
-test("Each InvalidScenario kind is in the expected outcome of some scenario under test/sim", () => {
+test("Each InvalidScenario kind is in the expected outcome of some scenario under test/unit/simulate", () => {
   const reported = new Set(
     examples.flatMap(({ root, scenarios }) =>
       scenarios.flatMap((name) => {

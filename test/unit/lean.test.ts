@@ -1,8 +1,19 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { test } from "node:test";
-import { leanDefinitionPaths, leanModulePaths, leanRoot } from "./examples.ts";
+
+const leanRoot = join(import.meta.dirname, "../../lean/Tazuna");
+
+/** Returns the paths of the Lean modules relative to Tazuna/<folder>, such as Chart/Always in Service. */
+const leanModulePaths = (folder: string): string[] =>
+  readdirSync(join(leanRoot, folder), { recursive: true, encoding: "utf8" })
+    .filter((file) => file.endsWith(".lean"))
+    .map((file) => file.slice(0, -".lean".length))
+    .sort();
+
+/** Returns the paths relative to Tazuna of the Lean modules outside Thm, such as Service/Chart/Always. */
+const leanDefinitionPaths = (): string[] => leanModulePaths("").filter((path) => !path.startsWith("Thm/"));
 
 const source = (folder: string, path: string) => readFileSync(join(leanRoot, folder, `${path}.lean`), "utf8");
 

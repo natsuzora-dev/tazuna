@@ -4,24 +4,14 @@ import { Converter } from "../../src/convert/program.ts";
 import type { Spec } from "../../src/load/load.ts";
 import { folders, loadedSpec } from "../fixtures/fixtures.ts";
 
-export const simRoot = join(import.meta.dirname, "sim");
-export const leanRoot = join(import.meta.dirname, "../../lean/Tazuna");
-
-/** Returns the paths of the Lean modules relative to Tazuna/<folder>, such as Chart/Always in Service. */
-export const leanModulePaths = (folder: string): string[] =>
-  readdirSync(join(leanRoot, folder), { recursive: true, encoding: "utf8" })
-    .filter((file) => file.endsWith(".lean"))
-    .map((file) => file.slice(0, -".lean".length))
-    .sort();
-
-/** Returns the paths relative to Tazuna of the Lean modules outside Thm, such as Service/Chart/Always. */
-export const leanDefinitionPaths = (): string[] => leanModulePaths("").filter((path) => !path.startsWith("Thm/"));
-
-const atPaths = (root: string, paths: readonly string[]): string[] =>
-  paths.flatMap((path) => folders(join(root, path)));
+/**
+ * The examples of the engine's simulate request: test/unit/simulate/<example>/, each a spec and pairs of
+ * <name>.scenario.json, a lowered scenario, and <name>.expected.json, the outcome.
+ */
+export const simRoot = join(import.meta.dirname, "simulate");
 
 /**
- * Loads the spec of the example `root` with its functions converted to IR, without the checks that a sim example may
+ * Loads the spec of the example `root` with its functions converted to IR, without the checks that an example may
  * fail on purpose, and throws when a function stays outside the IR.
  */
 export async function convertedSpec(root: string): Promise<Spec> {
@@ -39,9 +29,9 @@ export async function convertedSpec(root: string): Promise<Spec> {
 export const scenarioSuffix = ".scenario.json";
 export const outcomeSuffix = ".expected.json";
 
-/** Returns the examples test/sim/<Lean Sim module path>/<example>/, each with the names of its scenario files. */
+/** Returns the examples, each with the names of its scenario files. */
 export const simExamples = (): { readonly root: string; readonly scenarios: readonly string[] }[] =>
-  atPaths(simRoot, leanModulePaths("Sim")).map((root) => ({
+  folders(simRoot).map((root) => ({
     root,
     scenarios: readdirSync(root)
       .filter((name) => name.endsWith(scenarioSuffix))

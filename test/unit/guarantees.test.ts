@@ -5,8 +5,8 @@ import { test } from "node:test";
 import { exampleFolders } from "../../scripts/explain.ts";
 import type { UserKind } from "../../src/data/kinds.ts";
 import { allFixtures } from "../fixtures/fixtures.ts";
-import { simExamples } from "./examples.ts";
 import { type Guarantee, guarantees } from "./guarantees.generated.ts";
+import { simExamples } from "./simulate.ts";
 
 const tests = join(import.meta.dirname, "..");
 const isGuarantee = (name: string): name is Guarantee => guarantees.some((g) => g === name);
@@ -76,7 +76,7 @@ const ofAudit = {
   because:
     "states that a run whose spec functions are instrumented equals the plain run; the engine runs instrumented, and no command runs the plain one",
 } as const;
-const network = (scenario: string) => ({ example: "unit/sim/Run/network", scenario }) as const;
+const network = (scenario: string) => ({ example: "unit/simulate/network", scenario }) as const;
 
 const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   accepted_emits_decided: { example: "fixtures/test/noViolations/decide_payloads_sorted", scenario: "listed" },
@@ -99,8 +99,8 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   compose_fst_nodup: ofRenaming,
   compose_snd_nodup: ofRenaming,
   contentMatch_renamed: ofCompare,
-  created_distinct: { example: "unit/sim/Run/created_form", scenario: "createsKeys" },
-  created_kept: { example: "unit/sim/Run/created_form", scenario: "createsKeys" },
+  created_distinct: { example: "unit/simulate/created_form", scenario: "createsKeys" },
+  created_kept: { example: "unit/simulate/created_form", scenario: "createsKeys" },
   dangling_ref_reported_iff: { kindExample: "Fault.danglingRef" },
   dateLabelBody_denote: {
     because: "a property of the encoding over all SMT models, which no run computes; prove replays each counterexample",
@@ -123,8 +123,8 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
       "a statement about the order that entryOrder computes for every state tree; microstep_enters_in_entry_order relates it to runs",
   },
   execute_agrees: ofAudit,
-  execute_keepsKeys: { example: "unit/sim/Run/created_form", scenario: "createsKeys" },
-  execute_unwritten_not_created: { example: "unit/sim/Run/keys", scenario: "givenKeyApart" },
+  execute_keepsKeys: { example: "unit/simulate/created_form", scenario: "createsKeys" },
+  execute_unwritten_not_created: { example: "unit/simulate/keys", scenario: "givenKeyApart" },
   exitOrder_descendants_first: {
     because:
       "a statement about the order that exitOrder computes for every state tree; microstep_exits_in_exit_order relates it to runs",
@@ -146,8 +146,8 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
     because: "a property of every day number, which no run computes; the convert diff tests run both functions",
   },
   leave_makes_requests_stale: { example: "fixtures/test/noViolations/requests-on-entry", scenario: "answerAfterExit" },
-  line_keeps_leftInFlight: { example: "unit/sim/Run/moving_line_keeps_others", scenario: "leavesInFlight" },
-  line_keeps_states: { example: "unit/sim/Run/moving_line_keeps_others", scenario: "leavesInFlight" },
+  line_keeps_leftInFlight: { example: "unit/simulate/moving_line_keeps_others", scenario: "leavesInFlight" },
+  line_keeps_states: { example: "unit/simulate/moving_line_keeps_others", scenario: "leavesInFlight" },
   lines_after_stop_ignored: network("linesAfterHalt"),
   matchValue_renamed: ofCompare,
   matchValue_strRenamed: ofCompare,
@@ -221,7 +221,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
     scenario: "loggedBeforeAnswer",
   },
   start_sent_ids_distinct: { example: "fixtures/test/noViolations/requests", scenario: "requestsDiscarded" },
-  start_unwritten_not_created: { example: "unit/sim/Run/keys", scenario: "givenKeyApart" },
+  start_unwritten_not_created: { example: "unit/simulate/keys", scenario: "givenKeyApart" },
   stepOrderSearch_same: ofSearch,
   stopped_run_skips_exchanges: network("overtaking"),
   subscribe_agrees: ofAudit,
@@ -235,7 +235,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
     because:
       "no spec that check passes emits an event that its command does not list, since the IR names only listed events; the theorem keeps the semantics total over every Functions",
   },
-  unwritten_not_created: { example: "unit/sim/Run/keys", scenario: "givenKeyApart" },
+  unwritten_not_created: { example: "unit/simulate/keys", scenario: "givenKeyApart" },
 };
 
 /**

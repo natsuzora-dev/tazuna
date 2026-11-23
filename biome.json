@@ -2,7 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
   "plugins": ["./lint/sameJson.grit"],
   "files": {
-    "includes": ["**", "!**/routeTree.gen.ts", "!lean/lake-manifest.json", "!test/unit/sim/**/*.expected.json"]
+    "includes": ["**", "!**/routeTree.gen.ts", "!lean/lake-manifest.json", "!test/unit/simulate/**/*.expected.json"]
   },
   "vcs": {
     "enabled": true,
