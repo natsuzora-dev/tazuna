@@ -166,7 +166,7 @@ def recordTerms (st : Service) (creates created : List (String × Nat)) (records
     let value := ((records.find? (·.entity == e)).map (·.value)).getD (.obj [])
     pure (e, ← fieldsOfRow e value)
   let used := keyed.map fun (e, slots) => (e, slots.map (·.live))
-  pure ({ keyed, singles }, used)
+  pure ({ keyed, singles, keyFields := st.keyFields }, used)
 
 /-- A request line in from `caller`, with the id `<name>#<n>` as a scenario's lines have. -/
 def requestLine (query : Bool) (time : Int) (name : String) (n : Nat) (input : Value) (caller : Caller) : TraceLine :=

@@ -203,7 +203,7 @@ def initialOf (st : Service) : SRecords × Facts := Id.run do
           fields := fields ++ [(f, valVar s!"init.{e}.{f}")]
           facts := facts ++ { vars := [(s!"init.{e}.{f}", .val)], exact := false }
     singles := singles ++ [(e, fields)]
-  pure ({ keyed := (st.entities.filter (!st.singles.contains ·)).map (·, []), singles }, facts)
+  pure ({ keyed := (st.entities.filter (!st.singles.contains ·)).map (·, []), singles, keyFields := st.keyFields }, facts)
 
 /-- One service's symbolic induction: its state, and the step of each command, or why the step has no encoding. -/
 structure Induction where

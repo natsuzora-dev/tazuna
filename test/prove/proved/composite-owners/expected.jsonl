@@ -1,0 +1,1 @@
+{"service":"members","property":{"kind":"invariant","definition":{"service":"members","name":"members"},"name":"oneOwnerPerGroup"},"creates":{"Membership":2},"items":2,"verdict":{"kind":"proved"},"location":{"file":"members/members.ts","line":10}}

@@ -158,7 +158,8 @@ def slotKey (st : Service) (e x : String) : SlotKey :=
 
 /-- The symbolic records of `st` within `creates`, its variables named after `pre`. -/
 def SRecords.named (st : Service) (creates : List (String × Nat)) (pre : String) : SRecords :=
-  { keyed := (st.entities.filter (!st.singles.contains ·)).map fun e =>
+  { keyFields := st.keyFields,
+    keyed := (st.entities.filter (!st.singles.contains ·)).map fun e =>
       (e, (List.range ((creates.lookup e).getD 0)).map fun i =>
         let base := s!"{pre}.{e}.{i}"
         { live := boolVar s!"{base}.live", key := slotKey st e s!"{base}.key",
@@ -262,7 +263,8 @@ def Slot.ite (c : Term) (a b : Slot) : Slot :=
     fields := a.fields.map fun (f, t) => (f, .ite c t ((b.fields.lookup f).getD undefT)) }
 
 def SRecords.ite (c : Term) (a b : SRecords) : SRecords :=
-  { keyed := a.keyed.map fun (e, slots) => (e, (slots.zip ((b.keyed.lookup e).getD [])).map fun (x, y) => x.ite c y),
+  { keyFields := a.keyFields,
+    keyed := a.keyed.map fun (e, slots) => (e, (slots.zip ((b.keyed.lookup e).getD [])).map fun (x, y) => x.ite c y),
     singles := a.singles.map fun (e, fields) =>
       (e, fields.map fun (f, t) => (f, .ite c t ((((b.singles.lookup e).getD []).lookup f).getD undefT))) }
 
@@ -379,7 +381,7 @@ def Stepped.named (st : Stepped) (p : String) : Named Stepped := do
     pure (e, ← fields.mapM fun (f, t) => do pure (f, ← nameValue s!"{p}.{e}.{f}" t))
   let used ← st.used.mapM fun (e, us) => do
     pure (e, ← us.zipIdx.mapM fun (u, i) => nameAs s!"{p}.{e}.{i}.used" .bool u)
-  pure { records := { keyed, singles }, used, beyond := ← nameAs s!"{p}.beyond" .bool st.beyond,
+  pure { records := { keyed, singles, keyFields := st.records.keyFields }, used, beyond := ← nameAs s!"{p}.beyond" .bool st.beyond,
          gap := ← nameAs s!"{p}.gap" .bool st.gap }
 
 /-- The payload of an emit as scalar fields, and the term that holds when one is no scalar. -/
@@ -615,11 +617,19 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let admitted := admitted rq.callers pre caller
   let refs ← rq.refs.filterMapM fun (field, target) => do
     if target.service == svc.service && (pre.keyed.lookup target.name).isSome then
-      let v ← match input.lookup field with
-        | some (.scalar v) => pure v
-        | none => pure undefT
-        | some _ => throw s!"the ref field {field}, whose key is several fields"
-      pure (some (Term.or (nullishT v) (keyIn (.strOf v) (pre.slotsOf target.name))))
+      let slots := pre.slotsOf target.name
+      let names := svc.keyFieldsOf target.name
+      -- A ref to an entity whose key is several fields holds a key object, which names a record by its key fields.
+      let rec named : SJson → Except String Term
+        | .scalar v => pure (if names.length < 2 then .or (nullishT v) (keyIn (.strOf v) slots) else nullishT v)
+        | .obj fields => do
+          let key ← names.mapM fun n => match SVal.ofJson (SJson.field n fields) with
+            | .scalar t => pure (n, t)
+            | _ => throw s!"the ref field {field}, whose key fields may be no scalars"
+          pure (disj (slots.map (·.hasKeyFields key)))
+        | .ite c a b => do pure (.ite c (← named a) (← named b))
+        | .arr .. => throw s!"the ref field {field}, an array"
+      pure (some (← named ((input.lookup field).getD (.scalar undefT))))
     else pure none
   let binds := ((p.binding.find? (·.definition == svc.ref name)).map (·.conditions)).getD []
   let bindTerms ← binds.mapM fun b => do

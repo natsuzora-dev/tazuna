@@ -91,7 +91,7 @@ theorem truthy_conc (M : Model) (recs : Records) : ∀ v : SVal, v.truthy.holds 
   | .ite c a b => by
     rw [SVal.truthy, holds_ite, conc_ite, truthy_conc M recs a, truthy_conc M recs b]
     split <;> rfl
-  | .json _ | .jarr .. | .row .. | .single _ | .table _ | .obj _ | .list _ | .bag _ | .emit .. => rfl
+  | .json _ | .jarr .. | .row .. | .krow .. | .single _ | .table _ | .obj _ | .list _ | .bag _ | .emit .. => rfl
 
 /-- Whether a value is `undefined` or null, which `??` and `?.` test. -/
 def isNullish : Val → Bool
@@ -106,7 +106,7 @@ theorem nullish_conc (M : Model) (recs : Records) : ∀ v : SVal, v.nullish.hold
   | .ite c a b => by
     rw [SVal.nullish, holds_ite, conc_ite, nullish_conc M recs a, nullish_conc M recs b]
     split <;> rfl
-  | .json _ | .jarr .. | .row .. | .single _ | .table _ | .obj _ | .list _ | .bag _ | .emit .. => rfl
+  | .json _ | .jarr .. | .row .. | .krow .. | .single _ | .table _ | .obj _ | .list _ | .bag _ | .emit .. => rfl
 
 theorem sameT_holds (M : Model) (a b : Term) :
     (sameT a b).holds M = same (a.denote M).toScalar.toVal (b.denote M).toScalar.toVal := by
@@ -145,7 +145,7 @@ theorem same_conc (M : Model) (recs : Records) :
   | .scalar a, .scalar b => by simp [SVal.same, SVal.conc, sameT_holds]
   | .scalar _, .json _ => by simp [SVal.same, SVal.conc, same_json_right, holds_ff]
   | .scalar _, .jarr .. => by simp [SVal.same, SVal.conc, same_arr_right, holds_ff]
-  | .scalar t, .row .. | .scalar t, .single _ | .scalar t, .table _ | .scalar t, .obj _ | .scalar t, .list _
+  | .scalar t, .row .. | .scalar t, .krow .. | .scalar t, .single _ | .scalar t, .table _ | .scalar t, .obj _ | .scalar t, .list _
   | .scalar t, .bag _
   | .scalar t, .emit .. => by
     simp only [SVal.same, holds_ff, SVal.conc]
@@ -154,7 +154,7 @@ theorem same_conc (M : Model) (recs : Records) :
     cases w <;> simp [SVal.same, SVal.conc, same_json_left, holds_ff]
   | .jarr .., w => by
     cases w <;> simp [SVal.same, SVal.conc, same_arr_left, holds_ff]
-  | .row .., w | .single _, w | .table _, w | .obj _, w | .list _, w | .bag _, w | .emit .., w => by
+  | .row .., w | .krow .., w | .single _, w | .table _, w | .obj _, w | .list _, w | .bag _, w | .emit .., w => by
     cases w <;> simp [SVal.same, SVal.conc, same, holds_ff]
 
 theorem scalarOf_conc (M : Model) (recs : Records) : ∀ v : SVal,
@@ -171,7 +171,7 @@ theorem scalarOf_conc (M : Model) (recs : Records) : ∀ v : SVal,
         simp_all [conc_scalar]
     · intro h
       split at h <;> rename_i hc <;> simp only [hc, ite_true] <;> simp_all
-  | .json _ | .jarr .. | .row .. | .single _ | .table _ | .obj _ | .list _ | .bag _ | .emit .. => by
+  | .json _ | .jarr .. | .row .. | .krow .. | .single _ | .table _ | .obj _ | .list _ | .bag _ | .emit .. => by
     simp [SVal.scalarOf, holds_tt, SVal.conc, NonScalar]
 
 
@@ -281,6 +281,86 @@ def liveRows (M : Model) (e : String) (ss : List Slot) : Records := (ss.filter (
 
 theorem denote_ite (M : Model) (c a b : Term) :
     (Term.ite c a b).denote M = if c.holds M then a.denote M else b.denote M := rfl
+
+/-- A scalar with `undefined` as null. -/
+def undefToNull : Scalar → Scalar
+  | .undef => .null
+  | sc => sc
+
+theorem lit_undefToNull (x : Lit) :
+    (if (Lit.bool (match x.toScalar with | .undef => true | _ => false)).toBool = true then Lit.val .null else x) =
+      Lit.val (undefToNull x.toScalar) := by
+  cases x with
+  | val sc => cases sc <;> simp [Lit.toScalar, Lit.toBool, undefToNull]
+  | _ => simp [Lit.toScalar, Lit.toBool, undefToNull]
+
+theorem nullIfUndef_denote (M : Model) (a : Term) : (nullIfUndef a).denote M = .val (undefToNull (a.denote M).toScalar) := by
+  simp only [nullIfUndef, Term.denote]
+  exact lit_undefToNull (a.denote M)
+
+theorem conj_cons (a : Term) (l : List Term) : conj (a :: l) = .and a (conj l) := rfl
+
+theorem disj_cons' (a : Term) (l : List Term) : disj (a :: l) = .or a (disj l) := rfl
+
+theorem nullIfUndef_eq (M : Model) (a b : Term) :
+    (Term.eq (nullIfUndef a) (nullIfUndef b)).holds M =
+      decide (((a.denote M).toScalar.toValue?).getD .null = ((b.denote M).toScalar.toValue?).getD .null) := by
+  simp only [Term.holds, Term.denote, nullIfUndef_denote, Lit.toBool, Lit.val.injEq]
+  generalize (a.denote M).toScalar = x
+  generalize (b.denote M).toScalar = y
+  cases x <;> cases y <;> simp [undefToNull, Scalar.toValue?]
+
+/-- That the key fields `key` hold the values `vs`, pairwise, as their conjunction of nullIfUndef equalities says. -/
+theorem keyEqs_holds (M : Model) (fs : List (String × Term)) : ∀ key : List (String × Term),
+    (conj (key.map fun p => .eq (nullIfUndef (jsonField p.1 fs)) (nullIfUndef p.2))).holds M =
+      decide (key.map (fun p => (p.1, ((Value.obj (present M fs)).field? p.1).getD .null)) =
+        key.map fun p => (p.1, ((p.2.denote M).toScalar.toValue?).getD .null))
+  | [] => rfl
+  | (n, t) :: key => by
+    have ih := keyEqs_holds M fs key
+    have hj := jsonField_conc M n fs
+    rw [List.map_cons, conj_cons, holds_and, nullIfUndef_eq, hj, ih, List.map_cons, List.map_cons]
+    simp only [List.cons.injEq, Prod.mk.injEq, true_and, Bool.decide_and]
+
+theorem hasKeyFields_holds (M : Model) (s : Slot) (key : List (String × Term)) :
+    (s.hasKeyFields key).holds M = (s.live.holds M && decide (s.keyValue M = keyValueOf M key)) := by
+  unfold Slot.hasKeyFields
+  cases hsk : s.key with
+  | text t => simp [Slot.keyValue, hsk, keyValueOf, Term.holds, Term.denote, Lit.toBool]
+  | fields names =>
+    simp only [Slot.keyValue, hsk, keyValueOf, Value.obj.injEq]
+    split
+    · rename_i hn
+      have hn' : key.map (·.1) = names := by simpa using hn
+      subst hn'
+      rw [conj_cons, holds_and, keyEqs_holds, List.map_map]
+      rfl
+    · rename_i hn
+      have hne : ¬ names.map (fun n => (n, ((Value.obj (present M s.fields)).field? n).getD .null)) =
+          key.map fun p => (p.1, ((p.2.denote M).toScalar.toValue?).getD .null) := by
+        intro he
+        have := congrArg (List.map (·.1)) he
+        simp [List.map_map, Function.comp_def] at this
+        exact hn (by simp [this])
+      simp [Term.holds, Term.denote, Lit.toBool, hne]
+
+theorem rowFieldOf_conc (M : Model) (e name : String) (key : List (String × Term)) : ∀ ss : List Slot,
+    ((rowFieldOf key name ss).denote M).toScalar.toVal =
+      Val.ofOption (((liveRows M e ss).find? fun r => r.entity == e && r.key == some (keyValueOf M key)).bind
+        (·.value.field? name))
+  | [] => by simp [rowFieldOf, liveRows, Term.denote, Lit.toScalar, Scalar.toVal, Scalar.toValue?]
+  | s :: ss => by
+    have ih := rowFieldOf_conc M e name key ss
+    have hk := hasKeyFields_holds M s key
+    rw [rowFieldOf, denote_ite]
+    by_cases hl : s.live.holds M
+    · by_cases hv : s.keyValue M = keyValueOf M key
+      · rw [hk]; simp only [hl, hv, decide_true, Bool.and_true, ite_true]
+        simp [liveRows, hl, Slot.row, hv, toVal_toValue?, jsonField_conc]
+      · rw [hk]; simp only [hl, hv, decide_false, Bool.and_false, Bool.false_eq_true, ite_false]; rw [ih]
+        simp [liveRows, hl, Slot.row, hv]
+    · rw [hk]; simp only [hl, Bool.false_and, Bool.false_eq_true, ite_false]; rw [ih]
+      simp [liveRows, hl]
 
 theorem rowField_conc (M : Model) (e name : String) (k : Term) : ∀ ss : List Slot,
     ((rowField k name ss).denote M).toScalar.toVal =
@@ -414,6 +494,9 @@ theorem field_conc (M : Model) (r : SRecords) (name : String) (s : Trace) : ∀ 
   | .row e k, _ => by
     simp only [SVal.conc, fieldOf, SVal.field]
     rw [run_note_pure, conc_find_keyed, rowField_conc M e name k]
+  | .krow e key, _ => by
+    simp only [SVal.conc, fieldOf, SVal.field]
+    rw [run_note_pure, conc_find_keyed, rowFieldOf_conc M e name key]
   | .single e, _ => by
     simp only [SVal.conc, fieldOf, SVal.field]
     rw [run_note_pure, conc_find_single]
@@ -843,7 +926,7 @@ theorem conc_not_object (M : Model) (recs : Records) : ∀ v : SVal, v.holdsObje
     have hb := conc_not_object M recs b h.2
     by_cases hc : c.holds M <;> simp [SVal.conc, hc, ha, hb]
   | .json _, h | .obj _, h => by simp [SVal.holdsObject] at h
-  | .jarr .., _ | .row .., _ | .single _, _ | .table _, _ | .list _, _ | .bag _, _ | .emit .., _ => by simp [SVal.conc]
+  | .jarr .., _ | .row .., _ | .krow .., _ | .single _, _ | .table _, _ | .list _, _ | .bag _, _ | .emit .., _ => by simp [SVal.conc]
 
 theorem lookup_op (M : Model) (r : SRecords) (vk : SVal) (s : Trace) (kf : String → List String)
     (hv : vk.holdsObject = false) : ∀ vt : SVal,
@@ -893,8 +976,90 @@ theorem lookup_op (M : Model) (r : SRecords) (vk : SVal) (s : Trace) (kf : Strin
   | .scalar t => by
     simp only [SVal.lookup, SVal.conc]
     cases (t.denote M).toScalar <;> simp [Scalar.toVal, Scalar.toValue?, Val.ofOption, run_thrown, Agrees, holds_tt]
-  | .json _ | .jarr .. | .row .. | .single _ | .obj _ | .list _ | .bag _ | .emit .. => by
+  | .json _ | .jarr .. | .row .. | .krow .. | .single _ | .obj _ | .list _ | .bag _ | .emit .. => by
     simp [SVal.lookup, SVal.conc, run_thrown, Agrees, holds_tt]
+
+/-- That a live slot holds the key whose key fields hold `key`, as a lookup by that key object finds a record. -/
+theorem conc_any_keyFields (M : Model) (r : SRecords) (e : String) (key : List (String × Term)) :
+    (r.conc M).any (fun row => row.entity == e && row.key == some (keyValueOf M key)) =
+      (disj ((r.slotsOf e).map (·.hasKeyFields key))).holds M := by
+  rw [any_eq_find, conc_find_keyed]
+  induction r.slotsOf e with
+  | nil => rfl
+  | cons s ss ih =>
+    rw [List.map_cons, disj_cons', holds_or, hasKeyFields_holds, ← ih]
+    by_cases hl : s.live.holds M
+    · by_cases hv : s.keyValue M = keyValueOf M key
+      · simp [liveRows, hl, Slot.row, hv]
+      · simp [liveRows, hl, Slot.row, hv]
+    · simp [liveRows, hl]
+
+/-- The key fields that keyObjectFields reads of an argument's object: each the field's scalar, in the order of `names`. -/
+theorem keyTerms_conc (M : Model) (fields : List (String × SJson)) : ∀ (names : List String) (key : List (String × Term)),
+    names.mapM (fun n => match SVal.ofJson (SJson.field n fields) with
+      | .scalar t => (pure (n, t) : Except String (String × Term))
+      | _ => throw "a key field that may be no scalar") = .ok key →
+    keyValueOf M key = .obj (names.map fun n => (n, ((Value.obj (SJson.concFields M fields)).field? n).getD .null))
+  | [], key, h => by cases h; rfl
+  | n :: names, key, h => by
+    simp only [List.mapM_cons, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i p hp
+    split at h
+    · contradiction
+    rename_i rest hrest
+    cases h
+    have ih := keyTerms_conc M fields names rest hrest
+    split at hp
+    · rename_i t ht
+      cases hp
+      have hc := ofJson_conc M [] (SJson.field n fields)
+      rw [ht, conc_scalar, jfield_conc] at hc
+      have hv : (t.denote M).toScalar.toValue? = (Value.obj (SJson.concFields M fields)).field? n := by
+        cases h1 : (t.denote M).toScalar.toValue? <;> cases h2 : (Value.obj (SJson.concFields M fields)).field? n <;>
+          simp_all [toVal_toValue?, Val.ofOption]
+      simp only [keyValueOf, Value.obj.injEq] at ih ⊢
+      simp [List.map_cons, ih, hv]
+    · contradiction
+
+/-- `table.get(key)` of a table by a key object that an argument holds, as keyObjectFields reads its key fields. -/
+theorem object_lookup_op (M : Model) (r : SRecords) (e : String) (kf : String → List String) (s : Trace)
+    (vk : SVal) (key : List (String × Term)) (notKey : Term) (hlen : ¬ (kf e).length < 2)
+    (hk : keyObjectFields (kf e) vk = .ok (key, notKey)) :
+    Agrees M (r.conc M) (.ite (disj ((r.slotsOf e).map (·.hasKeyFields key))) (.krow e key) (.scalar undefT), notKey)
+      (run (match (SVal.table e).conc M (r.conc M), vk.conc M (r.conc M) with
+        | .table source entity, .json (.str key) => do
+          note (.record entity (.str key))
+          pure (if source.any (fun r => r.entity == entity && r.key == some (.str key)) then
+            .row source entity (some (.str key)) else .undef)
+        | .table source entity, k@(.json (.obj _)) | .table source entity, k@(.obj _) => do
+          let some k := keyObject? k | thrown
+          let key := canonicalKey (kf entity) k
+          note (.record entity key)
+          pure (if source.any (fun r => r.entity == entity && r.key == some key) then .row source entity (some key)
+            else .undef)
+        | _, _ => thrown : EvalM Val) s).1 := by
+  cases vk with
+  | json fields =>
+    simp only [keyObjectFields, bind, Except.bind] at hk
+    split at hk
+    · contradiction
+    rename_i terms ht
+    cases hk
+    have hkv := keyTerms_conc M fields (kf e) key ht
+    have hcan : canonicalKey (kf e) (.obj (SJson.concFields M fields)) = keyValueOf M key := by
+      rw [hkv]
+      match hkf : kf e with
+      | [] => simp [hkf] at hlen
+      | [_] => simp [hkf] at hlen
+      | _ :: _ :: _ => simp [canonicalKey, keyAt]
+    simp only [SVal.conc, keyObject?]
+    rw [hcan, run_note_pure, conc_any_keyFields]
+    refine ⟨holds_ff M, ?_⟩
+    rw [conc_ite]
+    split <;> rfl
+  | _ => simp [keyObjectFields] at hk
 
 theorem countIn_denote (M : Model) (recs : Records) : ∀ items : List (Term × SVal),
     (countIn items).denote M = .int (SVal.concItems M recs items).length
@@ -951,7 +1116,7 @@ theorem size_op (M : Model) (r : SRecords) (s : Trace) : ∀ v : SVal,
   | .scalar t => by
     simp only [SVal.size, SVal.conc]
     cases (t.denote M).toScalar <;> simp [Scalar.toVal, Scalar.toValue?, Val.ofOption, run_thrown, Agrees, holds_tt]
-  | .json _ | .row .. | .single _ | .obj _ | .emit .. => by
+  | .json _ | .row .. | .krow .. | .single _ | .obj _ | .emit .. => by
     simp [SVal.size, SVal.conc, run_thrown, Agrees, holds_tt]
 
 
@@ -1003,7 +1168,7 @@ theorem elements_op (M : Model) (recs : Records) (vv : SVal) (s : Trace) : ∀ v
     refine ⟨fun _ => ⟨.thrown none, ?_⟩, fun h => by simp [SVal.includes, holds_tt] at h⟩
     simp only [SVal.conc]
     cases (t.denote M).toScalar <;> rfl
-  | .json _ | .row .. | .single _ | .obj _ | .emit .. => by
+  | .json _ | .row .. | .krow .. | .single _ | .obj _ | .emit .. => by
     refine ⟨fun _ => ⟨.thrown none, rfl⟩, fun h => by simp [SVal.includes, holds_tt] at h⟩
 
 /-! ### Collections: the values an operation visits, and a callback on each -/
@@ -1066,24 +1231,25 @@ theorem concItems_guard (M : Model) (recs : Records) (c : Term) (xs : List (Term
     obtain ⟨g, v⟩ := x
     by_cases hc : c.holds M <;> simp_all [SVal.concItems, holds_and]
 
-/-- A table's items, when every slot holds a String key: each live slot's record. -/
-theorem table_items (M : Model) (recs : Records) (e : String) : ∀ (ss : List Slot) (items : List (Term × SVal)),
-    ss.mapM (fun s => match s.key with | .text t => some (s.live, SVal.row e t) | .fields _ => none) = some items →
-      SVal.concItems M recs items = (ss.filter (·.live.holds M)).map fun s => Val.row recs e (some (s.keyValue M))
-  | [], items, h => by cases h; rfl
-  | s :: ss, items, h => by
-    rw [List.mapM_cons] at h
+/-- The key of a slot with several key fields, as a composite row of its key fields holds it. -/
+theorem krow_keyValue (M : Model) (s : Slot) (names : List String) (h : s.key = .fields names) :
+    keyValueOf M (names.map fun n => (n, jsonField n s.fields)) = s.keyValue M := by
+  simp [keyValueOf, Slot.keyValue, h, jsonField_conc]
+
+/-- A table's items: each live slot's record. -/
+theorem table_items (M : Model) (recs : Records) (e : String) : ∀ ss : List Slot,
+    SVal.concItems M recs (ss.map fun s => match s.key with
+      | .text t => (s.live, SVal.row e t)
+      | .fields names => (s.live, SVal.krow e (names.map fun n => (n, jsonField n s.fields)))) =
+      (ss.filter (·.live.holds M)).map fun s => Val.row recs e (some (s.keyValue M))
+  | [] => rfl
+  | s :: ss => by
+    have ih := table_items M recs e ss
     cases hsk : s.key with
-    | fields names => simp [hsk] at h
-    | text t =>
-      simp only [hsk, bind, Option.bind] at h
-      cases hr : ss.mapM (fun s => match s.key with | .text t => some (s.live, SVal.row e t) | .fields _ => none) with
-      | none => simp [hr] at h
-      | some rest =>
-        simp only [hr, pure, Option.some.injEq] at h
-        subst h
-        have ih := table_items M recs e ss rest hr
-        by_cases hl : s.live.holds M <;> simp [SVal.concItems, hl, ih, SVal.conc, Slot.keyValue, hsk]
+    | fields names =>
+      by_cases hl : s.live.holds M <;>
+        simp [SVal.concItems, hl, ih, SVal.conc, hsk, krow_keyValue M s names hsk]
+    | text t => by_cases hl : s.live.holds M <;> simp [SVal.concItems, hl, ih, SVal.conc, Slot.keyValue, hsk]
 
 theorem closed_denote : ∀ (t : Term), t.closed = true → ∀ M M' : Model, t.denote M = t.denote M'
   | .var .., h, _, _ => by simp [Term.closed] at h
@@ -1115,9 +1281,12 @@ theorem items_elements (M : Model) (r : SRecords) (s : Trace) : ∀ (v : SVal) (
   | .bag is, items, h => by cases h; simp [SVal.conc, elements, run_pure]
   | .jarr len is, items, h => by cases h; simp [SVal.conc, elements, run_pure, arrItems_conc]
   | .table e, items, h => by
+    simp only [SVal.items, Option.some.injEq] at h
+    subst h
     simp only [SVal.conc, elements]
-    rw [run_note_pure, heldKeys_conc, table_items M (r.conc M) e (r.slotsOf e) items h]
-    simp [Function.comp_def]
+    rw [run_note_pure, heldKeys_conc]
+    simp only [List.map_map, Function.comp_def]
+    exact congrArg Except.ok (table_items M (r.conc M) e (r.slotsOf e)).symm
   | .ite c a b, items, h => by
     simp only [SVal.items] at h
     split at h
@@ -1141,7 +1310,7 @@ theorem items_elements (M : Model) (r : SRecords) (s : Trace) : ∀ (v : SVal) (
         · simp [hc, holds_not, items_elements M r s a xs ha]
         · simp only [hc, Bool.false_eq_true, ite_false, holds_not, Bool.not_false, ite_true, List.nil_append]
           exact items_elements M r s b ys hb
-  | .scalar _, _, h | .json _, _, h | .row .., _, h | .single _, _, h | .obj _, _, h | .emit .., _, h => by
+  | .scalar _, _, h | .json _, _, h | .row .., _, h | .krow .., _, h | .single _, _, h | .obj _, _, h | .emit .., _, h => by
     simp [SVal.items] at h
 
 /-- That `x` throws exactly when `t` holds, and otherwise gives `b`. -/
@@ -1659,7 +1828,7 @@ theorem disj_split (M : Model) (B : Visit → Term) : ∀ visits : List Visit,
 /-- The environment that `env` is under `M`, with the field names `fields`, which no encoded operation reads. -/
 def concEnv (M : Model) (env : SEnv) (fields : String → List String) : Env :=
   { args := fun a => ((env.args a).map (·.conc M (env.records.conc M))).getD .undef,
-    records := env.records.conc M, fields, keys := {}, hidden := false }
+    records := env.records.conc M, fields, keyFields := env.keyFields, keys := {}, hidden := false }
 
 def concVars (M : Model) (recs : Records) (vars : List (String × SVal)) : List (String × Val) :=
   vars.map fun (x, v) => (x, v.conc M recs)
@@ -2050,7 +2219,27 @@ mutual
     · contradiction
     rename_i rb hrb
     split at h
-    · contradiction
+    · rename_i hv
+      split at h
+      · rename_i entity hta
+        split at h
+        · simp at h
+        rename_i hlen
+        split at h
+        · contradiction
+        rename_i kn hk
+        cases h
+        simp only [eval]
+        refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars a ra hra)
+          (fun h1 _ => by simp [Agrees, holds_or, h1]) ?_ s
+        intro s1 h1
+        refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars b rb hrb)
+          (fun h2 e => by simp [Agrees, holds_or, h2]) ?_ s1
+        intro s2 h2
+        rw [hta]
+        exact agrees_err (by simp [holds_or, h1, h2])
+          (object_lookup_op M env.records entity env.keyFields s2 rb.1 kn.1 kn.2 hlen hk)
+      · contradiction
     rename_i hv
     cases h
     simp only [eval]

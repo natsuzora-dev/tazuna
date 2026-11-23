@@ -42,6 +42,8 @@ deriving Repr, Inhabited
 structure SRecords where
   keyed : List (String × List Slot) := []
   singles : List (String × List (String × Term)) := []
+  /-- The key fields of each keyed entity, by which a key object is read (canonicalKey). -/
+  keyFields : List (String × List String) := []
 deriving Repr, Inhabited
 
 /-- The fields that are not `undefined` under `M`, as a JSON object holds them. -/
@@ -120,6 +122,10 @@ def SJson.field (name : String) : List (String × SJson) → SJson
       | u => .ite u (SJson.field name fs) j
     else SJson.field name fs
 
+/-- The key object whose key fields hold `key` under `M`, an `undefined` one as null, as keyAt writes a key. -/
+def keyValueOf (M : Model) (key : List (String × Term)) : Value :=
+  .obj (key.map fun p => (p.1, ((p.2.denote M).toScalar.toValue?).getD .null))
+
 /-- A symbolic value: the shape that an evaluation gives, with terms where the value depends on the model. -/
 inductive SVal where
   /-- A JSON scalar or `undefined`. -/
@@ -130,6 +136,8 @@ inductive SVal where
   | jarr (len : Term) (items : List SJson)
   /-- The record of `entity` with the key `key`, a String term. -/
   | row (entity : String) (key : Term)
+  /-- The record of `entity` whose key fields hold `key`, each a scalar term, in key order. -/
+  | krow (entity : String) (key : List (String × Term))
   | single (entity : String)
   | table (entity : String)
   | obj (fields : List (String × SVal))
@@ -151,6 +159,7 @@ def SVal.conc (M : Model) (records : Records) : SVal → Val
   | .json fields => .json (.obj (SJson.concFields M fields))
   | .jarr len items => .json (.arr (SJson.concItems M (len.denote M).toInt items))
   | .row e k => .row records e (some (.str (k.denote M).toStr))
+  | .krow e key => .row records e (some (keyValueOf M key))
   | .single e => .row records e none
   | .table e => .table records e
   | .obj fields => .obj (SVal.concFields M records fields)
@@ -252,6 +261,23 @@ def Slot.hasKey (s : Slot) (key : Term) : Term :=
   | .text t => .and s.live (.eq (.mkStr t) (.mkStr key))
   | .fields _ => ff
 
+/-- The scalar `t`, null where it is `undefined`, as keyAt writes a key field. -/
+def nullIfUndef (t : Term) : Term := .ite (.isUndef t) (.lit (.val .null)) t
+
+/-- Whether `s` is live with the key whose key fields hold `key`; a String key is no object, never such a key. -/
+def Slot.hasKeyFields (s : Slot) (key : List (String × Term)) : Term :=
+  match s.key with
+  | .fields names =>
+    if key.map (·.1) == names then
+      conj (s.live :: key.map fun p => .eq (nullIfUndef (jsonField p.1 s.fields)) (nullIfUndef p.2))
+    else .lit (.bool false)
+  | .text _ => .lit (.bool false)
+
+/-- The field `name` of the first live slot of `slots` whose key fields hold `key`, `undefined` when none does. -/
+def rowFieldOf (key : List (String × Term)) (name : String) : List Slot → Term
+  | [] => .lit (.val .undef)
+  | s :: ss => .ite (s.hasKeyFields key) (jsonField name s.fields) (rowFieldOf key name ss)
+
 /-- Whether the key of a live slot of `slots` is `key`. -/
 def keyIn (key : Term) (slots : List Slot) : Term :=
   disj (slots.map (·.hasKey key))
@@ -275,6 +301,7 @@ def liveCount : List Slot → Term
 def SVal.field (r : SRecords) (name : String) : SVal → SVal
   | .json fields => .ofJson (SJson.field name fields)
   | .row e k => .scalar (rowField k name (r.slotsOf e))
+  | .krow e key => .scalar (rowFieldOf key name (r.slotsOf e))
   | .single e => .scalar (match r.singles.lookup e with
     | some fields => jsonField name fields
     | none => undefT)
@@ -326,10 +353,9 @@ def SVal.items (r : SRecords) : SVal → Option (List (Term × SVal))
   | .list vs => some (vs.map (tt, ·))
   | .bag items => some items
   | .jarr len items => some (arrItems len 0 items)
-  -- A record whose key is several fields has no SVal.row.
-  | .table e => (r.slotsOf e).mapM fun s => match s.key with
-    | .text t => some (s.live, .row e t)
-    | .fields _ => none
+  | .table e => some ((r.slotsOf e).map fun s => match s.key with
+    | .text t => (s.live, .row e t)
+    | .fields names => (s.live, .krow e (names.map fun n => (n, jsonField n s.fields))))
   -- A choice that no variable decides, such as `x ?? []` on an `undefined` literal, is its one branch.
   | .ite c a b =>
     if c.closed then if c.holds fun _ => .bool false then a.items r else b.items r
@@ -463,10 +489,25 @@ partial def jsonLit : Value → Except String SJson
   | .arr vs => do pure (.arr (.lit (.int vs.length)) (← vs.mapM jsonLit))
   | v => do pure (.scalar (← litTerm v))
 
+/--
+The key fields `names` of a key object `key` that an argument holds, each a scalar term, as keyObject? and keyAt read
+them, and the term that holds when keyObject? finds no object, which it always finds in an argument's object.
+-/
+def keyObjectFields (names : List String) (key : SVal) : Except String (List (String × Term) × Term) :=
+  match key with
+  | .json fields => do
+    let terms ← names.mapM fun n => match SVal.ofJson (SJson.field n fields) with
+      | .scalar t => pure (n, t)
+      | _ => throw "a key field that may be no scalar"
+    pure (terms, ff)
+  | _ => throw "a key that is no argument's object, such as an object literal"
+
 /-- What an expression reads: its arguments, as symbolic values, and the records. -/
 structure SEnv where
   args : Arg → Option SVal := fun _ => none
   records : SRecords := {}
+  /-- The key fields of each keyed entity, by which a key object is read (canonicalKey). -/
+  keyFields : String → List String := fun e => (records.keyFields.lookup e).getD []
 
 /-- The value of a symbolic evaluation and the term that holds when the evaluation throws. -/
 abbrev SRes := SVal × Term
@@ -563,7 +604,13 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
   | .lookup t k => do
     let (vt, et) ← seval env vars t
     let (vk, ek) ← seval env vars k
-    if vk.holdsObject then throw "a key of several fields"
+    if vk.holdsObject then
+      let .table entity := vt | throw "a key object for what may be no table"
+      let names := env.keyFields entity
+      if names.length < 2 then throw "a key object of an entity whose key is one field"
+      let (key, notKey) ← keyObjectFields names vk
+      let found := disj ((env.records.slotsOf entity).map (·.hasKeyFields key))
+      return (.ite found (.krow entity key) (.scalar undefT), .or et (.or ek notKey))
     let (v, e) := SVal.lookup env.records vk vt
     pure (v, .or et (.or ek e))
   | .obj fields => do
