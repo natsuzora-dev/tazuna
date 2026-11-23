@@ -74,8 +74,8 @@ structure ProveResult where
 
 derive_wire ProveResult serialize_only
 
-/-- The milliseconds that Z3 may take on each query. -/
-def proveTimeout : Nat := 10000
+/-- The units of Z3's resource counter that each query may use: several seconds on a laptop, over 200 times the most that a todo query uses. -/
+def proveRlimit : Nat := 20000000
 
 /-- Where an invariant is checked: on each record of an entity, on a single entity's record, or on all records. -/
 inductive Holder where
@@ -352,7 +352,7 @@ def specServices (j : Spec.Structure) : List String := (j.services.filter (!·.e
 
 def proveQueriesOf (j : Spec.Structure) : IO (List String) := do
   let inductions ← (specServices j).mapM (inductionOf j)
-  pure (inductions.flatMap fun x => x.queries.map fun (_, q) => q.script proveTimeout)
+  pure (inductions.flatMap fun x => x.queries.map fun (_, q) => q.script proveRlimit)
 
 /-- The records of a state by entity, as the counterexample's Given shows them. -/
 def givenOf (st : Service) (records : Records) : Value :=

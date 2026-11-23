@@ -120,10 +120,11 @@ deriving Inhabited
 def datatypeV : String :=
   "(declare-datatypes ((V 0)) (((vundef) (vnull) (vbool (vbool_v Bool)) (vint (vint_v Int)) (vstr (vstr_v String)))))"
 
-/-- The script that asks Z3 whether `q` is satisfiable within `timeout` milliseconds, and for its model. -/
-def Query.script (q : Query) (timeout : Nat) : String :=
+/-- The script that asks Z3 whether `q` is satisfiable within `rlimit` units of Z3's resource counter, and for its
+model. A resource limit instead of a time limit gives the same answer on a loaded machine as on an idle one. -/
+def Query.script (q : Query) (rlimit : Nat) : String :=
   let (asserted, shared) := (q.asserts.mapM Term.shared).run {}
-  let lines := [s!"(set-option :timeout {timeout})", "(set-logic ALL)", datatypeV] ++
+  let lines := [s!"(set-option :rlimit {rlimit})", "(set-logic ALL)", datatypeV] ++
     q.vars.map (fun (x, t) => s!"(declare-const {symbol x} {t.smt})") ++ shared.defs.toList ++
     asserted.map (fun a => s!"(assert {a})") ++ ["(check-sat)"] ++
     (if q.vars.isEmpty then [] else [s!"(get-value ({" ".intercalate (q.vars.map (symbol ·.1))}))"])
@@ -211,7 +212,7 @@ def Answer.read (text : String) : Answer :=
         | _ => none
       if values.length == pairs.length then .sat values else .unknown s!"unreadable model: {text}"
     | _ => .unknown "the solver's model holds a character that no Lean string holds, a surrogate"
-  | "unknown" => .unknown "the solver answered unknown, as at its timeout"
+  | "unknown" => .unknown "the solver answered unknown, as at its resource limit"
   | _ => .unknown s!"unreadable answer: {text}"
 
 def Answer.model (values : List (String × Lit)) : Model := fun x => (values.lookup x).getD (.val .undef)
