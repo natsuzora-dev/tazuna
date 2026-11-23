@@ -87,7 +87,8 @@ def reactionOf (st : Service) (p : Program) (pre : SRecords) (now : Term) (paylo
   pure { fires := conj (bindTerms.map (·.2.2) ++ guards ++ [.not err] ++ scalars.map (.not ·.2.2)),
          input, valid := conj (fits.map (·.term)),
          facts := { vars := made.zipIdx.map fun (_, i) => (s!"{names}.k{i}", Ty.val), asserts := fresh,
-                    exact := fits.all (·.exact), complete := fits.all (·.complete) } }
+                    -- A fresh key may equal the key of a deleted record, which no created key does.
+                    exact := fits.all (·.exact) && made.isEmpty, complete := fits.all (·.complete) } }
 
 /-- That two symbolic records hold the same records: each live slot of one has a live slot of the other equal to it. -/
 def SRecords.same (a b : SRecords) : Term :=
