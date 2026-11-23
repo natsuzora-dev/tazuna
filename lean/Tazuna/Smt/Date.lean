@@ -2,7 +2,7 @@ import Tazuna.Smt.Term
 
 /-!
 The terms of a date label: whether a string is a label `YYYY-MM-DD` of a real day, the day number it names, and the label
-of a day number. Each mirrors the definition in Data.Time that eval runs (isDateLabel, daysFromCivil, civilFromDays,
+of a day number. Each mirrors the definition in Ir.Time that eval runs (isDateLabel, daysFromCivil, civilFromDays,
 dateLabel), operation by operation. A date that the encoding makes, such as a record's date field or an addDays result,
 is the label of a day number (`Term.dateLabel`), whose day number the encoding reads without parsing; these terms read a
 label that arrives as a string.
@@ -10,7 +10,7 @@ label that arrives as a string.
 
 namespace Tazuna.Smt
 
-open Tazuna.Data
+open Tazuna.Ir Tazuna.Semantics
 
 def intT (n : Int) : Term := .lit (.int n)
 

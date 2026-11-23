@@ -13,7 +13,7 @@ reads Z3's answers to them, replays each counterexample in the semantics, and gi
 
 namespace Tazuna.Engine
 
-open Tazuna.Data Tazuna.Service Tazuna.Smt
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Smt
 
 /--
 What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
@@ -22,16 +22,16 @@ steps that can be pending together, such as two automations that react to one ev
 response of an entity is met in time.
 -/
 inductive Property where
-  | invariant (definition : Spec.Ref) (name : String)
-  | response (definition : Spec.Ref) (name : String)
-  | ensures (definition : Spec.Ref) (name : String)
-  | danglingRef (definition : Spec.Ref) (field : String)
-  | stepOrder (definition : Spec.Ref) (other : Spec.Ref)
+  | invariant (definition : Ir.Ref) (name : String)
+  | response (definition : Ir.Ref) (name : String)
+  | ensures (definition : Ir.Ref) (name : String)
+  | danglingRef (definition : Ir.Ref) (field : String)
+  | stepOrder (definition : Ir.Ref) (other : Ir.Ref)
 deriving BEq, Repr, Inhabited
 
 derive_wire Property tag "kind"
 
-def Property.definition : Property → Spec.Ref
+def Property.definition : Property → Ir.Ref
   | .invariant d _ | .response d _ | .ensures d _ | .danglingRef d _ | .stepOrder d _ => d
 
 /--
@@ -126,7 +126,7 @@ The induction of a machine's or screen's invariants: its model, the context fiel
 context it starts with, or why it has none.
 -/
 structure ChartCase where
-  chart : Chart
+  chart : Service.Chart
   invariants : List Ir.Condition
   model : Except String ChartModel
   relevant : List String
@@ -136,7 +136,7 @@ structure ChartCase where
   sliced : Bool
   initial : Except String Value
 
-def chartCaseOf (st : Service) (fs : Functions IO) (c : Chart) : IO (Option ChartCase) := do
+def chartCaseOf (st : Service) (fs : Functions IO) (c : Service.Chart) : IO (Option ChartCase) := do
   let p := st.structure.program
   let invariants := (siteOf st p c .invariants).getD []
   if invariants.isEmpty then return none
@@ -148,7 +148,7 @@ def chartCaseOf (st : Service) (fs : Functions IO) (c : Chart) : IO (Option Char
                 props := all.filter (·.1 ∈ relevant), sliced := relevant.length < fields.length, initial }
 
 /-- The conditions of `definition` in a Program list. -/
-def conditionsOf (list : List Ir.Conditions) (definition : Spec.Ref) : List Ir.Condition :=
+def conditionsOf (list : List Ir.Conditions) (definition : Ir.Ref) : List Ir.Condition :=
   ((list.find? (·.definition == definition)).map (·.conditions)).getD []
 
 /-- The ref fields of `st` whose target is one of its keyed entities: the entity, the field and the target. -/
@@ -193,7 +193,7 @@ def initialOf (st : Service) : SRecords × Facts := Id.run do
   for e in st.singles do
     let defaults := defaultsOf (entitySchema st e)
     let mut fields := []
-    for f in Ir.fieldsOf st e do
+    for f in Eval.fieldsOf st e do
       match defaults.field? f with
       | none => fields := fields ++ [(f, undefT)]
       | some v =>
@@ -226,11 +226,11 @@ structure Induction where
   /-- Why the service has no induction, such as missing bounds. -/
   blocked : Option String
 
-def inductionOf (j : Spec.Structure) (service : String) : IO Induction := do
+def inductionOf (j : Ir.Structure) (service : String) : IO Induction := do
   let st ← Service.ofStructure j service
   let p := j.program
   let checked := invariantsOf st p
-  let fs := p.toFunctions st fun _ => pure ()
+  let fs := Eval.Program.toFunctions p st fun _ => pure ()
   let charts ← st.charts.filterMapM (chartCaseOf st fs)
   let keyed := st.entities.filter (!st.singles.contains ·)
   let bounds := (j.bounds.find? (·.service == service)).map (·.creates)
@@ -408,9 +408,9 @@ def Induction.queries (x : Induction) : List (Asked × Query) :=
       [(.pairGap prop, ask [o.gap]), (.pairDiffers prop, ask [.not o.gap, o.differ])]
 
 /-- The own spec services of the structure, in order. -/
-def specServices (j : Spec.Structure) : List String := (j.services.filter (!·.external)).map (·.name)
+def specServices (j : Ir.Structure) : List String := (j.services.filter (!·.external)).map (·.name)
 
-def proveQueriesOf (j : Spec.Structure) : IO (List String) := do
+def proveQueriesOf (j : Ir.Structure) : IO (List String) := do
   let inductions ← (specServices j).mapM (inductionOf j)
   pure (inductions.flatMap fun x => x.queries.map fun (_, q) => q.script proveRlimit)
 
@@ -422,8 +422,8 @@ def givenOf (st : Service) (records : Records) : Value :=
     else (e, .arr (rows.map (·.value))))
 
 /-- Whether `c` fails in `env`, as the semantics evaluates it. -/
-def failsConcrete (env : Ir.Env) (c : Ir.Condition) : Bool :=
-  match (Ir.firstFailing env [c]).run' with
+def failsConcrete (env : Eval.Env) (c : Ir.Condition) : Bool :=
+  match (Eval.firstFailing env [c]).run' with
   | (.ok none, _) => false
   | _ => true
 
@@ -456,14 +456,14 @@ def writtenBy (st : Service) (fs : Functions IO) (records : Records) (now : Time
 
 /-- Whether `c` fails at the time `now` on some record of `records` that it is checked on, as the semantics evaluates it. -/
 def failsIn (st : Service) (c : Checked) (records : Records) (now : Time) : Bool :=
-  let env (args : List (Ir.Arg × Ir.Val)) : Ir.Env :=
-    { fields := Ir.fieldsOf st, args := Ir.argsOf (args ++ [(.now, Ir.instant now)]), records }
+  let env (args : List (Ir.Arg × Eval.Val)) : Eval.Env :=
+    { fields := Eval.fieldsOf st, args := Eval.argsOf (args ++ [(.now, Eval.instant now)]), records }
   match c.holder with
   | .keyed e | .single e => records.any fun r => r.entity == e && failsConcrete (env [(.record, .json r.value)]) c.condition
   | .service => failsConcrete (env []) c.condition
 
 /-- Whether a fault of an ensures of `definition` reports `name` failing, or a throw. -/
-def failedEnsures (definition : Spec.Ref) (name : String) : Fault → Bool
+def failedEnsures (definition : Ir.Ref) (name : String) : Fault → Bool
   | .failedEnsures d c => d == definition && c == name
   | .exception (some d) | .notOnly (some d) => d == definition
   | _ => false
@@ -486,7 +486,7 @@ def Induction.stateOf (x : Induction) (M : Model) : Except String (Records × Va
   let clock := (M "clock").toInt
   if let some b := x.checked.find? (failsIn x.st · records clock) then
     throw s!"the case's state fails {repr b.ref}, which the induction assumes"
-  let fits (r : Row) : Bool := match Data.parse (entitySchema x.st r.entity) r.value with
+  let fits (r : Row) : Bool := match Semantics.parse (entitySchema x.st r.entity) r.value with
     | some (.ok (.ok _)) => true
     | _ => false
   if let some r := records.find? (!fits ·) then throw s!"the case's record of {r.entity} is outside its schema"
@@ -613,22 +613,22 @@ def replayChart (x : Induction) (fs : Functions IO) (cc : ChartCase) (k : Ir.Con
   | .error why => return .error why
   | .ok (records, given, clock) =>
   let id := InstanceId.top c.name
-  let base : State := { service := st.service, records, now := clock, started := true }
-  let failing (s : State) (cond : Ir.Condition) : Bool := match s.machine? id with
-    | some i => failsConcrete { fields := Ir.fieldsOf st, args := Ir.scopeArgs st (s.scopeOf i none) .none,
+  let base : Service.State := { service := st.service, records, now := clock, started := true }
+  let failing (s : Service.State) (cond : Ir.Condition) : Bool := match s.machine? id with
+    | some i => failsConcrete { fields := Eval.fieldsOf st, args := Eval.scopeArgs st (s.scopeOf i none) .none,
                                 records := s.records } cond
     | none => false
   let context : Value := match initial with
     | .obj fields => .obj (fields.filter (·.1 ∉ cc.relevant) ++ present M (cc.relevant.map fun f => (f, valVar s!"ctx.{f}")))
     | v => v
-  let machineIn (config : Nat) : State × Value :=
+  let machineIn (config : Nat) : Service.State × Value :=
     let active := m.configs[config]!
     ({ base with machines := [{ chart := c, id, context, entered := active.map (·, clock) }] },
      .obj [("active", .arr (active.map .str)), ("context", context)])
-  let reported (s : State) : Except String (List Violation) :=
+  let reported (s : Service.State) : Except String (List Violation) :=
     if !failing s k then .error "the semantics keeps the invariant after the case's step"
     else .ok (s.violations.map (·.toViolation))
-  let assumed (s : State) : Bool := cc.invariants.all (!failing s ·)
+  let assumed (s : Service.State) : Bool := cc.invariants.all (!failing s ·)
   match step with
   | .start =>
     let s ← startInstance st fs base c
@@ -677,7 +677,7 @@ def replayPair (x : Induction) (fs : Functions IO) (pair : Pair) (o : Orders) (M
       unless (← fs.automationBinding a.name b payload records now) matches .ok true do return none
     for g in a.guard do
       unless (← fs.automationGuard a.name g payload records now) matches .ok true do return none
-    let keys := ({ service := st.service, createdEntities := created } : State).nextKeys
+    let keys := ({ service := st.service, createdEntities := created } : Service.State).nextKeys
     match ← fs.react a.name payload records now keys with
     | .ok (input, made) => pure (some (input, created ++ made))
     | .error _ => pure none
@@ -721,11 +721,11 @@ def verdictOf (answer : Smt.Answer) (exact complete : Bool) (replay : Model → 
       pure (some (.undecided s!"the solver's case {what} is outside what the encoding states exactly: {why}"))
 
 def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : IO (List ProveResult) := do
-  let fs := x.st.structure.program.toFunctions x.st fun _ => pure ()
+  let fs := Eval.Program.toFunctions x.st.structure.program x.st fun _ => pure ()
   let p := x.st.structure.program
   let result (prop : Property) (verdict : Verdict) : ProveResult :=
     { service := x.st.service, property := prop, creates := x.creates,
-      items := Spec.itemsOf x.st.structure.bounds x.st.service, verdict }
+      items := Ir.itemsOf x.st.structure.bounds x.st.service, verdict }
   let chartProps := x.charts.flatMap fun cc => cc.invariants.map fun k => (cc, k, Property.invariant (x.st.ref cc.chart.name) k.name)
   let ensures := x.st.commands.flatMap fun c => (conditionsOf p.ensures (x.st.ref c)).map fun e =>
     (c, Property.ensures (x.st.ref c) e.name)
@@ -856,7 +856,7 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
   pure (invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ responses)
 
 /-- The results of each property of each spec service, from Z3's answers to proveQueriesOf's scripts, in order. -/
-def proveOf (j : Spec.Structure) (answers : List String) : IO (List ProveResult) := do
+def proveOf (j : Ir.Structure) (answers : List String) : IO (List ProveResult) := do
   let inductions ← (specServices j).mapM (inductionOf j)
   let mut rest := answers
   let mut results := []

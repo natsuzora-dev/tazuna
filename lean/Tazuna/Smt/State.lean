@@ -1,5 +1,5 @@
 import Tazuna.Smt.Encode
-import Tazuna.Ir.Functions
+import Tazuna.Semantics.Eval.Functions
 
 /-!
 The symbolic records of a service within its bounds, what the semantics guarantees of every state, and a command's step
@@ -10,7 +10,7 @@ it reports in the semantics (Prove.replay).
 
 namespace Tazuna.Smt
 
-open Tazuna.Data Tazuna.Ir Tazuna.Service
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Eval Tazuna.Semantics.Service
 
 def boolVar (x : String) : Term := .var x .bool
 def strVar (x : String) : Term := .var x .str
@@ -299,7 +299,7 @@ def Stepped.create (st : Stepped) (entity : String) (key : Term) (payload : List
     beyond := .or st.beyond ((used.getLast?).getD tt) }
 
 /-- The records after the event `event` with `payload`, as Records.evolve changes them. -/
-def Stepped.apply (svc : Service) (st : Stepped) (event : Spec.Ref) (payload : List (String × Term)) : Stepped :=
+def Stepped.apply (svc : Service) (st : Stepped) (event : Ir.Ref) (payload : List (String × Term)) : Stepped :=
   let keyOf (fields : List String) : Term := .strOf (match fields with
     | [f] => (payload.lookup f).getD undefT
     | _ => undefT)
@@ -491,7 +491,7 @@ An object of `schema` as JSON holds its fields, each a variable named after `pre
 each array within the service's `items` bound.
 -/
 def objectOf (svc : Service) (schema : Schema) (pre : String) : List (String × SJson) × Facts :=
-  propertiesOf (Spec.itemsOf svc.structure.bounds svc.service) ((svc.schemaOf schema).getD (.obj [])) pre
+  propertiesOf (Ir.itemsOf svc.structure.bounds svc.service) ((svc.schemaOf schema).getD (.obj [])) pre
 
 /-- The input of command or query `name` as objectOf makes it. -/
 def inputOf (svc : Service) (name : String) (pre : String := "in") : List (String × SJson) × Facts :=
@@ -509,7 +509,7 @@ def callerVars (pre : String := "caller") : List (String × Term) × Facts :=
                            (conj [.isUndef (f "entity"), .isUndef (f "key"), .isStr (f "service")])] })
 
 /-- An entity among `callers` whose key is several fields: its caller key is an object, which callerVars does not hold. -/
-def compositeCaller (svc : Service) (callers : List Spec.CallerType) : Option String :=
+def compositeCaller (svc : Service) (callers : List Ir.CallerType) : Option String :=
   callers.findSome? fun
     | .entity e => if (svc.keyFieldsOf e).length > 1 then some e else none
     | .service _ => none
@@ -525,7 +525,7 @@ def callerTerms (c : Caller) : List (String × Term) :=
 That a request to a target that takes `callers` from the caller `caller` passes callerRejection on the records `pre`: the
 target lists the caller's kind, and an entity caller's record is live.
 -/
-def admitted (callers : List Spec.CallerType) (pre : SRecords) (caller : List (String × Term)) : Term :=
+def admitted (callers : List Ir.CallerType) (pre : SRecords) (caller : List (String × Term)) : Term :=
   let f (n : String) := (caller.lookup n).getD undefT
   disj (callers.map fun
     | .entity e => conj [.eq (f "entity") (.mkStr (strLit e)), .isStr (f "key"), keyIn (.strOf (f "key")) (pre.slotsOf e)]

@@ -2,14 +2,14 @@ import Engine.Drive
 import Engine.Prove
 import Engine.Generate
 import Tazuna.Ir.Expr
-import Tazuna.Explore.Coverage
-import Tazuna.Explore.Instrument
-import Tazuna.Scenario.Given
-import Tazuna.Sim.InvalidScenario
-import Tazuna.Validation.Illegal
-import Tazuna.Validation.NonCanonical
-import Tazuna.Verify.Compare
-import Tazuna.Verify.Pairing
+import Tazuna.Semantics.Explore.Coverage
+import Tazuna.Semantics.Explore.Instrument
+import Tazuna.Semantics.Scenario.Given
+import Tazuna.Semantics.Sim.InvalidScenario
+import Tazuna.Semantics.Validation.Illegal
+import Tazuna.Semantics.Validation.NonCanonical
+import Tazuna.Semantics.Verify.Compare
+import Tazuna.Semantics.Verify.Pairing
 
 /-!
 The messages that the engine exchanges with TS over stdio, one JSON value per line: TS sends Requests, and the engine
@@ -18,7 +18,7 @@ answers each with a Response.
 
 namespace Tazuna.Engine
 
-open Tazuna.Data Tazuna.Service
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service
 
 
 /-- A record that an `evaluate` request gives: the key is absent for a single entity's. -/
@@ -33,27 +33,27 @@ def Stored.row (s : Stored) : Service.Row := { entity := s.entity, key := s.key,
 
 /-- What TS asks Lean to compute. A snapshot line is null for a blank line. -/
 inductive Request where
-  | check («structure» : Spec.Structure)
-  | checkCanonical («structure» : Spec.Structure)
+  | check («structure» : Ir.Structure)
+  | checkCanonical («structure» : Ir.Structure)
   | pairSnapshots (services : List String) (expected : List Verify.Expected) (folders : List Verify.Folder)
   | compareSnapshot (snapshot : List (Option Value)) (run : List Value)
   | afters (snapshot : List (Option TraceLine))
   | decodeLines (values : List Value)
   /-- The simulation of the scenario: what each running service shows, and the simulation's violations. -/
-  | simulate («structure» : Spec.Structure) (scenario : Scenario)
+  | simulate («structure» : Ir.Structure) (scenario : Scenario)
   /-- What test finds of each scenario (Engine.test). -/
-  | test («structure» : Spec.Structure) (scenarios : List Scenario)
+  | test («structure» : Ir.Structure) (scenarios : List Scenario)
   /-- What verify finds of each log, and the parts of the spec that no log reached (Engine.verify). -/
-  | verify («structure» : Spec.Structure) (logs : List Log)
+  | verify («structure» : Ir.Structure) (logs : List Log)
   /-- The comparison of drive's log so far with the snapshot so far, for its bindings (Engine.bindingsOf). -/
-  | bindings («structure» : Spec.Structure) (service : String) (snapshot : List (Option TraceLine))
+  | bindings («structure» : Ir.Structure) (service : String) (snapshot : List (Option TraceLine))
       (trace : List (FileLine TraceLine))
   /-- The violations of an external service's trace against its contract (Engine.verifyExternal). -/
-  | verifyExternal («structure» : Spec.Structure) (service : String) (trace : List (FileLine TraceLine))
+  | verifyExternal («structure» : Ir.Structure) (service : String) (trace : List (FileLine TraceLine))
   /-- The Given records of the running service `service` of the scenario, as its records hold them. -/
-  | givenRecords («structure» : Spec.Structure) (scenario : Scenario) (service : String)
+  | givenRecords («structure» : Ir.Structure) (scenario : Scenario) (service : String)
   /-- Each line of a snapshot of `service` as verify reads it (readSnapshotLines), by which drive substitutes keys. -/
-  | readLines («structure» : Spec.Structure) (service : String) (lines : List (Option TraceLine))
+  | readLines («structure» : Ir.Structure) (service : String) (lines : List (Option TraceLine))
   /-- sortCollections of an encoded value by its JSON Schema. -/
   | sort (schema value : Value)
   /-- keyOrdered of an encoded value by its JSON Schema. -/
@@ -64,17 +64,17 @@ inductive Request where
   -/
   | evaluate (body : Ir.Expr) (input : Value) (records : List Stored) (keys : Keys)
       (fields : List (String × List String))
-  /-- `value` parsed by the JSON Schema `schema` as Lean's Data.parse does. -/
+  /-- `value` parsed by the JSON Schema `schema` as Lean's Semantics.parse does. -/
   | parse (schema : Value) (value : Value)
   /-- The SMT-LIB scripts of prove's queries, in order (Engine.proveQueriesOf). -/
-  | proveQueries («structure» : Spec.Structure)
+  | proveQueries («structure» : Ir.Structure)
   /-- prove's result of each invariant, from Z3's output on each script of proveQueries, in order (Engine.proveOf). -/
-  | prove («structure» : Spec.Structure) (answers : List String)
+  | prove («structure» : Ir.Structure) (answers : List String)
   /--
   generate's result (Engine.generateOf). Before it the engine sends `solve` responses, each answered by `solved`.
   `depth` is the most requests of a sequence, by default one more than the creations that the service's bounds allow.
   -/
-  | generate («structure» : Spec.Structure) (depth : Option Nat)
+  | generate («structure» : Ir.Structure) (depth : Option Nat)
   /-- Z3's output on each script of the engine's last `solve`, in order. -/
   | solved (outputs : List String)
 

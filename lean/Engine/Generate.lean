@@ -1,6 +1,6 @@
 import Engine.Prove
 import Engine.Verify
-import Tazuna.Explore.Coverage
+import Tazuna.Semantics.Explore.Coverage
 import Std.Data.HashMap
 
 /-!
@@ -17,7 +17,7 @@ TS runs Z3, so the search asks it through `solve` mid-run and goes on with the o
 
 namespace Tazuna.Engine
 
-open Tazuna.Data Tazuna.Service Tazuna.Smt Tazuna.Explore
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Smt Tazuna.Semantics.Explore
 
 /-- What generate found of a target. -/
 inductive Outcome where
@@ -58,7 +58,7 @@ structure Generation where
 
 derive_wire Generation serialize_only
 
-def triggerName : Spec.Trigger → String
+def triggerName : Ir.Trigger → String
   | .on key => s!"on.{key}"
   | .after deadline => s!"after.{deadline}"
   | .always => "always"
@@ -69,7 +69,7 @@ def triggerName : Spec.Trigger → String
   | .sends key .onRejected => s!"sends.{key}.onRejected"
   | .opens key => s!"opens.{key}"
 
-def transitionName (t : Spec.TransitionRef) : String :=
+def transitionName (t : Ir.TransitionRef) : String :=
   s!"{t.state.getD "chart"}.{triggerName t.trigger}.{t.index}"
 
 /-- The name of the input found first for `part`, which names its file. -/
@@ -87,13 +87,13 @@ def inputName : Uncovered → String
   | .state d s => s!"{d.name}.state.{s}"
 
 /-- The definition of a target. -/
-def _root_.Tazuna.Service.Uncovered.ref : Uncovered → Spec.Ref
+def _root_.Tazuna.Semantics.Service.Uncovered.ref : Uncovered → Ir.Ref
   | .request d | .successAnswer d | .bindsRejection d _ | .requiresRejection d _ | .automation d
   | .automationBindingValue d _ | .automationBindingNull d _ | .automationGuard d _ _ | .transition d _
   | .guardFalse d _ _ | .state d _ => d
 
 /-- Whether a request reaches `part`, so that the solver can seek it through the request's input. -/
-def _root_.Tazuna.Service.Uncovered.ofRequest : Uncovered → Bool
+def _root_.Tazuna.Semantics.Service.Uncovered.ofRequest : Uncovered → Bool
   | .request _ | .successAnswer _ | .bindsRejection .. | .requiresRejection .. => true
   | _ => false
 
@@ -144,7 +144,7 @@ for each record it may still create beyond `created`; and which slots are used.
 def recordTerms (st : Service) (creates created : List (String × Nat)) (records : Records) :
     Except String (SRecords × List (String × List Term)) := do
   let fieldsOfRow (e : String) (value : Value) : Except String (List (String × Term)) :=
-    (Ir.fieldsOf st e).mapM fun f => do pure (f, ← fieldTerm (entitySchema st e) f (value.field? f))
+    (Eval.fieldsOf st e).mapM fun f => do pure (f, ← fieldTerm (entitySchema st e) f (value.field? f))
   let keyedEntities := st.entities.filter (!st.singles.contains ·)
   let keyed ← keyedEntities.mapM fun e => do
     let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.keyText ≤ b.keyText)
@@ -159,7 +159,7 @@ def recordTerms (st : Service) (creates created : List (String × Nat)) (records
     let emptyKey := match names with
       | [_] => SlotKey.text (.lit (.str ""))
       | _ => .fields names
-    let empty : Slot := { live := ff, key := emptyKey, fields := (Ir.fieldsOf st e).map (·, undefT) }
+    let empty : Slot := { live := ff, key := emptyKey, fields := (Eval.fieldsOf st e).map (·, undefT) }
     pure (e, live ++ (List.range free).map fun _ => empty)
   let singles ← st.singles.mapM fun e => do
     let value := ((records.find? (·.entity == e)).map (·.value)).getD (.obj [])
@@ -197,7 +197,7 @@ inductive Want where
 def queryOf (facts : Facts) (goal : Term) : Query := { vars := facts.vars, asserts := facts.asserts ++ [goal] }
 
 /-- That an answer's output `output` to the request of `target` with `input` meets the target's ensures, as its contract promises. -/
-def promised (st : Service) (input : Value) (target : Spec.Ref) (output : List (String × SJson)) : Except String Term := do
+def promised (st : Service) (input : Value) (target : Ir.Ref) (output : List (String × SJson)) : Except String Term := do
   let env : SEnv := { args := fun
     | .input => (jsonLit input).toOption.map .ofJson
     | .output => some (.json output)
@@ -209,7 +209,7 @@ def promised (st : Service) (input : Value) (target : Spec.Ref) (output : List (
   pure (conj held)
 
 /-- A value of a chart function's arguments as a symbolic value: JSON as literals, none for records. -/
-def svalOfVal : Ir.Val → Option SVal
+def svalOfVal : Eval.Val → Option SVal
   | .undef => some (.scalar undefT)
   | .json v | .tracked _ v => (jsonLit v).toOption.map .ofJson
   | _ => none
@@ -219,7 +219,7 @@ For an answer `output` to the shows slot `slot` of the screen instance `i`, the 
 holds when the answer makes it list a payload, with the screen's other arguments as they are: the operations that the
 answer opens, which the search seeks as it seeks each branch of an automation that an event reaches.
 -/
-def offerGoals (fs : Functions ReplayM) (st : Service) (s : State) (i : Instance) (slot : String)
+def offerGoals (fs : Functions ReplayM) (st : Service) (s : Service.State) (i : Instance) (slot : String)
     (output : List (String × SJson)) : ReplayM (List Term) := do
   let p := st.structure.program
   let mut goals := []
@@ -233,7 +233,7 @@ def offerGoals (fs : Functions ReplayM) (st : Service) (s : State) (i : Instance
       let scope := s.scopeOf holder state
       let shown := (scope.shown.filter (·.1 != slot)).filterMap fun (k, v) => (jsonLit v).toOption.map (k, ·)
       let args (a : Ir.Arg) : Option SVal :=
-        if a == .shown then some (.json (shown ++ [(slot, .obj output)])) else svalOfVal (Ir.scopeArgs st scope .none a)
+        if a == .shown then some (.json (shown ++ [(slot, .obj output)])) else svalOfVal (Eval.scopeArgs st scope .none a)
       let .ok (offers, err) := seval { args } [] body.body | continue
       let (size, notSized) := offers.size {}
       let (n, notScalar) := size.scalarOf
@@ -242,7 +242,7 @@ def offerGoals (fs : Functions ReplayM) (st : Service) (s : State) (i : Instance
 
 /-- One spec service's search. -/
 structure Search where
-  spec : Spec.Structure
+  spec : Ir.Structure
   st : Service
   creates : List (String × Nat)
   /-- Why the service cannot grow, if it cannot: keyed entities without bounds(). -/
@@ -252,7 +252,7 @@ structure Search where
   sendable : List String
   targets : List Uncovered
 
-def searchOf (j : Spec.Structure) (depth : Option Nat) (service : String) : IO Search := do
+def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Search := do
   let st ← Service.ofStructure j service
   let bounds := (j.bounds.find? (·.service == service)).map (·.creates)
   let creates := bounds.getD []
@@ -271,7 +271,7 @@ def searchOf (j : Spec.Structure) (depth : Option Nat) (service : String) : IO S
 
 /-- A state of the search: the semantics' state after `inputs`, what the run collected, and the records it created per entity. -/
 structure Node where
-  state : State
+  state : Service.State
   collect : Collect
   inputs : List TraceLine
   created : List (String × Nat)
@@ -356,7 +356,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
     let target := pd.activity.ref
     let query := (st.structure.body? target) matches some (.query _)
     let id := s!"{target.service}/answer#{nextNumber n.inputs s!"{target.service}/answer"}"
-    let answerLine (a : Data.Answer) : TraceLine := { time := s.now, after := none, created := none, body := .answer .in id pd.id.text a }
+    let answerLine (a : Ir.Answer) : TraceLine := { time := s.now, after := none, created := none, body := .answer .in id pd.id.text a }
     if st.structure.hasOutput target then
       let (output, facts) := objectOf st (.output target) "out"
       let promise := (promised st pd.input target output).toOption.getD tt
@@ -451,7 +451,7 @@ stays within the bounds leads to a node of the next layer.
 def Search.run (x : Search) : SolveM Found := do
   let st := x.st
   let last ← IO.mkRef {}
-  let fs := instrument st (Ir.functionsOf st last) (Ir.instrumentOf last)
+  let fs := instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)
   let (s0, c0) ← (begin st fs { now := 0, service := st.service, records := [] }).run {}
   let mut found : Found := { first := (c0.reached.filter x.targets.contains).map (·, []), sought := [], broken := [] }
   let mut frontier : List Node := [{ state := s0, collect := c0, inputs := [], created := [] }]
@@ -486,7 +486,7 @@ def Search.run (x : Search) : SolveM Found := do
         if tried.contains l then continue
         tried := tried ++ [l]
         let s := n.state
-        let ins (s : State) := s.lines.toList.countP (·.dir == .in)
+        let ins (s : Service.State) := s.lines.toList.countP (·.dir == .in)
         let (s', c') ← (takeIn x.spec st fs [] s l { l with value := none }).run n.collect
         if ins s' == ins s || s'.halted.isSome || s'.violations.length != s.violations.length ||
           c'.violations.length != n.collect.violations.length then continue
@@ -527,11 +527,11 @@ def Search.anyState (x : Search) (part : Uncovered) : Except String (Query × Bo
   pure ({ vars := all.vars, asserts := all.asserts ++ [goal] }, all.complete)
 
 /-- The run of `inputs` from the initial state of `service`: the spec's trace lines, and the targets that the run reaches. -/
-def runInputs (spec : Spec.Structure) (service : String) (inputs : List TraceLine) : IO (List TraceLine × List Uncovered) := do
+def runInputs (spec : Ir.Structure) (service : String) (inputs : List TraceLine) : IO (List TraceLine × List Uncovered) := do
   let st ← Service.ofStructure spec service
   let last ← IO.mkRef {}
-  let fs := instrument st (Ir.functionsOf st last) (Ir.instrumentOf last)
-  let run : ReplayM State := do
+  let fs := instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)
+  let run : ReplayM Service.State := do
     let mut s ← begin st fs { now := 0, service, records := [] }
     for l in inputs do
       s ← takeIn spec st fs [] s l { l with value := none }
@@ -561,7 +561,7 @@ def reduce (candidates : List Candidate) : List Candidate := Id.run do
   return kept.filterMap (candidates[·]?)
 
 /-- The own spec services' searches, asking `solve` for the solver's output on each script, in order. -/
-def generateOf (j : Spec.Structure) (depth : Option Nat) (solve : List String → IO (List String)) : IO Generation := do
+def generateOf (j : Ir.Structure) (depth : Option Nat) (solve : List String → IO (List String)) : IO Generation := do
   let searches ← (specServices j).mapM (searchOf j depth)
   let searched : SolveM (List (Search × Found × List (Uncovered × Smt.Answer × Bool))) := searches.mapM fun x => do
     let found ← x.run
@@ -589,7 +589,7 @@ def generateOf (j : Spec.Structure) (depth : Option Nat) (solve : List String �
         | some why, _ => .notEncodable why
         | none, some why => if found.sought.contains part then .notReached x.depth else .notEncodable why
         | none, none => .notReached x.depth
-    ({ target := part.toViolation, creates := x.creates, items := Spec.itemsOf j.bounds x.st.service, outcome } :
+    ({ target := part.toViolation, creates := x.creates, items := Ir.itemsOf j.bounds x.st.service, outcome } :
       TargetOutcome)
   return { targets := outcomes,
            inputs := kept.map fun c => { service := c.service, name := c.name, lines := c.lines } }

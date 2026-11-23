@@ -1,12 +1,14 @@
-import Tazuna.Ir.Eval
+import Tazuna.Semantics.Eval.Expr
 
 /-!
 The SMT-LIB terms that prove sends to Z3, and what each term means for an assignment of its variables (`Term.denote`).
-The theorems of Thm.Smt state the encoding's agreement with Ir.eval through `denote`; the printer writes each
+The theorems of Thm.Smt state the encoding's agreement with Eval.eval through `denote`; the printer writes each
 constructor as the SMT-LIB operation of the same meaning. A JSON scalar or `undefined` is the datatype `V`.
 -/
 
 namespace Tazuna.Smt
+
+open Tazuna.Semantics
 
 /-- The sorts of the terms: SMT-LIB's Bool, Int and String, and the datatype `V` of JSON scalars and `undefined`. -/
 inductive Ty where
@@ -128,7 +130,7 @@ def Term.denote (M : Model) : Term → Lit
   | .prefixOf a b => .bool ((a.denote M).toStr.toList.isPrefixOf (b.denote M).toStr.toList)
   | .suffixOf a b =>
     .bool ((a.denote M).toStr.toList.reverse.isPrefixOf (b.denote M).toStr.toList.reverse)
-  | .contains a b => .bool (Ir.isInfix (b.denote M).toStr.toList (a.denote M).toStr.toList)
+  | .contains a b => .bool (Eval.isInfix (b.denote M).toStr.toList (a.denote M).toStr.toList)
   | .strAt a i =>
     let n := (i.denote M).toInt
     .str (if 0 ≤ n then ((a.denote M).toStr.toList[n.toNat]?.map String.singleton).getD "" else "")
@@ -137,7 +139,7 @@ def Term.denote (M : Model) : Term → Lit
     let n := (a.denote M).toInt
     .str (if 0 ≤ n ∧ n ≤ 0x2FFFF then String.singleton (Char.ofNat n.toNat) else "")
   | .strCat a b => .str ((a.denote M).toStr ++ (b.denote M).toStr)
-  | .dateLabel a => .str ((Data.renderDate? (a.denote M).toInt).getD "")
+  | .dateLabel a => .str ((Ir.renderDate? (a.denote M).toInt).getD "")
   | .mkBool a => .val (.bool (a.denote M).toBool)
   | .mkInt a => .val (.int (a.denote M).toInt)
   | .mkStr a => .val (.str (a.denote M).toStr)

@@ -1,16 +1,16 @@
 import Tazuna.Smt.Date
-import Tazuna.Ir.Eval
+import Tazuna.Semantics.Eval.Expr
 
 /-!
-The encoding of IR expressions as terms over symbolic records: `seval` mirrors Ir.eval, case for case, on symbolic
+The encoding of IR expressions as terms over symbolic records: `seval` mirrors Eval.eval, case for case, on symbolic
 values, and gives each expression's value and the term that holds when its evaluation throws. Thm.Smt.Encode proves
-that the encoding agrees with Ir.eval under every model (`seval_agrees`). An expression outside the encoded operations
+that the encoding agrees with Eval.eval under every model (`seval_agrees`). An expression outside the encoded operations
 is no encoding, with the reason.
 -/
 
 namespace Tazuna.Smt
 
-open Tazuna.Data Tazuna.Ir Tazuna.Service
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Eval Tazuna.Semantics.Service
 
 /-- The JSON of a scalar, none for `undefined`. An integer is the JSON number with exponent 0. -/
 def Scalar.toValue? : Scalar → Option Value
@@ -147,7 +147,7 @@ inductive SVal where
   order that the operation visits them.
   -/
   | bag (items : List (Term × SVal))
-  | emit (event : Spec.Ref) (payload : SVal)
+  | emit (event : Ir.Ref) (payload : SVal)
   | ite (c : Term) (a b : SVal)
 deriving Repr, Inhabited
 
@@ -520,7 +520,7 @@ def stringsOf (s p : SRes) : Term × Term × Term :=
 
 mutual
 
-/-- The symbolic evaluation of `e`, as Ir.eval evaluates it, or why `e` has no encoding. -/
+/-- The symbolic evaluation of `e`, as Eval.eval evaluates it, or why `e` has no encoding. -/
 def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String SRes
   | .undef => pure (.scalar undefT, ff)
   | .lit v => do pure (.scalar (← litTerm v), ff)

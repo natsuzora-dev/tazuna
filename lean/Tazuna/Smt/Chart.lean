@@ -1,5 +1,5 @@
 import Tazuna.Smt.State
-import Tazuna.Service.Chart.Config
+import Tazuna.Semantics.Service.Chart.Config
 
 /-!
 The configurations of a machine and its microsteps, for the induction of its invariants. The control is concrete: each
@@ -12,7 +12,7 @@ semantics.
 
 namespace Tazuna.Smt
 
-open Tazuna.Data Tazuna.Ir Tazuna.Service
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Eval Tazuna.Semantics.Service
 
 def Expr.children : Expr → List Expr
   | .undef | .lit _ | .arg _ | .var _ | .table _ | .single _ | .createKey _ => []
@@ -69,8 +69,8 @@ inductive Taken where
 /-- A microstep from configuration `source`: `transition`, tried after `earlier` on its trigger, and what it takes. -/
 structure Edge where
   source : Nat
-  earlier : List Transition
-  transition : Transition
+  earlier : List Service.Transition
+  transition : Service.Transition
   taken : Taken
   target : Nat
   /-- The states that the microstep exits, in exit order, and enters, in entry order. -/
@@ -79,19 +79,19 @@ structure Edge where
 
 /-- A machine's configurations, the first the initial one, which starting enters as `initialEntries`, and its edges. -/
 structure ChartModel where
-  chart : Chart
+  chart : Service.Chart
   configs : Array (List String)
   edges : List Edge
 
 /-- Why the chart has no model, or none. -/
-def unsupported (c : Chart) : Option String :=
+def unsupported (c : Service.Chart) : Option String :=
   if c.screen then some "a screen"
   else if c.states.any (·.spec.kind != .plain) then some "a parallel, final, history or map state"
   else if c.states.any (·.spec.hasParameters) then some "a state with parameters (held)"
   else none
 
 /-- The configuration after `t` from `active`, and the states it exits and enters, as Service.microstep finds them. -/
-def chartStep (c : Chart) (active : List String) (t : Transition) : List String × List String × List String :=
+def chartStep (c : Service.Chart) (active : List String) (t : Service.Transition) : List String × List String × List String :=
   match t.target with
   | none => (active, [], [])
   | some target =>
@@ -101,25 +101,25 @@ def chartStep (c : Chart) (active : List String) (t : Transition) : List String 
     (c.tree.entryOrder (rest ++ entries), exits, entries)
 
 /-- The states that starting enters, in entry order, which are the initial configuration. -/
-def initialEntries (c : Chart) : List String := c.tree.entrySet [] 0 c.initial
+def initialEntries (c : Service.Chart) : List String := c.tree.entrySet [] 0 c.initial
 
 /--
 The transitions that the semantics tries on `trigger` from `active`, in order: those of the leaf, then of each ancestor,
 then the chart's own (Select.levelsOf), for an event or an always; those of one state for a deadline or an answer.
 -/
-def candidates (c : Chart) (active : List String) : List (Spec.Trigger × Taken × List Transition) :=
-  let levels (trigger : Spec.Trigger) : List Transition :=
+def candidates (c : Service.Chart) (active : List String) : List (Ir.Trigger × Taken × List Service.Transition) :=
+  let levels (trigger : Ir.Trigger) : List Service.Transition :=
     let path := match (c.tree.leaves active).head? with
       | some leaf => c.tree.pathOf leaf
       | none => []
     path.reverse.flatMap (fun n => c.transitionsAt (some n) trigger) ++ c.transitionsAt none trigger
-  let events := c.receives.map fun (key, event) => (Spec.Trigger.on key, Taken.payload (.payload event), levels (.on key))
-  let always := [(Spec.Trigger.always, Taken.none, levels .always)]
+  let events := c.receives.map fun (key, event) => (Ir.Trigger.on key, Taken.payload (.payload event), levels (.on key))
+  let always := [(Ir.Trigger.always, Taken.none, levels .always)]
   let own := active.flatMap fun n => match c.state? n with
     | none => []
     | some cs =>
       let deadlines := cs.spec.deadlines.map fun d =>
-        (Spec.Trigger.after d.name, Taken.none, c.transitionsAt (some n) (.after d.name))
+        (Ir.Trigger.after d.name, Taken.none, c.transitionsAt (some n) (.after d.name))
       let answers := cs.activities.flatMap fun a => match a with
         | .sends key target =>
           [(.sends key .onAccepted, .output (.output target)), (.sends key .onRejected, .rejection)]
@@ -130,7 +130,7 @@ def candidates (c : Chart) (active : List String) : List (Spec.Trigger × Taken 
   events ++ always ++ own
 
 /-- The model of `c`: its configurations from the initial one and its edges, or why it has none. -/
-def ChartModel.of (c : Chart) : Except String ChartModel := do
+def ChartModel.of (c : Service.Chart) : Except String ChartModel := do
   if let some why := unsupported c then throw s!"prove does not encode {why} yet"
   let initial := c.tree.entryOrder (initialEntries c)
   let mut configs : Array (List String) := #[initial]
@@ -149,7 +149,7 @@ def ChartModel.of (c : Chart) : Except String ChartModel := do
   pure { chart := c, configs, edges }
 
 /-- Whether each state of `c` is in `active`, as the `active` argument holds it. -/
-def activeVal (c : Chart) (active : List String) : SVal :=
+def activeVal (c : Service.Chart) (active : List String) : SVal :=
   .obj (c.states.map fun s => (s.spec.name, .scalar (.lit (.val (.bool (s.spec.name ∈ active))))))
 
 /-- The symbolic state of a machine: its encoded context fields and its active states. -/
@@ -158,7 +158,7 @@ structure SMachine where
   active : List String
 
 /-- The arguments of a machine's expression, with what its transition takes. -/
-def SMachine.env (m : SMachine) (c : Chart) (records : SRecords) (now : Term) (taken : Option (Arg × SVal)) : SEnv :=
+def SMachine.env (m : SMachine) (c : Service.Chart) (records : SRecords) (now : Term) (taken : Option (Arg × SVal)) : SEnv :=
   { records,
     args := fun a => match a with
       | .context => some (.json (SJson.ofTerms m.context))
@@ -174,11 +174,11 @@ def SVal.isScalar : SVal → Bool
   | _ => false
 
 /-- The functions of a site of chart `c`. -/
-def siteOf (svc : Service) (p : Program) (c : Chart) (s : Site) : Option (List Condition) :=
+def siteOf (svc : Service) (p : Program) (c : Service.Chart) (s : Site) : Option (List Condition) :=
   (p.chart.find? fun f => f.chart == svc.ref c.name && f.site == s).map (·.functions)
 
 /-- The assign sites of chart `c`. -/
-def assignSites (svc : Service) (p : Program) (c : Chart) : List (List Condition) :=
+def assignSites (svc : Service) (p : Program) (c : Service.Chart) : List (List Condition) :=
   p.chart.filterMap fun f =>
     if f.chart != svc.ref c.name then none else match f.site with
       | .transitionAssign _ | .entryAssign _ | .exitAssign _ => some f.functions
@@ -188,7 +188,7 @@ def assignSites (svc : Service) (p : Program) (c : Chart) : List (List Condition
 The context fields that the invariants and guards depend on: those they read, and those that an assign of such a field
 reads. An assign of any other field changes nothing they evaluate, so the encoding leaves those fields out.
 -/
-def relevantContext (svc : Service) (p : Program) (c : Chart) (fields : List String) : List String := Id.run do
+def relevantContext (svc : Service) (p : Program) (c : Service.Chart) (fields : List String) : List String := Id.run do
   let reads (e : Expr) : List String := (argReads .context e).getD fields
   let roots := p.chart.filter (fun f => f.chart == svc.ref c.name && match f.site with
     | .invariants | .guards _ => true
@@ -235,8 +235,8 @@ structure Moved where
 The machine after `exits`, the assign of `transition` and `entries`, in the order of Service.microstep: each exit's
 assign before the state leaves, and each entry's assign after the state is active.
 -/
-def SMachine.move (m : SMachine) (svc : Service) (p : Program) (c : Chart) (records : SRecords) (now : Term)
-    (taken : Option (Arg × SVal)) (transition : Option Transition) (exits entries : List String) : Except String Moved := do
+def SMachine.move (m : SMachine) (svc : Service) (p : Program) (c : Service.Chart) (records : SRecords) (now : Term)
+    (taken : Option (Arg × SVal)) (transition : Option Service.Transition) (exits entries : List String) : Except String Moved := do
   let mut m := m
   let mut halted := ff
   let site (s : Site) : List Condition := (siteOf svc p c s).getD []

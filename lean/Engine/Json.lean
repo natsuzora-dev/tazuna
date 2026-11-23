@@ -1,19 +1,19 @@
 import Lean.Data.Json.Parser
 import Lean.Data.Json.Printer
-import Tazuna.Explore.Instrument
-import Tazuna.Validation.Check
-import Tazuna.Verify.External
-import Tazuna.Verify.Pairing
-import Tazuna.Verify.Snapshot
+import Tazuna.Semantics.Explore.Instrument
+import Tazuna.Semantics.Validation.Check
+import Tazuna.Semantics.Verify.External
+import Tazuna.Semantics.Verify.Pairing
+import Tazuna.Semantics.Verify.Snapshot
 
 /-!
-Lean.Json objects sort fields by name (Std.TreeMap), so this module parses and renders `Data.Value`, which keeps the
+Lean.Json objects sort fields by name (Std.TreeMap), so this module parses and renders `Ir.Value`, which keeps the
 field order that TS writes.
 -/
 
 namespace Tazuna.Json
 
-open Tazuna.Data Tazuna.Service Tazuna.Explore
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore
 open Std.Internal.Parsec Std.Internal.Parsec.String
 
 mutual

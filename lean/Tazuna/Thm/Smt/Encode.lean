@@ -3,14 +3,14 @@ import Tazuna.Thm.Smt.Date
 import Tazuna.Thm.Guarantee
 
 /-!
-The encoding of IR expressions agrees with Ir.eval (`seval_agrees`): under every model, an expression that `seval`
+The encoding of IR expressions agrees with Eval.eval (`seval_agrees`): under every model, an expression that `seval`
 encodes throws exactly when its throw term holds, and else evaluates to the value that its symbolic value is. This is the
 link from the SMT answers to the semantics, as Cedar's symbolic compiler proves of its encoding.
 -/
 
 namespace Tazuna.Thm.Smt.Encode
 
-open Tazuna.Smt Tazuna.Ir Tazuna.Data Tazuna.Service
+open Tazuna.Smt Tazuna.Ir Tazuna.Semantics.Eval Tazuna.Semantics Tazuna.Semantics.Service
 
 /-- The value and final state of an evaluation that starts in state `s`. -/
 def run {α : Type} (x : EvalM α) (s : Trace) : Except Issue α × Trace := (ExceptT.run x).run s
@@ -645,7 +645,7 @@ theorem toVal_ordinal (sc : Scalar) :
 
 theorem relT_holds (M : Model) (r : Relation) (a b : Term) :
     (relT r (.intOf a) (.intOf b)).holds M =
-      r.holds (((Term.intOf a).denote M).toInt) (((Term.intOf b).denote M).toInt) := by
+      Relation.holds r (((Term.intOf a).denote M).toInt) (((Term.intOf b).denote M).toInt) := by
   cases r
   case eq =>
     simp only [relT, Relation.holds, Term.holds, Term.denote, Lit.toBool, Lit.toInt, Lit.int.injEq]
@@ -677,7 +677,7 @@ theorem compare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal) (s
     Agrees M recs (.scalar (.mkBool (relT r (.intOf va.scalarOf.1) (.intOf vb.scalarOf.1))),
         .or va.scalarOf.2 (.or vb.scalarOf.2 (.not (.and (.isInt va.scalarOf.1) (.isInt vb.scalarOf.1)))))
       (run (match ordinal .number (va.conc M recs), ordinal .number (vb.conc M recs) with
-        | some (m, e), some (m', e') => pure (.json (.bool (r.holds (m * 10 ^ e') (m' * 10 ^ e))))
+        | some (m, e), some (m', e') => pure (.json (.bool (Relation.holds r (m * 10 ^ e') (m' * 10 ^ e))))
         | _, _ => thrown : EvalM Val) s).1 := by
   rcases scalar_cases M recs va with ⟨ha, hca⟩ | ⟨ha, hna⟩ <;>
     rcases scalar_cases M recs vb with ⟨hb, hcb⟩ | ⟨hb, hnb⟩
@@ -694,7 +694,7 @@ theorem compare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal) (s
 
 
 theorem relT_ints (M : Model) (r : Relation) (a b : Term) (x y : Int) (ha : a.denote M = .int x)
-    (hb : b.denote M = .int y) : (relT r a b).holds M = r.holds x y := by
+    (hb : b.denote M = .int y) : (relT r a b).holds M = Relation.holds r x y := by
   cases r
   case eq =>
     simp only [relT, Relation.holds, Term.holds, Term.denote, ha, hb, Lit.toBool, Lit.int.injEq]
@@ -727,7 +727,7 @@ theorem dateLabel_scalar (M : Model) (z : Term) :
   cases h : renderDate? (z.denote M).toInt with
   | none => simp [isDateLabel_empty]
   | some s =>
-    have hp := Tazuna.Thm.Data.Time.parse_render _ s h
+    have hp := Tazuna.Thm.Ir.Time.parse_render _ s h
     unfold parseDate? at hp
     split at hp
     · rename_i hl
@@ -786,7 +786,7 @@ theorem dateCompare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal
     Agrees M recs (.scalar (.mkBool (relT r (dayOf va.scalarOf.1) (dayOf vb.scalarOf.1))),
         .or va.scalarOf.2 (.or vb.scalarOf.2 (.not (.and (isDateOf va.scalarOf.1) (isDateOf vb.scalarOf.1)))))
       (run (match ordinal .date (va.conc M recs), ordinal .date (vb.conc M recs) with
-        | some (m, e), some (m', e') => pure (.json (.bool (r.holds (m * 10 ^ e') (m' * 10 ^ e))))
+        | some (m, e), some (m', e') => pure (.json (.bool (Relation.holds r (m * 10 ^ e') (m' * 10 ^ e))))
         | _, _ => thrown : EvalM Val) s).1 := by
   rcases scalar_cases M recs va with ⟨ha, hca⟩ | ⟨ha, hna⟩ <;>
     rcases scalar_cases M recs vb with ⟨hb, hcb⟩ | ⟨hb, hnb⟩
@@ -888,7 +888,7 @@ theorem arith_op (M : Model) (recs : Records) (op : Arith) (va vb : SVal) (s : T
     Agrees M recs (.scalar (.mkInt (arithT op (.intOf va.scalarOf.1) (.intOf vb.scalarOf.1))),
         .or va.scalarOf.2 (.or vb.scalarOf.2 (.not (.and (.isInt va.scalarOf.1) (.isInt vb.scalarOf.1)))))
       (run (match integer? (va.conc M recs), integer? (vb.conc M recs) with
-        | some x, some y => pure (.json (.num (op.apply x y)))
+        | some x, some y => pure (.json (.num (Arith.apply op x y)))
         | _, _ => thrown : EvalM Val) s).1 := by
   have hint : ∀ v : SVal, v.scalarOf.2.holds M = true → integer? (v.conc M recs) = none := by
     intro v h
@@ -1805,14 +1805,14 @@ theorem leastIn_conc (M : Model) (recs : Records) (order : Order) (lt : Term →
         exact ⟨by simp [holds_or, hf], by rw [denote_ite, hcond]; exact hm, by rw [keyT_ite, hcond]; exact hmk, hk0⟩
 
 theorem keyOf_conc (M : Model) (recs : Records) (order : Order) (b : SVal) :
-    Ir.keyOf order (b.conc M recs) =
+    Eval.keyOf order (b.conc M recs) =
       if (Term.or b.scalarOf.2 (.not (keyOkT order b.scalarOf.1))).holds M then thrown
       else pure (((keyT order b.scalarOf.1).denote M).toInt, 0) := by
   rcases scalar_cases M recs b with ⟨h, hc⟩ | ⟨h, hn⟩
   · rw [hc]
-    simp only [Ir.keyOf, key_ordinal, holds_or, holds_not, h, Bool.false_or]
+    simp only [Eval.keyOf, key_ordinal, holds_or, holds_not, h, Bool.false_or]
     cases (keyOkT order b.scalarOf.1).holds M <;> rfl
-  · simp [Ir.keyOf, nonScalar_ordinal order hn, holds_or, h]
+  · simp [Eval.keyOf, nonScalar_ordinal order hn, holds_or, h]
 
 theorem disj_split (M : Model) (B : Visit → Term) : ∀ visits : List Visit,
     (disj (visits.map fun q => .and q.1 (.or q.2.2.2 (B q)))).holds M =
@@ -1880,7 +1880,7 @@ theorem agrees_err {M : Model} {recs : Records} {r : SRes} {e' : Term} {x : Exce
 
 mutual
 
-/-- The encoding agrees with Ir.eval: under every model, from every state of the evaluation's trace. -/
+/-- The encoding agrees with Eval.eval: under every model, from every state of the evaluation's trace. -/
 @[guarantee] theorem seval_agrees (M : Model) (env : SEnv) (fields : String → List String) :
     ∀ (vars : List (String × SVal)) (e : Expr) (r : SRes), seval env vars e = .ok r → ∀ s,
       Agrees M (env.records.conc M) r

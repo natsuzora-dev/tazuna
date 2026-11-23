@@ -97,7 +97,7 @@ A run halts at a violation of a *halting* kind.
 
 A run that halts gets none of the checks at the end of a run: the expectations of Then, the check of the messages left in flight, and the checks of the exchanges with external services.
 The lines after the halt never took place, so those checks would read a cut-off record.
-Only kinds of the groups `Fault`, `InvalidInput`, and `InvalidScenario` halt, as `halts` in `lean/Tazuna/Service/Fault.lean`, `lean/Tazuna/Service/InvalidInput.lean`, and `lean/Tazuna/Sim/InvalidScenario.lean` decides.
+Only kinds of the groups `Fault`, `InvalidInput`, and `InvalidScenario` halt, as `halts` in `lean/Tazuna/Semantics/Service/Fault.lean`, `lean/Tazuna/Semantics/Service/InvalidInput.lean`, and `lean/Tazuna/Semantics/Sim/InvalidScenario.lean` decides.
 
 ## What a passing command means
 

@@ -8,7 +8,7 @@ answer that it reports in the semantics.
 
 namespace Tazuna.Smt
 
-open Tazuna.Data Tazuna.Ir Tazuna.Service
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Eval Tazuna.Semantics.Service
 
 /--
 Two automations that react to the same event. Both reactions read the records before either command runs, since the

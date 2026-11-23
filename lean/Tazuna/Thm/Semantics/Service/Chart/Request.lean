@@ -1,0 +1,134 @@
+import Tazuna.Semantics.Service.Chart.Request
+import Tazuna.Thm.Semantics.Service.Chart.Queue
+import Tazuna.Thm.Guarantee
+
+namespace Tazuna.Thm.Semantics.Service.Chart.Request
+
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service
+open Tazuna.Thm.Semantics.Value.Basic Tazuna.Thm.Semantics.Service.Chart.Queue Tazuna.Thm.Semantics.Service.Functions Tazuna.Thm.Semantics.Service.State Tazuna.Thm.Ir.Shape Tazuna.Thm.Semantics.Service.Chart.Basic
+
+variable {st : Service} {fs : Functions Id} {s : Service.State}
+
+theorem keeps_request (step : Nat) (name : InstanceId) (state : String) (a : Service.Activity) : Keeps (request fs st step name state a) := by
+  unfold request
+  apply keeps_withMachine
+  intro i r
+  try simp only [id_bind]
+  split
+  · simp [Processing.report]
+  · split
+    · rfl
+    · exact await_fixed ..
+
+theorem keeps_openScreen (step : Nat) (name : InstanceId) (state : String) (a : Service.Activity) :
+    Keeps (openScreen fs st step name state a) := by
+  unfold openScreen
+  apply keeps_withMachine
+  intro i r
+  try simp only [id_bind]
+  repeat' split
+  all_goals first | rfl | simp [Processing.report]
+
+theorem keeps_activate (step : Nat) (name : InstanceId) (state : String) (a : Service.Activity) :
+    Keeps (activate fs st step name state a) := by
+  unfold activate
+  split
+  · exact keeps_openScreen step name state _
+  · intro r; rfl
+  · exact keeps_request step name state _
+  · exact keeps_request step name state _
+
+theorem growsBy_request (step : Nat) (name : InstanceId) (state : String) (a : Service.Activity) : GrowsBy (request fs st step name state a) := by
+  unfold request
+  apply growsBy_withMachine
+  intro i r
+  try simp only [id_bind]
+  split
+  · exact Grows.of_lines (report_lines ..)
+  · split
+    · exact Grows.refl _
+    · exact (Grows.of_lines (s' := r.state.createKeys _) rfl).trans rfl (await_grows ..)
+
+theorem sameLines_openScreen (step : Nat) (name : InstanceId) (state : String) (a : Service.Activity) :
+    SameLines (openScreen fs st step name state a) := by
+  unfold openScreen
+  apply sameLines_withMachine
+  intro i r
+  try simp only [id_bind]
+  repeat' split
+  all_goals first | rfl | simp [Processing.report]
+
+theorem growsBy_activate (step : Nat) (name : InstanceId) (state : String) (a : Service.Activity) :
+    GrowsBy (activate fs st step name state a) := by
+  unfold activate
+  split
+  · exact (sameLines_openScreen step name state _).grows (keeps_openScreen step name state _)
+  · intro r; exact Grows.refl _
+  · exact growsBy_request step name state _
+  · exact growsBy_request step name state _
+
+theorem keeps_activateEntered (e : InstanceId × String × Nat) : Keeps (activateEntered fs st e) := by
+  unfold activateEntered
+  apply keeps_withMachine
+  intro i r
+  split
+  · rfl
+  · split
+    · rfl
+    · exact foldlM_keeps (fun a => keeps_unlessHalted (keeps_activate _ _ _ a)) _ _
+
+theorem keeps_sendEntered : Keeps (sendEntered fs st) := fun r =>
+  foldlM_keeps (fun e => keeps_activateEntered e) _ ⟨r.state, { r.queue with entered := [] }⟩
+
+theorem growsBy_activateEntered (e : InstanceId × String × Nat) : GrowsBy (activateEntered fs st e) := by
+  unfold activateEntered
+  apply growsBy_withMachine
+  intro i r
+  split
+  · exact Grows.refl _
+  · split
+    · exact Grows.refl _
+    · exact (foldlM_grows (fun a => growsBy_unlessHalted (growsBy_activate _ _ _ a))
+        (fun a => keeps_unlessHalted (keeps_activate _ _ _ a)) _ _).bridge rfl rfl
+
+theorem growsBy_sendEntered : GrowsBy (sendEntered fs st) := fun r =>
+  (foldlM_grows (fun e => growsBy_activateEntered e) (fun e => keeps_activateEntered e) _
+    ⟨r.state, { r.queue with entered := [] }⟩).bridge rfl rfl
+
+@[guarantee] theorem exited_state_sends_nothing (e : InstanceId × String × Nat) (r : Processing) (i : Instance)
+    (hi : r.state.machine? e.1 = some i) (hn : i.isIn e.2.1 = false) : activateEntered fs st e r = r := by
+  unfold activateEntered withMachine
+  split
+  · rfl
+  · simp [hi, hn]
+
+@[guarantee] theorem entering_opens_one_child (step : Nat) (name : InstanceId) (state : String) (a : Service.Activity) (r : Processing) (i : Instance)
+    (c : Service.Chart) (given : Value) (keys : List String) (context : Value) (hh : r.state.halted = none)
+    (hi : r.state.machine? name = some i) (hc : st.chart? a.ref.name = some c)
+    (raw : Value) (hp : fs.input (r.state.scopeOf i (some state)) r.state.records a r.state.nextKeys = .ok (raw, keys))
+    (hq : fs.parse (.input (st.ref c.name)) raw = .ok (some given))
+    (rq : Requirements)
+    (hl : st.requirements.lookup c.name = some rq)
+    (hr : firstFalse (fs.inputRequirement (st.ref c.name) · given) rq.requires = .ok none)
+    (hx : initialContextOf fs st c.name given = .ok context) :
+    ∃ child : Instance,
+      (openScreen fs st step name state a r).1.machines = r.state.machines.filter (·.id != child.id) ++ [child] ∧
+      child.chart = c ∧ child.id.opener? = some (name, state, a.key) ∧
+      (openScreen fs st step name state a r).1.stack = r.state.stack ++ [child.id] ∧
+      (openScreen fs st step name state a r).2.tasks = r.queue.tasks ++ [.start child.id (some step)] := by
+  simp only [openScreen, withMachine, Processing.halted, hh, hi, Option.isSome_none, Bool.false_eq_true, ↓reduceIte, id_bind,
+    hc, hp, hq, expectFound, hl, pure, hr, hx]
+  exact ⟨{ chart := c, id := .opened c.name name state a.key, context, input := given, shown := c.slots.map (·, .null) },
+    rfl, rfl, rfl, rfl, rfl⟩
+
+def EnteredFrom (s s' : Service.State) : Prop :=
+  ∀ n i', s'.machine? n = some i' → i'.entered = [] ∨ ∃ i, s.machine? n = some i ∧ i.closed = i'.closed ∧ i.entered = i'.entered
+
+theorem EnteredFrom.active {s s' : Service.State} (h : EnteredFrom s s') {name : InstanceId} {n : String} {i' : Instance}
+    (hi : s'.machine? name = some i') (hc : i'.closed = false) (hn : i'.isIn n = true) :
+    ∃ i, s.machine? name = some i ∧ i.closed = false ∧ i.isIn n = true := by
+  rcases h name i' hi with he | ⟨i, h, hc', he⟩
+  · simp [Instance.isIn, he] at hn
+  · exact ⟨i, h, hc'.trans hc, by simpa [Instance.isIn, he] using hn⟩
+
+end Tazuna.Thm.Semantics.Service.Chart.Request

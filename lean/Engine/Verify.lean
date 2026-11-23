@@ -1,6 +1,6 @@
 import Engine.Run
-import Tazuna.Verify.External
-import Tazuna.Explore.Coverage
+import Tazuna.Semantics.Verify.External
+import Tazuna.Semantics.Explore.Coverage
 
 /-!
 What the CLI's verify command asks of the engine: the replay of an implementation's log, whose `in` lines the spec
@@ -10,7 +10,7 @@ contract, with the values read by their schemas and the contract's conditions ev
 
 namespace Tazuna.Engine
 
-open Tazuna.Data Tazuna.Service Tazuna.Verify Tazuna.Explore
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Verify Tazuna.Semantics.Explore
 
 /-- A finding as a report writes it: a violation with its line, or an `after`, which only test compares. -/
 instance : ToValue Verify.Finding := ⟨fun
@@ -21,7 +21,7 @@ instance : ToValue Verify.Finding := ⟨fun
       ("snapshot", ToValue.toValue snapshot), ("trace", ToValue.toValue trace)])]⟩
 
 /-- Whether a finding is a violation of verify, which compares no `after`. -/
-def _root_.Tazuna.Verify.Finding.isViolation : Verify.Finding → Bool
+def _root_.Tazuna.Semantics.Verify.Finding.isViolation : Verify.Finding → Bool
   | .after .. => false
   | _ => true
 
@@ -70,7 +70,7 @@ abbrev ReplayM := StateT Collect IO
 def inverse (b : Bindings) (t : String) : String := ((b.find? (·.2 == t)).map (·.1)).getD t
 
 /-- The id of the service's line whose id reads `text`: the service's own request that an answer or resultOf names. -/
-def lineIdOf (s : State) (text : String) : LineId :=
+def lineIdOf (s : Service.State) (text : String) : LineId :=
   ((s.lines.toList.find? (·.id.text == text)).map (·.id)).getD (.own text)
 
 /-- The value with each key reference renamed by `f`. -/
@@ -89,14 +89,14 @@ def renameCaller (f : String → String) : Caller → Caller
   | .service s => .service s
 
 /-- The spec service's trace lines so far, as a snapshot holds them. -/
-def specLines (service : String) (s : State) : List (Option TraceLine) :=
+def specLines (service : String) (s : Service.State) : List (Option TraceLine) :=
   (Sim.trace s).map fun (l, after, created) => some (Sim.traceLineOf service l after created)
 
 /--
 The state after the clock moves to `time` with no line of its own: the deadlines due by then fire, and the subscription
 answers that the new time changes are sent.
 -/
-def advance (st : Service) (fs : Functions ReplayM) (time : Time) (s : State) : ReplayM State := do
+def advance (st : Service) (fs : Functions ReplayM) (time : Time) (s : Service.State) : ReplayM Service.State := do
   let s ← fireDue st fs time Limit.dueDeadlines.max none s
   let s := { s with now := max s.now time }
   if s.halted.isSome then pure s else publish st fs s
@@ -106,10 +106,10 @@ The state after the spec service takes the log's `in` line `l`, whose values ver
 the line's time first, and the values that the implementation stands for in its own way (its keys, its request ids)
 are the spec's that the binding `b` gives them, as drive substitutes them the other way.
 -/
-def takeIn (spec : Spec.Structure) (st : Service) (fs : Functions ReplayM) (b : Bindings) (s : State) (l : TraceLine)
-    (read : Verify.Line) : ReplayM State := do
+def takeIn (spec : Ir.Structure) (st : Service) (fs : Functions ReplayM) (b : Bindings) (s : Service.State) (l : TraceLine)
+    (read : Verify.Line) : ReplayM Service.State := do
   let value := read.value.map fun v => (renameRefs (inverse b) v).flatten
-  let ref (name : String) (kinds : List String) : Spec.Ref :=
+  let ref (name : String) (kinds : List String) : Ir.Ref :=
     ((spec.named st.service (some name) kinds).map (·.ref)).getD { service := st.service, name }
   let s ← match l.body with
     | .time .. => pure s
@@ -146,8 +146,8 @@ far keeps; then its lines are compared with the log's (Verify.verifyLines). The 
 the spec does not take: after the spec halts, once the comparison so far finds the log uncomparable, or when the spec
 rejects the line as an input that no sender could give. No line from there on compares.
 -/
-def replay (spec : Spec.Structure) (log : Log) : ReplayM Replayed := do
-  let ask (d : Spec.Definition) (part : Verify.Part) (v : Value) : ReplayM CValue := pure (Verify.readValueOf spec d part v)
+def replay (spec : Ir.Structure) (log : Log) : ReplayM Replayed := do
+  let ask (d : Ir.Definition) (part : Verify.Part) (v : Value) : ReplayM CValue := pure (Verify.readValueOf spec d part v)
   let start ← match log.start with
     | none => pure (some none)
     | some s => pure ((FromValue.fromValue s.value : Except String Start).toOption.map some)
@@ -156,7 +156,7 @@ def replay (spec : Spec.Structure) (log : Log) : ReplayM Replayed := do
                bindings := [] }
   let st ← Service.ofStructure spec log.service
   let last ← IO.mkRef {}
-  let fs := instrument st (Ir.functionsOf st last) (Ir.instrumentOf last)
+  let fs := instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)
   let (lines, _) := comparedLines .out log.lines
   let time := match start with
     | some s => s.time
@@ -166,7 +166,7 @@ def replay (spec : Spec.Structure) (log : Log) : ReplayM Replayed := do
   let broken ← if invalid.isEmpty then Sim.givenInvariants fs log.service rows time else pure []
   let user := start.bind (·.user)
   let mut s ← begin st fs { now := time, service := log.service, records := rows, user }
-  let inputs (s : State) := s.lines.toList.countP (·.dir == .in)
+  let inputs (s : Service.State) := s.lines.toList.countP (·.dir == .in)
   let mut taken := log.lines.length
   -- A resend and the answer to it stand for the request that they repeat (withoutResends), so the spec takes neither.
   for (l, k) in (withoutResends lines).zipIdx do
@@ -197,7 +197,7 @@ def replay (spec : Spec.Structure) (log : Log) : ReplayM Replayed := do
          bindings := final.bindings.map (·.strings) }
 
 /-- What verify finds of each log, and the parts of the spec that no log reached (Uncovered). -/
-def verify (spec : Spec.Structure) (logs : List Log) : IO (List Replayed × List Violation) := do
+def verify (spec : Ir.Structure) (logs : List Log) : IO (List Replayed × List Violation) := do
   let (replayed, reached) ← logs.foldlM (init := ([], [])) fun (done, reached) log => do
     let (r, c) ← (replay spec log).run {}
     pure (done ++ [r], c.reached.foldl (fun acc u => if acc.contains u then acc else acc ++ [u]) reached)
@@ -214,11 +214,11 @@ each event's payload, and each answer that answers a send of its request: the re
 may answer when it fails the schema, the requires on the input, the output, and a command's ensures with all its
 result events, which may come before or after the answer.
 -/
-def verifyExternal (spec : Spec.Structure) (service : String) (trace : List (FileLine TraceLine)) :
+def verifyExternal (spec : Ir.Structure) (service : String) (trace : List (FileLine TraceLine)) :
     IO (List Verify.Finding) := do
   let st ← Service.ofStructure spec service
   let last ← IO.mkRef {}
-  let fs := Ir.functionsOf st last
+  let fs := Eval.functionsOf st last
   let (lines, cut) := comparedLines .in trace
   let structural := checkLines spec service lines 1 [] ++ (exchanges spec service lines).flatMap (checkExchange spec service)
   let found := structural ++ (cut.map .uncomparable).toList
@@ -265,7 +265,7 @@ def verifyExternal (spec : Spec.Structure) (service : String) (trace : List (Fil
           if rejected || failedRequires.isSome || outputFails then pure none
           else orStop "the ensures" (← firstFalse (fun n => do
             pure ((← fs.resultEnsures target n decodedInput (parsedOutput.join) results).map Ensured.passes)) ensures)
-        if let some broken := Spec.assumptionMismatch answer failedRequires failedEnsures then
+        if let some broken := Ir.assumptionMismatch answer failedRequires failedEnsures then
           more := more ++ [.mismatch (.assumption line x.id target broken)]
       if parsedOutput matches some none then
         more := more ++ [.mismatch (.assumption line x.id target .answerOutputSchema)]

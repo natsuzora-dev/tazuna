@@ -1,18 +1,18 @@
-import Tazuna.Ir.Functions
-import Tazuna.Verify.Read
-import Tazuna.Explore.StepOrders
-import Tazuna.Sim.Run
-import Tazuna.Sim.Trace
+import Tazuna.Semantics.Eval.Functions
+import Tazuna.Semantics.Verify.Read
+import Tazuna.Semantics.Explore.StepOrders
+import Tazuna.Semantics.Sim.Run
+import Tazuna.Semantics.Sim.Trace
 
 /-!
 The runs that the CLI's test command asks of the engine: each scenario simulated and the step orders of its processings
 searched, with what every running service reports. The spec functions run as the
-structure's IR (Ir.functionsOf).
+structure's IR (Eval.functionsOf).
 -/
 
 namespace Tazuna.Engine
 
-open Tazuna.Data Tazuna.Service Tazuna.Explore
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore
 
 /-- What an instrumented simulation collects: one Collect per running service, and the service whose processing runs. -/
 structure Acting where
@@ -52,8 +52,8 @@ def instrumentedOf (start : Sim.World) : IO (String → Functions ActingIO) := d
   let last ← IO.mkRef {}
   pure fun service =>
     match start.services.lookup service with
-    | none => (Ir.functionsOf default last).hoist liftM
-    | some st => (instrument st (Ir.functionsOf st last) (Ir.instrumentOf last)).hoist (focus service)
+    | none => (Eval.functionsOf default last).hoist liftM
+    | some st => (instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)).hoist (focus service)
 
 /-- A world with what each running service's instrumented functions collected on the way to it. -/
 structure Ran where
@@ -63,18 +63,18 @@ structure Ran where
 def Ran.execution (r : Ran) : Execution := { world := r.world, collect := r.acting.collect }
 
 /-- The value of a definition's part as verify reads it. -/
-def readIn (spec : Spec.Structure) (d : Spec.Definition) (part : Verify.Part) (v : Value) : IO CValue :=
+def readIn (spec : Ir.Structure) (d : Ir.Definition) (part : Verify.Part) (v : Value) : IO CValue :=
   pure (Verify.readValueOf spec d part v)
 
 /-- The comparison of two runs' trace lines of `service`, by which the step-order search compares them. -/
-def compareFor (spec : Spec.Structure) (service : String) : Compare IO := fun renamed expected actual => do
+def compareFor (spec : Ir.Structure) (service : String) : Compare IO := fun renamed expected actual => do
   pure ((← Verify.compareTraces spec service (readIn spec) renamed expected actual).mapError fun
     | .mismatch m => Difference.outputs m.toViolation
     | .uncomparable u => .outputs u.toViolation
     | .after line subject snapshot trace => .after line subject snapshot trace)
 
 /-- The scenario executed from its start, with the step orders `stepOrders`. -/
-def executeWith (spec : Spec.Structure) (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) :
+def executeWith (spec : Ir.Structure) (sc : Scenario) (stepOrders : List (Scenario.Origin × String × List StepName)) :
     IO Execution := do
   let start ← Sim.World.start spec sc
   let start := { start with stepOrders }
@@ -82,7 +82,7 @@ def executeWith (spec : Spec.Structure) (sc : Scenario) (stepOrders : List (Scen
   pure { world, collect := acting.collect }
 
 /-- The violations that the step orders of the processings of `executed` from line `from` on find. -/
-def stepOrderViolations (spec : Spec.Structure) (sc : Scenario) (executed : Execution) («from» : Nat) :
+def stepOrderViolations (spec : Ir.Structure) (sc : Scenario) (executed : Execution) («from» : Nat) :
     IO (List Violation) := do
   let searched ← stepOrderChanges (compareFor spec) (executeWith spec) sc executed «from»
   pure (searched.filterMap (·.search.found))
@@ -90,7 +90,7 @@ def stepOrderViolations (spec : Spec.Structure) (sc : Scenario) (executed : Exec
 def halted (w : Sim.World) : Bool := w.halted.isSome || w.states.any (·.2.halted.isSome)
 
 /-- What a running service reports: its own violations, then those its instrument collected, then its halt. -/
-def reportedOf (r : Ran) (service : String) (s : State) : List Violation :=
+def reportedOf (r : Ran) (service : String) (s : Service.State) : List Violation :=
   reportedViolations s (r.acting.collect service) none
 
 /-- What a simulation shows of one running service: its trace lines, its violations, and its candidates. -/
@@ -122,7 +122,7 @@ structure ScenarioRun where
 derive_wire ScenarioRun serialize_only
 
 /-- The simulation and step-order search of `sc`. -/
-def runScenario (spec : Spec.Structure) (sc : Scenario) : IO ScenarioRun := do
+def runScenario (spec : Ir.Structure) (sc : Scenario) : IO ScenarioRun := do
   let start ← Sim.World.start spec sc
   let (world, acting) ← (Sim.simulate spec (← instrumentedOf start) start sc).run {}
   let simulated : Ran := { world, acting }
@@ -137,7 +137,7 @@ def runScenario (spec : Spec.Structure) (sc : Scenario) : IO ScenarioRun := do
 The simulation of `sc`: each running service's trace lines, violations and candidates, and the simulation's violations
 and its halting one.
 -/
-def simulate (spec : Spec.Structure) (sc : Scenario) :
+def simulate (spec : Ir.Structure) (sc : Scenario) :
     IO (List SimulatedService × List Sim.InvalidScenario × Option Sim.InvalidScenario) := do
   let start ← Sim.World.start spec sc
   let (w, acting) ← (Sim.simulate spec (← instrumentedOf start) start sc).run {}
@@ -149,7 +149,7 @@ def simulate (spec : Spec.Structure) (sc : Scenario) :
   pure (services, w.violations, w.halted)
 
 /-- What test finds of each scenario, in order. -/
-def test (spec : Spec.Structure) (scenarios : List Scenario) : IO (List ScenarioRun) :=
+def test (spec : Ir.Structure) (scenarios : List Scenario) : IO (List ScenarioRun) :=
   scenarios.mapM (runScenario spec)
 
 end Tazuna.Engine

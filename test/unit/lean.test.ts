@@ -19,15 +19,23 @@ const source = (folder: string, path: string) => readFileSync(join(leanRoot, fol
 
 /** For each folder, the folders under Tazuna whose modules its files may import. */
 const allowedImports: Readonly<Record<string, readonly string[]>> = {
-  Data: ["Data"],
-  // The structure holds the program, whose IR names only data and the definitions of Spec.
-  Spec: ["Data", "Spec", "Ir/Expr"],
-  Validation: ["Data", "Spec", "Validation"],
-  Service: ["Data", "Spec", "Service"],
-  Scenario: ["Data", "Spec", "Scenario"],
-  Sim: ["Data", "Spec", "Service", "Scenario", "Sim"],
-  Explore: ["Data", "Spec", "Service", "Scenario", "Sim", "Explore"],
-  Verify: ["Data", "Spec", "Verify"],
+  Ir: ["Ir"],
+  "Semantics/Value": ["Ir", "Semantics/Value"],
+  "Semantics/Validation": ["Ir", "Semantics/Value", "Semantics/Validation"],
+  "Semantics/Service": ["Ir", "Semantics/Value", "Semantics/Service"],
+  "Semantics/Scenario": ["Ir", "Semantics/Value", "Semantics/Scenario"],
+  "Semantics/Sim": ["Ir", "Semantics/Value", "Semantics/Service", "Semantics/Scenario", "Semantics/Sim"],
+  "Semantics/Explore": [
+    "Ir",
+    "Semantics/Value",
+    "Semantics/Service",
+    "Semantics/Scenario",
+    "Semantics/Sim",
+    "Semantics/Explore",
+  ],
+  "Semantics/Verify": ["Ir", "Semantics/Value", "Semantics/Verify"],
+  "Semantics/Eval": ["Ir", "Semantics/Value", "Semantics/Service", "Semantics/Explore", "Semantics/Eval"],
+  Smt: ["Ir", "Semantics", "Smt"],
 };
 
 for (const [folder, allowed] of Object.entries(allowedImports))
@@ -40,7 +48,7 @@ for (const [folder, allowed] of Object.entries(allowedImports))
     assert.deepEqual(outside, []);
   });
 
-test("The namespace of each Thm file is its path (Tazuna.Thm.Service.Chart.Exit for Tazuna/Thm/Service/Chart/Exit.lean)", () => {
+test("The namespace of each Thm file is its path (Tazuna.Thm.Semantics.Service.Chart.Exit for Tazuna/Thm/Semantics/Service/Chart/Exit.lean)", () => {
   for (const path of leanModulePaths("Thm")) {
     const expected = `Tazuna.Thm.${path.split(sep).join(".")}`;
     const namespaces = [...source("Thm", path).matchAll(/^namespace (\S+)$/gm)].map((m) => m[1]);
@@ -48,7 +56,7 @@ test("The namespace of each Thm file is its path (Tazuna.Thm.Service.Chart.Exit 
   }
 });
 
-test("Each file outside Thm opens only Tazuna and the namespaces under its folder (Tazuna.Service.* for Service/Basic.lean)", () => {
+test("Each file outside Thm opens only Tazuna and the namespaces under its folder (Tazuna.Semantics.* for Semantics/Service/Basic.lean)", () => {
   const outside = leanDefinitionPaths().flatMap((path) => {
     const folder = path.split(sep)[0] ?? "";
     const open: string[] = [];
@@ -65,9 +73,9 @@ test("Each file outside Thm opens only Tazuna and the namespaces under its folde
   assert.deepEqual(outside, []);
 });
 
-test("Each Validation file except the violation types has a file of the same name in Thm/Validation, and the other way around", () => {
+test("Each Validation file except the violation types has a file of the same name in Thm/Semantics/Validation, and the other way around", () => {
   assert.deepEqual(
-    leanModulePaths("Validation").filter((path) => path !== "Illegal" && path !== "NonCanonical"),
-    leanModulePaths("Thm/Validation"),
+    leanModulePaths("Semantics/Validation").filter((path) => path !== "Illegal" && path !== "NonCanonical"),
+    leanModulePaths("Thm/Semantics/Validation"),
   );
 });

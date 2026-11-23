@@ -1,14 +1,14 @@
 import Engine.Json
 import Engine.Protocol
-import Tazuna.Validation.Canonical
-import Tazuna.Data.Parse
+import Tazuna.Semantics.Validation.Canonical
+import Tazuna.Semantics.Value.Parse
 
 /-!
 The engine: it reads one Request per line on stdin and writes one Response per line on stdout (precedents:
 leanprover-community/repl, the Lean LSP). Engine/Protocol.lean defines the messages.
 -/
 
-open Tazuna Tazuna.Data Tazuna.Service Tazuna.Json Tazuna.Engine
+open Tazuna Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Json Tazuna.Engine
 
 def sendLine {α : Type} [ToValue α] (stdout : IO.FS.Stream) (message : α) : IO Unit := do
   stdout.putStrLn (render (ToValue.toValue message))
@@ -43,15 +43,15 @@ def respond (solve : List String → IO (List String)) : Engine.Request → IO R
   | .sort schema value => pure (.sorted (sortCollections schema value))
   | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))
   | .evaluate body input records keys fields =>
-    let env : Ir.Env := { args := Ir.argsOf [(.input, .json input)], records := records.map Stored.row, keys,
-                          fields := fun e => (fields.lookup e).getD [] }
-    let (answer, trace) := (do Ir.encode env (← Ir.eval env [] body)).run'
+    let env : Eval.Env := { args := Eval.argsOf [(.input, .json input)], records := records.map Stored.row, keys,
+                            fields := fun e => (fields.lookup e).getD [] }
+    let (answer, trace) := (do Eval.encode env (← Eval.eval env [] body)).run'
     let reads := trace.parts.map ReadPart.of
     let created := trace.created
     pure (match answer with
       | .ok value => .evaluated { value, issue := none, reads, created }
       | .error issue => .evaluated { value := none, issue, reads, created })
-  | .parse schema value => pure (match Data.parse schema value with
+  | .parse schema value => pure (match Semantics.parse schema value with
     | none => .parsed false none none false
     | some (.error ()) => .parsed true none none true
     | some (.ok (.ok v)) => .parsed true (some v) none false

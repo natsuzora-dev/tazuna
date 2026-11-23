@@ -1,33 +1,33 @@
 import Lean.Elab.Term
-import Tazuna.Data.Names
-import Tazuna.Service.Limits
-import Tazuna.Data.Trace
-import Tazuna.Explore.ChoiceDependent
-import Tazuna.Explore.RegionOrderDependent
-import Tazuna.Explore.Undecided
-import Tazuna.Service.Fault
-import Tazuna.Service.InvalidInput
-import Tazuna.Service.Note
-import Tazuna.Spec.Structure
-import Tazuna.Scenario.Given
-import Tazuna.Sim.InvalidScenario
-import Tazuna.Validation.Illegal
-import Tazuna.Validation.NonCanonical
-import Tazuna.Verify.Mismatch
-import Tazuna.Verify.Uncomparable
+import Tazuna.Semantics.Value.Names
+import Tazuna.Semantics.Service.Limits
+import Tazuna.Ir.Trace
+import Tazuna.Semantics.Explore.ChoiceDependent
+import Tazuna.Semantics.Explore.RegionOrderDependent
+import Tazuna.Semantics.Explore.Undecided
+import Tazuna.Semantics.Service.Fault
+import Tazuna.Semantics.Service.InvalidInput
+import Tazuna.Semantics.Service.Note
+import Tazuna.Ir.Structure
+import Tazuna.Semantics.Scenario.Given
+import Tazuna.Semantics.Sim.InvalidScenario
+import Tazuna.Semantics.Validation.Illegal
+import Tazuna.Semantics.Validation.NonCanonical
+import Tazuna.Semantics.Verify.Mismatch
+import Tazuna.Semantics.Verify.Uncomparable
 import Engine.Protocol
 import Tazuna.Thm.Guarantee
 
 /-!
 The text is laid out as Biome formats it, since `npm run lint` checks it.
 
-A violation type and a wire type (Data/Wire.lean) differ in two ways. A violation's `Option` field is always `T | null`,
+A violation type and a wire type (Ir/Wire.lean) differ in two ways. A violation's `Option` field is always `T | null`,
 and a wire type's is an optional property under skip_serializing_none. A violation's constructor is
 named by its `kind` (`"Group.constructor"`), and a wire type's constructor by its `tag` field, whose value is the
 constructor's name, kebab-case under rename_all.
 -/
 
-open Lean Elab Term Meta Tazuna.Data
+open Lean Elab Term Meta Tazuna.Ir Tazuna.Semantics
 
 /--
 The TS constant `name`: the strings `values` as a const array, on one line when it fits in 120 columns and one string
@@ -42,61 +42,61 @@ def constArray (name : String) (values : List String) : String :=
 /-- The TS type of each Lean type that no generated file declares: a TS built-in, or a type of a hand-written module. -/
 def handTypes : List (Name × String × Option String) :=
   [(``String, "string", none), (``Nat, "number", none), (``Int, "number", none), (``Bool, "boolean", none),
-   (``Tazuna.Data.Time, "number", none), (``Tazuna.Data.Value, "Json", some "src/data/values.ts"),
-   (``Tazuna.Spec.Ref, "DefinitionRef", some "src/data/definitionRef.ts"),
-   (``Tazuna.Data.Violation, "ViolationValue", some "src/data/violation.ts"),
-   (``Tazuna.Verify.At, "At", some "src/data/pairing.ts"),
-   (``Tazuna.Verify.Run, "Run", some "src/data/traceFile.ts"),
-   (``Tazuna.Verify.Expected, "Expected", some "src/data/pairing.ts"),
-   (``Tazuna.Verify.Folder, "Folder", some "src/data/pairing.ts")]
+   (``Tazuna.Ir.Time, "number", none), (``Tazuna.Ir.Value, "Json", some "src/data/values.ts"),
+   (``Tazuna.Ir.Ref, "DefinitionRef", some "src/data/definitionRef.ts"),
+   (``Tazuna.Ir.Violation, "ViolationValue", some "src/data/violation.ts"),
+   (``Tazuna.Semantics.Verify.At, "At", some "src/data/pairing.ts"),
+   (``Tazuna.Semantics.Verify.Run, "Run", some "src/data/traceFile.ts"),
+   (``Tazuna.Semantics.Verify.Expected, "Expected", some "src/data/pairing.ts"),
+   (``Tazuna.Semantics.Verify.Folder, "Folder", some "src/data/pairing.ts")]
 
 /-- The Lean sums whose constructors each wrap one value and write it as it is, with the types that they wrap. -/
 def sums : List (Name × List Name) :=
-  [(``Tazuna.Verify.Finding, [``Tazuna.Verify.Mismatch, ``Tazuna.Verify.Uncomparable])]
+  [(``Tazuna.Semantics.Verify.Finding, [``Tazuna.Semantics.Verify.Mismatch, ``Tazuna.Semantics.Verify.Uncomparable])]
 
 /-- Each generated module, by repository path, and the Lean types that it declares, the root last. -/
 def modules : List (String × List Name) :=
-  [("src/data/schema.generated.ts", [``Tazuna.Schema, ``Tazuna.SchemaStep]),
-   ("src/data/illegal.generated.ts", [``Tazuna.Validation.Illegal]),
-   ("src/data/nonCanonical.generated.ts", [``Tazuna.Validation.OnRejectedAt, ``Tazuna.Validation.NonCanonical]),
-   ("src/data/mismatch.generated.ts", [``Tazuna.Data.Subject, ``Tazuna.Verify.Mismatch]),
-   ("src/data/uncomparable.generated.ts", [``Tazuna.Verify.Uncomparable]),
-   ("src/data/invalidInput.generated.ts", [``Tazuna.Service.InvalidInput]),
-   ("src/data/invalidScenario.generated.ts", [``Tazuna.Sim.InvalidScenario]),
+  [("src/data/schema.generated.ts", [``Tazuna.Ir.Schema, ``Tazuna.Ir.SchemaStep]),
+   ("src/data/illegal.generated.ts", [``Tazuna.Semantics.Validation.Illegal]),
+   ("src/data/nonCanonical.generated.ts", [``Tazuna.Semantics.Validation.OnRejectedAt, ``Tazuna.Semantics.Validation.NonCanonical]),
+   ("src/data/mismatch.generated.ts", [``Tazuna.Ir.Subject, ``Tazuna.Semantics.Verify.Mismatch]),
+   ("src/data/uncomparable.generated.ts", [``Tazuna.Semantics.Verify.Uncomparable]),
+   ("src/data/invalidInput.generated.ts", [``Tazuna.Semantics.Service.InvalidInput]),
+   ("src/data/invalidScenario.generated.ts", [``Tazuna.Semantics.Sim.InvalidScenario]),
    ("src/data/scenario.generated.ts",
-    [``Tazuna.Spec.Ref, ``Tazuna.Data.Caller, ``Tazuna.Scenario.Origin, ``Tazuna.Scenario.Fact, ``Tazuna.Scenario.ValueRef,
-     ``Tazuna.Scenario.Fill, ``Tazuna.Scenario.Hole, ``Tazuna.Scenario.Template, ``Tazuna.Scenario.Line,
-     ``Tazuna.Scenario.SentRequest, ``Tazuna.Scenario.EmittedEvent, ``Tazuna.Scenario.Expectation,
-     ``Tazuna.Scenario.GivenRecord, ``Tazuna.Scenario.Peer, ``Tazuna.Scenario.PeerEntry, ``Tazuna.Scenario.Given,
-     ``Tazuna.Scenario]),
-   ("src/data/fault.generated.ts", [``Tazuna.Service.Fault]),
-   ("src/data/regionOrderDependent.generated.ts", [``Tazuna.Explore.RegionOrderDependent]),
-   ("src/data/undecided.generated.ts", [``Tazuna.Explore.Undecided]),
-   ("src/data/uncovered.generated.ts", [``Tazuna.Service.Uncovered]),
+    [``Tazuna.Ir.Ref, ``Tazuna.Ir.Caller, ``Tazuna.Semantics.Scenario.Origin, ``Tazuna.Semantics.Scenario.Fact, ``Tazuna.Semantics.Scenario.ValueRef,
+     ``Tazuna.Semantics.Scenario.Fill, ``Tazuna.Semantics.Scenario.Hole, ``Tazuna.Semantics.Scenario.Template, ``Tazuna.Semantics.Scenario.Line,
+     ``Tazuna.Semantics.Scenario.SentRequest, ``Tazuna.Semantics.Scenario.EmittedEvent, ``Tazuna.Semantics.Scenario.Expectation,
+     ``Tazuna.Semantics.Scenario.GivenRecord, ``Tazuna.Semantics.Scenario.Peer, ``Tazuna.Semantics.Scenario.PeerEntry, ``Tazuna.Semantics.Scenario.Given,
+     ``Tazuna.Semantics.Scenario]),
+   ("src/data/fault.generated.ts", [``Tazuna.Semantics.Service.Fault]),
+   ("src/data/regionOrderDependent.generated.ts", [``Tazuna.Semantics.Explore.RegionOrderDependent]),
+   ("src/data/undecided.generated.ts", [``Tazuna.Semantics.Explore.Undecided]),
+   ("src/data/uncovered.generated.ts", [``Tazuna.Semantics.Service.Uncovered]),
    ("src/data/choiceDependent.generated.ts",
-    [``Tazuna.Explore.Difference, ``Tazuna.Explore.ChoiceDependent]),
+    [``Tazuna.Semantics.Explore.Difference, ``Tazuna.Semantics.Explore.ChoiceDependent]),
    ("src/data/transitionRef.generated.ts",
-    [``Tazuna.Spec.CallOutcome, ``Tazuna.Spec.SendOutcome, ``Tazuna.Spec.Trigger, ``Tazuna.Spec.TransitionRef]),
+    [``Tazuna.Ir.CallOutcome, ``Tazuna.Ir.SendOutcome, ``Tazuna.Ir.Trigger, ``Tazuna.Ir.TransitionRef]),
    ("src/data/step.generated.ts",
-    [``Tazuna.Service.InstanceId, ``Tazuna.Service.Requester, ``Tazuna.Service.Received, ``Tazuna.Service.Activity,
-     ``Tazuna.Service.StepName]),
+    [``Tazuna.Semantics.Service.InstanceId, ``Tazuna.Semantics.Service.Requester, ``Tazuna.Semantics.Service.Received, ``Tazuna.Semantics.Service.Activity,
+     ``Tazuna.Semantics.Service.StepName]),
    ("src/data/trace.generated.ts",
-    [``Tazuna.Data.RejectionKind, ``Tazuna.Data.Rejection, ``Tazuna.Data.Answer, ``Tazuna.Data.LineId,
-     ``Tazuna.Data.TraceLine]),
+    [``Tazuna.Ir.RejectionKind, ``Tazuna.Ir.Rejection, ``Tazuna.Ir.Answer, ``Tazuna.Ir.LineId,
+     ``Tazuna.Ir.TraceLine]),
    ("src/spec/structure.generated.ts",
-    [``Tazuna.Spec.Activity, ``Tazuna.Spec.Transition, ``Tazuna.Spec.DeadlineTime,
-     ``Tazuna.Spec.Deadline, ``Tazuna.Spec.MapState, ``Tazuna.Spec.StateType, ``Tazuna.Spec.Held, ``Tazuna.Spec.State,
-     ``Tazuna.Spec.ChartFields, ``Tazuna.Spec.Reference, ``Tazuna.Spec.KeyPosition, ``Tazuna.Spec.ChangeKind, ``Tazuna.Spec.Change,
-     ``Tazuna.Spec.ResponseTime, ``Tazuna.Spec.EntityBody, ``Tazuna.Spec.EventBody, ``Tazuna.Spec.CallerType, ``Tazuna.Spec.CommandBody, ``Tazuna.Spec.QueryBody,
-     ``Tazuna.Spec.AutomationBody, ``Tazuna.Spec.Body, ``Tazuna.Spec.Definition, ``Tazuna.Spec.Contract,
-     ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
-     ``Tazuna.Spec.Bounds,
-     ``Tazuna.Spec.Structure]),
+    [``Tazuna.Ir.Activity, ``Tazuna.Ir.Transition, ``Tazuna.Ir.DeadlineTime,
+     ``Tazuna.Ir.Deadline, ``Tazuna.Ir.MapState, ``Tazuna.Ir.StateType, ``Tazuna.Ir.Held, ``Tazuna.Ir.State,
+     ``Tazuna.Ir.ChartFields, ``Tazuna.Ir.Reference, ``Tazuna.Ir.KeyPosition, ``Tazuna.Ir.ChangeKind, ``Tazuna.Ir.Change,
+     ``Tazuna.Ir.ResponseTime, ``Tazuna.Ir.EntityBody, ``Tazuna.Ir.EventBody, ``Tazuna.Ir.CallerType, ``Tazuna.Ir.CommandBody, ``Tazuna.Ir.QueryBody,
+     ``Tazuna.Ir.AutomationBody, ``Tazuna.Ir.Body, ``Tazuna.Ir.Definition, ``Tazuna.Ir.Contract,
+     ``Tazuna.Ir.ServiceInfo, ``Tazuna.Ir.ResultOfMismatch, ``Tazuna.Ir.AssumptionMismatch,
+     ``Tazuna.Ir.Bounds,
+     ``Tazuna.Ir.Structure]),
    ("src/spec/ir.generated.ts",
     [``Tazuna.Ir.Arg, ``Tazuna.Ir.Expr, ``Tazuna.Ir.Field, ``Tazuna.Ir.Condition, ``Tazuna.Ir.Conditions, ``Tazuna.Ir.Fn,
      ``Tazuna.Ir.Entry, ``Tazuna.Ir.Site, ``Tazuna.Ir.ChartFns, ``Tazuna.Ir.Program]),
    ("src/cli/protocol.generated.ts",
-    [``Tazuna.Service.Issue, ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys,
+    [``Tazuna.Semantics.Service.Issue, ``Tazuna.Semantics.Service.NextKeys, ``Tazuna.Semantics.Service.Keys,
      ``Tazuna.Engine.Stored, ``Tazuna.Engine.StartLine, ``Tazuna.Engine.Log, ``Tazuna.Engine.Request, ``Tazuna.Engine.Unpaired,
      ``Tazuna.Engine.SimulatedService, ``Tazuna.Engine.ReadPart, ``Tazuna.Engine.Evaluated,
      ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Replayed, ``Tazuna.Engine.Property,
@@ -143,7 +143,7 @@ partial def named (name : Name) : Write String := do
   throwError "no generated module declares {name}; add it to modules"
 
 /-- The TS type of a Lean type. -/
-partial def tsType : Expr → Write String
+partial def tsType : Lean.Expr → Write String
   | .app (.const ``Option _) a => return s!"{← tsType a} | null"
   | .app (.const ``List _) (.app (.app (.const ``Prod _) (.const ``String _)) a) =>
     return s!"Readonly<Record<string, {← tsType a}>>"
@@ -151,7 +151,7 @@ partial def tsType : Expr → Write String
     let t ← tsType a
     return if t.startsWith "readonly " || (t.splitOn " | ").length > 1 then s!"readonly ({t})[]" else s!"readonly {t}[]"
   | .app (.app (.const ``Prod _) a) b => return s!"readonly [{← tsType a}, {← tsType b}]"
-  | .app (.const ``Tazuna.Data.FileLine _) a => return s!"null | \"malformed\" | {← tsType a}"
+  | .app (.const ``Tazuna.Ir.FileLine _) a => return s!"null | \"malformed\" | {← tsType a}"
   | .const name _ => named name
   | type => throwError "no TS type for {type}"
 
@@ -231,7 +231,7 @@ def dataFields (ctor : Name) (fields : List WireField) : MetaM (List (Option Str
     | field => throwError "{ctor}.{field.name}: a group's data has no optional or flattened field"
 
 def group (type : Name) : Write String := do
-  let kinds ← Tazuna.Data.members type
+  let kinds ← Tazuna.Ir.members type
   let members ← kinds.mapM fun member => do
     let fields ← groupFields member
     let definition ← match fields.definition with
@@ -239,8 +239,8 @@ def group (type : Name) : Write String := do
         let ref := match type with
           | .app (.const ``Option _) a => a
           | t => t
-        unless ref.isConstOf ``Tazuna.Spec.Ref do
-          throwError "{member.ctor}: the argument definition must have type Spec.Ref or Option Spec.Ref"
+        unless ref.isConstOf ``Tazuna.Ir.Ref do
+          throwError "{member.ctor}: the argument definition must have type Ir.Ref or Option Ir.Ref"
         tsType type
       | none => pure "null"
     let place ← fields.place.mapM fun (n, type) => do pure s!"      readonly {n}: {← tsType type};\n"
@@ -306,7 +306,7 @@ structure Emitted where
 
 abbrev Emit := StateT Emitted MetaM
 
-partial def zodSchema (listed : List Name) : Expr → Emit String
+partial def zodSchema (listed : List Name) : Lean.Expr → Emit String
   | .app (.const ``Option _) a => return s!"{← zodSchema listed a}.nullable()"
   | .app (.const ``List _) (.app (.app (.const ``Prod _) (.const ``String _)) a) =>
     return s!"z.record(z.string(), {← zodSchema listed a})"
@@ -315,10 +315,10 @@ partial def zodSchema (listed : List Name) : Expr → Emit String
   | .const ``Bool _ => return "z.boolean()"
   | .const ``Nat _ => return "z.int().nonnegative()"
   | .const ``Int _ => return "z.int()"
-  | .const ``Tazuna.Data.Value _ => return "z.unknown()"
-  | .const ``Tazuna.Data.Time _ => return "z.int()"
+  | .const ``Tazuna.Ir.Value _ => return "z.unknown()"
+  | .const ``Tazuna.Ir.Time _ => return "z.int()"
   | .app (.app (.const ``Prod _) a) b => return s!"z.tuple([{← zodSchema listed a}, {← zodSchema listed b}])"
-  | .app (.const ``Tazuna.Data.FileLine _) a =>
+  | .app (.const ``Tazuna.Ir.FileLine _) a =>
     return s!"z.union([z.null(), z.literal(\"malformed\"), {← zodSchema listed a}])"
   | .const name _ => do
     if listed.contains name then return schemaName name
@@ -333,7 +333,7 @@ partial def zodSchema (listed : List Name) : Expr → Emit String
     if let .untagged ctors ← wireShape name then
       let scalar (f : WireField) : Option String := match f with
         | .required _ (.const ``String _) => some "z.string()"
-        | .required _ (.const ``Tazuna.Data.Value _) => some "z.unknown()"
+        | .required _ (.const ``Tazuna.Ir.Value _) => some "z.unknown()"
         | _ => none
       if ctors.all (·.fields.all (scalar · |>.isSome)) then
         modify fun e => { e with inlined := if name ∈ e.inlined then e.inlined else e.inlined ++ [name] }
@@ -433,7 +433,7 @@ elab "zod% " p:str : term => do
 /-- `groupSamples% T` elaborates to one value per kind of group `T`, with `default` arguments, in declaration order. -/
 elab "groupSamples% " t:ident : term => do
   let group ← realizeGlobalConstNoOverloadWithInfo t
-  let sample (ctor : Name) (flattened : Option (String × Expr)) : MetaM Expr := do
+  let sample (ctor : Name) (flattened : Option (String × Lean.Expr)) : MetaM Lean.Expr := do
     forallTelescope (← getConstInfoCtor ctor).type fun args _ => do
       let values ← args.mapM fun a => do
         if let some (field, value) := flattened then
@@ -478,9 +478,9 @@ elab "sources% " cs:ident+ : term => do
   return toExpr (← modulePaths (← cs.toList.mapM fun c => realizeGlobalConstNoOverloadWithInfo c.raw))
 
 /-- The TS constant `name`: the rejection kinds, in declaration order, that `p` holds for. -/
-def kindsWhere (name doc : String) (p : Tazuna.Data.RejectionKind → Bool) : String :=
+def kindsWhere (name doc : String) (p : Tazuna.Ir.RejectionKind → Bool) : String :=
   s!"\n/** {doc} */\n" ++
-    constArray name ((samples% Tazuna.Data.RejectionKind).filterMap fun k =>
+    constArray name ((samples% Tazuna.Ir.RejectionKind).filterMap fun k =>
       match ToValue.toValue k with
       | .str s => if p k then some s else none
       | _ => none)
@@ -524,16 +524,16 @@ def files (guarantees : List String) : List (String × String) :=
    typescript% "src/data/mismatch.generated.ts",
    typescript% "src/data/uncomparable.generated.ts",
    appended (typescript% "src/data/invalidInput.generated.ts")
-     (let samples := groupSamples% Tazuna.Service.InvalidInput
+     (let samples := groupSamples% Tazuna.Semantics.Service.InvalidInput
       halting "InvalidInput" ((samples.filter (·.halts)).map (·.kind)) ++
         internal "InvalidInput" ((samples.filter (·.internal)).map (·.kind))),
    appended (typescript% "src/data/invalidScenario.generated.ts")
-     (let samples := groupSamples% Tazuna.Sim.InvalidScenario
+     (let samples := groupSamples% Tazuna.Semantics.Sim.InvalidScenario
       halting "InvalidScenario" ((samples.filter (·.halts)).map (·.kind)) ++
         internal "InvalidScenario" ((samples.filter (·.internal)).map (·.kind))),
    zod% "src/data/scenario.generated.ts",
    appended (typescript% "src/data/fault.generated.ts")
-     (let samples := groupSamples% Tazuna.Service.Fault
+     (let samples := groupSamples% Tazuna.Semantics.Service.Fault
       halting "Fault" ((samples.filter (·.halts)).map (·.kind)) ++
         internal "Fault" ((samples.filter (·.internal)).map (·.kind))),
    typescript% "src/data/regionOrderDependent.generated.ts",

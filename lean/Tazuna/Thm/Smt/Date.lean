@@ -1,15 +1,15 @@
 import Tazuna.Smt.Date
-import Tazuna.Thm.Data.Time
+import Tazuna.Thm.Ir.Time
 import Tazuna.Thm.Guarantee
 
 /-!
-The date terms denote what Data.Time computes: a term of a string is a date label exactly when isDateLabel holds of the
+The date terms denote what Ir.Time computes: a term of a string is a date label exactly when isDateLabel holds of the
 string, and then names its day number; the label term of a day number is dateLabel of civilFromDays.
 -/
 
 namespace Tazuna.Thm.Smt.Date
 
-open Tazuna.Data Tazuna.Smt
+open Tazuna.Ir Tazuna.Semantics Tazuna.Smt
 
 variable (M : Model)
 
@@ -108,7 +108,7 @@ theorem labelT_denote (z : Term) :
   simp only [labelT, Term.denote, digitCharT_denote, intT, toInt_int, toStr_str, dateLabel]
 
 theorem inRangeT_holds (z : Term) : (inRangeT z).holds M = (renderDate? (z.denote M).toInt).isSome := by
-  rw [Tazuna.Thm.Data.Time.labelled_range]
+  rw [Tazuna.Thm.Ir.Time.labelled_range]
   simp only [inRangeT, Term.holds, Term.denote, intT, toInt_int, toBool_bool]
   rfl
 

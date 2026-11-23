@@ -1,5 +1,5 @@
-import Tazuna.Data.Wire
-import Tazuna.Spec.Definition
+import Tazuna.Ir.Wire
+import Tazuna.Ir.Definition
 
 /-!
 The intermediate representation of spec function bodies: data that Lean evaluates in place of the TS function. TS
@@ -7,8 +7,6 @@ converts a function only when every construct in it is one of these, so the IR k
 -/
 
 namespace Tazuna.Ir
-
-open Tazuna.Data
 
 /-- An argument that a spec function receives, as the callback that evaluates it passes it. -/
 inductive Arg where
@@ -131,7 +129,7 @@ inductive Expr where
   /-- `addDays(date, days)`: the date label `days` days after `date`, which throws outside years 0000 through 9999. -/
   | addDays (date days : Expr)
   /-- `emit(event, payload)` of an event that the command lists. -/
-  | emit (event : Spec.Ref) (payload : Expr)
+  | emit (event : Ir.Ref) (payload : Expr)
   /--
   `createKey(ref(entity))`: the next key of the entity, which the evaluation notes as created. The converter writes it
   only where TS passes createKey, and never inside a callback, so the keys made follow the written order.
@@ -159,7 +157,7 @@ derive_wire Condition
 
 /-- The converted conditions of one definition, in the order the spec writes them. -/
 structure Conditions where
-  definition : Spec.Ref
+  definition : Ir.Ref
   conditions : List Condition
 deriving Repr, Inhabited
 
@@ -167,7 +165,7 @@ derive_wire Conditions
 
 /-- Where in a state a transition that enters a state with parameters starts: a transition, or its parent's initial. -/
 inductive Entry where
-  | transition (transition : Spec.TransitionRef)
+  | transition (transition : Ir.TransitionRef)
   | initial (parent : String)
 deriving DecidableEq, Repr, Inhabited
 
@@ -178,7 +176,7 @@ inductive Site where
   /-- The chart's invariants. -/
   | invariants
   /-- The guard conditions of a transition. -/
-  | guards (transition : Spec.TransitionRef)
+  | guards (transition : Ir.TransitionRef)
   /-- The `at` of a deadline of a state. -/
   | deadline (state name : String)
   /-- The items of a map state. -/
@@ -193,7 +191,7 @@ inductive Site where
   /-- A screen's resolve. -/
   | close
   /-- The assign of a transition, by field, in the order the spec writes them. -/
-  | transitionAssign (transition : Spec.TransitionRef)
+  | transitionAssign (transition : Ir.TransitionRef)
   | entryAssign (state : String)
   | exitAssign (state : String)
 deriving DecidableEq, Repr, Inhabited
@@ -205,7 +203,7 @@ The converted functions of one site of a chart, all of them in the order the que
 function names it with the empty string.
 -/
 structure ChartFns where
-  chart : Spec.Ref
+  chart : Ir.Ref
   site : Site
   functions : List Condition
 deriving Repr, Inhabited
@@ -214,7 +212,7 @@ derive_wire ChartFns
 
 /-- A converted spec function of a definition that has one, such as a query's resolve. -/
 structure Fn where
-  definition : Spec.Ref
+  definition : Ir.Ref
   body : Expr
 deriving Repr, Inhabited
 
