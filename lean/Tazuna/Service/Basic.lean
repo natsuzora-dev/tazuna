@@ -9,12 +9,12 @@ open Tazuna.Data
 
 inductive Change where
   | none
-  /-- The creation of a record. `key` is the payload field that holds the entity key. -/
-  | create (entity : String) (key : String) (fields : List String)
+  /-- The creation of a record. `key` is the payload fields that hold the entity key. -/
+  | create (entity : String) (key : List String) (fields : List String)
   /-- An overwrite of `writes` of the keyed record, which creates the record from the payload if it is missing. -/
-  | update (entity : String) (key : String) (writes : List String)
+  | update (entity : String) (key : List String) (writes : List String)
   /-- The deletion of the keyed record of `entity`. -/
-  | delete (entity : String) (key : String) (fields : List String)
+  | delete (entity : String) (key : List String) (fields : List String)
   | set (entity : String) (writes : List String)
 deriving DecidableEq, Repr, Inhabited
 
@@ -70,6 +70,8 @@ structure Service where
   /-- The `ref()` fields as entity, field, and referenced entity, in entity then field order. -/
   references : List (String × String × String) := []
   uniques : List (String × List String) := []
+  /-- The key fields of each own keyed entity, in the order of `entities`. -/
+  keyFields : List (String × List String) := []
   /-- The key positions of each own entity's records, in the order of `entities`. -/
   recordKeys : List (String × List Spec.KeyPosition) := []
   requirements : List (String × Requirements) := []
@@ -133,7 +135,7 @@ def ofStructure {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure)
       match d.body with
       | .entity body => if d.ref == r then some body else none
       | _ => none)
-  let keyed (r : Ref) : m (String × List String) := do
+  let keyed (r : Ref) : m (List String × List String) := do
     let body ← entityBody r
     pure ((← expectFound s!"key of the entity {r.name}" body.key), schemaProperties body.fields)
   let charts := own.filterMap fun (d, order) =>
@@ -155,7 +157,7 @@ def ofStructure {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure)
       | some { kind := .update, entity := e } =>
         match (← entityBody e).key with
         | none => events := events ++ [(name, .set e.name (schemaProperties payload))]
-        | some key => events := events ++ [(name, .update e.name key ((schemaProperties payload).filter (· != key)))]
+        | some key => events := events ++ [(name, .update e.name key ((schemaProperties payload).filter (!key.contains ·)))]
       | some { kind := .delete, entity := e } =>
         let (key, fields) ← keyed e
         events := events ++ [(name, .delete e.name key fields)]
@@ -173,6 +175,7 @@ def ofStructure {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure)
   let bodies ← entities.mapM fun e => do pure (e, ← entityBody { service, name := e })
   pure { service, «structure» := j, commands, queries, events, receives, automations, charts, entities,
          singles := bodies.filterMap fun (e, b) => if b.key.isNone then some e else none
+         keyFields := bodies.filterMap fun (e, b) => b.key.map (e, ·)
          references := bodies.flatMap fun (e, b) => b.references.map fun r => (e, r.field, r.entity.name)
          uniques := bodies.map fun (e, b) => (e, b.unique)
          recordKeys := bodies.map fun (e, b) => (e, b.keys)

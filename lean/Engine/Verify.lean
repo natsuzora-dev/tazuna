@@ -84,7 +84,8 @@ partial def renameRefs (f : String → String) : CValue → CValue
 
 /-- The caller with an entity record's key renamed by `f`, as renameRefs renames a key reference. -/
 def renameCaller (f : String → String) : Caller → Caller
-  | .entity e k => .entity e (f k)
+  | .entity e (.str k) => .entity e (.str (f k))
+  | .entity e k => .entity e k
   | .service s => .service s
 
 /-- The spec service's trace lines so far, as a snapshot holds them. -/

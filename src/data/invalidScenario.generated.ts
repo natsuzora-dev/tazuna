@@ -41,7 +41,7 @@ export type InvalidScenario =
       readonly data: {
         readonly service: string;
         readonly entity: string;
-        readonly key: string | null;
+        readonly key: Json | null;
       };
     }
   /**
@@ -54,7 +54,7 @@ export type InvalidScenario =
       readonly data: {
         readonly service: string;
         readonly entity: string;
-        readonly key: string | null;
+        readonly key: Json | null;
         readonly written: string;
         readonly created: DefinitionRef;
       };
@@ -66,7 +66,7 @@ export type InvalidScenario =
       readonly data: {
         readonly service: string;
         readonly entity: string;
-        readonly key: string | null;
+        readonly key: Json | null;
       };
     }
   /**
@@ -79,7 +79,7 @@ export type InvalidScenario =
       readonly data: {
         readonly service: string;
         readonly entity: string | null;
-        readonly key: string | null;
+        readonly key: Json | null;
         readonly invariant: string | null;
       };
     }

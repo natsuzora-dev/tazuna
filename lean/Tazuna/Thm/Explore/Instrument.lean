@@ -162,10 +162,10 @@ theorem endWith_agrees {e : InstanceId → String → Processing → StateT C Id
     (c : InstanceId) (r : Processing) : Agrees (endWith e c r) (endWith e' c r) := by
   unfold endWith; refine withMachine_agrees (fun i r => ?_) r; agree [unlessHalted_agrees, he]
 
-theorem callerRejection_agrees (records : Records) (definition : Spec.Ref)
+theorem callerRejection_agrees (st : Service) (records : Records) (definition : Spec.Ref)
     (callers : List Spec.CallerType) (caller : Caller) :
-    Agrees (callerRejection records definition callers caller : StateT C Id _)
-      (callerRejection records definition callers caller : Id _) := by
+    Agrees (callerRejection st records definition callers caller : StateT C Id _)
+      (callerRejection st records definition callers caller : Id _) := by
   unfold callerRejection; agree [note_agrees]
 
 theorem sorted_agrees (schema : Schema) (v : Value) :

@@ -189,7 +189,7 @@ theorem denote_ite (M : Model) (c a b : Term) :
 
 theorem rowField_conc (M : Model) (e name : String) (k : Term) : ∀ ss : List Slot,
     ((rowField k name ss).denote M).toScalar.toVal =
-      Val.ofOption (((liveRows M e ss).find? fun r => r.entity == e && r.key == some (k.denote M).toStr).bind
+      Val.ofOption (((liveRows M e ss).find? fun r => r.entity == e && r.key == some (.str (k.denote M).toStr)).bind
         (·.value.field? name))
   | [] => by simp [rowField, liveRows, undefT, Term.denote, Lit.toScalar, Scalar.toVal, Scalar.toValue?]
   | s :: ss => by
@@ -247,7 +247,7 @@ theorem keyedRows_find (M : Model) (e : String) (p : Row → Bool) (hp : ∀ row
       have : (e' == e) = false := by simp [he]
       simp [none, ih, this]
 
-theorem conc_find_keyed (M : Model) (r : SRecords) (e : String) (key : String) :
+theorem conc_find_keyed (M : Model) (r : SRecords) (e : String) (key : Value) :
     (r.conc M).find? (fun row => row.entity == e && row.key == some key) =
       (liveRows M e (r.slotsOf e)).find? (fun row => row.entity == e && row.key == some key) := by
   simp only [SRecords.conc, List.find?_append]
@@ -279,7 +279,7 @@ theorem conc_find_single (M : Model) (r : SRecords) (e : String) :
     by_cases he : e' = e
     · subst he; simp
     · have : (e == e') = false := by simp [Ne.symm he]
-      have hp : ((e' == e) && ((none : Option String) == none)) = false := by simp [he]
+      have hp : ((e' == e) && ((none : Option Value) == none)) = false := by simp [he]
       rw [List.map_cons, List.find?_cons, List.lookup_cons, this]
       simp only [hp]
       exact ih
@@ -331,7 +331,7 @@ theorem field_conc (M : Model) (r : SRecords) (name : String) (s : Trace) : ∀ 
 
 
 theorem find_liveRows_isSome (M : Model) (e x : String) : ∀ ss : List Slot,
-    ((liveRows M e ss).find? (fun row => row.entity == e && row.key == some x)).isSome =
+    ((liveRows M e ss).find? (fun row => row.entity == e && row.key == some (.str x))).isSome =
       ss.any (fun s => s.live.holds M && decide ((s.key.denote M).toStr = x))
   | [] => rfl
   | s :: ss => by
@@ -340,9 +340,9 @@ theorem find_liveRows_isSome (M : Model) (e x : String) : ∀ ss : List Slot,
     · have hlr : liveRows M e (s :: ss) = Slot.row M e s :: liveRows M e ss := by simp [liveRows, hl]
       rw [hlr, List.find?_cons, List.any_cons, hl]
       by_cases hk : (s.key.denote M).toStr = x
-      · have hp : ((Slot.row M e s).entity == e && (Slot.row M e s).key == some x) = true := by simp [Slot.row, hk]
+      · have hp : ((Slot.row M e s).entity == e && (Slot.row M e s).key == some (.str x)) = true := by simp [Slot.row, hk]
         simp [hp, hk]
-      · have hp : ((Slot.row M e s).entity == e && (Slot.row M e s).key == some x) = false := by simp [Slot.row, hk]
+      · have hp : ((Slot.row M e s).entity == e && (Slot.row M e s).key == some (.str x)) = false := by simp [Slot.row, hk]
         rw [hp]
         simp [ih, hk]
     · have hlr : liveRows M e (s :: ss) = liveRows M e ss := by simp [liveRows, hl]
@@ -385,7 +385,7 @@ theorem liveCount_denote (M : Model) : ∀ ss : List Slot,
 
 theorem keys_length (M : Model) (r : SRecords) (e : String) :
     ((r.conc M).keys e).length = ((r.slotsOf e).filter (·.live.holds M)).length := by
-  simp only [Records.keys, List.length_mergeSort, SRecords.conc, List.filter_append, List.filterMap_append,
+  simp only [Records.keys, SRecords.conc, List.filter_append, List.filterMap_append,
     List.length_append]
   have hs : ((r.singles.map fun (e, fields) => ({ entity := e, key := none, value := .obj (present M fields) } : Row)).filter
       (·.entity == e)).filterMap (·.key) = [] := by
@@ -713,19 +713,41 @@ theorem arith_op (M : Model) (recs : Records) (op : Arith) (va vb : SVal) (s : T
 
 
 theorem conc_any_keyed (M : Model) (r : SRecords) (e : String) (k : Term) :
-    (r.conc M).any (fun row => row.entity == e && row.key == some (k.denote M).toStr) =
+    (r.conc M).any (fun row => row.entity == e && row.key == some (.str (k.denote M).toStr)) =
       (keyIn k (r.slotsOf e)).holds M := by
   rw [any_eq_find, conc_find_keyed, find_liveRows_isSome, keyIn_holds]
 
-theorem lookup_op (M : Model) (r : SRecords) (vk : SVal) (s : Trace) : ∀ vt : SVal,
+/-- A value that may not be an object is no object under any model. -/
+theorem conc_not_object (M : Model) (recs : Records) : ∀ v : SVal, v.holdsObject = false →
+    (∀ fs, v.conc M recs ≠ .json (.obj fs)) ∧ ∀ fs, v.conc M recs ≠ .obj fs
+  | .scalar t, _ => by
+    constructor <;> intro fs <;> cases hs : (t.denote M).toScalar <;>
+      simp [SVal.conc, hs, Scalar.toVal, Scalar.toValue?, Val.ofOption]
+  | .ite c a b, h => by
+    simp only [SVal.holdsObject, Bool.or_eq_false_iff] at h
+    have ha := conc_not_object M recs a h.1
+    have hb := conc_not_object M recs b h.2
+    by_cases hc : c.holds M <;> simp [SVal.conc, hc, ha, hb]
+  | .json _, h | .obj _, h => by simp [SVal.holdsObject] at h
+  | .row .., _ | .single _, _ | .table _, _ | .list _, _ | .bag _, _ | .emit .., _ => by simp [SVal.conc]
+
+theorem lookup_op (M : Model) (r : SRecords) (vk : SVal) (s : Trace) (kf : String → List String)
+    (hv : vk.holdsObject = false) : ∀ vt : SVal,
     Agrees M (r.conc M) (SVal.lookup r vk vt)
       (run (match vt.conc M (r.conc M), vk.conc M (r.conc M) with
         | .table source entity, .json (.str key) => do
+          note (.record entity (.str key))
+          pure (if source.any (fun r => r.entity == entity && r.key == some (.str key)) then
+            .row source entity (some (.str key)) else .undef)
+        | .table source entity, k@(.json (.obj _)) | .table source entity, k@(.obj _) => do
+          let some k := keyObject? k | thrown
+          let key := canonicalKey (kf entity) k
           note (.record entity key)
           pure (if source.any (fun r => r.entity == entity && r.key == some key) then .row source entity (some key)
             else .undef)
         | _, _ => thrown : EvalM Val) s).1
   | .table e => by
+    have ho := conc_not_object M (r.conc M) vk hv
     simp only [SVal.lookup, SVal.conc]
     rcases scalar_cases M (r.conc M) vk with ⟨h, hc⟩ | ⟨h, hn⟩
     · rw [hc]
@@ -743,10 +765,12 @@ theorem lookup_op (M : Model) (r : SRecords) (vk : SVal) (s : Trace) : ∀ vt : 
       | _ => simp [Scalar.toVal, Scalar.toValue?, Val.ofOption, run_thrown, Agrees, holds_or, holds_not, holds_isStr, hx]
     · split
       · rename_i hv; rw [hv] at hn; exact absurd hn (by simp [NonScalar])
+      · exact absurd ‹vk.conc M (r.conc M) = _› (ho.1 _)
+      · exact absurd ‹vk.conc M (r.conc M) = _› (ho.2 _)
       · simp [run_thrown, Agrees, holds_or, h]
   | .ite c a b => by
-    have ha := lookup_op M r vk s a
-    have hb := lookup_op M r vk s b
+    have ha := lookup_op M r vk s kf hv a
+    have hb := lookup_op M r vk s kf hv b
     simp only [SVal.lookup, conc_ite]
     by_cases hc : c.holds M
     · simp only [hc, ite_true]; exact agrees_congr (by simp [conc_ite, hc]) (by simp [holds_ite, hc]) ha
@@ -870,12 +894,12 @@ theorem concItems_append (M : Model) (recs : Records) (xs ys : List (Term × SVa
   simp [concItems_eq]
 
 theorem liveRows_heldKeys (M : Model) (e : String) (ss : List Slot) :
-    (liveRows M e ss).filterMap (·.key) = (ss.filter (·.live.holds M)).map fun s => (s.key.denote M).toStr := by
+    (liveRows M e ss).filterMap (·.key) = (ss.filter (·.live.holds M)).map fun s => .str (s.key.denote M).toStr := by
   simp [liveRows, List.filterMap_map, Function.comp_def, Slot.row]
 
 /-- A table's records as the semantics holds them: its live slots in slot order. -/
 theorem heldKeys_conc (M : Model) (r : SRecords) (e : String) :
-    heldKeys (r.conc M) e = ((r.slotsOf e).filter (·.live.holds M)).map fun s => (s.key.denote M).toStr := by
+    heldKeys (r.conc M) e = ((r.slotsOf e).filter (·.live.holds M)).map fun s => .str (s.key.denote M).toStr := by
   simp only [heldKeys, SRecords.conc, List.filter_append, List.filterMap_append]
   have hs : ((r.singles.map fun (e, fields) => ({ entity := e, key := none, value := .obj (present M fields) } : Row)).filter
       (·.entity == e)).filterMap (·.key) = [] := by
@@ -1754,6 +1778,9 @@ mutual
     split at h
     · contradiction
     rename_i rb hrb
+    split at h
+    · contradiction
+    rename_i hv
     cases h
     simp only [eval]
     refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars a ra hra) (fun h1 _ => by simp [Agrees, holds_or, h1]) ?_ s
@@ -1761,7 +1788,7 @@ mutual
     refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars b rb hrb)
       (fun h2 e => by simp [Agrees, holds_or, h2]) ?_ s1
     intro s2 h2
-    exact agrees_err (by simp [holds_or, h1, h2]) (lookup_op M env.records rb.1 s2 ra.1)
+    exact agrees_err (by simp [holds_or, h1, h2]) (lookup_op M env.records rb.1 s2 _ (by simpa using hv) ra.1)
   | vars, .obj fs, r, h, s => by
     simp only [seval, bind, Except.bind] at h
     split at h

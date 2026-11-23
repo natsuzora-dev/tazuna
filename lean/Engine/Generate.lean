@@ -142,9 +142,11 @@ def recordTerms (st : Service) (creates created : List (String × Nat)) (records
     (Ir.fieldsOf st e).mapM fun f => do pure (f, ← fieldTerm (entitySchema st e) f (value.field? f))
   let keyedEntities := st.entities.filter (!st.singles.contains ·)
   let keyed ← keyedEntities.mapM fun e => do
-    let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.key.getD "" ≤ b.key.getD "")
+    let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.keyText ≤ b.keyText)
     let live ← rows.mapM fun r => do
-      let key ← litTerm (.str (r.key.getD ""))
+      let key ← match r.key with
+        | some (.str k) => litTerm (.str k)
+        | _ => throw "a key that is no string"
       pure ({ live := tt, key := .strOf key, fields := ← fieldsOfRow e r.value } : Slot)
     let free := (creates.lookup e).getD 0 - (created.lookup e).getD 0
     let empty : Slot := { live := ff, key := .lit (.str ""), fields := (Ir.fieldsOf st e).map (·, undefT) }
@@ -222,7 +224,7 @@ def searchOf (j : Spec.Structure) (depth : Option Nat) (service : String) : IO S
   let fromClients (name : String) : Bool :=
     ((st.requirements.lookup name).map (·.callers)).getD [] |>.any (· != .service service)
   pure { spec := j, st, creates, depth := depth.getD (creates.foldl (· + ·.2) 0 + 1),
-         blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else none,
+         blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else compositeKeyed st,
          sendable := (st.commands ++ st.queries).filter fromClients,
          targets := ((targets j).filter (·.part.ref.service == service)).map (·.part) }
 
@@ -242,7 +244,7 @@ def fingerprint (n : Node) : String :=
   let r {α : Type} [Repr α] (a : α) : String := toString (repr a)
   let inst (i : Instance) := "|".intercalate [r i.id, r i.entered, r i.context, r i.held, r i.input, r i.lastChildren,
     r i.shown, r i.closed, r i.copyKeys, r i.awaitingOnDone]
-  let records := s.records.mergeSort fun a b => decide (a.entity < b.entity ∨ (a.entity = b.entity ∧ a.key.getD "" ≤ b.key.getD ""))
+  let records := s.records.mergeSort fun a b => decide (a.entity < b.entity ∨ (a.entity = b.entity ∧ a.keyText ≤ b.keyText))
   "#".intercalate [r s.now, r records, r (s.machines.map inst), r (s.copies.map inst),
     r (s.deadlines.map fun d => (d.time, d.machine, d.state, d.name)), r (s.pending.map fun p => (p.activity, p.input, p.stale)),
     r (s.queued.map fun q => (q.machine, q.state, q.stale)), r (s.subscriptions.map fun u => (u.query, u.input, u.last)),

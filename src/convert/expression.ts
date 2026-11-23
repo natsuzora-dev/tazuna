@@ -734,7 +734,9 @@ class Conversion {
       };
     }
     if (method === "get" && receiver === "table") {
-      if (this.only(argument) !== "string") this.fail(e, "gets a record by other than a string");
+      // A key of several fields is an object.
+      const key = this.only(argument);
+      if (key !== "string" && key !== "object") this.fail(e, "gets a record by other than a string or a key object");
       return { op: "lookup", table: this.expression(callee.expression, scope), key: this.expression(argument, scope) };
     }
     const collection = this.collection(callee.expression);

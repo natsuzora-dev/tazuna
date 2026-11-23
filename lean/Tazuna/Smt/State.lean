@@ -163,10 +163,15 @@ def SRecords.named (st : Service) (creates : List (String × Nat)) (pre : String
 /-- The variable that tells whether a slot was ever used. -/
 def usedVar (pre e : String) (i : Nat) : Term := boolVar s!"{pre}.{e}.{i}.used"
 
+/-- The key field of the keyed entity `e`, none for an entity with several key fields, which slots do not encode. -/
 def keyField (st : Service) (e : String) : Option String :=
   match st.structure.body? (st.ref e) with
-  | some (.entity b) => b.key
+  | some (.entity { key := some [k], .. }) => some k
   | _ => none
+
+/-- Why the slots cannot hold the records of `st`: an entity whose key is several fields, which a slot's key does not hold. -/
+def compositeKeyed (st : Service) : Option String :=
+  (st.keyFields.find? (·.2.length > 1)).map fun (e, _) => s!"the entity {e} has a key of several fields, which the encoding does not hold"
 
 /-- That the live slots of `slots` have distinct keys. -/
 def distinctKeys : List Slot → List Term
@@ -276,13 +281,18 @@ def Stepped.create (st : Stepped) (entity : String) (key : Term) (payload : List
 
 /-- The records after the event `event` with `payload`, as Records.evolve changes them. -/
 def Stepped.apply (svc : Service) (st : Stepped) (event : Spec.Ref) (payload : List (String × Term)) : Stepped :=
-  let keyOf (field : String) : Term := .strOf ((payload.lookup field).getD undefT)
-  let keyGap (field : String) : Stepped := { st with gap := .or st.gap (.not (.isStr ((payload.lookup field).getD undefT))) }
+  let keyOf (fields : List String) : Term := .strOf (match fields with
+    | [f] => (payload.lookup f).getD undefT
+    | _ => undefT)
+  -- A key of several fields has no encoding (keyField).
+  let keyGap (fields : List String) : Stepped := match fields with
+    | [f] => { st with gap := .or st.gap (.not (.isStr ((payload.lookup f).getD undefT))) }
+    | _ => { st with gap := tt }
   match svc.changeOf event with
-  | some (.create entity keyField _) => (keyGap keyField).create entity (keyOf keyField) payload
-  | some (.update entity keyField _) =>
-    let st := keyGap keyField
-    let key := keyOf keyField
+  | some (.create entity keyFields _) => (keyGap keyFields).create entity (keyOf keyFields) payload
+  | some (.update entity keyFields _) =>
+    let st := keyGap keyFields
+    let key := keyOf keyFields
     let slots := (st.records.keyed.lookup entity).getD []
     let hit (s : Slot) := Term.and s.live (.eq s.key key)
     let updated := st.records.mapSlots entity fun ss => ss.map fun s =>
@@ -291,9 +301,9 @@ def Stepped.apply (svc : Service) (st : Stepped) (event : Spec.Ref) (payload : L
         | none => t) }
     let found := disj (slots.map hit)
     Stepped.ite found { st with records := updated } (st.create entity key payload)
-  | some (.delete entity keyField _) =>
-    let st := keyGap keyField
-    let key := keyOf keyField
+  | some (.delete entity keyFields _) =>
+    let st := keyGap keyFields
+    let key := keyOf keyFields
     { st with records := st.records.mapSlots entity fun ss => ss.map fun s =>
       { s with live := .and s.live (.not (.eq s.key key)) } }
   | some (.set entity _) =>
@@ -405,7 +415,8 @@ def callerVars (pre : String := "caller") : List (String × Term) × Facts :=
 /-- The caller `c` as JSON holds it, a literal. -/
 def callerTerms (c : Caller) : List (String × Term) :=
   match c with
-  | .entity e k => [("entity", .mkStr (strLit e)), ("key", .mkStr (strLit k))]
+  | .entity e (.str k) => [("entity", .mkStr (strLit e)), ("key", .mkStr (strLit k))]
+  | .entity e _ => [("entity", .mkStr (strLit e)), ("key", undefT)]
   | .service s => [("service", .mkStr (strLit s))]
 
 /--

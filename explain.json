@@ -1380,6 +1380,19 @@
         "violation": "{\"kind\":\"Malformed.misusedObserved\",\"definition\":null,\"data\":{\"use\":\"conversion\",\"path\":[\"count\"]},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"convertsObserved\"}}"
       }
     },
+    "Malformed.nullableKeyField": {
+      "meaning": "The key field `field` accepts null or undefined. A key identifies its record, so each key field holds a value, as a SQL primary key column is NOT NULL.",
+      "example": {
+        "excerpt": {
+          "file": "members/members.ts",
+          "from": 4,
+          "to": 8,
+          "line": 4,
+          "text": "export const Membership = entity({\n  description: \"A user's membership of a group\",\n  fields: { userId: z.string(), groupId: z.string().nullable() },\n  key: [\"userId\", \"groupId\"],\n});"
+        },
+        "violation": "{\"kind\":\"Malformed.nullableKeyField\",\"definition\":{\"service\":\"members\",\"name\":\"Membership\"},\"data\":{\"field\":\"groupId\"},\"location\":{\"file\":\"members/members.ts\",\"line\":4}}"
+      }
+    },
     "Malformed.opaqueCollection": {
       "meaning": "A `bag`, `set`, or sorted collection is inside a schema at `path` that tazuna does not look into, such as a `z.record`, so tazuna cannot write its values in canonical order.",
       "example": {
@@ -1391,6 +1404,19 @@
           "text": "export const marks = query({\n  callers: [\"client\"],\n  output: {\n    tags: bag(z.string()).readonly(),\n    days: sortedBy(z.strictObject({ n: z.int() }), \"n\").readonly(),\n    ids: set(z.string()).readonly(),\n  },\n}).resolve(() => ({ tags: [], days: [{ n: 1 }], ids: [] }));"
         },
         "violation": "{\"kind\":\"Malformed.opaqueCollection\",\"definition\":{\"service\":\"todo\",\"name\":\"marks\"},\"data\":{\"path\":[\"output\",\"tags\"],\"collection\":\"bag\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":15}}"
+      }
+    },
+    "Malformed.repeatedKeyField": {
+      "meaning": "The entity's `key` lists the field `field` more than once.",
+      "example": {
+        "excerpt": {
+          "file": "members/members.ts",
+          "from": 4,
+          "to": 8,
+          "line": 4,
+          "text": "export const Membership = entity({\n  description: \"A user's membership of a group\",\n  fields: { userId: z.string(), groupId: z.string() },\n  key: [\"userId\", \"groupId\", \"userId\"],\n});"
+        },
+        "violation": "{\"kind\":\"Malformed.repeatedKeyField\",\"definition\":{\"service\":\"members\",\"name\":\"Membership\"},\"data\":{\"field\":\"userId\"},\"location\":{\"file\":\"members/members.ts\",\"line\":4}}"
       }
     },
     "Malformed.reservedNameCharacter": {

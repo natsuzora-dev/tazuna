@@ -7,7 +7,7 @@ open Tazuna.Data
 /-- A record of a Given: a keyed record has its `key`, a single-entity record none. -/
 structure GivenRecord where
   entity : String
-  key : Option String
+  key : Option Value
   value : Value
 deriving DecidableEq, Repr, Inhabited
 

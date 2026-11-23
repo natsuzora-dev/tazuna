@@ -328,15 +328,17 @@ partial def zodSchema (listed : List Name) : Expr → Emit String
     if let .enum ctors ← wireShape name then
       modify fun e => { e with inlined := if name ∈ e.inlined then e.inlined else e.inlined ++ [name] }
       return enumSchema ctors
-    -- A union of string records that another module declares, such as Caller, is written in place as an enum is.
+    -- A union of records of strings and JSON values that another module declares, such as Caller, is written in place
+    -- as an enum is.
     if let .untagged ctors ← wireShape name then
-      let strings (f : WireField) : Bool := match f with
-        | .required _ (.const ``String _) => true
-        | _ => false
-      if ctors.all (·.fields.all strings) then
+      let scalar (f : WireField) : Option String := match f with
+        | .required _ (.const ``String _) => some "z.string()"
+        | .required _ (.const ``Tazuna.Data.Value _) => some "z.unknown()"
+        | _ => none
+      if ctors.all (·.fields.all (scalar · |>.isSome)) then
         modify fun e => { e with inlined := if name ∈ e.inlined then e.inlined else e.inlined ++ [name] }
         return "z.union([" ++ ", ".intercalate (ctors.map fun c =>
-          "z.object({ " ++ ", ".intercalate (c.fields.map fun f => s!"{f.name}: z.string()") ++ " })") ++ "])"
+          "z.object({ " ++ ", ".intercalate (c.fields.map fun f => s!"{f.name}: {(scalar f).getD ""}") ++ " })") ++ "])"
     throwError "list {name} before the wire types that use it"
   | type => throwError "no Zod schema for {type}"
 

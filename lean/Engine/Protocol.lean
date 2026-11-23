@@ -24,7 +24,7 @@ open Tazuna.Data Tazuna.Service
 /-- A record that an `evaluate` request gives: the key is absent for a single entity's. -/
 structure Stored where
   entity : String
-  key : Option String
+  key : Option Value
   value : Value
 
 derive_wire Stored skip_serializing_none
@@ -89,7 +89,7 @@ derive_wire Unpaired serialize_only
 /-- A part of the records that an evaluation read, as a `read` reply names it. -/
 structure ReadPart where
   entity : String
-  key : Option String
+  key : Option Value
   field : Option String
 
 derive_wire ReadPart serialize_only skip_serializing_none

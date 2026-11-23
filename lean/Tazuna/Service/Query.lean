@@ -20,7 +20,7 @@ def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
   | .ok none => pure (.answered (.rejected { kind := .invalidInput }) [])
   | .ok (some input) =>
     let rq ← expectFound s!"requirements of {name}" (st.requirements.lookup name)
-    if let some r ← callerRejection s.records definition rq.callers caller then return .answered (.rejected r) []
+    if let some r ← callerRejection st s.records definition rq.callers caller then return .answered (.rejected r) []
     match ← firstFalse (fs.inputRequirement definition · input) rq.requires with
     | .error e => pure (.halted (issueViolation definition e))
     | .ok (some reason) =>

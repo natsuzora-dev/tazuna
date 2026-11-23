@@ -11,7 +11,7 @@ import {
   type Place,
   type ServiceDefinition,
 } from "../dsl/definition.ts";
-import { keyTarget } from "../dsl/entity.ts";
+import { keyTarget, refTarget } from "../dsl/entity.ts";
 import type { Found } from "./found.ts";
 import { definitionSchemas, type SchemaAt, schemasIn } from "./schemas.ts";
 
@@ -39,8 +39,9 @@ const chartReferences = (chart: ChartSpec): Reference[] => [
  */
 const schemaReferences = (schemas: readonly SchemaAt[]): Reference[] =>
   schemas.flatMap(({ path, schema }, i) => {
-    const target = keyTarget(schema);
-    const counted = schemas.slice(0, i).some((s) => keyTarget(s.schema) === target && sameJson(s.path, path));
+    const targetOf = (s: z.ZodType) => refTarget(s) ?? keyTarget(s);
+    const target = targetOf(schema);
+    const counted = schemas.slice(0, i).some((s) => targetOf(s.schema) === target && sameJson(s.path, path));
     return target === undefined || counted ? [] : [{ path, target }];
   });
 

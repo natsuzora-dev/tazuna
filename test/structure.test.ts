@@ -112,7 +112,7 @@ test("Entities, commands and events have the JSON Schema of their fields, input 
     kind: "entity",
     service: "todo",
     name: "Task",
-    key: "id",
+    key: ["id"],
     fields: {
       type: "object",
       properties: { id: { type: "string", "x-tazuna-key": "todo/Task" }, title: { type: "string" } },

@@ -168,9 +168,12 @@ export type ResponseTime = {
   readonly within: number;
 };
 
-/** An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. */
+/**
+ * An entity. `key` lists the key fields, one or more, and is null for a single entity, whose `unique` is empty.
+ * `references` are in field order.
+ */
 export type EntityBody = {
-  readonly key: string | null;
+  readonly key: readonly string[] | null;
   /** The JSON Schema of the fields. */
   readonly fields: Json;
   readonly unique: readonly string[];

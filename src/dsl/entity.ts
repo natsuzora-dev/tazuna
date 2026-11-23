@@ -37,7 +37,17 @@ export interface Response<Args> {
 
 export type Responses<Args> = Readonly<Record<string, Response<Args>>>;
 
-export interface KeyedEntity<S extends Shape = Shape, K extends keyof S & string = keyof S & string> {
+/**
+ * The key of an entity's records: one field, or two or more fields whose values together identify a record, as a
+ * composite primary key does in SQL.
+ */
+export type KeyDeclaration<S extends Shape = Shape> =
+  | (keyof S & string)
+  | readonly [keyof S & string, keyof S & string, ...(keyof S & string)[]];
+/** The key fields that the key declaration `K` lists. */
+type KeyFields<K> = K extends readonly (infer F extends string)[] ? F : K & string;
+
+export interface KeyedEntity<S extends Shape = Shape, K extends KeyDeclaration<S> = KeyDeclaration<S>> {
   readonly kind: "entity";
   readonly single: false;
   readonly description: string;
@@ -61,9 +71,35 @@ export interface SingleEntity<S extends Shape = Shape> {
 export type AnyKeyedEntity = KeyedEntity<any, any>;
 // biome-ignore lint/suspicious/noExplicitAny: an entity of any shape
 export type AnyEntity = AnyKeyedEntity | SingleEntity<any>;
-export type KeyOf<E extends AnyKeyedEntity> = E extends { readonly key: infer K extends string } ? K : never;
+/** The key fields of `E`. */
+export type KeyOf<E extends AnyKeyedEntity> = E extends { readonly key: infer K } ? KeyFields<K> : never;
+/** A key of `E`: its key field's value, or an object of the values of its key fields. */
 export type KeyValue<E extends AnyKeyedEntity> =
-  E extends KeyedEntity<infer S, infer K> ? Row<S>[K & keyof Row<S>] : never;
+  E extends KeyedEntity<infer S, infer K>
+    ? K extends string
+      ? Row<S>[K & keyof Row<S>]
+      : { readonly [F in KeyFields<K> & keyof Row<S>]: Row<S>[F] }
+    : never;
+/** A keyed entity whose key is one field, of which createKey makes keys. */
+// biome-ignore lint/suspicious/noExplicitAny: an entity of any shape
+export type SingleKeyEntity = KeyedEntity<any, string>;
+
+/** The key fields of `entity`, in key order. */
+export const keyFieldsOf = (entity: AnyKeyedEntity): readonly string[] =>
+  typeof entity.key === "string" ? [entity.key] : entity.key;
+
+const keySchemas = new WeakMap<AnyKeyedEntity, z.ZodType>();
+
+/** The schema of a key of `entity`: its key field's, or an object of its key fields'. */
+function keySchema(entity: AnyKeyedEntity): z.ZodType {
+  if (typeof entity.key === "string") return entity.fields[entity.key] as z.ZodType;
+  let schema = keySchemas.get(entity);
+  if (schema === undefined) {
+    schema = z.object(Object.fromEntries(entity.key.map((f: string) => [f, entity.fields[f] as z.ZodType])));
+    keySchemas.set(entity, schema);
+  }
+  return schema;
+}
 /** A record of `E` as expressions receive it, for helpers that take records (like Drizzle's InferSelectModel). */
 export type RowOf<E extends AnyEntity> =
   E extends KeyedEntity<infer S> ? Row<S> : E extends SingleEntity<infer S> ? Row<S> : never;
@@ -92,7 +128,11 @@ type Resolved<T, Key extends z.ZodType> = T extends SelfRef
           : T extends z.ZodObject<infer O extends Shape, infer C>
             ? z.ZodObject<{ -readonly [F in keyof O]: Resolved<O[F], Key> }, C>
             : T;
-type SelfResolved<S extends Shape, K extends keyof S> = { [F in keyof S]: Resolved<S[F], S[K]> };
+/** The schema of a key of an entity of the fields `S` and the key `K`. */
+type KeySchemaOf<S extends Shape, K> = K extends keyof S
+  ? S[K]
+  : z.ZodObject<{ -readonly [F in KeyFields<K> & keyof S]: S[F] }>;
+type SelfResolved<S extends Shape, K> = { [F in keyof S]: Resolved<S[F], Extract<KeySchemaOf<S, K>, z.ZodType>> };
 
 /** Returns the unclaimed `ref.self()` placeholders in `schema`. */
 function unclaimedSelfRefs(schema: z.ZodType, seen = new Set<z.ZodType>()): z.ZodType[] {
@@ -107,14 +147,17 @@ function unclaimedSelfRefs(schema: z.ZodType, seen = new Set<z.ZodType>()): z.Zo
  */
 export function entity<
   const S extends Shape,
-  const K extends keyof S & string,
+  const K extends KeyDeclaration<S>,
   const Iv extends string = never,
   const Rs extends string = never,
 >(definition: {
   description: string;
   /** A field that can be null is `.nullable()`. A field that holds the key of a record of this entity is `ref.self()`. */
   fields: S;
-  /** The key field, whose value never changes after the record is created. */
+  /**
+   * The key field, or two or more key fields whose values together identify a record (`["userId", "groupId"]`). A key
+   * never changes after the record is created.
+   */
   key: K;
   /** The fields whose combined values no two records share. A record with null in any of them is not checked. */
   unique?: readonly (keyof S & string)[];
@@ -123,23 +166,30 @@ export function entity<
   /** The bounded responses of each record (`Fault.missedResponse`). */
   responses?: { readonly [N in Rs]: Response<{ record: Row<SelfResolved<S, K>> } & Now> };
 }): KeyedEntity<SelfResolved<S, K>, K> {
+  const fields: Record<string, z.ZodType> = { ...definition.fields };
+  const keyFields: readonly string[] = typeof definition.key === "string" ? [definition.key] : definition.key;
+  for (const f of keyFields)
+    if (selfRefs.has(fields[f] as z.ZodType)) throw new TypeError("the key field of an entity cannot be ref.self()");
   // A clone, so that a schema that the key field shares with other fields does not mark them as key positions too.
-  const shared = definition.fields[definition.key] as z.ZodType;
-  if (selfRefs.has(shared)) throw new TypeError("the key field of an entity cannot be ref.self()");
-  const key = shared.clone();
-  const target = refTargets.get(shared);
-  if (target !== undefined) refTargets.set(key, target);
+  // Only a key of one field holds the keys that createKey makes, so only its field is a key position.
+  const single = typeof definition.key === "string" ? definition.key : undefined;
+  const key = single === undefined ? undefined : (fields[single] as z.ZodType).clone();
+  if (single !== undefined && key !== undefined) {
+    const target = refTargets.get(fields[single] as z.ZodType);
+    if (target !== undefined) refTargets.set(key, target);
+    fields[single] = key;
+  }
   const keyed: KeyedEntity<SelfResolved<S, K>, K> = {
     kind: "entity",
     single: false,
     description: definition.description,
-    fields: { ...definition.fields, [definition.key]: key } as unknown as SelfResolved<S, K>,
-    key: definition.key,
+    fields: fields as unknown as SelfResolved<S, K>,
+    key: definition.key as unknown as K,
     unique: definition.unique ?? [],
     invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<SelfResolved<S, K>> } & Now>,
     responses: (definition.responses ?? {}) as Responses<{ record: Row<SelfResolved<S, K>> } & Now>,
   };
-  keyFieldOwners.set(key, keyed);
+  if (key !== undefined) keyFieldOwners.set(key, keyed);
   for (const field of Object.values(definition.fields) as z.ZodType[])
     for (const self of unclaimedSelfRefs(field)) refTargets.set(self, keyed);
   return keyed;
@@ -181,7 +231,7 @@ export type Ref<E extends AnyKeyedEntity> = z.ZodType<KeyValue<E>, KeyValue<E>> 
  * top-level `ref(target)` field of the input names a key that no `target` record has.
  */
 export function ref<E extends AnyKeyedEntity>(target: E): Ref<E> {
-  const schema = (target.fields[target.key] as z.ZodType).clone();
+  const schema = keySchema(target).clone();
   refTargets.set(schema, target);
   return schema as Ref<E>;
 }
@@ -194,7 +244,7 @@ ref.self = (): SelfRef => {
   // One outside the fields of entity() reads no value until load reports it (Malformed.misplacedSelfRef).
   const schema: z.ZodType = z.lazy(() => {
     const owner = refTargets.get(schema);
-    return owner === undefined ? z.never() : (owner.fields[owner.key] as z.ZodType);
+    return owner === undefined ? z.never() : keySchema(owner);
   });
   selfRefs.add(schema);
   return schema as SelfRef;
@@ -213,10 +263,13 @@ export function refTarget(schema: z.ZodType): AnyKeyedEntity | undefined {
   return undefined;
 }
 
-/** Returns the entity whose key a value of `schema` is, as `ref(entity)` or as the entity's key field. */
+/**
+ * Returns the entity whose key a value of `schema` is, as `ref(entity)` or as the entity's key field, for an entity whose
+ * key is one field: a key of several fields is an object, which holds no key that createKey made.
+ */
 export function keyTarget(schema: z.ZodType): AnyKeyedEntity | undefined {
   const direct = refTargets.get(schema) ?? keyFieldOwners.get(schema);
-  if (direct !== undefined) return direct;
+  if (direct !== undefined) return typeof direct.key === "string" ? direct : undefined;
   if (schema instanceof z.ZodNullable || schema instanceof z.ZodDefault) return keyTarget(schema.unwrap() as z.ZodType);
   return undefined;
 }

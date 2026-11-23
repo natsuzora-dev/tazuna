@@ -64,11 +64,11 @@ def writtenRecords (sc : Scenario) (service : String) : List GivenRecord :=
     | some (.run records) => records
     | _ => []
 
-/-- Whether the key `a` comes before `b`: none first, then in code-point order. -/
-def keyBefore : Option String → Option String → Bool
+/-- Whether the key `a` comes before `b`: none first, then by canonical text in code-point order. -/
+def keyBefore : Option Value → Option Value → Bool
   | none, _ => true
   | some _, none => false
-  | some x, some y => decide (x ≤ y)
+  | some x, some y => decide (x.canonical ≤ y.canonical)
 
 /-- Whether the Given record `a` comes before `b`: by entity in code-point order, then by key. -/
 def recordBefore (a b : GivenRecord) : Bool :=
@@ -99,11 +99,11 @@ def givenRows (st : Service) (fs : Functions m) (written : Value → Option (Str
   records.foldlM (init := ([], [])) fun (rows, found) g => do
     let invalid := (rows, found ++ [InvalidScenario.invalidRecord service g.entity g.key])
     if !st.entities.contains g.entity || st.singles.contains g.entity != g.key.isNone then return invalid
-    if let some (key, e) := written (.arr ((g.key.map Value.str).toList ++ [g.value])) then
+    if let some (key, e) := written (.arr (g.key.toList ++ [g.value])) then
       return (rows, found ++ [.writtenGivenKey service g.entity g.key key e])
     match ← fs.parseOutside st (.record (st.ref g.entity)) g.value with
     | .ok (some value) =>
-      let row : Row := { entity := g.entity, key := g.key, value }
+      let row : Row := { entity := g.entity, key := g.key.map (canonicalKey (st.keyFieldsOf g.entity)), value }
       if rows.any (clash st · row) then return (rows, found ++ [.duplicateRecord service g.entity g.key])
       pure (rows ++ [row], found)
     | _ => pure invalid

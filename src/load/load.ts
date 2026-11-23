@@ -22,6 +22,7 @@ import type { Structure } from "../spec/structure.generated.ts";
 import { type DefinitionStructure, unconverted } from "../spec/structure.ts";
 import { opaqueCollections } from "./collections.ts";
 import type { Found } from "./found.ts";
+import { malformedKeys } from "./keys.ts";
 import { caseCollisions, duplicateNames, type NamedExport, reservedNames } from "./names.ts";
 import { type DefinerExport, owners } from "./owners.ts";
 import { unexportedDefinitions } from "./references.ts";
@@ -315,6 +316,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
     ...unexportedDefinitions(definitions, services, contracts, constants, exported),
     ...opaque,
     ...unrepresentableSchemas(definitions, constants),
+    ...malformedKeys(definitions),
     ...misplacedSelfRefs(definitions, constants),
     ...(built.kind === "found" ? built.malformed : []),
     ...loaded.malformed,

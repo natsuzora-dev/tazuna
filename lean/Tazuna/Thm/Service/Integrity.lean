@@ -32,10 +32,10 @@ variable {fs : Functions Id}
 theorem mem_danglingRefs (records : Records) (name : String) (row : Row) (f : Fault) :
     f ∈ danglingRefs st records name row ↔
       ∃ field targetEntity v, (row.entity, field, targetEntity) ∈ st.references ∧ row.value.field? field = some v ∧ v ≠ .null ∧
-        targetEntity ∈ st.entities ∧ ¬ (∃ x ∈ records, x.entity = targetEntity ∧ x.key = some v.keyString) ∧
+        targetEntity ∈ st.entities ∧ ¬ (∃ x ∈ records, x.entity = targetEntity ∧ x.key = some (canonicalKey (st.keyFieldsOf targetEntity) v)) ∧
         f = match row.key with
-          | some key => .danglingRef (st.ref row.entity) key field v.keyString (st.ref name)
-          | none => .danglingSingleRef (st.ref row.entity) field v.keyString (st.ref name) := by
+          | some key => .danglingRef (st.ref row.entity) key field (canonicalKey (st.keyFieldsOf targetEntity) v) (st.ref name)
+          | none => .danglingSingleRef (st.ref row.entity) field (canonicalKey (st.keyFieldsOf targetEntity) v) (st.ref name) := by
   unfold danglingRefs
   simp only [List.mem_filterMap, List.mem_filter, Prod.exists]
   constructor
@@ -56,7 +56,7 @@ theorem mem_danglingRefs (records : Records) (name : String) (row : Row) (f : Fa
   · rintro ⟨field, targetEntity, v, hm, hv, hn, ht, hr, rfl⟩
     refine ⟨row.entity, field, targetEntity, ⟨hm, by simp⟩, ?_⟩
     have hc : (decide (targetEntity ∈ st.entities) &&
-        !records.any fun r => r.entity == targetEntity && r.key == some v.keyString) = true := by
+        !records.any fun r => r.entity == targetEntity && r.key == some (canonicalKey (st.keyFieldsOf targetEntity) v)) = true := by
       simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true', List.any_eq_false, beq_iff_eq, not_and]
       exact ⟨ht, fun x hx h1 h2 => hr ⟨x, hx, h1, h2⟩⟩
     split
@@ -159,7 +159,7 @@ theorem mem_integrityViolations (records : Records) (now : Time) (name : String)
         · cases he
         · cases hc; exact Or.inr rfl
 
-@[guarantee] theorem entity_invariant_reported_iff (records : Records) (now : Time) (name : String) (definition : Spec.Ref) (key c : String)
+@[guarantee] theorem entity_invariant_reported_iff (records : Records) (now : Time) (name : String) (definition : Spec.Ref) (key : Value) (c : String)
     (command : Spec.Ref) :
     .failedEntityInvariant definition key c command ∈ (integrityViolations st fs records now name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
@@ -199,11 +199,11 @@ theorem mem_integrityViolations (records : Records) (now : Time) (name : String)
     exact Or.inr (Or.inr ⟨c, hs, rfl⟩)
 
 @[guarantee] theorem dangling_ref_reported_iff (records : Records) (now : Time) (name : String) (definition : Spec.Ref)
-    (key field targetKey : String) (command : Spec.Ref) :
+    (key : Value) (field : String) (targetKey : Value) (command : Spec.Ref) :
     .danglingRef definition key field targetKey command ∈ (integrityViolations st fs records now name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
         row.key = some key ∧ ∃ targetEntity, (row.entity, field, targetEntity) ∈ st.references ∧
-        targetEntity ∈ st.entities ∧ ∃ v, row.value.field? field = some v ∧ v ≠ .null ∧ v.keyString = targetKey ∧
+        targetEntity ∈ st.entities ∧ ∃ v, row.value.field? field = some v ∧ v ≠ .null ∧ canonicalKey (st.keyFieldsOf targetEntity) v = targetKey ∧
           ¬ ∃ x ∈ records, x.entity = targetEntity ∧ x.key = some targetKey := by
   rw [mem_integrityViolations]
   simp only [mem_rowViolations, mem_danglingRefs, Row.failedInvariant]

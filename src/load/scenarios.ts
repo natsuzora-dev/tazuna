@@ -6,7 +6,7 @@ import type { GivenRecord, PeerEntry, Scenario } from "../data/scenario.generate
 import { isInstant } from "../data/time.ts";
 import { plain, stringsOf } from "../data/values.ts";
 import type { Named, Place, ServiceDefinition } from "../dsl/definition.ts";
-import type { AnyEntity } from "../dsl/entity.ts";
+import { type AnyEntity, keyFieldsOf } from "../dsl/entity.ts";
 import { contractService } from "../dsl/service.ts";
 import type { ScenarioDefinition } from "../scenario/define.ts";
 import { type LoweringViolation, lower } from "../scenario/lower.ts";
@@ -66,8 +66,14 @@ function givenRecords(entities: Readonly<Record<string, AnyEntity>>, records: un
     const e = entities[entity];
     if (e === undefined || e.single || !Array.isArray(written)) return [{ entity, value: plain(written) }];
     return written.map((row) => {
-      const key = (row as Record<string, unknown> | null)?.[e.key];
-      return { entity, ...(typeof key === "string" ? { key } : {}), value: plain(row) };
+      const fields = keyFieldsOf(e);
+      const values = fields.map((f) => (row as Record<string, unknown> | null)?.[f]);
+      const key = values.some((v) => v === undefined)
+        ? undefined
+        : values.length === 1
+          ? values[0]
+          : Object.fromEntries(fields.map((f, i) => [f, values[i]]));
+      return { entity, ...(key === undefined ? {} : { key: plain(key) }), value: plain(row) };
     });
   });
 }

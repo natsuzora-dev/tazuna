@@ -363,7 +363,7 @@ export function lower(
   const w = {
     startup: caused({ type: "startup" }),
     client: {
-      as: (who: unknown, key?: string) => {
+      as: (who: unknown, key?: unknown) => {
         const caller: Caller =
           typeof who === "string" ? { service: who } : { entity: named(who, at()).name, key: key ?? "" };
         return {

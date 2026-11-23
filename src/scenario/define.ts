@@ -15,7 +15,7 @@ import type {
   Query,
   ServiceDefinition,
 } from "../dsl/definition.ts";
-import type { AnyKeyedEntity } from "../dsl/entity.ts";
+import type { AnyKeyedEntity, KeyValue } from "../dsl/entity.ts";
 import type { EncodedPayload, PayloadShape } from "../dsl/event.ts";
 
 type Encoded<S extends Shape> = z.input<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>;
@@ -395,7 +395,7 @@ type Taking<P extends Peers> = NameOf<Exclude<P[number], Skip>>;
  */
 interface Client<R extends string, S extends string, X extends Listed> {
   /** The requests of a record of the receiver's entity `entity`, whose key is `key`. */
-  as<E extends AnyKeyedEntity>(entity: E, key: string): Sender<R, S, X>;
+  as<E extends AnyKeyedEntity>(entity: E, key: KeyValue<E>): Sender<R, S, X>;
   /** The requests of the service `service`. */
   as(service: string): Sender<R, S, X>;
   /** The client ends the subscription of `subscription`. */

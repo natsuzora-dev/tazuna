@@ -48,10 +48,11 @@ def danglingRefs (st : Service) (records : Records) (name : String) (row : Row) 
     match row.value.field? field with
     | none | some .null => none
     | some v =>
-      if targetEntity ∈ st.entities && !records.any (fun r => r.entity == targetEntity && r.key == some v.keyString) then
+      let target := canonicalKey (st.keyFieldsOf targetEntity) v
+      if targetEntity ∈ st.entities && !records.any (fun r => r.entity == targetEntity && r.key == some target) then
         some (match row.key with
-          | some key => .danglingRef (st.ref row.entity) key field v.keyString (st.ref name)
-          | none => .danglingSingleRef (st.ref row.entity) field v.keyString (st.ref name))
+          | some key => .danglingRef (st.ref row.entity) key field target (st.ref name)
+          | none => .danglingSingleRef (st.ref row.entity) field target (st.ref name))
       else none
 
 def rowViolations [Monad m] (st : Service) (fs : Functions m) (records : Records) (now : Time) (name : String) (row : Row) :

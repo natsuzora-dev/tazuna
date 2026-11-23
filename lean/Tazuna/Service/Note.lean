@@ -11,8 +11,8 @@ open Tazuna.Data
 
 inductive RecordPart where
   | keys (entity : String)
-  | record (entity key : String)
-  | field (entity : String) (key : Option String) (name : String)
+  | record (entity : String) (key : Value)
+  | field (entity : String) (key : Option Value) (name : String)
 deriving DecidableEq, Repr, Inhabited
 
 /-- A value that steps read and write. Being in a state also stands for the copy set of a map state. -/

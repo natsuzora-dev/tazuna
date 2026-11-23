@@ -25,7 +25,7 @@ def orderedGroups (decided : List (List Emit)) (sorted : List Emit) : List (List
 
 /-- A record that two events of one group write, as its entity and key. -/
 def twiceWritten (st : Service) (records : Records) (groups : List (List Emit)) :
-    Option (String × Option String) :=
+    Option (String × Option Value) :=
   groups.findSome? fun g =>
     let rows := g.filterMap fun e => (evolve st records e).map fun ev => (ev.entity, ev.key)
     firstDuplicate id rows

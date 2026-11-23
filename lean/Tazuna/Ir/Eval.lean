@@ -33,7 +33,7 @@ inductive Val where
   The record of `key` of `entity` in `source`, none for a single entity's. A record and a table read the records that
   made them, as TS's records view does: a binds value read in an ensures holds the records from before the write.
   -/
-  | row (source : Records) (entity : String) (key : Option String)
+  | row (source : Records) (entity : String) (key : Option Value)
   /-- The records of a keyed entity in `source`. -/
   | table (source : Records) (entity : String)
   /-- A Bag or array that an operation made. -/
@@ -52,6 +52,8 @@ structure Env where
   args : Arg → Val := fun _ => .undef
   records : Records := []
   fields : String → List String := fun _ => []
+  /-- The key fields of each keyed entity. -/
+  keyFields : String → List String := fun _ => []
   /-- What createKey returns next. -/
   keys : Keys := {}
   /-- Whether the records are another service's, which a read stops at (`Trace.readHidden`). -/
@@ -114,6 +116,13 @@ def Relation.holds {α : Type} [LT α] [LE α] [BEq α] [DecidableRel (α := α)
 
 def thrown {α : Type} : EvalM α := throw (.thrown none)
 
+/-- The object that `v` is, as the key of an entity with several key fields: a JSON object, or an object of JSON values
+that an expression built; none for anything else. -/
+def keyObject? : Val → Option Value
+  | .json (.obj fields) => some (.obj fields)
+  | .obj fields => (fields.mapM fun ((n, v) : String × Val) => match v with | .json x => some (n, x) | _ => none).map .obj
+  | _ => none
+
 /-- The stop at reading hidden records, as TS's unreadable records throw on the first property read. -/
 def readHidden {α : Type} : EvalM α := do
   modify fun t => { t with readHidden := true }
@@ -159,7 +168,7 @@ The keys of the records of `entity`, in the order that the records hold them. A 
 exposes the order in which it visits one (`Functions.comparable` ignores it), so a table visits its records as they
 are held: prove's slots hold them in the same order.
 -/
-def heldKeys (records : Records) (entity : String) : List String :=
+def heldKeys (records : Records) (entity : String) : List Value :=
   (records.filter (·.entity == entity)).filterMap (·.key)
 
 /-- The values that a callback method visits. Visiting a table reads its keys and visits its records as they are held. -/
@@ -306,6 +315,13 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
     let table ← eval env vars t
     match table, ← eval env vars k with
     | .table source entity, .json (.str key) => do
+      note (.record entity (.str key))
+      pure (if source.any (fun r => r.entity == entity && r.key == some (.str key)) then .row source entity (some (.str key))
+        else .undef)
+    | .table source entity, k@(.json (.obj _)) | .table source entity, k@(.obj _) => do
+      -- The key of an entity with several key fields, an object.
+      let some k := keyObject? k | thrown
+      let key := canonicalKey (env.keyFields entity) k
       note (.record entity key)
       pure (if source.any (fun r => r.entity == entity && r.key == some key) then .row source entity (some key) else .undef)
     | _, _ => thrown

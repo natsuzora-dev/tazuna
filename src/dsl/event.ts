@@ -12,11 +12,19 @@ import type {
   ServiceDefinition,
   UpdateEvent,
 } from "./definition.ts";
-import type { AnyEntity, AnyKeyedEntity, Entities, KeyedEntity, SingleEntity } from "./entity.ts";
+import {
+  type AnyEntity,
+  type AnyKeyedEntity,
+  type Entities,
+  type KeyedEntity,
+  type KeyOf,
+  keyFieldsOf,
+  type SingleEntity,
+} from "./entity.ts";
 
 type WritableField<E extends AnyEntity> =
-  E extends KeyedEntity<infer S, infer K>
-    ? Exclude<keyof S & string, K>
+  E extends KeyedEntity<infer S>
+    ? Exclude<keyof S & string, KeyOf<E>>
     : E extends SingleEntity<infer S>
       ? keyof S & string
       : never;
@@ -69,7 +77,7 @@ function payloadOf(change: AnyEvent["change"], d: EventOptions): Shape {
   if (change === "none") return d.payload ?? {};
   const entity = d.entity as AnyEntity;
   const fields = entity.fields as Shape;
-  const key = entity.single ? [] : [(entity as AnyKeyedEntity).key];
+  const key = entity.single ? [] : keyFieldsOf(entity as AnyKeyedEntity);
   const keys = change === "create" ? Object.keys(fields) : [...key, ...(change === "update" ? (d.writes ?? []) : [])];
   return Object.fromEntries(keys.map((k: string) => [k, fields[k] as z.ZodType]));
 }
@@ -78,13 +86,13 @@ export type PayloadShape<Ev extends AnyEvent> =
   Ev extends CreateEvent<KeyedEntity<infer S>>
     ? S
     : Ev extends UpdateEvent<infer E, infer W>
-      ? E extends KeyedEntity<infer S, infer K>
-        ? Pick<S, K | (W & keyof S)>
+      ? E extends KeyedEntity<infer S>
+        ? Pick<S, KeyOf<E> | (W & keyof S)>
         : E extends SingleEntity<infer S>
           ? Pick<S, W & keyof S>
           : never
-      : Ev extends DeleteEvent<KeyedEntity<infer S, infer K>>
-        ? Pick<S, K>
+      : Ev extends DeleteEvent<infer E extends KeyedEntity<infer S>>
+        ? Pick<S, KeyOf<E>>
         : Ev extends FieldsEvent<infer S>
           ? S
           : never;

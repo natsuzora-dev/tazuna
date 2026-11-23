@@ -10,18 +10,19 @@ open Tazuna.Scenario (GivenRecord PeerEntry)
 
 variable {fsOf : String → Functions Id}
 
-/-- No two of the records share an entity and a key. -/
-def RecordsDistinct (rs : List GivenRecord) : Prop := (rs.map fun g => (g.entity, g.key)).Nodup
+/-- No two of the records share an entity and the canonical text of a key. -/
+def RecordsDistinct (rs : List GivenRecord) : Prop := (rs.map fun g => (g.entity, g.key.map Value.canonical)).Nodup
 
-theorem keyBefore_trans {a b c : Option String} (h₁ : keyBefore a b = true) (h₂ : keyBefore b c = true) :
+theorem keyBefore_trans {a b c : Option Value} (h₁ : keyBefore a b = true) (h₂ : keyBefore b c = true) :
     keyBefore a c = true := by
   cases a <;> cases b <;> cases c <;> simp_all [keyBefore]
   exact String.le_trans h₁ h₂
 
-theorem keyBefore_total (a b : Option String) : (keyBefore a b || keyBefore b a) = true := by
+theorem keyBefore_total (a b : Option Value) : (keyBefore a b || keyBefore b a) = true := by
   cases a <;> cases b <;> simp [keyBefore, String.le_total]
 
-theorem keyBefore_antisymm {a b : Option String} (h₁ : keyBefore a b = true) (h₂ : keyBefore b a = true) : a = b := by
+theorem keyBefore_antisymm {a b : Option Value} (h₁ : keyBefore a b = true) (h₂ : keyBefore b a = true) :
+    a.map Value.canonical = b.map Value.canonical := by
   cases a <;> cases b <;> simp_all [keyBefore]
   exact String.le_antisymm h₁ h₂
 
@@ -47,7 +48,7 @@ theorem before_total (a b : GivenRecord) : (recordBefore a b || recordBefore b a
   · simp only [h, Ne.symm h, ite_false]; simpa using String.le_total a.entity b.entity
 
 theorem before_antisymm {a b : GivenRecord} (h₁ : recordBefore a b = true) (h₂ : recordBefore b a = true) :
-    (a.entity, a.key) = (b.entity, b.key) := by
+    (a.entity, a.key.map Value.canonical) = (b.entity, b.key.map Value.canonical) := by
   unfold recordBefore at *
   by_cases h : a.entity = b.entity
   · simp only [h, ite_true] at h₁ h₂
@@ -62,12 +63,12 @@ theorem sorted_perm {rs rs' : List GivenRecord} (hp : rs.Perm rs') (hn : Records
     (List.pairwise_mergeSort before_trans before_total _)
     ((List.mergeSort_perm _ _).trans (hp.trans (List.mergeSort_perm _ _).symm))
   intro a b ha hb hab hba
-  exact eq_of_map_nodup (f := fun g : GivenRecord => (g.entity, g.key)) hn ((List.mergeSort_perm _ _).mem_iff.mp ha)
+  exact eq_of_map_nodup (f := fun g : GivenRecord => (g.entity, g.key.map Value.canonical)) hn ((List.mergeSort_perm _ _).mem_iff.mp ha)
     (hp.mem_iff.mpr ((List.mergeSort_perm _ _).mem_iff.mp hb)) (before_antisymm hab hba)
 
 /--
 The order in which Given writes the records of a running service reaches nothing: a scenario that writes, for each
-running service, the records of another scenario in another order, with no two of them of one entity and key, simulates
+running service, the records of another scenario in another order, with no two of them of one entity and key text, simulates
 alike, with the same traces, messages, halt, and violations.
 -/
 @[guarantee] theorem simulate_records_perm (j : Spec.Structure) (start : World) (sc : Scenario) (records : List GivenRecord)

@@ -88,7 +88,7 @@ test("An entity in viewModel has its key, its unique, its invariant names, the t
   assert.deepEqual(fields("notifier", "OpenTask"), ["taskId string -> todo.Task"]);
   const { fields: _, ...task } = entity("todo", "Task") ?? {};
   assert.deepEqual(task, {
-    key: "id",
+    key: ["id"],
     unique: [],
     invariants: ["createdBeforeNow", "completedAfterCreated"],
   });

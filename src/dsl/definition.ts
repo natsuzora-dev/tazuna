@@ -4,7 +4,18 @@ import type { Shape } from "../data/values.ts";
 import { definitionKinds } from "../spec/structure.ts";
 import type { CallerType } from "./caller.ts";
 import type { Conditions } from "./conditions.ts";
-import type { AnyEntity, AnyKeyedEntity, Entities, KeyOf, KeyValue, MadeRow, Ref, Row, RowOf } from "./entity.ts";
+import type {
+  AnyEntity,
+  AnyKeyedEntity,
+  Entities,
+  KeyOf,
+  KeyValue,
+  MadeRow,
+  Ref,
+  Row,
+  RowOf,
+  SingleKeyEntity,
+} from "./entity.ts";
 
 export type Definition = AnyEntity | AnyEvent | AnyCommand | AnyQuery | Automation | Machine | AnyScreen;
 
@@ -125,7 +136,7 @@ export interface ServiceDefinition {
 }
 
 /** The function that creates a new key. The implementation decides the key's form. */
-export type CreateKey = { readonly createKey: <E extends AnyKeyedEntity>(key: Ref<E>) => KeyValue<E> };
+export type CreateKey = { readonly createKey: <E extends SingleKeyEntity>(key: Ref<E>) => KeyValue<E> };
 
 export interface CreateEvent<E extends AnyKeyedEntity = AnyKeyedEntity> {
   readonly kind: "event";
@@ -162,7 +173,7 @@ export interface FieldsEvent<S extends Shape = Shape> {
 // biome-ignore lint/suspicious/noExplicitAny: an event of any shape
 export type AnyEvent = CreateEvent<any> | UpdateEvent<any, any> | DeleteEvent<any> | FieldsEvent<any>;
 
-type KeyPayload<E extends AnyEntity> = E extends AnyKeyedEntity ? { [K in KeyOf<E>]: KeyValue<E> } : unknown;
+type KeyPayload<E extends AnyEntity> = E extends AnyKeyedEntity ? Pick<RowOf<E>, KeyOf<E> & keyof RowOf<E>> : unknown;
 
 export type Payload<Ev extends AnyEvent> =
   Ev extends CreateEvent<infer E>

@@ -77,6 +77,13 @@ export type Malformed =
       null,
       { readonly name: string; readonly path: readonly string[]; readonly type: UnrepresentableType }
     >
+  /** The entity's `key` lists the field `field` more than once. */
+  | Of<"repeatedKeyField", DefinitionRef, { readonly field: string }>
+  /**
+   * The key field `field` accepts null or undefined. A key identifies its record, so each key field holds a value, as a
+   * SQL primary key column is NOT NULL.
+   */
+  | Of<"nullableKeyField", DefinitionRef, { readonly field: string }>
   /** A `ref.self()` at `path` is outside the fields of `entity()`, where no entity's key gives it a schema. */
   | Of<"misplacedSelfRef", DefinitionRef, { readonly path: readonly string[] }>
   | Of<"misplacedSelfRef", null, { readonly name: string; readonly path: readonly string[] }>

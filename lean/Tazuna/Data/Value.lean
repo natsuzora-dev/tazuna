@@ -70,14 +70,6 @@ def Value.field? : Value → String → Option Value
   | .obj fields, name => (fields.find? (·.1 == name)).map (·.2)
   | _, _ => none
 
-/-- The string that TS `String(payload[key])` gives. -/
-def Value.keyString : Value → String
-  | .str s => s
-  | .num n => toString n
-  | .bool b => toString b
-  | .null => "null"
-  | _ => "[object Object]"
-
 mutual
 
 /-- The strings in the value, excluding object field names. -/

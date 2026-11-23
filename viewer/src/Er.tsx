@@ -35,7 +35,7 @@ interface PlacedEntity {
   readonly entity: EntityView;
 }
 
-type KeyedEntity = PlacedEntity & { readonly entity: { readonly key: string } };
+type KeyedEntity = PlacedEntity & { readonly entity: { readonly key: readonly [string, ...string[]] } };
 
 export type ErPick =
   | { readonly type: "entity"; readonly placed: PlacedEntity }
@@ -73,7 +73,7 @@ function FieldRow({ placed, field, shownFrom }: { placed: PlacedEntity; field: F
       >
         <span>
           {field.name}
-          {field.name === placed.entity.key && <span className="key"> key</span>}
+          {placed.entity.key?.includes(field.name) && <span className="key"> key</span>}
         </span>
         <span className="type">
           {field.ref === null ? field.type : `→ ${entityName(field.ref.service, field.ref.name, shownFrom)}`}
@@ -169,7 +169,7 @@ export function erPick(services: readonly ServiceView[], shown: string, id: stri
 function erGraph(placed: readonly PlacedEntity[], refs: readonly Ref[], nodes: readonly EntityNode[]): ElkNode {
   const ends = refs.flatMap((r) => [
     { placed: r.from, field: r.field.name, side: "EAST" as const },
-    { placed: r.to, field: r.to.entity.key, side: "WEST" as const },
+    { placed: r.to, field: r.to.entity.key[0], side: "WEST" as const },
   ]);
   return {
     id: "er",
@@ -217,7 +217,7 @@ function erGraph(placed: readonly PlacedEntity[], refs: readonly Ref[], nodes: r
     edges: refs.map((r) => ({
       id: r.id,
       sources: [portId(rowId(r.from, r.field.name), "EAST")],
-      targets: [portId(rowId(r.to, r.to.entity.key), "WEST")],
+      targets: [portId(rowId(r.to, r.to.entity.key[0]), "WEST")],
     })),
   };
 }
@@ -265,7 +265,7 @@ function Diagram({ services, service, picked, onPick, kept, onMove }: ErProps) {
   const ref = refs.find((r) => r.id === picked);
   const highlighted =
     ref !== undefined
-      ? [ref.id, rowId(ref.from, ref.field.name), rowId(ref.to, ref.to.entity.key)]
+      ? [ref.id, rowId(ref.from, ref.field.name), rowId(ref.to, ref.to.entity.key[0])]
       : picked === null
         ? []
         : [picked];

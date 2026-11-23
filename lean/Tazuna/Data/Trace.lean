@@ -34,7 +34,7 @@ Who sent a request, as the receiver knows it from outside the spec (authenticati
 receiving service, by its key, or a service, by its name. A Cedar request names its principal the same way.
 -/
 inductive Caller where
-  | entity (entity : String) (key : String)
+  | entity (entity : String) (key : Value)
   | service (service : String)
 deriving DecidableEq, Repr, Inhabited
 
@@ -42,7 +42,7 @@ derive_wire Caller untagged
 
 /-- The strings of the caller in which created keys are searched: an entity record's key. -/
 def Caller.strings : Caller → List String
-  | .entity _ key => [key]
+  | .entity _ key => key.strings
   | .service _ => []
 
 /--

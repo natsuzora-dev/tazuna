@@ -98,7 +98,7 @@ def recordsValue (st : Service) (records : Records) : CValue :=
     let row (r : Row) := keyed (refsAt keys) [] r.value
     if e ∈ st.singles then (records.find? (·.entity == e)).map fun r => (e, row r)
     else
-      let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.key.getD "" ≤ b.key.getD "")
+      let rows := (records.filter (·.entity == e)).mergeSort fun a b => decide (a.keyText ≤ b.keyText)
       some (e, .bag (rows.map row)))
 
 /-- The chart `name` of the running service `st`. -/

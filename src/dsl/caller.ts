@@ -1,4 +1,4 @@
-import type { AnyKeyedEntity, Entities } from "./entity.ts";
+import type { AnyKeyedEntity, Entities, KeyValue } from "./entity.ts";
 
 /** The keyed entities of `Es`. */
 type KeyedIn<Es extends Entities> = { [K in keyof Es]: Es[K] extends AnyKeyedEntity ? Es[K] : never }[keyof Es];
@@ -17,13 +17,13 @@ export type CallerType<Es extends Entities = Entities> = KeyedIn<Es> | string;
 
 /**
  * The caller that a function reads as `caller`, of a command or query that lists `Cl`: `{ entity, key }` for a record of
- * an entity, by its key as text, `{ service }` for a service. The fields of the other kind are absent, so that comparing
+ * an entity, by its key, `{ service }` for a service. The fields of the other kind are absent, so that comparing
  * `entity` or `service` tells the kinds apart.
  */
 export type CallerOf<Cl, Es extends Entities> = Cl extends readonly (infer T)[]
   ? T extends string
     ? { readonly service: T; readonly entity?: never; readonly key?: never }
     : T extends AnyKeyedEntity
-      ? { readonly entity: NameIn<Es, T>; readonly key: string; readonly service?: never }
+      ? { readonly entity: NameIn<Es, T>; readonly key: KeyValue<T>; readonly service?: never }
       : never
   : never;

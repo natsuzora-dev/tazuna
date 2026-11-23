@@ -40,7 +40,7 @@ def RecordAccess.values (a : RecordAccess) : Footprint :=
   { reads := (a.reads.map .record).foldl addNew [], writes := (a.writes.map .record).foldl addNew [],
     keyWrites := a.keyWrites.map fun entity => .record (.keys entity) }
 
-def uniqueReads (st : Service) (records : Records) (entity : String) (key : Option String) : List RecordPart :=
+def uniqueReads (st : Service) (records : Records) (entity : String) (key : Option Value) : List RecordPart :=
   match records.find? (fun r => r.entity == entity && r.key == key) with
   | none => []
   | some row =>
@@ -66,7 +66,7 @@ def writesOf (st : Service) (records : Records) (emits : List Emit) : RecordAcce
     | none => (rs, acc, rows)
     | some ev =>
       (ev.records, acc.union (recordAccessOf st e ev), if ev.change == .delete then rows else rows ++ [(ev.entity, ev.key)]))
-    (records, ({} : RecordAccess), ([] : List (String × Option String)))
+    (records, ({} : RecordAccess), ([] : List (String × Option Value)))
   written.union { reads := rows.foldl (fun acc (entity, key) => (uniqueReads st final entity key).foldl addNew acc) [] }
 
 inductive Holder where

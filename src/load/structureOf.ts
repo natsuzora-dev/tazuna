@@ -16,7 +16,7 @@ import {
   type Services,
   type StateSpec,
 } from "../dsl/definition.ts";
-import { keyTarget, refTarget } from "../dsl/entity.ts";
+import { keyFieldsOf, keyTarget, refTarget } from "../dsl/entity.ts";
 import type {
   DeadlineTime,
   StateType,
@@ -189,7 +189,7 @@ function definitionStructure(
       kind: d.kind,
       service,
       name,
-      key: d.single ? null : d.key,
+      key: d.single ? null : [...keyFieldsOf(d)],
       fields,
       unique: d.single ? [] : [...d.unique],
       references: references(d.fields as Shape, "fields"),

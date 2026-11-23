@@ -19,7 +19,7 @@ inductive Fault where
   Two events of one Bag that the command's decide returns write one record of `entity`, so the record would depend on
   their order. `recordKey` is null for a single entity.
   -/
-  | sameRecordInBag (definition : Spec.Ref) (entity : Spec.Ref) (recordKey : Option String)
+  | sameRecordInBag (definition : Spec.Ref) (entity : Spec.Ref) (recordKey : Option Value)
   /-- The query answers with an output that does not match its output schema. -/
   | outputSchema (definition : Spec.Ref)
   /-- The input that the chart or automation `definition` gives `target` does not match the input schema of `target`. -/
@@ -67,13 +67,13 @@ inductive Fault where
   -/
   | exception (definition : Option Spec.Ref)
   /-- The record `recordKey` of entity `definition` refers in `field` to the missing record `targetKey`. -/
-  | danglingRef (definition : Spec.Ref) (recordKey field targetKey : String) (command : Spec.Ref)
+  | danglingRef (definition : Spec.Ref) (recordKey : Value) (field : String) (targetKey : Value) (command : Spec.Ref)
   /-- The record of the single entity `definition` refers in `field` to the missing record `targetKey`. -/
-  | danglingSingleRef (definition : Spec.Ref) (field targetKey : String) (command : Spec.Ref)
+  | danglingSingleRef (definition : Spec.Ref) (field : String) (targetKey : Value) (command : Spec.Ref)
   /-- The answer of the command or query, or the output of the screen, fails its ensures `condition`. -/
   | failedEnsures (definition : Spec.Ref) (condition : String)
   /-- The record `recordKey` of the entity fails its invariant `condition` after the command `command`. -/
-  | failedEntityInvariant (definition : Spec.Ref) (recordKey condition : String) (command : Spec.Ref)
+  | failedEntityInvariant (definition : Spec.Ref) (recordKey : Value) (condition : String) (command : Spec.Ref)
   /-- The record of the single entity fails its invariant `condition` after the command `command`. -/
   | failedSingleInvariant (definition : Spec.Ref) (condition : String) (command : Spec.Ref)
   /-- The records of the service fail its invariant `condition` after the command `command`. -/
@@ -84,7 +84,7 @@ inductive Fault where
   Time passed `due` while the response `response` of the record `recordKey` of entity `definition` was open: its `when`
   held and its `expect` did not hold since, through `due`. The record of a single entity has no key.
   -/
-  | missedResponse (definition : Spec.Ref) (recordKey : Option String) (response : String) (due : Int)
+  | missedResponse (definition : Spec.Ref) (recordKey : Option Value) (response : String) (due : Int)
   /-- Two items that the chart computes for the map `map` have the key `itemKey`. -/
   | duplicateItemKey (definition : Spec.Ref) (map : String) (itemKey : Value)
   /--

@@ -11,7 +11,7 @@ export type Ref = z.infer<typeof ref>;
 const caller = z.union([
   z.object({
     entity: z.string(),
-    key: z.string(),
+    key: z.unknown(),
   }),
   z.object({
     service: z.string(),
@@ -328,7 +328,7 @@ export type Expectation = z.infer<typeof expectation>;
 
 const givenRecord = z.object({
   entity: z.string(),
-  key: z.string().exactOptional(),
+  key: z.unknown().exactOptional(),
   value: z.unknown(),
 });
 

@@ -55,7 +55,7 @@ export type Keys = {
 /** A record that an `evaluate` request gives: the key is absent for a single entity's. */
 export type Stored = {
   readonly entity: string;
-  readonly key?: string;
+  readonly key?: Json;
   readonly value: Json;
 };
 
@@ -221,7 +221,7 @@ export type SimulatedService = {
 /** A part of the records that an evaluation read, as a `read` reply names it. */
 export type ReadPart = {
   readonly entity: string;
-  readonly key?: string;
+  readonly key?: Json;
   readonly field?: string;
 };
 

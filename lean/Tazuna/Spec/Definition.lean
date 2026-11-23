@@ -279,9 +279,12 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire ResponseTime
 
-/-- An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. -/
+/--
+An entity. `key` lists the key fields, one or more, and is null for a single entity, whose `unique` is empty.
+`references` are in field order.
+-/
 structure EntityBody where
-  key : Option String
+  key : Option (List String)
   /-- The JSON Schema of the fields. -/
   fields : Value
   unique : List String

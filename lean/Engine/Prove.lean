@@ -234,7 +234,7 @@ def inductionOf (j : Spec.Structure) (service : String) : IO Induction := do
   let pre := SRecords.named st creates "pre"
   let used := pre.keyed.map fun (e, slots) => (e, (List.range slots.length).map (usedVar "pre" e))
   let holds := conj (checked.filterMap fun c => (failsOn pre clockT c).toOption.map .not)
-  let blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else none
+  let blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else compositeKeyed st
   pure { st, creates, pre, facts := pre.facts st "pre" ++ clockFacts, holds,
          steps := st.commands.map fun c => (c, stepOf st p pre clockT used c),
          answers := (st.queries.filter fun q => !(conditionsOf p.queryEnsures (st.ref q)).isEmpty).map fun q =>

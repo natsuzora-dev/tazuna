@@ -27,19 +27,19 @@ inductive InvalidScenario where
   Given writes a record of `entity` of the running service `service` that is no entity of it, that has a key for a
   single entity or none for a keyed one, or that does not match the entity's schema.
   -/
-  | invalidRecord (service entity : String) (key : Option String)
+  | invalidRecord (service entity : String) (key : Option Value)
   /--
   Given's record of `entity` with `key` of the running service `service` holds `written`, of the form of a key of
   `created` that a running service creates: a created key exists only once the run creates it.
   -/
-  | writtenGivenKey (service entity : String) (key : Option String) (written : String) (created : Spec.Ref)
+  | writtenGivenKey (service entity : String) (key : Option Value) (written : String) (created : Spec.Ref)
   /-- The record of `entity` clashes with an earlier record of Given: the same key, or the same unique values. -/
-  | duplicateRecord (service entity : String) (key : Option String)
+  | duplicateRecord (service entity : String) (key : Option Value)
   /--
   The invariant `invariant` of the record of `entity` with `key`, or of the service when `entity` is none, fails on
   Given's records of `service`. `invariant` is none when the invariant throws.
   -/
-  | brokenGivenInvariant (service : String) (entity key invariant : Option String)
+  | brokenGivenInvariant (service : String) (entity : Option String) (key : Option Value) (invariant : Option String)
   /-- No fact matches the handle `fact` that the line names. -/
   | unresolvedReference (scenarioLine : Nat) (fact : Value)
   /--

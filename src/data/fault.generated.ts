@@ -33,7 +33,7 @@ export type Fault =
       readonly definition: DefinitionRef;
       readonly data: {
         readonly entity: DefinitionRef;
-        readonly recordKey: string | null;
+        readonly recordKey: Json | null;
       };
     }
   /** The query answers with an output that does not match its output schema. */
@@ -165,9 +165,9 @@ export type Fault =
       readonly kind: "Fault.danglingRef";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly recordKey: string;
+        readonly recordKey: Json;
         readonly field: string;
-        readonly targetKey: string;
+        readonly targetKey: Json;
         readonly command: DefinitionRef;
       };
     }
@@ -177,7 +177,7 @@ export type Fault =
       readonly definition: DefinitionRef;
       readonly data: {
         readonly field: string;
-        readonly targetKey: string;
+        readonly targetKey: Json;
         readonly command: DefinitionRef;
       };
     }
@@ -194,7 +194,7 @@ export type Fault =
       readonly kind: "Fault.failedEntityInvariant";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly recordKey: string;
+        readonly recordKey: Json;
         readonly condition: string;
         readonly command: DefinitionRef;
       };
@@ -233,7 +233,7 @@ export type Fault =
       readonly kind: "Fault.missedResponse";
       readonly definition: DefinitionRef;
       readonly data: {
-        readonly recordKey: string | null;
+        readonly recordKey: Json | null;
         readonly response: string;
         readonly due: number;
       };

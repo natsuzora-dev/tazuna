@@ -45,7 +45,7 @@ An open obligation of the response `response` of a record of `entity`: `when` he
 -/
 structure Obligation where
   entity : String
-  key : Option String
+  key : Option Value
   response : String
   due : Time
 deriving DecidableEq, Repr, Inhabited

@@ -1,0 +1,7 @@
+{"time":1795428000000,"dir":"in","type":"command","id":"join#1","name":"join","input":{"userId":"bob","groupId":"chess"},"caller":{"service":"client"}}
+{"time":1795428000000,"dir":"out","type":"answer","id":"answer#1","to":"join#1","answer":{"result":"accepted"}}
+{"time":1795428000000,"dir":"out","type":"event","id":"joined#1","name":"joined","payload":{"userId":"bob","groupId":"chess","role":"member"},"resultOf":"join#1"}
+{"time":1795428000000,"dir":"in","type":"command","id":"join#2","name":"join","input":{"userId":"bob","groupId":"chess"},"caller":{"service":"client"}}
+{"time":1795428000000,"dir":"out","type":"answer","id":"answer#2","to":"join#2","answer":{"result":"rejected","rejection":{"kind":"already-exists"}}}
+{"time":1795428000000,"dir":"in","type":"query","id":"roleOf#1","name":"roleOf","input":{"userId":"bob","groupId":"chess"},"caller":{"service":"client"}}
+{"time":1795428000000,"dir":"out","type":"answer","id":"answer#3","to":"roleOf#1","answer":{"result":"fulfilled","output":{"role":"member"}}}

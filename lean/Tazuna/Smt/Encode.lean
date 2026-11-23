@@ -40,7 +40,7 @@ def present (M : Model) (fields : List (String × Term)) : List (String × Value
   fields.filterMap fun (n, t) => ((t.denote M).toScalar.toValue?).map (n, ·)
 
 def Slot.row (M : Model) (entity : String) (s : Slot) : Row :=
-  { entity, key := some (s.key.denote M).toStr, value := .obj (present M s.fields) }
+  { entity, key := some (.str (s.key.denote M).toStr), value := .obj (present M s.fields) }
 
 /-- The records that `r` holds under `M`: the live slots of each keyed entity, then the single entities' records. -/
 def SRecords.conc (M : Model) (r : SRecords) : Records :=
@@ -78,7 +78,7 @@ mutual
 def SVal.conc (M : Model) (records : Records) : SVal → Val
   | .scalar t => (t.denote M).toScalar.toVal
   | .json fields => .json (.obj (present M fields))
-  | .row e k => .row records e (some (k.denote M).toStr)
+  | .row e k => .row records e (some (.str (k.denote M).toStr))
   | .single e => .row records e none
   | .table e => .table records e
   | .obj fields => .obj (SVal.concFields M records fields)
@@ -178,6 +178,12 @@ def SVal.field (r : SRecords) (name : String) : SVal → SVal
   | .obj fields => (fields.lookup name).getD (.scalar undefT)
   | .ite c a b => .ite c (a.field r name) (b.field r name)
   | _ => .scalar undefT
+
+/-- Whether `v` may be an object: the key of an entity with several key fields, which slots do not encode. -/
+def SVal.holdsObject : SVal → Bool
+  | .obj _ | .json _ => true
+  | .ite _ a b => a.holdsObject || b.holdsObject
+  | _ => false
 
 /-- `table.get(key)` and the term that holds when it throws. -/
 def SVal.lookup (r : SRecords) (key : SVal) : SVal → SVal × Term
@@ -422,6 +428,7 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
   | .lookup t k => do
     let (vt, et) ← seval env vars t
     let (vk, ek) ← seval env vars k
+    if vk.holdsObject then throw "a key of several fields"
     let (v, e) := SVal.lookup env.records vk vt
     pure (v, .or et (.or ek e))
   | .obj fields => do
