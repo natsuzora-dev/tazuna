@@ -1,0 +1,4 @@
+{"time":0,"dir":"out","type":"subscribe","id":"store.items#1","name":"store.items","input":{},"caller":{"service":"screens"}}
+{"time":0,"dir":"in","type":"answer","id":"store/answer#1","to":"store.items#1","answer":{"result":"fulfilled","output":{"items":[{"itemId":"","done":false}]}}}
+{"time":0,"dir":"in","type":"operation","id":"listScreen.finish#1","name":"listScreen.finish","payload":{"itemId":""}}
+{"time":0,"dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"store.items#1"}

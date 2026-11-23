@@ -330,10 +330,13 @@ def SVal.items (r : SRecords) : SVal → Option (List (Term × SVal))
   | .table e => (r.slotsOf e).mapM fun s => match s.key with
     | .text t => some (s.live, .row e t)
     | .fields _ => none
-  | .ite c a b => do
-    let xs ← a.items r
-    let ys ← b.items r
-    pure (xs.map (fun (g, v) => (.and c g, v)) ++ ys.map fun (g, v) => (.and (.not c) g, v))
+  -- A choice that no variable decides, such as `x ?? []` on an `undefined` literal, is its one branch.
+  | .ite c a b =>
+    if c.closed then if c.holds fun _ => .bool false then a.items r else b.items r
+    else do
+      let xs ← a.items r
+      let ys ← b.items r
+      pure (xs.map (fun (g, v) => (.and c g, v)) ++ ys.map fun (g, v) => (.and (.not c) g, v))
   | _ => none
 
 /-- An item of a callback method: the term that holds when the value is visited, the value, and the callback's result. -/

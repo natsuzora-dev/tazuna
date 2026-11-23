@@ -209,6 +209,38 @@ def promised (st : Service) (input : Value) (target : Spec.Ref) (output : List (
     pure (Term.and (.not e) v.truthy)
   pure (conj held)
 
+/-- A value of a chart function's arguments as a symbolic value: JSON as literals, none for records. -/
+def svalOfVal : Ir.Val → Option SVal
+  | .undef => some (.scalar undefT)
+  | .json v | .tracked _ v => (jsonLit v).toOption.map .ofJson
+  | _ => none
+
+/--
+For an answer `output` to the shows slot `slot` of the screen instance `i`, the term of each offers of a control that
+holds when the answer makes it list a payload, with the screen's other arguments as they are: the operations that the
+answer opens, which the search seeks as it seeks each branch of an automation that an event reaches.
+-/
+def offerGoals (fs : Functions ReplayM) (st : Service) (s : State) (i : Instance) (slot : String)
+    (output : List (String × SJson)) : ReplayM (List Term) := do
+  let p := st.structure.program
+  let mut goals := []
+  for control in i.chart.controls do
+    let .ok found ← offeringStates fs st s i control.name (.obj []) | continue
+    for (holder, state, o) in appliedOffers i control.name found do
+      let .listed := o | continue
+      let some f := p.chart.find? fun f => f.chart == st.ref i.chart.name && f.site == .offers state control.name
+        | continue
+      let some body := f.functions.head? | continue
+      let scope := s.scopeOf holder state
+      let shown := (scope.shown.filter (·.1 != slot)).filterMap fun (k, v) => (jsonLit v).toOption.map (k, ·)
+      let args (a : Ir.Arg) : Option SVal :=
+        if a == .shown then some (.json (shown ++ [(slot, .obj output)])) else svalOfVal (Ir.scopeArgs st scope .none a)
+      let .ok (offers, err) := seval { args } [] body.body | continue
+      let (size, notSized) := offers.size {}
+      let (n, notScalar) := size.scalarOf
+      goals := goals ++ [conj [.not err, .not notSized, .not notScalar, .lt (intLit 0) (.intOf n)]]
+  pure goals
+
 /-- One spec service's search. -/
 structure Search where
   spec : Spec.Structure
@@ -229,7 +261,11 @@ def searchOf (j : Spec.Structure) (depth : Option Nat) (service : String) : IO S
   -- A client sends a request whose callers list someone outside the service (fromOutside).
   let fromClients (name : String) : Bool :=
     ((st.requirements.lookup name).map (·.callers)).getD [] |>.any (· != .service service)
-  pure { spec := j, st, creates, depth := depth.getD (creates.foldl (· + ·.2) 0 + 1),
+  -- The answers of the services that it sends requests to vary with their records, so their creates count too.
+  let requested := ((st.charts.flatMap fun c => c.states.flatMap (·.activities)) ++ st.automations.map (·.sends)).filterMap
+    fun a => if a matches .opens .. || a.ref.service == service then none else some a.ref.service
+  let read := creates ++ requested.eraseDups.flatMap fun s => ((j.bounds.find? (·.service == s)).map (·.creates)).getD []
+  pure { spec := j, st, creates, depth := depth.getD (read.foldl (· + ·.2) 0 + 1),
          blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else none,
          sendable := (st.commands ++ st.queries).filter fromClients,
          targets := ((targets j).filter (·.part.ref.service == service)).map (·.part) }
@@ -301,9 +337,16 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
     let answerLine (a : Data.Answer) : TraceLine := { time := s.now, after := none, created := none, body := .answer .in id pd.id.text a }
     if st.structure.hasOutput target then
       let (output, facts) := objectOf st (.output target) "out"
-      wants := wants ++ [.solve (queryOf facts ((promised st pd.input target output).toOption.getD tt))
-        (fun M => answerLine (if query then .fulfilled (.obj (SJson.concFields M output))
-          else .accepted (some (.obj (SJson.concFields M output))))) none]
+      let promise := (promised st pd.input target output).toOption.getD tt
+      let line (M : Model) := answerLine (if query then .fulfilled (.obj (SJson.concFields M output))
+        else .accepted (some (.obj (SJson.concFields M output))))
+      -- An answer to a screen's shows slot may open operations: each offers that it can make list a payload.
+      let opens ← match pd.requester with
+        | .slot m slot => match s.machine? m with
+          | some i => offerGoals fs st s i slot output
+          | none => pure []
+        | _ => pure []
+      wants := wants ++ (tt :: opens).map fun g => .solve (queryOf facts (.and promise g)) line none
     else wants := wants ++ [.line (answerLine (if query then .fulfilled (.obj []) else .accepted none))]
     for kind in (st.structure.rejectionKinds st.service target).filter (!·.blamesSender) do
       let reasons := if kind == .requires then (st.structure.rejectionReasons target).map some else [none]

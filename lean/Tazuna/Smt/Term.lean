@@ -150,6 +150,16 @@ def Term.denote (M : Model) : Term → Lit
   | .intOf a => .int (match (a.denote M).toScalar with | .int n => n | _ => 0)
   | .strOf a => .str (match (a.denote M).toScalar with | .str s => s | _ => "")
 
+/-- Whether `t` has no variable, so that every model gives it one value. -/
+def Term.closed : Term → Bool
+  | .var .. => false
+  | .lit _ => true
+  | .not a | .len a | .toCode a | .fromCode a | .dateLabel a | .mkBool a | .mkInt a | .mkStr a | .isUndef a | .isNull a
+  | .isBool a | .isInt a | .isStr a | .boolOf a | .intOf a | .strOf a => a.closed
+  | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
+  | .prefixOf a b | .suffixOf a b | .contains a b | .strAt a b | .strCat a b => a.closed && b.closed
+  | .ite c a b => c.closed && a.closed && b.closed
+
 /-- Whether the term holds under `M`. -/
 abbrev Term.holds (M : Model) (t : Term) : Bool := (t.denote M).toBool
 

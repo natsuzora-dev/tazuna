@@ -1,0 +1,2 @@
+{"time":0,"dir":"in","type":"query","id":"items#1","name":"items","input":{},"caller":{"service":"screens"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"items#1","answer":{"result":"fulfilled","output":{"items":[]}}}

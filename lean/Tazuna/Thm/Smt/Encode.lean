@@ -1085,6 +1085,28 @@ theorem table_items (M : Model) (recs : Records) (e : String) : ∀ (ss : List S
         have ih := table_items M recs e ss rest hr
         by_cases hl : s.live.holds M <;> simp [SVal.concItems, hl, ih, SVal.conc, Slot.keyValue, hsk]
 
+theorem closed_denote : ∀ (t : Term), t.closed = true → ∀ M M' : Model, t.denote M = t.denote M'
+  | .var .., h, _, _ => by simp [Term.closed] at h
+  | .lit _, _, _, _ => rfl
+  | .not a, h, M, M' | .len a, h, M, M' | .toCode a, h, M, M' | .fromCode a, h, M, M' | .dateLabel a, h, M, M'
+  | .mkBool a, h, M, M' | .mkInt a, h, M, M' | .mkStr a, h, M, M' | .isUndef a, h, M, M' | .isNull a, h, M, M'
+  | .isBool a, h, M, M' | .isInt a, h, M, M' | .isStr a, h, M, M' | .boolOf a, h, M, M' | .intOf a, h, M, M'
+  | .strOf a, h, M, M' => by
+    simp only [Term.closed] at h
+    simp only [Term.denote, closed_denote a h M M']
+  | .and a b, h, M, M' | .or a b, h, M, M' | .eq a b, h, M, M' | .lt a b, h, M, M' | .le a b, h, M, M'
+  | .add a b, h, M, M' | .sub a b, h, M, M' | .mul a b, h, M, M' | .div a b, h, M, M' | .mod a b, h, M, M'
+  | .prefixOf a b, h, M, M' | .suffixOf a b, h, M, M' | .contains a b, h, M, M' | .strAt a b, h, M, M'
+  | .strCat a b, h, M, M' => by
+    simp only [Term.closed, Bool.and_eq_true] at h
+    simp only [Term.denote, closed_denote a h.1 M M', closed_denote b h.2 M M']
+  | .ite c a b, h, M, M' => by
+    simp only [Term.closed, Bool.and_eq_true] at h
+    simp only [Term.denote, closed_denote c h.1.1 M M', closed_denote a h.1.2 M M', closed_denote b h.2 M M']
+
+theorem closed_holds (t : Term) (h : t.closed = true) (M M' : Model) : t.holds M = t.holds M' := by
+  simp only [Term.holds, closed_denote t h M M']
+
 /-- What an operation visits in a collection that has items: their values, in order. -/
 theorem items_elements (M : Model) (r : SRecords) (s : Trace) : ∀ (v : SVal) (items : List (Term × SVal)),
     v.items r = some items → (run (elements (v.conc M (r.conc M))) s).1 = .ok (SVal.concItems M (r.conc M) items)
@@ -1097,7 +1119,15 @@ theorem items_elements (M : Model) (r : SRecords) (s : Trace) : ∀ (v : SVal) (
     rw [run_note_pure, heldKeys_conc, table_items M (r.conc M) e (r.slotsOf e) items h]
     simp [Function.comp_def]
   | .ite c a b, items, h => by
-    simp only [SVal.items, bind, Option.bind] at h
+    simp only [SVal.items] at h
+    split at h
+    · rename_i hcl
+      have hc := closed_holds c hcl M (fun _ => .bool false)
+      rw [conc_ite, hc]
+      split at h
+      · rename_i ht; simp only [ht, ite_true]; exact items_elements M r s a items h
+      · rename_i ht; simp only [ht, Bool.false_eq_true, ite_false]; exact items_elements M r s b items h
+    simp only [bind, Option.bind] at h
     cases ha : a.items r with
     | none => simp [ha] at h
     | some xs =>
