@@ -54,12 +54,11 @@ derive_wire Log skip_serializing_none
 
 /--
 What verify finds of one log: the violations of comparing its lines with the spec's (Finding), those that the spec
-reports while it takes the log's inputs, and the pairs of each binding that the comparison ends with.
+reports while it takes the log's inputs.
 -/
 structure Replayed where
   findings : List Verify.Finding
   violations : List Violation
-  bindings : List (List (String × String))
 
 derive_wire Replayed serialize_only
 
@@ -152,8 +151,7 @@ def replay (spec : Ir.Structure) (log : Log) : ReplayM Replayed := do
     | none => pure (some none)
     | some s => pure ((FromValue.fromValue s.value : Except String Start).toOption.map some)
   let some start := start
-    | return { findings := [.uncomparable (.lineSchema ((log.start.map (·.line)).getD 1))], violations := [],
-               bindings := [] }
+    | return { findings := [.uncomparable (.lineSchema ((log.start.map (·.line)).getD 1))], violations := [] }
   let st ← Service.ofStructure spec log.service
   let last ← IO.mkRef {}
   let fs := instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)
@@ -193,8 +191,7 @@ def replay (spec : Ir.Structure) (log : Log) : ReplayM Replayed := do
   let final ← Verify.verifyLines spec log.service ask (specLines log.service s) (log.lines.take taken) id
   let byLine := final.findings.mergeSort fun a b => decide (a.line ≤ b.line)
   pure { findings := byLine.filter (·.isViolation)
-         violations := (invalid ++ broken).map (·.toViolation) ++ reportedViolations s (← get) none
-         bindings := final.bindings.map (·.strings) }
+         violations := (invalid ++ broken).map (·.toViolation) ++ reportedViolations s (← get) none }
 
 /-- What verify finds of each log, and the parts of the spec that no log reached (Uncovered). -/
 def verify (spec : Ir.Structure) (logs : List Log) : IO (List Replayed × List Violation) := do

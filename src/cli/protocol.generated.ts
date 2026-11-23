@@ -83,12 +83,9 @@ export type Log = {
 
 /** What TS asks Lean to compute. A snapshot line is null for a blank line. */
 export type Request =
+  /** The Illegal and NonCanonical violations of the structure. */
   | {
       readonly type: "check";
-      readonly structure: Structure;
-    }
-  | {
-      readonly type: "checkCanonical";
       readonly structure: Structure;
     }
   | {
@@ -243,12 +240,11 @@ export type ReadLine = {
 
 /**
  * What verify finds of one log: the violations of comparing its lines with the spec's (Finding), those that the spec
- * reports while it takes the log's inputs, and the pairs of each binding that the comparison ends with.
+ * reports while it takes the log's inputs.
  */
 export type Replayed = {
   readonly findings: readonly (Mismatch | Uncomparable)[];
   readonly violations: readonly ViolationValue[];
-  readonly bindings: readonly Readonly<Record<string, string>>[];
 };
 
 /**
@@ -430,23 +426,20 @@ export type Generation = {
   readonly inputs: readonly GeneratedInput[];
 };
 
-/** What Lean answers a Request with, the constructor named after the request's. */
+/** What Lean answers a Request with: the constructor of the request's name, `solve` mid-request, or `error`. */
 export type Response =
   | {
-      readonly type: "checked";
-      readonly findings: readonly Illegal[];
+      readonly type: "check";
+      readonly illegal: readonly Illegal[];
+      readonly nonCanonical: readonly NonCanonical[];
     }
   | {
-      readonly type: "checkedCanonical";
-      readonly findings: readonly NonCanonical[];
-    }
-  | {
-      readonly type: "pairedSnapshots";
+      readonly type: "pairSnapshots";
       readonly compare: readonly Run[];
       readonly findings: readonly Unpaired[];
     }
   | {
-      readonly type: "comparedSnapshot";
+      readonly type: "compareSnapshot";
       readonly mismatch: Mismatch | null;
     }
   | {
@@ -455,37 +448,37 @@ export type Response =
     }
   /** Each value as a trace line, or null when it is none. */
   | {
-      readonly type: "decodedLines";
+      readonly type: "decodeLines";
       readonly lines: readonly (TraceLine | null)[];
     }
   | {
-      readonly type: "evaluated";
+      readonly type: "evaluate";
       readonly result: Evaluated;
     }
   | {
-      readonly type: "tested";
+      readonly type: "test";
       readonly runs: readonly ScenarioRun[];
     }
   | {
-      readonly type: "verified";
+      readonly type: "verify";
       readonly logs: readonly Replayed[];
       readonly uncovered: readonly ViolationValue[];
     }
   | {
-      readonly type: "bound";
+      readonly type: "bindings";
       readonly findings: readonly (Mismatch | Uncomparable)[];
       readonly bindings: readonly Readonly<Record<string, string>>[];
     }
   | {
-      readonly type: "verifiedExternal";
+      readonly type: "verifyExternal";
       readonly findings: readonly (Mismatch | Uncomparable)[];
     }
   | {
-      readonly type: "given";
+      readonly type: "givenRecords";
       readonly records: readonly GivenRecord[];
     }
   | {
-      readonly type: "read";
+      readonly type: "readLines";
       readonly lines: readonly (ReadLine | null)[];
     }
   /**
@@ -493,7 +486,7 @@ export type Response =
    * record facts hold of the parsed record, or of the value when parse rejects it, with their fit (Smt.recordHolds).
    */
   | {
-      readonly type: "parsed";
+      readonly type: "parse";
       readonly supported: boolean;
       readonly value: Json | null;
       readonly issues: readonly Json[] | null;
@@ -501,15 +494,15 @@ export type Response =
       readonly facts: readonly [boolean, Fit] | null;
     }
   | {
-      readonly type: "queried";
+      readonly type: "proveQueries";
       readonly scripts: readonly string[];
     }
   | {
-      readonly type: "proved";
+      readonly type: "prove";
       readonly results: readonly ProveResult[];
     }
   | {
-      readonly type: "generated";
+      readonly type: "generate";
       readonly result: Generation;
     }
   /** The SMT-LIB scripts whose Z3 outputs a running request needs next; TS answers with `solved`. */

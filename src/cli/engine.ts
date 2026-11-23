@@ -34,34 +34,13 @@ function locate(): string {
   );
 }
 
-/** The response that each request gets. */
-const responses = {
-  check: "checked",
-  checkCanonical: "checkedCanonical",
-  pairSnapshots: "pairedSnapshots",
-  compareSnapshot: "comparedSnapshot",
-  afters: "afters",
-  decodeLines: "decodedLines",
-  test: "tested",
-  verify: "verified",
-  bindings: "bound",
-  verifyExternal: "verifiedExternal",
-  givenRecords: "given",
-  readLines: "read",
-  evaluate: "evaluated",
-  parse: "parsed",
-  proveQueries: "queried",
-  prove: "proved",
-  generate: "generated",
-} as const satisfies Record<Exclude<Request["type"], "solved">, Response["type"]>;
-
-export type Asked = keyof typeof responses;
-export type Answer<T extends Asked> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
+/** A request that TS starts; the engine answers it with the response of the same type. */
+export type Asked = Exclude<Request["type"], "solved">;
+export type Answer<T extends Asked> = Omit<Extract<Response, { type: T }>, "type">;
 
 function answerOf<T extends Asked>(type: T, response: Response | null): Answer<T> {
   if (response?.type === "error") throw new InternalError(`the engine: ${response.message}`);
-  if (response?.type !== responses[type])
-    throw new InternalError(`the engine answered ${type} with ${JSON.stringify(response)}`);
+  if (response?.type !== type) throw new InternalError(`the engine answered ${type} with ${JSON.stringify(response)}`);
   const { type: _, ...answer } = response;
   return answer as unknown as Answer<T>;
 }

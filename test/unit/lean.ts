@@ -17,14 +17,10 @@ process.once("exit", () => {
   for (const child of running) child.kill();
 });
 
-/** The response that each request that these tests send gets. */
-const responses = {
-  decodeLines: "decodedLines",
-  evaluate: "evaluated",
-  parse: "parsed",
-} as const satisfies Partial<Record<Request["type"], Response["type"]>>;
+/** The requests that these tests send. */
+type Sent = "decodeLines" | "evaluate" | "parse";
 
-type Responded<T extends keyof typeof responses> = Omit<Extract<Response, { type: (typeof responses)[T] }>, "type">;
+type Responded<T extends Sent> = Omit<Extract<Response, { type: T }>, "type">;
 
 /**
  * The engine process, which a test asks many small questions inside one synchronous property check: stdin and stdout
@@ -88,14 +84,11 @@ export class Lean {
   }
 
   /** Sends `request` and returns the engine's response. */
-  private exchange<T extends keyof typeof responses>(
-    type: T,
-    request: Omit<Extract<Request, { type: T }>, "type">,
-  ): Responded<T> {
+  private exchange<T extends Sent>(type: T, request: Omit<Extract<Request, { type: T }>, "type">): Responded<T> {
     this.send({ type, ...request } as unknown as Request);
     const message = this.receive();
     if (message.type === "error") throw new Error(`tazuna-engine: ${message.message}`);
-    if (message.type !== responses[type]) throw new Error(`tazuna-engine answered ${type} with ${message.type}`);
+    if (message.type !== type) throw new Error(`tazuna-engine answered ${type} with ${message.type}`);
     const { type: _, ...response } = message;
     return response as unknown as Responded<T>;
   }

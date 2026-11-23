@@ -33,8 +33,8 @@ def Stored.row (s : Stored) : Service.Row := { entity := s.entity, key := s.key,
 
 /-- What TS asks Lean to compute. A snapshot line is null for a blank line. -/
 inductive Request where
+  /-- The Illegal and NonCanonical violations of the structure. -/
   | check («structure» : Ir.Structure)
-  | checkCanonical («structure» : Ir.Structure)
   | pairSnapshots (services : List String) (expected : List Verify.Expected) (folders : List Verify.Folder)
   | compareSnapshot (snapshot : List (Option Value)) (run : List Value)
   | afters (snapshot : List (Option TraceLine))
@@ -106,31 +106,30 @@ structure Evaluated where
 
 derive_wire Evaluated serialize_only skip_serializing_none
 
-/-- What Lean answers a Request with, the constructor named after the request's. -/
+/-- What Lean answers a Request with: the constructor of the request's name, `solve` mid-request, or `error`. -/
 inductive Response where
-  | checked (findings : List Validation.Illegal)
-  | checkedCanonical (findings : List Validation.NonCanonical)
-  | pairedSnapshots (compare : List Verify.Run) (findings : List Unpaired)
-  | comparedSnapshot (mismatch : Option Verify.Mismatch)
+  | check (illegal : List Validation.Illegal) (nonCanonical : List Validation.NonCanonical)
+  | pairSnapshots (compare : List Verify.Run) (findings : List Unpaired)
+  | compareSnapshot (mismatch : Option Verify.Mismatch)
   | afters (findings : List Verify.Uncomparable)
   /-- Each value as a trace line, or null when it is none. -/
-  | decodedLines (lines : List (Option TraceLine))
-  | evaluated (result : Evaluated)
-  | tested (runs : List Engine.ScenarioRun)
-  | verified (logs : List Replayed) (uncovered : List Violation)
-  | bound (findings : List Verify.Finding) (bindings : List (List (String × String)))
-  | verifiedExternal (findings : List Verify.Finding)
-  | given (records : List Scenario.GivenRecord)
-  | read (lines : List (Option ReadLine))
+  | decodeLines (lines : List (Option TraceLine))
+  | evaluate (result : Evaluated)
+  | test (runs : List Engine.ScenarioRun)
+  | verify (logs : List Replayed) (uncovered : List Violation)
+  | bindings (findings : List Verify.Finding) (bindings : List (List (String × String)))
+  | verifyExternal (findings : List Verify.Finding)
+  | givenRecords (records : List Scenario.GivenRecord)
+  | readLines (lines : List (Option ReadLine))
   /--
   Whether Lean parses by the schema, and then the value, Zod's issues, or whether a codec threw; and whether prove's
   record facts hold of the parsed record, or of the value when parse rejects it, with their fit (Smt.recordHolds).
   -/
-  | parsed (supported : Bool) (value : Option Value) (issues : Option (List Value)) (thrown : Bool)
+  | parse (supported : Bool) (value : Option Value) (issues : Option (List Value)) (thrown : Bool)
     (facts : Option (Bool × Smt.Fit))
-  | queried (scripts : List String)
-  | proved (results : List ProveResult)
-  | generated (result : Generation)
+  | proveQueries (scripts : List String)
+  | prove (results : List ProveResult)
+  | generate (result : Generation)
   /-- The SMT-LIB scripts whose Z3 outputs a running request needs next; TS answers with `solved`. -/
   | solve (scripts : List String)
   | error (message : String)
