@@ -1,0 +1,3 @@
+{"time":0,"dir":"in","type":"command","id":"quiet#1","name":"quiet","input":{},"caller":{"service":"client"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"quiet#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"boardChanged#1","name":"boardChanged","payload":{"changes":1,"mode":"quiet"},"resultOf":"quiet#1"}

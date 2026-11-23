@@ -1,0 +1,1 @@
+{"service":"board","property":{"kind":"invariant","definition":{"service":"board","name":"board"},"name":"fewChanges"},"creates":{},"items":2,"verdict":{"kind":"proved"},"location":{"file":"board/board.ts","line":9}}

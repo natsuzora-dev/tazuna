@@ -570,6 +570,32 @@ def emitPaths : SVal → List Term
   | _ => [tt]
 
 /--
+The paths through what a decide returns: through each item of an array in turn, with or without an item that an
+operation may leave out, and through each branch of a choice between arrays, such as `c ? [emit(..)] : []`.
+-/
+def decidedPaths : SVal → List Term
+  | .ite c a b => (decidedPaths a).map (.and c) ++ (decidedPaths b).map (.and (.not c))
+  | .list items => items.foldl (fun acc item => acc.flatMap fun p => (emitPaths item).map (.and p)) [tt]
+  | .bag items => items.foldl (fun acc (g, item) =>
+      acc.flatMap fun p => (emitPaths item).map (fun q => conj [p, g, q]) ++ [.and p (.not g)]) [tt]
+  | _ => []
+
+/--
+The records after what a decide returns: the emits of an array in order, and for a choice between arrays each branch as
+its own step from `st`, the state then one or the other; `k` names the variables of the branch.
+-/
+def Stepped.decided (svc : Service) (names : String) (st : Stepped) (k : String) : SVal → ExceptT String Named Stepped
+  | .list items => items.zipIdx.foldlM (init := st) fun st (item, i) => do
+    let st ← st.emitAll svc s!"{names}emit{k}{i}" item
+    (st.named s!"{names}post{k}{i}" : Named Stepped)
+  | .ite c a b => do pure (.ite c (← st.decided svc names s!"{k}y" a) (← st.decided svc names s!"{k}n" b))
+  -- An array that an operation made, such as a spread of a choice between arrays: each item where it is present.
+  | .bag items => items.zipIdx.foldlM (init := st) fun st ((g, item), i) => do
+    let st' ← st.emitAll svc s!"{names}emit{k}{i}" item
+    (Stepped.ite g st' st |>.named s!"{names}post{k}{i}" : Named Stepped)
+  | _ => throw "a decide that returns no array"
+
+/--
 The step of command `name` from `pre` with the input `input` from `caller` at the time `now`, as stepOf builds it; the
 variables that name its terms start with `names`, so that two steps can sit in one query.
 -/
@@ -608,14 +634,8 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let held (c : Check) := Term.and (.not c.throws) c.passes
   let some decide := p.decide.find? (·.definition == svc.ref name) | throw s!"no decide of {name}"
   let (decided, decideErr) ← seval env [] decide.body
-  let items ← match decided with
-    | .list items => pure items
-    | _ => throw "a decide that returns no array literal"
   let start : Stepped := { records := pre, used }
-  let applied : ExceptT String Named Stepped := items.zipIdx.foldlM (init := start) fun st (item, k) => do
-    let st ← st.emitAll svc s!"{names}emit{k}" item
-    (st.named s!"{names}post{k}" : Named Stepped)
-  let (stepped, defs) := applied.run.run []
+  let (stepped, defs) := (start.decided svc names "" decided).run.run []
   let stepped ← stepped
   let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty), asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t }
   let accepted := conj (admitted :: refs ++ bindTerms.map (held ·.2) ++ requireChecks.map held ++
@@ -623,7 +643,7 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   pure { facts := facts ++ named, input, caller, now, accepted, post := stepped.records, used := stepped.used,
          beyond := stepped.beyond, gap := .or stepped.gap (stepped.records.outsideSchema svc), bound, admitted,
          refs := conj refs, binds := bindTerms.map (·.2), requires := requireChecks,
-         paths := items.foldl (fun acc item => acc.flatMap fun p => (emitPaths item).map (.and p)) [tt] }
+         paths := decidedPaths decided }
 
 /--
 The step of command `name` of `svc` from `pre` at the time `clock`, whose slots of each entity are used as `used` says.

@@ -24,10 +24,15 @@ export const answer = command({ callers: ["board"], emits: [boardChanged] }).dec
   emit(boardChanged, { answered: records.Board.answered + 1, mode: records.Board.mode }),
 ]);
 
-// A decide that chooses between arrays has no encoding.
-export const toggle = command({ callers: ["client"], emits: [boardChanged] }).decide(({ records }) =>
-  records.Board.mode === "quiet" ? [emit(boardChanged, { answered: records.Board.answered, mode: "loud" })] : [],
-);
+// An emit whose payload chooses between objects has no encoding.
+export const toggle = command({ callers: ["client"], emits: [boardChanged] }).decide(({ records }) => [
+  emit(
+    boardChanged,
+    records.Board.mode === "quiet"
+      ? { answered: records.Board.answered, mode: "loud" }
+      : { answered: records.Board.answered, mode: "quiet" },
+  ),
+]);
 
 export const answerWhileLoud = automation({ receives: { pinged }, commands: { answer } }).send({
   guard: { loud: ({ records }) => records.Board.mode === "loud" },

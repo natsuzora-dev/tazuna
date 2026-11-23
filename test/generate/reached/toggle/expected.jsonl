@@ -1,0 +1,4 @@
+{"target":{"kind":"Uncovered.request","definition":{"service":"board","name":"toggle"},"data":{}},"creates":{},"items":2,"outcome":{"kind":"reached","input":"toggle.successAnswer"},"location":{"file":"board/board.ts","line":18}}
+{"target":{"kind":"Uncovered.successAnswer","definition":{"service":"board","name":"toggle"},"data":{}},"creates":{},"items":2,"outcome":{"kind":"reached","input":"toggle.successAnswer"},"location":{"file":"board/board.ts","line":18}}
+{"target":{"kind":"Uncovered.request","definition":{"service":"board","name":"quiet"},"data":{}},"creates":{},"items":2,"outcome":{"kind":"reached","input":"quiet.successAnswer"},"location":{"file":"board/board.ts","line":23}}
+{"target":{"kind":"Uncovered.successAnswer","definition":{"service":"board","name":"quiet"},"data":{}},"creates":{},"items":2,"outcome":{"kind":"reached","input":"quiet.successAnswer"},"location":{"file":"board/board.ts","line":23}}
