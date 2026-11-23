@@ -102,17 +102,17 @@ def rejectedBy (checks : List Check) (name : String) : Option Term := do
 def stepGoal (step : Step) : Uncovered → Option Term
   | .request _ => some tt
   | .successAnswer _ => some step.accepted
-  | .bindsRejection _ b => (rejectedBy step.binds b).map (.and step.refs)
+  | .bindsRejection _ b => (rejectedBy step.binds b).map (conj [step.admitted, step.refs, ·])
   | .requiresRejection _ c =>
     (rejectedBy step.requires c).map fun t =>
-      conj ([step.refs] ++ step.binds.map (fun b => .and (.not b.throws) b.passes) ++ [t])
+      conj ([step.admitted, step.refs] ++ step.binds.map (fun b => .and (.not b.throws) b.passes) ++ [t])
   | _ => none
 
 /-- The term that holds when a query's answer reaches `part`. -/
 def answerGoal (a : Answered) : Uncovered → Option Term
   | .request _ => some tt
   | .successAnswer _ => some a.answered
-  | .requiresRejection _ c => rejectedBy a.requires c
+  | .requiresRejection _ c => (rejectedBy a.requires c).map (.and a.admitted)
   | _ => none
 
 /-- The term that holds when a command's step accepts along a path through its decide, within the bounds and the encoding. -/
@@ -155,11 +155,18 @@ def recordTerms (st : Service) (creates created : List (String × Nat)) (records
   let used := keyed.map fun (e, slots) => (e, slots.map (·.live))
   pure ({ keyed, singles }, used)
 
-/-- A request line in, with the id `<name>#<n>` as a scenario's lines have. -/
-def requestLine (query : Bool) (time : Int) (name : String) (n : Nat) (input : Value) : TraceLine :=
+/-- A request line in from `caller`, with the id `<name>#<n>` as a scenario's lines have. -/
+def requestLine (query : Bool) (time : Int) (name : String) (n : Nat) (input : Value) (caller : Caller) : TraceLine :=
   let id := s!"{name}#{n}"
   { time, after := none, created := none,
-    body := if query then .query .in id name input else .command .in id name input }
+    body := if query then .query .in id name input caller else .command .in id name input caller }
+
+/--
+That a client's request to `st` comes from a caller other than `st` itself: the service sends its own requests from its
+automations and charts, which the semantics runs, so a client that claims to be the service stands for no sender.
+-/
+def fromOutside (st : Service) (caller : List (String × Term)) : Facts :=
+  { asserts := [.not (.eq ((caller.lookup "service").getD undefT) (.mkStr (strLit st.service)))] }
 
 /-- The number of `in` lines of `inputs` whose id is `<name>#<n>`, plus one: the number of the next. -/
 def nextNumber (inputs : List TraceLine) (name : String) : Nat :=
@@ -211,12 +218,12 @@ def searchOf (j : Spec.Structure) (depth : Option Nat) (service : String) : IO S
   let bounds := (j.bounds.find? (·.service == service)).map (·.creates)
   let creates := bounds.getD []
   let keyed := st.entities.filter (!st.singles.contains ·)
-  -- A client sends what the service's contract lists, as an app's router serves it; without a contract, any request.
-  let listed (name : String) : Bool :=
-    !j.contracts.any (·.service == service) || (j.contractsListing (st.ref name)).contains service
+  -- A client sends a request whose callers list someone outside the service (fromOutside).
+  let fromClients (name : String) : Bool :=
+    ((st.requirements.lookup name).map (·.callers)).getD [] |>.any (· != .service service)
   pure { spec := j, st, creates, depth := depth.getD (creates.foldl (· + ·.2) 0 + 1),
          blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else none,
-         sendable := (st.commands ++ st.queries).filter listed,
+         sendable := (st.commands ++ st.queries).filter fromClients,
          targets := ((targets j).filter (·.part.ref.service == service)).map (·.part) }
 
 /-- A state of the search: the semantics' state after `inputs`, what the run collected, and the records it created per entity. -/
@@ -256,23 +263,28 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
     let mine := all.filter (!· matches .request _)
     let id := nextNumber n.inputs name
     let isQuery := st.queries.contains name
-    let line (input : List (String × Term)) (M : Model) := requestLine isQuery s.now name id (.obj (present M input))
+    let line (input caller : List (String × Term)) (M : Model) :=
+      requestLine isQuery s.now name id (.obj (present M input)) ((callerIn M caller).getD (.service ""))
     match terms with
     | .error why => wants := wants ++ all.map (.broken · s!"the state's records have no encoding: {why}")
     | .ok (pre, used) =>
     if isQuery then
       match answerOf st p pre now name "in" with
       | .error why => wants := wants ++ all.map (.broken · s!"the query has no encoding: {why}")
-      | .ok a => wants := wants ++ mine.filterMap fun t =>
-        (answerGoal a t).map fun g => .solve (queryOf a.facts g) (line a.input) (some t)
+      | .ok a =>
+        let facts := a.facts ++ fromOutside st a.caller
+        wants := wants ++ mine.filterMap fun t =>
+          (answerGoal a t).map fun g => .solve (queryOf facts g) (line a.input a.caller) (some t)
     else
       let (input, inputFacts) := inputOf st name "in"
-      match stepWith st p pre used name input now "s." with
+      let (caller, callerFacts) := callerVars "in.caller"
+      match stepWith st p pre used name input caller now "s." with
       | .error why => wants := wants ++ all.map (.broken · s!"the command has no encoding: {why}")
       | .ok step =>
-        let facts := inputFacts ++ step.facts
-        wants := wants ++ mine.filterMap (fun t => (stepGoal step t).map fun g => .solve (queryOf facts g) (line input) (some t)) ++
-          (advancing step).map fun g => .solve (queryOf facts g) (line input) none
+        let facts := inputFacts ++ callerFacts ++ fromOutside st caller ++ step.facts
+        wants := wants ++
+          mine.filterMap (fun t => (stepGoal step t).map fun g => .solve (queryOf facts g) (line input caller) (some t)) ++
+          (advancing step).map fun g => .solve (queryOf facts g) (line input caller) none
   -- Answers to the service's requests that wait: an output within the schema, and each rejection the target may give.
   for pd in s.pending.filter (!·.stale) do
     let target := pd.activity.ref
@@ -302,7 +314,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
         let base := facts ++ r.facts
         goals := goals ++ [(base, .not r.fires)]
         if a.sends.isOwn st.service then
-          match stepWith st p pre used a.sends.ref.name r.input now "rs." with
+          match stepWith st p pre used a.sends.ref.name r.input (callerTerms (.service st.service)) now "rs." with
           | .ok step => goals := goals ++ (advancing step).map fun g => (base ++ step.facts, conj [r.fires, r.valid, g])
           | .error _ => goals := goals ++ [(base, r.fires)]
         else goals := goals ++ [(base, r.fires)]
@@ -423,7 +435,10 @@ def Search.run (x : Search) : SolveM Found := do
     frontier := next
   pure found
 
-/-- Whether any state within the bounds, every record within its schema, lets the request of `part` reach it. -/
+/--
+Whether any state within the bounds, every record within its schema, lets the request of `part` from any caller that
+its target takes reach it: the service's own automations and charts send too.
+-/
 def Search.anyState (x : Search) (part : Uncovered) : Except String (Query × Bool) := do
   let p := x.st.structure.program
   let pre := SRecords.named x.st x.creates "pre"
@@ -432,8 +447,9 @@ def Search.anyState (x : Search) (part : Uncovered) : Except String (Query × Bo
   let d := part.ref
   let (goal, more) ← if x.st.commands.contains d.name then do
       let (input, inputFacts) := Smt.inputOf x.st d.name
-      let step ← stepWith x.st p pre used d.name input nowT ""
-      pure ((stepGoal step part).getD ff, inputFacts ++ step.facts)
+      let (caller, callerFacts) := callerVars
+      let step ← stepWith x.st p pre used d.name input caller nowT ""
+      pure ((stepGoal step part).getD ff, inputFacts ++ callerFacts ++ step.facts)
     else do
       let a ← answerOf x.st p pre clockT d.name
       pure ((answerGoal a part).getD ff, a.facts)

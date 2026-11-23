@@ -8,7 +8,7 @@ const arranged = given({
 });
 
 const when = arranged.step((w) => {
-  w.client.send(arm, {});
+  w.client.as("client").send(arm, {});
 });
 
 export const pongAfterDue = scenario({

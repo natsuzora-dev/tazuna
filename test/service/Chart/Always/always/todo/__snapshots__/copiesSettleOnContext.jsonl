@@ -1,4 +1,4 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"openRows#1","name":"openRows","input":{}}
+{"time":1792890000000,"dir":"in","type":"command","id":"openRows#1","name":"openRows","input":{},"caller":{"service":"client"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"openRows#1","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"rowsOpened#1","name":"rowsOpened","payload":{},"resultOf":"openRows#1"}
 {"time":1792890000000,"dir":"out","type":"event","id":"rowMarked#1","name":"rowMarked","payload":{"name":"a"}}

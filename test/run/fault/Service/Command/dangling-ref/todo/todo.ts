@@ -23,6 +23,7 @@ export const { command, createEvent, deleteEvent, updateEvent, contract, scenari
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
@@ -34,11 +35,13 @@ export const taskDeleted = deleteEvent({ entity: Task });
 export const commentDeleted = deleteEvent({ entity: Comment });
 
 export const addComment = command({
+  callers: ["client"],
   input: { commentId: Comment.fields.id, taskId: ref(Task) },
   emits: [commentAdded],
 }).decide(({ input }) => [emit(commentAdded, { id: input.commentId, taskId: input.taskId })]);
 
 export const deleteTaskAndComments = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskDeleted, commentDeleted],
 }).decide(({ input, records }) => [
@@ -47,15 +50,15 @@ export const deleteTaskAndComments = command({
 ]);
 
 export const deleteTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskDeleted, commentDeleted],
 }).decide(({ input }) => [emit(taskDeleted, { id: input.taskId })]);
 
 export const taskPinned = updateEvent({ entity: Pin, writes: ["taskId"] });
 
-export const pinTask = command({
-  input: { taskId: ref(Task) },
-  emits: [taskPinned],
-}).decide(({ input }) => [emit(taskPinned, { taskId: input.taskId })]);
+export const pinTask = command({ callers: ["client"], input: { taskId: ref(Task) }, emits: [taskPinned] }).decide(
+  ({ input }) => [emit(taskPinned, { taskId: input.taskId })],
+);
 
 export const todo = contract({ addTask, addComment, deleteTaskAndComments, deleteTask, pinTask });

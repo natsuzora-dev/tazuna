@@ -81,12 +81,14 @@ async function loadApp(
   const calendarDouble: typeof Calendar = {
     nextBusinessDay: (input) =>
       new Promise((resolve) =>
-        outputs.request(queryRequest(calendar.nextBusinessDay, input, (a) => resolve(toApp.calendar(a)))),
+        outputs.request(
+          queryRequest(calendar.nextBusinessDay, input, { service: "todo" }, (a) => resolve(toApp.calendar(a))),
+        ),
       ),
   };
   const deviceRequest = (name: keyof typeof Device, input: object) =>
     new Promise<DeviceResult>((resolve) =>
-      outputs.request(commandRequest(device[name], input, (a) => resolve(toApp.device(a)))),
+      outputs.request(commandRequest(device[name], input, { service }, (a) => resolve(toApp.device(a)))),
     );
   const deviceDouble: typeof Device = {
     requestNotificationPermission: () => deviceRequest("requestNotificationPermission", {}),

@@ -33,9 +33,9 @@ def arriveFrom (st : Service) (fs : Functions m) (s : State) (sender : String) (
     m State :=
   let given := some (receivedId sender id)
   match body with
-  | .command n input => send st fs s n given input
-  | .query n input => call st fs s n given input
-  | .subscribe n input => subscribe st fs s n given input
+  | .command n input caller => send st fs s n given input caller
+  | .query n input caller => call st fs s n given input caller
+  | .subscribe n input caller => subscribe st fs s n given input caller
   | .unsubscribe to => endSubscription st fs s (receivedId sender to)
   | .answer to a => match sentId? st.service to with
     | some own => answerIn st fs s (receivedId sender id) own a

@@ -12,12 +12,13 @@ export const { command, query, createEvent, contract, scenario } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
-export const taskTitles = query({
-  output: { titles: bag(Task.fields.title) },
-}).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));
+export const taskTitles = query({ callers: ["client"], output: { titles: bag(Task.fields.title) } }).resolve(
+  ({ records }) => ({ titles: records.Task.map((t) => t.title) }),
+);
 
 export const todo = contract({ addTask, taskTitles });

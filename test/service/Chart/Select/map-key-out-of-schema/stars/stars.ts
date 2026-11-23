@@ -6,15 +6,13 @@ export const { command, machine, event, scenario } = service({ name: "stars", de
 export const taskStarred = event({ payload: { taskId: z.string() } });
 export const noted = event({ payload: { taskId: z.string() } });
 
-export const starTask = command({
-  input: { taskId: z.string() },
-  emits: [taskStarred],
-}).decide(({ input }) => [emit(taskStarred, { taskId: input.taskId })]);
+export const starTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskStarred] }).decide(
+  ({ input }) => [emit(taskStarred, { taskId: input.taskId })],
+);
 
-export const note = command({
-  input: { taskId: z.string() },
-  emits: [noted],
-}).decide(({ input }) => [emit(noted, { taskId: input.taskId })]);
+export const note = command({ callers: ["client", "stars"], input: { taskId: z.string() }, emits: [noted] }).decide(
+  ({ input }) => [emit(noted, { taskId: input.taskId })],
+);
 
 export const perTask = machine({
   description: "Mark only in the copies of tasks whose taskId fits the key schema",

@@ -1,11 +1,11 @@
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.reminderSettings#1","name":"todo.reminderSettings","input":{}}
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"}}
+{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.reminderSettings#1","name":"todo.reminderSettings","input":{},"caller":{"service":"screens"}}
+{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"},"caller":{"service":"screens"}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"todo/answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"task-1","title":"Buy milk","dueAt":1793005200000,"completedAt":null}]}}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"todo/answer#2","to":"todo.reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":true}}}
 {"time":1792890000000,"dir":"in","type":"operation","id":"taskListScreen.openTask#1","name":"taskListScreen.openTask","payload":{"taskId":"task-1","title":"Buy milk"}}
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.taskDetail#1","name":"todo.taskDetail","input":{"taskId":"task-1"}}
+{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.taskDetail#1","name":"todo.taskDetail","input":{"taskId":"task-1"},"caller":{"service":"screens"}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"todo/answer#3","to":"todo.taskDetail#1","answer":{"result":"fulfilled","output":{"task":{"title":"Buy milk","isCompleted":false,"dueAt":1793005200000,"createdAt":1792882800000,"remindAt":1793005200000}}}}
 {"time":1792890000000,"dir":"in","type":"operation","id":"taskDetailScreen.rename#1","name":"taskDetailScreen.rename","payload":{"title":"Buy milk"}}
 {"time":1792890000000,"dir":"in","type":"operation","id":"taskDetailScreen.rename#2","name":"taskDetailScreen.rename","payload":{"title":"Buy soy milk"}}
-{"time":1792890000000,"dir":"out","type":"command","id":"todo.renameTask#1","name":"todo.renameTask","input":{"taskId":"task-1","title":"Buy soy milk"}}
+{"time":1792890000000,"dir":"out","type":"command","id":"todo.renameTask#1","name":"todo.renameTask","input":{"taskId":"task-1","title":"Buy soy milk"},"caller":{"service":"screens"}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"todo/answer#4","to":"todo.renameTask#1","answer":{"result":"accepted"}}

@@ -24,6 +24,9 @@
           "beatIds": ["beat-1", "beat-2"]
         },
         "holes": []
+      },
+      "caller": {
+        "service": "client"
       }
     },
     {

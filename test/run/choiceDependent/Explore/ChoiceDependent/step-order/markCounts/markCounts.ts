@@ -12,23 +12,17 @@ export const { automation, command, event, createEvent, contract, scenario } = s
 export const taskAdded = event({ payload: { id: z.string() } });
 export const marked = createEvent({ entity: Mark });
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
-
-export const markA = command({
-  input: { id: z.string() },
-  emits: [marked],
-}).decide(({ input, records }) =>
-  records.Mark.get(input.id) === undefined ? [emit(marked, { id: input.id, count: 0 })] : [],
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
 );
 
-export const markB = command({
-  input: { id: z.string() },
-  emits: [marked],
-}).decide(({ input, records }) =>
-  records.Mark.get(input.id) === undefined ? [emit(marked, { id: input.id, count: records.Mark.size })] : [],
+export const markA = command({ callers: ["client", "markCounts"], input: { id: z.string() }, emits: [marked] }).decide(
+  ({ input, records }) => (records.Mark.get(input.id) === undefined ? [emit(marked, { id: input.id, count: 0 })] : []),
+);
+
+export const markB = command({ callers: ["client", "markCounts"], input: { id: z.string() }, emits: [marked] }).decide(
+  ({ input, records }) =>
+    records.Mark.get(input.id) === undefined ? [emit(marked, { id: input.id, count: records.Mark.size })] : [],
 );
 
 export const markWithA = automation({

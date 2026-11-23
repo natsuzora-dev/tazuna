@@ -24,12 +24,12 @@ export const taskAdded = createEvent({ entity: Task });
 export const noteAdded = createEvent({ entity: Note });
 export const tagAdded = createEvent({ entity: Tag });
 
-export const addTask = command({
-  input: { taskId: Task.fields.id },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
 export const addNote = command({
+  callers: ["client", "todo"],
   input: { noteId: Note.fields.id, taskId: ref(Task) },
   emits: [noteAdded],
 }).decide(({ input }) => [emit(noteAdded, { id: input.noteId, taskId: input.taskId })]);
@@ -40,6 +40,7 @@ export const noteAddedTask = automation({
 }).send({ input: ({ payload, createKey }) => ({ noteId: createKey(ref(Note)), taskId: payload.id }) });
 
 export const addTag = command({
+  callers: ["client", "todo"],
   input: { tagId: Tag.fields.id, taskId: ref(Task) },
   emits: [tagAdded],
 }).decide(({ input }) => [emit(tagAdded, { id: input.tagId, taskId: input.taskId })]);

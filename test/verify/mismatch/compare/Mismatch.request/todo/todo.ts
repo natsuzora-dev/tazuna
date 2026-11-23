@@ -5,6 +5,7 @@ import { screens } from "../screens/contract.ts";
 export const { query, contract } = service({ name: "todo", description: "Answer questions about notes" });
 
 export const linked = query({
+  callers: ["client", "screens"],
   input: { links: bag(z.object({ from: screens.DraftId, to: screens.DraftId })) },
   output: { count: z.int() },
 }).resolve(({ input }) => ({ count: input.links.size }));

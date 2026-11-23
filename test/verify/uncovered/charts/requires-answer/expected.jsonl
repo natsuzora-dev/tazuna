@@ -1,4 +1,4 @@
-{"kind":"Uncovered.transition","definition":{"service":"todo","name":"planner"},"data":{"transition":{"state":"asking","trigger":{"type":"calls","key":"nextDay","outcome":"onFulfilled"},"index":0}},"location":{"file":"todo/todo.ts","line":20}}
-{"kind":"Uncovered.transition","definition":{"service":"todo","name":"planner"},"data":{"transition":{"state":"asking","trigger":{"type":"calls","key":"nextDay","outcome":"onRejected"},"index":0}},"location":{"file":"todo/todo.ts","line":20}}
-{"kind":"Uncovered.state","definition":{"service":"todo","name":"planner"},"data":{"state":"planned"},"location":{"file":"todo/todo.ts","line":20}}
-{"kind":"Uncovered.state","definition":{"service":"todo","name":"planner"},"data":{"state":"refused"},"location":{"file":"todo/todo.ts","line":20}}
+{"kind":"Uncovered.transition","definition":{"service":"todo","name":"planner"},"data":{"transition":{"state":"asking","trigger":{"type":"calls","key":"nextDay","outcome":"onFulfilled"},"index":0}},"location":{"file":"todo/todo.ts","line":19}}
+{"kind":"Uncovered.transition","definition":{"service":"todo","name":"planner"},"data":{"transition":{"state":"asking","trigger":{"type":"calls","key":"nextDay","outcome":"onRejected"},"index":0}},"location":{"file":"todo/todo.ts","line":19}}
+{"kind":"Uncovered.state","definition":{"service":"todo","name":"planner"},"data":{"state":"planned"},"location":{"file":"todo/todo.ts","line":19}}
+{"kind":"Uncovered.state","definition":{"service":"todo","name":"planner"},"data":{"state":"refused"},"location":{"file":"todo/todo.ts","line":19}}

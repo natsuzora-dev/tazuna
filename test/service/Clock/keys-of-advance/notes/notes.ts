@@ -12,15 +12,18 @@ export const { automation, command, event, createEvent, machine, query, contract
 export const taskAdded = event({ payload: { id: z.string() } });
 export const noteAdded = createEvent({ entity: Note });
 
-export const addTask = command({ input: { taskId: z.string() }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { id: input.taskId }),
-]);
-
-export const addNote = command({ input: { noteId: Note.fields.id, label: z.string() }, emits: [noteAdded] }).decide(
-  ({ input }) => [emit(noteAdded, { id: input.noteId, label: input.label })],
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
 );
 
+export const addNote = command({
+  callers: ["client", "notes"],
+  input: { noteId: Note.fields.id, label: z.string() },
+  emits: [noteAdded],
+}).decide(({ input }) => [emit(noteAdded, { id: input.noteId, label: input.label })]);
+
 export const noteByLabel = query({
+  callers: ["client"],
   input: { label: z.string() },
   output: { noteId: Note.fields.id.describe('The key of the one note with the label, or "" for none or several') },
 }).resolve(({ input, records }) => {

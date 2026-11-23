@@ -12,6 +12,7 @@ export const { command, createEvent, scenario } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);

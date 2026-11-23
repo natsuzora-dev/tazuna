@@ -18,6 +18,7 @@ export const taskAdded = createEvent({ entity: Task });
 export const choreAdded = event({ payload: { taskId: Task.fields.id } });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded, choreAdded],
 }).decide(({ input }) => [
@@ -28,6 +29,7 @@ export const addTask = command({
 export const reminded = event({ payload: { taskId: Task.fields.id } });
 
 export const remind = command({
+  callers: ["client", "backlog"],
   input: { taskId: Task.fields.id },
   emits: [reminded],
 }).decide(({ input }) => [emit(reminded, { taskId: input.taskId })]);

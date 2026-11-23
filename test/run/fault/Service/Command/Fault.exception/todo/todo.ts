@@ -5,8 +5,10 @@ export const { command, event, contract, scenario } = service({ name: "todo", de
 
 export const titleLogged = event({ payload: { title: z.string(), until: date } });
 
-export const logTitle = command({ input: { title: z.string(), from: date }, emits: [titleLogged] }).decide(
-  ({ input }) => [emit(titleLogged, { title: input.title, until: addDays(input.from, 3_000_000) })],
-);
+export const logTitle = command({
+  callers: ["client"],
+  input: { title: z.string(), from: date },
+  emits: [titleLogged],
+}).decide(({ input }) => [emit(titleLogged, { title: input.title, until: addDays(input.from, 3_000_000) })]);
 
 export const todo = contract({ logTitle });

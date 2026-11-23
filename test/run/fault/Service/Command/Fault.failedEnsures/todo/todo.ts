@@ -12,6 +12,7 @@ export const { command, createEvent, contract, scenario } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
   ensures: { keepsTitle: ({ input, records }) => records.Task.get(input.taskId)?.title === input.title },

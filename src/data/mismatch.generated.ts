@@ -36,6 +36,17 @@ export type Mismatch =
         readonly trace: Json;
       };
     }
+  /** The request line has another caller than the snapshot's. */
+  | {
+      readonly kind: "Mismatch.caller";
+      readonly definition: null;
+      readonly line: number;
+      readonly data: {
+        readonly subject: Subject;
+        readonly snapshot: Json;
+        readonly trace: Json;
+      };
+    }
   /** The event line has another payload than the snapshot's. */
   | {
       readonly kind: "Mismatch.event";
@@ -306,6 +317,7 @@ export type Mismatch =
 
 export const mismatchKinds = [
   "Mismatch.request",
+  "Mismatch.caller",
   "Mismatch.event",
   "Mismatch.output",
   "Mismatch.result",

@@ -12,6 +12,7 @@ export const { command, machine, event } = service({
 export const greeted = event({ payload: { taskId: z.string(), rank: z.int() } });
 
 export const greet = command({
+  callers: ["client", "greeter"],
   input: { taskId: ref(Task), rank: z.int(), label: z.object({ text: z.string() }) },
   emits: [greeted],
 }).decide(({ input }) => [emit(greeted, { taskId: input.taskId, rank: input.rank })]);

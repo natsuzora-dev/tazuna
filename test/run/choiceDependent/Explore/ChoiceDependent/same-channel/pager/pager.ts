@@ -3,4 +3,4 @@ import { z } from "zod";
 
 export const { command, contract } = externalService({ name: "pager", description: "Page a person" });
 
-export const page = command({ input: { by: z.string() }, emits: [], rejects: [] });
+export const page = command({ callers: ["bells"], input: { by: z.string() }, emits: [], rejects: [] });

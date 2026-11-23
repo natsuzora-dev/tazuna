@@ -6,7 +6,7 @@ export const addDue = scenario({
     "Add a task due 2026-10-25; the invariant of Task moves the date three million days on, past year 9999, so addDays faults and test reports exception of Task",
   given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: { Task: [] }, peers: [] },
   when: (w) => {
-    w.client.send(addTask, { taskId: "task-1", due: "2026-10-25" });
+    w.client.as("client").send(addTask, { taskId: "task-1", due: "2026-10-25" });
   },
   then: () => [],
 });

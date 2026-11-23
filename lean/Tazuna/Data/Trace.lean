@@ -30,13 +30,29 @@ def LineId.text : LineId → String
   | .received sender id => s!"{sender}/{id}"
 
 /--
+Who sent a request, as the receiver knows it from outside the spec (authentication): a record of an entity of the
+receiving service, by its key, or a service, by its name. A Cedar request names its principal the same way.
+-/
+inductive Caller where
+  | entity (entity : String) (key : String)
+  | service (service : String)
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire Caller untagged
+
+/-- The strings of the caller in which created keys are searched: an entity record's key. -/
+def Caller.strings : Caller → List String
+  | .entity _ key => [key]
+  | .service _ => []
+
+/--
 The body of a trace line. Every line has `dir` and `id`, `type` decides the other fields, and the `dir` of a time or
 restart line is "in".
 -/
 inductive TraceLine.Body where
-  | command (dir : Dir) (id : String) (name : String) (input : Value)
-  | query (dir : Dir) (id : String) (name : String) (input : Value)
-  | subscribe (dir : Dir) (id : String) (name : String) (input : Value)
+  | command (dir : Dir) (id : String) (name : String) (input : Value) (caller : Caller)
+  | query (dir : Dir) (id : String) (name : String) (input : Value) (caller : Caller)
+  | subscribe (dir : Dir) (id : String) (name : String) (input : Value) (caller : Caller)
   | answer (dir : Dir) (id : String) (to : String) (answer : Answer)
   | unsubscribe (dir : Dir) (id : String) (to : String)
   | event (dir : Dir) (id : String) (name : String) (payload : Value) (resultOf : Option String)
@@ -61,8 +77,12 @@ def TraceLine.Body.id : TraceLine.Body → String
   | .operation _ id .. | .time _ id | .restart _ id => id
 
 def TraceLine.Body.name? : TraceLine.Body → Option String
-  | .command _ _ name _ | .query _ _ name _ | .subscribe _ _ name _ | .event _ _ name _ _ | .operation _ _ name _ _ => some name
+  | .command _ _ name _ _ | .query _ _ name _ _ | .subscribe _ _ name _ _ | .event _ _ name _ _ | .operation _ _ name _ _ => some name
   | .answer .. | .unsubscribe .. | .time .. | .restart .. => none
+
+def TraceLine.Body.caller? : TraceLine.Body → Option Caller
+  | .command _ _ _ _ caller | .query _ _ _ _ caller | .subscribe _ _ _ _ caller => some caller
+  | _ => none
 
 def TraceLine.Body.to? : TraceLine.Body → Option String
   | .answer _ _ to _ | .unsubscribe _ _ to => some to

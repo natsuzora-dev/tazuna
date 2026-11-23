@@ -8,8 +8,8 @@ export const eventRoutedByKey = scenario({
     "Star task-1 and task-3; taskStarred reaches only the copy whose key taskId equals the taskId of the payload, so only the copy of task-1 notifies, and the taskStarred of task-3, which has no copy, reaches no copy",
   given: arranged,
   when: (w) => {
-    w.client.send(starTask, { taskId: "task-1" });
-    w.client.send(starTask, { taskId: "task-3" });
+    w.client.as("client").send(starTask, { taskId: "task-1" });
+    w.client.as("client").send(starTask, { taskId: "task-3" });
   },
   then: () => [],
 });

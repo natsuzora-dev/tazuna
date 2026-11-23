@@ -18,11 +18,13 @@ export const taskAdded = createEvent({ entity: Task });
 export const dueSet = updateEvent({ entity: Task, writes: ["due"] });
 
 export const addTasks = command({
+  callers: ["client"],
   input: { taskIds: z.array(Task.fields.id) },
   emits: [taskAdded],
 }).decide(({ input }) => input.taskIds.map((id) => emit(taskAdded, { id, due: null })));
 
 export const setDue = command({
+  callers: ["client", "todo"],
   input: { taskId: ref(Task), due: instant },
   emits: [dueSet],
 }).decide(({ input }) => [emit(dueSet, { id: input.taskId, due: input.due })]);

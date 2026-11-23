@@ -9,9 +9,9 @@ export const { command, query, machine, event, contract, scenario } = service({
 
 export const askPressed = event({});
 
-export const ask = command({ emits: [askPressed] }).decide(() => [emit(askPressed, {})]);
+export const ask = command({ callers: ["client"], emits: [askPressed] }).decide(() => [emit(askPressed, {})]);
 
-export const status = query({ output: { ready: z.boolean() } }).resolve(() => ({ ready: true }));
+export const status = query({ callers: ["client"], output: { ready: z.boolean() } }).resolve(() => ({ ready: true }));
 
 export const permission = machine({
   description: "Ask for the permission when ask is pressed",

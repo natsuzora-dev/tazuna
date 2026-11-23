@@ -9,9 +9,9 @@ export const { automation, command, event, contract } = service({
 
 export const notified = event({ payload: { text: z.string() } });
 
-export const notify = command({ input: { text: z.string() }, emits: [notified] }).decide(({ input }) => [
-  emit(notified, { text: input.text }),
-]);
+export const notify = command({ callers: ["client", "todo"], input: { text: z.string() }, emits: [notified] }).decide(
+  ({ input }) => [emit(notified, { text: input.text })],
+);
 
 export const askOnNotified = automation({
   receives: { notified },

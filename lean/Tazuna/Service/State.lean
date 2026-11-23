@@ -145,6 +145,7 @@ structure Subscription where
   id : LineId
   query : String
   input : Value
+  caller : Caller
   last : Option Value := none
 deriving DecidableEq, Repr, Inhabited
 
@@ -158,6 +159,8 @@ structure Durable where
   createdEntities : List String := []
   /-- The service whose state this is, which qualifies its createKey values (Keys) and names its line ids. -/
   service : String
+  /-- The user that operates the service's screens, or none when no user signed in. -/
+  user : Option Caller := none
 deriving Repr, Inhabited
 
 /-- The part of the state that lives in the service process's memory; a restart drops it. -/
@@ -296,6 +299,15 @@ def State.emitAll (s : State) (resultOf : Option LineId) (emits : List (Emit × 
 
 def State.machine? (s : State) (id : InstanceId) : Option Instance :=
   (s.machines ++ s.copies).find? (·.id == id)
+
+/--
+The caller of the requests that `requester` sends: a screen acts for the user that operates it, or for its service when
+no user signed in, as a signed-out web app calls with its own key; any other sender sends as its service.
+-/
+def State.callerOf (s : State) (requester : Requester) : Caller :=
+  match requester.machine?.bind s.machine? with
+  | some i => if i.chart.screen then s.user.getD (.service s.service) else .service s.service
+  | none => .service s.service
 
 /--
 The fault of `sender` when the receiver rejected its input to `target` as invalid. Only the receiver parses a message,

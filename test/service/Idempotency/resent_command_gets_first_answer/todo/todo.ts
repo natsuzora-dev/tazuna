@@ -17,6 +17,7 @@ export const taskAddedRecorded = createEvent({ entity: Task });
 export const taskAdded = event({ payload: { taskId: z.string() } });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAddedRecorded, taskAdded],
 }).decide(({ input }) => [
@@ -24,6 +25,6 @@ export const addTask = command({
   emit(taskAdded, { taskId: input.taskId }),
 ]);
 
-export const taskCount = query({
-  output: { count: z.int() },
-}).resolve(({ records }) => ({ count: records.Task.size }));
+export const taskCount = query({ callers: ["client"], output: { count: z.int() } }).resolve(({ records }) => ({
+  count: records.Task.size,
+}));

@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { MarkOf } from "../data/bag.ts";
+import type { Caller } from "../data/scenario.generated.ts";
 import type { Rejection, RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import type { Contract, RecordsOf, ServiceOf } from "../dsl/contract.ts";
@@ -14,6 +15,7 @@ import type {
   Query,
   ServiceDefinition,
 } from "../dsl/definition.ts";
+import type { AnyKeyedEntity } from "../dsl/entity.ts";
 import type { EncodedPayload, PayloadShape } from "../dsl/event.ts";
 
 type Encoded<S extends Shape> = z.input<z.ZodObject<{ -readonly [K in keyof S]: S[K] }>>;
@@ -365,6 +367,12 @@ export interface Given<R, P extends Peers, Own extends string = string> {
   readonly records: R;
   /** Every service that exchanges messages with the own service. */
   readonly peers: P & NoInfer<CheckedPeers<P, Own>>;
+  /**
+   * The user that operates the screens of every running service, which send their requests as this caller: a record of
+   * an entity of the receiving service, such as `{ entity: "User", key: "u1" }`. Left out, no user signed in, and a
+   * screen sends as its own service.
+   */
+  readonly user?: Caller;
 }
 
 type Members<C> = C[keyof C];
@@ -381,8 +389,23 @@ type Running<P extends Peers> = NameOf<Extract<P[number], Run>>;
 /** The names of the peers of `P` that take part in the simulation: running and external ones. */
 type Taking<P extends Peers> = NameOf<Exclude<P[number], Skip>>;
 
-/** The client, which reaches the services of `R` directly. Its lines' messages travel between services of `S`. */
+/**
+ * The client, which reaches the services of `R` directly. Its lines' messages travel between services of `S`. Each
+ * request states who sends it (`as`), whom the receiver takes as authenticated.
+ */
 interface Client<R extends string, S extends string, X extends Listed> {
+  /** The requests of a record of the receiver's entity `entity`, whose key is `key`. */
+  as<E extends AnyKeyedEntity>(entity: E, key: string): Sender<R, S, X>;
+  /** The requests of the service `service`. */
+  as(service: string): Sender<R, S, X>;
+  /** The client ends the subscription of `subscription`. */
+  unsubscribe(subscription: ClientSubscribeLine): ProcessingLine<S, X>;
+  /** The client sends the request of `line` again with the same id and caller. */
+  resend<L extends ClientRequestLine | ClientSubscribeLine>(line: L): L;
+}
+
+/** The requests of one caller that the client sends. */
+interface Sender<R extends string, S extends string, X extends Listed> {
   /** A command to the own service or to a running peer, the owner of the definition. */
   send<C extends AnyCommand>(
     command: C & OwnedBy<C, R>,
@@ -393,10 +416,6 @@ interface Client<R extends string, S extends string, X extends Listed> {
   call<Q extends AnyQuery>(query: Q & OwnedBy<Q, R>, input: Value<InputOf<Q>> | Raw): ClientRequestLine<Q, S, X>;
   /** A subscription to a query of the own service or of a running peer, answered each time the answer changes. */
   subscribe<Q extends AnyQuery>(query: Q & OwnedBy<Q, R>, input: Value<InputOf<Q>> | Raw): ClientSubscribeLine<Q, S, X>;
-  /** The client ends the subscription of `subscription`. */
-  unsubscribe(subscription: ClientSubscribeLine): ProcessingLine<S, X>;
-  /** The client sends the request of `line` again with the same id. */
-  resend<L extends ClientRequestLine | ClientSubscribeLine>(line: L): L;
 }
 
 interface User<S extends string, X extends Listed> {
@@ -682,7 +701,7 @@ export const raw = (value: unknown): Raw => Object.freeze({ [rawMark]: value }) 
 export interface ScenarioDefinition {
   readonly kind: "scenario";
   readonly description: string;
-  readonly given: { readonly start: number; readonly records: unknown; readonly peers: Peers };
+  readonly given: { readonly start: number; readonly records: unknown; readonly peers: Peers; readonly user?: Caller };
   readonly when: (w: When<Peers>) => unknown;
   /** Then, under another key, so that the definition is no thenable. */
   readonly expect: (lines: never) => readonly Expectation[];

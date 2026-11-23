@@ -19,11 +19,12 @@ export const taskAdded = createEvent({ entity: Task });
 const taskSeen = event({});
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: z.string() },
   emits: [taskAdded, taskSeen],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId }), emit(taskSeen, {})]);
 
-const markSeen = command({ emits: [] }).decide(() => []);
+const markSeen = command({ callers: ["client"], emits: [] }).decide(() => []);
 
 export const seenMarked = automation({ receives: { taskSeen }, commands: { markSeen } }).send({});
 
@@ -41,7 +42,11 @@ export const watcher = machine({
 
 export const taskNoted = event({ payload: { taskId: ref(Task) } });
 
-export const taskDetail = query({ input: { taskId: ref(Task) }, output: { related: set(ref(Task)) } }).resolve(() => ({
+export const taskDetail = query({
+  callers: ["client"],
+  input: { taskId: ref(Task) },
+  output: { related: set(ref(Task)) },
+}).resolve(() => ({
   related: [],
 }));
 

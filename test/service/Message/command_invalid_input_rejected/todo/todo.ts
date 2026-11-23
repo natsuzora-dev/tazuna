@@ -26,11 +26,13 @@ export const taskRenamed = updateEvent({
 });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title, completedAt: null })]);
 
 export const completeTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskCompleted],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
@@ -38,6 +40,7 @@ export const completeTask = command({
 }).decide(({ input, now }) => [emit(taskCompleted, { id: input.taskId, completedAt: now })]);
 
 export const swapTitles = command({
+  callers: ["client"],
   input: { firstId: ref(Task), secondId: ref(Task) },
   emits: [taskRenamed],
   binds: {
@@ -50,6 +53,7 @@ export const swapTitles = command({
 ]);
 
 export const titledCount = query({
+  callers: ["client"],
   input: { title: z.string() },
   output: { count: z.int() },
   requires: { hasTitle: ({ input }) => input.title !== "" },

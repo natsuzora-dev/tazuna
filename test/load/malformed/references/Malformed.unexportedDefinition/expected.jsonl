@@ -1,2 +1,2 @@
 {"kind":"Malformed.unexportedDefinition","definition":{"service":"app","name":"player"},"data":{"path":["commands","mute"]},"location":{"file":"app/app.ts","line":6}}
-{"kind":"Malformed.unexportedDefinition","definition":null,"data":{"contract":"device","key":"mute"},"location":{"file":"device/contract.ts","line":12}}
+{"kind":"Malformed.unexportedDefinition","definition":null,"data":{"contract":"device","key":"mute"},"location":{"file":"device/contract.ts","line":16}}

@@ -1,21 +1,22 @@
 import type { z } from "zod";
 import type { CommandAnswer, QueryAnswer } from "../data/answer.ts";
 import { parsedOutside } from "../data/collections.ts";
-import type { GivenRecord } from "../data/scenario.generated.ts";
+import type { Caller, GivenRecord } from "../data/scenario.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import { type Shape, strictObjectOf } from "../data/values.ts";
 import type { AnyCommand, AnyQuery } from "../dsl/definition.ts";
 
 /**
- * A message that the harness gives the implementation. `name` is the name in the spec. An operation names its screen
- * instance by `nth`, its index among the open instances of the screen in opening order, only when more than one is
- * open.
+ * A message that the harness gives the implementation. `name` is the name in the spec. A request names its `caller`,
+ * whom the implementation takes as authenticated. An operation names its screen instance by `nth`, its index among the
+ * open instances of the screen in opening order, only when more than one is open.
  */
 export interface InputMessage {
   readonly id: string;
   readonly name: string;
   readonly input: unknown;
   readonly payload: unknown;
+  readonly caller?: Caller;
   readonly nth?: number;
 }
 
@@ -24,8 +25,16 @@ export interface InputMessage {
  * deliveries to the implementation and the restart. The implementation's outputs reach the harness through `Outputs`.
  */
 export interface Adapter {
-  /** Starts the implementation at `time` with the Given records, each value as the trace writes values. */
-  readonly start: (outputs: Outputs, time: number, records: readonly GivenRecord[]) => Promise<void>;
+  /**
+   * Starts the implementation at `time` with the Given records, each value as the trace writes values, and the user that
+   * operates its screens, undefined when no user signed in.
+   */
+  readonly start: (
+    outputs: Outputs,
+    time: number,
+    records: readonly GivenRecord[],
+    user: Caller | undefined,
+  ) => Promise<void>;
   readonly now: () => number;
   /** Moves the implementation's clock to `time`, firing its timers due by then in its own order. */
   readonly advanceTo: (time: number) => Promise<void>;
@@ -66,6 +75,8 @@ export class Unsettled extends Error {
 export interface ForeignRequest {
   readonly definition: AnyCommand | AnyQuery;
   readonly input: unknown;
+  /** Whom the implementation sends the request as: its own service, or the user that operates its screen. */
+  readonly caller: Caller;
   readonly answer: (answer: Answer, id: string) => void;
 }
 
@@ -96,14 +107,16 @@ export function decodeAnswer(request: AnyCommand | AnyQuery, answer: Answer): An
 export const commandRequest = (
   command: AnyCommand,
   input: unknown,
+  caller: Caller,
   answer: (answer: CommandAnswer, id: string) => void,
-): ForeignRequest => ({ definition: command, input, answer: (a, id) => answer(decodeAnswer(command, a), id) });
+): ForeignRequest => ({ definition: command, input, caller, answer: (a, id) => answer(decodeAnswer(command, a), id) });
 
 export const queryRequest = <Q extends AnyQuery>(
   query: Q,
   input: unknown,
+  caller: Caller,
   answer: (answer: QueryAnswer<z.output<z.ZodObject<Q["output"]>>>, id: string) => void,
-): ForeignRequest => ({ definition: query, input, answer: (a, id) => answer(decodeAnswer(query, a), id) });
+): ForeignRequest => ({ definition: query, input, caller, answer: (a, id) => answer(decodeAnswer(query, a), id) });
 
 /** A place in the trace where the implementation's outputs are written. */
 export interface OutputSlot {

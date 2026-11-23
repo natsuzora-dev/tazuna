@@ -31,12 +31,14 @@ export const taskRenamed = updateEvent({
 });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
   requires: { titleFree: ({ input, records }) => records.Task.every((t) => t.title !== input.title) },
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const renameTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task), title: Task.fields.title },
   emits: [taskRenamed],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
@@ -59,12 +61,14 @@ export const taskPinned = updateEvent({
 });
 
 export const pinTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskPinned],
   requires: { pinsLeft: ({ records }) => records.Board.pins < 2 },
 }).decide(({ input, records }) => [emit(taskPinned, { pinned: input.taskId, pins: records.Board.pins + 1 })]);
 
 export const pinTaskByTitle = command({
+  callers: ["client"],
   input: { title: Task.fields.title },
   emits: [taskPinned],
   binds: { task: ({ input, records }) => records.Task.filter((t) => t.title === input.title).only() },
@@ -72,6 +76,7 @@ export const pinTaskByTitle = command({
 }).decide(({ records, bound }) => [emit(taskPinned, { pinned: bound.task.id, pins: records.Board.pins + 1 })]);
 
 export const taskTitles = query({
+  callers: ["client"],
   output: { titles: bag(Task.fields.title) },
   ensures: {
     distinct: ({ output }) => output.titles.every((t) => output.titles.filter((u) => u === t).size === 1),

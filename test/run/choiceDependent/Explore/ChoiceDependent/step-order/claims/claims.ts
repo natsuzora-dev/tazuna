@@ -18,13 +18,14 @@ export const taskAdded = createEvent({ entity: Task });
 export const claimed = updateEvent({ entity: Winner, writes: ["taskId"] });
 
 export const addTasks = command({
+  callers: ["client"],
   input: { taskIds: z.array(Task.fields.id) },
   emits: [taskAdded],
 }).decide(({ input }) => input.taskIds.map((id) => emit(taskAdded, { id })));
 
-export const claim = command({ input: { taskId: ref(Task) }, emits: [claimed] }).decide(({ input }) => [
-  emit(claimed, { taskId: input.taskId }),
-]);
+export const claim = command({ callers: ["client", "claims"], input: { taskId: ref(Task) }, emits: [claimed] }).decide(
+  ({ input }) => [emit(claimed, { taskId: input.taskId })],
+);
 
 export const claimer = machine({
   description: "Claim the winner once from the copy of each task",

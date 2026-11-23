@@ -1,11 +1,11 @@
-{"time":1792922400000,"dir":"in","type":"command","id":"addTasks#1","name":"addTasks","input":{"tasks":[{"id":"task-1","day":"Mon"},{"id":"task-2","day":"Mon"},{"id":"task-3","day":"Mon"}]}}
+{"time":1792922400000,"dir":"in","type":"command","id":"addTasks#1","name":"addTasks","input":{"tasks":[{"id":"task-1","day":"Mon"},{"id":"task-2","day":"Mon"},{"id":"task-3","day":"Mon"}]},"caller":{"service":"client"}}
 {"time":1792922400000,"dir":"out","type":"answer","id":"answer#1","to":"addTasks#1","answer":{"result":"accepted"}}
 {"time":1792922400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","day":"Mon","booked":null},"resultOf":"addTasks#1"}
 {"time":1792922400000,"dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","day":"Mon","booked":null},"resultOf":"addTasks#1","after":["taskAdded#1"]}
 {"time":1792922400000,"dir":"out","type":"event","id":"taskAdded#3","name":"taskAdded","payload":{"id":"task-3","day":"Mon","booked":null},"resultOf":"addTasks#1","after":["taskAdded#1","taskAdded#2"]}
-{"time":1792922400000,"dir":"out","type":"command","id":"calendar.reserve#1","name":"calendar.reserve","input":{"day":"Mon"}}
-{"time":1792922400000,"dir":"out","type":"command","id":"calendar.reserve#2","name":"calendar.reserve","input":{"day":"Mon"}}
-{"time":1792922400000,"dir":"out","type":"command","id":"calendar.reserve#3","name":"calendar.reserve","input":{"day":"Mon"}}
+{"time":1792922400000,"dir":"out","type":"command","id":"calendar.reserve#1","name":"calendar.reserve","input":{"day":"Mon"},"caller":{"service":"todo"}}
+{"time":1792922400000,"dir":"out","type":"command","id":"calendar.reserve#2","name":"calendar.reserve","input":{"day":"Mon"},"caller":{"service":"todo"}}
+{"time":1792922400000,"dir":"out","type":"command","id":"calendar.reserve#3","name":"calendar.reserve","input":{"day":"Mon"},"caller":{"service":"todo"}}
 {"time":1792922400000,"dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.reserve#1","answer":{"result":"accepted"}}
 {"time":1792922400000,"dir":"out","type":"event","id":"bookedSet#1","name":"bookedSet","payload":{"id":"task-1","booked":true}}
 {"time":1792922400000,"dir":"in","type":"answer","id":"calendar/answer#2","to":"calendar.reserve#2","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"free"}}}

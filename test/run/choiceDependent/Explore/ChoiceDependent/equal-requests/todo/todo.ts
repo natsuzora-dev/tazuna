@@ -18,11 +18,13 @@ export const taskAdded = createEvent({ entity: Task });
 export const bookedSet = updateEvent({ entity: Task, writes: ["booked"] });
 
 export const addTasks = command({
+  callers: ["client"],
   input: { tasks: z.array(z.object({ id: Task.fields.id, day: z.string() })) },
   emits: [taskAdded],
 }).decide(({ input }) => input.tasks.map((t) => emit(taskAdded, { id: t.id, day: t.day, booked: null })));
 
 export const setBooked = command({
+  callers: ["client", "todo"],
   input: { taskId: ref(Task), booked: z.boolean() },
   emits: [bookedSet],
 }).decide(({ input }) => [emit(bookedSet, { id: input.taskId, booked: input.booked })]);

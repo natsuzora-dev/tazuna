@@ -19,7 +19,7 @@ export const queried = scenario({
     "Ask for the plan; resolve writes the titles and the entries out of order, and tazuna answers with the titles bag sorted by canonical JSON and the entries sorted by day",
   given: arranged,
   when: (w) => {
-    w.client.call(plan, {});
+    w.client.as("client").call(plan, {});
   },
   then: () => [],
 });
@@ -42,13 +42,13 @@ export const unsortedInput = scenario({
     "Plan tasks with entries out of day order and then in day order; the first planTasks does not fit the input schema and is rejected with invalid-input, and the second is accepted",
   given: arranged,
   when: (w) => {
-    w.client.send(planTasks, {
+    w.client.as("client").send(planTasks, {
       entries: [
         { day: 2, title: "Buy eggs" },
         { day: 1, title: "Buy milk" },
       ],
     });
-    w.client.send(planTasks, {
+    w.client.as("client").send(planTasks, {
       entries: [
         { day: 1, title: "Buy milk" },
         { day: 2, title: "Buy eggs" },
@@ -63,7 +63,7 @@ export const listedByTime = scenario({
     "List the visits; decide writes the visits in one order to byTime and byDay of visitsListed, and tazuna sorts byTime by the time at and byDay by the date on",
   given: arranged,
   when: (w) => {
-    w.client.send(listVisits, {});
+    w.client.as("client").send(listVisits, {});
   },
   then: () => [],
 });
@@ -73,8 +73,8 @@ export const nullableSorted = scenario({
     "Check the plan unfilled and filled; nullable and union of planChecked hold null or entries in day order. tazuna writes null as it is and sorts the entries by day",
   given: arranged,
   when: (w) => {
-    w.client.send(checkPlan, { isFilled: false });
-    w.client.send(checkPlan, { isFilled: true });
+    w.client.as("client").send(checkPlan, { isFilled: false });
+    w.client.as("client").send(checkPlan, { isFilled: true });
   },
   then: () => [],
 });
@@ -84,7 +84,7 @@ export const listedGroups = scenario({
     "List the groups; decide writes each counts bag out of order, in a union whose option only the closed fields or the enum discriminator tell apart, and tazuna sorts every counts bag",
   given: arranged,
   when: (w) => {
-    w.client.send(listGroups, {});
+    w.client.as("client").send(listGroups, {});
   },
   then: () => [],
 });
@@ -94,7 +94,7 @@ export const defaultedInput = scenario({
     "Shelve without names or entries; parse fills both with defaults that the spec writes out of order. The client wrote no entries, so their day order is not checked, and tazuna sorts the names and the entries",
   given: arranged,
   when: (w) => {
-    w.client.send(shelve, {});
+    w.client.as("client").send(shelve, {});
   },
   then: () => [],
 });

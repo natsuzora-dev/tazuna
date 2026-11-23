@@ -22,11 +22,13 @@ export const taskAdded = createEvent({ entity: Task });
 export const noteAdded = event({ payload: { text: z.string() } });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: z.string(), title: z.string() },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const addNote = command({
+  callers: ["client"],
   input: {
     text: z.string().default(() => {
       throw new Error("no text is set");

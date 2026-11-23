@@ -19,7 +19,7 @@ export const staleAnswerRedelivered = scenario({
     const reached = w.net.deliver(sub);
     const zero = reached.answer(reached);
     w.net.deliver(zero);
-    const adding = w.client.send(todo.addTask, { taskId: "t1" });
+    const adding = w.client.as("client").send(todo.addTask, { taskId: "t1" });
     const one = adding.answer(reached);
     w.net.deliver(one);
     w.net.redeliver(zero);

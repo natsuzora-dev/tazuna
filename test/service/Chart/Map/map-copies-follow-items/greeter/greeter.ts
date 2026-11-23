@@ -19,21 +19,23 @@ export const greeted = event({ payload: { taskId: z.string() } });
 export const reminded = event({ payload: { taskId: z.string() } });
 
 export const addTasks = command({
+  callers: ["client"],
   input: { taskIds: z.array(Task.fields.id) },
   emits: [taskAdded],
 }).decide(({ input }) => input.taskIds.map((id) => emit(taskAdded, { id, completedAt: null })));
 
 export const completeTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskCompleted],
 }).decide(({ input, now }) => [emit(taskCompleted, { id: input.taskId, completedAt: now })]);
 
-export const greet = command({
-  input: { taskId: ref(Task) },
-  emits: [greeted],
-}).decide(({ input }) => [emit(greeted, { taskId: input.taskId })]);
+export const greet = command({ callers: ["client", "greeter"], input: { taskId: ref(Task) }, emits: [greeted] }).decide(
+  ({ input }) => [emit(greeted, { taskId: input.taskId })],
+);
 
 export const remind = command({
+  callers: ["client", "greeter"],
   input: { taskId: ref(Task) },
   emits: [reminded],
 }).decide(({ input }) => [emit(reminded, { taskId: input.taskId })]);

@@ -7,9 +7,14 @@ export const { command, contract } = externalService({
 });
 
 export const showNotification = command({
+  callers: ["todo"],
   input: { text: z.string() },
   emits: [],
   rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
 });
 
-export const playSound = command({ emits: [], rejects: ["invalid-input", "requires", "unavailable", "reused-id"] });
+export const playSound = command({
+  callers: [],
+  emits: [],
+  rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
+});

@@ -13,7 +13,7 @@ export const emptyTitle = scenario({
     "Add a task with an empty title; noteAdded sends addNote with the empty text, which only notes parses: its input schema does not take it, so notes rejects it with invalid-input, and test reports inputSchema of noteAdded, the sender",
   given: arranged,
   when: (w) => {
-    const added = w.client.send(addTask, { taskId: "task-1", title: "" });
+    const added = w.client.as("client").send(addTask, { taskId: "task-1", title: "" });
     const note = w.net.deliver(added.request(notes.addNote));
     w.net.deliver(note.answer(note));
   },

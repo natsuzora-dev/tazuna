@@ -21,6 +21,27 @@ def indexReasons (s : Structure) : List Illegal :=
   s.definitions.flatMap fun d =>
     ((s.rejectionReasons d.ref).filter isArrayIndex).map (.indexReason d.ref)
 
-def check (s : Structure) : List Illegal := foreignEvents s ++ indexReasons s
+/-- The commands and queries that `d` sends: an automation's command, or a chart's commands and queries. -/
+def sentBy (d : Definition) : List Ref :=
+  match d.body with
+  | .automation a => [a.command]
+  | .machine c | .screen c => (c.commands ++ c.queries).map (·.2)
+  | _ => []
+
+/--
+Whether `callers` take the requests of `d`: they list its service, or, when `d` is a screen, which sends as the user
+that operates it (State.callerOf), an entity.
+-/
+def admitsSender (callers : List CallerType) (d : Definition) : Bool :=
+  callers.contains (.service d.service) || (d.isScreen && callers.any (· matches .entity _))
+
+def unlistedCallers (s : Structure) : List Illegal :=
+  s.definitions.flatMap fun d =>
+    (sentBy d).filterMap fun r =>
+      match s.callersOf? r with
+      | some callers => if admitsSender callers d then none else some (.unlistedCaller d.ref r)
+      | none => none
+
+def check (s : Structure) : List Illegal := foreignEvents s ++ indexReasons s ++ unlistedCallers s
 
 end Tazuna.Validation.Commands

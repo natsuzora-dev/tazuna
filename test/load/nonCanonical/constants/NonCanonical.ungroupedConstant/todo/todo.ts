@@ -22,6 +22,7 @@ export const { command, createEvent, contract } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [
@@ -33,6 +34,7 @@ export const reminderOffsets = [{ minutes: 10 }, { hours: 1 }];
 export const defaultLabel = "inbox";
 
 export const addLabeledTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: z.string().max(titleLengthMax) },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title, label: defaultLabel })]);

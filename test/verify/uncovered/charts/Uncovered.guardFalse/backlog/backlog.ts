@@ -16,6 +16,7 @@ export const { automation, command, query, machine, createEvent, updateEvent, co
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title, isDone: false })]);

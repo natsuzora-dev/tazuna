@@ -8,12 +8,14 @@ export const { command, screen, event, contract, scenario } = service({
 
 export const taskAdded = event({ payload: { id: z.string() } });
 
-export const addTasks = command({ input: { taskIds: bag(z.string()) }, emits: [taskAdded] }).decide(({ input }) => [
-  input.taskIds.map((id) => emit(taskAdded, { id })),
-]);
+export const addTasks = command({
+  callers: ["client"],
+  input: { taskIds: bag(z.string()) },
+  emits: [taskAdded],
+}).decide(({ input }) => [input.taskIds.map((id) => emit(taskAdded, { id }))]);
 
 export const claimed = event({});
-export const claim = command({ emits: [claimed] }).decide(() => [emit(claimed, {})]);
+export const claim = command({ callers: ["client", "count"], emits: [claimed] }).decide(() => [emit(claimed, {})]);
 
 export const helper = screen({
   description: "Claims once on the first task",

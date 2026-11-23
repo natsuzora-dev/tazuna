@@ -3,6 +3,7 @@ import { command } from "./data.ts";
 import { notificationPermissionDenied, notificationPermissionGranted } from "./events.ts";
 
 export const requestNotificationPermission = command({
+  callers: ["notifier"],
   emits: [notificationPermissionGranted, notificationPermissionDenied],
   rejects: ["unavailable"],
   ensures: { atMostOneResult: ({ events }) => events.length <= 1 },
@@ -14,4 +15,9 @@ const notice = z.discriminatedUnion("id", [
   z.strictObject({ id: z.literal("openTasks"), values: z.strictObject({ count: z.int() }) }),
 ]);
 
-export const showNotification = command({ input: { notice }, emits: [], rejects: ["unavailable"] });
+export const showNotification = command({
+  callers: ["notifier", "todo"],
+  input: { notice },
+  emits: [],
+  rejects: ["unavailable"],
+});

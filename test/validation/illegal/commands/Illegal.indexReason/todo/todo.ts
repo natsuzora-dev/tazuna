@@ -13,11 +13,13 @@ export const taskAdded = createEvent({ entity: Task });
 export const taskRenamed = updateEvent({ entity: Task, writes: ["title"] });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const renameTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task), title: Task.fields.title },
   emits: [taskRenamed],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },

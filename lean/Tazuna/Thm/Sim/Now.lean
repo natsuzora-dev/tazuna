@@ -28,9 +28,9 @@ theorem arriveFrom_now (st : Service) (fs : Functions Id) (s : State) (sender : 
   unfold arriveFrom
   dsimp only
   split
-  · exact send_now _ _ _ _
-  · exact call_now _ _ _ _
-  · exact subscribe_now _ _ _ _
+  · exact send_now _ _ _ _ _
+  · exact call_now _ _ _ _ _
+  · exact subscribe_now _ _ _ _ _
   · exact endSubscription_now _ _
   · split
     · exact answerIn_now _ _ _ _ _ _
@@ -60,8 +60,8 @@ abbrev nowRel : StateRel where
   checkStepOrder x := by unfold checkStepOrder; split <;> simp
   arriveFrom := arriveFrom_now
   arriveAll := arriveAll_now
-  requestOf type _ _ _ _ _ _ := by cases type <;> first
-    | exact send_now _ _ _ _ | exact call_now _ _ _ _ | exact subscribe_now _ _ _ _
+  requestOf type _ _ _ _ _ _ _ := by cases type <;> first
+    | exact send_now _ _ _ _ _ | exact call_now _ _ _ _ _ | exact subscribe_now _ _ _ _ _
 
 /--
 Only a clock line moves the current time of a running service, the time that every line it writes carries: any other

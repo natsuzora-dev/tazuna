@@ -12,16 +12,19 @@ export const { command, query, createEvent, contract, scenario } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const taskTitle = query({
+  callers: ["client"],
   input: { taskId: Task.fields.id },
   output: { title: Task.fields.title.nullable() },
 }).resolve(({ input, records }) => ({ title: records.Task.get(input.taskId)?.title ?? null }));
 
 export const dueAfter = query({
+  callers: ["client"],
   input: { from: date, days: z.int() },
   output: { due: date },
 }).resolve(({ input }) => ({ due: addDays(input.from, input.days) }));

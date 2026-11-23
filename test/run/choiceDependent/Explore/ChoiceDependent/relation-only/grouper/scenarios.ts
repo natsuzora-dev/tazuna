@@ -16,7 +16,7 @@ export const pairAtTen = scenario({
     peers: [],
   },
   when: (w) => {
-    w.client.send(arm, {});
+    w.client.as("client").send(arm, {});
     w.clock.at(parseInstant("2026-10-25T10:30:00+09:00"));
   },
   then: () => [],

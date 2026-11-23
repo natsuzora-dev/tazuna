@@ -1,2 +1,2 @@
 {"service":"todo","property":{"kind":"ensures","definition":{"service":"todo","name":"completeTask"},"name":"completed"},"creates":{"Task":2},"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":24}}
-{"service":"todo","property":{"kind":"ensures","definition":{"service":"todo","name":"openCount"},"name":"withinTasks"},"creates":{"Task":2},"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":30}}
+{"service":"todo","property":{"kind":"ensures","definition":{"service":"todo","name":"openCount"},"name":"withinTasks"},"creates":{"Task":2},"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":31}}

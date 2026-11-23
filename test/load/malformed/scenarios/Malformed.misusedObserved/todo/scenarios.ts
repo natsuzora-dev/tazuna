@@ -6,8 +6,8 @@ export const convertsObserved = scenario({
     "Write the count that a query line observes into a title as a string; check reports misusedObserved for the line",
   given: { start: parseInstant("2026-10-25T10:00:00+09:00"), records: { Task: [] }, peers: [] },
   when: (w) => {
-    const counting = w.client.call(taskCount, {});
-    w.client.send(addTask, { taskId: "task-1", title: String(counting.output.count) });
+    const counting = w.client.as("client").call(taskCount, {});
+    w.client.as("client").send(addTask, { taskId: "task-1", title: String(counting.output.count) });
   },
   then: () => [],
 });

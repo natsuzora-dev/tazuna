@@ -9,10 +9,9 @@ export const { automation, command, event, contract } = service({
 
 export const announced = event({ payload: { taskId: z.string() } });
 
-export const announce = command({
-  input: { taskId: z.string() },
-  emits: [announced],
-}).decide(({ input }) => [emit(announced, { taskId: input.taskId })]);
+export const announce = command({ callers: ["client"], input: { taskId: z.string() }, emits: [announced] }).decide(
+  ({ input }) => [emit(announced, { taskId: input.taskId })],
+);
 
 export const announceAdded = automation({
   receives: { taskAdded: todo.taskAdded },

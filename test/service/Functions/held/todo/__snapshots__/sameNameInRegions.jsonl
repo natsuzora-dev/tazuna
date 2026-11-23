@@ -1,4 +1,4 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"openLabels#1","name":"openLabels","input":{}}
+{"time":1792890000000,"dir":"in","type":"command","id":"openLabels#1","name":"openLabels","input":{},"caller":{"service":"client"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"openLabels#1","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"labelsOpened#1","name":"labelsOpened","payload":{},"resultOf":"openLabels#1"}
 {"time":1792890000000,"dir":"out","type":"event","id":"notified#1","name":"notified","payload":{"text":"left"}}

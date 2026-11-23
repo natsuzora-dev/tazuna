@@ -6,12 +6,12 @@ export const { automation, command, event, contract } = service({ name: "todo", 
 export const taskAdded = event({ payload: { taskId: z.string() } });
 export const taskCounted = event({ payload: { taskId: z.string() } });
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { taskId: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { taskId: input.taskId })],
+);
 
 export const countTask = command({
+  callers: ["client", "todo"],
   input: { taskId: z.string() },
   emits: [taskCounted],
 }).decide(({ input }) => [emit(taskCounted, { taskId: input.taskId })]);

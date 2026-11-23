@@ -1,2 +1,2 @@
-{"time":1792886400000,"dir":"out","type":"command","id":"todo.addTask#1","name":"todo.addTask","input":{"taskId":"task-1","title":"Buy milk"}}
+{"time":1792886400000,"dir":"out","type":"command","id":"todo.addTask#1","name":"todo.addTask","input":{"taskId":"task-1","title":"Buy milk"},"caller":{"service":"planner"}}
 {"time":1792886400000,"dir":"in","type":"answer","id":"todo/answer#1","to":"todo.addTask#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"short"}}}

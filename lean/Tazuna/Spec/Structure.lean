@@ -115,25 +115,37 @@ def Structure.contractsListing (s : Structure) (r : Ref) : List String :=
 /--
 The kinds that an answer to the command or query `r` may be rejected with when a definition of `service` sends it: for
 an external `r`, the kinds it declares. Otherwise `requires` needs a requires condition or a binds value, `notFound` an
-input ref field, and `alreadyExists` an emitted event that creates or updates a record, and a request to another
-service may also be rejected with `unavailable`, and a command to another service with `reusedId`. An answer
-rejected with `invalidInput` is the sender's fault (rejectedInput?), so it is not listed.
+input ref field, or a caller entity when `service` has a screen, which sends as its user, and `alreadyExists` an emitted
+event that creates or updates a record, and a request to another service may also be rejected with `unavailable`, and a
+command to another service with `reusedId`. An answer rejected with `invalidInput` is the sender's fault
+(rejectedInput?), and one rejected with `permissionDenied` names a sender that `r` does not list (Illegal.unlistedCaller),
+so neither is listed.
 -/
 def Structure.rejectionKinds (s : Structure) (service : String) (r : Ref) : List RejectionKind :=
   let other (kinds : List RejectionKind) := if r.service == service then [] else kinds
+  let screens := s.definitions.any fun d => d.service == service && d.isScreen
+  let userMissing (callers : List CallerType) : List RejectionKind :=
+    if screens && callers.any (· matches .entity _) then [.notFound] else []
   match (s.definitions.find? (·.ref == r)).map Definition.body with
   | some (.query { rejects := some kinds, .. }) | some (.command { rejects := some kinds, .. }) => kinds
-  | some (.query q) => (if q.requires.isEmpty then [] else [.requires]) ++ other [.unavailable]
+  | some (.query q) => userMissing q.callers ++ (if q.requires.isEmpty then [] else [.requires]) ++ other [.unavailable]
   | some (.command c) =>
     let writes := c.emits.any fun e => s.definitions.any fun d =>
       d.ref == e && match d.body with
         | .event { change := some { kind := .create, .. }, .. }
         | .event { change := some { kind := .update, .. }, .. } => true
         | _ => false
-    other [.reusedId] ++ (if c.references.isEmpty then [] else [.notFound]) ++
+    other [.reusedId] ++ (if c.references.isEmpty then userMissing c.callers else [.notFound]) ++
       (if c.binds.isEmpty && c.requires.isEmpty then [] else [.requires]) ++
       (if writes then [.alreadyExists] else []) ++ other [.unavailable]
   | _ => []
+
+/-- The callers that the command or query `r` lists, or none when `r` is no command or query. -/
+def Structure.callersOf? (s : Structure) (r : Ref) : Option (List CallerType) :=
+  match (s.definitions.find? (·.ref == r)).map Definition.body with
+  | some (.command c) => some c.callers
+  | some (.query q) => some q.callers
+  | _ => none
 
 /-- The events that `r` lists in its emits, or no events when `r` is no command. -/
 def Structure.emitsOf (s : Structure) (r : Ref) : List Ref :=

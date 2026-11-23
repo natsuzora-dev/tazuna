@@ -13,17 +13,20 @@ export const taskAdded = createEvent({ entity: Task });
 export const taskDeleted = deleteEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const deleteBoundTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskDeleted],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
 }).decide(({ bound }) => [emit(taskDeleted, { id: bound.task.id })]);
 
 export const deleteTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskDeleted],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },

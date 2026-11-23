@@ -10,7 +10,7 @@ export const redelivered = scenario({
     peers: [run(todo, { Task: [] })],
   },
   when: (w) => {
-    const add = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
+    const add = w.client.as("client").send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
     const added = w.peer.todo.emit(todo.taskAdded, { taskId: "task-1" }, { resultOf: add });
     w.net.deliver(added);
     w.net.redeliver(added);

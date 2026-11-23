@@ -49,7 +49,7 @@ def World.checkWritten (w : World) (line : Nat) (written picks : List Template) 
   else ((written ++ picks).findSome? fun t => w.writtenKey? t.value).map fun (key, e) => .writtenKey line key e
 
 def requestTarget? : LineBody → Option Spec.Ref
-  | .command r _ | .query r _ | .subscribe r _ => some r
+  | .command r .. | .query r .. | .subscribe r .. => some r
   | _ => none
 
 /--
@@ -68,22 +68,25 @@ def World.recordSent (w : World) (i : Nat) (service : String) (before : Nat) (id
 def World.forEach {α : Type} (w : World) (xs : List α) (f : World → α → m World) : m World :=
   xs.foldlM (init := w) fun v x => if v.stopped then pure v else f v x
 
-def requestOf (type : RequestType) (target : Spec.Ref) (id : Option LineId) (v : Value) :
+def requestOf (type : RequestType) (target : Spec.Ref) (id : Option LineId) (v : Value) (caller : Caller) :
     Service → Functions m → State → m State :=
   fun st fs s => match type with
-    | .command => send st fs s target id v
-    | .query => call st fs s target id v
-    | .subscribe => subscribe st fs s target id v
+    | .command => send st fs s target id v caller
+    | .query => call st fs s target id v caller
+    | .subscribe => subscribe st fs s target id v caller
 
-def bodyOf (type : RequestType) (target : Spec.Ref) (v : Value) : LineBody :=
+def bodyOf (type : RequestType) (target : Spec.Ref) (v : Value) (caller : Caller) : LineBody :=
   match type with
-  | .command => .command target v
-  | .query => .query target v
-  | .subscribe => .subscribe target v
+  | .command => .command target v caller
+  | .query => .query target v caller
+  | .subscribe => .subscribe target v caller
 
-/-- The world after the client's request of line `i`, with the id of the request of line `sameIdAs`, if any. -/
+/--
+The world after the client's request of line `i` as `caller`, with the id of the request of line `sameIdAs`, if any.
+-/
 def World.clientRequest (w : World) (fsOf : String → Functions m) (i : Nat) (type : RequestType)
-    (target : Spec.Ref) (input : Template) (sameIdAs : Option Nat) : m World := do
+    (target : Spec.Ref) (input : Template) (sameIdAs : Option Nat) (caller : Option Caller) : m World := do
+  let caller ← expectFound s!"the caller of the client's request of line {i}" caller
   let receiver := target.service
   if !((w.role receiver).any (·.running)) then return w.report (.wrongRole i receiver)
   w.resolving (w.fill fsOf i input) fun v => do
@@ -92,7 +95,7 @@ def World.clientRequest (w : World) (fsOf : String → Functions m) (i : Nat) (t
       | some j => pure ((w.sentBy j).head?.map (some ·.id))
     let some id := given | return w.report (.unresolvedReference i (ToValue.toValue (Fact.line (sameIdAs.getD 0))))
     let before := (w.state receiver).lines.size
-    let w ← w.act fsOf (.line i) receiver (requestOf type target id v)
+    let w ← w.act fsOf (.line i) receiver (requestOf type target id v caller)
     pure (w.recordSent i receiver before)
 
 /-- The world with the message `k` carried by line `i`. -/
@@ -216,13 +219,13 @@ def refusal (msg : Message) (i : Nat) : Message :=
 /-- The world after line `i` of the scenario of the own service `own`. -/
 def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines : List Scenario.Line) (i : Nat) :
     Scenario.Line → m World
-  | .request none type target input sameIdAs => w.clientRequest fsOf i type target input sameIdAs
-  | .request (some peer) type target input _ => do
+  | .request none type target input sameIdAs caller => w.clientRequest fsOf i type target input sameIdAs caller
+  | .request (some peer) type target input _ _ => do
     match w.role peer with
     | some .external =>
       w.resolving (w.fill fsOf i input) fun v => do
         let (w, id) := w.nextId peer target.name
-        pure (w.stated i { sender := peer, receiver := target.service, id, body := bodyOf type target v,
+        pure (w.stated i { sender := peer, receiver := target.service, id, body := bodyOf type target v (.service peer),
                            definition := target, origin := .line i, status := .inFlight })
     | some .run =>
       w.resolving (w.fill fsOf i input) fun v => do
@@ -257,7 +260,7 @@ def World.take (w : World) (fsOf : String → Functions m) (own : String) (lines
       | _ => pure (w.report (.wrongRole i p))
   | .resend j =>
     match lines[j]? with
-    | some (.request none type target input _) => w.clientRequest fsOf i type target input (some j)
+    | some (.request none type target input _ caller) => w.clientRequest fsOf i type target input (some j) caller
     | _ => pure (w.report (.unresolvedReference i (ToValue.toValue (Fact.line j))))
   | .operate screen control payload =>
     w.attempt (w.screenOf i screen) fun o => do
@@ -488,9 +491,9 @@ def World.compared (w : World) (fsOf : String → Functions m) (own : String) (l
         pure (Value.str msg.id.text)).flatten
     let actual ← (span.filterMap fun l =>
       match l.dir, l.body with
-      | .out, .command r input => some (RequestType.command, r, input)
-      | .out, .query r input => some (.query, r, input)
-      | .out, .subscribe r input => some (.subscribe, r, input)
+      | .out, .command r input _ => some (RequestType.command, r, input)
+      | .out, .query r input _ => some (.query, r, input)
+      | .out, .subscribe r input _ => some (.subscribe, r, input)
       | _, _ => none).mapM fun (type, r, input) => do
         pure (Value.obj [("kind", ToValue.toValue type), ("target", ToValue.toValue r),
           ("input", ← comparedOr fs (.input r) input)])

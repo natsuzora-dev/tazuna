@@ -11,9 +11,10 @@ namespace Tazuna.Service
 open Tazuna.Data
 
 inductive LineBody where
-  | command (target : Spec.Ref) (input : Value)
-  | query (target : Spec.Ref) (input : Value)
-  | subscribe (target : Spec.Ref) (input : Value)
+  /-- A request to `target`, which `caller` sends. -/
+  | command (target : Spec.Ref) (input : Value) (caller : Caller)
+  | query (target : Spec.Ref) (input : Value) (caller : Caller)
+  | subscribe (target : Spec.Ref) (input : Value) (caller : Caller)
   /-- An event whose `resultOf` is the id of the request line of the command that the event results from. -/
   | event (event : Spec.Ref) (payload : Value) (resultOf : Option LineId)
   | answer (to : LineId) (answer : Answer)
@@ -29,14 +30,14 @@ deriving DecidableEq, Repr, Inhabited
 
 /-- What the line carries, as TS contentOf gives it: a request's input, an event's or operation's payload, an answer. -/
 def LineBody.content : LineBody → Value
-  | .command _ v | .query _ v | .subscribe _ v | .event _ v _ => v
+  | .command _ v _ | .query _ v _ | .subscribe _ v _ | .event _ v _ => v
   | .operation _ _ _ p => p.getD .null
   | .answer _ a => ToValue.toValue a
   | .unsubscribe _ | .time | .restart => .null
 
 /-- The name that LineIds counts, as the trace of `service` writes it. -/
 def LineBody.idName (service : String) : LineBody → String
-  | .command r _ | .query r _ | .subscribe r _ | .event r _ _ => r.traceName service
+  | .command r .. | .query r .. | .subscribe r .. | .event r _ _ => r.traceName service
   | .operation screen control _ _ => operationName (screen.traceName service) control
   | .answer _ _ => "answer"
   | .unsubscribe _ => "unsubscribe"

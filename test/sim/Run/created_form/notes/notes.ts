@@ -9,4 +9,8 @@ export const { command, machine, contract } = service({
   entities: { Note },
 });
 
-export const attach = command({ input: { labelId: z.string(), noteId: z.string() }, emits: [] }).decide(() => []);
+export const attach = command({
+  callers: ["client", "tags"],
+  input: { labelId: z.string(), noteId: z.string() },
+  emits: [],
+}).decide(() => []);

@@ -1,1 +1,1 @@
-{"kind":"Uncovered.automationGuard","definition":{"service":"backlog","name":"completeChores"},"data":{"condition":"chore","met":true},"location":{"file":"backlog/backlog.ts","line":32}}
+{"kind":"Uncovered.automationGuard","definition":{"service":"backlog","name":"completeChores"},"data":{"condition":"chore","met":true},"location":{"file":"backlog/backlog.ts","line":34}}

@@ -9,12 +9,11 @@ export const { command, machine, event, contract, scenario } = service({
 export const taskAdded = event({ payload: { id: z.string() } });
 export const pinged = event({});
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
-export const ping = command({ emits: [pinged] }).decide(() => [emit(pinged, {})]);
+export const ping = command({ callers: ["client", "pinger"], emits: [pinged] }).decide(() => [emit(pinged, {})]);
 
 export const pinger = machine({
   description: "Ping when a task is added; sending lists pinged with no transitions",

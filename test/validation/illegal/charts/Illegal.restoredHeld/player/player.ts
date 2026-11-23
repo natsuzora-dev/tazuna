@@ -11,7 +11,7 @@ export const { command, machine, event, contract } = service({
 
 export const paused = event({});
 
-export const pause = command({ emits: [paused] }).decide(() => [emit(paused, {})]);
+export const pause = command({ callers: ["client"], emits: [paused] }).decide(() => [emit(paused, {})]);
 
 // A history state under a map state enters the map state's initial state, so it restores nothing.
 export const shuffler = machine({

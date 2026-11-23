@@ -1,4 +1,4 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"start#1","name":"start","input":{}}
+{"time":1792886400000,"dir":"in","type":"command","id":"start#1","name":"start","input":{},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"start#1","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"started#1","name":"started","payload":{},"resultOf":"start#1"}
 {"time":1792886400000,"dir":"out","type":"event","id":"flagged#1","name":"flagged","payload":{"by":"first"}}

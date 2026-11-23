@@ -11,6 +11,9 @@
           "name": "tags.register",
           "input": {
             "noteId": "notes/Note-1"
+          },
+          "caller": {
+            "service": "notes"
           }
         },
         {
@@ -29,7 +32,10 @@
           "type": "query",
           "id": "tags.labels#1",
           "name": "tags.labels",
-          "input": {}
+          "input": {},
+          "caller": {
+            "service": "notes"
+          }
         },
         {
           "time": 1792890000000,
@@ -51,6 +57,9 @@
           "input": {
             "labelId": "tags/Label-2",
             "noteId": "notes/Note-1"
+          },
+          "caller": {
+            "service": "tags"
           }
         },
         {
@@ -96,6 +105,9 @@
           "name": "register",
           "input": {
             "noteId": "notes/Note-1"
+          },
+          "caller": {
+            "service": "notes"
           }
         },
         {
@@ -128,6 +140,9 @@
           "input": {
             "labelId": "tags/Label-2",
             "noteId": "notes/Note-1"
+          },
+          "caller": {
+            "service": "tags"
           }
         },
         {
@@ -157,7 +172,10 @@
           "type": "query",
           "id": "notes/tags.labels#1",
           "name": "labels",
-          "input": {}
+          "input": {},
+          "caller": {
+            "service": "notes"
+          }
         },
         {
           "time": 1792890000000,

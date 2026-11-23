@@ -9,7 +9,7 @@ export const passThrough = scenario({
     "Add a done task; in the one message of addDoneTask, dayNoter enters asking on taskAdded and exits it on taskCompleted. It is not in asking at the end of the macrostep, so it sends no calendar.nextDay",
   given: arranged,
   when: (w) => {
-    w.client.send(addDoneTask, { taskId: "task-1" });
+    w.client.as("client").send(addDoneTask, { taskId: "task-1" });
   },
   then: () => [],
 });

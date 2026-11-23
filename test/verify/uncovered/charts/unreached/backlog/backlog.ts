@@ -16,6 +16,7 @@ export const { command, machine, createEvent, updateEvent, contract, scenario } 
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title, isDone: false })]);
@@ -23,6 +24,7 @@ export const addTask = command({
 export const taskCompleted = updateEvent({ entity: Task, writes: ["isDone"] });
 
 export const completeTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id },
   emits: [taskCompleted],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },

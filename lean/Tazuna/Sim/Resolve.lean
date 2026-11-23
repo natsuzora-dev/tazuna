@@ -49,11 +49,11 @@ def picks (fs : Functions m) (schema : Schema) (pick : Option Value) (v : Value)
   | some p => pure ((← comparedOr fs schema (v.overlay p)).canonical == (← comparedOr fs schema v).canonical)
 
 def _root_.Tazuna.Service.LineBody.value? : LineBody → Option Value
-  | .command _ v | .query _ v | .subscribe _ v | .event _ v _ => some v
+  | .command _ v _ | .query _ v _ | .subscribe _ v _ | .event _ v _ => some v
   | _ => none
 
 def _root_.Tazuna.Service.LineBody.target? : LineBody → Option Spec.Ref
-  | .command r _ | .query r _ | .subscribe r _ => some r
+  | .command r .. | .query r .. | .subscribe r .. => some r
   | _ => none
 
 def _root_.Tazuna.Service.LineBody.requestType? : LineBody → Option Scenario.RequestType
@@ -64,7 +64,7 @@ def _root_.Tazuna.Service.LineBody.requestType? : LineBody → Option Scenario.R
 
 def Message.target? (m : Message) : Option Spec.Ref :=
   match m.body with
-  | .command r _ | .query r _ | .subscribe r _ => some r
+  | .command r .. | .query r .. | .subscribe r .. => some r
   | _ => none
 
 def Message.event? (m : Message) : Option Spec.Ref :=
@@ -79,7 +79,7 @@ an event's payload. The sender is that end when it runs, and the receiver otherw
 def World.schemaOf? (w : World) (msg : Message) : Option (String × Schema) :=
   let side := if (w.role msg.sender).any (·.running) then msg.sender else msg.receiver
   match msg.body with
-  | .command r _ | .query r _ | .subscribe r _ => some (side, .input r)
+  | .command r .. | .query r .. | .subscribe r .. => some (side, .input r)
   | .event r _ _ => some (side, .payload r)
   | _ => none
 

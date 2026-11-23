@@ -3,6 +3,7 @@ import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import { type GivenDefiner, givenDefiner, type ScenarioDefiner, scenarioDefiner } from "../scenario/define.ts";
 import { type BoundsDefiner, boundsDefiner } from "./bounds.ts";
+import type { CallerOf, CallerType } from "./caller.ts";
 import type { Conditions, Named, Now, Present } from "./conditions.ts";
 import type { ConstantsGroup } from "./constants.ts";
 import type { Contract, RecordsData } from "./contract.ts";
@@ -46,34 +47,48 @@ interface Definers<Es extends Entities, N extends string> {
     const Rq extends string = never,
     const En extends string = never,
     const Bn extends string = never,
+    const Cl extends readonly CallerType<Es>[] = never,
   >(definition: {
+    /**
+     * Who may send the command: records of an entity of this service, or services by name. A request from another
+     * caller is rejected with `permission-denied`, and one from a record that does not exist with `not-found`, before
+     * `binds`.
+     */
+    callers: Cl;
     input?: I;
     /** The events that the command emits, of this service only (`Illegal.foreignEvent`). */
     emits: readonly Ev[];
     /** The values that `requires`, `decide`, and `ensures` read as `bound`. */
-    binds?: Binds<{ input: Input<I>; refs: Refs<I, Es>; records: Records<Es> } & Now, B> & Present<Bn>;
+    binds?: Binds<{ input: Input<I>; caller: CallerOf<Cl, Es>; refs: Refs<I, Es>; records: Records<Es> } & Now, B> &
+      Present<Bn>;
     /**
      * Checked after `binds`, each in written order. The first that fails names the rejection reason. No key of either
      * may be an array index such as `1`, which JavaScript lists before the other keys (`Illegal.indexReason`).
      */
-    requires?: Named<Rq, { input: Input<I>; refs: Refs<I, Es>; records: Records<Es>; bound: Bound<B> } & Now>;
+    requires?: Named<
+      Rq,
+      { input: Input<I>; caller: CallerOf<Cl, Es>; refs: Refs<I, Es>; records: Records<Es>; bound: Bound<B> } & Now
+    >;
     /** `records` holds the records after the events. `bound` holds the values from before them. */
-    ensures?: Named<En, { input: Input<I>; records: Records<Es>; bound: Bound<B> }>;
-  }): CommandSetup<I, Ev, B, Rq, Es, N>;
+    ensures?: Named<En, { input: Input<I>; caller: CallerOf<Cl, Es>; records: Records<Es>; bound: Bound<B> }>;
+  }): CommandSetup<I, Ev, B, Rq, Es, N, CallerOf<Cl, Es>>;
   /** Defines a query: a request to read records. */
   query<
     const I extends Shape = Record<never, never>,
     const O extends Shape = Shape,
     const Rq extends string = never,
     const En extends string = never,
+    const Cl extends readonly CallerType<Es>[] = never,
   >(definition: {
+    /** Who may send the query, checked as a command's `callers`, before `requires`. */
+    callers: Cl;
     input?: I;
     /** A lookup that can miss uses a nullable field. */
     output: O;
     /** Checked as a command's `requires`. */
     requires?: Named<Rq, { input: Input<I> }>;
-    ensures?: Named<En, { input: Input<I>; output: Row<O>; records: Records<Es> }>;
-  }): QuerySetup<I, O, Rq, Es, N>;
+    ensures?: Named<En, { input: Input<I>; caller: CallerOf<Cl, Es>; output: Row<O>; records: Records<Es> }>;
+  }): QuerySetup<I, O, Rq, Es, N, CallerOf<Cl, Es>>;
   /**
    * Defines an automation: on each received event it sends one command and keeps no context. Waiting for an answer or a
    * deadline, or reacting to a rejection, needs a machine (`NonCanonical.statelessMachine`).
@@ -128,15 +143,18 @@ interface CommandSetup<
   Rq extends string,
   Es extends Entities,
   N extends string,
+  C,
 > {
   decide(
-    decide: (args: { input: Input<I>; refs: Refs<I, Es>; records: Records<Es>; bound: Bound<B> } & Now) => Emits<Ev>,
+    decide: (
+      args: { input: Input<I>; caller: C; refs: Refs<I, Es>; records: Records<Es>; bound: Bound<B> } & Now,
+    ) => Emits<Ev>,
   ): Command<I, Ev, keyof B & string, Rq, undefined, undefined> & Owned<N>;
 }
 
-interface QuerySetup<I extends Shape, O extends Shape, Rq extends string, Es extends Entities, N extends string> {
+interface QuerySetup<I extends Shape, O extends Shape, Rq extends string, Es extends Entities, N extends string, C> {
   resolve(
-    resolve: (args: { input: Input<I>; refs: Refs<I, Es>; records: Records<Es> } & Now) => MadeRow<O>,
+    resolve: (args: { input: Input<I>; caller: C; refs: Refs<I, Es>; records: Records<Es> } & Now) => MadeRow<O>,
   ): Query<I, O, Rq, undefined> & Owned<N>;
 }
 
@@ -191,6 +209,8 @@ interface ExternalDefiners<N extends string> {
     const En extends string = never,
     const Rj extends readonly RejectionKind[] = never,
   >(definition: {
+    /** The services that may send the command, as a spec service's command lists them. */
+    callers: readonly string[];
     input?: I;
     output?: O;
     emits: readonly Ev[];
@@ -212,6 +232,8 @@ interface ExternalDefiners<N extends string> {
     const En extends string = never,
     const Rj extends readonly RejectionKind[] = never,
   >(definition: {
+    /** The services that may send the query, as a spec service's query lists them. */
+    callers: readonly string[];
     input?: I;
     output: O;
     /**
@@ -284,6 +306,7 @@ export function service<
 }
 
 type CommandOptions = {
+  callers: readonly CallerType[];
   input?: Shape;
   output?: Shape;
   emits: readonly AnyEvent[];
@@ -293,6 +316,7 @@ type CommandOptions = {
   ensures?: Conditions<never>;
 };
 type QueryOptions = {
+  callers: readonly CallerType[];
   input?: Shape;
   output: Shape;
   rejects?: readonly RejectionKind[];
@@ -321,6 +345,7 @@ const commandOf = (
 ): AnyCommand => ({
   kind: "command",
   service: owner,
+  callers: d.callers,
   input: d.input ?? {},
   output: d.output,
   emits: d.emits,
@@ -338,6 +363,7 @@ const queryOf = (
 ): AnyQuery => ({
   kind: "query",
   service: owner,
+  callers: d.callers,
   input: d.input ?? {},
   output: d.output,
   requires: d.requires ?? {},

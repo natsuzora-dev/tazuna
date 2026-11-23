@@ -17,6 +17,6 @@ export const listsUnknownPeers = scenario({
       skip(unchecked({}), "no service"),
     ],
   },
-  when: (w) => ({ add: w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }) }),
+  when: (w) => ({ add: w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" }) }),
   then: () => [],
 });

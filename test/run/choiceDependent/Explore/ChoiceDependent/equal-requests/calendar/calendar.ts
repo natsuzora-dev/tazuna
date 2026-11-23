@@ -12,6 +12,7 @@ export const { command, createEvent, contract, scenario } = service({
 export const booked = createEvent({ entity: Booking });
 
 export const reserve = command({
+  callers: ["client", "todo"],
   input: { day: z.string() },
   emits: [booked],
   requires: { free: ({ input, records }) => records.Booking.get(input.day) === undefined },

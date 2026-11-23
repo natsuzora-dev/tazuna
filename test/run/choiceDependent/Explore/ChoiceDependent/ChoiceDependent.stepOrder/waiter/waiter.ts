@@ -13,11 +13,12 @@ export const e1 = event({});
 export const e2 = event({});
 export const pinged = event({});
 export const go = command({
+  callers: ["client"],
   input: { ks: bag(z.string()) },
   emits: [went, e1, e2],
   requires: { first: ({ records }) => !records.Once.went },
 }).decide(({ input }) => [emit(went, { went: true }), input.ks.map((k) => (k === "1" ? emit(e1, {}) : emit(e2, {})))]);
-export const ping = command({ emits: [pinged] }).decide(() => [emit(pinged, {})]);
+export const ping = command({ callers: ["client", "waiter"], emits: [pinged] }).decide(() => [emit(pinged, {})]);
 
 export const m = machine({
   description: "e1 enters waiting, whose at reads due; e2 moves due",

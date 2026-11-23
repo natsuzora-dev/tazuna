@@ -6,10 +6,10 @@ export const milkBought = event({});
 export const roomDusted = event({});
 export const celebrated = event({});
 
-export const buyMilk = command({ emits: [milkBought] }).decide(() => [emit(milkBought, {})]);
+export const buyMilk = command({ callers: ["client"], emits: [milkBought] }).decide(() => [emit(milkBought, {})]);
 
-export const dustRoom = command({
-  emits: [roomDusted],
-}).decide(() => [emit(roomDusted, {})]);
+export const dustRoom = command({ callers: ["client"], emits: [roomDusted] }).decide(() => [emit(roomDusted, {})]);
 
-export const celebrate = command({ emits: [celebrated] }).decide(() => [emit(celebrated, {})]);
+export const celebrate = command({ callers: ["client", "todo"], emits: [celebrated] }).decide(() => [
+  emit(celebrated, {}),
+]);

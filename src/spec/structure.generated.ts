@@ -188,12 +188,26 @@ export type EventBody = {
 };
 
 /**
+ * A kind of caller that a command or query takes: the records of an entity of its service, or the service named
+ * `service`. Cedar's `appliesTo.principalTypes` lists the principals of an action the same way.
+ */
+export type CallerType =
+  | {
+      readonly entity: string;
+    }
+  | {
+      readonly service: string;
+    };
+
+/**
  * A command. For a command of an external service, `rejects` lists the rejection kinds that it declares, and `emits`
  * lists the events that may arrive as results of an accepted request (resultOf). For a command of a spec service,
  * `rejects` is null. `references` are in field order.
  */
 export type CommandBody = {
   readonly rejects: readonly RejectionKind[] | null;
+  /** The kinds of caller that may send the command, in written order. */
+  readonly callers: readonly CallerType[];
   readonly input: Json;
   readonly output: Json | null;
   readonly emits: readonly DefinitionRef[];
@@ -209,6 +223,8 @@ export type CommandBody = {
  */
 export type QueryBody = {
   readonly rejects: readonly RejectionKind[] | null;
+  /** The kinds of caller that may send the query, in written order. */
+  readonly callers: readonly CallerType[];
   readonly input: Json;
   readonly output: Json | null;
   readonly requires: readonly string[];

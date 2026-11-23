@@ -37,9 +37,11 @@ structure Given where
   start : Time
   records : List GivenRecord
   peers : List PeerEntry
+  /-- The user that operates the screens of every running service, or none when no user signed in. -/
+  user : Option Caller := none
 deriving Repr, Inhabited
 
-derive_wire Given
+derive_wire Given skip_serializing_none
 
 end Tazuna.Scenario
 

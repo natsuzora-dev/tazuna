@@ -16,6 +16,8 @@ the spec's functions or Zod schemas.
 inductive Mismatch where
   /-- The request line has another input than the snapshot's. -/
   | request (line : Nat) (subject : Subject) (snapshot trace : Value)
+  /-- The request line has another caller than the snapshot's. -/
+  | caller (line : Nat) (subject : Subject) (snapshot trace : Value)
   /-- The event line has another payload than the snapshot's. -/
   | event (line : Nat) (subject : Subject) (snapshot trace : Value)
   /-- The accepted or fulfilled answer, or the answer to a query, has another output than the snapshot's. -/

@@ -6,7 +6,7 @@ export const addOne = scenario({
     "Add a task; traces/todo/addOne.jsonl replays without a violation, and traces/addOne.jsonl is in no service's folder, so verify reports unknownTraceEntry",
   given: { start: parseInstant("2026-10-25T00:00:00Z"), records: { Task: [] }, peers: [] },
   when: (w) => {
-    w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
+    w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" });
   },
   then: () => [],
 });

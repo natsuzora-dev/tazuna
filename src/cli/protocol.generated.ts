@@ -5,7 +5,7 @@ import type { InvalidScenario } from "../data/invalidScenario.generated.ts";
 import type { Mismatch } from "../data/mismatch.generated.ts";
 import type { NonCanonical } from "../data/nonCanonical.generated.ts";
 import type { At, Expected, Folder } from "../data/pairing.ts";
-import type { GivenRecord, Scenario } from "../data/scenario.generated.ts";
+import type { Caller, GivenRecord, Scenario } from "../data/scenario.generated.ts";
 import type { Schema } from "../data/schema.generated.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import type { Run } from "../data/traceFile.ts";
@@ -316,6 +316,8 @@ export type Counterexample = {
   /** The query and its input, which it answers at the time of the state. */
   readonly query?: string;
   readonly input?: Json;
+  /** The caller of the command or query. */
+  readonly caller?: Caller;
   readonly now?: number;
   /** The machine's active states and context before the transition, none for starting it. */
   readonly machine?: Json;

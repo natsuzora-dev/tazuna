@@ -15,7 +15,15 @@ test("nextBusinessDay writes the trace of the calendar double's answers", async 
   for (const [id, day] of Object.entries(inputs)) {
     const after = Temporal.PlainDate.from(day).toZonedDateTime({ timeZone, plainTime: "12:00" }).epochMilliseconds;
     const result = await nextBusinessDay({ after });
-    trace.push({ time, dir: "in", type: "query", id, name: "nextBusinessDay", input: { after } });
+    trace.push({
+      time,
+      dir: "in",
+      type: "query",
+      id,
+      name: "nextBusinessDay",
+      input: { after },
+      caller: { service: "todo" },
+    });
     trace.push({ time, dir: "out", type: "answer", id: lineId("answer"), to: id, answer: toSpec.calendar(result) });
   }
   writeTrace("calendar/nextBusinessDay.jsonl", trace);

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const { command, machine, scenario } = service({ name: "chains", description: "Ping in chains" });
 
-export const ping = command({ emits: [] }).decide(() => []);
+export const ping = command({ callers: ["client", "chains"], emits: [] }).decide(() => []);
 
 export const pinger = machine({
   description: "Run 11 chains of 100 pings at the start, each ping sent when the one before is accepted",

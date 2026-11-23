@@ -6,7 +6,7 @@ export const listed = scenario({
     "List the tasks; verify treats as matching an implementation trace that orders the elements of titles and tags differently, and orders differently the entries with the same day; no violation",
   given: { start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [] },
   when: (w) => {
-    w.client.send(listTasks, {});
+    w.client.as("client").send(listTasks, {});
   },
   then: () => [],
 });
@@ -17,8 +17,8 @@ export const grouped = scenario({
   given: { start: parseInstant("2026-10-25T10:00:00+09:00"), records: {}, peers: [] },
   when: (w) => {
     const tags = w.startup.screen(tagScreen);
-    w.client.call(taskGroups, {});
-    w.client.send(tagTask, { tags: ["home", "store"] });
+    w.client.as("client").call(taskGroups, {});
+    w.client.as("client").send(tagTask, { tags: ["home", "store"] });
     w.user.operate(tags, "pick", { tags: ["home", "store"] });
   },
   then: () => [],
@@ -29,12 +29,12 @@ export const groupedSixTimes = scenario({
     "Ask for orderedTaskGroups six times; the implementation trace of this scenario answers with a different number of bag elements, a different order of array elements, a different order of sortedBy elements with different at values, and a different number of elements of a default bag, so verify reports Mismatch.output",
   given: { start: parseInstant("2026-10-25T00:00:00Z"), records: {}, peers: [] },
   when: (w) => {
-    w.client.call(orderedTaskGroups, {});
-    w.client.call(orderedTaskGroups, {});
-    w.client.call(orderedTaskGroups, {});
-    w.client.call(orderedTaskGroups, {});
-    w.client.call(orderedTaskGroups, {});
-    w.client.call(orderedTaskGroups, {});
+    w.client.as("client").call(orderedTaskGroups, {});
+    w.client.as("client").call(orderedTaskGroups, {});
+    w.client.as("client").call(orderedTaskGroups, {});
+    w.client.as("client").call(orderedTaskGroups, {});
+    w.client.as("client").call(orderedTaskGroups, {});
+    w.client.as("client").call(orderedTaskGroups, {});
   },
   then: () => [],
 });

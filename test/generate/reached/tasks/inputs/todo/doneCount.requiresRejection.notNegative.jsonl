@@ -1,2 +1,2 @@
-{"time":0,"dir":"in","type":"query","id":"doneCount#1","name":"doneCount","input":{"atLeast":-1}}
+{"time":0,"dir":"in","type":"query","id":"doneCount#1","name":"doneCount","input":{"atLeast":-1},"caller":{"service":"client"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#1","to":"doneCount#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"notNegative"}}}

@@ -2,7 +2,7 @@ import type { CheckedSpec } from "../check/spec.ts";
 import { ask } from "../cli/engine.ts";
 import type { ReadLine } from "../cli/protocol.generated.ts";
 import { InternalError } from "../data/internalError.ts";
-import type { GivenRecord } from "../data/scenario.generated.ts";
+import type { Caller, GivenRecord } from "../data/scenario.generated.ts";
 import { type TraceLine, traceLine } from "../data/trace.generated.ts";
 import type { Bindings, UntimedTraceLine } from "../data/trace.ts";
 import type { InputRun, Run } from "../data/traceFile.ts";
@@ -76,11 +76,15 @@ function substitutedLine(bindings: Bindings, read: ReadLine): TraceLine {
   });
 }
 
-/** The first line of a log: the time and the records that the implementation starts from. */
+/**
+ * The first line of a log: the time and the records that the implementation starts from, and the user that operates its
+ * screens, absent when no user signed in.
+ */
 interface StartLine {
   readonly type: "start";
   readonly time: number;
   readonly records: readonly GivenRecord[];
+  readonly user?: Caller;
 }
 
 /** A line of a log that verify reads: its start line, then trace lines. */
@@ -134,7 +138,7 @@ export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Ada
     do sent += 1;
     while (id === undefined && requestIds.has(`${name}@${sent}`));
     const appId = id ?? `${name}@${sent}`;
-    write({ dir: "out", type, id: appId, name, input: plain(request.input) }, at);
+    write({ dir: "out", type, id: appId, name, input: plain(request.input), caller: request.caller }, at);
     // A second request with the same id stays in the trace, where verify takes it as the first sent again, or reports
     // Uncomparable.duplicateId when its type, name or input differs.
     const key = waitingKey(id === undefined ? "harness" : "implementation", appId);
@@ -186,6 +190,7 @@ export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Ada
           type: "start",
           time: scenario.given.start,
           records: ask("givenRecords", [{ structure: spec.structure, scenario, service: runner }])[0]?.records ?? [],
+          ...(scenario.given.user === undefined ? {} : { user: scenario.given.user }),
         };
   const comparedBefore = (k: number) => {
     const [compared] = ask("bindings", [
@@ -254,7 +259,7 @@ export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Ada
     }
   }
 
-  await adapter.start(outputs, start.time, start.records);
+  await adapter.start(outputs, start.time, start.records, start.user);
   for (const [k, line] of snapshot.entries()) {
     if (line.dir === "out") continue;
     await adapter.settled();

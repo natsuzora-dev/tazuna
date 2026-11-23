@@ -20,11 +20,13 @@ export const taskDone = updateEvent({ entity: Task, writes: ["done"] });
 export const taskDropped = deleteEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title, done: false })]);
 
 export const markDone = command({
+  callers: ["client", "cleanup"],
   input: { taskId: Task.fields.id },
   emits: [taskDone],
 }).decide(({ input, records }) =>
@@ -32,6 +34,7 @@ export const markDone = command({
 );
 
 export const dropTask = command({
+  callers: ["client", "cleanup"],
   input: { taskId: Task.fields.id },
   emits: [taskDropped],
 }).decide(({ input }) => [emit(taskDropped, { id: input.taskId })]);

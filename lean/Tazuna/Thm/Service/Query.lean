@@ -44,7 +44,7 @@ theorem publish_grows : Grows s (publish st fs s) := by
         · exact (Grows.of_lines (reportAll_lines (s := t) _)).trans (reportAll_now (s := t) _) (grows_write _ _ _ _ _ _)
 
 @[guarantee] theorem changed_answer_sent (sub : Subscription) (a : Answer) (vs : List Fault) (c : Value)
-    (hh : s.halted = none) (hr : resolveChecked st fs s sub.query sub.input = .answered a vs)
+    (hh : s.halted = none) (hr : resolveChecked st fs s sub.query sub.input sub.caller = .answered a vs)
     (hc : fs.comparable sub.query a = .ok c) (hl : sub.last ≠ some c) :
     publishOne st fs s sub =
       ({ s.reportAll vs with subscriptions := s.subscriptions.map fun (u : Subscription) =>
@@ -52,7 +52,7 @@ theorem publish_grows : Grows s (publish st fs s) := by
   simp [publishOne, hh, hr, hc, hl]
 
 @[guarantee] theorem unchanged_answer_not_sent (sub : Subscription) (a : Answer) (vs : List Fault) (c : Value)
-    (hh : s.halted = none) (hr : resolveChecked st fs s sub.query sub.input = .answered a vs)
+    (hh : s.halted = none) (hr : resolveChecked st fs s sub.query sub.input sub.caller = .answered a vs)
     (hc : fs.comparable sub.query a = .ok c) (hl : sub.last = some c) :
     publishOne st fs s sub = s.reportAll vs := by
   have : (sub.last == some c) = true := by rw [hl]; exact beq_self_eq_true _
@@ -106,18 +106,19 @@ theorem publish_answers_only_open_subscriptions :
   injection hb with h
   exact hid sub hsub h.symm
 
-@[guarantee] theorem query_invalid_input_rejected (name : String) (raw : Value)
+@[guarantee] theorem query_invalid_input_rejected (name : String) (raw : Value) (caller : Caller)
     (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok none) :
-    resolveChecked st fs s name raw = .answered (.rejected { kind := .invalidInput }) [] := by
+    resolveChecked st fs s name raw caller = .answered (.rejected { kind := .invalidInput }) [] := by
   simp [resolveChecked, hp]
 
-@[guarantee] theorem resolve_output_answered (name : String) (raw input output : Value)
+@[guarantee] theorem resolve_output_answered (name : String) (raw input output : Value) (caller : Caller)
     (failed : Option String) (rq : Requirements) (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok (some input))
     (hq : st.requirements.lookup name = some rq)
+    (hc : (callerRejection s.records (st.ref name) rq.callers caller : Id _) = none)
     (hr : firstFalse (fs.inputRequirement (st.ref name) · input) rq.requires = .ok none)
-    (hv : fs.resolve name input s.records s.now = .ok output)
-    (he : fs.queryEnsures name input output s.records = .ok failed) :
-    ∃ vs, resolveChecked st fs s name raw = .answered (.fulfilled output) vs := by
-  cases failed <;> simp [resolveChecked, expectFound, hp, hq, hr, hv, he] <;> exact ⟨_, rfl⟩
+    (hv : fs.resolve name input caller s.records s.now = .ok output)
+    (he : fs.queryEnsures name input caller output s.records = .ok failed) :
+    ∃ vs, resolveChecked st fs s name raw caller = .answered (.fulfilled output) vs := by
+  cases failed <;> simp [resolveChecked, expectFound, hp, hq, hc, hr, hv, he] <;> exact ⟨_, rfl⟩
 
 end Tazuna.Thm.Service.Query

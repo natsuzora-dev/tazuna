@@ -1,9 +1,9 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"post#1","name":"post","input":{"noteId":"note-1","replyTo":null}}
+{"time":1792886400000,"dir":"in","type":"command","id":"post#1","name":"post","input":{"noteId":"note-1","replyTo":null},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"post#1","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"posted#1","name":"posted","payload":{"id":"note-1","replyTo":null},"resultOf":"post#1"}
-{"time":1792886400000,"dir":"in","type":"command","id":"post#2","name":"post","input":{"noteId":"note-2","replyTo":"note-1"}}
+{"time":1792886400000,"dir":"in","type":"command","id":"post#2","name":"post","input":{"noteId":"note-2","replyTo":"note-1"},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#2","to":"post#2","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"posted#2","name":"posted","payload":{"id":"note-2","replyTo":"note-1"},"resultOf":"post#2"}
-{"time":1792886400000,"dir":"in","type":"command","id":"deleteNote#1","name":"deleteNote","input":{"noteId":"note-1"}}
+{"time":1792886400000,"dir":"in","type":"command","id":"deleteNote#1","name":"deleteNote","input":{"noteId":"note-1"},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#3","to":"deleteNote#1","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"deleted#1","name":"deleted","payload":{"id":"note-1"},"resultOf":"deleteNote#1"}

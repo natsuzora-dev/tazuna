@@ -10,13 +10,13 @@ export const armed = event({});
 export const rang = event({ payload: { by: z.string() } });
 export const echoed = event({});
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
-export const ring = command({ input: { by: z.string() }, emits: [rang] }).decide(({ input }) => [
-  emit(rang, { by: input.by }),
-]);
+export const ring = command({ callers: ["client", "echoes"], input: { by: z.string() }, emits: [rang] }).decide(
+  ({ input }) => [emit(rang, { by: input.by })],
+);
 
-export const echo = command({ emits: [echoed] }).decide(() => [emit(echoed, {})]);
+export const echo = command({ callers: ["client", "echoes"], emits: [echoed] }).decide(() => [emit(echoed, {})]);
 
 export const first = machine({
   description: `Ring as first at 10:00 once armed`,

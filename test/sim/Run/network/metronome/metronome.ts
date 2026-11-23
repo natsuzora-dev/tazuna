@@ -14,15 +14,21 @@ export const tock = event({});
 export const beatAdded = createEvent({ entity: Beat });
 export const marked = event({ payload: { beatId: z.string() } });
 
-export const beat = command({ emits: [tick, tock] }).decide(() => [emit(tick, {}), emit(tock, {}), emit(tick, {})]);
-
-export const addBeats = command({ input: { beatIds: z.array(Beat.fields.id) }, emits: [beatAdded] }).decide(
-  ({ input }) => input.beatIds.map((id) => emit(beatAdded, { id })),
-);
-
-export const mark = command({ input: { beatId: ref(Beat) }, emits: [marked] }).decide(({ input }) => [
-  emit(marked, { beatId: input.beatId }),
+export const beat = command({ callers: ["client"], emits: [tick, tock] }).decide(() => [
+  emit(tick, {}),
+  emit(tock, {}),
+  emit(tick, {}),
 ]);
+
+export const addBeats = command({
+  callers: ["client"],
+  input: { beatIds: z.array(Beat.fields.id) },
+  emits: [beatAdded],
+}).decide(({ input }) => input.beatIds.map((id) => emit(beatAdded, { id })));
+
+export const mark = command({ callers: ["client", "metronome"], input: { beatId: ref(Beat) }, emits: [marked] }).decide(
+  ({ input }) => [emit(marked, { beatId: input.beatId })],
+);
 
 export const marker = machine({
   description: "Mark once from the copy of each beat",

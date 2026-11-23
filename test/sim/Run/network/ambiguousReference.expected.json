@@ -12,6 +12,9 @@
           "input": {
             "firstId": "task-1",
             "secondId": "task-2"
+          },
+          "caller": {
+            "service": "client"
           }
         },
         {
@@ -97,6 +100,9 @@
           "input": {
             "bookingId": "todo/Booking-1",
             "taskId": "task-1"
+          },
+          "caller": {
+            "service": "todo"
           }
         }
       ],

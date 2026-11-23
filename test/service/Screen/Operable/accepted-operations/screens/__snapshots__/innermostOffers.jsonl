@@ -1,5 +1,5 @@
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.task#1","name":"todo.task","input":{}}
+{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.task#1","name":"todo.task","input":{},"caller":{"service":"screens"}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"todo/answer#1","to":"todo.task#1","answer":{"result":"fulfilled","output":{"isCompleted":false}}}
 {"time":1792890000000,"dir":"in","type":"operation","id":"taskScreen.complete#1","name":"taskScreen.complete"}
-{"time":1792890000000,"dir":"out","type":"command","id":"todo.completeTask#1","name":"todo.completeTask","input":{"taskId":"task-1"}}
+{"time":1792890000000,"dir":"out","type":"command","id":"todo.completeTask#1","name":"todo.completeTask","input":{"taskId":"task-1"},"caller":{"service":"screens"}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"todo/answer#2","to":"todo.completeTask#1","answer":{"result":"accepted"}}

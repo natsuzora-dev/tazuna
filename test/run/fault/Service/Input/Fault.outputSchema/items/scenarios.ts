@@ -6,7 +6,7 @@ export const lookUpItem = scenario({
     "Look up a missing item; item answers an empty title, which its output schema does not accept, so test reports outputSchema",
   given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: { Item: [] }, peers: [] },
   when: (w) => {
-    w.client.call(item, { itemId: "item-1" });
+    w.client.as("client").call(item, { itemId: "item-1" });
   },
   then: () => [],
 });

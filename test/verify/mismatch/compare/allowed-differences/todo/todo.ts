@@ -21,11 +21,13 @@ export const taskCompletedRecorded = updateEvent({
 export const taskCompleted = event({ payload: { taskId: ref(Task) } });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id },
   emits: [taskAddedRecorded],
 }).decide(({ input }) => [emit(taskAddedRecorded, { id: input.taskId, completedAt: null })]);
 
 export const completeTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskCompletedRecorded, taskCompleted],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },

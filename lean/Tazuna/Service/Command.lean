@@ -44,16 +44,16 @@ def Outcome.answer : Outcome → Answer
   | .halted .. => .rejected { kind := .unavailable }
 
 def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records : Records) (now : Time) (name : String)
-    (raw : Value) : m Outcome := do
+    (raw : Value) (caller : Caller) : m Outcome := do
   match ← fs.parseOutside st (.input (st.ref name)) raw with
   | .error e => pure (.halted [issueViolation (st.ref name) e])
   | .ok none => pure (.rejected { kind := .invalidInput })
   | .ok (some input) =>
-    match ← requirementsRejection st fs records now name input with
+    match ← requirementsRejection st fs records now name input caller with
     | .error v => pure (.halted [v])
     | .ok (some r) => pure (.rejected r)
     | .ok none =>
-      match ← fs.decide name input records now with
+      match ← fs.decide name input caller records now with
       | .error e =>
         pure (.halted [issueViolation (st.ref name) e fun
           | .payload event => .emittedPayloadSchema (st.ref name) event
@@ -71,7 +71,7 @@ def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records 
         let written := applyAll st records groups.flatten
         if duplicated st written then pure (.rejected { kind := .alreadyExists })
         else
-          let ensures ← commandEnsures st fs name input records written now
+          let ensures ← commandEnsures st fs name input caller records written now
           let violations := ensures ++ (← integrityViolations st fs written now name)
           pure (if violations.any (·.halts) then .halted violations else .accepted written groups violations)
 
@@ -81,9 +81,9 @@ sender reads records with a query. An external service's command may return outp
 APIs like Stripe do.
 -/
 def processCommand [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (raw : Value)
-    (id : Option LineId) (step : Nat) : m (State × Answer × List (List Emit)) := do
+    (caller : Caller) (id : Option LineId) (step : Nat) : m (State × Answer × List (List Emit)) := do
   MonadNote.note (.reached (.request (st.ref name)))
-  let outcome ← evaluate st fs s.records s.now name raw
+  let outcome ← evaluate st fs s.records s.now name raw caller
   match outcome with
   | .rejected r => pure (s.answer id (st.ref name) (.rejected r), .rejected r, [])
   | .accepted records groups violations =>

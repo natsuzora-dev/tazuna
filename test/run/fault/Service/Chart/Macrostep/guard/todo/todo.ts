@@ -7,9 +7,9 @@ export const { command, machine, event, contract, scenario } = service({
 
 export const taskAdded = event({ payload: { due: date } });
 
-export const addTask = command({ input: { due: date }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { due: input.due }),
-]);
+export const addTask = command({ callers: ["client"], input: { due: date }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { due: input.due })],
+);
 
 export const watcher = machine({
   description: "Stop at the first task due before year 10000",

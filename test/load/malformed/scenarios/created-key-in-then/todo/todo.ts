@@ -17,11 +17,12 @@ export const { automation, command, query, createEvent, contract, scenario } = s
 export const taskAdded = createEvent({ entity: Task });
 export const noteAdded = createEvent({ entity: Note });
 
-export const addTask = command({ input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { id: input.taskId }),
-]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
 export const addNote = command({
+  callers: ["client"],
   input: { noteId: Note.fields.id, taskId: ref(Task) },
   emits: [noteAdded],
 }).decide(({ input }) => [emit(noteAdded, { id: input.noteId, taskId: input.taskId })]);
@@ -31,6 +32,8 @@ export const noteAddedTask = automation({
   commands: { addNote },
 }).send({ input: ({ payload, createKey }) => ({ noteId: createKey(ref(Note)), taskId: payload.id }) });
 
-export const noteIds = query({ output: { noteIds: bag(Note.fields.id) } }).resolve(({ records }) => ({
-  noteIds: records.Note.map((n) => n.id),
-}));
+export const noteIds = query({ callers: ["client"], output: { noteIds: bag(Note.fields.id) } }).resolve(
+  ({ records }) => ({
+    noteIds: records.Note.map((n) => n.id),
+  }),
+);

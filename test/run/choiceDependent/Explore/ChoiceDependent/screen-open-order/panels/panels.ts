@@ -15,8 +15,10 @@ export const { command, screen, event, updateEvent, contract, scenario } = servi
 export const ready = event({});
 export const claimed = updateEvent({ entity: Board, writes: ["used"] });
 
-export const announce = command({ emits: [ready] }).decide(() => [emit(ready, {})]);
-export const claim = command({ emits: [claimed] }).decide(() => [emit(claimed, { used: true })]);
+export const announce = command({ callers: ["client"], emits: [ready] }).decide(() => [emit(ready, {})]);
+export const claim = command({ callers: ["client", "panels"], emits: [claimed] }).decide(() => [
+  emit(claimed, { used: true }),
+]);
 
 export const detailScreen = screen({
   description: "Show which panel opened it",

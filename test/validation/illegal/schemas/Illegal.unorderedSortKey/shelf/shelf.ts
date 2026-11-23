@@ -7,4 +7,6 @@ export const shelvesListed = event({
   payload: { shelves: sortedBy(z.object({ name: z.string(), rank: z.int().default(0) }), "rank") },
 });
 
-export const listShelves = command({ emits: [shelvesListed] }).decide(() => [emit(shelvesListed, { shelves: [] })]);
+export const listShelves = command({ callers: ["client"], emits: [shelvesListed] }).decide(() => [
+  emit(shelvesListed, { shelves: [] }),
+]);

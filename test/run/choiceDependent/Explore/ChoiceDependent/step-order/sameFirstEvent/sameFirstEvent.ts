@@ -13,21 +13,23 @@ export const started = event({});
 export const taskAdded = event({ payload: { id: z.string() } });
 export const counted = updateEvent({ entity: Count, writes: ["seen"] });
 
-export const start = command({ emits: [started] }).decide(() => [emit(started, {})]);
+export const start = command({ callers: ["client"], emits: [started] }).decide(() => [emit(started, {})]);
 
-export const addTwo = command({ emits: [taskAdded] }).decide(() => [
+export const addTwo = command({ callers: ["client", "sameFirstEvent"], emits: [taskAdded] }).decide(() => [
   emit(taskAdded, { id: "task-1" }),
   emit(taskAdded, { id: "task-2" }),
 ]);
 
-export const addThree = command({ emits: [taskAdded] }).decide(() => [
+export const addThree = command({ callers: ["client", "sameFirstEvent"], emits: [taskAdded] }).decide(() => [
   emit(taskAdded, { id: "task-1" }),
   emit(taskAdded, { id: "task-3" }),
 ]);
 
-export const set = command({ input: { seen: z.int() }, emits: [counted] }).decide(({ input }) => [
-  emit(counted, { seen: input.seen }),
-]);
+export const set = command({
+  callers: ["client", "sameFirstEvent"],
+  input: { seen: z.int() },
+  emits: [counted],
+}).decide(({ input }) => [emit(counted, { seen: input.seen })]);
 
 export const withTwo = automation({ receives: { started }, commands: { addTwo } }).send({});
 

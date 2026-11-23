@@ -22,9 +22,10 @@ export const armed = event({});
 export const posted = createEvent({ entity: Note });
 export const counted = updateEvent({ entity: Count, writes: ["notes"] });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
 export const postThread = command({
+  callers: ["client", "threads"],
   input: { id: Note.fields.id, replyId: Note.fields.id, text: Note.fields.text },
   emits: [posted, counted],
 }).decide(({ input, records }) => [

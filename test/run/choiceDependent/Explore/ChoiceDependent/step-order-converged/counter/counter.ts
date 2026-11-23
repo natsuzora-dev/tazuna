@@ -14,17 +14,17 @@ export const taskAdded = event({ payload: { id: z.string() } });
 export const marked = createEvent({ entity: Mark });
 export const flagged = updateEvent({ entity: Flag, writes: ["isOn"] });
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
-export const mark = command({
-  input: { id: z.string() },
-  emits: [marked],
-}).decide(({ input, records }) => (records.Mark.get(input.id) === undefined ? [emit(marked, { id: input.id })] : []));
+export const mark = command({ callers: ["client", "counter"], input: { id: z.string() }, emits: [marked] }).decide(
+  ({ input, records }) => (records.Mark.get(input.id) === undefined ? [emit(marked, { id: input.id })] : []),
+);
 
-export const raise = command({ emits: [flagged] }).decide(() => [emit(flagged, { isOn: true })]);
+export const raise = command({ callers: ["client", "counter"], emits: [flagged] }).decide(() => [
+  emit(flagged, { isOn: true }),
+]);
 
 export const markAdded = automation({
   receives: { taskAdded },

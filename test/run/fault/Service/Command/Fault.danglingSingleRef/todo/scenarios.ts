@@ -10,9 +10,9 @@ export const deletePinned = scenario({
     peers: [],
   },
   when: (w) => {
-    w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-    w.client.send(pinTask, { taskId: "task-1" });
-    w.client.send(deleteTask, { taskId: "task-1" });
+    w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" });
+    w.client.as("client").send(pinTask, { taskId: "task-1" });
+    w.client.as("client").send(deleteTask, { taskId: "task-1" });
   },
   then: () => [],
 });

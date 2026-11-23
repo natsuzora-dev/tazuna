@@ -20,22 +20,24 @@ export const completionChanged = updateEvent({
 });
 export const noted = updateEvent({ entity: Task, writes: ["note"] });
 
-export const addTask = command({
-  input: { taskId: Task.fields.id },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, completedAt: null, note: null })]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId, completedAt: null, note: null })],
+);
 
 export const completeTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [completionChanged],
 }).decide(({ input, now }) => [emit(completionChanged, { id: input.taskId, completedAt: now })]);
 
 export const reopenTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [completionChanged],
 }).decide(({ input }) => [emit(completionChanged, { id: input.taskId, completedAt: null })]);
 
 export const note = command({
+  callers: ["client", "todo"],
   input: { taskId: ref(Task), day: instant },
   emits: [noted],
 }).decide(({ input }) => [emit(noted, { id: input.taskId, note: input.day })]);

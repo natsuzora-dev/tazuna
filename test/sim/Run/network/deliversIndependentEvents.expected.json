@@ -14,6 +14,9 @@
               "beat-1",
               "beat-2"
             ]
+          },
+          "caller": {
+            "service": "client"
           }
         },
         {

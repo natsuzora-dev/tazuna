@@ -3,4 +3,4 @@ import { z } from "zod";
 
 export const { command, contract } = externalService({ name: "device", description: "Show notifications" });
 
-export const showNotification = command({ input: { text: z.string() }, emits: [], rejects: [] });
+export const showNotification = command({ callers: ["todo"], input: { text: z.string() }, emits: [], rejects: [] });

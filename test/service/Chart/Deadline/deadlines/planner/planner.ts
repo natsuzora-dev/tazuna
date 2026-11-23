@@ -9,9 +9,8 @@ export const { command, machine, event, contract, given, scenario } = service({
 export const taskAdded = event({ payload: { taskId: z.string() } });
 export const reminded = event({});
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { taskId: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { taskId: input.taskId })],
+);
 
-export const remind = command({ emits: [reminded] }).decide(() => [emit(reminded, {})]);
+export const remind = command({ callers: ["client", "planner"], emits: [reminded] }).decide(() => [emit(reminded, {})]);

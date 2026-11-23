@@ -16,17 +16,17 @@ export const pinged = event({ payload: { at: z.int() } });
 export const aShown = updateEvent({ entity: Board, writes: ["a"] });
 export const bShown = updateEvent({ entity: Board, writes: ["b"] });
 
-export const ping = command({ input: { at: z.int() }, emits: [pinged] }).decide(({ input }) => [
+export const ping = command({ callers: ["client"], input: { at: z.int() }, emits: [pinged] }).decide(({ input }) => [
   emit(pinged, { at: input.at }),
 ]);
 
-export const showA = command({ input: { shown: z.boolean() }, emits: [aShown] }).decide(({ input }) => [
-  emit(aShown, { a: input.shown }),
-]);
+export const showA = command({ callers: ["client", "board"], input: { shown: z.boolean() }, emits: [aShown] }).decide(
+  ({ input }) => [emit(aShown, { a: input.shown })],
+);
 
-export const showB = command({ input: { shown: z.boolean() }, emits: [bShown] }).decide(({ input }) => [
-  emit(bShown, { b: input.shown }),
-]);
+export const showB = command({ callers: ["client", "board"], input: { shown: z.boolean() }, emits: [bShown] }).decide(
+  ({ input }) => [emit(bShown, { b: input.shown })],
+);
 
 export const replyA = automation({ receives: { pinged }, commands: { showA } }).send({
   input: () => ({ shown: true }),

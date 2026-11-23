@@ -21,6 +21,7 @@ export const taskAdded = event({ payload: { taskId: ref(Task) } });
 export const taskCountChanged = event({ payload: { count: z.int() } });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAddedRecorded, taskAdded, taskCountChanged],
 }).decide(({ input, records }) => [

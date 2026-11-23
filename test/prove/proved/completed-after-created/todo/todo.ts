@@ -21,12 +21,14 @@ export const taskAdded = createEvent({ entity: Task });
 
 export const taskCompleted = updateEvent({ entity: Task, writes: ["completedAt"] });
 
-export const addTask = command({ input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(({ input, now }) => [
-  emit(taskAdded, { id: input.taskId, createdAt: now, completedAt: null }),
-]);
-
-export const completeTask = command({ input: { taskId: ref(Task) }, emits: [taskCompleted] }).decide(
-  ({ input, now }) => [emit(taskCompleted, { id: input.taskId, completedAt: now })],
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input, now }) => [emit(taskAdded, { id: input.taskId, createdAt: now, completedAt: null })],
 );
+
+export const completeTask = command({
+  callers: ["client"],
+  input: { taskId: ref(Task) },
+  emits: [taskCompleted],
+}).decide(({ input, now }) => [emit(taskCompleted, { id: input.taskId, completedAt: now })]);
 
 export const todoBounds = bounds({ creates: { Task: 2 } });

@@ -5,6 +5,7 @@ import { type JsonSchema, jsonSchema, objectSchema } from "../data/jsonSchema.ts
 import type { Expected, Malformed } from "../data/malformed.ts";
 import { type Shape, sameJson, strictObjectOf } from "../data/values.ts";
 import { thrown, type ViolationError, zodError } from "../data/violation.ts";
+import type { CallerType } from "../dsl/caller.ts";
 import { chartOf, transitionArrays } from "../dsl/chart.ts";
 import {
   any,
@@ -16,7 +17,12 @@ import {
   type StateSpec,
 } from "../dsl/definition.ts";
 import { keyTarget, refTarget } from "../dsl/entity.ts";
-import type { DeadlineTime, StateType, Structure } from "../spec/structure.generated.ts";
+import type {
+  DeadlineTime,
+  StateType,
+  Structure,
+  CallerType as StructureCallerType,
+} from "../spec/structure.generated.ts";
 import type {
   ActivityStructure,
   ChartStructure,
@@ -171,6 +177,11 @@ function definitionStructure(
       const target = refTarget(schema);
       return target === undefined ? [] : [{ field, entity: ref(target, [key, field], "keyedEntity") }];
     });
+  // A listed entity is one of the service's own, which the types of `callers` allow alone.
+  const callersOf = (callers: readonly CallerType[]): StructureCallerType[] =>
+    callers.map((c, i) =>
+      typeof c === "string" ? { service: c } : { entity: ref(c, ["callers", i], "keyedEntity").name },
+    );
   if (d.kind === "entity") {
     const fields = schemaOf(d, d.fields as Shape);
     if (d.single) defaultsOf(d, d.fields as Shape);
@@ -204,6 +215,7 @@ function definitionStructure(
       service,
       name,
       rejects: d.rejects === undefined ? null : [...d.rejects],
+      callers: callersOf(d.callers),
       input: schemaOf(d, d.input),
       output: d.output === undefined ? null : schemaOf(d, d.output),
       emits: d.emits.map((e, i) => ref(e, ["emits", i], "event")),
@@ -218,6 +230,7 @@ function definitionStructure(
       service,
       name,
       rejects: d.rejects === undefined ? null : [...d.rejects],
+      callers: callersOf(d.callers),
       input: schemaOf(d, d.input),
       output: d.output === undefined ? null : schemaOf(d, d.output),
       requires: Object.keys(d.requires),

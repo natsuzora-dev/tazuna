@@ -6,12 +6,13 @@ export const { command, machine, event, contract, scenario } = service({ name: "
 export const taskAdded = event({ payload: { taskId: z.string() } });
 export const tasksCleared = event({});
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { taskId: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { taskId: input.taskId })],
+);
 
-export const clearTasks = command({ emits: [tasksCleared] }).decide(() => [emit(tasksCleared, {})]);
+export const clearTasks = command({ callers: ["client"], emits: [tasksCleared] }).decide(() => [
+  emit(tasksCleared, {}),
+]);
 
 export const tracker = machine({
   description: "Count the added tasks in one region, and remember the last one in the other",

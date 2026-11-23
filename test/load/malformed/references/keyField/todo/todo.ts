@@ -13,6 +13,8 @@ export const { command, createEvent } = service({
 
 export const taskAdded = createEvent({ entity: Task });
 
-export const addTask = command({ input: { id: z.string(), tag: z.string() }, emits: [taskAdded] }).decide(
-  ({ input }) => [emit(taskAdded, input)],
-);
+export const addTask = command({
+  callers: ["client"],
+  input: { id: z.string(), tag: z.string() },
+  emits: [taskAdded],
+}).decide(({ input }) => [emit(taskAdded, input)]);

@@ -16,6 +16,7 @@ export const closed = event({});
 export const touched = event({ payload: { by: z.string() } });
 
 export const go = command({
+  callers: ["client"],
   input: { ks: bag(z.string()) },
   emits: [used, opened, closed],
   requires: { first },
@@ -23,9 +24,12 @@ export const go = command({
   emit(used, { used: true }),
   input.ks.map((k) => (k === "open" ? emit(opened, {}) : emit(closed, {}))),
 ]);
-export const touch = command({ input: { by: bag(z.string()) }, emits: [used, touched], requires: { first } }).decide(
-  ({ input }) => [emit(used, { used: true }), input.by.map((by) => emit(touched, { by }))],
-);
+export const touch = command({
+  callers: ["client"],
+  input: { by: bag(z.string()) },
+  emits: [used, touched],
+  requires: { first },
+}).decide(({ input }) => [emit(used, { used: true }), input.by.map((by) => emit(touched, { by }))]);
 
 export const door = machine({
   description: "opened enters open and closed enters shut; touched keeps who touched last in the context",

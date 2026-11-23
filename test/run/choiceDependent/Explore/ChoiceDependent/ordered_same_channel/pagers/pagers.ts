@@ -8,7 +8,7 @@ export const { command, machine, event, contract, scenario } = service({
 
 export const armed = event({});
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
 export const first = machine({
   description: `Page as first at 10:00 once armed`,

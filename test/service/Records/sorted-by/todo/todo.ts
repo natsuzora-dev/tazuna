@@ -17,7 +17,7 @@ export const tasksListed = event({
   },
 });
 
-export const listTasks = command({ emits: [tasksListed] }).decide(() => [
+export const listTasks = command({ callers: ["client"], emits: [tasksListed] }).decide(() => [
   emit(tasksListed, {
     steps: ["shop", "pay"],
     titles: ["Buy milk", "Buy eggs", "Buy milk"],
@@ -41,7 +41,7 @@ export const groupsListed = event({
   },
 });
 
-export const listGroups = command({ emits: [groupsListed] }).decide(() => [
+export const listGroups = command({ callers: ["client"], emits: [groupsListed] }).decide(() => [
   emit(groupsListed, {
     tagged: { counts: [3, 1] },
     extended: { name: "Shop", counts: [3, 1] },
@@ -52,6 +52,7 @@ export const listGroups = command({ emits: [groupsListed] }).decide(() => [
 export const shelved = event({ payload: { names: bag(z.string()), entries: sortedBy(Entry, "day") } });
 
 export const shelve = command({
+  callers: ["client"],
   input: {
     names: bag(z.string()).default(["shop", "home"]),
     entries: sortedBy(Entry, "day").default([
@@ -65,6 +66,7 @@ export const shelve = command({
 export const tasksPlanned = event({ payload: { entries: sortedBy(Entry, "day") } });
 
 export const planTasks = command({
+  callers: ["client"],
   input: { entries: sortedBy(Entry, "day") },
   emits: [tasksPlanned],
 }).decide(({ input }) => [emit(tasksPlanned, { entries: input.entries })]);
@@ -75,7 +77,7 @@ export const visitsListed = event({
   payload: { byTime: sortedBy(Visit, "at"), byDay: sortedBy(Visit, "on") },
 });
 
-export const listVisits = command({ emits: [visitsListed] }).decide(({ now }) => {
+export const listVisits = command({ callers: ["client"], emits: [visitsListed] }).decide(({ now }) => {
   const visits = [
     { at: now + 2 * 3_600_000, on: "2026-10-25", title: "Go to the bakery" },
     { at: now, on: "2026-10-27", title: "Go to the station" },
@@ -92,6 +94,7 @@ export const planChecked = event({
 });
 
 export const checkPlan = command({
+  callers: ["client"],
   input: { isFilled: z.boolean() },
   emits: [planChecked],
 }).decide(({ input }) => {
@@ -105,6 +108,7 @@ const unsorted = () => [
 ];
 
 export const plan = query({
+  callers: ["client"],
   output: { titles: bag(z.string()), entries: sortedBy(Entry, "day") },
 }).resolve(() => ({ titles: ["Buy milk", "Buy eggs"], entries: unsorted() }));
 

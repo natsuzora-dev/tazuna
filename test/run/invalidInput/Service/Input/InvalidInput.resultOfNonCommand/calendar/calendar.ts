@@ -6,6 +6,7 @@ export const { query, event, contract } = externalService({
 });
 
 export const nextDay = query({
+  callers: ["agenda"],
   input: { from: instant },
   output: { day: instant },
   rejects: ["invalid-input", "requires", "unavailable"],

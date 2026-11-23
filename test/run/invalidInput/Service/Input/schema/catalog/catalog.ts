@@ -9,6 +9,7 @@ export const { query, contract } = externalService({
 export const Item = z.object({ n: z.int(), name: z.string() });
 
 export const numbers = query({
+  callers: ["shelf"],
   output: { items: sortedBy(Item, "n") },
   rejects: ["invalid-input", "requires", "unavailable"],
 });

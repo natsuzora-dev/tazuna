@@ -8,9 +8,9 @@ export const deadlineMoved = scenario({
     "Add a task at 10:00 and another at 12:30; reminder enters waiting again on each taskAdded, which fixes its deadline anew. The deadline becomes 13:00 after the first addTask and 14:00 after the second, so reminder notifies at 14:00; fixedReminder does not enter waiting again, so it notifies at 12:00",
   given: arranged,
   when: (w) => {
-    w.client.send(addTask, { taskId: "task-1" });
+    w.client.as("client").send(addTask, { taskId: "task-1" });
     w.clock.at(parseInstant("2026-10-25T12:30:00+09:00"));
-    w.client.send(addTask, { taskId: "task-2" });
+    w.client.as("client").send(addTask, { taskId: "task-2" });
     w.clock.at(parseInstant("2026-10-25T14:30:00+09:00"));
   },
   then: () => [],
@@ -22,7 +22,7 @@ export const deadlinePassed = scenario({
   given: arranged,
   when: (w) => {
     w.clock.at(parseInstant("2026-10-25T11:30:00+09:00"));
-    w.client.send(addTask, { taskId: "now" });
+    w.client.as("client").send(addTask, { taskId: "now" });
   },
   then: () => [],
 });

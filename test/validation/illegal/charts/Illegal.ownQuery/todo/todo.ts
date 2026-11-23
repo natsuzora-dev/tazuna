@@ -12,6 +12,7 @@ export const { automation, command, machine, query, createEvent, updateEvent, co
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
@@ -22,15 +23,16 @@ export const titleChanged = updateEvent({
 });
 
 export const trimTitle = command({
+  callers: ["client", "todo"],
   input: { taskId: ref(Task) },
   emits: [titleChanged],
 }).decide(({ input, records }) => [
   emit(titleChanged, { id: input.taskId, title: records.Task.get(input.taskId)?.title ?? "" }),
 ]);
 
-export const taskCount = query({
-  output: { count: z.int() },
-}).resolve(({ records }) => ({ count: records.Task.size }));
+export const taskCount = query({ callers: ["client", "todo"], output: { count: z.int() } }).resolve(({ records }) => ({
+  count: records.Task.size,
+}));
 
 export const trimFirstTitle = automation({
   receives: { taskAdded },

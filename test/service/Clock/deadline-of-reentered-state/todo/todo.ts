@@ -8,6 +8,6 @@ export const { command, machine, event, contract, scenario } = service({
 export const taskAdded = event({});
 export const reminded = event({});
 
-export const addTask = command({ emits: [taskAdded] }).decide(() => [emit(taskAdded, {})]);
+export const addTask = command({ callers: ["client"], emits: [taskAdded] }).decide(() => [emit(taskAdded, {})]);
 
-export const remind = command({ emits: [reminded] }).decide(() => [emit(reminded, {})]);
+export const remind = command({ callers: ["client", "todo"], emits: [reminded] }).decide(() => [emit(reminded, {})]);

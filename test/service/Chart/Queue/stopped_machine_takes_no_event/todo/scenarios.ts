@@ -10,7 +10,7 @@ export const eventAfterClose = scenario({
   given: arranged,
   when: (w) => {
     w.user.operate(w.startup.screen(homeScreen), "openPick");
-    w.client.send(dropTask, {});
+    w.client.as("client").send(dropTask, {});
   },
   then: () => [],
 });

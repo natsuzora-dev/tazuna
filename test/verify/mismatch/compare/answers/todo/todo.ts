@@ -16,6 +16,7 @@ export const { command, query, createEvent, updateEvent, contract, scenario } = 
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title, isDone: false })]);
@@ -23,18 +24,20 @@ export const addTask = command({
 export const taskCompleted = updateEvent({ entity: Task, writes: ["isDone"] });
 
 export const completeTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskCompleted],
   requires: { notDone: ({ input, records }) => records.Task.get(input.taskId)?.isDone === false },
 }).decide(({ input }) => [emit(taskCompleted, { id: input.taskId, isDone: true })]);
 
-export const taskTitles = query({
-  output: { titles: bag(Task.fields.title) },
-}).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));
+export const taskTitles = query({ callers: ["client"], output: { titles: bag(Task.fields.title) } }).resolve(
+  ({ records }) => ({ titles: records.Task.map((t) => t.title) }),
+);
 
 const part = z.union([z.strictObject({ name: z.string() }), z.strictObject({ size: z.int() })]);
 
 export const taskCard = query({
+  callers: ["client"],
   output: {
     due: z.strictObject({ at: instant, parts: z.array(z.strictObject({ name: z.string() })) }),
     mark: z.discriminatedUnion("kind", [

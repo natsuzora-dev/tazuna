@@ -11,8 +11,8 @@ inductive Resolution where
   | halted (violation : Fault)
 deriving Repr, Inhabited
 
-def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (raw : Value) :
-    m Resolution := do
+def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (name : String) (raw : Value)
+    (caller : Caller) : m Resolution := do
   let definition := st.ref name
   MonadNote.note (.reached (.request definition))
   match ← fs.parseOutside st (.input definition) raw with
@@ -20,16 +20,17 @@ def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
   | .ok none => pure (.answered (.rejected { kind := .invalidInput }) [])
   | .ok (some input) =>
     let rq ← expectFound s!"requirements of {name}" (st.requirements.lookup name)
+    if let some r ← callerRejection s.records definition rq.callers caller then return .answered (.rejected r) []
     match ← firstFalse (fs.inputRequirement definition · input) rq.requires with
     | .error e => pure (.halted (issueViolation definition e))
     | .ok (some reason) =>
       MonadNote.note (.reached (.requiresRejection definition reason))
       pure (.answered (.rejected { kind := .requires, reason := some reason }) [])
     | .ok none =>
-      match ← fs.resolve name input s.records s.now with
+      match ← fs.resolve name input caller s.records s.now with
       | .error e => pure (.halted (issueViolation definition e fun _ => .outputSchema definition))
       | .ok output =>
-        match ← fs.queryEnsures name input output s.records with
+        match ← fs.queryEnsures name input caller output s.records with
         | .error e => pure (.halted (issueViolation definition e))
         | .ok (some c) =>
           MonadNote.note (.reached (.successAnswer definition))
@@ -41,7 +42,7 @@ def resolveChecked [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s 
 def publishOne [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (sub : Subscription) :
     m State := do
   if s.halted.isSome then pure s else
-  match ← resolveChecked st fs s sub.query sub.input with
+  match ← resolveChecked st fs s sub.query sub.input sub.caller with
   | .halted fault => pure (s.report (.fault fault))
   | .answered answer violations =>
     let s := s.reportAll violations

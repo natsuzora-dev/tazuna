@@ -17,12 +17,12 @@ export const { automation, command, query, createEvent, contract, scenario } = s
 export const taskAdded = createEvent({ entity: Task });
 export const seen = createEvent({ entity: Seen });
 
-export const addTask = command({
-  input: { taskId: Task.fields.id },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
 export const see = command({
+  callers: ["client", "todo"],
   input: { id: Seen.fields.id, taskId: Seen.fields.taskId },
   emits: [seen],
 }).decide(({ input }) => [emit(seen, input)]);
@@ -33,6 +33,7 @@ export const seeAdded = automation({
 }).send({ input: ({ payload, createKey }) => ({ id: createKey(ref(Seen)), taskId: payload.id }) });
 
 export const seenIds = query({
+  callers: ["client"],
   output: {
     repeated: bag(ref(Seen)),
     none: bag(z.string()),
@@ -49,8 +50,10 @@ export const seenIds = query({
   return { repeated: ids.concat(firstSeen), none: [], ids, listed };
 });
 
-export const seenTwice = query({ output: { repeated: bag(ref(Seen)) } }).resolve(({ records }) => ({
-  repeated: records.Seen.map((s) => s.id).concat(records.Seen.filter((s) => s.taskId === "task-1").map((s) => s.id)),
-}));
+export const seenTwice = query({ callers: ["client"], output: { repeated: bag(ref(Seen)) } }).resolve(
+  ({ records }) => ({
+    repeated: records.Seen.map((s) => s.id).concat(records.Seen.filter((s) => s.taskId === "task-1").map((s) => s.id)),
+  }),
+);
 
 export const todo = contract({ addTask, seenIds, seenTwice });

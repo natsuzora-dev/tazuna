@@ -15,11 +15,12 @@ receiver only by a line of the network.
 -/
 inductive Line where
   /--
-  A request to `target`'s service from the client, which reaches its running receiver directly, or from the peer
-  `peer`, in flight. With `sameIdAs`, the client's request has the id of the request of that line.
+  A request to `target`'s service from the client as `caller`, which reaches its running receiver directly, or from the
+  peer `peer`, in flight, whose caller is the peer's service. With `sameIdAs`, the client's request has the id of the
+  request of that line.
   -/
   | request (peer : Option String) (kind : RequestType) (target : Spec.Ref) (input : Template)
-      (sameIdAs : Option Nat)
+      (sameIdAs : Option Nat) (caller : Option Caller)
   /--
   The end of the subscription that line `subscription` opened: from the client, which reaches its receiver directly, or
   from the peer `peer`, in flight.
@@ -69,7 +70,7 @@ derive_wire Line tag "type" skip_serializing_none
 
 /-- The values that the line writes: a request's input, an operation's payload, an answer, an event's payload. -/
 def Line.written : Line → List Template
-  | .request _ _ _ input _ => [input]
+  | .request _ _ _ input _ _ => [input]
   | .operate _ _ payload => [payload]
   | .answer _ _ a => [a]
   | .emit _ _ payload _ => [payload]

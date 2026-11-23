@@ -22,9 +22,10 @@ export const armed = event({});
 export const posted = createEvent({ entity: Note });
 export const moved = updateEvent({ entity: Last, writes: ["id"] });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
 export const post = command({
+  callers: ["client", "replies"],
   input: { id: Note.fields.id, text: Note.fields.text },
   emits: [posted, moved],
 }).decide(({ input, records }) => [

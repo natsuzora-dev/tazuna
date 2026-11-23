@@ -18,17 +18,18 @@ export const taskAdded = createEvent({ entity: Task });
 
 export const statusChanged = updateEvent({ entity: Task, writes: ["status", "doneBy"] });
 
-export const addTask = command({ input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { id: input.taskId, status: "open", doneBy: null }),
-]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId, status: "open", doneBy: null })],
+);
 
 export const completeTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task), by: z.string() },
   emits: [statusChanged],
 }).decide(({ input }) => [emit(statusChanged, { id: input.taskId, status: "done", doneBy: input.by })]);
 
-export const reopenTask = command({ input: { taskId: ref(Task) }, emits: [statusChanged] }).decide(({ input }) => [
-  emit(statusChanged, { id: input.taskId, status: "open", doneBy: null }),
-]);
+export const reopenTask = command({ callers: ["client"], input: { taskId: ref(Task) }, emits: [statusChanged] }).decide(
+  ({ input }) => [emit(statusChanged, { id: input.taskId, status: "open", doneBy: null })],
+);
 
 export const todoBounds = bounds({ creates: { Task: 2 } });

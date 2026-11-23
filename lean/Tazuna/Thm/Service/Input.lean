@@ -12,28 +12,28 @@ open Tazuna.Thm.Spec.Structure (resultOfMismatch_eq_none_iff resultOfMismatch_un
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-@[guarantee] theorem send_keysDistinct (name : Spec.Ref) (id : Option LineId) (raw : Value) (h : KeysDistinct s.records) :
-    KeysDistinct (send st fs s name id raw).records := by
+@[guarantee] theorem send_keysDistinct (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (h : KeysDistinct s.records) :
+    KeysDistinct (send st fs s name id raw caller).records := by
   unfold send
   split
   · simp only [id_bind]
     split
     · exact message_keysDistinct _ (by rw [answer_records]; exact h)
-    · exact message_keysDistinct _ (processCommand_keysDistinct _ _ _ _ h)
+    · exact message_keysDistinct _ (processCommand_keysDistinct _ _ _ _ _ h)
   · exact h
-@[guarantee] theorem resent_command_gets_first_answer (name : Spec.Ref) (id : LineId) (raw : Value)
+@[guarantee] theorem resent_command_gets_first_answer (name : Spec.Ref) (id : LineId) (raw : Value) (caller : Caller)
     (known : Request × Answer) (hs : name.service = st.service) (hc : name.name ∈ st.commands)
-    (hk : s.commandAnswers.find? id = some known) (hr : known.1.same { name := name.name, input := raw }) :
-    send st fs s name (some id) raw =
-      let s' := (sent s name id raw).1
+    (hk : s.commandAnswers.find? id = some known) (hr : known.1.same { name := name.name, input := raw, caller }) :
+    send st fs s name (some id) raw caller =
+      let s' := (sent s name id raw caller).1
       message st fs (s'.answer (some id) name known.2) {} := by
   simp [send, hs, hc, hk, answerAgain, hr, sent]
 
-@[guarantee] theorem reused_id_rejected (name : Spec.Ref) (id : LineId) (raw : Value)
+@[guarantee] theorem reused_id_rejected (name : Spec.Ref) (id : LineId) (raw : Value) (caller : Caller)
     (known : Request × Answer) (hs : name.service = st.service) (hc : name.name ∈ st.commands)
-    (hk : s.commandAnswers.find? id = some known) (hr : known.1.same { name := name.name, input := raw } = false) :
-    send st fs s name (some id) raw =
-      let s' := (sent s name id raw).1
+    (hk : s.commandAnswers.find? id = some known) (hr : known.1.same { name := name.name, input := raw, caller } = false) :
+    send st fs s name (some id) raw caller =
+      let s' := (sent s name id raw caller).1
       message st fs (s'.answer (some id) name (.rejected { kind := .reusedId })) {} := by
   simp [send, hs, hc, hk, answerAgain, hr, sent]
 
@@ -44,20 +44,20 @@ variable {st : Service} {fs : Functions Id} {s : State}
   simp [receive, redeliver, hd]
 
 /-- A command is one message: the service processes it, and the work that it causes, in one `message`. -/
-@[guarantee] theorem command_one_message (target : Spec.Ref) (id : Option LineId) (raw : Value)
+@[guarantee] theorem command_one_message (target : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller)
     (hs : target.service = st.service) (hc : target.name ∈ st.commands) :
-    ∃ s' q, send st fs s target id raw = message st fs s' q := by
+    ∃ s' q, send st fs s target id raw caller = message st fs s' q := by
   simp only [send, hs, hc, and_self, ite_true, id_bind]
   split <;> exact ⟨_, _, rfl⟩
 
 /-- A query has no identity: the service resolves and answers every query, one with the id of an earlier query too. -/
-@[guarantee] theorem query_answered_again (target : Spec.Ref) (givenId : Option LineId) (raw : Value) (a : Answer)
+@[guarantee] theorem query_answered_again (target : Spec.Ref) (givenId : Option LineId) (raw : Value) (caller : Caller) (a : Answer)
     (vs : List Fault) (hs : target.service = st.service) (hq : target.name ∈ st.queries)
-    (hr : resolveChecked st fs (s.write .in givenId (.query target raw)).1.newMessage target.name raw =
+    (hr : resolveChecked st fs (s.write .in givenId (.query target raw caller)).1.newMessage target.name raw caller =
       .answered a vs) :
-    call st fs s target givenId raw =
-      message st fs (((s.write .in givenId (.query target raw)).1.newMessage.reportAll vs).answer
-        (some (s.write .in givenId (.query target raw)).2) target a) {} := by
+    call st fs s target givenId raw caller =
+      message st fs (((s.write .in givenId (.query target raw caller)).1.newMessage.reportAll vs).answer
+        (some (s.write .in givenId (.query target raw caller)).2) target a) {} := by
   simp [call, hs, hq, hr]
 
 /--

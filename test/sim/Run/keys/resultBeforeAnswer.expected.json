@@ -11,6 +11,9 @@
           "name": "tags.register",
           "input": {
             "noteId": "notes/Note-1"
+          },
+          "caller": {
+            "service": "notes"
           }
         },
         {
@@ -39,6 +42,9 @@
           "name": "register",
           "input": {
             "noteId": "notes/Note-1"
+          },
+          "caller": {
+            "service": "notes"
           }
         },
         {
@@ -71,6 +77,9 @@
           "input": {
             "labelId": "tags/Label-2",
             "noteId": "notes/Note-1"
+          },
+          "caller": {
+            "service": "tags"
           }
         },
         {

@@ -16,6 +16,7 @@ export const { command, createEvent, contract } = service({
 export const posted = createEvent({ entity: Note });
 
 export const post = command({
+  callers: ["client"],
   input: { noteId: Note.fields.id, replyTo: Note.fields.replyTo, quoted: z.object({ note: ref.self() }) },
   emits: [posted],
 }).decide(({ input }) => [emit(posted, { id: input.noteId, replyTo: input.replyTo })]);

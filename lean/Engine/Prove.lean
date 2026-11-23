@@ -48,6 +48,8 @@ structure Counterexample where
   /-- The query and its input, which it answers at the time of the state. -/
   query : Option String := none
   input : Option Value
+  /-- The caller of the command or query. -/
+  caller : Option Caller := none
   now : Option Int
   /-- The machine's active states and context before the transition, none for starting it. -/
   machine : Option Value := none
@@ -431,14 +433,18 @@ def reports (st : Service) (c : Checked) (command : String) (fault : Fault) : Bo
   | .service, .exception none => true
   | _, _ => false
 
+/-- The caller whose fields a model gives `fields`, none when they hold no caller. -/
+def callerIn (M : Model) (fields : List (String × Term)) : Option Caller :=
+  (FromValue.fromValue (.obj (present M fields)) : Except String Caller).toOption
+
 /-- The records that the step writes, as the semantics writes them, or none when it rejects or halts before. -/
-def writtenBy (st : Service) (fs : Functions IO) (records : Records) (now : Time) (name : String) (input : Value) :
-    IO (Option (Records × List Fault)) := do
-  match ← evaluate st fs records now name input with
+def writtenBy (st : Service) (fs : Functions IO) (records : Records) (now : Time) (name : String) (input : Value)
+    (caller : Caller) : IO (Option (Records × List Fault)) := do
+  match ← evaluate st fs records now name input caller with
   | .accepted written _ violations => pure (some (written, violations))
   | .halted violations =>
     -- The halt is a fault such as a throw in ensures; the records the step writes are those decide's events write.
-    match ← fs.decide name input records now with
+    match ← fs.decide name input caller records now with
     | .ok decided => pure (some (applyAll st records (orderedGroups decided decided.flatten).flatten, violations))
     | .error _ => pure none
   | .rejected _ => pure none
@@ -486,15 +492,16 @@ def replayStep (x : Induction) (fs : Functions IO) (M : Model) (command : String
     IO (Except String Counterexample) := do
   let input := Value.obj (present M step.input)
   let now := (M "now").toInt
+  let some caller := callerIn M step.caller | return .error "the case's caller is no caller"
   match x.stateOf M with
   | .error why => return .error why
   | .ok (pre, given, clock) =>
-  match ← writtenBy x.st fs pre now command input with
+  match ← writtenBy x.st fs pre now command input caller with
   | none => return .error "the semantics rejects the case's command"
   | some (written, faults) =>
     if !x.failedAfter command now written faults prop then
       return .error "the semantics keeps the property after the case's command"
-    return .ok { given, clock, command := some command, input := some input, now := some now,
+    return .ok { given, clock, command := some command, input := some input, caller := some caller, now := some now,
                  violations := faults.map (·.toViolation) }
 
 /--
@@ -524,12 +531,13 @@ def replayResponse (x : Induction) (fs : Functions IO) (M : Model) (r : Checked)
   | some (c, step) =>
     let input := Value.obj (present M step.input)
     let now := (M "now").toInt
-    match ← writtenBy x.st fs pre now c input with
+    let some caller := callerIn M step.caller | return .error "the case's caller is no caller"
+    match ← writtenBy x.st fs pre now c input caller with
     | none => return .error "the semantics rejects the case's command"
     | some (written, faults) =>
       let missed ← missedAfter x fs written now r
       if missed.isEmpty then return .error "the semantics opens no obligation after the case's command"
-      return .ok { given, clock, command := some c, input := some input, now := some now,
+      return .ok { given, clock, command := some c, input := some input, caller := some caller, now := some now,
                    violations := (faults ++ missed).map (·.toViolation) }
 
 /-- The progress that a response's verdict assumes of the runs, which the spec does not state. -/
@@ -541,14 +549,15 @@ def progressAssumption : String :=
 def replayAnswer (x : Induction) (fs : Functions IO) (M : Model) (query : String) (a : Answered) (name : String) :
     IO (Except String Counterexample) := do
   let input := Value.obj (present M a.input)
+  let some caller := callerIn M a.caller | return .error "the case's caller is no caller"
   match x.stateOf M with
   | .error why => return .error why
   | .ok (pre, given, clock) =>
   let failed := failedEnsures (x.st.ref query) name
   let case (faults : List Fault) : Counterexample :=
-    { given, clock, command := none, query := some query, input := some input, now := none,
+    { given, clock, command := none, query := some query, input := some input, caller := some caller, now := none,
       violations := faults.map (·.toViolation) }
-  match ← resolveChecked x.st fs { now := clock, service := x.st.service, records := pre } query input with
+  match ← resolveChecked x.st fs { now := clock, service := x.st.service, records := pre } query input caller with
   | .answered _ faults => return if faults.any failed then .ok (case faults) else .error "the semantics keeps the ensures"
   | .halted fault => return if failed fault then .ok (case [fault]) else .error "the semantics halts the case's query"
 
@@ -670,7 +679,7 @@ def replayPair (x : Induction) (fs : Functions IO) (pair : Pair) (o : Orders) (M
   let some (first, created) ← react pair.first [] | return .error s!"{pair.first.name} does not react in the semantics"
   let some (second, _) ← react pair.second created | return .error s!"{pair.second.name} does not react in the semantics"
   let run (rs : Records) (a : Automation) (input : Value) : IO (Records × Bool) := do
-    match ← evaluate st fs rs now a.sends.ref.name input with
+    match ← evaluate st fs rs now a.sends.ref.name input (.service st.service) with
     | .accepted written _ _ => pure (written, true)
     | _ => pure (rs, false)
   let (r1, a1) ← run records pair.first first

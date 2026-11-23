@@ -1,2 +1,2 @@
-{"time":1792886400000,"dir":"out","type":"subscribe","id":"todo.titled#1","name":"todo.titled","input":{"prefix":"B"}}
+{"time":1792886400000,"dir":"out","type":"subscribe","id":"todo.titled#1","name":"todo.titled","input":{"prefix":"B"},"caller":{"service":"screens"}}
 {"time":1792886400000,"dir":"in","type":"answer","id":"todo/answer:todo.titled#1","to":"todo.titled#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}

@@ -9,11 +9,11 @@ export const countAtEachTime = scenario({
   given: { start, records: {}, peers: [] },
   when: (w) => {
     w.clock.at(start + 0.5);
-    w.client.call(taskCount, {});
+    w.client.as("client").call(taskCount, {});
     w.clock.at(2 ** 53);
-    w.client.call(taskCount, {});
+    w.client.as("client").call(taskCount, {});
     w.clock.at(start + 60_000);
-    w.client.call(taskCount, {});
+    w.client.as("client").call(taskCount, {});
   },
   then: () => [],
 });

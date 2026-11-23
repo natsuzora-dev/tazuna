@@ -13,16 +13,17 @@ export const { command, query, machine, event, createEvent, contract, scenario }
 export const armed = event({});
 export const taskAdded = createEvent({ entity: Task });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
 export const addTask = command({
+  callers: ["client", "tasks"],
   input: { taskId: Task.fields.id },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
 
-export const title = query({
-  output: { title: Board.fields.title },
-}).resolve(({ records }) => ({ title: records.Board.title }));
+export const title = query({ callers: ["client"], output: { title: Board.fields.title } }).resolve(({ records }) => ({
+  title: records.Board.title,
+}));
 
 export const first = machine({
   description: `Add task a at 10:00 once armed`,

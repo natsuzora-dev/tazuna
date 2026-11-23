@@ -1,4 +1,5 @@
 import Tazuna.Data.Answer
+import Tazuna.Data.Trace
 import Tazuna.Data.Value
 import Tazuna.Data.Wire
 import Tazuna.Spec.Tree
@@ -302,12 +303,31 @@ deriving Repr, Inhabited
 derive_wire EventBody
 
 /--
+A kind of caller that a command or query takes: the records of an entity of its service, or the service named
+`service`. Cedar's `appliesTo.principalTypes` lists the principals of an action the same way.
+-/
+inductive CallerType where
+  | entity (entity : String)
+  | service (service : String)
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire CallerType untagged
+
+/-- Whether a caller of this type may be `caller`. -/
+def CallerType.admits : CallerType → Caller → Bool
+  | .entity e, .entity e' _ => e == e'
+  | .service s, .service s' => s == s'
+  | _, _ => false
+
+/--
 A command. For a command of an external service, `rejects` lists the rejection kinds that it declares, and `emits`
 lists the events that may arrive as results of an accepted request (resultOf). For a command of a spec service,
 `rejects` is null. `references` are in field order.
 -/
 structure CommandBody where
   rejects : Option (List RejectionKind)
+  /-- The kinds of caller that may send the command, in written order. -/
+  callers : List CallerType
   input : Value
   output : Option Value
   emits : List Ref
@@ -325,6 +345,8 @@ spec service, `rejects` is null.
 -/
 structure QueryBody where
   rejects : Option (List RejectionKind)
+  /-- The kinds of caller that may send the query, in written order. -/
+  callers : List CallerType
   input : Value
   output : Option Value
   «requires» : List String

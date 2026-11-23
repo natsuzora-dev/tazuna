@@ -6,6 +6,7 @@ export const { command, contract, event } = service({ name: "notes", description
 export const noteKept = event({ payload: { text: z.string() } });
 
 export const addNote = command({
+  callers: ["client", "todo"],
   input: { text: z.string().min(1) },
   emits: [noteKept],
 }).decide(({ input }) => [emit(noteKept, { text: input.text })]);

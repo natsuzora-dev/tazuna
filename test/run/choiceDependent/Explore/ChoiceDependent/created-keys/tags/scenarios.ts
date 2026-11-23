@@ -10,7 +10,7 @@ export const tied = scenario({
     peers: [],
   },
   when: (w) => {
-    w.client.send(arm, {});
+    w.client.as("client").send(arm, {});
   },
   then: () => [],
 });

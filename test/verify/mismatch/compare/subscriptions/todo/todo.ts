@@ -12,11 +12,13 @@ export const { command, query, createEvent, contract } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const tasksNamed = query({
+  callers: ["client", "screens"],
   input: { prefix: z.string() },
   output: { titles: bag(Task.fields.title) },
 }).resolve(({ input, records }) => ({

@@ -87,9 +87,9 @@ theorem message_now (s : State) (q : Queue) : (message st fs s q).now = s.now :=
   rw [fireDue_now _ _ _ _ (Int.le_refl _), Tazuna.Thm.Service.Response.observeResponses_now, afterMessage_now,
     drain_keeps_now]
 
-theorem processCommand_now (name : String) (raw : Value) (id : Option LineId) (n : Nat) (s : State) :
-    (processCommand st fs s name raw id n).1.now = s.now :=
-  congrArg Prod.snd (Tazuna.Thm.Service.Command.processCommand_clock name raw id n)
+theorem processCommand_now (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (n : Nat) (s : State) :
+    (processCommand st fs s name raw caller id n).1.now = s.now :=
+  congrArg Prod.snd (Tazuna.Thm.Service.Command.processCommand_clock name raw caller id n)
 
 theorem keeps_deliverAnswer (step : Nat) (p : Pending) (answer : Answer) : Keeps (deliverAnswer fs st step p answer) := by
   intro r
@@ -106,18 +106,18 @@ macro "now_leaf" : tactic => `(tactic| ((try rw [message_now]) <;>
   (try rw [(keeps_settled _ _ (keeps_dispatch _ _ _ _)).now]) <;>
   simp [State.answer, State.write, State.newStep, State.newMessage, processCommand_now, apply_ite State.now] <;> (repeat' split) <;> simp [State.report] <;> (repeat' split) <;> rfl))
 
-theorem send_now (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
-    (send st fs s name id raw).now = s.now := by
+theorem send_now (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : State) :
+    (send st fs s name id raw caller).now = s.now := by
   simp only [send, id_bind]; repeat' split
   all_goals now_leaf
 
-theorem call_now (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
-    (call st fs s name id raw).now = s.now := by
+theorem call_now (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : State) :
+    (call st fs s name id raw caller).now = s.now := by
   simp only [call, id_bind]; repeat' split
   all_goals now_leaf
 
-theorem subscribe_now (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
-    (subscribe st fs s name id raw).now = s.now := by
+theorem subscribe_now (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : State) :
+    (subscribe st fs s name id raw caller).now = s.now := by
   simp only [subscribe]; repeat' split
   all_goals now_leaf
 

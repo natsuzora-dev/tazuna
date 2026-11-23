@@ -8,8 +8,8 @@ export const onDoneAfterExit = scenario({
     "Add a task and archive it; on the taskFinished of archiveTask, tracker enters finished of tracking and queues the onDone of tracking. On the taskArchived of the same message, tracker exits tracking, so the onDone processed later is dropped and tracker sends no logTask",
   given: arranged,
   when: (w) => {
-    w.client.send(addTask, {});
-    w.client.send(archiveTask, {});
+    w.client.as("client").send(addTask, {});
+    w.client.as("client").send(archiveTask, {});
   },
   then: () => [],
 });

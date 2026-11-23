@@ -295,8 +295,8 @@ theorem answer_records (t : State) (to : Option LineId) (d : Spec.Ref) (a : Answ
   cases to <;> rfl
 
 /-- The state and the step after `send` writes the input line and begins the message and its step. -/
-def sent (s : State) (name : Spec.Ref) (id : LineId) (input : Value) : State × Nat :=
-  (s.write .in (some id) (.command name input)).1.newMessage.newStep .root
+def sent (s : State) (name : Spec.Ref) (id : LineId) (input : Value) (caller : Caller) : State × Nat :=
+  (s.write .in (some id) (.command name input caller)).1.newMessage.newStep .root
 
 /-- The state after `receive` writes the input line. -/
 def AddsOnly (P : Line → Prop) (s s' : State) : Prop := ∃ new, s'.lines = s.lines ++ new ∧ ∀ l ∈ new, P l

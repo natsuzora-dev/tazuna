@@ -18,7 +18,7 @@ export const sentCreatedKey = scenario({
     "The client sends todo/Task-2 as a task id, the form of a key that todo creates, so loading reports writtenCreatedKey at the line",
   given: { start: parseInstant("2026-10-25T10:00:00+09:00"), records: { Task: [] }, peers: [] },
   when: (w) => {
-    w.client.send(addTask, { taskId: "todo/Task-2", title: "Buy milk" });
+    w.client.as("client").send(addTask, { taskId: "todo/Task-2", title: "Buy milk" });
   },
   then: () => [],
 });

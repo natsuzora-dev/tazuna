@@ -18,6 +18,9 @@
           "input": {
             "taskId": "task-1",
             "title": "Buy milk"
+          },
+          "caller": {
+            "service": "client"
           }
         },
         {
@@ -71,6 +74,9 @@
           "input": {
             "bookingId": "todo/Booking-1",
             "taskId": "task-1"
+          },
+          "caller": {
+            "service": "todo"
           }
         }
       ],

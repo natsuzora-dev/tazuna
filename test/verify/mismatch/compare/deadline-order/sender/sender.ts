@@ -10,15 +10,15 @@ export const armed = event({});
 export const pinged = event({ payload: { by: z.string() } });
 export const ponged = event({ payload: { by: z.string() } });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
-export const ping = command({ input: { by: z.string() }, emits: [pinged] }).decide(({ input }) => [
-  emit(pinged, { by: input.by }),
-]);
+export const ping = command({ callers: ["client", "sender"], input: { by: z.string() }, emits: [pinged] }).decide(
+  ({ input }) => [emit(pinged, { by: input.by })],
+);
 
-export const pong = command({ input: { by: z.string() }, emits: [ponged] }).decide(({ input }) => [
-  emit(ponged, { by: input.by }),
-]);
+export const pong = command({ callers: ["client", "sender"], input: { by: z.string() }, emits: [ponged] }).decide(
+  ({ input }) => [emit(ponged, { by: input.by })],
+);
 
 export const late = machine({
   description: "Ping as late once armed, and pong at 2026-10-25T01:00:00Z",

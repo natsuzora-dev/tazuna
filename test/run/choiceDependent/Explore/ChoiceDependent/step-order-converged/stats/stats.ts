@@ -17,6 +17,7 @@ export const { automation, command, createEvent, updateEvent, contract, scenario
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
@@ -26,13 +27,12 @@ export const statsChanged = updateEvent({
   writes: ["added", "lastTitle"],
 });
 
-export const countAdded = command({
-  emits: [statsChanged],
-}).decide(({ records }) => [
+export const countAdded = command({ callers: ["client", "stats"], emits: [statsChanged] }).decide(({ records }) => [
   emit(statsChanged, { added: records.Stats.added + 1, lastTitle: records.Stats.lastTitle }),
 ]);
 
 export const rememberTitle = command({
+  callers: ["client", "stats"],
   input: { title: Task.fields.title },
   emits: [statsChanged],
 }).decide(({ input, records }) => [emit(statsChanged, { added: records.Stats.added, lastTitle: input.title })]);

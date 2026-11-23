@@ -4,6 +4,7 @@ import { z } from "zod";
 export const { query, contract } = externalService({ name: "calendar", description: "Answer questions about days" });
 
 export const nextDay = query({
+  callers: ["todo"],
   input: { from: instant },
   output: { day: instant },
   rejects: ["invalid-input", "requires", "unavailable"],
@@ -11,6 +12,7 @@ export const nextDay = query({
 });
 
 export const holiday = query({
+  callers: [],
   input: { day: instant },
   output: { isHoliday: z.boolean() },
   rejects: ["invalid-input", "requires", "unavailable"],

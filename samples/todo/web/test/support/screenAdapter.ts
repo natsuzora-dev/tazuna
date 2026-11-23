@@ -1,5 +1,12 @@
 import type { AnyCommand, AnyQuery, CommandAnswer } from "@natsuzora-dev/tazuna";
-import { type Adapter, commandRequest, type OutputSlot, queryRequest, Unsettled } from "@natsuzora-dev/tazuna/verify";
+import {
+  type Adapter,
+  type Caller,
+  commandRequest,
+  type OutputSlot,
+  queryRequest,
+  Unsettled,
+} from "@natsuzora-dev/tazuna/verify";
 import { expect, type Locator, type Page, type Request } from "@playwright/test";
 import { todo } from "@todo/spec/todo";
 import { z } from "zod";
@@ -120,6 +127,9 @@ export function screenAdapter(page: Page, held: typeof Held): Adapter & { readon
   let unansweredCommands = 0;
   const unshownAnswers = new Map<AnyQuery, () => Promise<void>>();
   let time: number;
+  // The screens send as the user who operates them, or as the screens service when no user signed in.
+  let user: Caller | undefined;
+  const caller = (): Caller => user ?? { service: "screens" };
   const sent: Sent[] = [];
   const unbound: Unbound[] = [];
   const eventStreams = new Set<(event: TodoEvent) => void>();
@@ -158,7 +168,7 @@ export function screenAdapter(page: Page, held: typeof Held): Adapter & { readon
       receive({
         call,
         write: (output) => {
-          output.request({ ...commandRequest(definition, call.input, answer), id });
+          output.request({ ...commandRequest(definition, call.input, caller(), answer), id });
           return undefined;
         },
       });
@@ -180,7 +190,7 @@ export function screenAdapter(page: Page, held: typeof Held): Adapter & { readon
         call,
         write: (output) =>
           output.subscribe(
-            queryRequest(definition, call.input, (answer) => {
+            queryRequest(definition, call.input, caller(), (answer) => {
               if (answer.result !== "fulfilled") throw new Error("the subscriptions of todo answer only fulfilled");
               unshownAnswers.set(definition, expectShown(answer.output));
               push(answer.output);
@@ -190,8 +200,9 @@ export function screenAdapter(page: Page, held: typeof Held): Adapter & { readon
     };
 
   return {
-    async start(outputs, startTime) {
+    async start(outputs, startTime, _records, startUser) {
       time = startTime;
+      user = startUser;
       page.on("request", (request) => {
         sent.push({ request, slotAtRequest: outputs.later() });
         bind();

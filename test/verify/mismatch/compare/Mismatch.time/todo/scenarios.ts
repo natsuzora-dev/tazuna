@@ -6,7 +6,7 @@ export const addOneReordered = scenario({
   description: "Add a task; the implementation trace queries nextDay five seconds later than the spec",
   given: { start: parseInstant("2026-10-25T00:00:00Z"), records: { Task: [] }, peers: [external(calendar)] },
   when: (w) => {
-    const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
+    const add = w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" });
     w.net.leaveInFlight(add.request(calendar.nextDay));
   },
   then: () => [],

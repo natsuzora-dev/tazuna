@@ -26,13 +26,13 @@ theorem commands_emit_own_events (s : Structure) :
     | _ => rfl
 
 theorem accepted_command_emits_own_events (j : Structure) (h : Commands.foreignEvents j = []) (st : Service)
-    (hj : st.«structure» = j) (fs : Functions Id) (records : Records) (now : Time) (name : String) (raw : Value)
+    (hj : st.«structure» = j) (fs : Functions Id) (records : Records) (now : Time) (name : String) (raw : Value) (caller : Caller)
     (written : Records) (groups : List (List Emit)) (vs : List Fault)
-    (ha : evaluate st fs records now name raw = .accepted written groups vs) :
+    (ha : evaluate st fs records now name raw caller = .accepted written groups vs) :
     ∀ e ∈ groups.flatten,
       ∃ r, r ∈ j.emitsOf (st.ref name) ∧ r.service = st.service ∧ e.event = r := by
   intro e he
-  obtain ⟨_, decided, _, _, hl, rfl⟩ := accepted_emits_decided records now name raw written groups vs ha
+  obtain ⟨_, decided, _, _, hl, rfl⟩ := accepted_emits_decided records now name raw caller written groups vs ha
   have hlist := hl e (mem_orderedGroups _ _ e he)
   simp only [Service.lists, hj, List.contains_iff_mem] at hlist
   obtain ⟨d, hd, hs, hm⟩ := Tazuna.Thm.Spec.Structure.emitsOf_mem j _ _ hlist

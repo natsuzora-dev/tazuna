@@ -16,14 +16,14 @@ export const dueChanged = updateEvent({ entity: Setting, writes: ["due"] });
 export const dueSet = event({});
 export const ponged = event({});
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
-export const setDue = command({ emits: [dueChanged, dueSet] }).decide(() => [
+export const setDue = command({ callers: ["client", "sender"], emits: [dueChanged, dueSet] }).decide(() => [
   emit(dueChanged, { due: parseInstant("2026-10-24T00:00:00Z") }),
   emit(dueSet, {}),
 ]);
 
-export const pong = command({ emits: [ponged] }).decide(() => [emit(ponged, {})]);
+export const pong = command({ callers: ["client", "sender"], emits: [ponged] }).decide(() => [emit(ponged, {})]);
 
 export const setDueOnArm = automation({ receives: { armed }, commands: { setDue } }).send({});
 

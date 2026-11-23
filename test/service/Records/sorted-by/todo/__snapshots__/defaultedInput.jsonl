@@ -1,3 +1,3 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"shelve#1","name":"shelve","input":{}}
+{"time":1792890000000,"dir":"in","type":"command","id":"shelve#1","name":"shelve","input":{},"caller":{"service":"client"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"shelve#1","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"shelved#1","name":"shelved","payload":{"names":["home","shop"],"entries":[{"day":1,"title":"Buy milk"},{"day":2,"title":"Buy eggs"}]},"resultOf":"shelve#1"}

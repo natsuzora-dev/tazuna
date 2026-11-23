@@ -25,6 +25,7 @@ export const taskAdded = createEvent({ entity: Task });
 export const tallyCounted = updateEvent({ entity: Tally, writes: ["added"] });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded, tallyCounted],
 }).decide(({ input, records }) => [

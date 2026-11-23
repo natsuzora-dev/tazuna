@@ -4,7 +4,7 @@ import { arm, given, scenario } from "./sender.ts";
 const arranged = given({ start: parseInstant("2026-10-25T09:00:00+09:00"), records: {}, peers: [] });
 
 const when = arranged.step((w) => {
-  w.client.send(arm, {});
+  w.client.as("client").send(arm, {});
   w.clock.at(parseInstant("2026-10-25T10:30:00+09:00"));
 });
 

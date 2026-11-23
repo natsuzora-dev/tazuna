@@ -6,12 +6,10 @@ export const { command, machine, event, contract, scenario } = service({ name: "
 export const taskAdded = event({ payload: { taskId: z.string() } });
 export const greeted = event({ payload: { count: z.int() } });
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { taskId: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { taskId: input.taskId })],
+);
 
-export const greet = command({
-  input: { count: z.int() },
-  emits: [greeted],
-}).decide(({ input }) => [emit(greeted, { count: input.count })]);
+export const greet = command({ callers: ["client", "todo"], input: { count: z.int() }, emits: [greeted] }).decide(
+  ({ input }) => [emit(greeted, { count: input.count })],
+);

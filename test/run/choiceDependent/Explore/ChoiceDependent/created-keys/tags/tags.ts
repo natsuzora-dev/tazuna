@@ -19,9 +19,10 @@ export const tagged = createEvent({ entity: Tag });
 export const counted = updateEvent({ entity: Count, writes: ["n"] });
 export const announced = event({ payload: { noteId: ref(Note), text: Note.fields.text, label: z.string() } });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
 export const post = command({
+  callers: ["client", "tags"],
   input: { id: Note.fields.id, text: Note.fields.text },
   emits: [posted, tagged, counted, announced],
 }).decide(({ input, records }) => [

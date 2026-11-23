@@ -12,13 +12,13 @@ export const { command, machine, event, updateEvent, contract, scenario } = serv
 export const started = event({});
 export const flagged = updateEvent({ entity: Flag, writes: ["by"] });
 
-export const start = command({ emits: [started] }).decide(() => [emit(started, {})]);
+export const start = command({ callers: ["client"], emits: [started] }).decide(() => [emit(started, {})]);
 
-export const ping = command({ emits: [] }).decide(() => []);
+export const ping = command({ callers: ["client", "sameCommand"], emits: [] }).decide(() => []);
 
-export const set = command({ input: { by: z.string() }, emits: [flagged] }).decide(({ input }) => [
-  emit(flagged, { by: input.by }),
-]);
+export const set = command({ callers: ["client", "sameCommand"], input: { by: z.string() }, emits: [flagged] }).decide(
+  ({ input }) => [emit(flagged, { by: input.by })],
+);
 
 export const pinger = machine({
   description: "Send ping twice from one state; the send answered first picks who sets the flag",

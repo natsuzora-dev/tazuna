@@ -15,11 +15,13 @@ export const armed = event({});
 export const marked = updateEvent({ entity: Mark, writes: ["set"] });
 export const paired = event({ payload: { n: z.int() } });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
-export const mark = command({ emits: [marked] }).decide(() => [emit(marked, { set: true })]);
+export const mark = command({ callers: ["client", "grouper"], emits: [marked] }).decide(() => [
+  emit(marked, { set: true }),
+]);
 
-export const pair = command({ emits: [paired] }).decide(({ records }) =>
+export const pair = command({ callers: ["client", "grouper"], emits: [paired] }).decide(({ records }) =>
   records.Mark.set
     ? [records.Item.map((item) => emit(paired, { n: item.n }))]
     : [emit(paired, { n: 1 }), emit(paired, { n: 2 })],

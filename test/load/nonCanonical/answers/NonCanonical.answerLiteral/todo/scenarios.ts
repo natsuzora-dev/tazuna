@@ -13,9 +13,9 @@ export const writesAnswerLiterals = scenario({
       }),
     );
     return {
-      adding: w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }),
-      rejectedAdding: w.client.send(addTask, { taskId: "task-2", title: "" }),
-      counting: w.client.call(taskCount, {}),
+      adding: w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" }),
+      rejectedAdding: w.client.as("client").send(addTask, { taskId: "task-2", title: "" }),
+      counting: w.client.as("client").call(taskCount, {}),
     };
   },
   then: ({ adding, rejectedAdding, counting }) => [
@@ -36,9 +36,9 @@ export const writesAnswerConstructors = scenario({
   when: (w) => {
     w.net.deliver(w.peer.payments.answer(w.startup.request(payments.createCharge), accepted({ chargeId: "ch_1" })));
     return {
-      adding: w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }),
-      rejectedAdding: w.client.send(addTask, { taskId: "task-2", title: "" }),
-      counting: w.client.call(taskCount, {}),
+      adding: w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" }),
+      rejectedAdding: w.client.as("client").send(addTask, { taskId: "task-2", title: "" }),
+      counting: w.client.as("client").call(taskCount, {}),
     };
   },
   then: ({ adding, rejectedAdding, counting }) => [

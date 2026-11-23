@@ -6,7 +6,7 @@ export const addOne = scenario({
   description: "Add a task; the implementation trace keeps the spec's order and times; no violation",
   given: { start: parseInstant("2026-10-25T00:00:00Z"), records: { Task: [] }, peers: [external(calendar)] },
   when: (w) => {
-    const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
+    const add = w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" });
     w.net.leaveInFlight(add.request(calendar.nextDay));
   },
   then: () => [],
@@ -17,7 +17,7 @@ export const addOneReordered = scenario({
     "Add a task; the implementation trace sends taskCountChanged before taskAdded and the query 5 seconds late, so verify reports lineOrder and Mismatch.time",
   given: { start: parseInstant("2026-10-25T00:00:00Z"), records: { Task: [] }, peers: [external(calendar)] },
   when: (w) => {
-    const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
+    const add = w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" });
     w.net.leaveInFlight(add.request(calendar.nextDay));
   },
   then: () => [],

@@ -7,6 +7,7 @@ export const { command, event, machine } = service({ name: "notifier", descripti
 export const followUpAdded = event({ payload: { taskId: z.string() } });
 
 export const addFollowUp = command({
+  callers: ["client"],
   input: { taskId: z.string() },
   emits: [followUpAdded],
 }).decide(({ input }) => [emit(followUpAdded, { taskId: input.taskId })]);

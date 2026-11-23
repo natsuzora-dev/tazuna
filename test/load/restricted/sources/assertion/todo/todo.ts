@@ -19,22 +19,26 @@ export const noteCopied = updateEvent({ entity: Task, writes: ["title"] });
 const titles = ["Buy milk", "Walk"] as const;
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: z.enum(titles) },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title, note: null })]);
 
 export const copyNote = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id },
   emits: [noteCopied],
   binds: { note: ({ input, records }) => records.Task.get(input.taskId)?.note },
 }).decide(({ input, bound }) => [emit(noteCopied, { id: input.taskId, title: bound.note })]);
 
 export const addTaskAsString = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: z.enum(titles) },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title as string, note: null })]);
 
 export const copyNoteAsserted = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id },
   emits: [noteCopied],
 }).decide(({ input, records }) => {

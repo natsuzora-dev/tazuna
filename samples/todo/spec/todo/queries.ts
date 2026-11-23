@@ -13,6 +13,7 @@ const matches = (filter: z.infer<typeof Filter>, completedAt: number | null) =>
 // tasks does not group by due date: overdue or due today changes with time alone, but a subscription is recomputed
 // only after a message, so the list screen groups and sorts.
 export const tasks = query({
+  callers: ["screens"],
   input: { filter: Filter },
   output: {
     tasks: bag(
@@ -38,6 +39,7 @@ export const tasks = query({
 }));
 
 export const taskDetail = query({
+  callers: ["screens"],
   input: { taskId: ref(Task) },
   output: {
     task: z
@@ -67,5 +69,6 @@ export const taskDetail = query({
 });
 
 export const reminderSettings = query({
+  callers: ["screens"],
   output: { shouldRemind: Settings.fields.shouldRemind.unwrap() },
 }).resolve(({ records }) => ({ shouldRemind: records.Settings.shouldRemind }));

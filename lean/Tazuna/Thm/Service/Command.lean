@@ -12,16 +12,16 @@ open Tazuna.Thm.Data.Basic Tazuna.Thm.Service.Functions Tazuna.Thm.Service.Integ
 
 variable {st : Service} {fs : Functions Id} {s : State}
 
-theorem processCommand_clock (name : String) (raw : Value) (id : Option LineId) (n : Nat) :
-    (processCommand st fs s name raw id n).1.clock = s.clock := by
+theorem processCommand_clock (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (n : Nat) :
+    (processCommand st fs s name raw caller id n).1.clock = s.clock := by
   simp only [processCommand, id_bind]
   split
   · cases id <;> rfl
   · exact (emitAll_clock _ _ _).trans (by simp [State.clock])
   · simp [State.clock]
 
-theorem processCommand_grows (name : String) (raw : Value) (id : Option LineId) (n : Nat) :
-    Grows s (processCommand st fs s name raw id n).1 := by
+theorem processCommand_grows (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (n : Nat) :
+    Grows s (processCommand st fs s name raw caller id n).1 := by
   simp only [processCommand, id_bind]
   split
   · exact answer_grows s _ _ _
@@ -30,12 +30,12 @@ theorem processCommand_grows (name : String) (raw : Value) (id : Option LineId) 
       (answer_grows _ id _ (.accepted none))).trans (by simp) (emitAll_grows _ _ _)
   · exact Grows.of_lines (reportAll_lines ..)
 
-theorem evaluate_accepted_applies (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
+theorem evaluate_accepted_applies (records : Records) (now : Time) (name : String) (raw : Value) (caller : Caller) (written : Records)
     (groups : List (List Emit)) (vs : List Fault)
-    (h : evaluate st fs records now name raw = .accepted written groups vs) :
+    (h : evaluate st fs records now name raw caller = .accepted written groups vs) :
     applyAll st records groups.flatten = written ∧ duplicated st written = false ∧
       ∃ input, fs.parseOutside st (.input (st.ref name)) raw = .ok (some input) ∧
-        vs = (commandEnsures st fs name input records written now).run ++ (integrityViolations st fs written now name).run := by
+        vs = (commandEnsures st fs name input caller records written now).run ++ (integrityViolations st fs written now name).run := by
   simp only [evaluate, id_bind] at h
   split at h
   · cases h
@@ -59,8 +59,8 @@ theorem evaluate_accepted_applies (records : Records) (now : Time) (name : Strin
                 subst h₁ h₂ h₃
                 exact ⟨rfl, by simpa using hd, input, hp, rfl⟩
 
-theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option LineId) (n : Nat)
-    (h : KeysDistinct s.records) : KeysDistinct (processCommand st fs s name raw id n).1.records := by
+theorem processCommand_keysDistinct (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (n : Nat)
+    (h : KeysDistinct s.records) : KeysDistinct (processCommand st fs s name raw caller id n).1.records := by
   simp only [processCommand, id_bind]
   split
   · cases id <;> exact h
@@ -71,43 +71,43 @@ theorem processCommand_keysDistinct (name : String) (raw : Value) (id : Option L
     rw [show (State.emitAll _ id (emittedBy n groups)).records = _ from hr]
     show KeysDistinct ((State.answer _ id _ _).records)
     rw [answer_records, reportAll_records]
-    exact keysDistinct_of_not_duplicated (evaluate_accepted_applies _ _ _ _ _ _ _ he).2.1
+    exact keysDistinct_of_not_duplicated (evaluate_accepted_applies _ _ _ _ _ _ _ _ he).2.1
   · show KeysDistinct (State.reportAll _ _).records
     rw [reportAll_records]
     exact h
 
 /-- A rejected command writes no record and emits no event: the state only gains the answer line. -/
-@[guarantee] theorem rejected_command_changes_nothing (name : String) (raw : Value) (id : Option LineId) (n : Nat) (r : Rejection)
-    (h : evaluate st fs s.records s.now name raw = .rejected r) :
-    processCommand st fs s name raw id n = (s.answer id (st.ref name) (.rejected r), .rejected r, []) ∧
-      (processCommand st fs s name raw id n).1.records = s.records := by
-  have hp : processCommand st fs s name raw id n = (s.answer id (st.ref name) (.rejected r), .rejected r, []) := by
+@[guarantee] theorem rejected_command_changes_nothing (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (n : Nat) (r : Rejection)
+    (h : evaluate st fs s.records s.now name raw caller = .rejected r) :
+    processCommand st fs s name raw caller id n = (s.answer id (st.ref name) (.rejected r), .rejected r, []) ∧
+      (processCommand st fs s name raw caller id n).1.records = s.records := by
+  have hp : processCommand st fs s name raw caller id n = (s.answer id (st.ref name) (.rejected r), .rejected r, []) := by
     simp only [processCommand, id_bind, h]; rfl
   exact ⟨hp, by rw [hp]; exact answer_records s id _ _⟩
 
-@[guarantee] theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Value) (id : Option LineId) (n : Nat)
+@[guarantee] theorem accepted_command_writes_then_queues_reactions (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (n : Nat)
     (written : Records) (groups : List (List Emit)) (vs : List Fault)
-    (h : evaluate st fs s.records s.now name raw = .accepted written groups vs) :
+    (h : evaluate st fs s.records s.now name raw caller = .accepted written groups vs) :
     applyAll st s.records groups.flatten = written ∧
-      (processCommand st fs s name raw id n).1.records = written ∧
-      (processCommand st fs s name raw id n).2.2 = groups := by
-  refine ⟨(evaluate_accepted_applies _ _ _ _ _ _ _ h).1, ?_, ?_⟩
+      (processCommand st fs s name raw caller id n).1.records = written ∧
+      (processCommand st fs s name raw caller id n).2.2 = groups := by
+  refine ⟨(evaluate_accepted_applies _ _ _ _ _ _ _ _ h).1, ?_, ?_⟩
   · simp only [processCommand, id_bind, h]
     exact (congrArg Fixed.records (emitAll_fixed
       (s := ({ s with records := written }.reportAll vs).answer id (st.ref name) (.accepted none)) _ _)).trans
       (by show (State.answer _ id _ _).records = _; rw [answer_records, reportAll_records])
   · simp [processCommand, h]
 
-@[guarantee] theorem command_invalid_input_rejected (records : Records) (now : Time) (name : String) (raw : Value)
+@[guarantee] theorem command_invalid_input_rejected (records : Records) (now : Time) (name : String) (raw : Value) (caller : Caller)
     (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok none) :
-    evaluate st fs records now name raw = .rejected { kind := .invalidInput } := by
+    evaluate st fs records now name raw caller = .rejected { kind := .invalidInput } := by
   simp [evaluate, hp]
 
-@[guarantee] theorem unlisted_emitted_event_halts (records : Records) (now : Time) (name : String) (raw input : Value)
+@[guarantee] theorem unlisted_emitted_event_halts (records : Records) (now : Time) (name : String) (raw input : Value) (caller : Caller)
     (decided : List (List Emit)) (hp : fs.parseOutside st (.input (st.ref name)) raw = .ok (some input))
-    (hr : requirementsRejection st fs records now name input = .ok none)
-    (hd : fs.decide name input records now = .ok decided) (hu : ∃ e ∈ decided.flatten, st.lists name e = false) :
-    ∃ v, evaluate st fs records now name raw = .halted [v] ∧ v.halts = true ∧
+    (hr : requirementsRejection st fs records now name input caller = .ok none)
+    (hd : fs.decide name input caller records now = .ok decided) (hu : ∃ e ∈ decided.flatten, st.lists name e = false) :
+    ∃ v, evaluate st fs records now name raw caller = .halted [v] ∧ v.halts = true ∧
       ∃ event, v = .unlistedEmittedEvent (st.ref name) event := by
   cases hf : decided.flatten.find? (!st.lists name ·) with
   | none =>
@@ -131,10 +131,10 @@ theorem mem_orderedGroups (decided : List (List Emit)) (sorted : List Emit) (e :
   obtain ⟨_, ⟨g, hg, rfl⟩, he⟩ := h
   exact mem_chunks _ _ e (List.mem_flatten.mpr ⟨g, hg, (List.mergeSort_perm _ _).mem_iff.mp he⟩)
 
-@[guarantee] theorem accepted_emits_decided (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
+@[guarantee] theorem accepted_emits_decided (records : Records) (now : Time) (name : String) (raw : Value) (caller : Caller) (written : Records)
     (groups : List (List Emit)) (vs : List Fault)
-    (h : evaluate st fs records now name raw = .accepted written groups vs) :
-    ∃ input decided, fs.parseOutside st (.input (st.ref name)) raw = .ok (some input) ∧ fs.decide name input records now = .ok decided ∧
+    (h : evaluate st fs records now name raw caller = .accepted written groups vs) :
+    ∃ input decided, fs.parseOutside st (.input (st.ref name)) raw = .ok (some input) ∧ fs.decide name input caller records now = .ok decided ∧
       (∀ e ∈ decided.flatten, st.lists name e = true) ∧
       groups = orderedGroups decided decided.flatten := by
   simp only [evaluate, id_bind] at h
@@ -166,15 +166,15 @@ theorem mem_orderedGroups (decided : List (List Emit)) (sorted : List Emit) (e :
 Each event that a command accepted with the sorting functions (Functions.sorting, which `instrument` gives every run)
 emits is one that its `decide` returned, with the payload sorted by its event's schema, parsed by it, and sorted again.
 -/
-@[guarantee] theorem decide_payloads_sorted (records : Records) (now : Time) (name : String) (raw : Value) (written : Records)
+@[guarantee] theorem decide_payloads_sorted (records : Records) (now : Time) (name : String) (raw : Value) (caller : Caller) (written : Records)
     (groups : List (List Emit)) (vs : List Fault)
-    (h : evaluate st (fs.sorting st) records now name raw = .accepted written groups vs) :
-    ∃ input decided, fs.decide name input records now = .ok decided ∧
+    (h : evaluate st (fs.sorting st) records now name raw caller = .accepted written groups vs) :
+    ∃ input decided, fs.decide name input caller records now = .ok decided ∧
       ∀ o ∈ groups.flatten, ∃ e ∈ decided.flatten, o.event = e.event ∧
         ∃ y, fs.parse (.payload e.event) (st.sorted (m := Id) (.payload e.event) e.payload) = .ok (some y) ∧
           o.payload = st.sorted (m := Id) (.payload e.event) y := by
-  obtain ⟨input, sorted, _, hd, hl, rfl⟩ := accepted_emits_decided records now name raw written groups vs h
-  obtain ⟨decided, hd', hs⟩ := sorting_decide_parsed name input records now sorted hd
+  obtain ⟨input, sorted, _, hd, hl, rfl⟩ := accepted_emits_decided records now name raw caller written groups vs h
+  obtain ⟨decided, hd', hs⟩ := sorting_decide_parsed name input caller records now sorted hd
   refine ⟨input, decided, hd', fun o ho => ?_⟩
   have ho := mem_orderedGroups _ _ _ ho
   obtain ⟨g, hg, hog⟩ := List.mem_flatten.mp ho

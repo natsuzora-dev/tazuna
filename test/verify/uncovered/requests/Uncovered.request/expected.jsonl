@@ -1,2 +1,2 @@
 {"kind":"Uncovered.request","definition":{"service":"archive","name":"archiveTask"},"data":{},"location":{"file":"archive/archive.ts","line":18}}
-{"kind":"Uncovered.request","definition":{"service":"archive","name":"archivedTitles"},"data":{},"location":{"file":"archive/archive.ts","line":23}}
+{"kind":"Uncovered.request","definition":{"service":"archive","name":"archivedTitles"},"data":{},"location":{"file":"archive/archive.ts","line":24}}

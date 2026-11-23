@@ -11,19 +11,18 @@ export const { command, query, createEvent, contract, scenario } = service({
 
 export const taskAdded = createEvent({ entity: Task });
 
-export const addTask = command({
-  input: { taskId: Task.fields.id },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
-export const taskIds = query({
-  output: { taskIds: bag(Task.fields.id) },
-}).resolve(({ records }) => ({ taskIds: records.Task.map((t) => t.id) }));
+export const taskIds = query({ callers: ["client"], output: { taskIds: bag(Task.fields.id) } }).resolve(
+  ({ records }) => ({ taskIds: records.Task.map((t) => t.id) }),
+);
 
-export const taskCount = query({
-  output: { count: z.int() },
-}).resolve(({ records }) => ({ count: records.Task.size }));
+export const taskCount = query({ callers: ["client"], output: { count: z.int() } }).resolve(({ records }) => ({
+  count: records.Task.size,
+}));
 
-export const hasTasks = query({
-  output: { hasTasks: z.boolean() },
-}).resolve(({ records }) => ({ hasTasks: records.Task.size > 0 }));
+export const hasTasks = query({ callers: ["client"], output: { hasTasks: z.boolean() } }).resolve(({ records }) => ({
+  hasTasks: records.Task.size > 0,
+}));

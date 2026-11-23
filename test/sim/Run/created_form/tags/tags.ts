@@ -17,11 +17,14 @@ export const { automation, command, createEvent, event, query, contract } = serv
 export const registered = event({ payload: { noteId: z.string() } });
 export const labelAddedRecorded = createEvent({ entity: Label });
 
-export const register = command({ input: { noteId: z.string() }, emits: [registered] }).decide(({ input }) => [
-  emit(registered, { noteId: input.noteId }),
-]);
+export const register = command({
+  callers: ["client", "notes"],
+  input: { noteId: z.string() },
+  emits: [registered],
+}).decide(({ input }) => [emit(registered, { noteId: input.noteId })]);
 
 export const addLabel = command({
+  callers: ["client", "tags"],
   input: { labelId: Label.fields.id, noteId: Label.fields.noteId },
   emits: [labelAddedRecorded],
 }).decide(({ input }) => [emit(labelAddedRecorded, { id: input.labelId, noteId: input.noteId })]);
@@ -36,5 +39,6 @@ export const announceRegistered = automation({ receives: { registered }, command
 });
 
 export const labels = query({
+  callers: ["client", "notes"],
   output: { labels: bag(z.object({ labelId: ref(Label), noteId: Label.fields.noteId })) },
 }).resolve(({ records }) => ({ labels: records.Label.map((l) => ({ labelId: l.id, noteId: l.noteId })) }));

@@ -24,12 +24,12 @@ export const taskAdded = createEvent({ entity: Task });
 
 export const taskAssigned = updateEvent({ entity: Task, writes: ["assignee"] });
 
-export const addTask = command({
-  input: { taskId: Task.fields.id },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, assignee: null })]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId, assignee: null })],
+);
 
 export const assignTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task), assignee: z.string() },
   emits: [taskAssigned],
 }).decide(({ input }) => [emit(taskAssigned, { id: input.taskId, assignee: input.assignee })]);

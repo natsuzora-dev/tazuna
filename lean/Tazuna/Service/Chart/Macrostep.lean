@@ -212,7 +212,7 @@ def workBody [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (step : N
                                                   serial := none, input, cause := step }] }⟩
       else do
         MonadNote.note (.reached (.request a.sends.ref))
-        pure ⟨s.await (.command a.sends.ref input) (.automation a.name) a.sends input, q⟩
+        pure ⟨s.await (.command a.sends.ref input (.service st.service)) (.automation a.name) a.sends input, q⟩
   | .answered c answer _, ⟨s, q⟩ => do
     -- Whether the Queued is stale depends on whether the machine left the sending state, which matters only when the
     -- answer has a transition to take.
@@ -280,7 +280,7 @@ def drain [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (fuel : Nat)
       | some exceeded => pure (s.report (.fault exceeded))
       | none =>
         MonadNote.note (.stepBegins step (Ready.command c).name none)
-        let pc ← processCommand st fs s c.activity.ref.name c.input none step
+        let pc ← processCommand st fs s c.activity.ref.name c.input (s.callerOf c.requester) none step
         MonadNote.note .stepEnds
         drain st fs fuel pc.1
           { rest with tasks := rest.tasks ++ commandWork st pc.1 pc.2.2 step ++ [.answered c pc.2.1 step] }

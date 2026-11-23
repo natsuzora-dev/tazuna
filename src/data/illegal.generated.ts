@@ -72,6 +72,18 @@ export type Illegal =
       };
     }
   /**
+   * The automation or chart sends `target`, whose callers list neither the sender's service nor, when the sender is a
+   * screen, which sends as the user that operates it, an entity. `check` reports none exactly when every sent request
+   * lists its sender (`Checked.callersListed`), so no spec sender's request is rejected with `permission-denied` by kind.
+   */
+  | {
+      readonly kind: "Illegal.unlistedCaller";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly target: DefinitionRef;
+      };
+    }
+  /**
    * A binds or requires key of the command or query, which a requires rejection may name as its reason, is an array index
    * such as `"1"`. JavaScript lists such keys before the others (ECMA-262 OrdinaryOwnPropertyKeys), so the written order
    * would not decide which failing condition gives the reason.
@@ -178,6 +190,7 @@ export const illegalKinds = [
   "Illegal.unlistedControl",
   "Illegal.alwaysCycle",
   "Illegal.foreignEvent",
+  "Illegal.unlistedCaller",
   "Illegal.indexReason",
   "Illegal.foreignMember",
   "Illegal.restoredHeld",

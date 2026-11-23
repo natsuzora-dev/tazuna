@@ -11,6 +11,7 @@ export const { command, query, event, contract } = externalService({
 });
 
 export const holiday = query({
+  callers: [],
   input: { day: instant },
   output: { isHoliday: z.boolean() },
   rejects: ["invalid-input", "requires", "unavailable"],
@@ -20,6 +21,7 @@ export const holiday = query({
 export const booked = event({ payload: { day: instant } });
 
 export const book = command({
+  callers: ["booking"],
   input: { day: instant },
   emits: [booked],
   rejects: ["invalid-input", "requires", "unavailable", "reused-id"],

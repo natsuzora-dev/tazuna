@@ -80,9 +80,9 @@ theorem sortingParse_checked (schema : Schema) (v x : Value) (h : (fs.sortingPar
 Each event that the sorting decide answers is one that decide wrote. One that the command lists has its payload sorted,
 as its event's schema parses it, and sorted again; an unlisted one keeps the payload that decide wrote.
 -/
-theorem sorting_decide_parsed (name : String) (input : Value) (records : Records) (now : Time)
-    (groups : List (List Emit)) (h : (fs.sorting st).decide name input records now = .ok groups) :
-    ∃ decided, fs.decide name input records now = .ok decided ∧
+theorem sorting_decide_parsed (name : String) (input : Value) (caller : Caller) (records : Records) (now : Time)
+    (groups : List (List Emit)) (h : (fs.sorting st).decide name input caller records now = .ok groups) :
+    ∃ decided, fs.decide name input caller records now = .ok decided ∧
       ∀ g ∈ groups, ∀ o ∈ g, ∃ d ∈ decided, ∃ e ∈ d,
         if st.lists name e then
           o.event = e.event ∧ ∃ y, fs.parse (.payload e.event) (st.sorted (m := Id) (.payload e.event) e.payload) =
@@ -112,9 +112,9 @@ theorem sorting_decide_parsed (name : String) (input : Value) (records : Records
       exact heo.symm
 
 /-- A query's output is the sorted output of resolve, as its output schema parses it, sorted again. -/
-@[guarantee] theorem sorting_resolve_parsed (name : String) (input : Value) (records : Records) (now : Time) (output : Value)
-    (h : (fs.sorting st).resolve name input records now = .ok output) :
-    ∃ raw, fs.resolve name input records now = .ok raw ∧
+@[guarantee] theorem sorting_resolve_parsed (name : String) (input : Value) (caller : Caller) (records : Records)
+    (now : Time) (output : Value) (h : (fs.sorting st).resolve name input caller records now = .ok output) :
+    ∃ raw, fs.resolve name input caller records now = .ok raw ∧
       ∃ y, fs.parse (.output (st.ref name)) (st.sorted (m := Id) (.output (st.ref name)) raw) = .ok (some y) ∧
         output = st.sorted (m := Id) (.output (st.ref name)) y := by
   simp only [Functions.sorting, bind] at h

@@ -10,6 +10,7 @@ export const { query, contract, scenario } = service({
 });
 
 export const itemCount = query({
+  callers: ["client"],
   input: { owner: z.string() },
   output: { count: z.int() },
 }).resolve(({ records }) => ({ count: records.Item.size }));

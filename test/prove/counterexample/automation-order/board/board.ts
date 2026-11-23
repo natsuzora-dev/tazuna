@@ -15,13 +15,15 @@ export const { command, automation, event, updateEvent } = service({
 export const pinged = event({ payload: { at: z.int() } });
 export const lastChanged = updateEvent({ entity: Board, writes: ["last"] });
 
-export const ping = command({ input: { at: z.int() }, emits: [pinged] }).decide(({ input }) => [
+export const ping = command({ callers: ["client"], input: { at: z.int() }, emits: [pinged] }).decide(({ input }) => [
   emit(pinged, { at: input.at }),
 ]);
 
-export const show = command({ input: { last: z.enum(["a", "b"]) }, emits: [lastChanged] }).decide(({ input }) => [
-  emit(lastChanged, { last: input.last }),
-]);
+export const show = command({
+  callers: ["client", "board"],
+  input: { last: z.enum(["a", "b"]) },
+  emits: [lastChanged],
+}).decide(({ input }) => [emit(lastChanged, { last: input.last })]);
 
 export const replyA = automation({ receives: { pinged }, commands: { show } }).send({ input: () => ({ last: "a" }) });
 

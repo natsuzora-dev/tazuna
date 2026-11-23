@@ -13,6 +13,7 @@ export const stop = event({});
 export const resume = event({});
 
 export const go = command({
+  callers: ["client"],
   input: { ks: bag(z.string()) },
   emits: [used, next, stop, resume],
 }).decide(({ input }) => [

@@ -1,5 +1,5 @@
 {"kind":"Uncovered.request","definition":{"service":"archive","name":"archiveTask"},"data":{},"location":{"file":"archive/archive.ts","line":18}}
-{"kind":"Uncovered.request","definition":{"service":"archive","name":"archivedTitles"},"data":{},"location":{"file":"archive/archive.ts","line":23}}
-{"kind":"Uncovered.request","definition":{"service":"backlog","name":"completeTask"},"data":{},"location":{"file":"backlog/backlog.ts","line":25}}
-{"kind":"Uncovered.request","definition":{"service":"backlog","name":"renameTask"},"data":{},"location":{"file":"backlog/backlog.ts","line":34}}
-{"kind":"Uncovered.request","definition":{"service":"backlog","name":"taskTitles"},"data":{},"location":{"file":"backlog/backlog.ts","line":41}}
+{"kind":"Uncovered.request","definition":{"service":"archive","name":"archivedTitles"},"data":{},"location":{"file":"archive/archive.ts","line":24}}
+{"kind":"Uncovered.request","definition":{"service":"backlog","name":"completeTask"},"data":{},"location":{"file":"backlog/backlog.ts","line":26}}
+{"kind":"Uncovered.request","definition":{"service":"backlog","name":"renameTask"},"data":{},"location":{"file":"backlog/backlog.ts","line":36}}
+{"kind":"Uncovered.request","definition":{"service":"backlog","name":"taskTitles"},"data":{},"location":{"file":"backlog/backlog.ts","line":44}}

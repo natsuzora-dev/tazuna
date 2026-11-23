@@ -8,15 +8,13 @@ export const logged = event({
   payload: { taskId: z.string(), loggedAt: instant },
 });
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input, now }) => [emit(taskAdded, { taskId: input.taskId, addedAt: now })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input, now }) => [emit(taskAdded, { taskId: input.taskId, addedAt: now })],
+);
 
-export const log = command({
-  input: { taskId: z.string() },
-  emits: [logged],
-}).decide(({ input, now }) => [emit(logged, { taskId: input.taskId, loggedAt: now })]);
+export const log = command({ callers: ["client", "todo"], input: { taskId: z.string() }, emits: [logged] }).decide(
+  ({ input, now }) => [emit(logged, { taskId: input.taskId, loggedAt: now })],
+);
 
 export const logAdded = automation({
   receives: { taskAdded },

@@ -64,7 +64,7 @@ def modules : List (String × List Name) :=
    ("src/data/invalidInput.generated.ts", [``Tazuna.Service.InvalidInput]),
    ("src/data/invalidScenario.generated.ts", [``Tazuna.Sim.InvalidScenario]),
    ("src/data/scenario.generated.ts",
-    [``Tazuna.Spec.Ref, ``Tazuna.Scenario.Origin, ``Tazuna.Scenario.Fact, ``Tazuna.Scenario.ValueRef,
+    [``Tazuna.Spec.Ref, ``Tazuna.Data.Caller, ``Tazuna.Scenario.Origin, ``Tazuna.Scenario.Fact, ``Tazuna.Scenario.ValueRef,
      ``Tazuna.Scenario.Fill, ``Tazuna.Scenario.Hole, ``Tazuna.Scenario.Template, ``Tazuna.Scenario.Line,
      ``Tazuna.Scenario.SentRequest, ``Tazuna.Scenario.EmittedEvent, ``Tazuna.Scenario.Expectation,
      ``Tazuna.Scenario.GivenRecord, ``Tazuna.Scenario.Peer, ``Tazuna.Scenario.PeerEntry, ``Tazuna.Scenario.Given,
@@ -87,7 +87,7 @@ def modules : List (String × List Name) :=
     [``Tazuna.Spec.Activity, ``Tazuna.Spec.Transition, ``Tazuna.Spec.DeadlineTime,
      ``Tazuna.Spec.Deadline, ``Tazuna.Spec.MapState, ``Tazuna.Spec.StateType, ``Tazuna.Spec.Held, ``Tazuna.Spec.State,
      ``Tazuna.Spec.ChartFields, ``Tazuna.Spec.Reference, ``Tazuna.Spec.KeyPosition, ``Tazuna.Spec.ChangeKind, ``Tazuna.Spec.Change,
-     ``Tazuna.Spec.ResponseTime, ``Tazuna.Spec.EntityBody, ``Tazuna.Spec.EventBody, ``Tazuna.Spec.CommandBody, ``Tazuna.Spec.QueryBody,
+     ``Tazuna.Spec.ResponseTime, ``Tazuna.Spec.EntityBody, ``Tazuna.Spec.EventBody, ``Tazuna.Spec.CallerType, ``Tazuna.Spec.CommandBody, ``Tazuna.Spec.QueryBody,
      ``Tazuna.Spec.AutomationBody, ``Tazuna.Spec.Body, ``Tazuna.Spec.Definition, ``Tazuna.Spec.Contract,
      ``Tazuna.Spec.ServiceInfo, ``Tazuna.Spec.ResultOfMismatch, ``Tazuna.Spec.AssumptionMismatch,
      ``Tazuna.Spec.Bounds,
@@ -328,6 +328,15 @@ partial def zodSchema (listed : List Name) : Expr → Emit String
     if let .enum ctors ← wireShape name then
       modify fun e => { e with inlined := if name ∈ e.inlined then e.inlined else e.inlined ++ [name] }
       return enumSchema ctors
+    -- A union of string records that another module declares, such as Caller, is written in place as an enum is.
+    if let .untagged ctors ← wireShape name then
+      let strings (f : WireField) : Bool := match f with
+        | .required _ (.const ``String _) => true
+        | _ => false
+      if ctors.all (·.fields.all strings) then
+        modify fun e => { e with inlined := if name ∈ e.inlined then e.inlined else e.inlined ++ [name] }
+        return "z.union([" ++ ", ".intercalate (ctors.map fun c =>
+          "z.object({ " ++ ", ".intercalate (c.fields.map fun f => s!"{f.name}: z.string()") ++ " })") ++ "])"
     throwError "list {name} before the wire types that use it"
   | type => throwError "no Zod schema for {type}"
 
@@ -394,7 +403,15 @@ def schemaOf (listed : List Name) (type : Name) : Emit String := do
 
 /-- A type that TS parses: its schema, exported for the root, and its type. -/
 def zodDeclaration (listed : List Name) (exported : Bool) (type : Name) : Emit String := do
-  return s!"{if exported then "export " else ""}const {schemaName type} = {← schemaOf listed type};\n\n" ++
+  let head := s!"{if exported then "export " else ""}const {schemaName type} = "
+  let schema ← schemaOf listed type
+  -- An enum longer than Biome's line width of 120 goes one name per line, as Biome writes it.
+  let schema ← match ← wireShape type with
+    | .enum ctors =>
+      if (head ++ schema ++ ";").length ≤ 120 then pure schema
+      else pure ("z.enum([\n" ++ String.join (ctors.map fun c => s!"  \"{c.name}\",\n") ++ "])")
+    | _ => pure schema
+  return s!"{head}{schema};\n\n" ++
     (← typeDoc type) ++ s!"export type {type.getString!} = z.infer<typeof {schemaName type}>;\n"
 
 /-- `zod% path` elaborates to the module `path` and the Zod schemas of the wire types that it declares, which TS parses. -/

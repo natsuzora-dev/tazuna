@@ -97,12 +97,14 @@ const keyed = fc.record({ id: fc.constantFrom("a", "b", "d"), title: text });
 const { command, condition, event } = service({ name: "fixtures", description: "The fixtures' events", entities });
 const noted = event({ payload: { title: z.string() } });
 const counted = event({ payload: { n: z.int() } });
-const noting = command({ input: { title: z.string(), bag: bag(z.int()) }, emits: [noted, counted] }).decide(
-  ({ input }) => [
-    input.title === "" ? emit(counted, { n: 0 }) : emit(noted, { title: input.title }),
-    input.bag.map((n) => emit(counted, { n })),
-  ],
-);
+const noting = command({
+  callers: ["client"],
+  input: { title: z.string(), bag: bag(z.int()) },
+  emits: [noted, counted],
+}).decide(({ input }) => [
+  input.title === "" ? emit(counted, { n: 0 }) : emit(noted, { title: input.title }),
+  input.bag.map((n) => emit(counted, { n })),
+]);
 
 // Helpers that a fixture calls, which the converter inlines.
 const between = (n: number, low: number, high: number) => low <= n && n <= high;

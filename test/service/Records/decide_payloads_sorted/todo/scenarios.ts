@@ -8,7 +8,7 @@ export const listed = scenario({
     "List the tasks; decide writes the titles and the entries of tasksListed out of order, and tazuna sorts the titles bag by canonical JSON and the entries by day, the two entries of day 1 by canonical JSON",
   given: arranged,
   when: (w) => {
-    w.client.send(listTasks, {});
+    w.client.as("client").send(listTasks, {});
   },
   then: () => [],
 });

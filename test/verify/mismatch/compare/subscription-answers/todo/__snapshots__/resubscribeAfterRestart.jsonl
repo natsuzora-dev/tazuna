@@ -1,9 +1,9 @@
-{"time":1792886400000,"dir":"in","type":"subscribe","id":"taskTitles#1","name":"taskTitles","input":{}}
+{"time":1792886400000,"dir":"in","type":"subscribe","id":"taskTitles#1","name":"taskTitles","input":{},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"taskTitles#1","answer":{"result":"fulfilled","output":{"titles":[]}}}
 {"time":1792886400000,"dir":"in","type":"restart","id":"restart#1"}
-{"time":1792886400000,"dir":"in","type":"subscribe","id":"taskTitles#1","name":"taskTitles","input":{}}
+{"time":1792886400000,"dir":"in","type":"subscribe","id":"taskTitles#1","name":"taskTitles","input":{},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#2","to":"taskTitles#1","answer":{"result":"fulfilled","output":{"titles":[]}}}
-{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"}}
+{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#3","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"},"resultOf":"addTask#1"}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#4","to":"taskTitles#1","answer":{"result":"fulfilled","output":{"titles":["Buy milk"]}}}

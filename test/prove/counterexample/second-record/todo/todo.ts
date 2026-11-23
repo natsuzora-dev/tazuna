@@ -16,8 +16,8 @@ export const { command, createEvent, bounds } = service({
 
 export const taskAdded = createEvent({ entity: Task });
 
-export const addTask = command({ input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { id: input.taskId }),
-]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
 export const todoBounds = bounds({ creates: { Task: 2 } });

@@ -52,6 +52,10 @@ def scopeArgs (st : Service) (scope : Scope) (extra : Extra) : Arg → Val :=
     | .output v => [(.output, .json v)]
     | .rejection r => [(.rejection, .json (.obj [("kind", ToValue.toValue r.kind)]))])
 
+/-- The arguments of a function of a command or query that reads its request: the input, the caller, and the time. -/
+def requestArgs (input : Value) (caller : Caller) (now : Time) : Arg → Val :=
+  argsOf [(.input, .json input), (.caller, .json (ToValue.toValue caller)), (.now, instant now)]
+
 /-- The site of the input of `activity` written in `state`. -/
 def inputSite (state : String) : Activity → Site
   | .calls key _ => .input state "calls" key
@@ -179,25 +183,26 @@ def Program.toFunctions (p : Program) (st : Service) (read : Trace → IO Unit) 
     closeEnsures := fun screen input output => evaluated "closeEnsures" <|
       (all p.closeEnsures (st.ref screen)).map fun cs =>
         (firstFailing { fields := fieldsOf st, args := argsOf [(.input, .json input), (.output, .json output)] } cs).run'
-    binding := fun name b input records now => evaluated "binding" <|
+    binding := fun name b input caller records now => evaluated "binding" <|
       (named p.binding (st.ref name) b).map fun c =>
-        (nonNull { fields := fieldsOf st, args := argsOf [(.input, .json input), (.now, instant now)], records } c).run'
-    requirement := fun name c input records now => evaluated "requirement" <|
+        (nonNull { fields := fieldsOf st, args := requestArgs input caller now, records } c).run'
+    requirement := fun name c input caller records now => evaluated "requirement" <|
       (named p.requirement (st.ref name) c).map fun cond =>
-        let env := { fields := fieldsOf st, args := argsOf [(.input, .json input), (.now, instant now)], records }
+        let env := { fields := fieldsOf st, args := requestArgs input caller now, records }
         (withBound env (binds p.binding (st.ref name)) (holds · cond)).run'
-    ensures := fun name input before after _ => evaluated "ensures" <|
+    ensures := fun name input caller before after _ => evaluated "ensures" <|
       (all p.ensures (st.ref name)).map fun cs =>
-        let args := argsOf [(.input, .json input)]
+        let args := argsOf [(.input, .json input), (.caller, .json (ToValue.toValue caller))]
         -- As TS's firstFailing, which builds the arguments only when there is a condition.
         let checked : EvalM (Option String) :=
           if cs.isEmpty then pure none
           else withBound { fields := fieldsOf st, args, records := before } (binds p.binding (st.ref name)) fun env =>
             firstFailing { env with records := after } cs
         checked.run'
-    queryEnsures := fun name input output records => evaluated "queryEnsures" <|
+    queryEnsures := fun name input caller output records => evaluated "queryEnsures" <|
       (all p.queryEnsures (st.ref name)).map fun cs =>
-        (firstFailing { fields := fieldsOf st, args := argsOf [(.input, .json input), (.output, .json output)], records } cs).run'
+        let args := argsOf [(.input, .json input), (.caller, .json (ToValue.toValue caller)), (.output, .json output)]
+        (firstFailing { fields := fieldsOf st, args, records } cs).run'
     serviceInvariant := fun records now => evaluated "serviceInvariant" <|
       (all p.serviceInvariant (st.ref st.service)).map fun cs =>
         let (answer, trace) := (firstFailing { fields := fieldsOf st, args := argsOf [(.now, instant now)], records } cs).run'
@@ -212,13 +217,13 @@ def Program.toFunctions (p : Program) (st : Service) (read : Trace → IO Unit) 
       (named p.automationGuard (st.ref name) c).map fun cond =>
         let env := { fields := fieldsOf st, args := argsOf [(.payload, .json payload), (.now, instant now)], records }
         (withBound env (binds p.automationBinding (st.ref name)) (holds · cond)).run'
-    resolve := fun name input records now => evaluated "resolve" <|
+    resolve := fun name input caller records now => evaluated "resolve" <|
       (p.resolve.find? (·.definition == st.ref name)).map fun f =>
-        let env := { fields := fieldsOf st, args := argsOf [(.input, .json input), (.now, instant now)], records }
+        let env := { fields := fieldsOf st, args := requestArgs input caller now, records }
         (valueIn env f.body).run'
-    decide := fun name input records now => evaluated "decide" <|
+    decide := fun name input caller records now => evaluated "decide" <|
       (p.decide.find? (·.definition == st.ref name)).map fun f =>
-        let env := { fields := fieldsOf st, args := argsOf [(.input, .json input), (.now, instant now)], records }
+        let env := { fields := fieldsOf st, args := requestArgs input caller now, records }
         let emitted (env : Env) : Val → EvalM Emit
           | .emit event payload => do pure { event, payload := ← answerOf env payload }
           | _ => thrown

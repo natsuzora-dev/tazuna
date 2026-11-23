@@ -7,6 +7,7 @@ const saturday = parseInstant("2026-10-31T00:00:00Z");
 export const { query, contract } = externalService({ name: "calendar", description: "Answer questions about days" });
 
 export const nextDay = query({
+  callers: ["todo"],
   input: { from: instant },
   output: { day: instant },
   rejects: ["requires"],

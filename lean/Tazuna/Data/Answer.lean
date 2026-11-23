@@ -6,6 +6,8 @@ namespace Tazuna.Data
 inductive RejectionKind where
   | invalidInput
   | reusedId
+  /-- The target lists no kind of the request's caller (`callers`). -/
+  | permissionDenied
   | notFound
   | requires
   | alreadyExists

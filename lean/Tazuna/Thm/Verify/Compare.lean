@@ -63,8 +63,10 @@ an `in` line or an `out` request; the request they answer and their `resultOf`; 
     obtain ⟨l₁, hl₁, c₁, hc₁, l₂, hl₂, c₂, hc₂, e₂⟩ := mem_andThen hm hc
     obtain ⟨l₃, hl₃, c₃, hc₃, l₄, hl₄, c₄, hc₄, e₄⟩ := mem_andThen hl₂ hc₂
     obtain ⟨l₅, hl₅, c₅, hc₅, l₆, hl₆, c₆, hc₆, e₆⟩ := mem_andThen hl₄ hc₄
+    obtain ⟨l₇, hl₇, c₇, hc₇, l₈, _, c₈, hc₈, e₈⟩ := mem_andThen hl₆ hc₆
     have h₆ : c₆.val.Extends b := by rw [← e₆, ← e₄, ← e₂]; exact hext
-    have h₅ : c₅.val.Extends b := c₆.property.trans h₆
+    have h₇ : c₇.val.Extends b := c₈.property.trans (by rw [← e₈]; exact h₆)
+    have h₅ : c₅.val.Extends b := c₇.property.trans h₇
     have h₃ : c₃.val.Extends b := c₅.property.trans h₅
     have h₁ : c₁.val.Extends b := c₃.property.trans h₃
     refine ⟨by simpa using hf, fun hdir => ?_, (opt_bound hl₃ hc₃).mono h₃, (opt_bound hl₅ hc₅).mono h₅, ?_, ?_⟩
@@ -73,21 +75,21 @@ an `in` line or an `out` request; the request they answer and their `resultOf`; 
       · rename_i hn
         exfalso; apply hn
         rcases hdir with hdir | hdir <;> simp [hdir]
-    · unfold matchOption at hl₆
-      split at hl₆
+    · unfold matchOption at hl₇
+      split at hl₇
       · simp_all
       · simp_all
-      · cases hl₆; cases hc₆
+      · cases hl₇; cases hc₇
     · intro x hx y hy
-      unfold matchOption at hl₆
-      split at hl₆
+      unfold matchOption at hl₇
+      split at hl₇
       · simp_all
       · rename_i x' y' hx' hy'
         rw [hx'] at hx; rw [hy'] at hy
         cases hx; cases hy
-        exact Renamed.mono (fun _ _ => BoundBy.mono h₆)
-          (matchValue_renamed v c₅.val x y (hd x (by simp [hx'])) (he y (by simp [hy'])) hl₆ c₆ hc₆)
-      · cases hl₆; cases hc₆
+        exact Renamed.mono (fun _ _ => BoundBy.mono h₇)
+          (matchValue_renamed v c₅.val x y (hd x (by simp [hx'])) (he y (by simp [hy'])) hl₇ c₇ hc₇)
+      · cases hl₇; cases hc₇
 
 /-- The pair of line numbers `p` pairs a snapshot line with a trace line that compare equal under `b`. -/
 def PairMatch (dom : String → String) (snapshot trace : List Numbered) (b : Binding) (p : Nat × Nat) : Prop :=

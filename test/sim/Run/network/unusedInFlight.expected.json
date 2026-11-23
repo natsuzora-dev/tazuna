@@ -12,6 +12,9 @@
           "input": {
             "taskId": "task-1",
             "title": "Buy milk"
+          },
+          "caller": {
+            "service": "client"
           }
         },
         {
@@ -65,6 +68,9 @@
           "input": {
             "bookingId": "todo/Booking-1",
             "taskId": "task-1"
+          },
+          "caller": {
+            "service": "todo"
           }
         },
         {
@@ -88,6 +94,9 @@
           "name": "markSeen",
           "input": {
             "taskId": "task-1"
+          },
+          "caller": {
+            "service": "notifier"
           }
         },
         {
@@ -118,7 +127,10 @@
           "type": "command",
           "id": "notifier/todo.ping#1",
           "name": "ping",
-          "input": {}
+          "input": {},
+          "caller": {
+            "service": "notifier"
+          }
         },
         {
           "time": 1792890000000,
@@ -156,7 +168,10 @@
           "type": "query",
           "id": "tasks#1",
           "name": "tasks",
-          "input": {}
+          "input": {},
+          "caller": {
+            "service": "client"
+          }
         },
         {
           "time": 1792890000000,
@@ -207,6 +222,9 @@
           "name": "todo.markSeen",
           "input": {
             "taskId": "task-1"
+          },
+          "caller": {
+            "service": "notifier"
           }
         },
         {
@@ -215,7 +233,10 @@
           "type": "command",
           "id": "todo.ping#1",
           "name": "todo.ping",
-          "input": {}
+          "input": {},
+          "caller": {
+            "service": "notifier"
+          }
         },
         {
           "time": 1792890000000,

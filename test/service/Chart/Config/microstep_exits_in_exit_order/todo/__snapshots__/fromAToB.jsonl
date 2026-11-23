@@ -1,4 +1,4 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{}}
+{"time":1792890000000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{},"caller":{"service":"client"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{},"resultOf":"addTask#1"}
 {"time":1792890000000,"dir":"out","type":"event","id":"stepsRecorded#1","name":"stepsRecorded","payload":{"steps":["a1 exit","a exit","transition assign","b entry","b1 entry"]}}

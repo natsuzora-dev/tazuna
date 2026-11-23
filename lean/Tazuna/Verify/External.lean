@@ -34,7 +34,7 @@ def exchanges (s : Structure) (service : String) (lines : List (Option TraceLine
   numbered.filterMap fun (i, l) =>
     let later := numbered.filter (·.1 > i)
     match l.body with
-    | .command .in id name _ | .query .in id name _ =>
+    | .command .in id name .. | .query .in id name .. =>
       if numbered.any fun (j, e) => j < i && sentWith id e then none
       else (s.named service (some name) [l.body.type]).map fun definition =>
         { line := i, id, definition
@@ -52,7 +52,7 @@ def exchanges (s : Structure) (service : String) (lines : List (Option TraceLine
 def checkLine (s : Structure) (service : String) (requests : List String) (line : Nat) (l : TraceLine) :
     Option Finding :=
   match l.body with
-  | .command .in _ name _ | .query .in _ name _ =>
+  | .command .in _ name .. | .query .in _ name .. =>
     if (s.named service (some name) [l.body.type]).isSome then none
     else some (.uncomparable (.unknownRequest line (Subject.of l)))
   | .answer .out _ to _ =>

@@ -118,18 +118,18 @@ def readLine {m : Type → Type} [Monad m] (s : Structure) (service : String) (a
   | .event dir id name payload resultOf =>
     let value ← read (s.named service (some name) ["event"]) .payload payload
     pure (line (.event dir id name value.flatten resultOf) (some value), outputByRequestId)
-  | .command dir id name input =>
+  | .command dir id name input caller =>
     let d := s.named service (some name) ["command"]
     let value ← read d .input input
-    pure (line (.command dir id name value.flatten) (some value), request d id)
-  | .query dir id name input =>
+    pure (line (.command dir id name value.flatten caller) (some value), request d id)
+  | .query dir id name input caller =>
     let d := s.named service (some name) ["query"]
     let value ← read d .input input
-    pure (line (.query dir id name value.flatten) (some value), request d id)
-  | .subscribe dir id name input =>
+    pure (line (.query dir id name value.flatten caller) (some value), request d id)
+  | .subscribe dir id name input caller =>
     let d := s.named service (some name) ["query"]
     let value ← read d .input input
-    pure (line (.subscribe dir id name value.flatten) (some value), request d id)
+    pure (line (.subscribe dir id name value.flatten caller) (some value), request d id)
   | .unsubscribe .. | .time .. | .restart .. => pure (line l.body none, outputByRequestId)
 
 def readLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue) :
@@ -153,6 +153,9 @@ def Line.content (l : Line) : Option CValue :=
   | .answer _ _ _ answer => some (answerContent answer l.value)
   | _ => l.value
 
+/-- The caller of a request line, whose created keys compare under the binding as the content's do. -/
+def Line.caller (l : Line) : Option CValue := l.body.caller?.map (CValue.ofValue ∘ ToValue.toValue)
+
 /--
 The lines with each `out` answer to a subscription that equals the previous answer to it set to `none`. A
 subscription is open from the `in` subscribe to the `in` unsubscribe or restart. Values compare ignoring bag order and
@@ -166,7 +169,7 @@ where
     | none :: ls, o => none :: go ls o
     | some l :: ls, o =>
       match l.body with
-      | .subscribe .in id _ _ => some l :: go ls (if (o.lookup id).isSome then o else o ++ [(id, none)])
+      | .subscribe .in id _ _ _ => some l :: go ls (if (o.lookup id).isSome then o else o ++ [(id, none)])
       | .unsubscribe .in _ to => some l :: go ls (o.filter (·.1 != to))
       | .restart .in _ => some l :: go ls []
       | .answer .out _ to answer =>
@@ -256,7 +259,8 @@ def matchContent (v : Values) (b : Binding) (s t : Line) : Matches b :=
       | _, _ => some []
     ids.andThen fun b =>
       (opt s.body.to? t.body.to? b).andThen fun b =>
-        (opt s.body.resultOf? t.body.resultOf? b).andThen fun b => matchOption v b s.content t.content
+        (opt s.body.resultOf? t.body.resultOf? b).andThen fun b =>
+          (matchOption v b s.content t.content).andThen fun b => matchOption v b s.caller t.caller
 
 /-- The bindings under which snapshot line `s` compares equal with implementation line `t`: at the same time, and by
 matchContent. -/
@@ -285,7 +289,10 @@ def difference (s : Line) (t : Numbered) : Mismatch :=
   | .event _ _ _ _ sr, .event _ _ _ _ tr =>
     if (s.content.map (·.key)) == (t.line.content.map (·.key)) then .resultOf t.index subject sr tr
     else .event t.index subject (json s.content) (json t.line.content)
-  | _, _ => .request t.index subject (json s.content) (json t.line.content)
+  | _, _ =>
+    if (s.content.map (·.key)) == (t.line.content.map (·.key)) && (s.caller.map (·.key)) != (t.line.caller.map (·.key)) then
+      .caller t.index subject (json s.caller) (json t.line.caller)
+    else .request t.index subject (json s.content) (json t.line.content)
 
 /-- The report of snapshot line `s` that the trace lacks, at trace line `place`. -/
 def missing (s : Numbered) (place : Nat) : Mismatch :=

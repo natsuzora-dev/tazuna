@@ -51,7 +51,7 @@ def World.startWith (sc : Scenario) (services : List (String × Service)) : Worl
     | .external => .external
     | .skip _ => .skip)
   let now := sc.given.start
-  { now, roles, services, states := (runningOf sc).map fun s => (s, { now, service := s }) }
+  { now, roles, services, states := (runningOf sc).map fun s => (s, { now, service := s, user := sc.given.user }) }
 
 /-- The world before the startup: World.startWith with each running service of the structure `j`. -/
 def World.start {m : Type → Type} [Monad m] [MonadNote m] (j : Spec.Structure) (sc : Scenario) : m World := do

@@ -171,7 +171,7 @@ def World.route (w : World) (o : Origin) (service : String) (lines : List Line) 
   lines.foldl (init := w) fun w l =>
     if w.stopped then w else
     match l with
-    | ⟨_, .out, _, .command r _, _, _, _⟩ | ⟨_, .out, _, .query r _, _, _, _⟩ | ⟨_, .out, _, .subscribe r _, _, _, _⟩ =>
+    | ⟨_, .out, _, .command r .., _, _, _⟩ | ⟨_, .out, _, .query r .., _, _, _⟩ | ⟨_, .out, _, .subscribe r .., _, _, _⟩ =>
       if r.service == service then w else w.post o service r.service l r
     | ⟨_, .out, _, .unsubscribe _, _, _, r⟩ => w.post o service r.service l r
     | ⟨_, .out, _, .answer (.received requester _) _, _, _, r⟩ => w.post o service requester l r

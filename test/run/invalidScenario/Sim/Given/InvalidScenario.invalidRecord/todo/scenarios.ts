@@ -9,7 +9,7 @@ export const untitled = scenario({
     peers: [],
   },
   when: (w) => {
-    w.client.send(addTask, { taskId: "task-2", title: "Buy milk" });
+    w.client.as("client").send(addTask, { taskId: "task-2", title: "Buy milk" });
   },
   then: () => [],
 });

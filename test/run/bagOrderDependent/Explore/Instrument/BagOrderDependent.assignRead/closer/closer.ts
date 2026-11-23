@@ -8,7 +8,7 @@ export const { command, machine, event, contract, scenario } = service({
 
 export const tasksClosed = event({});
 
-export const closeTasks = command({ emits: [tasksClosed] }).decide(() => [emit(tasksClosed, {})]);
+export const closeTasks = command({ callers: ["client"], emits: [tasksClosed] }).decide(() => [emit(tasksClosed, {})]);
 
 export const copyReadsRegion = machine({
   description:

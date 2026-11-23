@@ -18,11 +18,14 @@ export const accountOpened = createEvent({ entity: Account });
 
 export const balanceChanged = updateEvent({ entity: Account, writes: ["balance"] });
 
-export const openAccount = command({ input: { accountId: Account.fields.id }, emits: [accountOpened] }).decide(
-  ({ input }) => [emit(accountOpened, { id: input.accountId, balance: 0 })],
-);
+export const openAccount = command({
+  callers: ["client"],
+  input: { accountId: Account.fields.id },
+  emits: [accountOpened],
+}).decide(({ input }) => [emit(accountOpened, { id: input.accountId, balance: 0 })]);
 
 export const withdraw = command({
+  callers: ["client"],
   input: { accountId: ref(Account), amount: z.int().min(1) },
   emits: [balanceChanged],
   binds: { account: ({ input, records }) => records.Account.get(input.accountId) },

@@ -13,8 +13,10 @@ export const started = event({});
 export const prepared = createEvent({ entity: Item });
 export const counted = event({});
 
-export const start = command({ emits: [started] }).decide(() => [emit(started, {})]);
+export const start = command({ callers: ["client"], emits: [started] }).decide(() => [emit(started, {})]);
 
-export const prepare = command({ emits: [prepared] }).decide(() => [emit(prepared, { id: "x" })]);
+export const prepare = command({ callers: ["client", "stock"], emits: [prepared] }).decide(() => [
+  emit(prepared, { id: "x" }),
+]);
 
-export const count = command({ emits: [counted] }).decide(() => [emit(counted, {})]);
+export const count = command({ callers: ["client", "stock"], emits: [counted] }).decide(() => [emit(counted, {})]);

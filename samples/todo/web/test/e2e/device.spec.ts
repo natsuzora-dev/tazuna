@@ -44,7 +44,8 @@ async function playDevice(
   for (const [i, request] of requests.entries()) {
     const { name, input } = request;
     const id = `${name}-${i + 1}`;
-    record({ dir: "in", type: "command", id, name, input });
+    // notifier is the one caller that both device commands list.
+    record({ dir: "in", type: "command", id, name, input, caller: { service: "notifier" } });
     const result = await sendToPage(request);
     record({ dir: "out", type: "answer", id: lineId("answer"), to: id, answer: toSpec.device(result) });
     if (name === "requestNotificationPermission" && result.ok) {

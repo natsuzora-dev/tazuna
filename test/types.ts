@@ -72,7 +72,7 @@ const { machine, screen, createEvent, updateEvent, deleteEvent, contract } = ser
   entities: { Task, Settings },
 });
 const Note = entity({ description: "", fields: { id: z.string() }, key: "id" });
-const reminderSettings = externalQuery({ output: { enabled: z.boolean() }, rejects: [] });
+const reminderSettings = externalQuery({ callers: [], output: { enabled: z.boolean() }, rejects: [] });
 
 // @ts-expect-error an update event writes only non-key fields
 updateEvent({ entity: Task, writes: ["id"] });
@@ -125,27 +125,27 @@ emit(dueChanged, { id: "task-1", dueAt: tomorrow, remindAt: tomorrow, reminderDe
 // @ts-expect-error a payload holds an instant as milliseconds
 emit(dueChanged, { id: "task-1", dueAt: "2026-10-25T10:00:00+09:00", remindAt: null, reminderDecision: "pending" });
 
-command({ emits: [taskCompletedRecorded] }).decide(() => [
+command({ callers: ["client"], emits: [taskCompletedRecorded] }).decide(() => [
   // @ts-expect-error decide returns only events in emits
   emit(taskDeletedRecorded, { id: "task-1" }),
 ]);
 
-command({
-  input: { taskIds: z.array(ref(Task)) },
-  emits: [taskDeletedRecorded],
-}).decide(({ input, records }) => {
-  const task = records.Task.filter((t) => input.taskIds.includes(t.id)).only();
-  // @ts-expect-error expressions cannot mutate records
-  if (task !== undefined) task.title = "";
-  // @ts-expect-error expressions cannot mutate input arrays
-  input.taskIds.push("task-2");
-  return [];
-});
+command({ callers: ["client"], input: { taskIds: z.array(ref(Task)) }, emits: [taskDeletedRecorded] }).decide(
+  ({ input, records }) => {
+    const task = records.Task.filter((t) => input.taskIds.includes(t.id)).only();
+    // @ts-expect-error expressions cannot mutate records
+    if (task !== undefined) task.title = "";
+    // @ts-expect-error expressions cannot mutate input arrays
+    input.taskIds.push("task-2");
+    return [];
+  },
+);
 
 // A function extracted from an expression takes records as RowOf.
 const isOpen = (task: RowOf<typeof Task>) => task.completedAt === null;
 const shouldRemind = (settings: RowOf<typeof Settings>) => settings.shouldRemind;
 command({
+  callers: ["client"],
   input: { taskId: ref(Task), other: ref(Task).nullable() },
   emits: [],
   requires: { open: ({ refs }) => refs.taskId.completedAt === null },
@@ -154,7 +154,7 @@ command({
   refs.other;
   return refs.taskId.title === "" ? [] : [];
 });
-command({ emits: [] }).decide(({ records }) => {
+command({ callers: ["client"], emits: [] }).decide(({ records }) => {
   records.Task.filter(isOpen);
   shouldRemind(records.Settings);
   // @ts-expect-error RowOf records are readonly like expression records
@@ -163,7 +163,7 @@ command({ emits: [] }).decide(({ records }) => {
 });
 
 // Records are a Bag: no index, length or iterator, and a sort key is a number or a time.
-query({ output: { n: z.number() } }).resolve(({ records }) => {
+query({ callers: ["client"], output: { n: z.number() } }).resolve(({ records }) => {
   // @ts-expect-error a Bag has no index
   void records.Task[0];
   // @ts-expect-error a Bag has no length
@@ -181,17 +181,23 @@ query({ output: { n: z.number() } }).resolve(({ records }) => {
 });
 
 // A bag output takes a Bag, and a sortedBy output takes Runs; an array output, whose order means something, takes no Bag.
-query({ output: { ids: bag(ref(Task)) } }).resolve(({ records }) => ({ ids: records.Task.map((t) => t.id) }));
-query({ output: { tasks: sortedBy(z.object({ id: ref(Task), createdAt: instant }), "createdAt") } }).resolve(
-  ({ records }) => ({
-    tasks: records.Task.map((t) => ({ id: t.id, createdAt: t.createdAt })).sortedBy((t) => t.createdAt),
-  }),
-);
-// @ts-expect-error an array output takes no Bag
-query({ output: { ids: z.array(ref(Task)) } }).resolve(({ records }) => ({ ids: records.Task.map((t) => t.id) }));
+query({ callers: ["client"], output: { ids: bag(ref(Task)) } }).resolve(({ records }) => ({
+  ids: records.Task.map((t) => t.id),
+}));
+query({
+  callers: ["client"],
+  output: { tasks: sortedBy(z.object({ id: ref(Task), createdAt: instant }), "createdAt") },
+}).resolve(({ records }) => ({
+  tasks: records.Task.map((t) => ({ id: t.id, createdAt: t.createdAt })).sortedBy((t) => t.createdAt),
+}));
+query({ callers: ["client"], output: { ids: z.array(ref(Task)) } }).resolve(({ records }) => ({
+  // @ts-expect-error an array output takes no Bag
+  ids: records.Task.map((t) => t.id),
+}));
 
 // A bag, set or sortedBy value that spec code receives is a Bag or Runs, and spec code may give it back as it is.
 query({
+  callers: ["client"],
   input: { ids: set(ref(Task)), tasks: sortedBy(z.object({ id: ref(Task), createdAt: instant }), "createdAt") },
   output: { ids: bag(ref(Task)), earliest: bag(ref(Task)) },
   ensures: {
@@ -247,6 +253,7 @@ automation({ receives: { taskAdded }, commands: { addTask } }).send({
 
 // An external service's command can have an output on acceptance, which ensures reads.
 const charge = externalCommand({
+  callers: [],
   input: { amount: z.number() },
   output: { chargeId: z.string() },
   emits: [],
@@ -266,7 +273,7 @@ void [chargeAccepted, chargeAcceptedBare, chargeAcceptedWrong];
 externalCommand({ emits: [], rejects: [], ensures: { hasId: ({ output }) => output } });
 
 // @ts-expect-error a spec service's command has no output (CQRS)
-command({ output: { id: z.string() }, emits: [] });
+command({ callers: ["client"], output: { id: z.string() }, emits: [] });
 
 machine({
   description: "",
@@ -305,17 +312,18 @@ externalQuery({ output: { day: z.string() }, rejects: [] }).resolve(() => ({ day
 externalCommand({ emits: [] });
 
 // @ts-expect-error a command of a spec service takes the kinds it may reject with from its definition
-command({ emits: [], rejects: [] }).decide(() => []);
+command({ callers: [], emits: [], rejects: [] }).decide(() => []);
 
-const undecided = command({ input: { taskId: ref(Task) }, emits: [taskCompletedRecorded] });
+const undecided = command({ callers: ["client"], input: { taskId: ref(Task) }, emits: [taskCompletedRecorded] });
 // @ts-expect-error a non-external command is not a command until decide is given
 contract({ undecided });
 
 // @ts-expect-error query requires read only input
-query({ output: { n: z.number() }, requires: { some: ({ records }) => records.Task.size > 0 } });
+query({ callers: ["client"], output: { n: z.number() }, requires: { some: ({ records }) => records.Task.size > 0 } });
 
 // Command ensures read, through bound, the values binds computed before the command ran.
 command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [taskCompletedRecorded],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
@@ -323,6 +331,7 @@ command({
 }).decide(({ input, now }) => [emit(taskCompletedRecorded, { id: input.taskId, completedAt: now })]);
 
 const renameTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task), title: Task.fields.title },
   emits: [],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
@@ -374,6 +383,7 @@ machine({
 });
 
 command({
+  callers: ["client"],
   input: { taskId: ref(Task) },
   emits: [],
   // @ts-expect-error keys that read bound come after binds
@@ -388,6 +398,7 @@ automation({ receives: { dueChanged }, commands: { setReminder } }).send({
 });
 
 const dueTasks = query({
+  callers: ["client"],
   input: { from: instant, until: instant },
   output: {},
   requires: { fromBeforeUntil: ({ input }) => input.from < input.until },
@@ -418,6 +429,7 @@ machine({
 });
 
 externalQuery({
+  callers: [],
   output: { day: z.string() },
   rejects: [],
   // @ts-expect-error an external query's requires read only input
@@ -425,7 +437,7 @@ externalQuery({
 });
 
 // @ts-expect-error a command has no description
-command({ description: "", emits: [] });
+command({ callers: ["client"], description: "", emits: [] });
 
 // @ts-expect-error a service has a description
 service({ name: "test" });
@@ -455,7 +467,7 @@ void ({} as RecordsOf<typeof calendarContract>)["Task"];
 const externalKind: KindOf<typeof calendarContract> = "external";
 void externalKind;
 
-const notify = externalCommand({ input: { text: z.string() }, emits: [], rejects: ["unavailable"] });
+const notify = externalCommand({ callers: [], input: { text: z.string() }, emits: [], rejects: ["unavailable"] });
 
 // An automation ignores an unavailable rejection with onRejected: [].
 automation({ receives: { taskAdded }, commands: { notify } }).send({ input: () => ({ text: "" }), onRejected: [] });
@@ -1356,7 +1368,7 @@ scenarioOfScreens({
     ],
   },
   when: (w) => {
-    const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
+    const adding = w.client.as("client").send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
     adding.request(calendarPeer.nextBusinessDay);
     // @ts-expect-error the device is skipped: no message to it is named
     adding.request(devicePeer.requestNotificationPermission);
@@ -1365,7 +1377,7 @@ scenarioOfScreens({
     // @ts-expect-error a peer that Given does not list has no actor
     w.peer.notifier;
     // @ts-expect-error the client reaches the own service and running peers only
-    w.client.send(devicePeer.requestNotificationPermission, {});
+    w.client.as("client").send(devicePeer.requestNotificationPermission, {});
     // @ts-expect-error a running peer sends only to the own service and the listed peers
     w.peer.todo.send(devicePeer.showNotification, { text: "Due" });
     return { adding };
@@ -1388,13 +1400,13 @@ scenarioOfScreens({
     const list = w.startup.screen(taskListScreen);
     const watching = w.startup.subscription(todoPeer.tasks);
     const look = w.user.look(list);
-    const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
+    const adding = w.client.as("client").send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
     const asking = adding.request(calendarPeer.nextBusinessDay);
     w.net.deliver(adding.request(calendarPeer.nextBusinessDay, { after: parseInstant("2026-10-25T10:00:00+09:00") }));
     // @ts-expect-error a pick has fields of the input only
     void adding.request(calendarPeer.nextBusinessDay, { input: { after: parseInstant("2026-10-25T10:00:00+09:00") } });
     // @ts-expect-error the client reaches running services only, not an external peer
-    w.client.call(calendarPeer.nextBusinessDay, { after: parseInstant("2026-10-25T10:00:00+09:00") });
+    w.client.as("client").call(calendarPeer.nextBusinessDay, { after: parseInstant("2026-10-25T10:00:00+09:00") });
     // @ts-expect-error a client line reaches its receiver directly; no message is delivered
     w.net.deliver(adding);
     // @ts-expect-error only a request can fail
@@ -1402,25 +1414,25 @@ scenarioOfScreens({
     // @ts-expect-error a look line carries no message
     w.net.leaveInFlight(look);
     // @ts-expect-error created() is written only in a running peer's message
-    w.client.send(todoPeer.completeTask, { taskId: created() });
+    w.client.as("client").send(todoPeer.completeTask, { taskId: created() });
     // @ts-expect-error an external peer's values are its own, never created()
     w.peer.calendar.answer(asking, { result: "fulfilled", output: { day: created() } });
     const sent = w.peer.todo.send(todoPeer.completeTask, { taskId: created() });
     // @ts-expect-error the client resends only its own lines
     w.client.resend(sent);
     // @ts-expect-error an observed value is no string
-    w.client.send(todoPeer.addTask, { taskId: "task-2", title: `${asking.input.from}` });
+    w.client.as("client").send(todoPeer.addTask, { taskId: "task-2", title: `${asking.input.from}` });
     // @ts-expect-error an observed value is not compared
     if (asking.input.from === "2026-10-25") w.host.restart();
     // @ts-expect-error an observed value is not spread
-    w.client.call(todoPeer.tasks, { ...watching.input });
-    const listed = w.client.call(todoPeer.tasks, { filter: "all" });
-    w.client.call(todoPeer.taskDetail, { taskId: adding.request(todoPeer.addTask).input.taskId });
+    w.client.as("client").call(todoPeer.tasks, { ...watching.input });
+    const listed = w.client.as("client").call(todoPeer.tasks, { filter: "all" });
+    w.client.as("client").call(todoPeer.taskDetail, { taskId: adding.request(todoPeer.addTask).input.taskId });
     // @ts-expect-error a bag's elements have no position: name one by content or by the line that sent it
-    w.client.send(todoPeer.completeTask, { taskId: listed.output.tasks[0].taskId });
-    w.client.send(todoPeer.addTask, raw({ taskId: "task-3", title: 7 }));
-    const completing = w.client.send(todoPeer.completeTask, { taskId: "task-1" });
-    const subscribed = w.client.subscribe(todoPeer.tasks, { filter: "all" });
+    w.client.as("client").send(todoPeer.completeTask, { taskId: listed.output.tasks[0].taskId });
+    w.client.as("client").send(todoPeer.addTask, raw({ taskId: "task-3", title: 7 }));
+    const completing = w.client.as("client").send(todoPeer.completeTask, { taskId: "task-1" });
+    const subscribed = w.client.as("client").subscribe(todoPeer.tasks, { filter: "all" });
     return { look, watching, adding, completing, subscribed };
   },
   then: ({ look, watching, adding, completing, subscribed }) => [
@@ -1465,7 +1477,7 @@ scenarioOfTodo({
     peers: [external(calendarPeer), external(devicePeer)],
   },
   when: (w) => {
-    const adding = w.client.send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
+    const adding = w.client.as("client").send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
     const asking = adding.request(devicePeer.requestNotificationPermission);
     w.net.deliver(asking);
     w.peer.device.emit(devicePeer.notificationPermissionGranted, {}, { resultOf: asking });
@@ -1497,10 +1509,12 @@ givenOfScreens({
   // @ts-expect-error a service is a peer once, in one role
   peers: [external(calendarPeer), skip(calendarPeer, "listed twice")],
 });
-const addMilk = withTodo.step((w, title: string) => w.client.send(todoPeer.addTask, { taskId: "task-1", title }));
+const addMilk = withTodo.step((w, title: string) =>
+  w.client.as("client").send(todoPeer.addTask, { taskId: "task-1", title }),
+);
 withTodo.step((w) => {
   // @ts-expect-error a step's lines reach only the own service and the running peers of its Given
-  w.client.send(devicePeer.requestNotificationPermission, {});
+  w.client.as("client").send(devicePeer.requestNotificationPermission, {});
   // @ts-expect-error a step's own parameters keep their types
   addMilk(w, 1);
   return addMilk(w, "Buy milk");
@@ -1538,6 +1552,6 @@ const { condition, command: permissionCommand } = service({
   },
 });
 const undetermined = condition(({ records }) => records.Permission.status === "undetermined");
-permissionCommand({ emits: [], requires: { undetermined } }).decide(() => []);
+permissionCommand({ callers: ["client"], emits: [], requires: { undetermined } }).decide(() => []);
 // @ts-expect-error a condition compares an enum field only with its values
 condition(({ records }) => records.Permission.status === "undeterminde");

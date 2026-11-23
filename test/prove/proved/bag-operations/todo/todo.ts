@@ -27,11 +27,13 @@ export const taskAdded = createEvent({ entity: Task });
 export const pointsChanged = updateEvent({ entity: Task, writes: ["points"] });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, points: Task.fields.points },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, points: input.points })]);
 
 export const changePoints = command({
+  callers: ["client"],
   input: { taskId: ref(Task), points: Task.fields.points },
   emits: [pointsChanged],
 }).decide(({ input }) => [emit(pointsChanged, { id: input.taskId, points: input.points })]);

@@ -47,7 +47,7 @@ def State.endShowStep (wanted : List Wanted) (owner : InstanceId) (s : State) (p
 
 def State.subscribeStep (opened : List Pending) (owner : InstanceId) (s : State) (w : Wanted) : State :=
   if opened.any (fun p => p.requester.slot? == some w.slot && p.input == w.input) then s else
-  s.await (.subscribe w.activity.ref w.input) (.slot owner w.slot) w.activity w.input
+  s.await (.subscribe w.activity.ref w.input (s.callerOf (.slot owner w.slot))) (.slot owner w.slot) w.activity w.input
 
 def State.syncShows (s : State) (owner : InstanceId) (wanted : List Wanted) : State :=
   wanted.foldl (State.subscribeStep (s.openShows owner) owner)

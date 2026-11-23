@@ -245,18 +245,18 @@ instance {m : Type → Type} [Monad m] : MonadNote (StateT Collect m) where
 def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type} → m α → n α) (fs : Functions m) : Functions n where
   parse a b := f (fs.parse a b)
   unordered a b := f (fs.unordered a b)
-  binding a b c d e := f (fs.binding a b c d e)
-  requirement a b c d e := f (fs.requirement a b c d e)
+  binding a b c d e g := f (fs.binding a b c d e g)
+  requirement a b c d e g := f (fs.requirement a b c d e g)
   inputRequirement a b c := f (fs.inputRequirement a b c)
-  decide a b c d := f (fs.decide a b c d)
-  ensures a b c d e := f (fs.ensures a b c d e)
-  queryEnsures a b c d := f (fs.queryEnsures a b c d)
+  decide a b c d e := f (fs.decide a b c d e)
+  ensures a b c d e g := f (fs.ensures a b c d e g)
+  queryEnsures a b c d e := f (fs.queryEnsures a b c d e)
   resultEnsures a b c d e := f (fs.resultEnsures a b c d e)
   invariant a b c := f (fs.invariant a b c)
   responses a b c := f (fs.responses a b c)
   serviceInvariant a b := f (fs.serviceInvariant a b)
   chartInvariant a b := f (fs.chartInvariant a b)
-  resolve a b c d := f (fs.resolve a b c d)
+  resolve a b c d e := f (fs.resolve a b c d e)
   automationBinding a b c d e := f (fs.automationBinding a b c d e)
   automationGuard a b c d e := f (fs.automationGuard a b c d e)
   react a b c d e := f (fs.react a b c d e)
@@ -307,15 +307,16 @@ def instrument : Functions (StateT Collect m) :=
   let fs := fs.sorting st
   let collect {α : Type} (scope : Option Scope) (x : m α) : StateT Collect m α := observe x fun _ => stepCollect ifs scope
   { liftFunctions fs with
-    binding := fun name b input records now => collect none (fs.binding name b input records now)
-    requirement := fun name c input records now => collect none (fs.requirement name c input records now)
-    decide := fun name input records now =>
-      observe (fs.decide name input records now) fun r => do
+    binding := fun name b input caller records now => collect none (fs.binding name b input caller records now)
+    requirement := fun name c input caller records now => collect none (fs.requirement name c input caller records now)
+    decide := fun name input caller records now =>
+      observe (fs.decide name input caller records now) fun r => do
         stepCollect ifs none
         decideCollect (m := m) st name records r
-    queryEnsures := fun name input output records => collect none (fs.queryEnsures name input output records)
+    queryEnsures := fun name input caller output records =>
+      collect none (fs.queryEnsures name input caller output records)
     chartInvariant := fun scope records => collect (some scope) (fs.chartInvariant scope records)
-    resolve := fun name input records now => collect none (fs.resolve name input records now)
+    resolve := fun name input caller records now => collect none (fs.resolve name input caller records now)
     automationBinding := fun name b payload records now => collect none (fs.automationBinding name b payload records now)
     automationGuard := fun name c payload records now => collect none (fs.automationGuard name c payload records now)
     react := fun name payload records now keys => collect none (fs.react name payload records now keys)

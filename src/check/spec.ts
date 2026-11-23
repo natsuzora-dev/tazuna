@@ -62,6 +62,7 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
     case "Illegal.alwaysCycle":
     case "Illegal.foreignEvent":
     case "Illegal.indexReason":
+    case "Illegal.unlistedCaller":
     case "Illegal.restoredHeld":
     case "Illegal.inexactDelay":
     case "Illegal.negativeDelay":

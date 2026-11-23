@@ -41,6 +41,9 @@
           "secondId": "task-2"
         },
         "holes": []
+      },
+      "caller": {
+        "service": "client"
       }
     },
     {

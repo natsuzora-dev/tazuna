@@ -12,11 +12,13 @@ export const { command, query, createEvent, contract, scenario } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const taskCount = query({
+  callers: ["client"],
   output: { count: z.int() },
   ensures: { countsTasks: ({ output, records }) => output.count === records.Task.size },
 }).resolve(({ records }) => ({ count: records.Task.size }));

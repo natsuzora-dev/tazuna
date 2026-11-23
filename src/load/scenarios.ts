@@ -150,6 +150,7 @@ export function loadScenarios(
             start: definition.given.start,
             records: givenRecords(entitiesOf(own), definition.given.records),
             peers,
+            ...(definition.given.user === undefined ? {} : { user: definition.given.user }),
           },
           lines: [...lowered.lines],
           expectations: [...lowered.expectations],

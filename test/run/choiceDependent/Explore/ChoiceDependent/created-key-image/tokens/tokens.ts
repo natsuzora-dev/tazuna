@@ -13,12 +13,11 @@ export const { command, machine, event, updateEvent, contract, scenario } = serv
 export const armed = event({});
 export const moved = updateEvent({ entity: Last, writes: ["id"] });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
-export const setLast = command({
-  input: { id: Last.fields.id },
-  emits: [moved],
-}).decide(({ input }) => [emit(moved, { id: input.id })]);
+export const setLast = command({ callers: ["client", "tokens"], input: { id: Last.fields.id }, emits: [moved] }).decide(
+  ({ input }) => [emit(moved, { id: input.id })],
+);
 
 export const first = machine({
   description: "Clear the token at 10:00",

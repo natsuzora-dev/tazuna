@@ -18,15 +18,21 @@ export const chorusPlayed = event({});
 export const trackLoaded = event({ payload: { trackId: z.string() } });
 
 export const queueTrack = command({
+  callers: ["client"],
   input: { trackId: Track.fields.id },
   emits: [trackQueued],
 }).decide(({ input }) => [emit(trackQueued, { id: input.trackId })]);
-export const play = command({ emits: [playPressed] }).decide(() => [emit(playPressed, {})]);
-export const skip = command({ emits: [skipPressed] }).decide(() => [emit(skipPressed, {})]);
-export const pause = command({ emits: [pausePressed] }).decide(() => [emit(pausePressed, {})]);
-export const playIntro = command({ emits: [introPlayed] }).decide(() => [emit(introPlayed, {})]);
-export const playChorus = command({ emits: [chorusPlayed] }).decide(() => [emit(chorusPlayed, {})]);
+export const play = command({ callers: ["client"], emits: [playPressed] }).decide(() => [emit(playPressed, {})]);
+export const skip = command({ callers: ["client"], emits: [skipPressed] }).decide(() => [emit(skipPressed, {})]);
+export const pause = command({ callers: ["client"], emits: [pausePressed] }).decide(() => [emit(pausePressed, {})]);
+export const playIntro = command({ callers: ["client", "player"], emits: [introPlayed] }).decide(() => [
+  emit(introPlayed, {}),
+]);
+export const playChorus = command({ callers: ["client", "player"], emits: [chorusPlayed] }).decide(() => [
+  emit(chorusPlayed, {}),
+]);
 export const loadTrack = command({
+  callers: ["client", "player"],
   input: { trackId: z.string() },
   emits: [trackLoaded],
 }).decide(({ input }) => [emit(trackLoaded, { trackId: input.trackId })]);

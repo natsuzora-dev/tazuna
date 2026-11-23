@@ -8,7 +8,7 @@ export const { command, machine, event, contract, scenario } = service({
 
 export const ticked = event({});
 
-export const tick = command({ emits: [ticked] }).decide(() => [emit(ticked, {})]);
+export const tick = command({ callers: ["client"], emits: [ticked] }).decide(() => [emit(ticked, {})]);
 
 export const countdown = machine({
   description: "Count down from one on every tick, entering counting again with the ticks left",

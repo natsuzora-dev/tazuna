@@ -1,1 +1,1 @@
-{"kind":"Uncovered.automationBindingNull","definition":{"service":"backlog","name":"completeAdded"},"data":{"binding":"added"},"location":{"file":"backlog/backlog.ts","line":32}}
+{"kind":"Uncovered.automationBindingNull","definition":{"service":"backlog","name":"completeAdded"},"data":{"binding":"added"},"location":{"file":"backlog/backlog.ts","line":34}}

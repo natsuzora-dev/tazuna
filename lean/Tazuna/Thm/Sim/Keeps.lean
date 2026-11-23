@@ -25,7 +25,8 @@ structure StateRel where
   checkStepOrder : ∀ x, R x (checkStepOrder x)
   arriveFrom : ∀ (st : Service) (fs : Functions Id) (s : State) sender id body, R s (arriveFrom st fs s sender id body)
   arriveAll : ∀ (st : Service) (fs : Functions Id) arrivals (s : State), R s (arriveAll st fs arrivals s)
-  requestOf : ∀ type name id v (st : Service) (fs : Functions Id) (s : State), R s (requestOf type name id v st fs s)
+  requestOf : ∀ type name id v caller (st : Service) (fs : Functions Id) (s : State),
+    R s (requestOf type name id v caller st fs s)
 
 /-- Every running service of `w'` is related by `ρ` to its state in `w`. -/
 def KeepsWorld (ρ : StateRel) (w w' : World) : Prop := ∀ p, ρ.R (w.state p) (w'.state p)
@@ -180,8 +181,8 @@ theorem keepsWorld_deliverCarried {ρ : StateRel} {w w' : World} (h : KeepsWorld
         | exact foldl_keeps (KeepsWorld ρ w) _ (fun x l hx => keepsWorld_recordSent hx _ _ _ _) _ _ hu
 
 theorem keepsWorld_clientRequest {ρ : StateRel} {w w' : World} (h : KeepsWorld ρ w w') (i : Nat) (type : Scenario.RequestType)
-    (target : Spec.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) :
-    KeepsWorld ρ w (w'.clientRequest fsOf i type target input sameIdAs) := by
+    (target : Spec.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) (caller : Option Caller) :
+    KeepsWorld ρ w (w'.clientRequest fsOf i type target input sameIdAs caller) := by
   unfold World.clientRequest
   simp only [bind, pure]
   split
@@ -190,7 +191,7 @@ theorem keepsWorld_clientRequest {ρ : StateRel} {w w' : World} (h : KeepsWorld 
     repeat' split
     all_goals first
       | exact keepsWorld_report h _
-      | exact keepsWorld_recordSent (keepsWorld_act h _ _ _ (fun st s => ρ.requestOf _ _ _ _ _ _ _)) _ _ _ _
+      | exact keepsWorld_recordSent (keepsWorld_act h _ _ _ (fun st s => ρ.requestOf _ _ _ _ _ _ _ _)) _ _ _ _
 
 theorem keepsWorld_now_iff {ρ : StateRel} {w w' : World} (now : Time) : KeepsWorld ρ w { w' with now } ↔ KeepsWorld ρ w w' := Iff.rfl
 

@@ -61,9 +61,9 @@ theorem keeps_arriveFrom (st : Service) (fs : Functions Id) (s : State) (sender 
   unfold arriveFrom
   dsimp only
   split
-  · exact keeps_send _ _ _ _
-  · exact keeps_call _ _ _ _
-  · exact keeps_subscribe _ _ _ _
+  · exact keeps_send _ _ _ _ _
+  · exact keeps_call _ _ _ _ _
+  · exact keeps_subscribe _ _ _ _ _
   · exact keeps_endSubscription _ _
   · split
     · exact keeps_answerIn _ _ _ _ _ _
@@ -96,11 +96,12 @@ theorem keeps_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : State
     keys_close h
 
 theorem keeps_requestOf (type : Scenario.RequestType) (name : Spec.Ref) (id : Option LineId) (v : Value)
-    (st : Service) (fs : Functions Id) (s : State) : KeepsKeys s (requestOf type name id v st fs s) := by
+    (caller : Caller) (st : Service) (fs : Functions Id) (s : State) :
+    KeepsKeys s (requestOf type name id v caller st fs s) := by
   cases type
-  · exact keeps_send _ _ _ _
-  · exact keeps_call _ _ _ _
-  · exact keeps_subscribe _ _ _ _
+  · exact keeps_send _ _ _ _ _
+  · exact keeps_call _ _ _ _ _
+  · exact keeps_subscribe _ _ _ _ _
 
 /-- Keeping the createKey values, which every input of a line does. -/
 abbrev keysRel : StateRel where

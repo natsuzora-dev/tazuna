@@ -420,8 +420,8 @@ theorem keeps_automationAnswer (a : String) (answer : Answer) (s : State) :
   unfold automationAnswer; repeat' split
   all_goals keys_leaf
 
-theorem keeps_processCommand (name : String) (raw : Value) (id : Option LineId) (step : Nat) (s : State) :
-    KeepsKeys s (processCommand st fs s name raw id step).1 := by
+theorem keeps_processCommand (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (step : Nat) (s : State) :
+    KeepsKeys s (processCommand st fs s name raw caller id step).1 := by
   simp only [processCommand, id_bind]
   split
   · keys_leaf
@@ -577,7 +577,7 @@ theorem keeps_drain (n : Nat) (s : State) (q : Queue) : KeepsKeys s (drain st fs
          refine KeepsKeys.trans ?_ (keysBy_settled _ _ (keysBy_workBody _ _) _)
          keys_leaf)
       | (refine KeepsKeys.trans ?_ (ih _ _)
-         refine KeepsKeys.trans ?_ (keeps_processCommand _ _ _ _ _)
+         refine KeepsKeys.trans ?_ (keeps_processCommand _ _ _ _ _ _)
          keys_leaf)
       | (refine KeepsKeys.trans ?_ (ih _ _)
          exact keysBy_sendEntered _)
@@ -639,32 +639,32 @@ macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, S
   State.write, State.newStep, State.newMessage, State.answer, apply_ite State.toDurable,
   apply_ite Durable.service, apply_ite Durable.createdEntities] <;> (repeat' split) <;> (try simp)) <;> done)
 
-@[simp] theorem processCommand_service (name : String) (raw : Value) (id : Option LineId) (step : Nat) (s : State) :
-    (processCommand st fs s name raw id step).1.service = s.service := (keeps_processCommand _ _ _ _ _).1
+@[simp] theorem processCommand_service (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (step : Nat) (s : State) :
+    (processCommand st fs s name raw caller id step).1.service = s.service := (keeps_processCommand _ _ _ _ _ _).1
 
-@[simp] theorem processCommand_createdEntities (name : String) (raw : Value) (id : Option LineId) (step : Nat)
-    (s : State) : (processCommand st fs s name raw id step).1.createdEntities = s.createdEntities := by
+@[simp] theorem processCommand_createdEntities (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (step : Nat)
+    (s : State) : (processCommand st fs s name raw caller id step).1.createdEntities = s.createdEntities := by
   simp only [processCommand, id_bind]
   split <;> keys_same
 
-theorem keeps_send (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
-    KeepsKeys s (send st fs s name id raw) := by
+theorem keeps_send (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : State) :
+    KeepsKeys s (send st fs s name id raw caller) := by
   simp only [send, id_bind]
   repeat' split
   all_goals first
     | keys_leaf
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
 
-theorem keeps_call (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
-    KeepsKeys s (call st fs s name id raw) := by
+theorem keeps_call (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : State) :
+    KeepsKeys s (call st fs s name id raw caller) := by
   simp only [call, id_bind]
   repeat' split
   all_goals first
     | keys_leaf
     | (refine KeepsKeys.trans ?_ (keeps_message _ _); keys_leaf)
 
-theorem keeps_subscribe (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
-    KeepsKeys s (subscribe st fs s name id raw) := by
+theorem keeps_subscribe (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : State) :
+    KeepsKeys s (subscribe st fs s name id raw caller) := by
   simp only [subscribe]
   repeat' split
   all_goals first

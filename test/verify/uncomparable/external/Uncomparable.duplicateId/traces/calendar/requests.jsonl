@@ -1,6 +1,6 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"c1","name":"book","input":{"day":1792972800000}}
+{"time":1792886400000,"dir":"in","type":"command","id":"c1","name":"book","input":{"day":1792972800000},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"c1","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"e1","name":"booked","resultOf":"c1","payload":{"day":1792972800000}}
-{"time":1792886400000,"dir":"in","type":"command","id":"c1","name":"book","input":{"day":1793059200000}}
+{"time":1792886400000,"dir":"in","type":"command","id":"c1","name":"book","input":{"day":1793059200000},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#2","to":"c1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":1792886400000,"dir":"out","type":"event","id":"e2","name":"booked","resultOf":"c1","payload":{"day":1793059200000}}

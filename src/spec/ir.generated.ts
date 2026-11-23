@@ -17,7 +17,8 @@ export type Arg =
   | "active"
   | "held"
   | "key"
-  | "rejection";
+  | "rejection"
+  | "caller";
 
 /** An expression. `and`, `or` and `coalesce` give an operand's value and skip the other, as JS `&&`, `||` and `??`. */
 export type Expr =

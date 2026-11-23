@@ -4,8 +4,11 @@ import { z } from "zod";
 export const { query, contract } = service({ name: "todo", description: "Keep tasks" });
 
 export const tasks = query({
+  callers: ["client", "screens"],
   input: { filter: z.enum(["open", "all"]) },
   output: { taskIds: z.array(z.string()) },
 }).resolve(() => ({ taskIds: [] }));
 
-export const taskCount = query({ output: { count: z.int() } }).resolve(() => ({ count: 0 }));
+export const taskCount = query({ callers: ["client", "screens"], output: { count: z.int() } }).resolve(() => ({
+  count: 0,
+}));

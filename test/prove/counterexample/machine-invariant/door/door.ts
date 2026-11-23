@@ -14,9 +14,9 @@ export const { command, machine, updateEvent } = service({
 
 export const lockChanged = updateEvent({ entity: Lock, writes: ["locked"] });
 
-export const setLock = command({ input: { locked: z.boolean() }, emits: [lockChanged] }).decide(({ input }) => [
-  emit(lockChanged, { locked: input.locked }),
-]);
+export const setLock = command({ callers: ["client"], input: { locked: z.boolean() }, emits: [lockChanged] }).decide(
+  ({ input }) => [emit(lockChanged, { locked: input.locked })],
+);
 
 export const alarm = machine({
   description: "Ring each second while the door is unlocked, counting the rings without resetting them",

@@ -2,6 +2,7 @@ import type { Bag } from "../data/bag.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import { definitionKinds } from "../spec/structure.ts";
+import type { CallerType } from "./caller.ts";
 import type { Conditions } from "./conditions.ts";
 import type { AnyEntity, AnyKeyedEntity, Entities, KeyOf, KeyValue, MadeRow, Ref, Row, RowOf } from "./entity.ts";
 
@@ -40,6 +41,7 @@ export interface Command<
 > {
   readonly kind: "command";
   readonly service: ServiceDefinition;
+  readonly callers: readonly CallerType[];
   readonly input: I;
   /** The output shape, or undefined for a command without output. */
   readonly output: O;
@@ -61,6 +63,7 @@ export interface Query<
 > {
   readonly kind: "query";
   readonly service: ServiceDefinition;
+  readonly callers: readonly CallerType[];
   readonly input: I;
   readonly output: O;
   readonly requires: ByName<Rq, (args: never) => boolean>;

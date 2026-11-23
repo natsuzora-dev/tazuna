@@ -28,6 +28,8 @@ inductive Arg where
   | key
   /-- The rejection that a transition takes, as `{ kind }`. -/
   | rejection
+  /-- The caller of the request that a command or query processes, as its JSON: `{ entity, key }` or `{ service }`. -/
+  | caller
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Arg

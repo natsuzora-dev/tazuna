@@ -25,17 +25,27 @@ export const taskAdded = createEvent({ entity: Task });
 export const pinged = event({ payload: {} });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
-export const ping = command({ input: {}, emits: [pinged], binds: {}, requires: {}, ensures: {} }).decide(() => [
-  emit(pinged, {}),
-]);
+export const ping = command({
+  callers: ["client", "todo"],
+  input: {},
+  emits: [pinged],
+  binds: {},
+  requires: {},
+  ensures: {},
+}).decide(() => [emit(pinged, {})]);
 
-export const tasks = query({ input: {}, output: { count: z.int() }, requires: {}, ensures: {} }).resolve(
-  ({ records }) => ({ count: records.Task.size }),
-);
+export const tasks = query({
+  callers: ["client"],
+  input: {},
+  output: { count: z.int() },
+  requires: {},
+  ensures: {},
+}).resolve(({ records }) => ({ count: records.Task.size }));
 
 export const pingOnAdd = automation({ receives: { taskAdded }, commands: { ping } }).send({ binds: {}, guard: {} });
 

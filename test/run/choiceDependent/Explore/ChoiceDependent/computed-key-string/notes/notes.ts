@@ -16,9 +16,10 @@ export const posted = createEvent({ entity: Note });
 export const counted = updateEvent({ entity: Count, writes: ["n"] });
 export const announced = event({ payload: { noteId: ref(Note), text: Note.fields.text, label: z.string() } });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
 export const post = command({
+  callers: ["client", "notes"],
   input: { id: Note.fields.id, text: Note.fields.text },
   emits: [posted, counted, announced],
 }).decide(({ input, records }) => [

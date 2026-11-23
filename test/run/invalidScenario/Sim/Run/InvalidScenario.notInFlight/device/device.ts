@@ -9,6 +9,7 @@ export const granted = event({});
 export const muted = event({});
 
 export const requestPermission = command({
+  callers: ["app"],
   emits: [granted],
   rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
 });

@@ -8,9 +8,8 @@ export const { command, event, contract } = service({
 
 export const announced = event({ payload: { taskId: todo.TaskId } });
 
-export const announce = command({
-  input: { taskId: todo.TaskId },
-  emits: [announced],
-}).decide(({ input }) => [emit(announced, { taskId: input.taskId })]);
+export const announce = command({ callers: ["client"], input: { taskId: todo.TaskId }, emits: [announced] }).decide(
+  ({ input }) => [emit(announced, { taskId: input.taskId })],
+);
 
 export const announcer = contract({ announce, announced });

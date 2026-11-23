@@ -5,6 +5,7 @@ import { query } from "./todo.ts";
 const part = z.union([z.strictObject({ name: z.string() }), z.strictObject({ size: z.int() })]);
 
 export const taskCard = query({
+  callers: ["client"],
   output: {
     card: z.object({ title: z.string(), detail: z.object({ note: z.string() }) }),
     due: z.strictObject({ at: instant, parts: z.array(z.strictObject({ name: z.string() })) }),
@@ -20,6 +21,7 @@ export const taskCard = query({
 }));
 
 export const taskNote = query({
+  callers: ["client"],
   input: { taskId: z.string() },
   output: { note: z.string() },
   requires: { hasTaskId: ({ input }) => input.taskId !== "" },

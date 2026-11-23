@@ -11,7 +11,7 @@ The strings of a line body in which createKey values are searched. Rejection kin
 be createKey values.
 -/
 def bodyStrings : LineBody → List String
-  | .command _ input | .query _ input | .subscribe _ input => input.strings
+  | .command _ input caller | .query _ input caller | .subscribe _ input caller => input.strings ++ caller.strings
   | .event _ payload _ => payload.strings
   | .answer _ a => match a with
     | .accepted none => ["accepted"]
@@ -40,9 +40,9 @@ def traceLineOf (service : String) (line : Line) (after : List LineId) (created 
   let (dir, id) := (line.dir, line.id.text)
   let name (r : Spec.Ref) := r.traceName service
   let body : TraceLine.Body := match line.body with
-    | .command r input => .command dir id (name r) input
-    | .query r input => .query dir id (name r) input
-    | .subscribe r input => .subscribe dir id (name r) input
+    | .command r input caller => .command dir id (name r) input caller
+    | .query r input caller => .query dir id (name r) input caller
+    | .subscribe r input caller => .subscribe dir id (name r) input caller
     | .event r payload resultOf => .event dir id (name r) payload (resultOf.map (·.text))
     | .answer to answer => .answer dir id to.text answer
     | .unsubscribe to => .unsubscribe dir id to.text

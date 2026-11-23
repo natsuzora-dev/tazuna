@@ -101,7 +101,7 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         callback: "resolve",
         definition: { service, name },
         f: query.resolve as SpecFunction | undefined,
-        args: ["input", "refs", "records", "now"],
+        args: ["input", "caller", "refs", "records", "now"],
       });
     }
     if (d.kind === "command") {
@@ -110,7 +110,7 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         callback: "decide",
         definition: { service, name },
         f: command.decide as SpecFunction | undefined,
-        args: ["input", "refs", "records", "now", "bound"],
+        args: ["input", "caller", "refs", "records", "now", "bound"],
         binds: "binding",
         events: command.emits.flatMap((e) => {
           const named = spec.names.get(e);
@@ -314,7 +314,7 @@ function slotsOf(spec: Spec): Slot[] {
           callback: "binding",
           definition,
           conditions: target.binds as Conditions<never>,
-          args: ["input", "refs", "records", "now"],
+          args: ["input", "caller", "refs", "records", "now"],
           whole: true,
         };
         slots.push(
@@ -323,7 +323,7 @@ function slotsOf(spec: Spec): Slot[] {
             callback: "requirement",
             definition,
             conditions: target.requires,
-            args: ["input", "refs", "records", "now", "bound"],
+            args: ["input", "caller", "refs", "records", "now", "bound"],
             whole: false,
             binds,
           },
@@ -331,7 +331,7 @@ function slotsOf(spec: Spec): Slot[] {
             callback: "ensures",
             definition,
             conditions: target.ensures,
-            args: ["input", "records", "bound"],
+            args: ["input", "caller", "records", "bound"],
             whole: true,
             binds,
           },
@@ -341,7 +341,7 @@ function slotsOf(spec: Spec): Slot[] {
           callback: "queryEnsures",
           definition,
           conditions: target.ensures,
-          args: ["input", "output", "records"],
+          args: ["input", "caller", "output", "records"],
           whole: true,
         });
     }

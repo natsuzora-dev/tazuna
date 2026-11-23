@@ -12,15 +12,13 @@ export const { automation, command, event, createEvent, contract, scenario } = s
 export const taskAdded = createEvent({ entity: Task });
 export const counted = event({ payload: { count: z.int() } });
 
-export const addTask = command({
-  input: { taskId: Task.fields.id },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
-export const tellCount = command({
-  input: { count: z.int() },
-  emits: [counted],
-}).decide(({ input }) => [emit(counted, { count: input.count })]);
+export const tellCount = command({ callers: ["client", "todo"], input: { count: z.int() }, emits: [counted] }).decide(
+  ({ input }) => [emit(counted, { count: input.count })],
+);
 
 export const countAdded = automation({
   receives: { taskAdded },

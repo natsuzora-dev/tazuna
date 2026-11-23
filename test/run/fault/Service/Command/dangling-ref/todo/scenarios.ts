@@ -10,10 +10,10 @@ export const deleteCommented = scenario({
     peers: [],
   },
   when: (w) => {
-    w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-    w.client.send(addComment, { commentId: "comment-1", taskId: "task-1" });
-    w.client.send(addComment, { commentId: "comment-2", taskId: "task-1" });
-    w.client.send(deleteTaskAndComments, { taskId: "task-1" });
+    w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" });
+    w.client.as("client").send(addComment, { commentId: "comment-1", taskId: "task-1" });
+    w.client.as("client").send(addComment, { commentId: "comment-2", taskId: "task-1" });
+    w.client.as("client").send(deleteTaskAndComments, { taskId: "task-1" });
   },
   then: () => [],
 });
@@ -27,9 +27,9 @@ export const deleteCommentedTaskOnly = scenario({
     peers: [],
   },
   when: (w) => {
-    w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-    w.client.send(addComment, { commentId: "comment-1", taskId: "task-1" });
-    w.client.send(deleteTask, { taskId: "task-1" });
+    w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" });
+    w.client.as("client").send(addComment, { commentId: "comment-1", taskId: "task-1" });
+    w.client.as("client").send(deleteTask, { taskId: "task-1" });
   },
   then: () => [],
 });
@@ -43,9 +43,9 @@ export const deletePinned = scenario({
     peers: [],
   },
   when: (w) => {
-    w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });
-    w.client.send(pinTask, { taskId: "task-1" });
-    w.client.send(deleteTask, { taskId: "task-1" });
+    w.client.as("client").send(addTask, { taskId: "task-1", title: "Buy milk" });
+    w.client.as("client").send(pinTask, { taskId: "task-1" });
+    w.client.as("client").send(deleteTask, { taskId: "task-1" });
   },
   then: () => [],
 });

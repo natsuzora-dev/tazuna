@@ -8,6 +8,7 @@ open Tazuna.Data
 structure Request where
   name : String
   input : Value
+  caller : Caller
 deriving DecidableEq, Repr, Inhabited
 
 /-- The first recorded answer for each id, with the request that it answered. -/
@@ -17,10 +18,11 @@ def CommandAnswers.find? (table : CommandAnswers) (id : LineId) : Option (Reques
   (List.find? (·.1 == id) table).map (·.2)
 
 /--
-Whether two commands with one id are the same request: the same name and input, whatever the order of object
-fields.
+Whether two commands with one id are the same request: the same name, input, whatever the order of object fields, and
+caller.
 -/
-def Request.same (a b : Request) : Bool := a.name == b.name && a.input.canonical == b.input.canonical
+def Request.same (a b : Request) : Bool :=
+  a.name == b.name && a.input.canonical == b.input.canonical && a.caller == b.caller
 
 def answerAgain (known : Request × Answer) (request : Request) : Answer :=
   if known.1.same request then known.2 else .rejected { kind := .reusedId }

@@ -1,5 +1,5 @@
-{"time":1792890000000,"dir":"in","type":"query","id":"taskGroups#1","name":"taskGroups","input":{}}
+{"time":1792890000000,"dir":"in","type":"query","id":"taskGroups#1","name":"taskGroups","input":{},"caller":{"service":"client"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"taskGroups#1","answer":{"result":"fulfilled","output":{"groups":[{"name":"a","members":["y","x","y"],"steps":[1,2],"slots":[{"at":1792890000000,"n":2},{"at":1792893600000,"n":3},{"at":1792893600000,"n":1}]}],"either":[2,1],"maybe":[2,1],"orNull":[2,1],"withDefault":[2,1]}}}
-{"time":1792890000000,"dir":"in","type":"command","id":"tagTask#1","name":"tagTask","input":{"tags":["store","home"]}}
+{"time":1792890000000,"dir":"in","type":"command","id":"tagTask#1","name":"tagTask","input":{"tags":["store","home"]},"caller":{"service":"client"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#2","to":"tagTask#1","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"in","type":"operation","id":"tagScreen.pick#1","name":"tagScreen.pick","payload":{"tags":["store","home"]}}

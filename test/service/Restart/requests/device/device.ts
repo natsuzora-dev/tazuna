@@ -8,6 +8,7 @@ export const { command, event, contract } = externalService({
 export const granted = event({});
 
 export const requestPermission = command({
+  callers: ["app"],
   emits: [granted],
   rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
 });

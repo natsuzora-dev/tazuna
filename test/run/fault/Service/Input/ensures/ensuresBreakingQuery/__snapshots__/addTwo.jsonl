@@ -1,8 +1,8 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"milk"}}
+{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"milk"},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"milk"},"resultOf":"addTask#1"}
-{"time":1792886400000,"dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2","title":"eggs"}}
+{"time":1792886400000,"dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2","title":"eggs"},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"id":"task-2","title":"eggs"},"resultOf":"addTask#2"}
-{"time":1792886400000,"dir":"in","type":"query","id":"taskCount#1","name":"taskCount","input":{}}
+{"time":1792886400000,"dir":"in","type":"query","id":"taskCount#1","name":"taskCount","input":{},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#3","to":"taskCount#1","answer":{"result":"fulfilled","output":{"count":3}}}

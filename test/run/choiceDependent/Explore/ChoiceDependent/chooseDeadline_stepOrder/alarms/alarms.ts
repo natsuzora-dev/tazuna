@@ -12,11 +12,11 @@ export const { command, machine, event, updateEvent, contract, scenario } = serv
 export const armed = event({});
 export const rang = updateEvent({ entity: Alarm, writes: ["by"] });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
-export const ring = command({ input: { by: z.string() }, emits: [rang] }).decide(({ input }) => [
-  emit(rang, { by: input.by }),
-]);
+export const ring = command({ callers: ["client", "alarms"], input: { by: z.string() }, emits: [rang] }).decide(
+  ({ input }) => [emit(rang, { by: input.by })],
+);
 
 export const first = machine({
   description: `Ring the alarm as first at 10:00 once armed`,

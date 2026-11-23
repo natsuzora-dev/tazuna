@@ -16,11 +16,13 @@ export const { command, query, createEvent, contract } = service({
 export const taskArchived = createEvent({ entity: ArchivedTask });
 
 export const archiveTask = command({
+  callers: ["client"],
   input: { taskId: ArchivedTask.fields.id, title: ArchivedTask.fields.title },
   emits: [taskArchived],
 }).decide(({ input }) => [emit(taskArchived, { id: input.taskId, title: input.title })]);
 
 export const archivedTitles = query({
+  callers: ["client"],
   output: { titles: bag(ArchivedTask.fields.title) },
 }).resolve(({ records }) => ({ titles: records.ArchivedTask.map((t) => t.title) }));
 

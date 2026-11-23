@@ -12,6 +12,7 @@ export const { command, createEvent, contract } = service({
 export const noteAdded = createEvent({ entity: Note });
 
 export const addNote = command({
+  callers: ["client"],
   input: { noteId: Note.fields.id, text: Note.fields.text },
   emits: [noteAdded],
 }).decide(({ input }) => [emit(noteAdded, { id: input.noteId, text: input.text })]);

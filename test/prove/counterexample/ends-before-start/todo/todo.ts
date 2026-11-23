@@ -17,6 +17,7 @@ export const { command, createEvent, bounds } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, startsOn: date, days: z.int().min(-1).max(365) },
   emits: [taskAdded],
 }).decide(({ input }) => [

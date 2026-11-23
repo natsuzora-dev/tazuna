@@ -1,2 +1,2 @@
-{"time":1792972800000,"dir":"in","type":"query","id":"q2","name":"nextDay","input":{"from":1792972800000}}
+{"time":1792972800000,"dir":"in","type":"query","id":"q2","name":"nextDay","input":{"from":1792972800000},"caller":{"service":"client"}}
 {"time":1792972800000,"dir":"out","type":"answer","id":"answer#2","to":"q2","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"isWeekday"}}}

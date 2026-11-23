@@ -9,7 +9,10 @@
           "type": "command",
           "id": "beat#1",
           "name": "beat",
-          "input": {}
+          "input": {},
+          "caller": {
+            "service": "client"
+          }
         },
         {
           "time": 1792886400000,

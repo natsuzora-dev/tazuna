@@ -1,12 +1,12 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"}}
+{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"e1","name":"taskAdded","payload":{"id":"task-1"},"resultOf":"addTask#1"}
 {"time":1792886400000,"dir":"out","type":"event","id":"e2","name":"seen","payload":{"id":"y","taskId":"task-1"}}
-{"time":1792886400000,"dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2"}}
+{"time":1792886400000,"dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-2"},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"e3","name":"taskAdded","payload":{"id":"task-2"},"resultOf":"addTask#2"}
 {"time":1792886400000,"dir":"out","type":"event","id":"e4","name":"seen","payload":{"id":"x","taskId":"task-2"}}
-{"time":1792886400000,"dir":"in","type":"query","id":"seenTwice#1","name":"seenTwice","input":{}}
+{"time":1792886400000,"dir":"in","type":"query","id":"seenTwice#1","name":"seenTwice","input":{},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#3","to":"seenTwice#1","answer":{"result":"fulfilled","output":{"repeated":["x","y","y"]}}}
-{"time":1792886400000,"dir":"in","type":"query","id":"seenIds#1","name":"seenIds","input":{}}
+{"time":1792886400000,"dir":"in","type":"query","id":"seenIds#1","name":"seenIds","input":{},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#4","to":"seenIds#1","answer":{"result":"fulfilled","output":{"repeated":["x","y","y"],"none":[],"ids":["x","y"],"listed":["y","x"]}}}

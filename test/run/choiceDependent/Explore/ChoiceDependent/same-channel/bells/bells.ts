@@ -10,11 +10,11 @@ export const { command, machine, event, contract, scenario } = service({
 export const armed = event({});
 export const rang = event({ payload: { by: z.string() } });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
-export const ring = command({ input: { by: z.string() }, emits: [rang] }).decide(({ input }) => [
-  emit(rang, { by: input.by }),
-]);
+export const ring = command({ callers: ["client", "bells"], input: { by: z.string() }, emits: [rang] }).decide(
+  ({ input }) => [emit(rang, { by: input.by })],
+);
 
 export const first = machine({
   description: `Ring as first at 10:00 once armed: emit rang and page`,

@@ -9,6 +9,7 @@ export const { automation, command, event, scenario } = service({
 export const announced = event({ payload: { taskId: todo.addTask.input.taskId } });
 
 export const announce = command({
+  callers: ["client", "notifier"],
   input: { taskId: todo.addTask.input.taskId },
   emits: [announced],
 }).decide(({ input }) => [emit(announced, { taskId: input.taskId })]);

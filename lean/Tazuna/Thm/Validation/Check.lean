@@ -53,6 +53,9 @@ structure Checked (s : Structure) : Prop where
   unionsApart : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.schemasOf d, ∀ path, (path, .ambiguousUnion) ∉ Schemas.issues x.1 x.2
   /-- No map state's key declares a default, which items, typed by the key's output type, never leaves to fill. -/
   mapKeysUndefaulted : ∀ d ∈ s.definitions, ∀ x ∈ Schemas.mapKeysOf d, Schemas.defaultPaths x.1 x.2 = []
+  /-- Every command or query that an automation or chart sends lists its sender among its callers. -/
+  callersListed : ∀ d ∈ s.definitions, ∀ r ∈ Commands.sentBy d, ∀ callers, s.callersOf? r = some callers →
+    Commands.admitsSender callers d = true
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/
 @[guarantee] theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by
@@ -101,6 +104,19 @@ structure Checked (s : Structure) : Prop where
     constructor
     · intro h d hd r hr; simpa using h d hd r hr
     · intro h d hd r hr; simpa using h d hd r hr
+  have callers : Commands.unlistedCallers s = [] ↔ ∀ d ∈ s.definitions, ∀ r ∈ Commands.sentBy d, ∀ callers,
+      s.callersOf? r = some callers → Commands.admitsSender callers d = true := by
+    simp only [Commands.unlistedCallers, List.flatMap_eq_nil_iff, List.filterMap_eq_nil_iff]
+    constructor
+    · intro h d hd r hr callers hc
+      have := h d hd r hr
+      simp only [hc] at this
+      exact Classical.byContradiction fun hn => by simp [hn] at this
+    · intro h d hd r hr
+      split
+      · rename_i callers hc
+        simp [h d hd r hr callers hc]
+      · rfl
   have restored : Charts.restoredHeld s = [] ↔ ∀ d ∈ s.definitions, ∀ c, d.chart? = some c →
       Charts.restoredHeldOf c = [] := by
     simp only [Charts.restoredHeld, List.flatMap_eq_nil_iff]
@@ -144,12 +160,12 @@ structure Checked (s : Structure) : Prop where
         simpa using h d hd c hc st hst t ht
       · rfl
   have schemas := Tazuna.Thm.Validation.Schemas.schemas_ordered s
-  rw [parents, controls, reasons, restored, delays, negative, schemas]
+  rw [parents, controls, reasons, callers, restored, delays, negative, schemas]
   simp only [and_assoc]
   constructor
-  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, m, sk, ua, mk⟩
-    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng, sk, ua, mk⟩
+  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, u, m, sk, ua, mk⟩
+    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng, sk, ua, mk, u⟩
   · intro h
-    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.9, h.12, h.13, h.14⟩
+    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.15, h.9, h.12, h.13, h.14⟩
 
 end Tazuna.Thm.Validation.Check

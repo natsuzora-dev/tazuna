@@ -26,7 +26,7 @@ const show = (openTasks: number) =>
 const askPermission = requestOf(device.requestNotificationPermission, {});
 
 const taskAddedReaches = fresh.step((w, n: number) => {
-  const adding = w.client.send(todo.addTask, { taskId: `task-${n}`, title: `Task ${n}` });
+  const adding = w.client.as("screens").send(todo.addTask, { taskId: `task-${n}`, title: `Task ${n}` });
   const asking = adding.request(calendar.nextBusinessDay);
   w.net.deliver(asking);
   w.peer.calendar.leaveUnanswered(asking);
@@ -34,7 +34,7 @@ const taskAddedReaches = fresh.step((w, n: number) => {
 });
 
 const taskCompletedReaches = fresh.step((w, n: number) => {
-  const completing = w.client.send(todo.completeTask, { taskId: `task-${n}` });
+  const completing = w.client.as("screens").send(todo.completeTask, { taskId: `task-${n}` });
   return w.net.deliver(w.peer.todo.emit(todo.taskCompleted, { taskId: `task-${n}` }, { resultOf: completing }));
 });
 
@@ -135,7 +135,7 @@ export const countsReopenedTask = scenario({
     taskCompletedReaches(w, 1);
     // task-2 to task-11 are 10 open tasks, which notifier allows.
     const eleventh = taskAddedReaches(w, 11);
-    const reopening = w.client.send(todo.reopenTask, { taskId: "task-1" });
+    const reopening = w.client.as("screens").send(todo.reopenTask, { taskId: "task-1" });
     // task-1 open again makes 11.
     const reopened = w.net.deliver(w.peer.todo.emit(todo.taskReopened, { taskId: "task-1" }, { resultOf: reopening }));
     shownUnanswered(w, reopened);

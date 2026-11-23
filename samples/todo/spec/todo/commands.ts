@@ -20,6 +20,7 @@ import {
 } from "./events.ts";
 
 export const addTask = command({
+  callers: ["screens"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAddedRecorded, taskAdded],
 }).decide(({ input, now }) => [
@@ -36,6 +37,7 @@ export const addTask = command({
 ]);
 
 export const completeTask = command({
+  callers: ["screens"],
   input: { taskId: ref(Task) },
   emits: [taskCompletedRecorded, taskCompleted],
   requires: { notCompleted: ({ refs }) => refs.taskId.completedAt === null },
@@ -48,6 +50,7 @@ export const completeTask = command({
 ]);
 
 export const reopenTask = command({
+  callers: ["screens"],
   input: { taskId: ref(Task) },
   emits: [taskReopenedRecorded, taskReopened],
   requires: { completed: ({ refs }) => refs.taskId.completedAt !== null },
@@ -66,11 +69,13 @@ export const reopenTask = command({
 });
 
 export const renameTask = command({
+  callers: ["screens"],
   input: { taskId: ref(Task), title: Task.fields.title },
   emits: [taskRenamed],
 }).decide(({ input }) => [emit(taskRenamed, { id: input.taskId, title: input.title })]);
 
 export const deleteTask = command({
+  callers: ["screens"],
   input: { taskId: ref(Task) },
   emits: [taskDeletedRecorded, taskDeleted],
 }).decide(({ input }) => [
@@ -79,6 +84,7 @@ export const deleteTask = command({
 ]);
 
 export const changeDue = command({
+  callers: ["screens"],
   input: { taskId: ref(Task), dueAt: instant.nullable() },
   emits: [dueChanged, dueCleared],
   requires: {
@@ -92,11 +98,13 @@ export const changeDue = command({
 ]);
 
 export const changeReminders = command({
+  callers: ["screens"],
   input: { shouldRemind: Settings.fields.shouldRemind.unwrap() },
   emits: [remindersChanged],
 }).decide(({ input }) => [emit(remindersChanged, { shouldRemind: input.shouldRemind })]);
 
 export const setReminder = command({
+  callers: ["todo"],
   input: { taskId: ref(Task), remindAt: instant },
   emits: [reminderScheduled],
 }).decide(({ input }) => [
@@ -104,11 +112,13 @@ export const setReminder = command({
 ]);
 
 export const recordReminderDecisionFailed = command({
+  callers: ["todo"],
   input: { taskId: ref(Task) },
   emits: [reminderDecisionFailed],
 }).decide(({ input }) => [emit(reminderDecisionFailed, { id: input.taskId, reminderDecision: "failed" })]);
 
 export const recordReminderTimeReached = command({
+  callers: ["todo"],
   input: { taskId: ref(Task) },
   emits: [reminderTimeReachedRecorded, reminderTimeReached],
   requires: {

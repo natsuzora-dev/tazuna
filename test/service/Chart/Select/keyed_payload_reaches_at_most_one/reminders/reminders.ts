@@ -10,16 +10,14 @@ export const taskStarred = event({ payload: { taskId: z.string() } });
 export const allCleared = event({});
 export const notified = event({ payload: { taskId: z.string() } });
 
-export const starTask = command({
-  input: { taskId: z.string() },
-  emits: [taskStarred],
-}).decide(({ input }) => [emit(taskStarred, { taskId: input.taskId })]);
+export const starTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskStarred] }).decide(
+  ({ input }) => [emit(taskStarred, { taskId: input.taskId })],
+);
 
-export const clearAll = command({
-  emits: [allCleared],
-}).decide(() => [emit(allCleared, {})]);
+export const clearAll = command({ callers: ["client"], emits: [allCleared] }).decide(() => [emit(allCleared, {})]);
 
 export const notify = command({
+  callers: ["client", "reminders"],
   input: { taskId: z.string() },
   emits: [notified],
 }).decide(({ input }) => [emit(notified, { taskId: input.taskId })]);

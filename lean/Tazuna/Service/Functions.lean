@@ -168,6 +168,7 @@ that it does not encode is a schema Issue, and no other check runs, since the ru
 - unordered: a value from outside or of a trace line as a simulation compares it: canonical, with the elements of
   every bag in canonical order and sortedBy elements with equal keys in canonical order, so that a scenario never
   writes an order that the spec does not define.
+Each question about a request (binding, requirement, decide, ensures, queryEnsures, resolve) also takes its caller.
 - binding: whether one binds value of a command is non-null.
 - requirement: whether one requires condition of a command holds.
 - inputRequirement: whether one requires condition holds on the input alone, for a query or a screen, whose requires
@@ -224,18 +225,18 @@ that it does not encode is a schema Issue, and no other check runs, since the ru
 structure Functions (m : Type → Type) where
   parse : Schema → Value → m (Except Issue (Option Value))
   unordered : Schema → Value → m (Except Issue Value)
-  binding : String → String → Value → Records → Time → m (Except Issue Bool)
-  requirement : String → String → Value → Records → Time → m (Except Issue Bool)
+  binding : String → String → Value → Caller → Records → Time → m (Except Issue Bool)
+  requirement : String → String → Value → Caller → Records → Time → m (Except Issue Bool)
   inputRequirement : Spec.Ref → String → Value → m (Except Issue Bool)
-  decide : String → Value → Records → Time → m (Except Issue (List (List Emit)))
-  ensures : String → Value → Records → Records → Time → m (Except Issue (Option String))
-  queryEnsures : String → Value → Value → Records → m (Except Issue (Option String))
+  decide : String → Value → Caller → Records → Time → m (Except Issue (List (List Emit)))
+  ensures : String → Value → Caller → Records → Records → Time → m (Except Issue (Option String))
+  queryEnsures : String → Value → Caller → Value → Records → m (Except Issue (Option String))
   resultEnsures : Spec.Ref → String → Value → Option Value → List Emit → m (Except Issue Ensured)
   invariant : String → Value → Time → m (Except Issue (Option String))
   responses : String → Value → Time → m (Except Issue (List (String × Bool × Bool)))
   serviceInvariant : Records → Time → m (Except (Option Schema) (Option String))
   chartInvariant : Scope → Records → m (Except Issue (Option String))
-  resolve : String → Value → Records → Time → m (Except Issue Value)
+  resolve : String → Value → Caller → Records → Time → m (Except Issue Value)
   automationBinding : String → String → Value → Records → Time → m (Except Issue Bool)
   automationGuard : String → String → Value → Records → Time → m (Except Issue Bool)
   react : String → Value → Records → Time → Keys → m (Except Issue (Value × List String))
@@ -323,16 +324,16 @@ def Functions.sorting {m : Type → Type} [Monad m] [MonadNote m] (st : Service)
       pure (.ok (← st.sorted (← expectFound "the receiver of an input" schema) input, keys))
     | .error e => pure (.error e)
   { fs with
-    decide := fun name input records now => do
-      match ← fs.decide name input records now with
+    decide := fun name input caller records now => do
+      match ← fs.decide name input caller records now with
       | .error e => pure (.error e)
       | .ok groups =>
         mapChecked (mapChecked fun e =>
           if st.lists name e then do
             pure ((← fs.checked st (.payload e.event) e.payload).map fun payload => { e with payload })
           else pure (.ok e)) groups
-    resolve := fun name input records now => do
-      match ← fs.resolve name input records now with
+    resolve := fun name input caller records now => do
+      match ← fs.resolve name input caller records now with
       | .ok output => fs.checked st (.output (st.ref name)) output
       | .error e => pure (.error e)
     react := fun name payload records now keys => do

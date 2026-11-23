@@ -17,6 +17,7 @@ export const { automation, command, createEvent, contract, scenario } = service(
 export const openTaskRecorded = createEvent({ entity: OpenTask });
 
 export const recordOpenTask = command({
+  callers: ["client", "notifier"],
   input: { taskId: OpenTask.fields.taskId },
   emits: [openTaskRecorded],
 }).decide(({ input, records }) =>

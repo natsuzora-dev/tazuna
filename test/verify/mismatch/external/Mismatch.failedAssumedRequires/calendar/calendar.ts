@@ -11,6 +11,7 @@ export const { command, query, event, contract } = externalService({
 });
 
 export const nextDay = query({
+  callers: [],
   input: { from: instant },
   output: { day: instant },
   rejects: ["invalid-input", "requires", "unavailable"],
@@ -23,6 +24,7 @@ export const reminderAdded = event({
 });
 
 export const addReminder = command({
+  callers: [],
   emits: [reminderAdded],
   rejects: ["invalid-input", "requires", "unavailable", "reused-id"],
   ensures: { isOnce: ({ events }) => events.length === 1 },

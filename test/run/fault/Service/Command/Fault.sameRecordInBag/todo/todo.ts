@@ -20,11 +20,13 @@ export const taskAdded = createEvent({ entity: Task });
 export const titleArchived = createEvent({ entity: Archive });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title })]);
 
 export const archiveTitle = command({
+  callers: ["client"],
   input: { title: Archive.fields.title },
   emits: [titleArchived],
 }).decide(({ input, records }) => [

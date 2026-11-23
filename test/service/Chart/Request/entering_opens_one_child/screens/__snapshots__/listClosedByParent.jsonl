@@ -1,7 +1,7 @@
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.taskCount#1","name":"todo.taskCount","input":{"filter":"open"}}
+{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.taskCount#1","name":"todo.taskCount","input":{"filter":"open"},"caller":{"service":"screens"}}
 {"time":1792890000000,"dir":"in","type":"operation","id":"homeScreen.openList#1","name":"homeScreen.openList"}
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"}}
+{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"},"caller":{"service":"screens"}}
 {"time":1792890060000,"dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"todo.tasks#1","after":["todo.tasks#1"]}
 {"time":1792890120000,"dir":"in","type":"time","id":"time#1"}
 {"time":1792890120000,"dir":"in","type":"operation","id":"homeScreen.openList#2","name":"homeScreen.openList"}
-{"time":1792890120000,"dir":"out","type":"subscribe","id":"todo.tasks#2","name":"todo.tasks","input":{"filter":"open"}}
+{"time":1792890120000,"dir":"out","type":"subscribe","id":"todo.tasks#2","name":"todo.tasks","input":{"filter":"open"},"caller":{"service":"screens"}}

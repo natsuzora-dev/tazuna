@@ -1,4 +1,4 @@
-{"time":1792893600000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{}}
+{"time":1792893600000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{},"caller":{"service":"client"}}
 {"time":1792893600000,"dir":"out","type":"answer","id":"answer#1","to":"arm#1","answer":{"result":"accepted"}}
 {"time":1792893600000,"dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
 {"time":1792893600000,"dir":"out","type":"event","id":"added#1","name":"added","payload":{"id":"reminders/Task-1","text":"a"},"created":["reminders/Task-1"]}

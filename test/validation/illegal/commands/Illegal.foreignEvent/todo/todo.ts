@@ -16,6 +16,7 @@ export const taskAdded = event({
 });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAddedRecorded, taskAdded],
 }).decide(({ input }) => [

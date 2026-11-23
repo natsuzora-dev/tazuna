@@ -6,6 +6,7 @@ export const Task = entity({ description: "A task", fields: { id: z.string(), ti
 export const { query, contract } = service({ name: "todo", description: "Keep the tasks", entities: { Task } });
 
 export const titled = query({
+  callers: ["client", "emptyPrefixScreens", "screens"],
   input: { prefix: z.string() },
   output: { titles: bag(Task.fields.title) },
   requires: { notEmpty: ({ input }) => input.prefix !== "" },

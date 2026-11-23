@@ -16,6 +16,7 @@ export const { command, query, createEvent, updateEvent, contract, scenario } = 
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: input.title, isDone: false })]);
@@ -23,6 +24,7 @@ export const addTask = command({
 export const taskCompleted = updateEvent({ entity: Task, writes: ["isDone"] });
 
 export const completeTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id },
   emits: [taskCompleted],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
@@ -32,6 +34,7 @@ export const completeTask = command({
 export const taskRenamed = updateEvent({ entity: Task, writes: ["title"] });
 
 export const renameTask = command({
+  callers: ["client"],
   input: { taskId: ref(Task), title: Task.fields.title },
   emits: [taskRenamed],
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
@@ -39,6 +42,7 @@ export const renameTask = command({
 }).decide(({ bound, input }) => [emit(taskRenamed, { id: bound.task.id, title: input.title })]);
 
 export const taskTitles = query({
+  callers: ["client"],
   input: { prefix: z.string() },
   output: { titles: bag(Task.fields.title) },
   requires: {

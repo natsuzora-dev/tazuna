@@ -26,11 +26,11 @@ def initialContextOf [Monad m] [MonadNote m] (fs : Functions m) (st : Service) (
       | .ok none => pure (.error (.initialContextSchema definition))
       | .ok (some context) => pure (.ok context)
 
-/-- The request line of a calls (a query) or of a sends (a command) to `target` with `input`. -/
-def Activity.requestLine (a : Activity) (input : Value) : LineBody :=
+/-- The request line of a calls (a query) or of a sends (a command) to `target` with `input`, which `caller` sends. -/
+def Activity.requestLine (a : Activity) (input : Value) (caller : Caller) : LineBody :=
   match a with
-  | .calls .. => .query a.ref input
-  | _ => .command a.ref input
+  | .calls .. => .query a.ref input caller
+  | _ => .command a.ref input caller
 
 section
 
@@ -49,7 +49,7 @@ def request (st : Service) (step : Nat) (name : InstanceId) (state : String) (a 
         pure ⟨s, { r.queue with round := r.queue.round ++ [sent] }⟩
       else do
         MonadNote.note (.reached (.request a.ref))
-        pure ⟨r.state.await (a.requestLine input) (.state name state) a input, r.queue⟩
+        pure ⟨r.state.await (a.requestLine input (r.state.callerOf (.state name state))) (.state name state) a input, r.queue⟩
 
 def openScreen (st : Service) (step : Nat) (name : InstanceId) (state : String) (a : Activity) : Processing → m Processing :=
   withMachine name fun i r => do

@@ -202,7 +202,7 @@ export const reopenFromList = scenario({
   given: milk,
   when: (w) => {
     const { list, tasksSub, tasksReached } = openList(w);
-    const completing = w.client.send(todo.completeTask, { taskId: "task-1" });
+    const completing = w.client.as("screens").send(todo.completeTask, { taskId: "task-1" });
     w.net.leaveInFlight(completing.event(todo.taskCompleted));
     const filtering = w.user.operate(list, "filter", { filter: "completed" });
     const completedSub = filtering.subscription(todo.tasks);
@@ -294,7 +294,7 @@ export const completedTaskNotCompleted = scenario({
   given: milk,
   when: (w) => {
     const { list, tasksReached } = openList(w);
-    const completing = w.client.send(todo.completeTask, { taskId: "task-1" });
+    const completing = w.client.as("screens").send(todo.completeTask, { taskId: "task-1" });
     w.net.leaveInFlight(completing.event(todo.taskCompleted));
     const { detail, detailSub } = openTask(w, list);
     w.net.deliver(detailSub);
@@ -426,7 +426,7 @@ export const clearsOnlyDue = scenario({
   given: milk,
   when: (w) => {
     const { list, tasksReached } = openList(w);
-    const clear = w.client.send(todo.changeDue, { taskId: "task-1", dueAt: null });
+    const clear = w.client.as("screens").send(todo.changeDue, { taskId: "task-1", dueAt: null });
     w.net.deliver(clear.request(calendar.nextBusinessDay));
     w.peer.calendar.leaveUnanswered(clear.request(calendar.nextBusinessDay));
     const { detail, detailSub } = openTask(w, list);
@@ -496,7 +496,7 @@ export const closesDeletedTask = scenario({
   when: (w) => {
     const { list, tasksReached } = openList(w);
     const { detailSub } = openTask(w, list);
-    const del = w.client.send(todo.deleteTask, { taskId: "task-1" });
+    const del = w.client.as("screens").send(todo.deleteTask, { taskId: "task-1" });
     const deleted = w.net.deliver(w.peer.todo.emit(todo.taskDeleted, { taskId: "task-1" }, { resultOf: del }));
     w.net.leaveInFlight(detailSub);
     w.net.leaveInFlight(del.answer(tasksReached));
@@ -714,7 +714,7 @@ export const keepsDetailWhenOtherTaskDeleted = scenario({
   given: milkAndCompletedEggs,
   when: (w) => {
     const { tasksReached, detail, detailReached } = openDetail(w);
-    const del = w.client.send(todo.deleteTask, { taskId: "task-2" });
+    const del = w.client.as("screens").send(todo.deleteTask, { taskId: "task-2" });
     const deleted = w.net.deliver(w.peer.todo.emit(todo.taskDeleted, { taskId: "task-2" }, { resultOf: del }));
     const completing = w.user.operate(detail, "complete");
     const completingReached = w.net.deliver(completing.request(todo.completeTask));

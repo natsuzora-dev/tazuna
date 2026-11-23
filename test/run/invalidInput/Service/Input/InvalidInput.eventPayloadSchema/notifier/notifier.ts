@@ -10,6 +10,7 @@ export const { automation, command, event, given, scenario } = service({
 export const announced = event({ payload: { taskId: z.string() } });
 
 export const announce = command({
+  callers: ["client", "notifier"],
   input: { taskId: z.string() },
   emits: [announced],
 }).decide(({ input }) => [emit(announced, { taskId: input.taskId })]);

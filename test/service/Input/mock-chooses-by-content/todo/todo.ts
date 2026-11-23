@@ -4,4 +4,4 @@ export const { command, machine, event, contract, scenario } = service({ name: "
 
 export const taskAdded = event({});
 
-export const addTask = command({ emits: [taskAdded] }).decide(() => [emit(taskAdded, {})]);
+export const addTask = command({ callers: ["client"], emits: [taskAdded] }).decide(() => [emit(taskAdded, {})]);

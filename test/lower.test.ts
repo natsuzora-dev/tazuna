@@ -43,8 +43,10 @@ const line = (index: number) => ({ type: "line", index }) as const;
 
 test("A handle's observed value in a written value becomes a hole that reads the handle's fact", () => {
   const { lines } = lowered((w) => {
-    const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
-    w.client.call(todo.taskDetail, { taskId: adding.request(calendar.nextBusinessDay).input.after as never });
+    const adding = w.client.as("client").send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
+    w.client
+      .as("client")
+      .call(todo.taskDetail, { taskId: adding.request(calendar.nextBusinessDay).input.after as never });
   });
   assert.deepEqual(lines[1], {
     type: "request",
@@ -71,13 +73,14 @@ test("A handle's observed value in a written value becomes a hole that reads the
         },
       ],
     },
+    caller: { service: "client" },
   });
 });
 
 test("A pick that holds an observed value becomes a template, and a subscription handle names a subscribe request", () => {
   const { lines } = lowered((w) => {
     const watching = w.startup.subscription(todo.tasks, { filter: "open" });
-    const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
+    const adding = w.client.as("client").send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
     w.net.deliver(adding.request(todo.completeTask, { taskId: watching.input.filter }));
   });
   assert.deepEqual(lines[1], {
@@ -116,7 +119,7 @@ test("A pick that holds an observed value becomes a template, and a subscription
 test("created() becomes a created hole, and raw() writes its value as is", () => {
   const { lines } = lowered((w) => {
     w.peer.todo.send(todo.completeTask, { taskId: created() });
-    w.client.send(todo.addTask, raw({ taskId: "task-1", title: 7 }));
+    w.client.as("client").send(todo.addTask, raw({ taskId: "task-1", title: 7 }));
   });
   assert.deepEqual(
     lines.map((l) => (l.type === "request" ? l.input : undefined)),
@@ -173,7 +176,7 @@ test("A peer's line names the message it states; a deliver line names it too, an
 
 test("Then lowers each expectation about the line it names", () => {
   const { expectations } = lowered(
-    (w) => ({ adding: w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" }) }),
+    (w) => ({ adding: w.client.as("client").send(todo.addTask, { taskId: "task-1", title: "Buy milk" }) }),
     (({ adding }: { adding: never }) => [
       requested(adding, [requestOf(calendar.nextBusinessDay, { after: 1_792_890_000_000 })]),
     ]) as never,
@@ -202,8 +205,8 @@ for (const [use, misuse] of [
 ] as const)
   test(`An observed value used as ${use} is a violation of the line that uses it, not an error`, () => {
     const { violations } = lowered((w) => {
-      const asking = w.client.call(todo.taskDetail, { taskId: "task-1" });
-      w.client.send(todo.addTask, { taskId: "task-2", title: misuse(asking.output as never) as never });
+      const asking = w.client.as("client").call(todo.taskDetail, { taskId: "task-1" });
+      w.client.as("client").send(todo.addTask, { taskId: "task-2", title: misuse(asking.output as never) as never });
     });
     assert.equal(violations.length, 1);
     assert.equal(violations[0]?.kind, "misusedObserved");
@@ -212,7 +215,7 @@ for (const [use, misuse] of [
 
 test("A pick is the content itself, and an event's route comes after it", () => {
   const { lines } = lowered((w) => {
-    const adding = w.client.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
+    const adding = w.client.as("client").send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
     w.net.deliver(adding.request(calendar.nextBusinessDay, { after: 1_792_886_400_000 }));
     w.net.deliver(adding.event(todo.taskAdded, { taskId: "task-1" }, { to: todo }));
   });
@@ -242,8 +245,8 @@ test("A pick is the content itself, and an event's route comes after it", () => 
 
 test("A position read in a bag of an observed value is a violation, and one in a sequence is a hole", () => {
   const { violations } = lowered((w) => {
-    const listed = w.client.call(todo.tasks, { filter: "all" });
-    w.client.send(todo.completeTask, {
+    const listed = w.client.as("client").call(todo.tasks, { filter: "all" });
+    w.client.as("client").send(todo.completeTask, {
       taskId: (listed.output.tasks as never as { taskId: string }[])[0]?.taskId as never,
     });
   });
@@ -259,6 +262,6 @@ test("A line placed after When returned, and a definition the spec does not name
     return [];
   }) as never);
   assert.deepEqual(after.violations, [{ kind: "lineAfterWhen" }]);
-  const unnamed = lowered((w) => w.client.send({ kind: "command" } as never, {} as never));
+  const unnamed = lowered((w) => w.client.as("client").send({ kind: "command" } as never, {} as never));
   assert.deepEqual(unnamed.violations, [{ kind: "unnamed", path: ["lines", 0] }]);
 });

@@ -1,5 +1,5 @@
-{"time":1792890000000,"dir":"out","type":"command","id":"device.requestPermission#1","name":"device.requestPermission","input":{}}
+{"time":1792890000000,"dir":"out","type":"command","id":"device.requestPermission#1","name":"device.requestPermission","input":{},"caller":{"service":"app"}}
 {"time":1792890000000,"dir":"in","type":"restart","id":"restart#1"}
-{"time":1792890000000,"dir":"out","type":"command","id":"device.requestPermission#2","name":"device.requestPermission","input":{}}
+{"time":1792890000000,"dir":"out","type":"command","id":"device.requestPermission#2","name":"device.requestPermission","input":{},"caller":{"service":"app"}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"device/answer#1","to":"device.requestPermission#1","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"in","type":"event","id":"device/granted#1","name":"device.granted","payload":{},"resultOf":"device.requestPermission#1"}

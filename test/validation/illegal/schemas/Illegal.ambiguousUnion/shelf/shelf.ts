@@ -10,4 +10,6 @@ const group = z.union([
 
 export const grouped = event({ payload: { group } });
 
-export const groupItems = command({ emits: [grouped] }).decide(() => [emit(grouped, { group: { names: [] } })]);
+export const groupItems = command({ callers: ["client"], emits: [grouped] }).decide(() => [
+  emit(grouped, { group: { names: [] } }),
+]);

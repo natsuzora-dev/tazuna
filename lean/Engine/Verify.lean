@@ -29,8 +29,10 @@ def _root_.Tazuna.Verify.Finding.isViolation : Verify.Finding → Bool
 structure Start where
   time : Time
   records : List Scenario.GivenRecord
+  /-- The user that operates the service's screens, or none when no user signed in. -/
+  user : Option Caller := none
 
-derive_wire Start
+derive_wire Start skip_serializing_none
 
 /-- A log's first line as it stands, with its line number, when it is a start line. -/
 structure StartLine where
@@ -80,6 +82,11 @@ partial def renameRefs (f : String → String) : CValue → CValue
   | .runs rs => .runs (rs.map (renameRefs f))
   | .obj fs => .obj (fs.map fun (k, x) => (k, renameRefs f x))
 
+/-- The caller with an entity record's key renamed by `f`, as renameRefs renames a key reference. -/
+def renameCaller (f : String → String) : Caller → Caller
+  | .entity e k => .entity e (f k)
+  | .service s => .service s
+
 /-- The spec service's trace lines so far, as a snapshot holds them. -/
 def specLines (service : String) (s : State) : List (Option TraceLine) :=
   (Sim.trace s).map fun (l, after, created) => some (Sim.traceLineOf service l after created)
@@ -107,9 +114,12 @@ def takeIn (spec : Spec.Structure) (st : Service) (fs : Functions ReplayM) (b : 
     | .time .. => pure s
     | _ => if s.now < l.time then advance st fs l.time s else pure s
   match l.body with
-  | .command _ id name input => send st fs s (ref name ["command"]) (some (.own id)) (value.getD input)
-  | .query _ id name input => call st fs s (ref name ["query"]) (some (.own id)) (value.getD input)
-  | .subscribe _ id name input => subscribe st fs s (ref name ["query"]) (some (.own id)) (value.getD input)
+  | .command _ id name input caller =>
+    send st fs s (ref name ["command"]) (some (.own id)) (value.getD input) (renameCaller (inverse b) caller)
+  | .query _ id name input caller =>
+    call st fs s (ref name ["query"]) (some (.own id)) (value.getD input) (renameCaller (inverse b) caller)
+  | .subscribe _ id name input caller =>
+    subscribe st fs s (ref name ["query"]) (some (.own id)) (value.getD input) (renameCaller (inverse b) caller)
   | .answer _ id to a =>
     let a := match a, value with
       | .accepted (some _), some o => .accepted (some o)
@@ -153,7 +163,8 @@ def replay (spec : Spec.Structure) (log : Log) : ReplayM Replayed := do
   let records := ((start.map (·.records)).getD []).mergeSort Sim.recordBefore
   let (rows, invalid) ← Sim.givenRows st fs (fun _ => none) log.service records
   let broken ← if invalid.isEmpty then Sim.givenInvariants fs log.service rows time else pure []
-  let mut s ← begin st fs { now := time, service := log.service, records := rows }
+  let user := start.bind (·.user)
+  let mut s ← begin st fs { now := time, service := log.service, records := rows, user }
   let inputs (s : State) := s.lines.toList.countP (·.dir == .in)
   let mut taken := log.lines.length
   -- A resend and the answer to it stand for the request that they repeat (withoutResends), so the spec takes neither.
@@ -224,7 +235,7 @@ def verifyExternal (spec : Spec.Structure) (service : String) (trace : List (Fil
   for x in exchanges spec service lines do
     let target := x.definition.ref
     let input := match (numbered.lookup x.line).map (·.body) with
-      | some (.command _ _ _ v) | some (.query _ _ _ v) => v
+      | some (.command _ _ _ v _) | some (.query _ _ _ v _) => v
       | _ => .null
     let parsedInput ← orStop "the input check" (← fs.parseOutside st (.input target) input)
     let (requires, ensures) := (spec.conditionsOf? target).getD ([], [])

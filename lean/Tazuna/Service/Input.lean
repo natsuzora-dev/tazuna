@@ -10,37 +10,37 @@ open Tazuna.Data
 variable {m : Type → Type}
 
 def send [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (target : Spec.Ref)
-    (givenId : Option LineId) (raw : Value) : m State := do
+    (givenId : Option LineId) (raw : Value) (caller : Caller) : m State := do
   if target.service = st.service ∧ target.name ∈ st.commands then
-    let (s, id) := s.write .in givenId (.command target raw)
+    let (s, id) := s.write .in givenId (.command target raw caller)
     let (s, step) := s.newMessage.newStep .root
-    let request : Request := { name := target.name, input := raw }
+    let request : Request := { name := target.name, input := raw, caller }
     match s.commandAnswers.find? id with
     | some known => message st fs (s.answer (some id) target (answerAgain known request)) {}
     | none =>
-      let pc ← processCommand st fs s target.name raw (some id) step
+      let pc ← processCommand st fs s target.name raw caller (some id) step
       message st fs { pc.1 with commandAnswers := pc.1.commandAnswers.keep id request pc.2.1 }
         { tasks := commandWork st pc.1 pc.2.2 step }
   else pure (s.report (.invalidInput (.unownedTarget target)))
 
 def call [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (target : Spec.Ref)
-    (givenId : Option LineId) (raw : Value) : m State := do
+    (givenId : Option LineId) (raw : Value) (caller : Caller) : m State := do
   if target.service = st.service ∧ target.name ∈ st.queries then
-    let (s, id) := s.write .in givenId (.query target raw)
+    let (s, id) := s.write .in givenId (.query target raw caller)
     let s := s.newMessage
-    match ← resolveChecked st fs s target.name raw with
+    match ← resolveChecked st fs s target.name raw caller with
     | .answered answer violations => message st fs ((s.reportAll violations).answer (some id) target answer) {}
     | .halted fault => pure (s.report (.fault fault))
   else pure (s.report (.invalidInput (.unownedTarget target)))
 
 /-- The state after a subscribe input. The first answer is sent when the message finishes. -/
 def subscribe [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) (target : Spec.Ref)
-    (givenId : Option LineId) (raw : Value) : m State := do
+    (givenId : Option LineId) (raw : Value) (caller : Caller) : m State := do
   if target.service = st.service ∧ target.name ∈ st.queries then
-    let (s, id) := s.write .in givenId (.subscribe target raw)
+    let (s, id) := s.write .in givenId (.subscribe target raw caller)
     let s := if s.subscriptions.any (·.id == id) then
         s.report (.invalidInput (.reusedSubscriptionId id.text))
-      else { s with subscriptions := s.subscriptions ++ [{ id, query := target.name, input := raw }] }
+      else { s with subscriptions := s.subscriptions ++ [{ id, query := target.name, input := raw, caller }] }
     message st fs s.newMessage {}
   else pure (s.report (.invalidInput (.unownedTarget target)))
 
@@ -183,8 +183,8 @@ def State.exchanges (s : State) : List Exchange :=
         | .event e p (some r) => if r == id then some (e, p) else none
         | _ => none }
   s.lines.toList.filterMap fun
-    | ⟨_, .out, id, .command r input, _, sender, _⟩ | ⟨_, .out, id, .query r input, _, sender, _⟩
-    | ⟨_, .out, id, .subscribe r input, _, sender, _⟩ => some (sent id r input sender)
+    | ⟨_, .out, id, .command r input _, _, sender, _⟩ | ⟨_, .out, id, .query r input _, _, sender, _⟩
+    | ⟨_, .out, id, .subscribe r input _, _, sender, _⟩ => some (sent id r input sender)
     | _ => none
 
 /--

@@ -17,7 +17,7 @@ export const tasksListed = event({
   },
 });
 
-export const listTasks = command({ emits: [tasksListed] }).decide(() => [
+export const listTasks = command({ callers: ["client"], emits: [tasksListed] }).decide(() => [
   emit(tasksListed, {
     steps: ["shop", "pay"],
     titles: ["Buy milk", "Buy eggs", "Buy milk"],
@@ -34,6 +34,7 @@ const Slot = z.strictObject({ at: instant, n: z.int() });
 const at = (hour: number) => parseInstant("2026-10-25T00:00:00Z") + hour * 3_600_000;
 
 export const taskGroups = query({
+  callers: ["client"],
   output: {
     groups: z.array(
       z.strictObject({
@@ -68,6 +69,7 @@ export const taskGroups = query({
 }));
 
 export const orderedTaskGroups = query({
+  callers: ["client"],
   output: {
     groups: z.array(
       z.strictObject({
@@ -94,10 +96,7 @@ export const orderedTaskGroups = query({
   withDefault: [1, 2],
 }));
 
-export const tagTask = command({
-  input: { tags: bag(z.string()) },
-  emits: [],
-}).decide(() => []);
+export const tagTask = command({ callers: ["client"], input: { tags: bag(z.string()) }, emits: [] }).decide(() => []);
 
 export const tagScreen = screen({
   description: "A screen that picks a card",

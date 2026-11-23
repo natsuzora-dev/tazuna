@@ -4,6 +4,7 @@ import { z } from "zod";
 export const { query, contract } = service({ name: "todo", description: "Answer the marks" });
 
 export const marksWithVisibleCollections = query({
+  callers: ["client"],
   output: {
     tags: bag(z.string()).default([]),
     days: z.array(sortedBy(z.strictObject({ n: z.int() }), "n")).optional(),
@@ -12,6 +13,7 @@ export const marksWithVisibleCollections = query({
 }).resolve(() => ({ tags: [], days: [], ids: null }));
 
 export const marks = query({
+  callers: ["client"],
   output: {
     tags: bag(z.string()).readonly(),
     days: sortedBy(z.strictObject({ n: z.int() }), "n").readonly(),

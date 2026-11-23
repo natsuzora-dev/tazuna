@@ -1,9 +1,9 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{}}
+{"time":1792890000000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{},"caller":{"service":"client"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{},"resultOf":"addTask#1"}
-{"time":1792890000000,"dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":1792890000000,"constructor":{"name":"planner"}}}
-{"time":1792890000000,"dir":"out","type":"query","id":"calendar.nextDay#2","name":"calendar.nextDay","input":{"from":1792897200000,"constructor":{"name":"planner"}}}
-{"time":1792890000000,"dir":"out","type":"query","id":"calendar.nextDay#3","name":"calendar.nextDay","input":{"from":1792893600000,"constructor":{"name":"planner"}}}
+{"time":1792890000000,"dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":1792890000000,"constructor":{"name":"planner"}},"caller":{"service":"todo"}}
+{"time":1792890000000,"dir":"out","type":"query","id":"calendar.nextDay#2","name":"calendar.nextDay","input":{"from":1792897200000,"constructor":{"name":"planner"}},"caller":{"service":"todo"}}
+{"time":1792890000000,"dir":"out","type":"query","id":"calendar.nextDay#3","name":"calendar.nextDay","input":{"from":1792893600000,"constructor":{"name":"planner"}},"caller":{"service":"todo"}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.nextDay#3","answer":{"result":"fulfilled","output":{"day":1792940400000}}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"calendar/answer#2","to":"calendar.nextDay#1","answer":{"result":"fulfilled","output":{"day":1792940400000}}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"calendar/answer#3","to":"calendar.nextDay#2","answer":{"result":"fulfilled","output":{"day":1792940400000}}}

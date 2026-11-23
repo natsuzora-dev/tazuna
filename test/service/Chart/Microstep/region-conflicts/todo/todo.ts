@@ -8,12 +8,12 @@ export const countReported = event({
   payload: { count: z.int(), lastTaskId: z.string() },
 });
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { taskId: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { taskId: input.taskId })],
+);
 
 export const reportCount = command({
+  callers: ["client", "todo"],
   input: { count: z.int(), lastTaskId: z.string() },
   emits: [countReported],
 }).decide(({ input }) => [emit(countReported, { count: input.count, lastTaskId: input.lastTaskId })]);

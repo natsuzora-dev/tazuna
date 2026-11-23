@@ -15,11 +15,12 @@ export const armed = event({});
 export const marked = createEvent({ entity: Mark });
 export const counted = updateEvent({ entity: Count, writes: ["n"] });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
 const key = Mark.fields.id;
 
 export const addMarks = command({
+  callers: ["client", "marks"],
   input: { a: key, b: key, c: key, d: key },
   emits: [marked, counted],
 }).decide(({ input, records }) => [

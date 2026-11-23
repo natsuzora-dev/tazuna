@@ -7,7 +7,7 @@ export const eventWithoutKeyFields = scenario({
   description: "Clear all; allCleared, whose payload has no taskId, reaches every copy",
   given: arranged,
   when: (w) => {
-    w.client.send(clearAll, {});
+    w.client.as("client").send(clearAll, {});
   },
   then: () => [],
 });

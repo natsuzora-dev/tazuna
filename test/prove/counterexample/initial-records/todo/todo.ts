@@ -15,8 +15,10 @@ export const { command, updateEvent, bounds } = service({
 
 export const limitChanged = updateEvent({ entity: Settings, writes: ["limit"] });
 
-export const changeLimit = command({ input: { limit: z.int().min(0) }, emits: [limitChanged] }).decide(({ input }) => [
-  emit(limitChanged, { limit: input.limit }),
-]);
+export const changeLimit = command({
+  callers: ["client"],
+  input: { limit: z.int().min(0) },
+  emits: [limitChanged],
+}).decide(({ input }) => [emit(limitChanged, { limit: input.limit })]);
 
 export const todoBounds = bounds({ creates: {} });

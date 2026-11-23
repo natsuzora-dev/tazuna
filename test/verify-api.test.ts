@@ -53,7 +53,15 @@ test("verifyTraces compares an external service trace under any name with the co
     const traces = join(copies, name);
     mkdirSync(join(traces, "calendar"), { recursive: true });
     const lines = [
-      { time, dir: "in", type: "query", id: "q1", name: "nextDay", input: { from: monday } },
+      {
+        time,
+        dir: "in",
+        type: "query",
+        id: "q1",
+        name: "nextDay",
+        input: { from: monday },
+        caller: { service: "client" },
+      },
       { time, dir: "out", type: "answer", id: "answer#1", to: "q1", answer: { result: "fulfilled", output: { day } } },
     ];
     writeFileSync(join(traces, "calendar", `${name}.jsonl`), lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
@@ -92,7 +100,7 @@ function shopAdapter(
         outputs.event({ name: "orderPlaced", payload: { amount: 1200 }, resultOf: id });
         const charged = new Promise<void>((resolve) =>
           outputs.request({
-            ...commandRequest(payments.createCharge, { amount: 1200 }, (a) => {
+            ...commandRequest(payments.createCharge, { amount: 1200 }, { service: "shop" }, (a) => {
               const output = decodeAnswer(payments.createCharge, a);
               if (output.result === "accepted") chargeId = output.output.chargeId;
               resolve();
@@ -104,7 +112,7 @@ function shopAdapter(
       } else {
         outputs.event({ name: "orderCancelled", payload: {}, resultOf: id });
         outputs.request({
-          ...commandRequest(payments.refundCharge, { chargeId: refunds(chargeId) }, () => {}),
+          ...commandRequest(payments.refundCharge, { chargeId: refunds(chargeId) }, { service: "shop" }, () => {}),
           id: requestId(requests),
         });
       }

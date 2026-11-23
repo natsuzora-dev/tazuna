@@ -139,29 +139,29 @@ theorem keepsIds_message (s : State) (q : Queue) : KeepsIds s (message st fs s q
   exact ((drain_grows _ _).trans (drain_keeps_now _ _) afterMessage_grows).keepsIds.trans
     (Tazuna.Thm.Service.Response.observeResponses_grows.keepsIds.trans (keepsIds_fireDue _ _ _ _))
 
-theorem keepsIds_send (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
-    KeepsIds s (send st fs s name id raw) := by
+theorem keepsIds_send (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : State) :
+    KeepsIds s (send st fs s name id raw caller) := by
   simp only [send, id_bind]
   repeat' split
   all_goals first
     | ids_leaf
     | (refine KeepsIds.trans ?_ (keepsIds_message _ _); ids_leaf)
     | (refine KeepsIds.trans ?_ (keepsIds_message _ _)
-       refine KeepsIds.trans ?_ (Grows.of_lines (s' := { (processCommand st fs _ _ _ _ _).1 with commandAnswers := _ })
+       refine KeepsIds.trans ?_ (Grows.of_lines (s' := { (processCommand st fs _ _ _ _ _ _).1 with commandAnswers := _ })
          rfl rfl).keepsIds
-       refine KeepsIds.trans ?_ (processCommand_grows _ _ _ _).keepsIds
+       refine KeepsIds.trans ?_ (processCommand_grows _ _ _ _ _).keepsIds
        ids_leaf)
 
-theorem keepsIds_call (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
-    KeepsIds s (call st fs s name id raw) := by
+theorem keepsIds_call (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : State) :
+    KeepsIds s (call st fs s name id raw caller) := by
   simp only [call, id_bind]
   repeat' split
   all_goals first
     | ids_leaf
     | (refine KeepsIds.trans ?_ (keepsIds_message _ _); ids_leaf)
 
-theorem keepsIds_subscribe (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
-    KeepsIds s (subscribe st fs s name id raw) := by
+theorem keepsIds_subscribe (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) (s : State) :
+    KeepsIds s (subscribe st fs s name id raw caller) := by
   simp only [subscribe]
   repeat' split
   all_goals first

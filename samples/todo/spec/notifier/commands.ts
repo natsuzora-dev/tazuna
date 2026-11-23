@@ -4,12 +4,12 @@ import { todo } from "../todo/contract.ts";
 import { command, NotificationPermission } from "./data.ts";
 import { notificationPermissionRecorded, openTaskForgotten, openTaskRecorded, tooManyWarned } from "./events.ts";
 
-export const warn = command({
-  input: { count: z.int() },
-  emits: [tooManyWarned],
-}).decide(({ input }) => [emit(tooManyWarned, { count: input.count })]);
+export const warn = command({ callers: ["notifier"], input: { count: z.int() }, emits: [tooManyWarned] }).decide(
+  ({ input }) => [emit(tooManyWarned, { count: input.count })],
+);
 
 export const recordOpenTask = command({
+  callers: ["notifier"],
   input: { taskId: todo.TaskId },
   emits: [openTaskRecorded],
 }).decide(({ input, records }) =>
@@ -17,6 +17,7 @@ export const recordOpenTask = command({
 );
 
 export const forgetOpenTask = command({
+  callers: ["notifier"],
   input: { taskId: todo.TaskId },
   emits: [openTaskForgotten],
 }).decide(({ input, records }) =>
@@ -24,6 +25,7 @@ export const forgetOpenTask = command({
 );
 
 export const recordNotificationPermission = command({
+  callers: ["notifier"],
   input: { status: NotificationPermission.fields.status.unwrap().exclude(["undetermined"]) },
   emits: [notificationPermissionRecorded],
 }).decide(({ input }) => [emit(notificationPermissionRecorded, { status: input.status })]);

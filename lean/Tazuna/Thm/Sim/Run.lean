@@ -339,8 +339,8 @@ theorem keeps_deliverCarried {w w' : World} (h : KeepsInFlight e w w') (i : Nat)
         | exact foldl_keeps (KeepsInFlight e w) _ (fun x l hx => keeps_recordSent hx _ _ _ _) _ _ hu
 
 theorem keeps_clientRequest {w w' : World} (h : KeepsInFlight e w w') (i : Nat) (type : Scenario.RequestType)
-    (target : Spec.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) :
-    KeepsInFlight e w (w'.clientRequest fsOf i type target input sameIdAs) := by
+    (target : Spec.Ref) (input : Scenario.Template) (sameIdAs : Option Nat) (caller : Option Caller) :
+    KeepsInFlight e w (w'.clientRequest fsOf i type target input sameIdAs caller) := by
   unfold World.clientRequest
   simp only [bind, pure]
   keeps_tac
@@ -377,7 +377,7 @@ theorem take_keeps (w : World) (own : String) (lines : List Scenario.Line) (i : 
   cases l <;> simp only [moved, reduceCtorEq] at hl <;> simp only [World.take, bind, pure, foldlM_id]
   all_goals keeps_tac
   all_goals first
-    | exact keeps_clientRequest (keeps_refl _) _ _ _ _ _
+    | exact keeps_clientRequest (keeps_refl _) _ _ _ _ _ _
     | (apply keeps_setStatus ‹KeepsInFlight _ _ _›; right
        exact unkept_of_keeps ‹KeepsInFlight _ _ _› (status_ne ‹_› ‹_› (by decide)))
     | (apply keeps_deliverCarried (keeps_refl _)

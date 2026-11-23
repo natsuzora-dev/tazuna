@@ -17,11 +17,13 @@ export const posted = createEvent({ entity: Note });
 export const deleted = deleteEvent({ entity: Note });
 
 export const post = command({
+  callers: ["client"],
   input: { noteId: Note.fields.id, replyTo: Note.fields.replyTo },
   emits: [posted],
 }).decide(({ input }) => [emit(posted, { id: input.noteId, replyTo: input.replyTo })]);
 
 export const deleteNote = command({
+  callers: ["client"],
   input: { noteId: ref(Note) },
   emits: [deleted],
   requires: { noReplies: ({ input, records }) => !records.Note.some((n) => n.replyTo === input.noteId) },

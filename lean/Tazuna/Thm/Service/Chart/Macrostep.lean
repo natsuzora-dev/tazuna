@@ -382,8 +382,8 @@ theorem drain_grows (n : Nat) (q : Queue) : Grows s (drain st fs n s q) := by
          exact (Grows.of_lines rfl).trans rfl (runWork_grows _ _ _)
          exact congrArg Fixed.now (runWork_fixed _ _ _))
       | (refine Grows.trans ?_ ?_ (ih _)
-         exact (Grows.of_lines rfl).trans rfl (processCommand_grows _ _ _ _)
-         exact congrArg Prod.snd (processCommand_clock _ _ _ _))
+         exact (Grows.of_lines rfl).trans rfl (processCommand_grows _ _ _ _ _)
+         exact congrArg Prod.snd (processCommand_clock _ _ _ _ _))
 
 theorem drain_keysDistinct (n : Nat) (q : Queue) (h : KeysDistinct s.records) :
     KeysDistinct (drain st fs n s q).records := by
@@ -410,7 +410,7 @@ theorem drain_keysDistinct (n : Nat) (q : Queue) (h : KeysDistinct s.records) :
       | exact ih _ (hr (runWork_fixed _ _ _))
       | exact ih _ (hr (keeps_sendEntered _))
       | exact ih _ (hr (settleScreens_fixed _ _))
-      | exact ih _ (processCommand_keysDistinct _ _ _ _ h)
+      | exact ih _ (processCommand_keysDistinct _ _ _ _ _ h)
 
 /-- An answer to a stale own-service command only ends the wait for it, unless it rejects the input (rejectedInput?). -/
 @[guarantee] theorem stale_command_answer_ignored (s : State) (q : Queue) (step : Nat) (c : Sent) (serial cause : Nat)

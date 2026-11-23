@@ -9,6 +9,7 @@ export const { command, event, contract, given, scenario } = service({
 export const itemAdded = event({ payload: { note: z.string(), qty: z.int() } });
 
 export const addItem = command({
+  callers: ["client"],
   input: { note: z.string(), qty: z.int().default(1) },
   emits: [itemAdded],
 }).decide(({ input }) => [emit(itemAdded, { note: input.note, qty: input.qty })]);

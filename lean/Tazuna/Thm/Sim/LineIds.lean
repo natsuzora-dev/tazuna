@@ -33,9 +33,9 @@ theorem keepsIds_arriveFrom (st : Service) (fs : Functions Id) (s : State) (send
   unfold arriveFrom
   dsimp only
   split
-  · exact keepsIds_send _ _ _ _
-  · exact keepsIds_call _ _ _ _
-  · exact keepsIds_subscribe _ _ _ _
+  · exact keepsIds_send _ _ _ _ _
+  · exact keepsIds_call _ _ _ _ _
+  · exact keepsIds_subscribe _ _ _ _ _
   · exact keepsIds_endSubscription _ _
   · split
     · exact keepsIds_answerIn _ _ _ _ _ _
@@ -76,8 +76,8 @@ abbrev idsRel : StateRel where
   checkStepOrder x := by unfold checkStepOrder; split <;> exact .of_lines (by simp)
   arriveFrom := keepsIds_arriveFrom
   arriveAll := keepsIds_arriveAll
-  requestOf type _ _ _ _ _ _ := by cases type <;> first
-    | exact keepsIds_send _ _ _ _ | exact keepsIds_call _ _ _ _ | exact keepsIds_subscribe _ _ _ _
+  requestOf type _ _ _ _ _ _ _ := by cases type <;> first
+    | exact keepsIds_send _ _ _ _ _ | exact keepsIds_call _ _ _ _ _ | exact keepsIds_subscribe _ _ _ _ _
 
 theorem keepsWorld_take (w : World) (own : String) (lines : List Scenario.Line) (i : Nat) (l : Scenario.Line) :
     KeepsWorld idsRel w (w.take fsOf own lines i l) := by

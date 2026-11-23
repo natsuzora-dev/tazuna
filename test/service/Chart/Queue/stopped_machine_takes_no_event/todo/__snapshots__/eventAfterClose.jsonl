@@ -1,4 +1,4 @@
 {"time":1792890000000,"dir":"in","type":"operation","id":"homeScreen.openPick#1","name":"homeScreen.openPick"}
-{"time":1792890000000,"dir":"in","type":"command","id":"dropTask#1","name":"dropTask","input":{}}
+{"time":1792890000000,"dir":"in","type":"command","id":"dropTask#1","name":"dropTask","input":{},"caller":{"service":"client"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"dropTask#1","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"taskDropped#1","name":"taskDropped","payload":{},"resultOf":"dropTask#1"}

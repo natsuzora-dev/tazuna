@@ -12,11 +12,13 @@ export const { command, machine, event, createEvent, contract, scenario } = serv
 export const armed = event({});
 export const added = createEvent({ entity: Task });
 
-export const arm = command({ emits: [armed] }).decide(() => [emit(armed, {})]);
+export const arm = command({ callers: ["client"], emits: [armed] }).decide(() => [emit(armed, {})]);
 
-export const add = command({ input: { id: Task.fields.id, text: Task.fields.text }, emits: [added] }).decide(
-  ({ input }) => [emit(added, { id: input.id, text: input.text })],
-);
+export const add = command({
+  callers: ["client", "tracker"],
+  input: { id: Task.fields.id, text: Task.fields.text },
+  emits: [added],
+}).decide(({ input }) => [emit(added, { id: input.id, text: input.text })]);
 
 export const first = machine({
   description: `Add task a at 10:00 once armed`,

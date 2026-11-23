@@ -15,10 +15,12 @@ export const { automation, command, event, updateEvent, contract, scenario } = s
 export const ticked = event({});
 export const counted = updateEvent({ entity: Counter, writes: ["count"] });
 
-export const tick = command({ emits: [ticked] }).decide(() => [emit(ticked, {})]);
+export const tick = command({ callers: ["client"], emits: [ticked] }).decide(() => [emit(ticked, {})]);
 
 const bump = () =>
-  command({ emits: [counted] }).decide(({ records }) => [emit(counted, { count: records.Counter.count + 1 })]);
+  command({ callers: ["client", "counter"], emits: [counted] }).decide(({ records }) => [
+    emit(counted, { count: records.Counter.count + 1 }),
+  ]);
 
 export const bumpA = bump();
 export const bumpB = bump();

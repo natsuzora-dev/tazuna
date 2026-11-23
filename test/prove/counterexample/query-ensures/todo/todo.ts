@@ -15,11 +15,12 @@ export const { command, query, createEvent, bounds } = service({
 
 export const taskAdded = createEvent({ entity: Task });
 
-export const addTask = command({ input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { id: input.taskId, done: false }),
-]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId, done: false })],
+);
 
 export const openCount = query({
+  callers: ["client"],
   output: { count: z.int() },
   ensures: { withinTasks: ({ output, records }) => output.count <= records.Task.size },
 }).resolve(({ records }) => ({ count: records.Task.size + 1 }));

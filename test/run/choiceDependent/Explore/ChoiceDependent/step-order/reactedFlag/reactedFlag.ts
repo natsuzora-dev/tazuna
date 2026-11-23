@@ -12,13 +12,15 @@ export const { automation, command, event, updateEvent, contract, scenario } = s
 export const taskAdded = event({ payload: { id: z.string() } });
 export const flagged = updateEvent({ entity: Flag, writes: ["by"] });
 
-export const addTasks = command({ input: { taskIds: bag(z.string()) }, emits: [taskAdded] }).decide(({ input }) => [
-  input.taskIds.map((id) => emit(taskAdded, { id })),
-]);
+export const addTasks = command({
+  callers: ["client"],
+  input: { taskIds: bag(z.string()) },
+  emits: [taskAdded],
+}).decide(({ input }) => [input.taskIds.map((id) => emit(taskAdded, { id }))]);
 
-export const set = command({ input: { by: z.string() }, emits: [flagged] }).decide(({ input }) => [
-  emit(flagged, { by: input.by }),
-]);
+export const set = command({ callers: ["client", "reactedFlag"], input: { by: z.string() }, emits: [flagged] }).decide(
+  ({ input }) => [emit(flagged, { by: input.by })],
+);
 
 export const setOnAdd = automation({ receives: { taskAdded }, commands: { set } }).send({
   input: ({ payload }) => ({ by: payload.id }),

@@ -5,7 +5,7 @@ export const addOne = scenario({
   description: "Add a task; no violation",
   given: { start: parseInstant("2026-10-25T09:00:00+09:00"), records: { Task: [] }, peers: [] },
   when: (w) => {
-    w.client.send(addTask, { taskId: "task-1" });
+    w.client.as("client").send(addTask, { taskId: "task-1" });
   },
   then: () => [],
 });

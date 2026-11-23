@@ -11,13 +11,17 @@ export const { automation, command, createEvent } = service({
 
 export const taskAdded = createEvent({ entity: Task });
 
-export const addTask = command({ input: { id: z.string(), title: z.string() }, emits: [taskAdded] }).decide(
-  ({ input }) => [emit(taskAdded, input)],
-);
+export const addTask = command({
+  callers: ["client"],
+  input: { id: z.string(), title: z.string() },
+  emits: [taskAdded],
+}).decide(({ input }) => [emit(taskAdded, input)]);
 
-export const addCopy = command({ input: { id: z.string(), title: z.string() }, emits: [taskAdded] }).decide(
-  ({ input }) => [emit(taskAdded, input)],
-);
+export const addCopy = command({
+  callers: ["client"],
+  input: { id: z.string(), title: z.string() },
+  emits: [taskAdded],
+}).decide(({ input }) => [emit(taskAdded, input)]);
 
 export const copyTask = automation({ receives: { taskAdded }, commands: JSON.parse("0") || { addTask, addCopy } }).send(
   {

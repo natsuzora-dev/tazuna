@@ -77,18 +77,18 @@ theorem Agrees.mapM {α β : Type} {f : α → StateT C Id β} {g : α → Id β
 structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : Prop where
   parse : ∀ a b, Agrees (fsI.parse a b) (fs.parse a b)
   unordered : ∀ a b, Agrees (fsI.unordered a b) (fs.unordered a b)
-  binding : ∀ a b c d e, Agrees (fsI.binding a b c d e) (fs.binding a b c d e)
-  requirement : ∀ a b c d e, Agrees (fsI.requirement a b c d e) (fs.requirement a b c d e)
+  binding : ∀ a b c d e g, Agrees (fsI.binding a b c d e g) (fs.binding a b c d e g)
+  requirement : ∀ a b c d e g, Agrees (fsI.requirement a b c d e g) (fs.requirement a b c d e g)
   inputRequirement : ∀ a b c, Agrees (fsI.inputRequirement a b c) (fs.inputRequirement a b c)
-  decide : ∀ a b c d, Agrees (fsI.decide a b c d) (fs.decide a b c d)
-  ensures : ∀ a b c d e, Agrees (fsI.ensures a b c d e) (fs.ensures a b c d e)
-  queryEnsures : ∀ a b c d, Agrees (fsI.queryEnsures a b c d) (fs.queryEnsures a b c d)
+  decide : ∀ a b c d e, Agrees (fsI.decide a b c d e) (fs.decide a b c d e)
+  ensures : ∀ a b c d e g, Agrees (fsI.ensures a b c d e g) (fs.ensures a b c d e g)
+  queryEnsures : ∀ a b c d e, Agrees (fsI.queryEnsures a b c d e) (fs.queryEnsures a b c d e)
   resultEnsures : ∀ a b c d e, Agrees (fsI.resultEnsures a b c d e) (fs.resultEnsures a b c d e)
   invariant : ∀ a b c, Agrees (fsI.invariant a b c) (fs.invariant a b c)
   responses : ∀ a b c, Agrees (fsI.responses a b c) (fs.responses a b c)
   serviceInvariant : ∀ a b, Agrees (fsI.serviceInvariant a b) (fs.serviceInvariant a b)
   chartInvariant : ∀ a b, Agrees (fsI.chartInvariant a b) (fs.chartInvariant a b)
-  resolve : ∀ a b c d, Agrees (fsI.resolve a b c d) (fs.resolve a b c d)
+  resolve : ∀ a b c d e, Agrees (fsI.resolve a b c d e) (fs.resolve a b c d e)
   automationBinding : ∀ a b c d e, Agrees (fsI.automationBinding a b c d e) (fs.automationBinding a b c d e)
   automationGuard : ∀ a b c d e, Agrees (fsI.automationGuard a b c d e) (fs.automationGuard a b c d e)
   react : ∀ a b c d e, Agrees (fsI.react a b c d e) (fs.react a b c d e)
@@ -161,6 +161,12 @@ theorem endWith_agrees {e : InstanceId → String → Processing → StateT C Id
     {e' : InstanceId → String → Processing → Id Processing} (he : ∀ c n r, Agrees (e c n r) (e' c n r))
     (c : InstanceId) (r : Processing) : Agrees (endWith e c r) (endWith e' c r) := by
   unfold endWith; refine withMachine_agrees (fun i r => ?_) r; agree [unlessHalted_agrees, he]
+
+theorem callerRejection_agrees (records : Records) (definition : Spec.Ref)
+    (callers : List Spec.CallerType) (caller : Caller) :
+    Agrees (callerRejection records definition callers caller : StateT C Id _)
+      (callerRejection records definition callers caller : Id _) := by
+  unfold callerRejection; agree [note_agrees]
 
 theorem sorted_agrees (schema : Schema) (v : Value) :
     Agrees (st.sorted schema v : StateT C Id Value) (st.sorted schema v : Id Value) := by
@@ -403,9 +409,9 @@ theorem runWork_agrees (s : State) (q : Queue) (step : Nat) (w : Work) :
     agree [firstFalse_agrees (fun _ => ?_), h.automationBinding, h.automationGuard, h.react, sorted_agrees, answerTo_agrees h, startWork_agrees h, receiveWork_agrees h, doneWork_agrees h,
       withMachine_agrees, applyCompletion_agrees h]
 
-theorem resolveChecked_agrees (s : State) (name : String) (raw : Value) :
-    Agrees (resolveChecked st fsI s name raw) (resolveChecked st fs s name raw) := by
-  unfold resolveChecked; agree [h.parse, parseSorted_agrees h, parseOutside_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resolve,
+theorem resolveChecked_agrees (s : State) (name : String) (raw : Value) (caller : Caller) :
+    Agrees (resolveChecked st fsI s name raw caller) (resolveChecked st fs s name raw caller) := by
+  unfold resolveChecked; agree [callerRejection_agrees, h.parse, parseSorted_agrees h, parseOutside_agrees h, firstFalse_agrees (fun _ => h.inputRequirement _ _ _), h.resolve,
     h.queryEnsures, sorted_agrees]
 
 theorem publishOne_agrees (s : State) (sub : Subscription) :
@@ -448,8 +454,8 @@ theorem startInstance_agrees (s : State) (c : Chart) : Agrees (startInstance st 
   unfold startInstance; agree [initialContextOf_agrees h]
 
 omit [MonadNote (StateT C Id)] in
-theorem commandEnsures_agrees (name : String) (input : Value) (before after : Records) (now : Time) :
-    Agrees (commandEnsures st fsI name input before after now) (commandEnsures st fs name input before after now) := by
+theorem commandEnsures_agrees (name : String) (input : Value) (caller : Caller) (before after : Records) (now : Time) :
+    Agrees (commandEnsures st fsI name input caller before after now) (commandEnsures st fs name input caller before after now) := by
   unfold commandEnsures; agree [h.ensures]
 
 omit [MonadNote (StateT C Id)] in
@@ -461,19 +467,19 @@ theorem integrityViolations_agrees (records : Records) (now : Time) (name : Stri
     exact Agrees.bind (h.invariant _ _ _) fun r => by rcases r with _ | _ | _ <;> exact Agrees.pure _
   · exact Agrees.bind (h.serviceInvariant _ _) fun r => by rcases r with _ | _ | _ <;> exact Agrees.pure _
 
-theorem requirementsRejection_agrees (records : Records) (now : Time) (name : String) (input : Value) :
-    Agrees (requirementsRejection st fsI records now name input) (requirementsRejection st fs records now name input) := by
+theorem requirementsRejection_agrees (records : Records) (now : Time) (name : String) (input : Value) (caller : Caller) :
+    Agrees (requirementsRejection st fsI records now name input caller) (requirementsRejection st fs records now name input caller) := by
   unfold requirementsRejection
-  agree [note_agrees, firstFalse_agrees (fun _ => h.binding _ _ _ _ _), firstFalse_agrees (fun _ => h.requirement _ _ _ _ _)]
+  agree [callerRejection_agrees, note_agrees, firstFalse_agrees (fun _ => h.binding _ _ _ _ _ _), firstFalse_agrees (fun _ => h.requirement _ _ _ _ _ _)]
 
-theorem evaluate_agrees (records : Records) (now : Time) (name : String) (raw : Value) :
-    Agrees (evaluate st fsI records now name raw) (evaluate st fs records now name raw) := by
+theorem evaluate_agrees (records : Records) (now : Time) (name : String) (raw : Value) (caller : Caller) :
+    Agrees (evaluate st fsI records now name raw caller) (evaluate st fs records now name raw caller) := by
   unfold evaluate
   agree [h.parse, parseSorted_agrees h, parseOutside_agrees h, requirementsRejection_agrees h, h.decide, commandEnsures_agrees h,
     integrityViolations_agrees h]
 
-theorem processCommand_agrees (s : State) (name : String) (raw : Value) (id : Option LineId) (step : Nat) :
-    Agrees (processCommand st fsI s name raw id step) (processCommand st fs s name raw id step) := by
+theorem processCommand_agrees (s : State) (name : String) (raw : Value) (caller : Caller) (id : Option LineId) (step : Nat) :
+    Agrees (processCommand st fsI s name raw caller id step) (processCommand st fs s name raw caller id step) := by
   unfold processCommand; agree [evaluate_agrees h, note_agrees]
 
 theorem settleScreen_agrees (name : InstanceId) (r : Processing) :
@@ -510,16 +516,16 @@ theorem message_agrees (s : State) (q : Queue) : Agrees (message st fsI s q) (me
   unfold message; agree [drain_agrees h, finish_agrees h]
 
 set_option maxHeartbeats 800000 in
-@[guarantee] theorem send_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
-    Agrees (send st fsI s name id raw) (send st fs s name id raw) := by
+@[guarantee] theorem send_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) :
+    Agrees (send st fsI s name id raw caller) (send st fs s name id raw caller) := by
   unfold send; agree [message_agrees h, processCommand_agrees h]
 
-@[guarantee] theorem call_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
-    Agrees (call st fsI s name id raw) (call st fs s name id raw) := by
+@[guarantee] theorem call_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) :
+    Agrees (call st fsI s name id raw caller) (call st fs s name id raw caller) := by
   unfold call; agree [resolveChecked_agrees h, message_agrees h]
 
-@[guarantee] theorem subscribe_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
-    Agrees (subscribe st fsI s name id raw) (subscribe st fs s name id raw) := by
+@[guarantee] theorem subscribe_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) (caller : Caller) :
+    Agrees (subscribe st fsI s name id raw caller) (subscribe st fs s name id raw caller) := by
   unfold subscribe; agree [message_agrees h]
 
 @[guarantee] theorem endSubscription_agrees (s : State) (id : LineId) :

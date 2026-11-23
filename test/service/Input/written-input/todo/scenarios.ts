@@ -7,6 +7,6 @@ export const writtenAsIs = scenario({
   description:
     "Add an item without a quantity; the in line holds the input as the client wrote it, and only todo's parse fills the default quantity",
   given: arranged,
-  when: (w) => ({ adding: w.client.send(addItem, { note: "milk" }) }),
+  when: (w) => ({ adding: w.client.as("client").send(addItem, { note: "milk" }) }),
   then: ({ adding }) => [emitted(adding, [eventOf(itemAdded, { note: "milk", qty: 1 })])],
 });

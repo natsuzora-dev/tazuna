@@ -20,6 +20,8 @@ deriving DecidableEq, Repr, Inhabited
 
 /-- The requirements that a command or query checks before processing, in declaration order. -/
 structure Requirements where
+  /-- The kinds of caller that may send the request; a screen's are empty, since nothing requests a screen. -/
+  callers : List Spec.CallerType := []
   /-- The input ref fields, each with the entity that it points to. -/
   refs : List (String × Spec.Ref) := []
   binds : List String := []
@@ -113,8 +115,9 @@ def requirementsOf (j : Spec.Structure) (service : String) : List (String × Req
     if d.service != service then none else
     match d.body with
     | .command c =>
-      some (d.name, { refs := c.references.map fun r => (r.field, r.entity), binds := c.binds, requires := c.requires })
-    | .query q => some (d.name, { requires := q.requires })
+      some (d.name, { callers := c.callers, refs := c.references.map fun r => (r.field, r.entity), binds := c.binds,
+                      requires := c.requires })
+    | .query q => some (d.name, { callers := q.callers, requires := q.requires })
     | .screen c => some (d.name, { requires := c.requires })
     | _ => none
 

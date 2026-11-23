@@ -29,6 +29,7 @@ export const pinged = event({});
 export const noted = event({});
 
 export const addTask = command({
+  callers: ["client", "calendar"],
   input: { taskId: Task.fields.id, title: Task.fields.title },
   emits: [taskAddedRecorded, taskAdded],
 }).decide(({ input }) => [
@@ -37,6 +38,7 @@ export const addTask = command({
 ]);
 
 export const addTasks = command({
+  callers: ["client"],
   input: { firstId: Task.fields.id, secondId: Task.fields.id },
   emits: [taskAddedRecorded, taskAdded],
 }).decide(({ input }) => [
@@ -46,17 +48,20 @@ export const addTasks = command({
   emit(taskAdded, { taskId: input.secondId }),
 ]);
 
-export const markSeen = command({ input: { taskId: ref(Task) }, emits: [taskSeenRecorded] }).decide(({ input }) => [
-  emit(taskSeenRecorded, { id: input.taskId, seen: true }),
-]);
+export const markSeen = command({
+  callers: ["client", "notifier"],
+  input: { taskId: ref(Task) },
+  emits: [taskSeenRecorded],
+}).decide(({ input }) => [emit(taskSeenRecorded, { id: input.taskId, seen: true })]);
 
-export const ping = command({ emits: [pinged] }).decide(() => [emit(pinged, {})]);
+export const ping = command({ callers: ["client", "notifier"], emits: [pinged] }).decide(() => [emit(pinged, {})]);
 
-export const note = command({ emits: [noted] }).decide(() => [emit(noted, {})]);
+export const note = command({ callers: ["client", "todo"], emits: [noted] }).decide(() => [emit(noted, {})]);
 
 export const noteAdded = automation({ receives: { taskAdded }, commands: { note } }).send({});
 
 export const tasks = query({
+  callers: ["client"],
   output: { tasks: bag(z.object({ taskId: ref(Task), seen: Task.fields.seen })) },
 }).resolve(({ records }) => ({ tasks: records.Task.map((t) => ({ taskId: t.id, seen: t.seen })) }));
 

@@ -12,6 +12,7 @@ export const { command, machine, createEvent, contract, scenario } = service({
 export const taskAdded = createEvent({ entity: Task });
 
 export const addTasks = command({
+  callers: ["client"],
   input: { taskIds: z.array(Task.fields.id) },
   emits: [taskAdded],
 }).decide(({ input }) => input.taskIds.map((id) => emit(taskAdded, { id })));

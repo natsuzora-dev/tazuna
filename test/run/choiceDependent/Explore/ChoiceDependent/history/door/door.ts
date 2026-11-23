@@ -11,13 +11,9 @@ export const used = updateEvent({ entity: Door, writes: ["used"] });
 export const next = event({});
 export const stop = event({});
 
-export const go = command({
-  input: { ks: bag(z.string()) },
-  emits: [used, next, stop],
-}).decide(({ input }) => [
-  emit(used, { used: true }),
-  input.ks.map((k) => (k === "next" ? emit(next, {}) : emit(stop, {}))),
-]);
+export const go = command({ callers: ["client"], input: { ks: bag(z.string()) }, emits: [used, next, stop] }).decide(
+  ({ input }) => [emit(used, { used: true }), input.ks.map((k) => (k === "next" ? emit(next, {}) : emit(stop, {})))],
+);
 
 export const door = machine({
   description: "working.a -next-> working.b; stop leaves working for idle; no history state",

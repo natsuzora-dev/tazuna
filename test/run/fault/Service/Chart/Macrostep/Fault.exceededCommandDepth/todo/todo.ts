@@ -11,9 +11,9 @@ export const { command, machine, updateEvent, scenario } = service({
 
 export const counted = updateEvent({ entity: Counter, writes: ["value"] });
 
-export const count = command({
-  emits: [counted],
-}).decide(({ records }) => [emit(counted, { value: records.Counter.value + 1 })]);
+export const count = command({ callers: ["client", "todo"], emits: [counted] }).decide(({ records }) => [
+  emit(counted, { value: records.Counter.value + 1 }),
+]);
 
 export const counter = machine({
   description: "Count on every count, going back and forth between two states",

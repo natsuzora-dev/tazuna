@@ -12,14 +12,17 @@ export const { command, machine, event, updateEvent, contract, scenario } = serv
 export const taskAdded = event({ payload: { id: z.string() } });
 export const flagged = updateEvent({ entity: Flag, writes: ["isOn"] });
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
-export const raise = command({ emits: [flagged] }).decide(() => [emit(flagged, { isOn: true })]);
+export const raise = command({ callers: ["client", "flags"], emits: [flagged] }).decide(() => [
+  emit(flagged, { isOn: true }),
+]);
 
-export const lower = command({ emits: [flagged] }).decide(() => [emit(flagged, { isOn: false })]);
+export const lower = command({ callers: ["client", "flags"], emits: [flagged] }).decide(() => [
+  emit(flagged, { isOn: false }),
+]);
 
 export const flagger = machine({
   description: "Raise and lower the flag when a task is added",

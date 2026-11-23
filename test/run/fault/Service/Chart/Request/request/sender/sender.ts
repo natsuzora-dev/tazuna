@@ -6,6 +6,7 @@ export const { command, machine, event, scenario } = service({ name: "sender", d
 export const greeted = event({ payload: { name: z.string() } });
 
 export const greet = command({
+  callers: ["client", "sender"],
   input: { name: z.string().min(1) },
   emits: [greeted],
 }).decide(({ input }) => [emit(greeted, { name: input.name })]);

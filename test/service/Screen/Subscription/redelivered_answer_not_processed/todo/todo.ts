@@ -11,13 +11,14 @@ export const { command, query, createEvent, contract } = service({
 
 export const taskAdded = createEvent({ entity: Task });
 
-export const addTask = command({
-  input: { taskId: Task.fields.id },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
-export const note = command({ input: { count: z.int() }, emits: [] }).decide(() => []);
+export const note = command({ callers: ["client", "screens"], input: { count: z.int() }, emits: [] }).decide(() => []);
 
-export const taskCount = query({ output: { count: z.int() } }).resolve(({ records }) => ({
-  count: records.Task.size,
-}));
+export const taskCount = query({ callers: ["client", "screens"], output: { count: z.int() } }).resolve(
+  ({ records }) => ({
+    count: records.Task.size,
+  }),
+);

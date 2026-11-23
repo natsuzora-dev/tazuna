@@ -11,11 +11,10 @@ export const { command, query, createEvent, contract, given, scenario } = servic
 
 export const taskAdded = createEvent({ entity: Task });
 
-export const addTask = command({
-  input: { taskId: Task.fields.id },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
-export const taskCount = query({ output: { count: z.int() } }).resolve(({ records }) => ({
+export const taskCount = query({ callers: ["client"], output: { count: z.int() } }).resolve(({ records }) => ({
   count: records.Task.size,
 }));

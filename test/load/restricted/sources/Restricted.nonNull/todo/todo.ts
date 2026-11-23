@@ -5,8 +5,8 @@ export const { command, event, contract } = service({ name: "todo", description:
 
 export const taskAdded = event({ payload: { title: z.string() } });
 
-export const addTask = command({ input: { title: z.string() }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { title: input.title }),
-]);
+export const addTask = command({ callers: ["client"], input: { title: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { title: input.title })],
+);
 
 export const todo = contract({ addTask });

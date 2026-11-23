@@ -12,6 +12,7 @@ export const bookingConfirmed = event({ payload: { bookingId: z.string() } });
 export const slotFreed = event({ payload: { slot: z.string() } });
 
 export const book = command({
+  callers: ["todo"],
   input: { bookingId: z.string(), taskId: z.string() },
   output: { slot: z.string() },
   emits: [bookingConfirmed],

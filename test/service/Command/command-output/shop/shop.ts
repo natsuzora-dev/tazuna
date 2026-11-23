@@ -7,10 +7,11 @@ export const orderPlaced = event({ payload: { amount: z.int().positive() } });
 export const orderCancelled = event({});
 
 export const placeOrder = command({
+  callers: ["client"],
   input: { amount: z.int().positive() },
   emits: [orderPlaced],
 }).decide(({ input }) => [emit(orderPlaced, { amount: input.amount })]);
 
-export const cancelOrder = command({
-  emits: [orderCancelled],
-}).decide(() => [emit(orderCancelled, {})]);
+export const cancelOrder = command({ callers: ["client"], emits: [orderCancelled] }).decide(() => [
+  emit(orderCancelled, {}),
+]);

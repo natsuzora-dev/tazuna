@@ -1,4 +1,4 @@
-{"time":1792893600000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{}}
+{"time":1792893600000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{},"caller":{"service":"client"}}
 {"time":1792893600000,"dir":"out","type":"answer","id":"answer#1","to":"arm#1","answer":{"result":"accepted"}}
 {"time":1792893600000,"dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
 {"time":1792893600000,"dir":"out","type":"event","id":"posted#1","name":"posted","payload":{"id":"threads/Note-1","text":"first","replyTo":null},"created":["threads/Note-1"]}

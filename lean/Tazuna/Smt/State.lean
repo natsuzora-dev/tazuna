@@ -391,6 +391,33 @@ def objectOf (svc : Service) (schema : Schema) (pre : String) : List (String × 
 def inputOf (svc : Service) (name : String) (pre : String := "in") : List (String × Term) × Facts :=
   objectOf svc (.input (svc.ref name)) pre
 
+/--
+A caller of a request as JSON holds it, each field a variable named after `pre`: `entity` and `key`, or `service`, the
+other fields undefined, as the facts state.
+-/
+def callerVars (pre : String := "caller") : List (String × Term) × Facts :=
+  let fields := ["entity", "key", "service"].map fun f => (f, valVar s!"{pre}.{f}")
+  let f (n : String) := (fields.lookup n).getD undefT
+  (fields, { vars := fields.map fun (n, _) => (s!"{pre}.{n}", .val),
+             asserts := [.or (conj [.isStr (f "entity"), .isStr (f "key"), .isUndef (f "service")])
+                           (conj [.isUndef (f "entity"), .isUndef (f "key"), .isStr (f "service")])] })
+
+/-- The caller `c` as JSON holds it, a literal. -/
+def callerTerms (c : Caller) : List (String × Term) :=
+  match c with
+  | .entity e k => [("entity", .mkStr (strLit e)), ("key", .mkStr (strLit k))]
+  | .service s => [("service", .mkStr (strLit s))]
+
+/--
+That a request to a target that takes `callers` from the caller `caller` passes callerRejection on the records `pre`: the
+target lists the caller's kind, and an entity caller's record is live.
+-/
+def admitted (callers : List Spec.CallerType) (pre : SRecords) (caller : List (String × Term)) : Term :=
+  let f (n : String) := (caller.lookup n).getD undefT
+  disj (callers.map fun
+    | .entity e => conj [.eq (f "entity") (.mkStr (strLit e)), .isStr (f "key"), keyIn (.strOf (f "key")) (pre.slotsOf e)]
+    | .service s => .eq (f "service") (.mkStr (strLit s)))
+
 /-- A binding or condition that a request checks in order: its name, the term that holds when its evaluation throws, and its value's term that holds when it passes. -/
 structure Check where
   name : String
@@ -402,6 +429,8 @@ structure Step where
   facts : Facts
   /-- The input fields, as JSON holds them. -/
   input : List (String × Term)
+  /-- The caller's fields, as JSON holds them. -/
+  caller : List (String × Term)
   now : Term
   /-- That the command accepts: no rejection and no throw before the integrity check. -/
   accepted : Term
@@ -414,6 +443,8 @@ structure Step where
   gap : Term
   /-- The binds values, from the records before the step, as the command's ensures reads them. -/
   bound : SVal
+  /-- That the command takes the caller (callerRejection), which it checks before the ref fields. -/
+  admitted : Term
   /-- That every ref field of the input names a record, which the command checks before its binds. -/
   refs : Term
   /-- The binds, a value that is not null passing, then the requires, each in the order that the command checks them. -/
@@ -428,19 +459,21 @@ def emitPaths : SVal → List Term
   | _ => [tt]
 
 /--
-The step of command `name` from `pre` with the input `input` at the time `now`, as stepOf builds it; the variables that
-name its terms start with `names`, so that two steps can sit in one query.
+The step of command `name` from `pre` with the input `input` from `caller` at the time `now`, as stepOf builds it; the
+variables that name its terms start with `names`, so that two steps can sit in one query.
 -/
 def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String × List Term)) (name : String)
-    (input : List (String × Term)) (now : Term) (names : String) : Except String Step := do
+    (input caller : List (String × Term)) (now : Term) (names : String) : Except String Step := do
   let some rq := svc.requirements.lookup name | throw s!"no requirements of {name}"
   let facts : Facts := {}
   let args (bound : Option SVal) : Arg → Option SVal
     | .input => some (.json input)
+    | .caller => some (.json caller)
     | .now => some (.scalar (.mkInt now))
     | .bound => bound
     | _ => none
   let env : SEnv := { args := args none, records := pre }
+  let admitted := admitted rq.callers pre caller
   let refs := rq.refs.filterMap fun (field, target) =>
     if target.service == svc.service && (pre.keyed.lookup target.name).isSome then
       let v := (input.lookup field).getD undefT
@@ -469,10 +502,10 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let (stepped, defs) := applied.run.run []
   let stepped ← stepped
   let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty), asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t }
-  let accepted := conj (refs ++ bindTerms.map (held ·.2) ++ requireChecks.map held ++
+  let accepted := conj (admitted :: refs ++ bindTerms.map (held ·.2) ++ requireChecks.map held ++
     [.not decideErr, .not (stepped.records.duplicated svc)])
-  pure { facts := facts ++ named, input, now, accepted, post := stepped.records, used := stepped.used,
-         beyond := stepped.beyond, gap := .or stepped.gap (stepped.records.outsideSchema svc), bound,
+  pure { facts := facts ++ named, input, caller, now, accepted, post := stepped.records, used := stepped.used,
+         beyond := stepped.beyond, gap := .or stepped.gap (stepped.records.outsideSchema svc), bound, admitted,
          refs := conj refs, binds := bindTerms.map (·.2), requires := requireChecks,
          paths := items.foldl (fun acc item => acc.flatMap fun p => (emitPaths item).map (.and p)) [tt] }
 
@@ -484,15 +517,17 @@ and verify's replay keeps the later time), which no theorem states yet.
 def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used : List (String × List Term))
     (name : String) : Except String Step := do
   let (input, inputFacts) := inputOf svc name
+  let (caller, callerFacts) := callerVars
   let now := Term.var "now" .int
   let nowFacts : Facts :=
     { vars := [("now", .int)], asserts := [Term.le (intLit (-maxInstant)) now, .le now (intLit maxInstant), .le clock now] }
-  let step ← stepWith svc p pre used name input now ""
-  pure { step with facts := inputFacts ++ nowFacts ++ step.facts }
+  let step ← stepWith svc p pre used name input caller now ""
+  pure { step with facts := inputFacts ++ callerFacts ++ nowFacts ++ step.facts }
 
 /-- The term that holds when the ensures `c` of a step's command fails, or throws, after the step. -/
 def Step.ensuresFails (step : Step) (c : Condition) : Except String Term := do
-  let env : SEnv := { args := (fun | .input => some (.json step.input) | .bound => some step.bound | _ => none),
+  let env : SEnv := { args := (fun | .input => some (.json step.input) | .caller => some (.json step.caller)
+                                    | .bound => some step.bound | _ => none),
                       records := step.post }
   let (v, e) ← seval env [] c.body
   pure (Term.or e (.not v.truthy))
@@ -512,6 +547,10 @@ fits its schema, which the semantics checks before the ensures read it.
 structure Answered where
   facts : Facts
   input : List (String × Term)
+  /-- The caller's fields, as JSON holds them. -/
+  caller : List (String × Term)
+  /-- That the query takes the caller (callerRejection), which it checks before its requires. -/
+  admitted : Term
   answered : Term
   output : SVal
   /-- The requires, in the order that the query checks them. -/
@@ -520,21 +559,26 @@ structure Answered where
 def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name : String) (names : String := "in") :
     Except String Answered := do
   let (input, inputFacts) := inputOf svc name names
+  let (caller, callerFacts) := callerVars s!"{names}.caller"
+  let callers := ((svc.requirements.lookup name).map (·.callers)).getD []
   let requires := ((p.inputRequirement.find? (·.definition == svc.ref name)).map (·.conditions)).getD []
   let requireChecks ← requires.mapM fun c => do
     let (v, e) ← seval { args := (fun | .input => some (.json input) | _ => none) } [] c.body
     pure ({ name := c.name, throws := e, passes := v.truthy } : Check)
   let some resolve := p.resolve.find? (·.definition == svc.ref name) | throw s!"no resolve of {name}"
-  let env : SEnv := { args := (fun | .input => some (.json input) | .now => some (.scalar (.mkInt clock)) | _ => none),
+  let env : SEnv := { args := (fun | .input => some (.json input) | .caller => some (.json caller)
+                                    | .now => some (.scalar (.mkInt clock)) | _ => none),
                       records := pre }
   let (output, err) ← seval env [] resolve.body
-  pure { facts := { inputFacts with exact := false }, input,
-         answered := conj (requireChecks.map (fun c => .and (.not c.throws) c.passes) ++ [.not err]), output,
+  let admitted := admitted callers pre caller
+  pure { facts := { inputFacts ++ callerFacts with exact := false }, input, caller, admitted,
+         answered := conj (admitted :: requireChecks.map (fun c => .and (.not c.throws) c.passes) ++ [.not err]), output,
          requires := requireChecks }
 
 /-- The term that holds when the ensures `c` of a query fails, or throws, on its answer. -/
 def Answered.ensuresFails (a : Answered) (pre : SRecords) (c : Condition) : Except String Term := do
-  let env : SEnv := { args := (fun | .input => some (.json a.input) | .output => some a.output | _ => none),
+  let env : SEnv := { args := (fun | .input => some (.json a.input) | .caller => some (.json a.caller)
+                                    | .output => some a.output | _ => none),
                       records := pre }
   let (v, e) ← seval env [] c.body
   pure (Term.or e (.not v.truthy))

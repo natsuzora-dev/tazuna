@@ -1,8 +1,8 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{}}
+{"time":1792886400000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"arm#1","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
 {"time":1792890000000,"dir":"out","type":"event","id":"rang#1","name":"rang","payload":{"by":"first"}}
-{"time":1792890000000,"dir":"out","type":"command","id":"pager.page#1","name":"pager.page","input":{"by":"first"}}
+{"time":1792890000000,"dir":"out","type":"command","id":"pager.page#1","name":"pager.page","input":{"by":"first"},"caller":{"service":"bells"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"rang#2","name":"rang","payload":{"by":"second"}}
-{"time":1792890000000,"dir":"out","type":"command","id":"pager.page#2","name":"pager.page","input":{"by":"second"}}
+{"time":1792890000000,"dir":"out","type":"command","id":"pager.page#2","name":"pager.page","input":{"by":"second"},"caller":{"service":"bells"}}
 {"time":1792891800000,"dir":"in","type":"time","id":"time#1"}

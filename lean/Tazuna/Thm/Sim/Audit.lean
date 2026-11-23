@@ -287,8 +287,8 @@ termination_by arrivals.length
 decreasing_by simp only [List.length_eraseIdx_of_lt (Fin.isLt _)]; simp
 
 theorem requestOf_agrees (q : String) (type : Scenario.RequestType) (target : Spec.Ref) (id : Option LineId)
-    (v : Value) (st : Service) (s : State) :
-    Agrees (requestOf type target id v st (fsOfI q) s) (requestOf type target id v st (fsOf q) s) := by
+    (v : Value) (caller : Caller) (st : Service) (s : State) :
+    Agrees (requestOf type target id v caller st (fsOfI q) s) (requestOf type target id v caller st (fsOf q) s) := by
   unfold requestOf; agreeE [send_agrees (h q), call_agrees (h q), subscribe_agrees (h q)]
 
 theorem fireTo_agrees (q : String) (time : Time) (st : Service) (s : State) :
@@ -318,10 +318,11 @@ theorem deliver_agrees (w : World) (o : Scenario.Origin) (receiver : String) (ks
   · exact act_agrees hact _ _ _ (fun _ _ => by unfold arriveAll; exact arriveAll_go_agrees h _ _ _ _ _)
 
 theorem clientRequest_agrees (w : World) (i : Nat) (type : Scenario.RequestType) (target : Spec.Ref)
-    (input : Template) (sameIdAs : Option Nat) :
-    Agrees (w.clientRequest fsOfI i type target input sameIdAs) (w.clientRequest fsOf i type target input sameIdAs) := by
+    (input : Template) (sameIdAs : Option Nat) (caller : Option Caller) :
+    Agrees (w.clientRequest fsOfI i type target input sameIdAs caller)
+      (w.clientRequest fsOf i type target input sameIdAs caller) := by
   unfold World.clientRequest World.resolving
-  agreeE [fill_agrees h, act_agrees hact, requestOf_agrees h]
+  agreeE [expectFound_agrees, fill_agrees h, act_agrees hact, requestOf_agrees h]
 
 theorem deliverCarried_agrees (w : World) (i : Nat) (ks : List Nat) :
     Agrees (w.deliverCarried fsOfI i ks) (w.deliverCarried fsOf i ks) := by

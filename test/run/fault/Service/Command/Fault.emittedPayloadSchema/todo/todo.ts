@@ -11,9 +11,8 @@ export const { command, createEvent, contract, scenario } = service({
 
 export const taskAdded = createEvent({ entity: Task });
 
-export const addTask = command({
-  input: { taskId: Task.fields.id },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: "Untitled" })]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId, title: "Untitled" })],
+);
 
 export const todo = contract({ addTask });

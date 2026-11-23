@@ -4,6 +4,7 @@ import { z } from "zod";
 export const { query, contract } = externalService({ name: "todo", description: "Keep tasks" });
 
 export const tasks = query({
+  callers: ["screens"],
   output: { taskIds: z.array(z.string()) },
   rejects: ["requires"],
   requires: { isListed: () => false },

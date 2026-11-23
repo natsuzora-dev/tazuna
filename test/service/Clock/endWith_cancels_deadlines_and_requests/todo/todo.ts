@@ -12,10 +12,10 @@ export const { command, machine, event, createEvent, contract, scenario } = serv
 export const taskAdded = createEvent({ entity: Task });
 export const reminded = event({ payload: { taskId: z.string() } });
 
-export const addTask = command({ input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { id: input.taskId }),
-]);
+export const addTask = command({ callers: ["client"], input: { taskId: Task.fields.id }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
-export const remind = command({ input: { taskId: ref(Task) }, emits: [reminded] }).decide(({ input }) => [
-  emit(reminded, { taskId: input.taskId }),
-]);
+export const remind = command({ callers: ["client", "todo"], input: { taskId: ref(Task) }, emits: [reminded] }).decide(
+  ({ input }) => [emit(reminded, { taskId: input.taskId })],
+);

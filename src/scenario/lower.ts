@@ -2,6 +2,7 @@ import type { z } from "zod";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import { collectionOf } from "../data/marks.ts";
 import type {
+  Caller,
   Expectation as DataExpectation,
   Line as DataLine,
   Fact,
@@ -278,6 +279,7 @@ export function lower(
   const processing = (line: DataLine) => handle<ProcessingLine>(processingLine(line));
   const self = (index: number): Fact => ({ type: "line", index });
   const clientRequest = (
+    caller: Caller,
     kind: "command" | "query" | "subscribe",
     target: unknown,
     input: unknown,
@@ -289,6 +291,7 @@ export function lower(
       target: named(target, at()),
       input: template(input),
       ...(sameIdAs === undefined ? {} : { sameIdAs }),
+      caller,
     });
     const index = handle[lineIndex];
     return { ...handle, target, subscribes: kind === "subscribe", output: outputOf(self(index), target) };
@@ -360,19 +363,26 @@ export function lower(
   const w = {
     startup: caused({ type: "startup" }),
     client: {
-      send: <C extends AnyCommand>(command: C, input: unknown, options?: { readonly sameIdAs?: Line }) =>
-        handle<ClientRequestLine<C>>(
-          clientRequest(
-            "command",
-            command,
-            input,
-            options?.sameIdAs === undefined ? undefined : indexOf(options.sameIdAs),
-          ),
-        ),
-      call: <Q extends AnyQuery>(query: Q, input: unknown) =>
-        handle<ClientRequestLine<Q>>(clientRequest("query", query, input)),
-      subscribe: <Q extends AnyQuery>(query: Q, input: unknown) =>
-        handle<ClientSubscribeLine<Q>>(clientRequest("subscribe", query, input)),
+      as: (who: unknown, key?: string) => {
+        const caller: Caller =
+          typeof who === "string" ? { service: who } : { entity: named(who, at()).name, key: key ?? "" };
+        return {
+          send: <C extends AnyCommand>(command: C, input: unknown, options?: { readonly sameIdAs?: Line }) =>
+            handle<ClientRequestLine<C>>(
+              clientRequest(
+                caller,
+                "command",
+                command,
+                input,
+                options?.sameIdAs === undefined ? undefined : indexOf(options.sameIdAs),
+              ),
+            ),
+          call: <Q extends AnyQuery>(query: Q, input: unknown) =>
+            handle<ClientRequestLine<Q>>(clientRequest(caller, "query", query, input)),
+          subscribe: <Q extends AnyQuery>(query: Q, input: unknown) =>
+            handle<ClientSubscribeLine<Q>>(clientRequest(caller, "subscribe", query, input)),
+        };
+      },
       unsubscribe: (subscription: Line) => processing({ type: "unsubscribe", subscription: indexOf(subscription) }),
       resend: <L extends ClientRequestLine | ClientSubscribeLine>(line: L) => {
         const placed = processingLine({ type: "resend", line: indexOf(line) });

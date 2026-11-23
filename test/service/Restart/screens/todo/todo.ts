@@ -3,4 +3,8 @@ import { z } from "zod";
 
 export const { query, contract } = service({ name: "todo", description: "Keep tasks" });
 
-export const tasks = query({ output: { taskIds: z.array(z.string()) } }).resolve(() => ({ taskIds: [] }));
+export const tasks = query({ callers: ["client", "screens"], output: { taskIds: z.array(z.string()) } }).resolve(
+  () => ({
+    taskIds: [],
+  }),
+);

@@ -1,4 +1,4 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"go#1","name":"go","input":{"ks":["1","2"]}}
+{"time":1792886400000,"dir":"in","type":"command","id":"go#1","name":"go","input":{"ks":["1","2"]},"caller":{"service":"client"}}
 {"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"go#1","answer":{"result":"accepted"}}
 {"time":1792886400000,"dir":"out","type":"event","id":"went#1","name":"went","payload":{"went":true},"resultOf":"go#1"}
 {"time":1792886400000,"dir":"out","type":"event","id":"e1#1","name":"e1","payload":{},"resultOf":"go#1","after":["went#1"]}

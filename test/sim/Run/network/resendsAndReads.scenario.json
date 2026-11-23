@@ -36,6 +36,9 @@
           "title": "Buy milk"
         },
         "holes": []
+      },
+      "caller": {
+        "service": "client"
       }
     },
     {
@@ -79,6 +82,9 @@
       "input": {
         "value": {},
         "holes": []
+      },
+      "caller": {
+        "service": "client"
       }
     },
     {
@@ -94,6 +100,9 @@
           "title": "Buy bread"
         },
         "holes": []
+      },
+      "caller": {
+        "service": "client"
       }
     },
     {
@@ -127,6 +136,9 @@
             }
           }
         ]
+      },
+      "caller": {
+        "service": "client"
       }
     },
     {

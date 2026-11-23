@@ -15,11 +15,12 @@ export const taskAdded = createEvent({ entity: Task });
 export const statsChanged = updateEvent({ entity: Stats, writes: ["added"] });
 
 export const addTask = command({
+  callers: ["client"],
   input: { taskId: Task.fields.id, due: Task.fields.due },
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, due: input.due })]);
 
-export const countAdded = command({ emits: [statsChanged] }).decide(({ records }) => [
+export const countAdded = command({ callers: ["client", "todo"], emits: [statsChanged] }).decide(({ records }) => [
   emit(statsChanged, { added: records.Stats.added + 1 }),
 ]);
 

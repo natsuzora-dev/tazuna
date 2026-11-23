@@ -12,14 +12,17 @@ export const { command, query, machine, event, updateEvent, contract, scenario }
 export const taskAdded = event({ payload: { id: z.string() } });
 export const flagged = updateEvent({ entity: Flag, writes: ["isOn"] });
 
-export const addTask = command({
-  input: { taskId: z.string() },
-  emits: [taskAdded],
-}).decide(({ input }) => [emit(taskAdded, { id: input.taskId })]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { id: input.taskId })],
+);
 
-export const raise = command({ emits: [flagged] }).decide(() => [emit(flagged, { isOn: true })]);
+export const raise = command({ callers: ["client", "flags"], emits: [flagged] }).decide(() => [
+  emit(flagged, { isOn: true }),
+]);
 
-export const lower = command({ emits: [flagged] }).decide(() => [emit(flagged, { isOn: false })]);
+export const lower = command({ callers: ["client", "flags"], emits: [flagged] }).decide(() => [
+  emit(flagged, { isOn: false }),
+]);
 
 export const flagger = machine({
   description: "Raise and lower the flag when a task is added",
@@ -39,7 +42,7 @@ export const flagger = machine({
   },
 });
 
-export const flagText = query({ output: { text: z.string().min(5) } }).resolve(({ records }) => ({
+export const flagText = query({ callers: ["client"], output: { text: z.string().min(5) } }).resolve(({ records }) => ({
   text: records.Flag.isOn ? "on" : "off",
 }));
 

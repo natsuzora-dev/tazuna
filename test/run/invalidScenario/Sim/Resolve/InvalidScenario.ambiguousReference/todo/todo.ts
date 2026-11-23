@@ -9,9 +9,9 @@ export const { automation, command, event, contract, scenario } = service({
 
 export const taskAdded = event({ payload: { taskId: z.string() } });
 
-export const addTask = command({ input: { taskId: z.string() }, emits: [taskAdded] }).decide(({ input }) => [
-  emit(taskAdded, { taskId: input.taskId }),
-]);
+export const addTask = command({ callers: ["client"], input: { taskId: z.string() }, emits: [taskAdded] }).decide(
+  ({ input }) => [emit(taskAdded, { taskId: input.taskId })],
+);
 
 export const mailOwner = automation({
   receives: { taskAdded },
