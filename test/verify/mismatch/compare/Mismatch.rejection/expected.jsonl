@@ -1,1 +1,1 @@
-{"kind":"Mismatch.rejection","definition":null,"data":{"subject":{"type":"answer","to":"completeTask#1"},"snapshot":"not-found","trace":"requires"},"location":{"file":"traces/todo/answersWrongResults.jsonl","line":7},"scenario":{"service":"todo","name":"answersWrongResults"}}
+{"kind":"Mismatch.rejection","definition":null,"data":{"subject":{"type":"answer","to":"completeTask#1"},"snapshot":"not-found","trace":"requires"},"location":{"file":"traces/todo/answersWrongResults.jsonl","line":7}}

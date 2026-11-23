@@ -16,18 +16,17 @@ export function entriesOf(folder: string): Entry[] {
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
-/** The subfolder `service` of the trace folder, or the snapshot folder of `service`. */
+/** The snapshot folder of `service`. */
 export interface Folder {
   readonly service: string;
   readonly entries: readonly Entry[];
 }
 
-export type TraceEntry = { readonly kind: "traceEntry"; readonly service?: string; readonly entry: string };
 export type SnapshotEntry = { readonly kind: "snapshotEntry"; readonly service: string; readonly entry: string };
 export type ScenarioAt = { readonly kind: "scenario"; readonly scenario: DefinitionRef };
 
-/** An entry of the trace folder or of its subfolder `service`, an entry of the snapshot folder of `service`, or a scenario. */
-export type At = TraceEntry | SnapshotEntry | ScenarioAt;
+/** An entry of the snapshot folder of `service`, or a scenario. */
+export type At = SnapshotEntry | ScenarioAt;
 
 export interface PairingViolation<A extends At = At> {
   readonly at: A;

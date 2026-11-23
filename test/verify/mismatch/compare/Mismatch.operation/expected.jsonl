@@ -1,1 +1,0 @@
-{"kind":"Mismatch.operation","definition":null,"data":{"subject":{"type":"operation","name":"taskScreen.open","id":"taskScreen.open#1"},"snapshot":{"taskId":"task-1"},"trace":{"taskId":"task-2"}},"location":{"file":"traces/todo/addOneOperated.jsonl","line":4},"scenario":{"service":"todo","name":"addOneOperated"}}

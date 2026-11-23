@@ -84,7 +84,6 @@ export const guarantees = [
   "moves_complete",
   "moves_enabled",
   "moving_line_keeps_others",
-  "no_violation_iff",
   "nonmodal_child_lets_parent",
   "only_clock_moves_time",
   "operate_agrees",

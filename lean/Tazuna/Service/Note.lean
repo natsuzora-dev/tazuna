@@ -60,7 +60,7 @@ inductive Note where
   /-- The start of the checks and subscription answers after message `message` (afterMessage), which no step runs. -/
   | afterMessageBegins (message : Nat)
   | afterMessageEnds
-  /-- The run reached `part`, which `test --coverage` then does not report. -/
+  /-- The run reached `part`, which `verify --coverage` then does not report. -/
   | reached (part : Uncovered)
   /--
   A tazuna bug: the run reached a state that the semantics never reaches for a spec that its types accept, and goes on

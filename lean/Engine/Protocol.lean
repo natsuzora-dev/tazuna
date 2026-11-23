@@ -22,13 +22,6 @@ namespace Tazuna.Engine
 open Tazuna.Data Tazuna.Service
 
 
-/-- A service of a `pair` request, and whether it is external. -/
-structure PairedService where
-  name : String
-  external : Bool
-
-derive_wire PairedService
-
 /-- A record that an `evaluate` request gives: the key is absent for a single entity's. -/
 structure Stored where
   entity : String
@@ -43,18 +36,18 @@ def Stored.row (s : Stored) : Service.Row := { entity := s.entity, key := s.key,
 inductive Request where
   | check («structure» : Spec.Structure)
   | checkCanonical («structure» : Spec.Structure)
-  | pair (services : List PairedService) (expected : List Verify.Expected) (others : List String)
-      (folders : List Verify.Folder)
   | pairSnapshots (services : List String) (expected : List Verify.Expected) (folders : List Verify.Folder)
   | compareSnapshot (snapshot : List (Option Value)) (run : List Value)
   | afters (snapshot : List (Option TraceLine))
   | decodeLines (values : List Value)
   /-- The simulation of the scenario: what each running service shows, and the simulation's violations. -/
   | simulate («structure» : Spec.Structure) (scenario : Scenario)
-  /-- What test finds of each scenario, and the parts that no exploration reached (Engine.test). -/
+  /-- What test finds of each scenario (Engine.test). -/
   | test («structure» : Spec.Structure) (scenarios : List Scenario)
-  /-- The violations of a trace against its snapshot, and the bindings that the comparison ends with. -/
-  | verifyTrace («structure» : Spec.Structure) (service : String) (snapshot : List (Option TraceLine))
+  /-- What verify finds of each log, and the parts of the spec that no log reached (Engine.verify). -/
+  | verify («structure» : Spec.Structure) (logs : List Log)
+  /-- The comparison of drive's log so far with the snapshot so far, for its bindings (Engine.bindingsOf). -/
+  | bindings («structure» : Spec.Structure) (service : String) (snapshot : List (Option TraceLine))
       (trace : List (FileLine TraceLine))
   /-- The violations of an external service's trace against its contract (Engine.verifyExternal). -/
   | verifyExternal («structure» : Spec.Structure) (service : String) (trace : List (FileLine TraceLine))
@@ -113,8 +106,6 @@ derive_wire Evaluated serialize_only skip_serializing_none
 inductive Response where
   | checked (findings : List Validation.Illegal)
   | checkedCanonical (findings : List Validation.NonCanonical)
-  /-- The pairs of each binding that the comparison ends with. -/
-  | paired (compare : List Verify.Run) (contract : List Spec.Ref) (findings : List Unpaired)
   | pairedSnapshots (compare : List Verify.Run) (findings : List Unpaired)
   | comparedSnapshot (mismatch : Option Verify.Mismatch)
   | afters (findings : List Verify.Uncomparable)
@@ -125,8 +116,9 @@ inductive Response where
   | sorted (value : Value)
   | keyOrdered (ordered : Bool)
   | evaluated (result : Evaluated)
-  | tested (runs : List Engine.ScenarioRun) (uncovered : List Violation)
-  | verifiedTrace (findings : List Verify.Finding) (bindings : List (List (String × String)))
+  | tested (runs : List Engine.ScenarioRun)
+  | verified (logs : List Replayed) (uncovered : List Violation)
+  | bound (findings : List Verify.Finding) (bindings : List (List (String × String)))
   | verifiedExternal (findings : List Verify.Finding)
   | given (records : List Scenario.GivenRecord)
   | read (lines : List (Option ReadLine))

@@ -1,1 +1,1 @@
-{"kind":"Uncomparable.duplicateId","definition":null,"data":{"id":"n1","firstLine":4},"location":{"file":"traces/todo/addTwoReusedId.jsonl","line":10},"scenario":{"service":"todo","name":"addTwoReusedId"}}
+{"kind":"Uncomparable.duplicateId","definition":null,"data":{"id":"n1","firstLine":4},"location":{"file":"traces/todo/addTwoReusedId.jsonl","line":10}}

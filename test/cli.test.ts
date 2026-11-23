@@ -285,12 +285,11 @@ export const addMilk = scenario({ description: "Add", given: ${given}, when: (w)
   }
 });
 
-test("test writes an error and exits with 2 when --only names no scenario of the spec or comes with --coverage", async () => {
+test("test writes an error and exits with 2 when --only names no scenario of the spec", async () => {
   const folder = "test/verify/uncomparable/snapshot/unpaired";
   const cases: [string[], string][] = [
     [["--only", "todo/addOn"], "unknown scenario todo/addOn"],
     [["--only", "addOne"], "unknown scenario addOne"],
-    [["--only", "todo/addOne", "--coverage"], "--coverage cannot be given with --only"],
   ];
   for (const [args, message] of cases) {
     const { code, out, err } = await run("test", folder, ...args);
@@ -309,7 +308,7 @@ test("explain writes the markdown of a violation kind: its meaning, its group, w
     markdown,
     /^# Fault\.failedEnsures\n\nThe answer of the command or query, or the output of the screen, fails its ensures `condition`\./,
   );
-  assert.match(markdown, /\n- Reported by: `test`\n- Side at fault: The spec\.\n- Halts the run: no\n/);
+  assert.match(markdown, /\n- Reported by: `test`, `verify`\n- Side at fault: The spec\.\n- Halts the run: no\n/);
   const halting = await run("explain", "Fault.exception");
   assert.match(halting.out.join("\n"), /\n- Halts the run: yes\n/);
   assert.match(

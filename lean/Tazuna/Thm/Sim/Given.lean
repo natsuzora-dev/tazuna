@@ -1,5 +1,6 @@
 import Tazuna.Sim.Run
-import Tazuna.Thm.Verify.Pairing
+import Tazuna.Thm.Data.List
+import Tazuna.Data.Binding
 import Tazuna.Thm.Guarantee
 
 namespace Tazuna.Thm.Sim.Given

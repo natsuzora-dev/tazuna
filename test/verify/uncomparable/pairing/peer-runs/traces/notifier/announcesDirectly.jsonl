@@ -1,3 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"announce#1","name":"announce","input":{"taskId":"task-1"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"announce#1","answer":{"result":"accepted"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"e1","name":"announced","payload":{"taskId":"task-1"},"resultOf":"announce#1"}

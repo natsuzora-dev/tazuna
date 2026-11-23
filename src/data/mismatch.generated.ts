@@ -47,17 +47,6 @@ export type Mismatch =
         readonly trace: Json;
       };
     }
-  /** The operation line has another payload than the snapshot's. */
-  | {
-      readonly kind: "Mismatch.operation";
-      readonly definition: null;
-      readonly line: number;
-      readonly data: {
-        readonly subject: Subject;
-        readonly snapshot: Json;
-        readonly trace: Json;
-      };
-    }
   /** The accepted or fulfilled answer, or the answer to a query, has another output than the snapshot's. */
   | {
       readonly kind: "Mismatch.output";
@@ -318,7 +307,6 @@ export type Mismatch =
 export const mismatchKinds = [
   "Mismatch.request",
   "Mismatch.event",
-  "Mismatch.operation",
   "Mismatch.output",
   "Mismatch.result",
   "Mismatch.rejection",

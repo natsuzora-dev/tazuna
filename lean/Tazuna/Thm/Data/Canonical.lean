@@ -1,9 +1,11 @@
-import Tazuna.Thm.Verify.Pairing
+import Tazuna.Verify.Pairing
+import Tazuna.Thm.Data.List
+import Tazuna.Data.Binding
 import Tazuna.Data.Canonical
 
 namespace Tazuna.Thm.Data.Canonical
 
-open Tazuna.Data Tazuna.Thm.Verify.Pairing Tazuna.Verify
+open Tazuna.Data Tazuna.Verify
 
 mutual
 

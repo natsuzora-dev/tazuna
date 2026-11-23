@@ -87,28 +87,10 @@ export type Uncomparable =
         readonly lineId: string;
       };
     }
-  /** The trace has an `in` line where the snapshot has none. */
-  | {
-      readonly kind: "Uncomparable.unexpectedInput";
-      readonly definition: null;
-      readonly line: number;
-      readonly data: {
-        readonly trace: Json;
-      };
-    }
-  /** The trace, at its last line `line`, has no `in` line for the snapshot's. */
-  | {
-      readonly kind: "Uncomparable.missingInput";
-      readonly definition: null;
-      readonly line: number;
-      readonly data: {
-        readonly snapshot: Json;
-        readonly snapshotLine: number;
-      };
-    }
   /**
-   * The `in` line differs from the snapshot's `in` line `snapshotLine`, so the trace's run took another input than the
-   * snapshot's.
+   * The `in` line differs from the `in` line `snapshotLine` that the spec took from it: its time is earlier than the
+   * spec's clock, which never goes back. Where one side has no `in` line, its value is null, and `snapshotLine` is 0 when
+   * the spec has none.
    */
   | {
       readonly kind: "Uncomparable.differentInput";
@@ -159,26 +141,7 @@ export type Uncomparable =
         readonly service: string;
       };
     }
-  /** A trace is named for no scenario of the service. */
-  | {
-      readonly kind: "Uncomparable.unknownScenario";
-      readonly definition: null;
-      readonly scenario: DefinitionRef;
-      readonly data: Readonly<Record<string, never>>;
-    }
-  /** A snapshot of the run of `scenario` by `runner` has no trace. */
-  | {
-      readonly kind: "Uncomparable.missingTrace";
-      readonly definition: null;
-      readonly scenario: DefinitionRef;
-      readonly data: {
-        readonly runner: string;
-      };
-    }
-  /**
-   * The traces folder has an entry that is not a `<service>/<scenario>.jsonl` or `<service>/<scenario>.<peer>.jsonl`
-   * trace.
-   */
+  /** The traces folder has an entry that is not in a service's folder, or is neither a file nor a folder. */
   | {
       readonly kind: "Uncomparable.unknownTraceEntry";
       readonly definition: null;
@@ -218,14 +181,10 @@ export const uncomparableKinds = [
   "Uncomparable.resultOfUnknownRequest",
   "Uncomparable.resultOfNonCommand",
   "Uncomparable.unknownAfter",
-  "Uncomparable.unexpectedInput",
-  "Uncomparable.missingInput",
   "Uncomparable.differentInput",
   "Uncomparable.ambiguous",
   "Uncomparable.bindingLimit",
   "Uncomparable.unknownService",
-  "Uncomparable.unknownScenario",
-  "Uncomparable.missingTrace",
   "Uncomparable.unknownTraceEntry",
   "Uncomparable.missingSnapshot",
   "Uncomparable.obsoleteSnapshot",

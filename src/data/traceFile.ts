@@ -17,11 +17,14 @@ export interface Run {
   readonly runner: string;
 }
 
-/** The name of a run's snapshot and trace file: the scenario's, or `<scenario>.<runner>` for a peer's run. */
+/** The name of a run's snapshot: the scenario's, or `<scenario>.<runner>` for a peer's run. */
 const runStem = (run: Run): string => (run.runner === run.service ? run.scenario : `${run.scenario}.${run.runner}`);
 
-/** The path of a run's trace in a trace folder, and of its snapshot in the snapshot folder: `<service>/<stem>.jsonl`. */
-export const runFile = (run: Run): string => join(run.service, `${runStem(run)}.jsonl`);
+/**
+ * A path in a traces folder for the log of a run, in the folder of the run's runner: `<runner>/<service>/<scenario>.jsonl`.
+ * verify reads any file in the runner's folder as its log, whatever its name.
+ */
+export const runFile = (run: Run): string => join(run.runner, run.service, `${run.scenario}.jsonl`);
 
 export const sameRun = (a: Run, b: Run): boolean =>
   a.service === b.service && a.scenario === b.scenario && a.runner === b.runner;

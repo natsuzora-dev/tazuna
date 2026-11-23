@@ -1,2 +1,0 @@
-{"kind":"Uncomparable.unknownScenario","definition":null,"data":{},"location":{"file":"traces/notifier/announcesDirectly.notifier.jsonl"},"scenario":{"service":"notifier","name":"announcesDirectly.notifier"}}
-{"kind":"Uncomparable.missingTrace","definition":null,"data":{"runner":"todo"},"location":{"file":"notifier/__snapshots__/announcesAdded.todo.jsonl"},"scenario":{"service":"notifier","name":"announcesAdded"}}

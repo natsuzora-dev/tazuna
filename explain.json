@@ -10,7 +10,7 @@
     "BagOrderDependent": "A result, found while the run evaluates, that depends on an order the spec does not fix: the order of parallel regions.",
     "ChoiceDependent": "A result that depends on a choice nobody controls: the order of two steps of one processing that no cause chain links, of two deadlines of one service due at one time, or of two messages that one line delivers to one service.",
     "Undecided": "A check of `test` that reached a limit that tazuna sets before it could decide, so it neither reports the violation that the check looks for nor rules it out, as an SMT solver answers unknown.",
-    "Uncovered": "A part that neither a scenario's run nor an explored path reached, which test --coverage reports.",
+    "Uncovered": "A part that no trace's replay reached, which verify --coverage reports.",
     "Mismatch": "A difference between compared lines.",
     "Uncomparable": "A line or file that verify cannot compare."
   },
@@ -1592,13 +1592,13 @@
       "meaning": "The event line has another payload than the snapshot's.",
       "example": {
         "excerpt": {
-          "file": "traces/notifier/announcesAdded.todo.jsonl",
+          "file": "traces/todo/announcesAdded.jsonl",
           "from": 3,
           "to": 3,
           "line": 3,
           "text": "{\"time\":1792890000000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e1\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\"},\"resultOf\":\"addTask#1\"}"
         },
-        "violation": "{\"kind\":\"Mismatch.event\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e1\"},\"snapshot\":{\"taskId\":\"task-1\"},\"trace\":{\"taskId\":\"task-2\"}},\"location\":{\"file\":\"traces/notifier/announcesAdded.todo.jsonl\",\"line\":3},\"scenario\":{\"service\":\"notifier\",\"name\":\"announcesAdded\"}}"
+        "violation": "{\"kind\":\"Mismatch.event\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e1\"},\"snapshot\":{\"taskId\":\"task-1\"},\"trace\":{\"taskId\":\"task-2\"}},\"location\":{\"file\":\"traces/todo/announcesAdded.jsonl\",\"line\":3}}"
       }
     },
     "Mismatch.eventPayloadSchema": {
@@ -1663,7 +1663,7 @@
           "line": 4,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"scheduled#1\",\"name\":\"scheduled\",\"payload\":{\"taskId\":\"task-1\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.lineOrder\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"scheduled\",\"id\":\"scheduled#1\"},\"before\":{\"type\":\"event\",\"name\":\"logged\",\"id\":\"logged#1\"}},\"location\":{\"file\":\"traces/todo/addTwice.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwice\"}}"
+        "violation": "{\"kind\":\"Mismatch.lineOrder\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"scheduled\",\"id\":\"scheduled#1\"},\"before\":{\"type\":\"event\",\"name\":\"logged\",\"id\":\"logged#1\"}},\"location\":{\"file\":\"traces/todo/addTwice.jsonl\",\"line\":4}}"
       }
     },
     "Mismatch.missingAnswer": {
@@ -1676,7 +1676,7 @@
           "line": 10,
           "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"completeTask#2\",\"name\":\"completeTask\",\"input\":{\"taskId\":\"task-1\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.missingAnswer\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#2\"},\"snapshotLine\":11},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":10},\"scenario\":{\"service\":\"todo\",\"name\":\"answersWrongResults\"}}"
+        "violation": "{\"kind\":\"Mismatch.missingAnswer\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#2\"},\"snapshotLine\":11},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":10}}"
       }
     },
     "Mismatch.missingLine": {
@@ -1689,20 +1689,7 @@
           "line": 6,
           "text": "{\"time\":1792890000000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.missingLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"calendar.nextDay#2\"},\"content\":{\"from\":1792890000000},\"snapshotLine\":9},\"location\":{\"file\":\"traces/todo/addHourlyWrongRequests.jsonl\",\"line\":6},\"scenario\":{\"service\":\"todo\",\"name\":\"addHourlyWrongRequests\"}}"
-      }
-    },
-    "Mismatch.operation": {
-      "meaning": "The operation line has another payload than the snapshot's.",
-      "example": {
-        "excerpt": {
-          "file": "traces/todo/addOneOperated.jsonl",
-          "from": 4,
-          "to": 4,
-          "line": 4,
-          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"operation\",\"id\":\"taskScreen.open#1\",\"name\":\"taskScreen.open\",\"payload\":{\"taskId\":\"task-2\"}}"
-        },
-        "violation": "{\"kind\":\"Mismatch.operation\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"operation\",\"name\":\"taskScreen.open\",\"id\":\"taskScreen.open#1\"},\"snapshot\":{\"taskId\":\"task-1\"},\"trace\":{\"taskId\":\"task-2\"}},\"location\":{\"file\":\"traces/todo/addOneOperated.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneOperated\"}}"
+        "violation": "{\"kind\":\"Mismatch.missingLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"calendar.nextDay#2\"},\"content\":{\"from\":1792890000000},\"snapshotLine\":9},\"location\":{\"file\":\"traces/todo/addHourlyWrongRequests.jsonl\",\"line\":6}}"
       }
     },
     "Mismatch.output": {
@@ -1715,7 +1702,7 @@
           "line": 7,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"thread#1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"n2\",\"text\":\"reply\",\"replyTo\":\"n9\"},{\"id\":\"n1\",\"text\":\"first\",\"replyTo\":null}]}}}"
         },
-        "violation": "{\"kind\":\"Mismatch.output\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"thread#1\"},\"snapshot\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"notes/Note-1\",\"text\":\"first\",\"replyTo\":null},{\"id\":\"notes/Note-2\",\"text\":\"reply\",\"replyTo\":\"notes/Note-1\"}]}},\"trace\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"n2\",\"text\":\"reply\",\"replyTo\":\"n9\"},{\"id\":\"n1\",\"text\":\"first\",\"replyTo\":null}]}}},\"location\":{\"file\":\"traces/notes/replyToOther.jsonl\",\"line\":7},\"scenario\":{\"service\":\"notes\",\"name\":\"replyToOther\"}}"
+        "violation": "{\"kind\":\"Mismatch.output\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"thread#1\"},\"snapshot\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"notes/Note-1\",\"text\":\"first\",\"replyTo\":null},{\"id\":\"notes/Note-2\",\"text\":\"reply\",\"replyTo\":\"notes/Note-1\"}]}},\"trace\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"n2\",\"text\":\"reply\",\"replyTo\":\"n9\"},{\"id\":\"n1\",\"text\":\"first\",\"replyTo\":null}]}}},\"location\":{\"file\":\"traces/notes/replyToOther.jsonl\",\"line\":7}}"
       }
     },
     "Mismatch.rejectedAssumedRequires": {
@@ -1741,7 +1728,7 @@
           "line": 7,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#3\",\"to\":\"completeTask#1\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"requires\",\"reason\":\"notDone\"}}}"
         },
-        "violation": "{\"kind\":\"Mismatch.rejection\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#1\"},\"snapshot\":\"not-found\",\"trace\":\"requires\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":7},\"scenario\":{\"service\":\"todo\",\"name\":\"answersWrongResults\"}}"
+        "violation": "{\"kind\":\"Mismatch.rejection\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#1\"},\"snapshot\":\"not-found\",\"trace\":\"requires\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":7}}"
       }
     },
     "Mismatch.repeatedAnswer": {
@@ -1767,7 +1754,7 @@
           "line": 4,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s2\",\"name\":\"todo.linked\",\"input\":{\"links\":[{\"from\":\"n1\",\"to\":\"n2\"},{\"from\":\"n2\",\"to\":\"n3\"}]}}"
         },
-        "violation": "{\"kind\":\"Mismatch.request\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.linked\",\"id\":\"s2\"},\"snapshot\":{\"links\":[{\"from\":\"screens/Draft-1\",\"to\":\"screens/Draft-2\"},{\"from\":\"screens/Draft-2\",\"to\":\"screens/Draft-1\"}]},\"trace\":{\"links\":[{\"from\":\"n1\",\"to\":\"n2\"},{\"from\":\"n2\",\"to\":\"n3\"}]}},\"location\":{\"file\":\"traces/screens/draftTwoBroken.jsonl\",\"line\":4},\"scenario\":{\"service\":\"screens\",\"name\":\"draftTwoBroken\"}}"
+        "violation": "{\"kind\":\"Mismatch.request\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.linked\",\"id\":\"s2\"},\"snapshot\":{\"links\":[{\"from\":\"screens/Draft-1\",\"to\":\"screens/Draft-2\"},{\"from\":\"screens/Draft-2\",\"to\":\"screens/Draft-1\"}]},\"trace\":{\"links\":[{\"from\":\"n1\",\"to\":\"n2\"},{\"from\":\"n2\",\"to\":\"n3\"}]}},\"location\":{\"file\":\"traces/screens/draftTwoBroken.jsonl\",\"line\":4}}"
       }
     },
     "Mismatch.requestInputSchema": {
@@ -1793,7 +1780,7 @@
           "line": 5,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"addTask#2\",\"answer\":{\"result\":\"accepted\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.result\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"addTask#2\"},\"snapshot\":\"rejected\",\"trace\":\"accepted\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"answersWrongResults\"}}"
+        "violation": "{\"kind\":\"Mismatch.result\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"addTask#2\"},\"snapshot\":\"rejected\",\"trace\":\"accepted\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":5}}"
       }
     },
     "Mismatch.resultOf": {
@@ -1804,9 +1791,9 @@
           "from": 8,
           "to": 8,
           "line": 8,
-          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e4\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"},\"resultOf\":\"addTask#2\"}"
+          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e4\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.resultOf\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e4\"},\"snapshot\":null,\"trace\":\"addTask#2\"},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"addThreeWrongEvents\"}}"
+        "violation": "{\"kind\":\"Mismatch.resultOf\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e4\"},\"snapshot\":\"addTask#2\",\"trace\":null},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":8}}"
       }
     },
     "Mismatch.resultOfUnacceptedRequest": {
@@ -1845,7 +1832,7 @@
           "line": 5,
           "text": "{\"time\":1792886405000,\"dir\":\"out\",\"type\":\"query\",\"id\":\"q1\",\"name\":\"calendar.nextDay\",\"input\":{\"from\":1792886400000}}"
         },
-        "violation": "{\"kind\":\"Mismatch.time\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"q1\"},\"snapshot\":1792886400000,\"trace\":1792886405000},\"location\":{\"file\":\"traces/todo/addOneReordered.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneReordered\"}}"
+        "violation": "{\"kind\":\"Mismatch.time\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"q1\"},\"snapshot\":1792886400000,\"trace\":1792886405000},\"location\":{\"file\":\"traces/todo/addOneReordered.jsonl\",\"line\":5}}"
       }
     },
     "Mismatch.unexpectedLine": {
@@ -1858,7 +1845,7 @@
           "line": 11,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e9\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-1\",\"title\":\"Buy tea\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.unexpectedLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e9\"}},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":11},\"scenario\":{\"service\":\"todo\",\"name\":\"addThreeWrongEvents\"}}"
+        "violation": "{\"kind\":\"Mismatch.unexpectedLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e9\"}},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":11}}"
       }
     },
     "Mismatch.unexpectedSubscription": {
@@ -1871,7 +1858,7 @@
           "line": 10,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s5\",\"name\":\"todo.notesNamed\",\"input\":{\"prefix\":\"x\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.unexpectedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.notesNamed\",\"id\":\"s5\"},\"content\":{\"prefix\":\"x\"}},\"location\":{\"file\":\"traces/screens/draftAndOpen.jsonl\",\"line\":10},\"scenario\":{\"service\":\"screens\",\"name\":\"draftAndOpen\"}}"
+        "violation": "{\"kind\":\"Mismatch.unexpectedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.notesNamed\",\"id\":\"s5\"},\"content\":{\"prefix\":\"x\"}},\"location\":{\"file\":\"traces/screens/draftAndOpen.jsonl\",\"line\":10}}"
       }
     },
     "Mismatch.unlistedEvent": {
@@ -1910,7 +1897,7 @@
           "line": 6,
           "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"operation\",\"id\":\"noteScreen.open#1\",\"name\":\"noteScreen.open\"}"
         },
-        "violation": "{\"kind\":\"Mismatch.unopenedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.note\",\"id\":\"todo.note#1\"},\"content\":{\"id\":\"screens/Draft-1\"},\"snapshotLine\":9},\"location\":{\"file\":\"traces/screens/draftAndOpen.jsonl\",\"line\":6},\"scenario\":{\"service\":\"screens\",\"name\":\"draftAndOpen\"}}"
+        "violation": "{\"kind\":\"Mismatch.unopenedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.note\",\"id\":\"todo.note#1\"},\"content\":{\"id\":\"screens/Draft-1\"},\"snapshotLine\":9},\"location\":{\"file\":\"traces/screens/draftAndOpen.jsonl\",\"line\":6}}"
       }
     },
     "NonCanonical.answerLiteral": {
@@ -2274,7 +2261,7 @@
           "line": 8,
           "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"answer\",\"id\":\"calendar/answer#1\",\"to\":\"r1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":1792972800000}}}"
         },
-        "violation": "{\"kind\":\"Uncomparable.ambiguous\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"calendar.nextDay#1\"},\"snapshotLine\":8,\"candidates\":[6,7]},\"location\":{\"file\":\"traces/todo/twoDays.jsonl\",\"line\":8},\"scenario\":{\"service\":\"todo\",\"name\":\"twoDays\"}}"
+        "violation": "{\"kind\":\"Uncomparable.ambiguous\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"calendar.nextDay#1\"},\"snapshotLine\":8,\"candidates\":[6,7]},\"location\":{\"file\":\"traces/todo/twoDays.jsonl\",\"line\":8}}"
       }
     },
     "Uncomparable.bindingLimit": {
@@ -2287,20 +2274,20 @@
           "line": 29,
           "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"query\",\"id\":\"seenTwice#1\",\"name\":\"seenTwice\",\"input\":{}}"
         },
-        "violation": "{\"kind\":\"Uncomparable.bindingLimit\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"seenTwice#1\"},\"snapshotLine\":30,\"limit\":256},\"location\":{\"file\":\"traces/todo/seenSeven.jsonl\",\"line\":29},\"scenario\":{\"service\":\"todo\",\"name\":\"seenSeven\"}}"
+        "violation": "{\"kind\":\"Uncomparable.bindingLimit\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"seenTwice#1\"},\"snapshotLine\":30,\"limit\":256},\"location\":{\"file\":\"traces/todo/seenSeven.jsonl\",\"line\":29}}"
       }
     },
     "Uncomparable.differentInput": {
-      "meaning": "The `in` line differs from the snapshot's `in` line `snapshotLine`, so the trace's run took another input than the snapshot's.",
+      "meaning": "The `in` line differs from the `in` line `snapshotLine` that the spec took from it: its time is earlier than the spec's clock, which never goes back. Where one side has no `in` line, its value is null, and `snapshotLine` is 0 when the spec has none.",
       "example": {
         "excerpt": {
-          "file": "traces/todo/resend.jsonl",
+          "file": "traces/todo/addAndRemove.jsonl",
           "from": 4,
           "to": 4,
           "line": 4,
-          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"x2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}}"
+          "text": "{\"time\":1792886399000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"removeTask#1\",\"name\":\"removeTask\",\"input\":{\"taskId\":\"task-1\"}}"
         },
-        "violation": "{\"kind\":\"Uncomparable.differentInput\",\"definition\":null,\"data\":{\"snapshotLine\":4,\"snapshot\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#1\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}},\"trace\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"x2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-1\"}}},\"location\":{\"file\":\"traces/todo/resend.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"resend\"}}"
+        "violation": "{\"kind\":\"Uncomparable.differentInput\",\"definition\":null,\"data\":{\"snapshotLine\":4,\"snapshot\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"removeTask#1\",\"name\":\"removeTask\",\"input\":{\"taskId\":\"task-1\"}},\"trace\":{\"time\":1792886399000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"removeTask#1\",\"name\":\"removeTask\",\"input\":{\"taskId\":\"task-1\"}}},\"location\":{\"file\":\"traces/todo/addAndRemove.jsonl\",\"line\":4}}"
       }
     },
     "Uncomparable.duplicateId": {
@@ -2329,19 +2316,6 @@
         "violation": "{\"kind\":\"Uncomparable.lineSchema\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/__snapshots__/addOneCut.jsonl\",\"line\":2},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneCut\"},\"error\":{\"type\":\"zod\",\"issues\":[{\"code\":\"invalid_type\",\"expected\":\"object\",\"path\":[],\"message\":\"Invalid input: expected object, received string\"}]}}"
       }
     },
-    "Uncomparable.missingInput": {
-      "meaning": "The trace, at its last line `line`, has no `in` line for the snapshot's.",
-      "example": {
-        "excerpt": {
-          "file": "traces/todo/addTwo.jsonl",
-          "from": 4,
-          "to": 4,
-          "line": 4,
-          "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"query\",\"id\":\"qc1\",\"name\":\"calendar.nextDay\",\"input\":{\"from\":1792886400000}}"
-        },
-        "violation": "{\"kind\":\"Uncomparable.missingInput\",\"definition\":null,\"data\":{\"snapshot\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}},\"snapshotLine\":5},\"location\":{\"file\":\"traces/todo/addTwo.jsonl\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwo\"}}"
-      }
-    },
     "Uncomparable.missingSnapshot": {
       "meaning": "The run of `scenario` by `runner` did not halt and has no snapshot, such as the run of a new scenario. `tazuna test --update` writes the snapshot.",
       "example": {
@@ -2353,12 +2327,6 @@
           "text": "export const addOneUnsnapshotted = scenario({\n  description: \"Add a task; the scenario has no snapshot, so test reports missingSnapshot\",\n  given: { start: parseInstant(\"2026-10-25T09:00:00+09:00\"), records: { Task: [] }, peers: [] },\n  when: (w) => {\n    w.client.send(addTask, { taskId: \"task-1\", title: \"Buy milk\" });\n  },\n  then: () => [],\n});"
         },
         "violation": "{\"kind\":\"Uncomparable.missingSnapshot\",\"definition\":null,\"data\":{\"runner\":\"todo\"},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"addOneUnsnapshotted\"}}"
-      }
-    },
-    "Uncomparable.missingTrace": {
-      "meaning": "A snapshot of the run of `scenario` by `runner` has no trace.",
-      "example": {
-        "violation": "{\"kind\":\"Uncomparable.missingTrace\",\"definition\":null,\"data\":{\"runner\":\"todo\"},\"location\":{\"file\":\"todo/__snapshots__/addTwo.jsonl\"},\"scenario\":{\"service\":\"todo\",\"name\":\"addTwo\"}}"
       }
     },
     "Uncomparable.obsoleteSnapshot": {
@@ -2391,19 +2359,6 @@
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e3\",\"name\":\"booked\",\"resultOf\":\"c9\",\"payload\":{\"day\":1792972800000}}"
         },
         "violation": "{\"kind\":\"Uncomparable.resultOfUnknownRequest\",\"definition\":null,\"data\":{\"event\":{\"service\":\"calendar\",\"name\":\"booked\"},\"requestId\":\"c9\"},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":1}}"
-      }
-    },
-    "Uncomparable.unexpectedInput": {
-      "meaning": "The trace has an `in` line where the snapshot has none.",
-      "example": {
-        "excerpt": {
-          "file": "traces/todo/addOne.jsonl",
-          "from": 5,
-          "to": 5,
-          "line": 5,
-          "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"c2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}"
-        },
-        "violation": "{\"kind\":\"Uncomparable.unexpectedInput\",\"definition\":null,\"data\":{\"trace\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"c2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}},\"location\":{\"file\":\"traces/todo/addOne.jsonl\",\"line\":5},\"scenario\":{\"service\":\"todo\",\"name\":\"addOne\"}}"
       }
     },
     "Uncomparable.unknownAfter": {
@@ -2458,16 +2413,10 @@
         "violation": "{\"kind\":\"Uncomparable.unknownRequest\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"nextWeek\",\"id\":\"q1\"}},\"location\":{\"file\":\"traces/calendar/requests.jsonl\",\"line\":1}}"
       }
     },
-    "Uncomparable.unknownScenario": {
-      "meaning": "A trace is named for no scenario of the service.",
-      "example": {
-        "violation": "{\"kind\":\"Uncomparable.unknownScenario\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"traces/todo/removed.jsonl\"},\"scenario\":{\"service\":\"todo\",\"name\":\"removed\"}}"
-      }
-    },
     "Uncomparable.unknownService": {
       "meaning": "The traces folder has a folder `service` that names no service of the spec.",
       "example": {
-        "violation": "{\"kind\":\"Uncomparable.unknownService\",\"definition\":null,\"data\":{\"service\":\"other\"},\"location\":{\"file\":\"traces/other/addOne.jsonl\"}}"
+        "violation": "{\"kind\":\"Uncomparable.unknownService\",\"definition\":null,\"data\":{\"service\":\"other\"},\"location\":{\"file\":\"traces/other\"}}"
       }
     },
     "Uncomparable.unknownSnapshotEntry": {
@@ -2477,7 +2426,7 @@
       }
     },
     "Uncomparable.unknownTraceEntry": {
-      "meaning": "The traces folder has an entry that is not a `<service>/<scenario>.jsonl` or `<service>/<scenario>.<peer>.jsonl` trace.",
+      "meaning": "The traces folder has an entry that is not in a service's folder, or is neither a file nor a folder.",
       "example": {
         "violation": "{\"kind\":\"Uncomparable.unknownTraceEntry\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"traces/addOne.jsonl\"}}"
       }

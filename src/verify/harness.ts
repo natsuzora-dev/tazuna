@@ -2,6 +2,7 @@ import type { CheckedSpec } from "../check/spec.ts";
 import { ask } from "../cli/engine.ts";
 import type { ReadLine } from "../cli/protocol.generated.ts";
 import { InternalError } from "../data/internalError.ts";
+import type { GivenRecord } from "../data/scenario.generated.ts";
 import { type TraceLine, traceLine } from "../data/trace.generated.ts";
 import type { Bindings, UntimedTraceLine } from "../data/trace.ts";
 import type { Run } from "../data/traceFile.ts";
@@ -75,19 +76,29 @@ function substitutedLine(bindings: Bindings, read: ReadLine): TraceLine {
   });
 }
 
+/** The first line of a log: the time and the records that the implementation starts from. */
+interface StartLine {
+  readonly type: "start";
+  readonly time: number;
+  readonly records: readonly GivenRecord[];
+}
+
+/** A line of a log that verify reads: its start line, then trace lines. */
+export type LogLine = StartLine | TraceLine;
+
 /**
- * Drives the implementation through the run as the simulation ran it, and returns the trace at the implementation's
- * boundary. The implementation starts at the scenario's start from the Given records, then gets the snapshot's `in`
- * lines one by one: before each, the harness waits until the implementation has settled (Adapter.settled), and moves
- * the clock to the line's time. A command, query or subscription does not hold the harness: its answer is an output
- * that the trace gets when the implementation gives it, maybe after later inputs. A value of the snapshot that the
- * implementation stands for in its own way (a key it created, the id of a request it sent) is substituted to the
- * implementation's value by the first of the bindings that verify's comparison keeps for the trace so far, so an answer
- * reaches the request that the implementation sent; where the bindings disagree on the value, the comparison reports
- * the line as ambiguous when another binding could give the implementation different inputs. Once that comparison
- * finds the trace uncomparable, the harness gives no more lines.
+ * Drives the implementation through the run as the simulation ran it, and returns the log at the implementation's
+ * boundary: its start line, then its trace. The implementation starts at the scenario's start from the Given records,
+ * then gets the snapshot's `in` lines one by one: before each, the harness waits until the implementation has settled
+ * (Adapter.settled), and moves the clock to the line's time. A command, query or subscription does not hold the
+ * harness: its answer is an output that the log gets when the implementation gives it, maybe after later inputs. A
+ * value of the snapshot that the implementation stands for in its own way (a key it created, the id of a request it
+ * sent) is substituted to the implementation's value by the first of the bindings under which the log so far compares
+ * with the snapshot so far, so an answer reaches the request that the implementation sent. Once that comparison finds
+ * the log uncomparable, the harness gives no more lines. Comparing reads values by their schemas alone, so drive runs
+ * no spec function, and verify's replay of the log is what checks it.
  */
-export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Promise<TraceLine[]> {
+export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Promise<LogLine[]> {
   const { runner } = run;
   const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === run.scenario)?.definition
     .scenario;
@@ -164,12 +175,14 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
   const running = (work: Promise<void>) => void work.catch((error: unknown) => failures.push(error));
   const writeAnswer = (to: string, answer: unknown) =>
     write({ dir: "out", type: "answer", id: lineId("answer"), to, answer: plain(answer) } as UntimedTraceLine);
+  const [given] = ask("givenRecords", [{ structure: spec.structure, scenario, service: runner }]);
+  const start: StartLine = { type: "start", time: scenario.given.start, records: given?.records ?? [] };
   const comparedBefore = (k: number) => {
-    const [verified] = ask("verifyTrace", [
+    const [compared] = ask("bindings", [
       { structure: spec.structure, service: runner, snapshot: snapshot.slice(0, k), trace: written() },
     ]);
-    const [first] = verified?.bindings ?? [];
-    return { found: verified?.findings ?? [], first: new Map(Object.entries(first ?? {})) };
+    const [first] = compared?.bindings ?? [];
+    return { found: compared?.findings ?? [], first: new Map(Object.entries(first ?? {})) };
   };
 
   async function give(line: TraceLine): Promise<void> {
@@ -231,8 +244,7 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
     }
   }
 
-  const [given] = ask("givenRecords", [{ structure: spec.structure, scenario, service: runner }]);
-  await adapter.start(outputs, scenario.given.start, given?.records ?? []);
+  await adapter.start(outputs, start.time, start.records);
   for (const [k, line] of snapshot.entries()) {
     if (line.dir === "out") continue;
     await adapter.settled();
@@ -250,5 +262,5 @@ export async function drive(spec: CheckedSpec, run: Run, adapter: Adapter): Prom
   for (const controller of subscriptions.values()) controller.abort();
   await adapter.settled();
   if (failures.length > 0) throw failures[0];
-  return written();
+  return [start, ...written()];
 }

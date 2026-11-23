@@ -18,8 +18,6 @@ inductive Mismatch where
   | request (line : Nat) (subject : Subject) (snapshot trace : Value)
   /-- The event line has another payload than the snapshot's. -/
   | event (line : Nat) (subject : Subject) (snapshot trace : Value)
-  /-- The operation line has another payload than the snapshot's. -/
-  | operation (line : Nat) (subject : Subject) (snapshot trace : Value)
   /-- The accepted or fulfilled answer, or the answer to a query, has another output than the snapshot's. -/
   | output (line : Nat) (subject : Subject) (snapshot trace : Value)
   /-- The answer has another result, accepted, fulfilled, or rejected, than the snapshot's. -/

@@ -1,2 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"event","id":"todo/taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"task-1"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"announced#1","name":"announced","payload":{"taskId":"task-1"}}

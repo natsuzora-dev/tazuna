@@ -1,7 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"start#1","name":"start","input":{}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"start#1","answer":{"result":"accepted"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"started#1","name":"started","payload":{},"resultOf":"start#1"}
-{"time":1792886400000,"dir":"out","type":"event","id":"posted#1","name":"posted","payload":{"id":"notes/Note-1","text":"first","replyTo":null},"created":["notes/Note-1"]}
-{"time":1792886400000,"dir":"out","type":"event","id":"replied#1","name":"replied","payload":{"id":"notes/Note-2","text":"reply","replyTo":"notes/Note-1"},"after":["posted#1"],"created":["notes/Note-2"]}
-{"time":1792886400000,"dir":"in","type":"query","id":"thread#1","name":"thread","input":{}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#2","to":"thread#1","answer":{"result":"fulfilled","output":{"notes":[{"id":"notes/Note-1","text":"first","replyTo":null},{"id":"notes/Note-2","text":"reply","replyTo":"notes/Note-1"}]}}}

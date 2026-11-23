@@ -2,13 +2,7 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
-      "entry": [
-        "test/service/**/*.ts",
-        "test/load/**/*.ts",
-        "test/validation/**/*.ts",
-        "test/explore/**/*.ts",
-        "test/verify/**/*.ts"
-      ],
+      "entry": ["test/service/**/*.ts", "test/load/**/*.ts", "test/validation/**/*.ts", "test/verify/**/*.ts"],
       "ignoreDependencies": ["@swc/core"],
       "vite": {
         "config": ["viewer/vite.config.ts"]

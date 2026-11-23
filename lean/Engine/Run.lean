@@ -4,7 +4,6 @@ import Tazuna.Explore.StepOrders
 import Tazuna.Explore.Moves
 import Tazuna.Explore.Enabled
 import Tazuna.Explore.Fingerprint
-import Tazuna.Explore.Coverage
 import Tazuna.Sim.Run
 import Tazuna.Sim.Trace
 
@@ -131,16 +130,10 @@ structure Found where
 
 derive_wire Found serialize_only skip_serializing_none
 
-/-- What explore found after a scenario, the parts it reached, and how many worlds it visited. -/
+/-- What explore found after a scenario, and how many worlds it visited. -/
 structure Explored where
   found : List Found := []
-  reached : List Uncovered := []
   visited : Nat := 0
-
-def Explored.reach (x : Explored) (r : Ran) : Explored :=
-  if halted r.world then x else
-  { x with reached := r.world.states.foldl (fun acc (service, _) =>
-      (r.acting.collect service).reached.foldl (fun acc u => if acc.contains u then acc else acc ++ [u]) acc) x.reached }
 
 /--
 Explores the scenario: executes its lines, and the paths that append moves facing the own service, up to the depth of
@@ -156,7 +149,7 @@ def explore (spec : Spec.Structure) (sc : Scenario) : IO Explored := do
   let bound := (← exploreOf spec sc.service).depth
   let (world, acting) ← (Sim.execute spec fsOf start sc).run {}
   let base : Ran := { world, acting }
-  let x : Explored := ({} : Explored).reach base
+  let x : Explored := {}
   if halted base.world || !base.world.violations.isEmpty then return x
   let own := sc.service
   let movesAfter (appended : List Scenario.Line) (r : Ran) : IO (Except Violation (List Move)) := do
@@ -202,7 +195,6 @@ def explore (spec : Spec.Structure) (sc : Scenario) : IO Explored := do
     let orders ← stepOrderViolations spec { sc with lines := sc.lines ++ added } child.execution
       (sc.lines.length + appended.length)
     found.modify fun x =>
-      let x := x.reach child
       { x with found := x.found ++ (addedSince parent child).map (fun rep =>
           { violation := rep.violation, service := rep.service, appended := added }) ++
         orders.map ({ violation := ·, service := none, appended := added }) }
@@ -239,8 +231,8 @@ structure ScenarioRun where
 
 derive_wire ScenarioRun serialize_only
 
-/-- The simulation, step-order search and exploration of `sc`, and the parts that its exploration reached. -/
-def runScenario (spec : Spec.Structure) (sc : Scenario) : IO (ScenarioRun × List Uncovered) := do
+/-- The simulation, step-order search and exploration of `sc`. -/
+def runScenario (spec : Spec.Structure) (sc : Scenario) : IO ScenarioRun := do
   let start ← Sim.World.start spec sc
   let (world, acting) ← (Sim.simulate spec (← instrumentedOf start) start sc).run {}
   let simulated : Ran := { world, acting }
@@ -249,9 +241,9 @@ def runScenario (spec : Spec.Structure) (sc : Scenario) : IO (ScenarioRun × Lis
     { service, violations := reportedOf simulated service s
       lines := (Sim.trace s).map fun (l, after, created) => Sim.traceLineOf service l after created }
   let explored ← explore spec sc
-  pure ({ violations := world.violations.map (·.toViolation) ++ (world.halted.map (·.toViolation)).toList
-          stepOrders := orders, services, halted := halted world, found := explored.found
-          visited := explored.visited }, explored.reached)
+  pure { violations := world.violations.map (·.toViolation) ++ (world.halted.map (·.toViolation)).toList
+         stepOrders := orders, services, halted := halted world, found := explored.found
+         visited := explored.visited }
 
 /--
 The simulation of `sc`: each running service's trace lines, violations and candidates, and the simulation's violations
@@ -268,11 +260,8 @@ def simulate (spec : Spec.Structure) (sc : Scenario) :
       candidates := if (w.services.lookup service).isSome then candidates s c none else [] }
   pure (services, w.violations, w.halted)
 
-/-- What test finds of each scenario, in order, and the parts of the spec that no exploration reached. -/
-def test (spec : Spec.Structure) (scenarios : List Scenario) : IO (List ScenarioRun × List Violation) := do
-  let (runs, reached) ← scenarios.foldlM (init := ([], [])) fun (runs, reached) sc => do
-    let (run, more) ← runScenario spec sc
-    pure (runs ++ [run], more.foldl (fun acc u => if acc.contains u then acc else acc ++ [u]) reached)
-  pure (runs, (Explore.uncovered spec reached).map (·.toViolation))
+/-- What test finds of each scenario, in order. -/
+def test (spec : Spec.Structure) (scenarios : List Scenario) : IO (List ScenarioRun) :=
+  scenarios.mapM (runScenario spec)
 
 end Tazuna.Engine

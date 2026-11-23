@@ -285,7 +285,6 @@ def difference (s : Line) (t : Numbered) : Mismatch :=
   | .event _ _ _ _ sr, .event _ _ _ _ tr =>
     if (s.content.map (·.key)) == (t.line.content.map (·.key)) then .resultOf t.index subject sr tr
     else .event t.index subject (json s.content) (json t.line.content)
-  | .operation .., _ => .operation t.index subject (json s.content) (json t.line.content)
   | _, _ => .request t.index subject (json s.content) (json t.line.content)
 
 /-- The report of snapshot line `s` that the trace lacks, at trace line `place`. -/
@@ -556,8 +555,8 @@ def compareGroups (lineCount : Nat) (internal : Line → Bool) (relation : Bool)
             .error (.uncomparable (.ambiguous t.index subject s.index
               ((outs.filter fun o => images.contains o.line.body.id).map (·.index))))
           | none => .ok set'
-      | some s, none => .error (.uncomparable (.missingInput lineCount (lineValue s.line) s.index))
-      | none, some t => .error (.uncomparable (.unexpectedInput t.index (lineValue t.line)))
+      | some s, none => .error (.uncomparable (.differentInput lineCount s.index (lineValue s.line) .null))
+      | none, some t => .error (.uncomparable (.differentInput t.index 0 .null (lineValue t.line)))
     match inputs' with
     | .error f => ([f], set)
     | .ok set₁ =>
@@ -573,11 +572,11 @@ def compareGroups (lineCount : Nat) (internal : Line → Bool) (relation : Bool)
           (found ++ rest, set₃)
   | e :: _, [], _, set =>
     match e.input with
-    | some s => ([.uncomparable (.missingInput lineCount (lineValue s.line) s.index)], set)
+    | some s => ([.uncomparable (.differentInput lineCount s.index (lineValue s.line) .null)], set)
     | none => ([], set)
   | [], a :: _, _, set =>
     match a.input with
-    | some t => ([.uncomparable (.unexpectedInput t.index (lineValue t.line))], set)
+    | some t => ([.uncomparable (.differentInput t.index 0 .null (lineValue t.line))], set)
     | none => ([], set)
 
 /--

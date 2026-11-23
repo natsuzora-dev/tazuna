@@ -1,7 +1,7 @@
 import Tazuna.Explore.Coverage
 import Tazuna.Thm.Guarantee
 
-/-! What `test --coverage` reports: only parts outside the reached parts that the runs collect. -/
+/-! What `verify --coverage` reports: only parts outside the reached parts that the runs collect. -/
 
 namespace Tazuna.Thm.Explore.Coverage
 
@@ -25,7 +25,7 @@ theorem chartUncovered_unreached (reached : List Uncovered) (d : Spec.Definition
   · simpa using (List.mem_filter.mp h).2
   · simp at h
 
-/-- `test --coverage` reports only parts outside `reached`, the parts that the runs collect. -/
+/-- `verify --coverage` reports only parts outside `reached`, the parts that the runs collect. -/
 @[guarantee] theorem uncovered_unreached (spec : Spec.Structure) (reached : List Uncovered) (u : Uncovered)
     (h : u ∈ uncovered spec reached) : u ∉ reached := by
   simp only [uncovered, List.mem_append, List.mem_flatMap] at h

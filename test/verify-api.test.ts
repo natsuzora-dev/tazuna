@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { after, test } from "node:test";
 import { type Adapter, commandRequest, decodeAnswer, drive, snapshotRuns, verifyTraces } from "../src/verify/index.ts";
 import { checkedRoot, serviceRoot } from "./examples.ts";
@@ -15,34 +15,24 @@ const refund = { service: "shop", scenario: "refundCreatedCharge", runner: "shop
 mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
 const copies = mkdtempSync(join(import.meta.dirname, ".fixtures", "verify-api-"));
 after(() => rmSync(copies, { recursive: true, force: true }));
-// tsc's include skips the dot folder .fixtures, so the copies get a tsconfig.json of their own, by which the converter
-// types their functions.
-writeFileSync(join(copies, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
-const copyOfCommandOutput = (name: string) => {
-  const copy = join(copies, name);
-  cpSync(commandOutput, copy, { recursive: true });
-  return copy;
-};
 
 test("snapshotRuns returns the own and peer runs that have a snapshot", async () => {
-  const spec = await checkedRoot(join(import.meta.dirname, "verify/uncomparable/pairing/peer-runs"));
+  const spec = await checkedRoot(join(import.meta.dirname, "verify/mismatch/compare/Mismatch.event"));
   assert.deepEqual(
     snapshotRuns(spec).filter((r) => r.runner !== r.service),
     [{ service: "notifier", scenario: "announcesAdded", runner: "todo" }],
   );
 });
 
-test("verifyTraces reports snapshot lines that do not fit the schema as violations without throwing", async () => {
-  const broken = await checkedRoot(copyOfCommandOutput("schema"));
-  const snapshot = join(broken.root, "shop/__snapshots__/refundCreatedCharge.jsonl");
+test("verifyTraces reports a trace line that does not fit the schema as a violation without throwing", async () => {
+  const snapshot = join(shop.root, "shop/__snapshots__/refundCreatedCharge.jsonl");
   const traces = join(copies, "schema-traces");
   mkdirSync(join(traces, "shop"), { recursive: true });
-  cpSync(snapshot, join(traces, "shop/refundCreatedCharge.jsonl"));
   const text = readFileSync(snapshot, "utf8").split("\n");
-  writeFileSync(snapshot, [...text.slice(0, 2), "{", ...text.slice(2)].join("\n"));
+  writeFileSync(join(traces, "shop/any-name.jsonl"), [...text.slice(0, 2), "{", ...text.slice(2)].join("\n"));
   assert.deepEqual(
-    verifyTraces(broken, traces).violations.map((p) => [p.location, p.kind]),
-    [[{ file: "shop/__snapshots__/refundCreatedCharge.jsonl", line: 3 }, "Uncomparable.lineSchema"]],
+    verifyTraces(shop, traces).violations.map((p) => [p.location, p.kind]),
+    [[{ file: relative(shop.root, join(traces, "shop/any-name.jsonl")), line: 3 }, "Uncomparable.lineSchema"]],
   );
 });
 
@@ -165,7 +155,7 @@ test("drive keeps both requests that the implementation sends under one id, and 
     shopAdapter((chargeId) => chargeId, { requestId: () => "pay-1" }),
   );
   assert.deepEqual(
-    trace.filter((l) => l.dir === "out" && l.type === "command").map((l) => l.id),
+    trace.filter((l) => "dir" in l && l.dir === "out" && l.type === "command").map((l) => "id" in l && l.id),
     ["pay-1", "pay-1"],
   );
   assert.deepEqual(kinds, ["Uncomparable.duplicateId"]);
@@ -238,8 +228,5 @@ test("drive ends the subscriptions of the old process at a restart, so an iterab
     trace.map((l) => `${JSON.stringify(l)}\n`).join(""),
   );
   const kinds = verifyTraces(spec, traces).violations.map((p) => p.kind);
-  assert.deepEqual(
-    kinds.filter((k) => k !== "Uncomparable.missingTrace"),
-    [],
-  );
+  assert.deepEqual(kinds, []);
 });

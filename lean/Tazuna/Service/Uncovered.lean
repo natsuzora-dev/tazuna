@@ -6,7 +6,7 @@ namespace Tazuna.Service
 open Tazuna.Data
 
 /--
-A part that neither a scenario's run nor an explored path reached, which test --coverage reports. A run notes each part
+A part that no trace's replay reached, which verify --coverage reports. A run notes each part
 of a command, query, automation, or chart that it reaches (Note.reached). A run evaluates bindings and conditions in
 order and stops at the first null binding or false condition, so `bindsRejection`, `requiresRejection`,
 `automationBindingNull`, `automationGuard` with `met` false, and `guardFalse` name only that first one.

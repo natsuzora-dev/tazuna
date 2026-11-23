@@ -3,7 +3,7 @@ import { addTask, scenario } from "./todo.ts";
 
 export const addThreeWrongEvents = scenario({
   description:
-    "Add three tasks; the implementation trace names the second addTask as the result of the second taskAdded, which the spec emits as no result",
+    "Add three tasks; the implementation trace emits the second taskAdded without naming the second addTask as its result, as the spec does",
   given: { start: parseInstant("2026-10-25T00:00:00Z"), records: { Task: [] }, peers: [] },
   when: (w) => {
     w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });

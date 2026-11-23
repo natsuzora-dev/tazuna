@@ -156,7 +156,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   },
   modal_child_covers: { kindExample: "InvalidInput.coveredByModal" },
   moves_enabled: ofExplored,
-  no_violation_iff: ofCompare,
   only_clock_moves_time: network("delivered"),
   operate_agrees: ofAudit,
   overtaking_delivery_halts: { kindExample: "InvalidScenario.overtaking" },
@@ -213,7 +212,10 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   subscribe_agrees: ofAudit,
   then_only_reports: network("unmetExpectation"),
   unchanged_answer_not_sent: { example: "service/Query/changed_answer_sent", scenario: "subscribed" },
-  uncovered_unreached: ofExplored,
+  uncovered_unreached: {
+    because:
+      "a property of coverage over all replays, which the engine runs on every verify --coverage example; no one run shows all replays",
+  },
   unlisted_emitted_event_halts: {
     because:
       "no spec that check passes emits an event that its command does not list, since the IR names only listed events; the theorem keeps the semantics total over every Functions",

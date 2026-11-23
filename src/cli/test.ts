@@ -8,7 +8,7 @@ import { type Run, sameRun, snapshotEntryPath, snapshotPath } from "../data/trac
 import { canonicalJson } from "../data/values.ts";
 import { type Location, type ReportedViolation, toReported, type ViolationValue } from "../data/violation.ts";
 import type { Named } from "../dsl/definition.ts";
-import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
+import { placeOf } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
 import type { LoadedScenario } from "../load/scenarios.ts";
 import { snapshotPairingViolation } from "../verify/pairing.ts";
@@ -19,8 +19,6 @@ export interface TestResult {
   readonly violations: readonly ReportedViolation[];
   readonly written: readonly string[];
   readonly removed: readonly string[];
-  /** The parts that no exploration reached, which test --coverage reports. */
-  readonly uncovered: readonly ViolationValue[];
 }
 
 function writeSnapshot(spec: Spec, run: Run, lines: readonly TraceLine[]): string {
@@ -142,16 +140,5 @@ export function testSpec(
       );
   const skipped = spec.scenarios.filter((s) => !scenarios.includes(s));
   const snapshots = testSnapshots(spec, snapshotted, options.update, skipped);
-  return {
-    ...snapshots,
-    violations: [...violations, ...snapshots.violations],
-    uncovered: tested.uncovered,
-  };
+  return { ...snapshots, violations: [...violations, ...snapshots.violations] };
 }
-
-/** The parts that `test --coverage` reports, each at its definition, in place order. */
-export const uncoveredOf = (spec: Spec, uncovered: readonly ViolationValue[]): ReportedViolation[] =>
-  uncovered
-    .map((violation) => ({ violation, place: placeOf(spec, violation.definition) }))
-    .sort((x, y) => comparePlaces(x.place, y.place))
-    .map(reportedOfFound);

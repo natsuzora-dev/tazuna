@@ -97,9 +97,10 @@ def modules : List (String × List Name) :=
      ``Tazuna.Ir.Entry, ``Tazuna.Ir.Site, ``Tazuna.Ir.ChartFns, ``Tazuna.Ir.Program]),
    ("src/cli/protocol.generated.ts",
     [``Tazuna.Service.Issue, ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys,
-     ``Tazuna.Engine.PairedService, ``Tazuna.Engine.Stored, ``Tazuna.Engine.Request, ``Tazuna.Engine.Unpaired,
+     ``Tazuna.Engine.Stored, ``Tazuna.Engine.StartLine, ``Tazuna.Engine.Log, ``Tazuna.Engine.Request, ``Tazuna.Engine.Unpaired,
      ``Tazuna.Engine.SimulatedService, ``Tazuna.Engine.ReadPart, ``Tazuna.Engine.Evaluated, ``Tazuna.Engine.Found,
-     ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Response])]
+     ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Replayed,
+     ``Tazuna.Engine.Response])]
 
 def declaredIn (path : String) : MetaM (List Name) := do
   let some types := modules.lookup path | throwError "modules has no {path}"

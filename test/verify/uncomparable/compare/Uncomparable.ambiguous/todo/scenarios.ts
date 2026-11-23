@@ -10,7 +10,7 @@ const arranged = given({
 
 export const twoDays = scenario({
   description:
-    "Add a task and answer the calendar.nextDay request; its snapshot, edited by hand, has the planner send two equal calendar.nextDay requests and answers them with different days. The trace's two requests are equal too, so no line tells which of them stands for the first, and the request that the harness gave the first answer to decides what the implementation got; verify reports Uncomparable.ambiguous",
+    "Add a task; planner and reminder send two equal calendar.nextDay requests. The trace answers them with different days, and its two requests are equal too, so no line tells which of them stands for which of the spec's, and which spec request the replay gives the first answer to decides what the spec got; verify reports Uncomparable.ambiguous",
   given: arranged,
   when: (w) => {
     const ask = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);
@@ -22,7 +22,7 @@ export const twoDays = scenario({
 
 export const twoDaysAlike = scenario({
   description:
-    "Same inputs as twoDays; its snapshot, edited by hand, answers the two equal requests with the same day, so whichever request the harness gives each answer to, the implementation gets the same inputs; no violation",
+    "Same inputs as twoDays; the trace answers the two equal requests with the same day, so whichever spec request the replay gives each answer to, the spec gets the same inputs; no violation",
   given: arranged,
   when: (w) => {
     const ask = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }).request(calendar.nextDay);

@@ -47,7 +47,7 @@ export function snapshotFolders(spec: Spec): {
 }
 
 /** Returns every run that can have a snapshot: each scenario's own run, and the run of each other spec service in it. */
-export function snapshotRuns(spec: Spec): Run[] {
+function possibleRuns(spec: Spec): Run[] {
   const runners = spec.structure.services.filter((s) => !s.external).map((s) => s.name);
   return spec.scenarios.flatMap(({ service, name }) => [
     { service, scenario: name, runner: service },
@@ -56,7 +56,7 @@ export function snapshotRuns(spec: Spec): Run[] {
 }
 
 /** Returns the runs among `runs` that have a snapshot. */
-export function withSnapshot(spec: Spec, runs: readonly Run[]): Run[] {
+function withSnapshot(spec: Spec, runs: readonly Run[]): Run[] {
   const { services, folders } = snapshotFolders(spec);
   return [
     ...pairSnapshots(
@@ -66,6 +66,12 @@ export function withSnapshot(spec: Spec, runs: readonly Run[]): Run[] {
     ).compare,
   ];
 }
+
+/**
+ * Returns every run that has a snapshot: each scenario's own run, and each run of another spec service in a scenario.
+ * `drive` drives an implementation of the run's `runner` through it.
+ */
+export const snapshotRuns = (spec: Spec): Run[] => withSnapshot(spec, possibleRuns(spec));
 
 export function snapshotViolations(spec: Spec, run: Run, lines: readonly TraceLine[]): ReportedViolation[] {
   const path = snapshotPath(spec, run);

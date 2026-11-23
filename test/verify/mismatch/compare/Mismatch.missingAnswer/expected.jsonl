@@ -1,1 +1,1 @@
-{"kind":"Mismatch.missingAnswer","definition":null,"data":{"subject":{"type":"answer","to":"completeTask#2"},"snapshotLine":11},"location":{"file":"traces/todo/answersWrongResults.jsonl","line":10},"scenario":{"service":"todo","name":"answersWrongResults"}}
+{"kind":"Mismatch.missingAnswer","definition":null,"data":{"subject":{"type":"answer","to":"completeTask#2"},"snapshotLine":11},"location":{"file":"traces/todo/answersWrongResults.jsonl","line":10}}

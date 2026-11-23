@@ -192,15 +192,15 @@ The side that breaks a contract is at fault: the caller for a precondition, and 
 | `NonCanonical` | `check` | The spec. |
 | `Restricted` | `check` | The spec. |
 | `Illegal` | `check` | The spec. |
-| `InvalidScenario` | `test` | The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold or cannot fail. |
-| `InvalidInput` | `test` | The scenario: a message that no sender could give the running service, including an external peer's answer that breaks the peer's contract. |
-| `Fault` | `test` | The spec. |
-| `BagOrderDependent` | `test` | The spec. |
-| `ChoiceDependent` | `test` | The spec. |
+| `InvalidScenario` | `test`, `verify` | The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold or cannot fail. For `verify`, the start line of the trace, whose records the spec rejects. |
+| `InvalidInput` | `test`, `verify` | The scenario, or for `verify` the trace: a message that no sender could give the running service, including an external peer's answer that breaks the peer's contract. |
+| `Fault` | `test`, `verify` | The spec. |
+| `BagOrderDependent` | `test`, `verify` | The spec. |
+| `ChoiceDependent` | `test`, `verify` | The spec. |
 | `Undecided` | `test` | Neither side: the check stopped at a limit of tazuna. A smaller processing, or fewer created keys that only their keys tell apart, lets it decide. |
-| `Uncovered` | `test --coverage` | The scenarios. |
+| `Uncovered` | `verify --coverage` | The tests that write the traces. |
 | `Mismatch` | `test`, `verify` | The implementation or external service whose trace differs, or, for `test`, the snapshot that differs from its scenario's simulation. |
-| `Uncomparable` | `test`, `verify` | The trace whose `in` lines differ from the snapshot's or that pairs with it in more than one way, or, for `test`, a snapshot without a scenario or a scenario without a snapshot. |
+| `Uncomparable` | `test`, `verify` | The trace that the spec cannot replay or compare in one way, or an entry of the traces folder that is no trace, or, for `test`, a snapshot without a scenario or a scenario without a snapshot. |
 
 ## Detections
 
@@ -430,7 +430,6 @@ No theorem shows that it does.
 | When the step-order search of a message reports nothing, each order that it ran either could not run, because no queue takes the steps in that order, or gives the same outcome as the execution that it came from. | `stepOrderSearch_same` |
 | The step-order search does not swap two steps of which one is an `always` round of an instance that the other settles around: either order gives the same processing. | `always_step_independent` |
 | The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and a state equal under a binding of created keys, as [Step orders that `test` searches](#step-orders-that-test-searches) defines. When `verify` cannot compare the first execution's outputs even with themselves, as the `ChoiceDependent` rows of [Detections](#detections) say, the same outcome means only a state equal under a binding. | `difference_same`, `compareTraces_ok`, `sameState_renamed` |
-| `verify` pairs the traces folder with the scenarios without a violation exactly when the folder holds only service subfolders, each file of a subfolder is a trace of an external service or is named after a scenario of its service, and each compared scenario of a service that is not external has a trace. | `no_violation_iff` |
 
 ### Exploration
 
@@ -441,4 +440,4 @@ No theorem shows that it does.
 | `test` appends a move exactly when the world enables it and the declared domains and the finite types admit its values. | `moves_complete` |
 | On an explored path, no two requests that the own service sends carry one id, restarts included and whatever step orders the step-order search sets, so no move answers the own service with `reused-id`. | `explored_sent_ids_distinct` |
 | When the fingerprints assumption holds, extending only the first explored world of each fingerprint reports the same violations and reached parts as extending every path of up to the `depth` of `explore()`. The row covers nothing where that assumption fails, as for a second `BagOrderDependent` violation of one definition. | `merged_search_reports` |
-| `test --coverage` reports only parts outside the reached parts that the runs collect. No theorem states that the collected parts are what the runs reached. Lean and the TypeScript runtime collect the same parts on every explored path, which the diff test of explored paths compares. | `uncovered_unreached` |
+| `verify --coverage` reports only parts outside the reached parts that the replays collect. No theorem states that the collected parts are what the replays reached. | `uncovered_unreached` |

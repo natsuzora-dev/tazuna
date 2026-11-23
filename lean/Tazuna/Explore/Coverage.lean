@@ -1,8 +1,8 @@
 import Tazuna.Service.Uncovered
 
 /-!
-What `test --coverage` reports: the parts of the spec that no scenario's run and no explored path reached, given the
-parts that they reached (Note.reached).
+What `verify --coverage` reports: the parts of the spec that no trace's replay reached, given the parts that the
+replays reached (Note.reached).
 -/
 
 namespace Tazuna.Explore
@@ -64,7 +64,7 @@ def chartUncovered (reached : List Uncovered) (d : Spec.Definition) : List Uncov
     ((if started then transitions c.on else []) ++ states).filter (!reached.contains ·)
   | _ => []
 
-/-- What `test --coverage` reports, by definition: requests, then automations, then charts. -/
+/-- What `verify --coverage` reports, by definition: requests, then automations, then charts. -/
 def uncovered (spec : Spec.Structure) (reached : List Uncovered) : List Uncovered :=
   spec.definitions.flatMap (requestsUncovered reached) ++ spec.definitions.flatMap (automationUncovered reached) ++
     spec.definitions.flatMap (chartUncovered reached)

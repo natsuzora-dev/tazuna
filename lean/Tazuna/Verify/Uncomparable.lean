@@ -32,13 +32,10 @@ inductive Uncomparable where
   | resultOfNonCommand (line : Nat) (event : Spec.Ref) (requestId : String) (target : Spec.Ref)
   /-- An id of the line's `after` names no earlier `out` line of its group. -/
   | unknownAfter (line : Nat) (lineId : String)
-  /-- The trace has an `in` line where the snapshot has none. -/
-  | unexpectedInput (line : Nat) (trace : Value)
-  /-- The trace, at its last line `line`, has no `in` line for the snapshot's. -/
-  | missingInput (line : Nat) (snapshot : Value) (snapshotLine : Nat)
   /--
-  The `in` line differs from the snapshot's `in` line `snapshotLine`, so the trace's run took another input than the
-  snapshot's.
+  The `in` line differs from the `in` line `snapshotLine` that the spec took from it: its time is earlier than the
+  spec's clock, which never goes back. Where one side has no `in` line, its value is null, and `snapshotLine` is 0 when
+  the spec has none.
   -/
   | differentInput (line snapshotLine : Nat) (snapshot trace : Value)
   /--
@@ -56,14 +53,7 @@ inductive Uncomparable where
   | bindingLimit (line : Nat) (subject : Subject) (snapshotLine : Nat) (limit : Nat)
   /-- The traces folder has a folder `service` that names no service of the spec. -/
   | unknownService (service : String)
-  /-- A trace is named for no scenario of the service. -/
-  | unknownScenario (scenario : Spec.Ref)
-  /-- A snapshot of the run of `scenario` by `runner` has no trace. -/
-  | missingTrace (scenario : Spec.Ref) (runner : String)
-  /--
-  The traces folder has an entry that is not a `<service>/<scenario>.jsonl` or `<service>/<scenario>.<peer>.jsonl`
-  trace.
-  -/
+  /-- The traces folder has an entry that is not in a service's folder, or is neither a file nor a folder. -/
   | unknownTraceEntry
   /--
   The run of `scenario` by `runner` did not halt and has no snapshot, such as the run of a new scenario.

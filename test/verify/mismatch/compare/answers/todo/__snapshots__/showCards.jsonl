@@ -1,6 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"query","id":"taskCard#1","name":"taskCard","input":{}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"taskCard#1","answer":{"result":"fulfilled","output":{"due":{"at":1792890000000,"parts":[{"name":"Morning"}]},"mark":{"kind":"one","part":{"name":"Shop"}}}}}
-{"time":1792886400000,"dir":"in","type":"query","id":"taskCard#2","name":"taskCard","input":{}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#2","to":"taskCard#2","answer":{"result":"fulfilled","output":{"due":{"at":1792890000000,"parts":[{"name":"Morning"}]},"mark":{"kind":"one","part":{"name":"Shop"}}}}}
-{"time":1792886400000,"dir":"in","type":"query","id":"taskCard#3","name":"taskCard","input":{}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#3","to":"taskCard#3","answer":{"result":"fulfilled","output":{"due":{"at":1792890000000,"parts":[{"name":"Morning"}]},"mark":{"kind":"one","part":{"name":"Shop"}}}}}

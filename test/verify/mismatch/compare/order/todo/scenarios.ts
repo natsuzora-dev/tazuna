@@ -3,7 +3,7 @@ import { calendar } from "../calendar/contract.ts";
 import { addTask, scenario } from "./todo.ts";
 
 export const addOne = scenario({
-  description: "Add a task; the implementation trace keeps the snapshot's order and times; no violation",
+  description: "Add a task; the implementation trace keeps the spec's order and times; no violation",
   given: { start: parseInstant("2026-10-25T00:00:00Z"), records: { Task: [] }, peers: [external(calendar)] },
   when: (w) => {
     const add = w.client.send(addTask, { taskId: "task-1", title: "Buy milk" });

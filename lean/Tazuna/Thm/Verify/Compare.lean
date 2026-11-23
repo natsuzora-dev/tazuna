@@ -660,8 +660,8 @@ theorem compareGroups_match (lineCount : Nat) (internal : Line → Bool) (relati
                 .error (.uncomparable (.ambiguous t.index (Subject.of s.line.toTraceLine) s.index
                   ((outs.filter fun o => images.contains o.line.body.id).map (·.index))))
               | none => .ok set'
-          | some s, none => .error (.uncomparable (.missingInput lineCount (lineValue s.line) s.index))
-          | none, some t => .error (.uncomparable (.unexpectedInput t.index (lineValue t.line))) :
+          | some s, none => .error (.uncomparable (.differentInput lineCount s.index (lineValue s.line) .null))
+          | none, some t => .error (.uncomparable (.differentInput t.index 0 .null (lineValue t.line))) :
             Except Finding (List (From root))) = .ok set₁ →
         set₁ ≠ [] ∧ ∀ c ∈ set₁, ∃ c₀ ∈ set, c₀.val.Extends c.val ∧ InputMatch v.domain c.val e.input a.input := by
       intro set₁ hs

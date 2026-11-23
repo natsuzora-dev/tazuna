@@ -3,10 +3,12 @@ import { join, relative, resolve } from "node:path";
 import { checkSpecWith, failureText } from "../check/spec.ts";
 import { type TypeCheck, typeCheck } from "../check/typeCheck.ts";
 import type { Converter } from "../convert/program.ts";
-import type { ReportedViolation } from "../data/violation.ts";
+import type { ReportedViolation, ViolationValue } from "../data/violation.ts";
+import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
+import type { Spec } from "../load/load.ts";
 import { verifyTraces } from "../verify/index.ts";
 import { explain } from "./explain.ts";
-import { testSpec, uncoveredOf } from "./test.ts";
+import { testSpec } from "./test.ts";
 import { isViewerBuilt, viewerFolder, viewSpec } from "./view.ts";
 
 interface Io {
@@ -28,11 +30,10 @@ type Invocation =
       readonly command: "test";
       readonly root: string;
       readonly update: boolean;
-      readonly coverage: boolean;
       /** The `<service>/<scenario>` names that --only selects; empty to run every scenario. */
       readonly only: readonly string[];
     }
-  | { readonly command: "verify"; readonly root: string; readonly traces: string }
+  | { readonly command: "verify"; readonly root: string; readonly traces: string; readonly coverage: boolean }
   | { readonly command: "view"; readonly root: string; readonly port: number; readonly viewer: string }
   | { readonly command: "explain"; readonly markdown: string };
 
@@ -113,33 +114,33 @@ const commands = {
         description:
           "Write the snapshot of each scenario whose run did not halt instead of comparing the run with it, and remove the snapshots without a scenario.",
       },
-      "--coverage": {
-        kind: "flag",
-        description:
-          "Also report the parts of commands, queries, automations, and charts that neither a scenario's run nor an explored path reaches (Uncovered).",
-      },
       "--only": {
         kind: "repeatable",
         value: "service/scenario",
         description:
-          "Run only the scenario named exactly <service>/<scenario>, the service and name fields of a violation's scenario. The snapshots of the scenarios that do not run, and the other entries named after them, are neither compared, reported, nor removed. --coverage needs every scenario, so it cannot be given with --only.",
+          "Run only the scenario named exactly <service>/<scenario>, the service and name fields of a violation's scenario. The snapshots of the scenarios that do not run, and the other entries named after them, are neither compared, reported, nor removed.",
       },
     },
     parse: ({ root, options }) => {
-      const { "--coverage": coverage, "--update": update, "--only": only } = options;
-      if (coverage && only.length > 0) return { misuse: "--coverage cannot be given with --only" };
-      return { command: "test", root, update, coverage, only };
+      const { "--update": update, "--only": only } = options;
+      return { command: "test", root, update, only };
     },
   }),
   verify: command({
     spec: true,
     positionals: ["traces"],
     description:
-      "Compare implementation traces with the snapshots without running the spec. <traces> is a folder of <service>/<scenario>.jsonl traces, and of <service>/<scenario>.<peer>.jsonl traces of the implementation of a spec service <peer> that runs as a peer in the scenario. verify compares the latter with the snapshot <service>/__snapshots__/<scenario>.<peer>.jsonl as <peer>'s trace. Any other entry of <traces> is a violation. verify checks a trace of an external service against the service's contract once the trace ends, so a result event may come before or after its request's answer. verify also reports traces that name no scenario and snapshots without a trace, and skips a trace that has no snapshot.",
-    options: {},
-    parse: ({ root, positionals: [traces = ""] }, io) =>
+      'Check traces of implementations against the spec. Each file under <traces>/<service>, at any depth and with any name, is a trace of the implementation of the service <service>: its trace lines, after a first line {"type":"start","time","records"} that states the time and the records that the implementation starts from. A trace without that line starts from no records at the time of its first line. For a spec service, verify replays the trace: the spec takes the trace\'s in lines in order, each at its time, with the values that the implementation stands for in its own way (its keys, its request ids) bound to the spec\'s by the out lines so far, and then verify compares the trace\'s lines with the spec\'s, and reports what the spec reports while it takes them. verify checks a trace of an external service against the service\'s contract once the trace ends, so a result event may come before or after its request\'s answer. Any other entry of <traces> is a violation.',
+    options: {
+      "--coverage": {
+        kind: "flag",
+        description:
+          "Also report the parts of commands, queries, automations, and charts that no trace's replay reaches (Uncovered).",
+      },
+    },
+    parse: ({ root, positionals: [traces = ""], options }, io) =>
       isFolder(resolve(io.cwd, traces))
-        ? { command: "verify", root, traces: resolve(io.cwd, traces) }
+        ? { command: "verify", root, traces: resolve(io.cwd, traces), coverage: options["--coverage"] }
         : { misuse: `no such folder ${traces}` },
   }),
   view: command({
@@ -221,7 +222,7 @@ const help = [
   "",
   ...wrap(
     "",
-    "A violation after which the spec's behavior is undefined, or a line that cannot take place, halts the run. test then neither writes nor compares that scenario's snapshot. test --update leaves an existing snapshot of that scenario as it is, and verify still compares traces with it. test and verify compare nothing with a snapshot that has a line that the trace line schema cannot read or an after field that names no earlier out line since the input line before it. verify compares no line of a trace after an in line that differs from the snapshot's. Unless such an in line stops the comparison first, verify stops at the first line of a trace that the trace line schema cannot read and reports that line. It compares no line after the last in line before that line, and checks no line of an external service's trace after that line. Blank lines of traces and snapshots are skipped, and line numbers count them.",
+    "A violation after which the spec's behavior is undefined, or a line that cannot take place, halts the run. test then neither writes nor compares that scenario's snapshot, and test --update leaves an existing snapshot of that scenario as it is; verify's replay takes no more in lines. test compares nothing with a snapshot that has a line that the trace line schema cannot read or an after field that names no earlier out line since the input line before it. verify stops at the first line of a trace that the trace line schema cannot read and reports that line. It compares no line after the last in line before that line, and checks no line of an external service's trace after that line. Blank lines of traces and snapshots are skipped, and line numbers count them.",
   ),
   "",
   ...wrap(
@@ -233,6 +234,13 @@ const help = [
     "The exit code is 1 when tsc reports an error or a command reports a violation, 2 on a usage error, and 0 otherwise.",
   ),
 ].join("\n");
+
+/** The parts that `verify --coverage` reports, each at its definition, in place order. */
+const uncoveredOf = (spec: Spec, uncovered: readonly ViolationValue[]): ReportedViolation[] =>
+  uncovered
+    .map((violation) => ({ violation, place: placeOf(spec, violation.definition) }))
+    .sort((x, y) => comparePlaces(x.place, y.place))
+    .map(reportedOfFound);
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
@@ -335,13 +343,16 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
       const tested = testSpec(spec, { update: invocation.update, scenarios });
       for (const written of tested.written) io.error(`Updated 1 snapshot: ${join(root, relative(spec.root, written))}`);
       for (const removed of tested.removed) io.error(`Removed 1 snapshot: ${join(root, relative(spec.root, removed))}`);
-      const violations = [...(invocation.coverage ? uncoveredOf(spec, tested.uncovered) : []), ...tested.violations];
       const ran = `${scenarios.length}/${spec.scenarios.length} scenarios${only.length === 0 ? "" : " (--only)"}`;
-      return report(io, spec.root, violations, ran);
+      return report(io, spec.root, tested.violations, ran);
     }
     case "verify": {
       const verified = verifyTraces(spec, invocation.traces);
-      return report(io, spec.root, verified.violations, count(verified.traces, "trace"));
+      const violations = [
+        ...(invocation.coverage ? uncoveredOf(spec, verified.uncovered) : []),
+        ...verified.violations,
+      ];
+      return report(io, spec.root, violations, count(verified.traces, "trace"));
     }
   }
 }

@@ -1,7 +1,0 @@
-{"kind":"Uncovered.request","definition":{"service":"archive","name":"archiveTask"},"data":{},"location":{"file":"archive/archive.ts","line":18}}
-{"kind":"Uncovered.request","definition":{"service":"archive","name":"archivedTitles"},"data":{},"location":{"file":"archive/archive.ts","line":23}}
-{"kind":"Uncovered.successAnswer","definition":{"service":"backlog","name":"renameTask"},"data":{},"location":{"file":"backlog/backlog.ts","line":34}}
-{"kind":"Uncovered.bindsRejection","definition":{"service":"backlog","name":"renameTask"},"data":{"binding":"task"},"location":{"file":"backlog/backlog.ts","line":34}}
-{"kind":"Uncovered.successAnswer","definition":{"service":"backlog","name":"taskTitles"},"data":{},"location":{"file":"backlog/backlog.ts","line":41}}
-{"kind":"Uncovered.requiresRejection","definition":{"service":"backlog","name":"taskTitles"},"data":{"condition":"notEmpty"},"location":{"file":"backlog/backlog.ts","line":41}}
-{"kind":"Uncovered.request","definition":{"service":"device","name":"showNotification"},"data":{},"location":{"file":"device/device.ts","line":6}}

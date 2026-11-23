@@ -49,3 +49,24 @@ export const planner = machine({
     },
   },
 });
+
+export const reminder = machine({
+  description: "Ask for the next day of the latest added task too, with the same input as planner",
+  receives: { taskAddedRecorded },
+  queries: { nextDay: calendar.nextDay },
+  initial: "idle",
+  states: { idle: {}, asking: {} },
+}).chart({
+  on: { taskAddedRecorded: [{ target: "asking" }] },
+  states: {
+    asking: {
+      calls: {
+        nextDay: {
+          input: ({ now }) => ({ from: now }),
+          onFulfilled: [{ target: "idle" }],
+          onRejected: [{ target: "idle" }],
+        },
+      },
+    },
+  },
+});

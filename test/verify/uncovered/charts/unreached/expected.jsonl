@@ -1,0 +1,9 @@
+{"kind":"Uncovered.request","definition":{"service":"backlog","name":"completeTask"},"data":{},"location":{"file":"backlog/backlog.ts","line":25}}
+{"kind":"Uncovered.transition","definition":{"service":"backlog","name":"progress"},"data":{"transition":{"state":"busy","trigger":{"type":"on","key":"taskCompleted"},"index":0}},"location":{"file":"backlog/backlog.ts","line":32}}
+{"kind":"Uncovered.guardFalse","definition":{"service":"backlog","name":"progress"},"data":{"transition":{"state":"busy","trigger":{"type":"on","key":"taskCompleted"},"index":0},"condition":"allDone"},"location":{"file":"backlog/backlog.ts","line":32}}
+{"kind":"Uncovered.state","definition":{"service":"backlog","name":"progress"},"data":{"state":"done"},"location":{"file":"backlog/backlog.ts","line":32}}
+{"kind":"Uncovered.state","definition":{"service":"backlog","name":"progress"},"data":{"state":"archived"},"location":{"file":"backlog/backlog.ts","line":32}}
+{"kind":"Uncovered.guardFalse","definition":{"service":"backlog","name":"titleWatcher"},"data":{"transition":{"state":"idle","trigger":{"type":"on","key":"taskAdded"},"index":0},"condition":"isTitled"},"location":{"file":"backlog/backlog.ts","line":49}}
+{"kind":"Uncovered.guardFalse","definition":{"service":"backlog","name":"titleWatcher"},"data":{"transition":{"state":"idle","trigger":{"type":"on","key":"taskAdded"},"index":0},"condition":"isMilk"},"location":{"file":"backlog/backlog.ts","line":49}}
+{"kind":"Uncovered.transition","definition":{"service":"backlog","name":"titleWatcher"},"data":{"transition":{"state":"idle","trigger":{"type":"on","key":"taskAdded"},"index":1}},"location":{"file":"backlog/backlog.ts","line":49}}
+{"kind":"Uncovered.transition","definition":{"service":"backlog","name":"titleWatcher"},"data":{"transition":{"state":"seen","trigger":{"type":"on","key":"taskAdded"},"index":0}},"location":{"file":"backlog/backlog.ts","line":49}}

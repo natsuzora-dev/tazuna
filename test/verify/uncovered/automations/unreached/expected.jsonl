@@ -1,0 +1,4 @@
+{"kind":"Uncovered.request","definition":{"service":"backlog","name":"completeTask"},"data":{},"location":{"file":"backlog/backlog.ts","line":25}}
+{"kind":"Uncovered.automationBindingNull","definition":{"service":"backlog","name":"completeChores"},"data":{"binding":"added"},"location":{"file":"backlog/backlog.ts","line":32}}
+{"kind":"Uncovered.automationGuard","definition":{"service":"backlog","name":"completeChores"},"data":{"condition":"chore","met":true},"location":{"file":"backlog/backlog.ts","line":32}}
+{"kind":"Uncovered.automationBindingValue","definition":{"service":"backlog","name":"completeDuplicates"},"data":{"binding":"earlier"},"location":{"file":"backlog/backlog.ts","line":41}}

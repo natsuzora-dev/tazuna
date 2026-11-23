@@ -4,7 +4,8 @@ import Tazuna.Sim.Given
 /-!
 What `drive` asks of the engine while it drives an implementation through a snapshot: the Given records that the
 implementation starts from, and the snapshot's lines read by their schemas, whose key references it substitutes by the
-bindings that verifying the trace so far keeps (verifyTrace).
+bindings under which the log so far compares with the snapshot so far (bindingsOf). Comparing reads values by their
+schemas alone, so drive needs no spec function.
 -/
 
 namespace Tazuna.Engine
@@ -39,5 +40,14 @@ def readSnapshotLines (spec : Spec.Structure) (service : String) (lines : List (
     IO (List (Option ReadLine)) := do
   let (read, _) ← Verify.readLines spec service (readIn spec) lines []
   pure (read.map (·.map fun l => { line := l.toTraceLine, value := l.value.map CValue.tagged }))
+
+/--
+The violations of comparing the log `trace` so far with the snapshot lines `snapshot` so far, and the pairs of each
+binding that the comparison ends with, by which drive substitutes the snapshot's values.
+-/
+def bindingsOf (spec : Spec.Structure) (service : String) (snapshot : List (Option TraceLine))
+    (trace : List (FileLine TraceLine)) : IO (List Verify.Finding × List (List (String × String))) := do
+  let compared ← Verify.verifyLines spec service (readIn spec) snapshot trace id
+  pure (compared.findings.filter (·.isViolation), compared.bindings.map (·.strings))
 
 end Tazuna.Engine

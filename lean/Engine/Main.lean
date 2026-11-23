@@ -18,9 +18,6 @@ def sendLine {α : Type} [ToValue α] (stdout : IO.FS.Stream) (message : α) : I
 def respond : Engine.Request → IO Response
   | .check s => pure (.checked (Validation.check s))
   | .checkCanonical s => pure (.checkedCanonical (Validation.Canonical.check s))
-  | .pair services expected others folders =>
-    let found := Verify.pairTraces (services.map fun s => (s.name, s.external)) expected others folders
-    pure (.paired found.compare found.contract (unpaired found.violations))
   | .pairSnapshots services expected folders =>
     let found := Verify.pairSnapshots services expected folders
     pure (.pairedSnapshots found.compare (unpaired found.violations))
@@ -33,12 +30,13 @@ def respond : Engine.Request → IO Response
   | .simulate s sc => do
     let (services, violations, halted) ← Engine.simulate s sc
     pure (.simulated services violations halted)
-  | .test s scenarios => do
-    let (runs, uncovered) ← Engine.test s scenarios
-    pure (.tested runs uncovered)
-  | .verifyTrace s service snapshot trace => do
-    let (findings, bindings) ← Engine.verifyTrace s service snapshot trace
-    pure (.verifiedTrace findings bindings)
+  | .test s scenarios => do pure (.tested (← Engine.test s scenarios))
+  | .verify s logs => do
+    let (replayed, uncovered) ← Engine.verify s logs
+    pure (.verified replayed uncovered)
+  | .bindings s service snapshot trace => do
+    let (findings, bindings) ← Engine.bindingsOf s service snapshot trace
+    pure (.bound findings bindings)
   | .verifyExternal s service trace => do pure (.verifiedExternal (← Engine.verifyExternal s service trace))
   | .givenRecords s sc service => do pure (.given (← Engine.givenRecordsOf s sc service))
   | .readLines s service lines => do pure (.read (← Engine.readSnapshotLines s service lines))
