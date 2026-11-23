@@ -1,0 +1,1 @@
+{"kind":"Fault.missedResponse","definition":{"service":"todo","name":"Task"},"data":{"recordKey":"task-0","response":"assigned","due":1792890000000},"location":{"file":"todo/todo.ts","line":4},"scenario":{"service":"todo","name":"givenUnassigned"}}

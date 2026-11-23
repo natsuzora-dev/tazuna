@@ -31,7 +31,7 @@ export type MadeRow<S extends Shape> = Made<Row<S>>;
 export interface Response<Args> {
   readonly when: (args: Args) => boolean;
   readonly expect: (args: Args) => boolean;
-  /** The milliseconds, a whole number, by which `expect` must hold. */
+  /** The milliseconds, a whole number, zero or more, by which `expect` must hold (`Malformed.inexactWithin`). */
   readonly within: number;
 }
 

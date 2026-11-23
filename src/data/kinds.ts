@@ -45,6 +45,7 @@ const malformedKinds = every<Malformed["kind"]>()([
   "Malformed.unexportedDefinition",
   "Malformed.unresolvedReference",
   "Malformed.unreadableDeadline",
+  "Malformed.inexactWithin",
   "Malformed.inexactTime",
   "Malformed.unknownPeer",
   "Malformed.lineAfterWhen",

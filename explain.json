@@ -1276,6 +1276,19 @@
         "violation": "{\"kind\":\"Malformed.inexactTime\",\"definition\":null,\"data\":{},\"location\":{\"file\":\"todo/scenarios.ts\",\"line\":11},\"scenario\":{\"service\":\"todo\",\"name\":\"countAtEachTime\"}}"
       }
     },
+    "Malformed.inexactWithin": {
+      "meaning": "The response `response` of the entity has a `within` that is no duration: whole milliseconds, zero or more.",
+      "example": {
+        "excerpt": {
+          "file": "todo/todo.ts",
+          "from": 4,
+          "to": 25,
+          "line": 4,
+          "text": "export const Task = entity({\n  description: \"A task\",\n  fields: { id: z.string(), assignee: z.string().nullable() },\n  key: \"id\",\n  responses: {\n    assignedBeforeAdded: {\n      when: ({ record }) => record.assignee === null,\n      expect: ({ record }) => record.assignee !== null,\n      within: -1,\n    },\n    assignedInHalfAMillisecond: {\n      when: ({ record }) => record.assignee === null,\n      expect: ({ record }) => record.assignee !== null,\n      within: 0.5,\n    },\n    assignedAtOnce: {\n      when: ({ record }) => record.assignee === null,\n      expect: ({ record }) => record.assignee !== null,\n      within: 0,\n    },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"Malformed.inexactWithin\",\"definition\":{\"service\":\"todo\",\"name\":\"Task\"},\"data\":{\"response\":\"assignedBeforeAdded\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":4}}"
+      }
+    },
     "Malformed.lineAfterWhen": {
       "meaning": "A line of the scenario was placed after its When returned, through a handle kept for later.",
       "example": {
