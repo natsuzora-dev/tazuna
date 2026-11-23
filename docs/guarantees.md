@@ -103,7 +103,7 @@ tazuna guarantees nothing about inputs that no trace contains.
   For an invariant of records, `prove` shows that it holds of the initial records at any time, and after each command, with any input and caller at any time no earlier than the records' time, from any records within the bounds where every invariant holds and every record fits its schema.
   From the same records, it shows that each `ensures` holds and that no command leaves a ref that names a missing record.
   A chart's invariant holds when the chart starts and after each microstep, for any event, answer, or deadline in any configuration.
-  For a pair of steps, deadlines, or arrivals, both [orders](#orders-that-prove-compares) end the same from any records and machine states within the bounds.
+  For a pair of steps, deadlines, or arrivals, both [orders](#orders-that-prove-compares) end the same from any records and machine states within the bounds where every invariant, a machine's too, holds.
 - `counterexample` means that the semantics reports the violations that the line lists when it runs the command, query, or transition of the line from the line's state.
   `prove` replays every counterexample in the semantics before it reports it, and a replay that disagrees with the solver is an internal error, or undecided for a pair of deadlines or arrivals, whose chains leave out faults.
   The state may be one that no run reaches, as [A counterexample is a decision about the spec](concepts.md#a-counterexample-is-a-decision-about-the-spec) explains.
@@ -115,7 +115,8 @@ Some properties are undecided by design:
 
 - A response is proved only when `when` implies `expect` in the initial records, after each command, and as time passes.
   A response that a deadline or a later step meets in time is undecided, unless the service has no automation and no chart, in which case `prove` reports a counterexample that states its progress assumption in `assumes`.
-- A pair of deadlines or events whose message can take more than 8 steps is undecided, as is the arrival order of two answers.
+- A pair of deadlines or arrivals whose message can take more than 8 steps is undecided.
+- A pair of deadlines or arrivals is undecided when its service has a screen, or a machine with parallel, final, history, or map states or with `held` data, or when its message runs an automation that creates a key, and so is an answer that several states or automations wait for.
 - An invariant of a screen, or of a machine with parallel, final, history, or map states or with `held` data, is undecided.
 
 ### What `generate` writes
@@ -131,15 +132,16 @@ Some properties are undecided by design:
 The spec decides every choice, so an outcome that depends on an order that no line writes is a violation.
 `prove` compares, from any state where the invariants hold, both orders of:
 
-- two automations that react to one event
+- two automations that react to one event, or to two events that one command emits
 - two deadlines of one service that can be due at the same time
-- two events from other services that can arrive at once
+- two messages from other services that can arrive at once: events that the service receives, and answers to requests that it waits for, each with its requesting state active
 
 Each order runs each message to its end: the deadline's or event's transitions, the always transitions that follow, the own commands, the automations and machines that their events wake, and the activities of the states entered.
 `prove` follows at most 8 steps of each message.
 Two orders end the same when both halt, or when neither halts and both leave the same records and write the same out lines, in any order.
 When they differ, `prove` reports `ChoiceDependent` in its counterexample.
 When a message can take more than 8 steps, the pair is undecided.
+`prove` does not compare other steps that wait together in one message's queue: the events of one group that one machine takes, and the commands that states send in one round and the answers to them.
 
 `test` runs each scenario in one order: deadlines due at the same time fire in the order they were armed, the messages that one line delivers arrive in the order they were sent, and a message's queue takes its waiting steps in queue order.
 
