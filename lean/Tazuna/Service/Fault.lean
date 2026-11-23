@@ -57,7 +57,10 @@ inductive Fault where
   | deadlineOutOfRange (definition : Spec.Ref) (state deadline : String)
   /-- A function reads `held` (its state's parameter) under a name that the state does not have. -/
   | unheld (definition : Spec.Ref) (held : String)
-  /-- A function calls `only()` on a bag with more than one element. -/
+  /--
+  A function calls `only()` on a bag with more than one element, or `minBy` or `maxBy` on a bag whose least or greatest
+  key more than one element has.
+  -/
   | notOnly (definition : Spec.Ref)
   /--
   A spec function threw. `definition` is the definition whose function threw, or null when a service invariant throws.

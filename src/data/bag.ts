@@ -71,6 +71,10 @@ export interface Bag<T> {
   min<K extends SortKey>(f: (value: T) => K): K | undefined;
   /** The greatest key, or undefined for no values. */
   max<K extends SortKey>(f: (value: T) => K): K | undefined;
+  /** The value of the least key, or undefined for no values. More than one value of that key is `Fault.notOnly`. */
+  minBy(f: (value: T) => SortKey): T | undefined;
+  /** The value of the greatest key, or undefined for no values. More than one value of that key is `Fault.notOnly`. */
+  maxBy(f: (value: T) => SortKey): T | undefined;
   /** The one value, or undefined for no values. More than one value is `Fault.notOnly`. */
   only(): T | undefined;
   /** The values in groups of equal key, in ascending key order. */
@@ -162,6 +166,16 @@ export class BagValue<T> implements Bag<T> {
     return this.#values()
       .map((v) => f(v))
       .reduce<K | undefined>((m, k) => (m === undefined || compareKeys(k, m) > 0 ? k : m), undefined);
+  }
+
+  minBy(f: (value: T) => SortKey): T | undefined {
+    const least = this.min(f);
+    return this.filter((v) => f(v) === least).only();
+  }
+
+  maxBy(f: (value: T) => SortKey): T | undefined {
+    const greatest = this.max(f);
+    return this.filter((v) => f(v) === greatest).only();
   }
 
   only(): T | undefined {

@@ -760,6 +760,20 @@ class Conversion {
       if (key !== "number" && key !== "date") this.fail(e, `calls ${method} with other than a key`);
       return { op: method, order: key, ...this.visited(method, callee.expression, argument, scope) };
     }
+    if ((method === "minBy" || method === "maxBy") && collection === "bag") {
+      const key = this.only(this.callbackBody(method, argument));
+      if (key !== "number" && key !== "date") this.fail(e, `calls ${method} with other than a key`);
+      // The value whose key is the least (greatest): the one value of that key, so that a tie is Fault.notOnly.
+      const visited = this.visited(method, callee.expression, argument, scope);
+      const extreme = `#${this.fresh++}`;
+      const atExtreme: Expr = { op: "eq", left: visited.body, right: { op: "var", name: extreme } };
+      return {
+        op: "let",
+        name: extreme,
+        value: { op: method === "minBy" ? "min" : "max", order: key, ...visited },
+        body: { op: "only", collection: { op: "filter", visit: "bag", ...visited, body: atExtreme } },
+      };
+    }
     if (method === "concat" && collection === "bag") {
       const other = this.only(argument);
       if (other !== "bag" && other !== "table" && other !== "array")

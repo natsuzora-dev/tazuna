@@ -276,6 +276,13 @@ export const fixtures: readonly Fixture[] = [
   recordFixture("sum", {}, fc.record({}), ({ records }) => records.Task.sum((t) => (t.done ? 1 : 0))),
   fixture("sum", { bag: bag(z.int()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.sum((n) => n)),
   fixture("min", { bag: bag(z.int()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.min((n) => n)),
+  fixture(
+    "min",
+    { bag: bag(z.object({ k: z.int(), v: z.string() })) },
+    fc.record({ bag: fc.array(fc.record({ k: number, v: text }), { maxLength: 4 }) }),
+    ({ input }) => input.bag.minBy((x) => x.k),
+  ),
+  recordFixture("max", {}, fc.record({}), ({ records }) => records.Task.maxBy((t) => t.title.length)?.id),
   recordFixture("max", {}, fc.record({}), ({ records }) =>
     records.Task.filter((t) => t.at !== null).max((t) => t.at as number),
   ),

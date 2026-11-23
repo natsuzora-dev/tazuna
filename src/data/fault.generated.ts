@@ -145,7 +145,10 @@ export type Fault =
         readonly held: string;
       };
     }
-  /** A function calls `only()` on a bag with more than one element. */
+  /**
+   * A function calls `only()` on a bag with more than one element, or `minBy` or `maxBy` on a bag whose least or greatest
+   * key more than one element has.
+   */
   | {
       readonly kind: "Fault.notOnly";
       readonly definition: DefinitionRef;

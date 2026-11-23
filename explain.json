@@ -393,7 +393,7 @@
       }
     },
     "Fault.notOnly": {
-      "meaning": "A function calls `only()` on a bag with more than one element.",
+      "meaning": "A function calls `only()` on a bag with more than one element, or `minBy` or `maxBy` on a bag whose least or greatest key more than one element has.",
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",
