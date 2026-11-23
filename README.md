@@ -1,8 +1,14 @@
 # tazuna
 
 tazuna is a language for specifying services in TypeScript.
-A spec defines services, and its scenarios state what each service does.
-Lean 4 defines what a spec means, and the `tazuna` command checks a spec, simulates its scenarios, and compares an implementation's traces with the simulation.
+A spec defines each service's records, commands, queries, events, machines, and screens, and its scenarios state what the service does.
+tazuna turns the spec into data that Lean 4 defines the meaning of, and the `tazuna` command uses that meaning in five ways:
+
+- `check` checks the spec without running it.
+- `test` runs the scenarios and compares each run with its snapshot.
+- `prove` proves the spec's invariants with the Z3 solver, or reports a counterexample.
+- `generate` writes inputs that reach the parts of the spec that no scenario reaches.
+- `verify` replays an implementation's traces and compares its outputs with the spec's.
 
 Before 1.0, a minor version may break the DSL.
 Read the docs and samples of the version you installed, in `node_modules/@natsuzora-dev/tazuna`, not those on GitHub.
@@ -109,11 +115,44 @@ Run the commands in the folder of your `package.json`.
 
 8. Run every scenario again, as in step 4, to see that the fix broke no other scenario.
 
+## Prove the invariants
+
+In this section, we prove the sample's invariants, remove one, and read the counterexample that `prove` reports.
+
+1. Prove the spec:
+
+   ```sh
+   npx tazuna prove spec
+   ```
+
+   Each line names a property, such as the invariant `createdBeforeNow` of `Task`, and its verdict.
+   The last line says that every property is proved.
+
+2. Open `spec/todo/data.ts`, delete the line of the invariant `createdBeforeNow`, and prove the spec again.
+   The invariant `completedAfterCreated` now has a counterexample: a task whose `createdAt` is after the current time, which `completeTask` completes before its creation.
+
+3. No run of `todo` reaches that state, because `todo` creates each task at the current time.
+   `prove` checks each command from any records where the invariants hold, so it needs that fact as an invariant.
+   Put the line back, and prove the spec again to see that every property is proved.
+
+## Lay out a project
+
+The ToDo sample keeps its files in this layout:
+
+```text
+spec/<service>/              the spec, its bounds, its scenarios, and the __snapshots__ that test --update writes
+inputs/<service>/            the inputs that tazuna generate spec inputs writes
+web/.traces/<service>/       the traces that the implementation's tests write, which git ignores
+```
+
+The implementation's tests drive it through each snapshot and each input with `drive`, from `@natsuzora-dev/tazuna/verify`, and write a trace of each run.
+Then `npx tazuna verify spec web/.traces --coverage` checks the traces and lists the parts of the spec that no trace reached.
+See the sample's tests in [web/test](https://github.com/natsuzora-dev/tazuna/tree/main/samples/todo/web/test) in the tazuna repository.
+
 ## Next steps
 
 - To learn why a spec is written the way it is, read [Concepts](docs/concepts.md).
-- To look up what a passing command guarantees and who fixes each violation, read [Guarantees](docs/guarantees.md).
+- To look up what each command guarantees and who fixes each violation, read [Guarantees](docs/guarantees.md).
 - To drive tazuna from a coding agent, give it the skill in [skills/tazuna](skills/tazuna/SKILL.md).
-- To compare an implementation with the snapshots, see how the ToDo sample's server drives itself through the scenarios in [web/test/todo.test.ts](https://github.com/natsuzora-dev/tazuna/blob/main/samples/todo/web/test/todo.test.ts) in the tazuna repository.
 - To browse a spec's definitions and scenario snapshots in a browser, run `npx tazuna view spec`.
 - To list the commands and options, run `npx tazuna --help`. Each exported function documents itself in its doc comment.

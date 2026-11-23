@@ -13,6 +13,7 @@ It receives requests (commands, queries, and subscriptions), events, user operat
 It sends answers, events, and requests of its own.
 A service's *trace* is the sequence of these messages, each with its time.
 An `in` line of a trace is a message that the service received, and an `out` line is a message that it sent.
+A trace can start with a line `{"type":"start","time","records"}`, which states the time and the records that the service starts from.
 
 The own service of a scenario and its running peers (`run`) are the *running services* of one *simulation*, and they share one clock.
 A message to or from a running service stays *in flight* until a line of `w.net` decides its fate.
@@ -58,35 +59,15 @@ A map state has one *map state copy*, or *copy*, of its child states for each ke
 ### Keys and bindings
 
 A *created key* is a key that `createKey` returned in a run.
-A *key position* is a value whose schema is `ref(E)`, `ref.self()` inside `E`'s own fields, or `E`'s key field, such as `Task.fields.id`, at any depth of a message, a record, a context, or a map state's item key.
+A *key position* is a value whose schema is `ref(E)`, `ref.self()` inside `E`'s own fields, or one of `E`'s key fields, such as `Task.fields.id`, at any depth of a message, a record, a context, or a map state's item key.
 A *binding* pairs the values that one run created with the values of another run, one to one within each domain: the request ids, and the keys of each entity.
 `test` and `verify` compare a string through the binding only at a key position, and compare any other string, such as a key held in a plain `z.string()`, as text.
 
-### Explored paths
+### Bounds
 
-After each scenario, `test` explores paths of up to the `depth` that the service's `explore()` declares.
-The `depth` counts moves, and `tazuna --help` says which network lines a move brings with it.
-An *explored path* appends *moves* that the world enables:
-
-- an external peer's answer to a request that the own service awaits and has not ended
-- a clock line before or at the next deadline, and not before now
-- an operation that an open screen accepts
-- the end of a client subscription that no line ended
-- a request to an own command or query
-- an event of an external peer that the own service receives
-- a restart
-
-A move writes each value from the domains that `explore()` declares, or from its type when the type is finite.
-A type is finite when it is a boolean, an enum, a literal, null, an object of finite types, or a union of them.
-An optional field, or one with a default, may also be left out.
-An answer is an output, a rejection of each kind that the target may give, or a `requires` rejection for each reason that the target lists.
-Answers leave out `invalid-input` and `reused-id`, which blame the sender.
-The own service checks the input of each request that it sends and gives it an id that none of its earlier requests carries, restarts included, so an honest peer never gives them.
-An explored path uses new request ids and neither resends a command nor redelivers an event.
-
-The *explored world* of a path is the simulation at the end of the path.
-Its *fingerprint* is the part of it that `test` takes to decide what later paths report: the time, the messages in flight, and each running service's records, instances, deadlines, requests, subscriptions, and counts of line ids and created keys.
-A fingerprint leaves out the trace and the violations reported so far.
+A service's *bounds* are the numbers that its `bounds()` declares: `creates`, the most records of each keyed entity that a run creates, and `items`, the most items in each array or `Bag` of an input, payload, or answer.
+A state is *within the bounds* when it holds at most `creates` records of each entity.
+`prove` and `generate` write the bounds that they used on each result line.
 
 ### Violations
 
@@ -101,16 +82,49 @@ Only kinds of the groups `Fault`, `InvalidInput`, and `InvalidScenario` halt, as
 
 ## What a passing command means
 
-A command *passes* when it reports no violation.
+A command *passes* when it reports no violation and `prove` reports no counterexample.
+A command exits with 0 when it passes, with 1 when it reports a violation other than `Undecided` or a counterexample or tsc reports an error, with 3 when it reports only `Undecided` violations or undecided properties, and with 2 on a usage error.
+`generate` exits with 0 whatever it finds.
 
-- When `check` passes, every spec file type-checks under the nearest `tsconfig.json`, and the spec has no violation of the groups that `check` reports.
-- When `test` without `--only` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, each running service's trace equals its snapshot, and no explored path reports a violation.
+- When `check` passes, every spec file type-checks under the nearest `tsconfig.json`, every spec function translates into an expression, and the spec has no violation of the groups that `check` reports.
+- When `test` without `--only` passes, `check` passes, every line of every scenario takes place, every expectation of Then holds, and each running service's trace equals its snapshot.
   The scenario then states everything that happened between the running services, and each `InvalidScenario` kind is one rule of that statement.
-- When `test` and `verify` both pass with the same spec and snapshots, the trace that `drive` makes of the implementation in each scenario matches the snapshot.
-  This holds for the own service and for each running peer that has an implementation.
+- When `verify` passes, the spec takes every `in` line of every trace, and each trace [matches the spec](#when-a-trace-matches-the-spec).
+  With `--coverage`, the replays also reach every part of the spec's commands, queries, automations, and charts.
 
-When `test` and `verify` both pass and the assumptions hold, the implementation sends the messages that the spec defines for the lines of each scenario.
-tazuna guarantees nothing about lines that no scenario contains.
+When `verify` passes and the assumptions hold, the implementation sends the messages that the spec defines for the `in` lines of each trace.
+tazuna guarantees nothing about inputs that no trace contains.
+
+### What a `prove` verdict means
+
+`prove` writes one verdict for each property of each spec service, within the service's bounds.
+
+- `proved` means that the property holds in every state within the bounds that a run from the initial state reaches.
+  For an invariant of records, `prove` shows that it holds of the initial records at any time, and after each command, with any input and caller at any time no earlier than the records' time, from any records within the bounds where every invariant holds and every record fits its schema.
+  From the same records, it shows that each `ensures` holds and that no command leaves a ref that names a missing record.
+  A chart's invariant holds when the chart starts and after each microstep, for any event, answer, or deadline in any configuration.
+- `counterexample` means that the semantics reports the violations that the line lists when it runs the command, query, or transition of the line from the line's state.
+  `prove` replays every counterexample in the semantics before it reports it, and a replay that disagrees with the solver is an internal error.
+  The state may be one that no run reaches, as [A counterexample is a decision about the spec](concepts.md#a-counterexample-is-a-decision-about-the-spec) explains.
+- `undecided` means that `prove` gives no verdict, for the reason that the line states, such as a construct that it does not encode or the solver's resource limit.
+
+A spec holds no fractional numbers, since `check` reports them as `Restricted.schema`, so no verdict rests on floating-point arithmetic.
+
+Some properties are undecided by design:
+
+- A response is proved only when `when` implies `expect` in the initial records, after each command, and as time passes.
+  A response that a deadline or a later step meets in time is undecided, unless the service has no automation and no chart, in which case `prove` reports a counterexample that states its progress assumption in `assumes`.
+- A step-order property compares two automations that react to one event.
+  Two deadlines due at the same time, and two messages that arrive together, have no property, so `prove` checks neither order.
+- An invariant of a screen, or of a machine with parallel, final, history, or map states or with `held` data, is undecided.
+
+### What `generate` writes
+
+`generate` writes one outcome for each part of each spec service that `verify --coverage` reports:
+
+- `reached` names an input whose run in the semantics reaches the part, from no records at time 0.
+- `unreachable` means that no state within the bounds lets the part's request reach the part, so no run within the bounds reaches it.
+- `notReached` and `notEncodable` mean only that the search found no input. The part may still be reachable.
 
 ### Step orders that `test` searches
 
@@ -142,24 +156,25 @@ An instance that no screen opens is named by its chart, and a map state copy by 
 A screen that another screen opens is named by its opener and by the state and key of that `opens`.
 A screen that the same state opens again takes the name of the one it replaces, so neither the order in which screens open nor how many times a state opened its screen changes a name.
 
-### When a trace matches a snapshot
+### When a trace matches the spec
 
-A trace *matches* a snapshot when all of the following hold:
+`verify` replays a trace: the spec takes the trace's `in` lines in order, each at its time, and writes its own `out` lines, with the [send order](#steps-and-channels) in their `after`.
+A trace *matches* the spec when all of the following hold:
 
-- Its `in` lines pair in order with the snapshot's `in` lines, at equal times.
-- The `out` lines after each `in` line pair one to one with the snapshot's.
-  In one pairing, each pair is equal under the binding and at an equal time, and the pairing keeps the order that each snapshot line's `after` names.
+- The spec takes every `in` line of the trace.
+- The `out` lines after each `in` line pair one to one with the spec's.
+  In one pairing, each pair is equal under the binding and at an equal time, and the pairing keeps the order that each spec line's `after` names.
   `after` names only lines on one channel, and never two events at one time of one event group or of steps that no cause chain links.
   A trace line names no receiver, so `verify` takes the answers to one request, the events with one `resultOf`, and the events without `resultOf` each as one channel.
-  For events, this channel is coarser than the spec's: events to different receivers share it, and the `after` of a snapshot uses it too.
-- One binding maps each value that the snapshot creates to one implementation value over the whole comparison.
-  Paired lines have the same type, direction, and name, and their contents, and the ids of `in` lines and outgoing requests, are equal under the binding.
+  For events, this channel is coarser than the spec's: events to different receivers share it, and `after` uses it too.
+- One binding maps each value that the spec creates to one implementation value over the whole comparison.
+  Paired lines have the same type, direction, name, and caller, and their contents, and the ids of `in` lines and outgoing requests, are equal under the binding.
 
 An implementation that reuses an existing request id or key for a new one does not match.
 An implementation that uses a string of its input, such as an idempotency key, as a new key can match.
 
 `verify` keeps every binding that agrees with the lines compared so far.
-The counts in a bag can decide a binding: the snapshot's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`.
+The counts in a bag can decide a binding: the spec's `[K1, K1, K2]` against the implementation's `[x, y, y]` binds `K1` to `y`.
 Keys that only a later line tells apart wait for that line.
 When the bindings cannot decide what the implementation gets, or a trace cannot be compared at all, `verify` reports an `Uncomparable` kind.
 
@@ -179,7 +194,7 @@ In the trace of an external service, an id names one request, as a Stripe `Idemp
 A request line with an earlier line's id and the same type, name, and input, whatever the order of object fields, sends that request again, and each send gets at most one answer.
 `verify` checks each answer to a send against the target's contract, and does not check that a resent request gets the first answer.
 `verify` reports a line that reuses an id with another type, name, or input as `Uncomparable.duplicateId` and checks no later line, as it does for the requests that a spec service sends.
-A spec service's own resend stands for the request that it repeats, and an answer to the resend stands for an answer to that request, so the trace pairs with a snapshot that sent the request once.
+A spec service's own resend stands for the request that it repeats, and an answer to the resend stands for an answer to that request, so the trace pairs with spec lines that sent the request once.
 
 ## Who fixes a violation
 
@@ -211,51 +226,45 @@ Each row below names one thing that a detection leaves out.
 
 | Detection | How it detects | What it leaves out |
 |---|---|---|
-| Violations on explored paths | It runs every explored path. | Paths longer than the `depth` of `explore()`. |
-| Violations on explored paths | | Values outside the declared domains. |
-| Violations on explored paths | | Paths with an answer, an event, or a control payload whose parts each fit their domains but whose whole value fails a refinement of its schema. No one could write such a line, so `test` discards the path. A request with such a value stays, and the own service rejects it as `invalid-input`. |
-| `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that a spec function reaches by another name, or through a package that the spec imports. |
+| `prove` | It proves each property for the states within the bounds. | States with more records of an entity than `creates`, and arrays and bags with more items than `items`. |
+| `prove` | | Strings with a character after U+2FFFF, which Z3's strings cannot hold. |
+| `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that module code reaches by another name, or through a package that the spec imports. |
 | `ChoiceDependent` | It searches the [step orders](#step-orders-that-test-searches) of each processing. | Orders beyond `Undecided.stepOrderLimit`. |
 | `ChoiceDependent` | | The orders of a processing after its first violation. |
 | `ChoiceDependent` | | The order of two steps that wait in the service's queue at once, are not message arrivals, and run the same definition on equal values, such as one automation's reactions to two equal events. The search names a step by what it runs and not by the step that caused it, so it takes such steps as one. |
 | `ChoiceDependent` | | A difference in outputs that `verify` cannot compare, such as equal requests that get different answers. The state is still compared. |
 | `ChoiceDependent` | | A state with too many bindings of created keys to compare, which it reports as `Undecided.stepOrderBindings`. |
 | `ChoiceDependent` | | A screen's input, the answers to its `shows` requests, and the order of open screens, which the opener and the answer lines set. |
+| `ChoiceDependent` | | In `prove`, every pair of steps other than two automations that react to one event. |
 | `InvalidInput` | It checks an external peer's lines against the peer's contract. | A `requires` that reads more than the input, and an `ensures` that reads records. |
-| `Uncovered` | It marks the parts that a scenario's run or an explored path reaches. | Parts that only paths longer than the `depth` of `explore()`, or values outside the declared domains, reach. |
 
 ## Assumptions
 
 tazuna detects a break of each assumption only in part or not at all.
 
-- **Runtime.** The TypeScript runtime that the commands run returns the same traces and violations as the Lean definitions.
-  Diff tests compare the two only on tazuna's own example specs and traces, and for `test` on the paths of up to two moves after the example scenarios.
-  They also check that `test`, which runs an explored path by continuing the run of the path one move shorter, gets the run that replaying every line gives.
+- **Translation.** tazuna translates each spec function from TypeScript into an expression with the meaning that the TypeScript code has.
+  No theorem covers the translation.
+  The convert diff tests evaluate each operation and built-in of the expressions on random inputs in TypeScript and in Lean.
+- **Types.** Each value in spec code has the type that the code declares.
+  The translation picks each operation by the types of its operands.
+- **Loading.** tazuna loads a spec in TypeScript, and no theorem states what loading guarantees of the structure that it builds.
+  `check`'s `Malformed` and `Restricted` rules, and its `NonCanonical` rules that read the source, hold for that structure.
 - **Scenario start.** Some theorems hold only for a scenario whose start meets their hypotheses, such as Given records with distinct keys.
   `test` checks Given before any line and reports `InvalidScenario.unlistedPeer`, `InvalidScenario.invalidRecord`, `InvalidScenario.duplicateRecord`, and `InvalidScenario.brokenGivenInvariant`.
   After any of them, no line runs.
   No theorem shows that a Given without these violations meets every hypothesis.
-- **Key order.** The TypeScript runtime gives spec functions the keys of an entity in one order, whatever order the records were written in, while the Lean definitions give the records in write order.
-  No theorem covers this rule, and the two runtimes agree only when spec functions do not depend on the order of keys.
-- **Loading.** tazuna loads a spec in TypeScript, and no theorem states what loading guarantees of the structure that it builds.
-  `check`'s `Malformed` and `Restricted` rules, and its `NonCanonical` rules that read the source, hold for that structure.
-  Loading also decides which schema a `domain()` names by Zod object identity, and no theorem covers that matching.
 - **Step-order search.** The step-order search reaches every order of conflicting steps that changes a message's outcome.
   No theorem proves it, and a proof needs two facts: steps that do not conflict give the same outcome in either order, and the conflict check sees every read and write of every step.
 - **Exchange checks.** The end-of-run checks of the exchanges with external services check what [Exchanges with external services](#exchanges-with-external-services) lists.
   No theorem ties each item of that list to the checks.
 - **Cause chain.** The simulation computes the cause chain that [Steps and channels](#steps-and-channels) describes.
   The theorems under [Ordering](#ordering) state only the `after` that the computed cause chain gives.
-- **Fingerprints.** Two explored worlds with the same fingerprint report alike on every later path of the same number of moves: what the first reports, the second reports too, or its own path reported already.
-  A path reports the violations that it adds and the parts that it reaches first.
-  `test` extends only the first explored world of each fingerprint, so its explored paths rest on this assumption.
-  No theorem proves it, and the diff test of explored paths checks only that the TypeScript runtime and Lean take the same worlds as the same.
-- **Fingerprint hashes.** `test` keeps a 64-bit hash of each fingerprint instead of its text, so two worlds whose fingerprints share a hash also count as one.
-  It writes the probability of that, as TLC does, when the probability is at least 1e-12.
-- **Spec functions.** Spec functions are deterministic.
-  They read no clock, random source, or mutable global state, and they receive the current time as an argument.
-  A result of a spec function depends neither on the order in which a `Bag` visits its values nor on the order of keys, as a comparison such as `a.id < b.id` would.
-- **Types.** Each value in spec code has the type that the code declares.
+- **Step encoding.** `prove` and `generate` encode each step, such as a command, a microstep of a chart, or the reactions of two automations, as SMT formulas over the encodings of its expressions.
+  `seval_agrees` proves the encoding of expressions, and no theorem proves the encoding of steps.
+  A counterexample and a `reached` input are replayed in the semantics, so they do not rest on this assumption.
+  A `proved` verdict and an `unreachable` outcome do.
+- **State facts.** `prove` assumes facts that every state of the semantics keeps: the clock never moves back, and each record and each chart's context fits its schema.
+  The semantics checks a chart's context against its schema after each assignment, and no theorem proves that every state keeps these facts.
 - **Adapter.** The `Adapter` through which `drive` drives the implementation controls the implementation's whole world.
   The implementation reads the time only from the clock that `advanceTo` moves, and receives messages only through the adapter.
   The adapter reports only the messages that the implementation received or sent, with the values that the implementation used.
@@ -265,10 +274,10 @@ tazuna detects a break of each assumption only in part or not at all.
   `test` and `verify` check only the [exchanges](#exchanges-with-external-services) that a scenario or a trace contains.
 - **Opaque values.** An implementation treats the ids and keys that it did not create as opaque.
   Replacing them one to one in its inputs replaces them the same way in its outputs and changes nothing else.
-  A running peer's implementation gets the values of other implementations, while its snapshot holds the values of the simulation, so `verify` assumes that the implementation behaves the same with either set of values.
+  A running peer's implementation gets the values of other implementations, while the spec's replay holds the values of the spec, so `verify` assumes that the implementation behaves the same with either set of values.
 - **Reproducible implementations.** Given the same world, an implementation sends the messages of its recorded trace.
-  `verify` compares each implementation's trace with its own snapshot, so the claim that several implementations together produce the simulated run rests on this assumption and the previous one.
-- **Tools.** The Lean kernel, the TypeScript type checker, and Node.js are correct.
+  `verify` replays each implementation's trace on its own, so the claim that several implementations together produce the run that the spec gives rests on this assumption and the previous one.
+- **Tools.** The Lean kernel, the Lean compiler that builds the engine, the TypeScript type checker, Node.js, and Z3 are correct, and so is the code that prints each query as SMT-LIB text.
   The Lean build fails on `sorry` and on any axiom other than `propext`, `Classical.choice`, and `Quot.sound`, so no theorem rests on an unproven step.
 
 ## Proven properties
@@ -298,7 +307,7 @@ Each property holds for every spec, and the theorems in `lean/Tazuna/Thm` prove 
 | The `n`-th created key of an entity is `<owner>/<Entity>-<n>`, so no two createKey calls of one service return the same key. | `created_form`, `created_distinct` |
 | In a run of a scenario, `createKey` of a keyed entity never returns a key that the scenario may write, such as a Given key. | `unwritten_not_created`, `execute_unwritten_not_created`, `start_unwritten_not_created` |
 | The order in which Given writes the records does not matter. A scenario that writes the same records, no two with one key, in another order simulates alike. | `simulate_records_perm` |
-| To find `BagOrderDependent` and `ChoiceDependent` violations, `test` records what each spec function reads and writes. The recording changes no step of a run: a service starts, processes each input, and checks the end of a run as it does without the recording. | `instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkExchanges_agrees` |
+| To find `RegionOrderDependent` and `ChoiceDependent` violations, the semantics records what each spec function reads and writes. The recording changes no step of a run: a service starts, processes each input, and checks the end of a run as it does without the recording. | `instrument_agrees`, `begin_agrees`, `send_agrees`, `call_agrees`, `subscribe_agrees`, `endSubscription_agrees`, `receive_agrees`, `answerIn_agrees`, `operate_agrees`, `fireDue_agrees`, `publish_agrees`, `restart_agrees`, `checkExchanges_agrees` |
 | A run of a whole scenario with the recording leaves the world that the run without it leaves, whatever the recording collected before. | `execute_agrees`, `simulate_agrees` |
 
 ### Data validity
@@ -419,7 +428,7 @@ No theorem shows that it does.
 | Property | Theorems |
 |---|---|
 | A snapshot matches a run when their lines have equal canonical JSON, whatever the order of object fields. | `compareSnapshot_eq_none_iff`, `compareSnapshot_reordered` |
-| A trace in which `verify` finds no violation matches its snapshot as [When a trace matches a snapshot](#when-a-trace-matches-a-snapshot) states. | `compare_matches`, `contentMatch_renamed` |
+| A trace in which `verify` finds no violation matches the spec as [When a trace matches the spec](#when-a-trace-matches-the-spec) states. | `compare_matches`, `contentMatch_renamed` |
 | When `check` reports no `Illegal` violation, the spec keeps the structural rule of each `Illegal` kind. | `check_eq_nil_iff` |
 | When `check` reports none of the `NonCanonical` kinds that read only the structure, each transition has a `reenter` exactly when it leads within its source. | `canonical_check_eq_nil_iff` |
 | When `check` reports none of the `NonCanonical` kinds that read only the structure, each automation and each calls or sends has `onRejected` exactly when an answer may be rejected. | `canonical_check_eq_nil_iff` |
@@ -428,7 +437,7 @@ No theorem shows that it does.
 | The step-order search does not swap two steps of which one is an `always` round of an instance that the other settles around: either order gives the same processing. | `always_step_independent` |
 | The same outcome means the same halt, or outputs that pair through one pairing with the same `after` and a state equal under a binding of created keys, as [Step orders that `test` searches](#step-orders-that-test-searches) defines. When `verify` cannot compare the first execution's outputs even with themselves, as the `ChoiceDependent` rows of [Detections](#detections) say, the same outcome means only a state equal under a binding. | `difference_same`, `compareTraces_ok`, `sameState_renamed` |
 
-### Exploration
+### Coverage
 
 | Property | Theorems |
 |---|---|

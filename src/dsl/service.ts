@@ -215,8 +215,8 @@ interface ExternalDefiners<N extends string> {
     output?: O;
     emits: readonly Ev[];
     /**
-     * The kinds that the external implementation may reject with. `test` explores only these, and `verify` reports
-     * others.
+     * The kinds that the external implementation may reject with. `generate` answers with only these, and another kind
+     * is `InvalidInput.unlistedRejectionKind` in a scenario and `Mismatch.unlistedRejectionKind` in a trace.
      */
     rejects: Rj;
     /** The external implementation rejects with `requires` when one fails. */
@@ -237,8 +237,8 @@ interface ExternalDefiners<N extends string> {
     input?: I;
     output: O;
     /**
-     * The kinds that the external implementation may reject with. `test` explores only these, and `verify` reports
-     * others.
+     * The kinds that the external implementation may reject with. `generate` answers with only these, and another kind
+     * is `InvalidInput.unlistedRejectionKind` in a scenario and `Mismatch.unlistedRejectionKind` in a trace.
      */
     rejects: Rj;
     /** The external implementation rejects with `requires` when one fails. */

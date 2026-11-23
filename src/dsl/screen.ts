@@ -58,7 +58,6 @@ type ScreenFields<I extends Shape, Sh extends Queries> = {
 
 type ScreenOutput<S> = S extends Screen<Shape, infer O> ? Row<O> : never;
 
-/** A control written with a payload has it, so that a `domain()` can name a payload field's schema. */
 type ScreenControls<Ps extends Payloads> = {
   readonly [K in keyof Ps]: Ps[K] extends Shape
     ? Control<Ps[K]> & { readonly payload: Ps[K] }
