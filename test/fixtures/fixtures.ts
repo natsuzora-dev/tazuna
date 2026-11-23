@@ -112,6 +112,9 @@ const summaries = {
   generate: /^\d+ targets?: \d+ reached, \d+ not reached, \d+ unreachable, \d+ not encodable; \d+ inputs? written$/,
 };
 
+/** Whether the case runs tsc: one with a tsconfig.json of its own, for the violations that only tsc's program shows. */
+const runsTsc = (root: string) => existsSync(join(root, "tsconfig.json"));
+
 /** The lines that `tazuna <args>` writes to stdout in the folder `root`, and its exit code. */
 export async function run(
   root: string,
@@ -126,7 +129,7 @@ export async function run(
     error: (line) => {
       if (!summary.test(line)) throw new Error(`tazuna ${args.join(" ")} wrote ${line} to stderr`);
     },
-    ...(existsSync(join(root, "tsconfig.json")) ? {} : { typeCheck: () => typeChecked, converter: converter() }),
+    ...(runsTsc(root) ? {} : { typeCheck: () => typeChecked, converter: converter() }),
   });
   return { lines, code };
 }

@@ -73,6 +73,12 @@ interface FnSlot {
   readonly binds?: ConditionsCallback;
 }
 
+/**
+ * Whether the engine runs a function for the slot: a react always, since an automation without input sends `{}`, and a
+ * resolve or decide only when written, since a command without decide is an external service's.
+ */
+const runsFn = (slot: FnSlot) => slot.f !== undefined || slot.callback === "react";
+
 const located = (u: Unconverted) => (u.location === undefined ? {} : { location: u.location });
 
 const sameRef = (a: DefinitionRef, b: DefinitionRef) => a.service === b.service && a.name === b.name;
@@ -506,7 +512,7 @@ export class Converter {
     }
     const fns: Record<FnCallback, Fn[]> = { resolve: [], decide: [], react: [] };
     for (const slot of fnSlotsOf(spec)) {
-      if (slot.f === undefined && slot.callback !== "react") continue;
+      if (!runsFn(slot)) continue;
       const { f } = slot;
       const binds = slot.binds === undefined || lists[slot.binds].some((g) => sameRef(g.definition, slot.definition));
       const body: Expr | Unconverted = binds

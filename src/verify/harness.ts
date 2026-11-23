@@ -2,7 +2,7 @@ import type { CheckedSpec } from "../check/spec.ts";
 import { ask } from "../cli/engine.ts";
 import type { ReadLine } from "../cli/protocol.generated.ts";
 import { InternalError } from "../data/internalError.ts";
-import type { Caller, GivenRecord } from "../data/scenario.generated.ts";
+import type { Caller, GivenRecord, Scenario } from "../data/scenario.generated.ts";
 import { type TraceLine, traceLine } from "../data/trace.generated.ts";
 import type { Bindings, UntimedTraceLine } from "../data/trace.ts";
 import type { InputRun, Run } from "../data/traceFile.ts";
@@ -103,13 +103,23 @@ export type LogLine = StartLine | TraceLine;
  * the log uncomparable, the harness gives no more lines. Comparing reads values by their schemas alone, so drive runs
  * no spec function, and verify's replay of the log is what checks it.
  */
+/**
+ * Where a run's lines come from: an input of generate, which starts from the initial state, no records, at the time of
+ * its first line, or a scenario's snapshot, which starts from the scenario's Given.
+ */
+type Origin = { readonly kind: "input" } | { readonly kind: "scenario"; readonly scenario: Scenario };
+
+function originOf(spec: CheckedSpec, run: Run | InputRun): Origin {
+  if ("path" in run) return { kind: "input" };
+  const scenario = spec.scenarios.find((s) => s.service === run.service && s.name === run.scenario)?.definition
+    .scenario;
+  if (scenario === undefined) throw new InternalError(`no scenario ${run.service}.${run.scenario}`);
+  return { kind: "scenario", scenario };
+}
+
 export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Adapter): Promise<LogLine[]> {
   const { runner } = run;
-  const scenario =
-    "path" in run
-      ? undefined
-      : spec.scenarios.find((s) => s.service === run.service && s.name === run.scenario)?.definition.scenario;
-  if (!("path" in run) && scenario === undefined) throw new InternalError(`no scenario ${run.service}.${run.scenario}`);
+  const origin = originOf(spec, run);
   const snapshot = readSnapshot(spec, run);
   const readSnapshotLines = ask("readLines", { structure: spec.structure, service: runner, lines: snapshot }).lines;
   const lines: (TraceLine | undefined)[] = [];
@@ -182,13 +192,14 @@ export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Ada
   const writeAnswer = (to: string, answer: unknown) =>
     write({ dir: "out", type: "answer", id: lineId("answer"), to, answer: plain(answer) } as UntimedTraceLine);
   const start: StartLine =
-    scenario === undefined
+    origin.kind === "input"
       ? { type: "start", time: snapshot[0]?.time ?? 0, records: [] }
       : {
           type: "start",
-          time: scenario.given.start,
-          records: ask("givenRecords", { structure: spec.structure, scenario, service: runner }).records,
-          ...(scenario.given.user === undefined ? {} : { user: scenario.given.user }),
+          time: origin.scenario.given.start,
+          records: ask("givenRecords", { structure: spec.structure, scenario: origin.scenario, service: runner })
+            .records,
+          ...(origin.scenario.given.user === undefined ? {} : { user: origin.scenario.given.user }),
         };
   const comparedBefore = (k: number) => {
     const compared = ask("bindings", {

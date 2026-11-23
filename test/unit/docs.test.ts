@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { dirname, join, posix, relative } from "node:path";
 import { test } from "node:test";
 import { explain } from "../../src/cli/explain.ts";
 import { main } from "../../src/cli/main.ts";
@@ -367,9 +367,10 @@ test("The README tutorial's broken scenario gives the violation line and summary
       recursive: true,
       filter: (src) => !src.includes("node_modules"),
     });
+    const tsconfig = join(project, "spec/tsconfig.json");
     writeFileSync(
-      join(project, "spec/tsconfig.json"),
-      '{ "extends": "../../../../tsconfig.json", "include": ["."] }\n',
+      tsconfig,
+      JSON.stringify({ extends: relative(dirname(tsconfig), join(root, "tsconfig.json")), include: ["."] }),
     );
     const scenarios = join(project, "spec/todo/scenarios.ts");
     const text = readFileSync(scenarios, "utf8");

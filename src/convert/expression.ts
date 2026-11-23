@@ -207,14 +207,20 @@ class Conversion {
     return kinds;
   }
 
+  /**
+   * The kind of an intersection: a date for a date label, the scalar of `string & Brand` and the like, an object for
+   * several object types, and other for anything else.
+   */
+  private intersectionKind(types: readonly Type[]): Kind {
+    if (types.some((t) => t.getSymbol()?.name === "DateBrand")) return "date";
+    const kinds = new Set(types.map((t) => this.kind(t)));
+    kinds.delete("object");
+    const [kind, ...rest] = kinds;
+    return kind === undefined ? "object" : rest.length === 0 && scalars.has(kind) ? kind : "other";
+  }
+
   private kind(type: Type): Kind {
-    if (type.isIntersectionType()) {
-      if (type.getTypes().some((t) => t.getSymbol()?.name === "DateBrand")) return "date";
-      const kinds = new Set(type.getTypes().map((t) => this.kind(t)));
-      kinds.delete("object");
-      const [kind, ...rest] = kinds;
-      return kind === undefined ? "object" : rest.length === 0 && scalars.has(kind) ? kind : "other";
-    }
+    if (type.isIntersectionType()) return this.intersectionKind(type.getTypes());
     const { flags } = type;
     if (flags & TypeFlags.StringLike) return "string";
     if (flags & TypeFlags.NumberLike) return "number";
