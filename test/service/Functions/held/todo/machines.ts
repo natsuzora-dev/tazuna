@@ -70,7 +70,7 @@ export const labels = machine({
       sends: {
         notify: {
           input: ({ held }) => ({ text: held.label }),
-          onAccepted: [{ target: "leftClosed", assign: { last: ({ held }) => `Closed ${held.label}` } }],
+          onAccepted: [{ target: "leftClosed", assign: { last: ({ held }) => held.label } }],
         },
       },
     },

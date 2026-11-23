@@ -2027,7 +2027,7 @@ mutual
         (fun b => by rw [same_conc M (env.records.conc M)]; rfl)]
       simp [visited, List.filter_map, Function.comp_def]
   | vars, .some .array .., r, h, s | vars, .every .array .., r, h, s
-  | vars, .sortedBy .., r, h, s | vars, .format _, r, h, s
+  | vars, .sortedBy .., r, h, s
   | vars, .createKey _, r, h, s => by simp [seval] at h
   | vars, .sum c x body, r, h, s => by
     simp only [seval, bind, Except.bind] at h

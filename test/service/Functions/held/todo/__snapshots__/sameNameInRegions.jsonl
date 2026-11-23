@@ -3,4 +3,4 @@
 {"time":1792890000000,"dir":"out","type":"event","id":"labelsOpened#1","name":"labelsOpened","payload":{},"resultOf":"openLabels#1"}
 {"time":1792890000000,"dir":"out","type":"event","id":"notified#1","name":"notified","payload":{"text":"left"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"notified#2","name":"notified","payload":{"text":"right"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"notified#3","name":"notified","payload":{"text":"Closed left"},"after":["notified#1"]}
+{"time":1792890000000,"dir":"out","type":"event","id":"notified#3","name":"notified","payload":{"text":"left"},"after":["notified#1"]}

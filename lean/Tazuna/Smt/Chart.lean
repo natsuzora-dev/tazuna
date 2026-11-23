@@ -24,7 +24,7 @@ def Expr.children : Expr → List Expr
   | .filter _ c _ b | .some _ c _ b | .every _ c _ b | .map _ c _ b | .sum c _ b | .min _ c _ b | .max _ c _ b
   | .sortedBy _ c _ b => [c, b]
   | .obj fs => fs.map (·.value)
-  | .arr vs | .format vs => vs
+  | .arr vs => vs
 
 /-- The names that a callback of `e` binds in its body, which is the last of `e`'s children. -/
 def Expr.binds : Expr → Option String

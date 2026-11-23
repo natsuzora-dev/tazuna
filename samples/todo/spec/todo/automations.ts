@@ -7,6 +7,6 @@ export const reminderNotification = automation({
   commands: { showNotification: device.showNotification },
 }).send({
   guard: { remindersEnabled: ({ records }) => records.Settings.shouldRemind },
-  input: ({ payload }) => ({ text: payload.title }),
+  input: ({ payload }) => ({ notice: { id: "reminder", values: { title: payload.title } } }),
   onRejected: [],
 });

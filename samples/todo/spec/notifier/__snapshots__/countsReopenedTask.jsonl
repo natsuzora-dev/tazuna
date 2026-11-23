@@ -30,4 +30,4 @@
 {"time":1792890060000,"dir":"in","type":"event","id":"todo/taskReopened#1","name":"todo.taskReopened","payload":{"taskId":"task-1"}}
 {"time":1792890060000,"dir":"out","type":"event","id":"openTaskRecorded#12","name":"openTaskRecorded","payload":{"taskId":"task-1"}}
 {"time":1792890060000,"dir":"out","type":"event","id":"tooManyWarned#1","name":"tooManyWarned","payload":{"count":11},"after":["openTaskRecorded#12"]}
-{"time":1792890060000,"dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"You have 11 open tasks"}}
+{"time":1792890060000,"dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"notice":{"id":"openTasks","values":{"count":11}}}}

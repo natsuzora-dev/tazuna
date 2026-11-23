@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Task = entity({
   description: "A task of the user",
-  fields: { id: z.string(), completedAt: instant.nullable(), note: z.string().nullable() },
+  fields: { id: z.string(), completedAt: instant.nullable(), note: instant.nullable() },
   key: "id",
 });
 
@@ -36,6 +36,6 @@ export const reopenTask = command({
 }).decide(({ input }) => [emit(completionChanged, { id: input.taskId, completedAt: null })]);
 
 export const note = command({
-  input: { taskId: ref(Task), text: z.string() },
+  input: { taskId: ref(Task), day: instant },
   emits: [noted],
-}).decide(({ input }) => [emit(noted, { id: input.taskId, note: input.text })]);
+}).decide(({ input }) => [emit(noted, { id: input.taskId, note: input.day })]);

@@ -125,10 +125,6 @@ inductive Expr where
   | concat (left right : Expr)
   /-- `array.includes(value)` of an array of scalars, null or undefined. -/
   | includes (array value : Expr)
-  /--
-  A template literal: each part as a string, as JS writes a string, number, boolean, null or undefined, joined.
-  -/
-  | format (parts : List Expr)
   | arith (operation : Arith) (left right : Expr)
   /-- `addDays(date, days)`: the date label `days` days after `date`, which throws outside years 0000 through 9999. -/
   | addDays (date days : Expr)

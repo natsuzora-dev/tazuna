@@ -102,9 +102,7 @@ export const closer = machine({
     c1: {
       exit: { assign: { steps: ({ context }) => [...context.steps, "c1 exit"] } },
       on: {
-        taskRemoved: [
-          { assign: { seen: ({ context, key }) => [...context.seen, `copy ${key.name} c1 transition assign`] } },
-        ],
+        taskRemoved: [{ assign: { seen: ({ context }) => [...context.seen, "copy k c1 transition assign"] } }],
       },
     },
     x: {

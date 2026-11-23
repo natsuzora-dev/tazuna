@@ -1,6 +1,19 @@
 import { useEffect, useState } from "react";
 import { client } from "../orpc/client.ts";
 import { useEvents } from "../orpc/useEvents.ts";
+import type { DeviceRequest } from "./pages.server.ts";
+
+type Notice = Extract<DeviceRequest, { readonly name: "showNotification" }>["input"]["notice"];
+
+/** The text that a notification shows for a notice, which the spec gives as a message id and its values. */
+function noticeText(notice: Notice): string {
+  switch (notice.id) {
+    case "reminder":
+      return notice.values.title;
+    case "openTasks":
+      return `You have ${notice.values.count} open tasks`;
+  }
+}
 
 const subscribeDeviceRequests = () =>
   client.device.deviceRequests(undefined, { context: { retry: Number.POSITIVE_INFINITY } });
@@ -20,7 +33,7 @@ function Device() {
   useEvents(subscribeDeviceRequests, async (request) => {
     if (request.name === "showNotification") {
       const isShown = Notification.permission === "granted";
-      if (isShown) new Notification(request.input.text);
+      if (isShown) new Notification(noticeText(request.input.notice));
       await client.device.answerDeviceRequest({ id: request.id, accepted: isShown });
       return;
     }

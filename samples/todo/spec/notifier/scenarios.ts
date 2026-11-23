@@ -21,7 +21,8 @@ const fresh = given({
   peers: [run(todo, { Task: [], Settings: { shouldRemind: true } }), external(calendar), external(device)],
 });
 
-const show = (openTasks: number) => requestOf(device.showNotification, { text: `You have ${openTasks} open tasks` });
+const show = (openTasks: number) =>
+  requestOf(device.showNotification, { notice: { id: "openTasks", values: { count: openTasks } } });
 const askPermission = requestOf(device.requestNotificationPermission, {});
 
 const taskAddedReaches = fresh.step((w, n: number) => {

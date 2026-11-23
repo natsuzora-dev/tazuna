@@ -8,5 +8,5 @@
 {"time":0,"dir":"out","type":"event","id":"dueChanged#1","name":"dueChanged","payload":{"id":"A","dueAt":1,"remindAt":1,"reminderDecision":"decided"},"resultOf":"changeDue#1"}
 {"time":1,"dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"A","remindAt":null}}
 {"time":1,"dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"A"},"after":["reminderTimeReachedRecorded#1"]}
-{"time":1,"dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"A"}}
+{"time":1,"dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"notice":{"id":"reminder","values":{"title":"A"}}}}
 {"time":1,"dir":"in","type":"time","id":"time#1"}

@@ -56,7 +56,7 @@ function remindDueTasks(): void {
   const { shouldRemind } = readReminderSettings();
   for (const task of due) {
     db.update(tasks).set({ remindAt: null }).where(eq(tasks.id, task.id)).run();
-    if (shouldRemind) void showNotification({ text: task.title });
+    if (shouldRemind) void showNotification({ notice: { id: "reminder", values: { title: task.title } } });
   }
   notifyChange();
 }

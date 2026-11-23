@@ -75,7 +75,7 @@ function toIdle(): void {
 
 function showWarning(count: number): void {
   if (flow === "asking" || permissionStatus() !== "granted") return;
-  void showNotification({ text: `You have ${count} open tasks` });
+  void showNotification({ notice: { id: "openTasks", values: { count } } });
 }
 
 async function askPermission(): Promise<void> {

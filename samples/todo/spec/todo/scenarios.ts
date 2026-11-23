@@ -43,7 +43,7 @@ const milkDetail = {
   createdAt: parseInstant("2026-10-25T10:00:00+09:00"),
   remindAt: parseInstant("2026-10-26T00:00:00+09:00"),
 };
-const showMilk = requestOf(device.showNotification, { text: "Buy milk" });
+const showMilk = requestOf(device.showNotification, { notice: { id: "reminder", values: { title: "Buy milk" } } });
 
 const addMilkUnanswered = noTasks.step((w) => w.client.send(addTask, { taskId: "task-1", title: "Buy milk" }));
 
@@ -290,7 +290,9 @@ export const remindsAfterNotShown = scenario({
   },
   then: ({ first, second }) => [
     requested(first, [showMilk]),
-    requested(second, [requestOf(device.showNotification, { text: "Buy eggs" })]),
+    requested(second, [
+      requestOf(device.showNotification, { notice: { id: "reminder", values: { title: "Buy eggs" } } }),
+    ]),
   ],
 });
 

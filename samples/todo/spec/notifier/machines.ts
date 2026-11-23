@@ -104,7 +104,7 @@ export const notification = machine({
       entry: resetAttempts,
       sends: {
         showNotification: {
-          input: ({ context }) => ({ text: `You have ${context.count} open tasks` }),
+          input: ({ context }) => ({ notice: { id: "openTasks", values: { count: context.count } } }),
           onAccepted: [{ target: "idle" }],
           onRejected: [{ target: "idle" }],
         },

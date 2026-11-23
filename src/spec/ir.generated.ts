@@ -218,11 +218,6 @@ export type Expr =
       readonly array: Expr;
       readonly value: Expr;
     }
-  /** A template literal: each part as a string, as JS writes a string, number, boolean, null or undefined, joined. */
-  | {
-      readonly op: "format";
-      readonly parts: readonly Expr[];
-    }
   | {
       readonly op: "arith";
       readonly operation: "add" | "sub" | "mul";

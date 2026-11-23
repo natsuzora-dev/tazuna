@@ -8,5 +8,5 @@
 {"time":1792940399000,"dir":"in","type":"time","id":"time#1"}
 {"time":1792940400000,"dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null}}
 {"time":1792940400000,"dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["reminderTimeReachedRecorded#1"]}
-{"time":1792940400000,"dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"Buy milk"}}
+{"time":1792940400000,"dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"notice":{"id":"reminder","values":{"title":"Buy milk"}}}}
 {"time":1792940400000,"dir":"in","type":"time","id":"time#2"}

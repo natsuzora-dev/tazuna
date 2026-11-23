@@ -14,11 +14,11 @@
 {"time":1792890000000,"dir":"out","type":"event","id":"reminderScheduled#2","name":"reminderScheduled","payload":{"id":"task-2","remindAt":1793026800000,"reminderDecision":"decided"}}
 {"time":1792940400000,"dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"task-1","remindAt":null},"after":["reminderScheduled#2"]}
 {"time":1792940400000,"dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"Buy milk"},"after":["reminderScheduled#2","reminderTimeReachedRecorded#1"]}
-{"time":1792940400000,"dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"Buy milk"}}
+{"time":1792940400000,"dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"notice":{"id":"reminder","values":{"title":"Buy milk"}}}}
 {"time":1792940400000,"dir":"in","type":"time","id":"time#1"}
 {"time":1792940400000,"dir":"in","type":"answer","id":"device/answer#1","to":"device.showNotification#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":1793026800000,"dir":"out","type":"event","id":"reminderTimeReachedRecorded#2","name":"reminderTimeReachedRecorded","payload":{"id":"task-2","remindAt":null}}
 {"time":1793026800000,"dir":"out","type":"event","id":"reminderTimeReached#2","name":"reminderTimeReached","payload":{"title":"Buy eggs"},"after":["reminderTimeReachedRecorded#2"]}
-{"time":1793026800000,"dir":"out","type":"command","id":"device.showNotification#2","name":"device.showNotification","input":{"text":"Buy eggs"}}
+{"time":1793026800000,"dir":"out","type":"command","id":"device.showNotification#2","name":"device.showNotification","input":{"notice":{"id":"reminder","values":{"title":"Buy eggs"}}}}
 {"time":1793026800000,"dir":"in","type":"time","id":"time#2"}
 {"time":1793026800000,"dir":"in","type":"answer","id":"device/answer#2","to":"device.showNotification#2","answer":{"result":"accepted"}}

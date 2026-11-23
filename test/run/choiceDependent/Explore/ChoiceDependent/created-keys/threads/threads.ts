@@ -29,7 +29,7 @@ export const postThread = command({
   emits: [posted, counted],
 }).decide(({ input, records }) => [
   emit(posted, { id: input.id, text: input.text, replyTo: null }),
-  emit(posted, { id: input.replyId, text: `re: ${input.text}`, replyTo: input.id }),
+  emit(posted, { id: input.replyId, text: input.text, replyTo: input.id }),
   emit(counted, { notes: records.Count.notes + 2 }),
 ]);
 

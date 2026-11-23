@@ -30,7 +30,7 @@ export const copyAndRegion = machine({
 }).chart({
   states: {
     m: { items: () => [{ name: "k" }] },
-    c1: { on: { tasksClosed: [{ assign: { notes: ({ context, key }) => [...context.notes, `copy ${key.name}`] } }] } },
+    c1: { on: { tasksClosed: [{ assign: { notes: ({ context, key }) => [...context.notes, key.name] } }] } },
     x: { on: { tasksClosed: [{ target: "y", assign: { notes: ({ context }) => [...context.notes, "x"] } }] } },
     y: { on: { tasksClosed: [{ target: "x" }] } },
   },
@@ -74,7 +74,7 @@ export const twoCopies = machine({
 }).chart({
   states: {
     m: { items: () => [{ name: "k" }, { name: "l" }] },
-    c1: { on: { tasksClosed: [{ assign: { notes: ({ context, key }) => [...context.notes, `copy ${key.name}`] } }] } },
+    c1: { on: { tasksClosed: [{ assign: { notes: ({ context, key }) => [...context.notes, key.name] } }] } },
   },
 });
 

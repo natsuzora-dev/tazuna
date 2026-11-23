@@ -500,7 +500,6 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
     let some items := vc.items env.records | throw "an only of what may be no collection"
     pure (firstIn items, .or ec (twoIn items))
   | .sortedBy .. => throw "sortedBy, whose groups the encoding does not hold"
-  | .format .. => throw "a template literal"
   | .addDays d n => do
     let (vd, ed) ← seval env vars d
     let (vn, en) ← seval env vars n

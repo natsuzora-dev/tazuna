@@ -268,9 +268,9 @@
         "excerpt": {
           "file": "ensuresBreakingTodo/todo.ts",
           "from": 14,
-          "to": 18,
+          "to": 20,
           "line": 14,
-          "text": "export const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n  ensures: { keepsTitle: ({ input, records }) => records.Task.get(input.taskId)?.title === input.title },\n}).decide(({ input }) => [emit(taskAdded, { id: input.taskId, title: `${input.title}!` })]);"
+          "text": "export const addTask = command({\n  input: { taskId: Task.fields.id, title: Task.fields.title },\n  emits: [taskAdded],\n  ensures: { keepsTitle: ({ input, records }) => records.Task.get(input.taskId)?.title === input.title },\n}).decide(({ input }) => [\n  emit(taskAdded, { id: input.taskId, title: input.title === \"changed\" ? \"again\" : \"changed\" }),\n]);"
         },
         "violation": "{\"kind\":\"Fault.failedEnsures\",\"definition\":{\"service\":\"ensuresBreakingTodo\",\"name\":\"addTask\"},\"data\":{\"condition\":\"keepsTitle\"},\"location\":{\"file\":\"ensuresBreakingTodo/todo.ts\",\"line\":14},\"scenario\":{\"service\":\"ensuresBreakingTodo\",\"name\":\"addTwo\"}}"
       }
@@ -2083,7 +2083,7 @@
       }
     },
     "Restricted.function": {
-      "meaning": "A spec function of the definition holds a construct that tazuna can neither execute in Lean nor encode to SMT, which `reason` names with the construct's source. In its place: - a statement other than `const`, `if` and `return`, such as `let`, a loop, or `push`: an expression, such as   `map`, `filter` or `sum` of a Bag. - `throw`: a `requires`, guard, or invariant that states the condition. - a name declared outside the function, such as a parameter of a function that builds definitions: a constant,   or a value that the input, the records or the context hold, with one definition per value. - a call that the IR does not have, such as `trim`, `Object.keys`, `flatMap` or `JSON.parse`: the value held in   a field, or a helper declared with `const` at the top of the file. - an event that the command's `emits` does not list: the event added to `emits`.",
+      "meaning": "A spec function of the definition holds a construct that tazuna can neither execute in Lean nor encode to SMT, which `reason` names with the construct's source. In its place: - a statement other than `const`, `if` and `return`, such as `let`, a loop, or `push`: an expression, such as   `map`, `filter` or `sum` of a Bag. - `throw`: a `requires`, guard, or invariant that states the condition. - a template literal, or `+` on strings: a structured value, such as `{ id, values }`, that the implementation   renders as text. - a name declared outside the function, such as a parameter of a function that builds definitions: a constant,   or a value that the input, the records or the context hold, with one definition per value. - a call that the IR does not have, such as `trim`, `Object.keys`, `flatMap` or `JSON.parse`: the value held in   a field, or a helper declared with `const` at the top of the file. - an event that the command's `emits` does not list: the event added to `emits`.",
       "example": {
         "excerpt": {
           "file": "todo/todo.ts",

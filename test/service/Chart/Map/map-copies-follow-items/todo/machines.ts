@@ -32,7 +32,7 @@ export const dayNoter = machine({
     writing: {
       sends: {
         note: {
-          input: ({ key, held }) => ({ taskId: key.taskId, text: `${held.day}` }),
+          input: ({ key, held }) => ({ taskId: key.taskId, day: held.day }),
           onAccepted: [{ target: "done" }],
           onRejected: [],
         },

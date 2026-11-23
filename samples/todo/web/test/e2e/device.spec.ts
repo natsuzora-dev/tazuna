@@ -63,7 +63,7 @@ test("A browser without notification permission sends notificationPermissionDeni
 }) => {
   const trace = await playDevice(page, app, held, [
     { name: "requestNotificationPermission", input: {} },
-    { name: "showNotification", input: { text: "Buy milk" } },
+    { name: "showNotification", input: { notice: { id: "reminder", values: { title: "Buy milk" } } } },
   ]);
   expect(trace).toContainEqual(expect.objectContaining({ name: "notificationPermissionDenied" }));
   expect(trace).toContainEqual(

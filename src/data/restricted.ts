@@ -117,6 +117,8 @@ export type Restricted =
    * - a statement other than `const`, `if` and `return`, such as `let`, a loop, or `push`: an expression, such as
    *   `map`, `filter` or `sum` of a Bag.
    * - `throw`: a `requires`, guard, or invariant that states the condition.
+   * - a template literal, or `+` on strings: a structured value, such as `{ id, values }`, that the implementation
+   *   renders as text.
    * - a name declared outside the function, such as a parameter of a function that builds definitions: a constant,
    *   or a value that the input, the records or the context hold, with one definition per value.
    * - a call that the IR does not have, such as `trim`, `Object.keys`, `flatMap` or `JSON.parse`: the value held in

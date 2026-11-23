@@ -1,7 +1,10 @@
 import { expect, onTestFinished, test } from "vitest";
 import { answerRequest, connectPage, sendToPage } from "../src/device/pages.server.ts";
 
-const showNotification: Parameters<typeof sendToPage>[0] = { name: "showNotification", input: { text: "Buy milk" } };
+const showNotification: Parameters<typeof sendToPage>[0] = {
+  name: "showNotification",
+  input: { notice: { id: "reminder", values: { title: "Buy milk" } } },
+};
 
 function connect() {
   const connection = new AbortController();

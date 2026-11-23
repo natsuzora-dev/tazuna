@@ -1,4 +1,3 @@
-import Tazuna.Data.Number
 import Tazuna.Data.Time
 import Tazuna.Ir.Expr
 import Tazuna.Service.Functions
@@ -215,15 +214,6 @@ def integer? : Val → Option Int
     if n.mantissa % d == 0 then some (n.mantissa / d) else none
   | _ => none
 
-/-- The string that JS writes for a scalar, null or undefined in a template literal. -/
-def jsString : Val → EvalM String
-  | .undef => pure "undefined"
-  | .json .null => pure "null"
-  | .json (.bool b) => pure (toString b)
-  | .json (.num n) => pure (jsNumber n)
-  | .json (.str s) => pure s
-  | _ => thrown
-
 mutual
 
 /--
@@ -358,9 +348,6 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
     let vs ← elements (← eval env vars a)
     let value ← eval env vars v
     pure (.json (.bool (vs.any (same · value))))
-  | .format parts => do
-    let texts ← (← evalAll env vars parts).mapM jsString
-    pure (.json (.str (String.join texts)))
   | .arith operation a b => do
     let left ← eval env vars a
     match integer? left, integer? (← eval env vars b) with

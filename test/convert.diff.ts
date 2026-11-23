@@ -57,7 +57,6 @@ const ops = [
   "emit",
   "createKey",
   "includes",
-  "format",
   "arith",
   "addDays",
 ] as const satisfies readonly Expr["op"][];

@@ -545,17 +545,7 @@ class Conversion {
     if (isPropertyAccessExpression(e)) return this.access(e, scope);
     if (isObjectLiteralExpression(e)) return { op: "obj", fields: e.properties.map((p) => this.property(p, scope)) };
     if (isArrayLiteralExpression(e)) return this.array(e.elements, scope);
-    if (isTemplateExpression(e)) {
-      const parts: Expr[] = e.head.text === "" ? [] : [{ op: "lit", value: e.head.text }];
-      for (const span of e.templateSpans) {
-        const kinds = [...this.kinds(span.expression)];
-        if (!kinds.every((k) => scalars.has(k) || k === "date"))
-          this.fail(span.expression, "writes in a template other than a scalar or date");
-        parts.push(this.expression(span.expression, scope));
-        if (span.literal.text !== "") parts.push({ op: "lit", value: span.literal.text });
-      }
-      return { op: "format", parts };
-    }
+    if (isTemplateExpression(e)) this.fail(e, "writes a template literal");
     if (isCallExpression(e)) return this.call(e, scope);
     this.fail(e, "is no expression of the IR");
   }
@@ -599,11 +589,8 @@ class Conversion {
     if (operator === SyntaxKind.AmpersandAmpersandToken) return { op: "and", ...both() };
     if (operator === SyntaxKind.BarBarToken) return { op: "or", ...both() };
     if (operator === SyntaxKind.QuestionQuestionToken) return { op: "coalesce", ...both() };
-    if (operator === SyntaxKind.PlusToken && (this.only(left) === "string" || this.only(right) === "string")) {
-      if (![left, right].every((side) => [...this.kinds(side)].every((k) => scalars.has(k) || k === "date")))
-        this.fail(node, "adds to a string other than a scalar or date");
-      return { op: "format", parts: [this.expression(left, scope), this.expression(right, scope)] };
-    }
+    if (operator === SyntaxKind.PlusToken && (this.only(left) === "string" || this.only(right) === "string"))
+      this.fail(node, "joins strings with +");
     if (operator === SyntaxKind.EqualsEqualsToken || operator === SyntaxKind.ExclamationEqualsToken) {
       const nullish = this.isNullish(right, scope) ? left : this.isNullish(left, scope) ? right : undefined;
       if (nullish === undefined) this.fail(node, "compares with == other than null or undefined");

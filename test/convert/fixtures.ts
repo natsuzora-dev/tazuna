@@ -305,20 +305,6 @@ export const fixtures: readonly Fixture[] = [
   fixture("includes", { ns: z.array(z.int()), n: z.int() }, fc.record({ ns: numbers, n: number }), ({ input }) =>
     input.ns.includes(input.n),
   ),
-  fixture(
-    "format",
-    { title: z.string(), n: z.int(), on: date, note: z.string().nullable().optional() },
-    fc.record(
-      {
-        title: text,
-        n: fc.oneof(number, fc.double({ noNaN: true, noDefaultInfinity: true })),
-        on: day,
-        note: fc.option(text),
-      },
-      { requiredKeys: ["title", "n", "on"] },
-    ),
-    ({ input }) => `${input.title}: ${input.n} on ${input.on} ${input.note} ${input.n > 0}` + input.on,
-  ),
   fixture("lit", { at: instantSchema, on: date }, fc.record({ at: instant, on: day }), ({ input }) =>
     input.at > 1_767_225_601_000 ? input.on : "2026-01-31",
   ),
@@ -379,6 +365,8 @@ export const outside: readonly ((args: {
 }) => unknown)[] = [
   ({ input }) => input.n % 2 === 1,
   ({ input }) => input.n / 2,
+  ({ input }) => `${input.title}: ${input.n}`,
+  ({ input }) => input.title + input.n,
   ({ input }) => input.n + 0.5,
   ({ input }) => Date.now() + input.n,
   ({ input }) => input.n ** 2,
