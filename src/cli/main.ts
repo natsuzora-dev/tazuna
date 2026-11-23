@@ -266,11 +266,11 @@ const help = [
   "",
   ...wrap(
     "",
-    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command but explain first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, writes tsc's output to stderr, and stops if tsc reports an error. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless tsc reports an error or a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr one summary line, <what was checked>: <number of violations, or no violations>, where test's <what was checked> is how many scenarios it ran out of all, and the paths of the snapshots that test --update writes or removes.",
+    "<spec> is the folder whose .ts files hold the spec, in any subfolders except __snapshots__ and node_modules, without .d.ts files. A symlinked folder is walked once. Every command but explain first checks the spec as check does, and does nothing else when that reports a violation. check runs tsc --noEmit, from the typescript package that <spec> resolves, on the nearest tsconfig.json at or above <spec>, reports each error of tsc as Malformed.typeError, and stops there if tsc reports one. A spec file outside tsc's program is Malformed. If loading the spec finds a Malformed violation, check reports the violations that loading finds (Malformed, NonCanonical, Restricted) without checking the spec's structure (Illegal). No tsconfig.json at or above <spec>, no typescript package that <spec> resolves, a tsc that does not finish, or a spec file that throws when imported is a usage error. tazuna reports the last in one line with the error and the first place outside node: in its stack. Unless a usage error stops them, check, test, and verify write to stdout one JSON line per violation, whose location.file is relative to the current directory, and write to stderr one summary line, <what was checked>: <number of violations, or no violations>, where test's <what was checked> is how many scenarios it ran out of all, and the paths of the snapshots that test --update writes or removes.",
   ),
   ...wrap(
     "",
-    "The exit code is 1 when tsc reports an error, a command reports a violation, or prove finds a counterexample; 2 on a usage error; 3 when prove leaves a property undecided, as an SMT solver answers unknown; and 0 otherwise.",
+    "The exit code is 1 when a command reports a violation, or prove finds a counterexample; 2 on a usage error; 3 when prove leaves a property undecided, as an SMT solver answers unknown; and 0 otherwise.",
   ),
 ].join("\n");
 
@@ -390,10 +390,6 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
   const { root } = invocation;
   const specRoot = resolve(io.cwd, root);
   const result = await checkSpec(specRoot, (io.typeCheck ?? typeCheck)(specRoot, io.cwd), io.converter);
-  if (result.kind === "typeErrors") {
-    io.error(failureText(result, root));
-    return 1;
-  }
   if (result.kind !== "violations" && result.kind !== "checked") return misused(failureText(result, root));
   if (result.kind === "violations" || invocation.command === "check") {
     const files = result.kind === "violations" ? result.files : result.spec.sources.length;

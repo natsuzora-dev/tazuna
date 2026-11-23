@@ -9,7 +9,7 @@ import type { Restricted } from "../data/restricted.ts";
 import type { ReportedViolation } from "../data/violation.ts";
 import type { Place } from "../dsl/definition.ts";
 import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/found.ts";
-import { type Loaded, type LoadedSpec, loadSpec, type Spec } from "../load/load.ts";
+import { type Loaded, type LoadedSpec, loadSpec, type Spec, tsFiles } from "../load/load.ts";
 import * as answers from "./nonCanonical/answers.ts";
 import * as binds from "./nonCanonical/binds.ts";
 import * as constants from "./nonCanonical/constants.ts";
@@ -30,13 +30,12 @@ export type CheckedSpec = Spec & { readonly [checked]: true };
 /** A checked spec whose functions are converted to IR, which the engine needs to run the spec. */
 export type ConvertedSpec = CheckedSpec & { readonly [convertedMark]: true };
 
-/** Why a check returned no checked spec. All but `typeErrors` and `violations` are usage errors. */
+/** Why a check returned no checked spec. All but `violations` are usage errors. */
 export type SpecFailure =
   | { readonly kind: "noTsconfig" }
   | { readonly kind: "noTypescript" }
   | { readonly kind: "unfinished"; readonly reason: string }
   | { readonly kind: "unloadable"; readonly reason: string }
-  | { readonly kind: "typeErrors"; readonly output: string }
   | { readonly kind: "violations"; readonly files: number; readonly violations: readonly ReportedViolation[] };
 
 export type SpecCheck<S extends CheckedSpec = CheckedSpec> =
@@ -109,8 +108,6 @@ export function failureText(failure: SpecFailure, folder: string): string {
       return `tsc did not finish: ${failure.reason}`;
     case "unloadable":
       return `cannot load ${folder}: ${failure.reason.replace(/\s+/g, " ").trim()}`;
-    case "typeErrors":
-      return failure.output.trimEnd();
     case "violations":
       return failure.violations.map((v) => JSON.stringify(v)).join("\n");
   }
@@ -127,6 +124,19 @@ function unlistedFiles(
       violation: { kind: "Malformed.unlistedFile", definition: null, data: { tsconfig } },
       place: { file: s.file, line: 1, column: 1 },
     }));
+}
+
+/** tsc's errors, each at its place relative to `root`, or at the tsconfig.json for an error of the whole program. */
+function typeErrors(
+  root: string,
+  typeChecked: Extract<TypeCheck, { readonly kind: "typeErrors" }>,
+): Found<Malformed>[] {
+  const posix = (path: string) => relative(root, path).split(sep).join("/");
+  return typeChecked.errors.map(({ at, code, message }) => ({
+    violation: { kind: "Malformed.typeError", definition: null, data: { code, message } },
+    place:
+      at === undefined ? { file: posix(typeChecked.tsconfig), line: 1, column: 1 } : { ...at, file: posix(at.file) },
+  }));
 }
 
 /**
@@ -146,6 +156,7 @@ function converted(spec: Spec, converter: Converter | undefined): Spec | Found<R
 
 /** The spec in the folder `root` after `typeChecked`, loaded and checked in all but its spec functions. */
 async function checkUnconverted(root: string, typeChecked: TypeCheck): Promise<SpecCheck> {
+  if (typeChecked.kind === "typeErrors") return violationsOf(tsFiles(root).length, typeErrors(root, typeChecked));
   if (typeChecked.kind !== "passed") return typeChecked;
   let loaded: Loaded;
   try {

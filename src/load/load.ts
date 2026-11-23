@@ -78,7 +78,7 @@ export type Loaded =
 const skippedFolders = new Set(["__snapshots__", "node_modules"]);
 
 /** The spec files under `dir`, walking each folder once however many symlinks lead to it. */
-function tsFiles(dir: string, visited = new Set([realpathSync(dir)])): string[] {
+export function tsFiles(dir: string, visited = new Set([realpathSync(dir)])): string[] {
   return readdirSync(dir)
     .sort()
     .flatMap((name) => {

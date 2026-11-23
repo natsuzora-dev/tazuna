@@ -20,6 +20,11 @@ type Of<Name extends string, Definition extends DefinitionRef | null, Data> = {
  */
 export type Malformed =
   /**
+   * tsc reports the error `code` with `message` at the location, in a file of the tsconfig's program, which may lie
+   * outside the spec folder; an error of the whole program is at the tsconfig.json.
+   */
+  | Of<"typeError", null, { readonly code: string; readonly message: string }>
+  /**
    * The program of `tsconfig`, the nearest tsconfig.json, does not include the spec file, so tsc did not check it
    * (TypeScript's TS6307).
    */

@@ -21,6 +21,7 @@ const every =
     list;
 
 const malformedKinds = every<Malformed["kind"]>()([
+  "Malformed.typeError",
   "Malformed.unlistedFile",
   "Malformed.missingDefiner",
   "Malformed.unlistedEntity",

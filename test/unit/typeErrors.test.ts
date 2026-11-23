@@ -6,7 +6,7 @@ import { typeCheck } from "../../src/check/typeCheck.ts";
 
 const root = join(import.meta.dirname, "../..");
 
-/** The tsc output for `source`, a file next to the spec of the ToDo sample's todo service. */
+/** The messages of tsc's errors for `source`, a file next to the spec of the ToDo sample's todo service. */
 function errorsOf(source: string): string {
   mkdirSync(join(import.meta.dirname, "../.fixtures"), { recursive: true });
   const project = mkdtempSync(join(import.meta.dirname, "../.fixtures", "type-errors-"));
@@ -18,7 +18,7 @@ function errorsOf(source: string): string {
     writeFileSync(join(project, "probe.ts"), source);
     const checked = typeCheck(project, root);
     assert.equal(checked.kind, "typeErrors");
-    return checked.kind === "typeErrors" ? checked.output : "";
+    return checked.kind === "typeErrors" ? checked.errors.map((e) => e.message).join("\n") : "";
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

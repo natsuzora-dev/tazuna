@@ -102,7 +102,7 @@ test("view writes an error and exits with 2 when another program uses the port",
   }
 });
 
-test("check, test, verify, and view write the tsc output to stderr and exit with 1 when tsc reports errors for the nearest tsconfig.json above the spec folder", async () => {
+test("check, test, verify, and view report each error of tsc on the nearest tsconfig.json above the spec folder as Malformed.typeError and exit with 1", async () => {
   const project = mkdtempSync(join(import.meta.dirname, "../.fixtures", "type-error-"));
   writeFileSync(join(project, "tsconfig.json"), "{}\n");
   writeFileSync(join(project, "count.ts"), 'export const count: number = "one";\n');
@@ -116,10 +116,18 @@ test("check, test, verify, and view write the tsc output to stderr and exit with
     ]) {
       const { code, out, err } = await runWithTsc(...args);
       assert.equal(code, 1);
-      assert.deepEqual(out, []);
-      assert.deepEqual(err, [
-        `${folder}/count.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.`,
-      ]);
+      assert.deepEqual(
+        out.map((line) => JSON.parse(line)),
+        [
+          {
+            kind: "Malformed.typeError",
+            definition: null,
+            data: { code: "TS2322", message: "Type 'string' is not assignable to type 'number'." },
+            location: { file: `${folder}/count.ts`, line: 1 },
+          },
+        ],
+      );
+      assert.deepEqual(err, ["1 file: 1 violation"]);
     }
   } finally {
     rmSync(project, { recursive: true, force: true });

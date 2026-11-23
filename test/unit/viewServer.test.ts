@@ -67,7 +67,7 @@ test("The view server reloads the spec in a child process when a spec file chang
       assert.equal(failed?.type, "error");
       assert.match(
         failed?.type === "error" ? failed.message : "",
-        /data\.ts\(\d+,\d+\): error TS1109: Expression expected/,
+        /"data":\{"code":"TS1109","message":"Expression expected\."\},"location":\{"file":"todo\/data\.ts"/,
       );
       assert.equal(await task(), "A to-do of the user");
       assert.deepEqual((await (await listen(server.url)).next()).value, failed);
