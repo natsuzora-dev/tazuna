@@ -273,6 +273,24 @@ export const remindsAtMovedDue = scenario({
   then: ({ midnight, due }) => [requested(midnight, []), requested(due, [showMilk])],
 });
 
+export const keepsOtherReminderOnDueChange = scenario({
+  description:
+    "Change the due date of one task while another task waits for its reminder time; todo still reminds the user of the other task at its own time",
+  given: noTasks,
+  when: (w) => {
+    addMilk(w, startOf("2026-10-26"));
+    const addBread = w.client.as("screens").send(addTask, { taskId: "task-2", title: "Buy bread" });
+    w.net.deliver(addBread.request(calendar.nextBusinessDay));
+    w.net.deliver(w.peer.calendar.answer(addBread.request(calendar.nextBusinessDay), rejected("unavailable")));
+    w.client.as("screens").send(changeDue, { taskId: "task-2", dueAt: parseInstant("2026-10-27T18:00:00+09:00") });
+    const midnight = w.clock.at(parseInstant("2026-10-26T00:00:00+09:00"));
+    w.net.deliver(midnight.request(device.showNotification));
+    w.peer.device.leaveUnanswered(midnight.request(device.showNotification));
+    return { midnight };
+  },
+  then: ({ midnight }) => [requested(midnight, [showMilk])],
+});
+
 export const remindsAfterNotShown = scenario({
   description:
     "Let device fail to show a reminder, and let the reminder time of the next task arrive; todo reminds the user of that task",

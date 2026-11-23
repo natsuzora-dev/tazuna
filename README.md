@@ -80,12 +80,12 @@ Run the commands in the folder of your `package.json`.
    npx tazuna test spec
    ```
 
-   The output ends with `65/65 scenarios: no violations`.
+   The output ends with `66/66 scenarios: no violations`.
    `test` compared the run of each scenario with its snapshot.
    Open `spec/todo/__snapshots__/completeTwice.jsonl` to see one: each line is a message that `todo` received (`"dir":"in"`) or sent (`"dir":"out"`).
 
 5. In Then, change the expected answer of `first` from `accepted()` to `rejected("requires", "notCompleted")`, and run the scenarios again.
-   The output is a violation line, followed by `65/65 scenarios: 1 violation`:
+   The output is a violation line, followed by `66/66 scenarios: 1 violation`:
 
    ```json
    {"kind":"InvalidScenario.unmetExpectation","definition":null,"data":{"expectation":0,"expected":[{"result":"rejected","rejection":{"kind":"requires","reason":"notCompleted"}}],"actual":[{"result":"accepted"}]},"location":{"file":"spec/todo/scenarios.ts","line":70},"scenario":{"service":"todo","name":"completeTwice"}}
@@ -105,7 +105,7 @@ Run the commands in the folder of your `package.json`.
    npx tazuna test spec --only todo/completeTwice
    ```
 
-   The output ends with `1/65 scenarios (--only): no violations`.
+   The output ends with `1/66 scenarios (--only): no violations`.
 
 8. Run every scenario again, as in step 4, to see that the fix broke no other scenario.
 

@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "check": "rm -rf .traces && npm run typecheck && npm run test && npm run test:e2e && tazuna verify ../spec .traces",
+    "check": "rm -rf .traces && npm run typecheck && npm run test && npm run test:e2e && tazuna verify ../spec .traces --coverage",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "dev": "npm run db:migrate && vite dev",
