@@ -144,19 +144,14 @@ def dateLabelDef : String :=
   let body := shared.defs.foldr (fun (name, _, bound) acc => s!"(let (({name} {bound})) {acc})") text
   s!"(define-fun date_label (({symbol "z"} Int)) String {body})"
 
-/--
-The script that asks Z3 whether `q` is satisfiable within `rlimit` units of Z3's resource counter, and for its model. A
-resource limit instead of a time limit gives the same answer on a loaded machine as on an idle one. The query goes
-straight to Z3's SMT core (the `smt` tactic): a plain check-sat first runs Z3's preprocessing, whose equation solving
-substitutes each named variable back into the terms that name it, and spent most of a second on each two-order query of
-a tie, ten times what the core took for the same answer.
--/
+/-- The script that asks Z3 whether `q` is satisfiable within `rlimit` units of Z3's resource counter, and for its
+model. A resource limit instead of a time limit gives the same answer on a loaded machine as on an idle one. -/
 def Query.script (q : Query) (rlimit : Nat) : String :=
   let (asserted, shared) := (q.asserts.mapM Term.shared).run {}
   let lines := [s!"(set-option :rlimit {rlimit})", "(set-logic ALL)", datatypeV, dateLabelDef] ++
     q.vars.map (fun (x, t) => s!"(declare-const {symbol x} {t.smt})") ++
     shared.defs.toList.map (fun (name, sort, text) => s!"(define-fun {name} () {sort.smt} {text})") ++
-    asserted.map (fun a => s!"(assert {a})") ++ ["(check-sat-using smt)"] ++
+    asserted.map (fun a => s!"(assert {a})") ++ ["(check-sat)"] ++
     (if q.vars.isEmpty then [] else [s!"(get-value ({" ".intercalate (q.vars.map (symbol ·.1))}))"])
   "\n".intercalate lines ++ "\n"
 

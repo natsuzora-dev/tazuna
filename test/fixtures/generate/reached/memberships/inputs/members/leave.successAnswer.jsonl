@@ -1,9 +1,9 @@
-{"time":0,"dir":"in","type":"command","id":"addUser#1","name":"addUser","input":{"id":"c"},"caller":{"service":"client"}}
+{"time":0,"dir":"in","type":"command","id":"addUser#1","name":"addUser","input":{"id":"!0!"},"caller":{"service":"client"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addUser#1","answer":{"result":"accepted"}}
-{"time":0,"dir":"out","type":"event","id":"userAdded#1","name":"userAdded","payload":{"id":"c"},"resultOf":"addUser#1"}
-{"time":0,"dir":"in","type":"command","id":"addGroup#1","name":"addGroup","input":{"id":"c"},"caller":{"service":"client"}}
+{"time":0,"dir":"out","type":"event","id":"userAdded#1","name":"userAdded","payload":{"id":"!0!"},"resultOf":"addUser#1"}
+{"time":0,"dir":"in","type":"command","id":"addGroup#1","name":"addGroup","input":{"id":"!0!"},"caller":{"service":"client"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#2","to":"addGroup#1","answer":{"result":"accepted"}}
-{"time":0,"dir":"out","type":"event","id":"groupAdded#1","name":"groupAdded","payload":{"id":"c"},"resultOf":"addGroup#1"}
-{"time":0,"dir":"in","type":"command","id":"leave#1","name":"leave","input":{"userId":"c","groupId":"c"},"caller":{"service":"client"}}
+{"time":0,"dir":"out","type":"event","id":"groupAdded#1","name":"groupAdded","payload":{"id":"!0!"},"resultOf":"addGroup#1"}
+{"time":0,"dir":"in","type":"command","id":"leave#1","name":"leave","input":{"userId":"!0!","groupId":"!0!"},"caller":{"service":"client"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#3","to":"leave#1","answer":{"result":"accepted"}}
-{"time":0,"dir":"out","type":"event","id":"left#1","name":"left","payload":{"userId":"c","groupId":"c"},"resultOf":"leave#1"}
+{"time":0,"dir":"out","type":"event","id":"left#1","name":"left","payload":{"userId":"!0!","groupId":"!0!"},"resultOf":"leave#1"}
