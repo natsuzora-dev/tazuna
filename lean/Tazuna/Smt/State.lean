@@ -72,6 +72,8 @@ def checksKnown : Value → Bool
   | .arr checks => checks.all fun c => match c.field? "check" with
     | some (Value.str "min_length") | some (Value.str "max_length") => true
     | some (Value.str "number_format") => c.field? "format" == some (Value.str "safeint")
+    -- An inclusive bound is the schema's minimum or maximum, which the term checks.
+    | some (Value.str "greater_than") | some (Value.str "less_than") => c.field? "inclusive" == some (Value.bool true)
     | some (Value.str "string_format") => c.field? "format" == some (Value.str "date")
     | _ => false
   | _ => false
