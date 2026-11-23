@@ -1,6 +1,6 @@
 import Lean.Data.Json.Parser
 import Lean.Data.Json.Printer
-import Tazuna.Semantics.Explore.Instrument
+import Tazuna.Semantics.Instrument.Collect
 import Tazuna.Semantics.Validation.Check
 import Tazuna.Semantics.Verify.External
 import Tazuna.Semantics.Verify.Pairing
@@ -13,7 +13,7 @@ field order that TS writes.
 
 namespace Tazuna.Json
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Instrument
 open Std.Internal.Parsec Std.Internal.Parsec.String
 
 mutual

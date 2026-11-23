@@ -2,8 +2,8 @@ import Engine.Drive
 import Engine.Prove
 import Engine.Generate
 import Tazuna.Ir.Expr
-import Tazuna.Semantics.Explore.Coverage
-import Tazuna.Semantics.Explore.Instrument
+import Tazuna.Semantics.Instrument.Coverage
+import Tazuna.Semantics.Instrument.Collect
 import Tazuna.Semantics.Scenario.Given
 import Tazuna.Semantics.Sim.InvalidScenario
 import Tazuna.Semantics.Validation.Illegal

@@ -1,7 +1,7 @@
 import Tazuna.Ir.Group
 import Tazuna.Semantics.Service.Message
 
-namespace Tazuna.Semantics.Explore
+namespace Tazuna.Semantics.Instrument
 
 open Tazuna.Ir Tazuna.Semantics.Service
 
@@ -25,4 +25,4 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_group RegionOrderDependent
 
-end Tazuna.Semantics.Explore
+end Tazuna.Semantics.Instrument

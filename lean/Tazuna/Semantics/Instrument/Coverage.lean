@@ -6,7 +6,7 @@ and that `generate` seeks inputs for. An external service's definitions are no t
 checks an external service's trace against its contract instead.
 -/
 
-namespace Tazuna.Semantics.Explore
+namespace Tazuna.Semantics.Instrument
 
 open Tazuna.Ir Tazuna.Semantics.Service
 
@@ -80,4 +80,4 @@ an unreached request hides its answers.
 def uncovered (spec : Ir.Structure) (reached : List Uncovered) : List Uncovered :=
   ((targets spec).filter fun t => !reached.contains t.part && t.after.all reached.contains).map (·.part)
 
-end Tazuna.Semantics.Explore
+end Tazuna.Semantics.Instrument

@@ -1,9 +1,9 @@
 import Tazuna.Ir.Group
 import Tazuna.Semantics.Service.Step
 
-namespace Tazuna.Semantics.Explore
+namespace Tazuna.Semantics.Service
 
-open Tazuna.Ir Tazuna.Semantics.Service
+open Tazuna.Ir
 
 /--
 A result that depends on an order that no line writes, which prove finds: the order of two steps that can be pending
@@ -19,4 +19,4 @@ deriving Repr, Inhabited
 
 derive_group ChoiceDependent
 
-end Tazuna.Semantics.Explore
+end Tazuna.Semantics.Service

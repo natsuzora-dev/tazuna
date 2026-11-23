@@ -1,6 +1,6 @@
 import Tazuna.Semantics.Eval.Expr
 import Tazuna.Semantics.Value.Parse
-import Tazuna.Semantics.Explore.Instrument
+import Tazuna.Semantics.Instrument.Collect
 
 /-!
 The Functions that the engine runs a spec with (Program.toFunctions). The arguments of each spec function are those
@@ -9,7 +9,7 @@ that the TS DSL passes it for the same question.
 
 namespace Tazuna.Semantics.Eval
 
-open Tazuna.Ir Tazuna.Semantics.Service Tazuna.Semantics.Explore
+open Tazuna.Ir Tazuna.Semantics.Service Tazuna.Semantics.Instrument
 
 /-- The arguments of a spec function that receives only `passed`; any other name is `undefined`. -/
 def argsOf (passed : List (Arg × Val)) (a : Arg) : Val := (passed.lookup a).getD .undef

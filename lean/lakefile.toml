@@ -1,6 +1,6 @@
 name = "tazuna-lean"
 version = "0.1.0"
-defaultTargets = ["Tazuna", "Engine", "tazuna-engine", "tazuna-generate", "tazuna-axioms", "tazuna-graph"]
+defaultTargets = ["Tazuna", "Engine", "tazuna-engine", "tazuna-codegen", "tazuna-axioms", "tazuna-graph"]
 
 [leanOptions]
 autoImplicit = false
@@ -19,8 +19,8 @@ name = "tazuna-engine"
 root = "Engine.Main"
 
 [[lean_exe]]
-name = "tazuna-generate"
-root = "Generate.Main"
+name = "tazuna-codegen"
+root = "Codegen.Main"
 
 [[lean_exe]]
 name = "tazuna-axioms"

@@ -1,6 +1,6 @@
 import Tazuna.Semantics.Eval.Functions
 import Tazuna.Semantics.Verify.Read
-import Tazuna.Semantics.Explore.Instrument
+import Tazuna.Semantics.Instrument.Collect
 import Tazuna.Semantics.Sim.Run
 import Tazuna.Semantics.Sim.Trace
 
@@ -11,7 +11,7 @@ reports. The spec functions run as the structure's IR (Eval.functionsOf).
 
 namespace Tazuna.Engine
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Instrument
 
 /-- What an instrumented simulation collects: one Collect per running service, and the service whose processing runs. -/
 structure Acting where

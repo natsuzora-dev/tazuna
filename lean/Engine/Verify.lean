@@ -1,6 +1,6 @@
 import Engine.Run
 import Tazuna.Semantics.Verify.External
-import Tazuna.Semantics.Explore.Coverage
+import Tazuna.Semantics.Instrument.Coverage
 
 /-!
 What the CLI's verify command asks of the engine: the replay of an implementation's log, whose `in` lines the spec
@@ -10,7 +10,7 @@ contract, with the values read by their schemas and the contract's conditions ev
 
 namespace Tazuna.Engine
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Verify Tazuna.Semantics.Explore
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Verify Tazuna.Semantics.Instrument
 
 /-- A finding as a report writes it: the violation itself. -/
 instance : ToValue Verify.Finding := ⟨fun
@@ -188,7 +188,7 @@ def verify (spec : Ir.Structure) (logs : List Log) : IO (List Replayed × List V
   let (replayed, reached) ← logs.foldlM (init := ([], [])) fun (done, reached) log => do
     let (r, c) ← (replay spec log).run {}
     pure (done ++ [r], c.reached.foldl (fun acc u => if acc.contains u then acc else acc ++ [u]) reached)
-  pure (replayed, (Explore.uncovered spec reached).map (·.toViolation))
+  pure (replayed, (Instrument.uncovered spec reached).map (·.toViolation))
 
 /-- The value of an Except that stops the engine on an Issue, as a spec function's throw stopped TS. -/
 def orStop {α : Type} (what : String) : Except Issue α → IO α

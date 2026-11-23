@@ -1,12 +1,12 @@
 import Tazuna.Semantics.Service.Restart
-import Tazuna.Semantics.Explore.RegionOrderDependent
+import Tazuna.Semantics.Instrument.RegionOrderDependent
 
 /-!
 This module defines the instrumented run. It wraps Functions without changing the semantic run and collects what the
 transitions of a microstep read and assign, which the check of parallel regions compares, and the parts the run reached.
 -/
 
-namespace Tazuna.Semantics.Explore
+namespace Tazuna.Semantics.Instrument
 
 open Tazuna.Ir Tazuna.Semantics.Service
 
@@ -168,4 +168,4 @@ def reportedViolations (s : Service.State) (c : Collect) (stopped : Option Findi
 
 end
 
-end Tazuna.Semantics.Explore
+end Tazuna.Semantics.Instrument

@@ -2,7 +2,7 @@ import Tazuna.Ir.Time
 import Tazuna.Ir.Expr
 import Tazuna.Semantics.Service.Functions
 import Tazuna.Semantics.Service.Note
-import Tazuna.Semantics.Explore.Instrument
+import Tazuna.Semantics.Instrument.Collect
 
 /-!
 The evaluator of IR expressions. Values stay as JSON encodes them: the converter has chosen each operation by the TS type
@@ -12,7 +12,7 @@ field only when an expression reads it, so an evaluation reads the parts of the 
 
 namespace Tazuna.Semantics.Eval
 
-open Tazuna.Ir Tazuna.Semantics.Service Tazuna.Semantics.Explore
+open Tazuna.Ir Tazuna.Semantics.Service Tazuna.Semantics.Instrument
 
 /-- A value of a chart function's arguments that notes each field that an expression reads, as TS's arguments do. -/
 inductive Tracked where

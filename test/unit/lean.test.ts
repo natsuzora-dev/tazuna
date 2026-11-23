@@ -25,16 +25,16 @@ const allowedImports: Readonly<Record<string, readonly string[]>> = {
   "Semantics/Service": ["Ir", "Semantics/Value", "Semantics/Service"],
   "Semantics/Scenario": ["Ir", "Semantics/Value", "Semantics/Scenario"],
   "Semantics/Sim": ["Ir", "Semantics/Value", "Semantics/Service", "Semantics/Scenario", "Semantics/Sim"],
-  "Semantics/Explore": [
+  "Semantics/Instrument": [
     "Ir",
     "Semantics/Value",
     "Semantics/Service",
     "Semantics/Scenario",
     "Semantics/Sim",
-    "Semantics/Explore",
+    "Semantics/Instrument",
   ],
   "Semantics/Verify": ["Ir", "Semantics/Value", "Semantics/Verify"],
-  "Semantics/Eval": ["Ir", "Semantics/Value", "Semantics/Service", "Semantics/Explore", "Semantics/Eval"],
+  "Semantics/Eval": ["Ir", "Semantics/Value", "Semantics/Service", "Semantics/Instrument", "Semantics/Eval"],
   Smt: ["Ir", "Semantics", "Smt"],
 };
 

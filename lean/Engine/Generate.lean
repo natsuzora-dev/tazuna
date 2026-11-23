@@ -1,6 +1,6 @@
 import Engine.Prove
 import Engine.Verify
-import Tazuna.Semantics.Explore.Coverage
+import Tazuna.Semantics.Instrument.Coverage
 import Std.Data.HashMap
 
 /-!
@@ -17,7 +17,7 @@ TS runs Z3, so the search asks it through `solve` mid-run and goes on with the o
 
 namespace Tazuna.Engine
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Smt Tazuna.Semantics.Explore
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Smt Tazuna.Semantics.Instrument
 
 /-- What generate found of a target. -/
 inductive Outcome where

@@ -1,4 +1,4 @@
-import Tazuna.Semantics.Explore.Instrument
+import Tazuna.Semantics.Instrument.Collect
 import Tazuna.Thm.Ir.List
 import Tazuna.Thm.Guarantee
 
@@ -7,9 +7,9 @@ Service definitions are generic in `m`, so instrumented functions that agree wit
 every instrumented definition agree with its plain one.
 -/
 
-namespace Tazuna.Thm.Semantics.Explore.Instrument
+namespace Tazuna.Thm.Semantics.Instrument.Collect
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore Tazuna.Thm.Ir.List
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Instrument Tazuna.Thm.Ir.List
 
 variable {C : Type}
 
@@ -613,11 +613,11 @@ theorem startRecords_agrees (s : Service.State) : Agrees (startRecords st fsI s)
 
 end
 
-end Tazuna.Thm.Semantics.Explore.Instrument
+end Tazuna.Thm.Semantics.Instrument.Collect
 
-namespace Tazuna.Thm.Semantics.Explore.Instrument
+namespace Tazuna.Thm.Semantics.Instrument.Collect
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore Tazuna.Thm.Ir.List
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Instrument Tazuna.Thm.Ir.List
 
 variable {C : Type} {st : Service} {fs : Functions Id} {ifs : InstrumentFunctions Id}
 
@@ -630,4 +630,4 @@ theorem observe_agrees {α : Type} (x : Id α) (f : α → StateT Collect Id Uni
 @[guarantee] theorem instrument_agrees : FunctionsAgree (instrument st fs ifs) (fs.sorting st) := by
   constructor <;> intros <;> first | exact observe_agrees _ _ | exact Agrees.lift _
 
-end Tazuna.Thm.Semantics.Explore.Instrument
+end Tazuna.Thm.Semantics.Instrument.Collect

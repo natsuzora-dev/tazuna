@@ -1,15 +1,15 @@
 import Tazuna.Semantics.Sim.Run
-import Tazuna.Thm.Semantics.Explore.Instrument
+import Tazuna.Thm.Semantics.Instrument.Collect
 import Tazuna.Thm.Guarantee
 
 /-!
-The audit's agreement for each service input (Thm.Explore.Instrument) lifted to the whole run: instrumented functions
+The audit's agreement for each service input (Thm.Semantics.Instrument.Collect) lifted to the whole run: instrumented functions
 that agree with the plain ones make `execute` and `simulate` return the same world.
 -/
 
 namespace Tazuna.Thm.Semantics.Sim.Audit
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Sim Tazuna.Thm.Semantics.Explore.Instrument
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Sim Tazuna.Thm.Semantics.Instrument.Collect
 open Tazuna.Semantics.Scenario (Fact ValueRef Template)
 
 variable {C ε : Type}

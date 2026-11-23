@@ -4,7 +4,7 @@ import Tazuna.Smt.State
 import Tazuna.Smt.Chart
 import Tazuna.Smt.Pair
 import Tazuna.Smt.Chain
-import Tazuna.Semantics.Explore.ChoiceDependent
+import Tazuna.Semantics.Service.ChoiceDependent
 
 /-!
 prove: the base case and the inductive step of each invariant of each spec service, within the service's bounds, and
@@ -757,7 +757,7 @@ def replayPair (x : Induction) (fs : Functions IO) (pair : Pair) (o : Orders) (M
     .obj [("records", givenOf st rs), ("accepted", .obj [(pair.first.name, .bool x), (pair.second.name, .bool y)])]
   let firstStep := StepName.command pair.first.sends (.automation pair.first.name) first
   let secondStep := StepName.command pair.second.sends (.automation pair.second.name) second
-  let found := Explore.ChoiceDependent.stepOrder (st.ref pair.first.name) firstStep secondStep (outcome r12 a1 b1)
+  let found := ChoiceDependent.stepOrder (st.ref pair.first.name) firstStep secondStep (outcome r12 a1 b1)
     (outcome r21 a2 b2)
   let taken := if pair.first.receives == pair.second.receives then payload
     else .obj [("first", payload), ("second", otherPayload)]
@@ -861,7 +861,7 @@ def replayTie (x : Induction) (fs : Functions IO) (tie : Tie) (o : TieOrders) (M
         some (Value.obj [("first", shownOf a ga), ("second", shownOf b gb)]),
         ← arrive (← arrive s a "a" ga) b "b" gb, ← arrive (← arrive s b "b" gb) a "a" ga)
   if same s1 s2 then return .error "the semantics ends the same in both orders"
-  let found := Explore.ChoiceDependent.stepOrder (tieProperty st tie).definition steps.1 steps.2 (outcome s1)
+  let found := ChoiceDependent.stepOrder (tieProperty st tie).definition steps.1 steps.2 (outcome s1)
     (outcome s2)
   return .ok { given, clock, command := none, input := none, now := some now, machine := some (.obj shown), taken,
                violations := [found.toViolation] }

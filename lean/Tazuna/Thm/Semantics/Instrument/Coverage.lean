@@ -1,11 +1,11 @@
-import Tazuna.Semantics.Explore.Coverage
+import Tazuna.Semantics.Instrument.Coverage
 import Tazuna.Thm.Guarantee
 
 /-! What `verify --coverage` reports: only parts outside the reached parts that the runs collect. -/
 
-namespace Tazuna.Thm.Semantics.Explore.Coverage
+namespace Tazuna.Thm.Semantics.Instrument.Coverage
 
-open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explore
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Instrument
 
 /-- `verify --coverage` reports only parts outside `reached`, the parts that the runs collect. -/
 @[guarantee] theorem uncovered_unreached (spec : Ir.Structure) (reached : List Uncovered) (u : Uncovered)
@@ -14,4 +14,4 @@ open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Explor
   obtain ⟨t, ⟨-, hr, -⟩, rfl⟩ := h
   simpa using hr
 
-end Tazuna.Thm.Semantics.Explore.Coverage
+end Tazuna.Thm.Semantics.Instrument.Coverage
