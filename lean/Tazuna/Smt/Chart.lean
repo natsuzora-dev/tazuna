@@ -83,6 +83,11 @@ structure ChartModel where
   configs : Array (List String)
   edges : List Edge
 
+/-- The configurations that a settled machine is never in: some active state has an always transition without a guard. -/
+def ChartModel.transient (m : ChartModel) : List Nat :=
+  ((List.range m.configs.size).filter fun k => m.edges.any fun e =>
+    e.source == k && e.transition.trigger == .always && e.transition.guards.isEmpty && e.target != k)
+
 /-- Why the chart has no model, or none. -/
 def unsupported (c : Service.Chart) : Option String :=
   if c.screen then some "a screen"

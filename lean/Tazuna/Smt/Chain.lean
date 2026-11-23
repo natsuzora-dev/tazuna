@@ -787,7 +787,8 @@ where
 /-- A tie's two orders from one state: the first message then the second, and the second then the first. -/
 structure TieOrders where
   facts : Facts
-  /-- What the state must hold for the tie: each deadline's state active, and each requester of an answer. -/
+  /-- What the state must hold for the tie: every machine settled, each deadline's state active, and each requester of an
+  answer. -/
   pre : Term
   first : Ending
   second : Ending
@@ -801,6 +802,9 @@ def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String
     | .ok m => pure (c.name, m)
     | .error why => throw s!"{c.name}: {why}"
   let ce : ChainEnv := { st, p, models, now }
+  -- A tie starts between messages, when every machine has settled.
+  let settled := conj (models.flatMap fun (c, m) =>
+    m.transient.map fun k => Term.not (.eq (cfgVar c) (intLit (Int.ofNat k))))
   let orders (watched : List (String × String)) (a b : List Start) : Except String (Ending × Ending) := do
     let run (name : String) (x y : List Start) : Except String Ending := do
       let paths ← message ce watched [{ name, pc := tt, records := pre, used, machines := startMachines ce }] x
@@ -811,12 +815,13 @@ def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String
     let (first, second) ← orders [(a.chart, a.state), (b.chart, b.state)]
       [{ jobs := [.deadline a.chart a.state a.name] }] [{ jobs := [.deadline b.chart b.state b.name] }]
     pure { facts := machineFacts ce ++ first.facts ++ second.facts,
-           pre := .and (activeIn models a.chart a.state) (activeIn models b.chart b.state), first, second, given := [] }
+           pre := conj [settled, activeIn models a.chart a.state, activeIn models b.chart b.state], first, second,
+           given := [] }
   | .arrivals a b =>
     let ga ← arrivingOf ce a "pa"
     let gb ← arrivingOf ce b "pb"
     let (first, second) ← orders (ga.watched ++ gb.watched) ga.starts gb.starts
-    pure { facts := machineFacts ce ++ ga.facts ++ gb.facts ++ first.facts ++ second.facts, pre := .and ga.pre gb.pre,
-           first, second, given := [ga.given, gb.given] }
+    pure { facts := machineFacts ce ++ ga.facts ++ gb.facts ++ first.facts ++ second.facts,
+           pre := conj [settled, ga.pre, gb.pre], first, second, given := [ga.given, gb.given] }
 
 end Tazuna.Smt
