@@ -1,0 +1,655 @@
+import Tazuna.Smt.Chart
+import Tazuna.Smt.Pair
+import Std.Data.HashSet
+
+/-!
+The chain of one message: the steps that a due deadline or an arriving event causes within its message, in the order of
+Service.drain. The control is concrete and the data symbolic: each choice that data decides, such as which transition a
+guard lets through or whether a command accepts, splits the chain into paths, each with the term that holds when the
+message takes it. The chain follows at most `chainLimit` steps of a message; a path with steps left past them is cut,
+and prove asks whether any cut path can be taken. These encodings carry no proof; prove replays each answer that it
+reports in the semantics.
+-/
+
+namespace Tazuna.Smt
+
+open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Eval Tazuna.Semantics.Service
+
+/--
+The steps of one message that prove follows, each work item, own command or sending of entered states' activities one
+step, as Service.drain counts them, and each always round of a settle one more. As CBMC and Kani unwind a loop only to
+the bound they are given and then check that no run goes further (the unwinding assertion), a message that can take
+more steps leaves its tie undecided, never proved. The longest chain of the todo sample takes 6 steps (at a bound of 5
+its ties are cut, at 6 none is), and 8 leaves two to spare; a path can split at each step, so a larger bound costs
+time on every spec.
+-/
+def chainLimit : Nat := 8
+
+/-- What an out line carries: a request to another service, or an event. -/
+inductive OutKind where
+  | command
+  | query
+  | event
+deriving DecidableEq, Repr
+
+/--
+A line that a message writes out, the term that holds when it does, and its fields. `id` names where the chain wrote
+it, which the paths that split after it share.
+-/
+structure Out where
+  id : String
+  guard : Term
+  kind : OutKind
+  definition : Ir.Ref
+  fields : List (String × Term)
+
+/-- A machine in a chain: its configuration in the chart's model, its context, and the states that it exited so far. -/
+structure Mach where
+  config : Nat
+  context : List (String × Term)
+  exited : List String := []
+
+/-- The sender of an own command: a state's `sends`, with the place in its machine's exits when it sent, or an automation. -/
+inductive Sender where
+  | state (chart state key : String) (exitsBefore : Nat)
+  | automation (name : String)
+
+/-- An own command that waits in the internal queue, as Sent: its sender's rank, sender, command, input and whether the input fits its schema. -/
+structure Waiting where
+  order : Nat
+  sender : Sender
+  command : String
+  input : List (String × Term)
+  valid : Term
+
+/-- A work item of the internal queue, as Work. -/
+inductive Job where
+  /-- A deadline of a state that fires, the work that starts a deadline's message. -/
+  | deadline (chart state name : String)
+  /-- A machine's evaluation, with the event that it takes, if any: the term that holds when it is emitted, its key and payload. -/
+  | receive (chart : String) (event : Option (Term × String × List (String × Term)))
+  | react (automation : Automation) (guard : Term) (payload : List (String × Term))
+  /-- The answer to a state's own command. -/
+  | answered (sender : Sender) (accepted : Bool)
+
+/-- A path of a chain: the term that holds when the run takes it, and the state of the service and of its message. -/
+structure Path where
+  name : String
+  pc : Term
+  records : SRecords
+  used : List (String × List Term)
+  machines : List (String × Mach) := []
+  outs : List Out := []
+  jobs : List Job := []
+  round : List Waiting := []
+  commands : List Waiting := []
+  entered : List (String × String) := []
+  steps : Nat := 0
+  halted : Bool := false
+  /-- That the message has steps left past chainLimit. -/
+  cut : Bool := false
+  gap : Term := ff
+  beyond : Term := ff
+  /-- The facts of the path's variables, each group under the unique name of the step that made it, which forks share. -/
+  facts : List (String × Facts) := []
+  /-- The configurations that each chart it has not read yet is not in. -/
+  excluded : List (String × List Nat) := []
+  fresh : Nat := 0
+
+/-- What a chain reads of the service: the spec, each chart's model, and the time of the message. -/
+structure ChainEnv where
+  st : Service
+  p : Program
+  models : List (String × ChartModel)
+  now : Term
+
+def cfgVar (chart : String) : Term := .var s!"cfg.{chart}" .int
+
+def ctxVar (chart field : String) : Term := valVar s!"ctx.{chart}.{field}"
+
+/-- The context fields of `chart` with their schemas, as propertiesWith gives them. -/
+def contextProps (st : Service) (chart : String) : List (String × Value × Bool) :=
+  propertiesWith ((st.schemaOf (.context (st.ref chart))).getD (.obj []))
+
+/--
+The facts of the machines of a state: each chart's configuration a variable among its model's configurations, and each
+context field a variable that fits its schema, as the semantics checks after each assign.
+-/
+def machineFacts (ce : ChainEnv) : Facts :=
+  ce.models.foldl (fun f (c, m) =>
+    let holds := (contextProps ce.st c).map fun pr => fieldHolds (ctxVar c pr.1) pr
+    f ++ { vars := [(s!"cfg.{c}", .int)] ++ (contextProps ce.st c).map fun pr => (s!"ctx.{c}.{pr.1}", Ty.val),
+           asserts := [.le (intLit 0) (cfgVar c), .lt (cfgVar c) (intLit m.configs.size)] ++ holds.map (·.term),
+           fit := Fit.all (holds.map (·.fit)) }) Facts.none
+
+/-- `a ∧ b`, without the literals that decide it, so that a path that no run takes has `ff` as its term. -/
+def andT (a b : Term) : Term :=
+  if a == ff || b == ff then ff else if a == tt then b else if b == tt then a else .and a b
+
+def notT (a : Term) : Term := if a == tt then ff else if a == ff then tt else .not a
+
+namespace Path
+
+def fork (x : Path) (c : Term) (tag : String) : Path := { x with pc := andT x.pc c, name := s!"{x.name}{tag}" }
+
+/-- A name for the path's next variables, and the path that has used it. -/
+def next (x : Path) : String × Path := (s!"{x.name}.{x.fresh}.", { x with fresh := x.fresh + 1 })
+
+def mach? (x : Path) (chart : String) : Option Mach := x.machines.lookup chart
+
+def setMach (x : Path) (chart : String) (m : Mach) : Path :=
+  { x with machines := x.machines.filter (·.1 != chart) ++ [(chart, m)] }
+
+/-- The path counting one more step of its message, cut when the step would pass chainLimit. -/
+def step (x : Path) : Path := if x.steps < chainLimit then { x with steps := x.steps + 1 } else { x with cut := true }
+
+def stopped (x : Path) : Bool := x.halted || x.cut
+
+end Path
+
+/--
+The paths in which `chart` is in each configuration where `matters` says the work can change it, the first time the
+chain reads it, and one where it is in none of them, which leaves the chart unread.
+-/
+def touch (ce : ChainEnv) (x : Path) (chart : String) (matters : ChartModel → Nat → Bool) : Except String (List Path) := do
+  if (x.mach? chart).isSome then return [x]
+  let some m := ce.models.lookup chart | throw s!"no model of {chart}"
+  let excluded := (x.excluded.lookup chart).getD []
+  let open_ := (List.range m.configs.size).filter (· ∉ excluded)
+  let (read, unread) := open_.partition (matters m)
+  let isConfig (k : Nat) : Term := .eq (cfgVar chart) (intLit (Int.ofNat k))
+  let touched := read.map fun k =>
+    (x.fork (isConfig k) s!"c{k}").setMach chart
+      { config := k, context := (contextProps ce.st chart).map fun pr => (pr.1, ctxVar chart pr.1) }
+  let rest := if unread.isEmpty then [] else
+    [{ x.fork (conj (read.map (notT ∘ isConfig))) "c" with
+       excluded := x.excluded.filter (·.1 != chart) ++ [(chart, excluded ++ read)] }]
+  pure (touched ++ rest)
+
+/-- The input of an activity or a react as scalar fields, or why it has none. -/
+def scalarFields : SVal → Except String (List (String × Term) × Term)
+  | .obj fields => pure (fields.map (fun (f, v) => (f, v.scalarOf.1)), disj (fields.map (·.2.scalarOf.2)))
+  | .json fields => pure (fields.map (fun (f, j) => (f, (SVal.ofJson j).scalarOf.1)),
+      disj (fields.map fun (_, j) => (SVal.ofJson j).scalarOf.2))
+  | _ => throw "an input that is no object literal"
+
+/-- That `input` fits the input schema of `target`, which its receiver otherwise rejects as invalid input. -/
+def inputFits (st : Service) (target : Ir.Ref) (input : List (String × Term)) : Holds :=
+  let fits := (propertiesWith ((st.schemaOf (.input target)).getD (.obj []))).map fun pr =>
+    fieldHolds ((input.lookup pr.1).getD undefT) pr
+  { term := conj (fits.map (·.term)), fit := Fit.all (fits.map (·.fit)) }
+
+/--
+The paths after the microstep of `chart` by the first of `edges` whose guards hold, in order, as `choose` takes it: one
+path per edge, and one that halts when a guard or an assign throws; and the path where no edge is taken.
+-/
+def take (ce : ChainEnv) (x : Path) (chart : String) (edges : List Edge) (taken : Option (Arg × SVal)) :
+    Except String (List Path × Path) := do
+  let some mach := x.mach? chart | throw s!"no machine {chart}"
+  let some model := ce.models.lookup chart | throw s!"no model of {chart}"
+  let c := model.chart
+  let pre : SMachine := { context := mach.context, active := model.configs[mach.config]! }
+  let env := pre.env c x.records ce.now taken
+  let mut before := tt
+  let mut halts := ff
+  let mut out := []
+  for (e, i) in edges.zipIdx do
+    let (ok, halted) ← guardTerms env ((siteOf ce.st ce.p c (.guards e.transition.ref)).getD []) e.transition.guards
+    halts := .or halts (andT before halted)
+    let moved ← pre.move ce.st ce.p c x.records ce.now taken (some e.transition) e.exits e.entries
+    let y := (x.fork (conj [before, ok, notT halted]) s!"e{i}").setMach chart
+      { config := e.target, context := moved.machine.context, exited := mach.exited ++ e.exits }
+    out := out ++ [{ y.fork moved.halted "h" with halted := true },
+                   ← enterAll ce (y.fork (notT moved.halted) "") chart moved.machine e.entries]
+    before := conj [before, notT ok, notT halted]
+  pure (out ++ [{ x.fork halts "g" with halted := true }], x.fork (andT before (notT halts)) "z")
+where
+  /-- The path after `chart` entered `entries`: each deadline armed, which must fall after the message, and each state with activities queued to send them. -/
+  enterAll (ce : ChainEnv) (x : Path) (chart : String) (m : SMachine) (entries : List String) : Except String Path := do
+    let some model := ce.models.lookup chart | throw s!"no model of {chart}"
+    let c := model.chart
+    entries.foldlM (init := x) fun x n => do
+      let some cs := c.state? n | pure x
+      if cs.activities.any fun a => a matches .shows .. || a matches .opens .. then
+        throw "a state that shows or opens"
+      let early ← cs.spec.deadlines.mapM fun d => match d.time with
+        | .delay ms => pure (if ms.any (0 < ·) then ff else tt)
+        | .at => do
+          let some f := ((siteOf ce.st ce.p c (.deadline n d.name)).getD []).head? | throw s!"no IR of the at of {d.name}"
+          let (v, err) ← seval (m.env c x.records ce.now none) [] f.body
+          let (t, notScalar) := v.scalarOf
+          pure (disj [err, notScalar, .not (.isInt t), .le (.intOf t) ce.now])
+      let entered := if cs.activities.isEmpty then x.entered
+        else x.entered.filter (· != (chart, n)) ++ [(chart, n)]
+      pure { x with gap := disj ([x.gap] ++ early.map (andT x.pc ·)), entered }
+
+/-- The paths of `paths` that some run can take. -/
+def live (paths : List Path) : List Path := paths.filter (·.pc != ff)
+
+/-- The paths after `x` takes `edges` and each path that moved settles by `next`. -/
+def takeThen (ce : ChainEnv) (x : Path) (chart : String) (edges : List Edge) (taken : Option (Arg × SVal))
+    (next : Path → Except String (List Path)) : Except String (List Path) := do
+  let (moved, idle) ← take ce x chart edges taken
+  pure ((← (live moved).flatMapM fun y => if y.stopped then pure [y] else next y) ++ live [idle])
+
+/-- The edges of the model of `chart` from configuration `k` on `trigger`, from the state `source` when it is some. -/
+def edgesOn (model : ChartModel) (k : Nat) (trigger : Ir.Trigger) (source : Option String := none) : List Edge :=
+  model.edges.filter fun e => e.source == k && e.transition.trigger == trigger && (source.all (e.transition.source == some ·))
+
+/-- The paths after `chart` settles: its always transitions, round by round, until none is taken (Service.settle). -/
+def settle (ce : ChainEnv) (chart : String) : Nat → Path → Except String (List Path)
+  | fuel, x => do
+    if x.stopped then return [x]
+    let some mach := x.mach? chart | return [x]
+    let some model := ce.models.lookup chart | throw s!"no model of {chart}"
+    let edges := edgesOn model mach.config .always
+    if edges.isEmpty then return [x]
+    let (moved, idle) ← take ce x chart edges none
+    let moved := live moved
+    match fuel with
+    | 0 => pure (moved.map ({ · with cut := true }) ++ live [idle])
+    | fuel + 1 => pure ((← moved.flatMapM fun y => settle ce chart fuel y.step) ++ live [idle])
+
+/-- The paths after each of `paths` goes on by `f`. -/
+def andThen (paths : List Path) (f : Path → Except String (List Path)) : Except String (List Path) :=
+  (live paths).flatMapM fun x => if x.stopped then pure [x] else f x
+
+/-- The paths after the deadline `name` of `state` of `chart` fires, settled before and after (Service.fire). -/
+def fireDeadline (ce : ChainEnv) (x : Path) (chart state name : String) : Except String (List Path) := do
+  let matters (m : ChartModel) (k : Nat) := (m.configs[k]!).contains state || !(edgesOn m k .always).isEmpty
+  let paths ← andThen (← touch ce x chart matters) (settle ce chart chainLimit)
+  andThen paths fun x => do
+    let some mach := x.mach? chart | return [x]
+    let some model := ce.models.lookup chart | throw s!"no model of {chart}"
+    -- Exiting the state took its deadline away, even when the state was entered again.
+    if mach.exited.contains state || !(model.configs[mach.config]!).contains state then return [x]
+    takeThen ce x chart (edgesOn model mach.config (.after name) (some state)) none (settle ce chart chainLimit)
+
+/-- The paths after the answer to a state's own command, settled before and after (Service.handle). -/
+def answer (ce : ChainEnv) (x : Path) (chart state key : String) (exitsBefore : Nat) (accepted : Bool) :
+    Except String (List Path) := do
+  let paths ← settle ce chart chainLimit x
+  andThen paths fun x => do
+    let some mach := x.mach? chart | throw s!"no machine {chart}"
+    let some model := ce.models.lookup chart | throw s!"no model of {chart}"
+    if (mach.exited.drop exitsBefore).contains state then return [x]
+    let trigger := Ir.Trigger.sends key (if accepted then .onAccepted else .onRejected)
+    let (pre, x) := x.next
+    let (taken, facts) ← if accepted then pure (none, Facts.none) else do
+      let (t, f) ← takenOf ce.st s!"{pre}tk" [] .rejection
+      -- An invalid input halts the sender before any transition (rejectedInput?), so the kind is another one.
+      pure (t, { f with asserts := f.asserts ++ [.not (.eq (valVar s!"{pre}tk.kind") (.mkStr (strLit "invalid-input")))] })
+    let x := { x with facts := x.facts ++ [(pre, facts)] }
+    takeThen ce x chart (edgesOn model mach.config trigger (some state)) taken (settle ce chart chainLimit)
+
+/-- The work that the events of an accepted command cause (commandWork): each machine's evaluation, then each automation's reaction. -/
+def commandWork (ce : ChainEnv) (emitted : List (Term × Ir.Ref × List (String × Term))) : Except String (List Job) := do
+  let machines ← ce.models.mapM fun (c, m) => do
+    let received := emitted.filterMap fun (g, e, payload) =>
+      (m.chart.receives.find? (·.2 == e)).map fun (key, _) => (g, key, payload)
+    if 1 < received.length then throw s!"a command that emits several events that {c} receives"
+    pure (Job.receive c received.head?)
+  let reactions ← ce.st.automations.filterMapM fun a => do
+    let received := emitted.filter (·.2.1 == a.receives)
+    if 1 < received.length then throw s!"a command that emits several events that {a.name} receives"
+    pure (received.head?.map fun (g, _, payload) => Job.react a g payload)
+  pure (machines ++ reactions)
+
+/-- The paths after the own command `w` runs (Service.processCommand), its answer queued for a state that sent it. -/
+def runCommand (ce : ChainEnv) (x : Path) (w : Waiting) : Except String (List Path) := do
+  let (names, x) := x.next
+  let step ← stepWith ce.st ce.p x.records x.used w.command (SJson.ofTerms w.input) (callerTerms (.service ce.st.service))
+    ce.now names
+  let answered (accepted : Bool) : List Job := match w.sender with
+    | .state .. => [.answered w.sender accepted]
+    | .automation _ => []
+  -- An automation's rejected command, or any command rejected as invalid input, is the sender's fault (automationAnswer).
+  let invalid := { x.fork (notT w.valid) "i" with halted := true }
+  let rejected := x.fork (andT w.valid (notT step.accepted)) "r"
+  let rejected := match w.sender with
+    | .state .. => { rejected with jobs := rejected.jobs ++ answered false }
+    | .automation _ => { rejected with halted := true }
+  let ok := x.fork (andT w.valid step.accepted) "a"
+  let ok := { ok with records := step.post, used := step.used, facts := ok.facts ++ [(names, step.facts)],
+                      gap := .or ok.gap (.and ok.pc step.gap), beyond := .or ok.beyond (.and ok.pc step.beyond),
+                      outs := ok.outs ++ step.emitted.zipIdx.map fun (((g, e, payload) : Term × Ir.Ref × List (String × Term)), (i : Nat)) =>
+                        ({ id := s!"{names}{i}", guard := .and ok.pc g, kind := .event, definition := e,
+                           fields := payload } : Out) }
+  let work ← commandWork ce step.emitted
+  let any := disj (step.emitted.map (·.1))
+  let some_ := ok.fork any "w"
+  let none_ := ok.fork (notT any) "q"
+  let accepted := if step.emitted.isEmpty then [{ ok with jobs := ok.jobs ++ answered true }]
+    else [{ some_ with jobs := some_.jobs ++ work ++ answered true }, { none_ with jobs := none_.jobs ++ answered true }]
+  pure (live ([invalid, rejected] ++ accepted))
+
+/-- The paths after the automation `a` reacts to `payload` when the guard `g` holds (Service.workBody). -/
+def react (ce : ChainEnv) (x : Path) (a : Automation) (g : Term) (payload : List (String × Term)) :
+    Except String (List Path) := do
+  let (names, x) := x.next
+  let r ← reactionOf ce.st ce.p x.records ce.now (.json (SJson.ofTerms payload)) a names
+  if !r.facts.vars.isEmpty then throw s!"{a.name} creates a key, which prove does not follow in a chain yet"
+  let fires := x.fork (andT g r.fires) "f"
+  let fired := if a.sends.isOwn ce.st.service then
+      { fires with round := fires.round ++ [({ order := a.order, sender := .automation a.name, command := a.sends.ref.name,
+                                               input := r.input, valid := r.valid } : Waiting)] }
+    else { fires with outs := fires.outs ++ [({ id := names, guard := fires.pc, kind := .command,
+                                                definition := a.sends.ref, fields := r.input } : Out)] }
+  pure (live [{ fired with facts := fired.facts ++ [(names, r.facts)] }, x.fork (notT (andT g r.fires)) "s"])
+
+/-- The paths after a machine's evaluation: settled, then the event it takes, if any, then settled (Service.receiveWork). -/
+def receive (ce : ChainEnv) (x : Path) (chart : String) (event : Option (Term × String × List (String × Term))) :
+    Except String (List Path) := do
+  let matters (m : ChartModel) (k : Nat) :=
+    !(edgesOn m k .always).isEmpty || event.any fun (_, key, _) => !(edgesOn m k (.on key)).isEmpty
+  let paths ← andThen (← touch ce x chart matters) (settle ce chart chainLimit)
+  match event with
+  | none => pure paths
+  | some (g, key, payload) =>
+    andThen paths fun x => do
+      let some mach := x.mach? chart | return [x]
+      let some model := ce.models.lookup chart | throw s!"no model of {chart}"
+      let taken := some (Arg.payload, SVal.json (SJson.ofTerms payload))
+      let dispatched ← takeThen ce (x.fork g "d") chart (edgesOn model mach.config (.on key)) taken
+        (settle ce chart chainLimit)
+      pure (dispatched ++ live [x.fork (notT g) "u"])
+
+/-- The paths after the states that the message entered send their activities (Service.sendEntered), as one step. -/
+def sendEntered (ce : ChainEnv) (x : Path) : Except String Path := do
+  let charts := x.entered.map (·.1) |>.eraseDups
+  let ordered := charts.flatMap fun c => match ce.models.lookup c with
+    | some m => (m.chart.states.map (·.spec.name)).filterMap fun n => if x.entered.contains (c, n) then some (c, n) else none
+    | none => []
+  ordered.foldlM (init := { x with entered := [] }) fun x (chart, n) => do
+    let some mach := x.mach? chart | pure x
+    let some model := ce.models.lookup chart | pure x
+    if !(model.configs[mach.config]!).contains n then return x
+    let c := model.chart
+    let some cs := c.state? n | pure x
+    let m : SMachine := { context := mach.context, active := model.configs[mach.config]! }
+    cs.activities.foldlM (init := x) fun x a => do
+      let keyword := match a with
+        | .calls .. => "calls"
+        | _ => "sends"
+      let (input, notScalar) ← match ((siteOf ce.st ce.p c (.input n keyword a.key)).getD []).head? with
+        | some f => do
+          let (v, err) ← seval (m.env c x.records ce.now none) [] f.body
+          let (fields, notScalar) ← scalarFields v
+          pure (fields, .or err notScalar)
+        | none => pure ([], ff)
+      let x := { x with gap := .or x.gap (.and x.pc notScalar) }
+      if a.isOwn ce.st.service then
+        let fits := inputFits ce.st a.ref input
+        let (key, x) := x.next
+        pure { x with round := x.round ++ [{ order := c.order, sender := .state chart n a.key mach.exited.length,
+                                             command := a.ref.name, input, valid := fits.term }],
+                      facts := x.facts ++ [(key, { Facts.none with fit := fits.fit })] }
+      else
+        let kind := match a with
+          | .calls .. => OutKind.query
+          | _ => .command
+        let (id, x) := x.next
+        pure { x with outs := x.outs ++ [{ id, guard := x.pc, kind, definition := a.ref, fields := input }] }
+
+/-- `ws` in sender-definition order, equal ranks in sending order (sortSent). -/
+def sortWaiting (ws : List Waiting) : List Waiting := ws.mergeSort fun a b => decide (a.order ≤ b.order)
+
+/-- The path after the next item of its internal queue runs, as Service.drain takes it: work in arrival order, then own commands, then the activities of the entered states, each a step. -/
+def stepQueue (ce : ChainEnv) (x : Path) : Except String (List Path) := do
+  match x.jobs with
+  | job :: rest =>
+    let x := { x with jobs := rest }.step
+    if x.cut then return [x]
+    match job with
+    | .deadline chart state name => fireDeadline ce x chart state name
+    | .receive chart event => receive ce x chart event
+    | .react a g payload => react ce x a g payload
+    | .answered (.state chart state key exitsBefore) accepted => answer ce x chart state key exitsBefore accepted
+    | .answered (.automation _) _ => pure [x]
+  | [] =>
+    match x.commands ++ sortWaiting x.round with
+    | w :: rest =>
+      let x := { x with commands := rest, round := [] }.step
+      if x.cut then return [x]
+      runCommand ce x w
+    | [] =>
+      let x := x.step
+      if x.cut then return [x]
+      pure [← sendEntered ce x]
+
+def Path.idle (x : Path) : Bool := x.jobs.isEmpty && x.commands.isEmpty && x.round.isEmpty && x.entered.isEmpty
+
+def Sender.shape : Sender → String
+  | .state c s k e => s!"state {c} {s} {k} {e}"
+  | .automation a => s!"automation {a}"
+
+def Waiting.shape (w : Waiting) : String := s!"{w.order} {w.sender.shape} {w.command} {w.input.map (·.1)}"
+
+def Job.shape : Job → String
+  | .deadline c s n => s!"deadline {c} {s} {n}"
+  | .receive c e =>
+    let fields : List String := match e with
+      | some (_, _, p) => p.map Prod.fst
+      | none => []
+    s!"receive {c} {e.map (·.2.1)} {fields}"
+  | .react a _ p => s!"react {a.name} {p.map (·.1)}"
+  | .answered s ok => s!"answered {s.shape} {ok}"
+
+/-- What two paths must share to be joined: whether they halted or were cut, each machine's configuration and exits, and the shape of the internal queue. -/
+def Path.control (x : Path) : String :=
+  if x.halted || x.cut then s!"{x.halted} {x.cut}" else
+  let machines := (x.machines.map fun (c, m) => (c, m.config, m.exited)).mergeSort fun a b => decide (a.1 ≤ b.1)
+  let excluded := x.excluded.mergeSort fun a b => decide (a.1 ≤ b.1)
+  s!"{machines} {excluded} {if x.idle then 0 else x.steps} {x.jobs.map (·.shape)} {x.round.map (·.shape)} " ++
+    s!"{x.commands.map (·.shape)} {x.entered}"
+
+def iteFields (c : Term) (a b : List (String × Term)) : List (String × Term) :=
+  a.map fun (f, t) => (f, Term.ite c t ((b.lookup f).getD t))
+
+def Waiting.join (c : Term) (a b : Waiting) : Waiting :=
+  { a with input := iteFields c a.input b.input, valid := .ite c a.valid b.valid }
+
+def Job.join (c : Term) : Job → Job → Job
+  | .receive ch (some (g, k, p)), .receive _ (some (h, _, q)) => .receive ch (some (.ite c g h, k, iteFields c p q))
+  | .react a g p, .react _ h q => .react a (.ite c g h) (iteFields c p q)
+  | j, _ => j
+
+/-- One path for `a` and `b`, which have the same control and disjoint terms: each datum the one of the path taken. -/
+def Path.join (a b : Path) : Path :=
+  let c := a.pc
+  let records := SRecords.ite c a.records b.records
+  let used := a.used.map fun (e, us) => (e, (us.zip ((b.used.lookup e).getD [])).map fun (x, y) => Term.ite c x y)
+  let other (m f : String) (t : Term) : Term := ((((b.mach? m).map (·.context)).getD []).lookup f).getD t
+  let name := a.name ++ "m"
+  -- Each joined datum is a variable, so that later joins nest variables and the terms stay small.
+  let ((joined, machines), defs) := (do
+    let joined ← ({ records, used } : Stepped).named name
+    let machines ← a.machines.mapM fun (m, x) => do
+      pure (m, { x with context := ← x.context.mapM fun (f, t) => do
+        pure (f, ← nameValue s!"{name}.ctx.{m}.{f}" (Term.ite c t (other m f t))) })
+    pure (joined, machines) : Named (Stepped × List (String × Mach))).run []
+  let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty),
+                         asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t, fit := .exact }
+  let keys : Std.HashSet String := a.facts.foldl (fun s (k, _) => s.insert k) ∅
+  -- An out line's guard holds only on the paths that wrote it, so one from before the paths split is kept once.
+  let ids : Std.HashSet String := a.outs.foldl (fun s o => s.insert o.id) ∅
+  let outs := a.outs ++ b.outs.filter (!ids.contains ·.id)
+  { a with name, pc := Term.or a.pc b.pc, records := joined.records, used := joined.used, machines, outs,
+           jobs := (a.jobs.zip b.jobs).map fun (x, y) => x.join c y,
+           round := (a.round.zip b.round).map fun (x, y) => x.join c y,
+           commands := (a.commands.zip b.commands).map fun (x, y) => x.join c y,
+           gap := Term.or a.gap b.gap, beyond := Term.or a.beyond b.beyond,
+           facts := a.facts ++ b.facts.filter (!keys.contains ·.1) ++ [(name, named)] }
+
+/-- `paths` with the paths of equal control joined, so that the steps after them are followed once. -/
+def merge (paths : List Path) : List Path :=
+  paths.foldl (fun acc x => match acc.findIdx? (·.control == x.control) with
+    | some i => acc.modify i (·.join x)
+    | none => acc ++ [x]) []
+
+/-- The paths after the internal queues of `paths` run out (Service.drain), at most `fuel` steps, the paths of equal control joined after each step. -/
+def drain (ce : ChainEnv) : Nat → List Path → Except String (List Path)
+  | 0, paths => pure (paths.map fun x => if x.stopped || x.idle then x else { x with cut := true })
+  | fuel + 1, paths => do
+    let (rest, busy) := paths.partition fun x => x.stopped || x.idle
+    if busy.isEmpty then return paths
+    drain ce fuel (merge (rest ++ live (← busy.flatMapM (stepQueue ce))))
+
+/--
+The paths after a message that starts with `jobs`, counted from no step. Of the states each machine exited, only those
+in `watched` matter after the message: a later deadline of them no longer fires.
+-/
+def message (ce : ChainEnv) (watched : List (String × String)) (paths : List Path) (jobs : List Job) :
+    Except String (List Path) := do
+  let (stopped, going) := paths.partition (·.stopped)
+  let ended := (← drain ce (2 * chainLimit + 2) (going.map ({ · with jobs, steps := 0 }))).map fun x =>
+    { x with machines := x.machines.map fun (c, m) => (c, { m with exited := m.exited.filter fun n => watched.contains (c, n) }) }
+  pure (merge (stopped ++ ended))
+
+/-- The work that an event from another service causes on arrival (Service.deliver): each machine that receives it, then each automation. -/
+def arrivalWork (ce : ChainEnv) (event : Ir.Ref) (payload : List (String × Term)) : List Job :=
+  ce.models.filterMap (fun (c, m) => (m.chart.receives.find? (·.2 == event)).map fun (key, _) =>
+      Job.receive c (some (tt, key, payload))) ++
+    (ce.st.automations.filter (·.receives == event)).map fun a => .react a tt payload
+
+/-- The facts of `paths`, each group once, since forks share the groups from before they split. -/
+def factsOf (paths : List Path) : Facts :=
+  (paths.foldl (fun (seen, f) x => x.facts.foldl (fun (seen, f) (k, g) =>
+    if seen.contains k then (seen, f) else (seen.insert k, f ++ g)) (seen, f)) ((∅ : Std.HashSet String), Facts.none)).2
+
+/-- What an order of two messages ends with, over all its paths. -/
+structure Ending where
+  records : SRecords
+  halted : Term
+  outs : List Out
+  gap : Term
+  beyond : Term
+  /-- That a message of the order has steps left past chainLimit. -/
+  cut : Term
+  facts : Facts
+
+def Ending.of (start : SRecords) (paths : List Path) : Ending :=
+  let finished := paths.filter (!·.cut)
+  { records := finished.foldr (fun x r => .ite x.pc x.records r) start,
+    halted := disj ((finished.filter (·.halted)).map (·.pc)),
+    -- An out line's guard holds only on the paths that wrote it, which share it after they split.
+    outs := (finished.foldl (fun (seen, outs) x => x.outs.foldl (fun (seen, outs) o =>
+      if seen.contains o.id then (seen, outs) else (seen.insert o.id, outs ++ [o])) (seen, outs))
+      ((∅ : Std.HashSet String), ([] : List Out))).2,
+    gap := disj (finished.map fun x => .and x.pc x.gap),
+    beyond := disj (finished.map fun x => .and x.pc x.beyond),
+    cut := disj ((paths.filter (·.cut)).map (·.pc)),
+    facts := factsOf paths }
+
+/-- How many out lines of `outs` equal `o` where they are written. -/
+def countOf (outs : List Out) (o : Out) : Term :=
+  let same (x : Out) : Term :=
+    let names := (x.fields.map (·.1) ++ o.fields.map (·.1)).eraseDups
+    conj (names.map fun f => .eq ((x.fields.lookup f).getD undefT) ((o.fields.lookup f).getD undefT))
+  (outs.filter fun x => x.kind == o.kind && x.definition == o.definition).foldl
+    (fun n x => .add n (.ite (.and x.guard (same x)) (intLit 1) (intLit 0))) (intLit 0)
+
+/-- That two orders end differently: one halts and the other does not, or neither halts and their records or out lines differ. -/
+def Ending.differ (a b : Ending) : Term :=
+  let outsDiffer := disj ((a.outs ++ b.outs).map fun o => .and o.guard (.not (.eq (countOf a.outs o) (countOf b.outs o))))
+  .or (.not (.eq a.halted b.halted)) (conj [.not a.halted, .not b.halted, .or (.not (a.records.same b.records)) outsDiffer])
+
+/-- A deadline of a state of a chart. -/
+structure DeadlineRef where
+  chart : String
+  state : String
+  name : String
+deriving DecidableEq
+
+/-- A message from another service that can arrive at the service: an event that it receives, or an answer to a request that it sends. -/
+inductive Arrival where
+  | event (ref : Ir.Ref)
+  | answer (target : Ir.Ref)
+deriving DecidableEq
+
+def Arrival.ref : Arrival → Ir.Ref
+  | .event r | .answer r => r
+
+/--
+Two messages that no line orders: two deadlines due at one time, which the clock fires one after the other, or two
+messages that arrive at once, which the network delivers in either order.
+-/
+inductive Tie where
+  | deadlines (a b : DeadlineRef)
+  | arrivals (a b : Arrival)
+
+/-- Whether state `n` of `c` lies inside a map state, so that each copy of the map has its own deadlines. -/
+def inMap (c : Service.Chart) (n : String) : Bool :=
+  (((c.state? n).map (·.spec.path.dropLast)).getD []).any fun a => (c.state? a).any (·.spec.kind == .map)
+
+/--
+The ties of `st`, each pair once: two deadlines that can be armed together (one deadline with itself only inside a map,
+whose copies each arm it), and two arrivals, one with itself among them.
+-/
+def tiesOf (st : Service) : List Tie :=
+  let deadlines := st.charts.flatMap fun c => c.states.flatMap fun cs =>
+    cs.spec.deadlines.map fun d => ({ chart := c.name, state := cs.spec.name, name := d.name } : DeadlineRef)
+  let together (a b : DeadlineRef) : Bool :=
+    if a == b then (st.charts.find? (·.name == a.chart)).any (inMap · a.state)
+    else if a.chart != b.chart then true
+    else match (st.charts.find? (·.name == a.chart)).map ChartModel.of with
+      | some (.ok m) => m.configs.any fun k => k.contains a.state && k.contains b.state
+      | _ => true
+  let events := (st.receives.filter fun e =>
+    st.automations.any (·.receives == e) || st.charts.any (·.receives.any (·.2 == e))).map Arrival.event
+  let requested := (st.charts.flatMap fun c => c.states.flatMap (·.activities)).filterMap (fun a => match a with
+      | .calls _ r | .sends _ r => if r.service != st.service then some (Arrival.answer r) else none
+      | _ => none) ++
+    (st.automations.filter (!·.sends.isOwn st.service)).map (Arrival.answer ·.sends.ref)
+  let arrivals := (events ++ requested).eraseDups
+  let pairs {α : Type} (xs : List α) : List (α × α) := xs.zipIdx.flatMap fun (a, i) => (xs.drop i).map (a, ·)
+  ((pairs deadlines).filter (fun (a, b) => together a b)).map (fun (a, b) => Tie.deadlines a b) ++
+    (pairs arrivals).map fun (a, b) => .arrivals a b
+
+/-- A tie's two orders from one state: the first message then the second, and the second then the first. -/
+structure TieOrders where
+  facts : Facts
+  /-- What the state must hold for the tie: each deadline's state active. -/
+  pre : Term
+  first : Ending
+  second : Ending
+  /-- The payload of each arriving event, by its fields, none for a deadline. -/
+  payloads : List (List (String × Term))
+
+def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String × List Term)) (now : Term) (tie : Tie) :
+    Except String TieOrders := do
+  let models ← st.charts.mapM fun c => do
+    match ChartModel.of c with
+    | .ok m => pure (c.name, m)
+    | .error why => throw s!"{c.name}: {why}"
+  let ce : ChainEnv := { st, p, models, now }
+  let orders (watched : List (String × String)) (a b : List Job) : Except String (Ending × Ending) := do
+    let run (name : String) (x y : List Job) : Except String Ending := do
+      let paths ← message ce watched [{ name, pc := tt, records := pre, used }] x
+      pure (Ending.of pre (← message ce watched paths y))
+    pure (← run "o1" a b, ← run "o2" b a)
+  match tie with
+  | .deadlines a b =>
+    let active (d : DeadlineRef) : Term := match models.lookup d.chart with
+      | some m => disj ((m.configs.toList.zipIdx.filter (·.1.contains d.state)).map fun (_, k) =>
+          Term.eq (cfgVar d.chart) (intLit (Int.ofNat k)))
+      | none => ff
+    let (first, second) ← orders [(a.chart, a.state), (b.chart, b.state)] [.deadline a.chart a.state a.name]
+      [.deadline b.chart b.state b.name]
+    pure { facts := machineFacts ce ++ first.facts ++ second.facts, pre := .and (active a) (active b), first, second,
+           payloads := [] }
+  | .arrivals (.event a) (.event b) =>
+    let payloadOf (e : Ir.Ref) (x : String) : List (String × Term) × Facts :=
+      let props := propertiesWith ((st.schemaOf (.payload e)).getD (.obj []))
+      let terms := props.map fun pr => (pr.1, propertyVar s!"{x}.{pr.1}" pr)
+      let holds := props.map fun pr => fieldHolds (((terms.lookup pr.1).map (·.1)).getD undefT) pr
+      (terms.map fun (f, t, _) => (f, t),
+       { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term), fit := Fit.all (holds.map (·.fit)) })
+    let (pa, fa) := payloadOf a "pa"
+    let (pb, fb) := payloadOf b "pb"
+    let (first, second) ← orders [] (arrivalWork ce a pa) (arrivalWork ce b pb)
+    pure { facts := machineFacts ce ++ fa ++ fb ++ first.facts ++ second.facts, pre := tt, first, second,
+           payloads := [pa, pb] }
+  | .arrivals .. => throw "an answer's arrival, which prove does not encode yet: it needs the pending requests in the state"
+
+end Tazuna.Smt

@@ -317,11 +317,16 @@ structure Stepped where
   used : List (String × List Term)
   beyond : Term := ff
   gap : Term := ff
+  /-- The events emitted so far, in order, each with the term that holds when it is emitted and its payload. -/
+  emitted : List (Term × Ir.Ref × List (String × Term)) := []
 
-def Stepped.ite (c : Term) (a b : Stepped) : Stepped :=
+/-- The state `a` where `c` holds and `b` elsewhere, both steps on from a state that had emitted `common` events. -/
+def Stepped.ite (c : Term) (a b : Stepped) (common : Nat) : Stepped :=
+  let under (g : Term) (es : List (Term × Ir.Ref × List (String × Term))) := es.map fun (h, e, p) => (Term.and g h, e, p)
   { records := .ite c a.records b.records,
     used := a.used.map fun (e, us) => (e, (us.zip ((b.used.lookup e).getD [])).map fun (x, y) => .ite c x y),
-    beyond := .ite c a.beyond b.beyond, gap := .ite c a.gap b.gap }
+    beyond := .ite c a.beyond b.beyond, gap := .ite c a.gap b.gap,
+    emitted := a.emitted.take common ++ under c (a.emitted.drop common) ++ under (.not c) (b.emitted.drop common) }
 
 /-- The record that `payload` creates in the first unused slot of `entity`, which leaves the bounds when none is. -/
 def Stepped.create (st : Stepped) (entity : String) (payload : List (String × Term)) : Stepped :=
@@ -331,7 +336,8 @@ def Stepped.create (st : Stepped) (entity : String) (payload : List (String × T
   let slots' := slots.zipIdx.map fun (s, i) =>
     { s with live := .or s.live (chosen i),
              fields := s.fields.map fun (f, t) => (f, .ite (chosen i) ((payload.lookup f).getD undefT) t) }
-  { records := st.records.mapSlots entity fun _ => slots',
+  { st with
+    records := st.records.mapSlots entity (fun _ => slots'),
     used := st.used.map fun (e, us) => if e == entity then (e, us.zipIdx.map fun (u, i) => .or u (chosen i)) else (e, us),
     beyond := .or st.beyond ((used.getLast?).getD tt) }
 
@@ -349,7 +355,7 @@ def Stepped.apply (svc : Service) (st : Stepped) (event : Ir.Ref) (payload : Lis
         | some v => .ite (hit s) v t
         | none => t) }
     let found := disj (slots.map hit)
-    Stepped.ite found { st with records := updated } (st.create entity payload)
+    Stepped.ite found { st with records := updated } (st.create entity payload) st.emitted.length
   | some (.delete entity keyFields _) =>
     { st with records := st.records.mapSlots entity fun ss => ss.map fun s =>
       { s with live := .and s.live (.not (hasPayloadKey keyFields s)) } }
@@ -404,7 +410,7 @@ def Stepped.named (st : Stepped) (p : String) : Named Stepped := do
   let used ← st.used.mapM fun (e, us) => do
     pure (e, ← us.zipIdx.mapM fun (u, i) => nameAs s!"{p}.{e}.{i}.used" .bool u)
   pure { records := { keyed, singles, keyFields := st.records.keyFields }, used, beyond := ← nameAs s!"{p}.beyond" .bool st.beyond,
-         gap := ← nameAs s!"{p}.gap" .bool st.gap }
+         gap := ← nameAs s!"{p}.gap" .bool st.gap, emitted := st.emitted }
 
 /-- The payload of an emit as scalar fields, and the term that holds when one is no scalar. -/
 def payloadOf : SVal → Except String (List (String × Term) × Term)
@@ -417,8 +423,9 @@ def Stepped.emitAll (svc : Service) (p : String) : Stepped → SVal → ExceptT 
     let (fields, notScalar) ← payloadOf payload
     let fields ← fields.mapM fun (f, t) => do pure (f, ← (nameValue s!"{p}.{event.name}.{f}" t : Named Term))
     let st' := st.apply svc event fields
-    pure { st' with gap := .or st'.gap notScalar }
-  | st, .ite c a b => do pure (.ite c (← st.emitAll svc s!"{p}.y" a) (← st.emitAll svc s!"{p}.n" b))
+    pure { st' with gap := .or st'.gap notScalar, emitted := st.emitted ++ [(tt, event, fields)] }
+  | st, .ite c a b => do
+    pure (Stepped.ite c (← st.emitAll svc s!"{p}.y" a) (← st.emitAll svc s!"{p}.n" b) st.emitted.length)
   | _, _ => throw "a decide item that is no emit"
 
 /-- That two live records of an entity of `r` clash on their key or unique fields (Integrity.duplicated). -/
@@ -588,6 +595,8 @@ structure Step where
   requires : List Check
   /-- For each path through the decide's choices between emits, the term that holds when the step takes it. -/
   paths : List Term
+  /-- The events that the step emits when it accepts, in order, each with the term that holds when it does and its payload. -/
+  emitted : List (Term × Ir.Ref × List (String × Term))
 
 /-- The paths through a decide item's choices between emits, each as the term that holds when it is taken. -/
 def emitPaths : SVal → List Term
@@ -613,11 +622,12 @@ def Stepped.decided (svc : Service) (names : String) (st : Stepped) (k : String)
   | .list items => items.zipIdx.foldlM (init := st) fun st (item, i) => do
     let st ← st.emitAll svc s!"{names}emit{k}{i}" item
     (st.named s!"{names}post{k}{i}" : Named Stepped)
-  | .ite c a b => do pure (.ite c (← st.decided svc names s!"{k}y" a) (← st.decided svc names s!"{k}n" b))
+  | .ite c a b => do
+    pure (Stepped.ite c (← st.decided svc names s!"{k}y" a) (← st.decided svc names s!"{k}n" b) st.emitted.length)
   -- An array that an operation made, such as a spread of a choice between arrays: each item where it is present.
   | .bag items => items.zipIdx.foldlM (init := st) fun st ((g, item), i) => do
     let st' ← st.emitAll svc s!"{names}emit{k}{i}" item
-    (Stepped.ite g st' st |>.named s!"{names}post{k}{i}" : Named Stepped)
+    (Stepped.ite g st' st st.emitted.length |>.named s!"{names}post{k}{i}" : Named Stepped)
   | _ => throw "a decide that returns no array"
 
 /--
@@ -677,7 +687,7 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   pure { facts := facts ++ named, input, caller, now, accepted, post := stepped.records, used := stepped.used,
          beyond := stepped.beyond, gap := .or stepped.gap (stepped.records.outsideSchema svc), bound, admitted,
          refs := conj refs, binds := bindTerms.map (·.2), requires := requireChecks,
-         paths := decidedPaths decided }
+         paths := decidedPaths decided, emitted := stepped.emitted }
 
 /--
 The step of command `name` of `svc` from `pre` at the time `clock`, whose slots of each entity are used as `used` says.

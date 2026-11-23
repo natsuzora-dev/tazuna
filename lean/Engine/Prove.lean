@@ -3,6 +3,7 @@ import Tazuna.Smt.Script
 import Tazuna.Smt.State
 import Tazuna.Smt.Chart
 import Tazuna.Smt.Pair
+import Tazuna.Smt.Chain
 
 /-!
 prove: the base case and the inductive step of each invariant of each spec service, within the service's bounds, and
@@ -17,9 +18,10 @@ open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Smt
 
 /--
 What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
-ensures of a command or query; that a ref field of an entity never names a missing record; or that the order of two
-steps that can be pending together, such as two automations that react to one event, changes no outcome; or that a
-response of an entity is met in time.
+ensures of a command or query; that a ref field of an entity never names a missing record; that the order of two
+steps that can be pending together, such as two automations that react to one event, changes no outcome; that the
+order of two deadlines due at one time, or of two messages that arrive at once, changes no outcome; or that a response
+of an entity is met in time.
 -/
 inductive Property where
   | invariant (definition : Ir.Ref) (name : String)
@@ -27,12 +29,16 @@ inductive Property where
   | ensures (definition : Ir.Ref) (name : String)
   | danglingRef (definition : Ir.Ref) (field : String)
   | stepOrder (definition : Ir.Ref) (other : Ir.Ref)
+  /-- The deadline `name` of `state` of the chart `definition`, and the deadline `otherName` of `otherState` of `other`. -/
+  | deadlineTie (definition : Ir.Ref) (state name : String) (other : Ir.Ref) (otherState otherName : String)
+  /-- Two messages from other services: events that the service receives, or answers to the requests named. -/
+  | arrivalTie (definition : Ir.Ref) (other : Ir.Ref)
 deriving BEq, Repr, Inhabited
 
 derive_wire Property tag "kind"
 
 def Property.definition : Property → Ir.Ref
-  | .invariant d _ | .response d _ | .ensures d _ | .danglingRef d _ | .stepOrder d _ => d
+  | .invariant d _ | .response d _ | .ensures d _ | .danglingRef d _ | .stepOrder d _ | .deadlineTie d .. | .arrivalTie d _ => d
 
 /--
 A state within the bounds where every invariant holds, and a command after which the property fails, or a query whose
@@ -266,6 +272,8 @@ structure Induction where
   charts : List ChartCase
   /-- Each pair of steps that can be pending together, with its two orders, or why they have no encoding. -/
   pairs : List (Pair × Except String Orders)
+  /-- Each tie of two messages, with its two orders, or why they have no encoding. -/
+  ties : List (Smt.Tie × Except String TieOrders)
   /-- Why the service has no induction, such as missing bounds. -/
   blocked : Option String
 
@@ -285,10 +293,16 @@ def inductionOf (j : Ir.Structure) (service : String) : IO Induction := do
          answers := (st.queries.filter fun q => !(conditionsOf p.queryEnsures (st.ref q)).isEmpty).map fun q =>
            (q, answerOf st p pre clockT q),
          checked, responses := responsesOf st p, charts, blocked,
-         pairs := (pairsOf st).map fun pair => (pair, ordersOf st p pre used nowT pair) }
+         pairs := (pairsOf st).map fun pair => (pair, ordersOf st p pre used nowT pair),
+         ties := (tiesOf st).map fun tie => (tie, tieOrders st p pre used nowT tie) }
 
 /-- The property of a pair: that the order of its two steps changes no outcome. -/
 def pairProperty (st : Service) (pair : Pair) : Property := .stepOrder (st.ref pair.first.name) (st.ref pair.second.name)
+
+/-- The property of a tie: that the order of its two messages changes no outcome. -/
+def tieProperty (st : Service) : Smt.Tie → Property
+  | .deadlines a b => .deadlineTie (st.ref a.chart) a.state a.name (st.ref b.chart) b.state b.name
+  | .arrivals a b => .arrivalTie a.ref b.ref
 
 /--
 A step of a machine's induction: starting it, or a microstep of one of its edges. A command changes no machine, and an
@@ -455,7 +469,7 @@ def Induction.failedAfter (x : Induction) (command : String) (now : Time) (writt
   | .danglingRef d field => faults.any fun
     | .danglingRef d' _ f _ cmd | .danglingSingleRef d' f _ cmd => d' == d && f == field && cmd == x.st.ref command
     | _ => false
-  | .stepOrder .. | .response .. => false
+  | .stepOrder .. | .deadlineTie .. | .arrivalTie .. | .response .. => false
 
 /-- The records of a model's state, or why the state is none that the induction assumes. -/
 def Induction.stateOf (x : Induction) (M : Model) : Except String (Records × Value × Int) := do
@@ -679,6 +693,72 @@ def replayPair (x : Induction) (fs : Functions IO) (pair : Pair) (o : Orders) (M
   return .ok { given, clock, command := none, input := none, now := some now, taken := some payload,
                violations := [found.toViolation] }
 
+/-- The out lines that `s` wrote after its first `from` lines, without their ids, in canonical order: what two orders compare. -/
+def outsOf (s : Service.State) («from» : Nat) : List Value :=
+  ((s.lines.extract «from» s.lines.size).toList.filterMap fun l =>
+    if l.dir != .out then none else match l.body with
+      | .command t v _ => some (.obj [("command", ToValue.toValue t), ("input", v)])
+      | .query t v _ => some (.obj [("query", ToValue.toValue t), ("input", v)])
+      | .event e v _ => some (.obj [("event", ToValue.toValue e), ("payload", v)])
+      | b => some (.obj [("line", .str (repr b).pretty)])).mergeSort fun a b => decide (a.canonical ≤ b.canonical)
+
+/--
+The replay of a model of a tie's query in the semantics: from the decoded records and machines, the two deadlines fire
+one after the other at the model's time, the first then the second and the other way, as the clock fires deadlines due at
+one time in the order they stand; or the two events arrive one after the other. The two orders must differ in whether
+the service halts, in the records, or in the lines it writes out.
+-/
+def replayTie (x : Induction) (fs : Functions IO) (tie : Smt.Tie) (o : TieOrders) (M : Model) :
+    IO (Except String Counterexample) := do
+  let st := x.st
+  match x.stateOf M with
+  | .error why => return .error why
+  | .ok (records, given, clock) =>
+  let now := (M "now").toInt
+  let mut machines := []
+  let mut shown := []
+  for c in st.charts do
+    let .ok m := ChartModel.of c | return .error s!"the chart {c.name} has no model"
+    let .ok initial ← initialContextOf fs st c.name (.obj []) | return .error s!"the initial context of {c.name} fails"
+    let fields := (contextProps st c.name).map fun pr => (pr.1, ctxVar c.name pr.1)
+    let context : Value := match initial with
+      | .obj fs => .obj (fs.filter (·.1 ∉ fields.map (·.1)) ++ present M fields)
+      | v => v
+    let active := m.configs[(M s!"cfg.{c.name}").toInt.toNat]?.getD []
+    machines := machines ++ [({ chart := c, id := .top c.name, context, entered := active.map (·, clock) } : Instance)]
+    shown := shown ++ [(c.name, Value.obj [("active", .arr (active.map .str)), ("context", context)])]
+  let base : Service.State := { service := st.service, records, now := clock, started := true, machines }
+  let outcome (s : Service.State) : Value :=
+    .obj [("halted", .bool s.halted.isSome), ("records", givenOf st s.records),
+          ("outputs", .arr (outsOf s base.lines.size))]
+  let same (a b : Service.State) : Bool :=
+    a.halted.isSome == b.halted.isSome &&
+      (a.halted.isSome || (recordsText a.records == recordsText b.records &&
+        (outsOf a base.lines.size).map (·.canonical) == (outsOf b base.lines.size).map (·.canonical)))
+  let (steps, taken, s1, s2) ← match tie with
+    | .deadlines a b =>
+      let deadline (d : DeadlineRef) (order : Nat) : Service.Deadline :=
+        { time := now, order, machine := .top d.chart, state := d.state, name := d.name, armedBy := 0 }
+      let run (ds : List Service.Deadline) := fireDue st fs now Limit.dueDeadlines.max none
+        { base with deadlines := ds, deadlineCount := 2 }
+      pure ((StepName.deadline (.top a.chart) a.state a.name, StepName.deadline (.top b.chart) b.state b.name), none,
+        ← run [deadline a 1, deadline b 2], ← run [deadline b 2, deadline a 1])
+    | .arrivals a b =>
+      let payloads := o.payloads.map fun fields => Value.obj (present M fields)
+      let pa := payloads.getD 0 (.obj [])
+      let pb := payloads.getD 1 (.obj [])
+      let arrive (s : Service.State) (e : Ir.Ref) (id : String) (payload : Value) :=
+        receive st fs s e (.received e.service id) payload none
+      let s := { base with now }
+      pure ((StepName.arrival a.ref s!"{a.ref.service}/a", StepName.arrival b.ref s!"{b.ref.service}/b"),
+        some (Value.obj [("first", pa), ("second", pb)]),
+        ← arrive (← arrive s a.ref "a" pa) b.ref "b" pb, ← arrive (← arrive s b.ref "b" pb) a.ref "a" pa)
+  if same s1 s2 then return .error "the semantics ends the same in both orders"
+  let found := Explore.ChoiceDependent.stepOrder (tieProperty st tie).definition steps.1 steps.2 [steps.1, steps.2]
+    [steps.2, steps.1] (.state (outcome s1) (outcome s2))
+  return .ok { given, clock, command := none, input := none, now := some now, machine := some (.obj shown), taken,
+               violations := [found.toViolation] }
+
 /--
 The verdict of a solver's answer, from the replay of its model when it is sat. `fit` is that of the query's facts: an
 unsat answer proves the property only when they are complete, and a replay that disagrees is a bug only when they are
@@ -734,7 +814,8 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
     (q, a, e, Property.ensures (x.st.ref q) e.name)
   let dangling := (ownRefs x.st).map fun (e, field, _) => Property.danglingRef (x.st.ref e) field
   let props := x.checked.map (·.ref) ++ ensures.map (·.2) ++ queryEnsures.map (·.2.2.2) ++ dangling ++
-    chartProps.map (·.2.2) ++ x.pairs.map (pairProperty x.st ·.1) ++ x.responses.map (·.ref)
+    chartProps.map (·.2.2) ++ x.pairs.map (pairProperty x.st ·.1) ++ x.ties.map (tieProperty x.st ·.1) ++
+    x.responses.map (·.ref)
   if let some why := x.blocked then return props.map (·, .decided (.undecided why))
   let (init, initFacts) := initialOf x.st
   let initQuery (fails : Term) : Query :=
@@ -794,6 +875,26 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
         .asks [.of (ask [o.gap]) (withinEncoding "a step of the pair can write a value that the encoding does not hold"),
                .of (ask [.not o.gap, o.differ]) fun a =>
                  verdictOf a facts.fit (replayPair x fs pair o ·) "between the two orders"])
+  let ties := x.ties.map fun (tie, orders) =>
+    (tieProperty x.st tie, match orders with
+      | .error why => .decided (.undecided s!"the tie has no encoding: {why}")
+      | .ok o =>
+        let facts := x.facts ++ nowFacts ++ o.facts
+        let ask (goal : List Term) : Query :=
+          { vars := facts.vars,
+            asserts := facts.asserts ++ [x.holds, o.pre, .not o.first.beyond, .not o.second.beyond] ++ goal }
+        let cut := Term.or o.first.cut o.second.cut
+        let gap := Term.or o.first.gap o.second.gap
+        -- The chains leave out faults, such as a failing invariant after a command, which other properties report.
+        -- One query asks for both reasons to leave the tie undecided, and the model tells which it found.
+        let beyondFollowed := s!"a message of the tie can take more than {chainLimit} steps, past what prove follows"
+        .asks [.of (ask [.or cut gap]) (fun
+                 | .unsat => pure none
+                 | .sat values => pure (some (.undecided (if cut.holds (Smt.Answer.model values) then beyondFollowed
+                     else "a step of the tie can write a value that the encoding does not hold")))
+                 | .unknown why => pure (some (.undecided s!"whether the tie stays within what prove follows is unknown: {why}"))),
+               .of (ask [.not cut, .not gap, o.first.differ o.second]) fun a =>
+                 verdictOf a (facts.fit.join .over) (replayTie x fs tie o ·) "between the two orders"])
   -- A response: proved when `when` implies `expect` at every visible state, so no obligation ever opens; else a case
   -- in a service with no automation and no chart, which nothing internal can repair, misses it.
   let internal := !x.st.automations.isEmpty || !x.st.charts.isEmpty
@@ -826,7 +927,7 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
                                     asserts := x.facts.asserts ++ [x.holds, held, .le clockT laterT, laterFails] }
           (case x.facts.fit none)
         pure ([base] ++ steps ++ [tick])])
-  return invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ responses
+  return invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ ties ++ responses
 
 /-- The own spec services' plans, each with its service. -/
 def plansOf (j : Ir.Structure) : IO (List (Induction × List (Property × Plan))) := do

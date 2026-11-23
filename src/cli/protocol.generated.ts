@@ -281,9 +281,10 @@ export type Replayed = {
 
 /**
  * What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
- * ensures of a command or query; that a ref field of an entity never names a missing record; or that the order of two
- * steps that can be pending together, such as two automations that react to one event, changes no outcome; or that a
- * response of an entity is met in time.
+ * ensures of a command or query; that a ref field of an entity never names a missing record; that the order of two
+ * steps that can be pending together, such as two automations that react to one event, changes no outcome; that the
+ * order of two deadlines due at one time, or of two messages that arrive at once, changes no outcome; or that a response
+ * of an entity is met in time.
  */
 export type Property =
   | {
@@ -308,6 +309,22 @@ export type Property =
     }
   | {
       readonly kind: "stepOrder";
+      readonly definition: DefinitionRef;
+      readonly other: DefinitionRef;
+    }
+  /** The deadline `name` of `state` of the chart `definition`, and the deadline `otherName` of `otherState` of `other`. */
+  | {
+      readonly kind: "deadlineTie";
+      readonly definition: DefinitionRef;
+      readonly state: string;
+      readonly name: string;
+      readonly other: DefinitionRef;
+      readonly otherState: string;
+      readonly otherName: string;
+    }
+  /** Two messages from other services: events that the service receives, or answers to the requests named. */
+  | {
+      readonly kind: "arrivalTie";
       readonly definition: DefinitionRef;
       readonly other: DefinitionRef;
     };
