@@ -519,7 +519,7 @@ export interface When<
   readonly clock: {
     /**
      * The clock advances to `time`, and every running service fires its deadlines due by then. Deadlines of one service
-     * due at one time fire in every order that `test` searches.
+     * due at one time fire in the order they were armed.
      */
     at(time: number): ProcessingLine<S, X>;
   };

@@ -4,8 +4,8 @@ import Tazuna.Ir.List
 import Tazuna.Semantics.Value.Names
 
 /-!
-This module defines the values that verify and the peer check compare. TS reads a line by its definition's schema,
-re-encodes it, and wraps bags, sets and sortedBy arrays. This module fixes how wrapped values compare.
+This module defines the values that verify and the peer check compare. Verify reads a line by its definition's schema,
+re-encodes it, and wraps bags, sets and sortedBy arrays (Verify/Read). This module fixes how wrapped values compare.
 -/
 
 namespace Tazuna.Semantics
@@ -57,7 +57,7 @@ decreasing_by all_goals nested_decreasing
 
 mutual
 
-/-- The value that TS `JSON.stringify` writes: bag and runs become arrays of their elements. -/
+/-- The plain JSON of a value: bag and runs become arrays of their elements. -/
 def CValue.flatten : CValue → Value
   | .leaf v => v
   | .ref _ s => .str s
@@ -86,8 +86,8 @@ def sortStrings (xs : List String) : List String := xs.mergeSort fun a b => deci
 mutual
 
 /--
-The text by which values compare, as TS `canonicalJson(orderFree(v))` writes it: elements of a bag, and of each run,
-are sorted by text. Two texts are equal exactly when the values differ only in field order and bag element order.
+The text by which values compare: fields in code point order, and the elements of a bag, and of each run, sorted by
+text. Two texts are equal exactly when the values differ only in field order and bag element order.
 -/
 def CValue.key : CValue → String
   | .leaf v => v.canonical

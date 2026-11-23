@@ -28,7 +28,7 @@ inductive LineBody where
   | operation (screen : Ir.Ref) (control : String) (nth : Option Nat) (payload : Option Value)
 deriving DecidableEq, Repr, Inhabited
 
-/-- What the line carries, as TS contentOf gives it: a request's input, an event's or operation's payload, an answer. -/
+/-- What the line carries: a request's input, an event's or operation's payload, an answer. -/
 def LineBody.content : LineBody → Value
   | .command _ v _ | .query _ v _ | .subscribe _ v _ | .event _ v _ => v
   | .operation _ _ _ p => p.getD .null

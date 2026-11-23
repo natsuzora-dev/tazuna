@@ -190,7 +190,7 @@ def verify (spec : Ir.Structure) (logs : List Log) : IO (List Replayed × List V
     pure (done ++ [r], c.reached.foldl (fun acc u => if acc.contains u then acc else acc ++ [u]) reached)
   pure (replayed, (Instrument.uncovered spec reached).map (·.toViolation))
 
-/-- The value of an Except that stops the engine on an Issue, as a spec function's throw stopped TS. -/
+/-- The value of an Except, or an engine error on its Issue. -/
 def orStop {α : Type} (what : String) : Except Issue α → IO α
   | .ok a => pure a
   | .error e => throw (IO.userError s!"{what} stopped on {repr e}")

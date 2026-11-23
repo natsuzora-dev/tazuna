@@ -7,14 +7,14 @@ import Tazuna.Semantics.Instrument.Collect
 /-!
 The evaluator of IR expressions. Values stay as JSON encodes them: the converter has chosen each operation by the TS type
 of its operands (an instant compare, a Bag's `every`), so no value needs decoding. A record is a handle that reads a
-field only when an expression reads it, so an evaluation reads the parts of the records that TS's records view reads.
+field only when an expression reads it, so an evaluation notes exactly the parts of the records that it reads.
 -/
 
 namespace Tazuna.Semantics.Eval
 
 open Tazuna.Ir Tazuna.Semantics.Service Tazuna.Semantics.Instrument
 
-/-- A value of a chart function's arguments that notes each field that an expression reads, as TS's arguments do. -/
+/-- A value of a chart function's arguments that notes each field that an expression reads. -/
 inductive Tracked where
   /-- The context; a field of `copied` is the copy's. -/
   | context (copied : List String)
@@ -31,7 +31,7 @@ inductive Val where
   | json (value : Value)
   /--
   The record of `key` of `entity` in `source`, none for a single entity's. A record and a table read the records that
-  made them, as TS's records view does: a binds value read in an ensures holds the records from before the write.
+  made them: a binds value read in an ensures holds the records from before the write.
   -/
   | row (source : Records) (entity : String) (key : Option Value)
   /-- The records of a keyed entity in `source`. -/
@@ -123,7 +123,7 @@ def keyObject? : Val → Option Value
   | .obj fields => (fields.mapM fun ((n, v) : String × Val) => match v with | .json x => some (n, x) | _ => none).map .obj
   | _ => none
 
-/-- The stop at reading hidden records, as TS's unreadable records throw on the first property read. -/
+/-- The stop at reading hidden records, on the first property read. -/
 def readHidden {α : Type} : EvalM α := do
   modify fun t => { t with readHidden := true }
   thrown
@@ -200,7 +200,7 @@ def least (lt : Int × Nat → Int × Nat → Bool) : List (Val × (Int × Nat))
   | [] => .undef
   | k :: ks => (ks.foldl (fun m k => if lt k.2 m.2 then k else m) k).1
 
-/-- Groups of equal key in ascending key order, each in the order of `keyed`, as TS's runsOf makes them. -/
+/-- Groups of equal key in ascending key order, each in the order of `keyed`. -/
 def runs (keyed : List (Val × (Int × Nat))) : List (List Val) :=
   let sorted := keyed.mergeSort fun a b => !keyLt b.2 a.2
   let groups := sorted.foldl (fun (acc : List (List (Val × (Int × Nat)))) k =>
@@ -398,8 +398,8 @@ def evalFields (env : Env) (vars : List (String × Val)) : List Field → EvalM 
 end
 
 /--
-The JSON of a value, none for `undefined`, as TS's encoding and JSON.stringify write it. A record reads every field of
-its entity, in the schema's order, as encoding the records view's record does, and a table is the list of its records.
+The JSON of a value, none for `undefined`, as JSON.stringify writes it. A record reads every field of its entity, in the
+schema's order, and a table is the list of its records.
 -/
 partial def encode (env : Env) : Val → EvalM (Option Value)
   | .undef => pure none
@@ -417,15 +417,15 @@ partial def encode (env : Env) : Val → EvalM (Option Value)
   | .tracked _ v => pure (some v)
   | .emit _ payload => do pure (some (.obj [("kind", .str "emit"), ("payload", (← encode env payload).getD .null)]))
 
-/-- The JSON that TS's encoding of a spec function's value gives: null for `undefined`, as JSON.stringify writes it. -/
+/-- The JSON of a spec function's value: null for `undefined`. -/
 def answerOf (env : Env) (v : Val) : EvalM Value := do pure ((← encode env v).getD .null)
 
-/-- The name of the first of `conditions` whose value is not truthy, in order, as TS `firstFailing` finds it. -/
+/-- The name of the first of `conditions` whose value is not truthy, in order. -/
 def firstFailing (env : Env) : List Condition → EvalM (Option String)
   | [] => pure none
   | c :: cs => do if truthy (← eval env [] c.body) then firstFailing env cs else pure (some c.name)
 
-/-- The binds values of `binds`, in order, as an object, as TS computes `bound` before a condition reads it. -/
+/-- The binds values of `binds`, in order, as an object: the `bound` that a condition reads. -/
 def bound (env : Env) (binds : List Condition) : EvalM Val := do
   pure (.obj (← binds.mapM fun b => do pure (b.name, ← eval env [] b.body)))
 

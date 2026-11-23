@@ -480,7 +480,7 @@ def jsLess (a b : String) : Bool :=
     | _, _ => false
   go (utf16 a) (utf16 b)
 
-/-- The JSON text of TS's canonicalJson: fields in code point order, numbers as JS writes them. -/
+/-- The canonical JSON text of a value: fields in code point order, numbers as JS writes them. -/
 partial def canonicalText : Value → String
   | .num n => jsNumber n
   | .arr vs => arrayText (vs.map canonicalText)
@@ -490,7 +490,7 @@ partial def canonicalText : Value → String
 def sortedByText (xs : List Value) : List Value :=
   (xs.map fun x => (x, canonicalText x)).mergeSort (fun a b => !jsLess b.2 a.2) |>.map (·.1)
 
-/-- Adjacent elements whose `key` writes the same JSON, as TS's runsOf groups a sortedBy array. -/
+/-- Adjacent elements whose `key` writes the same JSON: the runs of a sortedBy array. -/
 def adjacentRuns (key : String) (xs : List Value) : List (List Value) :=
   let keyText (x : Value) := (x.field? key).map canonicalText
   (xs.foldl (fun (acc : List (List Value)) x =>
@@ -499,8 +499,8 @@ def adjacentRuns (key : String) (xs : List Value) : List (List Value) :=
     | _ => [x] :: acc) []).reverse
 
 /--
-`v` with each bag and set in canonical order and each run of equal keys of a sortedBy array likewise, as TS's bagged
-and orderFree read it by `schema`.
+`v` with each bag and set in canonical order and each run of equal keys of a sortedBy array likewise, read by
+`schema`.
 -/
 partial def orderFree (schema v : Value) : Value :=
   if schema.field? "x-tazuna-nullable" == some (.bool true) then
@@ -527,7 +527,7 @@ partial def orderFree (schema v : Value) : Value :=
     | v => v
 
 /--
-`v` as TS's comparable reads it by the object schema `schema`: each field that parses by its own schema encoded again,
+`v` read by the object schema `schema` as verify compares it: each field that parses by its own schema encoded again,
 with its default where it is absent, and its collections order-free; any other field as it is.
 -/
 def unorderedBy (schema v : Value) : ParseM Value := do
@@ -544,8 +544,8 @@ def unorderedBy (schema v : Value) : ParseM Value := do
   pure (orderFree schema (.obj (own ++ extra)))
 
 /--
-The text of an answer as verify compares a query's answers, as TS's comparableAnswer and canonicalJson write it: a
-rejection by its kind, and an output read by `output`, its query's output schema, as unorderedBy reads it.
+The text of an answer as verify compares a query's answers: a rejection by its kind, and an output read by `output`, its
+query's output schema, as unorderedBy reads it.
 -/
 def comparableText (output : Option Value) (answer : Value) : ParseM Value := do
   let compared ← match answer.field? "result", answer.field? "output", output with
@@ -562,13 +562,13 @@ def defaultsOf (schema : Value) : Value :=
   | some (.obj ps) => .obj (ps.filterMap fun (k, p) => (p.field? "default").map (k, ·))
   | _ => .obj []
 
-/-- The JSON Schema that TS parses with for a definition's schema: an object with no fields when it names none. -/
+/-- The JSON Schema of a definition's schema: an object with no fields when it names none. -/
 def rootSchema (schema : Value) : Value :=
   if schema == .obj [] then .obj [("type", .str "object"), ("properties", .obj []), ("additionalProperties", .bool false)]
   else schema
 
 /--
-`v` parsed by `schema` as TS's parse does: the value encoded again, or Zod's issues as it renders them, or a throw. None
+`v` parsed by `schema` as Zod parses it: the value encoded again, or Zod's issues as it renders them, or a throw. None
 when `schema` says less than Zod checks.
 -/
 def parse (schema v : Value) : Option (ParseM (Except (List Value) Value)) :=

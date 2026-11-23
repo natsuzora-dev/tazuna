@@ -3,8 +3,8 @@ import Tazuna.Semantics.Service.Basic
 import Tazuna.Semantics.Service.Instance
 
 /-!
-Functions answers what the semantics cannot evaluate: schema validation and spec functions. Theorems take `m = Id` and
-hold for every function; the executable takes `m = IO` and asks TS.
+Functions answers what the semantics leaves open: schema validation and spec functions. Theorems take `m = Id` and hold
+for every function; the engine evaluates the IR (Eval.functionsOf) in `IO`, which only notes what each call read.
 -/
 
 namespace Tazuna.Semantics.Service
@@ -52,7 +52,7 @@ deriving DecidableEq, Repr, Inhabited
 derive_wire CopyScope
 
 /--
-The values passed to machine and screen expressions; TS builds the expressions' arguments from them and the records.
+The values passed to machine and screen expressions, from which with the records their arguments are built.
 `id` is the evaluating instance or copy. `state` is the state that declares the expression (`none` for the chart's own
 `on`); `held` holds the parameters of that state for its current visit (empty when it has none), so a transition reads
 the parameters of the state that it exits. `active` holds the active state names of a copy and its owner. `context` is

@@ -25,7 +25,7 @@ def emitted (events : List Emit) : Value :=
   .arr (events.map fun e => .obj [("kind", .str "emit"), ("payload", e.payload)])
 
 /--
-The arguments of a function of a machine or screen, as TS builds them for `scope`: the context with the copy's fields
+The arguments of a function of a machine or screen for `scope`: the context with the copy's fields
 over the owner's, whether each state of the chart is active, the shown slots, the held parameters, the copy's key, and
 the cause `extra`.
 -/
@@ -65,7 +65,7 @@ def inputSite (state : String) : Service.Activity → Site
 
 def Transition.ref (t : Service.Transition) : Ir.TransitionRef := { state := t.source, trigger := t.trigger, index := t.index }
 
-/-- The value of `body` in `env`, as TS's encoding writes it. -/
+/-- The value of `body` in `env`, as JSON. -/
 def valueIn (env : Env) (body : Expr) : EvalM Value := do answerOf env (← eval env [] body)
 
 /-- The values of an array that a function made, such as the offers' payloads or a map state's items. -/
@@ -101,7 +101,7 @@ def spread (base : Value) (assigned : List (String × Val)) : Val :=
     | _ => []
   .obj (own ++ assigned.filter fun (name, _) => !(own.any (·.1 == name)))
 
-/-- `x` in `env` with `bound`, which TS computes from every binds value before a requires or guard reads it. -/
+/-- `x` in `env` with `bound`, computed from every binds value before a requires or guard reads it. -/
 def withBound {α : Type} (env : Env) (binds : List Condition) (x : Env → EvalM α) : EvalM α := do
   let values ← bound env binds
   x { env with args := fun a => if a == .bound then values else env.args a }
@@ -192,7 +192,7 @@ def Program.toFunctions (p : Program) (st : Service) (read : Trace → IO Unit) 
     ensures := fun name input caller before after _ => evaluated "ensures" <|
       (all p.ensures (st.ref name)).map fun cs =>
         let args := argsOf [(.input, .json input), (.caller, .json (ToValue.toValue caller))]
-        -- As TS's firstFailing, which builds the arguments only when there is a condition.
+        -- The arguments are built only when there is a condition, so an empty ensures reads no binds.
         let checked : EvalM (Option String) :=
           if cs.isEmpty then pure none
           else withBound { fields := fieldsOf st, keyFields := st.keyFieldsOf, args, records := before } (binds p.binding (st.ref name)) fun env =>

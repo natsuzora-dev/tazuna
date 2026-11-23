@@ -3,7 +3,7 @@ import Lean.Data.Json.Printer
 
 namespace Tazuna.Ir
 
-/-- A JSON value. Object fields keep their order, because the TS runtime compares values by `JSON.stringify`. -/
+/-- A JSON value. Object fields keep their order, which the trace lines that the engine writes keep too. -/
 inductive Value where
   | null
   | bool (b : Bool)
