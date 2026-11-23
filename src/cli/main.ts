@@ -149,7 +149,7 @@ const commands = {
     spec: true,
     positionals: [],
     description:
-      "Prove each invariant of each spec service by induction within the bounds of its service's bounds(): it holds of the initial records, the single entities' records of their schema defaults, at any time, and after each command, with any input at any time no earlier than the records' time, from any records within the bounds of which every invariant holds and every record fits its schema. From those records, prove also proves that each command's and query's ensures holds and that no command leaves a ref naming a missing record. prove writes one JSON line per property, with its verdict: proved; counterexample, with the records and their time, the command or query, its input and time, and the violations that the spec reports on replaying them; or undecided, with the reason, such as a solver timeout or a construct that prove does not encode. A machine's or screen's invariant is undecided. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant.",
+      "Prove each invariant of each spec service by induction within the bounds of its service's bounds(): it holds of the initial records, the single entities' records of their schema defaults, at any time, and after each command, with any input at any time no earlier than the records' time, from any records within the bounds of which every invariant holds and every record fits its schema. From those records, prove also proves that each command's and query's ensures holds and that no command leaves a ref naming a missing record. prove writes one JSON line per property, with its verdict: proved; counterexample, with the records and their time, the command or query, its input and time, and the violations that the spec reports on replaying them; or undecided, with the reason, such as a solver timeout or a construct that prove does not encode. A machine's or screen's invariant is undecided. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant. prove exits with 1 on a counterexample, else with 2 when a property is undecided, and else with 0.",
     options: {},
     parse: ({ root }) => ({ command: "prove", root }),
   }),
@@ -269,7 +269,10 @@ function report(io: Io, specRoot: string, violations: readonly ReportedViolation
 
 const isName = (command: string): command is Name => Object.hasOwn(commands, command);
 
-/** Writes prove's lines to stdout and the count of each verdict to stderr; a counterexample exits with 1. */
+/**
+ * Writes prove's lines to stdout and the count of each verdict to stderr. A counterexample exits with 1, and else an
+ * undecided property with 2.
+ */
 function reportProved(io: Io, specRoot: string, lines: readonly ProveLine[]): number {
   for (const l of lines)
     io.log(
@@ -280,7 +283,7 @@ function reportProved(io: Io, specRoot: string, lines: readonly ProveLine[]): nu
   io.error(
     `${count(lines.length, "property", "properties")}: ${counted("proved")} proved, ${count(counterexamples, "counterexample")}, ${counted("undecided")} undecided`,
   );
-  return counterexamples === 0 ? 0 : 1;
+  return counterexamples > 0 ? 1 : counted("undecided") > 0 ? 2 : 0;
 }
 
 /** Parses `args` by the command table, before anything reads the spec. */
