@@ -123,7 +123,8 @@ export const notification = machine({
       after: { retry: { delay: notifierConstants.permissionRetryDelay, onFired: [{ target: "asking" }] } },
     },
     awaitingUserChoice: { entry: resetAttempts, always: [{ guard: { decided }, target: "asked" }] },
-    asked: { entry: resetAttempts },
+    // Only requesting reads the flag; clearing it here keeps two orders of one task and one answer in one state.
+    asked: { entry: { assign: { attempts: () => 0, openedWhileAsking: () => false } } },
     showing: {
       entry: resetAttempts,
       sends: {
