@@ -1,1 +1,1 @@
-{"service":"todo","property":{"kind":"response","definition":{"service":"todo","name":"Task"},"name":"stamped"},"creates":{"Task":2},"items":2,"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":4}}
+{"service":"todo","property":{"kind":"response","definition":{"service":"todo","name":"Task"},"name":"stamped"},"creates":{"Task":2},"items":2,"verdict":{"kind":"proved"},"assumes":[],"location":{"file":"todo/todo.ts","line":4}}

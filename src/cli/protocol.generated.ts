@@ -362,6 +362,20 @@ export type Verdict =
     };
 
 /**
+ * What a verdict assumes beyond the spec: a property that prove did not prove, which a proof assumed of the state it starts
+ * from; or the progress of runs, which a response's counterexample assumes.
+ */
+export type Assumed =
+  | {
+      readonly kind: "unproved";
+      readonly property: Property;
+    }
+  | {
+      readonly kind: "progress";
+      readonly runs: string;
+    };
+
+/**
  * What prove found of one property, within the bounds of creating at most `creates` records of each keyed entity and of
  * at most `items` items in each array or Bag of an input, payload or answer.
  */
@@ -371,8 +385,8 @@ export type ProveResult = {
   readonly creates: Readonly<Record<string, number>>;
   readonly items: number;
   readonly verdict: Verdict;
-  /** What the verdict assumes of the runs beyond the spec, which a response's counterexample states. */
-  readonly assumes?: string;
+  /** What the verdict assumes beyond the spec; a proof that assumes none holds outright. */
+  readonly assumes: readonly Assumed[];
 };
 
 /** What generate found of a target. */

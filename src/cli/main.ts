@@ -309,8 +309,10 @@ function reportProved(io: Io, specRoot: string, lines: readonly ProveLine[]): nu
     );
   const counted = (kind: ProveLine["verdict"]["kind"]) => lines.filter((l) => l.verdict.kind === kind).length;
   const counterexamples = counted("counterexample");
+  const conditional = lines.filter((l) => l.verdict.kind === "proved" && l.assumes.length > 0).length;
+  const proved = `${counted("proved")} proved${conditional === 0 ? "" : ` (${conditional} assuming an unproved property)`}`;
   io.error(
-    `${count(lines.length, "property", "properties")}: ${counted("proved")} proved, ${count(counterexamples, "counterexample")}, ${counted("undecided")} undecided`,
+    `${count(lines.length, "property", "properties")}: ${proved}, ${count(counterexamples, "counterexample")}, ${counted("undecided")} undecided`,
   );
   return exitCode(counterexamples > 0, counted("undecided") > 0);
 }

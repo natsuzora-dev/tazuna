@@ -101,6 +101,7 @@ tazuna guarantees nothing about inputs that no trace contains.
   From the same records, it shows that each `ensures` holds and that no command leaves a ref that names a missing record.
   A chart's invariant holds when the chart starts and after each microstep, for any event, answer, or deadline in any configuration.
   For a pair of steps, deadlines, or arrivals, both [orders](#orders-that-prove-compares) end the same from any records and machine states within the bounds where every invariant, a machine's too, holds, and no machine is in a state that an always transition without a guard leaves at once.
+  A proof that assumes an invariant that `prove` does not prove lists it in `assumes`, and holds only where that invariant does.
 - `counterexample` means that the semantics reports the violations that the line lists when it runs the command, query, or transition of the line from the line's state.
   `prove` replays every counterexample in the semantics before it reports it, and a replay that disagrees with the solver is an internal error, or undecided for a pair of deadlines or arrivals, whose chains leave out faults.
   The state may be one that no run reaches, as [A counterexample is a decision about the spec](concepts.md#a-counterexample-is-a-decision-about-the-spec) explains.

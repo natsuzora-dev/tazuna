@@ -1,1 +1,1 @@
-{"service":"door","property":{"kind":"invariant","definition":{"service":"door","name":"alarm"},"name":"countsOnlyWhileRinging"},"creates":{},"items":2,"verdict":{"kind":"proved"},"location":{"file":"door/door.ts","line":21}}
+{"service":"door","property":{"kind":"invariant","definition":{"service":"door","name":"alarm"},"name":"countsOnlyWhileRinging"},"creates":{},"items":2,"verdict":{"kind":"proved"},"assumes":[],"location":{"file":"door/door.ts","line":21}}

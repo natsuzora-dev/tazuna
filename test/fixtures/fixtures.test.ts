@@ -3,8 +3,10 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { type TestContext, test } from "node:test";
+import type { ProveLine } from "../../src/cli/prove.ts";
 import { groups } from "../../src/data/groups.ts";
 import { parseKind } from "../../src/data/kinds.ts";
+import { sameJson } from "../../src/data/values.ts";
 import type { Group, ReportedViolation } from "../../src/data/violation.ts";
 import {
   type Command,
@@ -24,6 +26,9 @@ const jsonl = (lines: readonly string[]) => lines.map((line) => `${line}\n`).joi
 /** The folders under test/fixtures/<command> that are no kind, each with what it holds. */
 const helpers: Partial<Record<Command, Readonly<Record<string, string>>>> = {
   check: { outside: "the modules that Restricted/imported-module imports from outside its spec" },
+  prove: {
+    assumes: "the cases with a proof that assumes a property which prove does not prove, so their verdicts mix",
+  },
 };
 
 const commands = Object.keys(kinds) as Command[];
@@ -113,6 +118,17 @@ for (const verdict of kinds.prove)
         lines.map(() => verdict),
       );
     });
+
+for (const root of folders(join(fixturesRoot, "prove", "assumes")))
+  test(relative(fixturesRoot, root), async (t) => {
+    const { lines } = await run(root, ["prove", "."]);
+    t.assert.fileSnapshot(lines, join(root, expected), { serializers: [jsonl] });
+    const results = lines.map((line) => JSON.parse(line) as ProveLine);
+    const proved = (p: unknown) => results.some((r) => sameJson(r.property, p) && r.verdict.kind === "proved");
+    assert.ok(results.some((r) => r.verdict.kind === "proved" && r.assumes.length > 0));
+    for (const r of results)
+      for (const a of r.assumes) if (a.kind === "unproved") assert.ok(!proved(a.property), JSON.stringify(a.property));
+  });
 
 /** The files under `folder`, at any depth, relative to it, in name order, none when it is missing. */
 const filesUnder = (folder: string): string[] =>

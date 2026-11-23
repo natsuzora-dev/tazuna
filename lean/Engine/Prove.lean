@@ -87,6 +87,16 @@ inductive Verdict where
 derive_wire Verdict tag "kind" serialize_only
 
 /--
+What a verdict assumes beyond the spec: a property that prove did not prove, which a proof assumed of the state it starts
+from; or the progress of runs, which a response's counterexample assumes.
+-/
+inductive Assumed where
+  | unproved (property : Property)
+  | progress (runs : String)
+
+derive_wire Assumed tag "kind" serialize_only
+
+/--
 What prove found of one property, within the bounds of creating at most `creates` records of each keyed entity and of
 at most `items` items in each array or Bag of an input, payload or answer.
 -/
@@ -96,8 +106,8 @@ structure ProveResult where
   creates : List (String × Nat)
   items : Nat
   verdict : Verdict
-  /-- What the verdict assumes of the runs beyond the spec, which a response's counterexample states. -/
-  assumes : Option String := none
+  /-- What the verdict assumes beyond the spec; a proof that assumes none holds outright. -/
+  assumes : List Assumed
 
 derive_wire ProveResult serialize_only skip_serializing_none
 
@@ -1036,8 +1046,24 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
     uncompared.map (fun (prop, why) => (prop, .decided (.undecided why))) ++ responses
 
 /--
+The properties that the queries of `prop` assume of the state they start from, as an induction assumes them: every
+encoded invariant of the records; a machine's invariant also its machine's; and a tie or pair every machine's.
+-/
+def Induction.assumed (x : Induction) : Property → List Property
+  | .invariant d _ =>
+    records ++ ((x.charts.find? (x.st.ref ·.chart.name == d)).map chartInvariants).getD []
+  | .ensures .. | .danglingRef .. | .response .. => records
+  | .stepOrder .. | .deadlineTie .. | .arrivalTie .. =>
+    records ++ (x.charts.filter (·.model matches .ok _)).flatMap chartInvariants
+  | .groupOrder .. | .roundOrder .. | .deadlineArrivalTie .. => []
+where
+  records := (x.checked.filter (failsOn x.pre clockT · |>.toOption.isSome)).map (·.ref)
+  chartInvariants (cc : ChartCase) := cc.invariants.map (.invariant (x.st.ref cc.chart.name) ·.name)
+
+/--
 The result of each property of each spec service, asking `solve` once for the solver's output on the script of every
-obligation. Every obligation needs its own answer: one missing is an internal error, never a proof.
+obligation. Every obligation needs its own answer: one missing is an internal error, never a proof. A proof that
+assumes a property which prove did not prove lists it in `assumes`, since the proof holds only if that property does.
 -/
 def proveOf (j : Ir.Structure) (solve : List String → IO (List String)) : IO (List ProveResult) := do
   let all := (← (specServices j).mapM (inductionOf j)).map fun x => (x, x.plans)
@@ -1048,7 +1074,8 @@ def proveOf (j : Ir.Structure) (solve : List String → IO (List String)) : IO (
   if outputs.length != scripts.length then
     throw (IO.userError s!"prove got {outputs.length} solver outputs for {scripts.length} scripts")
   let answers : Std.HashMap String String := (scripts.zip outputs).foldl (fun m (k, v) => m.insert k v) {}
-  all.flatMapM fun (x, plans) => plans.mapM fun (prop, plan) => do
+  all.flatMapM fun (x, plans) => do
+  let verdicts ← plans.mapM fun (prop, plan) => do
     let verdict ← match plan with
       | .decided v => pure v
       | .asks obligations => do
@@ -1059,10 +1086,14 @@ def proveOf (j : Ir.Structure) (solve : List String → IO (List String)) : IO (
             verdict := v
             break
         pure verdict
+    pure (prop, verdict)
+  let proved (p : Property) : Bool := verdicts.any fun (q, v) => q == p && v matches .proved
+  pure (verdicts.map fun (prop, verdict) =>
     let assumes := match prop, verdict with
-      | .response .., .counterexample _ => some progressAssumption
-      | _, _ => none
-    pure { service := x.st.service, property := prop, creates := x.creates,
-           items := Ir.itemsOf x.st.structure.bounds x.st.service, verdict, assumes }
+      | .response .., .counterexample _ => [.progress progressAssumption]
+      | _, .proved => ((x.assumed prop).filter (!proved ·)).map .unproved
+      | _, _ => []
+    { service := x.st.service, property := prop, creates := x.creates,
+      items := Ir.itemsOf x.st.structure.bounds x.st.service, verdict, assumes })
 
 end Tazuna.Engine

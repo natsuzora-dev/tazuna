@@ -106,7 +106,8 @@ const converter = (): Converter => {
 /** The summary line that each command writes to stderr, its only line there. */
 const summaries = {
   violations: /^[^:\n]+: (?:no violations|\d+ violations?)$/,
-  prove: /^\d+ propert(y|ies): \d+ proved, \d+ counterexamples?, \d+ undecided$/,
+  prove:
+    /^\d+ propert(y|ies): \d+ proved(?: \(\d+ assuming an unproved property\))?, \d+ counterexamples?, \d+ undecided$/,
   generate: /^\d+ targets?: \d+ reached, \d+ not reached, \d+ unreachable, \d+ not encodable; \d+ inputs? written$/,
 };
 
