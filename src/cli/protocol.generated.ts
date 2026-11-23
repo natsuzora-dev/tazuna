@@ -341,11 +341,15 @@ export type Verdict =
       readonly reason: string;
     };
 
-/** What prove found of one property, within the bound of creating at most `creates` records of each keyed entity. */
+/**
+ * What prove found of one property, within the bounds of creating at most `creates` records of each keyed entity and of
+ * at most `items` items in each array or Bag of an input, payload or answer.
+ */
 export type ProveResult = {
   readonly service: string;
   readonly property: Property;
   readonly creates: Readonly<Record<string, number>>;
+  readonly items: number;
   readonly verdict: Verdict;
   /** What the verdict assumes of the runs beyond the spec, which a response's counterexample states. */
   readonly assumes?: string;
@@ -373,8 +377,14 @@ export type Outcome =
       readonly reason: string;
     };
 
+/**
+ * What generate found of a target, within the bounds of creating at most `creates` records of each keyed entity and of at
+ * most `items` items in each array or Bag of an input, payload or answer that the solver picks.
+ */
 export type TargetOutcome = {
   readonly target: ViolationValue;
+  readonly creates: Readonly<Record<string, number>>;
+  readonly items: number;
   readonly outcome: Outcome;
 };
 

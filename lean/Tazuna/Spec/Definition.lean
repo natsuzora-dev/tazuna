@@ -481,12 +481,24 @@ open Tazuna.Data
 
 /--
 The `bounds()` of the service `service`: the most records of each of its keyed entities that prove creates, keys never
-reused.
+reused, and the most items of each array or Bag that an input, payload or answer holds in prove and generate, the default
+when none.
 -/
 structure Bounds where
   service : String
   creates : List (String × Nat)
+  items : Option Nat
 deriving Repr, Inhabited
+
+/--
+The `items` bound of a service without one: two items, the fewest in which an array's order and a repeated value show,
+in the spirit of Alloy's small-scope hypothesis that most counterexamples have small instances.
+-/
+def defaultItems : Nat := 2
+
+/-- The `items` bound of the service `service`. -/
+def itemsOf (bounds : List Bounds) (service : String) : Nat :=
+  ((bounds.find? (·.service == service)).bind (·.items)).getD defaultItems
 
 derive_wire Bounds
 

@@ -134,13 +134,13 @@ def ordersOf (st : Service) (p : Program) (pre : SRecords) (used : List (String 
      used.map fun (e, us) => (e, (us.zip ((step.used.lookup e).getD [])).map fun (u, w) => .ite (accepted r step) w u))
   -- An automation sends its own service's command as that service (State.callerOf).
   let own := callerTerms (.service st.service)
-  let a1 ← stepWith st p pre used fc a.input own now "o1a."
+  let a1 ← stepWith st p pre used fc (SJson.ofTerms a.input) own now "o1a."
   let (r1, u1) := after a a1 pre used
-  let b1 ← stepWith st p r1 u1 sc b.input own now "o1b."
+  let b1 ← stepWith st p r1 u1 sc (SJson.ofTerms b.input) own now "o1b."
   let (r12, _) := after b b1 r1 u1
-  let b2 ← stepWith st p pre used sc b.input own now "o2b."
+  let b2 ← stepWith st p pre used sc (SJson.ofTerms b.input) own now "o2b."
   let (r2, u2) := after b b2 pre used
-  let a2 ← stepWith st p r2 u2 fc a.input own now "o2a."
+  let a2 ← stepWith st p r2 u2 fc (SJson.ofTerms a.input) own now "o2a."
   let (r21, _) := after a a2 r2 u2
   let steps := [a1, b1, b2, a2]
   pure { facts := payloadFacts ++ a.facts ++ b.facts ++ steps.foldl (· ++ ·.facts) {},

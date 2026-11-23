@@ -1,0 +1,2 @@
+{"time":0,"dir":"in","type":"command","id":"addNote#1","name":"addNote","input":{"noteId":"p","tags":["i","n"]},"caller":{"service":"client"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addNote#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"pinnedFirst"}}}

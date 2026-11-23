@@ -4,10 +4,12 @@ import type { AnyKeyedEntity, Entities } from "./entity.ts";
 /** The names of the keyed entities of `Es`. */
 type KeyedNames<Es extends Entities> = { [E in keyof Es]: Es[E] extends AnyKeyedEntity ? E : never }[keyof Es];
 
-/** The bounds of the states that `prove` checks the service's invariants in. */
+/** The bounds of the states that `prove` checks the service's invariants in and that `generate` searches. */
 export interface BoundsOptions<Es extends Entities> {
   /** The most records of each keyed entity that the service creates, keys never reused. */
   readonly creates: { readonly [E in KeyedNames<Es>]: number };
+  /** The most items of each array or Bag in an input, event payload or answer that the solver picks; 2 when left out. */
+  readonly items?: number;
 }
 
 export type BoundsDefiner<Es extends Entities> = (options: BoundsOptions<Es>) => BoundsOptions<Es>;
@@ -21,7 +23,13 @@ export const boundsDefiner =
     for (const [entity, n] of Object.entries(creates))
       if (!Number.isInteger(n) || n < 0)
         throw new RangeError(`bounds() of ${owner.name}: creates.${entity} ${n} is not a non-negative integer`);
-    const defined = Object.freeze({ creates: Object.freeze({ ...creates }) });
+    const { items } = options;
+    if (items !== undefined && (!Number.isInteger(items) || items < 0))
+      throw new RangeError(`bounds() of ${owner.name}: items ${items} is not a non-negative integer`);
+    const defined = Object.freeze({
+      creates: Object.freeze({ ...creates }),
+      ...(items === undefined ? {} : { items }),
+    });
     boundsOwners.set(defined, owner);
     return defined;
   };

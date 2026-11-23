@@ -410,19 +410,89 @@ def SRecords.outsideSchema (svc : Service) (r : SRecords) : Term :=
     (disj (r.singles.flatMap fun (e, fields) =>
       (propertiesWith (entitySchema svc e)).map fun p => .not (fieldHolds ((fields.lookup p.1).getD undefT) p).term))
 
+/-- The facts, each holding only where `g` holds. -/
+def Facts.under (g : Term) (f : Facts) : Facts := { f with asserts := f.asserts.map (Term.or (.not g)) }
+
+/-- Whether a schema's values may be objects or arrays, which a `V` cannot hold. -/
+partial def structured (schema : Value) : Bool :=
+  match schema.field? "anyOf" with
+  | some (.arr options) => options.any structured
+  | _ => schema.field? "type" == some (.str "object") || schema.field? "type" == some (.str "array")
+
+/-- Whether `schema` has no keyword outside `keys` and the descriptive ones, so that the encoding says all it says. -/
+def keywordsWithin (schema : Value) (keys : List String) : Bool :=
+  match schema with
+  | .obj fields => fields.all fun (k, _) => k ∈ keys ++ descriptive
+  | _ => false
+
+mutual
+
 /--
-An object of `schema` as JSON holds its fields, each a variable named after `pre`, and that each field fits the schema.
+A value of `schema` whose variables are named after `x`, each array at most `items` long, and the facts of its schema: a
+scalar as propertyVar makes it; an object of its properties; an array of the length `x.len` over `items` items, each
+item's facts holding where it is within the length; and a union of objects or arrays by the option `x.option`.
 -/
-def objectOf (svc : Service) (schema : Schema) (pre : String) : List (String × Term) × Facts :=
-  let props := propertiesWith ((svc.schemaOf schema).getD (.obj []))
-  let terms := props.map fun pr => (pr.1, propertyVar s!"{pre}.{pr.1}" pr)
-  let input := terms.map fun (f, t, _) => (f, t)
-  let fieldFacts := props.map fun pr => fieldHolds ((input.lookup pr.1).getD undefT) pr
-  (input, { vars := terms.flatMap (·.2.2), asserts := fieldFacts.map (·.term),
-            exact := fieldFacts.all (·.exact), complete := fieldFacts.all (·.complete) })
+partial def jsonOf (items : Nat) (schema : Value) (x : String) : SJson × Facts :=
+  if !structured schema then
+    let (t, vars) := propertyVar x ("", schema, true)
+    let h := schemaHolds schema t
+    (.scalar t, { vars, asserts := [h.term], exact := h.exact, complete := h.complete })
+  else match schema.field? "anyOf" with
+  | some (.arr options) =>
+    let parts := options.zipIdx.map fun (o, i) => (i, jsonOf items o s!"{x}.{i}")
+    let option := Term.var s!"{x}.option" .int
+    let chosen (i : Nat) := Term.eq option (intLit i)
+    let value := match parts.reverse with
+      | [] => SJson.scalar undefT
+      | (_, last, _) :: rest => rest.foldl (fun acc (i, j, _) => .ite (chosen i) j acc) last
+    let facts := parts.foldl (fun acc (i, _, f) => acc ++ f.under (chosen i))
+      { vars := [(s!"{x}.option", .int)], asserts := [.le (intLit 0) option, .lt option (intLit options.length)],
+        exact := keywordsWithin schema ["anyOf"] }
+    (value, facts)
+  | _ =>
+    if schema.field? "type" == some (.str "object") then
+      let (fields, facts) := propertiesOf items schema x
+      let own := keywordsWithin schema ["type", "properties", "required", "additionalProperties"]
+      (.obj fields, { facts with exact := facts.exact && own })
+    else
+      let item := (schema.field? "items").getD (.obj [])
+      let least := ((schema.field? "minItems").bind intOfValue?).getD 0
+      let most : Int := match (schema.field? "maxItems").bind intOfValue? with
+        | some m => min m items
+        | none => items
+      let len := Term.var s!"{x}.len" .int
+      let parts := (List.range most.toNat).map fun i => (i, jsonOf items item s!"{x}.{i}")
+      -- A set's items are distinct and a sortedBy array's are in key order, which no fact states.
+      let exact := keywordsWithin schema ["type", "items", "minItems", "maxItems", "x-tazuna-bag", "x-tazuna-checks"]
+      let facts := parts.foldl (fun acc (i, _, f) => acc ++ f.under (.lt (intLit i) len))
+        { vars := [(s!"{x}.len", .int)], asserts := [.le (intLit least) len, .le len (intLit most)], exact }
+      (.arr len (parts.map (·.2.1)), facts)
+
+/-- The properties of the object schema `schema` as jsonOf makes their values, and their facts. -/
+partial def propertiesOf (items : Nat) (schema : Value) (x : String) : List (String × SJson) × Facts :=
+  (propertiesWith schema).foldl (init := ([], {})) fun (fields, facts) (n, s, required) =>
+    if structured s then
+      let (j, f) := jsonOf items s s!"{x}.{n}"
+      if required then (fields ++ [(n, j)], facts ++ f)
+      else
+        let set := boolVar s!"{x}.{n}.set"
+        (fields ++ [(n, .ite set j (.scalar undefT))], facts ++ { vars := [(s!"{x}.{n}.set", .bool)] } ++ f.under set)
+    else
+      let (t, vars) := propertyVar s!"{x}.{n}" (n, s, required)
+      let h := fieldHolds t (n, s, required)
+      (fields ++ [(n, .scalar t)], facts ++ { vars, asserts := [h.term], exact := h.exact, complete := h.complete })
+
+end
+
+/--
+An object of `schema` as JSON holds its fields, each a variable named after `pre`, and that each field fits the schema,
+each array within the service's `items` bound.
+-/
+def objectOf (svc : Service) (schema : Schema) (pre : String) : List (String × SJson) × Facts :=
+  propertiesOf (Spec.itemsOf svc.structure.bounds svc.service) ((svc.schemaOf schema).getD (.obj [])) pre
 
 /-- The input of command or query `name` as objectOf makes it. -/
-def inputOf (svc : Service) (name : String) (pre : String := "in") : List (String × Term) × Facts :=
+def inputOf (svc : Service) (name : String) (pre : String := "in") : List (String × SJson) × Facts :=
   objectOf svc (.input (svc.ref name)) pre
 
 /--
@@ -469,7 +539,7 @@ structure Check where
 structure Step where
   facts : Facts
   /-- The input fields, as JSON holds them. -/
-  input : List (String × Term)
+  input : List (String × SJson)
   /-- The caller's fields, as JSON holds them. -/
   caller : List (String × Term)
   now : Term
@@ -504,11 +574,12 @@ The step of command `name` from `pre` with the input `input` from `caller` at th
 variables that name its terms start with `names`, so that two steps can sit in one query.
 -/
 def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String × List Term)) (name : String)
-    (input caller : List (String × Term)) (now : Term) (names : String) : Except String Step := do
+    (input : List (String × SJson)) (caller : List (String × Term)) (now : Term) (names : String) :
+    Except String Step := do
   let some rq := svc.requirements.lookup name | throw s!"no requirements of {name}"
   let facts : Facts := {}
   let args (bound : Option SVal) : Arg → Option SVal
-    | .input => some (.json (SJson.ofTerms input))
+    | .input => some (.json input)
     | .caller => some (.json (SJson.ofTerms caller))
     | .now => some (.scalar (.mkInt now))
     | .bound => bound
@@ -516,11 +587,14 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let env : SEnv := { args := args none, records := pre }
   if let some e := compositeCaller svc rq.callers then throw s!"the caller {e} has a key of several fields"
   let admitted := admitted rq.callers pre caller
-  let refs := rq.refs.filterMap fun (field, target) =>
+  let refs ← rq.refs.filterMapM fun (field, target) => do
     if target.service == svc.service && (pre.keyed.lookup target.name).isSome then
-      let v := (input.lookup field).getD undefT
-      some (Term.or (nullishT v) (keyIn (.strOf v) (pre.slotsOf target.name)))
-    else none
+      let v ← match input.lookup field with
+        | some (.scalar v) => pure v
+        | none => pure undefT
+        | some _ => throw s!"the ref field {field}, whose key is several fields"
+      pure (some (Term.or (nullishT v) (keyIn (.strOf v) (pre.slotsOf target.name))))
+    else pure none
   let binds := ((p.binding.find? (·.definition == svc.ref name)).map (·.conditions)).getD []
   let bindTerms ← binds.mapM fun b => do
     let (v, e) ← seval env [] b.body
@@ -568,7 +642,7 @@ def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used :
 
 /-- The term that holds when the ensures `c` of a step's command fails, or throws, after the step. -/
 def Step.ensuresFails (step : Step) (c : Condition) : Except String Term := do
-  let env : SEnv := { args := (fun | .input => some (.json (SJson.ofTerms step.input)) | .caller => some (.json (SJson.ofTerms step.caller))
+  let env : SEnv := { args := (fun | .input => some (.json step.input) | .caller => some (.json (SJson.ofTerms step.caller))
                                     | .bound => some step.bound | _ => none),
                       records := step.post }
   let (v, e) ← seval env [] c.body
@@ -588,7 +662,7 @@ fits its schema, which the semantics checks before the ensures read it.
 -/
 structure Answered where
   facts : Facts
-  input : List (String × Term)
+  input : List (String × SJson)
   /-- The caller's fields, as JSON holds them. -/
   caller : List (String × Term)
   /-- That the query takes the caller (callerRejection), which it checks before its requires. -/
@@ -605,10 +679,10 @@ def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name
   let callers := ((svc.requirements.lookup name).map (·.callers)).getD []
   let requires := ((p.inputRequirement.find? (·.definition == svc.ref name)).map (·.conditions)).getD []
   let requireChecks ← requires.mapM fun c => do
-    let (v, e) ← seval { args := (fun | .input => some (.json (SJson.ofTerms input)) | _ => none) } [] c.body
+    let (v, e) ← seval { args := (fun | .input => some (.json input) | _ => none) } [] c.body
     pure ({ name := c.name, throws := e, passes := v.truthy } : Check)
   let some resolve := p.resolve.find? (·.definition == svc.ref name) | throw s!"no resolve of {name}"
-  let env : SEnv := { args := (fun | .input => some (.json (SJson.ofTerms input)) | .caller => some (.json (SJson.ofTerms caller))
+  let env : SEnv := { args := (fun | .input => some (.json input) | .caller => some (.json (SJson.ofTerms caller))
                                     | .now => some (.scalar (.mkInt clock)) | _ => none),
                       records := pre }
   let (output, err) ← seval env [] resolve.body
@@ -620,7 +694,7 @@ def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name
 
 /-- The term that holds when the ensures `c` of a query fails, or throws, on its answer. -/
 def Answered.ensuresFails (a : Answered) (pre : SRecords) (c : Condition) : Except String Term := do
-  let env : SEnv := { args := (fun | .input => some (.json (SJson.ofTerms a.input)) | .caller => some (.json (SJson.ofTerms a.caller))
+  let env : SEnv := { args := (fun | .input => some (.json a.input) | .caller => some (.json (SJson.ofTerms a.caller))
                                     | .output => some a.output | _ => none),
                       records := pre }
   let (v, e) ← seval env [] c.body

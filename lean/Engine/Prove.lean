@@ -69,11 +69,15 @@ inductive Verdict where
 
 derive_wire Verdict tag "kind" serialize_only
 
-/-- What prove found of one property, within the bound of creating at most `creates` records of each keyed entity. -/
+/--
+What prove found of one property, within the bounds of creating at most `creates` records of each keyed entity and of
+at most `items` items in each array or Bag of an input, payload or answer.
+-/
 structure ProveResult where
   service : String
   property : Property
   creates : List (String × Nat)
+  items : Nat
   verdict : Verdict
   /-- What the verdict assumes of the runs beyond the spec, which a response's counterexample states. -/
   assumes : Option String := none
@@ -490,7 +494,7 @@ def Induction.stateOf (x : Induction) (M : Model) : Except String (Records × Va
 /-- The result of the replay of a model of a fails query: the counterexample, or why the model is no case of it. -/
 def replayStep (x : Induction) (fs : Functions IO) (M : Model) (command : String) (step : Step) (prop : Property) :
     IO (Except String Counterexample) := do
-  let input := Value.obj (present M step.input)
+  let input := Value.obj (SJson.concFields M step.input)
   let now := (M "now").toInt
   let some caller := callerIn M step.caller | return .error "the case's caller is no caller"
   match x.stateOf M with
@@ -529,7 +533,7 @@ def replayResponse (x : Induction) (fs : Functions IO) (M : Model) (r : Checked)
     if missed.isEmpty then return .error "the semantics opens no obligation as time passes"
     return .ok { given, clock, command := none, input := none, now := some later, violations := missed.map (·.toViolation) }
   | some (c, step) =>
-    let input := Value.obj (present M step.input)
+    let input := Value.obj (SJson.concFields M step.input)
     let now := (M "now").toInt
     let some caller := callerIn M step.caller | return .error "the case's caller is no caller"
     match ← writtenBy x.st fs pre now c input caller with
@@ -548,7 +552,7 @@ def progressAssumption : String :=
 /-- The result of the replay of a model of an answer query: the counterexample, or why the model is no case of it. -/
 def replayAnswer (x : Induction) (fs : Functions IO) (M : Model) (query : String) (a : Answered) (name : String) :
     IO (Except String Counterexample) := do
-  let input := Value.obj (present M a.input)
+  let input := Value.obj (SJson.concFields M a.input)
   let some caller := callerIn M a.caller | return .error "the case's caller is no caller"
   match x.stateOf M with
   | .error why => return .error why
@@ -719,7 +723,8 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
   let fs := x.st.structure.program.toFunctions x.st fun _ => pure ()
   let p := x.st.structure.program
   let result (prop : Property) (verdict : Verdict) : ProveResult :=
-    { service := x.st.service, property := prop, creates := x.creates, verdict }
+    { service := x.st.service, property := prop, creates := x.creates,
+      items := Spec.itemsOf x.st.structure.bounds x.st.service, verdict }
   let chartProps := x.charts.flatMap fun cc => cc.invariants.map fun k => (cc, k, Property.invariant (x.st.ref cc.chart.name) k.name)
   let ensures := x.st.commands.flatMap fun c => (conditionsOf p.ensures (x.st.ref c)).map fun e =>
     (c, Property.ensures (x.st.ref c) e.name)

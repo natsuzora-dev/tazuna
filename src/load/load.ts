@@ -258,13 +258,13 @@ export async function loadSpec(root: string): Promise<Loaded> {
     }
     return [{ name, service, place, definition: { schema, values: value as Constants["values"] } }];
   });
-  const bounds = new Map<string, Readonly<Record<string, number>>>();
+  const bounds = new Map<string, BoundsOptions<Entities>>();
   const boundsMalformed = foundBounds.flatMap(({ place, value }): Found<Malformed>[] => {
     const service = ownerName(boundsService(value));
     if (service === undefined) return [];
     if (bounds.has(service))
       return [{ violation: { kind: "Malformed.duplicateBounds", definition: null, data: { service } }, place }];
-    bounds.set(service, value.creates);
+    bounds.set(service, value);
     return [];
   });
   const defined = foundScenarios.flatMap(({ name, place, value }): Named<ScenarioDefinition>[] => {
@@ -327,7 +327,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
     throw new InternalError(`${built.unnamed.join(", ")} names a value that no export names, and no check reports it`);
   const structure = {
     ...built.structure,
-    bounds: [...bounds].map(([service, creates]) => ({ service, creates })),
+    bounds: [...bounds].map(([service, { creates, items }]) => ({ service, creates, items: items ?? null })),
     program: unconverted,
   };
   return { kind: "structured", spec: { ...spec, structure } };

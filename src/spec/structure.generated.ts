@@ -316,11 +316,13 @@ export type AssumptionMismatch =
 
 /**
  * The `bounds()` of the service `service`: the most records of each of its keyed entities that prove creates, keys never
- * reused.
+ * reused, and the most items of each array or Bag that an input, payload or answer holds in prove and generate, the default
+ * when none.
  */
 export type Bounds = {
   readonly service: string;
   readonly creates: Readonly<Record<string, number>>;
+  readonly items: number | null;
 };
 
 /**

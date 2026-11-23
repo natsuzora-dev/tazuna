@@ -33,8 +33,14 @@ inductive Outcome where
 
 derive_wire Outcome tag "kind" serialize_only
 
+/--
+What generate found of a target, within the bounds of creating at most `creates` records of each keyed entity and of at
+most `items` items in each array or Bag of an input, payload or answer that the solver picks.
+-/
 structure TargetOutcome where
   target : Violation
+  creates : List (String × Nat)
+  items : Nat
   outcome : Outcome
 
 derive_wire TargetOutcome serialize_only
@@ -192,10 +198,10 @@ inductive Want where
 def queryOf (facts : Facts) (goal : Term) : Query := { vars := facts.vars, asserts := facts.asserts ++ [goal] }
 
 /-- That an answer's output `output` to the request of `target` with `input` meets the target's ensures, as its contract promises. -/
-def promised (st : Service) (input : Value) (target : Spec.Ref) (output : List (String × Term)) : Except String Term := do
+def promised (st : Service) (input : Value) (target : Spec.Ref) (output : List (String × SJson)) : Except String Term := do
   let env : SEnv := { args := fun
     | .input => (jsonLit input).toOption.map .ofJson
-    | .output => some (.json (SJson.ofTerms output))
+    | .output => some (.json output)
     | _ => none }
   let ensures := ((st.structure.program.resultEnsures.find? (·.definition == target)).map (·.conditions)).getD []
   let held ← ensures.mapM fun c => do
@@ -265,8 +271,8 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
     let mine := all.filter (!· matches .request _)
     let id := nextNumber n.inputs name
     let isQuery := st.queries.contains name
-    let line (input caller : List (String × Term)) (M : Model) :=
-      requestLine isQuery s.now name id (.obj (present M input)) ((callerIn M caller).getD (.service ""))
+    let line (input : List (String × SJson)) (caller : List (String × Term)) (M : Model) :=
+      requestLine isQuery s.now name id (.obj (SJson.concFields M input)) ((callerIn M caller).getD (.service ""))
     match terms with
     | .error why => wants := wants ++ all.map (.broken · s!"the state's records have no encoding: {why}")
     | .ok (pre, used) =>
@@ -296,7 +302,8 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
     if st.structure.hasOutput target then
       let (output, facts) := objectOf st (.output target) "out"
       wants := wants ++ [.solve (queryOf facts ((promised st pd.input target output).toOption.getD tt))
-        (fun M => answerLine (if query then .fulfilled (.obj (present M output)) else .accepted (some (.obj (present M output))))) none]
+        (fun M => answerLine (if query then .fulfilled (.obj (SJson.concFields M output))
+          else .accepted (some (.obj (SJson.concFields M output))))) none]
     else wants := wants ++ [.line (answerLine (if query then .fulfilled (.obj []) else .accepted none))]
     for kind in (st.structure.rejectionKinds st.service target).filter (!·.blamesSender) do
       let reasons := if kind == .requires then (st.structure.rejectionReasons target).map some else [none]
@@ -308,15 +315,15 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
     let id := s!"{event.service}/{event.name}#{nextNumber n.inputs s!"{event.service}/{event.name}"}"
     let (payload, facts) := objectOf st (.payload event) "pay"
     let line (M : Model) : TraceLine :=
-      { time := s.now, after := none, created := none, body := .event .in id name (.obj (present M payload)) none }
+      { time := s.now, after := none, created := none, body := .event .in id name (.obj (SJson.concFields M payload)) none }
     let mut goals := [(facts, tt)]
     if let .ok (pre, used) := terms then
       for a in st.automations.filter (·.receives == event) do
-        let .ok r := reactionOf st p pre now (.json (SJson.ofTerms payload)) a "r" | continue
+        let .ok r := reactionOf st p pre now (.json payload) a "r" | continue
         let base := facts ++ r.facts
         goals := goals ++ [(base, .not r.fires)]
         if a.sends.isOwn st.service then
-          match stepWith st p pre used a.sends.ref.name r.input (callerTerms (.service st.service)) now "rs." with
+          match stepWith st p pre used a.sends.ref.name (SJson.ofTerms r.input) (callerTerms (.service st.service)) now "rs." with
           | .ok step => goals := goals ++ (advancing step).map fun g => (base ++ step.facts, conj [r.fires, r.valid, g])
           | .error _ => goals := goals ++ [(base, r.fires)]
         else goals := goals ++ [(base, r.fires)]
@@ -333,7 +340,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
       | some ps => wants := wants ++ ps.map (.line ∘ line)
       | none =>
         let (payload, facts) := objectOf st (.control (st.ref op.screen) op.control) "op"
-        wants := wants ++ [.solve (queryOf facts tt) (fun M => line (.obj (present M payload))) none]
+        wants := wants ++ [.solve (queryOf facts tt) (fun M => line (.obj (SJson.concFields M payload))) none]
   -- A restart of the service process, which keeps the durable state.
   wants := wants ++ [.line { time := s.now, after := none, created := none, body := .restart .in s!"restart#{nextNumber n.inputs "restart"}" }]
   -- Time: the clock moves to the next deadline.
@@ -525,7 +532,8 @@ def generateOf (j : Spec.Structure) (depth : Option Nat) (answers : List String)
         | some why, _ => .notEncodable why
         | none, some why => if found.sought.contains part then .notReached x.depth else .notEncodable why
         | none, none => .notReached x.depth
-    ({ target := part.toViolation, outcome } : TargetOutcome)
+    ({ target := part.toViolation, creates := x.creates, items := Spec.itemsOf j.bounds x.st.service, outcome } :
+      TargetOutcome)
   return .ok { targets := outcomes,
                inputs := kept.map fun c => { service := c.service, name := c.name, lines := c.lines } }
 

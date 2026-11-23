@@ -1,2 +1,2 @@
-{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"todo"},"name":"firstIsLeast"},"creates":{"Task":1},"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":10}}
-{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"todo"},"name":"lastIsGreatest"},"creates":{"Task":1},"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":10}}
+{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"todo"},"name":"firstIsLeast"},"creates":{"Task":1},"items":2,"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":10}}
+{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"todo"},"name":"lastIsGreatest"},"creates":{"Task":1},"items":2,"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":10}}

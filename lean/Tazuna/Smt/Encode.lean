@@ -113,7 +113,12 @@ def SJson.ofTerms (fields : List (String × Term)) : List (String × SJson) := f
 /-- The field `name` of a JSON object's fields: the first that is not `undefined`, as JSON drops the others. -/
 def SJson.field (name : String) : List (String × SJson) → SJson
   | [] => .scalar (.lit (.val .undef))
-  | (n, j) :: fs => if n == name then .ite j.undefT (SJson.field name fs) j else SJson.field name fs
+  | (n, j) :: fs =>
+    if n == name then
+      match j.undefT with
+      | .lit (.bool false) => j
+      | u => .ite u (SJson.field name fs) j
+    else SJson.field name fs
 
 /-- A symbolic value: the shape that an evaluation gives, with terms where the value depends on the model. -/
 inductive SVal where

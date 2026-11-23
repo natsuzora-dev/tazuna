@@ -227,8 +227,17 @@ theorem jfield_conc (M : Model) (name : String) : ∀ fs : List (String × SJson
     simp only [Value.field?] at ih ⊢
     by_cases hn : n = name
     · subst hn
+      have hf : (SJson.field n ((n, j) :: fs)).conc M = (SJson.ite j.undefT (SJson.field n fs) j).conc M := by
+        simp only [SJson.field, beq_self_eq_true, ite_true]
+        split
+        · rename_i hu'
+          rw [hu'] at hu
+          simp only [Term.holds, Term.denote, Lit.toBool] at hu
+          simp only [SJson.conc, Term.holds, hu', Term.denote, Lit.toBool, Bool.false_eq_true, ite_false]
+        · rfl
+      rw [hf]
       cases hj : j.conc M <;>
-        simp_all [SJson.field, SJson.conc, SJson.concFields]
+        simp_all [SJson.conc, SJson.concFields]
     · have : (n == name) = false := by simp [hn]
       cases hj : j.conc M <;> simp_all [SJson.field, SJson.concFields]
 
