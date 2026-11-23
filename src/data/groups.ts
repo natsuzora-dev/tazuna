@@ -1,4 +1,4 @@
-import type { Group } from "./violation.ts";
+import type { Group } from "./kinds.ts";
 
 /** Who meets a violation of a group: the commands that report it, and the side at fault, which fixes it. */
 export interface GroupInfo {

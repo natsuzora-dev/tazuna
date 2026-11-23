@@ -5,9 +5,9 @@ import { basename, join, relative } from "node:path";
 import { type TestContext, test } from "node:test";
 import type { ProveLine } from "../../src/cli/prove.ts";
 import { groups } from "../../src/data/groups.ts";
-import { parseKind } from "../../src/data/kinds.ts";
+import { type Group, parseKind } from "../../src/data/kinds.ts";
 import { sameJson } from "../../src/data/values.ts";
-import type { Group, ReportedViolation } from "../../src/data/violation.ts";
+import type { ReportedViolation } from "../../src/data/violation.ts";
 import {
   type Command,
   expected,

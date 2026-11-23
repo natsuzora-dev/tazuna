@@ -11,7 +11,6 @@ import { regionOrderDependentKinds } from "./regionOrderDependent.generated.ts";
 import type { Restricted } from "./restricted.ts";
 import { uncomparableKinds } from "./uncomparable.generated.ts";
 import { uncoveredKinds } from "./uncovered.generated.ts";
-import type { Group } from "./violation.ts";
 
 /** `list` when it holds every member of `U`; a missing member is a type error that names it. */
 const every =
@@ -81,8 +80,12 @@ const restrictedKinds = every<Restricted["kind"]>()([
   "Restricted.function",
 ]);
 
+/** `kinds`, each list of whose kinds starts with its group. */
+const grouped = <const K extends { readonly [G in keyof K]: readonly `${G & string}.${string}`[] }>(kinds: K): K =>
+  kinds;
+
 /** The kinds of each group. */
-export const kindsOf = {
+export const kindsOf = grouped({
   Malformed: malformedKinds,
   NonCanonical: nonCanonicalKinds,
   Restricted: restrictedKinds,
@@ -95,26 +98,16 @@ export const kindsOf = {
   Uncovered: uncoveredKinds,
   Mismatch: mismatchKinds,
   Uncomparable: uncomparableKinds,
-} as const satisfies { readonly [G in Group]: readonly `${G}.${string}`[] };
+});
+
+/** A violation's group: the part of its kind before the dot. */
+export type Group = keyof typeof kindsOf;
 
 /** A violation kind. */
 export type Kind = (typeof kindsOf)[Group][number];
 
 /** Every group. */
-export const groupNames = every<Group>()([
-  "Malformed",
-  "NonCanonical",
-  "Restricted",
-  "Illegal",
-  "InvalidScenario",
-  "InvalidInput",
-  "Fault",
-  "RegionOrderDependent",
-  "ChoiceDependent",
-  "Uncovered",
-  "Mismatch",
-  "Uncomparable",
-]);
+export const groupNames = Object.keys(kindsOf) as Group[];
 
 const parsed: ReadonlyMap<string, { readonly kind: Kind; readonly group: Group }> = new Map(
   groupNames.flatMap((group) => kindsOf[group].map((kind: Kind) => [kind, { kind, group }] as const)),

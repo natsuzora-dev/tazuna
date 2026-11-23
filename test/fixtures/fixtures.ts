@@ -8,7 +8,8 @@ import { main } from "../../src/cli/main.ts";
 import type { Outcome, Verdict } from "../../src/cli/protocol.generated.ts";
 import { Converter } from "../../src/convert/program.ts";
 import { groups } from "../../src/data/groups.ts";
-import type { Group, ViolationError } from "../../src/data/violation.ts";
+import type { Group } from "../../src/data/kinds.ts";
+import type { ViolationError } from "../../src/data/violation.ts";
 import { loadSpec, type Spec } from "../../src/load/load.ts";
 
 /**

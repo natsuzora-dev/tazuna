@@ -2,9 +2,8 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseSync } from "oxc-parser";
 import { type Example, type Excerpt, type Explanations, explanationsPath } from "../src/cli/explain.ts";
-import { groupNames, isUserKind, type Kind, kindsOf, parseKind, type UserKind } from "../src/data/kinds.ts";
+import { type Group, groupNames, isUserKind, type Kind, kindsOf, parseKind, type UserKind } from "../src/data/kinds.ts";
 import type { Json } from "../src/data/values.ts";
-import type { Group } from "../src/data/violation.ts";
 
 const root = join(import.meta.dirname, "..");
 const expected = "expected.jsonl";

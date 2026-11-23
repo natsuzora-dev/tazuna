@@ -4,9 +4,8 @@ import { haltingFaultKinds } from "../data/fault.generated.ts";
 import { groups } from "../data/groups.ts";
 import { haltingInvalidInputKinds } from "../data/invalidInput.generated.ts";
 import { haltingInvalidScenarioKinds } from "../data/invalidScenario.generated.ts";
-import { isUserKind, parseKind, type UserKind } from "../data/kinds.ts";
+import { type Group, isUserKind, parseKind, type UserKind } from "../data/kinds.ts";
 import type { Json } from "../data/values.ts";
-import type { Group } from "../data/violation.ts";
 
 /** The lines `from` to `to` of a file of an example's spec: the top-level statement that holds `line`, the reported one. */
 export interface Excerpt {

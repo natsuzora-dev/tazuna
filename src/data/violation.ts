@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { DefinitionRef } from "./definitionRef.ts";
+import type { Kind } from "./kinds.ts";
 import { type Json, plain } from "./values.ts";
 
 export type Data = Readonly<Record<string, Json>>;
@@ -18,23 +19,6 @@ export interface Placed {
   readonly scenario?: DefinitionRef;
   readonly line?: number;
 }
-
-/** A violation's group: the part of its kind before the dot. */
-export type Group =
-  | "Malformed"
-  | "Illegal"
-  | "NonCanonical"
-  | "Restricted"
-  | "InvalidInput"
-  | "Fault"
-  | "RegionOrderDependent"
-  | "ChoiceDependent"
-  | "Mismatch"
-  | "Uncomparable"
-  | "Uncovered"
-  | "InvalidScenario";
-
-export type Kind = `${Group}.${string}`;
 
 /**
  * The location of a violation. `file` is relative to the spec folder. Without `line`, the location is a whole file or a
