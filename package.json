@@ -61,8 +61,8 @@
     "explain:write": "node scripts/explain.ts --write",
     "prepack": "node scripts/explain.ts && rm -rf dist && tsc -p tsconfig.build.json && vite build viewer",
     "samples:check": "npm run check --workspace todo",
-    "test": "node --test --test-randomize 'test/*.test.ts'",
-    "test:write": "node --test --test-randomize --test-update-snapshots 'test/*.test.ts'",
+    "test": "node --test --test-randomize 'test/*.test.ts' 'test/fixtures/*.test.ts'",
+    "test:write": "node --test --test-randomize --test-update-snapshots 'test/*.test.ts' 'test/fixtures/*.test.ts'",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p viewer"
   },
   "dependencies": {

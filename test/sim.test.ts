@@ -5,16 +5,8 @@ import { test } from "node:test";
 import { ask } from "../src/cli/engine.ts";
 import { invalidScenarioKinds } from "../src/data/invalidScenario.generated.ts";
 import { scenario } from "../src/data/scenario.generated.ts";
-import {
-  convertedSpec,
-  folders,
-  isServiceFolder,
-  leanModulePaths,
-  outcomeSuffix,
-  scenarioSuffix,
-  simExamples,
-  simRoot,
-} from "./examples.ts";
+import { convertedSpec, leanModulePaths, outcomeSuffix, scenarioSuffix, simExamples, simRoot } from "./examples.ts";
+import { folders, isServiceFolder } from "./fixtures/fixtures.ts";
 
 const tests = import.meta.dirname;
 const examples = simExamples();

@@ -3,12 +3,12 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
 import { type Adapter, commandRequest, decodeAnswer, drive, snapshotRuns, verifyTraces } from "../src/verify/index.ts";
-import { checkedRoot, serviceRoot } from "./examples.ts";
-import { payments } from "./service/Command/command-output/payments/contract.ts";
-import { createCharge } from "./service/Command/command-output/payments/payments.ts";
-import { calendar } from "./verify/mismatch/external/assumptions/calendar/contract.ts";
+import { checkedRoot, fixture } from "./fixtures/fixtures.ts";
+import { payments } from "./fixtures/test/noViolations/command-output/payments/contract.ts";
+import { createCharge } from "./fixtures/test/noViolations/command-output/payments/payments.ts";
+import { calendar } from "./fixtures/verify/Mismatch/assumptions/calendar/contract.ts";
 
-const commandOutput = join(serviceRoot, "Command/command-output");
+const commandOutput = fixture("test", "noViolations", "command-output");
 const shop = await checkedRoot(commandOutput);
 const refund = { service: "shop", scenario: "refundCreatedCharge", runner: "shop" };
 
@@ -17,7 +17,7 @@ const copies = mkdtempSync(join(import.meta.dirname, ".fixtures", "verify-api-")
 after(() => rmSync(copies, { recursive: true, force: true }));
 
 test("snapshotRuns returns the own and peer runs that have a snapshot", async () => {
-  const spec = await checkedRoot(join(import.meta.dirname, "verify/mismatch/compare/Mismatch.event"));
+  const spec = await checkedRoot(fixture("verify", "Mismatch", "Mismatch.event"));
   assert.deepEqual(
     snapshotRuns(spec).filter((r) => r.runner !== r.service),
     [{ service: "notifier", scenario: "announcesAdded", runner: "todo" }],
@@ -46,7 +46,7 @@ test("decodeAnswer decodes the output of an answer with the output schema and re
 });
 
 test("verifyTraces compares an external service trace under any name with the contract", async () => {
-  const spec = await checkedRoot(join(import.meta.dirname, "verify/mismatch/external/assumptions"));
+  const spec = await checkedRoot(fixture("verify", "Mismatch", "assumptions"));
   const time = Date.UTC(2026, 9, 26);
   const monday = time;
   const kinds = (name: string, day: number) => {
@@ -169,7 +169,7 @@ test("drive keeps both requests that the implementation sends under one id, and 
   assert.deepEqual(kinds, ["Uncomparable.duplicateId"]);
 });
 
-const subscriptionAnswers = join(import.meta.dirname, "verify/mismatch/compare/subscription-answers");
+const subscriptionAnswers = fixture("verify", "Mismatch", "subscription-answers");
 
 /** A todo whose subscriptions end with an error at a restart, as when a server drops its connections. */
 function droppingTodoAdapter(): Adapter {

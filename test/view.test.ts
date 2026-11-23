@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { viewModel } from "../src/view/model.ts";
 import type { StateView, TransitionView } from "../src/view/types.ts";
-import { checkedRoot } from "./examples.ts";
+import { checkedRoot } from "./fixtures/fixtures.ts";
 
 test("The model that viewModel builds from samples/todo/spec holds, for each service, its kind, its description, the services whose contracts it uses, and the number of definitions of each kind", async () => {
   const model = viewModel(await checkedRoot(join(import.meta.dirname, "../samples/todo/spec")), "samples/todo/spec");

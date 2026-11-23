@@ -6,12 +6,12 @@ import { testSpec } from "../src/cli/test.ts";
 import { sameRef } from "../src/data/definitionRef.ts";
 import { ownRun, snapshotPath } from "../src/data/traceFile.ts";
 import type { ReportedViolation } from "../src/data/violation.ts";
-import { checkedRoot } from "./examples.ts";
+import { checkedRoot, fixture } from "./fixtures/fixtures.ts";
 
 mkdirSync(join(import.meta.dirname, ".fixtures"), { recursive: true });
 const copy = mkdtempSync(join(import.meta.dirname, ".fixtures", "snapshots-"));
 after(() => rmSync(copy, { recursive: true, force: true }));
-cpSync(join(import.meta.dirname, "service/Query/changed_answer_sent"), copy, { recursive: true });
+cpSync(fixture("test", "noViolations", "changed_answer_sent"), copy, { recursive: true });
 // tsc's include skips the dot folder .fixtures, so the copy gets a tsconfig.json of its own, by which the converter
 // types its functions.
 writeFileSync(join(copy, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');

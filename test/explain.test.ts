@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { exampleFolders, explanations } from "../scripts/explain.ts";
 import { explain, explanationsPath } from "../src/cli/explain.ts";
 import { isUserKind, kinds } from "../src/data/kinds.ts";
-import { expectedOf, kindOfLine } from "./expected.ts";
+import { expectedOf, kindOfLine } from "./fixtures/fixtures.ts";
 
 const maxExcerptLines = 40;
 const built = explanations();

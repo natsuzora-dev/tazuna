@@ -4,7 +4,8 @@ import { join, relative } from "node:path";
 import { test } from "node:test";
 import { exampleFolders } from "../scripts/explain.ts";
 import type { UserKind } from "../src/data/kinds.ts";
-import { groupExamples, runExamples, simExamples } from "./examples.ts";
+import { simExamples } from "./examples.ts";
+import { allFixtures } from "./fixtures/fixtures.ts";
 import { type Guarantee, guarantees } from "./guarantees.generated.ts";
 
 const tests = import.meta.dirname;
@@ -78,7 +79,7 @@ const ofAudit = {
 const network = (scenario: string) => ({ example: "sim/Run/network", scenario }) as const;
 
 const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
-  accepted_emits_decided: { example: "service/Records/decide_payloads_sorted", scenario: "listed" },
+  accepted_emits_decided: { example: "fixtures/test/noViolations/decide_payloads_sorted", scenario: "listed" },
   always_rounds_limit_halts: { kindExample: "Fault.exceededAlwaysRounds" },
   always_step_independent: ofSearch,
   answerIn_agrees: ofAudit,
@@ -89,7 +90,7 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   canonical_check_eq_nil_iff: ofCheck,
   checkExchanges_agrees: ofAudit,
   check_eq_nil_iff: ofCheck,
-  clock_publishes: { example: "service/Query/changed_answer_sent", scenario: "answerChangesWithTime" },
+  clock_publishes: { example: "fixtures/test/noViolations/changed_answer_sent", scenario: "answerChangesWithTime" },
   command_limit_halts: { kindExample: "Fault.exceededCommandDepth" },
   compareSnapshot_eq_none_iff: ofCompare,
   compareSnapshot_reordered: ofCompare,
@@ -104,15 +105,18 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   dateLabelBody_denote: {
     because: "a property of the encoding over all SMT models, which no run computes; prove replays each counterexample",
   },
-  deadline_message_at_its_time: { example: "service/Chart/Deadline/deadlines", scenario: "deadlinePassed" },
-  deadlines_exact: { example: "service/Chart/Deadline/deadlines", scenario: "deadlinePassed" },
+  deadline_message_at_its_time: { example: "fixtures/test/noViolations/chart-deadlines", scenario: "deadlinePassed" },
+  deadlines_exact: { example: "fixtures/test/noViolations/chart-deadlines", scenario: "deadlinePassed" },
   difference_same: ofSearch,
   done_selections_limit_halts: { kindExample: "Fault.exceededOnDoneSelections" },
-  drain_keeps_now: { example: "service/Chart/Deadline/deadlines", scenario: "deadlinePassed" },
+  drain_keeps_now: { example: "fixtures/test/noViolations/chart-deadlines", scenario: "deadlinePassed" },
   due_deadlines_limit_halts: { kindExample: "Fault.exceededDueDeadlines" },
   endSubscription_agrees: ofAudit,
-  ended_subscription_not_answered: { example: "service/Restart/restart_keeps", scenario: "subscriptionsEnd" },
-  enters_initial: { example: "service/Chart/Config/exit-transition-entry-order", scenario: "intoRegion" },
+  ended_subscription_not_answered: {
+    example: "fixtures/test/noViolations/restart_keeps",
+    scenario: "subscriptionsEnd",
+  },
+  enters_initial: { example: "fixtures/test/noViolations/exit-transition-entry-order", scenario: "intoRegion" },
   entity_invariant_reported_iff: { kindExample: "Fault.failedEntityInvariant" },
   entryOrder_ancestors_first: {
     because:
@@ -134,21 +138,24 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   independent_unordered: network("deliversIndependentEvents"),
   instrument_agrees: ofAudit,
   invalid_input_answer_blames_sender: { kindExample: "Fault.inputSchema" },
-  keyless_payload_reaches_all: { example: "service/Chart/Select/map-copies-by-key", scenario: "eventWithoutKeyFields" },
+  keyless_payload_reaches_all: {
+    example: "fixtures/test/noViolations/map-copies-by-key",
+    scenario: "eventWithoutKeyFields",
+  },
   labelled_range: {
     because: "a property of every day number, which no run computes; the convert diff tests run both functions",
   },
-  leave_makes_requests_stale: { example: "service/Chart/Request/requests-on-entry", scenario: "answerAfterExit" },
+  leave_makes_requests_stale: { example: "fixtures/test/noViolations/requests-on-entry", scenario: "answerAfterExit" },
   line_keeps_leftInFlight: { example: "sim/Run/moving_line_keeps_others", scenario: "leavesInFlight" },
   line_keeps_states: { example: "sim/Run/moving_line_keeps_others", scenario: "leavesInFlight" },
   lines_after_stop_ignored: network("linesAfterHalt"),
   matchValue_renamed: ofCompare,
   matchValue_strRenamed: ofCompare,
-  message_keysDistinct: { example: "service/Message/rejection-kinds", scenario: "commandRejections" },
-  message_outputs_at_its_time: { example: "service/Chart/Deadline/deadlines", scenario: "deadlinePassed" },
+  message_keysDistinct: { example: "fixtures/test/noViolations/rejection-kinds", scenario: "commandRejections" },
+  message_outputs_at_its_time: { example: "fixtures/test/noViolations/chart-deadlines", scenario: "deadlinePassed" },
   message_work_limit_halts: { kindExample: "Fault.exceededMessageWork" },
   microstep_enters_in_entry_order: {
-    example: "service/Chart/Config/exit-transition-entry-order",
+    example: "fixtures/test/noViolations/exit-transition-entry-order",
     scenario: "intoRegion",
   },
   modal_child_covers: { kindExample: "InvalidInput.coveredByModal" },
@@ -158,15 +165,18 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   parse_render: {
     because: "a property of every day number, which no run computes; the convert diff tests run both functions",
   },
-  post_message: { example: "service/Restart/requests", scenario: "requestsDiscarded" },
+  post_message: { example: "fixtures/test/noViolations/requests", scenario: "requestsDiscarded" },
   publish_agrees: ofAudit,
-  query_answered_again: { example: "service/Idempotency/same-id", scenario: "askedTwice" },
-  query_invalid_input_rejected: { example: "service/Message/rejection-kinds", scenario: "queryRejections" },
+  query_answered_again: { example: "fixtures/test/noViolations/same-id", scenario: "askedTwice" },
+  query_invalid_input_rejected: { example: "fixtures/test/noViolations/rejection-kinds", scenario: "queryRejections" },
   receive_agrees: ofAudit,
-  redelivered_event_not_processed: { example: "service/Idempotency/same-id", scenario: "redelivered" },
-  reenter_false_not_exited: { example: "service/Chart/Config/reenter_true_exits", scenario: "addedThrice" },
+  redelivered_event_not_processed: { example: "fixtures/test/noViolations/same-id", scenario: "redelivered" },
+  reenter_false_not_exited: { example: "fixtures/test/noViolations/reenter_true_exits", scenario: "addedThrice" },
   refuse_answers_unavailable: network("refusesRequest"),
-  rejected_command_changes_nothing: { example: "service/Message/rejection-kinds", scenario: "commandRejections" },
+  rejected_command_changes_nothing: {
+    example: "fixtures/test/noViolations/rejection-kinds",
+    scenario: "commandRejections",
+  },
   render_parse: {
     because: "a property of every date label, which no run computes; the convert diff tests run both functions",
   },
@@ -177,19 +187,19 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
     because:
       "a statement about the requirements table that Service.ofStructure builds, which the other theorems take as a hypothesis and every example builds",
   },
-  resolve_output_answered: { example: "service/Records/sorted-by", scenario: "queried" },
+  resolve_output_answered: { example: "fixtures/test/noViolations/sorted-by", scenario: "queried" },
   restart_agrees: ofAudit,
   restart_forgets: {
     because:
       "states that a restart's result does not depend on the state it discards, which compares two runs that no fixture holds; restart_keeps runs the restart",
   },
-  reused_id_rejected: { example: "service/Idempotency/same-id", scenario: "changedInput" },
+  reused_id_rejected: { example: "fixtures/test/noViolations/same-id", scenario: "changedInput" },
   sameState_renamed: ofCompare,
-  select_follows_leaves: { example: "service/Chart/Select/leaf_selects_innermost", scenario: "leftRegionWins" },
-  select_picked_by_leaf: { example: "service/Chart/Select/leaf_selects_innermost", scenario: "rightRegionWins" },
+  select_follows_leaves: { example: "fixtures/test/noViolations/leaf_selects_innermost", scenario: "leftRegionWins" },
+  select_picked_by_leaf: { example: "fixtures/test/noViolations/leaf_selects_innermost", scenario: "rightRegionWins" },
   send_agrees: ofAudit,
-  send_keysDistinct: { example: "service/Message/rejection-kinds", scenario: "commandRejections" },
-  sent_ids_distinct: { example: "service/Restart/requests", scenario: "requestsDiscarded" },
+  send_keysDistinct: { example: "fixtures/test/noViolations/rejection-kinds", scenario: "commandRejections" },
+  sent_ids_distinct: { example: "fixtures/test/noViolations/requests", scenario: "requestsDiscarded" },
   service_invariant_reported_iff: { kindExample: "Fault.failedServiceInvariant" },
   seval_agrees: {
     because:
@@ -204,19 +214,19 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   sortByKey_equal_keys_in_canonical_order: ofSort,
   sortByKey_perm: ofSort,
   sortCanonical_perm: ofSort,
-  sorting_resolve_parsed: { example: "service/Records/sorted-by", scenario: "queried" },
-  stale_answer_ignored: { example: "service/Chart/Request/requests-on-entry", scenario: "answerAfterExit" },
+  sorting_resolve_parsed: { example: "fixtures/test/noViolations/sorted-by", scenario: "queried" },
+  stale_answer_ignored: { example: "fixtures/test/noViolations/requests-on-entry", scenario: "answerAfterExit" },
   stale_command_answer_ignored: {
-    example: "service/Chart/Queue/leave_makes_queued_stale",
+    example: "fixtures/test/noViolations/leave_makes_queued_stale",
     scenario: "loggedBeforeAnswer",
   },
-  start_sent_ids_distinct: { example: "service/Restart/requests", scenario: "requestsDiscarded" },
+  start_sent_ids_distinct: { example: "fixtures/test/noViolations/requests", scenario: "requestsDiscarded" },
   start_unwritten_not_created: { example: "sim/Run/keys", scenario: "givenKeyApart" },
   stepOrderSearch_same: ofSearch,
   stopped_run_skips_exchanges: network("overtaking"),
   subscribe_agrees: ofAudit,
   then_only_reports: network("unmetExpectation"),
-  unchanged_answer_not_sent: { example: "service/Query/changed_answer_sent", scenario: "subscribed" },
+  unchanged_answer_not_sent: { example: "fixtures/test/noViolations/changed_answer_sent", scenario: "subscribed" },
   uncovered_unreached: {
     because:
       "a property of coverage over all replays, which the engine runs on every verify --coverage example; no one run shows all replays",
@@ -244,13 +254,7 @@ const named = (dir: string): readonly (readonly [Guarantee, string])[] =>
 const fixtures = named(tests);
 
 /** The examples that a diff test runs in TS and Lean. */
-const diffed = new Set([
-  ...runExamples(),
-  ...simExamples().map((e) => e.root),
-  ...groupExamples("load"),
-  ...groupExamples("validation"),
-  ...groupExamples("verify"),
-]);
+const diffed = new Set([...allFixtures(), ...simExamples().map((e) => e.root)]);
 
 test("Each guarantee has one fixture, a diff-tested example named after its theorem, or else one entry in instead", () => {
   assert.deepEqual(

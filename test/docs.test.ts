@@ -7,7 +7,8 @@ import { explain } from "../src/cli/explain.ts";
 import { main } from "../src/cli/main.ts";
 import { groups as groupInfos } from "../src/data/groups.ts";
 import { groupNames, isUserKind, parseKind } from "../src/data/kinds.ts";
-import { leanRoot, typeChecked } from "./examples.ts";
+import { leanRoot } from "./examples.ts";
+import { typeChecked } from "./fixtures/fixtures.ts";
 import { guarantees as tagged } from "./guarantees.generated.ts";
 
 const root = join(import.meta.dirname, "..");

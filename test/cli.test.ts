@@ -7,7 +7,7 @@ import { join, relative } from "node:path";
 import { after, test } from "node:test";
 import { main } from "../src/cli/main.ts";
 import { traceLine } from "../src/data/trace.generated.ts";
-import { typeChecked } from "./examples.ts";
+import { typeChecked } from "./fixtures/fixtures.ts";
 
 const root = join(import.meta.dirname, "..");
 
@@ -178,7 +178,7 @@ test("check, test, and verify write one line with the error and its place and ex
 test("check writes one JSON line per violation to stdout and the count, or that there is no violation, to stderr", async () => {
   const sourcesOf = (folder: string) =>
     readdirSync(join(root, folder), { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".ts"));
-  const violatingFolder = "test/validation/illegal/commands/Illegal.foreignEvent";
+  const violatingFolder = "test/fixtures/check/Illegal/Illegal.foreignEvent";
   const violating = await run("check", violatingFolder);
   assert.equal(violating.code, 1);
   assert.deepEqual(
@@ -186,7 +186,7 @@ test("check writes one JSON line per violation to stdout and the count, or that 
     ["Illegal.foreignEvent"],
   );
   assert.deepEqual(violating.err, [`${sourcesOf(violatingFolder).length} files: 1 violation`]);
-  const cleanFolder = "test/service/Chart/Always/always";
+  const cleanFolder = "test/fixtures/test/noViolations/always";
   const clean = await run("check", cleanFolder);
   assert.equal(clean.code, 0);
   assert.deepEqual(clean.out, []);
@@ -196,7 +196,7 @@ test("check writes one JSON line per violation to stdout and the count, or that 
 test("test writes how many scenarios it ran out of all to stderr, and with --only runs only the named scenarios and leaves the snapshot entries named after the others unreported and unremoved", async () => {
   const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "only-"));
   writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
-  cpSync(join(import.meta.dirname, "verify/uncomparable/snapshot/unpaired"), project, { recursive: true });
+  cpSync(join(import.meta.dirname, "fixtures/test/Uncomparable/unpaired"), project, { recursive: true });
   const folder = relative(root, project);
   const snapshots = join(project, "todo/__snapshots__");
   const snapshot = (name: string) => join(folder, "todo/__snapshots__", name);
@@ -234,7 +234,7 @@ test("test writes how many scenarios it ran out of all to stderr, and with --onl
 });
 
 test("test writes an error and exits with 2 when --only names no scenario of the spec", async () => {
-  const folder = "test/verify/uncomparable/snapshot/unpaired";
+  const folder = "test/fixtures/test/Uncomparable/unpaired";
   const cases: [string[], string][] = [
     [["--only", "todo/addOn"], "unknown scenario todo/addOn"],
     [["--only", "addOne"], "unknown scenario addOne"],
@@ -278,7 +278,7 @@ test("explain writes an error and exits with 2 for a name that is no violation k
 });
 
 test("test, verify, and view write the same violation lines and count as check and do nothing else when check reports violations", async () => {
-  const folder = "test/load/malformed/times/Malformed.inexactTime";
+  const folder = "test/fixtures/check/Malformed/Malformed.inexactTime";
   const checked = await run("check", folder);
   assert.notDeepEqual(checked.out, []);
   for (const args of [
@@ -298,7 +298,7 @@ test("check reports each spec file that the program of the nearest tsconfig.json
   writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.base.json", "include": ["src"] }\n');
   mkdirSync(join(project, "src"));
   writeFileSync(join(project, "src/app.ts"), "export {};\n");
-  cpSync(join(import.meta.dirname, "service/Chart/Config/history/player"), join(project, "spec/player"), {
+  cpSync(join(import.meta.dirname, "fixtures/test/noViolations/history/player"), join(project, "spec/player"), {
     recursive: true,
   });
   const folder = relative(root, join(project, "spec"));
@@ -322,7 +322,7 @@ test("check reports each spec file that the program of the nearest tsconfig.json
 test("check skips node_modules folders and .d.ts files, and walks a symlinked folder once", async () => {
   const project = mkdtempSync(join(import.meta.dirname, ".fixtures", "walk-"));
   writeFileSync(join(project, "tsconfig.json"), '{ "extends": "../../../tsconfig.json", "include": ["."] }\n');
-  cpSync(join(import.meta.dirname, "service/Chart/Config/history/player"), join(project, "player"), {
+  cpSync(join(import.meta.dirname, "fixtures/test/noViolations/history/player"), join(project, "player"), {
     recursive: true,
   });
   mkdirSync(join(project, "node_modules/helper"), { recursive: true });
@@ -350,7 +350,7 @@ test("Every line of the snapshots under samples conforms to traceLine", () => {
 });
 
 test("test exits with 3 when it reports only Undecided violations, as prove does with an undecided property", async () => {
-  const { code, out } = await run("test", "test/run/undecided/Explore/StepOrders/Undecided.stepOrderLimit");
+  const { code, out } = await run("test", "test/fixtures/test/Undecided/Undecided.stepOrderLimit");
   assert.equal(code, 3);
   assert.ok(out.length > 0 && out.every((line) => line.includes('"kind":"Undecided.')), out.join("\n"));
 });

@@ -25,14 +25,13 @@
   },
   "overrides": [
     {
-      "includes": ["test/load/restricted/sources/Restricted.nonNull/**", "test/convert/fixtures.ts"],
+      "includes": ["test/fixtures/check/Restricted/Restricted.nonNull/**", "test/convert/fixtures.ts"],
       "linter": { "rules": { "style": { "noNonNullAssertion": "off" } } }
     },
     {
       "includes": [
-        "test/load/restricted/sources/Restricted.any/**",
-        "test/load/restricted/sources/anyAutomation/**",
-        "test/bug/**"
+        "test/fixtures/check/Restricted/Restricted.any/**",
+        "test/fixtures/check/Restricted/anyAutomation/**"
       ],
       "linter": { "rules": { "suspicious": { "noExplicitAny": "off" } } }
     },
