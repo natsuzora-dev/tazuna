@@ -66,12 +66,63 @@ def SRecords.conc (M : Model) (r : SRecords) : Records :=
 def SRecords.slotsOf (r : SRecords) (entity : String) : List Slot :=
   (r.keyed.filter (·.1 == entity)).flatMap (·.2)
 
+/--
+A JSON value or `undefined` that an argument holds, such as an input or an answer's output: a scalar, an object, an
+array whose items are its first `len` of `items`, or a choice between two. The bound on an array's length is the
+service's `items` bound, which the facts state.
+-/
+inductive SJson where
+  | scalar (t : Term)
+  | obj (fields : List (String × SJson))
+  | arr (len : Term) (items : List SJson)
+  | ite (c : Term) (a b : SJson)
+deriving Repr, Inhabited
+
+mutual
+
+/-- The JSON that `j` is under `M`, none for `undefined`. -/
+def SJson.conc (M : Model) : SJson → Option Value
+  | .scalar t => (t.denote M).toScalar.toValue?
+  | .obj fields => some (.obj (SJson.concFields M fields))
+  | .arr len items => some (.arr (SJson.concItems M (len.denote M).toInt items))
+  | .ite c a b => if c.holds M then a.conc M else b.conc M
+
+/-- The fields that are not `undefined`, as a JSON object holds them. -/
+def SJson.concFields (M : Model) : List (String × SJson) → List (String × Value)
+  | [] => []
+  | (n, j) :: fs => match j.conc M with
+    | some v => (n, v) :: SJson.concFields M fs
+    | none => SJson.concFields M fs
+
+/-- The first `n` items, an `undefined` one as null, as JSON writes an array. -/
+def SJson.concItems (M : Model) : Int → List SJson → List Value
+  | _, [] => []
+  | n, j :: js => if 0 < n then (j.conc M).getD .null :: SJson.concItems M (n - 1) js else []
+
+end
+
+/-- The term that holds when `j` is `undefined`. -/
+def SJson.undefT : SJson → Term
+  | .scalar t => .isUndef t
+  | .obj _ | .arr .. => .lit (.bool false)
+  | .ite c a b => .ite c a.undefT b.undefT
+
+/-- An object of scalar fields. -/
+def SJson.ofTerms (fields : List (String × Term)) : List (String × SJson) := fields.map fun (n, t) => (n, .scalar t)
+
+/-- The field `name` of a JSON object's fields: the first that is not `undefined`, as JSON drops the others. -/
+def SJson.field (name : String) : List (String × SJson) → SJson
+  | [] => .scalar (.lit (.val .undef))
+  | (n, j) :: fs => if n == name then .ite j.undefT (SJson.field name fs) j else SJson.field name fs
+
 /-- A symbolic value: the shape that an evaluation gives, with terms where the value depends on the model. -/
 inductive SVal where
   /-- A JSON scalar or `undefined`. -/
   | scalar (t : Term)
-  /-- A JSON object that an argument holds, such as an input: the fields that are not `undefined`. -/
-  | json (fields : List (String × Term))
+  /-- A JSON object that an argument holds, such as an input. -/
+  | json (fields : List (String × SJson))
+  /-- A JSON array that an argument holds: its first `len` of `items`. -/
+  | jarr (len : Term) (items : List SJson)
   /-- The record of `entity` with the key `key`, a String term. -/
   | row (entity : String) (key : Term)
   | single (entity : String)
@@ -92,7 +143,8 @@ mutual
 /-- The value that `v` is under `M`, with `records` the records that the evaluation reads. -/
 def SVal.conc (M : Model) (records : Records) : SVal → Val
   | .scalar t => (t.denote M).toScalar.toVal
-  | .json fields => .json (.obj (present M fields))
+  | .json fields => .json (.obj (SJson.concFields M fields))
+  | .jarr len items => .json (.arr (SJson.concItems M (len.denote M).toInt items))
   | .row e k => .row records e (some (.str (k.denote M).toStr))
   | .single e => .row records e none
   | .table e => .table records e
@@ -117,6 +169,25 @@ def SVal.concItems (M : Model) (records : Records) : List (Term × SVal) → Lis
     else SVal.concItems M records items
 
 end
+
+/-- The symbolic value of the JSON `j`; a choice between two scalars is one scalar. -/
+def SVal.ofJson : SJson → SVal
+  | .scalar t => .scalar t
+  | .obj fields => .json fields
+  | .arr len items => .jarr len items
+  | .ite c a b =>
+    match SVal.ofJson a, SVal.ofJson b with
+    | .scalar x, .scalar y => .scalar (.ite c x y)
+    | x, y => .ite c x y
+
+/--
+The items of an array from the index `i` on, each with the term that holds when it is within the array's length, and an
+`undefined` one as null, as JSON writes an array.
+-/
+def arrItems (len : Term) : Nat → List SJson → List (Term × SVal)
+  | _, [] => []
+  | i, j :: js =>
+    (.lt (.lit (.int i)) len, SVal.ofJson (.ite j.undefT (.scalar (.lit (.val .null))) j)) :: arrItems len (i + 1) js
 
 def mkBoolT (t : Term) : Term := .mkBool t
 def intLit (n : Int) : Term := .lit (.int n)
@@ -197,7 +268,7 @@ def liveCount : List Slot → Term
 
 /-- The field `name` of a value that is neither null nor `undefined`. -/
 def SVal.field (r : SRecords) (name : String) : SVal → SVal
-  | .json fields => .scalar (jsonField name fields)
+  | .json fields => .ofJson (SJson.field name fields)
   | .row e k => .scalar (rowField k name (r.slotsOf e))
   | .single e => .scalar (match r.singles.lookup e with
     | some fields => jsonField name fields
@@ -228,6 +299,7 @@ def SVal.size (r : SRecords) : SVal → SVal × Term
   | .table e => (.scalar (.mkInt (liveCount (r.slotsOf e))), ff)
   | .list vs => (.scalar (.mkInt (intLit vs.length)), ff)
   | .bag items => (.scalar (.mkInt (countIn items)), ff)
+  | .jarr len items => (.scalar (.mkInt (countIn (arrItems len 0 items))), ff)
   | .ite c a b => (.ite c (a.size r).1 (b.size r).1, .ite c (a.size r).2 (b.size r).2)
   | _ => (.scalar undefT, tt)
 
@@ -235,6 +307,7 @@ def SVal.size (r : SRecords) : SVal → SVal × Term
 def SVal.includes (value : SVal) : SVal → Term × Term
   | .list vs => (disj (vs.map (·.same value)), ff)
   | .bag items => (disj (items.map fun (g, v) => .and g (v.same value)), ff)
+  | .jarr len items => (disj ((arrItems len 0 items).map fun (g, v) => .and g (v.same value)), ff)
   | .table _ => (ff, ff)
   | .ite c a b =>
     (.ite c (SVal.includes value a).1 (SVal.includes value b).1, .ite c (SVal.includes value a).2 (SVal.includes value b).2)
@@ -247,6 +320,7 @@ table's records in slot order, which is the order that `SRecords.conc` holds the
 def SVal.items (r : SRecords) : SVal → Option (List (Term × SVal))
   | .list vs => some (vs.map (tt, ·))
   | .bag items => some items
+  | .jarr len items => some (arrItems len 0 items)
   -- A record whose key is several fields has no SVal.row.
   | .table e => (r.slotsOf e).mapM fun s => match s.key with
     | .text t => some (s.live, .row e t)
@@ -262,6 +336,23 @@ abbrev Visit := Term × SVal × (SVal × Term)
 
 /-- The term that holds when the callback throws on a visited value. -/
 def thrownIn (visits : List Visit) : Term := disj (visits.map fun q => .and q.1 q.2.2.2)
+
+/--
+An array's `some` on the visited values, which stops at the first callback that returns a truthy value: its value, and
+the term that holds when a callback that it runs throws.
+-/
+def someIn : List Visit → Term × Term
+  | [] => (ff, ff)
+  | (g, _, (b, e)) :: visits =>
+    let (found, thrown) := someIn visits
+    (.ite (.and g b.truthy) tt found, .ite g (.or e (.and (.not b.truthy) thrown)) thrown)
+
+/-- An array's `every` on the visited values, which stops at the first callback that returns a falsy value. -/
+def everyIn : List Visit → Term × Term
+  | [] => (tt, ff)
+  | (g, _, (b, e)) :: visits =>
+    let (all, thrown) := everyIn visits
+    (.ite (.and g (.not b.truthy)) ff all, .ite g (.or e (.and b.truthy thrown)) thrown)
 
 /-- A safe integer bound: `Number.isSafeInteger` takes integers whose magnitude is below `2 ^ 53`. -/
 def safeT (t : Term) : Term := .and (.lt (intLit (-(2 ^ 53))) t) (.lt t (intLit (2 ^ 53)))
@@ -357,6 +448,12 @@ def litTerm : Value → Except String Term
     if s.toList.all (·.toNat ≤ 0x2FFFF) then pure (.lit (.val (.str s)))
     else throw "a string literal with a character above U+2FFFF, which SMT strings lack"
   | _ => throw "an array or object literal"
+
+/-- A JSON literal as a symbolic JSON value, its scalars as litTerm writes them. -/
+partial def jsonLit : Value → Except String SJson
+  | .obj fields => do pure (.obj (← fields.mapM fun (n, v) => do pure (n, ← jsonLit v)))
+  | .arr vs => do pure (.arr (.lit (.int vs.length)) (← vs.mapM jsonLit))
+  | v => do pure (.scalar (← litTerm v))
 
 /-- What an expression reads: its arguments, as symbolic values, and the records. -/
 structure SEnv where
@@ -507,8 +604,16 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
     let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
     pure (.scalar (.mkBool (.not (disj (visits.map fun (g, _, b, _) => .and g (b.same falseT))))),
       .or ec (thrownIn visits))
-  | .some .array .. => throw "an array's some"
-  | .every .array .. => throw "an array's every"
+  | .some .array c x body => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "a some of what may be no collection"
+    let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
+    pure (.scalar (.mkBool (someIn visits).1), .or ec (someIn visits).2)
+  | .every .array c x body => do
+    let (vc, ec) ← seval env vars c
+    let some items := vc.items env.records | throw "an every of what may be no collection"
+    let visits ← items.mapM fun (g, v) => do pure (g, v, ← seval env ((x, v) :: vars) body)
+    pure (.scalar (.mkBool (everyIn visits).1), .or ec (everyIn visits).2)
   | .map _ c x body => do
     let (vc, ec) ← seval env vars c
     let some items := vc.items env.records | throw "a map of what may be no collection"

@@ -67,7 +67,7 @@ def reactionOf (st : Service) (p : Program) (pre : SRecords) (now : Term) (paylo
   let base : SEnv := { records := pre, args := fun
     | .payload => some payload
     | .now => some (.scalar (.mkInt now))
-    | .key => some (.json keys)
+    | .key => some (.json (SJson.ofTerms keys))
     | _ => none }
   let binds := conditionsOf p.automationBinding
   let bindTerms ← binds.mapM fun b => do
@@ -125,8 +125,8 @@ def ordersOf (st : Service) (p : Program) (pre : SRecords) (used : List (String 
   let holds := props.map fun pr => fieldHolds ((payload.lookup pr.1).getD undefT) pr
   let payloadFacts : Facts := { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term),
                                 exact := holds.all (·.exact), complete := holds.all (·.complete) }
-  let a ← reactionOf st p pre now (.json payload) pair.first "ra"
-  let b ← reactionOf st p pre now (.json payload) pair.second "rb"
+  let a ← reactionOf st p pre now (.json (SJson.ofTerms payload)) pair.first "ra"
+  let b ← reactionOf st p pre now (.json (SJson.ofTerms payload)) pair.second "rb"
   let accepted (r : Reaction) (step : Step) : Term := .and r.valid step.accepted
   let after (r : Reaction) (step : Step) (records : SRecords) (used : List (String × List Term)) :
       SRecords × List (String × List Term) :=

@@ -1,0 +1,2 @@
+{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"todo"},"name":"someWithinRange"},"creates":{"Task":2},"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":10}}
+{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"todo"},"name":"everyWithinRange"},"creates":{"Task":2},"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":10}}

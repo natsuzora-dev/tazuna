@@ -191,16 +191,11 @@ inductive Want where
 /-- The query of `facts` with `goal`. -/
 def queryOf (facts : Facts) (goal : Term) : Query := { vars := facts.vars, asserts := facts.asserts ++ [goal] }
 
-/-- The scalar fields of a JSON object as terms. -/
-def objectTerms : Value → Except String (List (String × Term))
-  | .obj fields => fields.mapM fun (f, v) => do pure (f, ← litTerm v)
-  | _ => throw "no object"
-
 /-- That an answer's output `output` to the request of `target` with `input` meets the target's ensures, as its contract promises. -/
 def promised (st : Service) (input : Value) (target : Spec.Ref) (output : List (String × Term)) : Except String Term := do
   let env : SEnv := { args := fun
-    | .input => (objectTerms input).toOption.map .json
-    | .output => some (.json output)
+    | .input => (jsonLit input).toOption.map .ofJson
+    | .output => some (.json (SJson.ofTerms output))
     | _ => none }
   let ensures := ((st.structure.program.resultEnsures.find? (·.definition == target)).map (·.conditions)).getD []
   let held ← ensures.mapM fun c => do
@@ -317,7 +312,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
     let mut goals := [(facts, tt)]
     if let .ok (pre, used) := terms then
       for a in st.automations.filter (·.receives == event) do
-        let .ok r := reactionOf st p pre now (.json payload) a "r" | continue
+        let .ok r := reactionOf st p pre now (.json (SJson.ofTerms payload)) a "r" | continue
         let base := facts ++ r.facts
         goals := goals ++ [(base, .not r.fires)]
         if a.sends.isOwn st.service then

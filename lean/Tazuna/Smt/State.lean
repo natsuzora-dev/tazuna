@@ -237,7 +237,7 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
 
 /-- The arguments of an entity invariant: the fields of a record as JSON holds them, and the time, an Int term. -/
 def recordEnv (fields : List (String × Term)) (now : Term) : SEnv :=
-  { args := (fun | .record => some (.json fields) | .now => some (.scalar (.mkInt now)) | _ => none) }
+  { args := (fun | .record => some (.json (SJson.ofTerms fields)) | .now => some (.scalar (.mkInt now)) | _ => none) }
 
 /-- The arguments of a service invariant: the records and the time, an Int term. -/
 def recordsEnv (r : SRecords) (now : Term) : SEnv :=
@@ -508,8 +508,8 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let some rq := svc.requirements.lookup name | throw s!"no requirements of {name}"
   let facts : Facts := {}
   let args (bound : Option SVal) : Arg → Option SVal
-    | .input => some (.json input)
-    | .caller => some (.json caller)
+    | .input => some (.json (SJson.ofTerms input))
+    | .caller => some (.json (SJson.ofTerms caller))
     | .now => some (.scalar (.mkInt now))
     | .bound => bound
     | _ => none
@@ -568,7 +568,7 @@ def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used :
 
 /-- The term that holds when the ensures `c` of a step's command fails, or throws, after the step. -/
 def Step.ensuresFails (step : Step) (c : Condition) : Except String Term := do
-  let env : SEnv := { args := (fun | .input => some (.json step.input) | .caller => some (.json step.caller)
+  let env : SEnv := { args := (fun | .input => some (.json (SJson.ofTerms step.input)) | .caller => some (.json (SJson.ofTerms step.caller))
                                     | .bound => some step.bound | _ => none),
                       records := step.post }
   let (v, e) ← seval env [] c.body
@@ -605,10 +605,10 @@ def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name
   let callers := ((svc.requirements.lookup name).map (·.callers)).getD []
   let requires := ((p.inputRequirement.find? (·.definition == svc.ref name)).map (·.conditions)).getD []
   let requireChecks ← requires.mapM fun c => do
-    let (v, e) ← seval { args := (fun | .input => some (.json input) | _ => none) } [] c.body
+    let (v, e) ← seval { args := (fun | .input => some (.json (SJson.ofTerms input)) | _ => none) } [] c.body
     pure ({ name := c.name, throws := e, passes := v.truthy } : Check)
   let some resolve := p.resolve.find? (·.definition == svc.ref name) | throw s!"no resolve of {name}"
-  let env : SEnv := { args := (fun | .input => some (.json input) | .caller => some (.json caller)
+  let env : SEnv := { args := (fun | .input => some (.json (SJson.ofTerms input)) | .caller => some (.json (SJson.ofTerms caller))
                                     | .now => some (.scalar (.mkInt clock)) | _ => none),
                       records := pre }
   let (output, err) ← seval env [] resolve.body
@@ -620,7 +620,7 @@ def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name
 
 /-- The term that holds when the ensures `c` of a query fails, or throws, on its answer. -/
 def Answered.ensuresFails (a : Answered) (pre : SRecords) (c : Condition) : Except String Term := do
-  let env : SEnv := { args := (fun | .input => some (.json a.input) | .caller => some (.json a.caller)
+  let env : SEnv := { args := (fun | .input => some (.json (SJson.ofTerms a.input)) | .caller => some (.json (SJson.ofTerms a.caller))
                                     | .output => some a.output | _ => none),
                       records := pre }
   let (v, e) ← seval env [] c.body

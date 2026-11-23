@@ -586,8 +586,8 @@ def rejectionKindOf (text : String) : RejectionKind :=
 /-- What a transition takes under `M`, as the semantics passes it, and as the counterexample shows it. -/
 def takenIn (M : Model) (taken : Taken) (sym : Option (Ir.Arg × SVal)) : Extra × Option Value :=
   match taken, sym with
-  | .payload _, some (_, .json fields) => let v := Value.obj (present M fields); (.payload v, some v)
-  | .output _, some (_, .json fields) => let v := Value.obj (present M fields); (.output v, some v)
+  | .payload _, some (_, .json fields) => let v := Value.obj (SJson.concFields M fields); (.payload v, some v)
+  | .output _, some (_, .json fields) => let v := Value.obj (SJson.concFields M fields); (.output v, some v)
   | .rejection, _ =>
     let kind := ((M "tk.kind").toScalar.toValue?).bind fun | .str k => some k | _ => none
     let r : Rejection := { kind := rejectionKindOf (kind.getD "") }

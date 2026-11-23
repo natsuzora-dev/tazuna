@@ -161,7 +161,7 @@ structure SMachine where
 def SMachine.env (m : SMachine) (c : Chart) (records : SRecords) (now : Term) (taken : Option (Arg × SVal)) : SEnv :=
   { records,
     args := fun a => match a with
-      | .context => some (.json m.context)
+      | .context => some (.json (SJson.ofTerms m.context))
       | .active => some (activeVal c m.active)
       | .input => some (.json [])
       | .shown | .held => some (.obj [])
@@ -268,7 +268,7 @@ def takenOf (svc : Service) (pre : String) (reads : List Expr) : Taken → Excep
   | .none => pure (none, {})
   | .rejection =>
     let kind := valVar s!"{pre}.kind"
-    pure (some (.rejection, .json [("kind", kind)]),
+    pure (some (.rejection, .json (SJson.ofTerms [("kind", kind)])),
       { vars := [(s!"{pre}.kind", .val)], asserts := [disj (rejectionKinds.map fun k => .eq kind (.mkStr (strLit k)))] })
   | .payload schema => fields .payload schema
   | .output schema => if (svc.schemaOf schema).isNone then pure (none, {}) else fields .output schema
@@ -281,7 +281,7 @@ where
     let kept := props.filter fun (f, _, _) => read.all (f ∈ ·)
     let terms := kept.map fun pr => (pr.1, propertyVar s!"{pre}.{pr.1}" pr)
     let holds := kept.map fun pr => fieldHolds (((terms.lookup pr.1).map (·.1)).getD undefT) pr
-    pure (some (arg, .json (terms.map fun (f, t, _) => (f, t))),
+    pure (some (arg, .json (SJson.ofTerms (terms.map fun (f, t, _) => (f, t)))),
       { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term),
         exact := holds.all (·.exact) && kept.length == props.length, complete := holds.all (·.complete) })
 
