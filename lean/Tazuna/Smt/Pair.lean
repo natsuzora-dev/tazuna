@@ -117,9 +117,10 @@ def ordersOf (st : Service) (p : Program) (pre : SRecords) (used : List (String 
   let fc := pair.first.sends.ref.name
   let sc := pair.second.sends.ref.name
   let props := propertiesWith ((st.schemaOf (.payload pair.first.receives)).getD (.obj []))
-  let payload := props.map fun (f, _, _) => (f, valVar s!"pay.{f}")
+  let terms := props.map fun pr => (pr.1, propertyVar s!"pay.{pr.1}" pr)
+  let payload := terms.map fun (f, t, _) => (f, t)
   let holds := props.map fun pr => fieldHolds ((payload.lookup pr.1).getD undefT) pr
-  let payloadFacts : Facts := { vars := payload.map fun (f, _) => (s!"pay.{f}", Ty.val), asserts := holds.map (·.term),
+  let payloadFacts : Facts := { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term),
                                 exact := holds.all (·.exact), complete := holds.all (·.complete) }
   let a ← reactionOf st p pre now (.json payload) pair.first "ra"
   let b ← reactionOf st p pre now (.json payload) pair.second "rb"

@@ -94,8 +94,8 @@ partial def schemaHolds (schema : Value) (t : Term) : Holds :=
       -- A date's schema also writes Zod's pattern of its format, which parse checks as parseDate? does.
       let date := fields.lookup "format" == some (.str "date")
       let typed : String → Option (Term × Bool)
-        | "string" => some (conj [.isStr t, bound "minLength" (.le · (.len (.strOf t))),
-            bound "maxLength" (.le (.len (.strOf t)) ·), if date then dateValidT (.strOf t) else tt], true)
+        | "string" => some (conj [if date then isDateOf t else .isStr t, bound "minLength" (.le · (.len (.strOf t))),
+            bound "maxLength" (.le (.len (.strOf t)) ·)], true)
         | "integer" => some (integer, true)
         | "number" => some (integer, false)
         | "boolean" => some (.isBool t, true)
@@ -129,19 +129,41 @@ def fieldHolds (t : Term) : String × Value × Bool → Holds
     let h := schemaHolds s t
     { h with term := if required then h.term else .or (.isUndef t) h.term }
 
+def entitySchema (st : Service) (e : String) : Value := ((st.schemaOf (.record (st.ref e))).getD (.obj []))
+
+def isDateSchema (schema : Value) : Bool :=
+  schema.field? "type" == some (.str "string") && schema.field? "format" == some (.str "date")
+
+/--
+The term of a variable named `x` that holds a value of the property `p`, and the variables it declares. A date is the
+label of an integer day number, so that comparing dates and adding days stay integer arithmetic for the solver; it is
+`undefined` instead while its `set` variable is false, when the object may lack it. Any other value is a `V`.
+-/
+def propertyVar (x : String) (p : String × Value × Bool) : Term × List (String × Ty) :=
+  if isDateSchema p.2.1 then
+    let label := Term.mkStr (.dateLabel (.var s!"{x}.day" .int))
+    if p.2.2 then (label, [(s!"{x}.day", .int)])
+    else (.ite (boolVar s!"{x}.set") label undefT, [(s!"{x}.set", .bool), (s!"{x}.day", .int)])
+  else (valVar x, [(x, .val)])
+
+/-- The term and variables of the field `f` of an object of schema `schema`, as propertyVar makes them. -/
+def fieldVar (schema : Value) (x f : String) : Term × List (String × Ty) :=
+  match (propertiesWith schema).find? (·.1 == f) with
+  | some p => propertyVar x p
+  | none => (valVar x, [(x, .val)])
+
 /-- The symbolic records of `st` within `creates`, its variables named after `pre`. -/
 def SRecords.named (st : Service) (creates : List (String × Nat)) (pre : String) : SRecords :=
   { keyed := (st.entities.filter (!st.singles.contains ·)).map fun e =>
       (e, (List.range ((creates.lookup e).getD 0)).map fun i =>
         let base := s!"{pre}.{e}.{i}"
         { live := boolVar s!"{base}.live", key := strVar s!"{base}.key",
-          fields := (fieldsOf st e).map fun f => (f, valVar s!"{base}.{f}") })
-    singles := st.singles.map fun e => (e, (fieldsOf st e).map fun f => (f, valVar s!"{pre}.{e}.{f}")) }
+          fields := (fieldsOf st e).map fun f => (f, (fieldVar (entitySchema st e) s!"{base}.{f}" f).1) })
+    singles := st.singles.map fun e =>
+      (e, (fieldsOf st e).map fun f => (f, (fieldVar (entitySchema st e) s!"{pre}.{e}.{f}" f).1)) }
 
 /-- The variable that tells whether a slot was ever used. -/
 def usedVar (pre e : String) (i : Nat) : Term := boolVar s!"{pre}.{e}.{i}.used"
-
-def entitySchema (st : Service) (e : String) : Value := ((st.schemaOf (.record (st.ref e))).getD (.obj []))
 
 def keyField (st : Service) (e : String) : Option String :=
   match st.structure.body? (st.ref e) with
@@ -173,7 +195,7 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
     let props := propertiesWith (entitySchema st e)
     for (s, i) in slots.zipIdx do
       facts := facts ++ { vars := [(s!"{pre}.{e}.{i}.live", .bool), (s!"{pre}.{e}.{i}.used", .bool),
-        (s!"{pre}.{e}.{i}.key", .str)] ++ s.fields.map fun (f, _) => (s!"{pre}.{e}.{i}.{f}", .val) }
+        (s!"{pre}.{e}.{i}.key", .str)] ++ s.fields.flatMap fun (f, _) => (fieldVar (entitySchema st e) s!"{pre}.{e}.{i}.{f}" f).2 }
       let used := usedVar pre e i
       let earlier := if i == 0 then [] else [Term.or (.not used) (usedVar pre e (i - 1))]
       let keyTerm := match keyField st e with
@@ -194,7 +216,7 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
   for (e, fields) in r.singles do
     let props := propertiesWith (entitySchema st e)
     let schemas := props.map fun p => fieldHolds ((fields.lookup p.1).getD undefT) p
-    let vars := fields.map fun (f, _) => (s!"{pre}.{e}.{f}", Ty.val)
+    let vars := fields.flatMap fun (f, _) => (fieldVar (entitySchema st e) s!"{pre}.{e}.{f}" f).2
     let asserts := schemas.map (·.term)
     facts := facts ++ { vars, asserts, exact := schemas.all (·.exact), complete := schemas.all (·.complete) }
   return facts
@@ -290,16 +312,39 @@ def nameAs (x : String) (ty : Ty) (t : Term) : Named Term :=
   | .var .. | .lit _ => pure t
   | _ => do modify (· ++ [(x, ty, t)]); pure (.var x ty)
 
+/--
+A value term that is a date or `undefined` in each branch, with at least one date (propertyVar's shape after steps): the
+term that holds when it is a date, and its day number.
+-/
+def dayView? : Term → Option (Term × Term × Bool)
+  | .mkStr (.dateLabel z) => some (tt, z, true)
+  | .lit (.val .undef) => some (ff, intLit 0, false)
+  | .ite c a b => do
+    let (sa, za, la) ← dayView? a
+    let (sb, zb, lb) ← dayView? b
+    pure (.ite c sa sb, .ite c za zb, la || lb)
+  | _ => none
+
+/-- The value term `t` as named variables: a date (dayView?) by its day number and whether it is set, as propertyVar. -/
+def nameValue (x : String) (t : Term) : Named Term :=
+  match dayView? t with
+  | some (set, z, true) => do
+    let label := Term.mkStr (.dateLabel (← nameAs s!"{x}.day" .int z))
+    match set with
+    | .lit (.bool true) => pure label
+    | _ => pure (.ite (← nameAs s!"{x}.set" .bool set) label undefT)
+  | _ => nameAs x .val t
+
 /-- The state with each of its terms named after `p`. -/
 def Stepped.named (st : Stepped) (p : String) : Named Stepped := do
   let keyed ← st.records.keyed.mapM fun (e, slots) => do
     let slots ← slots.zipIdx.mapM fun (s, i) => do
       let base := s!"{p}.{e}.{i}"
       pure ({ live := ← nameAs s!"{base}.live" .bool s.live, key := ← nameAs s!"{base}.key" .str s.key,
-              fields := ← s.fields.mapM fun (f, t) => do pure (f, ← nameAs s!"{base}.{f}" .val t) } : Slot)
+              fields := ← s.fields.mapM fun (f, t) => do pure (f, ← nameValue s!"{base}.{f}" t) } : Slot)
     pure (e, slots)
   let singles ← st.records.singles.mapM fun (e, fields) => do
-    pure (e, ← fields.mapM fun (f, t) => do pure (f, ← nameAs s!"{p}.{e}.{f}" .val t))
+    pure (e, ← fields.mapM fun (f, t) => do pure (f, ← nameValue s!"{p}.{e}.{f}" t))
   let used ← st.used.mapM fun (e, us) => do
     pure (e, ← us.zipIdx.mapM fun (u, i) => nameAs s!"{p}.{e}.{i}.used" .bool u)
   pure { records := { keyed, singles }, used, beyond := ← nameAs s!"{p}.beyond" .bool st.beyond,
@@ -314,7 +359,7 @@ def payloadOf : SVal → Except String (List (String × Term) × Term)
 def Stepped.emitAll (svc : Service) (p : String) : Stepped → SVal → ExceptT String Named Stepped
   | st, .emit event payload => do
     let (fields, notScalar) ← payloadOf payload
-    let fields ← fields.mapM fun (f, t) => do pure (f, ← (nameAs s!"{p}.{event.name}.{f}" .val t : Named Term))
+    let fields ← fields.mapM fun (f, t) => do pure (f, ← (nameValue s!"{p}.{event.name}.{f}" t : Named Term))
     let st' := st.apply svc event fields
     pure { st' with gap := .or st'.gap notScalar }
   | st, .ite c a b => do pure (.ite c (← st.emitAll svc s!"{p}.y" a) (← st.emitAll svc s!"{p}.n" b))
@@ -336,9 +381,10 @@ def SRecords.outsideSchema (svc : Service) (r : SRecords) : Term :=
 /-- The input of command or query `name` as JSON holds its fields, and that each field fits the input's schema. -/
 def inputOf (svc : Service) (name : String) : List (String × Term) × Facts :=
   let props := propertiesWith ((svc.schemaOf (.input (svc.ref name))).getD (.obj []))
-  let input := props.map fun (f, _, _) => (f, valVar s!"in.{f}")
+  let terms := props.map fun pr => (pr.1, propertyVar s!"in.{pr.1}" pr)
+  let input := terms.map fun (f, t, _) => (f, t)
   let fieldFacts := props.map fun pr => fieldHolds ((input.lookup pr.1).getD undefT) pr
-  (input, { vars := input.map fun (f, _) => (s!"in.{f}", Ty.val), asserts := fieldFacts.map (·.term),
+  (input, { vars := terms.flatMap (·.2.2), asserts := fieldFacts.map (·.term),
             exact := fieldFacts.all (·.exact), complete := fieldFacts.all (·.complete) })
 
 /-- A command's symbolic step from the records `pre`. -/

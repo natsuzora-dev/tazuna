@@ -279,9 +279,10 @@ where
     if read.isNone && ((svc.schemaOf schema).bind (·.field? "properties")).isNone then
       throw s!"a read of the whole {repr arg} that is no object"
     let kept := props.filter fun (f, _, _) => read.all (f ∈ ·)
-    let holds := kept.map fun pr => fieldHolds (valVar s!"{pre}.{pr.1}") pr
-    pure (some (arg, .json (kept.map fun (f, _, _) => (f, valVar s!"{pre}.{f}"))),
-      { vars := kept.map fun (f, _, _) => (s!"{pre}.{f}", .val), asserts := holds.map (·.term),
+    let terms := kept.map fun pr => (pr.1, propertyVar s!"{pre}.{pr.1}" pr)
+    let holds := kept.map fun pr => fieldHolds (((terms.lookup pr.1).map (·.1)).getD undefT) pr
+    pure (some (arg, .json (terms.map fun (f, t, _) => (f, t))),
+      { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term),
         exact := holds.all (·.exact) && kept.length == props.length, complete := holds.all (·.complete) })
 
 /-- The term that holds when the invariant `c` of the machine fails, or throws, in `env`. -/

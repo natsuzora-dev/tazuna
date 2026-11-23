@@ -101,6 +101,9 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   created_distinct: { example: "sim/Run/created_form", scenario: "createsKeys" },
   created_kept: { example: "sim/Run/created_form", scenario: "createsKeys" },
   dangling_ref_reported_iff: { kindExample: "Fault.danglingRef" },
+  dateLabelBody_denote: {
+    because: "a property of the encoding over all SMT models, which no run computes; prove replays each counterexample",
+  },
   deadline_message_at_its_time: { example: "service/Chart/Deadline/deadlines", scenario: "deadlinePassed" },
   deadlines_exact: { example: "service/Chart/Deadline/deadlines", scenario: "deadlinePassed" },
   difference_same: ofSearch,
@@ -132,6 +135,9 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   instrument_agrees: ofAudit,
   invalid_input_answer_blames_sender: { kindExample: "Fault.inputSchema" },
   keyless_payload_reaches_all: { example: "service/Chart/Select/map-copies-by-key", scenario: "eventWithoutKeyFields" },
+  labelled_range: {
+    because: "a property of every day number, which no run computes; the convert diff tests run both functions",
+  },
   leave_makes_requests_stale: { example: "service/Chart/Request/requests-on-entry", scenario: "answerAfterExit" },
   line_keeps_leftInFlight: { example: "sim/Run/moving_line_keeps_others", scenario: "leavesInFlight" },
   line_keeps_states: { example: "sim/Run/moving_line_keeps_others", scenario: "leavesInFlight" },
@@ -149,6 +155,9 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   only_clock_moves_time: network("delivered"),
   operate_agrees: ofAudit,
   overtaking_delivery_halts: { kindExample: "InvalidScenario.overtaking" },
+  parse_render: {
+    because: "a property of every day number, which no run computes; the convert diff tests run both functions",
+  },
   post_message: { example: "service/Restart/requests", scenario: "requestsDiscarded" },
   publish_agrees: ofAudit,
   query_answered_again: { example: "service/Idempotency/same-id", scenario: "askedTwice" },
@@ -158,6 +167,9 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   reenter_false_not_exited: { example: "service/Chart/Config/reenter_true_exits", scenario: "addedThrice" },
   refuse_answers_unavailable: network("refusesRequest"),
   rejected_command_changes_nothing: { example: "service/Message/rejection-kinds", scenario: "commandRejections" },
+  render_parse: {
+    because: "a property of every date label, which no run computes; the convert diff tests run both functions",
+  },
   renamed_refl: ofRenaming,
   renamed_symm: ofRenaming,
   renamed_trans: ofRenaming,

@@ -1,4 +1,6 @@
 import Tazuna.Smt.Date
+import Tazuna.Thm.Data.Time
+import Tazuna.Thm.Guarantee
 
 /-!
 The date terms denote what Data.Time computes: a term of a string is a date label exactly when isDateLabel holds of the
@@ -105,11 +107,18 @@ theorem labelT_denote (z : Term) :
   rw [← civilT_denote]
   simp only [labelT, Term.denote, digitCharT_denote, intT, toInt_int, toStr_str, dateLabel]
 
-theorem labelledT_holds (z : Term) :
-    (labelledT z).holds M =
-      (decide (0 ≤ (civilFromDays (z.denote M).toInt).1) && decide ((civilFromDays (z.denote M).toInt).1 ≤ 9999)) := by
-  have h := congrArg Prod.fst (civilT_denote M z)
-  simp only at h
-  simp only [labelledT, Term.holds, Term.denote, intT, toInt_int, toBool_bool, h]
+theorem inRangeT_holds (z : Term) : (inRangeT z).holds M = (renderDate? (z.denote M).toInt).isSome := by
+  rw [Tazuna.Thm.Data.Time.labelled_range]
+  simp only [inRangeT, Term.holds, Term.denote, intT, toInt_int, toBool_bool]
+  rfl
+
+/-- The body that the script gives `date_label` denotes what `Term.dateLabel` denotes. -/
+@[guarantee] theorem dateLabelBody_denote (z : Term) : (dateLabelBody z).denote M = (Term.dateLabel z).denote M := by
+  have h := inRangeT_holds M z
+  simp only [Term.holds] at h
+  simp only [dateLabelBody, Term.denote, h, labelT_denote, renderDate?]
+  generalize civilFromDays (z.denote M).toInt = c
+  obtain ⟨y, m, d⟩ := c
+  by_cases hy : (decide (0 ≤ y) && decide (y ≤ 9999)) = true <;> simp [hy]
 
 end Tazuna.Thm.Smt.Date

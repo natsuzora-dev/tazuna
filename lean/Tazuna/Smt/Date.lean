@@ -3,8 +3,9 @@ import Tazuna.Smt.Term
 /-!
 The terms of a date label: whether a string is a label `YYYY-MM-DD` of a real day, the day number it names, and the label
 of a day number. Each mirrors the definition in Data.Time that eval runs (isDateLabel, daysFromCivil, civilFromDays,
-dateLabel), operation by operation, so a comparison of labels is a comparison of day numbers, as in eval, and addDays
-adds to the day number and writes its label.
+dateLabel), operation by operation. A date that the encoding makes, such as a record's date field or an addDays result,
+is the label of a day number (`Term.dateLabel`), whose day number the encoding reads without parsing; these terms read a
+label that arrives as a string.
 -/
 
 namespace Tazuna.Smt
@@ -84,7 +85,10 @@ def labelT (z : Term) : Term :=
     (digitCharT y)) dash) (digitCharT (.div m (intT 10)))) (digitCharT m)) dash) (digitCharT (.div d (intT 10))))
     (digitCharT d)
 
-/-- That the day number `z` has a label, its year being 0000 through 9999 (renderDate?). -/
-def labelledT (z : Term) : Term := .and (.le (intT 0) (civilT z).1) (.le (civilT z).1 (intT 9999))
+/-- That the day number `z` has a label: it is 0000-01-01 through 9999-12-31 (renderDate?). -/
+def inRangeT (z : Term) : Term := .and (.le (intT firstDay) z) (.le z (intT lastDay))
+
+/-- What the script defines `date_label` of the day number `z` as: its label, or the empty string when it has none. -/
+def dateLabelBody (z : Term) : Term := .ite (inRangeT z) (labelT z) (.lit (.str ""))
 
 end Tazuna.Smt

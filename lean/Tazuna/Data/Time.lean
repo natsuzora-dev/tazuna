@@ -70,6 +70,10 @@ def renderDate? (days : Int) : Option String :=
   let (y, m, d) := civilFromDays days
   if 0 ≤ y && y ≤ 9999 then some (dateLabel y m d) else none
 
+/-- The first and the last day that a label names, 0000-01-01 and 9999-12-31. -/
+def firstDay : Int := -719528
+def lastDay : Int := 2932896
+
 /-- Whether `t` is a safe integer, as an instant on the wire must be. -/
 def Time.inRange (t : Time) : Bool := isSafeInteger t
 

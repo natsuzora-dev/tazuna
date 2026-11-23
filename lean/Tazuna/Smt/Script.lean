@@ -1,5 +1,5 @@
 import Std.Data.HashMap
-import Tazuna.Smt.Term
+import Tazuna.Smt.Date
 
 /-!
 The SMT-LIB script of a query, which TS hands to Z3 as text, and the reading of Z3's answer: `sat` with the values of
@@ -66,6 +66,7 @@ def Term.parts : Term → String × List Term
   | .toCode a => ("str.to_code", [a])
   | .fromCode a => ("str.from_code", [a])
   | .strCat a b => ("str.++", [a, b])
+  | .dateLabel a => ("date_label", [a])
   | .mkBool a => ("vbool", [a])
   | .mkInt a => ("vint", [a])
   | .mkStr a => ("vstr", [a])
@@ -87,14 +88,15 @@ def Term.sort : Term → Ty
   | .lit (.val _) => .val
   | .ite _ a _ => a.sort
   | .add .. | .sub .. | .mul .. | .div .. | .mod .. | .len _ | .toCode _ | .intOf _ => .int
-  | .strOf _ | .strAt .. | .fromCode _ | .strCat .. => .str
+  | .strOf _ | .strAt .. | .fromCode _ | .strCat .. | .dateLabel _ => .str
   | .mkBool _ | .mkInt _ | .mkStr _ => .val
   | _ => .bool
 
 /-- The definitions of the compound terms printed so far, each once, by its text with its operands named. -/
 structure Shared where
   names : Std.HashMap String String := {}
-  defs : Array String := #[]
+  /-- Each definition's name, sort and text. -/
+  defs : Array (String × Ty × String) := #[]
 
 /--
 `t` as SMT-LIB text: a variable or literal as itself, and a compound term as the name of a definition that is made once
@@ -114,7 +116,7 @@ partial def Term.shared (t : Term) : StateM Shared String := do
     | some name => pure name
     | none =>
       let name := s!"|t{s.defs.size}|"
-      set ({ names := s.names.insert text name, defs := s.defs.push s!"(define-fun {name} () {t.sort.smt} {text})" } : Shared)
+      set ({ names := s.names.insert text name, defs := s.defs.push (name, t.sort, text) } : Shared)
       pure name
 
 /-- A satisfiability question: its variables and the terms that must all hold. -/
@@ -126,12 +128,19 @@ deriving Inhabited
 def datatypeV : String :=
   "(declare-datatypes ((V 0)) (((vundef) (vnull) (vbool (vbool_v Bool)) (vint (vint_v Int)) (vstr (vstr_v String)))))"
 
+/-- The definition of `date_label` (Term.dateLabel) as dateLabelBody, its shared subterms bound by `let`. -/
+def dateLabelDef : String :=
+  let (text, shared) := (dateLabelBody (.var "z" .int)).shared.run {}
+  let body := shared.defs.foldr (fun (name, _, bound) acc => s!"(let (({name} {bound})) {acc})") text
+  s!"(define-fun date_label (({symbol "z"} Int)) String {body})"
+
 /-- The script that asks Z3 whether `q` is satisfiable within `rlimit` units of Z3's resource counter, and for its
 model. A resource limit instead of a time limit gives the same answer on a loaded machine as on an idle one. -/
 def Query.script (q : Query) (rlimit : Nat) : String :=
   let (asserted, shared) := (q.asserts.mapM Term.shared).run {}
-  let lines := [s!"(set-option :rlimit {rlimit})", "(set-logic ALL)", datatypeV] ++
-    q.vars.map (fun (x, t) => s!"(declare-const {symbol x} {t.smt})") ++ shared.defs.toList ++
+  let lines := [s!"(set-option :rlimit {rlimit})", "(set-logic ALL)", datatypeV, dateLabelDef] ++
+    q.vars.map (fun (x, t) => s!"(declare-const {symbol x} {t.smt})") ++
+    shared.defs.toList.map (fun (name, sort, text) => s!"(define-fun {name} () {sort.smt} {text})") ++
     asserted.map (fun a => s!"(assert {a})") ++ ["(check-sat)"] ++
     (if q.vars.isEmpty then [] else [s!"(get-value ({" ".intercalate (q.vars.map (symbol ·.1))}))"])
   "\n".intercalate lines ++ "\n"

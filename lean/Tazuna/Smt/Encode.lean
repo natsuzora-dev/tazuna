@@ -268,6 +268,23 @@ def falseT : SVal := .scalar (.lit (.val (.bool false)))
 /-- That the scalar `t` is a date label. -/
 def dateT (t : Term) : Term := .and (.isStr t) (dateValidT (.strOf t))
 
+/--
+That the scalar `t` is a date label (`dateT`), read off the day number where `t` is the label of one that the encoding
+made: a day variable, or a sum such as addDays makes.
+-/
+def isDateOf : Term → Term
+  | .mkStr (.dateLabel (.var x .int)) => inRangeT (.var x .int)
+  | .mkStr (.dateLabel (.add a b)) => inRangeT (.add a b)
+  | .ite c a b => .ite c (isDateOf a) (isDateOf b)
+  | t => dateT t
+
+/-- The day number of the date label `t`, read off as `isDateOf` reads it, else parsed. -/
+def dayOf : Term → Term
+  | .mkStr (.dateLabel (.var x .int)) => .var x .int
+  | .mkStr (.dateLabel (.add a b)) => .add a b
+  | .ite c a b => .ite c (dayOf a) (dayOf b)
+  | t => dayT (.strOf t)
+
 def relT (r : Relation) (a b : Term) : Term :=
   match r with
   | .lt => .lt a b
@@ -356,8 +373,8 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
     let (vb, eb) ← seval env vars b
     let (x, xe) := va.scalarOf
     let (y, ye) := vb.scalarOf
-    pure (.scalar (.mkBool (relT r (dayT (.strOf x)) (dayT (.strOf y)))),
-      .or ea (.or eb (.or xe (.or ye (.not (.and (dateT x) (dateT y)))))))
+    pure (.scalar (.mkBool (relT r (dayOf x) (dayOf y))),
+      .or ea (.or eb (.or xe (.or ye (.not (.and (isDateOf x) (isDateOf y)))))))
   | .field o name => do
     let (v, e) ← seval env vars o
     pure (v.field env.records name, .or e v.nullish)
@@ -479,9 +496,9 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
     let (vn, en) ← seval env vars n
     let (x, xe) := vd.scalarOf
     let (y, ye) := vn.scalarOf
-    let day := Term.add (dayT (.strOf x)) (.intOf y)
-    pure (.scalar (.mkStr (labelT day)),
-      .or ed (.or en (.or xe (.or ye (.not (.and (dateT x) (.and (.isInt y) (labelledT day))))))))
+    let day := Term.add (dayOf x) (.intOf y)
+    pure (.scalar (.mkStr (.dateLabel day)),
+      .or ed (.or en (.or xe (.or ye (.not (.and (isDateOf x) (.and (.isInt y) (inRangeT day))))))))
   | .createKey .. => throw "createKey"
 
 def sevalAll (env : SEnv) (vars : List (String × SVal)) : List Expr → Except String (List SVal × Term)

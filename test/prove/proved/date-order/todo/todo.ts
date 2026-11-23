@@ -21,4 +21,4 @@ export const addTask = command({
   emits: [taskAdded],
 }).decide(({ input }) => [emit(taskAdded, { id: input.taskId, startsOn: input.startsOn, endsOn: input.startsOn })]);
 
-export const todoBounds = bounds({ creates: { Task: 1 } });
+export const todoBounds = bounds({ creates: { Task: 3 } });

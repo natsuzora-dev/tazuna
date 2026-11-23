@@ -536,9 +536,69 @@ theorem dayT_strOf (M : Model) (t : Term) (s : String) (h : (t.denote M).toScala
     (dayT (.strOf t)).denote M = .int (daysFromCivil (labelYear s) (labelMonth s) (labelDay s)) := by
   rw [Tazuna.Thm.Smt.Date.dayT_denote, denote_strOf, h]
 
+theorem isDateLabel_empty : isDateLabel "" = false := rfl
+
+/-- The label of the day number `z`, as a scalar, is a date label exactly when `z` is within the labelled days. -/
+theorem dateLabel_scalar (M : Model) (z : Term) :
+    match ((Term.mkStr (.dateLabel z)).denote M).toScalar with
+    | .str s => isDateLabel s = (inRangeT z).holds M ∧
+        (isDateLabel s = true → daysFromCivil (labelYear s) (labelMonth s) (labelDay s) = (z.denote M).toInt)
+    | _ => False := by
+  simp only [Term.denote, Lit.toScalar, Lit.toStr, Tazuna.Thm.Smt.Date.inRangeT_holds]
+  cases h : renderDate? (z.denote M).toInt with
+  | none => simp [isDateLabel_empty]
+  | some s =>
+    have hp := Tazuna.Thm.Data.Time.parse_render _ s h
+    unfold parseDate? at hp
+    split at hp
+    · rename_i hl
+      have hd := Option.some.inj hp
+      simp only [Option.getD_some, Option.isSome_some, hl, true_and]
+      exact fun _ => hd
+    · cases hp
+
+theorem inRangeT_label (M : Model) (z : Term) : (inRangeT z).holds M = (match ((Term.mkStr (.dateLabel z)).denote M).toScalar with
+    | .str s => isDateLabel s | _ => false) := by
+  have := dateLabel_scalar M z
+  split at this
+  · exact this.1.symm
+  · exact this.elim
+
+/-- That the scalar `t` is a date label, as eval parses it, read as `isDateOf` reads it. -/
+theorem isDateOf_holds (M : Model) (t : Term) :
+    (isDateOf t).holds M = (match (t.denote M).toScalar with | .str s => isDateLabel s | _ => false) := by
+  fun_induction isDateOf t
+  · exact inRangeT_label M _
+  · exact inRangeT_label M _
+  · rename_i c a b iha ihb
+    simp only [Term.holds, Term.denote] at iha ihb ⊢
+    by_cases hc : (c.denote M).toBool <;> simp [hc, iha, ihb]
+  · exact dateT_holds M _
+
+theorem label_day (M : Model) (z : Term) (s : String) (hn : ∃ n, z.denote M = .int n)
+    (hs : ((Term.mkStr (.dateLabel z)).denote M).toScalar = .str s) (hv : isDateLabel s = true) :
+    z.denote M = .int (daysFromCivil (labelYear s) (labelMonth s) (labelDay s)) := by
+  obtain ⟨n, hn⟩ := hn
+  have := dateLabel_scalar M z
+  rw [hs] at this
+  rw [this.2 hv, hn]; rfl
+
+/-- The day number of the date label `t`, read as `dayOf` reads it, is the one that parseDate? gives. -/
+theorem dayOf_denote (M : Model) (t : Term) (s : String) (h : (t.denote M).toScalar = .str s)
+    (hv : isDateLabel s = true) : (dayOf t).denote M = .int (daysFromCivil (labelYear s) (labelMonth s) (labelDay s)) := by
+  fun_induction dayOf t
+  · exact label_day M _ s ⟨_, rfl⟩ h hv
+  · exact label_day M _ s ⟨_, rfl⟩ h hv
+  · rename_i c a b iha ihb
+    simp only [Term.denote] at h ⊢
+    by_cases hc : (c.denote M).toBool <;> simp only [hc, ite_true, Bool.false_eq_true, ite_false] at h ⊢
+    · exact iha h
+    · exact ihb h
+  · exact dayT_strOf M _ s h
+
 theorem dateCompare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal) (s : Trace) :
-    Agrees M recs (.scalar (.mkBool (relT r (dayT (.strOf va.scalarOf.1)) (dayT (.strOf vb.scalarOf.1)))),
-        .or va.scalarOf.2 (.or vb.scalarOf.2 (.not (.and (dateT va.scalarOf.1) (dateT vb.scalarOf.1)))))
+    Agrees M recs (.scalar (.mkBool (relT r (dayOf va.scalarOf.1) (dayOf vb.scalarOf.1))),
+        .or va.scalarOf.2 (.or vb.scalarOf.2 (.not (.and (isDateOf va.scalarOf.1) (isDateOf vb.scalarOf.1)))))
       (run (match va.conc M recs, vb.conc M recs, double? (va.conc M recs), double? (vb.conc M recs) with
         | .nonFinite _, _, some x, some y | _, .nonFinite _, some x, some y =>
           if Order.date == .number then pure (.json (.bool (r.holds x y))) else thrown
@@ -556,11 +616,11 @@ theorem dateCompare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal
     · exfalso; simp_all
     · rw [toVal_ordinal_date, toVal_ordinal_date]
       cases hx : (va.scalarOf.1.denote M).toScalar <;> cases hy : (vb.scalarOf.1.denote M).toScalar <;>
-        simp [run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, dateT_holds]
+        simp [run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, isDateOf_holds]
       rename_i x y
       unfold parseDate?
-      cases hvx : isDateLabel x <;> cases hvy : isDateLabel y <;>
-        simp [run_pure, run_thrown, conc_mkBool, relT_ints M r _ _ _ _ (dayT_strOf M _ x hx) (dayT_strOf M _ y hy)]
+      cases hvx : isDateLabel x <;> cases hvy : isDateLabel y <;> simp [run_pure, run_thrown]
+      simp [conc_mkBool, relT_ints M r _ _ _ _ (dayOf_denote M _ x hx hvx) (dayOf_denote M _ y hy hvy)]
   · rw [nonScalar_double hnb, nonScalar_ordinal .date hnb]
     split <;> simp_all [run_thrown, Agrees, holds_or]
   · rw [nonScalar_double hna, nonScalar_ordinal .date hna]
@@ -572,9 +632,9 @@ theorem conc_mkStr (M : Model) (recs : Records) (t : Term) :
     (SVal.scalar (.mkStr t)).conc M recs = .json (.str (t.denote M).toStr) := rfl
 
 theorem addDays_op (M : Model) (recs : Records) (vd vn : SVal) (s : Trace) :
-    Agrees M recs (.scalar (.mkStr (labelT (.add (dayT (.strOf vd.scalarOf.1)) (.intOf vn.scalarOf.1)))),
-        .or vd.scalarOf.2 (.or vn.scalarOf.2 (.not (.and (dateT vd.scalarOf.1)
-          (.and (.isInt vn.scalarOf.1) (labelledT (.add (dayT (.strOf vd.scalarOf.1)) (.intOf vn.scalarOf.1))))))))
+    Agrees M recs (.scalar (.mkStr (.dateLabel (.add (dayOf vd.scalarOf.1) (.intOf vn.scalarOf.1)))),
+        .or vd.scalarOf.2 (.or vn.scalarOf.2 (.not (.and (isDateOf vd.scalarOf.1)
+          (.and (.isInt vn.scalarOf.1) (inRangeT (.add (dayOf vd.scalarOf.1) (.intOf vn.scalarOf.1))))))))
       (run (match ordinal .date (vd.conc M recs), integer? (vn.conc M recs) with
         | some (days, _), some more =>
           match renderDate? (days + more) with
@@ -594,21 +654,22 @@ theorem addDays_op (M : Model) (recs : Records) (vd vn : SVal) (s : Trace) :
     rcases scalar_cases M recs vn with ⟨hb, hcb⟩ | ⟨hb, hnb⟩
   · rw [hca, hcb, hsc, toVal_ordinal_date]
     cases hx : (vd.scalarOf.1.denote M).toScalar <;> cases hy : (vn.scalarOf.1.denote M).toScalar <;>
-      simp [run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, dateT_holds, holds_isInt]
+      simp [run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, isDateOf_holds, holds_isInt]
     rename_i x n
-    have hz : (Term.add (dayT (.strOf vd.scalarOf.1)) (.intOf vn.scalarOf.1)).denote M =
-        .int (daysFromCivil (labelYear x) (labelMonth x) (labelDay x) + n) := by
-      simp only [Term.denote, dayT_strOf M _ x hx, hy, Lit.toInt]
     unfold parseDate?
     cases hv : isDateLabel x
     · simp [run_thrown]
-    · simp only [Option.map_some, ite_true, Tazuna.Thm.Smt.Date.labelledT_holds, hz, Lit.toInt]
-      unfold renderDate?
-      rcases hc : civilFromDays (daysFromCivil (labelYear x) (labelMonth x) (labelDay x) + n) with ⟨yr, mo, dy⟩
-      cases hr : (decide (0 ≤ yr) && decide (yr ≤ 9999))
-      · simp [hr, run_thrown]
-      · simp only [conc_mkStr, Tazuna.Thm.Smt.Date.labelT_denote, hz, Lit.toInt, hc]
-        simp_all [run_pure]
+    · have hz : (Term.add (dayOf vd.scalarOf.1) (.intOf vn.scalarOf.1)).denote M =
+          .int (daysFromCivil (labelYear x) (labelMonth x) (labelDay x) + n) := by
+        simp only [Term.denote, dayOf_denote M _ x hx hv, hy, Lit.toInt]
+      simp only [Option.map_some, ite_true, Tazuna.Thm.Smt.Date.inRangeT_holds, hz, Lit.toInt]
+      cases hr : renderDate? (daysFromCivil (labelYear x) (labelMonth x) (labelDay x) + n)
+      · simp [run_thrown]
+      · rename_i label
+        have hd : (Term.dateLabel (.add (dayOf vd.scalarOf.1) (.intOf vn.scalarOf.1))).denote M = .str label := by
+          show Lit.str ((renderDate? ((Term.add _ _).denote M).toInt).getD "") = _
+          rw [hz]; simp [Lit.toInt, hr]
+        simp [run_pure, conc_mkStr, hd, Lit.toStr]
   all_goals simp [hint vn, nonScalar_ordinal .date, run_thrown, Agrees, holds_or, *]
 
 theorem strLen_op (M : Model) (recs : Records) (v : SVal) (s : Trace) :

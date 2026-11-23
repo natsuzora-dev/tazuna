@@ -439,3 +439,5 @@ No theorem shows that it does.
 | Property | Theorems |
 |---|---|
 | Under every assignment of the SMT variables, an expression that `prove` encodes throws exactly when its encoding's throw term holds, and otherwise has the value that its encoding gives. | `seval_agrees` |
+| A date label of years 0000 through 9999 and its day number determine each other: parsing a label and rendering the day number give the label back, rendering a day number and parsing the label give the day number back, and a day number has a label exactly from 0000-01-01 through 9999-12-31. `prove` holds a date as its day number on these grounds. | `parse_render`, `render_parse`, `labelled_range` |
+| The function that each `prove` query defines for the label of a day number means the label term of the encoding. | `dateLabelBody_denote` |

@@ -68,6 +68,11 @@ inductive Term where
   | fromCode (a : Term)
   /-- `str.++`. -/
   | strCat (a b : Term)
+  /--
+  The label `YYYY-MM-DD` of the day number `a` (renderDate?), or the empty string when `a` has none. The script defines
+  it as a function of the day number, so a date is an integer in a query unless its label is read as a string.
+  -/
+  | dateLabel (a : Term)
   | mkBool (a : Term)
   | mkInt (a : Term)
   | mkStr (a : Term)
@@ -132,6 +137,7 @@ def Term.denote (M : Model) : Term → Lit
     let n := (a.denote M).toInt
     .str (if 0 ≤ n ∧ n ≤ 0x2FFFF then String.singleton (Char.ofNat n.toNat) else "")
   | .strCat a b => .str ((a.denote M).toStr ++ (b.denote M).toStr)
+  | .dateLabel a => .str ((Data.renderDate? (a.denote M).toInt).getD "")
   | .mkBool a => .val (.bool (a.denote M).toBool)
   | .mkInt a => .val (.int (a.denote M).toInt)
   | .mkStr a => .val (.str (a.denote M).toStr)
