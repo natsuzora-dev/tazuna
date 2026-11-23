@@ -1,0 +1,12 @@
+{"time":0,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"A","title":"A"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"A","title":"A","createdAt":0,"completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
+{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"A"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
+{"time":0,"dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"after":0}}
+{"time":0,"dir":"in","type":"command","id":"changeDue#1","name":"changeDue","input":{"taskId":"A","dueAt":1}}
+{"time":0,"dir":"out","type":"answer","id":"answer#2","to":"changeDue#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"dueChanged#1","name":"dueChanged","payload":{"id":"A","dueAt":1,"remindAt":1,"reminderDecision":"decided"},"resultOf":"changeDue#1"}
+{"time":1,"dir":"out","type":"event","id":"reminderTimeReachedRecorded#1","name":"reminderTimeReachedRecorded","payload":{"id":"A","remindAt":null}}
+{"time":1,"dir":"out","type":"event","id":"reminderTimeReached#1","name":"reminderTimeReached","payload":{"title":"A"},"after":["reminderTimeReachedRecorded#1"]}
+{"time":1,"dir":"out","type":"command","id":"device.showNotification#1","name":"device.showNotification","input":{"text":"A"}}
+{"time":1,"dir":"in","type":"time","id":"time#1"}

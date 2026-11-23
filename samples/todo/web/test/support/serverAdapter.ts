@@ -101,6 +101,7 @@ async function loadApp(
   vi.doMock(import("../../src/calendar/calendar.server.ts"), () => calendarDouble);
   vi.doMock(import("../../src/device/device.server.ts"), () => deviceDouble);
   if (service === "todo") vi.doMock(import("../../src/notifier/notifier.server.ts"), () => notifierDouble);
+  else vi.doUnmock(import("../../src/notifier/notifier.server.ts"));
   if (db === undefined) vi.doUnmock(import("../../src/db/index.server.ts"));
   else vi.doMock(import("../../src/db/index.server.ts"), () => ({ db }));
   const loaded = await import("../../src/db/index.server.ts");

@@ -3,6 +3,5 @@
 {"time":0,"dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"A","title":"A","createdAt":0,"completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
 {"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"A"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
 {"time":0,"dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"after":0}}
-{"time":0,"dir":"in","type":"command","id":"changeDue#1","name":"changeDue","input":{"taskId":"A","dueAt":null}}
-{"time":0,"dir":"out","type":"answer","id":"answer#2","to":"changeDue#1","answer":{"result":"accepted"}}
-{"time":0,"dir":"out","type":"event","id":"dueCleared#1","name":"dueCleared","payload":{"id":"A","dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"changeDue#1"}
+{"time":0,"dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.nextBusinessDay#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
+{"time":0,"dir":"out","type":"event","id":"reminderDecisionFailed#1","name":"reminderDecisionFailed","payload":{"id":"A","reminderDecision":"failed"}}

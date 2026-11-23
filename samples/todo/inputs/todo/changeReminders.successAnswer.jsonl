@@ -1,3 +1,0 @@
-{"time":0,"dir":"in","type":"command","id":"changeReminders#1","name":"changeReminders","input":{"shouldRemind":false}}
-{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"changeReminders#1","answer":{"result":"accepted"}}
-{"time":0,"dir":"out","type":"event","id":"remindersChanged#1","name":"remindersChanged","payload":{"shouldRemind":false},"resultOf":"changeReminders#1"}

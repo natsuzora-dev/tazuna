@@ -1,0 +1,2 @@
+{"time":0,"dir":"in","type":"event","id":"device/notificationPermissionDenied#1","name":"device.notificationPermissionDenied","payload":{}}
+{"time":0,"dir":"out","type":"event","id":"notificationPermissionRecorded#1","name":"notificationPermissionRecorded","payload":{"status":"denied"}}
