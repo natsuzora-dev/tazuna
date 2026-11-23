@@ -388,25 +388,4 @@ decreasing_by all_goals decreasing_tactic
 
 end
 
-/--
-When a binding pairs no value of domain "", the strings it relates as matchValue compares them are the strings it
-renames (StrRenames), the relation that renamed_refl, renamed_symm and renamed_trans prove an equivalence.
--/
-theorem boundBy_strRenames {dom : String → String} {c : Binding} (hc : ∀ p ∈ c.pairs, p.1.1 ≠ "" ∧ p.2.1 ≠ "")
-    {s t : String} : BoundBy dom c s t → StrRenames dom c.pairs s t
-  | .inl hp => .inl hp
-  | .inr ⟨e, hd⟩ => by
-    subst e
-    refine .inr ⟨rfl, fun hm => ?_, fun hm => ?_⟩
-    · obtain ⟨p, hp, e⟩ := List.mem_map.mp hm
-      exact (hc p hp).1 (by rw [e]; exact hd)
-    · obtain ⟨p, hp, e⟩ := List.mem_map.mp hm
-      exact (hc p hp).2 (by rw [e]; exact hd)
-
-/-- matchValue_renamed for a binding that pairs no value of domain "", in the relation of Renaming. -/
-@[guarantee] theorem matchValue_strRenamed {v : Values} {b : Binding} {x y : CValue} (hx : Distinct x) (hy : Distinct y)
-    {out : List (From b)} (h : matchValue v b x y = some out) {c : From b} (hc : c ∈ out)
-    (hblank : ∀ p ∈ c.val.pairs, p.1.1 ≠ "" ∧ p.2.1 ≠ "") : Renamed (StrRenames v.domain c.val.pairs) x y :=
-  Renamed.mono (fun _ _ => boundBy_strRenames hblank) (matchValue_renamed v b x y hx hy h c hc)
-
 end Tazuna.Thm.Semantics.Value.Binding

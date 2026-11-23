@@ -64,10 +64,6 @@ const ofCheck = {
   because:
     "a property of the structure check over all structures, which the engine runs on every check; no one run shows all structures",
 } as const;
-const ofRenaming = {
-  because:
-    "a property of the renaming relation, which the identity theorems use and no run computes, so no spec or trace can exercise it",
-} as const;
 const ofAudit = {
   because:
     "states that a run whose spec functions are instrumented equals the plain run; the engine runs instrumented, and no command runs the plain one",
@@ -90,8 +86,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   compareSnapshot_eq_none_iff: ofCompare,
   compareSnapshot_reordered: ofCompare,
   compare_matches: ofCompare,
-  compose_fst_nodup: ofRenaming,
-  compose_snd_nodup: ofRenaming,
   contentMatch_renamed: ofCompare,
   created_distinct: { example: "unit/simulate/created_form", scenario: "createsKeys" },
   created_kept: { example: "unit/simulate/created_form", scenario: "createsKeys" },
@@ -144,7 +138,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   line_keeps_states: { example: "unit/simulate/moving_line_keeps_others", scenario: "leavesInFlight" },
   lines_after_stop_ignored: network("linesAfterHalt"),
   matchValue_renamed: ofCompare,
-  matchValue_strRenamed: ofCompare,
   message_keysDistinct: { example: "fixtures/test/noViolations/rejection-kinds", scenario: "commandRejections" },
   message_outputs_at_its_time: { example: "fixtures/test/noViolations/chart-deadlines", scenario: "deadlinePassed" },
   message_work_limit_halts: { kindExample: "Fault.exceededMessageWork" },
@@ -175,9 +168,6 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   render_parse: {
     because: "a property of every date label, which no run computes; the convert diff tests run both functions",
   },
-  renamed_refl: ofRenaming,
-  renamed_symm: ofRenaming,
-  renamed_trans: ofRenaming,
   requirements_lookup: {
     because:
       "a statement about the requirements table that Service.ofStructure builds, which the other theorems take as a hypothesis and every example builds",

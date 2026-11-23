@@ -3,8 +3,7 @@ import Tazuna.Ir.Trace
 
 /-!
 A binding of one side's values to another's, and the matching of two values under the set of bindings that agree with
-them. Verify matches a snapshot with an implementation trace, and Explore matches two runs of a spec, whose created keys
-differ only by a renaming.
+them. Verify matches a snapshot with an implementation trace.
 
 - Each value comes with its domain (Bound): the entity whose key it is, `request` for a request id, or "" for any other
   string. A binding pairs values one to one, and since a value carries its domain, values of different domains never

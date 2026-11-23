@@ -395,10 +395,6 @@ No theorem shows that it does.
 | The service answers a repeated query again, because a query has no identity. | `query_answered_again` |
 | When an event or an answer arrives again with the same id, the service does not process it again. | `redelivered_event_not_processed`, `redelivered_answer_not_processed` |
 | Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each key position as the binding pairs it, any other leaf equal, and bags and objects without repeated keys after reordering. | `matchValue_renamed` |
-| For a binding that pairs only keys and request ids, that renaming is a renaming in the sense of the next three rows. | `matchValue_strRenamed` |
-| Every value renames to itself. | `renamed_refl` |
-| A renaming read backward is the inverse binding, when each binding pairs each key with a key of its own entity. | `renamed_symm` |
-| Two renamings in a row are their composition, which is again one to one, when each binding pairs each key with a key of its own entity. | `renamed_trans`, `compose_fst_nodup`, `compose_snd_nodup` |
 
 ### Restart
 
