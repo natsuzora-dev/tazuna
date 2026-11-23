@@ -121,11 +121,6 @@ export interface ServiceDefinition {
   readonly external: boolean;
 }
 
-export interface Now {
-  /** The time of the message in progress, in milliseconds since the epoch. */
-  readonly now: number;
-}
-
 /** The function that creates a new key. The implementation decides the key's form. */
 export type CreateKey = { readonly createKey: <E extends AnyKeyedEntity>(key: Ref<E>) => KeyValue<E> };
 

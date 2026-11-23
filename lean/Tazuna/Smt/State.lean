@@ -169,15 +169,13 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
     facts := facts ++ { vars, asserts, exact := schemas.all (·.2) }
   return facts
 
-/-- The term that holds when every condition holds of `env`, none throwing, or why one has no encoding. -/
-def allHold (env : SEnv) (conditions : List Condition) : Except String Term := do
-  let terms ← conditions.mapM fun c => do
-    let (v, e) ← seval env [] c.body
-    pure (Term.and (.not e) v.truthy)
-  pure (conj terms)
+/-- The arguments of an entity invariant: the fields of a record as JSON holds them, and the time, an Int term. -/
+def recordEnv (fields : List (String × Term)) (now : Term) : SEnv :=
+  { args := fun | .record => some (.json fields) | .now => some (.scalar (.mkInt now)) | _ => none }
 
-/-- The record argument of an entity invariant: the fields of a record as JSON holds them. -/
-def recordEnv (fields : List (String × Term)) : SEnv := { args := fun a => if a == .record then some (.json fields) else none }
+/-- The arguments of a service invariant: the records and the time, an Int term. -/
+def recordsEnv (r : SRecords) (now : Term) : SEnv :=
+  { args := fun | .now => some (.scalar (.mkInt now)) | _ => none, records := r }
 
 /-- The invariants of an entity, by name, that the program holds. -/
 def invariantsOf (st : Service) (p : Program) (e : String) : List Condition :=
@@ -185,14 +183,6 @@ def invariantsOf (st : Service) (p : Program) (e : String) : List Condition :=
 
 def serviceInvariantsOf (st : Service) (p : Program) : List Condition :=
   ((p.serviceInvariant.find? (·.definition == st.ref st.service)).map (·.conditions)).getD []
-
-/-- That every entity and service invariant holds of `r`. -/
-def SRecords.invariants (st : Service) (p : Program) (r : SRecords) : Except String Term := do
-  let keyed ← r.keyed.mapM fun (e, slots) => slots.mapM fun s => do
-    pure (Term.or (.not s.live) (← allHold (recordEnv s.fields) (invariantsOf st p e)))
-  let singles ← r.singles.mapM fun (e, fields) => allHold (recordEnv fields) (invariantsOf st p e)
-  let service ← allHold { records := r } (serviceInvariantsOf st p)
-  pure (conj (keyed.flatten ++ singles ++ [service]))
 
 /-- The slots of `r` with `f` applied to those of `entity`. -/
 def SRecords.mapSlots (r : SRecords) (entity : String) (f : List Slot → List Slot) : SRecords :=
@@ -327,9 +317,13 @@ structure Step where
   /-- That the step writes what the encoding does not hold, or a record outside its schema. -/
   gap : Term
 
-/-- The step of command `name` of `svc` from `pre`, whose slots of each entity are used as `used` says. -/
-def stepOf (svc : Service) (p : Program) (pre : SRecords) (used : List (String × List Term)) (name : String) :
-    Except String Step := do
+/--
+The step of command `name` of `svc` from `pre` at the time `clock`, whose slots of each entity are used as `used` says.
+The step's time is no earlier than `clock`: the semantics never moves time back (Sim's clock line reports `notLater`,
+and verify's replay keeps the later time), which no theorem states yet.
+-/
+def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used : List (String × List Term))
+    (name : String) : Except String Step := do
   let some rq := svc.requirements.lookup name | throw s!"no requirements of {name}"
   let inputSchema := (svc.schemaOf (.input (svc.ref name))).getD (.obj [])
   let props := propertiesWith inputSchema
@@ -338,7 +332,7 @@ def stepOf (svc : Service) (p : Program) (pre : SRecords) (used : List (String �
   let now := Term.var "now" .int
   let vars := input.map (fun (f, _) => (s!"in.{f}", Ty.val)) ++ [("now", .int)]
   let asserts := fieldFacts.map (·.1) ++
-    [Term.le (intLit (-safeInteger)) now, .le now (intLit safeInteger)]
+    [Term.le (intLit (-safeInteger)) now, .le now (intLit safeInteger), .le clock now]
   let facts : Facts := { vars, asserts, exact := fieldFacts.all (·.2) }
   let args (bound : Option SVal) : Arg → Option SVal
     | .input => some (.json input)

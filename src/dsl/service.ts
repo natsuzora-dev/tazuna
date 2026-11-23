@@ -3,7 +3,7 @@ import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
 import { type GivenDefiner, givenDefiner, type ScenarioDefiner, scenarioDefiner } from "../scenario/define.ts";
 import { type BoundsDefiner, boundsDefiner } from "./bounds.ts";
-import type { Conditions, Named, Present } from "./conditions.ts";
+import type { Conditions, Named, Now, Present } from "./conditions.ts";
 import type { ConstantsGroup } from "./constants.ts";
 import type { Contract, RecordsData } from "./contract.ts";
 import type {
@@ -17,7 +17,6 @@ import type {
   Emit,
   Emits,
   FieldsEvent,
-  Now,
   Owned,
   Payload,
   Query,
@@ -273,7 +272,7 @@ export function service<
     description: string;
     entities?: Es;
     /** The conditions over all records (`Fault.failedServiceInvariant`). */
-    invariants?: Named<Iv, { records: Records<Es> }>;
+    invariants?: Named<Iv, { records: Records<Es> } & Now>;
   } & ReservedIn<N>,
 ): Definers<Es, N> {
   return definers(

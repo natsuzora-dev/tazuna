@@ -35,7 +35,7 @@ theorem evaluate_accepted_applies (records : Records) (now : Time) (name : Strin
     (h : evaluate st fs records now name raw = .accepted written groups vs) :
     applyAll st records groups.flatten = written ∧ duplicated st written = false ∧
       ∃ input, fs.parseOutside st (.input (st.ref name)) raw = .ok (some input) ∧
-        vs = (commandEnsures st fs name input records written now).run ++ (integrityViolations st fs written name).run := by
+        vs = (commandEnsures st fs name input records written now).run ++ (integrityViolations st fs written now name).run := by
   simp only [evaluate, id_bind] at h
   split at h
   · cases h

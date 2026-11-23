@@ -430,7 +430,7 @@ function slotsOf(spec: Spec): Slot[] {
         callback: "invariant",
         definition: { service, name },
         conditions: entity.invariants as Conditions<never>,
-        args: ["record"],
+        args: ["record", "now"],
         whole: true,
         typed: typedOf(spec, service, { record: entity.fields }),
       });
@@ -438,7 +438,7 @@ function slotsOf(spec: Spec): Slot[] {
       callback: "serviceInvariant",
       definition: { service, name: service },
       conditions: definition.invariants as Conditions<never>,
-      args: ["records"],
+      args: ["records", "now"],
       whole: true,
       typed: typedOf(spec, service, {}),
     });

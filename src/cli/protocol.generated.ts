@@ -268,6 +268,8 @@ export type InvariantRef = {
 export type Counterexample = {
   /** The records, by entity: a keyed entity's as a list, a single entity's as its record. */
   readonly given: Json;
+  /** The time of the state, which invariants read as `now`. */
+  readonly clock: number;
   /** The command and its input and time, none for the initial state. */
   readonly command?: string;
   readonly input?: Json;

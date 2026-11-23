@@ -109,13 +109,13 @@ def givenRows (st : Service) (fs : Functions m) (written : Value → Option (Str
     | _ => pure invalid
 
 /-- The violations of the entity invariants of each row and of the service invariants that fail on `rows`. -/
-def givenInvariants (fs : Functions m) (service : String) (rows : Records) : m (List InvalidScenario) := do
+def givenInvariants (fs : Functions m) (service : String) (rows : Records) (now : Time) : m (List InvalidScenario) := do
   let each ← rows.mapM fun r => do
-    pure (match ← fs.invariant r.entity r.value with
+    pure (match ← fs.invariant r.entity r.value now with
       | .ok none => []
       | .ok (some c) => [InvalidScenario.brokenGivenInvariant service (some r.entity) r.key (some c)]
       | .error _ => [.brokenGivenInvariant service (some r.entity) r.key none])
-  let whole := match ← fs.serviceInvariant rows with
+  let whole := match ← fs.serviceInvariant rows now with
     | .ok none => []
     | .ok (some c) => [InvalidScenario.brokenGivenInvariant service none none (some c)]
     | .error _ => [.brokenGivenInvariant service none none none]
@@ -137,7 +137,7 @@ def World.given (w : World) (j : Spec.Structure) (fsOf : String → Functions m)
     let records := givenRecords sc service
     let (rows, invalid) ← givenRows st fs w.writtenKey? service records
     let missing := (st.singles.filter fun e => !records.any (·.entity == e)).map (InvalidScenario.missingRecord service ·)
-    let broken ← if invalid.isEmpty && missing.isEmpty then givenInvariants fs service rows else pure []
+    let broken ← if invalid.isEmpty && missing.isEmpty then givenInvariants fs service rows w.now else pure []
     let w := (invalid ++ missing ++ broken).foldl World.note w
     pure { w with states := w.states.map fun (q, s) =>
       if q == service then (q, { s with records := rows }) else (q, s) }

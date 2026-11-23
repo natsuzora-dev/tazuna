@@ -72,7 +72,7 @@ def evaluate [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (records 
         if duplicated st written then pure (.rejected { kind := .alreadyExists })
         else
           let ensures ← commandEnsures st fs name input records written now
-          let violations := ensures ++ (← integrityViolations st fs written name)
+          let violations := ensures ++ (← integrityViolations st fs written now name)
           pure (if violations.any (·.halts) then .halted violations else .accepted written groups violations)
 
 /--

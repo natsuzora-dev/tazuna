@@ -3,7 +3,7 @@ import type { Bag, Made, MarkOf, Runs } from "../data/bag.ts";
 import { childrenOf, schemaNode } from "../data/schemaNode.ts";
 import type { DateLabel } from "../data/time.ts";
 import type { Shape } from "../data/values.ts";
-import type { Conditions, Named } from "./conditions.ts";
+import type { Conditions, Named, Now } from "./conditions.ts";
 
 export type DefaultedShape = Readonly<Record<string, z.ZodDefault<z.ZodType>>>;
 /** The type T with every nested object and array readonly, each bag and set a Bag, and each sortedBy array Runs. */
@@ -31,7 +31,7 @@ export interface KeyedEntity<S extends Shape = Shape, K extends keyof S & string
   readonly fields: S;
   readonly key: K;
   readonly unique: readonly (keyof S & string)[];
-  readonly invariants: Conditions<{ record: Row<S> }>;
+  readonly invariants: Conditions<{ record: Row<S> } & Now>;
 }
 
 export interface SingleEntity<S extends Shape = Shape> {
@@ -39,7 +39,7 @@ export interface SingleEntity<S extends Shape = Shape> {
   readonly single: true;
   readonly description: string;
   readonly fields: S;
-  readonly invariants: Conditions<{ record: Row<S> }>;
+  readonly invariants: Conditions<{ record: Row<S> } & Now>;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: an entity of any shape
@@ -103,7 +103,7 @@ export function entity<
   /** The fields whose combined values no two records share. A record with null in any of them is not checked. */
   unique?: readonly (keyof S & string)[];
   /** The conditions that every record meets (`Fault.failedEntityInvariant`). */
-  invariants?: Named<Iv, { record: Row<SelfResolved<S, K>> }>;
+  invariants?: Named<Iv, { record: Row<SelfResolved<S, K>> } & Now>;
 }): KeyedEntity<SelfResolved<S, K>, K> {
   // A clone, so that a schema that the key field shares with other fields does not mark them as key positions too.
   const shared = definition.fields[definition.key] as z.ZodType;
@@ -118,7 +118,7 @@ export function entity<
     fields: { ...definition.fields, [definition.key]: key } as unknown as SelfResolved<S, K>,
     key: definition.key,
     unique: definition.unique ?? [],
-    invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<SelfResolved<S, K>> }>,
+    invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<SelfResolved<S, K>> } & Now>,
   };
   keyFieldOwners.set(key, keyed);
   for (const field of Object.values(definition.fields) as z.ZodType[])
@@ -131,14 +131,14 @@ export function singleEntity<const S extends DefaultedShape, const Iv extends st
   description: string;
   fields: S;
   /** The conditions that the record meets (`Fault.failedSingleInvariant`). */
-  invariants?: Named<Iv, { record: Row<S> }>;
+  invariants?: Named<Iv, { record: Row<S> } & Now>;
 }): SingleEntity<S> {
   return {
     kind: "entity",
     single: true,
     description: definition.description,
     fields: definition.fields,
-    invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<S> }>,
+    invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<S> } & Now>,
   };
 }
 

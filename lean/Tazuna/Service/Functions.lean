@@ -182,7 +182,7 @@ that it does not encode is a schema Issue, and no other check runs, since the ru
 - resultEnsures: what one ensures of the command or query that a request names gives on the request's input, its
   answer's output, and its result events so far.
 - invariant, serviceInvariant, chartInvariant: the name of the first failing invariant of an entity record, the service,
-  or a machine or screen instance. A service invariant reads only records, so it fails only by a throw, with the schema
+  or a machine or screen instance, at the time of the state that they check. A service invariant reads only records and the time, so it fails only by a throw, with the schema
   whose refinement or codec threw.
 - resolve: a query's output, encoded by its schema in the order it was built, or a schema Issue.
 - automationBinding: whether one binds value of an automation is non-null for the received payload.
@@ -230,8 +230,8 @@ structure Functions (m : Type → Type) where
   ensures : String → Value → Records → Records → Time → m (Except Issue (Option String))
   queryEnsures : String → Value → Value → Records → m (Except Issue (Option String))
   resultEnsures : Spec.Ref → String → Value → Option Value → List Emit → m (Except Issue Ensured)
-  invariant : String → Value → m (Except Issue (Option String))
-  serviceInvariant : Records → m (Except (Option Schema) (Option String))
+  invariant : String → Value → Time → m (Except Issue (Option String))
+  serviceInvariant : Records → Time → m (Except (Option Schema) (Option String))
   chartInvariant : Scope → Records → m (Except Issue (Option String))
   resolve : String → Value → Records → Time → m (Except Issue Value)
   automationBinding : String → String → Value → Records → Time → m (Except Issue Bool)

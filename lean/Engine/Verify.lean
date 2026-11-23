@@ -152,7 +152,7 @@ def replay (spec : Spec.Structure) (log : Log) : ReplayM Replayed := do
     | none => ((lines.findSome? id).map (·.time : TraceLine → Time)).getD 0
   let records := ((start.map (·.records)).getD []).mergeSort Sim.recordBefore
   let (rows, invalid) ← Sim.givenRows st fs (fun _ => none) log.service records
-  let broken ← if invalid.isEmpty then Sim.givenInvariants fs log.service rows else pure []
+  let broken ← if invalid.isEmpty then Sim.givenInvariants fs log.service rows time else pure []
   let mut s ← begin st fs { now := time, service := log.service, records := rows }
   let inputs (s : State) := s.lines.toList.countP (·.dir == .in)
   let mut taken := log.lines.length

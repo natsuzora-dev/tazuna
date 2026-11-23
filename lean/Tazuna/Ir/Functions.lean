@@ -163,9 +163,9 @@ def Program.toFunctions (p : Program) (st : Service) (read : Trace → IO Unit) 
         let args := argsOf [(.input, .json input), (.output, .ofOption read), (.events, .ofOption list)]
         let (answer, trace) := ((fun h => if h then Ensured.holds else .fails) <$> holds { args, hidden := true } cond).run'
         (if trace.readHidden then .ok .readsRecords else answer, trace)
-    invariant := fun entity record => evaluated "invariant" <|
+    invariant := fun entity record now => evaluated "invariant" <|
       (all p.invariant (st.ref entity)).map fun cs =>
-        (firstFailing { fields := fieldsOf st, args := argsOf [(.record, .json record)] } cs).run'
+        (firstFailing { fields := fieldsOf st, args := argsOf [(.record, .json record), (.now, instant now)] } cs).run'
     closeEnsures := fun screen input output => evaluated "closeEnsures" <|
       (all p.closeEnsures (st.ref screen)).map fun cs =>
         (firstFailing { fields := fieldsOf st, args := argsOf [(.input, .json input), (.output, .json output)] } cs).run'
@@ -188,9 +188,9 @@ def Program.toFunctions (p : Program) (st : Service) (read : Trace → IO Unit) 
     queryEnsures := fun name input output records => evaluated "queryEnsures" <|
       (all p.queryEnsures (st.ref name)).map fun cs =>
         (firstFailing { fields := fieldsOf st, args := argsOf [(.input, .json input), (.output, .json output)], records } cs).run'
-    serviceInvariant := fun records => evaluated "serviceInvariant" <|
+    serviceInvariant := fun records now => evaluated "serviceInvariant" <|
       (all p.serviceInvariant (st.ref st.service)).map fun cs =>
-        let (answer, trace) := (firstFailing { fields := fieldsOf st, records } cs).run'
+        let (answer, trace) := (firstFailing { fields := fieldsOf st, args := argsOf [(.now, instant now)], records } cs).run'
         let answer := answer.mapError fun
           | .thrown schema => schema
           | _ => none

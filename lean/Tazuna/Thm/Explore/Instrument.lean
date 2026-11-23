@@ -84,8 +84,8 @@ structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : P
   ensures : ∀ a b c d e, Agrees (fsI.ensures a b c d e) (fs.ensures a b c d e)
   queryEnsures : ∀ a b c d, Agrees (fsI.queryEnsures a b c d) (fs.queryEnsures a b c d)
   resultEnsures : ∀ a b c d e, Agrees (fsI.resultEnsures a b c d e) (fs.resultEnsures a b c d e)
-  invariant : ∀ a b, Agrees (fsI.invariant a b) (fs.invariant a b)
-  serviceInvariant : ∀ a, Agrees (fsI.serviceInvariant a) (fs.serviceInvariant a)
+  invariant : ∀ a b c, Agrees (fsI.invariant a b c) (fs.invariant a b c)
+  serviceInvariant : ∀ a b, Agrees (fsI.serviceInvariant a b) (fs.serviceInvariant a b)
   chartInvariant : ∀ a b, Agrees (fsI.chartInvariant a b) (fs.chartInvariant a b)
   resolve : ∀ a b c d, Agrees (fsI.resolve a b c d) (fs.resolve a b c d)
   automationBinding : ∀ a b c d e, Agrees (fsI.automationBinding a b c d e) (fs.automationBinding a b c d e)
@@ -455,13 +455,13 @@ theorem commandEnsures_agrees (name : String) (input : Value) (before after : Re
   unfold commandEnsures; agree [h.ensures]
 
 omit [MonadNote (StateT C Id)] in
-theorem integrityViolations_agrees (records : Records) (name : String) :
-    Agrees (integrityViolations st fsI records name) (integrityViolations st fs records name) := by
+theorem integrityViolations_agrees (records : Records) (now : Time) (name : String) :
+    Agrees (integrityViolations st fsI records now name) (integrityViolations st fs records now name) := by
   unfold integrityViolations
   refine Agrees.bind (Agrees.mapM (fun row => ?_) _) (fun _ => ?_)
   · unfold rowViolations
-    exact Agrees.bind (h.invariant _ _) fun r => by rcases r with _ | _ | _ <;> exact Agrees.pure _
-  · exact Agrees.bind (h.serviceInvariant _) fun r => by rcases r with _ | _ | _ <;> exact Agrees.pure _
+    exact Agrees.bind (h.invariant _ _ _) fun r => by rcases r with _ | _ | _ <;> exact Agrees.pure _
+  · exact Agrees.bind (h.serviceInvariant _ _) fun r => by rcases r with _ | _ | _ <;> exact Agrees.pure _
 
 theorem requirementsRejection_agrees (records : Records) (now : Time) (name : String) (input : Value) :
     Agrees (requirementsRejection st fsI records now name input) (requirementsRejection st fs records now name input) := by

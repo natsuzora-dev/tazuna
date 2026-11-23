@@ -68,14 +68,14 @@ theorem mem_danglingRefs (records : Records) (name : String) (row : Row) (f : Fa
       simp only [hc, ite_true]
       rfl
 
-theorem mem_rowViolations (records : Records) (name : String) (row : Row) (f : Fault) :
-    f ∈ (rowViolations st fs records name row).run ↔
-      (∃ e, fs.invariant row.entity row.value = .error e ∧ f = issueViolation (st.ref row.entity) e) ∨
-      (∃ c, fs.invariant row.entity row.value = .ok (some c) ∧ f = row.failedInvariant st c (st.ref name)) ∨
+theorem mem_rowViolations (records : Records) (now : Time) (name : String) (row : Row) (f : Fault) :
+    f ∈ (rowViolations st fs records now name row).run ↔
+      (∃ e, fs.invariant row.entity row.value now = .error e ∧ f = issueViolation (st.ref row.entity) e) ∨
+      (∃ c, fs.invariant row.entity row.value now = .ok (some c) ∧ f = row.failedInvariant st c (st.ref name)) ∨
         f ∈ danglingRefs st records name row := by
-  cases h : fs.invariant row.entity row.value with
+  cases h : fs.invariant row.entity row.value now with
   | error e =>
-    have : (rowViolations st fs records name row).run =
+    have : (rowViolations st fs records now name row).run =
         issueViolation (st.ref row.entity) e :: danglingRefs st records name row := by
       simp only [rowViolations, h]; rfl
     rw [this, List.mem_cons]
@@ -90,13 +90,13 @@ theorem mem_rowViolations (records : Records) (name : String) (row : Row) (f : F
   | ok o =>
     cases o with
     | none =>
-      have : (rowViolations st fs records name row).run = danglingRefs st records name row := by
+      have : (rowViolations st fs records now name row).run = danglingRefs st records name row := by
         simp only [rowViolations, h]; rfl
       rw [this]
       exact ⟨fun h' => Or.inr (Or.inr h'), fun h' => h'.elim (fun ⟨_, he, _⟩ => by cases he)
         fun h' => h'.elim (fun ⟨_, hc, _⟩ => by cases hc) id⟩
     | some c =>
-      have : (rowViolations st fs records name row).run =
+      have : (rowViolations st fs records now name row).run =
           row.failedInvariant st c (st.ref name) :: danglingRefs st records name row := by
         simp only [rowViolations, h]; rfl
       rw [this, List.mem_cons]
@@ -109,24 +109,24 @@ theorem mem_rowViolations (records : Records) (name : String) (row : Row) (f : F
         · cases hc; exact Or.inl rfl
         · exact Or.inr h
 
-theorem mem_integrityViolations (records : Records) (name : String) (f : Fault) :
-    f ∈ (integrityViolations st fs records name).run ↔
-      (∃ row ∈ records, row.entity ∈ st.entities ∧ f ∈ (rowViolations st fs records name row).run) ∨
-        (∃ schema, fs.serviceInvariant records = .error schema ∧ f = .exception (schema.map Schema.owner)) ∨
-        ∃ c, fs.serviceInvariant records = .ok (some c) ∧ f = .failedServiceInvariant c (st.ref name) := by
+theorem mem_integrityViolations (records : Records) (now : Time) (name : String) (f : Fault) :
+    f ∈ (integrityViolations st fs records now name).run ↔
+      (∃ row ∈ records, row.entity ∈ st.entities ∧ f ∈ (rowViolations st fs records now name row).run) ∨
+        (∃ schema, fs.serviceInvariant records now = .error schema ∧ f = .exception (schema.map Schema.owner)) ∨
+        ∃ c, fs.serviceInvariant records now = .ok (some c) ∧ f = .failedServiceInvariant c (st.ref name) := by
   let rows := ((st.entities.flatMap fun e => records.filter (·.entity == e)).map fun x =>
-    (rowViolations st fs records name x).run).flatten
+    (rowViolations st fs records now name x).run).flatten
   have hrows : f ∈ rows ↔
-      ∃ row ∈ records, row.entity ∈ st.entities ∧ f ∈ (rowViolations st fs records name row).run := by
+      ∃ row ∈ records, row.entity ∈ st.entities ∧ f ∈ (rowViolations st fs records now name row).run := by
     simp only [rows, List.mem_flatten, List.mem_map, List.mem_flatMap, List.mem_filter, beq_iff_eq]
     constructor
     · rintro ⟨_, ⟨row, ⟨e, he, hr, rfl⟩, rfl⟩, hm⟩
       exact ⟨row, hr, he, hm⟩
     · rintro ⟨row, hr, he, hm⟩
       exact ⟨_, ⟨row, ⟨row.entity, he, hr, rfl⟩, rfl⟩, hm⟩
-  cases h : fs.serviceInvariant records with
+  cases h : fs.serviceInvariant records now with
   | error e =>
-    have : (integrityViolations st fs records name).run = rows ++ [.exception (e.map Schema.owner)] := by
+    have : (integrityViolations st fs records now name).run = rows ++ [.exception (e.map Schema.owner)] := by
       simp only [integrityViolations, mapM_id, h]; rfl
     rw [this, List.mem_append, hrows, List.mem_singleton]
     constructor
@@ -140,13 +140,13 @@ theorem mem_integrityViolations (records : Records) (name : String) (f : Fault) 
   | ok o =>
     cases o with
     | none =>
-      have : (integrityViolations st fs records name).run = rows := by
+      have : (integrityViolations st fs records now name).run = rows := by
         simp only [integrityViolations, mapM_id, h]; rfl
       rw [this, hrows]
       exact ⟨Or.inl, fun h' => h'.elim id fun h' => h'.elim (fun ⟨_, he, _⟩ => by cases he)
         fun ⟨_, hc, _⟩ => by cases hc⟩
     | some c =>
-      have : (integrityViolations st fs records name).run =
+      have : (integrityViolations st fs records now name).run =
           rows ++ [.failedServiceInvariant c (st.ref name)] := by
         simp only [integrityViolations, mapM_id, h]; rfl
       rw [this, List.mem_append, hrows, List.mem_singleton]
@@ -159,11 +159,11 @@ theorem mem_integrityViolations (records : Records) (name : String) (f : Fault) 
         · cases he
         · cases hc; exact Or.inr rfl
 
-@[guarantee] theorem entity_invariant_reported_iff (records : Records) (name : String) (definition : Spec.Ref) (key c : String)
+@[guarantee] theorem entity_invariant_reported_iff (records : Records) (now : Time) (name : String) (definition : Spec.Ref) (key c : String)
     (command : Spec.Ref) :
-    .failedEntityInvariant definition key c command ∈ (integrityViolations st fs records name).run ↔
+    .failedEntityInvariant definition key c command ∈ (integrityViolations st fs records now name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
-        row.key = some key ∧ fs.invariant row.entity row.value = .ok (some c) := by
+        row.key = some key ∧ fs.invariant row.entity row.value now = .ok (some c) := by
   rw [mem_integrityViolations]
   simp only [mem_rowViolations, mem_danglingRefs, Row.failedInvariant]
   constructor
@@ -181,9 +181,9 @@ theorem mem_integrityViolations (records : Records) (name : String) (f : Fault) 
   · rintro ⟨rfl, row, hr, rfl, he, hk, hi⟩
     exact Or.inl ⟨row, hr, he, Or.inr (Or.inl ⟨c, hi, by rw [hk]⟩)⟩
 
-@[guarantee] theorem service_invariant_reported_iff (records : Records) (name : String) (c : String) (command : Spec.Ref) :
-    .failedServiceInvariant c command ∈ (integrityViolations st fs records name).run ↔
-      command = st.ref name ∧ fs.serviceInvariant records = .ok (some c) := by
+@[guarantee] theorem service_invariant_reported_iff (records : Records) (now : Time) (name : String) (c : String) (command : Spec.Ref) :
+    .failedServiceInvariant c command ∈ (integrityViolations st fs records now name).run ↔
+      command = st.ref name ∧ fs.serviceInvariant records now = .ok (some c) := by
   rw [mem_integrityViolations]
   simp only [mem_rowViolations, mem_danglingRefs, Row.failedInvariant]
   constructor
@@ -198,9 +198,9 @@ theorem mem_integrityViolations (records : Records) (name : String) (f : Fault) 
   · rintro ⟨rfl, hs⟩
     exact Or.inr (Or.inr ⟨c, hs, rfl⟩)
 
-@[guarantee] theorem dangling_ref_reported_iff (records : Records) (name : String) (definition : Spec.Ref)
+@[guarantee] theorem dangling_ref_reported_iff (records : Records) (now : Time) (name : String) (definition : Spec.Ref)
     (key field targetKey : String) (command : Spec.Ref) :
-    .danglingRef definition key field targetKey command ∈ (integrityViolations st fs records name).run ↔
+    .danglingRef definition key field targetKey command ∈ (integrityViolations st fs records now name).run ↔
       command = st.ref name ∧ ∃ row ∈ records, definition = st.ref row.entity ∧ row.entity ∈ st.entities ∧
         row.key = some key ∧ ∃ targetEntity, (row.entity, field, targetEntity) ∈ st.references ∧
         targetEntity ∈ st.entities ∧ ∃ v, row.value.field? field = some v ∧ v ≠ .null ∧ v.keyString = targetKey ∧

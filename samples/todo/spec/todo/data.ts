@@ -15,6 +15,7 @@ export const Task = entity({
   },
   key: "id",
   invariants: {
+    createdBeforeNow: ({ record, now }) => record.createdAt <= now,
     completedAfterCreated: ({ record }) => record.completedAt === null || record.completedAt >= record.createdAt,
   },
 });

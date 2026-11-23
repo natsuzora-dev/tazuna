@@ -1,7 +1,7 @@
 import type { Bag, Made } from "../data/bag.ts";
 import type { RejectionKind } from "../data/trace.generated.ts";
 import type { Shape } from "../data/values.ts";
-import type { Conditions, Named } from "./conditions.ts";
+import type { Conditions, Named, Now } from "./conditions.ts";
 import type {
   AcceptedOutput,
   AnyCommand,
@@ -10,7 +10,6 @@ import type {
   Events,
   InputOf,
   Machine,
-  Now,
   Payload,
   QueryOutput,
   ServiceDefinition,
