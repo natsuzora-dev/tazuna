@@ -342,11 +342,16 @@ def replayBase (x : Induction) (M : Model) (c : Checked) : Except String Counter
     .ok { given := givenOf x.st records, clock, command := none, input := none, now := none, violations := [] }
   else .error "the semantics keeps the invariant of the initial records"
 
-/-- The verdict of a solver's answer, from the replay of its model when it is sat. -/
-def verdictOf (answer : Smt.Answer) (exact : Bool) (replay : Model → IO (Except String Counterexample)) (what : String) :
-    IO (Option Verdict) := do
+/--
+The verdict of a solver's answer, from the replay of its model when it is sat. `exact` and `complete` are those of the
+query's facts (Facts): an unsat answer proves the property only when the facts are complete.
+-/
+def verdictOf (answer : Smt.Answer) (exact complete : Bool) (replay : Model → IO (Except String Counterexample))
+    (what : String) : IO (Option Verdict) := do
   match answer with
-  | .unsat => pure none
+  | .unsat =>
+    if complete then pure none
+    else pure (some (.undecided s!"no case {what} among the values that the encoding holds, which leave out some values of a schema, such as decimals"))
   | .unknown why => pure (some (.undecided s!"{what}: {why}"))
   | .sat values =>
     match ← replay (Smt.Answer.model values) with
@@ -392,7 +397,9 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
       for (asked, a) in answers do
         let .fails c' prop' := asked | continue
         if c' != c || prop' != prop then continue
-        if let some v ← verdictOf a (x.facts.exact && step.facts.exact) (replayStep x fs · c step prop) s!"after {c}" then
+        let replay := (replayStep x fs · c step prop)
+        if let some v ← verdictOf a (x.facts.exact && step.facts.exact) (x.facts.complete && step.facts.complete) replay
+            s!"after {c}" then
           return v
     return .proved
   let invariants ← x.checked.mapM fun ch => do
@@ -404,7 +411,7 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
       | _ => none
     if let some a := base then
       let replay (M : Model) : IO (Except String Counterexample) := pure (replayBase x M ch)
-      if let some v ← verdictOf a initFacts.exact replay "of the initial records" then return result ch.ref v
+      if let some v ← verdictOf a initFacts.exact initFacts.complete replay "of the initial records" then return result ch.ref v
     return result ch.ref (← afterSteps ch.ref x.st.commands)
   let commandEnsures ← ensures.mapM fun (c, prop) => do pure (result prop (← afterSteps prop [c]))
   let answered ← queryEnsures.mapM fun (q, e, prop) => do
@@ -417,7 +424,7 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
       for (asked, ans) in answers do
         let .answer q' prop' := asked | continue
         if q' != q || prop' != prop then continue
-        if let some v ← verdictOf ans false (replayAnswer x fs · q a e.name) s!"of {q}" then return result prop v
+        if let some v ← verdictOf ans false (x.facts.complete && a.facts.complete) (replayAnswer x fs · q a e.name) s!"of {q}" then return result prop v
       return result prop .proved
     | none => return result prop (.undecided s!"the query {q} has no encoding")
   let refs ← dangling.mapM fun prop => do pure (result prop (← afterSteps prop x.st.commands))

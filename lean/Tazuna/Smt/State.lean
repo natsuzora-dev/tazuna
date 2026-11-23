@@ -20,12 +20,15 @@ def valVar (x : String) : Term := .var x .val
 structure Facts where
   vars : List (String × Ty) := []
   asserts : List Term := []
-  /-- Whether every term says exactly what the semantics guarantees; otherwise a model may be no state. -/
+  /-- Whether no term holds of more than the semantics guarantees; otherwise a model may be no state. -/
   exact : Bool := true
+  /-- Whether every term holds of every state that the semantics allows; otherwise an unsat answer proves nothing. -/
+  complete : Bool := true
 deriving Inhabited
 
 instance : Append Facts where
-  append a b := { vars := a.vars ++ b.vars, asserts := a.asserts ++ b.asserts, exact := a.exact && b.exact }
+  append a b := { vars := a.vars ++ b.vars, asserts := a.asserts ++ b.asserts, exact := a.exact && b.exact,
+                  complete := a.complete && b.complete }
 
 def safeInteger : Int := 9007199254740991
 
@@ -44,10 +47,21 @@ def intOfValue? : Value → Option Int
   | _ => none
 
 /--
-The term that holds when the scalar `t` is a value that `schema` accepts, and whether the term says exactly that. A
-schema that a scalar cannot fit, such as an object, or that has a keyword outside this subset, holds of any `t`.
+What a term says of the values that a schema accepts. `exact`: it holds of no other value, so a model is a value of the
+schema. `complete`: it holds of every value of the schema that a `V` can be; a decimal or an array is none, so a schema
+that accepts one is incomplete, and an unsat answer then says nothing of states that hold one.
 -/
-partial def schemaHolds (schema : Value) (t : Term) : Term × Bool :=
+structure Holds where
+  term : Term
+  exact : Bool := true
+  complete : Bool := true
+deriving Inhabited
+
+/--
+What holds when the scalar `t` is a value that `schema` accepts. A schema that a scalar cannot fit, such as an object,
+holds of no `t`; a keyword outside this subset is left out, so the term holds of more values than the schema accepts.
+-/
+partial def schemaHolds (schema : Value) (t : Term) : Holds :=
   match schema with
   | .obj fields =>
     let checks := (fields.lookup "x-tazuna-checks").all checksKnown
@@ -55,14 +69,16 @@ partial def schemaHolds (schema : Value) (t : Term) : Term × Bool :=
     match fields.lookup "anyOf", fields.lookup "enum", fields.lookup "const", fields.lookup "type" with
     | some (.arr options), _, _, _ =>
       let each := options.map (schemaHolds · t)
-      (disj (each.map (·.1)), only ["anyOf"] && each.all (·.2))
+      { term := disj (each.map (·.term)), exact := only ["anyOf"] && each.all (·.exact),
+        complete := each.all (·.complete) }
     | _, some (.arr values), _, _ =>
       let terms := values.filterMap fun v => (litTerm v).toOption
-      (disj (terms.map (.eq t ·)), only ["enum", "type"] && terms.length == values.length)
+      { term := disj (terms.map (.eq t ·)), exact := only ["enum", "type"] && terms.length == values.length,
+        complete := terms.length == values.length }
     | _, _, some v, _ =>
       match litTerm v with
-      | .ok l => (.eq t l, only ["const", "type"])
-      | .error _ => (tt, false)
+      | .ok l => { term := .eq t l, exact := only ["const", "type"] }
+      | .error _ => { term := tt, exact := false }
     | _, _, _, some types =>
       let names := match types with
         | .str t => [t]
@@ -72,18 +88,24 @@ partial def schemaHolds (schema : Value) (t : Term) : Term × Bool :=
         match (fields.lookup key).bind intOfValue? with
         | some n => f (intLit n)
         | none => tt
-      let typed : String → Option Term
+      let integer := conj [.isInt t, bound "minimum" (.le · (.intOf t)), bound "maximum" (.le (.intOf t) ·)]
+      -- A number is an integer or a decimal; the term holds of the integers, the numbers that a `V` can be.
+      let typed : String → Option (Term × Bool)
         | "string" => some (conj [.isStr t, bound "minLength" (.le · (.len (.strOf t))),
-            bound "maxLength" (.le (.len (.strOf t)) ·)])
-        | "integer" => some (conj [.isInt t, bound "minimum" (.le · (.intOf t)), bound "maximum" (.le (.intOf t) ·)])
-        | "boolean" => some (.isBool t)
-        | "null" => some (.isNull t)
+            bound "maxLength" (.le (.len (.strOf t)) ·)], true)
+        | "integer" => some (integer, true)
+        | "number" => some (integer, false)
+        | "boolean" => some (.isBool t, true)
+        | "null" => some (.isNull t, true)
         | _ => none
       let terms := names.filterMap typed
-      (disj terms, only ["type", "minLength", "maxLength", "minimum", "maximum"] && terms.length == names.length &&
-        !names.isEmpty)
-    | _, _, _, none => (tt, false)
-  | _ => (tt, false)
+      let complete := terms.length == names.length && terms.all (·.2)
+      { term := disj (terms.map (·.1)),
+        exact := only ["type", "minLength", "maxLength", "minimum", "maximum"] && terms.length == names.length &&
+          !names.isEmpty,
+        complete }
+    | _, _, _, none => { term := tt, exact := false }
+  | _ => { term := tt, exact := false }
 
 /--
 The properties of an object schema, in order, each with whether the object must hold it: a required property, or one with a
@@ -98,10 +120,10 @@ def propertiesWith (schema : Value) : List (String × Value × Bool) :=
   | _ => []
 
 /-- That a field holds a value of its schema, or `undefined` when the object may lack it. -/
-def fieldHolds (t : Term) : String × Value × Bool → Term × Bool
+def fieldHolds (t : Term) : String × Value × Bool → Holds
   | (_, s, required) =>
-    let (holds, exact) := schemaHolds s t
-    ((if required then holds else .or (.isUndef t) holds), exact)
+    let h := schemaHolds s t
+    { h with term := if required then h.term else .or (.isUndef t) h.term }
 
 /-- The symbolic records of `st` within `creates`, its variables named after `pre`. -/
 def SRecords.named (st : Service) (creates : List (String × Nat)) (pre : String) : SRecords :=
@@ -154,9 +176,9 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
         | some k => [Term.eq ((s.fields.lookup k).getD undefT) (.mkStr s.key)]
         | none => []
       let schemas := props.map fun p => fieldHolds ((s.fields.lookup p.1).getD undefT) p
-      let whenLive := (keyTerm ++ schemas.map (·.1)).map (Term.or (.not s.live))
+      let whenLive := (keyTerm ++ schemas.map (·.term)).map (Term.or (.not s.live))
       let asserts := [Term.or (.not s.live) used] ++ earlier ++ whenLive
-      facts := facts ++ { asserts, exact := schemas.all (·.2) }
+      facts := facts ++ { asserts, exact := schemas.all (·.exact), complete := schemas.all (·.complete) }
     facts := facts ++ { asserts := distinctKeys slots ++ (uniqueClash (st.uniqueOf e) slots).map .not }
     for (_, field, target) in st.references.filter (·.1 == e) do
       if (r.keyed.lookup target).isSome then
@@ -169,8 +191,8 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
     let props := propertiesWith (entitySchema st e)
     let schemas := props.map fun p => fieldHolds ((fields.lookup p.1).getD undefT) p
     let vars := fields.map fun (f, _) => (s!"{pre}.{e}.{f}", Ty.val)
-    let asserts := schemas.map (·.1)
-    facts := facts ++ { vars, asserts, exact := schemas.all (·.2) }
+    let asserts := schemas.map (·.term)
+    facts := facts ++ { vars, asserts, exact := schemas.all (·.exact), complete := schemas.all (·.complete) }
   return facts
 
 /-- The arguments of an entity invariant: the fields of a record as JSON holds them, and the time, an Int term. -/
@@ -303,17 +325,17 @@ def SRecords.duplicated (svc : Service) (r : SRecords) : Term :=
 def SRecords.outsideSchema (svc : Service) (r : SRecords) : Term :=
   disj (r.keyed.flatMap fun (e, slots) =>
       let props := propertiesWith (entitySchema svc e)
-      slots.flatMap fun s => props.map fun p => conj [s.live, .not (fieldHolds ((s.fields.lookup p.1).getD undefT) p).1]) |>.or
+      slots.flatMap fun s => props.map fun p => conj [s.live, .not (fieldHolds ((s.fields.lookup p.1).getD undefT) p).term]) |>.or
     (disj (r.singles.flatMap fun (e, fields) =>
-      (propertiesWith (entitySchema svc e)).map fun p => .not (fieldHolds ((fields.lookup p.1).getD undefT) p).1))
+      (propertiesWith (entitySchema svc e)).map fun p => .not (fieldHolds ((fields.lookup p.1).getD undefT) p).term))
 
 /-- The input of command or query `name` as JSON holds its fields, and that each field fits the input's schema. -/
 def inputOf (svc : Service) (name : String) : List (String × Term) × Facts :=
   let props := propertiesWith ((svc.schemaOf (.input (svc.ref name))).getD (.obj []))
   let input := props.map fun (f, _, _) => (f, valVar s!"in.{f}")
   let fieldFacts := props.map fun pr => fieldHolds ((input.lookup pr.1).getD undefT) pr
-  (input, { vars := input.map fun (f, _) => (s!"in.{f}", Ty.val), asserts := fieldFacts.map (·.1),
-            exact := fieldFacts.all (·.2) })
+  (input, { vars := input.map fun (f, _) => (s!"in.{f}", Ty.val), asserts := fieldFacts.map (·.term),
+            exact := fieldFacts.all (·.exact), complete := fieldFacts.all (·.complete) })
 
 /-- A command's symbolic step from the records `pre`. -/
 structure Step where
