@@ -166,16 +166,10 @@ export type Request =
       readonly schema: Json;
       readonly value: Json;
     }
-  /** The SMT-LIB scripts of prove's queries, each once, in order (Engine.proveQueriesOf). */
-  | {
-      readonly type: "proveQueries";
-      readonly structure: Structure;
-    }
-  /** prove's result of each property, from Z3's output on each script of proveQueries, in order (Engine.proveOf). */
+  /** prove's result of each property (Engine.proveOf). Before it the engine sends a `solve` response. */
   | {
       readonly type: "prove";
       readonly structure: Structure;
-      readonly answers: readonly string[];
     }
   /**
    * generate's result (Engine.generateOf). Before it the engine sends `solve` responses, each answered by `solved`.
@@ -492,10 +486,6 @@ export type Response =
       readonly issues: readonly Json[] | null;
       readonly thrown: boolean;
       readonly facts: readonly [boolean, Fit] | null;
-    }
-  | {
-      readonly type: "proveQueries";
-      readonly scripts: readonly string[];
     }
   | {
       readonly type: "prove";

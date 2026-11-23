@@ -9,8 +9,8 @@ import Tazuna.Semantics.Explore.ChoiceDependent
 /-!
 prove: the base case and the inductive step of each invariant of each spec service, within the service's bounds, and
 from any state where they hold, that every ensures of a command or query holds and that no command leaves a ref
-dangling. The engine answers in two requests, since TS runs Z3: `proveQueries` gives the SMT-LIB scripts, and `prove`
-reads Z3's answers to them, replays each counterexample in the semantics, and gives one result per property.
+dangling. TS runs Z3, so the engine asks it for the outputs on every SMT-LIB script in one `solve`, then replays each
+counterexample in the semantics and gives one result per property.
 -/
 
 namespace Tazuna.Engine
@@ -1047,26 +1047,16 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
   return invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ ties ++
     uncompared.map (fun (prop, why) => (prop, .decided (.undecided why))) ++ responses
 
-/-- The own spec services' plans, each with its service. -/
-def plansOf (j : Ir.Structure) : IO (List (Induction × List (Property × Plan))) := do
-  let inductions ← (specServices j).mapM (inductionOf j)
-  pure (inductions.map fun x => (x, x.plans))
-
-/-- The scripts of every obligation of every property, each once, in order. -/
-def proveQueriesOf (j : Ir.Structure) : IO (List String) := do
-  pure ((← plansOf j).flatMap fun (_, plans) => plans.flatMap fun
-    | (_, .asks obligations) => obligations.map (·.script)
-    | (_, .decided _) => []).eraseDups
-
 /--
-The result of each property of each spec service, from Z3's output on each script of proveQueriesOf, in order. Every
-obligation needs its own answer: one missing is an internal error, never a proof.
+The result of each property of each spec service, asking `solve` once for the solver's output on the script of every
+obligation. Every obligation needs its own answer: one missing is an internal error, never a proof.
 -/
-def proveOf (j : Ir.Structure) (outputs : List String) : IO (List ProveResult) := do
-  let all ← plansOf j
+def proveOf (j : Ir.Structure) (solve : List String → IO (List String)) : IO (List ProveResult) := do
+  let all := (← (specServices j).mapM (inductionOf j)).map fun x => (x, x.plans)
   let scripts := (all.flatMap fun (_, plans) => plans.flatMap fun
     | (_, .asks obligations) => obligations.map (·.script)
     | (_, .decided _) => []).eraseDups
+  let outputs ← solve scripts
   if outputs.length != scripts.length then
     throw (IO.userError s!"prove got {outputs.length} solver outputs for {scripts.length} scripts")
   let answers : Std.HashMap String String := (scripts.zip outputs).foldl (fun m (k, v) => m.insert k v) {}

@@ -60,10 +60,8 @@ inductive Request where
       (fields : List (String × List String))
   /-- `value` parsed by the JSON Schema `schema` as Lean's Semantics.parse does. -/
   | parse (schema : Value) (value : Value)
-  /-- The SMT-LIB scripts of prove's queries, each once, in order (Engine.proveQueriesOf). -/
-  | proveQueries («structure» : Ir.Structure)
-  /-- prove's result of each property, from Z3's output on each script of proveQueries, in order (Engine.proveOf). -/
-  | prove («structure» : Ir.Structure) (answers : List String)
+  /-- prove's result of each property (Engine.proveOf). Before it the engine sends a `solve` response. -/
+  | prove («structure» : Ir.Structure)
   /--
   generate's result (Engine.generateOf). Before it the engine sends `solve` responses, each answered by `solved`.
   `depth` is the most requests of a sequence, by default one more than the creations that the service's bounds allow.
@@ -127,7 +125,6 @@ inductive Response where
   -/
   | parse (supported : Bool) (value : Option Value) (issues : Option (List Value)) (thrown : Bool)
     (facts : Option (Bool × Smt.Fit))
-  | proveQueries (scripts : List String)
   | prove (results : List ProveResult)
   | generate (result : Generation)
   /-- The SMT-LIB scripts whose Z3 outputs a running request needs next; TS answers with `solved`. -/

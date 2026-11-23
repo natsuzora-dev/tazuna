@@ -53,8 +53,7 @@ def respond (solve : List String → IO (List String)) : Engine.Request → IO R
     | some (.error ()) => .parse true none none true (facts value)
     | some (.ok (.ok v)) => .parse true (some v) none false (facts v)
     | some (.ok (.error issues)) => .parse true none (some issues) false (facts value))
-  | .proveQueries s => do pure (.proveQueries (← proveQueriesOf s))
-  | .prove s answers => do pure (.prove (← proveOf s answers))
+  | .prove s => do pure (.prove (← proveOf s solve))
   | .generate s depth => do pure (.generate (← generateOf s depth solve))
   | .solved _ => throw (IO.userError "solved answers no solve")
 where
