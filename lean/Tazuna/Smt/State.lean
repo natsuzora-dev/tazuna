@@ -36,6 +36,7 @@ def checksKnown : Value → Bool
   | .arr checks => checks.all fun c => match c.field? "check" with
     | some (Value.str "min_length") | some (Value.str "max_length") => true
     | some (Value.str "number_format") => c.field? "format" == some (Value.str "safeint")
+    | some (Value.str "string_format") => c.field? "format" == some (Value.str "date")
     | _ => false
   | _ => false
 
@@ -90,9 +91,11 @@ partial def schemaHolds (schema : Value) (t : Term) : Holds :=
         | none => tt
       let integer := conj [.isInt t, bound "minimum" (.le · (.intOf t)), bound "maximum" (.le (.intOf t) ·)]
       -- A number is an integer or a decimal; the term holds of the integers, the numbers that a `V` can be.
+      -- A date's schema also writes Zod's pattern of its format, which parse checks as parseDate? does.
+      let date := fields.lookup "format" == some (.str "date")
       let typed : String → Option (Term × Bool)
         | "string" => some (conj [.isStr t, bound "minLength" (.le · (.len (.strOf t))),
-            bound "maxLength" (.le (.len (.strOf t)) ·)], true)
+            bound "maxLength" (.le (.len (.strOf t)) ·), if date then dateValidT (.strOf t) else tt], true)
         | "integer" => some (integer, true)
         | "number" => some (integer, false)
         | "boolean" => some (.isBool t, true)
@@ -101,7 +104,8 @@ partial def schemaHolds (schema : Value) (t : Term) : Holds :=
       let terms := names.filterMap typed
       let complete := terms.length == names.length && terms.all (·.2)
       { term := disj (terms.map (·.1)),
-        exact := only ["type", "minLength", "maxLength", "minimum", "maximum"] && terms.length == names.length &&
+        exact := only (["type", "minLength", "maxLength", "minimum", "maximum"] ++ if date then ["format", "pattern"] else []) &&
+          terms.length == names.length &&
           !names.isEmpty,
         complete }
     | _, _, _, none => { term := tt, exact := false }

@@ -1,4 +1,4 @@
-import Tazuna.Smt.Term
+import Tazuna.Smt.Date
 import Tazuna.Ir.Eval
 
 /-!
@@ -265,6 +265,9 @@ def twoIn : List (Term × SVal) → Term
 def trueT : SVal := .scalar (.lit (.val (.bool true)))
 def falseT : SVal := .scalar (.lit (.val (.bool false)))
 
+/-- That the scalar `t` is a date label. -/
+def dateT (t : Term) : Term := .and (.isStr t) (dateValidT (.strOf t))
+
 def relT (r : Relation) (a b : Term) : Term :=
   match r with
   | .lt => .lt a b
@@ -348,7 +351,13 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
     let (y, ye) := vb.scalarOf
     pure (.scalar (.mkBool (relT r (.intOf x) (.intOf y))),
       .or ea (.or eb (.or xe (.or ye (.not (.and (.isInt x) (.isInt y)))))))
-  | .compare _ .date _ _ => throw "a date comparison"
+  | .compare r .date a b => do
+    let (va, ea) ← seval env vars a
+    let (vb, eb) ← seval env vars b
+    let (x, xe) := va.scalarOf
+    let (y, ye) := vb.scalarOf
+    pure (.scalar (.mkBool (relT r (dayT (.strOf x)) (dayT (.strOf y)))),
+      .or ea (.or eb (.or xe (.or ye (.not (.and (dateT x) (dateT y)))))))
   | .field o name => do
     let (v, e) ← seval env vars o
     pure (v.field env.records name, .or e v.nullish)
@@ -465,7 +474,14 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
   | .sortedBy .. => throw "sortedBy, whose groups the encoding does not hold"
   | .format .. => throw "a template literal"
   | .decimal .. => throw "decimal arithmetic"
-  | .addDays .. => throw "addDays"
+  | .addDays d n => do
+    let (vd, ed) ← seval env vars d
+    let (vn, en) ← seval env vars n
+    let (x, xe) := vd.scalarOf
+    let (y, ye) := vn.scalarOf
+    let day := Term.add (dayT (.strOf x)) (.intOf y)
+    pure (.scalar (.mkStr (labelT day)),
+      .or ed (.or en (.or xe (.or ye (.not (.and (dateT x) (.and (.isInt y) (labelledT day))))))))
   | .createKey .. => throw "createKey"
 
 def sevalAll (env : SEnv) (vars : List (String × SVal)) : List Expr → Except String (List SVal × Term)

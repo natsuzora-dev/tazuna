@@ -23,32 +23,52 @@ def civilFromDays (z : Int) : Int × Int × Int :=
   let doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
   let mp := (5 * doy + 2) / 153
   let d := doy - (153 * mp + 2) / 5 + 1
-  let m := if mp < 10 then mp + 3 else mp - 9
-  (if m ≤ 2 then yoe + era * 400 + 1 else yoe + era * 400, m, d)
+  let m := if decide (mp < 10) then mp + 3 else mp - 9
+  (if decide (m ≤ 2) then yoe + era * 400 + 1 else yoe + era * 400, m, d)
 
-def pad (width : Nat) (n : Int) : String :=
-  let s := toString n.toNat
-  String.ofList (List.replicate (width - s.length) '0') ++ s
+/-- The code point of character `i` of `s`, or -1 past its end, as SMT-LIB's `str.to_code (str.at s i)` gives it. -/
+def codeAt (s : String) (i : Nat) : Int := (s.toList[i]?.map (fun c => (c.toNat : Int))).getD (-1)
+
+/-- The digit that character `i` of `s` is, when it is one. -/
+def digitAt (s : String) (i : Nat) : Int := codeAt s i - 48
+
+def isDigitAt (s : String) (i : Nat) : Bool := 0 ≤ digitAt s i && digitAt s i ≤ 9
+
+def isLeap (y : Int) : Bool := y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)
+
+def monthDays (y m : Int) : Int :=
+  if m == 2 then (if isLeap y then 29 else 28) else if m == 4 || m == 6 || m == 9 || m == 11 then 30 else 31
+
+/-- The year, month and day that the digits of a label `YYYY-MM-DD` write. -/
+def labelYear (s : String) : Int := digitAt s 0 * 1000 + digitAt s 1 * 100 + digitAt s 2 * 10 + digitAt s 3
+def labelMonth (s : String) : Int := digitAt s 5 * 10 + digitAt s 6
+def labelDay (s : String) : Int := digitAt s 8 * 10 + digitAt s 9
+
+/--
+Whether `s` is a label `YYYY-MM-DD` of a real day in years 0000 through 9999. Smt.dateValid states the same of a term,
+character by character, so that the two agree by their definitions.
+-/
+def isDateLabel (s : String) : Bool :=
+  s.length == 10 && isDigitAt s 0 && isDigitAt s 1 && isDigitAt s 2 && isDigitAt s 3 && codeAt s 4 == 45 &&
+    isDigitAt s 5 && isDigitAt s 6 && codeAt s 7 == 45 && isDigitAt s 8 && isDigitAt s 9 &&
+    1 ≤ labelMonth s && labelMonth s ≤ 12 && 1 ≤ labelDay s && labelDay s ≤ monthDays (labelYear s) (labelMonth s)
 
 /-- The days since 1970-01-01 of a date label `YYYY-MM-DD` of a real day in years 0000 through 9999. -/
 def parseDate? (text : String) : Option Int :=
-  let number (a b : Char) : Nat := (a.toNat - '0'.toNat) * 10 + (b.toNat - '0'.toNat)
-  match text.toList with
-  | y1 :: y2 :: y3 :: y4 :: '-' :: m1 :: m2 :: '-' :: [d1, d2] =>
-    let year := number y1 y2 * 100 + number y3 y4
-    let month := number m1 m2
-    let day := number d1 d2
-    let leap := year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
-    let days := if month == 2 then (if leap then 29 else 28) else if month ∈ [4, 6, 9, 11] then 30 else 31
-    if [y1, y2, y3, y4, m1, m2, d1, d2].all Char.isDigit && 1 ≤ month && month ≤ 12 && 1 ≤ day && day ≤ days then
-      some (daysFromCivil year month day)
-    else none
-  | _ => none
+  if isDateLabel text then some (daysFromCivil (labelYear text) (labelMonth text) (labelDay text)) else none
+
+/-- The one-digit string of the last decimal digit of `n`. -/
+def digitChar (n : Int) : String := String.singleton (Char.ofNat (48 + n % 10).toNat)
+
+/-- The label `YYYY-MM-DD` of a year from 0000 through 9999, a month and a day. -/
+def dateLabel (y m d : Int) : String :=
+  digitChar (y / 1000) ++ digitChar (y / 100) ++ digitChar (y / 10) ++ digitChar y ++ "-" ++ digitChar (m / 10) ++
+    digitChar m ++ "-" ++ digitChar (d / 10) ++ digitChar d
 
 /-- The label `YYYY-MM-DD` of the day `days` after 1970-01-01, when its year is 0000 through 9999. -/
 def renderDate? (days : Int) : Option String :=
   let (y, m, d) := civilFromDays days
-  if 0 ≤ y && y ≤ 9999 then some s!"{pad 4 y}-{pad 2 m}-{pad 2 d}" else none
+  if 0 ≤ y && y ≤ 9999 then some (dateLabel y m d) else none
 
 /-- Whether `t` is a safe integer, as an instant on the wire must be. -/
 def Time.inRange (t : Time) : Bool := isSafeInteger t

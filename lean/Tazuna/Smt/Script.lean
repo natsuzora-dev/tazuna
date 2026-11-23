@@ -56,10 +56,16 @@ def Term.parts : Term → String × List Term
   | .add a b => ("+", [a, b])
   | .sub a b => ("-", [a, b])
   | .mul a b => ("*", [a, b])
+  | .div a b => ("div", [a, b])
+  | .mod a b => ("mod", [a, b])
   | .len a => ("str.len", [a])
   | .prefixOf a b => ("str.prefixof", [a, b])
   | .suffixOf a b => ("str.suffixof", [a, b])
   | .contains a b => ("str.contains", [a, b])
+  | .strAt a i => ("str.at", [a, i])
+  | .toCode a => ("str.to_code", [a])
+  | .fromCode a => ("str.from_code", [a])
+  | .strCat a b => ("str.++", [a, b])
   | .mkBool a => ("vbool", [a])
   | .mkInt a => ("vint", [a])
   | .mkStr a => ("vstr", [a])
@@ -80,8 +86,8 @@ def Term.sort : Term → Ty
   | .lit (.str _) => .str
   | .lit (.val _) => .val
   | .ite _ a _ => a.sort
-  | .add .. | .sub .. | .mul .. | .len _ | .intOf _ => .int
-  | .strOf _ => .str
+  | .add .. | .sub .. | .mul .. | .div .. | .mod .. | .len _ | .toCode _ | .intOf _ => .int
+  | .strOf _ | .strAt .. | .fromCode _ | .strCat .. => .str
   | .mkBool _ | .mkInt _ | .mkStr _ => .val
   | _ => .bool
 

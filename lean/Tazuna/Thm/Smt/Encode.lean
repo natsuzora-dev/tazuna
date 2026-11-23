@@ -1,4 +1,5 @@
 import Tazuna.Smt.Encode
+import Tazuna.Thm.Smt.Date
 import Tazuna.Thm.Guarantee
 
 /-!
@@ -512,6 +513,103 @@ theorem compare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal) (s
   · rw [nonScalar_double hna, nonScalar_ordinal .number hna]
     split <;> simp_all [run_thrown, Agrees, holds_or]
 
+
+theorem relT_ints (M : Model) (r : Relation) (a b : Term) (x y : Int) (ha : a.denote M = .int x)
+    (hb : b.denote M = .int y) : (relT r a b).holds M = r.holds x y := by
+  cases r
+  case eq =>
+    simp only [relT, Relation.holds, Term.holds, Term.denote, ha, hb, Lit.toBool, Lit.int.injEq]
+    exact (Bool.beq_eq_decide_eq _ _).symm
+  all_goals simp [relT, Relation.holds, Term.holds, Term.denote, ha, hb, Lit.toBool, Lit.toInt]
+
+theorem toVal_ordinal_date (sc : Scalar) :
+    ordinal .date sc.toVal = (match sc with | .str s => (parseDate? s).map (·, 0) | _ => none) := by
+  cases sc <;> rfl
+
+/-- That the scalar term `t` is a date label, as eval parses it. -/
+theorem dateT_holds (M : Model) (t : Term) :
+    (dateT t).holds M = (match (t.denote M).toScalar with | .str s => isDateLabel s | _ => false) := by
+  simp only [dateT, holds_and, holds_isStr, Tazuna.Thm.Smt.Date.dateValidT_holds, denote_strOf]
+  cases (t.denote M).toScalar <;> simp
+
+theorem dayT_strOf (M : Model) (t : Term) (s : String) (h : (t.denote M).toScalar = .str s) :
+    (dayT (.strOf t)).denote M = .int (daysFromCivil (labelYear s) (labelMonth s) (labelDay s)) := by
+  rw [Tazuna.Thm.Smt.Date.dayT_denote, denote_strOf, h]
+
+theorem dateCompare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal) (s : Trace) :
+    Agrees M recs (.scalar (.mkBool (relT r (dayT (.strOf va.scalarOf.1)) (dayT (.strOf vb.scalarOf.1)))),
+        .or va.scalarOf.2 (.or vb.scalarOf.2 (.not (.and (dateT va.scalarOf.1) (dateT vb.scalarOf.1)))))
+      (run (match va.conc M recs, vb.conc M recs, double? (va.conc M recs), double? (vb.conc M recs) with
+        | .nonFinite _, _, some x, some y | _, .nonFinite _, some x, some y =>
+          if Order.date == .number then pure (.json (.bool (r.holds x y))) else thrown
+        | _, _, _, _ =>
+          match ordinal .date (va.conc M recs), ordinal .date (vb.conc M recs) with
+          | some (m, e), some (m', e') => pure (.json (.bool (r.holds (m * 10 ^ e') (m' * 10 ^ e))))
+          | _, _ => thrown : EvalM Val) s).1 := by
+  rcases scalar_cases M recs va with ⟨ha, hca⟩ | ⟨ha, hna⟩ <;>
+    rcases scalar_cases M recs vb with ⟨hb, hcb⟩ | ⟨hb, hnb⟩
+  · rw [hca, hcb]
+    have nf1 := toVal_not_nonFinite (va.scalarOf.1.denote M).toScalar
+    have nf2 := toVal_not_nonFinite (vb.scalarOf.1.denote M).toScalar
+    split
+    · exfalso; simp_all
+    · exfalso; simp_all
+    · rw [toVal_ordinal_date, toVal_ordinal_date]
+      cases hx : (va.scalarOf.1.denote M).toScalar <;> cases hy : (vb.scalarOf.1.denote M).toScalar <;>
+        simp [run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, dateT_holds]
+      rename_i x y
+      unfold parseDate?
+      cases hvx : isDateLabel x <;> cases hvy : isDateLabel y <;>
+        simp [run_pure, run_thrown, conc_mkBool, relT_ints M r _ _ _ _ (dayT_strOf M _ x hx) (dayT_strOf M _ y hy)]
+  · rw [nonScalar_double hnb, nonScalar_ordinal .date hnb]
+    split <;> simp_all [run_thrown, Agrees, holds_or]
+  · rw [nonScalar_double hna, nonScalar_ordinal .date hna]
+    split <;> simp_all [run_thrown, Agrees, holds_or]
+  · rw [nonScalar_double hna, nonScalar_ordinal .date hna]
+    split <;> simp_all [run_thrown, Agrees, holds_or]
+
+theorem conc_mkStr (M : Model) (recs : Records) (t : Term) :
+    (SVal.scalar (.mkStr t)).conc M recs = .json (.str (t.denote M).toStr) := rfl
+
+theorem addDays_op (M : Model) (recs : Records) (vd vn : SVal) (s : Trace) :
+    Agrees M recs (.scalar (.mkStr (labelT (.add (dayT (.strOf vd.scalarOf.1)) (.intOf vn.scalarOf.1)))),
+        .or vd.scalarOf.2 (.or vn.scalarOf.2 (.not (.and (dateT vd.scalarOf.1)
+          (.and (.isInt vn.scalarOf.1) (labelledT (.add (dayT (.strOf vd.scalarOf.1)) (.intOf vn.scalarOf.1))))))))
+      (run (match ordinal .date (vd.conc M recs), integer? (vn.conc M recs) with
+        | some (days, _), some more =>
+          match renderDate? (days + more) with
+          | some label => pure (.json (.str label))
+          | none => thrown
+        | _, _ => thrown : EvalM Val) s).1 := by
+  have hint : ∀ v : SVal, v.scalarOf.2.holds M = true → integer? (v.conc M recs) = none := by
+    intro v h
+    rcases scalar_cases M recs v with ⟨h', _⟩ | ⟨_, hn⟩
+    · simp [h] at h'
+    · revert hn; cases v.conc M recs with
+      | json j => cases j <;> simp [NonScalar, integer?]
+      | _ => simp [NonScalar, integer?]
+  have hsc : ∀ sc : Scalar, integer? sc.toVal = (match sc with | .int n => some n | _ => none) := by
+    intro sc; cases sc <;> simp [Scalar.toVal, Scalar.toValue?, Val.ofOption, integer?]
+  rcases scalar_cases M recs vd with ⟨ha, hca⟩ | ⟨ha, hna⟩ <;>
+    rcases scalar_cases M recs vn with ⟨hb, hcb⟩ | ⟨hb, hnb⟩
+  · rw [hca, hcb, hsc, toVal_ordinal_date]
+    cases hx : (vd.scalarOf.1.denote M).toScalar <;> cases hy : (vn.scalarOf.1.denote M).toScalar <;>
+      simp [run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, dateT_holds, holds_isInt]
+    rename_i x n
+    have hz : (Term.add (dayT (.strOf vd.scalarOf.1)) (.intOf vn.scalarOf.1)).denote M =
+        .int (daysFromCivil (labelYear x) (labelMonth x) (labelDay x) + n) := by
+      simp only [Term.denote, dayT_strOf M _ x hx, hy, Lit.toInt]
+    unfold parseDate?
+    cases hv : isDateLabel x
+    · simp [run_thrown]
+    · simp only [Option.map_some, ite_true, Tazuna.Thm.Smt.Date.labelledT_holds, hz, Lit.toInt]
+      unfold renderDate?
+      rcases hc : civilFromDays (daysFromCivil (labelYear x) (labelMonth x) (labelDay x) + n) with ⟨yr, mo, dy⟩
+      cases hr : (decide (0 ≤ yr) && decide (yr ≤ 9999))
+      · simp [hr, run_thrown]
+      · simp only [conc_mkStr, Tazuna.Thm.Smt.Date.labelT_denote, hz, Lit.toInt, hc]
+        simp_all [run_pure]
+  all_goals simp [hint vn, nonScalar_ordinal .date, run_thrown, Agrees, holds_or, *]
 
 theorem strLen_op (M : Model) (recs : Records) (v : SVal) (s : Trace) :
     Agrees M recs (.scalar (.mkInt (.len (.strOf v.scalarOf.1))), .or v.scalarOf.2 (.not (.isStr v.scalarOf.1)))
@@ -1412,7 +1510,45 @@ mutual
       (fun h2 e => by simp [Agrees, holds_or, h2]) ?_ s1
     intro s2 h2
     exact agrees_err (by simp [holds_or, h1, h2]) (compare_op M _ rel ra.1 rb.1 s2)
-  | vars, .compare _ .date _ _, r, h, s => by simp [seval] at h
+  | vars, .addDays d n, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i ra hra
+    split at h
+    · contradiction
+    rename_i rb hrb
+    cases h
+    simp only [eval]
+    refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars d ra hra) (fun h1 _ => by simp [Agrees, holds_or, h1]) ?_ s
+    intro s1 h1
+    rw [run_bind]
+    have h2 := seval_agrees M env fields vars n rb hrb s1
+    rcases hr : run (eval (concEnv M env fields) (concVars M (env.records.conc M) vars) n) s1 with ⟨y, s2⟩
+    rw [hr] at h2
+    cases y with
+    | error =>
+      have he : rb.2.holds M = true := h2
+      simp [Agrees, holds_or, he]
+    | ok w =>
+      obtain ⟨h2, rfl⟩ := h2
+      exact agrees_err (by simp [holds_or, h1, h2]) (addDays_op M _ ra.1 rb.1 s2)
+  | vars, .compare rel .date a b, r, h, s => by
+    simp only [seval, bind, Except.bind] at h
+    split at h
+    · contradiction
+    rename_i ra hra
+    split at h
+    · contradiction
+    rename_i rb hrb
+    cases h
+    simp only [eval]
+    refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars a ra hra) (fun h1 _ => by simp [Agrees, holds_or, h1]) ?_ s
+    intro s1 h1
+    refine agrees_bind (P := Agrees M _ _) (seval_agrees M env fields vars b rb hrb)
+      (fun h2 e => by simp [Agrees, holds_or, h2]) ?_ s1
+    intro s2 h2
+    exact agrees_err (by simp [holds_or, h1, h2]) (dateCompare_op M _ rel ra.1 rb.1 s2)
   | vars, .field a name, r, h, s => by
     simp only [seval, bind, Except.bind] at h
     split at h
@@ -1814,7 +1950,7 @@ mutual
       simp [visited, List.filter_map, Function.comp_def]
   | vars, .some .array .., r, h, s | vars, .every .array .., r, h, s
   | vars, .min .date .., r, h, s | vars, .max .date .., r, h, s
-  | vars, .sortedBy .., r, h, s | vars, .format _, r, h, s | vars, .decimal .., r, h, s | vars, .addDays .., r, h, s
+  | vars, .sortedBy .., r, h, s | vars, .format _, r, h, s | vars, .decimal .., r, h, s
   | vars, .createKey _, r, h, s => by simp [seval] at h
   | vars, .sum c x body, r, h, s => by
     simp only [seval, bind, Except.bind] at h

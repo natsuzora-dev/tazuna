@@ -46,6 +46,9 @@ inductive Term where
   | add (a b : Term)
   | sub (a b : Term)
   | mul (a b : Term)
+  /-- `div` and `mod`, Euclidean as SMT-LIB defines them; the encoding divides only by positive literals. -/
+  | div (a b : Term)
+  | mod (a b : Term)
   /-- `str.len`: the number of characters. -/
   | len (a : Term)
   /-- `str.prefixof a b`: whether `a` starts `b`. -/
@@ -54,6 +57,17 @@ inductive Term where
   | suffixOf (a b : Term)
   /-- `str.contains a b`: whether `b` occurs in `a`. -/
   | contains (a b : Term)
+  /-- `str.at a i`: the character at index `i` as a string, or the empty string past either end. -/
+  | strAt (a i : Term)
+  /-- `str.to_code a`: the code point of a one-character string, else -1. -/
+  | toCode (a : Term)
+  /--
+  `str.from_code n`: the one-character string of code point `n` from 0 through 0x2FFFF, else the empty string. A
+  surrogate code point is no Lean character, so `denote` takes it as the character 0; the encoding builds only digits.
+  -/
+  | fromCode (a : Term)
+  /-- `str.++`. -/
+  | strCat (a b : Term)
   | mkBool (a : Term)
   | mkInt (a : Term)
   | mkStr (a : Term)
@@ -103,11 +117,21 @@ def Term.denote (M : Model) : Term → Lit
   | .add a b => .int ((a.denote M).toInt + (b.denote M).toInt)
   | .sub a b => .int ((a.denote M).toInt - (b.denote M).toInt)
   | .mul a b => .int ((a.denote M).toInt * (b.denote M).toInt)
+  | .div a b => .int ((a.denote M).toInt / (b.denote M).toInt)
+  | .mod a b => .int ((a.denote M).toInt % (b.denote M).toInt)
   | .len a => .int (a.denote M).toStr.length
   | .prefixOf a b => .bool ((a.denote M).toStr.toList.isPrefixOf (b.denote M).toStr.toList)
   | .suffixOf a b =>
     .bool ((a.denote M).toStr.toList.reverse.isPrefixOf (b.denote M).toStr.toList.reverse)
   | .contains a b => .bool (Ir.isInfix (b.denote M).toStr.toList (a.denote M).toStr.toList)
+  | .strAt a i =>
+    let n := (i.denote M).toInt
+    .str (if 0 ≤ n then ((a.denote M).toStr.toList[n.toNat]?.map String.singleton).getD "" else "")
+  | .toCode a => .int (match (a.denote M).toStr.toList with | [c] => c.toNat | _ => -1)
+  | .fromCode a =>
+    let n := (a.denote M).toInt
+    .str (if 0 ≤ n ∧ n ≤ 0x2FFFF then String.singleton (Char.ofNat n.toNat) else "")
+  | .strCat a b => .str ((a.denote M).toStr ++ (b.denote M).toStr)
   | .mkBool a => .val (.bool (a.denote M).toBool)
   | .mkInt a => .val (.int (a.denote M).toInt)
   | .mkStr a => .val (.str (a.denote M).toStr)

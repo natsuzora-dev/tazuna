@@ -1,1 +1,0 @@
-{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"Task"},"name":"endsAfterStart"},"creates":{"Task":2},"verdict":{"kind":"undecided","reason":"the property has no encoding: a date comparison (in addTask)"},"location":{"file":"todo/todo.ts","line":4}}
