@@ -3,24 +3,35 @@ import Tazuna.Smt.Script
 import Tazuna.Smt.State
 
 /-!
-prove: the base case and the inductive step of each invariant of each spec service, within the service's bounds. The
-engine answers in two requests, since TS runs Z3: `proveQueries` gives the SMT-LIB scripts, and `prove` reads Z3's
-answers to them, replays each counterexample in the semantics, and gives one result per invariant.
+prove: the base case and the inductive step of each invariant of each spec service, within the service's bounds, and
+from any state where they hold, that every ensures of a command or query holds and that no command leaves a ref
+dangling. The engine answers in two requests, since TS runs Z3: `proveQueries` gives the SMT-LIB scripts, and `prove`
+reads Z3's answers to them, replays each counterexample in the semantics, and gives one result per property.
 -/
 
 namespace Tazuna.Engine
 
 open Tazuna.Data Tazuna.Service Tazuna.Smt
 
-/-- An invariant: a condition of an entity's records, of a machine or screen, or of the service, which names itself. -/
-structure InvariantRef where
-  definition : Spec.Ref
-  name : String
-deriving Repr, Inhabited
+/--
+What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
+ensures of a command or query; or that a ref field of an entity never names a missing record.
+-/
+inductive Property where
+  | invariant (definition : Spec.Ref) (name : String)
+  | ensures (definition : Spec.Ref) (name : String)
+  | danglingRef (definition : Spec.Ref) (field : String)
+deriving BEq, Repr, Inhabited
 
-derive_wire InvariantRef
+derive_wire Property tag "kind"
 
-/-- A state within the bounds where every invariant holds, and a command after which the invariant fails. -/
+def Property.definition : Property → Spec.Ref
+  | .invariant d _ | .ensures d _ | .danglingRef d _ => d
+
+/--
+A state within the bounds where every invariant holds, and a command after which the property fails, or a query whose
+answer fails its ensures.
+-/
 structure Counterexample where
   /-- The records, by entity: a keyed entity's as a list, a single entity's as its record. -/
   given : Value
@@ -28,6 +39,8 @@ structure Counterexample where
   clock : Int
   /-- The command and its input and time, none for the initial state. -/
   command : Option String
+  /-- The query and its input, which it answers at the time of the state. -/
+  query : Option String := none
   input : Option Value
   now : Option Int
   /-- The violations that the semantics reports on replaying the case. -/
@@ -43,10 +56,10 @@ inductive Verdict where
 
 derive_wire Verdict tag "kind" serialize_only
 
-/-- What prove found of one invariant, within the bound of creating at most `creates` records of each keyed entity. -/
+/-- What prove found of one property, within the bound of creating at most `creates` records of each keyed entity. -/
 structure ProveResult where
   service : String
-  invariant : InvariantRef
+  property : Property
   creates : List (String × Nat)
   verdict : Verdict
 
@@ -62,21 +75,29 @@ inductive Holder where
   | service
 
 structure Checked where
-  ref : InvariantRef
+  ref : Property
   holder : Holder
   condition : Ir.Condition
 
 /-- The invariants of `st` that prove checks, and those of its charts, which it leaves undecided. -/
-def invariantsOf (st : Service) (p : Ir.Program) : List Checked × List InvariantRef :=
+def invariantsOf (st : Service) (p : Ir.Program) : List Checked × List Property :=
   let entity := st.entities.flatMap fun e =>
     (Smt.invariantsOf st p e).map fun c =>
-      { ref := { definition := st.ref e, name := c.name },
+      { ref := .invariant (st.ref e) c.name,
         holder := if st.singles.contains e then .single e else .keyed e, condition := c }
   let service := (serviceInvariantsOf st p).map fun c =>
-    { ref := { definition := st.ref st.service, name := c.name }, holder := .service, condition := c }
+    { ref := .invariant (st.ref st.service) c.name, holder := .service, condition := c }
   let charts := p.chart.filter (fun f => f.chart.service == st.service && f.site == .invariants) |>.flatMap fun f =>
-    f.functions.map fun c => ({ definition := f.chart, name := c.name } : InvariantRef)
+    f.functions.map fun c => Property.invariant f.chart c.name
   (entity ++ service, charts)
+
+/-- The conditions of `definition` in a Program list. -/
+def conditionsOf (list : List Ir.Conditions) (definition : Spec.Ref) : List Ir.Condition :=
+  ((list.find? (·.definition == definition)).map (·.conditions)).getD []
+
+/-- The ref fields of `st` whose target is one of its keyed entities: the entity, the field and the target. -/
+def ownRefs (st : Service) : List (String × String × String) :=
+  st.references.filter fun (_, _, target) => st.entities.contains target && !st.singles.contains target
 
 /-- The term that holds when `c` fails, or throws, at the time `now` on some record of `r` that it is checked on. -/
 def failsOn (r : SRecords) (now : Term) (c : Checked) : Except String Term := do
@@ -129,8 +150,10 @@ structure Induction where
   /-- That every encoded invariant holds of `pre`. -/
   holds : Term
   steps : List (String × Except String Step)
+  /-- The answer of each query, or why it has no encoding. -/
+  answers : List (String × Except String Answered)
   checked : List Checked
-  charts : List InvariantRef
+  charts : List Property
   /-- Why the service has no induction, such as missing bounds. -/
   blocked : Option String
 
@@ -146,36 +169,56 @@ def inductionOf (j : Spec.Structure) (service : String) : IO Induction := do
   let holds := conj (checked.filterMap fun c => (failsOn pre clockT c).toOption.map .not)
   let blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else none
   pure { st, creates, pre, facts := pre.facts st "pre" ++ clockFacts, holds,
-         steps := st.commands.map fun c => (c, stepOf st p pre clockT used c), checked, charts, blocked }
+         steps := st.commands.map fun c => (c, stepOf st p pre clockT used c),
+         answers := (st.queries.filter fun q => !(conditionsOf p.queryEnsures (st.ref q)).isEmpty).map fun q =>
+           (q, answerOf st p pre clockT q),
+         checked, charts, blocked }
 
-/-- A query of the induction: whether the initial records fail an invariant, a step can leave the encoding, or fail one. -/
+/-- A query of the induction: whether the initial records fail an invariant, a step can leave the encoding, a step can
+fail a property, or a query's answer can fail one of its ensures. -/
 inductive Asked where
-  | base (invariant : InvariantRef)
+  | base (property : Property)
   | gap (command : String)
-  | fails (command : String) (invariant : InvariantRef)
+  | fails (command : String) (property : Property)
+  | answer (query : String) (property : Property)
 
 def Induction.query (x : Induction) (step : Step) (goal : Term) : Query :=
   { vars := x.facts.vars ++ step.facts.vars,
     asserts := x.facts.asserts ++ [x.holds] ++ step.facts.asserts ++ [step.accepted, .not step.beyond, goal] }
 
+/-- The properties that a step of `command` can fail, each with the term that holds when the step fails it. -/
+def Induction.stepGoals (x : Induction) (command : String) (step : Step) : List (Property × Except String Term) :=
+  let p := x.st.structure.program
+  (x.checked.map fun ch => (ch.ref, failsOn step.post step.now ch)) ++
+    ((conditionsOf p.ensures (x.st.ref command)).map fun c =>
+      (Property.ensures (x.st.ref command) c.name, step.ensuresFails c)) ++
+    ((ownRefs x.st).map fun (e, field, target) =>
+      (Property.danglingRef (x.st.ref e) field, .ok (step.post.dangling e field target)))
+
 /--
 The queries of an induction, in order: the base case of each encoded invariant, then each command's gap query and one
-per encoded invariant.
+per property it can fail, then one per ensures of each query.
 -/
 def Induction.queries (x : Induction) : List (Asked × Query) :=
   if x.blocked.isSome then [] else
   let (init, initFacts) := initialOf x.st
   let facts := clockFacts ++ initFacts
+  let p := x.st.structure.program
   (x.checked.filterMap fun ch => (failsOn init clockT ch).toOption.map fun fails =>
     (Asked.base ch.ref, { vars := facts.vars, asserts := facts.asserts ++ [fails] })) ++
-  x.steps.flatMap fun (c, step) =>
+  (x.steps.flatMap fun (c, step) =>
     match step with
     | .error _ => []
     | .ok step =>
       (Asked.gap c, x.query step step.gap) ::
-        x.checked.filterMap fun ch => match failsOn step.post step.now ch with
-          | .ok fails => some (.fails c ch.ref, x.query step (.and (.not step.gap) fails))
-          | .error _ => none
+        (x.stepGoals c step).filterMap fun (prop, goal) => goal.toOption.map fun fails =>
+          (.fails c prop, x.query step (.and (.not step.gap) fails))) ++
+  x.answers.flatMap fun (q, answered) =>
+    match answered with
+    | .error _ => []
+    | .ok a => (conditionsOf p.queryEnsures (x.st.ref q)).filterMap fun c => (a.ensuresFails x.pre c).toOption.map
+      fun fails => (.answer q (.ensures (x.st.ref q) c.name),
+        { vars := x.facts.vars ++ a.facts.vars, asserts := x.facts.asserts ++ [x.holds] ++ a.facts.asserts ++ [a.answered, fails] })
 
 /-- The own spec services of the structure, in order. -/
 def specServices (j : Spec.Structure) : List String := (j.services.filter (!·.external)).map (·.name)
@@ -227,29 +270,65 @@ def failsIn (st : Service) (c : Checked) (records : Records) (now : Time) : Bool
   | .keyed e | .single e => records.any fun r => r.entity == e && failsConcrete (env [(.record, .json r.value)]) c.condition
   | .service => failsConcrete (env []) c.condition
 
-/-- The result of the replay of a model of a fails query: the counterexample, or why the model is no case of it. -/
-def replayFails (x : Induction) (fs : Functions IO) (M : Model) (command : String) (step : Step) (c : Checked) :
-    IO (Except String Counterexample) := do
-  let records := x.pre.conc M
-  let input := Value.obj (present M step.input)
+/-- Whether a fault of an ensures of `definition` reports `name` failing, or a throw. -/
+def failedEnsures (definition : Spec.Ref) (name : String) : Fault → Bool
+  | .failedEnsures d c => d == definition && c == name
+  | .exception (some d) => d == definition
+  | _ => false
+
+/-- Whether the semantics shows that `command`, which wrote `written` at `now` and reported `faults`, fails `prop`. -/
+def Induction.failedAfter (x : Induction) (command : String) (now : Time) (written : Records) (faults : List Fault) :
+    Property → Bool
+  | .invariant d name => match x.checked.find? (·.ref == .invariant d name) with
+    | some c => failsIn x.st c written now && faults.any (reports x.st c command)
+    | none => false
+  | .ensures d name => faults.any (failedEnsures d name)
+  | .danglingRef d field => faults.any fun
+    | .danglingRef d' _ f _ cmd | .danglingSingleRef d' f _ cmd => d' == d && f == field && cmd == x.st.ref command
+    | _ => false
+
+/-- The records of a model's state, or why the state is none that the induction assumes. -/
+def Induction.stateOf (x : Induction) (M : Model) : Except String (Records × Value × Int) := do
+  let records := (x.pre.conc M).filter fun r => x.st.entities.contains r.entity
   let clock := (M "clock").toInt
-  let now := (M "now").toInt
-  let pre := records.filter fun r => (x.st.entities.contains r.entity)
-  let given := givenOf x.st records
-  -- The state must be one where every invariant holds, as the induction assumes.
-  if let some b := x.checked.find? (failsIn x.st · pre clock) then
-    return .error s!"the case's state fails {b.ref.name}, which the induction assumes"
+  if let some b := x.checked.find? (failsIn x.st · records clock) then
+    throw s!"the case's state fails {repr b.ref}, which the induction assumes"
   let fits (r : Row) : Bool := match Data.parse (entitySchema x.st r.entity) r.value with
     | some (.ok (.ok _)) => true
     | _ => false
-  if let some r := pre.find? (!fits ·) then return .error s!"the case's record of {r.entity} is outside its schema"
+  if let some r := records.find? (!fits ·) then throw s!"the case's record of {r.entity} is outside its schema"
+  pure (records, givenOf x.st records, clock)
+
+/-- The result of the replay of a model of a fails query: the counterexample, or why the model is no case of it. -/
+def replayStep (x : Induction) (fs : Functions IO) (M : Model) (command : String) (step : Step) (prop : Property) :
+    IO (Except String Counterexample) := do
+  let input := Value.obj (present M step.input)
+  let now := (M "now").toInt
+  match x.stateOf M with
+  | .error why => return .error why
+  | .ok (pre, given, clock) =>
   match ← writtenBy x.st fs pre now command input with
   | none => return .error "the semantics rejects the case's command"
   | some (written, faults) =>
-    if !failsIn x.st c written now || !faults.any (reports x.st c command) then
-      return .error "the semantics keeps the invariant after the case's command"
+    if !x.failedAfter command now written faults prop then
+      return .error "the semantics keeps the property after the case's command"
     return .ok { given, clock, command := some command, input := some input, now := some now,
                  violations := faults.map (·.toViolation) }
+
+/-- The result of the replay of a model of an answer query: the counterexample, or why the model is no case of it. -/
+def replayAnswer (x : Induction) (fs : Functions IO) (M : Model) (query : String) (a : Answered) (name : String) :
+    IO (Except String Counterexample) := do
+  let input := Value.obj (present M a.input)
+  match x.stateOf M with
+  | .error why => return .error why
+  | .ok (pre, given, clock) =>
+  let failed := failedEnsures (x.st.ref query) name
+  let case (faults : List Fault) : Counterexample :=
+    { given, clock, command := none, query := some query, input := some input, now := none,
+      violations := faults.map (·.toViolation) }
+  match ← resolveChecked x.st fs { now := clock, service := x.st.service, records := pre } query input with
+  | .answered _ faults => return if faults.any failed then .ok (case faults) else .error "the semantics keeps the ensures"
+  | .halted fault => return if failed fault then .ok (case [fault]) else .error "the semantics halts the case's query"
 
 /--
 The replay of a model of a base query: the initial records, the single entities' records of their schema defaults, at the
@@ -263,65 +342,88 @@ def replayBase (x : Induction) (M : Model) (c : Checked) : Except String Counter
     .ok { given := givenOf x.st records, clock, command := none, input := none, now := none, violations := [] }
   else .error "the semantics keeps the invariant of the initial records"
 
+/-- The verdict of a solver's answer, from the replay of its model when it is sat. -/
+def verdictOf (answer : Smt.Answer) (exact : Bool) (replay : Model → IO (Except String Counterexample)) (what : String) :
+    IO (Option Verdict) := do
+  match answer with
+  | .unsat => pure none
+  | .unknown why => pure (some (.undecided s!"{what}: {why}"))
+  | .sat values =>
+    match ← replay (Smt.Answer.model values) with
+    | .ok case => pure (some (.counterexample case))
+    | .error why =>
+      if exact then throw (IO.userError s!"prove's encoding disagrees with the semantics {what}: {why}")
+      pure (some (.undecided s!"the solver's case {what} is outside what the encoding states exactly: {why}"))
+
 def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : IO (List ProveResult) := do
   let fs := x.st.structure.program.toFunctions x.st fun _ => pure ()
-  let result (ref : InvariantRef) (verdict : Verdict) : ProveResult :=
-    { service := x.st.service, invariant := ref, creates := x.creates, verdict }
+  let p := x.st.structure.program
+  let result (prop : Property) (verdict : Verdict) : ProveResult :=
+    { service := x.st.service, property := prop, creates := x.creates, verdict }
   let charts := x.charts.map (result · (.undecided "prove does not encode machine and screen states yet"))
+  let ensures := x.st.commands.flatMap fun c => (conditionsOf p.ensures (x.st.ref c)).map fun e =>
+    (c, Property.ensures (x.st.ref c) e.name)
+  let queryEnsures := x.answers.flatMap fun (q, _) => (conditionsOf p.queryEnsures (x.st.ref q)).map fun e =>
+    (q, e, Property.ensures (x.st.ref q) e.name)
+  let dangling := (ownRefs x.st).map fun (e, field, _) => Property.danglingRef (x.st.ref e) field
   if let some why := x.blocked then
-    return (x.checked.map (result ·.ref (.undecided why))) ++ charts
+    return ((x.checked.map (·.ref)) ++ ensures.map (·.2) ++ queryEnsures.map (·.2.2) ++ dangling).map
+      (result · (.undecided why)) ++ charts
   let (init, initFacts) := initialOf x.st
-  let unencoded := x.steps.findSome? fun (c, step) => match step with
-    | .error why => some s!"the command {c} has no encoding: {why}"
-    | .ok _ => none
-  let gap := answers.findSome? fun
-    | (.gap c, .sat _) => some s!"the command {c} can write a value that the encoding does not hold, such as a record outside its schema"
-    | (.gap c, .unknown why) => some s!"whether the command {c} stays within the encoding is unknown: {why}"
+  let gapOf (c : String) : Option String := answers.findSome? fun
+    | (.gap c', .sat _) => if c' == c then
+        some s!"the command {c} can write a value that the encoding does not hold, such as a record outside its schema"
+      else none
+    | (.gap c', .unknown why) => if c' == c then some s!"whether the command {c} stays within the encoding is unknown: {why}"
+      else none
     | _ => none
-  let entries ← x.checked.mapM fun ch => do
-    let same (ref : InvariantRef) := ref.definition == ch.ref.definition && ref.name == ch.ref.name
+  -- A property that steps can fail: proved when no step of `commands` can.
+  let afterSteps (prop : Property) (commands : List String) : IO Verdict := do
+    for c in commands do
+      match x.steps.lookup c with
+      | some (.error why) => return .undecided s!"the command {c} has no encoding: {why}"
+      | some (.ok step) =>
+        if let some (_, .error why) := (x.stepGoals c step).find? (·.1 == prop) then
+          return .undecided s!"the property has no encoding: {why} (in {c})"
+        if let some why := gapOf c then return .undecided why
+      | none => pure ()
+    for c in commands do
+      let some (.ok step) := x.steps.lookup c | continue
+      for (asked, a) in answers do
+        let .fails c' prop' := asked | continue
+        if c' != c || prop' != prop then continue
+        if let some v ← verdictOf a (x.facts.exact && step.facts.exact) (replayStep x fs · c step prop) s!"after {c}" then
+          return v
+    return .proved
+  let invariants ← x.checked.mapM fun ch => do
     match failsOn init clockT ch with
     | .error why => return result ch.ref (.undecided s!"the invariant has no encoding: {why}")
     | .ok _ => pure ()
     let base : Option Smt.Answer := answers.findSome? fun
-      | (.base ref, a) => if same ref then some a else none
+      | (.base ref, a) => if ref == ch.ref then some a else none
       | _ => none
-    match base with
-    | some (.sat values) =>
-      match replayBase x (Smt.Answer.model values) ch with
-      | .ok case => return result ch.ref (.counterexample case)
-      | .error why =>
-        if initFacts.exact then
-          throw (IO.userError s!"prove's encoding disagrees with the semantics on {ch.ref.name} of the initial records: {why}")
-        return result ch.ref (.undecided s!"the solver's initial records are outside what the encoding states exactly: {why}")
-    | some (.unknown why) => return result ch.ref (.undecided s!"of the initial records: {why}")
-    | _ => pure ()
-    let unencodable := x.steps.findSome? fun (c, step) => match step with
-      | .ok s => match failsOn s.post s.now ch with
-        | .error why => some s!"the invariant has no encoding: {why} (in {c})"
-        | .ok _ => none
-      | .error _ => none
-    if let some why := unencoded <|> unencodable then return result ch.ref (.undecided why)
-    if let some why := gap then return result ch.ref (.undecided why)
-    let mine := answers.filterMap fun
-      | (.fails c ref, a) => if same ref then some (c, a) else none
-      | _ => none
-    for (c, a) in mine do
-      match a with
-      | .sat values =>
-        let some (.ok step) := x.steps.lookup c | continue
-        match ← replayFails x fs (Smt.Answer.model values) c step ch with
-        | .ok case => return result ch.ref (.counterexample case)
-        | .error why =>
-          if x.facts.exact && step.facts.exact then
-            throw (IO.userError s!"prove's encoding disagrees with the semantics on {ch.ref.name} after {c}: {why}")
-          return result ch.ref (.undecided s!"the solver's case after {c} is outside what the encoding states exactly: {why}")
-      | .unknown why => return result ch.ref (.undecided s!"after {c}: {why}")
-      | .unsat => pure ()
-    return result ch.ref .proved
-  pure (entries ++ charts)
+    if let some a := base then
+      let replay (M : Model) : IO (Except String Counterexample) := pure (replayBase x M ch)
+      if let some v ← verdictOf a initFacts.exact replay "of the initial records" then return result ch.ref v
+    return result ch.ref (← afterSteps ch.ref x.st.commands)
+  let commandEnsures ← ensures.mapM fun (c, prop) => do pure (result prop (← afterSteps prop [c]))
+  let answered ← queryEnsures.mapM fun (q, e, prop) => do
+    match x.answers.lookup q with
+    | some (.error why) => return result prop (.undecided s!"the query {q} has no encoding: {why}")
+    | some (.ok a) =>
+      match a.ensuresFails x.pre e with
+      | .error why => return result prop (.undecided s!"the property has no encoding: {why}")
+      | .ok _ => pure ()
+      for (asked, ans) in answers do
+        let .answer q' prop' := asked | continue
+        if q' != q || prop' != prop then continue
+        if let some v ← verdictOf ans false (replayAnswer x fs · q a e.name) s!"of {q}" then return result prop v
+      return result prop .proved
+    | none => return result prop (.undecided s!"the query {q} has no encoding")
+  let refs ← dangling.mapM fun prop => do pure (result prop (← afterSteps prop x.st.commands))
+  pure (invariants ++ commandEnsures ++ answered ++ refs ++ charts)
 
-/-- The results of each invariant of each spec service, from Z3's answers to proveQueriesOf's scripts, in order. -/
+/-- The results of each property of each spec service, from Z3's answers to proveQueriesOf's scripts, in order. -/
 def proveOf (j : Spec.Structure) (answers : List String) : IO (List ProveResult) := do
   let inductions ← (specServices j).mapM (inductionOf j)
   let mut rest := answers

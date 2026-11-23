@@ -99,7 +99,7 @@ def modules : List (String × List Name) :=
     [``Tazuna.Service.Issue, ``Tazuna.Service.NextKeys, ``Tazuna.Service.Keys,
      ``Tazuna.Engine.Stored, ``Tazuna.Engine.StartLine, ``Tazuna.Engine.Log, ``Tazuna.Engine.Request, ``Tazuna.Engine.Unpaired,
      ``Tazuna.Engine.SimulatedService, ``Tazuna.Engine.ReadPart, ``Tazuna.Engine.Evaluated,
-     ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Replayed, ``Tazuna.Engine.InvariantRef,
+     ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Replayed, ``Tazuna.Engine.Property,
      ``Tazuna.Engine.Counterexample, ``Tazuna.Engine.Verdict, ``Tazuna.Engine.ProveResult,
      ``Tazuna.Engine.Response])]
 

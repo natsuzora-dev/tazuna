@@ -149,7 +149,7 @@ const commands = {
     spec: true,
     positionals: [],
     description:
-      "Prove each invariant of each spec service by induction within the bounds of its service's bounds(): it holds of the initial records, the single entities' records of their schema defaults, and after each command, with any input at any time, from any records within the bounds of which every invariant holds and every record fits its schema. prove writes one JSON line per invariant, with its verdict: proved; counterexample, with the records, the command, its input and time, and the violations that the spec reports on replaying them; or undecided, with the reason, such as a solver timeout or a construct that prove does not encode. A machine's or screen's invariant is undecided. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant.",
+      "Prove each invariant of each spec service by induction within the bounds of its service's bounds(): it holds of the initial records, the single entities' records of their schema defaults, at any time, and after each command, with any input at any time no earlier than the records' time, from any records within the bounds of which every invariant holds and every record fits its schema. From those records, prove also proves that each command's and query's ensures holds and that no command leaves a ref naming a missing record. prove writes one JSON line per property, with its verdict: proved; counterexample, with the records and their time, the command or query, its input and time, and the violations that the spec reports on replaying them; or undecided, with the reason, such as a solver timeout or a construct that prove does not encode. A machine's or screen's invariant is undecided. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant.",
     options: {},
     parse: ({ root }) => ({ command: "prove", root }),
   }),
@@ -252,7 +252,7 @@ const uncoveredOf = (spec: Spec, uncovered: readonly ViolationValue[]): Reported
     .sort((x, y) => comparePlaces(x.place, y.place))
     .map(reportedOfFound);
 
-const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+const count = (n: number, noun: string, plural = `${noun}s`) => `${n} ${n === 1 ? noun : plural}`;
 
 function record(io: Io, specRoot: string, r: ReportedViolation): string {
   return JSON.stringify({ ...r, location: { ...r.location, file: relative(io.cwd, join(specRoot, r.location.file)) } });
@@ -278,7 +278,7 @@ function reportProved(io: Io, specRoot: string, lines: readonly ProveLine[]): nu
   const counted = (kind: ProveLine["verdict"]["kind"]) => lines.filter((l) => l.verdict.kind === kind).length;
   const counterexamples = counted("counterexample");
   io.error(
-    `${count(lines.length, "invariant")}: ${counted("proved")} proved, ${count(counterexamples, "counterexample")}, ${counted("undecided")} undecided`,
+    `${count(lines.length, "property", "properties")}: ${counted("proved")} proved, ${count(counterexamples, "counterexample")}, ${counted("undecided")} undecided`,
   );
   return counterexamples === 0 ? 0 : 1;
 }

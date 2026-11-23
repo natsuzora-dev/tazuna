@@ -258,13 +258,31 @@ export type Replayed = {
   readonly bindings: readonly Readonly<Record<string, string>>[];
 };
 
-/** An invariant: a condition of an entity's records, of a machine or screen, or of the service, which names itself. */
-export type InvariantRef = {
-  readonly definition: DefinitionRef;
-  readonly name: string;
-};
+/**
+ * What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
+ * ensures of a command or query; or that a ref field of an entity never names a missing record.
+ */
+export type Property =
+  | {
+      readonly kind: "invariant";
+      readonly definition: DefinitionRef;
+      readonly name: string;
+    }
+  | {
+      readonly kind: "ensures";
+      readonly definition: DefinitionRef;
+      readonly name: string;
+    }
+  | {
+      readonly kind: "danglingRef";
+      readonly definition: DefinitionRef;
+      readonly field: string;
+    };
 
-/** A state within the bounds where every invariant holds, and a command after which the invariant fails. */
+/**
+ * A state within the bounds where every invariant holds, and a command after which the property fails, or a query whose
+ * answer fails its ensures.
+ */
 export type Counterexample = {
   /** The records, by entity: a keyed entity's as a list, a single entity's as its record. */
   readonly given: Json;
@@ -272,6 +290,8 @@ export type Counterexample = {
   readonly clock: number;
   /** The command and its input and time, none for the initial state. */
   readonly command?: string;
+  /** The query and its input, which it answers at the time of the state. */
+  readonly query?: string;
   readonly input?: Json;
   readonly now?: number;
   /** The violations that the semantics reports on replaying the case. */
@@ -291,10 +311,10 @@ export type Verdict =
       readonly reason: string;
     };
 
-/** What prove found of one invariant, within the bound of creating at most `creates` records of each keyed entity. */
+/** What prove found of one property, within the bound of creating at most `creates` records of each keyed entity. */
 export type ProveResult = {
   readonly service: string;
-  readonly invariant: InvariantRef;
+  readonly property: Property;
   readonly creates: Readonly<Record<string, number>>;
   readonly verdict: Verdict;
 };

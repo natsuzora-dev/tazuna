@@ -56,7 +56,7 @@ export async function proveLinesOf(example: string): Promise<readonly string[]> 
   await main(["prove", "."], {
     cwd: example,
     log: (line) => logged.push(line),
-    error: (line) => assert.match(line, /^\d+ invariants?: \d+ proved, \d+ counterexamples?, \d+ undecided$/),
+    error: (line) => assert.match(line, /^\d+ propert(y|ies): \d+ proved, \d+ counterexamples?, \d+ undecided$/),
     typeCheck: () => typeChecked,
     converter: converter(),
   });

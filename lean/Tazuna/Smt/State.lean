@@ -175,11 +175,11 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
 
 /-- The arguments of an entity invariant: the fields of a record as JSON holds them, and the time, an Int term. -/
 def recordEnv (fields : List (String × Term)) (now : Term) : SEnv :=
-  { args := fun | .record => some (.json fields) | .now => some (.scalar (.mkInt now)) | _ => none }
+  { args := (fun | .record => some (.json fields) | .now => some (.scalar (.mkInt now)) | _ => none) }
 
 /-- The arguments of a service invariant: the records and the time, an Int term. -/
 def recordsEnv (r : SRecords) (now : Term) : SEnv :=
-  { args := fun | .now => some (.scalar (.mkInt now)) | _ => none, records := r }
+  { args := (fun | .now => some (.scalar (.mkInt now)) | _ => none), records := r }
 
 /-- The invariants of an entity, by name, that the program holds. -/
 def invariantsOf (st : Service) (p : Program) (e : String) : List Condition :=
@@ -307,6 +307,14 @@ def SRecords.outsideSchema (svc : Service) (r : SRecords) : Term :=
     (disj (r.singles.flatMap fun (e, fields) =>
       (propertiesWith (entitySchema svc e)).map fun p => .not (fieldHolds ((fields.lookup p.1).getD undefT) p).1))
 
+/-- The input of command or query `name` as JSON holds its fields, and that each field fits the input's schema. -/
+def inputOf (svc : Service) (name : String) : List (String × Term) × Facts :=
+  let props := propertiesWith ((svc.schemaOf (.input (svc.ref name))).getD (.obj []))
+  let input := props.map fun (f, _, _) => (f, valVar s!"in.{f}")
+  let fieldFacts := props.map fun pr => fieldHolds ((input.lookup pr.1).getD undefT) pr
+  (input, { vars := input.map fun (f, _) => (s!"in.{f}", Ty.val), asserts := fieldFacts.map (·.1),
+            exact := fieldFacts.all (·.2) })
+
 /-- A command's symbolic step from the records `pre`. -/
 structure Step where
   facts : Facts
@@ -320,6 +328,8 @@ structure Step where
   beyond : Term
   /-- That the step writes what the encoding does not hold, or a record outside its schema. -/
   gap : Term
+  /-- The binds values, from the records before the step, as the command's ensures reads them. -/
+  bound : SVal
 
 /--
 The step of command `name` of `svc` from `pre` at the time `clock`, whose slots of each entity are used as `used` says.
@@ -329,15 +339,11 @@ and verify's replay keeps the later time), which no theorem states yet.
 def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used : List (String × List Term))
     (name : String) : Except String Step := do
   let some rq := svc.requirements.lookup name | throw s!"no requirements of {name}"
-  let inputSchema := (svc.schemaOf (.input (svc.ref name))).getD (.obj [])
-  let props := propertiesWith inputSchema
-  let input := props.map fun (f, _, _) => (f, valVar s!"in.{f}")
-  let fieldFacts := props.map fun pr => fieldHolds ((input.lookup pr.1).getD undefT) pr
+  let (input, inputFacts) := inputOf svc name
   let now := Term.var "now" .int
-  let vars := input.map (fun (f, _) => (s!"in.{f}", Ty.val)) ++ [("now", .int)]
-  let asserts := fieldFacts.map (·.1) ++
-    [Term.le (intLit (-safeInteger)) now, .le now (intLit safeInteger), .le clock now]
-  let facts : Facts := { vars, asserts, exact := fieldFacts.all (·.2) }
+  let nowFacts : Facts :=
+    { vars := [("now", .int)], asserts := [Term.le (intLit (-safeInteger)) now, .le now (intLit safeInteger), .le clock now] }
+  let facts := inputFacts ++ nowFacts
   let args (bound : Option SVal) : Arg → Option SVal
     | .input => some (.json input)
     | .now => some (.scalar (.mkInt now))
@@ -374,6 +380,50 @@ def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used :
   let accepted := conj (refs ++ bindTerms.map (·.2.2) ++ requireTerms ++
     [.not decideErr, .not (stepped.records.duplicated svc)])
   pure { facts := facts ++ named, input, now, accepted, post := stepped.records, beyond := stepped.beyond,
-         gap := .or stepped.gap (stepped.records.outsideSchema svc) }
+         gap := .or stepped.gap (stepped.records.outsideSchema svc), bound }
+
+/-- The term that holds when the ensures `c` of a step's command fails, or throws, after the step. -/
+def Step.ensuresFails (step : Step) (c : Condition) : Except String Term := do
+  let env : SEnv := { args := (fun | .input => some (.json step.input) | .bound => some step.bound | _ => none),
+                      records := step.post }
+  let (v, e) ← seval env [] c.body
+  pure (Term.or e (.not v.truthy))
+
+/-- The term that holds when a live record of `entity` in `r` holds in `field` a key that no live record of `target` has. -/
+def SRecords.dangling (r : SRecords) (entity field target : String) : Term :=
+  let danglingAt (live : Term) (fields : List (String × Term)) : Term :=
+    let v := (fields.lookup field).getD undefT
+    conj [live, .not (nullishT v), .or (.not (.isStr v)) (.not (keyIn (.strOf v) (r.slotsOf target)))]
+  disj ((r.slotsOf entity).map (fun s => danglingAt s.live s.fields) ++ ((r.singles.lookup entity).map (danglingAt tt)).toList)
+
+/--
+A query's symbolic answer on the records `pre` at the time `clock`: its input, the term that holds when the input passes
+the query's requires and resolve does not throw, and the output. The facts are inexact: nothing states that the output
+fits its schema, which the semantics checks before the ensures read it.
+-/
+structure Answered where
+  facts : Facts
+  input : List (String × Term)
+  answered : Term
+  output : SVal
+
+def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name : String) : Except String Answered := do
+  let (input, inputFacts) := inputOf svc name
+  let requires := ((p.inputRequirement.find? (·.definition == svc.ref name)).map (·.conditions)).getD []
+  let requireTerms ← requires.mapM fun c => do
+    let (v, e) ← seval { args := (fun | .input => some (.json input) | _ => none) } [] c.body
+    pure (Term.and (.not e) v.truthy)
+  let some resolve := p.resolve.find? (·.definition == svc.ref name) | throw s!"no resolve of {name}"
+  let env : SEnv := { args := (fun | .input => some (.json input) | .now => some (.scalar (.mkInt clock)) | _ => none),
+                      records := pre }
+  let (output, err) ← seval env [] resolve.body
+  pure { facts := { inputFacts with exact := false }, input, answered := conj (requireTerms ++ [.not err]), output }
+
+/-- The term that holds when the ensures `c` of a query fails, or throws, on its answer. -/
+def Answered.ensuresFails (a : Answered) (pre : SRecords) (c : Condition) : Except String Term := do
+  let env : SEnv := { args := (fun | .input => some (.json a.input) | .output => some a.output | _ => none),
+                      records := pre }
+  let (v, e) ← seval env [] c.body
+  pure (Term.or e (.not v.truthy))
 
 end Tazuna.Smt
