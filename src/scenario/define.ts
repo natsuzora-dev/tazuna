@@ -186,8 +186,8 @@ type OwnedBy<D, S extends string> = OwnerOf<D> extends S ? unknown : never;
 /**
  * What a line's processing, or the startup, caused, named by content: a handle names every message whose content has
  * the fields of `pick`. None matching is reported, and so are matches that differ. A line that names a handle acts on
- * each of its messages in sending order, and `test` runs every other order and reports `ChoiceDependent` when one
- * changes the result. A message travels between services of `S`: the own service and the peers that Given lists as
+ * each of its messages in sending order; prove reports `ChoiceDependent` when another order changes the result. A
+ * message travels between services of `S`: the own service and the peers that Given lists as
  * running or external.
  */
 export interface Caused<S extends string = string> {

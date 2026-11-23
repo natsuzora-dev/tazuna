@@ -394,7 +394,7 @@ No theorem shows that it does.
 | The service rejects a command that reuses an id with another input, whatever the order of object fields. | `reused_id_rejected` |
 | The service answers a repeated query again, because a query has no identity. | `query_answered_again` |
 | When an event or an answer arrives again with the same id, the service does not process it again. | `redelivered_event_not_processed`, `redelivered_answer_not_processed` |
-| Two values that `test` or `verify` compares equal rename into each other under the binding that the comparison ends with: each key position as the binding pairs it, any other leaf equal, and bags and objects without repeated keys after reordering. | `matchValue_renamed` |
+| Two values that `verify` compares equal rename into each other under the binding that the comparison ends with: each key position as the binding pairs it, any other leaf equal, and bags and objects without repeated keys after reordering. | `matchValue_renamed` |
 
 ### Restart
 
