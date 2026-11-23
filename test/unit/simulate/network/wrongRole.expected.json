@@ -1,23 +1,25 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.wrongRole",
+      "definition": null,
+      "data": {
+        "scenarioLine": 0,
+        "service": "calendar"
+      }
+    }
+  ],
   "services": [
     {
       "service": "todo",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     },
     {
       "service": "notifier",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.wrongRole",
-    "definition": null,
-    "data": {
-      "scenarioLine": 0,
-      "service": "calendar"
-    }
-  }
+  "halted": true
 }

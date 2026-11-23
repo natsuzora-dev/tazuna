@@ -1,7 +1,9 @@
 {
+  "violations": [],
   "services": [
     {
       "service": "todo",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -10,15 +12,13 @@
           "id": "listScreen.close#1",
           "name": "listScreen.close"
         }
-      ],
-      "violations": []
+      ]
     },
     {
       "service": "notifier",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     }
   ],
-  "violations": [],
-  "halted": null
+  "halted": false
 }

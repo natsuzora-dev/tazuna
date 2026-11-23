@@ -5,7 +5,7 @@ import type { Spec } from "../../src/load/load.ts";
 import { folders, loadedSpec } from "../fixtures/fixtures.ts";
 
 /**
- * The examples of the engine's simulate request: test/unit/simulate/<example>/, each a spec and pairs of
+ * The examples of lowered scenarios, which the engine's test request runs: test/unit/simulate/<example>/, each a spec and pairs of
  * <name>.scenario.json, a lowered scenario, and <name>.expected.json, the outcome.
  */
 export const simRoot = join(import.meta.dirname, "simulate");

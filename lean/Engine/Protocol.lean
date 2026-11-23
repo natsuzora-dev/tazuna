@@ -39,8 +39,6 @@ inductive Request where
   | compareSnapshot (snapshot : List (Option Value)) (run : List Value)
   | afters (snapshot : List (Option TraceLine))
   | decodeLines (values : List Value)
-  /-- The simulation of the scenario: what each running service shows, and the simulation's violations. -/
-  | simulate («structure» : Ir.Structure) (scenario : Scenario)
   /-- What test finds of each scenario (Engine.test). -/
   | test («structure» : Ir.Structure) (scenarios : List Scenario)
   /-- What verify finds of each log, and the parts of the spec that no log reached (Engine.verify). -/
@@ -117,8 +115,6 @@ inductive Response where
   | afters (findings : List Verify.Uncomparable)
   /-- Each value as a trace line, or null when it is none. -/
   | decodedLines (lines : List (Option TraceLine))
-  | simulated (services : List SimulatedService) (violations : List Sim.InvalidScenario)
-      (halted : Option Sim.InvalidScenario)
   | evaluated (result : Evaluated)
   | tested (runs : List Engine.ScenarioRun)
   | verified (logs : List Replayed) (uncovered : List Violation)

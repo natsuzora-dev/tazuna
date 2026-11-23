@@ -1,26 +1,28 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.unreceivedEvent",
+      "definition": null,
+      "data": {
+        "scenarioLine": 0,
+        "event": {
+          "service": "calendar",
+          "name": "slotFreed"
+        }
+      }
+    }
+  ],
   "services": [
     {
       "service": "todo",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     },
     {
       "service": "notifier",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.unreceivedEvent",
-    "definition": null,
-    "data": {
-      "scenarioLine": 0,
-      "event": {
-        "service": "calendar",
-        "name": "slotFreed"
-      }
-    }
-  }
+  "halted": true
 }

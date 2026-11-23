@@ -1,24 +1,4 @@
 {
-  "services": [
-    {
-      "service": "todo",
-      "lines": [
-        {
-          "time": 1792890000000,
-          "dir": "in",
-          "type": "operation",
-          "id": "listScreen.close#1",
-          "name": "listScreen.close"
-        }
-      ],
-      "violations": []
-    },
-    {
-      "service": "notifier",
-      "lines": [],
-      "violations": []
-    }
-  ],
   "violations": [
     {
       "kind": "InvalidScenario.unresolvedReference",
@@ -32,5 +12,25 @@
       }
     }
   ],
-  "halted": null
+  "services": [
+    {
+      "service": "todo",
+      "violations": [],
+      "lines": [
+        {
+          "time": 1792890000000,
+          "dir": "in",
+          "type": "operation",
+          "id": "listScreen.close#1",
+          "name": "listScreen.close"
+        }
+      ]
+    },
+    {
+      "service": "notifier",
+      "violations": [],
+      "lines": []
+    }
+  ],
+  "halted": false
 }

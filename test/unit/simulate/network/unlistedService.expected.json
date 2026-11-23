@@ -1,12 +1,23 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.unlistedService",
+      "definition": null,
+      "data": {
+        "scenarioLine": 0,
+        "service": "calendar"
+      }
+    }
+  ],
   "services": [
     {
       "service": "notifier",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     },
     {
       "service": "todo",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -54,7 +65,10 @@
           "payload": {
             "taskId": "task-1"
           },
-          "resultOf": "addTask#1"
+          "resultOf": "addTask#1",
+          "after": [
+            "taskAddedRecorded#1"
+          ]
         },
         {
           "time": 1792890000000,
@@ -76,19 +90,13 @@
           },
           "caller": {
             "service": "todo"
-          }
+          },
+          "created": [
+            "todo/Booking-1"
+          ]
         }
-      ],
-      "violations": []
+      ]
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.unlistedService",
-    "definition": null,
-    "data": {
-      "scenarioLine": 0,
-      "service": "calendar"
-    }
-  }
+  "halted": true
 }

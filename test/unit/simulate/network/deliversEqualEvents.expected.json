@@ -1,7 +1,9 @@
 {
+  "violations": [],
   "services": [
     {
       "service": "metronome",
+      "violations": [],
       "lines": [
         {
           "time": 1792886400000,
@@ -40,7 +42,10 @@
           "id": "tock#1",
           "name": "tock",
           "payload": {},
-          "resultOf": "beat#1"
+          "resultOf": "beat#1",
+          "after": [
+            "tick#1"
+          ]
         },
         {
           "time": 1792886400000,
@@ -49,13 +54,17 @@
           "id": "tick#2",
           "name": "tick",
           "payload": {},
-          "resultOf": "beat#1"
+          "resultOf": "beat#1",
+          "after": [
+            "tick#1",
+            "tock#1"
+          ]
         }
-      ],
-      "violations": []
+      ]
     },
     {
       "service": "listener",
+      "violations": [],
       "lines": [
         {
           "time": 1792886400000,
@@ -81,10 +90,8 @@
           "name": "metronome.tick",
           "payload": {}
         }
-      ],
-      "violations": []
+      ]
     }
   ],
-  "violations": [],
-  "halted": null
+  "halted": false
 }

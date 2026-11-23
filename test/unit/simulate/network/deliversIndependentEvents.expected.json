@@ -1,7 +1,9 @@
 {
+  "violations": [],
   "services": [
     {
       "service": "metronome",
+      "violations": [],
       "lines": [
         {
           "time": 1792886400000,
@@ -49,7 +51,10 @@
           "payload": {
             "id": "beat-2"
           },
-          "resultOf": "addBeats#1"
+          "resultOf": "addBeats#1",
+          "after": [
+            "beatAdded#1"
+          ]
         },
         {
           "time": 1792886400000,
@@ -71,11 +76,11 @@
             "beatId": "beat-2"
           }
         }
-      ],
-      "violations": []
+      ]
     },
     {
       "service": "listener",
+      "violations": [],
       "lines": [
         {
           "time": 1792886400000,
@@ -97,10 +102,8 @@
             "beatId": "beat-1"
           }
         }
-      ],
-      "violations": []
+      ]
     }
   ],
-  "violations": [],
-  "halted": null
+  "halted": false
 }

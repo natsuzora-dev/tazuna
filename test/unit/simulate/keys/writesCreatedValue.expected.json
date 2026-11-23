@@ -1,7 +1,22 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.writtenKey",
+      "definition": null,
+      "data": {
+        "scenarioLine": 9,
+        "key": "tags/Label-1",
+        "entity": {
+          "service": "tags",
+          "name": "Label"
+        }
+      }
+    }
+  ],
   "services": [
     {
       "service": "notes",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -14,7 +29,10 @@
           },
           "caller": {
             "service": "notes"
-          }
+          },
+          "created": [
+            "notes/Note-1"
+          ]
         },
         {
           "time": 1792890000000,
@@ -72,11 +90,11 @@
             "result": "accepted"
           }
         }
-      ],
-      "violations": []
+      ]
     },
     {
       "service": "tags",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -124,7 +142,10 @@
           },
           "caller": {
             "service": "tags"
-          }
+          },
+          "created": [
+            "tags/Label-2"
+          ]
         },
         {
           "time": 1792890000000,
@@ -135,7 +156,10 @@
           "payload": {
             "id": "tags/Label-1",
             "noteId": "notes/Note-1"
-          }
+          },
+          "created": [
+            "tags/Label-1"
+          ]
         },
         {
           "time": 1792890000000,
@@ -176,21 +200,8 @@
             }
           }
         }
-      ],
-      "violations": []
+      ]
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.writtenKey",
-    "definition": null,
-    "data": {
-      "scenarioLine": 9,
-      "key": "tags/Label-1",
-      "entity": {
-        "service": "tags",
-        "name": "Label"
-      }
-    }
-  }
+  "halted": true
 }

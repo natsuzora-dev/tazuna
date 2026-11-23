@@ -1,7 +1,38 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.unmetExpectation",
+      "definition": null,
+      "data": {
+        "expectation": 0,
+        "expected": [
+          {
+            "result": "fulfilled",
+            "output": {
+              "tasks": []
+            }
+          }
+        ],
+        "actual": [
+          {
+            "result": "fulfilled",
+            "output": {
+              "tasks": [
+                {
+                  "taskId": "task-1",
+                  "seen": true
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
   "services": [
     {
       "service": "todo",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -49,7 +80,10 @@
           "payload": {
             "taskId": "task-1"
           },
-          "resultOf": "addTask#1"
+          "resultOf": "addTask#1",
+          "after": [
+            "taskAddedRecorded#1"
+          ]
         },
         {
           "time": 1792890000000,
@@ -71,7 +105,10 @@
           },
           "caller": {
             "service": "todo"
-          }
+          },
+          "created": [
+            "todo/Booking-1"
+          ]
         },
         {
           "time": 1792890000000,
@@ -197,11 +234,11 @@
           "type": "time",
           "id": "time#1"
         }
-      ],
-      "violations": []
+      ]
     },
     {
       "service": "notifier",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -271,39 +308,8 @@
           "type": "time",
           "id": "time#1"
         }
-      ],
-      "violations": []
+      ]
     }
   ],
-  "violations": [
-    {
-      "kind": "InvalidScenario.unmetExpectation",
-      "definition": null,
-      "data": {
-        "expectation": 0,
-        "expected": [
-          {
-            "result": "fulfilled",
-            "output": {
-              "tasks": []
-            }
-          }
-        ],
-        "actual": [
-          {
-            "result": "fulfilled",
-            "output": {
-              "tasks": [
-                {
-                  "taskId": "task-1",
-                  "seen": true
-                }
-              ]
-            }
-          }
-        ]
-      }
-    }
-  ],
-  "halted": null
+  "halted": false
 }

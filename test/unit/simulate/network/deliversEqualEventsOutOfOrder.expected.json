@@ -1,7 +1,35 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.overtaking",
+      "definition": null,
+      "data": {
+        "scenarioLine": 1,
+        "message": {
+          "sender": "metronome",
+          "receiver": "listener",
+          "id": "tock#1",
+          "origin": {
+            "type": "line",
+            "index": 0
+          }
+        },
+        "earlier": {
+          "sender": "metronome",
+          "receiver": "listener",
+          "id": "tick#1",
+          "origin": {
+            "type": "line",
+            "index": 0
+          }
+        }
+      }
+    }
+  ],
   "services": [
     {
       "service": "metronome",
+      "violations": [],
       "lines": [
         {
           "time": 1792886400000,
@@ -40,7 +68,10 @@
           "id": "tock#1",
           "name": "tock",
           "payload": {},
-          "resultOf": "beat#1"
+          "resultOf": "beat#1",
+          "after": [
+            "tick#1"
+          ]
         },
         {
           "time": 1792886400000,
@@ -49,41 +80,19 @@
           "id": "tick#2",
           "name": "tick",
           "payload": {},
-          "resultOf": "beat#1"
+          "resultOf": "beat#1",
+          "after": [
+            "tick#1",
+            "tock#1"
+          ]
         }
-      ],
-      "violations": []
+      ]
     },
     {
       "service": "listener",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.overtaking",
-    "definition": null,
-    "data": {
-      "scenarioLine": 1,
-      "message": {
-        "sender": "metronome",
-        "receiver": "listener",
-        "id": "tock#1",
-        "origin": {
-          "type": "line",
-          "index": 0
-        }
-      },
-      "earlier": {
-        "sender": "metronome",
-        "receiver": "listener",
-        "id": "tick#1",
-        "origin": {
-          "type": "line",
-          "index": 0
-        }
-      }
-    }
-  }
+  "halted": true
 }

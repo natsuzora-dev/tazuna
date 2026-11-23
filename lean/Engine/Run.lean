@@ -54,28 +54,11 @@ def instrumentedOf (start : Sim.World) : IO (String → Functions ActingIO) := d
     | none => (Eval.functionsOf default last).hoist liftM
     | some st => (instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)).hoist (focus service)
 
-/-- A world with what each running service's instrumented functions collected on the way to it. -/
-structure Ran where
-  world : Sim.World
-  acting : Acting
-
 /-- The value of a definition's part as verify reads it. -/
 def readIn (spec : Ir.Structure) (d : Ir.Definition) (part : Verify.Part) (v : Value) : IO CValue :=
   pure (Verify.readValueOf spec d part v)
 
 def halted (w : Sim.World) : Bool := w.halted.isSome || w.states.any (·.2.halted.isSome)
-
-/-- What a running service reports: its own violations, then those its instrument collected, then its halt. -/
-def reportedOf (r : Ran) (service : String) (s : Service.State) : List Violation :=
-  reportedViolations s (r.acting.collect service) none
-
-/-- What a simulation shows of one running service: its trace lines and its violations. -/
-structure SimulatedService where
-  service : String
-  lines : List TraceLine
-  violations : List Violation
-
-derive_wire SimulatedService serialize_only
 
 /-- What a running service of a scenario's simulation reports, and its trace as its snapshot holds it. -/
 structure ServiceRun where
@@ -99,26 +82,11 @@ derive_wire ScenarioRun serialize_only
 def runScenario (spec : Ir.Structure) (sc : Scenario) : IO ScenarioRun := do
   let start ← Sim.World.start spec sc
   let (world, acting) ← (Sim.simulate spec (← instrumentedOf start) start sc).run {}
-  let simulated : Ran := { world, acting }
   let services := world.states.map fun (service, s) =>
-    { service, violations := reportedOf simulated service s
+    { service, violations := reportedViolations s (acting.collect service) none
       lines := (Sim.trace s).map fun (l, after, created) => Sim.traceLineOf service l after created }
   pure { violations := world.violations.map (·.toViolation) ++ (world.halted.map (·.toViolation)).toList
          services, halted := halted world }
-
-/--
-The simulation of `sc`: each running service's trace lines and violations, and the simulation's violations and its
-halting one.
--/
-def simulate (spec : Ir.Structure) (sc : Scenario) :
-    IO (List SimulatedService × List Sim.InvalidScenario × Option Sim.InvalidScenario) := do
-  let start ← Sim.World.start spec sc
-  let (w, acting) ← (Sim.simulate spec (← instrumentedOf start) start sc).run {}
-  let services := w.states.map fun (service, s) =>
-    let c := acting.collect service
-    { service, lines := s.lines.toList.map (Sim.traceLineOf service · [] [])
-      violations := reportedViolations s c none }
-  pure (services, w.violations, w.halted)
 
 /-- What test finds of each scenario, in order. -/
 def test (spec : Ir.Structure) (scenarios : List Scenario) : IO (List ScenarioRun) :=

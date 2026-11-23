@@ -42,7 +42,6 @@ const responses = {
   compareSnapshot: "comparedSnapshot",
   afters: "afters",
   decodeLines: "decodedLines",
-  simulate: "simulated",
   test: "tested",
   verify: "verified",
   bindings: "bound",

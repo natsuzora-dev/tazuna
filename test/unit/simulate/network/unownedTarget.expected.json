@@ -1,8 +1,8 @@
 {
+  "violations": [],
   "services": [
     {
       "service": "todo",
-      "lines": [],
       "violations": [
         {
           "kind": "InvalidInput.unownedTarget",
@@ -14,14 +14,14 @@
             }
           }
         }
-      ]
+      ],
+      "lines": []
     },
     {
       "service": "notifier",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     }
   ],
-  "violations": [],
-  "halted": null
+  "halted": true
 }

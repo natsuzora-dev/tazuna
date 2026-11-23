@@ -1,27 +1,29 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.writtenKey",
+      "definition": null,
+      "data": {
+        "scenarioLine": 0,
+        "key": "todo/Task-7",
+        "entity": {
+          "service": "todo",
+          "name": "Task"
+        }
+      }
+    }
+  ],
   "services": [
     {
       "service": "todo",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     },
     {
       "service": "notifier",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.writtenKey",
-    "definition": null,
-    "data": {
-      "scenarioLine": 0,
-      "key": "todo/Task-7",
-      "entity": {
-        "service": "todo",
-        "name": "Task"
-      }
-    }
-  }
+  "halted": true
 }

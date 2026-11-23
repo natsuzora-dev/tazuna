@@ -27,9 +27,6 @@ def respond (solve : List String → IO (List String)) : Engine.Request → IO R
     pure (.afters (Verify.unknownAfters lines))
   | .decodeLines values =>
     pure (.decodedLines (values.map fun v => (FromValue.fromValue v : Except String TraceLine).toOption))
-  | .simulate s sc => do
-    let (services, violations, halted) ← Engine.simulate s sc
-    pure (.simulated services violations halted)
   | .test s scenarios => do pure (.tested (← Engine.test s scenarios))
   | .verify s logs => do
     let (replayed, uncovered) ← Engine.verify s logs

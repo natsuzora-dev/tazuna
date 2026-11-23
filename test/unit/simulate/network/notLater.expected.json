@@ -1,24 +1,26 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.notLater",
+      "definition": null,
+      "data": {
+        "scenarioLine": 0,
+        "at": 1792890000000,
+        "now": 1792890000000
+      }
+    }
+  ],
   "services": [
     {
       "service": "todo",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     },
     {
       "service": "notifier",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.notLater",
-    "definition": null,
-    "data": {
-      "scenarioLine": 0,
-      "at": 1792890000000,
-      "now": 1792890000000
-    }
-  }
+  "halted": true
 }

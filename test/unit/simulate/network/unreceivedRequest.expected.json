@@ -1,7 +1,30 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.unreceivedRequest",
+      "definition": null,
+      "data": {
+        "scenarioLine": 1,
+        "peer": "calendar",
+        "fact": {
+          "type": "request",
+          "origin": {
+            "type": "line",
+            "index": 0
+          },
+          "kind": "command",
+          "target": {
+            "service": "calendar",
+            "name": "book"
+          }
+        }
+      }
+    }
+  ],
   "services": [
     {
       "service": "todo",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -49,7 +72,10 @@
           "payload": {
             "taskId": "task-1"
           },
-          "resultOf": "addTask#1"
+          "resultOf": "addTask#1",
+          "after": [
+            "taskAddedRecorded#1"
+          ]
         },
         {
           "time": 1792890000000,
@@ -71,36 +97,18 @@
           },
           "caller": {
             "service": "todo"
-          }
+          },
+          "created": [
+            "todo/Booking-1"
+          ]
         }
-      ],
-      "violations": []
+      ]
     },
     {
       "service": "notifier",
-      "lines": [],
-      "violations": []
+      "violations": [],
+      "lines": []
     }
   ],
-  "violations": [],
-  "halted": {
-    "kind": "InvalidScenario.unreceivedRequest",
-    "definition": null,
-    "data": {
-      "scenarioLine": 1,
-      "peer": "calendar",
-      "fact": {
-        "type": "request",
-        "origin": {
-          "type": "line",
-          "index": 0
-        },
-        "kind": "command",
-        "target": {
-          "service": "calendar",
-          "name": "book"
-        }
-      }
-    }
-  }
+  "halted": true
 }

@@ -21,19 +21,14 @@ test("Each example holds only service folders and pairs of <name>.scenario.json 
   assert.ok(examples.length > 0);
 });
 
-const outcomes = new Map<string, readonly string[]>();
-
 for (const { root, scenarios } of examples) {
   const spec = await convertedSpec(root);
   for (const name of scenarios)
     test(`${relative(tests, root)}/${name}: the simulation gives the outcome of ${name}${outcomeSuffix}`, (t) => {
       const sc = scenario.parse(JSON.parse(readFileSync(join(root, `${name}${scenarioSuffix}`), "utf8")));
-      const [outcome] = ask("simulate", [{ structure: spec.structure, scenario: sc }]);
+      const [tested] = ask("test", [{ structure: spec.structure, scenarios: [sc] }]);
+      const [outcome] = tested?.runs ?? [];
       if (outcome === undefined) throw new Error("the engine gave no outcome");
-      outcomes.set(`${root}/${name}`, [
-        ...outcome.violations.map((r) => r.kind),
-        ...(outcome.halted === null ? [] : [outcome.halted.kind]),
-      ]);
       t.assert.fileSnapshot(outcome, join(root, `${name}${outcomeSuffix}`), {
         serializers: [(v) => `${JSON.stringify(v, null, 2)}\n`],
       });
@@ -46,9 +41,8 @@ test("Each InvalidScenario kind is in the expected outcome of some scenario unde
       scenarios.flatMap((name) => {
         const outcome = JSON.parse(readFileSync(join(root, `${name}${outcomeSuffix}`), "utf8")) as {
           readonly violations: readonly { readonly kind: string }[];
-          readonly halted: { readonly kind: string } | null;
         };
-        return [...outcome.violations.map((r) => r.kind), ...(outcome.halted === null ? [] : [outcome.halted.kind])];
+        return outcome.violations.map((r) => r.kind);
       }),
     ),
   );

@@ -1,7 +1,40 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
+          "sender": "tags",
+          "receiver": "notes",
+          "id": "answer#1",
+          "origin": {
+            "type": "line",
+            "index": 0
+          }
+        }
+      }
+    },
+    {
+      "kind": "InvalidScenario.leftInFlight",
+      "definition": null,
+      "data": {
+        "message": {
+          "sender": "tags",
+          "receiver": "notes",
+          "id": "notes.attach#1",
+          "origin": {
+            "type": "line",
+            "index": 0
+          }
+        }
+      }
+    }
+  ],
   "services": [
     {
       "service": "notes",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -14,7 +47,10 @@
           },
           "caller": {
             "service": "notes"
-          }
+          },
+          "created": [
+            "notes/Note-1"
+          ]
         },
         {
           "time": 1792890000000,
@@ -27,11 +63,11 @@
           },
           "resultOf": "tags.register#1"
         }
-      ],
-      "violations": []
+      ]
     },
     {
       "service": "tags",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -79,7 +115,10 @@
           },
           "caller": {
             "service": "tags"
-          }
+          },
+          "created": [
+            "tags/Label-2"
+          ]
         },
         {
           "time": 1792890000000,
@@ -90,43 +129,13 @@
           "payload": {
             "id": "tags/Label-1",
             "noteId": "notes/Note-1"
-          }
+          },
+          "created": [
+            "tags/Label-1"
+          ]
         }
-      ],
-      "violations": []
+      ]
     }
   ],
-  "violations": [
-    {
-      "kind": "InvalidScenario.leftInFlight",
-      "definition": null,
-      "data": {
-        "message": {
-          "sender": "tags",
-          "receiver": "notes",
-          "id": "answer#1",
-          "origin": {
-            "type": "line",
-            "index": 0
-          }
-        }
-      }
-    },
-    {
-      "kind": "InvalidScenario.leftInFlight",
-      "definition": null,
-      "data": {
-        "message": {
-          "sender": "tags",
-          "receiver": "notes",
-          "id": "notes.attach#1",
-          "origin": {
-            "type": "line",
-            "index": 0
-          }
-        }
-      }
-    }
-  ],
-  "halted": null
+  "halted": false
 }

@@ -1,18 +1,4 @@
 {
-  "services": [
-    {
-      "service": "notifier",
-      "lines": [
-        {
-          "time": 1792893600000,
-          "dir": "in",
-          "type": "time",
-          "id": "time#1"
-        }
-      ],
-      "violations": []
-    }
-  ],
   "violations": [
     {
       "kind": "InvalidScenario.vacuousExpectation",
@@ -22,5 +8,19 @@
       }
     }
   ],
-  "halted": null
+  "services": [
+    {
+      "service": "notifier",
+      "violations": [],
+      "lines": [
+        {
+          "time": 1792893600000,
+          "dir": "in",
+          "type": "time",
+          "id": "time#1"
+        }
+      ]
+    }
+  ],
+  "halted": false
 }

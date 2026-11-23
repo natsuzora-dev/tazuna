@@ -1,7 +1,17 @@
 {
+  "violations": [
+    {
+      "kind": "InvalidScenario.unusedInFlight",
+      "definition": null,
+      "data": {
+        "scenarioLine": 16
+      }
+    }
+  ],
   "services": [
     {
       "service": "todo",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -49,7 +59,10 @@
           "payload": {
             "taskId": "task-1"
           },
-          "resultOf": "addTask#1"
+          "resultOf": "addTask#1",
+          "after": [
+            "taskAddedRecorded#1"
+          ]
         },
         {
           "time": 1792890000000,
@@ -71,7 +84,10 @@
           },
           "caller": {
             "service": "todo"
-          }
+          },
+          "created": [
+            "todo/Booking-1"
+          ]
         },
         {
           "time": 1792890000000,
@@ -197,11 +213,11 @@
           "type": "time",
           "id": "time#1"
         }
-      ],
-      "violations": []
+      ]
     },
     {
       "service": "notifier",
+      "violations": [],
       "lines": [
         {
           "time": 1792890000000,
@@ -271,18 +287,8 @@
           "type": "time",
           "id": "time#1"
         }
-      ],
-      "violations": []
+      ]
     }
   ],
-  "violations": [
-    {
-      "kind": "InvalidScenario.unusedInFlight",
-      "definition": null,
-      "data": {
-        "scenarioLine": 16
-      }
-    }
-  ],
-  "halted": null
+  "halted": false
 }
