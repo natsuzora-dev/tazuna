@@ -113,6 +113,7 @@ export const guarantees = [
   "send_keysDistinct",
   "sent_ids_distinct",
   "service_invariant_reported_iff",
+  "seval_agrees",
   "simulate_agrees",
   "simulate_records_perm",
   "simulate_reported",

@@ -433,3 +433,9 @@ No theorem shows that it does.
 | Property | Theorems |
 |---|---|
 | `verify --coverage` reports only parts outside the reached parts that the replays collect. No theorem states that the collected parts are what the replays reached. | `uncovered_unreached` |
+
+### Proof
+
+| Property | Theorems |
+|---|---|
+| Under every assignment of the SMT variables, an expression that `prove` encodes throws exactly when its encoding's throw term holds, and otherwise has the value that its encoding gives. | `seval_agrees` |

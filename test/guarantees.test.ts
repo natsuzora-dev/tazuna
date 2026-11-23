@@ -179,6 +179,10 @@ const instead: Readonly<Partial<Record<Guarantee, Instead>>> = {
   send_keysDistinct: { example: "service/Message/rejection-kinds", scenario: "commandRejections" },
   sent_ids_distinct: { example: "service/Restart/requests", scenario: "requestsDiscarded" },
   service_invariant_reported_iff: { kindExample: "Fault.failedServiceInvariant" },
+  seval_agrees: {
+    because:
+      "a property of the encoding over all SMT models, which no run computes; prove replays each counterexample in the semantics instead",
+  },
   simulate_agrees: ofAudit,
   simulate_records_perm: {
     because:
