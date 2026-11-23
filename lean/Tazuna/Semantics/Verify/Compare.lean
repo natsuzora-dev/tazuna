@@ -409,7 +409,7 @@ def pairPlace {root : Binding} (v : Values) (trace : List Numbered) (place : Nat
         let id := s.line.body.id
         let c : From root :=
           if s.line.isOutRequest then
-            match st.binding.val.bindString (v.binds id t.line.body.id) (v.domain id, id) (v.domain id, t.line.body.id) with
+            match st.binding.val.bindString (v.binds id) (v.domain id, id) (v.domain id, t.line.body.id) with
             | some c => ⟨c.val, st.binding.property.trans c.property⟩
             | none => st.binding
           else st.binding
@@ -562,7 +562,7 @@ def compare (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (i
   let inputs := expected.filterMap fun g => g.input.map (·.line)
   let (found, set) :=
     compareGroups lines.length internal inputs (actual.flatMap (·.outs)) cut.isSome expected actual
-      { domain := valueDomains snapshot, fresh := [], image := fun _ _ => true }
+      { domain := valueDomains snapshot, fresh := [] }
       [⟨Binding.empty, .refl _⟩]
   { findings := found ++ (cut.map Finding.uncomparable).toList, bindings := set.map (·.val) }
 

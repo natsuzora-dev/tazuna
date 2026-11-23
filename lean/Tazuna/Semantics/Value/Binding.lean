@@ -128,22 +128,19 @@ def Matches.andThen {b : Binding} (m : Matches b) (f : (c : Binding) → Matches
 def sameSet {α : Type} [BEq α] (a b : List α) : Bool := a.length == b.length && a.all b.contains
 
 /--
-What the comparison knows of the snapshot's values: the domain of each (valueDomains), the fresh ones so far, and
-which values `image s t` lets a fresh `s` stand for. Verify lets it stand for any string, since the implementation
-chooses its values in its own way; Explore compares two runs of the spec and lets a created key stand only for a key
-that the other run created in the same domain.
+What the comparison knows of the snapshot's values: the domain of each (valueDomains) and the fresh ones so far. A fresh
+value may stand for any string, since the implementation chooses its values in its own way.
 -/
 structure Values where
   domain : String → String
   fresh : List String
-  image : String → String → Bool
 
-/-- Whether snapshot value `s` may bind to `t` as a new value: `s` is fresh and may stand for `t`. -/
-def Values.binds (v : Values) (s t : String) : Bool := v.fresh.contains s && v.image s t
+/-- Whether snapshot value `s` may bind as a new value: it is fresh. -/
+def Values.binds (v : Values) (s : String) : Bool := v.fresh.contains s
 
 /-- The binding with snapshot string `s` standing for implementation string `t`, both in the domain of `s`. -/
 def Values.bind (v : Values) (b : Binding) (s t : String) : Matches b :=
-  .one (b.bindString (v.binds s t) (v.domain s, s) (v.domain s, t))
+  .one (b.bindString (v.binds s) (v.domain s, s) (v.domain s, t))
 
 mutual
 
