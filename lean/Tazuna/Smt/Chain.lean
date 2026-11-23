@@ -596,6 +596,8 @@ def factsOf (paths : List Path) : Facts :=
 /-- What an order of two messages ends with, over all its paths. -/
 structure Ending where
   records : SRecords
+  /-- Each machine's configuration, a control state that decides the service's later messages as records do. -/
+  machines : List (String × Term)
   halted : Term
   outs : List Out
   gap : Term
@@ -604,9 +606,11 @@ structure Ending where
   cut : Term
   facts : Facts
 
-def Ending.of (start : SRecords) (paths : List Path) : Ending :=
+def Ending.of (start : SRecords) (machines : List (String × Mach)) (paths : List Path) : Ending :=
   let finished := paths.filter (!·.cut)
+  let mach (x : Path) (c : String) (m : Mach) : Mach := (x.mach? c).getD m
   { records := finished.foldr (fun x r => .ite x.pc x.records r) start,
+    machines := machines.map fun (c, m) => (c, finished.foldr (fun x t => iteT x.pc (mach x c m).config t) m.config),
     halted := disj ((finished.filter (·.halted)).map (·.pc)),
     outs := (finished.foldl (fun (seen, outs) x => x.outs.foldl (fun (seen, outs) o =>
       if seen.contains o.id then (seen, outs) else (seen.insert o.id, outs ++ [o])) (seen, outs))
@@ -624,10 +628,15 @@ def countOf (outs : List Out) (o : Out) : Term :=
   (outs.filter fun x => x.kind == o.kind && x.definition == o.definition).foldl
     (fun n x => .add n (.ite (.and x.guard (same x)) (intLit 1) (intLit 0))) (intLit 0)
 
-/-- That two orders end differently: one halts and the other does not, or neither halts and their records or out lines differ. -/
+/--
+That two orders end differently: one halts and the other does not, or neither halts and their records, machine
+configurations or out lines differ.
+-/
 def Ending.differ (a b : Ending) : Term :=
   let outsDiffer := disj ((a.outs ++ b.outs).map fun o => .and o.guard (.not (.eq (countOf a.outs o) (countOf b.outs o))))
-  .or (.not (.eq a.halted b.halted)) (conj [.not a.halted, .not b.halted, .or (.not (a.records.same b.records)) outsDiffer])
+  let machinesDiffer := disj ((a.machines.zip b.machines).map fun ((_, c), (_, d)) => .not (.eq c d))
+  .or (.not (.eq a.halted b.halted))
+    (conj [.not a.halted, .not b.halted, disj [.not (a.records.same b.records), machinesDiffer, outsDiffer]])
 
 /-- A deadline of a state of a chart. -/
 structure DeadlineRef where
@@ -810,7 +819,7 @@ def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String
   let orders (watched : List (String × String)) (a b : List Start) : Except String (Ending × Ending) := do
     let run (name : String) (x y : List Start) : Except String Ending := do
       let paths ← message ce watched [{ name, pc := tt, records := pre, used, machines := startMachines ce }] x
-      pure (Ending.of pre (← message ce watched paths y))
+      pure (Ending.of pre (startMachines ce) (← message ce watched paths y))
     pure (← run "o1" a b, ← run "o2" b a)
   match tie with
   | .deadlines a b =>

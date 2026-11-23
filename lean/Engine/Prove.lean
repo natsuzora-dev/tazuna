@@ -772,7 +772,7 @@ def kindText (M : Model) (t : Term) : String := match t.denote M with
 The replay of a model of a tie's query in the semantics: from the decoded records and machines, the two deadlines fire
 one after the other at the model's time, the first then the second and the other way, as the clock fires deadlines due at
 one time in the order they stand; or the two events arrive one after the other. The two orders must differ in whether
-the service halts, in the records, or in the lines it writes out.
+the service halts, in the records, in its machines' configurations, or in the lines it writes out.
 -/
 def replayTie (x : Induction) (fs : Functions IO) (tie : Tie) (o : TieOrders) (M : Model) :
     IO (Except String Counterexample) := do
@@ -794,12 +794,15 @@ def replayTie (x : Induction) (fs : Functions IO) (tie : Tie) (o : TieOrders) (M
     machines := machines ++ [({ chart := c, id := .top c.name, context, entered := active.map (·, clock) } : Instance)]
     shown := shown ++ [(c.name, Value.obj [("active", .arr (active.map .str)), ("context", context)])]
   let base : Service.State := { service := st.service, records, now := clock, started := true, machines }
+  let machinesOf (s : Service.State) : Value := .obj (s.machines.map fun i =>
+    (i.chart.name, .arr ((i.active.mergeSort (· ≤ ·)).map .str)))
   let outcome (s : Service.State) : Value :=
-    .obj [("halted", .bool s.halted.isSome), ("records", givenOf st s.records),
+    .obj [("halted", .bool s.halted.isSome), ("records", givenOf st s.records), ("machines", machinesOf s),
           ("outputs", .arr (outsOf s base.lines.size))]
   let same (a b : Service.State) : Bool :=
     a.halted.isSome == b.halted.isSome &&
       (a.halted.isSome || (recordsText a.records == recordsText b.records &&
+        (machinesOf a).canonical == (machinesOf b).canonical &&
         (outsOf a base.lines.size).map (·.canonical) == (outsOf b base.lines.size).map (·.canonical)))
   let answerOf (target : Ir.Ref) (g : Given) : Ir.Answer :=
     let output := Value.obj (present M g.fields)

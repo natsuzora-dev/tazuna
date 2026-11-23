@@ -135,7 +135,7 @@ Some properties are undecided by design:
 
 Each order runs each message to its end: the deadline's or event's transitions, the always transitions that follow, the own commands, the automations and machines that their events wake, and the activities of the states entered.
 `prove` follows at most 8 steps of each message.
-Two orders end the same when both halt, or when neither halts and both leave the same records and write the same out lines, in any order.
+Two orders end the same when both halt, or when neither halts and both leave the same records and machine configurations and write the same out lines, in any order.
 When they differ, `prove` reports `ChoiceDependent` in its counterexample.
 `prove` does not compare yet the orders of the following pairs:
 
