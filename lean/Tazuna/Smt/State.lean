@@ -127,10 +127,14 @@ def distinctKeys : List Slot → List Term
   | [] => []
   | s :: ss => ss.map (fun s' => .not (conj [s.live, s'.live, .eq s.key s'.key])) ++ distinctKeys ss
 
-/-- That two live slots of `slots` hold the same values of the unique fields `unique`, none of them null. -/
+/--
+That two live slots of `slots` hold the same values of the unique fields `unique`, none of them null. An entity without
+unique fields has no clash.
+-/
 def uniqueClash (unique : List String) : List Slot → List Term
   | [] => []
   | s :: ss =>
+    if unique.isEmpty then [] else
     let value (x : Slot) (f : String) := (x.fields.lookup f).getD undefT
     let checked (x : Slot) := conj (unique.map fun f => .not (.isNull (value x f)))
     ss.map (fun s' => conj ([s.live, s'.live, checked s, checked s'] ++ unique.map fun f => .eq (value s f) (value s' f))) ++
