@@ -671,35 +671,46 @@ def requesterOf (st : Service) (target : Ir.Ref) : Except String AnswerTo := do
   | [] => throw s!"no requester of {target.service}.{target.name}"
   | _ => throw s!"an answer to {target.service}.{target.name}, which several states or automations request, so its requester is unknown"
 
-/--
-The ties of `st`, each pair once: two deadlines that can be armed together (one deadline with itself only inside a map,
-whose copies each arm it), and two arrivals, one with itself among them unless a state waits for it.
--/
-def tiesOf (st : Service) : List Tie :=
-  let deadlines := st.charts.flatMap fun c => c.states.flatMap fun cs =>
+/-- Whether state `a` of chart `ca` and state `b` of chart `cb` can be active at once: in two charts, or in one configuration of one chart. -/
+def activeTogether (st : Service) (ca a cb b : String) : Bool :=
+  if ca != cb then true
+  else match (st.charts.find? (·.name == ca)).map ChartModel.of with
+    | some (.ok m) => m.configs.any fun k => k.contains a && k.contains b
+    | _ => true
+
+def deadlinesOf (st : Service) : List DeadlineRef :=
+  st.charts.flatMap fun c => c.states.flatMap fun cs =>
     cs.spec.deadlines.map fun d => ({ chart := c.name, state := cs.spec.name, name := d.name } : DeadlineRef)
-  let together (a b : DeadlineRef) : Bool :=
-    if a == b then (st.charts.find? (·.name == a.chart)).any (inMap · a.state)
-    else if a.chart != b.chart then true
-    else match (st.charts.find? (·.name == a.chart)).map ChartModel.of with
-      | some (.ok m) => m.configs.any fun k => k.contains a.state && k.contains b.state
-      | _ => true
+
+/-- The messages from other services that can arrive at `st`: events that it receives, and answers to its requests. -/
+def arrivalsOf (st : Service) : List Arrival :=
   let events := (st.receives.filter fun e =>
     st.automations.any (·.receives == e) || st.charts.any (·.receives.any (·.2 == e))).map Arrival.event
   let requested := (st.charts.flatMap fun c => c.states.flatMap (·.activities)).filterMap (fun a => match a with
       | .calls _ r | .sends _ r => if r.service != st.service then some (Arrival.answer r) else none
       | _ => none) ++
     (st.automations.filter (!·.sends.isOwn st.service)).map (Arrival.answer ·.sends.ref)
-  let arrivals := (events ++ requested).eraseDups
-  let pairs {α : Type} (xs : List α) : List (α × α) := xs.zipIdx.flatMap fun (a, i) => (xs.drop i).map (a, ·)
+  (events ++ requested).eraseDups
+
+/-- The pairs of `xs`, each once, each item with itself too. -/
+def pairsWithSelf {α : Type} (xs : List α) : List (α × α) := xs.zipIdx.flatMap fun (a, i) => (xs.drop i).map (a, ·)
+
+/--
+The ties of `st`, each pair once: two deadlines that can be armed together (one deadline with itself only inside a map,
+whose copies each arm it), and two arrivals, one with itself among them unless a state waits for it.
+-/
+def tiesOf (st : Service) : List Tie :=
+  let together (a b : DeadlineRef) : Bool :=
+    if a == b then (st.charts.find? (·.name == a.chart)).any (inMap · a.state)
+    else activeTogether st a.chart a.state b.chart b.state
   -- A state waits for one answer at a time: entering it again makes the earlier request stale.
   let twice : Arrival → Bool
     | .answer r => match requesterOf st r with
       | .ok (.automation _) => true
       | _ => false
     | .event _ => true
-  ((pairs deadlines).filter (fun (a, b) => together a b)).map (fun (a, b) => Tie.deadlines a b) ++
-    ((pairs arrivals).filter fun (a, b) => a != b || twice a).map fun (a, b) => .arrivals a b
+  ((pairsWithSelf (deadlinesOf st)).filter (fun (a, b) => together a b)).map (fun (a, b) => Tie.deadlines a b) ++
+    ((pairsWithSelf (arrivalsOf st)).filter fun (a, b) => a != b || twice a).map fun (a, b) => .arrivals a b
 
 /--
 What a message from another service carries, each a variable named after the message: an event's payload; or an

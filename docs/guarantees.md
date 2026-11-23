@@ -118,6 +118,7 @@ Some properties are undecided by design:
 - A pair of deadlines or arrivals whose message can take more than 8 steps is undecided.
 - A pair of deadlines or arrivals is undecided when its service has a screen, or a machine with parallel, final, history, or map states or with `held` data, or when its message runs an automation that creates a key, and so is an answer that several states or automations wait for.
 - An invariant of a screen, or of a machine with parallel, final, history, or map states or with `held` data, is undecided.
+- Each pair of steps whose order `prove` [does not compare yet](#orders-that-prove-compares) is undecided.
 
 ### What `generate` writes
 
@@ -141,7 +142,11 @@ Each order runs each message to its end: the deadline's or event's transitions, 
 Two orders end the same when both halt, or when neither halts and both leave the same records and write the same out lines, in any order.
 When they differ, `prove` reports `ChoiceDependent` in its counterexample.
 When a message can take more than 8 steps, the pair is undecided.
-`prove` does not compare other steps that wait together in one message's queue: the events of one group that one machine takes, and the commands that states send in one round and the answers to them.
+`prove` does not compare yet the orders of the following pairs, and lists each pair that the spec can have as an undecided property:
+
+- the events of one event group that one machine or automation takes (`groupOrder`)
+- two own commands that states send in one round, and the answers to them (`roundOrder`)
+- a deadline and a message from another service that arrives when it is due (`deadlineArrivalTie`)
 
 `test` runs each scenario in one order: deadlines due at the same time fire in the order they were armed, the messages that one line delivers arrive in the order they were sent, and a message's queue takes its waiting steps in queue order.
 
@@ -216,8 +221,7 @@ Each row below names one thing that a detection leaves out.
 | `prove` | It proves each property for the states within the bounds. | States with more records of an entity than `creates`, and arrays and bags with more items than `items`. |
 | `prove` | | Strings with a character after U+2FFFF, which Z3's strings cannot hold. |
 | `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that module code reaches by another name, or through a package that the spec imports. |
-| `ChoiceDependent` | `prove` compares [both orders](#orders-that-prove-compares) of each pair from any state. | The order of other steps of one message, such as two machines that react to one event or the events of one event group. |
-| `ChoiceDependent` | | The arrival order of answers to the service's requests, and pairs in a service with a screen or a parallel, final, history or map state, which `prove` leaves undecided. |
+| `ChoiceDependent` | `prove` compares [both orders](#orders-that-prove-compares) of each pair from any state. | The pairs that `prove` lists as undecided: the orders that it does not compare yet, pairs in a service with a screen or a parallel, final, history or map state, and messages longer than 8 steps. |
 | `ChoiceDependent` | | Faults inside a message, such as a failing invariant after a command, which other properties report. |
 | `InvalidInput` | It checks an external peer's lines against the peer's contract. | A `requires` that reads more than the input, and an `ensures` that reads records. |
 

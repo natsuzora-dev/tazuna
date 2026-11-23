@@ -21,8 +21,9 @@ open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Smt
 What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
 ensures of a command or query; that a ref field of an entity never names a missing record; that the order of two
 steps that can be pending together, such as two automations that react to one event, changes no outcome; that the
-order of two deadlines due at one time, or of two messages that arrive at once, changes no outcome; or that a response
-of an entity is met in time.
+order of two deadlines due at one time, or of two messages that arrive at once, changes no outcome; that the order of
+other steps that no line orders changes no outcome, which prove names but does not compare yet; or that a response of
+an entity is met in time.
 -/
 inductive Property where
   | invariant (definition : Ir.Ref) (name : String)
@@ -34,12 +35,21 @@ inductive Property where
   | deadlineTie (definition : Ir.Ref) (state name : String) (other : Ir.Ref) (otherState otherName : String)
   /-- Two messages from other services: events that the service receives, or answers to the requests named. -/
   | arrivalTie (definition : Ir.Ref) (other : Ir.Ref)
+  /-- The events of one event group of the command `definition` that the machine or automation `receiver` takes. -/
+  | groupOrder (definition : Ir.Ref) (receiver : Ir.Ref)
+  /-- The own commands that the activity `key` of `state` of the chart `definition` and the activity `otherKey` of
+  `otherState` of `other` send in one round, and the answers to them. -/
+  | roundOrder (definition : Ir.Ref) (state key : String) (other : Ir.Ref) (otherState otherKey : String)
+  /-- The deadline `name` of `state` of the chart `definition`, and the message `other` from another service that
+  arrives when it is due. -/
+  | deadlineArrivalTie (definition : Ir.Ref) (state name : String) (other : Ir.Ref)
 deriving BEq, Repr, Inhabited
 
 derive_wire Property tag "kind"
 
 def Property.definition : Property → Ir.Ref
-  | .invariant d _ | .response d _ | .ensures d _ | .danglingRef d _ | .stepOrder d _ | .deadlineTie d .. | .arrivalTie d _ => d
+  | .invariant d _ | .response d _ | .ensures d _ | .danglingRef d _ | .stepOrder d _ | .deadlineTie d .. | .arrivalTie d _
+  | .groupOrder d _ | .roundOrder d .. | .deadlineArrivalTie d .. => d
 
 /--
 A state within the bounds where every invariant holds, and a command after which the property fails, or a query whose
@@ -305,6 +315,61 @@ def tieProperty (st : Service) : Tie → Property
   | .deadlines a b => .deadlineTie (st.ref a.chart) a.state a.name (st.ref b.chart) b.state b.name
   | .arrivals a b => .arrivalTie a.ref b.ref
 
+/-- The events that `e` emits inside a Bag, such as `records.Task.map((t) => emit(...))`, whose events are one group. -/
+partial def groupedEvents : Expr → List Ir.Ref
+  | .map .bag _ _ body => emitted body
+  | e => (Expr.children e).flatMap groupedEvents
+where
+  emitted : Expr → List Ir.Ref
+    | .emit event _ => [event]
+    | e => (Expr.children e).flatMap emitted
+
+/--
+Whether only a deadline that fires enters state `n` of `c`: no start or entry enters it as an initial state, and every
+transition into it or a state inside it fires on a deadline. Each deadline fires as its own message, so two such states
+of different deadlines never wait in one round.
+-/
+def deadlineEntered (c : Service.Chart) (n : String) : Bool :=
+  let path := ((c.state? n).map (·.spec.path)).getD []
+  let inside (t : String) := (c.state? t).any fun s => path.isPrefixOf s.spec.path
+  c.initial != n && !c.states.any (·.spec.initial == some n) && !c.states.any (·.spec.type matches .history) &&
+    (c.on ++ c.states.flatMap (·.transitions)).all fun t => match t.target, t.trigger with
+      | some _, .after _ => true
+      | some target, _ => !inside target
+      | none, _ => true
+
+/--
+The properties of the orders that no line writes and that prove does not compare yet, each with why it is undecided:
+the events of one group that one machine or automation takes; the own commands that states send in one round, and
+their answers; and a deadline with a message from another service that arrives when it is due. Each pair that the spec
+can have is listed, so that no such order passes unnamed.
+-/
+def uncomparedOf (st : Service) : List (Property × String) :=
+  let groups := st.commands.flatMap fun c =>
+    let events := (((st.structure.program.decide.find? (·.definition == st.ref c)).map (groupedEvents ·.body)).getD [])
+    let receivers := st.charts.filterMap (fun ch => if ch.receives.any (events.contains ·.2) then some ch.name else none) ++
+      (st.automations.filter (events.contains ·.receives)).map (·.name)
+    receivers.map fun r => (Property.groupOrder (st.ref c) (st.ref r),
+      "prove does not compare yet the orders in which one machine or automation takes the events of one event group")
+  let senders := st.charts.flatMap fun c => c.states.flatMap fun cs =>
+    (cs.activities.filter (·.isOwn st.service)).map fun a => (c.name, cs.spec.name, a.key)
+  let byDeadline (c a : String) := (st.charts.find? (·.name == c)).any (deadlineEntered · a)
+  let rounds := (pairsWithSelf senders).filter (fun ((ca, a, k), (cb, b, l)) =>
+      if (ca != cb || (a == b && k == l)) && byDeadline ca a && byDeadline cb b then false
+      else if ca == cb && a == b && k == l then (st.charts.find? (·.name == ca)).any (inMap · a)
+      else activeTogether st ca a cb b) |>.map fun ((ca, a, k), (cb, b, l)) =>
+    (Property.roundOrder (st.ref ca) a k (st.ref cb) b l,
+     "prove does not compare yet the orders of the own commands that states send in one round, and of their answers")
+  let waits (d : DeadlineRef) : Arrival → Bool
+    | .answer r => match requesterOf st r with
+      | .ok (.state chart state _) => activeTogether st d.chart d.state chart state
+      | _ => true
+    | .event _ => true
+  let instants := (deadlinesOf st).flatMap fun d => ((arrivalsOf st).filter (waits d)).map fun a =>
+    (Property.deadlineArrivalTie (st.ref d.chart) d.state d.name a.ref,
+     "prove does not compare yet a deadline with a message from another service that arrives when it is due")
+  groups ++ rounds ++ instants
+
 /--
 A step of a machine's induction: starting it, or a microstep of one of its edges. A command changes no machine, and an
 invariant reads only the machine's context and active states, so no command can fail one. The semantics checks the
@@ -470,7 +535,8 @@ def Induction.failedAfter (x : Induction) (command : String) (now : Time) (writt
   | .danglingRef d field => faults.any fun
     | .danglingRef d' _ f _ cmd | .danglingSingleRef d' f _ cmd => d' == d && f == field && cmd == x.st.ref command
     | _ => false
-  | .stepOrder .. | .deadlineTie .. | .arrivalTie .. | .response .. => false
+  | .stepOrder .. | .deadlineTie .. | .arrivalTie .. | .groupOrder .. | .roundOrder .. | .deadlineArrivalTie ..
+  | .response .. => false
 
 /-- The records of a model's state, or why the state is none that the induction assumes. -/
 def Induction.stateOf (x : Induction) (M : Model) : Except String (Records × Value × Int) := do
@@ -854,9 +920,10 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
   let queryEnsures := x.answers.flatMap fun (q, a) => (conditionsOf p.queryEnsures (x.st.ref q)).map fun e =>
     (q, a, e, Property.ensures (x.st.ref q) e.name)
   let dangling := (ownRefs x.st).map fun (e, field, _) => Property.danglingRef (x.st.ref e) field
+  let uncompared := uncomparedOf x.st
   let props := x.checked.map (·.ref) ++ ensures.map (·.2) ++ queryEnsures.map (·.2.2.2) ++ dangling ++
     chartProps.map (·.2.2) ++ x.pairs.map (pairProperty x.st ·.1) ++ x.ties.map (tieProperty x.st ·.1) ++
-    x.responses.map (·.ref)
+    uncompared.map (·.1) ++ x.responses.map (·.ref)
   if let some why := x.blocked then return props.map (·, .decided (.undecided why))
   let (init, initFacts) := initialOf x.st
   let initQuery (fails : Term) : Query :=
@@ -977,7 +1044,8 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
                                     asserts := x.facts.asserts ++ [x.holds, held, .le clockT laterT, laterFails] }
           (case x.facts.fit none)
         pure ([base] ++ steps ++ [tick])])
-  return invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ ties ++ responses
+  return invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ ties ++
+    uncompared.map (fun (prop, why) => (prop, .decided (.undecided why))) ++ responses
 
 /-- The own spec services' plans, each with its service. -/
 def plansOf (j : Ir.Structure) : IO (List (Induction × List (Property × Plan))) := do
