@@ -66,6 +66,26 @@ export async function proveLinesOf(
   return { lines: logged, code };
 }
 
+/** generate's lines on the spec of `example`, which writes its inputs to `out`, and its exit code. */
+export async function generateLinesOf(
+  example: string,
+  out: string,
+): Promise<{ readonly lines: readonly string[]; readonly code: number }> {
+  const logged: string[] = [];
+  const code = await main(["generate", ".", out], {
+    cwd: example,
+    log: (line) => logged.push(line),
+    error: (line) =>
+      assert.match(
+        line,
+        /^\d+ targets?: \d+ reached, \d+ not reached, \d+ unreachable, \d+ not encodable; \d+ inputs? written$/,
+      ),
+    typeCheck: () => typeChecked,
+    converter: converter(),
+  });
+  return { lines: logged, code };
+}
+
 export const expectedOf = (example: string): string[] =>
   readFileSync(join(example, expected), "utf8")
     .split("\n")

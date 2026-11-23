@@ -58,6 +58,10 @@ def respond : Engine.Request → IO Response
     | some (.ok (.error issues)) => .parsed true none (some issues) false)
   | .proveQueries s => do pure (.queried (← proveQueriesOf s))
   | .prove s answers => do pure (.proved (← proveOf s answers))
+  | .generate s depth answers => do
+    match ← generateOf s depth answers with
+    | .error scripts => pure (.generated scripts none)
+    | .ok result => pure (.generated [] (some result))
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 

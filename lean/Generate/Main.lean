@@ -101,6 +101,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Engine.SimulatedService, ``Tazuna.Engine.ReadPart, ``Tazuna.Engine.Evaluated,
      ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Replayed, ``Tazuna.Engine.Property,
      ``Tazuna.Engine.Counterexample, ``Tazuna.Engine.Verdict, ``Tazuna.Engine.ProveResult,
+     ``Tazuna.Engine.Outcome, ``Tazuna.Engine.TargetOutcome, ``Tazuna.Engine.GeneratedInput, ``Tazuna.Engine.Generation,
      ``Tazuna.Engine.Response])]
 
 def declaredIn (path : String) : MetaM (List Name) := do

@@ -1,5 +1,6 @@
 import Engine.Drive
 import Engine.Prove
+import Engine.Generate
 import Tazuna.Ir.Expr
 import Tazuna.Explore.Coverage
 import Tazuna.Explore.Instrument
@@ -69,6 +70,12 @@ inductive Request where
   | proveQueries («structure» : Spec.Structure)
   /-- prove's result of each invariant, from Z3's output on each script of proveQueries, in order (Engine.proveOf). -/
   | prove («structure» : Spec.Structure) (answers : List String)
+  /--
+  generate's next scripts, or its result, from Z3's output on each script that earlier answers gave, in order
+  (Engine.generateOf). `depth` is the most requests of a sequence, by default one more than the creations that the
+  service's bounds allow.
+  -/
+  | generate («structure» : Spec.Structure) (depth : Option Nat) (answers : List String)
 
 derive_wire Request tag "type" skip_serializing_none
 
@@ -128,6 +135,8 @@ inductive Response where
   | parsed (supported : Bool) (value : Option Value) (issues : Option (List Value)) (thrown : Bool)
   | queried (scripts : List String)
   | proved (results : List ProveResult)
+  /-- The scripts that generate asks next, or, with none, its result. -/
+  | generated (scripts : List String) (result : Option Generation)
   | error (message : String)
 
 derive_wire Response tag "type" serialize_only

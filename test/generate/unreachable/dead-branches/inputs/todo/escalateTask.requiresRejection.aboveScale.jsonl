@@ -1,0 +1,5 @@
+{"time":0,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"!0!"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"!0!","done":false,"priority":2},"resultOf":"addTask#1"}
+{"time":0,"dir":"in","type":"command","id":"escalateTask#1","name":"escalateTask","input":{"taskId":"!0!","priority":1}}
+{"time":0,"dir":"out","type":"answer","id":"answer#2","to":"escalateTask#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"aboveScale"}}}

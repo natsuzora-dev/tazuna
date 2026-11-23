@@ -1,0 +1,5 @@
+{"time":0,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"A","title":"A"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"A","title":"A","done":false},"resultOf":"addTask#1"}
+{"time":0,"dir":"in","type":"command","id":"reopenTask#1","name":"reopenTask","input":{"taskId":"A"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#2","to":"reopenTask#1","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"done"}}}

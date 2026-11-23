@@ -1,0 +1,9 @@
+{"time":0,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"B","title":"A"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"B","title":"A","done":false},"resultOf":"addTask#1"}
+{"time":0,"dir":"in","type":"command","id":"completeTask#1","name":"completeTask","input":{"taskId":"B"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#2","to":"completeTask#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"doneChanged#1","name":"doneChanged","payload":{"id":"B","done":true},"resultOf":"completeTask#1"}
+{"time":0,"dir":"in","type":"command","id":"reopenTask#1","name":"reopenTask","input":{"taskId":"B"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#3","to":"reopenTask#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"doneChanged#2","name":"doneChanged","payload":{"id":"B","done":false},"resultOf":"reopenTask#1"}

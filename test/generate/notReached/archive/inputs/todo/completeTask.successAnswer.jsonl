@@ -1,0 +1,6 @@
+{"time":0,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"!0!"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"!0!","status":"open"},"resultOf":"addTask#1"}
+{"time":0,"dir":"in","type":"command","id":"completeTask#1","name":"completeTask","input":{"taskId":"!0!"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#2","to":"completeTask#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"statusChanged#1","name":"statusChanged","payload":{"id":"!0!","status":"done"},"resultOf":"completeTask#1"}

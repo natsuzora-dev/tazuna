@@ -378,14 +378,23 @@ def SRecords.outsideSchema (svc : Service) (r : SRecords) : Term :=
     (disj (r.singles.flatMap fun (e, fields) =>
       (propertiesWith (entitySchema svc e)).map fun p => .not (fieldHolds ((fields.lookup p.1).getD undefT) p).term))
 
-/-- The input of command or query `name` as JSON holds its fields, and that each field fits the input's schema. -/
-def inputOf (svc : Service) (name : String) : List (String × Term) × Facts :=
+/--
+The input of command or query `name` as JSON holds its fields, each a variable named after `pre`, and that each field
+fits the input's schema.
+-/
+def inputOf (svc : Service) (name : String) (pre : String := "in") : List (String × Term) × Facts :=
   let props := propertiesWith ((svc.schemaOf (.input (svc.ref name))).getD (.obj []))
-  let terms := props.map fun pr => (pr.1, propertyVar s!"in.{pr.1}" pr)
+  let terms := props.map fun pr => (pr.1, propertyVar s!"{pre}.{pr.1}" pr)
   let input := terms.map fun (f, t, _) => (f, t)
   let fieldFacts := props.map fun pr => fieldHolds ((input.lookup pr.1).getD undefT) pr
   (input, { vars := terms.flatMap (·.2.2), asserts := fieldFacts.map (·.term),
             exact := fieldFacts.all (·.exact), complete := fieldFacts.all (·.complete) })
+
+/-- A binding or condition that a request checks in order: its name, the term that holds when its evaluation throws, and its value's term that holds when it passes. -/
+structure Check where
+  name : String
+  throws : Term
+  passes : Term
 
 /-- A command's symbolic step from the records `pre`. -/
 structure Step where
@@ -404,6 +413,11 @@ structure Step where
   gap : Term
   /-- The binds values, from the records before the step, as the command's ensures reads them. -/
   bound : SVal
+  /-- That every ref field of the input names a record, which the command checks before its binds. -/
+  refs : Term
+  /-- The binds, a value that is not null passing, then the requires, each in the order that the command checks them. -/
+  binds : List Check
+  requires : List Check
 
 /--
 The step of command `name` from `pre` with the input `input` at the time `now`, as stepOf builds it; the variables that
@@ -427,13 +441,14 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let binds := ((p.binding.find? (·.definition == svc.ref name)).map (·.conditions)).getD []
   let bindTerms ← binds.mapM fun b => do
     let (v, e) ← seval env [] b.body
-    pure (b.name, v, Term.and (.not e) (.not v.nullish))
-  let bound : SVal := .obj (bindTerms.map fun (n, v, _) => (n, v))
+    pure (v, ({ name := b.name, throws := e, passes := .not v.nullish } : Check))
+  let bound : SVal := .obj (bindTerms.map fun (v, c) => (c.name, v))
   let env := { env with args := args (some bound) }
   let requires := ((p.requirement.find? (·.definition == svc.ref name)).map (·.conditions)).getD []
-  let requireTerms ← requires.mapM fun c => do
+  let requireChecks ← requires.mapM fun c => do
     let (v, e) ← seval env [] c.body
-    pure (Term.and (.not e) v.truthy)
+    pure ({ name := c.name, throws := e, passes := v.truthy } : Check)
+  let held (c : Check) := Term.and (.not c.throws) c.passes
   let some decide := p.decide.find? (·.definition == svc.ref name) | throw s!"no decide of {name}"
   let (decided, decideErr) ← seval env [] decide.body
   let items ← match decided with
@@ -446,10 +461,11 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let (stepped, defs) := applied.run.run []
   let stepped ← stepped
   let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty), asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t }
-  let accepted := conj (refs ++ bindTerms.map (·.2.2) ++ requireTerms ++
+  let accepted := conj (refs ++ bindTerms.map (held ·.2) ++ requireChecks.map held ++
     [.not decideErr, .not (stepped.records.duplicated svc)])
   pure { facts := facts ++ named, input, now, accepted, post := stepped.records, used := stepped.used,
-         beyond := stepped.beyond, gap := .or stepped.gap (stepped.records.outsideSchema svc), bound }
+         beyond := stepped.beyond, gap := .or stepped.gap (stepped.records.outsideSchema svc), bound,
+         refs := conj refs, binds := bindTerms.map (·.2), requires := requireChecks }
 
 /--
 The step of command `name` of `svc` from `pre` at the time `clock`, whose slots of each entity are used as `used` says.
@@ -489,18 +505,23 @@ structure Answered where
   input : List (String × Term)
   answered : Term
   output : SVal
+  /-- The requires, in the order that the query checks them. -/
+  requires : List Check
 
-def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name : String) : Except String Answered := do
-  let (input, inputFacts) := inputOf svc name
+def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name : String) (names : String := "in") :
+    Except String Answered := do
+  let (input, inputFacts) := inputOf svc name names
   let requires := ((p.inputRequirement.find? (·.definition == svc.ref name)).map (·.conditions)).getD []
-  let requireTerms ← requires.mapM fun c => do
+  let requireChecks ← requires.mapM fun c => do
     let (v, e) ← seval { args := (fun | .input => some (.json input) | _ => none) } [] c.body
-    pure (Term.and (.not e) v.truthy)
+    pure ({ name := c.name, throws := e, passes := v.truthy } : Check)
   let some resolve := p.resolve.find? (·.definition == svc.ref name) | throw s!"no resolve of {name}"
   let env : SEnv := { args := (fun | .input => some (.json input) | .now => some (.scalar (.mkInt clock)) | _ => none),
                       records := pre }
   let (output, err) ← seval env [] resolve.body
-  pure { facts := { inputFacts with exact := false }, input, answered := conj (requireTerms ++ [.not err]), output }
+  pure { facts := { inputFacts with exact := false }, input,
+         answered := conj (requireChecks.map (fun c => .and (.not c.throws) c.passes) ++ [.not err]), output,
+         requires := requireChecks }
 
 /-- The term that holds when the ensures `c` of a query fails, or throws, on its answer. -/
 def Answered.ensuresFails (a : Answered) (pre : SRecords) (c : Condition) : Except String Term := do

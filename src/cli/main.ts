@@ -8,6 +8,7 @@ import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
 import { verifyTraces } from "../verify/index.ts";
 import { explain } from "./explain.ts";
+import { type GenerateLine, generateSpec } from "./generate.ts";
 import { type ProveLine, proveSpec } from "./prove.ts";
 import { testSpec } from "./test.ts";
 import { isViewerBuilt, viewerFolder, viewSpec } from "./view.ts";
@@ -36,6 +37,7 @@ type Invocation =
     }
   | { readonly command: "verify"; readonly root: string; readonly traces: string; readonly coverage: boolean }
   | { readonly command: "prove"; readonly root: string }
+  | { readonly command: "generate"; readonly root: string; readonly out: string; readonly depth: number | undefined }
   | { readonly command: "view"; readonly root: string; readonly port: number; readonly viewer: string }
   | { readonly command: "explain"; readonly markdown: string };
 
@@ -152,6 +154,31 @@ const commands = {
       "Prove each invariant of each spec service by induction within the bounds of its service's bounds(): it holds of the initial records, the single entities' records of their schema defaults, at any time, and after each command, with any input at any time no earlier than the records' time, from any records within the bounds of which every invariant holds and every record fits its schema. From those records, prove also proves that each command's and query's ensures holds and that no command leaves a ref naming a missing record. prove writes one JSON line per property, with its verdict: proved; counterexample, with the records and their time, the command or query, its input and time, and the violations that the spec reports on replaying them; or undecided, with the reason, such as the solver reaching its resource limit or a construct that prove does not encode. A machine's or screen's invariant is undecided. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant. prove exits with 1 on a counterexample, else with 2 when a property is undecided, and else with 0.",
     options: {},
     parse: ({ root }) => ({ command: "prove", root }),
+  }),
+  generate: command({
+    spec: true,
+    positionals: ["out"],
+    description:
+      "Write inputs that cover the spec: for each part of a spec service that verify --coverage reports, the shortest sequence of requests to the service's commands and queries from its initial state that reaches it, which the solver finds within the bounds of the service's bounds(). The spec runs each sequence, and generate keeps a sequence unless the runs of the others kept reach every part that its run reaches. Each kept run goes to <out>/<service>/<name>.jsonl as trace lines, named after the part that its sequence was found for; an implementation's tests can send its in lines, and verify can check their traces. generate removes the other files of those folders. It writes one JSON line per part: reached, with the input whose run reaches it; notReached, when no sequence of at most the depth reaches it; unreachable, when no records within the bounds let the request reach it; or notEncodable, with the reason, such as a part of an automation or a chart, which only a run of another part's sequence can reach.",
+    options: {
+      "--depth": {
+        kind: "single",
+        value: "n",
+        description:
+          "Seek sequences of at most n requests instead of one more than the creations that the service's bounds() allow.",
+      },
+    },
+    parse: ({ root, positionals: [out = ""], options }, io) => {
+      const depth = options["--depth"];
+      if (depth !== undefined && !/^[1-9]\d*$/.test(depth))
+        return { misuse: `invalid depth ${depth} (expected a positive integer)` };
+      return {
+        command: "generate",
+        root,
+        out: resolve(io.cwd, out),
+        depth: depth === undefined ? undefined : Number(depth),
+      };
+    },
   }),
   view: command({
     spec: true,
@@ -286,6 +313,25 @@ function reportProved(io: Io, specRoot: string, lines: readonly ProveLine[]): nu
   return counterexamples > 0 ? 1 : counted("undecided") > 0 ? 2 : 0;
 }
 
+/** Writes generate's lines to stdout, and to stderr the count of each outcome and the inputs written and removed. */
+function reportGenerated(
+  io: Io,
+  specRoot: string,
+  generated: { readonly lines: readonly GenerateLine[]; readonly written: string[]; readonly removed: string[] },
+): number {
+  for (const l of generated.lines)
+    io.log(
+      JSON.stringify({ ...l, location: { ...l.location, file: relative(io.cwd, join(specRoot, l.location.file)) } }),
+    );
+  const counted = (kind: GenerateLine["outcome"]["kind"]) =>
+    generated.lines.filter((l) => l.outcome.kind === kind).length;
+  for (const removed of generated.removed) io.error(`Removed 1 input: ${relative(io.cwd, removed)}`);
+  io.error(
+    `${count(generated.lines.length, "target")}: ${counted("reached")} reached, ${counted("notReached")} not reached, ${counted("unreachable")} unreachable, ${counted("notEncodable")} not encodable; ${count(generated.written.length, "input")} written`,
+  );
+  return 0;
+}
+
 /** Parses `args` by the command table, before anything reads the spec. */
 function parse(args: readonly string[], io: Io): Invocation | Misuse {
   const [name = "", ...rest] = args;
@@ -375,6 +421,8 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
     }
     case "prove":
       return reportProved(io, spec.root, await proveSpec(spec));
+    case "generate":
+      return reportGenerated(io, spec.root, await generateSpec(spec, invocation.out, invocation.depth));
     case "verify": {
       const verified = verifyTraces(spec, invocation.traces);
       const violations = [
