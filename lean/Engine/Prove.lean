@@ -668,9 +668,15 @@ def replayChart (x : Induction) (fs : Functions IO) (cc : ChartCase) (k : Ir.Con
       { given, clock, command := none, input := none, now := some now, machine := some machine,
         transition := some (ToValue.toValue e.transition.ref), taken, violations }
 
-/-- The records as one canonical text, which two orders compare: the order of rows is not part of the state. -/
-def recordsText (records : Records) : List String :=
-  (records.map fun r => s!"{r.entity} {repr r.key} {r.value.canonical}").toArray.qsort (· < ·) |>.toList
+/-- The records in a canonical order, which two orders compare: the order of rows is not part of the state. -/
+def sortedRecords (records : Records) : Records :=
+  records.mergeSort fun a b => decide (s!"{a.entity} {repr a.key} {a.value.canonical}" ≤ s!"{b.entity} {repr b.key} {b.value.canonical}")
+
+/-- The deadlines of the machine `id` that wait, each as its state, name and time, in a canonical order. -/
+def deadlinesOf (id : InstanceId) (deadlines : List Service.Deadline) : Value :=
+  .arr (((deadlines.filter (·.machine == id)).map fun d =>
+    Value.obj [("state", .str d.state), ("name", .str d.name), ("time", ToValue.toValue d.time)]).mergeSort
+    fun a b => decide (a.canonical ≤ b.canonical))
 
 /-- The out lines that `s` wrote after its first `from` lines, without their ids, in canonical order: what two orders compare. -/
 def outsOf (s : Service.State) («from» : Nat) : List Value :=
@@ -694,8 +700,9 @@ def kindText (M : Model) (t : Term) : String := match t.denote M with
 The replay of a model of a pair's or tie's query in the semantics, from the decoded records and machines: the two own
 commands wait in one round, and the queue takes one then the other and the other way, each input from the decoded
 payload, input or state; the two deadlines fire one after the other at the model's time, as the clock fires deadlines due
-at one time in the order they stand; or the two messages arrive one after the other. The two orders must differ in
-whether the service halts, in the records, in its machines' configurations, or in the lines it writes out.
+at one time in the order they stand; or the two messages arrive one after the other. Each deadline of an active state
+waits at its decoded time. The two orders must differ in whether the service halts, in the records, in a machine's
+active states, context, deadlines or requests that wait, or in the lines it writes out.
 -/
 def replayUnordered (x : Induction) (fs : Functions IO) (u : Unordered) (o : TieOrders) (M : Model) :
     IO (Except String Counterexample) := do
@@ -705,6 +712,7 @@ def replayUnordered (x : Induction) (fs : Functions IO) (u : Unordered) (o : Tie
   | .ok (records, given, clock) =>
   let now := (M "now").toInt
   let mut machines := []
+  let mut deadlines : List Service.Deadline := []
   let mut shown := []
   for c in st.charts do
     let .ok m := ChartModel.of c | return .error s!"the chart {c.name} has no model"
@@ -714,19 +722,29 @@ def replayUnordered (x : Induction) (fs : Functions IO) (u : Unordered) (o : Tie
       | .obj fs => .obj (fs.filter (·.1 ∉ fields.map (·.1)) ++ present M fields)
       | v => v
     let active := m.configs[(M s!"cfg.{c.name}").toInt.toNat]?.getD []
+    let armed := (deadlinesIn c).filter (active.contains ·.1)
     machines := machines ++ [({ chart := c, id := .top c.name, context, entered := active.map (·, clock) } : Instance)]
-    shown := shown ++ [(c.name, Value.obj [("active", .arr (active.map .str)), ("context", context)])]
-  let base : Service.State := { service := st.service, records, now := clock, started := true, machines }
-  let machinesOf (s : Service.State) : Value := .obj (s.machines.map fun i =>
-    (i.chart.name, .arr ((i.active.mergeSort (· ≤ ·)).map .str)))
+    deadlines := deadlines ++ armed.map fun (n, d) =>
+      { time := (M s!"dl.{c.name}.{n}.{d}").toInt, order := 0, machine := .top c.name, state := n, name := d, armedBy := 0 }
+    shown := shown ++ [(c.name, Value.obj [("active", .arr (active.map .str)), ("context", context),
+      ("deadlines", deadlinesOf (.top c.name) deadlines)])]
+  let base : Service.State :=
+    { service := st.service, records, now := clock, started := true, machines,
+      deadlines := deadlines.zipIdx.map fun (d, i) => { d with order := i + 3 }, deadlineCount := deadlines.length + 2 }
+  -- What a later message can see of a state: its records, and each machine's active states, context, deadlines and
+  -- requests to other services that wait, then the lines that the order wrote, each in a canonical order.
   let outcome (s : Service.State) : Value :=
-    .obj [("halted", .bool s.halted.isSome), ("records", givenOf st s.records), ("machines", machinesOf s),
+    let requests (i : Instance) : Value := .arr ((s.pending.filterMap fun p => match p.requester with
+      | .state id state => if id == i.id && !p.stale then
+          some (Value.obj [("state", .str state), ("key", .str p.activity.key), ("input", p.input)]) else none
+      | _ => none).mergeSort fun a b => decide (a.canonical ≤ b.canonical))
+    .obj [("halted", .bool s.halted.isSome), ("records", givenOf st (sortedRecords s.records)),
+          ("machines", .obj (s.machines.map fun i => (i.chart.name, .obj [
+            ("active", .arr ((i.active.mergeSort (· ≤ ·)).map .str)), ("context", i.context),
+            ("deadlines", deadlinesOf i.id s.deadlines), ("requests", requests i)]))),
           ("outputs", .arr (outsOf s base.lines.size))]
   let same (a b : Service.State) : Bool :=
-    a.halted.isSome == b.halted.isSome &&
-      (a.halted.isSome || (recordsText a.records == recordsText b.records &&
-        (machinesOf a).canonical == (machinesOf b).canonical &&
-        (outsOf a base.lines.size).map (·.canonical) == (outsOf b base.lines.size).map (·.canonical)))
+    (a.halted.isSome && b.halted.isSome) || (outcome a).canonical == (outcome b).canonical
   let answerOf (target : Ir.Ref) (g : Given) : Ir.Answer :=
     let output := Value.obj (present M g.fields)
     if Term.holds M g.accepted then
@@ -791,8 +809,10 @@ def replayUnordered (x : Induction) (fs : Functions IO) (u : Unordered) (o : Tie
     | .tie (.deadlines a b) =>
       let deadline (d : DeadlineRef) (order : Nat) : Service.Deadline :=
         { time := now, order, machine := .top d.chart, state := d.state, name := d.name, armedBy := 0 }
+      let others := base.deadlines.filter fun d => !(d.machine == .top a.chart && d.state == a.state && d.name == a.name) &&
+        !(d.machine == .top b.chart && d.state == b.state && d.name == b.name)
       let run (ds : List Service.Deadline) := fireDue st fs now Limit.dueDeadlines.max
-        { base with deadlines := ds, deadlineCount := 2 }
+        { base with deadlines := ds ++ others }
       pure ((StepName.deadline (.top a.chart) a.state a.name, StepName.deadline (.top b.chart) b.state b.name), none,
         ← run [deadline a 1, deadline b 2], ← run [deadline b 2, deadline a 1])
     | .tie (.arrivals a b) =>

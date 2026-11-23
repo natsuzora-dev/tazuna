@@ -43,20 +43,73 @@ structure Out where
   definition : Ir.Ref
   fields : List (String × Term)
 
+/-- An `after` deadline of a state: whether it waits, and when it is due. -/
+structure Armed where
+  state : String
+  name : String
+  waits : Term
+  time : Term
+
 /--
-A machine in a chain: the configurations of the chart's model that it can be in and the term of which one it is, its
-context, and the states that it exited so far. A path fixes one configuration only when a step reads it, so that paths
+The request of a state's activity to another service: whether one that the chain sent awaits its answer, and its input.
+Until the chain sends one, the request is whatever the state held before, the same in every order.
+-/
+structure Request where
+  state : String
+  key : String
+  sent : Term
+  input : List (String × Term)
+
+/--
+A machine in a chain, the whole of its state that decides the service's later messages: the configurations of the
+chart's model that it can be in and the term of which one it is, its context, its deadlines and its requests to other
+services; and the states that it exited so far. A path fixes one configuration only when a step reads it, so that paths
 that differ only in a machine's configuration join, and the steps that do not read it are followed once.
 -/
 structure Mach where
   configs : List Nat
   config : Term
   context : List (String × Term)
+  deadlines : List Armed := []
+  requests : List Request := []
   exited : List String := []
 
 def Mach.fixed? (m : Mach) : Option Nat := match m.configs with
   | [k] => some k
   | _ => none
+
+/-- The machine after it exited `states`: their deadlines taken away and their requests stale. -/
+def Mach.leave (m : Mach) (states : List String) : Mach :=
+  { m with exited := m.exited ++ states,
+           deadlines := m.deadlines.map fun d => if states.contains d.state then { d with waits := ff } else d,
+           requests := m.requests.map fun r => if states.contains r.state then { r with sent := ff } else r }
+
+/-- `t` where `c` holds, else `e`, each datum joined. -/
+def Mach.ite (c : Term) (t e : Mach) : Mach :=
+  let fields (a b : List (String × Term)) : List (String × Term) :=
+    ((a.map (·.1)) ++ b.map (·.1)).eraseDups.map fun f => (f, iteT c ((a.lookup f).getD undefT) ((b.lookup f).getD undefT))
+  { e with configs := (e.configs ++ t.configs).eraseDups.mergeSort, config := iteT c t.config e.config,
+           context := fields t.context e.context,
+           deadlines := e.deadlines.map fun d => match t.deadlines.find? (fun x => x.state == d.state && x.name == d.name) with
+             | some x => { d with waits := iteT c x.waits d.waits, time := iteT c x.time d.time }
+             | none => d,
+           requests := e.requests.map fun r => match t.requests.find? (fun x => x.state == r.state && x.key == r.key) with
+             | some x => { r with sent := iteT c x.sent r.sent, input := fields x.input r.input }
+             | none => r }
+
+/--
+That two machines differ in a way that a later message can see: their configurations, a context field, whether a
+deadline waits or when it is due, or whether a request that the chain sent waits or its input.
+-/
+def Mach.differ (a b : Mach) : Term :=
+  let fieldsDiffer (x y : List (String × Term)) : Term :=
+    disj (((x.map (·.1)) ++ y.map (·.1)).eraseDups.map fun f =>
+      .not (.eq ((x.lookup f).getD undefT) ((y.lookup f).getD undefT)))
+  disj ([.not (.eq a.config b.config), fieldsDiffer a.context b.context] ++
+    (a.deadlines.zip b.deadlines).map (fun (d, e) =>
+      .or (.not (.eq d.waits e.waits)) (conj [d.waits, e.waits, .not (.eq d.time e.time)])) ++
+    (a.requests.zip b.requests).map fun (r, q) =>
+      .or (.not (.eq r.sent q.sent)) (conj [r.sent, q.sent, fieldsDiffer r.input q.input]))
 
 /-- The sender of an own command: a state's `sends`, with the place in its machine's exits when it sent, or an automation. -/
 inductive Sender where
@@ -116,19 +169,36 @@ def cfgVar (chart : String) : Term := .var s!"cfg.{chart}" .int
 
 def ctxVar (chart field : String) : Term := valVar s!"ctx.{chart}.{field}"
 
+/-- When the deadline `name` of `state` of `chart` is due, as a state holds it before a message. -/
+def dlVar (chart state name : String) : Term := .var s!"dl.{chart}.{state}.{name}" .int
+
+/-- The term that holds when a machine of `chart` is in a configuration with `state` active. -/
+def activeIn (models : List (String × ChartModel)) (chart state : String) : Term := match models.lookup chart with
+  | some m => disj ((m.configs.toList.zipIdx.filter (·.1.contains state)).map fun (_, k) =>
+      Term.eq (cfgVar chart) (intLit (Int.ofNat k)))
+  | none => ff
+
 /-- The context fields of `chart` with their schemas, as propertiesWith gives them. -/
 def contextProps (st : Service) (chart : String) : List (String × Value × Bool) :=
   propertiesWith ((st.schemaOf (.context (st.ref chart))).getD (.obj []))
 
+/-- The deadlines of the states of `c`, each as its state and name. -/
+def deadlinesIn (c : Service.Chart) : List (String × String) :=
+  c.states.flatMap fun cs => cs.spec.deadlines.map (cs.spec.name, ·.name)
+
 /--
-The facts of the machines of a state: each chart's configuration a variable among its model's configurations, and each
-context field a variable that fits its schema, as the semantics checks after each assign.
+The facts of the machines of a state: each chart's configuration a variable among its model's configurations, each
+context field a variable that fits its schema, as the semantics checks after each assign, and each deadline due after
+the message, since one due at its time would tie with it, except those in `due`, which fall due at it.
 -/
-def machineFacts (ce : ChainEnv) : Facts :=
+def machineFacts (ce : ChainEnv) (due : List (String × String × String) := []) : Facts :=
   ce.models.foldl (fun f (c, m) =>
     let holds := (contextProps ce.st c).map fun pr => fieldHolds (ctxVar c pr.1) pr
-    f ++ { vars := [(s!"cfg.{c}", .int)] ++ (contextProps ce.st c).map fun pr => (s!"ctx.{c}.{pr.1}", Ty.val),
-           asserts := [.le (intLit 0) (cfgVar c), .lt (cfgVar c) (intLit m.configs.size)] ++ holds.map (·.term),
+    let deadlines := deadlinesIn m.chart
+    f ++ { vars := [(s!"cfg.{c}", .int)] ++ (contextProps ce.st c).map (fun pr => (s!"ctx.{c}.{pr.1}", Ty.val)) ++
+             deadlines.map fun (n, d) => (s!"dl.{c}.{n}.{d}", Ty.int),
+           asserts := [.le (intLit 0) (cfgVar c), .lt (cfgVar c) (intLit m.configs.size)] ++ holds.map (·.term) ++
+             deadlines.map fun (n, d) => (if due.contains (c, n, d) then Term.eq else Term.lt) ce.now (dlVar c n d),
            fit := Fit.all (holds.map (·.fit)) }) Facts.none
 
 /-- `a ∧ b`, without the literals that decide it, so that a path that no run takes has `ff` as its term. -/
@@ -161,11 +231,20 @@ def stopped (x : Path) : Bool := x.halted || x.cut
 
 end Path
 
-/-- Each machine of a state, in any configuration of its model, as machineFacts names it. -/
+/--
+Each machine of a state, in any configuration of its model, as machineFacts names it: each deadline of an active state
+waits, and each request is the one that the state held.
+-/
 def startMachines (ce : ChainEnv) : List (String × Mach) :=
   ce.models.map fun (c, m) =>
     (c, { configs := List.range m.configs.size, config := cfgVar c,
-          context := (contextProps ce.st c).map fun pr => (pr.1, ctxVar c pr.1) })
+          context := (contextProps ce.st c).map (fun pr => (pr.1, ctxVar c pr.1)),
+          deadlines := (deadlinesIn m.chart).map fun (n, d) =>
+            { state := n, name := d, waits := activeIn ce.models c n, time := dlVar c n d },
+          requests := m.chart.states.flatMap fun cs => cs.activities.filterMap fun a => match a with
+            | .calls .. | .sends .. =>
+              if a.isOwn ce.st.service then none else some { state := cs.spec.name, key := a.key, sent := ff, input := [] }
+            | _ => none })
 
 /--
 The paths in which `chart` is in each configuration where `matters` says the work can change it, and one where it is in
@@ -216,8 +295,8 @@ def take (ce : ChainEnv) (x : Path) (chart : String) (edges : List Edge) (taken 
     halts := .or halts (andT before halted)
     let moved ← pre.move ce.st ce.p c x.records ce.now taken (some e.transition) e.exits e.entries
     let y := (x.fork (conj [before, ok, notT halted]) s!"e{i}").setMach chart
-      { configs := [e.target], config := intLit (Int.ofNat e.target), context := moved.machine.context,
-        exited := mach.exited ++ e.exits }
+      { mach.leave e.exits with configs := [e.target], config := intLit (Int.ofNat e.target),
+                                context := moved.machine.context }
     let y := { y with facts := y.facts ++ [(s!"{y.name}.fit", { Facts.none with fit := moved.fit })] }
     out := out ++ [{ y.fork moved.halted "h" with halted := true },
                    ← enterAll ce (y.fork (notT moved.halted) "") chart moved.machine e.entries]
@@ -232,16 +311,22 @@ where
       let some cs := c.state? n | pure x
       if cs.activities.any fun a => a matches .shows .. || a matches .opens .. then
         throw "a state that shows or opens"
-      let early ← cs.spec.deadlines.mapM fun d => match d.time with
-        | .delay ms => pure (if ms.any (0 < ·) then ff else tt)
+      let armed ← cs.spec.deadlines.mapM fun d => match d.time with
+        | .delay ms => pure (d.name, .add ce.now (intLit (ms.getD 0)), if ms.any (0 < ·) then ff else tt)
         | .at => do
           let some f := ((siteOf ce.st ce.p c (.deadline n d.name)).getD []).head? | throw s!"no IR of the at of {d.name}"
           let (v, err) ← seval (m.env c x.records ce.now none) [] f.body
           let (t, notScalar) := v.scalarOf
-          pure (disj [err, notScalar, .not (.isInt t), .le (.intOf t) ce.now])
+          pure (d.name, .intOf t, disj [err, notScalar, .not (.isInt t), .le (.intOf t) ce.now])
+      let some mach := x.mach? chart | throw s!"no machine {chart}"
+      let deadlines := mach.deadlines.map fun a => if a.state != n then a else
+        match armed.find? (·.1 == a.name) with
+        | some (_, time, _) => { a with waits := tt, time }
+        | none => a
       let entered := if cs.activities.isEmpty then x.entered
         else x.entered.filter (· != (chart, n)) ++ [(chart, n)]
-      pure { x with gap := disj ([x.gap] ++ early.map (andT x.pc ·)), entered }
+      pure { x.setMach chart { mach with deadlines } with
+             gap := disj ([x.gap] ++ armed.map (andT x.pc ·.2.2)), entered }
 
 /-- The paths of `paths` that some run can take. -/
 def live (paths : List Path) : List Path := paths.filter (·.pc != ff)
@@ -283,7 +368,9 @@ def fireDeadline (ce : ChainEnv) (x : Path) (chart state name : String) : Except
     let some model := ce.models.lookup chart | throw s!"no model of {chart}"
     -- Exiting the state took its deadline away, even when the state was entered again.
     if mach.exited.contains state || !(model.configs[config]!).contains state then return [x]
-    takeThen ce x chart (edgesOn model config (.after name) (some state)) none (settle ce chart chainLimit)
+    let fired := mach.deadlines.map fun d => if d.state == state && d.name == name then { d with waits := ff } else d
+    takeThen ce (x.setMach chart { mach with deadlines := fired }) chart (edgesOn model config (.after name) (some state))
+      none (settle ce chart chainLimit)
 
 /--
 The paths after the answer to the request of activity `key` of `state`, settled before and after (Service.handle): an
@@ -438,7 +525,11 @@ def sendEntered (ce : ChainEnv) (x : Path) : Except String Path := do
           | .calls .. => OutKind.query
           | _ => .command
         let (id, x) := x.next
-        pure { x with outs := x.outs ++ [{ id, guard := x.pc, kind, definition := a.ref, fields := input }] }
+        let some mach := x.mach? chart | throw s!"no machine {chart}"
+        let requests := mach.requests.map fun r =>
+          if r.state == n && r.key == a.key then { r with sent := tt, input } else r
+        pure { x.setMach chart { mach with requests } with
+               outs := x.outs ++ [{ id, guard := x.pc, kind, definition := a.ref, fields := input }] }
 
 /-- `ws` in sender-definition order, equal ranks in sending order (sortSent). -/
 def sortWaiting (ws : List Waiting) : List Waiting := ws.mergeSort fun a b => decide (a.order ≤ b.order)
@@ -524,16 +615,12 @@ def Job.join (c : Term) : Job → Job → Job
 def Path.absorb (a b : Path) : Path :=
   let c := b.pc
   let pick (x y : Term) : Term := iteT c y x
-  let other (m f : String) (t : Term) : Term := ((((b.mach? m).map (·.context)).getD []).lookup f).getD t
   let keys : Std.HashSet String := a.facts.foldl (fun s (k, _) => s.insert k) ∅
   -- An out line's guard holds only on the paths that wrote it, so one from before the paths split is kept once.
   let ids : Std.HashSet String := a.outs.foldl (fun s o => s.insert o.id) ∅
   { a with pc := Term.or a.pc b.pc, records := SRecords.ite c b.records a.records,
            used := a.used.map fun (e, us) => (e, (us.zip ((b.used.lookup e).getD [])).map fun (x, y) => pick x y),
-           machines := a.machines.map fun (m, x) =>
-             let y := (b.mach? m).getD x
-             (m, { x with configs := (x.configs ++ y.configs).eraseDups.mergeSort, config := pick x.config y.config,
-                          context := x.context.map fun (f, t) => (f, pick t (other m f t)) }),
+           machines := a.machines.map fun (m, x) => (m, Mach.ite c ((b.mach? m).getD x) x),
            outs := a.outs ++ b.outs.filter (!ids.contains ·.id),
            jobs := (b.jobs.zip a.jobs).map fun (y, x) => y.join c x,
            round := (b.round.zip a.round).map fun (y, x) => y.join c x,
@@ -552,8 +639,16 @@ def Path.joinAll (x : Path) (rest : List Path) : Path :=
   let ((joined, machines), defs) := (do
     let joined ← ({ records := j.records, used := j.used } : Stepped).named name
     let machines ← j.machines.mapM fun (m, x) => do
+      let fields (p : String) (fs : List (String × Term)) : Named (List (String × Term)) :=
+        fs.mapM fun (f, t) => do pure (f, ← nameValue s!"{p}.{f}" t)
       pure (m, { x with config := ← nameAs s!"{name}.cfg.{m}" .int x.config,
-                        context := ← x.context.mapM fun (f, t) => do pure (f, ← nameValue s!"{name}.ctx.{m}.{f}" t) })
+                        context := ← fields s!"{name}.ctx.{m}" x.context,
+                        deadlines := ← x.deadlines.mapM fun d => do
+                          let p := s!"{name}.dl.{m}.{d.state}.{d.name}"
+                          pure { d with waits := ← nameAs s!"{p}.waits" .bool d.waits, time := ← nameAs p .int d.time },
+                        requests := ← x.requests.mapM fun r => do
+                          let p := s!"{name}.rq.{m}.{r.state}.{r.key}"
+                          pure { r with sent := ← nameAs p .bool r.sent, input := ← fields p r.input } })
     pure (joined, machines) : Named (Stepped × List (String × Mach))).run []
   let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty),
                          asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t, fit := .exact }
@@ -612,8 +707,8 @@ def factsOf (paths : List Path) : Facts :=
 /-- What an order of two messages ends with, over all its paths. -/
 structure Ending where
   records : SRecords
-  /-- Each machine's configuration, a control state that decides the service's later messages as records do. -/
-  machines : List (String × Term)
+  /-- Each machine's state, which decides the service's later messages as records do. -/
+  machines : List (String × Mach)
   halted : Term
   outs : List Out
   gap : Term
@@ -626,7 +721,7 @@ def Ending.of (start : SRecords) (machines : List (String × Mach)) (paths : Lis
   let finished := paths.filter (!·.cut)
   let mach (x : Path) (c : String) (m : Mach) : Mach := (x.mach? c).getD m
   { records := finished.foldr (fun x r => .ite x.pc x.records r) start,
-    machines := machines.map fun (c, m) => (c, finished.foldr (fun x t => iteT x.pc (mach x c m).config t) m.config),
+    machines := machines.map fun (c, m) => (c, finished.foldr (fun x t => Mach.ite x.pc (mach x c m) t) m),
     halted := disj ((finished.filter (·.halted)).map (·.pc)),
     outs := (finished.foldl (fun (seen, outs) x => x.outs.foldl (fun (seen, outs) o =>
       if seen.contains o.id then (seen, outs) else (seen.insert o.id, outs ++ [o])) (seen, outs))
@@ -645,12 +740,12 @@ def countOf (outs : List Out) (o : Out) : Term :=
     (fun n x => .add n (.ite (.and x.guard (same x)) (intLit 1) (intLit 0))) (intLit 0)
 
 /--
-That two orders end differently: one halts and the other does not, or neither halts and their records, machine
-configurations or out lines differ.
+That two orders end differently: one halts and the other does not, or neither halts and their records, machines
+(Mach.differ) or out lines differ.
 -/
 def Ending.differ (a b : Ending) : Term :=
   let outsDiffer := disj ((a.outs ++ b.outs).map fun o => .and o.guard (.not (.eq (countOf a.outs o) (countOf b.outs o))))
-  let machinesDiffer := disj ((a.machines.zip b.machines).map fun ((_, c), (_, d)) => .not (.eq c d))
+  let machinesDiffer := disj ((a.machines.zip b.machines).map fun ((_, c), (_, d)) => c.differ d)
   .or (.not (.eq a.halted b.halted))
     (conj [.not a.halted, .not b.halted, disj [.not (a.records.same b.records), machinesDiffer, outsDiffer]])
 
@@ -756,12 +851,6 @@ structure Arriving where
   given : Given
   facts : Facts
 
-/-- The term that holds when a machine of `chart` is in a configuration with `state` active. -/
-def activeIn (models : List (String × ChartModel)) (chart state : String) : Term := match models.lookup chart with
-  | some m => disj ((m.configs.toList.zipIdx.filter (·.1.contains state)).map fun (_, k) =>
-      Term.eq (cfgVar chart) (intLit (Int.ofNat k)))
-  | none => ff
-
 /--
 The arrival `a` with its variables named after `x`. An answer arrives for a request that waits: the requesting state is
 active, as leaving it makes the request stale. A rejection as invalid input, from a service that parsed the input
@@ -852,7 +941,7 @@ def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String
   | .deadlines a b =>
     let (first, second) ← orders [(a.chart, a.state), (b.chart, b.state)]
       [{ jobs := [.deadline a.chart a.state a.name] }] [{ jobs := [.deadline b.chart b.state b.name] }]
-    pure { facts := machineFacts ce ++ first.facts ++ second.facts,
+    pure { facts := machineFacts ce [(a.chart, a.state, a.name), (b.chart, b.state, b.name)] ++ first.facts ++ second.facts,
            pre := conj [settled, activeIn models a.chart a.state, activeIn models b.chart b.state], first, second,
            given := [] }
   | .arrivals a b =>
