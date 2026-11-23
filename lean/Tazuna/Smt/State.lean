@@ -379,16 +379,19 @@ def SRecords.outsideSchema (svc : Service) (r : SRecords) : Term :=
       (propertiesWith (entitySchema svc e)).map fun p => .not (fieldHolds ((fields.lookup p.1).getD undefT) p).term))
 
 /--
-The input of command or query `name` as JSON holds its fields, each a variable named after `pre`, and that each field
-fits the input's schema.
+An object of `schema` as JSON holds its fields, each a variable named after `pre`, and that each field fits the schema.
 -/
-def inputOf (svc : Service) (name : String) (pre : String := "in") : List (String × Term) × Facts :=
-  let props := propertiesWith ((svc.schemaOf (.input (svc.ref name))).getD (.obj []))
+def objectOf (svc : Service) (schema : Schema) (pre : String) : List (String × Term) × Facts :=
+  let props := propertiesWith ((svc.schemaOf schema).getD (.obj []))
   let terms := props.map fun pr => (pr.1, propertyVar s!"{pre}.{pr.1}" pr)
   let input := terms.map fun (f, t, _) => (f, t)
   let fieldFacts := props.map fun pr => fieldHolds ((input.lookup pr.1).getD undefT) pr
   (input, { vars := terms.flatMap (·.2.2), asserts := fieldFacts.map (·.term),
             exact := fieldFacts.all (·.exact), complete := fieldFacts.all (·.complete) })
+
+/-- The input of command or query `name` as objectOf makes it. -/
+def inputOf (svc : Service) (name : String) (pre : String := "in") : List (String × Term) × Facts :=
+  objectOf svc (.input (svc.ref name)) pre
 
 /-- A binding or condition that a request checks in order: its name, the term that holds when its evaluation throws, and its value's term that holds when it passes. -/
 structure Check where
@@ -418,6 +421,13 @@ structure Step where
   /-- The binds, a value that is not null passing, then the requires, each in the order that the command checks them. -/
   binds : List Check
   requires : List Check
+  /-- For each path through the decide's choices between emits, the term that holds when the step takes it. -/
+  paths : List Term
+
+/-- The paths through a decide item's choices between emits, each as the term that holds when it is taken. -/
+def emitPaths : SVal → List Term
+  | .ite c a b => (emitPaths a).map (.and c) ++ (emitPaths b).map (.and (.not c))
+  | _ => [tt]
 
 /--
 The step of command `name` from `pre` with the input `input` at the time `now`, as stepOf builds it; the variables that
@@ -465,7 +475,8 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
     [.not decideErr, .not (stepped.records.duplicated svc)])
   pure { facts := facts ++ named, input, now, accepted, post := stepped.records, used := stepped.used,
          beyond := stepped.beyond, gap := .or stepped.gap (stepped.records.outsideSchema svc), bound,
-         refs := conj refs, binds := bindTerms.map (·.2), requires := requireChecks }
+         refs := conj refs, binds := bindTerms.map (·.2), requires := requireChecks,
+         paths := items.foldl (fun acc item => acc.flatMap fun p => (emitPaths item).map (.and p)) [tt] }
 
 /--
 The step of command `name` of `svc` from `pre` at the time `clock`, whose slots of each entity are used as `used` says.

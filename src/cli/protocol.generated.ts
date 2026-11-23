@@ -356,7 +356,7 @@ export type Outcome =
       readonly kind: "reached";
       readonly input: string;
     }
-  /** No sequence of at most `depth` requests from the initial state reaches the target. */
+  /** No run of at most `depth` inputs that the search tried reaches the target. */
   | {
       readonly kind: "notReached";
       readonly depth: number;
@@ -365,7 +365,7 @@ export type Outcome =
   | {
       readonly kind: "unreachable";
     }
-  /** The encoding cannot seek the target, such as a chart's, or cannot decide it. */
+  /** No run reached the target, and the encoding could not ask the solver for its request's input. */
   | {
       readonly kind: "notEncodable";
       readonly reason: string;
