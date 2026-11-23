@@ -246,7 +246,7 @@ structure Search where
   targets : List Uncovered
 
 def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Search := do
-  let st ← Service.ofStructure j service
+  let st ← specService j service
   let bounds := (j.bounds.find? (·.service == service)).map (·.creates)
   let creates := bounds.getD []
   let keyed := st.entities.filter (!st.singles.contains ·)
@@ -512,10 +512,12 @@ def Search.anyState (x : Search) (part : Uncovered) : Except String (Query × Bo
       let (input, inputFacts) := Smt.inputOf x.st d.name
       let (caller, callerFacts) := callerVars
       let step ← stepWith x.st p pre used d.name input caller nowT ""
-      pure ((stepGoal step part).getD ff, inputFacts ++ callerFacts ++ step.facts)
+      let some goal := stepGoal step part | throw "the command's step has no goal for the target"
+      pure (goal, inputFacts ++ callerFacts ++ step.facts)
     else do
       let a ← answerOf x.st p pre clockT d.name
-      pure ((answerGoal a part).getD ff, a.facts)
+      let some goal := answerGoal a part | throw "the query's answer has no goal for the target"
+      pure (goal, a.facts)
   let all := facts ++ more
   pure ({ vars := all.vars, asserts := all.asserts ++ [goal] }, all.complete)
 

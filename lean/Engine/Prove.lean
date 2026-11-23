@@ -116,10 +116,10 @@ def responsesOf (st : Service) (p : Ir.Program) : List Checked :=
   st.entities.flatMap fun e =>
     let expects := ((p.responseExpect.find? (·.definition == st.ref e)).map (·.conditions)).getD []
     let whens := ((p.responseWhen.find? (·.definition == st.ref e)).map (·.conditions)).getD []
-    whens.map fun w =>
-      let expect := ((expects.find? (·.name == w.name)).map (·.body)).getD (.lit (.bool true))
+    -- missingBodies stops prove before a when lacks its expect.
+    (whens.zip expects).map fun (w, x) =>
       { ref := .response (st.ref e) w.name, holder := if st.singles.contains e then .single e else .keyed e,
-        condition := { name := w.name, body := .or (.not w.body) expect } }
+        condition := { name := w.name, body := .or (.not w.body) x.body } }
 
 /--
 The induction of a machine's or screen's invariants: its model, the context fields that the encoding holds, and the
@@ -150,6 +150,35 @@ def chartCaseOf (st : Service) (fs : Functions IO) (c : Service.Chart) : IO (Opt
 /-- The conditions of `definition` in a Program list. -/
 def conditionsOf (list : List Ir.Conditions) (definition : Ir.Ref) : List Ir.Condition :=
   ((list.find? (·.definition == definition)).map (·.conditions)).getD []
+
+/--
+The bodies that the structure names for the service `service` and its program lacks: an ensures of a command or query, a
+response's `when` or `expect`, or the invariants of an entity or of the service, which TS writes for every one, none or
+empty. Each is a converter bug, which prove and generate stop at instead of reading the missing body as true or absent.
+-/
+def missingBodies (j : Ir.Structure) (service : String) : List String :=
+  let p := j.program
+  let names (list : List Ir.Conditions) (d : Ir.Ref) : Option (List String) :=
+    (list.find? (·.definition == d)).map (·.conditions.map (·.name))
+  let lacks (what : String) (list : List Ir.Conditions) (d : Ir.Ref) (expected : List String) : List String :=
+    if names list d == some expected then [] else [s!"{what} of {d.name}"]
+  let lacksAny (what : String) (list : List Ir.Conditions) (d : Ir.Ref) : List String :=
+    if (names list d).isSome then [] else [s!"{what} of {d.name}"]
+  (j.definitions.filter (·.service == service)).flatMap (fun d => match d.body with
+    | .command c => lacks "the ensures" p.ensures d.ref c.ensures
+    | .query q => lacks "the ensures" p.queryEnsures d.ref q.ensures
+    | .entity e =>
+      lacksAny "the invariants" p.invariant d.ref ++
+        lacks "the response whens" p.responseWhen d.ref (e.responses.map (·.name)) ++
+        lacks "the response expects" p.responseExpect d.ref (e.responses.map (·.name))
+    | _ => []) ++
+  lacksAny "the invariants" p.serviceInvariant { service, name := service }
+
+/-- The structure's own spec service `service`, which stops when its program lacks a body that the structure names. -/
+def specService (j : Ir.Structure) (service : String) : IO Service := do
+  let missing := missingBodies j service
+  if !missing.isEmpty then throw (IO.userError s!"the program lacks {", ".intercalate missing}")
+  Service.ofStructure j service
 
 /-- The ref fields of `st` whose target is one of its keyed entities: the entity, the field and the target. -/
 def ownRefs (st : Service) : List (String × String × String) :=
@@ -227,7 +256,7 @@ structure Induction where
   blocked : Option String
 
 def inductionOf (j : Ir.Structure) (service : String) : IO Induction := do
-  let st ← Service.ofStructure j service
+  let st ← specService j service
   let p := j.program
   let checked := invariantsOf st p
   let fs := Eval.Program.toFunctions p st fun _ => pure ()
@@ -258,20 +287,6 @@ inductive ChartStep where
   | start
   | edge (index : Nat)
 deriving BEq
-
-/-- A query of the induction: whether the initial records fail an invariant, a step can leave the encoding, a step can
-fail a property, or a query's answer can fail one of its ensures. -/
-inductive Asked where
-  | base (property : Property)
-  | gap (command : String)
-  | fails (command : String) (property : Property)
-  | answer (query : String) (property : Property)
-  | chart (property : Property) (step : ChartStep)
-  /-- Whether a step of a pair can leave the encoding, and whether the pair's two orders can differ. -/
-  | pairGap (property : Property)
-  | pairDiffers (property : Property)
-  /-- Whether time passing alone, with no message, can fail a response's `when` implies `expect`. -/
-  | tick (property : Property)
 
 def Induction.query (x : Induction) (step : Step) (goal : Term) : Query :=
   { vars := x.facts.vars ++ step.facts.vars,
@@ -361,58 +376,8 @@ def Induction.chartQueries (x : Induction) (cc : ChartCase) (k : Ir.Condition) :
       facts.complete && postFits.all (·.complete)) : ChartStep × Query × Bool × Bool)
   pure ([start] ++ edges)
 
-/--
-The queries of an induction, in order: the base case of each encoded invariant, then each command's gap query and one
-per property it can fail, then one per ensures of each query, then those of each machine's invariants.
--/
-def Induction.queries (x : Induction) : List (Asked × Query) :=
-  if x.blocked.isSome then [] else
-  let (init, initFacts) := initialOf x.st
-  let facts := clockFacts ++ initFacts
-  let p := x.st.structure.program
-  (x.checked.filterMap fun ch => (failsOn init clockT ch).toOption.map fun fails =>
-    (Asked.base ch.ref, { vars := facts.vars, asserts := facts.asserts ++ [fails] })) ++
-  (x.steps.flatMap fun (c, step) =>
-    match step with
-    | .error _ => []
-    | .ok step =>
-      (Asked.gap c, x.query step step.gap) ::
-        (x.stepGoals c step).filterMap fun (prop, goal) => goal.toOption.map fun fails =>
-          (.fails c prop, x.query step (.and (.not step.gap) fails))) ++
-  (x.answers.flatMap fun (q, answered) =>
-    match answered with
-    | .error _ => []
-    | .ok a => (conditionsOf p.queryEnsures (x.st.ref q)).filterMap fun c => (a.ensuresFails x.pre c).toOption.map
-      fun fails => (.answer q (.ensures (x.st.ref q) c.name),
-        { vars := x.facts.vars ++ a.facts.vars, asserts := x.facts.asserts ++ [x.holds] ++ a.facts.asserts ++ [a.answered, fails] })) ++
-  (x.charts.flatMap fun cc => cc.invariants.flatMap fun k =>
-    ((x.chartQueries cc k).toOption.getD []).map fun (step, q, _) =>
-      (Asked.chart (.invariant (x.st.ref cc.chart.name) k.name) step, q)) ++
-  (x.responses.flatMap fun r =>
-    let held := (failsOn x.pre clockT r).toOption.map Term.not
-    ((failsOn init clockT r).toOption.map fun fails =>
-      (Asked.base r.ref, { vars := facts.vars, asserts := facts.asserts ++ [fails] })).toList ++
-    (x.steps.filterMap fun (c, step) => do
-      let step ← step.toOption
-      let fails ← (failsOn step.post step.now r).toOption
-      pure (.fails c r.ref, x.query step (.and ((held.getD ff)) (.and (.not step.gap) fails)))) ++
-    ((failsOn x.pre laterT r).toOption.map fun fails =>
-      (Asked.tick r.ref, { vars := x.facts.vars ++ [("later", .int)],
-                           asserts := x.facts.asserts ++ [x.holds, held.getD ff, .le clockT laterT, fails] })).toList) ++
-  x.pairs.flatMap fun (pair, orders) => match orders with
-    | .error _ => []
-    | .ok o =>
-      let prop := pairProperty x.st pair
-      let facts := x.facts ++ nowFacts ++ o.facts
-      let ask (goal : List Term) : Query := { vars := facts.vars, asserts := facts.asserts ++ [x.holds, o.within] ++ goal }
-      [(.pairGap prop, ask [o.gap]), (.pairDiffers prop, ask [.not o.gap, o.differ])]
-
 /-- The own spec services of the structure, in order. -/
 def specServices (j : Ir.Structure) : List String := (j.services.filter (!·.external)).map (·.name)
-
-def proveQueriesOf (j : Ir.Structure) : IO (List String) := do
-  let inductions ← (specServices j).mapM (inductionOf j)
-  pure (inductions.flatMap fun x => x.queries.map fun (_, q) => q.script proveRlimit)
 
 /-- The records of a state by entity, as the counterexample's Given shows them. -/
 def givenOf (st : Service) (records : Records) : Value :=
@@ -720,151 +685,174 @@ def verdictOf (answer : Smt.Answer) (exact complete : Bool) (replay : Model → 
       if exact then throw (IO.userError s!"prove's encoding disagrees with the semantics {what}: {why}")
       pure (some (.undecided s!"the solver's case {what} is outside what the encoding states exactly: {why}"))
 
-def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : IO (List ProveResult) := do
+/-- A query that a property's verdict needs: its script, and the verdict that its answer gives, none when the answer leaves the property standing. -/
+structure Obligation where
+  script : String
+  decide : Smt.Answer → IO (Option Verdict)
+
+def Obligation.of (q : Query) (decide : Smt.Answer → IO (Option Verdict)) : Obligation :=
+  { script := q.script proveRlimit, decide }
+
+/-- How prove decides a property: with no query, or by its obligations in order, proved when every answer leaves it standing. -/
+inductive Plan where
+  | decided (verdict : Verdict)
+  | asks (obligations : List Obligation)
+
+/-- The plan of `checks` in order: the first that decides with no query, or else all their obligations. -/
+def Plan.all (checks : List (Except Verdict (List Obligation))) : Plan :=
+  match checks.mapM id with
+  | .error v => .decided v
+  | .ok obligations => .asks obligations.flatten
+
+/-- The verdict that an answer gives when only unsat leaves the property standing. -/
+def withinEncoding (what : String) : Smt.Answer → IO (Option Verdict)
+  | .unsat => pure none
+  | .sat _ => pure (some (.undecided what))
+  | .unknown why => pure (some (.undecided s!"whether {what} is unknown: {why}"))
+
+/-- Each property of the induction, in result order, and how prove decides it. -/
+def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
   let fs := Eval.Program.toFunctions x.st.structure.program x.st fun _ => pure ()
   let p := x.st.structure.program
-  let result (prop : Property) (verdict : Verdict) : ProveResult :=
-    { service := x.st.service, property := prop, creates := x.creates,
-      items := Ir.itemsOf x.st.structure.bounds x.st.service, verdict }
   let chartProps := x.charts.flatMap fun cc => cc.invariants.map fun k => (cc, k, Property.invariant (x.st.ref cc.chart.name) k.name)
   let ensures := x.st.commands.flatMap fun c => (conditionsOf p.ensures (x.st.ref c)).map fun e =>
     (c, Property.ensures (x.st.ref c) e.name)
-  let queryEnsures := x.answers.flatMap fun (q, _) => (conditionsOf p.queryEnsures (x.st.ref q)).map fun e =>
-    (q, e, Property.ensures (x.st.ref q) e.name)
+  let queryEnsures := x.answers.flatMap fun (q, a) => (conditionsOf p.queryEnsures (x.st.ref q)).map fun e =>
+    (q, a, e, Property.ensures (x.st.ref q) e.name)
   let dangling := (ownRefs x.st).map fun (e, field, _) => Property.danglingRef (x.st.ref e) field
-  if let some why := x.blocked then
-    return ((x.checked.map (·.ref)) ++ ensures.map (·.2) ++ queryEnsures.map (·.2.2) ++ dangling ++
-      x.responses.map (·.ref)).map
-      (result · (.undecided why)) ++ chartProps.map (fun (_, _, prop) => result prop (.undecided why)) ++
-        x.pairs.map fun (pair, _) => result (pairProperty x.st pair) (.undecided why)
+  let props := x.checked.map (·.ref) ++ ensures.map (·.2) ++ queryEnsures.map (·.2.2.2) ++ dangling ++
+    chartProps.map (·.2.2) ++ x.pairs.map (pairProperty x.st ·.1) ++ x.responses.map (·.ref)
+  if let some why := x.blocked then return props.map (·, .decided (.undecided why))
   let (init, initFacts) := initialOf x.st
-  let gapOf (c : String) : Option String := answers.findSome? fun
-    | (.gap c', .sat _) => if c' == c then
-        some s!"the command {c} can write a value that the encoding does not hold, such as a record outside its schema"
-      else none
-    | (.gap c', .unknown why) => if c' == c then some s!"whether the command {c} stays within the encoding is unknown: {why}"
-      else none
-    | _ => none
-  -- A property that steps can fail: proved when no step of `commands` can.
-  let afterSteps (prop : Property) (commands : List String) : IO Verdict := do
-    for c in commands do
-      match x.steps.lookup c with
-      | some (.error why) => return .undecided s!"the command {c} has no encoding: {why}"
-      | some (.ok step) =>
-        if let some (_, .error why) := (x.stepGoals c step).find? (·.1 == prop) then
-          return .undecided s!"the property has no encoding: {why} (in {c})"
-        if let some why := gapOf c then return .undecided why
-      | none => pure ()
-    for c in commands do
-      let some (.ok step) := x.steps.lookup c | continue
-      for (asked, a) in answers do
-        let .fails c' prop' := asked | continue
-        if c' != c || prop' != prop then continue
+  let initQuery (fails : Term) : Query :=
+    let facts := clockFacts ++ initFacts
+    { vars := facts.vars, asserts := facts.asserts ++ [fails] }
+  let encoded (c : String) : Except Verdict Step := match x.steps.lookup c with
+    | some (.ok step) => pure step
+    | some (.error why) => throw (.undecided s!"the command {c} has no encoding: {why}")
+    | none => throw (.undecided s!"the command {c} has no step")
+  -- Whether a step of `c` stays within the encoding, which every property that the step can fail needs.
+  let gap (c : String) (step : Step) : Obligation := .of (x.query step step.gap)
+    (withinEncoding s!"the command {c} can write a value that the encoding does not hold, such as a record outside its schema")
+  let afterSteps (prop : Property) (commands : List String) : Plan := Plan.all <| (commands.map fun c => do
+      let step ← encoded c
+      match (x.stepGoals c step).lookup prop with
+      | some (.ok fails) =>
         let replay := (replayStep x fs · c step prop)
-        if let some v ← verdictOf a (x.facts.exact && step.facts.exact) (x.facts.complete && step.facts.complete) replay
-            s!"after {c}" then
-          return v
-    return .proved
-  let invariants ← x.checked.mapM fun ch => do
-    match failsOn init clockT ch with
-    | .error why => return result ch.ref (.undecided s!"the invariant has no encoding: {why}")
-    | .ok _ => pure ()
-    let base : Option Smt.Answer := answers.findSome? fun
-      | (.base ref, a) => if ref == ch.ref then some a else none
-      | _ => none
-    if let some a := base then
-      let replay (M : Model) : IO (Except String Counterexample) := pure (replayBase x M ch)
-      if let some v ← verdictOf a initFacts.exact initFacts.complete replay "of the initial records" then return result ch.ref v
-    return result ch.ref (← afterSteps ch.ref x.st.commands)
-  let commandEnsures ← ensures.mapM fun (c, prop) => do pure (result prop (← afterSteps prop [c]))
-  let answered ← queryEnsures.mapM fun (q, e, prop) => do
-    match x.answers.lookup q with
-    | some (.error why) => return result prop (.undecided s!"the query {q} has no encoding: {why}")
-    | some (.ok a) =>
-      match a.ensuresFails x.pre e with
-      | .error why => return result prop (.undecided s!"the property has no encoding: {why}")
-      | .ok _ => pure ()
-      for (asked, ans) in answers do
-        let .answer q' prop' := asked | continue
-        if q' != q || prop' != prop then continue
-        if let some v ← verdictOf ans false (x.facts.complete && a.facts.complete) (replayAnswer x fs · q a e.name) s!"of {q}" then return result prop v
-      return result prop .proved
-    | none => return result prop (.undecided s!"the query {q} has no encoding")
-  let refs ← dangling.mapM fun prop => do pure (result prop (← afterSteps prop x.st.commands))
-  let charts ← chartProps.mapM fun (cc, k, prop) => do
-    match x.chartQueries cc k with
-    | .error why => return result prop (.undecided s!"the invariant has no encoding: {why}")
-    | .ok queries =>
-    for (step, _, exact, complete) in queries do
-      let answer := answers.findSome? fun
-        | (.chart prop' step', a) => if prop' == prop && step' == step then some a else none
-        | _ => none
-      let some a := answer | continue
-      let what := match step with
-        | .start => "on starting the machine"
-        | .edge i => s!"in the machine's microstep {i}"
-      if let some v ← verdictOf a exact complete (replayChart x fs cc k step ·) what then return result prop v
-    return result prop .proved
-  let find (asked : Asked → Bool) : Option Smt.Answer := answers.findSome? fun (a, v) => if asked a then some v else none
-  let pairs ← x.pairs.mapM fun (pair, orders) => do
-    let prop := pairProperty x.st pair
-    match orders with
-    | .error why => return result prop (.undecided s!"the pair has no encoding: {why}")
-    | .ok o =>
-    match find (fun | .pairGap p' => p' == prop | _ => false) with
-    | some (.sat _) => return result prop (.undecided "a step of the pair can write a value that the encoding does not hold")
-    | some (.unknown why) => return result prop (.undecided s!"whether the pair stays within the encoding is unknown: {why}")
-    | _ => pure ()
-    let facts := x.facts ++ nowFacts ++ o.facts
-    let some a := find (fun | .pairDiffers p' => p' == prop | _ => false) | return result prop (.undecided "the pair was not asked")
-    match ← verdictOf a facts.exact facts.complete (replayPair x fs pair o ·) "between the two orders" with
-    | some v => return result prop v
-    | none => return result prop .proved
+        pure [gap c step, .of (x.query step (.and (.not step.gap) fails)) fun a =>
+          verdictOf a (x.facts.exact && step.facts.exact) (x.facts.complete && step.facts.complete) replay s!"after {c}"]
+      | some (.error why) => throw (.undecided s!"the property has no encoding: {why} (in {c})")
+      | none => throw (.undecided s!"the command {c} has no goal for the property"))
+  let invariants := x.checked.map fun ch =>
+    (ch.ref, match failsOn init clockT ch with
+      | .error why => .decided (.undecided s!"the invariant has no encoding: {why}")
+      | .ok fails =>
+        let base := Obligation.of (initQuery fails) fun a =>
+          verdictOf a initFacts.exact initFacts.complete (fun M => pure (replayBase x M ch)) "of the initial records"
+        match afterSteps ch.ref x.st.commands with
+        | .decided v => .decided v
+        | .asks obligations => .asks (base :: obligations))
+  let commandEnsures := ensures.map fun (c, prop) => (prop, afterSteps prop [c])
+  let answered := queryEnsures.map fun (q, answered, e, prop) =>
+    (prop, match answered with
+      | .error why => .decided (.undecided s!"the query {q} has no encoding: {why}")
+      | .ok a =>
+        match a.ensuresFails x.pre e with
+        | .error why => .decided (.undecided s!"the property has no encoding: {why}")
+        | .ok fails =>
+          .asks [.of { vars := x.facts.vars ++ a.facts.vars,
+                       asserts := x.facts.asserts ++ [x.holds] ++ a.facts.asserts ++ [a.answered, fails] } fun ans =>
+            verdictOf ans false (x.facts.complete && a.facts.complete) (replayAnswer x fs · q a e.name) s!"of {q}"])
+  let refs := dangling.map fun prop => (prop, afterSteps prop x.st.commands)
+  let charts := chartProps.map fun (cc, k, prop) =>
+    (prop, match x.chartQueries cc k with
+      | .error why => .decided (.undecided s!"the invariant has no encoding: {why}")
+      | .ok queries => .asks (queries.map fun (step, q, exact, complete) =>
+        let what := match step with
+          | .start => "on starting the machine"
+          | .edge i => s!"in the machine's microstep {i}"
+        .of q fun a => verdictOf a exact complete (replayChart x fs cc k step ·) what))
+  let pairs := x.pairs.map fun (pair, orders) =>
+    (pairProperty x.st pair, match orders with
+      | .error why => .decided (.undecided s!"the pair has no encoding: {why}")
+      | .ok o =>
+        let facts := x.facts ++ nowFacts ++ o.facts
+        let ask (goal : List Term) : Query := { vars := facts.vars, asserts := facts.asserts ++ [x.holds, o.within] ++ goal }
+        .asks [.of (ask [o.gap]) (withinEncoding "a step of the pair can write a value that the encoding does not hold"),
+               .of (ask [.not o.gap, o.differ]) fun a =>
+                 verdictOf a facts.exact facts.complete (replayPair x fs pair o ·) "between the two orders"])
   -- A response: proved when `when` implies `expect` at every visible state, so no obligation ever opens; else a case
   -- in a service with no automation and no chart, which nothing internal can repair, misses it.
   let internal := !x.st.automations.isEmpty || !x.st.charts.isEmpty
-  let responses ← x.responses.mapM fun r => do
-    let done (v : Verdict) : ProveResult := match v with
-      | .counterexample _ => { result r.ref v with assumes := some progressAssumption }
-      | _ => result r.ref v
-    match failsOn init clockT r with
-    | .error why => return done (.undecided s!"the response has no encoding: {why}")
-    | .ok _ => pure ()
-    for (c, step) in x.steps do
-      match step with
-      | .error why => return done (.undecided s!"the command {c} has no encoding: {why}")
-      | .ok step =>
-        if let .error why := failsOn step.post step.now r then return done (.undecided s!"the response has no encoding: {why} (in {c})")
-        if let some why := gapOf c then return done (.undecided why)
-    let unmet := "its when can hold without its expect at a visible state, and the service's automations or charts may meet its expect later; prove proves a response only when its when implies its expect"
-    if let some a := find (fun | .base p' => p' == r.ref | _ => false) then
-      if let .sat _ := a then return done (.undecided s!"its when can hold without its expect in the initial records")
-      if let some v ← verdictOf a initFacts.exact initFacts.complete (fun _ => pure (.error "")) "of the initial records" then
-        return done v
-    for (asked, a) in answers do
-      let command : Option (Option (String × Step)) := match asked with
-        | .fails c p' => if p' == r.ref then (x.steps.lookup c).bind (·.toOption) |>.map fun s => some (c, s) else none
-        | .tick p' => if p' == r.ref then some none else none
-        | _ => none
-      let some command := command | continue
+  let unmet := "its when can hold without its expect at a visible state, and the service's automations or charts may meet its expect later; prove proves a response only when its when implies its expect"
+  let responses := x.responses.map fun r =>
+    let noEncoding {α : Type} (why : String) : Except Verdict α := throw (.undecided s!"the response has no encoding: {why}")
+    let case (exact complete : Bool) (command : Option (String × Step)) (a : Smt.Answer) : IO (Option Verdict) := do
       if let .sat _ := a then
-        if internal then return done (.undecided unmet)
-      let exact := x.facts.exact && (command.map (·.2.facts.exact)).getD true
-      let complete := x.facts.complete && (command.map (·.2.facts.complete)).getD true
-      if let some v ← verdictOf a exact complete (replayResponse x fs · r command) "of the response" then return done v
-    return done .proved
-  pure (invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ responses)
+        if internal then return some (.undecided unmet)
+      verdictOf a exact complete (replayResponse x fs · r command) "of the response"
+    (r.ref, Plan.all <|
+      (x.steps.map fun (c, _) => do
+        let step ← encoded c
+        if let .error why := failsOn step.post step.now r then noEncoding s!"{why} (in {c})"
+        pure [gap c step]) ++
+      [do
+        let .ok initFails := failsOn init clockT r | noEncoding "on the initial records"
+        let .ok heldFails := failsOn x.pre clockT r | noEncoding "on a state"
+        let .ok laterFails := failsOn x.pre laterT r | noEncoding "after time passes"
+        let held := Term.not heldFails
+        let base := Obligation.of (initQuery initFails) fun a => do
+          if let .sat _ := a then return some (.undecided "its when can hold without its expect in the initial records")
+          verdictOf a initFacts.exact initFacts.complete (fun _ => pure (.error "")) "of the initial records"
+        let steps ← x.steps.mapM fun (c, _) => do
+          let step ← encoded c
+          let .ok fails := failsOn step.post step.now r | noEncoding s!"after {c}"
+          pure (Obligation.of (x.query step (.and held (.and (.not step.gap) fails)))
+            (case (x.facts.exact && step.facts.exact) (x.facts.complete && step.facts.complete) (some (c, step))))
+        let tick := Obligation.of { vars := x.facts.vars ++ [("later", .int)],
+                                    asserts := x.facts.asserts ++ [x.holds, held, .le clockT laterT, laterFails] }
+          (case x.facts.exact x.facts.complete none)
+        pure ([base] ++ steps ++ [tick])])
+  return invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ responses
 
-/-- The results of each property of each spec service, from Z3's answers to proveQueriesOf's scripts, in order. -/
-def proveOf (j : Ir.Structure) (answers : List String) : IO (List ProveResult) := do
+/-- The own spec services' plans, each with its service. -/
+def plansOf (j : Ir.Structure) : IO (List (Induction × List (Property × Plan))) := do
   let inductions ← (specServices j).mapM (inductionOf j)
-  let mut rest := answers
-  let mut results := []
-  for x in inductions do
-    let asked := x.queries.map (·.1)
-    let mine := asked.zip (rest.take asked.length |>.map Smt.Answer.read)
-    rest := rest.drop asked.length
-    results := results ++ (← x.results mine)
-  pure results
+  pure (inductions.map fun x => (x, x.plans))
+
+/-- The scripts of every obligation of every property, each once, in order. -/
+def proveQueriesOf (j : Ir.Structure) : IO (List String) := do
+  pure ((← plansOf j).flatMap fun (_, plans) => plans.flatMap fun
+    | (_, .asks obligations) => obligations.map (·.script)
+    | (_, .decided _) => []).eraseDups
+
+/--
+The result of each property of each spec service, from Z3's output on each script of proveQueriesOf, in order. Every
+obligation needs its own answer: one missing is an internal error, never a proof.
+-/
+def proveOf (j : Ir.Structure) (outputs : List String) : IO (List ProveResult) := do
+  let all ← plansOf j
+  let scripts := (all.flatMap fun (_, plans) => plans.flatMap fun
+    | (_, .asks obligations) => obligations.map (·.script)
+    | (_, .decided _) => []).eraseDups
+  if outputs.length != scripts.length then
+    throw (IO.userError s!"prove got {outputs.length} solver outputs for {scripts.length} scripts")
+  let answers : Std.HashMap String String := (scripts.zip outputs).foldl (fun m (k, v) => m.insert k v) {}
+  all.flatMapM fun (x, plans) => plans.mapM fun (prop, plan) => do
+    let verdict ← match plan with
+      | .decided v => pure v
+      | .asks obligations => do
+        let mut verdict := Verdict.proved
+        for o in obligations do
+          let some output := answers.get? o.script | throw (IO.userError "prove has no solver output for an obligation")
+          if let some v ← o.decide (Smt.Answer.read output) then
+            verdict := v
+            break
+        pure verdict
+    let assumes := match prop, verdict with
+      | .response .., .counterexample _ => some progressAssumption
+      | _, _ => none
+    pure { service := x.st.service, property := prop, creates := x.creates,
+           items := Ir.itemsOf x.st.structure.bounds x.st.service, verdict, assumes }
 
 end Tazuna.Engine

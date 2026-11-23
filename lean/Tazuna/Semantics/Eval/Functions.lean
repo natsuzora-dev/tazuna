@@ -174,10 +174,9 @@ def Program.toFunctions (p : Program) (st : Service) (read : Trace → IO Unit) 
       let whens ← all p.responseWhen (st.ref entity)
       let expects ← all p.responseExpect (st.ref entity)
       let env : Env := { fields := fieldsOf st, keyFields := st.keyFieldsOf, args := argsOf [(.record, .json record), (.now, instant now)] }
-      let answers : EvalM (List (String × Bool × Bool)) := whens.mapM fun (w : Condition) => do
-        let expected ← match expects.find? (·.name == w.name) with
-          | some c => holds env c
-          | none => pure true
+      let pairs ← whens.mapM fun (w : Condition) => (expects.find? (·.name == w.name)).map (w, ·)
+      let answers : EvalM (List (String × Bool × Bool)) := pairs.mapM fun (w, x) => do
+        let expected ← holds env x
         pure (w.name, ← holds env w, expected)
       pure answers.run'
     closeEnsures := fun screen input output => evaluated "closeEnsures" <|

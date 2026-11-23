@@ -66,9 +66,9 @@ inductive Request where
       (fields : List (String × List String))
   /-- `value` parsed by the JSON Schema `schema` as Lean's Semantics.parse does. -/
   | parse (schema : Value) (value : Value)
-  /-- The SMT-LIB scripts of prove's queries, in order (Engine.proveQueriesOf). -/
+  /-- The SMT-LIB scripts of prove's queries, each once, in order (Engine.proveQueriesOf). -/
   | proveQueries («structure» : Ir.Structure)
-  /-- prove's result of each invariant, from Z3's output on each script of proveQueries, in order (Engine.proveOf). -/
+  /-- prove's result of each property, from Z3's output on each script of proveQueries, in order (Engine.proveOf). -/
   | prove («structure» : Ir.Structure) (answers : List String)
   /--
   generate's result (Engine.generateOf). Before it the engine sends `solve` responses, each answered by `solved`.

@@ -181,12 +181,12 @@ export type Request =
       readonly schema: Json;
       readonly value: Json;
     }
-  /** The SMT-LIB scripts of prove's queries, in order (Engine.proveQueriesOf). */
+  /** The SMT-LIB scripts of prove's queries, each once, in order (Engine.proveQueriesOf). */
   | {
       readonly type: "proveQueries";
       readonly structure: Structure;
     }
-  /** prove's result of each invariant, from Z3's output on each script of proveQueries, in order (Engine.proveOf). */
+  /** prove's result of each property, from Z3's output on each script of proveQueries, in order (Engine.proveOf). */
   | {
       readonly type: "prove";
       readonly structure: Structure;
