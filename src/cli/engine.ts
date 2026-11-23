@@ -45,21 +45,18 @@ function answerOf<T extends Asked>(type: T, response: Response | null): Answer<T
   return answer as unknown as Answer<T>;
 }
 
-/** The engine's answers to `requests`, in order, from one run of it, which reads one JSON line per request. */
-export function ask<T extends Asked>(
-  type: T,
-  requests: readonly Omit<Extract<Request, { type: T }>, "type">[],
-): Answer<T>[] {
+/** The engine's answer to `request`, from one run of it. */
+export function ask<T extends Asked>(type: T, request: Omit<Extract<Request, { type: T }>, "type">): Answer<T> {
   const executable = enginePath();
   const run = spawnSync(executable, {
-    input: requests.map((r) => `${JSON.stringify({ type, ...r })}\n`).join(""),
+    input: `${JSON.stringify({ type, ...request })}\n`,
     encoding: "utf8",
     maxBuffer: Number.POSITIVE_INFINITY,
   });
   if (run.error !== undefined) throw new InternalError(`cannot run ${executable}: ${run.error.message}`);
   if (run.status !== 0) throw new InternalError(`${executable} exited with ${run.status}: ${run.stderr}`);
-  const lines = run.stdout.split("\n").filter((l) => l !== "");
-  return requests.map((__, i) => answerOf(type, JSON.parse(lines[i] ?? "null") as Response | null));
+  const [line] = run.stdout.split("\n").filter((l) => l !== "");
+  return answerOf(type, JSON.parse(line ?? "null") as Response | null);
 }
 
 /**

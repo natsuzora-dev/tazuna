@@ -95,8 +95,7 @@ export function testSpec(
   options: { readonly update: boolean; readonly scenarios: readonly Named<LoadedScenario>[] },
 ): TestResult {
   const { scenarios } = options;
-  const [tested] = ask("test", [{ structure: spec.structure, scenarios: scenarios.map((s) => s.definition.scenario) }]);
-  if (tested === undefined) throw new InternalError("the engine gave no answer to test");
+  const tested = ask("test", { structure: spec.structure, scenarios: scenarios.map((s) => s.definition.scenario) });
   const violations: ReportedViolation[] = [];
   const reported = new Set<string>();
   // Two violations count as one when they differ only in `error`.

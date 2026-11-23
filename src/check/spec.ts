@@ -81,10 +81,10 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
 
 /** The NonCanonical and Illegal violations of the structure, which the engine finds, each at its place. */
 function structureViolations(spec: Spec): Found<NonCanonical | Illegal>[] {
-  const [checked] = ask("check", [{ structure: spec.structure }]);
+  const checked = ask("check", { structure: spec.structure });
   return [
-    ...(checked?.nonCanonical ?? []).map((violation) => ({ violation, place: placeOf(spec, violation.definition) })),
-    ...(checked?.illegal ?? []).map((violation) => ({ violation, place: placeOfIllegal(spec, violation) })),
+    ...checked.nonCanonical.map((violation) => ({ violation, place: placeOf(spec, violation.definition) })),
+    ...checked.illegal.map((violation) => ({ violation, place: placeOfIllegal(spec, violation) })),
   ];
 }
 

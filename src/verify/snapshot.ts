@@ -1,6 +1,5 @@
 import { join, relative } from "node:path";
 import { ask } from "../cli/engine.ts";
-import { InternalError } from "../data/internalError.ts";
 import {
   type Expected,
   entriesOf,
@@ -26,8 +25,7 @@ export function pairSnapshots(
   expected: readonly Expected[],
   folders: readonly Folder[],
 ): { readonly compare: readonly Run[]; readonly violations: readonly PairingViolation<ScenarioAt | SnapshotEntry>[] } {
-  const [paired] = ask("pairSnapshots", [{ services, expected, folders }]);
-  if (paired === undefined) throw new InternalError("the engine gave no snapshot pairing");
+  const paired = ask("pairSnapshots", { services, expected, folders });
   return {
     compare: paired.compare,
     violations: paired.findings as readonly PairingViolation<ScenarioAt | SnapshotEntry>[],
@@ -92,11 +90,11 @@ export function snapshotViolations(spec: Spec, run: Run, lines: readonly TraceLi
   const file = relative(spec.root, path);
   const snapshot = readSnapshotViolations(path);
   if (snapshot.violations.length > 0) return violationsAt(file, snapshot.violations, scenarioOf(run));
-  const [compared] = ask("compareSnapshot", [
-    { snapshot: snapshot.values.map((v) => v ?? null), run: lines.map(jsonLine) },
-  ]);
-  const mismatch = compared?.mismatch ?? undefined;
-  return mismatch === undefined ? [] : violationsAt(file, [mismatch], scenarioOf(run));
+  const { mismatch } = ask("compareSnapshot", {
+    snapshot: snapshot.values.map((v) => v ?? null),
+    run: lines.map(jsonLine),
+  });
+  return mismatch === null ? [] : violationsAt(file, [mismatch], scenarioOf(run));
 }
 
 /**

@@ -28,8 +28,8 @@ export function readSnapshotViolations(path: string): {
   const values = readTrace(path);
   const { lines, malformed } = parseLines(values);
   if (malformed.length > 0) return { values, lines, violations: malformed.map(lineSchema) };
-  const [afters] = ask("afters", [{ snapshot: lines.map((l) => l ?? null) }]);
-  return { values, lines, violations: afters?.findings ?? [] };
+  const afters = ask("afters", { snapshot: lines.map((l) => l ?? null) });
+  return { values, lines, violations: afters.findings };
 }
 
 /** Returns each violation as a ReportedViolation in `file`, at the line that it names, or at the whole file. */

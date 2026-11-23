@@ -111,8 +111,7 @@ export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Ada
       : spec.scenarios.find((s) => s.service === run.service && s.name === run.scenario)?.definition.scenario;
   if (!("path" in run) && scenario === undefined) throw new InternalError(`no scenario ${run.service}.${run.scenario}`);
   const snapshot = readSnapshot(spec, run);
-  const [read] = ask("readLines", [{ structure: spec.structure, service: runner, lines: snapshot }]);
-  const readSnapshotLines = read?.lines ?? [];
+  const readSnapshotLines = ask("readLines", { structure: spec.structure, service: runner, lines: snapshot }).lines;
   const lines: (TraceLine | undefined)[] = [];
   // Keyed by who gave the id, the implementation or the harness, so that neither id hides the other.
   const waiting = new Map<string, Waiting>();
@@ -188,15 +187,18 @@ export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Ada
       : {
           type: "start",
           time: scenario.given.start,
-          records: ask("givenRecords", [{ structure: spec.structure, scenario, service: runner }])[0]?.records ?? [],
+          records: ask("givenRecords", { structure: spec.structure, scenario, service: runner }).records,
           ...(scenario.given.user === undefined ? {} : { user: scenario.given.user }),
         };
   const comparedBefore = (k: number) => {
-    const [compared] = ask("bindings", [
-      { structure: spec.structure, service: runner, snapshot: snapshot.slice(0, k), trace: written() },
-    ]);
-    const [first] = compared?.bindings ?? [];
-    return { found: compared?.findings ?? [], first: new Map(Object.entries(first ?? {})) };
+    const compared = ask("bindings", {
+      structure: spec.structure,
+      service: runner,
+      snapshot: snapshot.slice(0, k),
+      trace: written(),
+    });
+    const [first] = compared.bindings;
+    return { found: compared.findings, first: new Map(Object.entries(first ?? {})) };
   };
 
   async function give(line: TraceLine): Promise<void> {

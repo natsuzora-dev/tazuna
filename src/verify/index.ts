@@ -2,6 +2,7 @@ import { join, relative } from "node:path";
 import type { ConvertedSpec } from "../check/spec.ts";
 import { ask } from "../cli/engine.ts";
 import type { Log } from "../cli/protocol.generated.ts";
+import { InternalError } from "../data/internalError.ts";
 import { entriesOf } from "../data/pairing.ts";
 import { type FileLine, isMalformed, parseFileLines } from "../data/trace.ts";
 import { readTrace } from "../data/traceFile.ts";
@@ -113,28 +114,30 @@ export function verifyTraces(
     }
   }
   const replayed = logs.filter((l) => !l.external).map((l) => ({ ...l, ...readLog(l.service, l.path) }));
-  const [verified] = ask("verify", [{ structure: spec.structure, logs: replayed.map((r) => r.log) }]);
+  const verified = ask("verify", { structure: spec.structure, logs: replayed.map((r) => r.log) });
+  if (verified.logs.length !== replayed.length)
+    throw new InternalError(`the engine gave ${verified.logs.length} results for ${replayed.length} traces`);
   const ofReplays = replayed.flatMap((r, i) => {
-    const result = verified?.logs[i];
+    const result = verified.logs[i];
+    if (result === undefined) throw new InternalError(`the engine gave no result for ${r.path}`);
     const file = at(r.path);
     return [
-      ...violationsAt(file, withLineErrors(result?.findings ?? [], r.lines)),
-      ...(result?.violations ?? []).map((v) =>
-        toReported(v, v.definition === null ? { file } : placeOf(spec, v.definition)),
-      ),
+      ...violationsAt(file, withLineErrors(result.findings, r.lines)),
+      ...result.violations.map((v) => toReported(v, v.definition === null ? { file } : placeOf(spec, v.definition))),
     ];
   });
   const contracts = logs.filter((l) => l.external).map((l) => ({ ...l, lines: parseFileLines(readTrace(l.path)) }));
-  const external = ask(
-    "verifyExternal",
-    contracts.map((c) => ({ structure: spec.structure, service: c.service, trace: fileLines(c.lines) })),
-  );
-  const ofContracts = contracts.flatMap((c, i) =>
-    violationsAt(at(c.path), withLineErrors(external[i]?.findings ?? [], c.lines)),
-  );
+  const ofContracts = contracts.flatMap((c) => {
+    const { findings } = ask("verifyExternal", {
+      structure: spec.structure,
+      service: c.service,
+      trace: fileLines(c.lines),
+    });
+    return violationsAt(at(c.path), withLineErrors(findings, c.lines));
+  });
   return {
     traces: logs.length,
     violations: [...ofReplays, ...ofContracts, ...unplaced],
-    uncovered: verified?.uncovered ?? [],
+    uncovered: verified.uncovered,
   };
 }

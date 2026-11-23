@@ -26,8 +26,7 @@ for (const { root, scenarios } of examples) {
   for (const name of scenarios)
     test(`${relative(tests, root)}/${name}: the simulation gives the outcome of ${name}${outcomeSuffix}`, (t) => {
       const sc = scenario.parse(JSON.parse(readFileSync(join(root, `${name}${scenarioSuffix}`), "utf8")));
-      const [tested] = ask("test", [{ structure: spec.structure, scenarios: [sc] }]);
-      const [outcome] = tested?.runs ?? [];
+      const [outcome] = ask("test", { structure: spec.structure, scenarios: [sc] }).runs;
       if (outcome === undefined) throw new Error("the engine gave no outcome");
       t.assert.fileSnapshot(outcome, join(root, `${name}${outcomeSuffix}`), {
         serializers: [(v) => `${JSON.stringify(v, null, 2)}\n`],
