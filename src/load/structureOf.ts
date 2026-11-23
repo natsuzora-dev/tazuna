@@ -183,6 +183,7 @@ function definitionStructure(
       unique: d.single ? [] : [...d.unique],
       references: references(d.fields as Shape, "fields"),
       keys: keysOf(d.fields as Shape, ref, ["fields"]),
+      responses: Object.entries(d.responses).map(([name, r]) => ({ name, within: r.within })),
     };
   }
   if (d.kind === "event")

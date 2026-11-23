@@ -63,7 +63,7 @@ theorem keepsIds_fireTo (time : Time) (st : Service) (fs : Functions Id) (s : St
   simp only [fireTo, id_bind]
   refine (keepsIds_fireDue (st := st) (fs := fs) time Limit.dueDeadlines.max none s).trans ?_
   split
-  · exact .of_lines rfl
+  · exact .of_lines (by simp)
   · refine KeepsIds.trans ?_ publish_grows.keepsIds
     ids_leaf
 

@@ -166,6 +166,16 @@ def Program.toFunctions (p : Program) (st : Service) (read : Trace → IO Unit) 
     invariant := fun entity record now => evaluated "invariant" <|
       (all p.invariant (st.ref entity)).map fun cs =>
         (firstFailing { fields := fieldsOf st, args := argsOf [(.record, .json record), (.now, instant now)] } cs).run'
+    responses := fun entity record now => evaluated "responses" <| do
+      let whens ← all p.responseWhen (st.ref entity)
+      let expects ← all p.responseExpect (st.ref entity)
+      let env : Env := { fields := fieldsOf st, args := argsOf [(.record, .json record), (.now, instant now)] }
+      let answers : EvalM (List (String × Bool × Bool)) := whens.mapM fun (w : Condition) => do
+        let expected ← match expects.find? (·.name == w.name) with
+          | some c => holds env c
+          | none => pure true
+        pure (w.name, ← holds env w, expected)
+      pure answers.run'
     closeEnsures := fun screen input output => evaluated "closeEnsures" <|
       (all p.closeEnsures (st.ref screen)).map fun cs =>
         (firstFailing { fields := fieldsOf st, args := argsOf [(.input, .json input), (.output, .json output)] } cs).run'

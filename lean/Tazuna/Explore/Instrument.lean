@@ -253,6 +253,7 @@ def _root_.Tazuna.Service.Functions.hoist {m n : Type → Type} (f : {α : Type}
   queryEnsures a b c d := f (fs.queryEnsures a b c d)
   resultEnsures a b c d e := f (fs.resultEnsures a b c d e)
   invariant a b c := f (fs.invariant a b c)
+  responses a b c := f (fs.responses a b c)
   serviceInvariant a b := f (fs.serviceInvariant a b)
   chartInvariant a b := f (fs.chartInvariant a b)
   resolve a b c d := f (fs.resolve a b c d)

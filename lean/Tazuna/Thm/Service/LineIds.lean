@@ -128,14 +128,16 @@ theorem keepsIds_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : State
           obtain ⟨_, rfl⟩ := chooseDeadline_orders hc
           simp only [id_bind, note_id, endMessage_id]
           refine KeepsIds.trans ?_ (ih _ _)
+          refine KeepsIds.trans ?_ Tazuna.Thm.Service.Response.observeResponses_grows.keepsIds
           refine KeepsIds.trans ?_ afterMessage_grows.keepsIds
           refine KeepsIds.trans ?_ (drain_grows _ _).keepsIds
           refine KeepsIds.trans ?_ (growsBy_settled _ _ (growsBy_fire _ _) (keeps_fire _ _) _).keepsIds
-          exact .of_lines rfl
+          exact .of_lines (by simp [State.newMessage, State.newStep]) (by simp [State.newMessage, State.newStep])
 
 theorem keepsIds_message (s : State) (q : Queue) : KeepsIds s (message st fs s q) := by
   simp only [message, finish, id_bind, endMessage_id]
-  exact ((drain_grows _ _).trans (drain_keeps_now _ _) afterMessage_grows).keepsIds.trans (keepsIds_fireDue _ _ _ _)
+  exact ((drain_grows _ _).trans (drain_keeps_now _ _) afterMessage_grows).keepsIds.trans
+    (Tazuna.Thm.Service.Response.observeResponses_grows.keepsIds.trans (keepsIds_fireDue _ _ _ _))
 
 theorem keepsIds_send (name : Spec.Ref) (id : Option LineId) (raw : Value) (s : State) :
     KeepsIds s (send st fs s name id raw) := by

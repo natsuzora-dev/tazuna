@@ -2,6 +2,7 @@ import Tazuna.Service.Restart
 import Tazuna.Thm.Data.Basic
 import Tazuna.Thm.Service.Note
 import Tazuna.Thm.Service.Clock
+import Tazuna.Thm.Service.Response
 
 /-!
 Processing never drops a createKey value: every input keeps the owner that qualifies the values and the entities that
@@ -596,6 +597,10 @@ theorem keysBy_fire (step : Nat) (t : Deadline) : KeysBy (fire fs st step t) := 
       · exact keysBy_applyCompletion _ _ _ _ r) _)
     keys_leaf
 
+theorem keeps_observe (s : State) : KeepsKeys s (observeResponses st fs s) :=
+  ⟨Tazuna.Thm.Service.Response.observeResponses_service,
+    by rw [Tazuna.Thm.Service.Response.observeResponses_createdEntities]; exact List.prefix_refl _⟩
+
 theorem keeps_afterMessage (s : State) : KeepsKeys s (afterMessage st fs s) := by
   simp only [afterMessage]
   split
@@ -619,6 +624,7 @@ theorem keeps_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
           obtain ⟨_, rfl⟩ := Tazuna.Thm.Service.Clock.chooseDeadline_orders hc
           simp only [id_bind, note_id]
           refine KeepsKeys.trans ?_ (ih _ _)
+          refine KeepsKeys.trans ?_ (keeps_observe _)
           refine KeepsKeys.trans ?_ (keeps_afterMessage _)
           refine KeepsKeys.trans ?_ (keeps_drain _ _ _)
           refine KeepsKeys.trans ?_ (keysBy_settled _ _ (keysBy_fire _ _) _)
@@ -626,7 +632,7 @@ theorem keeps_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
 
 theorem keeps_message (s : State) (q : Queue) : KeepsKeys s (message st fs s q) := by
   simp only [message, finish, id_bind]
-  exact (keeps_drain _ _ _).trans ((keeps_afterMessage _).trans (keeps_fireDue _ _ _ _))
+  exact (keeps_drain _ _ _).trans ((keeps_afterMessage _).trans ((keeps_observe _).trans (keeps_fireDue _ _ _ _)))
 
 /-- Closes an equation between the keys of `t` and of `s`, where `t` is `s` with fields other than the keys changed. -/
 macro "keys_same" : tactic => `(tactic| ((repeat' split) <;> simp [State.halt, State.violate,

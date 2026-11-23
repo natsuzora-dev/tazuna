@@ -293,7 +293,7 @@ theorem requestOf_agrees (q : String) (type : Scenario.RequestType) (target : Sp
 
 theorem fireTo_agrees (q : String) (time : Time) (st : Service) (s : State) :
     Agrees (fireTo time st (fsOfI q) s) (fireTo time st (fsOf q) s) := by
-  unfold fireTo; agreeE [fireDue_agrees (h q), publish_agrees (h q)]
+  unfold fireTo; agreeE [fireDue_agrees (h q), observeResponses_agrees (h q), publish_agrees (h q)]
 
 variable [MonadActing (StateT C Id)]
   (hact : ∀ {α : Type} (q : String) (x : StateT C Id α) (a : α), Agrees x a → Agrees (MonadActing.acting q x) a)

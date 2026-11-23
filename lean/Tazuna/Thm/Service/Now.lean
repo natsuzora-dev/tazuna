@@ -76,14 +76,16 @@ theorem fireDue_now (to : Time) (fuel : Nat) (tie : Option Time) (s : State) (h 
           obtain ⟨_, rfl⟩ := Tazuna.Thm.Service.Clock.chooseDeadline_orders hc
           simp only [id_bind, note_id, endMessage_id]
           rw [ih]
-          all_goals rw [afterMessage_now, drain_keeps_now, (keeps_settled _ _ (keeps_fire _ _)).now]
-          all_goals simp only [newStep_now, newMessage_now, Int.max_eq_left ht]
+          all_goals rw [Tazuna.Thm.Service.Response.observeResponses_now, afterMessage_now, drain_keeps_now,
+            (keeps_settled _ _ (keeps_fire _ _)).now]
+          all_goals simp only [newStep_now, newMessage_now, Tazuna.Thm.Service.Response.passTime_now, Int.max_eq_left ht]
           all_goals first | rfl | exact h
 
 /-- A message keeps the current time: its work does, and the deadlines it lets fire are due by then. -/
 theorem message_now (s : State) (q : Queue) : (message st fs s q).now = s.now := by
   simp only [message, finish, id_bind, endMessage_id]
-  rw [fireDue_now _ _ _ _ (Int.le_refl _), afterMessage_now, drain_keeps_now]
+  rw [fireDue_now _ _ _ _ (Int.le_refl _), Tazuna.Thm.Service.Response.observeResponses_now, afterMessage_now,
+    drain_keeps_now]
 
 theorem processCommand_now (name : String) (raw : Value) (id : Option LineId) (n : Nat) (s : State) :
     (processCommand st fs s name raw id n).1.now = s.now :=

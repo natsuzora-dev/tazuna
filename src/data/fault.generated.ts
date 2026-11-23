@@ -222,6 +222,19 @@ export type Fault =
         readonly condition: string;
       };
     }
+  /**
+   * Time passed `due` while the response `response` of the record `recordKey` of entity `definition` was open: its `when`
+   * held and its `expect` did not hold since, through `due`. The record of a single entity has no key.
+   */
+  | {
+      readonly kind: "Fault.missedResponse";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly recordKey: string | null;
+        readonly response: string;
+        readonly due: number;
+      };
+    }
   /** Two items that the chart computes for the map `map` have the key `itemKey`. */
   | {
       readonly kind: "Fault.duplicateItemKey";
@@ -341,6 +354,7 @@ export const faultKinds = [
   "Fault.failedSingleInvariant",
   "Fault.failedServiceInvariant",
   "Fault.failedChartInvariant",
+  "Fault.missedResponse",
   "Fault.duplicateItemKey",
   "Fault.exceededCommandDepth",
   "Fault.exceededMessageCommands",

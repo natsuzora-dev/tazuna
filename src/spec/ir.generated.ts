@@ -379,6 +379,9 @@ export type Program = {
   readonly ensures: readonly Conditions[];
   readonly queryEnsures: readonly Conditions[];
   readonly serviceInvariant: readonly Conditions[];
+  /** The `when` and the `expect` of an entity's responses, each named after its response. */
+  readonly responseWhen: readonly Conditions[];
+  readonly responseExpect: readonly Conditions[];
   readonly automationBinding: readonly Conditions[];
   readonly automationGuard: readonly Conditions[];
   readonly resolve: readonly Fn[];

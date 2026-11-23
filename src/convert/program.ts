@@ -425,15 +425,28 @@ function slotsOf(spec: Spec): Slot[] {
     }
   }
   for (const [service, { definition }] of spec.services) {
-    for (const [name, entity] of Object.entries(definition.entities as Readonly<Record<string, AnyEntity>>))
-      slots.push({
-        callback: "invariant",
+    for (const [name, entity] of Object.entries(definition.entities as Readonly<Record<string, AnyEntity>>)) {
+      const record = {
         definition: { service, name },
-        conditions: entity.invariants as Conditions<never>,
         args: ["record", "now"],
         whole: true,
         typed: typedOf(spec, service, { record: entity.fields }),
-      });
+      } as const;
+      const responses = Object.entries(entity.responses);
+      slots.push(
+        { callback: "invariant", conditions: entity.invariants as Conditions<never>, ...record },
+        {
+          callback: "responseWhen",
+          conditions: Object.fromEntries(responses.map(([n, r]) => [n, r.when])) as Conditions<never>,
+          ...record,
+        },
+        {
+          callback: "responseExpect",
+          conditions: Object.fromEntries(responses.map(([n, r]) => [n, r.expect])) as Conditions<never>,
+          ...record,
+        },
+      );
+    }
     slots.push({
       callback: "serviceInvariant",
       definition: { service, name: service },
@@ -519,6 +532,8 @@ export class Converter {
       ensures: [],
       queryEnsures: [],
       serviceInvariant: [],
+      responseWhen: [],
+      responseExpect: [],
       automationBinding: [],
       automationGuard: [],
     };

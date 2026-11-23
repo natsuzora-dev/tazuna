@@ -250,6 +250,9 @@ structure Program where
   ensures : List Conditions := []
   queryEnsures : List Conditions := []
   serviceInvariant : List Conditions := []
+  /-- The `when` and the `expect` of an entity's responses, each named after its response. -/
+  responseWhen : List Conditions := []
+  responseExpect : List Conditions := []
   automationBinding : List Conditions := []
   automationGuard : List Conditions := []
   resolve : List Fn := []

@@ -100,6 +100,12 @@ def changeOf (st : Service) (r : Spec.Ref) : Option Change :=
 
 def uniqueOf (st : Service) (entity : String) : List String := (st.uniques.lookup entity).getD []
 
+/-- The responses of an own entity. -/
+def responsesOf (st : Service) (entity : String) : List Spec.ResponseTime :=
+  match st.body? (st.ref entity) with
+  | some (.entity b) => b.responses
+  | _ => []
+
 open Tazuna.Spec in
 /-- The requirements of each own command, query, and screen of `service`, in definition order. -/
 def requirementsOf (j : Spec.Structure) (service : String) : List (String × Requirements) :=

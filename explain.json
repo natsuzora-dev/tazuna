@@ -379,6 +379,19 @@
         "violation": "{\"kind\":\"Fault.itemsSchema\",\"definition\":{\"service\":\"tags\",\"name\":\"tagWatcher\"},\"data\":{\"map\":\"watching\"},\"location\":{\"file\":\"tags/tags.ts\",\"line\":6},\"scenario\":{\"service\":\"tags\",\"name\":\"start\"}}"
       }
     },
+    "Fault.missedResponse": {
+      "meaning": "Time passed `due` while the response `response` of the record `recordKey` of entity `definition` was open: its `when` held and its `expect` did not hold since, through `due`. The record of a single entity has no key.",
+      "example": {
+        "excerpt": {
+          "file": "todo/todo.ts",
+          "from": 4,
+          "to": 15,
+          "line": 4,
+          "text": "export const Task = entity({\n  description: \"A task\",\n  fields: { id: z.string(), assignee: z.string().nullable() },\n  key: \"id\",\n  responses: {\n    assigned: {\n      when: ({ record }) => record.assignee === null,\n      expect: ({ record }) => record.assignee !== null,\n      within: 3_600_000,\n    },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"Fault.missedResponse\",\"definition\":{\"service\":\"todo\",\"name\":\"Task\"},\"data\":{\"recordKey\":\"task-1\",\"response\":\"assigned\",\"due\":1792890000000},\"location\":{\"file\":\"todo/todo.ts\",\"line\":4},\"scenario\":{\"service\":\"todo\",\"name\":\"assignedLate\"}}"
+      }
+    },
     "Fault.notOnly": {
       "meaning": "A function calls `only()` on a bag with more than one element.",
       "example": {

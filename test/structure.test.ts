@@ -117,6 +117,7 @@ test("Entities, commands and events have the JSON Schema of their fields, input 
     unique: [],
     references: [],
     keys: [{ path: ["id"], entity: { service: "todo", name: "Task" } }],
+    responses: [],
   });
   const renamed = byName("taskRenamed");
   assert.ok(renamed?.kind === "event");

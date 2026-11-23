@@ -85,6 +85,7 @@ structure FunctionsAgree (fsI : Functions (StateT C Id)) (fs : Functions Id) : P
   queryEnsures : ∀ a b c d, Agrees (fsI.queryEnsures a b c d) (fs.queryEnsures a b c d)
   resultEnsures : ∀ a b c d e, Agrees (fsI.resultEnsures a b c d e) (fs.resultEnsures a b c d e)
   invariant : ∀ a b c, Agrees (fsI.invariant a b c) (fs.invariant a b c)
+  responses : ∀ a b c, Agrees (fsI.responses a b c) (fs.responses a b c)
   serviceInvariant : ∀ a b, Agrees (fsI.serviceInvariant a b) (fs.serviceInvariant a b)
   chartInvariant : ∀ a b, Agrees (fsI.chartInvariant a b) (fs.chartInvariant a b)
   resolve : ∀ a b c d, Agrees (fsI.resolve a b c d) (fs.resolve a b c d)
@@ -488,18 +489,27 @@ theorem drain_agrees (fuel : Nat) (s : State) (q : Queue) :
     agree [runWork_agrees h, processCommand_agrees h, sendEntered_agrees h, refreshScreens_agrees h,
       settleScreen_agrees h, ih]
 
+omit [MonadNote (StateT C Id)] in
+theorem observeResponses_agrees (s : State) :
+    Agrees (observeResponses st fsI s) (observeResponses st fs s) := by
+  unfold observeResponses; agree [h.responses]
+
+theorem endMessage_agrees (s : State) : Agrees (endMessage st fsI s) (endMessage st fs s) := by
+  unfold endMessage; agree [note_agrees, afterMessage_agrees h, observeResponses_agrees h]
+
 @[guarantee] theorem fireDue_agrees (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
     Agrees (fireDue st fsI to fuel tie s) (fireDue st fs to fuel tie s) := by
   induction fuel generalizing s tie with
   | zero => unfold fireDue; agree []
-  | succ fuel ih => unfold fireDue; agree [note_agrees, settled_agrees h, fire_agrees h, drain_agrees h, afterMessage_agrees h, ih]
+  | succ fuel ih => unfold fireDue; agree [note_agrees, settled_agrees h, fire_agrees h, drain_agrees h, endMessage_agrees h, ih]
 
 theorem finish_agrees (s : State) : Agrees (finish st fsI s) (finish st fs s) := by
-  unfold finish; agree [afterMessage_agrees h, fireDue_agrees h]
+  unfold finish; agree [endMessage_agrees h, fireDue_agrees h]
 
 theorem message_agrees (s : State) (q : Queue) : Agrees (message st fsI s q) (message st fs s q) := by
   unfold message; agree [drain_agrees h, finish_agrees h]
 
+set_option maxHeartbeats 800000 in
 @[guarantee] theorem send_agrees (s : State) (name : Spec.Ref) (id : Option LineId) (raw : Value) :
     Agrees (send st fsI s name id raw) (send st fs s name id raw) := by
   unfold send; agree [message_agrees h, processCommand_agrees h]

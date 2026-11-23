@@ -77,6 +77,11 @@ inductive Fault where
   | failedServiceInvariant (condition : String) (command : Spec.Ref)
   /-- The chart fails its invariant `condition` after it starts or after a microstep. -/
   | failedChartInvariant (definition : Spec.Ref) (condition : String)
+  /--
+  Time passed `due` while the response `response` of the record `recordKey` of entity `definition` was open: its `when`
+  held and its `expect` did not hold since, through `due`. The record of a single entity has no key.
+  -/
+  | missedResponse (definition : Spec.Ref) (recordKey : Option String) (response : String) (due : Int)
   /-- Two items that the chart computes for the map `map` have the key `itemKey`. -/
   | duplicateItemKey (definition : Spec.Ref) (map : String) (itemKey : Value)
   /--
@@ -129,7 +134,8 @@ def Fault.halts : Fault → Bool
   | .exceededMessageCommands .. | .exceededAlwaysRounds .. | .exceededOnDoneSelections .. | .exceededMessageWork ..
   | .exceededDueDeadlines .. => true
   | .danglingRef .. | .danglingSingleRef .. | .failedEnsures .. | .failedEntityInvariant .. | .failedSingleInvariant ..
-  | .failedServiceInvariant .. | .failedChartInvariant .. | .rejectedAutomationCommand .. | .rejectedShows .. => false
+  | .failedServiceInvariant .. | .failedChartInvariant .. | .missedResponse .. | .rejectedAutomationCommand ..
+  | .rejectedShows .. => false
 
 /--
 Whether no spec that `tazuna check` passes can produce the violation, as InvalidScenario.internal says: the IR names

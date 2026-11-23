@@ -162,6 +162,12 @@ export type Change = {
   readonly entity: DefinitionRef;
 };
 
+/** A bounded response of an entity: once `when` holds of a record, `expect` must hold of it within `within` ms. */
+export type ResponseTime = {
+  readonly name: string;
+  readonly within: number;
+};
+
 /** An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. */
 export type EntityBody = {
   readonly key: string | null;
@@ -171,6 +177,8 @@ export type EntityBody = {
   readonly references: readonly Reference[];
   /** The key positions of the fields. */
   readonly keys: readonly KeyPosition[];
+  /** The responses, in definition order. */
+  readonly responses: readonly ResponseTime[];
 };
 
 export type EventBody = {

@@ -24,6 +24,19 @@ export type Row<S extends Shape> = Immutable<z.output<z.ZodObject<{ -readonly [K
 /** Values of shape `S` as expressions return them: a bag, set or sortedBy field also takes a Bag. */
 export type MadeRow<S extends Shape> = Made<Row<S>>;
 
+/**
+ * A bounded response: once `when` holds of a record and `expect` does not, `expect` must hold of it within `within`
+ * milliseconds (`Fault.missedResponse`).
+ */
+export interface Response<Args> {
+  readonly when: (args: Args) => boolean;
+  readonly expect: (args: Args) => boolean;
+  /** The milliseconds, a whole number, by which `expect` must hold. */
+  readonly within: number;
+}
+
+export type Responses<Args> = Readonly<Record<string, Response<Args>>>;
+
 export interface KeyedEntity<S extends Shape = Shape, K extends keyof S & string = keyof S & string> {
   readonly kind: "entity";
   readonly single: false;
@@ -32,6 +45,7 @@ export interface KeyedEntity<S extends Shape = Shape, K extends keyof S & string
   readonly key: K;
   readonly unique: readonly (keyof S & string)[];
   readonly invariants: Conditions<{ record: Row<S> } & Now>;
+  readonly responses: Responses<{ record: Row<S> } & Now>;
 }
 
 export interface SingleEntity<S extends Shape = Shape> {
@@ -40,6 +54,7 @@ export interface SingleEntity<S extends Shape = Shape> {
   readonly description: string;
   readonly fields: S;
   readonly invariants: Conditions<{ record: Row<S> } & Now>;
+  readonly responses: Responses<{ record: Row<S> } & Now>;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: an entity of any shape
@@ -94,6 +109,7 @@ export function entity<
   const S extends Shape,
   const K extends keyof S & string,
   const Iv extends string = never,
+  const Rs extends string = never,
 >(definition: {
   description: string;
   /** A field that can be null is `.nullable()`. A field that holds the key of a record of this entity is `ref.self()`. */
@@ -104,6 +120,8 @@ export function entity<
   unique?: readonly (keyof S & string)[];
   /** The conditions that every record meets (`Fault.failedEntityInvariant`). */
   invariants?: Named<Iv, { record: Row<SelfResolved<S, K>> } & Now>;
+  /** The bounded responses of each record (`Fault.missedResponse`). */
+  responses?: { readonly [N in Rs]: Response<{ record: Row<SelfResolved<S, K>> } & Now> };
 }): KeyedEntity<SelfResolved<S, K>, K> {
   // A clone, so that a schema that the key field shares with other fields does not mark them as key positions too.
   const shared = definition.fields[definition.key] as z.ZodType;
@@ -119,6 +137,7 @@ export function entity<
     key: definition.key,
     unique: definition.unique ?? [],
     invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<SelfResolved<S, K>> } & Now>,
+    responses: (definition.responses ?? {}) as Responses<{ record: Row<SelfResolved<S, K>> } & Now>,
   };
   keyFieldOwners.set(key, keyed);
   for (const field of Object.values(definition.fields) as z.ZodType[])
@@ -127,11 +146,17 @@ export function entity<
 }
 
 /** Defines an entity with exactly one record. `records.Settings` is that record. */
-export function singleEntity<const S extends DefaultedShape, const Iv extends string = never>(definition: {
+export function singleEntity<
+  const S extends DefaultedShape,
+  const Iv extends string = never,
+  const Rs extends string = never,
+>(definition: {
   description: string;
   fields: S;
   /** The conditions that the record meets (`Fault.failedSingleInvariant`). */
   invariants?: Named<Iv, { record: Row<S> } & Now>;
+  /** The bounded responses of the record (`Fault.missedResponse`). */
+  responses?: { readonly [N in Rs]: Response<{ record: Row<S> } & Now> };
 }): SingleEntity<S> {
   return {
     kind: "entity",
@@ -139,6 +164,7 @@ export function singleEntity<const S extends DefaultedShape, const Iv extends st
     description: definition.description,
     fields: definition.fields,
     invariants: (definition.invariants ?? {}) as Conditions<{ record: Row<S> } & Now>,
+    responses: (definition.responses ?? {}) as Responses<{ record: Row<S> } & Now>,
   };
 }
 

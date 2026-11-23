@@ -23,6 +23,8 @@ export const unconverted: Program = {
   ensures: [],
   queryEnsures: [],
   serviceInvariant: [],
+  responseWhen: [],
+  responseExpect: [],
   automationBinding: [],
   automationGuard: [],
   resolve: [],

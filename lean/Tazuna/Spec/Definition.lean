@@ -270,6 +270,14 @@ deriving Repr, Inhabited
 
 derive_wire Change
 
+/-- A bounded response of an entity: once `when` holds of a record, `expect` must hold of it within `within` ms. -/
+structure ResponseTime where
+  name : String
+  within : Int
+deriving DecidableEq, Repr, Inhabited
+
+derive_wire ResponseTime
+
 /-- An entity. `key` is null for a single entity, whose `unique` is empty. `references` are in field order. -/
 structure EntityBody where
   key : Option String
@@ -279,6 +287,8 @@ structure EntityBody where
   references : List Reference
   /-- The key positions of the fields. -/
   keys : List KeyPosition
+  /-- The responses, in definition order. -/
+  responses : List ResponseTime
 deriving Repr, Inhabited
 
 derive_wire EntityBody

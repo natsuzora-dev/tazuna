@@ -40,6 +40,17 @@ structure Instance where
 deriving Repr, Inhabited
 
 /--
+An open obligation of the response `response` of a record of `entity`: `when` held of the record and `expect` did not, so
+`expect` must hold of it by `due`.
+-/
+structure Obligation where
+  entity : String
+  key : Option String
+  response : String
+  due : Time
+deriving DecidableEq, Repr, Inhabited
+
+/--
 An `after` deadline of an active state, its time fixed when the state was entered. `order` is the creation order.
 -/
 structure Deadline where
@@ -169,6 +180,8 @@ deriving Repr, Inhabited
 /-- The state of a run between messages, when the internal queue is empty. -/
 structure State extends Durable, Process where
   now : Time := 0
+  /-- The open obligations of responses, in opening order; a response's observer, which a restart keeps. -/
+  obligations : List Obligation := []
   deadlineCount : Nat := 0
   /-- The entries of the current input's `stepOrder` that the internal queue has not used yet. -/
   stepOrder : List StepName := []
