@@ -1,0 +1,1 @@
+{"service":"todo","property":{"kind":"response","definition":{"service":"todo","name":"Task"},"name":"stamped"},"creates":{"Task":2},"verdict":{"kind":"proved"},"location":{"file":"todo/todo.ts","line":4}}

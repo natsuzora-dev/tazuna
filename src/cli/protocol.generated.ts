@@ -261,11 +261,17 @@ export type Replayed = {
 /**
  * What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
  * ensures of a command or query; that a ref field of an entity never names a missing record; or that the order of two
- * steps that can be pending together, such as two automations that react to one event, changes no outcome.
+ * steps that can be pending together, such as two automations that react to one event, changes no outcome; or that a
+ * response of an entity is met in time.
  */
 export type Property =
   | {
       readonly kind: "invariant";
+      readonly definition: DefinitionRef;
+      readonly name: string;
+    }
+  | {
+      readonly kind: "response";
       readonly definition: DefinitionRef;
       readonly name: string;
     }
@@ -328,6 +334,8 @@ export type ProveResult = {
   readonly property: Property;
   readonly creates: Readonly<Record<string, number>>;
   readonly verdict: Verdict;
+  /** What the verdict assumes of the runs beyond the spec, which a response's counterexample states. */
+  readonly assumes?: string;
 };
 
 /** What Lean answers a Request with, the constructor named after the request's. */

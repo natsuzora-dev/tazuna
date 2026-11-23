@@ -18,10 +18,12 @@ open Tazuna.Data Tazuna.Service Tazuna.Smt
 /--
 What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
 ensures of a command or query; that a ref field of an entity never names a missing record; or that the order of two
-steps that can be pending together, such as two automations that react to one event, changes no outcome.
+steps that can be pending together, such as two automations that react to one event, changes no outcome; or that a
+response of an entity is met in time.
 -/
 inductive Property where
   | invariant (definition : Spec.Ref) (name : String)
+  | response (definition : Spec.Ref) (name : String)
   | ensures (definition : Spec.Ref) (name : String)
   | danglingRef (definition : Spec.Ref) (field : String)
   | stepOrder (definition : Spec.Ref) (other : Spec.Ref)
@@ -30,7 +32,7 @@ deriving BEq, Repr, Inhabited
 derive_wire Property tag "kind"
 
 def Property.definition : Property → Spec.Ref
-  | .invariant d _ | .ensures d _ | .danglingRef d _ | .stepOrder d _ => d
+  | .invariant d _ | .response d _ | .ensures d _ | .danglingRef d _ | .stepOrder d _ => d
 
 /--
 A state within the bounds where every invariant holds, and a command after which the property fails, or a query whose
@@ -71,8 +73,10 @@ structure ProveResult where
   property : Property
   creates : List (String × Nat)
   verdict : Verdict
+  /-- What the verdict assumes of the runs beyond the spec, which a response's counterexample states. -/
+  assumes : Option String := none
 
-derive_wire ProveResult serialize_only
+derive_wire ProveResult serialize_only skip_serializing_none
 
 /-- The units of Z3's resource counter that each query may use: several seconds on a laptop, over 200 times the most that a todo query uses. -/
 def proveRlimit : Nat := 20000000
@@ -97,6 +101,19 @@ def invariantsOf (st : Service) (p : Ir.Program) : List Checked :=
   let service := (serviceInvariantsOf st p).map fun c =>
     { ref := .invariant (st.ref st.service) c.name, holder := .service, condition := c }
   entity ++ service
+
+/--
+The responses of the entities of `st`, each checked as the invariant that its `when` implies its `expect` at every
+visible state, which prove proves of a response instead of its observer (responseVerdict).
+-/
+def responsesOf (st : Service) (p : Ir.Program) : List Checked :=
+  st.entities.flatMap fun e =>
+    let expects := ((p.responseExpect.find? (·.definition == st.ref e)).map (·.conditions)).getD []
+    let whens := ((p.responseWhen.find? (·.definition == st.ref e)).map (·.conditions)).getD []
+    whens.map fun w =>
+      let expect := ((expects.find? (·.name == w.name)).map (·.body)).getD (.lit (.bool true))
+      { ref := .response (st.ref e) w.name, holder := if st.singles.contains e then .single e else .keyed e,
+        condition := { name := w.name, body := .or (.not w.body) expect } }
 
 /--
 The induction of a machine's or screen's invariants: its model, the context fields that the encoding holds, and the
@@ -153,6 +170,9 @@ def clockT : Term := .var "clock" .int
 
 def nowT : Term := .var "now" .int
 
+/-- A time after the state's, which a response reads when time passes with no message. -/
+def laterT : Term := .var "later" .int
+
 /-- The time of a step, `now`, a safe integer no earlier than the state's time. -/
 def nowFacts : Facts :=
   { vars := [("now", .int)], asserts := [.le (intLit (-safeInteger)) nowT, .le nowT (intLit safeInteger), .le clockT nowT] }
@@ -192,6 +212,8 @@ structure Induction where
   /-- The answer of each query, or why it has no encoding. -/
   answers : List (String × Except String Answered)
   checked : List Checked
+  /-- The responses, which the induction checks but, unlike `checked`, does not assume. -/
+  responses : List Checked
   charts : List ChartCase
   /-- Each pair of steps that can be pending together, with its two orders, or why they have no encoding. -/
   pairs : List (Pair × Except String Orders)
@@ -215,7 +237,7 @@ def inductionOf (j : Spec.Structure) (service : String) : IO Induction := do
          steps := st.commands.map fun c => (c, stepOf st p pre clockT used c),
          answers := (st.queries.filter fun q => !(conditionsOf p.queryEnsures (st.ref q)).isEmpty).map fun q =>
            (q, answerOf st p pre clockT q),
-         checked, charts, blocked,
+         checked, responses := responsesOf st p, charts, blocked,
          pairs := (pairsOf st).map fun pair => (pair, ordersOf st p pre used nowT pair) }
 
 /-- The property of a pair: that the order of its two steps changes no outcome. -/
@@ -242,6 +264,8 @@ inductive Asked where
   /-- Whether a step of a pair can leave the encoding, and whether the pair's two orders can differ. -/
   | pairGap (property : Property)
   | pairDiffers (property : Property)
+  /-- Whether time passing alone, with no message, can fail a response's `when` implies `expect`. -/
+  | tick (property : Property)
 
 def Induction.query (x : Induction) (step : Step) (goal : Term) : Query :=
   { vars := x.facts.vars ++ step.facts.vars,
@@ -358,6 +382,17 @@ def Induction.queries (x : Induction) : List (Asked × Query) :=
   (x.charts.flatMap fun cc => cc.invariants.flatMap fun k =>
     ((x.chartQueries cc k).toOption.getD []).map fun (step, q, _) =>
       (Asked.chart (.invariant (x.st.ref cc.chart.name) k.name) step, q)) ++
+  (x.responses.flatMap fun r =>
+    let held := (failsOn x.pre clockT r).toOption.map Term.not
+    ((failsOn init clockT r).toOption.map fun fails =>
+      (Asked.base r.ref, { vars := facts.vars, asserts := facts.asserts ++ [fails] })).toList ++
+    (x.steps.filterMap fun (c, step) => do
+      let step ← step.toOption
+      let fails ← (failsOn step.post step.now r).toOption
+      pure (.fails c r.ref, x.query step (.and ((held.getD ff)) (.and (.not step.gap) fails)))) ++
+    ((failsOn x.pre laterT r).toOption.map fun fails =>
+      (Asked.tick r.ref, { vars := x.facts.vars ++ [("later", .int)],
+                           asserts := x.facts.asserts ++ [x.holds, held.getD ff, .le clockT laterT, fails] })).toList) ++
   x.pairs.flatMap fun (pair, orders) => match orders with
     | .error _ => []
     | .ok o =>
@@ -432,7 +467,7 @@ def Induction.failedAfter (x : Induction) (command : String) (now : Time) (writt
   | .danglingRef d field => faults.any fun
     | .danglingRef d' _ f _ cmd | .danglingSingleRef d' f _ cmd => d' == d && f == field && cmd == x.st.ref command
     | _ => false
-  | .stepOrder .. => false
+  | .stepOrder .. | .response .. => false
 
 /-- The records of a model's state, or why the state is none that the induction assumes. -/
 def Induction.stateOf (x : Induction) (M : Model) : Except String (Records × Value × Int) := do
@@ -461,6 +496,46 @@ def replayStep (x : Induction) (fs : Functions IO) (M : Model) (command : String
       return .error "the semantics keeps the property after the case's command"
     return .ok { given, clock, command := some command, input := some input, now := some now,
                  violations := faults.map (·.toViolation) }
+
+/--
+The response faults that the semantics reports when time passes the due of the obligation that `r` opens on `records`
+at `now`, as the observer of a service with no automation and no chart sees it: nothing changes the records before then.
+-/
+def missedAfter (x : Induction) (fs : Functions IO) (records : Records) (now : Time) (r : Checked) : IO (List Fault) := do
+  let s ← observeResponses x.st fs { service := x.st.service, records, now, started := true }
+  let mine (o : Obligation) := x.st.ref o.entity == r.ref.definition && .response (x.st.ref o.entity) o.response == r.ref
+  let some o := s.obligations.find? mine | return []
+  pure ((s.passTime x.st (o.due + 1)).violations.filterMap fun
+    | .fault f@(.missedResponse ..) => some f
+    | _ => none)
+
+/-- The replay of a model of a response's fails or tick query: the counterexample, or why the model is no case of it. -/
+def replayResponse (x : Induction) (fs : Functions IO) (M : Model) (r : Checked) (command : Option (String × Step)) :
+    IO (Except String Counterexample) := do
+  match x.stateOf M with
+  | .error why => return .error why
+  | .ok (pre, given, clock) =>
+  match command with
+  | none =>
+    let later := (M "later").toInt
+    let missed ← missedAfter x fs pre later r
+    if missed.isEmpty then return .error "the semantics opens no obligation as time passes"
+    return .ok { given, clock, command := none, input := none, now := some later, violations := missed.map (·.toViolation) }
+  | some (c, step) =>
+    let input := Value.obj (present M step.input)
+    let now := (M "now").toInt
+    match ← writtenBy x.st fs pre now c input with
+    | none => return .error "the semantics rejects the case's command"
+    | some (written, faults) =>
+      let missed ← missedAfter x fs written now r
+      if missed.isEmpty then return .error "the semantics opens no obligation after the case's command"
+      return .ok { given, clock, command := some c, input := some input, now := some now,
+                   violations := (faults ++ missed).map (·.toViolation) }
+
+/-- The progress that a response's verdict assumes of the runs, which the spec does not state. -/
+def progressAssumption : String :=
+  "enabled internal steps run, in-flight messages arrive unless a line loses them, and an external service answers " ++
+    "only as its deadlines fire; no client sends anything"
 
 /-- The result of the replay of a model of an answer query: the counterexample, or why the model is no case of it. -/
 def replayAnswer (x : Induction) (fs : Functions IO) (M : Model) (query : String) (a : Answered) (name : String) :
@@ -643,7 +718,8 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
     (q, e, Property.ensures (x.st.ref q) e.name)
   let dangling := (ownRefs x.st).map fun (e, field, _) => Property.danglingRef (x.st.ref e) field
   if let some why := x.blocked then
-    return ((x.checked.map (·.ref)) ++ ensures.map (·.2) ++ queryEnsures.map (·.2.2) ++ dangling).map
+    return ((x.checked.map (·.ref)) ++ ensures.map (·.2) ++ queryEnsures.map (·.2.2) ++ dangling ++
+      x.responses.map (·.ref)).map
       (result · (.undecided why)) ++ chartProps.map (fun (_, _, prop) => result prop (.undecided why)) ++
         x.pairs.map fun (pair, _) => result (pairProperty x.st pair) (.undecided why)
   let (init, initFacts) := initialOf x.st
@@ -729,7 +805,40 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
     match ← verdictOf a facts.exact facts.complete (replayPair x fs pair o ·) "between the two orders" with
     | some v => return result prop v
     | none => return result prop .proved
-  pure (invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs)
+  -- A response: proved when `when` implies `expect` at every visible state, so no obligation ever opens; else a case
+  -- in a service with no automation and no chart, which nothing internal can repair, misses it.
+  let internal := !x.st.automations.isEmpty || !x.st.charts.isEmpty
+  let responses ← x.responses.mapM fun r => do
+    let done (v : Verdict) : ProveResult := match v with
+      | .counterexample _ => { result r.ref v with assumes := some progressAssumption }
+      | _ => result r.ref v
+    match failsOn init clockT r with
+    | .error why => return done (.undecided s!"the response has no encoding: {why}")
+    | .ok _ => pure ()
+    for (c, step) in x.steps do
+      match step with
+      | .error why => return done (.undecided s!"the command {c} has no encoding: {why}")
+      | .ok step =>
+        if let .error why := failsOn step.post step.now r then return done (.undecided s!"the response has no encoding: {why} (in {c})")
+        if let some why := gapOf c then return done (.undecided why)
+    let unmet := "its when can hold without its expect at a visible state, and the service's automations or charts may meet its expect later; prove proves a response only when its when implies its expect"
+    if let some a := find (fun | .base p' => p' == r.ref | _ => false) then
+      if let .sat _ := a then return done (.undecided s!"its when can hold without its expect in the initial records")
+      if let some v ← verdictOf a initFacts.exact initFacts.complete (fun _ => pure (.error "")) "of the initial records" then
+        return done v
+    for (asked, a) in answers do
+      let command : Option (Option (String × Step)) := match asked with
+        | .fails c p' => if p' == r.ref then (x.steps.lookup c).bind (·.toOption) |>.map fun s => some (c, s) else none
+        | .tick p' => if p' == r.ref then some none else none
+        | _ => none
+      let some command := command | continue
+      if let .sat _ := a then
+        if internal then return done (.undecided unmet)
+      let exact := x.facts.exact && (command.map (·.2.facts.exact)).getD true
+      let complete := x.facts.complete && (command.map (·.2.facts.complete)).getD true
+      if let some v ← verdictOf a exact complete (replayResponse x fs · r command) "of the response" then return done v
+    return done .proved
+  pure (invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ responses)
 
 /-- The results of each property of each spec service, from Z3's answers to proveQueriesOf's scripts, in order. -/
 def proveOf (j : Spec.Structure) (answers : List String) : IO (List ProveResult) := do
