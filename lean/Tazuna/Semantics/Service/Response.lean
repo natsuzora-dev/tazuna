@@ -28,7 +28,7 @@ def respond (st : Service) (now : Time) (row : Row) (obligations : List Obligati
     if expectHolds then os.filter (!mine ·)
     else if whenHolds && !os.any mine then
       match (st.responsesOf row.entity).find? (·.name == name) with
-      | some r => os ++ [{ entity := row.entity, key := row.key, response := name, due := now + r.within }]
+      | some r => os ++ [{ entity := row.entity, key := row.key, response := name, due := now + r.within.getD 0 }]
       | none => os
     else os) obligations
 

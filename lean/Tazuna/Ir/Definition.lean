@@ -269,13 +269,19 @@ deriving Repr, Inhabited
 
 derive_wire Change
 
-/-- A bounded response of an entity: once `when` holds of a record, `expect` must hold of it within `within` ms. -/
+/--
+A bounded response of an entity: once `when` holds of a record, `expect` must hold of it within `within` ms, which is
+null when it is no safe integer.
+-/
 structure ResponseTime where
   name : String
-  within : Int
+  within : Option Int
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire ResponseTime
+
+/-- Whether the response's `within` is a duration: whole milliseconds, zero or more. -/
+def ResponseTime.isDuration (r : ResponseTime) : Bool := r.within.any (0 ≤ ·)
 
 /--
 An entity. `key` lists the key fields, one or more, and is null for a single entity, whose `unique` is empty.

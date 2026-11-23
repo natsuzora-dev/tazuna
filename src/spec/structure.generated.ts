@@ -162,10 +162,13 @@ export type Change = {
   readonly entity: DefinitionRef;
 };
 
-/** A bounded response of an entity: once `when` holds of a record, `expect` must hold of it within `within` ms. */
+/**
+ * A bounded response of an entity: once `when` holds of a record, `expect` must hold of it within `within` ms, which is
+ * null when it is no safe integer.
+ */
 export type ResponseTime = {
   readonly name: string;
-  readonly within: number;
+  readonly within: number | null;
 };
 
 /**

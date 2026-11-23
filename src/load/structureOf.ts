@@ -156,13 +156,6 @@ export function structureOf(
           violation: { kind: "Malformed.unreadableDeadline", definition: { service, name }, data: { path: [...path] } },
           place,
         });
-      if (definition.kind === "entity")
-        for (const [response, r] of Object.entries(definition.responses))
-          if (!Number.isSafeInteger(r.within) || r.within < 0)
-            malformed.push({
-              violation: { kind: "Malformed.inexactWithin", definition: { service, name }, data: { response } },
-              place,
-            });
       return definitionStructure(named, ref, schemaOf, defaultsOf, unreadableDeadline);
     }),
   };
@@ -199,7 +192,10 @@ function definitionStructure(
       unique: d.single ? [] : [...d.unique],
       references: references(d.fields as Shape, "fields"),
       keys: keysOf(d.fields as Shape, ref, ["fields"]),
-      responses: Object.entries(d.responses).map(([name, r]) => ({ name, within: r.within })),
+      responses: Object.entries(d.responses).map(([name, r]) => ({
+        name,
+        within: Number.isSafeInteger(r.within) ? r.within : null,
+      })),
     };
   }
   if (d.kind === "event")

@@ -56,6 +56,8 @@ structure Checked (s : Structure) : Prop where
   /-- Every command or query that an automation or chart sends lists its sender among its callers. -/
   callersListed : ∀ d ∈ s.definitions, ∀ r ∈ Commands.sentBy d, ∀ callers, s.callersOf? r = some callers →
     Commands.admitsSender callers d = true
+  /-- Every response's `within` is a duration, which the run adds to an instant. -/
+  withinsDurations : ∀ d ∈ s.definitions, ∀ e, d.body = .entity e → ∀ r ∈ e.responses, r.isDuration = true
 
 /-- check reports no Illegal violation exactly when the spec keeps every structural rule (Checked). -/
 @[guarantee] theorem check_eq_nil_iff (s : Structure) : Validation.check s = [] ↔ Checked s := by
@@ -159,13 +161,28 @@ structure Checked (s : Structure) : Prop where
         intro st hst t ht
         simpa using h d hd c hc st hst t ht
       · rfl
+  have withins : inexactWithins s = [] ↔ ∀ d ∈ s.definitions, ∀ e, d.body = .entity e →
+      ∀ r ∈ e.responses, r.isDuration = true := by
+    simp only [inexactWithins, List.flatMap_eq_nil_iff]
+    constructor
+    · intro h d hd e he r hr
+      have := h d hd
+      simp only [he, List.map_eq_nil_iff, List.filter_eq_nil_iff] at this
+      simpa using this r hr
+    · intro h d hd
+      split
+      · rename_i e he
+        simp only [List.map_eq_nil_iff, List.filter_eq_nil_iff]
+        intro r hr
+        simpa using h d hd e he r hr
+      · rfl
   have schemas := Tazuna.Thm.Semantics.Validation.Schemas.schemas_ordered s
-  rw [parents, controls, reasons, callers, restored, delays, negative, schemas]
+  rw [parents, controls, reasons, callers, restored, delays, negative, schemas, withins]
   simp only [and_assoc]
   constructor
-  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, u, m, sk, ua, mk⟩
-    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng, sk, ua, mk, u⟩
+  · intro ⟨a, p, q, c, al, hr, dl, ng, e, r, u, m, sk, ua, mk, w⟩
+    exact ⟨a, p, q, c, al, e, r, hr, m, dl, ng, sk, ua, mk, u, w⟩
   · intro h
-    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.15, h.9, h.12, h.13, h.14⟩
+    exact ⟨h.1, h.2, h.3, h.4, h.5, h.8, h.10, h.11, h.6, h.7, h.15, h.9, h.12, h.13, h.14, h.16⟩
 
 end Tazuna.Thm.Semantics.Validation.Check

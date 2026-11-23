@@ -123,8 +123,6 @@ export type Malformed =
    * gets it past the types.
    */
   | Of<"unreadableDeadline", DefinitionRef, { readonly path: readonly (string | number)[] }>
-  /** The response `response` of the entity has a `within` that is no duration: whole milliseconds, zero or more. */
-  | Of<"inexactWithin", DefinitionRef, { readonly response: string }>
   /**
    * A time of the scenario, Given's start or a clock line's time, is no instant: whole milliseconds within the range of
    * an ECMAScript Date. The report is at the clock line, or at the scenario for Given's start.
