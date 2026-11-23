@@ -180,6 +180,18 @@ def specService (j : Ir.Structure) (service : String) : IO Service := do
   if !missing.isEmpty then throw (IO.userError s!"the program lacks {", ".intercalate missing}")
   Service.ofStructure j service
 
+/--
+Why prove and generate cannot bound the service `st`: it has keyed entities and no `bounds()`, or its `bounds()` give
+no creates bound for one of them, which plain JS lets through the TS type. Reading a missing bound as zero would leave
+the entity without records, so every property over it would hold.
+-/
+def unbounded (j : Ir.Structure) (st : Service) : Option String :=
+  let keyed := st.entities.filter (!st.singles.contains ·)
+  match (j.bounds.find? (·.service == st.service)).map (·.creates) with
+  | none => if keyed.isEmpty then none else some "the service has no bounds()"
+  | some creates => (keyed.find? (creates.lookup · |>.isNone)).map fun e =>
+    s!"the bounds() of the service give no creates bound for the entity {e}"
+
 /-- The ref fields of `st` whose target is one of its keyed entities: the entity, the field and the target. -/
 def ownRefs (st : Service) : List (String × String × String) :=
   st.references.filter fun (_, _, target) => st.entities.contains target && !st.singles.contains target
@@ -261,13 +273,11 @@ def inductionOf (j : Ir.Structure) (service : String) : IO Induction := do
   let checked := invariantsOf st p
   let fs := Eval.Program.toFunctions p st fun _ => pure ()
   let charts ← st.charts.filterMapM (chartCaseOf st fs)
-  let keyed := st.entities.filter (!st.singles.contains ·)
-  let bounds := (j.bounds.find? (·.service == service)).map (·.creates)
-  let creates := bounds.getD []
+  let creates := ((j.bounds.find? (·.service == service)).map (·.creates)).getD []
   let pre := SRecords.named st creates "pre"
   let used := pre.keyed.map fun (e, slots) => (e, (List.range slots.length).map (usedVar "pre" e))
   let holds := conj (checked.filterMap fun c => (failsOn pre clockT c).toOption.map .not)
-  let blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else none
+  let blocked := unbounded j st
   pure { st, creates, pre, facts := pre.facts st "pre" ++ clockFacts, holds,
          steps := st.commands.map fun c => (c, stepOf st p pre clockT used c),
          answers := (st.queries.filter fun q => !(conditionsOf p.queryEnsures (st.ref q)).isEmpty).map fun q =>

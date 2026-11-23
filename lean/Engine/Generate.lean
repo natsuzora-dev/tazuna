@@ -247,9 +247,7 @@ structure Search where
 
 def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Search := do
   let st ← specService j service
-  let bounds := (j.bounds.find? (·.service == service)).map (·.creates)
-  let creates := bounds.getD []
-  let keyed := st.entities.filter (!st.singles.contains ·)
+  let creates := ((j.bounds.find? (·.service == service)).map (·.creates)).getD []
   -- A client sends a request whose callers list someone outside the service (fromOutside).
   let fromClients (name : String) : Bool :=
     ((st.requirements.lookup name).map (·.callers)).getD [] |>.any (· != .service service)
@@ -258,7 +256,7 @@ def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Sea
     fun a => if a matches .opens .. || a.ref.service == service then none else some a.ref.service
   let read := creates ++ requested.eraseDups.flatMap fun s => ((j.bounds.find? (·.service == s)).map (·.creates)).getD []
   pure { spec := j, st, creates, depth := depth.getD (read.foldl (· + ·.2) 0 + 1),
-         blocked := if bounds.isNone && !keyed.isEmpty then some "the service has no bounds()" else none,
+         blocked := unbounded j st,
          sendable := (st.commands ++ st.queries).filter fromClients,
          targets := ((targets j).filter (·.part.ref.service == service)).map (·.part) }
 
