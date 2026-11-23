@@ -1,1 +1,2 @@
+{"kind":"Fault.contextSchema","definition":{"service":"levels","name":"meter"},"data":{},"location":{"file":"levels/levels.ts","line":6},"scenario":{"service":"levels","name":"start"}}
 {"kind":"Fault.contextSchema","definition":{"service":"picks","name":"picker"},"data":{},"location":{"file":"picks/picks.ts","line":6},"scenario":{"service":"picks","name":"start"}}

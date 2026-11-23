@@ -180,7 +180,7 @@ theorem parseOutside_agrees (schema : Schema) (v : Value) :
 theorem runAssign_agrees (name : InstanceId) (a : Assignment) (scope : Option String) (extra : Extra)
     (held : Option Value) (r : Processing) :
     Agrees (runAssign fsI st name a scope extra held r) (runAssign fs st name a scope extra held r) := by
-  unfold runAssign; refine withMachine_agrees (fun i r => ?_) r; agree [h.assign, sorted_agrees]
+  unfold runAssign contextMismatch; refine withMachine_agrees (fun i r => ?_) r; agree [h.assign, h.parse, sorted_agrees]
 
 theorem leaveWith_agrees {e : InstanceId → String → Processing → StateT C Id Processing}
     {e' : InstanceId → String → Processing → Id Processing} (he : ∀ c n r, Agrees (e c n r) (e' c n r))

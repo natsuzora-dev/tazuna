@@ -71,13 +71,13 @@
       "meaning": "An assign of the chart writes a context that does not match its context schema.",
       "example": {
         "excerpt": {
-          "file": "picks/picks.ts",
+          "file": "levels/levels.ts",
           "from": 6,
           "to": 11,
           "line": 6,
-          "text": "export const picker = machine({\n  description: \"Pick tags when the service starts\",\n  context: { picked: set(z.string()).default([]) },\n  initial: \"picking\",\n  states: { picking: {} },\n}).chart({ states: { picking: { entry: { assign: { picked: () => [\"a\", \"a\"] } } } } });"
+          "text": "export const meter = machine({\n  description: \"Raise the level past its maximum when the service starts\",\n  context: { level: z.int().min(0).max(2).default(0) },\n  initial: \"raising\",\n  states: { raising: {} },\n}).chart({ states: { raising: { entry: { assign: { level: ({ context }) => context.level + 3 } } } } });"
         },
-        "violation": "{\"kind\":\"Fault.contextSchema\",\"definition\":{\"service\":\"picks\",\"name\":\"picker\"},\"data\":{},\"location\":{\"file\":\"picks/picks.ts\",\"line\":6},\"scenario\":{\"service\":\"picks\",\"name\":\"start\"}}"
+        "violation": "{\"kind\":\"Fault.contextSchema\",\"definition\":{\"service\":\"levels\",\"name\":\"meter\"},\"data\":{},\"location\":{\"file\":\"levels/levels.ts\",\"line\":6},\"scenario\":{\"service\":\"levels\",\"name\":\"start\"}}"
       }
     },
     "Fault.copyContextSchema": {

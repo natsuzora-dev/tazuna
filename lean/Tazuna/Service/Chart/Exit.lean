@@ -41,6 +41,26 @@ section
 variable [Monad m] [MonadNote m] (fs : Functions m)
 
 /--
+The fault when a context that an assign of chart `chart` writes fails its schema: the instance's context, or the copy's
+context of the map state `map`. Like the initial context, every context the chart holds fits its schema, so a guard or
+an invariant never reads a value outside it.
+-/
+def contextMismatch (st : Service) (chart : String) (map : Option String) (context : Value) (copy : Option Value) :
+    m (Option Fault) := do
+  let definition := st.ref chart
+  let mismatch (schema : Schema) (v : Value) (fault : Fault) : m (Option Fault) := do
+    match ← fs.parse schema v with
+    | .ok (some _) => pure none
+    | .ok none => pure (some fault)
+    | .error e => pure (some (issueViolation definition e fun _ => fault))
+  match ← mismatch (.context definition) context (.contextSchema definition) with
+  | some fault => pure (some fault)
+  | none =>
+    match map, copy with
+    | some map, some c => mismatch (.mapContext definition map) c (.copyContextSchema definition map)
+    | _, _ => pure none
+
+/--
 The processing after the assign `a` of instance `name`, written in the state `scope`. `held` replaces the parameters
 that the expressions read: a transition reads those of its source as the microstep began, since the source has exited.
 -/
@@ -54,6 +74,9 @@ def runAssign (st : Service) (name : InstanceId) (a : Assignment) (scope : Optio
         | .mapContext _ map => .copyContextSchema (st.ref i.chart.name) map
         | _ => .contextSchema (st.ref i.chart.name))))
     | .ok (context, copyContext, keys) =>
+      match ← contextMismatch fs st i.chart.name i.id.map? context copyContext with
+      | some fault => pure (r.report (.fault fault))
+      | none =>
       let s := r.state.createKeys keys
       match i.id.map? with
       | some map =>

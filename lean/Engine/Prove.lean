@@ -107,6 +107,8 @@ structure ChartCase where
   invariants : List Ir.Condition
   model : Except String ChartModel
   relevant : List String
+  /-- The schema of each relevant context field and whether the context must hold it, as propertiesWith gives them. -/
+  props : List (String × Value × Bool)
   /-- Whether the encoding leaves out some context fields, which replay then takes as they start. -/
   sliced : Bool
   initial : Except String Value
@@ -115,11 +117,12 @@ def chartCaseOf (st : Service) (fs : Functions IO) (c : Chart) : IO (Option Char
   let p := st.structure.program
   let invariants := (siteOf st p c .invariants).getD []
   if invariants.isEmpty then return none
-  let fields := (propertiesWith ((st.schemaOf (.context (st.ref c.name))).getD (.obj []))).map (·.1)
+  let all := propertiesWith ((st.schemaOf (.context (st.ref c.name))).getD (.obj []))
+  let fields := all.map (·.1)
   let relevant := relevantContext st p c fields
   let initial := (← initialContextOf fs st c.name (.obj [])).mapError fun f => s!"the initial context fails: {repr f}"
-  return some { chart := c, invariants, model := ChartModel.of c, relevant, sliced := relevant.length < fields.length,
-                initial }
+  return some { chart := c, invariants, model := ChartModel.of c, relevant,
+                props := all.filter (·.1 ∈ relevant), sliced := relevant.length < fields.length, initial }
 
 /-- The conditions of `definition` in a Program list. -/
 def conditionsOf (list : List Ir.Conditions) (definition : Spec.Ref) : List Ir.Condition :=
@@ -253,10 +256,20 @@ def Induction.stepGoals (x : Induction) (command : String) (step : Step) : List 
     ((ownRefs x.st).map fun (e, field, target) =>
       (Property.danglingRef (x.st.ref e) field, .ok (step.post.dangling e field target)))
 
-/-- The machine of `cc` in `active` before a step, each encoded context field a variable. -/
+/--
+That each encoded context field of `m` fits its schema. The semantics checks the context after each assign
+(contextMismatch) and halts when it does not fit, so every context that a step starts from fits, and a step whose
+context does not fit halts instead of failing an invariant.
+-/
+def ChartCase.fits (cc : ChartCase) (m : SMachine) : List Holds :=
+  cc.props.filterMap fun pr => (m.context.lookup pr.1).map (fieldHolds · pr)
+
+/-- The machine of `cc` in `active` before a step, each encoded context field a variable of its schema. -/
 def ChartCase.pre (cc : ChartCase) (active : List String) : SMachine × Facts :=
-  ({ context := cc.relevant.map fun f => (f, valVar s!"ctx.{f}"), active },
-   { vars := cc.relevant.map fun f => (s!"ctx.{f}", Ty.val) })
+  let m : SMachine := { context := cc.relevant.map fun f => (f, valVar s!"ctx.{f}"), active }
+  let fits := cc.fits m
+  (m, { vars := cc.relevant.map fun f => (s!"ctx.{f}", Ty.val), asserts := fits.map (·.term),
+        exact := fits.all (·.exact), complete := fits.all (·.complete) })
 
 /--
 The expressions of the chart of `cc` that the encoding evaluates: its invariants, its guards, and its assigns of the
@@ -291,9 +304,11 @@ def Induction.chartQueries (x : Induction) (cc : ChartCase) (k : Ir.Condition) :
       | none => pure undefT)
   let started ← ({ context := startContext, active := [] } : SMachine).move st p c x.pre clockT none none [] (initialEntries c)
   let startFails ← chartFails (started.machine.env c x.pre clockT none) k
+  let startFits := cc.fits started.machine
   let start : ChartStep × Query × Bool × Bool :=
-    (.start, { vars := x.facts.vars, asserts := x.facts.asserts ++ [x.holds, .not started.halted, startFails] },
-     x.facts.exact && !cc.sliced, x.facts.complete)
+    (.start, { vars := x.facts.vars,
+               asserts := x.facts.asserts ++ [x.holds, .not started.halted] ++ startFits.map (·.term) ++ [startFails] },
+     x.facts.exact && !cc.sliced && startFits.all (·.exact), x.facts.complete && startFits.all (·.complete))
   let guardsOf (t : Service.Transition) : List Ir.Condition := (siteOf st p c (.guards t.ref)).getD []
   let edges ← m.edges.zipIdx.mapM fun (e, i) => do
     let (pre, ctxFacts) := cc.pre (m.configs[e.source]!)
@@ -306,11 +321,14 @@ def Induction.chartQueries (x : Induction) (cc : ChartCase) (k : Ir.Condition) :
     let (ok, halted) ← guardTerms env (guardsOf e.transition) e.transition.guards
     let moved ← pre.move st p c x.pre nowT taken (some e.transition) e.exits e.entries
     let fails ← chartFails (moved.machine.env c x.pre nowT none) k
+    let postFits := cc.fits moved.machine
     let facts := x.facts ++ nowFacts ++ ctxFacts ++ takenFacts
     let q : Query :=
       { vars := facts.vars,
-        asserts := facts.asserts ++ [x.holds, holdsPre] ++ earlier ++ [ok, .not halted, .not moved.halted, fails] }
-    pure ((ChartStep.edge i, q, facts.exact && !cc.sliced, facts.complete) : ChartStep × Query × Bool × Bool)
+        asserts := facts.asserts ++ [x.holds, holdsPre] ++ earlier ++ [ok, .not halted, .not moved.halted] ++
+          postFits.map (·.term) ++ [fails] }
+    pure ((ChartStep.edge i, q, facts.exact && !cc.sliced && postFits.all (·.exact),
+      facts.complete && postFits.all (·.complete)) : ChartStep × Query × Bool × Bool)
   pure ([start] ++ edges)
 
 /--

@@ -18,7 +18,9 @@ theorem keeps_runAssign (name : InstanceId) (a : Assignment) (scope : Option Str
   try simp only [id_bind]
   split
   · simp [Processing.report, report_eq, State.fixed]
-  · split <;> rfl
+  · split
+    · simp [Processing.report, report_eq, State.fixed]
+    · split <;> rfl
 
 theorem keeps_endWith {exit : InstanceId → String → Processing → Id Processing} (h : ∀ c n, Keeps (exit c n))
     (c : InstanceId) : Keeps (endWith exit c) := by
@@ -63,7 +65,9 @@ theorem sameLines_runAssign (name : InstanceId) (a : Assignment) (scope : Option
   try simp only [id_bind]
   split
   · simp [Processing.report]
-  · split <;> rfl
+  · split
+    · simp [Processing.report]
+    · split <;> rfl
 
 theorem endSubscription_grows (p : Pending) : Grows s (s.endSubscription p) := by
   unfold State.endSubscription
@@ -163,7 +167,9 @@ theorem runAssign_deadlines (name : InstanceId) (a : Assignment) (scope : Option
     · simp only [id_bind]
       split
       · simp [Processing.report, report_eq]
-      · split <;> rfl
+      · split
+        · simp [Processing.report, report_eq]
+        · split <;> rfl
     · rfl
 
 theorem deadlinesShrink_endWith {exit : InstanceId → String → Processing → Id Processing}
@@ -261,7 +267,9 @@ theorem runAssign_pending (name : InstanceId) (a : Assignment) (scope : Option S
     · simp only [id_bind]
       split
       · simp [Processing.report, report_eq]
-      · split <;> rfl
+      · split
+        · simp [Processing.report, report_eq]
+        · split <;> rfl
     · rfl
 
 theorem leaveMark_marked (name : InstanceId) (n : String) (q : Pending) : Marked q (leaveMark name n q) := by
@@ -362,12 +370,14 @@ theorem machinesKept_runAssign (name : InstanceId) (a : Assignment) (scope : Opt
   split
   · simp [Processing.report, report_eq]
   · split
-    · simp only [id_pure]
-      rw [setMachine_resources _ _ _ (by intro _; rfl), setMachine_resources _ _ _ (by intro _; rfl)]
-      rfl
-    · simp only [id_pure]
-      rw [setMachine_resources _ _ _ (by intro _; rfl)]
-      rfl
+    · simp [Processing.report, report_eq]
+    · split
+      · simp only [id_pure]
+        rw [setMachine_resources _ _ _ (by intro _; rfl), setMachine_resources _ _ _ (by intro _; rfl)]
+        rfl
+      · simp only [id_pure]
+        rw [setMachine_resources _ _ _ (by intro _; rfl)]
+        rfl
 
 theorem machinesKept_endWith {exit : InstanceId → String → Processing → Id Processing}
     (h : ∀ c n, MachinesKept (exit c n)) (c : InstanceId) : MachinesKept (endWith exit c) := by
