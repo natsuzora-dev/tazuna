@@ -283,8 +283,12 @@ const uncoveredOf = (spec: Spec, uncovered: readonly ViolationValue[]): Reported
 
 const count = (n: number, noun: string, plural = `${noun}s`) => `${n} ${n === 1 ? noun : plural}`;
 
-function record(io: Io, specRoot: string, r: ReportedViolation): string {
-  return JSON.stringify({ ...r, location: { ...r.location, file: relative(io.cwd, join(specRoot, r.location.file)) } });
+/** `line` as JSON, with its location's file relative to the current directory instead of the spec folder. */
+function located(io: Io, specRoot: string, line: { readonly location: { readonly file: string } }): string {
+  return JSON.stringify({
+    ...line,
+    location: { ...line.location, file: relative(io.cwd, join(specRoot, line.location.file)) },
+  });
 }
 
 /** The exit code of a command that found a counterexample or violation, else left something undecided, else neither. */
@@ -294,7 +298,7 @@ const exitCode = (violated: boolean, undecided: boolean) => (violated ? 1 : unde
  * Writes the violation lines to stdout, and to stderr the summary `<subject>: <result>`, such as `3 files: no violations`.
  */
 function report(io: Io, specRoot: string, violations: readonly ReportedViolation[], subject: string): number {
-  for (const p of violations) io.log(record(io, specRoot, p));
+  for (const p of violations) io.log(located(io, specRoot, p));
   io.error(`${subject}: ${violations.length === 0 ? "no violations" : count(violations.length, "violation")}`);
   return exitCode(violations.length > 0, false);
 }
@@ -303,10 +307,7 @@ const isName = (command: string): command is Name => Object.hasOwn(commands, com
 
 /** Writes prove's lines to stdout and the count of each verdict to stderr. */
 function reportProved(io: Io, specRoot: string, lines: readonly ProveLine[]): number {
-  for (const l of lines)
-    io.log(
-      JSON.stringify({ ...l, location: { ...l.location, file: relative(io.cwd, join(specRoot, l.location.file)) } }),
-    );
+  for (const l of lines) io.log(located(io, specRoot, l));
   const counted = (kind: ProveLine["verdict"]["kind"]) => lines.filter((l) => l.verdict.kind === kind).length;
   const counterexamples = counted("counterexample");
   const conditional = lines.filter((l) => l.verdict.kind === "proved" && l.assumes.length > 0).length;
@@ -323,10 +324,7 @@ function reportGenerated(
   specRoot: string,
   generated: { readonly lines: readonly GenerateLine[]; readonly written: string[]; readonly removed: string[] },
 ): number {
-  for (const l of generated.lines)
-    io.log(
-      JSON.stringify({ ...l, location: { ...l.location, file: relative(io.cwd, join(specRoot, l.location.file)) } }),
-    );
+  for (const l of generated.lines) io.log(located(io, specRoot, l));
   const counted = (kind: GenerateLine["outcome"]["kind"]) =>
     generated.lines.filter((l) => l.outcome.kind === kind).length;
   for (const removed of generated.removed) io.error(`Removed 1 input: ${relative(io.cwd, removed)}`);
