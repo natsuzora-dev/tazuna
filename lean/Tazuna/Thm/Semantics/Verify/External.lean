@@ -8,6 +8,5 @@ open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Verify
 def lineOf : Finding → Option Value
   | .mismatch m => m.place.lookup "line"
   | .uncomparable u => u.place.lookup "line"
-  | .after line .. => some (ToValue.toValue line)
 
 end Tazuna.Thm.Semantics.Verify.External

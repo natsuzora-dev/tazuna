@@ -4,13 +4,14 @@ import Tazuna.Ir.Structure
 import Tazuna.Semantics.Value.Binding
 import Tazuna.Semantics.Verify.Mismatch
 import Tazuna.Semantics.Verify.Uncomparable
+import Tazuna.Semantics.Verify.Read
 
 /-!
 This module compares an implementation trace with a snapshot. The harness gave the implementation the snapshot's `in`
 lines one by one under one deterministic simulation, so the lines align without a search; only the bindings of the
 values that the implementation chose in its own way are open.
 
-- Values are read by their definition's schema (the `ask` parameter) and compare as CValue.
+- Values are read by their definition's schema (readValueOf) and compare as CValue.
 - A binding (Data/Binding) maps snapshot strings to implementation strings, one to one within each domain
   (valueDomains): request ids, the keys of each entity, and the other strings. A value that a snapshot line introduces
   (the id of an `out` request, a `created` key) is fresh until bound and binds to the implementation string at the same
@@ -32,8 +33,8 @@ values that the implementation chose in its own way are open.
 - The `out` lines after an `in` line, or before the first, are that input's group. A group's snapshot lines, in file
   order, each pair with any unpaired trace line of the group that compares equal under a binding of the set, at the same
   time and after the lines that its `after` names, keeping every way. `after` names the earlier lines on the line's
-  channel (Sim.ordered), so a group keeps each channel's order and no order across channels. test compares two
-  orders of a processing alike (ChoiceDependent), so a spec without that report fixes each channel's order.
+  channel (Sim.ordered), so a group keeps each channel's order and no order across channels. prove reports two orders
+  of a processing that differ (ChoiceDependent), so a spec without that report fixes each channel's order.
 - A snapshot line that pairs in no way pairs by place (type and name, or the answered request under the first way) to
   report how it differs; a line with no place is missing, and the trace lines that the first way leaves unpaired are
   unexpected. Paired lines compare their time and the snapshot's `after` order. The set keeps the ways that leave the
@@ -58,32 +59,21 @@ structure Line extends TraceLine where
   value : Option CValue
 deriving Inhabited
 
-/-- Where the schema comes from: a definition's input, output or payload, or a screen control's payload. -/
-inductive Part where
-  | input
-  | output
-  | payload
-  | control (name : String)
-
-derive_wire Part tag "kind"
-
 /-- The value read by the definition's schema when the definition is known, and as a plain CValue otherwise. -/
-def readValue {m : Type → Type} [Monad m] (ask : Definition → Part → Value → m CValue) (d : Option Definition)
-    (part : Part) (v : Value) : m CValue :=
+def readValue (s : Structure) (d : Option Definition) (part : Part) (v : Value) : CValue :=
   match d with
-  | some d => ask d part v
-  | none => pure (CValue.ofValue v)
+  | some d => readValueOf s d part v
+  | none => CValue.ofValue v
 
-def comparableAnswer {m : Type → Type} [Monad m] (ask : Definition → Part → Value → m CValue)
-    (shape : Option Definition) : Answer → m (Answer × Option CValue)
-  | .rejected r => pure (.rejected { kind := r.kind }, none)
-  | .accepted none => pure (.accepted none, none)
-  | .accepted (some output) => do
-    let compared ← readValue ask shape .output output
-    pure (.accepted (some compared.flatten), some compared)
-  | .fulfilled output => do
-    let compared ← readValue ask shape .output output
-    pure (.fulfilled compared.flatten, some compared)
+def comparableAnswer (s : Structure) (shape : Option Definition) : Answer → Answer × Option CValue
+  | .rejected r => (.rejected { kind := r.kind }, none)
+  | .accepted none => (.accepted none, none)
+  | .accepted (some output) =>
+    let compared := readValue s shape .output output
+    (.accepted (some compared.flatten), some compared)
+  | .fulfilled output =>
+    let compared := readValue s shape .output output
+    (.fulfilled compared.flatten, some compared)
 
 /-- The list with `v` at key `k`, replaced in place if `k` exists and appended otherwise (JS `Map.set`). -/
 def setAt {β : Type} : List (String × β) → String → β → List (String × β)
@@ -94,9 +84,9 @@ def setAt {β : Type} : List (String × β) → String → β → List (String �
 The comparable form of a trace line. An answer's output is read with the output schema of the definition that its
 request line named. `outputByRequestId` carries over from the snapshot lines to the implementation lines.
 -/
-def readLine {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue)
-    (outputByRequestId : List (String × Definition)) (l : TraceLine) : m (Line × List (String × Definition)) := do
-  let read := readValue ask
+def readLine (s : Structure) (service : String) (outputByRequestId : List (String × Definition)) (l : TraceLine) :
+    Line × List (String × Definition) :=
+  let read := readValue s
   let line (body : TraceLine.Body) (value : Option CValue) : Line := { l with body, value }
   let request (d : Option Definition) (id : String) : List (String × Definition) :=
     match d with
@@ -110,38 +100,38 @@ def readLine {m : Type → Type} [Monad m] (s : Structure) (service : String) (a
   match l.body with
   | .operation dir id name nth payload =>
     let (d, part) := control name
-    let value ← payload.mapM (read d part)
-    pure (line (.operation dir id name nth (value.map (·.flatten))) value, outputByRequestId)
+    let value := payload.map (read d part)
+    (line (.operation dir id name nth (value.map (·.flatten))) value, outputByRequestId)
   | .answer dir id to answer =>
-    let (answer, value) ← comparableAnswer ask (outputByRequestId.lookup to) answer
-    pure (line (.answer dir id to answer) value, outputByRequestId)
+    let (answer, value) := comparableAnswer s (outputByRequestId.lookup to) answer
+    (line (.answer dir id to answer) value, outputByRequestId)
   | .event dir id name payload resultOf =>
-    let value ← read (s.named service (some name) ["event"]) .payload payload
-    pure (line (.event dir id name value.flatten resultOf) (some value), outputByRequestId)
+    let value := read (s.named service (some name) ["event"]) .payload payload
+    (line (.event dir id name value.flatten resultOf) (some value), outputByRequestId)
   | .command dir id name input caller =>
     let d := s.named service (some name) ["command"]
-    let value ← read d .input input
-    pure (line (.command dir id name value.flatten caller) (some value), request d id)
+    let value := read d .input input
+    (line (.command dir id name value.flatten caller) (some value), request d id)
   | .query dir id name input caller =>
     let d := s.named service (some name) ["query"]
-    let value ← read d .input input
-    pure (line (.query dir id name value.flatten caller) (some value), request d id)
+    let value := read d .input input
+    (line (.query dir id name value.flatten caller) (some value), request d id)
   | .subscribe dir id name input caller =>
     let d := s.named service (some name) ["query"]
-    let value ← read d .input input
-    pure (line (.subscribe dir id name value.flatten caller) (some value), request d id)
-  | .unsubscribe .. | .time .. | .restart .. => pure (line l.body none, outputByRequestId)
+    let value := read d .input input
+    (line (.subscribe dir id name value.flatten caller) (some value), request d id)
+  | .unsubscribe .. | .time .. | .restart .. => (line l.body none, outputByRequestId)
 
-def readLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue) :
-    List (Option TraceLine) → List (String × Definition) → m (List (Option Line) × List (String × Definition))
-  | [], outputByRequestId => pure ([], outputByRequestId)
-  | none :: ls, outputByRequestId => do
-    let (rest, outputByRequestId) ← readLines s service ask ls outputByRequestId
-    pure (none :: rest, outputByRequestId)
-  | some l :: ls, outputByRequestId => do
-    let (line, outputByRequestId) ← readLine s service ask outputByRequestId l
-    let (rest, outputByRequestId) ← readLines s service ask ls outputByRequestId
-    pure (some line :: rest, outputByRequestId)
+def readLines (s : Structure) (service : String) :
+    List (Option TraceLine) → List (String × Definition) → List (Option Line) × List (String × Definition)
+  | [], outputByRequestId => ([], outputByRequestId)
+  | none :: ls, outputByRequestId =>
+    let (rest, outputByRequestId) := readLines s service ls outputByRequestId
+    (none :: rest, outputByRequestId)
+  | some l :: ls, outputByRequestId =>
+    let (line, outputByRequestId) := readLine s service outputByRequestId l
+    let (rest, outputByRequestId) := readLines s service ls outputByRequestId
+    (some line :: rest, outputByRequestId)
 
 /-- The JSON form of `answer`, with the given output as its output. -/
 def answerContent (answer : Answer) : Option CValue → CValue
@@ -212,15 +202,10 @@ where
       if l.body.dir == .out then go ls (i + 1) input ({ line := l, index := i } :: acc)
       else { input, outs := acc.reverse } :: go ls (i + 1) (some { line := l, index := i }) []
 
-/--
-A finding of a comparison: a violation, or, between two runs of the simulation (`relation`), a trace line that follows
-other lines of its group than its snapshot line follows (`after`, compared through the pairing). The second is no
-violation, since only test compares it, and it reports it inside the ChoiceDependent violation that it shows.
--/
+/-- A violation that a comparison finds. -/
 inductive Finding where
   | mismatch (m : Mismatch)
   | uncomparable (u : Uncomparable)
-  | after (line : Nat) (subject : Subject) (snapshot trace : List String)
 
 /-- The violations of a comparison, and the bindings that agree with every compared line. -/
 structure Compared where
@@ -333,19 +318,6 @@ def followsPaired (snapshot : List Numbered) (pairs : List (Nat × Nat)) (i j : 
       | some (_, before) => before < j
       | none => true
 
-/--
-Whether trace line `t` follows exactly the lines that the way `pairs` pairs with those that snapshot line `s` follows:
-the trace's `after` equals the snapshot's through the pairing.
--/
-def sameAfter (snapshot trace : List Numbered) (pairs : List (Nat × Nat)) (s t : Numbered) : Bool :=
-  let follows (outs : List Numbered) (o : Numbered) : List Nat :=
-    match outs.zipIdx.find? (·.1.index == o.index) with
-    | some (o, k) => mustFollow outs o k
-    | none => []
-  let expected := follows snapshot s
-  let images := expected.filterMap fun n => (pairs.find? (·.1 == n)).map (·.2)
-  images.length == expected.length && sameSet images (follows trace t)
-
 /-- The request ids that line `l` names: the id of a request line, the answered or unsubscribed request, and resultOf. -/
 def Line.requestIds (l : Line) : List String :=
   (match l.body with
@@ -365,7 +337,6 @@ def valueDomains (snapshot : List (Option Line)) : String → String :=
 def Finding.line : Finding → Nat
   | .mismatch m => m.line?.getD 0
   | .uncomparable u => u.line?.getD 0
-  | .after line .. => line
 
 def differentInput (b : Binding) (s t : Numbered) : Finding :=
   .uncomparable (.differentInput t.index s.index (Bindings.substitute b.strings (lineValue s.line)) (lineValue t.line))
@@ -399,16 +370,14 @@ def overLimit (place : Nat) (s : Numbered) : Finding :=
 
 /--
 One snapshot line of the exact pass: each way pairs it with every unpaired trace line of the group that compares equal,
-at the same time and after the lines it must follow, and, when `relation`, with the same `after` (sameAfter). A line that
-pairs in no way goes to the failed lines.
+at the same time and after the lines it must follow. A line that pairs in no way goes to the failed lines.
 -/
-def pairExact {root : Binding} (v : Values) (relation : Bool) (snapshot trace : List Numbered) (place : Nat)
+def pairExact {root : Binding} (v : Values) (snapshot trace : List Numbered) (place : Nat)
     (same : State root → State root → Bool) (acc : List (State root) × List Numbered) (s : Numbered) :
     Except Finding (List (State root) × List Numbered) :=
   let (states, failed) := acc
   let next (st : State root) : Option (List (State root)) := do
-    let ways ← (trace.filter fun t => !st.used.contains t.index && followsPaired snapshot st.pairs s.index t.index &&
-        (!relation || sameAfter snapshot trace st.pairs s t)).mapM
+    let ways ← (trace.filter fun t => !st.used.contains t.index && followsPaired snapshot st.pairs s.index t.index).mapM
       fun t => (matchLine v st.binding.val s.line t.line).map (st.paired s t)
     pure ways.flatten
   match expand same states next with
@@ -452,11 +421,10 @@ def namedLines (snapshot : List Numbered) : List Nat :=
   snapshot.zipIdx.flatMap fun (s, k) => mustFollow snapshot s k
 
 /--
-The findings of the way that pairs the snapshot and trace lines `pairNumbers`: paired lines at different times, a line
-paired before a line that it must follow, and, when `relation`, a trace line whose `after` differs from the snapshot's
-through the pairing (sameAfter).
+The findings of the way that pairs the snapshot and trace lines `pairNumbers`: paired lines at different times, and a
+line paired before a line that it must follow.
 -/
-def pairChecks (relation : Bool) (snapshot trace : List Numbered) (pairNumbers : List (Nat × Nat)) : List Finding :=
+def pairChecks (snapshot trace : List Numbered) (pairNumbers : List (Nat × Nat)) : List Finding :=
   let pairs := pairNumbers.filterMap fun (i, j) => do
     pure (← snapshot.find? (·.index == i), ← trace.find? (·.index == j))
   let times := pairs.filterMap fun (s, t) =>
@@ -471,24 +439,20 @@ def pairChecks (relation : Bool) (snapshot trace : List Numbered) (pairNumbers :
         if before.index < t.index then none
         else some (Finding.mismatch
           (.lineOrder t.index (Subject.of t.line.toTraceLine) (Subject.of before.line.toTraceLine)))
-  let afters := if !relation then [] else pairs.filterMap fun (s, t) =>
-    if sameAfter snapshot trace pairNumbers s t then none
-    else some (Finding.after t.index (Subject.of t.line.toTraceLine) (s.line.after.getD []) (t.line.after.getD []))
-  times ++ orders ++ afters
+  times ++ orders
 
 /--
 Pairs the `out` lines of one group under the set of bindings and reports their differences. `v.fresh` holds the values
 that this and earlier groups introduced, also on lines that are not compared; one that is not bound yet binds where a
-compared line first holds it. `place` is the trace line of the group's input. When `relation`, the trace's `after`
-must equal the snapshot's (sameAfter). The first way reports by (pairChecks); when it has nothing to report, only the ways
+compared line first holds it. `place` is the trace line of the group's input. The first way reports by (pairChecks); when it has nothing to report, only the ways
 that have nothing either carry on, so that each binding carried on pairs the group through one pairing. The last
 component tells that nothing later is compared.
 -/
-def compareGroup {root : Binding} (set : List (From root)) (v : Values) (relation : Bool) (snapshot trace : List Numbered)
+def compareGroup {root : Binding} (set : List (From root)) (v : Values) (snapshot trace : List Numbered)
     (place : Nat) : List Finding × List (From root) × Bool :=
   let same := State.same (namedLines snapshot)
   let start : Except Finding (List (State root) × List Numbered) := .ok (set.map ({ binding := ·, pairs := [] }), [])
-  match snapshot.foldl (fun acc s => acc.bind fun a => pairExact v relation snapshot trace place same a s) start with
+  match snapshot.foldl (fun acc s => acc.bind fun a => pairExact v snapshot trace place same a s) start with
   | .error f => ([f], set, true)
   | .ok (states, failed) =>
   let start : Except Finding (List (State root) × List (Numbered × Option (Numbered × Bool))) := .ok (states, [])
@@ -502,9 +466,9 @@ def compareGroup {root : Binding} (set : List (From root)) (v : Values) (relatio
     | (_, some (_, true)) => none
     | (s, none) => some (.mismatch (missing s place))
   let unexpectedLines := (trace.filter fun t => !used.contains t.index).map (.mismatch ∘ unexpected)
-  let checks := pairChecks relation snapshot trace ((first.map (·.pairs)).getD [])
+  let checks := pairChecks snapshot trace ((first.map (·.pairs)).getD [])
   let kept := states.filter fun st =>
-    sameSet st.used used && (!checks.isEmpty || (pairChecks relation snapshot trace st.pairs).isEmpty)
+    sameSet st.used used && (!checks.isEmpty || (pairChecks snapshot trace st.pairs).isEmpty)
   (differences ++ unexpectedLines ++ checks, distinctBy From.same (kept.map (·.binding)), false)
 
 /-- The line without its own id, which names the line rather than what it gives. -/
@@ -540,9 +504,9 @@ def unrouted (set : List Binding) (v : Values) (inputs : List Line) (l : Line) :
 /--
 Compares the groups in order, carrying the set of bindings. When `cut`, the trace's last group ends at a malformed line,
 and only its input is compared. `internal` selects the `out` lines that are not compared. `inputs` holds the snapshot's
-`in` lines, and `outs` the trace's `out` lines. `relation` is compareGroup's.
+`in` lines, and `outs` the trace's `out` lines.
 -/
-def compareGroups (lineCount : Nat) (internal : Line → Bool) (relation : Bool) (inputs : List Line) (outs : List Numbered)
+def compareGroups (lineCount : Nat) (internal : Line → Bool) (inputs : List Line) (outs : List Numbered)
     (cut : Bool) {root : Binding} :
     (expected actual : List Group) → Values → List (From root) → List Finding × List (From root)
   | [], [], _, set => ([], set)
@@ -572,10 +536,10 @@ def compareGroups (lineCount : Nat) (internal : Line → Bool) (relation : Bool)
         let place := (a.input.map (·.index)).getD 1
         let compared (outs : List Numbered) := outs.filter fun o => !internal o.line
         let v := { v with fresh := v.fresh ++ e.outs.flatMap (·.line.fresh) }
-        let (found, set₂, stop) := compareGroup set₁ v relation (compared e.outs) (compared a.outs) place
+        let (found, set₂, stop) := compareGroup set₁ v (compared e.outs) (compared a.outs) place
         if stop then (found, set₂)
         else
-          let (rest, set₃) := compareGroups lineCount internal relation inputs outs cut es as v set₂
+          let (rest, set₃) := compareGroups lineCount internal inputs outs cut es as v set₂
           (found ++ rest, set₃)
   | e :: _, [], _, set =>
     match e.input with
@@ -590,18 +554,15 @@ def compareGroups (lineCount : Nat) (internal : Line → Bool) (relation : Bool)
 The violations of comparing a trace with a snapshot, and the bindings that agree with every compared line. In
 `snapshot`, `none` is a blank line. `lines` holds the trace lines before the line that `cut` reports, if any, with `none`
 for blank lines and repeated subscription answers. `internal` selects the event lines that verify does not compare. An
-`unknownAfters` id orders no line, because reading the snapshot reports it before the comparison. `renamed` refines
-what the comparison knows of the values (Explore's Finished.renaming); verify passes `id`. `relation` compares the lines'
-`after` too, as test does for two runs of the simulation; verify's trace has none, so verify passes false.
+`unknownAfters` id orders no line, because reading the snapshot reports it before the comparison.
 -/
-def compare (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool)
-    (renamed : Values → Values) (relation : Bool) : Compared :=
+def compare (snapshot lines : List (Option Line)) (cut : Option Uncomparable) (internal : Line → Bool) : Compared :=
   let expected := groups snapshot
   let actual := groups lines
   let inputs := expected.filterMap fun g => g.input.map (·.line)
   let (found, set) :=
-    compareGroups lines.length internal relation inputs (actual.flatMap (·.outs)) cut.isSome expected actual
-      (renamed { domain := valueDomains snapshot, fresh := [], image := fun _ _ => true })
+    compareGroups lines.length internal inputs (actual.flatMap (·.outs)) cut.isSome expected actual
+      { domain := valueDomains snapshot, fresh := [], image := fun _ _ => true }
       [⟨Binding.empty, .refl _⟩]
   { findings := found ++ (cut.map Finding.uncomparable).toList, bindings := set.map (·.val) }
 
@@ -684,12 +645,11 @@ where
           | _ => some l :: go ls sent
         | _ => some l :: go ls sent
 
-def verifyLines {m : Type → Type} [Monad m] (s : Structure) (service : String) (ask : Definition → Part → Value → m CValue)
-    (snapshot : List (Option TraceLine)) (trace : List (FileLine TraceLine)) (renamed : Values → Values)
-    (relation : Bool := false) : m Compared := do
+def verifyLines (s : Structure) (service : String) (snapshot : List (Option TraceLine))
+    (trace : List (FileLine TraceLine)) : Compared :=
   let (lines, cut) := comparedLines .out trace
-  let (expected, outputByRequestId) ← readLines s service ask snapshot []
-  let (actual, _) ← readLines s service ask (withoutResends lines) outputByRequestId
-  pure (compare expected (withoutRepeatedAnswers actual) cut (internalEvent s service) renamed relation)
+  let (expected, outputByRequestId) := readLines s service snapshot []
+  let (actual, _) := readLines s service (withoutResends lines) outputByRequestId
+  compare expected (withoutRepeatedAnswers actual) cut (internalEvent s service)
 
 end Tazuna.Semantics.Verify

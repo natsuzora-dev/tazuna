@@ -428,8 +428,7 @@ stays within the bounds leads to a node of the next layer.
 -/
 def Search.run (x : Search) : SolveM Found := do
   let st := x.st
-  let last ← IO.mkRef {}
-  let fs := instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)
+  let fs ← instrumentedFunctions st
   let (s0, c0) ← (begin st fs { now := 0, service := st.service, records := [] }).run {}
   let mut found : Found := { first := (c0.reached.filter x.targets.contains).map (·, []), sought := [], broken := [] }
   let mut frontier : List Node := [{ state := s0, collect := c0, inputs := [], created := [] }]
@@ -509,8 +508,7 @@ def Search.anyState (x : Search) (part : Uncovered) : Except String (Query × Bo
 /-- The run of `inputs` from the initial state of `service`: the spec's trace lines, and the targets that the run reaches. -/
 def runInputs (spec : Ir.Structure) (service : String) (inputs : List TraceLine) : IO (List TraceLine × List Uncovered) := do
   let st ← Service.ofStructure spec service
-  let last ← IO.mkRef {}
-  let fs := instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)
+  let fs ← instrumentedFunctions st
   let run : ReplayM Service.State := do
     let mut s ← begin st fs { now := 0, service, records := [] }
     for l in inputs do

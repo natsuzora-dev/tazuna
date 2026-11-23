@@ -38,7 +38,7 @@ derive_wire ReadLine serialize_only skip_serializing_none
 /-- Each line as verify reads it, or none for a blank line. -/
 def readSnapshotLines (spec : Ir.Structure) (service : String) (lines : List (Option TraceLine)) :
     IO (List (Option ReadLine)) := do
-  let (read, _) ← Verify.readLines spec service (readIn spec) lines []
+  let (read, _) := Verify.readLines spec service lines []
   pure (read.map (·.map fun l => { line := l.toTraceLine, value := l.value.map CValue.tagged }))
 
 /--
@@ -47,7 +47,7 @@ binding that the comparison ends with, by which drive substitutes the snapshot's
 -/
 def bindingsOf (spec : Ir.Structure) (service : String) (snapshot : List (Option TraceLine))
     (trace : List (FileLine TraceLine)) : IO (List Verify.Finding × List (List (String × String))) := do
-  let compared ← Verify.verifyLines spec service (readIn spec) snapshot trace id
-  pure (compared.findings.filter (·.isViolation), compared.bindings.map (·.strings))
+  let compared := Verify.verifyLines spec service snapshot trace
+  pure (compared.findings, compared.bindings.map (·.strings))
 
 end Tazuna.Engine

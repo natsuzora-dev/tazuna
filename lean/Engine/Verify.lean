@@ -12,18 +12,10 @@ namespace Tazuna.Engine
 
 open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Service Tazuna.Semantics.Verify Tazuna.Semantics.Explore
 
-/-- A finding as a report writes it: a violation with its line, or an `after`, which only test compares. -/
+/-- A finding as a report writes it: the violation itself. -/
 instance : ToValue Verify.Finding := ⟨fun
   | .mismatch m => ToValue.toValue m
-  | .uncomparable u => ToValue.toValue u
-  | .after line subject snapshot trace =>
-    .obj [("after", .obj [("line", ToValue.toValue line), ("subject", ToValue.toValue subject),
-      ("snapshot", ToValue.toValue snapshot), ("trace", ToValue.toValue trace)])]⟩
-
-/-- Whether a finding is a violation of verify, which compares no `after`. -/
-def _root_.Tazuna.Semantics.Verify.Finding.isViolation : Verify.Finding → Bool
-  | .after .. => false
-  | _ => true
+  | .uncomparable u => ToValue.toValue u⟩
 
 /-- The records that an implementation starts from, which a log states on its first line. -/
 structure Start where
@@ -146,15 +138,13 @@ the spec does not take: after the spec halts, once the comparison so far finds t
 rejects the line as an input that no sender could give. No line from there on compares.
 -/
 def replay (spec : Ir.Structure) (log : Log) : ReplayM Replayed := do
-  let ask (d : Ir.Definition) (part : Verify.Part) (v : Value) : ReplayM CValue := pure (Verify.readValueOf spec d part v)
   let start ← match log.start with
     | none => pure (some none)
     | some s => pure ((FromValue.fromValue s.value : Except String Start).toOption.map some)
   let some start := start
     | return { findings := [.uncomparable (.lineSchema ((log.start.map (·.line)).getD 1))], violations := [] }
   let st ← Service.ofStructure spec log.service
-  let last ← IO.mkRef {}
-  let fs := instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)
+  let fs ← instrumentedFunctions st
   let (lines, _) := comparedLines .out log.lines
   let time := match start with
     | some s => s.time
@@ -173,13 +163,13 @@ def replay (spec : Ir.Structure) (log : Log) : ReplayM Replayed := do
     if s.halted.isSome || !(invalid ++ broken).isEmpty then
       taken := k
       break
-    let compared ← Verify.verifyLines spec log.service ask (specLines log.service s) (log.lines.take k) id
+    let compared := Verify.verifyLines spec log.service (specLines log.service s) (log.lines.take k)
     -- Whether a route is ambiguous depends on the spec's later lines too, so only the final comparison tells.
     if compared.findings.any fun f => f matches .uncomparable _ && !(f matches .uncomparable (.ambiguous ..)) then
       taken := k
       break
     let b := (compared.bindings.head?.map (·.strings)).getD []
-    let (read, _) ← Verify.readLines spec log.service ask (lines.take (k + 1)) []
+    let (read, _) := Verify.readLines spec log.service (lines.take (k + 1)) []
     let some (some line) := read[k]? | continue
     let before := inputs s
     s ← takeIn spec st fs b s l line
@@ -188,9 +178,9 @@ def replay (spec : Ir.Structure) (log : Log) : ReplayM Replayed := do
       break
   if s.halted.isNone then s ← checkExchanges st fs s
   -- What the spec reports where it stops taking lines tells why, and no later line compares.
-  let final ← Verify.verifyLines spec log.service ask (specLines log.service s) (log.lines.take taken) id
+  let final := Verify.verifyLines spec log.service (specLines log.service s) (log.lines.take taken)
   let byLine := final.findings.mergeSort fun a b => decide (a.line ≤ b.line)
-  pure { findings := byLine.filter (·.isViolation)
+  pure { findings := byLine
          violations := (invalid ++ broken).map (·.toViolation) ++ reportedViolations s (← get) none }
 
 /-- What verify finds of each log, and the parts of the spec that no log reached (Uncovered). -/
@@ -214,8 +204,7 @@ result events, which may come before or after the answer.
 def verifyExternal (spec : Ir.Structure) (service : String) (trace : List (FileLine TraceLine)) :
     IO (List Verify.Finding) := do
   let st ← Service.ofStructure spec service
-  let last ← IO.mkRef {}
-  let fs := Eval.functionsOf st last
+  let fs := Eval.functionsOf st (← IO.mkRef {})
   let (lines, cut) := comparedLines .in trace
   let structural := checkLines spec service lines 1 [] ++ (exchanges spec service lines).flatMap (checkExchange spec service)
   let found := structural ++ (cut.map .uncomparable).toList
@@ -266,7 +255,6 @@ def verifyExternal (spec : Ir.Structure) (service : String) (trace : List (FileL
           more := more ++ [.mismatch (.assumption line x.id target broken)]
       if parsedOutput matches some none then
         more := more ++ [.mismatch (.assumption line x.id target .answerOutputSchema)]
-  let all := (found ++ more).mergeSort fun a b => decide (a.line ≤ b.line)
-  pure (all.filter (·.isViolation))
+  pure ((found ++ more).mergeSort fun a b => decide (a.line ≤ b.line))
 
 end Tazuna.Engine

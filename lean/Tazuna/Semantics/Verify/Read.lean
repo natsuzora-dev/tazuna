@@ -1,5 +1,6 @@
 import Tazuna.Semantics.Value.Parse
-import Tazuna.Semantics.Verify.Compare
+import Tazuna.Ir.Structure
+import Tazuna.Semantics.Value.Canonical
 
 /-!
 How verify reads a value by its definition's JSON Schema: each top-level field that parses by its own schema encoded
@@ -11,6 +12,15 @@ entity.
 namespace Tazuna.Semantics.Verify
 
 open Tazuna.Ir
+
+/-- Where the schema comes from: a definition's input, output or payload, or a screen control's payload. -/
+inductive Part where
+  | input
+  | output
+  | payload
+  | control (name : String)
+
+derive_wire Part tag "kind"
 
 /-- `v` with each field of the object schema `schema` that parses encoded again, as verify compares it. -/
 def canonicalFields (schema v : Value) : Value :=

@@ -46,6 +46,11 @@ instance : MonadNote IO where
     | .bug message => throw (IO.userError message)
     | _ => pure ()
 
+/-- The functions of `st`, instrumented to collect what each call reads and writes. -/
+def instrumentedFunctions (st : Service) : IO (Functions (StateT Collect IO)) := do
+  let last ← IO.mkRef {}
+  pure (instrument st (Eval.functionsOf st last) (Eval.instrumentOf last))
+
 /-- The instrumented functions of each running service of `start`, which collect into that service's Collect. -/
 def instrumentedOf (start : Sim.World) : IO (String → Functions ActingIO) := do
   let last ← IO.mkRef {}
@@ -53,10 +58,6 @@ def instrumentedOf (start : Sim.World) : IO (String → Functions ActingIO) := d
     match start.services.lookup service with
     | none => (Eval.functionsOf default last).hoist liftM
     | some st => (instrument st (Eval.functionsOf st last) (Eval.instrumentOf last)).hoist (focus service)
-
-/-- The value of a definition's part as verify reads it. -/
-def readIn (spec : Ir.Structure) (d : Ir.Definition) (part : Verify.Part) (v : Value) : IO CValue :=
-  pure (Verify.readValueOf spec d part v)
 
 def halted (w : Sim.World) : Bool := w.halted.isSome || w.states.any (·.2.halted.isSome)
 
