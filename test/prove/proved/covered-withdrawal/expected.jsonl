@@ -1,0 +1,1 @@
+{"service":"bank","invariant":{"definition":{"service":"bank","name":"Account"},"name":"nonNegative"},"creates":{"Account":2},"verdict":{"kind":"proved"},"location":{"file":"bank/bank.ts","line":4}}

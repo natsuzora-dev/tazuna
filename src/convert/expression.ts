@@ -191,6 +191,8 @@ class Conversion {
   /** The helpers being inlined, innermost last, so that a recursive one stays TS. */
   private readonly inlining: Helper[] = [];
   private fresh = 0;
+  /** The schema that the values of the function's expression body come from, where the converter follows them to one. */
+  result: z.ZodType | undefined;
 
   constructor(source: Source, events: readonly DefinitionRef[], defined: Defined, typed: Typed) {
     this.source = source;
@@ -498,8 +500,12 @@ class Conversion {
     if (rest.length > 0) this.fail(f, "takes more than its arguments object");
     const written = f.body;
     if (written === undefined) this.fail(f, "has no body");
-    const body = (scope: Scope): Expr =>
-      isBlock(written) ? this.block([...written.statements], scope) : this.expression(written as Expression, scope);
+    const body = (scope: Scope): Expr => {
+      if (isBlock(written)) return this.block([...written.statements], scope);
+      const value = this.expression(written as Expression, scope);
+      this.result = this.schemaOf(written as Expression, scope);
+      return value;
+    };
     this.specials = new Set(args.filter((a): a is Special => a === "records" || a === "createKey"));
     this.argument = (node, name) => {
       if (this.specials.has(name as Special)) this.fail(node, `reads ${name}`);
@@ -989,8 +995,8 @@ class Conversion {
 }
 
 /**
- * The IR of the function of `source` that receives `args`, or the construct outside the IR that it has. A decide's
- * `events` are those its command lists.
+ * The IR of the function of `source` that receives `args`, with the schema of its values where the converter follows
+ * them to one, or the construct outside the IR that it has. A decide's `events` are those its command lists.
  */
 export function converted(
   source: Source,
@@ -998,9 +1004,11 @@ export function converted(
   events: readonly DefinitionRef[] = [],
   defined: Defined = { constants: new Map(), entities: new Map() },
   typed: Typed = untyped,
-): Expr | { readonly unconverted: string } {
+): { readonly body: Expr; readonly schema: z.ZodType | undefined } | { readonly unconverted: string } {
   try {
-    return new Conversion(source, events, defined, typed).convertFunction(source.node, args);
+    const conversion = new Conversion(source, events, defined, typed);
+    const body = conversion.convertFunction(source.node, args);
+    return { body, schema: conversion.result };
   } catch (error) {
     if (error instanceof Unconverted) return { unconverted: error.message };
     throw error;

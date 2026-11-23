@@ -474,12 +474,26 @@ export class Converter {
       typed,
     }: { readonly events?: readonly DefinitionRef[]; readonly defined?: Defined; readonly typed?: Typed } = {},
   ): Expr | Unconverted {
+    const result = this.convertTyped(f, args, { events, defined, ...(typed && { typed }) });
+    return "unconverted" in result ? result : result.body;
+  }
+
+  /** convert's IR of `f` with the schema of its values, where the converter follows them to one. */
+  private convertTyped(
+    f: SpecFunction,
+    args: readonly Arg[],
+    {
+      events = [],
+      defined = this.defined,
+      typed,
+    }: { readonly events?: readonly DefinitionRef[]; readonly defined?: Defined; readonly typed?: Typed },
+  ): { readonly body: Expr; readonly schema: z.ZodType | undefined } | Unconverted {
     const location = this.locator.located(f);
     const source = location === undefined ? undefined : this.sources.sourceAt(location);
     if (source === undefined)
       return { unconverted: "has no source that the converter finds", ...(location && { location }) };
-    const body = converted(source, args, events, defined, typed);
-    return "unconverted" in body && location !== undefined ? { ...body, location } : body;
+    const result = converted(source, args, events, defined, typed);
+    return "unconverted" in result && location !== undefined ? { ...result, location } : result;
   }
 
   /** The IR of the spec functions of the callbacks that Lean evaluates, and those that stay TS. */
@@ -510,19 +524,31 @@ export class Converter {
     };
     const notConverted: NotConverted[] = [];
     const convertedBinds = new Set<Slot>();
+    // The schema of each binds value, by its binds callback and definition, so that `bound` keeps integers integers.
+    const bindSchemas = new Map<string, Shape>();
+    const bindsKey = (callback: string, d: DefinitionRef) => `${callback} ${d.service} ${d.name}`;
+    const withBound = (typed: Typed, callback: string | undefined, d: DefinitionRef): Typed => {
+      const shape = callback === undefined ? undefined : bindSchemas.get(bindsKey(callback, d));
+      return shape === undefined ? typed : { ...typed, args: { ...typed.args, bound: z.object(shape) } };
+    };
     for (const slot of slotsOf(spec)) {
       const entries = Object.entries(slot.conditions ?? {}) as [string, SpecFunction][];
       const binds = slot.binds === undefined || convertedBinds.has(slot.binds);
+      const typed = withBound(slot.typed, slot.binds?.callback, slot.definition);
       const conditions: Condition[] = [];
       const failed: NotConverted[] = [];
+      const schemas: Record<string, z.ZodType> = {};
       for (const [name, f] of entries) {
         const at = { callback: slot.callback, definition: slot.definition, name };
-        const body: Expr | Unconverted = binds
-          ? this.convert(f, slot.args, { typed: slot.typed })
-          : { unconverted: "reads binds that stay TS" };
-        if ("unconverted" in body) failed.push({ ...at, reason: body.unconverted, ...located(body) });
-        else conditions.push({ name, body });
+        const result = binds ? this.convertTyped(f, slot.args, { typed }) : { unconverted: "reads binds that stay TS" };
+        if ("unconverted" in result) failed.push({ ...at, reason: result.unconverted, ...located(result) });
+        else {
+          conditions.push({ name, body: result.body });
+          schemas[name] = result.schema ?? z.unknown();
+        }
       }
+      if (slot.callback === "binding" || slot.callback === "automationBinding")
+        bindSchemas.set(bindsKey(slot.callback, slot.definition), schemas);
       notConverted.push(...failed);
       if (slot.whole ? failed.length === 0 : conditions.length > 0)
         lists[slot.callback].push({ definition: slot.definition, conditions });
@@ -537,7 +563,10 @@ export class Converter {
       const body: Expr | Unconverted = binds
         ? f === undefined
           ? empty
-          : this.convert(f, slot.args, { events: slot.events ?? [], typed: slot.typed })
+          : this.convert(f, slot.args, {
+              events: slot.events ?? [],
+              typed: withBound(slot.typed, slot.binds, slot.definition),
+            })
         : { unconverted: "reads binds that stay TS" };
       if ("unconverted" in body)
         notConverted.push({

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Account = entity({
   description: "An account",
-  fields: { id: z.string(), balance: z.int() },
+  fields: { id: z.string(), balance: z.number() },
   key: "id",
   invariants: { nonNegative: ({ record }) => record.balance >= 0 },
 });
@@ -23,7 +23,7 @@ export const openAccount = command({ input: { accountId: Account.fields.id }, em
 );
 
 export const deposit = command({
-  input: { accountId: ref(Account), amount: z.int().min(1) },
+  input: { accountId: ref(Account), amount: z.number() },
   emits: [balanceChanged],
   binds: { account: ({ input, records }) => records.Account.get(input.accountId) },
 }).decide(({ input, bound }) => [
