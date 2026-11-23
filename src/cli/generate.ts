@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { CheckedSpec } from "../check/spec.ts";
+import type { ConvertedSpec } from "../check/spec.ts";
 import type { Location } from "../data/violation.ts";
 import { placeOf } from "../load/found.ts";
 import { solve } from "../z3/solve.ts";
@@ -15,7 +15,7 @@ export type GenerateLine = TargetOutcome & { readonly location: Location };
  * files of those service folders, and returns what generate found of each target and the paths written and removed.
  */
 export async function generateSpec(
-  spec: CheckedSpec,
+  spec: ConvertedSpec,
   out: string,
   depth: number | undefined,
 ): Promise<{ readonly lines: readonly GenerateLine[]; readonly written: string[]; readonly removed: string[] }> {

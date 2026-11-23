@@ -1,5 +1,5 @@
 import { join, relative } from "node:path";
-import type { CheckedSpec } from "../check/spec.ts";
+import type { ConvertedSpec } from "../check/spec.ts";
 import { ask } from "../cli/engine.ts";
 import type { Log } from "../cli/protocol.generated.ts";
 import { entriesOf } from "../data/pairing.ts";
@@ -10,7 +10,7 @@ import { type ReportedViolation, toReported, type ViolationValue, zodError } fro
 import { placeOf } from "../load/found.ts";
 import { type Found, violationsAt } from "./lines.ts";
 
-export { type CheckedSpec, checkSpec, failureText, type SpecCheck } from "../check/spec.ts";
+export { type CheckedSpec, type ConvertedSpec, checkSpec, failureText, type SpecCheck } from "../check/spec.ts";
 export type { Caller, GivenRecord } from "../data/scenario.generated.ts";
 export { type InputRun, type Run, runFile } from "../data/traceFile.ts";
 export {
@@ -82,7 +82,7 @@ function filesUnder(folder: string): { readonly files: string[]; readonly others
  * contract. Any other entry of the folder is a violation. `uncovered` holds the parts of the spec that no log reached.
  */
 export function verifyTraces(
-  spec: CheckedSpec,
+  spec: ConvertedSpec,
   folder: string,
 ): { traces: number; violations: ReportedViolation[]; uncovered: readonly ViolationValue[] } {
   const at = (path: string) => relative(spec.root, path);

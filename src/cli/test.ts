@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { CheckedSpec } from "../check/spec.ts";
+import type { ConvertedSpec } from "../check/spec.ts";
 import { InternalError } from "../data/internalError.ts";
 import type { TraceLine } from "../data/trace.generated.ts";
 import { toJsonl } from "../data/trace.ts";
@@ -91,7 +91,7 @@ function placeOfReported(spec: Spec, named: Named<LoadedScenario>, v: ViolationV
  * violation is reported once per kind, definition, data and location, in the order of the scenarios.
  */
 export function testSpec(
-  spec: CheckedSpec,
+  spec: ConvertedSpec,
   options: { readonly update: boolean; readonly scenarios: readonly Named<LoadedScenario>[] },
 ): TestResult {
   const { scenarios } = options;

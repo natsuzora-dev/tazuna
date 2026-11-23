@@ -22,9 +22,13 @@ import * as sources from "./restricted/sources.ts";
 import { type TypeCheck, typeCheck } from "./typeCheck.ts";
 
 declare const checked: unique symbol;
+declare const convertedMark: unique symbol;
 
-/** A spec in which checkSpec found no violation. Only checkSpec makes one. */
+/** A spec in which checkSpec found no violation. Only checkSpec makes one. Its spec functions may be unconverted. */
 export type CheckedSpec = Spec & { readonly [checked]: true };
+
+/** A checked spec whose functions are converted to IR, which the engine needs to run the spec. */
+export type ConvertedSpec = CheckedSpec & { readonly [convertedMark]: true };
 
 /** Why checkSpec returned no checked spec. All but `typeErrors` and `violations` are usage errors. */
 export type SpecFailure =
@@ -35,7 +39,9 @@ export type SpecFailure =
   | { readonly kind: "typeErrors"; readonly output: string }
   | { readonly kind: "violations"; readonly files: number; readonly violations: readonly ReportedViolation[] };
 
-export type SpecCheck = SpecFailure | { readonly kind: "checked"; readonly spec: CheckedSpec };
+export type SpecCheck<S extends CheckedSpec = CheckedSpec> =
+  | SpecFailure
+  | { readonly kind: "checked"; readonly spec: S };
 
 const syntaxChecks: readonly { readonly check: (spec: LoadedSpec) => readonly Found<NonCanonical | Restricted>[] }[] = [
   answers,
@@ -138,14 +144,11 @@ function converted(spec: Spec, converter: Converter | undefined): Spec | Found<R
   }
 }
 
-/**
- * checkSpec after `typeChecked`, the type check of `root`. `converter` reads the spec functions; a caller that checks
- * many specs passes one, since each converter starts tsgo. With "unconverted", the spec functions stay unchecked.
- */
-export async function checkSpecWith(
+/** checkSpecWith, or with "unconverted" checkSpec, whose spec functions stay unchecked. */
+async function checkWith(
   root: string,
   typeChecked: TypeCheck,
-  converter?: Converter | "unconverted",
+  converter: Converter | undefined | "unconverted",
 ): Promise<SpecCheck> {
   if (typeChecked.kind !== "passed") return typeChecked;
   let loaded: Loaded;
@@ -175,8 +178,18 @@ export async function checkSpecWith(
 /**
  * Type-checks the spec in the folder `root` with tsc on the nearest tsconfig.json at or above it, loads it, and checks
  * it. A Malformed violation leaves the structure unchecked: Illegal, and the NonCanonical checks that read it. The spec
- * functions stay unchecked: `drive` runs them as JS, and a test runner that transforms the spec files, as vitest
- * does, hides their source positions from the converter.
+ * functions stay unconverted: a test runner that transforms the spec files, as vitest does, hides their source positions
+ * from the converter.
  */
 export const checkSpec = (root: string): Promise<SpecCheck> =>
-  checkSpecWith(root, typeCheck(root, process.cwd()), "unconverted");
+  checkWith(root, typeCheck(root, process.cwd()), "unconverted");
+
+/**
+ * Checks the spec in the folder `root` after `typeChecked`, its type check, and converts its spec functions to IR.
+ * `converter` reads the spec functions; a caller that checks many specs passes one, since each converter starts tsgo.
+ */
+export const checkSpecWith = (
+  root: string,
+  typeChecked: TypeCheck,
+  converter?: Converter,
+): Promise<SpecCheck<ConvertedSpec>> => checkWith(root, typeChecked, converter) as Promise<SpecCheck<ConvertedSpec>>;
