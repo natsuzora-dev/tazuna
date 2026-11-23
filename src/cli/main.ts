@@ -8,7 +8,7 @@ import type { ReportedViolation, ViolationValue } from "../data/violation.ts";
 import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
 import { verifyTraces } from "../verify/index.ts";
-import { explain } from "./explain.ts";
+import { type Explanation, explain } from "./explain.ts";
 import { type GenerateLine, generateSpec } from "./generate.ts";
 import { type ProveLine, proveSpec } from "./prove.ts";
 import { testSpec } from "./test.ts";
@@ -21,6 +21,8 @@ interface Io {
   readonly error: (line: string) => void;
   /** The built viewer folder; defaults to viewerFolder. */
   readonly viewer?: string;
+  /** The explain.json file that explain reads; defaults to explanationsPath. */
+  readonly explanations?: string;
   readonly typeCheck?: (specRoot: string, cwd: string) => TypeCheck;
   /** The converter of spec functions to share across commands; without one, each command runs its own. */
   readonly converter?: Converter;
@@ -40,7 +42,7 @@ type Invocation =
   | { readonly command: "prove"; readonly root: string }
   | { readonly command: "generate"; readonly root: string; readonly out: string; readonly depth: number | undefined }
   | { readonly command: "view"; readonly root: string; readonly port: number; readonly viewer: string }
-  | { readonly command: "explain"; readonly markdown: string };
+  | { readonly command: "explain"; readonly explanation: Explanation };
 
 type Name = Invocation["command"];
 
@@ -200,11 +202,11 @@ const commands = {
     spec: false,
     positionals: ["kind"],
     description:
-      "Print in markdown what the violation kind <kind>, such as Fault.failedEnsures, means, who reports it, and the side at fault, and, when tazuna's tests have one, an example: the top-level statement of a spec that holds the reported line, with that line marked, and the violation line that tazuna reports on it.",
+      "Write as one JSON line what the violation kind <kind>, such as Fault.failedEnsures, means, its group and what the group means, who reports it, the side at fault, whether it halts the run when its group's kinds can, and, when tazuna's fixtures have one, an example: the top-level statement of a spec that holds the reported line, with that line's number, and the violation that tazuna reports on it.",
     options: {},
-    parse: ({ positionals: [kind = ""] }) => {
-      const explained = explain(kind);
-      return "misuse" in explained ? explained : { command: "explain", markdown: explained.markdown };
+    parse: ({ positionals: [kind = ""] }, io) => {
+      const explained = explain(kind, io.explanations);
+      return "misuse" in explained ? explained : { command: "explain", explanation: explained.explanation };
     },
   }),
 } satisfies { readonly [N in Name]: AnyCommand };
@@ -387,7 +389,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
   if ("misuse" in invocation)
     return misused(invocation.help === true ? `${invocation.misuse}. Run tazuna --help for usage` : invocation.misuse);
   if (invocation.command === "explain") {
-    io.log(invocation.markdown);
+    io.log(JSON.stringify(invocation.explanation));
     return 0;
   }
   const { root } = invocation;

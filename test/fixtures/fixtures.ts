@@ -1,6 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { after } from "node:test";
+import { explanations } from "../../scripts/explain.ts";
 import { type CheckedSpec, checkSpecWith, failureText } from "../../src/check/spec.ts";
 import type { TypeCheck } from "../../src/check/typeCheck.ts";
 import { main } from "../../src/cli/main.ts";
@@ -127,4 +128,20 @@ export async function run(
     ...(existsSync(join(root, "tsconfig.json")) ? {} : { typeCheck: () => typeChecked, converter: converter() }),
   });
   return { lines, code };
+}
+
+let explainFile: string | undefined;
+
+/**
+ * An explain.json built from the fixtures, which this process deletes on exit: a hook of node:test would run after the
+ * test that first asks for it.
+ */
+export function builtExplanations(): string {
+  if (explainFile !== undefined) return explainFile;
+  mkdirSync(join(fixturesRoot, "../.fixtures"), { recursive: true });
+  const dir = mkdtempSync(join(fixturesRoot, "../.fixtures", "explain-"));
+  process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
+  explainFile = join(dir, "explain.json");
+  writeFileSync(explainFile, JSON.stringify(explanations()));
+  return explainFile;
 }

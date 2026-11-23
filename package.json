@@ -58,7 +58,6 @@
     "lean:write": "cd lean && export PATH=\"$HOME/.elan/bin:$PATH\" && lake build && lake exe tazuna-generate --write ..",
     "lint": "biome check . && depcruise src -T err-long && knip --no-progress",
     "lint:write": "biome check --write .",
-    "explain:write": "node scripts/explain.ts --write",
     "prepack": "node scripts/explain.ts && rm -rf dist && tsc -p tsconfig.build.json && vite build viewer",
     "samples:check": "npm run check --workspace todo",
     "test": "node --test --test-randomize 'test/*.test.ts' 'test/fixtures/*.test.ts'",

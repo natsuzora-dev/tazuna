@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { parseSync } from "oxc-parser";
 import { type Example, type Excerpt, type Explanations, explanationsPath } from "../src/cli/explain.ts";
 import { groupNames, isUserKind, type Kind, kindsOf, parseKind, type UserKind } from "../src/data/kinds.ts";
+import type { Json } from "../src/data/values.ts";
 import type { Group } from "../src/data/violation.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -46,8 +47,8 @@ const groupDoc = (group: Group) => {
   return /^.*?\.(?=\s|$)/.exec(docText(body))?.[0] ?? "";
 };
 
-/** The example of each kind: the folder under test named after the kind, which reports only that kind. */
-export function exampleFolders(dir = join(root, "test")): readonly (readonly [Kind, string])[] {
+/** The example of each kind: the fixture named after the kind, which reports only that kind. */
+export function exampleFolders(dir = join(root, "test/fixtures")): readonly (readonly [Kind, string])[] {
   return readdirSync(dir, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .flatMap((e) => {
@@ -93,10 +94,10 @@ function excerptOf(dir: string, { file, line }: Reported["location"]): Excerpt |
 function exampleOf(dir: string): Example {
   const [line = "{}"] = readFileSync(join(dir, expected), "utf8").split("\n");
   const excerpt = excerptOf(dir, (JSON.parse(line) as Reported).location);
-  return { ...(excerpt === undefined ? {} : { excerpt }), violation: line };
+  return { ...(excerpt === undefined ? {} : { excerpt }), violation: JSON.parse(line) as Json };
 }
 
-/** The data of explain.json, from the doc comments in src/data and the examples under test. */
+/** The data of explain.json, from the doc comments in src/data and the fixtures. */
 export function explanations(): Explanations {
   const examples = new Map(exampleFolders());
   const explanation = (kind: UserKind, group: Group) => {
@@ -114,11 +115,4 @@ export function explanations(): Explanations {
   };
 }
 
-if (import.meta.main) {
-  const built = `${JSON.stringify(explanations(), null, 2)}\n`;
-  if (process.argv.includes("--write")) writeFileSync(explanationsPath, built);
-  else if (!existsSync(explanationsPath) || readFileSync(explanationsPath, "utf8") !== built) {
-    console.error("explain.json differs from what scripts/explain.ts builds. Run npm run explain:write.");
-    process.exit(1);
-  }
-}
+if (import.meta.main) writeFileSync(explanationsPath, `${JSON.stringify(explanations(), null, 2)}\n`);

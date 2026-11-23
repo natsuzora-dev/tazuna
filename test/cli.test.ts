@@ -5,9 +5,10 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
+import type { Explanation } from "../src/cli/explain.ts";
 import { main } from "../src/cli/main.ts";
 import { traceLine } from "../src/data/trace.generated.ts";
-import { typeChecked } from "./fixtures/fixtures.ts";
+import { builtExplanations, typeChecked } from "./fixtures/fixtures.ts";
 
 const root = join(import.meta.dirname, "..");
 
@@ -25,6 +26,7 @@ async function run(...args: string[]): Promise<{ code: number; out: string[]; er
     log: (line) => out.push(line),
     error: (line) => err.push(line),
     viewer,
+    explanations: builtExplanations(),
     typeCheck: () => typeChecked,
   });
   return { code, out, err };
@@ -247,25 +249,26 @@ test("test writes an error and exits with 2 when --only names no scenario of the
   }
 });
 
-test("explain writes the markdown of a violation kind: its meaning, its group, who reports it, the side at fault, whether it halts the run, and an example", async () => {
+test("explain writes one JSON line of a violation kind: its meaning, its group, who reports it, the side at fault, whether it halts the run, and an example", async () => {
   const { code, out, err } = await run("explain", "Fault.failedEnsures");
   assert.equal(code, 0);
   assert.deepEqual(err, []);
-  const markdown = out.join("\n");
+  assert.equal(out.length, 1);
+  const explained = JSON.parse(out[0] ?? "") as Explanation;
   assert.match(
-    markdown,
-    /^# Fault\.failedEnsures\n\nThe answer of the command or query, or the output of the screen, fails its ensures `condition`\./,
+    explained.meaning,
+    /^The answer of the command or query, or the output of the screen, fails its ensures `condition`\./,
   );
-  assert.match(
-    markdown,
-    /\n- Reported by: `test`, `verify`, `prove`\n- Side at fault: The spec\.\n- Halts the run: no\n/,
+  assert.deepEqual(
+    [explained.group, explained.reportedBy, explained.fixedIn, explained.halts],
+    ["Fault", ["test", "verify", "prove"], "The spec.", false],
   );
   const halting = await run("explain", "Fault.exception");
-  assert.match(halting.out.join("\n"), /\n- Halts the run: yes\n/);
-  assert.match(
-    markdown,
-    /\n## Example\n\n`[^`]+\.ts`, lines? \d+[^\n]*:\n\n```ts\n[\s\S]*\nThe violation:\n\n```json\n\{"kind":"Fault\.failedEnsures"/,
-  );
+  assert.equal((JSON.parse(halting.out[0] ?? "") as Explanation).halts, true);
+  const { example } = explained;
+  assert.ok(example?.excerpt !== undefined);
+  assert.ok(example.excerpt.file.endsWith(".ts") && example.excerpt.from <= example.excerpt.line);
+  assert.equal((example.violation as { readonly kind: string }).kind, "Fault.failedEnsures");
 });
 
 test("explain writes an error and exits with 2 for a name that is no violation kind", async () => {

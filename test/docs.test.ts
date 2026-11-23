@@ -8,7 +8,7 @@ import { main } from "../src/cli/main.ts";
 import { groups as groupInfos } from "../src/data/groups.ts";
 import { groupNames, isUserKind, parseKind } from "../src/data/kinds.ts";
 import { leanRoot } from "./examples.ts";
-import { typeChecked } from "./fixtures/fixtures.ts";
+import { builtExplanations, typeChecked } from "./fixtures/fixtures.ts";
 import { guarantees as tagged } from "./guarantees.generated.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -386,7 +386,7 @@ test("The README tutorial's broken scenario gives the violation line and summary
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
-  const explained = explain(violation.kind);
-  assert.ok("markdown" in explained && explained.markdown.includes("\n- Side at fault: The scenario"));
+  const explained = explain(violation.kind, builtExplanations());
+  assert.ok("explanation" in explained && explained.explanation.fixedIn.startsWith("The scenario"));
   assert.match(readme, /says what the violation means and that the scenario is the side at fault/);
 });
