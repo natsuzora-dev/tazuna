@@ -130,14 +130,14 @@ In this section, we prove the sample's invariants, remove one, and read the coun
    ```
 
    Each line names a property, such as the invariant `createdBeforeNow` of `Task`, and its verdict.
-   The last line says that every property is proved.
+   The invariants and ensures of `todo` are proved.
 
 2. Open `spec/todo/data.ts`, delete the line of the invariant `createdBeforeNow`, and prove the spec again.
    The invariant `completedAfterCreated` now has a counterexample: a task whose `createdAt` is after the current time, which `completeTask` completes before its creation.
 
 3. No run of `todo` reaches that state, because `todo` creates each task at the current time.
    `prove` checks each command from any records where the invariants hold, so it needs that fact as an invariant.
-   Put the line back, and prove the spec again to see that every property is proved.
+   Put the line back, and prove the spec again to see that `completedAfterCreated` is proved.
 
 ## Lay out a project
 

@@ -103,8 +103,9 @@ tazuna guarantees nothing about inputs that no trace contains.
   For an invariant of records, `prove` shows that it holds of the initial records at any time, and after each command, with any input and caller at any time no earlier than the records' time, from any records within the bounds where every invariant holds and every record fits its schema.
   From the same records, it shows that each `ensures` holds and that no command leaves a ref that names a missing record.
   A chart's invariant holds when the chart starts and after each microstep, for any event, answer, or deadline in any configuration.
+  For a pair of steps, deadlines, or arrivals, both [orders](#orders-that-prove-compares) end the same from any records and machine states within the bounds.
 - `counterexample` means that the semantics reports the violations that the line lists when it runs the command, query, or transition of the line from the line's state.
-  `prove` replays every counterexample in the semantics before it reports it, and a replay that disagrees with the solver is an internal error.
+  `prove` replays every counterexample in the semantics before it reports it, and a replay that disagrees with the solver is an internal error, or undecided for a pair of deadlines or arrivals, whose chains leave out faults.
   The state may be one that no run reaches, as [A counterexample is a decision about the spec](concepts.md#a-counterexample-is-a-decision-about-the-spec) explains.
 - `undecided` means that `prove` gives no verdict, for the reason that the line states, such as a construct that it does not encode or the solver's resource limit.
 

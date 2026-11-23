@@ -34,15 +34,15 @@ Records have no order, because a database returns rows in an order that the spec
 Spec functions receive the records of an entity as a `Bag`, and a spec that needs an order sorts by a key with `sortedBy`.
 `minBy` and `maxBy` pick one record by a key, and a tie is `Fault.notOnly`, as `only` reports a bag with more than one value.
 
-Some steps have no cause that orders them: deadlines of one service due at the same time, the steps of one message that read and write the same data, and the events of one event group that `decide` returns.
-`test` runs the orders of such steps that conflict, and reports `ChoiceDependent.stepOrder` for the first order that gives a different outcome, as Concuerror and loom stop at the first failing schedule.
-`prove` checks the same for two automations that react to one event, from any state within the bounds.
+Some steps have no cause that orders them: two automations that react to one event, deadlines of one service due at the same time, and events from other services that arrive at once.
+Whether their order changes the outcome is a property of the whole spec, so `prove` checks it, not `test`: from any state within the bounds, it runs both orders to the end of each message and reports `ChoiceDependent.stepOrder` in a counterexample when the records, the lines written out, or whether the service halts differ.
+`test` runs each scenario in one fixed order.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
 
 Whether two orders give the same outcome depends on what each step changes:
 
 - Two deadlines that each send one request give the same outcome, because the requests keep no order between them.
-- Two deadlines that each add a task that a subscription returns do not, because the answer after the first deadline shows which one fired first.
+- Two deadlines that each write the same field with a different value do not, because the one that fires last decides the record.
 - Two events that move one machine to different states do not, because the next event finds the machine in a different state.
 
 ## A scenario states the whole world
