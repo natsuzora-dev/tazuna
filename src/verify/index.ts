@@ -11,7 +11,13 @@ import { type ReportedViolation, toReported, type ViolationValue, zodError } fro
 import { placeOf } from "../load/found.ts";
 import { type Found, violationsAt } from "./lines.ts";
 
-export { type CheckedSpec, type ConvertedSpec, checkSpec, failureText, type SpecCheck } from "../check/spec.ts";
+export {
+  type CheckedSpec,
+  type ConvertedSpec,
+  checkSpecUnconverted,
+  failureText,
+  type SpecCheck,
+} from "../check/spec.ts";
 export type { Caller, GivenRecord } from "../data/scenario.generated.ts";
 export { type InputRun, type Run, runFile } from "../data/traceFile.ts";
 export {

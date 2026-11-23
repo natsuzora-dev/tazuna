@@ -1,5 +1,5 @@
 import { fork } from "node:child_process";
-import { checkSpecWith, failureText } from "../check/spec.ts";
+import { checkSpec, failureText } from "../check/spec.ts";
 import { typeCheck } from "../check/typeCheck.ts";
 import { viewModel } from "./model.ts";
 import type { ViewModel } from "./types.ts";
@@ -8,7 +8,7 @@ export type Loaded = { readonly model: ViewModel } | { readonly error: string };
 
 if (import.meta.main && process.send !== undefined) {
   const [root = "", path = "", cwd = ""] = process.argv.slice(2);
-  const result = await checkSpecWith(root, typeCheck(root, cwd));
+  const result = await checkSpec(root, typeCheck(root, cwd));
   const loaded: Loaded =
     result.kind === "checked" ? { model: viewModel(result.spec, path) } : { error: failureText(result, path) };
   process.send?.(loaded, () => process.disconnect?.());

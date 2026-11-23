@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { checkSpecWith, failureText } from "../check/spec.ts";
+import { checkSpec, failureText } from "../check/spec.ts";
 import { type TypeCheck, typeCheck } from "../check/typeCheck.ts";
 import type { Converter } from "../convert/program.ts";
 import type { ReportedViolation, ViolationValue } from "../data/violation.ts";
@@ -389,7 +389,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
   }
   const { root } = invocation;
   const specRoot = resolve(io.cwd, root);
-  const result = await checkSpecWith(specRoot, (io.typeCheck ?? typeCheck)(specRoot, io.cwd), io.converter);
+  const result = await checkSpec(specRoot, (io.typeCheck ?? typeCheck)(specRoot, io.cwd), io.converter);
   if (result.kind === "typeErrors") {
     io.error(failureText(result, root));
     return 1;

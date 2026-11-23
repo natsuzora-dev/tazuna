@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { join, relative } from "node:path";
 import { after } from "node:test";
 import { explanations, violationOfLine } from "../../scripts/explain.ts";
-import { type ConvertedSpec, checkSpecWith, failureText } from "../../src/check/spec.ts";
+import { type ConvertedSpec, checkSpec, failureText } from "../../src/check/spec.ts";
 import type { TypeCheck } from "../../src/check/typeCheck.ts";
 import { main } from "../../src/cli/main.ts";
 import type { Outcome, Verdict } from "../../src/cli/protocol.generated.ts";
@@ -65,7 +65,7 @@ export const typeChecked: TypeCheck = { kind: "passed", tsconfig: "", includes: 
 
 /** Checks the spec of the fixture `root` with typeChecked, and throws unless it is checked. */
 export async function checkedRoot(root: string): Promise<ConvertedSpec> {
-  const result = await checkSpecWith(root, typeChecked);
+  const result = await checkSpec(root, typeChecked);
   if (result.kind === "checked") return result.spec;
   const name = relative(join(import.meta.dirname, "../.."), root);
   throw new Error(`${name} is not checked:\n${failureText(result, name)}`);

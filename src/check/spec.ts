@@ -24,13 +24,13 @@ import { type TypeCheck, typeCheck } from "./typeCheck.ts";
 declare const checked: unique symbol;
 declare const convertedMark: unique symbol;
 
-/** A spec in which checkSpec found no violation. Only checkSpec makes one. Its spec functions may be unconverted. */
+/** A spec in which checkSpecUnconverted or checkSpec found no violation. Its spec functions may be unconverted. */
 export type CheckedSpec = Spec & { readonly [checked]: true };
 
 /** A checked spec whose functions are converted to IR, which the engine needs to run the spec. */
 export type ConvertedSpec = CheckedSpec & { readonly [convertedMark]: true };
 
-/** Why checkSpec returned no checked spec. All but `typeErrors` and `violations` are usage errors. */
+/** Why a check returned no checked spec. All but `typeErrors` and `violations` are usage errors. */
 export type SpecFailure =
   | { readonly kind: "noTsconfig" }
   | { readonly kind: "noTypescript" }
@@ -144,12 +144,8 @@ function converted(spec: Spec, converter: Converter | undefined): Spec | Found<R
   }
 }
 
-/** checkSpecWith, or with "unconverted" checkSpec, whose spec functions stay unchecked. */
-async function checkWith(
-  root: string,
-  typeChecked: TypeCheck,
-  converter: Converter | undefined | "unconverted",
-): Promise<SpecCheck> {
+/** The spec in the folder `root` after `typeChecked`, loaded and checked in all but its spec functions. */
+async function checkUnconverted(root: string, typeChecked: TypeCheck): Promise<SpecCheck> {
   if (typeChecked.kind !== "passed") return typeChecked;
   let loaded: Loaded;
   try {
@@ -165,31 +161,38 @@ async function checkWith(
     loaded.kind === "structured" && unlisted.length === 0
       ? [...syntax, ...structureViolations(loaded.spec)]
       : [...unlisted, ...(loaded.kind === "malformed" ? loaded.malformed : []), ...syntax];
-  if (found.length === 0 && loaded.kind === "structured" && converter !== "unconverted") {
-    const done = converted(loaded.spec, converter);
-    if (!Array.isArray(done)) return { kind: "checked", spec: done as CheckedSpec };
-    found.push(...done);
-  }
-  if (found.length === 0) return { kind: "checked", spec: loaded.spec as CheckedSpec };
+  if (found.length === 0 && loaded.kind === "structured") return { kind: "checked", spec: loaded.spec as CheckedSpec };
+  return violationsOf(spec.sources.length, found);
+}
+
+function violationsOf(files: number, found: Found<Malformed | NonCanonical | Restricted | Illegal>[]): SpecFailure {
   const violations = found.sort(({ place: x }, { place: y }) => comparePlaces(x, y)).map(reportedOfFound);
-  return { kind: "violations", files: spec.sources.length, violations };
+  return { kind: "violations", files, violations };
 }
 
 /**
  * Type-checks the spec in the folder `root` with tsc on the nearest tsconfig.json at or above it, loads it, and checks
- * it. A Malformed violation leaves the structure unchecked: Illegal, and the NonCanonical checks that read it. The spec
- * functions stay unconverted: a test runner that transforms the spec files, as vitest does, hides their source positions
- * from the converter.
+ * it in all but its spec functions, which stay unconverted, so `tazuna check` may still report a `Restricted.function`
+ * in a spec that this passes. A Malformed violation leaves the structure unchecked: Illegal, and the NonCanonical checks
+ * that read it. The spec functions are not converted because a test runner that transforms the spec files, as vitest
+ * does, hides their source positions from the converter.
  */
-export const checkSpec = (root: string): Promise<SpecCheck> =>
-  checkWith(root, typeCheck(root, process.cwd()), "unconverted");
+export const checkSpecUnconverted = (root: string): Promise<SpecCheck> =>
+  checkUnconverted(root, typeCheck(root, process.cwd()));
 
 /**
  * Checks the spec in the folder `root` after `typeChecked`, its type check, and converts its spec functions to IR.
  * `converter` reads the spec functions; a caller that checks many specs passes one, since each converter starts tsgo.
  */
-export const checkSpecWith = (
+export async function checkSpec(
   root: string,
   typeChecked: TypeCheck,
   converter?: Converter,
-): Promise<SpecCheck<ConvertedSpec>> => checkWith(root, typeChecked, converter) as Promise<SpecCheck<ConvertedSpec>>;
+): Promise<SpecCheck<ConvertedSpec>> {
+  const checked = await checkUnconverted(root, typeChecked);
+  if (checked.kind !== "checked") return checked;
+  const done = converted(checked.spec, converter);
+  return Array.isArray(done)
+    ? violationsOf(checked.spec.sources.length, done)
+    : { kind: "checked", spec: done as ConvertedSpec };
+}
