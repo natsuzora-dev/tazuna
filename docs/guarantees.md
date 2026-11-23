@@ -219,6 +219,7 @@ Each row below names one thing that a detection leaves out.
 | `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that module code reaches by another name, or through a package that the spec imports. |
 | `ChoiceDependent` | `prove` compares [both orders](#orders-that-prove-compares) of each pair from any state. | The pairs that [`prove` leaves undecided](#what-a-prove-verdict-means). |
 | `ChoiceDependent` | | Faults inside a message, such as a failing invariant after a command, which other properties report. |
+| `RegionOrderDependent` | It compares what the transitions of parallel regions on one event read and assign in the steps that a run takes. | The transitions that no scenario's run or trace's replay takes together. |
 | `InvalidInput` | It checks an external peer's lines against the peer's contract. | A `requires` that reads more than the input, and an `ensures` that reads records. |
 
 ## Assumptions

@@ -42,6 +42,7 @@ For each counterexample, decide which case it is:
 
 - If a run can reach the counterexample's state, the behavior is wrong. Fix the spec, and add a scenario that reaches the state.
 - If no run can reach it, state the fact that rules it out as an invariant, and say in your reply why every run keeps that fact.
+- If it is `ChoiceDependent`, two steps with no order between them end differently. Make the definitions order them, or make both orders end alike, as the sample's notifier decides by the time a task opened, not by whether the task arrived before an answer. A scenario cannot show it, since `test` runs one order.
 
 An undecided property is no failure. Report its reason, and do not rewrite the spec only to make it decided.
 

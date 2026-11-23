@@ -10,7 +10,7 @@ The Lean engine runs it for `test`, `verify`, and `generate`, encodes it as SMT 
 A Lean theorem proves that the encoding of each expression agrees with its evaluation, as Cedar proves its encoding against its evaluator.
 
 With one meaning, no second interpreter can disagree with the definitions that the theorems are about.
-TypeScript only types and translates the spec, and every answer of a command comes from Lean.
+Lean decides what a spec means. TypeScript types and translates the spec, and reports only the rules about source text, files, and loading.
 
 ## tazuna owns only what it can run, encode, and prove
 
@@ -36,6 +36,7 @@ Spec functions receive the records of an entity as a `Bag`, and a spec that need
 
 Some steps have no cause that orders them: two own commands that wait in one round, such as those of two automations that react to one message, deadlines of one service due at the same time, and events or answers from other services that arrive at once.
 Whether their order changes the outcome is a property of the whole spec, so `prove` checks it, not `test`.
+Parallel regions of one chart are the exception: their transitions on one event run in one step, and `test` and `verify` report `RegionOrderDependent` when two of them in a run that they execute both assign a context field, or one assigns a field that the other reads.
 `prove` runs both orders from any state within the bounds and reports `ChoiceDependent.stepOrder` when they end differently.
 A pair that `prove` does not compare yet is an undecided property, as [Orders that `prove` compares](guarantees.md#orders-that-prove-compares) lists.
 To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
@@ -160,7 +161,7 @@ Each rule lives in one tool.
 The earlier tools report a mistake closer to the line that causes it, and they need no implementation.
 
 Some violations point at the spec or the scenario even when nothing in them is wrong as written, because the run leaves open a choice that no comparison can settle.
-`ChoiceDependent` and `Uncomparable.ambiguous` are such violations.
+`ChoiceDependent`, `RegionOrderDependent`, and `Uncomparable.ambiguous` are such violations.
 The fix writes the choice into the spec or the scenario, so that the spec and the implementation make it alike.
 
 ## Any log of the implementation can be checked
