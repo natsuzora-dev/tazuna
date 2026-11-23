@@ -56,6 +56,8 @@ def respond : Engine.Request → IO Response
     | some (.error ()) => .parsed true none none true
     | some (.ok (.ok v)) => .parsed true (some v) none false
     | some (.ok (.error issues)) => .parsed true none (some issues) false)
+  | .proveQueries s => do pure (.queried (← proveQueriesOf s))
+  | .prove s answers => do pure (.proved (← proveOf s answers))
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
 

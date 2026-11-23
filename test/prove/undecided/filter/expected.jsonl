@@ -1,0 +1,1 @@
+{"service":"todo","invariant":{"definition":{"service":"todo","name":"todo"},"name":"fewOpen"},"creates":{"Task":3},"verdict":{"kind":"undecided","reason":"the invariant has no encoding: filter (in addTask)"},"location":{"file":"todo/todo.ts","line":10}}

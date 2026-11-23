@@ -50,6 +50,19 @@ export async function recordsOf(example: string, runs: readonly (readonly string
   return logged;
 }
 
+/** The lines that `tazuna prove` writes for `example`, with its summary checked to be the only line on stderr. */
+export async function proveLinesOf(example: string): Promise<readonly string[]> {
+  const logged: string[] = [];
+  await main(["prove", "."], {
+    cwd: example,
+    log: (line) => logged.push(line),
+    error: (line) => assert.match(line, /^\d+ invariants?: \d+ proved, \d+ counterexamples?, \d+ undecided$/),
+    typeCheck: () => typeChecked,
+    converter: converter(),
+  });
+  return logged;
+}
+
 export const expectedOf = (example: string): string[] =>
   readFileSync(join(example, expected), "utf8")
     .split("\n")

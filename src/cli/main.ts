@@ -8,6 +8,7 @@ import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
 import { verifyTraces } from "../verify/index.ts";
 import { explain } from "./explain.ts";
+import { type ProveLine, proveSpec } from "./prove.ts";
 import { testSpec } from "./test.ts";
 import { isViewerBuilt, viewerFolder, viewSpec } from "./view.ts";
 
@@ -34,6 +35,7 @@ type Invocation =
       readonly only: readonly string[];
     }
   | { readonly command: "verify"; readonly root: string; readonly traces: string; readonly coverage: boolean }
+  | { readonly command: "prove"; readonly root: string }
   | { readonly command: "view"; readonly root: string; readonly port: number; readonly viewer: string }
   | { readonly command: "explain"; readonly markdown: string };
 
@@ -142,6 +144,14 @@ const commands = {
       isFolder(resolve(io.cwd, traces))
         ? { command: "verify", root, traces: resolve(io.cwd, traces), coverage: options["--coverage"] }
         : { misuse: `no such folder ${traces}` },
+  }),
+  prove: command({
+    spec: true,
+    positionals: [],
+    description:
+      "Prove each invariant of each spec service by induction within the bounds of its service's bounds(): it holds of the initial records, the single entities' records of their schema defaults, and after each command, with any input at any time, from any records within the bounds of which every invariant holds and every record fits its schema. prove writes one JSON line per invariant, with its verdict: proved; counterexample, with the records, the command, its input and time, and the violations that the spec reports on replaying them; or undecided, with the reason, such as a solver timeout or a construct that prove does not encode. A machine's or screen's invariant is undecided. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant.",
+    options: {},
+    parse: ({ root }) => ({ command: "prove", root }),
   }),
   view: command({
     spec: true,
@@ -259,6 +269,20 @@ function report(io: Io, specRoot: string, violations: readonly ReportedViolation
 
 const isName = (command: string): command is Name => Object.hasOwn(commands, command);
 
+/** Writes prove's lines to stdout and the count of each verdict to stderr; a counterexample exits with 1. */
+function reportProved(io: Io, specRoot: string, lines: readonly ProveLine[]): number {
+  for (const l of lines)
+    io.log(
+      JSON.stringify({ ...l, location: { ...l.location, file: relative(io.cwd, join(specRoot, l.location.file)) } }),
+    );
+  const counted = (kind: ProveLine["verdict"]["kind"]) => lines.filter((l) => l.verdict.kind === kind).length;
+  const counterexamples = counted("counterexample");
+  io.error(
+    `${count(lines.length, "invariant")}: ${counted("proved")} proved, ${count(counterexamples, "counterexample")}, ${counted("undecided")} undecided`,
+  );
+  return counterexamples === 0 ? 0 : 1;
+}
+
 /** Parses `args` by the command table, before anything reads the spec. */
 function parse(args: readonly string[], io: Io): Invocation | Misuse {
   const [name = "", ...rest] = args;
@@ -346,6 +370,8 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
       const ran = `${scenarios.length}/${spec.scenarios.length} scenarios${only.length === 0 ? "" : " (--only)"}`;
       return report(io, spec.root, tested.violations, ran);
     }
+    case "prove":
+      return reportProved(io, spec.root, await proveSpec(spec));
     case "verify": {
       const verified = verifyTraces(spec, invocation.traces);
       const violations = [

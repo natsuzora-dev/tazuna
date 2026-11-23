@@ -1,0 +1,177 @@
+import Tazuna.Smt.Term
+
+/-!
+The SMT-LIB script of a query, which TS hands to Z3 as text, and the reading of Z3's answer: `sat` with the values of
+the declared variables, `unsat`, or `unknown`. Each term prints as the SMT-LIB operation that `Term.denote` gives it.
+-/
+
+namespace Tazuna.Smt
+
+def Ty.smt : Ty → String
+  | .bool => "Bool"
+  | .int => "Int"
+  | .str => "String"
+  | .val => "V"
+
+/-- A symbol as SMT-LIB quotes it; names never hold `|` or a backslash. -/
+def symbol (name : String) : String := "|" ++ name ++ "|"
+
+def hexDigits (n : Nat) : String := String.ofList (Nat.toDigits 16 n)
+
+/-- An SMT-LIB string literal: printable ASCII as is, `"` doubled, every other character as `\u{…}`. -/
+def strLiteral (s : String) : String :=
+  let esc (c : Char) : String :=
+    if c == '"' then "\"\""
+    else if c.toNat ≥ 0x20 && c.toNat ≤ 0x7E && c != '\\' then c.toString
+    else "\\u{" ++ hexDigits c.toNat ++ "}"
+  "\"" ++ String.join (s.toList.map esc) ++ "\""
+
+def intLiteral (n : Int) : String := if n < 0 then s!"(- {n.natAbs})" else toString n
+
+def Scalar.smt : Scalar → String
+  | .undef => "vundef"
+  | .null => "vnull"
+  | .bool b => s!"(vbool {b})"
+  | .int n => s!"(vint {intLiteral n})"
+  | .str s => s!"(vstr {strLiteral s})"
+
+def Lit.smt : Lit → String
+  | .bool b => toString b
+  | .int n => intLiteral n
+  | .str s => strLiteral s
+  | .val v => v.smt
+
+def Term.smt : Term → String
+  | .var x _ => symbol x
+  | .lit v => v.smt
+  | .not a => s!"(not {a.smt})"
+  | .and a b => s!"(and {a.smt} {b.smt})"
+  | .or a b => s!"(or {a.smt} {b.smt})"
+  | .ite c a b => s!"(ite {c.smt} {a.smt} {b.smt})"
+  | .eq a b => s!"(= {a.smt} {b.smt})"
+  | .lt a b => s!"(< {a.smt} {b.smt})"
+  | .le a b => s!"(<= {a.smt} {b.smt})"
+  | .add a b => s!"(+ {a.smt} {b.smt})"
+  | .sub a b => s!"(- {a.smt} {b.smt})"
+  | .mul a b => s!"(* {a.smt} {b.smt})"
+  | .len a => s!"(str.len {a.smt})"
+  | .prefixOf a b => s!"(str.prefixof {a.smt} {b.smt})"
+  | .suffixOf a b => s!"(str.suffixof {a.smt} {b.smt})"
+  | .contains a b => s!"(str.contains {a.smt} {b.smt})"
+  | .mkBool a => s!"(vbool {a.smt})"
+  | .mkInt a => s!"(vint {a.smt})"
+  | .mkStr a => s!"(vstr {a.smt})"
+  | .isUndef a => s!"((_ is vundef) {a.smt})"
+  | .isNull a => s!"((_ is vnull) {a.smt})"
+  | .isBool a => s!"((_ is vbool) {a.smt})"
+  | .isInt a => s!"((_ is vint) {a.smt})"
+  | .isStr a => s!"((_ is vstr) {a.smt})"
+  | .boolOf a => s!"(vbool_v {a.smt})"
+  | .intOf a => s!"(vint_v {a.smt})"
+  | .strOf a => s!"(vstr_v {a.smt})"
+
+/-- A satisfiability question: its variables and the terms that must all hold. -/
+structure Query where
+  vars : List (String × Ty)
+  asserts : List Term
+deriving Inhabited
+
+def datatypeV : String :=
+  "(declare-datatypes ((V 0)) (((vundef) (vnull) (vbool (vbool_v Bool)) (vint (vint_v Int)) (vstr (vstr_v String)))))"
+
+/-- The script that asks Z3 whether `q` is satisfiable within `timeout` milliseconds, and for its model. -/
+def Query.script (q : Query) (timeout : Nat) : String :=
+  let lines := [s!"(set-option :timeout {timeout})", "(set-logic ALL)", datatypeV] ++
+    q.vars.map (fun (x, t) => s!"(declare-const {symbol x} {t.smt})") ++
+    q.asserts.map (fun a => s!"(assert {a.smt})") ++ ["(check-sat)"] ++
+    (if q.vars.isEmpty then [] else [s!"(get-value ({" ".intercalate (q.vars.map (symbol ·.1))}))"])
+  "\n".intercalate lines ++ "\n"
+
+/-- An s-expression of Z3's output. -/
+inductive Sexp where
+  | atom (text : String)
+  | str (value : String)
+  | list (items : List Sexp)
+deriving Inhabited
+
+/-- The characters of a string literal up to its closing quote, unescaped, and the rest. -/
+partial def readString (acc : List Char) : List Char → Option (String × List Char)
+  | '"' :: '"' :: rest => readString ('"' :: acc) rest
+  | '"' :: rest => some (String.ofList acc.reverse, rest)
+  | '\\' :: 'u' :: '{' :: rest =>
+    let digits := rest.takeWhile (· != '}')
+    let n := digits.foldl (fun n c => n * 16 + (if c.isDigit then c.toNat - '0'.toNat else c.toLower.toNat - 'a'.toNat + 10)) 0
+    -- A surrogate is a character of SMT strings that no Lean string holds, so the model is no state.
+    if n.isValidChar then readString (Char.ofNat n :: acc) (rest.drop (digits.length + 1)) else none
+  | c :: rest => readString (c :: acc) rest
+  | [] => none
+
+mutual
+
+partial def readSexp : List Char → Option (Sexp × List Char)
+  | c :: rest =>
+    if c.isWhitespace then readSexp rest
+    else if c == '(' then readItems [] rest
+    else if c == '"' then (readString [] rest).map fun (s, r) => (.str s, r)
+    else if c == '|' then
+      let name := rest.takeWhile (· != '|')
+      some (.atom (String.ofList name), rest.drop (name.length + 1))
+    else
+      let text := (c :: rest).takeWhile fun d => !d.isWhitespace && d != '(' && d != ')'
+      some (.atom (String.ofList text), rest.drop (text.length - 1))
+  | [] => none
+
+partial def readItems (acc : List Sexp) : List Char → Option (Sexp × List Char)
+  | c :: rest =>
+    if c.isWhitespace then readItems acc rest
+    else if c == ')' then some (.list acc.reverse, rest)
+    else match readSexp (c :: rest) with
+      | some (s, r) => readItems (s :: acc) r
+      | none => none
+  | [] => none
+
+end
+
+def Sexp.int? : Sexp → Option Int
+  | .atom t => t.toNat?.map Int.ofNat
+  | .list [.atom "-", .atom t] => t.toNat?.map fun n => -Int.ofNat n
+  | _ => none
+
+def Sexp.lit? : Sexp → Option Lit
+  | .atom "true" => some (.bool true)
+  | .atom "false" => some (.bool false)
+  | .atom "vundef" => some (.val .undef)
+  | .atom "vnull" => some (.val .null)
+  | .str s => some (.str s)
+  | .list [.atom "vbool", .atom b] => some (.val (.bool (b == "true")))
+  | .list [.atom "vint", n] => n.int?.map fun n => .val (.int n)
+  | .list [.atom "vstr", .str s] => some (.val (.str s))
+  | s => s.int?.map .int
+
+/-- Z3's answer to a query. -/
+inductive Answer where
+  | sat (values : List (String × Lit))
+  | unsat
+  | unknown (reason : String)
+deriving Inhabited
+
+/-- The answer that Z3's output `text` gives: its first line, and with `sat` the values that get-value printed. -/
+def Answer.read (text : String) : Answer :=
+  let chars := text.toList.dropWhile Char.isWhitespace
+  let first := String.ofList (chars.takeWhile (!·.isWhitespace))
+  match first with
+  | "unsat" => .unsat
+  | "sat" =>
+    match readSexp (chars.drop 3) with
+    | some (.list pairs, _) =>
+      let values := pairs.filterMap fun
+        | .list [.atom name, v] => v.lit?.map (name, ·)
+        | _ => none
+      if values.length == pairs.length then .sat values else .unknown s!"unreadable model: {text}"
+    | _ => .unknown "the solver's model holds a character that no Lean string holds, a surrogate"
+  | "unknown" => .unknown "the solver answered unknown, as at its timeout"
+  | _ => .unknown s!"unreadable answer: {text}"
+
+def Answer.model (values : List (String × Lit)) : Model := fun x => (values.lookup x).getD (.val .undef)
+
+end Tazuna.Smt

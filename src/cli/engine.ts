@@ -25,6 +25,8 @@ const responses = {
   keyOrdered: "keyOrdered",
   evaluate: "evaluated",
   parse: "parsed",
+  proveQueries: "queried",
+  prove: "proved",
 } as const satisfies Record<Request["type"], Response["type"]>;
 
 export type Asked = keyof typeof responses;

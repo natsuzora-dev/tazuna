@@ -1,4 +1,5 @@
 import Engine.Drive
+import Engine.Prove
 import Tazuna.Ir.Expr
 import Tazuna.Explore.Coverage
 import Tazuna.Explore.Instrument
@@ -64,6 +65,10 @@ inductive Request where
       (fields : List (String × List String))
   /-- `value` parsed by the JSON Schema `schema` as Lean's Data.parse does. -/
   | parse (schema : Value) (value : Value)
+  /-- The SMT-LIB scripts of prove's queries, in order (Engine.proveQueriesOf). -/
+  | proveQueries («structure» : Spec.Structure)
+  /-- prove's result of each invariant, from Z3's output on each script of proveQueries, in order (Engine.proveOf). -/
+  | prove («structure» : Spec.Structure) (answers : List String)
 
 derive_wire Request tag "type" skip_serializing_none
 
@@ -121,6 +126,8 @@ inductive Response where
   | read (lines : List (Option ReadLine))
   /-- Whether Lean parses by the schema, and then the value, Zod's issues, or whether a codec threw. -/
   | parsed (supported : Bool) (value : Option Value) (issues : Option (List Value)) (thrown : Bool)
+  | queried (scripts : List String)
+  | proved (results : List ProveResult)
   | error (message : String)
 
 derive_wire Response tag "type" serialize_only
