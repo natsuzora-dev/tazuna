@@ -103,7 +103,7 @@ tazuna guarantees nothing about inputs that no trace contains.
   For a pair of steps, deadlines, or arrivals, both [orders](#orders-that-prove-compares) end the same from any records and machine states within the bounds where every invariant, a machine's too, holds, and no machine is in a state that an always transition without a guard leaves at once.
   A proof that assumes an invariant that `prove` does not prove lists it in `assumes`, and holds only where that invariant does.
 - `counterexample` means that the semantics reports the violations that the line lists when it runs the command, query, or transition of the line from the line's state.
-  `prove` replays every counterexample in the semantics before it reports it, and a replay that disagrees with the solver is an internal error, or undecided for a pair of deadlines or arrivals, whose chains leave out faults.
+  `prove` replays every counterexample in the semantics before it reports it, and a replay that disagrees with the solver is an internal error, or undecided for a pair of own commands, deadlines, or arrivals, whose chains are not shown precise.
   The state may be one that no run reaches, as [A counterexample is a decision about the spec](concepts.md#a-counterexample-is-a-decision-about-the-spec) explains.
 - `undecided` means that `prove` gives no verdict, for the reason that the line states, such as a construct that it does not encode or the solver's resource limit.
 
@@ -113,8 +113,8 @@ Some properties are undecided by design:
 
 - A response is proved only when `when` implies `expect` in the initial records, after each command, and as time passes.
   A response that a deadline or a later step meets in time is undecided, unless the service has no automation and no chart, in which case `prove` reports a counterexample that states its progress assumption in `assumes`.
-- A pair of deadlines or arrivals whose message can take more than 8 steps is undecided.
-- A pair of deadlines or arrivals is undecided when its service has a screen, or a machine with parallel, final, history, or map states or with `held` data, or when its message runs an automation that creates a key, and so is an answer that several states or automations wait for.
+- A pair of own commands, deadlines, or arrivals whose message can take more than 8 steps is undecided.
+- A pair of own commands, deadlines, or arrivals is undecided when its service has a screen, or a machine with parallel, final, history, or map states or with `held` data, or when its message runs an automation that creates a key, and so is an answer that several states or automations wait for.
 - An invariant of a screen, or of a machine with parallel, final, history, or map states or with `held` data, is undecided.
 - Each pair of steps whose order `prove` [does not compare yet](#orders-that-prove-compares) is undecided.
 
@@ -130,18 +130,18 @@ Some properties are undecided by design:
 
 `prove` compares, from any state where the invariants hold, both orders of:
 
-- two automations that react to one event, or to two events that one command emits
+- two own commands that can wait in one round of the internal queue: two automations whose events can occur in one message, an automation and a state's activity, and two states' activities whose states can be active together
 - two deadlines of one service that can be due at the same time
 - two messages from other services that can arrive at once: events that the service receives, and answers to requests that it waits for, each with its requesting state active
 
 Each order runs each message to its end: the deadline's or event's transitions, the always transitions that follow, the own commands, the automations and machines that their events wake, and the activities of the states entered.
 `prove` follows at most 8 steps of each message.
+When a third own command can wait in the same round, the two may run after it, so `prove` takes as an automation's input any that it computes from any records within the bounds, and as an activity's input any that fits its schema.
 Two orders end the same when both halt, or when neither halts and both leave the same records and machine configurations and write the same out lines, in any order.
 When they differ, `prove` reports `ChoiceDependent` in its counterexample.
 `prove` does not compare yet the orders of the following pairs:
 
-- the events of one event group that one machine or automation takes (`groupOrder`)
-- two own commands that states send in one round, and the answers to them (`roundOrder`)
+- the events of one event group that one machine takes (`groupOrder`)
 - a deadline and a message from another service that arrives when it is due (`deadlineArrivalTie`)
 
 ### When a trace matches the spec

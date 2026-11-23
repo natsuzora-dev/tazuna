@@ -241,13 +241,25 @@ export type Replayed = {
   readonly violations: readonly ViolationValue[];
 };
 
+/** The sender of an own command: an automation, or the activity `key` of `state` of the chart `definition`. */
+export type CommandSender =
+  | {
+      readonly kind: "automation";
+      readonly definition: DefinitionRef;
+    }
+  | {
+      readonly kind: "activity";
+      readonly definition: DefinitionRef;
+      readonly state: string;
+      readonly key: string;
+    };
+
 /**
  * What prove checks: an invariant of an entity's records, a machine or screen, or the service (which names itself); an
- * ensures of a command or query; that a ref field of an entity never names a missing record; that the order of two
- * steps that can be pending together, such as two automations that react to one event, changes no outcome; that the
- * order of two deadlines due at one time, or of two messages that arrive at once, changes no outcome; that the order of
- * other steps that no line orders changes no outcome, which prove names but does not compare yet; or that a response of
- * an entity is met in time.
+ * ensures of a command or query; that a ref field of an entity never names a missing record; that the order of two own
+ * commands that can wait in one round changes no outcome; that the order of two deadlines due at one time, or of two
+ * messages that arrive at once, changes no outcome; that the order of other steps that no line orders changes no outcome,
+ * which prove names but does not compare yet; or that a response of an entity is met in time.
  */
 export type Property =
   | {
@@ -272,8 +284,8 @@ export type Property =
     }
   | {
       readonly kind: "stepOrder";
-      readonly definition: DefinitionRef;
-      readonly other: DefinitionRef;
+      readonly first: CommandSender;
+      readonly second: CommandSender;
     }
   /** The deadline `name` of `state` of the chart `definition`, and the deadline `otherName` of `otherState` of `other`. */
   | {
@@ -296,19 +308,6 @@ export type Property =
       readonly kind: "groupOrder";
       readonly definition: DefinitionRef;
       readonly receiver: DefinitionRef;
-    }
-  /**
-   * The own commands that the activity `key` of `state` of the chart `definition` and the activity `otherKey` of
-   * `otherState` of `other` send in one round, and the answers to them.
-   */
-  | {
-      readonly kind: "roundOrder";
-      readonly definition: DefinitionRef;
-      readonly state: string;
-      readonly key: string;
-      readonly other: DefinitionRef;
-      readonly otherState: string;
-      readonly otherKey: string;
     }
   /**
    * The deadline `name` of `state` of the chart `definition`, and the message `other` from another service that

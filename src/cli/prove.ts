@@ -8,7 +8,8 @@ import type { ProveResult } from "./protocol.generated.ts";
 /** A result of prove at the definition that declares its property: an entity, a command or query, a chart, or the service. */
 export type ProveLine = ProveResult & { readonly location: Location };
 
-function locationOf(spec: ConvertedSpec, { property: { definition } }: ProveResult): Location {
+function locationOf(spec: ConvertedSpec, { property }: ProveResult): Location {
+  const { definition } = property.kind === "stepOrder" ? property.first : property;
   const service = definition.name === definition.service ? spec.services.get(definition.service) : undefined;
   const { file, line } = service?.place ?? placeOf(spec, definition);
   return { file, line };

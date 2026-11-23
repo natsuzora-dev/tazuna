@@ -97,7 +97,7 @@ def modules : List (String × List Name) :=
     [``Tazuna.Smt.Fit, ``Tazuna.Semantics.Service.Issue, ``Tazuna.Semantics.Service.NextKeys, ``Tazuna.Semantics.Service.Keys,
      ``Tazuna.Engine.Stored, ``Tazuna.Engine.StartLine, ``Tazuna.Engine.Log, ``Tazuna.Engine.Request, ``Tazuna.Engine.Unpaired,
      ``Tazuna.Engine.ReadPart, ``Tazuna.Engine.Evaluated,
-     ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Replayed, ``Tazuna.Engine.Property,
+     ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Replayed, ``Tazuna.Engine.CommandSender, ``Tazuna.Engine.Property,
      ``Tazuna.Engine.Counterexample, ``Tazuna.Engine.Verdict, ``Tazuna.Engine.Assumed, ``Tazuna.Engine.ProveResult,
      ``Tazuna.Engine.Outcome, ``Tazuna.Engine.TargetOutcome, ``Tazuna.Engine.GeneratedInput, ``Tazuna.Engine.Generation,
      ``Tazuna.Engine.Response])]

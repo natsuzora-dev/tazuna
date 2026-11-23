@@ -34,7 +34,7 @@ Records have no order, because a database returns rows in an order that the spec
 Spec functions receive the records of an entity as a `Bag`, and a spec that needs an order sorts by a key with `sortedBy`.
 `minBy` and `maxBy` pick one record by a key, and a tie is `Fault.notOnly`, as `only` reports a bag with more than one value.
 
-Some steps have no cause that orders them: two automations that react to one message, deadlines of one service due at the same time, and events or answers from other services that arrive at once.
+Some steps have no cause that orders them: two own commands that wait in one round, such as those of two automations that react to one message, deadlines of one service due at the same time, and events or answers from other services that arrive at once.
 Whether their order changes the outcome is a property of the whole spec, so `prove` checks it, not `test`.
 `prove` runs both orders from any state within the bounds and reports `ChoiceDependent.stepOrder` when they end differently.
 A pair that `prove` does not compare yet is an undecided property, as [Orders that `prove` compares](guarantees.md#orders-that-prove-compares) lists.

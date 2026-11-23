@@ -387,6 +387,35 @@ def receive (ce : ChainEnv) (x : Path) (chart : String) (event : Option (Term ×
         (settle ce chart chainLimit)
       pure (dispatched ++ live [x.fork (notT g) "u"])
 
+/--
+The path with the input of the activity `a` of state `n` of `chart`, whose configuration the path fixes, computed as
+Service.request computes it: a throw, or an input that is no object of scalars, leaves what the encoding holds.
+-/
+def activityInput (ce : ChainEnv) (x : Path) (chart n : String) (a : Service.Activity) :
+    Except String (Path × List (String × Term)) := do
+  let some (mach, config) := x.fixed? chart | throw s!"no fixed configuration of {chart}"
+  let some model := ce.models.lookup chart | throw s!"no model of {chart}"
+  let c := model.chart
+  let m : SMachine := { context := mach.context, active := model.configs[config]! }
+  let keyword := match a with
+    | .calls .. => "calls"
+    | _ => "sends"
+  let (input, notScalar) ← match ((siteOf ce.st ce.p c (.input n keyword a.key)).getD []).head? with
+    | some f => do
+      let (v, err) ← seval (m.env c x.records ce.now none) [] f.body
+      let (fields, notScalar) ← scalarFields v
+      pure (fields, .or err notScalar)
+    | none => pure ([], ff)
+  pure ({ x with gap := .or x.gap (.and x.pc notScalar) }, input)
+
+/-- The path with the fit of whether `input` fits the input schema of `a`'s target, and the own command that waits for it. -/
+def ownWaiting (ce : ChainEnv) (x : Path) (order : Nat) (sender : Sender) (a : Service.Activity)
+    (input : List (String × Term)) : Path × Waiting :=
+  let fits := inputFits ce.st a.ref input
+  let (key, x) := x.next
+  ({ x with facts := x.facts ++ [(key, { Facts.none with fit := fits.fit })] },
+   { order, sender, command := a.ref.name, input, valid := fits.term })
+
 /-- The paths after the states that the message entered send their activities (Service.sendEntered), as one step. -/
 def sendEntered (ce : ChainEnv) (x : Path) : Except String Path := do
   let charts := x.entered.map (·.1) |>.eraseDups
@@ -399,24 +428,11 @@ def sendEntered (ce : ChainEnv) (x : Path) : Except String Path := do
     if !(model.configs[config]!).contains n then return x
     let c := model.chart
     let some cs := c.state? n | pure x
-    let m : SMachine := { context := mach.context, active := model.configs[config]! }
     cs.activities.foldlM (init := x) fun x a => do
-      let keyword := match a with
-        | .calls .. => "calls"
-        | _ => "sends"
-      let (input, notScalar) ← match ((siteOf ce.st ce.p c (.input n keyword a.key)).getD []).head? with
-        | some f => do
-          let (v, err) ← seval (m.env c x.records ce.now none) [] f.body
-          let (fields, notScalar) ← scalarFields v
-          pure (fields, .or err notScalar)
-        | none => pure ([], ff)
-      let x := { x with gap := .or x.gap (.and x.pc notScalar) }
+      let (x, input) ← activityInput ce x chart n a
       if a.isOwn ce.st.service then
-        let fits := inputFits ce.st a.ref input
-        let (key, x) := x.next
-        pure { x with round := x.round ++ [{ order := c.order, sender := .state chart n a.key mach.exited.length,
-                                             command := a.ref.name, input, valid := fits.term }],
-                      facts := x.facts ++ [(key, { Facts.none with fit := fits.fit })] }
+        let (x, w) := ownWaiting ce x c.order (.state chart n a.key mach.exited.length) a input
+        pure { x with round := x.round ++ [w] }
       else
         let kind := match a with
           | .calls .. => OutKind.query
@@ -795,6 +811,15 @@ where
      { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term), fit := Fit.all (holds.map (·.fit)) })
   payloadOf (e : Ir.Ref) := payloadOfSchema (.payload e)
 
+/--
+What a sender's command takes in a pair's orders: the payload of the event that its automation reacts to, from which
+the automation computes the input; an input of its own; or the input that its state computes when it enters.
+-/
+inductive Sending where
+  | payload (fields : List (String × Term))
+  | input (fields : List (String × Term))
+  | computed
+
 /-- A tie's two orders from one state: the first message then the second, and the second then the first. -/
 structure TieOrders where
   facts : Facts
@@ -805,6 +830,8 @@ structure TieOrders where
   second : Ending
   /-- What each arriving message carries, none for a deadline. -/
   given : List Given
+  /-- What each of two own commands takes, none for a tie. -/
+  sendings : List Sending := []
 
 def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String × List Term)) (now : Term) (tie : Tie) :
     Except String TieOrders := do
@@ -834,5 +861,193 @@ def tieOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String
     let (first, second) ← orders (ga.watched ++ gb.watched) ga.starts gb.starts
     pure { facts := machineFacts ce ++ ga.facts ++ gb.facts ++ first.facts ++ second.facts,
            pre := conj [settled, ga.pre, gb.pre], first, second, given := [ga.given, gb.given] }
+
+/-- An own command's sender: an automation, or the activity `key` of `state` of the chart `chart`. -/
+inductive SenderRef where
+  | automation (name : String)
+  | activity (chart state key : String)
+deriving DecidableEq
+
+/-- The senders of `st`'s own commands, in definition order. -/
+def sendersOf (st : Service) : List SenderRef :=
+  (st.automations.filter (·.sends.isOwn st.service)).map (.automation ·.name) ++
+    st.charts.flatMap fun c => c.states.flatMap fun cs =>
+      (cs.activities.filter (·.isOwn st.service)).map (.activity c.name cs.spec.name ·.key)
+
+/--
+Whether only a deadline that fires enters state `n` of `c`: no start or entry enters it as an initial state, and every
+transition into it or a state inside it fires on a deadline. Each deadline fires as its own message.
+-/
+def deadlineEntered (c : Service.Chart) (n : String) : Bool :=
+  let path := ((c.state? n).map (·.spec.path)).getD []
+  let inside (t : String) := (c.state? t).any fun s => path.isPrefixOf s.spec.path
+  c.initial != n && !c.states.any (·.spec.initial == some n) && !c.states.any (·.spec.type matches .history) &&
+    (c.on ++ c.states.flatMap (·.transitions)).all fun t => match t.target, t.trigger with
+      | some _, .after _ => true
+      | some target, _ => !inside target
+      | none, _ => true
+
+/-- The events that `e` emits inside a Bag, such as `records.Task.map((t) => emit(...))`, whose events are one group. -/
+partial def groupedEvents : Expr → List Ir.Ref
+  | .map .bag _ _ body => emitted body
+  | e => (Expr.children e).flatMap groupedEvents
+where
+  emitted : Expr → List Ir.Ref
+    | .emit event _ => [event]
+    | e => (Expr.children e).flatMap emitted
+
+/-- The events that `e` emits, once for each emit. -/
+partial def emitsOf : Expr → List Ir.Ref
+  | .emit event _ => [event]
+  | e => (Expr.children e).flatMap emitsOf
+
+/--
+Whether the event `e` can occur twice in one message of `st`, and whether together with `f`: a command emits it inside a
+Bag or at two emits, or it and `f` both; or an own command emits it, which the steps of any message can send.
+-/
+def occurs (st : Service) (e f : Ir.Ref) : Bool :=
+  let decides := st.commands.filterMap fun c =>
+    (st.structure.program.decide.find? (·.definition == st.ref c)).map (c, ·.body)
+  let sent := (sendersOf st).filterMap fun
+    | .automation a => (st.automations.find? (·.name == a)).map (·.sends.ref.name)
+    | .activity c n k => (((st.charts.find? (·.name == c)).bind (·.state? n)).bind
+        (·.activities.find? (·.key == k))).map (·.ref.name)
+  decides.any (fun (c, body) =>
+    let emits := emitsOf body
+    (e == f && ((groupedEvents body).contains e || 1 < emits.count e)) || (e != f && emits.contains e && emits.contains f) ||
+      (sent.contains c && (emits.contains e || emits.contains f)))
+
+/--
+Whether the own commands of `a` and `b` can wait in one round of the internal queue with no cause chain between them.
+Two automations can when they react to one event, or when their events can occur in one message (`occurs`), each reacting to an event of a command of
+the round, since no line orders two commands' events; an automation and a state's activity can unless only a deadline
+enters the state, whose message every step of comes from. Two states' activities can when the states can be active together, except two
+states that only deadlines enter, each its own message, and one state with itself, except inside a map.
+-/
+def shareRound (st : Service) : SenderRef → SenderRef → Bool
+  | .automation a, .automation b => match st.automations.find? (·.name == a), st.automations.find? (·.name == b) with
+    | some x, some y => (a != b && x.receives == y.receives) || occurs st x.receives y.receives
+    | _, _ => true
+  | .automation _, .activity c n _ | .activity c n _, .automation _ => !byDeadline c n
+  | .activity ca a k, .activity cb b l =>
+    if (ca != cb || (a == b && k == l)) && byDeadline ca a && byDeadline cb b then false
+    else if ca == cb && a == b && k == l then (st.charts.find? (·.name == ca)).any (inMap · a)
+    else activeTogether st ca a cb b
+where
+  byDeadline (c n : String) : Bool := (st.charts.find? (·.name == c)).any (deadlineEntered · n)
+
+/--
+Two steps that no line orders: two own commands that can wait in one round; two messages that tie; a deadline and a
+message from another service that arrives when it is due; or the events of one event group of `command` that one
+machine takes.
+-/
+inductive Unordered where
+  | sends (a b : SenderRef)
+  | tie (tie : Tie)
+  | deadlineArrival (deadline : DeadlineRef) (arrival : Arrival)
+  | group (command chart : String)
+
+/--
+Every pair of steps of `st` that no line orders, each once, so that no order passes unnamed: prove compares each one or
+names it undecided.
+-/
+def unorderedOf (st : Service) : List Unordered :=
+  let sends := ((pairsWithSelf (sendersOf st)).filter fun (a, b) => shareRound st a b).map fun (a, b) => Unordered.sends a b
+  let waits (d : DeadlineRef) : Arrival → Bool
+    | .answer r => match requesterOf st r with
+      | .ok (.state chart state _) => activeTogether st d.chart d.state chart state
+      | _ => true
+    | .event _ => true
+  let instants := (deadlinesOf st).flatMap fun d => ((arrivalsOf st).filter (waits d)).map (Unordered.deadlineArrival d)
+  let groups := st.commands.flatMap fun c =>
+    let events := (((st.structure.program.decide.find? (·.definition == st.ref c)).map (groupedEvents ·.body)).getD [])
+    st.charts.filterMap fun ch => if ch.receives.any (events.contains ·.2) then some (Unordered.group c ch.name) else none
+  sends ++ (tiesOf st).map .tie ++ instants ++ groups
+
+/-- The variables of an object of `schema`, each named after `x`, and the facts that they fit it. -/
+def objectVars (st : Service) (schema : Schema) (x : String) : List (String × Term) × Facts :=
+  let props := propertiesWith ((st.schemaOf schema).getD (.obj []))
+  let terms := props.map fun pr => (pr.1, propertyVar s!"{x}.{pr.1}" pr)
+  let holds := props.map fun pr => fieldHolds (((terms.lookup pr.1).map (·.1)).getD undefT) pr
+  (terms.map fun (f, t, _) => (f, t),
+   { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term), fit := Fit.all (holds.map (·.fit)) })
+
+/-- A sender as a pair runs it: what the state must hold, the facts, what its command takes, and its waiting command on a path. -/
+structure SenderRun where
+  pre : Term := tt
+  facts : Facts := Facts.none
+  sending : Sending
+  waiting : Path → Except String (Path × Waiting)
+
+/--
+The two orders of the own commands of `a` and `b`, waiting in one round, from one state: each command runs, then the
+work it causes, as Service.drain takes them, to the end of the message. When a third own command can wait in the round,
+the two may run after it and its work, from a state that their inputs were not computed from: an automation's reaction
+then reads any records within the bounds, and a state's activity sends any input of its schema. Otherwise each input
+comes from the state, as the automation's reaction or the state's activity computes it, and the state of an activity
+is active.
+-/
+def sendOrders (st : Service) (p : Program) (pre : SRecords) (used : List (String × List Term)) (now : Term)
+    (a b : SenderRef) : Except String TieOrders := do
+  let models ← st.charts.mapM fun c => do
+    match ChartModel.of c with
+    | .ok m => pure (c.name, m)
+    | .error why => throw s!"{c.name}: {why}"
+  let ce : ChainEnv := { st, p, models, now }
+  let settled := conj (models.flatMap fun (c, m) =>
+    m.transient.map fun k => Term.not (.eq (cfgVar c) (intLit (Int.ofNat k))))
+  let third := (sendersOf st).any fun c => c != a && c != b && shareRound st c a && shareRound st c b
+  let runOf (s : SenderRef) (tag : String) : Except String SenderRun := do
+    match s with
+    | .automation name =>
+      let some auto := st.automations.find? (·.name == name) | throw s!"no automation {name}"
+      let waiting (input : List (String × Term)) (valid : Term) : Waiting :=
+        { order := auto.order, sender := .automation name, command := auto.sends.ref.name, input, valid }
+      let (payload, payloadFacts) := objectVars st (.payload auto.receives) tag
+      if third then
+        -- The reaction read the records of an earlier state of the round, any records within the bounds.
+        let read := SRecords.named st (Ir.createsOf st.structure.bounds st.service) s!"{tag}.rd"
+        let r ← reactionOf st p read now (.json (SJson.ofTerms payload)) auto s!"{tag}.r"
+        if !r.facts.vars.isEmpty then throw s!"{auto.name} creates a key in a round with a third own command"
+        let w := waiting r.input r.valid
+        pure { pre := r.fires, facts := payloadFacts ++ read.facts st s!"{tag}.rd" ++ r.facts, sending := .input r.input,
+               waiting := fun x => pure (x, w) }
+      else
+        let r ← reactionOf st p pre now (.json (SJson.ofTerms payload)) auto s!"{tag}.r"
+        let w := waiting r.input r.valid
+        pure { pre := r.fires, facts := payloadFacts ++ r.facts, sending := .payload payload, waiting := fun x => pure (x, w) }
+    | .activity chart state key =>
+      let some c := st.charts.find? (·.name == chart) | throw s!"no chart {chart}"
+      let some act := ((c.state? state).map (·.activities.find? (·.key == key))).join | throw s!"no activity {key}"
+      let sender := Sender.state chart state key 0
+      if third then
+        let (input, facts) := objectVars st (.input act.ref) tag
+        pure { facts, sending := .input input, waiting := fun x => pure (ownWaiting ce x c.order sender act input) }
+      else
+        let waiting (x : Path) : Except String (Path × Waiting) := do
+          let (x, input) ← activityInput ce x chart state act
+          pure (ownWaiting ce x c.order sender act input)
+        pure { pre := activeIn models chart state, sending := .computed, waiting }
+  let ra ← runOf a "sa"
+  let rb ← runOf b "sb"
+  -- An activity's input reads its machine's configuration, so each path fixes it where the state is active.
+  let charts := [a, b].filterMap fun
+    | .activity chart state _ => if third then none else some (chart, state)
+    | .automation _ => none
+  let orders (name : String) (swap : Bool) : Except String Ending := do
+    let start : Path := { name, pc := tt, records := pre, used, machines := startMachines ce }
+    let starts ← charts.foldlM (init := [start]) fun paths (chart, state) => do
+      let touched ← paths.flatMapM fun x => touch ce x chart fun m k => (m.configs[k]!).contains state
+      pure (touched.filter fun x => (x.fixed? chart).any fun (_, k) =>
+        ((models.lookup chart).map (·.configs[k]!.contains state)).getD false)
+    let begun ← starts.mapM fun x => do
+      let (x, wa) ← ra.waiting x
+      let (x, wb) ← rb.waiting x
+      pure { x with commands := if swap then [wb, wa] else [wa, wb] }
+    pure (Ending.of pre (startMachines ce) (merge (← drain ce (2 * chainLimit + 2) (live begun))))
+  let first ← orders "o1" false
+  let second ← orders "o2" true
+  pure { facts := machineFacts ce ++ ra.facts ++ rb.facts ++ first.facts ++ second.facts,
+         pre := conj [settled, ra.pre, rb.pre], first, second, given := [], sendings := [ra.sending, rb.sending] }
 
 end Tazuna.Smt
