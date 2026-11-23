@@ -193,15 +193,18 @@ export type Request =
       readonly answers: readonly string[];
     }
   /**
-   * generate's next scripts, or its result, from Z3's output on each script that earlier answers gave, in order
-   * (Engine.generateOf). `depth` is the most requests of a sequence, by default one more than the creations that the
-   * service's bounds allow.
+   * generate's result (Engine.generateOf). Before it the engine sends `solve` responses, each answered by `solved`.
+   * `depth` is the most requests of a sequence, by default one more than the creations that the service's bounds allow.
    */
   | {
       readonly type: "generate";
       readonly structure: Structure;
       readonly depth?: number;
-      readonly answers: readonly string[];
+    }
+  /** Z3's output on each script of the engine's last `solve`, in order. */
+  | {
+      readonly type: "solved";
+      readonly outputs: readonly string[];
     };
 
 /** A pairing violation and where it is. */
@@ -488,11 +491,14 @@ export type Response =
       readonly type: "proved";
       readonly results: readonly ProveResult[];
     }
-  /** The scripts that generate asks next, or, with none, its result. */
   | {
       readonly type: "generated";
+      readonly result: Generation;
+    }
+  /** The SMT-LIB scripts whose Z3 outputs a running request needs next; TS answers with `solved`. */
+  | {
+      readonly type: "solve";
       readonly scripts: readonly string[];
-      readonly result: Generation | null;
     }
   | {
       readonly type: "error";

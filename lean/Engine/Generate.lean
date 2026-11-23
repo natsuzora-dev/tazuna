@@ -12,8 +12,7 @@ request's input that takes a branch of the request (a rejection, or a path throu
 payload of an event or the output of an answer that the service receives. Sequences whose targets other sequences cover
 are dropped.
 
-TS runs Z3, so one request goes back and forth: given the solver's outputs on the scripts asked so far, in order, the
-engine answers with the next scripts, or with the result once no search waits for an answer.
+TS runs Z3, so the search asks it through `solve` mid-run and goes on with the outputs.
 -/
 
 namespace Tazuna.Engine
@@ -391,22 +390,18 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
     wants := wants ++ [.line { time := t, after := none, created := none, body := .time .in s!"time#{nextNumber n.inputs "time"}" }]
   pure wants
 
-/-- The solver's outputs so far, by script, and the outputs not yet read. -/
-structure Solved where
-  cache : Std.HashMap String String := {}
-  rest : List String
+/-- A search that asks the solver through the function it reads, and keeps the solver's output on each script asked so far. -/
+abbrev SolveM := ReaderT (List String → IO (List String)) (StateT (Std.HashMap String String) IO)
 
-/-- A search that stops with the scripts it needs next when the outputs run out. -/
-abbrev SolveM := ExceptT (List String) (StateT Solved IO)
-
-/-- The solver's answers to `queries`, asking for the scripts that no output answers yet. -/
+/-- The solver's answers to `queries`, asking it for the scripts that no earlier output answers. -/
 def solveAll (queries : List Query) : SolveM (List Smt.Answer) := do
   let scripts := queries.map (·.script proveRlimit)
-  let s ← get
-  let missing := (scripts.filter (!s.cache.contains ·)).eraseDups
-  if s.rest.length < missing.length then throw missing
-  set { cache := (missing.zip s.rest).foldl (fun c (k, v) => c.insert k v) s.cache, rest := s.rest.drop missing.length : Solved }
-  let cache := (← get).cache
+  let missing := (scripts.filter (!(← get).contains ·)).eraseDups
+  if !missing.isEmpty then
+    let outputs ← (← read) missing
+    if outputs.length != missing.length then throw (IO.userError s!"the solver gave {outputs.length} outputs for {missing.length} scripts")
+    modify fun cache => (missing.zip outputs).foldl (fun c (k, v) => c.insert k v) cache
+  let cache ← get
   pure ((queries.zip scripts).map fun (q, script) =>
     let text := cache.getD script ""
     -- With no variable, the script asks for no model.
@@ -542,9 +537,8 @@ def reduce (candidates : List Candidate) : List Candidate := Id.run do
     if ((candidates[i]?).map (·.covers.all covered)).getD false then kept := others
   return kept.filterMap (candidates[·]?)
 
-/-- The own spec services' searches, after the solver's outputs `answers`: the next scripts, or the result. -/
-def generateOf (j : Spec.Structure) (depth : Option Nat) (answers : List String) :
-    IO (Except (List String) Generation) := do
+/-- The own spec services' searches, asking `solve` for the solver's output on each script, in order. -/
+def generateOf (j : Spec.Structure) (depth : Option Nat) (solve : List String → IO (List String)) : IO Generation := do
   let searches ← (specServices j).mapM (searchOf j depth)
   let searched : SolveM (List (Search × Found × List (Uncovered × Smt.Answer × Bool))) := searches.mapM fun x => do
     let found ← x.run
@@ -552,10 +546,7 @@ def generateOf (j : Spec.Structure) (depth : Option Nat) (answers : List String)
     let asked := unreached.filterMap fun t => (x.anyState t).toOption.map (t, ·)
     let answers ← solveAll (asked.map (·.2.1))
     pure (x, found, (asked.zip answers).map fun ((t, _, complete), a) => (t, a, complete))
-  let (result, _) ← searched.run.run { rest := answers }
-  match result with
-  | .error scripts => return .error scripts
-  | .ok all =>
+  let (all, _) ← (searched.run solve).run {}
   let mut candidates := []
   for (x, found, _) in all do
     let mut paths : List (List TraceLine) := []
@@ -577,7 +568,7 @@ def generateOf (j : Spec.Structure) (depth : Option Nat) (answers : List String)
         | none, none => .notReached x.depth
     ({ target := part.toViolation, creates := x.creates, items := Spec.itemsOf j.bounds x.st.service, outcome } :
       TargetOutcome)
-  return .ok { targets := outcomes,
-               inputs := kept.map fun c => { service := c.service, name := c.name, lines := c.lines } }
+  return { targets := outcomes,
+           inputs := kept.map fun c => { service := c.service, name := c.name, lines := c.lines } }
 
 end Tazuna.Engine

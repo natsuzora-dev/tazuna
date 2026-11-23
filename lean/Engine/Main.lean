@@ -14,8 +14,8 @@ def sendLine {α : Type} [ToValue α] (stdout : IO.FS.Stream) (message : α) : I
   stdout.putStrLn (render (ToValue.toValue message))
   stdout.flush
 
-/-- The response to `request`. A snapshot line is none for a blank line. -/
-def respond : Engine.Request → IO Response
+/-- The response to `request`, asking `solve` for Z3's outputs mid-request. A snapshot line is none for a blank line. -/
+def respond (solve : List String → IO (List String)) : Engine.Request → IO Response
   | .check s => pure (.checked (Validation.check s))
   | .checkCanonical s => pure (.checkedCanonical (Validation.Canonical.check s))
   | .pairSnapshots services expected folders =>
@@ -58,18 +58,23 @@ def respond : Engine.Request → IO Response
     | some (.ok (.error issues)) => .parsed true none (some issues) false)
   | .proveQueries s => do pure (.queried (← proveQueriesOf s))
   | .prove s answers => do pure (.proved (← proveOf s answers))
-  | .generate s depth answers => do
-    match ← generateOf s depth answers with
-    | .error scripts => pure (.generated scripts none)
-    | .ok result => pure (.generated [] (some result))
+  | .generate s depth => do pure (.generated (← generateOf s depth solve))
+  | .solved _ => throw (IO.userError "solved answers no solve")
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
+
+/-- Z3's outputs on `scripts`: a `solve` response out, and the `solved` request that TS answers it with. -/
+def solveOver (stdin stdout : IO.FS.Stream) (scripts : List String) : IO (List String) := do
+  sendLine stdout (Response.solve scripts)
+  match ← IO.ofExcept (parse (← stdin.getLine) >>= FromValue.fromValue) with
+  | Engine.Request.solved outputs => pure outputs
+  | _ => throw (IO.userError "expected solved")
 
 partial def loop (stdin stdout : IO.FS.Stream) : IO Unit := do
   let line ← stdin.getLine
   if line.isEmpty then return
   let reply ← try
-      respond (← IO.ofExcept (parse line >>= FromValue.fromValue))
+      respond (solveOver stdin stdout) (← IO.ofExcept (parse line >>= FromValue.fromValue))
     catch e => pure (.error (toString e))
   sendLine stdout reply
   loop stdin stdout
