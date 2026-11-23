@@ -1,3 +1,4 @@
+import { instant } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { device } from "../device/contract.ts";
 import { warn } from "./commands.ts";
@@ -54,14 +55,13 @@ export const workload = machine({
 const decided = condition((args) => !undetermined(args));
 const hasOpenTasks = condition((args) => openTasks(args).size > 0);
 const resetAttempts = { assign: { attempts: () => 0 } };
-const opened = { guard: { opened: ({ payload }: { payload: { change: string } }) => payload.change === "opened" } };
 // One request goes to device at a time, since requestNotificationPermission writes the permission that
 // showNotification reads. Asking does not wait for the permission that notifier knows: device answers at once when the
 // user already chose, and a choice may arrive after the task that makes notifier ask.
 export const notification = machine({
   description:
     "Request notification permission from the user when a task opens until a request is accepted, and show each warning as a notification if permission is granted",
-  context: { attempts: z.int().default(0), count: z.int().default(0), openedWhileAsking: z.boolean().default(false) },
+  context: { attempts: z.int().default(0), count: z.int().default(0), askingSince: instant.default(0) },
   receives: { taskChangeRecorded, tooManyWarned },
   commands: {
     requestNotificationPermission: device.requestNotificationPermission,
@@ -86,8 +86,7 @@ export const notification = machine({
       ],
     },
     asking: {
-      entry: { assign: { attempts: ({ context }) => context.attempts + 1, openedWhileAsking: () => false } },
-      on: { taskChangeRecorded: [{ ...opened, assign: { openedWhileAsking: () => true } }] },
+      entry: { assign: { attempts: ({ context }) => context.attempts + 1, askingSince: ({ now }) => now } },
       sends: {
         requestNotificationPermission: {
           onAccepted: [{ target: "awaitingUserChoice" }],
@@ -96,9 +95,13 @@ export const notification = machine({
               guard: { canRetry: ({ context }) => context.attempts < notifierConstants.permissionAttempts },
               target: "retrying",
             },
-            // A task that opened during the attempts asks again, as one that opens after them does.
+            // A task that opened since the attempt began asks again, as one that opens later does in idle. Its time
+            // decides, not whether it arrived before the answer; a task opened as the attempt began counts.
             {
-              guard: { openedWhileAsking: ({ context }) => context.openedWhileAsking },
+              guard: {
+                openedWhileAsking: ({ records, context }) =>
+                  records.TaskChange.some((c) => c.change === "opened" && c.at >= context.askingSince),
+              },
               target: "asking",
               reenter: true,
               assign: { attempts: () => 0 },
@@ -116,15 +119,26 @@ export const notification = machine({
         ],
       },
     },
-    idle: { entry: resetAttempts, on: { taskChangeRecorded: [{ ...opened, target: "asking" }] } },
+    idle: {
+      entry: resetAttempts,
+      on: {
+        taskChangeRecorded: [
+          {
+            guard: {
+              openedSinceAsking: ({ payload, context }) =>
+                payload.change === "opened" && payload.at >= context.askingSince,
+            },
+            target: "asking",
+          },
+        ],
+      },
+    },
     retrying: {
-      on: { taskChangeRecorded: [{ ...opened, assign: { openedWhileAsking: () => true } }] },
       always: [{ guard: { decided }, target: "asked" }],
       after: { retry: { delay: notifierConstants.permissionRetryDelay, onFired: [{ target: "asking" }] } },
     },
     awaitingUserChoice: { entry: resetAttempts, always: [{ guard: { decided }, target: "asked" }] },
-    // Only requesting reads the flag; clearing it here keeps two orders of one task and one answer in one state.
-    asked: { entry: { assign: { attempts: () => 0, openedWhileAsking: () => false } } },
+    asked: { entry: resetAttempts },
     showing: {
       entry: resetAttempts,
       sends: {

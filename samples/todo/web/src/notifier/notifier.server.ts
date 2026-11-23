@@ -10,8 +10,7 @@ export function onTodoEvent(event: TodoEvent): void {
   const recorded =
     db.insert(notifierTaskChanges).values({ taskId, at, change }).onConflictDoNothing().run().changes > 0;
   if (!recorded || change === "closed") return;
-  if (flow === "idle") void askPermission();
-  else if (flow === "asking" || flow === "retrying") openedWhileAsking = true;
+  if (flow === "idle" && at >= askingSince) void askPermission();
   if (warnedPeriod === undefined) warnIfTooMany();
 }
 
@@ -39,6 +38,13 @@ function openTaskCount(): number {
   ).length;
 }
 
+const openedSince = (start: number) =>
+  db
+    .select()
+    .from(notifierTaskChanges)
+    .all()
+    .some((c) => c.change === "opened" && c.at >= start);
+
 const isDecided = () => db.$count(notifierPermissionChoices).sync() > 0;
 
 function isGranted(): boolean {
@@ -63,7 +69,7 @@ function warnIfTooMany(): void {
 // user already chose, and a choice may arrive after the task that makes notifier ask.
 let flow: "idle" | "asking" | "retrying" | "awaitingUserChoice" | "asked" | "showing" = "idle";
 let attempts = 0;
-let openedWhileAsking = false;
+let askingSince = 0;
 let retry: ReturnType<typeof setTimeout> | undefined;
 
 function toAsked(): void {
@@ -85,7 +91,7 @@ function showWarning(count: number): void {
 async function askPermission(): Promise<void> {
   flow = "asking";
   attempts += 1;
-  openedWhileAsking = false;
+  askingSince = Date.now();
   const answer = await requestNotificationPermission();
   if (answer.ok) {
     if (isDecided()) toAsked();
@@ -99,8 +105,8 @@ async function askPermission(): Promise<void> {
       flow = "retrying";
       retry = setTimeout(askPermission, notifierConstants.permissionRetryDelay);
     }
-  } else if (openedWhileAsking) {
-    // A task that opened during the attempts asks again, as one that opens after them does.
+  } else if (openedSince(askingSince)) {
+    // A task that opened during the attempt asks again, as one that opens after them does.
     attempts = 0;
     void askPermission();
   } else {
