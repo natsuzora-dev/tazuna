@@ -32,7 +32,7 @@ export const taskTitles = query({
   output: { titles: bag(Task.fields.title) },
 }).resolve(({ records }) => ({ titles: records.Task.map((t) => t.title) }));
 
-const part = z.union([z.strictObject({ name: z.string() }), z.strictObject({ size: z.number() })]);
+const part = z.union([z.strictObject({ name: z.string() }), z.strictObject({ size: z.int() })]);
 
 export const taskCard = query({
   output: {

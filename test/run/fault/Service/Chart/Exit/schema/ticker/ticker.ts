@@ -9,7 +9,7 @@ export const tick = command({ emits: [ticked] }).decide(() => [emit(ticked, {})]
 
 export const countdown = machine({
   description: "Count down from one on every tick",
-  context: { left: z.number().nonnegative().default(1) },
+  context: { left: z.int().nonnegative().default(1) },
   receives: { ticked },
   initial: "counting",
   states: { counting: {} },

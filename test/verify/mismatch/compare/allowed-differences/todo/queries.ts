@@ -2,7 +2,7 @@ import { instant, parseInstant } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 import { query } from "./todo.ts";
 
-const part = z.union([z.strictObject({ name: z.string() }), z.strictObject({ size: z.number() })]);
+const part = z.union([z.strictObject({ name: z.string() }), z.strictObject({ size: z.int() })]);
 
 export const taskCard = query({
   output: {

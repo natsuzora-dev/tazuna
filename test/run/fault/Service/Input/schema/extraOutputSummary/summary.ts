@@ -11,7 +11,7 @@ export const { query, contract, scenario } = service({
 
 export const itemCount = query({
   input: { owner: z.string() },
-  output: { count: z.number() },
+  output: { count: z.int() },
 }).resolve(({ input, records }) => {
   // A const, which tsc does not check for fields that the output lacks, as it checks a returned object literal.
   const answer = { owner: input.owner, count: records.Item.size };

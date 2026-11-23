@@ -9,7 +9,7 @@ export const Note = entity({
 
 export const Count = singleEntity({
   description: "How many notes were posted",
-  fields: { notes: z.number().default(0) },
+  fields: { notes: z.int().default(0) },
 });
 
 export const { command, machine, event, createEvent, updateEvent, contract, scenario } = service({

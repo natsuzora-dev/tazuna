@@ -5,7 +5,7 @@ export const Task = entity({ description: "A task", fields: { id: z.string(), ti
 
 export const Stats = singleEntity({
   description: "Statistics of tasks",
-  fields: { added: z.number().default(0), lastTitle: z.string().default("") },
+  fields: { added: z.int().default(0), lastTitle: z.string().default("") },
 });
 
 export const { automation, command, createEvent, updateEvent, contract, scenario } = service({

@@ -14,7 +14,7 @@ export const countdown = machine({
   description: "Count down from one on every tick, entering counting again with the ticks left",
   receives: { ticked },
   initial: "running",
-  states: { running: { initial: "counting", states: { counting: { held: { left: z.number().nonnegative() } } } } },
+  states: { running: { initial: "counting", states: { counting: { held: { left: z.int().nonnegative() } } } } },
 }).chart({
   states: {
     running: { initial: { with: { left: () => 1 } } },

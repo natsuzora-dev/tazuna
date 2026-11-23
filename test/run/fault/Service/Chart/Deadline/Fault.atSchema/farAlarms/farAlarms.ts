@@ -11,7 +11,7 @@ export const alarm = machine({
     waiting: {
       after: {
         ring: {
-          at: () => 9_007_199_254_740_992,
+          at: () => 9_007_199_254_740_991 + 1,
           onFired: [{ target: "ringing" }],
         },
       },

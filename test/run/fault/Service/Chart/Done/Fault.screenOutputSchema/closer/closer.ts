@@ -5,7 +5,7 @@ export const { screen, scenario } = service({ name: "closer", description: "Clos
 
 export const doneScreen = screen({
   description: "A screen that closes with a negative count",
-  output: { count: z.number().nonnegative() },
+  output: { count: z.int().nonnegative() },
   controls: { close: { label: "Close" } },
   initial: "open",
   states: { open: {}, closed: { type: "final" } },

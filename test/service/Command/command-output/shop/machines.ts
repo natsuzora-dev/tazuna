@@ -9,7 +9,7 @@ export const checkout = machine({
   initial: "waiting",
   states: {
     waiting: {},
-    charging: { held: { amount: z.number().int().positive() } },
+    charging: { held: { amount: z.int().positive() } },
     charged: { held: { chargeId: z.string() } },
     refunding: { held: { chargeId: z.string() } },
   },

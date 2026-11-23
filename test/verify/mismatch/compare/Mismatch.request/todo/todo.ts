@@ -6,5 +6,5 @@ export const { query, contract } = service({ name: "todo", description: "Answer 
 
 export const linked = query({
   input: { links: bag(z.object({ from: screens.DraftId, to: screens.DraftId })) },
-  output: { count: z.number() },
+  output: { count: z.int() },
 }).resolve(({ input }) => ({ count: input.links.size }));

@@ -1,7 +1,7 @@
 import { emit, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const Counter = singleEntity({ description: "A counter", fields: { value: z.number().default(0) } });
+export const Counter = singleEntity({ description: "A counter", fields: { value: z.int().default(0) } });
 
 export const { command, machine, updateEvent, scenario } = service({
   name: "todo",

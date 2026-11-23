@@ -442,17 +442,9 @@ theorem nonScalar_ordinal (order : Order) {v : Val} (h : NonScalar v) : ordinal 
   | json j => cases j <;> simp_all [NonScalar, ordinal]
   | _ => simp_all [NonScalar, ordinal]
 
-theorem nonScalar_double {v : Val} (h : NonScalar v) : double? v = none := by
-  cases v with
-  | json j => cases j <;> simp_all [NonScalar, double?]
-  | _ => simp_all [NonScalar, double?]
-
 theorem toVal_ordinal (sc : Scalar) :
     ordinal .number sc.toVal = (match sc with | .int n => some (n, 0) | _ => none) := by
   cases sc <;> rfl
-
-theorem toVal_not_nonFinite (sc : Scalar) (x : Float) : sc.toVal ≠ .nonFinite x := by
-  cases sc <;> simp [Scalar.toVal, Scalar.toValue?, Val.ofOption]
 
 theorem relT_holds (M : Model) (r : Relation) (a b : Term) :
     (relT r (.intOf a) (.intOf b)).holds M =
@@ -487,30 +479,20 @@ theorem denote_strOf (M : Model) (t : Term) :
 theorem compare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal) (s : Trace) :
     Agrees M recs (.scalar (.mkBool (relT r (.intOf va.scalarOf.1) (.intOf vb.scalarOf.1))),
         .or va.scalarOf.2 (.or vb.scalarOf.2 (.not (.and (.isInt va.scalarOf.1) (.isInt vb.scalarOf.1)))))
-      (run (match va.conc M recs, vb.conc M recs, double? (va.conc M recs), double? (vb.conc M recs) with
-        | .nonFinite _, _, some x, some y | _, .nonFinite _, some x, some y =>
-          if Order.number == .number then pure (.json (.bool (r.holds x y))) else thrown
-        | _, _, _, _ =>
-          match ordinal .number (va.conc M recs), ordinal .number (vb.conc M recs) with
-          | some (m, e), some (m', e') => pure (.json (.bool (r.holds (m * 10 ^ e') (m' * 10 ^ e))))
-          | _, _ => thrown : EvalM Val) s).1 := by
+      (run (match ordinal .number (va.conc M recs), ordinal .number (vb.conc M recs) with
+        | some (m, e), some (m', e') => pure (.json (.bool (r.holds (m * 10 ^ e') (m' * 10 ^ e))))
+        | _, _ => thrown : EvalM Val) s).1 := by
   rcases scalar_cases M recs va with ⟨ha, hca⟩ | ⟨ha, hna⟩ <;>
     rcases scalar_cases M recs vb with ⟨hb, hcb⟩ | ⟨hb, hnb⟩
-  · rw [hca, hcb]
-    have nf1 := toVal_not_nonFinite (va.scalarOf.1.denote M).toScalar
-    have nf2 := toVal_not_nonFinite (vb.scalarOf.1.denote M).toScalar
-    split
-    · exfalso; simp_all
-    · exfalso; simp_all
-    · rw [toVal_ordinal, toVal_ordinal]
-      cases hx : (va.scalarOf.1.denote M).toScalar <;> cases hy : (vb.scalarOf.1.denote M).toScalar <;>
-        simp [run_pure, run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, holds_isInt, relT_holds,
-          denote_intOf, conc_mkBool]
-  · rw [nonScalar_double hnb, nonScalar_ordinal .number hnb]
+  · rw [hca, hcb, toVal_ordinal, toVal_ordinal]
+    cases hx : (va.scalarOf.1.denote M).toScalar <;> cases hy : (vb.scalarOf.1.denote M).toScalar <;>
+      simp [run_pure, run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, holds_isInt, relT_holds,
+        denote_intOf, conc_mkBool]
+  · rw [nonScalar_ordinal .number hnb]
     split <;> simp_all [run_thrown, Agrees, holds_or]
-  · rw [nonScalar_double hna, nonScalar_ordinal .number hna]
+  · rw [nonScalar_ordinal .number hna]
     split <;> simp_all [run_thrown, Agrees, holds_or]
-  · rw [nonScalar_double hna, nonScalar_ordinal .number hna]
+  · rw [nonScalar_ordinal .number hna]
     split <;> simp_all [run_thrown, Agrees, holds_or]
 
 
@@ -606,33 +588,23 @@ theorem dayOf_denote (M : Model) (t : Term) (s : String) (h : (t.denote M).toSca
 theorem dateCompare_op (M : Model) (recs : Records) (r : Relation) (va vb : SVal) (s : Trace) :
     Agrees M recs (.scalar (.mkBool (relT r (dayOf va.scalarOf.1) (dayOf vb.scalarOf.1))),
         .or va.scalarOf.2 (.or vb.scalarOf.2 (.not (.and (isDateOf va.scalarOf.1) (isDateOf vb.scalarOf.1)))))
-      (run (match va.conc M recs, vb.conc M recs, double? (va.conc M recs), double? (vb.conc M recs) with
-        | .nonFinite _, _, some x, some y | _, .nonFinite _, some x, some y =>
-          if Order.date == .number then pure (.json (.bool (r.holds x y))) else thrown
-        | _, _, _, _ =>
-          match ordinal .date (va.conc M recs), ordinal .date (vb.conc M recs) with
-          | some (m, e), some (m', e') => pure (.json (.bool (r.holds (m * 10 ^ e') (m' * 10 ^ e))))
-          | _, _ => thrown : EvalM Val) s).1 := by
+      (run (match ordinal .date (va.conc M recs), ordinal .date (vb.conc M recs) with
+        | some (m, e), some (m', e') => pure (.json (.bool (r.holds (m * 10 ^ e') (m' * 10 ^ e))))
+        | _, _ => thrown : EvalM Val) s).1 := by
   rcases scalar_cases M recs va with ⟨ha, hca⟩ | ⟨ha, hna⟩ <;>
     rcases scalar_cases M recs vb with ⟨hb, hcb⟩ | ⟨hb, hnb⟩
-  · rw [hca, hcb]
-    have nf1 := toVal_not_nonFinite (va.scalarOf.1.denote M).toScalar
-    have nf2 := toVal_not_nonFinite (vb.scalarOf.1.denote M).toScalar
-    split
-    · exfalso; simp_all
-    · exfalso; simp_all
-    · rw [toVal_ordinal_date, toVal_ordinal_date]
-      cases hx : (va.scalarOf.1.denote M).toScalar <;> cases hy : (vb.scalarOf.1.denote M).toScalar <;>
-        simp [run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, isDateOf_holds]
-      rename_i x y
-      unfold parseDate?
-      cases hvx : isDateLabel x <;> cases hvy : isDateLabel y <;> simp [run_pure, run_thrown]
-      simp [conc_mkBool, relT_ints M r _ _ _ _ (dayOf_denote M _ x hx hvx) (dayOf_denote M _ y hy hvy)]
-  · rw [nonScalar_double hnb, nonScalar_ordinal .date hnb]
+  · rw [hca, hcb, toVal_ordinal_date, toVal_ordinal_date]
+    cases hx : (va.scalarOf.1.denote M).toScalar <;> cases hy : (vb.scalarOf.1.denote M).toScalar <;>
+      simp [run_thrown, Agrees, holds_or, holds_not, holds_and, ha, hb, hx, hy, isDateOf_holds]
+    rename_i x y
+    unfold parseDate?
+    cases hvx : isDateLabel x <;> cases hvy : isDateLabel y <;> simp [run_pure, run_thrown]
+    simp [conc_mkBool, relT_ints M r _ _ _ _ (dayOf_denote M _ x hx hvx) (dayOf_denote M _ y hy hvy)]
+  · rw [nonScalar_ordinal .date hnb]
     split <;> simp_all [run_thrown, Agrees, holds_or]
-  · rw [nonScalar_double hna, nonScalar_ordinal .date hna]
+  · rw [nonScalar_ordinal .date hna]
     split <;> simp_all [run_thrown, Agrees, holds_or]
-  · rw [nonScalar_double hna, nonScalar_ordinal .date hna]
+  · rw [nonScalar_ordinal .date hna]
     split <;> simp_all [run_thrown, Agrees, holds_or]
 
 theorem conc_mkStr (M : Model) (recs : Records) (t : Term) :
@@ -2055,7 +2027,7 @@ mutual
         (fun b => by rw [same_conc M (env.records.conc M)]; rfl)]
       simp [visited, List.filter_map, Function.comp_def]
   | vars, .some .array .., r, h, s | vars, .every .array .., r, h, s
-  | vars, .sortedBy .., r, h, s | vars, .format _, r, h, s | vars, .decimal .., r, h, s
+  | vars, .sortedBy .., r, h, s | vars, .format _, r, h, s
   | vars, .createKey _, r, h, s => by simp [seval] at h
   | vars, .sum c x body, r, h, s => by
     simp only [seval, bind, Except.bind] at h

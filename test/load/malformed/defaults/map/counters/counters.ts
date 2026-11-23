@@ -10,7 +10,7 @@ export const tagCounter = machine({
     counting: {
       type: "map",
       key: { tag: z.string() },
-      context: { visits: z.number().min(1).default(0) },
+      context: { visits: z.int().min(1).default(0) },
       initial: "idle",
       states: { idle: {} },
     },

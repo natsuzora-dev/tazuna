@@ -3,11 +3,11 @@ import { z } from "zod";
 
 export const { command, machine, event, contract, scenario } = service({ name: "shop", description: "Take orders" });
 
-export const orderPlaced = event({ payload: { amount: z.number().int().positive() } });
+export const orderPlaced = event({ payload: { amount: z.int().positive() } });
 export const orderCancelled = event({});
 
 export const placeOrder = command({
-  input: { amount: z.number().int().positive() },
+  input: { amount: z.int().positive() },
   emits: [orderPlaced],
 }).decide(({ input }) => [emit(orderPlaced, { amount: input.amount })]);
 

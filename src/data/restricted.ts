@@ -48,6 +48,7 @@ export const schemaFeatures = [
   "tuple",
   "recursion",
   "message",
+  "decimal",
 ] as const;
 
 type Of<Name extends string, Data, Definition = null> = {
@@ -107,6 +108,7 @@ export type Restricted =
    * - `tuple` (z.tuple): an object with a field per position.
    * - `recursion` (z.lazy): an entity whose rows ref() each other.
    * - `message`: an error message that is a function; a message written as a string stays.
+   * - `decimal` (z.number() without .int()): z.int() that holds the value in its smallest unit, such as cents.
    */
   | Of<"schema", SchemaPlace | (SchemaPlace & { readonly name: string }), DefinitionRef | null>
   /**

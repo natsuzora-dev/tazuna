@@ -14,7 +14,7 @@ export const panel = screen({
         rows: {
           type: "map",
           key: { row: z.string() },
-          context: { bumps: z.number().default(0) },
+          context: { bumps: z.int().default(0) },
           initial: "counting",
           states: { counting: {} },
         },

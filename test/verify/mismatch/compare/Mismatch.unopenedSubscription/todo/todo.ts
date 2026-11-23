@@ -6,7 +6,7 @@ export const { query, contract } = service({ name: "todo", description: "Answer 
 
 export const notesIn = query({
   input: { ids: z.array(screens.DraftId) },
-  output: { count: z.number() },
+  output: { count: z.int() },
 }).resolve(({ input }) => ({ count: input.ids.length }));
 
 export const note = query({
@@ -16,5 +16,5 @@ export const note = query({
 
 export const notesNamed = query({
   input: { prefix: z.string() },
-  output: { count: z.number() },
+  output: { count: z.int() },
 }).resolve(() => ({ count: 0 }));

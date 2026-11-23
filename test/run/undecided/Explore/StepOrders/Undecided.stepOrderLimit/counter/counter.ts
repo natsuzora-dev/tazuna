@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Counter = singleEntity({
   description: "How many bumps the counter took",
-  fields: { count: z.number().default(0) },
+  fields: { count: z.int().default(0) },
 });
 
 export const { automation, command, event, updateEvent, contract, scenario } = service({

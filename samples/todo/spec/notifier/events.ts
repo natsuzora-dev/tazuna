@@ -2,7 +2,7 @@ import { z } from "zod";
 import { createEvent, deleteEvent, event, NotificationPermission, OpenTask, updateEvent } from "./data.ts";
 
 export const tooManyWarned = event({
-  payload: { count: z.number() },
+  payload: { count: z.int() },
 });
 
 export const openTaskRecorded = createEvent({

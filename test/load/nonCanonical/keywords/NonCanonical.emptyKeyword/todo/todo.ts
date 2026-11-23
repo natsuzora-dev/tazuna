@@ -33,7 +33,7 @@ export const ping = command({ input: {}, emits: [pinged], binds: {}, requires: {
   emit(pinged, {}),
 ]);
 
-export const tasks = query({ input: {}, output: { count: z.number() }, requires: {}, ensures: {} }).resolve(
+export const tasks = query({ input: {}, output: { count: z.int() }, requires: {}, ensures: {} }).resolve(
   ({ records }) => ({ count: records.Task.size }),
 );
 

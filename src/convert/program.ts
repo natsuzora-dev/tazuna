@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { z } from "zod";
 import { encoded } from "../data/collections.ts";
 import type { DefinitionRef } from "../data/definitionRef.ts";
 import type { Json, Shape } from "../data/values.ts";
@@ -19,7 +18,7 @@ import type {
   Site,
 } from "../spec/ir.generated.ts";
 import { chartStructure, stateNamed, transitionRef } from "../spec/structure.ts";
-import { type Arg, converted, type Defined, definedKey, type Typed } from "./expression.ts";
+import { type Arg, converted, type Defined, definedKey } from "./expression.ts";
 import { type Location, Locator } from "./located.ts";
 import { Sources } from "./sources.ts";
 
@@ -59,7 +58,6 @@ interface Slot {
   readonly whole: boolean;
   /** The binds slot whose values the conditions read as `bound`, which converts first. */
   readonly binds?: Slot;
-  readonly typed: Typed;
 }
 
 /** The one function of a definition that a callback evaluates, with its arguments and their schemas. */
@@ -72,24 +70,11 @@ interface FnSlot {
   readonly events?: readonly DefinitionRef[];
   /** The binds that the function reads as `bound`, which convert first. */
   readonly binds?: ConditionsCallback;
-  readonly typed: Typed;
 }
 
 const located = (u: Unconverted) => (u.location === undefined ? {} : { location: u.location });
 
 const sameRef = (a: DefinitionRef, b: DefinitionRef) => a.service === b.service && a.name === b.name;
-
-const objectOf = (shape: Shape | undefined): z.ZodType | undefined =>
-  shape === undefined ? undefined : z.object(shape);
-
-/** The schemas of a service's records and of the arguments `args`, each an object of a shape. */
-function typedOf(spec: Spec, service: string, args: Readonly<Record<string, Shape | undefined>>): Typed {
-  const entities = (spec.services.get(service)?.definition.entities ?? {}) as Readonly<Record<string, AnyEntity>>;
-  return {
-    args: Object.fromEntries(Object.entries(args).map(([name, shape]) => [name, objectOf(shape)])),
-    entities: Object.fromEntries(Object.entries(entities).map(([name, e]) => [name, z.object(e.fields)])),
-  };
-}
 
 function fnSlotsOf(spec: Spec): FnSlot[] {
   const slots: FnSlot[] = [];
@@ -101,7 +86,6 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         definition: { service, name },
         f: query.resolve as SpecFunction | undefined,
         args: ["input", "records", "now"],
-        typed: typedOf(spec, service, { input: query.input }),
       });
     }
     if (d.kind === "command") {
@@ -112,7 +96,6 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         f: command.decide as SpecFunction | undefined,
         args: ["input", "records", "now", "bound"],
         binds: "binding",
-        typed: typedOf(spec, service, { input: command.input }),
         events: command.emits.flatMap((e) => {
           const named = spec.names.get(e);
           return named === undefined ? [] : [{ service: named.service, name: named.name }];
@@ -126,7 +109,6 @@ function fnSlotsOf(spec: Spec): FnSlot[] {
         definition: { service, name },
         f: automation.input,
         args: ["payload", "records", "now", "bound", "createKey"],
-        typed: typedOf(spec, service, { payload: Object.values(automation.receives)[0]?.payload }),
         binds: "automationBinding",
       });
     }
@@ -142,7 +124,6 @@ interface ChartSlot {
   readonly args: readonly Arg[];
   /** Whether the question reads every function of the site, as `firstFailing` or a held object does. */
   readonly whole: boolean;
-  readonly typed: Typed;
 }
 
 const scopeArgs: readonly Arg[] = ["context", "input", "shown", "key", "records", "active", "now", "held"];
@@ -159,19 +140,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
     const structure = chartStructure(spec.structure, service, name);
     if (structure === undefined) continue;
     const chart = { service, name };
-    const contexts = [chartSpec.context, ...structure.states.map((st) => stateAt(chartSpec, st.path).context)];
-    // A copy's field over the owner's of another schema could be either.
-    const context = Object.fromEntries(
-      [...new Set(contexts.flatMap((c) => Object.keys(c ?? {})))].flatMap((field) => {
-        const schemas = new Set(contexts.flatMap((c) => (c?.[field] === undefined ? [] : [c[field]])));
-        return schemas.size === 1 ? [[field, [...schemas][0]]] : [];
-      }),
-    ) as Shape;
-    const typed = (state?: string | null): Typed => {
-      const declaring = state === undefined || state === null ? undefined : stateNamed(structure, state);
-      const held = declaring === undefined ? undefined : (stateAt(chartSpec, declaring.path).held as Shape | undefined);
-      return typedOf(spec, service, { context, input: chartSpec.input, held });
-    };
     const fns = (functions: Readonly<Record<string, unknown>> | undefined) =>
       Object.entries(functions ?? {}) as [string, SpecFunction][];
     slots.push(
@@ -181,7 +149,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
         functions: fns(chartSpec.invariants),
         args: scopeArgs,
         whole: true,
-        typed: typed(),
       },
       {
         chart,
@@ -189,7 +156,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
         functions: [["", chartSpec.initialContext]],
         args: ["input"],
         whole: true,
-        typed: typed(),
       },
       {
         chart,
@@ -197,7 +163,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
         functions: [["", chartSpec.resolve]],
         args: scopeArgs,
         whole: true,
-        typed: typed(),
       },
     );
     const offers = (state: string | null, offered: Readonly<Record<string, unknown>> | undefined) => {
@@ -209,7 +174,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
             functions: [["", f as SpecFunction]],
             args: scopeArgs,
             whole: true,
-            typed: typed(state),
           });
     };
     offers(null, chartSpec.offers);
@@ -218,7 +182,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
       state: string,
       fills: Readonly<Record<string, unknown>> | undefined,
       args: readonly Arg[],
-      declaring: string | null,
     ) => {
       const target = stateNamed(structure, state);
       if (target?.held === null || target === undefined) return;
@@ -232,7 +195,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
         functions,
         args,
         whole: true,
-        typed: typed(declaring),
       });
     };
     for (const t of [...structure.on, ...structure.states.flatMap((s) => s.transitions)]) {
@@ -245,7 +207,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
           functions: fns(written.guard),
           args: causeArgs,
           whole: false,
-          typed: typed(t.source),
         },
         {
           chart,
@@ -253,10 +214,9 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
           functions: fns(written.assign),
           args: assignArgs,
           whole: true,
-          typed: typed(t.source),
         },
       );
-      if (t.target !== null) held({ kind: "transition", transition: ref }, t.target, written.with, causeArgs, t.source);
+      if (t.target !== null) held({ kind: "transition", transition: ref }, t.target, written.with, causeArgs);
     }
     for (const s of structure.states) {
       const node = stateAt(chartSpec, s.path);
@@ -267,7 +227,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
           functions: fns(node.entry?.assign),
           args: assignArgs,
           whole: true,
-          typed: typed(s.name),
         },
         {
           chart,
@@ -275,10 +234,9 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
           functions: fns(node.exit?.assign),
           args: assignArgs,
           whole: true,
-          typed: typed(s.name),
         },
       );
-      if (s.initial !== null) held({ kind: "initial", parent: s.name }, s.initial, node.initialWith, scopeArgs, s.name);
+      if (s.initial !== null) held({ kind: "initial", parent: s.name }, s.initial, node.initialWith, scopeArgs);
       for (const deadline of s.deadlines) {
         const at = node.after?.[deadline.name]?.at as SpecFunction | undefined;
         if (at !== undefined)
@@ -288,7 +246,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
             functions: [["", at]],
             args: scopeArgs,
             whole: true,
-            typed: typed(s.name),
           });
       }
       if (node.type === "map")
@@ -298,7 +255,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
           functions: [["", node.items as SpecFunction]],
           args: scopeArgs,
           whole: true,
-          typed: typed(s.name),
         });
       offers(s.name, node.offers);
       for (const keyword of keywords)
@@ -309,7 +265,6 @@ function chartSlotsOf(spec: Spec): ChartSlot[] {
             functions: [["", (activity as { readonly input?: SpecFunction }).input]],
             args: keyword === "sends" ? [...scopeArgs, "createKey"] : scopeArgs,
             whole: true,
-            typed: typed(s.name),
           });
     }
   }
@@ -320,7 +275,6 @@ function slotsOf(spec: Spec): Slot[] {
   const slots: Slot[] = [];
   for (const { service, name, definition: d } of spec.definitions) {
     const definition = { service, name };
-    const typed = (args: Readonly<Record<string, Shape | undefined>>) => typedOf(spec, service, args);
     if (d.kind === "command" || d.kind === "query") {
       const target = d as AnyCommand | AnyQuery;
       slots.push(
@@ -330,7 +284,6 @@ function slotsOf(spec: Spec): Slot[] {
           conditions: target.requires,
           args: ["input"],
           whole: false,
-          typed: typed({ input: target.input }),
         },
         {
           callback: "resultEnsures",
@@ -338,7 +291,6 @@ function slotsOf(spec: Spec): Slot[] {
           conditions: target.ensures,
           args: ["input", "output", "events", "records"],
           whole: false,
-          typed: typed({ input: target.input, output: target.output }),
         },
       );
       if (target.kind === "command") {
@@ -348,7 +300,6 @@ function slotsOf(spec: Spec): Slot[] {
           conditions: target.binds as Conditions<never>,
           args: ["input", "records", "now"],
           whole: true,
-          typed: typed({ input: target.input }),
         };
         slots.push(
           binds,
@@ -358,7 +309,6 @@ function slotsOf(spec: Spec): Slot[] {
             conditions: target.requires,
             args: ["input", "records", "now", "bound"],
             whole: false,
-            typed: typed({ input: target.input }),
             binds,
           },
           {
@@ -367,7 +317,6 @@ function slotsOf(spec: Spec): Slot[] {
             conditions: target.ensures,
             args: ["input", "records", "bound"],
             whole: true,
-            typed: typed({ input: target.input }),
             binds,
           },
         );
@@ -378,19 +327,16 @@ function slotsOf(spec: Spec): Slot[] {
           conditions: target.ensures,
           args: ["input", "output", "records"],
           whole: true,
-          typed: typed({ input: target.input, output: target.output }),
         });
     }
     if (d.kind === "automation") {
       const automation = d as Automation;
-      const payloads = Object.values(automation.receives).map((e) => e.payload);
       const binds: Slot = {
         callback: "automationBinding",
         definition,
         conditions: automation.binds as Conditions<never>,
         args: ["payload", "records", "now"],
         whole: true,
-        typed: typed({ payload: payloads[0] }),
       };
       slots.push(binds, {
         callback: "automationGuard",
@@ -398,7 +344,6 @@ function slotsOf(spec: Spec): Slot[] {
         conditions: automation.guard,
         args: ["payload", "records", "now", "bound"],
         whole: false,
-        typed: typed({ payload: payloads[0] }),
         binds,
       });
     }
@@ -411,7 +356,6 @@ function slotsOf(spec: Spec): Slot[] {
           conditions: screen.requires,
           args: ["input"],
           whole: false,
-          typed: typed({ input: screen.input }),
         },
         {
           callback: "closeEnsures",
@@ -419,7 +363,6 @@ function slotsOf(spec: Spec): Slot[] {
           conditions: screen.ensures,
           args: ["input", "output"],
           whole: true,
-          typed: typed({ input: screen.input, output: screen.output }),
         },
       );
     }
@@ -430,7 +373,6 @@ function slotsOf(spec: Spec): Slot[] {
         definition: { service, name },
         args: ["record", "now"],
         whole: true,
-        typed: typedOf(spec, service, { record: entity.fields }),
       } as const;
       const responses = Object.entries(entity.responses);
       slots.push(
@@ -453,7 +395,6 @@ function slotsOf(spec: Spec): Slot[] {
       conditions: definition.invariants as Conditions<never>,
       args: ["records", "now"],
       whole: true,
-      typed: typedOf(spec, service, {}),
     });
   }
   return slots;
@@ -475,8 +416,7 @@ export class Converter {
 
   /**
    * The IR of `f`, a spec function that receives `args`, or the reason that it stays TS. A decide's `events` are those
-   * its command lists; `defined` is what the spec defines outside its functions, which program() finds itself, and
-   * `typed` the schemas of the arguments.
+   * its command lists; `defined` is what the spec defines outside its functions, which program() finds itself.
    */
   convert(
     f: SpecFunction,
@@ -484,28 +424,13 @@ export class Converter {
     {
       events = [],
       defined = this.defined,
-      typed,
-    }: { readonly events?: readonly DefinitionRef[]; readonly defined?: Defined; readonly typed?: Typed } = {},
+    }: { readonly events?: readonly DefinitionRef[]; readonly defined?: Defined } = {},
   ): Expr | Unconverted {
-    const result = this.convertTyped(f, args, { events, defined, ...(typed && { typed }) });
-    return "unconverted" in result ? result : result.body;
-  }
-
-  /** convert's IR of `f` with the schema of its values, where the converter follows them to one. */
-  private convertTyped(
-    f: SpecFunction,
-    args: readonly Arg[],
-    {
-      events = [],
-      defined = this.defined,
-      typed,
-    }: { readonly events?: readonly DefinitionRef[]; readonly defined?: Defined; readonly typed?: Typed },
-  ): { readonly body: Expr; readonly schema: z.ZodType | undefined } | Unconverted {
     const location = this.locator.located(f);
     const source = location === undefined ? undefined : this.sources.sourceAt(location);
     if (source === undefined)
       return { unconverted: "has no source that the converter finds", ...(location && { location }) };
-    const result = converted(source, args, events, defined, typed);
+    const result = converted(source, args, events, defined);
     return "unconverted" in result && location !== undefined ? { ...result, location } : result;
   }
 
@@ -539,31 +464,17 @@ export class Converter {
     };
     const notConverted: NotConverted[] = [];
     const convertedBinds = new Set<Slot>();
-    // The schema of each binds value, by its binds callback and definition, so that `bound` keeps integers integers.
-    const bindSchemas = new Map<string, Shape>();
-    const bindsKey = (callback: string, d: DefinitionRef) => `${callback} ${d.service} ${d.name}`;
-    const withBound = (typed: Typed, callback: string | undefined, d: DefinitionRef): Typed => {
-      const shape = callback === undefined ? undefined : bindSchemas.get(bindsKey(callback, d));
-      return shape === undefined ? typed : { ...typed, args: { ...typed.args, bound: z.object(shape) } };
-    };
     for (const slot of slotsOf(spec)) {
       const entries = Object.entries(slot.conditions ?? {}) as [string, SpecFunction][];
       const binds = slot.binds === undefined || convertedBinds.has(slot.binds);
-      const typed = withBound(slot.typed, slot.binds?.callback, slot.definition);
       const conditions: Condition[] = [];
       const failed: NotConverted[] = [];
-      const schemas: Record<string, z.ZodType> = {};
       for (const [name, f] of entries) {
         const at = { callback: slot.callback, definition: slot.definition, name };
-        const result = binds ? this.convertTyped(f, slot.args, { typed }) : { unconverted: "reads binds that stay TS" };
+        const result = binds ? this.convert(f, slot.args) : { unconverted: "reads binds that stay TS" };
         if ("unconverted" in result) failed.push({ ...at, reason: result.unconverted, ...located(result) });
-        else {
-          conditions.push({ name, body: result.body });
-          schemas[name] = result.schema ?? z.unknown();
-        }
+        else conditions.push({ name, body: result });
       }
-      if (slot.callback === "binding" || slot.callback === "automationBinding")
-        bindSchemas.set(bindsKey(slot.callback, slot.definition), schemas);
       notConverted.push(...failed);
       if (slot.whole ? failed.length === 0 : conditions.length > 0)
         lists[slot.callback].push({ definition: slot.definition, conditions });
@@ -578,10 +489,7 @@ export class Converter {
       const body: Expr | Unconverted = binds
         ? f === undefined
           ? empty
-          : this.convert(f, slot.args, {
-              events: slot.events ?? [],
-              typed: withBound(slot.typed, slot.binds, slot.definition),
-            })
+          : this.convert(f, slot.args, { events: slot.events ?? [] })
         : { unconverted: "reads binds that stay TS" };
       if ("unconverted" in body)
         notConverted.push({
@@ -597,7 +505,7 @@ export class Converter {
       const functions: Condition[] = [];
       const failed: NotConverted[] = [];
       for (const [name, f] of slot.functions) {
-        const body = f === undefined ? empty : this.convert(f, slot.args, { typed: slot.typed });
+        const body = f === undefined ? empty : this.convert(f, slot.args);
         if ("unconverted" in body)
           failed.push({
             callback: "chart",

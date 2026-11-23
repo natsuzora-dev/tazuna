@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import { markOf } from "../../data/marks.ts";
 import type { Restricted, schemaFeatures } from "../../data/restricted.ts";
-import { constantMessage, schemaNode } from "../../data/schemaNode.ts";
+import { constantMessage, isDecimal, schemaNode } from "../../data/schemaNode.ts";
 import { isSelfRef } from "../../dsl/entity.ts";
 import type { Found } from "../../load/found.ts";
 import type { LoadedSpec } from "../../load/load.ts";
@@ -44,6 +44,7 @@ function featuresOf(schema: z.ZodType): Feature[] {
   const own: Feature[] = [
     ...(node.type === "record" || node.type === "tuple" ? [node.type] : [wrapping(schema) ?? []].flat()),
     ...(def.coerce === true ? (["overwrite"] as const) : []),
+    ...(isDecimal(schema) ? (["decimal"] as const) : []),
     ...(def.error !== undefined && constantMessage(def.error) === undefined ? (["message"] as const) : []),
   ];
   return [...new Set([...own, ...checksOn(schema).flatMap((c) => checkFeature(c) ?? [])])];

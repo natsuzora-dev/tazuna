@@ -1,7 +1,7 @@
 import { emit, service, singleEntity } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
 
-export const Count = singleEntity({ description: "A count", fields: { seen: z.number().default(0) } });
+export const Count = singleEntity({ description: "A count", fields: { seen: z.int().default(0) } });
 
 export const { automation, command, machine, event, updateEvent, contract, scenario } = service({
   name: "sameFirstEvent",
@@ -25,7 +25,7 @@ export const addThree = command({ emits: [taskAdded] }).decide(() => [
   emit(taskAdded, { id: "task-3" }),
 ]);
 
-export const set = command({ input: { seen: z.number() }, emits: [counted] }).decide(({ input }) => [
+export const set = command({ input: { seen: z.int() }, emits: [counted] }).decide(({ input }) => [
   emit(counted, { seen: input.seen }),
 ]);
 
@@ -35,7 +35,7 @@ export const withThree = automation({ receives: { started }, commands: { addThre
 
 export const counter = machine({
   description: "Count task-1 events until task-3 arrives, then write the count",
-  context: { seen: z.number().default(0) },
+  context: { seen: z.int().default(0) },
   receives: { taskAdded },
   commands: { set },
   initial: "counting",

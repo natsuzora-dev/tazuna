@@ -11,7 +11,7 @@ export const tagCounter = machine({
       type: "map",
       key: { tag: z.string() },
       context: {
-        visits: z.number().default(() => {
+        visits: z.int().default(() => {
           throw new Error("no visit count is set");
         }),
       },

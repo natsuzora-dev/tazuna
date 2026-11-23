@@ -34,7 +34,7 @@ export const noteB = automation({
 // A cycle through a machine is not reported, because a machine waits and its guard can stop the cycle.
 export const noter = machine({
   description: "Write note A on the first three pings",
-  context: { count: z.number().default(0) },
+  context: { count: z.int().default(0) },
   receives: { pinged },
   commands: { noteFromA },
   initial: "idle",

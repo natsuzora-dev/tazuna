@@ -8,7 +8,7 @@ export const { machine, scenario } = service({
 
 export const limits = machine({
   description: "Hold the limit",
-  context: { limit: z.number().min(1).default(0) },
+  context: { limit: z.int().min(1).default(0) },
   initial: "holding",
   states: { holding: {} },
 }).chart({});

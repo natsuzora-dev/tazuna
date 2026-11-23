@@ -5,8 +5,8 @@ export const { screen, scenario } = service({ name: "screens", description: "Sho
 
 export const counterScreen = screen({
   description: "A counter the user sets",
-  context: { count: z.number().default(0) },
-  controls: { countSet: { label: "Count", payload: { count: z.number().int() } } },
+  context: { count: z.int().default(0) },
+  controls: { countSet: { label: "Count", payload: { count: z.int() } } },
   initial: "counting",
   states: { counting: {} },
 }).chart({

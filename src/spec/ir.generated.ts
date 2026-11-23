@@ -229,13 +229,6 @@ export type Expr =
       readonly left: Expr;
       readonly right: Expr;
     }
-  /** `+`, `-`, `*` or `/` of numbers, which the converter writes where `arith` does not hold them, as JS computes it. */
-  | {
-      readonly op: "decimal";
-      readonly operation: "add" | "sub" | "mul" | "div";
-      readonly left: Expr;
-      readonly right: Expr;
-    }
   /** `addDays(date, days)`: the date label `days` days after `date`, which throws outside years 0000 through 9999. */
   | {
       readonly op: "addDays";

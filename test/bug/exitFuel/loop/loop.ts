@@ -5,7 +5,7 @@ export const { screen, scenario } = service({ name: "loop", description: "Open s
 
 export const selfScreen: any = screen({
   description: "A screen that opens itself until depth 10",
-  input: { depth: z.number() },
+  input: { depth: z.int() },
   screens: {
     get selfScreen() {
       return selfScreen;

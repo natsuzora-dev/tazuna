@@ -5,7 +5,7 @@ import { command, NotificationPermission } from "./data.ts";
 import { notificationPermissionRecorded, openTaskForgotten, openTaskRecorded, tooManyWarned } from "./events.ts";
 
 export const warn = command({
-  input: { count: z.number() },
+  input: { count: z.int() },
   emits: [tooManyWarned],
 }).decide(({ input }) => [emit(tooManyWarned, { count: input.count })]);
 

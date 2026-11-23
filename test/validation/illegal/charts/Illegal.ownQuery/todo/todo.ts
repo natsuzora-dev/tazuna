@@ -29,7 +29,7 @@ export const trimTitle = command({
 ]);
 
 export const taskCount = query({
-  output: { count: z.number() },
+  output: { count: z.int() },
 }).resolve(({ records }) => ({ count: records.Task.size }));
 
 export const trimFirstTitle = automation({

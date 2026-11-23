@@ -112,6 +112,9 @@ export function schemaNode(schema: z.ZodType): SchemaNode {
   }
 }
 
+/** Whether `schema` is a number that may have a fraction: z.number() without .int(). */
+export const isDecimal = (schema: z.ZodType): boolean => schema instanceof z.ZodNumber && schema.isInt !== true;
+
 export function childrenOf(node: SchemaNode): readonly z.ZodType[] {
   switch (node.type) {
     case "array":

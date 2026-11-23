@@ -19,7 +19,7 @@ export const ping = command({ emits: [pinged] }).decide(() => [emit(pinged, {})]
 export const echo = machine({
   description:
     "Ping 100 times in a chain for each added task, each ping sent when echo receives the pinged event of the one before",
-  context: { pings: z.number().default(0) },
+  context: { pings: z.int().default(0) },
   receives: { taskAdded, pinged },
   commands: { ping },
   initial: "idle",

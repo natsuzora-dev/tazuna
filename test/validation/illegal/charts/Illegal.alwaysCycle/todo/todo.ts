@@ -87,7 +87,7 @@ export const inward = machine({
 // A transition without a target stays in its state.
 export const counting = machine({
   description: "Count without end",
-  context: { count: z.number().int().default(0) },
+  context: { count: z.int().default(0) },
   receives: { taskAdded },
   initial: "t",
   states: { t: {} },

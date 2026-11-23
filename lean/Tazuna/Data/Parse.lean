@@ -1,4 +1,4 @@
-import Tazuna.Data.Binary64
+import Tazuna.Data.Number
 import Tazuna.Data.Time
 import Tazuna.Data.UnionOptions
 
@@ -93,20 +93,16 @@ def sameValue : Value → Value → Bool
 
 def numLt (a b : Lean.JsonNumber) : Bool := a.mantissa * 10 ^ b.exponent < b.mantissa * 10 ^ a.exponent
 
-/-- A number as JS writes it back to JSON. -/
-def jsonNumber (n : Lean.JsonNumber) : Lean.JsonNumber := (decimalOf? n.toFloat).getD n
-
-def isInteger (n : Lean.JsonNumber) : Bool := n.mantissa % 10 ^ n.exponent == 0
+/-- A number as JS writes it back to JSON: an integer as its digits, other numbers without trailing zeros. -/
+def jsonNumber (n : Lean.JsonNumber) : Lean.JsonNumber :=
+  if isInteger n then ⟨n.mantissa / 10 ^ n.exponent, 0⟩ else trimmed n
 
 def safeLimit : Int := 2 ^ 53 - 1
 
-/-- Zod's util.floatSafeRemainder of two doubles is zero. -/
-def multipleOf (value step : Float) : Bool :=
-  let ratio := value / step
-  let floor := ratio.floor
-  let rounded := if ratio - floor >= 0.5 then floor + 1 else floor
-  let magnitude := if ratio.abs > 1 then ratio.abs else 1
-  (ratio - rounded).abs < 4 * 2.220446049250313e-16 * magnitude
+/-- Whether `value` is a whole multiple of `step`, exactly: Zod's float-safe remainder agrees on integers. -/
+def multipleOf (value step : Lean.JsonNumber) : Bool :=
+  let divisor := step.mantissa * 10 ^ value.exponent
+  divisor != 0 && (value.mantissa * 10 ^ step.exponent) % divisor == 0
 
 /-- Zod's pattern of z.iso.date(), as an issue writes it. -/
 def datePattern : String :=
@@ -259,7 +255,7 @@ def checkIssues (c : Value) (v : Value) : List ZodIssue :=
     [checkIssue [("origin", .str "number"), ("code", .str "too_big"), ("maximum", .num bound),
       ("inclusive", .bool inclusive)] (boundMessage true "number" (adjective true) (.num bound))]
   | some "multiple_of", .num n =>
-    if multipleOf n.toFloat (num "value").toFloat then [] else
+    if multipleOf n (num "value") then [] else
     [checkIssue [("origin", .str "number"), ("code", .str "not_multiple_of"), ("divisor", .num (num "value"))]
       s!"Invalid number: must be a multiple of {jsNumber (num "value")}"]
   | some "number_format", .num n =>

@@ -501,7 +501,6 @@ def seval (env : SEnv) (vars : List (String × SVal)) : Expr → Except String S
     pure (firstIn items, .or ec (twoIn items))
   | .sortedBy .. => throw "sortedBy, whose groups the encoding does not hold"
   | .format .. => throw "a template literal"
-  | .decimal .. => throw "decimal arithmetic"
   | .addDays d n => do
     let (vd, ed) ← seval env vars d
     let (vn, en) ← seval env vars n

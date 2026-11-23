@@ -12,8 +12,8 @@ export const pinger = machine({
   states: {
     chains: {
       type: "map",
-      key: { chain: z.number() },
-      context: { pings: z.number().default(1) },
+      key: { chain: z.int() },
+      context: { pings: z.int().default(1) },
       initial: "pinging",
       states: { pinging: {} },
     },

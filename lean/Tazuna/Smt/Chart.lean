@@ -19,7 +19,7 @@ def Expr.children : Expr → List Expr
   | .let _ v b => [v, b]
   | .ite c y n => [c, y, n]
   | .and a b | .or a b | .coalesce a b | .eq a b | .compare _ _ a b | .startsWith a b | .endsWith a b
-  | .strIncludes a b | .lookup a b | .concat a b | .includes a b | .arith _ a b | .decimal _ a b | .addDays a b => [a, b]
+  | .strIncludes a b | .lookup a b | .concat a b | .includes a b | .arith _ a b | .addDays a b => [a, b]
   | .not a | .field a _ | .fieldOpt a _ | .strLen a | .size a | .only a | .emit _ a => [a]
   | .filter _ c _ b | .some _ c _ b | .every _ c _ b | .map _ c _ b | .sum c _ b | .min _ c _ b | .max _ c _ b
   | .sortedBy _ c _ b => [c, b]

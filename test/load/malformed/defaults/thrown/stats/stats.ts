@@ -4,7 +4,7 @@ import { z } from "zod";
 export const Stats = singleEntity({
   description: "Statistics of tasks, whose goal default throws",
   fields: {
-    goal: z.number().default(() => {
+    goal: z.int().default(() => {
       throw new Error("no goal is set");
     }),
   },

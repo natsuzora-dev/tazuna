@@ -18,7 +18,7 @@ export const addTask = command({
 
 export const counter = machine({
   description: "Count added tasks up to one",
-  context: { count: z.number().default(0) },
+  context: { count: z.int().default(0) },
   receives: { taskAdded },
   initial: "counting",
   states: { counting: {} },

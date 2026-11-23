@@ -8,7 +8,7 @@ export const { screen, scenario } = service({
 
 export const pickScreen = screen({
   description: "Pick a number below a positive count",
-  input: { count: z.number() },
+  input: { count: z.int() },
   initial: "picking",
   states: { picking: {} },
   requires: { positive: ({ input }) => input.count > 0 },

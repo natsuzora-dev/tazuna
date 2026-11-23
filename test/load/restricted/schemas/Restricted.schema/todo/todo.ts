@@ -21,6 +21,7 @@ export const taskAdded = event({
     size: z.int().min(1, { error: (issue) => `at least 1, not ${String(issue.input)}` }),
     named: z.string().min(1, "a name has text"),
     startsWithA: z.string().startsWith("a"),
+    price: z.number(),
   },
 });
 

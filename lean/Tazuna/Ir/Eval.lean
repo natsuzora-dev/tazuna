@@ -1,4 +1,4 @@
-import Tazuna.Data.Binary64
+import Tazuna.Data.Number
 import Tazuna.Data.Time
 import Tazuna.Ir.Expr
 import Tazuna.Service.Functions
@@ -42,8 +42,6 @@ inductive Val where
   | obj (fields : List (String × Val))
   | tracked (tracked : Tracked) (value : Value)
   | emit (event : Spec.Ref) (payload : Val)
-  /-- An infinity or NaN that a `decimal` made, which JSON has no number for. -/
-  | nonFinite (x : Float)
 deriving Inhabited
 
 def Val.ofOption : Option Value → Val
@@ -89,7 +87,6 @@ def truthy : Val → Bool
   | .json (.bool b) => b
   | .json (.num n) => n.mantissa != 0
   | .json (.str s) => !s.isEmpty
-  | .nonFinite x => !x.isNaN
   | _ => true
 
 /-- JS `===` on scalars, null and undefined. Two arrays, objects or records are never the same value. -/
@@ -99,7 +96,6 @@ def same : Val → Val → Bool
   | .json (.bool a), .json (.bool b) => a == b
   | .json (.num a), .json (.num b) => a.mantissa * 10 ^ b.exponent == b.mantissa * 10 ^ a.exponent
   | .json (.str a), .json (.str b) => a == b
-  | .nonFinite a, .nonFinite b => a == b
   | _, _ => false
 
 /-- The number or days that `order` reads of a value to compare it, as a numerator over 10 ^ the exponent. -/
@@ -116,24 +112,6 @@ def Relation.holds {α : Type} [LT α] [LE α] [BEq α] [DecidableRel (α := α)
   | .gt => a > b
   | .ge => a ≥ b
   | .eq => a == b
-
-/-- The double that a number is, as JS holds it. -/
-def double? : Val → Option Float
-  | .json (.num n) => some n.toFloat
-  | .nonFinite x => some x
-  | _ => none
-
-/-- A double as a value: its JSON number when it is finite. -/
-def Val.ofDouble (x : Float) : Val :=
-  match decimalOf? x with
-  | some n => .json (.num n)
-  | none => .nonFinite x
-
-def Decimal.apply : Decimal → Float → Float → Float
-  | .add, a, b => a + b
-  | .sub, a, b => a - b
-  | .mul, a, b => a * b
-  | .div, a, b => a / b
 
 def thrown {α : Type} : EvalM α := throw (.thrown none)
 
@@ -244,7 +222,6 @@ def jsString : Val → EvalM String
   | .json (.bool b) => pure (toString b)
   | .json (.num n) => pure (jsNumber n)
   | .json (.str s) => pure s
-  | .nonFinite x => pure (if x.isNaN then "NaN" else if x > 0 then "Infinity" else "-Infinity")
   | _ => thrown
 
 mutual
@@ -279,13 +256,9 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
   | .compare r order a b => do
     let left ← eval env vars a
     let right ← eval env vars b
-    match left, right, double? left, double? right with
-    | .nonFinite _, _, some x, some y | _, .nonFinite _, some x, some y =>
-      if order == .number then pure (.json (.bool (r.holds x y))) else thrown
-    | _, _, _, _ =>
-      match ordinal order left, ordinal order right with
-      | some (m, e), some (m', e') => pure (.json (.bool (r.holds (m * 10 ^ e') (m' * 10 ^ e))))
-      | _, _ => thrown
+    match ordinal order left, ordinal order right with
+    | some (m, e), some (m', e') => pure (.json (.bool (r.holds (m * 10 ^ e') (m' * 10 ^ e))))
+    | _, _ => thrown
   | .field o name => do
     match ← eval env vars o with
     | .undef | .json .null => thrown
@@ -393,11 +366,6 @@ def eval (env : Env) (vars : List (String × Val)) : Expr → EvalM Val
     match integer? left, integer? (← eval env vars b) with
     | some x, some y => pure (.json (.num (operation.apply x y)))
     | _, _ => thrown
-  | .decimal operation a b => do
-    let left ← eval env vars a
-    match double? left, double? (← eval env vars b) with
-    | some x, some y => pure (.ofDouble (operation.apply x y))
-    | _, _ => thrown
   | .addDays d n => do
     let date ← eval env vars d
     match ordinal .date date, integer? (← eval env vars n) with
@@ -445,7 +413,6 @@ partial def encode (env : Env) : Val → EvalM (Option Value)
   | .table source entity => do encode env (.list (← elements (.table source entity)))
   | .tracked _ v => pure (some v)
   | .emit _ payload => do pure (some (.obj [("kind", .str "emit"), ("payload", (← encode env payload).getD .null)]))
-  | .nonFinite _ => pure (some .null)
 
 /-- The JSON that TS's encoding of a spec function's value gives: null for `undefined`, as JSON.stringify writes it. -/
 def answerOf (env : Env) (v : Val) : EvalM Value := do pure ((← encode env v).getD .null)

@@ -5,8 +5,8 @@ export const { screen, scenario } = service({ name: "screens", description: "Pic
 
 export const pickScreen = screen({
   description: "Pick a number",
-  input: { count: z.number() },
-  output: { picked: z.number() },
+  input: { count: z.int() },
+  output: { picked: z.int() },
   initial: "picked",
   states: { picked: { type: "final" } },
   ensures: { belowCount: ({ input, output }) => output.picked < input.count },

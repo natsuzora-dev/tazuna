@@ -33,7 +33,7 @@ const fixture = <S extends Shape>(
 
 // Few distinct values, so that equal ones and empty ones come up often.
 const text = fc.string({ maxLength: 3, unit: fc.constantFrom("a", "b", "é") });
-const number = fc.oneof(fc.integer({ min: -2, max: 2 }), fc.double({ min: -3, max: 3, noNaN: true }));
+const number = fc.integer({ min: -3, max: 3 });
 const instant = fc.integer({ min: 0, max: 3 }).map((n) => Date.UTC(2026, 0, 1) + n * 999);
 const day = fc.integer({ min: 0, max: 3 }).map((n) => new Date(Date.UTC(2026, 0, 30 + n)).toISOString().slice(0, 10));
 const numbers = fc.array(number, { maxLength: 4 });
@@ -46,7 +46,7 @@ const Task = entity({
   fields: { id: z.string(), title: z.string(), done: z.boolean(), at: instantSchema.nullable() },
   key: "id",
 });
-const Settings = singleEntity({ description: "The settings", fields: { limit: z.number().default(0) } });
+const Settings = singleEntity({ description: "The settings", fields: { limit: z.int().default(0) } });
 export const entities = { Task, Settings };
 
 /** What a loaded spec of the fixtures would define: the entity Task. */
@@ -96,8 +96,8 @@ const keyed = fc.record({ id: fc.constantFrom("a", "b", "d"), title: text });
 
 const { command, condition, event } = service({ name: "fixtures", description: "The fixtures' events", entities });
 const noted = event({ payload: { title: z.string() } });
-const counted = event({ payload: { n: z.number() } });
-const noting = command({ input: { title: z.string(), bag: bag(z.number()) }, emits: [noted, counted] }).decide(
+const counted = event({ payload: { n: z.int() } });
+const noting = command({ input: { title: z.string(), bag: bag(z.int()) }, emits: [noted, counted] }).decide(
   ({ input }) => [
     input.title === "" ? emit(counted, { n: 0 }) : emit(noted, { title: input.title }),
     input.bag.map((n) => emit(counted, { n })),
@@ -118,7 +118,7 @@ export const fixtures: readonly Fixture[] = [
   ),
   fixture("lit", { title: z.string() }, fc.record({ title: text }), ({ input }) => input.title === "a"),
   fixture("arg", { title: z.string() }, fc.record({ title: text }), ({ input }) => input.title),
-  fixture("var", { ns: z.array(z.number()) }, fc.record({ ns: numbers }), ({ input }) => input.ns.some((n) => n > 0)),
+  fixture("var", { ns: z.array(z.int()) }, fc.record({ ns: numbers }), ({ input }) => input.ns.some((n) => n > 0)),
   fixture("let", { a: z.string(), b: z.string() }, fc.record({ a: text, b: text }), ({ input }) => {
     const { a } = input;
     if (a === "") return input.b;
@@ -126,26 +126,21 @@ export const fixtures: readonly Fixture[] = [
   }),
   fixture(
     "ite",
-    { n: z.number(), a: z.string(), b: z.string() },
+    { n: z.int(), a: z.string(), b: z.string() },
     fc.record({ n: number, a: text, b: text }),
     ({ input }) => (input.n > 0 ? input.a : input.b),
   ),
-  fixture(
-    "and",
-    { a: z.string(), n: z.number() },
-    fc.record({ a: text, n: number }),
-    ({ input }) => input.a && input.n,
-  ),
-  fixture("or", { a: z.string(), n: z.number() }, fc.record({ a: text, n: number }), ({ input }) => input.a || input.n),
+  fixture("and", { a: z.string(), n: z.int() }, fc.record({ a: text, n: number }), ({ input }) => input.a && input.n),
+  fixture("or", { a: z.string(), n: z.int() }, fc.record({ a: text, n: number }), ({ input }) => input.a || input.n),
   fixture(
     "coalesce",
     { note: z.string().nullable().optional(), title: z.string() },
     fc.record({ note: fc.option(text), title: text }, { requiredKeys: ["title"] }),
     ({ input }) => input.note ?? input.title,
   ),
-  fixture("not", { n: z.number() }, fc.record({ n: number }), ({ input }) => !input.n),
+  fixture("not", { n: z.int() }, fc.record({ n: number }), ({ input }) => !input.n),
   recordFixture("not", {}, fc.record({}), (args) => !tasksDone(args as never)),
-  fixture("let", { ns: z.array(z.number()), n: z.number() }, fc.record({ ns: numbers, n: number }), ({ input }) =>
+  fixture("let", { ns: z.array(z.int()), n: z.int() }, fc.record({ ns: numbers, n: number }), ({ input }) =>
     input.ns.some((n) => between(input.n, n, limit)),
   ),
   fixture(
@@ -156,17 +151,17 @@ export const fixtures: readonly Fixture[] = [
   ),
   fixture(
     "or",
-    { a: z.string().nullable().optional(), n: z.number().nullable() },
+    { a: z.string().nullable().optional(), n: z.int().nullable() },
     fc.record({ a: fc.option(text), n: fc.option(number) }, { requiredKeys: ["n"] }),
     ({ input }) => (input.a == null ? input.n != null : input.a),
   ),
   fixture(
     "eq",
-    { a: z.string(), n: z.number().nullable() },
+    { a: z.string(), n: z.int().nullable() },
     fc.record({ a: text, n: fc.option(number) }),
     ({ input }) => input.a === "b" || input.n === null || input.n === 1,
   ),
-  fixture("compare", { n: z.number(), m: z.number() }, fc.record({ n: number, m: number }), ({ input }) =>
+  fixture("compare", { n: z.int(), m: z.int() }, fc.record({ n: number, m: number }), ({ input }) =>
     input.n <= input.m ? input.n < 0 : input.m >= 1,
   ),
   fixture(
@@ -202,19 +197,19 @@ export const fixtures: readonly Fixture[] = [
   ),
   fixture(
     "size",
-    { ns: z.array(z.number()), bag: bag(z.number()) },
+    { ns: z.array(z.int()), bag: bag(z.int()) },
     fc.record({ ns: numbers, bag: numbers }),
     ({ input }) => input.ns.length === input.bag.size,
   ),
   fixture(
     "filter",
-    { ns: z.array(z.number()) },
+    { ns: z.array(z.int()) },
     fc.record({ ns: numbers }),
     ({ input }) => input.ns.filter((n) => n > 0).length,
   ),
   fixture(
     "filter",
-    { bag: bag(z.number()) },
+    { bag: bag(z.int()) },
     fc.record({ bag: numbers }),
     ({ input }) => input.bag.filter((n) => n > 0).filter((n) => n < 2).size,
   ),
@@ -236,9 +231,7 @@ export const fixtures: readonly Fixture[] = [
     fc.record({ items: fc.array(itemOf, { maxLength: 3 }) }),
     ({ input }) => input.items.every(({ name }) => name !== "a"),
   ),
-  fixture("every", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) =>
-    input.bag.every((n) => n > -1),
-  ),
+  fixture("every", { bag: bag(z.int()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.every((n) => n > -1)),
   recordFixture(
     "table",
     { title: z.string() },
@@ -248,7 +241,7 @@ export const fixtures: readonly Fixture[] = [
   ),
   recordFixture("table", {}, fc.record({}), ({ records }) => ({ tasks: records.Task })),
   recordFixture("table", {}, fc.record({}), ({ records }) => records.Task.every((t) => t.at === null || t.at >= 0)),
-  recordFixture("single", { n: z.number() }, fc.record({ n: number }), ({ input, records }) =>
+  recordFixture("single", { n: z.int() }, fc.record({ n: number }), ({ input, records }) =>
     records.Settings.limit > input.n ? records.Settings.limit : input.n,
   ),
   recordFixture(
@@ -275,14 +268,14 @@ export const fixtures: readonly Fixture[] = [
     fc.record({ title: text, note: text }, { requiredKeys: ["title"] }),
     ({ input }) => [input.title, input.note],
   ),
-  fixture("map", { ns: z.array(z.number()) }, fc.record({ ns: numbers }), ({ input }) => input.ns.map((n) => n > 0)),
-  fixture("map", { bag: bag(z.number()).optional() }, fc.record({ bag: numbers }, { requiredKeys: [] }), ({ input }) =>
+  fixture("map", { ns: z.array(z.int()) }, fc.record({ ns: numbers }), ({ input }) => input.ns.map((n) => n > 0)),
+  fixture("map", { bag: bag(z.int()).optional() }, fc.record({ bag: numbers }, { requiredKeys: [] }), ({ input }) =>
     (input.bag ?? []).filter((n) => n > 0).map((n) => n < 2),
   ),
   recordFixture("map", {}, fc.record({}), ({ records }) => records.Task.map((t) => ({ id: t.id, done: t.done }))),
   recordFixture("sum", {}, fc.record({}), ({ records }) => records.Task.sum((t) => (t.done ? 1 : 0))),
-  fixture("sum", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.sum((n) => n)),
-  fixture("min", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.min((n) => n)),
+  fixture("sum", { bag: bag(z.int()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.sum((n) => n)),
+  fixture("min", { bag: bag(z.int()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.min((n) => n)),
   recordFixture("max", {}, fc.record({}), ({ records }) =>
     records.Task.filter((t) => t.at !== null).max((t) => t.at as number),
   ),
@@ -292,24 +285,22 @@ export const fixtures: readonly Fixture[] = [
     fc.record({ title: text }),
     ({ input, records }) => records.Task.filter((t) => t.title === input.title).only()?.id,
   ),
-  fixture("sortedBy", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input }) =>
-    input.bag.sortedBy((n) => n),
-  ),
+  fixture("sortedBy", { bag: bag(z.int()) }, fc.record({ bag: numbers }), ({ input }) => input.bag.sortedBy((n) => n)),
   recordFixture("sortedBy", {}, fc.record({}), ({ records }) =>
     records.Task.map((t) => ({ title: t.title, done: t.done ? 1 : 0 })).sortedBy((x) => x.done),
   ),
-  fixture("concat", { ns: z.array(z.number()), n: z.number() }, fc.record({ ns: numbers, n: number }), ({ input }) => [
+  fixture("concat", { ns: z.array(z.int()), n: z.int() }, fc.record({ ns: numbers, n: number }), ({ input }) => [
     input.n,
     ...input.ns,
     ...[input.n > 0],
     ...input.ns,
   ]),
-  fixture("includes", { ns: z.array(z.number()), n: z.number() }, fc.record({ ns: numbers, n: number }), ({ input }) =>
+  fixture("includes", { ns: z.array(z.int()), n: z.int() }, fc.record({ ns: numbers, n: number }), ({ input }) =>
     input.ns.includes(input.n),
   ),
   fixture(
     "format",
-    { title: z.string(), n: z.number(), on: date, note: z.string().nullable().optional() },
+    { title: z.string(), n: z.int(), on: date, note: z.string().nullable().optional() },
     fc.record(
       {
         title: text,
@@ -326,25 +317,14 @@ export const fixtures: readonly Fixture[] = [
   ),
   fixture(
     "arith",
-    { n: z.int(), items: bag(z.object({ k: z.int().default(0) })), d: z.number() },
+    { n: z.int(), items: bag(z.object({ k: z.int().default(0) })) },
     fc.record({
       n: fc.integer({ min: -9, max: 9 }),
       items: fc.array(fc.record({ k: fc.integer({ min: -3, max: 3 }) }), { maxLength: 3 }),
-      d: number,
     }),
     ({ input }) => {
       const { n } = input;
       return input.items.some((i) => i.k * 2 - -n === 3 + input.items.size) ? -n : n + input.items.sum((i) => i.k) - 1;
-    },
-  ),
-  fixture(
-    "decimal",
-    { d: z.number(), e: z.number(), n: z.int() },
-    fc.record({ d: number, e: fc.oneof(number, fc.constant(0)), n: fc.integer({ min: -9, max: 9 }) }),
-    ({ input }) => {
-      const { d, e, n } = input;
-      const ratio = d / e;
-      return [d + 0.1, d - e * 3.7, n / 3, -d, ratio, ratio > 1, ratio === d, `${d * 1e21} ${ratio}`, { q: e / n }];
     },
   ),
   recordFixture(
@@ -367,7 +347,7 @@ export const fixtures: readonly Fixture[] = [
     second: input.title === "" ? createKey(ids.task) : null,
     third: createKey(TaskId),
   })),
-  recordFixture("concat", { bag: bag(z.number()) }, fc.record({ bag: numbers }), ({ input, records }) =>
+  recordFixture("concat", { bag: bag(z.int()) }, fc.record({ bag: numbers }), ({ input, records }) =>
     input.bag.concat(records.Task.map((t) => t.title.length)),
   ),
   {
@@ -387,10 +367,12 @@ const looping = (n: number): boolean => n > 0 && looping(n);
 
 /** Functions with a construct outside the IR, each of which stays TS. */
 export const outside: readonly ((args: {
-  readonly input: Row<{ n: z.ZodNumber; title: z.ZodString; ns: z.ZodArray<z.ZodNumber> }>;
+  readonly input: Row<{ n: z.ZodInt; title: z.ZodString; ns: z.ZodArray<z.ZodInt> }>;
   readonly createKey: CreateKey;
 }) => unknown)[] = [
   ({ input }) => input.n % 2 === 1,
+  ({ input }) => input.n / 2,
+  ({ input }) => input.n + 0.5,
   ({ input }) => Date.now() + input.n,
   ({ input }) => input.n ** 2,
   ({ input }) => input.title.trim() === "",

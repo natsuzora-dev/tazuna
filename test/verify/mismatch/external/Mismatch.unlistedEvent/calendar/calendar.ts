@@ -16,7 +16,7 @@ export const booked = event({ payload: { day: instant } });
 
 export const cancelled = event({ payload: { day: instant } });
 
-export const audited = event({ payload: { count: z.number() } });
+export const audited = event({ payload: { count: z.int() } });
 
 export const book = command({
   input: { day: instant },

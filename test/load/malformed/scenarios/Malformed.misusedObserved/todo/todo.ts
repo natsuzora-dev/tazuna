@@ -25,4 +25,4 @@ export const addTask = command({
   emit(taskAdded, { taskId: input.taskId }),
 ]);
 
-export const taskCount = query({ output: { count: z.number() } }).resolve(() => ({ count: 0 }));
+export const taskCount = query({ output: { count: z.int() } }).resolve(() => ({ count: 0 }));

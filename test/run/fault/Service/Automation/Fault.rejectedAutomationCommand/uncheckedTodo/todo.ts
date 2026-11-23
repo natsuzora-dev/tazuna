@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const Task = entity({ description: "A task", fields: { id: z.string(), title: z.string() }, key: "id" });
 
-export const Stats = singleEntity({ description: "Statistics of tasks", fields: { added: z.number().default(0) } });
+export const Stats = singleEntity({ description: "Statistics of tasks", fields: { added: z.int().default(0) } });
 
 export const { automation, command, createEvent, updateEvent, contract, scenario } = service({
   name: "uncheckedTodo",

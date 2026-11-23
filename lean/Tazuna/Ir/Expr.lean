@@ -61,7 +61,7 @@ deriving DecidableEq, Repr, Inhabited
 
 derive_wire Collection
 
-/-- An integer operation, exact: the converter writes one only on integers that schemas or literals give. -/
+/-- An integer operation, exact: spec numbers are integers. -/
 inductive Arith where
   | add
   | sub
@@ -69,16 +69,6 @@ inductive Arith where
 deriving DecidableEq, Repr, Inhabited
 
 derive_wire Arith
-
-/-- A JS number operation, which rounds as IEEE binary64 does: JS numbers are doubles. -/
-inductive Decimal where
-  | add
-  | sub
-  | mul
-  | div
-deriving DecidableEq, Repr, Inhabited
-
-derive_wire Decimal
 
 mutual
 
@@ -140,8 +130,6 @@ inductive Expr where
   -/
   | format (parts : List Expr)
   | arith (operation : Arith) (left right : Expr)
-  /-- `+`, `-`, `*` or `/` of numbers, which the converter writes where `arith` does not hold them, as JS computes it. -/
-  | decimal (operation : Decimal) (left right : Expr)
   /-- `addDays(date, days)`: the date label `days` days after `date`, which throws outside years 0000 through 9999. -/
   | addDays (date days : Expr)
   /-- `emit(event, payload)` of an event that the command lists. -/

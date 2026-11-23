@@ -10,7 +10,7 @@ export const Task = entity({
 
 export const Tally = singleEntity({
   description: "The number of added tasks",
-  fields: { added: z.number().default(0) },
+  fields: { added: z.int().default(0) },
 });
 
 export const { command, createEvent, updateEvent, contract, scenario } = service({

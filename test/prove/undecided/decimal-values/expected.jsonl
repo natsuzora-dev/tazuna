@@ -1,1 +1,0 @@
-{"service":"meter","property":{"kind":"invariant","definition":{"service":"meter","name":"Reading"},"name":"notBetweenZeroAndOne"},"creates":{"Reading":2},"verdict":{"kind":"undecided","reason":"no case after takeReading among the values that the encoding holds, which leave out some values of a schema, such as decimals"},"location":{"file":"meter/meter.ts","line":4}}

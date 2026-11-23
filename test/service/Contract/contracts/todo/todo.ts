@@ -10,7 +10,7 @@ export const Task = entity({
 
 export const Board = singleEntity({
   description: "A task that the user highlighted, and how many times",
-  fields: { pinned: ref(Task).nullable().default(null), pins: z.number().default(0) },
+  fields: { pinned: ref(Task).nullable().default(null), pins: z.int().default(0) },
   invariants: { fewPins: ({ record }) => record.pins < 3 },
 });
 

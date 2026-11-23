@@ -1,1 +1,0 @@
-{"service":"bank","property":{"kind":"invariant","definition":{"service":"bank","name":"Account"},"name":"nonNegative"},"creates":{"Account":2},"verdict":{"kind":"undecided","reason":"the command deposit has no encoding: decimal arithmetic"},"location":{"file":"bank/bank.ts","line":4}}

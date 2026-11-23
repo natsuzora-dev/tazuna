@@ -4,7 +4,7 @@ import { z } from "zod";
 export const { command, contract } = externalService({ name: "payments", description: "Process payments" });
 
 export const createCharge = command({
-  input: { amount: z.number().int().positive() },
+  input: { amount: z.int().positive() },
   output: { chargeId: z.string().min(1) },
   emits: [],
   rejects: ["invalid-input", "requires", "unavailable", "reused-id"],

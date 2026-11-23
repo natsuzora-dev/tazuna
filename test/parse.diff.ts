@@ -48,15 +48,15 @@ const day = fc.constantFrom("2026-01-31", "2026-02-30", "2024-02-29", "0000-02-2
 /** A schema's fields and values of them: often of the field's own kind, sometimes anything. */
 const fixtures: readonly { readonly shape: Shape; readonly fields: Readonly<Record<string, fc.Arbitrary<Json>>> }[] = [
   {
-    shape: { s: z.string().min(1).max(3), n: z.number().positive(), i: z.int().min(-1), b: z.boolean() },
+    shape: { s: z.string().min(1).max(3), n: z.int().positive(), i: z.int().min(-1), b: z.boolean() },
     fields: { s: text, n: scalar, i: scalar, b: scalar },
   },
   {
     shape: {
       p: z.string().startsWith("x").endsWith("a"),
       q: z.string().includes("b").length(2),
-      m: z.number().multipleOf(0.1).lt(5),
-      w: z.number().int().max(2),
+      m: z.int().multipleOf(2).lt(5),
+      w: z.int().max(2),
     },
     fields: { p: text, q: text, m: scalar, w: scalar },
   },
