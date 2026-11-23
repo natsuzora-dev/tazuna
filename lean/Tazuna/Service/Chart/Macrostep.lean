@@ -137,6 +137,7 @@ def doneWork (st : Service) (step : Nat) (name : InstanceId) : Nat → Processin
 def startWork (st : Service) (step : Nat) (name : InstanceId) : Processing → m Processing :=
   withMachine name fun i r => do
     let r ← enter fs st step name [i.chart.initial] ⟨r.state.setMachine name ({ · with startStep := some step }), r.queue⟩
+    let r ← checkChart fs st name r
     unlessHalted (settle fs st step name) r
 
 /--

@@ -105,7 +105,7 @@ theorem keeps_startWork (step : Nat) (name : InstanceId) : Keeps (startWork fs s
   apply keeps_withMachine
   intro i r
   try simp only [id_bind]
-  rw [keeps_unlessHalted (keeps_settle step name), keeps_enter]
+  rw [keeps_unlessHalted (keeps_settle step name), keeps_checkChart, keeps_enter]
   rfl
 
 theorem showAnswer_fixed (name : InstanceId) (slot : String) (answer : Answer) (r : Processing) :
@@ -219,7 +219,8 @@ theorem growsBy_startWork (step : Nat) (name : InstanceId) : GrowsBy (startWork 
   try simp only [id_bind]
   let r' : Processing := ⟨r.state.setMachine name ({ · with startStep := some step }), r.queue⟩
   exact (Grows.of_lines (s' := r'.state) rfl).trans rfl ((growsBy_enter step name _ r').trans
-    ((keeps_enter step name _).now r') (growsBy_unlessHalted (growsBy_settle step name) _))
+    ((keeps_enter step name _).now r') ((growsBy_checkChart name _).trans ((keeps_checkChart name).now _)
+      (growsBy_unlessHalted (growsBy_settle step name) _)))
 
 theorem showAnswer_grows (name : InstanceId) (slot : String) (answer : Answer) (r : Processing) :
     Grows r.state (showAnswer st name slot answer r).state := by

@@ -155,6 +155,24 @@ def enter (st : Service) (step : Nat) (name : InstanceId) (targets : List String
     (i.chart.tree.entryOrder (targets.flatMap (i.chart.tree.entrySet i.active i.depth))).foldlM
       (fun r n => unlessHalted (enterOne fs st step false name n) r) r
 
+/-- The first failing invariant of instance `i` in `s`, as a fault, or none. -/
+def chartViolation (st : Service) (s : State) (i : Instance) : m (Option Fault) := do
+  match ← fs.chartInvariant (s.scopeOf i none) s.records with
+  | .error e => pure (some (issueViolation (st.ref i.chart.name) e))
+  | .ok failed => pure (failed.map (.failedChartInvariant (st.ref i.chart.name)))
+
+/--
+The processing with the failing invariant of instance `name` reported. An invariant reads only the instance's context
+and active states, which only starting and microsteps change, so the run checks it after each of them: in every state
+between two microsteps, as prove's induction does, and not only when a message finishes.
+-/
+def checkChart (st : Service) (name : InstanceId) : Processing → m Processing :=
+  withMachine name fun i r => do
+    if i.closed then pure r else
+    match ← chartViolation fs st r.state i with
+    | some fault => pure (r.report (.fault fault))
+    | none => pure r
+
 /--
 The processing after one microstep of instance `name` (SCXML microstep). `chosen` holds each transition with the
 resource (instance or copy) that takes it, in selection order. Owner and copy transitions run in one microstep,
@@ -182,7 +200,7 @@ def microstep (st : Service) (step : Nat) (name : InstanceId) (chosen : List (In
       unlessHalted (enterOne fs st step (targetedBy chosen e k) e.1 e.2) r) r
     MonadNote.note (.microstepEnds
       { chart := st.ref i.chart.name, pairs, halted := r.halted })
-    pure r
+    checkChart fs st name r
 
 end
 

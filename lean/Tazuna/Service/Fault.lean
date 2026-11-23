@@ -75,7 +75,7 @@ inductive Fault where
   | failedSingleInvariant (definition : Spec.Ref) (condition : String) (command : Spec.Ref)
   /-- The records of the service fail its invariant `condition` after the command `command`. -/
   | failedServiceInvariant (condition : String) (command : Spec.Ref)
-  /-- The chart fails its invariant `condition`. -/
+  /-- The chart fails its invariant `condition` after it starts or after a microstep. -/
   | failedChartInvariant (definition : Spec.Ref) (condition : String)
   /-- Two items that the chart computes for the map `map` have the key `itemKey`. -/
   | duplicateItemKey (definition : Spec.Ref) (map : String) (itemKey : Value)

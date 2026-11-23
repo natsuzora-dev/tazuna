@@ -220,7 +220,8 @@ def pairProperty (st : Service) (pair : Pair) : Property := .stepOrder (st.ref p
 
 /--
 A step of a machine's induction: starting it, or a microstep of one of its edges. A command changes no machine, and an
-invariant reads only the machine's context and active states, so no command can fail one.
+invariant reads only the machine's context and active states, so no command can fail one. The semantics checks the
+invariants after the same steps (checkChart).
 -/
 inductive ChartStep where
   | start
@@ -517,17 +518,17 @@ def replayChart (x : Induction) (fs : Functions IO) (cc : ChartCase) (k : Ir.Con
     let active := m.configs[config]!
     ({ base with machines := [{ chart := c, id, context, entered := active.map (·, clock) }] },
      .obj [("active", .arr (active.map .str)), ("context", context)])
-  let reported (s : State) : IO (Except String (List Violation)) := do
-    if !failing s k then return .error "the semantics keeps the invariant after the case's step"
-    return .ok ((← invariantViolations st fs s).map (·.toViolation))
+  let reported (s : State) : Except String (List Violation) :=
+    if !failing s k then .error "the semantics keeps the invariant after the case's step"
+    else .ok (s.violations.map (·.toViolation))
   let assumed (s : State) : Bool := cc.invariants.all (!failing s ·)
   match step with
   | .start =>
     let s ← startInstance st fs base c
     if s.halted.isSome then return .error "the semantics halts on starting the machine"
-    let r ← enter fs st 0 id [c.initial] ⟨s, {}⟩
+    let r ← checkChart fs st id (← enter fs st 0 id [c.initial] ⟨s, {}⟩)
     if r.halted then return .error "the semantics halts on entering the initial states"
-    return (← reported r.state).map fun violations =>
+    return (reported r.state).map fun violations =>
       { given, clock, command := none, input := none, now := none, violations }
   | .edge i =>
     let some e := m.edges[i]? | return .error "no such edge"
@@ -543,7 +544,7 @@ def replayChart (x : Induction) (fs : Functions IO) (cc : ChartCase) (k : Ir.Con
     | _ => return .error "the semantics chooses no transition"
     let r ← microstep fs st 0 id [(id, e.transition)] extra ⟨s, {}⟩
     if r.halted then return .error "the semantics halts in the case's microstep"
-    return (← reported r.state).map fun violations =>
+    return (reported r.state).map fun violations =>
       { given, clock, command := none, input := none, now := some now, machine := some machine,
         transition := some (ToValue.toValue e.transition.ref), taken, violations }
 

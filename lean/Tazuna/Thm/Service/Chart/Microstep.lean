@@ -130,6 +130,30 @@ theorem keeps_enter (step : Nat) (name : InstanceId) (targets : List String) : K
   intro i r
   exact foldlM_keeps (fun n => keeps_unlessHalted (keeps_enterOne step false name n)) _ r
 
+theorem keeps_checkChart (name : InstanceId) : Keeps (checkChart fs st name) := by
+  unfold checkChart
+  apply keeps_withMachine
+  intro i r
+  split
+  · rfl
+  · simp only [id_bind]; split <;> simp
+
+theorem sameLines_checkChart (name : InstanceId) : SameLines (checkChart fs st name) := by
+  unfold checkChart
+  apply sameLines_withMachine
+  intro i r
+  split
+  · rfl
+  · simp only [id_bind]; split <;> simp
+
+theorem growsBy_checkChart (name : InstanceId) : GrowsBy (checkChart fs st name) :=
+  (sameLines_checkChart name).grows (keeps_checkChart name)
+
+theorem Grows.sameLines {a b c : State} (h : Grows a b) (hl : c.lines = b.lines) (hs : c.service = b.service) :
+    Grows a c := by
+  obtain ⟨⟨n, e, t⟩, m⟩ := h
+  exact ⟨⟨n, by rw [hl, e], t⟩, by rw [hl, hs]; exact m⟩
+
 theorem keeps_microstep (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) :
     Keeps (microstep fs st step name chosen extra) := by
   unfold microstep
@@ -138,6 +162,7 @@ theorem keeps_microstep (step : Nat) (name : InstanceId) (chosen : List (Instanc
   split
   · rfl
   · simp only [id_bind, note_id, id_pure]
+    refine ((keeps_checkChart name) _).trans ?_
     refine (foldlM_keeps (fun (e : (InstanceId × String) × Nat) => keeps_unlessHalted (keeps_enterOne step _ e.1.1 e.1.2)) _ _).trans ?_
     refine (foldlM_keeps (fun c => keeps_transitionContent extra _ _ c) _ _).trans ?_
     refine (foldlM_keeps (fun (e : (InstanceId × String) × Nat) =>
@@ -228,8 +253,9 @@ theorem growsBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Insta
       | nil => intro t; exact ⟨rfl, rfl, rfl⟩
       | cons h hs ih => intro t; exact ih _
     obtain ⟨l0, n0, s0⟩ := h0 (holdersOf chosen) _ r.state
-    exact (Grows.of_lines l0 s0).trans n0 ((hE _ _).trans (congrArg Fixed.now (kE _ _))
-      ((hA _ _ _ _).trans (congrArg Fixed.now (kA _ _ _ _)) (hN _ _)))
+    exact Grows.sameLines ((Grows.of_lines l0 s0).trans n0 ((hE _ _).trans (congrArg Fixed.now (kE _ _))
+      ((hA _ _ _ _).trans (congrArg Fixed.now (kA _ _ _ _)) (hN _ _)))) (sameLines_checkChart name _)
+      ((keeps_checkChart name).service _)
 
 theorem documentOrder_owner_pairs (i : Instance) (pairs : List (InstanceId × String)) :
     (((i.documentOrder.filter (· ∈ pairs)).filter (·.1 == i.id)).map (·.2)) =

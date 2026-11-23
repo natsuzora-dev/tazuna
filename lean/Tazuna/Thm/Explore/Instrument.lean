@@ -261,10 +261,17 @@ theorem enter_agrees (step : Nat) (name : InstanceId) (targets : List String) (r
     Agrees (enter fsI st step name targets r) (enter fs st step name targets r) := by
   unfold enter; refine withMachine_agrees (fun i r => ?_) r; agree [unlessHalted_agrees, enterOne_agrees h]
 
+omit [MonadNote (StateT C Id)] in
+theorem checkChart_agrees (name : InstanceId) (r : Processing) :
+    Agrees (checkChart fsI st name r) (checkChart fs st name r) := by
+  unfold checkChart chartViolation; refine withMachine_agrees (fun i r => ?_) r
+  agree [h.chartInvariant]
+
 theorem microstep_agrees (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) (r : Processing) :
     Agrees (microstep fsI st step name chosen extra r) (microstep fs st step name chosen extra r) := by
   unfold microstep; refine withMachine_agrees (fun i r => ?_) r
-  agree [note_agrees, transitionContent_agrees h, unlessHalted_agrees, exitOne_agrees h, enterOne_agrees h]
+  agree [note_agrees, transitionContent_agrees h, unlessHalted_agrees, exitOne_agrees h, enterOne_agrees h,
+    checkChart_agrees h]
 
 theorem choose_agrees (s : State) (i : Instance) (extra : Extra) (ts : List Transition) :
     Agrees (choose fsI st s i extra ts) (choose fs st s i extra ts) := by
@@ -375,7 +382,8 @@ theorem doneWork_agrees (step : Nat) (name : InstanceId) (fuel : Nat) (r : Proce
 
 theorem startWork_agrees (step : Nat) (name : InstanceId) (r : Processing) :
     Agrees (startWork fsI st step name r) (startWork fs st step name r) := by
-  unfold startWork; refine withMachine_agrees (fun i r => ?_) r; agree [enter_agrees h, unlessHalted_agrees, settle_agrees h]
+  unfold startWork; refine withMachine_agrees (fun i r => ?_) r
+  agree [enter_agrees h, checkChart_agrees h, unlessHalted_agrees, settle_agrees h]
 
 theorem answerTo_agrees (step : Nat) (a : Activity) (answer : Answer) (requester : Requester) (r : Processing) :
     Agrees (answerTo fsI st step a answer requester r) (answerTo fs st step a answer requester r) := by
@@ -431,20 +439,9 @@ theorem fire_agrees (step : Nat) (t : Deadline) (r : Processing) :
     Agrees (fire fsI st step t r) (fire fs st step t r) := by
   unfold fire; agree [withMachine_agrees, applyCompletion_agrees h]
 
-omit [MonadNote (StateT C Id)] in
-theorem invariantViolations_agrees (s : State) :
-    Agrees (invariantViolations st fsI s) (invariantViolations st fs s) := by
-  unfold invariantViolations
-  exact Agrees.bind (Agrees.mapM (fun _ => Agrees.bind (h.chartInvariant _ _) fun r => by
-    cases r <;> exact Agrees.pure _) _) fun _ => Agrees.pure _
-
-omit [MonadNote (StateT C Id)] in
-theorem checkInvariants_agrees (s : State) : Agrees (checkInvariants st fsI s) (checkInvariants st fs s) := by
-  unfold checkInvariants; exact Agrees.bind (invariantViolations_agrees h s) fun _ => Agrees.pure _
-
 theorem afterMessage_agrees (s : State) : Agrees (afterMessage st fsI s) (afterMessage st fs s) := by
   unfold afterMessage
-  agree [refreshScreens_agrees h, checkInvariants_agrees h, publish_agrees h]
+  agree [refreshScreens_agrees h, publish_agrees h]
 
 theorem startInstance_agrees (s : State) (c : Chart) : Agrees (startInstance st fsI s c) (startInstance st fs s c) := by
   unfold startInstance; agree [initialContextOf_agrees h]

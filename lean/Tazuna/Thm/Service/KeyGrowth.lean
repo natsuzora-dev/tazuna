@@ -243,6 +243,13 @@ theorem keysBy_enter (step : Nat) (name : InstanceId) (targets : List String) : 
   intro i r
   exact keysBy_foldlM (fun n => keysBy_unlessHalted (keysBy_enterOne step false name n)) _ r
 
+theorem keysBy_checkChart (name : InstanceId) : KeysBy (checkChart fs st name) := by
+  apply keysBy_withMachine
+  intro i r
+  split
+  · exact .refl _
+  · simp only [id_bind]; split <;> keys_leaf
+
 theorem keysBy_microstep (step : Nat) (name : InstanceId) (chosen : List (InstanceId × Transition)) (extra : Extra) :
     KeysBy (microstep fs st step name chosen extra) := by
   apply keysBy_withMachine
@@ -250,6 +257,7 @@ theorem keysBy_microstep (step : Nat) (name : InstanceId) (chosen : List (Instan
   split
   · exact .refl _
   · simp only [id_bind, note_id, id_pure]
+    refine KeepsKeys.trans ?_ (keysBy_checkChart name _)
     refine KeepsKeys.trans ?_ (keysBy_foldlM (fun e => keysBy_unlessHalted (keysBy_enterOne step _ _ _)) _ _)
     refine KeepsKeys.trans ?_ (keysBy_foldlM (fun c => keysBy_transitionContent extra _ _ c) _ _)
     refine KeepsKeys.trans ?_ (keysBy_foldlM (fun e => keysBy_unlessHalted (keysBy_exitOne _ _ _)) _ _)
@@ -492,7 +500,7 @@ theorem keysBy_startWork (step : Nat) (name : InstanceId) : KeysBy (startWork fs
   simp only [id_bind]
   let r' : Processing := ⟨r.state.setMachine name ({ · with startStep := some step }), r.queue⟩
   exact (KeepsKeys.refl r.state : KeepsKeys r.state r'.state).trans
-    ((keysBy_enter step name _ r').trans (keysBy_unlessHalted (keysBy_settle step name) _))
+    ((keysBy_enter step name _ r').trans ((keysBy_checkChart name _).trans (keysBy_unlessHalted (keysBy_settle step name) _)))
 
 theorem keysBy_answerTo (step : Nat) (a : Activity) (answer : Answer) (requester : Requester) :
     KeysBy (answerTo fs st step a answer requester) := by
@@ -589,10 +597,10 @@ theorem keysBy_fire (step : Nat) (t : Deadline) : KeysBy (fire fs st step t) := 
     keys_leaf
 
 theorem keeps_afterMessage (s : State) : KeepsKeys s (afterMessage st fs s) := by
-  simp only [afterMessage, checkInvariants, id_bind]
+  simp only [afterMessage]
   split
-  · exact keeps_reportAll _ _
-  · exact (keeps_reportAll _ _).trans (keeps_publish _)
+  · exact .refl _
+  · exact keeps_publish _
 
 theorem keeps_fireDue (to : Time) (fuel : Nat) (tie : Option Time) (s : State) :
     KeepsKeys s (fireDue st fs to fuel tie s) := by

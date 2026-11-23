@@ -214,7 +214,7 @@ export type Fault =
         readonly command: DefinitionRef;
       };
     }
-  /** The chart fails its invariant `condition`. */
+  /** The chart fails its invariant `condition` after it starts or after a microstep. */
   | {
       readonly kind: "Fault.failedChartInvariant";
       readonly definition: DefinitionRef;

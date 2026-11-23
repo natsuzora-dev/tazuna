@@ -9,7 +9,6 @@ export const listScreen = screen({
   controls: { leave: { label: "Leave" }, back: { label: "Back" } },
   initial: "viewing",
   states: { viewing: {}, leaving: {}, cleared: {} },
-  invariants: { notLeftOver: ({ active }) => !active.leaving },
 }).chart({
   offers: { leave: any, back: any },
   states: {

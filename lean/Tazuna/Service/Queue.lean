@@ -13,23 +13,7 @@ open Tazuna.Data
 
 variable {m : Type → Type}
 
-def invariantViolations [Monad m] (st : Service) (fs : Functions m) (s : State) :
-    m (List Fault) := do
-  let found ← (s.machines.filter (!·.closed)).mapM fun i => do
-    match ← fs.chartInvariant (s.scopeOf i none) s.records with
-    | .error e => pure (some (issueViolation (st.ref i.chart.name) e))
-    | .ok failed => pure (failed.map (.failedChartInvariant (st.ref i.chart.name)))
-  pure (found.filterMap id)
-
-/--
-The state with the chart invariant violations reported. As in JML visible-state semantics, the invariants are checked
-when a message finishes, not between microsteps.
--/
-def checkInvariants [Monad m] (st : Service) (fs : Functions m) (s : State) : m State := do
-  pure (s.reportAll (← invariantViolations st fs s))
-
 def afterMessage [Monad m] [MonadNote m] (st : Service) (fs : Functions m) (s : State) : m State := do
-  let s ← checkInvariants st fs s
   if s.halted.isSome then pure s else
   publish st fs s
 

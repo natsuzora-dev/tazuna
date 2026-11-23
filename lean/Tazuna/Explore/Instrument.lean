@@ -145,7 +145,7 @@ structure Collect where
   afterMessage : Option Nat := none
   /-- The place in `steps` of the step in which a message of a tie arrives, while it is processed (arrivalBegins). -/
   arrival : Option Nat := none
-  /-- For each message, the values that its afterMessage read: subscription answers and invariants. -/
+  /-- For each message, the values that its afterMessage read: subscription answers. -/
   afters : List (Nat × Footprint) := []
   violations : List Violation := []
   /-- The parts that the run reached, each once, in the order first reached. -/

@@ -250,7 +250,7 @@
       }
     },
     "Fault.failedChartInvariant": {
-      "meaning": "The chart fails its invariant `condition`.",
+      "meaning": "The chart fails its invariant `condition` after it starts or after a microstep.",
       "example": {
         "excerpt": {
           "file": "invariantsBreakingCounter/todo.ts",
