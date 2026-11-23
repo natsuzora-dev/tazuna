@@ -59,18 +59,6 @@
       }
     },
     {
-      "name": "validation",
-      "comment": "src/validation imports only data, spec, and validation",
-      "severity": "error",
-      "from": {
-        "path": "^src/validation/"
-      },
-      "to": {
-        "path": "^src/",
-        "pathNot": "^src/(data|spec|validation)/"
-      }
-    },
-    {
       "name": "load",
       "comment": "src/load imports only data, dsl, spec, scenario, and load",
       "severity": "error",
@@ -96,76 +84,14 @@
     },
     {
       "name": "verify",
-      "comment": "src/verify imports only data, dsl, spec, load, check, sim, verify, and the engine client",
+      "comment": "src/verify imports only data, dsl, spec, load, check, verify, and the engine client",
       "severity": "error",
       "from": {
         "path": "^src/verify/"
       },
       "to": {
         "path": "^src/",
-        "pathNot": "^src/((data|dsl|spec|load|check|verify|sim)/|cli/(engine|protocol\\.generated)\\.ts$)"
-      }
-    },
-    {
-      "name": "service",
-      "comment": "src/service imports only data, spec, and service",
-      "severity": "error",
-      "from": {
-        "path": "^src/service/"
-      },
-      "to": {
-        "path": "^src/",
-        "pathNot": "^src/(data|spec|service)/"
-      }
-    },
-    {
-      "name": "sim",
-      "comment": "src/sim, outside src/sim/spec, imports only data, spec, service, and sim",
-      "severity": "error",
-      "from": {
-        "path": "^src/sim/",
-        "pathNot": "^src/sim/spec/"
-      },
-      "to": {
-        "path": "^src/",
-        "pathNot": "^src/((data|spec|service)/|sim/(?!spec/))"
-      }
-    },
-    {
-      "name": "sim/spec",
-      "comment": "src/sim/spec, which runs the spec's JS functions, imports only data, dsl, spec, load, service, sim, and explore/instrument, which collects what exploration needs from a run",
-      "severity": "error",
-      "from": {
-        "path": "^src/sim/spec/"
-      },
-      "to": {
-        "path": "^src/",
-        "pathNot": "^src/((data|dsl|spec|load|service|sim)/|explore/instrument\\.ts$)"
-      }
-    },
-    {
-      "name": "explore",
-      "comment": "src/explore imports only data, dsl, spec, load, verify, service, sim, and explore",
-      "severity": "error",
-      "from": {
-        "path": "^src/explore/",
-        "pathNot": "^src/explore/uncovered/"
-      },
-      "to": {
-        "path": "^src/",
-        "pathNot": "^src/(data|dsl|spec|load|verify|service|sim|explore)/"
-      }
-    },
-    {
-      "name": "explore/uncovered",
-      "comment": "src/explore/uncovered imports only data, dsl, spec, load, service, sim, and explore/uncovered",
-      "severity": "error",
-      "from": {
-        "path": "^src/explore/uncovered/"
-      },
-      "to": {
-        "path": "^src/",
-        "pathNot": "^src/(data|dsl|spec|load|service|sim|explore/uncovered)/"
+        "pathNot": "^src/((data|dsl|spec|load|check|verify)/|cli/(engine|protocol\\.generated)\\.ts$)"
       }
     },
     {
