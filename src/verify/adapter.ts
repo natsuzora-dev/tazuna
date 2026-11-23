@@ -1,6 +1,5 @@
 import type { z } from "zod";
 import type { CommandAnswer, QueryAnswer } from "../data/answer.ts";
-import { parsedOutside } from "../data/collections.ts";
 import type { Caller, GivenRecord } from "../data/scenario.generated.ts";
 import type { Answer } from "../data/trace.generated.ts";
 import { type Shape, strictObjectOf } from "../data/values.ts";
@@ -99,7 +98,7 @@ export function decodeAnswer(request: AnyCommand | AnyQuery, answer: Answer): An
   if (answer.result !== (request.kind === "query" ? "fulfilled" : "accepted"))
     throw new Error(`a ${request.kind} has no ${answer.result} answer`);
   if (request.output === undefined) return answer;
-  const output = parsedOutside(strictObjectOf(request.output), answer.output);
+  const output = strictObjectOf(request.output).safeParse(answer.output);
   if (!output.success) throw output.error;
   return { ...answer, output: output.data };
 }

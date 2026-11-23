@@ -26,7 +26,7 @@ export const strictObjectOf = (shape: Shape): z.ZodObject =>
   cached(strictObjects, shape, (s) => strict(z.object(s)) as z.ZodObject);
 
 /** Orders strings by code point, as Lean's String order does; `<` on strings compares UTF-16 code units. */
-export function byCodePoint(a: string, b: string): number {
+function byCodePoint(a: string, b: string): number {
   let i = 0;
   while (i < a.length && i < b.length) {
     const [x, y] = [a.codePointAt(i) as number, b.codePointAt(i) as number];

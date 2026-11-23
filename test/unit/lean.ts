@@ -20,8 +20,6 @@ process.once("exit", () => {
 /** The response that each request that these tests send gets. */
 const responses = {
   decodeLines: "decodedLines",
-  sort: "sorted",
-  keyOrdered: "keyOrdered",
   evaluate: "evaluated",
   parse: "parsed",
 } as const satisfies Partial<Record<Request["type"], Response["type"]>>;
@@ -104,12 +102,6 @@ export class Lean {
 
   decodeLines(values: readonly Json[]): Responded<"decodeLines">["lines"] {
     return this.exchange("decodeLines", { values }).lines;
-  }
-  sort(schema: Json, value: Json): Json {
-    return this.exchange("sort", { schema, value }).value as Json;
-  }
-  keyOrdered(schema: Json, value: Json): boolean {
-    return this.exchange("keyOrdered", { schema, value }).ordered;
   }
   /**
    * The value of `body` with `input` as its only argument over `records` and createKey over `keys`, as Lean evaluates

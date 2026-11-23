@@ -40,8 +40,6 @@ def respond (solve : List String → IO (List String)) : Engine.Request → IO R
   | .verifyExternal s service trace => do pure (.verifiedExternal (← Engine.verifyExternal s service trace))
   | .givenRecords s sc service => do pure (.given (← Engine.givenRecordsOf s sc service))
   | .readLines s service lines => do pure (.read (← Engine.readSnapshotLines s service lines))
-  | .sort schema value => pure (.sorted (sortCollections schema value))
-  | .keyOrdered schema value => pure (.keyOrdered (keyOrdered schema value))
   | .evaluate body input records keys fields =>
     let env : Eval.Env := { args := Eval.argsOf [(.input, .json input)], records := records.map Stored.row, keys,
                             fields := fun e => (fields.lookup e).getD [] }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { test } from "node:test";
 import { exampleFolders } from "../../scripts/explain.ts";
@@ -45,21 +45,21 @@ test("The theorems in the last cells under Proven properties are the theorems ta
  *
  * - `kindExample`: the example of a violation kind that the theorem states.
  * - `example` and `scenario`: a scenario of an example, by its path under test, that exercises the theorem.
- * - `diffTest`: the file under test of the diff test that compares, in TS and Lean, the function that the theorem states
- *   over all its inputs, which no one run can show.
  * - `because`: why no run can exercise the theorem.
  */
 type Instead =
   | { readonly kindExample: UserKind }
   | { readonly example: string; readonly scenario: string }
-  | { readonly diffTest: string }
   | { readonly because: string };
 
 const ofCompare = {
   because:
     "a property of verify's comparison over all traces, which the engine runs on every verify example; no one run shows all traces",
 } as const;
-const ofSort = { diffTest: "unit/collections.diff.ts" } as const;
+const ofSort = {
+  because:
+    "a property of the sort over all values, which the engine runs on every collection that spec code makes; no one run shows all values",
+} as const;
 const ofCheck = {
   because:
     "a property of the structure check over all structures, which the engine runs on every check; no one run shows all structures",
@@ -269,7 +269,7 @@ const hasScenario = (dir: string, name: string): boolean =>
           new RegExp(`^export const ${name} = scenario\\(`, "m").test(readFileSync(join(dir, e.name), "utf8"))),
   );
 
-test("Each entry in instead that names a kind names one with an example, each that names an example names one of its scenarios, and each that names a diff test names a file of one", () => {
+test("Each entry in instead that names a kind names one with an example, and each that names an example names one of its scenarios", () => {
   const examples = new Set(exampleFolders().map(([kind]) => kind));
   assert.deepEqual(
     Object.entries(instead).filter(([, i]) => {
@@ -278,7 +278,6 @@ test("Each entry in instead that names a kind names one with an example, each th
         const dir = join(tests, i.example);
         return !diffed.has(dir) || !hasScenario(dir, i.scenario);
       }
-      if ("diffTest" in i) return !i.diffTest.endsWith(".diff.ts") || !existsSync(join(tests, i.diffTest));
       return false;
     }),
     [],

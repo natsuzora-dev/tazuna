@@ -3,7 +3,7 @@ import type { DateLabel } from "./time.ts";
 export type SortKey = number | DateLabel;
 
 /** Compares two keys. NaN throws, as it is neither less than, equal to nor greater than another number. */
-export function compareKeys(a: unknown, b: unknown): number {
+function compareKeys(a: unknown, b: unknown): number {
   if (Number.isNaN(a) || Number.isNaN(b)) throw new RangeError("NaN is not a sort key");
   if (typeof a === "string" && typeof b === "string") return a < b ? -1 : a > b ? 1 : 0;
   return typeof a === "number" && typeof b === "number" ? a - b : 0;

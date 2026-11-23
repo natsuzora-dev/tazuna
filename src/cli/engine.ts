@@ -49,8 +49,6 @@ const responses = {
   verifyExternal: "verifiedExternal",
   givenRecords: "given",
   readLines: "read",
-  sort: "sorted",
-  keyOrdered: "keyOrdered",
   evaluate: "evaluated",
   parse: "parsed",
   proveQueries: "queried",

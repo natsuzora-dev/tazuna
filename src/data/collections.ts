@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { BagValue, bagValues, compareKeys, type Marked, runsOf, type SortKey } from "./bag.ts";
+import { BagValue, bagValues, type Marked, runsOf, type SortKey } from "./bag.ts";
 import { InternalError } from "./internalError.ts";
 import { type JsonSchema, jsonSchema } from "./jsonSchema.ts";
 import { type Collection, collectionOf, mark } from "./marks.ts";
 import { fieldSchema, type SchemaNode, schemaNode } from "./schemaNode.ts";
 import { type DateLabel, date } from "./time.ts";
-import { field, fits, unionOptions } from "./unionOptions.ts";
-import { byCodePoint, canonicalJson, type Fields, type Json, plain, type Shape } from "./values.ts";
+import { fits } from "./unionOptions.ts";
+import { canonicalJson, type Fields, type Json, plain, type Shape } from "./values.ts";
 
 /** An array schema whose output type carries mark `M`, so that spec functions may produce it from a Bag. */
 type CollectionSchema<E extends z.ZodType, M extends "bag" | "sortedBy"> = z.ZodArray<E> & {
@@ -68,7 +68,7 @@ const keyOf = (element: z.ZodType, key: string) => (row: unknown) =>
 
 /**
  * Returns an array schema sorted ascending by `key`, like Kotlin's `sortedBy`. tazuna sorts the values that the spec
- * produces, so `resolve` and `decide` do not sort. A value from outside out of key order is an error (keyOrderIssue).
+ * produces, so `resolve` and `decide` do not sort. A value from outside out of key order is an error.
  */
 export const sortedBy = <E extends z.ZodObject, K extends SortKeyOf<E>>(
   element: E,
@@ -81,86 +81,6 @@ function unbagged(collection: Collection | undefined, value: unknown): unknown {
   const values = bagValues(value);
   if (values !== undefined) return values;
   return collection.kind === "sortedBy" && Array.isArray(value) ? value.flatMap((v) => bagValues(v) ?? [v]) : value;
-}
-
-/** Lean's sortCollections. */
-export function sortCollections(schema: unknown, v: Json): Json {
-  const options = unionOptions(schema);
-  if (options !== undefined) {
-    const option = options.find((o) => fits(o, v));
-    return option === undefined ? v : sortCollections(option, v);
-  }
-  if (Array.isArray(v)) {
-    const item = field(schema, "items");
-    const items = item === undefined ? v : v.map((x) => sortCollections(item, x));
-    const sortedBy = field(schema, "x-tazuna-sorted-by");
-    const unordered =
-      typeof sortedBy === "string" || [field(schema, "x-tazuna-bag"), field(schema, "x-tazuna-set")].includes(true);
-    if (!unordered) return items;
-    const text = new Map(items.map((x) => [x, canonicalJson(x)]));
-    const canonical = items.toSorted((a, b) => byCodePoint(text.get(a) as string, text.get(b) as string));
-    if (typeof sortedBy !== "string") return canonical;
-    const key = (x: Json) => encodedKey(field(x, sortedBy));
-    return canonical.toSorted((a, b) => compareKeys(key(a), key(b)));
-  }
-  if (!isRecord(v)) return v;
-  return Object.fromEntries(
-    Object.entries(v).map(([k, x]) => {
-      const child = field(field(schema, "properties"), k) ?? field(schema, "additionalProperties");
-      return [k, child === undefined ? x : sortCollections(child, x as Json)];
-    }),
-  );
-}
-
-/**
- * Lean's keyOrdered, with where it fails: the first array of the encoded value `v` whose JSON Schema has
- * `x-tazuna-sorted-by` and whose elements are out of that key's order, as a Zod issue at the later element.
- */
-export function keyOrderIssue(
-  schema: unknown,
-  v: Json,
-  path: readonly PropertyKey[] = [],
-): z.core.$ZodIssue | undefined {
-  const options = unionOptions(schema);
-  if (options !== undefined) {
-    const option = options.find((o) => fits(o, v));
-    return option === undefined ? undefined : keyOrderIssue(option, v, path);
-  }
-  if (Array.isArray(v)) {
-    const item = field(schema, "items");
-    for (const [i, x] of item === undefined ? [] : v.entries()) {
-      const issue = keyOrderIssue(item, x, [...path, i]);
-      if (issue !== undefined) return issue;
-    }
-    const key = field(schema, "x-tazuna-sorted-by");
-    if (typeof key !== "string") return undefined;
-    const keys = v.map((x) => encodedKey(field(x, key)));
-    const i = keys.findIndex((k, i) => i > 0 && compareKeys(keys[i - 1], k) > 0);
-    if (i < 0) return undefined;
-    return {
-      code: "custom",
-      message: `element ${i} is before element ${i - 1} in ${key} order`,
-      path: [...path, i],
-    };
-  }
-  if (!isRecord(v)) return undefined;
-  for (const [k, x] of Object.entries(v)) {
-    const child = field(field(schema, "properties"), k) ?? field(schema, "additionalProperties");
-    const issue = child === undefined ? undefined : keyOrderIssue(child, x as Json, [...path, k]);
-    if (issue !== undefined) return issue;
-  }
-  return undefined;
-}
-
-/**
- * Returns a value from outside parsed by `schema`, which also lists each sortedBy array in key order as written
- * (keyOrderIssue), as Lean's Functions.parseOutside reads it.
- */
-export function parsedOutside<T extends z.ZodType>(schema: T, value: unknown): z.ZodSafeParseResult<z.output<T>> {
-  const parsed = schema.safeParse(value);
-  if (!parsed.success) return parsed;
-  const issue = keyOrderIssue(jsonSchema(schema), value as Json);
-  return issue === undefined ? parsed : { success: false, error: new z.ZodError([issue]) as z.ZodError<z.output<T>> };
 }
 
 /**
@@ -335,7 +255,7 @@ export function toJson(schema: z.ZodType, value: unknown): unknown {
  * Returns a value of `schema` from the JSON that toJson wrote of it: the mirror of toJson, which runs only the decode
  * of each codec. The value was checked when it was parsed, so no check runs again.
  */
-export function fromJson(schema: z.ZodType, json: unknown): unknown {
+function fromJson(schema: z.ZodType, json: unknown): unknown {
   const node = schemaNode(schema);
   switch (node.type) {
     case "codec": {

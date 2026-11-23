@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import { type Bag, BagValue, NotOnly } from "../../src/data/bag.ts";
-import { bag, bagged, sortCollections } from "../../src/data/collections.ts";
-import { jsonSchema } from "../../src/data/jsonSchema.ts";
+import { bag, bagged } from "../../src/data/collections.ts";
 import type { DateLabel } from "../../src/data/time.ts";
 
 const bagOf = <T>(items: readonly T[]): Bag<T> => new BagValue(() => items);
@@ -100,12 +99,8 @@ test("A Bag reads its values on each call", () => {
   assert.equal(reads, 2);
 });
 
-test("sortCollections and bagged order a bag in an object's catchall like one in its shape", () => {
+test("bagged reads a bag in an object's catchall like one in its shape", () => {
   const schema = z.object({ named: bag(z.int()) }).catchall(bag(z.int()));
-  assert.deepEqual(sortCollections(jsonSchema(schema), { named: [2, 1], other: [3, 1, 2] }), {
-    named: [1, 2],
-    other: [1, 2, 3],
-  });
   const received = bagged(schema, { other: [1, 2] }) as { readonly other: unknown };
   assert.ok(received.other instanceof BagValue);
 });

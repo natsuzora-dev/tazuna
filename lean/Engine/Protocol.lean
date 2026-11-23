@@ -54,10 +54,6 @@ inductive Request where
   | givenRecords («structure» : Ir.Structure) (scenario : Scenario) (service : String)
   /-- Each line of a snapshot of `service` as verify reads it (readSnapshotLines), by which drive substitutes keys. -/
   | readLines («structure» : Ir.Structure) (service : String) (lines : List (Option TraceLine))
-  /-- sortCollections of an encoded value by its JSON Schema. -/
-  | sort (schema value : Value)
-  /-- keyOrdered of an encoded value by its JSON Schema. -/
-  | keyOrdered (schema value : Value)
   /--
   The value of an IR expression whose only argument is `input`, over `records` whose entities have `fields` in their
   schemas' order, with createKey over `keys`.
@@ -123,8 +119,6 @@ inductive Response where
   | decodedLines (lines : List (Option TraceLine))
   | simulated (services : List SimulatedService) (violations : List Sim.InvalidScenario)
       (halted : Option Sim.InvalidScenario)
-  | sorted (value : Value)
-  | keyOrdered (ordered : Bool)
   | evaluated (result : Evaluated)
   | tested (runs : List Engine.ScenarioRun)
   | verified (logs : List Replayed) (uncovered : List Violation)

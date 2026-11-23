@@ -158,18 +158,6 @@ export type Request =
       readonly service: string;
       readonly lines: readonly (TraceLine | null)[];
     }
-  /** sortCollections of an encoded value by its JSON Schema. */
-  | {
-      readonly type: "sort";
-      readonly schema: Json;
-      readonly value: Json;
-    }
-  /** keyOrdered of an encoded value by its JSON Schema. */
-  | {
-      readonly type: "keyOrdered";
-      readonly schema: Json;
-      readonly value: Json;
-    }
   /**
    * The value of an IR expression whose only argument is `input`, over `records` whose entities have `fields` in their
    * schemas' order, with createKey over `keys`.
@@ -489,14 +477,6 @@ export type Response =
       readonly services: readonly SimulatedService[];
       readonly violations: readonly InvalidScenario[];
       readonly halted: InvalidScenario | null;
-    }
-  | {
-      readonly type: "sorted";
-      readonly value: Json;
-    }
-  | {
-      readonly type: "keyOrdered";
-      readonly ordered: boolean;
     }
   | {
       readonly type: "evaluated";

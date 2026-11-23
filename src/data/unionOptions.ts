@@ -5,15 +5,7 @@ const isObject = (v: unknown): v is Readonly<Record<string, unknown>> =>
   v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof BagValue);
 
 /** Lean's Value.field?: a field that is undefined is absent, as JSON writes it. */
-export const field = (v: unknown, key: string): unknown => (isObject(v) && Object.hasOwn(v, key) ? v[key] : undefined);
-
-/** Lean's unionOptions. */
-export function unionOptions(schema: unknown): readonly unknown[] | undefined {
-  const anyOf = field(schema, "anyOf");
-  if (Array.isArray(anyOf)) return anyOf;
-  const oneOf = field(schema, "oneOf");
-  return Array.isArray(oneOf) ? oneOf : undefined;
-}
+const field = (v: unknown, key: string): unknown => (isObject(v) && Object.hasOwn(v, key) ? v[key] : undefined);
 
 /** Lean's typeNames, of a JSON value or of a value as spec code holds it, whose Bag is an array. */
 function typeNames(v: unknown): readonly string[] {
