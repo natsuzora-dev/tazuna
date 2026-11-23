@@ -8,7 +8,7 @@ open Tazuna.Data
 
 /--
 A definition that breaks the meaning while the run evaluates it. `definition` is the definition that causes it.
-An exception has no `definition` when a service invariant throws, since the subject is then the service.
+An exception or a notOnly has no `definition` when a service invariant causes it, since the subject is then the service.
 -/
 inductive Fault where
   /-- The command emits `event` with a payload that does not match the event's payload schema. -/
@@ -61,7 +61,7 @@ inductive Fault where
   A function calls `only()` on a bag with more than one element, or `minBy` or `maxBy` on a bag whose least or greatest
   key more than one element has.
   -/
-  | notOnly (definition : Spec.Ref)
+  | notOnly (definition : Option Spec.Ref)
   /--
   A spec function threw. `definition` is the definition whose function threw, or null when a service invariant throws.
   -/

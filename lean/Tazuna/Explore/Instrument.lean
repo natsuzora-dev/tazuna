@@ -1,5 +1,5 @@
 import Tazuna.Service.Restart
-import Tazuna.Explore.BagOrderDependent
+import Tazuna.Explore.RegionOrderDependent
 import Tazuna.Sim.Order
 import Tazuna.Data.Binding
 
@@ -103,7 +103,7 @@ structure TransitionAccess where
   writes : List (InstanceId × String) := []
 deriving Repr, Inhabited
 
-def regionFindings (chart : Spec.Ref) (access : Nat → TransitionAccess) (p : RegionPair) : List BagOrderDependent :=
+def regionFindings (chart : Spec.Ref) (access : Nat → TransitionAccess) (p : RegionPair) : List RegionOrderDependent :=
   let a := access p.first
   let b := access p.second
   (b.writes.filterMap fun v =>

@@ -20,88 +20,87 @@ export type Subject =
 
 /**
  * A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the trace's
- * `in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
- * failedAssumedRequires, failedAssumedEnsures, answerOutputSchema, eventPayloadSchema and requestInputSchema, which need
- * the spec's functions or Zod schemas.
+ * `in` line before it, or at 1. `spec` and `specLine` are the spec's side: the lines of the spec's replay of the
+ * trace's `in` lines, `specLine` 1-based in them.
  */
 export type Mismatch =
-  /** The request line has another input than the snapshot's. */
+  /** The request line has another input than the spec's. */
   | {
       readonly kind: "Mismatch.request";
       readonly definition: null;
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshot: Json;
+        readonly spec: Json;
         readonly trace: Json;
       };
     }
-  /** The request line has another caller than the snapshot's. */
+  /** The request line has another caller than the spec's. */
   | {
       readonly kind: "Mismatch.caller";
       readonly definition: null;
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshot: Json;
+        readonly spec: Json;
         readonly trace: Json;
       };
     }
-  /** The event line has another payload than the snapshot's. */
+  /** The event line has another payload than the spec's. */
   | {
       readonly kind: "Mismatch.event";
       readonly definition: null;
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshot: Json;
+        readonly spec: Json;
         readonly trace: Json;
       };
     }
-  /** The accepted or fulfilled answer, or the answer to a query, has another output than the snapshot's. */
+  /** The accepted or fulfilled answer, or the answer to a query, has another output than the spec's. */
   | {
       readonly kind: "Mismatch.output";
       readonly definition: null;
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshot: Json;
+        readonly spec: Json;
         readonly trace: Json;
       };
     }
-  /** The answer has another result, accepted, fulfilled, or rejected, than the snapshot's. */
+  /** The answer has another result, accepted, fulfilled, or rejected, than the spec's. */
   | {
       readonly kind: "Mismatch.result";
       readonly definition: null;
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshot: string;
+        readonly spec: string;
         readonly trace: string;
       };
     }
-  /** The answer rejects with another kind than the snapshot's. */
+  /** The answer rejects with another kind than the spec's. */
   | {
       readonly kind: "Mismatch.rejection";
       readonly definition: null;
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshot: RejectionKind;
+        readonly spec: RejectionKind;
         readonly trace: RejectionKind;
       };
     }
-  /** The trace does not answer the request that the snapshot answers at `snapshotLine`. */
+  /** The trace does not answer the request that the spec answers at `specLine`. */
   | {
       readonly kind: "Mismatch.missingAnswer";
       readonly definition: null;
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshotLine: number;
+        readonly specLine: number;
       };
     }
-  /** The trace lacks the snapshot's line `snapshotLine`. */
+  /** The trace lacks the spec's line `specLine`. */
   | {
       readonly kind: "Mismatch.missingLine";
       readonly definition: null;
@@ -109,10 +108,10 @@ export type Mismatch =
       readonly data: {
         readonly subject: Subject;
         readonly content: Json;
-        readonly snapshotLine: number;
+        readonly specLine: number;
       };
     }
-  /** The trace does not open the subscription that the snapshot opens. */
+  /** The trace does not open the subscription that the spec opens. */
   | {
       readonly kind: "Mismatch.unopenedSubscription";
       readonly definition: null;
@@ -120,10 +119,10 @@ export type Mismatch =
       readonly data: {
         readonly subject: Subject;
         readonly content: Json;
-        readonly snapshotLine: number;
+        readonly specLine: number;
       };
     }
-  /** The trace opens a subscription that the snapshot does not. */
+  /** The trace opens a subscription that the spec does not. */
   | {
       readonly kind: "Mismatch.unexpectedSubscription";
       readonly definition: null;
@@ -133,7 +132,7 @@ export type Mismatch =
         readonly content: Json;
       };
     }
-  /** The trace has a line that the snapshot does not. */
+  /** The trace has a line that the spec does not. */
   | {
       readonly kind: "Mismatch.unexpectedLine";
       readonly definition: null;
@@ -142,7 +141,7 @@ export type Mismatch =
         readonly subject: Subject;
       };
     }
-  /** The line comes before the line `before`, which its snapshot line must follow. */
+  /** The line comes before the line `before`, which its spec line must follow. */
   | {
       readonly kind: "Mismatch.lineOrder";
       readonly definition: null;
@@ -152,25 +151,25 @@ export type Mismatch =
         readonly before: Subject;
       };
     }
-  /** The line has another time than the snapshot's. */
+  /** The line has another time than the spec's. */
   | {
       readonly kind: "Mismatch.time";
       readonly definition: null;
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshot: number;
+        readonly spec: number;
         readonly trace: number;
       };
     }
-  /** The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. */
+  /** The event results from another request than the spec's event (`resultOf`), or only one of them names one. */
   | {
       readonly kind: "Mismatch.resultOf";
       readonly definition: null;
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshot: string | null;
+        readonly spec: string | null;
         readonly trace: string | null;
       };
     }

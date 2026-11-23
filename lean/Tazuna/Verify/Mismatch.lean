@@ -9,39 +9,38 @@ open Tazuna.Data
 
 /--
 A difference between compared lines. `line` is 1-based in the trace. A line missing from the trace is at the trace's
-`in` line before it, or at 1. `snapshotLine` is 1-based in the snapshot. TS decides rejectedAssumedRequires,
-failedAssumedRequires, failedAssumedEnsures, answerOutputSchema, eventPayloadSchema and requestInputSchema, which need
-the spec's functions or Zod schemas.
+`in` line before it, or at 1. `spec` and `specLine` are the spec's side: the lines of the spec's replay of the
+trace's `in` lines, `specLine` 1-based in them.
 -/
 inductive Mismatch where
-  /-- The request line has another input than the snapshot's. -/
-  | request (line : Nat) (subject : Subject) (snapshot trace : Value)
-  /-- The request line has another caller than the snapshot's. -/
-  | caller (line : Nat) (subject : Subject) (snapshot trace : Value)
-  /-- The event line has another payload than the snapshot's. -/
-  | event (line : Nat) (subject : Subject) (snapshot trace : Value)
-  /-- The accepted or fulfilled answer, or the answer to a query, has another output than the snapshot's. -/
-  | output (line : Nat) (subject : Subject) (snapshot trace : Value)
-  /-- The answer has another result, accepted, fulfilled, or rejected, than the snapshot's. -/
-  | result (line : Nat) (subject : Subject) (snapshot trace : String)
-  /-- The answer rejects with another kind than the snapshot's. -/
-  | rejection (line : Nat) (subject : Subject) (snapshot trace : RejectionKind)
-  /-- The trace does not answer the request that the snapshot answers at `snapshotLine`. -/
-  | missingAnswer (line : Nat) (subject : Subject) (snapshotLine : Nat)
-  /-- The trace lacks the snapshot's line `snapshotLine`. -/
-  | missingLine (line : Nat) (subject : Subject) (content : Value) (snapshotLine : Nat)
-  /-- The trace does not open the subscription that the snapshot opens. -/
-  | unopenedSubscription (line : Nat) (subject : Subject) (content : Value) (snapshotLine : Nat)
-  /-- The trace opens a subscription that the snapshot does not. -/
+  /-- The request line has another input than the spec's. -/
+  | request (line : Nat) (subject : Subject) (spec trace : Value)
+  /-- The request line has another caller than the spec's. -/
+  | caller (line : Nat) (subject : Subject) (spec trace : Value)
+  /-- The event line has another payload than the spec's. -/
+  | event (line : Nat) (subject : Subject) (spec trace : Value)
+  /-- The accepted or fulfilled answer, or the answer to a query, has another output than the spec's. -/
+  | output (line : Nat) (subject : Subject) (spec trace : Value)
+  /-- The answer has another result, accepted, fulfilled, or rejected, than the spec's. -/
+  | result (line : Nat) (subject : Subject) (spec trace : String)
+  /-- The answer rejects with another kind than the spec's. -/
+  | rejection (line : Nat) (subject : Subject) (spec trace : RejectionKind)
+  /-- The trace does not answer the request that the spec answers at `specLine`. -/
+  | missingAnswer (line : Nat) (subject : Subject) (specLine : Nat)
+  /-- The trace lacks the spec's line `specLine`. -/
+  | missingLine (line : Nat) (subject : Subject) (content : Value) (specLine : Nat)
+  /-- The trace does not open the subscription that the spec opens. -/
+  | unopenedSubscription (line : Nat) (subject : Subject) (content : Value) (specLine : Nat)
+  /-- The trace opens a subscription that the spec does not. -/
   | unexpectedSubscription (line : Nat) (subject : Subject) (content : Value)
-  /-- The trace has a line that the snapshot does not. -/
+  /-- The trace has a line that the spec does not. -/
   | unexpectedLine (line : Nat) (subject : Subject)
-  /-- The line comes before the line `before`, which its snapshot line must follow. -/
+  /-- The line comes before the line `before`, which its spec line must follow. -/
   | lineOrder (line : Nat) (subject before : Subject)
-  /-- The line has another time than the snapshot's. -/
-  | time (line : Nat) (subject : Subject) (snapshot trace : Time)
-  /-- The event results from another request than the snapshot's event (`resultOf`), or only one of them names one. -/
-  | resultOf (line : Nat) (subject : Subject) (snapshot trace : Option String)
+  /-- The line has another time than the spec's. -/
+  | time (line : Nat) (subject : Subject) (spec trace : Time)
+  /-- The event results from another request than the spec's event (`resultOf`), or only one of them names one. -/
+  | resultOf (line : Nat) (subject : Subject) (spec trace : Option String)
   /-- The run of test, not a trace, differs from the snapshot at its line `line`. A missing line is null. -/
   | line (line : Nat) (snapshot trace : Option Value)
   /-- No contract of another service lists the event that the external service emits. -/

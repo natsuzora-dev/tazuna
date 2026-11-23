@@ -74,12 +74,13 @@ function testSnapshots(
 }
 
 /**
- * Where a violation that a running service reports is: a failed service invariant, or a throw of one, at the
- * service, since a service is no definition; any other at its definition, or at the scenario without one.
+ * Where a violation that a running service reports is: a failed service invariant, or a throw or a notOnly of one, at
+ * the service, since a service is no definition; any other at its definition, or at the scenario without one.
  */
 function placeOfReported(spec: Spec, named: Named<LoadedScenario>, v: ViolationValue, service?: string): Location {
   const atService =
-    v.kind === "Fault.failedServiceInvariant" || (v.kind === "Fault.exception" && v.definition === null);
+    v.kind === "Fault.failedServiceInvariant" ||
+    ((v.kind === "Fault.exception" || v.kind === "Fault.notOnly") && v.definition === null);
   const servicePlace = service === undefined ? undefined : spec.services.get(service)?.place;
   if (atService && servicePlace !== undefined) return servicePlace;
   return v.definition === null ? named.place : placeOf(spec, v.definition);

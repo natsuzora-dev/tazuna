@@ -7,9 +7,9 @@ open Tazuna.Data Tazuna.Service
 
 /--
 A result, found while the run evaluates, that depends on an order the spec does not fix: the order of parallel regions.
-No `BagOrderDependent` violation halts the run. `definition` is the chart of the conflicting transitions.
+No `RegionOrderDependent` violation halts the run. `definition` is the chart of the conflicting transitions.
 -/
-inductive BagOrderDependent where
+inductive RegionOrderDependent where
   /--
   Two transitions in parallel regions of `state`, taken on one event, both assign the context field `field`, so the
   result depends on the order of the regions.
@@ -23,6 +23,6 @@ inductive BagOrderDependent where
   | assignRead (definition : Spec.Ref) (state : String) (writer reader : Spec.TransitionRef) (field : String)
 deriving DecidableEq, Repr, Inhabited
 
-derive_group BagOrderDependent
+derive_group RegionOrderDependent
 
 end Tazuna.Explore

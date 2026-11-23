@@ -353,7 +353,7 @@ the run that explore appends lines to.
 
 /--
 An audited run of a whole scenario returns the world of the plain run, whatever the audit collected before: `test`'s
-audits for `BagOrderDependent` and `ChoiceDependent` change no simulation.
+audits for `RegionOrderDependent` and `ChoiceDependent` change no simulation.
 -/
 @[guarantee] theorem simulate_agrees (j : Spec.Structure) (start : World) (sc : Scenario) :
     Agrees (simulate j fsOfI start sc) (simulate j fsOf start sc) := by

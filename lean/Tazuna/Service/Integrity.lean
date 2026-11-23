@@ -63,11 +63,17 @@ def rowViolations [Monad m] (st : Service) (fs : Functions m) (records : Records
     | .ok none => []
   pure (invariant ++ danglingRefs st records name row)
 
+/-- The fault that `e` means in a service invariant, which names no definition. -/
+def serviceIssueViolation : Issue → Fault
+  | .notOnly => .notOnly none
+  | .thrown schema => .exception (schema.map Schema.owner)
+  | _ => .exception none
+
 def integrityViolations [Monad m] (st : Service) (fs : Functions m) (records : Records) (now : Time) (name : String) :
     m (List Fault) := do
   let rows ← (st.entities.flatMap fun e => records.filter (·.entity == e)).mapM (rowViolations st fs records now name)
   match ← fs.serviceInvariant records now with
-  | .error schema => pure (rows.flatten ++ [.exception (schema.map Schema.owner)])
+  | .error e => pure (rows.flatten ++ [serviceIssueViolation e])
   | .ok (some c) => pure (rows.flatten ++ [.failedServiceInvariant c (st.ref name)])
   | .ok none => pure rows.flatten
 

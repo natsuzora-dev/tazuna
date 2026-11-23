@@ -7,7 +7,7 @@
     "InvalidScenario": "What the simulation of a scenario reports about the scenario.",
     "InvalidInput": "An input that the service takes and that breaks what it may assume: a message that no sender could give it, or that breaks the service's assumption about its sender, or an order that the scenario writes for the input.",
     "Fault": "A definition that breaks the meaning while the run evaluates it.",
-    "BagOrderDependent": "A result, found while the run evaluates, that depends on an order the spec does not fix: the order of parallel regions.",
+    "RegionOrderDependent": "A result, found while the run evaluates, that depends on an order the spec does not fix: the order of parallel regions.",
     "ChoiceDependent": "A result that depends on a choice nobody controls: the order of two steps of one processing that no cause chain links, of two deadlines of one service due at one time, or of two messages that one line delivers to one service.",
     "Undecided": "A check of `test` that reached a limit that tazuna sets before it could decide, so it neither reports the violation that the check looks for nor rules it out, as an SMT solver answers unknown.",
     "Uncovered": "A part that no trace's replay reached, which verify --coverage reports.",
@@ -15,32 +15,6 @@
     "Uncomparable": "A line or file that verify cannot compare."
   },
   "kinds": {
-    "BagOrderDependent.assignRead": {
-      "meaning": "The transition `writer` in one parallel region of `state` assigns the context field `field`, which the transition `reader` in another region, taken on the same event, reads, so the result depends on the order of the regions.",
-      "example": {
-        "excerpt": {
-          "file": "closer/closer.ts",
-          "from": 13,
-          "to": 38,
-          "line": 13,
-          "text": "export const copyReadsRegion = machine({\n  description:\n    \"Note the closing in state x in one region, and the copy k of map m saves the notes into seen in the other region\",\n  context: { notes: z.array(z.string()).default([]), seen: z.array(z.string()).default([]) },\n  receives: { tasksClosed },\n  initial: \"open\",\n  states: {\n    open: {\n      type: \"parallel\",\n      states: {\n        left: {\n          initial: \"m\",\n          states: { m: { type: \"map\", key: { name: z.string() }, initial: \"c1\", states: { c1: {} } } },\n        },\n        right: { initial: \"x\", states: { x: {}, y: {} } },\n      },\n    },\n  },\n}).chart({\n  states: {\n    m: { items: () => [{ name: \"k\" }] },\n    c1: { on: { tasksClosed: [{ assign: { seen: ({ context }) => [...context.notes] } }] } },\n    x: { on: { tasksClosed: [{ target: \"y\", assign: { notes: ({ context }) => [...context.notes, \"x\"] } }] } },\n    y: { on: { tasksClosed: [{ target: \"x\" }] } },\n  },\n});"
-        },
-        "violation": "{\"kind\":\"BagOrderDependent.assignRead\",\"definition\":{\"service\":\"closer\",\"name\":\"copyReadsRegion\"},\"data\":{\"state\":\"open\",\"writer\":{\"state\":\"x\",\"trigger\":{\"type\":\"on\",\"key\":\"tasksClosed\"},\"index\":0},\"reader\":{\"state\":\"c1\",\"trigger\":{\"type\":\"on\",\"key\":\"tasksClosed\"},\"index\":0},\"field\":\"notes\"},\"location\":{\"file\":\"closer/closer.ts\",\"line\":13},\"scenario\":{\"service\":\"closer\",\"name\":\"closeOnce\"}}"
-      }
-    },
-    "BagOrderDependent.bothAssign": {
-      "meaning": "Two transitions in parallel regions of `state`, taken on one event, both assign the context field `field`, so the result depends on the order of the regions.",
-      "example": {
-        "excerpt": {
-          "file": "todo/todo.ts",
-          "from": 17,
-          "to": 39,
-          "line": 17,
-          "text": "export const tracker = machine({\n  description: \"Mark that a task was added, once in each region\",\n  context: { status: z.enum([\"empty\", \"added\"]).default(\"empty\") },\n  receives: { taskAdded, tasksCleared },\n  initial: \"tracking\",\n  states: {\n    tracking: {\n      type: \"parallel\",\n      states: {\n        counting: { initial: \"countIdle\", states: { countIdle: {}, countMarking: {}, counted: {} } },\n        remembering: { initial: \"rememberIdle\", states: { rememberIdle: {}, rememberMarking: {}, remembered: {} } },\n      },\n    },\n  },\n}).chart({\n  on: { tasksCleared: [{ target: \"tracking\" }] },\n  states: {\n    countIdle: { on: { taskAdded: [{ target: \"countMarking\" }] } },\n    countMarking: { always: [{ target: \"counted\", assign: { status: () => \"added\" } }] },\n    rememberIdle: { on: { taskAdded: [{ target: \"rememberMarking\" }] } },\n    rememberMarking: { always: [{ target: \"remembered\", assign: { status: () => \"added\" } }] },\n  },\n});"
-        },
-        "violation": "{\"kind\":\"BagOrderDependent.bothAssign\",\"definition\":{\"service\":\"todo\",\"name\":\"tracker\"},\"data\":{\"state\":\"tracking\",\"firstTransition\":{\"state\":\"countMarking\",\"trigger\":{\"type\":\"always\"},\"index\":0},\"secondTransition\":{\"state\":\"rememberMarking\",\"trigger\":{\"type\":\"always\"},\"index\":0},\"field\":\"status\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":17},\"scenario\":{\"service\":\"todo\",\"name\":\"addOne\"}}"
-      }
-    },
     "ChoiceDependent.stepOrder": {
       "meaning": "The execution with the step order `originalOrder`, which takes `firstStep` before `secondStep`, and the execution with `alternativeOrder`, which takes `secondStep` first, differ by `difference`. An empty order is the execution without one. One order comes from the other (`stepOrderSearch`), so the pair is the steps whose order they swap. `definition` is the definition of the first step.",
       "example": {
@@ -1576,7 +1550,7 @@
       }
     },
     "Mismatch.caller": {
-      "meaning": "The request line has another caller than the snapshot's.",
+      "meaning": "The request line has another caller than the spec's.",
       "example": {
         "excerpt": {
           "file": "traces/screens/draftTwo.jsonl",
@@ -1585,11 +1559,11 @@
           "line": 1,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s1\",\"name\":\"todo.linked\",\"input\":{\"links\":[{\"from\":\"\",\"to\":\"\"},{\"from\":\"\",\"to\":\"\"}]},\"caller\":{\"service\":\"todo\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.caller\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.linked\",\"id\":\"s1\"},\"snapshot\":{\"service\":\"screens\"},\"trace\":{\"service\":\"todo\"}},\"location\":{\"file\":\"traces/screens/draftTwo.jsonl\",\"line\":1}}"
+        "violation": "{\"kind\":\"Mismatch.caller\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.linked\",\"id\":\"s1\"},\"spec\":{\"service\":\"screens\"},\"trace\":{\"service\":\"todo\"}},\"location\":{\"file\":\"traces/screens/draftTwo.jsonl\",\"line\":1}}"
       }
     },
     "Mismatch.event": {
-      "meaning": "The event line has another payload than the snapshot's.",
+      "meaning": "The event line has another payload than the spec's.",
       "example": {
         "excerpt": {
           "file": "traces/todo/announcesAdded.jsonl",
@@ -1598,7 +1572,7 @@
           "line": 3,
           "text": "{\"time\":1792890000000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e1\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\"},\"resultOf\":\"addTask#1\"}"
         },
-        "violation": "{\"kind\":\"Mismatch.event\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e1\"},\"snapshot\":{\"taskId\":\"task-1\"},\"trace\":{\"taskId\":\"task-2\"}},\"location\":{\"file\":\"traces/todo/announcesAdded.jsonl\",\"line\":3}}"
+        "violation": "{\"kind\":\"Mismatch.event\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e1\"},\"spec\":{\"taskId\":\"task-1\"},\"trace\":{\"taskId\":\"task-2\"}},\"location\":{\"file\":\"traces/todo/announcesAdded.jsonl\",\"line\":3}}"
       }
     },
     "Mismatch.eventPayloadSchema": {
@@ -1654,7 +1628,7 @@
       }
     },
     "Mismatch.lineOrder": {
-      "meaning": "The line comes before the line `before`, which its snapshot line must follow.",
+      "meaning": "The line comes before the line `before`, which its spec line must follow.",
       "example": {
         "excerpt": {
           "file": "traces/todo/addTwice.jsonl",
@@ -1667,7 +1641,7 @@
       }
     },
     "Mismatch.missingAnswer": {
-      "meaning": "The trace does not answer the request that the snapshot answers at `snapshotLine`.",
+      "meaning": "The trace does not answer the request that the spec answers at `specLine`.",
       "example": {
         "excerpt": {
           "file": "traces/todo/answersWrongResults.jsonl",
@@ -1676,11 +1650,11 @@
           "line": 10,
           "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"completeTask#2\",\"name\":\"completeTask\",\"input\":{\"taskId\":\"task-1\"},\"caller\":{\"service\":\"client\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.missingAnswer\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#2\"},\"snapshotLine\":11},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":10}}"
+        "violation": "{\"kind\":\"Mismatch.missingAnswer\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#2\"},\"specLine\":11},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":10}}"
       }
     },
     "Mismatch.missingLine": {
-      "meaning": "The trace lacks the snapshot's line `snapshotLine`.",
+      "meaning": "The trace lacks the spec's line `specLine`.",
       "example": {
         "excerpt": {
           "file": "traces/todo/addHourlyWrongRequests.jsonl",
@@ -1689,11 +1663,11 @@
           "line": 6,
           "text": "{\"time\":1792890000000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"addTask#2\",\"name\":\"addTask\",\"input\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"},\"caller\":{\"service\":\"client\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.missingLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"calendar.nextDay#2\"},\"content\":{\"from\":1792890000000},\"snapshotLine\":9},\"location\":{\"file\":\"traces/todo/addHourlyWrongRequests.jsonl\",\"line\":6}}"
+        "violation": "{\"kind\":\"Mismatch.missingLine\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"calendar.nextDay#2\"},\"content\":{\"from\":1792890000000},\"specLine\":9},\"location\":{\"file\":\"traces/todo/addHourlyWrongRequests.jsonl\",\"line\":6}}"
       }
     },
     "Mismatch.output": {
-      "meaning": "The accepted or fulfilled answer, or the answer to a query, has another output than the snapshot's.",
+      "meaning": "The accepted or fulfilled answer, or the answer to a query, has another output than the spec's.",
       "example": {
         "excerpt": {
           "file": "traces/notes/replyToOther.jsonl",
@@ -1702,7 +1676,7 @@
           "line": 7,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"thread#1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"n2\",\"text\":\"reply\",\"replyTo\":\"n9\"},{\"id\":\"n1\",\"text\":\"first\",\"replyTo\":null}]}}}"
         },
-        "violation": "{\"kind\":\"Mismatch.output\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"thread#1\"},\"snapshot\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"notes/Note-1\",\"text\":\"first\",\"replyTo\":null},{\"id\":\"notes/Note-2\",\"text\":\"reply\",\"replyTo\":\"notes/Note-1\"}]}},\"trace\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"n2\",\"text\":\"reply\",\"replyTo\":\"n9\"},{\"id\":\"n1\",\"text\":\"first\",\"replyTo\":null}]}}},\"location\":{\"file\":\"traces/notes/replyToOther.jsonl\",\"line\":7}}"
+        "violation": "{\"kind\":\"Mismatch.output\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"thread#1\"},\"spec\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"notes/Note-1\",\"text\":\"first\",\"replyTo\":null},{\"id\":\"notes/Note-2\",\"text\":\"reply\",\"replyTo\":\"notes/Note-1\"}]}},\"trace\":{\"result\":\"fulfilled\",\"output\":{\"notes\":[{\"id\":\"n2\",\"text\":\"reply\",\"replyTo\":\"n9\"},{\"id\":\"n1\",\"text\":\"first\",\"replyTo\":null}]}}},\"location\":{\"file\":\"traces/notes/replyToOther.jsonl\",\"line\":7}}"
       }
     },
     "Mismatch.rejectedAssumedRequires": {
@@ -1719,7 +1693,7 @@
       }
     },
     "Mismatch.rejection": {
-      "meaning": "The answer rejects with another kind than the snapshot's.",
+      "meaning": "The answer rejects with another kind than the spec's.",
       "example": {
         "excerpt": {
           "file": "traces/todo/answersWrongResults.jsonl",
@@ -1728,7 +1702,7 @@
           "line": 7,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#3\",\"to\":\"completeTask#1\",\"answer\":{\"result\":\"rejected\",\"rejection\":{\"kind\":\"requires\",\"reason\":\"notDone\"}}}"
         },
-        "violation": "{\"kind\":\"Mismatch.rejection\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#1\"},\"snapshot\":\"not-found\",\"trace\":\"requires\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":7}}"
+        "violation": "{\"kind\":\"Mismatch.rejection\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"completeTask#1\"},\"spec\":\"not-found\",\"trace\":\"requires\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":7}}"
       }
     },
     "Mismatch.repeatedAnswer": {
@@ -1745,7 +1719,7 @@
       }
     },
     "Mismatch.request": {
-      "meaning": "The request line has another input than the snapshot's.",
+      "meaning": "The request line has another input than the spec's.",
       "example": {
         "excerpt": {
           "file": "traces/screens/draftTwoBroken.jsonl",
@@ -1754,7 +1728,7 @@
           "line": 4,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"subscribe\",\"id\":\"s2\",\"name\":\"todo.linked\",\"input\":{\"links\":[{\"from\":\"n1\",\"to\":\"n2\"},{\"from\":\"n2\",\"to\":\"n3\"}]},\"caller\":{\"service\":\"screens\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.request\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.linked\",\"id\":\"s2\"},\"snapshot\":{\"links\":[{\"from\":\"screens/Draft-1\",\"to\":\"screens/Draft-2\"},{\"from\":\"screens/Draft-2\",\"to\":\"screens/Draft-1\"}]},\"trace\":{\"links\":[{\"from\":\"n1\",\"to\":\"n2\"},{\"from\":\"n2\",\"to\":\"n3\"}]}},\"location\":{\"file\":\"traces/screens/draftTwoBroken.jsonl\",\"line\":4}}"
+        "violation": "{\"kind\":\"Mismatch.request\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.linked\",\"id\":\"s2\"},\"spec\":{\"links\":[{\"from\":\"screens/Draft-1\",\"to\":\"screens/Draft-2\"},{\"from\":\"screens/Draft-2\",\"to\":\"screens/Draft-1\"}]},\"trace\":{\"links\":[{\"from\":\"n1\",\"to\":\"n2\"},{\"from\":\"n2\",\"to\":\"n3\"}]}},\"location\":{\"file\":\"traces/screens/draftTwoBroken.jsonl\",\"line\":4}}"
       }
     },
     "Mismatch.requestInputSchema": {
@@ -1771,7 +1745,7 @@
       }
     },
     "Mismatch.result": {
-      "meaning": "The answer has another result, accepted, fulfilled, or rejected, than the snapshot's.",
+      "meaning": "The answer has another result, accepted, fulfilled, or rejected, than the spec's.",
       "example": {
         "excerpt": {
           "file": "traces/todo/answersWrongResults.jsonl",
@@ -1780,11 +1754,11 @@
           "line": 5,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"answer\",\"id\":\"answer#2\",\"to\":\"addTask#2\",\"answer\":{\"result\":\"accepted\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.result\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"addTask#2\"},\"snapshot\":\"rejected\",\"trace\":\"accepted\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":5}}"
+        "violation": "{\"kind\":\"Mismatch.result\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"addTask#2\"},\"spec\":\"rejected\",\"trace\":\"accepted\"},\"location\":{\"file\":\"traces/todo/answersWrongResults.jsonl\",\"line\":5}}"
       }
     },
     "Mismatch.resultOf": {
-      "meaning": "The event results from another request than the snapshot's event (`resultOf`), or only one of them names one.",
+      "meaning": "The event results from another request than the spec's event (`resultOf`), or only one of them names one.",
       "example": {
         "excerpt": {
           "file": "traces/todo/addThreeWrongEvents.jsonl",
@@ -1793,7 +1767,7 @@
           "line": 8,
           "text": "{\"time\":1792886400000,\"dir\":\"out\",\"type\":\"event\",\"id\":\"e4\",\"name\":\"taskAdded\",\"payload\":{\"taskId\":\"task-2\",\"title\":\"Buy eggs\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.resultOf\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e4\"},\"snapshot\":\"addTask#2\",\"trace\":null},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":8}}"
+        "violation": "{\"kind\":\"Mismatch.resultOf\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"event\",\"name\":\"taskAdded\",\"id\":\"e4\"},\"spec\":\"addTask#2\",\"trace\":null},\"location\":{\"file\":\"traces/todo/addThreeWrongEvents.jsonl\",\"line\":8}}"
       }
     },
     "Mismatch.resultOfUnacceptedRequest": {
@@ -1823,7 +1797,7 @@
       }
     },
     "Mismatch.time": {
-      "meaning": "The line has another time than the snapshot's.",
+      "meaning": "The line has another time than the spec's.",
       "example": {
         "excerpt": {
           "file": "traces/todo/addOneReordered.jsonl",
@@ -1832,11 +1806,11 @@
           "line": 5,
           "text": "{\"time\":1792886405000,\"dir\":\"out\",\"type\":\"query\",\"id\":\"q1\",\"name\":\"calendar.nextDay\",\"input\":{\"from\":1792886400000},\"caller\":{\"service\":\"todo\"}}"
         },
-        "violation": "{\"kind\":\"Mismatch.time\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"q1\"},\"snapshot\":1792886400000,\"trace\":1792886405000},\"location\":{\"file\":\"traces/todo/addOneReordered.jsonl\",\"line\":5}}"
+        "violation": "{\"kind\":\"Mismatch.time\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"query\",\"name\":\"calendar.nextDay\",\"id\":\"q1\"},\"spec\":1792886400000,\"trace\":1792886405000},\"location\":{\"file\":\"traces/todo/addOneReordered.jsonl\",\"line\":5}}"
       }
     },
     "Mismatch.unexpectedLine": {
-      "meaning": "The trace has a line that the snapshot does not.",
+      "meaning": "The trace has a line that the spec does not.",
       "example": {
         "excerpt": {
           "file": "traces/todo/addThreeWrongEvents.jsonl",
@@ -1849,7 +1823,7 @@
       }
     },
     "Mismatch.unexpectedSubscription": {
-      "meaning": "The trace opens a subscription that the snapshot does not.",
+      "meaning": "The trace opens a subscription that the spec does not.",
       "example": {
         "excerpt": {
           "file": "traces/screens/draftAndOpen.jsonl",
@@ -1888,7 +1862,7 @@
       }
     },
     "Mismatch.unopenedSubscription": {
-      "meaning": "The trace does not open the subscription that the snapshot opens.",
+      "meaning": "The trace does not open the subscription that the spec opens.",
       "example": {
         "excerpt": {
           "file": "traces/screens/draftAndOpen.jsonl",
@@ -1897,7 +1871,7 @@
           "line": 6,
           "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"operation\",\"id\":\"noteScreen.open#1\",\"name\":\"noteScreen.open\"}"
         },
-        "violation": "{\"kind\":\"Mismatch.unopenedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.note\",\"id\":\"todo.note#1\"},\"content\":{\"id\":\"screens/Draft-1\"},\"snapshotLine\":9},\"location\":{\"file\":\"traces/screens/draftAndOpen.jsonl\",\"line\":6}}"
+        "violation": "{\"kind\":\"Mismatch.unopenedSubscription\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"subscribe\",\"name\":\"todo.note\",\"id\":\"todo.note#1\"},\"content\":{\"id\":\"screens/Draft-1\"},\"specLine\":9},\"location\":{\"file\":\"traces/screens/draftAndOpen.jsonl\",\"line\":6}}"
       }
     },
     "NonCanonical.answerLiteral": {
@@ -2067,6 +2041,32 @@
           "text": "export const deleteTask = command({\n  callers: [\"client\"],\n  input: { taskId: ref(Task) },\n  emits: [taskDeleted],\n  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },\n}).decide(({ input }) => [emit(taskDeleted, { id: input.taskId })]);"
         },
         "violation": "{\"kind\":\"NonCanonical.unreadBinding\",\"definition\":{\"service\":\"todo\",\"name\":\"deleteTask\"},\"data\":{\"binding\":\"task\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":28}}"
+      }
+    },
+    "RegionOrderDependent.assignRead": {
+      "meaning": "The transition `writer` in one parallel region of `state` assigns the context field `field`, which the transition `reader` in another region, taken on the same event, reads, so the result depends on the order of the regions.",
+      "example": {
+        "excerpt": {
+          "file": "closer/closer.ts",
+          "from": 13,
+          "to": 38,
+          "line": 13,
+          "text": "export const copyReadsRegion = machine({\n  description:\n    \"Note the closing in state x in one region, and the copy k of map m saves the notes into seen in the other region\",\n  context: { notes: z.array(z.string()).default([]), seen: z.array(z.string()).default([]) },\n  receives: { tasksClosed },\n  initial: \"open\",\n  states: {\n    open: {\n      type: \"parallel\",\n      states: {\n        left: {\n          initial: \"m\",\n          states: { m: { type: \"map\", key: { name: z.string() }, initial: \"c1\", states: { c1: {} } } },\n        },\n        right: { initial: \"x\", states: { x: {}, y: {} } },\n      },\n    },\n  },\n}).chart({\n  states: {\n    m: { items: () => [{ name: \"k\" }] },\n    c1: { on: { tasksClosed: [{ assign: { seen: ({ context }) => [...context.notes] } }] } },\n    x: { on: { tasksClosed: [{ target: \"y\", assign: { notes: ({ context }) => [...context.notes, \"x\"] } }] } },\n    y: { on: { tasksClosed: [{ target: \"x\" }] } },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"RegionOrderDependent.assignRead\",\"definition\":{\"service\":\"closer\",\"name\":\"copyReadsRegion\"},\"data\":{\"state\":\"open\",\"writer\":{\"state\":\"x\",\"trigger\":{\"type\":\"on\",\"key\":\"tasksClosed\"},\"index\":0},\"reader\":{\"state\":\"c1\",\"trigger\":{\"type\":\"on\",\"key\":\"tasksClosed\"},\"index\":0},\"field\":\"notes\"},\"location\":{\"file\":\"closer/closer.ts\",\"line\":13},\"scenario\":{\"service\":\"closer\",\"name\":\"closeOnce\"}}"
+      }
+    },
+    "RegionOrderDependent.bothAssign": {
+      "meaning": "Two transitions in parallel regions of `state`, taken on one event, both assign the context field `field`, so the result depends on the order of the regions.",
+      "example": {
+        "excerpt": {
+          "file": "todo/todo.ts",
+          "from": 17,
+          "to": 39,
+          "line": 17,
+          "text": "export const tracker = machine({\n  description: \"Mark that a task was added, once in each region\",\n  context: { status: z.enum([\"empty\", \"added\"]).default(\"empty\") },\n  receives: { taskAdded, tasksCleared },\n  initial: \"tracking\",\n  states: {\n    tracking: {\n      type: \"parallel\",\n      states: {\n        counting: { initial: \"countIdle\", states: { countIdle: {}, countMarking: {}, counted: {} } },\n        remembering: { initial: \"rememberIdle\", states: { rememberIdle: {}, rememberMarking: {}, remembered: {} } },\n      },\n    },\n  },\n}).chart({\n  on: { tasksCleared: [{ target: \"tracking\" }] },\n  states: {\n    countIdle: { on: { taskAdded: [{ target: \"countMarking\" }] } },\n    countMarking: { always: [{ target: \"counted\", assign: { status: () => \"added\" } }] },\n    rememberIdle: { on: { taskAdded: [{ target: \"rememberMarking\" }] } },\n    rememberMarking: { always: [{ target: \"remembered\", assign: { status: () => \"added\" } }] },\n  },\n});"
+        },
+        "violation": "{\"kind\":\"RegionOrderDependent.bothAssign\",\"definition\":{\"service\":\"todo\",\"name\":\"tracker\"},\"data\":{\"state\":\"tracking\",\"firstTransition\":{\"state\":\"countMarking\",\"trigger\":{\"type\":\"always\"},\"index\":0},\"secondTransition\":{\"state\":\"rememberMarking\",\"trigger\":{\"type\":\"always\"},\"index\":0},\"field\":\"status\"},\"location\":{\"file\":\"todo/todo.ts\",\"line\":17},\"scenario\":{\"service\":\"todo\",\"name\":\"addOne\"}}"
       }
     },
     "Restricted.alias": {
@@ -2252,7 +2252,7 @@
       }
     },
     "Uncomparable.ambiguous": {
-      "meaning": "The `in` line names a value that the bindings that agree with the lines so far give different implementation values, `candidates` are the trace's `out` lines with those values as ids, and the snapshot's `in` lines do not use alike the values that may stand for them, so the route that the harness chose decides what the implementation got (Verify/Compare). Equal requests that get different answers cause it. Give them content that tells them apart, or equal answers.",
+      "meaning": "The `in` line names a value that the bindings that agree with the lines so far give different implementation values, `candidates` are the trace's `out` lines with those values as ids, and the spec's `in` lines do not use alike the values that may stand for them, so the route that the harness chose decides what the implementation got (Verify/Compare). Equal requests that get different answers cause it. Give them content that tells them apart, or equal answers.",
       "example": {
         "excerpt": {
           "file": "traces/todo/twoDays.jsonl",
@@ -2261,11 +2261,11 @@
           "line": 8,
           "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"answer\",\"id\":\"calendar/answer#1\",\"to\":\"r1\",\"answer\":{\"result\":\"fulfilled\",\"output\":{\"day\":1792972800000}}}"
         },
-        "violation": "{\"kind\":\"Uncomparable.ambiguous\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"calendar.nextDay#1\"},\"snapshotLine\":8,\"candidates\":[6,7]},\"location\":{\"file\":\"traces/todo/twoDays.jsonl\",\"line\":8}}"
+        "violation": "{\"kind\":\"Uncomparable.ambiguous\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"calendar.nextDay#1\"},\"specLine\":8,\"candidates\":[6,7]},\"location\":{\"file\":\"traces/todo/twoDays.jsonl\",\"line\":8}}"
       }
     },
     "Uncomparable.bindingLimit": {
-      "meaning": "Comparing the snapshot line would keep more than `limit` bindings, or ways of pairing its group, that agree with the lines so far.",
+      "meaning": "Comparing the spec line would keep more than `limit` bindings, or ways of pairing its group, that agree with the lines so far.",
       "example": {
         "excerpt": {
           "file": "traces/todo/seenSeven.jsonl",
@@ -2274,11 +2274,11 @@
           "line": 29,
           "text": "{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"query\",\"id\":\"seenTwice#1\",\"name\":\"seenTwice\",\"input\":{},\"caller\":{\"service\":\"client\"}}"
         },
-        "violation": "{\"kind\":\"Uncomparable.bindingLimit\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"seenTwice#1\"},\"snapshotLine\":30,\"limit\":256},\"location\":{\"file\":\"traces/todo/seenSeven.jsonl\",\"line\":29}}"
+        "violation": "{\"kind\":\"Uncomparable.bindingLimit\",\"definition\":null,\"data\":{\"subject\":{\"type\":\"answer\",\"to\":\"seenTwice#1\"},\"specLine\":30,\"limit\":256},\"location\":{\"file\":\"traces/todo/seenSeven.jsonl\",\"line\":29}}"
       }
     },
     "Uncomparable.differentInput": {
-      "meaning": "The `in` line differs from the `in` line `snapshotLine` that the spec took from it: its time is earlier than the spec's clock, which never goes back. Where one side has no `in` line, its value is null, and `snapshotLine` is 0 when the spec has none.",
+      "meaning": "The `in` line differs from the `in` line `specLine` that the spec took from it: its time is earlier than the spec's clock, which never goes back. Where one side has no `in` line, its value is null, and `specLine` is 0 when the spec has none.",
       "example": {
         "excerpt": {
           "file": "traces/todo/addAndRemove.jsonl",
@@ -2287,7 +2287,7 @@
           "line": 4,
           "text": "{\"time\":1792886399000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"removeTask#1\",\"name\":\"removeTask\",\"input\":{\"taskId\":\"task-1\"},\"caller\":{\"service\":\"client\"}}"
         },
-        "violation": "{\"kind\":\"Uncomparable.differentInput\",\"definition\":null,\"data\":{\"snapshotLine\":4,\"snapshot\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"removeTask#1\",\"name\":\"removeTask\",\"input\":{\"taskId\":\"task-1\"},\"caller\":{\"service\":\"client\"}},\"trace\":{\"time\":1792886399000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"removeTask#1\",\"name\":\"removeTask\",\"input\":{\"taskId\":\"task-1\"},\"caller\":{\"service\":\"client\"}}},\"location\":{\"file\":\"traces/todo/addAndRemove.jsonl\",\"line\":4}}"
+        "violation": "{\"kind\":\"Uncomparable.differentInput\",\"definition\":null,\"data\":{\"specLine\":4,\"spec\":{\"time\":1792886400000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"removeTask#1\",\"name\":\"removeTask\",\"input\":{\"taskId\":\"task-1\"},\"caller\":{\"service\":\"client\"}},\"trace\":{\"time\":1792886399000,\"dir\":\"in\",\"type\":\"command\",\"id\":\"removeTask#1\",\"name\":\"removeTask\",\"input\":{\"taskId\":\"task-1\"},\"caller\":{\"service\":\"client\"}}},\"location\":{\"file\":\"traces/todo/addAndRemove.jsonl\",\"line\":4}}"
       }
     },
     "Uncomparable.duplicateId": {

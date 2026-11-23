@@ -1,1 +1,1 @@
-{"kind":"Uncomparable.ambiguous","definition":null,"data":{"subject":{"type":"answer","to":"calendar.nextDay#1"},"snapshotLine":8,"candidates":[6,7]},"location":{"file":"traces/todo/twoDays.jsonl","line":8}}
+{"kind":"Uncomparable.ambiguous","definition":null,"data":{"subject":{"type":"answer","to":"calendar.nextDay#1"},"specLine":8,"candidates":[6,7]},"location":{"file":"traces/todo/twoDays.jsonl","line":8}}

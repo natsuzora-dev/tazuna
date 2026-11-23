@@ -5,7 +5,7 @@ import type { Json } from "./values.ts";
 
 /**
  * A definition that breaks the meaning while the run evaluates it. `definition` is the definition that causes it.
- * An exception has no `definition` when a service invariant throws, since the subject is then the service.
+ * An exception or a notOnly has no `definition` when a service invariant causes it, since the subject is then the service.
  */
 export type Fault =
   /** The command emits `event` with a payload that does not match the event's payload schema. */
@@ -151,7 +151,7 @@ export type Fault =
    */
   | {
       readonly kind: "Fault.notOnly";
-      readonly definition: DefinitionRef;
+      readonly definition: DefinitionRef | null;
       readonly data: Readonly<Record<string, never>>;
     }
   /** A spec function threw. `definition` is the definition whose function threw, or null when a service invariant throws. */

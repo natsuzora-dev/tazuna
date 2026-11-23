@@ -256,7 +256,10 @@ test("explain writes the markdown of a violation kind: its meaning, its group, w
     markdown,
     /^# Fault\.failedEnsures\n\nThe answer of the command or query, or the output of the screen, fails its ensures `condition`\./,
   );
-  assert.match(markdown, /\n- Reported by: `test`, `verify`\n- Side at fault: The spec\.\n- Halts the run: no\n/);
+  assert.match(
+    markdown,
+    /\n- Reported by: `test`, `verify`, `prove`\n- Side at fault: The spec\.\n- Halts the run: no\n/,
+  );
   const halting = await run("explain", "Fault.exception");
   assert.match(halting.out.join("\n"), /\n- Halts the run: yes\n/);
   assert.match(

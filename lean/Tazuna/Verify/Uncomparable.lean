@@ -7,8 +7,8 @@ namespace Tazuna.Verify
 open Tazuna.Data
 
 /--
-A line or file that verify cannot compare. `line` is 1-based in the violation's file, and `snapshotLine` is 1-based in
-the snapshot.
+A line or file that verify cannot compare. `line` is 1-based in the violation's file, and `specLine` is 1-based in
+the lines of the spec's replay.
 -/
 inductive Uncomparable where
   /-- The line is not a trace line that the trace line schema reads. -/
@@ -33,24 +33,24 @@ inductive Uncomparable where
   /-- An id of the line's `after` names no earlier `out` line of its group. -/
   | unknownAfter (line : Nat) (lineId : String)
   /--
-  The `in` line differs from the `in` line `snapshotLine` that the spec took from it: its time is earlier than the
-  spec's clock, which never goes back. Where one side has no `in` line, its value is null, and `snapshotLine` is 0 when
+  The `in` line differs from the `in` line `specLine` that the spec took from it: its time is earlier than the
+  spec's clock, which never goes back. Where one side has no `in` line, its value is null, and `specLine` is 0 when
   the spec has none.
   -/
-  | differentInput (line snapshotLine : Nat) (snapshot trace : Value)
+  | differentInput (line specLine : Nat) (spec trace : Value)
   /--
   The `in` line names a value that the bindings that agree with the lines so far give different implementation values,
-  `candidates` are the trace's `out` lines with those values as ids, and the snapshot's `in` lines do not use alike the
+  `candidates` are the trace's `out` lines with those values as ids, and the spec's `in` lines do not use alike the
   values that may stand for them, so the route that the harness chose decides what the implementation got
   (Verify/Compare). Equal requests that get different answers cause it. Give them content that tells them apart, or
   equal answers.
   -/
-  | ambiguous (line : Nat) (subject : Subject) (snapshotLine : Nat) (candidates : List Nat)
+  | ambiguous (line : Nat) (subject : Subject) (specLine : Nat) (candidates : List Nat)
   /--
-  Comparing the snapshot line would keep more than `limit` bindings, or ways of pairing its group, that agree with the
+  Comparing the spec line would keep more than `limit` bindings, or ways of pairing its group, that agree with the
   lines so far.
   -/
-  | bindingLimit (line : Nat) (subject : Subject) (snapshotLine : Nat) (limit : Nat)
+  | bindingLimit (line : Nat) (subject : Subject) (specLine : Nat) (limit : Nat)
   /-- The traces folder has a folder `service` that names no service of the spec. -/
   | unknownService (service : String)
   /-- The traces folder has an entry that is not in a service's folder, or is neither a file nor a folder. -/

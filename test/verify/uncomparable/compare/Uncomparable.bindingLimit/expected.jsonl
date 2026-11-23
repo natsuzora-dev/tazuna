@@ -1,1 +1,1 @@
-{"kind":"Uncomparable.bindingLimit","definition":null,"data":{"subject":{"type":"answer","to":"seenTwice#1"},"snapshotLine":30,"limit":256},"location":{"file":"traces/todo/seenSeven.jsonl","line":29}}
+{"kind":"Uncomparable.bindingLimit","definition":null,"data":{"subject":{"type":"answer","to":"seenTwice#1"},"specLine":30,"limit":256},"location":{"file":"traces/todo/seenSeven.jsonl","line":29}}

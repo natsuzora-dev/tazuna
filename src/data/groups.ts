@@ -2,7 +2,7 @@ import type { Group } from "./violation.ts";
 
 /** Who meets a violation of a group: the commands that report it, and the side at fault, which fixes it. */
 export interface GroupInfo {
-  readonly reportedBy: readonly ("check" | "test" | "verify" | "verify --coverage")[];
+  readonly reportedBy: readonly ("check" | "test" | "verify" | "verify --coverage" | "prove")[];
   readonly fixedIn: string;
 }
 
@@ -21,9 +21,9 @@ export const groups = {
     fixedIn:
       "The scenario, or for `verify` the trace: a message that no sender could give the running service, including an external peer's answer that breaks the peer's contract.",
   },
-  Fault: { reportedBy: ["test", "verify"], fixedIn: "The spec." },
-  BagOrderDependent: { reportedBy: ["test", "verify"], fixedIn: "The spec." },
-  ChoiceDependent: { reportedBy: ["test", "verify"], fixedIn: "The spec." },
+  Fault: { reportedBy: ["test", "verify", "prove"], fixedIn: "The spec." },
+  RegionOrderDependent: { reportedBy: ["test", "verify"], fixedIn: "The spec." },
+  ChoiceDependent: { reportedBy: ["test", "verify", "prove"], fixedIn: "The spec." },
   Undecided: {
     reportedBy: ["test"],
     fixedIn:

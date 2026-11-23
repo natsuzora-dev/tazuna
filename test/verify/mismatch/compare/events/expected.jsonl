@@ -1,3 +1,3 @@
-{"kind":"Mismatch.event","definition":null,"data":{"subject":{"type":"event","name":"taskAdded","id":"e2"},"snapshot":{"taskId":"task-1","title":"Buy milk"},"trace":{"taskId":"task-1","title":"Buy eggs"}},"location":{"file":"traces/todo/addThreeWrongEvents.jsonl","line":4}}
-{"kind":"Mismatch.resultOf","definition":null,"data":{"subject":{"type":"event","name":"taskAdded","id":"e4"},"snapshot":"addTask#2","trace":null},"location":{"file":"traces/todo/addThreeWrongEvents.jsonl","line":8}}
+{"kind":"Mismatch.event","definition":null,"data":{"subject":{"type":"event","name":"taskAdded","id":"e2"},"spec":{"taskId":"task-1","title":"Buy milk"},"trace":{"taskId":"task-1","title":"Buy eggs"}},"location":{"file":"traces/todo/addThreeWrongEvents.jsonl","line":4}}
+{"kind":"Mismatch.resultOf","definition":null,"data":{"subject":{"type":"event","name":"taskAdded","id":"e4"},"spec":"addTask#2","trace":null},"location":{"file":"traces/todo/addThreeWrongEvents.jsonl","line":8}}
 {"kind":"Mismatch.unexpectedLine","definition":null,"data":{"subject":{"type":"event","name":"taskAdded","id":"e9"}},"location":{"file":"traces/todo/addThreeWrongEvents.jsonl","line":11}}

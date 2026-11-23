@@ -27,7 +27,7 @@ export type Group =
   | "Restricted"
   | "InvalidInput"
   | "Fault"
-  | "BagOrderDependent"
+  | "RegionOrderDependent"
   | "ChoiceDependent"
   | "Undecided"
   | "Mismatch"

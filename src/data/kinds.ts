@@ -1,4 +1,3 @@
-import { bagOrderDependentKinds } from "./bagOrderDependent.generated.ts";
 import { choiceDependentKinds } from "./choiceDependent.generated.ts";
 import { faultKinds, internalFaultKinds } from "./fault.generated.ts";
 import { illegalKinds } from "./illegal.generated.ts";
@@ -8,6 +7,7 @@ import type { Malformed } from "./malformed.ts";
 import { mismatchKinds } from "./mismatch.generated.ts";
 import { nonCanonicalKinds as structureNonCanonicalKinds } from "./nonCanonical.generated.ts";
 import type { SourceNonCanonical } from "./nonCanonical.ts";
+import { regionOrderDependentKinds } from "./regionOrderDependent.generated.ts";
 import type { Restricted } from "./restricted.ts";
 import { uncomparableKinds } from "./uncomparable.generated.ts";
 import { uncoveredKinds } from "./uncovered.generated.ts";
@@ -90,7 +90,7 @@ export const kindsOf = {
   InvalidScenario: invalidScenarioKinds,
   InvalidInput: invalidInputKinds,
   Fault: faultKinds,
-  BagOrderDependent: bagOrderDependentKinds,
+  RegionOrderDependent: regionOrderDependentKinds,
   ChoiceDependent: choiceDependentKinds,
   Undecided: undecidedKinds,
   Uncovered: uncoveredKinds,
@@ -110,7 +110,7 @@ export const groupNames = every<Group>()([
   "InvalidScenario",
   "InvalidInput",
   "Fault",
-  "BagOrderDependent",
+  "RegionOrderDependent",
   "ChoiceDependent",
   "Undecided",
   "Uncovered",

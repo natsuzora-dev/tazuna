@@ -1,2 +1,2 @@
-{"kind":"Mismatch.result","definition":null,"data":{"subject":{"type":"answer","to":"addTask#1"},"snapshot":"accepted","trace":"rejected"},"location":{"file":"traces/todo/addOneEdited.jsonl","line":3}}
-{"kind":"Mismatch.missingAnswer","definition":null,"data":{"subject":{"type":"answer","to":"addTask#1"},"snapshotLine":2},"location":{"file":"traces/todo/addOneUnanswered.jsonl","line":1}}
+{"kind":"Mismatch.result","definition":null,"data":{"subject":{"type":"answer","to":"addTask#1"},"spec":"accepted","trace":"rejected"},"location":{"file":"traces/todo/addOneEdited.jsonl","line":3}}
+{"kind":"Mismatch.missingAnswer","definition":null,"data":{"subject":{"type":"answer","to":"addTask#1"},"specLine":2},"location":{"file":"traces/todo/addOneUnanswered.jsonl","line":1}}

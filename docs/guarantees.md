@@ -194,9 +194,9 @@ The side that breaks a contract is at fault: the caller for a precondition, and 
 | `Illegal` | `check` | The spec. |
 | `InvalidScenario` | `test`, `verify` | The scenario: a line that cannot take place, a message that it leaves unstated, or an expectation of Then that does not hold or cannot fail. For `verify`, the start line of the trace, whose records the spec rejects. |
 | `InvalidInput` | `test`, `verify` | The scenario, or for `verify` the trace: a message that no sender could give the running service, including an external peer's answer that breaks the peer's contract. |
-| `Fault` | `test`, `verify` | The spec. |
-| `BagOrderDependent` | `test`, `verify` | The spec. |
-| `ChoiceDependent` | `test`, `verify` | The spec. |
+| `Fault` | `test`, `verify`, `prove` | The spec. |
+| `RegionOrderDependent` | `test`, `verify` | The spec. |
+| `ChoiceDependent` | `test`, `verify`, `prove` | The spec. |
 | `Undecided` | `test` | Neither side: the check stopped at a limit of tazuna. A smaller processing, or fewer created keys that only their keys tell apart, lets it decide. |
 | `Uncovered` | `verify --coverage` | The tests that write the traces. |
 | `Mismatch` | `test`, `verify` | The implementation or external service whose trace differs, or, for `test`, the snapshot that differs from its scenario's simulation. |

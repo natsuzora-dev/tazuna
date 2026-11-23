@@ -3,7 +3,7 @@ import Tazuna.Data.Names
 import Tazuna.Service.Limits
 import Tazuna.Data.Trace
 import Tazuna.Explore.ChoiceDependent
-import Tazuna.Explore.BagOrderDependent
+import Tazuna.Explore.RegionOrderDependent
 import Tazuna.Explore.Undecided
 import Tazuna.Service.Fault
 import Tazuna.Service.InvalidInput
@@ -70,7 +70,7 @@ def modules : List (String × List Name) :=
      ``Tazuna.Scenario.GivenRecord, ``Tazuna.Scenario.Peer, ``Tazuna.Scenario.PeerEntry, ``Tazuna.Scenario.Given,
      ``Tazuna.Scenario]),
    ("src/data/fault.generated.ts", [``Tazuna.Service.Fault]),
-   ("src/data/bagOrderDependent.generated.ts", [``Tazuna.Explore.BagOrderDependent]),
+   ("src/data/regionOrderDependent.generated.ts", [``Tazuna.Explore.RegionOrderDependent]),
    ("src/data/undecided.generated.ts", [``Tazuna.Explore.Undecided]),
    ("src/data/uncovered.generated.ts", [``Tazuna.Service.Uncovered]),
    ("src/data/choiceDependent.generated.ts",
@@ -536,7 +536,7 @@ def files (guarantees : List String) : List (String × String) :=
      (let samples := groupSamples% Tazuna.Service.Fault
       halting "Fault" ((samples.filter (·.halts)).map (·.kind)) ++
         internal "Fault" ((samples.filter (·.internal)).map (·.kind))),
-   typescript% "src/data/bagOrderDependent.generated.ts",
+   typescript% "src/data/regionOrderDependent.generated.ts",
    typescript% "src/data/undecided.generated.ts",
    typescript% "src/data/uncovered.generated.ts",
    typescript% "src/data/choiceDependent.generated.ts",

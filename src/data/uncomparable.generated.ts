@@ -4,8 +4,8 @@ import type { Subject } from "./mismatch.generated.ts";
 import type { Json } from "./values.ts";
 
 /**
- * A line or file that verify cannot compare. `line` is 1-based in the violation's file, and `snapshotLine` is 1-based in
- * the snapshot.
+ * A line or file that verify cannot compare. `line` is 1-based in the violation's file, and `specLine` is 1-based in
+ * the lines of the spec's replay.
  */
 export type Uncomparable =
   /** The line is not a trace line that the trace line schema reads. */
@@ -88,8 +88,8 @@ export type Uncomparable =
       };
     }
   /**
-   * The `in` line differs from the `in` line `snapshotLine` that the spec took from it: its time is earlier than the
-   * spec's clock, which never goes back. Where one side has no `in` line, its value is null, and `snapshotLine` is 0 when
+   * The `in` line differs from the `in` line `specLine` that the spec took from it: its time is earlier than the
+   * spec's clock, which never goes back. Where one side has no `in` line, its value is null, and `specLine` is 0 when
    * the spec has none.
    */
   | {
@@ -97,14 +97,14 @@ export type Uncomparable =
       readonly definition: null;
       readonly line: number;
       readonly data: {
-        readonly snapshotLine: number;
-        readonly snapshot: Json;
+        readonly specLine: number;
+        readonly spec: Json;
         readonly trace: Json;
       };
     }
   /**
    * The `in` line names a value that the bindings that agree with the lines so far give different implementation values,
-   * `candidates` are the trace's `out` lines with those values as ids, and the snapshot's `in` lines do not use alike the
+   * `candidates` are the trace's `out` lines with those values as ids, and the spec's `in` lines do not use alike the
    * values that may stand for them, so the route that the harness chose decides what the implementation got
    * (Verify/Compare). Equal requests that get different answers cause it. Give them content that tells them apart, or
    * equal answers.
@@ -115,12 +115,12 @@ export type Uncomparable =
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshotLine: number;
+        readonly specLine: number;
         readonly candidates: readonly number[];
       };
     }
   /**
-   * Comparing the snapshot line would keep more than `limit` bindings, or ways of pairing its group, that agree with the
+   * Comparing the spec line would keep more than `limit` bindings, or ways of pairing its group, that agree with the
    * lines so far.
    */
   | {
@@ -129,7 +129,7 @@ export type Uncomparable =
       readonly line: number;
       readonly data: {
         readonly subject: Subject;
-        readonly snapshotLine: number;
+        readonly specLine: number;
         readonly limit: number;
       };
     }

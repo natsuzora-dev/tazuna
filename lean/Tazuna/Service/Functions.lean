@@ -131,7 +131,7 @@ def issueViolation (owner : Spec.Ref) (e : Issue)
   | .thrown none => .exception (some owner)
   | .thrown (some s) => .exception (some s.owner)
   | .unheld held => .unheld owner held
-  | .notOnly => .notOnly owner
+  | .notOnly => .notOnly (some owner)
   | .schema (.held _ state) => .heldSchema owner state
   | .schema s => mismatch s
 
@@ -234,7 +234,7 @@ structure Functions (m : Type → Type) where
   resultEnsures : Spec.Ref → String → Value → Option Value → List Emit → m (Except Issue Ensured)
   invariant : String → Value → Time → m (Except Issue (Option String))
   responses : String → Value → Time → m (Except Issue (List (String × Bool × Bool)))
-  serviceInvariant : Records → Time → m (Except (Option Schema) (Option String))
+  serviceInvariant : Records → Time → m (Except Issue (Option String))
   chartInvariant : Scope → Records → m (Except Issue (Option String))
   resolve : String → Value → Caller → Records → Time → m (Except Issue Value)
   automationBinding : String → String → Value → Records → Time → m (Except Issue Bool)

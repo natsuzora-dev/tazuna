@@ -109,10 +109,14 @@ theorem mem_rowViolations (records : Records) (now : Time) (name : String) (row 
         · cases hc; exact Or.inl rfl
         · exact Or.inr h
 
+theorem not_service_issue_of_not_halts {e : Issue} {f : Fault} (hr : f.halts = false)
+    (h : f = serviceIssueViolation e) : False := by
+  subst h; cases e <;> cases hr
+
 theorem mem_integrityViolations (records : Records) (now : Time) (name : String) (f : Fault) :
     f ∈ (integrityViolations st fs records now name).run ↔
       (∃ row ∈ records, row.entity ∈ st.entities ∧ f ∈ (rowViolations st fs records now name row).run) ∨
-        (∃ schema, fs.serviceInvariant records now = .error schema ∧ f = .exception (schema.map Schema.owner)) ∨
+        (∃ e, fs.serviceInvariant records now = .error e ∧ f = serviceIssueViolation e) ∨
         ∃ c, fs.serviceInvariant records now = .ok (some c) ∧ f = .failedServiceInvariant c (st.ref name) := by
   let rows := ((st.entities.flatMap fun e => records.filter (·.entity == e)).map fun x =>
     (rowViolations st fs records now name x).run).flatten
@@ -126,7 +130,7 @@ theorem mem_integrityViolations (records : Records) (now : Time) (name : String)
       exact ⟨_, ⟨row, ⟨row.entity, he, hr, rfl⟩, rfl⟩, hm⟩
   cases h : fs.serviceInvariant records now with
   | error e =>
-    have : (integrityViolations st fs records now name).run = rows ++ [.exception (e.map Schema.owner)] := by
+    have : (integrityViolations st fs records now name).run = rows ++ [serviceIssueViolation e] := by
       simp only [integrityViolations, mapM_id, h]; rfl
     rw [this, List.mem_append, hrows, List.mem_singleton]
     constructor
@@ -176,7 +180,7 @@ theorem mem_integrityViolations (records : Records) (now : Time) (name : String)
         exact ⟨rfl, row, hr, rfl, he, hkey, hi⟩
       · cases hk
     · split at hk <;> cases hk
-    · cases h
+    · exact (not_service_issue_of_not_halts rfl h).elim
     · cases h
   · rintro ⟨rfl, row, hr, rfl, he, hk, hi⟩
     exact Or.inl ⟨row, hr, he, Or.inr (Or.inl ⟨c, hi, by rw [hk]⟩)⟩
@@ -191,7 +195,7 @@ theorem mem_integrityViolations (records : Records) (now : Time) (name : String)
     · exact (not_issue_of_not_halts (fun _ => rfl) rfl hi).elim
     · split at hk <;> cases hk
     · split at hk <;> cases hk
-    · cases h
+    · exact (not_service_issue_of_not_halts rfl h).elim
     · simp only [Fault.failedServiceInvariant.injEq] at hk
       obtain ⟨rfl, rfl⟩ := hk
       exact ⟨rfl, hs⟩
@@ -217,7 +221,7 @@ theorem mem_integrityViolations (records : Records) (now : Time) (name : String)
         obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := hk
         exact ⟨rfl, row, hr, rfl, he, hkey, t, hm, ht, v, hv, hn, rfl, hx⟩
       · cases hk
-    · cases h
+    · exact (not_service_issue_of_not_halts rfl h).elim
     · cases h
   · rintro ⟨rfl, row, hr, rfl, he, hk, targetEntity, hm, ht, v, hv, hn, rfl, hx⟩
     exact Or.inl ⟨row, hr, he, Or.inr (Or.inr ⟨field, targetEntity, v, hm, hv, hn, ht, hx, by rw [hk]⟩)⟩

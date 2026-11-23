@@ -432,9 +432,10 @@ def reports (st : Service) (c : Checked) (command : String) (fault : Fault) : Bo
   match c.holder, fault with
   | .keyed e, .failedEntityInvariant d _ _ cmd | .single e, .failedSingleInvariant d _ cmd =>
     d == st.ref e && cmd == st.ref command
-  | .keyed e, .exception (some d) | .single e, .exception (some d) => d == st.ref e
+  | .keyed e, .exception (some d) | .single e, .exception (some d) | .keyed e, .notOnly (some d)
+  | .single e, .notOnly (some d) => d == st.ref e
   | .service, .failedServiceInvariant _ cmd => cmd == st.ref command
-  | .service, .exception none => true
+  | .service, .exception none | .service, .notOnly none => true
   | _, _ => false
 
 /-- The caller whose fields a model gives `fields`, none when they hold no caller. -/
@@ -464,7 +465,7 @@ def failsIn (st : Service) (c : Checked) (records : Records) (now : Time) : Bool
 /-- Whether a fault of an ensures of `definition` reports `name` failing, or a throw. -/
 def failedEnsures (definition : Spec.Ref) (name : String) : Fault → Bool
   | .failedEnsures d c => d == definition && c == name
-  | .exception (some d) => d == definition
+  | .exception (some d) | .notOnly (some d) => d == definition
   | _ => false
 
 /-- Whether the semantics shows that `command`, which wrote `written` at `now` and reported `faults`, fails `prop`. -/

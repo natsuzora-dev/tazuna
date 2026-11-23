@@ -205,11 +205,7 @@ def Program.toFunctions (p : Program) (st : Service) (read : Trace → IO Unit) 
         (firstFailing { fields := fieldsOf st, keyFields := st.keyFieldsOf, args, records } cs).run'
     serviceInvariant := fun records now => evaluated "serviceInvariant" <|
       (all p.serviceInvariant (st.ref st.service)).map fun cs =>
-        let (answer, trace) := (firstFailing { fields := fieldsOf st, keyFields := st.keyFieldsOf, args := argsOf [(.now, instant now)], records } cs).run'
-        let answer := answer.mapError fun
-          | .thrown schema => schema
-          | _ => none
-        (answer, trace)
+        (firstFailing { fields := fieldsOf st, keyFields := st.keyFieldsOf, args := argsOf [(.now, instant now)], records } cs).run'
     automationBinding := fun name b payload records now => evaluated "automationBinding" <|
       (named p.automationBinding (st.ref name) b).map fun c =>
         (nonNull { fields := fieldsOf st, keyFields := st.keyFieldsOf, args := argsOf [(.payload, .json payload), (.now, instant now)], records } c).run'

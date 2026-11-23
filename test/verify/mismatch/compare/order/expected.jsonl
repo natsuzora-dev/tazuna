@@ -1,2 +1,2 @@
 {"kind":"Mismatch.lineOrder","definition":null,"data":{"subject":{"type":"event","name":"taskCountChanged","id":"e2"},"before":{"type":"event","name":"taskAdded","id":"e1"}},"location":{"file":"traces/todo/addOneReordered.jsonl","line":3}}
-{"kind":"Mismatch.time","definition":null,"data":{"subject":{"type":"query","name":"calendar.nextDay","id":"q1"},"snapshot":1792886400000,"trace":1792886405000},"location":{"file":"traces/todo/addOneReordered.jsonl","line":5}}
+{"kind":"Mismatch.time","definition":null,"data":{"subject":{"type":"query","name":"calendar.nextDay","id":"q1"},"spec":1792886400000,"trace":1792886405000},"location":{"file":"traces/todo/addOneReordered.jsonl","line":5}}
