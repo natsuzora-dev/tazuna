@@ -1,6 +1,7 @@
 import Engine.Run
 import Tazuna.Smt.Script
 import Tazuna.Smt.State
+import Tazuna.Smt.Chart
 
 /-!
 prove: the base case and the inductive step of each invariant of each spec service, within the service's bounds, and
@@ -43,6 +44,11 @@ structure Counterexample where
   query : Option String := none
   input : Option Value
   now : Option Int
+  /-- The machine's active states and context before the transition, none for starting it. -/
+  machine : Option Value := none
+  /-- The machine's transition and what it takes, such as an event's payload, none for starting it. -/
+  transition : Option Value := none
+  taken : Option Value := none
   /-- The violations that the semantics reports on replaying the case. -/
   violations : List Violation
 deriving Inhabited
@@ -79,17 +85,38 @@ structure Checked where
   holder : Holder
   condition : Ir.Condition
 
-/-- The invariants of `st` that prove checks, and those of its charts, which it leaves undecided. -/
-def invariantsOf (st : Service) (p : Ir.Program) : List Checked × List Property :=
+/-- The invariants of the entities and the service `st`. -/
+def invariantsOf (st : Service) (p : Ir.Program) : List Checked :=
   let entity := st.entities.flatMap fun e =>
     (Smt.invariantsOf st p e).map fun c =>
       { ref := .invariant (st.ref e) c.name,
         holder := if st.singles.contains e then .single e else .keyed e, condition := c }
   let service := (serviceInvariantsOf st p).map fun c =>
     { ref := .invariant (st.ref st.service) c.name, holder := .service, condition := c }
-  let charts := p.chart.filter (fun f => f.chart.service == st.service && f.site == .invariants) |>.flatMap fun f =>
-    f.functions.map fun c => Property.invariant f.chart c.name
-  (entity ++ service, charts)
+  entity ++ service
+
+/--
+The induction of a machine's or screen's invariants: its model, the context fields that the encoding holds, and the
+context it starts with, or why it has none.
+-/
+structure ChartCase where
+  chart : Chart
+  invariants : List Ir.Condition
+  model : Except String ChartModel
+  relevant : List String
+  /-- Whether the encoding leaves out some context fields, which replay then takes as they start. -/
+  sliced : Bool
+  initial : Except String Value
+
+def chartCaseOf (st : Service) (fs : Functions IO) (c : Chart) : IO (Option ChartCase) := do
+  let p := st.structure.program
+  let invariants := (siteOf st p c .invariants).getD []
+  if invariants.isEmpty then return none
+  let fields := (propertiesWith ((st.schemaOf (.context (st.ref c.name))).getD (.obj []))).map (·.1)
+  let relevant := relevantContext st p c fields
+  let initial := (← initialContextOf fs st c.name (.obj [])).mapError fun f => s!"the initial context fails: {repr f}"
+  return some { chart := c, invariants, model := ChartModel.of c, relevant, sliced := relevant.length < fields.length,
+                initial }
 
 /-- The conditions of `definition` in a Program list. -/
 def conditionsOf (list : List Ir.Conditions) (definition : Spec.Ref) : List Ir.Condition :=
@@ -153,14 +180,16 @@ structure Induction where
   /-- The answer of each query, or why it has no encoding. -/
   answers : List (String × Except String Answered)
   checked : List Checked
-  charts : List Property
+  charts : List ChartCase
   /-- Why the service has no induction, such as missing bounds. -/
   blocked : Option String
 
 def inductionOf (j : Spec.Structure) (service : String) : IO Induction := do
   let st ← Service.ofStructure j service
   let p := j.program
-  let (checked, charts) := invariantsOf st p
+  let checked := invariantsOf st p
+  let fs := p.toFunctions st fun _ => pure ()
+  let charts ← st.charts.filterMapM (chartCaseOf st fs)
   let keyed := st.entities.filter (!st.singles.contains ·)
   let bounds := (j.bounds.find? (·.service == service)).map (·.creates)
   let creates := bounds.getD []
@@ -174,6 +203,15 @@ def inductionOf (j : Spec.Structure) (service : String) : IO Induction := do
            (q, answerOf st p pre clockT q),
          checked, charts, blocked }
 
+/--
+A step of a machine's induction: starting it, or a microstep of one of its edges. A command changes no machine, and an
+invariant reads only the machine's context and active states, so no command can fail one.
+-/
+inductive ChartStep where
+  | start
+  | edge (index : Nat)
+deriving BEq
+
 /-- A query of the induction: whether the initial records fail an invariant, a step can leave the encoding, a step can
 fail a property, or a query's answer can fail one of its ensures. -/
 inductive Asked where
@@ -181,6 +219,7 @@ inductive Asked where
   | gap (command : String)
   | fails (command : String) (property : Property)
   | answer (query : String) (property : Property)
+  | chart (property : Property) (step : ChartStep)
 
 def Induction.query (x : Induction) (step : Step) (goal : Term) : Query :=
   { vars := x.facts.vars ++ step.facts.vars,
@@ -195,9 +234,75 @@ def Induction.stepGoals (x : Induction) (command : String) (step : Step) : List 
     ((ownRefs x.st).map fun (e, field, target) =>
       (Property.danglingRef (x.st.ref e) field, .ok (step.post.dangling e field target)))
 
+def nowT : Term := .var "now" .int
+
+/-- The time of a step, `now`, a safe integer no earlier than the state's time. -/
+def nowFacts : Facts :=
+  { vars := [("now", .int)], asserts := [.le (intLit (-safeInteger)) nowT, .le nowT (intLit safeInteger), .le clockT nowT] }
+
+/-- The machine of `cc` in `active` before a step, each encoded context field a variable. -/
+def ChartCase.pre (cc : ChartCase) (active : List String) : SMachine × Facts :=
+  ({ context := cc.relevant.map fun f => (f, valVar s!"ctx.{f}"), active },
+   { vars := cc.relevant.map fun f => (s!"ctx.{f}", Ty.val) })
+
+/--
+The expressions of the chart of `cc` that the encoding evaluates: its invariants, its guards, and its assigns of the
+relevant context fields. Their reads of a payload or output decide which fields the encoding holds.
+-/
+def ChartCase.expressions (cc : ChartCase) (st : Service) : List Ir.Expr :=
+  st.structure.program.chart.filter (·.chart == st.ref cc.chart.name) |>.flatMap fun f =>
+    match f.site with
+    | .invariants | .guards _ => f.functions.map (·.body)
+    | .transitionAssign _ | .entryAssign _ | .exitAssign _ =>
+      (f.functions.filter (·.name ∈ cc.relevant)).map (·.body)
+    | _ => []
+
+/-- That every invariant of the machine holds in `env`. -/
+def chartHolds (env : SEnv) (invariants : List Ir.Condition) : Except String Term := do
+  pure (conj (← invariants.mapM fun c => do pure (Term.not (← chartFails env c))))
+
+/--
+The queries of the induction of the invariant `k` of `cc`, each with whether its facts are exact and complete: starting
+the machine with any records, and each edge from a state where every invariant holds.
+-/
+def Induction.chartQueries (x : Induction) (cc : ChartCase) (k : Ir.Condition) :
+    Except String (List (ChartStep × Query × Bool × Bool)) := do
+  let m ← cc.model
+  let initial ← cc.initial
+  let st := x.st
+  let p := st.structure.program
+  let c := cc.chart
+  let startContext ← cc.relevant.mapM fun f => do
+    pure (f, ← match initial.field? f with
+      | some v => litTerm v
+      | none => pure undefT)
+  let started ← ({ context := startContext, active := [] } : SMachine).move st p c x.pre clockT none none [] (initialEntries c)
+  let startFails ← chartFails (started.machine.env c x.pre clockT none) k
+  let start : ChartStep × Query × Bool × Bool :=
+    (.start, { vars := x.facts.vars, asserts := x.facts.asserts ++ [x.holds, .not started.halted, startFails] },
+     x.facts.exact && !cc.sliced, x.facts.complete)
+  let guardsOf (t : Service.Transition) : List Ir.Condition := (siteOf st p c (.guards t.ref)).getD []
+  let edges ← m.edges.zipIdx.mapM fun (e, i) => do
+    let (pre, ctxFacts) := cc.pre (m.configs[e.source]!)
+    let (taken, takenFacts) ← takenOf st "tk" (cc.expressions st) e.taken
+    let env := pre.env c x.pre nowT taken
+    let holdsPre ← chartHolds (pre.env c x.pre clockT none) cc.invariants
+    let earlier ← e.earlier.mapM fun t => do
+      let (ok, halted) ← guardTerms env (guardsOf t) t.guards
+      pure (Term.and (.not ok) (.not halted))
+    let (ok, halted) ← guardTerms env (guardsOf e.transition) e.transition.guards
+    let moved ← pre.move st p c x.pre nowT taken (some e.transition) e.exits e.entries
+    let fails ← chartFails (moved.machine.env c x.pre nowT none) k
+    let facts := x.facts ++ nowFacts ++ ctxFacts ++ takenFacts
+    let q : Query :=
+      { vars := facts.vars,
+        asserts := facts.asserts ++ [x.holds, holdsPre] ++ earlier ++ [ok, .not halted, .not moved.halted, fails] }
+    pure ((ChartStep.edge i, q, facts.exact && !cc.sliced, facts.complete) : ChartStep × Query × Bool × Bool)
+  pure ([start] ++ edges)
+
 /--
 The queries of an induction, in order: the base case of each encoded invariant, then each command's gap query and one
-per property it can fail, then one per ensures of each query.
+per property it can fail, then one per ensures of each query, then those of each machine's invariants.
 -/
 def Induction.queries (x : Induction) : List (Asked × Query) :=
   if x.blocked.isSome then [] else
@@ -213,12 +318,15 @@ def Induction.queries (x : Induction) : List (Asked × Query) :=
       (Asked.gap c, x.query step step.gap) ::
         (x.stepGoals c step).filterMap fun (prop, goal) => goal.toOption.map fun fails =>
           (.fails c prop, x.query step (.and (.not step.gap) fails))) ++
-  x.answers.flatMap fun (q, answered) =>
+  (x.answers.flatMap fun (q, answered) =>
     match answered with
     | .error _ => []
     | .ok a => (conditionsOf p.queryEnsures (x.st.ref q)).filterMap fun c => (a.ensuresFails x.pre c).toOption.map
       fun fails => (.answer q (.ensures (x.st.ref q) c.name),
-        { vars := x.facts.vars ++ a.facts.vars, asserts := x.facts.asserts ++ [x.holds] ++ a.facts.asserts ++ [a.answered, fails] })
+        { vars := x.facts.vars ++ a.facts.vars, asserts := x.facts.asserts ++ [x.holds] ++ a.facts.asserts ++ [a.answered, fails] })) ++
+  x.charts.flatMap fun cc => cc.invariants.flatMap fun k =>
+    ((x.chartQueries cc k).toOption.getD []).map fun (step, q, _) =>
+      (Asked.chart (.invariant (x.st.ref cc.chart.name) k.name) step, q)
 
 /-- The own spec services of the structure, in order. -/
 def specServices (j : Spec.Structure) : List String := (j.services.filter (!·.external)).map (·.name)
@@ -342,6 +450,83 @@ def replayBase (x : Induction) (M : Model) (c : Checked) : Except String Counter
     .ok { given := givenOf x.st records, clock, command := none, input := none, now := none, violations := [] }
   else .error "the semantics keeps the invariant of the initial records"
 
+/-- The rejection kind that the kind `text` names, as `rejectionKinds` lists them. -/
+def rejectionKindOf (text : String) : RejectionKind :=
+  match text with
+  | "invalid-input" => .invalidInput
+  | "reused-id" => .reusedId
+  | "not-found" => .notFound
+  | "requires" => .requires
+  | "already-exists" => .alreadyExists
+  | _ => .unavailable
+
+/-- What a transition takes under `M`, as the semantics passes it, and as the counterexample shows it. -/
+def takenIn (M : Model) (taken : Taken) (sym : Option (Ir.Arg × SVal)) : Extra × Option Value :=
+  match taken, sym with
+  | .payload _, some (_, .json fields) => let v := Value.obj (present M fields); (.payload v, some v)
+  | .output _, some (_, .json fields) => let v := Value.obj (present M fields); (.output v, some v)
+  | .rejection, _ =>
+    let kind := ((M "tk.kind").toScalar.toValue?).bind fun | .str k => some k | _ => none
+    let r : Rejection := { kind := rejectionKindOf (kind.getD "") }
+    (.rejection r, some (ToValue.toValue r))
+  | _, _ => (.none, none)
+
+/--
+The replay of a model of a machine's query in the semantics: starting the machine, or the microstep of an edge, from the
+model's records and machine, after which the semantics must report the invariant `k`.
+-/
+def replayChart (x : Induction) (fs : Functions IO) (cc : ChartCase) (k : Ir.Condition) (step : ChartStep) (M : Model) :
+    IO (Except String Counterexample) := do
+  let st := x.st
+  let c := cc.chart
+  let .ok m := cc.model | return .error "the machine has no model"
+  let .ok initial := cc.initial | return .error "the machine has no initial context"
+  match x.stateOf M with
+  | .error why => return .error why
+  | .ok (records, given, clock) =>
+  let id := InstanceId.top c.name
+  let base : State := { service := st.service, records, now := clock, started := true }
+  let failing (s : State) (cond : Ir.Condition) : Bool := match s.machine? id with
+    | some i => failsConcrete { fields := Ir.fieldsOf st, args := Ir.scopeArgs st (s.scopeOf i none) .none,
+                                records := s.records } cond
+    | none => false
+  let context : Value := match initial with
+    | .obj fields => .obj (fields.filter (·.1 ∉ cc.relevant) ++ present M (cc.relevant.map fun f => (f, valVar s!"ctx.{f}")))
+    | v => v
+  let machineIn (config : Nat) : State × Value :=
+    let active := m.configs[config]!
+    ({ base with machines := [{ chart := c, id, context, entered := active.map (·, clock) }] },
+     .obj [("active", .arr (active.map .str)), ("context", context)])
+  let reported (s : State) : IO (Except String (List Violation)) := do
+    if !failing s k then return .error "the semantics keeps the invariant after the case's step"
+    return .ok ((← invariantViolations st fs s).map (·.toViolation))
+  let assumed (s : State) : Bool := cc.invariants.all (!failing s ·)
+  match step with
+  | .start =>
+    let s ← startInstance st fs base c
+    if s.halted.isSome then return .error "the semantics halts on starting the machine"
+    let r ← enter fs st 0 id [c.initial] ⟨s, {}⟩
+    if r.halted then return .error "the semantics halts on entering the initial states"
+    return (← reported r.state).map fun violations =>
+      { given, clock, command := none, input := none, now := none, violations }
+  | .edge i =>
+    let some e := m.edges[i]? | return .error "no such edge"
+    let (s, machine) := machineIn e.source
+    if !assumed s then return .error "the case's machine fails an invariant, which the induction assumes"
+    let now := (M "now").toInt
+    let s := { s with now }
+    let sym := ((takenOf st "tk" (cc.expressions st) e.taken).toOption.map (·.1)).join
+    let (extra, taken) := takenIn M e.taken sym
+    let some inst := s.machine? id | return .error "the machine is missing"
+    match ← choose fs st s inst extra (e.earlier ++ [e.transition]) with
+    | .ok (some t) => if t != e.transition then return .error "the semantics chooses another transition"
+    | _ => return .error "the semantics chooses no transition"
+    let r ← microstep fs st 0 id [(id, e.transition)] extra ⟨s, {}⟩
+    if r.halted then return .error "the semantics halts in the case's microstep"
+    return (← reported r.state).map fun violations =>
+      { given, clock, command := none, input := none, now := some now, machine := some machine,
+        transition := some (ToValue.toValue e.transition.ref), taken, violations }
+
 /--
 The verdict of a solver's answer, from the replay of its model when it is sat. `exact` and `complete` are those of the
 query's facts (Facts): an unsat answer proves the property only when the facts are complete.
@@ -365,7 +550,7 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
   let p := x.st.structure.program
   let result (prop : Property) (verdict : Verdict) : ProveResult :=
     { service := x.st.service, property := prop, creates := x.creates, verdict }
-  let charts := x.charts.map (result · (.undecided "prove does not encode machine and screen states yet"))
+  let chartProps := x.charts.flatMap fun cc => cc.invariants.map fun k => (cc, k, Property.invariant (x.st.ref cc.chart.name) k.name)
   let ensures := x.st.commands.flatMap fun c => (conditionsOf p.ensures (x.st.ref c)).map fun e =>
     (c, Property.ensures (x.st.ref c) e.name)
   let queryEnsures := x.answers.flatMap fun (q, _) => (conditionsOf p.queryEnsures (x.st.ref q)).map fun e =>
@@ -373,7 +558,7 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
   let dangling := (ownRefs x.st).map fun (e, field, _) => Property.danglingRef (x.st.ref e) field
   if let some why := x.blocked then
     return ((x.checked.map (·.ref)) ++ ensures.map (·.2) ++ queryEnsures.map (·.2.2) ++ dangling).map
-      (result · (.undecided why)) ++ charts
+      (result · (.undecided why)) ++ chartProps.map fun (_, _, prop) => result prop (.undecided why)
   let (init, initFacts) := initialOf x.st
   let gapOf (c : String) : Option String := answers.findSome? fun
     | (.gap c', .sat _) => if c' == c then
@@ -428,6 +613,20 @@ def Induction.results (x : Induction) (answers : List (Asked × Smt.Answer)) : I
       return result prop .proved
     | none => return result prop (.undecided s!"the query {q} has no encoding")
   let refs ← dangling.mapM fun prop => do pure (result prop (← afterSteps prop x.st.commands))
+  let charts ← chartProps.mapM fun (cc, k, prop) => do
+    match x.chartQueries cc k with
+    | .error why => return result prop (.undecided s!"the invariant has no encoding: {why}")
+    | .ok queries =>
+    for (step, _, exact, complete) in queries do
+      let answer := answers.findSome? fun
+        | (.chart prop' step', a) => if prop' == prop && step' == step then some a else none
+        | _ => none
+      let some a := answer | continue
+      let what := match step with
+        | .start => "on starting the machine"
+        | .edge i => s!"in the machine's microstep {i}"
+      if let some v ← verdictOf a exact complete (replayChart x fs cc k step ·) what then return result prop v
+    return result prop .proved
   pure (invariants ++ commandEnsures ++ answered ++ refs ++ charts)
 
 /-- The results of each property of each spec service, from Z3's answers to proveQueriesOf's scripts, in order. -/

@@ -294,6 +294,11 @@ export type Counterexample = {
   readonly query?: string;
   readonly input?: Json;
   readonly now?: number;
+  /** The machine's active states and context before the transition, none for starting it. */
+  readonly machine?: Json;
+  /** The machine's transition and what it takes, such as an event's payload, none for starting it. */
+  readonly transition?: Json;
+  readonly taken?: Json;
   /** The violations that the semantics reports on replaying the case. */
   readonly violations: readonly ViolationValue[];
 };

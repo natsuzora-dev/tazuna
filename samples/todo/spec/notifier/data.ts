@@ -36,6 +36,7 @@ export const {
   given,
   scenario,
   condition,
+  bounds,
 } = service({
   name: "notifier",
   description: "Notify the user about open tasks, with the notification permission that it requests",
