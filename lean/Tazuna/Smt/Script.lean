@@ -97,6 +97,17 @@ structure Shared where
   names : Std.HashMap String String := {}
   /-- Each definition's name, sort and text. -/
   defs : Array (String × Ty × String) := #[]
+  /-- The name of each compound term printed so far, by its address in memory (Term.addr). -/
+  printed : Std.HashMap USize String := {}
+
+private unsafe def addrImpl (t : Term) : USize := ptrAddrUnsafe t
+
+/--
+Where `t` lives in memory. The encoding builds a term from subterms it holds once in memory and reads many times, so
+printing walks each such subterm once by its address instead of once per occurrence. While a script is printed, the
+query holds every term it reads, so no two of them share an address.
+-/
+@[implemented_by addrImpl] opaque Term.addr (t : Term) : USize
 
 /--
 `t` as SMT-LIB text: a variable or literal as itself, and a compound term as the name of a definition that is made once
@@ -108,16 +119,15 @@ partial def Term.shared (t : Term) : StateM Shared String := do
   | .var x _ => pure (symbol x)
   | .lit v => pure v.smt
   | _ =>
+    if let some name := (← get).printed.get? t.addr then return name
     let (op, operands) := t.parts
     let names ← operands.mapM Term.shared
     let text := s!"({op} {" ".intercalate names})"
     let s ← get
-    match s.names.get? text with
-    | some name => pure name
-    | none =>
-      let name := s!"|t{s.defs.size}|"
-      set ({ names := s.names.insert text name, defs := s.defs.push (name, t.sort, text) } : Shared)
-      pure name
+    let name := (s.names.get? text).getD s!"|t{s.defs.size}|"
+    let defs := if s.names.contains text then s.defs else s.defs.push (name, t.sort, text)
+    set ({ names := s.names.insert text name, defs, printed := s.printed.insert t.addr name } : Shared)
+    pure name
 
 /-- A satisfiability question: its variables and the terms that must all hold. -/
 structure Query where
