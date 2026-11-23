@@ -88,7 +88,7 @@ def reactionOf (st : Service) (p : Program) (pre : SRecords) (now : Term) (paylo
          input, valid := conj (fits.map (·.term)),
          facts := { vars := made.zipIdx.map fun (_, i) => (s!"{names}.k{i}", Ty.val), asserts := fresh,
                     -- A fresh key may equal the key of a deleted record, which no created key does.
-                    exact := fits.all (·.exact) && made.isEmpty, complete := fits.all (·.complete) } }
+                    fit := (Fit.all (fits.map (·.fit))).join (.of made.isEmpty true) } }
 
 /-- That two symbolic records hold the same records: each live slot of one has a live slot of the other equal to it. -/
 def SRecords.same (a b : SRecords) : Term :=
@@ -121,7 +121,7 @@ def ordersOf (st : Service) (p : Program) (pre : SRecords) (used : List (String 
   let payload := terms.map fun (f, t, _) => (f, t)
   let holds := props.map fun pr => fieldHolds ((payload.lookup pr.1).getD undefT) pr
   let payloadFacts : Facts := { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term),
-                                exact := holds.all (·.exact), complete := holds.all (·.complete) }
+                                fit := Fit.all (holds.map (·.fit)) }
   let a ← reactionOf st p pre now (.json (SJson.ofTerms payload)) pair.first "ra"
   let b ← reactionOf st p pre now (.json (SJson.ofTerms payload)) pair.second "rb"
   let accepted (r : Reaction) (step : Step) : Term := .and r.valid step.accepted
@@ -140,7 +140,7 @@ def ordersOf (st : Service) (p : Program) (pre : SRecords) (used : List (String 
   let a2 ← stepWith st p r2 u2 fc (SJson.ofTerms a.input) own now "o2a."
   let (r21, _) := after a a2 r2 u2
   let steps := [a1, b1, b2, a2]
-  pure { facts := payloadFacts ++ a.facts ++ b.facts ++ steps.foldl (· ++ ·.facts) {},
+  pure { facts := payloadFacts ++ a.facts ++ b.facts ++ steps.foldl (· ++ ·.facts) Facts.none,
          within := conj ([a.fires, b.fires] ++ steps.map (.not ·.beyond)),
          gap := disj (steps.map (·.gap)),
          differ := disj [.not (r12.same r21), .not (.eq (accepted a a1) (accepted a a2)),

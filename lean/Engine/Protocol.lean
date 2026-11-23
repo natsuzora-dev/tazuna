@@ -132,8 +132,12 @@ inductive Response where
   | verifiedExternal (findings : List Verify.Finding)
   | given (records : List Scenario.GivenRecord)
   | read (lines : List (Option ReadLine))
-  /-- Whether Lean parses by the schema, and then the value, Zod's issues, or whether a codec threw. -/
+  /--
+  Whether Lean parses by the schema, and then the value, Zod's issues, or whether a codec threw; and whether prove's
+  record facts hold of the parsed record, or of the value when parse rejects it, with their fit (Smt.recordHolds).
+  -/
   | parsed (supported : Bool) (value : Option Value) (issues : Option (List Value)) (thrown : Bool)
+    (facts : Option (Bool × Smt.Fit))
   | queried (scripts : List String)
   | proved (results : List ProveResult)
   | generated (result : Generation)

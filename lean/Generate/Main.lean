@@ -96,7 +96,7 @@ def modules : List (String × List Name) :=
     [``Tazuna.Ir.Arg, ``Tazuna.Ir.Expr, ``Tazuna.Ir.Field, ``Tazuna.Ir.Condition, ``Tazuna.Ir.Conditions, ``Tazuna.Ir.Fn,
      ``Tazuna.Ir.Entry, ``Tazuna.Ir.Site, ``Tazuna.Ir.ChartFns, ``Tazuna.Ir.Program]),
    ("src/cli/protocol.generated.ts",
-    [``Tazuna.Semantics.Service.Issue, ``Tazuna.Semantics.Service.NextKeys, ``Tazuna.Semantics.Service.Keys,
+    [``Tazuna.Smt.Fit, ``Tazuna.Semantics.Service.Issue, ``Tazuna.Semantics.Service.NextKeys, ``Tazuna.Semantics.Service.Keys,
      ``Tazuna.Engine.Stored, ``Tazuna.Engine.StartLine, ``Tazuna.Engine.Log, ``Tazuna.Engine.Request, ``Tazuna.Engine.Unpaired,
      ``Tazuna.Engine.SimulatedService, ``Tazuna.Engine.ReadPart, ``Tazuna.Engine.Evaluated,
      ``Tazuna.Engine.ServiceRun, ``Tazuna.Engine.ScenarioRun, ``Tazuna.Engine.ReadLine, ``Tazuna.Engine.Replayed, ``Tazuna.Engine.Property,

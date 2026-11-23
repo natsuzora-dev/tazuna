@@ -15,19 +15,58 @@ open Tazuna.Ir Tazuna.Semantics Tazuna.Semantics.Eval Tazuna.Semantics.Service
 def boolVar (x : String) : Term := .var x .bool
 def valVar (x : String) : Term := .var x .val
 
-/-- What a symbolic state or step adds: its variables and the terms that must hold. -/
+/--
+How terms hold of what the semantics allows. These encodings carry no proof, so each encoder states its fit, with no
+default: `exact` holds of just those values or states; `over` holds of more, so a model may be none of them; `under` of
+fewer, so an unsat answer proves nothing of the ones it misses; `loose` both.
+-/
+inductive Fit where
+  | exact
+  | over
+  | under
+  | loose
+deriving BEq, Repr
+
+derive_wire Fit
+
+/-- The fit of terms that hold of nothing more when `precise`, and of everything when `complete`. -/
+def Fit.of (precise complete : Bool) : Fit :=
+  match precise, complete with
+  | true, true => .exact
+  | false, true => .over
+  | true, false => .under
+  | false, false => .loose
+
+/-- Whether the terms hold of nothing more than the semantics allows, so that a model is a value or state. -/
+def Fit.precise : Fit → Bool
+  | .exact | .under => true
+  | .over | .loose => false
+
+/-- Whether the terms hold of everything that the semantics allows, so that an unsat answer proves. -/
+def Fit.complete : Fit → Bool
+  | .exact | .over => true
+  | .under | .loose => false
+
+/-- The fit of two sets of terms that hold together. -/
+def Fit.join (a b : Fit) : Fit := .of (a.precise && b.precise) (a.complete && b.complete)
+
+/-- The fit of terms that hold together, each with its own fit. -/
+def Fit.all (fits : List Fit) : Fit := fits.foldl Fit.join .exact
+
+/-- What a symbolic state or step adds: its variables, the terms that must hold, and how they fit. -/
 structure Facts where
-  vars : List (String × Ty) := []
-  asserts : List Term := []
-  /-- Whether no term holds of more than the semantics guarantees; otherwise a model may be no state. -/
-  exact : Bool := true
-  /-- Whether every term holds of every state that the semantics allows; otherwise an unsat answer proves nothing. -/
-  complete : Bool := true
-deriving Inhabited
+  vars : List (String × Ty)
+  asserts : List Term
+  fit : Fit
+
+/-- No variable and no term, which hold of every state exactly. -/
+def Facts.none : Facts := { vars := [], asserts := [], fit := .exact }
+
+/-- What a partial encoder stands on before it runs: loose, never a fit that claims anything. -/
+instance : Inhabited Facts := ⟨{ Facts.none with fit := .loose }⟩
 
 instance : Append Facts where
-  append a b := { vars := a.vars ++ b.vars, asserts := a.asserts ++ b.asserts, exact := a.exact && b.exact,
-                  complete := a.complete && b.complete }
+  append a b := { vars := a.vars ++ b.vars, asserts := a.asserts ++ b.asserts, fit := a.fit.join b.fit }
 
 def checksKnown : Value → Bool
   | .arr checks => checks.all fun c => match c.field? "check" with
@@ -45,15 +84,15 @@ def intOfValue? : Value → Option Int
   | _ => none
 
 /--
-What a term says of the values that a schema accepts. `exact`: it holds of no other value, so a model is a value of the
-schema. `complete`: it holds of every value of the schema that a `V` can be; a decimal or an array is none, so a schema
-that accepts one is incomplete, and an unsat answer then says nothing of states that hold one.
+What a term says of the values that a schema accepts, and its fit to the values of the schema that a `V` can be: a
+decimal or an array is none, so a schema that accepts one is `under`, and an unsat answer then says nothing of states
+that hold one.
 -/
 structure Holds where
   term : Term
-  exact : Bool := true
-  complete : Bool := true
-deriving Inhabited
+  fit : Fit
+
+instance : Inhabited Holds := ⟨{ term := tt, fit := .loose }⟩
 
 /--
 What holds when the scalar `t` is a value that `schema` accepts. A schema that a scalar cannot fit, such as an object,
@@ -67,16 +106,15 @@ partial def schemaHolds (schema : Value) (t : Term) : Holds :=
     match fields.lookup "anyOf", fields.lookup "enum", fields.lookup "const", fields.lookup "type" with
     | some (.arr options), _, _, _ =>
       let each := options.map (schemaHolds · t)
-      { term := disj (each.map (·.term)), exact := only ["anyOf"] && each.all (·.exact),
-        complete := each.all (·.complete) }
+      { term := disj (each.map (·.term)), fit := (Fit.all (each.map (·.fit))).join (.of (only ["anyOf"]) true) }
     | _, some (.arr values), _, _ =>
       let terms := values.filterMap fun v => (litTerm v).toOption
-      { term := disj (terms.map (.eq t ·)), exact := only ["enum", "type"] && terms.length == values.length,
-        complete := terms.length == values.length }
+      { term := disj (terms.map (.eq t ·)),
+        fit := .of (only ["enum", "type"] && terms.length == values.length) (terms.length == values.length) }
     | _, _, some v, _ =>
       match litTerm v with
-      | .ok l => { term := .eq t l, exact := only ["const", "type"] }
-      | .error _ => { term := tt, exact := false }
+      | .ok l => { term := .eq t l, fit := .of (only ["const", "type"]) true }
+      | .error _ => { term := tt, fit := .over }
     | _, _, _, some types =>
       let names := match types with
         | .str t => [t]
@@ -101,12 +139,11 @@ partial def schemaHolds (schema : Value) (t : Term) : Holds :=
       let terms := names.filterMap typed
       let complete := terms.length == names.length && terms.all (·.2)
       { term := disj (terms.map (·.1)),
-        exact := only (["type", "minLength", "maxLength", "minimum", "maximum"] ++ if date then ["format", "pattern"] else []) &&
+        fit := .of (only (["type", "minLength", "maxLength", "minimum", "maximum"] ++ if date then ["format", "pattern"] else []) &&
           terms.length == names.length &&
-          !names.isEmpty,
-        complete }
-    | _, _, _, none => { term := tt, exact := false }
-  | _ => { term := tt, exact := false }
+          !names.isEmpty) complete }
+    | _, _, _, none => { term := tt, fit := .over }
+  | _ => { term := tt, fit := .over }
 
 /--
 The properties of an object schema, in order, each with whether the object must hold it: a required property, or one with a
@@ -188,33 +225,57 @@ def uniqueClash (unique : List String) : List Slot → List Term
     ss.map (fun s' => conj ([s.live, s'.live, checked s, checked s'] ++ unique.map fun f => .eq (value s f) (value s' f))) ++
       uniqueClash unique ss
 
+/-- A record field's value as a term: a date by its day number, as propertyVar holds a date; any other a scalar literal. -/
+def fieldTerm (schema : Value) (f : String) (v : Option Value) : Except String Term :=
+  match v with
+  | none => pure undefT
+  | some v =>
+    let date := ((propertiesWith schema).find? (·.1 == f)).any (isDateSchema ·.2.1)
+    match date, v with
+    | true, .str label =>
+      match parseDate? label with
+      | some day => pure (.mkStr (.dateLabel (intLit day)))
+      | none => litTerm v
+    | _, _ => litTerm v
+
+/--
+Whether the terms that SRecords.facts asserts of a live record's fields hold of the record `v` of the entity schema
+`schema`, and their fit; none when a field holds a value that no term holds, such as an array. A test compares it with
+what Semantics.parse accepts.
+-/
+def recordHolds (schema v : Value) : Option (Bool × Fit) := do
+  let holds ← (propertiesWith schema).mapM fun p => do
+    pure (fieldHolds (← (fieldTerm schema p.1 (v.field? p.1)).toOption) p)
+  pure ((conj (holds.map (·.term))).holds (fun _ => .bool false), Fit.all (holds.map (·.fit)))
+
 /-- The variables of `r` and what the semantics guarantees of every state's records: of every record within its schema. -/
 def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.run do
-  let mut facts : Facts := {}
+  let mut facts := Facts.none
   for (e, slots) in r.keyed do
     let props := propertiesWith (entitySchema st e)
     for (s, i) in slots.zipIdx do
-      facts := facts ++ { vars := [(s!"{pre}.{e}.{i}.live", .bool), (s!"{pre}.{e}.{i}.used", .bool)] ++ s.fields.flatMap fun (f, _) => (fieldVar (entitySchema st e) s!"{pre}.{e}.{i}.{f}" f).2 }
+      facts := facts ++ { vars := [(s!"{pre}.{e}.{i}.live", .bool), (s!"{pre}.{e}.{i}.used", .bool)] ++ s.fields.flatMap fun (f, _) => (fieldVar (entitySchema st e) s!"{pre}.{e}.{i}.{f}" f).2,
+                          asserts := [], fit := .exact }
       let used := usedVar pre e i
       let earlier := if i == 0 then [] else [Term.or (.not used) (usedVar pre e (i - 1))]
       let schemas := props.map fun p => fieldHolds ((s.fields.lookup p.1).getD undefT) p
       let whenLive := (schemas.map (·.term)).map (Term.or (.not s.live))
       let asserts := [Term.or (.not s.live) used] ++ earlier ++ whenLive
-      facts := facts ++ { asserts, exact := schemas.all (·.exact), complete := schemas.all (·.complete) }
-    facts := facts ++ { asserts := distinctKeys slots ++ (uniqueClash (st.uniqueOf e) slots).map .not }
+      facts := facts ++ { vars := [], asserts, fit := Fit.all (schemas.map (·.fit)) }
+    facts := facts ++ { vars := [], asserts := distinctKeys slots ++ (uniqueClash (st.uniqueOf e) slots).map .not, fit := .exact }
     for (_, field, target) in st.references.filter (·.1 == e) do
       if (r.keyed.lookup target).isSome then
         let targets := r.slotsOf target
         let asserts := slots.map fun s =>
           let v := (s.fields.lookup field).getD undefT
           Term.or (.not (.and s.live (.not (nullishT v)))) (keyIn v targets)
-        facts := facts ++ { asserts }
+        facts := facts ++ { vars := [], asserts, fit := .exact }
   for (e, fields) in r.singles do
     let props := propertiesWith (entitySchema st e)
     let schemas := props.map fun p => fieldHolds ((fields.lookup p.1).getD undefT) p
     let vars := fields.flatMap fun (f, _) => (fieldVar (entitySchema st e) s!"{pre}.{e}.{f}" f).2
     let asserts := schemas.map (·.term)
-    facts := facts ++ { vars, asserts, exact := schemas.all (·.exact), complete := schemas.all (·.complete) }
+    facts := facts ++ { vars, asserts, fit := Fit.all (schemas.map (·.fit)) }
   return facts
 
 /-- The arguments of an entity invariant: the fields of a record as JSON holds them, and the time, an Int term. -/
@@ -399,7 +460,7 @@ partial def jsonOf (items : Nat) (schema : Value) (x : String) : SJson × Facts 
   if !structured schema then
     let (t, vars) := propertyVar x ("", schema, true)
     let h := schemaHolds schema t
-    (.scalar t, { vars, asserts := [h.term], exact := h.exact, complete := h.complete })
+    (.scalar t, { vars, asserts := [h.term], fit := h.fit })
   else match schema.field? "anyOf" with
   | some (.arr options) =>
     let parts := options.zipIdx.map fun (o, i) => (i, jsonOf items o s!"{x}.{i}")
@@ -410,13 +471,13 @@ partial def jsonOf (items : Nat) (schema : Value) (x : String) : SJson × Facts 
       | (_, last, _) :: rest => rest.foldl (fun acc (i, j, _) => .ite (chosen i) j acc) last
     let facts := parts.foldl (fun acc (i, _, f) => acc ++ f.under (chosen i))
       { vars := [(s!"{x}.option", .int)], asserts := [.le (intLit 0) option, .lt option (intLit options.length)],
-        exact := keywordsWithin schema ["anyOf"] }
+        fit := .of (keywordsWithin schema ["anyOf"]) true }
     (value, facts)
   | _ =>
     if schema.field? "type" == some (.str "object") then
       let (fields, facts) := propertiesOf items schema x
       let own := keywordsWithin schema ["type", "properties", "required", "additionalProperties"]
-      (.obj fields, { facts with exact := facts.exact && own })
+      (.obj fields, { facts with fit := facts.fit.join (.of own true) })
     else
       let item := (schema.field? "items").getD (.obj [])
       let least := ((schema.field? "minItems").bind intOfValue?).getD 0
@@ -428,22 +489,22 @@ partial def jsonOf (items : Nat) (schema : Value) (x : String) : SJson × Facts 
       -- A set's items are distinct and a sortedBy array's are in key order, which no fact states.
       let exact := keywordsWithin schema ["type", "items", "minItems", "maxItems", "x-tazuna-bag", "x-tazuna-checks"]
       let facts := parts.foldl (fun acc (i, _, f) => acc ++ f.under (.lt (intLit i) len))
-        { vars := [(s!"{x}.len", .int)], asserts := [.le (intLit least) len, .le len (intLit most)], exact }
+        { vars := [(s!"{x}.len", .int)], asserts := [.le (intLit least) len, .le len (intLit most)], fit := .of exact true }
       (.arr len (parts.map (·.2.1)), facts)
 
 /-- The properties of the object schema `schema` as jsonOf makes their values, and their facts. -/
 partial def propertiesOf (items : Nat) (schema : Value) (x : String) : List (String × SJson) × Facts :=
-  (propertiesWith schema).foldl (init := ([], {})) fun (fields, facts) (n, s, required) =>
+  (propertiesWith schema).foldl (init := ([], Facts.none)) fun (fields, facts) (n, s, required) =>
     if structured s then
       let (j, f) := jsonOf items s s!"{x}.{n}"
       if required then (fields ++ [(n, j)], facts ++ f)
       else
         let set := boolVar s!"{x}.{n}.set"
-        (fields ++ [(n, .ite set j (.scalar undefT))], facts ++ { vars := [(s!"{x}.{n}.set", .bool)] } ++ f.under set)
+        (fields ++ [(n, .ite set j (.scalar undefT))], facts ++ { vars := [(s!"{x}.{n}.set", .bool)], asserts := [], fit := .exact } ++ f.under set)
     else
       let (t, vars) := propertyVar s!"{x}.{n}" (n, s, required)
       let h := fieldHolds t (n, s, required)
-      (fields ++ [(n, .scalar t)], facts ++ { vars, asserts := [h.term], exact := h.exact, complete := h.complete })
+      (fields ++ [(n, .scalar t)], facts ++ { vars, asserts := [h.term], fit := h.fit })
 
 end
 
@@ -467,7 +528,8 @@ def callerVars (pre : String := "caller") : List (String × Term) × Facts :=
   let f (n : String) := (fields.lookup n).getD undefT
   (fields, { vars := fields.map fun (n, _) => (s!"{pre}.{n}", .val),
              asserts := [.or (conj [.isStr (f "entity"), .isStr (f "key"), .isUndef (f "service")])
-                           (conj [.isUndef (f "entity"), .isUndef (f "key"), .isStr (f "service")])] })
+                           (conj [.isUndef (f "entity"), .isUndef (f "key"), .isStr (f "service")])],
+             fit := .exact })
 
 /-- An entity among `callers` whose key is several fields: its caller key is an object, which callerVars does not hold. -/
 def compositeCaller (svc : Service) (callers : List Ir.CallerType) : Option String :=
@@ -566,7 +628,7 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
     (input : List (String × SJson)) (caller : List (String × Term)) (now : Term) (names : String) :
     Except String Step := do
   let some rq := svc.requirements.lookup name | throw s!"no requirements of {name}"
-  let facts : Facts := {}
+  let facts := Facts.none
   let args (bound : Option SVal) : Arg → Option SVal
     | .input => some (.json input)
     | .caller => some (.json (SJson.ofTerms caller))
@@ -608,7 +670,8 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let start : Stepped := { records := pre, used }
   let (stepped, defs) := (start.decided svc names "" decided).run.run []
   let stepped ← stepped
-  let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty), asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t }
+  let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty), asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t,
+                         fit := .exact }
   let accepted := conj (admitted :: refs ++ bindTerms.map (held ·.2) ++ requireChecks.map held ++
     [.not decideErr, .not (stepped.records.duplicated svc)])
   pure { facts := facts ++ named, input, caller, now, accepted, post := stepped.records, used := stepped.used,
@@ -627,7 +690,8 @@ def stepOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (used :
   let (caller, callerFacts) := callerVars
   let now := Term.var "now" .int
   let nowFacts : Facts :=
-    { vars := [("now", .int)], asserts := [Term.le (intLit (-maxInstant)) now, .le now (intLit maxInstant), .le clock now] }
+    { vars := [("now", .int)], asserts := [Term.le (intLit (-maxInstant)) now, .le now (intLit maxInstant), .le clock now],
+      fit := .exact }
   let step ← stepWith svc p pre used name input caller now ""
   pure { step with facts := inputFacts ++ callerFacts ++ nowFacts ++ step.facts }
 
@@ -679,7 +743,7 @@ def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name
   let (output, err) ← seval env [] resolve.body
   if let some e := compositeCaller svc callers then throw s!"the caller {e} has a key of several fields"
   let admitted := admitted callers pre caller
-  pure { facts := { inputFacts ++ callerFacts with exact := false }, input, caller, admitted,
+  pure { facts := { inputFacts ++ callerFacts with fit := (inputFacts ++ callerFacts).fit.join .over }, input, caller, admitted,
          answered := conj (admitted :: requireChecks.map (fun c => .and (.not c.throws) c.passes) ++ [.not err]), output,
          requires := requireChecks }
 

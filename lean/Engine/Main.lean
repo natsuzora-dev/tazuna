@@ -51,11 +51,14 @@ def respond (solve : List String → IO (List String)) : Engine.Request → IO R
     pure (match answer with
       | .ok value => .evaluated { value, issue := none, reads, created }
       | .error issue => .evaluated { value := none, issue, reads, created })
-  | .parse schema value => pure (match Semantics.parse schema value with
-    | none => .parsed false none none false
-    | some (.error ()) => .parsed true none none true
-    | some (.ok (.ok v)) => .parsed true (some v) none false
-    | some (.ok (.error issues)) => .parsed true none (some issues) false)
+  | .parse schema value =>
+    -- What prove's record facts say of the record that parse gives, or of `value` when parse gives none.
+    let facts (v : Value) := Smt.recordHolds schema v
+    pure (match Semantics.parse schema value with
+    | none => .parsed false none none false none
+    | some (.error ()) => .parsed true none none true (facts value)
+    | some (.ok (.ok v)) => .parsed true (some v) none false (facts v)
+    | some (.ok (.error issues)) => .parsed true none (some issues) false (facts value))
   | .proveQueries s => do pure (.queried (← proveQueriesOf s))
   | .prove s answers => do pure (.proved (← proveOf s answers))
   | .generate s depth => do pure (.generated (← generateOf s depth solve))

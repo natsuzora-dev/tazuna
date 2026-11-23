@@ -265,13 +265,14 @@ variable named after `pre`, or a rejection's kind; and their facts. A field left
 replay then takes the value without it.
 -/
 def takenOf (svc : Service) (pre : String) (reads : List Expr) : Taken → Except String (Option (Arg × SVal) × Facts)
-  | .none => pure (none, {})
+  | .none => pure (none, Facts.none)
   | .rejection =>
     let kind := valVar s!"{pre}.kind"
     pure (some (.rejection, .json (SJson.ofTerms [("kind", kind)])),
-      { vars := [(s!"{pre}.kind", .val)], asserts := [disj (rejectionKinds.map fun k => .eq kind (.mkStr (strLit k)))] })
+      { vars := [(s!"{pre}.kind", .val)], asserts := [disj (rejectionKinds.map fun k => .eq kind (.mkStr (strLit k)))],
+        fit := .exact })
   | .payload schema => fields .payload schema
-  | .output schema => if (svc.schemaOf schema).isNone then pure (none, {}) else fields .output schema
+  | .output schema => if (svc.schemaOf schema).isNone then pure (none, Facts.none) else fields .output schema
 where
   fields (arg : Arg) (schema : Schema) : Except String (Option (Arg × SVal) × Facts) := do
     let props := propertiesWith ((svc.schemaOf schema).getD (.obj []))
@@ -283,7 +284,7 @@ where
     let holds := kept.map fun pr => fieldHolds (((terms.lookup pr.1).map (·.1)).getD undefT) pr
     pure (some (arg, .json (SJson.ofTerms (terms.map fun (f, t, _) => (f, t)))),
       { vars := terms.flatMap (·.2.2), asserts := holds.map (·.term),
-        exact := holds.all (·.exact) && kept.length == props.length, complete := holds.all (·.complete) })
+        fit := (Fit.all (holds.map (·.fit))).join (.of (kept.length == props.length) true) })
 
 /-- The term that holds when the invariant `c` of the machine fails, or throws, in `env`. -/
 def chartFails (env : SEnv) (c : Condition) : Except String Term := do

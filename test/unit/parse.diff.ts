@@ -156,6 +156,29 @@ for (const [i, { shape, fields }] of fixtures.entries())
     );
   });
 
+const isPlainObject = (v: Json): v is { readonly [key: string]: Json } =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+for (const [i, { shape, fields }] of fixtures.entries())
+  test(`fixture ${i}: prove's record facts hold of each record that Lean parses when they are complete, and of no record it rejects when they are precise`, () => {
+    const schema = objectSchema(shape) as Json;
+    const known = Object.keys(shape);
+    fc.assert(
+      fc.property(valuesOf(fields), (value) => {
+        const parsed = lean.parse(schema, value);
+        if (parsed?.facts === null || parsed?.facts === undefined) return;
+        const [holds, fit] = parsed.facts;
+        if (parsed.value !== undefined && parsed.value !== null) {
+          if (fit === "exact" || fit === "over") assert.ok(holds, `the facts miss ${JSON.stringify(parsed.value)}`);
+        } else if (parsed.issues && (fit === "exact" || fit === "under") && isPlainObject(value)) {
+          if (Object.keys(value).every((k) => known.includes(k)))
+            assert.ok(!holds, `the facts hold of ${JSON.stringify(value)}, which parse rejects`);
+        }
+      }),
+      { numRuns: 300 },
+    );
+  });
+
 test("Lean leaves to Zod the schemas that check reports as Restricted: a string format, a refinement, an overwrite, a message that is a function, a record, or a recursion", () => {
   type Tree = { readonly children: readonly Tree[] };
   const tree: z.ZodType<Tree> = z.lazy(() => z.object({ children: z.array(tree) }));

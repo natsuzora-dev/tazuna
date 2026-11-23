@@ -124,19 +124,6 @@ def answerGoal (a : Answered) : Uncovered → Option Term
 def advancing (step : Step) : List Term :=
   step.paths.map fun path => conj [step.accepted, .not step.beyond, .not step.gap, path]
 
-/-- A record field's value as a term: a date by its day number, as propertyVar holds a date; any other a scalar literal. -/
-def fieldTerm (schema : Value) (f : String) (v : Option Value) : Except String Term :=
-  match v with
-  | none => pure undefT
-  | some v =>
-    let date := ((propertiesWith schema).find? (·.1 == f)).any (isDateSchema ·.2.1)
-    match date, v with
-    | true, .str label =>
-      match parseDate? label with
-      | some day => pure (.mkStr (.dateLabel (intLit day)))
-      | none => litTerm v
-    | _, _ => litTerm v
-
 /--
 The records `records` as terms within `creates`: each keyed entity's records in key order in live slots, then a free slot
 for each record it may still create beyond `created`; and which slots are used.
@@ -171,7 +158,7 @@ That a client's request to `st` comes from a caller other than `st` itself: the 
 automations and charts, which the semantics runs, so a client that claims to be the service stands for no sender.
 -/
 def fromOutside (st : Service) (caller : List (String × Term)) : Facts :=
-  { asserts := [.not (.eq ((caller.lookup "service").getD undefT) (.mkStr (strLit st.service)))] }
+  { vars := [], asserts := [.not (.eq ((caller.lookup "service").getD undefT) (.mkStr (strLit st.service)))], fit := .exact }
 
 /-- The number of `in` lines of `inputs` whose id is `<name>#<n>`, plus one: the number of the next. -/
 def nextNumber (inputs : List TraceLine) (name : String) : Nat :=
@@ -517,7 +504,7 @@ def Search.anyState (x : Search) (part : Uncovered) : Except String (Query × Bo
       let some goal := answerGoal a part | throw "the query's answer has no goal for the target"
       pure (goal, a.facts)
   let all := facts ++ more
-  pure ({ vars := all.vars, asserts := all.asserts ++ [goal] }, all.complete)
+  pure ({ vars := all.vars, asserts := all.asserts ++ [goal] }, all.fit.complete)
 
 /-- The run of `inputs` from the initial state of `service`: the spec's trace lines, and the targets that the run reaches. -/
 def runInputs (spec : Ir.Structure) (service : String) (inputs : List TraceLine) : IO (List TraceLine × List Uncovered) := do

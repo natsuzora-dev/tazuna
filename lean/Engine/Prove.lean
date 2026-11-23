@@ -211,7 +211,8 @@ def failsOn (r : SRecords) (now : Term) (c : Checked) : Except String Term := do
 /-- The time of a state, `clock`, an instant as every time is (Time.inRange). -/
 def clockFacts : Facts :=
   { vars := [("clock", .int)],
-    asserts := [.le (intLit (-maxInstant)) (.var "clock" .int), .le (.var "clock" .int) (intLit maxInstant)] }
+    asserts := [.le (intLit (-maxInstant)) (.var "clock" .int), .le (.var "clock" .int) (intLit maxInstant)],
+    fit := .exact }
 
 def clockT : Term := .var "clock" .int
 
@@ -222,14 +223,15 @@ def laterT : Term := .var "later" .int
 
 /-- The time of a step, `now`, an instant no earlier than the state's time. -/
 def nowFacts : Facts :=
-  { vars := [("now", .int)], asserts := [.le (intLit (-maxInstant)) nowT, .le nowT (intLit maxInstant), .le clockT nowT] }
+  { vars := [("now", .int)], asserts := [.le (intLit (-maxInstant)) nowT, .le nowT (intLit maxInstant), .le clockT nowT],
+    fit := .exact }
 
 /--
 The initial records: no record of a keyed entity, and each single entity's record of its schema defaults. A default that
 no term holds, such as an array, is a variable, which makes the facts inexact.
 -/
 def initialOf (st : Service) : SRecords × Facts := Id.run do
-  let mut facts : Facts := {}
+  let mut facts := Facts.none
   let mut singles := []
   for e in st.singles do
     let defaults := defaultsOf (entitySchema st e)
@@ -242,7 +244,7 @@ def initialOf (st : Service) : SRecords × Facts := Id.run do
         | .ok l => fields := fields ++ [(f, l)]
         | .error _ =>
           fields := fields ++ [(f, valVar s!"init.{e}.{f}")]
-          facts := facts ++ { vars := [(s!"init.{e}.{f}", .val)], exact := false }
+          facts := facts ++ { vars := [(s!"init.{e}.{f}", .val)], asserts := [], fit := .over }
     singles := singles ++ [(e, fields)]
   pure ({ keyed := (st.entities.filter (!st.singles.contains ·)).map (·, []), singles, keyFields := st.keyFields }, facts)
 
@@ -324,7 +326,7 @@ def ChartCase.pre (cc : ChartCase) (active : List String) : SMachine × Facts :=
   let m : SMachine := { context := cc.relevant.map fun f => (f, valVar s!"ctx.{f}"), active }
   let fits := cc.fits m
   (m, { vars := cc.relevant.map fun f => (s!"ctx.{f}", Ty.val), asserts := fits.map (·.term),
-        exact := fits.all (·.exact), complete := fits.all (·.complete) })
+        fit := Fit.all (fits.map (·.fit)) })
 
 /--
 The expressions of the chart of `cc` that the encoding evaluates: its invariants, its guards, and its assigns of the
@@ -343,11 +345,11 @@ def chartHolds (env : SEnv) (invariants : List Ir.Condition) : Except String Ter
   pure (conj (← invariants.mapM fun c => do pure (Term.not (← chartFails env c))))
 
 /--
-The queries of the induction of the invariant `k` of `cc`, each with whether its facts are exact and complete: starting
+The queries of the induction of the invariant `k` of `cc`, each with the fit of its facts: starting
 the machine with any records, and each edge from a state where every invariant holds.
 -/
 def Induction.chartQueries (x : Induction) (cc : ChartCase) (k : Ir.Condition) :
-    Except String (List (ChartStep × Query × Bool × Bool)) := do
+    Except String (List (ChartStep × Query × Fit)) := do
   let m ← cc.model
   let initial ← cc.initial
   let st := x.st
@@ -360,10 +362,10 @@ def Induction.chartQueries (x : Induction) (cc : ChartCase) (k : Ir.Condition) :
   let started ← ({ context := startContext, active := [] } : SMachine).move st p c x.pre clockT none none [] (initialEntries c)
   let startFails ← chartFails (started.machine.env c x.pre clockT none) k
   let startFits := cc.fits started.machine
-  let start : ChartStep × Query × Bool × Bool :=
+  let start : ChartStep × Query × Fit :=
     (.start, { vars := x.facts.vars,
                asserts := x.facts.asserts ++ [x.holds, .not started.halted] ++ startFits.map (·.term) ++ [startFails] },
-     x.facts.exact && !cc.sliced && startFits.all (·.exact), x.facts.complete && startFits.all (·.complete))
+     Fit.all ([x.facts.fit, .of (!cc.sliced) true] ++ startFits.map (·.fit)))
   let guardsOf (t : Service.Transition) : List Ir.Condition := (siteOf st p c (.guards t.ref)).getD []
   let edges ← m.edges.zipIdx.mapM fun (e, i) => do
     let (pre, ctxFacts) := cc.pre (m.configs[e.source]!)
@@ -382,8 +384,8 @@ def Induction.chartQueries (x : Induction) (cc : ChartCase) (k : Ir.Condition) :
       { vars := facts.vars,
         asserts := facts.asserts ++ [x.holds, holdsPre] ++ earlier ++ [ok, .not halted, .not moved.halted] ++
           postFits.map (·.term) ++ [fails] }
-    pure ((ChartStep.edge i, q, facts.exact && !cc.sliced && postFits.all (·.exact),
-      facts.complete && postFits.all (·.complete)) : ChartStep × Query × Bool × Bool)
+    pure ((ChartStep.edge i, q, Fit.all ([facts.fit, .of (!cc.sliced) true] ++ postFits.map (·.fit))) :
+      ChartStep × Query × Fit)
   pure ([start] ++ edges)
 
 /-- The own spec services of the structure, in order. -/
@@ -678,21 +680,22 @@ def replayPair (x : Induction) (fs : Functions IO) (pair : Pair) (o : Orders) (M
                violations := [found.toViolation] }
 
 /--
-The verdict of a solver's answer, from the replay of its model when it is sat. `exact` and `complete` are those of the
-query's facts (Facts): an unsat answer proves the property only when the facts are complete.
+The verdict of a solver's answer, from the replay of its model when it is sat. `fit` is that of the query's facts: an
+unsat answer proves the property only when they are complete, and a replay that disagrees is a bug only when they are
+precise.
 -/
-def verdictOf (answer : Smt.Answer) (exact complete : Bool) (replay : Model → IO (Except String Counterexample))
+def verdictOf (answer : Smt.Answer) (fit : Fit) (replay : Model → IO (Except String Counterexample))
     (what : String) : IO (Option Verdict) := do
   match answer with
   | .unsat =>
-    if complete then pure none
+    if fit.complete then pure none
     else pure (some (.undecided s!"no case {what} among the values that the encoding holds, which leave out some values of a schema, such as decimals"))
   | .unknown why => pure (some (.undecided s!"{what}: {why}"))
   | .sat values =>
     match ← replay (Smt.Answer.model values) with
     | .ok case => pure (some (.counterexample case))
     | .error why =>
-      if exact then throw (IO.userError s!"prove's encoding disagrees with the semantics {what}: {why}")
+      if fit.precise then throw (IO.userError s!"prove's encoding disagrees with the semantics {what}: {why}")
       pure (some (.undecided s!"the solver's case {what} is outside what the encoding states exactly: {why}"))
 
 /-- A query that a property's verdict needs: its script, and the verdict that its answer gives, none when the answer leaves the property standing. -/
@@ -750,7 +753,7 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
       | some (.ok fails) =>
         let replay := (replayStep x fs · c step prop)
         pure [gap c step, .of (x.query step (.and (.not step.gap) fails)) fun a =>
-          verdictOf a (x.facts.exact && step.facts.exact) (x.facts.complete && step.facts.complete) replay s!"after {c}"]
+          verdictOf a (x.facts ++ step.facts).fit replay s!"after {c}"]
       | some (.error why) => throw (.undecided s!"the property has no encoding: {why} (in {c})")
       | none => throw (.undecided s!"the command {c} has no goal for the property"))
   let invariants := x.checked.map fun ch =>
@@ -758,7 +761,7 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
       | .error why => .decided (.undecided s!"the invariant has no encoding: {why}")
       | .ok fails =>
         let base := Obligation.of (initQuery fails) fun a =>
-          verdictOf a initFacts.exact initFacts.complete (fun M => pure (replayBase x M ch)) "of the initial records"
+          verdictOf a initFacts.fit (fun M => pure (replayBase x M ch)) "of the initial records"
         match afterSteps ch.ref x.st.commands with
         | .decided v => .decided v
         | .asks obligations => .asks (base :: obligations))
@@ -772,16 +775,16 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
         | .ok fails =>
           .asks [.of { vars := x.facts.vars ++ a.facts.vars,
                        asserts := x.facts.asserts ++ [x.holds] ++ a.facts.asserts ++ [a.answered, fails] } fun ans =>
-            verdictOf ans false (x.facts.complete && a.facts.complete) (replayAnswer x fs · q a e.name) s!"of {q}"])
+            verdictOf ans (x.facts ++ a.facts).fit (replayAnswer x fs · q a e.name) s!"of {q}"])
   let refs := dangling.map fun prop => (prop, afterSteps prop x.st.commands)
   let charts := chartProps.map fun (cc, k, prop) =>
     (prop, match x.chartQueries cc k with
       | .error why => .decided (.undecided s!"the invariant has no encoding: {why}")
-      | .ok queries => .asks (queries.map fun (step, q, exact, complete) =>
+      | .ok queries => .asks (queries.map fun (step, q, fit) =>
         let what := match step with
           | .start => "on starting the machine"
           | .edge i => s!"in the machine's microstep {i}"
-        .of q fun a => verdictOf a exact complete (replayChart x fs cc k step ·) what))
+        .of q fun a => verdictOf a fit (replayChart x fs cc k step ·) what))
   let pairs := x.pairs.map fun (pair, orders) =>
     (pairProperty x.st pair, match orders with
       | .error why => .decided (.undecided s!"the pair has no encoding: {why}")
@@ -790,17 +793,17 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
         let ask (goal : List Term) : Query := { vars := facts.vars, asserts := facts.asserts ++ [x.holds, o.within] ++ goal }
         .asks [.of (ask [o.gap]) (withinEncoding "a step of the pair can write a value that the encoding does not hold"),
                .of (ask [.not o.gap, o.differ]) fun a =>
-                 verdictOf a facts.exact facts.complete (replayPair x fs pair o ·) "between the two orders"])
+                 verdictOf a facts.fit (replayPair x fs pair o ·) "between the two orders"])
   -- A response: proved when `when` implies `expect` at every visible state, so no obligation ever opens; else a case
   -- in a service with no automation and no chart, which nothing internal can repair, misses it.
   let internal := !x.st.automations.isEmpty || !x.st.charts.isEmpty
   let unmet := "its when can hold without its expect at a visible state, and the service's automations or charts may meet its expect later; prove proves a response only when its when implies its expect"
   let responses := x.responses.map fun r =>
     let noEncoding {α : Type} (why : String) : Except Verdict α := throw (.undecided s!"the response has no encoding: {why}")
-    let case (exact complete : Bool) (command : Option (String × Step)) (a : Smt.Answer) : IO (Option Verdict) := do
+    let case (fit : Fit) (command : Option (String × Step)) (a : Smt.Answer) : IO (Option Verdict) := do
       if let .sat _ := a then
         if internal then return some (.undecided unmet)
-      verdictOf a exact complete (replayResponse x fs · r command) "of the response"
+      verdictOf a fit (replayResponse x fs · r command) "of the response"
     (r.ref, Plan.all <|
       (x.steps.map fun (c, _) => do
         let step ← encoded c
@@ -813,15 +816,15 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
         let held := Term.not heldFails
         let base := Obligation.of (initQuery initFails) fun a => do
           if let .sat _ := a then return some (.undecided "its when can hold without its expect in the initial records")
-          verdictOf a initFacts.exact initFacts.complete (fun _ => pure (.error "")) "of the initial records"
+          verdictOf a initFacts.fit (fun _ => pure (.error "")) "of the initial records"
         let steps ← x.steps.mapM fun (c, _) => do
           let step ← encoded c
           let .ok fails := failsOn step.post step.now r | noEncoding s!"after {c}"
           pure (Obligation.of (x.query step (.and held (.and (.not step.gap) fails)))
-            (case (x.facts.exact && step.facts.exact) (x.facts.complete && step.facts.complete) (some (c, step))))
+            (case (x.facts ++ step.facts).fit (some (c, step))))
         let tick := Obligation.of { vars := x.facts.vars ++ [("later", .int)],
                                     asserts := x.facts.asserts ++ [x.holds, held, .le clockT laterT, laterFails] }
-          (case x.facts.exact x.facts.complete none)
+          (case x.facts.fit none)
         pure ([base] ++ steps ++ [tick])])
   return invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ pairs ++ responses
 
