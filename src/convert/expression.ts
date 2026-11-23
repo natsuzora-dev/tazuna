@@ -224,7 +224,7 @@ class Conversion {
     if (!(flags & TypeFlags.Object)) return "other";
     const name = type.getSymbol()?.name;
     if (name === "Table") return "table";
-    if (name === "Bag" || name === "BagValue") return "bag";
+    if (name === "Bag") return "bag";
     if (name === "Emit") return "emit";
     const { checker } = this.source;
     if (checker.isArrayType(type) || checker.isTupleType(type)) {

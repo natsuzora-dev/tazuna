@@ -3,11 +3,10 @@ import { after, test } from "node:test";
 import fc from "fast-check";
 import type { Keys, ReadPart, Stored } from "../../src/cli/protocol.generated.ts";
 import { Converter } from "../../src/convert/program.ts";
-import { bagValues, NotOnly } from "../../src/data/bag.ts";
-import { decoded } from "../../src/data/collections.ts";
 import { type Json, objectOf } from "../../src/data/values.ts";
 import type { Expr } from "../../src/spec/ir.generated.ts";
 import { Lean } from "../unit/lean.ts";
+import { bagged, bagValues, NotOnly } from "./bag.ts";
 import { defined, entities, fixtures, keyOf, outside } from "./fixtures.ts";
 import { type RecordSource, recordsView } from "./records.ts";
 
@@ -114,7 +113,7 @@ function sourceOf(stored: readonly Stored[], reads: ReadPart[]): RecordSource {
       note(key === undefined ? { entity, field } : { entity, key, field });
       const row = stored.find((s) => s.entity === entity && s.key === key);
       const shape = entities[entity as keyof typeof entities].fields;
-      return row === undefined ? undefined : (decoded(objectOf(shape), row.value) as Record<string, unknown>)[field];
+      return row === undefined ? undefined : (bagged(objectOf(shape), row.value) as Record<string, unknown>)[field];
     },
   };
 }
@@ -147,7 +146,7 @@ for (const [i, { fixture, ir }] of converted.entries())
         };
         let ts: { readonly value?: Json } | { readonly issue: "thrown" | "notOnly" };
         try {
-          const value = jsonOf(fixture.f({ input: decoded(schema, json), records, createKey } as never));
+          const value = jsonOf(fixture.f({ input: bagged(schema, json), records, createKey } as never));
           ts = value === undefined ? {} : { value: JSON.parse(JSON.stringify(value)) as Json };
         } catch (error) {
           ts = { issue: error instanceof NotOnly ? "notOnly" : "thrown" };

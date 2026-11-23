@@ -1,10 +1,9 @@
 import { z } from "zod";
-import { BagValue, bagValues, type Marked, runsOf, type SortKey } from "./bag.ts";
-import { InternalError } from "./internalError.ts";
+import type { Marked } from "./bag.ts";
 import { type JsonSchema, jsonSchema } from "./jsonSchema.ts";
-import { type Collection, collectionOf, mark } from "./marks.ts";
+import { type Collection, mark } from "./marks.ts";
 import { fieldSchema, type SchemaNode, schemaNode } from "./schemaNode.ts";
-import { type DateLabel, date } from "./time.ts";
+import type { date } from "./time.ts";
 import { fits } from "./unionOptions.ts";
 import { canonicalJson, type Fields, type Json, plain, type Shape } from "./values.ts";
 
@@ -56,16 +55,6 @@ type SortKeyOf<E extends z.ZodObject> = {
 }[keyof E["shape"]] &
   string;
 
-/** Lean's SortKey.of: the key that orders an encoded value, as a TS SortKey, whose compareKeys orders it as Lean. */
-function encodedKey(json: unknown): SortKey | undefined {
-  if (typeof json === "number") return json;
-  return typeof json === "string" && date.safeParse(json).success ? (json as DateLabel) : undefined;
-}
-
-/** The key `key` of each element of a sortedBy array of `element`, read from its encoded value as Lean reads it. */
-const keyOf = (element: z.ZodType, key: string) => (row: unknown) =>
-  encodedKey((toJson(element, row) as Record<string, unknown> | null)?.[key]) as SortKey;
-
 /**
  * Returns an array schema sorted ascending by `key`, like Kotlin's `sortedBy`. tazuna sorts the values that the spec
  * produces, so `resolve` and `decide` do not sort. A value from outside out of key order is an error.
@@ -74,46 +63,6 @@ export const sortedBy = <E extends z.ZodObject, K extends SortKeyOf<E>>(
   element: E,
   key: K,
 ): CollectionSchema<E, "sortedBy"> => marked(element, z.check(() => {}) as never, { kind: "sortedBy", key });
-
-/** Returns the elements of a marked array that spec code made from Bags, or the value itself if it is no such array. */
-function unbagged(collection: Collection | undefined, value: unknown): unknown {
-  if (collection === undefined) return value;
-  const values = bagValues(value);
-  if (values !== undefined) return values;
-  return collection.kind === "sortedBy" && Array.isArray(value) ? value.flatMap((v) => bagValues(v) ?? [v]) : value;
-}
-
-/**
- * Returns a value that spec code made for `schema` with each Bag in a bag or set, and each Bag or run of Bags in a
- * sortedBy array, as an array in the order that it holds its values, so that Zod can encode it.
- */
-function arrayed(schema: z.ZodType, value: unknown): unknown {
-  const node = schemaNode(schema);
-  switch (node.type) {
-    case "array": {
-      const array = unbagged(collectionOf(schema), value);
-      return Array.isArray(array) ? array.map((v) => arrayed(node.element, v)) : array;
-    }
-    case "object":
-      if (!isRecord(value)) return value;
-      return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => {
-          const field = fieldSchema(node, k);
-          return [k, field === undefined ? v : arrayed(field, v)];
-        }),
-      );
-    case "union": {
-      const option = unionOption(node, value);
-      return option === undefined ? value : arrayed(option, value);
-    }
-    case "optional":
-    case "nullable":
-    case "default":
-      return value == null ? value : arrayed(node.inner, value);
-    default:
-      return value;
-  }
-}
 
 /**
  * Returns a value that spec code made for `schema` as JSON holds it, in the order it was built, or why a part does not
@@ -125,11 +74,11 @@ export function encoded(
   value: unknown,
 ): { readonly encoded: Json } | { readonly error: z.ZodError } {
   const issues: z.core.$ZodIssue[] = [];
-  const json = codecsEncoded(schema, arrayed(schema, value), [], issues);
+  const json = codecsEncoded(schema, value, [], issues);
   return issues.length === 0 ? { encoded: plain(json) } : { error: new z.ZodError(issues) };
 }
 
-/** toJson with each codec encoding as Zod does, which adds to `issues`, at `path`, what its part fails. */
+/** `value` as JSON holds it, each codec encoding as Zod does and adding to `issues`, at `path`, what its part fails. */
 function codecsEncoded(
   schema: z.ZodType,
   value: unknown,
@@ -181,10 +130,7 @@ function codecsEncoded(
   }
 }
 
-/** Returns a value of `schema` from its checked encoding, as spec code receives it. */
-export const decoded = (schema: z.ZodType, json: unknown): unknown => bagged(schema, fromJson(schema, json));
-
-/** Whether `arrayed` and `bagged` walk into the node. A collection under any other node is opaque. */
+/** Whether the run sorts the collections inside the node (Lean's Functions.sorting). Any other node is opaque. */
 export const sortsInside = (node: SchemaNode): boolean =>
   ["array", "object", "union", "optional", "nullable", "default"].includes(node.type);
 
@@ -192,8 +138,7 @@ const optionSchemas = new WeakMap<readonly z.ZodType[], readonly JsonSchema[]>()
 
 /**
  * Returns the option of a union that `value` takes by Lean's `fits`, read from the JSON Schema of each option: the
- * first that fits, if any. A plain union holds no codec, so the encoded value that `fits` reads differs from `value`
- * only by its Bags, which `fits` reads as arrays.
+ * first that fits, if any. A plain union holds no codec, so `fits` reads `value` as its encoding.
  */
 function unionOption(node: Extract<SchemaNode, { type: "union" }>, value: unknown): z.ZodType | undefined {
   const known = optionSchemas.get(node.options);
@@ -203,140 +148,8 @@ function unionOption(node: Extract<SchemaNode, { type: "union" }>, value: unknow
   return i < 0 ? undefined : node.options[i];
 }
 
-/**
- * Returns a value of `schema` that a parse took as JSON holds it: each codec at any depth encodes its part, and no check
- * or other transform runs.
- */
-export function toJson(schema: z.ZodType, value: unknown): unknown {
-  const node = schemaNode(schema);
-  switch (node.type) {
-    case "codec": {
-      const wire = node.encode(toJson(node.out, value));
-      if (wire === undefined) throw new InternalError("a codec did not encode a value that parse took");
-      return toJson(node.in, wire.value);
-    }
-    case "pipe":
-      return toJson(node.in, toJson(node.out, value));
-    case "array":
-      return Array.isArray(value) ? value.map((v) => toJson(node.element, v)) : value;
-    case "tuple":
-      if (!Array.isArray(value)) return value;
-      return value.map((v, i) => {
-        const item = node.items[i] ?? node.rest;
-        return item === undefined ? v : toJson(item, v);
-      });
-    case "object":
-      if (!isRecord(value)) return value;
-      return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => {
-          const field = fieldSchema(node, k);
-          return [k, field === undefined ? v : toJson(field, v)];
-        }),
-      );
-    case "record":
-      if (!isRecord(value)) return value;
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toJson(node.value, v)]));
-    case "union": {
-      const option = unionOption(node, value);
-      return option === undefined ? value : toJson(option, value);
-    }
-    case "intersection":
-      return toJson(node.right, toJson(node.left, value));
-    case "lazy":
-      return toJson(node.inner, value);
-    case "opaque":
-      return value == null || node.inner === undefined ? value : toJson(node.inner, value);
-    default:
-      return value == null ? value : toJson(node.inner, value);
-  }
-}
-
-/**
- * Returns a value of `schema` from the JSON that toJson wrote of it: the mirror of toJson, which runs only the decode
- * of each codec. The value was checked when it was parsed, so no check runs again.
- */
-function fromJson(schema: z.ZodType, json: unknown): unknown {
-  const node = schemaNode(schema);
-  switch (node.type) {
-    case "codec": {
-      const value = node.decode(fromJson(node.in, json));
-      if (value === undefined) throw new InternalError("a codec did not decode a checked encoding");
-      return fromJson(node.out, value.value);
-    }
-    case "pipe":
-      return fromJson(node.out, fromJson(node.in, json));
-    case "array":
-      return Array.isArray(json) ? json.map((v) => fromJson(node.element, v)) : json;
-    case "tuple":
-      if (!Array.isArray(json)) return json;
-      return json.map((v, i) => {
-        const item = node.items[i] ?? node.rest;
-        return item === undefined ? v : fromJson(item, v);
-      });
-    case "object":
-      if (!isRecord(json)) return json;
-      return Object.fromEntries(
-        Object.entries(json).map(([k, v]) => {
-          const field = fieldSchema(node, k);
-          return [k, field === undefined ? v : fromJson(field, v)];
-        }),
-      );
-    case "record":
-      if (!isRecord(json)) return json;
-      return Object.fromEntries(Object.entries(json).map(([k, v]) => [k, fromJson(node.value, v)]));
-    case "union": {
-      const option = unionOption(node, json);
-      return option === undefined ? json : fromJson(option, json);
-    }
-    case "intersection":
-      return fromJson(node.left, fromJson(node.right, json));
-    case "lazy":
-      return fromJson(node.inner, json);
-    case "opaque":
-      return json == null || node.inner === undefined ? json : fromJson(node.inner, json);
-    default:
-      return json == null ? json : fromJson(node.inner, json);
-  }
-}
-
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
-
-/**
- * Returns a decoded value whose collections the run sorted as spec code receives it: each bag and set as a Bag, and each
- * sortedBy array as Runs.
- */
-export function bagged(schema: z.ZodType, value: unknown): unknown {
-  const node = schemaNode(schema);
-  switch (node.type) {
-    case "array": {
-      if (!Array.isArray(value)) return value;
-      const items = value.map((v) => bagged(node.element, v));
-      const collection = collectionOf(schema);
-      if (collection === undefined) return items;
-      if (collection.kind !== "sortedBy") return new BagValue(() => items);
-      return runsOf(items, keyOf(node.element, collection.key)).map((run) => new BagValue(() => run));
-    }
-    case "object":
-      if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-      return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => {
-          const field = fieldSchema(node, k);
-          return [k, field === undefined ? v : bagged(field, v)];
-        }),
-      );
-    case "union": {
-      const option = unionOption(node, value);
-      return option === undefined ? value : bagged(option, value);
-    }
-    case "optional":
-    case "nullable":
-    case "default":
-      return value == null ? value : bagged(node.inner, value);
-    default:
-      return value;
-  }
-}
 
 /** Returns the default value of each field of the shape that declares one, in the order it was built. */
 export function defaultRow(shape: Shape): Fields {

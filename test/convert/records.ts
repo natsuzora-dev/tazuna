@@ -1,6 +1,6 @@
-import { BagValue } from "../../src/data/bag.ts";
 import type { Fields } from "../../src/data/values.ts";
 import type { AnyEntity } from "../../src/dsl/entity.ts";
+import { BagValue } from "./bag.ts";
 
 /** The only access to records, where each call is a read. A single entity's fields take no key. */
 export interface RecordSource {

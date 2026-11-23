@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { type Bag, BagValue, NotOnly } from "../../src/data/bag.ts";
-import { bag, bagged } from "../../src/data/collections.ts";
+import type { Bag } from "../../src/data/bag.ts";
+import { bag } from "../../src/data/collections.ts";
 import type { DateLabel } from "../../src/data/time.ts";
+import { BagValue, bagged, NotOnly } from "../convert/bag.ts";
 
 const bagOf = <T>(items: readonly T[]): Bag<T> => new BagValue(() => items);
 const numbers = (bag: Bag<number>) => bag.sortedBy((n) => n).map((run) => [run.min((n) => n), run.size]);

@@ -1,16 +1,15 @@
-import { BagValue } from "./bag.ts";
 import { sameJson } from "./values.ts";
 
 const isObject = (v: unknown): v is Readonly<Record<string, unknown>> =>
-  v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof BagValue);
+  v !== null && typeof v === "object" && !Array.isArray(v);
 
 /** Lean's Value.field?: a field that is undefined is absent, as JSON writes it. */
 const field = (v: unknown, key: string): unknown => (isObject(v) && Object.hasOwn(v, key) ? v[key] : undefined);
 
-/** Lean's typeNames, of a JSON value or of a value as spec code holds it, whose Bag is an array. */
+/** Lean's typeNames. */
 function typeNames(v: unknown): readonly string[] {
   if (v === null) return ["null"];
-  if (Array.isArray(v) || v instanceof BagValue) return ["array"];
+  if (Array.isArray(v)) return ["array"];
   switch (typeof v) {
     case "boolean":
       return ["boolean"];

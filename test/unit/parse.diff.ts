@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import fc from "fast-check";
 import { z } from "zod";
-import { bag, set, sortedBy, toJson } from "../../src/data/collections.ts";
+import { bag, set, sortedBy } from "../../src/data/collections.ts";
 import { objectSchema } from "../../src/data/jsonSchema.ts";
 import { date, duration, instant } from "../../src/data/time.ts";
 import { type Json, plain, type Shape, strictObjectOf } from "../../src/data/values.ts";
@@ -11,13 +11,13 @@ import { Lean } from "./lean.ts";
 const lean = new Lean();
 after(() => lean.close());
 
-/** What TS's parse gives for `value`: the value encoded again, Zod's issues, or a throw. */
+/** What TS's parse gives for `value`: the value, which no codec of the fixtures changes, Zod's issues, or a throw. */
 function parsedByZod(shape: Shape, value: Json): { value?: Json; issues?: Json; thrown: boolean } {
   const object = strictObjectOf(shape);
   try {
     const parsed = object.safeParse(value);
     return parsed.success
-      ? { value: plain(toJson(object, parsed.data)), thrown: false }
+      ? { value: plain(parsed.data), thrown: false }
       : { issues: plain(parsed.error.issues), thrown: false };
   } catch {
     return { thrown: true };
