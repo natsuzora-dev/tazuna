@@ -1,12 +1,12 @@
 {"time":0,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"A","title":"A"},"caller":{"service":"screens"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":0,"dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"A","title":"A","createdAt":0,"completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
-{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"A"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
+{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"A","at":0},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
 {"time":0,"dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"after":0},"caller":{"service":"todo"}}
 {"time":0,"dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"B","title":"A"},"caller":{"service":"screens"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"accepted"}}
 {"time":0,"dir":"out","type":"event","id":"taskAddedRecorded#2","name":"taskAddedRecorded","payload":{"id":"B","title":"A","createdAt":0,"completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#2"}
-{"time":0,"dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"B"},"resultOf":"addTask#2","after":["taskAddedRecorded#2"]}
+{"time":0,"dir":"out","type":"event","id":"taskAdded#2","name":"taskAdded","payload":{"taskId":"B","at":0},"resultOf":"addTask#2","after":["taskAddedRecorded#2"]}
 {"time":0,"dir":"out","type":"query","id":"calendar.nextBusinessDay#2","name":"calendar.nextBusinessDay","input":{"after":0},"caller":{"service":"todo"}}
 {"time":0,"dir":"in","type":"command","id":"changeDue#1","name":"changeDue","input":{"taskId":"A","dueAt":1},"caller":{"service":"screens"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#3","to":"changeDue#1","answer":{"result":"accepted"}}

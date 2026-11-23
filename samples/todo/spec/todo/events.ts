@@ -1,14 +1,15 @@
-import { ref } from "@natsuzora-dev/tazuna";
+import { instant, ref } from "@natsuzora-dev/tazuna";
 import { createEvent, deleteEvent, event, Settings, Task, updateEvent } from "./data.ts";
 
-export const taskAdded = event({ payload: { taskId: ref(Task) } });
+/** `at` is when todo changed the task, which orders the changes of one task, as they can arrive in any order. */
+export const taskAdded = event({ payload: { taskId: ref(Task), at: instant } });
 
 export const taskAddedRecorded = createEvent({
   entity: Task,
 });
 
 export const taskCompleted = event({
-  payload: { taskId: ref(Task) },
+  payload: { taskId: ref(Task), at: instant },
 });
 
 export const taskCompletedRecorded = updateEvent({
@@ -17,7 +18,7 @@ export const taskCompletedRecorded = updateEvent({
 });
 
 export const taskReopened = event({
-  payload: { taskId: ref(Task) },
+  payload: { taskId: ref(Task), at: instant },
 });
 
 export const taskReopenedRecorded = updateEvent({
@@ -25,7 +26,7 @@ export const taskReopenedRecorded = updateEvent({
   writes: ["completedAt", "remindAt"],
 });
 
-export const taskDeleted = event({ payload: { taskId: ref(Task) } });
+export const taskDeleted = event({ payload: { taskId: ref(Task), at: instant } });
 
 export const taskDeletedRecorded = deleteEvent({
   entity: Task,

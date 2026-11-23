@@ -1,3 +1,3 @@
 import { bounds } from "./data.ts";
 
-export const notifierBounds = bounds({ creates: { OpenTask: 3 } });
+export const notifierBounds = bounds({ creates: { TaskChange: 3, PermissionChoice: 2 } });

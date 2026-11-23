@@ -1,0 +1,5 @@
+{"time":0,"dir":"in","type":"event","id":"todo/taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"A","at":-8639999999967715}}
+{"time":0,"dir":"out","type":"event","id":"taskChangeRecorded#1","name":"taskChangeRecorded","payload":{"taskId":"A","at":-8639999999967715,"change":"opened"}}
+{"time":0,"dir":"out","type":"command","id":"device.requestNotificationPermission#1","name":"device.requestNotificationPermission","input":{},"caller":{"service":"notifier"}}
+{"time":0,"dir":"in","type":"event","id":"todo/taskCompleted#1","name":"todo.taskCompleted","payload":{"taskId":"A","at":-8639999999967715}}
+{"time":0,"dir":"out","type":"event","id":"taskChangeRecorded#2","name":"taskChangeRecorded","payload":{"taskId":"A","at":-8639999999967715,"change":"closed"}}

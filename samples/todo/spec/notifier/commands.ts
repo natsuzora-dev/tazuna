@@ -1,31 +1,28 @@
 import { emit } from "@natsuzora-dev/tazuna";
 import { z } from "zod";
-import { todo } from "../todo/contract.ts";
-import { command, NotificationPermission } from "./data.ts";
-import { notificationPermissionRecorded, openTaskForgotten, openTaskRecorded, tooManyWarned } from "./events.ts";
+import { command, PermissionChoice, TaskChange } from "./data.ts";
+import { permissionChoiceRecorded, taskChangeRecorded, tooManyWarned } from "./events.ts";
 
 export const warn = command({ callers: ["notifier"], input: { count: z.int() }, emits: [tooManyWarned] }).decide(
   ({ input }) => [emit(tooManyWarned, { count: input.count })],
 );
 
-export const recordOpenTask = command({
+export const recordTaskChange = command({
   callers: ["notifier"],
-  input: { taskId: todo.TaskId },
-  emits: [openTaskRecorded],
+  input: { taskId: TaskChange.fields.taskId, at: TaskChange.fields.at, change: TaskChange.fields.change },
+  emits: [taskChangeRecorded],
 }).decide(({ input, records }) =>
-  records.OpenTask.get(input.taskId) === undefined ? [emit(openTaskRecorded, { taskId: input.taskId })] : [],
+  records.TaskChange.get(input) === undefined
+    ? [emit(taskChangeRecorded, { taskId: input.taskId, at: input.at, change: input.change })]
+    : [],
 );
 
-export const forgetOpenTask = command({
+export const recordPermissionChoice = command({
   callers: ["notifier"],
-  input: { taskId: todo.TaskId },
-  emits: [openTaskForgotten],
+  input: { status: PermissionChoice.fields.status, at: PermissionChoice.fields.at },
+  emits: [permissionChoiceRecorded],
 }).decide(({ input, records }) =>
-  records.OpenTask.get(input.taskId) === undefined ? [] : [emit(openTaskForgotten, { taskId: input.taskId })],
+  records.PermissionChoice.get(input) === undefined
+    ? [emit(permissionChoiceRecorded, { status: input.status, at: input.at })]
+    : [],
 );
-
-export const recordNotificationPermission = command({
-  callers: ["notifier"],
-  input: { status: NotificationPermission.fields.status.unwrap().exclude(["undetermined"]) },
-  emits: [notificationPermissionRecorded],
-}).decide(({ input }) => [emit(notificationPermissionRecorded, { status: input.status })]);

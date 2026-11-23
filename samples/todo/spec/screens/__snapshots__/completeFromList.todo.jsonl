@@ -5,5 +5,5 @@
 {"time":1792890000000,"dir":"in","type":"command","id":"screens/todo.completeTask#1","name":"completeTask","input":{"taskId":"task-1"},"caller":{"service":"screens"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#3","to":"screens/todo.completeTask#1","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"taskCompletedRecorded#1","name":"taskCompletedRecorded","payload":{"id":"task-1","completedAt":1792890000000},"resultOf":"screens/todo.completeTask#1"}
-{"time":1792890000000,"dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1"},"resultOf":"screens/todo.completeTask#1","after":["taskCompletedRecorded#1"]}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1","at":1792890000000},"resultOf":"screens/todo.completeTask#1","after":["taskCompletedRecorded#1"]}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#4","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[]}}}

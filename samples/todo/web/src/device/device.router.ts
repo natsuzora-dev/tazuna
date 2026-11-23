@@ -11,6 +11,6 @@ export const deviceRouter = {
     .handler(({ input }) => answerRequest(input.id, input.accepted ? { ok: true } : unavailable)),
 
   reportNotificationPermission: os
-    .input(z.object({ granted: z.boolean() }))
-    .handler(({ input }) => onNotificationPermission(input.granted)),
+    .input(z.object({ granted: z.boolean(), at: z.int() }))
+    .handler(({ input }) => onNotificationPermission(input)),
 };

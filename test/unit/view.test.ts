@@ -34,7 +34,7 @@ test("The model that viewModel builds from samples/todo/spec holds, for each ser
         name: "notifier",
         description: "Notify the user about open tasks, with the notification permission that it requests",
         uses: ["device", "todo"],
-        counts: { automation: 6, command: 4, entity: 2, event: 4, machine: 2 },
+        counts: { automation: 6, command: 3, entity: 2, event: 3, machine: 2 },
       },
       {
         kind: "screens",
@@ -85,7 +85,7 @@ test("An entity in viewModel has its key, its unique, its invariant names, the t
     "completedAt int?",
   ]);
   assert.deepEqual(fields("todo", "Task")?.at(-1), "reminderDecision enum");
-  assert.deepEqual(fields("notifier", "OpenTask"), ["taskId string -> todo.Task"]);
+  assert.deepEqual(fields("notifier", "TaskChange"), ["taskId string -> todo.Task", "at int", "change enum"]);
   const { fields: _, ...task } = entity("todo", "Task") ?? {};
   assert.deepEqual(task, {
     key: ["id"],
@@ -183,8 +183,8 @@ test("A chart in viewModel has the state tree of its machine or screen, and the 
     ),
   );
   assert.deepEqual(chart("workload").slice(-3), [
+    "    sends warn onAccepted -> warned as sends.warn.onAccepted[0] in warning",
     "  warned",
-    "    event openTaskRecorded -> warned reenter as on.openTaskRecorded[0] in warned",
     "    after periodEnd -> quiet as after.periodEnd.onFired[0] in warned",
   ]);
   assert.ok(chart("workload").includes("    always [tooMany] -> warning as always[0] in quiet"));

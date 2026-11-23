@@ -1,9 +1,9 @@
 {"time":0,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"A","title":"A"},"caller":{"service":"screens"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
 {"time":0,"dir":"out","type":"event","id":"taskAddedRecorded#1","name":"taskAddedRecorded","payload":{"id":"A","title":"A","createdAt":0,"completedAt":null,"dueAt":null,"remindAt":null,"reminderDecision":"pending"},"resultOf":"addTask#1"}
-{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"A"},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
+{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"A","at":0},"resultOf":"addTask#1","after":["taskAddedRecorded#1"]}
 {"time":0,"dir":"out","type":"query","id":"calendar.nextBusinessDay#1","name":"calendar.nextBusinessDay","input":{"after":0},"caller":{"service":"todo"}}
 {"time":0,"dir":"in","type":"command","id":"deleteTask#1","name":"deleteTask","input":{"taskId":"A"},"caller":{"service":"screens"}}
 {"time":0,"dir":"out","type":"answer","id":"answer#2","to":"deleteTask#1","answer":{"result":"accepted"}}
 {"time":0,"dir":"out","type":"event","id":"taskDeletedRecorded#1","name":"taskDeletedRecorded","payload":{"id":"A"},"resultOf":"deleteTask#1"}
-{"time":0,"dir":"out","type":"event","id":"taskDeleted#1","name":"taskDeleted","payload":{"taskId":"A"},"resultOf":"deleteTask#1","after":["taskDeletedRecorded#1"]}
+{"time":0,"dir":"out","type":"event","id":"taskDeleted#1","name":"taskDeleted","payload":{"taskId":"A","at":0},"resultOf":"deleteTask#1","after":["taskDeletedRecorded#1"]}

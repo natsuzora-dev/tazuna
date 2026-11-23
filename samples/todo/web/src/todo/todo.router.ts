@@ -30,9 +30,10 @@ export const todoRouter = {
     .errors({ TASK_ALREADY_EXISTS })
     .handler(({ input: { taskId, title }, errors, context }) => {
       if (findTask(taskId) !== undefined) throw errors.TASK_ALREADY_EXISTS();
-      db.insert(taskTable).values({ id: taskId, title, createdAt: Date.now(), reminderDecision: "pending" }).run();
+      const at = Date.now();
+      db.insert(taskTable).values({ id: taskId, title, createdAt: at, reminderDecision: "pending" }).run();
       notifyChange();
-      publish({ name: "taskAdded", payload: { taskId } }, context.headers);
+      publish({ name: "taskAdded", payload: { taskId, at } }, context.headers);
       void decideReminderTime(taskId);
     }),
 
@@ -43,9 +44,10 @@ export const todoRouter = {
       const task = findTask(taskId);
       if (task === undefined) throw errors.TASK_NOT_FOUND();
       if (task.completedAt !== null) throw errors.ALREADY_COMPLETED();
-      db.update(taskTable).set({ completedAt: Date.now() }).where(eq(taskTable.id, taskId)).run();
+      const at = Date.now();
+      db.update(taskTable).set({ completedAt: at }).where(eq(taskTable.id, taskId)).run();
       notifyChange();
-      publish({ name: "taskCompleted", payload: { taskId } }, context.headers);
+      publish({ name: "taskCompleted", payload: { taskId, at } }, context.headers);
     }),
 
   reopenTask: command
@@ -60,7 +62,7 @@ export const todoRouter = {
         .where(eq(taskTable.id, taskId))
         .run();
       notifyChange();
-      publish({ name: "taskReopened", payload: { taskId } }, context.headers);
+      publish({ name: "taskReopened", payload: { taskId, at: Date.now() } }, context.headers);
     }),
 
   renameTask: command
@@ -80,7 +82,7 @@ export const todoRouter = {
       stopDecidingReminderTime(taskId);
       db.delete(taskTable).where(eq(taskTable.id, taskId)).run();
       notifyChange();
-      publish({ name: "taskDeleted", payload: { taskId } }, context.headers);
+      publish({ name: "taskDeleted", payload: { taskId, at: Date.now() } }, context.headers);
     }),
 
   changeDue: command

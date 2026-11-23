@@ -19,6 +19,8 @@ import { given, scenario } from "./data.ts";
 import { taskDetailScreen } from "./taskDetailScreen.ts";
 import { taskListScreen } from "./taskListScreen.ts";
 
+const start = parseInstant("2026-10-25T10:00:00+09:00");
+
 const milkRecord = {
   id: "task-1",
   title: "Buy milk",
@@ -40,7 +42,7 @@ const completedEggsRecord = {
 
 const givenTasks = (Task: readonly (typeof milkRecord | typeof completedEggsRecord)[]) =>
   given({
-    start: parseInstant("2026-10-25T10:00:00+09:00"),
+    start,
     records: {},
     peers: [
       run(todo, { Task, Settings: { shouldRemind: true } }),
@@ -497,7 +499,9 @@ export const closesDeletedTask = scenario({
     const { list, tasksReached } = openList(w);
     const { detailSub } = openTask(w, list);
     const del = w.client.as("screens").send(todo.deleteTask, { taskId: "task-1" });
-    const deleted = w.net.deliver(w.peer.todo.emit(todo.taskDeleted, { taskId: "task-1" }, { resultOf: del }));
+    const deleted = w.net.deliver(
+      w.peer.todo.emit(todo.taskDeleted, { taskId: "task-1", at: start }, { resultOf: del }),
+    );
     w.net.leaveInFlight(detailSub);
     w.net.leaveInFlight(del.answer(tasksReached));
     w.net.leaveInFlight(deleted.end(detailSub));
@@ -715,7 +719,9 @@ export const keepsDetailWhenOtherTaskDeleted = scenario({
   when: (w) => {
     const { tasksReached, detail, detailReached } = openDetail(w);
     const del = w.client.as("screens").send(todo.deleteTask, { taskId: "task-2" });
-    const deleted = w.net.deliver(w.peer.todo.emit(todo.taskDeleted, { taskId: "task-2" }, { resultOf: del }));
+    const deleted = w.net.deliver(
+      w.peer.todo.emit(todo.taskDeleted, { taskId: "task-2", at: start }, { resultOf: del }),
+    );
     const completing = w.user.operate(detail, "complete");
     const completingReached = w.net.deliver(completing.request(todo.completeTask));
     w.net.deliver(w.peer.todo.answer(completing.request(todo.completeTask), accepted()));

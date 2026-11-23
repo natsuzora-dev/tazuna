@@ -53,14 +53,19 @@ function seed(db: typeof Db.db, records: readonly GivenRecord[]): void {
           .values({ id: 1, shouldRemind: row["shouldRemind"] === true })
           .run();
         break;
-      case "OpenTask":
-        db.insert(schema.notifierOpenTasks)
-          .values({ taskId: String(row["taskId"]) })
+      case "TaskChange":
+        db.insert(schema.notifierTaskChanges)
+          .values({
+            taskId: String(row["taskId"]),
+            at: Number(row["at"]),
+            change: row["change"] as "opened" | "closed",
+          })
           .run();
         break;
-      case "NotificationPermission":
-        if (row["status"] === "granted" || row["status"] === "denied")
-          db.insert(schema.notifierNotificationPermission).values({ id: 1, status: row["status"] }).run();
+      case "PermissionChoice":
+        db.insert(schema.notifierPermissionChoices)
+          .values({ status: row["status"] as "granted" | "denied", at: Number(row["at"]) })
+          .run();
         break;
       default:
         throw new Error(`the app stores no ${entity} records`);
@@ -198,7 +203,7 @@ export function serverAdapter(service: "todo" | "notifier"): Adapter {
     receive(event) {
       const granted = toApp.permission(event.name);
       if (granted === undefined) app.notifier.onTodoEvent(toApp.todoEvent(event));
-      else app.notifier.onNotificationPermission(granted);
+      else app.notifier.onNotificationPermission({ granted, at: Number((event.payload as { at: unknown }).at) });
     },
   };
 }

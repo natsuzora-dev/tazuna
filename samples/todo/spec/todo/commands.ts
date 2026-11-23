@@ -33,7 +33,7 @@ export const addTask = command({
     remindAt: null,
     reminderDecision: "pending",
   }),
-  emit(taskAdded, { taskId: input.taskId }),
+  emit(taskAdded, { taskId: input.taskId, at: now }),
 ]);
 
 export const completeTask = command({
@@ -46,7 +46,7 @@ export const completeTask = command({
   },
 }).decide(({ input, now }) => [
   emit(taskCompletedRecorded, { id: input.taskId, completedAt: now }),
-  emit(taskCompleted, { taskId: input.taskId }),
+  emit(taskCompleted, { taskId: input.taskId, at: now }),
 ]);
 
 export const reopenTask = command({
@@ -64,7 +64,7 @@ export const reopenTask = command({
       // A reminder time that passed while the task was completed is dropped, so the reopened task is not reminded.
       remindAt: remindAt !== null && remindAt > now ? remindAt : null,
     }),
-    emit(taskReopened, { taskId: input.taskId }),
+    emit(taskReopened, { taskId: input.taskId, at: now }),
   ];
 });
 
@@ -78,9 +78,9 @@ export const deleteTask = command({
   callers: ["screens"],
   input: { taskId: ref(Task) },
   emits: [taskDeletedRecorded, taskDeleted],
-}).decide(({ input }) => [
+}).decide(({ input, now }) => [
   emit(taskDeletedRecorded, { id: input.taskId }),
-  emit(taskDeleted, { taskId: input.taskId }),
+  emit(taskDeleted, { taskId: input.taskId, at: now }),
 ]);
 
 export const changeDue = command({

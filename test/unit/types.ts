@@ -1480,10 +1480,10 @@ scenarioOfTodo({
     const adding = w.client.as("client").send(todoPeer.addTask, { taskId: "task-1", title: "Buy milk" });
     const asking = adding.request(devicePeer.requestNotificationPermission);
     w.net.deliver(asking);
-    w.peer.device.emit(devicePeer.notificationPermissionGranted, {}, { resultOf: asking });
+    w.peer.device.emit(devicePeer.notificationPermissionGranted, { at: 0 }, { resultOf: asking });
     const asked = adding.request(calendarPeer.nextBusinessDay);
     // @ts-expect-error a query has no result events
-    w.peer.device.emit(devicePeer.notificationPermissionGranted, {}, { resultOf: asked });
+    w.peer.device.emit(devicePeer.notificationPermissionGranted, { at: 0 }, { resultOf: asked });
     return {};
   },
   then: () => [],

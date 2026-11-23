@@ -135,7 +135,7 @@ test("A peer's line names the message it states; a deliver line names it too, an
     const sent = w.peer.calendar.send(todo.addTask, { taskId: "task-1", title: "Buy milk" });
     const reached = w.net.deliver(sent);
     w.net.leaveInFlight(reached.answer(sent));
-    const told = w.peer.device.emit(device.notificationPermissionGranted, {}, { resultOf: null });
+    const told = w.peer.device.emit(device.notificationPermissionGranted, { at: 0 }, { resultOf: null });
     w.net.deliver(told.to(todo));
     const watching = w.startup.subscription(todo.tasks);
     w.net.lose(reached.end(watching));
@@ -147,7 +147,7 @@ test("A peer's line names the message it states; a deliver line names it too, an
       type: "emit",
       peer: "device",
       event: { service: "device", name: "notificationPermissionGranted" },
-      payload: { value: {}, holes: [] },
+      payload: { value: { at: 0 }, holes: [] },
     },
     {
       type: "deliver",

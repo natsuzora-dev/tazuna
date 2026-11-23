@@ -1,19 +1,14 @@
 import { z } from "zod";
-import { createEvent, deleteEvent, event, NotificationPermission, OpenTask, updateEvent } from "./data.ts";
+import { createEvent, event, PermissionChoice, TaskChange } from "./data.ts";
 
 export const tooManyWarned = event({
   payload: { count: z.int() },
 });
 
-export const openTaskRecorded = createEvent({
-  entity: OpenTask,
+export const taskChangeRecorded = createEvent({
+  entity: TaskChange,
 });
 
-export const openTaskForgotten = deleteEvent({
-  entity: OpenTask,
-});
-
-export const notificationPermissionRecorded = updateEvent({
-  entity: NotificationPermission,
-  writes: ["status"],
+export const permissionChoiceRecorded = createEvent({
+  entity: PermissionChoice,
 });

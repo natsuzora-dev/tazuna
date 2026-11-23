@@ -7,12 +7,12 @@
 {"time":1792890000000,"dir":"in","type":"command","id":"screens/todo.completeTask#2","name":"completeTask","input":{"taskId":"task-1"},"caller":{"service":"screens"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#4","to":"screens/todo.completeTask#2","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"taskCompletedRecorded#1","name":"taskCompletedRecorded","payload":{"id":"task-1","completedAt":1792890000000},"resultOf":"screens/todo.completeTask#2"}
-{"time":1792890000000,"dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1"},"resultOf":"screens/todo.completeTask#2","after":["taskCompletedRecorded#1"]}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskCompleted#1","name":"taskCompleted","payload":{"taskId":"task-1","at":1792890000000},"resultOf":"screens/todo.completeTask#2","after":["taskCompletedRecorded#1"]}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#5","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[]}}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#6","to":"screens/todo.taskDetail#1","answer":{"result":"fulfilled","output":{"task":{"title":"Buy milk","isCompleted":true,"dueAt":1793005200000,"createdAt":1792882800000,"remindAt":1793005200000}}}}
 {"time":1792890000000,"dir":"in","type":"command","id":"screens/todo.reopenTask#2","name":"reopenTask","input":{"taskId":"task-1"},"caller":{"service":"screens"}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#7","to":"screens/todo.reopenTask#2","answer":{"result":"accepted"}}
 {"time":1792890000000,"dir":"out","type":"event","id":"taskReopenedRecorded#1","name":"taskReopenedRecorded","payload":{"id":"task-1","completedAt":null,"remindAt":1793005200000},"resultOf":"screens/todo.reopenTask#2"}
-{"time":1792890000000,"dir":"out","type":"event","id":"taskReopened#1","name":"taskReopened","payload":{"taskId":"task-1"},"resultOf":"screens/todo.reopenTask#2","after":["taskReopenedRecorded#1"]}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskReopened#1","name":"taskReopened","payload":{"taskId":"task-1","at":1792890000000},"resultOf":"screens/todo.reopenTask#2","after":["taskReopenedRecorded#1"]}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#8","to":"screens/todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"task-1","title":"Buy milk","dueAt":1793005200000,"completedAt":null}]}}}
 {"time":1792890000000,"dir":"out","type":"answer","id":"answer#9","to":"screens/todo.taskDetail#1","answer":{"result":"fulfilled","output":{"task":{"title":"Buy milk","isCompleted":false,"dueAt":1793005200000,"createdAt":1792882800000,"remindAt":1793005200000}}}}

@@ -68,7 +68,7 @@ export const completeTwice = scenario({
   },
   then: ({ first, second }) => [
     answered(first, accepted()),
-    emitted(first, [eventOf(taskCompleted, { taskId: "task-1" })]),
+    emitted(first, [eventOf(taskCompleted, { taskId: "task-1", at: parseInstant("2026-10-25T10:01:00+09:00") })]),
     answered(second, rejected("requires", "notCompleted")),
     emitted(second, []),
   ],
@@ -162,7 +162,7 @@ export const reopenCompleted = scenario({
   },
   then: ({ reopen, open }) => [
     answered(reopen, accepted()),
-    emitted(reopen, [eventOf(taskReopened, { taskId: "task-1" })]),
+    emitted(reopen, [eventOf(taskReopened, { taskId: "task-1", at: parseInstant("2026-10-25T10:01:00+09:00") })]),
     answered(open, fulfilled({ tasks: [milkRow] })),
   ],
 });
@@ -224,7 +224,7 @@ export const deletesTask = scenario({
     return { del, all, detail };
   },
   then: ({ del, all, detail }) => [
-    emitted(del, [eventOf(taskDeleted, { taskId: "task-1" })]),
+    emitted(del, [eventOf(taskDeleted, { taskId: "task-1", at: parseInstant("2026-10-25T10:00:00+09:00") })]),
     answered(all, fulfilled({ tasks: [] })),
     answered(detail, fulfilled({ task: null })),
   ],
@@ -349,7 +349,7 @@ export const completeRedelivered = scenario({
   },
   then: ({ first, again }) => [
     answered(first, accepted()),
-    emitted(first, [eventOf(taskCompleted, { taskId: "task-1" })]),
+    emitted(first, [eventOf(taskCompleted, { taskId: "task-1", at: parseInstant("2026-10-25T10:00:00+09:00") })]),
     answered(again, accepted()),
     emitted(again, []),
   ],

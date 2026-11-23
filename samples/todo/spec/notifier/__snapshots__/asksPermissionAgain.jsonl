@@ -1,5 +1,5 @@
-{"time":1792890000000,"dir":"in","type":"event","id":"todo/taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"task-1"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"openTaskRecorded#1","name":"openTaskRecorded","payload":{"taskId":"task-1"}}
+{"time":1792890000000,"dir":"in","type":"event","id":"todo/taskAdded#1","name":"todo.taskAdded","payload":{"taskId":"task-1","at":1792890000000}}
+{"time":1792890000000,"dir":"out","type":"event","id":"taskChangeRecorded#1","name":"taskChangeRecorded","payload":{"taskId":"task-1","at":1792890000000,"change":"opened"}}
 {"time":1792890000000,"dir":"out","type":"command","id":"device.requestNotificationPermission#1","name":"device.requestNotificationPermission","input":{},"caller":{"service":"notifier"}}
 {"time":1792890000000,"dir":"in","type":"answer","id":"device/answer#1","to":"device.requestNotificationPermission#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":1792890060000,"dir":"out","type":"command","id":"device.requestNotificationPermission#2","name":"device.requestNotificationPermission","input":{},"caller":{"service":"notifier"}}
@@ -9,11 +9,11 @@
 {"time":1792890120000,"dir":"in","type":"time","id":"time#2"}
 {"time":1792890120000,"dir":"in","type":"answer","id":"device/answer#3","to":"device.requestNotificationPermission#3","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
 {"time":1792890180000,"dir":"in","type":"time","id":"time#3"}
-{"time":1792890180000,"dir":"in","type":"event","id":"todo/taskAdded#2","name":"todo.taskAdded","payload":{"taskId":"task-2"}}
-{"time":1792890180000,"dir":"out","type":"event","id":"openTaskRecorded#2","name":"openTaskRecorded","payload":{"taskId":"task-2"}}
+{"time":1792890180000,"dir":"in","type":"event","id":"todo/taskAdded#2","name":"todo.taskAdded","payload":{"taskId":"task-2","at":1792890180000}}
+{"time":1792890180000,"dir":"out","type":"event","id":"taskChangeRecorded#2","name":"taskChangeRecorded","payload":{"taskId":"task-2","at":1792890180000,"change":"opened"}}
 {"time":1792890180000,"dir":"out","type":"command","id":"device.requestNotificationPermission#4","name":"device.requestNotificationPermission","input":{},"caller":{"service":"notifier"}}
 {"time":1792890180000,"dir":"in","type":"answer","id":"device/answer#4","to":"device.requestNotificationPermission#4","answer":{"result":"accepted"}}
-{"time":1792890180000,"dir":"in","type":"event","id":"device/notificationPermissionGranted#1","name":"device.notificationPermissionGranted","payload":{},"resultOf":"device.requestNotificationPermission#4"}
-{"time":1792890180000,"dir":"out","type":"event","id":"notificationPermissionRecorded#1","name":"notificationPermissionRecorded","payload":{"status":"granted"}}
-{"time":1792890180000,"dir":"in","type":"event","id":"todo/taskAdded#3","name":"todo.taskAdded","payload":{"taskId":"task-3"}}
-{"time":1792890180000,"dir":"out","type":"event","id":"openTaskRecorded#3","name":"openTaskRecorded","payload":{"taskId":"task-3"}}
+{"time":1792890180000,"dir":"in","type":"event","id":"device/notificationPermissionGranted#1","name":"device.notificationPermissionGranted","payload":{"at":1792890180000},"resultOf":"device.requestNotificationPermission#4"}
+{"time":1792890180000,"dir":"out","type":"event","id":"permissionChoiceRecorded#1","name":"permissionChoiceRecorded","payload":{"status":"granted","at":1792890180000}}
+{"time":1792890180000,"dir":"in","type":"event","id":"todo/taskAdded#3","name":"todo.taskAdded","payload":{"taskId":"task-3","at":1792890180000}}
+{"time":1792890180000,"dir":"out","type":"event","id":"taskChangeRecorded#3","name":"taskChangeRecorded","payload":{"taskId":"task-3","at":1792890180000,"change":"opened"}}

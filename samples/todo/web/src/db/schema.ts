@@ -1,5 +1,5 @@
 import type { ORPCErrorJSON } from "@orpc/client";
-import { customType, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { customType, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 const instant = customType<{ data: number; driverData: string }>({
   dataType: () => "text",
@@ -30,11 +30,14 @@ export const commandAnswers = sqliteTable("command_answers", {
   answer: text({ mode: "json" }).$type<StoredAnswer>().notNull(),
 });
 
-export const notifierOpenTasks = sqliteTable("notifier_open_tasks", { taskId: text().primaryKey() });
+export const notifierTaskChanges = sqliteTable(
+  "notifier_task_changes",
+  { taskId: text().notNull(), at: instant().notNull(), change: text({ enum: ["opened", "closed"] }).notNull() },
+  (t) => [primaryKey({ columns: [t.taskId, t.at, t.change] })],
+);
 
-export const notifierNotificationPermission = sqliteTable("notifier_notification_permission", {
-  id: integer().primaryKey(),
-  status: text({ enum: ["granted", "denied"] }).notNull(),
-});
-
-export const notifierReceivedEvents = sqliteTable("notifier_received_events", { id: text().primaryKey() });
+export const notifierPermissionChoices = sqliteTable(
+  "notifier_permission_choices",
+  { status: text({ enum: ["granted", "denied"] }).notNull(), at: instant().notNull() },
+  (t) => [primaryKey({ columns: [t.status, t.at] })],
+);

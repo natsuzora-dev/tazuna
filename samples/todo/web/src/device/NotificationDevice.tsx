@@ -18,8 +18,9 @@ function noticeText(notice: Notice): string {
 const subscribeDeviceRequests = () =>
   client.device.deviceRequests(undefined, { context: { retry: Number.POSITIVE_INFINITY } });
 
+// The time of the choice orders the reports, which can reach notifier in any order.
 const report = (permission: "granted" | "denied") =>
-  client.device.reportNotificationPermission({ granted: permission === "granted" });
+  client.device.reportNotificationPermission({ granted: permission === "granted", at: Date.now() });
 
 export function NotificationDevice() {
   const [isSupported, setIsSupported] = useState(false);

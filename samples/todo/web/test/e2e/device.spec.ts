@@ -25,13 +25,13 @@ async function playDevice(
   held.whenHeld({
     onNotificationPermission: (call) => {
       const resultOf = askingPermission.shift();
-      const name = toSpec.permission(call.input);
+      const name = toSpec.permission(call.input.granted);
       const event: Extract<UntimedTraceLine, { type: "event" }> = {
         dir: "out",
         type: "event",
         id: lineId(name),
         name,
-        payload: {},
+        payload: { at: call.input.at },
       };
       record(resultOf === undefined ? event : { ...event, resultOf });
     },
