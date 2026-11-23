@@ -185,12 +185,12 @@ def nextNumber (inputs : List TraceLine) (name : String) : Nat :=
   inputs.countP (fun l => (l.body.id.splitOn "#").head? == some name) + 1
 
 /--
-An input that the search may take at a state: a line, or a line that a model of a query gives, with the target the
-query seeks if it seeks one, or the target whose query the encoding could not build, and why.
+An input that the search may take at a state: a line, or a line that a model of the first satisfiable of some queries
+gives, with the target the queries seek if they seek one, or the target whose query the encoding could not build, and why.
 -/
 inductive Want where
   | line (l : TraceLine)
-  | solve (q : Query) (line : Model → TraceLine) (seeks : Option Uncovered)
+  | solve (qs : List Query) (line : Model → TraceLine) (seeks : Option Uncovered)
   | broken (seeks : Uncovered) (why : String)
 
 /-- The query of `facts` with `goal`. -/
@@ -317,7 +317,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
       | .ok a =>
         let facts := a.facts ++ fromOutside st a.caller
         wants := wants ++ mine.filterMap fun t =>
-          (answerGoal a t).map fun g => .solve (queryOf facts g) (line a.input a.caller) (some t)
+          (answerGoal a t).map fun g => .solve [queryOf facts g] (line a.input a.caller) (some t)
     else
       let (input, inputFacts) := inputOf st name "in"
       let (caller, callerFacts) := callerVars "in.caller"
@@ -325,9 +325,32 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
       | .error why => wants := wants ++ all.map (.broken · s!"the command has no encoding: {why}")
       | .ok step =>
         let facts := inputFacts ++ callerFacts ++ fromOutside st caller ++ step.facts
+        -- An accepting path seeks a new record first: a key that no record holds, so that later inputs meet several
+        -- records. The solver otherwise tends to pick an existing record's key, which updates it. A path with ref inputs
+        -- instead tries each live record for each ref, and no live record at all only when every ref may be nullish.
+        let refFields := ((st.requirements.lookup name).map (·.refs)).getD []
+        let inputFields := propertiesWith ((st.schemaOf (.input (st.ref name))).getD (.obj []))
+        let mayBeNullish (field : String) := match inputFields.find? (·.1 == field) with
+          | some (_, s, required) => !required || s.field? "x-tazuna-nullable" == some (.bool true)
+          | none => true
+        let pinned : List (List Term × Bool) := refFields.filterMap fun (field, target) =>
+          match input.lookup field, pre.keyed.lookup target.name with
+          | some (.scalar v), some slots =>
+            let live := slots.filterMap fun sl => match sl.live, sl.key with
+              | .lit (.bool true), .text k => some (.eq (.strOf v) k)
+              | _, _ => none
+            some (live, mayBeNullish field || slots.any fun sl => !(sl.live matches .lit _))
+          | _, _ => none
+        let pins := pinned.flatMap (·.1)
+        let noRecord := if pinned.all (·.2) then [Term.not (disj pins)] else []
+        let creates := disj (step.used.flatMap fun (e, post) =>
+          (((used.lookup e).getD []).zip post).filterMap fun (u, p) => if u == ff then some p else none)
         wants := wants ++
-          mine.filterMap (fun t => (stepGoal step t).map fun g => .solve (queryOf facts g) (line input caller) (some t)) ++
-          (advancing step).map fun g => .solve (queryOf facts g) (line input caller) none
+          mine.filterMap (fun t => (stepGoal step t).map fun g => .solve [queryOf facts g] (line input caller) (some t)) ++
+          (advancing step).flatMap fun g =>
+            if pins.isEmpty then
+              [.solve ((if creates == ff then [] else [queryOf facts (.and g creates)]) ++ [queryOf facts g]) (line input caller) none]
+            else (pins ++ noRecord).map fun pin => .solve [queryOf facts (.and g pin)] (line input caller) none
   -- Answers to the service's requests that wait: an output within the schema, and each rejection the target may give.
   for pd in s.pending.filter (!·.stale) do
     let target := pd.activity.ref
@@ -345,7 +368,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
           | some i => offerGoals fs st s i slot output
           | none => pure []
         | _ => pure []
-      wants := wants ++ (tt :: opens).map fun g => .solve (queryOf facts (.and promise g)) line none
+      wants := wants ++ (tt :: opens).map fun g => .solve [queryOf facts (.and promise g)] line none
     else wants := wants ++ [.line (answerLine (if query then .fulfilled (.obj []) else .accepted none))]
     for kind in (st.structure.rejectionKinds st.service target).filter (!·.blamesSender) do
       let reasons := if kind == .requires then (st.structure.rejectionReasons target).map some else [none]
@@ -369,7 +392,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
           | .ok step => goals := goals ++ (advancing step).map fun g => (base ++ step.facts, conj [r.fires, r.valid, g])
           | .error _ => goals := goals ++ [(base, r.fires)]
         else goals := goals ++ [(base, r.fires)]
-    wants := wants ++ goals.map fun (f, g) => .solve (queryOf f g) line none
+    wants := wants ++ goals.map fun (f, g) => .solve [queryOf f g] line none
   -- Operations of the open screens: each offered payload, or any payload within the control's schema.
   for resource in s.stack.eraseDups do
     let .ok ops ← operationsOf fs st s resource | continue
@@ -382,7 +405,7 @@ def Search.wants (x : Search) (fs : Functions ReplayM) (n : Node) (open_ : List 
       | some ps => wants := wants ++ ps.map (.line ∘ line)
       | none =>
         let (payload, facts) := objectOf st (.control (st.ref op.screen) op.control) "op"
-        wants := wants ++ [.solve (queryOf facts tt) (fun M => line (.obj (SJson.concFields M payload))) none]
+        wants := wants ++ [.solve [queryOf facts tt] (fun M => line (.obj (SJson.concFields M payload))) none]
   -- A restart of the service process, which keeps the durable state.
   wants := wants ++ [.line { time := s.now, after := none, created := none, body := .restart .in s!"restart#{nextNumber n.inputs "restart"}" }]
   -- Time: the clock moves to the next deadline.
@@ -443,7 +466,7 @@ def Search.run (x : Search) : SolveM Found := do
       seen := seen.insert fp ()
       let (wants, _) ← (x.wants fs n open_).run n.collect
       layer := layer ++ [(n, wants)]
-    let queries := layer.flatMap fun (_, ws) => ws.filterMap fun | .solve q _ _ => some q | _ => none
+    let queries := layer.flatMap fun (_, ws) => ws.flatMap fun | .solve qs _ _ => qs | _ => []
     let answers ← solveAll queries
     let mut k := 0
     let mut next := []
@@ -452,13 +475,13 @@ def Search.run (x : Search) : SolveM Found := do
       for w in wants do
         let line? := match w with
           | .line l => some l
-          | .solve _ line _ => match answers[k]? with
-            | some (.sat values) => some (line (Smt.Answer.model values))
+          | .solve qs line _ => ((answers.drop k).take qs.length).findSome? fun
+            | Smt.Answer.sat values => some (line (Smt.Answer.model values))
             | _ => none
           | .broken .. => none
         if let .solve _ _ (some t) := w then found := { found with sought := found.sought ++ [t] }
         if let .broken t why := w then found := { found with broken := found.broken ++ [(t, why)] }
-        if w matches .solve .. then k := k + 1
+        if let .solve qs _ _ := w then k := k + qs.length
         let some l := line? | continue
         if tried.contains l then continue
         tried := tried ++ [l]
