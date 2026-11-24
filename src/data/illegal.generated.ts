@@ -192,6 +192,18 @@ export type Illegal =
       readonly data: {
         readonly path: readonly string[];
       };
+    }
+  /**
+   * The bound at `path` of the `bounds()` of `service`, `creates` and an entity or `items`, is no count: a whole number,
+   * zero or more. `check` reports none exactly when every bound is one (`Checked.boundsCounts`).
+   */
+  | {
+      readonly kind: "Illegal.inexactBound";
+      readonly definition: null;
+      readonly data: {
+        readonly service: string;
+        readonly path: readonly string[];
+      };
     };
 
 export const illegalKinds = [
@@ -211,4 +223,5 @@ export const illegalKinds = [
   "Illegal.unorderedSortKey",
   "Illegal.defaultedMapKey",
   "Illegal.ambiguousUnion",
+  "Illegal.inexactBound",
 ] as const;

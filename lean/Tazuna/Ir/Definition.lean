@@ -483,14 +483,17 @@ namespace Tazuna.Ir
 
 /--
 The `bounds()` of the service `service`: the most records of each of its keyed entities that prove creates, keys never
-reused, and the most items of each array or Bag that an input, payload or answer holds in prove and generate, the default
-when none.
+reused, and the most items of each array or Bag that an input, payload or answer holds in prove and generate, absent for
+the default. A bound is null when it is no safe integer.
 -/
 structure Bounds where
   service : String
-  creates : List (String × Nat)
-  items : Option Nat
+  creates : List (String × Option Int)
+  items : Option (Option Int)
 deriving Repr, Inhabited
+
+/-- Whether a written bound is a count: a whole number, zero or more. -/
+def Bounds.isCount (n : Option Int) : Bool := n.any (0 ≤ ·)
 
 /--
 The `items` bound of a service without one: two items, the fewest in which an array's order and a repeated value show,
@@ -500,12 +503,12 @@ def defaultItems : Nat := 2
 
 /-- The creates bound of each entity of the service `service`; none when it has no `bounds()`. -/
 def createsOf (bounds : List Bounds) (service : String) : List (String × Nat) :=
-  ((bounds.find? (·.service == service)).map (·.creates)).getD []
+  ((bounds.find? (·.service == service)).map fun b => b.creates.map fun (e, n) => (e, (n.getD 0).toNat)).getD []
 
 /-- The `items` bound of the service `service`. -/
 def itemsOf (bounds : List Bounds) (service : String) : Nat :=
-  ((bounds.find? (·.service == service)).bind (·.items)).getD defaultItems
+  ((bounds.find? (·.service == service)).bind (·.items) |>.map (·.getD 0 |>.toNat)).getD defaultItems
 
-derive_wire Bounds
+derive_wire Bounds skip_serializing_none
 
 end Tazuna.Ir

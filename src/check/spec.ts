@@ -60,6 +60,11 @@ function placeOfIllegal(spec: Spec, illegal: Illegal): Place {
       if (contract === undefined) throw new InternalError(`no contract of ${illegal.data.contract}`);
       return contract.place;
     }
+    case "Illegal.inexactBound": {
+      const place = spec.bounds.get(illegal.data.service);
+      if (place === undefined) throw new InternalError(`no bounds() of ${illegal.data.service}`);
+      return place;
+    }
     case "Illegal.automationCycle":
     case "Illegal.missingParent":
     case "Illegal.ownQuery":

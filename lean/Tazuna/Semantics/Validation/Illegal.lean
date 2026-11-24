@@ -96,6 +96,11 @@ inductive Illegal where
   reports none exactly when every such union tells its options apart (`Checked.unionsApart`).
   -/
   | ambiguousUnion (definition : Ir.Ref) (path : List String)
+  /--
+  The bound at `path` of the `bounds()` of `service`, `creates` and an entity or `items`, is no count: a whole number,
+  zero or more. `check` reports none exactly when every bound is one (`Checked.boundsCounts`).
+  -/
+  | inexactBound (service : String) (path : List String)
 
 derive_group Illegal
 

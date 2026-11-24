@@ -20,12 +20,7 @@ export const boundsDefiner =
   (owner: ServiceDefinition) =>
   (options: BoundsOptions<Entities>): BoundsOptions<Entities> => {
     const creates: Readonly<Record<string, number>> = options.creates;
-    for (const [entity, n] of Object.entries(creates))
-      if (!Number.isInteger(n) || n < 0)
-        throw new RangeError(`bounds() of ${owner.name}: creates.${entity} ${n} is not a non-negative integer`);
     const { items } = options;
-    if (items !== undefined && (!Number.isInteger(items) || items < 0))
-      throw new RangeError(`bounds() of ${owner.name}: items ${items} is not a non-negative integer`);
     const defined = Object.freeze({
       creates: Object.freeze({ ...creates }),
       ...(items === undefined ? {} : { items }),

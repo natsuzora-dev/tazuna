@@ -14,8 +14,13 @@ def inexactWithins (s : Structure) : List Illegal :=
     | .entity e => (e.responses.filter (!·.isDuration)).map fun r => .inexactWithin d.ref r.name
     | _ => []
 
+def inexactBounds (s : Structure) : List Illegal :=
+  s.bounds.flatMap fun b =>
+    (b.creates.filter (!Bounds.isCount ·.2)).map (fun (e, _) => .inexactBound b.service ["creates", e]) ++
+      if b.items.all Bounds.isCount then [] else [.inexactBound b.service ["items"]]
+
 def check (s : Structure) : List Illegal :=
   Automations.check s ++ Charts.check s ++ Commands.check s ++ Contracts.check s ++ Schemas.check s ++
-    inexactWithins s
+    inexactWithins s ++ inexactBounds s
 
 end Tazuna.Semantics.Validation

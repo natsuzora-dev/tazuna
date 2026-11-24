@@ -1,0 +1,3 @@
+{"kind":"Illegal.inexactBound","definition":null,"data":{"service":"todo","path":["creates","Task"]},"location":{"file":"todo/todo.ts","line":12}}
+{"kind":"Illegal.inexactBound","definition":null,"data":{"service":"todo","path":["creates","Note"]},"location":{"file":"todo/todo.ts","line":12}}
+{"kind":"Illegal.inexactBound","definition":null,"data":{"service":"todo","path":["items"]},"location":{"file":"todo/todo.ts","line":12}}

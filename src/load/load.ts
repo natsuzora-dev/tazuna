@@ -18,7 +18,7 @@ import {
 import type { Entities } from "../dsl/entity.ts";
 import { contractService, definerService, isContract } from "../dsl/service.ts";
 import { isScenarioDefinition, type ScenarioDefinition, scenarioService } from "../scenario/define.ts";
-import type { Structure } from "../spec/structure.generated.ts";
+import type { Bounds, Structure } from "../spec/structure.generated.ts";
 import { type DefinitionStructure, unconverted } from "../spec/structure.ts";
 import { opaqueCollections } from "./collections.ts";
 import type { Found } from "./found.ts";
@@ -59,6 +59,8 @@ export interface LoadedSpec {
   readonly imports: readonly ServiceImport[];
   readonly names: ReadonlyMap<unknown, Named<Definition>>;
   readonly services: ReadonlyMap<string, { readonly definition: ServiceDefinition; readonly place: Place }>;
+  /** The place of each service's `bounds()` call. */
+  readonly bounds: ReadonlyMap<string, Place>;
 }
 
 /** A loaded spec without Malformed violations, with its structure. */
@@ -74,6 +76,18 @@ export type Loaded =
       readonly spec: LoadedSpec;
       readonly malformed: readonly [Found<Malformed>, ...Found<Malformed>[]];
     };
+
+/** A bound as Lean reads it: null when it is no safe integer, which Lean's check reports (Illegal.inexactBound). */
+const written = (n: number): number | null => (Number.isSafeInteger(n) ? n : null);
+
+function boundsOf(service: string, { creates, items }: BoundsOptions<Entities>): Bounds {
+  const counts: Readonly<Record<string, number>> = creates;
+  return {
+    service,
+    creates: Object.fromEntries(Object.entries(counts).map(([entity, n]) => [entity, written(n)])),
+    ...(items === undefined ? {} : { items: written(items) }),
+  };
+}
 
 const skippedFolders = new Set(["__snapshots__", "node_modules"]);
 
@@ -258,13 +272,13 @@ export async function loadSpec(root: string): Promise<Loaded> {
     }
     return [{ name, service, place, definition: { schema, values: value as Constants["values"] } }];
   });
-  const bounds = new Map<string, BoundsOptions<Entities>>();
+  const bounds = new Map<string, { readonly place: Place; readonly value: BoundsOptions<Entities> }>();
   const boundsMalformed = foundBounds.flatMap(({ place, value }): Found<Malformed>[] => {
     const service = ownerName(boundsService(value));
     if (service === undefined) return [];
     if (bounds.has(service))
       return [{ violation: { kind: "Malformed.duplicateBounds", definition: null, data: { service } }, place }];
-    bounds.set(service, value);
+    bounds.set(service, { place, value });
     return [];
   });
   const defined = foundScenarios.flatMap(({ name, place, value }): Named<ScenarioDefinition>[] => {
@@ -304,6 +318,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
     imports: serviceImports(sources, fileExports, serviceOf),
     names,
     services,
+    bounds: new Map([...bounds].map(([service, { place }]) => [service, place])),
   };
   const malformed = [
     ...duplicateNames(namedExports),
@@ -327,7 +342,7 @@ export async function loadSpec(root: string): Promise<Loaded> {
     throw new InternalError(`${built.unnamed.join(", ")} names a value that no export names, and no check reports it`);
   const structure = {
     ...built.structure,
-    bounds: [...bounds].map(([service, { creates, items }]) => ({ service, creates, items: items ?? null })),
+    bounds: [...bounds].map(([service, { value }]) => boundsOf(service, value)),
     program: unconverted,
   };
   return { kind: "structured", spec: { ...spec, structure } };
