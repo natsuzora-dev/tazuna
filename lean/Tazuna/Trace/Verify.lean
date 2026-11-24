@@ -163,10 +163,10 @@ def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option 
     let caller ← (dec T b.id? v.caller c).elim (.error "the caller does not read as the service's caller type") .ok
     match finIdx v.commands (·.name == name), finIdx v.queries (·.name == name) with
     | some k, _ => match dec T b.id? (v.commands.get k).input i with
-      | some x => .ok (.command k caller x, some id, idsOf v.caller caller ++ idsOf _ x)
+      | some x => .ok (.command k caller x, some id, idsOf T v.caller caller ++ idsOf T _ x)
       | none => .error s!"the input does not read as {name}'s input type"
     | none, some k => match dec T b.id? (v.queries.get k).input i with
-      | some x => .ok (.query k caller x, some id, idsOf v.caller caller ++ idsOf _ x)
+      | some x => .ok (.query k caller x, some id, idsOf T v.caller caller ++ idsOf T _ x)
       | none => .error s!"the input does not read as {name}'s input type"
     | none, none => .error s!"{v.name} has no request {name}"
   | .answer t to res => do
@@ -177,14 +177,14 @@ def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option 
     | none => .ok (.answer id ⟨Ty.nil, .inl ()⟩, none, [])
     | some p =>
       match decAnswer T b p.request.output p.request.rejection res with
-      | some x => .ok (.answer id ⟨_, x⟩, none, idsOf _ x)
+      | some x => .ok (.answer id ⟨_, x⟩, none, idsOf T _ x)
       | none => .error "the answer does not read as an answer to the request: an output, or a command's rejection"
   | .event t src name w => do
     if t != s.now then throw s!"the event is at {t}, but a clock line brought time only to {s.now}"
     let some k := finIdx v.subscribes fun sub => sub.source == src && sub.name == name
       | throw s!"{v.name} subscribes to no event {src}.{name}"
     match dec T b.id? (v.subscribes.get k).event w with
-    | some x => .ok (.event k x, none, idsOf _ x)
+    | some x => .ok (.event k x, none, idsOf T _ x)
     | none => .error s!"the event does not read as {src}.{name}'s type"
   | _ => .error "an out line where an in line belongs"
 

@@ -495,6 +495,32 @@ theorem Ty.cmp_eq_iff {t : Ty} (h : t.ordered T = true) (x y : t.den0) :
 
 end
 
+section
+variable (T : List TypeDecl)
+
+/-- The values in the canonical order. -/
+def Ty.sortBy (t : Ty) (xs : List t.den0) : List t.den0 := xs.mergeSort fun a b => (Ty.cmp T t a b).isLE
+
+/-- A table's entries in the canonical order of their keys. -/
+def Ty.sortKeys (k v : Ty) (xs : List (k.den0 × v.den0)) : List (k.den0 × v.den0) :=
+  xs.mergeSort fun a b => (Ty.cmp T k a.1 b.1).isLE
+
+theorem keysUnique_iff {κ ν : Type} {fk : κ → κ → Bool} {gk : κ → Erl} (hk : ∀ a b, fk a b = true ↔ gk a = gk b)
+    (l : List (κ × ν)) : KeysUnique fk l ↔ (l.map fun e => gk e.1).Nodup := by
+  unfold KeysUnique List.Nodup
+  rw [List.pairwise_map]
+  constructor
+  · exact fun h => h.imp fun h e => by have := (hk _ _).2 e; simp_all
+  · refine fun h => h.imp fun h => ⟨?_, ?_⟩
+    · cases e : fk _ _
+      · rfl
+      · exact absurd ((hk _ _).1 e) h
+    · cases e : fk _ _
+      · rfl
+      · exact absurd ((hk _ _).1 e).symm h
+
+end
+
 -- Constructor atoms as gleam 1.19 compiles them, and terms in the order Erlang's `lists:sort` gives (checked with erl).
 #guard ["HTTPError", "Ab", "AB", "A1b", "A1B", "ABC", "Abc2Def", "True", "None"].map atomName ==
   ["h_t_t_p_error", "ab", "a_b", "a1b", "a1_b", "a_b_c", "abc2_def", "true", "none"]

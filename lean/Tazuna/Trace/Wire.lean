@@ -1,4 +1,4 @@
-import Tazuna.Semantics.Data
+import Tazuna.Semantics.Order
 import Tazuna.Trace.Date
 
 /-! How a data value crosses the wire, by its type. A trace holds JSON; `Wire` is that JSON with objects as lists of
@@ -6,8 +6,9 @@ pairs, so that reading a value back is a theorem about lists (`dec_enc`). Turnin
 JSON library.
 
 - An Int is a number and a String a string.
-- A List, a Bag and a tuple are arrays; a Bag's array is a multiset.
-- A Table is an array of `[key, value]` pairs.
+- A List, a Bag and a tuple are arrays; a Bag's array is a multiset, written in the canonical order
+  (`Tazuna.Semantics.Order`).
+- A Table is an array of `[key, value]` pairs, written in the canonical order of the keys.
 - A Bool is `true` or `false`, and Nil is `null`: JSON's own literals.
 - A value of any other custom type, `Option` and `Result` included, is an object: `"tag"` names the variant, and each
   field sits under its label, or under its position (`"0"`, `"1"`) when it has none.
@@ -73,12 +74,12 @@ def enc : (t : Ty) → t.den0 → Option Wire
   | .int, n => some (.num n)
   | .str, s => some (.str s)
   | .list t, xs => (xs.mapM (enc t)).map .arr
-  | .bag t, xs => (xs.mapM (enc t)).map .arr
+  | .bag t, xs => ((Ty.sortBy T t xs).mapM (enc t)).map .arr
   | .tuple ts, x => (encs ts x).map .arr
   | .adt i _ vs, x =>
     if i = 0 then encBool vs x else if i = 1 then encNil vs x
     else encAlts ((T[i]?.map (·.variants)).getD []) 0 vs x
-  | .table k v, x => (x.1.mapM fun (a, b) => do pure (Wire.arr [← enc k a, ← enc v b])).map .arr
+  | .table k v, x => ((Ty.sortKeys T k v x.1).mapM fun (a, b) => do pure (Wire.arr [← enc k a, ← enc v b])).map .arr
   | .date, d => (renderDate? d).map .str
   | .id, n => (name n).map .str
   | .fn .., _ | .param _, _ | .dsl .., _ => none
@@ -99,13 +100,17 @@ end
 
 end
 
+section
+variable (T : List TypeDecl)
+
 mutual
 /-- The ids a value holds, in the order its wire form writes them. -/
 def idsOf : (t : Ty) → t.den0 → List IdV
-  | .list t, xs | .bag t, xs => xs.flatMap (idsOf t)
+  | .list t, xs => xs.flatMap (idsOf t)
+  | .bag t, xs => (Ty.sortBy T t xs).flatMap (idsOf t)
   | .tuple ts, x => idsOfs ts x
   | .adt _ _ vs, x => idsOfAlts vs x
-  | .table k v, x => x.1.flatMap fun (a, b) => idsOf k a ++ idsOf v b
+  | .table k v, x => (Ty.sortKeys T k v x.1).flatMap fun (a, b) => idsOf k a ++ idsOf v b
   | .id, n => [n]
   | .int, _ | .str, _ | .date, _ | .fn .., _ | .param _, _ | .dsl .., _ => []
 def idsOfs : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List IdV
@@ -115,6 +120,8 @@ def idsOfAlts : (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → Lis
   | [], x => nomatch x
   | fs :: _, .inl x => idsOfs fs x
   | _ :: vs, .inr y => idsOfAlts vs y
+end
+
 end
 
 section
@@ -166,5 +173,9 @@ def decAlts (decl : List Variant) (kvs : List (String × Wire)) (k : Nat) (j : N
 end
 
 end
+
+-- Equal bags are written alike: the items go in the canonical order.
+#guard reprStr (enc prelude (fun _ => none) (.bag .int) ([2, 1, 2] : List Int)) ==
+  reprStr (some (Wire.arr [.num 1, .num 2, .num 2]))
 
 end Tazuna.Trace

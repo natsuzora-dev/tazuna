@@ -31,7 +31,7 @@ def Names.bind (ns : Names) (xs : List IdV) : Names :=
 
 /-- The wire form of a value, naming the ids it holds first. -/
 def Names.enc (ns : Names) (T : List TypeDecl) (t : Ty) (x : t.den0) : Names × Option Wire :=
-  let ns := ns.bind (idsOf t x)
+  let ns := ns.bind (idsOf T t x)
   (ns, Trace.enc T ns.name t x)
 
 /-- The wire form of an answer to a request: a command's output under `ok` and its rejection under `error`, a
