@@ -31,7 +31,7 @@ pub type Id
 /// The services a spec defines and the externals they talk to.
 pub type Spec
 
-/// A service: its records, the events that write them, and what it reacts to.
+/// A service: its records, the events that write them, what it reacts to, and its scenarios.
 pub type Service
 
 /// A request that may write records through events.
@@ -39,9 +39,6 @@ pub type Command(records, event, caller, input, rejection)
 
 /// A request that answers from the records and writes nothing.
 pub type Query(records, caller, input, output)
-
-/// A command or query, as its service lists it.
-pub type Definition(records, event, caller)
 
 /// State kept per instance; an instance lives while its key is among the machine's instances.
 pub type Machine(records, event)
@@ -58,11 +55,11 @@ pub type ExternalCommand(input, output, rejection)
 /// A query an external answers.
 pub type ExternalQuery(input, output)
 
-/// An event an external or another service sends.
-pub type ExternalEvent(event)
+/// Events of one name that an external or a service sends.
+pub type Source(event)
 
-/// An external's command, query or event, listed in its declaration.
-pub type Declared
+/// A command, query or source as its owner lists it: the service or external whose list holds it owns it. An external's list holds `Declared(Nil, Nil, Nil)`.
+pub type Declared(records, event, caller)
 
 /// A request to an external or to a command or query of the same service; its answer becomes events.
 pub type Effect(event)
@@ -80,7 +77,7 @@ pub type Create(records)
 pub type Response(event)
 
 /// Steps a service takes from its initial records, compared with a snapshot.
-pub type Scenario
+pub type Scenario(records, event, caller)
 
 /// One step of a scenario.
 pub type Step(records, event, caller)
@@ -144,34 +141,33 @@ pub fn require(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// The spec: its services, the externals they talk to, and scenarios of the services.
+/// The spec: its services and the externals they talk to.
 pub fn spec(
   services _services: List(Service),
   externals _externals: List(External),
-  scenarios _scenarios: List(Scenario),
 ) -> Spec {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A service. `apply` folds an event into the records: events are the only writes.
+/// A service. `apply` folds an event into the records: events are the only writes. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0.
 pub fn service(
   name _name: String,
   init _init: records,
   apply _apply: fn(records, event) -> records,
   subscribes _subscribes: List(Subscription(event)),
-  requests _requests: List(Definition(records, event, caller)),
+  declares _declares: List(Declared(records, event, caller)),
   machines _machines: List(Machine(records, event)),
   reactions _reactions: List(Reaction(records, event)),
   invariants _invariants: fn(records) -> Rules,
   responses _responses: List(Response(event)),
   bounds _bounds: Bounds(records),
+  scenarios _scenarios: List(Scenario(records, event, caller)),
 ) -> Service {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A command of the service named `service`: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects.
+/// A command: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects. The service that lists it owns it.
 pub fn command(
-  service _service: String,
   name _name: String,
   callers _callers: List(caller),
   accepts _accepts: fn(input) -> Rules,
@@ -182,28 +178,13 @@ pub fn command(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A query of the service named `service`: it answers from the records and writes nothing.
+/// A query: it answers from the records and writes nothing. The service that lists it owns it.
 pub fn query(
-  service _service: String,
   name _name: String,
   callers _callers: List(caller),
   accepts _accepts: fn(input) -> Rules,
   resolve _resolve: fn(Ctx(records, input, caller)) -> output,
 ) -> Query(records, caller, input, output) {
-  panic as \"tazuna's built-ins run only in the engine\"
-}
-
-/// The command, for its service's list of requests.
-pub fn define_command(
-  _command: Command(records, event, caller, input, rejection),
-) -> Definition(records, event, caller) {
-  panic as \"tazuna's built-ins run only in the engine\"
-}
-
-/// The query, for its service's list of requests.
-pub fn define_query(
-  _query: Query(records, caller, input, output),
-) -> Definition(records, event, caller) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
@@ -228,55 +209,66 @@ pub fn reaction(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// An external service and what it declares.
+/// An external service: the commands, queries and sources it declares, which it owns.
 pub fn external(
   name _name: String,
-  commands _commands: List(Declared),
-  queries _queries: List(Declared),
-  events _events: List(Declared),
+  declares _declares: List(Declared(Nil, Nil, Nil)),
 ) -> External {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A command of the external named `external`.
+/// A command of an external: the external that lists it owns it.
 pub fn external_command(
-  external _external: String,
   name _name: String,
 ) -> ExternalCommand(input, output, rejection) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A query of the external named `external`; `ensures` says what its answers satisfy.
+/// A query of an external; `ensures` says what its answers satisfy. The external that lists it owns it.
 pub fn external_query(
-  external _external: String,
   name _name: String,
   ensures _ensures: fn(input, output) -> Rules,
 ) -> ExternalQuery(input, output) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// An event of the external or service named `external`.
-pub fn external_event(
-  external _external: String,
-  name _name: String,
-) -> ExternalEvent(event) {
+/// Events named `name`: the service or external that lists the source sends them.
+pub fn source(name _name: String) -> Source(event) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// The command, for its external's declaration.
+/// The command, for the declarations of the service that owns it.
 pub fn declare_command(
+  _command: Command(records, event, caller, input, rejection),
+) -> Declared(records, event, caller) {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// The query, for the declarations of the service that owns it.
+pub fn declare_query(
+  _query: Query(records, caller, input, output),
+) -> Declared(records, event, caller) {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// The source, for the declarations of the service or external that owns it.
+pub fn declare_source(
+  _source: Source(source),
+) -> Declared(records, event, caller) {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// The command, for the declarations of the external that owns it.
+pub fn declare_external_command(
   _command: ExternalCommand(input, output, rejection),
-) -> Declared {
+) -> Declared(Nil, Nil, Nil) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// The query, for its external's declaration.
-pub fn declare_query(_query: ExternalQuery(input, output)) -> Declared {
-  panic as \"tazuna's built-ins run only in the engine\"
-}
-
-/// The event, for its external's declaration.
-pub fn declare_event(_event: ExternalEvent(event)) -> Declared {
+/// The query, for the declarations of the external that owns it.
+pub fn declare_external_query(
+  _query: ExternalQuery(input, output),
+) -> Declared(Nil, Nil, Nil) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
@@ -318,9 +310,9 @@ pub fn send_query(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// Receives another service's or an external's event as one of this service's events.
+/// Receives the events of another service's or an external's source as this service's events.
 pub fn subscribe(
-  to _to: ExternalEvent(source),
+  to _to: Source(source),
   wrap _wrap: fn(source) -> event,
 ) -> Subscription(event) {
   panic as \"tazuna's built-ins run only in the engine\"
@@ -354,12 +346,11 @@ pub fn response(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A scenario of the service named `service`: its steps run from the initial records at time 0, and `test` compares the trace with snapshots/<service>/<name>.jsonl.
+/// A scenario of the service that lists it: its steps run from the initial records at time 0, and `test` compares the trace with snapshots/<service>/<name>.jsonl.
 pub fn scenario(
-  service _service: String,
   name _name: String,
   steps _steps: List(Step(records, event, caller)),
-) -> Scenario {
+) -> Scenario(records, event, caller) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
@@ -404,9 +395,9 @@ pub fn step_answer_query(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A step: the service receives an event it subscribes to.
+/// A step: the service receives an event of a source it subscribes to.
 pub fn step_event(
-  event _event: ExternalEvent(source),
+  source _source: Source(source),
   value _value: source,
 ) -> Step(records, event, caller) {
   panic as \"tazuna's built-ins run only in the engine\"
@@ -686,17 +677,17 @@ pub const builtins = [
   "tazuna.service",
   "tazuna.command",
   "tazuna.query",
-  "tazuna.define_command",
-  "tazuna.define_query",
   "tazuna.machine",
   "tazuna.reaction",
   "tazuna.external",
   "tazuna.external_command",
   "tazuna.external_query",
-  "tazuna.external_event",
+  "tazuna.source",
   "tazuna.declare_command",
   "tazuna.declare_query",
-  "tazuna.declare_event",
+  "tazuna.declare_source",
+  "tazuna.declare_external_command",
+  "tazuna.declare_external_query",
   "tazuna.request_command",
   "tazuna.request_query",
   "tazuna.send_command",

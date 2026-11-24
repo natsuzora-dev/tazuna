@@ -1,0 +1,2 @@
+{"kind":"Illegal.rejection","message":"tasks.add: the rejection type is no custom type or Nil"}
+{"kind":"Illegal.rejection","message":"mail.send: the rejection type is no custom type or Nil"}

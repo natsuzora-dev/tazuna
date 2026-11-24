@@ -1,1 +1,1 @@
-{"kind":"Illegal.scenario","message":"the scenario nope/basic names nope, which is no service of the spec"}
+{"kind":"Illegal.scenario","message":"the scenario counter/basic: step 2 sends the query total, which counter does not declare"}

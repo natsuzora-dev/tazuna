@@ -3,8 +3,8 @@ import Tazuna.Semantics.Rules
 /-! The step semantics of one service. A step takes one input line and yields exactly one outcome, the events it
 applied, the out lines and the next state. Inside a step the cascade runs to completion: each event is applied, then
 every machine instance and reaction reacts to it, in a fixed canonical order (machines and reactions in declaration
-order, instances in the order their keys first appeared). A request to an external goes out at once, if the spec's
-externals declare what it asks for; a command or
+order, instances in the order their keys first appeared). A request to an external goes out at once, to the external
+that lists what it asks for; a command or
 query of the service's own waits in a queue and runs in turn as one internal step, and the cascade bound limits how
 many internal steps one input takes. Timers fire only on clock lines. Out lines and pending requests form multisets:
 the canonical order fixes how the step computes them, and no outcome depends on their order. -/
@@ -38,10 +38,11 @@ structure OutLine where
 /-- A multiset: two values are the same when one is a permutation of the other. -/
 abbrev Bag (α : Type) := List α
 
-/-- A request sent and not yet answered. -/
+/-- A request sent and not yet answered, to the external that lists what it asks for. -/
 structure Pending (e : Ty) where
   id : Nat
   sender : Sender
+  external : String
   request : RequestV e
 
 end Step
@@ -82,7 +83,7 @@ inductive Fault where
   | answerUnmatched (to : String)
   /-- An effect asked for what its target does not accept: a command or query of the service's own that was Invalid
   (the rules broken, as Invalid names them) or that the service does not list (`service`), or an external's command
-  or query that no external of the spec declares with these types (`declared`). -/
+  or query that no external of the spec lists with these types (`declared`). -/
   | invalidEffect (name : String) (rules : List String)
 
 inductive Outcome where
@@ -162,22 +163,23 @@ structure Acc (v : ServiceV) where
   out : Bag OutLine := []
   own : List (EffectV v.event) := []
 
-/-- Whether some external declares the command or query a request asks for, with its types. -/
-def _root_.Tazuna.Ir.RequestV.declaredIn {e : Ty} (r : RequestV e) (ds : List DeclaredV) : Bool :=
+/-- The external that lists the command or query a request asks for, with its types. -/
+def _root_.Tazuna.Ir.RequestV.ownerIn {e : Ty} (r : RequestV e) (ds : List (String × DeclaredV)) : Option String :=
   let same (a b : Ty) := (Ty.same a b).isSome
-  ds.any fun d => match d, r.rejection with
-    | .command x n i o j, some j' => x == r.external && n == r.name && same i r.input && same o r.output && same j j'
-    | .query x n i o _, none => x == r.external && n == r.name && same i r.input && same o r.output
-    | _, _ => false
+  (ds.find? fun (_, d) => match d, r.rejection with
+    | .externalCommand n i o j, some j' => n == r.name && same i r.input && same o r.output && same j j'
+    | .externalQuery n i o _, none => n == r.name && same i r.input && same o r.output
+    | _, _ => false).map (·.1)
 
 /-- Starts effects in order: a request to an external goes out with a fresh wire id; an own command or query waits. -/
 def start (a : Acc v) (effs : List (Sender × EffectV v.event)) : Except Fault (Acc v) :=
   effs.foldlM (fun a (snd, eff) => match eff with
-    | .request r =>
-      if !r.declaredIn v.declared then .error (.invalidEffect s!"{r.external}.{r.name}" ["declared"]) else
-      let s := a.state
-      .ok { a with state := { s with pending := s.pending ++ [⟨s.nextId, snd, r⟩], nextId := s.nextId + 1 },
-                   out := a.out ++ [⟨s.nextId, r.external, r.name, ⟨r.input, r.value⟩⟩] }
+    | .request r => match r.ownerIn v.declared with
+      | none => .error (.invalidEffect r.name ["declared"])
+      | some x =>
+        let s := a.state
+        .ok { a with state := { s with pending := s.pending ++ [⟨s.nextId, snd, x, r⟩], nextId := s.nextId + 1 },
+                     out := a.out ++ [⟨s.nextId, x, r.name, ⟨r.input, r.value⟩⟩] }
     | own => .ok { a with own := a.own ++ [own] }) a
 
 /-- Applies the events in order, each followed by every machine's and reaction's reaction. -/
@@ -200,7 +202,8 @@ def okNil {j : Ty} : (Ty.result Ty.nil j).den0 := .inl (.inl (), ())
 events are applied. -/
 def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
     (onAnswer : (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event)).den0) : Except Fault (Acc v) :=
-  if !(x.service == v.name && v.commands.any (·.name == x.name)) then .error (.invalidEffect x.name ["service"])
+  if !(v.commands.any fun c => c.name == x.name && (Ty.same c.input x.input).isSome &&
+      (Ty.same c.rejection x.rejection).isSome) then .error (.invalidEffect x.name ["service"])
   else match admit x.callers x.accepts caller input with
   | r :: rs => .error (.invalidEffect x.name (r :: rs))
   | [] => do
@@ -217,7 +220,8 @@ def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v
 /-- Runs an own query as an internal step: its answer's events are applied. -/
 def runQuery (a : Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0)
     (onAnswer : (Ty.fn [x.output] (.list v.event)).den0) : Except Fault (Acc v) :=
-  if !(x.service == v.name && v.queries.any (·.name == x.name)) then .error (.invalidEffect x.name ["service"])
+  if !(v.queries.any fun q => q.name == x.name && (Ty.same q.input x.input).isSome &&
+      (Ty.same q.output x.output).isSome) then .error (.invalidEffect x.name ["service"])
   else match admit x.callers x.accepts caller input with
   | r :: rs => .error (.invalidEffect x.name (r :: rs))
   | [] => applyEvents a (onAnswer (x.resolve (ctx a.state a.state.records caller input, ()), ()))

@@ -14,7 +14,7 @@ pub type Caller {
 }
 
 fn send() -> tazuna.ExternalCommand(fn() -> Int, Nil, Nil) {
-  tazuna.external_command(external: "mail", name: "send")
+  tazuna.external_command(name: "send")
 }
 
 fn apply(r: Records, _e: Event) -> Records {
@@ -23,7 +23,6 @@ fn apply(r: Records, _e: Event) -> Records {
 
 fn add(name: String) -> tazuna.Command(Records, Event, Caller, String, Nil) {
   tazuna.command(
-    service: "tasks",
     name: name,
     callers: [User],
     accepts: fn(_t: String) { [] },
@@ -38,7 +37,7 @@ fn tasks(name: String) -> tazuna.Service {
     init: Records(tasks: table.new()),
     apply: apply,
     subscribes: [],
-    requests: [tazuna.define_command(add("add"))],
+    declares: [tazuna.declare_command(add("add"))],
     machines: [],
     reactions: [],
     invariants: fn(_r) { [] },
@@ -49,20 +48,14 @@ fn tasks(name: String) -> tazuna.Service {
       cascade: 10,
       steps: 5,
     ),
+    scenarios: [],
   )
 }
 
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(
-    services: [tasks("tasks")],
-    externals: [
-      tazuna.external(
-        name: "mail",
-        commands: [tazuna.declare_command(send())],
-        queries: [],
-        events: [],
-      ),
-    ],
-    scenarios: [],
-  )
+  tazuna.spec(services: [tasks("tasks")], externals: [
+    tazuna.external(name: "mail", declares: [
+      tazuna.declare_external_command(send()),
+    ]),
+  ])
 }

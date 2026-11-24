@@ -7,11 +7,13 @@ namespace Tazuna.Ir
 
 /-- The structure rules. -/
 inductive Illegal where
-  /-- Two services or externals share a name, or two requests of one service, or two declarations of one external. -/
+  /-- Two services or externals share a name, or two commands or queries of one service, or two entries of one
+  external. -/
   | wireName
-  /-- A service or external lists a command, query or event whose handle names another owner. -/
+  /-- A service declares an external's command or query, or an external a service's; or two owners declare the same
+  handle (same kind, name and types). -/
   | owner
-  /-- A subscription names an event no external declares and no service of the spec owns. -/
+  /-- A subscription names a source that no service or external lists with that name and event type. -/
   | unknownSource
   /-- A table field of the records has no `create` bound or more than one, or a `create` reads no table field. -/
   | creates
@@ -19,14 +21,17 @@ inductive Illegal where
   | wireType
   /-- A bound is negative. -/
   | bounds
-  /-- A scenario names no service of the spec, sends another service's request, has steps typed for another service,
-  shares its name with another scenario of its service, or has a name that is no file name. -/
+  /-- A scenario step sends a request its service does not declare, two scenarios of a service share a name, or a
+  scenario's name is no file name. -/
   | scenario
+  /-- A command's rejection type is neither a custom type nor Nil: a rejection names its reason in a type of the
+  spec's own. -/
+  | rejection
 deriving Repr, DecidableEq
 
 namespace Illegal
 
-def all : List Illegal := [wireName, owner, unknownSource, creates, wireType, bounds, scenario]
+def all : List Illegal := [wireName, owner, unknownSource, creates, wireType, bounds, scenario, rejection]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -38,6 +43,7 @@ def name : Illegal → String
   | wireType => "wireType"
   | bounds => "bounds"
   | scenario => "scenario"
+  | rejection => "rejection"
 
 end Illegal
 
@@ -62,16 +68,41 @@ end
 def duplicates (names : List String) : List String :=
   (names.filter fun n => names.count n > 1).eraseDups
 
-def DeclaredV.external : DeclaredV → String
-  | .command e .. | .query e .. | .event e .. => e
-
 def DeclaredV.name : DeclaredV → String
-  | .command _ n .. | .query _ n .. | .event _ n .. => n
+  | .command _ _ _ x => x.name
+  | .query _ _ x => x.name
+  | .externalCommand n .. | .externalQuery n .. | .source n _ => n
 
+/-- What kind of handle the entry is, as messages name it. -/
+def DeclaredV.kind : DeclaredV → String
+  | .command .. => "command"
+  | .query .. => "query"
+  | .externalCommand .. => "external command"
+  | .externalQuery .. => "external query"
+  | .source .. => "source"
+
+/-- The types that, with the kind and name, make an entry the handle it is. -/
 def DeclaredV.types : DeclaredV → List Ty
-  | .command _ _ i o j => [i, o, j]
-  | .query _ _ i o _ => [i, o]
-  | .event _ _ e => [e]
+  | .command r e c x => [r, e, c, x.input, x.rejection]
+  | .query r c x => [r, c, x.input, x.output]
+  | .externalCommand _ i o j => [i, o, j]
+  | .externalQuery _ i o _ => [i, o]
+  | .source _ t => [t]
+
+/-- The types that cross the wire when the handle is used. -/
+def DeclaredV.wireTypes : DeclaredV → List Ty
+  | .command _ _ _ x => [x.input, x.rejection]
+  | .query _ _ x => [x.input, x.output]
+  | d => d.types
+
+/-- Whether two entries are one handle. -/
+def DeclaredV.same (a b : DeclaredV) : Bool :=
+  a.kind == b.kind && a.name == b.name && (Ty.sames a.types b.types).isSome
+
+/-- A custom type of the spec's own, or Nil: what a rejection may be. -/
+def Ty.customOrNil : Ty → Bool
+  | .adt i _ _ => i == 1 || prelude.length ≤ i
+  | _ => false
 
 mutual
 /-- Some value of a data type, when the type has one. -/
@@ -131,22 +162,32 @@ def CreateV.reads {r : Ty} (c : CreateV r) (probes : List (String × r.den0)) : 
 def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
   let names := s.services.map (·.name) ++ s.externals.map (·.name)
   let topNames := (duplicates names).map fun n => (.wireName, s!"{n} names more than one service or external")
+  let entries : List (String × DeclaredV) := s.services.flatMap (fun v => v.declares.map (v.name, ·)) ++
+    s.externals.flatMap fun x => x.declares.map (x.name, ·)
+  let sharedOwners := (entries.zipIdx.filterMap fun ((o, d), k) =>
+    match (entries.take k).find? fun (o', d') => o' != o && d.same d' with
+    | some (o', _) => some (Illegal.owner, s!"{o'} and {o} both declare the {d.kind} {d.name}")
+    | none => none)
+  let sources := s.services.flatMap (fun v => v.sources.map fun (n, t) => (n, t)) ++
+    s.externals.flatMap fun x => x.declares.filterMap fun | .source n t => some (n, t) | _ => none
   let perService := s.services.flatMap fun v =>
     let requests := v.commands.map (·.name) ++ v.queries.map (·.name)
-    let wireNames := (duplicates requests).map fun n => (Illegal.wireName, s!"{v.name}.{n} names more than one request")
-    let owners := (v.commands.map (fun c => (c.service, c.name)) ++ v.queries.map (fun q => (q.service, q.name))).filterMap
-      fun (o, n) => if o == v.name then none else some (Illegal.owner, s!"{v.name} lists {o}.{n}, which belongs to {o}")
+    let wireNames := (duplicates requests ++ duplicates (v.sources.map (·.1))).map fun n =>
+      (Illegal.wireName, s!"{v.name}.{n} names more than one request or source")
+    let owners := v.declares.filterMap fun
+      | .externalCommand n .. | .externalQuery n .. =>
+        some (Illegal.owner, s!"{v.name} declares {n}, an external's command or query")
+      | _ => none
     let wireTypes := ([("caller", v.caller), ("event", v.event)] ++
         v.commands.flatMap (fun c => [(c.name ++ " input", c.input), (c.name ++ " rejection", c.rejection)]) ++
-        v.queries.flatMap (fun q => [(q.name ++ " input", q.input), (q.name ++ " output", q.output)])).filterMap
+        v.queries.flatMap (fun q => [(q.name ++ " input", q.input), (q.name ++ " output", q.output)]) ++
+        v.sources.map (fun (n, t) => (n ++ " event", t))).filterMap
       fun (what, t) => if t.wire then none else some (Illegal.wireType, s!"{v.name}: the {what} type crosses the wire, so it holds no functions")
-    let sources := v.subscribes.filterMap fun sub =>
-      let declared := s.externals.any fun x => x.name == sub.source &&
-        x.declared.any fun d => match d with
-          | .event _ n _ => n == sub.name
-          | _ => false
-      if declared || s.services.any (·.name == sub.source) then none
-      else some (Illegal.unknownSource, s!"{v.name} subscribes to {sub.source}.{sub.name}, which nothing declares")
+    let unknown := v.subscribes.filterMap fun sub =>
+      if sources.any fun (n, t) => n == sub.name && (Ty.same t sub.event).isSome then none
+      else some (Illegal.unknownSource, s!"{v.name} subscribes to the source {sub.name}, which no service or external declares with its event type")
+    let rejections := v.commands.filterMap fun c => if c.rejection.customOrNil then none else
+      some (Illegal.rejection, s!"{v.name}.{c.name}: the rejection type is no custom type or Nil")
     let probes := tableProbes T v.records
     let reads := v.bounds.creates.map (·.reads probes)
     let creates := (probes.filterMap fun (t, _) => match (reads.filter (·.contains t)).length with
@@ -159,35 +200,39 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
     let negative := ([("items", (b.items : Int)), ("cascade", b.cascade), ("steps", b.steps)] ++
         (v.bounds.creates.zip reads).map (fun (c, ts) => ("create " ++ ", ".intercalate ts, c.atMost))).filterMap
       fun (what, n) => if n < 0 then some (Illegal.bounds, s!"{v.name}: the {what} bound is negative") else none
-    wireNames ++ owners ++ wireTypes ++ sources ++ creates ++ negative
+    let scenarioNames := (duplicates (v.scenarios.map (·.name))).map fun n =>
+      (Illegal.scenario, s!"{v.name}/{n} names more than one scenario")
+    let perScenario := v.scenarios.flatMap fun sc =>
+      let here := s!"the scenario {v.name}/{sc.name}"
+      let fileName := if sc.name.isEmpty || sc.name.contains '/' || sc.name.startsWith "." then
+          [(Illegal.scenario, s!"{here} has a name that is no file name")] else []
+      let steps := sc.steps.zipIdx.filterMap fun (st, k) =>
+        let unlisted (kind n : String) := some (Illegal.scenario, s!"{here}: step {k + 1} sends the {kind} {n}, which {v.name} does not declare")
+        match st with
+        | .command x _ _ _ =>
+          if v.commands.any fun c => c.name == x.name && (Ty.same c.input x.input).isSome &&
+            (Ty.same c.rejection x.rejection).isSome then none else unlisted "command" x.name
+        | .query x _ _ =>
+          if v.queries.any fun q => q.name == x.name && (Ty.same q.input x.input).isSome &&
+            (Ty.same q.output x.output).isSome then none else unlisted "query" x.name
+        | _ => none
+      fileName ++ steps
+    wireNames ++ owners ++ wireTypes ++ unknown ++ rejections ++ creates ++ negative ++ scenarioNames ++ perScenario
   let perExternal := s.externals.flatMap fun x =>
-    let wireNames := (duplicates (x.declared.map (·.name))).map fun n =>
+    let all := x.declares
+    let wireNames := (duplicates (all.map (·.name))).map fun n =>
       (Illegal.wireName, s!"{x.name}.{n} is declared more than once")
-    let owners := (x.declared.filter (·.external != x.name)).map fun d =>
-      (Illegal.owner, s!"{x.name} lists {d.external}.{d.name}, which belongs to {d.external}")
-    let wireTypes := (x.declared.filter fun d => !d.types.all Ty.wire).map fun d =>
+    let owners := all.filterMap fun
+      | .command _ _ _ c => some (Illegal.owner, s!"{x.name} declares {c.name}, a service's command")
+      | .query _ _ q => some (Illegal.owner, s!"{x.name} declares {q.name}, a service's query")
+      | _ => none
+    let wireTypes := (all.filter fun d => !d.wireTypes.all Ty.wire).map fun d =>
       (Illegal.wireType, s!"{x.name}.{d.name}: its types cross the wire, so they hold no functions")
-    wireNames ++ owners ++ wireTypes
-  let scenarioNames := (duplicates (s.scenarios.map fun sc => sc.service ++ "/" ++ sc.name)).map fun n =>
-    (Illegal.scenario, s!"{n} names more than one scenario")
-  let perScenario := s.scenarios.flatMap fun sc =>
-    let here := s!"the scenario {sc.service}/{sc.name}"
-    let fileName := if sc.name.isEmpty || sc.name.contains '/' || sc.name.startsWith "." then
-        [(Illegal.scenario, s!"{here} has a name that is no file name")] else []
-    let steps := match s.services.find? (·.name == sc.service) with
-      | none => [(Illegal.scenario, s!"{here} names {sc.service}, which is no service of the spec")]
-      | some v =>
-        let typed := (Ty.same sc.records v.records).isSome && (Ty.same sc.event v.event).isSome &&
-          (Ty.same sc.caller v.caller).isSome
-        (if typed then [] else [(Illegal.scenario, s!"{here} has steps typed for another service")]) ++
-        sc.steps.zipIdx.filterMap fun (st, k) =>
-          let other (o n : String) := if o == sc.service then none
-            else some (Illegal.scenario, s!"{here}: step {k + 1} sends {o}.{n}, a request of another service")
-          match st with
-          | .command x _ _ _ => other x.service x.name
-          | .query x _ _ => other x.service x.name
-          | _ => none
-    fileName ++ steps
-  topNames ++ perService ++ perExternal ++ scenarioNames ++ perScenario
+    let rejections := all.filterMap fun
+      | .externalCommand n _ _ j => if j.customOrNil then none else
+        some (Illegal.rejection, s!"{x.name}.{n}: the rejection type is no custom type or Nil")
+      | _ => none
+    wireNames ++ owners ++ wireTypes ++ rejections
+  topNames ++ sharedOwners ++ perService ++ perExternal
 
 end Tazuna.Ir

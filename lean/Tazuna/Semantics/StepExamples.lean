@@ -12,7 +12,7 @@ private def I (x : Int) : Int := x
 private def rule (n : String) (b : Bool) : Ty.rules.den0 := [(n, Ty.ofBool b, ())]
 
 def ping : EffectV .int := .request
-  { external := "mail", name := "ping", input := .str, output := .int, rejection := some .str, value := "hi",
+  { name := "ping", input := .str, output := .int, rejection := some .str, value := "hi",
     holds := fun _ => [], onAnswer := fun (a, ()) => match a with
       | .inl _ => [(1 : Int)]
       | .inr _ => [] }
@@ -27,24 +27,25 @@ def watch : MachineV .int .int :=
     invariants := fun _ => [] }
 
 def add : CommandV .int .int .int :=
-  { service := "sum", name := "add", input := .int, rejection := .str, callers := [(1 : Int)],
+  { name := "add", input := .int, rejection := .str, callers := [(1 : Int)],
     accepts := fun (i, ()) => rule "small" (decide (I i < 100)),
     decide := fun (.inl (_, i, _, _, _, ()), ()) =>
       if 0 < I i then .inl ([i], ()) else .inr (.inl ("positive", ())),
     ensures := fun (.inl (r, _, _, _, _, ()), r', ()) => rule "grows" (decide (I r ≤ I r')) }
 
 def total : QueryV .int .int :=
-  { service := "sum", name := "total", input := .int, output := .int, callers := [(1 : Int)], accepts := fun _ => [],
+  { name := "total", input := .int, output := .int, callers := [(1 : Int)], accepts := fun _ => [],
     resolve := fun (.inl (r, _, _, _, _, ()), ()) => r }
 
 def svc : ServiceV :=
   { name := "sum", records := .int, event := .int, caller := .int, init := (0 : Int),
     apply := fun (r, e, ()) => I r + I e,
     subscribes := [{ source := "peer", name := "moved", event := .int, wrap := fun (x, ()) => x }],
-    commands := [add], queries := [total], machines := [watch], reactions := [],
+    declares := [.command .int .int .int add, .query .int .int total],
+    commands := [add], queries := [total], sources := [], machines := [watch], reactions := [], scenarios := [],
     invariants := fun (r, ()) => rule "under 50" (decide (I r < 50)), responses := [],
     bounds := { creates := [], items := 3, cascade := 2, steps := 5 },
-    declared := [.command "mail" "ping" .str .int .str] }
+    declared := [("mail", .externalCommand "ping" .str .int .str)] }
 
 def s0 : State svc := State.init svc
 def cmd (caller amount : Int) : Input svc := .command ⟨0, by decide⟩ caller amount
@@ -92,23 +93,26 @@ def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
 #guard (step loop (State.init loop) (ev 3)).outcome.summary == "fault invalidEffect add [small]"
 -- More internal steps than the cascade bound is a fault.
 #guard (step loop (State.init loop) (ev 1)).outcome.summary == "fault cascadeLimit"
--- A service that lists another service's command breaks the owner rule.
-#guard ((SpecV.illegal prelude ⟨[{ svc with name := "other" }], [], []⟩).filter (·.1 == .owner)).length == 2
+-- Two services that list the same command and query break the owner rule, once for each.
+#guard ((SpecV.illegal prelude ⟨[svc, { svc with name := "other" }], []⟩).filter (·.1 == .owner)).length == 2
+-- So does a service that declares an external's command.
+#guard ((SpecV.illegal prelude ⟨[{ svc with declares := [.externalCommand "ping" .str .int .str] }], []⟩).filter
+  (·.1 == .owner)).length == 1
 /-- The outcome of the last of the inputs, run from the initial state. -/
 def last (v : ServiceV) (is : List (Input v)) : String :=
   (((run v (State.init v) is).2.getLast?).map (·.outcome.summary)).getD ""
 -- A request to a command no external declares is a fault.
-def undeclared : ServiceV := { svc with declared := [.command "mail" "ping" .str .int .int] }
+def undeclared : ServiceV := { svc with declared := [("mail", .externalCommand "ping" .str .int .int)] }
 #guard last undeclared [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int),
-  .clock 10] == "fault invalidEffect mail.ping [declared]"
+  .clock 10] == "fault invalidEffect ping [declared]"
 -- A request to an external query: an answer that breaks what the query ensures is Invalid, and the request stays
 -- pending for another answer.
 def rate : EffectV .int := .request
-  { external := "fx", name := "rate", input := .str, output := .int, rejection := none, value := "eur",
+  { name := "rate", input := .str, output := .int, rejection := none, value := "eur",
     holds := fun o => rule "positive" (decide (0 < I o)), onAnswer := fun (o, ()) => [o] }
 def asking : ServiceV :=
   { svc with machines := [{ watch with effect := fun _ st _ _ => if I st = 5 then some rate else none }],
-             declared := [.query "fx" "rate" .str .int fun _ => []] }
+             declared := [("fx", .externalQuery "rate" .str .int fun _ => [])] }
 def askingUntil : List (Input asking) :=
   [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int), .clock 10]
 #guard last asking (askingUntil ++ [.answer 0 ⟨.int, (-1 : Int)⟩]) == "invalid [positive]"

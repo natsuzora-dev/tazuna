@@ -19,7 +19,6 @@ fn apply(r: Records, _e: Event) -> Records {
 
 fn add(name: String) -> tazuna.Command(Records, Event, Caller, String, Nil) {
   tazuna.command(
-    service: "tasks",
     name: name,
     callers: [User],
     accepts: fn(_t: String) { [] },
@@ -34,9 +33,9 @@ fn tasks(name: String) -> tazuna.Service {
     init: Records(tasks: table.new()),
     apply: apply,
     subscribes: [],
-    requests: [
-      tazuna.define_command(add("add")),
-      tazuna.define_command(add("add")),
+    declares: [
+      tazuna.declare_command(add("add")),
+      tazuna.declare_command(add("add")),
     ],
     machines: [],
     reactions: [],
@@ -48,9 +47,10 @@ fn tasks(name: String) -> tazuna.Service {
       cascade: 10,
       steps: 5,
     ),
+    scenarios: [],
   )
 }
 
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(services: [tasks("tasks")], externals: [], scenarios: [])
+  tazuna.spec(services: [tasks("tasks")], externals: [])
 }

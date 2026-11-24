@@ -5,16 +5,16 @@ namespace Tazuna.Ir
 /-- The types of a spec's structure, which the `tazuna` module declares opaque: a spec builds their values with
 built-ins and never looks inside them. `fresh` is the source of new ids a step hands a command. -/
 inductive Dsl where
-  | spec | service | command | query | definition | machine | reaction | external
-  | externalCommand | externalQuery | externalEvent | declared | effect | subscription
+  | spec | service | command | query | machine | reaction | external
+  | externalCommand | externalQuery | source | declared | effect | subscription
   | bounds | create | response | scenario | step | sender | fresh
 deriving Repr, DecidableEq, Inhabited
 
 namespace Dsl
 
 def all : List Dsl :=
-  [.spec, .service, .command, .query, .definition, .machine, .reaction, .external, .externalCommand, .externalQuery,
-   .externalEvent, .declared, .effect, .subscription, .bounds, .create, .response,
+  [.spec, .service, .command, .query, .machine, .reaction, .external, .externalCommand, .externalQuery,
+   .source, .declared, .effect, .subscription, .bounds, .create, .response,
    .scenario, .step, .sender, .fresh]
 
 theorem mem_all (k : Dsl) : k ∈ all := by cases k <;> simp [all]
@@ -22,27 +22,29 @@ theorem mem_all (k : Dsl) : k ∈ all := by cases k <;> simp [all]
 /-- The name the `tazuna` module gives the type, its type parameters, and what it is. -/
 def decl : Dsl → String × List String × String
   | .spec => ("Spec", [], "The services a spec defines and the externals they talk to.")
-  | .service => ("Service", [], "A service: its records, the events that write them, and what it reacts to.")
+  | .service => ("Service", [],
+      "A service: its records, the events that write them, what it reacts to, and its scenarios.")
   | .command => ("Command", ["records", "event", "caller", "input", "rejection"],
       "A request that may write records through events.")
   | .query => ("Query", ["records", "caller", "input", "output"],
       "A request that answers from the records and writes nothing.")
-  | .definition => ("Definition", ["records", "event", "caller"], "A command or query, as its service lists it.")
   | .machine => ("Machine", ["records", "event"],
       "State kept per instance; an instance lives while its key is among the machine's instances.")
   | .reaction => ("Reaction", ["records", "event"], "Effects for each event, without state of its own.")
   | .external => ("External", [], "A service outside the spec, known by what it accepts and sends.")
   | .externalCommand => ("ExternalCommand", ["input", "output", "rejection"], "A command an external accepts.")
   | .externalQuery => ("ExternalQuery", ["input", "output"], "A query an external answers.")
-  | .externalEvent => ("ExternalEvent", ["event"], "An event an external or another service sends.")
-  | .declared => ("Declared", [], "An external's command, query or event, listed in its declaration.")
+  | .source => ("Source", ["event"], "Events of one name that an external or a service sends.")
+  | .declared => ("Declared", ["records", "event", "caller"],
+      "A command, query or source as its owner lists it: the service or external whose list holds it owns it. An external's list holds `Declared(Nil, Nil, Nil)`.")
   | .effect => ("Effect", ["event"],
       "A request to an external or to a command or query of the same service; its answer becomes events.")
   | .subscription => ("Subscription", ["event"], "Another service's event, received as one of this service's.")
   | .bounds => ("Bounds", ["records"], "How far checking goes.")
   | .create => ("Create", ["records"], "How many keys checking may add to one table of the records.")
   | .response => ("Response", ["event"], "After one event, another within a time.")
-  | .scenario => ("Scenario", [], "Steps a service takes from its initial records, compared with a snapshot.")
+  | .scenario => ("Scenario", ["records", "event", "caller"],
+      "Steps a service takes from its initial records, compared with a snapshot.")
   | .step => ("Step", ["records", "event", "caller"], "One step of a scenario.")
   | .sender => ("Sender", [], "What sent a request: a machine instance or a reaction.")
   | .fresh => ("Fresh", [], "Where a command's new ids come from.")

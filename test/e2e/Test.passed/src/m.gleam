@@ -16,14 +16,18 @@ pub type Caller {
   User
 }
 
+pub type Rejection {
+  TooBig
+}
+
 pub type Phase {
   Idle
   Waiting
   Pinging
 }
 
-fn send() -> tazuna.ExternalCommand(Int, Nil, String) {
-  tazuna.external_command(external: "mail", name: "send")
+fn send() -> tazuna.ExternalCommand(Int, Nil, Nil) {
+  tazuna.external_command(name: "send")
 }
 
 fn apply(r: Records, e: Event) -> Records {
@@ -33,14 +37,13 @@ fn apply(r: Records, e: Event) -> Records {
   }
 }
 
-fn add() -> tazuna.Command(Records, Event, Caller, Int, String) {
+fn add() -> tazuna.Command(Records, Event, Caller, Int, Rejection) {
   tazuna.command(
-    service: "counter",
     name: "add",
     callers: [User],
     accepts: fn(n: Int) { [#("positive", n > 0)] },
     decide: fn(c: Ctx(Records, Int, Caller)) {
-      use <- tazuna.require(c.input < 100, or: "too big")
+      use <- tazuna.require(c.input < 100, or: TooBig)
       Ok([Added(c.input), Tagged(tazuna.fresh(c.fresh, 0))])
     },
     ensures: fn(c: Ctx(Records, Int, Caller), r: Records) {
@@ -49,9 +52,8 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, String) {
   )
 }
 
-fn tag() -> tazuna.Command(Records, Event, Caller, Id, String) {
+fn tag() -> tazuna.Command(Records, Event, Caller, Id, Rejection) {
   tazuna.command(
-    service: "counter",
     name: "tag",
     callers: [User],
     accepts: fn(_id: Id) { [] },
@@ -62,7 +64,6 @@ fn tag() -> tazuna.Command(Records, Event, Caller, Id, String) {
 
 fn total() -> tazuna.Query(Records, Caller, Nil, Int) {
   tazuna.query(
-    service: "counter",
     name: "total",
     callers: [User],
     accepts: fn(_n) { [] },
@@ -120,21 +121,22 @@ fn counter() -> tazuna.Service {
     init: Records(total: 0),
     apply: apply,
     subscribes: [],
-    requests: [
-      tazuna.define_command(add()),
-      tazuna.define_command(tag()),
-      tazuna.define_query(total()),
+    declares: [
+      tazuna.declare_command(add()),
+      tazuna.declare_command(tag()),
+      tazuna.declare_query(total()),
     ],
     machines: [watch()],
     reactions: [],
     invariants: fn(r: Records) { [#("under 50", r.total < 50)] },
     responses: [],
     bounds: tazuna.bounds(creates: [], items: 3, cascade: 3, steps: 5),
+    scenarios: [basic()],
   )
 }
 
-fn basic() -> tazuna.Scenario {
-  tazuna.scenario(service: "counter", name: "basic", steps: [
+fn basic() -> tazuna.Scenario(Records, Event, Caller) {
+  tazuna.scenario(name: "basic", steps: [
     {
       use added <- tazuna.step_command_then(
         command: add(),
@@ -162,16 +164,9 @@ fn basic() -> tazuna.Scenario {
 }
 
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(
-    services: [counter()],
-    externals: [
-      tazuna.external(
-        name: "mail",
-        commands: [tazuna.declare_command(send())],
-        queries: [],
-        events: [],
-      ),
-    ],
-    scenarios: [basic()],
-  )
+  tazuna.spec(services: [counter()], externals: [
+    tazuna.external(name: "mail", declares: [
+      tazuna.declare_external_command(send()),
+    ]),
+  ])
 }

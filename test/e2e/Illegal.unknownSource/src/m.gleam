@@ -19,7 +19,6 @@ fn apply(r: Records, _e: Event) -> Records {
 
 fn add(name: String) -> tazuna.Command(Records, Event, Caller, String, Nil) {
   tazuna.command(
-    service: "tasks",
     name: name,
     callers: [User],
     accepts: fn(_t: String) { [] },
@@ -28,18 +27,22 @@ fn add(name: String) -> tazuna.Command(Records, Event, Caller, String, Nil) {
   )
 }
 
+/// The clock's ticks carry the time; the subscription below reads them as text.
+fn tick() -> tazuna.Source(Int) {
+  tazuna.source(name: "tick")
+}
+
 fn tasks(name: String) -> tazuna.Service {
   tazuna.service(
     name: name,
     init: Records(tasks: table.new()),
     apply: apply,
     subscribes: [
-      tazuna.subscribe(
-        to: tazuna.external_event(external: "clock", name: "tick"),
-        wrap: fn(t: String) { Added(t) },
-      ),
+      tazuna.subscribe(to: tazuna.source(name: "tick"), wrap: fn(t: String) {
+        Added(t)
+      }),
     ],
-    requests: [tazuna.define_command(add("add"))],
+    declares: [tazuna.declare_command(add("add"))],
     machines: [],
     reactions: [],
     invariants: fn(_r) { [] },
@@ -50,9 +53,12 @@ fn tasks(name: String) -> tazuna.Service {
       cascade: 10,
       steps: 5,
     ),
+    scenarios: [],
   )
 }
 
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(services: [tasks("tasks")], externals: [], scenarios: [])
+  tazuna.spec(services: [tasks("tasks")], externals: [
+    tazuna.external(name: "clock", declares: [tazuna.declare_source(tick())]),
+  ])
 }

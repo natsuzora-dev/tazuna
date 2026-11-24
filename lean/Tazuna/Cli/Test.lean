@@ -16,20 +16,13 @@ def faultFields : Fault → List (String × Json)
   | .answerUnmatched to => [("to", Json.str to)]
   | .invalidEffect n rs => [("request", Json.str n), ("rules", Json.arr (rs.map Json.str).toArray)]
 
-/-- The scenario's steps, typed by its service, when the types agree; the structure rules have checked that they do. -/
-def _root_.Tazuna.Ir.ScenarioV.stepsFor (sc : ScenarioV) (v : ServiceV) : Option (List (StepV v.records v.event v.caller)) :=
-  match Ty.same sc.records v.records, Ty.same sc.event v.event, Ty.same sc.caller v.caller with
-  | some ⟨h1⟩, some ⟨h2⟩, some ⟨h3⟩ => some (h1 ▸ h2 ▸ h3 ▸ sc.steps)
-  | _, _, _ => none
-
 def textLines (text : String) : List String := (text.splitOn "\n").filter (!·.isEmpty)
 
 /-- Runs one scenario and compares or writes its snapshot; returns whether it passed. -/
-def testScenario (T : List TypeDecl) (spec : SpecV) (sc : ScenarioV) (update : Bool) : IO Bool := do
-  let at_ := [("service", Json.str sc.service), ("scenario", Json.str sc.name)]
-  let some v := spec.services.find? (·.name == sc.service) | return false
-  let some steps := sc.stepsFor v | return false
-  match runScenario T v steps with
+def testScenario (T : List TypeDecl) (v : ServiceV) (sc : ScenarioV v.records v.event v.caller) (update : Bool) :
+    IO Bool := do
+  let at_ := [("service", Json.str v.name), ("scenario", Json.str sc.name)]
+  match runScenario T v sc.steps with
   | .error (.fault k f) =>
     printLine (.fault f.kind) (at_ ++ [("step", Json.num k)] ++ faultFields f)
     return false
@@ -38,7 +31,7 @@ def testScenario (T : List TypeDecl) (spec : SpecV) (sc : ScenarioV) (update : B
     return false
   | .ok wires =>
     let lines := wires.map Wire.text
-    let dir : System.FilePath := "snapshots" / sc.service
+    let dir : System.FilePath := "snapshots" / v.name
     let path := dir / (sc.name ++ ".jsonl")
     if update then
       IO.FS.createDirAll dir
@@ -66,8 +59,9 @@ def test (root path : String) (update : Bool) : IO UInt32 := do
   | .error code => return code
   | .ok (T, spec) =>
     let mut ok := true
-    for sc in spec.scenarios do
-      ok := (← testScenario T spec sc update) && ok
+    for v in spec.services do
+      for sc in v.scenarios do
+        ok := (← testScenario T v sc update) && ok
     return if ok then 0 else 1
 
 /-- Reads the lines of a trace after its header, each with its line number, and the service it names. -/

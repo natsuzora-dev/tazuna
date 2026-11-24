@@ -234,7 +234,7 @@ def resolveE : E (.fn [ctxT] (Ty.option .int)) :=
       (.cons (.field (ft := .int) "input" 1 (by simp) (.var .here)) .nil)))
 
 def getQ : QueryV recordsT .str :=
-  { service := "s", name := "get", input := .int, output := Ty.option .int, callers := ["alice"],
+  { name := "get", input := .int, output := Ty.option .int, callers := ["alice"],
     accepts := Ty.down _ rfl (acceptsE.eval (G := []) () ()), resolve := Ty.down _ rfl (resolveE.eval (G := []) () ()) }
 
 def getCode (L : Layout) : Except Refusal (QueryCode getQ) := do
@@ -244,8 +244,9 @@ def getCode (L : Layout) : Except Refusal (QueryCode getQ) := do
 
 def querySvc : ServiceV :=
   { name := "s", records := recordsT, event := .int, caller := .str, init := Builtin.tableEmpty,
-    apply := fun (r, _, ()) => r, subscribes := [], commands := [], queries := [getQ], machines := [], reactions := [],
-    invariants := fun _ => [], responses := [], bounds := ⟨[], 0, 0, 0⟩, declared := [] }
+    apply := fun (r, _, ()) => r, subscribes := [], declares := [], commands := [], queries := [getQ], sources := [],
+    machines := [], reactions := [], invariants := fun _ => [], responses := [], bounds := ⟨[], 0, 0, 0⟩,
+    scenarios := [], declared := [] }
 
 def queryLayout : Layout :=
   Layout.addTys (fun _ => 3) {} (recordsT :: .id :: Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys resolveE)
@@ -342,9 +343,10 @@ def invariantsE : E (.fn [recordsT] Ty.rules) :=
 def eventSvc : ServiceV :=
   { name := "e", records := recordsT, event := evT, caller := .str, init := Builtin.tableEmpty,
     apply := Ty.down _ rfl (applyE.eval (G := []) () ()),
-    subscribes := [⟨"x", "set", evT, Ty.down _ rfl (wrapE.eval (G := []) () ())⟩], commands := [], queries := [],
-    machines := [], reactions := [], invariants := Ty.down _ rfl (invariantsE.eval (G := []) () ()), responses := [],
-    bounds := ⟨[], 0, 0, 0⟩, declared := [] }
+    subscribes := [⟨"x", "set", evT, Ty.down _ rfl (wrapE.eval (G := []) () ())⟩], declares := [], commands := [],
+    queries := [], sources := [], machines := [], reactions := [],
+    invariants := Ty.down _ rfl (invariantsE.eval (G := []) () ()), responses := [], bounds := ⟨[], 0, 0, 0⟩,
+    scenarios := [], declared := [] }
 
 def eventLayout : Layout :=
   Layout.addTys (fun _ => 3) {} (recordsT :: evT :: Tazuna.Smt.Expr.tys applyE ++ Tazuna.Smt.Expr.tys invariantsE)

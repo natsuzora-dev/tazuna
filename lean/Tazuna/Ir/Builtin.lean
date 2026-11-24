@@ -55,8 +55,9 @@ inductive Prim where
   | tableFilter | tableMap | tableCount | tableAny | tableAll
   | dateAddDays | dateDaysBetween
   | require | tableLookup
-  | spec | service | command | query | defineCommand | defineQuery | machine | reaction
-  | external | externalCommand | externalQuery | externalEvent | declareCommand | declareQuery | declareEvent
+  | spec | service | command | query | machine | reaction
+  | external | externalCommand | externalQuery | source
+  | declareCommand | declareQuery | declareSource | declareExternalCommand | declareExternalQuery
   | requestCommand | requestQuery | sendCommand | sendQuery | subscribe | bounds | create | response
   | scenario | stepCommand | stepQuery | stepWait | stepAnswerCommand | stepAnswerQuery | stepEvent | fromMachine | fromReaction | fresh | stepCommandThen
 deriving Repr, DecidableEq
@@ -148,45 +149,35 @@ def sig : Prim → PrimSig :=
       [p "table" (.table k v), p "key" k, ⟨some "or", "rejection", param 3⟩, l "then" (.fn [v] (.result (param 2) (param 3)))],
       .result (param 2) (param 3), [0], false⟩
   | .spec =>
-    { name := "spec", doc := "The spec: its services, the externals they talk to, and scenarios of the services.",
+    { name := "spec", doc := "The spec: its services and the externals they talk to.",
       tvars := [],
-      params := [l "services" (.list (.dsl .service [])), l "externals" (.list (.dsl .external [])),
-        l "scenarios" (.list (.dsl .scenario []))],
+      params := [l "services" (.list (.dsl .service [])), l "externals" (.list (.dsl .external []))],
       ret := .dsl .spec [] }
   | .service =>
     { name := "service",
-      doc := "A service. `apply` folds an event into the records: events are the only writes.",
+      doc := "A service. `apply` folds an event into the records: events are the only writes. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0.",
       tvars := ["records", "event", "caller"], dataArgs := true, needsEq := [2],
       params := [l "name" .str, l "init" a, l "apply" (.fn [a, b] a),
-        l "subscribes" (.list (.dsl .subscription [b])), l "requests" (.list (.dsl .definition [a, b, param 2])),
+        l "subscribes" (.list (.dsl .subscription [b])), l "declares" (.list (.dsl .declared [a, b, param 2])),
         l "machines" (.list (.dsl .machine [a, b])),
         l "reactions" (.list (.dsl .reaction [a, b])), l "invariants" (.fn [a] Ty.rules),
-        l "responses" (.list (.dsl .response [b])), l "bounds" (.dsl .bounds [a])],
+        l "responses" (.list (.dsl .response [b])), l "bounds" (.dsl .bounds [a]),
+        l "scenarios" (.list (.dsl .scenario [a, b, param 2]))],
       ret := .dsl .service [] }
   | .command =>
     { name := "command",
-      doc := "A command of the service named `service`: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects.",
+      doc := "A command: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects. The service that lists it owns it.",
       tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true, needsEq := [2],
-      params := [l "service" .str, l "name" .str, l "callers" (.list (param 2)), l "accepts" (.fn [param 3] Ty.rules),
+      params := [l "name" .str, l "callers" (.list (param 2)), l "accepts" (.fn [param 3] Ty.rules),
         l "decide" (.fn [.ctx a (param 3) (param 2)] (.result (.list b) (param 4))),
         l "ensures" (.fn [.ctx a (param 3) (param 2), a] Ty.rules)],
       ret := .dsl .command [a, b, param 2, param 3, param 4] }
   | .query =>
-    { name := "query", doc := "A query of the service named `service`: it answers from the records and writes nothing.",
+    { name := "query", doc := "A query: it answers from the records and writes nothing. The service that lists it owns it.",
       tvars := ["records", "caller", "input", "output"], dataArgs := true, needsEq := [1],
-      params := [l "service" .str, l "name" .str, l "callers" (.list b), l "accepts" (.fn [param 2] Ty.rules),
+      params := [l "name" .str, l "callers" (.list b), l "accepts" (.fn [param 2] Ty.rules),
         l "resolve" (.fn [.ctx a (param 2) b] (param 3))],
       ret := .dsl .query [a, b, param 2, param 3] }
-  | .defineCommand =>
-    { name := "define_command", doc := "The command, for its service's list of requests.",
-      tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true,
-      params := [p "command" (.dsl .command [a, b, param 2, param 3, param 4])],
-      ret := .dsl .definition [a, b, param 2] }
-  | .defineQuery =>
-    { name := "define_query", doc := "The query, for its service's list of requests.",
-      tvars := ["records", "event", "caller", "input", "output"], dataArgs := true,
-      params := [p "query" (.dsl .query [a, param 2, param 3, param 4])],
-      ret := .dsl .definition [a, b, param 2] }
   | .machine =>
     { name := "machine",
       doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect.",
@@ -203,36 +194,48 @@ def sig : Prim → PrimSig :=
       params := [l "name" .str, l "react" (.fn [.reactionCtx a, b] (.list (.dsl .effect [b])))],
       ret := .dsl .reaction [a, b] }
   | .external =>
-    { name := "external", doc := "An external service and what it declares.", tvars := [],
-      params := [l "name" .str, l "commands" (.list (.dsl .declared [])), l "queries" (.list (.dsl .declared [])),
-        l "events" (.list (.dsl .declared []))],
+    { name := "external", doc := "An external service: the commands, queries and sources it declares, which it owns.", tvars := [],
+      params := [l "name" .str, l "declares" (.list (.dsl .declared [Ty.nil, Ty.nil, Ty.nil]))],
       ret := .dsl .external [] }
   | .externalCommand =>
-    { name := "external_command", doc := "A command of the external named `external`.",
+    { name := "external_command", doc := "A command of an external: the external that lists it owns it.",
       tvars := ["input", "output", "rejection"], dataArgs := true,
-      params := [l "external" .str, l "name" .str], ret := .dsl .externalCommand [a, b, param 2] }
+      params := [l "name" .str], ret := .dsl .externalCommand [a, b, param 2] }
   | .externalQuery =>
     { name := "external_query",
-      doc := "A query of the external named `external`; `ensures` says what its answers satisfy.",
+      doc := "A query of an external; `ensures` says what its answers satisfy. The external that lists it owns it.",
       tvars := ["input", "output"], dataArgs := true,
-      params := [l "external" .str, l "name" .str, l "ensures" (.fn [a, b] Ty.rules)],
+      params := [l "name" .str, l "ensures" (.fn [a, b] Ty.rules)],
       ret := .dsl .externalQuery [a, b] }
-  | .externalEvent =>
-    { name := "external_event", doc := "An event of the external or service named `external`.",
+  | .source =>
+    { name := "source", doc := "Events named `name`: the service or external that lists the source sends them.",
       tvars := ["event"], dataArgs := true,
-      params := [l "external" .str, l "name" .str], ret := .dsl .externalEvent [a] }
+      params := [l "name" .str], ret := .dsl .source [a] }
   | .declareCommand =>
-    { name := "declare_command", doc := "The command, for its external's declaration.",
-      tvars := ["input", "output", "rejection"], dataArgs := true,
-      params := [p "command" (.dsl .externalCommand [a, b, param 2])], ret := .dsl .declared [] }
+    { name := "declare_command", doc := "The command, for the declarations of the service that owns it.",
+      tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true,
+      params := [p "command" (.dsl .command [a, b, param 2, param 3, param 4])],
+      ret := .dsl .declared [a, b, param 2] }
   | .declareQuery =>
-    { name := "declare_query", doc := "The query, for its external's declaration.",
+    { name := "declare_query", doc := "The query, for the declarations of the service that owns it.",
+      tvars := ["records", "event", "caller", "input", "output"], dataArgs := true,
+      params := [p "query" (.dsl .query [a, param 2, param 3, param 4])],
+      ret := .dsl .declared [a, b, param 2] }
+  | .declareSource =>
+    { name := "declare_source", doc := "The source, for the declarations of the service or external that owns it.",
+      tvars := ["records", "event", "caller", "source"], dataArgs := true,
+      params := [p "source" (.dsl .source [param 3])],
+      ret := .dsl .declared [a, b, param 2] }
+  | .declareExternalCommand =>
+    { name := "declare_external_command", doc := "The command, for the declarations of the external that owns it.",
+      tvars := ["input", "output", "rejection"], dataArgs := true,
+      params := [p "command" (.dsl .externalCommand [a, b, param 2])],
+      ret := .dsl .declared [Ty.nil, Ty.nil, Ty.nil] }
+  | .declareExternalQuery =>
+    { name := "declare_external_query", doc := "The query, for the declarations of the external that owns it.",
       tvars := ["input", "output"], dataArgs := true,
-      params := [p "query" (.dsl .externalQuery [a, b])], ret := .dsl .declared [] }
-  | .declareEvent =>
-    { name := "declare_event", doc := "The event, for its external's declaration.",
-      tvars := ["event"], dataArgs := true,
-      params := [p "event" (.dsl .externalEvent [a])], ret := .dsl .declared [] }
+      params := [p "query" (.dsl .externalQuery [a, b])],
+      ret := .dsl .declared [Ty.nil, Ty.nil, Ty.nil] }
   | .requestCommand =>
     { name := "request_command",
       doc := "An effect: the request to an external's command, and the events its answer becomes.",
@@ -260,9 +263,9 @@ def sig : Prim → PrimSig :=
         l "input" (param 3), l "on_answer" (.fn [param 4] (.list b))],
       ret := .dsl .effect [b] }
   | .subscribe =>
-    { name := "subscribe", doc := "Receives another service's or an external's event as one of this service's events.",
+    { name := "subscribe", doc := "Receives the events of another service's or an external's source as this service's events.",
       tvars := ["event", "source"], dataArgs := true,
-      params := [l "to" (.dsl .externalEvent [b]), l "wrap" (.fn [b] a)], ret := .dsl .subscription [a] }
+      params := [l "to" (.dsl .source [b]), l "wrap" (.fn [b] a)], ret := .dsl .subscription [a] }
   | .bounds =>
     { name := "bounds",
       doc := "How far checking goes: keys created per table, items per bag, internal steps per input, steps per run.",
@@ -281,10 +284,10 @@ def sig : Prim → PrimSig :=
       ret := .dsl .response [a] }
   | .scenario =>
     { name := "scenario",
-      doc := "A scenario of the service named `service`: its steps run from the initial records at time 0, and `test` compares the trace with snapshots/<service>/<name>.jsonl.",
+      doc := "A scenario of the service that lists it: its steps run from the initial records at time 0, and `test` compares the trace with snapshots/<service>/<name>.jsonl.",
       tvars := ["records", "event", "caller"], dataArgs := true,
-      params := [l "service" .str, l "name" .str, l "steps" (.list (.dsl .step [a, b, param 2]))],
-      ret := .dsl .scenario [] }
+      params := [l "name" .str, l "steps" (.list (.dsl .step [a, b, param 2]))],
+      ret := .dsl .scenario [a, b, param 2] }
   | .stepCommand =>
     { name := "step_command", doc := "A step: the caller sends the command.",
       tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true,
@@ -315,9 +318,9 @@ def sig : Prim → PrimSig :=
         l "with" (param 4)],
       ret := .dsl .step [a, b, param 2] }
   | .stepEvent =>
-    { name := "step_event", doc := "A step: the service receives an event it subscribes to.",
+    { name := "step_event", doc := "A step: the service receives an event of a source it subscribes to.",
       tvars := ["records", "event", "caller", "source"], dataArgs := true,
-      params := [l "event" (.dsl .externalEvent [param 3]), l "value" (param 3)],
+      params := [l "source" (.dsl .source [param 3]), l "value" (param 3)],
       ret := .dsl .step [a, b, param 2] }
   | .fromMachine =>
     { name := "from_machine", doc := "The instance of the machine whose key is `key`, as the sender of a request.",
@@ -342,8 +345,9 @@ def all : List Prim :=
   [.length, .bagFromList, .bagInsert, .bagSize, .bagFilter, .bagMap, .bagCount, .bagSum, .bagAny, .bagAll,
    .bagContains, .bagMinBy, .bagMaxBy, .tableNew, .tableFromList, .tableInsert, .tableRemove, .tableGet, .tableSize,
    .tableKeys, .tableValues, .tableFilter, .tableMap, .tableCount, .tableAny, .tableAll, .dateAddDays,
-   .dateDaysBetween, .require, .tableLookup, .spec, .service, .command, .query, .defineCommand, .defineQuery, .machine, .reaction, .external,
-   .externalCommand, .externalQuery, .externalEvent, .declareCommand, .declareQuery, .declareEvent, .requestCommand, .requestQuery,
+   .dateDaysBetween, .require, .tableLookup, .spec, .service, .command, .query, .machine, .reaction,
+   .external, .externalCommand, .externalQuery, .source, .declareCommand, .declareQuery, .declareSource,
+   .declareExternalCommand, .declareExternalQuery, .requestCommand, .requestQuery,
    .sendCommand, .sendQuery, .subscribe, .bounds, .create, .response, .scenario, .stepCommand, .stepQuery, .stepWait,
    .stepAnswerCommand, .stepAnswerQuery, .stepEvent, .fromMachine, .fromReaction, .fresh, .stepCommandThen]
 

@@ -19,9 +19,9 @@ def answerTy (output : Ty) : Option Ty → Ty
   | some rejection => Ty.result output rejection
   | none => output
 
-/-- A request to an external's command or query; the answer becomes events. -/
+/-- A request to an external's command or query; the answer becomes events. The external is the one that lists the
+command or query, which the step finds. -/
 structure RequestV (e : Ty) where
-  external : String
   name : String
   input : Ty
   output : Ty
@@ -32,9 +32,8 @@ structure RequestV (e : Ty) where
   holds : (answerTy output rejection).den0 → Ty.rules.den0
   onAnswer : (Ty.fn [answerTy output rejection] (.list e)).den0
 
-/-- A command of the service `service`. -/
+/-- A command; the service that lists it owns it. -/
 structure CommandV (r e c : Ty) where
-  service : String
   name : String
   input : Ty
   rejection : Ty
@@ -43,9 +42,8 @@ structure CommandV (r e c : Ty) where
   decide : (Ty.fn [Ty.ctx r input c] (Ty.result (.list e) rejection)).den0
   ensures : (Ty.fn [Ty.ctx r input c, r] Ty.rules).den0
 
-/-- A query of the service `service`. -/
+/-- A query; the service that lists it owns it. -/
 structure QueryV (r c : Ty) where
-  service : String
   name : String
   input : Ty
   output : Ty
@@ -58,11 +56,6 @@ rejection)`, so a handle's types are the command's. -/
 abbrev CommandOf (r e c i j : Ty) := { x : CommandV r e c // x.input = i ∧ x.rejection = j }
 
 abbrev QueryOf (r c i o : Ty) := { x : QueryV r c // x.input = i ∧ x.output = o }
-
-/-- A command or query, as a service lists it. -/
-inductive DefinitionV (r e c : Ty) where
-  | command (x : CommandV r e c)
-  | query (x : QueryV r c)
 
 /-- What a machine or reaction starts: a request to an external, or a command or query of its own service run inside
 the same step. An own command's answer is `Ok(Nil)` once its events are applied, or its rejection. -/
@@ -88,19 +81,23 @@ structure ReactionV (r e : Ty) where
   name : String
   react : e.den0 → r.den0 → Int → List (EffectV e)
 
-/-- What an external declares: a command (with its rejection type), a query (with what its answers ensure) or an
-event. The wire name is `external.name`. -/
+/-- A declaration, for the service or external that owns it: the handle, with the types that make it that handle. -/
 inductive DeclaredV where
-  | command (external name : String) (input output rejection : Ty)
-  | query (external name : String) (input output : Ty) (holds : (Ty.fn [input, output] Ty.rules).den0)
-  | event (external name : String) (ty : Ty)
+  | command (r e c : Ty) (x : CommandV r e c)
+  | query (r c : Ty) (x : QueryV r c)
+  | externalCommand (name : String) (input output rejection : Ty)
+  | externalQuery (name : String) (input output : Ty) (holds : (Ty.fn [input, output] Ty.rules).den0)
+  | source (name : String) (event : Ty)
 
+/-- An external: the commands, queries and sources it declares. -/
 structure ExternalV where
   name : String
-  declared : List DeclaredV
+  declares : List DeclaredV
 
-/-- Another service's or an external's event, received as an event of this service. -/
+/-- Another service's or an external's source, whose events this service receives as its own. -/
 structure SubscriptionV (e : Ty) where
+  /-- The service or external that lists the source with this name and event type, which `spec` finds; empty when
+  none does. -/
   source : String
   name : String
   event : Ty
@@ -125,6 +122,24 @@ structure ResponseV (e : Ty) where
   then_ : (Ty.fn [e] Ty.bool).den0
   within : Int
 
+/-- One step of a scenario, typed by its service's records, event and caller. -/
+inductive StepV (r e c : Ty) where
+  /-- The command, then the steps `next` gives for the counter its new ids came from (`Ctx.fresh`). -/
+  | command (x : CommandV r e c) (caller : c.den0) (input : x.input.den0) (next : Nat → List (StepV r e c))
+  | query (x : QueryV r c) (caller : c.den0) (input : x.input.den0)
+  /-- Time moves on by `ms`: a clock line, which fires the timers due. -/
+  | wait (ms : Int)
+  /-- The answer to the one pending request that `sender` sent to the external command or query `name` of these
+  types (a query has no rejection type). -/
+  | answer (name : String) (input output : Ty) (rejection : Option Ty) (sender : Sender) (value : WireVal)
+  /-- An event of the source `name`, whose event type is the value's. -/
+  | event (name : String) (value : WireVal)
+
+/-- A scenario: steps from its service's initial records at time 0. -/
+structure ScenarioV (r e c : Ty) where
+  name : String
+  steps : List (StepV r e c)
+
 structure ServiceV where
   name : String
   records : Ty
@@ -133,41 +148,26 @@ structure ServiceV where
   init : records.den0
   apply : (Ty.fn [records, event] records).den0
   subscribes : List (SubscriptionV event)
+  /-- What it declares, as written. -/
+  declares : List DeclaredV
+  /-- The commands it lists that are typed for it. -/
   commands : List (CommandV records event caller)
   queries : List (QueryV records caller)
+  /-- The sources it lists: names and event types. -/
+  sources : List (String × Ty)
   machines : List (MachineV records event)
   reactions : List (ReactionV records event)
   invariants : (Ty.fn [records] Ty.rules).den0
   responses : List (ResponseV event)
   bounds : BoundsV records
-  /-- What the spec's externals declare, which `spec` fills in: an effect may request only a declared command or
-  query. -/
-  declared : List DeclaredV
-
-/-- One step of a scenario, typed by its service's records, event and caller. -/
-inductive StepV (r e c : Ty) where
-  /-- The command, then the steps `next` gives for the counter its new ids came from (`Ctx.fresh`). -/
-  | command (x : CommandV r e c) (caller : c.den0) (input : x.input.den0) (next : Nat → List (StepV r e c))
-  | query (x : QueryV r c) (caller : c.den0) (input : x.input.den0)
-  /-- Time moves on by `ms`: a clock line, which fires the timers due. -/
-  | wait (ms : Int)
-  /-- The answer to the one pending request to `external.name` that `sender` sent. -/
-  | answer (external name : String) (sender : Sender) (value : WireVal)
-  | event (source name : String) (value : WireVal)
-
-/-- A scenario of the service `service`: steps from the initial records at time 0. -/
-structure ScenarioV where
-  service : String
-  name : String
-  records : Ty
-  event : Ty
-  caller : Ty
-  steps : List (StepV records event caller)
+  scenarios : List (ScenarioV records event caller)
+  /-- The commands and queries the spec's externals list, each with its external, which `spec` fills in: an effect
+  may request only these. -/
+  declared : List (String × DeclaredV)
 
 structure SpecV where
   services : List ServiceV
   externals : List ExternalV
-  scenarios : List ScenarioV
 
 /-- What each structure type means. Structure values have no `==`. -/
 def Dsl.val : Dsl → List Ty → Sem
@@ -178,20 +178,19 @@ def Dsl.val : Dsl → List Ty → Sem
       | .service, _ => ServiceV
       | .command, [r, e, c, i, j] => CommandOf r e c i j
       | .query, [r, c, i, o] => QueryOf r c i o
-      | .definition, [r, e, c] => DefinitionV r e c
       | .machine, [r, e] => MachineV r e
       | .reaction, [r, e] => ReactionV r e
       | .external, _ => ExternalV
-      | .externalCommand, [_, _, _] => String × String
-      | .externalQuery, [i, o] => String × String × (Ty.fn [i, o] Ty.rules).den0
-      | .externalEvent, [_] => String × String
+      | .externalCommand, [_, _, _] => String
+      | .externalQuery, [i, o] => String × (Ty.fn [i, o] Ty.rules).den0
+      | .source, [_] => String
       | .declared, _ => DeclaredV
       | .effect, [e] => EffectV e
       | .subscription, [e] => SubscriptionV e
       | .bounds, [r] => BoundsV r
       | .create, [r] => CreateV r
       | .response, [e] => ResponseV e
-      | .scenario, _ => ScenarioV
+      | .scenario, [r, e, c] => ScenarioV r e c
       | .step, [r, e, c] => StepV r e c
       | .sender, _ => Sender
       | _, _ => Unit
