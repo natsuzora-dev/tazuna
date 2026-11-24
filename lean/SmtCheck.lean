@@ -63,6 +63,11 @@ def bagMap (b : E (.bag .int)) (r : Ty) (h : Prim.bagMap.ok [.int, r] = true) (b
 def bagContains (t : Ty) (h : Prim.bagContains.ok [t] = true) (b : E (.bag t)) (x : E t) : E Ty.bool :=
   .call (.prim .bagContains [t] h) (.cons b (.cons x .nil))
 def bagSize (t : Ty) (h : Prim.bagSize.ok [t] = true) (b : E (.bag t)) : E .int := .call (.prim .bagSize [t] h) (.cons b .nil)
+def minBy (b : E (.bag .int)) (body : Expr [] [.int] .int) : E (Ty.result .int Ty.pickError) :=
+  .call (.prim .bagMinBy [.int] rfl) (.cons b (.cons (.lam body) .nil))
+def maxBy (b : E (.bag .int)) (body : Expr [] [.int] .int) : E (Ty.result .int Ty.pickError) :=
+  .call (.prim .bagMaxBy [.int] rfl) (.cons b (.cons (.lam body) .nil))
+def b0 : E (.bag .int) := .call (.prim .bagFromList [.int] rfl) (.cons (.list .nil) .nil)
 def isTwo : Expr [] [.int] Ty.bool := .bin (.eq rfl) (.var .here) (.int 2)
 def bigger : Expr [] [.int] Ty.bool := .bin .gt (.var .here) (.int 1)
 /-- `table_from_list([#(1, "a"), #(1, "c")])`: the last pair for key 1 wins. -/
@@ -140,6 +145,10 @@ def cases : List (String × (t : Ty) × E t) :=
     ("bag filter", ⟨.int, .call (.prim .bagSize [.int] rfl) (.cons (bagOp .bagFilter (.bag .int) rfl rfl b3 bigger) .nil)⟩),
     ("bag any", ⟨Ty.bool, bagOp .bagAny Ty.bool rfl rfl b3 isTwo⟩),
     ("bag sum counts occurrences", ⟨.int, bagSum b3 (.bin .mul (.var .here) (.int 10))⟩),
+    ("min by picks the one least key", ⟨Ty.result .int Ty.pickError, minBy b3 (.var .here)⟩),
+    ("max by reports a tie", ⟨Ty.result .int Ty.pickError, maxBy b3 (.var .here)⟩),
+    ("max by with a negated key", ⟨Ty.result .int Ty.pickError, maxBy b3 (.neg (.var .here))⟩),
+    ("min by of an empty bag", ⟨Ty.result .int Ty.pickError, minBy b0 (.var .here)⟩),
     ("bag map keeps occurrences", ⟨.int, bagSum (bagMap b3 .int rfl (.bin .mul (.var .here) (.int 10))) (.var .here)⟩),
     ("bag map transforms items", ⟨Ty.bool, .bin .and (bagContains .int rfl (bagMap b3 .int rfl (.bin .mul (.var .here) (.int 10))) (.int 20))
       (.not (bagContains .int rfl (bagMap b3 .int rfl (.bin .mul (.var .here) (.int 10))) (.int 2)))⟩),

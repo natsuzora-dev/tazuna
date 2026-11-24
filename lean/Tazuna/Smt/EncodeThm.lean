@@ -1098,6 +1098,243 @@ theorem lookup_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L 
       simp only [Term.denotes, List.cons.injEq] at hxs
       simpa [hxs.2.1] using hzv
 
+/-! `bag_min_by` and `bag_max_by`. `pick` finds the winning key by a fold in list order; the encoding asks each slot
+whether it beats all others. `pick_eq` shows the two agree, and that no order is involved. -/
+
+theorem two_le_length {β : Type} {l : List β} {a b : β} (ha : a ∈ l) (hb : b ∈ l) (hab : a ≠ b) : 2 ≤ l.length := by
+  match l with
+  | [] => simp at ha
+  | [c] => simp at ha hb; exact absurd (ha.trans hb.symm) hab
+  | _ :: _ :: _ => simp
+
+section Pick
+variable {α : Type} (wins : Int → Int → Bool) (key : α → Int)
+
+/-- Whether `y` beats every other item of `l`: it is the only item that does not lose to it. -/
+def winsAll (l : List α) (y : α) : Bool := (l.filter fun z => !wins (key y) (key z)).length == 1
+
+variable (hirr : ∀ a, wins a a = false) (htrans : ∀ a b c, wins a b = true → wins b c = true → wins a c = true)
+include hirr htrans
+
+omit htrans in
+include htrans in
+/-- The fold's key is one of the keys, and no key beats it. -/
+theorem pick_best (htot : ∀ a b, a ≠ b → wins a b = true ∨ wins b a = true) : (rest : List α) → (m : Int) →
+    let r := rest.foldl (fun m y => if wins (key y) m then key y else m) m
+    (r = m ∨ ∃ z ∈ rest, key z = r) ∧ wins m r = false ∧ ∀ z ∈ rest, wins (key z) r = false
+  | [], m => ⟨.inl rfl, hirr m, by simp⟩
+  | y :: rest, m => by
+    obtain ⟨h1, h2, h3⟩ := pick_best htot rest (if wins (key y) m then key y else m)
+    simp only [List.foldl_cons]
+    generalize List.foldl _ _ rest = r at h1 h2 h3
+    refine ⟨?_, ?_, ?_⟩
+    · rcases h1 with h | ⟨z, hz, e⟩
+      · by_cases hw : wins (key y) m = true
+        · simp only [hw, ite_true] at h; exact .inr ⟨y, by simp, h.symm⟩
+        · simp only [hw, Bool.false_eq_true, ite_false] at h; exact .inl h
+      · exact .inr ⟨z, by simp [hz], e⟩
+    · by_cases hw : wins (key y) m = true
+      · simp only [hw, ite_true] at h2
+        cases e : wins m r
+        · rfl
+        · exact absurd (htrans _ _ _ hw e) (by simp [h2])
+      · simp only [hw, Bool.false_eq_true, ite_false] at h2; exact h2
+    · intro z hz
+      rcases List.mem_cons.1 hz with rfl | hz
+      · by_cases hw : wins (key z) m = true
+        · simp only [hw, ite_true] at h2; exact h2
+        · simp only [hw, Bool.false_eq_true, ite_false] at h2
+          cases e : wins (key z) r
+          · rfl
+          · exfalso
+            by_cases hrm : r = m
+            · rw [hrm] at e; exact hw e
+            · rcases htot r m hrm with h | h
+              · exact hw (htrans _ _ _ e h)
+              · rw [h2] at h; cases h
+      · exact h3 z hz
+
+/-- `pick` is the first item that beats all others, an error saying whether the bag had items when none does. -/
+theorem pick_eq (htot : ∀ a b, a ≠ b → wins a b = true ∨ wins b a = true) (l : List α) :
+    Builtin.pick wins key l = match l.find? (winsAll wins key l) with
+      | some w => .ok w
+      | none => .error (!l.isEmpty) := by
+  match l with
+  | [] => rfl
+  | x :: rest =>
+    obtain ⟨h1, h2, h3⟩ := pick_best wins key hirr htrans htot rest (key x)
+    generalize hb : rest.foldl (fun m y => if wins (key y) m then key y else m) (key x) = best at h1 h2 h3
+    have B1 : ∃ z ∈ x :: rest, key z = best := by
+      rcases h1 with h | ⟨z, hz, e⟩
+      · exact ⟨x, by simp, h.symm⟩
+      · exact ⟨z, by simp [hz], e⟩
+    have B2 : ∀ z ∈ x :: rest, wins (key z) best = false := by
+      intro z hz; rcases List.mem_cons.1 hz with rfl | hz
+      · exact h2
+      · exact h3 z hz
+    let F := (x :: rest).filter (key · == best)
+    have hA : ∀ y ∈ x :: rest, winsAll wins key (x :: rest) y = true → key y = best := by
+      intro y hy hw
+      refine Classical.byContradiction fun hne => ?_
+      obtain ⟨z, hz, ez⟩ := B1
+      have : 2 ≤ ((x :: rest).filter fun z => !wins (key y) (key z)).length :=
+        two_le_length (List.mem_filter.2 ⟨hy, by simp [hirr]⟩) (List.mem_filter.2 ⟨hz, by simp [ez, B2 y hy]⟩)
+          (fun e => hne (e ▸ ez))
+      simp only [winsAll, beq_iff_eq] at hw; omega
+    have hB : ∀ y, key y = best → ((x :: rest).filter fun z => !wins (key y) (key z)) = F := by
+      intro y ey
+      refine List.filter_congr fun z hz => ?_
+      rw [ey]
+      by_cases e : key z = best
+      · simp [e, hirr]
+      · have := B2 z hz
+        rcases htot best (key z) (Ne.symm e) with h | h
+        · simp [h, e]
+        · rw [this] at h; cases h
+    have hW : ∀ y ∈ x :: rest, winsAll wins key (x :: rest) y = true ↔ key y = best ∧ F.length = 1 := by
+      intro y hy
+      constructor
+      · intro hw
+        have ey := hA y hy hw
+        refine ⟨ey, ?_⟩
+        simp only [winsAll, beq_iff_eq, hB y ey] at hw; exact hw
+      · intro ⟨ey, hl⟩
+        simp only [winsAll, beq_iff_eq, hB y ey]; exact hl
+    simp only [Builtin.pick]
+    rw [hb]
+    split
+    · rename_i w hF
+      have hw : w ∈ F := by show w ∈ List.filter _ _; rw [hF]; simp
+      obtain ⟨hwl, ew⟩ := List.mem_filter.1 hw
+      simp only [beq_iff_eq] at ew
+      cases hf : (x :: rest).find? (winsAll wins key (x :: rest)) with
+      | none =>
+        exact absurd ((hW w hwl).2 ⟨ew, by simp [F, hF]⟩) (by simp [List.find?_eq_none.1 hf w hwl])
+      | some y =>
+        have hyl := List.mem_of_find?_eq_some hf
+        have ey := ((hW y hyl).1 (List.find?_some hf)).1
+        have : y ∈ List.filter (key · == best) (x :: rest) := List.mem_filter.2 ⟨hyl, by simp [ey]⟩
+        rw [hF] at this
+        simp at this; subst this; rfl
+    · rename_i hF
+      have hl : F.length ≠ 1 := by
+        intro h1
+        match hF' : F, h1 with
+        | [w], _ => exact hF w hF'
+      have hf : (x :: rest).find? (winsAll wins key (x :: rest)) = none :=
+        List.find?_eq_none.2 fun y hy hw => hl ((hW y hy).1 hw).2
+      rw [hf]; rfl
+
+/-- No two items of a list both beat all others. -/
+theorem winners_unique (l : List α) : l.Pairwise fun a b => ¬(winsAll wins key l a = true ∧ winsAll wins key l b = true) := by
+  refine List.pairwise_iff_forall_sublist.2 fun {a b} hs ⟨ha, hb⟩ => ?_
+  have beat : ∀ u v, [u, v].Sublist l → winsAll wins key l u = true → wins (key u) (key v) = true := by
+    intro u v huv hu
+    cases e : wins (key u) (key v)
+    · have := (huv.filter fun z => !wins (key u) (key z)).length_le
+      simp only [List.filter_cons, hirr, e, Bool.not_false, ite_true, List.filter_nil, List.length_cons,
+        List.length_nil] at this
+      simp only [winsAll, beq_iff_eq] at hu; omega
+    · rfl
+  have hab := beat a b hs ha
+  have hba : wins (key b) (key a) = true := by
+    cases e : wins (key b) (key a)
+    · have := (hs.filter fun z => !wins (key b) (key z)).length_le
+      simp only [List.filter_cons, hirr, e, Bool.not_false, ite_true, List.filter_nil, List.length_cons,
+        List.length_nil] at this
+      simp only [winsAll, beq_iff_eq] at hb; omega
+    · rfl
+  have := htrans _ _ _ hab hba
+  rw [hirr] at this; cases this
+
+end Pick
+
+/-- `bag_min_by` and `bag_max_by` on slots: the winning slot's item, or `Tie` or `Empty`, as `pick` gives. -/
+theorem pickCode_rel (lt : Term → Term → Term) (wins : Int → Int → Bool)
+    (hlt : ∀ (ta tb : Term) (a b : Int), ta.denote M = .int a → tb.denote M = .int b →
+      (lt ta tb).denote M = .bool (wins a b))
+    (hirr : ∀ a, wins a a = false) (htrans : ∀ a b c, wins a b = true → wins b c = true → wins a c = true)
+    (htot : ∀ a b, a ≠ b → wins a b = true ∨ wins b a = true)
+    {a : Ty} {xs : (Ty.bag a).den} {b : Term} (hb : Rel M L (.bag a) xs b) {f : (Ty.fn [a] .int).den}
+    {sf : Code (.fn [a] .int)} (hf : Rel M L _ f sf) {r c : Term} (h : pickCode L lt a b sf = .ok (r, c))
+    (hc : Holds M c) :
+    RelV L (Ty.result a Ty.pickError) (Ty.ofPick (Builtin.pick wins (fun x => f (x, ())) xs)) (r.denote M) := by
+  simp only [pickCode] at h
+  obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨R, h2, h⟩ := bind_ok.1 h
+  obtain ⟨dv, h3, h⟩ := bind_ok.1 h
+  obtain ⟨foundT, h4, h⟩ := bind_ok.1 h
+  obtain ⟨tieI, h5, h⟩ := bind_ok.1 h
+  obtain ⟨tieT, h6, h⟩ := bind_ok.1 h
+  obtain ⟨emI, h7, h⟩ := bind_ok.1 h
+  obtain ⟨emT, h8, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  dsimp only at h4 ⊢
+  let key : a.den → Int := fun x => f (x, ())
+  obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := bag_view hb h1
+  have hk : AlignedV M (EBag L a) (fun y v => v = .int (key y)) _ _ sv ys :=
+    slotTerms_aligned (r := .int) hf (fun y => (y, ())) eBag_rels hS hh h2 hc
+  have hks : AlignedV M (EBag L a) (fun y v => v = .int (key y)) (slotsOf d dt n 1 b) (R.map fun r => Term.share r.1)
+      sv ys := by
+    have := alignedV_mapq (V' := fun y v => v = .int (key y)) Term.share
+      (fun y q hq => by rw [Term.denote_share]; exact hq) hk
+    rwa [List.map_map] at this
+  generalize slotsOf d dt n 1 b = S at hS hks h4 ⊢
+  generalize R.map (fun r => Term.share r.1) = ks at hks h4 ⊢
+  have hws : Aligned M (EBag L a) (winsAll wins key ys) S
+      (ks.map fun k => Term.share (.eq (countT S (ks.map fun k' => .not (lt k k'))) (.int 1))) sv ys := by
+    refine alignedV_mapq _ (fun y k hy => ?_) hks
+    have hin : Aligned M (EBag L a) (fun z => !wins (key y) (key z)) S (ks.map fun k' => .not (lt k k')) sv ys :=
+      alignedV_mapq _ (fun z k' hz => by
+        show Val.bool (!(Term.denote M (lt k k')).toBool) = _
+        rw [hlt k k' _ _ hy hz]; rfl) hks
+    simp only [Term.denote_share, Term.denote, countT_den hin]
+    show Val.bool (Val.beq _ _) = _
+    simp only [Val.beq, winsAll]
+    congr 1
+    cases e : (List.filter (fun z => !wins (key y) (key z)) ys).length == 1 <;> simp_all; omega
+  have hany := anySlotT_den hws
+  have hne : (anySlotT S (S.map fun _ => tt)).denote M = .bool (ys.any fun _ => true) :=
+    anySlotT_den (aligned_map (V := fun _ v => v = .bool true) (fun _ => tt) (fun _ _ _ => rfl) hS hh)
+  have hW : winsAll wins key xs = winsAll wins key ys := funext fun y => by
+    simp only [winsAll, (hperm.filter _).length_eq]
+  have hfind : xs.find? (winsAll wins key ys) = ys.find? (winsAll wins key ys) := by
+    refine find_perm hperm.symm ?_
+    have := winners_unique wins key hirr htrans xs
+    rwa [hW] at this
+  show RelV L _ (Ty.ofPick (Builtin.pick wins key xs)) _
+  rw [pick_eq wins key hirr htrans htot xs, hW, hfind]
+  simp only [Term.denote, hany, Val.toBool]
+  cases hy : ys.find? (winsAll wins key ys) with
+  | some y =>
+    have : ys.any (winsAll wins key ys) = true := List.any_eq_true.2 ⟨y, List.mem_of_find?_eq_some hy, List.find?_some hy⟩
+    simp only [this, ite_true]
+    have hitem := pick_aligned (fun xs => xs.headD dv) (fun y v => RelV L a y v) (fun y xs he => by
+      obtain ⟨z, hz, hyz⟩ := he
+      match xs, hz with
+      | [t], hz => simp only [Term.denotes, List.cons.injEq] at hz; simpa [hz.1] using hyz) dv hws y hy
+    exact adtCtor_rel (vs := [[a], [Ty.pickError]]) ⟨0, by simp⟩ _ foundT h4 (y, ()) ⟨_, _, rfl, hitem, rfl⟩
+  | none =>
+    have : ys.any (winsAll wins key ys) = false := by
+      cases e : ys.any (winsAll wins key ys)
+      · rfl
+      · obtain ⟨y, hy', hw⟩ := List.any_eq_true.1 e
+        exact absurd hw (by simp [List.find?_eq_none.1 hy y hy'])
+    simp only [this, Bool.false_eq_true, ite_false, hne]
+    have hemp : xs.isEmpty = ys.isEmpty := by
+      have := hperm.length_eq
+      cases xs <;> cases ys <;> simp_all
+    rw [hemp]
+    cases ys with
+    | nil =>
+      simp only [List.any_nil, Bool.false_eq_true, ite_false, List.isEmpty_nil]
+      exact adtCtor_rel (vs := [[a], [Ty.pickError]]) ⟨1, by simp⟩ _ emT h8 (Alts.inj ⟨0, by simp⟩ (), ())
+        ⟨_, _, rfl, adtCtor_rel (vs := [[], []]) ⟨0, by simp⟩ [] emI h7 () rfl, rfl⟩
+    | cons y ys =>
+      simp only [List.any_cons, Bool.true_or, ite_true, List.isEmpty_cons, Bool.not_false]
+      exact adtCtor_rel (vs := [[a], [Ty.pickError]]) ⟨1, by simp⟩ _ tieT h6 (Alts.inj ⟨1, by simp⟩ (), ())
+        ⟨_, _, rfl, adtCtor_rel (vs := [[], []]) ⟨1, by simp⟩ [] tieI h5 () rfl, rfl⟩
+
 /-- Each built-in's code relates to its meaning. -/
 theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : Code (p.ty.inst args))
     (h : primCode L p args hp = .ok s) : Rel M L (p.ty.inst args) (p.den args hp) s := by
@@ -1302,6 +1539,18 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
           exact ⟨zv, by simp [Term.denotes, hxs.2.1], hzv⟩) (fun _ _ => rfl) ha
     obtain ⟨d', n', dt', S', sv', ys', h4, rfl, hS', hl', hw', hp', hh'⟩ := collOf_rel hr hS1 hw1 hh1 hc
     exact bag_mk h4 hS' hl' hw' (hp'.trans (hperm.map _)) hh'
+  case bagMinBy =>
+    simp only [primCode] at h; cases h
+    intro ⟨xs, f, ()⟩ ⟨b, sf, ()⟩ ⟨hb, hf, _⟩ r c hr hc
+    exact pickCode_rel (fun k k' => .lt k k') (fun a b => decide (a < b))
+      (fun ta tb a b ha hb => by simp [Term.denote, ha, hb, Val.toInt])
+      (fun a => by simp) (fun a b c => by simp; omega) (fun a b h => by simp; omega) hb hf hr hc
+  case bagMaxBy =>
+    simp only [primCode] at h; cases h
+    intro ⟨xs, f, ()⟩ ⟨b, sf, ()⟩ ⟨hb, hf, _⟩ r c hr hc
+    exact pickCode_rel (fun k k' => .lt k' k) (fun a b => decide (a > b))
+      (fun ta tb a b ha hb => by simp [Term.denote, ha, hb, Val.toInt])
+      (fun a => by simp) (fun a b c => by simp; omega) (fun a b h => by simp; omega) hb hf hr hc
   case bagAny =>
     simp only [primCode] at h; cases h
     intro ⟨xs, f, ()⟩ ⟨b, sf, ()⟩ ⟨hb, hf, _⟩ r c hr hc

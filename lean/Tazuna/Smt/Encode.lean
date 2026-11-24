@@ -342,6 +342,23 @@ def lookupCode (k v : Ty) (t key : Term) : Except Refusal (Term × Term) := do
   let dv ← need "a value type without a default term" (defaultT L v)
   pure (lookupT kt dv (slotsOf d dt n 2 t))
 
+/-- `bag_min_by` (`lt` is `<`) or `bag_max_by` (`lt` is `>`) of the bag `b` by the key function `f`: the item of
+the occupied slot whose key beats every other occupied slot's, `Tie` when none does and a slot is occupied, `Empty`
+when none is. A slot wins when its own key is the only one among the occupied slots that fails to beat it. -/
+def pickCode (lt : Term → Term → Term) (a : Ty) (b : Term) (f : Codes [a] → Except Refusal (Code .int × Term)) :
+    Except Refusal (Term × Term) := do
+  let (d, n, dt) ← collD L (.bag a) [a]
+  let S := slotsOf d dt n 1 b
+  let R ← slotTerms f S
+  let ks := R.map fun r => Term.share r.1
+  let ws := ks.map fun k => Term.share (.eq (countT S (ks.map fun k' => .not (lt k k'))) (.int 1))
+  let dv ← need "an item type without a default term" (defaultT L a)
+  let found ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 0
+    [pickT dv (List.zipWith (fun sl w => (sl.1, w, sl.2.headD dv)) S ws)]
+  let tie ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 1 [← adtCtor L 4 [] [[], []] 1 []]
+  let empty ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 1 [← adtCtor L 4 [] [[], []] 0 []]
+  pure (.ite (anySlotT S ws) found (.ite (anySlotT S (S.map fun _ => tt)) tie empty), guardsT S (R.map (·.2)))
+
 /-- The code of each built-in that has an exact encoding: a table of term builders indexed by the built-in. -/
 def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal (Code (p.ty.inst args)) :=
   match p, args, h with
@@ -401,6 +418,8 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let xt ← need' "an item type whose == is not SMT-LIB's =" a.eqable (← need "an item that has no term" (Code.term? _ x))
     let S := slotsOf d dt n 1 b
     pure (anySlotT S (S.map fun sl => .eq xt (sl.2.headD xt)), tt)
+  | .bagMinBy, args, _ => .ok fun (b, f, ()) => pickCode L (fun k k' => .lt k k') ((Ty.param 0).inst args) b f
+  | .bagMaxBy, args, _ => .ok fun (b, f, ()) => pickCode L (fun k k' => .lt k' k) ((Ty.param 0).inst args) b f
   | .tableNew, args, _ => .ok fun () => do
     let k := (Ty.param 0).inst args
     let v := (Ty.param 1).inst args

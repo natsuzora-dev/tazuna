@@ -441,6 +441,14 @@ theorem alignedV_mono {α : Type} {E : α → List Val → Prop} {V V' : α → 
   | (_, _) :: _, _ :: _, (false, _) :: _, _, ⟨hf, hx, ha⟩ => ⟨hf, hx, alignedV_mono h ha⟩
   | (_, _) :: _, _ :: _, (true, _) :: _, _ :: _, ⟨hf, hx, he, hq, ha⟩ => ⟨hf, hx, he, h _ _ hq, alignedV_mono h ha⟩
 
+theorem alignedV_mapq {α : Type} {E : α → List Val → Prop} {V V' : α → Val → Prop} (Q : Term → Term)
+    (hQ : ∀ y q, V y (q.denote M) → V' y ((Q q).denote M)) :
+    {S : List Slot} → {qs : List Term} → {sv : List (Bool × List Val)} → {ys : List α} →
+    AlignedV M E V S qs sv ys → AlignedV M E V' S (qs.map Q) sv ys
+  | [], [], [], [], _ => trivial
+  | (_, _) :: _, _ :: _, (false, _) :: _, _, ⟨hf, hx, ha⟩ => ⟨hf, hx, alignedV_mapq Q hQ ha⟩
+  | (_, _) :: _, _ :: _, (true, _) :: _, _ :: _, ⟨hf, hx, he, hq, ha⟩ => ⟨hf, hx, he, hQ _ _ hq, alignedV_mapq Q hQ ha⟩
+
 /-- The sum of the Int terms of the occupied slots. -/
 def sumSlotT (S : List Slot) (qs : List Term) : Term := sumT (List.zipWith (fun (f, _) q => .ite f q (.int 0)) S qs)
 
