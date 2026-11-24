@@ -96,11 +96,11 @@ def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Exce
   | .command x caller input => do
     let some i := finIdx v.commands fun c => c.name == x.name | throw (.badStep k s!"{v.name} lists no command {x.name}")
     let some ⟨h⟩ := Ty.same x.input (v.commands.get i).input | throw (.badStep k s!"{x.name} has another input type")
-    request (some x.name) (.command i caller (h ▸ input)) caller ⟨x.input, input⟩
+    request x.name (.command i caller (h ▸ input)) caller ⟨x.input, input⟩
   | .query x caller input => do
     let some i := finIdx v.queries fun q => q.name == x.name | throw (.badStep k s!"{v.name} lists no query {x.name}")
     let some ⟨h⟩ := Ty.same x.input (v.queries.get i).input | throw (.badStep k s!"{x.name} has another input type")
-    request (some x.name) (.query i caller (h ▸ input)) caller ⟨x.input, input⟩
+    request x.name (.query i caller (h ▸ input)) caller ⟨x.input, input⟩
   | .wait ms => do
     if ms < 0 then throw (.badStep k "a step waits a negative time")
     let t := run.state.now + ms
@@ -123,13 +123,13 @@ def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Exce
     let some w := w | throw (.badStep k "the event has no wire form")
     { run with names := ns }.finish' T v (.event i (h ▸ x)) [.event run.state.now src name w] none k
 where
-  request (name : Option String) (input : Input v) (caller : v.caller.den0) (value : WireVal) : Except Stop (Run v) := do
+  request (name : String) (input : Input v) (caller : v.caller.den0) (value : WireVal) : Except Stop (Run v) := do
     let id := toString (run.requests + 1)
     let (ns, c) := run.names.enc T v.caller caller
     let (ns, i) := ns.enc T value.1 value.2
     let (some c, some i) := (c, i) | throw (.badStep k "the request has no wire form")
     { run with names := ns, requests := run.requests + 1 }.finish' T v input
-      [.request run.state.now id (name.getD "") c i] (some id) k
+      [.request run.state.now id name c i] (some id) k
   finish (input : Input v) (inLines : List Line) (answerTo : Option String) : Except Stop (Run v) :=
     run.finish' T v input inLines answerTo k
 

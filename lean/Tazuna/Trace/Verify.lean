@@ -30,11 +30,12 @@ def seqMatch {α : Type} (f : α → Wire → Bind → List Bind) : List α → 
   | x :: xs, w :: ws, b => (f x w b).flatMap (seqMatch f xs ws)
   | _, _, _ => []
 
-/-- Every way to match the values with the wire forms in some order: a multiset. -/
-def bagMatch {α : Type} (f : α → Wire → Bind → List Bind) : List α → List Wire → Bind → List Bind
+/-- Every way to match the values with the written items in some order: a multiset. -/
+def bagMatch {α β : Type} (f : α → β → Bind → List Bind) : List α → List β → Bind → List Bind
   | [], [], b => [b]
-  | x :: xs, ws, b => (List.range ws.length).flatMap fun i =>
-    (f x (ws[i]?.getD .null) b).flatMap (bagMatch f xs (ws.eraseIdx i))
+  | x :: xs, ws, b => (List.range ws.length).flatMap fun i => match ws[i]? with
+    | some w => (f x w b).flatMap (bagMatch f xs (ws.eraseIdx i))
+    | none => []
   | _, _, _ => []
 
 section
@@ -184,18 +185,10 @@ def replay (lines : List (Nat × Line)) : Verdict := Id.run do
         if let .fault f := r.outcome then return .fault n f
         let es := expects v answerTo r
         let actual := window.map (·.2)
-        match bagMatchLines T v r.state.now es actual b with
+        match bagMatch (matchExpect T v r.state.now) es actual b with
         | b' :: _ => b := b'; s := r.state
         | [] => return .differs n ((es.filterMap (·.toLine T v r.state.now b)).map Line.toWire) (actual.map Line.toWire)
   return .passed
-where
-  bagMatchLines (T : List TypeDecl) (v : ServiceV) (now : Int) : List (Expect v) → List Line → Bind → List Bind
-    | [], [], b => [b]
-    | e :: es, ls, b => (List.range ls.length).flatMap fun i =>
-      match ls[i]? with
-      | some l => (matchExpect T v now e l b).flatMap (bagMatchLines T v now es (ls.eraseIdx i))
-      | none => []
-    | _, _, _ => []
 
 end
 
