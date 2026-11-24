@@ -99,10 +99,10 @@ def PendingShape.fields {e : Ty} (sh : PendingShape e) : List Ty := [.tuple sh.k
 
 /-- The pending request of the shape with the wire id `id` and the fields `x`. -/
 def PendingShape.pending {e : Ty} (sh : PendingShape e) (id : Nat) (x : Ty.dens sh.fields) : Step.Pending e :=
-  let (k, i, en, an, ()) := Ty.down (.tuple sh.fields) sh.hdata x
-  ⟨id, sh.sender.sender k, sh.external,
-    { name := sh.name, input := sh.input, output := sh.output, rejection := sh.rejection, value := i,
-      ensures := sh.ensures.map (·.fn en), onAnswer := sh.onAnswer.fn an }⟩
+  let y := Ty.down (.tuple sh.fields) sh.hdata x
+  ⟨id, sh.sender.sender y.1, sh.external,
+    { name := sh.name, input := sh.input, output := sh.output, rejection := sh.rejection, value := y.2.1,
+      ensures := sh.ensures.map (·.fn y.2.2.1), onAnswer := sh.onAnswer.fn y.2.2.2.1 }⟩
 
 /-- The senders a service's states can name. -/
 def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks) :=

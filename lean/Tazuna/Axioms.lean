@@ -6,6 +6,7 @@ import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
 import Tazuna.Smt.Decode
 import Tazuna.Smt.StepEncode
+import Tazuna.Smt.AnswerStep
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
 import Tazuna.Trace.WireThm

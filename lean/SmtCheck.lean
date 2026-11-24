@@ -1,4 +1,4 @@
-import Tazuna.Smt.StepEncode
+import Tazuna.Smt.AnswerStep
 import Tazuna.Smt.Solver
 
 /-! Runs the solver on printed scripts and reads its answers back: the theorems cover printing and reading our own
@@ -608,7 +608,12 @@ def payAnswerE : Expr [] [.int] (.fn [Ty.result .int .str] (.list .int)) := .lam
 def rateAnswerE : Expr [] [.int] (.fn [.int] (.list .int)) :=
   .lam (.list (.cons (.bin .add (.var .here) (.var (.there .here))) .nil))
 
-def rateEnsuresE : Expr [] [] (.fn [.str, .int] Ty.rules) := .lam (.list .nil)
+def rateEnsuresE : Expr [] [] (.fn [.str, .int] Ty.rules) :=
+  .lam (.list (.cons (.tuple (.cons (.str "positive") (.cons (.bin .lt (.int 0) (.var (.there .here))) .nil))) .nil))
+
+def insertE : E (.fn [recordsT, .int] recordsT) :=
+  .lam (.call (.prim .tableInsert [.int, .int] rfl)
+    (.cons (.var .here) (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))))
 
 def pendingSites : List AnySite :=
   [⟨[.int], _, ⟨(1, 1), [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨(2, 1), [], .nil, rfl, rfl, rateAnswerE⟩⟩,
@@ -619,12 +624,18 @@ def askR : ReactionV recordsT .int := ⟨"ask", fun _ _ _ => []⟩
 def fxDeclared : List (String × DeclaredV) :=
   [("fx", .externalCommand "pay" .str .int .str), ("fx", .externalQuery "rate" .str .int (.closed rateEnsuresE))]
 
-def pendingSvc : ServiceV := { querySvc with name := "p", queries := [], reactions := [askR], declared := fxDeclared }
+def insertSvc : ServiceV := { querySvc with apply := .closed insertE, invariants := .closed invariantsE }
+
+def pendingSvc : ServiceV := { insertSvc with name := "p", queries := [], reactions := [askR], declared := fxDeclared }
 
 def pendingShapes : List (PendingShape pendingSvc.event) := shapes pendingSvc pendingSites
 
 def pendingLayout : Layout :=
-  Layout.addTys (fun _ => 3) {} [recordsT, pendingTable pendingShapes]
+  let lits := Tazuna.Smt.Expr.lits insertE ++ Tazuna.Smt.Expr.lits invariantsE ++ Tazuna.Smt.Expr.lits payAnswerE ++
+    Tazuna.Smt.Expr.lits rateAnswerE ++ Tazuna.Smt.Expr.lits rateEnsuresE
+  Layout.addTys (listSlots (fun _ => 3) lits) {} (recordsT :: pendingTable pendingShapes :: .list .int ::
+    Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys payAnswerE ++
+    Tazuna.Smt.Expr.tys rateAnswerE ++ Tazuna.Smt.Expr.tys rateEnsuresE)
 
 /-- The pending table's slots in v4, and the entry datatype. -/
 def pendingSlots : Option (List Slot × Nat) :=
@@ -691,6 +702,99 @@ def pendingCheck (solver : Solver) : IO Bool := do
       | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
   return ok
 
+/-! An answer step on the pending service, for `answer_step` and `answer_unmatched`: the answer to the `rate` request
+(shape 1) in slot 0. `rate` ensures a positive answer, its `on_answer` yields the answer plus the captured value, the
+records insert that event, and the invariant `small` holds below three keys. -/
+
+/-- v0..v4 the state, v5 the wire id, v6 the answer, then the outcome terms: v7 the slot holds the request, v8 and v9
+the `ensures` rule, v10 the events, v11 the records after, v12 and v13 the invariant, v14 the pending table after.
+`shift` adds to the answer the terms read, which breaks the encoding on purpose. -/
+def answerScript (shift : Int) (goal : List Term) : Except String Script := do
+  let L := pendingLayout
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let some sh := pendingShapes[1]? | throw "no rate shape"
+  let (apply, ca) ← enc (pendingSvc.apply.code L)
+  let (inv, ci) ← enc (pendingSvc.invariants.code L)
+  let S := SymState.vars 0
+  let (o, cond) ← enc (encodeAnswer L pendingShapes 1 sh 0 apply inv S.records S.pending (.var 5)
+    (.add (.var 6) (.int shift)))
+  let some wf := S.wf L (v := pendingSvc) pendingShapes | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable pendingShapes) | throw "no pending sort"
+  let some lsrt := L.srt? (.list .int) | throw "no events sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [(rn, rh)] := o.rules | throw "not one rule"
+  let [(iname, ih)] := o.invariants | throw "not one invariant"
+  pure { datatypes := dts,
+         vars := [rsrt, .int, .int, .int, psrt, .int, .int, .bool, .bool, .str, lsrt, rsrt, .bool, .str, psrt],
+         asserts := [ca, ci, cond, wf, .le (.int 0) (.var 5), .eq (.var 7) o.hit, .eq (.var 8) rh, .eq (.var 9) rn,
+           .eq (.var 10) o.events, .eq (.var 11) o.records, .eq (.var 12) ih, .eq (.var 13) iname,
+           .eq (.var 14) o.pending] ++ goal,
+         shows := List.range 15 }
+
+/-- The script whose goal is that no slot holds a request of the answer's type that the wire id names. -/
+def unmatchedScript : Except String Script := do
+  let L := pendingLayout
+  let u ← (answerUnmatchedT L pendingShapes .int (.var 4) (.var 5)).mapError fun r => s!"no encoding: {repr r}"
+  let some wf := (SymState.vars 0).wf L (v := pendingSvc) pendingShapes | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable pendingShapes) | throw "no pending sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  -- Slot 0 holds a request with the wire id, so the answer names a request of another type.
+  let some (S, _) := pendingSlots | throw "no layout"
+  pure { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, .int, .int],
+         asserts := [wf, u, .le (.int 0) (.var 5), S[0]!.1, .eq (S[0]!.2.headD tt) (.var 5)], shows := List.range 7 }
+
+/-- Runs the step from the decoded state and input and compares it with what the terms say; true when they agree. -/
+def answerAgrees (vs : List (Nat × Val)) (unmatched : Bool) : Bool :=
+  let M := modelOf vs
+  let L := pendingLayout
+  match (SymState.vars 0).decode M L (v := pendingSvc) rfl [] pendingShapes, natOf (M.vars 5), intOf (M.vars 6) with
+  | some s, some to, some value =>
+    let r := step pendingSvc s (.answer to ⟨.int, value⟩)
+    if unmatched then r.outcome.summary == s!"fault answerUnmatched {to}" && r.state.pending.length == s.pending.length
+    else
+      let one (n h : Nat) := brokenIn M [(.var n, .var h)]
+      match one 9 8, one 13 12, r.outcome with
+      | n :: _, _, .invalid [n'] => n == n' && r.state.pending.length == s.pending.length
+      | [], n :: _, .fault (.invariant n') => n == n'
+      | [], [], .accepted =>
+        let pendingAfter := decodePending L pendingShapes (M.vars 14)
+        sameAs L recordsT rfl r.state.records (vs.lookup 11) && sameAs L (.list .int) rfl r.events (vs.lookup 10) &&
+          pendingAfter.map (·.map (·.id)) == some (r.state.pending.map (·.id)) &&
+          r.state.pending.length + 1 == s.pending.length
+      | _, _, _ => false
+  | _, _, _ => false
+
+def answerCases : List (String × List Term) :=
+  [ ("answer is accepted", [.var 7, .var 8, .var 12]),
+    ("answer breaks the query's ensures", [.var 7, .not (.var 8)]),
+    ("answer breaks the invariant", [.var 7, .var 8, .not (.var 12)]) ]
+
+def answerCheck (solver : Solver) : IO Bool := do
+  let mut ok := true
+  for (name, goal) in answerCases do
+    match answerScript 0 goal with
+    | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
+    | .ok script =>
+      match ← solver.run script with
+      | .sat vs => unless answerAgrees vs false do IO.println s!"smt-check: {name}: the step and the terms differ"; ok := false
+      | a => IO.println s!"smt-check: {name}: {repr a}"; ok := false
+  -- An encoding that reads the answer plus one must disagree with the step.
+  match answerScript 1 (answerCases[0]!.2) with
+  | .error m => IO.println s!"smt-check: broken answer encoding: {m}"; ok := false
+  | .ok script =>
+    match ← solver.run script with
+    | .sat vs => if answerAgrees vs false then IO.println "smt-check: a broken answer encoding agreed with the step"; ok := false
+    | a => IO.println s!"smt-check: broken answer encoding: {repr a}"; ok := false
+  match unmatchedScript with
+  | .error m => IO.println s!"smt-check: answer unmatched: {m}"; ok := false
+  | .ok script =>
+    match ← solver.run script with
+    | .sat vs => unless answerAgrees vs true do IO.println "smt-check: answer unmatched: the step and the term differ"; ok := false
+    | a => IO.println s!"smt-check: answer unmatched: {repr a}"; ok := false
+  return ok
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -745,6 +849,7 @@ def check (z3 : String) : IO Bool := do
   for (name, goal) in commandCases do
     unless ← commandCase solver name goal do ok := false
   unless ← pendingCheck solver do ok := false
+  unless ← answerCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
