@@ -11,6 +11,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import tazuna/internal/dsl_source
 import tazuna/internal/ir.{
   type Annotation, type Expr, type Pat, type Stmt, type Ty, At, Con, Expr, Fun,
   Meta, Pat, Tuple, Var,
@@ -1202,7 +1203,17 @@ fn value_global(
   let env = cx.env
   let m = cx.m
   let found = fn(global) {
+    let #(module, name) = names.split(global)
+    let builtin = list.contains(dsl_source.builtins, name)
     case dict.get(env.globals, global) {
+      Ok(GFn(..)) | Ok(GConst(..)) if module == dsl_module && !builtin ->
+        Error(finding(
+          m,
+          ForeignFunction,
+          span,
+          global
+            <> " is not a built-in: a spec calls its own functions and tazuna's built-ins",
+        ))
       Ok(gl) -> Ok(#(global, gl))
       Error(_) ->
         case dict.has_key(env.mods, names.split(global).0) {

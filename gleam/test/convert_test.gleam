@@ -179,3 +179,11 @@ pub fn a_finding_is_one_json_line_test() {
   assert convert.finding_line(f)
     == "{\"kind\":\"Restricted.panic\",\"file\":\"src/m.gleam\",\"line\":2,\"col\":3,\"message\":\"panic: a spec names its failures as rejections\"}"
 }
+
+pub fn tazuna_functions_besides_built_ins_are_foreign_test() {
+  let text = "import tazuna\n\npub fn f() -> Nil {\n  tazuna.main()\n}"
+  let assert Error([f]) =
+    convert.convert([Source("m", "src/m.gleam", text)], dsl_source.text, "m")
+  assert convert.kind_name(f.kind) == "Restricted.foreignFunction"
+  assert f.at == Some(ir.At(4, 3))
+}
