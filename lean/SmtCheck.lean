@@ -1098,6 +1098,46 @@ def effectCheck (solver : Solver) : IO Bool := do
       | _, _ => IO.println "smt-check: effect: no values"; return false
     | a => IO.println s!"smt-check: effect: {repr a}"; return false
 
+/-! A list of effects, as a reaction returns one: `[request_command(send, x + 1, fn(_) { [x] })]` in two slots. The
+free slot holds some value of the effect datatype, which no value reads; the occupied one must be eval's effect. -/
+
+def sendsE (k : Int) : Expr [] [.int] (.list (.dsl .effect [.int])) := .list (.cons (sendE k) .nil)
+
+def effListLayout : Layout :=
+  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9⟩, sendKey ⟨"m", 3, 7⟩] }
+    [.list (.dsl .effect [.int]), .int])
+
+/-- The items of a list's occupied slots. -/
+def occupied : Val → List Val
+  | .ctor _ 0 slots => slots.filterMap fun | .ctor _ 0 [.bool true, x] => some x | _ => none
+  | _ => []
+
+def effectListCheck (solver : Solver) : IO Bool := do
+  let L := effListLayout
+  let some srt := L.srt? (.list (.dsl .effect [.int])) | IO.println "smt-check: effect list: no sort"; return false
+  let some dts := L.datatypes? | IO.println "smt-check: effect list: no datatypes"; return false
+  match encode L (G := []) () (sendsE 1) (Term.var 1, ()) with
+  | .error r => IO.println s!"smt-check: effect list: no encoding: {repr r}"; return false
+  | .ok (code, cond) =>
+    let script : Script :=
+      { datatypes := dts, vars := [srt, .int], asserts := [.eq (.var 0) code, .lt (.int 40) (.var 1), cond],
+        shows := [0, 1] }
+    match ← solver.run script with
+    | .sat vs =>
+      match vs.lookup 0, vs.lookup 1 with
+      | some v, some (.int x) =>
+        let eval (k : Int) : List (EffectV .int) := (sendsE k).eval (G := []) .nil () (x, ())
+        let agrees (k : Int) : Bool := match eval k, occupied v with
+          | [eff], [w] => effMatches L eff w
+          | _, _ => false
+        if !agrees 1 then
+          IO.println s!"smt-check: effect list: the solver's {v.print} is not eval's list at x = {x}"; return false
+        if agrees 2 then
+          IO.println "smt-check: effect list: the comparison accepts another input"; return false
+        return true
+      | _, _ => IO.println "smt-check: effect list: no values"; return false
+    | a => IO.println s!"smt-check: effect list: {repr a}"; return false
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -1157,6 +1197,7 @@ def check (z3 : String) : IO Bool := do
   unless ← answerCheck solver do ok := false
   unless ← boundCheck solver do ok := false
   unless ← effectCheck solver do ok := false
+  unless ← effectListCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

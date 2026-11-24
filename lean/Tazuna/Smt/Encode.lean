@@ -294,41 +294,60 @@ def encodePats {ts : List Ty} {Δ : List Ty} : Pats ts Δ → Codes ts → Excep
     pure (andT m1 m2, Codes.append δ1 δ2)
 end
 
+section
+variable (dsl : Dsl → List Ty → Option Term)
+
 mutual
-/-- A term of the type's sort, for the items of free slots, which no value reads. -/
-def defaultT : Ty → Option Term
+/-- A term of the type's sort, with `dsl` giving one for a structure type. -/
+def defaultWith : Ty → Option Term
   | .int | .date => some (.int 0)
   | .str => some (.str "")
   | .adt 0 _ vs => if (boolVs? vs).isSome then some (.bool false) else none
   | .adt (i + 1) a vs => do
     let (d, _) ← L.find? (.adt (i + 1) a vs)
-    pure (.ctor d 0 (← defaultFirst vs))
+    pure (.ctor d 0 (← firstWith vs))
   | .tuple ts => do
     let (d, _) ← L.find? (.tuple ts)
-    pure (.ctor d 0 (← defaultTs ts))
+    pure (.ctor d 0 (← defaultsWith ts))
   | .id => do
     let (d, _) ← L.find? .id
     pure (.ctor d 0 [.int 0])
   | .bag t => do
     let (d, n) ← L.find? (.bag t)
     let (dt, _) ← L.find? (.tuple [Ty.bool, t])
-    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultT t])))
+    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultWith t])))
   | .table k v => do
     let (d, n) ← L.find? (.table k v)
     let (dt, _) ← L.find? (.tuple [Ty.bool, k, v])
-    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultT k, ← defaultT v])))
+    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultWith k, ← defaultWith v])))
   | .list t => do
     let (d, n) ← L.find? (.list t)
     let (dt, _) ← L.find? (.tuple [Ty.bool, t])
-    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultT t])))
-  | .fn .. | .param _ | .dsl .. => none
-def defaultTs : List Ty → Option (List Term)
+    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultWith t])))
+  | .dsl k a => dsl k a
+  | .fn .. | .param _ => none
+def defaultsWith : List Ty → Option (List Term)
   | [] => some []
-  | t :: ts => do pure ((← defaultT t) :: (← defaultTs ts))
-def defaultFirst : List (List Ty) → Option (List Term)
+  | t :: ts => do pure ((← defaultWith t) :: (← defaultsWith ts))
+def firstWith : List (List Ty) → Option (List Term)
   | [] => none
-  | fs :: _ => defaultTs fs
+  | fs :: _ => defaultsWith fs
 end
+
+end
+
+/-- A value of the effect datatype of the event type `e`: its first kind with a term of each field's sort. -/
+def effectDefault (e : Ty) : Option Term := do
+  let (d, _) ← L.find? (.dsl .effect [e])
+  let key ← (L.effectsOf e).head?
+  pure (.ctor d 0 (← key.fields.mapM (defaultWith L fun _ _ => none)))
+
+/-- A term of the type's sort, for the items of free slots, which no value reads. An effect has one too, any value
+of its datatype, so a list of effects has free slots. -/
+def defaultT : Ty → Option Term :=
+  defaultWith L fun
+    | .effect, [e] => effectDefault L e
+    | _, _ => none
 
 /-- The datatype of a bag or table type, its slot count, and the datatype of its slots. -/
 def collD (c : Ty) (item : List Ty) : Except Refusal (Nat × Nat × Nat) :=
@@ -796,35 +815,44 @@ def push (L : Layout) (t : Ty) (n : Nat := 0) : Layout :=
   if (L.find? t).isSome then L else { L with types := L.types ++ [(t, n)] }
 
 section
-variable (slots : Ty → Nat)
+variable (slots : Ty → Nat) (dsl : Layout → Dsl → List Ty → Layout)
 
 mutual
 /-- The layout with every datatype `t` needs: its fields' types first, so each datatype refers only to earlier
-ones. A bag, table or list gets `slots` of its type, each a tuple of an occupied flag and the item. -/
-def addTy (L : Layout) : Ty → Layout
-  | .tuple ts => (addTys L ts).push (.tuple ts)
-  | .adt 0 a vs => if (boolVs? vs).isSome then L else (addTyss L vs).push (.adt 0 a vs)
-  | .adt (i + 1) a vs => (addTyss L vs).push (.adt (i + 1) a vs)
+ones. A bag, table or list gets `slots` of its type, each a tuple of an occupied flag and the item. `dsl` adds what a
+structure type needs. -/
+def addTyWith (L : Layout) : Ty → Layout
+  | .tuple ts => (addTysWith L ts).push (.tuple ts)
+  | .adt 0 a vs => if (boolVs? vs).isSome then L else (addTyssWith L vs).push (.adt 0 a vs)
+  | .adt (i + 1) a vs => (addTyssWith L vs).push (.adt (i + 1) a vs)
   | .id => L.push .id
-  | .list t => ((addTy L t).push (.tuple [Ty.bool, t])).push (.list t) (slots (.list t))
-  | .fn ps r => addTy (addTys L ps) r
-  | .bag t => ((addTy L t).push (.tuple [Ty.bool, t])).push (.bag t) (slots (.bag t))
-  | .table k v => (((addTy (addTy L k) v)).push (.tuple [Ty.bool, k, v])).push (.table k v) (slots (.table k v))
-  | .int | .str | .date | .param _ | .dsl .. => L
-def addTys (L : Layout) : List Ty → Layout
+  | .list t => ((addTyWith L t).push (.tuple [Ty.bool, t])).push (.list t) (slots (.list t))
+  | .fn ps r => addTyWith (addTysWith L ps) r
+  | .bag t => ((addTyWith L t).push (.tuple [Ty.bool, t])).push (.bag t) (slots (.bag t))
+  | .table k v => (((addTyWith (addTyWith L k) v)).push (.tuple [Ty.bool, k, v])).push (.table k v) (slots (.table k v))
+  | .dsl k a => dsl L k a
+  | .int | .str | .date | .param _ => L
+def addTysWith (L : Layout) : List Ty → Layout
   | [] => L
-  | t :: ts => addTys (addTy L t) ts
-def addTyss (L : Layout) : List (List Ty) → Layout
+  | t :: ts => addTysWith (addTyWith L t) ts
+def addTyssWith (L : Layout) : List (List Ty) → Layout
   | [] => L
-  | ts :: vs => addTyss (addTys L ts) vs
+  | ts :: vs => addTyssWith (addTysWith L ts) vs
 end
+
+/-- The effect datatype of the event type `e`, after the types of its kinds' fields, which are data. -/
+def addEffect (L : Layout) (e : Ty) : Layout :=
+  ((L.effectsOf e).foldl (fun L k => addTysWith slots (fun L _ _ => L) L k.fields) L).push (.dsl .effect [e])
+
+/-- The layout with every datatype the types `ts` need, an effect type's included. -/
+def addTys (L : Layout) (ts : List Ty) : Layout :=
+  addTysWith slots (fun L k a => match k, a with | .effect, [e] => addEffect slots L e | _, _ => L) L ts
 
 end
 
 /-- The layout with the effect datatype of each event type its effect kinds name, after the types of their fields. -/
 def addEffects (slots : Ty → Nat) (L : Layout) : Layout :=
-  let L := L.effects.foldl (fun L k => addTys slots L k.fields) L
-  L.effects.foldl (fun L k => L.push (.dsl .effect [k.event])) L
+  L.effects.foldl (fun L k => addEffect slots L k.event) L
 
 /-- The sort that codes values of a first-order type. -/
 def srt? (L : Layout) (t : Ty) : Option Srt :=
