@@ -18,7 +18,7 @@ structure OpaqueType where
   make : List Ty → Option Ty
 
 def opaqueTypes : List OpaqueType :=
-  [ ⟨"tazuna/bag", "Bag", ["a"], "A multiset: two bags are equal when each value occurs as often in both.",
+  [ ⟨"tazuna/bag", "Bag", ["a"], "A multiset: two bags are equal when each value occurs as often in both. Where tazuna puts values in an order the spec does not write, it uses Erlang term order, the order Gleam's Erlang target compares values in; a bag compares as the list of its items in ascending order.",
       fun | [t] => some (.bag t) | _ => none⟩,
     ⟨"tazuna/table", "Table", ["k", "v"], "A finite map from keys to values; at most one value per key.",
       fun | [k, v] => some (.table k v) | _ => none⟩,
@@ -182,7 +182,7 @@ def sig : Prim → PrimSig :=
       ret := .dsl .query [a, b, param 2, param 3] }
   | .machine =>
     { name := "machine",
-      doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect.",
+      doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect. Instances react in the order they started; instances that start in one step start in Erlang term order of their keys.",
       tvars := ["records", "event", "key", "state"], dataArgs := true, needsEq := [2],
       params := [l "name" .str, l "instances" (.fn [a] (.bag (param 2))), l "initial" (param 3),
         l "on" (.fn [.machineCtx (param 2) (param 3) a, b] (.next (param 3))),

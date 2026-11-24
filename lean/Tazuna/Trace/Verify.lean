@@ -203,7 +203,7 @@ def replay (lines : List (Nat × Line)) : Verdict := Id.run do
       | .error m => return .invalid n m
       | .ok (input, answerTo, ids) =>
         b := b.outside ids
-        let r := step v s input
+        let r := step T v s input
         if let .fault f := r.outcome then
           -- The trace names requests by its own ids, so a fault names the answer's request as the trace does.
           return .fault n (match f, l with

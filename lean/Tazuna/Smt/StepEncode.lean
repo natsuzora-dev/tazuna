@@ -14,6 +14,8 @@ the like), so each theorem rests on `Fun.code_rel` (T1 at those sources), not on
 
 namespace Tazuna.Smt
 
+variable {T : List Ir.TypeDecl}
+
 open Tazuna.Ir
 
 /-- The codes of a query's functions. -/
@@ -247,7 +249,7 @@ theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (call
     (hsi : RelV L (v.queries.get i).input (Ty.up _ hd.input input) (si.denote M))
     {o : QueryOut} {cond : Term} (henc : encodeQuery L (v.queries.get i) qc ks records now fresh sc si = .ok (o, cond))
     (hc : Holds M cond) :
-    (step v s (.query i caller input)).state = s ∧ o.Rel M L hd.output (step v s (.query i caller input)).outcome := by
+    (step T v s (.query i caller input)).state = s ∧ o.Rel M L hd.output (step T v s (.query i caller input)).outcome := by
   have hq := QueryCode.rel_of hd hqc hcq
   obtain ⟨cc, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc
@@ -397,7 +399,7 @@ theorem step_event (v : ServiceV) (hx : v.reactions = []) (s : State v) (hs : s.
     (i : Fin v.subscribes.length) (value : (v.subscribes.get i).event.den0) :
     let ev := (v.subscribes.get i).wrap.fn (value, ())
     let records := v.apply.fn (s.records, ev, ())
-    step v s (.event i value) = match Step.broken (v.invariants.fn (records, ())) with
+    step T v s (.event i value) = match Step.broken (v.invariants.fn (records, ())) with
       | n :: _ => ⟨s, .fault (.invariant n), [], []⟩
       | [] => ⟨{ s with records }, .accepted, [ev], []⟩ := by
   intro ev records
@@ -416,7 +418,7 @@ theorem event_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.
     (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
     (hsv : RelV L _ (Ty.up _ hd.value value) (sv.denote M))
     {o : EventOut} {cond : Term} (henc : encodeEvent L ec records sv = .ok (o, cond)) (hc : Holds M cond) :
-    let r := step v s (.event i value)
+    let r := step T v s (.event i value)
     match brokenIn M o.invariants with
     | n :: _ => r = ⟨s, .fault (.invariant n), [], []⟩
     | [] => r.outcome = .accepted ∧ r.out = [] ∧ r.state = { s with records := r.state.records } ∧
@@ -497,7 +499,7 @@ variable {M : Model} {L : Layout}
 
 /-- A clock line's step from a state without machine instances, computed. -/
 theorem step_clock (v : ServiceV) (s : State v) (hs : s.machines = []) (time : Int) :
-    step v s (.clock time) = if time < s.now then ⟨s, .invalid ["time moves forward"], [], []⟩ else
+    step T v s (.clock time) = if time < s.now then ⟨s, .invalid ["time moves forward"], [], []⟩ else
       match Step.broken (v.invariants.fn (s.records, ())) with
       | n :: _ => ⟨s, .fault (.invariant n), [], []⟩
       | [] => ⟨{ s with now := time }, .accepted, [], []⟩ := by
@@ -515,7 +517,7 @@ theorem clock_step {v : ServiceV} (s : State v) (hs : s.machines = []) (time : I
     {records now st : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
     (hnow : now.denote M = .int s.now) (hst : st.denote M = .int time)
     {o : ClockOut} {cond : Term} (henc : encodeClock L inv records now st = .ok (o, cond)) (hc : Holds M cond) :
-    let r := step v s (.clock time)
+    let r := step T v s (.clock time)
     if (o.forward.denote M).toBool then
       match brokenIn M o.invariants with
       | n :: _ => r = ⟨s, .fault (.invariant n), [], []⟩
@@ -564,10 +566,10 @@ def _root_.Tazuna.Ir.Step.Acc.folded (a : Step.Acc v) (events : List v.event.den
 /-- Events applied on a service without reactions, from a state without machine instances: the records fold them,
 and nothing starts. -/
 theorem applyEvents_plain (hx : v.reactions = []) : (events : List v.event.den0) → (a : Step.Acc v) →
-    a.state.machines = [] → Step.applyEvents a events = .ok (a.folded events)
+    a.state.machines = [] → Step.applyEvents T a events = .ok (a.folded events)
   | [], a, _ => by simp [Step.applyEvents, List.foldlM, pure, Except.pure, Step.Acc.folded]
   | ev :: evs, a, hm => by
-    have h1 : Step.applyEvents a (ev :: evs) = Step.applyEvents (a.folded [ev]) evs := by
+    have h1 : Step.applyEvents T a (ev :: evs) = Step.applyEvents T (a.folded [ev]) evs := by
       simp only [Step.applyEvents, List.foldlM, Step.react, hm, List.foldl_nil, hx, List.flatMap_nil, List.append_nil,
         Step.start, bind, Except.bind, pure, Except.pure, Step.Acc.folded, List.foldl_cons]
     rw [h1, applyEvents_plain hx evs _ (by simpa [Step.Acc.folded] using hm)]
@@ -784,7 +786,7 @@ theorem command_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : 
     {o : CommandOut} {cond : Term}
     (henc : encodeCommand L (v.commands.get i) cc apply inv ks records now fresh sc si = .ok (o, cond))
     (hc : Holds M cond) :
-    let r := step v s (.command i caller input)
+    let r := step T v s (.command i caller input)
     let s' := { s with fresh := s.fresh + 1 }
     if (o.callerOk.denote M).toBool then
       match brokenIn M o.rules with

@@ -188,7 +188,7 @@ pub fn query(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect.
+/// A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect. Instances react in the order they started; instances that start in one step start in Erlang term order of their keys.
 pub fn machine(
   name _name: String,
   instances _instances: fn(records) -> Bag(key),
@@ -443,7 +443,7 @@ pub fn step_command_then(
 //// Generated from lean/Tazuna/Ir/Builtin.lean by `lake exe gen-dsl --write ..`
 //// in lean/. DO NOT EDIT.
 
-/// A multiset: two bags are equal when each value occurs as often in both.
+/// A multiset: two bags are equal when each value occurs as often in both. Where tazuna puts values in an order the spec does not write, it uses Erlang term order, the order Gleam's Erlang target compares values in; a bag compares as the list of its items in ascending order.
 pub type Bag(a)
 
 pub type PickError {

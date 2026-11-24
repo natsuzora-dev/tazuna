@@ -11,6 +11,8 @@ the answer's type fits, so the statements together cover every answer of a given
 
 namespace Tazuna.Smt
 
+variable {T : List Ir.TypeDecl}
+
 open Tazuna.Ir
 
 
@@ -216,7 +218,7 @@ theorem step_answer (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
     (hp : s.pending.find? (·.id == to) = some p) (value : (answerTy p.request.output p.request.rejection).den0) :
     let evs := p.request.onAnswer.fn (value, ())
     let records := evs.foldl (fun r ev => v.apply.fn (r, ev, ())) s.records
-    step v s (.answer to ⟨_, value⟩) = match Step.broken (p.request.holds value) with
+    step T v s (.answer to ⟨_, value⟩) = match Step.broken (p.request.holds value) with
       | r :: rs => ⟨s, .invalid (r :: rs), [], []⟩
       | [] => match Step.broken (v.invariants.fn (records, ())) with
         | n :: _ => ⟨s, .fault (.invariant n), [], []⟩
@@ -268,7 +270,7 @@ theorem answer_step (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
     (hval : RelV L _ (Ty.up _ hans value) (valT.denote M))
     {o : AnswerOut} {cond : Term} (henc : encodeAnswer L shs k sh j apply inv records pending toT valT = .ok (o, cond))
     (hc : Holds M cond) (hhit : Holds M o.hit) :
-    let r := step v s (.answer to ⟨_, value⟩)
+    let r := step T v s (.answer to ⟨_, value⟩)
     match brokenIn M o.rules with
     | n :: ns => r = ⟨s, .invalid (n :: ns), [], []⟩
     | [] => match brokenIn M o.invariants with
@@ -335,7 +337,7 @@ theorem answer_step (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
   have hfind : s.pending.find? (·.id == to) = some (sh.pending to fx) := by
     rw [← hlist, ← hpo, ← hkey]
     exact find_pending (sh0 :: rest) tbl.1 tbl.2 y (hperm.mem_iff.1 hy)
-  have hstep := step_answer hx s hs to (sh.pending to fx) hfind value
+  have hstep := step_answer (T := T) hx s hs to (sh.pending to fx) hfind value
   -- The entry's fields: the sender's key, the input, and each site's captured values.
   obtain ⟨f0, f1, f2, f3, ⟨⟩⟩ := fx
   obtain ⟨v0, vs0, rfl, -, v1, vs1, rfl, hv1, v2, vs2, rfl, hv2, v3, vs3, rfl, hv3, rfl⟩ := hfx
@@ -516,7 +518,7 @@ theorem answer_unmatched (s : State v) {shs : List (PendingShape v.event)} (to :
     {pending toT : Term} (hpend : PendingRel L shs (pending.denote M) s.pending)
     (hto : toT.denote M = .int (Int.ofNat to)) {u : Term} (henc : answerUnmatchedT L shs t pending toT = .ok u)
     (hu : Holds M u) :
-    step v s (.answer to ⟨t, value⟩) = ⟨s, .fault (.answerUnmatched (toString to)), [], []⟩ := by
+    step T v s (.answer to ⟨t, value⟩) = ⟨s, .fault (.answerUnmatched (toString to)), [], []⟩ := by
   cases hf : s.pending.find? (·.id == to) with
   | none => simp only [step, hf]
   | some p =>

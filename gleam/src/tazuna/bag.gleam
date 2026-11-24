@@ -6,7 +6,7 @@
 //// Generated from lean/Tazuna/Ir/Builtin.lean by `lake exe gen-dsl --write ..`
 //// in lean/. DO NOT EDIT.
 
-/// A multiset: two bags are equal when each value occurs as often in both.
+/// A multiset: two bags are equal when each value occurs as often in both. Where tazuna puts values in an order the spec does not write, it uses Erlang term order, the order Gleam's Erlang target compares values in; a bag compares as the list of its items in ascending order.
 pub type Bag(a)
 
 pub type PickError {

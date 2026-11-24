@@ -338,7 +338,7 @@ def queryCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
           (SymInput.query i (.var 4) (.var 5)).decode M L (v := querySvc) rfl (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl)
             (fun j => j.elim0) with
       | some s, some x =>
-        let r := step querySvc s x
+        let r := step prelude querySvc s x
         let want := match o.invalid M with
           | some ns => Outcome.invalid ns |>.summary
           | none => "answered"
@@ -428,7 +428,7 @@ def eventCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
           (SymInput.event eventI (.var 4)).decode M L (v := eventSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
             (fun | ⟨0, _⟩ => rfl) with
       | some s, some x =>
-        let r := step eventSvc s x
+        let r := step prelude eventSvc s x
         let ok := match brokenIn M [(.var 8, .var 7)], r.outcome, r.events with
           | n :: _, .fault (.invariant n'), [] => n == n' && sameAs L recordsT rfl r.state.records (vs.lookup 0)
           | [], .accepted, [e] => sameAs L recordsT rfl r.state.records (vs.lookup 5) && sameAs L evT rfl e (vs.lookup 6)
@@ -471,7 +471,7 @@ def clockCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
           (SymInput.clock (.var 4)).decode M L (v := eventSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
             (fun | ⟨0, _⟩ => rfl) with
       | some s, some x@(.clock time) =>
-        let r := step eventSvc s x
+        let r := step prelude eventSvc s x
         let ok := match (M.vars 5).toBool, brokenIn M [(.var 7, .var 6)], r.outcome with
           | false, _, .invalid ["time moves forward"] => r.state.now == s.now
           | true, n :: _, .fault (.invariant n') => n == n' && r.state.now == s.now
@@ -570,7 +570,7 @@ def commandCase (solver : Solver) (name : String) (goal : List Term) : IO Bool :
           (SymInput.command i (.var 4) (.var 5)).decode M L (v := commandSvc) rfl (fun | ⟨0, _⟩ => rfl)
             (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl) with
       | some s, some x =>
-        let r := step commandSvc s x
+        let r := step prelude commandSvc s x
         let one (n h : Nat) := brokenIn M [(.var n, .var h)]
         let ok := r.state.fresh == s.fresh + 1 && match (M.vars 6).toBool, one 8 7, (M.vars 9).toBool, one 13 12,
             one 16 15, r.outcome with
@@ -751,7 +751,7 @@ def answerAgrees (vs : List (Nat × Val)) (unmatched : Bool) : Bool :=
   let L := pendingLayout
   match (SymState.vars 0).decode M L (v := pendingSvc) rfl [] pendingShapes, natOf (M.vars 5), intOf (M.vars 6) with
   | some s, some to, some value =>
-    let r := step pendingSvc s (.answer to ⟨.int, value⟩)
+    let r := step prelude pendingSvc s (.answer to ⟨.int, value⟩)
     if unmatched then r.outcome.summary == s!"fault answerUnmatched {to}" && r.state.pending.length == s.pending.length
     else
       let one (n h : Nat) := brokenIn M [(.var n, .var h)]
@@ -856,7 +856,7 @@ def boundAgrees (vs : List (Nat × Val)) (reached : Bool) : Bool :=
       (SymInput.event boundI (.var 4)).decode M L (v := boundSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
         (fun | ⟨0, _⟩ => rfl) with
   | some s, some x =>
-    let r := step boundSvc s x
+    let r := step prelude boundSvc s x
     within boundSvc.bounds.creates s.records && r.outcome.summary == "accepted" &&
       within boundSvc.bounds.creates r.state.records == !reached &&
       (reached || sameAs L recordsB rfl r.state.records (vs.lookup 5))

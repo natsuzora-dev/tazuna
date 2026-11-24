@@ -104,7 +104,7 @@ structure Run where
 /-- Runs the input and appends its in lines and out lines. -/
 def Run.finish' (run : Run v) (input : Input v) (inLines : List Line) (answerTo : Option String) (k : Nat) :
     Except Stop (Run v) := do
-  let r := step v run.state input
+  let r := step T v run.state input
   if let .fault f := r.outcome then throw (.fault k f)
   let (ns, outs) := outLines T v run.names answerTo r
   let some outs := outs | throw (.badStep k "an output has no wire form")

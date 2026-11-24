@@ -61,8 +61,8 @@ def svc : ServiceV :=
 
 def s0 : State svc := State.init svc
 def cmd (caller amount : Int) : Input svc := .command ⟨0, by decide⟩ caller amount
-def summary (s : State svc) (i : Input svc) : String := (step svc s i).outcome.summary
-def after (s : State svc) (is : List (Input svc)) : State svc := (run svc s is).1
+def summary (s : State svc) (i : Input svc) : String := (step prelude svc s i).outcome.summary
+def after (s : State svc) (is : List (Input svc)) : State svc := (run prelude svc s is).1
 
 -- A command from a caller outside `callers`, or with input breaking `accepts`, is Invalid without deciding.
 #guard summary s0 (cmd 2 5) == "invalid [callers]"
@@ -72,7 +72,7 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run svc s is).
 #guard summary s0 (cmd 1 5) == "accepted"
 -- An invariant broken after the step is a fault, and the state stays as it was.
 #guard summary s0 (cmd 1 60) == "fault invariant under 50"
-#guard I (step svc s0 (cmd 1 60)).state.records == 0
+#guard I (step prelude svc s0 (cmd 1 60)).state.records == 0
 -- A query answers from the records.
 #guard summary (after s0 [cmd 1 5]) (.query ⟨0, by decide⟩ (1 : Int) (0 : Int)) == "answered"
 -- A peer event arrives as one of the service's events.
@@ -81,8 +81,8 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run svc s is).
 #guard (after s0 [cmd 1 5]).machines.map (·.2.map (·.timer.isSome)) == [[false]]
 #guard (after s0 [cmd 1 5, cmd 1 1]).machines.map (·.2.map (·.timer.map (·.1))) == [[some 10]]
 -- A clock line before the deadline fires nothing; at it, the instance enters 5, whose effect sends a request.
-#guard (step svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 9)).out.length == 0
-#guard (step svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 10)).out.map (·.name) == ["ping"]
+#guard (step prelude svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 9)).out.length == 0
+#guard (step prelude svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 10)).out.map (·.name) == ["ping"]
 -- Time does not move back.
 #guard summary (after s0 [.clock 5]) (.clock 4) == "invalid [time moves forward]"
 -- The answer to the pending request becomes events; an answer to no pending request is a fault.
@@ -99,12 +99,12 @@ def again : ReactionV .int .int :=
 def loop : ServiceV := { svc with reactions := [again] }
 def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
 -- The own command runs within the step: both events are applied.
-#guard I (step loop (State.init loop) (ev 7)).state.records == 9
-#guard ((step loop (State.init loop) (ev 7)).events.map I) == [7, 2]
+#guard I (step prelude loop (State.init loop) (ev 7)).state.records == 9
+#guard ((step prelude loop (State.init loop) (ev 7)).events.map I) == [7, 2]
 -- An own command with input it does not accept is a fault, not Invalid.
-#guard (step loop (State.init loop) (ev 3)).outcome.summary == "fault invalidEffect add [small]"
+#guard (step prelude loop (State.init loop) (ev 3)).outcome.summary == "fault invalidEffect add [small]"
 -- More internal steps than the cascade bound is a fault.
-#guard (step loop (State.init loop) (ev 1)).outcome.summary == "fault cascadeLimit"
+#guard (step prelude loop (State.init loop) (ev 1)).outcome.summary == "fault cascadeLimit"
 -- Two services that list the same command and query break the owner rule, once for each.
 #guard ((SpecV.illegal prelude ⟨[svc, { svc with name := "other" }], []⟩).filter (·.1 == .owner)).length == 2
 -- So does a service that declares an external's command.
@@ -112,7 +112,7 @@ def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
   (·.1 == .owner)).length == 1
 /-- The outcome of the last of the inputs, run from the initial state. -/
 def last (v : ServiceV) (is : List (Input v)) : String :=
-  (((run v (State.init v) is).2.getLast?).map (·.outcome.summary)).getD ""
+  (((run prelude v (State.init v) is).2.getLast?).map (·.outcome.summary)).getD ""
 -- A request to a command no external declares is a fault.
 def undeclared : ServiceV := { svc with declared := [("mail", .externalCommand "ping" .str .int .int)] }
 #guard last undeclared [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int),
@@ -138,6 +138,29 @@ def specWith (xs : List ExternalV) : SpecV := Prim.spec.den [] rfl (([svc] : Lis
 #guard ((specWith [⟨"text", [.source "moved" .str]⟩]).services.map fun v => v.subscribes.map (·.source)) == [[""]]
 #guard ((SpecV.illegal prelude (specWith [⟨"text", [.source "moved" .str]⟩])).filter (·.1 == .unknownSource)).length == 1
 -- Every input has one outcome.
-#guard (run svc s0 [cmd 1 5, cmd 2 5, .clock 3]).2.length == 3
+#guard (run prelude svc s0 [cmd 1 5, cmd 2 5, .clock 3]).2.length == 3
+
+-- Instances that start in one step start in key order, never in the order a bag happens to store its keys: one
+-- instance per key of a bag of Int, each asking `ping` with its key as it starts.
+def askKey (k : Int) : EffectV .int := .request
+  { name := "ping", input := .int, output := .int, rejection := none, value := k, ensures := none,
+    onAnswer := .closed (.lam (.list .nil)) }
+def perKey : MachineV (.bag .int) .int :=
+  { name := "perKey", key := .int, state := .int, instances := fun (r, ()) => r, initial := (0 : Int),
+    on := fun _ => .inl (), after := fun _ => .inr (.inl ()), effect := fun k _ _ _ => some (askKey k),
+    invariants := fun _ => [] }
+def keyed : ServiceV :=
+  { name := "keyed", records := .bag .int, event := .int, caller := .int, init := ([] : List Int),
+    apply := .closed (.lam (.var .here)),
+    subscribes := [{ source := "p", name := "e", event := .int, wrap := .closed (.lam (.var .here)) }],
+    declares := [], commands := [], queries := [], sources := [], machines := [perKey], reactions := [],
+    scenarios := [], invariants := .closed (.lam (.list .nil)), responses := [],
+    bounds := { creates := [], items := 3, cascade := 2, steps := 5 },
+    declared := [("x", .externalQuery "ping" .int .int (.closed (.lam (.list .nil))))] }
+def started (keys : List Int) : List (Nat × Int) :=
+  (step prelude keyed { State.init keyed with records := keys } (.event ⟨0, by decide⟩ (0 : Int))).out.map fun o =>
+    (o.id, match o.input with | ⟨.int, x⟩ => x | _ => 0)
+#guard started [3, 1, 2] == [(0, 1), (1, 2), (2, 3)]
+#guard started [2, 1, 3] == started [3, 1, 2]
 
 end Tazuna.Ir.StepExamples
