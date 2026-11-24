@@ -6,11 +6,11 @@ import type { Converter } from "../convert/program.ts";
 import type { ReportedViolation, ViolationValue } from "../data/violation.ts";
 import { comparePlaces, placeOf, reportedOfFound } from "../load/found.ts";
 import type { Spec } from "../load/load.ts";
-import { verifyTraces } from "../verify/index.ts";
 import { type Explanation, explain } from "./explain.ts";
 import { type GenerateLine, generateSpec } from "./generate.ts";
 import { type ProveLine, proveSpec } from "./prove.ts";
 import { testSpec } from "./test.ts";
+import { verifyTraces } from "./verify.ts";
 import { isViewerBuilt, viewerFolder, viewSpec } from "./view.ts";
 
 interface Io {

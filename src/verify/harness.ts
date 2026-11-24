@@ -91,19 +91,6 @@ interface StartLine {
 export type LogLine = StartLine | TraceLine;
 
 /**
- * Drives the implementation through the run as the simulation ran it, and returns the log at the implementation's
- * boundary: its start line, then its trace. The implementation starts at the scenario's start from the Given records,
- * or, for an input of generate, from no records at the time of the input's first line,
- * then gets the snapshot's `in` lines one by one: before each, the harness waits until the implementation has settled
- * (Adapter.settled), and moves the clock to the line's time. A command, query or subscription does not hold the
- * harness: its answer is an output that the log gets when the implementation gives it, maybe after later inputs. A
- * value of the snapshot that the implementation stands for in its own way (a key it created, the id of a request it
- * sent) is substituted to the implementation's value by the first of the bindings under which the log so far compares
- * with the snapshot so far, so an answer reaches the request that the implementation sent. Once that comparison finds
- * the log uncomparable, the harness gives no more lines. Comparing reads values by their schemas alone, so drive runs
- * no spec function, and verify's replay of the log is what checks it.
- */
-/**
  * Where a run's lines come from: an input of generate, which starts from the initial state, no records, at the time of
  * its first line, or a scenario's snapshot, which starts from the scenario's Given.
  */
@@ -117,6 +104,19 @@ function originOf(spec: CheckedSpec, run: Run | InputRun): Origin {
   return { kind: "scenario", scenario };
 }
 
+/**
+ * Drives the implementation through the run as the simulation ran it, and returns the log at the implementation's
+ * boundary: its start line, then its trace. The implementation starts at the scenario's start from the Given records,
+ * or, for an input of generate, from no records at the time of the input's first line,
+ * then gets the snapshot's `in` lines one by one: before each, the harness waits until the implementation has settled
+ * (Adapter.settled), and moves the clock to the line's time. A command, query or subscription does not hold the
+ * harness: its answer is an output that the log gets when the implementation gives it, maybe after later inputs. A
+ * value of the snapshot that the implementation stands for in its own way (a key it created, the id of a request it
+ * sent) is substituted to the implementation's value by the first of the bindings under which the log so far compares
+ * with the snapshot so far, so an answer reaches the request that the implementation sent. Once that comparison finds
+ * the log uncomparable, the harness gives no more lines. Comparing reads values by their schemas alone, so drive runs
+ * no spec function, and verify's replay of the log is what checks it.
+ */
 export async function drive(spec: CheckedSpec, run: Run | InputRun, adapter: Adapter): Promise<LogLine[]> {
   const { runner } = run;
   const origin = originOf(spec, run);

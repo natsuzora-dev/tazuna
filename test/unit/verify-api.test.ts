@@ -2,14 +2,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { after, test } from "node:test";
-import {
-  type Adapter,
-  commandRequest,
-  decodeAnswer,
-  drive,
-  snapshotRuns,
-  verifyTraces,
-} from "../../src/verify/index.ts";
+import { verifyTraces } from "../../src/cli/verify.ts";
+import { type Adapter, commandRequest, decodeAnswer, drive, snapshotRuns } from "../../src/verify/index.ts";
 import { checkedRoot, fixture } from "../fixtures/fixtures.ts";
 import { payments } from "../fixtures/test/noViolations/command-output/payments/contract.ts";
 import { createCharge } from "../fixtures/test/noViolations/command-output/payments/payments.ts";

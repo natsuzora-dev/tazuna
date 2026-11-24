@@ -3,8 +3,8 @@ import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync 
 import { join } from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { verifyTraces } from "../../src/cli/verify.ts";
 import { InternalError } from "../../src/data/internalError.ts";
-import { verifyTraces } from "../../src/verify/index.ts";
 import { checkedRoot, fixture } from "../fixtures/fixtures.ts";
 
 mkdirSync(join(import.meta.dirname, "../.fixtures"), { recursive: true });
