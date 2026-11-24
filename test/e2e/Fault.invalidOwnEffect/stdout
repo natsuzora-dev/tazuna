@@ -1,0 +1,1 @@
+{"kind":"Fault.invalidOwnEffect","request":"add","rules":["positive"],"scenario":"basic","service":"counter","step":1}

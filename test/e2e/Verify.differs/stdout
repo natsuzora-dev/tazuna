@@ -1,0 +1,1 @@
+{"actual":["{\"external\":\"mail\",\"id\":\"0\",\"input\":7,\"name\":\"send\",\"out\":\"request\",\"time\":10}"],"expected":["{\"external\":\"mail\",\"id\":\"?0\",\"input\":6,\"name\":\"send\",\"out\":\"request\",\"time\":10}"],"kind":"Verify.differs","line":14,"trace":"traces/basic.jsonl"}

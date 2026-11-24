@@ -1,7 +1,8 @@
 #!/bin/sh
 # Each kind of output line has one end-to-end case, a directory named after the kind. Fails when a kind has no case or
 # a case names no kind, and runs each case as a user would, once per target: the launcher, run in a copy of the case's
-# src/ with the arguments in its args file, must print the case's stdout and exit with the code in its exit file. A kind
+# src/ (and snapshots/ and traces/, when the case has them) with the arguments in its args file, must print the case's
+# stdout and exit with the code in its exit file. A kind
 # no spec can reach (a converter or launcher bug) has an ir.json instead of src/, which the engine reads directly.
 # Usage: test/e2e/check <file listing the kinds, one per line> <engine> <the Gleam package's build/dev directory>
 set -eu
@@ -38,7 +39,9 @@ for dir in */; do
   fi
   for target in javascript erlang; do
     mkdir "$work/$case-$target"
-    cp -R "$case/src" "$work/$case-$target/"
+    for part in src snapshots traces; do
+      if [ -d "$case/$part" ]; then cp -R "$case/$part" "$work/$case-$target/"; fi
+    done
     code=0
     # shellcheck disable=SC2086 # args holds words to split
     out=$(cd "$work/$case-$target" && TAZUNA_ENGINE="$engine" launch "$target" $args) || code=$?

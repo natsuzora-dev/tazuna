@@ -1,6 +1,6 @@
 import Lean.Elab.Command
 import Lean.Util.CollectAxioms
-import Tazuna.Cli.Check
+import Tazuna.Cli.Test
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples

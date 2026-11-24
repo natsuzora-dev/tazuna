@@ -1,0 +1,3 @@
+{"service":"counter","trace":1}
+{"in":"clock","time":10}
+{"in":"clock","time":5}

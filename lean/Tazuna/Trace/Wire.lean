@@ -73,6 +73,24 @@ end
 
 end
 
+mutual
+/-- The ids a value holds, in the order its wire form writes them. -/
+def idsOf : (t : Ty) → t.den0 → List Nat
+  | .list t, xs | .bag t, xs => xs.flatMap (idsOf t)
+  | .tuple ts, x => idsOfs ts x
+  | .adt _ _ vs, x => idsOfAlts vs x
+  | .table k v, x => x.1.flatMap fun (a, b) => idsOf k a ++ idsOf v b
+  | .id, n => [n]
+  | .int, _ | .str, _ | .date, _ | .fn .., _ | .param _, _ | .dsl .., _ => []
+def idsOfs : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List Nat
+  | [], () => []
+  | t :: ts, (x, xs) => idsOf t x ++ idsOfs ts xs
+def idsOfAlts : (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → List Nat
+  | [], x => nomatch x
+  | fs :: _, .inl x => idsOfs fs x
+  | _ :: vs, .inr y => idsOfAlts vs y
+end
+
 section
 variable (T : List TypeDecl) (lookup : String → Option Nat)
 
