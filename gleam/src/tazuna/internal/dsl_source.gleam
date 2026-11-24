@@ -166,7 +166,7 @@ pub fn service(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A command: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects. The service that lists it owns it.
+/// A command, named by a string literal: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects. The service that lists it owns it.
 pub fn command(
   name _name: String,
   callers _callers: List(caller),
@@ -178,7 +178,7 @@ pub fn command(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A query: it answers from the records and writes nothing. The service that lists it owns it.
+/// A query, named by a string literal: it answers from the records and writes nothing. The service that lists it owns it.
 pub fn query(
   name _name: String,
   callers _callers: List(caller),

@@ -31,15 +31,19 @@ inductive Illegal where
   /-- A machine's instance key type has no order the solver can encode (`Ty.orderable`): the canonical order of the
   keys decides which instance reacts, starts and fires first, so the step encoding must compare keys. -/
   | machineKey
-  /-- The program makes an external command or query handle that no external declares with its name and types, or
-  whose name is no string literal: an effect may request only what an external declares, and check sees which. -/
+  /-- The program makes an external command or query handle that no external declares with its name and types: an
+  effect may request only what an external declares. -/
   | unknownHandle
+  /-- The program makes a command, query, external command or external query handle whose name is no string literal:
+  a wire name is written once where it is defined, so check and the step encoding see which request a handle names. -/
+  | handleName
 deriving Repr, DecidableEq
 
 namespace Illegal
 
 def all : List Illegal :=
-  [wireName, owner, unknownSource, creates, wireType, bounds, scenario, rejection, machineKey, unknownHandle]
+  [wireName, owner, unknownSource, creates, wireType, bounds, scenario, rejection, machineKey, unknownHandle,
+    handleName]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -54,6 +58,7 @@ def name : Illegal → String
   | rejection => "rejection"
   | machineKey => "machineKey"
   | unknownHandle => "unknownHandle"
+  | handleName => "handleName"
 
 end Illegal
 
@@ -265,8 +270,8 @@ def tableProbes (T : List TypeDecl) : (r : Ty) → List (String × r.den0)
 def CreateV.reads {r : Ty} (c : CreateV r) (probes : List (String × r.den0)) : List String :=
   probes.filterMap fun (label, x) => if (c.table.fn (x, ())).1.isEmpty then none else some label
 
-/-- An external command or query handle the program makes: its kind as `DeclaredV.kind` names it, its name when the
-program writes it as a string literal, and its types. -/
+/-- A command, query, external command or external query handle the program makes: its kind as `DeclaredV.kind` names
+it, its name when the program writes it as a string literal, and its types. -/
 structure HandleSite where
   kind : String
   name : Option String
@@ -294,7 +299,7 @@ def Ty.groundss : List (List Ty) → Bool
   | ts :: vs => Ty.grounds ts && Ty.groundss vs
 end
 
-/-- The handle a call makes, when it calls `external_command` or `external_query`. -/
+/-- The handle a call makes, when it calls `command`, `query`, `external_command` or `external_query`. -/
 def handleAt {G Γ : List Ty} {ps : List Ty} {r : Ty} (f : Expr G Γ (.fn ps r)) (args : Exprs G Γ ps) : Option HandleSite :=
   let name : Option String := match args with
     | .cons e _ => e.lit?
@@ -302,6 +307,8 @@ def handleAt {G Γ : List Ty} {ps : List Ty} {r : Ty} (f : Expr G Γ (.fn ps r))
   match f with
   | .prim .externalCommand ts _ => some ⟨"external command", name, ts⟩
   | .prim .externalQuery ts _ => some ⟨"external query", name, ts⟩
+  | .prim .command ts _ => some ⟨"command", name, ts⟩
+  | .prim .query ts _ => some ⟨"query", name, ts⟩
   | _ => none
 
 section
@@ -424,9 +431,10 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : 
   -- The loader also elaborates each generic function at its own type variables; no step runs that copy, since the root
   -- has none and every call instantiates them, so its handles are left to the concrete copies.
   let unknownHandles := (handles.filter (Ty.grounds ·.types)).filterMap fun h => match h.name with
-    | none => some (Illegal.unknownHandle, s!"an {h.kind} handle's name is no string literal; write it as one, so check can see which external declares it")
+    | none => some (Illegal.handleName, s!"one {h.kind} handle's name is no string literal; write it as one, so check can see which request it names")
     | some n =>
-      if declared.any fun d => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome then none
+      if !h.kind.startsWith "external" ||
+        declared.any fun d => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome then none
       else some (Illegal.unknownHandle, s!"no external declares the {h.kind} {n} with these types; add it to an external's declares")
   topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles
 

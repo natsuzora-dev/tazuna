@@ -1,0 +1,1 @@
+{"kind":"Illegal.handleName","message":"one command handle's name is no string literal; write it as one, so check can see which request it names"}

@@ -170,14 +170,14 @@ def sig : Prim → PrimSig :=
       ret := .dsl .service [] }
   | .command =>
     { name := "command",
-      doc := "A command: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects. The service that lists it owns it.",
+      doc := "A command, named by a string literal: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects. The service that lists it owns it.",
       tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true, needsEq := [2],
       params := [l "name" .str, l "callers" (.list (param 2)), l "accepts" (kept (.fn [param 3] Ty.rules)),
         l "decide" (kept (.fn [.ctx a (param 3) (param 2)] (.result (.list b) (param 4)))),
         l "ensures" (kept (.fn [.ctx a (param 3) (param 2), a] Ty.rules))],
       ret := .dsl .command [a, b, param 2, param 3, param 4] }
   | .query =>
-    { name := "query", doc := "A query: it answers from the records and writes nothing. The service that lists it owns it.",
+    { name := "query", doc := "A query, named by a string literal: it answers from the records and writes nothing. The service that lists it owns it.",
       tvars := ["records", "caller", "input", "output"], dataArgs := true, needsEq := [1],
       params := [l "name" .str, l "callers" (.list b), l "accepts" (kept (.fn [param 2] Ty.rules)),
         l "resolve" (kept (.fn [.ctx a (param 2) b] (param 3)))],

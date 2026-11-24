@@ -164,6 +164,12 @@ def last (v : ServiceV) (is : List (Input v)) : String :=
   (·.1 == .unknownHandle)).length == 1
 #guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"external command", some "ping", [.param 0, .int, .str]⟩]).filter
   (·.1 == .unknownHandle)).isEmpty
+-- A handle whose name is no string literal is Illegal.handleName, own ones included; an own handle with a literal name
+-- needs no external.
+#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"command", none, [.int]⟩, ⟨"external query", none, [.int]⟩]).filter
+  (·.1 == .handleName)).length == 2
+#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"command", some "add", [.int]⟩, ⟨"query", some "get", [.int]⟩]).filter
+  fun f => f.1 == .handleName || f.1 == .unknownHandle).isEmpty
 -- Check reports a handle no external declares as Illegal.unknownHandle, so no checked spec reaches this fault: a
 -- request to a command no external declares.
 def undeclared : ServiceV := { svc with declared := [("mail", .externalCommand "ping" .str .int .int)] }

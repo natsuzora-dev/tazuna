@@ -17,9 +17,9 @@ fn apply(r: Records, _e: Event) -> Records {
   r
 }
 
-fn add(name: String) -> tazuna.Command(Records, Event, Caller, String, Nil) {
+fn add() -> tazuna.Command(Records, Event, Caller, String, Nil) {
   tazuna.command(
-    name: name,
+    name: "add",
     callers: [User],
     accepts: fn(_t: String) { [] },
     decide: fn(c: Ctx(Records, String, Caller)) { Ok([Added(c.input)]) },
@@ -42,7 +42,7 @@ fn tasks(name: String) -> tazuna.Service {
         Added(t)
       }),
     ],
-    declares: [tazuna.declare_command(add("add"))],
+    declares: [tazuna.declare_command(add())],
     machines: [],
     reactions: [],
     invariants: fn(_r) { [] },
