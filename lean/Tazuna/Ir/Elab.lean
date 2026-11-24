@@ -10,7 +10,7 @@ import Tazuna.Ir.Surface
 - `use p <- f(a)` followed by the rest of the block is `f(a, fn(p) { rest })`, the callback filling a place like an
   unlabelled argument written last. A `use` call node's type is the type of that whole call; so is the type of a call
   node a pipe inserts into.
-- `let p = e` followed by the rest of the block matches `e` against `p`, which must be irrefutable. A block that ends
+- `let p = e` followed by the rest of the block matches `e` against `p`, which must match every value. A block that ends
   with `let p = e` has the value of `e`.
 - Type aliases are expanded when the IR is read (`Tazuna.Ir.Surface.readTy`), so elaboration never sees one.
 - `case a, b { p, q | r, s -> .. }` matches the tuple `#(a, b)`; each alternative is its own clause.
@@ -243,17 +243,9 @@ def elabPatTop (pos : At) (t : Ty) (p : Surface.Pat) : E ((Δ : Scope) × Pat t 
 
 end Patterns
 
-mutual
-partial def Pat.irrefutable {t : Ty} {Δ : List Ty} : Pat t Δ → Bool
-  | .wild | .bind => true
-  | .int _ | .str _ => false
-  | .tuple ps => Pats.irrefutable ps
-  | @Pat.ctor _ _ vs _ _ ps => vs.length == 1 && Pats.irrefutable ps
-  | .as p => Pat.irrefutable p
-partial def Pats.irrefutable {ts : List Ty} {Δ : List Ty} : Pats ts Δ → Bool
-  | .nil => true
-  | .cons p ps => Pat.irrefutable p && Pats.irrefutable ps
-end
+/-- A `let` pattern must match every value of its type. -/
+def irrefutable {t : Ty} {Δ : List Ty} (pos : At) (p : Pat t Δ) : E Unit :=
+  if (exhaustive? t [p.shape]).isSome then pure () else fail pos "let pattern can fail to match"
 
 /-- What elaborating one body needs: the type table, the type variables in scope, every global's signature, and the
 instances already elaborated (all a body refers to). -/
@@ -417,18 +409,20 @@ partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr G (ctx 
       match subjects with
       | [s] =>
         let ⟨st, se⟩ ← elabExpr sc s
-        let cs ← elabClauses sc pos st want (fun alt => match alt with
+        let ⟨sh, cs⟩ ← elabClauses sc pos st want (fun alt => match alt with
           | [p] => elabPatTop T cx.σ pos st p
           | _ => fail pos "a clause alternative has a pattern per subject") clauses
-        pure ⟨want, .case se cs⟩
+        let some ⟨hc⟩ := exhaustive? st sh | fail pos "case is not exhaustive"
+        pure ⟨want, .case se cs hc⟩
       | _ =>
         let ⟨sts, ses⟩ ← elabExprs sc subjects
-        let cs ← elabClauses sc pos (.tuple sts) want (fun alt => do
+        let ⟨sh, cs⟩ ← elabClauses sc pos (.tuple sts) want (fun alt => do
           unless alt.length == sts.length do fail pos "a clause alternative has a pattern per subject"
           let ⟨Δ, ps⟩ ← elabPats T cx.σ sts alt
           if let some n := nodup (Δ.map (·.1) |>.filter (· != "")) then fail pos s!"pattern binds {n} twice"
           pure ⟨Δ, .tuple ps⟩) clauses
-        pure ⟨want, .case (.tuple ses) cs⟩
+        let some ⟨hc⟩ := exhaustive? (.tuple sts) sh | fail pos "case is not exhaustive"
+        pure ⟨want, .case (.tuple ses) cs hc⟩
     | .list items =>
       let want ← toTyAt cx pos ann
       let .list t := want | fail pos s!"list annotated {showTy T want}"
@@ -528,7 +522,7 @@ partial def elabBlock (sc : Scope) (pos : At) : List Surface.Stmt → E ((t : Ty
     if let some a := ann then
       unless annotationFits T cx.σ a t do fail p s!"let annotated with a type that is not {showTy T t}"
     let ⟨_, pat'⟩ ← elabPatTop T cx.σ p t pat
-    unless Pat.irrefutable pat' do fail p "let pattern can fail to match"
+    irrefutable p pat'
     pure ⟨t, x⟩
   | [.use p ..] => fail p "a block ends with use"
   | .expr e :: rest => do
@@ -546,10 +540,10 @@ partial def elabBlock (sc : Scope) (pos : At) : List Surface.Stmt → E ((t : Ty
       pure ⟨r, .let_ x body⟩
     | _ =>
       let ⟨Δ, pat'⟩ ← elabPatTop T cx.σ p t pat
-      unless Pat.irrefutable pat' do fail p "let pattern can fail to match"
+      let some ⟨hc⟩ := exhaustive? t [pat'.shape] | fail p "let pattern can fail to match"
       let ⟨r, body⟩ ← elabBlock (Δ ++ sc) pos rest
       let body ← castList (F := fun Γ => Expr G Γ r) p body (b := ctx Δ ++ ctx sc)
-      pure ⟨r, .case x (.cons pat' body .nil)⟩
+      pure ⟨r, .case x (.cons pat' body .nil) hc⟩
   | .use p pats call :: rest => do
     let cb := Slot.callback p pats rest
     match call with
@@ -558,22 +552,23 @@ partial def elabBlock (sc : Scope) (pos : At) : List Surface.Stmt → E ((t : Ty
 
 partial def elabClauses (sc : Scope) (pos : At) (st r : Ty)
     (pat : List Surface.Pat → E ((Δ : Scope) × Pat st (ctx Δ))) :
-    List Surface.Clause → E (Clauses G (ctx sc) st r)
-  | [] => pure .nil
+    List Surface.Clause → E ((sh : List Shape) × Clauses G (ctx sc) st r sh)
+  | [] => pure ⟨[], .nil⟩
   | .mk alts guard body :: rest => do
     let rest ← elabClauses sc pos st r pat rest
-    let elabAlt (alt : List Surface.Pat) (rest : Clauses G (ctx sc) st r) : E (Clauses G (ctx sc) st r) := do
+    let elabAlt (alt : List Surface.Pat) (rest : (sh : List Shape) × Clauses G (ctx sc) st r sh) :
+        E ((sh : List Shape) × Clauses G (ctx sc) st r sh) := do
       let ⟨Δ, p⟩ ← pat alt
       let ⟨bt, be⟩ ← elabExpr (Δ ++ sc) body
       let be ← coerce cx body.pos r bt be
       let be ← castList (F := fun Γ => Expr G Γ r) pos be (b := ctx Δ ++ ctx sc)
       match guard with
-      | none => pure (.cons p be rest)
+      | none => pure ⟨_, .cons p be rest.2⟩
       | some g =>
         let ⟨gt, ge⟩ ← elabExpr (Δ ++ sc) g
         let ge ← coerce cx g.pos .bool gt ge
         let ge ← castList (F := fun Γ => Expr G Γ .bool) pos ge (b := ctx Δ ++ ctx sc)
-        pure (.guarded p ge be rest)
+        pure ⟨_, .guarded p ge be rest.2⟩
     let bound ← alts.mapM fun alt => do
       let ⟨Δ, _⟩ ← pat alt
       pure (((Δ.filter (·.1 != "")).map fun (n, t) => (n, showTy T t)).mergeSort fun a b => a.1 ≤ b.1)

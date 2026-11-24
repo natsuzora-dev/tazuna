@@ -1,5 +1,6 @@
 import Lean.Data.Json.Elab
 import Tazuna.Ir.Load
+import Tazuna.Semantics.Eval
 
 /-! Hand-made IRs: one well-typed program that uses every surface construct, and one refusal per kind of converter
 bug the loader must catch. Each fixture's types are chosen so that a wrong desugaring or placement would be ill-typed. -/
@@ -101,7 +102,7 @@ def twice : Json := function "m.twice" [param "f" "f" (fnT [I] I), param "n" "n"
 /-- `pub fn id(x: a) -> a { x }` -/
 def id : Json := function "m.id" [param none "x" (varT "a")] (varT "a") (var 3 20 (varT "a") "x") 3
 
-def wellTyped : Json := program [box, shape] [sub, twice, id,
+def wellTypedFns : List Json := [sub, twice, id,
   -- `10 |> sub(label: "x")`: the piped value takes the first place no label took, `from`.
   function "m.t1" [] I (pipe 10 3 I (int 10 3 "10") (call 10 9 I (subRef 10 9) [larg "label" (str 10 20 "\"x\"")])) 10,
   -- `"x" |> sub(from: 10)`: here it takes `label`.
@@ -132,10 +133,13 @@ def wellTyped : Json := program [box, shape] [sub, twice, id,
     sLet 22 3 (pVar 22 7 I "n") (field 22 11 I (var 22 11 shapeT "s") "r"),
     sExpr (call 23 3 I (ref 23 3 (fnT [I] I) "m.id" [("a", I)])
       [arg (bin 23 6 I "+" (var 23 6 I "a") (var 23 10 I "n"))])]) 21,
-  function "m.big" [] I (int 24 3 "1_000_000_000_000_000_000_000") 24,
-  function "m.main" [] S (str 25 3 "\"a\\u{1F600}\\n\\\"\"") 25]
-  -- `const table = #(sub, 0)`: a constant holding a function value.
-  [constant "m.table" (tupT [subT, I]) (tuple 30 15 (tupT [subT, I]) [subRef 30 17, int 30 22 "0"]) 30]
+  function "m.big" [] I (int 24 3 "1_000_000_000_000_000_000_000") 24]
+
+/-- `const table = #(sub, 0)`: a constant holding a function value. -/
+def table : Json := constant "m.table" (tupT [subT, I]) (tuple 30 15 (tupT [subT, I]) [subRef 30 17, int 30 22 "0"]) 30
+
+def wellTyped : Json := program [box, shape]
+  (wellTypedFns ++ [function "m.main" [] S (str 25 3 "\"a\\u{1F600}\\n\\\"\"") 25]) [table]
 
 def loaded (rootTy : Ty) (j : Json) : Except Elab.LoadError (Program rootTy) := Load.load rootTy j
 
@@ -149,30 +153,69 @@ def verdict (rootTy : Ty) (j : Json) : String :=
 
 def rootStr : Ty := .fn [] .str
 
-/-- The Int the last definition returns, when it is a function returning a literal. -/
-def lastInt : {G : List Ty} → Defs G → Option Int
-  | _, .snoc _ _ (.lam (.int n)) => some n
-  | _, _ => none
-
-/-- The String the last definition returns, when it is a function returning a literal. -/
-def lastStr : {G : List Ty} → Defs G → Option String
-  | _, .snoc _ _ (.lam (.str s)) => some s
-  | _, _ => none
+/-- The value of `m.main()` in the well-typed program, with `main` returning a `ret` computed by `body`. -/
+def evalMain (ret : Ty) (retJ body : Json) : Option ret.den :=
+  match loaded (.fn [] ret) (program [box, shape] (wellTypedFns ++ [function "m.main" [] retJ body 40]) [table]) with
+  | .ok p => some (p.eval ())
+  | .error _ => none
 
 #guard verdict rootStr wellTyped == "accepted"
+
+/-! Evaluation: each surface construct means what Gleam means. -/
+
+def evalInt (body : Json) : Option Int := evalMain .int I body
+def evalStr (body : Json) : Option String := evalMain .str S body
+def evalBool (body : Json) : Option Bool := (evalMain .bool B body).map Ty.toBool
+
+def callFn (name : String) (ty : Json) (args : List Json) : Json := call 40 3 I (ref 40 3 ty name) args
+def circle (r : Json) : Json := ctor 40 10 shapeT "m.Shape" "Circle" [larg "r" r, larg "name" (str 40 20 "\"c\"")]
+def square (side : Json) : Json :=
+  ctor 40 10 shapeT "m.Shape" "Square" [larg "r" (int 40 12 "0"), larg "name" (str 40 20 "\"s\""), larg "side" side]
+def neg (n : Json) : Json := node "un" I 40 9 [("operator", "-"), ("arg", n)]
+
+-- `10 |> sub(label: "x")` places 10 at `from`, which `sub` returns.
+#guard evalInt (callFn "m.t1" (fnT [] I) []) == some 10
+-- `use y <- twice(n: 1)` passes `fn(y) { y + 3 }` as `f`: f(f(1)).
+#guard evalInt (callFn "m.t5" (fnT [] I) []) == some 7
+-- The guarded first clause takes a Circle with r > 0; otherwise the later clauses do.
+#guard evalInt (callFn "m.t7" (fnT [shapeT] I) [arg (circle (int 40 12 "5"))]) == some 5
+#guard evalInt (callFn "m.t7" (fnT [shapeT] I) [arg (circle (neg (int 40 12 "2")))]) == some (-2)
+#guard evalInt (callFn "m.t7" (fnT [shapeT] I) [arg (square (int 40 12 "9"))]) == some 9
+-- `let #(a, t) = #(1, "t")` binds a = 1; `s.r` reads the field shared by both variants.
+#guard evalInt (callFn "m.t9" (fnT [shapeT] I) [arg (square (int 40 12 "9"))]) == some 1
+#guard evalInt (callFn "m.t9" (fnT [shapeT] I) [arg (circle (int 40 12 "4"))]) == some 5
+-- Record update keeps the fields it does not set.
+#guard evalStr (field 40 3 S (call 40 3 boxT (ref 40 3 (fnT [boxT] boxT) "m.t8")
+    [arg (ctor 40 10 boxT "m.Box" "Box" [larg "left" (int 40 12 "1"), larg "right" (str 40 20 "\"x\"")])]) "right")
+  == some "y"
+-- Int `/` and `%` follow Gleam: truncation, and zero for a zero divisor.
+#guard evalInt (bin 40 3 I "/" (neg (int 40 4 "7")) (int 40 8 "2")) == some (-3)
+#guard evalInt (bin 40 3 I "%" (neg (int 40 4 "7")) (int 40 8 "2")) == some (-1)
+#guard evalInt (bin 40 3 I "%" (int 40 4 "7") (int 40 8 "0")) == some 0
+-- `==` compares structurally.
+#guard evalBool (bin 40 3 B "==" (circle (int 40 12 "4")) (circle (int 40 12 "4")))
+  == some true
+#guard evalBool (bin 40 3 B "==" (circle (int 40 12 "4")) (square (int 40 12 "4")))
+  == some false
+
 
 /-- A small program around one function `m.main` returning `ret`. -/
 def withMain (ret body : Json) (fns : List Json := []) (consts : List Json := []) (aliases : List Json := []) : Json :=
   program [box, shape] ([sub, twice, id] ++ fns ++ [function "m.main" [] ret body 40]) consts (aliases := aliases)
 
+-- A case no unguarded clause covers is refused: a guard does not count, as in Gleam.
+#guard verdict (.fn [] .int) (withMain I (case 40 3 I [circle (int 40 12 "1")] [
+    clause [[pCtor 41 5 shapeT "m.Shape" "Circle" [] true]] (int 41 20 "1"),
+    clause [[pCtor 42 5 shapeT "m.Shape" "Square" [] true]] (int 42 20 "2") (some (bin 42 30 B ">" (int 42 30 "1") (int 42 34 "0")))]))
+  == "src/m.gleam:40:3: m.main: case is not exhaustive"
 #guard (match loaded rootStr (withMain S (str 40 3 "\"a\\u{1F600}\\n\\\"\"")) with
-  | .ok p => lastStr p.defs == some ("a" ++ String.singleton (Char.ofNat 0x1F600) ++ "\n\"")
+  | .ok p => @BEq.beq String _ (p.eval ()) ("a" ++ String.singleton (Char.ofNat 0x1F600) ++ "\n\"")
   | .error _ => false)
 #guard (match loaded (.fn [] .int) (withMain I (int 40 3 "1_000_000_000_000_000_000_000")) with
-  | .ok p => lastInt p.defs == some 1000000000000000000000
+  | .ok p => @BEq.beq Int _ (p.eval ()) 1000000000000000000000
   | .error _ => false)
 #guard (match loaded (.fn [] .int) (withMain I (int 40 3 "0x_DEAD_beef")) with
-  | .ok p => lastInt p.defs == some 0xDEADBEEF
+  | .ok p => @BEq.beq Int _ (p.eval ()) 0xDEADBEEF
   | .error _ => false)
 
 -- Swapped labels in a pattern: `Box(right: l, left: r)` with `l: Int`, `r: String` puts each binder on the field of the
@@ -272,7 +315,7 @@ def useTwice (ann : Json) : Json := block 40 3 I [
       (tuple 40 17 (tupT [I, S]) [int 40 19 "7", str 40 22 "\"s\""])]))
   == "accepted"
 #guard (match loaded (.fn [] .int) (withMain I (block 40 3 I [sLet 40 3 (pVar 40 7 I "x") (int 40 11 "7")])) with
-  | .ok p => lastInt p.defs == some 7
+  | .ok p => @BEq.beq Int _ (p.eval ()) 7
   | .error _ => false)
 #guard verdict (.fn [] .int) (withMain I (block 40 3 I [
     sLet 40 3 (pCtor 40 7 shapeT "m.Shape" "Circle" [pArg (pVar 40 14 I "r"), pArg (pDiscard 40 17 S)])
