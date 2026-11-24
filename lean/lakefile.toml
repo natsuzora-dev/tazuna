@@ -1,6 +1,5 @@
-name = "tazuna-lean"
-version = "0.1.0"
-defaultTargets = ["Tazuna", "Engine", "tazuna-engine", "tazuna-codegen", "tazuna-axioms", "tazuna-graph"]
+name = "tazuna"
+defaultTargets = ["tazuna-engine"]
 
 [leanOptions]
 autoImplicit = false
@@ -10,22 +9,6 @@ linter.extra = true
 name = "Tazuna"
 globs = ["Tazuna.+"]
 
-[[lean_lib]]
-name = "Engine"
-globs = ["Engine.+"]
-
 [[lean_exe]]
 name = "tazuna-engine"
-root = "Engine.Main"
-
-[[lean_exe]]
-name = "tazuna-codegen"
-root = "Codegen.Main"
-
-[[lean_exe]]
-name = "tazuna-axioms"
-root = "Axioms.Main"
-
-[[lean_exe]]
-name = "tazuna-graph"
-root = "Graph.Main"
+root = "Main"
