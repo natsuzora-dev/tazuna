@@ -211,6 +211,35 @@ theorem fireFirst_eq (m : MachineV r e) (ho : m.key.ordered T = true) (records :
 
 end
 
+theorem fired_effs (m : MachineV r e) (records : r.den0) (now : Int) (i : Instance m) :
+    (fired m records now i).2.length ≤ 1 := by
+  unfold fired
+  split
+  · unfold enter; cases m.effectAt _ _ _ _ <;> simp
+  · simp
+
+theorem fireFirst_effs (m : MachineV r e) (records : r.den0) (now d : Int) :
+    (insts : List (Instance m)) → (fireFirst m records now d insts).2.1.length ≤ 1 ∧
+      ((fireFirst m records now d insts).2.2 = false → (fireFirst m records now d insts).2.1 = [])
+  | [] => ⟨by simp [fireFirst], fun _ => rfl⟩
+  | i :: is => by
+    unfold fireFirst
+    split
+    · exact ⟨fired_effs m records now i, fun h => nomatch h⟩
+    · exact fireFirst_effs m records now d is
+
+/-- A round fires at most one instance, so it starts at most one effect. -/
+theorem fireMachines_effs (records : r.den0) (now d : Int) :
+    (b : Bool) → (sms : List (MachineState r e)) → (fireMachines records now d b sms).2.1.length ≤ 1
+  | b, [] => by cases b <;> simp [fireMachines]
+  | true, ms :: rest => by rw [fireMachines_true]; simp
+  | false, ⟨m, insts⟩ :: rest => by
+    obtain ⟨h1, h2⟩ := fireFirst_effs m records now d insts
+    simp only [fireMachines, List.length_append]
+    cases hb : (fireFirst m records now d insts).2.2 with
+    | true => rw [fireMachines_true]; simpa using h1
+    | false => rw [h2 hb]; simpa using fireMachines_effs records now d false rest
+
 end Step
 
 end Tazuna.Ir

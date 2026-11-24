@@ -5,9 +5,9 @@ import Tazuna.Smt.EventPending
 each round finds the earliest deadline among the due timers of every machine (`minDueT`, a fold over all slots, so
 the order of slots does not matter), then the machines in order fire their first instance at that deadline, each
 unless an earlier machine fired (`encodeFires`, the done flag threading `Step.fireMachines`). A round with no due
-timer, and every round after it, changes nothing. When every round fires the step exceeds the cascade bound. The
-effects the rounds start are written into the pending table in round order, each round's ids after the earlier
-rounds'. -/
+timer, and every round after it, changes nothing. When every round fires the step exceeds the cascade bound. A round
+fires one instance, so it starts at most one effect, which takes the round's next id (`roundStarts`); the requests are
+written into the pending table in round order. -/
 
 namespace Tazuna.Smt
 
@@ -291,6 +291,15 @@ def _root_.Tazuna.Ir.Step.roundOf {r e : Ty} (recs : r.den0) (now : Int) (active
     | some d => let x := Step.fireMachines recs now d false sms; (x.1, x.2.1)
   else (sms, [])
 
+theorem roundOf_effs {r e : Ty} (recs : r.den0) (now : Int) (active : Bool) (sms : List (Step.MachineState r e)) :
+    (Step.roundOf recs now active sms).2.length ≤ 1 := by
+  unfold Step.roundOf
+  split
+  · split
+    · simp
+    · exact Step.fireMachines_effs recs now _ false sms
+  · simp
+
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
@@ -468,6 +477,18 @@ structure RoundsOut where
   nextId : Term
   over : Term
 
+/-- The pending slots of a round's start slots, machine by machine, and how many effects they start. A round fires at
+most one instance, so every slot takes the round's next id `nid`. -/
+def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (dE dP dopt : Nat) :
+    List (MachineV r e) → List (List (Term × Term × Term)) → Term → Except Refusal (List Slot × Term)
+  | [], [], _ => pure ([], .int 0)
+  | m :: ms, st :: sts, nid => do
+    let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
+    let js ← shapeIdxs shs ds m.name m.key (L.effectsOf e)
+    let (rest, k) ← roundStarts shs ds dE dP dopt ms sts nid
+    pure (entrySlots dE dP dk js (st.map (onceStart dopt nid)) ++ rest, .add (startCount dopt st) k)
+  | _, _, _ => .error (.outside "machines and start slots that differ in number")
+
 /-- `k` firing rounds from the tables `xs`, the first where `active`, each next one where the one before fired. -/
 def encodeRounds (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (dE dP dopt : Nat)
     (ms : List (MachineV r e)) (records now : Term) : Nat → List Term → (active nid : Term) →
@@ -475,8 +496,9 @@ def encodeRounds (shs : List (PendingShape e)) (ds : List (String × DeclaredV))
   | 0, xs, active, nid => pure (⟨xs, [], nid, active⟩, tt)
   | k + 1, xs, active, nid => do
     let (ro, c) ← encodeRound L T ms xs active records now
-    let (news, nid') ← encodeStarts L T shs ds dE dP dopt ms (ro.fires.map (·.starts)) nid
-    let (rest, c') ← encodeRounds shs ds dE dP dopt ms records now k (ro.fires.map (·.table)) ro.go nid'
+    let (news, n) ← roundStarts L shs ds dE dP dopt ms (ro.fires.map (·.starts)) nid
+    let (rest, c') ← encodeRounds shs ds dE dP dopt ms records now k (ro.fires.map (·.table)) ro.go
+      (.share (.add nid n))
     pure (⟨rest.tables, news ++ rest.news, rest.nextId, rest.over⟩, andT c c')
 
 end
@@ -505,6 +527,52 @@ theorem newsRel_append {shs : List (PendingShape v.event)} {ds : List (String ×
     · exact hw p hp
     · exact hw' p hp
   · rw [List.zipIdx_append]; exact hp.append hp'
+
+/-- T2 for a round's start slots: where they start at most one effect in all, the pending slots hold, where flagged,
+the request for it at the id `nid`, and the count term denotes how many there are. -/
+theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape v.event)}
+    (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
+    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
+    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
+    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt)) {nid : Term} {n0 : Nat}
+    (hn : nid.denote M = .int n0) :
+    (ms : List (MachineV v.records v.event)) → (sts : List (List (Term × Term × Term))) →
+    (effss : List (List (Sender × EffectV v.event))) → StartsRel M L T ms sts effss → effss.flatten.length ≤ 1 →
+    (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
+    {news : List Slot} → {cnt : Term} → roundStarts L shs ds dE dP dopt ms sts nid = .ok (news, cnt) →
+    cnt.denote M = .int (effss.flatten.length : Int) ∧ NewsRel M L shs ds news effss.flatten n0
+  | [], [], [], _, _, _, news, cnt, henc => by
+    simp only [roundStarts, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
+    obtain ⟨rfl, rfl⟩ := henc
+    exact ⟨rfl, [], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩
+  | m :: ms, st :: sts, effs :: effss, ⟨⟨α, κ, F, E, items, svX, hX, hh, hEp, _, heffs⟩, hrest⟩, hone, hreach,
+      news, cnt, henc => by
+    obtain ⟨⟨dk, nk⟩, h1, henc⟩ := bind_ok.1 henc
+    obtain ⟨js, h2, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨rest, k⟩, h3, henc⟩ := bind_ok.1 henc
+    cases pure_ok.1 henc
+    rw [List.flatten_cons, List.length_append] at hone
+    have hcount := startCount_den m hopt κ F hX hh hEp
+    obtain ⟨svS, ys, hS, hyp, hy⟩ := once_starts m hopt κ F hX hh hEp (heffs ▸ by omega) hn
+    rw [← heffs] at hyp hcount
+    have hr : ∀ x ∈ ys, x.1.2.Reach P := fun x hx =>
+      hreach effs (by simp) x.1 (List.fst_mem_of_mem_zipIdx (hyp.mem_iff.1 hx))
+    obtain ⟨sv1, zs1, hS1, -, hw1, hh1, hq1⟩ := entrySlots_rel hP m hshs h2 hE hPE (need_ok.1 h1) hS hy hr
+    obtain ⟨hk, hnews⟩ := roundStarts_rel hP hshs hE hPE hopt hn ms sts effss hrest (by omega)
+      (fun effs' h => hreach effs' (by simp [h])) h3
+    refine ⟨?_, ?_⟩
+    · simp only [Term.denote, hcount, hk, Val.toInt, List.flatten_cons, List.length_append]; push_cast; rfl
+    · rw [List.flatten_cons]
+      have h1 : NewsRel M L shs ds _ effs n0 := ⟨sv1, zs1, hS1, hw1, hh1, ys, hyp, hq1⟩
+      have hor : effs.length = 0 ∨ effss.flatten.length = 0 := by omega
+      obtain ⟨a, b, c, d, e, f, g, h⟩ := hnews
+      rcases hor with h0 | h0
+      · rw [List.length_eq_zero_iff.1 h0] at h1 ⊢
+        exact newsRel_append h1 ⟨a, b, c, d, e, f, g, h⟩
+      · rw [List.length_eq_zero_iff.1 h0] at g ⊢
+        exact newsRel_append h1 ⟨a, b, c, d, e, f, g, h⟩
+  | [], [], _ :: _, h, _, _, _, _, _ | [], _ :: _, _, h, _, _, _, _, _
+  | _ :: _, [], _, h, _, _, _, _, _ | _ :: _, _ :: _, [], h, _, _, _, _, _ => h.elim
 
 /-- T2 for the firing rounds: where `Step.fireFrom` gives none (every round fired) the over term holds; otherwise it
 does not, the tables denote the machines after the rounds, the pending slots hold the requests for their effects at
@@ -537,7 +605,7 @@ theorem rounds_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
         trivial⟩
   | k + 1, s, hrec, hnow, hreach, xs, hms, active, ab, hact, nid, n0, hnid, o, c, henc, hc => by
     obtain ⟨⟨ro, c1⟩, h1, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨news, nid'⟩, h2, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨news, n⟩, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
@@ -545,11 +613,12 @@ theorem rounds_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
     obtain ⟨hr1, hr2⟩ := roundOf_reach s.records s.now ab s.machines hreach
     have hreff : ∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P := fun effs he x hx =>
       hr1 x (hfl ▸ List.mem_flatten.2 ⟨effs, he, hx⟩)
-    obtain ⟨hnid', svN, zsN, hSN, hwN, hhN, xsN, hpN, hqN⟩ := starts_rel hP hshs hE hPE hopt v.machines _ effss hst
-      hreff hnid h2
-    rw [hfl] at hnid' hpN
-    have hnews : NewsRel M L shs ds news (Step.roundOf s.records s.now ab s.machines).2 n0 :=
-      ⟨svN, zsN, hSN, hwN, hhN, xsN, hpN, hqN⟩
+    obtain ⟨hcnt, hnews⟩ := roundStarts_rel hP hshs hE hPE hopt hnid v.machines _ effss hst
+      (hfl ▸ roundOf_effs s.records s.now ab s.machines) hreff h2
+    rw [hfl] at hcnt hnews
+    have hnid' : (Term.share (.add nid n)).denote M =
+        .int ((n0 + (Step.roundOf s.records s.now ab s.machines).2.length : Nat) : Int) := by
+      rw [Term.denote_share]; simp only [Term.denote, hnid, hcnt, Val.toInt]; push_cast; rfl
     let s1 : State v := { s with machines := (Step.roundOf s.records s.now ab s.machines).1 }
     have ih := rounds_rel hP hshs hE hPE hopt hrd hord k s1 hrec hnow hr2 hrel hgo hnid' h3 hc2
     -- Rounds that fire nothing: the rest fires nothing either.
