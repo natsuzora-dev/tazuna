@@ -1,3 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"c2","name":"book","input":{"day":1793059200000},"caller":{"service":"client"}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#4","to":"c2","answer":{"result":"accepted"}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#5","to":"c2","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}

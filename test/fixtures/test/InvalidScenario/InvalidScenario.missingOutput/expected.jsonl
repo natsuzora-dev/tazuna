@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.missingOutput","definition":null,"data":{"scenarioLine":1,"fact":{"type":"line","index":0}},"location":{"file":"todo/scenarios.ts","line":10},"scenario":{"service":"todo","name":"copyRejected"}}

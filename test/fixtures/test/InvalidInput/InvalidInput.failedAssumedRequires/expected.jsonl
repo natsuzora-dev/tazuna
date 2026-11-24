@@ -1,1 +1,0 @@
-{"kind":"InvalidInput.failedAssumedRequires","definition":null,"data":{"requestId":"calendar.book#1","target":{"service":"calendar","name":"book"},"condition":"startOfDay"},"location":{"file":"booking/scenarios.ts","line":5},"scenario":{"service":"booking","name":"acceptBookingLater"}}

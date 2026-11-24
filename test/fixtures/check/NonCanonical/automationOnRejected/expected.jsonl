@@ -1,4 +1,0 @@
-{"kind":"NonCanonical.missingOnRejected","definition":{"service":"notifier","name":"addTaskForFollowUp"},"data":{"at":{"kind":"automation"}},"location":{"file":"notifier/notifier.ts","line":15}}
-{"kind":"NonCanonical.unreachableOnRejected","definition":{"service":"todo","name":"countAdded"},"data":{"at":{"kind":"automation"}},"location":{"file":"todo/todo.ts","line":22}}
-{"kind":"NonCanonical.missingOnRejected","definition":{"service":"todo","name":"notifyAdded"},"data":{"at":{"kind":"automation"}},"location":{"file":"todo/todo.ts","line":27}}
-{"kind":"NonCanonical.unreachableOnRejected","definition":{"service":"todo","name":"beepCounted"},"data":{"at":{"kind":"automation"}},"location":{"file":"todo/todo.ts","line":32}}

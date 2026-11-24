@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.missingField","definition":null,"data":{"scenarioLine":1,"path":["note"],"value":{}},"location":{"file":"todo/scenarios.ts","line":10},"scenario":{"service":"todo","name":"copyMissingNote"}}

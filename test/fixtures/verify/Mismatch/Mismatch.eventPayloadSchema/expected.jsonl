@@ -1,1 +1,0 @@
-{"kind":"Mismatch.eventPayloadSchema","definition":null,"data":{"event":{"service":"calendar","name":"booked"}},"location":{"file":"traces/calendar/requests.jsonl","line":3}}

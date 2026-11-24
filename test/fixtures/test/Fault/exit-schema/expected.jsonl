@@ -1,3 +1,0 @@
-{"kind":"Fault.copyContextSchema","definition":{"service":"counters","name":"tagCounter"},"data":{"map":"counting"},"location":{"file":"counters/counters.ts","line":6},"scenario":{"service":"counters","name":"start"}}
-{"kind":"Fault.contextSchema","definition":{"service":"picks","name":"picker"},"data":{},"location":{"file":"picks/picks.ts","line":6},"scenario":{"service":"picks","name":"start"}}
-{"kind":"Fault.contextSchema","definition":{"service":"unguardedTicker","name":"countdown"},"data":{},"location":{"file":"unguardedTicker/ticker.ts","line":13},"scenario":{"service":"unguardedTicker","name":"tickTwice"}}

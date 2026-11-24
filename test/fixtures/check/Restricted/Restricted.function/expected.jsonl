@@ -1,1 +1,0 @@
-{"kind":"Restricted.function","definition":{"service":"todo","name":"addTask"},"data":{"reason":"has a statement other than const, if and return: throw new Error(\"a task needs a title\");"},"location":{"file":"todo/todo.ts","line":18}}

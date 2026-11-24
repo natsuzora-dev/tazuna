@@ -1,2 +1,0 @@
-{"kind":"Uncovered.automation","definition":{"service":"backlog","name":"remindChores"},"data":{},"location":{"file":"backlog/backlog.ts","line":37}}
-{"kind":"Uncovered.automation","definition":{"service":"backlog","name":"remindOpenChores"},"data":{},"location":{"file":"backlog/backlog.ts","line":44}}

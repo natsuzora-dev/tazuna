@@ -1,1 +1,0 @@
-{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"todo"},"name":"noNotes"},"creates":{"Task":1},"items":2,"verdict":{"kind":"undecided","reason":"the bounds() of the service give no creates bound for the entity Note"},"assumes":[],"location":{"file":"todo/todo.ts","line":8}}

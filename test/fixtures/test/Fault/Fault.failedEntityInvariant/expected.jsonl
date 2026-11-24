@@ -1,1 +1,0 @@
-{"kind":"Fault.failedEntityInvariant","definition":{"service":"invariantsBreakingTodo","name":"Task"},"data":{"recordKey":"task-1","condition":"titleNotBlank","command":{"service":"invariantsBreakingTodo","name":"addTask"}},"location":{"file":"invariantsBreakingTodo/todo.ts","line":4},"scenario":{"service":"invariantsBreakingTodo","name":"addBlank"}}

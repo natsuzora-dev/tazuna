@@ -1,1 +1,0 @@
-{"kind":"Uncovered.bindsRejection","definition":{"service":"backlog","name":"renameTask"},"data":{"binding":"task"},"location":{"file":"backlog/backlog.ts","line":26}}

@@ -1,1 +1,0 @@
-{"kind":"InvalidInput.resultOfUnlistedEvent","definition":null,"data":{"event":{"service":"device","name":"denied"},"requestId":"device.requestPermission#1","target":{"service":"device","name":"requestPermission"}},"location":{"file":"app/scenarios.ts","line":5},"scenario":{"service":"app","name":"denyUnlisted"}}

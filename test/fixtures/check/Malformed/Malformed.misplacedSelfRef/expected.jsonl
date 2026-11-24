@@ -1,1 +1,0 @@
-{"kind":"Malformed.misplacedSelfRef","definition":{"service":"notes","name":"post"},"data":{"path":["input","quoted","note"]},"location":{"file":"notes/notes.ts","line":18}}

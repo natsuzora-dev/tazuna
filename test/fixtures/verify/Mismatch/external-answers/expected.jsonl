@@ -1,4 +1,0 @@
-{"kind":"Mismatch.answerResult","definition":null,"data":{"requestId":"c1","target":{"service":"calendar","name":"book"},"result":"fulfilled"},"location":{"file":"traces/calendar/requests.jsonl","line":2}}
-{"kind":"Mismatch.answerResult","definition":null,"data":{"requestId":"q1","target":{"service":"calendar","name":"nextDay"},"result":"accepted"},"location":{"file":"traces/calendar/requests.jsonl","line":4}}
-{"kind":"Mismatch.repeatedAnswer","definition":null,"data":{"requestId":"c2","target":{"service":"calendar","name":"book"}},"location":{"file":"traces/calendar/requests.jsonl","line":9}}
-{"kind":"Mismatch.repeatedAnswer","definition":null,"data":{"requestId":"c1","target":{"service":"calendar","name":"book"}},"location":{"file":"traces/calendar/resends.jsonl","line":3}}

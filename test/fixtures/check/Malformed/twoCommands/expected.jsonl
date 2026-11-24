@@ -1,1 +1,0 @@
-{"kind":"Malformed.unresolvedReference","definition":{"service":"worklist","name":"copyTask"},"data":{"path":["commands"],"expected":"command"},"location":{"file":"worklist/worklist.ts","line":26}}

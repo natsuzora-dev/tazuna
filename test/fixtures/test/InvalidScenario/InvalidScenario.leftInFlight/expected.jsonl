@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.leftInFlight","definition":null,"data":{"message":{"sender":"app","receiver":"mailer","id":"mailer.sendMail#1","origin":{"type":"startup"}}},"location":{"file":"app/scenarios.ts","line":5},"scenario":{"service":"app","name":"undelivered"}}

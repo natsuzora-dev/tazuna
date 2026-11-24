@@ -1,4 +1,0 @@
-{"kind":"NonCanonical.answerLiteral","definition":null,"data":{"result":"accepted"},"location":{"file":"todo/scenarios.ts","line":10}}
-{"kind":"NonCanonical.answerLiteral","definition":null,"data":{"result":"accepted"},"location":{"file":"todo/scenarios.ts","line":22}}
-{"kind":"NonCanonical.answerLiteral","definition":null,"data":{"result":"rejected"},"location":{"file":"todo/scenarios.ts","line":23}}
-{"kind":"NonCanonical.answerLiteral","definition":null,"data":{"result":"fulfilled"},"location":{"file":"todo/scenarios.ts","line":24}}

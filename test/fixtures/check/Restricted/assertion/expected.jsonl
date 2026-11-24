@@ -1,6 +1,0 @@
-{"kind":"Restricted.as","definition":null,"data":{"type":"string"},"location":{"file":"todo/todo.ts","line":38}}
-{"kind":"Restricted.as","definition":null,"data":{"type":"{ note: string | null }"},"location":{"file":"todo/todo.ts","line":45}}
-{"kind":"Restricted.suppression","definition":null,"data":{"mark":"biome-ignore"},"location":{"file":"todo/todo.ts","line":46}}
-{"kind":"Restricted.nonNull","definition":null,"data":{},"location":{"file":"todo/todo.ts","line":47}}
-{"kind":"Restricted.suppression","definition":null,"data":{"mark":"@ts-expect-error"},"location":{"file":"todo/todo.ts","line":50}}
-{"kind":"Restricted.suppression","definition":null,"data":{"mark":"@ts-expect-error"},"location":{"file":"todo/todo.ts","line":53}}

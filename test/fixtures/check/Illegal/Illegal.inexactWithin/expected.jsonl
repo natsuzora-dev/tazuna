@@ -1,2 +1,0 @@
-{"kind":"Illegal.inexactWithin","definition":{"service":"todo","name":"Task"},"data":{"response":"assignedBeforeAdded"},"location":{"file":"todo/todo.ts","line":4}}
-{"kind":"Illegal.inexactWithin","definition":{"service":"todo","name":"Task"},"data":{"response":"assignedInHalfAMillisecond"},"location":{"file":"todo/todo.ts","line":4}}

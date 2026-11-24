@@ -1,4 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"renameTask#1","name":"renameTask","input":{},"caller":{"service":"client"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"renameTask#1","answer":{"result":"accepted"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"taskRenamed#1","name":"taskRenamed","payload":{},"resultOf":"renameTask#1"}
-{"time":1792890000000,"dir":"out","type":"event","id":"stepsRecorded#1","name":"stepsRecorded","payload":{"steps":["p entry","l2 entry","r1 entry"]}}

@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.awaitingAnswer","definition":null,"data":{"message":{"sender":"app","receiver":"device","id":"device.requestPermission#1","origin":{"type":"startup"}}},"location":{"file":"app/scenarios.ts","line":5},"scenario":{"service":"app","name":"neverAnswered"}}

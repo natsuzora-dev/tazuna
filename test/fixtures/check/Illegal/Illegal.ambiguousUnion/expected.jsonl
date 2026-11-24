@@ -1,1 +1,0 @@
-{"kind":"Illegal.ambiguousUnion","definition":{"service":"shelf","name":"grouped"},"data":{"path":["payload","group"]},"location":{"file":"shelf/shelf.ts","line":11}}

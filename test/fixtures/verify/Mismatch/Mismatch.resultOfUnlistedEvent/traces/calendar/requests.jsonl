@@ -1,3 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"c2","name":"book","input":{"day":1792972800000},"caller":{"service":"client"}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#2","to":"c2","answer":{"result":"accepted"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"e6","name":"cancelled","resultOf":"c2","payload":{"day":1792972800000}}

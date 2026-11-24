@@ -1,1 +1,0 @@
-{"kind":"InvalidInput.unlistedRejectionKind","definition":null,"data":{"requestId":"calendar.nextDay#1","target":{"service":"calendar","name":"nextDay"},"rejection":{"kind":"not-found"}},"location":{"file":"agenda/scenarios.ts","line":5},"scenario":{"service":"agenda","name":"rejectNextDayNotFound"}}

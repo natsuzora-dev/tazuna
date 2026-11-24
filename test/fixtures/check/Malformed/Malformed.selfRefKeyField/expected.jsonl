@@ -1,2 +1,0 @@
-{"kind":"Malformed.selfRefKeyField","definition":{"service":"tree","name":"Node"},"data":{"field":"id"},"location":{"file":"tree/tree.ts","line":4}}
-{"kind":"Malformed.selfRefKeyField","definition":{"service":"tree","name":"Edge"},"data":{"field":"from"},"location":{"file":"tree/tree.ts","line":6}}

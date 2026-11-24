@@ -1,1 +1,0 @@
-{"kind":"Mismatch.missingAnswer","definition":null,"data":{"subject":{"type":"answer","to":"completeTask#2"},"specLine":11},"location":{"file":"traces/todo/answersWrongResults.jsonl","line":10}}

@@ -1,1 +1,0 @@
-{"kind":"Uncomparable.lineSchema","definition":null,"data":{},"location":{"file":"todo/__snapshots__/addOneCut.jsonl","line":2},"scenario":{"service":"todo","name":"addOneCut"},"error":{"type":"zod","issues":[{"code":"invalid_type","expected":"object","path":[],"message":"Invalid input: expected object, received string"}]}}

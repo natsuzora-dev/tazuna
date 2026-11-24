@@ -1,1 +1,0 @@
-{"service":"notes","property":{"kind":"danglingRef","definition":{"service":"notes","name":"Note"},"field":"replyTo"},"creates":{"Note":2},"items":2,"verdict":{"kind":"proved"},"assumes":[],"location":{"file":"notes/notes.ts","line":4}}

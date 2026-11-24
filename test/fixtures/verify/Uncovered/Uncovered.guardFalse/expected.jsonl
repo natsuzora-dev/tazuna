@@ -1,1 +1,0 @@
-{"kind":"Uncovered.guardFalse","definition":{"service":"backlog","name":"titleWatcher"},"data":{"transition":{"state":"idle","trigger":{"type":"on","key":"taskAdded"},"index":0},"condition":"isTitled"},"location":{"file":"backlog/backlog.ts","line":24}}

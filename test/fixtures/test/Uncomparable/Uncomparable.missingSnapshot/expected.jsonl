@@ -1,1 +1,0 @@
-{"kind":"Uncomparable.missingSnapshot","definition":null,"data":{"runner":"todo"},"location":{"file":"todo/scenarios.ts","line":4},"scenario":{"service":"todo","name":"addOneUnsnapshotted"}}

@@ -1,2 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"todo/notifier.notify#1","name":"notify","input":{"text":"task-1"},"caller":{"service":"todo"}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"todo/notifier.notify#1","answer":{"result":"accepted"}}

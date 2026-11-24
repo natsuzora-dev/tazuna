@@ -1,3 +1,0 @@
-{"time":1792886400000,"dir":"out","type":"event","id":"counted#1","name":"counted","payload":{"value":1}}
-{"time":1792886400000,"dir":"out","type":"event","id":"counted#2","name":"counted","payload":{"value":2},"after":["counted#1"]}
-{"time":1792886400000,"dir":"out","type":"event","id":"counted#3","name":"counted","payload":{"value":3},"after":["counted#1","counted#2"]}

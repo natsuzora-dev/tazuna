@@ -1,1 +1,0 @@
-{"kind":"Fault.failedEnsures","definition":{"service":"ensuresBreakingQuery","name":"taskCount"},"data":{"condition":"countsTasks"},"location":{"file":"ensuresBreakingQuery/todo.ts","line":20},"scenario":{"service":"ensuresBreakingQuery","name":"addTwo"}}

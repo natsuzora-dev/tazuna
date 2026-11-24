@@ -1,6 +1,2 @@
 .DS_Store
 node_modules/
-dist/
-test/.fixtures/
-/explain.json
-/npm/*/tazuna-engine*

@@ -1,1 +1,0 @@
-{"kind":"InvalidInput.unopenedScreen","definition":null,"data":{"screen":{"service":"screens","name":"confirmDialog"},"control":"cancel"},"location":{"file":"screens/scenarios.ts","line":6},"scenario":{"service":"screens","name":"cancelUnopened"}}

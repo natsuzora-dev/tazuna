@@ -1,1 +1,0 @@
-{"kind":"Mismatch.event","definition":null,"data":{"subject":{"type":"event","name":"taskAdded","id":"e1"},"spec":{"taskId":"task-1"},"trace":{"taskId":"task-2"}},"location":{"file":"traces/todo/announcesAdded.jsonl","line":3}}

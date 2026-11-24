@@ -1,3 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"listTasks#1","name":"listTasks","input":{},"caller":{"service":"client"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"listTasks#1","answer":{"result":"accepted"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"tasksListed#1","name":"tasksListed","payload":{"steps":["shop","pay"],"titles":["Buy eggs","Buy milk","Buy milk"],"tags":["store","home"],"entries":[{"day":1,"title":"Buy bread"},{"day":1,"title":"Buy milk"},{"day":2,"title":"Buy eggs"}]},"resultOf":"listTasks#1"}

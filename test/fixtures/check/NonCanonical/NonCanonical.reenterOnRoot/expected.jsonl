@@ -1,1 +1,0 @@
-{"kind":"NonCanonical.reenterOnRoot","definition":{"service":"todo","name":"flow"},"data":{"transition":{"state":null,"trigger":{"type":"on","key":"taskAdded"},"index":0}},"location":{"file":"todo/todo.ts","line":22}}

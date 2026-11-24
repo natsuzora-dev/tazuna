@@ -1,1 +1,0 @@
-{"kind":"InvalidInput.controlPayloadSchema","definition":null,"data":{"screen":{"service":"shelf","name":"shelfScreen"},"control":"pick"},"location":{"file":"shelf/scenarios.ts","line":5},"scenario":{"service":"shelf","name":"pickTwice"}}

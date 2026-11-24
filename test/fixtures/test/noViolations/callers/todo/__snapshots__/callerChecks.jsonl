@@ -1,9 +1,0 @@
-{"time":1792922400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Sweep"},"caller":{"service":"janitor"}}
-{"time":1792922400000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"rejected","rejection":{"kind":"permission-denied"}}}
-{"time":1792922400000,"dir":"in","type":"command","id":"addTask#2","name":"addTask","input":{"taskId":"task-1","title":"Haunt"},"caller":{"entity":"User","key":"ghost"}}
-{"time":1792922400000,"dir":"out","type":"answer","id":"answer#2","to":"addTask#2","answer":{"result":"rejected","rejection":{"kind":"not-found"}}}
-{"time":1792922400000,"dir":"in","type":"command","id":"addTask#3","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"},"caller":{"entity":"User","key":"u1"}}
-{"time":1792922400000,"dir":"out","type":"answer","id":"answer#3","to":"addTask#3","answer":{"result":"accepted"}}
-{"time":1792922400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","ownerId":"u1","title":"Buy milk"},"resultOf":"addTask#3"}
-{"time":1792922400000,"dir":"in","type":"query","id":"myTasks#1","name":"myTasks","input":{},"caller":{"entity":"User","key":"u1"}}
-{"time":1792922400000,"dir":"out","type":"answer","id":"answer#4","to":"myTasks#1","answer":{"result":"fulfilled","output":{"titles":["Buy milk"]}}}

@@ -1,1 +1,0 @@
-{"kind":"Fault.failedRequires","definition":{"service":"zeroCountOpener","name":"homeScreen"},"data":{"screen":{"service":"zeroCountOpener","name":"pickScreen"},"condition":"positive"},"location":{"file":"zeroCountOpener/opener.ts","line":17},"scenario":{"service":"zeroCountOpener","name":"start"}}

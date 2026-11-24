@@ -1,3 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"starTask#1","name":"starTask","input":{"taskId":"other-1"},"caller":{"service":"client"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"starTask#1","answer":{"result":"accepted"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"taskStarred#1","name":"taskStarred","payload":{"taskId":"other-1"},"resultOf":"starTask#1"}

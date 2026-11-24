@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.unresolvedReference","definition":null,"data":{"scenarioLine":2,"fact":{"type":"request","origin":{"type":"line","index":1},"kind":"command","target":{"service":"device","name":"requestPermission"}}},"location":{"file":"app/scenarios.ts","line":12},"scenario":{"service":"app","name":"deliverUnsent"}}

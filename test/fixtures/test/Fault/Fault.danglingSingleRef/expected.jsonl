@@ -1,1 +1,0 @@
-{"kind":"Fault.danglingSingleRef","definition":{"service":"todo","name":"Pin"},"data":{"field":"taskId","targetKey":"task-1","command":{"service":"todo","name":"deleteTask"}},"location":{"file":"todo/todo.ts","line":12},"scenario":{"service":"todo","name":"deletePinned"}}

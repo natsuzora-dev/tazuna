@@ -1,1 +1,0 @@
-{"kind":"Fault.failedChartInvariant","definition":{"service":"todo","name":"tally"},"data":{"condition":"inSync"},"location":{"file":"todo/machines.ts","line":4},"scenario":{"service":"todo","name":"syncedWithinMessage"}}

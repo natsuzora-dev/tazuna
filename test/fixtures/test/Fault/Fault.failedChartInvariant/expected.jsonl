@@ -1,1 +1,0 @@
-{"kind":"Fault.failedChartInvariant","definition":{"service":"invariantsBreakingCounter","name":"counter"},"data":{"condition":"atMostOne"},"location":{"file":"invariantsBreakingCounter/todo.ts","line":20},"scenario":{"service":"invariantsBreakingCounter","name":"addTwo"}}

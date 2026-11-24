@@ -1,1 +1,0 @@
-{"kind":"InvalidInput.eventPayloadSchema","definition":null,"data":{"event":{"service":"todo","name":"taskAdded"}},"location":{"file":"notifier/scenarios.ts","line":7},"scenario":{"service":"notifier","name":"receiveAddedEmptyTitle"}}

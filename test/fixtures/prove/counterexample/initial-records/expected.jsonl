@@ -1,1 +1,0 @@
-{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"Settings"},"name":"nonNegativeLimit"},"creates":{},"items":2,"verdict":{"kind":"counterexample","case":{"given":{"Settings":{"limit":-1}},"clock":-8300720228139062,"violations":[]}},"assumes":[],"location":{"file":"todo/todo.ts","line":4}}

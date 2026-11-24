@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.notInFlight","definition":null,"data":{"scenarioLine":1,"message":{"sender":"app","receiver":"device","id":"device.requestPermission#1","origin":{"type":"startup"}}},"location":{"file":"app/scenarios.ts","line":10},"scenario":{"service":"app","name":"deliverTwice"}}

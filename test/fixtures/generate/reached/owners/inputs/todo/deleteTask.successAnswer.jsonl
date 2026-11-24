@@ -1,9 +1,0 @@
-{"time":0,"dir":"in","type":"command","id":"join#1","name":"join","input":{"userId":"!0!"},"caller":{"service":"accounts"}}
-{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"join#1","answer":{"result":"accepted"}}
-{"time":0,"dir":"out","type":"event","id":"userJoined#1","name":"userJoined","payload":{"id":"!0!"},"resultOf":"join#1"}
-{"time":0,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"t"},"caller":{"entity":"User","key":"!0!"}}
-{"time":0,"dir":"out","type":"answer","id":"answer#2","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":0,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"t","ownerId":"!0!"},"resultOf":"addTask#1"}
-{"time":0,"dir":"in","type":"command","id":"deleteTask#1","name":"deleteTask","input":{"taskId":"t"},"caller":{"entity":"User","key":"!0!"}}
-{"time":0,"dir":"out","type":"answer","id":"answer#3","to":"deleteTask#1","answer":{"result":"accepted"}}
-{"time":0,"dir":"out","type":"event","id":"taskDeleted#1","name":"taskDeleted","payload":{"id":"t"},"resultOf":"deleteTask#1"}

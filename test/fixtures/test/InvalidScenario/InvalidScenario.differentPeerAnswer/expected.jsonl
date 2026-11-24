@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.differentPeerAnswer","definition":null,"data":{"scenarioLine":2,"expected":{"result":"rejected","rejection":{"kind":"unavailable"}},"actual":{"result":"accepted"}},"location":{"file":"todo/scenarios.ts","line":11},"scenario":{"service":"todo","name":"rejectedNotify"}}

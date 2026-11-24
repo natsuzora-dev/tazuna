@@ -1,1 +1,0 @@
-{"kind":"Illegal.foreignMember","definition":null,"data":{"contract":"notifier","key":"taskAdded"},"location":{"file":"notifier/notifier.ts","line":15}}

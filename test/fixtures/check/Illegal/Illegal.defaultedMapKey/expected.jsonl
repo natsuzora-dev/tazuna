@@ -1,2 +1,0 @@
-{"kind":"Illegal.defaultedMapKey","definition":{"service":"greeter","name":"perTask"},"data":{"path":["rows","key","rank"]},"location":{"file":"greeter/greeter.ts","line":20}}
-{"kind":"Illegal.defaultedMapKey","definition":{"service":"greeter","name":"perTask"},"data":{"path":["rows","key","label","text"]},"location":{"file":"greeter/greeter.ts","line":20}}

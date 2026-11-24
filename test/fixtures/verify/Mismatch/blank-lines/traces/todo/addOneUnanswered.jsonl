@@ -1,2 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":"Buy milk"},"caller":{"service":"client"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","title":"Buy milk"},"resultOf":"addTask#1"}

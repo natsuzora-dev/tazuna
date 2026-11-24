@@ -1,2 +1,0 @@
-{"time":1792972800000,"dir":"in","type":"query","id":"q3","name":"nextDay","input":{"from":1792886400000},"caller":{"service":"client"}}
-{"time":1792972800000,"dir":"out","type":"answer","id":"answer#4","to":"q3","answer":{"result":"fulfilled","output":{"day":1792800000000}}}

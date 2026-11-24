@@ -1,6 +1,0 @@
-{"kind":"Mismatch.unlistedEvent","definition":null,"data":{"event":{"service":"calendar","name":"audited"}},"location":{"file":"traces/calendar/requests.jsonl","line":1}}
-{"kind":"Mismatch.resultOfUnacceptedRequest","definition":null,"data":{"event":{"service":"calendar","name":"booked"},"requestId":"c1","target":{"service":"calendar","name":"book"}},"location":{"file":"traces/calendar/requests.jsonl","line":4}}
-{"kind":"Mismatch.resultOfUnlistedEvent","definition":null,"data":{"event":{"service":"calendar","name":"cancelled"},"requestId":"c2","target":{"service":"calendar","name":"book"}},"location":{"file":"traces/calendar/requests.jsonl","line":7}}
-{"kind":"Mismatch.resultOfUnacceptedRequest","definition":null,"data":{"event":{"service":"calendar","name":"booked"},"requestId":"c4","target":{"service":"calendar","name":"book"}},"location":{"file":"traces/calendar/requests.jsonl","line":12}}
-{"kind":"Mismatch.resultOfUnacceptedRequest","definition":null,"data":{"event":{"service":"calendar","name":"booked"},"requestId":"c5","target":{"service":"calendar","name":"book"}},"location":{"file":"traces/calendar/requests.jsonl","line":16}}
-{"kind":"Mismatch.repeatedAnswer","definition":null,"data":{"requestId":"c5","target":{"service":"calendar","name":"book"}},"location":{"file":"traces/calendar/requests.jsonl","line":17}}

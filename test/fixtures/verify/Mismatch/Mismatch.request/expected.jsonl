@@ -1,1 +1,0 @@
-{"kind":"Mismatch.request","definition":null,"data":{"subject":{"type":"subscribe","name":"todo.linked","id":"s2"},"spec":{"links":[{"from":"screens/Draft-1","to":"screens/Draft-2"},{"from":"screens/Draft-2","to":"screens/Draft-1"}]},"trace":{"links":[{"from":"n1","to":"n2"},{"from":"n2","to":"n3"}]}},"location":{"file":"traces/screens/draftTwoBroken.jsonl","line":4}}

@@ -1,2 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"query","id":"taskCard#1","name":"taskCard","input":{},"caller":{"service":"client"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"taskCard#1","answer":{"result":"fulfilled","output":{"mark":{"part":{"name":"store"},"kind":"one"},"due":{"parts":[{"name":"morning"}],"at":1792890000000},"card":{"detail":{"note":"2 bottles"},"title":"Buy milk"}}}}

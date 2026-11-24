@@ -1,6 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"queueTrack#1","name":"queueTrack","input":{"trackId":"t1"},"caller":{"service":"client"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"queueTrack#1","answer":{"result":"accepted"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"trackQueued#1","name":"trackQueued","payload":{"id":"t1"},"resultOf":"queueTrack#1"}
-{"time":1792890000000,"dir":"out","type":"event","id":"trackLoaded#1","name":"trackLoaded","payload":{"trackId":"t1"}}
-{"time":1792890000000,"dir":"in","type":"restart","id":"restart#1"}
-{"time":1792890000000,"dir":"out","type":"event","id":"trackLoaded#2","name":"trackLoaded","payload":{"trackId":"t1"}}

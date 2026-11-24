@@ -1,1 +1,0 @@
-{"kind":"Fault.exceededMessageCommands","definition":{"service":"chains","name":"pinger"},"data":{"limit":1000},"location":{"file":"chains/chains.ts","line":8},"scenario":{"service":"chains","name":"start"}}

@@ -1,1 +1,0 @@
-{"kind":"Fault.exceededCommandDepth","definition":{"service":"todo","name":"counter"},"data":{"limit":100},"location":{"file":"todo/todo.ts","line":18},"scenario":{"service":"todo","name":"start"}}

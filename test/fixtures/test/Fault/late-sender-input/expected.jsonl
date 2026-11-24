@@ -1,1 +1,0 @@
-{"kind":"Fault.inputSchema","definition":{"service":"todo","name":"noteAdded"},"data":{"target":{"service":"notes","name":"addNote"}},"location":{"file":"todo/todo.ts","line":21},"scenario":{"service":"todo","name":"emptyTitleAfterRestart"}}

@@ -1,3 +1,0 @@
-{"kind":"NonCanonical.ungroupedConstant","definition":null,"data":{"name":"titleLengthMax"},"location":{"file":"todo/todo.ts","line":32}}
-{"kind":"NonCanonical.ungroupedConstant","definition":null,"data":{"name":"reminderOffsets"},"location":{"file":"todo/todo.ts","line":33}}
-{"kind":"NonCanonical.ungroupedConstant","definition":null,"data":{"name":"defaultLabel"},"location":{"file":"todo/todo.ts","line":34}}

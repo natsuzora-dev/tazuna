@@ -1,5 +1,0 @@
-{
-  "extends": "../../../../../tsconfig.json",
-  "include": ["todo/data.ts"],
-  "exclude": []
-}

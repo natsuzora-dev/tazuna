@@ -1,2 +1,0 @@
-{"kind":"InvalidInput.unopenedSubscription","definition":null,"data":{"subscriptionId":"taskTitles#1"},"location":{"file":"todo/scenarios.ts","line":15},"scenario":{"service":"todo","name":"endUnopenedAndSubscribeTwice"}}
-{"kind":"InvalidInput.reusedSubscriptionId","definition":null,"data":{"subscriptionId":"taskTitles#2"},"location":{"file":"todo/scenarios.ts","line":15},"scenario":{"service":"todo","name":"endUnopenedAndSubscribeTwice"}}

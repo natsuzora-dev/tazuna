@@ -1,5 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"operation","id":"listScreen.clear#1","name":"listScreen.clear"}
-{"time":1792886400000,"dir":"in","type":"operation","id":"confirmDialog.cancel#1","name":"confirmDialog.cancel"}
-{"time":1792886400000,"dir":"in","type":"operation","id":"listScreen.clear#2","name":"listScreen.clear"}
-{"time":1792886400000,"dir":"in","type":"operation","id":"confirmDialog.cancel#2","name":"confirmDialog.cancel"}
-{"time":1792886400000,"dir":"in","type":"operation","id":"listScreen.pick#1","name":"listScreen.pick","payload":{"taskId":"task-1"}}

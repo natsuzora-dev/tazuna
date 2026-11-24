@@ -1,6 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"query","id":"titledCount#1","name":"titledCount","input":{"title":1},"caller":{"service":"client"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"titledCount#1","answer":{"result":"rejected","rejection":{"kind":"invalid-input"}}}
-{"time":1792890000000,"dir":"in","type":"query","id":"titledCount#2","name":"titledCount","input":{"title":""},"caller":{"service":"client"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#2","to":"titledCount#2","answer":{"result":"rejected","rejection":{"kind":"requires","reason":"hasTitle"}}}
-{"time":1792890000000,"dir":"in","type":"query","id":"titledCount#3","name":"titledCount","input":{"title":"Buy milk"},"caller":{"service":"client"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#3","to":"titledCount#3","answer":{"result":"fulfilled","output":{"count":0}}}

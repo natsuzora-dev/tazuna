@@ -1,1 +1,0 @@
-{"kind":"Illegal.negativeDelay","definition":{"service":"reminder","name":"reminder"},"data":{"state":"waiting","deadline":"early"},"location":{"file":"reminder/reminder.ts","line":5}}

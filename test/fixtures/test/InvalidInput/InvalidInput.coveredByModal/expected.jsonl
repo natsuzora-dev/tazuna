@@ -1,1 +1,0 @@
-{"kind":"InvalidInput.coveredByModal","definition":null,"data":{"screen":{"service":"screens","name":"listScreen"},"control":"pick","child":{"service":"screens","name":"confirmDialog"}},"location":{"file":"screens/scenarios.ts","line":6},"scenario":{"service":"screens","name":"pickUnderDialog"}}

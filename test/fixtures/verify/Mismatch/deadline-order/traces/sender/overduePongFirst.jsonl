@@ -1,8 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"arm#1","name":"arm","input":{},"caller":{"service":"client"}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"arm#1","answer":{"result":"accepted"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"armed#1","name":"armed","payload":{},"resultOf":"arm#1"}
-{"time":1792886400000,"dir":"out","type":"event","id":"ponged#1","name":"ponged","payload":{"by":"overdue"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"pinged#1","name":"pinged","payload":{"by":"late"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"pinged#2","name":"pinged","payload":{"by":"overdue"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"ponged#2","name":"ponged","payload":{"by":"late"}}
-{"time":1792891800000,"dir":"in","type":"time","id":"time#1"}

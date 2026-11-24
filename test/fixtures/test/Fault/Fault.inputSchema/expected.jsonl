@@ -1,1 +1,0 @@
-{"kind":"Fault.inputSchema","definition":{"service":"app","name":"notifier"},"data":{"target":{"service":"mailer","name":"sendMail"}},"location":{"file":"app/app.ts","line":6},"scenario":{"service":"app","name":"unanswered"}}

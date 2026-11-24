@@ -1,1 +1,0 @@
-{"kind":"Mismatch.unexpectedSubscription","definition":null,"data":{"subject":{"type":"subscribe","name":"todo.notesNamed","id":"s5"},"content":{"prefix":"x"}},"location":{"file":"traces/screens/draftAndOpen.jsonl","line":10}}

@@ -1,1 +1,0 @@
-{"kind":"Fault.emittedPayloadSchema","definition":{"service":"emptyTitleTodo","name":"addTask"},"data":{"event":{"service":"emptyTitleTodo","name":"taskAdded"}},"location":{"file":"emptyTitleTodo/todo.ts","line":14},"scenario":{"service":"emptyTitleTodo","name":"addOne"}}

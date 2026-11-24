@@ -1,8 +1,0 @@
-{"time":1792886400000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"},"caller":{"service":"client"}}
-{"time":1792886400000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":1792886400000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"id":"task-1","assignee":null},"resultOf":"addTask#1"}
-{"time":1792888200000,"dir":"in","type":"time","id":"time#1"}
-{"time":1792888200000,"dir":"in","type":"command","id":"assignTask#1","name":"assignTask","input":{"taskId":"task-1","assignee":"aki"},"caller":{"service":"client"}}
-{"time":1792888200000,"dir":"out","type":"answer","id":"answer#2","to":"assignTask#1","answer":{"result":"accepted"}}
-{"time":1792888200000,"dir":"out","type":"event","id":"taskAssigned#1","name":"taskAssigned","payload":{"id":"task-1","assignee":"aki"},"resultOf":"assignTask#1"}
-{"time":1792893600000,"dir":"in","type":"time","id":"time#2"}

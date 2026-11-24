@@ -1,1 +1,0 @@
-{"kind":"Fault.outputSchema","definition":{"service":"items","name":"item"},"data":{},"location":{"file":"items/items.ts","line":12},"scenario":{"service":"items","name":"lookUpItem"}}

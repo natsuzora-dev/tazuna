@@ -1,1 +1,0 @@
-{"kind":"Fault.danglingRef","definition":{"service":"notes","name":"Note"},"data":{"recordKey":"note-2","field":"replyTo","targetKey":"note-1","command":{"service":"notes","name":"deleteNote"}},"location":{"file":"notes/notes.ts","line":4},"scenario":{"service":"notes","name":"deleteRepliedNote"}}

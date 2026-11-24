@@ -1,4 +1,0 @@
-{"time":1792972800000,"dir":"in","type":"query","id":"q1","name":"nextDay","input":{"from":1792972800000},"caller":{"service":"client"}}
-{"time":1792972800000,"dir":"out","type":"answer","id":"answer#1","to":"q1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}
-{"time":1792972801000,"dir":"in","type":"query","id":"q1","name":"nextDay","input":{"from":1792972800000},"caller":{"service":"client"}}
-{"time":1792972801000,"dir":"out","type":"answer","id":"answer#2","to":"q1","answer":{"result":"fulfilled","output":{"day":1792886400000}}}

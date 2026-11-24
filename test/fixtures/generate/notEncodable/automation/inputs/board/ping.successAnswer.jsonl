@@ -1,3 +1,0 @@
-{"time":0,"dir":"in","type":"command","id":"ping#1","name":"ping","input":{"at":0},"caller":{"service":"client"}}
-{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"ping#1","answer":{"result":"accepted"}}
-{"time":0,"dir":"out","type":"event","id":"pinged#1","name":"pinged","payload":{"at":0},"resultOf":"ping#1"}

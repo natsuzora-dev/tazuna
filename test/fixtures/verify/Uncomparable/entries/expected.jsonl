@@ -1,2 +1,0 @@
-{"kind":"Uncomparable.lineSchema","definition":null,"data":{},"location":{"file":"traces/todo/addOne.txt","line":1},"error":{"type":"zod","issues":[{"expected":"number","code":"invalid_type","path":["time"],"message":"Invalid input: expected number, received string"}]}}
-{"kind":"Uncomparable.unknownTraceEntry","definition":null,"data":{},"location":{"file":"traces/addOne.jsonl"}}

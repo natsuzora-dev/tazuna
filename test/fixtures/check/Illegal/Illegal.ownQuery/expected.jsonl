@@ -1,1 +1,0 @@
-{"kind":"Illegal.ownQuery","definition":{"service":"todo","name":"counter"},"data":{"key":"taskCount"},"location":{"file":"todo/todo.ts","line":45}}

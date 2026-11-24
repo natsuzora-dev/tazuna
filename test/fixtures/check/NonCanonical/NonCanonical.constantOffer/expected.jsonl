@@ -1,5 +1,0 @@
-{"kind":"NonCanonical.constantOffer","definition":{"service":"screens","name":"pickScreen"},"data":{"state":null,"control":"close","marker":"any"},"location":{"file":"screens/screens.ts","line":12}}
-{"kind":"NonCanonical.constantOffer","definition":{"service":"screens","name":"pickScreen"},"data":{"state":null,"control":"pick","marker":"none"},"location":{"file":"screens/screens.ts","line":12}}
-{"kind":"NonCanonical.constantOffer","definition":{"service":"screens","name":"pickScreen"},"data":{"state":"picked","control":"close","marker":"none"},"location":{"file":"screens/screens.ts","line":20}}
-{"kind":"NonCanonical.constantOffer","definition":{"service":"screens","name":"pickScreen"},"data":{"state":"done","control":"close","marker":"none"},"location":{"file":"screens/screens.ts","line":26}}
-{"kind":"NonCanonical.constantOffer","definition":{"service":"screens","name":"pickScreen"},"data":{"state":"done","control":"pick","marker":"none"},"location":{"file":"screens/screens.ts","line":29}}

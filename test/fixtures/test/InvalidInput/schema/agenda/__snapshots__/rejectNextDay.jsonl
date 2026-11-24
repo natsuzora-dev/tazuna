@@ -1,2 +1,0 @@
-{"time":1792886400000,"dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":1792886400000},"caller":{"service":"agenda"}}
-{"time":1792886400000,"dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.nextDay#1","answer":{"result":"rejected","rejection":{"kind":"unavailable"}}}

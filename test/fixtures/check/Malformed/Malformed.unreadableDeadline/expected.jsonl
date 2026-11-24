@@ -1,1 +1,0 @@
-{"kind":"Malformed.unreadableDeadline","definition":{"service":"alarms","name":"alarm"},"data":{"path":["states","waiting","after","ring"]},"location":{"file":"alarms/alarms.ts","line":5}}

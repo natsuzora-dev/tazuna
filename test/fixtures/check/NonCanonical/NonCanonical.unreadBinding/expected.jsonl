@@ -1,1 +1,0 @@
-{"kind":"NonCanonical.unreadBinding","definition":{"service":"todo","name":"deleteTask"},"data":{"binding":"task"},"location":{"file":"todo/todo.ts","line":35}}

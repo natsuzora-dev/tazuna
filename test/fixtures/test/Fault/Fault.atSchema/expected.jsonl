@@ -1,1 +1,0 @@
-{"kind":"Fault.atSchema","definition":{"service":"farAlarms","name":"alarm"},"data":{"state":"waiting","deadline":"ring"},"location":{"file":"farAlarms/farAlarms.ts","line":5},"scenario":{"service":"farAlarms","name":"start"}}

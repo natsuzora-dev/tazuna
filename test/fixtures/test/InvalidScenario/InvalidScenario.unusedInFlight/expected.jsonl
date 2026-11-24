@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.unusedInFlight","definition":null,"data":{"scenarioLine":0},"location":{"file":"app/scenarios.ts","line":9},"scenario":{"service":"app","name":"leaveThenDeliver"}}

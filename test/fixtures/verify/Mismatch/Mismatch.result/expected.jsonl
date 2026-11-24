@@ -1,1 +1,0 @@
-{"kind":"Mismatch.result","definition":null,"data":{"subject":{"type":"answer","to":"addTask#2"},"spec":"rejected","trace":"accepted"},"location":{"file":"traces/todo/answersWrongResults.jsonl","line":5}}

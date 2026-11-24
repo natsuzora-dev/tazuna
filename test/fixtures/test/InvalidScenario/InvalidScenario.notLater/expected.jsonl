@@ -1,1 +1,0 @@
-{"kind":"InvalidScenario.notLater","definition":null,"data":{"scenarioLine":1,"at":1792886400000,"now":1792886400000},"location":{"file":"app/scenarios.ts","line":10},"scenario":{"service":"app","name":"clockAtStart"}}

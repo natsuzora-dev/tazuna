@@ -1,6 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1"},"caller":{"service":"client"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"accepted"}}
-{"time":1792890000000,"dir":"out","type":"event","id":"taskAdded#1","name":"taskAdded","payload":{"taskId":"task-1"},"resultOf":"addTask#1"}
-{"time":1792890000000,"dir":"out","type":"query","id":"calendar.nextDay#1","name":"calendar.nextDay","input":{"from":1792890000000},"caller":{"service":"todo"}}
-{"time":1792897200000,"dir":"in","type":"time","id":"time#1"}
-{"time":1792897200000,"dir":"in","type":"answer","id":"calendar/answer#1","to":"calendar.nextDay#1","answer":{"result":"fulfilled","output":{"day":1792940400000}}}

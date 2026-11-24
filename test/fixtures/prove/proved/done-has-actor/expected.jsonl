@@ -1,1 +1,0 @@
-{"service":"todo","property":{"kind":"invariant","definition":{"service":"todo","name":"Task"},"name":"doneHasActor"},"creates":{"Task":2},"items":2,"verdict":{"kind":"proved"},"assumes":[],"location":{"file":"todo/todo.ts","line":4}}

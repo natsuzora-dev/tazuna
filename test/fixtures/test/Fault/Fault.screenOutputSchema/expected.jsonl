@@ -1,1 +1,0 @@
-{"kind":"Fault.screenOutputSchema","definition":{"service":"closer","name":"doneScreen"},"data":{},"location":{"file":"closer/closer.ts","line":6},"scenario":{"service":"closer","name":"closeDone"}}

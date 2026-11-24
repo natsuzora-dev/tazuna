@@ -1,3 +1,0 @@
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.task#1","name":"todo.task","input":{},"caller":{"service":"screens"}}
-{"time":1792890000000,"dir":"in","type":"operation","id":"editScreen.save#1","name":"editScreen.save"}
-{"time":1792890000000,"dir":"in","type":"operation","id":"editScreen.save#2","name":"editScreen.save"}

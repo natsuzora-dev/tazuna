@@ -1,3 +1,0 @@
-{"kind":"Mismatch.output","definition":null,"data":{"subject":{"type":"answer","to":"taskTitles#1"},"spec":{"result":"fulfilled","output":{"titles":["Buy milk"]}},"trace":{"result":"fulfilled","output":{"titles":["Buy eggs"]}}},"location":{"file":"traces/todo/watchTitlesWrongAnswers.jsonl","line":6}}
-{"kind":"Mismatch.missingAnswer","definition":null,"data":{"subject":{"type":"answer","to":"taskTitles#1"},"specLine":10},"location":{"file":"traces/todo/watchTitlesWrongAnswers.jsonl","line":7}}
-{"kind":"Mismatch.unexpectedLine","definition":null,"data":{"subject":{"type":"answer","to":"taskTitles#1"}},"location":{"file":"traces/todo/watchTitlesWrongAnswers.jsonl","line":12}}

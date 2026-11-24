@@ -1,1 +1,0 @@
-{"kind":"Fault.initialContextSchema","definition":{"service":"zeroLimits","name":"limits"},"data":{},"location":{"file":"zeroLimits/limits.ts","line":9},"scenario":{"service":"zeroLimits","name":"start"}}

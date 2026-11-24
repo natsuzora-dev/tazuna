@@ -1,1 +1,0 @@
-{"kind":"Fault.copyContextSchema","definition":{"service":"counters","name":"tagCounter"},"data":{"map":"counting"},"location":{"file":"counters/counters.ts","line":6},"scenario":{"service":"counters","name":"start"}}

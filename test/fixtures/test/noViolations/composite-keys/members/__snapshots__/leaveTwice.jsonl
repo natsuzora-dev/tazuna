@@ -1,7 +1,0 @@
-{"time":1795428000000,"dir":"in","type":"command","id":"leave#1","name":"leave","input":{"membership":{"userId":"ann","groupId":"chess"}},"caller":{"service":"client"}}
-{"time":1795428000000,"dir":"out","type":"answer","id":"answer#1","to":"leave#1","answer":{"result":"accepted"}}
-{"time":1795428000000,"dir":"out","type":"event","id":"left#1","name":"left","payload":{"userId":"ann","groupId":"chess"},"resultOf":"leave#1"}
-{"time":1795428000000,"dir":"in","type":"command","id":"leave#2","name":"leave","input":{"membership":{"userId":"ann","groupId":"chess"}},"caller":{"service":"client"}}
-{"time":1795428000000,"dir":"out","type":"answer","id":"answer#2","to":"leave#2","answer":{"result":"rejected","rejection":{"kind":"not-found"}}}
-{"time":1795428000000,"dir":"in","type":"query","id":"roleOf#1","name":"roleOf","input":{"userId":"ann","groupId":"chess"},"caller":{"service":"client"}}
-{"time":1795428000000,"dir":"out","type":"answer","id":"answer#3","to":"roleOf#1","answer":{"result":"fulfilled","output":{"role":"none"}}}

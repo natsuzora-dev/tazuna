@@ -1,1 +1,0 @@
-{"kind":"Illegal.unlistedCaller","definition":{"service":"todo","name":"noteAdded"},"data":{"target":{"service":"todo","name":"note"}},"location":{"file":"todo/todo.ts","line":28}}
