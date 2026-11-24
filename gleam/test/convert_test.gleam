@@ -4,14 +4,10 @@ import gleam/option.{None, Some}
 import gleam/string
 import simplifile
 import tazuna/internal/convert.{type Restricted, Source}
+import tazuna/internal/dsl_source
 import tazuna/internal/ir
 import tazuna/internal/names
 import tazuna/internal/print
-
-fn dsl() -> String {
-  let assert Ok(text) = simplifile.read("src/tazuna.gleam")
-  text
-}
 
 fn corpus() -> List(convert.Source) {
   ["shapes", "main"]
@@ -25,7 +21,8 @@ fn corpus() -> List(convert.Source) {
 /// Converts the corpus, which also prints every module back and compares, and
 /// leaves the IR where scripts/check hands it to the engine.
 pub fn corpus_converts_and_prints_back_test() {
-  let assert Ok(program) = convert.convert(corpus(), dsl(), "corpus/main")
+  let assert Ok(program) =
+    convert.convert(corpus(), dsl_source.text, "corpus/main")
   let assert Ok(_) =
     simplifile.write("build/corpus.ir.json", convert.ir_text(program))
 }
@@ -33,7 +30,8 @@ pub fn corpus_converts_and_prints_back_test() {
 /// Swapping the labels of two Int fields gives a well-typed program Lean would
 /// accept; printing it back is what tells it from the source.
 pub fn round_trip_catches_a_same_type_label_swap_test() {
-  let assert Ok(program) = convert.convert(corpus(), dsl(), "corpus/main")
+  let assert Ok(program) =
+    convert.convert(corpus(), dsl_source.text, "corpus/main")
   let assert [_, main] = corpus()
   let assert Ok(ast) = glance.module(main.text)
   let swapped =
@@ -74,7 +72,8 @@ pub fn round_trip_catches_a_same_type_label_swap_test() {
 }
 
 pub fn ir_json_escapes_control_characters_test() {
-  let assert Ok(program) = convert.convert(corpus(), dsl(), "corpus/main")
+  let assert Ok(program) =
+    convert.convert(corpus(), dsl_source.text, "corpus/main")
   let text = convert.ir_text(program)
   assert !string.contains(text, "\t")
   assert string.contains(text, "tab\\traw")
@@ -153,7 +152,7 @@ pub fn each_restricted_kind_is_found_where_it_is_written_test() {
   list.each(convert.restricted, fn(kind) {
     let #(text, line) = example(kind)
     let found = case
-      convert.convert([Source("m", "src/m.gleam", text)], dsl(), "m")
+      convert.convert([Source("m", "src/m.gleam", text)], dsl_source.text, "m")
     {
       Ok(_) -> []
       Error(findings) ->
@@ -172,7 +171,7 @@ pub fn each_restricted_kind_is_found_where_it_is_written_test() {
 pub fn a_finding_is_one_json_line_test() {
   let text = "pub fn f() -> Int {\n  panic\n}"
   let assert Error([f]) =
-    convert.convert([Source("m", "src/m.gleam", text)], dsl(), "m")
+    convert.convert([Source("m", "src/m.gleam", text)], dsl_source.text, "m")
   assert convert.finding_line(f)
     == "{\"kind\":\"Restricted.panic\",\"file\":\"src/m.gleam\",\"line\":2,\"col\":3,\"message\":\"panic: a spec names its failures as rejections\"}"
 }
