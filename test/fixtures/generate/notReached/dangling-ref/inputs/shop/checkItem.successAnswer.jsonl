@@ -1,0 +1,9 @@
+{"time":0,"dir":"in","type":"command","id":"addOwner#1","name":"addOwner","input":{"ownerId":"!0!"},"caller":{"service":"client"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addOwner#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"ownerAdded#1","name":"ownerAdded","payload":{"id":"!0!"},"resultOf":"addOwner#1"}
+{"time":0,"dir":"in","type":"command","id":"addItem#1","name":"addItem","input":{"itemId":"!","owner":"!0!"},"caller":{"service":"client"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#2","to":"addItem#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"itemAdded#1","name":"itemAdded","payload":{"id":"!","owner":"!0!","ownerSeen":true},"resultOf":"addItem#1"}
+{"time":0,"dir":"in","type":"command","id":"checkItem#1","name":"checkItem","input":{"itemId":"!"},"caller":{"service":"client"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#3","to":"checkItem#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"itemChecked#1","name":"itemChecked","payload":{"id":"!","ownerSeen":true},"resultOf":"checkItem#1"}

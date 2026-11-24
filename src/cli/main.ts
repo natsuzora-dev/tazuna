@@ -153,7 +153,7 @@ const commands = {
     spec: true,
     positionals: [],
     description:
-      "Prove each property of each spec service within the bounds of its service's bounds(), from any records within them where every invariant holds: each invariant by induction, each command's and query's ensures, that no command leaves a ref dangling, each machine invariant, that steps with no order between them give the same outcome in either order, and each response. prove writes one JSON line per property, with its verdict: proved; counterexample, with the state, the step, and the violations that the spec reports on replaying it; or undecided, with the reason. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant. docs/guarantees.md lists the properties and the cases that prove leaves undecided.",
+      "Prove each property of each spec service within the bounds of its service's bounds(), from any records within them where every invariant holds and every ref names a record: each invariant by induction, each command's and query's ensures, that no command leaves a ref dangling, each machine invariant, that steps with no order between them give the same outcome in either order, and each response. prove writes one JSON line per property, with its verdict: proved; counterexample, with the state, the step, and the violations that the spec reports on replaying it; or undecided, with the reason. A counterexample may start from records that no run reaches: then state the relation that rules them out as an invariant. docs/guarantees.md lists the properties and the cases that prove leaves undecided.",
     options: {},
     parse: ({ root }) => ({ command: "prove", root }),
   }),

@@ -1,0 +1,6 @@
+{"time":0,"dir":"in","type":"command","id":"addOwner#1","name":"addOwner","input":{"ownerId":"!0!"},"caller":{"service":"client"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#1","to":"addOwner#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"ownerAdded#1","name":"ownerAdded","payload":{"id":"!0!"},"resultOf":"addOwner#1"}
+{"time":0,"dir":"in","type":"command","id":"removeOwner#1","name":"removeOwner","input":{"ownerId":"!0!"},"caller":{"service":"client"}}
+{"time":0,"dir":"out","type":"answer","id":"answer#2","to":"removeOwner#1","answer":{"result":"accepted"}}
+{"time":0,"dir":"out","type":"event","id":"ownerRemoved#1","name":"ownerRemoved","payload":{"id":"!0!"},"resultOf":"removeOwner#1"}

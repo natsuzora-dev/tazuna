@@ -276,7 +276,7 @@ structure Induction where
   pre : SRecords
   /-- The facts of `pre` and of its time `clock`. -/
   facts : Facts
-  /-- That every encoded invariant holds of `pre`. -/
+  /-- What the induction assumes of `pre`: that every encoded invariant holds, and that no own ref dangles (SRecords.alive). -/
   holds : Term
   steps : List (String × Except String Step)
   /-- The answer of each query, or why it has no encoding. -/
@@ -299,7 +299,7 @@ def inductionOf (j : Ir.Structure) (service : String) : IO Induction := do
   let creates := Ir.createsOf j.bounds service
   let pre := SRecords.named st creates "pre"
   let used := pre.usedVars "pre"
-  let holds := conj (checked.filterMap fun c => (failsOn pre clockT c).toOption.map .not)
+  let holds := conj (checked.filterMap (fun c => (failsOn pre clockT c).toOption.map .not) ++ [pre.alive st])
   let blocked := unbounded j st
   pure { st, creates, pre, facts := pre.facts st "pre" ++ clockFacts, holds,
          steps := st.commands.map fun c => (c, stepOf st p pre used c),
@@ -1013,8 +1013,9 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
   return invariants ++ commandEnsures ++ answered ++ refs ++ charts ++ unordered ++ responses
 
 /--
-The properties that the queries of `prop` assume of the state they start from, as an induction assumes them: every
-encoded invariant of the records; a machine's invariant also its machine's; and a tie or pair every machine's.
+The properties that the queries of `prop` assume of the state they start from, as an induction assumes them (holds):
+every encoded invariant of the records and every own ref's danglingRef; a machine's invariant also its machine's; and a
+tie or pair every machine's.
 -/
 def Induction.assumed (x : Induction) : Property → List Property
   | .invariant d _ =>
@@ -1024,7 +1025,8 @@ def Induction.assumed (x : Induction) : Property → List Property
     records ++ (x.charts.filter (·.model matches .ok _)).flatMap chartInvariants
   | .groupOrder .. | .deadlineArrivalTie .. => []
 where
-  records := (x.checked.filter (failsOn x.pre clockT · |>.toOption.isSome)).map (·.ref)
+  records := (x.checked.filter (failsOn x.pre clockT · |>.toOption.isSome)).map (·.ref) ++
+    (ownRefs x.st).map fun (e, field, _) => .danglingRef (x.st.ref e) field
   chartInvariants (cc : ChartCase) := cc.invariants.map (.invariant (x.st.ref cc.chart.name) ·.name)
 
 /--

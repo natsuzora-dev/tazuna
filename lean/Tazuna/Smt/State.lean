@@ -269,13 +269,6 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
       let asserts := [Term.or (.not s.live) used] ++ earlier ++ whenLive
       facts := facts ++ { vars := [], asserts, fit := Fit.all (schemas.map (·.fit)) }
     facts := facts ++ { vars := [], asserts := distinctKeys slots ++ (uniqueClash (st.uniqueOf e) slots).map .not, fit := .exact }
-    for (_, field, target) in st.references.filter (·.1 == e) do
-      if (r.keyed.lookup target).isSome then
-        let targets := r.slotsOf target
-        let asserts := slots.map fun s =>
-          let v := (s.fields.lookup field).getD undefT
-          Term.or (.not (.and s.live (.not (nullishT v)))) (keyIn v targets)
-        facts := facts ++ { vars := [], asserts, fit := .exact }
   for (e, fields) in r.singles do
     let props := propertiesWith (entitySchema st e)
     let schemas := props.map fun p => fieldHolds ((fields.lookup p.1).getD undefT) p
@@ -283,6 +276,19 @@ def SRecords.facts (st : Service) (r : SRecords) (pre : String) : Facts := Id.ru
     let asserts := schemas.map (·.term)
     facts := facts ++ { vars, asserts, fit := Fit.all (schemas.map (·.fit)) }
   return facts
+
+/--
+That each live record's ref field to a keyed entity of `r` is null or names a live record. The semantics does not
+guarantee it, since a dangling ref does not halt (Fault.danglingRef): prove assumes it, as it assumes the invariants, and
+lists each danglingRef property that it did not prove in `assumes`; generate does not assume it.
+-/
+def SRecords.alive (st : Service) (r : SRecords) : Term :=
+  conj <| r.keyed.flatMap fun (e, slots) =>
+    (st.references.filter (·.1 == e)).flatMap fun (_, field, target) =>
+      if (r.keyed.lookup target).isNone then [] else
+        slots.map fun s =>
+          let v := (s.fields.lookup field).getD undefT
+          Term.or (.not (.and s.live (.not (nullishT v)))) (keyIn v (r.slotsOf target))
 
 /-- The arguments of an entity invariant: the fields of a record as JSON holds them, and the time, an Int term. -/
 def recordEnv (fields : List (String × Term)) (now : Term) : SEnv :=
