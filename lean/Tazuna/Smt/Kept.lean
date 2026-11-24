@@ -24,6 +24,11 @@ def _root_.Tazuna.Ir.Fun.code {t : Ty} (f : Fun t) : Enc (Code t) := do
   let σ ← need "a kept function that captured a function" (envCodes L f.Γ (Ty.up _ f.hΓ f.env))
   encode L (f.defs.encode L) f.body σ
 
+/-- The code and condition of a kept function that returns effects, from its source the same way. -/
+def _root_.Tazuna.Ir.EffectFun.code {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Enc (Code (.fn ps r)) := do
+  let σ ← need "a kept function that captured a function" (envCodes L f.Γ (Ty.up _ f.hΓ f.env))
+  encode L (f.defs.encode L) f.body σ
+
 end
 
 section
@@ -58,6 +63,17 @@ theorem _root_.Tazuna.Ir.Fun.code_rel {t : Ty} (f : Fun t) {s : Code t} {c : Ter
 theorem _root_.Tazuna.Ir.Fun.code_fn {t : Ty} (f : Fun t) (ht : t.isData = true) {s : Code t} {c : Term}
     (h : f.code L = .ok (s, c)) (hc : Holds M c) : Smt.Rel M L t (Ty.up t ht f.fn) s := by
   rw [Fun.fn, Ty.up_down]; exact f.code_rel h hc
+
+/-- A kept function that returns effects, applied to codes of its arguments, yields the code of what it returns:
+its effects as their variants of the effect datatype (T1 at the kept source). -/
+theorem _root_.Tazuna.Ir.EffectFun.code_apply {ps : List Ty} {r : Ty} (f : EffectFun ps r) {s : Code (.fn ps r)}
+    {c : Term} (h : f.code L = .ok (s, c)) (hc : Holds M c) (xs : (Ty.tuple ps).den0) (cs : Codes ps)
+    (hxs : Rels M L ps (Ty.up _ f.hps xs) cs) {o : Code r} {c' : Term} (ho : s cs = .ok (o, c')) (hc' : Holds M c') :
+    Smt.Rel M L r (f.apply xs) o := by
+  obtain ⟨σ, hσ, h⟩ := bind_ok.1 h
+  have hf := encode_agrees f.defs f.defs.eval (f.defs.encode L) (Defs.encode_agrees M L f.defs) f.body σ _
+    (envCodes_rels _ _ σ (need_ok.1 hσ)) s c h hc
+  exact hf _ _ hxs o c' ho hc'
 
 end
 

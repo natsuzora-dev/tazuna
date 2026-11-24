@@ -1138,6 +1138,70 @@ def effectListCheck (solver : Solver) : IO Bool := do
       | _, _ => IO.println "smt-check: effect list: no values"; return false
     | a => IO.println s!"smt-check: effect list: {repr a}"; return false
 
+/-! A machine's `effect` from its kept source: `fn(ctx) { case ctx.state == 5 { True ->
+Some(request_command(send, ctx.key + 1, fn(_) { [ctx.key] }))  False -> None } }`, its `on_answer` at m:3:7 capturing
+the key. Applied to the code of a context with a free key and state, the solver's value must be what the machine
+starts on entering that state (`MachineV.effectAt`), once with the state 5 and once without. -/
+
+def mctxT : Ty := Ty.machineCtx .int .int .int
+
+def machineEffectE : Expr [] [] (.fn [mctxT] (Ty.option (.dsl .effect [.int]))) :=
+  let ctx : Expr [] [mctxT] mctxT := .var .here
+  let key : Expr [] [mctxT] .int := .field (ft := .int) "key" 0 (by simp) ctx
+  let st : Expr [] [mctxT] .int := .field (ft := .int) "state" 1 (by simp) ctx
+  let handle : Expr [] [mctxT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+  let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
+  let clo : Expr [] [mctxT] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7⟩ (.cons key .nil) rfl rfl body
+  let req : Expr [] [mctxT] (.dsl .effect [.int]) :=
+    .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add key (.int 1)) (.cons clo .nil)))
+  .lam (.case (.bin (.eq rfl) st (.int 5))
+    (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨0, by decide⟩ (.cons req .nil))
+      (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil) .nil))
+    ⟨4, rfl⟩)
+
+def effectM : MachineV .int .int :=
+  { name := "m", key := .int, state := .int, instances := .closed (.lam (.call (.prim .bagFromList [.int] rfl)
+      (.cons (.list .nil) .nil))), initial := (0 : Int), on := .closed (.lam (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil)),
+    after := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)), effect := .closed machineEffectE,
+    invariants := .closed (.lam (.list .nil)) }
+
+def machineEffectLayout : Layout :=
+  Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9⟩, sendKey ⟨"m", 3, 7⟩] }
+    [mctxT, Ty.option (.dsl .effect [.int]), .tuple [.int]]
+
+def machineEffectCheck (solver : Solver) : IO Bool := do
+  let L := machineEffectLayout
+  let some srt := L.srt? (Ty.option (.dsl .effect [.int])) | IO.println "smt-check: machine effect: no sort"; return false
+  let some dts := L.datatypes? | IO.println "smt-check: machine effect: no datatypes"; return false
+  let some (dctx, _) := L.find? mctxT | IO.println "smt-check: machine effect: no context"; return false
+  let ctxT : Term := .ctor dctx 0 [.var 1, .var 2, .int 0, .int 0]
+  let mut ok := true
+  for five in [true, false] do
+    match effectM.effect.code L >>= fun (f, c) => (f (ctxT, ())).map fun (o, c') => (o, andT c c') with
+    | .error r => IO.println s!"smt-check: machine effect: no encoding: {repr r}"; return false
+    | .ok (o, cond) =>
+      let stAssert : Term := if five then .eq (.var 2) (.int 5) else .not (.eq (.var 2) (.int 5))
+      let script : Script :=
+        { datatypes := dts, vars := [srt, .int, .int], asserts := [.eq (.var 0) o, stAssert, cond], shows := [0, 1, 2] }
+      match ← solver.run script with
+      | .sat vs =>
+        match vs.lookup 0, vs.lookup 1, vs.lookup 2 with
+        | some v, some (.int key), some (.int st) =>
+          let agrees (k : Int) : Bool := match effectM.effectAt k st (0 : Int) 0, v with
+            | some eff, .ctor _ 0 [w] => effMatches L eff w
+            | none, .ctor _ 1 [] => true
+            | _, _ => false
+          if !agrees key then
+            IO.println s!"smt-check: machine effect: the solver's {v.print} is not the effect at key {key}, state {st}"
+            ok := false
+          -- The comparison must tell effects apart: another key's effect is not the solver's.
+          if five && agrees (key + 1) then
+            IO.println "smt-check: machine effect: the comparison accepts another key"; ok := false
+        | _, _, _ => IO.println "smt-check: machine effect: no values"; ok := false
+      | a => IO.println s!"smt-check: machine effect: {repr a}"; ok := false
+  return ok
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -1198,6 +1262,7 @@ def check (z3 : String) : IO Bool := do
   unless ← boundCheck solver do ok := false
   unless ← effectCheck solver do ok := false
   unless ← effectListCheck solver do ok := false
+  unless ← machineEffectCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
