@@ -128,6 +128,10 @@ fn example(kind: Restricted) -> #(String, Int) {
       "pub type Tree {\n  Leaf\n  Node(Forest)\n}\n\npub type Forest {\n  Forest(trees: List(Tree))\n}",
       1,
     )
+    convert.Incomparable -> #(
+      "import tazuna\n\npub fn f(t: tazuna.Table(fn() -> Int, Int)) -> Int {\n  tazuna.table_size(tazuna.table_remove(t, fn() { 1 }))\n}",
+      4,
+    )
     convert.ShadowedImport -> #(
       "import gleam/int.{to_string}\n\npub fn to_string() -> Int {\n  1\n}",
       3,
@@ -191,4 +195,15 @@ pub fn tazuna_functions_besides_built_ins_are_foreign_test() {
     convert.convert([Source("m", "src/m.gleam", text)], dsl_source.text, "m")
   assert convert.kind_name(f.kind) == "Restricted.foreignFunction"
   assert f.at == Some(ir.At(4, 3))
+}
+
+/// A generic function that compares its arguments passes the demand to the
+/// type it is called at, so the call holding functions is the one refused.
+pub fn equality_demands_flow_through_generic_functions_test() {
+  let text =
+    "pub fn same(a: x, b: x) -> Bool {\n  a == b\n}\n\npub fn twice(a: y) -> Bool {\n  same(a, a)\n}\n\npub fn ints() -> Bool {\n  twice(1)\n}\n\npub fn fns() -> Bool {\n  twice(ints)\n}"
+  let assert Error([f]) =
+    convert.convert([Source("m", "src/m.gleam", text)], dsl_source.text, "m")
+  assert convert.kind_name(f.kind) == "Restricted.incomparable"
+  assert f.at == Some(ir.At(14, 3))
 }

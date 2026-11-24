@@ -12,6 +12,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import tazuna/internal/dsl_source
+import tazuna/internal/equality
 import tazuna/internal/ir.{
   type Annotation, type Expr, type Pat, type Stmt, type Ty, At, Con, Expr, Fun,
   Meta, Pat, Tuple, Var,
@@ -42,6 +43,7 @@ pub type Restricted {
   ForeignType
   Recursion
   RecursiveType
+  Incomparable
   ShadowedImport
   MixedReference
   MultiVariantUpdate
@@ -68,6 +70,7 @@ pub const restricted = [
   ForeignType,
   Recursion,
   RecursiveType,
+  Incomparable,
   ShadowedImport,
   MixedReference,
   MultiVariantUpdate,
@@ -109,6 +112,7 @@ pub fn kind_name(kind: Kind) -> String {
         ForeignType -> "foreignType"
         Recursion -> "recursion"
         RecursiveType -> "recursiveType"
+        Incomparable -> "incomparable"
         ShadowedImport -> "shadowedImport"
         MixedReference -> "mixedReference"
         MultiVariantUpdate -> "multiVariantUpdate"
@@ -405,6 +409,14 @@ pub fn convert(
       constants: list.reverse(constants),
       solved: st.solved,
     )
+  use <- bail(
+    list.map(equality.sites(program), fn(site) {
+      let path =
+        list.key_find(program.sources, names.split(site.function).0)
+        |> result.unwrap(site.function)
+      Finding(Restricted(Incomparable), path, Some(site.at), site.message)
+    }),
+  )
   use <- bail(list.filter_map(mods, round_trip(program, _)))
   Ok(program)
 }

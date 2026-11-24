@@ -62,7 +62,12 @@ def embedded (dsl : String) : String :=
   "//// module. `lake exe gen-dsl --write ..` in lean/ writes this file.\n\n" ++
   "pub const text =\n  " ++ Tazuna.Ir.Literal.printStr dsl ++ "\n\n" ++
   "/// The functions of the module that are built-ins; a spec calls no other.\n" ++
-  "pub const builtins = [\n" ++ String.join (Prim.all.map fun p => s!"  {Tazuna.Ir.Literal.printStr p.sig.name},\n") ++ "]\n"
+  "pub const builtins = [\n" ++ String.join (Prim.all.map fun p => s!"  {Tazuna.Ir.Literal.printStr p.sig.name},\n") ++ "]\n\n" ++
+  "/// The built-ins whose type variables, by name, must be types `==` works on.\n" ++
+  "pub const needs_equality = [\n" ++
+  String.join ((Prim.all.filter (!·.sig.needsEq.isEmpty)).map fun p =>
+    let vs := p.sig.needsEq.map fun k => Tazuna.Ir.Literal.printStr (p.sig.tvars[k]?.getD "")
+    s!"  #({Tazuna.Ir.Literal.printStr p.sig.name}, [" ++ ", ".intercalate vs ++ "]),\n") ++ "]\n"
 
 /-- Checks that the built-in section of the DSL module matches Lean's table and that the launcher's copy of the module
 is current, or rewrites both with `--write`. -/

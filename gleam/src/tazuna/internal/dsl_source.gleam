@@ -248,3 +248,14 @@ pub const builtins = [
   "require",
   "ref",
 ]
+
+/// The built-ins whose type variables, by name, must be types `==` works on.
+pub const needs_equality = [
+  #("bag_contains", ["a"]),
+  #("table_new", ["k"]),
+  #("table_from_list", ["k"]),
+  #("table_insert", ["k"]),
+  #("table_remove", ["k"]),
+  #("table_get", ["k"]),
+  #("ref", ["k"]),
+]
