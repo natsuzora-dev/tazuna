@@ -94,6 +94,37 @@ def refOk (t : E (.table .int .str)) (k : Int) : E (Ty.result .str .str) :=
   .call (.prim .tableLookup [.int, .str, .str, .str] rfl) (.cons t (.cons (.int k) (.cons (.str "no")
     (.cons (.lam (.ctor (vs := [[.str], [.str]]) ⟨0, by decide⟩ (.cons (.var .here) .nil))) .nil))))
 
+/-- `case o { Some(x) -> [x, x + 1]  None -> [] }`: branches of different lengths share the list's two slots. -/
+def twoOrNone (o : E optI) : E (.list .int) :=
+  .case o
+    (.cons (.ctor (vs := [[.int], []]) ⟨0, by decide⟩ (.cons .bind .nil))
+      (.list (.cons (.var .here) (.cons (.bin .add (.var .here) (.int 1)) .nil)))
+      (.cons (.ctor (vs := [[.int], []]) ⟨1, by decide⟩ .nil) (.list .nil) .nil))
+    ⟨10, rfl⟩
+
+/-- `Ok(twoOrNone(o))`: a list inside a constructor, as a command's `decide` returns its events. -/
+def okList (o : E optI) : E (Ty.result (.list .int) .str) :=
+  .ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (twoOrNone o) .nil)
+
+/-- `table.from_list` of pairs a case chooses, so free slots of the list are skipped. -/
+def tableOfCase (o : E optI) : E (.table .int .str) :=
+  let pair (k : Int) (v : String) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
+  .call (.prim .tableFromList [.int, .str] rfl)
+    (.cons (.case o
+      (.cons (.ctor (vs := [[.int], []]) ⟨0, by decide⟩ (.cons .wild .nil))
+        (.list (.cons (pair 1 "a") (.cons (pair 2 "b") (.cons (pair 1 "c") .nil))))
+        (.cons (.ctor (vs := [[.int], []]) ⟨1, by decide⟩ .nil) (.list (.cons (pair 4 "d") .nil)) .nil))
+      ⟨10, rfl⟩) .nil)
+
+def listCases : List (String × (t : Ty) × E t) :=
+  [ ("a list keeps its order", ⟨.list .int, .list (.cons (.int 3) (.cons (.int 1) (.cons (.int 2) .nil)))⟩),
+    ("the longer branch of a list case", ⟨.list .int, twoOrNone some5⟩),
+    ("the empty branch of a list case", ⟨.list .int, twoOrNone none'⟩),
+    ("a list inside a constructor", ⟨Ty.result (.list .int) .str, okList some5⟩),
+    ("a bag from a list case", ⟨.bag .int, .call (.prim .bagFromList [.int] rfl) (.cons (twoOrNone some5) .nil)⟩),
+    ("a table from the longer list", ⟨.table .int .str, tableOfCase some5⟩),
+    ("a table from the shorter list", ⟨.table .int .str, tableOfCase none'⟩) ]
+
 def cases : List (String × (t : Ty) × E t) :=
   [ ("truncating division", ⟨.int, .bin .div (.int (-7)) (.int 2)⟩),
     ("division by a negative", ⟨.int, .bin .div (.int 7) (.int (-2))⟩),
@@ -194,9 +225,10 @@ def dt : Script :=
     asserts := [.eq (.var 0) (.ctor 1 0 [.ctor 0 0 [.int (-3), .str "x"]]), .eq (.var 1) (.ctor 0 1 [])],
     shows := [0, 1] }
 
-/-- The script asking for a variable equal to the expression under its condition. -/
+/-- The script asking for a variable equal to the expression under its condition. Lists get their longest literal's
+slots. -/
 def scriptOf (slots : Ty → Nat) {t : Ty} (e : E t) : Except String (Layout × Script) := do
-  let L := Layout.addTys slots {} (Tazuna.Smt.Expr.tys e)
+  let L := Layout.addTys (listSlots slots (Tazuna.Smt.Expr.lits e)) {} (Tazuna.Smt.Expr.tys e)
   match encode L (G := []) () e (), L.srt? t, L.datatypes? with
   | .ok (code, cond), some srt, some dts =>
     let some term := Code.term? t code | throw "no term"
@@ -249,7 +281,8 @@ def querySvc : ServiceV :=
     scenarios := [], declared := [] }
 
 def queryLayout : Layout :=
-  Layout.addTys (fun _ => 3) {} (recordsT :: .id :: Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys resolveE)
+  Layout.addTys (listSlots (fun _ => 3) (Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits resolveE)) {}
+    (recordsT :: .id :: Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys resolveE)
 
 /-- The script for one goal on the outcome terms: v0..v3 the state, v4 the caller, v5 the key, v6..v9 the outcome
 terms (caller listed, the rule's holds and name, the output). -/
@@ -359,7 +392,8 @@ def eventSvc : ServiceV :=
     scenarios := [], declared := [] }
 
 def eventLayout : Layout :=
-  Layout.addTys (fun _ => 3) {} (recordsT :: evT :: Tazuna.Smt.Expr.tys applyE ++ Tazuna.Smt.Expr.tys invariantsE)
+  Layout.addTys (listSlots (fun _ => 3) (Tazuna.Smt.Expr.lits applyE ++ Tazuna.Smt.Expr.lits invariantsE)) {}
+    (recordsT :: evT :: Tazuna.Smt.Expr.tys applyE ++ Tazuna.Smt.Expr.tys invariantsE)
 
 def eventI : Fin eventSvc.subscribes.length := ⟨0, by decide⟩
 
@@ -465,15 +499,17 @@ def clockCases : List (String × List Term) :=
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
-  for (slots, list) in [((fun _ => 3 : Ty → Nat), cases), (reslots, reslotted)] do
+  for (slots, list) in [((fun _ => 3 : Ty → Nat), cases), ((fun _ => 3 : Ty → Nat), listCases), (reslots, reslotted)] do
     for (name, ⟨t, e⟩) in list do
       match scriptOf slots e with
       | .ok (L, script) =>
         match ← solver.run script with
         | .sat vs =>
-          -- The value read back decodes (T3), and codes what eval computes.
-          let back := ((vs.lookup 0).bind (decodeV L t)).bind (embedV L t)
-          if back.map (·.print) != (embedV L t (Expr.eval (G := []) () e ())).map (·.print) then
+          -- The value read back decodes (T3) to a value `==` to what eval computes.
+          let same := match (vs.lookup 0).bind (decodeV L t) with
+            | some y => Ty.deq t y (Expr.eval (G := []) () e ())
+            | none => false
+          if !same then
             IO.println s!"smt-check: {name}: the solver's value differs from eval's"; ok := false
         | a => IO.println s!"smt-check: {name}: {repr a}"; ok := false
       | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false

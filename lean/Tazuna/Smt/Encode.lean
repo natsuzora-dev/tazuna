@@ -2,8 +2,8 @@ import Tazuna.Semantics.Eval
 import Tazuna.Smt.Slots
 
 /-! The encoding of typed IR expressions as SMT terms. It follows `eval` clause by clause: a value of a first-order
-type is coded as a term, a list (always a literal of known length) as a list of codes, and a function as a Lean
-function on codes, so lambdas, calls, globals and built-ins encode the way they evaluate. Each code comes with a
+type is coded as a term, a list too (slots in order, sized by its type's longest literal, since every list is a
+literal), and a function as a Lean function on codes, so lambdas, calls, globals and built-ins encode the way they evaluate. Each code comes with a
 condition, a Bool term that holds when no collection outgrew the slots its layout gives it; a caller states it as
 the bound it checks within. Whatever has no exact encoding is refused with a reason, never approximated.
 
@@ -24,7 +24,7 @@ inductive Refusal where
 deriving Repr
 
 /-- The datatypes a script declares: each type in the list is datatype `D<i>` by its position, with the number of
-slots it holds when it is a bag or a table. -/
+slots it holds when it is a bag, a table or a list. -/
 structure Layout where
   types : List (Ty × Nat) := []
 
@@ -38,12 +38,11 @@ def boolVs? : (vs : List (List Ty)) → Option (PLift (vs = [[], []]))
   | _ => none
 
 mutual
-/-- How a value of a type is coded: a term for first-order types, codes for a list literal's items, a Lean function
-on codes for a function. -/
+/-- How a value of a type is coded: a term for first-order types, a Lean function on codes for a function. A list
+is a term too: slots, like a bag's, whose occupied ones hold the items in order. -/
 def Code : Ty → Type
   | .fn ps r => Codes ps → Except Refusal (Code r × Term)
-  | .list t => List (Code t)
-  | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .date | .id | .dsl .. => Term
+  | .list _ | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .date | .id | .dsl .. => Term
 def Codes : List Ty → Type
   | [] => Unit
   | t :: ts => Code t × Codes ts
@@ -64,19 +63,19 @@ def andT : Term → Term → Term
   | a, b => .and a b
 
 def Code.term? : (t : Ty) → Code t → Option Term
-  | .fn .., _ | .list _, _ => none
-  | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
+  | .fn .., _ => none
+  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
   | .dsl .., s => some s
 
 def Code.ofTerm? : (t : Ty) → Term → Option (Code t)
-  | .fn .., _ | .list _, _ => none
-  | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
+  | .fn .., _ => none
+  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
   | .dsl .., s => some s
 
 /-- The code shared (`Term.share`) when it is a term: a bound variable may be used any number of times. -/
 def Code.share : (t : Ty) → Code t → Code t
-  | .fn .., s | .list _, s => s
-  | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
+  | .fn .., s => s
+  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
   | .dsl .., s => Term.share s
 
 def Codes.share : (ts : List Ty) → Codes ts → Codes ts
@@ -239,7 +238,11 @@ def defaultT : Ty → Option Term
     let (d, n) ← L.find? (.table k v)
     let (dt, _) ← L.find? (.tuple [Ty.bool, k, v])
     pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultT k, ← defaultT v])))
-  | .list _ | .fn .. | .param _ | .dsl .. => none
+  | .list t => do
+    let (d, n) ← L.find? (.list t)
+    let (dt, _) ← L.find? (.tuple [Ty.bool, t])
+    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultT t])))
+  | .fn .. | .param _ | .dsl .. => none
 def defaultTs : List Ty → Option (List Term)
   | [] => some []
   | t :: ts => do pure ((← defaultT t) :: (← defaultTs ts))
@@ -288,24 +291,31 @@ def putSlots (S : List Slot) (k v : Term) : List Slot × Term :=
   let (S', p) := insertSlots [k, v] tt (filterSlots S (keepQs k S))
   (S', .not p)
 
-/-- The bag's slots after inserting each item in turn, with the condition that each found a free slot. -/
-def insertAll : List Slot → List Term → List Slot × Term
-  | S, [] => (S, tt)
-  | S, x :: xs =>
-    let (S', p) := insertSlots [x] tt S
-    let (S'', c) := insertAll S' xs
-    (S'', andT (.not p) c)
-
-/-- The table's slots after `table.insert` of each entry in turn, with the condition that each found a slot. -/
-def putAll : List Slot → List (Term × Term) → List Slot × Term
-  | S, [] => (S, tt)
-  | S, (k, v) :: kvs =>
-    let (S', c) := putSlots S k v
-    let (S'', c') := putAll S' kvs
-    (S'', andT c c')
-
 def need' {α : Type} (what : String) (b : Bool) (a : α) : Except Refusal α :=
   if b then .ok a else .error (.outside what)
+
+/-- The slots `T` where `f` holds and `S` where it does not, slot by slot. -/
+def iteSlots (f : Term) (T S : List Slot) : List Slot :=
+  List.zipWith (fun a b => (.ite f a.1 b.1, List.zipWith (.ite f) a.2 b.2)) T S
+
+/-- The table's slots after `table.insert` of each pair a list's slots hold, occupied ones in order, shared after each
+insertion, with the condition that each found a slot. `dp` is the pairs' datatype. -/
+def putFrom (d dt dp : Nat) : List Slot → List Slot → List Slot × Term
+  | S, [] => (S, tt)
+  | S, (f, xs) :: P =>
+    let (S', c) := putSlots S (.sel dp 0 0 (xs.headD tt)) (.sel dp 0 1 (xs.headD tt))
+    let T := iteSlots f S' S
+    let (S'', c') := putFrom d dt dp (slotsOf d dt T.length 2 (slotsTerm d dt T)) P
+    (S'', andT (.ite f c tt) c')
+
+/-- A list literal: its items in the first slots of the list's datatype, the others free, with the condition that
+they fit. -/
+def listOf (t : Ty) (items : List Term) : Except Refusal (Term × Term) := do
+  let (d, n, dt) ← collD L (.list t) [t]
+  let dflt ← need "an item type without a default term" (defaultT L t)
+  if items.length ≤ n then
+    pure (slotsTerm d dt (items.map (tt, [·]) ++ List.replicate (n - items.length) (.bool false, [dflt])), tt)
+  else pure (slotsTerm d dt [], .bool false)
 
 /-- Whether each slot's key is `key`. -/
 def hitQs (key : Term) (S : List Slot) : List Term := S.map fun sl => .eq key (sl.2.headD key)
@@ -519,16 +529,15 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     pure (slotsTerm d dt S', c)
   | .bagFromList, args, _ => .ok fun (items, ()) => do
     let a := (Ty.param 0).inst args
-    let (d, n, dt) ← collD L (.bag a) [a]
-    let ts ← items.mapM fun x => need "an item that has no term" (Code.term? a x)
-    let (S, c) := insertAll (← emptySlots L [a] n) ts
-    pure (slotsTerm d dt S, c)
+    let (dl, nl, dt) ← collD L (.list a) [a]
+    collOf L (.bag a) [a] (slotsOf dl dt nl 1 items)
   | .tableFromList, args, _ => .ok fun (pairs, ()) => do
     let k := (Ty.param 0).inst args
     let v := (Ty.param 1).inst args
     let (d, n, dt) ← collD L (.table k v) [k, v]
+    let (dl, nl, dtl) ← collD L (.list (.tuple [k, v])) [.tuple [k, v]]
     let dp ← need' "a key type whose == is not SMT-LIB's =" k.eqable (← tupleD L [k, v])
-    let (S, c) := putAll (← emptySlots L [k, v] n) (pairs.map fun p => (.sel dp 0 0 p, .sel dp 0 1 p))
+    let (S, c) := putFrom d dt dp (← emptySlots L [k, v] n) (slotsOf dl dtl nl 1 pairs)
     pure (slotsTerm d dt S, c)
   | .tableGet, args, _ => .ok fun (t, key, ()) => do
     let v := (Ty.param 1).inst args
@@ -597,7 +606,11 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
     match ← encodeClauses cs σ (Code.share _ s) with
     | some (r, c2) => pure (r, andT c1 c2)
     | none => .error (.outside "a case without clauses")
-  | .list items, σ => encodeItems items σ
+  | @Expr.list _ _ t items, σ => do
+    let (ss, c1) ← encodeItems items σ
+    let ts ← ss.mapM fun s => need "a list item that has no term" (Code.term? t s)
+    let (r, c2) ← listOf L t ts
+    pure (r, andT c1 c2)
   | @Expr.tuple _ _ ts es, σ => do
     let (ss, c) ← encodes es σ
     let fs ← need "a tuple with an item that has no term" (Codes.terms? _ ss)
@@ -678,13 +691,13 @@ variable (slots : Ty → Nat)
 
 mutual
 /-- The layout with every datatype `t` needs: its fields' types first, so each datatype refers only to earlier
-ones. A bag or table gets `slots` of its type, each a tuple of an occupied flag and the item. -/
+ones. A bag, table or list gets `slots` of its type, each a tuple of an occupied flag and the item. -/
 def addTy (L : Layout) : Ty → Layout
   | .tuple ts => (addTys L ts).push (.tuple ts)
   | .adt 0 a vs => if (boolVs? vs).isSome then L else (addTyss L vs).push (.adt 0 a vs)
   | .adt (i + 1) a vs => (addTyss L vs).push (.adt (i + 1) a vs)
   | .id => L.push .id
-  | .list t => addTy L t
+  | .list t => ((addTy L t).push (.tuple [Ty.bool, t])).push (.list t) (slots (.list t))
   | .fn ps r => addTy (addTys L ps) r
   | .bag t => ((addTy L t).push (.tuple [Ty.bool, t])).push (.bag t) (slots (.bag t))
   | .table k v => (((addTy (addTy L k) v)).push (.tuple [Ty.bool, k, v])).push (.table k v) (slots (.table k v))
@@ -712,7 +725,7 @@ def datatype? (L : Layout) : Ty × Nat → Option Datatype
   | (.tuple ts, _) => do pure ⟨[← ts.mapM L.srt?]⟩
   | (.adt _ _ vs, _) => do pure ⟨← vs.mapM (·.mapM L.srt?)⟩
   | (.id, _) => some ⟨[[.int], [.str]]⟩
-  | (.bag t, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, t]))]⟩
+  | (.bag t, n) | (.list t, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, t]))]⟩
   | (.table k v, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, k, v]))]⟩
   | _ => none
 
@@ -756,5 +769,46 @@ def Clauses.tys {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r s
 end
 
 end
+
+section
+variable {G : List Ty}
+
+mutual
+/-- The type and length of every list literal of an expression. Every list is a literal, so a list type's longest
+literal bounds every list of that type: its slot count, derived, with no bound to state. -/
+def Expr.lits {Γ : List Ty} {t : Ty} : Expr G Γ t → List (Ty × Nat)
+  | .list items => (t, Items.len items) :: Items.lits items
+  | .ctor _ es | .tuple es => Exprs.lits es
+  | .field _ _ _ e | .index e _ | .lam e | .not e | .neg e => Expr.lits e
+  | .update e p => Expr.lits e ++ Patch.lits p
+  | .call f args => Expr.lits f ++ Exprs.lits args
+  | .let_ e body | .bin _ e body => Expr.lits e ++ Expr.lits body
+  | .case e cs _ => Expr.lits e ++ Clauses.lits cs
+  | .int _ | .str _ | .var _ | .global _ | .prim .. => []
+def Exprs.lits {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → List (Ty × Nat)
+  | .nil => []
+  | .cons e es => Expr.lits e ++ Exprs.lits es
+def Items.lits {Γ : List Ty} {t : Ty} : Items G Γ t → List (Ty × Nat)
+  | .nil => []
+  | .cons e es => Expr.lits e ++ Items.lits es
+def Items.len {Γ : List Ty} {t : Ty} : Items G Γ t → Nat
+  | .nil => 0
+  | .cons _ es => Items.len es + 1
+def Patch.lits {Γ : List Ty} {ts : List Ty} : Patch G Γ ts → List (Ty × Nat)
+  | .nil => []
+  | .keep rest => Patch.lits rest
+  | .set e rest => Expr.lits e ++ Patch.lits rest
+def Clauses.lits {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List (Ty × Nat)
+  | .nil => []
+  | .cons _ body rest => Expr.lits body ++ Clauses.lits rest
+  | .guarded _ g body rest => Expr.lits g ++ Expr.lits body ++ Clauses.lits rest
+end
+
+end
+
+/-- The slot count of each type: a list's longest literal among `lits`, and `base` for bags and tables. -/
+def listSlots (base : Ty → Nat) (lits : List (Ty × Nat)) : Ty → Nat
+  | .list t => lits.foldl (fun m (u, k) => if (Ty.same u (.list t)).isSome then max m k else m) 0
+  | t => base t
 
 end Tazuna.Smt

@@ -55,6 +55,10 @@ def wfT : Ty → Term → Option Term
     | some (d, n), some (dt, _) =>
       ((slotsOf d dt n 1 x).mapM fun sl : Slot => (wfT t (sl.2.headD tt)).map (Term.or (.not sl.1) ·)).map allT
     | _, _ => none
+  | .list t, x => match L.find? (.list t), L.find? (.tuple [Ty.bool, t]) with
+    | some (d, n), some (dt, _) =>
+      ((slotsOf d dt n 1 x).mapM fun sl : Slot => (wfT t (sl.2.headD tt)).map (Term.or (.not sl.1) ·)).map allT
+    | _, _ => none
   | .table k w, x => match L.find? (.table k w), L.find? (.tuple [Ty.bool, k, w]) with
     | some (d, n), some (dt, _) =>
       if k.eqable then
@@ -76,7 +80,7 @@ end
 
 mutual
 /-- The value has the shape of the type's sort, as every value of a well-sorted model does: slots for a bag or
-table, a declared constructor for an ADT. The items of free slots are left open: no value reads them. -/
+table or list, a declared constructor for an ADT. The items of free slots are left open: no value reads them. -/
 def Sorted : Ty → Val → Prop
   | .int, w | .date, w | .dsl .fresh _, w => ∃ n, w = .int n
   | .str, w => ∃ s, w = .str s
@@ -85,6 +89,8 @@ def Sorted : Ty → Val → Prop
   | .adt (i + 1) a vs, w => ∃ d n, L.find? (.adt (i + 1) a vs) = some (d, n) ∧ SortedAlts d 0 vs w
   | .tuple ts, w => ∃ d n vals, L.find? (.tuple ts) = some (d, n) ∧ w = .ctor d 0 vals ∧ SortedVs ts vals
   | .bag t, w => ∃ d n dt m sv, L.find? (.bag t) = some (d, n) ∧ L.find? (.tuple [Ty.bool, t]) = some (dt, m) ∧
+      collView d dt n 1 w = some sv ∧ ∀ p ∈ sv, p.1 = true → ∀ z, p.2 = [z] → Sorted t z
+  | .list t, w => ∃ d n dt m sv, L.find? (.list t) = some (d, n) ∧ L.find? (.tuple [Ty.bool, t]) = some (dt, m) ∧
       collView d dt n 1 w = some sv ∧ ∀ p ∈ sv, p.1 = true → ∀ z, p.2 = [z] → Sorted t z
   | .table k v, w => ∃ d n dt m sv, L.find? (.table k v) = some (d, n) ∧
       L.find? (.tuple [Ty.bool, k, v]) = some (dt, m) ∧ collView d dt n 2 w = some sv ∧
@@ -265,6 +271,29 @@ theorem wf_iff : (t : Ty) → (x : Term) → (c : Term) → wfT L t x = some c �
       have hl := hw p hp
       match p, hl with
       | (b, [z]), _ => exact ⟨z, rfl, hQ _ hp hb z rfl⟩
+  | .list t, x, c, h, ⟨d, n, dt, m, sv, hf, hft, hsv, hQ⟩ => by
+    simp only [wfT, hf, hft] at h
+    obtain ⟨cs, hcs, rfl⟩ := Option.map_eq_some_iff.1 h
+    obtain ⟨hx, hn, hw⟩ := collView_eq hsv
+    subst hn
+    have hS := slotsOf_den d dt 1 x sv hx hw
+    have hdec : (decodeV L (.list t) (x.denote M)).isSome =
+        ((occupied sv).mapM fun | [z] => decodeV L t z | _ => none).isSome := by
+      simp only [decodeV, hf, hft, hsv]; rfl
+    rw [hdec, mapM_isSome]
+    refine slots_all (g := fun xs => wfT L t (xs.headD tt)) (Q := fun vs => ∃ z, vs = [z] ∧ Sorted L t z) ?_ _ sv
+      hS ?_ cs hcs
+    · intro xs c' hc' ⟨z, hz, hzs⟩
+      obtain ⟨x0, rfl, hx0⟩ := singleton_terms hz
+      rw [hz]
+      simp only [List.headD_cons] at hc'
+      have := wf_iff t x0 c' hc' (hx0 ▸ hzs)
+      rw [hx0] at this
+      exact this
+    · intro p hp hb
+      have hl := hw p hp
+      match p, hl with
+      | (b, [z]), _ => exact ⟨z, rfl, hQ _ hp hb z rfl⟩
   | .table k w, x, c, h, ⟨d, n, dt, m, sv, hf, hft, hsv, hQ⟩ => by
     simp only [wfT, hf, hft] at h
     split at h
@@ -424,6 +453,18 @@ theorem decode_sorted : (t : Ty) → (v : Val) → (x : t.den) → decodeV L t v
       · simp [hc] at h
     · cases h
   | .bag t, v, x, h => by
+    simp only [decodeV] at h
+    split at h
+    · rename_i d n dt m hf hft
+      obtain ⟨sv, hsv, h⟩ := bind_some.1 h
+      refine ⟨d, n, dt, m, sv, hf, hft, hsv, fun p hp hb z hz => ?_⟩
+      obtain ⟨b, vs⟩ := p
+      simp only at hb hz
+      subst hz
+      obtain ⟨y, hy⟩ := mapM_mem h (mem_occupied hp hb)
+      exact decode_sorted t z y hy
+    · cases h
+  | .list t, v, x, h => by
     simp only [decodeV] at h
     split at h
     · rename_i d n dt m hf hft

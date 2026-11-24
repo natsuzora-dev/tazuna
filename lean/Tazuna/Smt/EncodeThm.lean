@@ -41,9 +41,13 @@ def RelV : (t : Ty) → t.den → Val → Prop
       L.find? (.tuple [Ty.bool, k, w]) = some (dt, m) ∧ sv.length = n ∧ v = slotsVal d dt sv ∧
       (∀ p ∈ sv, p.2.length = 2) ∧ ∃ ys : List (k.den × w.den), ys.Perm x.1 ∧
         Holds2 (fun e vs => ∃ zk zv, vs = [zk, zv] ∧ RelV k e.1 zk ∧ RelV w e.2 zv) ys sv
+  /- The occupied slots hold the list's items in order. -/
+  | .list t, xs, v => ∃ d n dt m sv, L.find? (.list t) = some (d, n) ∧ L.find? (.tuple [Ty.bool, t]) = some (dt, m) ∧
+      sv.length = n ∧ v = slotsVal d dt sv ∧ (∀ p ∈ sv, p.2.length = 1) ∧
+      Holds2 (fun y vs => ∃ z, vs = [z] ∧ RelV t y z) xs sv
   /- A fresh-id source is the step's counter. -/
   | .dsl .fresh _, x, v => v = .int (Int.ofNat x)
-  | .list _, _, _ | .fn .., _, _ | .param _, _, _ | .dsl .., _, _ => False
+  | .fn .., _, _ | .param _, _, _ | .dsl .., _, _ => False
 def RelVs : (ts : List Ty) → Ty.dens ts → List Val → Prop
   | [], _, vals => vals = []
   | t :: ts, (x, xs), vals => ∃ v vs, vals = v :: vs ∧ RelV t x v ∧ RelVs ts xs vs
@@ -54,11 +58,11 @@ def RelAlts (d : Nat) : (k : Nat) → (vs : List (List Ty)) → Ty.alts vs → V
 end
 
 mutual
-/-- A value and its code: a term denoting the value, codes of a list's items, or a function that maps related
-arguments to a related result wherever its condition holds. -/
+/-- A value and its code: a term denoting the value, or a function that maps related arguments to a related result
+wherever its condition holds. -/
 def Rel : (t : Ty) → t.den → Code t → Prop
   | .fn ps r, f, sf => ∀ xs ss, Rels ps xs ss → ∀ s c, sf ss = .ok (s, c) → Holds M c → Rel r (f xs) s
-  | .list t, xs, ss => Forall2 (Rel t) xs ss
+  | .list t, x, s => RelV L (.list t) x (Term.denote M s)
   | .int, x, s => RelV L .int x (Term.denote M s)
   | .str, x, s => RelV L .str x (Term.denote M s)
   | .tuple ts, x, s => RelV L (.tuple ts) x (Term.denote M s)
@@ -81,21 +85,21 @@ variable {M : Model} {L : Layout}
 
 theorem rel_term : {t : Ty} → {s : Code t} → {x : Term} → Code.term? t s = some x → (v : t.den) →
     (Rel M L t v s ↔ RelV L t v (x.denote M))
-  | .fn .., _, _, h, _ | .list _, _, _, h, _ => nomatch h
-  | .int, _, _, h, _ | .str, _, _, h, _ | .tuple _, _, _, h, _ | .adt .., _, _, h, _ | .param _, _, _, h, _
+  | .fn .., _, _, h, _ => nomatch h
+  | .list _, _, _, h, _ | .int, _, _, h, _ | .str, _, _, h, _ | .tuple _, _, _, h, _ | .adt .., _, _, h, _ | .param _, _, _, h, _
   | .bag _, _, _, h, _ | .table .., _, _, h, _ | .date, _, _, h, _ | .id, _, _, h, _ | .dsl .., _, _, h, _ => by
     cases h; exact Iff.rfl
 
 theorem rel_ofTerm : {t : Ty} → {x : Term} → {s : Code t} → Code.ofTerm? t x = some s → (v : t.den) →
     (Rel M L t v s ↔ RelV L t v (x.denote M))
-  | .fn .., _, _, h, _ | .list _, _, _, h, _ => nomatch h
-  | .int, _, _, h, _ | .str, _, _, h, _ | .tuple _, _, _, h, _ | .adt .., _, _, h, _ | .param _, _, _, h, _
+  | .fn .., _, _, h, _ => nomatch h
+  | .list _, _, _, h, _ | .int, _, _, h, _ | .str, _, _, h, _ | .tuple _, _, _, h, _ | .adt .., _, _, h, _ | .param _, _, _, h, _
   | .bag _, _, _, h, _ | .table .., _, _, h, _ | .date, _, _, h, _ | .id, _, _, h, _ | .dsl .., _, _, h, _ => by
     cases h; exact Iff.rfl
 
 theorem rel_share : {t : Ty} → {v : t.den} → {s : Code t} → Rel M L t v s → Rel M L t v (Code.share t s)
-  | .fn .., _, _, h | .list _, _, _, h => h
-  | .int, _, s, h | .str, _, s, h | .tuple _, _, s, h | .adt .., _, s, h | .param _, _, s, h | .bag _, _, s, h
+  | .fn .., _, _, h => h
+  | .list _, _, s, h | .int, _, s, h | .str, _, s, h | .tuple _, _, s, h | .adt .., _, s, h | .param _, _, s, h | .bag _, _, s, h
   | .table .., _, s, h | .date, _, s, h | .id, _, s, h | .dsl .., _, s, h => by
     simp only [Code.share, Rel] at h ⊢; rw [Term.denote_share M s]; exact h
 
@@ -847,54 +851,167 @@ theorem put_den {k w : Ty} (hk : k.eqable = true) {t0 : (Ty.table k w).den} {S :
   refine ⟨sv'', ys'', hS'', hl''.trans hl', hw'', hperm''.trans ?_, hh''⟩
   exact ((hperm.filter _).cons _).trans (List.perm_append_singleton _ _).symm
 
-theorem insertAll_rel {α : Type} {E : α → List Val → Prop} : {zs : List α} → {ts : List Term} →
-    Forall2 (fun y t => E y [Term.denote M t]) zs ts → {S : List Slot} → {sv : List (Bool × List Val)} →
-    SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 1) → {ys : List α} → Holds2 E ys sv → Holds M (insertAll S ts).2 →
-    ∃ sv' ys', SlotsDen M (insertAll S ts).1 sv' ∧ sv'.length = sv.length ∧ (∀ p ∈ sv', p.2.length = 1) ∧
-      ys'.Perm (zs ++ ys) ∧ Holds2 E ys' sv'
-  | [], [], _, S, sv, hS, hw, ys, hy, _ => ⟨sv, ys, hS, rfl, hw, List.Perm.refl _, hy⟩
-  | z :: zs, t :: ts, ⟨hz, hzs⟩, S, sv, hS, hw, ys, hy, hc => by
-    simp only [insertAll] at hc ⊢
-    obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-    obtain ⟨sv1, ys1, hS1, hl1, hw1, hp1, hh1⟩ :=
-      insert_rel hS hw hy [t] rfl z (by simpa [Term.denotes] using hz) rfl hc1
-    obtain ⟨sv2, ys2, hS2, hl2, hw2, hp2, hh2⟩ := insertAll_rel hzs hS1 hw1 hh1 hc2
-    refine ⟨sv2, ys2, hS2, hl2.trans hl1, hw2, hp2.trans ?_, hh2⟩
-    exact (List.Perm.append_left zs hp1).trans List.perm_middle
-  | [], _ :: _, h, _, _, _, _, _, _, _ | _ :: _, [], h, _, _, _, _, _, _, _ => nomatch h
+theorem iteSlots_den {f : Term} {b : Bool} (hf : f.denote M = .bool b) {w : Nat} : {T S : List Slot} →
+    {tv sv : List (Bool × List Val)} → SlotsDen M T tv → SlotsDen M S sv → (∀ p ∈ tv, p.2.length = w) →
+    (∀ p ∈ sv, p.2.length = w) → tv.length = sv.length → SlotsDen M (iteSlots f T S) (if b then tv else sv)
+  | [], [], [], [], _, _, _, _, _ => by cases b <;> trivial
+  | (g, xs) :: T, (g', xs') :: S, (c, vs) :: tv, (c', vs') :: sv, ⟨hg, hx, hT⟩, ⟨hg', hx', hS⟩, htw, hsw, hl => by
+    have ih := iteSlots_den hf hT hS (fun p hp => htw p (by simp [hp])) (fun p hp => hsw p (by simp [hp]))
+      (by simpa using hl)
+    have hxl : xs.length = xs'.length := by
+      have h1 := htw (c, vs) (by simp); have h2 := hsw (c', vs') (by simp)
+      rw [← hx, denotes_eq_map, List.length_map] at h1; rw [← hx', denotes_eq_map, List.length_map] at h2
+      omega
+    have hz := zip_ite f b hf xs xs' hxl
+    simp only [iteSlots, List.zipWith_cons_cons] at ih ⊢
+    cases b with
+    | true =>
+      simp only [ite_true] at ih hz ⊢
+      exact ⟨by simp [Term.denote, hf, hg, Val.toBool], by rw [hz, hx], ih⟩
+    | false =>
+      simp only [Bool.false_eq_true, ite_false] at ih hz ⊢
+      exact ⟨by simp [Term.denote, hf, hg', Val.toBool], by rw [hz, hx'], ih⟩
+  | [], [], _ :: _, _, hT, _, _, _, _ | [], [], [], _ :: _, _, hS, _, _, _ | [], _ :: _, [], [], _, hS, _, _, _
+  | [], _ :: _, _ :: _, _, hT, _, _, _, _ | _ :: _, [], [], _, hT, _, _, _, _
+  | _ :: _, [], _ :: _, _ :: _, _, hS, _, _, _ | _ :: _, _ :: _, [], _, hT, _, _, _, _
+  | _ :: _, _ :: _, _ :: _, [], _, hS, _, _, _ => by first | exact hT.elim | exact hS.elim
+  | [], _ :: _, [], _ :: _, _, _, _, _, hl | _ :: _, [], _ :: _, [], _, _, _, _, hl => by simp at hl
 
-theorem items_ebag {t : Ty} {w : String} : {xs : List t.den} → {items : List (Code t)} → {ts : List Term} →
-    Forall2 (Rel M L t) xs items → Forall2 (fun x y => need w (Code.term? t x) = .ok y) items ts →
-    Forall2 (fun y tm => EBag L t y [Term.denote M tm]) xs ts
-  | [], [], [], _, _ => trivial
-  | y :: _, _ :: _, _ :: _, ⟨h1, h2⟩, ⟨h3, h4⟩ =>
-    ⟨⟨_, rfl, (rel_term (need_ok.1 h3) y).1 h1⟩, items_ebag h2 h4⟩
-  | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ | _, [], _ :: _, _, h | _, _ :: _, [], _, h => nomatch h
+theorem filterSlots_any : {S : List Slot} → {sv : List (Bool × List Val)} → (qs : List Term) → SlotsDen M S sv →
+    qs.length = S.length → ∃ sv', SlotsDen M (filterSlots S qs) sv' ∧ sv'.map (·.2) = sv.map (·.2)
+  | [], [], [], _, _ => ⟨[], trivial, rfl⟩
+  | (f, xs) :: S, (b, vs) :: sv, q :: qs, ⟨hf, hx, h⟩, hl => by
+    obtain ⟨sv', h1, h2⟩ := filterSlots_any qs h (by simpa using hl)
+    exact ⟨(b && (q.denote M).toBool, vs) :: sv', ⟨by simp [Term.denote, hf, Val.toBool], hx, h1⟩, by simp [h2]⟩
+  | [], [], _ :: _, _, hl | _ :: _, _ :: _, [], _, hl => by simp at hl
+  | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ => h.elim
 
-theorem putAll_rel {k w : Ty} (hk : k.eqable = true) (dp : Nat) (hdp : ∃ m, L.find? (.tuple [k, w]) = some (dp, m)) :
-    {pairs : List (Ty.tuple [k, w]).den} → {ps : List Term} →
-    Forall2 (fun e p => RelV L (.tuple [k, w]) e (Term.denote M p)) pairs ps →
+/-- The slots after `table.insert` denote some slots of the same shape, whatever the key and value. -/
+theorem putSlots_any {S : List Slot} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv)
+    (hw : ∀ p ∈ sv, p.2.length = 2) (k v : Term) :
+    ∃ sv', SlotsDen M (putSlots S k v).1 sv' ∧ sv'.length = sv.length ∧ ∀ p ∈ sv', p.2.length = 2 := by
+  obtain ⟨sv1, h1, h2⟩ := filterSlots_any (keepQs k S) hS (by simp [keepQs])
+  have hl1 : sv1.length = sv.length := by simpa using congrArg List.length h2
+  have hw1 : ∀ p ∈ sv1, p.2.length = 2 := fun p hp => by
+    have : p.2 ∈ sv.map (·.2) := h2 ▸ List.mem_map_of_mem hp
+    obtain ⟨q, hq, e⟩ := List.mem_map.1 this
+    rw [← e]; exact hw q hq
+  obtain ⟨hS', -⟩ := insertSlots_den [k, v] _ rfl tt true rfl h1 (fun q hq => hw1 q hq)
+  obtain ⟨hl', hw'⟩ := insertVals_length (Term.denotes M [k, v]) 2 rfl true sv1 hw1
+  exact ⟨_, hS', hl'.trans hl1, hw'⟩
+
+/-- `table.from_list` on a list's slots: each occupied slot's pair inserted in turn. -/
+theorem putFrom_rel {k w : Ty} (hk : k.eqable = true) (d dt dp : Nat) (hdp : ∃ m, L.find? (.tuple [k, w]) = some (dp, m)) :
+    {P : List Slot} → {lv : List (Bool × List Val)} → SlotsDen M P lv → (∀ p ∈ lv, p.2.length = 1) →
+    {pairs : List (Ty.tuple [k, w]).den} → Holds2 (EBag L (.tuple [k, w])) pairs lv →
     {t0 : (Ty.table k w).den} → {S : List Slot} → {sv : List (Bool × List Val)} → {ys : List (k.den × w.den)} →
     SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 2) → ys.Perm t0.1 → Holds2 (ETab L k w) ys sv →
-    Holds M (putAll S (ps.map fun p => (.sel dp 0 0 p, .sel dp 0 1 p))).2 →
-    ∃ sv' ys', SlotsDen M (putAll S (ps.map fun p => (.sel dp 0 0 p, .sel dp 0 1 p))).1 sv' ∧
-      sv'.length = sv.length ∧ (∀ p ∈ sv', p.2.length = 2) ∧
+    Holds M (putFrom d dt dp S P).2 →
+    ∃ sv' ys', SlotsDen M (putFrom d dt dp S P).1 sv' ∧ sv'.length = sv.length ∧ (∀ p ∈ sv', p.2.length = 2) ∧
       ys'.Perm (pairs.foldl (fun t (k, v, ()) => Builtin.tableInsert k v t) t0).1 ∧ Holds2 (ETab L k w) ys' sv'
-  | [], [], _, t0, S, sv, ys, hS, hw, hp, hh, _ => ⟨sv, ys, hS, rfl, hw, hp, hh⟩
-  | (key, val, ()) :: pairs, p :: ps, ⟨he, hrest⟩, t0, S, sv, ys, hS, hw, hp, hh, hc => by
-    simp only [List.map_cons, putAll] at hc ⊢
+  | [], [], _, _, pairs, hpr, t0, S, sv, ys, hS, hw, hp, hh, _ => by
+    have : pairs = [] := by cases pairs <;> simp_all [Holds2, occupied, Forall2]
+    subst this
+    exact ⟨sv, ys, hS, rfl, hw, hp, hh⟩
+  | (f, xs) :: P, (b, vs) :: lv, ⟨hf, hxs, hP⟩, hlw, pairs, hpr, t0, S, sv, ys, hS, hw, hp, hh, hc => by
+    simp only [putFrom] at hc ⊢
     obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-    obtain ⟨m, hf⟩ := hdp
-    obtain ⟨d', n', vals, hf', ev, zk, rest, e1, hzk, zv, rest', e2, hzv, e3⟩ := he
-    obtain rfl := find_det hf hf'
-    subst e1 e2
-    simp only [RelVs] at e3; subst e3
-    have hk' : RelV L k key (Term.denote M (.sel dp 0 0 p)) := by rw [sel_ctor 0 ev]; exact hzk
-    have hv' : RelV L w val (Term.denote M (.sel dp 0 1 p)) := by rw [sel_ctor 1 ev]; exact hzv
-    obtain ⟨sv1, ys1, hS1, hl1, hw1, hp1, hh1⟩ := put_den hk hS hw hp hh key val _ _ hk' hv' hc1
-    obtain ⟨sv2, ys2, hS2, hl2, hw2, hp2, hh2⟩ := putAll_rel hk dp ⟨m, hf⟩ hrest hS1 hw1 hp1 hh1 hc2
-    exact ⟨sv2, ys2, hS2, hl2.trans hl1, hw2, hp2, hh2⟩
-  | [], _ :: _, h, _, _, _, _, _, _, _, _, _ | _ :: _, [], h, _, _, _, _, _, _, _, _, _ => nomatch h
+    have hlw' : ∀ p ∈ lv, p.2.length = 1 := fun p hp => hlw p (by simp [hp])
+    have hT : ∀ {sv1 : List (Bool × List Val)} {ys1 : List (k.den × w.den)} {t1 : (Ty.table k w).den},
+        SlotsDen M (iteSlots f (putSlots S (.sel dp 0 0 (xs.headD tt)) (.sel dp 0 1 (xs.headD tt))).1 S) sv1 →
+        sv1.length = sv.length → (∀ p ∈ sv1, p.2.length = 2) → ys1.Perm t1.1 → Holds2 (ETab L k w) ys1 sv1 →
+        {pairs' : List (Ty.tuple [k, w]).den} → Holds2 (EBag L (.tuple [k, w])) pairs' lv →
+        ∃ sv' ys', SlotsDen M (putFrom d dt dp (slotsOf d dt (iteSlots f (putSlots S (.sel dp 0 0 (xs.headD tt))
+            (.sel dp 0 1 (xs.headD tt))).1 S).length 2 (slotsTerm d dt (iteSlots f (putSlots S (.sel dp 0 0 (xs.headD tt))
+            (.sel dp 0 1 (xs.headD tt))).1 S))) P).1 sv' ∧ sv'.length = sv.length ∧ (∀ p ∈ sv', p.2.length = 2) ∧
+          ys'.Perm (pairs'.foldl (fun t (k, v, ()) => Builtin.tableInsert k v t) t1).1 ∧ Holds2 (ETab L k w) ys' sv' := by
+      intro sv1 ys1 t1 hS1 hl1 hw1 hp1 hh1 pairs' hpr'
+      have hlen := slotsDen_length hS1
+      have hS1' := slotsOf_den d dt 2 _ sv1 (slotsTerm_den d dt hS1) hw1
+      rw [← hlen] at hS1'
+      obtain ⟨sv2, ys2, hS2, hl2, hw2, hp2, hh2⟩ := putFrom_rel hk d dt dp hdp hP hlw' hpr' hS1' hw1 hp1 hh1 hc2
+      exact ⟨sv2, ys2, hS2, hl2.trans hl1, hw2, hp2, hh2⟩
+    have hl1 := hlw (b, vs) (by simp)
+    obtain ⟨x0, rfl, hx0⟩ : ∃ x0, xs = [x0] ∧ x0.denote M = vs.headD (.bool true) := by
+      match xs, vs, hxs, hl1 with
+      | [x0], [z], h, _ => exact ⟨x0, rfl, by simpa [Term.denotes] using h⟩
+    cases b with
+    | true =>
+      have hc1' : Holds M (putSlots S (.sel dp 0 0 x0) (.sel dp 0 1 x0)).2 := by
+        simpa [Holds, Term.denote, hf, Val.toBool] using hc1
+      match pairs, hpr with
+      | (key, val, ()) :: pairs', ⟨⟨z, hz, he⟩, hrest⟩ =>
+        subst hz
+        obtain ⟨m, hfd⟩ := hdp
+        obtain ⟨d', n', vals, hf', ev, zk, rest, e1, hzk, zv, rest', e2, hzv, e3⟩ := he
+        obtain rfl := find_det hfd hf'
+        subst e1 e2
+        simp only [RelVs] at e3; subst e3
+        simp only [List.headD_cons] at hx0
+        have hk' : RelV L k key (Term.denote M (.sel dp 0 0 x0)) := by rw [sel_ctor 0 (hx0.trans ev)]; exact hzk
+        have hv' : RelV L w val (Term.denote M (.sel dp 0 1 x0)) := by rw [sel_ctor 1 (hx0.trans ev)]; exact hzv
+        obtain ⟨sv1, ys1, hS1, hl1, hw1, hp1, hh1⟩ := put_den hk hS hw hp hh key val _ _ hk' hv' hc1'
+        have hI := iteSlots_den hf hS1 hS hw1 hw hl1
+        simp only [ite_true] at hI
+        exact hT hI hl1 hw1 hp1 hh1 hrest
+    | false =>
+      obtain ⟨svp, hSp, hlp, hwp⟩ := putSlots_any hS hw (.sel dp 0 0 x0) (.sel dp 0 1 x0)
+      have hI := iteSlots_den hf hSp hS hwp hw hlp
+      simp only [Bool.false_eq_true, ite_false] at hI
+      exact hT hI rfl hw hp hh (by simpa [Holds2, occupied] using hpr)
+  | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _, _, _ | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _, _, _ => h.elim
+
+theorem list_view {t : Ty} {xs : (Ty.list t).den} {b : Term} (hb : Rel M L (.list t) xs b) {d n dt : Nat}
+    (hc : collD L (.list t) [t] = .ok (d, n, dt)) :
+    ∃ sv, SlotsDen M (slotsOf d dt n 1 b) sv ∧ sv.length = n ∧ (∀ p ∈ sv, p.2.length = 1) ∧ Holds2 (EBag L t) xs sv := by
+  obtain ⟨hf, m, hft⟩ := collD_ok hc
+  obtain ⟨d', n', dt', m', sv, hf', hft', hl, hv, hw, hh⟩ := hb
+  rw [hf] at hf'; cases hf'
+  rw [hft] at hft'; cases hft'
+  refine ⟨sv, ?_, hl, hw, hh⟩
+  rw [← hl]; exact slotsOf_den d dt 1 b sv hv hw
+
+theorem items_terms {t : Ty} {w : String} : {xs : List t.den} → {items : List (Code t)} → {ts : List Term} →
+    Forall2 (Rel M L t) xs items → Forall2 (fun x y => need w (Code.term? t x) = .ok y) items ts →
+    Forall2 (fun x tm => RelV L t x (Term.denote M tm)) xs ts
+  | [], [], [], _, _ => trivial
+  | y :: _, _ :: _, _ :: _, ⟨h1, h2⟩, ⟨h3, h4⟩ => ⟨(rel_term (need_ok.1 h3) y).1 h1, items_terms h2 h4⟩
+  | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ | _, [], _ :: _, _, h | _, _ :: _, [], _, h => nomatch h
+
+theorem items_den : (ts : List Term) → SlotsDen M (ts.map (tt, [·])) (ts.map fun tm => (true, [tm.denote M]))
+  | [] => trivial
+  | _ :: ts => ⟨rfl, rfl, items_den ts⟩
+
+theorem items_ebag {t : Ty} : {xs : List t.den} → {ts : List Term} →
+    Forall2 (fun x tm => RelV L t x (Term.denote M tm)) xs ts → Forall2 (EBag L t) xs (ts.map fun tm => [tm.denote M])
+  | [], [], _ => trivial
+  | _ :: _, _ :: _, ⟨h, hs⟩ => ⟨⟨_, rfl, h⟩, items_ebag hs⟩
+  | [], _ :: _, h | _ :: _, [], h => h.elim
+
+/-- A list literal's slots hold its items in order. -/
+theorem listOf_rel {t : Ty} : {xs : List t.den} → {ts : List Term} →
+    Forall2 (fun x tm => RelV L t x (Term.denote M tm)) xs ts → {r c : Term} → listOf L t ts = .ok (r, c) →
+    Holds M c → RelV L (.list t) xs (r.denote M) := by
+  intro xs ts hx r c h hc
+  obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨dflt, h2, h⟩ := bind_ok.1 h
+  obtain ⟨hf, m, hft⟩ := collD_ok h1
+  split at h
+  · rename_i hle
+    cases pure_ok.1 h
+    let sv := ts.map (fun tm => (true, [tm.denote M])) ++ List.replicate (n - ts.length) (false, [dflt.denote M])
+    have hS : SlotsDen M (ts.map (tt, [·]) ++ List.replicate (n - ts.length) (.bool false, [dflt])) sv :=
+      slotsDen_append (items_den ts) (empty_den [dflt] _)
+    refine ⟨d, n, dt, m, sv, hf, hft, by simp [sv]; omega, slotsTerm_den d dt hS, ?_, ?_⟩
+    · intro p hp
+      simp only [sv, List.mem_append, List.mem_map, List.mem_replicate] at hp
+      rcases hp with ⟨_, _, rfl⟩ | ⟨_, rfl⟩ <;> rfl
+    · show Forall2 _ xs (occupied sv)
+      rw [show occupied sv = ts.map fun tm => [tm.denote M] by
+        simp [sv, occupied, List.filterMap_append, List.filterMap_map, Function.comp_def]]
+      exact items_ebag hx
+  · cases pure_ok.1 h
+    simp [Holds, Term.denote, Val.toBool] at hc
 
 theorem eBag_rels {t : Ty} (y : t.den) (vs : List Val) (h : EBag L t y vs) : RelVs L [t] (y, ()) vs := by
   obtain ⟨z, rfl, hz⟩ := h; exact ⟨z, [], rfl, hz, rfl⟩
@@ -1796,30 +1913,17 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
   case bagFromList =>
     simp only [primCode] at h; cases h
     intro ⟨xs, ()⟩ ⟨items, ()⟩ ⟨hxs, _⟩ r c hr hc
-    change Forall2 (Rel M L ((Ty.param 0).inst args)) xs items at hxs
-    obtain ⟨⟨d, n, dt⟩, h1, hr⟩ := bind_ok.1 hr
-    obtain ⟨ts, h2, hr⟩ := bind_ok.1 hr
-    obtain ⟨S0, h3, hr⟩ := bind_ok.1 hr
-    cases pure_ok.1 hr
-    simp only [emptySlots] at h3
-    obtain ⟨dx, h4, h3⟩ := bind_ok.1 h3
-    cases pure_ok.1 h3
-    have hdl : dx.length = 1 := by
-      have := need_ok.1 h4
-      simp only [List.mapM_cons, List.mapM_nil, bind, Option.bind, pure] at this
-      split at this <;> try cases this
-      all_goals rfl
-    have hts := mapM_ok _ items ts h2
-    have hz := items_ebag (M := M) hxs hts
-    obtain ⟨sv', ys', hS', hl', hw', hperm', hh'⟩ := insertAll_rel hz (empty_den dx n)
-      (fun p hp => by simp only [List.mem_replicate] at hp; rw [hp.2, denotes_eq_map]; simpa using hdl)
-      (ys := []) (by simp [Holds2, occupied_empty, Forall2]) hc
-    exact bag_mk h1 hS' (by simpa using hl') hw' (hperm'.trans (List.Perm.of_eq (List.append_nil xs))) hh'
+    change Rel M L (.list ((Ty.param 0).inst args)) xs items at hxs
+    obtain ⟨⟨dl, nl, dt⟩, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨sv, hS, -, hw, hh⟩ := list_view hxs h1
+    obtain ⟨d, n, dt', S', sv', ys', h2, rfl, hS', hl', hw', hperm', hh'⟩ := collOf_rel hr hS hw hh hc
+    exact bag_mk h2 hS' hl' hw' hperm' hh'
   case tableFromList =>
     simp only [primCode] at h; cases h
     intro ⟨pairs, ()⟩ ⟨ps, ()⟩ ⟨hps, _⟩ r c hr hc
-    change Forall2 (Rel M L (.tuple [(Ty.param 0).inst args, (Ty.param 1).inst args])) pairs ps at hps
+    change Rel M L (.list (.tuple [(Ty.param 0).inst args, (Ty.param 1).inst args])) pairs ps at hps
     obtain ⟨⟨d, n, dt⟩, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨⟨dl, nl, dtl⟩, h1', hr⟩ := bind_ok.1 hr
     obtain ⟨dp0, h2, hr⟩ := bind_ok.1 hr
     obtain ⟨dp, h3, hr⟩ := bind_ok.1 hr
     obtain ⟨S0, h4, hr⟩ := bind_ok.1 hr
@@ -1835,8 +1939,10 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
       split at this <;> try cases this
       split at this <;> try cases this
       all_goals rfl
-    obtain ⟨sv', ys', hS', hl', hw', hperm', hh'⟩ := putAll_rel heq dp ⟨m, hdp⟩ (t0 := Builtin.tableEmpty) hps
-      (empty_den dx n) (fun p hp => by simp only [List.mem_replicate] at hp; rw [hp.2, denotes_eq_map]; simpa using hdl)
+    obtain ⟨lv, hP, -, hlw, hlh⟩ := list_view hps h1'
+    obtain ⟨sv', ys', hS', hl', hw', hperm', hh'⟩ := putFrom_rel heq d dt dp ⟨m, hdp⟩ hP hlw hlh
+      (t0 := Builtin.tableEmpty) (empty_den dx n)
+      (fun p hp => by simp only [List.mem_replicate] at hp; rw [hp.2, denotes_eq_map]; simpa using hdl)
       (ys := []) (List.Perm.refl _) (by simp [Holds2, occupied_empty, Forall2]) hc
     exact table_mk h1 hS' (by simpa using hl') hw' hperm' hh'
   case bagContains =>
@@ -2022,7 +2128,13 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
       cases pure_ok.1 h
       obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
       exact encodeClauses_agrees cs σ ρ hσ _ _ (rel_share (encode_agrees e σ ρ hσ x c1 h1 hc1)) _ _ c2 h2 hc2
-  | .list items, σ, ρ, hσ, s, c, h, hc => encodeItems_agrees items σ ρ hσ s c h hc
+  | @Expr.list _ _ t items, σ, ρ, hσ, s, c, h, hc => by
+    obtain ⟨⟨ss, c1⟩, h1, h⟩ := bind_ok.1 h
+    obtain ⟨ts, h2, h⟩ := bind_ok.1 h
+    obtain ⟨⟨r, c2⟩, h3, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
+    exact listOf_rel (items_terms (encodeItems_agrees items σ ρ hσ ss c1 h1 hc1) (mapM_ok _ ss ts h2)) h3 hc2
   | @Expr.tuple _ _ ts es, σ, ρ, hσ, s, c, h, hc => by
     simp only [encode] at h
     obtain ⟨⟨ss, c1⟩, h1, h⟩ := bind_ok.1 h

@@ -3,8 +3,8 @@ import Tazuna.Smt.EncodeThm
 /-! T3, decoding: the value of a first-order type that an SMT value codes, as `RelV` relates them, and the embedding
 of a value as the SMT value that codes it. `decode_rel` proves that a decoded value is the one the model's value
 codes, so a value read from a model is a real value of its type; `decode_embed` proves that decoding inverts the
-embedding, so every value within the layout's slots is some model's value. A bag or table embeds its items in its
-first slots, in order, and decodes from its occupied slots, in order; a value with more items than its slots has no
+embedding, so every value within the layout's slots is some model's value. A bag, table or list embeds its items in
+its first slots, in order, and decodes from its occupied slots, in order; a value with more items than its slots has no
 embedding, and a table whose occupied slots repeat a key has no decoding. -/
 
 namespace Tazuna.Smt
@@ -60,6 +60,12 @@ def decodeV : (t : Ty) → Val → Option t.den
         | [z] => decodeV t z
         | _ => none
     | _, _ => none
+  | .list t, v => match L.find? (.list t), L.find? (.tuple [Ty.bool, t]) with
+    | some (d, n), some (dt, _) => (collView d dt n 1 v).bind fun sv =>
+      (occupied sv).mapM fun
+        | [z] => decodeV t z
+        | _ => none
+    | _, _ => none
   | .table k w, v => match L.find? (.table k w), L.find? (.tuple [Ty.bool, k, w]) with
     | some (d, n), some (dt, _) => (collView d dt n 2 v).bind fun sv =>
       ((occupied sv).mapM fun
@@ -100,6 +106,10 @@ def embedV : (t : Ty) → t.den → Option Val
     | some (d, _) => (embedVs ts x).map (.ctor d 0)
     | none => none
   | .bag t, xs => match L.find? (.bag t), L.find? (.tuple [Ty.bool, t]) with
+    | some (d, n), some (dt, _) =>
+      ((xs.mapM fun x => (embedV t x).map ([·])).bind (fillSlots n 1)).map (slotsVal d dt)
+    | _, _ => none
+  | .list t, xs => match L.find? (.list t), L.find? (.tuple [Ty.bool, t]) with
     | some (d, n), some (dt, _) =>
       ((xs.mapM fun x => (embedV t x).map ([·])).bind (fillSlots n 1)).map (slotsVal d dt)
     | _, _ => none
@@ -263,6 +273,17 @@ theorem decode_rel : (t : Ty) → (v : Val) → (x : t.den) → decodeV L t v = 
       match b, hb with
       | [z], hb => exact ⟨z, rfl, decode_rel t z a hb⟩
     · cases h
+  | .list t, v, x, h => by
+    simp only [decodeV] at h
+    split at h
+    · rename_i d n dt m hf hft
+      obtain ⟨sv, hsv, h⟩ := bind_some.1 h
+      obtain ⟨hv, hn, hw⟩ := collView_eq hsv
+      refine ⟨d, n, dt, m, sv, hf, hft, hn, hv, hw, ?_⟩
+      refine mapM_forall2 (fun b a hb => ?_) _ _ h
+      match b, hb with
+      | [z], hb => exact ⟨z, rfl, decode_rel t z a hb⟩
+    · cases h
   | .table k w, v, x, h => by
     simp only [decodeV] at h
     split at h
@@ -358,6 +379,24 @@ theorem decode_embed : (t : Ty) → (x : t.den) → (v : Val) → embedV L t x =
       simp [decodeV, hf, decodeVs_embed ts x vals hv]; rfl
     · cases h
   | .bag t, xs, v, h => by
+    simp only [embedV] at h
+    split at h
+    · rename_i d n dt m hf hft
+      obtain ⟨sv, h1, rfl⟩ := map_some.1 h
+      obtain ⟨zs, hzs, hsv⟩ := bind_some.1 h1
+      have hw := fill_width (mapM_lengths (w := 1) (fun a z hz => by
+        obtain ⟨_, _, rfl⟩ := map_some.1 hz; rfl) _ _ hzs) hsv
+      obtain ⟨hocc, hn⟩ := occupied_fill n 1 zs sv hsv
+      have hc := collView_slots (d := d) (dt := dt) sv hw
+      rw [hn] at hc
+      simp only [decodeV, hf, hft, hc]
+      show (occupied sv).mapM (fun | [z] => decodeV L t z | _ => none) = some xs
+      rw [hocc]
+      refine mapM_inverse (fun a z hz => ?_) _ _ hzs
+      obtain ⟨z', hz', rfl⟩ := map_some.1 hz
+      exact decode_embed t a z' hz'
+    · cases h
+  | .list t, xs, v, h => by
     simp only [embedV] at h
     split at h
     · rename_i d n dt m hf hft

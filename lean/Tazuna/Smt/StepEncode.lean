@@ -63,10 +63,13 @@ variable (L : Layout)
 def callerTerms {c : Ty} (hc : c.isData = true) (callers : List c.den0) : Option (List Term) :=
   callers.mapM fun x => (embedV L c (Ty.up c hc x)).map Val.term
 
-/-- The terms of the rules' names and of whether each holds. -/
-def ruleTerms (rs : List Term) : Except Refusal (List (Term × Term)) := do
+/-- The terms of the rules' names and of whether each holds, one per slot of the rules' list: a free slot's rule
+holds, so it is never broken. -/
+def ruleTerms (rs : Term) : Except Refusal (List (Term × Term)) := do
+  let (dl, n, dt) ← collD L Ty.rules [.tuple [.str, Ty.bool]]
   let d ← tupleD L [.str, Ty.bool]
-  pure (rs.map fun t => (.sel d 0 0 t, .sel d 0 1 t))
+  pure ((slotsOf dl dt n 1 rs).map fun sl =>
+    (.sel d 0 0 (sl.2.headD tt), .or (.not sl.1) (.sel d 0 1 (sl.2.headD tt))))
 
 /-- A query step's outcome terms and its condition, from the terms of the records, the time, the fresh counter, the
 caller and the input, and the constants of the listed callers. The condition asks only for what the step computes:
@@ -146,38 +149,59 @@ theorem callers_any {c : Ty} (hc : c.isData = true) {caller : c.den0} {cc : Code
     have ih := callers_any hc hcc xs ks' hks es he2
     simp only [anyT, Term.denote, heq, ih, Val.toBool, List.any_cons]
 
-theorem rules_broken_map {d m : Nat} (hdm : L.find? (.tuple [.str, Ty.bool]) = some (d, m)) : (xs : Ty.rules.den0) →
-    (rs : List Term) →
-    Forall2 (Smt.Rel M L (.tuple [.str, Ty.bool])) (xs.map (Ty.up (.tuple [.str, Ty.bool]) rfl)) rs →
-    brokenIn M (rs.map fun t => (.sel d 0 0 t, .sel d 0 1 t)) = Step.broken xs
-  | [], [], _ => rfl
-  | [], _ :: _, hx | _ :: _, [], hx => hx.elim
-  | (n, b, ()) :: xs, t :: rs, ⟨hxt, hxs⟩ => by
-    obtain ⟨d', m', vals, hf, hv, hrel⟩ := hxt
-    rw [hdm] at hf; cases hf
-    obtain ⟨vn, vs, rfl, hn, vb, vs', rfl, hb, rfl⟩ := hrel
-    simp only [RelV] at hn
-    obtain ⟨_, hb⟩ := hb
-    have ih := rules_broken_map hdm xs rs hxs
-    simp only [brokenIn, Step.broken] at ih
-    simp only [brokenIn, Step.broken, List.map_cons, List.filterMap_cons]
-    rw [ih]
-    simp only [Term.denote, hv, hn, hb, and_self, ite_true, List.getElem?_cons_zero, List.getElem?_cons_succ,
-      Option.getD_some, Val.toBool, Val.toStr]
-    rcases b with ⟨⟩ | ⟨⟨⟩⟩ | e
-    · rfl
-    · rfl
-    · exact e.elim
+theorem rules_broken_map {d m : Nat} (hdm : L.find? (.tuple [.str, Ty.bool]) = some (d, m)) :
+    (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 1) →
+    (xs : Ty.rules.den0) → Holds2 (EBag L (.tuple [.str, Ty.bool])) (xs.map (Ty.up (.tuple [.str, Ty.bool]) rfl)) sv →
+    brokenIn M (S.map fun sl => (.sel d 0 0 (sl.2.headD tt), .or (.not sl.1) (.sel d 0 1 (sl.2.headD tt)))) =
+      Step.broken xs
+  | [], [], _, _, xs, hx => by
+    cases xs with
+    | nil => rfl
+    | cons _ _ => exact hx.elim
+  | (f, ys) :: S, (b, vs) :: sv, ⟨hf, hys, hS⟩, hw, xs, hx => by
+    have hw' : ∀ p ∈ sv, p.2.length = 1 := fun p hp => hw p (by simp [hp])
+    cases b with
+    | false =>
+      have ih := rules_broken_map hdm S sv hS hw' xs (by simpa [Holds2, occupied] using hx)
+      simp only [brokenIn, List.map_cons, List.filterMap_cons] at ih ⊢
+      rw [← ih]
+      simp [Term.denote, hf, Val.toBool]
+    | true =>
+      match xs, hx with
+      | (n, bb, ()) :: xs, ⟨⟨z, hz, hxt⟩, hxs⟩ =>
+        subst hz
+        have hl := hw (true, [z]) (by simp)
+        obtain ⟨y0, rfl, hy0⟩ : ∃ y0, ys = [y0] ∧ y0.denote M = z := by
+          match ys, hys with
+          | [y0], h => exact ⟨y0, rfl, by simpa [Term.denotes] using h⟩
+        have ih := rules_broken_map hdm S sv hS hw' xs hxs
+        obtain ⟨d', m', vals, hf', hv, hrel⟩ := hxt
+        rw [hdm] at hf'; cases hf'
+        obtain ⟨vn, vs, rfl, hn, vb, vs', rfl, hb, rfl⟩ := hrel
+        simp only [RelV] at hn
+        obtain ⟨_, hb⟩ := hb
+        simp only [brokenIn, Step.broken] at ih
+        simp only [brokenIn, Step.broken, List.map_cons, List.filterMap_cons]
+        rw [ih]
+        simp only [List.headD_cons, Term.denote, hf, hy0, hv, hn, hb, and_self, ite_true, List.getElem?_cons_zero,
+          List.getElem?_cons_succ, Option.getD_some, Val.toBool, Val.toStr, Bool.not_true, Bool.false_or]
+        rcases bb with ⟨⟩ | ⟨⟨⟩⟩ | e
+        · rfl
+        · rfl
+        · exact e.elim
+  | [], _ :: _, h, _, _, _ | _ :: _, [], h, _, _, _ => h.elim
 
 /-- The rules' terms: each name and holds term denotes the rule's name and whether it holds. -/
-theorem rules_broken {rs : List Term} {rules : List (Term × Term)} (hr : ruleTerms L rs = .ok rules)
-    (xs : Ty.rules.den0)
-    (hx : Forall2 (Smt.Rel M L (.tuple [.str, Ty.bool])) (xs.map (Ty.up (.tuple [.str, Ty.bool]) rfl)) rs) :
+theorem rules_broken {rs : Term} {rules : List (Term × Term)} (hr : ruleTerms L rs = .ok rules)
+    (xs : Ty.rules.den0) (hx : Smt.Rel M L Ty.rules (Ty.up Ty.rules rfl xs) rs) :
     brokenIn M rules = Step.broken xs := by
+  obtain ⟨⟨dl, n, dt⟩, hc, hr⟩ := bind_ok.1 hr
   obtain ⟨d, hd, hr⟩ := bind_ok.1 hr
   cases pure_ok.1 hr
   obtain ⟨m, hdm⟩ := tupleD_ok hd
-  exact rules_broken_map hdm xs rs hx
+  obtain ⟨sv, hS, -, hw, hh⟩ := list_view hx hc
+  erw [Ty.up_list _ _ rfl] at hh
+  exact rules_broken_map hdm _ sv hS hw xs hh
 
 /-- The context a step builds for a query or command, read at the level codes relate to. -/
 theorem up_ctx {v : ServiceV} {r i c : Ty} (hr : r.isData = true) (hi : i.isData = true) (hc : c.isData = true)
@@ -235,7 +259,7 @@ theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (call
       show Smt.Rel M L _ (Ty.up (.tuple [(v.queries.get i).input]) hd.args (input, ())).1 ic ∧ True
       erw [Ty.up_tuple _ _ _ hd.input rfl]; exact ⟨hic, trivial⟩
     have hacc := hq.accepts _ (ic, ()) hargs rs c1 h4 hc'.1
-    erw [Ty.up_fn _ Ty.rules _ hd.args rfl, Ty.up_list _ _ rfl] at hacc
+    erw [Ty.up_fn _ Ty.rules _ hd.args rfl] at hacc
     have hbroken := rules_broken h5 _ hacc
     have hall := (brokenIn_nil (M := M) rules)
     cases hb : Step.broken ((v.queries.get i).accepts (input, ())) with
@@ -406,7 +430,7 @@ theorem event_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.
       (v.apply (s.records, (v.subscribes.get i).wrap (value, ()), ()), ())).1 _ ∧ True
     erw [Ty.up_tuple _ _ _ hd.records rfl]; exact ⟨hr', trivial⟩
   have hinv := he.invariants _ _ hargs3 invs c3 h5 hc.2.2
-  erw [Ty.up_fn _ Ty.rules _ hd.invArgs rfl, Ty.up_list _ _ rfl] at hinv
+  erw [Ty.up_fn _ Ty.rules _ hd.invArgs rfl] at hinv
   have hbroken := rules_broken h6 _ hinv
   simp only [r, step_event v hx s hs i value]
   rw [hbroken]
@@ -483,7 +507,7 @@ theorem clock_step {v : ServiceV} (s : State v) (hs : s.machines = []) (time : I
       show Smt.Rel M L _ (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hrd]) (s.records, ())).1 rc ∧ True
       erw [Ty.up_tuple _ _ _ hrd rfl]; exact ⟨hrc, trivial⟩
     have hi := hinv _ _ hargs invs c h2 hc'
-    erw [Ty.up_fn _ Ty.rules _ (by simp [Ty.isData, Ty.isDatas, hrd]) rfl, Ty.up_list _ _ rfl] at hi
+    erw [Ty.up_fn _ Ty.rules _ (by simp [Ty.isData, Ty.isDatas, hrd]) rfl] at hi
     rw [rules_broken h3 _ hi]
     cases Step.broken (v.invariants (s.records, ())) <;> rfl
   · have hlt : time < s.now := by omega
