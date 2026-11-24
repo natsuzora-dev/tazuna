@@ -1,5 +1,5 @@
 import Tazuna.Semantics.Eval
-import Tazuna.Smt.Term
+import Tazuna.Smt.Slots
 
 /-! The encoding of typed IR expressions as SMT terms. It follows `eval` clause by clause: a value of a first-order
 type is coded as a term, a list (always a literal of known length) as a list of codes, and a function as a Lean
@@ -56,8 +56,6 @@ scoped notation:max "Enc " α:max => Except Refusal (α × Term)
 def Encs : List Ty → Type
   | [] => Unit
   | t :: ts => Enc (Code t) × Encs ts
-
-def tt : Term := .bool true
 
 /-- Conjunction, leaving out a `true`. -/
 def andT : Term → Term → Term
@@ -228,6 +226,87 @@ def encodePats {ts : List Ty} {Δ : List Ty} : Pats ts Δ → Codes ts → Excep
     pure (andT m1 m2, Codes.append δ1 δ2)
 end
 
+mutual
+/-- A term of the type's sort, for the items of free slots, which no value reads. -/
+def defaultT : Ty → Option Term
+  | .int | .date => some (.int 0)
+  | .str => some (.str "")
+  | .adt 0 _ vs => if (boolVs? vs).isSome then some (.bool false) else none
+  | .adt (i + 1) a vs => do
+    let (d, _) ← L.find? (.adt (i + 1) a vs)
+    pure (.ctor d 0 (← defaultFirst vs))
+  | .tuple ts => do
+    let (d, _) ← L.find? (.tuple ts)
+    pure (.ctor d 0 (← defaultTs ts))
+  | .id => do
+    let (d, _) ← L.find? .id
+    pure (.ctor d 0 [.int 0])
+  | .bag t => do
+    let (d, n) ← L.find? (.bag t)
+    let (dt, _) ← L.find? (.tuple [Ty.bool, t])
+    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultT t])))
+  | .table k v => do
+    let (d, n) ← L.find? (.table k v)
+    let (dt, _) ← L.find? (.tuple [Ty.bool, k, v])
+    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultT k, ← defaultT v])))
+  | .list _ | .fn .. | .param _ | .dsl .. => none
+def defaultTs : List Ty → Option (List Term)
+  | [] => some []
+  | t :: ts => do pure ((← defaultT t) :: (← defaultTs ts))
+def defaultFirst : List (List Ty) → Option (List Term)
+  | [] => none
+  | fs :: _ => defaultTs fs
+end
+
+/-- The datatype of a bag or table type, its slot count, and the datatype of its slots. -/
+def collD (c : Ty) (item : List Ty) : Except Refusal (Nat × Nat × Nat) :=
+  match L.find? c, L.find? (.tuple (Ty.bool :: item)) with
+  | some (d, n), some (dt, _) => .ok (d, n, dt)
+  | _, _ => .error (lacks c)
+
+/-- `n` free slots. -/
+def emptySlots (item : List Ty) (n : Nat) : Except Refusal (List Slot) := do
+  let xs ← need "an item type without a default term" (item.mapM (defaultT L))
+  pure (List.replicate n (.bool false, xs))
+
+/-- A function's code applied to a slot's items. -/
+def slotApply {ps : List Ty} {r : Ty} (f : Codes ps → Except Refusal (Code r × Term)) (xs : List Term) :
+    Except Refusal (Code r × Term) := do
+  f (← need "an item that has no term" (Codes.ofTerms? ps xs))
+
+/-- A predicate's code applied to each slot's items: its term and its condition. -/
+def slotPreds {ps : List Ty} (f : Codes ps → Except Refusal (Code Ty.bool × Term)) (S : List Slot) :
+    Except Refusal (List (Term × Term)) :=
+  S.mapM fun sl => slotApply f sl.2
+
+/-- Whether a slot's key differs from `key`, as `table_remove` compares: in either direction. -/
+def keepQs (key : Term) (S : List Slot) : List Term :=
+  S.map fun (_, xs) => .not (.or (.eq key (xs.headD key)) (.eq (xs.headD key) key))
+
+/-- The table's slots after `table_insert`: the key's slot freed, then the entry in the first free slot. -/
+def putSlots (S : List Slot) (k v : Term) : List Slot × Term :=
+  let (S', p) := insertSlots [k, v] tt (filterSlots S (keepQs k S))
+  (S', .not p)
+
+/-- The bag's slots after inserting each item in turn, with the condition that each found a free slot. -/
+def insertAll : List Slot → List Term → List Slot × Term
+  | S, [] => (S, tt)
+  | S, x :: xs =>
+    let (S', p) := insertSlots [x] tt S
+    let (S'', c) := insertAll S' xs
+    (S'', andT (.not p) c)
+
+/-- The table's slots after `table_insert` of each entry in turn, with the condition that each found a slot. -/
+def putAll : List Slot → List (Term × Term) → List Slot × Term
+  | S, [] => (S, tt)
+  | S, (k, v) :: kvs =>
+    let (S', c) := putSlots S k v
+    let (S'', c') := putAll S' kvs
+    (S'', andT c c')
+
+def need' {α : Type} (what : String) (b : Bool) (a : α) : Except Refusal α :=
+  if b then .ok a else .error (.outside what)
+
 /-- The code of each built-in that has an exact encoding: a table of term builders indexed by the built-in. -/
 def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal (Code (p.ty.inst args)) :=
   match p, args, h with
@@ -241,6 +320,94 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let e := (Ty.param 1).inst args
     let err ← adtCtor L 2 [a, e] [[a], [e]] 1 [r]
     pure (.ite holds v err, .ite holds c tt)
+  | .bagSize, args, _ => .ok fun (b, ()) => do
+    let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
+    pure (sizeT (slotsOf d dt n 1 b), tt)
+  | .bagFilter, args, _ => .ok fun (b, f, ()) => do
+    let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
+    let S := slotsOf d dt n 1 b
+    let R ← slotPreds f S
+    pure (slotsTerm d dt (filterSlots S (R.map (·.1))), guardsT S (R.map (·.2)))
+  | .bagCount, args, _ => .ok fun (b, f, ()) => do
+    let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
+    let S := slotsOf d dt n 1 b
+    let R ← slotPreds f S
+    pure (countT S (R.map (·.1)), guardsT S (R.map (·.2)))
+  | .bagAny, args, _ => .ok fun (b, f, ()) => do
+    let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
+    let S := slotsOf d dt n 1 b
+    let R ← slotPreds f S
+    pure (anySlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
+  | .bagAll, args, _ => .ok fun (b, f, ()) => do
+    let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
+    let S := slotsOf d dt n 1 b
+    let R ← slotPreds f S
+    pure (allSlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
+  | .bagInsert, args, _ => .ok fun (b, x, ()) => do
+    let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
+    let xt ← need "an item that has no term" (Code.term? _ x)
+    let (S', p) := insertSlots [xt] tt (slotsOf d dt n 1 b)
+    pure (slotsTerm d dt S', .not p)
+  | .tableNew, args, _ => .ok fun () => do
+    let k := (Ty.param 0).inst args
+    let v := (Ty.param 1).inst args
+    let (d, n, dt) ← collD L (.table k v) [k, v]
+    pure (slotsTerm d dt (← emptySlots L [k, v] n), tt)
+  | .tableSize, args, _ => .ok fun (t, ()) => do
+    let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
+      [(Ty.param 0).inst args, (Ty.param 1).inst args]
+    pure (sizeT (slotsOf d dt n 2 t), tt)
+  | .tableFilter, args, _ => .ok fun (t, f, ()) => do
+    let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
+      [(Ty.param 0).inst args, (Ty.param 1).inst args]
+    let S := slotsOf d dt n 2 t
+    let R ← slotPreds f S
+    pure (slotsTerm d dt (filterSlots S (R.map (·.1))), guardsT S (R.map (·.2)))
+  | .tableCount, args, _ => .ok fun (t, f, ()) => do
+    let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
+      [(Ty.param 0).inst args, (Ty.param 1).inst args]
+    let S := slotsOf d dt n 2 t
+    let R ← slotPreds f S
+    pure (countT S (R.map (·.1)), guardsT S (R.map (·.2)))
+  | .tableAny, args, _ => .ok fun (t, f, ()) => do
+    let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
+      [(Ty.param 0).inst args, (Ty.param 1).inst args]
+    let S := slotsOf d dt n 2 t
+    let R ← slotPreds f S
+    pure (anySlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
+  | .tableAll, args, _ => .ok fun (t, f, ()) => do
+    let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
+      [(Ty.param 0).inst args, (Ty.param 1).inst args]
+    let S := slotsOf d dt n 2 t
+    let R ← slotPreds f S
+    pure (allSlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
+  | .tableRemove, args, _ => .ok fun (t, key, ()) => do
+    let k := (Ty.param 0).inst args
+    let (d, n, dt) ← collD L (.table k ((Ty.param 1).inst args)) [k, (Ty.param 1).inst args]
+    let kt ← need' "a key type whose == is not SMT-LIB's =" k.eqable (← need "a key that has no term" (Code.term? _ key))
+    let S := slotsOf d dt n 2 t
+    pure (slotsTerm d dt (filterSlots S (keepQs kt S)), tt)
+  | .tableInsert, args, _ => .ok fun (t, key, val, ()) => do
+    let k := (Ty.param 0).inst args
+    let v := (Ty.param 1).inst args
+    let (d, n, dt) ← collD L (.table k v) [k, v]
+    let kt ← need' "a key type whose == is not SMT-LIB's =" k.eqable (← need "a key that has no term" (Code.term? _ key))
+    let vt ← need "a value that has no term" (Code.term? _ val)
+    let (S', c) := putSlots (slotsOf d dt n 2 t) kt vt
+    pure (slotsTerm d dt S', c)
+  | .bagFromList, args, _ => .ok fun (items, ()) => do
+    let a := (Ty.param 0).inst args
+    let (d, n, dt) ← collD L (.bag a) [a]
+    let ts ← items.mapM fun x => need "an item that has no term" (Code.term? a x)
+    let (S, c) := insertAll (← emptySlots L [a] n) ts
+    pure (slotsTerm d dt S, c)
+  | .tableFromList, args, _ => .ok fun (pairs, ()) => do
+    let k := (Ty.param 0).inst args
+    let v := (Ty.param 1).inst args
+    let (d, n, dt) ← collD L (.table k v) [k, v]
+    let dp ← need' "a key type whose == is not SMT-LIB's =" k.eqable (← tupleD L [k, v])
+    let (S, c) := putAll (← emptySlots L [k, v] n) (pairs.map fun p => (.sel dp 0 0 p, .sel dp 0 1 p))
+    pure (slotsTerm d dt S, c)
   | p, _, _ => .error (.outside s!"the built-in {p.sig.name}")
 
 variable {G : List Ty} (gs : Encs G)
@@ -367,9 +534,12 @@ namespace Layout
 def push (L : Layout) (t : Ty) (n : Nat := 0) : Layout :=
   if (L.find? t).isSome then L else { types := L.types ++ [(t, n)] }
 
+section
+variable (slots : Ty → Nat)
+
 mutual
 /-- The layout with every datatype `t` needs: its fields' types first, so each datatype refers only to earlier
-ones. -/
+ones. A bag or table gets `slots` of its type, each a tuple of an occupied flag and the item. -/
 def addTy (L : Layout) : Ty → Layout
   | .tuple ts => (addTys L ts).push (.tuple ts)
   | .adt 0 a vs => if (boolVs? vs).isSome then L else (addTyss L vs).push (.adt 0 a vs)
@@ -377,13 +547,17 @@ def addTy (L : Layout) : Ty → Layout
   | .id => L.push .id
   | .list t => addTy L t
   | .fn ps r => addTy (addTys L ps) r
-  | .int | .str | .date | .param _ | .bag _ | .table .. | .dsl .. => L
+  | .bag t => ((addTy L t).push (.tuple [Ty.bool, t])).push (.bag t) (slots (.bag t))
+  | .table k v => (((addTy (addTy L k) v)).push (.tuple [Ty.bool, k, v])).push (.table k v) (slots (.table k v))
+  | .int | .str | .date | .param _ | .dsl .. => L
 def addTys (L : Layout) : List Ty → Layout
   | [] => L
   | t :: ts => addTys (addTy L t) ts
 def addTyss (L : Layout) : List (List Ty) → Layout
   | [] => L
   | ts :: vs => addTyss (addTys L ts) vs
+end
+
 end
 
 /-- The sort that codes values of a first-order type. -/
@@ -399,6 +573,8 @@ def datatype? (L : Layout) : Ty × Nat → Option Datatype
   | (.tuple ts, _) => do pure ⟨[← ts.mapM L.srt?]⟩
   | (.adt _ _ vs, _) => do pure ⟨← vs.mapM (·.mapM L.srt?)⟩
   | (.id, _) => some ⟨[[.int], [.str]]⟩
+  | (.bag t, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, t]))]⟩
+  | (.table k v, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, k, v]))]⟩
   | _ => none
 
 def datatypes? (L : Layout) : Option (List Datatype) := L.types.mapM L.datatype?

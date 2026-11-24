@@ -49,6 +49,25 @@ def guarded (o : E optI) : E .int :=
 def circle : E shape := .ctor ⟨1, by decide⟩ (.cons (.int 7) .nil)
 def square : E shape := .ctor ⟨0, by decide⟩ (.cons (.int 3) (.cons (.str "sq") .nil))
 
+/-- `bag_from_list([1, 2, 2])` -/
+def b3 : E (.bag .int) :=
+  .call (.prim .bagFromList [.int] rfl) (.cons (.list (.cons (.int 1) (.cons (.int 2) (.cons (.int 2) .nil)))) .nil)
+def bagOp (p : Prim) (r : Ty) (h : p.ok [.int] = true) (hty : p.ty.inst [.int] = .fn [.bag .int, .fn [.int] Ty.bool] r)
+    (b : E (.bag .int)) (body : Expr [] [.int] Ty.bool) : E r :=
+  .call (hty ▸ (Expr.prim p [.int] h : E (p.ty.inst [.int])) : E (.fn [.bag .int, .fn [.int] Ty.bool] r))
+    (.cons b (.cons (Expr.lam (ps := [.int]) body) .nil))
+def isTwo : Expr [] [.int] Ty.bool := .bin (.eq rfl) (.var .here) (.int 2)
+def bigger : Expr [] [.int] Ty.bool := .bin .gt (.var .here) (.int 1)
+/-- `table_from_list([#(1, "a"), #(1, "c")])`: the last pair for key 1 wins. -/
+def t2 : E (.table .int .str) :=
+  let pair (k : Int) (v : String) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
+  .call (.prim .tableFromList [.int, .str] rfl)
+    (.cons (.list (.cons (pair 1 "a") (.cons (pair 1 "c") .nil))) .nil)
+def tableAnyV (t : E (.table .int .str)) (v : String) : E Ty.bool :=
+  .call (.prim .tableAny [.int, .str] rfl)
+    (.cons t (.cons (.lam (.bin (.eq rfl) (.var (.there .here)) (.str v))) .nil))
+def tableSize (t : E (.table .int .str)) : E .int := .call (.prim .tableSize [.int, .str] rfl) (.cons t .nil)
+
 def cases : List (String × (t : Ty) × E t) :=
   [ ("truncating division", ⟨.int, .bin .div (.int (-7)) (.int 2)⟩),
     ("division by a negative", ⟨.int, .bin .div (.int 7) (.int (-2))⟩),
@@ -81,9 +100,26 @@ def cases : List (String × (t : Ty) × E t) :=
     ("require rejects", ⟨Ty.result .int .str, .call (.prim .require [.int, .str] rfl)
       (.cons (.bin .lt (.int 2) (.int 1)) (.cons (.str "no")
         (.cons (.lam (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons (.int 1) .nil))) .nil)))⟩),
+    ("bag size counts occurrences", ⟨.int, .call (.prim .bagSize [.int] rfl) (.cons b3 .nil)⟩),
+    ("bag count", ⟨.int, bagOp .bagCount .int rfl rfl b3 isTwo⟩),
+    ("bag filter", ⟨.int, .call (.prim .bagSize [.int] rfl) (.cons (bagOp .bagFilter (.bag .int) rfl rfl b3 bigger) .nil)⟩),
+    ("bag any", ⟨Ty.bool, bagOp .bagAny Ty.bool rfl rfl b3 isTwo⟩),
+    ("bag all", ⟨Ty.bool, bagOp .bagAll Ty.bool rfl rfl b3 bigger⟩),
+    ("table from list replaces a key", ⟨.int, tableSize t2⟩),
+    ("table keeps the last value", ⟨Ty.bool, .bin .and (tableAnyV t2 "c") (.not (tableAnyV t2 "a"))⟩),
+    ("table remove", ⟨.int, tableSize (.call (.prim .tableRemove [.int, .str] rfl) (.cons t2 (.cons (.int 1) .nil)))⟩),
+    ("table insert into new", ⟨.int, tableSize (.call (.prim .tableInsert [.int, .str] rfl)
+      (.cons (.call (.prim .tableNew [.int, .str] rfl) .nil) (.cons (.int 5) (.cons (.str "x") .nil))))⟩),
     ("require passes", ⟨Ty.result .int .str, .call (.prim .require [.int, .str] rfl)
       (.cons (.bin .lt (.int 1) (.int 2)) (.cons (.str "no")
         (.cons (.lam (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons (.int 1) .nil))) .nil)))⟩) ]
+
+/-- Expressions whose collections outgrow their one slot: the condition is false, so the script is unsat. -/
+def overflows : List (String × (t : Ty) × E t) :=
+  [ ("bag insert past the slots", ⟨.int, .call (.prim .bagSize [.int] rfl)
+      (.cons (.call (.prim .bagInsert [.int] rfl) (.cons b3 (.cons (.int 7) .nil))) .nil)⟩),
+    ("table insert past the slots", ⟨.int, tableSize (.call (.prim .tableInsert [.int, .str] rfl)
+      (.cons t2 (.cons (.int 3) (.cons (.str "d") .nil))))⟩) ]
 
 def dt : Script :=
   { datatypes := [Datatype.mk [[.int, .str], []], Datatype.mk [[.dt 0]]], vars := [.dt 1, .dt 0],
@@ -94,7 +130,7 @@ def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
   for (name, ⟨t, e⟩) in cases do
-    let L := Layout.addTys {} (Tazuna.Smt.Expr.tys e)
+    let L := Layout.addTys (fun _ => 3) {} (Tazuna.Smt.Expr.tys e)
     let expected := valOf L t (Expr.eval (G := []) () e ())
     match encode L (G := []) () e (), L.srt? t, L.datatypes? with
     | .ok (code, cond), some srt, some dts =>
@@ -107,6 +143,15 @@ def check (z3 : String) : IO Bool := do
       | a => IO.println s!"smt-check: {name}: {repr a}"; ok := false
     | .error r, _, _ => IO.println s!"smt-check: {name}: no encoding: {repr r}"; ok := false
     | _, _, _ => IO.println s!"smt-check: {name}: no sort"; ok := false
+  for (name, ⟨t, e⟩) in overflows do
+    let L := Layout.addTys (fun _ => 1) {} (Tazuna.Smt.Expr.tys e)
+    match encode L (G := []) () e (), L.srt? t, L.datatypes? with
+    | .ok (code, cond), some srt, some dts =>
+      let some term := Code.term? t code | IO.println s!"smt-check: {name}: no term"; ok := false
+      match ← solver.run { datatypes := dts, vars := [srt], asserts := [.eq (.var 0) term, cond] } with
+      | .unsat => pure ()
+      | a => IO.println s!"smt-check: {name}: not unsat: {repr a}"; ok := false
+    | _, _, _ => IO.println s!"smt-check: {name}: no encoding"; ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
