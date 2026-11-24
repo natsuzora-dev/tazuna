@@ -1,3 +1,4 @@
+import Tazuna.Smt.Kept
 import Tazuna.Smt.State
 
 /-! T2, the step encoding: for each step kind, terms for the next state and the outcome, computed from the symbolic
@@ -8,8 +9,8 @@ transition is a function of the state and input, so one statement gives both dir
 and input step to the outcome its terms denote (a decoded counterexample is a real step), and every concrete state
 and input are some model's (`decode_embedState`), so a script with no model has no step that breaks it.
 
-The codes of a definition's functions come with the hypothesis that they relate to the functions (`Rel`), which
-`encode_agrees` (T1) gives when they are the encodings of the functions' expressions. -/
+The codes of a definition's functions are the codes of the sources its structure value keeps (`QueryCode.of` and
+the like), so each theorem rests on `Fun.code_rel` (T1 at those sources), not on an assumed relation. -/
 
 namespace Tazuna.Smt
 
@@ -48,6 +49,20 @@ structure QueryCode.Rel (M : Model) (L : Layout) {r c : Ty} {q : QueryV r c} (hd
     Prop where
   accepts : Smt.Rel M L _ (Ty.up _ hd.accepts q.accepts.fn) qc.accepts
   resolve : Smt.Rel M L _ (Ty.up _ hd.resolve q.resolve.fn) qc.resolve
+
+/-- A query's codes, from the sources it keeps, with their condition. -/
+def QueryCode.of (L : Layout) {r c : Ty} (q : QueryV r c) : Except Refusal (QueryCode q × Term) := do
+  let (a, c1) ← q.accepts.code L
+  let (x, c2) ← q.resolve.code L
+  pure (⟨a, x⟩, andT c1 c2)
+
+theorem QueryCode.rel_of {M : Model} {L : Layout} {r c : Ty} {q : QueryV r c} (hd : QueryData q) {qc : QueryCode q}
+    {cq : Term} (h : QueryCode.of L q = .ok (qc, cq)) (hc : Holds M cq) : qc.Rel M L hd := by
+  obtain ⟨⟨a, c1⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨⟨x, c2⟩, h2, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  have hc := (holds_andT _ _).1 hc
+  exact ⟨q.accepts.code_fn _ h1 hc.1, q.resolve.code_fn _ h2 hc.2⟩
 
 /-- The terms of a query step's outcome: whether the caller is one the query lists, each `accepts` rule's name and
 whether it holds, and the output. -/
@@ -223,8 +238,8 @@ theorem up_ctx {v : ServiceV} {r i c : Ty} (hr : r.isData = true) (hi : i.isData
 /-- T2 for a query: wherever the condition holds, the outcome terms denote the outcome of the step from the state
 and input the terms denote, and the state stays. -/
 theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (caller : v.caller.den0)
-    (input : (v.queries.get i).input.den0) (hd : QueryData (v.queries.get i)) (qc : QueryCode (v.queries.get i))
-    (hq : qc.Rel M L hd) {ks : List Term} (hks : callerTerms L hd.caller (v.queries.get i).callers = some ks)
+    (input : (v.queries.get i).input.den0) (hd : QueryData (v.queries.get i)) {qc : QueryCode (v.queries.get i)}
+    {cq : Term} (hqc : QueryCode.of L _ = .ok (qc, cq)) (hcq : Holds M cq) {ks : List Term} (hks : callerTerms L hd.caller (v.queries.get i).callers = some ks)
     {records now fresh sc si : Term}
     (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
     (hnow : now.denote M = .int s.now) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
@@ -233,6 +248,7 @@ theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (call
     {o : QueryOut} {cond : Term} (henc : encodeQuery L (v.queries.get i) qc ks records now fresh sc si = .ok (o, cond))
     (hc : Holds M cond) :
     (step v s (.query i caller input)).state = s ∧ o.Rel M L hd.output (step v s (.query i caller input)).outcome := by
+  have hq := QueryCode.rel_of hd hqc hcq
   obtain ⟨cc, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
@@ -335,6 +351,23 @@ structure EventCode.Rel (M : Model) (L : Layout) {v : ServiceV} {i : Fin v.subsc
   wrap : Smt.Rel M L _ (Ty.up _ hd.wrap (v.subscribes.get i).wrap.fn) ec.wrap
   invariants : Smt.Rel M L _ (Ty.up _ hd.invariants v.invariants.fn) ec.invariants
 
+/-- An event step's codes, from the sources the service and the subscription keep, with their condition. -/
+def EventCode.of (L : Layout) (v : ServiceV) (i : Fin v.subscribes.length) : Except Refusal (EventCode v i × Term) := do
+  let (a, c1) ← v.apply.code L
+  let (w, c2) ← (v.subscribes.get i).wrap.code L
+  let (n, c3) ← v.invariants.code L
+  pure (⟨a, w, n⟩, andT c1 (andT c2 c3))
+
+theorem EventCode.rel_of {M : Model} {L : Layout} {v : ServiceV} {i : Fin v.subscribes.length} (hd : EventData v i)
+    {ec : EventCode v i} {ce : Term} (h : EventCode.of L v i = .ok (ec, ce)) (hc : Holds M ce) : ec.Rel M L hd := by
+  obtain ⟨⟨a, c1⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨⟨w, c2⟩, h2, h⟩ := bind_ok.1 h
+  obtain ⟨⟨n, c3⟩, h3, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  have hc := (holds_andT _ _).1 hc
+  have hc' := (holds_andT _ _).1 hc.2
+  exact ⟨v.apply.code_fn _ h1 hc.1, (v.subscribes.get i).wrap.code_fn _ h2 hc'.1, v.invariants.code_fn _ h3 hc'.2⟩
+
 /-- The terms of an event step: the records after the event, the event, and each invariant's name and whether it
 holds on those records. -/
 structure EventOut where
@@ -378,8 +411,8 @@ theorem step_event (v : ServiceV) (hx : v.reactions = []) (s : State v) (hs : s.
 /-- T2 for an event on a service without reactions, from a state without machine instances: wherever the condition holds, a broken invariant's
 name is the step's fault, and otherwise the step is accepted with the records and the event the terms denote. -/
 theorem event_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
-    (i : Fin v.subscribes.length) (value : (v.subscribes.get i).event.den0) (hd : EventData v i) (ec : EventCode v i)
-    (he : ec.Rel M L hd) {records sv : Term}
+    (i : Fin v.subscribes.length) (value : (v.subscribes.get i).event.den0) (hd : EventData v i) {ec : EventCode v i}
+    {ce : Term} (hec : EventCode.of L v i = .ok (ec, ce)) (hce : Holds M ce) {records sv : Term}
     (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
     (hsv : RelV L _ (Ty.up _ hd.value value) (sv.denote M))
     {o : EventOut} {cond : Term} (henc : encodeEvent L ec records sv = .ok (o, cond)) (hc : Holds M cond) :
@@ -390,6 +423,7 @@ theorem event_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.
         RelV L v.records (Ty.up _ hd.records r.state.records) (o.records.denote M) ∧
         ∃ e, r.events = [e] ∧ RelV L v.event (Ty.up _ hd.event e) (o.event.denote M) := by
   intro r
+  have he := EventCode.rel_of hd hec hce
   obtain ⟨vc, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨ev, c1⟩, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨rc, h3, henc⟩ := bind_ok.1 henc
@@ -477,9 +511,7 @@ theorem step_clock (v : ServiceV) (s : State v) (hs : s.machines = []) (time : I
 /-- T2 for a clock line from a state without machine instances: wherever the condition holds, a time before the
 state's is Invalid, a broken invariant's name is the step's fault, and otherwise time moves on. -/
 theorem clock_step {v : ServiceV} (s : State v) (hs : s.machines = []) (time : Int) (hrd : v.records.isData = true)
-    (inv : Code (Ty.fn [v.records] Ty.rules))
-    (hinv : Smt.Rel M L _ (Ty.up _ (by simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hrd])
-      v.invariants.fn) inv)
+    {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
     {records now st : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
     (hnow : now.denote M = .int s.now) (hst : st.denote M = .int time)
     {o : ClockOut} {cond : Term} (henc : encodeClock L inv records now st = .ok (o, cond)) (hc : Holds M cond) :
@@ -490,6 +522,7 @@ theorem clock_step {v : ServiceV} (s : State v) (hs : s.machines = []) (time : I
       | [] => r = ⟨{ s with now := time }, .accepted, [], []⟩
     else r = ⟨s, .invalid ["time moves forward"], [], []⟩ := by
   intro r
+  have hinv := v.invariants.code_fn (by simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hrd]) hci hcinv
   obtain ⟨rc, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨invs, c⟩, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨rules, h3, henc⟩ := bind_ok.1 henc
@@ -589,6 +622,23 @@ structure CommandCode.Rel (M : Model) (L : Layout) {r e c : Ty} {x : CommandV r 
   accepts : Smt.Rel M L _ (Ty.up _ hd.accepts x.accepts.fn) cc.accepts
   decide : Smt.Rel M L _ (Ty.up _ hd.decide x.decide.fn) cc.decide
   ensures : Smt.Rel M L _ (Ty.up _ hd.ensures x.ensures.fn) cc.ensures
+
+/-- A command's codes, from the sources it keeps, with their condition. -/
+def CommandCode.of (L : Layout) {r e c : Ty} (x : CommandV r e c) : Except Refusal (CommandCode x × Term) := do
+  let (a, c1) ← x.accepts.code L
+  let (d, c2) ← x.decide.code L
+  let (n, c3) ← x.ensures.code L
+  pure (⟨a, d, n⟩, andT c1 (andT c2 c3))
+
+theorem CommandCode.rel_of {M : Model} {L : Layout} {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
+    {cc : CommandCode x} {cx : Term} (h : CommandCode.of L x = .ok (cc, cx)) (hc : Holds M cx) : cc.Rel M L hd := by
+  obtain ⟨⟨a, c1⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨⟨d, c2⟩, h2, h⟩ := bind_ok.1 h
+  obtain ⟨⟨n, c3⟩, h3, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  have hc := (holds_andT _ _).1 hc
+  have hc' := (holds_andT _ _).1 hc.2
+  exact ⟨x.accepts.code_fn _ h1 hc.1, x.decide.code_fn _ h2 hc'.1, x.ensures.code_fn _ h3 hc'.2⟩
 
 /-- The terms of a command step's outcome: whether the caller is listed and the `accepts` rules, whether `decide`
 accepted, its rejection and its events, the `ensures` rules and the invariants on the records the events leave, and
@@ -720,9 +770,11 @@ rejection is the rejection the terms denote; a broken `ensures` rule or invarian
 step is accepted with the records and events the terms denote. The fresh counter advances in every case. -/
 theorem command_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
     (i : Fin v.commands.length) (caller : v.caller.den0) (input : (v.commands.get i).input.den0)
-    (hd : CommandData (v.commands.get i)) (cc : CommandCode (v.commands.get i)) (hcc : cc.Rel M L hd)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (happ : Smt.Rel M L _ (Ty.up _ hd.apply v.apply.fn) apply)
-    (inv : Code (Ty.fn [v.records] Ty.rules)) (hinv : Smt.Rel M L _ (Ty.up _ hd.invariants v.invariants.fn) inv)
+    (hd : CommandData (v.commands.get i)) {cc : CommandCode (v.commands.get i)} {cx : Term}
+    (hcc : CommandCode.of L _ = .ok (cc, cx)) (hccx : Holds M cx)
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    (hca : Holds M ca)
+    {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hinv : v.invariants.code L = .ok (inv, ci)) (hci : Holds M ci)
     {ks : List Term} (hks : callerTerms L hd.caller (v.commands.get i).callers = some ks)
     {records now fresh sc si : Term}
     (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
@@ -749,6 +801,9 @@ theorem command_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : 
         else r.state = s' ∧ ∃ j, r.outcome = .rejected ⟨(v.commands.get i).rejection, j⟩ ∧
           RelV L _ (Ty.up _ hd.rejection j) (o.rejection.denote M)
     else r = ⟨s', .invalid ["callers"], [], []⟩ := by
+  have hcc := CommandCode.rel_of hd hcc hccx
+  have happ := v.apply.code_fn hd.apply happ hca
+  have hinv := v.invariants.code_fn hd.invariants hinv hci
   intro r s'
   obtain ⟨cc0, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc

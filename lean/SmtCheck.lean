@@ -252,7 +252,8 @@ def freshScript (step : Nat) (index : Int) : Except String (Layout × Script) :=
 /-! A query step on a small service, for `query_step`: the records are a table of Int to Int, the query `get` takes a
 key from the caller "alice", accepts a positive key, and answers `table.get(ctx.records, key)`. Each case asks the
 solver for a state and input whose outcome terms meet a goal, decodes them, runs `step` on what they decode to, and
-compares its outcome with what the outcome terms denote in the model. -/
+compares its outcome with what the outcome terms denote in the model. Every code is the service's own: the encoding
+of the source its structure value keeps (`QueryCode.of`, `EventCode.of`, `CommandCode.of`, `Fun.code`). -/
 
 def recordsT : Ty := .table .int .int
 def ctxT : Ty := Ty.ctx recordsT .int .str
@@ -269,11 +270,6 @@ def getQ : QueryV recordsT .str :=
   { name := "get", input := .int, output := Ty.option .int, callers := ["alice"],
     accepts := .closed acceptsE, resolve := .closed resolveE }
 
-def getCode (L : Layout) : Except Refusal (QueryCode getQ) := do
-  let (a, _) ← encode L (G := []) () acceptsE ()
-  let (r, _) ← encode L (G := []) () resolveE ()
-  pure ⟨a, r⟩
-
 def querySvc : ServiceV :=
   { name := "s", records := recordsT, event := .int, caller := .str, init := Builtin.tableEmpty,
     apply := .closed (.lam (.var .here)), subscribes := [], declares := [], commands := [], queries := [getQ],
@@ -289,7 +285,7 @@ def queryLayout : Layout :=
 terms (caller listed, the rule's holds and name, the output). -/
 def queryScript (goal : List Term) : Except String (Script × QueryOut) := do
   let L := queryLayout
-  let qc ← (getCode L).mapError fun r => s!"no encoding: {repr r}"
+  let (qc, cq) ← (QueryCode.of L getQ).mapError fun r => s!"no encoding: {repr r}"
   let some ks := callerTerms L rfl getQ.callers | throw "no caller terms"
   let S := SymState.vars 0
   let (o, cond) ← (encodeQuery L getQ qc ks S.records S.now S.fresh (.var 4) (.var 5)).mapError
@@ -300,7 +296,7 @@ def queryScript (goal : List Term) : Except String (Script × QueryOut) := do
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.rules | throw "not one rule"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, .str, .int, .bool, .bool, .str, osrt],
-          asserts := [cond, wf,
+          asserts := [cq, cond, wf,
             .eq (.var 6) o.callerOk, .eq (.var 7) holds, .eq (.var 8) name, .eq (.var 9) o.output] ++ goal,
           shows := List.range 10 }, o)
 
@@ -398,16 +394,10 @@ def eventLayout : Layout :=
 
 def eventI : Fin eventSvc.subscribes.length := ⟨0, by decide⟩
 
-def eventCode (L : Layout) : Except Refusal (EventCode eventSvc eventI) := do
-  let (a, _) ← encode L (G := []) () applyE ()
-  let (w, _) ← encode L (G := []) () wrapE ()
-  let (n, _) ← encode L (G := []) () invariantsE ()
-  pure ⟨a, w, n⟩
-
 /-- v0..v3 the state, v4 the value, v5 the records after, v6 the event, v7 and v8 the invariant's holds and name. -/
 def eventScript (goal : List Term) : Except String Script := do
   let L := eventLayout
-  let ec ← (eventCode L).mapError fun r => s!"no encoding: {repr r}"
+  let (ec, ce) ← (EventCode.of L eventSvc eventI).mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
   let (o, cond) ← (encodeEvent L ec S.records (.var 4)).mapError fun r => s!"no encoding: {repr r}"
   let some wf := S.wf L (v := eventSvc) | throw "no well-formedness"
@@ -416,7 +406,7 @@ def eventScript (goal : List Term) : Except String Script := do
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.invariants | throw "not one invariant"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, esrt, rsrt, esrt, .bool, .str],
-         asserts := [cond, wf,
+         asserts := [ce, cond, wf,
            .eq (.var 5) o.records, .eq (.var 6) o.event, .eq (.var 7) holds, .eq (.var 8) name] ++ goal,
          shows := List.range 9 }
 
@@ -456,16 +446,16 @@ def eventCases : List (String × List Term) :=
 forward, v6 and v7 the invariant's holds and name. -/
 def clockScript (goal : List Term) : Except String Script := do
   let L := eventLayout
-  let ec ← (eventCode L).mapError fun r => s!"no encoding: {repr r}"
+  let (inv, ci) ← (eventSvc.invariants.code L).mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
-  let (o, cond) ← (encodeClock L (v := eventSvc) ec.invariants S.records S.now (.var 4)).mapError
+  let (o, cond) ← (encodeClock L (v := eventSvc) inv S.records S.now (.var 4)).mapError
     fun r => s!"no encoding: {repr r}"
   let some wf := S.wf L (v := eventSvc) | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.invariants | throw "not one invariant"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, .bool, .bool, .str],
-         asserts := [cond, wf,
+         asserts := [ci, cond, wf,
            .eq (.var 5) o.forward, .eq (.var 6) holds, .eq (.var 7) name] ++ goal,
          shows := List.range 8 }
 
@@ -544,13 +534,13 @@ rule, v9 accepted by `decide`, v10 the rejection, v11 the events, v12 and v13 th
 after, v15 and v16 the invariant. -/
 def commandScript (goal : List Term) : Except String Script := do
   let L := commandLayout
-  let enc {t : Ty} (e : E t) : Except String (Code t) := do
-    let (c, _) ← (encode L (G := []) () e ()).mapError fun r => s!"no encoding: {repr r}"
-    pure c
-  let cc : CommandCode putC := ⟨← enc acceptsE, ← enc decideE, ← enc ensuresE⟩
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let (cc, cx) ← enc (CommandCode.of L putC)
+  let (apply, ca) ← enc (commandSvc.apply.code L)
+  let (inv, ci) ← enc (commandSvc.invariants.code L)
   let some ks := callerTerms L rfl putC.callers | throw "no caller terms"
   let S := SymState.vars 0
-  let (o, cond) ← (encodeCommand L putC cc (← enc applyE) (← enc invariantsE) ks S.records S.now S.fresh (.var 4)
+  let (o, cond) ← (encodeCommand L putC cc apply inv ks S.records S.now S.fresh (.var 4)
     (.var 5)).mapError fun r => s!"no encoding: {repr r}"
   let some wf := S.wf L (v := commandSvc) | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -562,7 +552,7 @@ def commandScript (goal : List Term) : Except String Script := do
   pure { datatypes := dts,
          vars := [rsrt, .int, .int, .int, .str, .int, .bool, .bool, .str, .bool, .str, lsrt, .bool, .str, rsrt, .bool,
            .str],
-         asserts := [cond, wf, .eq (.var 6) o.callerOk, .eq (.var 7) ah, .eq (.var 8) an, .eq (.var 9) o.ok,
+         asserts := [cx, ca, ci, cond, wf, .eq (.var 6) o.callerOk, .eq (.var 7) ah, .eq (.var 8) an, .eq (.var 9) o.ok,
            .eq (.var 10) o.rejection, .eq (.var 11) o.events, .eq (.var 12) eh, .eq (.var 13) en,
            .eq (.var 14) o.records, .eq (.var 15) ih, .eq (.var 16) iname] ++ goal,
          shows := List.range 17 }
