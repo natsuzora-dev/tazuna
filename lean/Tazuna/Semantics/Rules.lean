@@ -1,4 +1,5 @@
 import Tazuna.Semantics.Eval
+import Tazuna.Semantics.Order
 
 /-! The structure rules: what a spec's structure must satisfy before any step runs. Each broken rule is one finding,
 named after the definition that breaks it. -/
@@ -27,11 +28,14 @@ inductive Illegal where
   /-- A command's rejection type is neither a custom type nor Nil: a rejection names its reason in a type of the
   spec's own. -/
   | rejection
+  /-- A machine's instance key type has no order the solver can encode (`Ty.orderable`): the canonical order of the
+  keys decides which instance reacts, starts and fires first, so the step encoding must compare keys. -/
+  | machineKey
 deriving Repr, DecidableEq
 
 namespace Illegal
 
-def all : List Illegal := [wireName, owner, unknownSource, creates, wireType, bounds, scenario, rejection]
+def all : List Illegal := [wireName, owner, unknownSource, creates, wireType, bounds, scenario, rejection, machineKey]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -44,6 +48,7 @@ def name : Illegal → String
   | bounds => "bounds"
   | scenario => "scenario"
   | rejection => "rejection"
+  | machineKey => "machineKey"
 
 end Illegal
 
@@ -62,6 +67,21 @@ def Ty.wires : List Ty → Bool
 def Ty.wiress : List (List Ty) → Bool
   | [] => true
   | ts :: vs => Ty.wires ts && Ty.wiress vs
+end
+
+mutual
+/-- Whether the solver compares values of a type by terms (`Tazuna.Smt.ordT`): Ints, dates, strings and ids, Bool and
+enumerations, and tuples and one-variant records of such types. -/
+def Ty.orderable : Ty → Bool
+  | .int | .date | .str | .id => true
+  | .tuple ts => Ty.orderables ts
+  | .adt 0 _ [[], []] => true
+  | .adt (_ + 1) _ [fs] => Ty.orderables fs
+  | .adt (_ + 1) _ vs => vs.all (·.isEmpty)
+  | _ => false
+def Ty.orderables : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.orderable t && Ty.orderables ts
 end
 
 /-- The names that occur more than once. -/
@@ -188,6 +208,8 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
       else some (Illegal.unknownSource, s!"{v.name} subscribes to the source {sub.name}, which no service or external declares with its event type")
     let rejections := v.commands.filterMap fun c => if c.rejection.customOrNil then none else
       some (Illegal.rejection, s!"{v.name}.{c.name}: the rejection type is no custom type or Nil")
+    let keys := v.machines.filterMap fun m => if m.key.orderable then none else
+      some (Illegal.machineKey, s!"{v.name}.{m.name}: the instance key type has no canonical order the solver can compare; use Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these")
     let probes := tableProbes T v.records
     let reads := v.bounds.creates.map (·.reads probes)
     let creates := (probes.filterMap fun (t, _) => match (reads.filter (·.contains t)).length with
@@ -217,7 +239,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
             (Ty.same q.output x.output).isSome then none else unlisted "query" x.name
         | _ => none
       fileName ++ steps
-    wireNames ++ owners ++ wireTypes ++ unknown ++ rejections ++ creates ++ negative ++ scenarioNames ++ perScenario
+    wireNames ++ owners ++ wireTypes ++ unknown ++ rejections ++ keys ++ creates ++ negative ++ scenarioNames ++ perScenario
   let perExternal := s.externals.flatMap fun x =>
     let all := x.declares
     let wireNames := (duplicates (all.map (·.name))).map fun n =>

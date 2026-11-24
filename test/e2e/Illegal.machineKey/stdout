@@ -1,0 +1,1 @@
+{"kind":"Illegal.machineKey","message":"cells.watch: the instance key type has no canonical order the solver can compare; use Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these"}
