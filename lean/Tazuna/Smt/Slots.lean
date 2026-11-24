@@ -36,12 +36,13 @@ def allT : List Term → Term
   | a :: r => .and a (allT r)
 
 /-- The slots with `x` in the first free one, after the pending flag `p` (whether `x` still waits for a slot); the
-second result is whether it still waits after the last slot. -/
+second result is whether it still waits after the last slot. The flags are shared: each slot's flag holds every
+earlier slot's, and its `here` guards every item. -/
 def insertSlots (x : List Term) : Term → List Slot → List Slot × Term
   | p, [] => ([], p)
   | p, (f, ys) :: S =>
-    let here := Term.and p (.not f)
-    let (S', p') := insertSlots x (.and p f) S
+    let here := Term.share (.and p (.not f))
+    let (S', p') := insertSlots x (Term.share (.and p f)) S
     ((.or f here, List.zipWith (fun a b => Term.ite here a b) x ys) :: S', p')
 
 /-- The slots `T` with the items of each occupied slot of `S` in the first free slot in turn, shared after each
@@ -290,14 +291,15 @@ theorem insertSlots_den (x : List Term) (xv : List Val) (hx : Term.denotes M x =
       (insertSlots x p S).2.denote M = .bool (insertVals xv pb sv).2
   | [], [], p, pb, hp, _, _ => ⟨trivial, hp⟩
   | (f, ys) :: S, (b, vs) :: sv, p, pb, hp, ⟨hf, hy, h⟩, hl => by
-    have hpf : (Term.and p f).denote M = .bool (pb && b) := by simp [Term.denote, hp, hf, Val.toBool]
-    obtain ⟨ih1, ih2⟩ := insertSlots_den x xv hx (pb := pb && b) (.and p f) hpf h (fun q hq => hl q (by simp [hq]))
+    have hpf : (Term.share (.and p f)).denote M = .bool (pb && b) := by simp [Term.denote, hp, hf, Val.toBool]
+    obtain ⟨ih1, ih2⟩ := insertSlots_den x xv hx (pb := pb && b) _ hpf h (fun q hq => hl q (by simp [hq]))
     refine ⟨⟨?_, ?_, ih1⟩, ih2⟩
     · simp [Term.denote, hf, hp, Val.toBool]
     · have hlen : ys.length = x.length := by
         have := hl (b, vs) (by simp)
         rw [← hy, denotes_eq_map] at this; simpa using this
-      have hhere : (Term.and p (.not f)).denote M = .bool (pb && !b) := by simp [Term.denote, hp, hf, Val.toBool]
+      have hhere : (Term.share (.and p (.not f))).denote M = .bool (pb && !b) := by
+        simp [Term.denote, hp, hf, Val.toBool]
       rw [zip_ite _ _ hhere x ys hlen.symm, hx, hy]
 
 theorem insertVals_occupied (xv : List Val) : (pb : Bool) → (sv : List (Bool × List Val)) →
