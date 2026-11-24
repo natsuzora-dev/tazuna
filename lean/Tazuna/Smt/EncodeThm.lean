@@ -475,6 +475,10 @@ theorem relAlts_index (d : Nat) (k : Nat) (vs : List (List Ty)) (x : Ty.alts vs)
   obtain ⟨vals, e, _⟩ := relAlts_view d k vs x w h
   exact ⟨_, vals, e, by omega⟩
 
+theorem ofNat_beq (x y : Nat) : (Int.ofNat x == Int.ofNat y) = (x == y) := by
+  rw [Bool.eq_iff_iff, beq_iff_eq, beq_iff_eq]
+  exact ⟨Int.ofNat.inj, congrArg _⟩
+
 mutual
 /-- SMT-LIB's `=` on the codes of values of an `eqable` type is Gleam's `==`. -/
 theorem relV_beq : (t : Ty) → t.eqable = true → (x y : t.den) → (vx vy : Val) → RelV L t x vx → RelV L t y vy →
@@ -485,6 +489,12 @@ theorem relV_beq : (t : Ty) → t.eqable = true → (x y : t.den) → (vx vy : V
     simp only [RelV] at hx hy; subst hx hy; rfl
   | .date, _, x, y, _, _, hx, hy => by
     simp only [RelV] at hx hy; subst hx hy; rfl
+  | .dsl .fresh a, _, x, y, _, _, hx, hy => by
+    change _ = Val.int (Int.ofNat x) at hx
+    change _ = Val.int (Int.ofNat y) at hy
+    subst hx hy
+    change (Int.ofNat x == Int.ofNat y) = (Dsl.base .fresh a).2 x y
+    exact ofNat_beq x y
   | .id, _, x, y, _, _, ⟨d, n, hf, ex⟩, ⟨d', n', hf', ey⟩ => by
     obtain rfl := find_det hf hf'
     subst ex ey

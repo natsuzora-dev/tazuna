@@ -290,7 +290,7 @@ def queryScript (goal : List Term) : Except String (Script × QueryOut) := do
   let S := SymState.vars 0
   let (o, cond) ← (encodeQuery L getQ qc ks S.records S.now S.fresh (.var 4) (.var 5)).mapError
     fun r => s!"no encoding: {repr r}"
-  let some wf := S.wf L (v := querySvc) | throw "no well-formedness"
+  let some wf := S.wf L (v := querySvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some osrt := L.srt? (Ty.option .int) | throw "no output sort"
   let some dts := L.datatypes? | throw "no datatypes"
@@ -313,7 +313,7 @@ def illFormed : List (String × Term) :=
 
 def illFormedScript (withWf : Bool) (goal : Term) : Except String Script := do
   let L := queryLayout
-  let some wf := (SymState.vars 0).wf L (v := querySvc) | throw "no well-formedness"
+  let some wf := (SymState.vars 0).wf L (v := querySvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some dts := L.datatypes? | throw "no datatypes"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int], asserts := (if withWf then [wf] else []) ++ [goal] }
@@ -400,7 +400,7 @@ def eventScript (goal : List Term) : Except String Script := do
   let (ec, ce) ← (EventCode.of L eventSvc eventI).mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
   let (o, cond) ← (encodeEvent L ec S.records (.var 4)).mapError fun r => s!"no encoding: {repr r}"
-  let some wf := S.wf L (v := eventSvc) | throw "no well-formedness"
+  let some wf := S.wf L (v := eventSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some esrt := L.srt? evT | throw "no event sort"
   let some dts := L.datatypes? | throw "no datatypes"
@@ -450,7 +450,7 @@ def clockScript (goal : List Term) : Except String Script := do
   let S := SymState.vars 0
   let (o, cond) ← (encodeClock L (v := eventSvc) inv S.records S.now (.var 4)).mapError
     fun r => s!"no encoding: {repr r}"
-  let some wf := S.wf L (v := eventSvc) | throw "no well-formedness"
+  let some wf := S.wf L (v := eventSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.invariants | throw "not one invariant"
@@ -542,7 +542,7 @@ def commandScript (goal : List Term) : Except String Script := do
   let S := SymState.vars 0
   let (o, cond) ← (encodeCommand L putC cc apply inv ks S.records S.now S.fresh (.var 4)
     (.var 5)).mapError fun r => s!"no encoding: {repr r}"
-  let some wf := S.wf L (v := commandSvc) | throw "no well-formedness"
+  let some wf := S.wf L (v := commandSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some lsrt := L.srt? (.list evT) | throw "no events sort"
   let some dts := L.datatypes? | throw "no datatypes"
@@ -598,6 +598,99 @@ def commandCases : List (String × List Term) :=
     ("command breaks its ensures", [.var 6, .var 7, .var 9, .not (.var 12)]),
     ("command breaks the invariant", [.var 6, .var 7, .var 9, .var 12, .not (.var 15)]) ]
 
+/-! Pending requests as a symbolic table, for `decode_state`: a service whose reaction may ask the external `fx` to
+`pay` (a command) or for a `rate` (a query). Each `on_answer` site captures an Int, so the service has two pending
+shapes, and a model's table decodes to requests whose `on_answer` is the site's closure record at the captured
+value. -/
+
+def payAnswerE : Expr [] [.int] (.fn [Ty.result .int .str] (.list .int)) := .lam (.list (.cons (.var (.there .here)) .nil))
+
+def rateAnswerE : Expr [] [.int] (.fn [.int] (.list .int)) :=
+  .lam (.list (.cons (.bin .add (.var .here) (.var (.there .here))) .nil))
+
+def rateEnsuresE : Expr [] [] (.fn [.str, .int] Ty.rules) := .lam (.list .nil)
+
+def pendingSites : List AnySite :=
+  [⟨[.int], _, ⟨(1, 1), [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨(2, 1), [], .nil, rfl, rfl, rateAnswerE⟩⟩,
+   ⟨[], _, ⟨(3, 1), [], .nil, rfl, rfl, rateEnsuresE⟩⟩]
+
+def askR : ReactionV recordsT .int := ⟨"ask", fun _ _ _ => []⟩
+
+def fxDeclared : List (String × DeclaredV) :=
+  [("fx", .externalCommand "pay" .str .int .str), ("fx", .externalQuery "rate" .str .int (.closed rateEnsuresE))]
+
+def pendingSvc : ServiceV := { querySvc with name := "p", queries := [], reactions := [askR], declared := fxDeclared }
+
+def pendingShapes : List (PendingShape pendingSvc.event) := shapes pendingSvc pendingSites
+
+def pendingLayout : Layout :=
+  Layout.addTys (fun _ => 3) {} [recordsT, pendingTable pendingShapes]
+
+/-- The pending table's slots in v4, and the entry datatype. -/
+def pendingSlots : Option (List Slot × Nat) :=
+  match pendingLayout.find? (pendingTable pendingShapes),
+      pendingLayout.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry pendingShapes]),
+      pendingLayout.find? (pendingEntry pendingShapes) with
+  | some (d, n), some (dt, _), some (de, _) => some (slotsOf d dt n 2 (.var 4), de)
+  | _, _, _ => none
+
+def pendingScript (withWf : Bool) (goal : List Term) : Except String Script := do
+  let L := pendingLayout
+  let some wf := (SymState.vars 0).wf L (v := pendingSvc) pendingShapes | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable pendingShapes) | throw "no pending sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  pure { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt], asserts := (if withWf then [wf] else []) ++ goal,
+         shows := List.range 5 }
+
+/-- Goals on the pending table: slot 0 holds a `rate` request with wire id 3 whose `on_answer` captured 7, and slot 1
+another request; with a repeated wire id or a negative one the well-formedness makes the goal unsat. -/
+def pendingGoals : Option (List Term × List (String × Term)) := do
+  let (S, de) ← pendingSlots
+  let id (j : Nat) := (S[j]!.2.headD tt)
+  let entry (j : Nat) := (S[j]!.2.getD 1 tt)
+  let rate := Term.and (.is de 1 (entry 0)) (.eq (.sel 1000 0 0 (.sel de 1 3 (entry 0))) (.int 7))
+  pure ([S[0]!.1, S[1]!.1, .eq (id 0) (.int 3), rate],
+    [("well-formedness excludes a repeated wire id", .and (.and S[0]!.1 S[1]!.1) (.eq (id 0) (id 1))),
+     ("well-formedness excludes a negative wire id", .and S[0]!.1 (.lt (id 0) (.int 0)))])
+
+def pendingCheck (solver : Solver) : IO Bool := do
+  let some (goal, illFormed) := pendingGoals | IO.println "smt-check: pending: no layout"; return false
+  let mut ok := true
+  if pendingShapes.length != 2 then IO.println "smt-check: pending: not two shapes"; ok := false
+  -- The captured value sits in the tuple of the site's captures; its datatype is the layout's.
+  let some (dc, _) := pendingLayout.find? (.tuple [.int]) | IO.println "smt-check: pending: no capture tuple"; return false
+  let goal := goal.map fun t => match t with
+    | .and a (.eq (.sel _ 0 0 x) n) => .and a (.eq (.sel dc 0 0 x) n)
+    | t => t
+  match pendingScript true goal with
+  | .error m => IO.println s!"smt-check: pending: {m}"; ok := false
+  | .ok script =>
+    match ← solver.run script with
+    | .sat vs =>
+      match (SymState.vars 0).decode (modelOf vs) pendingLayout (v := pendingSvc) rfl [] pendingShapes with
+      | some s =>
+        -- The decoded request runs the site's source at the captured value: answering 5 yields [5 + 7].
+        let rate := s.pending.find? (·.id == 3)
+        let answered := rate.bind fun p => match Ty.same (answerTy p.request.output p.request.rejection) .int with
+          | some ⟨h⟩ => some (show List Int from p.request.onAnswer.fn (h ▸ (5 : Int), ()))
+          | none => none
+        if s.pending.length != 2 || rate.map (·.request.name) != some "rate" || answered != some [12] then
+          IO.println "smt-check: pending: the decoded requests differ from the model"; ok := false
+      | none => IO.println "smt-check: pending: the model does not decode"; ok := false
+    | a => IO.println s!"smt-check: pending: {repr a}"; ok := false
+  for (name, g) in illFormed do
+    for (withWf, want) in [(true, "unsat"), (false, "sat")] do
+      match pendingScript withWf [g] with
+      | .ok script =>
+        let got := match ← solver.run script with
+          | .unsat => "unsat"
+          | .sat _ => "sat"
+          | _ => "unknown"
+        if got != want then IO.println s!"smt-check: {name} (well-formedness {withWf}): {got}"; ok := false
+      | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
+  return ok
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -651,6 +744,7 @@ def check (z3 : String) : IO Bool := do
     unless ← clockCase solver name goal do ok := false
   for (name, goal) in commandCases do
     unless ← commandCase solver name goal do ok := false
+  unless ← pendingCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

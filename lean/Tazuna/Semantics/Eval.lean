@@ -60,7 +60,7 @@ def Expr.eval {Γ : List Ty} {t : Ty} : Expr G Γ t → Ty.dens Γ → t.den
   | .not e, ρ => Ty.ofBool (!Ty.toBool (Expr.eval e ρ))
   | .neg e, ρ => @Neg.neg Int _ (Expr.eval e ρ)
   | .prim p args h, _ => p.den args h
-  | .close env hΓ ht body, ρ => show Fun _ from ⟨G, D, _, Ty.down _ hΓ (Exprs.eval env ρ), hΓ, ht, body⟩
+  | .close site env hΓ ht body, ρ => show Fun _ from ⟨site, G, D, _, Ty.down _ hΓ (Exprs.eval env ρ), hΓ, ht, body⟩
 def Exprs.eval {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Ty.dens Γ → Ty.dens ts
   | .nil, _ => ()
   | .cons e es, ρ => (Expr.eval e ρ, Exprs.eval es ρ)
@@ -108,7 +108,7 @@ def RequestV.holds {e : Ty} (r : RequestV e) (answer : (answerTy r.output r.reje
   | none => []
 
 /-- A kept function whose source is a closed expression without definitions, as examples write one. -/
-def Fun.closed {t : Ty} (body : Expr [] [] t) (ht : t.isData = true := by rfl) : Fun t := ⟨[], .nil, [], (), rfl, ht, body⟩
+def Fun.closed {t : Ty} (body : Expr [] [] t) (ht : t.isData = true := by rfl) : Fun t := ⟨(0, 0), [], .nil, [], (), rfl, ht, body⟩
 
 /-- The value of a loaded program's root. -/
 def Program.eval {rootTy : Ty} (p : Program rootTy) : rootTy.den := p.root.get p.defs.eval

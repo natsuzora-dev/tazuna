@@ -283,7 +283,7 @@ partial def usesE {G Γ : List Ty} {t : Ty} (d : Nat) : Expr G Γ t → List Nat
   | .case e cs _ => usesE d e ++ usesC d cs
   | .list items => usesI d items
   | .bin _ l r => usesE d l ++ usesE d r
-  | .close env _ _ _ => usesEs d env
+  | .close _ env _ _ _ => usesEs d env
 partial def usesEs {G Γ : List Ty} {ts : List Ty} (d : Nat) : Exprs G Γ ts → List Nat
   | .nil => []
   | .cons e es => usesE d e ++ usesEs d es
@@ -608,7 +608,7 @@ partial def elabKept (sc : Scope) (u : Ty) (e : Surface.Expr) : E (Expr G (ctx s
   if let some (n, _) := sc'.find? (holdsFn ·.2) then
     fail e.pos s!"a function a structure value keeps captures the function {n}, which has no constant"
   if hΓ : (Ty.tuple (ctx sc')).isData = true then
-    if ht : u.isData = true then pure (.close env hΓ ht body)
+    if ht : u.isData = true then pure (.close (e.pos.line, e.pos.col) env hΓ ht body)
     else fail e.pos s!"a structure value keeps a function of {showTy T u}, which holds no data"
   else fail e.pos s!"a function a structure value keeps captures a value that is not data: {", ".intercalate
     ((sc'.filter fun (_, t) => !t.isData).map (·.1))}"

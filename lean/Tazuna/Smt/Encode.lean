@@ -127,11 +127,11 @@ mutual
 /-- Whether SMT-LIB's `=` on codes is Gleam's `==`: the code of a value is unique, so no bag or table (whose slots
 can hold the same items in another order) and nothing without a term. -/
 def Ty.eqable : Ty → Bool
-  | .int | .str | .date | .id => true
+  | .int | .str | .date | .id | .dsl .fresh _ => true
   | .tuple ts => Ty.eqables ts
   | .adt 0 _ vs => (Smt.boolVs? vs).isSome
   | .adt (_ + 1) _ vs => Ty.eqabless vs
-  | .list _ | .fn .. | .param _ | .bag _ | .table .. | .dsl .. => false
+  | .list _ | .fn .. | .param _ | .bag _ | .table .. | .dsl _ _ => false
 def Ty.eqables : List Ty → Bool
   | [] => true
   | t :: ts => Ty.eqable t && Ty.eqables ts
@@ -752,7 +752,7 @@ def Expr.tys {Γ : List Ty} {t : Ty} : Expr G Γ t → List Ty
   | .tuple es => t :: Exprs.tys es
   | .bin _ l r => t :: Expr.tys l ++ Expr.tys r
   | .not e | .neg e => t :: Expr.tys e
-  | .close env _ _ body => t :: Exprs.tys env ++ Expr.tys body
+  | .close _ env _ _ body => t :: Exprs.tys env ++ Expr.tys body
   | .int _ | .str _ | .var _ | .global _ | .prim .. => [t]
 def Exprs.tys {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → List Ty
   | .nil => []
@@ -786,7 +786,7 @@ def Expr.lits {Γ : List Ty} {t : Ty} : Expr G Γ t → List (Ty × Nat)
   | .call f args => Expr.lits f ++ Exprs.lits args
   | .let_ e body | .bin _ e body => Expr.lits e ++ Expr.lits body
   | .case e cs _ => Expr.lits e ++ Clauses.lits cs
-  | .close env _ _ body => Exprs.lits env ++ Expr.lits body
+  | .close _ env _ _ body => Exprs.lits env ++ Expr.lits body
   | .int _ | .str _ | .var _ | .global _ | .prim .. => []
 def Exprs.lits {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → List (Ty × Nat)
   | .nil => []
