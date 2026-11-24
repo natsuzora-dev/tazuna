@@ -132,20 +132,24 @@ def enter {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (key : m.
 
 variable (T : List TypeDecl)
 
-/-- A machine after an event: instances whose key left go, and in the canonical order of the keys each other key's
-instance reacts with `on` or, when the key is new, starts at `initial`. The instances stay in that order. -/
+/-- How the instance of key `k` reacts to an event, given the instances before it: an instance with that key reacts
+with `on` (and may enter a state), and with none an instance starts at `initial`. -/
+def reactKey {r e : Ty} (m : MachineV r e) (insts : List (Instance m)) (records : r.den0) (now : Int) (ev : e.den0)
+    (k : m.key.den0) : Instance m × List (Sender × EffectV e) :=
+  match insts.find? ((Ty.semWith Dsl.base m.key).2 k ·.key) with
+  | some i => match m.on.fn (.inl (i.key, i.state, records, now, ()), ev, ()) with
+    | .inr (.inl (s, ())) => enter m records now i.key s
+    | _ => (i, [])
+  | none => enter m records now k m.initial
+
+/-- A machine after an event: instances whose key left go, and each key `instances` lists reacts alone
+(`reactKey`), in the canonical order of the keys. The instances stay in that order, and so do their effects. -/
 def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) : MachineState r e →
     MachineState r e × List (Sender × EffectV e)
   | ⟨m, insts⟩ =>
-    let eqK := (Ty.semWith Dsl.base m.key).2
-    let keys := Ty.sortBy T m.key (dedupBy eqK (m.instances.fn (records, ())))
-    let (insts, effs) := keys.foldl (fun (acc, effs) k =>
-      match insts.find? (eqK k ·.key) with
-      | some i => match m.on.fn (.inl (i.key, i.state, records, now, ()), ev, ()) with
-        | .inr (.inl (s, ())) => let (i', es) := enter m records now i.key s; (acc ++ [i'], effs ++ es)
-        | _ => (acc ++ [i], effs)
-      | none => let (i, es) := enter m records now k m.initial; (acc ++ [i], effs ++ es)) ([], [])
-    (⟨m, insts⟩, effs)
+    let keys := Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (records, ())))
+    let rs := keys.map (reactKey m insts records now ev)
+    (⟨m, rs.map (·.1)⟩, rs.flatMap (·.2))
 
 /-- One event: apply it, then let every machine and reaction react. -/
 def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV v.event) :=

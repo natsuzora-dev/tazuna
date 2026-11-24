@@ -84,6 +84,88 @@ def Ty.orderables : List Ty → Bool
   | t :: ts => Ty.orderable t && Ty.orderables ts
 end
 
+mutual
+/-- Whether `==` on the type is equality of values: no list, bag, table, function or type parameter inside. -/
+def Ty.plain : Ty → Bool
+  | .int | .str | .date | .id => true
+  | .tuple ts => Ty.plains ts
+  | .adt _ _ vs => Ty.plainss vs
+  | _ => false
+def Ty.plains : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.plain t && Ty.plains ts
+def Ty.plainss : List (List Ty) → Bool
+  | [] => true
+  | ts :: vs => Ty.plains ts && Ty.plainss vs
+end
+
+mutual
+theorem Ty.beq_plain : (t : Ty) → t.plain = true → (x y : t.den0) → ((Ty.semWith Dsl.base t).2 x y = true ↔ x = y)
+  | .int, _, x, y => beq_iff_eq (α := Int) (a := x) (b := y)
+  | .str, _, x, y => beq_iff_eq (α := String) (a := x) (b := y)
+  | .date, _, x, y => beq_iff_eq (α := Int) (a := x) (b := y)
+  | .id, _, x, y => ⟨fun h => @of_decide_eq_true _ (instDecidableEqIdV x y) h,
+      fun h => @decide_eq_true _ (instDecidableEqIdV x y) h⟩
+  | .tuple ts, h, x, y => Ty.beq_plains ts h x y
+  | .adt _ _ vs, h, x, y => Ty.beq_plainss vs h x y
+theorem Ty.beq_plains : (ts : List Ty) → Ty.plains ts = true → (x y : (Ty.semsWith Dsl.base ts).1) →
+    ((Ty.semsWith Dsl.base ts).2 x y = true ↔ x = y)
+  | [], _, (), () => by simp [Ty.semsWith]
+  | t :: ts, h, (a, as), (b, bs) => by
+    simp only [Ty.plains, Bool.and_eq_true] at h
+    have e1 := Ty.beq_plain t h.1 a b
+    have e2 := Ty.beq_plains ts h.2 as bs
+    show ((Ty.semWith Dsl.base t).2 a b && (Ty.semsWith Dsl.base ts).2 as bs) = true ↔ _
+    constructor
+    · intro hh
+      simp only [Bool.and_eq_true] at hh
+      obtain rfl := e1.1 hh.1
+      obtain rfl := e2.1 hh.2
+      rfl
+    · intro hh
+      cases hh
+      simp [e1.2 rfl, e2.2 rfl]
+theorem Ty.beq_plainss : (vs : List (List Ty)) → Ty.plainss vs = true → (x y : (Ty.semAltsWith Dsl.base vs).1) →
+    ((Ty.semAltsWith Dsl.base vs).2 x y = true ↔ x = y)
+  | [], _, x, _ => nomatch x
+  | ts :: vs, h, x, y => by
+    simp only [Ty.plainss, Bool.and_eq_true] at h
+    rcases x with a | a <;> rcases y with b | b
+    · refine (Ty.beq_plains ts h.1 a b).trans ⟨fun e => e ▸ rfl, fun e => ?_⟩
+      cases e; rfl
+    · exact ⟨fun e => (nomatch e), fun e => by cases e⟩
+    · exact ⟨fun e => (nomatch e), fun e => by cases e⟩
+    · refine (Ty.beq_plainss vs h.2 a b).trans ⟨fun e => e ▸ rfl, fun e => ?_⟩
+      cases e; rfl
+end
+
+mutual
+theorem Ty.plain_of_orderable : (t : Ty) → t.orderable = true → t.plain = true
+  | .int, _ | .date, _ | .str, _ | .id, _ => rfl
+  | .tuple ts, h => Ty.plains_of_orderables ts h
+  | .adt 0 _ vs, h => by
+    rcases vs with _ | ⟨_ | ⟨_, _⟩, _ | ⟨_ | ⟨_, _⟩, _ | ⟨_, _⟩⟩⟩ <;> simp_all [Ty.orderable, Ty.plain, Ty.plainss, Ty.plains]
+  | .adt (_ + 1) _ vs, h => by
+    rcases vs with _ | ⟨fs, _ | ⟨gs, ws⟩⟩
+    · rfl
+    · simp only [Ty.orderable] at h
+      simp [Ty.plain, Ty.plainss, Ty.plains_of_orderables fs h]
+    · simp only [Ty.orderable, List.all_cons, Bool.and_eq_true, List.isEmpty_iff, List.all_eq_true] at h
+      obtain ⟨rfl, rfl, hw⟩ := h
+      simp only [Ty.plain, Ty.plainss, Ty.plains, Bool.true_and]
+      induction ws with
+      | nil => rfl
+      | cons w ws ih =>
+        rw [hw w (by simp)]
+        exact ih fun x hx => hw x (by simp [hx])
+  | .list _, h | .bag _, h | .table .., h | .fn .., h | .param _, h | .dsl .., h => by simp [Ty.orderable] at h
+theorem Ty.plains_of_orderables : (ts : List Ty) → Ty.orderables ts = true → Ty.plains ts = true
+  | [], _ => rfl
+  | t :: ts, h => by
+    simp only [Ty.orderables, Bool.and_eq_true] at h
+    simp [Ty.plains, Ty.plain_of_orderable t h.1, Ty.plains_of_orderables ts h.2]
+end
+
 /-- The names that occur more than once. -/
 def duplicates (names : List String) : List String :=
   (names.filter fun n => names.count n > 1).eraseDups

@@ -619,6 +619,43 @@ theorem dedupBy_pairwise (eq : α → α → Bool) (xs : List α) : (dedupBy eq 
       simp only [List.any_eq_true, not_exists, not_and, Bool.not_eq_true] at hany
       exact hany a ha
 
+section
+variable {eq : α → α → Bool} (heq : ∀ a b, eq a b = true ↔ a = b)
+include heq
+
+theorem mem_dedupBy (xs : List α) (x : α) : x ∈ dedupBy eq xs ↔ x ∈ xs := by
+  suffices ∀ acc : List α, x ∈ xs.foldl (fun ks k => if ks.any (eq k) then ks else ks ++ [k]) acc ↔ x ∈ acc ∨ x ∈ xs by
+    have := this []; simp only [List.not_mem_nil, false_or] at this; exact this
+  induction xs with
+  | nil => simp
+  | cons k xs ih =>
+    intro acc
+    simp only [List.foldl_cons]
+    split
+    · rename_i hany
+      rw [ih]
+      obtain ⟨a, ha, hka⟩ := List.any_eq_true.1 hany
+      rw [(heq _ _).1 hka] at *
+      constructor
+      · rintro (h | h)
+        · exact .inl h
+        · exact .inr (List.mem_cons_of_mem _ h)
+      · rintro (h | h)
+        · exact .inl h
+        · rcases List.mem_cons.1 h with rfl | h
+          · exact .inl ha
+          · exact .inr h
+    · rw [ih]; simp [or_assoc]
+
+/-- Under an equality that is equality of values, deduplicating reordered lists gives reordered lists. -/
+theorem dedupBy_perm {xs ys : List α} (h : xs.Perm ys) : (dedupBy eq xs).Perm (dedupBy eq ys) := by
+  have nd : ∀ zs : List α, (dedupBy eq zs).Nodup := fun zs =>
+    (dedupBy_pairwise eq zs).imp fun {a _} hab e => by subst e; rw [(heq a a).2 rfl] at hab; cases hab
+  exact (List.perm_ext_iff_of_nodup (nd xs) (nd ys)).2 fun x => by
+    rw [mem_dedupBy heq, mem_dedupBy heq]; exact h.mem_iff
+
+end
+
 /-- In a list of distinct values sorted by a total order, the values before `x` are those below it. A step that
 starts effects in the canonical order of keys gives each one's request the next wire id plus the number of effects
 of the keys below its own. -/
