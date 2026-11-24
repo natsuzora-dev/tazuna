@@ -1,0 +1,50 @@
+import Tazuna.Smt.Script
+
+/-! Running the solver. Each script runs in its own solver process, which reads the script on stdin and prints its
+answer on stdout; the process boundary contains a solver crash, and a run past its time is killed. This is the one
+place that knows the solver is z3: its executable, its command line, and its resource limit, which is the one line
+outside standard SMT-LIB. -/
+
+namespace Tazuna.Smt
+
+structure Solver where
+  path : String := "z3"
+  /-- z3's deterministic resource limit, so the same script gets the same verdict on any machine. -/
+  rlimit : Nat := 50000000
+  /-- Wall-clock limit: the process is killed after this many ms. -/
+  timeoutMs : Nat := 30000
+
+def Solver.header (s : Solver) : List String := [s!"(set-option :rlimit {s.rlimit})"]
+
+/-- Runs one script and reads the answer. -/
+def Solver.run (s : Solver) (script : Script) : IO Answer := do
+  let child ← IO.Process.spawn
+    { cmd := s.path, args := #["-in", "-smt2"], stdin := .piped, stdout := .piped, stderr := .null }
+  let (stdin, child) ← child.takeStdin
+  stdin.putStr (script.text s.header)
+  stdin.flush
+  -- Dropping the handle closes the solver's stdin, so it reads to the end.
+  let _ := stdin
+  let out ← IO.asTask (prio := .dedicated) child.stdout.readToEnd
+  let deadline := (← IO.monoMsNow) + s.timeoutMs
+  while !(← IO.hasFinished out) && (← IO.monoMsNow) < deadline do
+    IO.sleep 5
+  if !(← IO.hasFinished out) then
+    child.kill
+    let _ ← child.wait
+    return .unknown s!"the solver ran past {s.timeoutMs} ms"
+  let _ ← child.wait
+  match out.get with
+  | .ok text => return Answer.parse text
+  | .error e => return .unknown s!"the solver's output did not read: {e}"
+
+/-- A question to the solver that owns its call: the script, and how its answer reads as a result. Nothing pairs
+answers with questions by position. -/
+structure Obligation (α : Type) where
+  script : Script
+  read : Answer → α
+
+def Obligation.run {α : Type} (s : Solver) (o : Obligation α) : IO α := do
+  return o.read (← s.run o.script)
+
+end Tazuna.Smt
