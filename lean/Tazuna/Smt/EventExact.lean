@@ -345,4 +345,142 @@ theorem event_step_exact (s : State v) (i : Fin v.subscribes.length) (value : (v
 
 end
 
+
+section
+variable {L : Layout} {M : Model}
+
+/-- The condition of a clock line's step is exact: it holds exactly when, if time moves forward, the invariants fit
+at the records. -/
+theorem clock_exact {v : ServiceV} (s : State v) (time : Int) (hrd : v.records.isData = true)
+    {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
+    {records now st : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
+    (hnow : now.denote M = .int s.now) (hst : st.denote M = .int time)
+    {o : ClockOut} {cond : Term} (henc : encodeClock L inv records now st = .ok (o, cond)) :
+    Holds M cond ↔ (s.now ≤ time → v.invariants.appFits L.count (s.records, ())) := by
+  obtain ⟨rc, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨invs, c⟩, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨rules, -, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  have hrc : Smt.Rel M L _ (Ty.up _ hrd s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
+  have hargs : Smt.Rels M L [v.records] (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hrd])
+      (s.records, ())) (rc, ()) := by
+    show Smt.Rel M L _ (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hrd]) (s.records, ())).1 rc ∧ True
+    erw [Ty.up_tuple _ _ _ hrd rfl]; exact ⟨hrc, trivial⟩
+  have hx := v.invariants.app_exact hci hcinv (by simpa using ofTerm_notFn (need_ok.1 h1)) _ _ hargs h2
+  by_cases ht : s.now ≤ time
+  · have : Holds M (.ite (.le now st) c tt) ↔ Holds M c := by
+      simp [holds_ite, Term.denote, hnow, hst, Val.toInt, Val.toBool, ht]
+    rw [this, hx]; exact ⟨fun h _ => h, fun h => h ht⟩
+  · have : Holds M (.ite (.le now st) c tt) := by
+      simp [holds_ite, Term.denote, hnow, hst, Val.toInt, Val.toBool, ht, holds_tt]
+    exact ⟨fun _ h => absurd h ht, fun _ => this⟩
+
+end
+
+
+section
+variable {L : Layout} {T : List TypeDecl} {M : Model}
+
+/-- A query's codes' own condition is exact: it holds exactly when its two kept sources fit. -/
+theorem queryCode_exact {r c : Ty} {q : QueryV r c} {qc : QueryCode q} {cq : Term} (h : QueryCode.of L q = .ok (qc, cq)) :
+    Holds M cq ↔ (q.accepts.fits L.count).1 ∧ (q.resolve.fits L.count).1 := by
+  obtain ⟨⟨a, c1⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨⟨x, c2⟩, h2, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  rw [holds_andT, (q.accepts.code_exact (M := M) h1).1, (q.resolve.code_exact (M := M) h2).1]
+
+/-- The condition of a query's step is exact: it holds exactly when, for a listed caller, `accepts` fits at the input
+and, where its rules hold, `resolve` fits at the context. -/
+theorem query_exact {v : ServiceV} (s : State v) (i : Fin v.queries.length) (caller : v.caller.den0)
+    (input : (v.queries.get i).input.den0) (hd : QueryData (v.queries.get i)) {qc : QueryCode (v.queries.get i)}
+    {cq : Term} (hqc : QueryCode.of L _ = .ok (qc, cq)) (hcq : Holds M cq) {ks : List Term}
+    (hks : callerTerms L hd.caller (v.queries.get i).callers = some ks)
+    {records now fresh sc si : Term}
+    (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
+    (hnow : now.denote M = .int s.now) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
+    (hsc : RelV L v.caller (Ty.up _ hd.caller caller) (sc.denote M))
+    (hsi : RelV L (v.queries.get i).input (Ty.up _ hd.input input) (si.denote M))
+    {o : QueryOut} {cond : Term} (henc : encodeQuery L (v.queries.get i) qc ks records now fresh sc si = .ok (o, cond)) :
+    Holds M cond ↔ ((v.queries.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
+      (v.queries.get i).accepts.appFits L.count (input, ()) ∧
+        (Step.broken ((v.queries.get i).accepts.fn (input, ())) = [] →
+          (v.queries.get i).resolve.appFits L.count (Step.ctx s s.records caller input, ()))) := by
+  have hq := QueryCode.rel_of hd hqc hcq
+  obtain ⟨⟨a, c1'⟩, g1, hqc'⟩ := bind_ok.1 hqc
+  obtain ⟨⟨x, c2'⟩, g2, hqc'⟩ := bind_ok.1 hqc'
+  cases pure_ok.1 hqc'
+  obtain ⟨hca, hcr⟩ := (holds_andT _ _).1 hcq
+  obtain ⟨cc, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨rs, c1⟩, h4, henc⟩ := bind_ok.1 henc
+  obtain ⟨rules, h5, henc⟩ := bind_ok.1 henc
+  obtain ⟨ctx, h6, henc⟩ := bind_ok.1 henc
+  obtain ⟨cx, h7, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨out, c2⟩, h8, henc⟩ := bind_ok.1 henc
+  obtain ⟨ot, h9, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  have hcc : Smt.Rel M L v.caller (Ty.up _ hd.caller caller) cc := (rel_ofTerm (need_ok.1 h1) _).2 hsc
+  have hok := callers_any hd.caller hcc (v.queries.get i).callers ks hks eqs h2
+  have hic : Smt.Rel M L (v.queries.get i).input (Ty.up _ hd.input input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
+  have hargs : Smt.Rels M L [(v.queries.get i).input] (Ty.up (.tuple [(v.queries.get i).input]) hd.args (input, ()))
+      (ic, ()) := by
+    show Smt.Rel M L _ (Ty.up (.tuple [(v.queries.get i).input]) hd.args (input, ())).1 ic ∧ True
+    erw [Ty.up_tuple _ _ _ hd.input rfl]; exact ⟨hic, trivial⟩
+  have e1 : Holds M c1 ↔ (v.queries.get i).accepts.appFits L.count (input, ()) :=
+    (v.queries.get i).accepts.app_exact g1 hca (by simpa using ofTerm_notFn (need_ok.1 h3)) _ _ hargs h4
+  have hctx := adtCtor_rel (L := L) (M := M) (vs := [[v.records, (v.queries.get i).input, v.caller, .int, .dsl .fresh []]])
+    ⟨0, by simp⟩ _ _ h6
+    (Ty.up _ hd.records s.records, Ty.up _ hd.input input, Ty.up _ hd.caller caller, s.now, s.fresh, ())
+    ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
+  rw [← up_ctx hd.records hd.input hd.caller hd.ctx] at hctx
+  have hcx : Smt.Rel M L _ (Ty.up _ hd.ctx (Step.ctx s s.records caller input)) cx := (rel_ofTerm (need_ok.1 h7) _).2 hctx
+  have hargs' : Smt.Rels M L [Ty.ctx v.records (v.queries.get i).input v.caller]
+      (Ty.up (.tuple [Ty.ctx v.records (v.queries.get i).input v.caller]) hd.ctxArgs
+        (Step.ctx s s.records caller input, ())) (cx, ()) := by
+    show Smt.Rel M L _ (Ty.up (.tuple [Ty.ctx v.records (v.queries.get i).input v.caller]) hd.ctxArgs
+      (Step.ctx s s.records caller input, ())).1 cx ∧ True
+    erw [Ty.up_tuple _ _ _ hd.ctx rfl]; exact ⟨hcx, trivial⟩
+  have e2 : Holds M c2 ↔ (v.queries.get i).resolve.appFits L.count (Step.ctx s s.records caller input, ()) :=
+    (v.queries.get i).resolve.app_exact g2 hcr (by simp [Ty.ctx, Ty.isFn]) _ _ hargs' h8
+  have hrules : ∀ (hc1 : Holds M c1), ((allT (rules.map (·.2))).denote M).toBool =
+      decide (Step.broken ((v.queries.get i).accepts.fn (input, ())) = []) := by
+    intro hc1
+    have hacc := hq.accepts _ (ic, ()) hargs rs c1 h4 hc1
+    erw [Ty.up_fn _ Ty.rules _ hd.args rfl] at hacc
+    have hbroken := rules_broken h5 _ hacc
+    rw [allT_denote, ← hbroken, Val.toBool]
+    have := brokenIn_nil (M := M) rules
+    cases hb : brokenIn M rules with
+    | nil => simp [this.1 hb]
+    | cons n ns =>
+      have : (rules.map (·.2)).all (fun t => (t.denote M).toBool) ≠ true := fun h => by
+        rw [(brokenIn_nil (M := M) rules).2 h] at hb; cases hb
+      simpa using this
+  by_cases hin : (v.queries.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true
+  · have hite : Holds M (.ite (anyT eqs) (andT c1 (.ite (allT (rules.map (·.2))) c2 tt)) tt) ↔
+        Holds M (andT c1 (.ite (allT (rules.map (·.2))) c2 tt)) := by
+      rw [holds_ite, hok]; simp only [Val.toBool, hin, ite_true]
+    rw [hite, holds_andT]
+    constructor
+    · rintro ⟨hc1, hc2⟩ _
+      refine ⟨e1.1 hc1, fun hb => e2.1 ?_⟩
+      have := (holds_ite _ _ _).1 hc2
+      rw [hrules hc1, decide_eq_true hb] at this
+      simpa using this
+    · intro h
+      obtain ⟨p1, p2⟩ := h hin
+      have hc1 := e1.2 p1
+      refine ⟨hc1, (holds_ite _ _ _).2 ?_⟩
+      rw [hrules hc1]
+      by_cases hb : Step.broken ((v.queries.get i).accepts.fn (input, ())) = []
+      · rw [decide_eq_true hb]; simpa using e2.2 (p2 hb)
+      · rw [decide_eq_false hb]; simpa using holds_tt (M := M)
+  · have hin' : (v.queries.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = false := by simpa using hin
+    have hite : Holds M (.ite (anyT eqs) (andT c1 (.ite (allT (rules.map (·.2))) c2 tt)) tt) := by
+      rw [holds_ite, hok]; simp only [Val.toBool, hin', Bool.false_eq_true, ite_false]; exact holds_tt
+    exact ⟨fun _ h => absurd h hin, fun _ => hite⟩
+
+end
+
 end Tazuna.Smt
