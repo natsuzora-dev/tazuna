@@ -4,6 +4,8 @@ import Tazuna.Cli.Check
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
+import Tazuna.Trace.Line
+import Tazuna.Trace.WireThm
 
 /-! Every declaration of the engine rests on Lean's standard axioms only, so no `sorry` or added axiom hides a gap. The
 build fails otherwise. -/
