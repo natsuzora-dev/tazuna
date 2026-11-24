@@ -1447,6 +1447,70 @@ def reactCheck (solver : Solver) : IO Bool := do
       return ok
     | a => fail s!"{repr a}"
 
+/-! A staying instance whose `after` would outgrow a slot: `after` builds a four-item list, one more than the three
+slots of every type, so wherever it is evaluated the bound is reached. `on` always stays. With key 3 in the old table
+in state 1 and in the records, the instance stays and `after` is not evaluated, so the step is within the bounds and
+the script must be sat with the step's table; with key 3 missing from the old table it starts afresh, `after` is
+evaluated, and the script must be unsat. -/
+
+def stayM : MachineV recordsT .int :=
+  { reactM with
+    name := "stay"
+    on := .closed (.lam (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil))
+    after := .closed (.lam (.let_ (.list (.cons (.int 1) (.cons (.int 2) (.cons (.int 3) (.cons (.int 4) .nil)))))
+      (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil))) }
+
+def staySvc : ServiceV := { querySvc with name := "s", queries := [], machines := [stayM] }
+
+def stayLayout : Layout := Layout.addTys (fun _ => 3) {} (reactTys ++ [.list .int])
+
+def stayCheck (solver : Solver) : IO Bool := do
+  let L := stayLayout
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: staying instance: {m}"; return false
+  let some (d, n) := L.find? stayM.table | fail "no table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no slot"
+  let some (de, _) := L.find? (instEntry .int) | fail "no entry"
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some wf := (SymState.vars 0 1).wf L (v := staySvc) [] | fail "no wf"
+  let some rsrt := L.srt? recordsT | fail "no records sort"
+  let some msrt := L.srt? stayM.table | fail "no table sort"
+  let some dts := L.datatypes? | fail "no datatypes"
+  match ReactCode.of L stayM >>= fun (rc, c0) =>
+      (encodeReact L stayM rc (.var 5) (.var 0) (.var 1) (.var 7)).map fun (o, c) => (o.table, andT c0 c) with
+  | .error r => fail s!"no encoding: {repr r}"
+  | .ok (newT, cond) =>
+    let So := slotsOf d dt n 2 (.var 5)
+    let Sr := slotsOf dr drt nr 2 (.var 0)
+    let records := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), .eq (.var 6) newT]
+    let script (old : List Term) : Script :=
+      { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, msrt, msrt, .int],
+        asserts := wf :: cond :: old ++ records, shows := List.range 8 }
+    let stays := [So[0]!.1, .not So[1]!.1, .not So[2]!.1, .eq (So[0]!.2.headD tt) (.int 3),
+      .eq (Term.sel de 0 0 (So[0]!.2.getD 1 tt)) (.int 1)]
+    let stayed ← match ← solver.run (script stays) with
+    | .sat vs => do
+      let M := modelOf vs
+      let some s := (SymState.vars 0 1).decode M L (v := staySvc) rfl prelude [] | fail "the model does not decode"
+      let some tbl := decodeV L stayM.table ((Term.var 6).denote M) | fail "the new table does not decode"
+      let some (.int ev) := vs.lookup 7 | fail "no event"
+      let read := instancesOf prelude stayM (Ty.down _ stayM.table_data tbl)
+      let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
+      let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
+        (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+      let step (insts : List (Step.Instance m)) :=
+        view m (Step.machineStep (e := staySvc.event) prelude s.records s.now ev ⟨m, insts⟩).1.2
+      if view stayM read != step insts || (view stayM read).map (fun (k, st, _) => (k, st)) != [((some 3 : Option Int), (some 1 : Option Int))] then
+        return ← fail s!"the new table holds {view stayM read}, the step {step insts}"
+      if view stayM read == step [] then return ← fail "the step from no instances passes the comparison"
+      return true
+    | a => fail s!"the instance stays, yet the script is {repr a}"
+    let mut ok := stayed
+    match ← solver.run (script [.not So[0]!.1, .not So[1]!.1, .not So[2]!.1]) with
+    | .unsat => pure ()
+    | a => ok ← fail s!"the instance starts and after outgrows a slot, yet the script is {repr a}"
+    return ok
+
 /-! The effects a machine's instances start on an event, with their wire ids: the reaction above, whose `effect` is
 `fn(ctx) { Some(request_command(send, ctx.key + 1, fn(_) { [ctx.key] })) }` on entering any state. Key 3 enters 1 and
 key 5 starts, so both start an effect; the bag holds 5 in slot 0 and 3 in slot 1, and the next wire id is 40. The
@@ -1609,6 +1673,7 @@ def check (z3 : String) : IO Bool := do
   unless ← noEffectsCheck solver do ok := false
   unless ← invariantCheck solver do ok := false
   unless ← reactCheck solver do ok := false
+  unless ← stayCheck solver do ok := false
   unless ← startsCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
