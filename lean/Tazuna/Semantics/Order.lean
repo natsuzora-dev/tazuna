@@ -132,6 +132,89 @@ instance : Std.LawfulEqOrd Erl where
 instance : DecidableEq Erl := fun a b =>
   decidable_of_iff (compare a b = .eq) Std.LawfulEqCmp.compare_eq_iff_eq
 
+/-! Erlang term order read off the terms: comparing two serializations with tails compares the terms first, since no
+term's serialization extends another's (`ser_inj`). The order encoding reads it this way. -/
+
+theorem lex_append : (u w r r' : List Tok) → (∀ t, u = w ++ t ∨ w = u ++ t → t = []) →
+    List.compareLex Tok.cmp (u ++ r) (w ++ r') = (List.compareLex Tok.cmp u w).then (List.compareLex Tok.cmp r r')
+  | [], [], _, _, _ => by simp [List.compareLex_nil_nil, Ordering.then]
+  | [], y :: w, _, _, h => by simpa using h (y :: w) (.inr rfl)
+  | x :: u, [], _, _, h => by simpa using h (x :: u) (.inl rfl)
+  | x :: u, y :: w, r, r', h => by
+    simp only [List.cons_append, List.compareLex_cons_cons]
+    cases hxy : Tok.cmp x y with
+    | lt => rfl
+    | gt => rfl
+    | eq =>
+      have := Std.LawfulEqCmp.eq_of_compare hxy; subst this
+      simp only [Ordering.then]
+      exact lex_append u w r r' fun t ht => h t (by simpa using ht)
+
+theorem ser_then (a b : Erl) (r r' : List Tok) :
+    List.compareLex Tok.cmp (ser a ++ r) (ser b ++ r') = (cmp a b).then (List.compareLex Tok.cmp r r') := by
+  refine lex_append _ _ r r' fun t ht => ?_
+  rcases ht with ht | ht
+  · exact (ser_inj b a t [] (by simp [← ht])).2
+  · exact (ser_inj a b t [] (by simp [← ht])).2
+
+/-- Lists of terms compared item by item, for lists of one length. -/
+def cmps : List Erl → List Erl → Ordering
+  | x :: xs, y :: ys => (cmp x y).then (cmps xs ys)
+  | _, _ => .eq
+
+theorem sers_then : (xs ys : List Erl) → xs.length = ys.length → (r r' : List Tok) →
+    List.compareLex Tok.cmp (sers xs ++ r) (sers ys ++ r') = (cmps xs ys).then (List.compareLex Tok.cmp r r')
+  | [], [], _, _, _ => by simp [sers, cmps, Ordering.then]
+  | x :: xs, y :: ys, h, r, r' => by
+    simp only [sers, List.append_assoc, ser_then, cmps]
+    rw [sers_then xs ys (by simpa using h)]
+    cases cmp x y <;> rfl
+  | [], _ :: _, h, _, _ | _ :: _, [], h, _, _ => by simp at h
+
+theorem cmp_int (a b : Int) : cmp (.int a) (.int b) = compare a b := by
+  simp only [cmp, ser, List.compareLex_cons_cons, Tok.cmp, List.compareLex_nil_nil]
+  cases compare a b <;> rfl
+
+theorem cmp_bin (a b : String) : cmp (.bin a) (.bin b) = compare a b := by
+  simp only [cmp, ser, List.compareLex_cons_cons, Tok.cmp, List.compareLex_nil_nil]
+  cases compare a b <;> rfl
+
+theorem cmp_int_bin (a : Int) (b : String) : cmp (.int a) (.bin b) = .lt := by
+  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
+
+theorem cmp_bin_int (a : String) (b : Int) : cmp (.bin a) (.int b) = .gt := by
+  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
+
+theorem cmp_atom (a b : String) : cmp (.atom a) (.atom b) = compare a b := by
+  simp only [cmp, ser, List.compareLex_cons_cons, Tok.cmp, List.compareLex_nil_nil]
+  cases compare a b <;> rfl
+
+theorem cmp_atom_tuple (a : String) (ys : List Erl) : cmp (.atom a) (.tuple ys) = .lt := by
+  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
+
+theorem cmp_tuple_atom (xs : List Erl) (b : String) : cmp (.tuple xs) (.atom b) = .gt := by
+  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
+
+/-- Tuples compare by size, then item by item. -/
+theorem cmp_tuple (xs ys : List Erl) :
+    cmp (.tuple xs) (.tuple ys) = if xs.length = ys.length then cmps xs ys else compare xs.length ys.length := by
+  simp only [cmp, ser, List.compareLex_cons_cons, Tok.cmp]
+  split
+  · rename_i h
+    have := sers_then xs ys h [] []
+    simp only [List.append_nil, List.compareLex_nil_nil] at this
+    rw [this, h]
+    simp [Ordering.then]; cases cmps xs ys <;> rfl
+  · rename_i h
+    have h' : compare (xs.length : Int) ys.length ≠ .eq := by
+      intro e; exact h (by have := Std.LawfulEqCmp.eq_of_compare e; omega)
+    have hc : compare (xs.length : Int) ys.length = compare xs.length ys.length := by
+      simp only [compare, compareOfLessAndEq]
+      split <;> split <;> (try split) <;> (try split) <;> first | rfl | omega
+    simp only [Ordering.then]
+    rw [← hc]
+    cases compare (xs.length : Int) ys.length <;> simp_all
+
 /-- Sorted ascending. -/
 def sort {α : Type} [Ord α] (xs : List α) : List α := xs.mergeSort fun a b => (compare a b).isLE
 

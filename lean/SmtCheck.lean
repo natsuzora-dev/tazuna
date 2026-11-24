@@ -1,4 +1,5 @@
 import Tazuna.Smt.Bounds
+import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 
 /-! Runs the solver on printed scripts and reads its answers back: the theorems cover printing and reading our own
@@ -776,6 +777,72 @@ def doorCheck (solver : Solver) : IO Bool := do
       | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
   return ok
 
+/-! The canonical order as terms, for `ordT_rel`: for pairs of values of each key type with an order term, the solver's
+values of the terms are the order `Ty.cmp` computes. A comparison with its operands swapped must disagree on some
+pair, so the check would see a broken encoding. -/
+
+/-- A program's types with an enumeration `Color` (Red, Green, Blue: atoms red, green, blue) and a record `Key`. -/
+def orderTypes : List TypeDecl := prelude ++
+  [{ name := "m.Color", params := [], variants := [⟨"Red", []⟩, ⟨"Green", []⟩, ⟨"Blue", []⟩] },
+   { name := "m.Key", params := [], variants := [⟨"Key", [⟨some "n", .int⟩, ⟨some "s", .str⟩]⟩] }]
+
+def colorT : Ty := .adt prelude.length [] [[], [], []]
+def keyT : Ty := .adt (prelude.length + 1) [] [[.int, .str]]
+
+/-- Whether the solver's values of the order terms agree with `Ty.cmp` on each pair; with `swap` the terms compare the
+second value with the first. -/
+def ordAgree (solver : Solver) (t : Ty) (ht : t.isData = true) (pairs : List (t.den0 × t.den0)) (swap : Bool) :
+    IO (Except String Bool) := do
+  let L := Layout.addTys (fun _ => 3) {} [t]
+  let some srt := L.srt? t | return .error "no sort"
+  let some dts := L.datatypes? | return .error "no datatypes"
+  let some (lt, le) := if swap then ordT L orderTypes t (.var 1) (.var 0) else ordT L orderTypes t (.var 0) (.var 1)
+    | return .error "no order term"
+  let mut all := true
+  for (a, b) in pairs do
+    let some va := embedV L t (Ty.up t ht a) | return .error "no value"
+    let some vb := embedV L t (Ty.up t ht b) | return .error "no value"
+    let script : Script :=
+      { datatypes := dts
+        vars := [srt, srt, Srt.bool, Srt.bool]
+        asserts := [.eq (.var 0) va.term, .eq (.var 1) vb.term, .eq (.var 2) lt, .eq (.var 3) le]
+        shows := [2, 3] }
+    match ← solver.run script with
+    | .sat vs =>
+      let o := Ty.cmp orderTypes t a b
+      unless (vs.lookup 2).map (·.print) == some (Val.bool (o == .lt)).print &&
+          (vs.lookup 3).map (·.print) == some (Val.bool o.isLE).print do all := false
+    | a => return .error s!"{repr a}"
+  return .ok all
+
+structure OrdCase where
+  name : String
+  t : Ty
+  ht : t.isData = true
+  pairs : List (t.den0 × t.den0)
+
+def ordCases : List OrdCase :=
+  [⟨"Int", .int, rfl, [((1 : Int), (2 : Int)), ((2 : Int), (1 : Int)), ((-3 : Int), (-3 : Int))]⟩,
+   ⟨"String", .str, rfl, [("a", "b"), ("b", "a"), ("ab", "a"), ("z", "\u00e9"), ("x", "x")]⟩,
+   ⟨"Id", .id, rfl, [(IdV.fresh 3, IdV.fresh 4), (IdV.fresh 9, IdV.named "a"), (IdV.named "a", IdV.fresh 1),
+     (IdV.named "b", IdV.named "a")]⟩,
+   ⟨"#(Int, String)", .tuple [.int, .str], rfl, [(((1 : Int), "b", ()), ((1 : Int), "a", ())),
+     (((0 : Int), "z", ()), ((1 : Int), "a", ())), (((2 : Int), "a", ()), ((2 : Int), "a", ()))]⟩,
+   ⟨"Bool", Ty.bool, rfl, [(.inl (), .inr (.inl ())), (.inr (.inl ()), .inl ()), (.inl (), .inl ())]⟩,
+   ⟨"Color", colorT, rfl, [(.inl (), .inr (.inl ())), (.inr (.inr (.inl ())), .inl ()),
+     (.inr (.inl ()), .inr (.inl ()))]⟩,
+   ⟨"Key", keyT, rfl, [(.inl ((1 : Int), "b", ()), .inl ((1 : Int), "a", ())),
+     (.inl ((0 : Int), "z", ()), .inl ((1 : Int), "a", ()))]⟩]
+
+def orderCheck (solver : Solver) : IO Bool := do
+  let mut ok := true
+  for c in ordCases do
+    match ← ordAgree solver c.t c.ht c.pairs false, ← ordAgree solver c.t c.ht c.pairs true with
+    | .ok true, .ok false => pure ()
+    | .ok a, .ok b => IO.println s!"smt-check: order {c.name}: agrees {a}, swapped agrees {b}"; ok := false
+    | .error m, _ | _, .error m => IO.println s!"smt-check: order {c.name}: {m}"; ok := false
+  return ok
+
 /-! An answer step on the pending service, for `answer_step` and `answer_unmatched`: the answer to the `rate` request
 (shape 1) in slot 0. `rate` ensures a positive answer, its `on_answer` yields the answer plus the captured value, the
 records insert that event, and the invariant `small` holds below three keys. -/
@@ -1026,6 +1093,7 @@ def check (z3 : String) : IO Bool := do
     unless ← commandCase solver name goal do ok := false
   unless ← pendingCheck solver do ok := false
   unless ← doorCheck solver do ok := false
+  unless ← orderCheck solver do ok := false
   unless ← answerCheck solver do ok := false
   unless ← boundCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.

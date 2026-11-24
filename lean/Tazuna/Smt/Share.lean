@@ -48,6 +48,7 @@ def Term.extract : Term → Defs → Term × Defs
   | .div a b, D => let (a, D) := a.extract D; let (b, D) := b.extract D; (.div a b, D)
   | .mod a b, D => let (a, D) := a.extract D; let (b, D) := b.extract D; (.mod a b, D)
   | .cat a b, D => let (a, D) := a.extract D; let (b, D) := b.extract D; (.cat a b, D)
+  | .slt a b, D => let (a, D) := a.extract D; let (b, D) := b.extract D; (.slt a b, D)
   | .ite c a b, D =>
     let (c, D) := c.extract D; let (a, D) := a.extract D; let (b, D) := b.extract D; (.ite c a b, D)
   | .ctor d k args, D => let (args, D) := Term.extracts args D; (.ctor d k args, D)
@@ -146,7 +147,8 @@ theorem Term.extract_ok : (t : Term) → (D : Defs) → D.Wf → ExtractOk t D (
   | .sel d k j a, D, hw =>
     extract_one (.sel d k j) _ (fun M x hx => by simp [Term.denote, hx]) (Term.extract_ok a D hw)
   | .and a b, D, hw | .or a b, D, hw | .eq a b, D, hw | .lt a b, D, hw | .le a b, D, hw | .add a b, D, hw
-  | .sub a b, D, hw | .mul a b, D, hw | .div a b, D, hw | .mod a b, D, hw | .cat a b, D, hw => by
+  | .sub a b, D, hw | .mul a b, D, hw | .div a b, D, hw | .mod a b, D, hw | .cat a b, D, hw
+  | .slt a b, D, hw => by
     have ha := Term.extract_ok a D hw
     have hb := Term.extract_ok b _ ha.1
     exact extract_two _ _ (fun M x y hx hy => by simp [Term.denote, hx, hy]) ha hb
@@ -197,7 +199,7 @@ def Term.refFree : Term → Bool
   | .ref _ => false
   | .shared _ a | .not a | .len a | .is _ _ a | .sel _ _ _ a => a.refFree
   | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
-  | .cat a b => a.refFree && b.refFree
+  | .cat a b | .slt a b => a.refFree && b.refFree
   | .ite c a b => c.refFree && a.refFree && b.refFree
   | .ctor _ _ args => Term.refFrees args
   | .var _ | .int _ | .str _ | .bool _ => true
@@ -215,7 +217,7 @@ theorem Term.denote_defs (M : Model) (f : Nat → Val) : (t : Term) → t.refFre
   | .sel _ _ _ a, h => by
     simp only [Term.refFree] at h; simp only [Term.denote, Term.denote_defs M f a h]
   | .and a b, h | .or a b, h | .eq a b, h | .lt a b, h | .le a b, h | .add a b, h | .sub a b, h | .mul a b, h
-  | .div a b, h | .mod a b, h | .cat a b, h => by
+  | .div a b, h | .mod a b, h | .cat a b, h | .slt a b, h => by
     simp only [Term.refFree, Bool.and_eq_true] at h
     simp [Term.denote, Term.denote_defs M f a h.1, Term.denote_defs M f b h.2]
   | .ite c a b, h => by
@@ -254,7 +256,7 @@ theorem Term.extract_refFree : (t : Term) → (D : Defs) → t.refFree = true �
     simp only [Term.refFree] at ht; exact Term.extract_refFree a D ht hD
   | .and a b, D, ht, hD | .or a b, D, ht, hD | .eq a b, D, ht, hD | .lt a b, D, ht, hD | .le a b, D, ht, hD
   | .add a b, D, ht, hD | .sub a b, D, ht, hD | .mul a b, D, ht, hD | .div a b, D, ht, hD
-  | .mod a b, D, ht, hD | .cat a b, D, ht, hD => by
+  | .mod a b, D, ht, hD | .cat a b, D, ht, hD | .slt a b, D, ht, hD => by
     simp only [Term.refFree, Bool.and_eq_true] at ht
     exact Term.extract_refFree b _ ht.2 (Term.extract_refFree a D ht.1 hD)
   | .ite c a b, D, ht, hD => by

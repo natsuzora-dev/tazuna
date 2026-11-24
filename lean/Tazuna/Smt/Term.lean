@@ -45,6 +45,8 @@ inductive Term where
   | len (a : Term)
   /-- `str.++`. -/
   | cat (a b : Term)
+  /-- `str.<`: lexicographic order on code points. -/
+  | slt (a b : Term)
   /-- Constructor `k` of datatype `d`. -/
   | ctor (d k : Nat) (args : List Term)
   /-- `(_ is D<d>_<k>)`: whether the value is built by constructor `k`. -/
@@ -68,7 +70,7 @@ def Term.beq : Term → Term → Bool
   | .not a, .not b | .len a, .len b => a.beq b
   | .and a b, .and c d | .or a b, .or c d | .eq a b, .eq c d | .lt a b, .lt c d | .le a b, .le c d
   | .add a b, .add c d | .sub a b, .sub c d | .mul a b, .mul c d | .div a b, .div c d | .mod a b, .mod c d
-  | .cat a b, .cat c d => a.beq c && b.beq d
+  | .cat a b, .cat c d | .slt a b, .slt c d => a.beq c && b.beq d
   | .ite a b c, .ite a' b' c' => a.beq a' && b.beq b' && c.beq c'
   | .ctor d k as, .ctor d' k' bs => d == d' && k == k' && Term.beqs as bs
   | .is d k a, .is d' k' b => d == d' && k == k' && a.beq b
@@ -86,7 +88,7 @@ theorem Term.beq_refl : (t : Term) → t.beq t = true
   | .var _ | .ref _ | .int _ | .str _ | .bool _ => by simp [Term.beq]
   | .not a | .len a => by simp [Term.beq, Term.beq_refl a]
   | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
-  | .cat a b => by simp [Term.beq, Term.beq_refl a, Term.beq_refl b]
+  | .cat a b | .slt a b => by simp [Term.beq, Term.beq_refl a, Term.beq_refl b]
   | .ite a b c => by simp [Term.beq, Term.beq_refl a, Term.beq_refl b, Term.beq_refl c]
   | .ctor _ _ as => by simp [Term.beq, Term.beqs_refl as]
   | .is _ _ a | .sel _ _ _ a | .shared _ a => by simp [Term.beq, Term.beq_refl a]
@@ -104,7 +106,8 @@ theorem Term.eq_of_beq : (a b : Term) → a.beq b = true → a = b
     cases b <;> try (simp [Term.beq] at h; done)
     all_goals simp only [Term.beq] at h; rw [Term.eq_of_beq a _ h]
   | .and a b, e, h | .or a b, e, h | .eq a b, e, h | .lt a b, e, h | .le a b, e, h | .add a b, e, h
-  | .sub a b, e, h | .mul a b, e, h | .div a b, e, h | .mod a b, e, h | .cat a b, e, h => by
+  | .sub a b, e, h | .mul a b, e, h | .div a b, e, h | .mod a b, e, h | .cat a b, e, h
+  | .slt a b, e, h => by
     cases e <;> try (simp [Term.beq] at h; done)
     all_goals simp only [Term.beq, Bool.and_eq_true] at h; rw [Term.eq_of_beq a _ h.1, Term.eq_of_beq b _ h.2]
   | .ite a b c, e, h => by
@@ -158,6 +161,7 @@ def Term.hash0 : Term → UInt64
   | .mod a b => mixHash 16 (mixHash a.hash0 b.hash0)
   | .len a => mixHash 17 a.hash0
   | .cat a b => mixHash 18 (mixHash a.hash0 b.hash0)
+  | .slt a b => mixHash 23 (mixHash a.hash0 b.hash0)
   | .ctor d k args => mixHash 19 (mixHash (hash (d, k)) (Term.hash0s args))
   | .is d k a => mixHash 20 (mixHash (hash (d, k)) a.hash0)
   | .sel d k j a => mixHash 21 (mixHash (hash (d, k, j)) a.hash0)
@@ -247,6 +251,7 @@ def Term.denote (M : Model) : Term → Val
     .int (if y = 0 then M.modZero x else x % y)
   | .len a => .int (a.denote M).toStr.length
   | .cat a b => .str ((a.denote M).toStr ++ (b.denote M).toStr)
+  | .slt a b => .bool (decide ((a.denote M).toStr < (b.denote M).toStr))
   | .ctor d k args => .ctor d k (Term.denotes M args)
   | .is d k a => .bool (match a.denote M with
     | .ctor d' k' _ => d' == d && k' == k

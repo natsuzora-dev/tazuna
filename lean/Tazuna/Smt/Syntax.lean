@@ -58,7 +58,7 @@ inductive Op1 where
 deriving DecidableEq, Repr
 
 inductive Op2 where
-  | and | or | eq | lt | le | add | sub | mul | div | mod | cat
+  | and | or | eq | lt | le | add | sub | mul | div | mod | cat | slt
 deriving DecidableEq, Repr
 
 /-- What a symbol stands for. -/
@@ -78,12 +78,12 @@ def Op1.text : Op1 → String
 
 def Op2.text : Op2 → String
   | .and => "and" | .or => "or" | .eq => "=" | .lt => "<" | .le => "<=" | .add => "+" | .sub => "-" | .mul => "*"
-  | .div => "div" | .mod => "mod" | .cat => "str.++"
+  | .div => "div" | .mod => "mod" | .cat => "str.++" | .slt => "str.<"
 
 def symbols : List (String × Sym) :=
   [("not", .op1 .not), ("str.len", .op1 .len), ("and", .op2 .and), ("or", .op2 .or), ("=", .op2 .eq),
    ("<", .op2 .lt), ("<=", .op2 .le), ("+", .op2 .add), ("-", .op2 .sub), ("*", .op2 .mul), ("div", .op2 .div),
-   ("mod", .op2 .mod), ("str.++", .op2 .cat), ("ite", .ite), ("true", .lit true), ("false", .lit false),
+   ("mod", .op2 .mod), ("str.++", .op2 .cat), ("str.<", .op2 .slt), ("ite", .ite), ("true", .lit true), ("false", .lit false),
    ("_", .under), ("is", .is)]
 
 def classify (s : String) : Sym :=
@@ -96,7 +96,7 @@ def Op1.mk : Op1 → Term → Term
 
 def Op2.mk : Op2 → Term → Term → Term
   | .and => .and | .or => .or | .eq => .eq | .lt => .lt | .le => .le | .add => .add | .sub => .sub | .mul => .mul
-  | .div => .div | .mod => .mod | .cat => .cat
+  | .div => .div | .mod => .mod | .cat => .cat | .slt => .slt
 
 mutual
 def Term.toSExp : Term → SExp
@@ -117,6 +117,7 @@ def Term.toSExp : Term → SExp
   | .div a b => .list [.sym "div", a.toSExp, b.toSExp]
   | .mod a b => .list [.sym "mod", a.toSExp, b.toSExp]
   | .cat a b => .list [.sym "str.++", a.toSExp, b.toSExp]
+  | .slt a b => .list [.sym "str.<", a.toSExp, b.toSExp]
   | .ite c a b => .list [.sym "ite", c.toSExp, a.toSExp, b.toSExp]
   | .ctor d k [] => .sym (Name.ctor d k).text
   | .ctor d k (a :: as) => .list (.sym (Name.ctor d k).text :: Term.toSExps (a :: as))
@@ -224,7 +225,7 @@ theorem classify_name (nm : Name) : classify nm.text = .name nm := by
 theorem classify_fixed : classify "not" = .op1 .not ∧ classify "str.len" = .op1 .len ∧ classify "and" = .op2 .and ∧
     classify "or" = .op2 .or ∧ classify "=" = .op2 .eq ∧ classify "<" = .op2 .lt ∧ classify "<=" = .op2 .le ∧
     classify "+" = .op2 .add ∧ classify "-" = .op2 .sub ∧ classify "*" = .op2 .mul ∧ classify "div" = .op2 .div ∧
-    classify "mod" = .op2 .mod ∧ classify "str.++" = .op2 .cat ∧ classify "ite" = .ite ∧
+    classify "mod" = .op2 .mod ∧ classify "str.++" = .op2 .cat ∧ classify "str.<" = .op2 .slt ∧ classify "ite" = .ite ∧
     classify "true" = .lit true ∧ classify "false" = .lit false ∧ classify "_" = .under ∧ classify "is" = .is := by
   decide
 
@@ -237,7 +238,7 @@ def Term.inDomain : Term → Bool
   | .shared .. => false
   | .not a | .len a | .is _ _ a | .sel _ _ _ a => a.inDomain
   | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
-  | .cat a b => a.inDomain && b.inDomain
+  | .cat a b | .slt a b => a.inDomain && b.inDomain
   | .ite c a b => c.inDomain && a.inDomain && b.inDomain
   | .ctor _ _ args => Term.inDomains args
 def Term.inDomains : List Term → Bool
@@ -263,7 +264,7 @@ theorem Term.ofSExp_toSExp : (t : Term) → t.inDomain = true → Term.ofSExp t.
     simp only [Term.inDomain] at h
     simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a h, Op1.mk]
   | .and a b, h | .or a b, h | .eq a b, h | .lt a b, h | .le a b, h | .add a b, h | .sub a b, h | .mul a b, h
-  | .div a b, h | .mod a b, h | .cat a b, h => by
+  | .div a b, h | .mod a b, h | .cat a b, h | .slt a b, h => by
     simp only [Term.inDomain, Bool.and_eq_true] at h
     simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a h.1, Term.ofSExp_toSExp b h.2, Op2.mk]
   | .ite c a b, h => by
@@ -369,7 +370,7 @@ theorem simpleSym_name (nm : Name) : simpleSym nm.text = true := by
 
 theorem simpleSym_fixed : simpleSym "not" ∧ simpleSym "str.len" ∧ simpleSym "and" ∧ simpleSym "or" ∧ simpleSym "=" ∧
     simpleSym "<" ∧ simpleSym "<=" ∧ simpleSym "+" ∧ simpleSym "-" ∧ simpleSym "*" ∧ simpleSym "div" ∧
-    simpleSym "mod" ∧ simpleSym "str.++" ∧ simpleSym "ite" ∧ simpleSym "true" ∧ simpleSym "false" ∧
+    simpleSym "mod" ∧ simpleSym "str.++" ∧ simpleSym "str.<" ∧ simpleSym "ite" ∧ simpleSym "true" ∧ simpleSym "false" ∧
     simpleSym "_" ∧ simpleSym "is" := by decide
 
 
@@ -392,7 +393,7 @@ theorem Term.toSExp_ok : (t : Term) → t.inDomain = true → t.toSExp.ok = true
     simp only [Term.inDomain] at h
     simp [Term.toSExp, SExp.ok, SExp.oks, simpleSym_name, Term.toSExp_ok a h]
   | .and a b, h | .or a b, h | .eq a b, h | .lt a b, h | .le a b, h | .add a b, h | .sub a b, h | .mul a b, h
-  | .div a b, h | .mod a b, h | .cat a b, h => by
+  | .div a b, h | .mod a b, h | .cat a b, h | .slt a b, h => by
     simp only [Term.inDomain, Bool.and_eq_true] at h
     simp [Term.toSExp, SExp.ok, SExp.oks, simpleSym_fixed, Term.toSExp_ok a h.1, Term.toSExp_ok b h.2]
   | .ite c a b, h => by

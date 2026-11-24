@@ -25,7 +25,7 @@ def Term.srt? (dts : List Datatype) (vars : List Srt) (defs : Array Srt) : Term 
   | .ref i => defs[i]?
   | .int _ | .add .. | .sub .. | .mul .. | .div .. | .mod .. | .len _ => some .int
   | .str _ | .cat .. => some .str
-  | .bool _ | .not _ | .and .. | .or .. | .eq .. | .lt .. | .le .. | .is .. => some .bool
+  | .bool _ | .not _ | .and .. | .or .. | .eq .. | .lt .. | .le .. | .slt .. | .is .. => some .bool
   | .ite _ a _ | .shared _ a => a.srt? dts vars defs
   | .ctor d _ _ => some (.dt d)
   | .sel d k j _ => do (← (← (← dts[d]?).ctors[k]?)[j]?)
