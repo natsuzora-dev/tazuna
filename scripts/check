@@ -17,14 +17,9 @@ if [ "$gleam_version" != "$lean_version" ]; then
   exit 1
 fi
 
-# Lean must load all of the corpus. Its root takes a tazuna.Spec instead of returning one because no built-in can build
-# a Spec yet, so the root's type is the only refusal; expect a clean load once built-ins exist.
-code=0
-out=$(lean/.lake/build/bin/tazuna-engine check corpus/main --ir gleam/build/corpus.ir.json) || code=$?
-case "$code $out" in
-  '4 {"col":1,"file":"test/corpus/main.gleam","kind":"Internal.invalidIr","line":18,"message":"root corpus/main.spec has type fn(tazuna.Spec) -> tazuna.Spec; it must be fn() -> tazuna.Spec"}') ;;
-  *) printf 'The engine did not load the converter corpus (exit %s):\n%s\n' "$code" "$out"; exit 1 ;;
-esac
+# Lean must load all of the corpus.
+lean/.lake/build/bin/tazuna-engine check corpus/main --ir gleam/build/corpus.ir.json ||
+  { echo "The engine did not load the converter corpus."; exit 1; }
 
 kinds=$(mktemp)
 trap 'rm -f "$kinds"' EXIT

@@ -15,8 +15,8 @@ pub const names: List(String) = ["a\tb", "tab	raw", "\u{1F600}\"\\"]
 
 pub const pick: fn(Int, String) -> Int = choose
 
-pub fn spec(s: tazuna.Spec) -> tazuna.Spec {
-  s
+pub fn spec() -> tazuna.Spec {
+  tazuna.spec(services: [], externals: [])
 }
 
 pub fn choose(first a: Int, second _b: String) -> Int {

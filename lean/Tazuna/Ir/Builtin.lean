@@ -23,7 +23,9 @@ def opaqueTypes : List OpaqueType :=
     ⟨"Date", [], "A day. Dates have no calendar: a spec adds days and counts the days between two dates.",
       fun | [] => some .date | _ => none⟩,
     ⟨"Id", [], "An identifier a step makes fresh; ids compare with `==` only.",
-      fun | [] => some .id | _ => none⟩ ]
+      fun | [] => some .id | _ => none⟩ ] ++
+  Dsl.all.map fun k => ⟨k.name, k.decl.2.1, k.decl.2.2,
+    fun args => if args.length == k.decl.2.1.length then some (.dsl k args) else none⟩
 
 /-- The type `tazuna.<name>` at `args`, when `tazuna` declares it opaque. -/
 def opaqueTy? (name : String) (args : List Ty) : Option Ty :=
@@ -45,6 +47,9 @@ inductive Prim where
   | tableFilter | tableMap | tableCount | tableAny | tableAll
   | dateAddDays | dateDaysBetween
   | require | ref
+  | spec | service | command | query | machine | reaction
+  | external | externalCommand | externalQuery | externalEvent | declareCommand | declareQuery | declareEvent
+  | request | subscribe | bounds | create | response | fresh
 deriving Repr, DecidableEq
 
 structure PrimParam where
@@ -60,6 +65,8 @@ structure PrimSig where
   ret : Ty
   /-- The type variables `==` must work on (`Ty.comparable`), by index. -/
   needsEq : List Nat := []
+  /-- Whether every type variable must be data (`Ty.isData`): a structure value holds data of those types. -/
+  dataArgs : Bool := false
 
 namespace Prim
 
@@ -72,71 +79,174 @@ def sig : Prim → PrimSig :=
   let p (n : String) (t : Ty) : PrimParam := ⟨none, n, t⟩
   let l (lab : String) (t : Ty) : PrimParam := ⟨some lab, lab, t⟩
   fun
-  | .length => ⟨"length", "The number of code points.", [], [p "string" .str], .int, []⟩
-  | .bagFromList => ⟨"bag_from_list", "A bag of the list's items.", ["a"], [p "items" (.list a)], .bag a, []⟩
+  | .length => ⟨"length", "The number of code points.", [], [p "string" .str], .int, [], false⟩
+  | .bagFromList => ⟨"bag_from_list", "A bag of the list's items.", ["a"], [p "items" (.list a)], .bag a, [], false⟩
   | .bagInsert => ⟨"bag_insert", "The bag with one more occurrence of the item.", ["a"],
-      [p "bag" (.bag a), p "item" a], .bag a, []⟩
-  | .bagSize => ⟨"bag_size", "The number of items, counting each occurrence.", ["a"], [p "bag" (.bag a)], .int, []⟩
+      [p "bag" (.bag a), p "item" a], .bag a, [], false⟩
+  | .bagSize => ⟨"bag_size", "The number of items, counting each occurrence.", ["a"], [p "bag" (.bag a)], .int, [], false⟩
   | .bagFilter => ⟨"bag_filter", "The items that satisfy the predicate.", ["a"],
-      [p "bag" (.bag a), l "keeping" (.fn [a] .bool)], .bag a, []⟩
+      [p "bag" (.bag a), l "keeping" (.fn [a] .bool)], .bag a, [], false⟩
   | .bagMap => ⟨"bag_map", "Each item transformed, occurrences kept.", ["a", "b"],
-      [p "bag" (.bag a), l "with" (.fn [a] b)], .bag b, []⟩
+      [p "bag" (.bag a), l "with" (.fn [a] b)], .bag b, [], false⟩
   | .bagCount => ⟨"bag_count", "The number of items that satisfy the predicate.", ["a"],
-      [p "bag" (.bag a), l "where" (.fn [a] .bool)], .int, []⟩
+      [p "bag" (.bag a), l "where" (.fn [a] .bool)], .int, [], false⟩
   | .bagSum => ⟨"bag_sum", "The sum of the function over the items.", ["a"],
-      [p "bag" (.bag a), l "of" (.fn [a] .int)], .int, []⟩
+      [p "bag" (.bag a), l "of" (.fn [a] .int)], .int, [], false⟩
   | .bagAny => ⟨"bag_any", "Whether some item satisfies the predicate.", ["a"],
-      [p "bag" (.bag a), l "satisfying" (.fn [a] .bool)], .bool, []⟩
+      [p "bag" (.bag a), l "satisfying" (.fn [a] .bool)], .bool, [], false⟩
   | .bagAll => ⟨"bag_all", "Whether every item satisfies the predicate.", ["a"],
-      [p "bag" (.bag a), l "satisfying" (.fn [a] .bool)], .bool, []⟩
+      [p "bag" (.bag a), l "satisfying" (.fn [a] .bool)], .bool, [], false⟩
   | .bagContains => ⟨"bag_contains", "Whether the item occurs in the bag.", ["a"],
-      [p "bag" (.bag a), p "item" a], .bool, [0]⟩
+      [p "bag" (.bag a), p "item" a], .bool, [0], false⟩
   | .bagMinBy => ⟨"bag_min_by", "The one item with the least key; Empty or Tie when there is not exactly one.",
-      ["a"], [p "bag" (.bag a), l "by" (.fn [a] .int)], .result a .pickError, []⟩
+      ["a"], [p "bag" (.bag a), l "by" (.fn [a] .int)], .result a .pickError, [], false⟩
   | .bagMaxBy => ⟨"bag_max_by", "The one item with the greatest key; Empty or Tie when there is not exactly one.",
-      ["a"], [p "bag" (.bag a), l "by" (.fn [a] .int)], .result a .pickError, []⟩
-  | .tableNew => ⟨"table_new", "The table without keys.", ["k", "v"], [], .table k v, [0]⟩
+      ["a"], [p "bag" (.bag a), l "by" (.fn [a] .int)], .result a .pickError, [], false⟩
+  | .tableNew => ⟨"table_new", "The table without keys.", ["k", "v"], [], .table k v, [0], false⟩
   | .tableFromList => ⟨"table_from_list", "A table of the pairs; a later pair replaces an earlier one's value.",
-      ["k", "v"], [p "pairs" (.list (.tuple [k, v]))], .table k v, [0]⟩
+      ["k", "v"], [p "pairs" (.list (.tuple [k, v]))], .table k v, [0], false⟩
   | .tableInsert => ⟨"table_insert", "The table with the key mapped to the value, replacing any value it had.",
-      ["k", "v"], [p "table" (.table k v), p "key" k, p "value" v], .table k v, [0]⟩
+      ["k", "v"], [p "table" (.table k v), p "key" k, p "value" v], .table k v, [0], false⟩
   | .tableRemove => ⟨"table_remove", "The table without the key.", ["k", "v"],
-      [p "table" (.table k v), p "key" k], .table k v, [0]⟩
+      [p "table" (.table k v), p "key" k], .table k v, [0], false⟩
   | .tableGet => ⟨"table_get", "The key's value, if the table has the key.", ["k", "v"],
-      [p "table" (.table k v), p "key" k], .option v, [0]⟩
-  | .tableSize => ⟨"table_size", "The number of keys.", ["k", "v"], [p "table" (.table k v)], .int, []⟩
-  | .tableKeys => ⟨"table_keys", "The keys.", ["k", "v"], [p "table" (.table k v)], .bag k, []⟩
+      [p "table" (.table k v), p "key" k], .option v, [0], false⟩
+  | .tableSize => ⟨"table_size", "The number of keys.", ["k", "v"], [p "table" (.table k v)], .int, [], false⟩
+  | .tableKeys => ⟨"table_keys", "The keys.", ["k", "v"], [p "table" (.table k v)], .bag k, [], false⟩
   | .tableValues => ⟨"table_values", "The values, one occurrence per key.", ["k", "v"],
-      [p "table" (.table k v)], .bag v, []⟩
+      [p "table" (.table k v)], .bag v, [], false⟩
   | .tableFilter => ⟨"table_filter", "The entries that satisfy the predicate.", ["k", "v"],
-      [p "table" (.table k v), l "keeping" (.fn [k, v] .bool)], .table k v, []⟩
+      [p "table" (.table k v), l "keeping" (.fn [k, v] .bool)], .table k v, [], false⟩
   | .tableMap => ⟨"table_map", "Each value transformed, keys kept.", ["k", "v", "w"],
-      [p "table" (.table k v), l "with" (.fn [k, v] (param 2))], .table k (param 2), []⟩
+      [p "table" (.table k v), l "with" (.fn [k, v] (param 2))], .table k (param 2), [], false⟩
   | .tableCount => ⟨"table_count", "The number of entries that satisfy the predicate.", ["k", "v"],
-      [p "table" (.table k v), l "where" (.fn [k, v] .bool)], .int, []⟩
+      [p "table" (.table k v), l "where" (.fn [k, v] .bool)], .int, [], false⟩
   | .tableAny => ⟨"table_any", "Whether some entry satisfies the predicate.", ["k", "v"],
-      [p "table" (.table k v), l "satisfying" (.fn [k, v] .bool)], .bool, []⟩
+      [p "table" (.table k v), l "satisfying" (.fn [k, v] .bool)], .bool, [], false⟩
   | .tableAll => ⟨"table_all", "Whether every entry satisfies the predicate.", ["k", "v"],
-      [p "table" (.table k v), l "satisfying" (.fn [k, v] .bool)], .bool, []⟩
+      [p "table" (.table k v), l "satisfying" (.fn [k, v] .bool)], .bool, [], false⟩
   | .dateAddDays => ⟨"date_add_days", "The date that many days later (earlier when negative).", [],
-      [p "date" .date, p "days" .int], .date, []⟩
+      [p "date" .date, p "days" .int], .date, [], false⟩
   | .dateDaysBetween => ⟨"date_days_between", "The days from the first date to the second: negative when it is earlier.",
-      [], [l "from" .date, l "to" .date], .int, []⟩
+      [], [l "from" .date, l "to" .date], .int, [], false⟩
   | .require => ⟨"require",
       "`use <- tazuna.require(holds, rejection)`: the rest of the block when it holds, else the rejection.",
       ["a", "e"], [p "holds" .bool, p "rejection" (param 1), p "then" (.fn [] (.result a (param 1)))],
-      .result a (param 1), []⟩
+      .result a (param 1), [], false⟩
   | .ref => ⟨"ref",
       "`use value <- tazuna.ref(table, key, rejection)`: the rest of the block with the key's value, else the rejection.",
       ["k", "v", "a", "e"],
       [p "table" (.table k v), p "key" k, p "rejection" (param 3), p "then" (.fn [v] (.result (param 2) (param 3)))],
-      .result (param 2) (param 3), [0]⟩
+      .result (param 2) (param 3), [0], false⟩
+  | .spec =>
+    { name := "spec", doc := "The spec: its services and the externals they talk to.", tvars := [],
+      params := [l "services" (.list (.dsl .service [])), l "externals" (.list (.dsl .external []))],
+      ret := .dsl .spec [] }
+  | .service =>
+    { name := "service",
+      doc := "A service. `apply` folds an event into the records: events are the only writes.",
+      tvars := ["records", "event", "caller"], dataArgs := true, needsEq := [2],
+      params := [l "name" .str, l "init" a, l "apply" (.fn [a, b] a),
+        l "subscribes" (.list (.dsl .subscription [b])), l "commands" (.list (.dsl .command [a, b, param 2])),
+        l "queries" (.list (.dsl .query [a, param 2])), l "machines" (.list (.dsl .machine [a, b])),
+        l "reactions" (.list (.dsl .reaction [a, b])), l "invariants" (.fn [a] Ty.rules),
+        l "responses" (.list (.dsl .response [b])), l "bounds" (.dsl .bounds [])],
+      ret := .dsl .service [] }
+  | .command =>
+    { name := "command",
+      doc := "A command: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects.",
+      tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true, needsEq := [2],
+      params := [l "name" .str, l "callers" (.list (param 2)), l "accepts" (.fn [param 3] Ty.rules),
+        l "decide" (.fn [.ctx a (param 3) (param 2)] (.result (.list b) (param 4))),
+        l "ensures" (.fn [.ctx a (param 3) (param 2), a] Ty.rules)],
+      ret := .dsl .command [a, b, param 2] }
+  | .query =>
+    { name := "query", doc := "A query: it answers from the records and writes nothing.",
+      tvars := ["records", "caller", "input", "output"], dataArgs := true, needsEq := [1],
+      params := [l "name" .str, l "callers" (.list b), l "accepts" (.fn [param 2] Ty.rules),
+        l "resolve" (.fn [.ctx a (param 2) b] (param 3))],
+      ret := .dsl .query [a, b] }
+  | .machine =>
+    { name := "machine",
+      doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect.",
+      tvars := ["records", "event", "key", "state"], dataArgs := true, needsEq := [2],
+      params := [l "name" .str, l "instances" (.fn [a] (.bag (param 2))), l "initial" (param 3),
+        l "on" (.fn [param 2, param 3, b, a, .int] (.next (param 3))),
+        l "after" (.fn [param 2, param 3, a, .int] (.option (.timer (param 3)))),
+        l "effect" (.fn [param 2, param 3, a, .int] (.option (.dsl .effect [b]))),
+        l "invariants" (.fn [param 2, param 3, a] Ty.rules)],
+      ret := .dsl .machine [a, b] }
+  | .reaction =>
+    { name := "reaction", doc := "A reaction: effects for each event, without state of its own.",
+      tvars := ["records", "event"], dataArgs := true,
+      params := [l "name" .str, l "react" (.fn [b, a, .int] (.list (.dsl .effect [b])))],
+      ret := .dsl .reaction [a, b] }
+  | .external =>
+    { name := "external", doc := "An external service and what it declares.", tvars := [],
+      params := [l "name" .str, l "commands" (.list (.dsl .declared [])), l "queries" (.list (.dsl .declared [])),
+        l "events" (.list (.dsl .declared []))],
+      ret := .dsl .external [] }
+  | .externalCommand =>
+    { name := "external_command", doc := "A command of the external named `external`.",
+      tvars := ["input", "output", "rejection"], dataArgs := true,
+      params := [l "external" .str, l "name" .str], ret := .dsl .externalCommand [a, b, param 2] }
+  | .externalQuery =>
+    { name := "external_query",
+      doc := "A query of the external named `external`; `ensures` says what its answers satisfy.",
+      tvars := ["input", "output"], dataArgs := true,
+      params := [l "external" .str, l "name" .str, l "ensures" (.fn [a, b] Ty.rules)],
+      ret := .dsl .externalQuery [a, b] }
+  | .externalEvent =>
+    { name := "external_event", doc := "An event of the external or service named `external`.",
+      tvars := ["event"], dataArgs := true,
+      params := [l "external" .str, l "name" .str], ret := .dsl .externalEvent [a] }
+  | .declareCommand =>
+    { name := "declare_command", doc := "The command, for its external's declaration.",
+      tvars := ["input", "output", "rejection"], dataArgs := true,
+      params := [p "command" (.dsl .externalCommand [a, b, param 2])], ret := .dsl .declared [] }
+  | .declareQuery =>
+    { name := "declare_query", doc := "The query, for its external's declaration.",
+      tvars := ["input", "output"], dataArgs := true,
+      params := [p "query" (.dsl .externalQuery [a, b])], ret := .dsl .declared [] }
+  | .declareEvent =>
+    { name := "declare_event", doc := "The event, for its external's declaration.",
+      tvars := ["event"], dataArgs := true,
+      params := [p "event" (.dsl .externalEvent [a])], ret := .dsl .declared [] }
+  | .request =>
+    { name := "request", doc := "An effect: the request to an external command, and the events its answer becomes.",
+      tvars := ["event", "input", "output", "rejection"], dataArgs := true,
+      params := [l "command" (.dsl .externalCommand [b, param 2, param 3]), l "input" b,
+        l "on_answer" (.fn [.result (param 2) (param 3)] (.list a))],
+      ret := .dsl .effect [a] }
+  | .subscribe =>
+    { name := "subscribe", doc := "Receives another service's or an external's event as one of this service's events.",
+      tvars := ["event", "source"], dataArgs := true,
+      params := [l "to" (.dsl .externalEvent [b]), l "wrap" (.fn [b] a)], ret := .dsl .subscription [a] }
+  | .bounds =>
+    { name := "bounds",
+      doc := "How far checking goes: keys created per table, items per bag, internal steps per input, steps per run.",
+      tvars := [],
+      params := [l "creates" (.list (.dsl .create [])), l "items" .int, l "cascade" .int, l "steps" .int],
+      ret := .dsl .bounds [] }
+  | .create =>
+    { name := "create", doc := "At most this many keys created in the records' table field `table`.",
+      tvars := [], params := [l "table" .str, l "at_most" .int], ret := .dsl .create [] }
+  | .response =>
+    { name := "response", doc := "After an event satisfying `after`, one satisfying `then` within `within` ms.",
+      tvars := ["event"], dataArgs := true,
+      params := [l "name" .str, l "after" (.fn [a] .bool), l "then" (.fn [a] .bool), l "within" .int],
+      ret := .dsl .response [a] }
+  | .fresh =>
+    { name := "fresh", doc := "The `index`-th new id of this step: ids from different steps or indices differ.",
+      tvars := [], params := [p "source" (.dsl .fresh []), p "index" .int], ret := .id }
 
 def all : List Prim :=
   [.length, .bagFromList, .bagInsert, .bagSize, .bagFilter, .bagMap, .bagCount, .bagSum, .bagAny, .bagAll,
    .bagContains, .bagMinBy, .bagMaxBy, .tableNew, .tableFromList, .tableInsert, .tableRemove, .tableGet, .tableSize,
    .tableKeys, .tableValues, .tableFilter, .tableMap, .tableCount, .tableAny, .tableAll, .dateAddDays,
-   .dateDaysBetween, .require, .ref]
+   .dateDaysBetween, .require, .ref, .spec, .service, .command, .query, .machine, .reaction, .external,
+   .externalCommand, .externalQuery, .externalEvent, .declareCommand, .declareQuery, .declareEvent, .request,
+   .subscribe, .bounds, .create, .response, .fresh]
 
 theorem mem_all (p : Prim) : p ∈ all := by cases p <;> simp [all]
 
@@ -147,7 +257,8 @@ def labels (p : Prim) : List (Option String) := p.sig.params.map (·.label)
 
 /-- Whether the type arguments meet the signature's demands. -/
 def ok (p : Prim) (args : List Ty) : Bool :=
-  args.length == p.sig.tvars.length && p.sig.needsEq.all fun k => (args[k]?.map Ty.comparable).getD false
+  args.length == p.sig.tvars.length && p.sig.needsEq.all (fun k => (args[k]?.map Ty.comparable).getD false) &&
+    (!p.sig.dataArgs || args.all Ty.isData)
 
 /-- The built-in a global name such as `tazuna.bag_filter` refers to. -/
 def byName? (name : String) : Option Prim :=

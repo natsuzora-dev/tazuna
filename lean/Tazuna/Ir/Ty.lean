@@ -2,6 +2,47 @@
 
 namespace Tazuna.Ir
 
+/-- The types of a spec's structure, which the `tazuna` module declares opaque: a spec builds their values with
+built-ins and never looks inside them. `fresh` is the source of new ids a step hands a command. -/
+inductive Dsl where
+  | spec | service | command | query | machine | reaction | external
+  | externalCommand | externalQuery | externalEvent | declared | effect | subscription
+  | bounds | create | response | fresh
+deriving Repr, DecidableEq, Inhabited
+
+namespace Dsl
+
+def all : List Dsl :=
+  [.spec, .service, .command, .query, .machine, .reaction, .external, .externalCommand, .externalQuery,
+   .externalEvent, .declared, .effect, .subscription, .bounds, .create, .response, .fresh]
+
+theorem mem_all (k : Dsl) : k ∈ all := by cases k <;> simp [all]
+
+/-- The name the `tazuna` module gives the type, its type parameters, and what it is. -/
+def decl : Dsl → String × List String × String
+  | .spec => ("Spec", [], "The services a spec defines and the externals they talk to.")
+  | .service => ("Service", [], "A service: its records, the events that write them, and what it reacts to.")
+  | .command => ("Command", ["records", "event", "caller"], "A request that may write records through events.")
+  | .query => ("Query", ["records", "caller"], "A request that answers from the records and writes nothing.")
+  | .machine => ("Machine", ["records", "event"],
+      "State kept per instance; an instance lives while its key is among the machine's instances.")
+  | .reaction => ("Reaction", ["records", "event"], "Effects for each event, without state of its own.")
+  | .external => ("External", [], "A service outside the spec, known by what it accepts and sends.")
+  | .externalCommand => ("ExternalCommand", ["input", "output", "rejection"], "A command an external accepts.")
+  | .externalQuery => ("ExternalQuery", ["input", "output"], "A query an external answers.")
+  | .externalEvent => ("ExternalEvent", ["event"], "An event an external or another service sends.")
+  | .declared => ("Declared", [], "An external's command, query or event, listed in its declaration.")
+  | .effect => ("Effect", ["event"], "A request to an external; its answer becomes events.")
+  | .subscription => ("Subscription", ["event"], "Another service's event, received as one of this service's.")
+  | .bounds => ("Bounds", [], "How far checking goes.")
+  | .create => ("Create", [], "How many keys checking may add to one table of the records.")
+  | .response => ("Response", ["event"], "After one event, another within a time.")
+  | .fresh => ("Fresh", [], "Where a command's new ids come from.")
+
+def name (k : Dsl) : String := (decl k).1
+
+end Dsl
+
 /-- A type after elaboration. `adt i args variants` is the `i`-th declaration of the program's type table at `args`,
 carrying each variant's field types. No declaration refers to itself, directly or through others, so every type is a
 finite tree and the meaning of a type follows its structure. `param k` is the `k`-th parameter of the declaration a
@@ -22,6 +63,8 @@ inductive Ty where
   | date
   /-- An identifier a step makes fresh; only `==` has meaning. -/
   | id
+  /-- A structure type at its type arguments. -/
+  | dsl (k : Dsl) (args : List Ty)
 deriving Repr, Inhabited
 
 namespace Ty
@@ -48,6 +91,8 @@ def same : (a b : Ty) → Option (PLift (a = b))
     | _, _ => none
   | .date, .date => some ⟨rfl⟩
   | .id, .id => some ⟨rfl⟩
+  | .dsl k a, .dsl k' b =>
+    if hk : k = k' then (sames a b).map fun ⟨h⟩ => ⟨hk ▸ h ▸ rfl⟩ else none
   | _, _ => none
 def sames : (a b : List Ty) → Option (PLift (a = b))
   | [], [] => some ⟨rfl⟩
@@ -77,6 +122,7 @@ def inst (args : List Ty) : Ty → Ty
   | .table k v => .table (inst args k) (inst args v)
   | .date => .date
   | .id => .id
+  | .dsl k ts => .dsl k (insts args ts)
 def insts (args : List Ty) : List Ty → List Ty
   | [] => []
   | t :: ts => inst args t :: insts args ts
@@ -94,6 +140,8 @@ def comparable : Ty → Bool
   | .tuple ts => comparables ts
   | .adt _ _ vs => comparabless vs
   | .fn .. => false
+  -- Structure values hold functions; a fresh-id source is a counter.
+  | .dsl k _ => k == .fresh
 def comparables : List Ty → Bool
   | [] => true
   | t :: ts => comparable t && comparables ts
@@ -159,18 +207,50 @@ def prelude : List TypeDecl :=
       variants := [⟨"Ok", [⟨none, .param 0⟩]⟩, ⟨"Error", [⟨none, .param 1⟩]⟩] },
     { name := "gleam/option.Option", params := ["a"],
       variants := [⟨"Some", [⟨none, .param 0⟩]⟩, ⟨"None", []⟩] },
-    { name := "tazuna.Spec", params := [], variants := [] },
-    { name := "tazuna.PickError", params := [], variants := [⟨"Empty", []⟩, ⟨"Tie", []⟩] } ]
+    { name := "tazuna.PickError", params := [], variants := [⟨"Empty", []⟩, ⟨"Tie", []⟩] },
+    { name := "tazuna.Ctx", params := ["records", "input", "caller"],
+      variants := [⟨"Ctx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩, ⟨some "caller", .param 2⟩,
+        ⟨some "now", .int⟩, ⟨some "fresh", .dsl .fresh []⟩]⟩] },
+    { name := "tazuna.Next", params := ["state"], variants := [⟨"Stay", []⟩, ⟨"Enter", [⟨none, .param 0⟩]⟩] },
+    { name := "tazuna.Timer", params := ["state"],
+      variants := [⟨"Timer", [⟨some "after", .int⟩, ⟨some "enter", .param 0⟩]⟩] } ]
 
 def Ty.bool : Ty := .adt 0 [] [[], []]
-def Ty.spec : Ty := .adt 4 [] []
-def Ty.pickError : Ty := .adt 5 [] [[], []]
+def Ty.spec : Ty := .dsl .spec []
+def Ty.pickError : Ty := .adt 4 [] [[], []]
 def Ty.result (a e : Ty) : Ty := .adt 2 [a, e] [[a], [e]]
 def Ty.option (a : Ty) : Ty := .adt 3 [a] [[a], []]
+def Ty.ctx (r i c : Ty) : Ty := .adt 5 [r, i, c] [[r, i, c, .int, .dsl .fresh []]]
+def Ty.next (s : Ty) : Ty := .adt 6 [s] [[], [s]]
+def Ty.timer (s : Ty) : Ty := .adt 7 [s] [[.int, s]]
+/-- Named rules, as `invariants`, `accepts` and `ensures` return them. -/
+def Ty.rules : Ty := .list (.tuple [.str, .bool])
+
+mutual
+/-- Whether a type is data: it holds no structure value, so it means the same at every level. -/
+def Ty.isData : Ty → Bool
+  | .list t | .bag t => Ty.isData t
+  | .tuple ts => Ty.isDatas ts
+  | .fn ps r => Ty.isDatas ps && Ty.isData r
+  | .adt _ _ vs => Ty.isDatass vs
+  | .table k v => Ty.isData k && Ty.isData v
+  | .dsl k _ => k == .fresh
+  | .int | .str | .param _ | .date | .id => true
+def Ty.isDatas : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.isData t && Ty.isDatas ts
+def Ty.isDatass : List (List Ty) → Bool
+  | [] => true
+  | ts :: vs => Ty.isDatas ts && Ty.isDatass vs
+end
+
 
 /-- The prelude's types at fixed indices are the ones the helpers above name. -/
 example : prelude[0]?.map (fun d => Ty.adt 0 [] (d.variantTys [])) = some Ty.bool := rfl
-example : prelude[5]?.map (fun d => Ty.adt 5 [] (d.variantTys [])) = some Ty.pickError := rfl
+example : prelude[4]?.map (fun d => Ty.adt 4 [] (d.variantTys [])) = some Ty.pickError := rfl
+example (r i c : Ty) : prelude[5]?.map (fun d => Ty.adt 5 [r, i, c] (d.variantTys [r, i, c])) = some (Ty.ctx r i c) := rfl
+example (s : Ty) : prelude[6]?.map (fun d => Ty.adt 6 [s] (d.variantTys [s])) = some (Ty.next s) := rfl
+example (s : Ty) : prelude[7]?.map (fun d => Ty.adt 7 [s] (d.variantTys [s])) = some (Ty.timer s) := rfl
 example (a e : Ty) : prelude[2]?.map (fun d => Ty.adt 2 [a, e] (d.variantTys [a, e])) = some (Ty.result a e) := rfl
 example (a : Ty) : prelude[3]?.map (fun d => Ty.adt 3 [a] (d.variantTys [a])) = some (Ty.option a) := rfl
 

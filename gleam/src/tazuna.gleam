@@ -1,5 +1,8 @@
 //// The tazuna DSL. Lean gives a spec its meaning, so the bodies here only
 //// let a spec compile; Gleam never runs them.
+////
+//// Generated from lean/Tazuna/Ir/Builtin.lean by `lake exe gen-dsl --write ..`
+//// in lean/. DO NOT EDIT.
 
 import gleam/option.{type Option}
 import tazuna/internal/launch
@@ -10,7 +13,6 @@ pub fn main() -> Nil {
   launch.main()
 }
 
-// Built-ins begin. `lake exe gen-dsl --write ..` in lean/ writes them; do not edit.
 /// A multiset: two bags are equal when each value occurs as often in both.
 pub type Bag(a)
 
@@ -23,11 +25,73 @@ pub type Date
 /// An identifier a step makes fresh; ids compare with `==` only.
 pub type Id
 
+/// The services a spec defines and the externals they talk to.
 pub type Spec
+
+/// A service: its records, the events that write them, and what it reacts to.
+pub type Service
+
+/// A request that may write records through events.
+pub type Command(records, event, caller)
+
+/// A request that answers from the records and writes nothing.
+pub type Query(records, caller)
+
+/// State kept per instance; an instance lives while its key is among the machine's instances.
+pub type Machine(records, event)
+
+/// Effects for each event, without state of its own.
+pub type Reaction(records, event)
+
+/// A service outside the spec, known by what it accepts and sends.
+pub type External
+
+/// A command an external accepts.
+pub type ExternalCommand(input, output, rejection)
+
+/// A query an external answers.
+pub type ExternalQuery(input, output)
+
+/// An event an external or another service sends.
+pub type ExternalEvent(event)
+
+/// An external's command, query or event, listed in its declaration.
+pub type Declared
+
+/// A request to an external; its answer becomes events.
+pub type Effect(event)
+
+/// Another service's event, received as one of this service's.
+pub type Subscription(event)
+
+/// How far checking goes.
+pub type Bounds
+
+/// How many keys checking may add to one table of the records.
+pub type Create
+
+/// After one event, another within a time.
+pub type Response(event)
+
+/// Where a command's new ids come from.
+pub type Fresh
 
 pub type PickError {
   Empty
   Tie
+}
+
+pub type Ctx(records, input, caller) {
+  Ctx(records: records, input: input, caller: caller, now: Int, fresh: Fresh)
+}
+
+pub type Next(state) {
+  Stay
+  Enter(state)
+}
+
+pub type Timer(state) {
+  Timer(after: Int, enter: state)
 }
 
 /// A point in time, in milliseconds.
@@ -208,4 +272,171 @@ pub fn ref(
 ) -> Result(a, e) {
   panic as "tazuna's built-ins run only in the engine"
 }
-// Built-ins end.
+
+/// The spec: its services and the externals they talk to.
+pub fn spec(
+  services _services: List(Service),
+  externals _externals: List(External),
+) -> Spec {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A service. `apply` folds an event into the records: events are the only writes.
+pub fn service(
+  name _name: String,
+  init _init: records,
+  apply _apply: fn(records, event) -> records,
+  subscribes _subscribes: List(Subscription(event)),
+  commands _commands: List(Command(records, event, caller)),
+  queries _queries: List(Query(records, caller)),
+  machines _machines: List(Machine(records, event)),
+  reactions _reactions: List(Reaction(records, event)),
+  invariants _invariants: fn(records) -> List(#(String, Bool)),
+  responses _responses: List(Response(event)),
+  bounds _bounds: Bounds,
+) -> Service {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A command: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects.
+pub fn command(
+  name _name: String,
+  callers _callers: List(caller),
+  accepts _accepts: fn(input) -> List(#(String, Bool)),
+  decide _decide: fn(Ctx(records, input, caller)) ->
+    Result(List(event), rejection),
+  ensures _ensures: fn(Ctx(records, input, caller), records) ->
+    List(#(String, Bool)),
+) -> Command(records, event, caller) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A query: it answers from the records and writes nothing.
+pub fn query(
+  name _name: String,
+  callers _callers: List(caller),
+  accepts _accepts: fn(input) -> List(#(String, Bool)),
+  resolve _resolve: fn(Ctx(records, input, caller)) -> output,
+) -> Query(records, caller) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect.
+pub fn machine(
+  name _name: String,
+  instances _instances: fn(records) -> Bag(key),
+  initial _initial: state,
+  on _on: fn(key, state, event, records, Int) -> Next(state),
+  after _after: fn(key, state, records, Int) -> Option(Timer(state)),
+  effect _effect: fn(key, state, records, Int) -> Option(Effect(event)),
+  invariants _invariants: fn(key, state, records) -> List(#(String, Bool)),
+) -> Machine(records, event) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A reaction: effects for each event, without state of its own.
+pub fn reaction(
+  name _name: String,
+  react _react: fn(event, records, Int) -> List(Effect(event)),
+) -> Reaction(records, event) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// An external service and what it declares.
+pub fn external(
+  name _name: String,
+  commands _commands: List(Declared),
+  queries _queries: List(Declared),
+  events _events: List(Declared),
+) -> External {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A command of the external named `external`.
+pub fn external_command(
+  external _external: String,
+  name _name: String,
+) -> ExternalCommand(input, output, rejection) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A query of the external named `external`; `ensures` says what its answers satisfy.
+pub fn external_query(
+  external _external: String,
+  name _name: String,
+  ensures _ensures: fn(input, output) -> List(#(String, Bool)),
+) -> ExternalQuery(input, output) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// An event of the external or service named `external`.
+pub fn external_event(
+  external _external: String,
+  name _name: String,
+) -> ExternalEvent(event) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// The command, for its external's declaration.
+pub fn declare_command(
+  _command: ExternalCommand(input, output, rejection),
+) -> Declared {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// The query, for its external's declaration.
+pub fn declare_query(_query: ExternalQuery(input, output)) -> Declared {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// The event, for its external's declaration.
+pub fn declare_event(_event: ExternalEvent(event)) -> Declared {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// An effect: the request to an external command, and the events its answer becomes.
+pub fn request(
+  command _command: ExternalCommand(input, output, rejection),
+  input _input: input,
+  on_answer _on_answer: fn(Result(output, rejection)) -> List(event),
+) -> Effect(event) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// Receives another service's or an external's event as one of this service's events.
+pub fn subscribe(
+  to _to: ExternalEvent(source),
+  wrap _wrap: fn(source) -> event,
+) -> Subscription(event) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// How far checking goes: keys created per table, items per bag, internal steps per input, steps per run.
+pub fn bounds(
+  creates _creates: List(Create),
+  items _items: Int,
+  cascade _cascade: Int,
+  steps _steps: Int,
+) -> Bounds {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// At most this many keys created in the records' table field `table`.
+pub fn create(table _table: String, at_most _at_most: Int) -> Create {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// After an event satisfying `after`, one satisfying `then` within `within` ms.
+pub fn response(
+  name _name: String,
+  after _after: fn(event) -> Bool,
+  then _then: fn(event) -> Bool,
+  within _within: Int,
+) -> Response(event) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// The `index`-th new id of this step: ids from different steps or indices differ.
+pub fn fresh(_source: Fresh, _index: Int) -> Id {
+  panic as "tazuna's built-ins run only in the engine"
+}

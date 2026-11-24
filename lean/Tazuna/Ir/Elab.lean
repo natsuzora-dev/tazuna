@@ -74,6 +74,9 @@ partial def showTy : Ty → String
   | .table k v => s!"tazuna.Table({showTy k}, {showTy v})"
   | .date => "tazuna.Date"
   | .id => "tazuna.Id"
+  | .dsl k args =>
+    let n := "tazuna." ++ k.name
+    if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map showTy) ++ ")"
 
 /-- Converts a type written in the IR, with `σ` giving the type variables in scope. -/
 partial def toTy (σ : List (String × Ty)) : STy → Except String Ty
@@ -106,6 +109,8 @@ partial def annotationFits (σ : List (String × Ty)) : STy → Ty → Bool
   | .con "tazuna.Bag" [a], .bag t => annotationFits σ a t
   | .con "tazuna.Table" [a, b], .table k v => annotationFits σ a k && annotationFits σ b v
   | .con "tazuna.Date" [], .date | .con "tazuna.Id" [], .id => true
+  | .con n args, .dsl k ts => n == "tazuna." ++ k.name && args.length == ts.length &&
+    (args.zip ts).all fun (a, t) => annotationFits σ a t
   | .con n args, .adt i ts _ =>
     typeIndex T n == some i && args.length == ts.length && (args.zip ts).all fun (a, t) => annotationFits σ a t
   | .fn ps r, .fn qs u =>

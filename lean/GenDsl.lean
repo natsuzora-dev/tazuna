@@ -1,11 +1,20 @@
 import Tazuna.Ir.Builtin
 import Tazuna.Ir.Literal
 
-def startMarker : String :=
-  "// Built-ins begin. `lake exe gen-dsl --write ..` in lean/ writes them; do not edit.\n"
-
-def endMarker : String :=
-  "// Built-ins end.\n"
+/-- The parts of the module that are not built-ins: the launcher's entry point. -/
+def moduleHead : String :=
+  "//// The tazuna DSL. Lean gives a spec its meaning, so the bodies here only\n" ++
+  "//// let a spec compile; Gleam never runs them.\n" ++
+  "////\n" ++
+  "//// Generated from lean/Tazuna/Ir/Builtin.lean by `lake exe gen-dsl --write ..`\n" ++
+  "//// in lean/. DO NOT EDIT.\n\n" ++
+  "import gleam/option.{type Option}\n" ++
+  "import tazuna/internal/launch\n\n" ++
+  "/// `gleam run -m tazuna -- <command> <root> [...]` checks the spec whose\n" ++
+  "/// root module is `src/<root>.gleam`.\n" ++
+  "pub fn main() -> Nil {\n" ++
+  "  launch.main()\n" ++
+  "}\n\n"
 
 open Tazuna.Ir
 
@@ -25,6 +34,9 @@ partial def gleamTy (tvars : List String) : Ty → String
   | .table k v => s!"Table({gleamTy tvars k}, {gleamTy tvars v})"
   | .date => "Date"
   | .id => "Id"
+  | .dsl k args =>
+    let n := k.name
+    if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map (gleamTy tvars)) ++ ")"
 
 def docLines (doc : String) : String := s!"/// {doc}\n"
 
@@ -39,7 +51,16 @@ def gleamFn (p : Prim) : String :=
   let ret := gleamTy s.tvars s.ret
   let oneLine := s!"pub fn {s.name}(" ++ ", ".intercalate params ++ s!") -> {ret} \{"
   let head := if oneLine.length ≤ 80 then oneLine
-    else s!"pub fn {s.name}(\n" ++ String.join (params.map (s!"  {·},\n")) ++ s!") -> {ret} \{"
+    else
+      let line (q : PrimParam) : String :=
+        let pre := (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": "
+        let whole := s!"  {pre}{gleamTy s.tvars q.ty},\n"
+        match q.ty with
+        | .fn ps r =>
+          if whole.length ≤ 81 then whole
+          else s!"  {pre}fn(" ++ ", ".intercalate (ps.map (gleamTy s.tvars)) ++ s!") ->\n    {gleamTy s.tvars r},\n"
+        | _ => whole
+      s!"pub fn {s.name}(\n" ++ String.join (s.params.map line) ++ s!") -> {ret} \{"
   docLines s.doc ++ head ++ "\n  panic as \"tazuna's built-ins run only in the engine\"\n}\n"
 
 /-- The declarations Lean owns, in the order the DSL module lists them. -/
@@ -47,8 +68,13 @@ def gleamSection : String :=
   let types := opaqueTypes.map fun t => docLines t.doc ++ s!"pub type {t.name}{typeParams t.params}\n"
   let preludeTypes := (prelude.filter (·.name.startsWith "tazuna.")).map fun d =>
     let n := (d.name.splitOn ".").getLast!
-    if d.variants.isEmpty then s!"pub type {n}\n"
-    else s!"pub type {n} \{\n" ++ String.join (d.variants.map (s!"  {·.name}\n")) ++ "}\n"
+    let variant (v : Variant) : String :=
+      if v.fields.isEmpty then s!"  {v.name}\n" else
+      let fs := v.fields.map fun f => (f.label.map (· ++ ": ")).getD "" ++ gleamTy d.params f.ty
+      let one := s!"  {v.name}(" ++ ", ".intercalate fs ++ ")"
+      if one.length ≤ 80 then one ++ "\n"
+      else s!"  {v.name}(\n" ++ String.join (fs.map (s!"    {·},\n")) ++ "  )\n"
+    s!"pub type {n}{typeParams d.params} \{\n" ++ String.join (d.variants.map variant) ++ "}\n"
   let aliases := builtinAliases.map fun (a, doc) =>
     let body := match a.ty with
       | .con n [] => n
@@ -69,7 +95,7 @@ def embedded (dsl : String) : String :=
     let vs := p.sig.needsEq.map fun k => Tazuna.Ir.Literal.printStr (p.sig.tvars[k]?.getD "")
     s!"  #({Tazuna.Ir.Literal.printStr p.sig.name}, [" ++ ", ".intercalate vs ++ "]),\n") ++ "]\n"
 
-/-- Checks that the built-in section of the DSL module matches Lean's table and that the launcher's copy of the module
+/-- Checks that the DSL module matches Lean's table and that the launcher's copy of the module
 is current, or rewrites both with `--write`. -/
 def main (args : List String) : IO UInt32 := do
   let parsed : Option (Bool × String) := match args with
@@ -80,16 +106,11 @@ def main (args : List String) : IO UInt32 := do
     | do IO.eprintln "usage: gen-dsl [--write] <repository root>"; return 3
   let path := root ++ "/gleam/src/tazuna.gleam"
   let copyPath := root ++ "/gleam/src/tazuna/internal/dsl_source.gleam"
-  let text ← IO.FS.readFile path
-  let some (before, after) := match text.splitOn startMarker with
-      | [before, rest] => match rest.splitOn endMarker with
-        | [_, after] => some (before, after)
-        | _ => none
-      | _ => none
-    | do IO.eprintln s!"{path} needs one line each of:\n{startMarker}{endMarker}"; return 1
-  let dsl := before ++ startMarker ++ gleamSection ++ endMarker ++ after
+  let read (p : String) : IO String := do if ← System.FilePath.pathExists p then IO.FS.readFile p else pure ""
+  let text ← read path
+  let dsl := moduleHead ++ gleamSection
   let copy := embedded dsl
-  let copyNow ← do if ← System.FilePath.pathExists copyPath then IO.FS.readFile copyPath else pure ""
+  let copyNow ← read copyPath
   if text == dsl && copyNow == copy then return 0
   if write then
     IO.FS.writeFile path dsl
