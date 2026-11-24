@@ -8,7 +8,7 @@ import Tazuna.Smt.Decode
 import Tazuna.Smt.StepEncode
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.EventStep
-import Tazuna.Smt.Exact
+import Tazuna.Smt.ReactExact
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
