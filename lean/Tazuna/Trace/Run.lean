@@ -41,6 +41,14 @@ def Names.enc (ns : Names) (T : List TypeDecl) (t : Ty) (x : t.den0) : Names × 
   let ns := ns.bind (idsOf t x)
   (ns, Trace.enc T ns.name t x)
 
+/-- The wire form of an answer to a request: a command's output under `ok` and its rejection under `error`, a
+query's output under `ok`. -/
+def Names.answerWire (ns : Names) (T : List TypeDecl) (o : Ty) :
+    (rj : Option Ty) → (answerTy o rj).den0 → Names × Option (Except Wire Wire)
+  | some _, .inl (x, ()) => let (ns, w) := ns.enc T o x; (ns, w.map .ok)
+  | some j, .inr (.inl (x, ())) => let (ns, w) := ns.enc T j x; (ns, w.map .error)
+  | none, x => let (ns, w) := ns.enc T o x; (ns, w.map .ok)
+
 /-- Why a scenario stopped before its end. -/
 inductive Stop where
   /-- The spec faulted at step `step`. -/
@@ -89,7 +97,7 @@ def outLines (ns : Names) (answerTo : Option String) (r : Result v) : Names × O
     let (ns', w) := ns.enc T o.input.1 o.input.2
     ns := ns'
     match w with
-    | some w => lines := lines ++ [.sent t (toString o.id) o.external o.command w]
+    | some w => lines := lines ++ [.sent t (toString o.id) o.external o.name w]
     | none => return (ns, none)
   return (ns, some lines)
 
@@ -125,17 +133,16 @@ def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Exce
     if ms < 0 then throw (.badStep k "a step waits a negative time")
     let t := run.state.now + ms
     finish (.clock t) [.clock t] none
-  | .answer ext cmd snd o j value => do
+  | .answer ext name snd ⟨ty, value⟩ => do
     let ps := run.state.pending.filter fun p =>
-      p.request.external == ext && p.request.command == cmd && p.sender.matches snd
-    let [p] := ps | throw (.badStep k s!"{ps.length} pending requests to {ext}.{cmd} match the sender")
-    let some value := run.names.resolve T (Ty.result o j) value | throw (.badStep k "the answer makes a fresh id")
-    let t := run.state.now
-    let (ns, w) := match value with
-      | .inl (x, ()) => let (ns, w) := run.names.enc T o x; (ns, w.map Except.ok)
-      | .inr (.inl (x, ())) => let (ns, w) := run.names.enc T j x; (ns, w.map Except.error)
+      p.request.external == ext && p.request.name == name && p.sender.matches snd
+    let [p] := ps | throw (.badStep k s!"{ps.length} pending requests to {ext}.{name} match the sender")
+    let some value := run.names.resolve T ty value | throw (.badStep k "the answer makes a fresh id")
+    let some ⟨h⟩ := Ty.same ty (answerTy p.request.output p.request.rejection)
+      | throw (.badStep k s!"the answer's type is not the type of answers to {ext}.{name}")
+    let (ns, w) := run.names.answerWire T p.request.output p.request.rejection (h ▸ value)
     let some w := w | throw (.badStep k "the answer has no wire form")
-    { run with names := ns }.finish' T v (.answer p.id ⟨Ty.result o j, value⟩) [.answer t (toString p.id) w] none k
+    { run with names := ns }.finish' T v (.answer p.id ⟨ty, value⟩) [.answer run.state.now (toString p.id) w] none k
   | .event src name ⟨ty, x⟩ => do
     let some i := finIdx v.subscribes fun sub => sub.source == src && sub.name == name
       | throw (.badStep k s!"{v.name} subscribes to no event {src}.{name}")

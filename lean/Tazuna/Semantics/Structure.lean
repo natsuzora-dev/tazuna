@@ -13,15 +13,24 @@ inductive Sender where
   | machine (name : String) (key : WireVal)
   | reaction (name : String)
 
-/-- A request to an external command; the answer, an output or a rejection, becomes events. -/
+/-- What an answer to a request to an external carries: the output or the rejection for a command, which has a
+rejection type, and the output for a query, which has none. -/
+def answerTy (output : Ty) : Option Ty → Ty
+  | some rejection => Ty.result output rejection
+  | none => output
+
+/-- A request to an external's command or query; the answer becomes events. -/
 structure RequestV (e : Ty) where
   external : String
-  command : String
+  name : String
   input : Ty
   output : Ty
-  rejection : Ty
+  /-- A command's rejection type; a query has none. -/
+  rejection : Option Ty
   value : input.den0
-  onAnswer : (Ty.fn [Ty.result output rejection] (.list e)).den0
+  /-- The rules an answer keeps: a query's `ensures` at this input; a command's answer keeps none. -/
+  holds : (answerTy output rejection).den0 → Ty.rules.den0
+  onAnswer : (Ty.fn [answerTy output rejection] (.list e)).den0
 
 /-- A command of the service `service`. -/
 structure CommandV (r e c : Ty) where
@@ -131,6 +140,9 @@ structure ServiceV where
   invariants : (Ty.fn [records] Ty.rules).den0
   responses : List (ResponseV event)
   bounds : BoundsV records
+  /-- What the spec's externals declare, which `spec` fills in: an effect may request only a declared command or
+  query. -/
+  declared : List DeclaredV
 
 /-- One step of a scenario, typed by its service's records, event and caller. -/
 inductive StepV (r e c : Ty) where
@@ -138,9 +150,8 @@ inductive StepV (r e c : Ty) where
   | query (x : QueryV r c) (caller : c.den0) (input : x.input.den0)
   /-- Time moves on by `ms`: a clock line, which fires the timers due. -/
   | wait (ms : Int)
-  /-- The answer to the one pending request to `external.command` that `sender` sent. -/
-  | answer (external command : String) (sender : Sender) (output rejection : Ty)
-      (value : (Ty.result output rejection).den0)
+  /-- The answer to the one pending request to `external.name` that `sender` sent. -/
+  | answer (external name : String) (sender : Sender) (value : WireVal)
   | event (source name : String) (value : WireVal)
 
 /-- A scenario of the service `service`: steps from the initial records at time 0. -/

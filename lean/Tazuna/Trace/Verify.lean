@@ -126,7 +126,7 @@ def matchExpect (now : Int) (e : Expect v) (l : Line) (b : Bind) : List Bind :=
 /-- The out lines the spec expects of a step's result. -/
 def expects (answerTo : Option String) (r : Result v) : List (Expect v) :=
   (answerTo.map fun to => [Expect.answered to r.outcome]).getD [] ++ r.events.map .applied ++
-    r.out.map fun o => .sent o.id o.external o.command o.input
+    r.out.map fun o => .sent o.id o.external o.name o.input
 
 /-- The expected out lines, written with the binding so far. -/
 def Expect.toLine (now : Int) (b : Bind) : Expect v → Option Line
@@ -147,6 +147,13 @@ inductive Verdict where
   | differs (line : Nat) (expected actual : List Wire)
   | invalid (line : Nat) (message : String)
   | fault (line : Nat) (f : Fault)
+
+/-- An answer to a request, read from its wire form: a command's output or rejection, a query's output. -/
+def decAnswer (b : Bind) (o : Ty) : (rj : Option Ty) → Except Wire Wire → Option (answerTy o rj).den0
+  | some _, .ok w => (dec T b.id? o w).map fun x => .inl (x, ())
+  | some j, .error w => (dec T b.id? j w).map fun x => .inr (.inl (x, ()))
+  | none, .ok w => dec T b.id? o w
+  | none, .error _ => none
 
 /-- The input an in line writes, read with the binding so far, the id its answer names, and the ids it holds. -/
 def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option String × List IdV)
@@ -169,14 +176,9 @@ def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option 
     -- The step itself faults on an answer to no pending request.
     | none => .ok (.answer id ⟨Ty.nil, .inl ()⟩, none, [])
     | some p =>
-      let o := p.request.output
-      let j := p.request.rejection
-      let value : Option (Ty.result o j).den0 := match res with
-        | .ok w => (dec T b.id? o w).map fun x => .inl (x, ())
-        | .error w => (dec T b.id? j w).map fun x => .inr (.inl (x, ()))
-      match value with
-      | some x => .ok (.answer id ⟨Ty.result o j, x⟩, none, idsOf _ x)
-      | none => .error "the answer does not read as the request's output or rejection type"
+      match decAnswer T b p.request.output p.request.rejection res with
+      | some x => .ok (.answer id ⟨_, x⟩, none, idsOf _ x)
+      | none => .error "the answer does not read as an answer to the request: an output, or a command's rejection"
   | .event t src name w => do
     if t != s.now then throw s!"the event is at {t}, but a clock line brought time only to {s.now}"
     let some k := finIdx v.subscribes fun sub => sub.source == src && sub.name == name

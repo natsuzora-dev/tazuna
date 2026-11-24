@@ -49,8 +49,8 @@ inductive Prim where
   | require | ref
   | spec | service | command | query | defineCommand | defineQuery | machine | reaction
   | external | externalCommand | externalQuery | externalEvent | declareCommand | declareQuery | declareEvent
-  | request | sendCommand | sendQuery | subscribe | bounds | create | response
-  | scenario | stepCommand | stepQuery | stepWait | stepAnswer | stepEvent | fromMachine | fromReaction | fresh | id
+  | requestCommand | requestQuery | sendCommand | sendQuery | subscribe | bounds | create | response
+  | scenario | stepCommand | stepQuery | stepWait | stepAnswerCommand | stepAnswerQuery | stepEvent | fromMachine | fromReaction | fresh | id
 deriving Repr, DecidableEq
 
 structure PrimParam where
@@ -225,11 +225,18 @@ def sig : Prim → PrimSig :=
     { name := "declare_event", doc := "The event, for its external's declaration.",
       tvars := ["event"], dataArgs := true,
       params := [p "event" (.dsl .externalEvent [a])], ret := .dsl .declared [] }
-  | .request =>
-    { name := "request", doc := "An effect: the request to an external command, and the events its answer becomes.",
+  | .requestCommand =>
+    { name := "request_command",
+      doc := "An effect: the request to an external's command, and the events its answer becomes.",
       tvars := ["event", "input", "output", "rejection"], dataArgs := true,
       params := [l "command" (.dsl .externalCommand [b, param 2, param 3]), l "input" b,
         l "on_answer" (.fn [.result (param 2) (param 3)] (.list a))],
+      ret := .dsl .effect [a] }
+  | .requestQuery =>
+    { name := "request_query",
+      doc := "An effect: the request to an external's query, and the events its answer becomes. An answer that breaks the query's `ensures` is Invalid.",
+      tvars := ["event", "input", "output"], dataArgs := true,
+      params := [l "query" (.dsl .externalQuery [b, param 2]), l "input" b, l "on_answer" (.fn [param 2] (.list a))],
       ret := .dsl .effect [a] }
   | .sendCommand =>
     { name := "send_command",
@@ -285,12 +292,19 @@ def sig : Prim → PrimSig :=
     { name := "step_wait", doc := "A step: time moves on by `ms`, and the timers due fire.",
       tvars := ["records", "event", "caller"], dataArgs := true,
       params := [l "ms" .int], ret := .dsl .step [a, b, param 2] }
-  | .stepAnswer =>
-    { name := "step_answer",
+  | .stepAnswerCommand =>
+    { name := "step_answer_command",
       doc := "A step: the external answers the one pending request to `command` that `sender` sent.",
       tvars := ["records", "event", "caller", "input", "output", "rejection"], dataArgs := true,
       params := [l "command" (.dsl .externalCommand [param 3, param 4, param 5]), l "sender" (.dsl .sender []),
         l "with" (.result (param 4) (param 5))],
+      ret := .dsl .step [a, b, param 2] }
+  | .stepAnswerQuery =>
+    { name := "step_answer_query",
+      doc := "A step: the external answers the one pending request to `query` that `sender` sent.",
+      tvars := ["records", "event", "caller", "input", "output"], dataArgs := true,
+      params := [l "query" (.dsl .externalQuery [param 3, param 4]), l "sender" (.dsl .sender []),
+        l "with" (param 4)],
       ret := .dsl .step [a, b, param 2] }
   | .stepEvent =>
     { name := "step_event", doc := "A step: the service receives an event it subscribes to.",
@@ -319,9 +333,9 @@ def all : List Prim :=
    .bagContains, .bagMinBy, .bagMaxBy, .tableNew, .tableFromList, .tableInsert, .tableRemove, .tableGet, .tableSize,
    .tableKeys, .tableValues, .tableFilter, .tableMap, .tableCount, .tableAny, .tableAll, .dateAddDays,
    .dateDaysBetween, .require, .ref, .spec, .service, .command, .query, .defineCommand, .defineQuery, .machine, .reaction, .external,
-   .externalCommand, .externalQuery, .externalEvent, .declareCommand, .declareQuery, .declareEvent, .request,
+   .externalCommand, .externalQuery, .externalEvent, .declareCommand, .declareQuery, .declareEvent, .requestCommand, .requestQuery,
    .sendCommand, .sendQuery, .subscribe, .bounds, .create, .response, .scenario, .stepCommand, .stepQuery, .stepWait,
-   .stepAnswer, .stepEvent, .fromMachine, .fromReaction, .fresh, .id]
+   .stepAnswerCommand, .stepAnswerQuery, .stepEvent, .fromMachine, .fromReaction, .fresh, .id]
 
 theorem mem_all (p : Prim) : p ∈ all := by cases p <;> simp [all]
 

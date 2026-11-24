@@ -422,11 +422,20 @@ pub fn declare_event(_event: ExternalEvent(event)) -> Declared {
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// An effect: the request to an external command, and the events its answer becomes.
-pub fn request(
+/// An effect: the request to an external's command, and the events its answer becomes.
+pub fn request_command(
   command _command: ExternalCommand(input, output, rejection),
   input _input: input,
   on_answer _on_answer: fn(Result(output, rejection)) -> List(event),
+) -> Effect(event) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// An effect: the request to an external's query, and the events its answer becomes. An answer that breaks the query's `ensures` is Invalid.
+pub fn request_query(
+  query _query: ExternalQuery(input, output),
+  input _input: input,
+  on_answer _on_answer: fn(output) -> List(event),
 ) -> Effect(event) {
   panic as "tazuna's built-ins run only in the engine"
 }
@@ -520,10 +529,19 @@ pub fn step_wait(ms _ms: Int) -> Step(records, event, caller) {
 }
 
 /// A step: the external answers the one pending request to `command` that `sender` sent.
-pub fn step_answer(
+pub fn step_answer_command(
   command _command: ExternalCommand(input, output, rejection),
   sender _sender: Sender,
   with _with: Result(output, rejection),
+) -> Step(records, event, caller) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A step: the external answers the one pending request to `query` that `sender` sent.
+pub fn step_answer_query(
+  query _query: ExternalQuery(input, output),
+  sender _sender: Sender,
+  with _with: output,
 ) -> Step(records, event, caller) {
   panic as "tazuna's built-ins run only in the engine"
 }

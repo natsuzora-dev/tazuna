@@ -84,12 +84,16 @@ fn watch() -> tazuna.Machine(Records, Event) {
       case s {
         Pinging ->
           Some(
-            tazuna.request(command: send(), input: r.total, on_answer: fn(a) {
-              case a {
-                Ok(Nil) -> [Pinged]
-                Error(_) -> []
-              }
-            }),
+            tazuna.request_command(
+              command: send(),
+              input: r.total,
+              on_answer: fn(a) {
+                case a {
+                  Ok(Nil) -> [Pinged]
+                  Error(_) -> []
+                }
+              },
+            ),
           )
         _ -> None
       }
@@ -120,7 +124,7 @@ fn basic() -> tazuna.Scenario {
     tazuna.step_command(command: add(), caller: User, input: 0),
     tazuna.step_command(command: add(), caller: User, input: 1),
     tazuna.step_wait(ms: 10),
-    tazuna.step_answer(
+    tazuna.step_answer_command(
       command: send(),
       sender: tazuna.from_machine(machine: watch(), key: 0),
       with: Ok(Nil),

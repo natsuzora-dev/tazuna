@@ -151,7 +151,10 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .dateAddDays, _, _ => fun (d, n, ()) => @HAdd.hAdd Int Int Int _ d n
   | .dateDaysBetween, _, _ => fun (a, b, ()) => @HSub.hSub Int Int Int _ b a
   | .require, _, _ => fun (holds, rejection, next, ()) => if Ty.toBool holds then next () else Ty.error rejection
-  | .spec, _, _ => fun (services, externals, scenarios, ()) => ⟨services, externals, scenarios⟩
+  | .spec, _, _ => fun (services, externals, scenarios, ()) =>
+    let externals : List ExternalV := externals
+    let declared := externals.flatMap (·.declared)
+    ⟨(show List ServiceV from services).map ({ · with declared }), externals, scenarios⟩
   | .service, args, h => let d := Prim.dataOf h rfl
     fun (name, init, apply, subscribes, requests, machines, reactions, invariants, responses, bnds, ()) =>
     let requests : List (DefinitionV ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)) :=
@@ -161,7 +164,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
       subscribes, machines, reactions,
       commands := requests.filterMap fun | .command c => some c | .query _ => none,
       queries := requests.filterMap fun | .query q => some q | .command _ => none,
-      invariants := Prim.dn d (.fn [.param 0] Ty.rules) rfl invariants, responses, bounds := bnds }
+      invariants := Prim.dn d (.fn [.param 0] Ty.rules) rfl invariants, responses, bounds := bnds, declared := [] }
   | .command, args, h => let d := Prim.dataOf h rfl
     fun (owner, name, callers, accepts, decide, ensures, ()) =>
     Subtype.mk (p := fun (x : CommandV _ _ _) => x.input = (Ty.param 3).inst args ∧ x.rejection = (Ty.param 4).inst args)
@@ -200,11 +203,18 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .declareQuery, args, _ => fun ((ext, name, ensures), ()) =>
     .query ext name ((Ty.param 0).inst args) ((Ty.param 1).inst args) ensures
   | .declareEvent, args, _ => fun ((ext, name), ()) => .event ext name ((Ty.param 0).inst args)
-  | .request, args, h => let d := Prim.dataOf h rfl
-    fun ((ext, cmd), input, onAnswer, ()) => .request
-    { external := ext, command := cmd, input := (Ty.param 1).inst args, output := (Ty.param 2).inst args,
-      rejection := (Ty.param 3).inst args, value := Prim.dn d (.param 1) rfl input,
+  | .requestCommand, args, h => let d := Prim.dataOf h rfl
+    fun ((ext, name), input, onAnswer, ()) => .request
+    { external := ext, name, input := (Ty.param 1).inst args, output := (Ty.param 2).inst args,
+      rejection := some ((Ty.param 3).inst args), value := Prim.dn d (.param 1) rfl input, holds := fun _ => [],
       onAnswer := Prim.dn d (.fn [.result (.param 2) (.param 3)] (.list (.param 0))) rfl onAnswer }
+  | .requestQuery, args, h => let d := Prim.dataOf h rfl
+    fun ((ext, name, ensures), input, onAnswer, ()) =>
+    let input := Prim.dn d (.param 1) rfl input
+    .request
+    { external := ext, name, input := (Ty.param 1).inst args, output := (Ty.param 2).inst args, rejection := none,
+      value := input, holds := fun o => ensures (input, o, ()),
+      onAnswer := Prim.dn d (.fn [.param 2] (.list (.param 0))) rfl onAnswer }
   | .sendCommand, args, h => let d := Prim.dataOf h rfl
     fun (c, caller, input, onAnswer, ()) =>
     let c : CommandOf ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)
@@ -247,10 +257,11 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
       ((Ty.param 4).inst args) := q
     .query q.1 (Prim.dn d (.param 2) rfl caller) (cast (congrArg Ty.den0 q.2.1.symm) (Prim.dn d (.param 3) rfl input))
   | .stepWait, _, _ => fun (ms, ()) => .wait ms
-  | .stepAnswer, args, h => let d := Prim.dataOf h rfl
-    fun ((ext, cmd), sender, value, ()) =>
-    .answer ext cmd sender ((Ty.param 4).inst args) ((Ty.param 5).inst args)
-      (Prim.dn d (.result (.param 4) (.param 5)) rfl value)
+  | .stepAnswerCommand, _, h => let d := Prim.dataOf h rfl
+    fun ((ext, name), sender, value, ()) =>
+    .answer ext name sender ⟨_, Prim.dn d (.result (.param 4) (.param 5)) rfl value⟩
+  | .stepAnswerQuery, _, h => let d := Prim.dataOf h rfl
+    fun ((ext, name, _), sender, value, ()) => .answer ext name sender ⟨_, Prim.dn d (.param 4) rfl value⟩
   | .stepEvent, args, h => let d := Prim.dataOf h rfl
     fun ((src, ev), value, ()) => .event src ev ⟨(Ty.param 3).inst args, Prim.dn d (.param 3) rfl value⟩
   | .fromMachine, args, h => let d := Prim.dataOf h rfl

@@ -14,7 +14,7 @@ def faultFields : Fault → List (String × Json)
   | .invariant n | .ensures n => [("rule", Json.str n)]
   | .cascadeLimit => []
   | .answerUnmatched to => [("to", Json.str to)]
-  | .invalidOwnEffect n rs => [("request", Json.str n), ("rules", Json.arr (rs.map Json.str).toArray)]
+  | .invalidEffect n rs => [("request", Json.str n), ("rules", Json.arr (rs.map Json.str).toArray)]
 
 /-- The scenario's steps, typed by its service, when the types agree; the structure rules have checked that they do. -/
 def _root_.Tazuna.Ir.ScenarioV.stepsFor (sc : ScenarioV) (v : ServiceV) : Option (List (StepV v.records v.event v.caller)) :=

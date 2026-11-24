@@ -12,8 +12,8 @@ private def I (x : Int) : Int := x
 private def rule (n : String) (b : Bool) : Ty.rules.den0 := [(n, Ty.ofBool b, ())]
 
 def ping : EffectV .int := .request
-  { external := "mail", command := "ping", input := .str, output := .int, rejection := .str, value := "hi",
-    onAnswer := fun (a, ()) => match a with
+  { external := "mail", name := "ping", input := .str, output := .int, rejection := some .str, value := "hi",
+    holds := fun _ => [], onAnswer := fun (a, ()) => match a with
       | .inl _ => [(1 : Int)]
       | .inr _ => [] }
 
@@ -43,7 +43,8 @@ def svc : ServiceV :=
     subscribes := [{ source := "peer", name := "moved", event := .int, wrap := fun (x, ()) => x }],
     commands := [add], queries := [total], machines := [watch], reactions := [],
     invariants := fun (r, ()) => rule "under 50" (decide (I r < 50)), responses := [],
-    bounds := { creates := [], items := 3, cascade := 2, steps := 5 } }
+    bounds := { creates := [], items := 3, cascade := 2, steps := 5 },
+    declared := [.command "mail" "ping" .str .int .str] }
 
 def s0 : State svc := State.init svc
 def cmd (caller amount : Int) : Input svc := .command ⟨0, by decide⟩ caller amount
@@ -68,7 +69,7 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run svc s is).
 #guard (after s0 [cmd 1 5, cmd 1 1]).machines.map (·.2.map (·.timer.map (·.1))) == [[some 10]]
 -- A clock line before the deadline fires nothing; at it, the instance enters 5, whose effect sends a request.
 #guard (step svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 9)).out.length == 0
-#guard (step svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 10)).out.map (·.command) == ["ping"]
+#guard (step svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 10)).out.map (·.name) == ["ping"]
 -- Time does not move back.
 #guard summary (after s0 [.clock 5]) (.clock 4) == "invalid [time moves forward]"
 -- The answer to the pending request becomes events; an answer to no pending request is a fault.
@@ -88,11 +89,30 @@ def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
 #guard I (step loop (State.init loop) (ev 7)).state.records == 9
 #guard ((step loop (State.init loop) (ev 7)).events.map I) == [7, 2]
 -- An own command with input it does not accept is a fault, not Invalid.
-#guard (step loop (State.init loop) (ev 3)).outcome.summary == "fault invalidOwnEffect add [small]"
+#guard (step loop (State.init loop) (ev 3)).outcome.summary == "fault invalidEffect add [small]"
 -- More internal steps than the cascade bound is a fault.
 #guard (step loop (State.init loop) (ev 1)).outcome.summary == "fault cascadeLimit"
 -- A service that lists another service's command breaks the owner rule.
 #guard ((SpecV.illegal prelude ⟨[{ svc with name := "other" }], [], []⟩).filter (·.1 == .owner)).length == 2
+/-- The outcome of the last of the inputs, run from the initial state. -/
+def last (v : ServiceV) (is : List (Input v)) : String :=
+  (((run v (State.init v) is).2.getLast?).map (·.outcome.summary)).getD ""
+-- A request to a command no external declares is a fault.
+def undeclared : ServiceV := { svc with declared := [.command "mail" "ping" .str .int .int] }
+#guard last undeclared [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int),
+  .clock 10] == "fault invalidEffect mail.ping [declared]"
+-- A request to an external query: an answer that breaks what the query ensures is Invalid, and the request stays
+-- pending for another answer.
+def rate : EffectV .int := .request
+  { external := "fx", name := "rate", input := .str, output := .int, rejection := none, value := "eur",
+    holds := fun o => rule "positive" (decide (0 < I o)), onAnswer := fun (o, ()) => [o] }
+def asking : ServiceV :=
+  { svc with machines := [{ watch with effect := fun _ st _ _ => if I st = 5 then some rate else none }],
+             declared := [.query "fx" "rate" .str .int fun _ => []] }
+def askingUntil : List (Input asking) :=
+  [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int), .clock 10]
+#guard last asking (askingUntil ++ [.answer 0 ⟨.int, (-1 : Int)⟩]) == "invalid [positive]"
+#guard last asking (askingUntil ++ [.answer 0 ⟨.int, (-1 : Int)⟩, .answer 0 ⟨.int, (3 : Int)⟩]) == "accepted"
 -- Every input has one outcome.
 #guard (run svc s0 [cmd 1 5, cmd 2 5, .clock 3]).2.length == 3
 

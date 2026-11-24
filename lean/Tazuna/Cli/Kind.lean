@@ -2,7 +2,7 @@ import Tazuna.Semantics.Step
 
 /-- A step that cannot happen in a correct spec, by kind (`Tazuna.Ir.Fault` without its details). -/
 inductive Tazuna.FaultKind : Type
-  | invariant | ensures | cascadeLimit | answerUnmatched | invalidOwnEffect
+  | invariant | ensures | cascadeLimit | answerUnmatched | invalidEffect
 deriving DecidableEq
 
 /-- What `test` found for one scenario. -/
@@ -35,7 +35,7 @@ inductive Tazuna.Kind : Type
 
 namespace Tazuna
 
-def FaultKind.all : List FaultKind := [.invariant, .ensures, .cascadeLimit, .answerUnmatched, .invalidOwnEffect]
+def FaultKind.all : List FaultKind := [.invariant, .ensures, .cascadeLimit, .answerUnmatched, .invalidEffect]
 
 theorem FaultKind.mem_all (k : FaultKind) : k ∈ FaultKind.all := by cases k <;> simp [FaultKind.all]
 
@@ -44,14 +44,14 @@ def FaultKind.name : FaultKind → String
   | .ensures => "ensures"
   | .cascadeLimit => "cascadeLimit"
   | .answerUnmatched => "answerUnmatched"
-  | .invalidOwnEffect => "invalidOwnEffect"
+  | .invalidEffect => "invalidEffect"
 
 def Ir.Fault.kind : Ir.Fault → FaultKind
   | .invariant _ => .invariant
   | .ensures _ => .ensures
   | .cascadeLimit => .cascadeLimit
   | .answerUnmatched _ => .answerUnmatched
-  | .invalidOwnEffect .. => .invalidOwnEffect
+  | .invalidEffect .. => .invalidEffect
 
 def TestKind.all : List TestKind := [.passed, .changed, .written, .badStep]
 
