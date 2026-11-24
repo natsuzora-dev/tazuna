@@ -1202,6 +1202,31 @@ def machineEffectCheck (solver : Solver) : IO Bool := do
       | a => IO.println s!"smt-check: machine effect: {repr a}"; ok := false
   return ok
 
+/-! A list of effects where no effect kind exists, as a reaction of a service that requests nothing returns: the
+list has no slots, so the solver's list is empty, as eval's `[]` is, and a script that asserts an occupied slot cannot
+be written (the comparison against a one-item list fails). -/
+
+def noEffectsE : Expr [] [] (.list (.dsl .effect [.int])) := .list .nil
+
+def noEffectsCheck (solver : Solver) : IO Bool := do
+  let L := Layout.addTys (fun _ => 2) {} [.list (.dsl .effect [.int])]
+  let some (_, n) := L.find? (.list (.dsl .effect [.int])) | IO.println "smt-check: no effects: no list"; return false
+  if n != 0 then IO.println s!"smt-check: no effects: the list has {n} slots"; return false
+  let some srt := L.srt? (.list (.dsl .effect [.int])) | IO.println "smt-check: no effects: no sort"; return false
+  let some dts := L.datatypes? | IO.println "smt-check: no effects: no datatypes"; return false
+  match encode L (G := []) () noEffectsE () with
+  | .error r => IO.println s!"smt-check: no effects: no encoding: {repr r}"; return false
+  | .ok (code, cond) =>
+    match ← solver.run { datatypes := dts, vars := [srt], asserts := [.eq (.var 0) code, cond], shows := [0] } with
+    | .sat vs =>
+      let some v := vs.lookup 0 | IO.println "smt-check: no effects: no value"; return false
+      let agrees (want : Nat) : Bool := (occupied v).length == want
+      if !agrees (noEffectsE.eval (G := []) .nil () ()).length then
+        IO.println s!"smt-check: no effects: the solver's {v.print} is not empty"; return false
+      if agrees 1 then IO.println "smt-check: no effects: the comparison accepts one effect"; return false
+      return true
+    | a => IO.println s!"smt-check: no effects: {repr a}"; return false
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -1263,6 +1288,7 @@ def check (z3 : String) : IO Bool := do
   unless ← effectCheck solver do ok := false
   unless ← effectListCheck solver do ok := false
   unless ← machineEffectCheck solver do ok := false
+  unless ← noEffectsCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

@@ -336,11 +336,13 @@ end
 
 end
 
-/-- A value of the effect datatype of the event type `e`: its first kind with a term of each field's sort. -/
+/-- A value of the effect datatype of the event type `e`: its first kind with a term of each field's sort, or the
+datatype's one constructor when no kind exists. -/
 def effectDefault (e : Ty) : Option Term := do
   let (d, _) ← L.find? (.dsl .effect [e])
-  let key ← (L.effectsOf e).head?
-  pure (.ctor d 0 (← key.fields.mapM (defaultWith L fun _ _ => none)))
+  match (L.effectsOf e).head? with
+  | none => pure (.ctor d 0 [])
+  | some key => pure (.ctor d 0 (← key.fields.mapM (defaultWith L fun _ _ => none)))
 
 /-- A term of the type's sort, for the items of free slots, which no value reads. An effect has one too, any value
 of its datatype, so a list of effects has free slots. -/
@@ -844,9 +846,16 @@ end
 def addEffect (L : Layout) (e : Ty) : Layout :=
   ((L.effectsOf e).foldl (fun L k => addTysWith slots (fun L _ _ => L) L k.fields) L).push (.dsl .effect [e])
 
+/-- The slot count of each type, except that a list of effects of an event type no effect kind names has none: no
+effect value of that type has a code, so every list of them that has one is empty. -/
+def effectSlots (L : Layout) : Ty → Nat
+  | .list (.dsl .effect [e]) => if (L.effectsOf e).isEmpty then 0 else slots (.list (.dsl .effect [e]))
+  | t => slots t
+
 /-- The layout with every datatype the types `ts` need, an effect type's included. -/
 def addTys (L : Layout) (ts : List Ty) : Layout :=
-  addTysWith slots (fun L k a => match k, a with | .effect, [e] => addEffect slots L e | _, _ => L) L ts
+  addTysWith (effectSlots slots L) (fun L k a => match k, a with
+    | .effect, [e] => addEffect (effectSlots slots L) L e | _, _ => L) L ts
 
 end
 
@@ -869,8 +878,9 @@ def datatype? (L : Layout) : Ty × Nat → Option Datatype
   | (.id, _) => some ⟨[[.int], [.str]]⟩
   | (.bag t, n) | (.list t, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, t]))]⟩
   | (.table k v, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, k, v]))]⟩
+  -- With no kind the datatype still needs a constructor (SMT-LIB declares none without one); it codes no value.
   | (.dsl .effect [e], _) => match L.effectsOf e with
-    | [] => none
+    | [] => some ⟨[[]]⟩
     | ks => do pure ⟨← ks.mapM (·.fields.mapM L.srt?)⟩
   | _ => none
 
