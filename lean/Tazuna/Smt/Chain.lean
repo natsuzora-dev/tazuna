@@ -440,15 +440,15 @@ def runCommand (ce : ChainEnv) (x : Path) (w : Waiting) : Except String (List Pa
   -- A command rejected as invalid input is the sender's fault, which halts (rejectedInput?).
   let (ok, rejected, halted) := x.after { accepted := andT w.valid step.accepted,
                                           halted := { step.halted with term := .or (notT w.valid) step.halted.term } }
-  -- An automation's rejected command is a fault that does not halt (automationAnswer), and nothing waits for it; a
-  -- state's waits for the answer.
-  let rejected := match w.sender with
-    | .state .. => { rejected with jobs := rejected.jobs ++ [.answered w.sender false] }
-    | .automation a => { rejected with faults := rejected.faults ++ step.rejections.zipIdx.map fun ((g, r), i) =>
-        { id := s!"{names}f{i}", guard := andT rejected.pc g, automation := a, rejection := r } }
   let answered (accepted : Bool) : List Job := match w.sender with
     | .state .. => [.answered w.sender accepted]
     | .automation _ => []
+  -- An automation's rejected command is a fault that does not halt (automationAnswer), and nothing waits for it; a
+  -- state's waits for the answer.
+  let rejected := match w.sender with
+    | .state .. => { rejected with jobs := rejected.jobs ++ answered false }
+    | .automation a => { rejected with faults := rejected.faults ++ step.rejections.zipIdx.map fun ((g, r), i) =>
+        { id := s!"{names}f{i}", guard := andT rejected.pc g, automation := a, rejection := r } }
   let ok := { ok with records := step.post, used := step.used,
                       gap := .or ok.gap (.and ok.pc step.gap), beyond := .or ok.beyond (.and ok.pc step.beyond),
                       outs := ok.outs ++ step.emitted.zipIdx.map fun (((g, e, payload) : Term × Ir.Ref × List (String × Term)), (i : Nat)) =>
