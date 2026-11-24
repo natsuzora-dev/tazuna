@@ -70,7 +70,7 @@ pub type Subscription(event)
 /// How far checking goes.
 pub type Bounds(records)
 
-/// How many keys checking may add to one table of the records.
+/// At most how many records one table of the records holds at any time.
 pub type Create(records)
 
 /// After one event, another within a time.
@@ -318,7 +318,7 @@ pub fn subscribe(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// How far checking goes: keys created per table, items per bag, internal steps per input, steps per run.
+/// How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run.
 pub fn bounds(
   creates _creates: List(Create(records)),
   items _items: Int,

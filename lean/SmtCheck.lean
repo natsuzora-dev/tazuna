@@ -1,4 +1,4 @@
-import Tazuna.Smt.AnswerStep
+import Tazuna.Smt.Bounds
 import Tazuna.Smt.Solver
 
 /-! Runs the solver on printed scripts and reads its answers back: the theorems cover printing and reading our own
@@ -795,6 +795,108 @@ def answerCheck (solver : Solver) : IO Bool := do
     | a => IO.println s!"smt-check: answer unmatched: {repr a}"; ok := false
   return ok
 
+/-! Bounds, for `createsT_iff` and `boundReached_iff`: records of two tables of Int to Int, `a` created at most 3
+times and `b` at most 2, so the table type has 3 slots and `b`'s limit is a term. The event inserts its key and value
+into both. -/
+
+def recordsB : Ty := .tuple [recordsT, recordsT]
+
+def applyB : E (.fn [recordsB, evT] recordsB) :=
+  let key : Expr [] [recordsB, evT] .int := .index (ts := [.int, .int]) (.var (.there .here)) ⟨0, by decide⟩
+  let val : Expr [] [recordsB, evT] .int := .index (ts := [.int, .int]) (.var (.there .here)) ⟨1, by decide⟩
+  let ins (t : Expr [] [recordsB, evT] recordsT) : Expr [] [recordsB, evT] recordsT :=
+    .call (.prim .tableInsert [.int, .int] rfl) (.cons t (.cons key (.cons val .nil)))
+  .lam (.tuple (.cons (ins (.index (ts := [recordsT, recordsT]) (.var .here) ⟨0, by decide⟩))
+    (.cons (ins (.index (ts := [recordsT, recordsT]) (.var .here) ⟨1, by decide⟩)) .nil)))
+
+def tableA : E (.fn [recordsB] recordsT) := .lam (.index (ts := [recordsT, recordsT]) (.var .here) ⟨0, by decide⟩)
+def tableB : E (.fn [recordsB] recordsT) := .lam (.index (ts := [recordsT, recordsT]) (.var .here) ⟨1, by decide⟩)
+
+def createsB (atMostB : Int) : List (CreateV recordsB) :=
+  [⟨.int, .int, .closed tableA, 3⟩, ⟨.int, .int, .closed tableB, atMostB⟩]
+
+def boundSvc : ServiceV :=
+  { name := "b", records := recordsB, event := evT, caller := .str,
+    init := ((Builtin.tableEmpty, Builtin.tableEmpty, ()) : recordsB.den0), apply := .closed applyB,
+    subscribes := [⟨"x", "set", evT, .closed wrapE⟩], declares := [], commands := [], queries := [], sources := [],
+    machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [],
+    bounds := ⟨createsB 2, 0, 0, 0⟩, scenarios := [], declared := [] }
+
+def boundLayout : Layout :=
+  let lits := Tazuna.Smt.Expr.lits applyB
+  Layout.addTys (listSlots (boundSlots boundSvc.bounds) lits) {} (recordsB :: evT :: Tazuna.Smt.Expr.tys applyB ++
+    Tazuna.Smt.Expr.tys tableA ++ [Ty.rules])
+
+def boundI : Fin boundSvc.subscribes.length := ⟨0, by decide⟩
+
+/-- v0..v3 the state, v4 the value, v5 the records after, v6 the bound-reached condition. `atMostB` is the `at_most`
+the script encodes for `b`, and `withLimits` whether it asserts the limits of the state before. -/
+def boundScript (atMostB : Int) (withLimits : Bool) (goal : List Term) : Except String Script := do
+  let L := boundLayout
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let (ec, ce) ← enc (EventCode.of L boundSvc boundI)
+  let S := SymState.vars 0
+  let (o, cond) ← enc (encodeEvent L ec S.records (.var 4))
+  let (pre, cpre) ← enc (createsT L S.records (createsB atMostB))
+  let (reached, creached) ← enc (boundReachedT L (createsB atMostB) cond o.records)
+  let some wf := S.wf L (v := boundSvc) [] | throw "no well-formedness"
+  let some rsrt := L.srt? recordsB | throw "no records sort"
+  let some esrt := L.srt? evT | throw "no event sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  pure { datatypes := dts, vars := [rsrt, .int, .int, .int, esrt, rsrt, .bool],
+         asserts := [ce, cpre, creached, wf] ++ (if withLimits then [pre] else []) ++
+           [.eq (.var 5) o.records, .eq (.var 6) reached] ++ goal,
+         shows := List.range 7 }
+
+/-- Whether the step from the decoded state and value leaves the bounds as the terms say it does. -/
+def boundAgrees (vs : List (Nat × Val)) (reached : Bool) : Bool :=
+  let M := modelOf vs
+  let L := boundLayout
+  match (SymState.vars 0).decode M L (v := boundSvc) rfl [] [],
+      (SymInput.event boundI (.var 4)).decode M L (v := boundSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+        (fun | ⟨0, _⟩ => rfl) with
+  | some s, some x =>
+    let r := step boundSvc s x
+    within boundSvc.bounds.creates s.records && r.outcome.summary == "accepted" &&
+      within boundSvc.bounds.creates r.state.records == !reached &&
+      (reached || sameAs L recordsB rfl r.state.records (vs.lookup 5))
+  | _, _ => false
+
+def boundCheck (solver : Solver) : IO Bool := do
+  let mut ok := true
+  if (boundLayout.find? recordsT).map (·.2) != some 3 then IO.println "smt-check: bounds: not 3 slots"; ok := false
+  for (name, reached) in [("a step leaves a create's bound", true), ("a step stays within the bounds", false)] do
+    -- The step's own condition holds, so only the limit can make the bound reached.
+    let goal := if reached then [.var 6] else [.not (.var 6)]
+    match boundScript 2 true goal with
+    | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
+    | .ok script =>
+      match ← solver.run script with
+      | .sat vs => unless boundAgrees vs reached do IO.println s!"smt-check: {name}: the step and the terms differ"; ok := false
+      | a => IO.println s!"smt-check: {name}: {repr a}"; ok := false
+  -- Three keys in `b` break its limit: unsat with the limits, sat without them.
+  let some (d, n) := boundLayout.find? recordsT | IO.println "smt-check: bounds: no table"; return false
+  let some (dt, _) := boundLayout.find? (.tuple [Ty.bool, .int, .int]) | IO.println "smt-check: bounds: no slot"; return false
+  let some (dr, _) := boundLayout.find? recordsB | IO.println "smt-check: bounds: no records"; return false
+  let full := allT ((slotsOf d dt n 2 (.sel dr 0 1 (.var 0))).map (·.1))
+  for (withLimits, want) in [(true, "unsat"), (false, "sat")] do
+    match boundScript 2 withLimits [full] with
+    | .ok script =>
+      let got := match ← solver.run script with
+        | .unsat => "unsat"
+        | .sat _ => "sat"
+        | _ => "unknown"
+      if got != want then IO.println s!"smt-check: limits exclude a full b (limits {withLimits}): {got}"; ok := false
+    | .error m => IO.println s!"smt-check: bounds: {m}"; ok := false
+  -- A limit encoded with the wrong `at_most` must disagree with the step.
+  match boundScript 1 false [.var 6, .not (.lt (.int 1) (sizeT (slotsOf d dt n 2 (.sel dr 0 1 (.var 0)))))] with
+  | .error m => IO.println s!"smt-check: broken limit: {m}"; ok := false
+  | .ok script =>
+    match ← solver.run script with
+    | .sat vs => if boundAgrees vs true then IO.println "smt-check: a broken limit agreed with the step"; ok := false
+    | a => IO.println s!"smt-check: broken limit: {repr a}"; ok := false
+  return ok
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -850,6 +952,7 @@ def check (z3 : String) : IO Bool := do
     unless ← commandCase solver name goal do ok := false
   unless ← pendingCheck solver do ok := false
   unless ← answerCheck solver do ok := false
+  unless ← boundCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
