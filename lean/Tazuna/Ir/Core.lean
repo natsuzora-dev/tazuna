@@ -3,15 +3,17 @@
 
 namespace Tazuna.Ir
 
-/-- A type after elaboration. `adt i` is the `i`-th declaration of the program's type table; `param k` is the `k`-th
-parameter of the declaration a field type belongs to, or a rigid type variable of a generic function body. -/
+/-- A type after elaboration. `adt i args variants` is the `i`-th declaration of the program's type table at `args`,
+carrying each variant's field types. No declaration refers to itself, directly or through others, so every type is a
+finite tree and the meaning of a type follows its structure. `param k` is the `k`-th parameter of the declaration a
+field type belongs to, or a rigid type variable of a generic function body. -/
 inductive Ty where
   | int
   | str
   | list (t : Ty)
   | tuple (ts : List Ty)
   | fn (ps : List Ty) (r : Ty)
-  | adt (i : Nat) (args : List Ty)
+  | adt (i : Nat) (args : List Ty) (variants : List (List Ty))
   | param (k : Nat)
 deriving Repr, Inhabited
 
@@ -27,12 +29,22 @@ def same : (a b : Ty) → Option (PLift (a = b))
   | .fn a r, .fn b u => match sames a b, same r u with
     | some ⟨h⟩, some ⟨h'⟩ => some ⟨h ▸ h' ▸ rfl⟩
     | _, _ => none
-  | .adt i a, .adt j b => if hi : i = j then (sames a b).map fun ⟨h⟩ => ⟨hi ▸ h ▸ rfl⟩ else none
+  | .adt i a v, .adt j b w =>
+    if hi : i = j then match sames a b, samess v w with
+      | some ⟨h⟩, some ⟨h'⟩ => some ⟨hi ▸ h ▸ h' ▸ rfl⟩
+      | _, _ => none
+    else none
   | .param i, .param j => if h : i = j then some ⟨h ▸ rfl⟩ else none
   | _, _ => none
 def sames : (a b : List Ty) → Option (PLift (a = b))
   | [], [] => some ⟨rfl⟩
   | x :: xs, y :: ys => match same x y, sames xs ys with
+    | some ⟨h⟩, some ⟨h'⟩ => some ⟨h ▸ h' ▸ rfl⟩
+    | _, _ => none
+  | _, _ => none
+def samess : (a b : List (List Ty)) → Option (PLift (a = b))
+  | [], [] => some ⟨rfl⟩
+  | x :: xs, y :: ys => match sames x y, samess xs ys with
     | some ⟨h⟩, some ⟨h'⟩ => some ⟨h ▸ h' ▸ rfl⟩
     | _, _ => none
   | _, _ => none
@@ -46,11 +58,14 @@ def inst (args : List Ty) : Ty → Ty
   | .list t => .list (inst args t)
   | .tuple ts => .tuple (insts args ts)
   | .fn ps r => .fn (insts args ps) (inst args r)
-  | .adt i ts => .adt i (insts args ts)
+  | .adt i ts vs => .adt i (insts args ts) (instss args vs)
   | .param k => args[k]?.getD (.param k)
 def insts (args : List Ty) : List Ty → List Ty
   | [] => []
   | t :: ts => inst args t :: insts args ts
+def instss (args : List Ty) : List (List Ty) → List (List Ty)
+  | [] => []
+  | ts :: vs => insts args ts :: instss args vs
 end
 
 mutual
@@ -58,12 +73,27 @@ mutual
 def comparable : Ty → Bool
   | .int | .str | .param _ => true
   | .list t => comparable t
-  | .tuple ts | .adt _ ts => comparables ts
+  | .tuple ts => comparables ts
+  | .adt _ _ vs => comparabless vs
   | .fn .. => false
 def comparables : List Ty → Bool
   | [] => true
   | t :: ts => comparable t && comparables ts
+def comparabless : List (List Ty) → Bool
+  | [] => true
+  | ts :: vs => comparables ts && comparabless vs
 end
+
+/-- Evidence that every variant has a field of type `ft` at index `k`, when it does. -/
+def fieldAt (k : Nat) (ft : Ty) : (vs : List (List Ty)) → Option (PLift (∀ fs ∈ vs, fs[k]? = some ft))
+  | [] => some ⟨by simp⟩
+  | fs :: vs => match h : fs[k]?, fieldAt k ft vs with
+    | some f, some ⟨p⟩ => (same f ft).map fun ⟨e⟩ => ⟨by
+        intro gs hg
+        cases hg with
+        | head => rw [h, e]
+        | tail _ hm => exact p gs hm⟩
+    | _, _ => none
 
 end Ty
 
@@ -85,8 +115,9 @@ deriving Inhabited
 
 namespace TypeDecl
 
-def fieldTys (d : TypeDecl) (v : Fin d.variants.length) (args : List Ty) : List Ty :=
-  Ty.insts args ((d.variants.get v).fields.map (·.ty))
+/-- Each variant's field types at `args`: what `Ty.adt` carries. -/
+def variantTys (d : TypeDecl) (args : List Ty) : List (List Ty) :=
+  d.variants.map fun v => Ty.insts args (v.fields.map (·.ty))
 
 /-- Gleam's record accessor: the field with this label sits at the same index with the same type in every variant. -/
 def accessor (d : TypeDecl) (label : String) : Option (Nat × Ty) :=
@@ -112,8 +143,8 @@ def prelude : List TypeDecl :=
       variants := [⟨"Some", [⟨none, .param 0⟩]⟩, ⟨"None", []⟩] },
     { name := "tazuna.Spec", params := [], variants := [] } ]
 
-def Ty.bool : Ty := .adt 0 []
-def Ty.spec : Ty := .adt 4 []
+def Ty.bool : Ty := .adt 0 [] [[], []]
+def Ty.spec : Ty := .adt 4 [] []
 
 /-- A variable of type `t` in the context `Γ`, the innermost binding first. -/
 inductive Var : List Ty → Ty → Type
@@ -146,77 +177,75 @@ inductive BinOp : Ty → Ty → Ty → Type
 
 mutual
 /-- A pattern matching values of type `t` and binding variables of types `Δ`, the first binding innermost. -/
-inductive Pat (T : List TypeDecl) : Ty → List Ty → Type
-  | wild {t} : Pat T t []
-  | bind {t} : Pat T t [t]
-  | int (n : Int) : Pat T .int []
-  | str (s : String) : Pat T .str []
-  | tuple {ts Δ} (ps : Pats T ts Δ) : Pat T (.tuple ts) Δ
-  | ctor {i args Δ} (d : TypeDecl) (h : T[i]? = some d) (v : Fin d.variants.length)
-      (ps : Pats T (d.fieldTys v args) Δ) : Pat T (.adt i args) Δ
+inductive Pat : Ty → List Ty → Type
+  | wild {t} : Pat t []
+  | bind {t} : Pat t [t]
+  | int (n : Int) : Pat .int []
+  | str (s : String) : Pat .str []
+  | tuple {ts Δ} (ps : Pats ts Δ) : Pat (.tuple ts) Δ
+  | ctor {i args vs Δ} (v : Fin vs.length) (ps : Pats (vs.get v) Δ) : Pat (.adt i args vs) Δ
   /-- `p as name`: the name binds after the variables of `p`. -/
-  | as {t Δ} (p : Pat T t Δ) : Pat T t (Δ ++ [t])
-inductive Pats (T : List TypeDecl) : List Ty → List Ty → Type
-  | nil : Pats T [] []
-  | cons {t ts Δ Δ'} (p : Pat T t Δ) (ps : Pats T ts Δ') : Pats T (t :: ts) (Δ ++ Δ')
+  | as {t Δ} (p : Pat t Δ) : Pat t (Δ ++ [t])
+inductive Pats : List Ty → List Ty → Type
+  | nil : Pats [] []
+  | cons {t ts Δ Δ'} (p : Pat t Δ) (ps : Pats ts Δ') : Pats (t :: ts) (Δ ++ Δ')
 end
 
 mutual
 /-- A term of type `t` over the globals `G` (earlier definitions only, so references are acyclic by construction) and
 the locals `Γ`. Calls are positional: elaboration has placed every labelled argument. -/
-inductive Expr (T : List TypeDecl) (G : List Ty) : List Ty → Ty → Type
-  | int {Γ} (n : Int) : Expr T G Γ .int
-  | str {Γ} (s : String) : Expr T G Γ .str
-  | var {Γ t} (v : Var Γ t) : Expr T G Γ t
-  | global {Γ t} (v : Var G t) : Expr T G Γ t
-  | ctor {Γ i args} (d : TypeDecl) (h : T[i]? = some d) (v : Fin d.variants.length)
-      (es : Exprs T G Γ (d.fieldTys v args)) : Expr T G Γ (.adt i args)
-  | field {Γ i args k ft} (d : TypeDecl) (h : T[i]? = some d) (label : String) (hk : d.accessor label = some (k, ft))
-      (e : Expr T G Γ (.adt i args)) : Expr T G Γ (ft.inst args)
-  | index {Γ ts} (e : Expr T G Γ (.tuple ts)) (k : Fin ts.length) : Expr T G Γ (ts.get k)
+inductive Expr (G : List Ty) : List Ty → Ty → Type
+  | int {Γ} (n : Int) : Expr G Γ .int
+  | str {Γ} (s : String) : Expr G Γ .str
+  | var {Γ t} (v : Var Γ t) : Expr G Γ t
+  | global {Γ t} (v : Var G t) : Expr G Γ t
+  | ctor {Γ i args vs} (v : Fin vs.length) (es : Exprs G Γ (vs.get v)) : Expr G Γ (.adt i args vs)
+  /-- Gleam's record accessor: the field sits at index `k` with type `ft` in every variant. -/
+  | field {Γ i args vs ft} (label : String) (k : Nat) (hk : ∀ fs ∈ vs, fs[k]? = some ft)
+      (e : Expr G Γ (.adt i args vs)) : Expr G Γ ft
+  | index {Γ ts} (e : Expr G Γ (.tuple ts)) (k : Fin ts.length) : Expr G Γ (ts.get k)
   /-- Record update, only on a type with one variant, so it never meets another variant at run time. -/
-  | update {Γ i args} (d : TypeDecl) (h : T[i]? = some d) (hv : 0 < d.variants.length)
-      (e : Expr T G Γ (.adt i args)) (p : Patch T G Γ (d.fieldTys ⟨0, hv⟩ args)) : Expr T G Γ (.adt i args)
-  | call {Γ ps r} (f : Expr T G Γ (.fn ps r)) (args : Exprs T G Γ ps) : Expr T G Γ r
-  | lam {Γ ps r} (body : Expr T G (ps ++ Γ) r) : Expr T G Γ (.fn ps r)
-  | let_ {Γ t r} (e : Expr T G Γ t) (body : Expr T G (t :: Γ) r) : Expr T G Γ r
-  | case {Γ t r} (e : Expr T G Γ t) (cs : Clauses T G Γ t r) : Expr T G Γ r
-  | list {Γ t} (items : Items T G Γ t) : Expr T G Γ (.list t)
-  | tuple {Γ ts} (es : Exprs T G Γ ts) : Expr T G Γ (.tuple ts)
-  | bin {Γ a b c} (op : BinOp a b c) (l : Expr T G Γ a) (r : Expr T G Γ b) : Expr T G Γ c
-  | not {Γ} (e : Expr T G Γ .bool) : Expr T G Γ .bool
-  | neg {Γ} (e : Expr T G Γ .int) : Expr T G Γ .int
-inductive Exprs (T : List TypeDecl) (G : List Ty) : List Ty → List Ty → Type
-  | nil {Γ} : Exprs T G Γ []
-  | cons {Γ t ts} (e : Expr T G Γ t) (es : Exprs T G Γ ts) : Exprs T G Γ (t :: ts)
-inductive Items (T : List TypeDecl) (G : List Ty) : List Ty → Ty → Type
-  | nil {Γ t} : Items T G Γ t
-  | cons {Γ t} (e : Expr T G Γ t) (es : Items T G Γ t) : Items T G Γ t
+  | update {Γ i args fs} (e : Expr G Γ (.adt i args [fs])) (p : Patch G Γ fs) : Expr G Γ (.adt i args [fs])
+  | call {Γ ps r} (f : Expr G Γ (.fn ps r)) (args : Exprs G Γ ps) : Expr G Γ r
+  | lam {Γ ps r} (body : Expr G (ps ++ Γ) r) : Expr G Γ (.fn ps r)
+  | let_ {Γ t r} (e : Expr G Γ t) (body : Expr G (t :: Γ) r) : Expr G Γ r
+  | case {Γ t r} (e : Expr G Γ t) (cs : Clauses G Γ t r) : Expr G Γ r
+  | list {Γ t} (items : Items G Γ t) : Expr G Γ (.list t)
+  | tuple {Γ ts} (es : Exprs G Γ ts) : Expr G Γ (.tuple ts)
+  | bin {Γ a b c} (op : BinOp a b c) (l : Expr G Γ a) (r : Expr G Γ b) : Expr G Γ c
+  | not {Γ} (e : Expr G Γ .bool) : Expr G Γ .bool
+  | neg {Γ} (e : Expr G Γ .int) : Expr G Γ .int
+inductive Exprs (G : List Ty) : List Ty → List Ty → Type
+  | nil {Γ} : Exprs G Γ []
+  | cons {Γ t ts} (e : Expr G Γ t) (es : Exprs G Γ ts) : Exprs G Γ (t :: ts)
+inductive Items (G : List Ty) : List Ty → Ty → Type
+  | nil {Γ t} : Items G Γ t
+  | cons {Γ t} (e : Expr G Γ t) (es : Items G Γ t) : Items G Γ t
 /-- For each field in order, keep it or replace it. -/
-inductive Patch (T : List TypeDecl) (G : List Ty) : List Ty → List Ty → Type
-  | nil {Γ} : Patch T G Γ []
-  | keep {Γ t ts} (rest : Patch T G Γ ts) : Patch T G Γ (t :: ts)
-  | set {Γ t ts} (e : Expr T G Γ t) (rest : Patch T G Γ ts) : Patch T G Γ (t :: ts)
+inductive Patch (G : List Ty) : List Ty → List Ty → Type
+  | nil {Γ} : Patch G Γ []
+  | keep {Γ t ts} (rest : Patch G Γ ts) : Patch G Γ (t :: ts)
+  | set {Γ t ts} (e : Expr G Γ t) (rest : Patch G Γ ts) : Patch G Γ (t :: ts)
 /-- Clauses in order; the first whose pattern matches and whose guard holds is taken. -/
-inductive Clauses (T : List TypeDecl) (G : List Ty) : List Ty → Ty → Ty → Type
-  | nil {Γ t r} : Clauses T G Γ t r
-  | cons {Γ t r} {Δ : List Ty} (p : Pat T t Δ) (body : Expr T G (Δ ++ Γ) r) (rest : Clauses T G Γ t r) :
-      Clauses T G Γ t r
-  | guarded {Γ t r} {Δ : List Ty} (p : Pat T t Δ) (guard : Expr T G (Δ ++ Γ) .bool) (body : Expr T G (Δ ++ Γ) r)
-      (rest : Clauses T G Γ t r) : Clauses T G Γ t r
+inductive Clauses (G : List Ty) : List Ty → Ty → Ty → Type
+  | nil {Γ t r} : Clauses G Γ t r
+  | cons {Γ t r} {Δ : List Ty} (p : Pat t Δ) (body : Expr G (Δ ++ Γ) r) (rest : Clauses G Γ t r) :
+      Clauses G Γ t r
+  | guarded {Γ t r} {Δ : List Ty} (p : Pat t Δ) (guard : Expr G (Δ ++ Γ) .bool) (body : Expr G (Δ ++ Γ) r)
+      (rest : Clauses G Γ t r) : Clauses G Γ t r
 end
 
 /-- Global definitions in dependency order: each body sees only the definitions before it. A function is a definition
 whose body is a lambda. -/
-inductive Defs (T : List TypeDecl) : List Ty → Type
-  | nil : Defs T []
-  | snoc {G} (defs : Defs T G) (t : Ty) (body : Expr T G [] t) : Defs T (t :: G)
+inductive Defs : List Ty → Type
+  | nil : Defs []
+  | snoc {G} (defs : Defs G) (t : Ty) (body : Expr G [] t) : Defs (t :: G)
 
 /-- A loaded program: its type table (the prelude first), its definitions, and the root definition. -/
 structure Program (rootTy : Ty) where
   types : List TypeDecl
   globals : List Ty
-  defs : Defs types globals
+  defs : Defs globals
   root : Var globals rootTy
 
 end Tazuna.Ir

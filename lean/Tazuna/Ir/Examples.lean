@@ -150,12 +150,12 @@ def verdict (rootTy : Ty) (j : Json) : String :=
 def rootStr : Ty := .fn [] .str
 
 /-- The Int the last definition returns, when it is a function returning a literal. -/
-def lastInt {T : List TypeDecl} : {G : List Ty} → Defs T G → Option Int
+def lastInt : {G : List Ty} → Defs G → Option Int
   | _, .snoc _ _ (.lam (.int n)) => some n
   | _, _ => none
 
 /-- The String the last definition returns, when it is a function returning a literal. -/
-def lastStr {T : List TypeDecl} : {G : List Ty} → Defs T G → Option String
+def lastStr : {G : List Ty} → Defs G → Option String
   | _, .snoc _ _ (.lam (.str s)) => some s
   | _, _ => none
 
@@ -247,6 +247,14 @@ def aliases : List Json :=
   == "src/m.gleam:2:1: m.Count: type alias m.Two takes 1 arguments, given 2"
 #guard verdict (.fn [] .int) (withMain I (int 40 3 "1") (aliases := [alias "m.Box" [] I 7]))
   == "type m.Box is declared twice or is built in"
+-- A type may name a type declared after it; a type that refers to itself is refused, since its values would be
+-- infinite trees and no function could walk them without recursion.
+#guard verdict (.fn [] .int) (program [typeDecl "m.Outer" [("Outer", [(none, named "m.Inner")])] 1,
+    typeDecl "m.Inner" [("Inner", [(none, I)])] 2] [function "m.main" [] I (int 40 3 "1") 40] [])
+  == "accepted"
+#guard verdict (.fn [] .int) (program [typeDecl "m.A" [("A", [(none, named "m.B")])] 1,
+    typeDecl "m.B" [("Leaf", []), ("Node", [(none, named "m.A")])] 2] [function "m.main" [] I (int 40 3 "1") 40] [])
+  == "src/m.gleam:1:1: m.A: refers to itself: m.A -> m.B -> m.A"
 
 -- A use pattern's annotation: `use y: Int <- twice(n: 1)` holds; `use y: String <- ..` does not.
 def useTwice (ann : Json) : Json := block 40 3 I [

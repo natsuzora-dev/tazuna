@@ -40,6 +40,7 @@ pub type Restricted {
   ForeignFunction
   ForeignType
   Recursion
+  RecursiveType
   ShadowedImport
   MixedReference
   MultiVariantUpdate
@@ -64,6 +65,7 @@ pub const restricted = [
   ForeignFunction,
   ForeignType,
   Recursion,
+  RecursiveType,
   ShadowedImport,
   MixedReference,
   MultiVariantUpdate,
@@ -103,6 +105,7 @@ pub fn kind_name(kind: Kind) -> String {
         ForeignFunction -> "foreignFunction"
         ForeignType -> "foreignType"
         Recursion -> "recursion"
+        RecursiveType -> "recursiveType"
         ShadowedImport -> "shadowedImport"
         MixedReference -> "mixedReference"
         MultiVariantUpdate -> "multiVariantUpdate"
@@ -332,6 +335,7 @@ pub fn convert(
         }),
       ),
     )
+  use <- bail(recursive_type(mods, user_graph(types)))
   let env1 = Env(..with_aliases, types:)
   let #(sigs, sig_findings) =
     list.flat_map([dsl, ..mods], fn(m) {
@@ -526,6 +530,67 @@ fn recursion(
   })
   |> result.map(list.wrap)
   |> result.unwrap([])
+}
+
+/// Each type to the types its fields name, after alias expansion.
+fn user_graph(types: Dict(String, TypeInfo)) -> Dict(String, List(String)) {
+  dict.map_values(types, fn(_, info) {
+    list.flat_map(info.variants, fn(v) {
+      list.flat_map(v.fields, fn(f) { named_types(f.1) })
+    })
+    |> list.filter(dict.has_key(types, _))
+  })
+}
+
+fn named_types(t: Ty) -> List(String) {
+  case t {
+    Con(n, args) -> [n, ..list.flat_map(args, named_types)]
+    Tuple(items) -> list.flat_map(items, named_types)
+    Fun(ps, r) -> list.flat_map([r, ..ps], named_types)
+    Var(_) | Meta(_) -> []
+  }
+}
+
+/// The first type, in source order, that refers to itself through its fields.
+fn recursive_type(
+  mods: List(Mod),
+  graph: Dict(String, List(String)),
+) -> List(Finding) {
+  list.find_map(mods, fn(m) {
+    list.find_map(list.reverse(m.ast.custom_types), fn(d) {
+      let name = m.name <> "." <> d.definition.name
+      use path <- result.map(type_cycle(graph, name, [], name))
+      finding(
+        m,
+        RecursiveType,
+        d.definition.location,
+        "recursive type: "
+          <> string.join(path, " -> ")
+          <> "; a spec walks values without recursion, so a type must not contain itself",
+      )
+    })
+  })
+  |> result.map(list.wrap)
+  |> result.unwrap([])
+}
+
+fn type_cycle(
+  graph: Dict(String, List(String)),
+  start: String,
+  path: List(String),
+  node: String,
+) -> Result(List(String), Nil) {
+  case dict.get(graph, node) {
+    Error(_) -> Error(Nil)
+    Ok(out) ->
+      list.find_map(out, fn(next) {
+        case next == start, list.contains([node, ..path], next) {
+          True, _ -> Ok(list.reverse([next, node, ..path]))
+          False, True -> Error(Nil)
+          False, False -> type_cycle(graph, start, [node, ..path], next)
+        }
+      })
+  }
 }
 
 fn walk(

@@ -50,7 +50,7 @@ def Global.refs (g : Global) : List (String × At × List (String × STy)) :=
 
 structure St (T : List TypeDecl) where
   G : List Ty
-  defs : Defs T G
+  defs : Defs G
   /-- Each elaborated instance: global name and type arguments, position from the bottom of `G`, type. -/
   done : List ((String × List Ty) × Nat × Ty)
 
@@ -94,13 +94,13 @@ partial def demand {T : List TypeDecl} (c : Ctx) (name : String) (args : List Ty
       let rt ← ty ret
       let pl : Scope := (params.map (·.2.1)).zip tys
       let ⟨bt, be⟩ ← elabExpr cx pl b
-      let be ← coerce b.pos rt bt be
-      let be ← castList (F := fun Γ => Expr T st.G Γ rt) g.pos be (b := tys ++ [])
-      pure (⟨.fn tys rt, .lam be⟩ : (t : Ty) × Expr T st.G [] t)
+      let be ← coerce cx b.pos rt bt be
+      let be ← castList (F := fun Γ => Expr st.G Γ rt) g.pos be (b := tys ++ [])
+      pure (⟨.fn tys rt, .lam be⟩ : (t : Ty) × Expr st.G [] t)
     | .const s v =>
       let want ← ty s
       let ⟨vt, ve⟩ ← elabExpr cx [] v
-      pure ⟨want, ← coerce v.pos want vt ve⟩
+      pure ⟨want, ← coerce cx v.pos want vt ve⟩
   set ({ G := t :: st.G, defs := .snoc st.defs t body, done := ((name, args), st.G.length, t) :: st.done } : St T)
 
 /-- Finds a global that depends on itself, reporting the reference that closes the cycle. -/
@@ -117,24 +117,51 @@ partial def findCycle (c : Ctx) : Except LoadError Unit := do
     return g.name :: finished
   discard <| c.globals.foldlM (fun finished g => visit [] finished g) []
 
+/-- The user types a field type names, after alias expansion. -/
+partial def namedTypes : STy → List String
+  | .con n args => n :: args.flatMap namedTypes
+  | .fn ps r => ps.flatMap namedTypes ++ namedTypes r
+  | .tuple ts => ts.flatMap namedTypes
+  | .var _ | .hole _ => []
+
+/-- The user types, each with its fields' types expanded. A type is elaborated after every type its fields name, so a
+type that refers to itself, directly or through others, is refused: its values would be infinite trees. -/
 def userTypes (fileOf : String → Option String) (types : List Surface.TypeDef) (aliases : List Surface.AliasDef) :
     Except LoadError (List TypeDecl) := do
   let names := prelude.map (·.name) ++ types.map (·.name) ++ aliases.map (·.name)
   if let some n := nodup names then throw ⟨none, none, s!"type {n} is declared twice or is built in"⟩
+  let err (t : Surface.TypeDef) (msg : String) : LoadError := ⟨fileOf t.name, some t.pos, s!"{t.name}: {msg}"⟩
+  let deps (t : Surface.TypeDef) : List String :=
+    (t.variants.flatMap fun (_, fs) => fs.flatMap fun (_, s) => namedTypes s).filter fun n => types.any (·.name == n)
+  -- Depth-first: `path` holds the types being visited, so meeting one again closes a cycle.
+  let rec visit (fuel : Nat) (path : List String) (order : List String) (n : String) :
+      Except LoadError (List String) := do
+    let some t := types.find? (·.name == n) | return order
+    if order.contains n then return order
+    if path.contains n then
+      throw (err t s!"refers to itself: {" -> ".intercalate ((path.reverse.dropWhile (· != n)) ++ [n])}")
+    match fuel with
+    | 0 => return order
+    | fuel + 1 =>
+      let order ← (deps t).foldlM (visit fuel (n :: path)) order
+      return order ++ [n]
+  let order ← types.foldlM (fun o t => visit (types.length + 1) [] o t.name) []
   let shells : List TypeDecl := prelude ++ types.map fun t => { name := t.name, params := t.params, variants := [] }
-  types.mapM fun t => do
-    let err (msg : String) : LoadError := ⟨fileOf t.name, some t.pos, s!"{t.name}: {msg}"⟩
-    if builtinName t.name || t.name.startsWith "tazuna." then throw (err "this type belongs to Lean")
-    if let some p := nodup t.params then throw (err s!"type parameter {p} is declared twice")
-    if let some v := nodup (t.variants.map (·.1)) then throw (err s!"variant {v} is declared twice")
+  let filled ← order.foldlM (init := shells) fun T n => do
+    let some t := types.find? (·.name == n) | throw ⟨none, none, s!"internal: type {n}"⟩
+    let some i := T.findIdx? (·.name == n) | throw ⟨none, none, s!"internal: type {n}"⟩
+    if builtinName t.name || t.name.startsWith "tazuna." then throw (err t "this type belongs to Lean")
+    if let some p := nodup t.params then throw (err t s!"type parameter {p} is declared twice")
+    if let some v := nodup (t.variants.map (·.1)) then throw (err t s!"variant {v} is declared twice")
     let σ := t.params.zipIdx.map fun (p, k) => (p, Ty.param k)
     let variants ← t.variants.mapM fun (v, fields) => do
-      if let some l := nodup (fields.filterMap (·.1)) then throw (err s!"{v} has the label {l} twice")
-      let fields ← fields.mapM fun (l, s) => match toTy shells σ s with
+      if let some l := nodup (fields.filterMap (·.1)) then throw (err t s!"{v} has the label {l} twice")
+      let fields ← fields.mapM fun (l, s) => match toTy T σ s with
         | .ok ty => pure ({ label := l, ty } : Field)
-        | .error e => throw (err e)
+        | .error e => throw (err t e)
       pure ({ name := v, fields } : Variant)
-    pure { name := t.name, params := t.params, variants }
+    pure (T.set i { name := t.name, params := t.params, variants })
+  return filled.drop prelude.length
 
 /-- Every alias must stand for a type, even one nothing uses: its parameters distinct, its body's type variables among
 them, and its expansion free of cycles and well formed. -/

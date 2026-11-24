@@ -66,7 +66,7 @@ partial def showTy : Ty → String
   | .list t => s!"List({showTy t})"
   | .tuple ts => "#(" ++ ", ".intercalate (ts.map showTy) ++ ")"
   | .fn ps r => "fn(" ++ ", ".intercalate (ps.map showTy) ++ ") -> " ++ showTy r
-  | .adt i args =>
+  | .adt i args _ =>
     let n := (T[i]?.map (·.name)).getD s!"type{i}"
     if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map showTy) ++ ")"
   | .param k => s!"param{k}"
@@ -81,7 +81,8 @@ partial def toTy (σ : List (String × Ty)) : STy → Except String Ty
     let some d := T[i]? | throw s!"unknown type {n}"
     if builtinName n || d.params.length != args.length then
       throw s!"type {n} takes {d.params.length} arguments, given {args.length}"
-    return .adt i (← args.mapM (toTy σ))
+    let args ← args.mapM (toTy σ)
+    return .adt i args (d.variantTys args)
   | .fn ps r => return .fn (← ps.mapM (toTy σ)) (← toTy σ r)
   | .tuple ts => return .tuple (← ts.mapM (toTy σ))
   | .var n => match σ.lookup n with
@@ -97,7 +98,7 @@ partial def annotationFits (σ : List (String × Ty)) : STy → Ty → Bool
     | none => true
   | .con "Int" [], .int | .con "String" [], .str => true
   | .con "List" [a], .list t => annotationFits σ a t
-  | .con n args, .adt i ts =>
+  | .con n args, .adt i ts _ =>
     typeIndex T n == some i && args.length == ts.length && (args.zip ts).all fun (a, t) => annotationFits σ a t
   | .fn ps r, .fn qs u =>
     ps.length == qs.length && (ps.zip qs).all (fun (a, t) => annotationFits σ a t) && annotationFits σ r u
@@ -157,7 +158,7 @@ def place {α} (pos : At) (what : String) (labels : List (Option String)) (first
       | [] => (out ++ [none], [])
   return out
 
-def castPat {Δ : List Ty} (pos : At) (u t : Ty) (p : Pat T u Δ) : E (Pat T t Δ) :=
+def castPat {Δ : List Ty} (pos : At) (u t : Ty) (p : Pat u Δ) : E (Pat t Δ) :=
   match Ty.same u t with
   | some ⟨h⟩ => pure (h ▸ p)
   | none => fail pos s!"pattern for {showTy T u} on {showTy T t}"
@@ -171,16 +172,17 @@ def lookupDecl (pos : At) (name : String) : E ((i : Nat) × (d : TypeDecl) × PL
   | some d => pure ⟨i, d, ⟨h⟩⟩
   | none => fail pos s!"unknown type {name}"
 
-def variantIndex (pos : At) (d : TypeDecl) (name : String) : E (Fin d.variants.length) :=
+/-- The variant's index into a type's variants `vs`, and its fields' labels. -/
+def variantIndex (pos : At) (d : TypeDecl) (vs : List (List Ty)) (name : String) :
+    E (Fin vs.length × List (Option String)) :=
   match d.variants.findIdx? (·.name == name) with
-  | some k => if hk : k < d.variants.length then pure ⟨k, hk⟩ else fail pos "internal: variant index"
+  | some k => match d.variants[k]? with
+    | some v => if hk : k < vs.length then pure (⟨k, hk⟩, v.fields.map (·.label)) else fail pos "internal: variant index"
+    | none => fail pos "internal: variant index"
   | none => fail pos s!"{d.name} has no variant {name}"
 
-def fieldLabels (d : TypeDecl) (v : Fin d.variants.length) : List (Option String) :=
-  (d.variants.get v).fields.map (·.label)
-
 mutual
-partial def elabPat (t : Ty) : Surface.Pat → E ((Δ : Scope) × Pat T t (ctx Δ))
+partial def elabPat (t : Ty) : Surface.Pat → E ((Δ : Scope) × Pat t (ctx Δ))
   | .mk pos ann node => do
     checkPatTy T σ pos ann t
     match node with
@@ -204,36 +206,37 @@ partial def elabPat (t : Ty) : Surface.Pat → E ((Δ : Scope) × Pat T t (ctx �
         pure ⟨Δ, ← castPat T pos (.tuple ts) t (.tuple ps)⟩
       | t => fail pos s!"tuple pattern on {showTy T t}"
     | .ctor type variant args spread =>
-      let ⟨i, d, ⟨h⟩⟩ ← lookupDecl T pos type
+      let ⟨i, d, _⟩ ← lookupDecl T pos type
       match t with
-      | .adt _ targs =>
-      let v ← variantIndex pos d variant
+      | .adt j targs vs =>
+      unless i == j do fail pos s!"{type}.{variant} pattern on {showTy T t}"
+      let (v, labels) ← variantIndex pos d vs variant
       let placed := args.map fun | .mk p l pat => ({ pos := p, label := l, value := pat } : Placed _)
-      let slots ← place pos s!"pattern {variant}" (fieldLabels d v) [] placed [] spread
-      let pats := (slots.zip (fieldLabels d v)).map fun
+      let slots ← place pos s!"pattern {variant}" labels [] placed [] spread
+      let pats := (slots.zip labels).map fun
         | (some (some p), _) => p
         | (some none, some l) => .mk pos (.hole "_") (.var l)
         | _ => .mk pos (.hole "_") (.discard "_")
-      let ⟨Δ, ps⟩ ← elabPats (d.fieldTys v targs) pats
-      pure ⟨Δ, ← castPat T pos (.adt i targs) t (.ctor d h v ps)⟩
+      let ⟨Δ, ps⟩ ← elabPats (vs.get v) pats
+      pure ⟨Δ, ← castPat T pos (.adt j targs vs) t (.ctor v ps)⟩
       | t => fail pos s!"{type}.{variant} pattern on {showTy T t}"
     | .as p n =>
       let ⟨Δ, p'⟩ ← elabPat t p
-      let p'' ← castList (F := Pat T t) pos (Pat.as p')
+      let p'' ← castList (F := Pat t) pos (Pat.as p')
       pure ⟨Δ ++ [(n, t)], p''⟩
 
-partial def elabPats : (ts : List Ty) → List Surface.Pat → E ((Δ : Scope) × Pats T ts (ctx Δ))
+partial def elabPats : (ts : List Ty) → List Surface.Pat → E ((Δ : Scope) × Pats ts (ctx Δ))
   | [], [] => pure ⟨[], .nil⟩
   | t :: ts, p :: ps => do
     let ⟨Δ, p'⟩ ← elabPat t p
     let ⟨Δ', ps'⟩ ← elabPats ts ps
-    let r ← castList (F := Pats T (t :: ts)) (match p with | .mk pos .. => pos) (Pats.cons p' ps')
+    let r ← castList (F := Pats (t :: ts)) (match p with | .mk pos .. => pos) (Pats.cons p' ps')
     pure ⟨Δ ++ Δ', r⟩
   | _, _ => throw (none, "internal: pattern count")
 end
 
 /-- The pattern's variables, checked to be distinct. -/
-def elabPatTop (pos : At) (t : Ty) (p : Surface.Pat) : E ((Δ : Scope) × Pat T t (ctx Δ)) := do
+def elabPatTop (pos : At) (t : Ty) (p : Surface.Pat) : E ((Δ : Scope) × Pat t (ctx Δ)) := do
   let r ← elabPat T σ t p
   if let some n := nodup (r.1.map (·.1) |>.filter (· != "")) then fail pos s!"pattern binds {n} twice"
   return r
@@ -241,13 +244,13 @@ def elabPatTop (pos : At) (t : Ty) (p : Surface.Pat) : E ((Δ : Scope) × Pat T 
 end Patterns
 
 mutual
-partial def Pat.irrefutable {T : List TypeDecl} {t : Ty} {Δ : List Ty} : Pat T t Δ → Bool
+partial def Pat.irrefutable {t : Ty} {Δ : List Ty} : Pat t Δ → Bool
   | .wild | .bind => true
   | .int _ | .str _ => false
   | .tuple ps => Pats.irrefutable ps
-  | .ctor d _ _ ps => d.variants.length == 1 && Pats.irrefutable ps
+  | @Pat.ctor _ _ vs _ _ ps => vs.length == 1 && Pats.irrefutable ps
   | .as p => Pat.irrefutable p
-partial def Pats.irrefutable {T : List TypeDecl} {ts : List Ty} {Δ : List Ty} : Pats T ts Δ → Bool
+partial def Pats.irrefutable {ts : List Ty} {Δ : List Ty} : Pats ts Δ → Bool
   | .nil => true
   | .cons p ps => Pat.irrefutable p && Pats.irrefutable ps
 end
@@ -263,7 +266,7 @@ structure Cx (T : List TypeDecl) (G : List Ty) where
 callback with its patterns and the rest of the block. -/
 inductive Slot (T : List TypeDecl) (G : List Ty) (Γ : List Ty) where
   | expr (e : Surface.Expr)
-  | typed (pos : At) (t : Ty) (e : Expr T G Γ t)
+  | typed (pos : At) (t : Ty) (e : Expr G Γ t)
   | callback (pos : At) (patterns : List (Surface.Pat × Option STy)) (rest : List Surface.Stmt)
 
 section Exprs
@@ -274,35 +277,36 @@ def toTyAt (pos : At) (t : STy) : E Ty :=
   | .ok t => pure t
   | .error e => fail pos e
 
-def coerce {Γ : List Ty} (pos : At) (want got : Ty) (e : Expr T G Γ got) : E (Expr T G Γ want) :=
+def coerce {Γ : List Ty} (pos : At) (want got : Ty) (e : Expr G Γ got) : E (Expr G Γ want) :=
+  let _ := cx
   match Ty.same got want with
   | some ⟨h⟩ => pure (h ▸ e)
   | none => fail pos s!"expected {showTy T want}, found {showTy T got}"
 
 /-- Checks a node's type annotation against the type computed from its children. -/
-def annotated {Γ : List Ty} (pos : At) (ann : STy) (r : (t : Ty) × Expr T G Γ t) : E ((t : Ty) × Expr T G Γ t) := do
+def annotated {Γ : List Ty} (pos : At) (ann : STy) (r : (t : Ty) × Expr G Γ t) : E ((t : Ty) × Expr G Γ t) := do
   if let .hole _ := ann then return r
   let want ← toTyAt cx pos ann
   match Ty.same r.1 want with
   | some _ => pure r
   | none => fail pos s!"annotated {showTy T want}, computed {showTy T r.1}"
 
-def elabBin {Γ : List Ty} (pos : At) (op : String) (a : Ty) (l : Expr T G Γ a) (b : Ty) (r : Expr T G Γ b) :
-    E ((c : Ty) × Expr T G Γ c) := do
-  let ints (o : BinOp .int .int .int) : E ((c : Ty) × Expr T G Γ c) := do
-    return ⟨.int, Expr.bin o (← coerce pos .int a l) (← coerce pos .int b r)⟩
-  let cmp (o : BinOp .int .int .bool) : E ((c : Ty) × Expr T G Γ c) := do
-    return ⟨.bool, Expr.bin o (← coerce pos .int a l) (← coerce pos .int b r)⟩
-  let logic (o : BinOp .bool .bool .bool) : E ((c : Ty) × Expr T G Γ c) := do
-    return ⟨.bool, Expr.bin o (← coerce pos .bool a l) (← coerce pos .bool b r)⟩
+def elabBin {Γ : List Ty} (pos : At) (op : String) (a : Ty) (l : Expr G Γ a) (b : Ty) (r : Expr G Γ b) :
+    E ((c : Ty) × Expr G Γ c) := do
+  let ints (o : BinOp .int .int .int) : E ((c : Ty) × Expr G Γ c) := do
+    return ⟨.int, Expr.bin o (← coerce cx pos .int a l) (← coerce cx pos .int b r)⟩
+  let cmp (o : BinOp .int .int .bool) : E ((c : Ty) × Expr G Γ c) := do
+    return ⟨.bool, Expr.bin o (← coerce cx pos .int a l) (← coerce cx pos .int b r)⟩
+  let logic (o : BinOp .bool .bool .bool) : E ((c : Ty) × Expr G Γ c) := do
+    return ⟨.bool, Expr.bin o (← coerce cx pos .bool a l) (← coerce cx pos .bool b r)⟩
   match op with
   | "+" => ints .add | "-" => ints .sub | "*" => ints .mul | "/" => ints .div | "%" => ints .mod
   | "<" => cmp .lt | "<=" => cmp .le | ">" => cmp .gt | ">=" => cmp .ge
   | "&&" => logic .and | "||" => logic .or
-  | "<>" => return ⟨.str, Expr.bin .concat (← coerce pos .str a l) (← coerce pos .str b r)⟩
+  | "<>" => return ⟨.str, Expr.bin .concat (← coerce cx pos .str a l) (← coerce cx pos .str b r)⟩
   | "==" | "!=" =>
     if h : a.comparable = true then
-      let r ← coerce pos a b r
+      let r ← coerce cx pos a b r
       return ⟨.bool, Expr.bin (if op == "==" then .eq h else .ne h) l r⟩
     else fail pos s!"{op} on {showTy T a}, whose values include functions"
   | _ => fail pos s!"unknown operator {op}"
@@ -315,9 +319,9 @@ def placedArgs {Γ : List Ty} (args : List Surface.Arg) : List (Placed (Slot T G
     | .mk pos label none => { pos, label, value := .expr (shorthand pos (label.getD "")) }
 
 mutual
-partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr T G (ctx sc) t)
+partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr G (ctx sc) t)
   | .mk pos ann node => do
-    let r : (t : Ty) × Expr T G (ctx sc) t ← match node with
+    let r : (t : Ty) × Expr G (ctx sc) t ← match node with
     | .int text =>
       let some n := Literal.parseInt text | fail pos s!"not a Gleam Int literal: {text}"
       pure ⟨.int, .int n⟩
@@ -338,51 +342,49 @@ partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr T G (ct
       let some ⟨t, v⟩ := cx.glob n args | fail pos s!"internal: {n} is not elaborated"
       pure ⟨t, .global v⟩
     | .ctor type variant args =>
-      let ⟨i, d, ⟨h⟩⟩ ← lookupDecl T pos type
+      let ⟨i, d, _⟩ ← lookupDecl T pos type
       let want ← toTyAt cx pos ann
-      let .adt j targs := want | fail pos s!"{type}.{variant} annotated {showTy T want}"
+      let .adt j targs vs := want | fail pos s!"{type}.{variant} annotated {showTy T want}"
       unless i == j do fail pos s!"{type}.{variant} annotated {showTy T want}"
-      let v ← variantIndex pos d variant
-      if args.isEmpty && !(d.variants.get v).fields.isEmpty then
+      let (v, labels) ← variantIndex pos d vs variant
+      if args.isEmpty && !labels.isEmpty then
         fail pos s!"{variant} used as a function value"
-      let slots ← place pos s!"constructor {variant}" (fieldLabels d v) [] (placedArgs args) [] false
-      let es ← elabSlots sc pos (d.fieldTys v targs) slots
-      pure ⟨.adt i targs, .ctor d h v es⟩
+      let slots ← place pos s!"constructor {variant}" labels [] (placedArgs args) [] false
+      let es ← elabSlots sc pos (vs.get v) slots
+      pure ⟨.adt i targs vs, .ctor v es⟩
     | .field record label =>
       let ⟨rt, re⟩ ← elabExpr sc record
-      let .adt i targs := rt | fail pos s!"field {label} of {showTy T rt}"
-      let re ← coerce pos (.adt i targs) rt re
-      match h : T[i]? with
-      | none => fail pos "internal: type index"
-      | some d =>
-        match hk : d.accessor label with
-        | some (_, ft) => pure ⟨ft.inst targs, .field d h label hk re⟩
-        | none => fail pos s!"{d.name} has no field labelled {label} shared by every variant"
+      let .adt i targs vs := rt | fail pos s!"field {label} of {showTy T rt}"
+      let re ← coerce cx pos (.adt i targs vs) rt re
+      let some d := T[i]? | fail pos "internal: type index"
+      let some (k, ft) := d.accessor label
+        | fail pos s!"{d.name} has no field labelled {label} shared by every variant"
+      let ft := ft.inst targs
+      let some ⟨hk⟩ := Ty.fieldAt k ft vs | fail pos s!"internal: field {label} of {showTy T rt}"
+      pure ⟨ft, .field label k hk re⟩
     | .index tuple k =>
       let ⟨tt, te⟩ ← elabExpr sc tuple
       let .tuple ts := tt | fail pos s!"index {k} of {showTy T tt}"
-      let te ← coerce pos (.tuple ts) tt te
+      let te ← coerce cx pos (.tuple ts) tt te
       if hk : k < ts.length then pure ⟨ts.get ⟨k, hk⟩, .index te ⟨k, hk⟩⟩
       else fail pos s!"index {k} of a tuple of {ts.length}"
     | .update type variant record fields =>
-      let ⟨i, d, ⟨h⟩⟩ ← lookupDecl T pos type
-      let v ← variantIndex pos d variant
-      unless d.variants.length == 1 do fail pos s!"record update on {type}, which has several variants"
+      let ⟨i, d, _⟩ ← lookupDecl T pos type
       let ⟨rt, re⟩ ← elabExpr sc record
-      let .adt j targs := rt | fail pos s!"record update of {showTy T rt}"
+      let .adt j targs vs := rt | fail pos s!"record update of {showTy T rt}"
       unless i == j do fail pos s!"{variant} update of {showTy T rt}"
+      let (_, labels) ← variantIndex pos d vs variant
+      let [fs] := vs | fail pos s!"record update on {type}, which has several variants"
       let given ← fields.mapM fun
         | .mk _ (some l) (some e) => pure (l, Slot.expr (G := G) (Γ := ctx sc) e)
         | .mk p (some l) none => pure (l, Slot.expr (shorthand p l))
         | .mk p none _ => fail p "a record update field needs a label"
       if let some l := nodup (given.map (·.1)) then fail pos s!"record update sets {l} twice"
       for (l, _) in given do
-        unless (fieldLabels d v).contains (some l) do fail pos s!"{variant} has no field labelled {l}"
-      if hv : 0 < d.variants.length then
-        let re ← coerce pos (.adt i targs) rt re
-        let p ← elabPatch sc pos (fieldLabels d ⟨0, hv⟩) (d.fieldTys ⟨0, hv⟩ targs) given
-        pure ⟨.adt i targs, .update d h hv re p⟩
-      else fail pos "internal: variants"
+        unless labels.contains (some l) do fail pos s!"{variant} has no field labelled {l}"
+      let re ← coerce cx pos (.adt i targs [fs]) rt re
+      let p ← elabPatch sc pos labels fs given
+      pure ⟨.adt i targs [fs], .update re p⟩
     | .call f args => elabCall sc pos f args [] []
     | .pipe left right =>
       let ⟨lt, le⟩ ← elabExpr sc left
@@ -407,7 +409,7 @@ partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr T G (ct
       let ⟨bt, be⟩ ← elabExpr (pl ++ sc) body
       if let some a := ret then
         unless annotationFits T cx.σ a bt do fail pos s!"return annotated with a type that is not {showTy T bt}"
-      let be ← castList (F := fun Γ => Expr T G Γ bt) pos be (b := tys ++ ctx sc)
+      let be ← castList (F := fun Γ => Expr G Γ bt) pos be (b := tys ++ ctx sc)
       pure ⟨.fn tys bt, .lam be⟩
     | .block stmts => elabBlock sc pos stmts
     | .case subjects clauses =>
@@ -437,21 +439,21 @@ partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr T G (ct
     | .bin op l r =>
       let ⟨lt, le⟩ ← elabExpr sc l
       let ⟨rt, re⟩ ← elabExpr sc r
-      elabBin pos op lt le rt re
+      elabBin cx pos op lt le rt re
     | .un op e =>
       let ⟨t, e⟩ ← elabExpr sc e
       match op with
-      | "!" => pure ⟨.bool, .not (← coerce pos .bool t e)⟩
-      | "-" => pure ⟨.int, .neg (← coerce pos .int t e)⟩
+      | "!" => pure ⟨.bool, .not (← coerce cx pos .bool t e)⟩
+      | "-" => pure ⟨.int, .neg (← coerce cx pos .int t e)⟩
       | _ => fail pos s!"unknown operator {op}"
     annotated cx pos ann r
 
 /-- `f(args)` with extra unlabelled arguments before (a pipe) or after (a `use` callback) the written ones. -/
 partial def elabCall (sc : Scope) (pos : At) (f : Surface.Expr) (args : List Surface.Arg)
-    (first last : List (Slot T G (ctx sc))) : E ((t : Ty) × Expr T G (ctx sc) t) := do
+    (first last : List (Slot T G (ctx sc))) : E ((t : Ty) × Expr G (ctx sc) t) := do
   let ⟨ft, fe⟩ ← elabExpr sc f
   let .fn ps r := ft | fail pos s!"call of {showTy T ft}"
-  let fe ← coerce pos (.fn ps r) ft fe
+  let fe ← coerce cx pos (.fn ps r) ft fe
   let labels := match f with
     | .mk _ _ (.ref n _) => ((cx.sigs.lookup n).bind (·.labels)).getD (ps.map fun _ => none)
     | _ => ps.map fun _ => none
@@ -460,17 +462,17 @@ partial def elabCall (sc : Scope) (pos : At) (f : Surface.Expr) (args : List Sur
   pure ⟨r, .call fe (← elabSlots sc pos ps slots)⟩
 
 partial def applyTo (sc : Scope) (pos : At) (f : Surface.Expr) (arg : Slot T G (ctx sc)) :
-    E ((t : Ty) × Expr T G (ctx sc) t) := do
+    E ((t : Ty) × Expr G (ctx sc) t) := do
   let ⟨ft, fe⟩ ← elabExpr sc f
   let .fn [p] r := ft | fail pos s!"pipe into {showTy T ft}, which does not take one argument"
-  let fe ← coerce pos (.fn [p] r) ft fe
+  let fe ← coerce cx pos (.fn [p] r) ft fe
   pure ⟨r, .call fe (.cons (← elabSlot sc p arg) .nil)⟩
 
-partial def elabSlot (sc : Scope) (t : Ty) : Slot T G (ctx sc) → E (Expr T G (ctx sc) t)
+partial def elabSlot (sc : Scope) (t : Ty) : Slot T G (ctx sc) → E (Expr G (ctx sc) t)
   | .expr e => do
     let ⟨u, x⟩ ← elabExpr sc e
-    coerce e.pos t u x
-  | .typed pos u x => coerce pos t u x
+    coerce cx e.pos t u x
+  | .typed pos u x => coerce cx pos t u x
   | .callback pos pats rest => do
     let .fn ps r := t | fail pos s!"use callback where {showTy T t} is expected"
     unless ps.length == pats.length do fail pos s!"use binds {pats.length} values; the callback takes {ps.length}"
@@ -484,19 +486,19 @@ partial def elabSlot (sc : Scope) (t : Ty) : Slot T G (ctx sc) → E (Expr T G (
     let lets := named.filterMap fun (n, p) => p.map fun p => Surface.Stmt.let_ pos p none (.mk pos (.hole "_") (.var n))
     let pl : Scope := (named.map (·.1)).zip ps
     let ⟨bt, be⟩ ← elabBlock (pl ++ sc) pos (lets ++ rest)
-    let be ← coerce pos r bt be
-    let be ← castList (F := fun Γ => Expr T G Γ r) pos be (b := ps ++ ctx sc)
-    coerce pos t (.fn ps r) (.lam be)
+    let be ← coerce cx pos r bt be
+    let be ← castList (F := fun Γ => Expr G Γ r) pos be (b := ps ++ ctx sc)
+    coerce cx pos t (.fn ps r) (.lam be)
 
 partial def elabSlots (sc : Scope) (pos : At) :
-    (ts : List Ty) → List (Option (Slot T G (ctx sc))) → E (Exprs T G (ctx sc) ts)
+    (ts : List Ty) → List (Option (Slot T G (ctx sc))) → E (Exprs G (ctx sc) ts)
   | [], [] => pure .nil
   | t :: ts, some s :: ss => do pure (.cons (← elabSlot sc t s) (← elabSlots sc pos ts ss))
   | _ :: _, none :: _ => fail pos "an argument is missing"
   | _, _ => fail pos "internal: argument count"
 
 partial def elabPatch (sc : Scope) (pos : At) :
-    List (Option String) → (ts : List Ty) → List (String × Slot T G (ctx sc)) → E (Patch T G (ctx sc) ts)
+    List (Option String) → (ts : List Ty) → List (String × Slot T G (ctx sc)) → E (Patch G (ctx sc) ts)
   | l :: ls, t :: ts, given => do
     let rest ← elabPatch sc pos ls ts given
     match l.bind fun l => given.lookup l with
@@ -505,20 +507,20 @@ partial def elabPatch (sc : Scope) (pos : At) :
   | [], [], _ => pure .nil
   | _, _, _ => fail pos "internal: field count"
 
-partial def elabExprs (sc : Scope) : List Surface.Expr → E ((ts : List Ty) × Exprs T G (ctx sc) ts)
+partial def elabExprs (sc : Scope) : List Surface.Expr → E ((ts : List Ty) × Exprs G (ctx sc) ts)
   | [] => pure ⟨[], .nil⟩
   | e :: es => do
     let ⟨t, x⟩ ← elabExpr sc e
     let ⟨ts, xs⟩ ← elabExprs sc es
     pure ⟨t :: ts, .cons x xs⟩
 
-partial def elabItems (sc : Scope) (t : Ty) : List Surface.Expr → E (Items T G (ctx sc) t)
+partial def elabItems (sc : Scope) (t : Ty) : List Surface.Expr → E (Items G (ctx sc) t)
   | [] => pure .nil
   | e :: es => do
     let ⟨u, x⟩ ← elabExpr sc e
-    pure (.cons (← coerce e.pos t u x) (← elabItems sc t es))
+    pure (.cons (← coerce cx e.pos t u x) (← elabItems sc t es))
 
-partial def elabBlock (sc : Scope) (pos : At) : List Surface.Stmt → E ((t : Ty) × Expr T G (ctx sc) t)
+partial def elabBlock (sc : Scope) (pos : At) : List Surface.Stmt → E ((t : Ty) × Expr G (ctx sc) t)
   | [] => fail pos "empty block"
   | [.expr e] => elabExpr sc e
   | [.let_ p pat ann value] => do
@@ -546,7 +548,7 @@ partial def elabBlock (sc : Scope) (pos : At) : List Surface.Stmt → E ((t : Ty
       let ⟨Δ, pat'⟩ ← elabPatTop T cx.σ p t pat
       unless Pat.irrefutable pat' do fail p "let pattern can fail to match"
       let ⟨r, body⟩ ← elabBlock (Δ ++ sc) pos rest
-      let body ← castList (F := fun Γ => Expr T G Γ r) p body (b := ctx Δ ++ ctx sc)
+      let body ← castList (F := fun Γ => Expr G Γ r) p body (b := ctx Δ ++ ctx sc)
       pure ⟨r, .case x (.cons pat' body .nil)⟩
   | .use p pats call :: rest => do
     let cb := Slot.callback p pats rest
@@ -555,22 +557,22 @@ partial def elabBlock (sc : Scope) (pos : At) : List Surface.Stmt → E ((t : Ty
     | f => elabCall sc p f [] [] [cb]
 
 partial def elabClauses (sc : Scope) (pos : At) (st r : Ty)
-    (pat : List Surface.Pat → E ((Δ : Scope) × Pat T st (ctx Δ))) :
-    List Surface.Clause → E (Clauses T G (ctx sc) st r)
+    (pat : List Surface.Pat → E ((Δ : Scope) × Pat st (ctx Δ))) :
+    List Surface.Clause → E (Clauses G (ctx sc) st r)
   | [] => pure .nil
   | .mk alts guard body :: rest => do
     let rest ← elabClauses sc pos st r pat rest
-    let elabAlt (alt : List Surface.Pat) (rest : Clauses T G (ctx sc) st r) : E (Clauses T G (ctx sc) st r) := do
+    let elabAlt (alt : List Surface.Pat) (rest : Clauses G (ctx sc) st r) : E (Clauses G (ctx sc) st r) := do
       let ⟨Δ, p⟩ ← pat alt
       let ⟨bt, be⟩ ← elabExpr (Δ ++ sc) body
-      let be ← coerce body.pos r bt be
-      let be ← castList (F := fun Γ => Expr T G Γ r) pos be (b := ctx Δ ++ ctx sc)
+      let be ← coerce cx body.pos r bt be
+      let be ← castList (F := fun Γ => Expr G Γ r) pos be (b := ctx Δ ++ ctx sc)
       match guard with
       | none => pure (.cons p be rest)
       | some g =>
         let ⟨gt, ge⟩ ← elabExpr (Δ ++ sc) g
-        let ge ← coerce g.pos .bool gt ge
-        let ge ← castList (F := fun Γ => Expr T G Γ .bool) pos ge (b := ctx Δ ++ ctx sc)
+        let ge ← coerce cx g.pos .bool gt ge
+        let ge ← castList (F := fun Γ => Expr G Γ .bool) pos ge (b := ctx Δ ++ ctx sc)
         pure (.guarded p ge be rest)
     let bound ← alts.mapM fun alt => do
       let ⟨Δ, _⟩ ← pat alt

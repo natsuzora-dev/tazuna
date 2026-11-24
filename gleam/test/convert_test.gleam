@@ -124,6 +124,10 @@ fn example(kind: Restricted) -> #(String, Int) {
       "pub fn f(n: Int) -> Int {\n  g(n)\n}\n\npub fn g(n: Int) -> Int {\n  f(n)\n}",
       2,
     )
+    convert.RecursiveType -> #(
+      "pub type Tree {\n  Leaf\n  Node(Forest)\n}\n\npub type Forest {\n  Forest(trees: List(Tree))\n}",
+      1,
+    )
     convert.ShadowedImport -> #(
       "import gleam/int.{to_string}\n\npub fn to_string() -> Int {\n  1\n}",
       3,
