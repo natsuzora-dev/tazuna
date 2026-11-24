@@ -1,5 +1,6 @@
 import Tazuna.Smt.ReactExact
 import Tazuna.Smt.EventStep
+import Tazuna.Smt.Bounds
 
 /-! The conditions `event_step` (T2 for an event with machines) takes are exact: each holds exactly when the
 functions the step applies fit the layout's slot counts. The service's part applies the subscription's wrap, `apply`
@@ -480,6 +481,50 @@ theorem query_exact {v : ServiceV} (s : State v) (i : Fin v.queries.length) (cal
     have hite : Holds M (.ite (anyT eqs) (andT c1 (.ite (allT (rules.map (·.2))) c2 tt)) tt) := by
       rw [holds_ite, hok]; simp only [Val.toBool, hin', Bool.false_eq_true, ite_false]; exact holds_tt
     exact ⟨fun _ h => absurd h hin, fun _ => hite⟩
+
+end
+
+
+section
+variable {L : Layout} {M : Model} {r : Ty}
+
+/-- One create's codes' condition is exact: it holds exactly when its table function's source fits and so does its
+application to the records. -/
+theorem createT_exact (hr : r.isData = true) (c : CreateV r) {records l k : Term} (x : r.den0)
+    (hx : RelV L r (Ty.up r hr x) (records.denote M)) (h : createT L c records = .ok (l, k)) :
+    Holds M k ↔ (c.table.fits L.count).1 ∧ c.table.appFits L.count (x, ()) := by
+  obtain ⟨⟨f, c1⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨rc, h2, h⟩ := bind_ok.1 h
+  obtain ⟨⟨t, c2⟩, h3, h⟩ := bind_ok.1 h
+  obtain ⟨⟨d, n, dt⟩, -, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  have hargs1 : (Ty.tuple [r]).isData = true := by simp [Ty.isData, Ty.isDatas, hr]
+  have hrc : Smt.Rel M L r (Ty.up r hr x) rc := (rel_ofTerm (need_ok.1 h2) _).2 hx
+  have hargs : Smt.Rels M L [r] (Ty.up (.tuple [r]) hargs1 (x, ())) (rc, ()) := by
+    show Smt.Rel M L _ (Ty.up (.tuple [r]) hargs1 (x, ())).1 rc ∧ True
+    erw [Ty.up_tuple _ _ _ hr rfl]; exact ⟨hrc, trivial⟩
+  rw [holds_andT, (c.table.code_exact (M := M) h1).1]
+  constructor
+  · rintro ⟨hc1, hc2⟩
+    exact ⟨hc1, (c.table.app_exact h1 ((c.table.code_exact (M := M) h1).1.2 hc1)
+      (by simpa using ofTerm_notFn (need_ok.1 h2)) _ _ hargs h3).1 hc2⟩
+  · rintro ⟨p1, p2⟩
+    have hc1 := (c.table.code_exact (M := M) h1).1.2 p1
+    exact ⟨p1, (c.table.app_exact h1 hc1 (by simpa using ofTerm_notFn (need_ok.1 h2)) _ _ hargs h3).2 p2⟩
+
+/-- Every create's codes' condition is exact: `createsT_iff`'s hypothesis holds exactly when each create's table
+function and its application to the records fit. -/
+theorem createsT_exact (hr : r.isData = true) {records : Term} (x : r.den0)
+    (hx : RelV L r (Ty.up r hr x) (records.denote M)) :
+    (cs : List (CreateV r)) → {l k : Term} → createsT L records cs = .ok (l, k) →
+      (Holds M k ↔ ∀ c ∈ cs, (c.table.fits L.count).1 ∧ c.table.appFits L.count (x, ()))
+  | [], _, _, h => by cases pure_ok.1 h; simp [holds_tt]
+  | c :: cs, _, _, h => by
+    obtain ⟨⟨l1, k1⟩, h1, h⟩ := bind_ok.1 h
+    obtain ⟨⟨ls, ks⟩, h2, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    rw [holds_andT, createT_exact hr c x hx h1, createsT_exact hr x hx cs h2]
+    simp
 
 end
 
