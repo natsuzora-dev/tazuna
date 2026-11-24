@@ -18,7 +18,7 @@ pub type Site {
 /// The places in `p` that compare a type holding functions.
 pub fn sites(p: ir.Program) -> List(Site) {
   let builtins =
-    list.map(dsl_source.needs_equality, fn(b) { #("tazuna." <> b.0, b.1) })
+    dsl_source.needs_equality
     |> dict.from_list
   let needs = settle(p, builtins, dict.new(), list.length(p.functions) + 1)
   let all = dict.merge(builtins, needs)

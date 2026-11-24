@@ -30,7 +30,7 @@ def guarded (o : E optI) : E .int :=
 def circle : E shape := .ctor ⟨1, by decide⟩ (.cons (.int 7) .nil)
 def square : E shape := .ctor ⟨0, by decide⟩ (.cons (.int 3) (.cons (.str "sq") .nil))
 
-/-- `bag_from_list([1, 2, 2])` -/
+/-- `bag.from_list([1, 2, 2])` -/
 def b3 : E (.bag .int) :=
   .call (.prim .bagFromList [.int] rfl) (.cons (.list (.cons (.int 1) (.cons (.int 2) (.cons (.int 2) .nil)))) .nil)
 def bagOp (p : Prim) (r : Ty) (h : p.ok [.int] = true) (hty : p.ty.inst [.int] = .fn [.bag .int, .fn [.int] Ty.bool] r)
@@ -53,7 +53,7 @@ def bagOf (xs : List Int) : E (.bag .int) :=
   .call (.prim .bagFromList [.int] rfl) (.cons (.list (xs.foldr (fun x r => .cons (.int x) r) .nil)) .nil)
 def isTwo : Expr [] [.int] Ty.bool := .bin (.eq rfl) (.var .here) (.int 2)
 def bigger : Expr [] [.int] Ty.bool := .bin .gt (.var .here) (.int 1)
-/-- `table_from_list([#(1, "a"), #(1, "c")])`: the last pair for key 1 wins. -/
+/-- `table.from_list([#(1, "a"), #(1, "c")])`: the last pair for key 1 wins. -/
 def t2 : E (.table .int .str) :=
   let pair (k : Int) (v : String) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
   .call (.prim .tableFromList [.int, .str] rfl)
@@ -76,11 +76,11 @@ def doubling : Nat → (Γ : List Ty) → Expr [] Γ .int
 
 def tableKeys (t : E (.table .int .str)) : E (.bag .int) := .call (.prim .tableKeys [.int, .str] rfl) (.cons t .nil)
 def tableValues (t : E (.table .int .str)) : E (.bag .str) := .call (.prim .tableValues [.int, .str] rfl) (.cons t .nil)
-/-- `table_map(t, fn(k, v) { v <> "!" })` -/
+/-- `table.map(t, fn(k, v) { v <> "!" })` -/
 def tableBang (t : E (.table .int .str)) : E (.table .int .str) :=
   .call (.prim .tableMap [.int, .str, .str] rfl)
     (.cons t (.cons (.lam (.bin .concat (.var (.there .here)) (.str "!"))) .nil))
-/-- `bag_from_list([1, 5])` -/
+/-- `bag.from_list([1, 5])` -/
 def b2 : E (.bag .int) :=
   .call (.prim .bagFromList [.int] rfl) (.cons (.list (.cons (.int 1) (.cons (.int 5) .nil))) .nil)
 
@@ -91,7 +91,7 @@ def tableGet (t : E (.table .int .str)) (k : Int) : E (Ty.option .str) :=
   .call (.prim .tableGet [.int, .str] rfl) (.cons t (.cons (.int k) .nil))
 /-- `use v <- ref(t, k, "no")` continuing with `Ok(v)`. -/
 def refOk (t : E (.table .int .str)) (k : Int) : E (Ty.result .str .str) :=
-  .call (.prim .ref [.int, .str, .str, .str] rfl) (.cons t (.cons (.int k) (.cons (.str "no")
+  .call (.prim .tableLookup [.int, .str, .str, .str] rfl) (.cons t (.cons (.int k) (.cons (.str "no")
     (.cons (.lam (.ctor (vs := [[.str], [.str]]) ⟨0, by decide⟩ (.cons (.var .here) .nil))) .nil))))
 
 def cases : List (String × (t : Ty) × E t) :=
@@ -218,7 +218,7 @@ def freshScript (step : Nat) (index : Int) : Except String (Layout × Script) :=
   | _, _, _ => throw "no sort"
 
 /-! A query step on a small service, for `query_step`: the records are a table of Int to Int, the query `get` takes a
-key from the caller "alice", accepts a positive key, and answers `table_get(ctx.records, key)`. Each case asks the
+key from the caller "alice", accepts a positive key, and answers `table.get(ctx.records, key)`. Each case asks the
 solver for a state and input whose outcome terms meet a goal, decodes them, runs `step` on what they decode to, and
 compares its outcome with what the outcome terms denote in the model. -/
 

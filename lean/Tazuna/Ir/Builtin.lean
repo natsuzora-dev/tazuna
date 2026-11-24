@@ -10,28 +10,28 @@ namespace Tazuna.Ir
 
 /-- A type `tazuna` declares without variants: Lean gives it a meaning of its own. -/
 structure OpaqueType where
+  /-- The module of the `tazuna` package that declares it. -/
+  module : String
   name : String
   params : List String
   doc : String
   make : List Ty → Option Ty
 
 def opaqueTypes : List OpaqueType :=
-  [ ⟨"Bag", ["a"], "A multiset: two bags are equal when each value occurs as often in both.",
+  [ ⟨"tazuna/bag", "Bag", ["a"], "A multiset: two bags are equal when each value occurs as often in both.",
       fun | [t] => some (.bag t) | _ => none⟩,
-    ⟨"Table", ["k", "v"], "A finite map from keys to values; at most one value per key.",
+    ⟨"tazuna/table", "Table", ["k", "v"], "A finite map from keys to values; at most one value per key.",
       fun | [k, v] => some (.table k v) | _ => none⟩,
-    ⟨"Date", [], "A day. Dates have no calendar: a spec adds days and counts the days between two dates.",
+    ⟨"tazuna/date", "Date", [], "A day. Dates have no calendar: a spec adds days and counts the days between two dates.",
       fun | [] => some .date | _ => none⟩,
-    ⟨"Id", [], "An identifier a step makes fresh, or one from outside the service; ids compare with `==` only.",
+    ⟨"tazuna", "Id", [], "An identifier a step makes fresh, or one from outside the service; ids compare with `==` only.",
       fun | [] => some .id | _ => none⟩ ] ++
-  Dsl.all.map fun k => ⟨k.name, k.decl.2.1, k.decl.2.2,
+  Dsl.all.map fun k => ⟨"tazuna", k.name, k.decl.2.1, k.decl.2.2,
     fun args => if args.length == k.decl.2.1.length then some (.dsl k args) else none⟩
 
-/-- The type `tazuna.<name>` at `args`, when `tazuna` declares it opaque. -/
+/-- The type a global name such as `tazuna/bag.Bag` names at `args`, when a `tazuna` module declares it opaque. -/
 def opaqueTy? (name : String) (args : List Ty) : Option Ty :=
-  match name.dropPrefix? "tazuna." with
-  | some n => (opaqueTypes.find? (·.name == n.toString)).bind (·.make args)
-  | none => none
+  (opaqueTypes.find? (fun t => t.module ++ "." ++ t.name == name)).bind (·.make args)
 
 /-- Aliases `tazuna` declares, with their documentation. -/
 def builtinAliases : List (Surface.AliasDef × String) :=
@@ -46,7 +46,7 @@ inductive Prim where
   | tableNew | tableFromList | tableInsert | tableRemove | tableGet | tableSize | tableKeys | tableValues
   | tableFilter | tableMap | tableCount | tableAny | tableAll
   | dateAddDays | dateDaysBetween
-  | require | ref
+  | require | tableLookup
   | spec | service | command | query | defineCommand | defineQuery | machine | reaction
   | external | externalCommand | externalQuery | externalEvent | declareCommand | declareQuery | declareEvent
   | requestCommand | requestQuery | sendCommand | sendQuery | subscribe | bounds | create | response
@@ -81,63 +81,63 @@ def sig : Prim → PrimSig :=
   let l (lab : String) (t : Ty) : PrimParam := ⟨some lab, lab, t⟩
   fun
   | .length => ⟨"length", "The number of code points.", [], [p "string" .str], .int, [], false⟩
-  | .bagFromList => ⟨"bag_from_list", "A bag of the list's items.", ["a"], [p "items" (.list a)], .bag a, [], false⟩
-  | .bagInsert => ⟨"bag_insert", "The bag with one more occurrence of the item.", ["a"],
+  | .bagFromList => ⟨"from_list", "A bag of the list's items.", ["a"], [p "items" (.list a)], .bag a, [], false⟩
+  | .bagInsert => ⟨"insert", "The bag with one more occurrence of the item.", ["a"],
       [p "bag" (.bag a), p "item" a], .bag a, [], false⟩
-  | .bagSize => ⟨"bag_size", "The number of items, counting each occurrence.", ["a"], [p "bag" (.bag a)], .int, [], false⟩
-  | .bagFilter => ⟨"bag_filter", "The items that satisfy the predicate.", ["a"],
+  | .bagSize => ⟨"size", "The number of items, counting each occurrence.", ["a"], [p "bag" (.bag a)], .int, [], false⟩
+  | .bagFilter => ⟨"filter", "The items that satisfy the predicate.", ["a"],
       [p "bag" (.bag a), l "keeping" (.fn [a] .bool)], .bag a, [], false⟩
-  | .bagMap => ⟨"bag_map", "Each item transformed, occurrences kept.", ["a", "b"],
+  | .bagMap => ⟨"map", "Each item transformed, occurrences kept.", ["a", "b"],
       [p "bag" (.bag a), l "with" (.fn [a] b)], .bag b, [], false⟩
-  | .bagCount => ⟨"bag_count", "The number of items that satisfy the predicate.", ["a"],
+  | .bagCount => ⟨"count", "The number of items that satisfy the predicate.", ["a"],
       [p "bag" (.bag a), l "where" (.fn [a] .bool)], .int, [], false⟩
-  | .bagSum => ⟨"bag_sum", "The sum of the function over the items.", ["a"],
+  | .bagSum => ⟨"sum", "The sum of the function over the items.", ["a"],
       [p "bag" (.bag a), l "of" (.fn [a] .int)], .int, [], false⟩
-  | .bagAny => ⟨"bag_any", "Whether some item satisfies the predicate.", ["a"],
+  | .bagAny => ⟨"any", "Whether some item satisfies the predicate.", ["a"],
       [p "bag" (.bag a), l "satisfying" (.fn [a] .bool)], .bool, [], false⟩
-  | .bagAll => ⟨"bag_all", "Whether every item satisfies the predicate.", ["a"],
+  | .bagAll => ⟨"all", "Whether every item satisfies the predicate.", ["a"],
       [p "bag" (.bag a), l "satisfying" (.fn [a] .bool)], .bool, [], false⟩
-  | .bagContains => ⟨"bag_contains", "Whether the item occurs in the bag.", ["a"],
+  | .bagContains => ⟨"contains", "Whether the item occurs in the bag.", ["a"],
       [p "bag" (.bag a), p "item" a], .bool, [0], false⟩
-  | .bagMinBy => ⟨"bag_min_by", "The one item with the least key; Empty or Tie when there is not exactly one.",
+  | .bagMinBy => ⟨"min_by", "The one item with the least key; Empty or Tie when there is not exactly one.",
       ["a"], [p "bag" (.bag a), l "by" (.fn [a] .int)], .result a .pickError, [], false⟩
-  | .bagMaxBy => ⟨"bag_max_by", "The one item with the greatest key; Empty or Tie when there is not exactly one.",
+  | .bagMaxBy => ⟨"max_by", "The one item with the greatest key; Empty or Tie when there is not exactly one.",
       ["a"], [p "bag" (.bag a), l "by" (.fn [a] .int)], .result a .pickError, [], false⟩
-  | .tableNew => ⟨"table_new", "The table without keys.", ["k", "v"], [], .table k v, [0], false⟩
-  | .tableFromList => ⟨"table_from_list", "A table of the pairs; a later pair replaces an earlier one's value.",
+  | .tableNew => ⟨"new", "The table without keys.", ["k", "v"], [], .table k v, [0], false⟩
+  | .tableFromList => ⟨"from_list", "A table of the pairs; a later pair replaces an earlier one's value.",
       ["k", "v"], [p "pairs" (.list (.tuple [k, v]))], .table k v, [0], false⟩
-  | .tableInsert => ⟨"table_insert", "The table with the key mapped to the value, replacing any value it had.",
+  | .tableInsert => ⟨"insert", "The table with the key mapped to the value, replacing any value it had.",
       ["k", "v"], [p "table" (.table k v), p "key" k, p "value" v], .table k v, [0], false⟩
-  | .tableRemove => ⟨"table_remove", "The table without the key.", ["k", "v"],
+  | .tableRemove => ⟨"remove", "The table without the key.", ["k", "v"],
       [p "table" (.table k v), p "key" k], .table k v, [0], false⟩
-  | .tableGet => ⟨"table_get", "The key's value, if the table has the key.", ["k", "v"],
+  | .tableGet => ⟨"get", "The key's value, if the table has the key.", ["k", "v"],
       [p "table" (.table k v), p "key" k], .option v, [0], false⟩
-  | .tableSize => ⟨"table_size", "The number of keys.", ["k", "v"], [p "table" (.table k v)], .int, [], false⟩
-  | .tableKeys => ⟨"table_keys", "The keys.", ["k", "v"], [p "table" (.table k v)], .bag k, [], false⟩
-  | .tableValues => ⟨"table_values", "The values, one occurrence per key.", ["k", "v"],
+  | .tableSize => ⟨"size", "The number of keys.", ["k", "v"], [p "table" (.table k v)], .int, [], false⟩
+  | .tableKeys => ⟨"keys", "The keys.", ["k", "v"], [p "table" (.table k v)], .bag k, [], false⟩
+  | .tableValues => ⟨"values", "The values, one occurrence per key.", ["k", "v"],
       [p "table" (.table k v)], .bag v, [], false⟩
-  | .tableFilter => ⟨"table_filter", "The entries that satisfy the predicate.", ["k", "v"],
+  | .tableFilter => ⟨"filter", "The entries that satisfy the predicate.", ["k", "v"],
       [p "table" (.table k v), l "keeping" (.fn [k, v] .bool)], .table k v, [], false⟩
-  | .tableMap => ⟨"table_map", "Each value transformed, keys kept.", ["k", "v", "w"],
+  | .tableMap => ⟨"map", "Each value transformed, keys kept.", ["k", "v", "w"],
       [p "table" (.table k v), l "with" (.fn [k, v] (param 2))], .table k (param 2), [], false⟩
-  | .tableCount => ⟨"table_count", "The number of entries that satisfy the predicate.", ["k", "v"],
+  | .tableCount => ⟨"count", "The number of entries that satisfy the predicate.", ["k", "v"],
       [p "table" (.table k v), l "where" (.fn [k, v] .bool)], .int, [], false⟩
-  | .tableAny => ⟨"table_any", "Whether some entry satisfies the predicate.", ["k", "v"],
+  | .tableAny => ⟨"any", "Whether some entry satisfies the predicate.", ["k", "v"],
       [p "table" (.table k v), l "satisfying" (.fn [k, v] .bool)], .bool, [], false⟩
-  | .tableAll => ⟨"table_all", "Whether every entry satisfies the predicate.", ["k", "v"],
+  | .tableAll => ⟨"all", "Whether every entry satisfies the predicate.", ["k", "v"],
       [p "table" (.table k v), l "satisfying" (.fn [k, v] .bool)], .bool, [], false⟩
-  | .dateAddDays => ⟨"date_add_days", "The date that many days later (earlier when negative).", [],
+  | .dateAddDays => ⟨"add_days", "The date that many days later (earlier when negative).", [],
       [p "date" .date, p "days" .int], .date, [], false⟩
-  | .dateDaysBetween => ⟨"date_days_between", "The days from the first date to the second: negative when it is earlier.",
+  | .dateDaysBetween => ⟨"days_between", "The days from the first date to the second: negative when it is earlier.",
       [], [l "from" .date, l "to" .date], .int, [], false⟩
   | .require => ⟨"require",
-      "`use <- tazuna.require(holds, rejection)`: the rest of the block when it holds, else the rejection.",
-      ["a", "e"], [p "holds" .bool, p "rejection" (param 1), p "then" (.fn [] (.result a (param 1)))],
+      "`use <- tazuna.require(holds, or: rejection)`: the rest of the block when it holds, else the rejection.",
+      ["a", "e"], [p "holds" .bool, ⟨some "or", "rejection", param 1⟩, l "then" (.fn [] (.result a (param 1)))],
       .result a (param 1), [], false⟩
-  | .ref => ⟨"ref",
-      "`use value <- tazuna.ref(table, key, rejection)`: the rest of the block with the key's value, else the rejection.",
+  | .tableLookup => ⟨"lookup",
+      "`use value <- table.lookup(table, key, or: rejection)`: the rest of the block with the key's value, else the rejection.",
       ["k", "v", "a", "e"],
-      [p "table" (.table k v), p "key" k, p "rejection" (param 3), p "then" (.fn [v] (.result (param 2) (param 3)))],
+      [p "table" (.table k v), p "key" k, ⟨some "or", "rejection", param 3⟩, l "then" (.fn [v] (.result (param 2) (param 3)))],
       .result (param 2) (param 3), [0], false⟩
   | .spec =>
     { name := "spec", doc := "The spec: its services, the externals they talk to, and scenarios of the services.",
@@ -334,7 +334,7 @@ def all : List Prim :=
   [.length, .bagFromList, .bagInsert, .bagSize, .bagFilter, .bagMap, .bagCount, .bagSum, .bagAny, .bagAll,
    .bagContains, .bagMinBy, .bagMaxBy, .tableNew, .tableFromList, .tableInsert, .tableRemove, .tableGet, .tableSize,
    .tableKeys, .tableValues, .tableFilter, .tableMap, .tableCount, .tableAny, .tableAll, .dateAddDays,
-   .dateDaysBetween, .require, .ref, .spec, .service, .command, .query, .defineCommand, .defineQuery, .machine, .reaction, .external,
+   .dateDaysBetween, .require, .tableLookup, .spec, .service, .command, .query, .defineCommand, .defineQuery, .machine, .reaction, .external,
    .externalCommand, .externalQuery, .externalEvent, .declareCommand, .declareQuery, .declareEvent, .requestCommand, .requestQuery,
    .sendCommand, .sendQuery, .subscribe, .bounds, .create, .response, .scenario, .stepCommand, .stepQuery, .stepWait,
    .stepAnswerCommand, .stepAnswerQuery, .stepEvent, .fromMachine, .fromReaction, .fresh, .stepCommandThen]
@@ -351,11 +351,21 @@ def ok (p : Prim) (args : List Ty) : Bool :=
   args.length == p.sig.tvars.length && p.sig.needsEq.all (fun k => (args[k]?.map Ty.comparable).getD false) &&
     (!p.sig.dataArgs || args.all Ty.isData)
 
-/-- The built-in a global name such as `tazuna.bag_filter` refers to. -/
-def byName? (name : String) : Option Prim :=
-  match name.dropPrefix? "tazuna." with
-  | some n => all.find? (·.sig.name == n.toString)
-  | none => none
+/-- The module of the `tazuna` package that declares the built-in: data built-ins sit beside their type, as
+`gleam/dict` holds `Dict`'s functions. -/
+def module : Prim → String
+  | .bagFromList | .bagInsert | .bagSize | .bagFilter | .bagMap | .bagCount | .bagSum | .bagAny | .bagAll
+  | .bagContains | .bagMinBy | .bagMaxBy => "tazuna/bag"
+  | .tableNew | .tableFromList | .tableInsert | .tableRemove | .tableGet | .tableSize | .tableKeys | .tableValues
+  | .tableFilter | .tableMap | .tableCount | .tableAny | .tableAll | .tableLookup => "tazuna/table"
+  | .dateAddDays | .dateDaysBetween => "tazuna/date"
+  | _ => "tazuna"
+
+/-- The global name, such as `tazuna/bag.filter`. -/
+def global (p : Prim) : String := p.module ++ "." ++ p.sig.name
+
+/-- The built-in a global name refers to. -/
+def byName? (name : String) : Option Prim := all.find? (·.global == name)
 
 end Prim
 

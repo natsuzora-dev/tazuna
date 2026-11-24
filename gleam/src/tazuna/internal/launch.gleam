@@ -12,7 +12,6 @@ import gleam/result
 import gleam/string
 import simplifile
 import tazuna/internal/convert.{type Finding, type Source, Source}
-import tazuna/internal/dsl_source
 
 pub fn main() -> Nil {
   exit(run(argv()))
@@ -46,7 +45,7 @@ fn check(engine: String, args: List(String), root: String) -> Int {
   case simplifile.is_file(path) {
     Ok(True) ->
       case
-        convert.convert(sources([root], []), dsl_source.text, root)
+        convert.convert(sources([root], []), root)
         |> result.try(fn(program) {
           case convert.root_findings(program) {
             [] -> Ok(program)

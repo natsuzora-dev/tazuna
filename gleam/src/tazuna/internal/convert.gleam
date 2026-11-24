@@ -170,6 +170,8 @@ type Global {
 
 type Env {
   Env(
+    /// The names of the `tazuna` modules.
+    dsl: List(String),
     mods: Dict(String, Mod),
     types: Dict(String, TypeInfo),
     /// Alias to its parameters and the type it stands for, as written.
@@ -177,8 +179,6 @@ type Env {
     globals: Dict(String, Global),
   )
 }
-
-const dsl_module = "tazuna"
 
 const option_type = "gleam/option.Option"
 
@@ -256,26 +256,28 @@ fn bug(m: Mod, span: g.Span, message: String) -> Finding {
   Finding(Internal, m.path, Some(position(m, span.start)), message)
 }
 
-/// Converts the spec's modules with `dsl` as the source of the `tazuna`
-/// module, whose types and functions Lean owns.
+/// Converts the spec's modules beside the `tazuna` modules, whose types and
+/// functions Lean owns.
 pub fn convert(
   spec: List(Source),
-  dsl: String,
   root_module: String,
 ) -> Result(ir.Program, List(Finding)) {
   use mods <- result.try(
     list.try_map(spec, load) |> result.map_error(list.wrap),
   )
-  use dsl <- result.try(
-    load(Source(dsl_module, "tazuna.gleam", dsl)) |> result.map_error(list.wrap),
+  use dsls <- result.try(
+    list.try_map(dsl_source.modules, fn(m) { load(Source(m.0, m.1, m.2)) })
+    |> result.map_error(list.wrap),
   )
+  let all = list.append(dsls, mods)
   use <- bail(list.flat_map(mods, module_findings))
   let env0 =
     Env(
-      mods: dict.from_list(list.map([dsl, ..mods], fn(m) { #(m.name, m) })),
+      dsl: list.map(dsls, fn(m) { m.name }),
+      mods: dict.from_list(list.map(all, fn(m) { #(m.name, m) })),
       types: dict.new(),
       aliases: dict.from_list(
-        list.flat_map([dsl, ..mods], fn(m) {
+        list.flat_map(all, fn(m) {
           list.map(m.ast.type_aliases, fn(a) {
             #(m.name <> "." <> a.definition.name, #([], Tuple([])))
           })
@@ -289,7 +291,7 @@ pub fn convert(
       types: dict.from_list(
         list.flatten([
           prelude_types(),
-          list.flat_map([dsl, ..mods], fn(m) {
+          list.flat_map(all, fn(m) {
             list.map(m.ast.custom_types, fn(d) {
               #(m.name <> "." <> d.definition.name, TypeInfo([], []))
             })
@@ -298,7 +300,7 @@ pub fn convert(
       ),
     )
   let #(typedefs, type_findings) =
-    list.flat_map([dsl, ..mods], fn(m) {
+    list.flat_map(all, fn(m) {
       list.map(list.reverse(m.ast.custom_types), fn(d) {
         type_def(names_only, m, d.definition)
       })
@@ -306,7 +308,7 @@ pub fn convert(
     |> partition
   use <- bail(type_findings)
   let #(aliases, alias_findings) =
-    list.flat_map([dsl, ..mods], fn(m) {
+    list.flat_map(all, fn(m) {
       list.map(list.reverse(m.ast.type_aliases), fn(d) {
         let a = d.definition
         declared(names_only, m, a.aliased)
@@ -346,7 +348,7 @@ pub fn convert(
   use <- bail(recursive_type(mods, user_graph(types)))
   let env1 = Env(..with_aliases, types:)
   let #(sigs, sig_findings) =
-    list.flat_map([dsl, ..mods], fn(m) {
+    list.flat_map(all, fn(m) {
       list.append(
         list.map(m.ast.functions, fn(d) { function_sig(env1, m, d.definition) }),
         list.map(m.ast.constants, fn(d) { constant_sig(env1, m, d.definition) }),
@@ -397,7 +399,7 @@ pub fn convert(
     })
   use <- bail(list.reverse(findings))
   use <- bail(recursion(refs))
-  let user = fn(name) { names.split(name).0 != dsl_module }
+  let user = fn(name) { !list.contains(env.dsl, names.split(name).0) }
   let user_types = list.filter(typedefs, fn(t) { user(t.name) })
   let program =
     ir.Program(
@@ -1268,10 +1270,11 @@ fn value_global(
   let env = cx.env
   let m = cx.m
   let found = fn(global) {
-    let #(module, name) = names.split(global)
-    let builtin = list.contains(dsl_source.builtins, name)
+    let #(module, _) = names.split(global)
+    let builtin = list.contains(dsl_source.builtins, global)
+    let in_dsl = list.contains(env.dsl, module)
     case dict.get(env.globals, global) {
-      Ok(GFn(..)) | Ok(GConst(..)) if module == dsl_module && !builtin ->
+      Ok(GFn(..)) | Ok(GConst(..)) if in_dsl && !builtin ->
         Error(finding(
           m,
           ForeignFunction,

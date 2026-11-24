@@ -1,5 +1,6 @@
 import gleam/option.{None, Some}
 import tazuna.{type Ctx, type Id}
+import tazuna/bag
 
 pub type Records {
   Records(total: Int)
@@ -39,7 +40,7 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, String) {
     callers: [User],
     accepts: fn(n: Int) { [#("positive", n > 0)] },
     decide: fn(c: Ctx(Records, Int, Caller)) {
-      use <- tazuna.require(c.input < 100, "too big")
+      use <- tazuna.require(c.input < 100, or: "too big")
       Ok([Added(c.input), Tagged(tazuna.fresh(c.fresh, 0))])
     },
     ensures: fn(c: Ctx(Records, Int, Caller), r: Records) {
@@ -74,8 +75,8 @@ fn watch() -> tazuna.Machine(Records, Event) {
     name: "watch",
     instances: fn(r: Records) {
       case r.total > 0 {
-        True -> tazuna.bag_from_list([0])
-        False -> tazuna.bag_from_list([])
+        True -> bag.from_list([0])
+        False -> bag.from_list([])
       }
     },
     initial: Idle,

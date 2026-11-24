@@ -279,7 +279,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     let x : ReactionV ((Ty.param 0).inst args) ((Ty.param 1).inst args) := x
     .reaction x.name
   | .fresh, _, _ => fun (step, index, ()) => freshId step index
-  | .ref, args, _ => fun (t, k, rejection, next, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t.1 with
+  | .tableLookup, args, _ => fun (t, k, rejection, next, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t.1 with
     | .some v => next (v, ())
     | .none => Ty.error rejection
 
@@ -340,9 +340,9 @@ example : isOk (Prim.require.den [.int, .str] rfl (ofBool true, "r", fun () => T
 example : Prim.require.den [.int, .str] rfl (ofBool false, "r", fun () => Ty.ok (e := .str) (1 : Int), ()) =
   Ty.error (a := .int) (e := .str) "r" := rfl
 -- `use v <- ref(table, key, r)` continues with the key's value and rejects with r when the key is absent.
-example : isOk (Prim.ref.den [.int, .str, .str, .str] rfl (table, (2 : Int), "r", fun (v, ()) => Ty.ok (e := .str) v, ()))
+example : isOk (Prim.tableLookup.den [.int, .str, .str, .str] rfl (table, (2 : Int), "r", fun (v, ()) => Ty.ok (e := .str) v, ()))
   = .some "bb" := rfl
-example : Prim.ref.den [.int, .str, .str, .str] rfl (table, (3 : Int), "r", fun (v, ()) => Ty.ok (e := .str) v, ()) =
+example : Prim.tableLookup.den [.int, .str, .str, .str] rfl (table, (3 : Int), "r", fun (v, ()) => Ty.ok (e := .str) v, ()) =
   Ty.error (a := .str) (e := .str) "r" := rfl
 
 end Examples

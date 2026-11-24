@@ -279,11 +279,11 @@ def slotTerms {ps : List Ty} {r : Ty} (f : Codes ps → Except Refusal (Code r �
     let (v, c) ← slotApply f sl.2
     pure (← need "a result that has no term" (Code.term? r v), c)
 
-/-- Whether a slot's key differs from `key`, as `table_remove` compares: in either direction. -/
+/-- Whether a slot's key differs from `key`, as `table.remove` compares: in either direction. -/
 def keepQs (key : Term) (S : List Slot) : List Term :=
   S.map fun (_, xs) => .not (.or (.eq key (xs.headD key)) (.eq (xs.headD key) key))
 
-/-- The table's slots after `table_insert`: the key's slot freed, then the entry in the first free slot. -/
+/-- The table's slots after `table.insert`: the key's slot freed, then the entry in the first free slot. -/
 def putSlots (S : List Slot) (k v : Term) : List Slot × Term :=
   let (S', p) := insertSlots [k, v] tt (filterSlots S (keepQs k S))
   (S', .not p)
@@ -296,7 +296,7 @@ def insertAll : List Slot → List Term → List Slot × Term
     let (S'', c) := insertAll S' xs
     (S'', andT (.not p) c)
 
-/-- The table's slots after `table_insert` of each entry in turn, with the condition that each found a slot. -/
+/-- The table's slots after `table.insert` of each entry in turn, with the condition that each found a slot. -/
 def putAll : List Slot → List (Term × Term) → List Slot × Term
   | S, [] => (S, tt)
   | S, (k, v) :: kvs =>
@@ -367,7 +367,7 @@ def encodeBin {a b c : Ty} : BinOp a b c → Code a → Code b → Except Refusa
   | @BinOp.eq t _, x, y => eqCode L t x y
   | @BinOp.ne t _, x, y => do .ok (.not (← eqCode L t x y))
 
-/-- `bag_min_by` (`lt` is `<`) or `bag_max_by` (`lt` is `>`) of the bag `b` by the key function `f`: the item of
+/-- `bag.min_by` (`lt` is `<`) or `bag.max_by` (`lt` is `>`) of the bag `b` by the key function `f`: the item of
 the occupied slot whose key beats every other occupied slot's, `Tie` when none does and a slot is occupied, `Empty`
 when none is. A slot wins when its own key is the only one among the occupied slots that fails to beat it. -/
 def pickCode (lt : Term → Term → Term) (a : Ty) (b : Term) (f : Codes [a] → Except Refusal (Code .int × Term)) :
@@ -535,7 +535,7 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let kt ← need "a key that has no term" (Code.term? _ key)
     let (hit, found) ← lookupCode L ((Ty.param 0).inst args) v t kt
     pure (.ite hit (← adtCtor L 3 [v] [[v], []] 0 [found]) (← adtCtor L 3 [v] [[v], []] 1 []), tt)
-  | .ref, args, _ => .ok fun (t, key, rej, next, ()) => do
+  | .tableLookup, args, _ => .ok fun (t, key, rej, next, ()) => do
     let kt ← need "a key that has no term" (Code.term? _ key)
     let (hit, found) ← lookupCode L ((Ty.param 0).inst args) ((Ty.param 1).inst args) t kt
     let fc ← need "a value that has no term" (Code.ofTerm? ((Ty.param 1).inst args) found)

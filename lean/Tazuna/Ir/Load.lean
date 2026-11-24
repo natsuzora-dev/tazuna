@@ -151,7 +151,7 @@ def userTypes (fileOf : String → Option String) (types : List Surface.TypeDef)
   let filled ← order.foldlM (init := shells) fun T n => do
     let some t := types.find? (·.name == n) | throw ⟨none, none, s!"internal: type {n}"⟩
     let some i := T.findIdx? (·.name == n) | throw ⟨none, none, s!"internal: type {n}"⟩
-    if builtinName t.name || t.name.startsWith "tazuna." then throw (err t "this type belongs to Lean")
+    if builtinName t.name || ownedByTazuna t.name then throw (err t "this type belongs to Lean")
     if let some p := nodup t.params then throw (err t s!"type parameter {p} is declared twice")
     if let some v := nodup (t.variants.map (·.1)) then throw (err t s!"variant {v} is declared twice")
     let σ := t.params.zipIdx.map fun (p, k) => (p, Ty.param k)
@@ -170,7 +170,7 @@ def checkAliases (fileOf : String → Option String) (T : List TypeDecl) (aliase
     Except LoadError Unit :=
   aliases.forM fun a => do
     let err (msg : String) : LoadError := ⟨fileOf a.name, some a.pos, s!"{a.name}: {msg}"⟩
-    if builtinName a.name || a.name.startsWith "tazuna." then throw (err "this type belongs to Lean")
+    if builtinName a.name || ownedByTazuna a.name then throw (err "this type belongs to Lean")
     if let some p := nodup a.params then throw (err s!"type parameter {p} is declared twice")
     if let some v := (tvarsOf [] a.ty).find? (!a.params.contains ·) then throw (err s!"unbound type variable {v}")
     let body ← match Surface.expandAliases aliases [a.name] a.ty with

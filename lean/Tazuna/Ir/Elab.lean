@@ -55,6 +55,9 @@ partial def tvarsOf (acc : List String) : STy → List String
 
 def builtinName (n : String) : Bool := n == "Int" || n == "String" || n == "List"
 
+/-- Whether a global name belongs to a module of the `tazuna` package, whose declarations Lean owns. -/
+def ownedByTazuna (n : String) : Bool := n.startsWith "tazuna." || n.startsWith "tazuna/"
+
 section
 variable (T : List TypeDecl)
 
@@ -70,9 +73,9 @@ partial def showTy : Ty → String
     let n := (T[i]?.map (·.name)).getD s!"type{i}"
     if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map showTy) ++ ")"
   | .param k => s!"param{k}"
-  | .bag t => s!"tazuna.Bag({showTy t})"
-  | .table k v => s!"tazuna.Table({showTy k}, {showTy v})"
-  | .date => "tazuna.Date"
+  | .bag t => s!"tazuna/bag.Bag({showTy t})"
+  | .table k v => s!"tazuna/table.Table({showTy k}, {showTy v})"
+  | .date => "tazuna/date.Date"
   | .id => "tazuna.Id"
   | .dsl k args =>
     let n := "tazuna." ++ k.name
@@ -106,9 +109,9 @@ partial def annotationFits (σ : List (String × Ty)) : STy → Ty → Bool
     | none => true
   | .con "Int" [], .int | .con "String" [], .str => true
   | .con "List" [a], .list t => annotationFits σ a t
-  | .con "tazuna.Bag" [a], .bag t => annotationFits σ a t
-  | .con "tazuna.Table" [a, b], .table k v => annotationFits σ a k && annotationFits σ b v
-  | .con "tazuna.Date" [], .date | .con "tazuna.Id" [], .id => true
+  | .con "tazuna/bag.Bag" [a], .bag t => annotationFits σ a t
+  | .con "tazuna/table.Table" [a, b], .table k v => annotationFits σ a k && annotationFits σ b v
+  | .con "tazuna/date.Date" [], .date | .con "tazuna.Id" [], .id => true
   | .con n args, .dsl k ts => n == "tazuna." ++ k.name && args.length == ts.length &&
     (args.zip ts).all fun (a, t) => annotationFits σ a t
   | .con n args, .adt i ts _ =>

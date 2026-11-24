@@ -812,7 +812,7 @@ theorem need'_ok {α : Type} {w : String} {b : Bool} {a a' : α} (h : need' w b 
   · cases h; exact ⟨by assumption, rfl⟩
   · cases h
 
-/-- The keys that `table_remove` keeps: the slot terms denote `!sameKey`. -/
+/-- The keys that `table.remove` keeps: the slot terms denote `!sameKey`. -/
 theorem keep_aligned {k w : Ty} (hk : k.eqable = true) (key : k.den) (kt : Term) (hkt : RelV L k key (kt.denote M))
     {S : List Slot} {sv : List (Bool × List Val)} {ys : List (k.den × w.den)} (hS : SlotsDen M S sv)
     (hy : Holds2 (ETab L k w) ys sv) :
@@ -828,7 +828,7 @@ theorem keep_aligned {k w : Ty} (hk : k.eqable = true) (key : k.den) (kt : Term)
     show Val.bool (!(Val.beq (kt.denote M) zk || Val.beq zk (kt.denote M))) = _
     rw [relV_beq k hk key e.1 _ _ hkt hzk, relV_beq k hk e.1 key _ _ hzk hkt]
 
-/-- `table_insert` on slots: the key's slot freed, then the entry in the first free slot. -/
+/-- `table.insert` on slots: the key's slot freed, then the entry in the first free slot. -/
 theorem put_den {k w : Ty} (hk : k.eqable = true) {t0 : (Ty.table k w).den} {S : List Slot}
     {sv : List (Bool × List Val)} {ys : List (k.den × w.den)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 2)
     (hperm : ys.Perm t0.1) (hh : Holds2 (ETab L k w) ys sv) (key : k.den) (val : w.den) (kt vt : Term)
@@ -1179,7 +1179,7 @@ theorem encodeBin_agrees {a b c : Ty} (op : BinOp a b c) (sx : Code a) (sy : Cod
     refine (rel_bool _ _).2 ?_
     simp only [Term.denote, BinOp.eval, toBool_ofBool, eqCode_rel hx hy h1, Val.toBool]
 
-/-! `bag_min_by` and `bag_max_by`. `pick` finds the winning key by a fold in list order; the encoding asks each slot
+/-! `bag.min_by` and `bag.max_by`. `pick` finds the winning key by a fold in list order; the encoding asks each slot
 whether it beats all others. `pick_eq` shows the two agree, and that no order is involved. -/
 
 theorem two_le_length {β : Type} {l : List β} {a b : β} (ha : a ∈ l) (hb : b ∈ l) (hab : a ≠ b) : 2 ≤ l.length := by
@@ -1330,7 +1330,7 @@ theorem winners_unique (l : List α) : l.Pairwise fun a b => ¬(winsAll wins key
 
 end Pick
 
-/-- `bag_min_by` and `bag_max_by` on slots: the winning slot's item, or `Tie` or `Empty`, as `pick` gives. -/
+/-- `bag.min_by` and `bag.max_by` on slots: the winning slot's item, or `Tie` or `Empty`, as `pick` gives. -/
 theorem pickCode_rel (lt : Term → Term → Term) (wins : Int → Int → Bool)
     (hlt : ∀ (ta tb : Term) (a b : Int), ta.denote M = .int a → tb.denote M = .int b →
       (lt ta tb).denote M = .bool (wins a b))
@@ -1510,7 +1510,7 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
       simp only [Term.denote, hhit, Val.toBool, ite_true]
       exact adtCtor_rel (M := M) (vs := [[_], []]) ⟨0, by simp⟩ [found] tsome h3 (val, ())
         ⟨_, _, rfl, hval val hl, rfl⟩
-  case ref =>
+  case tableLookup =>
     simp only [primCode] at h; cases h
     intro ⟨tb, key, rej, next, ()⟩ ⟨st, sk, srej, snext, ()⟩ ⟨ht, hk, hrej, hnext, _⟩ r c hr hc
     obtain ⟨kt, h1, hr⟩ := bind_ok.1 hr

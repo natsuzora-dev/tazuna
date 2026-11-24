@@ -1,4 +1,5 @@
-import tazuna.{type Ctx, type Table}
+import tazuna.{type Ctx}
+import tazuna/table.{type Table}
 
 pub type Records {
   Records(tasks: Table(Int, String))
@@ -44,7 +45,7 @@ fn stray() -> tazuna.Query(Records, Caller, Nil, Int) {
 fn tasks(name: String) -> tazuna.Service {
   tazuna.service(
     name: name,
-    init: Records(tasks: tazuna.table_new()),
+    init: Records(tasks: table.new()),
     apply: apply,
     subscribes: [],
     requests: [tazuna.define_command(add("add")), tazuna.define_query(stray())],

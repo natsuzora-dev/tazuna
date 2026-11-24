@@ -1,4 +1,5 @@
-import tazuna.{type Ctx, type Table}
+import tazuna.{type Ctx}
+import tazuna/table.{type Table}
 
 pub type Records {
   Records(tasks: Table(Int, String))
@@ -30,7 +31,7 @@ fn add(name: String) -> tazuna.Command(Records, Event, Caller, String, Nil) {
 fn tasks(name: String) -> tazuna.Service {
   tazuna.service(
     name: name,
-    init: Records(tasks: tazuna.table_new()),
+    init: Records(tasks: table.new()),
     apply: apply,
     subscribes: [
       tazuna.subscribe(

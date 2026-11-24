@@ -3,6 +3,8 @@
 import corpus/shapes.{type Count, type Shape, Circle, Rect}
 import gleam/option.{type Option, None, Some}
 import tazuna
+import tazuna/bag
+import tazuna/table
 
 pub type Event {
   Opened(id: Int, title: String)
@@ -150,19 +152,19 @@ pub type Rejection {
 }
 
 pub fn builtins(
-  titles: tazuna.Table(Int, String),
+  titles: table.Table(Int, String),
   id: Int,
   at: tazuna.Instant,
 ) -> Result(#(Int, tazuna.Instant), Rejection) {
-  use title <- tazuna.ref(titles, id, Missing)
-  use <- tazuna.require(tazuna.length(title) <= 10, TooLong)
+  use title <- table.lookup(titles, id, or: Missing)
+  use <- tazuna.require(tazuna.length(title) <= 10, or: TooLong)
   let lengths =
-    tazuna.table_values(titles)
-    |> tazuna.bag_map(with: tazuna.length)
-  let longest = case tazuna.bag_max_by(lengths, by: fn(n) { n }) {
+    table.values(titles)
+    |> bag.map(with: tazuna.length)
+  let longest = case bag.max_by(lengths, by: fn(n) { n }) {
     Ok(n) -> n
-    Error(tazuna.Empty) -> 0
-    Error(tazuna.Tie) -> -1
+    Error(bag.Empty) -> 0
+    Error(bag.Tie) -> -1
   }
   Ok(#(longest, at))
 }

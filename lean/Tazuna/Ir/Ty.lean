@@ -215,7 +215,7 @@ def prelude : List TypeDecl :=
       variants := [⟨"Ok", [⟨none, .param 0⟩]⟩, ⟨"Error", [⟨none, .param 1⟩]⟩] },
     { name := "gleam/option.Option", params := ["a"],
       variants := [⟨"Some", [⟨none, .param 0⟩]⟩, ⟨"None", []⟩] },
-    { name := "tazuna.PickError", params := [], variants := [⟨"Empty", []⟩, ⟨"Tie", []⟩] },
+    { name := "tazuna/bag.PickError", params := [], variants := [⟨"Empty", []⟩, ⟨"Tie", []⟩] },
     { name := "tazuna.Ctx", params := ["records", "input", "caller"],
       variants := [⟨"Ctx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩, ⟨some "caller", .param 2⟩,
         ⟨some "now", .int⟩, ⟨some "fresh", .dsl .fresh []⟩]⟩] },
