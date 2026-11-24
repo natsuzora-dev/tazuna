@@ -188,7 +188,7 @@ pub fn query(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect. Instances react in the order they started; instances that start in one step start in Erlang term order of their keys.
+/// A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect. A machine's instances react, start and fire in Erlang term order of their keys.
 pub fn machine(
   name _name: String,
   instances _instances: fn(records) -> Bag(key),

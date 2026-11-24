@@ -182,7 +182,7 @@ def sig : Prim → PrimSig :=
       ret := .dsl .query [a, b, param 2, param 3] }
   | .machine =>
     { name := "machine",
-      doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect. Instances react in the order they started; instances that start in one step start in Erlang term order of their keys.",
+      doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect. A machine's instances react, start and fire in Erlang term order of their keys.",
       tvars := ["records", "event", "key", "state"], dataArgs := true, needsEq := [2],
       params := [l "name" .str, l "instances" (.fn [a] (.bag (param 2))), l "initial" (param 3),
         l "on" (.fn [.machineCtx (param 2) (param 3) a, b] (.next (param 3))),

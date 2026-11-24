@@ -5,8 +5,8 @@ import Tazuna.Semantics.Rules
 /-! The step semantics of one service. A step takes one input line and yields exactly one outcome, the events it
 applied, the out lines and the next state. Inside a step the cascade runs to completion: each event is applied, then
 every machine instance and reaction reacts to it, in a fixed canonical order (machines and reactions in declaration
-order, instances in the order they started, and instances that start in one step in the canonical order of their keys,
-`Tazuna.Semantics.Order`, so the order is a function of the instances' keys and never of how a bag stores them). A request to an external goes out at once, to the external
+order, a machine's instances in the canonical order of their keys, `Tazuna.Semantics.Order`, so the order is a
+function of the keys alone, never of how a bag stores them or of when an instance started). A request to an external goes out at once, to the external
 that lists what it asks for; a command or
 query of the service's own waits in a queue and runs in turn as one internal step, and the cascade bound limits how
 many internal steps one input takes. Timers fire only on clock lines. Out lines and pending requests form multisets:
@@ -29,6 +29,7 @@ structure Instance {r e : Ty} (m : MachineV r e) where
   state : m.state.den0
   timer : Option (Int × m.state.den0)
 
+/-- A machine with its live instances, in the canonical order of their keys. -/
 abbrev MachineState (r e : Ty) := (m : MachineV r e) × List (Instance m)
 
 /-- An out line: a request to an external, with the wire id its answer names in `to`. -/
@@ -131,22 +132,21 @@ def enter {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (key : m.
 
 variable (T : List TypeDecl)
 
-/-- A machine after an event: instances whose key left go, the others react with `on`, and new keys start at
-`initial` in the canonical order of the keys. -/
+/-- A machine after an event: instances whose key left go, and in the canonical order of the keys each other key's
+instance reacts with `on` or, when the key is new, starts at `initial`. The instances stay in that order. -/
 def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) : MachineState r e →
     MachineState r e × List (Sender × EffectV e)
   | ⟨m, insts⟩ =>
     let eqK := (Ty.semWith Dsl.base m.key).2
-    let keys := (m.instances (records, ())).foldl (fun ks k => if ks.any (eqK k) then ks else ks ++ [k]) []
-    let kept := insts.filter fun i => keys.any (eqK i.key)
-    let (reacted, effs) := kept.foldl (fun (acc, effs) i =>
-      match m.on (.inl (i.key, i.state, records, now, ()), ev, ()) with
-      | .inr (.inl (s, ())) => let (i', es) := enter m records now i.key s; (acc ++ [i'], effs ++ es)
-      | _ => (acc ++ [i], effs)) ([], [])
-    let fresh := (keys.filter fun k => !insts.any (eqK k ·.key)).mergeSort fun a b => (Ty.cmp T m.key a b).isLE
-    let (born, effs) := fresh.foldl (fun (acc, effs) k =>
-      let (i, es) := enter m records now k m.initial; (acc ++ [i], effs ++ es)) (reacted, effs)
-    (⟨m, born⟩, effs)
+    let keys := ((m.instances (records, ())).foldl (fun ks k => if ks.any (eqK k) then ks else ks ++ [k]) []).mergeSort
+      fun a b => (Ty.cmp T m.key a b).isLE
+    let (insts, effs) := keys.foldl (fun (acc, effs) k =>
+      match insts.find? (eqK k ·.key) with
+      | some i => match m.on (.inl (i.key, i.state, records, now, ()), ev, ()) with
+        | .inr (.inl (s, ())) => let (i', es) := enter m records now i.key s; (acc ++ [i'], effs ++ es)
+        | _ => (acc ++ [i], effs)
+      | none => let (i, es) := enter m records now k m.initial; (acc ++ [i], effs ++ es)) ([], [])
+    (⟨m, insts⟩, effs)
 
 /-- One event: apply it, then let every machine and reaction react. -/
 def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV v.event) :=
@@ -259,7 +259,7 @@ def finish (s0 : State v) (a : Except Fault (Acc v)) (outcome : Outcome) : Resul
     | n :: _ => ⟨s0, .fault (.invariant n), [], []⟩
     | [] => ⟨a.state, outcome, a.events, a.out⟩
 
-/-- Fires the timers due at `now`, earliest deadline first, then machines and instances in order. Entering a state
+/-- Fires the timers due at `now`, earliest deadline first, then machines in order and instances in key order. Entering a state
 may start another due timer; the cascade bound limits how many fire. -/
 def fire (s : State v) : (fuel : Nat) → Option (State v × List (Sender × EffectV v.event))
   | 0 => none

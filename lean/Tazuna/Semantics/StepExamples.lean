@@ -140,14 +140,16 @@ def specWith (xs : List ExternalV) : SpecV := Prim.spec.den [] rfl (([svc] : Lis
 -- Every input has one outcome.
 #guard (run prelude svc s0 [cmd 1 5, cmd 2 5, .clock 3]).2.length == 3
 
--- Instances that start in one step start in key order, never in the order a bag happens to store its keys: one
--- instance per key of a bag of Int, each asking `ping` with its key as it starts.
+-- Instances react and start in key order, never in the order a bag stores its keys or the instances started: one
+-- instance per key of a bag of Int, asking `ping` with its key as it enters a state, and entering state 1 on every
+-- event.
 def askKey (k : Int) : EffectV .int := .request
   { name := "ping", input := .int, output := .int, rejection := none, value := k, ensures := none,
     onAnswer := .closed (.lam (.list .nil)) }
 def perKey : MachineV (.bag .int) .int :=
   { name := "perKey", key := .int, state := .int, instances := fun (r, ()) => r, initial := (0 : Int),
-    on := fun _ => .inl (), after := fun _ => .inr (.inl ()), effect := fun k _ _ _ => some (askKey k),
+    on := fun _ => .inr (.inl ((1 : Int), ())), after := fun _ => .inr (.inl ()),
+    effect := fun k _ _ _ => some (askKey k),
     invariants := fun _ => [] }
 def keyed : ServiceV :=
   { name := "keyed", records := .bag .int, event := .int, caller := .int, init := ([] : List Int),
@@ -157,10 +159,12 @@ def keyed : ServiceV :=
     scenarios := [], invariants := .closed (.lam (.list .nil)), responses := [],
     bounds := { creates := [], items := 3, cascade := 2, steps := 5 },
     declared := [("x", .externalQuery "ping" .int .int (.closed (.lam (.list .nil))))] }
-def started (keys : List Int) : List (Nat × Int) :=
-  (step prelude keyed { State.init keyed with records := keys } (.event ⟨0, by decide⟩ (0 : Int))).out.map fun o =>
-    (o.id, match o.input with | ⟨.int, x⟩ => x | _ => 0)
-#guard started [3, 1, 2] == [(0, 1), (1, 2), (2, 3)]
-#guard started [2, 1, 3] == started [3, 1, 2]
+def asked (r : Result keyed) : List (Nat × Int) := r.out.map fun o => (o.id, match o.input with | ⟨.int, x⟩ => x | _ => 0)
+def tick (s : State keyed) (keys : List Int) : Result keyed :=
+  step prelude keyed { s with records := keys } (.event ⟨0, by decide⟩ (0 : Int))
+#guard asked (tick (State.init keyed) [3, 1, 2]) == [(0, 1), (1, 2), (2, 3)]
+#guard asked (tick (State.init keyed) [2, 1, 3]) == asked (tick (State.init keyed) [3, 1, 2])
+-- The instance of 3 started first, yet the new instance of 1 asks first.
+#guard asked (tick (tick (State.init keyed) [3]).state [1, 3]) == [(1, 1), (2, 3)]
 
 end Tazuna.Ir.StepExamples
