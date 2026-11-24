@@ -21,6 +21,9 @@ fi
 lean/.lake/build/bin/tazuna-engine check corpus/main --ir gleam/build/corpus.ir.json ||
   { echo "The engine did not load the converter corpus."; exit 1; }
 
+# The solver must read the printed scripts and print values the engine reads back.
+lean/.lake/build/bin/smt-check "$(command -v z3)" || { echo "The solver check failed (is z3 on PATH?)."; exit 1; }
+
 kinds=$(mktemp)
 trap 'rm -f "$kinds"' EXIT
 (cd lean && lake exe kinds) >"$kinds"

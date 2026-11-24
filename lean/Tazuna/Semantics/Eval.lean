@@ -7,8 +7,8 @@ each value. So `eval` needs neither fuel nor a failure value. -/
 
 namespace Tazuna.Ir
 
-private def intLt (a b : Int) : Bool := decide (a < b)
-private def intLe (a b : Int) : Bool := decide (a ≤ b)
+def intLt (a b : Int) : Bool := decide (a < b)
+def intLe (a b : Int) : Bool := decide (a ≤ b)
 
 def BinOp.eval {a b c : Ty} : BinOp a b c → a.den → b.den → c.den
   | .add, x, y => @HAdd.hAdd Int Int Int _ x y

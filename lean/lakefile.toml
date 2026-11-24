@@ -1,5 +1,5 @@
 name = "tazuna"
-defaultTargets = ["Tazuna", "tazuna-engine", "gen-dsl", "kinds"]
+defaultTargets = ["Tazuna", "tazuna-engine", "gen-dsl", "kinds", "smt-check"]
 
 [leanOptions]
 autoImplicit = false
@@ -20,3 +20,7 @@ root = "GenDsl"
 [[lean_exe]]
 name = "kinds"
 root = "Kinds"
+
+[[lean_exe]]
+name = "smt-check"
+root = "SmtCheck"
