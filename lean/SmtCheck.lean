@@ -1,4 +1,4 @@
-import Tazuna.Smt.Decode
+import Tazuna.Smt.StepEncode
 import Tazuna.Smt.Solver
 
 /-! Runs the solver on printed scripts and reads its answers back: the theorems cover printing and reading our own
@@ -217,6 +217,112 @@ def freshScript (step : Nat) (index : Int) : Except String (Layout × Script) :=
   | .error r, _, _ => throw s!"no encoding: {repr r}"
   | _, _, _ => throw "no sort"
 
+/-! A query step on a small service, for `query_step`: the records are a table of Int to Int, the query `get` takes a
+key from the caller "alice", accepts a positive key, and answers `table_get(ctx.records, key)`. Each case asks the
+solver for a state and input whose outcome terms meet a goal, decodes them, runs `step` on what they decode to, and
+compares its outcome with what the outcome terms denote in the model. -/
+
+def recordsT : Ty := .table .int .int
+def ctxT : Ty := Ty.ctx recordsT .int .str
+
+def acceptsE : E (.fn [.int] Ty.rules) :=
+  .lam (.list (.cons (.tuple (.cons (.str "positive") (.cons (.bin .gt (.var .here) (.int 0)) .nil))) .nil))
+
+def resolveE : E (.fn [ctxT] (Ty.option .int)) :=
+  .lam (.call (.prim .tableGet [.int, .int] rfl)
+    (.cons (.field (ft := recordsT) "records" 0 (by simp) (.var .here))
+      (.cons (.field (ft := .int) "input" 1 (by simp) (.var .here)) .nil)))
+
+def getQ : QueryV recordsT .str :=
+  { service := "s", name := "get", input := .int, output := Ty.option .int, callers := ["alice"],
+    accepts := Ty.down _ rfl (acceptsE.eval (G := []) () ()), resolve := Ty.down _ rfl (resolveE.eval (G := []) () ()) }
+
+def getCode (L : Layout) : Except Refusal (QueryCode getQ) := do
+  let (a, _) ← encode L (G := []) () acceptsE ()
+  let (r, _) ← encode L (G := []) () resolveE ()
+  pure ⟨a, r⟩
+
+def querySvc : ServiceV :=
+  { name := "s", records := recordsT, event := .int, caller := .str, init := Builtin.tableEmpty,
+    apply := fun (r, _, ()) => r, subscribes := [], commands := [], queries := [getQ], machines := [], reactions := [],
+    invariants := fun _ => [], responses := [], bounds := ⟨[], 0, 0, 0⟩, declared := [] }
+
+def queryLayout : Layout :=
+  Layout.addTys (fun _ => 3) {} (recordsT :: .id :: Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys resolveE)
+
+/-- The occupied slots of a table term hold distinct keys, as a table's do. -/
+def keysDistinct (d dt : Nat) (n : Nat) (t : Term) : Term :=
+  let S := slotsOf d dt n 2 t
+  allT ((List.range n).flatMap fun a => (List.range n).filterMap fun b =>
+    if a < b then some (.not (.and (.and (S[a]!).1 (S[b]!).1) (.eq ((S[a]!).2.headD tt) ((S[b]!).2.headD tt))))
+    else none)
+
+/-- The script for one goal on the outcome terms: v0..v3 the state, v4 the caller, v5 the key, v6..v9 the outcome
+terms (caller listed, the rule's holds and name, the output). -/
+def queryScript (goal : List Term) : Except String (Script × QueryOut) := do
+  let L := queryLayout
+  let qc ← (getCode L).mapError fun r => s!"no encoding: {repr r}"
+  let some ks := callerTerms L rfl getQ.callers | throw "no caller terms"
+  let S := SymState.vars 0
+  let (o, cond) ← (encodeQuery L getQ qc ks S.records S.now S.fresh (.var 4) (.var 5)).mapError
+    fun r => s!"no encoding: {repr r}"
+  let some (d, n) := L.find? recordsT | throw "no records datatype"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | throw "no slot datatype"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some osrt := L.srt? (Ty.option .int) | throw "no output sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [(name, holds)] := o.rules | throw "not one rule"
+  pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, .str, .int, .bool, .bool, .str, osrt],
+          asserts := [cond, keysDistinct d dt n S.records, .le (.int 0) S.fresh, .le (.int 0) S.nextId,
+            .eq (.var 6) o.callerOk, .eq (.var 7) holds, .eq (.var 8) name, .eq (.var 9) o.output] ++ goal,
+          shows := List.range 10 }, o)
+
+/-- The model of the solver's values, as far as the variables go. -/
+def modelOf (vs : List (Nat × Val)) : Model :=
+  { vars := fun n => (vs.lookup n).getD default, divZero := fun _ => 0, modZero := fun _ => 0,
+    selOther := fun _ _ _ _ => default, defs := fun _ => default }
+
+/-- Runs one query case: the outcome `step` computes from the decoded state and input against the outcome terms. -/
+def queryCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := do
+  match queryScript goal with
+  | .error m => IO.println s!"smt-check: {name}: {m}"; return false
+  | .ok (script, _) =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let L := queryLayout
+      let o : QueryOut := ⟨.var 6, [(.var 8, .var 7)], .var 9⟩
+      let i : Fin querySvc.queries.length := ⟨0, by decide⟩
+      match (SymState.vars 0).decode M L (v := querySvc) rfl [] [],
+          (SymInput.query i (.var 4) (.var 5)).decode M L (v := querySvc) rfl (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl)
+            (fun j => j.elim0) with
+      | some s, some x =>
+        let r := step querySvc s x
+        let want := match o.invalid M with
+          | some ns => Outcome.invalid ns |>.summary
+          | none => "answered"
+        let outOk := match r.outcome with
+          | .answered ⟨t, y⟩ =>
+            match Ty.same t (Ty.option .int) with
+            | some ⟨h⟩ => (embedV L _ (Ty.up _ rfl (h ▸ y))).map (·.print) ==
+                (((vs.lookup 9).bind (decodeV L (Ty.option .int))).bind (embedV L _)).map (·.print)
+            | none => false
+          | _ => true
+        if r.outcome.summary != want || !outOk then
+          IO.println s!"smt-check: {name}: step says {r.outcome.summary}, the terms say {want}"; return false
+        return true
+      | _, _ => IO.println s!"smt-check: {name}: the model does not decode"; return false
+    | a => IO.println s!"smt-check: {name}: {repr a}"; return false
+
+def queryCases : List (String × List Term) :=
+  let some_ (t : Term) : Term := match queryLayout.find? (Ty.option .int) with
+    | some (d, _) => .is d 0 t
+    | none => .bool false
+  [ ("query answers a key the records hold", [.var 6, .var 7, some_ (.var 9)]),
+    ("query answers a key the records lack", [.var 6, .var 7, .not (some_ (.var 9))]),
+    ("query refuses an unlisted caller", [.not (.var 6)]),
+    ("query refuses a key that is not positive", [.var 6, .not (.var 7)]) ]
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -250,6 +356,8 @@ def check (z3 : String) : IO Bool := do
           IO.println s!"smt-check: fresh({step}, {index}): the solver's id differs from eval's"; ok := false
       | a => IO.println s!"smt-check: fresh({step}, {index}): {repr a}"; ok := false
     | .error m => IO.println s!"smt-check: fresh({step}, {index}): {m}"; ok := false
+  for (name, goal) in queryCases do
+    unless ← queryCase solver name goal do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

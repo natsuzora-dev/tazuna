@@ -237,10 +237,22 @@ theorem Ty.up_fn (ps : List Ty) (r : Ty) (h : (Ty.fn ps r).isData = true) (hps :
     Ty.up (.fn ps r) h f (Ty.up (.tuple ps) hps xs) = Ty.up r hr (f xs) := by
   unfold Ty.up; exact cast_fn _ _ _ f xs
 
-theorem Ty.up_cons (t : Ty) (ts : List Ty) (h : (Ty.tuple (t :: ts)).isData = true) (ht : t.isData = true)
-    (hts : (Ty.tuple ts).isData = true) (a : t.den0) (b : (Ty.tuple ts).den0) :
-    Ty.up (.tuple (t :: ts)) h (a, b) = (Ty.up t ht a, Ty.up (.tuple ts) hts b) := by
+theorem Ty.up_tuple (t : Ty) (ts : List Ty) (h : (Ty.tuple (t :: ts)).isData = true) (ht : t.isData = true)
+    (hts : (Ty.tuple ts).isData = true) (x : (Ty.tuple (t :: ts)).den0) :
+    Ty.up (.tuple (t :: ts)) h x = (Ty.up t ht x.1, Ty.up (.tuple ts) hts x.2) := by
+  obtain ⟨a, b⟩ := x
   unfold Ty.up; exact cast_prod _ _ _ a b
+
+theorem Ty.up_inl (k : Nat) (a : List Ty) (fs : List Ty) (vs : List (List Ty)) (h : (Ty.adt k a (fs :: vs)).isData = true)
+    (hfs : (Ty.tuple fs).isData = true) (x : (Ty.tuple fs).den0) :
+    Ty.up (.adt k a (fs :: vs)) h (.inl x) = .inl (Ty.up (.tuple fs) hfs x) := by
+  have hvs : Ty.isDatass vs = true := by simp_all [Ty.isData, Ty.isDatass]
+  unfold Ty.up
+  exact cast_sumL _ (congrArg Sigma.fst (Ty.semAltsWith_data Dsl.val_fresh vs hvs)).symm _ x
+
+theorem Ty.up_int (h : Ty.int.isData = true) (n : Ty.int.den0) : Ty.up .int h n = n := rfl
+theorem Ty.up_fresh (h : (Ty.dsl .fresh []).isData = true) (n : (Ty.dsl .fresh []).den0) : Ty.up (.dsl .fresh []) h n = n := rfl
+theorem Ty.up_nil (h : (Ty.tuple []).isData = true) (x : (Ty.tuple []).den0) : Ty.up (.tuple []) h x = () := rfl
 
 theorem Ty.up_list (t : Ty) (h : (Ty.list t).isData = true) (ht : t.isData = true) (xs : (Ty.list t).den0) :
     Ty.up (.list t) h xs = xs.map (Ty.up t ht) := by
