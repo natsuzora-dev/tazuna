@@ -86,12 +86,21 @@ structure RequestShape (e : Ty) where
   input : Ty
   output : Ty
   rejection : Option Ty
-  ensuresΓ : List Ty
-  ensures : Option (Site ensuresΓ (Ty.fn [input, answerTy output rejection] Ty.rules))
+  /-- A query's `ensures`, with the types of the values it captured; a command has none. -/
+  ensures : Option ((Γ : List Ty) × Site Γ (Ty.fn [input, answerTy output rejection] Ty.rules))
   answerΓ : List Ty
   onAnswer : Site answerΓ (Ty.fn [answerTy output rejection] (.list e))
   /-- What varies, each value data: the input, and the values each site captured. -/
-  hfields : (Ty.tuple [input, .tuple ensuresΓ, .tuple answerΓ]).isData = true
+  hfields : (Ty.tuple [input, .tuple ((ensures.map (·.1)).getD []), .tuple answerΓ]).isData = true
+
+/-- The types of the values the `ensures` captured; none without one. -/
+def RequestShape.ensuresΓ {e : Ty} (sh : RequestShape e) : List Ty := (sh.ensures.map (·.1)).getD []
+
+/-- The `ensures` closure record with the captured values `env`. -/
+def ensuresFn {t : Ty} : (ens : Option ((Γ : List Ty) × Site Γ t)) → (Ty.tuple ((ens.map (·.1)).getD [])).den0 →
+    Option (Fun t)
+  | none, _ => none
+  | some ⟨_, s⟩, env => some (s.fn env)
 
 /-- The types of what varies among the requests of a shape, as an effect value holds them. -/
 def RequestShape.fields {e : Ty} (sh : RequestShape e) : List Ty := [sh.input, .tuple sh.ensuresΓ, .tuple sh.answerΓ]
@@ -115,7 +124,7 @@ def PendingShape.pending {e : Ty} (sh : PendingShape e) (id : Nat) (x : Ty.dens 
   let y := Ty.down (.tuple sh.fields) sh.hdata x
   ⟨id, sh.sender.sender y.1, sh.external,
     { name := sh.name, input := sh.input, output := sh.output, rejection := sh.rejection, value := y.2.1,
-      ensures := sh.ensures.map (·.fn y.2.2.1), onAnswer := sh.onAnswer.fn y.2.2.2.1 }⟩
+      ensures := ensuresFn sh.ensures y.2.2.1, onAnswer := sh.onAnswer.fn y.2.2.2.1 }⟩
 
 /-- The senders a service's states can name. -/
 def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks) :=
@@ -125,14 +134,15 @@ def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks) :=
 the service may request, and each site of the type its `on_answer` and `ensures` must have, whose fields are data. -/
 def requestShapes (v : ServiceV) (sites : List AnySite) : List (RequestShape v.event) :=
   v.declared.flatMap fun (x, d) =>
-    let mk (name : String) (i o : Ty) (j : Option Ty) (eΓ : List Ty)
-        (ens : Option (Site eΓ (Ty.fn [i, answerTy o j] Ty.rules))) : List (RequestShape v.event) :=
+    let mk (name : String) (i o : Ty) (j : Option Ty)
+        (ens : Option ((Γ : List Ty) × Site Γ (Ty.fn [i, answerTy o j] Ty.rules))) : List (RequestShape v.event) :=
       (sitesOf sites (Ty.fn [answerTy o j] (.list v.event))).filterMap fun ⟨aΓ, a⟩ =>
-        if h : (Ty.tuple [i, .tuple eΓ, .tuple aΓ]).isData = true then some ⟨x, name, i, o, j, eΓ, ens, aΓ, a, h⟩
+        if h : (Ty.tuple [i, .tuple ((ens.map (·.1)).getD []), .tuple aΓ]).isData = true then
+          some ⟨x, name, i, o, j, ens, aΓ, a, h⟩
         else none
     match d with
-    | .externalCommand n i o j => mk n i o (some j) [] none
-    | .externalQuery n i o _ => (sitesOf sites (Ty.fn [i, o] Ty.rules)).flatMap fun ⟨eΓ, s⟩ => mk n i o none eΓ (some s)
+    | .externalCommand n i o j => mk n i o (some j) none
+    | .externalQuery n i o _ => (sitesOf sites (Ty.fn [i, o] Ty.rules)).flatMap fun s => mk n i o none (some s)
     | _ => []
 
 /-- Every shape of pending request a service can hold: each sender whose key is data, with each request shape. -/

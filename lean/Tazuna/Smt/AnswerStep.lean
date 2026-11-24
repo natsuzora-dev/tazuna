@@ -162,9 +162,9 @@ def ensuresTerms {e : Ty} (sh : PendingShape e) (de k : Nat) (entry : Term)
     (vc : Code (answerTy sh.output sh.rejection)) : Except Refusal (List (Term × Term) × Term) :=
   match sh.ensures with
   | none => pure ([], tt)
-  | some es => do
-    let (dn, _) ← need "a layout without the captures' tuple" (L.find? (.tuple sh.ensuresΓ))
-    let σe ← need "captures that have no term" (tupleCodes dn sh.ensuresΓ (.sel de k 2 entry) 0)
+  | some ⟨Γ, es⟩ => do
+    let (dn, _) ← need "a layout without the captures' tuple" (L.find? (.tuple Γ))
+    let σe ← need "captures that have no term" (tupleCodes dn Γ (.sel de k 2 entry) 0)
     let ic ← need "an input that has no term" (Code.ofTerm? sh.input (.sel de k 1 entry))
     let (oe, c) ← es.code L σe
     let (rs, c') ← oe (ic, vc, ())
@@ -393,17 +393,17 @@ theorem answer_step (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
   have hbroken : brokenIn M rules = Step.broken ((sh.pending to (f0, f1, f2, f3, ())).request.holds value) := by
     show brokenIn M rules = Step.broken (RequestV.holds ⟨sh.name, sh.input, sh.output, sh.rejection,
       (Ty.down (.tuple sh.fields) sh.hdata (f0, f1, f2, f3, ())).2.1,
-      sh.ensures.map (·.fn (Ty.down (.tuple sh.fields) sh.hdata (f0, f1, f2, f3, ())).2.2.1),
+      ensuresFn sh.ensures (Ty.down (.tuple sh.fields) sh.hdata (f0, f1, f2, f3, ())).2.2.1,
       sh.onAnswer.fn (Ty.down (.tuple sh.fields) sh.hdata (f0, f1, f2, f3, ())).2.2.2.1⟩ value)
     rw [hY1, hY2]
     unfold ensuresTerms at h9
-    cases hens : sh.ensures with
+    obtain ⟨⟨_, _, si, so, sj, ens, _, _, _⟩, _, _, _⟩ := sh
+    cases ens with
     | none =>
-      rw [hens] at h9
       cases pure_ok.1 h9
-      simp [RequestV.holds, brokenIn, Step.broken]
+      simp [RequestV.holds, brokenIn, Step.broken, ensuresFn]
     | some es =>
-      rw [hens] at h9
+      obtain ⟨Γ, es⟩ := es
       obtain ⟨⟨dn, dnn⟩, g1, h9⟩ := bind_ok.1 h9
       obtain ⟨σe, g2, h9⟩ := bind_ok.1 h9
       obtain ⟨ic, g3, h9⟩ := bind_ok.1 h9
@@ -414,29 +414,29 @@ theorem answer_step (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
       rw [holds_andT] at hc3
       obtain ⟨dn', nn', vals2, hfe, hv2e, hrel2⟩ := hv2
       obtain rfl := find_det hfe (need_ok.1 g1)
-      have hσe : Rels M L sh.ensuresΓ f2 σe :=
-        tupleCodes_rels sh.ensuresΓ [] vals2 f2 σe (by rw [hsel 2 v2 rfl, hv2e]; rfl) hrel2 (need_ok.1 g2)
+      have hσe : Rels M L Γ f2 σe :=
+        tupleCodes_rels Γ [] vals2 f2 σe (by rw [hsel 2 v2 rfl, hv2e]; rfl) hrel2 (need_ok.1 g2)
       have hoe := encode_agrees es.defs es.defs.eval (es.defs.encode L) (Defs.encode_agrees M L es.defs) es.body σe f2
         hσe oe ce g4 hc3.1
       have hoe' : Rel M L _ (Ty.up _ es.ht (es.fn (Ty.down _ hd2 f2)).fn) oe := by
         rw [Fun.fn, Ty.up_down]
-        have e : Ty.up (.tuple sh.ensuresΓ) es.hΓ (Ty.down _ hd2 f2) = f2 := Ty.up_down _ hd2 f2
+        have e : Ty.up (.tuple Γ) es.hΓ (Ty.down _ hd2 f2) = f2 := Ty.up_down _ hd2 f2
         simp only [Fun.eval, Site.fn]; rw [e]; exact hoe
-      have hic : Smt.Rel M L sh.input (Ty.up _ hd1 (Ty.down _ hd1 f1)) ic := by
+      have hic : Smt.Rel M L si (Ty.up _ hd1 (Ty.down _ hd1 f1)) ic := by
         rw [Ty.up_down]; exact (rel_ofTerm (need_ok.1 g3) _).2 (by rw [hsel 1 v1 rfl]; exact hv1)
-      have hte2 : (Ty.tuple [sh.input, answerTy sh.output sh.rejection]).isData = true := by
+      have hte2 : (Ty.tuple [si, answerTy so sj]).isData = true := by
         simp [Ty.isData, Ty.isDatas, hd1, hans]
-      have hargs2 : Smt.Rels M L [sh.input, answerTy sh.output sh.rejection]
-          (Ty.up (.tuple [sh.input, answerTy sh.output sh.rejection]) hte2 (Ty.down _ hd1 f1, value, ())) (ic, vc, ()) := by
-        show Smt.Rel M L _ (Ty.up (.tuple [sh.input, answerTy sh.output sh.rejection]) hte2
-          (Ty.down _ hd1 f1, value, ())).1 ic ∧ Smt.Rels M L [answerTy sh.output sh.rejection]
-            (Ty.up (.tuple [sh.input, answerTy sh.output sh.rejection]) hte2 (Ty.down _ hd1 f1, value, ())).2 (vc, ())
+      have hargs2 : Smt.Rels M L [si, answerTy so sj]
+          (Ty.up (.tuple [si, answerTy so sj]) hte2 (Ty.down _ hd1 f1, value, ())) (ic, vc, ()) := by
+        show Smt.Rel M L _ (Ty.up (.tuple [si, answerTy so sj]) hte2
+          (Ty.down _ hd1 f1, value, ())).1 ic ∧ Smt.Rels M L [answerTy so sj]
+            (Ty.up (.tuple [si, answerTy so sj]) hte2 (Ty.down _ hd1 f1, value, ())).2 (vc, ())
         erw [Ty.up_tuple _ _ _ hd1 hta]
         exact ⟨hic, hargs⟩
       have hrs := hoe' _ _ hargs2 rs ce' g5 hc3.2
       erw [Ty.up_fn _ Ty.rules _ hte2 rfl] at hrs
       rw [rules_broken g6 _ hrs]
-      simp [RequestV.holds]
+      rfl
   -- The step itself: Invalid on a broken rule, else the events apply and the invariants decide.
   have hr : r = _ := hstep
   rw [hr, hbroken]
