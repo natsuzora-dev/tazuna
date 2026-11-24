@@ -13,3 +13,8 @@ if [ "$gleam_version" != "$lean_version" ]; then
   echo "gleam/gleam.toml has version $gleam_version but the engine prints $lean_version. Make them the same."
   exit 1
 fi
+
+kinds=$(mktemp)
+trap 'rm -f "$kinds"' EXIT
+(cd lean && lake exe kinds) >"$kinds"
+test/e2e/check "$kinds"

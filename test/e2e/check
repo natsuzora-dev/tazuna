@@ -1,0 +1,15 @@
+#!/bin/sh
+# Each kind of output line has one end-to-end case, a directory named after the kind. Fails when a kind has no case or
+# a case names no kind. Usage: test/e2e/check <file listing the kinds, one per line>
+set -eu
+cd "$(dirname "$0")"
+kinds=$1
+status=0
+while read -r kind; do
+  [ -d "$kind" ] || { echo "e2e: kind $kind has no case. Add the directory test/e2e/$kind."; status=1; }
+done <"$kinds"
+for dir in */; do
+  [ -d "$dir" ] || continue
+  grep -qxF "${dir%/}" "$kinds" || { echo "e2e: test/e2e/$dir names no kind. Rename or remove it."; status=1; }
+done
+exit $status
