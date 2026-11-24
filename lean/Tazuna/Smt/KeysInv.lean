@@ -34,23 +34,6 @@ theorem instancesOk_of_lt (m : MachineV r e) (ho : m.key.ordered T = true) {inst
     · rw [Std.OrientedCmp.eq_swap (cmp := Ty.cmp T m.key), (Ty.cmp_eq_iff T ho _ _).2 hq] at hab
       simp [Ordering.swap] at hab
 
-/-- The keys a machine step reacts with strictly increase. -/
-theorem sortBy_dedup_lt {t : Ty} (ht : t.ordered T = true) (xs : List t.den0) :
-    (Ty.sortBy T t (dedupBy (Ty.semWith Dsl.base t).2 xs)).Pairwise fun a b => Ty.cmp T t a b = .lt := by
-  have hnd : (dedupBy (Ty.semWith Dsl.base t).2 xs).Pairwise fun a b => Ty.cmp T t a b ≠ .eq :=
-    (dedupBy_pairwise _ xs).imp fun h e => by
-      rw [(Ty.cmp_eq_iff T ht _ _).1 (Std.OrientedCmp.eq_symm e)] at h; cases h
-  have hp := List.mergeSort_perm (dedupBy (Ty.semWith Dsl.base t).2 xs) (fun a b => (Ty.cmp T t a b).isLE)
-  have hle := List.pairwise_mergeSort (le := fun a b => (Ty.cmp T t a b).isLE)
-    (fun _ _ _ h1 h2 => Std.TransCmp.isLE_trans h1 h2)
-    (fun a b => by
-      cases h : Ty.cmp T t a b with
-      | gt => have := Std.OrientedCmp.gt_iff_lt.1 h; simp [this]
-      | _ => simp) (dedupBy (Ty.semWith Dsl.base t).2 xs)
-  have hne := hnd.perm hp.symm (fun h e => h (Std.OrientedCmp.eq_symm e))
-  unfold Ty.sortBy
-  exact (hle.and hne).imp fun ⟨h1, h2⟩ => by cases e : Ty.cmp T t _ _ <;> simp_all
-
 theorem reactKey_erl (m : MachineV r e) (ho : m.key.ordered T = true) (insts : List (Step.Instance m))
     (records : r.den0) (now : Int) (ev : e.den0) (k : m.key.den0) :
     Ty.erl T m.key (Step.reactKey m insts records now ev k).1.key = Ty.erl T m.key k := by

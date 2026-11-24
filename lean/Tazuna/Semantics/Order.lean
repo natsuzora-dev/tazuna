@@ -717,6 +717,23 @@ theorem sortBy_dedup_prefix {t : Ty} (ht : t.ordered T = true) (xs : List t.den0
   sorted_prefix (Ty.cmp T t) _ ((dedupBy_pairwise _ xs).imp fun h e =>
     by rw [(Ty.cmp_eq_iff T ht _ _).1 (Std.OrientedCmp.eq_symm e)] at h; cases h) h
 
+/-- The keys of a bag of an ordered type, each once, in the canonical order, strictly increase. -/
+theorem sortBy_dedup_lt {t : Ty} (ht : t.ordered T = true) (xs : List t.den0) :
+    (Ty.sortBy T t (dedupBy (Ty.semWith Dsl.base t).2 xs)).Pairwise fun a b => Ty.cmp T t a b = .lt := by
+  have hnd : (dedupBy (Ty.semWith Dsl.base t).2 xs).Pairwise fun a b => Ty.cmp T t a b ≠ .eq :=
+    (dedupBy_pairwise _ xs).imp fun h e => by
+      rw [(Ty.cmp_eq_iff T ht _ _).1 (Std.OrientedCmp.eq_symm e)] at h; cases h
+  have hp := List.mergeSort_perm (dedupBy (Ty.semWith Dsl.base t).2 xs) (fun a b => (Ty.cmp T t a b).isLE)
+  have hle := List.pairwise_mergeSort (le := fun a b => (Ty.cmp T t a b).isLE)
+    (fun _ _ _ h1 h2 => Std.TransCmp.isLE_trans h1 h2)
+    (fun a b => by
+      cases h : Ty.cmp T t a b with
+      | gt => have := Std.OrientedCmp.gt_iff_lt.1 h; simp [this]
+      | _ => simp) (dedupBy (Ty.semWith Dsl.base t).2 xs)
+  have hne := hnd.perm hp.symm (fun h e => h (Std.OrientedCmp.eq_symm e))
+  unfold Ty.sortBy
+  exact (hle.and hne).imp fun ⟨h1, h2⟩ => by cases e : Ty.cmp T t _ _ <;> simp_all
+
 end
 
 -- Constructor atoms as gleam 1.19 compiles them, and terms in the order Erlang's `lists:sort` gives (checked with erl).
