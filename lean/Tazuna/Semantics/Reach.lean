@@ -42,7 +42,8 @@ def EffectFun.Reach {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Prop :=
 
 /-- An effect's kept functions are records of `P`. -/
 def EffectV.Reach {e : Ty} : EffectV e → Prop
-  | .request r => r.onAnswer.asSite ∈ P ∧ ∀ f ∈ r.ensures, f.asSite ∈ P
+  | .request r => r.onAnswer.asSite ∈ P ∧ (∀ f ∈ r.ensures, f.asSite ∈ P) ∧ r.input.isData = true ∧
+      r.rejection.isSome = r.ensures.isNone
   | .command _ _ _ _ _ _ onAnswer => onAnswer.asSite ∈ P
   | .query _ _ _ _ _ _ onAnswer => onAnswer.asSite ∈ P
 
@@ -331,10 +332,10 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
     exact he
   case requestCommand =>
     rintro ⟨name, input, oa, ⟨⟩⟩ ⟨-, -, ho, -⟩
-    exact ⟨ho, fun f hf => by cases hf⟩
+    exact ⟨ho, (fun f hf => by cases hf), Ty.isData_inst (Prim.dataOf h rfl) (.param 1) rfl, rfl⟩
   case requestQuery =>
     rintro ⟨⟨name, ens⟩, input, oa, ⟨⟩⟩ ⟨he, -, ho, -⟩
-    exact ⟨ho, fun f hf => by cases hf; exact he⟩
+    exact ⟨ho, (fun f hf => by cases hf; exact he), Ty.isData_inst (Prim.dataOf h rfl) (.param 1) rfl, rfl⟩
   case sendCommand =>
     rintro ⟨c, caller, input, oa, ⟨⟩⟩ ⟨-, -, -, ho, -⟩
     exact ho

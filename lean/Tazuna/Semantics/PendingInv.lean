@@ -8,6 +8,109 @@ run reaches (`run_inv`). -/
 
 namespace Tazuna.Ir
 
+/-- A sender a service's states can name: an instance of one of its machines by its key, or one of its reactions. -/
+def SentBy (v : ServiceV) (snd : Sender) : Prop :=
+  ∃ ks sd, ⟨ks, sd⟩ ∈ senderShapes v ∧ (Ty.tuple ks).isData = true ∧ ∃ kv, snd = sd.sender kv
+
+/-- The site of a kept function. -/
+def Fun.toSite {t : Ty} (f : Fun t) : Site f.Γ t := ⟨f.site, f.G, f.defs, f.hΓ, f.ht, f.body⟩
+
+theorem Fun.toSite_fn {t : Ty} (f : Fun t) : f.toSite.fn f.env = f := rfl
+
+theorem mem_sitesOf_self {P : List AnySite} {t : Ty} {f : Fun t} (h : f.asSite ∈ P) :
+    (⟨f.Γ, f.toSite⟩ : (Γ : List Ty) × Site Γ t) ∈ sitesOf P t := by
+  simp only [sitesOf, List.mem_filterMap]
+  exact ⟨f.asSite, h, by simp only [Fun.asSite, Ty_same_rfl]; rfl⟩
+
+theorem ownerIn_mem {e : Ty} {r : RequestV e} {ds : List (String × DeclaredV)} {x : String} (h : r.ownerIn ds = some x) :
+    ∃ d, (x, d) ∈ ds ∧ r.declaredBy (x, d) = true := by
+  simp only [RequestV.ownerIn, Option.map_eq_some_iff] at h
+  obtain ⟨⟨x', d⟩, hf, rfl⟩ := h
+  exact ⟨d, List.mem_of_find?_eq_some hf, List.find?_some hf⟩
+
+theorem same_eq {a b : Ty} (h : (Ty.same a b).isSome = true) : a = b := by
+  obtain ⟨⟨e⟩, -⟩ := Option.isSome_iff_exists.1 h; exact e
+
+/-- A request of a shape of the service's, with its sender's key and its fields, is of the service's shapes. -/
+theorem atShapes_of {v : ServiceV} {P : List AnySite} {ks : List Ty} {sd : SenderShape ks}
+    (hsd : ⟨ks, sd⟩ ∈ senderShapes v) (hks : (Ty.tuple ks).isData = true) {rq : RequestShape v.event}
+    (hrq : rq ∈ requestShapes v P) (id : Nat) (fx : Ty.dens (PendingShape.fields { rq with ks, sender := sd, hks })) :
+    AtShapes (shapes v P) (PendingShape.pending { rq with ks, sender := sd, hks } id fx) := by
+  have hsh : ({ rq with ks, sender := sd, hks } : PendingShape v.event) ∈ shapes v P := by
+    simp only [shapes, List.mem_flatMap]
+    exact ⟨⟨ks, sd⟩, hsd, by simp only [hks, dite_true]; exact List.mem_map.2 ⟨rq, hrq, rfl⟩⟩
+  obtain ⟨j, hj⟩ := List.mem_iff_getElem?.1 hsh
+  refine ⟨pendingInj _ j hj fx, ?_⟩
+  rw [pendingOf_inj]
+  rfl
+
+/-- A request an effect of the service starts is of the service's shapes: its sender is one the service names, its
+kept functions are the program's sites, and the external that lists it declares its types. -/
+theorem atShapes_start {P : List AnySite} {v : ServiceV} {snd : Sender} (hs : SentBy v snd) {r : RequestV v.event}
+    (hr : (EffectV.request r).Reach P) {x : String} (hx : r.ownerIn v.declared = some x) (id : Nat) :
+    AtShapes (shapes v P) ⟨id, snd, x, r⟩ := by
+  obtain ⟨ks, sd, hsd, hks, kv, rfl⟩ := hs
+  obtain ⟨d, hd, hpred⟩ := ownerIn_mem hx
+  obtain ⟨hA, hE, hin, hkind⟩ := hr
+  obtain ⟨name, input, output, rej, value, ens, onA⟩ := r
+  simp only [RequestV.declaredBy] at hpred
+  dsimp only at hA hE hin hkind hpred
+  cases d with
+  | externalCommand n i o j =>
+    cases rej with
+    | none => simp at hpred
+    | some j' =>
+      simp only [Bool.and_eq_true, beq_iff_eq] at hpred
+      obtain ⟨⟨⟨rfl, hi⟩, ho⟩, hj⟩ := hpred
+      obtain rfl := same_eq hi
+      obtain rfl := same_eq ho
+      obtain rfl := same_eq hj
+      cases ens with
+      | some _ => simp at hkind
+      | none =>
+        have hf : (Ty.tuple [i, .tuple [], .tuple onA.Γ]).isData = true := by
+          have h1 := onA.hΓ; simp only [Ty.isData, Ty.isDatas] at h1 ⊢; simp [hin, h1]
+        let rq : RequestShape v.event := ⟨x, n, i, o, some j, none, onA.Γ, onA.toSite, hf⟩
+        have hrq : rq ∈ requestShapes v P := by
+          simp only [requestShapes, List.mem_flatMap]
+          refine ⟨(x, .externalCommand n i o j), hd, ?_⟩
+          simp only [List.mem_filterMap]
+          exact ⟨⟨onA.Γ, onA.toSite⟩, mem_sitesOf_self hA, by split <;> first | rfl | contradiction⟩
+        have h := atShapes_of hsd hks hrq id (Ty.up _ (PendingShape.hdata _) (kv, value, (), onA.env, ()))
+        have e : PendingShape.pending { rq with ks, sender := sd, hks } id
+            (Ty.up _ (PendingShape.hdata _) (kv, value, (), onA.env, ())) =
+            ⟨id, sd.sender kv, x, ⟨n, i, o, some j, value, none, onA⟩⟩ := by
+          simp only [PendingShape.pending]; erw [Ty.down_up]; rfl
+        exact e ▸ h
+  | externalQuery n i o _ =>
+    cases rej with
+    | some _ => simp at hpred
+    | none =>
+      simp only [Bool.and_eq_true, beq_iff_eq] at hpred
+      obtain ⟨⟨rfl, hi⟩, ho⟩ := hpred
+      obtain rfl := same_eq hi
+      obtain rfl := same_eq ho
+      cases ens with
+      | none => simp at hkind
+      | some f =>
+        have hf : (Ty.tuple [i, .tuple f.Γ, .tuple onA.Γ]).isData = true := by
+          have h1 := onA.hΓ; have h2 := f.hΓ
+          simp only [Ty.isData, Ty.isDatas] at h1 h2 ⊢; simp [hin, h1, h2]
+        let rq : RequestShape v.event := ⟨x, n, i, o, none, some ⟨f.Γ, f.toSite⟩, onA.Γ, onA.toSite, hf⟩
+        have hrq : rq ∈ requestShapes v P := by
+          simp only [requestShapes, List.mem_flatMap]
+          refine ⟨(x, .externalQuery n i o _), hd, ?_⟩
+          refine List.mem_flatMap.2 ⟨⟨f.Γ, f.toSite⟩, mem_sitesOf_self (hE f rfl), ?_⟩
+          simp only [List.mem_filterMap]
+          exact ⟨⟨onA.Γ, onA.toSite⟩, mem_sitesOf_self hA, by split <;> first | rfl | contradiction⟩
+        have h := atShapes_of hsd hks hrq id (Ty.up _ (PendingShape.hdata _) (kv, value, f.env, onA.env, ()))
+        have e : PendingShape.pending { rq with ks, sender := sd, hks } id
+            (Ty.up _ (PendingShape.hdata _) (kv, value, f.env, onA.env, ())) =
+            ⟨id, sd.sender kv, x, ⟨n, i, o, none, value, some f, onA⟩⟩ := by
+          simp only [PendingShape.pending]; erw [Ty.down_up]; rfl
+        exact e ▸ h
+  | _ => cases rej <;> simp at hpred
+
 namespace Step
 
 variable (P : List AnySite) {v : ServiceV}
@@ -17,25 +120,61 @@ structure Inv (s : State v) : Prop where
   nodup : (s.pending.map (·.id)).Nodup
   reach : ∀ p ∈ s.pending, (EffectV.request p.request).Reach P
   machines : ∀ ms ∈ s.machines, ms.1.Reach P
+  /-- The state's machines are the service's, in its order. -/
+  machinesOf : s.machines.map (·.1) = v.machines
+  /-- Every pending request is of the service's shapes, so a symbolic state can hold it. -/
+  shaped : ∀ p ∈ s.pending, AtShapes (shapes v P) p
 
 variable {P}
 
 theorem Inv.congr {s s' : State v} (h : Inv P s) (hp : s'.pending = s.pending) (hn : s'.nextId = s.nextId)
     (hm : s'.machines = s.machines) : Inv P s' :=
-  ⟨hp ▸ hn ▸ h.below, hp ▸ h.nodup, hp ▸ h.reach, hm ▸ h.machines⟩
+  ⟨hp ▸ hn ▸ h.below, hp ▸ h.nodup, hp ▸ h.reach, hm ▸ h.machines, hm ▸ h.machinesOf, hp ▸ h.shaped⟩
 
 theorem init_inv (hv : v.Reach P) : Inv P (State.init v) :=
   ⟨by simp [State.init], by simp [State.init], by simp [State.init], by
     intro ms h
     simp only [State.init, List.mem_map] at h
     obtain ⟨m, hm, rfl⟩ := h
-    exact hv.1 m hm⟩
+    exact hv.1 m hm, by simp [State.init, Function.comp_def], by simp [State.init]⟩
+
+theorem Inv.mem {s : State v} (h : Inv P s) {ms : MachineState v.records v.event} (hms : ms ∈ s.machines) :
+    ms.1 ∈ v.machines := h.machinesOf ▸ List.mem_map_of_mem hms
 
 /-- Effects whose kept functions are records of `P`. -/
 def EffsReach (P : List AnySite) {e : Ty} (effs : List (Sender × EffectV e)) : Prop := ∀ x ∈ effs, x.2.Reach P
 
+/-- Effects whose senders the service names. -/
+def EffsFrom (v : ServiceV) (effs : List (Sender × EffectV v.event)) : Prop := ∀ x ∈ effs, SentBy v x.1
+
+theorem machine_sentBy {m : MachineV v.records v.event} (hm : m ∈ v.machines) (k : m.key.den0) :
+    SentBy v (.machine m.name ⟨m.key, k⟩) := by
+  have hk : m.key.isData = true := by
+    have h := m.on.ht
+    simp only [Ty.machineCtx, Ty.isData, Ty.isDatas, Ty.isDatass, Bool.and_eq_true] at h
+    exact h.1.1.1.1
+  refine ⟨[m.key], .machine m.name m.key, ?_, by simp [Ty.isData, Ty.isDatas, hk], (k, ()), rfl⟩
+  simp only [senderShapes, List.mem_append, List.mem_map]
+  exact .inl ⟨m, hm, rfl⟩
+
+theorem reaction_sentBy {x : ReactionV v.records v.event} (hx : x ∈ v.reactions) : SentBy v (.reaction x.name) := by
+  refine ⟨[], .reaction x.name, ?_, rfl, (), rfl⟩
+  simp only [senderShapes, List.mem_append, List.mem_map]
+  exact .inr ⟨x, hx, rfl⟩
+
+/-- A fold that appends one machine per machine keeps the machines in order. -/
+theorem foldl_fst {β : Type} {r e : Ty} (F : List (MachineState r e) × β → MachineState r e → List (MachineState r e) × β)
+    (hF : ∀ acc ms0, ∃ m', (F acc ms0).1 = acc.1 ++ [m'] ∧ m'.1 = ms0.1) :
+    (l : List (MachineState r e)) → (acc : List (MachineState r e) × β) →
+    (l.foldl F acc).1.map (·.1) = acc.1.map (·.1) ++ l.map (·.1)
+  | [], _ => by simp
+  | ms0 :: l, acc => by
+    obtain ⟨m', h1, h2⟩ := hF acc ms0
+    rw [List.foldl_cons, foldl_fst F hF l, h1]
+    simp [h2]
+
 theorem start_inv (a : Acc v) (effs : List (Sender × EffectV v.event)) (ha : Inv P a.state) (he : EffsReach P effs)
-    {a' : Acc v} (h : start a effs = .ok a') : Inv P a'.state := by
+    (hf : EffsFrom v effs) {a' : Acc v} (h : start a effs = .ok a') : Inv P a'.state := by
   induction effs generalizing a with
   | nil => simp only [start, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h; exact h ▸ ha
   | cons x effs ih =>
@@ -44,18 +183,19 @@ theorem start_inv (a : Acc v) (effs : List (Sender × EffectV v.event)) (ha : In
     split at h
     · cases h
     · rename_i a1 h1
-      refine ih a1 ?_ (fun y hy => he y (by simp [hy])) h
+      refine ih a1 ?_ (fun y hy => he y (by simp [hy])) (fun y hy => hf y (by simp [hy])) h
       have hx : eff.Reach P := he (snd, eff) (by simp)
+      have hsnd : SentBy v snd := hf (snd, eff) (by simp)
       revert h1
       cases eff with
       | request r =>
         simp only
         split
         · intro h1; cases h1
-        · rename_i x _
+        · rename_i x hxo
           intro h1
           cases h1
-          refine ⟨?_, ?_, ?_, ha.machines⟩
+          refine ⟨?_, ?_, ?_, ha.machines, ha.machinesOf, ?_⟩
           · intro p hp
             rcases List.mem_append.1 hp with hp | hp
             · exact Nat.lt_succ_of_lt (ha.below p hp)
@@ -71,6 +211,10 @@ theorem start_inv (a : Acc v) (effs : List (Sender × EffectV v.event)) (ha : In
             rcases List.mem_append.1 hp with hp | hp
             · exact ha.reach p hp
             · simp only [List.mem_singleton] at hp; subst hp; exact hx
+          · intro p hp
+            rcases List.mem_append.1 hp with hp | hp
+            · exact ha.shaped p hp
+            · simp only [List.mem_singleton] at hp; subst hp; exact atShapes_start hsnd hx hxo _
       | command => intro h1; cases h1; exact ha
       | query => intro h1; cases h1; exact ha
 
@@ -99,8 +243,33 @@ theorem machineStep_reach {r e : Ty} (T : List TypeDecl) (records : r.den0) (now
   obtain ⟨_, ⟨k, -, rfl⟩, hx⟩ := hx
   exact reactKey_reach m hm insts records now ev k x hx
 
+theorem machineStep_fst {r e : Ty} (T : List TypeDecl) (records : r.den0) (now : Int) (ev : e.den0)
+    (ms : MachineState r e) : (machineStep T records now ev ms).1.1 = ms.1 := by
+  obtain ⟨m, insts⟩ := ms; rfl
+
+theorem enter_from {m : MachineV v.records v.event} (hm : m ∈ v.machines) (records : v.records.den0) (now : Int)
+    (key : m.key.den0) (st : m.state.den0) : EffsFrom v (enter m records now key st).2 := by
+  intro x hx
+  simp only [enter, List.mem_map, Option.mem_toList] at hx
+  obtain ⟨eff, -, rfl⟩ := hx
+  exact machine_sentBy hm key
+
+theorem machineStep_from (T : List TypeDecl) (records : v.records.den0) (now : Int) (ev : v.event.den0)
+    (ms : MachineState v.records v.event) (hm : ms.1 ∈ v.machines) : EffsFrom v (machineStep T records now ev ms).2 := by
+  obtain ⟨m, insts⟩ := ms
+  intro x hx
+  simp only [machineStep, List.mem_flatMap, List.mem_map] at hx
+  obtain ⟨_, ⟨k, -, rfl⟩, hx⟩ := hx
+  revert hx
+  unfold reactKey
+  split
+  · split
+    · exact enter_from hm _ _ _ _ x
+    · intro hx; cases hx
+  · exact enter_from hm _ _ _ _ x
+
 theorem react_inv (T : List TypeDecl) (hv : v.Reach P) (s : State v) (ev : v.event.den0) (hs : Inv P s) :
-    Inv P (react T s ev).1 ∧ EffsReach P (react T s ev).2 := by
+    Inv P (react T s ev).1 ∧ EffsReach P (react T s ev).2 ∧ EffsFrom v (react T s ev).2 := by
   let records := v.apply.fn (s.records, ev, ())
   let f := fun (acc : List (MachineState v.records v.event) × List (Sender × EffectV v.event)) ms0 =>
     let (m', es) := machineStep T records s.now ev ms0; (acc.1 ++ [m'], acc.2 ++ es)
@@ -124,11 +293,27 @@ theorem react_inv (T : List TypeDecl) (hv : v.Reach P) (s : State v) (ev : v.eve
   have hm : (react T s ev).1.machines = (s.machines.foldl f ([], [])).1 := rfl
   have he : (react T s ev).2 = (s.machines.foldl f ([], [])).2 ++
       v.reactions.flatMap fun x => (x.effectsAt ev records s.now).map (Sender.reaction x.name, ·) := rfl
-  refine ⟨⟨hs.below, hs.nodup, hs.reach, hm ▸ hfold.1⟩, fun x hx => ?_⟩
-  rw [he] at hx
-  rcases List.mem_append.1 hx with h | h
-  · exact hfold.2 x h
-  · exact hr x h
+  have hfst : (react T s ev).1.machines.map (·.1) = v.machines := by
+    rw [hm, foldl_fst f (fun acc ms0 => ⟨_, rfl, machineStep_fst T records s.now ev ms0⟩) s.machines ([], [])]
+    simpa using hs.machinesOf
+  have hfrom := foldl_inv (fun (acc : List (MachineState v.records v.event) × List (Sender × EffectV v.event)) =>
+      EffsFrom v acc.2) (fun ms0 => ms0.1 ∈ v.machines) f
+    (fun ⟨ms, effs⟩ ms0 h1 h0 x hx => by
+      rcases List.mem_append.1 hx with h | h
+      · exact h1 x h
+      · exact machineStep_from T records s.now ev ms0 h0 x h)
+    s.machines ([], []) (fun _ h => hs.mem h) (by intro x hx; cases hx)
+  refine ⟨⟨hs.below, hs.nodup, hs.reach, hm ▸ hfold.1, hfst, hs.shaped⟩, fun x hx => ?_, fun x hx => ?_⟩
+  · rw [he] at hx
+    rcases List.mem_append.1 hx with h | h
+    · exact hfold.2 x h
+    · exact hr x h
+  · rw [he] at hx
+    rcases List.mem_append.1 hx with h | h
+    · exact hfrom x h
+    · simp only [List.mem_flatMap, List.mem_map] at h
+      obtain ⟨y, hy, eff, -, rfl⟩ := h
+      exact reaction_sentBy hy
 
 theorem applyEvents_inv (T : List TypeDecl) (hv : v.Reach P) (events : List v.event.den0) :
     (a : Acc v) → Inv P a.state → {a' : Acc v} → applyEvents T a events = .ok a' → Inv P a'.state := by
@@ -140,8 +325,8 @@ theorem applyEvents_inv (T : List TypeDecl) (hv : v.Reach P) (events : List v.ev
     split at h
     · cases h
     · rename_i a1 h1
-      obtain ⟨hs, he⟩ := react_inv T hv a.state ev ha
-      exact ih a1 (start_inv _ _ hs he h1) h
+      obtain ⟨hs, he, hf⟩ := react_inv T hv a.state ev ha
+      exact ih a1 (start_inv _ _ hs he hf h1) h
 
 theorem runCommand_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state)
     (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
@@ -235,47 +420,53 @@ theorem finish_inv (T : List TypeDecl) (hv : v.Reach P) (s0 : State v) (hs : Inv
 abbrev FireAcc (v : ServiceV) := List (MachineState v.records v.event) × List (Sender × EffectV v.event) × Bool
 
 def FireOk (P : List AnySite) {v : ServiceV} (acc : FireAcc v) : Prop :=
-  (∀ ms ∈ acc.1, ms.1.Reach P) ∧ EffsReach P acc.2.1
+  (∀ ms ∈ acc.1, ms.1.Reach P) ∧ EffsReach P acc.2.1 ∧ EffsFrom v acc.2.1
 
 theorem fire_inv (s : State v) (hs : Inv P s) : (fuel : Nat) → {r : State v × List (Sender × EffectV v.event)} →
-    fire s fuel = some r → Inv P r.1 ∧ EffsReach P r.2
+    fire s fuel = some r → Inv P r.1 ∧ EffsReach P r.2 ∧ EffsFrom v r.2
   | 0, _, h => by cases h
   | fuel + 1, r, h => by
     rw [fire] at h
     split at h
-    · cases h; exact ⟨hs, by intro x hx; cases hx⟩
+    · cases h; exact ⟨hs, (by intro x hx; cases hx), (by intro x hx; cases hx)⟩
     · rename_i d _
       have key : ∀ (F : FireAcc v → MachineState v.records v.event → FireAcc v),
-          (∀ b ms0, FireOk P b → ms0.1.Reach P → FireOk P (F b ms0)) →
+          (∀ b ms0, FireOk P b → ms0.1.Reach P ∧ ms0.1 ∈ v.machines → FireOk P (F b ms0)) →
+          (∀ acc ms0, ∃ m', (F acc ms0).1 = acc.1 ++ [m'] ∧ m'.1 = ms0.1) →
           ∀ {mach effs done}, s.machines.foldl F ([], [], false) = (mach, effs, done) →
           ∀ {r : State v × List (Sender × EffectV v.event)},
             Option.map (fun x => (x.1, effs ++ x.2)) (fire { s with machines := mach } fuel) = some r →
-            Inv P r.1 ∧ EffsReach P r.2 := by
-        intro F hF mach effs done hR r h
-        have hfold := foldl_inv (FireOk P) (fun ms0 => ms0.1.Reach P) F hF s.machines ([], [], false) hs.machines
-          ⟨by simp, by intro x hx; cases hx⟩
-        rw [hR] at hfold
+            Inv P r.1 ∧ EffsReach P r.2 ∧ EffsFrom v r.2 := by
+        intro F hF hFst mach effs done hR r h
+        have hfold := foldl_inv (FireOk P) (fun ms0 => ms0.1.Reach P ∧ ms0.1 ∈ v.machines) F hF s.machines
+          ([], [], false) (fun ms h => ⟨hs.machines ms h, hs.mem h⟩)
+          ⟨by simp, (by intro x hx; cases hx), (by intro x hx; cases hx)⟩
+        have hfst := foldl_fst F hFst s.machines ([], [], false)
+        rw [hR] at hfold hfst
         obtain ⟨r', hr, rfl⟩ := Option.map_eq_some_iff.1 h
-        obtain ⟨h1, h2⟩ := fire_inv { s with machines := mach } ⟨hs.below, hs.nodup, hs.reach, hfold.1⟩ fuel hr
-        exact ⟨h1, fun x hx => (List.mem_append.1 hx).elim (hfold.2 x) (h2 x)⟩
-      have hinner : ∀ (m : MachineV v.records v.event)
+        obtain ⟨h1, h2, h3⟩ := fire_inv { s with machines := mach }
+          ⟨hs.below, hs.nodup, hs.reach, hfold.1, by simpa using hfst.trans (by simpa using hs.machinesOf), hs.shaped⟩
+          fuel hr
+        exact ⟨h1, fun x hx => (List.mem_append.1 hx).elim (hfold.2.1 x) (h2 x),
+          fun x hx => (List.mem_append.1 hx).elim (hfold.2.2 x) (h3 x)⟩
+      have hinner : ∀ (m : MachineV v.records v.event) (Q : List (Sender × EffectV v.event) → Prop)
           (G : List (Instance m) × List (Sender × EffectV v.event) × Bool → Instance m →
             List (Instance m) × List (Sender × EffectV v.event) × Bool),
-          (∀ b i, EffsReach P b.2.1 → EffsReach P (G b i).2.1) → ∀ (insts : List (Instance m))
-            (acc : List (Instance m) × List (Sender × EffectV v.event) × Bool), EffsReach P acc.2.1 →
-            EffsReach P (insts.foldl G acc).2.1 := fun m G hG insts acc h0 =>
-        foldl_inv (fun acc => EffsReach P acc.2.1) (fun _ => True) G (fun b i h _ => hG b i h) insts acc
+          (∀ b i, Q b.2.1 → Q (G b i).2.1) → ∀ (insts : List (Instance m))
+            (acc : List (Instance m) × List (Sender × EffectV v.event) × Bool), Q acc.2.1 →
+            Q (insts.foldl G acc).2.1 := fun m Q G hG insts acc h0 =>
+        foldl_inv (fun acc => Q acc.2.1) (fun _ => True) G (fun b i h _ => hG b i h) insts acc
           (fun _ _ => trivial) h0
       split at h
       rename_i heq
-      refine key _ ?_ heq h
-      rintro ⟨ms, effs, done⟩ ⟨m, insts⟩ ⟨h1, h2⟩ h0
-      refine ⟨fun ms' hms' => ?_, ?_⟩
+      refine key _ ?_ (by rintro ⟨ms, effs, done⟩ ⟨m, insts⟩; exact ⟨_, rfl, rfl⟩) heq h
+      rintro ⟨ms, effs, done⟩ ⟨m, insts⟩ ⟨h1, h2, h3⟩ ⟨h0, hm0⟩
+      refine ⟨fun ms' hms' => ?_, ?_, ?_⟩
       · simp only at hms'
         rcases List.mem_append.1 hms' with h | h
         · exact h1 ms' h
         · simp only [List.mem_singleton] at h; subst h; exact h0
-      · refine hinner m _ ?_ insts _ h2
+      · refine hinner m (EffsReach P) _ ?_ insts _ h2
         rintro ⟨acc, effs, done⟩ i h
         dsimp only
         split
@@ -284,6 +475,17 @@ theorem fire_inv (s : State v) (hs : Inv P s) : (fuel : Nat) → {r : State v ×
             rcases List.mem_append.1 hx with hx | hx
             · exact h x hx
             · exact enter_reach m h0 _ _ _ _ x hx
+          · exact h
+        · exact h
+      · refine hinner m (EffsFrom v) _ ?_ insts _ h3
+        rintro ⟨acc, effs, done⟩ i h
+        dsimp only
+        split
+        · split
+          · intro x hx
+            rcases List.mem_append.1 hx with hx | hx
+            · exact h x hx
+            · exact enter_from hm0 _ _ _ _ x hx
           · exact h
         · exact h
 
@@ -323,7 +525,7 @@ theorem step_inv (T : List TypeDecl) {P : List AnySite} {v : ServiceV} (hv : v.R
         · exact hs
         · refine finish_inv T hv _ hs _ (fun a h => applyEvents_inv T hv _ _ ?_ h) _
           refine ⟨fun p hp => hs.below p (List.mem_filter.1 hp).1, ?_, fun p hp => hs.reach p (List.mem_filter.1 hp).1,
-            hs.machines⟩
+            hs.machines, hs.machinesOf, fun p hp => hs.shaped p (List.mem_filter.1 hp).1⟩
           exact (List.filter_sublist.map _).nodup hs.nodup
   | event i value => exact finish_inv T hv _ hs _ (fun a h => applyEvents_inv T hv _ _ hs h) _
   | clock time =>
@@ -335,7 +537,7 @@ theorem step_inv (T : List TypeDecl) {P : List AnySite} {v : ServiceV} (hv : v.R
       · rename_i s' effs hr
         exact finish_inv T hv _ hs _ (fun a h =>
           let hf := fire_inv { s with now := time } (Inv.congr hs rfl rfl rfl) _ hr
-          start_inv { state := s' } effs hf.1 hf.2 h) _
+          start_inv { state := s' } effs hf.1 hf.2.1 hf.2.2 h) _
 
 /-- Every state a run reaches from an invariant state keeps the invariant. -/
 theorem run_inv (T : List TypeDecl) {P : List AnySite} {v : ServiceV} (hv : v.Reach P) :

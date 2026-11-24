@@ -16,42 +16,6 @@ variable {T : List Ir.TypeDecl}
 open Tazuna.Ir
 
 
-mutual
-theorem Ty_same_self : (t : Ty) → (Ty.same t t).isSome = true
-  | .int | .str | .date | .id => rfl
-  | .param i => by simp [Ty.same]
-  | .list a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self a); simp [Ty.same, e]
-  | .bag a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self a); simp [Ty.same, e]
-  | .tuple a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self a); simp [Ty.same, e]
-  | .fn a r => by
-    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self a)
-    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_same_self r)
-    simp [Ty.same, e, e']
-  | .adt i a v => by
-    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self a)
-    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_samess_self v)
-    simp [Ty.same, e, e']
-  | .table k v => by
-    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self k)
-    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_same_self v)
-    simp [Ty.same, e, e']
-  | .dsl k a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self a); simp [Ty.same, e]
-theorem Ty_sames_self : (ts : List Ty) → (Ty.sames ts ts).isSome = true
-  | [] => rfl
-  | t :: ts => by
-    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self t)
-    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_sames_self ts)
-    simp [Ty.sames, e, e']
-theorem Ty_samess_self : (vs : List (List Ty)) → (Ty.samess vs vs).isSome = true
-  | [] => rfl
-  | ts :: vs => by
-    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self ts)
-    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_samess_self vs)
-    simp [Ty.samess, e, e']
-end
-
-theorem Ty_same_rfl (t : Ty) : Ty.same t t = some ⟨rfl⟩ := by
-  obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self t); rw [e]
 
 
 section

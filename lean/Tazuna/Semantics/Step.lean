@@ -175,13 +175,17 @@ structure Acc (v : ServiceV) where
   out : Bag OutLine := []
   own : List (EffectV v.event) := []
 
+/-- Whether a declaration lists the command or query a request asks for, with its types. -/
+def _root_.Tazuna.Ir.RequestV.declaredBy {e : Ty} (r : RequestV e) (xd : String × DeclaredV) : Bool :=
+  let same (a b : Ty) := (Ty.same a b).isSome
+  match xd.2, r.rejection with
+  | .externalCommand n i o j, some j' => n == r.name && same i r.input && same o r.output && same j j'
+  | .externalQuery n i o _, none => n == r.name && same i r.input && same o r.output
+  | _, _ => false
+
 /-- The external that lists the command or query a request asks for, with its types. -/
 def _root_.Tazuna.Ir.RequestV.ownerIn {e : Ty} (r : RequestV e) (ds : List (String × DeclaredV)) : Option String :=
-  let same (a b : Ty) := (Ty.same a b).isSome
-  (ds.find? fun (_, d) => match d, r.rejection with
-    | .externalCommand n i o j, some j' => n == r.name && same i r.input && same o r.output && same j j'
-    | .externalQuery n i o _, none => n == r.name && same i r.input && same o r.output
-    | _, _ => false).map (·.1)
+  (ds.find? r.declaredBy).map (·.1)
 
 /-- Starts effects in order: a request to an external goes out with a fresh wire id; an own command or query waits. -/
 def start (a : Acc v) (effs : List (Sender × EffectV v.event)) : Except Fault (Acc v) :=

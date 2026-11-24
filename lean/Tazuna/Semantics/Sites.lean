@@ -65,6 +65,43 @@ def Defs.sites : {G : List Ty} → Defs G → List AnySite
   | [], .nil => []
   | _ :: _, .snoc defs _ body => defs.sites ++ body.sites defs
 
+mutual
+theorem Ty_same_self : (t : Ty) → (Ty.same t t).isSome = true
+  | .int | .str | .date | .id => rfl
+  | .param i => by simp [Ty.same]
+  | .list a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self a); simp [Ty.same, e]
+  | .bag a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self a); simp [Ty.same, e]
+  | .tuple a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self a); simp [Ty.same, e]
+  | .fn a r => by
+    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self a)
+    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_same_self r)
+    simp [Ty.same, e, e']
+  | .adt i a v => by
+    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self a)
+    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_samess_self v)
+    simp [Ty.same, e, e']
+  | .table k v => by
+    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self k)
+    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_same_self v)
+    simp [Ty.same, e, e']
+  | .dsl k a => by obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self a); simp [Ty.same, e]
+theorem Ty_sames_self : (ts : List Ty) → (Ty.sames ts ts).isSome = true
+  | [] => rfl
+  | t :: ts => by
+    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self t)
+    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_sames_self ts)
+    simp [Ty.sames, e, e']
+theorem Ty_samess_self : (vs : List (List Ty)) → (Ty.samess vs vs).isSome = true
+  | [] => rfl
+  | ts :: vs => by
+    obtain ⟨⟨_⟩, e⟩ := Option.isSome_iff_exists.1 (Ty_sames_self ts)
+    obtain ⟨⟨_⟩, e'⟩ := Option.isSome_iff_exists.1 (Ty_samess_self vs)
+    simp [Ty.samess, e, e']
+end
+
+theorem Ty_same_rfl (t : Ty) : Ty.same t t = some ⟨rfl⟩ := by
+  obtain ⟨x, e⟩ := Option.isSome_iff_exists.1 (Ty_same_self t); rw [e]
+
 /-- The sites of the type `t`. -/
 def sitesOf (sites : List AnySite) (t : Ty) : List ((Γ : List Ty) × Site Γ t) :=
   sites.filterMap fun ⟨Γ, u, s⟩ => (Ty.same u t).map fun ⟨h⟩ => ⟨Γ, h ▸ s⟩
@@ -164,6 +201,24 @@ theorem pendingOf_id {e : Ty} : (shs : List (PendingShape e)) → (id : Nat) →
     (pendingOf shs id x).id = id
   | _ :: _, _, .inl _ => rfl
   | _ :: shs, id, .inr y => pendingOf_id shs id y
+
+section
+variable {e : Ty}
+
+/-- The value of the pending entry type for the shape `sh` at index `j`, with the fields `fx`. -/
+def pendingInj : (shs : List (PendingShape e)) → (j : Nat) → {sh : PendingShape e} → shs[j]? = some sh →
+    Ty.dens sh.fields → Ty.alts (shs.map PendingShape.fields)
+  | _ :: _, 0, _, h, fx => .inl ((Option.some.inj h).symm ▸ fx)
+  | _ :: shs, j + 1, _, h, fx => .inr (pendingInj shs j h fx)
+
+theorem pendingOf_inj (id : Nat) : (shs : List (PendingShape e)) → (j : Nat) → {sh : PendingShape e} →
+    (h : shs[j]? = some sh) → (fx : Ty.dens sh.fields) → pendingOf shs id (pendingInj shs j h fx) = sh.pending id fx
+  | s :: _, 0, sh, h, fx => by
+    obtain rfl : s = sh := Option.some.inj h
+    rfl
+  | _ :: shs, j + 1, _, h, fx => pendingOf_inj id shs j h fx
+
+end
 
 /-- A pending request is of one of the shapes: some value of the shapes' entry type codes it. -/
 def AtShapes {e : Ty} (shs : List (PendingShape e)) (p : Step.Pending e) : Prop :=

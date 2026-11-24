@@ -238,7 +238,7 @@ theorem fits_pending {P : List AnySite} (hP : SitesUnique P) {e : Ty} {sh : Pend
     subst h5 h6 hans1
     obtain rfl := eq_of_sames hans2
     dsimp only at hvi hva hens hreach
-    obtain ⟨hrA, hrE⟩ := hreach
+    obtain ⟨hrA, hrE, -, -⟩ := hreach
     obtain ⟨hsA, hsE⟩ := hsh
     obtain ⟨⟨⟩, hA⟩ := Fun.eq_siteFn hP _ onA hrA hsA rfl
     cases rens with
@@ -286,19 +286,6 @@ end
 
 section
 variable {e : Ty} {L : Layout}
-
-/-- The value of the pending entry type for the shape `sh` at index `j`, with the fields `fx`. -/
-def pendingInj : (shs : List (PendingShape e)) → (j : Nat) → {sh : PendingShape e} → shs[j]? = some sh →
-    Ty.dens sh.fields → Ty.alts (shs.map PendingShape.fields)
-  | _ :: _, 0, _, h, fx => .inl ((Option.some.inj h).symm ▸ fx)
-  | _ :: shs, j + 1, _, h, fx => .inr (pendingInj shs j h fx)
-
-theorem pendingOf_inj (id : Nat) : (shs : List (PendingShape e)) → (j : Nat) → {sh : PendingShape e} →
-    (h : shs[j]? = some sh) → (fx : Ty.dens sh.fields) → pendingOf shs id (pendingInj shs j h fx) = sh.pending id fx
-  | s :: _, 0, sh, h, fx => by
-    obtain rfl : s = sh := Option.some.inj h
-    rfl
-  | _ :: shs, j + 1, _, h, fx => pendingOf_inj id shs j h fx
 
 theorem relAlts_pendingInj (d : Nat) : (shs : List (PendingShape e)) → (k j : Nat) → {sh : PendingShape e} →
     (h : shs[j]? = some sh) → (fx : Ty.dens sh.fields) → {vals : List Val} → RelVs L sh.fields fx vals →
