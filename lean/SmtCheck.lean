@@ -1,4 +1,5 @@
 import Tazuna.Smt.Bounds
+import Tazuna.Smt.Machines
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 
@@ -1202,6 +1203,68 @@ def machineEffectCheck (solver : Solver) : IO Bool := do
       | a => IO.println s!"smt-check: machine effect: {repr a}"; ok := false
   return ok
 
+/-! Machine invariants over the instance table: `fn(ctx) { [#(case ctx.key == 1 { True -> "one" False -> "other" },
+ctx.state < 5)] }`. Slot 0 holds key 3 and slot 1 key 1, both in a state that breaks the rule, so the step reports
+"one" before "other" (key order), while slot order gives the reverse. The names read from the model must be the
+broken invariants of the decoded instances, in their order; slot order must not pass the comparison. -/
+
+def invCtxT : Ty := Ty.machineCtx .int .int recordsT
+
+def invM : MachineV recordsT .int :=
+  let ctx : Expr [] [invCtxT] invCtxT := .var .here
+  let key : Expr [] [invCtxT] .int := .field (ft := .int) "key" 0 (by simp) ctx
+  let st : Expr [] [invCtxT] .int := .field (ft := .int) "state" 1 (by simp) ctx
+  let name : Expr [] [invCtxT] .str := .case (.bin (.eq rfl) key (.int 1))
+    (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.str "one")
+      (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.str "other") .nil)) ⟨4, rfl⟩
+  { doorM with name := "inv", invariants := .closed (.lam (.list (.cons (.tuple (.cons name
+      (.cons (.bin .lt st (.int 5)) .nil))) .nil))) }
+
+def invSvc : ServiceV := { querySvc with name := "i", queries := [], machines := [invM] }
+
+def invLayout : Layout :=
+  Layout.addTys (fun _ => 3) {} [recordsT, invM.table, Ty.machineCtx .int .int recordsT, Ty.rules]
+
+def invariantCheck (solver : Solver) : IO Bool := do
+  let L := invLayout
+  let some (d, n) := L.find? invM.table | IO.println "smt-check: machine invariants: no table"; return false
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | IO.println "smt-check: machine invariants: no slot"; return false
+  let some (de, _) := L.find? (instEntry .int) | IO.println "smt-check: machine invariants: no entry"; return false
+  let some wf := (SymState.vars 0 1).wf L (v := invSvc) [] | IO.println "smt-check: machine invariants: no wf"; return false
+  let some rsrt := L.srt? recordsT | IO.println "smt-check: machine invariants: no records sort"; return false
+  let some msrt := L.srt? invM.table | IO.println "smt-check: machine invariants: no table sort"; return false
+  let some dts := L.datatypes? | IO.println "smt-check: machine invariants: no datatypes"; return false
+  match invM.invariants.code L >>= fun (inv, c0) =>
+      (encodeInstInvariants L prelude invM inv (.var 5) (.var 0) (.var 1)).map fun (cs, c) => (cs, andT c0 c) with
+  | .error r => IO.println s!"smt-check: machine invariants: no encoding: {repr r}"; return false
+  | .ok (checks, cond) =>
+    let S := slotsOf d dt n 2 (.var 5)
+    let key (j : Nat) := S[j]!.2.headD tt
+    let state (j : Nat) := Term.sel de 0 0 (S[j]!.2.getD 1 tt)
+    let goal := [S[0]!.1, S[1]!.1, .not S[2]!.1, .eq (key 0) (.int 3), .eq (state 0) (.int 7), .eq (key 1) (.int 1),
+      .eq (state 1) (.int 9)]
+    let script : Script :=
+      { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, msrt], asserts := wf :: cond :: goal,
+        shows := List.range 6 }
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let some s := (SymState.vars 0 1).decode M L (v := invSvc) rfl prelude []
+        | IO.println "smt-check: machine invariants: the model does not decode"; return false
+      let step := s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i =>
+        Step.broken (m.invariants.fn (.inl (i.key, i.state, s.records, s.now, ()), ()))
+      let read := instBroken L prelude M invM.key checks
+      let inSlots := (checks.filter fun c => (c.occupied.denote M).toBool).flatMap (brokenIn M ·.rules)
+      let mut ok := true
+      if read != step || step != ["one", "other"] then
+        IO.println s!"smt-check: machine invariants: read {read}, the step's {step}"; ok := false
+      if inSlots == step then
+        IO.println "smt-check: machine invariants: slot order passes the comparison"; ok := false
+      if (instOkT checks).denote M != .bool false then
+        IO.println "smt-check: machine invariants: instOkT holds with broken invariants"; ok := false
+      return ok
+    | a => IO.println s!"smt-check: machine invariants: {repr a}"; return false
+
 /-! A list of effects where no effect kind exists, as a reaction of a service that requests nothing returns: the
 list has no slots, so the solver's list is empty, as eval's `[]` is, and a script that asserts an occupied slot cannot
 be written (the comparison against a one-item list fails). -/
@@ -1289,6 +1352,7 @@ def check (z3 : String) : IO Bool := do
   unless ← effectListCheck solver do ok := false
   unless ← machineEffectCheck solver do ok := false
   unless ← noEffectsCheck solver do ok := false
+  unless ← invariantCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
