@@ -891,8 +891,9 @@ structure Arriving where
 /--
 The arrival `a` with its variables named after `x`. An answer arrives for a request that waits: the requesting state is
 active, as leaving it makes the request stale. A rejection as invalid input, from a service that parsed the input
-itself, is the requester's fault (rejectedInput?), and so is any rejection but `unavailable` of an automation's command
-(automationAnswer); the service halts on either.
+itself, is the requester's fault (rejectedInput?), on which the service halts. Any other rejection but `unavailable` of
+an automation's command is a fault that does not halt (automationAnswer), which both orders raise alike, since each
+takes the same answer.
 -/
 def arrivingOf (ce : ChainEnv) (a : Arrival) (x : String) : Except String Arriving := do
   let st := ce.st
@@ -925,8 +926,8 @@ def arrivingOf (ce : ChainEnv) (a : Arrival) (x : String) : Except String Arrivi
                         { cond := .and (.not accepted) faulted, halts := true }],
              pre := activeIn ce.models chart state, watched := [(chart, state)], given, facts }
     | .automation _ =>
-      pure { starts := [{ cond := .or accepted (isKind "unavailable") },
-                        { cond := .and (.not accepted) (.not (isKind "unavailable")), halts := true }],
+      pure { starts := [{ cond := .not (.and (.not accepted) faulted) },
+                        { cond := .and (.not accepted) faulted, halts := true }],
              given, facts }
 where
   payloadOfSchema (schema : Schema) : List (String × Term) × Facts :=
