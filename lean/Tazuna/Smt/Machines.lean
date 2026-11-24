@@ -46,6 +46,77 @@ def encodeInstInvariants (m : MachineV r e) (inv : Code (Ty.fn [Ty.machineCtx m.
   let _ ← need "a key type without order terms" (ordT L T m.key tt tt)
   pure (checks.map (·.1), allT (checks.map (·.2)))
 
+/-- The codes of the functions a machine's reaction to an event reads. -/
+structure ReactCode (m : MachineV r e) where
+  instances : Code (Ty.fn [r] (.bag m.key))
+  on : Code (Ty.fn [Ty.machineCtx m.key m.state r, e] (Ty.next m.state))
+  after : Code (Ty.fn [Ty.machineCtx m.key m.state r] (Ty.option (Ty.timer m.state)))
+
+/-- A machine's reaction codes, from the sources it keeps, with their condition. -/
+def ReactCode.of (m : MachineV r e) : Except Refusal (ReactCode m × Term) := do
+  let (i, c1) ← m.instances.code L
+  let (o, c2) ← m.on.code L
+  let (a, c3) ← m.after.code L
+  pure (⟨i, o, a⟩, andT c1 (andT c2 c3))
+
+/-- The terms of `n` slots, each `(f, [k])` with the flag `f` and that no earlier occupied slot holds an equal item:
+the slots that hold the first occurrence of their item. -/
+def firstSlots (t : Ty) : List Slot → List Slot → Except Refusal (List Term)
+  | _, [] => pure []
+  | prev, (f, xs) :: rest => do
+    let k ← need "an item that has no term" (Code.ofTerm? t (xs.headD tt))
+    let eqs ← prev.mapM fun (f', xs') => do
+      pure (Term.and f' (← eqCode L t (← need "an item that has no term" (Code.ofTerm? t (xs'.headD tt))) k))
+    pure (Term.and f (allT (eqs.map .not)) :: (← firstSlots t (prev ++ [(f, xs)]) rest))
+
+/-- The timer `after` starts, as an entry holds it: the deadline `now` plus the delay, and the state it enters. -/
+def timerT (m : MachineV r e) (now a : Term) : Except Refusal Term := do
+  let (dopt, _) ← need "a layout without the timer option" (L.find? (Ty.option (Ty.timer m.state)))
+  let (dtm, _) ← need "a layout without the timer" (L.find? (Ty.timer m.state))
+  let (dent, _) ← need "a layout without the entry's timer" (L.find? (Ty.option (.tuple [.int, m.state])))
+  let dp ← tupleD L [.int, m.state]
+  let tm := Term.sel dopt 0 0 a
+  pure (.ite (.is dopt 0 a) (.ctor dent 0 [.ctor dp 0 [.add now (.sel dtm 0 0 tm), .sel dtm 0 1 tm]]) (.ctor dent 1 []))
+
+/-- The new instance table of a machine after an event, and its condition, from the instance table `tbl`, the records
+after the event, the time and the event. One slot per slot of the bag `instances` returns: occupied where the slot
+holds the first occurrence of a key; the instance with that key, if any, reacts with `on` (a state it enters starts
+`after`'s timer), else one starts at `initial`. The bag has at most the table's slots, else the encoding is refused. -/
+def encodeReact (m : MachineV r e) (rc : ReactCode m) (tbl records now ev : Term) : Except Refusal (Term × Term) := do
+  let (d, n, dt) ← collD L m.table [m.key, instEntry m.state]
+  let de ← tupleD L [m.state, Ty.option (.tuple [.int, m.state])]
+  let (dn, _) ← need "a layout without the next state" (L.find? (Ty.next m.state))
+  let rcd ← need "records that have no term" (Code.ofTerm? r records)
+  let evc ← need "an event that has no term" (Code.ofTerm? e ev)
+  let (bag, c0) ← rc.instances (rcd, ())
+  let bagT ← need "a bag that has no term" (Code.term? _ bag)
+  let (db, nb, dtb) ← collD L (.bag m.key) [m.key]
+  let SB := slotsOf db dtb nb 1 bagT
+  let So := slotsOf d dt n 2 tbl
+  let init ← need "an initial state without a constant" (embedV L m.state (Ty.up _ m.state_data m.initial))
+  let dflt ← need "an entry without a default term" (defaultT L (instEntry m.state))
+  let firsts ← firstSlots L m.key [] SB
+  let slots ← (SB.zip firsts).mapM fun ((f, xs), first) => do
+    let key := xs.headD tt
+    let kc ← need "a key that has no term" (Code.ofTerm? m.key key)
+    let hits ← So.mapM fun (g, ys) => do
+      pure (g, ← eqCode L m.key (← need "a key that has no term" (Code.ofTerm? m.key (ys.headD tt))) kc, ys.getD 1 tt)
+    let found := anyT (hits.map fun (g, h, _) => .and g h)
+    let old := pickT dflt hits
+    let oldS := Term.sel de 0 0 old
+    let octx ← need "a context that has no term" (Code.ofTerm? _ (← instCtxT L m key oldS records now))
+    let (o, c1) ← rc.on (octx, evc, ())
+    let ot ← need "a next state that has no term" (Code.term? _ o)
+    let st := Term.ite found (.ite (.is dn 1 ot) (.sel dn 1 0 ot) oldS) init.term
+    let nctx ← need "a context that has no term" (Code.ofTerm? _ (← instCtxT L m key st records now))
+    let (a, c2) ← rc.after (nctx, ())
+    let at_ ← need "a timer that has no term" (Code.term? _ a)
+    let tm := Term.ite (.or (.not found) (.is dn 1 ot)) (← timerT L m now at_) (.sel de 0 1 old)
+    pure ((first, [key, .ctor de 0 [st, tm]]), Term.ite f (andT (.ite found c1 tt) c2) tt)
+  let _ ← need' "an instance bag with more slots than the instance table" (nb ≤ n) ()
+  let pad := List.replicate (n - nb) (Term.bool false, [← need "a key without a default term" (defaultT L m.key), dflt])
+  pure (slotsTerm d dt (slots.map (·.1) ++ pad), andT c0 (allT (slots.map (·.2))))
+
 /-- Whether every instance's invariants hold. -/
 def instOkT (checks : List InstCheck) : Term :=
   allT (checks.map fun c => .or (.not c.occupied) (allT (c.rules.map (·.2))))

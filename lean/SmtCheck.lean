@@ -1265,6 +1265,78 @@ def invariantCheck (solver : Solver) : IO Bool := do
       return ok
     | a => IO.println s!"smt-check: machine invariants: {repr a}"; return false
 
+/-! A machine's reaction to an event as a new instance table: instances are the records' keys {3, 5}; the old table
+holds key 3 in state 0 and key 7 in state 1. `on` enters 1 from state 0, `after` starts a timer (5 ms, to state 2) in
+state 1. So key 3 enters 1 with a timer due at now + 5, key 5 starts at 0 without one, and key 7 goes. The decoded new
+table's instances must be the step's (`machineStep`); the step from no instances (key 3 starting afresh) must differ. -/
+
+def reactM : MachineV recordsT .int :=
+  let st : Expr [] [invCtxT, .int] .int := .field (ft := .int) "state" 1 (by simp) (.var .here)
+  let st1 : Expr [] [invCtxT] .int := .field (ft := .int) "state" 1 (by simp) (.var .here)
+  { invM with
+    name := "react"
+    on := .closed (.lam (.case (.bin (.eq rfl) st (.int 0))
+      (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.ctor (vs := [[], [.int]]) ⟨1, by decide⟩ (.cons (.int 1) .nil))
+        (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil) .nil)) ⟨4, rfl⟩))
+    after := .closed (.lam (.case (.bin (.eq rfl) st1 (.int 1))
+      (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.ctor (vs := [[Ty.timer .int], []]) ⟨0, by decide⟩
+          (.cons (.ctor (vs := [[.int, .int]]) ⟨0, by decide⟩ (.cons (.int 5) (.cons (.int 2) .nil))) .nil))
+        (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil) .nil)) ⟨4, rfl⟩)) }
+
+def reactSvc : ServiceV := { querySvc with name := "r", queries := [], machines := [reactM] }
+
+def reactLayout : Layout :=
+  Layout.addTys (fun _ => 3) {} [recordsT, reactM.table, .bag .int, invCtxT, Ty.next .int, Ty.option (Ty.timer .int),
+    Ty.timer .int, Ty.option (.tuple [.int, .int]), .tuple [.int, .int], instEntry .int]
+
+def reactCheck (solver : Solver) : IO Bool := do
+  let L := reactLayout
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: machine reaction: {m}"; return false
+  let some (d, n) := L.find? reactM.table | fail "no table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no slot"
+  let some (de, _) := L.find? (instEntry .int) | fail "no entry"
+  let some (dopt, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some wf := (SymState.vars 0 1).wf L (v := reactSvc) [] | fail "no wf"
+  let some rsrt := L.srt? recordsT | fail "no records sort"
+  let some msrt := L.srt? reactM.table | fail "no table sort"
+  let some dts := L.datatypes? | fail "no datatypes"
+  match ReactCode.of L reactM >>= fun (rc, c0) =>
+      (encodeReact L reactM rc (.var 5) (.var 0) (.var 1) (.var 7)).map fun (t, c) => (t, andT c0 c) with
+  | .error r => fail s!"no encoding: {repr r}"
+  | .ok (newT, cond) =>
+    let So := slotsOf d dt n 2 (.var 5)
+    let Sr := slotsOf dr drt nr 2 (.var 0)
+    let key (j : Nat) := So[j]!.2.headD tt
+    let state (j : Nat) := Term.sel de 0 0 (So[j]!.2.getD 1 tt)
+    let timer (j : Nat) := Term.sel de 0 1 (So[j]!.2.getD 1 tt)
+    let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 3), .eq (state 0) (.int 0), .is dopt 1 (timer 0),
+      .eq (key 1) (.int 7), .eq (state 1) (.int 1), .is dopt 1 (timer 1), Sr[0]!.1, Sr[1]!.1, .not Sr[2]!.1,
+      .eq (Sr[0]!.2.headD tt) (.int 5), .eq (Sr[1]!.2.headD tt) (.int 3), .eq (.var 1) (.int 100),
+      .eq (.var 6) newT]
+    let script : Script :=
+      { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, msrt, msrt, .int], asserts := wf :: cond :: goal,
+        shows := List.range 8 }
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let some s := (SymState.vars 0 1).decode M L (v := reactSvc) rfl prelude [] | fail "the model does not decode"
+      let some tbl := decodeV L reactM.table ((Term.var 6).denote M) | fail "the new table does not decode"
+      let some (.int ev) := vs.lookup 7 | fail "no event"
+      let read := instancesOf prelude reactM (Ty.down _ reactM.table_data tbl)
+      let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
+      let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
+        (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+      let step (insts : List (Step.Instance m)) :=
+        view m (Step.machineStep (e := reactSvc.event) prelude s.records s.now ev ⟨m, insts⟩).1.2
+      let mut ok := true
+      if view reactM read != step insts || view reactM read != [(some 3, some 1, some (105, some 2)), (some 5, some 0, none)] then
+        ok ← fail s!"the new table holds {view reactM read}, the step {step insts}"
+      if view reactM read == step [] then ok ← fail "the step from no instances passes the comparison"
+      return ok
+    | a => fail s!"{repr a}"
+
 /-! A list of effects where no effect kind exists, as a reaction of a service that requests nothing returns: the
 list has no slots, so the solver's list is empty, as eval's `[]` is, and a script that asserts an occupied slot cannot
 be written (the comparison against a one-item list fails). -/
@@ -1353,6 +1425,7 @@ def check (z3 : String) : IO Bool := do
   unless ← machineEffectCheck solver do ok := false
   unless ← noEffectsCheck solver do ok := false
   unless ← invariantCheck solver do ok := false
+  unless ← reactCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
