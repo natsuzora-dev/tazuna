@@ -150,16 +150,21 @@ theorem sizeT_den : {S : List Slot} → {sv : List (Bool × List Val)} → Slots
     · simp [occupied]
     · simp [occupied]; omega
 
-/-- The slots denote `sv`; the occupied ones hold the items `ys` in order, related by `E`, and there each `q` denotes
-`P` of its item. -/
-def Aligned {α : Type} (M : Model) (E : α → List Val → Prop) (P : α → Bool) :
+/-- The slots denote `sv`; the occupied ones hold the items `ys` in order, related by `E`, and there each `q`, the
+term of a function at the slot's item, denotes a value that `V` relates to the item. Every operation that applies a
+function slot by slot rests on this relation. -/
+def AlignedV {α : Type} (M : Model) (E : α → List Val → Prop) (V : α → Val → Prop) :
     List Slot → List Term → List (Bool × List Val) → List α → Prop
   | [], [], [], [] => True
   | (f, xs) :: S, _ :: qs, (false, vs) :: sv, ys =>
-    f.denote M = .bool false ∧ Term.denotes M xs = vs ∧ Aligned M E P S qs sv ys
+    f.denote M = .bool false ∧ Term.denotes M xs = vs ∧ AlignedV M E V S qs sv ys
   | (f, xs) :: S, q :: qs, (true, vs) :: sv, y :: ys =>
-    f.denote M = .bool true ∧ Term.denotes M xs = vs ∧ E y vs ∧ q.denote M = .bool (P y) ∧ Aligned M E P S qs sv ys
+    f.denote M = .bool true ∧ Term.denotes M xs = vs ∧ E y vs ∧ V y (q.denote M) ∧ AlignedV M E V S qs sv ys
   | _, _, _, _ => False
+
+/-- `AlignedV` for a predicate: each `q` denotes `P` of its item. -/
+abbrev Aligned {α : Type} (M : Model) (E : α → List Val → Prop) (P : α → Bool) :=
+  AlignedV M E (fun y v => v = .bool (P y))
 
 /-- Occupied slots hold the items `ys` in order, related by `E`. -/
 def Holds2 {α : Type} (E : α → List Val → Prop) (ys : List α) (sv : List (Bool × List Val)) : Prop :=
@@ -371,11 +376,11 @@ theorem forall2_perm {α β : Type} {R : α → β → Prop} {bs bs' : List β} 
     obtain ⟨as2, hp2, h2⟩ := ih2 h1
     exact ⟨as2, hp2.trans hp1, h2⟩
 
-theorem aligned_of {α : Type} {E : α → List Val → Prop} {P : α → Bool} (G : Slot → Term × Term → Prop)
-    (hG : ∀ sl r y, G sl r → E y (Term.denotes M sl.2) → (r.2.denote M).toBool = true → r.1.denote M = .bool (P y)) :
+theorem aligned_of {α : Type} {E : α → List Val → Prop} {V : α → Val → Prop} (G : Slot → Term × Term → Prop)
+    (hG : ∀ sl r y, G sl r → E y (Term.denotes M sl.2) → (r.2.denote M).toBool = true → V y (r.1.denote M)) :
     {S : List Slot} → {sv : List (Bool × List Val)} → {ys : List α} → {R : List (Term × Term)} →
     SlotsDen M S sv → Holds2 E ys sv → Forall2 G S R → ((guardsT S (R.map (·.2))).denote M).toBool = true →
-    Aligned M E P S (R.map (·.1)) sv ys
+    AlignedV M E V S (R.map (·.1)) sv ys
   | [], [], [], [], _, _, _, _ => trivial
   | [], [], _ :: _, [], _, h, _, _ => nomatch h
   | (f, xs) :: S, (false, vs) :: sv, ys, r :: R, ⟨hf, hx, h⟩, he, ⟨_, hR⟩, hg => by
@@ -401,10 +406,10 @@ theorem holds2_length {α : Type} {E : α → List Val → Prop} {ys : List α} 
     | nil => simp [Forall2] at h
     | cons o os => simp [ih os h.2]
 
-theorem aligned_map {α : Type} {E : α → List Val → Prop} {P : α → Bool} (Q : List Term → Term)
-    (hQ : ∀ y xs, E y (Term.denotes M xs) → (Q xs).denote M = .bool (P y)) :
+theorem aligned_map {α : Type} {E : α → List Val → Prop} {V : α → Val → Prop} (Q : List Term → Term)
+    (hQ : ∀ y xs, E y (Term.denotes M xs) → V y ((Q xs).denote M)) :
     {S : List Slot} → {sv : List (Bool × List Val)} → {ys : List α} → SlotsDen M S sv → Holds2 E ys sv →
-    Aligned M E P S (S.map fun sl => Q sl.2) sv ys
+    AlignedV M E V S (S.map fun sl => Q sl.2) sv ys
   | [], [], [], _, _ => trivial
   | [], [], _ :: _, _, h => nomatch h
   | (f, xs) :: S, (false, vs) :: sv, ys, ⟨hf, hx, h⟩, he =>
@@ -413,6 +418,29 @@ theorem aligned_map {α : Type} {E : α → List Val → Prop} {P : α → Bool}
     simp only [Holds2, occupied, ite_true, List.filterMap_cons, Forall2] at he
     exact ⟨hf, hx, he.1, hQ y xs (by rw [hx]; exact he.1), aligned_map Q hQ h he.2⟩
   | (_, _) :: _, (true, _) :: _, [], _, he => by simp [Holds2, occupied, Forall2] at he
+
+theorem alignedV_mono {α : Type} {E : α → List Val → Prop} {V V' : α → Val → Prop} (h : ∀ y v, V y v → V' y v) :
+    {S : List Slot} → {qs : List Term} → {sv : List (Bool × List Val)} → {ys : List α} →
+    AlignedV M E V S qs sv ys → AlignedV M E V' S qs sv ys
+  | [], [], [], [], _ => trivial
+  | (_, _) :: _, _ :: _, (false, _) :: _, _, ⟨hf, hx, ha⟩ => ⟨hf, hx, alignedV_mono h ha⟩
+  | (_, _) :: _, _ :: _, (true, _) :: _, _ :: _, ⟨hf, hx, he, hq, ha⟩ => ⟨hf, hx, he, h _ _ hq, alignedV_mono h ha⟩
+
+/-- The sum of the Int terms of the occupied slots. -/
+def sumSlotT (S : List Slot) (qs : List Term) : Term := sumT (List.zipWith (fun (f, _) q => .ite f q (.int 0)) S qs)
+
+theorem sumSlotT_den {α : Type} {E : α → List Val → Prop} {g : α → Int} :
+    {S : List Slot} → {qs : List Term} → {sv : List (Bool × List Val)} → {ys : List α} →
+    AlignedV M E (fun y v => v = .int (g y)) S qs sv ys → (sumSlotT S qs).denote M = .int (ys.map g).sum
+  | [], [], [], [], _ => rfl
+  | (f, xs) :: S, q :: qs, (false, vs) :: sv, ys, ⟨hf, _, h⟩ => by
+    have := sumSlotT_den h
+    simp only [sumSlotT, sumT, List.zipWith_cons_cons, Term.denote, hf, Val.toBool, Val.toInt] at this ⊢
+    rw [this]; simp
+  | (f, xs) :: S, q :: qs, (true, vs) :: sv, y :: ys, ⟨hf, _, _, hq, h⟩ => by
+    have := sumSlotT_den h
+    simp only [sumSlotT, sumT, List.zipWith_cons_cons, Term.denote, hf, hq, Val.toBool, Val.toInt] at this ⊢
+    rw [this]; simp
 
 theorem empty_den (xs : List Term) : (n : Nat) →
     SlotsDen M (List.replicate n (Term.bool false, xs)) (List.replicate n (false, Term.denotes M xs))

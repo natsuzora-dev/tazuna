@@ -709,19 +709,48 @@ theorem table_mk {k w : Ty} {x : (Ty.table k w).den} {d n dt : Nat} (hc : collD 
   obtain ⟨hf, m, hft⟩ := collD_ok hc
   exact ⟨d, n, dt, m, sv, hf, hft, hl, slotsTerm_den d dt hS, hw, ys, hp, hh⟩
 
+theorem foldl_add (acc : Int) (l : List Int) : l.foldl (· + ·) acc = acc + l.sum := by
+  induction l generalizing acc with
+  | nil => simp
+  | cons a l ih => simp only [List.foldl_cons, ih, List.sum_cons]; omega
+
+theorem sum_perm {l l' : List Int} (h : l.Perm l') : l.sum = l'.sum := by
+  induction h with
+  | nil => rfl
+  | cons a _ ih => simp [ih]
+  | swap a b l => simp only [List.sum_cons]; omega
+  | trans _ _ ih1 ih2 => exact ih1.trans ih2
+
+/-- A function's code applied slot by slot denotes the function at each occupied slot's item. -/
+theorem slotTerms_aligned {ps : List Ty} {r : Ty} {f : (Ty.fn ps r).den} {sf : Code (.fn ps r)}
+    (hf : Rel M L (.fn ps r) f sf) {α : Type} {E : α → List Val → Prop} (toD : α → Ty.dens ps)
+    (hE : ∀ y vs, E y vs → RelVs L ps (toD y) vs) {S : List Slot} {sv : List (Bool × List Val)} {ys : List α}
+    {R : List (Term × Term)} (hS : SlotsDen M S sv) (hy : Holds2 E ys sv) (hR : slotTerms sf S = .ok R)
+    (hg : Holds M (guardsT S (R.map (·.2)))) :
+    AlignedV M E (fun y v => RelV L r (f (toD y)) v) S (R.map (·.1)) sv ys := by
+  refine aligned_of _ ?_ hS hy (mapM_ok _ S R hR) hg
+  intro sl r' y hr he hc
+  obtain ⟨⟨v, c⟩, h1, hr⟩ := bind_ok.1 hr
+  obtain ⟨t, h2, hr⟩ := bind_ok.1 hr
+  cases pure_ok.1 hr
+  simp only [slotApply] at h1
+  obtain ⟨cs, h3, h1⟩ := bind_ok.1 h1
+  have hcs := rels_ofTerms (need_ok.1 h3) (toD y) (hE y _ he)
+  exact (rel_term (need_ok.1 h2) _).1 (hf (toD y) cs hcs v c h1 hc)
+
+theorem relV_bool (x : Ty.bool.den) (v : Val) : RelV L Ty.bool x v ↔ v = .bool (Ty.toBool x) := by
+  constructor
+  · intro ⟨_, h⟩; rw [h]; rcases x with _ | _ | e <;> rfl
+  · intro h; refine ⟨rfl, ?_⟩; rw [h]; rcases x with _ | _ | e <;> rfl
+
 /-- A predicate's code applied slot by slot denotes the predicate on each occupied slot's item. -/
 theorem slotPreds_aligned {ps : List Ty} {f : (Ty.fn ps Ty.bool).den} {sf : Code (.fn ps Ty.bool)}
     (hf : Rel M L (.fn ps Ty.bool) f sf) {α : Type} {E : α → List Val → Prop} (toD : α → Ty.dens ps)
     (hE : ∀ y vs, E y vs → RelVs L ps (toD y) vs) {S : List Slot} {sv : List (Bool × List Val)} {ys : List α}
-    {R : List (Term × Term)} (hS : SlotsDen M S sv) (hy : Holds2 E ys sv) (hR : slotPreds sf S = .ok R)
+    {R : List (Term × Term)} (hS : SlotsDen M S sv) (hy : Holds2 E ys sv) (hR : slotTerms sf S = .ok R)
     (hg : Holds M (guardsT S (R.map (·.2)))) :
-    Aligned M E (fun y => Ty.toBool (f (toD y))) S (R.map (·.1)) sv ys := by
-  refine aligned_of (fun sl r => slotApply sf sl.2 = .ok r) ?_ hS hy (mapM_ok _ S R hR) hg
-  intro sl r y hr he hc
-  simp only [slotApply] at hr
-  obtain ⟨cs, h1, hr⟩ := bind_ok.1 hr
-  have hcs := rels_ofTerms (need_ok.1 h1) (toD y) (hE y _ he)
-  exact (rel_bool _ _).1 (hf (toD y) cs hcs r.1 r.2 hr hc)
+    Aligned M E (fun y => Ty.toBool (f (toD y))) S (R.map (·.1)) sv ys :=
+  alignedV_mono (fun _ v h => (relV_bool _ v).1 h) (slotTerms_aligned hf toD hE hS hy hR hg)
 
 /-- Inserting an item related by `E` into the first free slot, when one was free. -/
 theorem insert_rel {α : Type} {E : α → List Val → Prop} {S : List Slot} {sv : List (Bool × List Val)} {ys : List α}
@@ -1100,6 +1129,18 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     show RelV L .int _ _
     simp only [RelV, countT_den ha, (hperm.filter _).length_eq]
     rfl
+  case bagSum =>
+    simp only [primCode] at h; cases h
+    intro ⟨xs, f, ()⟩ ⟨b, sf, ()⟩ ⟨hb, hf, _⟩ r c hr hc
+    obtain ⟨⟨d, n, dt⟩, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨R, h2, hr⟩ := bind_ok.1 hr
+    cases pure_ok.1 hr
+    obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := bag_view hb h1
+    have ha : AlignedV M (EBag L _) (fun y v => v = .int (f (y, ()))) _ _ sv ys :=
+      slotTerms_aligned (r := .int) hf (fun y => (y, ())) eBag_rels hS hh h2 hc
+    show RelV L .int _ _
+    simp only [RelV, sumSlotT_den ha, Prim.den, Builtin.sumBy, foldl_add, Int.zero_add]
+    exact congrArg Val.int (sum_perm (hperm.map (fun y => f (y, ()))))
   case bagAny =>
     simp only [primCode] at h; cases h
     intro ⟨xs, f, ()⟩ ⟨b, sf, ()⟩ ⟨hb, hf, _⟩ r c hr hc
@@ -1294,7 +1335,7 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     obtain ⟨heq, rfl⟩ := need'_ok h3
     have hxt := (rel_term (need_ok.1 h2) x).1 hx
     obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := bag_view hb h1
-    have ha := aligned_map (P := fun y => Ty.deq _ x y) (fun xs => .eq xt (xs.headD xt)) (fun y xs he => by
+    have ha : Aligned M (EBag L _) (fun y => Ty.deq _ x y) _ _ sv ys := aligned_map (fun xs => .eq xt (xs.headD xt)) (fun y xs he => by
       obtain ⟨z, hz, hyz⟩ := he
       cases xs with
       | nil => simp [Term.denotes] at hz

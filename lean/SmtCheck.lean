@@ -56,6 +56,8 @@ def bagOp (p : Prim) (r : Ty) (h : p.ok [.int] = true) (hty : p.ty.inst [.int] =
     (b : E (.bag .int)) (body : Expr [] [.int] Ty.bool) : E r :=
   .call (hty ▸ (Expr.prim p [.int] h : E (p.ty.inst [.int])) : E (.fn [.bag .int, .fn [.int] Ty.bool] r))
     (.cons b (.cons (Expr.lam (ps := [.int]) body) .nil))
+def bagSum (b : E (.bag .int)) (body : Expr [] [.int] .int) : E .int :=
+  .call (.prim .bagSum [.int] rfl) (.cons b (.cons (.lam body) .nil))
 def isTwo : Expr [] [.int] Ty.bool := .bin (.eq rfl) (.var .here) (.int 2)
 def bigger : Expr [] [.int] Ty.bool := .bin .gt (.var .here) (.int 1)
 /-- `table_from_list([#(1, "a"), #(1, "c")])`: the last pair for key 1 wins. -/
@@ -122,6 +124,7 @@ def cases : List (String × (t : Ty) × E t) :=
     ("bag count", ⟨.int, bagOp .bagCount .int rfl rfl b3 isTwo⟩),
     ("bag filter", ⟨.int, .call (.prim .bagSize [.int] rfl) (.cons (bagOp .bagFilter (.bag .int) rfl rfl b3 bigger) .nil)⟩),
     ("bag any", ⟨Ty.bool, bagOp .bagAny Ty.bool rfl rfl b3 isTwo⟩),
+    ("bag sum counts occurrences", ⟨.int, bagSum b3 (.bin .mul (.var .here) (.int 10))⟩),
     ("bag contains", ⟨Ty.bool, .bin .and (.call (.prim .bagContains [.int] rfl) (.cons b3 (.cons (.int 2) .nil)))
       (.not (.call (.prim .bagContains [.int] rfl) (.cons b3 (.cons (.int 5) .nil))))⟩),
     ("bag all", ⟨Ty.bool, bagOp .bagAll Ty.bool rfl rfl b3 bigger⟩),

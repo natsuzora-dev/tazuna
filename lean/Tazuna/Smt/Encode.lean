@@ -284,10 +284,12 @@ def slotApply {ps : List Ty} {r : Ty} (f : Codes ps → Except Refusal (Code r �
     Except Refusal (Code r × Term) := do
   f (← need "an item that has no term" (Codes.ofTerms? ps xs))
 
-/-- A predicate's code applied to each slot's items: its term and its condition. -/
-def slotPreds {ps : List Ty} (f : Codes ps → Except Refusal (Code Ty.bool × Term)) (S : List Slot) :
+/-- A function's code applied to each slot's items: the term of its result and its condition. -/
+def slotTerms {ps : List Ty} {r : Ty} (f : Codes ps → Except Refusal (Code r × Term)) (S : List Slot) :
     Except Refusal (List (Term × Term)) :=
-  S.mapM fun sl => slotApply f sl.2
+  S.mapM fun sl => do
+    let (v, c) ← slotApply f sl.2
+    pure (← need "a result that has no term" (Code.term? r v), c)
 
 /-- Whether a slot's key differs from `key`, as `table_remove` compares: in either direction. -/
 def keepQs (key : Term) (S : List Slot) : List Term :=
@@ -351,22 +353,27 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
   | .bagFilter, args, _ => .ok fun (b, f, ()) => do
     let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
     let S := slotsOf d dt n 1 b
-    let R ← slotPreds f S
+    let R ← slotTerms f S
     pure (slotsTerm d dt (filterSlots S (R.map (·.1))), guardsT S (R.map (·.2)))
   | .bagCount, args, _ => .ok fun (b, f, ()) => do
     let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
     let S := slotsOf d dt n 1 b
-    let R ← slotPreds f S
+    let R ← slotTerms f S
     pure (countT S (R.map (·.1)), guardsT S (R.map (·.2)))
+  | .bagSum, args, _ => .ok fun (b, f, ()) => do
+    let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
+    let S := slotsOf d dt n 1 b
+    let R ← slotTerms f S
+    pure (sumSlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
   | .bagAny, args, _ => .ok fun (b, f, ()) => do
     let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
     let S := slotsOf d dt n 1 b
-    let R ← slotPreds f S
+    let R ← slotTerms f S
     pure (anySlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
   | .bagAll, args, _ => .ok fun (b, f, ()) => do
     let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
     let S := slotsOf d dt n 1 b
-    let R ← slotPreds f S
+    let R ← slotTerms f S
     pure (allSlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
   | .bagInsert, args, _ => .ok fun (b, x, ()) => do
     let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
@@ -392,25 +399,25 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
       [(Ty.param 0).inst args, (Ty.param 1).inst args]
     let S := slotsOf d dt n 2 t
-    let R ← slotPreds f S
+    let R ← slotTerms f S
     pure (slotsTerm d dt (filterSlots S (R.map (·.1))), guardsT S (R.map (·.2)))
   | .tableCount, args, _ => .ok fun (t, f, ()) => do
     let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
       [(Ty.param 0).inst args, (Ty.param 1).inst args]
     let S := slotsOf d dt n 2 t
-    let R ← slotPreds f S
+    let R ← slotTerms f S
     pure (countT S (R.map (·.1)), guardsT S (R.map (·.2)))
   | .tableAny, args, _ => .ok fun (t, f, ()) => do
     let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
       [(Ty.param 0).inst args, (Ty.param 1).inst args]
     let S := slotsOf d dt n 2 t
-    let R ← slotPreds f S
+    let R ← slotTerms f S
     pure (anySlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
   | .tableAll, args, _ => .ok fun (t, f, ()) => do
     let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
       [(Ty.param 0).inst args, (Ty.param 1).inst args]
     let S := slotsOf d dt n 2 t
-    let R ← slotPreds f S
+    let R ← slotTerms f S
     pure (allSlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
   | .tableRemove, args, _ => .ok fun (t, key, ()) => do
     let k := (Ty.param 0).inst args
