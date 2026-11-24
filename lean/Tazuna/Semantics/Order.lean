@@ -157,15 +157,6 @@ theorem sort_eq_iff {α : Type} [Ord α] [Std.TransOrd α] [Std.LawfulEqOrd α] 
 
 end Erl
 
-/-- The atom Gleam's Erlang target names a variant by: the name in snake case, an underscore before each capital but
-the first, as `HTTPError` becomes `h_t_t_p_error`. -/
-def atomName (name : String) : String := String.ofList (go true name.toList)
-where
-  go : Bool → List Char → List Char
-    | _, [] => []
-    | first, c :: cs =>
-      (if c.isUpper then (if first then [c.toLower] else ['_', c.toLower]) else [c]) ++ go false cs
-
 /-- The atom of variant `k` of a declaration's variants. -/
 def atomAt (decl : List Variant) (k : Nat) : String := ((decl[k]?).map (atomName ·.name)).getD ""
 
@@ -217,7 +208,7 @@ end
 
 mutual
 /-- Whether the canonical order on the type is total with `==` as its equality: the type is `comparable`, and the
-variants of each custom type have distinct atoms, which Gleam's naming rules give. -/
+variants of each custom type have distinct atoms, which Gleam's naming rules give and loading checks. -/
 def Ty.ordered : Ty → Bool
   | .int | .str | .date | .id | .param _ => true
   | .dsl k _ => k == .fresh

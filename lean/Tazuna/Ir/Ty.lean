@@ -191,6 +191,15 @@ structure TypeDecl where
   variants : List Variant
 deriving Inhabited
 
+/-- The atom Gleam's Erlang target names a variant by: the name in snake case, an underscore before each capital but
+the first, as `HTTPError` becomes `h_t_t_p_error`. -/
+def atomName (name : String) : String := String.ofList (go true name.toList)
+where
+  go : Bool → List Char → List Char
+    | _, [] => []
+    | first, c :: cs =>
+      (if c.isUpper then (if first then [c.toLower] else ['_', c.toLower]) else [c]) ++ go false cs
+
 namespace TypeDecl
 
 /-- Each variant's field types at `args`: what `Ty.adt` carries. -/

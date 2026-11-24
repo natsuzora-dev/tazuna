@@ -304,6 +304,10 @@ def aliases : List Json :=
   == "src/m.gleam:2:1: m.Count: type alias m.Two takes 1 arguments, given 2"
 #guard verdict (.fn [] .int) (withMain I (int 40 3 "1") (aliases := [alias "m.Box" [] I 7]))
   == "type m.Box is declared twice or is built in"
+-- Variants whose Erlang atoms coincide, which Gleam's naming rules rule out (`AB` and `A_b` are both `a_b`).
+#guard verdict (.fn [] .int) (program [typeDecl "m.T" [("AB", []), ("A_b", [])] 1]
+    [function "m.main" [] I (int 40 3 "1") 40] [])
+  == "src/m.gleam:1:1: m.T: two variants have the Erlang atom a_b"
 -- A type may name a type declared after it; a type that refers to itself is refused, since its values would be
 -- infinite trees and no function could walk them without recursion.
 #guard verdict (.fn [] .int) (program [typeDecl "m.Outer" [("Outer", [(none, named "m.Inner")])] 1,

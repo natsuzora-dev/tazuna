@@ -155,6 +155,9 @@ def userTypes (fileOf : String → Option String) (types : List Surface.TypeDef)
     if builtinName t.name || ownedByTazuna t.name then throw (err t "this type belongs to Lean")
     if let some p := nodup t.params then throw (err t s!"type parameter {p} is declared twice")
     if let some v := nodup (t.variants.map (·.1)) then throw (err t s!"variant {v} is declared twice")
+    -- Gleam's naming rules give each variant its own atom; the canonical order (`Ty.ordered`) rests on it.
+    if let some a := nodup (t.variants.map (atomName ·.1)) then
+      throw (err t s!"two variants have the Erlang atom {a}")
     let σ := t.params.zipIdx.map fun (p, k) => (p, Ty.param k)
     let variants ← t.variants.mapM fun (v, fields) => do
       if let some l := nodup (fields.filterMap (·.1)) then throw (err t s!"{v} has the label {l} twice")
