@@ -1,7 +1,8 @@
 import Tazuna.Cli.Kind
 import Tazuna.Ir.Load
+import Tazuna.Semantics.Eval
 
-/-! The `check` command. For now it loads the IR; structure rules join it in later units. -/
+/-! The `check` command: it loads the IR, evaluates the spec and reports each broken structure rule. -/
 
 namespace Tazuna.Cli
 
@@ -19,12 +20,16 @@ def check (root path : String) : IO UInt32 := do
   let result := match Json.parse text with
     | .ok j => match j.getObjValAs? String "root" with
       | .ok r =>
-        if r == root ++ ".spec" then (Ir.Load.load (.fn [] Ir.Ty.spec) j).map fun _ => ()
+        if r == root ++ ".spec" then (Ir.Load.load (.fn [] Ir.Ty.spec) j).map fun (p : Ir.Program (.fn [] Ir.Ty.spec)) => Ir.SpecV.illegal p.types (p.eval ())
         else .error ⟨none, none, s!"the IR's root is {r}, but the launcher was asked for {root}"⟩
       | .error e => .error ⟨none, none, s!"no root: {e}"⟩
     | .error e => .error ⟨none, none, s!"not JSON: {e}"⟩
   match result with
-  | .ok _ => return 0
+  | .ok [] => return 0
+  | .ok findings =>
+    for (k, message) in findings do
+      IO.println (Json.mkObj [("kind", Json.str (Kind.illegal k).name), ("message", Json.str message)]).compress
+    return 1
   | .error e =>
     IO.println (invalidIrLine e).compress
     return 4
