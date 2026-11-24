@@ -6,5 +6,5 @@ user's arguments as given and the IR it converted from them. -/
 def main (args : List String) : IO UInt32 := do
   match args with
   | [] => IO.println Tazuna.version; return 0
-  | ["check", _, "--ir", path] => Tazuna.Cli.check path
+  | ["check", root, "--ir", path] => Tazuna.Cli.check root path
   | _ => IO.eprintln "usage: tazuna-engine [check <root> --ir <ir.json>]"; return 3

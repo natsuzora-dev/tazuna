@@ -48,6 +48,7 @@ pub type Restricted {
   VariantField
   ConstructorValue
   AnnotationNeeded
+  RootSpec
 }
 
 pub const restricted = [
@@ -73,6 +74,7 @@ pub const restricted = [
   VariantField,
   ConstructorValue,
   AnnotationNeeded,
+  RootSpec,
 ]
 
 pub type Kind {
@@ -113,6 +115,7 @@ pub fn kind_name(kind: Kind) -> String {
         VariantField -> "variantField"
         ConstructorValue -> "constructorValue"
         AnnotationNeeded -> "annotationNeeded"
+        RootSpec -> "rootSpec"
       }
   }
 }
@@ -404,6 +407,56 @@ pub fn convert(
     )
   use <- bail(list.filter_map(mods, round_trip(program, _)))
   Ok(program)
+}
+
+/// The root module must define `spec() -> tazuna.Spec`, the function the
+/// engine evaluates. The launcher asks this of every spec it converts.
+pub fn root_findings(p: ir.Program) -> List(Finding) {
+  let #(module, _) = names.split(p.root)
+  let path = list.key_find(p.sources, module) |> result.unwrap(module)
+  case list.find(p.functions, fn(f) { f.name == p.root }) {
+    Error(Nil) -> [
+      Finding(
+        Restricted(RootSpec),
+        path,
+        None,
+        "the root module defines no spec() -> tazuna.Spec",
+      ),
+    ]
+    Ok(f) ->
+      case f.params, unalias(p.aliases, f.ret) {
+        [], Con("tazuna.Spec", []) -> []
+        _, _ -> [
+          Finding(
+            Restricted(RootSpec),
+            path,
+            Some(f.at),
+            "spec must be spec() -> tazuna.Spec, the function the engine evaluates",
+          ),
+        ]
+      }
+  }
+}
+
+fn unalias(aliases: List(ir.Alias), t: Ty) -> Ty {
+  case t {
+    Con(n, args) ->
+      case list.find(aliases, fn(a) { a.name == n }) {
+        Ok(a) -> unalias(aliases, subst(list.zip(a.params, args), a.ty))
+        Error(Nil) -> t
+      }
+    _ -> t
+  }
+}
+
+fn subst(by: List(#(String, Ty)), t: Ty) -> Ty {
+  case t {
+    Var(n) -> list.key_find(by, n) |> result.unwrap(t)
+    Con(n, args) -> Con(n, list.map(args, subst(by, _)))
+    Tuple(items) -> Tuple(list.map(items, subst(by, _)))
+    Fun(ps, r) -> Fun(list.map(ps, subst(by, _)), subst(by, r))
+    Meta(_) -> t
+  }
 }
 
 fn partition(results: List(Result(a, e))) -> #(List(a), List(e)) {

@@ -8,6 +8,7 @@
 import glance
 import gleam/io
 import gleam/list
+import gleam/result
 import gleam/string
 import simplifile
 import tazuna/internal/convert.{type Finding, type Source, Source}
@@ -44,7 +45,15 @@ fn check(engine: String, args: List(String), root: String) -> Int {
   let path = "src/" <> root <> ".gleam"
   case simplifile.is_file(path) {
     Ok(True) ->
-      case convert.convert(sources([root], []), dsl_source.text, root) {
+      case
+        convert.convert(sources([root], []), dsl_source.text, root)
+        |> result.try(fn(program) {
+          case convert.root_findings(program) {
+            [] -> Ok(program)
+            findings -> Error(findings)
+          }
+        })
+      {
         Error(findings) -> {
           list.each(findings, fn(f) { io.println(convert.finding_line(f)) })
           findings_code(findings)

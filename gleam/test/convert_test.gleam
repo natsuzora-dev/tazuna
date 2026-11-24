@@ -149,25 +149,30 @@ fn example(kind: Restricted) -> #(String, Int) {
       6,
     )
     convert.AnnotationNeeded -> #("pub fn f(x) -> Int {\n  1\n}", 1)
+    convert.RootSpec -> #(
+      "import tazuna\n\npub fn spec(s: tazuna.Spec) -> tazuna.Spec {\n  s\n}",
+      3,
+    )
   }
 }
 
 pub fn each_restricted_kind_is_found_where_it_is_written_test() {
   list.each(convert.restricted, fn(kind) {
     let #(text, line) = example(kind)
-    let found = case
+    let findings = case
       convert.convert([Source("m", "src/m.gleam", text)], dsl_source.text, "m")
     {
-      Ok(_) -> []
-      Error(findings) ->
-        list.map(findings, fn(f) {
-          let assert convert.Finding(k, "src/m.gleam", option_at, _) = f
-          #(convert.kind_name(k), case option_at {
-            Some(at) -> at.line
-            None -> 0
-          })
-        })
+      Ok(program) -> convert.root_findings(program)
+      Error(findings) -> findings
     }
+    let found =
+      list.map(findings, fn(f) {
+        let assert convert.Finding(k, "src/m.gleam", option_at, _) = f
+        #(convert.kind_name(k), case option_at {
+          Some(at) -> at.line
+          None -> 0
+        })
+      })
     assert found == [#(convert.kind_name(convert.Restricted(kind)), line)]
   })
 }

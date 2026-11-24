@@ -1,7 +1,8 @@
 #!/bin/sh
 # Each kind of output line has one end-to-end case, a directory named after the kind. Fails when a kind has no case or
 # a case names no kind, and runs each case as a user would, once per target: the launcher, run in a copy of the case's
-# src/ with the arguments in its args file, must print the case's stdout and exit with the code in its exit file.
+# src/ with the arguments in its args file, must print the case's stdout and exit with the code in its exit file. A kind
+# no spec can reach (a converter or launcher bug) has an ir.json instead of src/, which the engine reads directly.
 # Usage: test/e2e/check <file listing the kinds, one per line> <engine> <the Gleam package's build/dev directory>
 set -eu
 cd "$(dirname "$0")"
@@ -27,6 +28,14 @@ for dir in */; do
   case=${dir%/}
   grep -qxF "$case" "$kinds" || { echo "e2e: test/e2e/$dir names no kind. Rename or remove it."; status=1; continue; }
   args=$(cat "$case/args")
+  if [ -f "$case/ir.json" ]; then
+    code=0
+    # shellcheck disable=SC2086 # args holds words to split
+    out=$("$engine" $args --ir "$case/ir.json") || code=$?
+    [ "$out" = "$(cat "$case/stdout")" ] || { printf 'e2e: %s printed\n%s\n' "$case" "$out"; status=1; }
+    [ "$code" = "$(cat "$case/exit")" ] || { echo "e2e: $case exited $code, expected $(cat "$case/exit")"; status=1; }
+    continue
+  fi
   for target in javascript erlang; do
     mkdir "$work/$case-$target"
     cp -R "$case/src" "$work/$case-$target/"
