@@ -1,11 +1,3 @@
 #!/bin/sh
 "$(dirname "$0")/private-scan" staged || exit 1
-npm run check --silent || exit 1
-if ! git diff --quiet -- '*.generated.ts'; then
-  echo "The files that npm run lean:write rewrote are not staged. Run git add on them and commit again."
-  exit 1
-fi
-if [ -n "$(git ls-files --others --exclude-standard -- '*.generated.ts')" ]; then
-  echo "The files that npm run lean:write generated are not added to git. Run git add on them and commit again."
-  exit 1
-fi
+"$(dirname "$0")/../scripts/check" || exit 1
