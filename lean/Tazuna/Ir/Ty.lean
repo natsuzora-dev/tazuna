@@ -34,8 +34,8 @@ def decl : Dsl → String × List String × String
   | .declared => ("Declared", [], "An external's command, query or event, listed in its declaration.")
   | .effect => ("Effect", ["event"], "A request to an external; its answer becomes events.")
   | .subscription => ("Subscription", ["event"], "Another service's event, received as one of this service's.")
-  | .bounds => ("Bounds", [], "How far checking goes.")
-  | .create => ("Create", [], "How many keys checking may add to one table of the records.")
+  | .bounds => ("Bounds", ["records"], "How far checking goes.")
+  | .create => ("Create", ["records"], "How many keys checking may add to one table of the records.")
   | .response => ("Response", ["event"], "After one event, another within a time.")
   | .fresh => ("Fresh", [], "Where a command's new ids come from.")
 

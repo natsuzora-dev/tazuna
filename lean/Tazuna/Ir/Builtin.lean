@@ -150,7 +150,7 @@ def sig : Prim → PrimSig :=
         l "subscribes" (.list (.dsl .subscription [b])), l "commands" (.list (.dsl .command [a, b, param 2])),
         l "queries" (.list (.dsl .query [a, param 2])), l "machines" (.list (.dsl .machine [a, b])),
         l "reactions" (.list (.dsl .reaction [a, b])), l "invariants" (.fn [a] Ty.rules),
-        l "responses" (.list (.dsl .response [b])), l "bounds" (.dsl .bounds [])],
+        l "responses" (.list (.dsl .response [b])), l "bounds" (.dsl .bounds [a])],
       ret := .dsl .service [] }
   | .command =>
     { name := "command",
@@ -225,12 +225,14 @@ def sig : Prim → PrimSig :=
   | .bounds =>
     { name := "bounds",
       doc := "How far checking goes: keys created per table, items per bag, internal steps per input, steps per run.",
-      tvars := [],
-      params := [l "creates" (.list (.dsl .create [])), l "items" .int, l "cascade" .int, l "steps" .int],
-      ret := .dsl .bounds [] }
+      tvars := ["records"], dataArgs := true,
+      params := [l "creates" (.list (.dsl .create [a])), l "items" .int, l "cascade" .int, l "steps" .int],
+      ret := .dsl .bounds [a] }
   | .create =>
-    { name := "create", doc := "At most this many keys created in the records' table field `table`.",
-      tvars := [], params := [l "table" .str, l "at_most" .int], ret := .dsl .create [] }
+    { name := "create",
+      doc := "At most this many keys created in the table that `table` reads, a table field of the records.",
+      tvars := ["records", "k", "v"], dataArgs := true,
+      params := [l "table" (.fn [a] (.table b (param 2))), l "at_most" .int], ret := .dsl .create [a] }
   | .response =>
     { name := "response", doc := "After an event satisfying `after`, one satisfying `then` within `within` ms.",
       tvars := ["event"], dataArgs := true,

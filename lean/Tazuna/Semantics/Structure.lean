@@ -65,12 +65,15 @@ structure SubscriptionV (e : Ty) where
   event : Ty
   wrap : (Ty.fn [event] e).den0
 
-structure CreateV where
-  table : String
+/-- A bound on the keys created in the table `table` reads from the records. -/
+structure CreateV (r : Ty) where
+  key : Ty
+  value : Ty
+  table : (Ty.fn [r] (.table key value)).den0
   atMost : Int
 
-structure BoundsV where
-  creates : List CreateV
+structure BoundsV (r : Ty) where
+  creates : List (CreateV r)
   items : Int
   cascade : Int
   steps : Int
@@ -95,7 +98,7 @@ structure ServiceV where
   reactions : List (ReactionV records event)
   invariants : (Ty.fn [records] Ty.rules).den0
   responses : List (ResponseV event)
-  bounds : BoundsV
+  bounds : BoundsV records
 
 structure SpecV where
   services : List ServiceV
@@ -119,8 +122,8 @@ def Dsl.val : Dsl → List Ty → Sem
       | .declared, _ => DeclaredV
       | .effect, [e] => EffectV e
       | .subscription, [e] => SubscriptionV e
-      | .bounds, _ => BoundsV
-      | .create, _ => CreateV
+      | .bounds, [r] => BoundsV r
+      | .create, [r] => CreateV r
       | .response, [e] => ResponseV e
       | _, _ => Unit
     ⟨carrier, fun _ _ => false⟩

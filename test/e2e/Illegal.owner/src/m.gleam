@@ -43,7 +43,7 @@ fn tasks(name: String) -> tazuna.Service {
     invariants: fn(_r) { [] },
     responses: [],
     bounds: tazuna.bounds(
-      creates: [tazuna.create(table: "tasks", at_most: 3)],
+      creates: [tazuna.create(table: fn(r: Records) { r.tasks }, at_most: 3)],
       items: 3,
       cascade: 10,
       steps: 5,

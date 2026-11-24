@@ -69,10 +69,10 @@ pub type Effect(event)
 pub type Subscription(event)
 
 /// How far checking goes.
-pub type Bounds
+pub type Bounds(records)
 
 /// How many keys checking may add to one table of the records.
-pub type Create
+pub type Create(records)
 
 /// After one event, another within a time.
 pub type Response(event)
@@ -297,7 +297,7 @@ pub fn service(
   reactions _reactions: List(Reaction(records, event)),
   invariants _invariants: fn(records) -> List(#(String, Bool)),
   responses _responses: List(Response(event)),
-  bounds _bounds: Bounds,
+  bounds _bounds: Bounds(records),
 ) -> Service {
   panic as \"tazuna's built-ins run only in the engine\"
 }
@@ -417,16 +417,19 @@ pub fn subscribe(
 
 /// How far checking goes: keys created per table, items per bag, internal steps per input, steps per run.
 pub fn bounds(
-  creates _creates: List(Create),
+  creates _creates: List(Create(records)),
   items _items: Int,
   cascade _cascade: Int,
   steps _steps: Int,
-) -> Bounds {
+) -> Bounds(records) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// At most this many keys created in the records' table field `table`.
-pub fn create(table _table: String, at_most _at_most: Int) -> Create {
+/// At most this many keys created in the table that `table` reads, a table field of the records.
+pub fn create(
+  table _table: fn(records) -> Table(k, v),
+  at_most _at_most: Int,
+) -> Create(records) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 

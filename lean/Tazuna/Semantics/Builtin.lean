@@ -201,7 +201,10 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     fun ((source, name), wrap, ()) =>
     { source, name, event := (Ty.param 1).inst args, wrap := Prim.dn d (.fn [.param 1] (.param 0)) rfl wrap }
   | .bounds, _, _ => fun (creates, items, cascade, steps, ()) => { creates, items, cascade, steps }
-  | .create, _, _ => fun (table, atMost, ()) => { table, atMost }
+  | .create, args, h => let d := Prim.dataOf h rfl
+    fun (table, atMost, ()) =>
+    { key := (Ty.param 1).inst args, value := (Ty.param 2).inst args,
+      table := Prim.dn d (.fn [.param 0] (.table (.param 1) (.param 2))) rfl table, atMost }
   | .response, _, h => let d := Prim.dataOf h rfl
     fun (name, after, then_, within, ()) =>
     { name, after := Prim.dn d (.fn [.param 0] .bool) rfl after, then_ := Prim.dn d (.fn [.param 0] .bool) rfl then_,
