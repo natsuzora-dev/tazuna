@@ -731,6 +731,33 @@ theorem primCode_exact (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : 
     obtain ⟨it, -, hr⟩ := bind_ok.1 hr
     obtain ⟨t, -, e⟩ := map_ok.1 hr
     cases e; rfl
+  case command =>
+    simp only [primCode] at h; cases h
+    refine frel_tt rfl fun ss s c hr => ?_
+    obtain ⟨x, _, _, _, _, _⟩ := ss
+    dsimp only at hr
+    split at hr
+    split at hr
+    · simp only [Except.ok.injEq] at hr; exact (congrArg Prod.snd hr).symm
+    · cases hr
+  case query =>
+    simp only [primCode] at h; cases h
+    refine frel_tt rfl fun ss s c hr => ?_
+    obtain ⟨x, _, _, _, _⟩ := ss
+    dsimp only at hr
+    split at hr
+    split at hr
+    · simp only [Except.ok.injEq] at hr; exact (congrArg Prod.snd hr).symm
+    · cases hr
+  case sendCommand | sendQuery =>
+    simp only [primCode] at h; cases h
+    refine frel_tt rfl fun ss s c hr => ?_
+    obtain ⟨_, _, _, _, _⟩ := ss
+    dsimp only at hr
+    obtain ⟨ct, -, hr⟩ := bind_ok.1 hr
+    obtain ⟨it, -, hr⟩ := bind_ok.1 hr
+    obtain ⟨t, -, e⟩ := map_ok.1 hr
+    cases e; rfl
   all_goals simp [primCode] at h
 
 end

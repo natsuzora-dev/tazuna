@@ -1253,6 +1253,68 @@ def effectCheck (solver : Solver) : IO Bool := do
       | _, _ => IO.println "smt-check: effect: no values"; return false
     | a => IO.println s!"smt-check: effect: {repr a}"; return false
 
+/-! An own effect as its kind's variant: `send_command(put, "alice", x + k, fn(_) { [#(x, x)] })` with `put` the
+command above and `x` free, the `on_answer` site m:4:2 capturing `x`. The layout lists a request kind of the same
+event type and another own kind first, so the variant index is past both by construction, not by accident. The
+solver's value must be the variant of the effect `eval` builds at the solver's `x`: the command's name and the site,
+the caller, the input and the captured value. -/
+
+def putHandleT : Ty := .dsl .command [recordsT, evT, .str, .int, .str]
+def putAnswerT : Ty := .fn [Ty.result Ty.nil .str] (.list evT)
+
+def sendPutE (k : Int) : Expr [] [putHandleT, .int] (.dsl .effect [evT]) :=
+  let x : Expr [] [putHandleT, .int] .int := .var (.there .here)
+  let body : Expr [] [.int] putAnswerT :=
+    .lam (.list (.cons (.tuple (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))) .nil))
+  let clo : Expr [] [putHandleT, .int] (.dsl .closure [putAnswerT]) := .close ⟨"m", 4, 2, 0⟩ (.cons x .nil) rfl rfl body
+  .call (.prim .sendCommand [recordsT, evT, .str, .int, .str] rfl)
+    (.cons (.var .here) (.cons (.str "alice") (.cons (.bin .add x (.int k)) (.cons clo .nil))))
+
+def ownLayout : Layout :=
+  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2)
+    { effects := [⟨evT, "send", .int, Ty.nil, some Ty.nil, none, ⟨⟨"m", 9, 9, 0⟩, [.int]⟩⟩],
+      owns := [.command evT "put" .str .int .str ⟨⟨"m", 8, 8, 0⟩, [.int]⟩,
+        .command evT "put" .str .int .str ⟨⟨"m", 4, 2, 0⟩, [.int]⟩] }
+    [.dsl .effect [evT], .int, evT, .tuple [.int]])
+
+/-- Whether the solver's value `v` is the variant of the own effect `eff`: its kind's name and site after the request
+kinds, its caller, its input and the value its `on_answer` captured. -/
+def ownMatches (L : Layout) (eff : EffectV evT) (v : Val) : Bool :=
+  match eff, v with
+  | .command name c i _ caller value onAnswer, .ctor _ idx [vc, vi, .ctor _ 0 va] =>
+    match (L.ownsOf evT)[idx - (L.effectsOf evT).length]?, Ty.same c .str, Ty.same i .int,
+        Ty.sames onAnswer.Γ [.int] with
+    | some (.command _ kn _ _ _ ka), some ⟨hc⟩, some ⟨hi⟩, some ⟨hg⟩ =>
+      let cl : String := cast (congrArg Ty.den0 hc) caller
+      let x : Int := cast (congrArg Ty.den0 hi) value
+      let env : Int := (cast (congrArg (fun Γ => (Ty.tuple Γ).den0) hg) onAnswer.env).1
+      idx ≥ (L.effectsOf evT).length && kn == name && ka.site == onAnswer.site && vc.print == (Val.str cl).print &&
+        vi.print == (Val.int x).print && (va.map (·.print)) == [(Val.int env).print]
+    | _, _, _, _ => false
+  | _, _ => false
+
+def ownEffectCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: own effect: {m}"; return false
+  let L := ownLayout
+  let some srt := L.srt? (.dsl .effect [evT]) | fail "no sort"
+  let some dts := L.datatypes? | fail "no datatypes"
+  match encode L (G := []) () (sendPutE 1) (putC.name, Term.var 1, ()) with
+  | .error r => fail s!"no encoding: {repr r}"
+  | .ok (code, cond) =>
+    let script : Script :=
+      { datatypes := dts, vars := [srt, .int], asserts := [.eq (.var 0) code, .lt (.int 40) (.var 1), cond],
+        shows := [0, 1] }
+    match ← solver.run script with
+    | .sat vs =>
+      match vs.lookup 0, vs.lookup 1 with
+      | some v, some (.int x) =>
+        let eval (k : Int) : EffectV evT := (sendPutE k).eval (G := []) .nil () (⟨putC, rfl, rfl⟩, x, ())
+        if !ownMatches L (eval 1) v then return ← fail s!"the solver's {v.print} is not eval's effect at x = {x}"
+        if ownMatches L (eval 2) v then return ← fail "the comparison accepts another input"
+        return true
+      | _, _ => fail "no values"
+    | a => fail s!"{repr a}"
+
 /-! A list of effects, as a reaction returns one: `[request_command(send, x + 1, fn(_) { [x] })]` in two slots. The
 free slot holds some value of the effect datatype, which no value reads; the occupied one must be eval's effect. -/
 
@@ -2172,6 +2234,7 @@ def check (z3 : String) : IO Bool := do
   unless ← answerCheck solver do ok := false
   unless ← boundCheck solver do ok := false
   unless ← effectCheck solver do ok := false
+  unless ← ownEffectCheck solver do ok := false
   unless ← effectListCheck solver do ok := false
   unless ← machineEffectCheck solver do ok := false
   unless ← noEffectsCheck solver do ok := false

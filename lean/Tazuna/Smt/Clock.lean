@@ -484,7 +484,7 @@ def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) 
   | [], [], _ => pure ([], .int 0)
   | m :: ms, st :: sts, nid => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
-    let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
+    let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e) (L.ownsOf e)
     let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
     let (rest, k) ← roundStarts shs ds dE dP dopt ms sts nid
     pure (entrySlots dE dP dk dflt js (st.map (onceStart dopt nid)) ++ rest, .add (startCount dopt st) k)

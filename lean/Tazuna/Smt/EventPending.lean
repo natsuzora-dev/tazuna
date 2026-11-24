@@ -105,7 +105,7 @@ def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV))
   | [], [], n => pure ([], n)
   | m :: ms, st :: sts, n => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
-    let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
+    let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e) (L.ownsOf e)
     let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
     let S ← rankStarts L T m dopt n st
     let (rest, n') ← encodeStarts shs ds dE dP dopt ms sts (.add n (startCount dopt st))
@@ -167,7 +167,7 @@ def WritesEntry (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) 
 /-- A machine's pending slots hold, where flagged, the entries of the requests its effect slots hold. -/
 theorem entrySlots_rel {P : List AnySite} (hP : SitesUnique P) (m : MachineV r e)
     {shs : List (PendingShape e)} (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List Nat}
-    (hjs : shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e) = .ok js)
+    (hjs : shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e) (L.ownsOf e) = .ok js)
     {dE nE dP nP dk nk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP)) (hdk : L.find? (.tuple [m.key]) = some (dk, nk))
     {S : List Slot} {sv : List (Bool × List Val)} {ys : List ((Sender × EffectV e) × Nat)} (dflt : Term)

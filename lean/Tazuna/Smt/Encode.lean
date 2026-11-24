@@ -45,15 +45,41 @@ structure EffectKey where
 def EffectKey.fields (k : EffectKey) : List Ty :=
   [k.input, .tuple ((k.ensures.map (·.Γ)).getD []), .tuple k.answer.Γ]
 
+/-- One kind of effect that runs a command or query of the service's own: its name, the types of its caller and
+input, its rejection (a command) or output (a query), and the site of its `on_answer`, from the event type `event`.
+An effect of the kind is coded by its variant of the effect datatype, after the request kinds' variants; its fields
+are the caller, the input and the values the site captured. -/
+inductive OwnKey where
+  | command (event : Ty) (name : String) (caller input rejection : Ty) (answer : SiteKey)
+  | query (event : Ty) (name : String) (caller input output : Ty) (answer : SiteKey)
+
+def OwnKey.event : OwnKey → Ty
+  | .command e .. | .query e .. => e
+
+def OwnKey.answer : OwnKey → SiteKey
+  | .command _ _ _ _ _ a | .query _ _ _ _ _ a => a
+
+/-- The types of what varies among the effects of a kind. -/
+def OwnKey.fields : OwnKey → List Ty
+  | .command _ _ c i _ a | .query _ _ c i _ a => [c, i, .tuple a.Γ]
+
 /-- The datatypes a script declares: each type in the list is datatype `D<i>` by its position, with the number of
-slots it holds when it is a bag, a table or a list. `effects` lists the kinds of effect values the script codes: the
-type `Effect(event)` is a datatype with one variant per kind of that event type. -/
+slots it holds when it is a bag, a table or a list. `effects` and `owns` list the kinds of effect values the script
+codes: the type `Effect(event)` is a datatype with one variant per kind of that event type, requests first. -/
 structure Layout where
   types : List (Ty × Nat) := []
   effects : List EffectKey := []
+  owns : List OwnKey := []
 
-/-- The kinds of effect of the event type `e`, in the order of their variants. -/
+/-- The request kinds of effect of the event type `e`, in the order of their variants. -/
 def Layout.effectsOf (L : Layout) (e : Ty) : List EffectKey := L.effects.filter fun k => (Ty.same k.event e).isSome
+
+/-- The own kinds of effect of the event type `e`, in the order of their variants, after the request kinds'. -/
+def Layout.ownsOf (L : Layout) (e : Ty) : List OwnKey := L.owns.filter fun k => (Ty.same k.event e).isSome
+
+/-- The fields of every variant of the effect datatype of the event type `e`. -/
+def Layout.effectFields (L : Layout) (e : Ty) : List (List Ty) :=
+  (L.effectsOf e).map (·.fields) ++ (L.ownsOf e).map (·.fields)
 
 def SiteKey.same (a b : SiteKey) : Bool := a.site == b.site && (Ty.sames a.Γ b.Γ).isSome
 
@@ -67,6 +93,12 @@ def EffectKey.same (a b : EffectKey) : Bool :=
   (Ty.same a.event b.event).isSome && a.name == b.name && (Ty.same a.input b.input).isSome &&
     (Ty.same a.output b.output).isSome && optSame (fun x y => (Ty.same x y).isSome) a.rejection b.rejection &&
     optSame SiteKey.same a.ensures b.ensures && a.answer.same b.answer
+
+def OwnKey.same : OwnKey → OwnKey → Bool
+  | .command e n c i j a, .command e' n' c' i' j' a' | .query e n c i j a, .query e' n' c' i' j' a' =>
+    (Ty.same e e').isSome && n == n' && (Ty.same c c').isSome && (Ty.same i i').isSome && (Ty.same j j').isSome &&
+      a.same a'
+  | _, _ => false
 
 /-- The datatype index and slot count of a type. -/
 def Layout.find? (L : Layout) (t : Ty) : Option (Nat × Nat) :=
@@ -84,12 +116,13 @@ structure ClosureCode where
   env : List Term
 
 /-- How a value of a structure type is coded: a kept function by its closure code, a handle to an external's command
-by its name and to an external's query by its name and its `ensures`, all static; anything else by a term. -/
+by its name and to an external's query by its name and its `ensures`, an own command or query by its name, all
+static; anything else by a term. -/
 def DslCode : Dsl → List Ty → Type
   | .closure, _ => ClosureCode
-  | .externalCommand, _ => String
+  | .externalCommand, _ | .command, _ | .query, _ => String
   | .externalQuery, _ => String × ClosureCode
-  | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _ | .reaction, _ | .external, _ | .source, _
+  | .spec, _ | .service, _ | .machine, _ | .reaction, _ | .external, _ | .source, _
   | .declared, _ | .effect, _ | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _
   | .sender, _ | .fresh, _ | .effectClosure, _ => Term
 
@@ -107,20 +140,20 @@ end
 
 /-- The term of a structure value's code, when it has one. -/
 def DslCode.term? : (k : Dsl) → (a : List Ty) → DslCode k a → Option Term
-  | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ => none
-  | .spec, _, s | .service, _, s | .command, _, s | .query, _, s | .machine, _, s | .reaction, _, s | .external, _, s
+  | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ | .command, _, _ | .query, _, _ => none
+  | .spec, _, s | .service, _, s | .machine, _, s | .reaction, _, s | .external, _, s
   | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
   | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s | .effectClosure, _, s => some s
 
 def DslCode.ofTerm? : (k : Dsl) → (a : List Ty) → Term → Option (DslCode k a)
-  | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ => none
-  | .spec, _, s | .service, _, s | .command, _, s | .query, _, s | .machine, _, s | .reaction, _, s | .external, _, s
+  | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ | .command, _, _ | .query, _, _ => none
+  | .spec, _, s | .service, _, s | .machine, _, s | .reaction, _, s | .external, _, s
   | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
   | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s | .effectClosure, _, s => some s
 
 def DslCode.share : (k : Dsl) → (a : List Ty) → DslCode k a → DslCode k a
-  | .closure, _, s | .externalCommand, _, s | .externalQuery, _, s => s
-  | .spec, _, s | .service, _, s | .command, _, s | .query, _, s | .machine, _, s | .reaction, _, s | .external, _, s
+  | .closure, _, s | .externalCommand, _, s | .externalQuery, _, s | .command, _, s | .query, _, s => s
+  | .spec, _, s | .service, _, s | .machine, _, s | .reaction, _, s | .external, _, s
   | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
   | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s | .effectClosure, _, s => Term.share s
 
@@ -340,9 +373,9 @@ end
 datatype's one constructor when no kind exists. -/
 def effectDefault (e : Ty) : Option Term := do
   let (d, _) ← L.find? (.dsl .effect [e])
-  match (L.effectsOf e).head? with
+  match (L.effectFields e).head? with
   | none => pure (.ctor d 0 [])
-  | some key => pure (.ctor d 0 (← key.fields.mapM (defaultWith L fun _ _ => none)))
+  | some fs => pure (.ctor d 0 (← fs.mapM (defaultWith L fun _ _ => none)))
 
 /-- A term of the type's sort, for the items of free slots, which no value reads. An effect has one too, any value
 of its datatype, so a list of effects has free slots. -/
@@ -509,6 +542,14 @@ def effectT (key : EffectKey) (input : Term) (ens answer : List Term) : Except R
   let de ← tupleD L ((key.ensures.map (·.Γ)).getD [])
   let da ← tupleD L key.answer.Γ
   pure (.ctor d k [input, .ctor de 0 ens, .ctor da 0 answer])
+
+/-- An effect of the own kind `key`: its variant of the effect datatype, after the request kinds', with the caller,
+the input and the terms of the values the `on_answer` site captured. -/
+def ownT (key : OwnKey) (caller input : Term) (answer : List Term) : Except Refusal Term := do
+  let (d, _) ← need "a layout without the effect type" (L.find? (.dsl .effect [key.event]))
+  let k ← need "an effect of a kind the layout lacks" ((L.ownsOf key.event).findIdx? (·.same key))
+  let da ← tupleD L key.answer.Γ
+  pure (.ctor d ((L.effectsOf key.event).length + k) [caller, input, .ctor da 0 answer])
 
 /-- The code of each built-in that has an exact encoding: a table of term builders indexed by the built-in. -/
 def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal (Code (p.ty.inst args)) :=
@@ -681,6 +722,24 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let key : EffectKey := ⟨(Ty.param 0).inst args, name, (Ty.param 1).inst args, (Ty.param 2).inst args, none,
       some ens.key, oa.key⟩
     pure (← effectT L key it ens.env oa.env, tt)
+  | .command, _, _ => .ok fun (name, _, _, _, _, ()) => match name with
+    | .str n => .ok (n, tt)
+    | _ => .error (.outside "a command whose name is no literal")
+  | .query, _, _ => .ok fun (name, _, _, _, ()) => match name with
+    | .str n => .ok (n, tt)
+    | _ => .error (.outside "a query whose name is no literal")
+  | .sendCommand, args, _ => .ok fun (name, caller, input, oa, ()) => do
+    let ct ← need "a caller that has no term" (Code.term? _ caller)
+    let it ← need "an input that has no term" (Code.term? _ input)
+    let key : OwnKey := .command ((Ty.param 1).inst args) name ((Ty.param 2).inst args) ((Ty.param 3).inst args)
+      ((Ty.param 4).inst args) oa.key
+    pure (← ownT L key ct it oa.env, tt)
+  | .sendQuery, args, _ => .ok fun (name, caller, input, oa, ()) => do
+    let ct ← need "a caller that has no term" (Code.term? _ caller)
+    let it ← need "an input that has no term" (Code.term? _ input)
+    let key : OwnKey := .query ((Ty.param 1).inst args) name ((Ty.param 2).inst args) ((Ty.param 3).inst args)
+      ((Ty.param 4).inst args) oa.key
+    pure (← ownT L key ct it oa.env, tt)
   | p, _, _ => .error (.outside s!"the built-in {p.sig.name}")
 
 variable {G : List Ty} (gs : Encs G)
@@ -844,12 +903,12 @@ end
 
 /-- The effect datatype of the event type `e`, after the types of its kinds' fields, which are data. -/
 def addEffect (L : Layout) (e : Ty) : Layout :=
-  ((L.effectsOf e).foldl (fun L k => addTysWith slots (fun L _ _ => L) L k.fields) L).push (.dsl .effect [e])
+  ((L.effectFields e).foldl (fun L fs => addTysWith slots (fun L _ _ => L) L fs) L).push (.dsl .effect [e])
 
 /-- The slot count of each type, except that a list of effects of an event type no effect kind names has none: no
 effect value of that type has a code, so every list of them that has one is empty. -/
 def effectSlots (L : Layout) : Ty → Nat
-  | .list (.dsl .effect [e]) => if (L.effectsOf e).isEmpty then 0 else slots (.list (.dsl .effect [e]))
+  | .list (.dsl .effect [e]) => if (L.effectFields e).isEmpty then 0 else slots (.list (.dsl .effect [e]))
   | t => slots t
 
 /-- The layout with every datatype the types `ts` need, an effect type's included. -/
@@ -861,7 +920,7 @@ end
 
 /-- The layout with the effect datatype of each event type its effect kinds name, after the types of their fields. -/
 def addEffects (slots : Ty → Nat) (L : Layout) : Layout :=
-  L.effects.foldl (fun L k => addEffect slots L k.event) L
+  (L.effects.map (·.event) ++ L.owns.map (·.event)).foldl (addEffect slots) L
 
 /-- The sort that codes values of a first-order type. -/
 def srt? (L : Layout) (t : Ty) : Option Srt :=
@@ -881,9 +940,9 @@ def datatype? (L : Layout) : Ty × Nat → Option Datatype
   | (.id, _) => some ⟨[[.int], [.str]]⟩
   | (.bag t, n) | (.list t, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, t]))]⟩
   | (.table k v, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, k, v]))]⟩
-  | (.dsl .effect [e], _) => match L.effectsOf e with
+  | (.dsl .effect [e], _) => match L.effectFields e with
     | [] => some ⟨[[]]⟩
-    | ks => do pure ⟨← ks.mapM (·.fields.mapM L.srt?)⟩
+    | fss => do pure ⟨← fss.mapM (·.mapM L.srt?)⟩
   | _ => none
 
 def datatypes? (L : Layout) : Option (List Datatype) := L.types.mapM L.datatype?

@@ -78,10 +78,24 @@ def EffectKey.Holds {e : Ty} (key : EffectKey) : EffectV e → List Val → Prop
       | _, _ => False
   | _, _ => False
 
-/-- An effect and the SMT value that codes it: the variant of its kind in the effect datatype of its event type. -/
+/-- An effect of the own kind `key` and its variant's fields: the same command or query, with its caller, its input
+and its `on_answer`'s captured values coded by the fields, and its `on_answer` written at the kind's site. -/
+def OwnKey.Holds {e : Ty} : OwnKey → EffectV e → List Val → Prop
+  | .command _ name c i j a, .command name' c' i' j' caller value onAnswer, vals =>
+      name' = name ∧ c' = c ∧ i' = i ∧ j' = j ∧ onAnswer.site = a.site ∧ onAnswer.Γ = a.Γ ∧
+      ∃ vc vi va, vals = [vc, vi, va] ∧ RelD L c' caller vc ∧ RelD L i' value vi ∧ CapRel L onAnswer va
+  | .query _ name c i o a, .query name' c' i' o' caller value onAnswer, vals =>
+      name' = name ∧ c' = c ∧ i' = i ∧ o' = o ∧ onAnswer.site = a.site ∧ onAnswer.Γ = a.Γ ∧
+      ∃ vc vi va, vals = [vc, vi, va] ∧ RelD L c' caller vc ∧ RelD L i' value vi ∧ CapRel L onAnswer va
+  | _, _, _ => False
+
+/-- An effect and the SMT value that codes it: the variant of its kind in the effect datatype of its event type,
+request kinds first, then own kinds. -/
 def EffRel {e : Ty} (eff : EffectV e) (v : Val) : Prop :=
   ∃ d n, L.find? (.dsl .effect [e]) = some (d, n) ∧
-    ∃ k key vals, (L.effectsOf e)[k]? = some key ∧ v = .ctor d k vals ∧ key.Holds L eff vals
+    ((∃ k key vals, (L.effectsOf e)[k]? = some key ∧ v = .ctor d k vals ∧ key.Holds L eff vals) ∨
+      ∃ k key vals, (L.ownsOf e)[k]? = some key ∧ v = .ctor d ((L.effectsOf e).length + k) vals ∧
+        key.Holds L eff vals)
 
 mutual
 /-- A value of a first-order type and the SMT value that codes it. -/
@@ -130,10 +144,10 @@ def DslRel : (k : Dsl) → (a : List Ty) → (Ty.dsl k a).den → DslCode k a �
   | .closure, [_], f, c => ClosureRel M L f c
   | .externalCommand, [_, _, _], n, c => n = c
   | .externalQuery, [_, _], (n, f), (c, cc) => n = c ∧ ClosureRel M L f cc
+  | .command, [_, _, _, _, _], x, c => x.1.name = c
+  | .query, [_, _, _, _], x, c => x.1.name = c
   | .spec, a, x, s => RelV L (.dsl .spec a) x (Term.denote M s)
   | .service, a, x, s => RelV L (.dsl .service a) x (Term.denote M s)
-  | .command, a, x, s => RelV L (.dsl .command a) x (Term.denote M s)
-  | .query, a, x, s => RelV L (.dsl .query a) x (Term.denote M s)
   | .machine, a, x, s => RelV L (.dsl .machine a) x (Term.denote M s)
   | .reaction, a, x, s => RelV L (.dsl .reaction a) x (Term.denote M s)
   | .external, a, x, s => RelV L (.dsl .external a) x (Term.denote M s)
@@ -1806,6 +1820,28 @@ theorem effectT_ok {key : EffectKey} {it : Term} {ens ans : List Term} {t : Term
   refine ⟨d, n, k, de, da, need_ok.1 h1, ?_, tupleD_ok h3, tupleD_ok h4, rfl⟩
   rw [List.getElem?_eq_getElem hk, EffectKey.eq_of_same hsame]
 
+theorem OwnKey.eq_of_same : {a b : OwnKey} → a.same b = true → a = b
+  | .command .., .command .., h | .query .., .query .., h => by
+    simp only [OwnKey.same, Bool.and_eq_true, beq_iff_eq] at h
+    obtain ⟨⟨⟨⟨⟨he, hn⟩, hc⟩, hi⟩, hj⟩, ha⟩ := h
+    rw [Ty.eq_of_same he, hn, Ty.eq_of_same hc, Ty.eq_of_same hi, Ty.eq_of_same hj, SiteKey.eq_of_same ha]
+  | .command .., .query .., h | .query .., .command .., h => by simp [OwnKey.same] at h
+
+/-- An own effect's code is its kind's variant after the request kinds', with the caller, the input and the captured
+values' tuple as its fields. -/
+theorem ownT_ok {key : OwnKey} {ct it : Term} {ans : List Term} {t : Term} (h : ownT L key ct it ans = .ok t) :
+    ∃ d n k da, L.find? (.dsl .effect [key.event]) = some (d, n) ∧ (L.ownsOf key.event)[k]? = some key ∧
+      (∃ m, L.find? (.tuple key.answer.Γ) = some (da, m)) ∧
+      t = .ctor d ((L.effectsOf key.event).length + k) [ct, it, .ctor da 0 ans] := by
+  simp only [ownT] at h
+  obtain ⟨⟨d, n⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨k, h2, h⟩ := bind_ok.1 h
+  obtain ⟨da, h3, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  obtain ⟨hk, hsame, -⟩ := List.findIdx?_eq_some_iff_getElem.1 (need_ok.1 h2)
+  refine ⟨d, n, k, da, need_ok.1 h1, ?_, tupleD_ok h3, rfl⟩
+  rw [List.getElem?_eq_getElem hk, OwnKey.eq_of_same hsame]
+
 theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : Code (p.ty.inst args))
     (h : primCode L p args hp = .ok s) : Rel M L (p.ty.inst args) (p.den args hp) s := by
   cases p
@@ -2251,7 +2287,7 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     obtain ⟨d, n, k, de, da, hd, hk, ⟨m, hde⟩, ⟨m', hda⟩, rfl⟩ := effectT_ok h2
     have hd0 := Prim.dataOf hp rfl
     have hi := (rel_term (need_ok.1 h1) x).1 hx
-    refine ⟨d, n, hd, k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩
+    refine ⟨d, n, hd, .inl ⟨k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩⟩
     · have hdi := Ty.isData_inst hd0 (.param 1) rfl
       exact relV_up _ hdi (Ty.down _ hdi x) _ (by rw [Ty.up_down]; exact hi)
     · exact ⟨da, m', _, hf.2.1 ▸ hda, rfl, hf.2.2⟩
@@ -2267,7 +2303,7 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     obtain ⟨d, n, k, de, da, hd, hk, ⟨m, hde⟩, ⟨m', hda⟩, rfl⟩ := effectT_ok h2
     have hd0 := Prim.dataOf hp rfl
     have hi := (rel_term (need_ok.1 h1) x).1 hx
-    refine ⟨d, n, hd, k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩
+    refine ⟨d, n, hd, .inl ⟨k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩⟩
     · have hdi := Ty.isData_inst hd0 (.param 1) rfl
       exact relV_up _ hdi (Ty.down _ hdi x) _ (by rw [Ty.up_down]; exact hi)
     · exact ⟨da, m', _, hf.2.1 ▸ hda, rfl, hf.2.2⟩
@@ -2282,6 +2318,66 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
       simp only [RelV, Term.denote] at hx
       exact ⟨(Val.str.inj hx).symm, hf⟩
     · cases hr
+  case command =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, _, _, _, _, ()⟩ ⟨sx, _, _, _, _, ()⟩ ⟨hx, _⟩ r c hr _
+    change RelV L .str x (Term.denote M sx) at hx
+    dsimp only at hr
+    split at hr
+    · cases hr
+      simp only [RelV, Term.denote] at hx
+      exact (Val.str.inj hx).symm
+    · cases hr
+  case query =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, _, _, _, ()⟩ ⟨sx, _, _, _, ()⟩ ⟨hx, _⟩ r c hr _
+    change RelV L .str x (Term.denote M sx) at hx
+    dsimp only at hr
+    split at hr
+    · cases hr
+      simp only [RelV, Term.denote] at hx
+      exact (Val.str.inj hx).symm
+    · cases hr
+  case sendCommand =>
+    simp only [primCode] at h; cases h
+    intro ⟨cmd, cl, x, f, ()⟩ ⟨sn, scl, sx, cf, ()⟩ ⟨hn, hcl, hx, hf, _⟩ r c hr _
+    change cmd.1.name = sn at hn
+    change ClosureRel M L f cf at hf
+    dsimp only at hr
+    obtain ⟨ct, h0, hr⟩ := bind_ok.1 hr
+    obtain ⟨it, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨t, h2, e⟩ := map_ok.1 hr
+    cases e
+    obtain ⟨d, n, k, da, hd, hk, ⟨m', hda⟩, rfl⟩ := ownT_ok h2
+    have hd0 := Prim.dataOf hp rfl
+    have hc := (rel_term (need_ok.1 h0) cl).1 hcl
+    have hi := (rel_term (need_ok.1 h1) x).1 hx
+    refine ⟨d, n, hd, .inr ⟨k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩⟩
+    · have hdc := Ty.isData_inst hd0 (.param 2) rfl
+      exact relV_up _ hdc (Ty.down _ hdc cl) _ (by rw [Ty.up_down]; exact hc)
+    · have hdi := Ty.isData_inst hd0 (.param 3) rfl
+      exact relV_up _ hdi (Ty.down _ hdi x) _ (by rw [Ty.up_down]; exact hi)
+    · exact ⟨da, m', _, hf.2.1 ▸ hda, rfl, hf.2.2⟩
+  case sendQuery =>
+    simp only [primCode] at h; cases h
+    intro ⟨qry, cl, x, f, ()⟩ ⟨sn, scl, sx, cf, ()⟩ ⟨hn, hcl, hx, hf, _⟩ r c hr _
+    change qry.1.name = sn at hn
+    change ClosureRel M L f cf at hf
+    dsimp only at hr
+    obtain ⟨ct, h0, hr⟩ := bind_ok.1 hr
+    obtain ⟨it, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨t, h2, e⟩ := map_ok.1 hr
+    cases e
+    obtain ⟨d, n, k, da, hd, hk, ⟨m', hda⟩, rfl⟩ := ownT_ok h2
+    have hd0 := Prim.dataOf hp rfl
+    have hc := (rel_term (need_ok.1 h0) cl).1 hcl
+    have hi := (rel_term (need_ok.1 h1) x).1 hx
+    refine ⟨d, n, hd, .inr ⟨k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩⟩
+    · have hdc := Ty.isData_inst hd0 (.param 2) rfl
+      exact relV_up _ hdc (Ty.down _ hdc cl) _ (by rw [Ty.up_down]; exact hc)
+    · have hdi := Ty.isData_inst hd0 (.param 3) rfl
+      exact relV_up _ hdi (Ty.down _ hdi x) _ (by rw [Ty.up_down]; exact hi)
+    · exact ⟨da, m', _, hf.2.1 ▸ hda, rfl, hf.2.2⟩
   all_goals simp [primCode] at h
 
 end

@@ -44,7 +44,7 @@ def encodeReactions (shs : List (PendingShape e)) (ds : List (String × Declared
     let lt ← need "a list that has no term" (Code.term? _ l)
     let (d, nl, dt) ← collD L (.list (.dsl .effect [e])) [.dsl .effect [e]]
     let (dk, _) ← need "a layout without the empty key tuple" (L.find? (.tuple []))
-    let js ← shapeIdxs shs ds ⟨[], .reaction x.name⟩ (L.effectsOf e)
+    let js ← shapeIdxs shs ds ⟨[], .reaction x.name⟩ (L.effectsOf e) (L.ownsOf e)
     let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
     let (S, n') := reactSlots dE dP dk dflt js (slotsOf d dt nl 1 lt) n
     let (rest, n'', c2) ← encodeReactions shs ds dE dP xs records now ev n'
@@ -59,7 +59,7 @@ variable {L : Layout} {M : Model} {e : Ty}
 order at the ids from `n0`, and the id term after them denotes the id after them. -/
 theorem reactSlots_rel {P : List AnySite} (hP : SitesUnique P) (name : String) {shs : List (PendingShape e)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List Nat}
-    (hjs : shapeIdxs shs ds ⟨[], .reaction name⟩ (L.effectsOf e) = .ok js)
+    (hjs : shapeIdxs shs ds ⟨[], .reaction name⟩ (L.effectsOf e) (L.ownsOf e) = .ok js)
     {dE nE dP nP dk nk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP)) (hdk : L.find? (.tuple []) = some (dk, nk)) (dflt : Term) :
     (S : List Slot) → (sv : List (Bool × List Val)) → (effs : List (EffectV e)) → SlotsDen M S sv →
