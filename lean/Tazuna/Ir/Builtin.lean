@@ -202,12 +202,12 @@ def sig : Prim → PrimSig :=
       params := [l "name" .str, l "declares" (.list (.dsl .declared [Ty.nil, Ty.nil, Ty.nil]))],
       ret := .dsl .external [] }
   | .externalCommand =>
-    { name := "external_command", doc := "A command of an external: the external that lists it owns it.",
+    { name := "external_command", doc := "A command of an external, named by a string literal. The external that lists it owns it; check requires one to.",
       tvars := ["input", "output", "rejection"], dataArgs := true,
       params := [l "name" .str], ret := .dsl .externalCommand [a, b, param 2] }
   | .externalQuery =>
     { name := "external_query",
-      doc := "A query of an external; `ensures` says what its answers satisfy. The external that lists it owns it.",
+      doc := "A query of an external, named by a string literal; `ensures` says what its answers satisfy. The external that lists it owns it; check requires one to.",
       tvars := ["input", "output"], dataArgs := true,
       params := [l "name" .str, l "ensures" (kept (.fn [a, b] Ty.rules))],
       ret := .dsl .externalQuery [a, b] }

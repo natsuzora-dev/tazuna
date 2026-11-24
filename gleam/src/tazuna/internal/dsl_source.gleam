@@ -217,14 +217,14 @@ pub fn external(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A command of an external: the external that lists it owns it.
+/// A command of an external, named by a string literal. The external that lists it owns it; check requires one to.
 pub fn external_command(
   name _name: String,
 ) -> ExternalCommand(input, output, rejection) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A query of an external; `ensures` says what its answers satisfy. The external that lists it owns it.
+/// A query of an external, named by a string literal; `ensures` says what its answers satisfy. The external that lists it owns it; check requires one to.
 pub fn external_query(
   name _name: String,
   ensures _ensures: fn(input, output) -> Rules,

@@ -149,14 +149,21 @@ def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
 -- More internal steps than the cascade bound is a fault.
 #guard (step prelude loop (State.init loop) (ev 1)).outcome.summary == "fault cascadeLimit"
 -- Two services that list the same command and query break the owner rule, once for each.
-#guard ((SpecV.illegal prelude ⟨[svc, { svc with name := "other" }], []⟩).filter (·.1 == .owner)).length == 2
+#guard ((SpecV.illegal prelude ⟨[svc, { svc with name := "other" }], []⟩ []).filter (·.1 == .owner)).length == 2
 -- So does a service that declares an external's command.
-#guard ((SpecV.illegal prelude ⟨[{ svc with declares := [.externalCommand "ping" .str .int .str] }], []⟩).filter
+#guard ((SpecV.illegal prelude ⟨[{ svc with declares := [.externalCommand "ping" .str .int .str] }], []⟩ []).filter
   (·.1 == .owner)).length == 1
 /-- The outcome of the last of the inputs, run from the initial state. -/
 def last (v : ServiceV) (is : List (Input v)) : String :=
   (((run prelude v (State.init v) is).2.getLast?).map (·.outcome.summary)).getD ""
--- A request to a command no external declares is a fault.
+-- The handle `pingE` makes: check compares it with what the externals declare.
+#guard (pingE (Γ := [])).handles.map (fun h => (h.kind, h.name)) == [("external command", some "ping")]
+#guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .str]⟩]⟩ (pingE (Γ := [])).handles).filter
+  (·.1 == .unknownHandle)).isEmpty
+#guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .int]⟩]⟩ (pingE (Γ := [])).handles).filter
+  (·.1 == .unknownHandle)).length == 1
+-- Check reports a handle no external declares as Illegal.unknownHandle, so no checked spec reaches this fault: a
+-- request to a command no external declares.
 def undeclared : ServiceV := { svc with declared := [("mail", .externalCommand "ping" .str .int .int)] }
 #guard last undeclared [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int),
   .clock 10] == "fault invalidEffect ping [declared]"
@@ -182,7 +189,7 @@ def specWith (xs : List ExternalV) : SpecV := Prim.spec.den [] rfl (([svc] : Lis
 #guard ((specWith [⟨"text", [.source "moved" .str]⟩, ⟨"clock", [.source "moved" .int]⟩]).services.map fun v =>
   v.subscribes.map (·.source)) == [["clock"]]
 #guard ((specWith [⟨"text", [.source "moved" .str]⟩]).services.map fun v => v.subscribes.map (·.source)) == [[""]]
-#guard ((SpecV.illegal prelude (specWith [⟨"text", [.source "moved" .str]⟩])).filter (·.1 == .unknownSource)).length == 1
+#guard ((SpecV.illegal prelude (specWith [⟨"text", [.source "moved" .str]⟩]) []).filter (·.1 == .unknownSource)).length == 1
 -- Every input has one outcome.
 #guard (run prelude svc s0 [cmd 1 5, cmd 2 5, .clock 3]).2.length == 3
 

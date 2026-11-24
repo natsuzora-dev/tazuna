@@ -31,11 +31,15 @@ inductive Illegal where
   /-- A machine's instance key type has no order the solver can encode (`Ty.orderable`): the canonical order of the
   keys decides which instance reacts, starts and fires first, so the step encoding must compare keys. -/
   | machineKey
+  /-- The program makes an external command or query handle that no external declares with its name and types, or
+  whose name is no string literal: an effect may request only what an external declares, and check sees which. -/
+  | unknownHandle
 deriving Repr, DecidableEq
 
 namespace Illegal
 
-def all : List Illegal := [wireName, owner, unknownSource, creates, wireType, bounds, scenario, rejection, machineKey]
+def all : List Illegal :=
+  [wireName, owner, unknownSource, creates, wireType, bounds, scenario, rejection, machineKey, unknownHandle]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -49,6 +53,7 @@ def name : Illegal → String
   | scenario => "scenario"
   | rejection => "rejection"
   | machineKey => "machineKey"
+  | unknownHandle => "unknownHandle"
 
 end Illegal
 
@@ -260,8 +265,68 @@ def tableProbes (T : List TypeDecl) : (r : Ty) → List (String × r.den0)
 def CreateV.reads {r : Ty} (c : CreateV r) (probes : List (String × r.den0)) : List String :=
   probes.filterMap fun (label, x) => if (c.table.fn (x, ())).1.isEmpty then none else some label
 
-/-- Every broken structure rule of `s`, whose user types are `T`, with a message naming the definition. -/
-def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
+/-- An external command or query handle the program makes: its kind as `DeclaredV.kind` names it, its name when the
+program writes it as a string literal, and its types. -/
+structure HandleSite where
+  kind : String
+  name : Option String
+  types : List Ty
+
+def _root_.Tazuna.Ir.Expr.lit? {G Γ : List Ty} {t : Ty} : Expr G Γ t → Option String
+  | .str s => some s
+  | _ => none
+
+/-- The handle a call makes, when it calls `external_command` or `external_query`. -/
+def handleAt {G Γ : List Ty} {ps : List Ty} {r : Ty} (f : Expr G Γ (.fn ps r)) (args : Exprs G Γ ps) : Option HandleSite :=
+  let name : Option String := match args with
+    | .cons e _ => e.lit?
+    | .nil => none
+  match f with
+  | .prim .externalCommand ts _ => some ⟨"external command", name, ts⟩
+  | .prim .externalQuery ts _ => some ⟨"external query", name, ts⟩
+  | _ => none
+
+section
+variable {G : List Ty}
+
+mutual
+/-- The handles an expression makes, nested functions included. -/
+def Expr.handles {Γ : List Ty} {t : Ty} : Expr G Γ t → List HandleSite
+  | .int _ | .str _ | .var _ | .global _ | .prim .. => []
+  | .ctor _ es | .tuple es => Exprs.handles es
+  | .field _ _ _ e | .index e _ | .not e | .neg e | .lam e => Expr.handles e
+  | .update e p => Expr.handles e ++ Patch.handles p
+  | .call f args => (handleAt f args).toList ++ Expr.handles f ++ Exprs.handles args
+  | .let_ e body | .bin _ e body => Expr.handles e ++ Expr.handles body
+  | .case e cs _ => Expr.handles e ++ Clauses.handles cs
+  | .list items => Items.handles items
+  | .close _ env _ _ body | .closeEffect _ env _ _ body => Exprs.handles env ++ Expr.handles body
+def Exprs.handles {Γ ts : List Ty} : Exprs G Γ ts → List HandleSite
+  | .nil => []
+  | .cons e es => Expr.handles e ++ Exprs.handles es
+def Items.handles {Γ : List Ty} {t : Ty} : Items G Γ t → List HandleSite
+  | .nil => []
+  | .cons e es => Expr.handles e ++ Items.handles es
+def Patch.handles {Γ ts : List Ty} : Patch G Γ ts → List HandleSite
+  | .nil => []
+  | .keep rest => Patch.handles rest
+  | .set e rest => Expr.handles e ++ Patch.handles rest
+def Clauses.handles {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List HandleSite
+  | .nil => []
+  | .cons _ body rest => Expr.handles body ++ Clauses.handles rest
+  | .guarded _ g body rest => Expr.handles g ++ Expr.handles body ++ Clauses.handles rest
+end
+
+end
+
+/-- Every handle a program makes. -/
+def Defs.handles : {G : List Ty} → Defs G → List HandleSite
+  | [], .nil => []
+  | _ :: _, .snoc defs _ body => defs.handles ++ body.handles
+
+/-- Every broken structure rule of `s`, whose user types are `T` and whose program makes `handles`, with a message
+naming the definition. -/
+def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : List (Illegal × String) :=
   let names := s.services.map (·.name) ++ s.externals.map (·.name)
   let topNames := (duplicates names).map fun n => (.wireName, s!"{n} names more than one service or external")
   let entries : List (String × DeclaredV) := s.services.flatMap (fun v => v.declares.map (v.name, ·)) ++
@@ -337,6 +402,12 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
         some (Illegal.rejection, s!"{x.name}.{n}: the rejection type is no custom type or Nil")
       | _ => none
     wireNames ++ owners ++ wireTypes ++ rejections
-  topNames ++ sharedOwners ++ perService ++ perExternal
+  let declared := s.externals.flatMap (·.declares)
+  let unknownHandles := handles.filterMap fun h => match h.name with
+    | none => some (Illegal.unknownHandle, s!"an {h.kind} handle's name is no string literal; write it as one, so check can see which external declares it")
+    | some n =>
+      if declared.any fun d => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome then none
+      else some (Illegal.unknownHandle, s!"no external declares the {h.kind} {n} with these types; add it to an external's declares")
+  topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles
 
 end Tazuna.Ir

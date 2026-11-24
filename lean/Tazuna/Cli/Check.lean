@@ -25,7 +25,8 @@ def loadSpec (root path : String) : IO (Except UInt32 (List Ir.TypeDecl × Ir.Sp
     | .ok j => match j.getObjValAs? String "root" with
       | .ok r =>
         if r == root ++ ".spec" then
-          (Ir.Load.load (.fn [] Ir.Ty.spec) j).map fun (p : Ir.Program (.fn [] Ir.Ty.spec)) => (p.types, p.eval ())
+          (Ir.Load.load (.fn [] Ir.Ty.spec) j).map fun (p : Ir.Program (.fn [] Ir.Ty.spec)) =>
+            (p.types, p.eval (), p.defs.handles)
         else .error ⟨none, none, s!"the IR's root is {r}, but the launcher was asked for {root}"⟩
       | .error e => .error ⟨none, none, s!"no root: {e}"⟩
     | .error e => .error ⟨none, none, s!"not JSON: {e}"⟩
@@ -33,8 +34,8 @@ def loadSpec (root path : String) : IO (Except UInt32 (List Ir.TypeDecl × Ir.Sp
   | .error e =>
     IO.println (invalidIrLine e).compress
     return .error 4
-  | .ok (types, spec) =>
-    match Ir.SpecV.illegal types spec with
+  | .ok (types, spec, handles) =>
+    match Ir.SpecV.illegal types spec handles with
     | [] => return .ok (types, spec)
     | findings =>
       for (k, message) in findings do
