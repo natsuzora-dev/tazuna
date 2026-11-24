@@ -15,27 +15,6 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-mutual
-/-- The term that writes a value as a constant. -/
-def Val.term : Val → Term
-  | .int n => .int n
-  | .bool b => .bool b
-  | .str s => .str s
-  | .ctor d k args => .ctor d k (Val.terms args)
-def Val.terms : List Val → List Term
-  | [] => []
-  | w :: ws => w.term :: Val.terms ws
-end
-
-mutual
-theorem Val.denote_term (M : Model) : (w : Val) → w.term.denote M = w
-  | .int _ | .bool _ | .str _ => rfl
-  | .ctor d k args => by simp only [Val.term, Term.denote, Val.denotes_terms M args]
-theorem Val.denotes_terms (M : Model) : (ws : List Val) → Term.denotes M (Val.terms ws) = ws
-  | [] => rfl
-  | w :: ws => by simp only [Val.terms, Term.denotes, Val.denote_term M w, Val.denotes_terms M ws]
-end
-
 /-- The codes of a query's functions. -/
 structure QueryCode {r c : Ty} (q : QueryV r c) where
   accepts : Code (Ty.fn [q.input] Ty.rules)
@@ -128,14 +107,6 @@ def QueryOut.Rel (M : Model) (L : Layout) {output : Ty} (hout : output.isData = 
 
 section
 variable {M : Model} {L : Layout}
-
-theorem anyT_denote : (ts : List Term) → (anyT ts).denote M = .bool (ts.any fun t => (t.denote M).toBool)
-  | [] => rfl
-  | t :: ts => by simp [anyT, Term.denote, anyT_denote ts, Val.toBool]
-
-theorem allT_denote : (ts : List Term) → (allT ts).denote M = .bool (ts.all fun t => (t.denote M).toBool)
-  | [] => rfl
-  | t :: ts => by simp [allT, Term.denote, allT_denote ts, Val.toBool]
 
 theorem brokenIn_nil (rules : List (Term × Term)) :
     brokenIn M rules = [] ↔ (rules.map (·.2)).all (fun t => (t.denote M).toBool) = true := by

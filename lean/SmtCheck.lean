@@ -251,13 +251,6 @@ def querySvc : ServiceV :=
 def queryLayout : Layout :=
   Layout.addTys (fun _ => 3) {} (recordsT :: .id :: Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys resolveE)
 
-/-- The occupied slots of a table term hold distinct keys, as a table's do. -/
-def keysDistinct (d dt : Nat) (n : Nat) (t : Term) : Term :=
-  let S := slotsOf d dt n 2 t
-  allT ((List.range n).flatMap fun a => (List.range n).filterMap fun b =>
-    if a < b then some (.not (.and (.and (S[a]!).1 (S[b]!).1) (.eq ((S[a]!).2.headD tt) ((S[b]!).2.headD tt))))
-    else none)
-
 /-- The script for one goal on the outcome terms: v0..v3 the state, v4 the caller, v5 the key, v6..v9 the outcome
 terms (caller listed, the rule's holds and name, the output). -/
 def queryScript (goal : List Term) : Except String (Script × QueryOut) := do
@@ -267,16 +260,33 @@ def queryScript (goal : List Term) : Except String (Script × QueryOut) := do
   let S := SymState.vars 0
   let (o, cond) ← (encodeQuery L getQ qc ks S.records S.now S.fresh (.var 4) (.var 5)).mapError
     fun r => s!"no encoding: {repr r}"
-  let some (d, n) := L.find? recordsT | throw "no records datatype"
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | throw "no slot datatype"
+  let some wf := S.wf L (v := querySvc) | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some osrt := L.srt? (Ty.option .int) | throw "no output sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.rules | throw "not one rule"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, .str, .int, .bool, .bool, .str, osrt],
-          asserts := [cond, keysDistinct d dt n S.records, .le (.int 0) S.fresh, .le (.int 0) S.nextId,
+          asserts := [cond, wf,
             .eq (.var 6) o.callerOk, .eq (.var 7) holds, .eq (.var 8) name, .eq (.var 9) o.output] ++ goal,
           shows := List.range 10 }, o)
+
+/-- Goals that only a state that does not decode meets: two occupied slots with one key, a negative counter. The
+well-formedness makes each unsat, and each is sat without it. -/
+def illFormed : List (String × Term) :=
+  match queryLayout.find? recordsT, queryLayout.find? (.tuple [Ty.bool, .int, .int]) with
+  | some (d, n), some (dt, _) =>
+    let S := slotsOf d dt n 2 (.var 0)
+    [("well-formedness excludes a repeated key",
+        .and (.and S[0]!.1 S[1]!.1) (.eq (S[0]!.2.headD tt) (S[1]!.2.headD tt))),
+     ("well-formedness excludes a negative counter", .lt (.var 2) (.int 0))]
+  | _, _ => []
+
+def illFormedScript (withWf : Bool) (goal : Term) : Except String Script := do
+  let L := queryLayout
+  let some wf := (SymState.vars 0).wf L (v := querySvc) | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  pure { datatypes := dts, vars := [rsrt, .int, .int, .int], asserts := (if withWf then [wf] else []) ++ [goal] }
 
 /-- The model of the solver's values, as far as the variables go. -/
 def modelOf (vs : List (Nat × Val)) : Model :=
@@ -365,14 +375,13 @@ def eventScript (goal : List Term) : Except String Script := do
   let ec ← (eventCode L).mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
   let (o, cond) ← (encodeEvent L ec S.records (.var 4)).mapError fun r => s!"no encoding: {repr r}"
-  let some (d, n) := L.find? recordsT | throw "no records datatype"
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | throw "no slot datatype"
+  let some wf := S.wf L (v := eventSvc) | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some esrt := L.srt? evT | throw "no event sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.invariants | throw "not one invariant"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, esrt, rsrt, esrt, .bool, .str],
-         asserts := [cond, keysDistinct d dt n S.records, .le (.int 0) S.fresh, .le (.int 0) S.nextId,
+         asserts := [cond, wf,
            .eq (.var 5) o.records, .eq (.var 6) o.event, .eq (.var 7) holds, .eq (.var 8) name] ++ goal,
          shows := List.range 9 }
 
@@ -416,13 +425,12 @@ def clockScript (goal : List Term) : Except String Script := do
   let S := SymState.vars 0
   let (o, cond) ← (encodeClock L (v := eventSvc) ec.invariants S.records S.now (.var 4)).mapError
     fun r => s!"no encoding: {repr r}"
-  let some (d, n) := L.find? recordsT | throw "no records datatype"
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | throw "no slot datatype"
+  let some wf := S.wf L (v := eventSvc) | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.invariants | throw "not one invariant"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, .bool, .bool, .str],
-         asserts := [cond, keysDistinct d dt n S.records, .le (.int 0) S.fresh, .le (.int 0) S.nextId,
+         asserts := [cond, wf,
            .eq (.var 5) o.forward, .eq (.var 6) holds, .eq (.var 7) name] ++ goal,
          shows := List.range 8 }
 
@@ -487,6 +495,16 @@ def check (z3 : String) : IO Bool := do
           IO.println s!"smt-check: fresh({step}, {index}): the solver's id differs from eval's"; ok := false
       | a => IO.println s!"smt-check: fresh({step}, {index}): {repr a}"; ok := false
     | .error m => IO.println s!"smt-check: fresh({step}, {index}): {m}"; ok := false
+  for (name, goal) in illFormed do
+    for (withWf, want) in [(true, "unsat"), (false, "sat")] do
+      match illFormedScript withWf goal with
+      | .ok script =>
+        let got := match ← solver.run script with
+          | .unsat => "unsat"
+          | .sat _ => "sat"
+          | _ => "unknown"
+        if got != want then IO.println s!"smt-check: {name} (well-formedness {withWf}): {got}"; ok := false
+      | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
   for (name, goal) in queryCases do
     unless ← queryCase solver name goal do ok := false
   for (name, goal) in eventCases do

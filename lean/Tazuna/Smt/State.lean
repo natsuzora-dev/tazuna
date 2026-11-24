@@ -1,4 +1,4 @@
-import Tazuna.Smt.Decode
+import Tazuna.Smt.Wf
 import Tazuna.Semantics.Step
 
 /-! The symbolic state: a service's state between two inputs as terms, so a script can ask about every state at once.
@@ -47,6 +47,11 @@ def SymState.decode (S : SymState) (machines : List (Step.MachineState v.records
   (natOf (S.fresh.denote M)).bind fun fresh =>
   (natOf (S.nextId.denote M)).map fun nextId =>
   { records := Ty.down _ hr r, machines, pending, now, fresh, nextId }
+
+/-- The well-formedness of the symbolic state, which a script asserts: the records decode and the counters are not
+negative. -/
+def SymState.wf (S : SymState) : Option Term :=
+  (wfT L v.records S.records).map fun c => .and c (.and (.le (.int 0) S.fresh) (.le (.int 0) S.nextId))
 
 /-- The values of the state's data, in the order of `SymState.vars`. -/
 def embedState (s : State v) : Option (List Val) :=
@@ -112,6 +117,35 @@ theorem decode_embedState (b : Nat) (s : State v) (vals : List Val) (h : embedSt
   simp only [List.getElem_cons_zero, List.getElem_cons_succ, Nat.add_zero] at h0 h1 h2 h3
   simp only [SymState.decode, SymState.vars, Term.denote, h0, h1, h2, h3, decode_embed _ _ _ hrec, Option.bind_some,
     intOf, natOf, Int.ofNat_eq_natCast, Int.natCast_nonneg, ite_true, Int.toNat_natCast, Option.map_some, Ty.down_up]
+
+/-- The symbolic state's well-formedness characterizes the states it decodes to: for values of the state's sorts it
+holds exactly when they decode, so a model of a script that asserts it is a real state, and no state is lost. -/
+theorem wf_decode {S : SymState} {c : Term} (hc : S.wf L (v := v) = some c)
+    (hs : Sorted L v.records (S.records.denote M)) (hnow : ∃ n, S.now.denote M = .int n)
+    (hfr : ∃ n, S.fresh.denote M = .int n) (hni : ∃ n, S.nextId.denote M = .int n)
+    (ms : List (Step.MachineState v.records v.event)) (ps : Step.Bag (Step.Pending v.event)) :
+    Holds M c ↔ (S.decode M L hr ms ps).isSome = true := by
+  obtain ⟨cr, hcr, rfl⟩ := Option.map_eq_some_iff.1 hc
+  obtain ⟨now, hnow⟩ := hnow
+  obtain ⟨fr, hfr⟩ := hfr
+  obtain ⟨ni, hni⟩ := hni
+  have hw := wf_iff (M := M) v.records S.records cr hcr hs
+  rw [holds_and, holds_and, hw]
+  simp only [Holds, Term.denote, hfr, hni, Val.toInt, Val.toBool, decide_eq_true_eq]
+  simp only [SymState.decode, hnow, hfr, hni, intOf, natOf, Option.bind_some]
+  cases decodeV L v.records (S.records.denote M) <;> simp
+  by_cases h1 : 0 ≤ fr <;> by_cases h2 : 0 ≤ ni <;> simp [h1, h2]
+
+/-- Every state a model decodes to satisfies the well-formedness, embedded states among them. -/
+theorem wf_of_decodeState {S : SymState} {c : Term} (hc : S.wf L (v := v) = some c)
+    {ms : List (Step.MachineState v.records v.event)} {ps : Step.Bag (Step.Pending v.event)} {s : State v}
+    (h : S.decode M L hr ms ps = some s) : Holds M c := by
+  obtain ⟨r, hrec, h⟩ := bind_some.1 h
+  obtain ⟨now, hnow, h⟩ := bind_some.1 h
+  obtain ⟨fr, hfr, h⟩ := bind_some.1 h
+  obtain ⟨ni, hni, _⟩ := map_some.1 h
+  exact (wf_decode (hr := hr) hc (decode_sorted _ _ r hrec) ⟨now, intOf_eq hnow⟩ ⟨_, natOf_eq hfr⟩ ⟨_, natOf_eq hni⟩ ms ps).2
+    (by simp only [SymState.decode, hrec, hnow, hfr, hni, Option.bind_some, Option.map_some, Option.isSome_some])
 
 /-- T3 for a query's input: the decoded caller and input are the values the model's values code. -/
 theorem decode_query {hc : v.caller.isData = true} {hin hq he} {i : Fin v.queries.length} {sc si : Term}
