@@ -1,11 +1,15 @@
 import Tazuna.Semantics.Eval
 import Tazuna.Smt.Term
 
-/-! The encoding of typed IR expressions as SMT terms. It covers a fragment and refuses everything else with a reason,
-never approximating: Int with Gleam's arithmetic (truncating `/` and `%`, and zero for a zero divisor), Bool, and
-String with `==`, `!=` and `<>` concatenation, whose literals must lie in SMT-LIB's string domain
-(code points up to U+2FFFF). `encode_agrees` (T1) proves that in every model, an encoded expression denotes what
-`eval` computes. -/
+/-! The encoding of typed IR expressions as SMT terms. It follows `eval` clause by clause: a value of a first-order
+type is coded as a term, a list (always a literal of known length) as a list of codes, and a function as a Lean
+function on codes, so lambdas, calls, globals and built-ins encode the way they evaluate. Each code comes with a
+condition, a Bool term that holds when no collection outgrew the slots its layout gives it; a caller states it as
+the bound it checks within. Whatever has no exact encoding is refused with a reason, never approximated.
+
+Types become sorts by a `Layout`: Int, String and Date are SMT Ints and Strings, Bool is SMT Bool, and every other
+first-order type is a datatype the layout lists. `encode_agrees` (T1) proves that in every model where the condition
+holds, the code denotes what `eval` computes. -/
 
 namespace Tazuna.Smt
 
@@ -19,16 +23,82 @@ inductive Refusal where
   | outside (what : String)
 deriving Repr
 
-def _root_.Tazuna.Ir.Var.idx : {Γ : List Ty} → {t : Ty} → Var Γ t → Nat
-  | _, _, .here => 0
-  | _, _, .there v => v.idx + 1
+/-- The datatypes a script declares: each type in the list is datatype `D<i>` by its position, with the number of
+slots it holds when it is a bag or a table. -/
+structure Layout where
+  types : List (Ty × Nat) := []
 
-/-- The SMT sort of a type in the fragment. -/
-def Ty.srt? (t : Ty) : Option Srt :=
-  match t with
-  | .int => some .int
-  | .str => some .str
-  | t => if (Ty.same t Ty.bool).isSome then some .bool else none
+/-- The datatype index and slot count of a type. -/
+def Layout.find? (L : Layout) (t : Ty) : Option (Nat × Nat) :=
+  (L.types.zipIdx.find? fun ((u, _), _) => (Ty.same u t).isSome).map fun ((_, n), d) => (d, n)
+
+/-- Evidence that an ADT's variants are Bool's. ADT 0 is Bool in every program's type table. -/
+def boolVs? : (vs : List (List Ty)) → Option (PLift (vs = [[], []]))
+  | [[], []] => some ⟨rfl⟩
+  | _ => none
+
+mutual
+/-- How a value of a type is coded: a term for first-order types, codes for a list literal's items, a Lean function
+on codes for a function. -/
+def Code : Ty → Type
+  | .fn ps r => Codes ps → Except Refusal (Code r × Term)
+  | .list t => List (Code t)
+  | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .date | .id | .dsl .. => Term
+def Codes : List Ty → Type
+  | [] => Unit
+  | t :: ts => Code t × Codes ts
+end
+
+/-- A code with its condition, or why there is none. -/
+scoped notation:max "Enc " α:max => Except Refusal (α × Term)
+
+/-- Each global's code. -/
+def Encs : List Ty → Type
+  | [] => Unit
+  | t :: ts => Enc (Code t) × Encs ts
+
+def tt : Term := .bool true
+
+/-- Conjunction, leaving out a `true`. -/
+def andT : Term → Term → Term
+  | .bool true, b => b
+  | a, .bool true => a
+  | a, b => .and a b
+
+def Code.term? : (t : Ty) → Code t → Option Term
+  | .fn .., _ | .list _, _ => none
+  | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
+  | .dsl .., s => some s
+
+def Code.ofTerm? : (t : Ty) → Term → Option (Code t)
+  | .fn .., _ | .list _, _ => none
+  | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
+  | .dsl .., s => some s
+
+def Codes.terms? : (ts : List Ty) → Codes ts → Option (List Term)
+  | [], () => some []
+  | t :: ts, (s, ss) => do pure ((← Code.term? t s) :: (← Codes.terms? ts ss))
+
+def Codes.ofTerms? : (ts : List Ty) → List Term → Option (Codes ts)
+  | [], [] => some ()
+  | t :: ts, s :: ss => do pure ((← Code.ofTerm? t s), (← Codes.ofTerms? ts ss))
+  | _, _ => none
+
+/-- `if c then a else b` on codes of first-order types. -/
+def Code.ite? (t : Ty) (c : Term) (a b : Code t) : Option (Code t) := do
+  Code.ofTerm? t (.ite c (← Code.term? t a) (← Code.term? t b))
+
+def Codes.append : {a b : List Ty} → Codes a → Codes b → Codes (a ++ b)
+  | [], _, (), ys => ys
+  | _ :: _, _, (x, xs), ys => (x, Codes.append xs ys)
+
+def _root_.Tazuna.Ir.Var.code : {Γ : List Ty} → {t : Ty} → Var Γ t → Codes Γ → Code t
+  | _ :: _, _, .here, (s, _) => s
+  | _ :: _, _, .there v, (_, ss) => v.code ss
+
+def _root_.Tazuna.Ir.Var.enc : {Γ : List Ty} → {t : Ty} → Var Γ t → Encs Γ → Enc (Code t)
+  | _ :: _, _, .here, (s, _) => s
+  | _ :: _, _, .there v, (_, ss) => v.enc ss
 
 def absT (a : Term) : Term := .ite (.lt a (.int 0)) (.sub (.int 0) a) a
 
@@ -42,7 +112,75 @@ def tmodT (x y : Term) : Term :=
   .ite (.eq y (.int 0)) (.int 0)
     (.ite (.lt x (.int 0)) (.sub (.int 0) (.mod (absT x) (absT y))) (.mod (absT x) (absT y)))
 
-def encodeBin {a b c : Ty} : BinOp a b c → Term → Term → Except Refusal Term
+end Tazuna.Smt
+
+namespace Tazuna.Ir
+
+mutual
+/-- Whether SMT-LIB's `=` on codes is Gleam's `==`: the code of a value is unique, so no bag or table (whose slots
+can hold the same items in another order) and nothing without a term. -/
+def Ty.eqable : Ty → Bool
+  | .int | .str | .date | .id => true
+  | .tuple ts => Ty.eqables ts
+  | .adt 0 _ vs => (Smt.boolVs? vs).isSome
+  | .adt (_ + 1) _ vs => Ty.eqabless vs
+  | .list _ | .fn .. | .param _ | .bag _ | .table .. | .dsl .. => false
+def Ty.eqables : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.eqable t && Ty.eqables ts
+def Ty.eqabless : List (List Ty) → Bool
+  | [] => true
+  | ts :: vs => Ty.eqables ts && Ty.eqabless vs
+end
+
+end Tazuna.Ir
+
+namespace Tazuna.Smt
+
+open Tazuna.Ir
+
+def lacks (t : Ty) : Refusal := .outside s!"a type the layout lacks: {repr t}"
+
+/-- Selects field `j` of whichever of the constructors `k`, `k + 1`, ..., `k + n` built `x`; every one of them has
+the field. -/
+def fieldT (d j : Nat) (x : Term) : Nat → Nat → Term
+  | k, 0 => .sel d k j x
+  | k, n + 1 => .ite (.is d k x) (.sel d k j x) (fieldT d j x (k + 1) n)
+
+section
+variable (L : Layout)
+
+/-- Constructor `k` of ADT `i` with the fields' terms. -/
+def adtCtor (i : Nat) (args : List Ty) (vs : List (List Ty)) (k : Nat) (fs : List Term) : Except Refusal Term :=
+  match i with
+  | 0 => match boolVs? vs with
+    | some _ => .ok (.bool (k == 0))
+    | none => .error (.outside "ADT 0 that is not Bool")
+  | i + 1 => match L.find? (.adt (i + 1) args vs) with
+    | some (d, _) => .ok (.ctor d k fs)
+    | none => .error (lacks (.adt (i + 1) args vs))
+
+/-- Whether `x` is constructor `k` of ADT `i`, and its fields' terms. -/
+def adtView (i : Nat) (args : List Ty) (vs : List (List Ty)) (k : Nat) (x : Term) :
+    Except Refusal (Term × List Term) :=
+  match i with
+  | 0 => match boolVs? vs with
+    | some _ => .ok (if k = 0 then x else .not x, [])
+    | none => .error (.outside "ADT 0 that is not Bool")
+  | i + 1 => match L.find? (.adt (i + 1) args vs) with
+    | some (d, _) => .ok (.is d k x, (List.range ((vs[k]?.getD []).length)).map fun j => .sel d k j x)
+    | none => .error (lacks (.adt (i + 1) args vs))
+
+def tupleD (ts : List Ty) : Except Refusal Nat :=
+  match L.find? (.tuple ts) with
+  | some (d, _) => .ok d
+  | none => .error (lacks (.tuple ts))
+
+def need {α : Type} (what : String) : Option α → Except Refusal α
+  | some a => .ok a
+  | none => .error (.outside what)
+
+def encodeBin {a b c : Ty} : BinOp a b c → Code a → Code b → Except Refusal (Code c)
   | .add, x, y => .ok (.add x y)
   | .sub, x, y => .ok (.sub x y)
   | .mul, x, y => .ok (.mul x y)
@@ -55,48 +193,238 @@ def encodeBin {a b c : Ty} : BinOp a b c → Term → Term → Except Refusal Te
   | .and, x, y => .ok (.and x y)
   | .or, x, y => .ok (.or x y)
   | .concat, x, y => .ok (.cat x y)
-  | @BinOp.eq t _, x, y => if (Ty.srt? t).isSome then .ok (.eq x y) else .error (.outside "== on this type")
-  | @BinOp.ne t _, x, y => if (Ty.srt? t).isSome then .ok (.not (.eq x y)) else .error (.outside "<> on this type")
+  | @BinOp.eq t _, x, y =>
+    if t.eqable then do .ok (.eq (← need "==" (Code.term? t x)) (← need "==" (Code.term? t y)))
+    else .error (.outside "== on this type")
+  | @BinOp.ne t _, x, y =>
+    if t.eqable then do .ok (.not (.eq (← need "!=" (Code.term? t x)) (← need "!=" (Code.term? t y))))
+    else .error (.outside "!= on this type")
+
+mutual
+/-- Whether the value coded by `s` matches the pattern, as a Bool term, and the codes of the variables it binds. -/
+def encodePat {t : Ty} {Δ : List Ty} : Pat t Δ → Code t → Except Refusal (Term × Codes Δ)
+  | .wild, _ => .ok (tt, ())
+  | .bind, s => .ok (tt, (s, ()))
+  | .int n, s => .ok (.eq s (.int n), ())
+  | .str lit, s => if inDomain lit then .ok (.eq s (.str lit), ()) else .error (.unencodableString lit)
+  | @Pat.tuple ts _ ps, s => do
+    let d ← tupleD L ts
+    let fs ← need "a tuple item that has no term"
+      (Codes.ofTerms? ts ((List.range ts.length).map fun j => .sel d 0 j s))
+    encodePats ps fs
+  | @Pat.ctor i args vs _ v ps, s => do
+    let (m, fts) ← adtView L i args vs v.val s
+    let fs ← need "a field that has no term" (Codes.ofTerms? (vs.get v) fts)
+    let (m', δ) ← encodePats ps fs
+    pure (andT m m', δ)
+  | .as p, s => do
+    let (m, δ) ← encodePat p s
+    pure (m, Codes.append δ (s, ()))
+def encodePats {ts : List Ty} {Δ : List Ty} : Pats ts Δ → Codes ts → Except Refusal (Term × Codes Δ)
+  | .nil, () => .ok (tt, ())
+  | .cons p ps, (s, ss) => do
+    let (m1, δ1) ← encodePat p s
+    let (m2, δ2) ← encodePats ps ss
+    pure (andT m1 m2, Codes.append δ1 δ2)
+end
+
+variable {G : List Ty} (gs : Encs G)
+
+mutual
+/-- The code of an expression whose variables have the codes `σ`, with its condition. -/
+def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
+  | .int n, _ => .ok (.int n, tt)
+  | .str s, _ => if inDomain s then .ok (.str s, tt) else .error (.unencodableString s)
+  | .var v, σ => .ok (v.code σ, tt)
+  | .global v, _ => v.enc gs
+  | @Expr.ctor _ _ i args vs v es, σ => do
+    let (ss, c) ← encodes es σ
+    let fs ← need "a constructor with a field that has no term" (Codes.terms? _ ss)
+    pure (← adtCtor L i args vs v.val fs, c)
+  | @Expr.field _ _ i args vs ft _ k _ e, σ => do
+    let (x, c) ← encode e σ
+    match i with
+    | 0 => .error (.outside "a field of ADT 0")
+    | i + 1 => match L.find? (.adt (i + 1) args vs) with
+      | some (d, _) => pure (← need "a field that has no term" (Code.ofTerm? ft (fieldT d k x 0 (vs.length - 1))), c)
+      | none => .error (lacks (.adt (i + 1) args vs))
+  | @Expr.index _ _ ts e k, σ => do
+    let (x, c) ← encode e σ
+    let d ← tupleD L ts
+    pure (← need "a tuple item that has no term" (Code.ofTerm? (ts.get k) (.sel d 0 k.val x)), c)
+  | @Expr.update _ _ i args fs e p, σ => do
+    let (x, c) ← encode e σ
+    match i with
+    | 0 => .error (.outside "an update of ADT 0")
+    | i + 1 => match L.find? (.adt (i + 1) args [fs]) with
+      | some (d, _) =>
+        let (ys, c') ← encodePatch p σ (fun j => .sel d 0 j x) 0
+        pure (.ctor d 0 ys, andT c c')
+      | none => .error (lacks (.adt (i + 1) args [fs]))
+  | .call f args, σ => do
+    let (sf, c1) ← encode f σ
+    let (ss, c2) ← encodes args σ
+    let (r, c3) ← sf ss
+    pure (r, andT c1 (andT c2 c3))
+  | .lam body, σ => .ok (fun xs => encode body (Codes.append xs σ), tt)
+  | .let_ e body, σ => do
+    let (s, c1) ← encode e σ
+    let (r, c2) ← encode body (s, σ)
+    pure (r, andT c1 c2)
+  | .case e cs _, σ => do
+    let (s, c1) ← encode e σ
+    match ← encodeClauses cs σ s with
+    | some (r, c2) => pure (r, andT c1 c2)
+    | none => .error (.outside "a case without clauses")
+  | .list items, σ => encodeItems items σ
+  | @Expr.tuple _ _ ts es, σ => do
+    let (ss, c) ← encodes es σ
+    let fs ← need "a tuple with an item that has no term" (Codes.terms? _ ss)
+    pure (.ctor (← tupleD L ts) 0 fs, c)
+  | .bin op l r, σ => do
+    let (x, c1) ← encode l σ
+    let (y, c2) ← encode r σ
+    pure (← encodeBin op x y, andT c1 c2)
+  | .not e, σ => do
+    let (x, c) ← encode e σ
+    pure (.not x, c)
+  | .neg e, σ => do
+    let (x, c) ← encode e σ
+    pure (.sub (.int 0) x, c)
+  | .prim _ _ _, _ => .error (.outside "a built-in")
+def encodes {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Codes Γ → Enc (Codes ts)
+  | .nil, _ => .ok ((), tt)
+  | .cons e es, σ => do
+    let (s, c1) ← encode e σ
+    let (ss, c2) ← encodes es σ
+    pure ((s, ss), andT c1 c2)
+def encodeItems {Γ : List Ty} {t : Ty} : Items G Γ t → Codes Γ → Enc (List (Code t))
+  | .nil, _ => .ok ([], tt)
+  | .cons e es, σ => do
+    let (s, c1) ← encode e σ
+    let (ss, c2) ← encodeItems es σ
+    pure (s :: ss, andT c1 c2)
+/-- The terms of the updated fields, from field `j`; `keep j` is field `j` of the old value. -/
+def encodePatch {Γ : List Ty} {ts : List Ty} : Patch G Γ ts → Codes Γ → (Nat → Term) → Nat → Enc (List Term)
+  | .nil, _, _, _ => .ok ([], tt)
+  | .keep rest, σ, keep, j => do
+    let (ys, c) ← encodePatch rest σ keep (j + 1)
+    pure (keep j :: ys, c)
+  | @Patch.set _ _ t _ e rest, σ, keep, j => do
+    let (s, c1) ← encode e σ
+    let y ← need "an update with a field that has no term" (Code.term? t s)
+    let (ys, c2) ← encodePatch rest σ keep (j + 1)
+    pure (y :: ys, andT c1 c2)
+/-- The clauses' value as a chain of `ite` over their match conditions; `none` when there is no clause. The last
+clause needs no test: exhaustiveness rules out falling past it. -/
+def encodeClauses {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → Codes Γ → Code t →
+    Except Refusal (Option (Code r × Term))
+  | .nil, _, _ => .ok none
+  | .cons p body rest, σ, s => do
+    let (m, δ) ← encodePat L p s
+    let (vb, cb) ← encode body (Codes.append δ σ)
+    match ← encodeClauses rest σ s with
+    | none => pure (some (vb, cb))
+    | some (vr, cr) => pure (some (← need "a case whose value has no term" (Code.ite? r m vb vr), .ite m cb cr))
+  | .guarded p g body rest, σ, s => do
+    let (m, δ) ← encodePat L p s
+    let (vg, cg) ← encode g (Codes.append δ σ)
+    let (vb, cb) ← encode body (Codes.append δ σ)
+    match ← encodeClauses rest σ s with
+    | none => pure (some (vb, andT cg cb))
+    | some (vr, cr) =>
+      pure (some (← need "a case whose value has no term" (Code.ite? r (.and m vg) vb vr),
+        .ite m (andT cg (.ite vg cb cr)) cr))
+end
+
+end
+
+/-- Each global's code, from the ones before it. -/
+def _root_.Tazuna.Ir.Defs.encode (L : Layout) : {G : List Ty} → Defs G → Encs G
+  | [], .nil => ()
+  | _ :: _, .snoc defs _ body => let gs := defs.encode L; (Smt.encode L gs body (), gs)
+
+/-! Layouts for scripts: the datatypes an expression meets, each after the datatypes its fields use. -/
+
+namespace Layout
+
+/-- The layout with `t` as its next datatype, unless it already has it. -/
+def push (L : Layout) (t : Ty) (n : Nat := 0) : Layout :=
+  if (L.find? t).isSome then L else { types := L.types ++ [(t, n)] }
+
+mutual
+/-- The layout with every datatype `t` needs: its fields' types first, so each datatype refers only to earlier
+ones. -/
+def addTy (L : Layout) : Ty → Layout
+  | .tuple ts => (addTys L ts).push (.tuple ts)
+  | .adt 0 a vs => if (boolVs? vs).isSome then L else (addTyss L vs).push (.adt 0 a vs)
+  | .adt (i + 1) a vs => (addTyss L vs).push (.adt (i + 1) a vs)
+  | .id => L.push .id
+  | .list t => addTy L t
+  | .fn ps r => addTy (addTys L ps) r
+  | .int | .str | .date | .param _ | .bag _ | .table .. | .dsl .. => L
+def addTys (L : Layout) : List Ty → Layout
+  | [] => L
+  | t :: ts => addTys (addTy L t) ts
+def addTyss (L : Layout) : List (List Ty) → Layout
+  | [] => L
+  | ts :: vs => addTyss (addTys L ts) vs
+end
+
+/-- The sort that codes values of a first-order type. -/
+def srt? (L : Layout) (t : Ty) : Option Srt :=
+  match t with
+  | .int | .date => some .int
+  | .str => some .str
+  | .adt 0 _ vs => if (boolVs? vs).isSome then some .bool else none
+  | t => (L.find? t).map fun (d, _) => .dt d
+
+/-- The declaration of a layout entry's datatype. -/
+def datatype? (L : Layout) : Ty × Nat → Option Datatype
+  | (.tuple ts, _) => do pure ⟨[← ts.mapM L.srt?]⟩
+  | (.adt _ _ vs, _) => do pure ⟨← vs.mapM (·.mapM L.srt?)⟩
+  | (.id, _) => some ⟨[[.int], [.str]]⟩
+  | _ => none
+
+def datatypes? (L : Layout) : Option (List Datatype) := L.types.mapM L.datatype?
+
+end Layout
 
 section
 variable {G : List Ty}
 
-/-- The term of an expression whose variables `σ` encodes, innermost first. -/
-def encode {Γ : List Ty} {t : Ty} (σ : List Term) : Expr G Γ t → Except Refusal Term
-  | .int n => .ok (.int n)
-  | .str s => if inDomain s then .ok (.str s) else .error (.unencodableString s)
-  | .var v => match σ[v.idx]? with
-    | some x => .ok x
-    | none => .error (.outside "a variable without a term")
-  | .let_ e body => do encode ((← encode σ e) :: σ) body
-  | .bin op l r => do encodeBin op (← encode σ l) (← encode σ r)
-  | .not e => do pure (.not (← encode σ e))
-  | .neg e => do pure (.sub (.int 0) (← encode σ e))
-  | .global _ => .error (.outside "a global definition")
-  | .ctor .. => .error (.outside "a constructor")
-  | .field .. => .error (.outside "a field")
-  | .index .. => .error (.outside "a tuple index")
-  | .update .. => .error (.outside "a record update")
-  | .call .. => .error (.outside "a call")
-  | .lam .. => .error (.outside "a function")
-  | .case .. => .error (.outside "a case")
-  | .list .. => .error (.outside "a list")
-  | .tuple .. => .error (.outside "a tuple")
-  | .prim .. => .error (.outside "a built-in as a value")
-
+mutual
+/-- The type of every node of an expression, which a layout for it must cover. -/
+def Expr.tys {Γ : List Ty} {t : Ty} : Expr G Γ t → List Ty
+  | .ctor _ es => t :: Exprs.tys es
+  | .field _ _ _ e => t :: Expr.tys e
+  | .index e _ => t :: Expr.tys e
+  | .update e p => t :: Expr.tys e ++ Patch.tys p
+  | .call f args => t :: Expr.tys f ++ Exprs.tys args
+  | .lam body => t :: Expr.tys body
+  | .let_ e body => t :: Expr.tys e ++ Expr.tys body
+  | @Expr.case _ _ u _ _ e cs _ => t :: u :: Expr.tys e ++ Clauses.tys cs
+  | .list items => t :: Items.tys items
+  | .tuple es => t :: Exprs.tys es
+  | .bin _ l r => t :: Expr.tys l ++ Expr.tys r
+  | .not e | .neg e => t :: Expr.tys e
+  | .int _ | .str _ | .var _ | .global _ | .prim .. => [t]
+def Exprs.tys {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → List Ty
+  | .nil => []
+  | .cons e es => Expr.tys e ++ Exprs.tys es
+def Items.tys {Γ : List Ty} {t : Ty} : Items G Γ t → List Ty
+  | .nil => []
+  | .cons e es => Expr.tys e ++ Items.tys es
+def Patch.tys {Γ : List Ty} {ts : List Ty} : Patch G Γ ts → List Ty
+  | .nil => []
+  | .keep rest => Patch.tys rest
+  | .set e rest => Expr.tys e ++ Patch.tys rest
+def Clauses.tys {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List Ty
+  | .nil => []
+  | .cons _ body rest => Expr.tys body ++ Clauses.tys rest
+  | .guarded _ g body rest => Expr.tys g ++ Expr.tys body ++ Clauses.tys rest
 end
 
-/-! T1. -/
-
-/-- A value of `t` and the SMT value that encodes it. -/
-def Rel : (t : Ty) → t.den → Val → Prop
-  | .int, x, v => v = .int x
-  | .str, x, v => v = .str x
-  | .adt i a vs, x, v => ∃ h : Ty.adt i a vs = Ty.bool, v = .bool (Ty.toBool (cast (congrArg Ty.den h) x))
-  | _, _, _ => False
-
-/-- Each variable's term denotes the variable's value. -/
-def EnvRel (M : Model) {Γ : List Ty} (σ : List Term) (ρ : Ty.dens Γ) : Prop :=
-  ∀ (t : Ty) (v : Var Γ t), ∃ x, σ[v.idx]? = some x ∧ Rel t (v.get ρ) (x.denote M)
+end
 
 end Tazuna.Smt
