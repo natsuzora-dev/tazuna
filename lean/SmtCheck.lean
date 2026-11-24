@@ -334,7 +334,7 @@ def queryCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
       let L := queryLayout
       let o : QueryOut := ⟨.var 6, [(.var 8, .var 7)], .var 9⟩
       let i : Fin querySvc.queries.length := ⟨0, by decide⟩
-      match (SymState.vars 0).decode M L (v := querySvc) rfl [] [],
+      match (SymState.vars 0).decode M L (v := querySvc) rfl prelude [],
           (SymInput.query i (.var 4) (.var 5)).decode M L (v := querySvc) rfl (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl)
             (fun j => j.elim0) with
       | some s, some x =>
@@ -424,7 +424,7 @@ def eventCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
     | .sat vs =>
       let M := modelOf vs
       let L := eventLayout
-      match (SymState.vars 0).decode M L (v := eventSvc) rfl [] [],
+      match (SymState.vars 0).decode M L (v := eventSvc) rfl prelude [],
           (SymInput.event eventI (.var 4)).decode M L (v := eventSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
             (fun | ⟨0, _⟩ => rfl) with
       | some s, some x =>
@@ -467,7 +467,7 @@ def clockCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
     | .sat vs =>
       let M := modelOf vs
       let L := eventLayout
-      match (SymState.vars 0).decode M L (v := eventSvc) rfl [] [],
+      match (SymState.vars 0).decode M L (v := eventSvc) rfl prelude [],
           (SymInput.clock (.var 4)).decode M L (v := eventSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
             (fun | ⟨0, _⟩ => rfl) with
       | some s, some x@(.clock time) =>
@@ -566,7 +566,7 @@ def commandCase (solver : Solver) (name : String) (goal : List Term) : IO Bool :
       let M := modelOf vs
       let L := commandLayout
       let i : Fin commandSvc.commands.length := ⟨0, by decide⟩
-      match (SymState.vars 0).decode M L (v := commandSvc) rfl [] [],
+      match (SymState.vars 0).decode M L (v := commandSvc) rfl prelude [],
           (SymInput.command i (.var 4) (.var 5)).decode M L (v := commandSvc) rfl (fun | ⟨0, _⟩ => rfl)
             (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl) with
       | some s, some x =>
@@ -679,7 +679,7 @@ def pendingCheck (solver : Solver) : IO Bool := do
   | .ok script =>
     match ← solver.run script with
     | .sat vs =>
-      match (SymState.vars 0).decode (modelOf vs) pendingLayout (v := pendingSvc) rfl [] pendingShapes with
+      match (SymState.vars 0).decode (modelOf vs) pendingLayout (v := pendingSvc) rfl prelude pendingShapes with
       | some s =>
         -- The decoded request runs the site's source at the captured value: answering 5 yields [5 + 7].
         let rate := s.pending.find? (·.id == 3)
@@ -693,6 +693,80 @@ def pendingCheck (solver : Solver) : IO Bool := do
   for (name, g) in illFormed do
     for (withWf, want) in [(true, "unsat"), (false, "sat")] do
       match pendingScript withWf [g] with
+      | .ok script =>
+        let got := match ← solver.run script with
+          | .unsat => "unsat"
+          | .sat _ => "sat"
+          | _ => "unknown"
+        if got != want then IO.println s!"smt-check: {name} (well-formedness {withWf}): {got}"; ok := false
+      | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
+  return ok
+
+/-! A machine's instances as a symbolic table, for `decode_state` and `wf_decode`: one machine keyed by Int with Int
+states. A model's table decodes to instances in key order, whatever slots hold them, and a key twice is not
+well-formed. -/
+
+def doorM : MachineV recordsT .int :=
+  { name := "door", key := .int, state := .int, instances := .closed (.lam (.call (.prim .tableKeys [.int, .int] rfl)
+      (.cons (.var .here) .nil))), initial := (0 : Int), on := .closed (.lam (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil)),
+    after := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)), effect := fun _ _ _ _ => none,
+    invariants := .closed (.lam (.list .nil)) }
+
+def doorSvc : ServiceV := { querySvc with name := "d", queries := [], machines := [doorM] }
+
+def doorLayout : Layout := Layout.addTys (fun _ => 3) {} [recordsT, doorM.table]
+
+def doorScript (withWf : Bool) (goal : List Term) : Except String Script := do
+  let L := doorLayout
+  let some wf := (SymState.vars 0 1).wf L (v := doorSvc) [] | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some msrt := L.srt? doorM.table | throw "no instance table sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  pure { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, msrt], asserts := (if withWf then [wf] else []) ++ goal,
+         shows := List.range 6 }
+
+/-- Goals on the instance table in v5: slot 0 holds key 3 in state 1 with a timer due at 10 for state 2, slot 1 key 1
+in state 0 with no timer; with one key in two slots the well-formedness makes the goal unsat. -/
+def doorGoals : Option (List Term × List (String × Term)) := do
+  let (d, n) ← doorLayout.find? doorM.table
+  let (dt, _) ← doorLayout.find? (.tuple [Ty.bool, .int, instEntry .int])
+  let (de, _) ← doorLayout.find? (instEntry .int)
+  let (dopt, _) ← doorLayout.find? (Ty.option (.tuple [.int, .int]))
+  let (dtm, _) ← doorLayout.find? (.tuple [.int, .int])
+  let S := slotsOf d dt n 2 (.var 5)
+  let key (j : Nat) := S[j]!.2.headD tt
+  let entry (j : Nat) := S[j]!.2.getD 1 tt
+  let timer (j : Nat) := Term.sel de 0 1 (entry j)
+  pure ([S[0]!.1, S[1]!.1, .not S[2]!.1, .eq (key 0) (.int 3), .eq (.sel de 0 0 (entry 0)) (.int 1),
+      .is dopt 0 (timer 0), .eq (.sel dtm 0 0 (.sel dopt 0 0 (timer 0))) (.int 10),
+      .eq (.sel dtm 0 1 (.sel dopt 0 0 (timer 0))) (.int 2),
+      .eq (key 1) (.int 1), .eq (.sel de 0 0 (entry 1)) (.int 0), .is dopt 1 (timer 1)],
+    [("well-formedness excludes an instance key twice", .and (.and S[0]!.1 S[1]!.1) (.eq (key 0) (key 1)))])
+
+def intDen : (t : Ty) → t.den0 → Option Int
+  | .int, x => some x
+  | _, _ => none
+
+def doorCheck (solver : Solver) : IO Bool := do
+  let some (goal, illFormed) := doorGoals | IO.println "smt-check: instances: no layout"; return false
+  let mut ok := true
+  match doorScript true goal with
+  | .error m => IO.println s!"smt-check: instances: {m}"; ok := false
+  | .ok script =>
+    match ← solver.run script with
+    | .sat vs =>
+      match (SymState.vars 0 1).decode (modelOf vs) doorLayout (v := doorSvc) rfl prelude [] with
+      | some s =>
+        -- Slot 0 holds key 3 and slot 1 key 1, yet the instances come in key order.
+        let insts := s.machines.map fun ⟨_, is⟩ => is.map fun i =>
+          (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+        if insts != [[(some 1, some 0, none), (some 3, some 1, some (10, some 2))]] then
+          IO.println s!"smt-check: instances: the decoded instances differ from the model: {insts}"; ok := false
+      | none => IO.println "smt-check: instances: the model does not decode"; ok := false
+    | a => IO.println s!"smt-check: instances: {repr a}"; ok := false
+  for (name, g) in illFormed do
+    for (withWf, want) in [(true, "unsat"), (false, "sat")] do
+      match doorScript withWf [g] with
       | .ok script =>
         let got := match ← solver.run script with
           | .unsat => "unsat"
@@ -749,7 +823,7 @@ def unmatchedScript : Except String Script := do
 def answerAgrees (vs : List (Nat × Val)) (unmatched : Bool) : Bool :=
   let M := modelOf vs
   let L := pendingLayout
-  match (SymState.vars 0).decode M L (v := pendingSvc) rfl [] pendingShapes, natOf (M.vars 5), intOf (M.vars 6) with
+  match (SymState.vars 0).decode M L (v := pendingSvc) rfl prelude pendingShapes, natOf (M.vars 5), intOf (M.vars 6) with
   | some s, some to, some value =>
     let r := step prelude pendingSvc s (.answer to ⟨.int, value⟩)
     if unmatched then r.outcome.summary == s!"fault answerUnmatched {to}" && r.state.pending.length == s.pending.length
@@ -852,7 +926,7 @@ def boundScript (atMostB : Int) (withLimits : Bool) (goal : List Term) : Except 
 def boundAgrees (vs : List (Nat × Val)) (reached : Bool) : Bool :=
   let M := modelOf vs
   let L := boundLayout
-  match (SymState.vars 0).decode M L (v := boundSvc) rfl [] [],
+  match (SymState.vars 0).decode M L (v := boundSvc) rfl prelude [],
       (SymInput.event boundI (.var 4)).decode M L (v := boundSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
         (fun | ⟨0, _⟩ => rfl) with
   | some s, some x =>
@@ -951,6 +1025,7 @@ def check (z3 : String) : IO Bool := do
   for (name, goal) in commandCases do
     unless ← commandCase solver name goal do ok := false
   unless ← pendingCheck solver do ok := false
+  unless ← doorCheck solver do ok := false
   unless ← answerCheck solver do ok := false
   unless ← boundCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.

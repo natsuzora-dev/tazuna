@@ -31,9 +31,6 @@ inductive Wire where
   | obj (kvs : List (String × Wire))
 deriving Inhabited, Repr
 
-instance {κ ν : Type} (f : κ → κ → Bool) (xs : List (κ × ν)) : Decidable (KeysUnique f xs) := by
-  unfold KeysUnique; infer_instance
-
 /-- The keys a variant's fields sit under: their labels, or their positions. -/
 def fieldKeys (fs : List Field) : List String :=
   fs.zipIdx.map fun (f, k) => f.label.getD (toString k)

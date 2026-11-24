@@ -10,6 +10,9 @@ namespace Tazuna.Ir
 def KeysUnique {κ ν : Type} (f : κ → κ → Bool) (xs : List (κ × ν)) : Prop :=
   xs.Pairwise fun a b => f a.1 b.1 = false ∧ f b.1 a.1 = false
 
+instance {κ ν : Type} (f : κ → κ → Bool) (xs : List (κ × ν)) : Decidable (KeysUnique f xs) := by
+  unfold KeysUnique; infer_instance
+
 /-- How often a value occurs, by the equality `f`. -/
 def countBy {α : Type} (f : α → α → Bool) (x : α) (xs : List α) : Nat := (xs.filter (f x)).length
 
