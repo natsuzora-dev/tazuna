@@ -6,31 +6,79 @@ parametric body never inspects. -/
 
 namespace Tazuna.Ir
 
+/-- A key-value list whose keys differ pairwise by `f`, checked in both directions. -/
+def KeysUnique {κ ν : Type} (f : κ → κ → Bool) (xs : List (κ × ν)) : Prop :=
+  xs.Pairwise fun a b => f a.1 b.1 = false ∧ f b.1 a.1 = false
+
+/-- How often a value occurs, by the equality `f`. -/
+def countBy {α : Type} (f : α → α → Bool) (x : α) (xs : List α) : Nat := (xs.filter (f x)).length
+
+/-- Multiset equality by `f`: as many items, each occurring as often in both. -/
+def bagBeq {α : Type} (f : α → α → Bool) (xs ys : List α) : Bool :=
+  xs.length == ys.length && xs.all fun x => countBy f x xs == countBy f x ys
+
+def lookupBy {κ ν : Type} (f : κ → κ → Bool) (k : κ) : List (κ × ν) → Option ν
+  | [] => none
+  | (k', v) :: rest => if f k k' then some v else lookupBy f k rest
+
+/-- Map equality: the same number of keys, and each key of one has an equal value in the other. -/
+def tableBeq {κ ν : Type} (fk : κ → κ → Bool) (fv : ν → ν → Bool) (xs ys : List (κ × ν)) : Bool :=
+  xs.length == ys.length && xs.all fun (k, v) => match lookupBy fk k ys with
+    | some w => fv v w
+    | none => false
+
+def listBeq {α : Type} (f : α → α → Bool) : List α → List α → Bool
+  | [], [] => true
+  | x :: xs, y :: ys => f x y && listBeq f xs ys
+  | _, _ => false
+
+/-- A carrier type with Gleam's `==` on it. -/
+abbrev Sem := (α : Type) × (α → α → Bool)
+
+def Sem.pair (a b : Sem) : Sem := ⟨a.1 × b.1, fun x y => a.2 x.1 y.1 && b.2 x.2 y.2⟩
+
+def Sem.sum (a b : Sem) : Sem := ⟨a.1 ⊕ b.1, fun
+  | .inl x, .inl y => a.2 x y
+  | .inr x, .inr y => b.2 x y
+  | _, _ => false⟩
+
+def Sem.table (k v : Sem) : Sem :=
+  ⟨{ xs : List (k.1 × v.1) // KeysUnique k.2 xs }, fun x y => tableBeq k.2 v.2 x.1 y.1⟩
+
 mutual
-def Ty.den : Ty → Type
-  | .int => Int
-  | .str => String
-  | .list t => List t.den
-  | .tuple ts => Ty.dens ts
-  | .fn ps r => Ty.dens ps → r.den
-  | .adt _ _ vs => Ty.alts vs
-  | .param _ => Unit
+/-- What a type means and what `==` means on it, in one recursion: a table's keys are unique by the equality of its
+key type, so the carrier of a table needs that equality. -/
+def Ty.sem : Ty → Sem
+  | .int => ⟨Int, fun x y => @BEq.beq Int _ x y⟩
+  | .str => ⟨String, fun x y => @BEq.beq String _ x y⟩
+  | .list t => ⟨List (Ty.sem t).1, listBeq (Ty.sem t).2⟩
+  | .tuple ts => Ty.sems ts
+  -- Functions never meet `==`, since `==` needs a comparable type.
+  | .fn ps r => ⟨(Ty.sems ps).1 → (Ty.sem r).1, fun _ _ => false⟩
+  | .adt _ _ vs => Ty.semAlts vs
+  | .param _ => ⟨Unit, fun _ _ => true⟩
   -- Order carries no meaning: every operation on bags gives equal results for reordered lists.
-  | .bag t => List t.den
-  -- Each key at most once, which every operation on tables keeps.
-  | .table k v => List (k.den × v.den)
+  | .bag t => ⟨List (Ty.sem t).1, bagBeq (Ty.sem t).2⟩
+  -- Each key at most once by construction, so equality of tables is equality of finite maps.
+  | .table k v => Sem.table (Ty.sem k) (Ty.sem v)
   -- Days from an arbitrary origin.
-  | .date => Int
-  | .id => Nat
+  | .date => ⟨Int, fun x y => @BEq.beq Int _ x y⟩
+  | .id => ⟨Nat, fun x y => @BEq.beq Nat _ x y⟩
 /-- Values of the types `ts`, in order. -/
-def Ty.dens : List Ty → Type
-  | [] => Unit
-  | t :: ts => t.den × Ty.dens ts
+def Ty.sems : List Ty → Sem
+  | [] => ⟨Unit, fun _ _ => true⟩
+  | t :: ts => Sem.pair (Ty.sem t) (Ty.sems ts)
 /-- One variant's fields: the first variant's on the left. -/
-def Ty.alts : List (List Ty) → Type
-  | [] => Empty
-  | fs :: vs => Ty.dens fs ⊕ Ty.alts vs
+def Ty.semAlts : List (List Ty) → Sem
+  | [] => ⟨Empty, fun _ _ => false⟩
+  | fs :: vs => Sem.sum (Ty.sems fs) (Ty.semAlts vs)
 end
+
+abbrev Ty.den (t : Ty) : Type := t.sem.1
+abbrev Ty.dens (ts : List Ty) : Type := (Ty.sems ts).1
+abbrev Ty.alts (vs : List (List Ty)) : Type := (Ty.semAlts vs).1
+/-- Gleam's `==`: structural. -/
+abbrev Ty.deq (t : Ty) : t.den → t.den → Bool := t.sem.2
 
 def Var.get : {Γ : List Ty} → {t : Ty} → Var Γ t → Ty.dens Γ → t.den
   | _ :: _, _, .here, (x, _) => x
@@ -95,59 +143,15 @@ def Ty.toBool : Ty.bool.den → Bool
   | .inl _ => true
   | .inr _ => false
 
-/-- How often a value occurs, by the equality `f`. -/
-def countBy {α : Type} (f : α → α → Bool) (x : α) (xs : List α) : Nat := (xs.filter (f x)).length
-
-/-- Multiset equality by `f`: as many items, each occurring as often in both. -/
-def bagBeq {α : Type} (f : α → α → Bool) (xs ys : List α) : Bool :=
-  xs.length == ys.length && xs.all fun x => countBy f x xs == countBy f x ys
-
-def lookupBy {κ ν : Type} (f : κ → κ → Bool) (k : κ) : List (κ × ν) → Option ν
-  | [] => none
-  | (k', v) :: rest => if f k k' then some v else lookupBy f k rest
-
-/-- Map equality: the same number of keys, and each key of one has an equal value in the other. -/
-def tableBeq {κ ν : Type} (fk : κ → κ → Bool) (fv : ν → ν → Bool) (xs ys : List (κ × ν)) : Bool :=
-  xs.length == ys.length && xs.all fun (k, v) => match lookupBy fk k ys with
-    | some w => fv v w
-    | none => false
-
-def listBeq {α : Type} (f : α → α → Bool) : List α → List α → Bool
-  | [], [] => true
-  | x :: xs, y :: ys => f x y && listBeq f xs ys
-  | _, _ => false
-
-mutual
-/-- Gleam's `==`: structural. Functions never meet it, since `==` needs a comparable type. -/
-def Ty.deq : (t : Ty) → t.den → t.den → Bool
-  | .int, x, y => @BEq.beq Int _ x y
-  | .str, x, y => @BEq.beq String _ x y
-  | .list t, x, y => listBeq (Ty.deq t) x y
-  | .tuple ts, x, y => Ty.deqs ts x y
-  | .fn .., _, _ => false
-  | .adt _ _ vs, x, y => Ty.deqAlts vs x y
-  | .param _, _, _ => true
-  | .bag t, x, y => bagBeq (Ty.deq t) x y
-  | .table k v, x, y => tableBeq (Ty.deq k) (Ty.deq v) x y
-  | .date, x, y => @BEq.beq Int _ x y
-  | .id, x, y => @BEq.beq Nat _ x y
-def Ty.deqs : (ts : List Ty) → Ty.dens ts → Ty.dens ts → Bool
-  | [], _, _ => true
-  | t :: ts, (x, xs), (y, ys) => Ty.deq t x y && Ty.deqs ts xs ys
-def Ty.deqAlts : (vs : List (List Ty)) → Ty.alts vs → Ty.alts vs → Bool
-  | fs :: _, .inl x, .inl y => Ty.deqs fs x y
-  | _ :: vs, .inr x, .inr y => Ty.deqAlts vs x y
-  | _ :: _, _, _ => false
-end
-
 
 /-- `==` on bags ignores order: reordering a bag gives an equal bag. -/
 theorem Ty.deq_bag_perm (t : Ty) {xs ys : List t.den} (h : xs.Perm ys) : Ty.deq (.bag t) xs ys = true := by
-  simp only [Ty.deq, bagBeq, countBy, Bool.and_eq_true, beq_iff_eq, List.all_eq_true]
+  show bagBeq (Ty.deq t) xs ys = true
+  simp only [bagBeq, countBy, Bool.and_eq_true, beq_iff_eq, List.all_eq_true]
   exact ⟨h.length_eq, fun x _ => (h.filter _).length_eq⟩
 
 /-- `==` on Int and String is Lean's equality. -/
-theorem Ty.deq_int (a b : Int) : Ty.deq .int a b = true ↔ a = b := by simp [Ty.deq]
-theorem Ty.deq_str (a b : String) : Ty.deq .str a b = true ↔ a = b := by simp [Ty.deq]
+theorem Ty.deq_int (a b : Int) : Ty.deq .int a b = true ↔ a = b := by simp [Ty.deq, Ty.sem]
+theorem Ty.deq_str (a b : String) : Ty.deq .str a b = true ↔ a = b := by simp [Ty.deq, Ty.sem]
 
 end Tazuna.Ir

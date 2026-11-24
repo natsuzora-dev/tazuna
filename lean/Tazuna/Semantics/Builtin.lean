@@ -2,8 +2,8 @@ import Tazuna.Ir.Builtin
 import Tazuna.Semantics.Gleam
 import Tazuna.Semantics.Value
 
-/-! The meaning of each built-in. Bags are lists whose order no operation reveals; tables are lists of pairs with each
-key at most once. Every function here is generic over the values it holds, so the meaning of a built-in is the same at
+/-! The meaning of each built-in. Bags are lists whose order no operation reveals; tables are lists of pairs whose keys
+differ, which the type of a table demands. Every function here is generic over the values it holds, so the meaning of a built-in is the same at
 every instance. -/
 
 namespace Tazuna.Ir
@@ -21,11 +21,34 @@ def pick {α : Type} (wins : Int → Int → Bool) (key : α → Int) : List α 
 
 def sumBy {α : Type} (f : α → Int) (xs : List α) : Int := (xs.map f).foldl (· + ·) 0
 
-def insertBy {κ ν : Type} (f : κ → κ → Bool) (k : κ) (v : ν) (xs : List (κ × ν)) : List (κ × ν) :=
-  if xs.any (f k ·.1) then xs.map fun (k', w) => if f k k' then (k', v) else (k', w) else xs ++ [(k, v)]
+section Table
+variable {k v : Sem}
 
-def removeBy {κ ν : Type} (f : κ → κ → Bool) (k : κ) (xs : List (κ × ν)) : List (κ × ν) :=
-  xs.filter fun e => !f k e.1
+/-- Whether `a` and `b` are the same key, asked both ways. -/
+def sameKey (k : Sem) (a b : k.1) : Bool := k.2 a b || k.2 b a
+
+def tableEmpty : (Sem.table k v).1 := ⟨[], .nil⟩
+
+def tableRemove (key : k.1) (t : (Sem.table k v).1) : (Sem.table k v).1 :=
+  ⟨t.1.filter (!sameKey k key ·.1), t.2.filter _⟩
+
+/-- The table with `key` mapped to `value`: the old entry goes and the new one joins at the end. -/
+def tableInsert (key : k.1) (value : v.1) (t : (Sem.table k v).1) : (Sem.table k v).1 :=
+  ⟨(tableRemove key t).1 ++ [(key, value)], by
+    refine List.pairwise_append.2 ⟨(tableRemove key t).2, List.pairwise_singleton _ _, ?_⟩
+    intro a ha b hb
+    simp only [List.mem_singleton] at hb
+    subst hb
+    simp only [tableRemove, List.mem_filter, sameKey, Bool.not_eq_true', Bool.or_eq_false_iff] at ha
+    exact ⟨ha.2.2, ha.2.1⟩⟩
+
+def tableFilter (keep : k.1 → v.1 → Bool) (t : (Sem.table k v).1) : (Sem.table k v).1 :=
+  ⟨t.1.filter (fun e => keep e.1 e.2), t.2.filter _⟩
+
+def tableMap {w : Sem} (f : k.1 → v.1 → w.1) (t : (Sem.table k v).1) : (Sem.table k w).1 :=
+  ⟨t.1.map (fun e => (e.1, f e.1 e.2)), List.pairwise_map.2 (t.2.imp id)⟩
+
+end Table
 
 end Builtin
 
@@ -56,26 +79,25 @@ def Prim.den : (p : Prim) → (args : List Ty) → (p.ty.inst args).den
   | .bagContains, args => fun (xs, x, ()) => Ty.ofBool (xs.any (Ty.deq (args[0]?.getD (.param 0)) x))
   | .bagMinBy, _ => fun (xs, f, ()) => Ty.ofPick (pick (· < ·) (fun x => f (x, ())) xs)
   | .bagMaxBy, _ => fun (xs, f, ()) => Ty.ofPick (pick (· > ·) (fun x => f (x, ())) xs)
-  | .tableNew, _ => fun () => []
-  | .tableFromList, args => fun (pairs, ()) =>
-    pairs.foldl (fun t (k, v, ()) => insertBy (Ty.deq (args[0]?.getD (.param 0))) k v t) []
-  | .tableInsert, args => fun (t, k, v, ()) => insertBy (Ty.deq (args[0]?.getD (.param 0))) k v t
-  | .tableRemove, args => fun (t, k, ()) => removeBy (Ty.deq (args[0]?.getD (.param 0))) k t
-  | .tableGet, args => fun (t, k, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t with
+  | .tableNew, _ => fun () => Builtin.tableEmpty
+  | .tableFromList, _ => fun (pairs, ()) => pairs.foldl (fun t (k, v, ()) => Builtin.tableInsert k v t) tableEmpty
+  | .tableInsert, _ => fun (t, k, v, ()) => Builtin.tableInsert k v t
+  | .tableRemove, _ => fun (t, k, ()) => Builtin.tableRemove k t
+  | .tableGet, args => fun (t, k, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t.1 with
     | .some v => Ty.some v
     | .none => Ty.none
-  | .tableSize, _ => fun (t, ()) => (t.length : Int)
-  | .tableKeys, _ => fun (t, ()) => t.map (·.1)
-  | .tableValues, _ => fun (t, ()) => t.map (·.2)
-  | .tableFilter, _ => fun (t, f, ()) => t.filter fun (k, v) => Ty.toBool (f (k, v, ()))
-  | .tableMap, _ => fun (t, f, ()) => t.map fun (k, v) => (k, f (k, v, ()))
-  | .tableCount, _ => fun (t, f, ()) => ((t.filter fun (k, v) => Ty.toBool (f (k, v, ()))).length : Int)
-  | .tableAny, _ => fun (t, f, ()) => Ty.ofBool (t.any fun (k, v) => Ty.toBool (f (k, v, ())))
-  | .tableAll, _ => fun (t, f, ()) => Ty.ofBool (t.all fun (k, v) => Ty.toBool (f (k, v, ())))
+  | .tableSize, _ => fun (t, ()) => (t.1.length : Int)
+  | .tableKeys, _ => fun (t, ()) => t.1.map (·.1)
+  | .tableValues, _ => fun (t, ()) => t.1.map (·.2)
+  | .tableFilter, _ => fun (t, f, ()) => Builtin.tableFilter (fun k v => Ty.toBool (f (k, v, ()))) t
+  | .tableMap, _ => fun (t, f, ()) => Builtin.tableMap (fun k v => f (k, v, ())) t
+  | .tableCount, _ => fun (t, f, ()) => ((t.1.filter fun (k, v) => Ty.toBool (f (k, v, ()))).length : Int)
+  | .tableAny, _ => fun (t, f, ()) => Ty.ofBool (t.1.any fun (k, v) => Ty.toBool (f (k, v, ())))
+  | .tableAll, _ => fun (t, f, ()) => Ty.ofBool (t.1.all fun (k, v) => Ty.toBool (f (k, v, ())))
   | .dateAddDays, _ => fun (d, n, ()) => @HAdd.hAdd Int Int Int _ d n
   | .dateDaysBetween, _ => fun (a, b, ()) => @HSub.hSub Int Int Int _ b a
   | .require, _ => fun (holds, rejection, next, ()) => if Ty.toBool holds then next () else Ty.error rejection
-  | .ref, args => fun (t, k, rejection, next, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t with
+  | .ref, args => fun (t, k, rejection, next, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t.1 with
     | .some v => next (v, ())
     | .none => Ty.error rejection
 
@@ -93,7 +115,7 @@ private def pickFailure {a : Ty} : (Ty.result a .pickError).den → Option Bool
   | .inr (.inl (.inl (), ())) => .some false
   | .inr (.inl (.inr _, ())) => .some true
   | .inl _ => .none
-private def table : List (Int × String) := [(1, "a"), (2, "bb")]
+private def table : (Ty.table .int .str).den := ⟨[((1 : Int), "a"), ((2 : Int), "bb")], by simp [KeysUnique, Ty.sem]⟩
 
 example : Prim.length.den [] ("e\u0301", ()) = (2 : Int) := rfl
 example : Prim.bagFromList.den [.int] (([1, 1, 2] : List Int), ()) = ([1, 1, 2] : List Int) := rfl
@@ -111,19 +133,19 @@ example : isOk (Prim.bagMinBy.den [.str] ((["bb", "a"] : List String), fun (s, (
 example : pickFailure (Prim.bagMinBy.den [.str] (([] : List String), fun (s, ()) => (s.length : Int), ())) = .some false := rfl
 example : pickFailure (Prim.bagMinBy.den [.str] ((["a", "b"] : List String), fun (s, ()) => (s.length : Int), ())) = .some true := rfl
 example : isOk (Prim.bagMaxBy.den [.str] ((["bb", "a"] : List String), fun (s, ()) => (s.length : Int), ())) = .some "bb" := rfl
-example : Prim.tableNew.den [.int, .str] () = ([] : List (Int × String)) := rfl
+example : (Prim.tableNew.den [.int, .str] ()).1 = ([] : List (Int × String)) := rfl
 -- A later pair replaces an earlier one's value.
-example : Prim.tableFromList.den [.int, .str] (([((1 : Int), "a", ()), ((1 : Int), "b", ())] : List (Int × String × Unit)), ()) = ([(1, "b")] : List (Int × String)) := rfl
-example : Prim.tableInsert.den [.int, .str] (table, (1 : Int), "c", ()) = ([(1, "c"), (2, "bb")] : List (Int × String)) := rfl
-example : Prim.tableInsert.den [.int, .str] (table, (3 : Int), "c", ()) = ([(1, "a"), (2, "bb"), (3, "c")] : List (Int × String)) := rfl
-example : Prim.tableRemove.den [.int, .str] (table, (1 : Int), ()) = ([(2, "bb")] : List (Int × String)) := rfl
+example : (Prim.tableFromList.den [.int, .str] (([((1 : Int), "a", ()), ((1 : Int), "b", ())] : List (Int × String × Unit)), ())).1 = ([(1, "b")] : List (Int × String)) := rfl
+example : (Prim.tableInsert.den [.int, .str] (table, (1 : Int), "c", ())).1 = ([(2, "bb"), (1, "c")] : List (Int × String)) := rfl
+example : (Prim.tableInsert.den [.int, .str] (table, (3 : Int), "c", ())).1 = ([(1, "a"), (2, "bb"), (3, "c")] : List (Int × String)) := rfl
+example : (Prim.tableRemove.den [.int, .str] (table, (1 : Int), ())).1 = ([(2, "bb")] : List (Int × String)) := rfl
 example : Prim.tableGet.den [.int, .str] (table, (2 : Int), ()) = Ty.some (a := .str) "bb" := rfl
 example : Prim.tableGet.den [.int, .str] (table, (3 : Int), ()) = Ty.none (a := .str) := rfl
 example : Prim.tableSize.den [.int, .str] (table, ()) = (2 : Int) := rfl
 example : Prim.tableKeys.den [.int, .str] (table, ()) = ([1, 2] : List Int) := rfl
 example : Prim.tableValues.den [.int, .str] (table, ()) = ["a", "bb"] := rfl
-example : Prim.tableFilter.den [.int, .str] (table, fun (k, _, ()) => pos (I k - 1), ()) = ([(2, "bb")] : List (Int × String)) := rfl
-example : Prim.tableMap.den [.int, .str, .int] (table, fun (_, v, ()) => (v.length : Int), ()) =
+example : (Prim.tableFilter.den [.int, .str] (table, fun (k, _, ()) => pos (I k - 1), ())).1 = ([(2, "bb")] : List (Int × String)) := rfl
+example : (Prim.tableMap.den [.int, .str, .int] (table, fun (_, v, ()) => (v.length : Int), ())).1 =
   ([(1, 1), (2, 2)] : List (Int × Int)) := rfl
 example : Prim.tableCount.den [.int, .str] (table, fun (k, _, ()) => pos k, ()) = (2 : Int) := rfl
 example : toBool (Prim.tableAny.den [.int, .str] (table, fun (k, _, ()) => pos (I k - 1), ())) = true := rfl
