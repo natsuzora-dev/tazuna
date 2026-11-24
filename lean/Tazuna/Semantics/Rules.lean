@@ -276,6 +276,24 @@ def _root_.Tazuna.Ir.Expr.lit? {G Γ : List Ty} {t : Ty} : Expr G Γ t → Optio
   | .str s => some s
   | _ => none
 
+mutual
+/-- Whether a type has no type variable. -/
+def Ty.ground : Ty → Bool
+  | .int | .str | .date | .id => true
+  | .param _ => false
+  | .list t | .bag t => Ty.ground t
+  | .tuple ts | .dsl _ ts => Ty.grounds ts
+  | .fn ps r => Ty.grounds ps && Ty.ground r
+  | .adt _ ts vs => Ty.grounds ts && Ty.groundss vs
+  | .table k v => Ty.ground k && Ty.ground v
+def Ty.grounds : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.ground t && Ty.grounds ts
+def Ty.groundss : List (List Ty) → Bool
+  | [] => true
+  | ts :: vs => Ty.grounds ts && Ty.groundss vs
+end
+
 /-- The handle a call makes, when it calls `external_command` or `external_query`. -/
 def handleAt {G Γ : List Ty} {ps : List Ty} {r : Ty} (f : Expr G Γ (.fn ps r)) (args : Exprs G Γ ps) : Option HandleSite :=
   let name : Option String := match args with
@@ -403,7 +421,9 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : 
       | _ => none
     wireNames ++ owners ++ wireTypes ++ rejections
   let declared := s.externals.flatMap (·.declares)
-  let unknownHandles := handles.filterMap fun h => match h.name with
+  -- The loader also elaborates each generic function at its own type variables; no step runs that copy, since the root
+  -- has none and every call instantiates them, so its handles are left to the concrete copies.
+  let unknownHandles := (handles.filter (Ty.grounds ·.types)).filterMap fun h => match h.name with
     | none => some (Illegal.unknownHandle, s!"an {h.kind} handle's name is no string literal; write it as one, so check can see which external declares it")
     | some n =>
       if declared.any fun d => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome then none

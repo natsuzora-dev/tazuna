@@ -162,6 +162,8 @@ def last (v : ServiceV) (is : List (Input v)) : String :=
   (·.1 == .unknownHandle)).isEmpty
 #guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .int]⟩]⟩ (pingE (Γ := [])).handles).filter
   (·.1 == .unknownHandle)).length == 1
+#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"external command", some "ping", [.param 0, .int, .str]⟩]).filter
+  (·.1 == .unknownHandle)).isEmpty
 -- Check reports a handle no external declares as Illegal.unknownHandle, so no checked spec reaches this fault: a
 -- request to a command no external declares.
 def undeclared : ServiceV := { svc with declared := [("mail", .externalCommand "ping" .str .int .int)] }
