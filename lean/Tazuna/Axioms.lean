@@ -4,7 +4,7 @@ import Tazuna.Cli.Test
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
-import Tazuna.Smt.EncodeThm
+import Tazuna.Smt.Decode
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
 import Tazuna.Trace.WireThm

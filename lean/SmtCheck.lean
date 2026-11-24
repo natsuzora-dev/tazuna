@@ -1,33 +1,14 @@
-import Tazuna.Smt.EncodeThm
+import Tazuna.Smt.Decode
 import Tazuna.Smt.Solver
 
 /-! Runs the solver on printed scripts and reads its answers back: the theorems cover printing and reading our own
 text, and this check covers what only the solver can say, that it reads the text as SMT-LIB and prints values the
 reader reads. Each case encodes a closed expression, asks the solver for a variable equal to it, and compares the
-value with `eval`. Usage: smt-check <z3 executable>. -/
+value, decoded, with `eval`. Usage: smt-check <z3 executable>. -/
 
 open Tazuna.Ir Tazuna.Smt
 
 abbrev E (t : Ty) := Expr [] [] t
-
-mutual
-/-- The SMT value that codes a value, as `RelV` relates them. -/
-def valOf (L : Layout) : (t : Ty) → t.den → Option Val
-  | .int, n => some (.int n)
-  | .str, s => some (.str s)
-  | .date, n => some (.int n)
-  | .id, x => (L.find? .id).map fun (d, _) => idVal d x
-  | .adt 0 _ vs, x => (boolVs? vs).map fun ⟨h⟩ => .bool (altsBool (h ▸ x))
-  | .adt (i + 1) a vs, x => do let (d, _) ← L.find? (.adt (i + 1) a vs); valAlts L d 0 vs x
-  | .tuple ts, x => do let (d, _) ← L.find? (.tuple ts); pure (.ctor d 0 (← valsOf L ts x))
-  | .list _, _ | .fn .., _ | .param _, _ | .bag _, _ | .table .., _ | .dsl .., _ => none
-def valsOf (L : Layout) : (ts : List Ty) → Ty.dens ts → Option (List Val)
-  | [], _ => some []
-  | t :: ts, (x, xs) => do pure ((← valOf L t x) :: (← valsOf L ts xs))
-def valAlts (L : Layout) (d : Nat) : (k : Nat) → (vs : List (List Ty)) → Ty.alts vs → Option Val
-  | k, fs :: _, .inl x => do pure (.ctor d k (← valsOf L fs x))
-  | k, _ :: vs, .inr y => valAlts L d (k + 1) vs y
-end
 
 def optI : Ty := Ty.option .int
 /-- A record with two variants that share an Int field `id` at index 0. -/
@@ -232,7 +213,9 @@ def check (z3 : String) : IO Bool := do
       | .ok (L, script) =>
         match ← solver.run script with
         | .sat vs =>
-          if (vs.lookup 0).map (·.print) != (valOf L t (Expr.eval (G := []) () e ())).map (·.print) then
+          -- The value read back decodes (T3), and codes what eval computes.
+          let back := ((vs.lookup 0).bind (decodeV L t)).bind (embedV L t)
+          if back.map (·.print) != (embedV L t (Expr.eval (G := []) () e ())).map (·.print) then
             IO.println s!"smt-check: {name}: the solver's value differs from eval's"; ok := false
         | a => IO.println s!"smt-check: {name}: {repr a}"; ok := false
       | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
