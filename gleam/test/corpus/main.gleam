@@ -177,3 +177,7 @@ pub fn captures(ids: bag.Bag(Int)) -> #(bag.Bag(Event), Int, Option(Event)) {
   let wrap = Some
   #(closed, bag.size(opened) + bag.size(titled) + firsts(1), wrap(Closed(2)))
 }
+
+pub fn rules(n: Int, wait: tazuna.Duration) -> tazuna.Rules {
+  [#("positive", n > 0), #("waits", wait >= 0)]
+}

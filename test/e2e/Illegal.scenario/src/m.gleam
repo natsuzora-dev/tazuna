@@ -69,25 +69,25 @@ fn watch() -> tazuna.Machine(Records, Event) {
       }
     },
     initial: Idle,
-    on: fn(_k: Int, s: Phase, e: Event, _r: Records, _now: Int) {
-      case s, e {
+    on: fn(c: tazuna.MachineCtx(Int, Phase, Records), e: Event) {
+      case c.state, e {
         Idle, Added(_) -> tazuna.Enter(Waiting)
         _, _ -> tazuna.Stay
       }
     },
-    after: fn(_k: Int, s: Phase, _r: Records, _now: Int) {
-      case s {
+    after: fn(c: tazuna.MachineCtx(Int, Phase, Records)) {
+      case c.state {
         Waiting -> Some(tazuna.Timer(after: 10, enter: Pinging))
         _ -> None
       }
     },
-    effect: fn(_k: Int, s: Phase, r: Records, _now: Int) {
-      case s {
+    effect: fn(c: tazuna.MachineCtx(Int, Phase, Records)) {
+      case c.state {
         Pinging ->
           Some(
             tazuna.request_command(
               command: send(),
-              input: r.total,
+              input: c.records.total,
               on_answer: fn(a) {
                 case a {
                   Ok(Nil) -> [Pinged]
@@ -99,7 +99,7 @@ fn watch() -> tazuna.Machine(Records, Event) {
         _ -> None
       }
     },
-    invariants: fn(_k: Int, _s: Phase, _r: Records) { [] },
+    invariants: fn(_c: tazuna.MachineCtx(Int, Phase, Records)) { [] },
   )
 }
 
@@ -124,7 +124,7 @@ fn basic() -> tazuna.Scenario {
     tazuna.step_query(query: total(), caller: User, input: Nil),
     tazuna.step_command(command: add(), caller: User, input: 0),
     tazuna.step_command(command: add(), caller: User, input: 1),
-    tazuna.step_wait(ms: 10),
+    tazuna.step_wait(for: 10),
     tazuna.step_answer_command(
       command: send(),
       sender: tazuna.from_machine(machine: watch(), key: 0),

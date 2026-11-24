@@ -36,7 +36,15 @@ def opaqueTy? (name : String) (args : List Ty) : Option Ty :=
 /-- Aliases `tazuna` declares, with their documentation. -/
 def builtinAliases : List (Surface.AliasDef × String) :=
   [ (⟨"tazuna.Instant", [], .con "Int" [], ⟨0, 0⟩⟩, "A point in time, in milliseconds."),
-    (⟨"tazuna.Duration", [], .con "Int" [], ⟨0, 0⟩⟩, "A length of time, in milliseconds.") ]
+    (⟨"tazuna.Duration", [], .con "Int" [], ⟨0, 0⟩⟩, "A length of time, in milliseconds."),
+    (⟨"tazuna.Rules", [], .con "List" [.tuple [.con "String" [], .con "Bool" []]], ⟨0, 0⟩⟩,
+      "Named rules, as `invariants`, `accepts` and `ensures` return them: each holds or not.") ]
+
+/-- The Ints the DSL writes as a time alias, so a signature says which Int is a time: (the declaring type or built-in,
+the field or parameter label, the alias). -/
+def timeAliases : List (String × String × String) :=
+  [ ("tazuna.Ctx", "now", "Instant"), ("tazuna.MachineCtx", "now", "Instant"), ("tazuna.ReactionCtx", "now", "Instant"),
+    ("tazuna.Timer", "after", "Duration"), ("response", "within", "Duration"), ("step_wait", "for", "Duration") ]
 
 /-- The built-in functions. -/
 inductive Prim where
@@ -184,15 +192,15 @@ def sig : Prim → PrimSig :=
       doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect.",
       tvars := ["records", "event", "key", "state"], dataArgs := true, needsEq := [2],
       params := [l "name" .str, l "instances" (.fn [a] (.bag (param 2))), l "initial" (param 3),
-        l "on" (.fn [param 2, param 3, b, a, .int] (.next (param 3))),
-        l "after" (.fn [param 2, param 3, a, .int] (.option (.timer (param 3)))),
-        l "effect" (.fn [param 2, param 3, a, .int] (.option (.dsl .effect [b]))),
-        l "invariants" (.fn [param 2, param 3, a] Ty.rules)],
+        l "on" (.fn [.machineCtx (param 2) (param 3) a, b] (.next (param 3))),
+        l "after" (.fn [.machineCtx (param 2) (param 3) a] (.option (.timer (param 3)))),
+        l "effect" (.fn [.machineCtx (param 2) (param 3) a] (.option (.dsl .effect [b]))),
+        l "invariants" (.fn [.machineCtx (param 2) (param 3) a] Ty.rules)],
       ret := .dsl .machine [a, b] }
   | .reaction =>
     { name := "reaction", doc := "A reaction: effects for each event, without state of its own.",
       tvars := ["records", "event"], dataArgs := true,
-      params := [l "name" .str, l "react" (.fn [b, a, .int] (.list (.dsl .effect [b])))],
+      params := [l "name" .str, l "react" (.fn [.reactionCtx a, b] (.list (.dsl .effect [b])))],
       ret := .dsl .reaction [a, b] }
   | .external =>
     { name := "external", doc := "An external service and what it declares.", tvars := [],
@@ -267,7 +275,7 @@ def sig : Prim → PrimSig :=
       tvars := ["records", "k", "v"], dataArgs := true,
       params := [l "table" (.fn [a] (.table b (param 2))), l "at_most" .int], ret := .dsl .create [a] }
   | .response =>
-    { name := "response", doc := "After an event satisfying `after`, one satisfying `then` within `within` ms.",
+    { name := "response", doc := "After an event satisfying `after`, one satisfying `then` within the duration `within`.",
       tvars := ["event"], dataArgs := true,
       params := [l "name" .str, l "after" (.fn [a] .bool), l "then" (.fn [a] .bool), l "within" .int],
       ret := .dsl .response [a] }
@@ -289,9 +297,9 @@ def sig : Prim → PrimSig :=
       params := [l "query" (.dsl .query [a, param 2, param 3, param 4]), l "caller" (param 2), l "input" (param 3)],
       ret := .dsl .step [a, b, param 2] }
   | .stepWait =>
-    { name := "step_wait", doc := "A step: time moves on by `ms`, and the timers due fire.",
+    { name := "step_wait", doc := "A step: time moves on by the duration, and the timers due fire.",
       tvars := ["records", "event", "caller"], dataArgs := true,
-      params := [l "ms" .int], ret := .dsl .step [a, b, param 2] }
+      params := [⟨some "for", "duration", .int⟩], ret := .dsl .step [a, b, param 2] }
   | .stepAnswerCommand =>
     { name := "step_answer_command",
       doc := "A step: the external answers the one pending request to `command` that `sender` sent.",

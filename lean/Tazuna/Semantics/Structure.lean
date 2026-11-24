@@ -79,10 +79,10 @@ structure MachineV (r e : Ty) where
   state : Ty
   instances : (Ty.fn [r] (.bag key)).den0
   initial : state.den0
-  on : (Ty.fn [key, state, e, r, .int] (Ty.next state)).den0
-  after : (Ty.fn [key, state, r, .int] (Ty.option (Ty.timer state))).den0
+  on : (Ty.fn [Ty.machineCtx key state r, e] (Ty.next state)).den0
+  after : (Ty.fn [Ty.machineCtx key state r] (Ty.option (Ty.timer state))).den0
   effect : key.den0 → state.den0 → r.den0 → Int → Option (EffectV e)
-  invariants : (Ty.fn [key, state, r] Ty.rules).den0
+  invariants : (Ty.fn [Ty.machineCtx key state r] Ty.rules).den0
 
 structure ReactionV (r e : Ty) where
   name : String

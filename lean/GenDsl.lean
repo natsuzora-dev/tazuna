@@ -39,6 +39,7 @@ open Tazuna.Ir
 
 /-- A type as Gleam writes it inside the `tazuna` module, with `tvars` naming the type variables. -/
 partial def gleamTy (tvars : List String) : Ty → String
+  | .list (.tuple [.str, .adt 0 [] _]) => "Rules"
   | .int => "Int"
   | .str => "String"
   | .list t => s!"List({gleamTy tvars t})"
@@ -57,6 +58,19 @@ partial def gleamTy (tvars : List String) : Ty → String
     let n := k.name
     if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map (gleamTy tvars)) ++ ")"
 
+/-- The type of the field or parameter `label` of `owner`: a time alias when `timeAliases` names one. -/
+def labelledTy (owner : String) (tvars : List String) (label : Option String) (t : Ty) : String :=
+  match label.bind fun l => (timeAliases.find? fun (o, l', _) => o == owner && l' == l).map (·.2.2) with
+  | some alias => alias
+  | none => gleamTy tvars t
+
+/-- A type as an alias's body writes it. -/
+partial def surfaceTy : Surface.STy → String
+  | .con n args => (n.splitOn ".").getLast! ++ (if args.isEmpty then "" else "(" ++ ", ".intercalate (args.map surfaceTy) ++ ")")
+  | .tuple ts => "#(" ++ ", ".intercalate (ts.map surfaceTy) ++ ")"
+  | .fn ps r => "fn(" ++ ", ".intercalate (ps.map surfaceTy) ++ ") -> " ++ surfaceTy r
+  | .var n | .hole n => n
+
 def docLines (doc : String) : String := s!"/// {doc}\n"
 
 def typeParams (ps : List String) : String := if ps.isEmpty then "" else "(" ++ ", ".intercalate ps ++ ")"
@@ -66,14 +80,14 @@ else one parameter per line. -/
 def gleamFn (p : Prim) : String :=
   let s := p.sig
   let params := s.params.map fun q =>
-    (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": " ++ gleamTy s.tvars q.ty
+    (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": " ++ labelledTy s.name s.tvars q.label q.ty
   let ret := gleamTy s.tvars s.ret
   let oneLine := s!"pub fn {s.name}(" ++ ", ".intercalate params ++ s!") -> {ret} \{"
   let head := if oneLine.length ≤ 80 then oneLine
     else
       let line (q : PrimParam) : String :=
         let pre := (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": "
-        let whole := s!"  {pre}{gleamTy s.tvars q.ty},\n"
+        let whole := s!"  {pre}{labelledTy s.name s.tvars q.label q.ty},\n"
         match q.ty with
         | .fn ps r =>
           if whole.length ≤ 81 then whole
@@ -90,15 +104,13 @@ def gleamSection (m : String) : String :=
     let n := (d.name.splitOn ".").getLast!
     let variant (v : Variant) : String :=
       if v.fields.isEmpty then s!"  {v.name}\n" else
-      let fs := v.fields.map fun f => (f.label.map (· ++ ": ")).getD "" ++ gleamTy d.params f.ty
+      let fs := v.fields.map fun f => (f.label.map (· ++ ": ")).getD "" ++ labelledTy d.name d.params f.label f.ty
       let one := s!"  {v.name}(" ++ ", ".intercalate fs ++ ")"
       if one.length ≤ 80 then one ++ "\n"
       else s!"  {v.name}(\n" ++ String.join (fs.map (s!"    {·},\n")) ++ "  )\n"
     s!"pub type {n}{typeParams d.params} \{\n" ++ String.join (d.variants.map variant) ++ "}\n"
   let aliases := (builtinAliases.filter (·.1.name.startsWith (m ++ "."))).map fun (a, doc) =>
-    let body := match a.ty with
-      | .con n [] => n
-      | _ => "?"
+    let body := surfaceTy a.ty
     docLines doc ++ s!"pub type {(a.name.splitOn ".").getLast!} =\n  {body}\n"
   "\n".intercalate (types ++ preludeTypes ++ aliases ++ (Prim.all.filter (·.module == m)).map gleamFn)
 

@@ -92,7 +92,13 @@ pub type Sender
 pub type Fresh
 
 pub type Ctx(records, input, caller) {
-  Ctx(records: records, input: input, caller: caller, now: Int, fresh: Fresh)
+  Ctx(
+    records: records,
+    input: input,
+    caller: caller,
+    now: Instant,
+    fresh: Fresh,
+  )
 }
 
 pub type Next(state) {
@@ -101,7 +107,15 @@ pub type Next(state) {
 }
 
 pub type Timer(state) {
-  Timer(after: Int, enter: state)
+  Timer(after: Duration, enter: state)
+}
+
+pub type MachineCtx(key, state, records) {
+  MachineCtx(key: key, state: state, records: records, now: Instant)
+}
+
+pub type ReactionCtx(records) {
+  ReactionCtx(records: records, now: Instant)
 }
 
 /// A point in time, in milliseconds.
@@ -111,6 +125,10 @@ pub type Instant =
 /// A length of time, in milliseconds.
 pub type Duration =
   Int
+
+/// Named rules, as `invariants`, `accepts` and `ensures` return them: each holds or not.
+pub type Rules =
+  List(#(String, Bool))
 
 /// The number of code points.
 pub fn length(_string: String) -> Int {
@@ -144,7 +162,7 @@ pub fn service(
   requests _requests: List(Definition(records, event, caller)),
   machines _machines: List(Machine(records, event)),
   reactions _reactions: List(Reaction(records, event)),
-  invariants _invariants: fn(records) -> List(#(String, Bool)),
+  invariants _invariants: fn(records) -> Rules,
   responses _responses: List(Response(event)),
   bounds _bounds: Bounds(records),
 ) -> Service {
@@ -156,11 +174,10 @@ pub fn command(
   service _service: String,
   name _name: String,
   callers _callers: List(caller),
-  accepts _accepts: fn(input) -> List(#(String, Bool)),
+  accepts _accepts: fn(input) -> Rules,
   decide _decide: fn(Ctx(records, input, caller)) ->
     Result(List(event), rejection),
-  ensures _ensures: fn(Ctx(records, input, caller), records) ->
-    List(#(String, Bool)),
+  ensures _ensures: fn(Ctx(records, input, caller), records) -> Rules,
 ) -> Command(records, event, caller, input, rejection) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
@@ -170,7 +187,7 @@ pub fn query(
   service _service: String,
   name _name: String,
   callers _callers: List(caller),
-  accepts _accepts: fn(input) -> List(#(String, Bool)),
+  accepts _accepts: fn(input) -> Rules,
   resolve _resolve: fn(Ctx(records, input, caller)) -> output,
 ) -> Query(records, caller, input, output) {
   panic as \"tazuna's built-ins run only in the engine\"
@@ -195,10 +212,10 @@ pub fn machine(
   name _name: String,
   instances _instances: fn(records) -> Bag(key),
   initial _initial: state,
-  on _on: fn(key, state, event, records, Int) -> Next(state),
-  after _after: fn(key, state, records, Int) -> Option(Timer(state)),
-  effect _effect: fn(key, state, records, Int) -> Option(Effect(event)),
-  invariants _invariants: fn(key, state, records) -> List(#(String, Bool)),
+  on _on: fn(MachineCtx(key, state, records), event) -> Next(state),
+  after _after: fn(MachineCtx(key, state, records)) -> Option(Timer(state)),
+  effect _effect: fn(MachineCtx(key, state, records)) -> Option(Effect(event)),
+  invariants _invariants: fn(MachineCtx(key, state, records)) -> Rules,
 ) -> Machine(records, event) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
@@ -206,7 +223,7 @@ pub fn machine(
 /// A reaction: effects for each event, without state of its own.
 pub fn reaction(
   name _name: String,
-  react _react: fn(event, records, Int) -> List(Effect(event)),
+  react _react: fn(ReactionCtx(records), event) -> List(Effect(event)),
 ) -> Reaction(records, event) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
@@ -233,7 +250,7 @@ pub fn external_command(
 pub fn external_query(
   external _external: String,
   name _name: String,
-  ensures _ensures: fn(input, output) -> List(#(String, Bool)),
+  ensures _ensures: fn(input, output) -> Rules,
 ) -> ExternalQuery(input, output) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
@@ -327,12 +344,12 @@ pub fn create(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// After an event satisfying `after`, one satisfying `then` within `within` ms.
+/// After an event satisfying `after`, one satisfying `then` within the duration `within`.
 pub fn response(
   name _name: String,
   after _after: fn(event) -> Bool,
   then _then: fn(event) -> Bool,
-  within _within: Int,
+  within _within: Duration,
 ) -> Response(event) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
@@ -364,8 +381,8 @@ pub fn step_query(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A step: time moves on by `ms`, and the timers due fire.
-pub fn step_wait(ms _ms: Int) -> Step(records, event, caller) {
+/// A step: time moves on by the duration, and the timers due fire.
+pub fn step_wait(for _duration: Duration) -> Step(records, event, caller) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 

@@ -21,8 +21,8 @@ def watch : MachineV .int .int :=
   { name := "watch", key := .int, state := .int,
     instances := fun (r, ()) => if 0 < I r then [(0 : Int)] else [],
     initial := (0 : Int),
-    on := fun (_, st, _, _, _, ()) => .inr (.inl (I st + 1, ())),
-    after := fun (_, st, _, _, ()) => if I st = 1 then .inl (.inl ((10 : Int), (5 : Int), ()), ()) else .inr (.inl ()),
+    on := fun (.inl (_, st, _, _, ()), _, ()) => .inr (.inl (I st + 1, ())),
+    after := fun (.inl (_, st, _, _, ()), ()) => if I st = 1 then .inl (.inl ((10 : Int), (5 : Int), ()), ()) else .inr (.inl ()),
     effect := fun _ st _ _ => if I st = 5 then some ping else none,
     invariants := fun _ => [] }
 

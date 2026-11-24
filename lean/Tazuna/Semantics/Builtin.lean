@@ -104,6 +104,11 @@ abbrev Prim.dn {args : List Ty} (h : ∀ t ∈ args, t.isData = true) (t : Ty) (
     (x : (t.inst args).den) : (t.inst args).den0 :=
   Ty.down _ (Ty.isData_inst h t ht) x
 
+/-- A data value of type `t`, as a function of the spec receives it. -/
+abbrev Prim.upT {args : List Ty} (h : ∀ t ∈ args, t.isData = true) (t : Ty) (ht : t.isData = true := by rfl)
+    (x : (t.inst args).den0) : (t.inst args).den :=
+  Ty.up _ (Ty.isData_inst h t ht) x
+
 /-- A data value handed to a function of the spec. -/
 abbrev Prim.up {args : List Ty} (h : ∀ t ∈ args, t.isData = true) (k : Nat) (x : ((Ty.param k).inst args).den0) :
     ((Ty.param k).inst args).den :=
@@ -187,12 +192,14 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     { name, key := (Ty.param 2).inst args, state := (Ty.param 3).inst args,
       instances := Prim.dn d (.fn [.param 0] (.bag (.param 2))) rfl instances,
       initial := Prim.dn d (.param 3) rfl initial,
-      on := Prim.dn d (.fn [.param 2, .param 3, .param 1, .param 0, .int] (.next (.param 3))) rfl on,
-      after := Prim.dn d (.fn [.param 2, .param 3, .param 0, .int] (.option (.timer (.param 3)))) rfl after,
-      effect := fun k s r now => Ty.toOption (effect (Prim.up d 2 k, Prim.up d 3 s, Prim.up d 0 r, now, ())),
-      invariants := Prim.dn d (.fn [.param 2, .param 3, .param 0] Ty.rules) rfl invariants }
+      on := Prim.dn d (.fn [.machineCtx (.param 2) (.param 3) (.param 0), .param 1] (.next (.param 3))) rfl on,
+      after := Prim.dn d (.fn [.machineCtx (.param 2) (.param 3) (.param 0)] (.option (.timer (.param 3)))) rfl after,
+      effect := fun k s r now =>
+        Ty.toOption (effect (Prim.upT d (.machineCtx (.param 2) (.param 3) (.param 0)) rfl (.inl (k, s, r, now, ())), ())),
+      invariants := Prim.dn d (.fn [.machineCtx (.param 2) (.param 3) (.param 0)] Ty.rules) rfl invariants }
   | .reaction, _, h => let d := Prim.dataOf h rfl
-    fun (name, react, ()) => { name, react := fun e r now => react (Prim.up d 1 e, Prim.up d 0 r, now, ()) }
+    fun (name, react, ()) =>
+      { name, react := fun e r now => react (Prim.upT d (.reactionCtx (.param 0)) rfl (.inl (r, now, ())), Prim.up d 1 e, ()) }
   | .external, _, _ => fun (name, cs, qs, es, ()) => ⟨name, (show List DeclaredV from cs) ++ (show List DeclaredV from qs) ++ (show List DeclaredV from es)⟩
   | .externalCommand, _, _ => fun (ext, name, ()) => (ext, name)
   | .externalQuery, _, h => let d := Prim.dataOf h rfl

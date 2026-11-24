@@ -120,7 +120,7 @@ def State.init (v : ServiceV) : State v :=
 /-- An instance entering `st`: its timer and its effect. -/
 def enter {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (key : m.key.den0) (st : m.state.den0) :
     Instance m × List (Sender × EffectV e) :=
-  let timer := match m.after (key, st, records, now, ()) with
+  let timer := match m.after (.inl (key, st, records, now, ()), ()) with
     | .inl (.inl (d, target, ()), ()) => some (now + (show Int from d), target)
     | _ => none
   (⟨key, st, timer⟩, (m.effect key st records now).toList.map (.machine m.name ⟨m.key, key⟩, ·))
@@ -133,7 +133,7 @@ def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) : Machin
     let keys := (m.instances (records, ())).foldl (fun ks k => if ks.any (eqK k) then ks else ks ++ [k]) []
     let kept := insts.filter fun i => keys.any (eqK i.key)
     let (reacted, effs) := kept.foldl (fun (acc, effs) i =>
-      match m.on (i.key, i.state, ev, records, now, ()) with
+      match m.on (.inl (i.key, i.state, records, now, ()), ev, ()) with
       | .inr (.inl (s, ())) => let (i', es) := enter m records now i.key s; (acc ++ [i'], effs ++ es)
       | _ => (acc ++ [i], effs)) ([], [])
     let fresh := keys.filter fun k => !insts.any (eqK k ·.key)
@@ -152,7 +152,7 @@ def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV
 /-- The broken invariants of the service and of every machine instance. -/
 def invariants (s : State v) : List String :=
   broken (v.invariants (s.records, ())) ++
-    s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => broken (m.invariants (i.key, i.state, s.records, ()))
+    s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => broken (m.invariants (.inl (i.key, i.state, s.records, s.now, ()), ()))
 
 /-- A step in progress: the state, the events applied and the out lines so far, and the own commands and queries
 waiting to run. -/

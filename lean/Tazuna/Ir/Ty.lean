@@ -221,7 +221,12 @@ def prelude : List TypeDecl :=
         ⟨some "now", .int⟩, ⟨some "fresh", .dsl .fresh []⟩]⟩] },
     { name := "tazuna.Next", params := ["state"], variants := [⟨"Stay", []⟩, ⟨"Enter", [⟨none, .param 0⟩]⟩] },
     { name := "tazuna.Timer", params := ["state"],
-      variants := [⟨"Timer", [⟨some "after", .int⟩, ⟨some "enter", .param 0⟩]⟩] } ]
+      variants := [⟨"Timer", [⟨some "after", .int⟩, ⟨some "enter", .param 0⟩]⟩] },
+    { name := "tazuna.MachineCtx", params := ["key", "state", "records"],
+      variants := [⟨"MachineCtx", [⟨some "key", .param 0⟩, ⟨some "state", .param 1⟩, ⟨some "records", .param 2⟩,
+        ⟨some "now", .int⟩]⟩] },
+    { name := "tazuna.ReactionCtx", params := ["records"],
+      variants := [⟨"ReactionCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] } ]
 
 def Ty.bool : Ty := .adt 0 [] [[], []]
 def Ty.nil : Ty := .adt 1 [] [[]]
@@ -232,6 +237,10 @@ def Ty.option (a : Ty) : Ty := .adt 3 [a] [[a], []]
 def Ty.ctx (r i c : Ty) : Ty := .adt 5 [r, i, c] [[r, i, c, .int, .dsl .fresh []]]
 def Ty.next (s : Ty) : Ty := .adt 6 [s] [[], [s]]
 def Ty.timer (s : Ty) : Ty := .adt 7 [s] [[.int, s]]
+/-- What a machine's functions see of one instance: its key and state, the records, and the time. -/
+def Ty.machineCtx (k s r : Ty) : Ty := .adt 8 [k, s, r] [[k, s, r, .int]]
+/-- What a reaction sees: the records and the time. -/
+def Ty.reactionCtx (r : Ty) : Ty := .adt 9 [r] [[r, .int]]
 /-- Named rules, as `invariants`, `accepts` and `ensures` return them. -/
 def Ty.rules : Ty := .list (.tuple [.str, .bool])
 
@@ -261,6 +270,9 @@ example : prelude[4]?.map (fun d => Ty.adt 4 [] (d.variantTys [])) = some Ty.pic
 example (r i c : Ty) : prelude[5]?.map (fun d => Ty.adt 5 [r, i, c] (d.variantTys [r, i, c])) = some (Ty.ctx r i c) := rfl
 example (s : Ty) : prelude[6]?.map (fun d => Ty.adt 6 [s] (d.variantTys [s])) = some (Ty.next s) := rfl
 example (s : Ty) : prelude[7]?.map (fun d => Ty.adt 7 [s] (d.variantTys [s])) = some (Ty.timer s) := rfl
+example (k s r : Ty) : prelude[8]?.map (fun d => Ty.adt 8 [k, s, r] (d.variantTys [k, s, r])) =
+  some (Ty.machineCtx k s r) := rfl
+example (r : Ty) : prelude[9]?.map (fun d => Ty.adt 9 [r] (d.variantTys [r])) = some (Ty.reactionCtx r) := rfl
 example (a e : Ty) : prelude[2]?.map (fun d => Ty.adt 2 [a, e] (d.variantTys [a, e])) = some (Ty.result a e) := rfl
 example (a : Ty) : prelude[3]?.map (fun d => Ty.adt 3 [a] (d.variantTys [a])) = some (Ty.option a) := rfl
 
