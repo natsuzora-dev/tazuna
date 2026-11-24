@@ -54,7 +54,7 @@ partial def gleamTy (tvars : List String) : Ty → String
   | .table k v => s!"Table({gleamTy tvars k}, {gleamTy tvars v})"
   | .date => "Date"
   | .id => "Id"
-  | .dsl .closure [t] => gleamTy tvars t
+  | .dsl .closure [t] | .dsl .effectClosure [t] => gleamTy tvars t
   | .dsl k args =>
     let n := k.name
     if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map (gleamTy tvars)) ++ ")"
@@ -90,7 +90,7 @@ def gleamFn (p : Prim) : String :=
         let pre := (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": "
         let whole := s!"  {pre}{labelledTy s.name s.tvars q.label q.ty},\n"
         match q.ty with
-        | .fn ps r | .dsl .closure [.fn ps r] =>
+        | .fn ps r | .dsl .closure [.fn ps r] | .dsl .effectClosure [.fn ps r] =>
           if whole.length ≤ 81 then whole
           else s!"  {pre}fn(" ++ ", ".intercalate (ps.map (gleamTy s.tvars)) ++ s!") ->\n    {gleamTy s.tvars r},\n"
         | _ => whole
@@ -136,12 +136,12 @@ def embedded : String :=
   "/// The function parameters built-ins keep as closure records: the\n" ++
   "/// built-in, the parameter's position and its label.\n" ++
   "pub const kept = [\n" ++
-  String.join (Prim.all.flatMap fun p => (p.sig.params.zipIdx.filter (·.1.ty matches .dsl .closure _)).map
+  String.join (Prim.all.flatMap fun p => (p.sig.params.zipIdx.filter (·.1.ty matches .dsl .closure _ | .dsl .effectClosure _)).map
     fun (q, k) => s!"  #({Tazuna.Ir.Literal.printStr p.global}, {k}, {Tazuna.Ir.Literal.printStr (q.label.getD q.name)}),\n") ++
   "]\n\n" ++
   "/// The types whose values are structure values, not data.\n" ++
   "pub const structure_types = [\n" ++
-  String.join ((Dsl.all.filter fun k => k != .fresh && k != .closure).map fun k =>
+  String.join ((Dsl.all.filter fun k => k != .fresh && !k.kept).map fun k =>
     s!"  {Tazuna.Ir.Literal.printStr ("tazuna." ++ k.name)},\n") ++ "]\n"
 
 /-- Checks that the DSL modules match Lean's table and that the launcher's copy of them is current, or rewrites them

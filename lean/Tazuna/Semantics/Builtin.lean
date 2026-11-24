@@ -213,12 +213,8 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     fun (name, instances, initial, on, after, effect, invariants, ()) =>
     { name, key := (Ty.param 2).inst args, state := (Ty.param 3).inst args,
       instances, initial := Prim.dn d (.param 3) rfl initial, on, after,
-      effect := fun k s r now =>
-        Ty.toOption (effect (Prim.upT d (.machineCtx (.param 2) (.param 3) (.param 0)) rfl (.inl (k, s, r, now, ())), ())),
-      invariants }
-  | .reaction, _, h => let d := Prim.dataOf h rfl
-    fun (name, react, ()) =>
-      { name, react := fun e r now => react (Prim.upT d (.reactionCtx (.param 0)) rfl (.inl (r, now, ())), Prim.up d 1 e, ()) }
+      effect, invariants }
+  | .reaction, _, _ => fun (name, react, ()) => { name, react }
   | .external, _, _ => fun (name, declares, ()) => ⟨name, declares⟩
   | .externalCommand, _, _ => fun (name, ()) => name
   | .externalQuery, _, _ => fun (name, ensures, ()) => (name, ensures)
@@ -237,17 +233,12 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     fun (c, caller, input, onAnswer, ()) =>
     let c : CommandOf ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)
       ((Ty.param 3).inst args) ((Ty.param 4).inst args) := c
-    .command _ _ c.1 (Prim.dn d (.param 2) rfl caller)
-      (cast (congrArg Ty.den0 c.2.1.symm) (Prim.dn d (.param 3) rfl input))
-      (cast (congrArg (fun j => Fun (Ty.fn [.result Ty.nil j] (.list ((Ty.param 1).inst args)))) c.2.2.symm)
-        onAnswer)
+    .command c.1.name _ _ _ (Prim.dn d (.param 2) rfl caller) (Prim.dn d (.param 3) rfl input) onAnswer
   | .sendQuery, args, h => let d := Prim.dataOf h rfl
     fun (q, caller, input, onAnswer, ()) =>
     let q : QueryOf ((Ty.param 0).inst args) ((Ty.param 2).inst args) ((Ty.param 3).inst args)
       ((Ty.param 4).inst args) := q
-    .query _ _ q.1 (Prim.dn d (.param 2) rfl caller)
-      (cast (congrArg Ty.den0 q.2.1.symm) (Prim.dn d (.param 3) rfl input))
-      (cast (congrArg (fun o => Fun (Ty.fn [o] (.list ((Ty.param 1).inst args)))) q.2.2.symm) onAnswer)
+    .query q.1.name _ _ _ (Prim.dn d (.param 2) rfl caller) (Prim.dn d (.param 3) rfl input) onAnswer
   | .subscribe, args, _ => fun (name, wrap, ()) =>
     { source := "", name, event := (Ty.param 1).inst args, wrap }
   | .bounds, _, _ => fun (creates, items, cascade, steps, ()) => { creates, items, cascade, steps }

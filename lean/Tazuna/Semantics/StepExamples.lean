@@ -35,12 +35,23 @@ private def timerE {Γ : List Ty} {st : Ty} (d : Int) (x : Expr [] Γ st) : Expr
   .ctor (vs := [[Ty.timer st], []]) ⟨0, by simp⟩ (.cons (.ctor (vs := [[.int, st]]) ⟨0, by simp⟩
     (.cons (.int d) (.cons x .nil))) .nil)
 
-def ping : EffectV .int := .request
-  { name := "ping", input := .str, output := .int, rejection := some .str, value := "hi",
-    ensures := none,
-    onAnswer := .closed (.lam (.case (.var .here)
-      (.cons (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons .wild .nil)) (.list (.cons (.int 1) .nil))
-        (.cons (.ctor (vs := [[.int], [.str]]) ⟨1, by decide⟩ (.cons .wild .nil)) (.list .nil) .nil)) ⟨4, rfl⟩)) }
+private def someE {Γ : List Ty} {t : Ty} (x : Expr [] Γ t) : Expr [] Γ (Ty.option t) :=
+  .ctor (vs := [[t], []]) ⟨0, by simp⟩ (.cons x .nil)
+private def noneE {Γ : List Ty} {t : Ty} : Expr [] Γ (Ty.option t) := .ctor (vs := [[t], []]) ⟨1, by simp⟩ .nil
+/-- A kept function written at `line` of this module, capturing nothing. -/
+private def keptE {Γ : List Ty} {t : Ty} (line : Nat) (body : Expr [] [] t) (ht : t.isData = true := by rfl) :
+    Expr [] Γ (.dsl .closure [t]) :=
+  .close ⟨"examples", line, 1⟩ .nil rfl ht body
+
+/-- `request_command(external_command("ping"), "hi", fn(answer) { case answer { Ok(_) -> [1]  Error(_) -> [] } })`. -/
+private def pingE {Γ : List Ty} : Expr [] Γ (.dsl .effect [.int]) :=
+  .call (.prim .requestCommand [.int, .str, .int, .str] rfl)
+    (.cons (.call (.prim .externalCommand [.str, .int, .str] rfl) (.cons (.str "ping") .nil))
+      (.cons (.str "hi")
+        (.cons (keptE 1 (.lam (.case (.var .here)
+          (.cons (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons .wild .nil)) (.list (.cons (.int 1) .nil))
+            (.cons (.ctor (vs := [[.int], [.str]]) ⟨1, by decide⟩ (.cons .wild .nil)) (.list .nil) .nil)) ⟨4, rfl⟩)))
+          .nil)))
 
 def watch : MachineV .int .int :=
   { name := "watch", key := .int, state := .int,
@@ -49,17 +60,27 @@ def watch : MachineV .int .int :=
     initial := (0 : Int),
     on := .closed (.lam (enterE (.bin .add (mctxE "state" 1 (.var .here)) (.int 1)))),
     after := .closed (.lam (iteE (.bin (.eq rfl) (mctxE "state" 1 (.var .here)) (.int 1)) (timerE 10 (.int 5)) noTimerE)),
-    effect := fun _ st _ _ => if I st = 5 then some ping else none,
+    effect := .closed (.lam (iteE (.bin (.eq rfl) (mctxE "state" 1 (.var .here)) (.int 5)) (someE pingE) noneE)),
     invariants := .closed (.lam (.list .nil)) }
+
+private def addAccepts : Expr [] [] (Ty.fn [.int] Ty.rules) := .lam (ruleE "small" (.bin .lt (.var .here) (.int 100)))
+private def addDecide : Expr [] [] (Ty.fn [Ty.ctx .int .int .int] (Ty.result (.list .int) .str)) :=
+  .lam (.call (.prim .require [.list .int, .str] rfl)
+    (.cons (.bin .lt (.int 0) (inputE (.var .here))) (.cons (.str "positive")
+      (.cons (.lam (.ctor (i := 2) (args := [.list .int, .str]) ⟨0, by decide⟩
+        (.cons (.list (.cons (inputE (.var .here)) .nil)) .nil))) .nil))))
+private def addEnsures : Expr [] [] (Ty.fn [Ty.ctx .int .int .int, .int] Ty.rules) :=
+  .lam (ruleE "grows" (.bin .le (recordsE (.var .here)) (.var (.there .here))))
 
 def add : CommandV .int .int .int :=
   { name := "add", input := .int, rejection := .str, callers := [(1 : Int)],
-    accepts := .closed (.lam (ruleE "small" (.bin .lt (.var .here) (.int 100)))),
-    decide := .closed (.lam (.call (.prim .require [.list .int, .str] rfl)
-      (.cons (.bin .lt (.int 0) (inputE (.var .here))) (.cons (.str "positive")
-        (.cons (.lam (.ctor (i := 2) (args := [.list .int, .str]) ⟨0, by decide⟩
-          (.cons (.list (.cons (inputE (.var .here)) .nil)) .nil))) .nil))))),
-    ensures := .closed (.lam (ruleE "grows" (.bin .le (recordsE (.var .here)) (.var (.there .here))))) }
+    accepts := .closed addAccepts, decide := .closed addDecide, ensures := .closed addEnsures }
+
+/-- The command `add` as a spec writes it. -/
+private def addE {Γ : List Ty} : Expr [] Γ (.dsl .command [.int, .int, .int, .int, .str]) :=
+  .call (.prim .command [.int, .int, .int, .int, .str] rfl)
+    (.cons (.str "add") (.cons (.list (.cons (.int 1) .nil))
+      (.cons (keptE 2 addAccepts) (.cons (keptE 3 addDecide) (.cons (keptE 4 addEnsures) .nil)))))
 
 def total : QueryV .int .int :=
   { name := "total", input := .int, output := .int, callers := [(1 : Int)], accepts := .closed (.lam (.list .nil)),
@@ -108,10 +129,16 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run prelude sv
 -- An answer of the wrong type matches no request.
 #guard summary (after s0 [cmd 1 5, cmd 1 1, .clock 10]) (.answer 0 ⟨.int, (0 : Int)⟩) == "fault answerUnmatched 0"
 -- A reaction sends the service's own `add` for some events: 7 adds 2, 1 adds 1 again and again, 3 adds 500.
+/-- `send_command(add, 1, n, fn(_) { [] })`. -/
+private def sendE {Γ : List Ty} (n : Int) : Expr [] Γ (.dsl .effect [.int]) :=
+  .call (.prim .sendCommand [.int, .int, .int, .int, .str] rfl)
+    (.cons addE (.cons (.int 1) (.cons (.int n) (.cons (keptE 5 (.lam (.list .nil))) .nil))))
 def again : ReactionV .int .int :=
-  { name := "again", react := fun e _ _ =>
-      let send (n : Int) : EffectV .int := .command .int .int add (1 : Int) n (.closed (.lam (.list .nil)))
-      if I e = 7 then [send 2] else if I e = 1 then [send 1] else if I e = 3 then [send 500] else [] }
+  { name := "again", react := .closed (.lam
+      (let e : Expr [] ([Ty.reactionCtx .int, .int] ++ []) .int := .var (.there .here)
+       let is (k : Int) : Expr [] ([Ty.reactionCtx .int, .int] ++ []) Ty.bool := .bin (.eq rfl) e (.int k)
+       iteE (is 7) (.list (.cons (sendE 2) .nil)) (iteE (is 1) (.list (.cons (sendE 1) .nil))
+         (iteE (is 3) (.list (.cons (sendE 500) .nil)) (.list .nil))))) }
 def loop : ServiceV := { svc with reactions := [again] }
 def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
 -- The own command runs within the step: both events are applied.
@@ -135,12 +162,15 @@ def undeclared : ServiceV := { svc with declared := [("mail", .externalCommand "
   .clock 10] == "fault invalidEffect ping [declared]"
 -- A request to an external query: an answer that breaks what the query ensures is Invalid, and the request stays
 -- pending for another answer.
-def rate : EffectV .int := .request
-  { name := "rate", input := .str, output := .int, rejection := none, value := "eur",
-    ensures := some (.closed (.lam (ruleE "positive" (.bin .lt (.int 0) (.var (.there .here)))))),
-    onAnswer := .closed (.lam (.list (.cons (.var .here) .nil))) }
+/-- `request_query(external_query("rate", ensures), "eur", fn(rate) { [rate] })`. -/
+private def rateE {Γ : List Ty} : Expr [] Γ (.dsl .effect [.int]) :=
+  .call (.prim .requestQuery [.int, .str, .int] rfl)
+    (.cons (.call (.prim .externalQuery [.str, .int] rfl)
+        (.cons (.str "rate") (.cons (keptE 6 (.lam (ruleE "positive" (.bin .lt (.int 0) (.var (.there .here)))))) .nil)))
+      (.cons (.str "eur") (.cons (keptE 7 (.lam (.list (.cons (.var .here) .nil)))) .nil)))
 def asking : ServiceV :=
-  { svc with machines := [{ watch with effect := fun _ st _ _ => if I st = 5 then some rate else none }],
+  { svc with machines := [{ watch with effect := .closed (.lam
+      (iteE (.bin (.eq rfl) (mctxE "state" 1 (.var .here)) (.int 5)) (someE rateE) noneE)) }],
              declared := [("fx", .externalQuery "rate" .str .int (.closed (.lam (.list .nil))))] }
 def askingUntil : List (Input asking) :=
   [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int), .clock 10]
@@ -159,13 +189,15 @@ def specWith (xs : List ExternalV) : SpecV := Prim.spec.den [] rfl (([svc] : Lis
 -- Instances react and start in key order, never in the order a bag stores its keys or the instances started: one
 -- instance per key of a bag of Int, asking `ping` with its key as it enters a state, and entering state 1 on every
 -- event.
-def askKey (k : Int) : EffectV .int := .request
-  { name := "ping", input := .int, output := .int, rejection := none, value := k, ensures := none,
-    onAnswer := .closed (.lam (.list .nil)) }
+/-- `request_query(external_query("ping", fn(_, _) { [] }), key, fn(_) { [] })`. -/
+private def askKeyE {Γ : List Ty} (key : Expr [] Γ .int) : Expr [] Γ (.dsl .effect [.int]) :=
+  .call (.prim .requestQuery [.int, .int, .int] rfl)
+    (.cons (.call (.prim .externalQuery [.int, .int] rfl) (.cons (.str "ping") (.cons (keptE 8 (.lam (.list .nil))) .nil)))
+      (.cons key (.cons (keptE 9 (.lam (.list .nil))) .nil)))
 def perKey : MachineV (.bag .int) .int :=
   { name := "perKey", key := .int, state := .int, instances := .closed (.lam (.var .here)), initial := (0 : Int),
     on := .closed (.lam (enterE (.int 1))), after := .closed (.lam noTimerE),
-    effect := fun k _ _ _ => some (askKey k),
+    effect := .closed (.lam (someE (askKeyE (mctxE "key" 0 (.var .here))))),
     invariants := .closed (.lam (.list .nil)) }
 def keyed : ServiceV :=
   { name := "keyed", records := .bag .int, event := .int, caller := .int, init := ([] : List Int),

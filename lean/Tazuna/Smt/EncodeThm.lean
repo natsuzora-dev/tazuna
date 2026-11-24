@@ -148,6 +148,7 @@ def DslRel : (k : Dsl) → (a : List Ty) → (Ty.dsl k a).den → DslCode k a �
   | .step, a, x, s => RelV L (.dsl .step a) x (Term.denote M s)
   | .sender, a, x, s => RelV L (.dsl .sender a) x (Term.denote M s)
   | .fresh, a, x, s => RelV L (.dsl .fresh a) x (Term.denote M s)
+  | .effectClosure, a, x, s => RelV L (.dsl .effectClosure a) x (Term.denote M s)
   | _, _, _, _ => False
 
 mutual
@@ -2478,6 +2479,7 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
     cases pure_ok.1 h
     have hv := rels_terms (need_ok.1 h2) _ (encodes_agrees env σ ρ hσ ss c1 h1 hc)
     exact ⟨rfl, rfl, relVs_up Γ' hΓ _ _ (by erw [Ty.up_down]; exact hv)⟩
+  | .closeEffect .., _, _, _, _, _, h, _ => by simp only [encode] at h; cases h
 theorem encodes_agrees {Γ : List Ty} {ts : List Ty} : (es : Exprs G Γ ts) → (σ : Codes Γ) → (ρ : Ty.dens Γ) →
     Rels M L Γ ρ σ → (ss : Codes ts) → (c : Term) → encodes L gs es σ = .ok (ss, c) → Holds M c →
     Rels M L ts (Exprs.eval D g es ρ) ss

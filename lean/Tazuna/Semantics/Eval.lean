@@ -61,6 +61,8 @@ def Expr.eval {Γ : List Ty} {t : Ty} : Expr G Γ t → Ty.dens Γ → t.den
   | .neg e, ρ => @Neg.neg Int _ (Expr.eval e ρ)
   | .prim p args h, _ => p.den args h
   | .close site env hΓ ht body, ρ => show Fun _ from ⟨site, G, D, _, Ty.down _ hΓ (Exprs.eval env ρ), hΓ, ht, body⟩
+  | .closeEffect site env hΓ hps body, ρ =>
+    show EffectFun _ _ from ⟨site, G, D, _, Ty.down _ hΓ (Exprs.eval env ρ), hΓ, hps, body⟩
 def Exprs.eval {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Ty.dens Γ → Ty.dens ts
   | .nil, _ => ()
   | .cons e es, ρ => (Expr.eval e ρ, Exprs.eval es ρ)
@@ -101,6 +103,19 @@ def Fun.eval {t : Ty} (f : Fun t) : t.den := f.body.eval f.defs f.defs.eval (Ty.
 /-- A kept function as the step applies it. -/
 def Fun.fn {t : Ty} (f : Fun t) : t.den0 := Ty.down t f.ht f.eval
 
+/-- What a kept function that returns effects means at the arguments `xs`: its source's value. -/
+def EffectFun.apply {ps : List Ty} {r : Ty} (f : EffectFun ps r) (xs : (Ty.tuple ps).den0) : r.den :=
+  f.body.eval f.defs f.defs.eval (Ty.up _ f.hΓ f.env) (Ty.up _ f.hps xs)
+
+/-- The effect an instance of the machine starts on entering `st`. -/
+def MachineV.effectAt {r e : Ty} (m : MachineV r e) (key : m.key.den0) (st : m.state.den0) (records : r.den0)
+    (now : Int) : Option (EffectV e) :=
+  Ty.toOption (m.effect.apply (.inl (key, st, records, now, ()), ()))
+
+/-- The effects the reaction starts for the event `ev`. -/
+def ReactionV.effectsAt {r e : Ty} (x : ReactionV r e) (ev : e.den0) (records : r.den0) (now : Int) : List (EffectV e) :=
+  x.react.apply (.inl (records, now, ()), ev, ())
+
 /-- The rules an answer to the request keeps: its query's `ensures` at the request's input. -/
 def RequestV.holds {e : Ty} (r : RequestV e) (answer : (answerTy r.output r.rejection).den0) : Ty.rules.den0 :=
   match r.ensures with
@@ -109,6 +124,12 @@ def RequestV.holds {e : Ty} (r : RequestV e) (answer : (answerTy r.output r.reje
 
 /-- A kept function whose source is a closed expression without definitions, as examples write one. -/
 def Fun.closed {t : Ty} (body : Expr [] [] t) (ht : t.isData = true := by rfl) : Fun t := ⟨⟨"", 0, 0⟩, [], .nil, [], (), rfl, ht, body⟩
+
+/-- A kept function that returns effects, whose source is a closed expression without definitions, as examples write
+one. -/
+def EffectFun.closed {ps : List Ty} {r : Ty} (body : Expr [] [] (.fn ps r)) (hps : (Ty.tuple ps).isData = true := by rfl) :
+    EffectFun ps r :=
+  ⟨⟨"", 0, 0⟩, [], .nil, [], (), rfl, hps, body⟩
 
 /-- The value of a loaded program's root. -/
 def Program.eval {rootTy : Ty} (p : Program rootTy) : rootTy.den := p.root.get p.defs.eval

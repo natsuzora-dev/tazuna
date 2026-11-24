@@ -620,7 +620,7 @@ def pendingSites : List AnySite :=
   [⟨[.int], _, ⟨⟨"m", 1, 1⟩, [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨⟨"m", 2, 1⟩, [], .nil, rfl, rfl, rateAnswerE⟩⟩,
    ⟨[], _, ⟨⟨"m", 3, 1⟩, [], .nil, rfl, rfl, rateEnsuresE⟩⟩]
 
-def askR : ReactionV recordsT .int := ⟨"ask", fun _ _ _ => []⟩
+def askR : ReactionV recordsT .int := ⟨"ask", .closed (.lam (.list .nil))⟩
 
 def fxDeclared : List (String × DeclaredV) :=
   [("fx", .externalCommand "pay" .str .int .str), ("fx", .externalQuery "rate" .str .int (.closed rateEnsuresE))]
@@ -710,7 +710,7 @@ well-formed. -/
 def doorM : MachineV recordsT .int :=
   { name := "door", key := .int, state := .int, instances := .closed (.lam (.call (.prim .tableKeys [.int, .int] rfl)
       (.cons (.var .here) .nil))), initial := (0 : Int), on := .closed (.lam (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil)),
-    after := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)), effect := fun _ _ _ _ => none,
+    after := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)), effect := .closed (.lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil)),
     invariants := .closed (.lam (.list .nil)) }
 
 def doorSvc : ServiceV := { querySvc with name := "d", queries := [], machines := [doorM] }

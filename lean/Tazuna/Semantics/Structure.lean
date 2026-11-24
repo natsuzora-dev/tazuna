@@ -19,6 +19,18 @@ structure Fun (t : Ty) where
   ht : t.isData = true
   body : Expr G Γ t
 
+/-- A function a structure value keeps that takes data, of the types `ps`, and returns `r`, which holds effects, so
+it has no data meaning: its meaning is its source's value (`EffectFun.apply`). Like `Fun`, it is a closure record. -/
+structure EffectFun (ps : List Ty) (r : Ty) where
+  site : SiteId
+  G : List Ty
+  defs : Defs G
+  Γ : List Ty
+  env : (Ty.tuple Γ).den0
+  hΓ : (Ty.tuple Γ).isData = true
+  hps : (Ty.tuple ps).isData = true
+  body : Expr G Γ (.fn ps r)
+
 /-- A value with its type, as it crosses the wire. -/
 abbrev WireVal := (t : Ty) × t.den0
 
@@ -73,16 +85,16 @@ abbrev CommandOf (r e c i j : Ty) := { x : CommandV r e c // x.input = i ∧ x.r
 abbrev QueryOf (r c i o : Ty) := { x : QueryV r c // x.input = i ∧ x.output = o }
 
 /-- What a machine or reaction starts: a request to an external, or a command or query of its own service run inside
-the same step. An own command's answer is `Ok(Nil)` once its events are applied, or its rejection. -/
+the same step. An own command or query is named, with its types, as a handle's code names it: the step runs the one
+its service lists. An own command's answer is `Ok(Nil)` once its events are applied, or its rejection. -/
 inductive EffectV (e : Ty) where
   | request (x : RequestV e)
-  | command (r c : Ty) (x : CommandV r e c) (caller : c.den0) (input : x.input.den0)
-      (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list e)))
-  | query (r c : Ty) (x : QueryV r c) (caller : c.den0) (input : x.input.den0)
-      (onAnswer : Fun (Ty.fn [x.output] (.list e)))
+  | command (name : String) (c input rejection : Ty) (caller : c.den0) (value : input.den0)
+      (onAnswer : Fun (Ty.fn [Ty.result Ty.nil rejection] (.list e)))
+  | query (name : String) (c input output : Ty) (caller : c.den0) (value : input.den0)
+      (onAnswer : Fun (Ty.fn [output] (.list e)))
 
-/-- A machine. Its functions are kept, so the step encoding applies their codes; `effect` returns a structure value,
-which no kept function can. -/
+/-- A machine. Its functions are kept, so the step encoding applies their codes. -/
 structure MachineV (r e : Ty) where
   name : String
   key : Ty
@@ -91,12 +103,12 @@ structure MachineV (r e : Ty) where
   initial : state.den0
   on : Fun (Ty.fn [Ty.machineCtx key state r, e] (Ty.next state))
   after : Fun (Ty.fn [Ty.machineCtx key state r] (Ty.option (Ty.timer state)))
-  effect : key.den0 → state.den0 → r.den0 → Int → Option (EffectV e)
+  effect : EffectFun [Ty.machineCtx key state r] (Ty.option (.dsl .effect [e]))
   invariants : Fun (Ty.fn [Ty.machineCtx key state r] Ty.rules)
 
 structure ReactionV (r e : Ty) where
   name : String
-  react : e.den0 → r.den0 → Int → List (EffectV e)
+  react : EffectFun [Ty.reactionCtx r, e] (.list (.dsl .effect [e]))
 
 /-- A declaration, for the service or external that owns it: the handle, with the types that make it that handle. -/
 inductive DeclaredV where
@@ -212,6 +224,7 @@ def Dsl.val : Dsl → List Ty → Sem
       | .step, [r, e, c] => StepV r e c
       | .sender, _ => Sender
       | .closure, [t] => Fun t
+      | .effectClosure, [.fn ps r] => EffectFun ps r
       | _, _ => Unit
     ⟨carrier, fun _ _ => false⟩
 

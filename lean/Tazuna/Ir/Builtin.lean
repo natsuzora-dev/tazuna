@@ -26,7 +26,7 @@ def opaqueTypes : List OpaqueType :=
       fun | [] => some .date | _ => none⟩,
     ⟨"tazuna", "Id", [], "An identifier a step makes fresh, or one from outside the service; ids compare with `==` only.",
       fun | [] => some .id | _ => none⟩ ] ++
-  (Dsl.all.filter (· != .closure)).map fun k => ⟨"tazuna", k.name, k.decl.2.1, k.decl.2.2,
+  (Dsl.all.filter (!·.kept)).map fun k => ⟨"tazuna", k.name, k.decl.2.1, k.decl.2.2,
     fun args => if args.length == k.decl.2.1.length then some (.dsl k args) else none⟩
 
 /-- The type a global name such as `tazuna/bag.Bag` names at `args`, when a `tazuna` module declares it opaque. -/
@@ -90,6 +90,8 @@ def sig : Prim → PrimSig :=
   let l (lab : String) (t : Ty) : PrimParam := ⟨some lab, lab, t⟩
   -- A function the structure value keeps, closed over the data it captures.
   let kept (t : Ty) : Ty := .dsl .closure [t]
+  -- A kept function that takes data and returns effects.
+  let keptEffects (t : Ty) : Ty := .dsl .effectClosure [t]
   fun
   | .length => ⟨"length", "The number of code points.", [], [p "string" .str], .int, [], false⟩
   | .bagFromList => ⟨"from_list", "A bag of the list's items.", ["a"], [p "items" (.list a)], .bag a, [], false⟩
@@ -187,13 +189,13 @@ def sig : Prim → PrimSig :=
       params := [l "name" .str, l "instances" (kept (.fn [a] (.bag (param 2)))), l "initial" (param 3),
         l "on" (kept (.fn [.machineCtx (param 2) (param 3) a, b] (.next (param 3)))),
         l "after" (kept (.fn [.machineCtx (param 2) (param 3) a] (.option (.timer (param 3))))),
-        l "effect" (.fn [.machineCtx (param 2) (param 3) a] (.option (.dsl .effect [b]))),
+        l "effect" (keptEffects (.fn [.machineCtx (param 2) (param 3) a] (.option (.dsl .effect [b])))),
         l "invariants" (kept (.fn [.machineCtx (param 2) (param 3) a] Ty.rules))],
       ret := .dsl .machine [a, b] }
   | .reaction =>
     { name := "reaction", doc := "A reaction: effects for each event, without state of its own.",
       tvars := ["records", "event"], dataArgs := true,
-      params := [l "name" .str, l "react" (.fn [.reactionCtx a, b] (.list (.dsl .effect [b])))],
+      params := [l "name" .str, l "react" (keptEffects (.fn [.reactionCtx a, b] (.list (.dsl .effect [b]))))],
       ret := .dsl .reaction [a, b] }
   | .external =>
     { name := "external", doc := "An external service: the commands, queries and sources it declares, which it owns.", tvars := [],

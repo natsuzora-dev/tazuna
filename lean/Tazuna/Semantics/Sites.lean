@@ -40,6 +40,7 @@ def Expr.sites {Γ : List Ty} {t : Ty} : Expr G Γ t → List AnySite
   | .case e cs _ => Expr.sites e ++ Clauses.sites cs
   | .list items => Items.sites items
   | @Expr.close _ _ Γ' t' site env hΓ ht body => ⟨Γ', t', ⟨site, G, D, hΓ, ht, body⟩⟩ :: Exprs.sites env ++ Expr.sites body
+  | .closeEffect _ env _ _ body => Exprs.sites env ++ Expr.sites body
 def Exprs.sites {Γ ts : List Ty} : Exprs G Γ ts → List AnySite
   | .nil => []
   | .cons e es => Expr.sites e ++ Exprs.sites es

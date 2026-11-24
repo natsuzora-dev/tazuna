@@ -91,7 +91,7 @@ def DslCode : Dsl → List Ty → Type
   | .externalQuery, _ => String × ClosureCode
   | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _ | .reaction, _ | .external, _ | .source, _
   | .declared, _ | .effect, _ | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _
-  | .sender, _ | .fresh, _ => Term
+  | .sender, _ | .fresh, _ | .effectClosure, _ => Term
 
 mutual
 /-- How a value of a type is coded: a term for first-order types, a Lean function on codes for a function. A list
@@ -110,19 +110,19 @@ def DslCode.term? : (k : Dsl) → (a : List Ty) → DslCode k a → Option Term
   | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ => none
   | .spec, _, s | .service, _, s | .command, _, s | .query, _, s | .machine, _, s | .reaction, _, s | .external, _, s
   | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
-  | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s => some s
+  | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s | .effectClosure, _, s => some s
 
 def DslCode.ofTerm? : (k : Dsl) → (a : List Ty) → Term → Option (DslCode k a)
   | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ => none
   | .spec, _, s | .service, _, s | .command, _, s | .query, _, s | .machine, _, s | .reaction, _, s | .external, _, s
   | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
-  | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s => some s
+  | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s | .effectClosure, _, s => some s
 
 def DslCode.share : (k : Dsl) → (a : List Ty) → DslCode k a → DslCode k a
   | .closure, _, s | .externalCommand, _, s | .externalQuery, _, s => s
   | .spec, _, s | .service, _, s | .command, _, s | .query, _, s | .machine, _, s | .reaction, _, s | .external, _, s
   | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
-  | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s => Term.share s
+  | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s | .effectClosure, _, s => Term.share s
 
 /-- A code with its condition, or why there is none. -/
 scoped notation:max "Enc " α:max => Except Refusal (α × Term)
@@ -734,6 +734,7 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
     let (ss, c) ← encodes env σ
     let ts ← need "a captured value that has no term" (Codes.terms? _ ss)
     pure (⟨⟨site, Γ'⟩, ts⟩, c)
+  | .closeEffect .., _ => .error (.outside "a kept function that returns effects")
 def encodes {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Codes Γ → Enc (Codes ts)
   | .nil, _ => .ok ((), tt)
   | .cons e es, σ => do
@@ -867,7 +868,7 @@ def Expr.tys {Γ : List Ty} {t : Ty} : Expr G Γ t → List Ty
   | .tuple es => t :: Exprs.tys es
   | .bin _ l r => t :: Expr.tys l ++ Expr.tys r
   | .not e | .neg e => t :: Expr.tys e
-  | .close _ env _ _ body => t :: Exprs.tys env ++ Expr.tys body
+  | .close _ env _ _ body | .closeEffect _ env _ _ body => t :: Exprs.tys env ++ Expr.tys body
   | .int _ | .str _ | .var _ | .global _ | .prim .. => [t]
 def Exprs.tys {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → List Ty
   | .nil => []
@@ -901,7 +902,7 @@ def Expr.lits {Γ : List Ty} {t : Ty} : Expr G Γ t → List (Ty × Nat)
   | .call f args => Expr.lits f ++ Exprs.lits args
   | .let_ e body | .bin _ e body => Expr.lits e ++ Expr.lits body
   | .case e cs _ => Expr.lits e ++ Clauses.lits cs
-  | .close _ env _ _ body => Exprs.lits env ++ Expr.lits body
+  | .close _ env _ _ body | .closeEffect _ env _ _ body => Exprs.lits env ++ Expr.lits body
   | .int _ | .str _ | .var _ | .global _ | .prim .. => []
 def Exprs.lits {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → List (Ty × Nat)
   | .nil => []

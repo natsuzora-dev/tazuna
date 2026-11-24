@@ -128,7 +128,7 @@ def enter {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (key : m.
   let timer := match m.after.fn (.inl (key, st, records, now, ()), ()) with
     | .inl (.inl (d, target, ()), ()) => some (now + (show Int from d), target)
     | _ => none
-  (⟨key, st, timer⟩, (m.effect key st records now).toList.map (.machine m.name ⟨m.key, key⟩, ·))
+  (⟨key, st, timer⟩, (m.effectAt key st records now).toList.map (.machine m.name ⟨m.key, key⟩, ·))
 
 variable (T : List TypeDecl)
 
@@ -153,7 +153,7 @@ def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV
   let records := v.apply.fn (s.records, ev, ())
   let (machines, effs) := s.machines.foldl (fun (ms, effs) ms0 =>
     let (m', es) := machineStep T records s.now ev ms0; (ms ++ [m'], effs ++ es)) ([], [])
-  let effs := effs ++ v.reactions.flatMap fun x => (x.react ev records s.now).map (.reaction x.name, ·)
+  let effs := effs ++ v.reactions.flatMap fun x => (x.effectsAt ev records s.now).map (.reaction x.name, ·)
   ({ s with records, machines }, effs)
 
 /-- The broken invariants of the service and of every machine instance. -/
@@ -208,9 +208,7 @@ def okNil {j : Ty} : (Ty.result Ty.nil j).den0 := .inl (.inl (), ())
 events are applied. -/
 def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) : Except Fault (Acc v) :=
-  if !(v.commands.any fun c => c.name == x.name && (Ty.same c.input x.input).isSome &&
-      (Ty.same c.rejection x.rejection).isSome) then .error (.invalidEffect x.name ["service"])
-  else match admit x.callers x.accepts caller input with
+  match admit x.callers x.accepts caller input with
   | r :: rs => .error (.invalidEffect x.name (r :: rs))
   | [] => do
     let cx := ctx a.state a.state.records caller input
@@ -226,22 +224,40 @@ def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v
 /-- Runs an own query as an internal step: its answer's events are applied. -/
 def runQuery (a : Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) : Except Fault (Acc v) :=
-  if !(v.queries.any fun q => q.name == x.name && (Ty.same q.input x.input).isSome &&
-      (Ty.same q.output x.output).isSome) then .error (.invalidEffect x.name ["service"])
-  else match admit x.callers x.accepts caller input with
+  match admit x.callers x.accepts caller input with
   | r :: rs => .error (.invalidEffect x.name (r :: rs))
   | [] => applyEvents T a (onAnswer.fn (x.resolve.fn (ctx a.state a.state.records caller input, ()), ()))
 
+/-- The command the service lists by the name and types an effect gives. -/
+def ownCommand (name : String) (i j : Ty) :
+    Option ((x : CommandV v.records v.event v.caller) ×' (i = x.input ∧ j = x.rejection)) :=
+  v.commands.findSome? fun x => if x.name == name then
+    match Ty.same i x.input, Ty.same j x.rejection with
+    | some ⟨hi⟩, some ⟨hj⟩ => some ⟨x, hi, hj⟩
+    | _, _ => none
+  else none
+
+/-- The query the service lists by the name and types an effect gives. -/
+def ownQuery (name : String) (i o : Ty) : Option ((x : QueryV v.records v.caller) ×' (i = x.input ∧ o = x.output)) :=
+  v.queries.findSome? fun x => if x.name == name then
+    match Ty.same i x.input, Ty.same o x.output with
+    | some ⟨hi⟩, some ⟨ho⟩ => some ⟨x, hi, ho⟩
+    | _, _ => none
+  else none
+
+/-- Runs an own command or query: the one the service lists by the effect's name and types. -/
 def runOwn (a : Acc v) : EffectV v.event → Except Fault (Acc v)
   | .request _ => .ok a
-  | .command r c x caller input onAnswer =>
-    match Ty.same r v.records, Ty.same c v.caller with
-    | some ⟨hr⟩, some ⟨hc⟩ => by subst hr hc; exact runCommand T a x caller input onAnswer
-    | _, _ => .error (.invalidEffect x.name ["service"])
-  | .query r c x caller input onAnswer =>
-    match Ty.same r v.records, Ty.same c v.caller with
-    | some ⟨hr⟩, some ⟨hc⟩ => by subst hr hc; exact runQuery T a x caller input onAnswer
-    | _, _ => .error (.invalidEffect x.name ["service"])
+  | .command name c i j caller value onAnswer =>
+    match Ty.same c v.caller, ownCommand (v := v) name i j with
+    | some ⟨hc⟩, some ⟨x, hi, hj⟩ =>
+      runCommand T a x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (hj ▸ onAnswer)
+    | _, _ => .error (.invalidEffect name ["service"])
+  | .query name c i o caller value onAnswer =>
+    match Ty.same c v.caller, ownQuery (v := v) name i o with
+    | some ⟨hc⟩, some ⟨x, hi, ho⟩ =>
+      runQuery T a x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (ho ▸ onAnswer)
+    | _, _ => .error (.invalidEffect name ["service"])
 
 /-- Runs the waiting own commands and queries in order, one internal step each, until none waits; more than `fuel`
 internal steps is a fault. -/

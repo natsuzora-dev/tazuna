@@ -7,7 +7,7 @@ built-ins and never looks inside them. `fresh` is the source of new ids a step h
 inductive Dsl where
   | spec | service | command | query | machine | reaction | external
   | externalCommand | externalQuery | source | declared | effect | subscription
-  | bounds | create | response | scenario | step | sender | fresh | closure
+  | bounds | create | response | scenario | step | sender | fresh | closure | effectClosure
 deriving Repr, DecidableEq, Inhabited
 
 namespace Dsl
@@ -15,7 +15,7 @@ namespace Dsl
 def all : List Dsl :=
   [.spec, .service, .command, .query, .machine, .reaction, .external, .externalCommand, .externalQuery,
    .source, .declared, .effect, .subscription, .bounds, .create, .response,
-   .scenario, .step, .sender, .fresh, .closure]
+   .scenario, .step, .sender, .fresh, .closure, .effectClosure]
 
 theorem mem_all (k : Dsl) : k ∈ all := by cases k <;> simp [all]
 
@@ -50,8 +50,15 @@ def decl : Dsl → String × List String × String
   | .fresh => ("Fresh", [], "Where a command's new ids come from.")
   | .closure => ("Closure", ["function"],
       "A function a structure value keeps: Gleam writes it as the function type; Lean keeps its source.")
+  | .effectClosure => ("EffectClosure", ["function"],
+      "A function a structure value keeps that takes data and returns effects: Gleam writes it as the function type; Lean keeps its source.")
 
 def name (k : Dsl) : String := (decl k).1
+
+/-- Whether the type marks a function a structure value keeps, which Gleam writes as the function type. -/
+def kept : Dsl → Bool
+  | .closure | .effectClosure => true
+  | _ => false
 
 end Dsl
 

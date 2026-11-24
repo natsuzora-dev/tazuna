@@ -168,6 +168,10 @@ inductive Expr (G : List Ty) : List Ty → Ty → Type
   variables it uses, and names it by `site`, where it is written. -/
   | close {Γ Γ' t} (site : SiteId) (env : Exprs G Γ Γ') (hΓ : (Ty.tuple Γ').isData = true) (ht : t.isData = true)
       (body : Expr G Γ' t) : Expr G Γ (.dsl .closure [t])
+  /-- A function a structure value keeps that takes data and returns effects (a machine's `effect`, a reaction's
+  `react`): its source `body` over the values `env` it captures, named by `site` as `close` names one. -/
+  | closeEffect {Γ Γ' ps r} (site : SiteId) (env : Exprs G Γ Γ') (hΓ : (Ty.tuple Γ').isData = true)
+      (hps : (Ty.tuple ps).isData = true) (body : Expr G Γ' (.fn ps r)) : Expr G Γ (.dsl .effectClosure [.fn ps r])
 inductive Exprs (G : List Ty) : List Ty → List Ty → Type
   | nil {Γ} : Exprs G Γ []
   | cons {Γ t ts} (e : Expr G Γ t) (es : Exprs G Γ ts) : Exprs G Γ (t :: ts)

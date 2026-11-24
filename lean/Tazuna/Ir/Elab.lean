@@ -77,7 +77,7 @@ partial def showTy : Ty → String
   | .table k v => s!"tazuna/table.Table({showTy k}, {showTy v})"
   | .date => "tazuna/date.Date"
   | .id => "tazuna.Id"
-  | .dsl .closure [t] => showTy t
+  | .dsl .closure [t] | .dsl .effectClosure [t] => showTy t
   | .dsl k args =>
     let n := "tazuna." ++ k.name
     if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map showTy) ++ ")"
@@ -105,7 +105,7 @@ partial def toTy (σ : List (String × Ty)) : STy → Except String Ty
 /-- Whether a source annotation fits a type: holes and type variables the annotation introduces fit anything. -/
 partial def annotationFits (σ : List (String × Ty)) : STy → Ty → Bool
   | .hole _, _ => true
-  | a, .dsl .closure [t] => annotationFits σ a t
+  | a, .dsl .closure [t] | a, .dsl .effectClosure [t] => annotationFits σ a t
   | .var n, t => match σ.lookup n with
     | some u => (Ty.same u t).isSome
     | none => true
@@ -283,7 +283,7 @@ partial def usesE {G Γ : List Ty} {t : Ty} (d : Nat) : Expr G Γ t → List Nat
   | .case e cs _ => usesE d e ++ usesC d cs
   | .list items => usesI d items
   | .bin _ l r => usesE d l ++ usesE d r
-  | .close _ env _ _ _ => usesEs d env
+  | .close _ env _ _ _ | .closeEffect _ env _ _ _ => usesEs d env
 partial def usesEs {G Γ : List Ty} {ts : List Ty} (d : Nat) : Exprs G Γ ts → List Nat
   | .nil => []
   | .cons e es => usesE d e ++ usesEs d es
@@ -339,7 +339,7 @@ def coerce {Γ : List Ty} (pos : At) (want got : Ty) (e : Expr G Γ got) : E (Ex
 
 /-- The type as Gleam writes it: a function a structure value keeps is the function. -/
 partial def gleamTy : Ty → Ty
-  | .dsl .closure [t] => gleamTy t
+  | .dsl .closure [t] | .dsl .effectClosure [t] => gleamTy t
   | .list t => .list (gleamTy t)
   | .tuple ts => .tuple (ts.map gleamTy)
   | .fn ps r => .fn (ps.map gleamTy) (gleamTy r)
@@ -596,8 +596,11 @@ partial def holdsFn : Ty → Bool
   | _ => false
 
 /-- A function a structure built-in keeps, closed over the variables it uses: `e` elaborated again in a scope of
-only those, so its source needs no renaming. -/
-partial def elabKept (sc : Scope) (u : Ty) (e : Surface.Expr) : E (Expr G (ctx sc) (.dsl .closure [u])) := do
+only those, so its source needs no renaming. `close` builds the node from the site, the captured variables and the
+source. -/
+partial def elabKept {r : Ty} (sc : Scope) (u : Ty) (e : Surface.Expr)
+    (close : {Γ' : List Ty} → SiteId → Exprs G (ctx sc) Γ' → (Ty.tuple Γ').isData = true → Expr G Γ' u →
+      E (Expr G (ctx sc) r)) : E (Expr G (ctx sc) r) := do
   let ⟨u0, x⟩ ← elabExpr sc e
   let x ← coerce cx e.pos u u0 x
   let used := usesE 0 x
@@ -609,17 +612,22 @@ partial def elabKept (sc : Scope) (u : Ty) (e : Surface.Expr) : E (Expr G (ctx s
   let env ← castList (F := fun Γ' => Exprs G (ctx sc) Γ') e.pos env (b := ctx sc')
   if let some (n, _) := sc'.find? (holdsFn ·.2) then
     fail e.pos s!"a function a structure value keeps captures the function {n}, which has no constant"
-  if hΓ : (Ty.tuple (ctx sc')).isData = true then
-    if ht : u.isData = true then pure (.close ⟨cx.module, e.pos.line, e.pos.col⟩ env hΓ ht body)
-    else fail e.pos s!"a structure value keeps a function of {showTy T u}, which holds no data"
+  if hΓ : (Ty.tuple (ctx sc')).isData = true then close ⟨cx.module, e.pos.line, e.pos.col⟩ env hΓ body
   else fail e.pos s!"a function a structure value keeps captures a value that is not data: {", ".intercalate
     ((sc'.filter fun (_, t) => !t.isData).map (·.1))}"
 
 partial def elabSlot (sc : Scope) (t : Ty) : Slot T G (ctx sc) → E (Expr G (ctx sc) t)
   | .expr e => do
     if let .dsl .closure [u] := t then
-      let k ← elabKept sc u e
+      let k ← elabKept sc u e fun site env hΓ body =>
+        if ht : u.isData = true then pure (.close site env hΓ ht body)
+        else fail e.pos s!"a structure value keeps a function of {showTy T u}, which holds no data"
       return ← coerce cx e.pos t (.dsl .closure [u]) k
+    if let .dsl .effectClosure [.fn ps r] := t then
+      let k ← elabKept sc (.fn ps r) e fun site env hΓ body =>
+        if hps : (Ty.tuple ps).isData = true then pure (.closeEffect site env hΓ hps body)
+        else fail e.pos s!"a structure value keeps a function that takes {showTy T (.tuple ps)}, which holds no data"
+      return ← coerce cx e.pos t (.dsl .effectClosure [.fn ps r]) k
     let ⟨u, x⟩ ← elabExpr sc e
     coerce cx e.pos t u x
   | .typed pos u x => coerce cx pos t u x
