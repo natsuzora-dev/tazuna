@@ -310,8 +310,9 @@ def varsAt {G Γ : List Ty} (pos : At) : (bs : List ((String × Ty) × Nat)) →
 /-- What elaborating one body needs: the type table, the type variables in scope, every global's signature, and the
 instances already elaborated (all a body refers to). -/
 structure Cx (T : List TypeDecl) (G : List Ty) where
-  /-- The module whose global is elaborated, which names its kept functions' sites. -/
+  /-- The module whose global is elaborated and the global's index, which name its kept functions' sites. -/
   module : String
+  index : Nat
   σ : List (String × Ty)
   sigs : List (String × Sig)
   glob : String → List Ty → Option ((t : Ty) × Var G t)
@@ -612,7 +613,7 @@ partial def elabKept {r : Ty} (sc : Scope) (u : Ty) (e : Surface.Expr)
   let env ← castList (F := fun Γ' => Exprs G (ctx sc) Γ') e.pos env (b := ctx sc')
   if let some (n, _) := sc'.find? (holdsFn ·.2) then
     fail e.pos s!"a function a structure value keeps captures the function {n}, which has no constant"
-  if hΓ : (Ty.tuple (ctx sc')).isData = true then close ⟨cx.module, e.pos.line, e.pos.col⟩ env hΓ body
+  if hΓ : (Ty.tuple (ctx sc')).isData = true then close ⟨cx.module, e.pos.line, e.pos.col, cx.index⟩ env hΓ body
   else fail e.pos s!"a function a structure value keeps captures a value that is not data: {", ".intercalate
     ((sc'.filter fun (_, t) => !t.isData).map (·.1))}"
 

@@ -87,7 +87,8 @@ partial def demand {T : List TypeDecl} (c : Ctx) (name : String) (args : List Ty
       | none => fail pos s!"{n} needs the type argument {v}"
     demand c n args'
   let st ← get
-  let cx : Cx T st.G := { module := moduleOf name, σ, sigs := c.globals.map fun g => (g.name, g.sig), glob := st.glob }
+  let cx : Cx T st.G :=
+    { module := moduleOf name, index := st.G.length, σ, sigs := c.globals.map fun g => (g.name, g.sig), glob := st.glob }
   let ⟨t, body⟩ ← inGlobal c g.name do
     let ty (s : STy) : E Ty := match toTy T σ s with | .ok t => pure t | .error e => fail g.pos e
     match g.body with

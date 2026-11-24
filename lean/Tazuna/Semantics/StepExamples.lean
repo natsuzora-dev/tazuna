@@ -41,7 +41,7 @@ private def noneE {Γ : List Ty} {t : Ty} : Expr [] Γ (Ty.option t) := .ctor (v
 /-- A kept function written at `line` of this module, capturing nothing. -/
 private def keptE {Γ : List Ty} {t : Ty} (line : Nat) (body : Expr [] [] t) (ht : t.isData = true := by rfl) :
     Expr [] Γ (.dsl .closure [t]) :=
-  .close ⟨"examples", line, 1⟩ .nil rfl ht body
+  .close ⟨"examples", line, 1, 0⟩ .nil rfl ht body
 
 /-- `request_command(external_command("ping"), "hi", fn(answer) { case answer { Ok(_) -> [1]  Error(_) -> [] } })`. -/
 private def pingE {Γ : List Ty} : Expr [] Γ (.dsl .effect [.int]) :=

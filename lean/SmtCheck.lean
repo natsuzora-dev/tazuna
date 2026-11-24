@@ -730,8 +730,8 @@ def insertE : E (.fn [recordsT, .int] recordsT) :=
     (.cons (.var .here) (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))))
 
 def pendingSites : List AnySite :=
-  [⟨[.int], _, ⟨⟨"m", 1, 1⟩, [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨⟨"m", 2, 1⟩, [], .nil, rfl, rfl, rateAnswerE⟩⟩,
-   ⟨[], _, ⟨⟨"m", 3, 1⟩, [], .nil, rfl, rfl, rateEnsuresE⟩⟩]
+  [⟨[.int], _, ⟨⟨"m", 1, 1, 0⟩, [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨⟨"m", 2, 1, 0⟩, [], .nil, rfl, rfl, rateAnswerE⟩⟩,
+   ⟨[], _, ⟨⟨"m", 3, 1, 0⟩, [], .nil, rfl, rfl, rateEnsuresE⟩⟩]
 
 def askR : ReactionV recordsT .int := ⟨"ask", .closed (.lam (.list .nil))⟩
 
@@ -1159,14 +1159,14 @@ def sendE (k : Int) : Expr [] [.int] (.dsl .effect [.int]) :=
   let handle : Expr [] [.int] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
-  let clo : Expr [] [.int] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7⟩ (.cons (.var .here) .nil) rfl rfl body
+  let clo : Expr [] [.int] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7, 0⟩ (.cons (.var .here) .nil) rfl rfl body
   .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add (.var .here) (.int k)) (.cons clo .nil)))
 
 def sendKey (site : SiteId) : EffectKey :=
   ⟨.int, "send", .int, Ty.nil, some Ty.nil, none, ⟨site, [.int]⟩⟩
 
 def effLayout : Layout :=
-  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9⟩, sendKey ⟨"m", 3, 7⟩] }
+  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] }
     [.dsl .effect [.int], .int])
 
 /-- Whether the solver's value `v` is the variant of the effect `eff` holds: its kind's name and site, its input and
@@ -1213,7 +1213,7 @@ free slot holds some value of the effect datatype, which no value reads; the occ
 def sendsE (k : Int) : Expr [] [.int] (.list (.dsl .effect [.int])) := .list (.cons (sendE k) .nil)
 
 def effListLayout : Layout :=
-  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9⟩, sendKey ⟨"m", 3, 7⟩] }
+  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] }
     [.list (.dsl .effect [.int]), .int])
 
 /-- The items of a list's occupied slots. -/
@@ -1261,7 +1261,7 @@ def machineEffectE : Expr [] [] (.fn [mctxT] (Ty.option (.dsl .effect [.int]))) 
   let handle : Expr [] [mctxT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
-  let clo : Expr [] [mctxT] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7⟩ (.cons key .nil) rfl rfl body
+  let clo : Expr [] [mctxT] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7, 0⟩ (.cons key .nil) rfl rfl body
   let req : Expr [] [mctxT] (.dsl .effect [.int]) :=
     .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add key (.int 1)) (.cons clo .nil)))
   .lam (.case (.bin (.eq rfl) st (.int 5))
@@ -1276,7 +1276,7 @@ def effectM : MachineV .int .int :=
     invariants := .closed (.lam (.list .nil)) }
 
 def machineEffectLayout : Layout :=
-  Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9⟩, sendKey ⟨"m", 3, 7⟩] }
+  Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] }
     [mctxT, Ty.option (.dsl .effect [.int]), .tuple [.int]]
 
 def machineEffectCheck (solver : Solver) : IO Bool := do
@@ -1523,7 +1523,7 @@ def startEffectE : Expr [] [] (.fn [invCtxT] (Ty.option (.dsl .effect [.int]))) 
   let handle : Expr [] [invCtxT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
-  let clo : Expr [] [invCtxT] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7⟩ (.cons key .nil) rfl rfl body
+  let clo : Expr [] [invCtxT] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7, 0⟩ (.cons key .nil) rfl rfl body
   let req : Expr [] [invCtxT] (.dsl .effect [.int]) :=
     .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add key (.int 1)) (.cons clo .nil)))
   .lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨0, by decide⟩ (.cons req .nil))
@@ -1533,7 +1533,7 @@ def startM : MachineV recordsT .int := { reactM with name := "start", effect := 
 def startSvc : ServiceV := { querySvc with name := "st", queries := [], machines := [startM] }
 
 def startLayout : Layout :=
-  Layout.addTys (fun _ => 3) { effects := [sendKey ⟨"m", 9, 9⟩, sendKey ⟨"m", 3, 7⟩] } (reactTys ++ [.tuple [.int]])
+  Layout.addTys (fun _ => 3) { effects := [sendKey ⟨"m", 9, 9, 0⟩, sendKey ⟨"m", 3, 7, 0⟩] } (reactTys ++ [.tuple [.int]])
 
 def startsCheck (solver : Solver) : IO Bool := do
   let L := startLayout

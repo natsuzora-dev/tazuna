@@ -1,6 +1,6 @@
 import Tazuna.Cli.Kind
 import Tazuna.Ir.Load
-import Tazuna.Semantics.Eval
+import Tazuna.Semantics.Reach
 
 /-! The `check` command: it loads the IR, evaluates the spec and reports each broken structure rule. Every other
 command runs it first. -/
@@ -25,8 +25,9 @@ def loadSpec (root path : String) : IO (Except UInt32 (List Ir.TypeDecl × Ir.Sp
     | .ok j => match j.getObjValAs? String "root" with
       | .ok r =>
         if r == root ++ ".spec" then
-          (Ir.Load.load (.fn [] Ir.Ty.spec) j).map fun (p : Ir.Program (.fn [] Ir.Ty.spec)) =>
-            (p.types, p.eval (), p.defs.handles)
+          (Ir.Load.load (.fn [] Ir.Ty.spec) j).bind fun (p : Ir.Program (.fn [] Ir.Ty.spec)) =>
+            if Ir.SitesUnique p.defs.sites then .ok (p.types, p.eval (), p.defs.handles)
+            else .error ⟨none, none, "two kept functions share a site id"⟩
         else .error ⟨none, none, s!"the IR's root is {r}, but the launcher was asked for {root}"⟩
       | .error e => .error ⟨none, none, s!"no root: {e}"⟩
     | .error e => .error ⟨none, none, s!"not JSON: {e}"⟩

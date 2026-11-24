@@ -8,6 +8,28 @@ holds none. `eval_reach` proves evaluation keeps it, so with unique site ids a c
 
 namespace Tazuna.Ir
 
+/-- No two sites share an id. The elaborator names each site by its module, position and the global instance that
+holds it, and `check` refuses a program where two coincide. -/
+def SitesUnique (P : List AnySite) : Prop := (P.map (·.2.2.site)).Nodup
+
+instance (P : List AnySite) : Decidable (SitesUnique P) := inferInstanceAs (Decidable (List.Nodup _))
+
+theorem nodup_map_inj {α β : Type} (f : α → β) : (l : List α) → (l.map f).Nodup → ∀ {a b : α}, a ∈ l → b ∈ l →
+    f a = f b → a = b
+  | [], _, _, _, ha, _, _ => by cases ha
+  | x :: xs, h, a, b, ha, hb, e => by
+    rw [List.map_cons, List.nodup_cons] at h
+    rcases List.mem_cons.1 ha with ha' | ha' <;> rcases List.mem_cons.1 hb with hb' | hb'
+    · rw [ha', hb']
+    · subst ha'; exact absurd (e ▸ List.mem_map_of_mem hb') h.1
+    · subst hb'; exact absurd (e.symm ▸ List.mem_map_of_mem ha') h.1
+    · exact nodup_map_inj f xs h.2 ha' hb' e
+
+/-- Among unique sites, the id fixes the site. -/
+theorem site_eq {P : List AnySite} (hP : SitesUnique P) {a b : AnySite} (ha : a ∈ P) (hb : b ∈ P)
+    (h : a.2.2.site = b.2.2.site) : a = b :=
+  nodup_map_inj _ P hP ha hb h
+
 section
 variable (P : List AnySite)
 
@@ -447,5 +469,17 @@ theorem ReactionV.reach_effectsAt {r e : Ty} (x : ReactionV r e) (hx : x.Reach P
   EffectFun.reach_apply P x.react hx ((.inl (records, now, ()), ev, ()))
 
 end
+
+/-- A closure's id fixes its source: a kept function that is a record of the unique sites `P` is the closure record
+of `P`'s site with its id, at its captured values. -/
+theorem Fun.eq_siteFn {P : List AnySite} (hP : SitesUnique P) {Γ : List Ty} {t : Ty} (f : Fun t) (s : Site Γ t)
+    (hf : f.asSite ∈ P) (hs : ⟨Γ, t, s⟩ ∈ P) (h : f.site = s.site) : ∃ e : f.Γ = Γ, f = s.fn (e ▸ f.env) := by
+  have he := site_eq hP hf hs h
+  obtain ⟨site, G, defs, Γf, env, hΓ, ht, body⟩ := f
+  simp only [Fun.asSite, Sigma.mk.injEq] at he
+  obtain ⟨rfl, he⟩ := he
+  simp only [heq_eq_eq, Sigma.mk.injEq, true_and] at he
+  subst he
+  exact ⟨rfl, rfl⟩
 
 end Tazuna.Ir

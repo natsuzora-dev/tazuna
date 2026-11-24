@@ -5,12 +5,14 @@ import Tazuna.Ir.Builtin
 
 namespace Tazuna.Ir
 
-/-- Where a program writes a kept function: the module and the line and column in its source. Positions alone repeat
-across modules. -/
+/-- Where a program writes a kept function: the module, the line and column in its source, and the index of the
+global that holds it. Positions alone repeat across modules, and a generic function's repeat in each of its
+instances, each a global of its own. -/
 structure SiteId where
   module : String
   line : Nat
   col : Nat
+  index : Nat
 deriving DecidableEq, Repr
 
 /-- A variable of type `t` in the context `Γ`, the innermost binding first. -/

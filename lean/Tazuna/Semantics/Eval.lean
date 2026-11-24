@@ -123,13 +123,13 @@ def RequestV.holds {e : Ty} (r : RequestV e) (answer : (answerTy r.output r.reje
   | none => []
 
 /-- A kept function whose source is a closed expression without definitions, as examples write one. -/
-def Fun.closed {t : Ty} (body : Expr [] [] t) (ht : t.isData = true := by rfl) : Fun t := ⟨⟨"", 0, 0⟩, [], .nil, [], (), rfl, ht, body⟩
+def Fun.closed {t : Ty} (body : Expr [] [] t) (ht : t.isData = true := by rfl) : Fun t := ⟨⟨"", 0, 0, 0⟩, [], .nil, [], (), rfl, ht, body⟩
 
 /-- A kept function that returns effects, whose source is a closed expression without definitions, as examples write
 one. -/
 def EffectFun.closed {ps : List Ty} {r : Ty} (body : Expr [] [] (.fn ps r)) (hps : (Ty.tuple ps).isData = true := by rfl) :
     EffectFun ps r :=
-  ⟨⟨"", 0, 0⟩, [], .nil, [], (), rfl, hps, body⟩
+  ⟨⟨"", 0, 0, 0⟩, [], .nil, [], (), rfl, hps, body⟩
 
 /-- The value of a loaded program's root. -/
 def Program.eval {rootTy : Ty} (p : Program rootTy) : rootTy.den := p.root.get p.defs.eval
