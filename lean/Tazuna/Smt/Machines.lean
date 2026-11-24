@@ -109,7 +109,7 @@ def reactAt (m : MachineV r e) (rc : ReactCode m) (de dn : Nat) (So : List Slot)
     let (x, c3) ← rc.effect (nctx, ())
     let xt ← need "an effect that has no term" (Code.term? _ x)
     pure (((first, [key, .ctor de 0 [st, tm]]), .ite entered xt noneT),
-      Term.ite f (andT (.ite found c1 tt) (andT c2 (.ite entered c3 tt))) tt)
+      Term.ite f (andT (.ite found c1 tt) (.ite entered (andT c2 c3) tt)) tt)
 
 /-- What a machine's reaction encodes: the new instance table, and per slot of the instances bag its flag (the
 first occurrence of a key), its key and the effect option it starts. -/
@@ -897,8 +897,7 @@ theorem react_at (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
   rw [any_find?, hlook] at hfound
   have hc' := (holds_ite _ _ _).1 hcj
   simp only [hf, Val.toBool, ite_true] at hc'
-  obtain ⟨hc1', hc23⟩ := (holds_andT _ _).1 hc'
-  obtain ⟨hc2, hc3'⟩ := (holds_andT _ _).1 hc23
+  obtain ⟨hc1', hc23'⟩ := (holds_andT _ _).1 hc'
   cases hfind : (instancesOf T m tbl).find? (fun i => (Ty.semWith Dsl.base m.key).2 k i.key) with
   | none =>
     rw [hfind] at hfound
@@ -914,11 +913,11 @@ theorem react_at (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
       simp only [Term.denote, hfd, Val.toBool, Bool.false_eq_true, ite_false, Val.denote_term]
     have hstr : RelV L m.state (Ty.up _ m.state_data m.initial) init := embed_rel _ _ _ hinit
     have hcx := ctx_rel m hkr (hst ▸ hstr) hrec hnow h7 (need_ok.1 h8)
+    obtain ⟨hc2, hc3⟩ : Holds M c2 ∧ Holds M c3 := by
+      have := (holds_ite _ _ _).1 hc23'; simp [Term.denote, hfd, Val.toBool] at this; exact (holds_andT _ _).1 this
     have ha := after_app m haf hcx h9 hc2
     have hat := (rel_term (need_ok.1 h10) _).1 ha
     have htm := timerT_rel m hnow _ hat h11
-    have hc3 : Holds M c3 := by
-      have := (holds_ite _ _ _).1 hc3'; simpa [Term.denote, hfd, Val.toBool] using this
     have hxo := (rel_term (need_ok.1 h13) _).1 (hfx _ _ hcx _ _ h12 hc3)
     refine ⟨?_, rfl, ?_⟩
     · simp only [entryOf, Step.enter]
@@ -967,11 +966,12 @@ theorem react_at (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
             (.sel de 0 0 (pickT dflt hits))) init.term).denote M = vs := by
           simp [Term.denote, hfd, hvs, Val.toBool]
         have hcx := ctx_rel m hkr (by rw [hst]; exact hvsr) hrec hnow h7 (need_ok.1 h8)
+        obtain ⟨hc2, hc3⟩ : Holds M c2 ∧ Holds M c3 := by
+          have := (holds_ite _ _ _).1 hc23'
+          simp [Term.denote, hfd, hvs, Val.toBool] at this; exact (holds_andT _ _).1 this
         have ha := after_app m haf hcx h9 hc2
         have hat := (rel_term (need_ok.1 h10) _).1 ha
         have htm := timerT_rel m hnow _ hat h11
-        have hc3 : Holds M c3 := by
-          have := (holds_ite _ _ _).1 hc3'; simpa [Term.denote, hfd, hvs, Val.toBool] using this
         have hxo := (rel_term (need_ok.1 h13) _).1 (hfx _ _ hcx _ _ h12 hc3)
         refine ⟨?_, rfl, ?_⟩
         · simp only [entryOf, Step.enter]
