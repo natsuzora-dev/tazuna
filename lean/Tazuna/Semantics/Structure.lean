@@ -206,4 +206,48 @@ def Ty.up (t : Ty) (h : t.isData = true) (x : t.den0) : (Ty.semWith Dsl.val t).1
 def Ty.down (t : Ty) (h : t.isData = true) (x : (Ty.semWith Dsl.val t).1) : t.den0 :=
   cast (congrArg Sigma.fst (Ty.semWith_data Dsl.val_fresh t h)) x
 
+theorem Ty.up_down (t : Ty) (h : t.isData = true) (x : (Ty.semWith Dsl.val t).1) : Ty.up t h (Ty.down t h x) = x := by
+  simp [Ty.up, Ty.down]
+
+theorem Ty.down_up (t : Ty) (h : t.isData = true) (x : t.den0) : Ty.down t h (Ty.up t h x) = x := by
+  simp [Ty.up, Ty.down]
+
+/-! How `up` meets the shapes of data: it moves into functions, pairs, lists and equality. -/
+
+theorem cast_fn {A A' B B' : Type} (eA : A = A') (eB : B = B') (e : (A → B) = (A' → B')) (f : A → B) (x : A) :
+    cast e f (cast eA x) = cast eB (f x) := by subst eA; subst eB; rfl
+
+theorem cast_prod {A A' B B' : Type} (eA : A = A') (eB : B = B') (e : (A × B) = (A' × B')) (a : A) (b : B) :
+    cast e (a, b) = (cast eA a, cast eB b) := by subst eA; subst eB; rfl
+
+theorem cast_sumL {A A' B B' : Type} (eA : A = A') (eB : B = B') (e : (A ⊕ B) = (A' ⊕ B')) (a : A) :
+    cast e (Sum.inl a : A ⊕ B) = Sum.inl (cast eA a) := by subst eA; subst eB; rfl
+
+theorem cast_list {A A' : Type} (eA : A = A') (e : List A = List A') (xs : List A) :
+    cast e xs = xs.map (cast eA) := by
+  subst eA
+  have : (cast (rfl : A = A) : A → A) = id := funext fun _ => rfl
+  simp [this]
+
+theorem cast_sem (S S' : Sem) (e : S = S') (a b : S.1) :
+    S'.2 (cast (congrArg Sigma.fst e) a) (cast (congrArg Sigma.fst e) b) = S.2 a b := by subst e; rfl
+
+theorem Ty.up_fn (ps : List Ty) (r : Ty) (h : (Ty.fn ps r).isData = true) (hps : (Ty.tuple ps).isData = true)
+    (hr : r.isData = true) (f : (Ty.fn ps r).den0) (xs : (Ty.tuple ps).den0) :
+    Ty.up (.fn ps r) h f (Ty.up (.tuple ps) hps xs) = Ty.up r hr (f xs) := by
+  unfold Ty.up; exact cast_fn _ _ _ f xs
+
+theorem Ty.up_cons (t : Ty) (ts : List Ty) (h : (Ty.tuple (t :: ts)).isData = true) (ht : t.isData = true)
+    (hts : (Ty.tuple ts).isData = true) (a : t.den0) (b : (Ty.tuple ts).den0) :
+    Ty.up (.tuple (t :: ts)) h (a, b) = (Ty.up t ht a, Ty.up (.tuple ts) hts b) := by
+  unfold Ty.up; exact cast_prod _ _ _ a b
+
+theorem Ty.up_list (t : Ty) (h : (Ty.list t).isData = true) (ht : t.isData = true) (xs : (Ty.list t).den0) :
+    Ty.up (.list t) h xs = xs.map (Ty.up t ht) := by
+  unfold Ty.up; exact cast_list _ _ xs
+
+theorem Ty.deq_up (t : Ty) (h : t.isData = true) (a b : t.den0) :
+    (Ty.semWith Dsl.val t).2 (Ty.up t h a) (Ty.up t h b) = (Ty.semWith Dsl.base t).2 a b := by
+  unfold Ty.up; exact cast_sem _ _ (Ty.semWith_data Dsl.val_fresh t h).symm a b
+
 end Tazuna.Ir
