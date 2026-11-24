@@ -595,6 +595,77 @@ theorem keysUnique_iff {κ ν : Type} {fk : κ → κ → Bool} {gk : κ → Erl
 
 end
 
+section
+variable {α : Type}
+
+/-- A list with each value's later repeats under `eq` dropped. -/
+def dedupBy (eq : α → α → Bool) (xs : List α) : List α :=
+  xs.foldl (fun ks k => if ks.any (eq k) then ks else ks ++ [k]) []
+
+theorem dedupBy_pairwise (eq : α → α → Bool) (xs : List α) : (dedupBy eq xs).Pairwise fun a b => eq b a = false := by
+  suffices ∀ acc : List α, acc.Pairwise (fun a b => eq b a = false) →
+      (xs.foldl (fun ks k => if ks.any (eq k) then ks else ks ++ [k]) acc).Pairwise fun a b => eq b a = false from
+    this [] List.Pairwise.nil
+  induction xs with
+  | nil => exact fun _ h => h
+  | cons k xs ih =>
+    intro acc h
+    simp only [List.foldl_cons]
+    split
+    · exact ih acc h
+    · rename_i hany
+      refine ih _ (List.pairwise_append.2 ⟨h, List.pairwise_singleton _ _, fun a ha b hb => ?_⟩)
+      rw [List.mem_singleton] at hb; subst hb
+      simp only [List.any_eq_true, not_exists, not_and, Bool.not_eq_true] at hany
+      exact hany a ha
+
+/-- In a list of distinct values sorted by a total order, the values before `x` are those below it. A step that
+starts effects in the canonical order of keys gives each one's request the next wire id plus the number of effects
+of the keys below its own. -/
+theorem sorted_prefix (cmp : α → α → Ordering) [Std.TransCmp cmp] (xs : List α)
+    (hnd : xs.Pairwise fun a b => cmp a b ≠ .eq) {pre post : List α} {x : α}
+    (h : xs.mergeSort (fun a b => (cmp a b).isLE) = pre ++ x :: post) :
+    pre.Perm (xs.filter fun y => cmp y x == .lt) := by
+  have hp := List.mergeSort_perm xs (fun a b => (cmp a b).isLE)
+  have hle := List.pairwise_mergeSort (le := fun a b => (cmp a b).isLE)
+    (fun _ _ _ h1 h2 => Std.TransCmp.isLE_trans h1 h2)
+    (fun a b => by
+      cases h : cmp a b with
+      | gt => have := Std.OrientedCmp.gt_iff_lt.1 h; simp [this]
+      | _ => simp) xs
+  have hne := hnd.perm hp.symm (fun h e => h (Std.OrientedCmp.eq_symm e))
+  have hlt : (xs.mergeSort fun a b => (cmp a b).isLE).Pairwise fun a b => cmp a b = .lt := by
+    refine (hle.and hne).imp fun ⟨h1, h2⟩ => ?_
+    cases e : cmp _ _ <;> simp_all
+  rw [h] at hlt
+  have hsplit : (pre ++ x :: post).filter (fun y => cmp y x == .lt) = pre := by
+    obtain ⟨hpre, hxpost, hcross⟩ := List.pairwise_append.1 hlt
+    have hx := (List.pairwise_cons.1 hxpost).1
+    rw [List.filter_append, List.filter_cons]
+    have h1 : pre.filter (fun y => cmp y x == .lt) = pre :=
+      List.filter_eq_self.2 fun a ha => by simp [hcross a ha x List.mem_cons_self]
+    have h2 : post.filter (fun y => cmp y x == .lt) = [] :=
+      List.filter_eq_nil_iff.2 fun b hb => by
+        have := Std.OrientedCmp.gt_iff_lt.2 (hx b hb); simp [this]
+    simp [h1, h2, Std.ReflCmp.compare_self]
+  rw [← hsplit, ← h]
+  exact hp.filter _
+
+end
+
+section
+variable (T : List TypeDecl)
+
+/-- The keys of a bag of an ordered type, each once, in the canonical order: the keys before `x` are the bag's
+distinct keys below it. -/
+theorem sortBy_dedup_prefix {t : Ty} (ht : t.ordered T = true) (xs : List t.den0) {pre post : List t.den0} {x : t.den0}
+    (h : Ty.sortBy T t (dedupBy (Ty.semWith Dsl.base t).2 xs) = pre ++ x :: post) :
+    pre.Perm ((dedupBy (Ty.semWith Dsl.base t).2 xs).filter fun y => Ty.cmp T t y x == .lt) :=
+  sorted_prefix (Ty.cmp T t) _ ((dedupBy_pairwise _ xs).imp fun h e =>
+    by rw [(Ty.cmp_eq_iff T ht _ _).1 (Std.OrientedCmp.eq_symm e)] at h; cases h) h
+
+end
+
 -- Constructor atoms as gleam 1.19 compiles them, and terms in the order Erlang's `lists:sort` gives (checked with erl).
 #guard ["HTTPError", "Ab", "AB", "A1b", "A1B", "ABC", "Abc2Def", "True", "None"].map atomName ==
   ["h_t_t_p_error", "ab", "a_b", "a1b", "a1_b", "a_b_c", "abc2_def", "true", "none"]

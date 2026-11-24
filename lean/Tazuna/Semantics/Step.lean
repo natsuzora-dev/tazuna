@@ -138,8 +138,7 @@ def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) : Machin
     MachineState r e × List (Sender × EffectV e)
   | ⟨m, insts⟩ =>
     let eqK := (Ty.semWith Dsl.base m.key).2
-    let keys := ((m.instances.fn (records, ())).foldl (fun ks k => if ks.any (eqK k) then ks else ks ++ [k]) []).mergeSort
-      fun a b => (Ty.cmp T m.key a b).isLE
+    let keys := Ty.sortBy T m.key (dedupBy eqK (m.instances.fn (records, ())))
     let (insts, effs) := keys.foldl (fun (acc, effs) k =>
       match insts.find? (eqK k ·.key) with
       | some i => match m.on.fn (.inl (i.key, i.state, records, now, ()), ev, ()) with
