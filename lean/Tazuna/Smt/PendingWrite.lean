@@ -156,11 +156,30 @@ theorem shapes_inSites {v : ServiceV} {P : List AnySite} {sh : PendingShape v.ev
 def siteMatch {Γ : List Ty} {t : Ty} (s : Site Γ t) (k : SiteKey) : Bool :=
   s.site == k.site && (Ty.sames Γ k.Γ).isSome
 
-/-- Whether a shape is the one a request of the effect kind `key` takes when the instance of the machine `name`
-(with keys of type `kt`) starts it and the external `x` lists it. -/
-def _root_.Tazuna.Ir.PendingShape.fits (sh : PendingShape e) (name : String) (kt : Ty) (key : EffectKey) (x : String) :
-    Bool :=
-  (match sh.ks, sh.sender with | _, .machine n k => n == name && (Ty.same k kt).isSome | _, .reaction _ => false) &&
+/-- Whether two sender shapes are the same. -/
+def senderSame {ks ks' : List Ty} : SenderShape ks → SenderShape ks' → Bool
+  | .machine n k, .machine n' k' => n == n' && (Ty.same k k').isSome
+  | .reaction n, .reaction n' => n == n'
+  | _, _ => false
+
+theorem senderSame_eq : {ks ks' : List Ty} → (a : SenderShape ks) → (b : SenderShape ks') → senderSame a b = true →
+    (⟨ks, a⟩ : (ks : List Ty) × SenderShape ks) = ⟨ks', b⟩
+  | _, _, .machine n k, .machine n' k', h => by
+    simp only [senderSame, Bool.and_eq_true, beq_iff_eq] at h
+    obtain ⟨rfl, hk⟩ := h
+    obtain rfl := eq_of_same hk
+    rfl
+  | _, _, .reaction n, .reaction n', h => by
+    simp only [senderSame, beq_iff_eq] at h
+    subst h
+    rfl
+  | _, _, .machine _ _, .reaction _, h | _, _, .reaction _, .machine _ _, h => by simp [senderSame] at h
+
+/-- Whether a shape is the one a request of the effect kind `key` takes when the sender `snd` starts it and the
+external `x` lists it. -/
+def _root_.Tazuna.Ir.PendingShape.fits (sh : PendingShape e) (snd : (ks : List Ty) × SenderShape ks) (key : EffectKey)
+    (x : String) : Bool :=
+  senderSame sh.sender snd.2 &&
   sh.external == x && sh.name == key.name && (Ty.same sh.input key.input).isSome &&
   (Ty.same sh.output key.output).isSome && optSame (fun a b => (Ty.same a b).isSome) sh.rejection key.rejection &&
   (match sh.ensures, key.ensures with
@@ -186,28 +205,31 @@ theorem owner_eq {key : EffectKey} {r : RequestV e} {vals : List Val} (h : key.H
   rfl
 
 
-theorem fits_pending {P : List AnySite} (hP : SitesUnique P) {r e : Ty} {m : MachineV r e} {sh : PendingShape e}
-    (hsh : sh.InSites P) {key : EffectKey} {x : String} (hfit : sh.fits m.name m.key key x = true)
+/-- A machine's key as its sender's key tuple. -/
+theorem machineKey_rel {r e : Ty} (m : MachineV r e) (k : m.key.den0) {zk : Val}
+    (hzk : RelV L m.key (Ty.up _ m.key_data k) zk) {dk nk : Nat} (hdk : L.find? (.tuple [m.key]) = some (dk, nk)) :
+    RelD L (.tuple [m.key]) (k, ()) (.ctor dk 0 [zk]) :=
+  ⟨dk, nk, [zk], hdk, rfl, zk, [], rfl, relV_up _ _ _ _ hzk, rfl⟩
+
+theorem fits_pending {P : List AnySite} (hP : SitesUnique P) {e : Ty} {sh : PendingShape e}
+    (hsh : sh.InSites P) {ks : List Ty} {sd : SenderShape ks} {key : EffectKey} {x : String}
+    (hfit : sh.fits ⟨ks, sd⟩ key x = true)
     {req : RequestV e} (hreach : (EffectV.request req).Reach P) {vals : List Val}
-    (hh : key.Holds L (.request req) vals) (k : m.key.den0) {zk : Val}
-    (hzk : RelV L m.key (Ty.up _ m.key_data k) zk) {dk nk : Nat} (hdk : L.find? (.tuple [m.key]) = some (dk, nk))
-    (id : Nat) :
-    ∃ fx : Ty.dens sh.fields, RelVs L sh.fields fx (.ctor dk 0 [zk] :: vals) ∧
-      sh.pending id fx = ⟨id, .machine m.name ⟨m.key, k⟩, x, req⟩ := by
-  obtain ⟨⟨ext, name, input, output, rej, ens, aΓ, onA, hf⟩, ks, snd, hks⟩ := sh
+    (hh : key.Holds L (.request req) vals) (kv : (Ty.tuple ks).den0) {zkv : Val}
+    (hK : RelD L (.tuple ks) kv zkv) (id : Nat) :
+    ∃ fx : Ty.dens sh.fields, RelVs L sh.fields fx (zkv :: vals) ∧
+      sh.pending id fx = ⟨id, sd.sender kv, x, req⟩ := by
+  obtain ⟨⟨ext, name, input, output, rej, ens, aΓ, onA, hf⟩, ks0, snd, hks⟩ := sh
   obtain ⟨rname, rinput, routput, rrej, rvalue, rens, ronA⟩ := req
   obtain ⟨kev, kname, kinput, koutput, krej, kens, ⟨ksite, kΓ⟩⟩ := key
   obtain ⟨rs, rG, rdefs, rΓ, renv, rhΓ, rht, rbody⟩ := ronA
   obtain ⟨h1, h2, h3, h4, h5, h6, vi, ve, va, rfl, hvi, hva, hens⟩ := hh
   dsimp only at h1 h2 h3 h4 h5 h6
   subst h1 h2 h3 h4
-  cases snd with
-  | reaction _ => simp [PendingShape.fits] at hfit
-  | machine n kt =>
-    simp only [PendingShape.fits, Bool.and_eq_true, beq_iff_eq, siteMatch] at hfit
-    obtain ⟨⟨⟨⟨⟨⟨⟨⟨rfl, hkt⟩, rfl⟩, rfl⟩, hin⟩, hout⟩, hrej⟩, hensm⟩, hans1, hans2⟩ := hfit
-    obtain rfl := eq_of_same hkt
-    obtain rfl := eq_of_same hin
+  simp only [PendingShape.fits, Bool.and_eq_true, beq_iff_eq, siteMatch] at hfit
+  obtain ⟨⟨⟨⟨⟨⟨⟨hsnd, rfl⟩, rfl⟩, hin⟩, hout⟩, hrej⟩, hensm⟩, hans1, hans2⟩ := hfit
+  cases senderSame_eq snd sd hsnd
+  · obtain rfl := eq_of_same hin
     obtain rfl := eq_of_same hout
     have hrj : rej = rrej := by
       cases rej <;> cases rrej <;> simp only [optSame, reduceCtorEq] at hrej ⊢
@@ -219,8 +241,6 @@ theorem fits_pending {P : List AnySite} (hP : SitesUnique P) {r e : Ty} {m : Mac
     obtain ⟨hrA, hrE⟩ := hreach
     obtain ⟨hsA, hsE⟩ := hsh
     obtain ⟨⟨⟩, hA⟩ := Fun.eq_siteFn hP _ onA hrA hsA rfl
-    have hK : RelD L (.tuple [m.key]) (k, ()) (.ctor dk 0 [zk]) :=
-      ⟨dk, nk, [zk], hdk, rfl, zk, [], rfl, relV_up _ _ _ _ hzk, rfl⟩
     cases rens with
     | none =>
       cases kens with
@@ -230,7 +250,7 @@ theorem fits_pending {P : List AnySite} (hP : SitesUnique P) {r e : Ty} {m : Mac
         | some _ => simp at hensm
         | none =>
           obtain ⟨d0, n0, hd0, rfl⟩ := hens
-          refine ⟨Ty.up (.tuple _) (PendingShape.hdata _) ((k, ()), rvalue, (), renv, ()),
+          refine ⟨Ty.up (.tuple _) (PendingShape.hdata _) (kv, rvalue, (), renv, ()),
             relDs_up _ _ _ _ ⟨_, _, rfl, hK, _, _, rfl, hvi, _, _, rfl, ⟨d0, n0, [], hd0, rfl, rfl⟩, _, _, rfl, hva, rfl⟩,
             ?_⟩
           simp only [PendingShape.pending]
@@ -253,7 +273,7 @@ theorem fits_pending {P : List AnySite} (hP : SitesUnique P) {r e : Ty} {m : Mac
           obtain ⟨hes, hesΓ⟩ := hensm
           obtain rfl := eq_of_sames hesΓ
           obtain ⟨⟨⟩, hE⟩ := Fun.eq_siteFn hP _ es (hrE _ rfl) (hsE ⟨eΓ, es⟩ rfl) hes.symm
-          refine ⟨Ty.up (.tuple _) (PendingShape.hdata _) ((k, ()), rvalue, fenv, renv, ()),
+          refine ⟨Ty.up (.tuple _) (PendingShape.hdata _) (kv, rvalue, fenv, renv, ()),
             relDs_up _ _ _ _ ⟨_, _, rfl, hK, _, _, rfl, hvi, _, _, rfl, hve, _, _, rfl, hva, rfl⟩, ?_⟩
           simp only [PendingShape.pending]
           erw [Ty.down_up]
@@ -292,25 +312,26 @@ theorem relAlts_pendingInj (d : Nat) : (shs : List (PendingShape e)) → (k j : 
     rw [show k + (j + 1) = k + 1 + j by omega]
     exact this
 
-/-- The shape index of each effect kind, for requests the instances of the machine `name` (with keys of type `kt`)
-start: the shape that fits the kind and the external that lists it. -/
-def shapeIdxs (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (name : String) (kt : Ty)
+/-- The shape index of each effect kind, for requests the sender `snd` starts: the shape that fits the kind and the
+external that lists it. -/
+def shapeIdxs (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (snd : (ks : List Ty) × SenderShape ks)
     (keys : List EffectKey) : Except Refusal (List Nat) :=
   keys.mapM fun key => do
     let x ← need "an effect kind that no external declares" (key.owner ds)
-    need "an effect kind without a pending shape" (shs.findIdx? (·.fits name kt key x))
+    need "an effect kind without a pending shape" (shs.findIdx? (·.fits snd key x))
 
-/-- The pending entry of the effect kind `i`'s value `eff`, with the shape `j` and the sender's key `keyT`. -/
-def entryAt (dE dP dk : Nat) (keyT eff : Term) (i j : Nat) : Term :=
-  .ctor dP j [.ctor dk 0 [keyT], .sel dE i 0 eff, .sel dE i 1 eff, .sel dE i 2 eff]
+/-- The pending entry of the effect kind `i`'s value `eff`, with the shape `j` and the sender's key tuple items
+`keyT`. -/
+def entryAt (dE dP dk : Nat) (keyT : List Term) (eff : Term) (i j : Nat) : Term :=
+  .ctor dP j [.ctor dk 0 keyT, .sel dE i 0 eff, .sel dE i 1 eff, .sel dE i 2 eff]
 
 /-- The pending entry of the effect `eff`: the entry of its kind, from the kinds' shape indices `js`. -/
-def entryT (dE dP dk : Nat) (keyT eff : Term) : Nat → List Nat → Term
+def entryT (dE dP dk : Nat) (keyT : List Term) (eff : Term) : Nat → List Nat → Term
   | _, [] => .int 0
   | i, [j] => entryAt dE dP dk keyT eff i j
   | i, j :: js => .ite (.is dE i eff) (entryAt dE dP dk keyT eff i j) (entryT dE dP dk keyT eff (i + 1) js)
 
-theorem entryT_den {M : Model} (dE dP dk : Nat) (keyT eff : Term) {vals : List Val} :
+theorem entryT_den {M : Model} (dE dP dk : Nat) (keyT : List Term) (eff : Term) {vals : List Val} :
     (js : List Nat) → (i0 i : Nat) → eff.denote M = .ctor dE (i0 + i) vals → (j : Nat) → js[i]? = some j →
     (entryT dE dP dk keyT eff i0 js).denote M = (entryAt dE dP dk keyT eff (i0 + i) j).denote M
   | [], _, _, _, _, h => by cases h
@@ -334,19 +355,20 @@ theorem forall2_getElem? {α β : Type} {R : α → β → Prop} : {as : List α
   | _ :: _, _ :: _, ⟨hab, _⟩, 0, _, h => by cases h; exact ⟨_, rfl, hab⟩
   | _ :: _, _ :: _, ⟨_, hs⟩, i + 1, _, h => forall2_getElem? hs (i := i) (by simpa using h)
 
-/-- The pending entry the step writes for an effect an instance starts: wherever the effect's term and the key's term
-denote them, the entry term denotes an entry that codes the request with its sender and the external that lists it. -/
-theorem entry_rel {M : Model} {P : List AnySite} (hP : SitesUnique P) {r e : Ty} (m : MachineV r e)
+/-- The pending entry the step writes for an effect a sender starts: wherever the effect's term and the key tuple's
+items denote them, the entry term denotes an entry that codes the request with its sender and the external that lists
+it. -/
+theorem entry_rel {M : Model} {P : List AnySite} (hP : SitesUnique P) {e : Ty} {ks : List Ty} (sd : SenderShape ks)
     {shs : List (PendingShape e)} (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List Nat}
-    (hjs : shapeIdxs shs ds m.name m.key (L.effectsOf e) = .ok js)
-    {dE nE dP nP dk nk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP)) (hdk : L.find? (.tuple [m.key]) = some (dk, nk))
-    (k : m.key.den0) {keyT : Term} (hzk : RelV L m.key (Ty.up _ m.key_data k) (keyT.denote M))
+    (hjs : shapeIdxs shs ds ⟨ks, sd⟩ (L.effectsOf e) = .ok js)
+    {dE nE dP nP dk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
+    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
+    (kv : (Ty.tuple ks).den0) {keyT : List Term} (hK : RelD L (.tuple ks) kv (.ctor dk 0 (Term.denotes M keyT)))
     {eff : EffectV e} (hr : eff.Reach P) {effT : Term} (heff : RelV L (.dsl .effect [e]) eff (effT.denote M))
     (id : Nat) :
     ∃ req x, eff = .request req ∧ req.ownerIn ds = some x ∧ ∃ y,
       RelV L (pendingEntry shs) y ((entryT dE dP dk keyT effT 0 js).denote M) ∧
-      pendingOf shs id y = ⟨id, .machine m.name ⟨m.key, k⟩, x, req⟩ := by
+      pendingOf shs id y = ⟨id, sd.sender kv, x, req⟩ := by
   obtain ⟨d, n, hd, i, key, vals, hki, hz, hh⟩ := heff
   obtain rfl : dE = d := find_det hE hd
   cases eff with
@@ -358,7 +380,7 @@ theorem entry_rel {M : Model} {P : List AnySite} (hP : SitesUnique P) {r e : Ty}
     have hfind := need_ok.1 hbody
     obtain ⟨hlt, hfit, -⟩ := List.findIdx?_eq_some_iff_getElem.1 hfind
     have hsh : shs[j]? = some shs[j] := List.getElem?_eq_getElem hlt
-    obtain ⟨fx, hrel, hpend⟩ := fits_pending hP (hshs _ (List.getElem_mem hlt)) hfit hr hh k hzk hdk id
+    obtain ⟨fx, hrel, hpend⟩ := fits_pending hP (hshs _ (List.getElem_mem hlt)) hfit hr hh kv hK id
     refine ⟨req, x, rfl, (owner_eq hh ds).trans (need_ok.1 hx), pendingInj shs j hsh fx, ?_, ?_⟩
     · obtain ⟨-, -, -, -, -, -, vi, ve, va, rfl, -⟩ := hh
       rw [entryT_den dE dP dk keyT effT (vals := [vi, ve, va]) js 0 i (by rw [hz, Nat.zero_add]) j hj]

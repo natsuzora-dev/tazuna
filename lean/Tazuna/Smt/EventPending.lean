@@ -90,7 +90,7 @@ variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 /-- The pending table slot of an effect slot: its wire id and its entry. Both are shared, as are the key and the
 effect the entry reads several times, because moving the slot into the table copies its items into every slot. -/
 def entryItems (dE dP dk : Nat) (js : List Nat) (xs : List Term) : List Term :=
-  [Term.share (xs.headD tt), Term.share (entryT dE dP dk (Term.share (xs.getD 1 tt)) (Term.share (xs.getD 2 tt)) 0 js)]
+  [Term.share (xs.headD tt), Term.share (entryT dE dP dk [Term.share (xs.getD 1 tt)] (Term.share (xs.getD 2 tt)) 0 js)]
 
 /-- A machine's effect slots as pending table slots: each flagged slot holds its wire id and its entry. -/
 def entrySlots (dE dP dk : Nat) (js : List Nat) (S : List Slot) : List Slot :=
@@ -103,7 +103,7 @@ def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV))
   | [], [], n => pure ([], n)
   | m :: ms, st :: sts, n => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
-    let js ← shapeIdxs shs ds m.name m.key (L.effectsOf e)
+    let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
     let S ← rankStarts L T m dopt n st
     let (rest, n') ← encodeStarts shs ds dE dP dopt ms sts (.add n (startCount dopt st))
     pure (entrySlots dE dP dk js S ++ rest, n')
@@ -164,7 +164,7 @@ def WritesEntry (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) 
 /-- A machine's pending slots hold, where flagged, the entries of the requests its effect slots hold. -/
 theorem entrySlots_rel {P : List AnySite} (hP : SitesUnique P) (m : MachineV r e)
     {shs : List (PendingShape e)} (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List Nat}
-    (hjs : shapeIdxs shs ds m.name m.key (L.effectsOf e) = .ok js)
+    (hjs : shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e) = .ok js)
     {dE nE dP nP dk nk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP)) (hdk : L.find? (.tuple [m.key]) = some (dk, nk))
     {S : List Slot} {sv : List (Bool × List Val)} {ys : List ((Sender × EffectV e) × Nat)}
@@ -184,8 +184,10 @@ theorem entrySlots_rel {P : List AnySite} (hP : SitesUnique P) (m : MachineV r e
   obtain ⟨a, b, c, rfl, ha, hb, hc⟩ := triple_terms hvs
   simp only at hsnd hre hzx
   subst hsnd
-  obtain ⟨req, o, rfl, ho, y, hyrel, hpend⟩ := entry_rel hP m hshs hjs hE hPE hdk k
-    (keyT := Term.share b) (by rw [Term.denote_share, hb]; exact hzk) hre (effT := Term.share c)
+  obtain ⟨req, o, rfl, ho, y, hyrel, hpend⟩ := entry_rel (M := M) hP (.machine m.name m.key) hshs hjs hE hPE (k, ())
+    (keyT := [Term.share b]) (by
+      rw [show Term.denotes M [Term.share b] = [zk] by simp [Term.denotes, Term.denote_share, hb]]
+      exact machineKey_rel m k hzk hdk) hre (effT := Term.share c)
     (by rw [Term.denote_share, hc]; exact hzx) id
   refine ⟨((id : Nat), y), ⟨_, _, rfl, by simp only [List.headD_cons, Term.denote_share]; exact ha, ?_⟩, rfl, req, o,
     rfl, ho, hpend⟩

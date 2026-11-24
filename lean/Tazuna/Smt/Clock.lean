@@ -484,7 +484,7 @@ def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) 
   | [], [], _ => pure ([], .int 0)
   | m :: ms, st :: sts, nid => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
-    let js ← shapeIdxs shs ds m.name m.key (L.effectsOf e)
+    let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
     let (rest, k) ← roundStarts shs ds dE dP dopt ms sts nid
     pure (entrySlots dE dP dk js (st.map (onceStart dopt nid)) ++ rest, .add (startCount dopt st) k)
   | _, _, _ => .error (.outside "machines and start slots that differ in number")
