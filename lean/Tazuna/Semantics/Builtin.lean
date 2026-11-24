@@ -151,7 +151,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .dateAddDays, _, _ => fun (d, n, ()) => @HAdd.hAdd Int Int Int _ d n
   | .dateDaysBetween, _, _ => fun (a, b, ()) => @HSub.hSub Int Int Int _ b a
   | .require, _, _ => fun (holds, rejection, next, ()) => if Ty.toBool holds then next () else Ty.error rejection
-  | .spec, _, _ => fun (services, externals, ()) => ⟨services, externals⟩
+  | .spec, _, _ => fun (services, externals, scenarios, ()) => ⟨services, externals, scenarios⟩
   | .service, args, h => let d := Prim.dataOf h rfl
     fun (name, init, apply, subscribes, requests, machines, reactions, invariants, responses, bnds, ()) =>
     let requests : List (DefinitionV ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)) :=
@@ -233,6 +233,33 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     fun (name, after, then_, within, ()) =>
     { name, after := Prim.dn d (.fn [.param 0] .bool) rfl after, then_ := Prim.dn d (.fn [.param 0] .bool) rfl then_,
       within }
+  | .scenario, args, _ => fun (owner, name, steps, ()) =>
+    { service := owner, name := name, records := (Ty.param 0).inst args, event := (Ty.param 1).inst args,
+      caller := (Ty.param 2).inst args, steps }
+  | .stepCommand, args, h => let d := Prim.dataOf h rfl
+    fun (c, caller, input, ()) =>
+    let c : CommandOf ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)
+      ((Ty.param 3).inst args) ((Ty.param 4).inst args) := c
+    .command c.1 (Prim.dn d (.param 2) rfl caller) (cast (congrArg Ty.den0 c.2.1.symm) (Prim.dn d (.param 3) rfl input))
+  | .stepQuery, args, h => let d := Prim.dataOf h rfl
+    fun (q, caller, input, ()) =>
+    let q : QueryOf ((Ty.param 0).inst args) ((Ty.param 2).inst args) ((Ty.param 3).inst args)
+      ((Ty.param 4).inst args) := q
+    .query q.1 (Prim.dn d (.param 2) rfl caller) (cast (congrArg Ty.den0 q.2.1.symm) (Prim.dn d (.param 3) rfl input))
+  | .stepWait, _, _ => fun (ms, ()) => .wait ms
+  | .stepAnswer, args, h => let d := Prim.dataOf h rfl
+    fun ((ext, cmd), sender, value, ()) =>
+    .answer ext cmd sender ((Ty.param 4).inst args) ((Ty.param 5).inst args)
+      (Prim.dn d (.result (.param 4) (.param 5)) rfl value)
+  | .stepEvent, args, h => let d := Prim.dataOf h rfl
+    fun ((src, ev), value, ()) => .event src ev ⟨(Ty.param 3).inst args, Prim.dn d (.param 3) rfl value⟩
+  | .fromMachine, args, h => let d := Prim.dataOf h rfl
+    fun (m, key, ()) =>
+    let m : MachineV ((Ty.param 0).inst args) ((Ty.param 1).inst args) := m
+    .machine m.name ⟨(Ty.param 2).inst args, Prim.dn d (.param 2) rfl key⟩
+  | .fromReaction, args, _ => fun (x, ()) =>
+    let x : ReactionV ((Ty.param 0).inst args) ((Ty.param 1).inst args) := x
+    .reaction x.name
   | .fresh, _, _ => fun (step, index, ()) => freshId step index
   | .ref, args, _ => fun (t, k, rejection, next, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t.1 with
     | .some v => next (v, ())

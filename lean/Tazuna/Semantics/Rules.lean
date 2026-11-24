@@ -19,11 +19,14 @@ inductive Illegal where
   | wireType
   /-- A bound is negative. -/
   | bounds
+  /-- A scenario names no service of the spec, sends another service's request, has steps typed for another service,
+  shares its name with another scenario of its service, or has a name that is no file name. -/
+  | scenario
 deriving Repr, DecidableEq
 
 namespace Illegal
 
-def all : List Illegal := [wireName, owner, unknownSource, creates, wireType, bounds]
+def all : List Illegal := [wireName, owner, unknownSource, creates, wireType, bounds, scenario]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -34,6 +37,7 @@ def name : Illegal → String
   | creates => "creates"
   | wireType => "wireType"
   | bounds => "bounds"
+  | scenario => "scenario"
 
 end Illegal
 
@@ -164,6 +168,26 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
     let wireTypes := (x.declared.filter fun d => !d.types.all Ty.wire).map fun d =>
       (Illegal.wireType, s!"{x.name}.{d.name}: its types cross the wire, so they hold no functions")
     wireNames ++ owners ++ wireTypes
-  topNames ++ perService ++ perExternal
+  let scenarioNames := (duplicates (s.scenarios.map fun sc => sc.service ++ "/" ++ sc.name)).map fun n =>
+    (Illegal.scenario, s!"{n} names more than one scenario")
+  let perScenario := s.scenarios.flatMap fun sc =>
+    let here := s!"the scenario {sc.service}/{sc.name}"
+    let fileName := if sc.name.isEmpty || sc.name.contains '/' || sc.name.startsWith "." then
+        [(Illegal.scenario, s!"{here} has a name that is no file name")] else []
+    let steps := match s.services.find? (·.name == sc.service) with
+      | none => [(Illegal.scenario, s!"{here} names {sc.service}, which is no service of the spec")]
+      | some v =>
+        let typed := (Ty.same sc.records v.records).isSome && (Ty.same sc.event v.event).isSome &&
+          (Ty.same sc.caller v.caller).isSome
+        (if typed then [] else [(Illegal.scenario, s!"{here} has steps typed for another service")]) ++
+        sc.steps.zipIdx.filterMap fun (st, k) =>
+          let other (o n : String) := if o == sc.service then none
+            else some (Illegal.scenario, s!"{here}: step {k + 1} sends {o}.{n}, a request of another service")
+          match st with
+          | .command x _ _ => other x.service x.name
+          | .query x _ _ => other x.service x.name
+          | _ => none
+    fileName ++ steps
+  topNames ++ perService ++ perExternal ++ scenarioNames ++ perScenario
 
 end Tazuna.Ir

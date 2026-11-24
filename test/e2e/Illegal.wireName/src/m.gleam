@@ -51,5 +51,5 @@ fn tasks(name: String) -> tazuna.Service {
 }
 
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(services: [tasks("tasks")], externals: [])
+  tazuna.spec(services: [tasks("tasks")], externals: [], scenarios: [])
 }

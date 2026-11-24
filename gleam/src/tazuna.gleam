@@ -76,6 +76,15 @@ pub type Create(records)
 /// After one event, another within a time.
 pub type Response(event)
 
+/// Steps a service takes from its initial records, compared with a snapshot.
+pub type Scenario
+
+/// One step of a scenario.
+pub type Step(records, event, caller)
+
+/// What sent a request: a machine instance or a reaction.
+pub type Sender
+
 /// Where a command's new ids come from.
 pub type Fresh
 
@@ -276,10 +285,11 @@ pub fn ref(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// The spec: its services and the externals they talk to.
+/// The spec: its services, the externals they talk to, and scenarios of the services.
 pub fn spec(
   services _services: List(Service),
   externals _externals: List(External),
+  scenarios _scenarios: List(Scenario),
 ) -> Spec {
   panic as "tazuna's built-ins run only in the engine"
 }
@@ -474,6 +484,68 @@ pub fn response(
   then _then: fn(event) -> Bool,
   within _within: Int,
 ) -> Response(event) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A scenario of the service named `service`: its steps run from the initial records at time 0, and `test` compares the trace with snapshots/<service>/<name>.jsonl.
+pub fn scenario(
+  service _service: String,
+  name _name: String,
+  steps _steps: List(Step(records, event, caller)),
+) -> Scenario {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A step: the caller sends the command.
+pub fn step_command(
+  command _command: Command(records, event, caller, input, rejection),
+  caller _caller: caller,
+  input _input: input,
+) -> Step(records, event, caller) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A step: the caller sends the query.
+pub fn step_query(
+  query _query: Query(records, caller, input, output),
+  caller _caller: caller,
+  input _input: input,
+) -> Step(records, event, caller) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A step: time moves on by `ms`, and the timers due fire.
+pub fn step_wait(ms _ms: Int) -> Step(records, event, caller) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A step: the external answers the one pending request to `command` that `sender` sent.
+pub fn step_answer(
+  command _command: ExternalCommand(input, output, rejection),
+  sender _sender: Sender,
+  with _with: Result(output, rejection),
+) -> Step(records, event, caller) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// A step: the service receives an event it subscribes to.
+pub fn step_event(
+  event _event: ExternalEvent(source),
+  value _value: source,
+) -> Step(records, event, caller) {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// The instance of the machine whose key is `key`, as the sender of a request.
+pub fn from_machine(
+  machine _machine: Machine(records, event),
+  key _key: key,
+) -> Sender {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// The reaction, as the sender of a request.
+pub fn from_reaction(reaction _reaction: Reaction(records, event)) -> Sender {
   panic as "tazuna's built-ins run only in the engine"
 }
 

@@ -7,14 +7,15 @@ built-ins and never looks inside them. `fresh` is the source of new ids a step h
 inductive Dsl where
   | spec | service | command | query | definition | machine | reaction | external
   | externalCommand | externalQuery | externalEvent | declared | effect | subscription
-  | bounds | create | response | fresh
+  | bounds | create | response | scenario | step | sender | fresh
 deriving Repr, DecidableEq, Inhabited
 
 namespace Dsl
 
 def all : List Dsl :=
   [.spec, .service, .command, .query, .definition, .machine, .reaction, .external, .externalCommand, .externalQuery,
-   .externalEvent, .declared, .effect, .subscription, .bounds, .create, .response, .fresh]
+   .externalEvent, .declared, .effect, .subscription, .bounds, .create, .response,
+   .scenario, .step, .sender, .fresh]
 
 theorem mem_all (k : Dsl) : k ∈ all := by cases k <;> simp [all]
 
@@ -41,6 +42,9 @@ def decl : Dsl → String × List String × String
   | .bounds => ("Bounds", ["records"], "How far checking goes.")
   | .create => ("Create", ["records"], "How many keys checking may add to one table of the records.")
   | .response => ("Response", ["event"], "After one event, another within a time.")
+  | .scenario => ("Scenario", [], "Steps a service takes from its initial records, compared with a snapshot.")
+  | .step => ("Step", ["records", "event", "caller"], "One step of a scenario.")
+  | .sender => ("Sender", [], "What sent a request: a machine instance or a reaction.")
   | .fresh => ("Fresh", [], "Where a command's new ids come from.")
 
 def name (k : Dsl) : String := (decl k).1

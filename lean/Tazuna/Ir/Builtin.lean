@@ -49,7 +49,8 @@ inductive Prim where
   | require | ref
   | spec | service | command | query | defineCommand | defineQuery | machine | reaction
   | external | externalCommand | externalQuery | externalEvent | declareCommand | declareQuery | declareEvent
-  | request | sendCommand | sendQuery | subscribe | bounds | create | response | fresh
+  | request | sendCommand | sendQuery | subscribe | bounds | create | response
+  | scenario | stepCommand | stepQuery | stepWait | stepAnswer | stepEvent | fromMachine | fromReaction | fresh
 deriving Repr, DecidableEq
 
 structure PrimParam where
@@ -139,8 +140,10 @@ def sig : Prim → PrimSig :=
       [p "table" (.table k v), p "key" k, p "rejection" (param 3), p "then" (.fn [v] (.result (param 2) (param 3)))],
       .result (param 2) (param 3), [0], false⟩
   | .spec =>
-    { name := "spec", doc := "The spec: its services and the externals they talk to.", tvars := [],
-      params := [l "services" (.list (.dsl .service [])), l "externals" (.list (.dsl .external []))],
+    { name := "spec", doc := "The spec: its services, the externals they talk to, and scenarios of the services.",
+      tvars := [],
+      params := [l "services" (.list (.dsl .service [])), l "externals" (.list (.dsl .external [])),
+        l "scenarios" (.list (.dsl .scenario []))],
       ret := .dsl .spec [] }
   | .service =>
     { name := "service",
@@ -261,6 +264,47 @@ def sig : Prim → PrimSig :=
       tvars := ["event"], dataArgs := true,
       params := [l "name" .str, l "after" (.fn [a] .bool), l "then" (.fn [a] .bool), l "within" .int],
       ret := .dsl .response [a] }
+  | .scenario =>
+    { name := "scenario",
+      doc := "A scenario of the service named `service`: its steps run from the initial records at time 0, and `test` compares the trace with snapshots/<service>/<name>.jsonl.",
+      tvars := ["records", "event", "caller"], dataArgs := true,
+      params := [l "service" .str, l "name" .str, l "steps" (.list (.dsl .step [a, b, param 2]))],
+      ret := .dsl .scenario [] }
+  | .stepCommand =>
+    { name := "step_command", doc := "A step: the caller sends the command.",
+      tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true,
+      params := [l "command" (.dsl .command [a, b, param 2, param 3, param 4]), l "caller" (param 2),
+        l "input" (param 3)],
+      ret := .dsl .step [a, b, param 2] }
+  | .stepQuery =>
+    { name := "step_query", doc := "A step: the caller sends the query.",
+      tvars := ["records", "event", "caller", "input", "output"], dataArgs := true,
+      params := [l "query" (.dsl .query [a, param 2, param 3, param 4]), l "caller" (param 2), l "input" (param 3)],
+      ret := .dsl .step [a, b, param 2] }
+  | .stepWait =>
+    { name := "step_wait", doc := "A step: time moves on by `ms`, and the timers due fire.",
+      tvars := ["records", "event", "caller"], dataArgs := true,
+      params := [l "ms" .int], ret := .dsl .step [a, b, param 2] }
+  | .stepAnswer =>
+    { name := "step_answer",
+      doc := "A step: the external answers the one pending request to `command` that `sender` sent.",
+      tvars := ["records", "event", "caller", "input", "output", "rejection"], dataArgs := true,
+      params := [l "command" (.dsl .externalCommand [param 3, param 4, param 5]), l "sender" (.dsl .sender []),
+        l "with" (.result (param 4) (param 5))],
+      ret := .dsl .step [a, b, param 2] }
+  | .stepEvent =>
+    { name := "step_event", doc := "A step: the service receives an event it subscribes to.",
+      tvars := ["records", "event", "caller", "source"], dataArgs := true,
+      params := [l "event" (.dsl .externalEvent [param 3]), l "value" (param 3)],
+      ret := .dsl .step [a, b, param 2] }
+  | .fromMachine =>
+    { name := "from_machine", doc := "The instance of the machine whose key is `key`, as the sender of a request.",
+      tvars := ["records", "event", "key"], dataArgs := true,
+      params := [l "machine" (.dsl .machine [a, b]), l "key" (param 2)], ret := .dsl .sender [] }
+  | .fromReaction =>
+    { name := "from_reaction", doc := "The reaction, as the sender of a request.",
+      tvars := ["records", "event"], dataArgs := true,
+      params := [l "reaction" (.dsl .reaction [a, b])], ret := .dsl .sender [] }
   | .fresh =>
     { name := "fresh", doc := "The `index`-th new id of this step: ids from different steps or indices differ.",
       tvars := [], params := [p "source" (.dsl .fresh []), p "index" .int], ret := .id }
@@ -271,7 +315,8 @@ def all : List Prim :=
    .tableKeys, .tableValues, .tableFilter, .tableMap, .tableCount, .tableAny, .tableAll, .dateAddDays,
    .dateDaysBetween, .require, .ref, .spec, .service, .command, .query, .defineCommand, .defineQuery, .machine, .reaction, .external,
    .externalCommand, .externalQuery, .externalEvent, .declareCommand, .declareQuery, .declareEvent, .request,
-   .sendCommand, .sendQuery, .subscribe, .bounds, .create, .response, .fresh]
+   .sendCommand, .sendQuery, .subscribe, .bounds, .create, .response, .scenario, .stepCommand, .stepQuery, .stepWait,
+   .stepAnswer, .stepEvent, .fromMachine, .fromReaction, .fresh]
 
 theorem mem_all (p : Prim) : p ∈ all := by cases p <;> simp [all]
 

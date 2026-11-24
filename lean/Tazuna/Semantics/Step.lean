@@ -10,9 +10,6 @@ the canonical order fixes how the step computes them, and no outcome depends on 
 
 namespace Tazuna.Ir
 
-/-- A value with its type, as it crosses the wire. -/
-abbrev WireVal := (t : Ty) × t.den0
-
 namespace Step
 
 def toB : Ty.bool.den0 → Bool
@@ -29,11 +26,6 @@ structure Instance {r e : Ty} (m : MachineV r e) where
   timer : Option (Int × m.state.den0)
 
 abbrev MachineState (r e : Ty) := (m : MachineV r e) × List (Instance m)
-
-/-- What started an effect: an instance of a machine, by the machine's name and the instance's key, or a reaction. -/
-inductive Sender where
-  | machine (name : String) (key : WireVal)
-  | reaction (name : String)
 
 /-- An out line: a request to an external, with the wire id its answer names in `to`. -/
 structure OutLine where

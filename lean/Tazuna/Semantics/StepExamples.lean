@@ -92,7 +92,7 @@ def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
 -- More internal steps than the cascade bound is a fault.
 #guard (step loop (State.init loop) (ev 1)).outcome.summary == "fault cascadeLimit"
 -- A service that lists another service's command breaks the owner rule.
-#guard ((SpecV.illegal prelude ⟨[{ svc with name := "other" }], []⟩).filter (·.1 == .owner)).length == 2
+#guard ((SpecV.illegal prelude ⟨[{ svc with name := "other" }], [], []⟩).filter (·.1 == .owner)).length == 2
 -- Every input has one outcome.
 #guard (run svc s0 [cmd 1 5, cmd 2 5, .clock 3]).2.length == 3
 

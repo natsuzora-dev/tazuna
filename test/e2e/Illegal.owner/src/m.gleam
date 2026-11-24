@@ -62,12 +62,16 @@ fn tasks(name: String) -> tazuna.Service {
 }
 
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(services: [tasks("tasks")], externals: [
-    tazuna.external(
-      name: "mail",
-      commands: [tazuna.declare_command(send())],
-      queries: [],
-      events: [],
-    ),
-  ])
+  tazuna.spec(
+    services: [tasks("tasks")],
+    externals: [
+      tazuna.external(
+        name: "mail",
+        commands: [tazuna.declare_command(send())],
+        queries: [],
+        events: [],
+      ),
+    ],
+    scenarios: [],
+  )
 }

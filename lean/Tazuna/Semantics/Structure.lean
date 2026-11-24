@@ -5,6 +5,14 @@ holds data (`Ty.den0`) and the types of that data, so a list of commands can hol
 
 namespace Tazuna.Ir
 
+/-- A value with its type, as it crosses the wire. -/
+abbrev WireVal := (t : Ty) × t.den0
+
+/-- What started an effect: an instance of a machine, by the machine's name and the instance's key, or a reaction. -/
+inductive Sender where
+  | machine (name : String) (key : WireVal)
+  | reaction (name : String)
+
 /-- A request to an external command; the answer, an output or a rejection, becomes events. -/
 structure RequestV (e : Ty) where
   external : String
@@ -124,9 +132,30 @@ structure ServiceV where
   responses : List (ResponseV event)
   bounds : BoundsV records
 
+/-- One step of a scenario, typed by its service's records, event and caller. -/
+inductive StepV (r e c : Ty) where
+  | command (x : CommandV r e c) (caller : c.den0) (input : x.input.den0)
+  | query (x : QueryV r c) (caller : c.den0) (input : x.input.den0)
+  /-- Time moves on by `ms`: a clock line, which fires the timers due. -/
+  | wait (ms : Int)
+  /-- The answer to the one pending request to `external.command` that `sender` sent. -/
+  | answer (external command : String) (sender : Sender) (output rejection : Ty)
+      (value : (Ty.result output rejection).den0)
+  | event (source name : String) (value : WireVal)
+
+/-- A scenario of the service `service`: steps from the initial records at time 0. -/
+structure ScenarioV where
+  service : String
+  name : String
+  records : Ty
+  event : Ty
+  caller : Ty
+  steps : List (StepV records event caller)
+
 structure SpecV where
   services : List ServiceV
   externals : List ExternalV
+  scenarios : List ScenarioV
 
 /-- What each structure type means. Structure values have no `==`. -/
 def Dsl.val : Dsl → List Ty → Sem
@@ -150,6 +179,9 @@ def Dsl.val : Dsl → List Ty → Sem
       | .bounds, [r] => BoundsV r
       | .create, [r] => CreateV r
       | .response, [e] => ResponseV e
+      | .scenario, _ => ScenarioV
+      | .step, [r, e, c] => StepV r e c
+      | .sender, _ => Sender
       | _, _ => Unit
     ⟨carrier, fun _ _ => false⟩
 
