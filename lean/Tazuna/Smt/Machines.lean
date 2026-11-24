@@ -169,10 +169,6 @@ open Tazuna.Ir
 section
 variable {α β γ : Type}
 
-theorem forall2_length {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs → as.length = bs.length
-  | [], [], _ => rfl
-  | _ :: _, _ :: _, ⟨_, h⟩ => congrArg (· + 1) (forall2_length h)
-
 theorem forall2_zip {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
     ∀ p ∈ as.zip bs, R p.1 p.2
   | [], [], _, _, hp => by simp at hp

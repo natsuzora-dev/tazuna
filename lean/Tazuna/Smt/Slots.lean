@@ -73,6 +73,11 @@ def Forall2 {α β : Type} (R : α → β → Prop) : List α → List β → Pr
   | a :: as, b :: bs => R a b ∧ Forall2 R as bs
   | _, _ => False
 
+theorem forall2_length {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
+    as.length = bs.length
+  | [], [], _ => rfl
+  | _ :: _, _ :: _, ⟨_, h⟩ => congrArg (· + 1) (forall2_length h)
+
 /-- The item values of the occupied slots. -/
 def occupied (sv : List (Bool × List Val)) : List (List Val) :=
   sv.filterMap fun (b, vs) => if b then some vs else none
