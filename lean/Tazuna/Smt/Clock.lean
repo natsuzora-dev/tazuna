@@ -485,8 +485,9 @@ def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) 
   | m :: ms, st :: sts, nid => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
     let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
+    let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
     let (rest, k) ← roundStarts shs ds dE dP dopt ms sts nid
-    pure (entrySlots dE dP dk js (st.map (onceStart dopt nid)) ++ rest, .add (startCount dopt st) k)
+    pure (entrySlots dE dP dk dflt js (st.map (onceStart dopt nid)) ++ rest, .add (startCount dopt st) k)
   | _, _, _ => .error (.outside "machines and start slots that differ in number")
 
 /-- `k` firing rounds from the tables `xs`, the first where `active`, each next one where the one before fired. -/
@@ -532,6 +533,7 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
       news, cnt, henc => by
     obtain ⟨⟨dk, nk⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨js, h2, henc⟩ := bind_ok.1 henc
+    obtain ⟨dflt, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨rest, k⟩, h3, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     rw [List.flatten_cons, List.length_append] at hone
@@ -540,7 +542,7 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     rw [← heffs] at hyp hcount
     have hr : ∀ x ∈ ys, x.1.2.Reach P := fun x hx =>
       hreach effs (by simp) x.1 (List.fst_mem_of_mem_zipIdx (hyp.mem_iff.1 hx))
-    obtain ⟨sv1, zs1, hS1, -, hw1, hh1, hq1⟩ := entrySlots_rel hP m hshs h2 hE hPE (need_ok.1 h1) hS hy hr
+    obtain ⟨sv1, zs1, hS1, -, hw1, hh1, hq1⟩ := entrySlots_rel hP m hshs h2 hE hPE (need_ok.1 h1) dflt hS hy hr
     obtain ⟨hk, hnews⟩ := roundStarts_rel hP hshs hE hPE hopt hn ms sts effss hrest (by omega)
       (fun effs' h => hreach effs' (by simp [h])) h3
     refine ⟨?_, ?_⟩

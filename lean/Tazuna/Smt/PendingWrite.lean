@@ -325,15 +325,16 @@ def shapeIdxs (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (s
 def entryAt (dE dP dk : Nat) (keyT : List Term) (eff : Term) (i j : Nat) : Term :=
   .ctor dP j [.ctor dk 0 keyT, .sel dE i 0 eff, .sel dE i 1 eff, .sel dE i 2 eff]
 
-/-- The pending entry of the effect `eff`: the entry of its kind, from the kinds' shape indices `js`. -/
-def entryT (dE dP dk : Nat) (keyT : List Term) (eff : Term) : Nat → List Nat → Term
-  | _, [] => .int 0
+/-- The pending entry of the effect `eff`: the entry of its kind, from the kinds' shape indices `js`. With no kind no
+effect has a code, so no slot holding one is read; the entry is then `dflt`, any term of the entry's sort. -/
+def entryT (dE dP dk : Nat) (dflt : Term) (keyT : List Term) (eff : Term) : Nat → List Nat → Term
+  | _, [] => dflt
   | i, [j] => entryAt dE dP dk keyT eff i j
-  | i, j :: js => .ite (.is dE i eff) (entryAt dE dP dk keyT eff i j) (entryT dE dP dk keyT eff (i + 1) js)
+  | i, j :: js => .ite (.is dE i eff) (entryAt dE dP dk keyT eff i j) (entryT dE dP dk dflt keyT eff (i + 1) js)
 
-theorem entryT_den {M : Model} (dE dP dk : Nat) (keyT : List Term) (eff : Term) {vals : List Val} :
+theorem entryT_den {M : Model} (dE dP dk : Nat) (dflt : Term) (keyT : List Term) (eff : Term) {vals : List Val} :
     (js : List Nat) → (i0 i : Nat) → eff.denote M = .ctor dE (i0 + i) vals → (j : Nat) → js[i]? = some j →
-    (entryT dE dP dk keyT eff i0 js).denote M = (entryAt dE dP dk keyT eff (i0 + i) j).denote M
+    (entryT dE dP dk dflt keyT eff i0 js).denote M = (entryAt dE dP dk keyT eff (i0 + i) j).denote M
   | [], _, _, _, _, h => by cases h
   | [j'], i0, 0, _, j, h => by cases h; rfl
   | [_], _, _ + 1, _, _, h => by cases h
@@ -341,7 +342,7 @@ theorem entryT_den {M : Model} (dE dP dk : Nat) (keyT : List Term) (eff : Term) 
     cases h
     simp [entryT, Term.denote, he, Val.toBool]
   | j' :: j'' :: js, i0, i + 1, he, j, h => by
-    have ih := entryT_den dE dP dk keyT eff (j'' :: js) (i0 + 1) i (by rw [he]; congr 1; omega) j (by simpa using h)
+    have ih := entryT_den dE dP dk dflt keyT eff (j'' :: js) (i0 + 1) i (by rw [he]; congr 1; omega) j (by simpa using h)
     have hne : (Term.is dE i0 eff).denote M = .bool false := by simp [Term.denote, he]
     rw [show i0 + (i + 1) = i0 + 1 + i by omega, ← ih]
     show (if (Term.denote M (.is dE i0 eff)).toBool then _ else _) = _
@@ -365,9 +366,9 @@ theorem entry_rel {M : Model} {P : List AnySite} (hP : SitesUnique P) {e : Ty} {
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (kv : (Ty.tuple ks).den0) {keyT : List Term} (hK : RelD L (.tuple ks) kv (.ctor dk 0 (Term.denotes M keyT)))
     {eff : EffectV e} (hr : eff.Reach P) {effT : Term} (heff : RelV L (.dsl .effect [e]) eff (effT.denote M))
-    (id : Nat) :
+    (id : Nat) (dflt : Term) :
     ∃ req x, eff = .request req ∧ req.ownerIn ds = some x ∧ ∃ y,
-      RelV L (pendingEntry shs) y ((entryT dE dP dk keyT effT 0 js).denote M) ∧
+      RelV L (pendingEntry shs) y ((entryT dE dP dk dflt keyT effT 0 js).denote M) ∧
       pendingOf shs id y = ⟨id, sd.sender kv, x, req⟩ := by
   obtain ⟨d, n, hd, i, key, vals, hki, hz, hh⟩ := heff
   obtain rfl : dE = d := find_det hE hd
@@ -383,7 +384,7 @@ theorem entry_rel {M : Model} {P : List AnySite} (hP : SitesUnique P) {e : Ty} {
     obtain ⟨fx, hrel, hpend⟩ := fits_pending hP (hshs _ (List.getElem_mem hlt)) hfit hr hh kv hK id
     refine ⟨req, x, rfl, (owner_eq hh ds).trans (need_ok.1 hx), pendingInj shs j hsh fx, ?_, ?_⟩
     · obtain ⟨-, -, -, -, -, -, vi, ve, va, rfl, -⟩ := hh
-      rw [entryT_den dE dP dk keyT effT (vals := [vi, ve, va]) js 0 i (by rw [hz, Nat.zero_add]) j hj]
+      rw [entryT_den dE dP dk dflt keyT effT (vals := [vi, ve, va]) js 0 i (by rw [hz, Nat.zero_add]) j hj]
       have := relAlts_pendingInj (L := L) dP shs 0 j hsh fx hrel
       simp only [Nat.zero_add] at this
       refine ⟨dP, nP, hPE, ?_⟩

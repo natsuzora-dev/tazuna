@@ -1664,48 +1664,60 @@ and the step really holds four. -/
 
 def wrapIntE : E (.fn [.int] .int) := .lam (.var .here)
 
-def writeSvc : ServiceV :=
+def writeSvcOf (m : MachineV recordsT .int) : ServiceV :=
   { insertSvc with name := "w", queries := [], subscribes := [⟨"x", "set", .int, .closed wrapIntE⟩],
-                   machines := [startM], declared := [("mail", .externalCommand "send" .int Ty.nil Ty.nil)] }
+                   machines := [m], declared := [("mail", .externalCommand "send" .int Ty.nil Ty.nil)] }
+
+def writeSvc : ServiceV := writeSvcOf startM
 
 def writeSites : List AnySite := Tazuna.Ir.Expr.sites .nil startEffectE
 
-def writeShapes : List (PendingShape writeSvc.event) := shapes writeSvc writeSites
+def writeShapesOf (m : MachineV recordsT .int) : List (PendingShape (writeSvcOf m).event) := shapes (writeSvcOf m) writeSites
 
-def writeLayout (slots : Nat) : Layout :=
-  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m", 3, 7, 0⟩] }
-    (reactTys ++ [.tuple [.int], pendingTable writeShapes] ++ Tazuna.Smt.Expr.tys insertE ++
+def writeShapes : List (PendingShape writeSvc.event) := writeShapesOf startM
+
+def writeLayoutOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : Nat) : Layout :=
+  Layout.addTys (fun _ => slots) { effects := keys }
+    (reactTys ++ [.tuple [.int], pendingTable (writeShapesOf m)] ++ Tazuna.Smt.Expr.tys insertE ++
       Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE)
+
+def writeLayout (slots : Nat) : Layout := writeLayoutOf startM [sendKey ⟨"m", 3, 7, 0⟩] slots
 
 def writeI : Fin writeSvc.subscribes.length := ⟨0, by decide⟩
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the event value, v7 the new pending table, v8
 the next id after, v9 the records after, v10 the new instance table. -/
-def writeScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot) := do
-  let L := writeLayout slots
+def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : Nat) (goal : List Term) :
+    Except String (Script × List Slot) := do
+  let v := writeSvcOf m
+  let shs := writeShapesOf m
+  let L := writeLayoutOf m keys slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let (ec, ce) ← enc (EventCode.of L writeSvc writeI)
+  let (ec, ce) ← enc (EventCode.of L v ⟨0, by simp [v, writeSvcOf]⟩)
   let (o, cond) ← enc (encodeEvent L ec S.records (.var 6))
-  let (outs, cm) ← enc (encodeMachines L prelude writeSvc.machines S.machines o.records S.now o.event)
+  let (outs, cm) ← enc (encodeMachines L prelude v.machines S.machines o.records S.now o.event)
   let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry writeShapes) | throw "no pending entry"
+  let some (dP, _) := L.find? (pendingEntry shs) | throw "no pending entry"
   let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (news, nT) ← enc (encodeStarts L prelude writeShapes writeSvc.declared dE dP dopt writeSvc.machines (outs.map (·.starts)) S.nextId)
-  let (pT, cp) ← enc (encodePending L writeShapes S.pending news)
-  let below ← enc (pendingBelowT L writeShapes S.pending S.nextId)
-  let some wf := S.wf L (v := writeSvc) writeShapes | throw "no well-formedness"
+  let (news, nT) ← enc (encodeStarts L prelude shs v.declared dE dP dopt v.machines (outs.map MachineOut.starts) S.nextId)
+  let (pT, cp) ← enc (encodePending L shs S.pending news)
+  let below ← enc (pendingBelowT L shs S.pending S.nextId)
+  let some wf := S.wf L (v := v) shs | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
-  let some psrt := L.srt? (pendingTable writeShapes) | throw "no pending sort"
-  let some msrt := L.srt? startM.table | throw "no table sort"
+  let some psrt := L.srt? (pendingTable shs) | throw "no pending sort"
+  let some msrt := L.srt? m.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let [mo] := outs | throw "not one machine"
-  let some (d, n) := L.find? (pendingTable writeShapes) | throw "no pending table"
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry writeShapes]) | throw "no pending slot"
+  let some (d, n) := L.find? (pendingTable shs) | throw "no pending table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry shs]) | throw "no pending slot"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int, rsrt, msrt],
           asserts := [wf, below, ce, cond, cm, cp, .eq (.var 7) pT, .eq (.var 8) nT, .eq (.var 9) o.records,
             .eq (.var 10) mo.table] ++ goal,
           shows := List.range 11 }, slotsOf d dt n 2 (.var 4))
+
+def writeScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot) :=
+  writeScriptOf startM [sendKey ⟨"m", 3, 7, 0⟩] slots goal
 
 /-- What the comparison reads of a pending request: id, external, name, the sender's key and the input. -/
 def pendView (p : Step.Pending writeSvc.event) : Nat × String × String × Option Int × Option Int :=
@@ -1761,6 +1773,44 @@ def writeCheck (solver : Solver) : IO Bool := do
       | .unsat => pure ()
       | a => ok ← fail s!"two pending and two new requests in three slots, yet the script is {repr a}"
     return ok
+
+/-! An event step that can write no request although requests have pending shapes: the service `w` with the
+machine `react`, which starts nothing, and a layout that names no effect kind, as when the program builds an
+`on_answer` closure but never a request. The script must be well-sorted and sat, and the pending table and next id read
+from the model must be the step's: the one request already pending, next id 40. -/
+
+def quietCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: no effect kinds: {m}"; return false
+  let L := writeLayoutOf reactM [] 3
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dm, nm) := L.find? reactM.table | fail "no instance table"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let Sr := slotsOf dr drt nr 2 (.var 0)
+  let Sm := slotsOf dm dmt nm 2 (.var 5)
+  match writeScriptOf reactM [] 3 [] with
+  | .error m => fail m
+  | .ok (_, Sp) =>
+    let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), .not Sm[0]!.1,
+      .not Sm[1]!.1, .not Sm[2]!.1, .eq (.var 6) (.int 5), .eq (.var 3) (.int 40), Sp[0]!.1,
+      .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1]
+    match writeScriptOf reactM [] 3 goal with
+    | .error m => fail m
+    | .ok (script, _) =>
+      match ← solver.run script with
+      | .sat vs =>
+        let M := modelOf vs
+        match (SymState.vars 0 1).decode M L (v := writeSvcOf reactM) rfl prelude (writeShapesOf reactM),
+            decodePending L (writeShapesOf reactM) ((Term.var 7).denote M), vs.lookup 8 with
+        | some s, some pend', some (.int n') =>
+          let r := step prelude (writeSvcOf reactM) s (.event ⟨0, by simp [writeSvcOf]⟩ (by exact (5 : Int)))
+          let ids (ps : List (Step.Pending (writeSvcOf reactM).event)) := (ps.map (·.id)).mergeSort (· ≤ ·)
+          if r.outcome.summary != "accepted" then return ← fail s!"the step says {r.outcome.summary}"
+          if ids pend' != ids r.state.pending || n' != r.state.nextId || ids pend' != [2] then
+            return ← fail s!"the model's pending ids are {ids pend'} and next id {n'}, the step's {ids r.state.pending} and {r.state.nextId}"
+          return true
+        | _, _, _ => fail "the model does not decode"
+      | a => fail s!"{repr a}"
 
 /-! An event whose machine and reaction start requests, for `event_step_effects`: the service `w` above with the
 reaction `fan`, which requests `send` with the event's value plus 1 and plus 2, in that order. From the state of
@@ -2081,6 +2131,7 @@ def check (z3 : String) : IO Bool := do
   unless ← fireCheck solver do ok := false
   unless ← startsCheck solver do ok := false
   unless ← writeCheck solver do ok := false
+  unless ← quietCheck solver do ok := false
   unless ← fanCheck solver do ok := false
   unless ← clockFireCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
