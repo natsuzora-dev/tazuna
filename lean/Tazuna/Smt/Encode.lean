@@ -348,6 +348,12 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let xt ← need "an item that has no term" (Code.term? _ x)
     let (S', p) := insertSlots [xt] tt (slotsOf d dt n 1 b)
     pure (slotsTerm d dt S', .not p)
+  | .bagContains, args, _ => .ok fun (b, x, ()) => do
+    let a := (Ty.param 0).inst args
+    let (d, n, dt) ← collD L (.bag a) [a]
+    let xt ← need' "an item type whose == is not SMT-LIB's =" a.eqable (← need "an item that has no term" (Code.term? _ x))
+    let S := slotsOf d dt n 1 b
+    pure (anySlotT S (S.map fun sl => .eq xt (sl.2.headD xt)), tt)
   | .tableNew, args, _ => .ok fun () => do
     let k := (Ty.param 0).inst args
     let v := (Ty.param 1).inst args

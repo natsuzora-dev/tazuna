@@ -1093,6 +1093,28 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
       (empty_den dx n) (fun p hp => by simp only [List.mem_replicate] at hp; rw [hp.2, denotes_eq_map]; simpa using hdl)
       (ys := []) (List.Perm.refl _) (by simp [Holds2, occupied_empty, Forall2]) hc
     exact table_mk h1 hS' (by simpa using hl') hw' hperm' hh'
+  case bagContains =>
+    simp only [primCode] at h; cases h
+    intro ⟨xs, x, ()⟩ ⟨b, sx, ()⟩ ⟨hb, hx, _⟩ r c hr _
+    obtain ⟨⟨d, n, dt⟩, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨xt0, h2, hr⟩ := bind_ok.1 hr
+    obtain ⟨xt, h3, hr⟩ := bind_ok.1 hr
+    cases pure_ok.1 hr
+    obtain ⟨heq, rfl⟩ := need'_ok h3
+    have hxt := (rel_term (need_ok.1 h2) x).1 hx
+    obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := bag_view hb h1
+    have ha := aligned_map (P := fun y => Ty.deq _ x y) (fun xs => .eq xt (xs.headD xt)) (fun y xs he => by
+      obtain ⟨z, hz, hyz⟩ := he
+      cases xs with
+      | nil => simp [Term.denotes] at hz
+      | cons t rest =>
+        simp only [Term.denotes, List.cons.injEq] at hz
+        simp only [List.headD_cons, Term.denote, hz.1]
+        exact congrArg Val.bool (relV_beq _ heq x y _ _ hxt hyz)) hS hh
+    refine (rel_bool _ _).2 ?_
+    rw [anySlotT_den ha, hperm.any_eq]
+    simp only [Prim.den, toBool_ofBool]
+    rfl
   all_goals simp [primCode] at h
 
 end
