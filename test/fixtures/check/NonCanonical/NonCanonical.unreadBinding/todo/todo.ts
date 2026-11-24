@@ -25,6 +25,13 @@ export const deleteBoundTask = command({
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
 }).decide(({ bound }) => [emit(taskDeleted, { id: bound.task.id })]);
 
+export const deleteContextTask = command({
+  callers: ["client"],
+  input: { taskId: ref(Task) },
+  emits: [taskDeleted],
+  binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
+}).decide((ctx) => [emit(taskDeleted, { id: ctx.bound.task.id })]);
+
 export const deleteTask = command({
   callers: ["client"],
   input: { taskId: ref(Task) },
@@ -32,4 +39,4 @@ export const deleteTask = command({
   binds: { task: ({ input, records }) => records.Task.get(input.taskId) },
 }).decide(({ input }) => [emit(taskDeleted, { id: input.taskId })]);
 
-export const todo = contract({ addTask, deleteBoundTask, deleteTask });
+export const todo = contract({ addTask, deleteBoundTask, deleteContextTask, deleteTask });

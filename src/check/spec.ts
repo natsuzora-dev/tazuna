@@ -44,7 +44,6 @@ export type SpecCheck<S extends CheckedSpec = CheckedSpec> =
 
 const syntaxChecks: readonly { readonly check: (spec: LoadedSpec) => readonly Found<NonCanonical | Restricted>[] }[] = [
   answers,
-  binds,
   constants,
   descriptions,
   keywords,
@@ -147,14 +146,17 @@ function typeErrors(
 
 /**
  * The spec with its functions converted to IR, or the Restricted.function violations of what `converter` leaves
- * outside the IR. Without a converter, one runs for this spec alone.
+ * outside the IR, or else the NonCanonical.unreadBinding violations that the IR shows. Without a converter, one runs
+ * for this spec alone.
  */
-function converted(spec: Spec, converter: Converter | undefined): Spec | Found<Restricted>[] {
+function converted(spec: Spec, converter: Converter | undefined): Spec | Found<Restricted | NonCanonical>[] {
   const own = converter ?? new Converter();
   try {
     const { program, notConverted } = own.program(spec);
     const outside = functions.check(spec, notConverted);
-    return outside.length > 0 ? outside : { ...spec, structure: { ...spec.structure, program } };
+    if (outside.length > 0) return outside;
+    const unread = binds.check(spec, program);
+    return unread.length > 0 ? unread : { ...spec, structure: { ...spec.structure, program } };
   } finally {
     if (converter === undefined) own.close();
   }
@@ -190,7 +192,7 @@ function violationsOf(files: number, found: Found<Malformed | NonCanonical | Res
 /**
  * Type-checks the spec in the folder `root` with tsc on the nearest tsconfig.json at or above it, loads it, and checks
  * it in all but its spec functions, which stay unconverted, so `tazuna check` may still report a `Restricted.function`
- * in a spec that this passes. A Malformed violation leaves the structure unchecked: Illegal, and the NonCanonical checks
+ * or a `NonCanonical.unreadBinding` in a spec that this passes. A Malformed violation leaves the structure unchecked: Illegal, and the NonCanonical checks
  * that read it. The spec functions are not converted because a test runner that transforms the spec files, as vitest
  * does, hides their source positions from the converter.
  */
