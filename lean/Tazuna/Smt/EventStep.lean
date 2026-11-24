@@ -129,7 +129,7 @@ theorem machine_quiet (m : MachineV r e) (hor : m.key.orderable = true)
   rw [machineStep_effects m (Ty.plain_of_orderable _ hor)]
   refine List.flatMap_eq_nil_iff.2 fun k hkk => ?_
   obtain ⟨vs, ⟨zk, z, -, -, hz⟩⟩ := forall2_mem hhX (hEp.mem_iff.2 hkk)
-  unfold sentOf
+  unfold sentOf sentBy
   cases hst : startedOf m (instancesOf T m tbl) recs tnow ev k with
   | inl p =>
     obtain ⟨x', ⟨⟩⟩ := p

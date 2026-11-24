@@ -1041,10 +1041,14 @@ def entryUp (m : MachineV r e) (insts : List (Step.Instance m)) (recs : r.den0) 
     (k : m.key.den0) : m.key.den × (instEntry m.state).den :=
   (Ty.up _ m.key_data k, Ty.up _ m.entry_data (entryOf (Step.reactKey m insts recs tnow ev k).1))
 
-/-- A key's start, as a start slot relates to it: the key and the effect option the step starts for it. -/
-def EStart (m : MachineV r e) (insts : List (Step.Instance m)) (recs : r.den0) (tnow : Int) (ev : e.den0) :
-    m.key.den0 → List Val → Prop := fun k vs => ∃ zk z, vs = [zk, z] ∧ RelV L m.key (Ty.up _ m.key_data k) zk ∧
-      RelV L (Ty.option (.dsl .effect [e])) (startedOf m insts recs tnow ev k) z
+/-- An item's start, as a start slot relates to it: its key `κ` and the effect option `F` it starts. -/
+def EOpt (m : MachineV r e) {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den) :
+    α → List Val → Prop := fun a vs => ∃ zk z, vs = [zk, z] ∧ RelV L m.key (Ty.up _ m.key_data (κ a)) zk ∧
+      RelV L (Ty.option (.dsl .effect [e])) (F a) z
+
+/-- A key's start on an event: the effect option the step starts for it. -/
+abbrev EStart (m : MachineV r e) (insts : List (Step.Instance m)) (recs : r.den0) (tnow : Int) (ev : e.den0) :
+    m.key.den0 → List Val → Prop := EOpt (L := L) m id (startedOf m insts recs tnow ev)
 
 /-- The new table's slots for the bag's slots after `prevS`: occupied, in order, by the keys whose first occurrence
 they hold, each with the entry the step gives it; the start slots alike, each with the effect option it starts. -/

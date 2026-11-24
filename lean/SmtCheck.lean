@@ -1674,7 +1674,7 @@ def writeScript (slots : Nat) (goal : List Term) : Except String (Script × List
   let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
   let some (dP, _) := L.find? (pendingEntry writeShapes) | throw "no pending entry"
   let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (news, nT) ← enc (encodeStarts L prelude writeShapes writeSvc.declared dE dP dopt writeSvc.machines outs S.nextId)
+  let (news, nT) ← enc (encodeStarts L prelude writeShapes writeSvc.declared dE dP dopt writeSvc.machines (outs.map (·.starts)) S.nextId)
   let (pT, cp) ← enc (encodePending L writeShapes S.pending news)
   let below ← enc (pendingBelowT L writeShapes S.pending S.nextId)
   let some wf := S.wf L (v := writeSvc) writeShapes | throw "no well-formedness"

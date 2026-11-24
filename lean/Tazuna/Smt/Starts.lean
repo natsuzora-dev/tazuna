@@ -172,10 +172,15 @@ theorem forall2_imp {α β : Type} {R R' : α → β → Prop} (h : ∀ a b, R a
   | [], [], _ => trivial
   | _ :: _, _ :: _, ⟨hab, hs⟩ => ⟨h _ _ hab, forall2_imp h hs⟩
 
-/-- The effect the instance of key `a` starts, with its sender. -/
+/-- The effect an item starts, with its sender: the instance of the item's key. -/
+abbrev sentBy (m : MachineV r e) {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den) (a : α) :
+    Option (Sender × EffectV e) :=
+  (Ty.toOption (F a)).map (.machine m.name ⟨m.key, κ a⟩, ·)
+
+/-- The effect the instance of key `a` starts on an event, with its sender. -/
 abbrev sentOf (m : MachineV r e) (insts : List (Step.Instance m)) (recs : r.den0) (tnow : Int) (ev : e.den0)
     (a : m.key.den0) : Option (Sender × EffectV e) :=
-  (Ty.toOption (startedOf m insts recs tnow ev a)).map (.machine m.name ⟨m.key, a⟩, ·)
+  sentBy m id (startedOf m insts recs tnow ev) a
 
 /-- A machine's effects on an event: each key's, in the canonical order of the keys. -/
 theorem machineStep_effects (m : MachineV r e) (hpl : m.key.plain = true) (insts : List (Step.Instance m))
@@ -184,54 +189,55 @@ theorem machineStep_effects (m : MachineV r e) (hpl : m.key.plain = true) (insts
       (Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (recs, ())))).flatMap
         fun k => (sentOf m insts recs tnow ev k).toList := by
   simp only [Step.machineStep, List.flatMap_map]
-  congr 1; funext k; rw [reactKey_effects m hpl]; unfold sentOf; cases Ty.toOption (startedOf m insts recs tnow ev k) <;> rfl
+  congr 1; funext k; rw [reactKey_effects m hpl]; unfold sentOf sentBy
+  cases Ty.toOption (startedOf m insts recs tnow ev k) <;> rfl
 
-/-- How many keys below `a` start an effect: the effect of `a` is that many after the machine's first. -/
-def rankOf (m : MachineV r e) (insts : List (Step.Instance m)) (recs : r.den0) (tnow : Int) (ev : e.den0)
-    (keys : List m.key.den0) (a : m.key.den0) : Nat :=
-  keys.countP fun b => (sentOf m insts recs tnow ev b).isSome && Ty.cmp T m.key b a == .lt
+/-- How many items with a key below `a`'s start an effect: the effect of `a` is that many after the machine's first. -/
+def rankBy (m : MachineV r e) {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den)
+    (items : List α) (a : α) : Nat :=
+  items.countP fun b => (sentBy m κ F b).isSome && Ty.cmp T m.key (κ b) (κ a) == .lt
 
 section
 variable (m : MachineV r e) {dopt nopt : Nat} (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt))
-  {insts : List (Step.Instance m)} {recs : r.den0} {tnow : Int} {ev : e.den0}
-  {all : List (Term × Term × Term)} {svAll : List (Bool × List Val)} {Eall keys : List m.key.den0}
+  {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den)
+  {all : List (Term × Term × Term)} {svAll : List (Bool × List Val)} {Eall items : List α}
   (hX : SlotsDen M (all.map fun w => (w.1, [w.2.1, w.2.2])) svAll)
-  (hh : Holds2 (EStart (L := L) m insts recs tnow ev) Eall svAll) (hEp : Eall.Perm keys)
+  (hh : Holds2 (EOpt (L := L) m κ F) Eall svAll) (hEp : Eall.Perm items)
 include hopt hX hh hEp
 
-/-- The sum of a start slot's effect slot denotes the rank of its key. -/
-theorem below_sum {s : Term × Term × Term} {a : m.key.den0}
-    (ha : EStart (L := L) m insts recs tnow ev a (Term.denotes M [s.2.1, s.2.2])) {below : List Term}
+/-- The sum of a start slot's effect slot denotes the rank of its item. -/
+theorem below_sum {s : Term × Term × Term} {a : α}
+    (ha : EOpt (L := L) m κ F a (Term.denotes M [s.2.1, s.2.2])) {below : List Term}
     (hb : Forall2 (fun s' t => (do
       let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.2.1 s.2.1)
       pure (Term.ite (.and (startFlag dopt s') lt) (.int 1) (.int 0))) = Except.ok (ε := Refusal) t) all below) :
-    (sumT below).denote M = .int (rankOf (T := T) m insts recs tnow ev keys a) := by
+    (sumT below).denote M = .int (rankBy (T := T) m κ F items a) := by
   obtain ⟨zk, z, hvs, hk, -⟩ := ha
   simp only [Term.denotes, List.cons.injEq, and_true] at hvs
-  rw [rankOf, ← hEp.countP_eq]
+  rw [rankBy, ← hEp.countP_eq]
   refine sum_countP all svAll Eall below hX hh (forall2_imp (fun s' t h => ?_) hb)
   obtain ⟨⟨lt, le⟩, h1, h⟩ := bind_ok.1 h
   cases pure_ok.1 h
   refine ⟨_, rfl, fun hf => by simp [startFlag, Term.denote, hf, Val.toBool], fun b hf hE => ?_⟩
   obtain ⟨zk', z', hvs', hk', hz'⟩ := hE
   simp only [Term.denotes, List.cons.injEq, and_true] at hvs'
-  have hord := ordT_rel (M := M) L T m.key _ _ _ (need_ok.1 h1) m.key_data b a (hvs'.1 ▸ hk') (hvs.1 ▸ hk)
+  have hord := ordT_rel (M := M) L T m.key _ _ _ (need_ok.1 h1) m.key_data (κ b) (κ a) (hvs'.1 ▸ hk') (hvs.1 ▸ hk)
   have his := is_opt (M := M) hopt (x := s'.2.2) (hvs'.2 ▸ hz')
   show Term.denote M (.and (.and s'.1 (.is dopt 0 s'.2.2)) lt) = _
   rw [show Term.denote M (.and (.and s'.1 (.is dopt 0 s'.2.2)) lt) =
     .bool (((s'.1.denote M).toBool && (Term.denote M (.is dopt 0 s'.2.2)).toBool) && (lt.denote M).toBool) from rfl,
     hf, his, hord.1]
   simp only [Val.toBool, Bool.true_and]
-  unfold sentOf
-  cases Ty.toOption (startedOf m insts recs tnow ev b) <;> rfl
+  unfold sentBy
+  cases Ty.toOption (F b) <;> rfl
 
-/-- The effect slots of start slots hold, where flagged, each effect a key starts, with its wire id. -/
+/-- The effect slots of start slots hold, where flagged, each effect an item starts, with its wire id. -/
 theorem rank_slots {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int)) :
-    (ws : List (Term × Term × Term)) → (sv : List (Bool × List Val)) → (E : List m.key.den0) → (S : List Slot) →
-    SlotsDen M (ws.map fun w => (w.1, [w.2.1, w.2.2])) sv → Holds2 (EStart (L := L) m insts recs tnow ev) E sv →
+    (ws : List (Term × Term × Term)) → (sv : List (Bool × List Val)) → (E : List α) → (S : List Slot) →
+    SlotsDen M (ws.map fun w => (w.1, [w.2.1, w.2.2])) sv → Holds2 (EOpt (L := L) m κ F) E sv →
     Forall2 (fun s o => rankStart L T m dopt nextId all s = .ok o) ws S →
-    ∃ svS, SlotsDen M S svS ∧ Holds2 (EEff (L := L) m) (E.filterMap fun a => (sentOf m insts recs tnow ev a).map
-      fun x => (x, n0 + rankOf (T := T) m insts recs tnow ev keys a)) svS
+    ∃ svS, SlotsDen M S svS ∧ Holds2 (EEff (L := L) m) (E.filterMap fun a => (sentBy m κ F a).map
+      fun x => (x, n0 + rankBy (T := T) m κ F items a)) svS
   | [], [], E, [], _, hE, _ => by
     cases E with
     | nil => exact ⟨[], trivial, trivial⟩
@@ -248,22 +254,22 @@ theorem rank_slots {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 :
     | true =>
       match E, hE with
       | a :: E, ⟨ha, hE⟩ =>
-        have hsum := below_sum m hopt hX hh hEp (s := w) (by rw [hvs]; exact ha) (mapM_ok _ _ _ hbel)
+        have hsum := below_sum m hopt κ F hX hh hEp (s := w) (by rw [hvs]; exact ha) (mapM_ok _ _ _ hbel)
         obtain ⟨svS, hS', hh'⟩ := rank_slots hn ws sv E S hS hE hos
         obtain ⟨zk, z, rfl, hk, hz⟩ := ha
         rw [hden] at hvs
         simp only [List.cons.injEq, and_true] at hvs
         rcases opt_view hopt hz with ⟨x', zx, hv, hzv, hx'⟩ | ⟨hv, hzv⟩
-        · have hsent : sentOf m insts recs tnow ev a = some (.machine m.name ⟨m.key, a⟩, x') := by
-            simp only [sentOf, hv, Ty.toOption]; rfl
-          refine ⟨(true, [.int ((n0 + rankOf (T := T) m insts recs tnow ev keys a : Nat) : Int), zk, zx]) :: svS,
+        · have hsent : sentBy m κ F a = some (.machine m.name ⟨m.key, κ a⟩, x') := by
+            simp only [sentBy, hv, Ty.toOption]; rfl
+          refine ⟨(true, [.int ((n0 + rankBy (T := T) m κ F items a : Nat) : Int), zk, zx]) :: svS,
             ⟨?_, ?_, hS'⟩, ?_⟩
           · simp [startFlag, Term.denote, hf, hvs.2, hzv, Val.toBool]
           · simp only [Term.denotes, Term.denote, hn, hsum, Val.toInt, hvs.1, hvs.2, hzv]
             simp
           · simp only [List.filterMap_cons, hsent]
-            exact ⟨⟨a, zk, zx, rfl, rfl, hk, hx'⟩, hh'⟩
-        · have hsent : sentOf m insts recs tnow ev a = none := by simp only [sentOf, hv, Ty.toOption]; rfl
+            exact ⟨⟨κ a, zk, zx, rfl, rfl, hk, hx'⟩, hh'⟩
+        · have hsent : sentBy m κ F a = none := by simp only [sentBy, hv, Ty.toOption]; rfl
           refine ⟨(false, _) :: svS, ⟨by simp [startFlag, Term.denote, hf, hvs.2, hzv, Val.toBool], rfl, hS'⟩, ?_⟩
           simp only [List.filterMap_cons, hsent, Option.map_none]
           simpa [Holds2, occupied] using hh'
@@ -272,24 +278,24 @@ theorem rank_slots {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 :
 
 end
 
-/-- T2 for the effects a machine's instances start on an event: wherever the condition holds, the effect slots hold,
-where flagged, the step's effects, each with the wire id the step gives it (`nextId` plus its place among them), and
-the count term denotes how many there are. -/
+/-- T2 for the effects start slots start: wherever the condition holds, the effect slots hold, where flagged, the
+effects of the items (distinct keys, taken in key order), each with its wire id (`nextId` plus its place among them),
+and the count term denotes how many there are. -/
 theorem rank_starts (m : MachineV r e) {dopt nopt : Nat}
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt))
-    {insts : List (Step.Instance m)} {recs : r.den0} {tnow : Int} {ev : e.den0}
-    {starts : List (Term × Term × Term)} {svX : List (Bool × List Val)} {E keys : List m.key.den0}
+    {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den)
+    {starts : List (Term × Term × Term)} {svX : List (Bool × List Val)} {E items : List α}
     (hX : SlotsDen M (starts.map fun w => (w.1, [w.2.1, w.2.2])) svX)
-    (hh : Holds2 (EStart (L := L) m insts recs tnow ev) E svX) (hEp : E.Perm keys)
-    (hks : keys.Pairwise fun a b => Ty.cmp T m.key a b = .lt)
+    (hh : Holds2 (EOpt (L := L) m κ F) E svX) (hEp : E.Perm items)
+    (hks : items.Pairwise fun a b => Ty.cmp T m.key (κ a) (κ b) = .lt)
     {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int))
     {S : List Slot} (hS : rankStarts L T m dopt nextId starts = .ok S) :
-    let effs := keys.flatMap fun k => (sentOf m insts recs tnow ev k).toList
+    let effs := items.flatMap fun a => (sentBy m κ F a).toList
     (startCount dopt starts).denote M = .int effs.length ∧
       ∃ svS ys, SlotsDen M S svS ∧ ys.Perm (effs.zipIdx n0) ∧ Holds2 (EEff (L := L) m) ys svS := by
   intro effs
   refine ⟨?_, ?_⟩
-  · have := sum_countP (Q := fun a => (sentOf m insts recs tnow ev a).isSome) starts svX E _ hX hh
+  · have := sum_countP (Q := fun a => (sentBy m κ F a).isSome) starts svX E _ hX hh
       (forall2_map_self _ starts fun w _ => ⟨startFlag dopt w, rfl, fun hf => by simp [startFlag, Term.denote, hf, Val.toBool],
         fun a hf hE => by
           obtain ⟨zk, z, hvs, -, hz⟩ := hE
@@ -298,13 +304,15 @@ theorem rank_starts (m : MachineV r e) {dopt nopt : Nat}
           rw [show Term.denote M (startFlag dopt w) =
             .bool ((w.1.denote M).toBool && (Term.denote M (.is dopt 0 w.2.2)).toBool) from rfl, hf, his]
           simp only [Val.toBool, Bool.true_and]
-          unfold sentOf
-          cases Ty.toOption (startedOf m insts recs tnow ev a) <;> rfl⟩)
+          unfold sentBy
+          cases Ty.toOption (F a) <;> rfl⟩)
     rw [hEp.countP_eq] at this
     rw [startCount, this, length_flatMap_toList]
-  · obtain ⟨svS, hS', hh'⟩ := rank_slots (T := T) m hopt hX hh hEp hn starts svX E S hX hh (mapM_ok _ _ _ hS)
+  · obtain ⟨svS, hS', hh'⟩ := rank_slots (T := T) m hopt κ F hX hh hEp hn starts svX E S hX hh (mapM_ok _ _ _ hS)
     refine ⟨svS, _, hS', ?_, hh'⟩
-    have hz := zipIdx_ranked (Ty.cmp T m.key) (sentOf m insts recs tnow ev) keys hks n0
+    haveI : Std.OrientedCmp (fun a b : α => Ty.cmp T m.key (κ a) (κ b)) :=
+      ⟨fun {_ _} => Std.OrientedCmp.eq_swap (cmp := Ty.cmp T m.key)⟩
+    have hz := zipIdx_ranked (fun a b : α => Ty.cmp T m.key (κ a) (κ b)) (sentBy m κ F) items hks n0
     rw [hz]
     exact hEp.filterMap _
 
