@@ -733,7 +733,7 @@ def replayUnordered (x : Induction) (fs : Functions IO) (u : Unordered) (o : Tie
       deadlines := deadlines.zipIdx.map fun (d, i) => { d with order := i + 3 }, deadlineCount := deadlines.length + 2 }
   -- What a later message can see of a state: its records, and each machine's active states, context, deadlines and
   -- requests to other services that wait, then the lines that the order wrote and the faults that it raised that no
-  -- other property reports (Raised), each in a canonical order.
+  -- other property reports (Fault.unreported), each in a canonical order.
   let outcome (s : Service.State) : Value :=
     let requests (i : Instance) : Value := .arr ((s.pending.filterMap fun p => match p.requester with
       | .state id state => if id == i.id && !p.stale then
@@ -745,7 +745,7 @@ def replayUnordered (x : Induction) (fs : Functions IO) (u : Unordered) (o : Tie
             ("deadlines", deadlinesOf i.id s.deadlines), ("requests", requests i)]))),
           ("outputs", .arr (outsOf s base.lines.size)),
           ("faults", .arr ((s.violations.filterMap fun
-            | .fault f@(.rejectedAutomationCommand ..) => some (ToValue.toValue f)
+            | .fault f => if f.unreported then some (ToValue.toValue f) else none
             | _ => none).mergeSort fun a b => decide (a.canonical ≤ b.canonical)))]
   let same (a b : Service.State) : Bool :=
     (a.halted.isSome && b.halted.isSome) || (outcome a).canonical == (outcome b).canonical

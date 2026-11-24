@@ -141,6 +141,14 @@ def Fault.halts : Fault → Bool
   | .rejectedShows .. => false
 
 /--
+Whether no other property reports the fault, which does not halt, so two orders that differ only in raising it differ
+nowhere else: ChoiceDependent compares these faults between the orders.
+-/
+def Fault.unreported : Fault → Bool
+  | .rejectedAutomationCommand .. => true
+  | _ => false
+
+/--
 Whether no spec that `tazuna check` passes can produce the violation, as InvalidScenario.internal says: the IR names
 only the events that a command's emits list.
 -/

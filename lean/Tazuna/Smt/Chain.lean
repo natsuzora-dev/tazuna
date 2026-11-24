@@ -44,9 +44,9 @@ structure Out where
   fields : List (String × Term)
 
 /--
-A fault that a message raises and that no other property reports, the term that holds when it does: an automation's own
-command rejected (Fault.rejectedAutomationCommand), which does not halt. `id` names where the chain raised it, as an out
-line's does.
+A fault that a message raises and that no other property reports (Fault.unreported), the term that holds when it does: an
+automation's own command rejected (Fault.rejectedAutomationCommand), which does not halt. `id` names where the chain
+raised it, as an out line's does.
 -/
 structure Raised where
   id : String
