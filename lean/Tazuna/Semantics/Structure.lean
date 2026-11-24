@@ -81,16 +81,18 @@ inductive EffectV (e : Ty) where
   | query (r c : Ty) (x : QueryV r c) (caller : c.den0) (input : x.input.den0)
       (onAnswer : Fun (Ty.fn [x.output] (.list e)))
 
+/-- A machine. Its functions are kept, so the step encoding applies their codes; `effect` returns a structure value,
+which no kept function can. -/
 structure MachineV (r e : Ty) where
   name : String
   key : Ty
   state : Ty
-  instances : (Ty.fn [r] (.bag key)).den0
+  instances : Fun (Ty.fn [r] (.bag key))
   initial : state.den0
-  on : (Ty.fn [Ty.machineCtx key state r, e] (Ty.next state)).den0
-  after : (Ty.fn [Ty.machineCtx key state r] (Ty.option (Ty.timer state))).den0
+  on : Fun (Ty.fn [Ty.machineCtx key state r, e] (Ty.next state))
+  after : Fun (Ty.fn [Ty.machineCtx key state r] (Ty.option (Ty.timer state)))
   effect : key.den0 → state.den0 → r.den0 → Int → Option (EffectV e)
-  invariants : (Ty.fn [Ty.machineCtx key state r] Ty.rules).den0
+  invariants : Fun (Ty.fn [Ty.machineCtx key state r] Ty.rules)
 
 structure ReactionV (r e : Ty) where
   name : String

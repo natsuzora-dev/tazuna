@@ -20,6 +20,21 @@ private def recordsE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : E
 private def inputE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : Expr [] Γ .int :=
   .field (ft := .int) "input" 1 (by simp) x
 
+private def iteE {Γ : List Ty} {r : Ty} (c : Expr [] Γ Ty.bool) (a b : Expr [] Γ r) : Expr [] Γ r :=
+  .case c (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) a (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) b .nil))
+    ⟨4, rfl⟩
+/-- A field of the machine context `MachineCtx(key, state, records, now)`. -/
+private def mctxE {Γ : List Ty} {k st r : Ty} (label : String) (n : Fin 4) (x : Expr [] Γ (Ty.machineCtx k st r)) :
+    Expr [] Γ ([k, st, r, .int].get n) :=
+  .field label n.val (by intro fs h; simp at h; subst h; simp) x
+private def enterE {Γ : List Ty} {st : Ty} (x : Expr [] Γ st) : Expr [] Γ (Ty.next st) :=
+  .ctor (vs := [[], [st]]) ⟨1, by simp⟩ (.cons x .nil)
+private def noTimerE {Γ : List Ty} {st : Ty} : Expr [] Γ (Ty.option (Ty.timer st)) :=
+  .ctor (vs := [[Ty.timer st], []]) ⟨1, by simp⟩ .nil
+private def timerE {Γ : List Ty} {st : Ty} (d : Int) (x : Expr [] Γ st) : Expr [] Γ (Ty.option (Ty.timer st)) :=
+  .ctor (vs := [[Ty.timer st], []]) ⟨0, by simp⟩ (.cons (.ctor (vs := [[.int, st]]) ⟨0, by simp⟩
+    (.cons (.int d) (.cons x .nil))) .nil)
+
 def ping : EffectV .int := .request
   { name := "ping", input := .str, output := .int, rejection := some .str, value := "hi",
     ensures := none,
@@ -29,12 +44,13 @@ def ping : EffectV .int := .request
 
 def watch : MachineV .int .int :=
   { name := "watch", key := .int, state := .int,
-    instances := fun (r, ()) => if 0 < I r then [(0 : Int)] else [],
+    instances := .closed (.lam (.call (.prim .bagFromList [.int] rfl)
+      (.cons (iteE (.bin .lt (.int 0) (.var .here)) (.list (.cons (.int 0) .nil)) (.list .nil)) .nil))),
     initial := (0 : Int),
-    on := fun (.inl (_, st, _, _, ()), _, ()) => .inr (.inl (I st + 1, ())),
-    after := fun (.inl (_, st, _, _, ()), ()) => if I st = 1 then .inl (.inl ((10 : Int), (5 : Int), ()), ()) else .inr (.inl ()),
+    on := .closed (.lam (enterE (.bin .add (mctxE "state" 1 (.var .here)) (.int 1)))),
+    after := .closed (.lam (iteE (.bin (.eq rfl) (mctxE "state" 1 (.var .here)) (.int 1)) (timerE 10 (.int 5)) noTimerE)),
     effect := fun _ st _ _ => if I st = 5 then some ping else none,
-    invariants := fun _ => [] }
+    invariants := .closed (.lam (.list .nil)) }
 
 def add : CommandV .int .int .int :=
   { name := "add", input := .int, rejection := .str, callers := [(1 : Int)],
@@ -147,10 +163,10 @@ def askKey (k : Int) : EffectV .int := .request
   { name := "ping", input := .int, output := .int, rejection := none, value := k, ensures := none,
     onAnswer := .closed (.lam (.list .nil)) }
 def perKey : MachineV (.bag .int) .int :=
-  { name := "perKey", key := .int, state := .int, instances := fun (r, ()) => r, initial := (0 : Int),
-    on := fun _ => .inr (.inl ((1 : Int), ())), after := fun _ => .inr (.inl ()),
+  { name := "perKey", key := .int, state := .int, instances := .closed (.lam (.var .here)), initial := (0 : Int),
+    on := .closed (.lam (enterE (.int 1))), after := .closed (.lam noTimerE),
     effect := fun k _ _ _ => some (askKey k),
-    invariants := fun _ => [] }
+    invariants := .closed (.lam (.list .nil)) }
 def keyed : ServiceV :=
   { name := "keyed", records := .bag .int, event := .int, caller := .int, init := ([] : List Int),
     apply := .closed (.lam (.var .here)),

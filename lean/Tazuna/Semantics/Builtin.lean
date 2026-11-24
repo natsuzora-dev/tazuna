@@ -212,13 +212,10 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .machine, args, h => let d := Prim.dataOf h rfl
     fun (name, instances, initial, on, after, effect, invariants, ()) =>
     { name, key := (Ty.param 2).inst args, state := (Ty.param 3).inst args,
-      instances := Prim.dn d (.fn [.param 0] (.bag (.param 2))) rfl instances,
-      initial := Prim.dn d (.param 3) rfl initial,
-      on := Prim.dn d (.fn [.machineCtx (.param 2) (.param 3) (.param 0), .param 1] (.next (.param 3))) rfl on,
-      after := Prim.dn d (.fn [.machineCtx (.param 2) (.param 3) (.param 0)] (.option (.timer (.param 3)))) rfl after,
+      instances, initial := Prim.dn d (.param 3) rfl initial, on, after,
       effect := fun k s r now =>
         Ty.toOption (effect (Prim.upT d (.machineCtx (.param 2) (.param 3) (.param 0)) rfl (.inl (k, s, r, now, ())), ())),
-      invariants := Prim.dn d (.fn [.machineCtx (.param 2) (.param 3) (.param 0)] Ty.rules) rfl invariants }
+      invariants }
   | .reaction, _, h => let d := Prim.dataOf h rfl
     fun (name, react, ()) =>
       { name, react := fun e r now => react (Prim.upT d (.reactionCtx (.param 0)) rfl (.inl (r, now, ())), Prim.up d 1 e, ()) }

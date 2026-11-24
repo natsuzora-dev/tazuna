@@ -125,7 +125,7 @@ def State.init (v : ServiceV) : State v :=
 /-- An instance entering `st`: its timer and its effect. -/
 def enter {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (key : m.key.den0) (st : m.state.den0) :
     Instance m × List (Sender × EffectV e) :=
-  let timer := match m.after (.inl (key, st, records, now, ()), ()) with
+  let timer := match m.after.fn (.inl (key, st, records, now, ()), ()) with
     | .inl (.inl (d, target, ()), ()) => some (now + (show Int from d), target)
     | _ => none
   (⟨key, st, timer⟩, (m.effect key st records now).toList.map (.machine m.name ⟨m.key, key⟩, ·))
@@ -138,11 +138,11 @@ def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) : Machin
     MachineState r e × List (Sender × EffectV e)
   | ⟨m, insts⟩ =>
     let eqK := (Ty.semWith Dsl.base m.key).2
-    let keys := ((m.instances (records, ())).foldl (fun ks k => if ks.any (eqK k) then ks else ks ++ [k]) []).mergeSort
+    let keys := ((m.instances.fn (records, ())).foldl (fun ks k => if ks.any (eqK k) then ks else ks ++ [k]) []).mergeSort
       fun a b => (Ty.cmp T m.key a b).isLE
     let (insts, effs) := keys.foldl (fun (acc, effs) k =>
       match insts.find? (eqK k ·.key) with
-      | some i => match m.on (.inl (i.key, i.state, records, now, ()), ev, ()) with
+      | some i => match m.on.fn (.inl (i.key, i.state, records, now, ()), ev, ()) with
         | .inr (.inl (s, ())) => let (i', es) := enter m records now i.key s; (acc ++ [i'], effs ++ es)
         | _ => (acc ++ [i], effs)
       | none => let (i, es) := enter m records now k m.initial; (acc ++ [i], effs ++ es)) ([], [])
@@ -159,7 +159,7 @@ def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV
 /-- The broken invariants of the service and of every machine instance. -/
 def invariants (s : State v) : List String :=
   broken (v.invariants.fn (s.records, ())) ++
-    s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => broken (m.invariants (.inl (i.key, i.state, s.records, s.now, ()), ()))
+    s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => broken (m.invariants.fn (.inl (i.key, i.state, s.records, s.now, ()), ()))
 
 /-- A step in progress: the state, the events applied and the out lines so far, and the own commands and queries
 waiting to run. -/

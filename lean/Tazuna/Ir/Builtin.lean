@@ -184,11 +184,11 @@ def sig : Prim → PrimSig :=
     { name := "machine",
       doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect. A machine's instances react, start and fire in Erlang term order of their keys.",
       tvars := ["records", "event", "key", "state"], dataArgs := true, needsEq := [2],
-      params := [l "name" .str, l "instances" (.fn [a] (.bag (param 2))), l "initial" (param 3),
-        l "on" (.fn [.machineCtx (param 2) (param 3) a, b] (.next (param 3))),
-        l "after" (.fn [.machineCtx (param 2) (param 3) a] (.option (.timer (param 3)))),
+      params := [l "name" .str, l "instances" (kept (.fn [a] (.bag (param 2)))), l "initial" (param 3),
+        l "on" (kept (.fn [.machineCtx (param 2) (param 3) a, b] (.next (param 3)))),
+        l "after" (kept (.fn [.machineCtx (param 2) (param 3) a] (.option (.timer (param 3))))),
         l "effect" (.fn [.machineCtx (param 2) (param 3) a] (.option (.dsl .effect [b]))),
-        l "invariants" (.fn [.machineCtx (param 2) (param 3) a] Ty.rules)],
+        l "invariants" (kept (.fn [.machineCtx (param 2) (param 3) a] Ty.rules))],
       ret := .dsl .machine [a, b] }
   | .reaction =>
     { name := "reaction", doc := "A reaction: effects for each event, without state of its own.",
