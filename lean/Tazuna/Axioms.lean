@@ -16,6 +16,7 @@ import Tazuna.Smt.EventExact
 import Tazuna.Smt.CommandExact
 import Tazuna.Smt.PendingWrite
 import Tazuna.Smt.EventPending
+import Tazuna.Smt.Fire
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
