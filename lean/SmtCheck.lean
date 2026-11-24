@@ -1,5 +1,5 @@
 import Tazuna.Smt.Bounds
-import Tazuna.Smt.Machines
+import Tazuna.Smt.Starts
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 
@@ -1285,9 +1285,11 @@ def reactM : MachineV recordsT .int :=
 
 def reactSvc : ServiceV := { querySvc with name := "r", queries := [], machines := [reactM] }
 
-def reactLayout : Layout :=
-  Layout.addTys (fun _ => 3) {} [recordsT, reactM.table, .bag .int, invCtxT, Ty.next .int, Ty.option (Ty.timer .int),
-    Ty.timer .int, Ty.option (.tuple [.int, .int]), .tuple [.int, .int], instEntry .int]
+def reactTys : List Ty :=
+  [recordsT, reactM.table, .bag .int, invCtxT, Ty.next .int, Ty.option (Ty.timer .int), Ty.timer .int,
+    Ty.option (.tuple [.int, .int]), .tuple [.int, .int], instEntry .int, Ty.option (.dsl .effect [.int])]
+
+def reactLayout : Layout := Layout.addTys (fun _ => 3) {} reactTys
 
 def reactCheck (solver : Solver) : IO Bool := do
   let L := reactLayout
@@ -1303,7 +1305,7 @@ def reactCheck (solver : Solver) : IO Bool := do
   let some msrt := L.srt? reactM.table | fail "no table sort"
   let some dts := L.datatypes? | fail "no datatypes"
   match ReactCode.of L reactM >>= fun (rc, c0) =>
-      (encodeReact L reactM rc (.var 5) (.var 0) (.var 1) (.var 7)).map fun (t, c) => (t, andT c0 c) with
+      (encodeReact L reactM rc (.var 5) (.var 0) (.var 1) (.var 7)).map fun (o, c) => (o.table, andT c0 c) with
   | .error r => fail s!"no encoding: {repr r}"
   | .ok (newT, cond) =>
     let So := slotsOf d dt n 2 (.var 5)
@@ -1334,6 +1336,77 @@ def reactCheck (solver : Solver) : IO Bool := do
       if view reactM read != step insts || view reactM read != [(some 3, some 1, some (105, some 2)), (some 5, some 0, none)] then
         ok ← fail s!"the new table holds {view reactM read}, the step {step insts}"
       if view reactM read == step [] then ok ← fail "the step from no instances passes the comparison"
+      return ok
+    | a => fail s!"{repr a}"
+
+/-! The effects a machine's instances start on an event, with their wire ids: the reaction above, whose `effect` is
+`fn(ctx) { Some(request_command(send, ctx.key + 1, fn(_) { [ctx.key] })) }` on entering any state. Key 3 enters 1 and
+key 5 starts, so both start an effect; the bag holds 5 in slot 0 and 3 in slot 1, and the next wire id is 40. The
+effect slots read from the model must hold the step's effects with the ids `start` gives them (key 3's 40, key 5's
+41), and the count term their number; ids by slot order must not pass the comparison. -/
+
+def startEffectE : Expr [] [] (.fn [invCtxT] (Ty.option (.dsl .effect [.int]))) :=
+  let ctx : Expr [] [invCtxT] invCtxT := .var .here
+  let key : Expr [] [invCtxT] .int := .field (ft := .int) "key" 0 (by simp) ctx
+  let handle : Expr [] [invCtxT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+  let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
+  let clo : Expr [] [invCtxT] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7⟩ (.cons key .nil) rfl rfl body
+  let req : Expr [] [invCtxT] (.dsl .effect [.int]) :=
+    .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add key (.int 1)) (.cons clo .nil)))
+  .lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨0, by decide⟩ (.cons req .nil))
+
+def startM : MachineV recordsT .int := { reactM with name := "start", effect := .closed startEffectE }
+
+def startSvc : ServiceV := { querySvc with name := "st", queries := [], machines := [startM] }
+
+def startLayout : Layout :=
+  Layout.addTys (fun _ => 3) { effects := [sendKey ⟨"m", 9, 9⟩, sendKey ⟨"m", 3, 7⟩] } (reactTys ++ [.tuple [.int]])
+
+def startsCheck (solver : Solver) : IO Bool := do
+  let L := startLayout
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: machine starts: {m}"; return false
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | fail "no effect option"
+  let some wf := (SymState.vars 0 1).wf L (v := startSvc) [] | fail "no wf"
+  let some rsrt := L.srt? recordsT | fail "no records sort"
+  let some msrt := L.srt? startM.table | fail "no table sort"
+  let some dts := L.datatypes? | fail "no datatypes"
+  match ReactCode.of L startM >>= fun (rc, c0) =>
+      (encodeReact L startM rc (.var 5) (.var 0) (.var 1) (.var 6)).bind fun (o, c) =>
+        (rankStarts L prelude startM dopt (.var 3) o.starts).map fun S => (S, startCount dopt o.starts, andT c0 c) with
+  | .error r => fail s!"no encoding: {repr r}"
+  | .ok (S, count, cond) =>
+    let Sr := slotsOf dr drt nr 2 (.var 0)
+    let goal := [Sr[0]!.1, Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2.headD tt) (.int 5), .eq (Sr[1]!.2.headD tt) (.int 3),
+      .eq (.var 1) (.int 100), .eq (.var 3) (.int 40)]
+    let script : Script :=
+      { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, msrt, .int], asserts := wf :: cond :: goal,
+        shows := List.range 7 }
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let some s := (SymState.vars 0 1).decode M L (v := startSvc) rfl prelude [] | fail "the model does not decode"
+      let some (.int ev) := vs.lookup 6 | fail "no event"
+      let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
+      let effs := (Step.machineStep (e := startSvc.event) prelude s.records s.now ev ⟨m, insts⟩).2.zipIdx s.nextId
+      -- Each flagged effect slot as (wire id, key, effect value), in slot order.
+      let read := S.filterMap fun (f, xs) => if (f.denote M).toBool then
+        match Term.denotes M xs with
+        | [.int id, .int k, w] => some (id, k, w)
+        | _ => none
+        else none
+      let agrees (got : List (Int × Int × Val)) : Bool :=
+        let sorted := got.mergeSort fun a b => a.1 ≤ b.1
+        sorted.length == effs.length && (sorted.zip effs).all fun ((id, k, w), ((snd, eff), n)) =>
+          id == n && (match snd with | .machine _ ⟨_, kv⟩ => intDen _ kv == some k | _ => false) && effMatches L eff w
+      let mut ok := true
+      if !agrees read || effs.map (·.2) != [40, 41] then
+        ok ← fail s!"the effect slots hold {read.map fun (id, k, _) => (id, k)}, the step {effs.length} effects"
+      if count.denote M != .int effs.length then ok ← fail s!"the count is {(count.denote M).print}"
+      if agrees (read.zipIdx.map fun ((_, k, w), j) => (40 + j, k, w)) then
+        ok ← fail "ids by slot order pass the comparison"
       return ok
     | a => fail s!"{repr a}"
 
@@ -1426,6 +1499,7 @@ def check (z3 : String) : IO Bool := do
   unless ← noEffectsCheck solver do ok := false
   unless ← invariantCheck solver do ok := false
   unless ← reactCheck solver do ok := false
+  unless ← startsCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
