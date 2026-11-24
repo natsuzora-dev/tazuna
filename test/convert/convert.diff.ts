@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import fc from "fast-check";
+import { z } from "zod";
 import type { Keys, ReadPart, Stored } from "../../src/cli/protocol.generated.ts";
 import { Converter } from "../../src/convert/program.ts";
-import { type Json, objectOf } from "../../src/data/values.ts";
+import type { Json, Shape } from "../../src/data/values.ts";
 import type { Expr } from "../../src/spec/ir.generated.ts";
 import { Lean } from "../unit/lean.ts";
 import { bagged, bagValues, NotOnly } from "./bag.ts";
@@ -11,6 +12,7 @@ import { defined, entities, fixtures, keyOf, outside } from "./fixtures.ts";
 import { type RecordSource, recordsView } from "./records.ts";
 
 const lean = new Lean();
+const objectOf = (shape: Shape): z.ZodObject => z.object(shape);
 const converter = new Converter();
 after(() => {
   converter.close();

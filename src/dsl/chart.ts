@@ -1,6 +1,5 @@
 import type { TransitionRef, Trigger } from "../data/transitionRef.generated.ts";
-import type { ChartStructure } from "../spec/structure.ts";
-import { pathOf } from "../spec/tree.ts";
+import { type ChartStructure, stateNamed } from "../spec/structure.ts";
 import type { ChartSpec, Definition, StateSpec, TransitionSpec } from "./definition.ts";
 
 export function chartOf(d: Definition): ChartSpec | undefined {
@@ -67,7 +66,7 @@ export function stateAt(chart: ChartSpec, path: readonly string[]): StateSpec {
 }
 
 export function transitionAt(chart: ChartSpec, structure: ChartStructure, t: TransitionRef): TransitionSpec {
-  const node = t.state === null ? { on: chart.on } : stateAt(chart, pathOf(structure, t.state));
+  const node = t.state === null ? { on: chart.on } : stateAt(chart, stateNamed(structure, t.state)?.path ?? []);
   const transitions = pathOfTrigger(t.trigger).reduce<unknown>(
     (value, key) => (value as Record<string, unknown>)[key],
     node,

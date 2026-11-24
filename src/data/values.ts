@@ -4,26 +4,16 @@ import { strict } from "./schemaNode.ts";
 export type Shape = Readonly<Record<string, z.ZodType>>;
 export type Fields = Record<string, unknown>;
 
-const objects = new WeakMap<Shape, z.ZodObject>();
 const strictObjects = new WeakMap<Shape, z.ZodObject>();
 
-function cached(
-  cache: WeakMap<Shape, z.ZodObject>,
-  shape: Shape,
-  make: (shape: Record<string, z.ZodType>) => z.ZodObject,
-): z.ZodObject {
-  let o = cache.get(shape);
+export function strictObjectOf(shape: Shape): z.ZodObject {
+  let o = strictObjects.get(shape);
   if (o === undefined) {
-    o = make(shape as Record<string, z.ZodType>);
-    cache.set(shape, o);
+    o = strict(z.object(shape)) as z.ZodObject;
+    strictObjects.set(shape, o);
   }
   return o;
 }
-
-export const objectOf = (shape: Shape): z.ZodObject => cached(objects, shape, z.object);
-
-export const strictObjectOf = (shape: Shape): z.ZodObject =>
-  cached(strictObjects, shape, (s) => strict(z.object(s)) as z.ZodObject);
 
 /** Orders strings by code point, as Lean's String order does; `<` on strings compares UTF-16 code units. */
 function byCodePoint(a: string, b: string): number {

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Spec } from "../../src/load/load.ts";
 import { type ChartStructure, chartStructure, stateNamed } from "../../src/spec/structure.ts";
-import { isDescendant, parallelBetween } from "../../src/spec/tree.ts";
 import { fixture, loadedSpec } from "../fixtures/fixtures.ts";
 
 const subject = async (name: string) => await loadedSpec(fixture("test", "noViolations", name));
@@ -38,16 +37,8 @@ test("States come in source order, each with its path of names from the children
   );
   assert.deepEqual(stateNamed(closer, "left")?.children, ["m"]);
   assert.equal(stateNamed(closer, "m")?.initial, "c1");
-  assert.ok(isDescendant(closer, "c1", "p"));
-  assert.ok(!isDescendant(closer, "done", "p"));
   const song = chartOf(await subject("history"), "player", "song");
   assert.equal(stateNamed(song, "resumed")?.kind, "history");
-});
-
-test("parallelBetween returns the parallel state that holds the two states in different regions", () => {
-  assert.equal(parallelBetween(closer, "c1", "x"), "p");
-  assert.equal(parallelBetween(closer, "c1", "m"), null);
-  assert.equal(parallelBetween(closer, "left", "c1"), null);
 });
 
 test("A transition has the state it is written in, the key and index in its transition array, its target, and its guard names, and a state has its activities", async () => {
