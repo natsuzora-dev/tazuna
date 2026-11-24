@@ -43,10 +43,11 @@ partial def refs : Surface.Expr → List (String × At × List (String × STy))
       | .mk _ g b => (g.map refs).getD [] ++ refs b
     | .list es | .tuple es => es.flatMap refs
 
+/-- The references to other globals; built-ins are not globals. -/
 def Global.refs (g : Global) : List (String × At × List (String × STy)) :=
-  match g.body with
-  | .fn _ _ b => Load.refs b
-  | .const _ v => Load.refs v
+  (match g.body with
+    | .fn _ _ b => Load.refs b
+    | .const _ v => Load.refs v).filter fun (n, _, _) => (Prim.byName? n).isNone
 
 structure St (T : List TypeDecl) where
   G : List Ty
@@ -195,7 +196,7 @@ def globalsOf (fileOf : String → Option String) (p : Surface.Program) : Except
 
 /-- Loads the IR, requiring the root to be a function of type `rootTy` (the engine asks for `fn() -> tazuna.Spec`). -/
 def load (rootTy : Ty) (j : Lean.Json) : Except LoadError (Program rootTy) := do
-  let p ← match Surface.readProgram j with
+  let p ← match Surface.readProgram (builtinAliases.map (·.1)) j with
     | .ok p => pure p
     | .error e => throw ⟨none, e.pos, match e.global with | some g => s!"{g}: {e.message}" | none => e.message⟩
   unless p.version == irVersion do

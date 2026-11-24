@@ -70,6 +70,10 @@ partial def showTy : Ty → String
     let n := (T[i]?.map (·.name)).getD s!"type{i}"
     if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map showTy) ++ ")"
   | .param k => s!"param{k}"
+  | .bag t => s!"tazuna.Bag({showTy t})"
+  | .table k v => s!"tazuna.Table({showTy k}, {showTy v})"
+  | .date => "tazuna.Date"
+  | .id => "tazuna.Id"
 
 /-- Converts a type written in the IR, with `σ` giving the type variables in scope. -/
 partial def toTy (σ : List (String × Ty)) : STy → Except String Ty
@@ -77,6 +81,7 @@ partial def toTy (σ : List (String × Ty)) : STy → Except String Ty
   | .con "String" [] => pure .str
   | .con "List" [t] => return .list (← toTy σ t)
   | .con n args => do
+    if let some t := opaqueTy? n (← args.mapM (toTy σ)) then return t
     let some i := typeIndex T n | throw s!"unknown type {n}"
     let some d := T[i]? | throw s!"unknown type {n}"
     if builtinName n || d.params.length != args.length then
@@ -98,6 +103,9 @@ partial def annotationFits (σ : List (String × Ty)) : STy → Ty → Bool
     | none => true
   | .con "Int" [], .int | .con "String" [], .str => true
   | .con "List" [a], .list t => annotationFits σ a t
+  | .con "tazuna.Bag" [a], .bag t => annotationFits σ a t
+  | .con "tazuna.Table" [a, b], .table k v => annotationFits σ a k && annotationFits σ b v
+  | .con "tazuna.Date" [], .date | .con "tazuna.Id" [], .id => true
   | .con n args, .adt i ts _ =>
     typeIndex T n == some i && args.length == ts.length && (args.zip ts).all fun (a, t) => annotationFits σ a t
   | .fn ps r, .fn qs u =>
@@ -324,6 +332,17 @@ partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr G (ctx 
       let some ⟨t, v⟩ := lookupVar sc n | fail pos s!"unbound variable {n}"
       pure ⟨t, .var v⟩
     | .ref n targs =>
+      if let some p := Prim.byName? n then
+        let keys := targs.map (·.1)
+        unless keys.length == p.sig.tvars.length && p.sig.tvars.all keys.contains && (nodup keys).isNone do
+          fail pos s!"{n} takes type arguments for [{", ".intercalate p.sig.tvars}], given [{", ".intercalate keys}]"
+        let args ← p.sig.tvars.mapM fun v => match targs.lookup v with
+          | some t => toTyAt cx pos t
+          | none => fail pos s!"missing type argument {v}"
+        if h : p.ok args = true then pure ⟨_, .prim p args h⟩
+        else fail pos s!"{n} needs == on the type arguments [{", ".intercalate (p.sig.needsEq.map fun k =>
+          (args[k]?.map (showTy T)).getD "?")}], whose values include functions"
+      else
       let some sig := cx.sigs.lookup n | fail pos s!"unknown global {n}"
       let keys := targs.map (·.1)
       unless keys.length == sig.tvars.length && sig.tvars.all keys.contains && (nodup keys).isNone do
@@ -449,7 +468,9 @@ partial def elabCall (sc : Scope) (pos : At) (f : Surface.Expr) (args : List Sur
   let .fn ps r := ft | fail pos s!"call of {showTy T ft}"
   let fe ← coerce cx pos (.fn ps r) ft fe
   let labels := match f with
-    | .mk _ _ (.ref n _) => ((cx.sigs.lookup n).bind (·.labels)).getD (ps.map fun _ => none)
+    | .mk _ _ (.ref n _) => match Prim.byName? n with
+      | some p => p.labels
+      | none => ((cx.sigs.lookup n).bind (·.labels)).getD (ps.map fun _ => none)
     | _ => ps.map fun _ => none
   let what := match f with | .mk _ _ (.ref n _) => n | _ => "the function"
   let slots ← place pos what labels first (placedArgs args) last false

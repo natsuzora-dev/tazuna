@@ -310,7 +310,8 @@ def topLevel {α} (r : R α) : ExceptT ReadError Id α :=
   | (.ok a, _) => pure a
   | (.error e, pos) => throw ⟨none, pos, e⟩
 
-def readProgram (j : Json) : Except ReadError Program := do
+/-- Reads an IR whose types may also name the aliases in `owned`, which the `tazuna` module declares. -/
+def readProgram (owned : List AliasDef) (j : Json) : Except ReadError Program := do
   let version ← topLevel (nat j "tazuna_ir")
   let root ← topLevel (str j "root")
   let sources ← topLevel do (← arr j "sources").mapM fun s => do return (← str s "module", ← str s "path")
@@ -320,9 +321,10 @@ def readProgram (j : Json) : Except ReadError Program := do
       let params ← (← arr a "params").mapM fun p => match p.getStr? with
         | .ok s => pure s | .error _ => throw "a type parameter must be a string"
       return { name, params, ty := ← readTyAsWritten (← get a "ty"), pos := ← readAt a : AliasDef }
+  let visible := owned ++ aliases
   let types ← (← topLevel (arr j "types")).mapM fun t => do
     let name ← topLevel (str t "name")
-    inGlobal aliases name do
+    inGlobal visible name do
       let variants ← (← arr t "variants").mapM fun v => do
         return (← str v "name", ← (← arr v "fields").mapM fun f => do return (← optStr f "label", ← readTy (← get f "ty")))
       let params ← (← arr t "params").mapM fun p => match p.getStr? with
@@ -330,14 +332,14 @@ def readProgram (j : Json) : Except ReadError Program := do
       return { name, params, variants, pos := ← readAt t : TypeDef }
   let functions ← (← topLevel (arr j "functions")).mapM fun f => do
     let name ← topLevel (str f "name")
-    inGlobal aliases name do
+    inGlobal visible name do
       let pos ← readAt f
       let params ← (← arr f "params").mapM fun p => do
         return (← optStr p "label", ← str p "name", ← readTy (← get p "ty"))
       return { name, params, ret := ← readTy (← get f "ret"), body := ← readExpr (← get f "body"), pos : FunDef }
   let constants ← (← topLevel (arr j "constants")).mapM fun c => do
     let name ← topLevel (str c "name")
-    inGlobal aliases name do
+    inGlobal visible name do
       let pos ← readAt c
       return { name, ty := ← readTy (← get c "ty"), value := ← readExpr (← get c "value"), pos : ConstDef }
   return { version, root, sources, types, aliases, functions, constants }

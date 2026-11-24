@@ -29,7 +29,8 @@ def Matches : (t : Ty) → Shape → t.den → Prop
   | _, .lit, _ => False
   | .tuple ts, .ctor k args, x => k = 0 ∧ MatchesAll ts args x
   | .adt _ _ vs, .ctor k args, x => MatchesAlt vs k args x
-  | .int, .ctor .., _ | .str, .ctor .., _ | .list _, .ctor .., _ | .fn .., .ctor .., _ | .param _, .ctor .., _ => False
+  | .int, .ctor .., _ | .str, .ctor .., _ | .list _, .ctor .., _ | .fn .., .ctor .., _ | .param _, .ctor .., _
+  | .bag _, .ctor .., _ | .table .., .ctor .., _ | .date, .ctor .., _ | .id, .ctor .., _ => False
 def MatchesAll : (ts : List Ty) → List Shape → Ty.dens ts → Prop
   | [], [], _ => True
   | t :: ts, s :: ss, (x, xs) => Matches t s x ∧ MatchesAll ts ss xs
@@ -41,7 +42,8 @@ def MatchesAlt : (vs : List (List Ty)) → Nat → List Shape → Ty.alts vs →
 end
 
 theorem matches_any : {t : Ty} → (x : t.den) → Matches t .any x
-  | .int, _ | .str, _ | .list _, _ | .tuple _, _ | .fn .., _ | .adt .., _ | .param _, _ => trivial
+  | .int, _ | .str, _ | .list _, _ | .tuple _, _ | .fn .., _ | .adt .., _ | .param _, _
+  | .bag _, _ | .table .., _ | .date, _ | .id, _ => trivial
 
 theorem matchesAlt_inj : {vs : List (List Ty)} → (v : Fin vs.length) → (args : List Shape) →
     (y : Ty.dens (vs.get v)) → MatchesAll (vs.get v) args y → MatchesAlt vs v.val args (Alts.inj v y)
@@ -202,7 +204,9 @@ theorem covers_sound : (fuel : Nat) → (rows : List (List Shape)) → (ts : Lis
     exact specialize_sound (t := .tuple us) 0 x x xs (fun as _ hm => ⟨rfl, hm⟩) rows row' hr' hm'
   | n + 1, rows, .int :: ts, h, (x, xs) | n + 1, rows, .str :: ts, h, (x, xs)
   | n + 1, rows, .list _ :: ts, h, (x, xs) | n + 1, rows, .fn .. :: ts, h, (x, xs)
-  | n + 1, rows, .param _ :: ts, h, (x, xs) => by
+  | n + 1, rows, .param _ :: ts, h, (x, xs) | n + 1, rows, .bag _ :: ts, h, (x, xs)
+  | n + 1, rows, .table .. :: ts, h, (x, xs) | n + 1, rows, .date :: ts, h, (x, xs)
+  | n + 1, rows, .id :: ts, h, (x, xs) => by
     simp only [covers] at h
     obtain ⟨row', hr', hm'⟩ := covers_sound n _ _ h xs
     exact dflt_sound x xs rows row' hr' hm'

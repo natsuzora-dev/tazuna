@@ -1,4 +1,4 @@
-import Tazuna.Semantics.Gleam
+import Tazuna.Semantics.Builtin
 import Tazuna.Semantics.Match
 
 /-! Evaluation of the typed IR. It is total by construction: types are finite trees, globals see only earlier
@@ -59,6 +59,7 @@ def Expr.eval {Γ : List Ty} {t : Ty} : Expr G Γ t → Ty.dens Γ → t.den
   | .bin op l r, ρ => op.eval (Expr.eval l ρ) (Expr.eval r ρ)
   | .not e, ρ => Ty.ofBool (!Ty.toBool (Expr.eval e ρ))
   | .neg e, ρ => @Neg.neg Int _ (Expr.eval e ρ)
+  | .prim p args _, _ => p.den args
 def Exprs.eval {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Ty.dens Γ → Ty.dens ts
   | .nil, _ => ()
   | .cons e es, ρ => (Expr.eval e ρ, Exprs.eval es ρ)

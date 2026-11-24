@@ -143,3 +143,26 @@ pub fn statements(f: fn() -> Int) -> Int {
   }
   g() + pick(1, "p")
 }
+
+pub type Rejection {
+  Missing
+  TooLong
+}
+
+pub fn builtins(
+  titles: tazuna.Table(Int, String),
+  id: Int,
+  at: tazuna.Instant,
+) -> Result(#(Int, tazuna.Instant), Rejection) {
+  use title <- tazuna.ref(titles, id, Missing)
+  use <- tazuna.require(tazuna.length(title) <= 10, TooLong)
+  let lengths =
+    tazuna.table_values(titles)
+    |> tazuna.bag_map(with: tazuna.length)
+  let longest = case tazuna.bag_max_by(lengths, by: fn(n) { n }) {
+    Ok(n) -> n
+    Error(tazuna.Empty) -> 0
+    Error(tazuna.Tie) -> -1
+  }
+  Ok(#(longest, at))
+}
