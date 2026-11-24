@@ -168,3 +168,12 @@ pub fn builtins(
   }
   Ok(#(longest, at))
 }
+
+pub fn captures(ids: bag.Bag(Int)) -> #(bag.Bag(Event), Int, Option(Event)) {
+  let closed = bag.map(ids, with: Closed)
+  let opened = bag.map(ids, with: Opened(_, "new"))
+  let titled = bag.map(ids, with: Opened(title: "t", id: _))
+  let firsts = choose(second: "s", first: _)
+  let wrap = Some
+  #(closed, bag.size(opened) + bag.size(titled) + firsts(1), wrap(Closed(2)))
+}

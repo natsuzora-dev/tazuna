@@ -44,6 +44,13 @@ pub type Node {
   Index(tuple: Expr, index: Int)
   Update(type_: String, variant: String, record: Expr, fields: List(Arg))
   Call(function: Expr, args: List(Arg))
+  /// `f(before.., label: _, after..)`: a function of the one argument `_`.
+  Capture(
+    label: Option(String),
+    function: Expr,
+    before: List(Arg),
+    after: List(Arg),
+  )
   Pipe(left: Expr, right: Expr)
   Lam(params: List(Param), ret: Option(Annotation), body: Expr)
   Block(stmts: List(Stmt))
@@ -336,6 +343,13 @@ fn expr_json(e: Expr, ty: fn(Ty) -> Json) -> Json {
       #("fields", args(xs)),
     ]
     Call(f, xs) -> [#("op", Str("call")), #("fn", sub(f)), #("args", args(xs))]
+    Capture(label, f, before, after) -> [
+      #("op", Str("capture")),
+      #("fn", sub(f)),
+      #("before", args(before)),
+      #("after", args(after)),
+      ..optional("label", label, Str)
+    ]
     Pipe(l, r) -> [#("op", Str("pipe")), #("left", sub(l)), #("right", sub(r))]
     Lam(params, ret, body) -> [
       #("op", Str("lam")),

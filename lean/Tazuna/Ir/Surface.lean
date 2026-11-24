@@ -16,6 +16,9 @@ The JSON contract, version 2:
 - A `use` statement's patterns are `{"pattern", "annotation"?}`.
 - Every expression and pattern carries `"ty"` and `"at": [line, column]`. Operators (`"bin"`, `"un"`) name Gleam's symbol
   in `"operator"`.
+- A function capture `f(a, label: _, b)` is `{"op": "capture", "fn", "label"?, "before": [..], "after": [..]}`, and a
+  constructor with fields written without arguments is a constructor used as a function; Lean expands both into
+  functions.
 - Arguments of calls, constructors, record updates and constructor patterns are `{"label"?, "value"?}` (patterns:
   `"pattern"?`) in source order. A labelled argument without a value is shorthand for the variable named by the label;
   it carries its own `"at"`. A positional argument's place is its value's `"at"`. -/
@@ -69,6 +72,8 @@ inductive Node where
   | index (tuple : Expr) (k : Nat)
   | update (type variant : String) (record : Expr) (fields : List Arg)
   | call (fn : Expr) (args : List Arg)
+  /-- `fn(before.., label: _, after..)`: a function of the one argument `_`. -/
+  | capture (label : Option String) (fn : Expr) (before after : List Arg)
   | pipe (left right : Expr)
   | lam (params : List Param) (ret : Option STy) (body : Expr)
   | block (stmts : List Stmt)
@@ -272,6 +277,8 @@ partial def readExpr (j : Json) : R Expr := do
     | "update" => pure (.update (← str j "type") (← str j "variant") (← sub "record")
         (← (← arr j "fields").mapM readArg))
     | "call" => pure (.call (← sub "fn") (← (← arr j "args").mapM readArg))
+    | "capture" => pure (.capture (← optStr j "label") (← sub "fn") (← (← arr j "before").mapM readArg)
+        (← (← arr j "after").mapM readArg))
     | "pipe" => pure (.pipe (← sub "left") (← sub "right"))
     | "lam" =>
       let ps ← (← arr j "params").mapM fun p => do

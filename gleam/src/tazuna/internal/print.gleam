@@ -282,6 +282,22 @@ fn expr(p: Printer, e: Expr) -> String {
       <> ")"
     ir.Call(f, args) ->
       sub(f) <> "(" <> commas(list.map(args, arg(p, _))) <> ")"
+    ir.Capture(label, f, before, after) -> {
+      let hole = case label {
+        Some(l) -> l <> ": _"
+        None -> "_"
+      }
+      sub(f)
+      <> "("
+      <> commas(
+        list.flatten([
+          list.map(before, arg(p, _)),
+          [hole],
+          list.map(after, arg(p, _)),
+        ]),
+      )
+      <> ")"
+    }
     ir.Pipe(l, r) -> sub(l) <> " |> " <> sub(r)
     ir.Lam(params, ret, b) ->
       "fn("

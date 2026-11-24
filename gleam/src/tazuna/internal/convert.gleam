@@ -37,7 +37,6 @@ pub type Restricted {
   ListSpread
   ListPattern
   StringPrefixPattern
-  FunctionCapture
   External
   ForeignFunction
   ForeignType
@@ -64,7 +63,6 @@ pub const restricted = [
   ListSpread,
   ListPattern,
   StringPrefixPattern,
-  FunctionCapture,
   External,
   ForeignFunction,
   ForeignType,
@@ -106,7 +104,6 @@ pub fn kind_name(kind: Kind) -> String {
         ListSpread -> "listSpread"
         ListPattern -> "listPattern"
         StringPrefixPattern -> "stringPrefixPattern"
-        FunctionCapture -> "functionCapture"
         External -> "external"
         ForeignFunction -> "foreignFunction"
         ForeignType -> "foreignType"
@@ -1094,12 +1091,8 @@ fn expr(cx: Cx, st: St, e: g.Expression, hint: Option(Ty)) -> R(Expr) {
       restrict(Echo, span, "echo: debugging output is not part of a spec")
     g.BitString(span, _) ->
       restrict(BitArray, span, "bit arrays are outside the spec subset")
-    g.FnCapture(span, ..) ->
-      restrict(
-        FunctionCapture,
-        span,
-        "function capture: write fn(x) { f(x, ..) }",
-      )
+    g.FnCapture(span, label, f, before, after) ->
+      capture(cx, st, span, label, f, before, after)
     g.Variable(span, name) ->
       case dict.get(cx.scope, name) {
         Ok(t) -> Ok(#(node(cx, span, t, ir.Local(name)), st))
@@ -1380,20 +1373,83 @@ fn global_value(
     GConst(ty, _) -> Ok(#(node(cx, span, ty, ir.Ref(global, [])), st))
     GCtor(type_, variant) -> {
       let #(t, fields, _, st) = constructor_type(cx, st, type_, variant)
-      case fields {
-        [] -> Ok(#(node(cx, span, t, ir.Ctor(type_, variant, [])), st))
-        _ ->
-          Error(finding(
-            cx.m,
-            ConstructorValue,
-            span,
-            variant
-              <> " used as a function value: write fn(..) { "
-              <> variant
-              <> "(..) }",
-          ))
-      }
+      Ok(#(constructor_value(cx, span, type_, variant, t, fields), st))
     }
+  }
+}
+
+/// A constructor as a value: itself when it has no fields, else a function
+/// of its fields, which Lean expands.
+fn constructor_value(
+  cx: Cx,
+  span: g.Span,
+  type_: String,
+  variant: String,
+  t: Ty,
+  fields: List(#(Option(String), Ty)),
+) -> Expr {
+  let ty = case fields {
+    [] -> t
+    _ -> Fun(list.map(fields, fn(f) { f.1 }), t)
+  }
+  node(cx, span, ty, ir.Ctor(type_, variant, []))
+}
+
+/// `f(before.., label: _, after..)`, typed as the call with `_` a fresh local
+/// and kept as a capture, which Lean expands into a function of `_`.
+fn capture(
+  cx: Cx,
+  st: St,
+  span: g.Span,
+  label: Option(String),
+  f: g.Expression,
+  before: List(g.Field(g.Expression)),
+  after: List(g.Field(g.Expression)),
+) -> R(Expr) {
+  use #(c, st) <- result.try(callee(cx, st, f))
+  let #(c, st) = case c {
+    CCtor(type_, variant, cspan) -> {
+      let #(t, fields, _, st) = constructor_type(cx, st, type_, variant)
+      let value = constructor_value(cx, cspan, type_, variant, t, fields)
+      #(CFn(value, list.map(fields, fn(f) { f.0 })), st)
+    }
+    CFn(..) -> #(c, st)
+  }
+  let #(hole_ty, st) = fresh(st)
+  let hole = g.Variable(span, "_")
+  let field = case label {
+    Some(l) -> g.LabelledField(l, span, hole)
+    None -> g.UnlabelledField(hole)
+  }
+  let cx_hole = Cx(..cx, scope: dict.insert(cx.scope, "_", hole_ty))
+  use #(#(call, _), st) <- result.try(apply(
+    cx_hole,
+    st,
+    span,
+    c,
+    list.flatten([before, [field], after]),
+    None,
+    None,
+  ))
+  case call.node {
+    ir.Call(function, args) -> {
+      let n = list.length(before)
+      Ok(#(
+        node(
+          cx,
+          span,
+          Fun([hole_ty], call.ty),
+          ir.Capture(
+            label,
+            function,
+            list.take(args, n),
+            list.drop(args, n + 1),
+          ),
+        ),
+        st,
+      ))
+    }
+    _ -> Error(bug(cx.m, span, "a capture is no call"))
   }
 }
 
@@ -1795,9 +1851,9 @@ fn apply(
             ConstructorValue,
             cspan,
             variant
-              <> " used as a function value: write fn(..) { "
+              <> " called through a pipe or use: write "
               <> variant
-              <> "(..) }",
+              <> "(..) with every argument",
           ))
       }
     CFn(f, labels) ->

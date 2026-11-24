@@ -34,6 +34,7 @@ partial def refs : Surface.Expr → List (String × At × List (String × STy))
     | .field e _ | .index e _ | .un _ e => refs e
     | .update _ _ e fs => refs e ++ args fs
     | .call f as => refs f ++ args as
+    | .capture _ f bs as => refs f ++ args bs ++ args as
     | .pipe l r | .bin _ l r => refs l ++ refs r
     | .lam _ _ b => refs b
     | .block stmts => stmts.flatMap fun

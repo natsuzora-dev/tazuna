@@ -321,6 +321,31 @@ def elabBin {Γ : List Ty} (pos : At) (op : String) (a : Ty) (l : Expr G Γ a) (
 
 def shorthand (pos : At) (label : String) : Surface.Expr := .mk pos (.hole "_") (.var label)
 
+/-! Eta expansion: a constructor used as a value and a function capture mean the functions Lean writes here. Their
+parameters are named with `$`, which no Gleam name contains. -/
+
+/-- `Variant`, a constructor of fields `ps` used as a value: `fn($0, ..) { Variant($0, ..) }`. -/
+def etaCtor (pos : At) (ann : STy) (type variant : String) (ps : List STy) (r : STy) : Surface.Expr :=
+  let names := ps.mapIdx fun k _ => s!"${k}"
+  -- Placement wants positional arguments in source order, so each stands one column after the one before.
+  let at_ (k : Nat) : At := ⟨pos.line, pos.col + k⟩
+  .mk pos ann (.lam ((names.zip ps).map fun (n, p) => .mk n p none) none
+    (.mk pos r (.ctor type variant ((names.zip ps).zipIdx.map fun ((n, p), k) =>
+      .mk (at_ k) none (some (.mk (at_ k) p (.var n)))))))
+
+/-- `f(before.., label: _, after..)` with `_` of type `p`: `fn($) { f(before.., label: $, after..) }`. The argument
+`$` stands where `_` was written, after every argument before it. -/
+def etaCapture (pos : At) (ann p r : STy) (label : Option String) (f : Surface.Expr)
+    (before after : List Surface.Arg) : Surface.Expr :=
+  let holePos := match before.getLast? with
+    | some (.mk ⟨l, c⟩ _ _) => ⟨l, c + 1⟩
+    | none => pos
+  let args := before ++ [.mk holePos label (some (.mk holePos p (.var "$")))] ++ after
+  let body : Surface.Node := match f with
+    | .mk _ _ (.ctor type variant []) => .ctor type variant args
+    | _ => .call f args
+  .mk pos ann (.lam [.mk "$" p none] none (.mk pos r body))
+
 def placedArgs {Γ : List Ty} (args : List Surface.Arg) : List (Placed (Slot T G Γ)) :=
   args.map fun
     | .mk pos label (some v) => { pos, label, value := .expr v }
@@ -360,17 +385,14 @@ partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr G (ctx 
         | none => fail pos s!"missing type argument {v}"
       let some ⟨t, v⟩ := cx.glob n args | fail pos s!"internal: {n} is not elaborated"
       pure ⟨t, .global v⟩
-    | .ctor type variant args =>
-      let ⟨i, d, _⟩ ← lookupDecl T pos type
-      let want ← toTyAt cx pos ann
-      let .adt j targs vs := want | fail pos s!"{type}.{variant} annotated {showTy T want}"
-      unless i == j do fail pos s!"{type}.{variant} annotated {showTy T want}"
-      let (v, labels) ← variantIndex pos d vs variant
-      if args.isEmpty && !labels.isEmpty then
-        fail pos s!"{variant} used as a function value"
-      let slots ← place pos s!"constructor {variant}" labels [] (placedArgs args) [] false
-      let es ← elabSlots sc pos (vs.get v) slots
-      pure ⟨.adt i targs vs, .ctor v es⟩
+    | .ctor type variant [] =>
+      match ann with
+      | .fn ps r => elabExpr sc (etaCtor pos ann type variant ps r)
+      | _ => elabCtor sc pos ann type variant []
+    | .ctor type variant args => elabCtor sc pos ann type variant args
+    | .capture label f before after =>
+      let .fn [p] r := ann | fail pos "a capture annotated with a type that is no function of one argument"
+      elabExpr sc (etaCapture pos ann p r label f before after)
     | .field record label =>
       let ⟨rt, re⟩ ← elabExpr sc record
       let .adt i targs vs := rt | fail pos s!"field {label} of {showTy T rt}"
@@ -468,6 +490,20 @@ partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr G (ctx 
       | "-" => pure ⟨.int, .neg (← coerce cx pos .int t e)⟩
       | _ => fail pos s!"unknown operator {op}"
     annotated cx pos ann r
+
+/-- `Variant(args)`. -/
+partial def elabCtor (sc : Scope) (pos : At) (ann : STy) (type variant : String) (args : List Surface.Arg) :
+    E ((t : Ty) × Expr G (ctx sc) t) := do
+  let ⟨i, d, _⟩ ← lookupDecl T pos type
+  let want ← toTyAt cx pos ann
+  let .adt j targs vs := want | fail pos s!"{type}.{variant} annotated {showTy T want}"
+  unless i == j do fail pos s!"{type}.{variant} annotated {showTy T want}"
+  let (v, labels) ← variantIndex pos d vs variant
+  if args.isEmpty && !labels.isEmpty then
+    fail pos s!"{variant} used as a function value"
+  let slots ← place pos s!"constructor {variant}" labels [] (placedArgs args) [] false
+  let es ← elabSlots sc pos (vs.get v) slots
+  pure ⟨.adt i targs vs, .ctor v es⟩
 
 /-- `f(args)` with extra unlabelled arguments before (a pipe) or after (a `use` callback) the written ones. -/
 partial def elabCall (sc : Scope) (pos : At) (f : Surface.Expr) (args : List Surface.Arg)

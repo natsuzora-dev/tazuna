@@ -197,6 +197,20 @@ def neg (n : Json) : Json := node "un" I 40 9 [("operator", "-"), ("arg", n)]
   == some true
 #guard evalBool (bin 40 3 B "==" (circle (int 40 12 "4")) (square (int 40 12 "4")))
   == some false
+-- `Box`, a constructor with fields used as a value, is the function of its fields: `Box(7, "a").left`.
+#guard evalInt (field 40 3 I (call 40 3 boxT (ctor 40 3 (fnT [I, S] boxT) "m.Box" "Box" [])
+    [arg (int 40 8 "7"), arg (str 40 11 "\"a\"")]) "left") == some 7
+-- `sub(_, "x")` and `sub(label: "x", from: _)` are functions of the `_`; each places it where `_` was written.
+def capture (l c : Nat) (ty f : Json) (before after : List Json) (label : Option String := none) : Json :=
+  node "capture" ty l c ([("fn", f), ("before", arr before), ("after", arr after)] ++
+    (label.map fun x => ("label", Json.str x)).toList)
+#guard evalInt (call 40 3 I (capture 40 3 (fnT [I] I) (subRef 40 3) [] [arg (str 40 10 "\"x\"")]) [arg (int 40 20 "5")])
+  == some 5
+#guard evalInt (call 40 3 I (capture 40 3 (fnT [I] I) (subRef 40 3) [larg "label" (str 40 13 "\"x\"")] [] (label := "from"))
+    [arg (int 40 30 "6")]) == some 6
+-- `Box(left: _, right: "b")`: a capture of a constructor builds the record.
+#guard evalStr (field 40 3 S (call 40 3 boxT (capture 40 3 (fnT [I] boxT) (ctor 40 3 (fnT [I, S] boxT) "m.Box" "Box" [])
+    [] [larg "right" (str 40 20 "\"b\"")] (label := "left")) [arg (int 40 30 "1")]) "right") == some "b"
 
 
 /-- A small program around one function `m.main` returning `ret`. -/

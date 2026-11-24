@@ -164,6 +164,10 @@ fn children(e: Expr) -> List(Expr) {
     ir.Field(r, _) | ir.Index(r, _) | ir.Un(_, r) -> [r]
     ir.Update(_, _, r, fields) -> [r, ..list.flat_map(fields, arg)]
     ir.Call(f, args) -> [f, ..list.flat_map(args, arg)]
+    ir.Capture(_, f, before, after) -> [
+      f,
+      ..list.flat_map(list.append(before, after), arg)
+    ]
     ir.Pipe(l, r) | ir.Bin(_, l, r) -> [l, r]
     ir.Lam(_, _, body) -> [body]
     ir.Block(stmts) ->

@@ -100,10 +100,6 @@ fn example(kind: Restricted) -> #(String, Int) {
       "pub fn f(s: String) -> Int {\n  case s {\n    \"a\" <> _ -> 1\n    _ -> 0\n  }\n}",
       3,
     )
-    convert.FunctionCapture -> #(
-      "pub fn g(a: Int, b: Int) -> Int {\n  a + b\n}\n\npub fn f() -> fn(Int) -> Int {\n  g(1, _)\n}",
-      6,
-    )
     convert.External -> #(
       "@external(javascript, \"./x.mjs\", \"f\")\npub fn f() -> Int",
       2,
@@ -145,7 +141,7 @@ fn example(kind: Restricted) -> #(String, Int) {
       8,
     )
     convert.ConstructorValue -> #(
-      "pub type B {\n  B(n: Int)\n}\n\npub fn f() -> fn(Int) -> B {\n  B\n}",
+      "pub type P {\n  P(a: Int, b: Int)\n}\n\npub fn f() -> P {\n  1 |> P(2)\n}",
       6,
     )
     convert.AnnotationNeeded -> #("pub fn f(x) -> Int {\n  1\n}", 1)
