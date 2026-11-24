@@ -1,5 +1,4 @@
-import Tazuna.Smt.Instances
-import Tazuna.Semantics.PendingInv
+import Tazuna.Smt.KeysInv
 
 /-! The symbolic state: a service's state between two inputs as terms, so a script can ask about every state at once.
 The records are one term of the records' sort, with each table in the slots its layout gives it; the time, the fresh
@@ -10,7 +9,7 @@ program's sites, with distinct wire ids. Each machine's instances are one table 
 (`MachineV.table`), decoded in the canonical order of the keys, as the step keeps them. T3 for the state: `decode_state`
 reads a model's values as the state they denote, and `decode_embedState` shows that decoding inverts the embedding,
 so every state within the slots whose pending requests are of the shapes (`exists_pendingVal`) and whose instances
-are in the step's form (`InstancesOk`) is some model's. -/
+are in the step's form (`InstancesOk`) is some model's; every state a run reaches is such a state (`decode_run`). -/
 
 namespace Tazuna.Smt
 
@@ -306,16 +305,27 @@ theorem exists_pendingVal (shs : List (PendingShape v.event)) : (ps : List (Step
     · simp only [PendingVal.list, pendingList, List.map_cons] at htbl ⊢
       rw [hx, htbl]
 
-/-- T3 for reachable states: every state a run reaches (`Step.Inv`) holds pending requests of the service's shapes, so
-when its values fit the slots and its instances are in the step's form, the constants of some model hold it and the
-symbolic state decodes to it. -/
+/-- T3 for states that keep the step invariants (`Step.Inv`, `Step.KeysOk`): such a state holds pending requests of
+the service's shapes and instances in the step's form, so when its values fit the slots the constants of some model
+hold it and the symbolic state decodes to it. -/
 theorem decode_reachable (b : Nat) (T : List TypeDecl) {P : List AnySite} (s : State v) (hinv : Step.Inv P s)
-    (hok : ∀ sm ∈ s.machines, InstancesOk T sm.1 sm.2) :
+    (hkeys : Step.KeysOk T s) :
     ∃ pv : PendingVal (shapes v P), pv.list = s.pending ∧ ∀ vals, embedState L hr s pv = some vals →
       ∀ M : Model, (∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) →
         (SymState.vars b v.machines.length).decode M L hr T (shapes v P) = some s := by
   obtain ⟨pv, hpv⟩ := exists_pendingVal (shapes v P) s.pending hinv.shaped hinv.nodup
-  exact ⟨pv, hpv, fun vals h M hM => decode_embedState b T s pv hpv hinv.machinesOf hok vals h hM⟩
+  exact ⟨pv, hpv, fun vals h M hM =>
+    decode_embedState b T s pv hpv hinv.machinesOf (fun sm h => (hkeys sm h).2) vals h hM⟩
+
+/-- T3 for every state a run reaches from the initial state of a service whose program reaches only `P` and whose
+machine keys are ordered (what check requires): no assumption about the state is left. -/
+theorem decode_run (b : Nat) (T : List TypeDecl) {P : List AnySite} (hv : v.Reach P)
+    (hord : ∀ m ∈ v.machines, m.key.ordered T = true) (is : List (Input v)) :
+    ∃ pv : PendingVal (shapes v P), pv.list = (run T v (Step.State.init v) is).1.pending ∧
+      ∀ vals, embedState L hr (run T v (Step.State.init v) is).1 pv = some vals →
+      ∀ M : Model, (∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) →
+        (SymState.vars b v.machines.length).decode M L hr T (shapes v P) = some (run T v (Step.State.init v) is).1 :=
+  decode_reachable b T _ (run_inv T hv _ (Step.init_inv hv) is) (run_keys T _ (Step.init_keys T hord) is)
 
 /-- The instance tables' well-formedness holds exactly when they decode. -/
 theorem wfMachines_iff (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → (xs : List Term) → {c : Term} →
