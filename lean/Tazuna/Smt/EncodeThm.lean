@@ -568,68 +568,6 @@ theorem tmodT_agrees (tx ty : Term) (x y : Int) (hx : tx.denote M = .int x)
       simp [Int.neg_tmod, Int.tmod_neg, Int.tmod_eq_emod_of_nonneg (Int.natCast_nonneg _)] <;>
       rcases Nat.eq_zero_or_pos m with rfl | hm <;> simp_all <;> omega
 
-theorem encodeBin_agrees {a b c : Ty} (op : BinOp a b c) (sx : Code a) (sy : Code b) (x : a.den) (y : b.den)
-    (hx : Rel M L a x sx) (hy : Rel M L b y sy) (r : Code c) (h : encodeBin op sx sy = .ok r) :
-    Rel M L c (op.eval x y) r := by
-  cases op with
-  | add => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toInt, BinOp.eval]
-  | sub => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toInt, BinOp.eval]
-  | mul => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toInt, BinOp.eval]
-  | div => cases h; simp only [Rel, RelV] at hx hy ⊢; exact tdivT_agrees sx sy x y hx hy
-  | mod => cases h; simp only [Rel, RelV] at hx hy ⊢; exact tmodT_agrees sx sy x y hx hy
-  | lt =>
-    cases h; simp only [Rel, RelV] at hx hy; refine (rel_bool _ _).2 ?_
-    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, BinOp.eval, intLt, toBool_ofBool]; congr 2
-  | le =>
-    cases h; simp only [Rel, RelV] at hx hy; refine (rel_bool _ _).2 ?_
-    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, BinOp.eval, intLe, toBool_ofBool]; congr 2
-  | gt =>
-    cases h; simp only [Rel, RelV] at hx hy; refine (rel_bool _ _).2 ?_
-    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, BinOp.eval, intLt, toBool_ofBool]; congr 2
-  | ge =>
-    cases h; simp only [Rel, RelV] at hx hy; refine (rel_bool _ _).2 ?_
-    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, BinOp.eval, intLe, toBool_ofBool]; congr 2
-  | and =>
-    cases h; replace hx := (rel_bool _ _).1 hx; replace hy := (rel_bool _ _).1 hy; refine (rel_bool _ _).2 ?_
-    simp only [Term.denote, hx, hy, Val.toBool, BinOp.eval, toBool_ofBool]
-  | or =>
-    cases h; replace hx := (rel_bool _ _).1 hx; replace hy := (rel_bool _ _).1 hy; refine (rel_bool _ _).2 ?_
-    simp only [Term.denote, hx, hy, Val.toBool, BinOp.eval, toBool_ofBool]
-  | concat => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toStr, BinOp.eval]
-  | eq hc =>
-    simp only [encodeBin] at h
-    split at h
-    · rename_i he
-      cases h1 : Code.term? _ sx with
-      | none => simp [h1, need, bind, Except.bind] at h
-      | some tx =>
-        cases h2 : Code.term? _ sy with
-        | none => simp [h1, h2, need, bind, Except.bind] at h
-        | some ty =>
-          simp only [h1, h2, need, bind, Except.bind] at h
-          cases h
-          refine (rel_bool _ _).2 ?_
-          simp only [Term.denote, BinOp.eval, toBool_ofBool]
-          exact congrArg Val.bool (relV_beq _ he x y _ _ ((rel_term h1 x).1 hx) ((rel_term h2 y).1 hy))
-    · cases h
-  | ne hc =>
-    simp only [encodeBin] at h
-    split at h
-    · rename_i he
-      cases h1 : Code.term? _ sx with
-      | none => simp [h1, need, bind, Except.bind] at h
-      | some tx =>
-        cases h2 : Code.term? _ sy with
-        | none => simp [h1, h2, need, bind, Except.bind] at h
-        | some ty =>
-          simp only [h1, h2, need, bind, Except.bind] at h
-          cases h
-          refine (rel_bool _ _).2 ?_
-          simp only [Term.denote, BinOp.eval, toBool_ofBool, Val.toBool]
-          exact congrArg (fun b => Val.bool !b)
-            (relV_beq _ he x y _ _ ((rel_term h1 x).1 hx) ((rel_term h2 y).1 hy))
-    · cases h
-
 theorem bind_ok {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {b : β} :
     (x >>= f) = .ok b ↔ ∃ a, x = .ok a ∧ f a = .ok b := by
   cases x <;> simp [bind, Except.bind]
@@ -1036,18 +974,12 @@ theorem pick_aligned {α : Type} {E : α → List Val → Prop} {P : α → Bool
     | false => simp only [hp] at hy ⊢; exact pick_aligned R V hR none h y hy
 
 /-- A lookup in a table's slots: whether the key is there, and its value when it is. -/
-theorem lookup_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L (.table k w) x t) (key : k.den)
-    (kt : Term) (hkt : RelV L k key (kt.denote M)) {hit found : Term}
-    (h : lookupCode L k w t kt = .ok (hit, found)) :
-    hit.denote M = .bool (lookupBy (Ty.deq k) key x.1).isSome ∧
-      ∀ val, lookupBy (Ty.deq k) key x.1 = some val → RelV L w val (found.denote M) := by
-  simp only [lookupCode] at h
-  obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
-  obtain ⟨kt', h2, h⟩ := bind_ok.1 h
-  obtain ⟨hk, hkk⟩ := need'_ok h2
-  have hkt' : RelV L k key (Term.denote M kt') := hkk ▸ hkt
-  obtain ⟨dv, h3, h⟩ := bind_ok.1 h
-  cases pure_ok.1 h
+theorem lookupT_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L (.table k w) x t)
+    (hk : k.eqable = true) {d n dt : Nat} (h1 : collD L (.table k w) [k, w] = .ok (d, n, dt)) (key : k.den)
+    (kt' : Term) (hkt' : RelV L k key (kt'.denote M)) (dv : Term) :
+    (lookupT kt' dv (slotsOf d dt n 2 t)).1.denote M = .bool (lookupBy (Ty.deq k) key x.1).isSome ∧
+      ∀ val, lookupBy (Ty.deq k) key x.1 = some val →
+        RelV L w val ((lookupT kt' dv (slotsOf d dt n 2 t)).2.denote M) := by
   obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := table_view hb h1
   let P : k.den × w.den → Bool := fun e => k.deq key e.1
   have ha : Aligned M (ETab L k w) P (slotsOf d dt n 2 t) (hitQs kt' (slotsOf d dt n 2 t)) sv ys := by
@@ -1078,7 +1010,7 @@ theorem lookup_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L 
   have hfind : lookupBy (Ty.deq k) key x.1 = (ys.find? P).map (·.2) := by
     rw [lookupBy_find]; exact congrArg _ (find_perm hperm.symm (hperm.pairwise hu fun h e => h ⟨e.2, e.1⟩))
   refine ⟨?_, fun val hv => ?_⟩
-  · simp only [anySlotT_den ha, hfind, Option.isSome_map]
+  · simp only [lookupT, anySlotT_den ha, hfind, Option.isSome_map]
     congr 1
     cases hf : ys.find? P with
     | none =>
@@ -1097,6 +1029,153 @@ theorem lookup_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L 
     | [_, tv], hxs =>
       simp only [Term.denotes, List.cons.injEq] at hxs
       simpa [hxs.2.1] using hzv
+
+theorem lookup_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L (.table k w) x t) (key : k.den)
+    (kt : Term) (hkt : RelV L k key (kt.denote M)) {hit found : Term}
+    (h : lookupCode L k w t kt = .ok (hit, found)) :
+    hit.denote M = .bool (lookupBy (Ty.deq k) key x.1).isSome ∧
+      ∀ val, lookupBy (Ty.deq k) key x.1 = some val → RelV L w val (found.denote M) := by
+  simp only [lookupCode] at h
+  obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨kt', h2, h⟩ := bind_ok.1 h
+  obtain ⟨hk, hkk⟩ := need'_ok h2
+  obtain ⟨dv, h3, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  exact lookupT_rel hb hk h1 key kt' (hkk ▸ hkt) dv
+
+theorem natCast_beq (m n : Nat) : ((m : Int) == (n : Int)) = (m == n) := by
+  rw [Bool.eq_iff_iff]; simp only [beq_iff_eq]; omega
+
+theorem bagBeq_perm {α : Type} (f : α → α → Bool) {xs xs' ys ys' : List α} (hx : xs.Perm xs') (hy : ys.Perm ys') :
+    bagBeq f xs ys = bagBeq f xs' ys' := by
+  simp only [bagBeq, countBy, hx.length_eq, hy.length_eq, hx.all_eq, fun z => (hx.filter (f z)).length_eq,
+    fun z => (hy.filter (f z)).length_eq]
+
+/-- How often an item occurs among a bag's slots. -/
+theorem countEqT_den {a : Ty} (heq : a.eqable = true) {z : a.den} {x : Term} (hz : RelV L a z (x.denote M))
+    {S : List Slot} {sv : List (Bool × List Val)} {ys : List a.den} (hS : SlotsDen M S sv)
+    (hh : Holds2 (EBag L a) ys sv) : (countEqT x S).denote M = .int (ys.filter (Ty.deq a z)).length := by
+  have ha : Aligned M (EBag L a) (fun y => Ty.deq a z y) S (S.map fun sl => .eq x (sl.2.headD x)) sv ys :=
+    aligned_map (fun xs => .eq x (xs.headD x)) (fun y xs he => by
+      obtain ⟨w, hw, hyw⟩ := he
+      cases xs with
+      | nil => simp [Term.denotes] at hw
+      | cons t rest =>
+        simp only [Term.denotes, List.cons.injEq] at hw
+        simp only [List.headD_cons, Term.denote, hw.1]
+        exact congrArg Val.bool (relV_beq _ heq z y _ _ hz hyw)) hS hh
+  exact countT_den ha
+
+/-- `==` on codes is Gleam's `==`. -/
+theorem eqCode_rel {t : Ty} {x y : t.den} {sx sy : Code t} (hx : Rel M L t x sx) (hy : Rel M L t y sy) {r : Term}
+    (h : eqCode L t sx sy = .ok r) : r.denote M = .bool (Ty.deq t x y) := by
+  unfold eqCode at h
+  split at h
+  · rename_i he
+    obtain ⟨tx, h1, h⟩ := bind_ok.1 h
+    obtain ⟨ty, h2, h⟩ := bind_ok.1 h
+    cases h
+    simp only [Term.denote]
+    exact congrArg Val.bool (relV_beq _ he x y _ _ ((rel_term (need_ok.1 h1) x).1 hx) ((rel_term (need_ok.1 h2) y).1 hy))
+  · split at h
+    · rename_i a sa sb _
+      obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
+      obtain ⟨heq, rfl⟩ := need'_ok h
+      obtain ⟨svA, ysA, hSA, -, -, hpA, hhA⟩ := bag_view hx h1
+      obtain ⟨svB, ysB, hSB, -, -, hpB, hhB⟩ := bag_view hy h1
+      show _ = Val.bool (bagBeq (Ty.deq a) x y)
+      rw [← bagBeq_perm _ hpA hpB]
+      have hq : Aligned M (EBag L a) (fun z => countBy (Ty.deq a) z ysA == countBy (Ty.deq a) z ysB) _ _ svA ysA :=
+        aligned_map (fun xs => .eq (countEqT (xs.headD tt) (slotsOf d dt n 1 sa))
+          (countEqT (xs.headD tt) (slotsOf d dt n 1 sb))) (fun z xs he => by
+          obtain ⟨w, hw, hzw⟩ := he
+          cases xs with
+          | nil => simp [Term.denotes] at hw
+          | cons t rest =>
+            simp only [Term.denotes, List.cons.injEq] at hw
+            have hz : RelV L a z (t.denote M) := hw.1 ▸ hzw
+            simp only [List.headD_cons, Term.denote, countEqT_den heq hz hSA hhA, countEqT_den heq hz hSB hhB]
+            show Val.bool (Val.beq _ _) = _
+            simp only [Val.beq, countBy, natCast_beq]) hSA hhA
+      simp only [bagEqT, Term.denote, sizeT_den hSA, sizeT_den hSB, allSlotT_den hq, ← holds2_length hhA,
+        ← holds2_length hhB, bagBeq]
+      show Val.bool (Val.beq _ _ && _) = _
+      simp only [Val.beq, Val.toBool, natCast_beq]
+    · rename_i k v sa sb _
+      obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
+      obtain ⟨dv, h2, h⟩ := bind_ok.1 h
+      obtain ⟨heq, rfl⟩ := need'_ok h
+      simp only [Bool.and_eq_true] at heq
+      obtain ⟨hk, hv⟩ := heq
+      obtain ⟨svA, ysA, hSA, -, -, hpA, hhA⟩ := table_view hx h1
+      obtain ⟨svB, ysB, hSB, -, -, hpB, hhB⟩ := table_view hy h1
+      show _ = Val.bool (tableBeq (Ty.deq k) (Ty.deq v) x.1 y.1)
+      have hq : Aligned M (ETab L k v) (fun (a, b) => match lookupBy (Ty.deq k) a y.1 with
+          | some w => Ty.deq v b w
+          | none => false) _ _ svA ysA :=
+        aligned_map (fun xs => .and (lookupT (xs.headD dv) dv (slotsOf d dt n 2 sb)).1
+          (.eq (xs.getD 1 dv) (lookupT (xs.headD dv) dv (slotsOf d dt n 2 sb)).2)) (fun e xs he => by
+          obtain ⟨ek, ev⟩ := e
+          obtain ⟨zk, zv, hxs, hzk, hzv⟩ := he
+          match xs, hxs with
+          | [tk, tv], hxs =>
+            simp only [Term.denotes, List.cons.injEq] at hxs
+            obtain ⟨hh1, hh2⟩ := lookupT_rel hy hk h1 ek tk (hxs.1 ▸ hzk) dv
+            simp only [List.headD_cons, List.getD_cons_succ, List.getD_cons_zero, Term.denote, hh1]
+            cases hl : lookupBy (Ty.deq k) ek y.1 with
+            | none => simp [Val.toBool]
+            | some w =>
+              have := relV_beq v hv ev w _ _ (hxs.2.1 ▸ hzv) (hh2 w hl)
+              simp only [Option.isSome_some, Val.toBool, Bool.true_and]
+              exact congrArg Val.bool this) hSA hhA
+      simp only [tableEqT, Term.denote, sizeT_den hSA, sizeT_den hSB, allSlotT_den hq, ← holds2_length hhA,
+        ← holds2_length hhB, tableBeq, hpA.length_eq, hpB.length_eq, hpA.all_eq]
+      show Val.bool (Val.beq _ _ && _) = _
+      simp only [Val.beq, Val.toBool, natCast_beq]
+      congr 2
+      refine congrArg _ (funext fun e => ?_)
+      split <;> split <;> simp_all
+    · cases h
+
+theorem encodeBin_agrees {a b c : Ty} (op : BinOp a b c) (sx : Code a) (sy : Code b) (x : a.den) (y : b.den)
+    (hx : Rel M L a x sx) (hy : Rel M L b y sy) (r : Code c) (h : encodeBin L op sx sy = .ok r) :
+    Rel M L c (op.eval x y) r := by
+  cases op with
+  | add => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toInt, BinOp.eval]
+  | sub => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toInt, BinOp.eval]
+  | mul => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toInt, BinOp.eval]
+  | div => cases h; simp only [Rel, RelV] at hx hy ⊢; exact tdivT_agrees sx sy x y hx hy
+  | mod => cases h; simp only [Rel, RelV] at hx hy ⊢; exact tmodT_agrees sx sy x y hx hy
+  | lt =>
+    cases h; simp only [Rel, RelV] at hx hy; refine (rel_bool _ _).2 ?_
+    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, BinOp.eval, intLt, toBool_ofBool]; congr 2
+  | le =>
+    cases h; simp only [Rel, RelV] at hx hy; refine (rel_bool _ _).2 ?_
+    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, BinOp.eval, intLe, toBool_ofBool]; congr 2
+  | gt =>
+    cases h; simp only [Rel, RelV] at hx hy; refine (rel_bool _ _).2 ?_
+    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, BinOp.eval, intLt, toBool_ofBool]; congr 2
+  | ge =>
+    cases h; simp only [Rel, RelV] at hx hy; refine (rel_bool _ _).2 ?_
+    simp only [Term.denote]; rw [hx, hy]; simp only [Val.toInt, BinOp.eval, intLe, toBool_ofBool]; congr 2
+  | and =>
+    cases h; replace hx := (rel_bool _ _).1 hx; replace hy := (rel_bool _ _).1 hy; refine (rel_bool _ _).2 ?_
+    simp only [Term.denote, hx, hy, Val.toBool, BinOp.eval, toBool_ofBool]
+  | or =>
+    cases h; replace hx := (rel_bool _ _).1 hx; replace hy := (rel_bool _ _).1 hy; refine (rel_bool _ _).2 ?_
+    simp only [Term.denote, hx, hy, Val.toBool, BinOp.eval, toBool_ofBool]
+  | concat => cases h; simp only [Rel, RelV] at hx hy ⊢; simp [Term.denote, hx, hy, Val.toStr, BinOp.eval]
+  | eq hc =>
+    simp only [encodeBin] at h
+    refine (rel_bool _ _).2 ?_
+    simp only [BinOp.eval, toBool_ofBool]
+    exact eqCode_rel hx hy h
+  | ne hc =>
+    simp only [encodeBin] at h
+    obtain ⟨e, h1, h⟩ := bind_ok.1 h
+    cases h
+    refine (rel_bool _ _).2 ?_
+    simp only [Term.denote, BinOp.eval, toBool_ofBool, eqCode_rel hx hy h1, Val.toBool]
 
 /-! `bag_min_by` and `bag_max_by`. `pick` finds the winning key by a fold in list order; the encoding asks each slot
 whether it beats all others. `pick_eq` shows the two agree, and that no order is involved. -/

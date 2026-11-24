@@ -68,6 +68,8 @@ def minBy (b : E (.bag .int)) (body : Expr [] [.int] .int) : E (Ty.result .int T
 def maxBy (b : E (.bag .int)) (body : Expr [] [.int] .int) : E (Ty.result .int Ty.pickError) :=
   .call (.prim .bagMaxBy [.int] rfl) (.cons b (.cons (.lam body) .nil))
 def b0 : E (.bag .int) := .call (.prim .bagFromList [.int] rfl) (.cons (.list .nil) .nil)
+def bagOf (xs : List Int) : E (.bag .int) :=
+  .call (.prim .bagFromList [.int] rfl) (.cons (.list (xs.foldr (fun x r => .cons (.int x) r) .nil)) .nil)
 def isTwo : Expr [] [.int] Ty.bool := .bin (.eq rfl) (.var .here) (.int 2)
 def bigger : Expr [] [.int] Ty.bool := .bin .gt (.var .here) (.int 1)
 /-- `table_from_list([#(1, "a"), #(1, "c")])`: the last pair for key 1 wins. -/
@@ -101,6 +103,9 @@ def tableBang (t : E (.table .int .str)) : E (.table .int .str) :=
 def b2 : E (.bag .int) :=
   .call (.prim .bagFromList [.int] rfl) (.cons (.list (.cons (.int 1) (.cons (.int 5) .nil))) .nil)
 
+def tableOf (kvs : List (Int × String)) : E (.table .int .str) :=
+  let pair (k : Int) (v : String) : Expr [] [] (.tuple [.int, .str]) := .tuple (.cons (.int k) (.cons (.str v) .nil))
+  .call (.prim .tableFromList [.int, .str] rfl) (.cons (.list (kvs.foldr (fun (k, v) r => .cons (pair k v) r) .nil)) .nil)
 def tableGet (t : E (.table .int .str)) (k : Int) : E (Ty.option .str) :=
   .call (.prim .tableGet [.int, .str] rfl) (.cons t (.cons (.int k) .nil))
 /-- `use v <- ref(t, k, "no")` continuing with `Ok(v)`. -/
@@ -163,6 +168,13 @@ def cases : List (String × (t : Ty) × E t) :=
     ("table keys", ⟨Ty.bool, .bin .and (bagContains .int rfl (tableKeys t2) (.int 1)) (.bin (.eq rfl) (bagSize .int rfl (tableKeys t2)) (.int 1))⟩),
     ("table values", ⟨Ty.bool, .bin .and (bagContains .str rfl (tableValues t2) (.str "c")) (.not (bagContains .str rfl (tableValues t2) (.str "a")))⟩),
     ("table map keeps keys", ⟨Ty.option .str, tableGet (tableBang t2) 1⟩),
+    ("== on bags ignores order", ⟨Ty.bool, .bin (.eq rfl) b3 (bagOf [2, 1, 2])⟩),
+    ("== on bags counts occurrences", ⟨Ty.bool, .bin (.eq rfl) b3 (bagOf [1, 1, 2])⟩),
+    ("!= on bags of other sizes", ⟨Ty.bool, .bin (.ne rfl) b3 (bagOf [1, 2])⟩),
+    ("bag map equals its image", ⟨Ty.bool, .bin (.eq rfl) (bagMap b3 .int rfl (.bin .mul (.var .here) (.int 10))) (bagOf [20, 10, 20])⟩),
+    ("== on tables", ⟨Ty.bool, .bin (.eq rfl) t2 (tableOf [(1, "c")])⟩),
+    ("== on tables compares values", ⟨Ty.bool, .bin (.eq rfl) t2 (tableOf [(1, "a")])⟩),
+    ("!= on tables of other sizes", ⟨Ty.bool, .bin (.ne rfl) t2 (tableOf [(1, "c"), (2, "d")])⟩),
     ("table get finds the key", ⟨Ty.option .str, tableGet t2 1⟩),
     ("table get misses a key", ⟨Ty.option .str, tableGet t2 5⟩),
     ("ref continues with the value", ⟨Ty.result .str .str, refOk t2 1⟩),

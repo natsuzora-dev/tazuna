@@ -188,26 +188,6 @@ def need {α : Type} (what : String) : Option α → Except Refusal α
   | some a => .ok a
   | none => .error (.outside what)
 
-def encodeBin {a b c : Ty} : BinOp a b c → Code a → Code b → Except Refusal (Code c)
-  | .add, x, y => .ok (.add x y)
-  | .sub, x, y => .ok (.sub x y)
-  | .mul, x, y => .ok (.mul x y)
-  | .div, x, y => .ok (tdivT x y)
-  | .mod, x, y => .ok (tmodT x y)
-  | .lt, x, y => .ok (.lt x y)
-  | .le, x, y => .ok (.le x y)
-  | .gt, x, y => .ok (.lt y x)
-  | .ge, x, y => .ok (.le y x)
-  | .and, x, y => .ok (.and x y)
-  | .or, x, y => .ok (.or x y)
-  | .concat, x, y => .ok (.cat x y)
-  | @BinOp.eq t _, x, y =>
-    if t.eqable then do .ok (.eq (← need "==" (Code.term? t x)) (← need "==" (Code.term? t y)))
-    else .error (.outside "== on this type")
-  | @BinOp.ne t _, x, y =>
-    if t.eqable then do .ok (.not (.eq (← need "!=" (Code.term? t x)) (← need "!=" (Code.term? t y))))
-    else .error (.outside "!= on this type")
-
 mutual
 /-- Whether the value coded by `s` matches the pattern, as a Bool term, and the codes of the variables it binds. -/
 def encodePat {t : Ty} {Δ : List Ty} : Pat t Δ → Code t → Except Refusal (Term × Codes Δ)
@@ -341,6 +321,51 @@ def lookupCode (k v : Ty) (t key : Term) : Except Refusal (Term × Term) := do
   let kt ← need' "a key type whose == is not SMT-LIB's =" k.eqable key
   let dv ← need "a value type without a default term" (defaultT L v)
   pure (lookupT kt dv (slotsOf d dt n 2 t))
+
+/-- How often `x` occurs among the occupied slots' items, by SMT-LIB's `=`. -/
+def countEqT (x : Term) (S : List Slot) : Term := countT S (S.map fun sl => .eq x (sl.2.headD x))
+
+/-- `==` on bags: as many items, and each item of the first occurs as often in the second. -/
+def bagEqT (A B : List Slot) : Term :=
+  .and (.eq (sizeT A) (sizeT B))
+    (allSlotT A (A.map fun sl => .eq (countEqT (sl.2.headD tt) A) (countEqT (sl.2.headD tt) B)))
+
+/-- `==` on tables: as many entries, and each key of the first has an equal value in the second. -/
+def tableEqT (dv : Term) (A B : List Slot) : Term :=
+  .and (.eq (sizeT A) (sizeT B))
+    (allSlotT A (A.map fun sl =>
+      .and (lookupT (sl.2.headD dv) dv B).1 (.eq (sl.2.getD 1 dv) (lookupT (sl.2.headD dv) dv B).2)))
+
+/-- Gleam's `==`: SMT-LIB's `=` where codes are unique, and multiset or map equality over the slots of bags and
+tables, whose slots can hold the same items in another order. -/
+def eqCode (t : Ty) (x y : Code t) : Except Refusal Term :=
+  if t.eqable then do .ok (.eq (← need "==" (Code.term? t x)) (← need "==" (Code.term? t y)))
+  else match t, x, y with
+    | .bag a, x, y => do
+      let (d, n, dt) ← collD L (.bag a) [a]
+      need' "== on a bag whose items' == is not SMT-LIB's =" a.eqable (bagEqT (slotsOf d dt n 1 x) (slotsOf d dt n 1 y))
+    | .table k v, x, y => do
+      let (d, n, dt) ← collD L (.table k v) [k, v]
+      let dv ← need "a value type without a default term" (defaultT L v)
+      need' "== on a table whose keys' or values' == is not SMT-LIB's =" (k.eqable && v.eqable)
+        (tableEqT dv (slotsOf d dt n 2 x) (slotsOf d dt n 2 y))
+    | _, _, _ => .error (.outside "== on this type")
+
+def encodeBin {a b c : Ty} : BinOp a b c → Code a → Code b → Except Refusal (Code c)
+  | .add, x, y => .ok (.add x y)
+  | .sub, x, y => .ok (.sub x y)
+  | .mul, x, y => .ok (.mul x y)
+  | .div, x, y => .ok (tdivT x y)
+  | .mod, x, y => .ok (tmodT x y)
+  | .lt, x, y => .ok (.lt x y)
+  | .le, x, y => .ok (.le x y)
+  | .gt, x, y => .ok (.lt y x)
+  | .ge, x, y => .ok (.le y x)
+  | .and, x, y => .ok (.and x y)
+  | .or, x, y => .ok (.or x y)
+  | .concat, x, y => .ok (.cat x y)
+  | @BinOp.eq t _, x, y => eqCode L t x y
+  | @BinOp.ne t _, x, y => do .ok (.not (← eqCode L t x y))
 
 /-- `bag_min_by` (`lt` is `<`) or `bag_max_by` (`lt` is `>`) of the bag `b` by the key function `f`: the item of
 the occupied slot whose key beats every other occupied slot's, `Tie` when none does and a slot is occupied, `Empty`
@@ -570,7 +595,7 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
   | .bin op l r, σ => do
     let (x, c1) ← encode l σ
     let (y, c2) ← encode r σ
-    pure (← encodeBin op x y, andT c1 c2)
+    pure (← encodeBin L op x y, andT c1 c2)
   | .not e, σ => do
     let (x, c) ← encode e σ
     pure (.not x, c)
