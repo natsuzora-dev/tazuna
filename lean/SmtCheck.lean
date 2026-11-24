@@ -1,7 +1,7 @@
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.EventStep
 import Tazuna.Smt.EventPending
-import Tazuna.Smt.Fire
+import Tazuna.Smt.Clock
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 
@@ -1762,6 +1762,114 @@ def writeCheck (solver : Solver) : IO Bool := do
       | a => ok ← fail s!"two pending and two new requests in three slots, yet the script is {repr a}"
     return ok
 
+/-! A clock line with timers, for `clock_fire_step`: the service `w` above with the cascade bound `cascade`. Key 7
+waits for 80 and key 3 for 90, both entering state 1, which starts a timer due at now + 5 and requests `send`. The
+state holds one request pending at wire id 2, next id 40, now 50; the line's time is 100. Round one fires key 7 (the
+earliest deadline, though key 3 is smaller), round two key 3, and round three finds no due timer. With cascade 2 the
+step is accepted: the decoded pending table, next id and instance table must be the step's (key 7's request at 40,
+key 3's at 41), and ids by key order must not pass the comparison. With cascade 1 both rounds use the bound, so the
+script must say the bound is exceeded and the step must be the cascade fault. -/
+
+def clockFireSvc (cascade : Int) : ServiceV := { writeSvc with name := "k", bounds := ⟨[], 0, cascade, 0⟩ }
+
+def clockShapes (cascade : Int) : List (PendingShape (clockFireSvc cascade).event) :=
+  shapes (clockFireSvc cascade) writeSites
+
+/-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the line's time, v7 the new pending table, v8
+the next id after, v9 the new instance table. -/
+def clockFireScript (cascade : Int) (slots : Nat) (goal : List Term) : Except String (Script × ClockFireOut) := do
+  let v := clockFireSvc cascade
+  let L := writeLayout slots
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
+  let some (dP, _) := L.find? (pendingEntry (clockShapes cascade)) | throw "no pending entry"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let (inv, ci) ← enc (v.invariants.code L)
+  let (o, cond) ← enc (encodeClockFire L prelude v (clockShapes cascade) dE dP dopt inv S.records S.now (.var 6) S.pending
+    S.nextId S.machines)
+  let below ← enc (pendingBelowT L (clockShapes cascade) S.pending S.nextId)
+  let some wf := S.wf L (v := v) (clockShapes cascade) | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable (clockShapes cascade)) | throw "no pending sort"
+  let some msrt := L.srt? startM.table | throw "no table sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [tbl] := o.tables | throw "not one machine"
+  pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int, msrt],
+          asserts := [wf, below, ci, cond, .eq (.var 7) o.pending, .eq (.var 8) o.nextId, .eq (.var 9) tbl] ++ goal,
+          shows := List.range 10 }, o)
+
+def clockFireCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: clock fires timers: {m}"; return false
+  let L := writeLayout 3
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dm, nm) := L.find? startM.table | fail "no instance table"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (de, _) := L.find? (instEntry .int) | fail "no instance entry"
+  let some (dto, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
+  let some (dp, _) := L.find? (.tuple [.int, .int]) | fail "no timer"
+  let some (d, n) := L.find? (pendingTable (clockShapes 2)) | fail "no pending table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry (clockShapes 2)]) | fail "no pending slot"
+  let Sr := slotsOf dr drt nr 2 (.var 0)
+  let Sm := slotsOf dm dmt nm 2 (.var 5)
+  let Sp := slotsOf d dt n 2 (.var 4)
+  let waits (j : Nat) (key dl : Int) := [Sm[j]!.1, .eq (Sm[j]!.2.headD tt) (.int key),
+    .eq (Term.sel de 0 0 (Sm[j]!.2.getD 1 tt)) (.int 0), .is dto 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)),
+    .eq (.sel dp 0 0 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)))) (.int dl),
+    .eq (.sel dp 0 1 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)))) (.int 1)]
+  let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), .not Sm[2]!.1,
+    .eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2),
+    .not Sp[1]!.1, .not Sp[2]!.1] ++ waits 0 7 80 ++ waits 1 3 90
+  let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
+    (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+  let mut ok := true
+  match clockFireScript 2 3 goal with
+  | .error m => ok ← fail m
+  | .ok (script, o) =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      match (SymState.vars 0 1).decode M L (v := clockFireSvc 2) rfl prelude (clockShapes 2),
+          decodePending L (clockShapes 2) ((Term.var 7).denote M), vs.lookup 8,
+          decodeV L startM.table ((Term.var 9).denote M) with
+      | some s, some pend', some (.int n'), some tbl =>
+        let r := step prelude (clockFireSvc 2) s (.clock 100)
+        let sorted (ps : List (Step.Pending writeSvc.event)) := (ps.map pendView).mergeSort fun a b => a.1 ≤ b.1
+        let outs := (r.out.map fun l => (l.id, l.external, l.name)).mergeSort fun a b => a.1 ≤ b.1
+        let newOnes := (sorted pend').filter (·.1 ≥ s.nextId) |>.map fun (id, x, nm, _, _) => (id, x, nm)
+        let read := view startM (instancesOf prelude startM (Ty.down _ startM.table_data tbl))
+        let stepTable := match r.state.machines with
+          | [⟨m, insts⟩] => view m insts
+          | _ => []
+        let keyOrder := (sorted pend').map fun (id, x, nm, k, i) =>
+          (if id ≥ 40 then (if k == some 3 then 40 else 41) else id, x, nm, k, i)
+        if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
+        if (o.over.denote M).toBool then ok ← fail "the script says the bound is exceeded"
+        if sorted pend' != sorted r.state.pending || n' != r.state.nextId then
+          ok ← fail s!"the model's pending table holds {sorted pend'} and next id {n'}, the step {sorted r.state.pending} and {r.state.nextId}"
+        if outs != newOnes then ok ← fail s!"the out lines are {outs}, the new entries {newOnes}"
+        let ids := (sorted pend').map fun (id, _, _, k, _) => (id, if id ≥ 40 then k else none)
+        if ids != [(2, none), (40, some 7), (41, some 3)] then ok ← fail s!"the wire ids are {ids}"
+        if read != stepTable then ok ← fail s!"the new table holds {read}, the step {stepTable}"
+        if keyOrder == sorted r.state.pending then ok ← fail "ids by key order pass the comparison"
+      | _, _, _, _ => ok ← fail "the model does not decode"
+    | a => ok ← fail s!"{repr a}"
+  match clockFireScript 1 3 goal with
+  | .error m => ok ← fail m
+  | .ok (script, o) =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      match (SymState.vars 0 1).decode M L (v := clockFireSvc 1) rfl prelude (clockShapes 1) with
+      | some s =>
+        let r := step prelude (clockFireSvc 1) s (.clock 100)
+        if !(o.over.denote M).toBool then ok ← fail "with cascade 1 the script does not say the bound is exceeded"
+        if r.outcome.summary != "fault cascadeLimit" then ok ← fail s!"with cascade 1 the step says {r.outcome.summary}"
+      | none => ok ← fail "the model does not decode"
+    | a => ok ← fail s!"cascade 1: {repr a}"
+  return ok
+
 /-! A list of effects where no effect kind exists, as a reaction of a service that requests nothing returns: the
 list has no slots, so the solver's list is empty, as eval's `[]` is, and a script that asserts an occupied slot cannot
 be written (the comparison against a one-item list fails). -/
@@ -1857,6 +1965,7 @@ def check (z3 : String) : IO Bool := do
   unless ← fireCheck solver do ok := false
   unless ← startsCheck solver do ok := false
   unless ← writeCheck solver do ok := false
+  unless ← clockFireCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
