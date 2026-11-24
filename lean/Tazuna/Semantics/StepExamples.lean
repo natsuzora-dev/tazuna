@@ -1,3 +1,4 @@
+import Tazuna.Semantics.Builtin
 import Tazuna.Semantics.Step
 
 /-! One example per step rule, on a small service: the records are a running total, a command adds a positive amount
@@ -117,6 +118,13 @@ def askingUntil : List (Input asking) :=
   [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int), .clock 10]
 #guard last asking (askingUntil ++ [.answer 0 ⟨.int, (-1 : Int)⟩]) == "invalid [positive]"
 #guard last asking (askingUntil ++ [.answer 0 ⟨.int, (-1 : Int)⟩, .answer 0 ⟨.int, (3 : Int)⟩]) == "accepted"
+-- `spec` finds the owner of each subscribed source by its name and event type: the external that declares `moved`
+-- with Int events, not the one whose `moved` carries text.
+def specWith (xs : List ExternalV) : SpecV := Prim.spec.den [] rfl (([svc] : List ServiceV), xs, ())
+#guard ((specWith [⟨"text", [.source "moved" .str]⟩, ⟨"clock", [.source "moved" .int]⟩]).services.map fun v =>
+  v.subscribes.map (·.source)) == [["clock"]]
+#guard ((specWith [⟨"text", [.source "moved" .str]⟩]).services.map fun v => v.subscribes.map (·.source)) == [[""]]
+#guard ((SpecV.illegal prelude (specWith [⟨"text", [.source "moved" .str]⟩])).filter (·.1 == .unknownSource)).length == 1
 -- Every input has one outcome.
 #guard (run svc s0 [cmd 1 5, cmd 2 5, .clock 3]).2.length == 3
 
