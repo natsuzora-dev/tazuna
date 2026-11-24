@@ -286,6 +286,21 @@ theorem Ty.up_list (t : Ty) (h : (Ty.list t).isData = true) (ht : t.isData = tru
     Ty.up (.list t) h xs = xs.map (Ty.up t ht) := by
   unfold Ty.up; exact cast_list _ _ xs
 
+theorem Ty.up_bag (t : Ty) (h : (Ty.bag t).isData = true) (ht : t.isData = true) (xs : (Ty.bag t).den0) :
+    Ty.up (.bag t) h xs = xs.map (Ty.up t ht) := by
+  unfold Ty.up; exact cast_list _ _ xs
+
+theorem cast_table_val (K K' V V' : Sem) (hk : K = K') (hv : V = V') (e : (Sem.table K V).1 = (Sem.table K' V').1)
+    (x : (Sem.table K V).1) :
+    (cast e x).1 = x.1.map fun p => (cast (congrArg Sigma.fst hk) p.1, cast (congrArg Sigma.fst hv) p.2) := by
+  subst hk; subst hv
+  simp
+
+theorem Ty.up_table (k w : Ty) (h : (Ty.table k w).isData = true) (hk : k.isData = true) (hw : w.isData = true)
+    (x : (Ty.table k w).den0) : (Ty.up (.table k w) h x).1 = x.1.map fun p => (Ty.up k hk p.1, Ty.up w hw p.2) := by
+  unfold Ty.up
+  exact cast_table_val _ _ _ _ (Ty.semWith_data Dsl.val_fresh k hk).symm (Ty.semWith_data Dsl.val_fresh w hw).symm _ x
+
 theorem Ty.deq_up (t : Ty) (h : t.isData = true) (a b : t.den0) :
     (Ty.semWith Dsl.val t).2 (Ty.up t h a) (Ty.up t h b) = (Ty.semWith Dsl.base t).2 a b := by
   unfold Ty.up; exact cast_sem _ _ (Ty.semWith_data Dsl.val_fresh t h).symm a b

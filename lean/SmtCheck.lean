@@ -1038,6 +1038,66 @@ def boundCheck (solver : Solver) : IO Bool := do
     | a => IO.println s!"smt-check: broken limit: {repr a}"; ok := false
   return ok
 
+/-! An effect value as its kind's variant: `request_command(external_command("send"), x + k, fn(_) { [x] })` with
+`x` free, the `on_answer` site (3, 7) capturing `x`. The layout lists a second kind first, at another site, so the
+variant index is not 0 by accident. The solver's value of the effect must be the variant of the effect `eval` builds
+at the solver's `x`: the same kind (name and site), the input, and the captured value. -/
+
+def effArgs : List Ty := [.int, .int, Ty.nil, Ty.nil]
+def answerTyE : Ty := .fn [Ty.result Ty.nil Ty.nil] (.list .int)
+
+def sendE (k : Int) : Expr [] [.int] (.dsl .effect [.int]) :=
+  let handle : Expr [] [.int] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+  let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
+  let clo : Expr [] [.int] (.dsl .closure [answerTyE]) := .close (3, 7) (.cons (.var .here) .nil) rfl rfl body
+  .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add (.var .here) (.int k)) (.cons clo .nil)))
+
+def sendKey (site : Nat × Nat) : EffectKey :=
+  ⟨.int, "send", .int, Ty.nil, some Ty.nil, none, ⟨site, [.int]⟩⟩
+
+def effLayout : Layout :=
+  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey (9, 9), sendKey (3, 7)] }
+    [.dsl .effect [.int], .int])
+
+/-- Whether the solver's value `v` is the variant of the effect `eff` holds: its kind's name and site, its input and
+the value its `on_answer` captured, all Ints here. -/
+def effMatches (L : Layout) (eff : EffectV .int) (v : Val) : Bool :=
+  match eff, v with
+  | .request r, .ctor _ k [vi, _, .ctor _ 0 va] =>
+    match (L.effectsOf .int)[k]?, Ty.same r.input .int, Ty.sames r.onAnswer.Γ [.int] with
+    | some key, some ⟨hi⟩, some ⟨hg⟩ =>
+      let x : Int := cast (congrArg Ty.den0 hi) r.value
+      let env : Int := (cast (congrArg (fun Γ => (Ty.tuple Γ).den0) hg) r.onAnswer.env).1
+      key.name == r.name && key.answer.site == r.onAnswer.site && vi.print == (Val.int x).print &&
+        (va.map (·.print)) == [(Val.int env).print]
+    | _, _, _ => false
+  | _, _ => false
+
+def effectCheck (solver : Solver) : IO Bool := do
+  let L := effLayout
+  let some srt := L.srt? (.dsl .effect [.int]) | IO.println "smt-check: effect: no sort"; return false
+  let some dts := L.datatypes? | IO.println "smt-check: effect: no datatypes"; return false
+  match encode L (G := []) () (sendE 1) (Term.var 1, ()) with
+  | .error r => IO.println s!"smt-check: effect: no encoding: {repr r}"; return false
+  | .ok (code, cond) =>
+    let script : Script :=
+      { datatypes := dts, vars := [srt, .int], asserts := [.eq (.var 0) code, .lt (.int 40) (.var 1), cond],
+        shows := [0, 1] }
+    match ← solver.run script with
+    | .sat vs =>
+      match vs.lookup 0, vs.lookup 1 with
+      | some v, some (.int x) =>
+        let eval (k : Int) : EffectV .int := (sendE k).eval (G := []) .nil () (x, ())
+        -- The comparison must tell effects apart: the effect of `x + 2` is not the solver's.
+        if !effMatches L (eval 1) v then
+          IO.println s!"smt-check: effect: the solver's {v.print} is not eval's effect at x = {x}"; return false
+        if effMatches L (eval 2) v then
+          IO.println "smt-check: effect: the comparison accepts another input"; return false
+        return true
+      | _, _ => IO.println "smt-check: effect: no values"; return false
+    | a => IO.println s!"smt-check: effect: {repr a}"; return false
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -1096,6 +1156,7 @@ def check (z3 : String) : IO Bool := do
   unless ← orderCheck solver do ok := false
   unless ← answerCheck solver do ok := false
   unless ← boundCheck solver do ok := false
+  unless ← effectCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

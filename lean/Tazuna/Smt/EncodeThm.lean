@@ -18,10 +18,70 @@ def altsBool : Ty.alts [[], []] → Bool
   | .inl _ => true
   | .inr _ => false
 
+def altsBool0 : (Ty.semAltsWith Dsl.base [[], []]).1 → Bool
+  | .inl _ => true
+  | .inr _ => false
+
 /-- An id as a value of its datatype `d`: a fresh one by its number, an outside one by its name. -/
 def idVal (d : Nat) : IdV → Val
   | .fresh n => .ctor d 0 [.int n]
   | .named s => .ctor d 1 [.str s]
+
+mutual
+/-- A data value as the step holds it (`Ty.den0`) and the SMT value that codes it: `RelV` for the data a structure
+value holds, such as an effect's input and the values its kept functions captured. -/
+def RelD : (t : Ty) → t.den0 → Val → Prop
+  | .int, x, v => v = .int x
+  | .str, x, v => v = .str x
+  | .date, x, v => v = .int x
+  | .id, x, v => ∃ d n, L.find? .id = some (d, n) ∧ v = idVal d x
+  | .adt 0 _ vs, x, v => ∃ h : vs = [[], []], v = .bool (altsBool0 (h ▸ x))
+  | .adt (i + 1) a vs, x, v => ∃ d n, L.find? (.adt (i + 1) a vs) = some (d, n) ∧ RelDAlts d 0 vs x v
+  | .tuple ts, x, v => ∃ d n vals, L.find? (.tuple ts) = some (d, n) ∧ v = .ctor d 0 vals ∧ RelDs ts x vals
+  /- The slots hold the bag's items in some order. -/
+  | .bag t, xs, v => ∃ d n dt m sv, L.find? (.bag t) = some (d, n) ∧ L.find? (.tuple [Ty.bool, t]) = some (dt, m) ∧
+      sv.length = n ∧ v = slotsVal d dt sv ∧ (∀ p ∈ sv, p.2.length = 1) ∧
+      ∃ ys : List t.den0, ys.Perm xs ∧ Holds2 (fun y vs => ∃ z, vs = [z] ∧ RelD t y z) ys sv
+  | .table k w, x, v => ∃ d n dt m sv, L.find? (.table k w) = some (d, n) ∧
+      L.find? (.tuple [Ty.bool, k, w]) = some (dt, m) ∧ sv.length = n ∧ v = slotsVal d dt sv ∧
+      (∀ p ∈ sv, p.2.length = 2) ∧ ∃ ys : List (k.den0 × w.den0), ys.Perm x.1 ∧
+        Holds2 (fun e vs => ∃ zk zv, vs = [zk, zv] ∧ RelD k e.1 zk ∧ RelD w e.2 zv) ys sv
+  /- The occupied slots hold the list's items in order. -/
+  | .list t, xs, v => ∃ d n dt m sv, L.find? (.list t) = some (d, n) ∧ L.find? (.tuple [Ty.bool, t]) = some (dt, m) ∧
+      sv.length = n ∧ v = slotsVal d dt sv ∧ (∀ p ∈ sv, p.2.length = 1) ∧
+      Holds2 (fun y vs => ∃ z, vs = [z] ∧ RelD t y z) xs sv
+  /- A fresh-id source is the step's counter. -/
+  | .dsl .fresh _, x, v => v = .int (Int.ofNat x)
+  | .fn .., _, _ | .param _, _, _ | .dsl .., _, _ => False
+def RelDs : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List Val → Prop
+  | [], _, vals => vals = []
+  | t :: ts, (x, xs), vals => ∃ v vs, vals = v :: vs ∧ RelD t x v ∧ RelDs ts xs vs
+/-- The value is constructor `k + j` of datatype `d` when it is the `j`-th variant of `vs`. -/
+def RelDAlts (d : Nat) : (k : Nat) → (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → Val → Prop
+  | k, fs :: _, .inl x, v => ∃ vals, v = .ctor d k vals ∧ RelDs fs x vals
+  | k, _ :: vs, .inr y, v => RelDAlts d (k + 1) vs y v
+end
+
+/-- The captured values of a kept function: a tuple of their codes. -/
+def CapRel {t : Ty} (f : Fun t) (v : Val) : Prop :=
+  ∃ d n vals, L.find? (.tuple f.Γ) = some (d, n) ∧ v = .ctor d 0 vals ∧ RelDs L f.Γ f.env vals
+
+/-- An effect of the kind `key` and its variant's fields: the same request, with its input and each kept function's
+captured values coded by the fields, and its kept functions written at the kind's sites. -/
+def EffectKey.Holds {e : Ty} (key : EffectKey) : EffectV e → List Val → Prop
+  | .request r, vals => r.name = key.name ∧ r.input = key.input ∧ r.output = key.output ∧
+      r.rejection = key.rejection ∧ r.onAnswer.site = key.answer.site ∧ r.onAnswer.Γ = key.answer.Γ ∧
+      ∃ vi ve va, vals = [vi, ve, va] ∧ RelD L r.input r.value vi ∧ CapRel L r.onAnswer va ∧
+      match r.ensures, key.ensures with
+      | none, none => ∃ d n, L.find? (.tuple []) = some (d, n) ∧ ve = .ctor d 0 []
+      | some f, some sk => f.site = sk.site ∧ f.Γ = sk.Γ ∧ CapRel L f ve
+      | _, _ => False
+  | _, _ => False
+
+/-- An effect and the SMT value that codes it: the variant of its kind in the effect datatype of its event type. -/
+def EffRel {e : Ty} (eff : EffectV e) (v : Val) : Prop :=
+  ∃ d n, L.find? (.dsl .effect [e]) = some (d, n) ∧
+    ∃ k key vals, (L.effectsOf e)[k]? = some key ∧ v = .ctor d k vals ∧ key.Holds L eff vals
 
 mutual
 /-- A value of a first-order type and the SMT value that codes it. -/
@@ -47,6 +107,8 @@ def RelV : (t : Ty) → t.den → Val → Prop
       Holds2 (fun y vs => ∃ z, vs = [z] ∧ RelV t y z) xs sv
   /- A fresh-id source is the step's counter. -/
   | .dsl .fresh _, x, v => v = .int (Int.ofNat x)
+  /- An effect is its kind's variant. -/
+  | .dsl .effect [_], x, v => EffRel L x v
   | .fn .., _, _ | .param _, _, _ | .dsl .., _, _ => False
 def RelVs : (ts : List Ty) → Ty.dens ts → List Val → Prop
   | [], _, vals => vals = []
@@ -56,6 +118,37 @@ def RelAlts (d : Nat) : (k : Nat) → (vs : List (List Ty)) → Ty.alts vs → V
   | k, fs :: _, .inl x, v => ∃ vals, v = .ctor d k vals ∧ RelVs fs x vals
   | k, _ :: vs, .inr y, v => RelAlts d (k + 1) vs y v
 end
+
+/-- A kept function and its closure code: written at the code's site, with the captured values the code's terms
+denote. -/
+def ClosureRel {t : Ty} (f : Fun t) (c : ClosureCode) : Prop :=
+  f.site = c.key.site ∧ f.Γ = c.key.Γ ∧ RelDs L f.Γ f.env (Term.denotes M c.env)
+
+/-- A structure value and its code: a kept function by its closure code, a handle by its name (and a query's
+`ensures`), anything else by the term that denotes it. -/
+def DslRel : (k : Dsl) → (a : List Ty) → (Ty.dsl k a).den → DslCode k a → Prop
+  | .closure, [_], f, c => ClosureRel M L f c
+  | .externalCommand, [_, _, _], n, c => n = c
+  | .externalQuery, [_, _], (n, f), (c, cc) => n = c ∧ ClosureRel M L f cc
+  | .spec, a, x, s => RelV L (.dsl .spec a) x (Term.denote M s)
+  | .service, a, x, s => RelV L (.dsl .service a) x (Term.denote M s)
+  | .command, a, x, s => RelV L (.dsl .command a) x (Term.denote M s)
+  | .query, a, x, s => RelV L (.dsl .query a) x (Term.denote M s)
+  | .machine, a, x, s => RelV L (.dsl .machine a) x (Term.denote M s)
+  | .reaction, a, x, s => RelV L (.dsl .reaction a) x (Term.denote M s)
+  | .external, a, x, s => RelV L (.dsl .external a) x (Term.denote M s)
+  | .source, a, x, s => RelV L (.dsl .source a) x (Term.denote M s)
+  | .declared, a, x, s => RelV L (.dsl .declared a) x (Term.denote M s)
+  | .effect, a, x, s => RelV L (.dsl .effect a) x (Term.denote M s)
+  | .subscription, a, x, s => RelV L (.dsl .subscription a) x (Term.denote M s)
+  | .bounds, a, x, s => RelV L (.dsl .bounds a) x (Term.denote M s)
+  | .create, a, x, s => RelV L (.dsl .create a) x (Term.denote M s)
+  | .response, a, x, s => RelV L (.dsl .response a) x (Term.denote M s)
+  | .scenario, a, x, s => RelV L (.dsl .scenario a) x (Term.denote M s)
+  | .step, a, x, s => RelV L (.dsl .step a) x (Term.denote M s)
+  | .sender, a, x, s => RelV L (.dsl .sender a) x (Term.denote M s)
+  | .fresh, a, x, s => RelV L (.dsl .fresh a) x (Term.denote M s)
+  | _, _, _, _ => False
 
 mutual
 /-- A value and its code: a term denoting the value, or a function that maps related arguments to a related result
@@ -72,7 +165,7 @@ def Rel : (t : Ty) → t.den → Code t → Prop
   | .table k v, x, s => RelV L (.table k v) x (Term.denote M s)
   | .date, x, s => RelV L .date x (Term.denote M s)
   | .id, x, s => RelV L .id x (Term.denote M s)
-  | .dsl k a, x, s => RelV L (.dsl k a) x (Term.denote M s)
+  | .dsl k a, x, s => DslRel M L k a x s
 def Rels : (ts : List Ty) → Ty.dens ts → Codes ts → Prop
   | [], _, _ => True
   | t :: ts, (x, xs), (s, ss) => Rel t x s ∧ Rels ts xs ss
@@ -83,25 +176,130 @@ end
 section
 variable {M : Model} {L : Layout}
 
+theorem forall2_map {α α' β : Type} {R : α → β → Prop} {R' : α' → β → Prop} (f : α → α') (hf : ∀ a b, R a b → R' (f a) b) :
+    {as : List α} → {bs : List β} → Forall2 R as bs → Forall2 R' (as.map f) bs
+  | [], [], _ => trivial
+  | _ :: _, _ :: _, ⟨h, hs⟩ => ⟨hf _ _ h, forall2_map f hf hs⟩
+  | [], _ :: _, h | _ :: _, [], h => h.elim
+
+theorem map_down_up (t : Ty) (ht : t.isData = true) (xs : List t.den0) :
+    (xs.map (Ty.up t ht)).map (Ty.down t ht) = xs := by
+  simp [List.map_map, Function.comp_def, Ty.down_up]
+
+mutual
+/-- On data, `RelV` at a value read at the structure level is `RelD` at the value. -/
+theorem relV_up : (t : Ty) → (h : t.isData = true) → (y : t.den0) → (v : Val) → RelV L t (Ty.up t h y) v →
+    RelD L t y v
+  | .int, _, _, _, hv | .str, _, _, _, hv | .date, _, _, _, hv | .id, _, _, _, hv | .dsl .fresh _, _, _, _, hv => hv
+  | .adt 0 a vs, h, y, v, hv => by
+    obtain ⟨e, hv⟩ := hv
+    subst e
+    refine ⟨rfl, ?_⟩
+    rw [hv]
+    rcases y with u | u | u
+    · erw [Ty.up_inl 0 a [] [[]] h rfl u]; rfl
+    · erw [Ty.up_inr 0 a [] [[]] h rfl (.inl u), Ty.up_inl 0 a [] [] rfl rfl u]; rfl
+    · exact u.elim
+  | .adt (i + 1) a vs, h, y, v, ⟨d, n, hf, hr⟩ => ⟨d, n, hf, relAlts_up d (i + 1) a 0 vs h y v hr⟩
+  | .tuple ts, h, y, v, ⟨d, n, vals, hf, hv, hr⟩ => ⟨d, n, vals, hf, hv, relVs_up ts h y vals hr⟩
+  | .bag t, h, xs, v, ⟨d, n, dt, m, sv, h1, h2, h3, h4, h5, ys, hp, hh⟩ => by
+    have ht : t.isData = true := by simpa [Ty.isData] using h
+    rw [Ty.up_bag t h ht] at hp
+    refine ⟨d, n, dt, m, sv, h1, h2, h3, h4, h5, ys.map (Ty.down t ht), ?_, ?_⟩
+    · have := hp.map (Ty.down t ht)
+      erw [map_down_up t ht] at this
+      exact this
+    · exact forall2_map _ (fun y vs ⟨z, hz, hyz⟩ => ⟨z, hz, relV_up t ht _ z (by rw [Ty.up_down]; exact hyz)⟩) hh
+  | .list t, h, xs, v, ⟨d, n, dt, m, sv, h1, h2, h3, h4, h5, hh⟩ => by
+    have ht : t.isData = true := by simpa [Ty.isData] using h
+    rw [Ty.up_list t h ht] at hh
+    refine ⟨d, n, dt, m, sv, h1, h2, h3, h4, h5, ?_⟩
+    have := forall2_map (R := fun y vs => ∃ z, vs = [z] ∧ RelV L t y z)
+      (R' := fun y vs => ∃ z, vs = [z] ∧ RelD L t y z) (Ty.down t ht)
+      (fun y vs ⟨z, hz, hyz⟩ => ⟨z, hz, relV_up t ht _ z (by rw [Ty.up_down]; exact hyz)⟩) hh
+    erw [map_down_up t ht] at this
+    exact this
+  | .table k w, h, x, v, ⟨d, n, dt, m, sv, h1, h2, h3, h4, h5, ys, hp, hh⟩ => by
+    have h' := h
+    simp only [Ty.isData, Bool.and_eq_true] at h'
+    have hk : k.isData = true := h'.1
+    have hw : w.isData = true := h'.2
+    rw [Ty.up_table k w h hk hw] at hp
+    let dn : k.den × w.den → k.den0 × w.den0 := fun p => (Ty.down k hk p.1, Ty.down w hw p.2)
+    refine ⟨d, n, dt, m, sv, h1, h2, h3, h4, h5, ys.map dn, ?_, ?_⟩
+    · have := hp.map dn
+      rwa [List.map_map, show dn ∘ (fun p : k.den0 × w.den0 => (Ty.up k hk p.1, Ty.up w hw p.2)) = id from
+        funext fun p => by simp [dn, Ty.down_up], List.map_id] at this
+    · exact forall2_map dn (fun e vs ⟨zk, zv, hz, h1, h2⟩ => ⟨zk, zv, hz,
+        relV_up k hk _ zk (by show RelV L k (Ty.up k hk (Ty.down k hk e.1)) zk; rw [Ty.up_down]; exact h1),
+        relV_up w hw _ zv (by show RelV L w (Ty.up w hw (Ty.down w hw e.2)) zv; rw [Ty.up_down]; exact h2)⟩) hh
+  | .fn .., _, _, _, hv | .param _, _, _, _, hv => hv.elim
+  | .dsl .effect _, h, _, _, _ => by simp [Ty.isData] at h
+  | .dsl .spec _, _, _, _, hv | .dsl .service _, _, _, _, hv | .dsl .command _, _, _, _, hv
+  | .dsl .query _, _, _, _, hv | .dsl .machine _, _, _, _, hv | .dsl .reaction _, _, _, _, hv
+  | .dsl .external _, _, _, _, hv | .dsl .externalCommand _, _, _, _, hv | .dsl .externalQuery _, _, _, _, hv
+  | .dsl .source _, _, _, _, hv | .dsl .declared _, _, _, _, hv | .dsl .subscription _, _, _, _, hv
+  | .dsl .bounds _, _, _, _, hv | .dsl .create _, _, _, _, hv | .dsl .response _, _, _, _, hv
+  | .dsl .scenario _, _, _, _, hv | .dsl .step _, _, _, _, hv | .dsl .sender _, _, _, _, hv
+  | .dsl .closure _, _, _, _, hv => by simp [RelV] at hv
+theorem relVs_up : (ts : List Ty) → (h : (Ty.tuple ts).isData = true) → (y : (Ty.semsWith Dsl.base ts).1) →
+    (vals : List Val) → RelVs L ts (Ty.up (.tuple ts) h y) vals → RelDs L ts y vals
+  | [], _, _, _, hv => hv
+  | t :: ts, h, y, vals, hv => by
+    have h' := h
+    simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at h'
+    have ht : t.isData = true := h'.1
+    have hts : (Ty.tuple ts).isData = true := by simpa [Ty.isData] using h'.2
+    erw [Ty.up_tuple t ts h ht hts] at hv
+    obtain ⟨v, vs, e, h1, h2⟩ := hv
+    exact ⟨v, vs, e, relV_up t ht y.1 v h1, relVs_up ts hts y.2 vs h2⟩
+theorem relAlts_up (d i : Nat) (a : List Ty) : (k : Nat) → (vs : List (List Ty)) → (h : (Ty.adt i a vs).isData = true) →
+    (y : (Ty.semAltsWith Dsl.base vs).1) → (v : Val) → RelAlts L d k vs (Ty.up (.adt i a vs) h y) v →
+    RelDAlts L d k vs y v
+  | _, [], _, y, _, _ => nomatch y
+  | k, fs :: vs, h, .inl x, v, hv => by
+    have h' := h
+    simp only [Ty.isData, Ty.isDatass, Bool.and_eq_true] at h'
+    have hfs : (Ty.tuple fs).isData = true := by simpa [Ty.isData] using h'.1
+    erw [Ty.up_inl i a fs vs h hfs x] at hv
+    obtain ⟨vals, e, hr⟩ := hv
+    exact ⟨vals, e, relVs_up fs hfs x vals hr⟩
+  | k, fs :: vs, h, .inr y, v, hv => by
+    have h' := h
+    simp only [Ty.isData, Ty.isDatass, Bool.and_eq_true] at h'
+    have hvs : (Ty.adt i a vs).isData = true := by simpa [Ty.isData] using h'.2
+    erw [Ty.up_inr i a fs vs h hvs y] at hv
+    exact relAlts_up d i a (k + 1) vs hvs y v hv
+end
+
 theorem rel_term : {t : Ty} → {s : Code t} → {x : Term} → Code.term? t s = some x → (v : t.den) →
     (Rel M L t v s ↔ RelV L t v (x.denote M))
   | .fn .., _, _, h, _ => nomatch h
+  | .dsl k _, _, _, h, _ => by
+    cases k <;> simp only [Code.term?, DslCode.term?, reduceCtorEq] at h <;> cases h <;> exact Iff.rfl
   | .list _, _, _, h, _ | .int, _, _, h, _ | .str, _, _, h, _ | .tuple _, _, _, h, _ | .adt .., _, _, h, _ | .param _, _, _, h, _
-  | .bag _, _, _, h, _ | .table .., _, _, h, _ | .date, _, _, h, _ | .id, _, _, h, _ | .dsl .., _, _, h, _ => by
+  | .bag _, _, _, h, _ | .table .., _, _, h, _ | .date, _, _, h, _ | .id, _, _, h, _ => by
     cases h; exact Iff.rfl
 
 theorem rel_ofTerm : {t : Ty} → {x : Term} → {s : Code t} → Code.ofTerm? t x = some s → (v : t.den) →
     (Rel M L t v s ↔ RelV L t v (x.denote M))
   | .fn .., _, _, h, _ => nomatch h
+  | .dsl k _, _, _, h, _ => by
+    cases k <;> simp only [Code.ofTerm?, DslCode.ofTerm?, reduceCtorEq] at h <;> cases h <;>
+      exact Iff.rfl
   | .list _, _, _, h, _ | .int, _, _, h, _ | .str, _, _, h, _ | .tuple _, _, _, h, _ | .adt .., _, _, h, _ | .param _, _, _, h, _
-  | .bag _, _, _, h, _ | .table .., _, _, h, _ | .date, _, _, h, _ | .id, _, _, h, _ | .dsl .., _, _, h, _ => by
+  | .bag _, _, _, h, _ | .table .., _, _, h, _ | .date, _, _, h, _ | .id, _, _, h, _ => by
     cases h; exact Iff.rfl
 
 theorem rel_share : {t : Ty} → {v : t.den} → {s : Code t} → Rel M L t v s → Rel M L t v (Code.share t s)
   | .fn .., _, _, h => h
   | .list _, _, s, h | .int, _, s, h | .str, _, s, h | .tuple _, _, s, h | .adt .., _, s, h | .param _, _, s, h | .bag _, _, s, h
-  | .table .., _, s, h | .date, _, s, h | .id, _, s, h | .dsl .., _, s, h => by
+  | .table .., _, s, h | .date, _, s, h | .id, _, s, h => by
     simp only [Code.share, Rel] at h ⊢; rw [Term.denote_share M s]; exact h
+  | .dsl k _, _, s, h => by
+    cases k <;> first
+      | exact h
+      | (simp only [Code.share, DslCode.share, Rel, DslRel] at h ⊢; rw [Term.denote_share M s]; exact h)
 
 theorem rels_share : {ts : List Ty} → {vs : Ty.dens ts} → {ss : Codes ts} → Rels M L ts vs ss →
     Rels M L ts vs (Codes.share ts ss)
@@ -1567,6 +1765,46 @@ theorem freshId_int (step : Nat) (index : Int) :
   rfl
 
 /-- Each built-in's code relates to its meaning. -/
+theorem Ty.eq_of_same {a b : Ty} (h : (Ty.same a b).isSome = true) : a = b := by
+  obtain ⟨⟨e⟩, _⟩ := Option.isSome_iff_exists.1 h; exact e
+
+theorem Ty.eq_of_sames {a b : List Ty} (h : (Ty.sames a b).isSome = true) : a = b := by
+  obtain ⟨⟨e⟩, _⟩ := Option.isSome_iff_exists.1 h; exact e
+
+theorem SiteKey.eq_of_same {a b : SiteKey} (h : a.same b = true) : a = b := by
+  obtain ⟨s, Γ⟩ := a; obtain ⟨s', Γ'⟩ := b
+  simp only [SiteKey.same, Bool.and_eq_true, beq_iff_eq] at h
+  rw [h.1, Ty.eq_of_sames h.2]
+
+theorem optSame_eq {α : Type} {f : α → α → Bool} (hf : ∀ a b, f a b = true → a = b) :
+    {a b : Option α} → optSame f a b = true → a = b
+  | none, none, _ => rfl
+  | some _, some _, h => by rw [hf _ _ h]
+  | none, some _, h | some _, none, h => by simp [optSame] at h
+
+theorem EffectKey.eq_of_same {a b : EffectKey} (h : a.same b = true) : a = b := by
+  obtain ⟨e, n, i, o, j, en, an⟩ := a; obtain ⟨e', n', i', o', j', en', an'⟩ := b
+  simp only [EffectKey.same, Bool.and_eq_true, beq_iff_eq] at h
+  obtain ⟨⟨⟨⟨⟨⟨he, hn⟩, hi⟩, ho⟩, hj⟩, hen⟩, han⟩ := h
+  rw [Ty.eq_of_same he, hn, Ty.eq_of_same hi, Ty.eq_of_same ho, optSame_eq (fun _ _ => Ty.eq_of_same) hj,
+    optSame_eq (fun _ _ => SiteKey.eq_of_same) hen, SiteKey.eq_of_same han]
+
+/-- An effect's code is its kind's variant, with the input and the captured values' tuples as its fields. -/
+theorem effectT_ok {key : EffectKey} {it : Term} {ens ans : List Term} {t : Term}
+    (h : effectT L key it ens ans = .ok t) :
+    ∃ d n k de da, L.find? (.dsl .effect [key.event]) = some (d, n) ∧ (L.effectsOf key.event)[k]? = some key ∧
+      (∃ m, L.find? (.tuple ((key.ensures.map (·.Γ)).getD [])) = some (de, m)) ∧
+      (∃ m, L.find? (.tuple key.answer.Γ) = some (da, m)) ∧ t = .ctor d k [it, .ctor de 0 ens, .ctor da 0 ans] := by
+  simp only [effectT] at h
+  obtain ⟨⟨d, n⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨k, h2, h⟩ := bind_ok.1 h
+  obtain ⟨de, h3, h⟩ := bind_ok.1 h
+  obtain ⟨da, h4, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  obtain ⟨hk, hsame, -⟩ := List.findIdx?_eq_some_iff_getElem.1 (need_ok.1 h2)
+  refine ⟨d, n, k, de, da, need_ok.1 h1, ?_, tupleD_ok h3, tupleD_ok h4, rfl⟩
+  rw [List.getElem?_eq_getElem hk, EffectKey.eq_of_same hsame]
+
 theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : Code (p.ty.inst args))
     (h : primCode L p args hp = .ok s) : Rel M L (p.ty.inst args) (p.den args hp) s := by
   cases p
@@ -1990,6 +2228,59 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     show Val.ctor d 0 (Term.denotes M [freshT ss si]) = idVal d (freshId step index)
     simp only [Term.denotes, freshT_denote M hs hi, hm, idVal]
     rw [hmi]; rfl
+  case externalCommand =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, ()⟩ ⟨sx, ()⟩ ⟨hx, _⟩ r c hr _
+    change RelV L .str x (Term.denote M sx) at hx
+    dsimp only at hr
+    split at hr
+    · cases hr
+      simp only [RelV, Term.denote] at hx
+      exact (Val.str.inj hx).symm
+    · cases hr
+  case requestCommand =>
+    simp only [primCode] at h; cases h
+    intro ⟨nm, x, f, ()⟩ ⟨sn, sx, cf, ()⟩ ⟨hn, hx, hf, _⟩ r c hr _
+    change nm = sn at hn
+    change ClosureRel M L f cf at hf
+    dsimp only at hr
+    obtain ⟨it, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨t, h2, e⟩ := map_ok.1 hr
+    cases e
+    obtain ⟨d, n, k, de, da, hd, hk, ⟨m, hde⟩, ⟨m', hda⟩, rfl⟩ := effectT_ok h2
+    have hd0 := Prim.dataOf hp rfl
+    have hi := (rel_term (need_ok.1 h1) x).1 hx
+    refine ⟨d, n, hd, k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩
+    · have hdi := Ty.isData_inst hd0 (.param 1) rfl
+      exact relV_up _ hdi (Ty.down _ hdi x) _ (by rw [Ty.up_down]; exact hi)
+    · exact ⟨da, m', _, hf.2.1 ▸ hda, rfl, hf.2.2⟩
+    · exact ⟨de, m, hde, rfl⟩
+  case requestQuery =>
+    simp only [primCode] at h; cases h
+    intro ⟨⟨nm, g⟩, x, f, ()⟩ ⟨⟨sn, cg⟩, sx, cf, ()⟩ ⟨⟨hn, hg⟩, hx, hf, _⟩ r c hr _
+    change ClosureRel M L f cf at hf
+    dsimp only at hr
+    obtain ⟨it, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨t, h2, e⟩ := map_ok.1 hr
+    cases e
+    obtain ⟨d, n, k, de, da, hd, hk, ⟨m, hde⟩, ⟨m', hda⟩, rfl⟩ := effectT_ok h2
+    have hd0 := Prim.dataOf hp rfl
+    have hi := (rel_term (need_ok.1 h1) x).1 hx
+    refine ⟨d, n, hd, k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩
+    · have hdi := Ty.isData_inst hd0 (.param 1) rfl
+      exact relV_up _ hdi (Ty.down _ hdi x) _ (by rw [Ty.up_down]; exact hi)
+    · exact ⟨da, m', _, hf.2.1 ▸ hda, rfl, hf.2.2⟩
+    · exact ⟨hg.1, hg.2.1, de, m, _, hg.2.1 ▸ hde, rfl, hg.2.2⟩
+  case externalQuery =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, f, ()⟩ ⟨sx, cf, ()⟩ ⟨hx, hf, _⟩ r c hr _
+    change RelV L .str x (Term.denote M sx) at hx
+    dsimp only at hr
+    split at hr
+    · cases hr
+      simp only [RelV, Term.denote] at hx
+      exact ⟨(Val.str.inj hx).symm, hf⟩
+    · cases hr
   all_goals simp [primCode] at h
 
 end
@@ -2180,7 +2471,13 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
     obtain ⟨r, h1, h⟩ := bind_ok.1 h
     cases pure_ok.1 h
     exact primCode_agrees p args hp _ h1
-  | .close .., _, _, _, s, c, h, _ => nomatch h
+  | @Expr.close _ _ Γ' _ _ env hΓ _ _, σ, ρ, hσ, s, c, h, hc => by
+    simp only [encode] at h
+    obtain ⟨⟨ss, c1⟩, h1, h⟩ := bind_ok.1 h
+    obtain ⟨ts, h2, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    have hv := rels_terms (need_ok.1 h2) _ (encodes_agrees env σ ρ hσ ss c1 h1 hc)
+    exact ⟨rfl, rfl, relVs_up Γ' hΓ _ _ (by erw [Ty.up_down]; exact hv)⟩
 theorem encodes_agrees {Γ : List Ty} {ts : List Ty} : (es : Exprs G Γ ts) → (σ : Codes Γ) → (ρ : Ty.dens Γ) →
     Rels M L Γ ρ σ → (ss : Codes ts) → (c : Term) → encodes L gs es σ = .ok (ss, c) → Holds M c →
     Rels M L ts (Exprs.eval D g es ρ) ss

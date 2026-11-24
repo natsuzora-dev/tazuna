@@ -23,10 +23,50 @@ inductive Refusal where
   | outside (what : String)
 deriving Repr
 
+/-- What a kept function's code says of it: where it is written and the types of the values it captured. -/
+structure SiteKey where
+  site : Nat × Nat
+  Γ : List Ty
+
+/-- One kind of effect a program writes: a request to the external command (with a rejection type) or query `name`
+of these types, from the event type `event`, whose `on_answer` and (for a query) `ensures` are written at these
+sites. An effect of the kind is coded by its variant of the effect datatype, whose fields are what varies: the input
+and the values each site captured. -/
+structure EffectKey where
+  event : Ty
+  name : String
+  input : Ty
+  output : Ty
+  rejection : Option Ty
+  ensures : Option SiteKey
+  answer : SiteKey
+
+/-- The types of what varies among the effects of a kind. -/
+def EffectKey.fields (k : EffectKey) : List Ty :=
+  [k.input, .tuple ((k.ensures.map (·.Γ)).getD []), .tuple k.answer.Γ]
+
 /-- The datatypes a script declares: each type in the list is datatype `D<i>` by its position, with the number of
-slots it holds when it is a bag, a table or a list. -/
+slots it holds when it is a bag, a table or a list. `effects` lists the kinds of effect values the script codes: the
+type `Effect(event)` is a datatype with one variant per kind of that event type. -/
 structure Layout where
   types : List (Ty × Nat) := []
+  effects : List EffectKey := []
+
+/-- The kinds of effect of the event type `e`, in the order of their variants. -/
+def Layout.effectsOf (L : Layout) (e : Ty) : List EffectKey := L.effects.filter fun k => (Ty.same k.event e).isSome
+
+def SiteKey.same (a b : SiteKey) : Bool := a.site == b.site && (Ty.sames a.Γ b.Γ).isSome
+
+def optSame {α : Type} (f : α → α → Bool) : Option α → Option α → Bool
+  | none, none => true
+  | some a, some b => f a b
+  | _, _ => false
+
+/-- Whether two kinds of effect are the same kind. -/
+def EffectKey.same (a b : EffectKey) : Bool :=
+  (Ty.same a.event b.event).isSome && a.name == b.name && (Ty.same a.input b.input).isSome &&
+    (Ty.same a.output b.output).isSome && optSame (fun x y => (Ty.same x y).isSome) a.rejection b.rejection &&
+    optSame SiteKey.same a.ensures b.ensures && a.answer.same b.answer
 
 /-- The datatype index and slot count of a type. -/
 def Layout.find? (L : Layout) (t : Ty) : Option (Nat × Nat) :=
@@ -37,16 +77,52 @@ def boolVs? : (vs : List (List Ty)) → Option (PLift (vs = [[], []]))
   | [[], []] => some ⟨rfl⟩
   | _ => none
 
+/-- A kept function's code: where it is written, the types of the values it captured, and their terms. It is static,
+so an effect that holds it names the site in its variant (defunctionalization in the encoder). -/
+structure ClosureCode where
+  key : SiteKey
+  env : List Term
+
+/-- How a value of a structure type is coded: a kept function by its closure code, a handle to an external's command
+by its name and to an external's query by its name and its `ensures`, all static; anything else by a term. -/
+def DslCode : Dsl → List Ty → Type
+  | .closure, _ => ClosureCode
+  | .externalCommand, _ => String
+  | .externalQuery, _ => String × ClosureCode
+  | .spec, _ | .service, _ | .command, _ | .query, _ | .machine, _ | .reaction, _ | .external, _ | .source, _
+  | .declared, _ | .effect, _ | .subscription, _ | .bounds, _ | .create, _ | .response, _ | .scenario, _ | .step, _
+  | .sender, _ | .fresh, _ => Term
+
 mutual
 /-- How a value of a type is coded: a term for first-order types, a Lean function on codes for a function. A list
 is a term too: slots, like a bag's, whose occupied ones hold the items in order. -/
 def Code : Ty → Type
   | .fn ps r => Codes ps → Except Refusal (Code r × Term)
-  | .list _ | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .date | .id | .dsl .. => Term
+  | .dsl k a => DslCode k a
+  | .list _ | .int | .str | .tuple _ | .adt .. | .param _ | .bag _ | .table .. | .date | .id => Term
 def Codes : List Ty → Type
   | [] => Unit
   | t :: ts => Code t × Codes ts
 end
+
+/-- The term of a structure value's code, when it has one. -/
+def DslCode.term? : (k : Dsl) → (a : List Ty) → DslCode k a → Option Term
+  | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ => none
+  | .spec, _, s | .service, _, s | .command, _, s | .query, _, s | .machine, _, s | .reaction, _, s | .external, _, s
+  | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
+  | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s => some s
+
+def DslCode.ofTerm? : (k : Dsl) → (a : List Ty) → Term → Option (DslCode k a)
+  | .closure, _, _ | .externalCommand, _, _ | .externalQuery, _, _ => none
+  | .spec, _, s | .service, _, s | .command, _, s | .query, _, s | .machine, _, s | .reaction, _, s | .external, _, s
+  | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
+  | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s => some s
+
+def DslCode.share : (k : Dsl) → (a : List Ty) → DslCode k a → DslCode k a
+  | .closure, _, s | .externalCommand, _, s | .externalQuery, _, s => s
+  | .spec, _, s | .service, _, s | .command, _, s | .query, _, s | .machine, _, s | .reaction, _, s | .external, _, s
+  | .source, _, s | .declared, _, s | .effect, _, s | .subscription, _, s | .bounds, _, s | .create, _, s
+  | .response, _, s | .scenario, _, s | .step, _, s | .sender, _, s | .fresh, _, s => Term.share s
 
 /-- A code with its condition, or why there is none. -/
 scoped notation:max "Enc " α:max => Except Refusal (α × Term)
@@ -64,19 +140,22 @@ def andT : Term → Term → Term
 
 def Code.term? : (t : Ty) → Code t → Option Term
   | .fn .., _ => none
-  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
-  | .dsl .., s => some s
+  | .dsl k a, s => DslCode.term? k a s
+  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s =>
+    some s
 
 def Code.ofTerm? : (t : Ty) → Term → Option (Code t)
   | .fn .., _ => none
-  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
-  | .dsl .., s => some s
+  | .dsl k a, s => DslCode.ofTerm? k a s
+  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s =>
+    some s
 
 /-- The code shared (`Term.share`) when it is a term: a bound variable may be used any number of times. -/
 def Code.share : (t : Ty) → Code t → Code t
   | .fn .., s => s
-  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
-  | .dsl .., s => Term.share s
+  | .dsl k a, s => DslCode.share k a s
+  | .list _, s | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s =>
+    Term.share s
 
 def Codes.share : (ts : List Ty) → Codes ts → Codes ts
   | [], () => ()
@@ -401,6 +480,15 @@ def freshT (step index : Term) : Term :=
   let a := Term.share (.add step i)
   .add (.div (.mul a (.add a (.int 1))) (.int 2)) i
 
+/-- An effect of the kind `key`: its variant of the effect datatype, with the input and the terms of the values the
+`ensures` and `on_answer` sites captured. -/
+def effectT (key : EffectKey) (input : Term) (ens answer : List Term) : Except Refusal Term := do
+  let (d, _) ← need "a layout without the effect type" (L.find? (.dsl .effect [key.event]))
+  let k ← need "an effect of a kind the layout lacks" ((L.effectsOf key.event).findIdx? (·.same key))
+  let de ← tupleD L ((key.ensures.map (·.Γ)).getD [])
+  let da ← tupleD L key.answer.Γ
+  pure (.ctor d k [input, .ctor de 0 ens, .ctor da 0 answer])
+
 /-- The code of each built-in that has an exact encoding: a table of term builders indexed by the built-in. -/
 def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal (Code (p.ty.inst args)) :=
   match p, args, h with
@@ -556,6 +644,22 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
   | .fresh, _, _ => .ok fun (step, index, ()) => do
     let (d, _) ← need "a layout without Id" (L.find? .id)
     pure (.ctor d 0 [freshT step index], tt)
+  | .externalCommand, _, _ => .ok fun (name, ()) => match name with
+    | .str n => .ok (n, tt)
+    | _ => .error (.outside "a handle whose name is no literal")
+  | .externalQuery, _, _ => .ok fun (name, ens, ()) => match name with
+    | .str n => .ok ((n, ens), tt)
+    | _ => .error (.outside "a handle whose name is no literal")
+  | .requestCommand, args, _ => .ok fun (name, input, oa, ()) => do
+    let it ← need "an input that has no term" (Code.term? _ input)
+    let key : EffectKey := ⟨(Ty.param 0).inst args, name, (Ty.param 1).inst args, (Ty.param 2).inst args,
+      some ((Ty.param 3).inst args), none, oa.key⟩
+    pure (← effectT L key it [] oa.env, tt)
+  | .requestQuery, args, _ => .ok fun ((name, ens), input, oa, ()) => do
+    let it ← need "an input that has no term" (Code.term? _ input)
+    let key : EffectKey := ⟨(Ty.param 0).inst args, name, (Ty.param 1).inst args, (Ty.param 2).inst args, none,
+      some ens.key, oa.key⟩
+    pure (← effectT L key it ens.env oa.env, tt)
   | p, _, _ => .error (.outside s!"the built-in {p.sig.name}")
 
 variable {G : List Ty} (gs : Encs G)
@@ -626,7 +730,10 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
     let (x, c) ← encode e σ
     pure (.sub (.int 0) x, c)
   | .prim p args h, _ => do pure (← primCode L p args h, tt)
-  | .close .., _ => .error (.outside "a function a structure value keeps")
+  | @Expr.close _ _ Γ' _ site env _ _ _, σ => do
+    let (ss, c) ← encodes env σ
+    let ts ← need "a captured value that has no term" (Codes.terms? _ ss)
+    pure (⟨⟨site, Γ'⟩, ts⟩, c)
 def encodes {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Codes Γ → Enc (Codes ts)
   | .nil, _ => .ok ((), tt)
   | .cons e es, σ => do
@@ -685,7 +792,7 @@ namespace Layout
 
 /-- The layout with `t` as its next datatype, unless it already has it. -/
 def push (L : Layout) (t : Ty) (n : Nat := 0) : Layout :=
-  if (L.find? t).isSome then L else { types := L.types ++ [(t, n)] }
+  if (L.find? t).isSome then L else { L with types := L.types ++ [(t, n)] }
 
 section
 variable (slots : Ty → Nat)
@@ -713,6 +820,11 @@ end
 
 end
 
+/-- The layout with the effect datatype of each event type its effect kinds name, after the types of their fields. -/
+def addEffects (slots : Ty → Nat) (L : Layout) : Layout :=
+  let L := L.effects.foldl (fun L k => addTys slots L k.fields) L
+  L.effects.foldl (fun L k => L.push (.dsl .effect [k.event])) L
+
 /-- The sort that codes values of a first-order type. -/
 def srt? (L : Layout) (t : Ty) : Option Srt :=
   match t with
@@ -728,6 +840,9 @@ def datatype? (L : Layout) : Ty × Nat → Option Datatype
   | (.id, _) => some ⟨[[.int], [.str]]⟩
   | (.bag t, n) | (.list t, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, t]))]⟩
   | (.table k v, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, k, v]))]⟩
+  | (.dsl .effect [e], _) => match L.effectsOf e with
+    | [] => none
+    | ks => do pure ⟨← ks.mapM (·.fields.mapM L.srt?)⟩
   | _ => none
 
 def datatypes? (L : Layout) : Option (List Datatype) := L.types.mapM L.datatype?
