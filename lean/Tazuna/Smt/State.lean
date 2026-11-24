@@ -647,8 +647,6 @@ structure Outcome where
   accepted : Term
   halted : Holds
 
-def Step.outcome (s : Step) : Outcome := { accepted := s.accepted, halted := s.halted }
-
 /--
 The rejection of a step whose caller is a service, each with the term that holds when it is the one where the step is
 rejected and does not halt: the caller, a ref field, a binds value, a requires condition, then a record that already
