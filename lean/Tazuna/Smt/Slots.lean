@@ -44,6 +44,21 @@ def insertSlots (x : List Term) : Term → List Slot → List Slot × Term
     let (S', p') := insertSlots x (.and p f) S
     ((.or f here, List.zipWith (fun a b => Term.ite here a b) x ys) :: S', p')
 
+/-- The slots `T` with the items of each occupied slot of `S` in the first free slot in turn, shared after each
+insertion; the second result is that each found one. -/
+def moveAll (d dt w : Nat) : List Slot → List Slot → List Slot × Term
+  | T, [] => (T, tt)
+  | T, (f, xs) :: S =>
+    let (T', p) := insertSlots xs f T
+    let (T'', c) := moveAll d dt w (slotsOf d dt T'.length w (slotsTerm d dt T')) S
+    (T'', .and (.not p) c)
+
+/-- The slots `S` carried into `n` slots of the collection datatype `d`: padded with free slots holding `dflt` when
+they fit, else moved one by one into `n` free slots, with the condition that the occupied ones fit. -/
+def resizeSlots (d dt : Nat) (dflt : List Term) (n : Nat) (S : List Slot) : List Slot × Term :=
+  if S.length ≤ n then (S ++ List.replicate (n - S.length) (.bool false, dflt), tt)
+  else moveAll d dt dflt.length (List.replicate n (.bool false, dflt)) S
+
 /-- The term `found xs` of the first occupied slot whose items satisfy `hit`, or `none`. -/
 def firstT (hit : List Term → Term) (found : List Term → Term) (none : Term) : List Slot → Term
   | [] => none
@@ -441,6 +456,44 @@ theorem sumSlotT_den {α : Type} {E : α → List Val → Prop} {g : α → Int}
     have := sumSlotT_den h
     simp only [sumSlotT, sumT, List.zipWith_cons_cons, Term.denote, hf, hq, Val.toBool, Val.toInt] at this ⊢
     rw [this]; simp
+
+/-- The slots with each one's items replaced by `N` of its items and its term in `qs`; flags stay. -/
+def mapSlots (N : List Term → Term → List Term) (S : List Slot) (qs : List Term) : List Slot :=
+  List.zipWith (fun (f, xs) q => (f, N xs q)) S qs
+
+theorem mapSlots_den {α β : Type} {E : α → List Val → Prop} {V : α → Val → Prop} {E' : β → List Val → Prop}
+    (g : α → β) (N : List Term → Term → List Term) (w : Nat)
+    (hN : ∀ y xs q, E y (Term.denotes M xs) → V y (q.denote M) → E' (g y) (Term.denotes M (N xs q)))
+    (hw : ∀ xs q, (N xs q).length = w) :
+    {S : List Slot} → {qs : List Term} → {sv : List (Bool × List Val)} → {ys : List α} →
+    AlignedV M E V S qs sv ys → ∃ sv', SlotsDen M (mapSlots N S qs) sv' ∧ sv'.length = sv.length ∧
+      (∀ p ∈ sv', p.2.length = w) ∧ Holds2 E' (ys.map g) sv'
+  | [], [], [], [], _ => ⟨[], trivial, rfl, by simp, by simp [Holds2, occupied, Forall2]⟩
+  | (f, xs) :: S, q :: qs, (false, vs) :: sv, ys, ⟨hf, _, h⟩ => by
+    obtain ⟨sv', h1, h2, h3, h4⟩ := mapSlots_den g N w hN hw h
+    refine ⟨(false, Term.denotes M (N xs q)) :: sv', ⟨hf, rfl, h1⟩, by simp [h2], ?_, by simpa [Holds2, occupied] using h4⟩
+    simp only [List.mem_cons, forall_eq_or_imp]
+    exact ⟨by rw [denotes_eq_map, List.length_map, hw], h3⟩
+  | (f, xs) :: S, q :: qs, (true, vs) :: sv, y :: ys, ⟨hf, hx, he, hq, h⟩ => by
+    obtain ⟨sv', h1, h2, h3, h4⟩ := mapSlots_den g N w hN hw h
+    refine ⟨(true, Term.denotes M (N xs q)) :: sv', ⟨hf, rfl, h1⟩, by simp [h2], ?_, ?_⟩
+    · simp only [List.mem_cons, forall_eq_or_imp]
+      exact ⟨by rw [denotes_eq_map, List.length_map, hw], h3⟩
+    · simp only [Holds2, occupied, ite_true, List.filterMap_cons, List.map_cons, Forall2] at h4 ⊢
+      exact ⟨hN y xs q (hx ▸ he) hq, h4⟩
+
+theorem slotsDen_append : {S : List Slot} → {sv : List (Bool × List Val)} → {T : List Slot} →
+    {tv : List (Bool × List Val)} → SlotsDen M S sv → SlotsDen M T tv → SlotsDen M (S ++ T) (sv ++ tv)
+  | [], [], _, _, _, h => h
+  | _ :: _, _ :: _, _, _, ⟨hf, hx, h⟩, h' => ⟨hf, hx, slotsDen_append h h'⟩
+
+theorem occupied_append (sv tv : List (Bool × List Val)) : occupied (sv ++ tv) = occupied sv ++ occupied tv := by
+  simp [occupied, List.filterMap_append]
+
+/-- With nothing pending, inserting changes no slot. -/
+theorem insertVals_false (xv : List Val) : (sv : List (Bool × List Val)) → insertVals xv false sv = (sv, false)
+  | [] => rfl
+  | (b, vs) :: sv => by simp [insertVals, insertVals_false xv sv]
 
 theorem empty_den (xs : List Term) : (n : Nat) →
     SlotsDen M (List.replicate n (Term.bool false, xs)) (List.replicate n (false, Term.denotes M xs))

@@ -58,6 +58,11 @@ def bagOp (p : Prim) (r : Ty) (h : p.ok [.int] = true) (hty : p.ty.inst [.int] =
     (.cons b (.cons (Expr.lam (ps := [.int]) body) .nil))
 def bagSum (b : E (.bag .int)) (body : Expr [] [.int] .int) : E .int :=
   .call (.prim .bagSum [.int] rfl) (.cons b (.cons (.lam body) .nil))
+def bagMap (b : E (.bag .int)) (r : Ty) (h : Prim.bagMap.ok [.int, r] = true) (body : Expr [] [.int] r) : E (.bag r) :=
+  .call (.prim .bagMap [.int, r] h) (.cons b (.cons (.lam body) .nil))
+def bagContains (t : Ty) (h : Prim.bagContains.ok [t] = true) (b : E (.bag t)) (x : E t) : E Ty.bool :=
+  .call (.prim .bagContains [t] h) (.cons b (.cons x .nil))
+def bagSize (t : Ty) (h : Prim.bagSize.ok [t] = true) (b : E (.bag t)) : E .int := .call (.prim .bagSize [t] h) (.cons b .nil)
 def isTwo : Expr [] [.int] Ty.bool := .bin (.eq rfl) (.var .here) (.int 2)
 def bigger : Expr [] [.int] Ty.bool := .bin .gt (.var .here) (.int 1)
 /-- `table_from_list([#(1, "a"), #(1, "c")])`: the last pair for key 1 wins. -/
@@ -80,6 +85,16 @@ def inserts : Nat → E (.table .int .str)
 def doubling : Nat → (Γ : List Ty) → Expr [] Γ .int
   | 0, _ => .int 1
   | n + 1, Γ => .let_ (doubling n Γ) (.bin .add (.var .here) (.var .here))
+
+def tableKeys (t : E (.table .int .str)) : E (.bag .int) := .call (.prim .tableKeys [.int, .str] rfl) (.cons t .nil)
+def tableValues (t : E (.table .int .str)) : E (.bag .str) := .call (.prim .tableValues [.int, .str] rfl) (.cons t .nil)
+/-- `table_map(t, fn(k, v) { v <> "!" })` -/
+def tableBang (t : E (.table .int .str)) : E (.table .int .str) :=
+  .call (.prim .tableMap [.int, .str, .str] rfl)
+    (.cons t (.cons (.lam (.bin .concat (.var (.there .here)) (.str "!"))) .nil))
+/-- `bag_from_list([1, 5])` -/
+def b2 : E (.bag .int) :=
+  .call (.prim .bagFromList [.int] rfl) (.cons (.list (.cons (.int 1) (.cons (.int 5) .nil))) .nil)
 
 def tableGet (t : E (.table .int .str)) (k : Int) : E (Ty.option .str) :=
   .call (.prim .tableGet [.int, .str] rfl) (.cons t (.cons (.int k) .nil))
@@ -125,6 +140,9 @@ def cases : List (String × (t : Ty) × E t) :=
     ("bag filter", ⟨.int, .call (.prim .bagSize [.int] rfl) (.cons (bagOp .bagFilter (.bag .int) rfl rfl b3 bigger) .nil)⟩),
     ("bag any", ⟨Ty.bool, bagOp .bagAny Ty.bool rfl rfl b3 isTwo⟩),
     ("bag sum counts occurrences", ⟨.int, bagSum b3 (.bin .mul (.var .here) (.int 10))⟩),
+    ("bag map keeps occurrences", ⟨.int, bagSum (bagMap b3 .int rfl (.bin .mul (.var .here) (.int 10))) (.var .here)⟩),
+    ("bag map transforms items", ⟨Ty.bool, .bin .and (bagContains .int rfl (bagMap b3 .int rfl (.bin .mul (.var .here) (.int 10))) (.int 20))
+      (.not (bagContains .int rfl (bagMap b3 .int rfl (.bin .mul (.var .here) (.int 10))) (.int 2)))⟩),
     ("bag contains", ⟨Ty.bool, .bin .and (.call (.prim .bagContains [.int] rfl) (.cons b3 (.cons (.int 2) .nil)))
       (.not (.call (.prim .bagContains [.int] rfl) (.cons b3 (.cons (.int 5) .nil))))⟩),
     ("bag all", ⟨Ty.bool, bagOp .bagAll Ty.bool rfl rfl b3 bigger⟩),
@@ -133,6 +151,9 @@ def cases : List (String × (t : Ty) × E t) :=
     ("table remove", ⟨.int, tableSize (.call (.prim .tableRemove [.int, .str] rfl) (.cons t2 (.cons (.int 1) .nil)))⟩),
     ("table insert into new", ⟨.int, tableSize (.call (.prim .tableInsert [.int, .str] rfl)
       (.cons (.call (.prim .tableNew [.int, .str] rfl) .nil) (.cons (.int 5) (.cons (.str "x") .nil))))⟩),
+    ("table keys", ⟨Ty.bool, .bin .and (bagContains .int rfl (tableKeys t2) (.int 1)) (.bin (.eq rfl) (bagSize .int rfl (tableKeys t2)) (.int 1))⟩),
+    ("table values", ⟨Ty.bool, .bin .and (bagContains .str rfl (tableValues t2) (.str "c")) (.not (bagContains .str rfl (tableValues t2) (.str "a")))⟩),
+    ("table map keeps keys", ⟨Ty.option .str, tableGet (tableBang t2) 1⟩),
     ("table get finds the key", ⟨Ty.option .str, tableGet t2 1⟩),
     ("table get misses a key", ⟨Ty.option .str, tableGet t2 5⟩),
     ("ref continues with the value", ⟨Ty.result .str .str, refOk t2 1⟩),
@@ -142,6 +163,22 @@ def cases : List (String × (t : Ty) × E t) :=
     ("require passes", ⟨Ty.result .int .str, .call (.prim .require [.int, .str] rfl)
       (.cons (.bin .lt (.int 1) (.int 2)) (.cons (.str "no")
         (.cons (.lam (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons (.int 1) .nil))) .nil)))⟩) ]
+
+/-- Slot counts that differ by item type, so maps and keys carry slots into a collection of another count: bags of
+Bool get two slots, bags of String four, the rest three. -/
+def reslots : Ty → Nat
+  | .bag (.adt 0 _ _) => 2
+  | .bag .str => 4
+  | _ => 3
+
+def reslotted : List (String × (t : Ty) × E t) :=
+  [ ("map into fewer slots", ⟨.int, bagSize Ty.bool rfl (bagMap b2 Ty.bool rfl (.bin .gt (.var .here) (.int 1)))⟩),
+    ("map into fewer slots keeps items", ⟨Ty.bool, bagContains Ty.bool rfl (bagMap b2 Ty.bool rfl (.bin .gt (.var .here) (.int 1))) tru⟩),
+    ("values into more slots", ⟨Ty.bool, bagContains .str rfl (tableValues t2) (.str "c")⟩) ]
+
+/-- Mapped items that outgrow the two slots of a bag of Bool. -/
+def reslotOverflows : List (String × (t : Ty) × E t) :=
+  [ ("map past the target's slots", ⟨.int, bagSize Ty.bool rfl (bagMap b3 Ty.bool rfl (.bin .gt (.var .here) (.int 1)))⟩) ]
 
 /-- Expressions whose collections outgrow their one slot: the condition is false, so the script is unsat. -/
 def overflows : List (String × (t : Ty) × E t) :=
@@ -155,32 +192,37 @@ def dt : Script :=
     asserts := [.eq (.var 0) (.ctor 1 0 [.ctor 0 0 [.int (-3), .str "x"]]), .eq (.var 1) (.ctor 0 1 [])],
     shows := [0, 1] }
 
+/-- The script asking for a variable equal to the expression under its condition. -/
+def scriptOf (slots : Ty → Nat) {t : Ty} (e : E t) : Except String (Layout × Script) := do
+  let L := Layout.addTys slots {} (Tazuna.Smt.Expr.tys e)
+  match encode L (G := []) () e (), L.srt? t, L.datatypes? with
+  | .ok (code, cond), some srt, some dts =>
+    let some term := Code.term? t code | throw "no term"
+    pure (L, { datatypes := dts, vars := [srt], asserts := [.eq (.var 0) term, cond], shows := [0] })
+  | .error r, _, _ => throw s!"no encoding: {repr r}"
+  | _, _, _ => throw "no sort"
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
-  for (name, ⟨t, e⟩) in cases do
-    let L := Layout.addTys (fun _ => 3) {} (Tazuna.Smt.Expr.tys e)
-    let expected := valOf L t (Expr.eval (G := []) () e ())
-    match encode L (G := []) () e (), L.srt? t, L.datatypes? with
-    | .ok (code, cond), some srt, some dts =>
-      let some term := Code.term? t code | IO.println s!"smt-check: {name}: no term"; ok := false
-      let script : Script := { datatypes := dts, vars := [srt], asserts := [.eq (.var 0) term, cond], shows := [0] }
-      match ← solver.run script with
-      | .sat vs =>
-        if (vs.lookup 0).map (·.print) != expected.map (·.print) then
-          IO.println s!"smt-check: {name}: the solver's value differs from eval's"; ok := false
-      | a => IO.println s!"smt-check: {name}: {repr a}"; ok := false
-    | .error r, _, _ => IO.println s!"smt-check: {name}: no encoding: {repr r}"; ok := false
-    | _, _, _ => IO.println s!"smt-check: {name}: no sort"; ok := false
-  for (name, ⟨t, e⟩) in overflows do
-    let L := Layout.addTys (fun _ => 1) {} (Tazuna.Smt.Expr.tys e)
-    match encode L (G := []) () e (), L.srt? t, L.datatypes? with
-    | .ok (code, cond), some srt, some dts =>
-      let some term := Code.term? t code | IO.println s!"smt-check: {name}: no term"; ok := false
-      match ← solver.run { datatypes := dts, vars := [srt], asserts := [.eq (.var 0) term, cond] } with
-      | .unsat => pure ()
-      | a => IO.println s!"smt-check: {name}: not unsat: {repr a}"; ok := false
-    | _, _, _ => IO.println s!"smt-check: {name}: no encoding"; ok := false
+  for (slots, list) in [((fun _ => 3 : Ty → Nat), cases), (reslots, reslotted)] do
+    for (name, ⟨t, e⟩) in list do
+      match scriptOf slots e with
+      | .ok (L, script) =>
+        match ← solver.run script with
+        | .sat vs =>
+          if (vs.lookup 0).map (·.print) != (valOf L t (Expr.eval (G := []) () e ())).map (·.print) then
+            IO.println s!"smt-check: {name}: the solver's value differs from eval's"; ok := false
+        | a => IO.println s!"smt-check: {name}: {repr a}"; ok := false
+      | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
+  for (slots, list) in [((fun _ => 1 : Ty → Nat), overflows), (reslots, reslotOverflows)] do
+    for (name, ⟨_, e⟩) in list do
+      match scriptOf slots e with
+      | .ok (_, script) =>
+        match ← solver.run script with
+        | .unsat => pure ()
+        | a => IO.println s!"smt-check: {name}: not unsat: {repr a}"; ok := false
+      | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

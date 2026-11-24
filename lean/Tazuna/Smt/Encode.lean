@@ -279,6 +279,14 @@ def emptySlots (item : List Ty) (n : Nat) : Except Refusal (List Slot) := do
   let xs ← need "an item type without a default term" (item.mapM (defaultT L))
   pure (List.replicate n (.bool false, xs))
 
+/-- The collection of type `c` with items `item` holding the slots `S`, carried into its own slot count, with the
+condition that they fit. -/
+def collOf (c : Ty) (item : List Ty) (S : List Slot) : Except Refusal (Term × Term) := do
+  let (d, n, dt) ← collD L c item
+  let dflt ← need "an item type without a default term" (item.mapM (defaultT L))
+  let rs := resizeSlots d dt dflt n S
+  pure (slotsTerm d dt rs.1, rs.2)
+
 /-- A function's code applied to a slot's items. -/
 def slotApply {ps : List Ty} {r : Ty} (f : Codes ps → Except Refusal (Code r × Term)) (xs : List Term) :
     Except Refusal (Code r × Term) := do
@@ -365,6 +373,13 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let S := slotsOf d dt n 1 b
     let R ← slotTerms f S
     pure (sumSlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
+  | .bagMap, args, _ => .ok fun (b, f, ()) => do
+    let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
+    let S := slotsOf d dt n 1 b
+    let R ← slotTerms f S
+    let (r, c) ← collOf L (.bag ((Ty.param 1).inst args)) [(Ty.param 1).inst args]
+      (mapSlots (fun _ q => [q]) S (R.map (·.1)))
+    pure (r, andT (guardsT S (R.map (·.2))) c)
   | .bagAny, args, _ => .ok fun (b, f, ()) => do
     let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
     let S := slotsOf d dt n 1 b
@@ -401,6 +416,24 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let S := slotsOf d dt n 2 t
     let R ← slotTerms f S
     pure (slotsTerm d dt (filterSlots S (R.map (·.1))), guardsT S (R.map (·.2)))
+  | .tableMap, args, _ => .ok fun (t, f, ()) => do
+    let k := (Ty.param 0).inst args
+    let (d, n, dt) ← collD L (.table k ((Ty.param 1).inst args)) [k, (Ty.param 1).inst args]
+    let S := slotsOf d dt n 2 t
+    let R ← slotTerms f S
+    let (r, c) ← collOf L (.table k ((Ty.param 2).inst args)) [k, (Ty.param 2).inst args]
+      (mapSlots (fun xs q => [xs.headD q, q]) S (R.map (·.1)))
+    pure (r, andT (guardsT S (R.map (·.2))) c)
+  | .tableKeys, args, _ => .ok fun (t, ()) => do
+    let k := (Ty.param 0).inst args
+    let (d, n, dt) ← collD L (.table k ((Ty.param 1).inst args)) [k, (Ty.param 1).inst args]
+    let S := slotsOf d dt n 2 t
+    collOf L (.bag k) [k] (mapSlots (fun xs q => [xs.headD q]) S (S.map fun _ => tt))
+  | .tableValues, args, _ => .ok fun (t, ()) => do
+    let v := (Ty.param 1).inst args
+    let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) v) [(Ty.param 0).inst args, v]
+    let S := slotsOf d dt n 2 t
+    collOf L (.bag v) [v] (mapSlots (fun xs q => [xs.getD 1 q]) S (S.map fun _ => tt))
   | .tableCount, args, _ => .ok fun (t, f, ()) => do
     let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
       [(Ty.param 0).inst args, (Ty.param 1).inst args]
