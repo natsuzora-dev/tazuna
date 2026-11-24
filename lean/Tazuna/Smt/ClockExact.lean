@@ -1,7 +1,7 @@
 import Tazuna.Smt.Clock
 import Tazuna.Smt.CommandExact
 
-/-! The condition of a clock line's step with timers is exact (run-log entry 63): it fails only where a function the
+/-! The condition of a clock line's step is exact (run-log entry 63): it fails only where a function the
 step really applies outgrows a slot count. Every round asks for each machine's `after` and `effect` sources, and for
 both applied where an instance fires; the pending write asks that the requests fit the pending table; the invariants
 are asked at the line's time. Rounds past the first that fired nothing, and everything after a step that exceeds the
@@ -193,11 +193,11 @@ theorem instChecks_exact (recs : v.records.den0) (tnow : Int) {records now : Ter
   | [], [], _ :: _, h, _, _, _ | [], _ :: _, _, h, _, _, _ | _ :: _, [], _, h, _, _, _
   | _ :: _, _ :: _, [], h, _, _, _ => h.elim
 
-/-- The condition of a clock line's step with timers is exact: it holds exactly when, if time moves forward, every
+/-- The condition of a clock line's step is exact: it holds exactly when, if time moves forward, every
 firing round's functions fit, and, unless every round fires, the requests fit the pending table, the service's
 invariants fit at the records, and every machine's invariants fit at the instances the rounds leave, at the line's
 time. -/
-theorem clock_fire_exact {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape v.event)} (hne : shs ≠ [])
+theorem clock_exact {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) (s : State v) (hinv : Step.Inv P s) (time : Int) (hrd : v.records.isData = true)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
     {records now st pending nextIdT : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
@@ -207,7 +207,7 @@ theorem clock_fire_exact {P : List AnySite} (hP : SitesUnique P) {shs : List (Pe
     {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
-    {o : ClockFireOut} {cond : Term} (henc : encodeClockFire L T v shs dE dP dopt inv records now st pending nextIdT xs = .ok (o, cond)) :
+    {o : ClockOut} {cond : Term} (henc : encodeClock L T v shs dE dP dopt inv records now st pending nextIdT xs = .ok (o, cond)) :
     Holds M cond ↔ (s.now ≤ time →
       roundsFit L.count T { s with now := time } true (v.bounds.cascade.toNat + 1) ∧
       ∀ s' effs, Step.fire { s with now := time } (v.bounds.cascade.toNat + 1) = some (s', effs) →
@@ -257,7 +257,7 @@ theorem clock_fire_exact {P : List AnySite} (hP : SitesUnique P) {shs : List (Pe
         obtain ⟨hover, hmach, hs', -, svN, zsN, hSN, hwN, hhN, xsN, hpN, hqN⟩ := hro
         rw [holds_ite, hover]
         simp only [Val.toBool, Bool.false_eq_true, ite_false]
-        have ep := pending_exact hne hpend hSN hwN hhN hpN hqN h2
+        have ep := pending_exact hpend hSN hwN hhN hpN hqN h2
         have ec := instChecks_exact s.records time hrd hrec hst v.machines ro.tables s'.machines hmach h6
         rw [holds_andT, holds_andT, ep, hx, ec]
         constructor

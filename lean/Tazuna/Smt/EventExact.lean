@@ -2,9 +2,10 @@ import Tazuna.Smt.ReactExact
 import Tazuna.Smt.EventStep
 import Tazuna.Smt.Bounds
 
-/-! The conditions `event_step` (T2 for an event with machines) takes are exact: each holds exactly when the
-functions the step applies fit the layout's slot counts. The service's part applies the subscription's wrap, `apply`
-and the invariants; each machine's part its reaction (`react_exact`) and every instance's invariants. -/
+/-! The conditions `event_step` (T2 for an event) takes are exact: each holds exactly when the functions the step
+applies fit the layout's slot counts. The service's part applies the subscription's wrap, `apply` and the invariants;
+each machine's part its reaction (`react_exact`) and every instance's invariants. The reactions' condition
+(`reactions_exact`) and the pending write's (`pending_exact`) are proved beside their encodings. -/
 
 namespace Tazuna.Smt
 
@@ -309,9 +310,9 @@ theorem machines_exact (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) 
   | [], [], _ :: _, _, _, h, _, _ | [], _ :: _, _, _, _, h, _, _ | _ :: _, [], _, _, _, h, _, _
   | _ :: _, _ :: _, [], _, _, h, _, _ => h.elim
 
-/-- The conditions `event_step` takes are exact together: the codes', the service part's and the machines' hold
-exactly when the kept sources fit, the service's functions fit where the step applies them, and every machine's part
-fits on the records after the event. -/
+/-- The service's and machines' conditions `event_step` takes are exact together: the codes', the service part's and
+the machines' hold exactly when the kept sources fit, the service's functions fit where the step applies them, and
+every machine's part fits on the records after the event. -/
 theorem event_step_exact (s : State v) (i : Fin v.subscribes.length) (value : (v.subscribes.get i).event.den0)
     (hd : EventData v i) {ec : EventCode v i} {ce : Term} (hec : EventCode.of L v i = .ok (ec, ce)) {records sv now : Term}
     (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
@@ -342,38 +343,6 @@ theorem event_step_exact (s : State v) (i : Fin v.subscribes.length) (value : (v
     have hce := (eventCode_exact (M := M) hec).2 p0
     have hc := (e2 hce).2 p1
     exact ⟨p0, hc, (e3 hce hc).2 p2⟩
-
-end
-
-
-section
-variable {L : Layout} {M : Model}
-
-/-- The condition of a clock line's step is exact: it holds exactly when, if time moves forward, the invariants fit
-at the records. -/
-theorem clock_exact {v : ServiceV} (s : State v) (time : Int) (hrd : v.records.isData = true)
-    {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
-    {records now st : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
-    (hnow : now.denote M = .int s.now) (hst : st.denote M = .int time)
-    {o : ClockOut} {cond : Term} (henc : encodeClock L inv records now st = .ok (o, cond)) :
-    Holds M cond ↔ (s.now ≤ time → v.invariants.appFits L.count (s.records, ())) := by
-  obtain ⟨rc, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨invs, c⟩, h2, henc⟩ := bind_ok.1 henc
-  obtain ⟨rules, -, henc⟩ := bind_ok.1 henc
-  cases pure_ok.1 henc
-  have hrc : Smt.Rel M L _ (Ty.up _ hrd s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
-  have hargs : Smt.Rels M L [v.records] (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hrd])
-      (s.records, ())) (rc, ()) := by
-    show Smt.Rel M L _ (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hrd]) (s.records, ())).1 rc ∧ True
-    erw [Ty.up_tuple _ _ _ hrd rfl]; exact ⟨hrc, trivial⟩
-  have hx := v.invariants.app_exact hci hcinv (by simpa using ofTerm_notFn (need_ok.1 h1)) _ _ hargs h2
-  by_cases ht : s.now ≤ time
-  · have : Holds M (.ite (.le now st) c tt) ↔ Holds M c := by
-      simp [holds_ite, Term.denote, hnow, hst, Val.toInt, Val.toBool, ht]
-    rw [this, hx]; exact ⟨fun h _ => h, fun h => h ht⟩
-  · have : Holds M (.ite (.le now st) c tt) := by
-      simp [holds_ite, Term.denote, hnow, hst, Val.toInt, Val.toBool, ht, holds_tt]
-    exact ⟨fun _ h => absurd h ht, fun _ => this⟩
 
 end
 

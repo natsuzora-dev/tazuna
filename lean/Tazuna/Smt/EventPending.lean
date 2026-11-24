@@ -358,7 +358,7 @@ theorem forall2_map_eq {α β γ : Type} {R : α → β → Prop} (f : α → γ
 /-- T2 for writing the new entries into the pending table: wherever the condition holds, the new table denotes the
 state's pending requests with the requests the step writes for the effects (in some order: pending requests are a
 multiset), when the state's wire ids are distinct and below the first new id. -/
-theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : List (String × DeclaredV)} (hne : shs ≠ [])
+theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : List (String × DeclaredV)}
     {pending : Term} {ps0 : List (Step.Pending v.event)} (hpend : PendingRel L shs (pending.denote M) ps0)
     {n0 : Nat} (hbelow : ∀ p ∈ ps0, p.id < n0) (hnd : (ps0.map (·.id)).Nodup)
     {effs : List (Sender × EffectV v.event)} {news : List Slot} {sv : List (Bool × List Val)}
@@ -368,7 +368,6 @@ theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : Lis
     {pT c : Term} (henc : encodePending L shs pending news = .ok (pT, c)) (hc : Holds M c) :
     ∃ ps, Forall2 (Step.Writes ds) (effs.zipIdx n0) ps ∧
       ∃ ps', ps'.Perm (ps0 ++ ps) ∧ PendingRel L shs (pT.denote M) ps' := by
-  obtain ⟨sh0, rest, rfl⟩ := List.exists_cons_of_ne_nil hne
   obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   obtain ⟨tbl, ⟨d', n', dt', m', sv0, hf, hft, hl, hv, hw0, ys0, hp0, hh0⟩, hlist⟩ := hpend
@@ -382,14 +381,14 @@ theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : Lis
   -- The requests in the order of the effects.
   obtain ⟨zs'', hzp, hq'⟩ := forall2_perm hxs (forall2_flip hq)
   have hq'' := forall2_flip hq'
-  refine ⟨zs''.map fun y => pendingOf (sh0 :: rest) y.1 y.2, forall2_map_r _ (forall2_imp (fun _ _ h => h.2) hq''), ?_⟩
-  let key : (Ty.dsl .fresh []).den × (pendingEntry (sh0 :: rest)).den → Nat := fun y => y.1
+  refine ⟨zs''.map fun y => pendingOf shs y.1 y.2, forall2_map_r _ (forall2_imp (fun _ _ h => h.2) hq''), ?_⟩
+  let key : (Ty.dsl .fresh []).den × (pendingEntry shs).den → Nat := fun y => y.1
   have hkeysNew : zs.map key = xs.map (·.2) := (forall2_map_eq (·.2) key (fun _ _ h => h.1.symm) hq).symm
   have hkeysOld : (ys0.map key).Perm (ps0.map (·.id)) := by
     rw [← hlist]
     simp only [pendingList, List.map_map]
-    have : ((·.id) ∘ fun y : (Ty.dsl .fresh []).den × (pendingEntry (sh0 :: rest)).den =>
-      pendingOf (sh0 :: rest) y.1 y.2) = key := funext fun y => pendingOf_id _ _ _
+    have : ((·.id) ∘ fun y : (Ty.dsl .fresh []).den × (pendingEntry shs).den =>
+      pendingOf shs y.1 y.2) = key := funext fun y => pendingOf_id _ _ _
     rw [this]
     exact hp0.map _
   have hnew : (zs.map key).Perm (List.range' n0 effs.length) := by
@@ -404,7 +403,7 @@ theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : Lis
     obtain ⟨p, hp, rfl⟩ := List.mem_map.1 (hkeysOld.mem_iff.1 hb)
     have := hbelow p hp
     omega
-  let tbl' : (pendingTable (sh0 :: rest)).den := ⟨zs', by
+  let tbl' : (pendingTable shs).den := ⟨zs', by
     refine List.Pairwise.imp ?_ (List.pairwise_map.1 hkeys)
     intro a b hab
     have h1 : ¬ (a.1 : Nat) = b.1 := hab
@@ -429,7 +428,7 @@ variable {L : Layout} {M : Model}
 
 /-- The condition of writing the new entries is exact: it holds exactly when the pending requests and the new ones
 together fit the pending table's slots, so a false condition means the step really outgrows the bound. -/
-theorem pending_exact {v : ServiceV} {shs : List (PendingShape v.event)} (hne : shs ≠ [])
+theorem pending_exact {v : ServiceV} {shs : List (PendingShape v.event)}
     {pending : Term} {ps0 : List (Step.Pending v.event)} (hpend : PendingRel L shs (pending.denote M) ps0)
     {effs : List (Sender × EffectV v.event)} {news : List Slot} {sv : List (Bool × List Val)}
     {zs : List ((Ty.dsl .fresh []).den × (pendingEntry shs).den)} (hS : SlotsDen M news sv)
@@ -438,7 +437,6 @@ theorem pending_exact {v : ServiceV} {shs : List (PendingShape v.event)} (hne : 
     {ds : List (String × DeclaredV)} (hq : Forall2 (WritesEntry shs ds) xs zs)
     {pT c : Term} (henc : encodePending L shs pending news = .ok (pT, c)) :
     Holds M c ↔ ps0.length + effs.length ≤ L.count (pendingTable shs) := by
-  obtain ⟨sh0, rest, rfl⟩ := List.exists_cons_of_ne_nil hne
   obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   obtain ⟨tbl, ⟨d', n', dt', m', sv0, hf, hft, hl, hv, hw0, ys0, hp0, hh0⟩, hlist⟩ := hpend
@@ -450,7 +448,7 @@ theorem pending_exact {v : ServiceV} {shs : List (PendingShape v.event)} (hne : 
   rw [hl] at hT
   rw [moveAll_exact d dt 2 hS hw hT hw0, ← holds2_length hh, ← holds2_length hh0, ← forall2_length hq, hxs.length_eq,
     List.length_zipIdx, hp0.length_eq, hl, ← hlist, pendingList, List.length_map]
-  have hc : L.count (pendingTable (sh0 :: rest)) = n := by simp [Layout.count, hf1]
+  have hc : L.count (pendingTable shs) = n := by simp [Layout.count, hf1]
   rw [hc]
   omega
 
@@ -504,11 +502,10 @@ theorem belowT_iff {w : Ty} {n : Term} {n0 : Nat} (hn : n.denote M = .int (n0 : 
         exact and_congr_left' Int.ofNat_lt
 
 /-- The asserted invariant is exact: it holds exactly when every pending wire id is below the next one. -/
-theorem pendingBelow_iff {v : ServiceV} {shs : List (PendingShape v.event)} (hne : shs ≠ [])
+theorem pendingBelow_iff {v : ServiceV} {shs : List (PendingShape v.event)}
     {pending nextId : Term} {ps0 : List (Step.Pending v.event)} (hpend : PendingRel L shs (pending.denote M) ps0)
     {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int)) {t : Term} (henc : pendingBelowT L shs pending nextId = .ok t) :
     Holds M t ↔ ∀ p ∈ ps0, p.id < n0 := by
-  obtain ⟨sh0, rest, rfl⟩ := List.exists_cons_of_ne_nil hne
   obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   obtain ⟨tbl, ⟨d', n', dt', m', sv0, hf, hft, hl, hv, hw0, ys0, hp0, hh0⟩, hlist⟩ := hpend
@@ -524,7 +521,7 @@ theorem pendingBelow_iff {v : ServiceV} {shs : List (PendingShape v.event)} (hne
   · rintro h _ ⟨y, hy, rfl⟩
     exact lt_of_eq_of_lt (pendingOf_id _ _ _) (h y (hp0.mem_iff.2 hy))
   · intro h y hy
-    exact lt_of_eq_of_lt (pendingOf_id (sh0 :: rest) y.1 y.2).symm (h _ ⟨y, hp0.mem_iff.1 hy, rfl⟩)
+    exact lt_of_eq_of_lt (pendingOf_id shs y.1 y.2).symm (h _ ⟨y, hp0.mem_iff.1 hy, rfl⟩)
 
 end
 

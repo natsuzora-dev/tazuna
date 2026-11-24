@@ -101,7 +101,7 @@ def SortedVs : List Ty → List Val → Prop
   | t :: ts, w :: ws => Sorted t w ∧ SortedVs ts ws
   | _, _ => False
 def SortedAlts (d : Nat) : Nat → List (List Ty) → Val → Prop
-  | _, [], _ => False
+  | k, [], w => k = 0 ∧ w = .ctor d 0 []
   | k, fs :: vs, w => ∃ k' vals, w = .ctor d k' vals ∧ ((k' = k ∧ SortedVs fs vals) ∨ (k' ≠ k ∧ SortedAlts d (k + 1) vs w))
 end
 
@@ -388,7 +388,10 @@ theorem wfFields_iff (d k : Nat) : (ts : List Ty) → (x : Term) → (vs : List 
 theorem wfAlts_iff (d : Nat) : (k : Nat) → (vs : List (List Ty)) → (x : Term) → (c : Term) →
     wfAlts L d k vs x = some c → SortedAlts L d k vs (x.denote M) →
     (Holds M c ↔ (decodeAlts L d k vs (x.denote M)).isSome = true)
-  | _, [], _, _, _, hs => hs.elim
+  | _, [], _, c, h, _ => by
+    simp only [wfAlts, Option.some.injEq] at h
+    subst h
+    simp [Holds, Term.denote, Val.toBool, decodeAlts]
   | k, fs :: vs, x, c, h, ⟨k', vals, hw, hs⟩ => by
     obtain ⟨c1, h1, h⟩ := Option.bind_eq_some_iff.1 h
     obtain ⟨c2, h2, rfl⟩ := Option.map_eq_some_iff.1 h
@@ -514,6 +517,7 @@ theorem decodeAlts_sorted (d : Nat) : (k : Nat) → (vs : List (List Ty)) → (v
       have hd : d' = d := by
         match vs, hs with
         | _ :: _, ⟨_, _, hw, _⟩ => cases hw; rfl
+        | [], hs => exact absurd hs.1 (Nat.succ_ne_zero _)
       subst hd
       exact ⟨k', vals, rfl, .inr ⟨fun h => hc ⟨rfl, h⟩, hs⟩⟩
   | _, _ :: _, .int _, _, h | _, _ :: _, .bool _, _, h | _, _ :: _, .str _, _, h => by simp [decodeAlts] at h

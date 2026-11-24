@@ -1,7 +1,7 @@
 import Tazuna.Smt.Fire
 import Tazuna.Smt.EventPending
 
-/-! A clock line's step with machine timers. Time moves to the line's time, then rounds fire, at most `cascade + 1`:
+/-! A clock line's step. Time moves to the line's time, then rounds fire, at most `cascade + 1`:
 each round finds the earliest deadline among the due timers of every machine (`minDueT`, a fold over all slots, so
 the order of slots does not matter), then the machines in order fire their first instance at that deadline, each
 unless an earlier machine fired (`encodeFires`, the done flag threading `Step.fireMachines`). A round with no due
@@ -673,10 +673,10 @@ def encodeInstChecks : List (MachineV r e) → List Term → (records now : Term
 def checksBroken (M : Model) (ms : List (MachineV r e)) (checks : List (List InstCheck)) : List String :=
   (ms.zip checks).flatMap fun (m, cs) => instBroken L T M m.key cs
 
-/-- What a clock line's step with timers encodes: whether time moves forward, whether every round fired (the cascade
+/-- What a clock line's step encodes: whether time moves forward, whether every round fired (the cascade
 bound is exceeded), the instance tables after the rounds, the service's invariants and every instance's checks at the
 line's time, and the pending table and next wire id after the rounds' requests. -/
-structure ClockFireOut where
+structure ClockOut where
   forward : Term
   over : Term
   tables : List Term
@@ -688,9 +688,9 @@ structure ClockFireOut where
 /-- A clock line's step from the state terms: `cascade + 1` firing rounds at the line's time `time`, the requests
 they start written into the pending table, then the invariants. Each part's condition is asked only where the step
 reaches it. -/
-def encodeClockFire (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt : Nat)
+def encodeClock (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt : Nat)
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (records now time pending nextId : Term) (xs : List Term) :
-    Except Refusal (ClockFireOut × Term) := do
+    Except Refusal (ClockOut × Term) := do
   let (ro, cr) ← encodeRounds L T shs v.declared dE dP dopt v.machines records time (v.bounds.cascade.toNat + 1) xs tt
     nextId
   let (pT, cp) ← encodePending L shs pending ro.news
@@ -751,13 +751,12 @@ theorem step_clock_requests (s : State v) (time : Int) (ht : ¬time < s.now) {s'
   simp only [bind, Except.bind, Step.settle, Step.Acc.wrote]
   rfl
 
-/-- T2 for a clock line with machine timers, on a service whose requests have pending shapes: wherever the
-conditions hold, a time before the state's is Invalid; when every one of the `cascade + 1` rounds fires the step is
-the cascade fault; else a broken invariant's name (the service's first, then each machine's instances in key order)
-is the step's fault, and otherwise the step is accepted: time moves to the line's, the machines are the ones the
-tables denote, the rounds' requests are written at the next wire ids and sent, the pending table term denotes the
-pending requests (as a multiset) and the next id term the next wire id. -/
-theorem clock_fire_step {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape v.event)} (hne : shs ≠ [])
+/-- T2 for a clock line: wherever the conditions hold, a time before the state's is Invalid; when every one of the
+`cascade + 1` rounds fires the step is the cascade fault; else a broken invariant's name (the service's first, then
+each machine's instances in key order) is the step's fault, and otherwise the step is accepted: time moves to the
+line's, the machines are the ones the tables denote, the rounds' requests are written at the next wire ids and sent,
+the pending table term denotes the pending requests (as a multiset) and the next id term the next wire id. -/
+theorem clock_step {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) (s : State v) (hinv : Step.Inv P s) (time : Int) (hrd : v.records.isData = true)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
     {records now st pending nextIdT : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
@@ -767,7 +766,7 @@ theorem clock_fire_step {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
-    {o : ClockFireOut} {cond : Term} (henc : encodeClockFire L T v shs dE dP dopt inv records now st pending nextIdT xs = .ok (o, cond))
+    {o : ClockOut} {cond : Term} (henc : encodeClock L T v shs dE dP dopt inv records now st pending nextIdT xs = .ok (o, cond))
     (hc : Holds M cond) :
     let r := step T v s (.clock time)
     if (o.forward.denote M).toBool then
@@ -824,7 +823,7 @@ theorem clock_fire_step {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
       obtain ⟨hcp, hci'⟩ := (holds_andT _ _).1 hrest
       obtain ⟨hci2, hcm⟩ := (holds_andT _ _).1 hci'
       obtain ⟨svN, zsN, hSN, hwN, hhN, xsN, hpN, hqN⟩ := hnews
-      obtain ⟨ps, hps, ps', hperm, hrelP⟩ := pending_rel hne hpend hinv.below hinv.nodup hSN hwN hhN hpN hqN h2 hcp
+      obtain ⟨ps, hps, ps', hperm, hrelP⟩ := pending_rel hpend hinv.below hinv.nodup hSN hwN hhN hpN hqN h2 hcp
       have hs'n : s'.nextId = s.nextId := by rw [hs']
       have hs'p : s'.pending = s.pending := by rw [hs']
       have hs'r : s'.records = s.records := by rw [hs']

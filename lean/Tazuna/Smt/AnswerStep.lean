@@ -523,7 +523,10 @@ theorem answer_unmatched (s : State v) {shs : List (PendingShape v.event)} (to :
   | none => simp only [step, hf]
   | some p =>
   match shs, hpend, henc with
-  | [], hpend, _ => simp only [PendingRel] at hpend; simp [hpend] at hf
+  | [], ⟨tbl, _, hlist⟩, _ =>
+    match tbl, hlist with
+    | ⟨[], _⟩, hlist => simp only [pendingList, List.map_nil] at hlist; simp [← hlist] at hf
+    | ⟨(_, x) :: _, _⟩, _ => exact nomatch x
   | sh0 :: rest, ⟨tbl, htbl, hlist⟩, henc =>
   obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨de, dn⟩, h2, henc⟩ := bind_ok.1 henc

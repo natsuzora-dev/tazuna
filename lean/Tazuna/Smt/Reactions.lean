@@ -5,8 +5,7 @@ import Tazuna.Smt.ReactExact
 effect value the layout codes is a request, so each occupied slot is written into the pending table. The step starts
 them after the machines' effects, reactions in order and each reaction's effects in list order, so a slot's wire id is
 the id after the effects before it: a running count over the slots (`reactSlots`), linear in the slots.
-`event_step_effects` is T2 for the whole event step with pending shapes: machines, reactions, the pending write and
-the invariants. -/
+`event_step` is T2 for the whole event step: machines, reactions, the pending write and the invariants. -/
 
 namespace Tazuna.Smt
 
@@ -255,13 +254,13 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model}
 
-/-- T2 for an event on a service whose machines and reactions start requests: wherever the conditions hold, a broken
-invariant's name (the service's first, then each machine's instances in key order) is the step's fault, and otherwise
-the step is accepted with the records, the instance tables and the event the terms denote; it writes the requests
-`ps` (machines' first, then reactions') at the next wire ids and sends them as its out lines, the pending table term
-denotes the pending requests (as a multiset) and the next id term the next wire id. -/
-theorem event_step_effects {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx : ∀ x ∈ v.reactions, x.Reach P)
-    {shs : List (PendingShape v.event)} (hne : shs ≠ []) (hshs : ∀ sh ∈ shs, sh.InSites P)
+/-- T2 for an event: wherever the conditions hold, a broken invariant's name (the service's first, then each machine's
+instances in key order) is the step's fault, and otherwise the step is accepted with the records, the instance tables
+and the event the terms denote; it writes the requests `ps` (machines' first, then reactions') at the next wire ids
+and sends them as its out lines, the pending table term denotes the pending requests (as a multiset) and the next id
+term the next wire id. -/
+theorem event_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx : ∀ x ∈ v.reactions, x.Reach P)
+    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (s : State v) (hinv : Step.Inv P s) (i : Fin v.subscribes.length)
     (value : (v.subscribes.get i).event.den0) (hd : EventData v i) {ec : EventCode v i} {ce : Term}
     (hec : EventCode.of L v i = .ok (ec, ce)) (hce : Holds M ce) {records sv now nextIdT pending : Term}
@@ -309,7 +308,7 @@ theorem event_step_effects {P : List AnySite} (hP : SitesUnique P) {v : ServiceV
   obtain ⟨hnR, hnews2⟩ := reactions_rel hP hshs hE hPE recs' s.now ev hd.records hd.event hr' hnow he' v.reactions hvx
     hnT hrx hcr
   obtain ⟨svA, zsA, hSA, hwA, hhA, xsA, hxpA, hqA⟩ := newsRel_append hnews1 hnews2
-  obtain ⟨ps, hps, ps', hperm, hrelP⟩ := pending_rel hne hpend hinv.below hinv.nodup hSA hwA hhA hxpA hqA hpe hcp
+  obtain ⟨ps, hps, ps', hperm, hrelP⟩ := pending_rel hpend hinv.below hinv.nodup hSA hwA hhA hxpA hqA hpe hcp
   have hlen : ps.length = (startedBy T s recs' ev ++ reactedBy s recs' ev).length := by
     rw [← forall2_length hps, List.length_zipIdx]
   simp only [r]

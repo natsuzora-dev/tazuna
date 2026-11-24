@@ -330,7 +330,7 @@ def defaultsWith : List Ty → Option (List Term)
   | [] => some []
   | t :: ts => do pure ((← defaultWith t) :: (← defaultsWith ts))
 def firstWith : List (List Ty) → Option (List Term)
-  | [] => none
+  | [] => some []
   | fs :: _ => defaultsWith fs
 end
 
@@ -874,11 +874,13 @@ def srt? (L : Layout) (t : Ty) : Option Srt :=
 /-- The declaration of a layout entry's datatype. -/
 def datatype? (L : Layout) : Ty × Nat → Option Datatype
   | (.tuple ts, _) => do pure ⟨[← ts.mapM L.srt?]⟩
+  -- A datatype needs a constructor (SMT-LIB declares none without one), so a type without variants gets one that codes
+  -- no value; so does the effect datatype with no kind.
+  | (.adt _ _ [], _) => some ⟨[[]]⟩
   | (.adt _ _ vs, _) => do pure ⟨← vs.mapM (·.mapM L.srt?)⟩
   | (.id, _) => some ⟨[[.int], [.str]]⟩
   | (.bag t, n) | (.list t, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, t]))]⟩
   | (.table k v, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, k, v]))]⟩
-  -- With no kind the datatype still needs a constructor (SMT-LIB declares none without one); it codes no value.
   | (.dsl .effect [e], _) => match L.effectsOf e with
     | [] => some ⟨[[]]⟩
     | ks => do pure ⟨← ks.mapM (·.fields.mapM L.srt?)⟩
