@@ -1,3 +1,4 @@
+import Tazuna.Ir.Reads
 import Tazuna.Semantics.Validation.NonCanonical
 
 namespace Tazuna.Semantics.Validation.Canonical
@@ -79,8 +80,31 @@ def states (s : Structure) : List NonCanonical :=
             let arrives := !(s.rejectionKinds d.service r).isEmpty
             if arrives == written then none else some (onRejected d.ref arrives (.request st.name trigger))
 
+/--
+Each binds of a command or automation with the bodies that receive it as `bound`, as Program.toFunctions pairs them
+under withBound: a command's requires, ensures and decide, and an automation's guard and react.
+-/
+def boundReaders (p : Program) : List (Conditions × List Expr) :=
+  let conditions (l : List Conditions) (d : Ref) := (l.filter (·.definition == d)).flatMap (·.conditions.map (·.body))
+  let fns (l : List Fn) (d : Ref) := (l.filter (·.definition == d)).map (·.body)
+  p.binding.map (fun c => (c, conditions p.requirement c.definition ++ conditions p.ensures c.definition ++
+    fns p.decide c.definition)) ++
+  p.automationBinding.map (fun c => (c, conditions p.automationGuard c.definition ++ fns p.react c.definition))
+
+/-- Whether one of `bodies` reads the binding `name` of `bound`, or reads `bound` as a whole. -/
+def readsBinding (bodies : List Expr) (name : String) : Bool :=
+  bodies.any fun e => match argReads .bound e with
+    | none => true
+    | some fields => fields.contains name
+
+/-- The bindings that none of the bodies receiving them reads. Before conversion the program is empty, so none. -/
+def unreadBindings (s : Structure) : List NonCanonical :=
+  (boundReaders s.program).flatMap fun x =>
+    x.1.conditions.filterMap fun b =>
+      if readsBinding x.2 b.name then none else some (.unreadBinding x.1.definition b.name)
+
 /-- The NonCanonical violations that the structure shows. -/
 def check (s : Structure) : List NonCanonical :=
-  statelessMachines s ++ reenters s ++ automations s ++ states s
+  statelessMachines s ++ reenters s ++ automations s ++ states s ++ unreadBindings s
 
 end Tazuna.Semantics.Validation.Canonical

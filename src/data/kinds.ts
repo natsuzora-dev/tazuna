@@ -58,7 +58,6 @@ const nonCanonicalKinds = [
     "NonCanonical.ungroupedConstant",
     "NonCanonical.constantOffer",
     "NonCanonical.answerLiteral",
-    "NonCanonical.unreadBinding",
     "NonCanonical.undescribedService",
     "NonCanonical.undescribedDefinition",
   ]),

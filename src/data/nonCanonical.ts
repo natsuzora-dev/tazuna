@@ -32,8 +32,6 @@ export type SourceNonCanonical =
    * `fulfilled(output)`, or `rejected(kind, reason)` writes.
    */
   | Of<"answerLiteral", null, { readonly result: "accepted" | "fulfilled" | "rejected" }>
-  /** No function of the command or automation reads the binding of its `binds`. */
-  | Of<"unreadBinding", DefinitionRef, { readonly binding: string }>
   /** The service definer `service` has an empty `description`. */
   | Of<"undescribedService", null, { readonly service: string }>
   /** The definition has an empty `description`. */

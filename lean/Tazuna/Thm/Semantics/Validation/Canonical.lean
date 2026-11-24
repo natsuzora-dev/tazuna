@@ -23,6 +23,8 @@ structure CanonicalForms (s : Structure) : Prop where
   requestOnRejected : ∀ d ∈ s.definitions, ∀ c, d.chart? = some c → ∀ st ∈ c.states, ∀ a ∈ st.activities,
     ∀ trigger r written, requestOf a = some (trigger, r, written) →
       written = !(s.rejectionKinds d.service r).isEmpty
+  /-- Each binding of a command's or automation's `binds` is read by a body that receives it as `bound`. -/
+  bindingRead : ∀ x ∈ boundReaders s.program, ∀ b ∈ x.1.conditions, readsBinding x.2 b.name = true
 
 /--
 Canonical.check reports no violation exactly when the spec keeps every canonical form that the structure shows
@@ -90,7 +92,16 @@ Canonical.check reports no violation exactly when the spec keeps every canonical
         | some x =>
           obtain ⟨trigger, r, written⟩ := x
           simp [h d hd c hc st hst a ha trigger r written hr]
-  rw [machines, reenter, automation, request]
-  exact ⟨fun ⟨⟨⟨a, b⟩, c⟩, d⟩ => ⟨a, b, c, d⟩, fun ⟨a, b, c, d⟩ => ⟨⟨⟨a, b⟩, c⟩, d⟩⟩
+  have binding : unreadBindings s = [] ↔
+      ∀ x ∈ boundReaders s.program, ∀ b ∈ x.1.conditions, readsBinding x.2 b.name = true := by
+    simp only [unreadBindings, List.flatMap_eq_nil_iff, List.filterMap_eq_nil_iff]
+    constructor
+    · intro h x hx b hb
+      have := h x hx b hb
+      exact Classical.byContradiction fun hn => by simp [hn] at this
+    · intro h x hx b hb
+      simp [h x hx b hb]
+  rw [machines, reenter, automation, request, binding]
+  exact ⟨fun ⟨⟨⟨⟨a, b⟩, c⟩, d⟩, e⟩ => ⟨a, b, c, d, e⟩, fun ⟨a, b, c, d, e⟩ => ⟨⟨⟨⟨a, b⟩, c⟩, d⟩, e⟩⟩
 
 end Tazuna.Thm.Semantics.Validation.Canonical

@@ -17,7 +17,7 @@ derive_wire OnRejectedAt tag "kind"
 
 /--
 A form that changes no meaning but is not the one canonical way to write that meaning, which `Canonical.check` finds
-from the structure. TS finds the kinds that only the source shows.
+from the structure and its program. TS finds the kinds that only the source shows.
 -/
 inductive NonCanonical where
   /-- A transition to its source state or a descendant of it has no `reenter`. -/
@@ -32,6 +32,8 @@ inductive NonCanonical where
   | missingOnRejected (definition : Ir.Ref) («at» : OnRejectedAt)
   /-- The automation or the request `at` has an `onRejected`, but no answer can be rejected. -/
   | unreachableOnRejected (definition : Ir.Ref) («at» : OnRejectedAt)
+  /-- No function of the command or automation reads the binding `binding` of its `binds`. -/
+  | unreadBinding (definition : Ir.Ref) (binding : String)
 
 derive_group NonCanonical
 

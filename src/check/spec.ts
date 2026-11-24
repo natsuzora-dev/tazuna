@@ -11,7 +11,6 @@ import type { Place } from "../dsl/definition.ts";
 import { comparePlaces, type Found, placeOf, reportedOfFound } from "../load/found.ts";
 import { type Loaded, type LoadedSpec, loadSpec, type Spec, tsFiles } from "../load/load.ts";
 import * as answers from "./nonCanonical/answers.ts";
-import * as binds from "./nonCanonical/binds.ts";
 import * as constants from "./nonCanonical/constants.ts";
 import * as descriptions from "./nonCanonical/descriptions.ts";
 import * as keywords from "./nonCanonical/keywords.ts";
@@ -146,17 +145,14 @@ function typeErrors(
 
 /**
  * The spec with its functions converted to IR, or the Restricted.function violations of what `converter` leaves
- * outside the IR, or else the NonCanonical.unreadBinding violations that the IR shows. Without a converter, one runs
- * for this spec alone.
+ * outside the IR. Without a converter, one runs for this spec alone.
  */
-function converted(spec: Spec, converter: Converter | undefined): Spec | Found<Restricted | NonCanonical>[] {
+function converted(spec: Spec, converter: Converter | undefined): Spec | Found<Restricted>[] {
   const own = converter ?? new Converter();
   try {
     const { program, notConverted } = own.program(spec);
     const outside = functions.check(spec, notConverted);
-    if (outside.length > 0) return outside;
-    const unread = binds.check(spec, program);
-    return unread.length > 0 ? unread : { ...spec, structure: { ...spec.structure, program } };
+    return outside.length > 0 ? outside : { ...spec, structure: { ...spec.structure, program } };
   } finally {
     if (converter === undefined) own.close();
   }
@@ -211,7 +207,9 @@ export async function checkSpec(
   const checked = await checkUnconverted(root, typeChecked);
   if (checked.kind !== "checked") return checked;
   const done = converted(checked.spec, converter);
-  return Array.isArray(done)
-    ? violationsOf(checked.spec.sources.length, done)
+  // The structure is checked again with its program, which the NonCanonical.unreadBinding check reads.
+  const found = Array.isArray(done) ? done : structureViolations(done);
+  return found.length > 0
+    ? violationsOf(checked.spec.sources.length, found)
     : { kind: "checked", spec: done as ConvertedSpec };
 }

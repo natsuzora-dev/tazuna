@@ -17,7 +17,7 @@ export type OnRejectedAt =
 
 /**
  * A form that changes no meaning but is not the one canonical way to write that meaning, which `Canonical.check` finds
- * from the structure. TS finds the kinds that only the source shows.
+ * from the structure and its program. TS finds the kinds that only the source shows.
  */
 export type NonCanonical =
   /** A transition to its source state or a descendant of it has no `reenter`. */
@@ -65,6 +65,14 @@ export type NonCanonical =
       readonly data: {
         readonly at: OnRejectedAt;
       };
+    }
+  /** No function of the command or automation reads the binding `binding` of its `binds`. */
+  | {
+      readonly kind: "NonCanonical.unreadBinding";
+      readonly definition: DefinitionRef;
+      readonly data: {
+        readonly binding: string;
+      };
     };
 
 export const nonCanonicalKinds = [
@@ -74,4 +82,5 @@ export const nonCanonicalKinds = [
   "NonCanonical.statelessMachine",
   "NonCanonical.missingOnRejected",
   "NonCanonical.unreachableOnRejected",
+  "NonCanonical.unreadBinding",
 ] as const;

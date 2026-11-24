@@ -413,6 +413,7 @@ No theorem shows that it does.
 | When `check` reports none of the `NonCanonical` kinds that read only the structure, each transition has a `reenter` exactly when it leads within its source. | `canonical_check_eq_nil_iff` |
 | When `check` reports none of the `NonCanonical` kinds that read only the structure, each automation and each calls or sends has `onRejected` exactly when an answer may be rejected. | `canonical_check_eq_nil_iff` |
 | When `check` reports none of the `NonCanonical` kinds that read only the structure, no machine is stateless. | `canonical_check_eq_nil_iff` |
+| When `check` reports none of the `NonCanonical` kinds that read only the structure, a function that receives `bound` reads each binding of its command's or automation's `binds`. | `canonical_check_eq_nil_iff` |
 
 ### Coverage
 
