@@ -277,9 +277,9 @@ def sig : Prim → PrimSig :=
       ret := .dsl .bounds [a] }
   | .create =>
     { name := "create",
-      doc := "At most this many keys created in the table that `table` reads, a table field of the records.",
+      doc := "At most this many records in the table that `table` reads, a table field of the records, at any time.",
       tvars := ["records", "k", "v"], dataArgs := true,
-      params := [l "table" (.fn [a] (.table b (param 2))), l "at_most" .int], ret := .dsl .create [a] }
+      params := [l "table" (kept (.fn [a] (.table b (param 2)))), l "at_most" .int], ret := .dsl .create [a] }
   | .response =>
     { name := "response", doc := "After an event satisfying `after`, one satisfying `then` within the duration `within`.",
       tvars := ["event"], dataArgs := true,

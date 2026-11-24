@@ -118,11 +118,12 @@ structure SubscriptionV (e : Ty) where
   event : Ty
   wrap : Fun (Ty.fn [event] e)
 
-/-- A bound on the keys created in the table `table` reads from the records. -/
+/-- A bound on the records the table `table` reads from the records holds at any time. `table` is kept, so the
+bound's encoding reads the table through the accessor's code. -/
 structure CreateV (r : Ty) where
   key : Ty
   value : Ty
-  table : (Ty.fn [r] (.table key value)).den0
+  table : Fun (Ty.fn [r] (.table key value))
   atMost : Int
 
 structure BoundsV (r : Ty) where

@@ -1,4 +1,4 @@
-import Tazuna.Semantics.Value
+import Tazuna.Semantics.Eval
 
 /-! The structure rules: what a spec's structure must satisfy before any step runs. Each broken rule is one finding,
 named after the definition that breaks it. -/
@@ -107,25 +107,25 @@ def Ty.customOrNil : Ty → Bool
 mutual
 /-- Some value of a data type, when the type has one. -/
 def Ty.default? : (t : Ty) → Option t.den0
-  | .int => some (0 : Int)
-  | .str => some ""
-  | .list _ | .bag _ => some []
+  | .int => Option.some (0 : Int)
+  | .str => Option.some ""
+  | .list _ | .bag _ => Option.some []
   | .tuple ts => Ty.defaults? ts
   | .fn _ r => (Ty.default? r).map fun d _ => d
   | .adt _ _ vs => Ty.defaultAlt? vs
-  | .param _ => some ()
-  | .table _ _ => some ⟨[], .nil⟩
-  | .date => some (0 : Int)
-  | .id => some (IdV.fresh 0)
-  | .dsl k _ => by cases k <;> first | exact some (0 : Nat) | exact some ()
+  | .param _ => Option.some ()
+  | .table _ _ => Option.some ⟨[], .nil⟩
+  | .date => Option.some (0 : Int)
+  | .id => Option.some (IdV.fresh 0)
+  | .dsl k _ => by cases k <;> first | exact Option.some (0 : Nat) | exact Option.some ()
 def Ty.defaults? : (ts : List Ty) → Option (Ty.semsWith Dsl.base ts).1
-  | [] => some ()
+  | [] => Option.some ()
   | t :: ts => do pure (← Ty.default? t, ← Ty.defaults? ts)
 def Ty.defaultAlt? : (vs : List (List Ty)) → Option (Ty.semAltsWith Dsl.base vs).1
-  | [] => none
+  | [] => Option.none
   | fs :: vs => match Ty.defaults? fs with
-    | some x => some (.inl x)
-    | none => (Ty.defaultAlt? vs).map .inr
+    | Option.some x => Option.some (.inl x)
+    | Option.none => (Ty.defaultAlt? vs).map .inr
 end
 
 /-- Fields with defaults, except field `k`, which is a table of one entry. -/
@@ -156,7 +156,7 @@ def tableProbes (T : List TypeDecl) : (r : Ty) → List (String × r.den0)
 
 /-- The labels of the table fields a create reads: those whose probe makes its table nonempty. -/
 def CreateV.reads {r : Ty} (c : CreateV r) (probes : List (String × r.den0)) : List String :=
-  probes.filterMap fun (label, x) => if (c.table (x, ())).1.isEmpty then none else some label
+  probes.filterMap fun (label, x) => if (c.table.fn (x, ())).1.isEmpty then none else some label
 
 /-- Every broken structure rule of `s`, whose user types are `T`, with a message naming the definition. -/
 def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=

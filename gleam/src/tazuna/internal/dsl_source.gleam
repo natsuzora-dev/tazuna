@@ -328,7 +328,7 @@ pub fn bounds(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// At most this many keys created in the table that `table` reads, a table field of the records.
+/// At most this many records in the table that `table` reads, a table field of the records, at any time.
 pub fn create(
   table _table: fn(records) -> Table(k, v),
   at_most _at_most: Int,
@@ -740,6 +740,7 @@ pub const kept = [
   #("tazuna.send_command", 3, "on_answer"),
   #("tazuna.send_query", 3, "on_answer"),
   #("tazuna.subscribe", 1, "wrap"),
+  #("tazuna.create", 0, "table"),
 ]
 
 /// The types whose values are structure values, not data.

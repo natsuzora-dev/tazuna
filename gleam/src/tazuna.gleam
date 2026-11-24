@@ -320,7 +320,7 @@ pub fn bounds(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// At most this many keys created in the table that `table` reads, a table field of the records.
+/// At most this many records in the table that `table` reads, a table field of the records, at any time.
 pub fn create(
   table _table: fn(records) -> Table(k, v),
   at_most _at_most: Int,
