@@ -32,9 +32,15 @@ partial def withKeys : Expr → StateM (List String) Expr
   | .arr vs => do pure (.arr (← vs.mapM withKeys))
   | e => pure e
 
-/-- An automation's reaction to the payload `payload`: whether it sends its command, the command's input, and the facts. -/
+/--
+An automation's reaction to the payload `payload`: whether it sends its command or halts (Outcome), the command's input,
+and the facts.
+-/
 structure Reaction where
-  fires : Term
+  /-- Accepted when every binds value is present, every guard holds and react returns; halted when one of them throws. -/
+  outcome : Outcome
+  /-- That react returns a field that the encoding holds as no scalar. -/
+  gap : Term
   input : List (String × Term)
   /-- That the input fits the command's input schema, which the command otherwise rejects as invalid input. -/
   valid : Term
@@ -58,19 +64,24 @@ def reactionOf (st : Service) (p : Program) (pre : SRecords) (now : Term) (paylo
   let binds := conditionsOf p.automationBinding
   let bindTerms ← binds.mapM fun b => do
     let (v, e) ← seval base [] b.body
-    pure (b.name, v, Term.and (.not e) (.not v.nullish))
+    pure (b.name, v, ({ name := b.name, throws := e, passes := .not v.nullish } : Check))
   let env := { base with args := fun x => if x == .bound then some (.obj (bindTerms.map fun (n, v, _) => (n, v)))
                                           else base.args x }
   let guards ← (conditionsOf p.automationGuard).mapM fun c => do
     let (v, e) ← seval env [] c.body
-    pure (Term.and (.not e) v.truthy)
+    pure ({ name := c.name, throws := e, passes := v.truthy } : Check)
   let (input, err) ← seval env [] body
   let .obj fields := input | throw "a react that returns no object literal"
   let scalars := fields.map fun (f, v) => (f, v.scalarOf)
   let input := scalars.map fun (f, (t, _)) => (f, t)
   let props := propertiesWith ((st.schemaOf (.input a.sends.ref)).getD (.obj []))
   let fits := props.map fun pr => fieldHolds ((input.lookup pr.1).getD undefT) pr
-  pure { fires := conj (bindTerms.map (·.2.2) ++ guards ++ [.not err] ++ scalars.map (.not ·.2.2)),
+  -- The semantics checks the binds, then the guards, each up to the first that fails (workBody), then runs react.
+  let checks := bindTerms.map (·.2.2) ++ guards
+  let accepted := conj (checks.map (fun c => Term.and (.not c.throws) c.passes) ++ [.not err])
+  let halts := throwsFirst (checks.map (fun c => (c.throws, c.passes)) ++ [(err, tt)])
+  pure { outcome := { accepted, halted := { term := halts, fit := .exact } },
+         gap := .and accepted (disj (scalars.map (·.2.2))),
          input, valid := conj (fits.map (·.term)),
          facts := { vars := made.zipIdx.map fun (_, i) => (s!"{names}.k{i}", Ty.val), asserts := fresh,
                     -- A fresh key may equal the key of a deleted record, which no created key does.

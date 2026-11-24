@@ -638,6 +638,30 @@ structure Step where
   /-- The events that the step emits when it accepts, in order, each with the term that holds when it does and its payload. -/
   emitted : List (Term × Ir.Ref × List (String × Term))
 
+/--
+How a step of a chain ends, as terms over where it starts: it is accepted (a command accepts, an automation's reaction
+sends its command), it halts, or else it is rejected (a command rejects, a reaction does not fire). A halt comes before
+either, as the semantics stops there (Outcome in Semantics.Service.Command).
+-/
+structure Outcome where
+  accepted : Term
+  halted : Holds
+
+def Step.outcome (s : Step) : Outcome := { accepted := s.accepted, halted := s.halted }
+
+/--
+The rejection of a step whose caller is a service, each with the term that holds when it is the one where the step is
+rejected and does not halt: the caller, a ref field, a binds value, a requires condition, then a record that already
+exists, in the order the semantics checks them (requirementsRejection, evaluate).
+-/
+def Step.rejections (s : Step) : List (Term × Rejection) :=
+  let held (c : Check) : Term := .and (.not c.throws) c.passes
+  let checks := [(s.admitted, ({ kind := .permissionDenied } : Rejection)), (s.refs, { kind := .notFound })] ++
+    (s.binds ++ s.requires).map fun c => (held c, { kind := .requires, reason := some c.name })
+  let (before, found) := checks.foldl (fun (before, found) (passes, r) =>
+    (Term.and before passes, found ++ [(Term.and before (.not passes), r)])) (tt, [])
+  found ++ [(before, { kind := .alreadyExists })]
+
 /-- The paths through a decide item's choices between emits, each as the term that holds when it is taken. -/
 def emitPaths : SVal → List Term
   | .ite c a b => (emitPaths a).map (.and c) ++ (emitPaths b).map (.and (.not c))

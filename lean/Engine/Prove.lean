@@ -732,7 +732,8 @@ def replayUnordered (x : Induction) (fs : Functions IO) (u : Unordered) (o : Tie
     { service := st.service, records, now := clock, started := true, machines,
       deadlines := deadlines.zipIdx.map fun (d, i) => { d with order := i + 3 }, deadlineCount := deadlines.length + 2 }
   -- What a later message can see of a state: its records, and each machine's active states, context, deadlines and
-  -- requests to other services that wait, then the lines that the order wrote, each in a canonical order.
+  -- requests to other services that wait, then the lines that the order wrote and the faults that it raised that no
+  -- other property reports (Raised), each in a canonical order.
   let outcome (s : Service.State) : Value :=
     let requests (i : Instance) : Value := .arr ((s.pending.filterMap fun p => match p.requester with
       | .state id state => if id == i.id && !p.stale then
@@ -742,7 +743,10 @@ def replayUnordered (x : Induction) (fs : Functions IO) (u : Unordered) (o : Tie
           ("machines", .obj (s.machines.map fun i => (i.chart.name, .obj [
             ("active", .arr ((i.active.mergeSort (· ≤ ·)).map .str)), ("context", i.context),
             ("deadlines", deadlinesOf i.id s.deadlines), ("requests", requests i)]))),
-          ("outputs", .arr (outsOf s base.lines.size))]
+          ("outputs", .arr (outsOf s base.lines.size)),
+          ("faults", .arr ((s.violations.filterMap fun
+            | .fault f@(.rejectedAutomationCommand ..) => some (ToValue.toValue f)
+            | _ => none).mergeSort fun a b => decide (a.canonical ≤ b.canonical)))]
   let same (a b : Service.State) : Bool :=
     (a.halted.isSome && b.halted.isSome) || (outcome a).canonical == (outcome b).canonical
   let answerOf (target : Ir.Ref) (g : Given) : Ir.Answer :=
@@ -968,7 +972,7 @@ def Induction.plans (x : Induction) : List (Property × Plan) := Id.run do
             asserts := facts.asserts ++ [x.holds, machinesHold, o.pre, .not o.first.beyond, .not o.second.beyond] ++ goal }
         let cut := Term.or o.first.cut o.second.cut
         let gap := Term.or o.first.gap o.second.gap
-        -- The chains leave out faults, such as a failing invariant after a command, which other properties report.
+        -- The chains leave out the faults that other properties report, such as a failing invariant after a command.
         -- One query asks for both reasons to leave the pair or tie undecided, and the model tells which it found.
         let beyondFollowed := s!"a message of the {noun} can take more than {chainLimit} steps, past what prove follows"
         .asks [.of (ask [.or cut gap]) (fun

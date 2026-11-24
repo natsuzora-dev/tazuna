@@ -395,12 +395,14 @@ def eventWants (st : Service) (n : Node) (terms : Except String (SRecords × Lis
     for a in st.automations.filter (·.receives == event) do
       let .ok r := reactionOf st p pre now (.json payload) a "r" | continue
       let base := facts ++ r.facts
-      goals := goals ++ [(base, .not r.fires)]
+      -- A goal that the reaction sends a command whose input the encoding holds, or that it does not.
+      let fires := Term.and r.outcome.accepted (.not r.gap)
+      goals := goals ++ [(base, .not fires)]
       if a.sends.isOwn st.service then
         match stepWith st p pre used a.sends.ref.name (SJson.ofTerms r.input) (callerTerms (.service st.service)) now "rs." with
-        | .ok step => goals := goals ++ (advancing step).map fun g => (base ++ step.facts, conj [r.fires, r.valid, g])
-        | .error _ => goals := goals ++ [(base, r.fires)]
-      else goals := goals ++ [(base, r.fires)]
+        | .ok step => goals := goals ++ (advancing step).map fun g => (base ++ step.facts, conj [fires, r.valid, g])
+        | .error _ => goals := goals ++ [(base, fires)]
+      else goals := goals ++ [(base, fires)]
   return goals.map fun (f, g) => .solve [queryOf f g] line none
 
 /-- The operations of the screens open on `resource`: each offered payload, or any payload within the control's schema. -/

@@ -139,7 +139,7 @@ In that state, every waiting deadline falls due after the time of the orders, ex
 Each order runs each message to its end: the deadline's or event's transitions, the always transitions that follow, the own commands, the automations and machines that their events wake, and the activities of the states entered.
 `prove` follows at most 8 steps of each message.
 When a third own command can wait in the same round, the two may run after it, so `prove` takes as an automation's input any that it computes from any records within the bounds, and as an activity's input any that fits its schema.
-Two orders end the same when both halt, or when neither halts and both leave the same service state and write the same out lines, in any order.
+Two orders end the same when both halt, or when neither halts and both leave the same service state, write the same out lines, and raise the same `Fault.rejectedAutomationCommand` faults, each in any order.
 The service state is all that a later message can read: the records, and each machine's active states, context, waiting deadlines with their times, and requests to other services that await an answer, with their inputs.
 When they differ, `prove` reports `ChoiceDependent` in its counterexample.
 `prove` does not compare yet the orders of the following pairs:
@@ -219,7 +219,7 @@ Each row below names one thing that a detection leaves out.
 | `prove` | | Strings with a character after U+2FFFF, which Z3's strings cannot hold. |
 | `Restricted` | It looks for the names of clocks, random sources, and locales in the spec files and in the local files that they import by a relative path. | A clock, random source, or locale that module code reaches by another name, or through a package that the spec imports. |
 | `ChoiceDependent` | `prove` compares [both orders](#orders-that-prove-compares) of each pair from any state. | The pairs that [`prove` leaves undecided](#what-a-prove-verdict-means). |
-| `ChoiceDependent` | | Faults inside a message, such as a failing invariant after a command, which other properties report. |
+| `ChoiceDependent` | | Faults inside a message that other properties report, such as a failing invariant after a command. |
 | `RegionOrderDependent` | It compares what the transitions of parallel regions on one event read and assign in the steps that a run takes. | The transitions that no scenario's run or trace's replay takes together. |
 | `InvalidInput` | It checks an external peer's lines against the peer's contract. | A `requires` that reads more than the input, and an `ensures` that reads records. |
 

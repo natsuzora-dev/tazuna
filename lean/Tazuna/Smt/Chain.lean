@@ -43,6 +43,17 @@ structure Out where
   definition : Ir.Ref
   fields : List (String × Term)
 
+/--
+A fault that a message raises and that no other property reports, the term that holds when it does: an automation's own
+command rejected (Fault.rejectedAutomationCommand), which does not halt. `id` names where the chain raised it, as an out
+line's does.
+-/
+structure Raised where
+  id : String
+  guard : Term
+  automation : String
+  rejection : Rejection
+
 /-- An `after` deadline of a state: whether it waits, and when it is due. -/
 structure Armed where
   state : String
@@ -144,6 +155,7 @@ structure Path where
   used : List (String × List Term)
   machines : List (String × Mach) := []
   outs : List Out := []
+  faults : List Raised := []
   jobs : List Job := []
   round : List Waiting := []
   commands : List Waiting := []
@@ -210,6 +222,12 @@ def notT (a : Term) : Term := if a == tt then ff else if a == ff then tt else .n
 namespace Path
 
 def fork (x : Path) (c : Term) (tag : String) : Path := { x with pc := andT x.pc c, name := s!"{x.name}{tag}" }
+
+/-- The paths of `x` after a step that ends as `o`: accepted, rejected, and halted. -/
+def after (x : Path) (o : Outcome) : Path × Path × Path :=
+  let halts := o.halted.term
+  (x.fork (andT o.accepted (notT halts)) "a", x.fork (andT (notT o.accepted) (notT halts)) "r",
+   { x.fork halts "h" with halted := true })
 
 /-- A name for the path's next variables, and the path that has used it. -/
 def next (x : Path) : String × Path := (s!"{x.name}.{x.fresh}.", { x with fresh := x.fresh + 1 })
@@ -419,17 +437,18 @@ def runCommand (ce : ChainEnv) (x : Path) (w : Waiting) : Except String (List Pa
   let step ← stepWith ce.st ce.p x.records x.used w.command (SJson.ofTerms w.input) (callerTerms (.service ce.st.service))
     ce.now names
   let x := { x with facts := x.facts ++ [(names, { step.facts with fit := step.facts.fit.join step.halted.fit })] }
+  -- A command rejected as invalid input is the sender's fault, which halts (rejectedInput?).
+  let (ok, rejected, halted) := x.after { accepted := andT w.valid step.accepted,
+                                          halted := { step.halted with term := .or (notT w.valid) step.halted.term } }
+  -- An automation's rejected command is a fault that does not halt (automationAnswer), and nothing waits for it; a
+  -- state's waits for the answer.
+  let rejected := match w.sender with
+    | .state .. => { rejected with jobs := rejected.jobs ++ [.answered w.sender false] }
+    | .automation a => { rejected with faults := rejected.faults ++ step.rejections.zipIdx.map fun ((g, r), i) =>
+        { id := s!"{names}f{i}", guard := andT rejected.pc g, automation := a, rejection := r } }
   let answered (accepted : Bool) : List Job := match w.sender with
     | .state .. => [.answered w.sender accepted]
     | .automation _ => []
-  let halts := step.halted.term
-  -- A command rejected as invalid input is the sender's fault, which halts (rejectedInput?).
-  let invalid := { x.fork (notT w.valid) "i" with halted := true }
-  let halted := { x.fork (andT w.valid halts) "h" with halted := true }
-  -- An automation's rejected command is a violation that does not halt (automationAnswer), and nothing waits for it.
-  let rejected := x.fork (andT w.valid (andT (notT step.accepted) (notT halts))) "r"
-  let rejected := { rejected with jobs := rejected.jobs ++ answered false }
-  let ok := x.fork (andT w.valid (andT step.accepted (notT halts))) "a"
   let ok := { ok with records := step.post, used := step.used,
                       gap := .or ok.gap (.and ok.pc step.gap), beyond := .or ok.beyond (.and ok.pc step.beyond),
                       outs := ok.outs ++ step.emitted.zipIdx.map fun (((g, e, payload) : Term × Ir.Ref × List (String × Term)), (i : Nat)) =>
@@ -441,7 +460,7 @@ def runCommand (ce : ChainEnv) (x : Path) (w : Waiting) : Except String (List Pa
   let none_ := ok.fork (notT any) "q"
   let accepted := if step.emitted.isEmpty then [{ ok with jobs := ok.jobs ++ answered true }]
     else [{ some_ with jobs := some_.jobs ++ work ++ answered true }, { none_ with jobs := none_.jobs ++ answered true }]
-  pure (live ([invalid, halted, rejected] ++ accepted))
+  pure (live ([halted, rejected] ++ accepted))
 
 /-- The paths after the automation `a` reacts to `payload` when the guard `g` holds (Service.workBody). -/
 def react (ce : ChainEnv) (x : Path) (a : Automation) (g : Term) (payload : List (String × Term)) :
@@ -449,13 +468,16 @@ def react (ce : ChainEnv) (x : Path) (a : Automation) (g : Term) (payload : List
   let (names, x) := x.next
   let r ← reactionOf ce.st ce.p x.records ce.now (.json (SJson.ofTerms payload)) a names
   if !r.facts.vars.isEmpty then throw s!"{a.name} creates a key, which prove does not follow in a chain yet"
-  let fires := x.fork (andT g r.fires) "f"
+  let x := { x with facts := x.facts ++ [(names, r.facts)] }
+  let (fires, skips, halted) := x.after { accepted := andT g r.outcome.accepted,
+                                          halted := { r.outcome.halted with term := andT g r.outcome.halted.term } }
+  let fires := { fires with gap := .or fires.gap (.and fires.pc r.gap) }
   let fired := if a.sends.isOwn ce.st.service then
       { fires with round := fires.round ++ [({ order := a.order, sender := .automation a.name, command := a.sends.ref.name,
                                                input := r.input, valid := r.valid } : Waiting)] }
     else { fires with outs := fires.outs ++ [({ id := names, guard := fires.pc, kind := .command,
                                                 definition := a.sends.ref, fields := r.input } : Out)] }
-  pure (live [{ fired with facts := fired.facts ++ [(names, r.facts)] }, x.fork (notT (andT g r.fires)) "s"])
+  pure (live [fired, skips, halted])
 
 /-- The paths after a machine's evaluation: settled, then the event it takes, if any, then settled (Service.receiveWork). -/
 def receive (ce : ChainEnv) (x : Path) (chart : String) (event : Option (Term × String × List (String × Term))) :
@@ -618,10 +640,12 @@ def Path.absorb (a b : Path) : Path :=
   let keys : Std.HashSet String := a.facts.foldl (fun s (k, _) => s.insert k) ∅
   -- An out line's guard holds only on the paths that wrote it, so one from before the paths split is kept once.
   let ids : Std.HashSet String := a.outs.foldl (fun s o => s.insert o.id) ∅
+  let raised : Std.HashSet String := a.faults.foldl (fun s f => s.insert f.id) ∅
   { a with pc := Term.or a.pc b.pc, records := SRecords.ite c b.records a.records,
            used := a.used.map fun (e, us) => (e, (us.zip ((b.used.lookup e).getD [])).map fun (x, y) => pick x y),
            machines := a.machines.map fun (m, x) => (m, Mach.ite c ((b.mach? m).getD x) x),
            outs := a.outs ++ b.outs.filter (!ids.contains ·.id),
+           faults := a.faults ++ b.faults.filter (!raised.contains ·.id),
            jobs := (b.jobs.zip a.jobs).map fun (y, x) => y.join c x,
            round := (b.round.zip a.round).map fun (y, x) => y.join c x,
            commands := (b.commands.zip a.commands).map fun (y, x) => y.join c x,
@@ -711,11 +735,18 @@ structure Ending where
   machines : List (String × Mach)
   halted : Term
   outs : List Out
+  faults : List Raised
   gap : Term
   beyond : Term
   /-- That a message of the order has steps left past chainLimit. -/
   cut : Term
   facts : Facts
+
+/-- The items that `of` gives of `paths`, each `id` once, since forks share the items from before they split. -/
+def onceEach {α : Type} (paths : List Path) (of : Path → List α) (id : α → String) : List α :=
+  (paths.foldl (fun (seen, items) x => (of x).foldl (fun (seen, items) i =>
+    if seen.contains (id i) then (seen, items) else (seen.insert (id i), items ++ [i])) (seen, items))
+    ((∅ : Std.HashSet String), ([] : List α))).2
 
 def Ending.of (start : SRecords) (machines : List (String × Mach)) (paths : List Path) : Ending :=
   let finished := paths.filter (!·.cut)
@@ -723,9 +754,8 @@ def Ending.of (start : SRecords) (machines : List (String × Mach)) (paths : Lis
   { records := finished.foldr (fun x r => .ite x.pc x.records r) start,
     machines := machines.map fun (c, m) => (c, finished.foldr (fun x t => Mach.ite x.pc (mach x c m) t) m),
     halted := disj ((finished.filter (·.halted)).map (·.pc)),
-    outs := (finished.foldl (fun (seen, outs) x => x.outs.foldl (fun (seen, outs) o =>
-      if seen.contains o.id then (seen, outs) else (seen.insert o.id, outs ++ [o])) (seen, outs))
-      ((∅ : Std.HashSet String), ([] : List Out))).2,
+    outs := onceEach finished (·.outs) (·.id),
+    faults := onceEach finished (·.faults) (·.id),
     gap := disj (finished.map fun x => .and x.pc x.gap),
     beyond := disj (finished.map fun x => .and x.pc x.beyond),
     cut := disj ((paths.filter (·.cut)).map (·.pc)),
@@ -739,15 +769,22 @@ def countOf (outs : List Out) (o : Out) : Term :=
   (outs.filter fun x => x.kind == o.kind && x.definition == o.definition).foldl
     (fun n x => .add n (.ite (.and x.guard (same x)) (intLit 1) (intLit 0))) (intLit 0)
 
+/-- How many faults of `faults` are `f`'s fault where they are raised. -/
+def raisedCount (faults : List Raised) (f : Raised) : Term :=
+  (faults.filter fun x => x.automation == f.automation && x.rejection == f.rejection).foldl
+    (fun n x => .add n (.ite x.guard (intLit 1) (intLit 0))) (intLit 0)
+
 /--
 That two orders end differently: one halts and the other does not, or neither halts and their records, machines
-(Mach.differ) or out lines differ.
+(Mach.differ), out lines or raised faults differ.
 -/
 def Ending.differ (a b : Ending) : Term :=
   let outsDiffer := disj ((a.outs ++ b.outs).map fun o => .and o.guard (.not (.eq (countOf a.outs o) (countOf b.outs o))))
+  let faultsDiffer := disj ((a.faults ++ b.faults).map fun f =>
+    .and f.guard (.not (.eq (raisedCount a.faults f) (raisedCount b.faults f))))
   let machinesDiffer := disj ((a.machines.zip b.machines).map fun ((_, c), (_, d)) => c.differ d)
   .or (.not (.eq a.halted b.halted))
-    (conj [.not a.halted, .not b.halted, disj [.not (a.records.same b.records), machinesDiffer, outsDiffer]])
+    (conj [.not a.halted, .not b.halted, disj [.not (a.records.same b.records), machinesDiffer, outsDiffer, faultsDiffer]])
 
 /-- A deadline of a state of a chart. -/
 structure DeadlineRef where
@@ -1099,12 +1136,13 @@ def sendOrders (st : Service) (p : Program) (pre : SRecords) (used : List (Strin
         let r ← reactionOf st p read now (.json (SJson.ofTerms payload)) auto s!"{tag}.r"
         if !r.facts.vars.isEmpty then throw s!"{auto.name} creates a key in a round with a third own command"
         let w := waiting r.input r.valid
-        pure { pre := r.fires, facts := payloadFacts ++ read.facts st s!"{tag}.rd" ++ r.facts, sending := .input r.input,
-               waiting := fun x => pure (x, w) }
+        pure { pre := r.outcome.accepted, facts := payloadFacts ++ read.facts st s!"{tag}.rd" ++ r.facts,
+               sending := .input r.input, waiting := fun x => pure ({ x with gap := .or x.gap r.gap }, w) }
       else
         let r ← reactionOf st p pre now (.json (SJson.ofTerms payload)) auto s!"{tag}.r"
         let w := waiting r.input r.valid
-        pure { pre := r.fires, facts := payloadFacts ++ r.facts, sending := .payload payload, waiting := fun x => pure (x, w) }
+        pure { pre := r.outcome.accepted, facts := payloadFacts ++ r.facts, sending := .payload payload,
+               waiting := fun x => pure ({ x with gap := .or x.gap r.gap }, w) }
     | .activity chart state key =>
       let some c := st.charts.find? (·.name == chart) | throw s!"no chart {chart}"
       let some act := ((c.state? state).map (·.activities.find? (·.key == key))).join | throw s!"no activity {key}"
