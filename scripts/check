@@ -3,10 +3,11 @@ set -eu
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.elan/bin:$PATH"
 
-# The JavaScript target needs only node. The launcher's Erlang FFI is not built or run here yet.
-# gleam test leaves the converter corpus's IR in gleam/build/corpus.ir.json.
-(cd gleam && gleam format --check src test && gleam build --target javascript --warnings-as-errors &&
-  gleam test --target javascript)
+# Users run the launcher on either target, so both are built and tested. gleam test leaves the converter corpus's IR in
+# gleam/build/corpus.ir.json.
+(cd gleam && gleam format --check src test &&
+  gleam build --target javascript --warnings-as-errors && gleam test --target javascript &&
+  gleam build --target erlang --warnings-as-errors && gleam test --target erlang)
 (cd lean && lake build --wfail && lake exe gen-dsl ..)
 
 gleam_version=$(sed -n 's/^version = "\(.*\)"$/\1/p' gleam/gleam.toml)
@@ -28,4 +29,4 @@ esac
 kinds=$(mktemp)
 trap 'rm -f "$kinds"' EXIT
 (cd lean && lake exe kinds) >"$kinds"
-test/e2e/check "$kinds" "$PWD/lean/.lake/build/bin/tazuna-engine" "$PWD/gleam/build/dev/javascript/tazuna/tazuna.mjs"
+test/e2e/check "$kinds" "$PWD/lean/.lake/build/bin/tazuna-engine" "$PWD/gleam/build/dev"
