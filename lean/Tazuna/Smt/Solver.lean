@@ -2,8 +2,8 @@ import Tazuna.Smt.Script
 
 /-! Running the solver. Each script runs in its own solver process, which reads the script on stdin and prints its
 answer on stdout; the process boundary contains a solver crash, and a run past its time is killed. This is the one
-place that knows the solver is z3: its executable, its command line, and its resource limit, which is the one line
-outside standard SMT-LIB. -/
+place that knows the solver is z3: its executable, its command line, and the header lines outside standard SMT-LIB,
+its resource limit and its random seeds. -/
 
 namespace Tazuna.Smt
 
@@ -11,10 +11,15 @@ structure Solver where
   path : String := "z3"
   /-- z3's deterministic resource limit, so the same script gets the same verdict on any machine. -/
   rlimit : Nat := 50000000
+  /-- z3's random seeds, fixed so the same script gets the same answer, model included, on every run (Boogie sets
+  the same two options). -/
+  seed : Nat := 0
   /-- Wall-clock limit: the process is killed after this many ms. -/
   timeoutMs : Nat := 30000
 
-def Solver.header (s : Solver) : List String := [s!"(set-option :rlimit {s.rlimit})"]
+def Solver.header (s : Solver) : List String :=
+  [s!"(set-option :rlimit {s.rlimit})", s!"(set-option :smt.random_seed {s.seed})",
+    s!"(set-option :sat.random_seed {s.seed})"]
 
 /-- Runs one script and reads the answer. -/
 def Solver.run (s : Solver) (script : Script) : IO Answer := do
