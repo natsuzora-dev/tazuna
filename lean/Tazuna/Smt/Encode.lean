@@ -317,6 +317,21 @@ def putAll : List Slot → List (Term × Term) → List Slot × Term
 def need' {α : Type} (what : String) (b : Bool) (a : α) : Except Refusal α :=
   if b then .ok a else .error (.outside what)
 
+/-- Whether each slot's key is `key`. -/
+def hitQs (key : Term) (S : List Slot) : List Term := S.map fun sl => .eq key (sl.2.headD key)
+
+/-- A lookup of `key` in a table's slots: whether an occupied slot has the key, and the value of the first that has
+it (`dv` when none has). A table's keys are unique, so the first is the only one, whatever the slots' order. -/
+def lookupT (key dv : Term) (S : List Slot) : Term × Term :=
+  (anySlotT S (hitQs key S), pickT dv (List.zipWith (fun sl q => (sl.1, q, sl.2.getD 1 dv)) S (hitQs key S)))
+
+/-- The table's slots and the lookup of the key's code in them. -/
+def lookupCode (k v : Ty) (t key : Term) : Except Refusal (Term × Term) := do
+  let (d, n, dt) ← collD L (.table k v) [k, v]
+  let kt ← need' "a key type whose == is not SMT-LIB's =" k.eqable key
+  let dv ← need "a value type without a default term" (defaultT L v)
+  pure (lookupT kt dv (slotsOf d dt n 2 t))
+
 /-- The code of each built-in that has an exact encoding: a table of term builders indexed by the built-in. -/
 def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal (Code (p.ty.inst args)) :=
   match p, args, h with
@@ -424,6 +439,20 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let dp ← need' "a key type whose == is not SMT-LIB's =" k.eqable (← tupleD L [k, v])
     let (S, c) := putAll (← emptySlots L [k, v] n) (pairs.map fun p => (.sel dp 0 0 p, .sel dp 0 1 p))
     pure (slotsTerm d dt S, c)
+  | .tableGet, args, _ => .ok fun (t, key, ()) => do
+    let v := (Ty.param 1).inst args
+    let kt ← need "a key that has no term" (Code.term? _ key)
+    let (hit, found) ← lookupCode L ((Ty.param 0).inst args) v t kt
+    pure (.ite hit (← adtCtor L 3 [v] [[v], []] 0 [found]) (← adtCtor L 3 [v] [[v], []] 1 []), tt)
+  | .ref, args, _ => .ok fun (t, key, rej, next, ()) => do
+    let kt ← need "a key that has no term" (Code.term? _ key)
+    let (hit, found) ← lookupCode L ((Ty.param 0).inst args) ((Ty.param 1).inst args) t kt
+    let fc ← need "a value that has no term" (Code.ofTerm? ((Ty.param 1).inst args) found)
+    let (r, c) ← next (fc, ())
+    let rt ← need "a rejection that has no term" (Code.term? _ rej)
+    let a := (Ty.param 2).inst args
+    let e := (Ty.param 3).inst args
+    pure (.ite hit r (← adtCtor L 2 [a, e] [[a], [e]] 1 [rt]), .ite hit c tt)
   | p, _, _ => .error (.outside s!"the built-in {p.sig.name}")
 
 variable {G : List Ty} (gs : Encs G)

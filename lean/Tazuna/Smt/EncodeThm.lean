@@ -634,6 +634,10 @@ theorem bind_ok {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {
     (x >>= f) = .ok b ↔ ∃ a, x = .ok a ∧ f a = .ok b := by
   cases x <;> simp [bind, Except.bind]
 
+theorem map_ok {ε α β : Type} {x : Except ε α} {f : α → β} {b : β} :
+    f <$> x = .ok b ↔ ∃ a, x = .ok a ∧ f a = b := by
+  cases x <;> simp [Functor.map, Except.map]
+
 theorem pure_ok {ε α : Type} {a b : α} : (pure a : Except ε α) = .ok b ↔ a = b := by
   simp [pure, Except.pure]
 
@@ -837,6 +841,136 @@ end
 section
 variable {M : Model} {L : Layout}
 
+mutual
+theorem Val.eq_of_beq : (a b : Val) → Val.beq a b = true → a = b
+  | .int _, .int _, h | .bool _, .bool _, h | .str _, .str _, h => by simp [Val.beq] at h; rw [h]
+  | .ctor d k as, .ctor d' k' bs, h => by
+    simp only [Val.beq, Bool.and_eq_true, beq_iff_eq] at h; rw [h.1.1, h.1.2, Val.eq_of_beqs as bs h.2]
+  | .int _, .bool _, h | .int _, .str _, h | .int _, .ctor .., h | .bool _, .int _, h | .bool _, .str _, h
+  | .bool _, .ctor .., h | .str _, .int _, h | .str _, .bool _, h | .str _, .ctor .., h | .ctor .., .int _, h
+  | .ctor .., .bool _, h | .ctor .., .str _, h => by simp [Val.beq] at h
+theorem Val.eq_of_beqs : (as bs : List Val) → Val.beqs as bs = true → as = bs
+  | [], [], _ => rfl
+  | a :: as, b :: bs, h => by
+    simp only [Val.beqs, Bool.and_eq_true] at h; rw [Val.eq_of_beq a b h.1, Val.eq_of_beqs as bs h.2]
+  | [], _ :: _, h | _ :: _, [], h => by simp [Val.beqs] at h
+end
+
+theorem lookupBy_find {κ ν : Type} (f : κ → κ → Bool) (k : κ) : (xs : List (κ × ν)) →
+    lookupBy f k xs = (xs.find? fun e => f k e.1).map (·.2)
+  | [] => rfl
+  | (k', v) :: rest => by
+    cases h : f k k' <;> simp [lookupBy, h, lookupBy_find f k rest]
+
+/-- When no two items both satisfy `P`, an item that does is the one `find?` returns. -/
+theorem find_unique {α : Type} {P : α → Bool} : {xs : List α} → xs.Pairwise (fun a b => ¬(P a = true ∧ P b = true)) →
+    {a : α} → a ∈ xs → P a = true → xs.find? P = some a
+  | b :: rest, hu, a, ha, hp => by
+    rw [List.pairwise_cons] at hu
+    rw [List.find?_cons]
+    rcases List.mem_cons.1 ha with rfl | ha'
+    · simp [hp]
+    · by_cases hb : P b = true
+      · exact absurd ⟨hb, hp⟩ (hu.1 a ha')
+      · simp only [hb]; exact find_unique hu.2 ha' hp
+
+theorem find_perm {α : Type} {P : α → Bool} {xs ys : List α} (hp : xs.Perm ys)
+    (hu : xs.Pairwise (fun a b => ¬(P a = true ∧ P b = true))) : xs.find? P = ys.find? P := by
+  have hu' := hp.pairwise hu (fun h e => h ⟨e.2, e.1⟩)
+  by_cases h : ∃ a ∈ xs, P a = true
+  · obtain ⟨a, ha, hpa⟩ := h
+    rw [find_unique hu ha hpa, find_unique hu' (hp.mem_iff.1 ha) hpa]
+  · have h1 : xs.find? P = none := List.find?_eq_none.2 fun a ha hpa => h ⟨a, ha, hpa⟩
+    have h2 : ys.find? P = none := List.find?_eq_none.2 fun a ha hpa => h ⟨a, hp.mem_iff.2 ha, hpa⟩
+    rw [h1, h2]
+
+theorem forall2_mem {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
+    {a : α} → a ∈ as → ∃ b, R a b
+  | x :: _, y :: _, ⟨hxy, h⟩, a, ha => by
+    rcases List.mem_cons.1 ha with rfl | ha'
+    · exact ⟨y, hxy⟩
+    · exact forall2_mem h ha'
+
+/-- The value term of the first occupied slot whose hit holds relates to the first item satisfying `P`. -/
+theorem pick_aligned {α : Type} {E : α → List Val → Prop} {P : α → Bool} (R : List Term → Term)
+    (V : α → Val → Prop) (hR : ∀ y xs, E y (Term.denotes M xs) → V y ((R xs).denote M)) (none : Term) :
+    {S : List Slot} → {qs : List Term} → {sv : List (Bool × List Val)} → {ys : List α} →
+    Aligned M E P S qs sv ys → ∀ y, ys.find? P = some y →
+      V y ((pickT none (List.zipWith (fun sl q => (sl.1, q, R sl.2)) S qs)).denote M)
+  | [], [], [], [], _, y, hy => by simp at hy
+  | (f, xs) :: S, q :: qs, (false, vs) :: sv, ys, ⟨hf, _, h⟩, y, hy => by
+    simp only [List.zipWith_cons_cons, pickT, Term.denote, hf, Val.toBool, Bool.false_and]
+    exact pick_aligned R V hR none h y hy
+  | (f, xs) :: S, q :: qs, (true, vs) :: sv, y' :: ys, ⟨hf, hx, he, hq, h⟩, y, hy => by
+    simp only [List.zipWith_cons_cons, pickT, Term.denote, hf, hq, Val.toBool, Bool.true_and]
+    rw [List.find?_cons] at hy
+    cases hp : P y' with
+    | true => simp only [hp] at hy ⊢; cases hy; exact hR y' xs (hx ▸ he)
+    | false => simp only [hp] at hy ⊢; exact pick_aligned R V hR none h y hy
+
+/-- A lookup in a table's slots: whether the key is there, and its value when it is. -/
+theorem lookup_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L (.table k w) x t) (key : k.den)
+    (kt : Term) (hkt : RelV L k key (kt.denote M)) {hit found : Term}
+    (h : lookupCode L k w t kt = .ok (hit, found)) :
+    hit.denote M = .bool (lookupBy (Ty.deq k) key x.1).isSome ∧
+      ∀ val, lookupBy (Ty.deq k) key x.1 = some val → RelV L w val (found.denote M) := by
+  simp only [lookupCode] at h
+  obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
+  obtain ⟨kt', h2, h⟩ := bind_ok.1 h
+  obtain ⟨hk, hkk⟩ := need'_ok h2
+  have hkt' : RelV L k key (Term.denote M kt') := hkk ▸ hkt
+  obtain ⟨dv, h3, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := table_view hb h1
+  let P : k.den × w.den → Bool := fun e => k.deq key e.1
+  have ha : Aligned M (ETab L k w) P (slotsOf d dt n 2 t) (hitQs kt' (slotsOf d dt n 2 t)) sv ys := by
+    refine aligned_map (fun xs => .eq kt' (xs.headD kt')) ?_ hS hh
+    intro e xs he
+    obtain ⟨zk, zv, hxs, hzk, _⟩ := he
+    cases xs with
+    | nil => simp [Term.denotes] at hxs
+    | cons tk rest =>
+      simp only [Term.denotes, List.cons.injEq] at hxs
+      simp only [List.headD_cons, Term.denote, hxs.1]
+      show Val.bool (Val.beq (kt'.denote M) zk) = _
+      rw [relV_beq k hk key e.1 _ _ hkt' hzk]
+  have hu : ys.Pairwise (fun a b => ¬(P a = true ∧ P b = true)) := by
+    refine (hperm.symm.pairwise x.2 fun h => ⟨h.2, h.1⟩).imp_of_mem ?_
+    intro a b ha hb' hab hp
+    obtain ⟨va, zka, zva, rfl, hza, -⟩ := forall2_mem hh ha
+    obtain ⟨vb, zkb, zvb, rfl, hzb, -⟩ := forall2_mem hh hb'
+    have e1 := Val.eq_of_beq _ _ ((relV_beq k hk key a.1 _ _ hkt' hza).trans hp.1)
+    have e2 := Val.eq_of_beq _ _ ((relV_beq k hk key b.1 _ _ hkt' hzb).trans hp.2)
+    have := relV_beq k hk a.1 b.1 _ _ hza hzb
+    rw [← e1, ← e2] at this
+    have hr : Val.beq (kt'.denote M) (kt'.denote M) = true := by
+      have h0 := (relV_beq k hk key a.1 _ _ hkt' hza).trans hp.1
+      rwa [← e1] at h0
+    rw [hr] at this
+    exact absurd this.symm (by simp [hab.1])
+  have hfind : lookupBy (Ty.deq k) key x.1 = (ys.find? P).map (·.2) := by
+    rw [lookupBy_find]; exact congrArg _ (find_perm hperm.symm (hperm.pairwise hu fun h e => h ⟨e.2, e.1⟩))
+  refine ⟨?_, fun val hv => ?_⟩
+  · simp only [anySlotT_den ha, hfind, Option.isSome_map]
+    congr 1
+    cases hf : ys.find? P with
+    | none =>
+      simp only [Option.isSome_none, Bool.eq_false_iff]
+      intro hany
+      obtain ⟨a, ha, hpa⟩ := List.any_eq_true.1 hany
+      exact List.find?_eq_none.1 hf a ha hpa
+    | some y => simp only [Option.isSome_some, List.any_eq_true]; exact ⟨y, List.mem_of_find?_eq_some hf,
+        List.find?_some hf⟩
+  · rw [hfind] at hv
+    obtain ⟨y, hy, rfl⟩ := Option.map_eq_some_iff.1 hv
+    refine pick_aligned (fun xs => xs.getD 1 dv) (fun y v => RelV L w y.2 v) ?_ dv ha y hy
+    intro e xs he
+    obtain ⟨zk, zv, hxs, -, hzv⟩ := he
+    match xs, hxs with
+    | [_, tv], hxs =>
+      simp only [Term.denotes, List.cons.injEq] at hxs
+      simpa [hxs.2.1] using hzv
+
 /-- Each built-in's code relates to its meaning. -/
 theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : Code (p.ty.inst args))
     (h : primCode L p args hp = .ok s) : Rel M L (p.ty.inst args) (p.den args hp) s := by
@@ -886,6 +1020,52 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
       exact hv hc
     · simp only [hbt, Bool.false_eq_true, ite_false] at hc ⊢
       exact he
+  case tableGet =>
+    simp only [primCode] at h; cases h
+    intro ⟨tb, key, ()⟩ ⟨st, sk, ()⟩ ⟨ht, hk, _⟩ r c hr _
+    obtain ⟨kt, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨⟨hit, found⟩, h2, hr⟩ := bind_ok.1 hr
+    obtain ⟨tsome, h3, hr⟩ := bind_ok.1 hr
+    obtain ⟨tnone, h4, hr⟩ := map_ok.1 hr
+    cases hr
+    obtain ⟨hhit, hval⟩ := lookup_rel ht key kt ((rel_term (need_ok.1 h1) _).1 hk) h2
+    change RelV L (.adt 3 [_] [[_], []]) (match lookupBy (Ty.deq _) key tb.1 with
+      | some v => Ty.some v
+      | none => Ty.none) ((Term.ite hit tsome tnone).denote M)
+    cases hl : lookupBy (Ty.deq _) key tb.1 with
+    | none =>
+      simp only [hl, Option.isSome_none] at hhit
+      simp only [Term.denote, hhit, Val.toBool, Bool.false_eq_true, ite_false]
+      exact adtCtor_rel (M := M) (vs := [[_], []]) ⟨1, by simp⟩ [] tnone h4 () rfl
+    | some val =>
+      simp only [hl, Option.isSome_some] at hhit
+      simp only [Term.denote, hhit, Val.toBool, ite_true]
+      exact adtCtor_rel (M := M) (vs := [[_], []]) ⟨0, by simp⟩ [found] tsome h3 (val, ())
+        ⟨_, _, rfl, hval val hl, rfl⟩
+  case ref =>
+    simp only [primCode] at h; cases h
+    intro ⟨tb, key, rej, next, ()⟩ ⟨st, sk, srej, snext, ()⟩ ⟨ht, hk, hrej, hnext, _⟩ r c hr hc
+    obtain ⟨kt, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨⟨hit, found⟩, h2, hr⟩ := bind_ok.1 hr
+    obtain ⟨fc, h3, hr⟩ := bind_ok.1 hr
+    obtain ⟨⟨v, c1⟩, h4, hr⟩ := bind_ok.1 hr
+    obtain ⟨rt, h5, hr⟩ := bind_ok.1 hr
+    obtain ⟨err, h6, hr⟩ := map_ok.1 hr
+    cases hr
+    obtain ⟨hhit, hval⟩ := lookup_rel ht key kt ((rel_term (need_ok.1 h1) _).1 hk) h2
+    change RelV L (.adt 2 [_, _] [[_], [_]]) (match lookupBy (Ty.deq _) key tb.1 with
+      | some v => next (v, ())
+      | none => Ty.error rej) ((Term.ite hit v err).denote M)
+    cases hl : lookupBy (Ty.deq _) key tb.1 with
+    | none =>
+      simp only [hl, Option.isSome_none] at hhit
+      simp only [Term.denote, hhit, Val.toBool, Bool.false_eq_true, ite_false]
+      exact adtCtor_rel (M := M) (vs := [[_], [_]]) ⟨1, by simp⟩ [rt] err h6 (rej, ())
+        ⟨_, _, rfl, (rel_term (need_ok.1 h5) _).1 hrej, rfl⟩
+    | some val =>
+      simp only [hl, Option.isSome_some] at hhit
+      simp only [Holds, Term.denote, hhit, Val.toBool, ite_true] at hc ⊢
+      exact hnext (val, ()) (fc, ()) ⟨(rel_ofTerm (need_ok.1 h3) _).2 (hval val hl), trivial⟩ v c1 h4 hc
   case bagSize =>
     simp only [primCode] at h; cases h
     intro ⟨xs, ()⟩ ⟨b, ()⟩ ⟨hb, _⟩ r c hr _

@@ -79,6 +79,13 @@ def doubling : Nat → (Γ : List Ty) → Expr [] Γ .int
   | 0, _ => .int 1
   | n + 1, Γ => .let_ (doubling n Γ) (.bin .add (.var .here) (.var .here))
 
+def tableGet (t : E (.table .int .str)) (k : Int) : E (Ty.option .str) :=
+  .call (.prim .tableGet [.int, .str] rfl) (.cons t (.cons (.int k) .nil))
+/-- `use v <- ref(t, k, "no")` continuing with `Ok(v)`. -/
+def refOk (t : E (.table .int .str)) (k : Int) : E (Ty.result .str .str) :=
+  .call (.prim .ref [.int, .str, .str, .str] rfl) (.cons t (.cons (.int k) (.cons (.str "no")
+    (.cons (.lam (.ctor (vs := [[.str], [.str]]) ⟨0, by decide⟩ (.cons (.var .here) .nil))) .nil))))
+
 def cases : List (String × (t : Ty) × E t) :=
   [ ("truncating division", ⟨.int, .bin .div (.int (-7)) (.int 2)⟩),
     ("division by a negative", ⟨.int, .bin .div (.int 7) (.int (-2))⟩),
@@ -123,6 +130,10 @@ def cases : List (String × (t : Ty) × E t) :=
     ("table remove", ⟨.int, tableSize (.call (.prim .tableRemove [.int, .str] rfl) (.cons t2 (.cons (.int 1) .nil)))⟩),
     ("table insert into new", ⟨.int, tableSize (.call (.prim .tableInsert [.int, .str] rfl)
       (.cons (.call (.prim .tableNew [.int, .str] rfl) .nil) (.cons (.int 5) (.cons (.str "x") .nil))))⟩),
+    ("table get finds the key", ⟨Ty.option .str, tableGet t2 1⟩),
+    ("table get misses a key", ⟨Ty.option .str, tableGet t2 5⟩),
+    ("ref continues with the value", ⟨Ty.result .str .str, refOk t2 1⟩),
+    ("ref rejects a missing key", ⟨Ty.result .str .str, refOk t2 5⟩),
     ("twelve inserts share their tables", ⟨Ty.bool, tableAnyV (inserts 12) "v11"⟩),
     ("forty lets share their values", ⟨.int, doubling 40 []⟩),
     ("require passes", ⟨Ty.result .int .str, .call (.prim .require [.int, .str] rfl)
