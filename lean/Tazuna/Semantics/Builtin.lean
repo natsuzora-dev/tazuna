@@ -224,37 +224,33 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
       { name, react := fun e r now => react (Prim.upT d (.reactionCtx (.param 0)) rfl (.inl (r, now, ())), Prim.up d 1 e, ()) }
   | .external, _, _ => fun (name, declares, ()) => ⟨name, declares⟩
   | .externalCommand, _, _ => fun (name, ()) => name
-  | .externalQuery, _, h => let d := Prim.dataOf h rfl
-    fun (name, ensures, ()) => (name, Prim.dn d (.fn [.param 0, .param 1] Ty.rules) rfl ensures)
+  | .externalQuery, _, _ => fun (name, ensures, ()) => (name, ensures)
   | .source, _, _ => fun (name, ()) => name
   | .requestCommand, args, h => let d := Prim.dataOf h rfl
     fun (name, input, onAnswer, ()) => .request
     { name, input := (Ty.param 1).inst args, output := (Ty.param 2).inst args,
-      rejection := some ((Ty.param 3).inst args), value := Prim.dn d (.param 1) rfl input, holds := fun _ => [],
-      onAnswer := Prim.dn d (.fn [.result (.param 2) (.param 3)] (.list (.param 0))) rfl onAnswer }
+      rejection := some ((Ty.param 3).inst args), value := Prim.dn d (.param 1) rfl input, ensures := none,
+      onAnswer }
   | .requestQuery, args, h => let d := Prim.dataOf h rfl
     fun ((name, ensures), input, onAnswer, ()) =>
-    let input := Prim.dn d (.param 1) rfl input
     .request
     { name, input := (Ty.param 1).inst args, output := (Ty.param 2).inst args, rejection := none,
-      value := input, holds := fun o => ensures (input, o, ()),
-      onAnswer := Prim.dn d (.fn [.param 2] (.list (.param 0))) rfl onAnswer }
+      value := Prim.dn d (.param 1) rfl input, ensures := some ensures, onAnswer }
   | .sendCommand, args, h => let d := Prim.dataOf h rfl
     fun (c, caller, input, onAnswer, ()) =>
     let c : CommandOf ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)
       ((Ty.param 3).inst args) ((Ty.param 4).inst args) := c
     .command _ _ c.1 (Prim.dn d (.param 2) rfl caller)
       (cast (congrArg Ty.den0 c.2.1.symm) (Prim.dn d (.param 3) rfl input))
-      (cast (congrArg (fun j => (Ty.fn [.result Ty.nil j] (.list ((Ty.param 1).inst args))).den0) c.2.2.symm)
-        (Prim.dn d (.fn [.result Ty.nil (.param 4)] (.list (.param 1))) rfl onAnswer))
+      (cast (congrArg (fun j => Fun (Ty.fn [.result Ty.nil j] (.list ((Ty.param 1).inst args)))) c.2.2.symm)
+        onAnswer)
   | .sendQuery, args, h => let d := Prim.dataOf h rfl
     fun (q, caller, input, onAnswer, ()) =>
     let q : QueryOf ((Ty.param 0).inst args) ((Ty.param 2).inst args) ((Ty.param 3).inst args)
       ((Ty.param 4).inst args) := q
     .query _ _ q.1 (Prim.dn d (.param 2) rfl caller)
       (cast (congrArg Ty.den0 q.2.1.symm) (Prim.dn d (.param 3) rfl input))
-      (cast (congrArg (fun o => (Ty.fn [o] (.list ((Ty.param 1).inst args))).den0) q.2.2.symm)
-        (Prim.dn d (.fn [.param 4] (.list (.param 1))) rfl onAnswer))
+      (cast (congrArg (fun o => Fun (Ty.fn [o] (.list ((Ty.param 1).inst args)))) q.2.2.symm) onAnswer)
   | .subscribe, args, _ => fun (name, wrap, ()) =>
     { source := "", name, event := (Ty.param 1).inst args, wrap }
   | .bounds, _, _ => fun (creates, items, cascade, steps, ()) => { creates, items, cascade, steps }

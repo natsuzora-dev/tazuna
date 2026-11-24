@@ -22,9 +22,10 @@ private def inputE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : Exp
 
 def ping : EffectV .int := .request
   { name := "ping", input := .str, output := .int, rejection := some .str, value := "hi",
-    holds := fun _ => [], onAnswer := fun (a, ()) => match a with
-      | .inl _ => [(1 : Int)]
-      | .inr _ => [] }
+    ensures := none,
+    onAnswer := .closed (.lam (.case (.var .here)
+      (.cons (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons .wild .nil)) (.list (.cons (.int 1) .nil))
+        (.cons (.ctor (vs := [[.int], [.str]]) ⟨1, by decide⟩ (.cons .wild .nil)) (.list .nil) .nil)) ⟨4, rfl⟩)) }
 
 def watch : MachineV .int .int :=
   { name := "watch", key := .int, state := .int,
@@ -93,7 +94,7 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run svc s is).
 -- A reaction sends the service's own `add` for some events: 7 adds 2, 1 adds 1 again and again, 3 adds 500.
 def again : ReactionV .int .int :=
   { name := "again", react := fun e _ _ =>
-      let send (n : Int) : EffectV .int := .command .int .int add (1 : Int) n fun _ => ([] : List Int)
+      let send (n : Int) : EffectV .int := .command .int .int add (1 : Int) n (.closed (.lam (.list .nil)))
       if I e = 7 then [send 2] else if I e = 1 then [send 1] else if I e = 3 then [send 500] else [] }
 def loop : ServiceV := { svc with reactions := [again] }
 def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
@@ -120,10 +121,11 @@ def undeclared : ServiceV := { svc with declared := [("mail", .externalCommand "
 -- pending for another answer.
 def rate : EffectV .int := .request
   { name := "rate", input := .str, output := .int, rejection := none, value := "eur",
-    holds := fun o => rule "positive" (decide (0 < I o)), onAnswer := fun (o, ()) => [o] }
+    ensures := some (.closed (.lam (ruleE "positive" (.bin .lt (.int 0) (.var (.there .here)))))),
+    onAnswer := .closed (.lam (.list (.cons (.var .here) .nil))) }
 def asking : ServiceV :=
   { svc with machines := [{ watch with effect := fun _ st _ _ => if I st = 5 then some rate else none }],
-             declared := [("fx", .externalQuery "rate" .str .int fun _ => [])] }
+             declared := [("fx", .externalQuery "rate" .str .int (.closed (.lam (.list .nil))))] }
 def askingUntil : List (Input asking) :=
   [.command ⟨0, by decide⟩ (1 : Int) (5 : Int), .command ⟨0, by decide⟩ (1 : Int) (1 : Int), .clock 10]
 #guard last asking (askingUntil ++ [.answer 0 ⟨.int, (-1 : Int)⟩]) == "invalid [positive]"

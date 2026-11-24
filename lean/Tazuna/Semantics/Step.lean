@@ -202,7 +202,7 @@ def okNil {j : Ty} : (Ty.result Ty.nil j).den0 := .inl (.inl (), ())
 /-- Runs an own command as an internal step: its events are applied and its `ensures` checked, then its answer's
 events are applied. -/
 def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
-    (onAnswer : (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event)).den0) : Except Fault (Acc v) :=
+    (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) : Except Fault (Acc v) :=
   if !(v.commands.any fun c => c.name == x.name && (Ty.same c.input x.input).isSome &&
       (Ty.same c.rejection x.rejection).isSome) then .error (.invalidEffect x.name ["service"])
   else match admit x.callers x.accepts caller input with
@@ -215,17 +215,17 @@ def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v
       let a ← applyEvents a events
       match broken (x.ensures.fn (cx, a.state.records, ())) with
       | n :: _ => .error (.ensures n)
-      | [] => applyEvents a (onAnswer (okNil, ()))
-    | .inr (.inl (j, ())) => applyEvents a (onAnswer (.inr (.inl (j, ())), ()))
+      | [] => applyEvents a (onAnswer.fn (okNil, ()))
+    | .inr (.inl (j, ())) => applyEvents a (onAnswer.fn (.inr (.inl (j, ())), ()))
 
 /-- Runs an own query as an internal step: its answer's events are applied. -/
 def runQuery (a : Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0)
-    (onAnswer : (Ty.fn [x.output] (.list v.event)).den0) : Except Fault (Acc v) :=
+    (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) : Except Fault (Acc v) :=
   if !(v.queries.any fun q => q.name == x.name && (Ty.same q.input x.input).isSome &&
       (Ty.same q.output x.output).isSome) then .error (.invalidEffect x.name ["service"])
   else match admit x.callers x.accepts caller input with
   | r :: rs => .error (.invalidEffect x.name (r :: rs))
-  | [] => applyEvents a (onAnswer (x.resolve.fn (ctx a.state a.state.records caller input, ()), ()))
+  | [] => applyEvents a (onAnswer.fn (x.resolve.fn (ctx a.state a.state.records caller input, ()), ()))
 
 def runOwn (a : Acc v) : EffectV v.event → Except Fault (Acc v)
   | .request _ => .ok a
@@ -310,7 +310,7 @@ def step (v : ServiceV) (s : State v) : Input v → Result v
         | r :: rs => ⟨s, .invalid (r :: rs), [], []⟩
         | [] =>
           let s' := { s with pending := s.pending.filter (·.id != to) }
-          finish s (applyEvents { state := s' } (p.request.onAnswer (h ▸ value, ()))) .accepted
+          finish s (applyEvents { state := s' } (p.request.onAnswer.fn (h ▸ value, ()))) .accepted
   | .event i value => finish s (applyEvents { state := s } [(v.subscribes.get i).wrap.fn (value, ())]) .accepted
   | .clock time =>
     if time < s.now then ⟨s, .invalid ["time moves forward"], [], []⟩ else

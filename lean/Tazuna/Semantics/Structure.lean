@@ -40,9 +40,10 @@ structure RequestV (e : Ty) where
   /-- A command's rejection type; a query has none. -/
   rejection : Option Ty
   value : input.den0
-  /-- The rules an answer keeps: a query's `ensures` at this input; a command's answer keeps none. -/
-  holds : (answerTy output rejection).den0 → Ty.rules.den0
-  onAnswer : (Ty.fn [answerTy output rejection] (.list e)).den0
+  /-- What a query's answers satisfy, at its input and the answer; a command's answers satisfy no rules. -/
+  ensures : Option (Fun (Ty.fn [input, answerTy output rejection] Ty.rules))
+  /-- The events an answer becomes: with `value`, the pending request is the closure record of this function. -/
+  onAnswer : Fun (Ty.fn [answerTy output rejection] (.list e))
 
 /-- A command; the service that lists it owns it. -/
 structure CommandV (r e c : Ty) where
@@ -74,9 +75,9 @@ the same step. An own command's answer is `Ok(Nil)` once its events are applied,
 inductive EffectV (e : Ty) where
   | request (x : RequestV e)
   | command (r c : Ty) (x : CommandV r e c) (caller : c.den0) (input : x.input.den0)
-      (onAnswer : (Ty.fn [Ty.result Ty.nil x.rejection] (.list e)).den0)
+      (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list e)))
   | query (r c : Ty) (x : QueryV r c) (caller : c.den0) (input : x.input.den0)
-      (onAnswer : (Ty.fn [x.output] (.list e)).den0)
+      (onAnswer : Fun (Ty.fn [x.output] (.list e)))
 
 structure MachineV (r e : Ty) where
   name : String
@@ -98,7 +99,7 @@ inductive DeclaredV where
   | command (r e c : Ty) (x : CommandV r e c)
   | query (r c : Ty) (x : QueryV r c)
   | externalCommand (name : String) (input output rejection : Ty)
-  | externalQuery (name : String) (input output : Ty) (holds : (Ty.fn [input, output] Ty.rules).den0)
+  | externalQuery (name : String) (input output : Ty) (holds : Fun (Ty.fn [input, output] Ty.rules))
   | source (name : String) (event : Ty)
 
 /-- An external: the commands, queries and sources it declares. -/
@@ -194,7 +195,7 @@ def Dsl.val : Dsl → List Ty → Sem
       | .reaction, [r, e] => ReactionV r e
       | .external, _ => ExternalV
       | .externalCommand, [_, _, _] => String
-      | .externalQuery, [i, o] => String × (Ty.fn [i, o] Ty.rules).den0
+      | .externalQuery, [i, o] => String × Fun (Ty.fn [i, o] Ty.rules)
       | .source, [_] => String
       | .declared, _ => DeclaredV
       | .effect, [e] => EffectV e

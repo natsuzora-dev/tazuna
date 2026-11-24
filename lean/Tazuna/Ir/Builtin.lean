@@ -207,7 +207,7 @@ def sig : Prim → PrimSig :=
     { name := "external_query",
       doc := "A query of an external; `ensures` says what its answers satisfy. The external that lists it owns it.",
       tvars := ["input", "output"], dataArgs := true,
-      params := [l "name" .str, l "ensures" (.fn [a, b] Ty.rules)],
+      params := [l "name" .str, l "ensures" (kept (.fn [a, b] Ty.rules))],
       ret := .dsl .externalQuery [a, b] }
   | .source =>
     { name := "source", doc := "Events named `name`: the service or external that lists the source sends them.",
@@ -243,26 +243,27 @@ def sig : Prim → PrimSig :=
       doc := "An effect: the request to an external's command, and the events its answer becomes.",
       tvars := ["event", "input", "output", "rejection"], dataArgs := true,
       params := [l "command" (.dsl .externalCommand [b, param 2, param 3]), l "input" b,
-        l "on_answer" (.fn [.result (param 2) (param 3)] (.list a))],
+        l "on_answer" (kept (.fn [.result (param 2) (param 3)] (.list a)))],
       ret := .dsl .effect [a] }
   | .requestQuery =>
     { name := "request_query",
       doc := "An effect: the request to an external's query, and the events its answer becomes. An answer that breaks the query's `ensures` is Invalid.",
       tvars := ["event", "input", "output"], dataArgs := true,
-      params := [l "query" (.dsl .externalQuery [b, param 2]), l "input" b, l "on_answer" (.fn [param 2] (.list a))],
+      params := [l "query" (.dsl .externalQuery [b, param 2]), l "input" b,
+        l "on_answer" (kept (.fn [param 2] (.list a)))],
       ret := .dsl .effect [a] }
   | .sendCommand =>
     { name := "send_command",
       doc := "An effect: the service runs its own command within the same step; `on_answer` gets Ok(Nil) once the command's events are applied, or its rejection.",
       tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true,
       params := [l "command" (.dsl .command [a, b, param 2, param 3, param 4]), l "caller" (param 2),
-        l "input" (param 3), l "on_answer" (.fn [.result Ty.nil (param 4)] (.list b))],
+        l "input" (param 3), l "on_answer" (kept (.fn [.result Ty.nil (param 4)] (.list b)))],
       ret := .dsl .effect [b] }
   | .sendQuery =>
     { name := "send_query", doc := "An effect: the service runs its own query within the same step.",
       tvars := ["records", "event", "caller", "input", "output"], dataArgs := true,
       params := [l "query" (.dsl .query [a, param 2, param 3, param 4]), l "caller" (param 2),
-        l "input" (param 3), l "on_answer" (.fn [param 4] (.list b))],
+        l "input" (param 3), l "on_answer" (kept (.fn [param 4] (.list b)))],
       ret := .dsl .effect [b] }
   | .subscribe =>
     { name := "subscribe", doc := "Receives the events of another service's or an external's source as this service's events.",

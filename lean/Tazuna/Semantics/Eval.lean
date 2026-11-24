@@ -101,6 +101,12 @@ def Fun.eval {t : Ty} (f : Fun t) : t.den := f.body.eval f.defs f.defs.eval (Ty.
 /-- A kept function as the step applies it. -/
 def Fun.fn {t : Ty} (f : Fun t) : t.den0 := Ty.down t f.ht f.eval
 
+/-- The rules an answer to the request keeps: its query's `ensures` at the request's input. -/
+def RequestV.holds {e : Ty} (r : RequestV e) (answer : (answerTy r.output r.rejection).den0) : Ty.rules.den0 :=
+  match r.ensures with
+  | some f => f.fn (r.value, answer, ())
+  | none => []
+
 /-- A kept function whose source is a closed expression without definitions, as examples write one. -/
 def Fun.closed {t : Ty} (body : Expr [] [] t) (ht : t.isData = true := by rfl) : Fun t := ⟨[], .nil, [], (), rfl, ht, body⟩
 
