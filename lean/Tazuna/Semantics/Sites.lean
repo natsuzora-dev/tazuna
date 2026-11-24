@@ -3,8 +3,8 @@ import Tazuna.Semantics.Step
 /-! The places a program writes kept functions, and the pending requests a state can hold. A kept function is a
 closure record (`Fun`): a site's source with the values it captured. A pending request holds such records, so the
 requests a program's states can hold are finitely many shapes: who sent it, which external command or query of the
-service's `declared` it asks for, and which sites its `on_answer` and its query's `ensures` come from. A shape's
-fields are the data that varies (the sender's key, the input, the captured values), so a pending request is a shape
+service's `declared` it asks for, and which sites its `on_answer` and its query's `ensures` come from: the shape of
+the effect that started it (`RequestShape`) with its sender. A shape's fields are the data that varies (the sender's key, the input, the captured values), so a pending request is a shape
 with its fields (`PendingShape.pending`), the form a symbolic state holds it in. -/
 
 namespace Tazuna.Ir
@@ -78,11 +78,9 @@ def SenderShape.sender : {ks : List Ty} → SenderShape ks → (Ty.tuple ks).den
   | _, .machine n k, (key, ()) => .machine n ⟨k, key⟩
   | _, .reaction n, () => .reaction n
 
-/-- One shape of pending request: the sender, the external command or query of the service's `declared` it asks for,
+/-- One shape of request an effect makes: the external command or query of the service's `declared` it asks for,
 and the sites of its `on_answer` and, for a query, of its `ensures`. -/
-structure PendingShape (e : Ty) where
-  ks : List Ty
-  sender : SenderShape ks
+structure RequestShape (e : Ty) where
   external : String
   name : String
   input : Ty
@@ -92,11 +90,25 @@ structure PendingShape (e : Ty) where
   ensures : Option (Site ensuresΓ (Ty.fn [input, answerTy output rejection] Ty.rules))
   answerΓ : List Ty
   onAnswer : Site answerΓ (Ty.fn [answerTy output rejection] (.list e))
-  /-- What varies, each value data: the sender's key, the input, and the values each site captured. -/
-  hdata : (Ty.tuple [.tuple ks, input, .tuple ensuresΓ, .tuple answerΓ]).isData = true
+  /-- What varies, each value data: the input, and the values each site captured. -/
+  hfields : (Ty.tuple [input, .tuple ensuresΓ, .tuple answerΓ]).isData = true
 
-/-- The types of what varies among the requests of a shape. -/
-def PendingShape.fields {e : Ty} (sh : PendingShape e) : List Ty := [.tuple sh.ks, sh.input, .tuple sh.ensuresΓ, .tuple sh.answerΓ]
+/-- The types of what varies among the requests of a shape, as an effect value holds them. -/
+def RequestShape.fields {e : Ty} (sh : RequestShape e) : List Ty := [sh.input, .tuple sh.ensuresΓ, .tuple sh.answerΓ]
+
+/-- One shape of pending request: an effect's request shape with its sender. -/
+structure PendingShape (e : Ty) extends RequestShape e where
+  ks : List Ty
+  sender : SenderShape ks
+  hks : (Ty.tuple ks).isData = true
+
+/-- The types of what varies among the requests of a shape: the sender's key, then the request's fields. -/
+def PendingShape.fields {e : Ty} (sh : PendingShape e) : List Ty := .tuple sh.ks :: sh.toRequestShape.fields
+
+theorem PendingShape.hdata {e : Ty} (sh : PendingShape e) : (Ty.tuple sh.fields).isData = true := by
+  have h1 := sh.hks; have h2 := sh.hfields
+  simp only [PendingShape.fields, RequestShape.fields, Ty.isData, Ty.isDatas, Bool.and_eq_true] at h1 h2 ⊢
+  exact ⟨h1, h2⟩
 
 /-- The pending request of the shape with the wire id `id` and the fields `x`. -/
 def PendingShape.pending {e : Ty} (sh : PendingShape e) (id : Nat) (x : Ty.dens sh.fields) : Step.Pending e :=
@@ -109,21 +121,25 @@ def PendingShape.pending {e : Ty} (sh : PendingShape e) (id : Nat) (x : Ty.dens 
 def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks) :=
   v.machines.map (fun m => ⟨[m.key], .machine m.name m.key⟩) ++ v.reactions.map fun x => ⟨[], .reaction x.name⟩
 
-/-- Every shape of pending request a service can hold, given the program's sites: each sender, each external
-command or query the service may request, and each site of the type its `on_answer` and `ensures` must have, whose
-fields are data. -/
-def shapes (v : ServiceV) (sites : List AnySite) : List (PendingShape v.event) :=
-  (senderShapes v).flatMap fun ⟨ks, snd⟩ => v.declared.flatMap fun (x, d) =>
+/-- Every shape of request a service's effects can make, given the program's sites: each external command or query
+the service may request, and each site of the type its `on_answer` and `ensures` must have, whose fields are data. -/
+def requestShapes (v : ServiceV) (sites : List AnySite) : List (RequestShape v.event) :=
+  v.declared.flatMap fun (x, d) =>
     let mk (name : String) (i o : Ty) (j : Option Ty) (eΓ : List Ty)
-        (ens : Option (Site eΓ (Ty.fn [i, answerTy o j] Ty.rules))) : List (PendingShape v.event) :=
+        (ens : Option (Site eΓ (Ty.fn [i, answerTy o j] Ty.rules))) : List (RequestShape v.event) :=
       (sitesOf sites (Ty.fn [answerTy o j] (.list v.event))).filterMap fun ⟨aΓ, a⟩ =>
-        if h : (Ty.tuple [.tuple ks, i, .tuple eΓ, .tuple aΓ]).isData = true then
-          some ⟨ks, snd, x, name, i, o, j, eΓ, ens, aΓ, a, h⟩
+        if h : (Ty.tuple [i, .tuple eΓ, .tuple aΓ]).isData = true then some ⟨x, name, i, o, j, eΓ, ens, aΓ, a, h⟩
         else none
     match d with
     | .externalCommand n i o j => mk n i o (some j) [] none
     | .externalQuery n i o _ => (sitesOf sites (Ty.fn [i, o] Ty.rules)).flatMap fun ⟨eΓ, s⟩ => mk n i o none eΓ (some s)
     | _ => []
+
+/-- Every shape of pending request a service can hold: each sender whose key is data, with each request shape. -/
+def shapes (v : ServiceV) (sites : List AnySite) : List (PendingShape v.event) :=
+  (senderShapes v).flatMap fun ⟨ks, snd⟩ =>
+    if h : (Ty.tuple ks).isData = true then (requestShapes v sites).map fun r => { r with ks, sender := snd, hks := h }
+    else []
 
 /-- The type that codes a pending request of the shapes `shs`: one variant per shape, holding its fields. Its index
 names no type of the program; the variants tell it apart. -/

@@ -344,15 +344,15 @@ theorem answer_step (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
   have hsel (i : Nat) (w : Val) (hw : [v0, v1, v2, v3][i]? = some w) : (Term.sel de k i te).denote M = w := by
     rw [Nat.zero_add] at hzv'
     rw [sel_ctor _ (hte.trans hzv'), hw]; rfl
-  have hdata := sh.hdata
+  have hd0 : (Ty.tuple sh.ks).isData = true := sh.hks
+  have hdata := sh.hfields
   simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true, Bool.and_true] at hdata
-  obtain ⟨hd0, hd1, hd2, hd3⟩ := hdata
-  replace hd0 : (Ty.tuple sh.ks).isData = true := hd0
+  obtain ⟨hd1, hd2, hd3⟩ := hdata
   replace hd2 : (Ty.tuple sh.ensuresΓ).isData = true := hd2
   replace hd3 : (Ty.tuple sh.answerΓ).isData = true := hd3
   have hdown : Ty.down (.tuple sh.fields) sh.hdata (f0, f1, f2, f3, ()) =
       (Ty.down _ hd0 f0, Ty.down _ hd1 f1, Ty.down _ hd2 f2, Ty.down _ hd3 f3, ()) := by
-    simp only [PendingShape.fields]
+    simp only [PendingShape.fields, RequestShape.fields]
     have e2 : (Ty.tuple [Ty.tuple sh.ensuresΓ, Ty.tuple sh.answerΓ]).isData = true := by
       simp only [Ty.isData, Ty.isDatas] at hd2 hd3 ⊢; simp [hd2, hd3]
     have e1 : (Ty.tuple [sh.input, Ty.tuple sh.ensuresΓ, Ty.tuple sh.answerΓ]).isData = true := by
