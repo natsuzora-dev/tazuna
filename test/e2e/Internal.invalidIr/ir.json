@@ -1,0 +1,176 @@
+{
+ "constants": [],
+ "functions": [
+  {
+   "at": [
+    3,
+    1
+   ],
+   "body": {
+    "at": [
+     4,
+     3
+    ],
+    "op": "block",
+    "stmts": [
+     {
+      "at": [
+       4,
+       3
+      ],
+      "pattern": {
+       "at": [
+        4,
+        7
+       ],
+       "name": "b",
+       "p": "var",
+       "ty": {
+        "args": [],
+        "con": "m.Box"
+       }
+      },
+      "stmt": "let",
+      "value": {
+       "args": [
+        {
+         "value": {
+          "at": [
+           4,
+           15
+          ],
+          "op": "int",
+          "text": "1",
+          "ty": {
+           "args": [],
+           "con": "Int"
+          }
+         }
+        },
+        {
+         "value": {
+          "at": [
+           4,
+           18
+          ],
+          "op": "str",
+          "text": "\"s\"",
+          "ty": {
+           "args": [],
+           "con": "String"
+          }
+         }
+        }
+       ],
+       "at": [
+        4,
+        11
+       ],
+       "op": "ctor",
+       "ty": {
+        "args": [],
+        "con": "m.Box"
+       },
+       "type": "m.Box",
+       "variant": "Box"
+      }
+     },
+     {
+      "stmt": "expr",
+      "value": {
+       "at": [
+        5,
+        3
+       ],
+       "fields": [
+        {
+         "label": "left",
+         "value": {
+          "at": [
+           5,
+           18
+          ],
+          "op": "str",
+          "text": "\"y\"",
+          "ty": {
+           "args": [],
+           "con": "String"
+          }
+         }
+        }
+       ],
+       "op": "update",
+       "record": {
+        "at": [
+         5,
+         9
+        ],
+        "name": "b",
+        "op": "var",
+        "ty": {
+         "args": [],
+         "con": "m.Box"
+        }
+       },
+       "ty": {
+        "args": [],
+        "con": "m.Box"
+       },
+       "type": "m.Box",
+       "variant": "Box"
+      }
+     }
+    ],
+    "ty": {
+     "args": [],
+     "con": "tazuna.Spec"
+    }
+   },
+   "name": "m.spec",
+   "params": [],
+   "ret": {
+    "args": [],
+    "con": "tazuna.Spec"
+   }
+  }
+ ],
+ "root": "m.spec",
+ "sources": [
+  {
+   "module": "m",
+   "path": "src/m.gleam"
+  }
+ ],
+ "tazuna_ir": 2,
+ "types": [
+  {
+   "at": [
+    1,
+    1
+   ],
+   "name": "m.Box",
+   "params": [],
+   "variants": [
+    {
+     "fields": [
+      {
+       "label": "left",
+       "ty": {
+        "args": [],
+        "con": "Int"
+       }
+      },
+      {
+       "label": "right",
+       "ty": {
+        "args": [],
+        "con": "String"
+       }
+      }
+     ],
+     "name": "Box"
+    }
+   ]
+  }
+ ]
+}

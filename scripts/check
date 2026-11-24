@@ -17,4 +17,4 @@ fi
 kinds=$(mktemp)
 trap 'rm -f "$kinds"' EXIT
 (cd lean && lake exe kinds) >"$kinds"
-test/e2e/check "$kinds"
+test/e2e/check "$kinds" "$PWD/lean/.lake/build/bin/tazuna-engine"

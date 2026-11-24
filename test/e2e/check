@@ -1,15 +1,22 @@
 #!/bin/sh
 # Each kind of output line has one end-to-end case, a directory named after the kind. Fails when a kind has no case or
-# a case names no kind. Usage: test/e2e/check <file listing the kinds, one per line>
+# a case names no kind, and runs each case: the engine checks the case's ir.json, and its stdout and exit code must
+# equal the files stdout and exit. Usage: test/e2e/check <file listing the kinds, one per line> <engine>
 set -eu
 cd "$(dirname "$0")"
 kinds=$1
+engine=$2
 status=0
 while read -r kind; do
   [ -d "$kind" ] || { echo "e2e: kind $kind has no case. Add the directory test/e2e/$kind."; status=1; }
 done <"$kinds"
 for dir in */; do
   [ -d "$dir" ] || continue
-  grep -qxF "${dir%/}" "$kinds" || { echo "e2e: test/e2e/$dir names no kind. Rename or remove it."; status=1; }
+  case=${dir%/}
+  grep -qxF "$case" "$kinds" || { echo "e2e: test/e2e/$dir names no kind. Rename or remove it."; status=1; continue; }
+  code=0
+  out=$("$engine" check "$case/ir.json") || code=$?
+  [ "$out" = "$(cat "$case/stdout")" ] || { printf 'e2e: %s printed\n%s\n' "$case" "$out"; status=1; }
+  [ "$code" = "$(cat "$case/exit")" ] || { echo "e2e: $case exited $code, expected $(cat "$case/exit")"; status=1; }
 done
 exit $status
