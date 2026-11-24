@@ -723,3 +723,44 @@ pub const needs_equality = [
   #("tazuna.query", ["caller"]),
   #("tazuna.machine", ["key"]),
 ]
+
+/// The function parameters built-ins keep as closure records: the
+/// built-in, the parameter's position and its label.
+pub const kept = [
+  #("tazuna.service", 2, "apply"),
+  #("tazuna.service", 7, "invariants"),
+  #("tazuna.command", 2, "accepts"),
+  #("tazuna.command", 3, "decide"),
+  #("tazuna.command", 4, "ensures"),
+  #("tazuna.query", 2, "accepts"),
+  #("tazuna.query", 3, "resolve"),
+  #("tazuna.external_query", 1, "ensures"),
+  #("tazuna.request_command", 2, "on_answer"),
+  #("tazuna.request_query", 2, "on_answer"),
+  #("tazuna.send_command", 3, "on_answer"),
+  #("tazuna.send_query", 3, "on_answer"),
+  #("tazuna.subscribe", 1, "wrap"),
+]
+
+/// The types whose values are structure values, not data.
+pub const structure_types = [
+  "tazuna.Spec",
+  "tazuna.Service",
+  "tazuna.Command",
+  "tazuna.Query",
+  "tazuna.Machine",
+  "tazuna.Reaction",
+  "tazuna.External",
+  "tazuna.ExternalCommand",
+  "tazuna.ExternalQuery",
+  "tazuna.Source",
+  "tazuna.Declared",
+  "tazuna.Effect",
+  "tazuna.Subscription",
+  "tazuna.Bounds",
+  "tazuna.Create",
+  "tazuna.Response",
+  "tazuna.Scenario",
+  "tazuna.Step",
+  "tazuna.Sender",
+]

@@ -18,6 +18,7 @@ import tazuna/internal/ir.{
   Meta, Pat, Tuple, Var,
 }
 import tazuna/internal/json
+import tazuna/internal/kept
 import tazuna/internal/names.{type Imports}
 import tazuna/internal/print
 
@@ -43,6 +44,7 @@ pub type Restricted {
   Recursion
   RecursiveType
   Incomparable
+  KeptCapture
   ShadowedImport
   MixedReference
   MultiVariantUpdate
@@ -69,6 +71,7 @@ pub const restricted = [
   Recursion,
   RecursiveType,
   Incomparable,
+  KeptCapture,
   ShadowedImport,
   MixedReference,
   MultiVariantUpdate,
@@ -110,6 +113,7 @@ pub fn kind_name(kind: Kind) -> String {
         Recursion -> "recursion"
         RecursiveType -> "recursiveType"
         Incomparable -> "incomparable"
+        KeptCapture -> "keptCapture"
         ShadowedImport -> "shadowedImport"
         MixedReference -> "mixedReference"
         MultiVariantUpdate -> "multiVariantUpdate"
@@ -414,6 +418,14 @@ pub fn convert(
         list.key_find(program.sources, names.split(site.function).0)
         |> result.unwrap(site.function)
       Finding(Restricted(Incomparable), path, Some(site.at), site.message)
+    }),
+  )
+  use <- bail(
+    list.map(kept.sites(program), fn(site) {
+      let path =
+        list.key_find(program.sources, names.split(site.function).0)
+        |> result.unwrap(site.function)
+      Finding(Restricted(KeptCapture), path, Some(site.at), site.message)
     }),
   )
   use <- bail(list.filter_map(mods, round_trip(program, _)))

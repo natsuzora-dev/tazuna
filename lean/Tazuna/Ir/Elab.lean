@@ -583,6 +583,16 @@ partial def applyTo (sc : Scope) (pos : At) (f : Surface.Expr) (arg : Slot T G (
   let fe ← coerce cx pos (.fn [p] r) ft fe
   pure ⟨r, .call fe (.cons (← elabSlot sc p arg) .nil)⟩
 
+/-- Whether values of a type hold a function, which a kept function cannot capture: its code writes each captured
+value as a constant. The converter reports such a capture as `Restricted.keptCapture` first. -/
+partial def holdsFn : Ty → Bool
+  | .fn .. => true
+  | .list t | .bag t => holdsFn t
+  | .tuple ts => ts.any holdsFn
+  | .adt _ _ vs => vs.any (·.any holdsFn)
+  | .table k v => holdsFn k || holdsFn v
+  | _ => false
+
 /-- A function a structure built-in keeps, closed over the variables it uses: `e` elaborated again in a scope of
 only those, so its source needs no renaming. -/
 partial def elabKept (sc : Scope) (u : Ty) (e : Surface.Expr) : E (Expr G (ctx sc) (.dsl .closure [u])) := do
@@ -595,6 +605,8 @@ partial def elabKept (sc : Scope) (u : Ty) (e : Surface.Expr) : E (Expr G (ctx s
   let body ← coerce cx e.pos u u1 body
   let env ← varsAt e.pos bs
   let env ← castList (F := fun Γ' => Exprs G (ctx sc) Γ') e.pos env (b := ctx sc')
+  if let some (n, _) := sc'.find? (holdsFn ·.2) then
+    fail e.pos s!"a function a structure value keeps captures the function {n}, which has no constant"
   if hΓ : (Ty.tuple (ctx sc')).isData = true then
     if ht : u.isData = true then pure (.close env hΓ ht body)
     else fail e.pos s!"a structure value keeps a function of {showTy T u}, which holds no data"

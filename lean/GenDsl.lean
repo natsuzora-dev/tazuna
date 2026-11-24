@@ -132,7 +132,17 @@ def embedded : String :=
   "pub const needs_equality = [\n" ++
   String.join ((Prim.all.filter (!·.sig.needsEq.isEmpty)).map fun p =>
     let vs := p.sig.needsEq.map fun k => Tazuna.Ir.Literal.printStr (p.sig.tvars[k]?.getD "")
-    s!"  #({Tazuna.Ir.Literal.printStr p.global}, [" ++ ", ".intercalate vs ++ "]),\n") ++ "]\n"
+    s!"  #({Tazuna.Ir.Literal.printStr p.global}, [" ++ ", ".intercalate vs ++ "]),\n") ++ "]\n\n" ++
+  "/// The function parameters built-ins keep as closure records: the\n" ++
+  "/// built-in, the parameter's position and its label.\n" ++
+  "pub const kept = [\n" ++
+  String.join (Prim.all.flatMap fun p => (p.sig.params.zipIdx.filter (·.1.ty matches .dsl .closure _)).map
+    fun (q, k) => s!"  #({Tazuna.Ir.Literal.printStr p.global}, {k}, {Tazuna.Ir.Literal.printStr (q.label.getD q.name)}),\n") ++
+  "]\n\n" ++
+  "/// The types whose values are structure values, not data.\n" ++
+  "pub const structure_types = [\n" ++
+  String.join ((Dsl.all.filter fun k => k != .fresh && k != .closure).map fun k =>
+    s!"  {Tazuna.Ir.Literal.printStr ("tazuna." ++ k.name)},\n") ++ "]\n"
 
 /-- Checks that the DSL modules match Lean's table and that the launcher's copy of them is current, or rewrites them
 with `--write`. -/

@@ -124,6 +124,10 @@ fn example(kind: Restricted) -> #(String, Int) {
       "import tazuna/table\n\npub fn f(t: table.Table(fn() -> Int, Int)) -> Int {\n  table.size(table.remove(t, fn() { 1 }))\n}",
       4,
     )
+    convert.KeptCapture -> #(
+      "import tazuna\n\npub fn f() -> tazuna.Query(Int, Int, Int, Int) {\n  let twice = fn(n) { n * 2 }\n  tazuna.query(name: \"q\", callers: [], accepts: fn(_) { [] }, resolve: fn(cx) {\n    twice(cx.input)\n  })\n}",
+      6,
+    )
     convert.ShadowedImport -> #(
       "import gleam/int.{to_string}\n\npub fn to_string() -> Int {\n  1\n}",
       3,
@@ -198,4 +202,53 @@ pub fn equality_demands_flow_through_generic_functions_test() {
     convert.convert([Source("m", "src/m.gleam", text)], "m")
   assert convert.kind_name(f.kind) == "Restricted.incomparable"
   assert f.at == Some(ir.At(14, 3))
+}
+
+fn kept_findings(body: String) -> List(#(Int, String)) {
+  let text =
+    "import tazuna\n\npub fn f(s: tazuna.Service, n: Int) -> tazuna.Query(Int, Int, Int, Int) {\n"
+    <> body
+    <> "\n}"
+  let assert Error(findings) =
+    convert.convert([Source("m", "src/m.gleam", text)], "m")
+  list.map(findings, fn(f) {
+    let assert Some(at) = f.at
+    assert convert.kind_name(f.kind) == "Restricted.keptCapture"
+    #(at.line, f.message)
+  })
+}
+
+/// A kept function may capture data; a structure value, a local function
+/// passed by its label alone, or one captured inside a piped call or a `use`
+/// callback, is refused where it is written, with the fix.
+pub fn kept_captures_name_the_fix_test() {
+  let ok =
+    "import tazuna\n\npub fn f(n: Int) -> tazuna.Query(Int, Int, Int, Int) {\n  tazuna.query(name: \"q\", callers: [], accepts: fn(_) { [] }, resolve: fn(cx) {\n    cx.input + n\n  })\n}"
+  let assert Ok(_) = convert.convert([Source("m", "src/m.gleam", ok)], "m")
+  assert kept_findings(
+      "  tazuna.query(name: \"q\", callers: [], accepts: fn(_) { [] }, resolve: fn(_) {\n    let _ = s\n    n\n  })",
+    )
+    == [
+      #(
+        5,
+        "resolve of tazuna.query captures `s`, which holds a tazuna.Service, a structure value Lean cannot keep as data: capture only the data the function reads",
+      ),
+    ]
+  assert kept_findings(
+      "  let resolve = fn(_) { n }\n  tazuna.query(name: \"q\", callers: [], accepts: fn(_) { [] }, resolve:)",
+    )
+    == [
+      #(
+        5,
+        "resolve of tazuna.query is kept with the local function `resolve`, which Lean cannot keep as data: define it at the top level and pass it by name",
+      ),
+    ]
+  let assert [#(5, _)] =
+    kept_findings(
+      "  let g = fn(x) { x }\n  \"q\" |> tazuna.query([], fn(_) { [] }, fn(cx) { g(cx.input) })",
+    )
+  let assert [#(5, _), #(6, _)] =
+    kept_findings(
+      "  let g = fn(x) { x }\n  use cx <- tazuna.query(name: \"q\", callers: [], accepts: fn(i) { [#(\"ok\", g(i) > 0)] })\n  g(cx.input)",
+    )
 }
