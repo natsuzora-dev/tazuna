@@ -4,6 +4,7 @@ import Tazuna.Cli.Test
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
+import Tazuna.Semantics.Reach
 import Tazuna.Smt.Decode
 import Tazuna.Smt.StepEncode
 import Tazuna.Smt.Bounds
