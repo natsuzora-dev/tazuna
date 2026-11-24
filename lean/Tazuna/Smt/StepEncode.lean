@@ -300,4 +300,150 @@ theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (call
 
 end
 
+/-! The event kind, on a service without reactions and a state without machine instances: the subscription wraps the value into an event, the
+records apply it, and the invariants are checked on the result. -/
+
+/-- The codes of the functions an event step reads. -/
+structure EventCode (v : ServiceV) (i : Fin v.subscribes.length) where
+  apply : Code (Ty.fn [v.records, v.event] v.records)
+  wrap : Code (Ty.fn [(v.subscribes.get i).event] v.event)
+  invariants : Code (Ty.fn [v.records] Ty.rules)
+
+/-- An event step's types are data, as the `service` and `subscription` built-ins demand. -/
+structure EventData (v : ServiceV) (i : Fin v.subscribes.length) : Prop where
+  records : v.records.isData = true
+  event : v.event.isData = true
+  value : (v.subscribes.get i).event.isData = true
+
+section
+variable {v : ServiceV} {i : Fin v.subscribes.length} (hd : EventData v i)
+include hd
+
+theorem EventData.apply : (Ty.fn [v.records, v.event] v.records).isData = true := by
+  simp [Ty.isData, Ty.isDatas, hd.records, hd.event]
+theorem EventData.applyArgs : (Ty.tuple [v.records, v.event]).isData = true := by
+  simp [Ty.isData, Ty.isDatas, hd.records, hd.event]
+theorem EventData.wrap : (Ty.fn [(v.subscribes.get i).event] v.event).isData = true := by
+  simp only [Ty.isData, Ty.isDatas, hd.value, hd.event, Bool.and_self]
+theorem EventData.wrapArgs : (Ty.tuple [(v.subscribes.get i).event]).isData = true := by
+  simp only [Ty.isData, Ty.isDatas, hd.value, Bool.and_self]
+theorem EventData.invariants : (Ty.fn [v.records] Ty.rules).isData = true := by
+  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.records]
+theorem EventData.invArgs : (Ty.tuple [v.records]).isData = true := by simp [Ty.isData, Ty.isDatas, hd.records]
+
+end
+
+/-- The codes relate to the service's and the subscription's functions in the model. -/
+structure EventCode.Rel (M : Model) (L : Layout) {v : ServiceV} {i : Fin v.subscribes.length} (hd : EventData v i)
+    (ec : EventCode v i) : Prop where
+  apply : Smt.Rel M L _ (Ty.up _ hd.apply v.apply) ec.apply
+  wrap : Smt.Rel M L _ (Ty.up _ hd.wrap (v.subscribes.get i).wrap) ec.wrap
+  invariants : Smt.Rel M L _ (Ty.up _ hd.invariants v.invariants) ec.invariants
+
+/-- The terms of an event step: the records after the event, the event, and each invariant's name and whether it
+holds on those records. -/
+structure EventOut where
+  records : Term
+  event : Term
+  invariants : List (Term × Term)
+
+/-- An event step's terms and its condition, from the terms of the records and the received value. -/
+def encodeEvent (L : Layout) {v : ServiceV} {i : Fin v.subscribes.length} (ec : EventCode v i) (records value : Term) :
+    Except Refusal (EventOut × Term) := do
+  let vc ← need "a value that has no term" (Code.ofTerm? _ value)
+  let (ev, c1) ← ec.wrap (vc, ())
+  let rc ← need "records that have no term" (Code.ofTerm? _ records)
+  let (r, c2) ← ec.apply (rc, Code.share _ ev, ())
+  let r := Code.share _ r
+  let (invs, c3) ← ec.invariants (r, ())
+  let rules ← ruleTerms L invs
+  let rt ← need "records that have no term" (Code.term? _ r)
+  let et ← need "an event that has no term" (Code.term? _ ev)
+  pure (⟨rt, et, rules⟩, andT c1 (andT c2 c3))
+
+section
+variable {M : Model} {L : Layout}
+
+/-- An event's step on a service without reactions from a state without machine instances, computed. -/
+theorem step_event (v : ServiceV) (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
+    (i : Fin v.subscribes.length) (value : (v.subscribes.get i).event.den0) :
+    let ev := (v.subscribes.get i).wrap (value, ())
+    let records := v.apply (s.records, ev, ())
+    step v s (.event i value) = match Step.broken (v.invariants (records, ())) with
+      | n :: _ => ⟨s, .fault (.invariant n), [], []⟩
+      | [] => ⟨{ s with records }, .accepted, [ev], []⟩ := by
+  intro ev records
+  have hinv : ∀ (s' : State v), s'.machines = [] → Step.invariants s' = Step.broken (v.invariants (s'.records, ())) := by
+    intro s' h; simp [Step.invariants, h]
+  simp only [step, Step.finish, Step.applyEvents, List.foldlM, Step.react, hs, List.foldl_nil, hx, List.flatMap_nil,
+    List.append_nil, Step.start, bind, Except.bind, pure, Except.pure, Step.settle, List.nil_append]
+  rw [hinv _ rfl]
+  rfl
+
+/-- T2 for an event on a service without reactions, from a state without machine instances: wherever the condition holds, a broken invariant's
+name is the step's fault, and otherwise the step is accepted with the records and the event the terms denote. -/
+theorem event_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
+    (i : Fin v.subscribes.length) (value : (v.subscribes.get i).event.den0) (hd : EventData v i) (ec : EventCode v i)
+    (he : ec.Rel M L hd) {records sv : Term}
+    (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
+    (hsv : RelV L _ (Ty.up _ hd.value value) (sv.denote M))
+    {o : EventOut} {cond : Term} (henc : encodeEvent L ec records sv = .ok (o, cond)) (hc : Holds M cond) :
+    let r := step v s (.event i value)
+    match brokenIn M o.invariants with
+    | n :: _ => r = ⟨s, .fault (.invariant n), [], []⟩
+    | [] => r.outcome = .accepted ∧ r.out = [] ∧ r.state = { s with records := r.state.records } ∧
+        RelV L v.records (Ty.up _ hd.records r.state.records) (o.records.denote M) ∧
+        ∃ e, r.events = [e] ∧ RelV L v.event (Ty.up _ hd.event e) (o.event.denote M) := by
+  intro r
+  obtain ⟨vc, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨ev, c1⟩, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨rc, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨rr, c2⟩, h4, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨invs, c3⟩, h5, henc⟩ := bind_ok.1 henc
+  obtain ⟨rules, h6, henc⟩ := bind_ok.1 henc
+  obtain ⟨rt, h7, henc⟩ := bind_ok.1 henc
+  obtain ⟨et, h8, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  rw [holds_andT, holds_andT] at hc
+  have hvc : Smt.Rel M L _ (Ty.up _ hd.value value) vc := (rel_ofTerm (need_ok.1 h1) _).2 hsv
+  have hargs : Smt.Rels M L [(v.subscribes.get i).event]
+      (Ty.up (.tuple [(v.subscribes.get i).event]) hd.wrapArgs (value, ())) (vc, ()) := by
+    show Smt.Rel M L _ (Ty.up (.tuple [(v.subscribes.get i).event]) hd.wrapArgs (value, ())).1 vc ∧ True
+    erw [Ty.up_tuple _ _ _ hd.value rfl]; exact ⟨hvc, trivial⟩
+  have hev := he.wrap _ (vc, ()) hargs ev c1 h2 hc.1
+  erw [Ty.up_fn _ _ _ hd.wrapArgs hd.event] at hev
+  have hrc : Smt.Rel M L _ (Ty.up _ hd.records s.records) rc := (rel_ofTerm (need_ok.1 h3) _).2 hrec
+  have hargs2 : Smt.Rels M L [v.records, v.event]
+      (Ty.up (.tuple [v.records, v.event]) hd.applyArgs (s.records, (v.subscribes.get i).wrap (value, ()), ()))
+      (rc, Code.share _ ev, ()) := by
+    show Smt.Rel M L _ (Ty.up (.tuple [v.records, v.event]) hd.applyArgs
+      (s.records, (v.subscribes.get i).wrap (value, ()), ())).1 rc ∧
+      Smt.Rels M L [v.event] (Ty.up (.tuple [v.records, v.event]) hd.applyArgs
+        (s.records, (v.subscribes.get i).wrap (value, ()), ())).2 (Code.share _ ev, ())
+    erw [Ty.up_tuple _ _ _ hd.records (by simp [Ty.isData, Ty.isDatas, hd.event])]
+    refine ⟨hrc, ?_⟩
+    show Smt.Rel M L _ (Ty.up (.tuple [v.event]) (by simp only [Ty.isData, Ty.isDatas, hd.event, Bool.and_self])
+      ((v.subscribes.get i).wrap (value, ()), ())).1 _ ∧ True
+    erw [Ty.up_tuple _ _ _ hd.event rfl]; exact ⟨rel_share hev, trivial⟩
+  have hr := he.apply _ _ hargs2 rr c2 h4 hc.2.1
+  erw [Ty.up_fn _ _ _ hd.applyArgs hd.records] at hr
+  have hr' := rel_share hr
+  have hargs3 : Smt.Rels M L [v.records]
+      (Ty.up (.tuple [v.records]) hd.invArgs (v.apply (s.records, (v.subscribes.get i).wrap (value, ()), ()), ()))
+      (Code.share _ rr, ()) := by
+    show Smt.Rel M L _ (Ty.up (.tuple [v.records]) hd.invArgs
+      (v.apply (s.records, (v.subscribes.get i).wrap (value, ()), ()), ())).1 _ ∧ True
+    erw [Ty.up_tuple _ _ _ hd.records rfl]; exact ⟨hr', trivial⟩
+  have hinv := he.invariants _ _ hargs3 invs c3 h5 hc.2.2
+  erw [Ty.up_fn _ Ty.rules _ hd.invArgs rfl, Ty.up_list _ _ rfl] at hinv
+  have hbroken := rules_broken h6 _ hinv
+  simp only [r, step_event v hx s hs i value]
+  rw [hbroken]
+  cases Step.broken (v.invariants (v.apply (s.records, (v.subscribes.get i).wrap (value, ()), ()), ())) with
+  | cons n ns => rfl
+  | nil =>
+    exact ⟨rfl, rfl, rfl, (rel_term (need_ok.1 h7) _).1 hr', _, rfl, (rel_term (need_ok.1 h8) _).1 hev⟩
+
+end
+
 end Tazuna.Smt

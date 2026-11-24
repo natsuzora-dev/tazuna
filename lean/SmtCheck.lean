@@ -323,6 +323,89 @@ def queryCases : List (String × List Term) :=
     ("query refuses an unlisted caller", [.not (.var 6)]),
     ("query refuses a key that is not positive", [.var 6, .not (.var 7)]) ]
 
+/-! An event step on a service without machines or reactions, for `event_step`: the subscription's value is a key
+and a value, the records insert it, and the invariant `small` holds while the table has fewer than three keys. -/
+
+def evT : Ty := .tuple [.int, .int]
+
+def wrapE : E (.fn [evT] evT) := .lam (.var .here)
+
+def applyE : E (.fn [recordsT, evT] recordsT) :=
+  .lam (.call (.prim .tableInsert [.int, .int] rfl)
+    (.cons (.var .here) (.cons (.index (ts := [.int, .int]) (.var (.there .here)) ⟨0, by decide⟩)
+      (.cons (.index (ts := [.int, .int]) (.var (.there .here)) ⟨1, by decide⟩) .nil))))
+
+def invariantsE : E (.fn [recordsT] Ty.rules) :=
+  .lam (.list (.cons (.tuple (.cons (.str "small")
+    (.cons (.bin .lt (.call (.prim .tableSize [.int, .int] rfl) (.cons (.var .here) .nil)) (.int 3)) .nil))) .nil))
+
+def eventSvc : ServiceV :=
+  { name := "e", records := recordsT, event := evT, caller := .str, init := Builtin.tableEmpty,
+    apply := Ty.down _ rfl (applyE.eval (G := []) () ()),
+    subscribes := [⟨"x", "set", evT, Ty.down _ rfl (wrapE.eval (G := []) () ())⟩], commands := [], queries := [],
+    machines := [], reactions := [], invariants := Ty.down _ rfl (invariantsE.eval (G := []) () ()), responses := [],
+    bounds := ⟨[], 0, 0, 0⟩, declared := [] }
+
+def eventLayout : Layout :=
+  Layout.addTys (fun _ => 3) {} (recordsT :: evT :: Tazuna.Smt.Expr.tys applyE ++ Tazuna.Smt.Expr.tys invariantsE)
+
+def eventI : Fin eventSvc.subscribes.length := ⟨0, by decide⟩
+
+def eventCode (L : Layout) : Except Refusal (EventCode eventSvc eventI) := do
+  let (a, _) ← encode L (G := []) () applyE ()
+  let (w, _) ← encode L (G := []) () wrapE ()
+  let (n, _) ← encode L (G := []) () invariantsE ()
+  pure ⟨a, w, n⟩
+
+/-- v0..v3 the state, v4 the value, v5 the records after, v6 the event, v7 and v8 the invariant's holds and name. -/
+def eventScript (goal : List Term) : Except String Script := do
+  let L := eventLayout
+  let ec ← (eventCode L).mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0
+  let (o, cond) ← (encodeEvent L ec S.records (.var 4)).mapError fun r => s!"no encoding: {repr r}"
+  let some (d, n) := L.find? recordsT | throw "no records datatype"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | throw "no slot datatype"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some esrt := L.srt? evT | throw "no event sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [(name, holds)] := o.invariants | throw "not one invariant"
+  pure { datatypes := dts, vars := [rsrt, .int, .int, .int, esrt, rsrt, esrt, .bool, .str],
+         asserts := [cond, keysDistinct d dt n S.records, .le (.int 0) S.fresh, .le (.int 0) S.nextId,
+           .eq (.var 5) o.records, .eq (.var 6) o.event, .eq (.var 7) holds, .eq (.var 8) name] ++ goal,
+         shows := List.range 9 }
+
+/-- Whether the model's value decodes to a value `==` to `x`. -/
+def sameAs (L : Layout) (t : Ty) (h : t.isData = true) (x : t.den0) (w : Option Val) : Bool :=
+  match w.bind (decodeV L t) with
+  | some y => (Ty.semWith Dsl.val t).2 (Ty.up t h x) y
+  | none => false
+
+def eventCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := do
+  match eventScript goal with
+  | .error m => IO.println s!"smt-check: {name}: {m}"; return false
+  | .ok script =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let L := eventLayout
+      match (SymState.vars 0).decode M L (v := eventSvc) rfl [] [],
+          (SymInput.event eventI (.var 4)).decode M L (v := eventSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+            (fun | ⟨0, _⟩ => rfl) with
+      | some s, some x =>
+        let r := step eventSvc s x
+        let ok := match brokenIn M [(.var 8, .var 7)], r.outcome, r.events with
+          | n :: _, .fault (.invariant n'), [] => n == n' && sameAs L recordsT rfl r.state.records (vs.lookup 0)
+          | [], .accepted, [e] => sameAs L recordsT rfl r.state.records (vs.lookup 5) && sameAs L evT rfl e (vs.lookup 6)
+          | _, _, _ => false
+        unless ok do IO.println s!"smt-check: {name}: step says {r.outcome.summary}, the terms differ"
+        return ok
+      | _, _ => IO.println s!"smt-check: {name}: the model does not decode"; return false
+    | a => IO.println s!"smt-check: {name}: {repr a}"; return false
+
+def eventCases : List (String × List Term) :=
+  [ ("event keeps the invariant", [.var 7]),
+    ("event breaks the invariant", [.not (.var 7)]) ]
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -358,6 +441,8 @@ def check (z3 : String) : IO Bool := do
     | .error m => IO.println s!"smt-check: fresh({step}, {index}): {m}"; ok := false
   for (name, goal) in queryCases do
     unless ← queryCase solver name goal do ok := false
+  for (name, goal) in eventCases do
+    unless ← eventCase solver name goal do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
