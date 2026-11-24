@@ -1,5 +1,5 @@
 name = "tazuna"
-defaultTargets = ["tazuna-engine", "gen-dsl", "kinds"]
+defaultTargets = ["Tazuna", "tazuna-engine", "gen-dsl", "kinds"]
 
 [leanOptions]
 autoImplicit = false
