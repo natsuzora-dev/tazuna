@@ -17,9 +17,11 @@ structure Solver where
   /-- Wall-clock limit: the process is killed after this many ms. -/
   timeoutMs : Nat := 30000
 
+/-- Beyond depth 5 z3 prints a value with `let` aliases, which values in SMT-LIB's model syntax do not have; the
+depth limit is raised so every value prints as a term. -/
 def Solver.header (s : Solver) : List String :=
   [s!"(set-option :rlimit {s.rlimit})", s!"(set-option :smt.random_seed {s.seed})",
-    s!"(set-option :sat.random_seed {s.seed})"]
+    s!"(set-option :sat.random_seed {s.seed})", "(set-option :pp.max_depth 1000000)"]
 
 /-- Runs one script and reads the answer. -/
 def Solver.run (s : Solver) (script : Script) : IO Answer := do
