@@ -20,13 +20,24 @@ fn apply(r: Records, _e: Event) -> Records {
   r
 }
 
-fn add(name: String) -> tazuna.Command(Records, Event, Caller) {
+fn add(name: String) -> tazuna.Command(Records, Event, Caller, String, Nil) {
   tazuna.command(
+    service: "tasks",
     name: name,
     callers: [User],
     accepts: fn(_t: String) { [] },
     decide: fn(c: Ctx(Records, String, Caller)) { Ok([Added(c.input)]) },
     ensures: fn(_c, _r) { [] },
+  )
+}
+
+fn stray() -> tazuna.Query(Records, Caller, Nil, Int) {
+  tazuna.query(
+    service: "mail",
+    name: "stray",
+    callers: [User],
+    accepts: fn(_i) { [] },
+    resolve: fn(_c) { 0 },
   )
 }
 
@@ -36,8 +47,7 @@ fn tasks(name: String) -> tazuna.Service {
     init: Records(tasks: tazuna.table_new()),
     apply: apply,
     subscribes: [],
-    commands: [add("add")],
-    queries: [],
+    requests: [tazuna.define_command(add("add")), tazuna.define_query(stray())],
     machines: [],
     reactions: [],
     invariants: fn(_r) { [] },

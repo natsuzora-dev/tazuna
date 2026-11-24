@@ -47,9 +47,9 @@ inductive Prim where
   | tableFilter | tableMap | tableCount | tableAny | tableAll
   | dateAddDays | dateDaysBetween
   | require | ref
-  | spec | service | command | query | machine | reaction
+  | spec | service | command | query | defineCommand | defineQuery | machine | reaction
   | external | externalCommand | externalQuery | externalEvent | declareCommand | declareQuery | declareEvent
-  | request | subscribe | bounds | create | response | fresh
+  | request | sendCommand | sendQuery | subscribe | bounds | create | response | fresh
 deriving Repr, DecidableEq
 
 structure PrimParam where
@@ -147,25 +147,35 @@ def sig : Prim → PrimSig :=
       doc := "A service. `apply` folds an event into the records: events are the only writes.",
       tvars := ["records", "event", "caller"], dataArgs := true, needsEq := [2],
       params := [l "name" .str, l "init" a, l "apply" (.fn [a, b] a),
-        l "subscribes" (.list (.dsl .subscription [b])), l "commands" (.list (.dsl .command [a, b, param 2])),
-        l "queries" (.list (.dsl .query [a, param 2])), l "machines" (.list (.dsl .machine [a, b])),
+        l "subscribes" (.list (.dsl .subscription [b])), l "requests" (.list (.dsl .definition [a, b, param 2])),
+        l "machines" (.list (.dsl .machine [a, b])),
         l "reactions" (.list (.dsl .reaction [a, b])), l "invariants" (.fn [a] Ty.rules),
         l "responses" (.list (.dsl .response [b])), l "bounds" (.dsl .bounds [a])],
       ret := .dsl .service [] }
   | .command =>
     { name := "command",
-      doc := "A command: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects.",
+      doc := "A command of the service named `service`: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects.",
       tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true, needsEq := [2],
-      params := [l "name" .str, l "callers" (.list (param 2)), l "accepts" (.fn [param 3] Ty.rules),
+      params := [l "service" .str, l "name" .str, l "callers" (.list (param 2)), l "accepts" (.fn [param 3] Ty.rules),
         l "decide" (.fn [.ctx a (param 3) (param 2)] (.result (.list b) (param 4))),
         l "ensures" (.fn [.ctx a (param 3) (param 2), a] Ty.rules)],
-      ret := .dsl .command [a, b, param 2] }
+      ret := .dsl .command [a, b, param 2, param 3, param 4] }
   | .query =>
-    { name := "query", doc := "A query: it answers from the records and writes nothing.",
+    { name := "query", doc := "A query of the service named `service`: it answers from the records and writes nothing.",
       tvars := ["records", "caller", "input", "output"], dataArgs := true, needsEq := [1],
-      params := [l "name" .str, l "callers" (.list b), l "accepts" (.fn [param 2] Ty.rules),
+      params := [l "service" .str, l "name" .str, l "callers" (.list b), l "accepts" (.fn [param 2] Ty.rules),
         l "resolve" (.fn [.ctx a (param 2) b] (param 3))],
-      ret := .dsl .query [a, b] }
+      ret := .dsl .query [a, b, param 2, param 3] }
+  | .defineCommand =>
+    { name := "define_command", doc := "The command, for its service's list of requests.",
+      tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true,
+      params := [p "command" (.dsl .command [a, b, param 2, param 3, param 4])],
+      ret := .dsl .definition [a, b, param 2] }
+  | .defineQuery =>
+    { name := "define_query", doc := "The query, for its service's list of requests.",
+      tvars := ["records", "event", "caller", "input", "output"], dataArgs := true,
+      params := [p "query" (.dsl .query [a, param 2, param 3, param 4])],
+      ret := .dsl .definition [a, b, param 2] }
   | .machine =>
     { name := "machine",
       doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect.",
@@ -218,6 +228,19 @@ def sig : Prim → PrimSig :=
       params := [l "command" (.dsl .externalCommand [b, param 2, param 3]), l "input" b,
         l "on_answer" (.fn [.result (param 2) (param 3)] (.list a))],
       ret := .dsl .effect [a] }
+  | .sendCommand =>
+    { name := "send_command",
+      doc := "An effect: the service runs its own command within the same step; `on_answer` gets Ok(Nil) once the command's events are applied, or its rejection.",
+      tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true,
+      params := [l "command" (.dsl .command [a, b, param 2, param 3, param 4]), l "caller" (param 2),
+        l "input" (param 3), l "on_answer" (.fn [.result Ty.nil (param 4)] (.list b))],
+      ret := .dsl .effect [b] }
+  | .sendQuery =>
+    { name := "send_query", doc := "An effect: the service runs its own query within the same step.",
+      tvars := ["records", "event", "caller", "input", "output"], dataArgs := true,
+      params := [l "query" (.dsl .query [a, param 2, param 3, param 4]), l "caller" (param 2),
+        l "input" (param 3), l "on_answer" (.fn [param 4] (.list b))],
+      ret := .dsl .effect [b] }
   | .subscribe =>
     { name := "subscribe", doc := "Receives another service's or an external's event as one of this service's events.",
       tvars := ["event", "source"], dataArgs := true,
@@ -246,9 +269,9 @@ def all : List Prim :=
   [.length, .bagFromList, .bagInsert, .bagSize, .bagFilter, .bagMap, .bagCount, .bagSum, .bagAny, .bagAll,
    .bagContains, .bagMinBy, .bagMaxBy, .tableNew, .tableFromList, .tableInsert, .tableRemove, .tableGet, .tableSize,
    .tableKeys, .tableValues, .tableFilter, .tableMap, .tableCount, .tableAny, .tableAll, .dateAddDays,
-   .dateDaysBetween, .require, .ref, .spec, .service, .command, .query, .machine, .reaction, .external,
+   .dateDaysBetween, .require, .ref, .spec, .service, .command, .query, .defineCommand, .defineQuery, .machine, .reaction, .external,
    .externalCommand, .externalQuery, .externalEvent, .declareCommand, .declareQuery, .declareEvent, .request,
-   .subscribe, .bounds, .create, .response, .fresh]
+   .sendCommand, .sendQuery, .subscribe, .bounds, .create, .response, .fresh]
 
 theorem mem_all (p : Prim) : p ∈ all := by cases p <;> simp [all]
 

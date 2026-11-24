@@ -1,10 +1,12 @@
 import Tazuna.Semantics.Rules
 
-/-! The step semantics of one service. A step takes one input line and yields exactly one outcome, the out lines and
-the next state. Inside a step the cascade runs to completion: each event is applied, then every machine instance and
-reaction reacts to it, in a fixed canonical order (machines and reactions in declaration order, instances in the order
-their keys first appeared). Timers fire only on clock lines. Out lines and pending requests form multisets: the
-canonical order fixes how the step computes them, and no outcome depends on their order. -/
+/-! The step semantics of one service. A step takes one input line and yields exactly one outcome, the events it
+applied, the out lines and the next state. Inside a step the cascade runs to completion: each event is applied, then
+every machine instance and reaction reacts to it, in a fixed canonical order (machines and reactions in declaration
+order, instances in the order their keys first appeared). A request to an external goes out at once; a command or
+query of the service's own waits in a queue and runs in turn as one internal step, and the cascade bound limits how
+many internal steps one input takes. Timers fire only on clock lines. Out lines and pending requests form multisets:
+the canonical order fixes how the step computes them, and no outcome depends on their order. -/
 
 namespace Tazuna.Ir
 
@@ -28,6 +30,11 @@ structure Instance {r e : Ty} (m : MachineV r e) where
 
 abbrev MachineState (r e : Ty) := (m : MachineV r e) × List (Instance m)
 
+/-- What started an effect: an instance of a machine, by the machine's name and the instance's key, or a reaction. -/
+inductive Sender where
+  | machine (name : String) (key : WireVal)
+  | reaction (name : String)
+
 /-- An out line: a request to an external, with the wire id its answer names in `to`. -/
 structure OutLine where
   id : Nat
@@ -38,9 +45,11 @@ structure OutLine where
 /-- A multiset: two values are the same when one is a permutation of the other. -/
 abbrev Bag (α : Type) := List α
 
+/-- A request sent and not yet answered. -/
 structure Pending (e : Ty) where
   id : Nat
-  effect : EffectV e
+  sender : Sender
+  request : RequestV e
 
 end Step
 
@@ -71,22 +80,25 @@ inductive Input (v : ServiceV) where
 inductive Fault where
   /-- A service or machine invariant is broken after the step. -/
   | invariant (name : String)
-  /-- A command's `ensures` rule is broken after it accepted. -/
+  /-- A command's `ensures` rule is broken once its events are applied. -/
   | ensures (name : String)
-  /-- The cascade took more internal steps than `bounds.cascade`. -/
+  /-- The step took more internal steps than `bounds.cascade`. -/
   | cascadeLimit
   /-- An answer names no pending request, or not with the types that request has. -/
   | answerUnmatched (to : Nat)
+  /-- An effect ran a command or query that was Invalid (the rules broken, as Invalid names them) or that the service
+  does not list (`service`). -/
+  | invalidOwnEffect (name : String) (rules : List String)
 
 inductive Outcome where
-  | accepted (events : List WireVal)
+  | accepted
   | answered (output : WireVal)
   | rejected (rejection : WireVal)
   | invalid (rules : List String)
   | fault (f : Fault)
 
 def Outcome.summary : Outcome → String
-  | .accepted es => s!"accepted {es.length}"
+  | .accepted => "accepted"
   | .answered _ => "answered"
   | .rejected _ => "rejected"
   | .invalid rs => s!"invalid {rs}"
@@ -94,10 +106,13 @@ def Outcome.summary : Outcome → String
   | .fault (.ensures n) => s!"fault ensures {n}"
   | .fault .cascadeLimit => "fault cascadeLimit"
   | .fault (.answerUnmatched n) => s!"fault answerUnmatched {n}"
+  | .fault (.invalidOwnEffect n rs) => s!"fault invalidOwnEffect {n} {rs}"
 
+/-- What one step yields: the next state, the outcome, every event it applied in order, and the out lines. -/
 structure Result (v : ServiceV) where
   state : State v
   outcome : Outcome
+  events : List v.event.den0
   out : Bag OutLine
 
 namespace Step
@@ -107,23 +122,17 @@ variable {v : ServiceV}
 def State.init (v : ServiceV) : State v :=
   { records := v.init, machines := v.machines.map (⟨·, []⟩), pending := [], now := 0, fresh := 0, nextId := 0 }
 
-/-- Effects become requests with fresh wire ids, in order. -/
-def send (s : State v) (effects : List (EffectV v.event)) : State v × Bag OutLine :=
-  effects.foldl (fun (s, out) eff =>
-    ({ s with pending := s.pending ++ [⟨s.nextId, eff⟩], nextId := s.nextId + 1 },
-     out ++ [⟨s.nextId, eff.external, eff.command, ⟨eff.input, eff.value⟩⟩])) (s, [])
-
 /-- An instance entering `st`: its timer and its effect. -/
 def enter {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (key : m.key.den0) (st : m.state.den0) :
-    Instance m × List (EffectV e) :=
+    Instance m × List (Sender × EffectV e) :=
   let timer := match m.after (key, st, records, now, ()) with
     | .inl (.inl (d, target, ()), ()) => some (now + (show Int from d), target)
     | _ => none
-  (⟨key, st, timer⟩, (m.effect key st records now).toList)
+  (⟨key, st, timer⟩, (m.effect key st records now).toList.map (.machine m.name ⟨m.key, key⟩, ·))
 
 /-- A machine after an event: instances whose key left go, new keys start at `initial`, the others react with `on`. -/
 def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) : MachineState r e →
-    MachineState r e × List (EffectV e)
+    MachineState r e × List (Sender × EffectV e)
   | ⟨m, insts⟩ =>
     let eqK := (Ty.semWith Dsl.base m.key).2
     let keys := (m.instances (records, ())).foldl (fun ks k => if ks.any (eqK k) then ks else ks ++ [k]) []
@@ -137,12 +146,12 @@ def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) : Machin
       let (i, es) := enter m records now k m.initial; (acc ++ [i], effs ++ es)) (reacted, effs)
     (⟨m, born⟩, effs)
 
-/-- One event of the cascade: apply it, then let every machine and reaction react. -/
-def react (s : State v) (ev : v.event.den0) : State v × List (EffectV v.event) :=
+/-- One event: apply it, then let every machine and reaction react. -/
+def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV v.event) :=
   let records := v.apply (s.records, ev, ())
   let (machines, effs) := s.machines.foldl (fun (ms, effs) ms0 =>
     let (m', es) := machineStep records s.now ev ms0; (ms ++ [m'], effs ++ es)) ([], [])
-  let effs := effs ++ v.reactions.flatMap fun x => x.react ev records s.now
+  let effs := effs ++ v.reactions.flatMap fun x => (x.react ev records s.now).map (.reaction x.name, ·)
   ({ s with records, machines }, effs)
 
 /-- The broken invariants of the service and of every machine instance. -/
@@ -150,20 +159,95 @@ def invariants (s : State v) : List String :=
   broken (v.invariants (s.records, ())) ++
     s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => broken (m.invariants (i.key, i.state, s.records, ()))
 
-/-- Runs the cascade for `events` and checks the invariants: the outcome is `ok` unless something faults. -/
-def cascade (s0 s : State v) (events : List v.event.den0) (ok : State v → List String) (outcome : Outcome) :
-    Result v :=
-  if (v.bounds.cascade : Int) < events.length then ⟨s0, .fault .cascadeLimit, []⟩ else
-  let (s, effs) := events.foldl (fun (s, effs) ev => let (s, es) := react s ev; (s, effs ++ es)) (s, [])
-  let (s, out) := send s effs
-  match invariants s, ok s with
-  | n :: _, _ => ⟨s0, .fault (.invariant n), []⟩
-  | [], n :: _ => ⟨s0, .fault (.ensures n), []⟩
-  | [], [] => ⟨s, outcome, out⟩
+/-- A step in progress: the state, the events applied and the out lines so far, and the own commands and queries
+waiting to run. -/
+structure Acc (v : ServiceV) where
+  state : State v
+  events : List v.event.den0 := []
+  out : Bag OutLine := []
+  own : List (EffectV v.event) := []
+
+/-- Starts effects in order: a request to an external goes out with a fresh wire id; an own command or query waits. -/
+def start (a : Acc v) (effs : List (Sender × EffectV v.event)) : Acc v :=
+  effs.foldl (fun a (snd, eff) => match eff with
+    | .request r =>
+      let s := a.state
+      { a with state := { s with pending := s.pending ++ [⟨s.nextId, snd, r⟩], nextId := s.nextId + 1 },
+               out := a.out ++ [⟨s.nextId, r.external, r.command, ⟨r.input, r.value⟩⟩] }
+    | own => { a with own := a.own ++ [own] }) a
+
+/-- Applies the events in order, each followed by every machine's and reaction's reaction. -/
+def applyEvents (a : Acc v) (events : List v.event.den0) : Acc v :=
+  events.foldl (fun a ev =>
+    let (s, effs) := react a.state ev
+    start { a with state := s, events := a.events ++ [ev] } effs) a
+
+def ctx {r i c : Ty} (s : State v) (records : r.den0) (caller : c.den0) (input : i.den0) : (Ty.ctx r i c).den0 :=
+  .inl (records, input, caller, s.now, s.fresh, ())
+
+/-- Why a request is Invalid: a caller it does not list, or the input's broken `accepts` rules. -/
+def admit {i : Ty} (callers : List v.caller.den0) (accepts : (Ty.fn [i] Ty.rules).den0) (caller : v.caller.den0)
+    (input : i.den0) : List String :=
+  if callers.any ((Ty.semWith Dsl.base v.caller).2 caller) then broken (accepts (input, ())) else ["callers"]
+
+def okNil {j : Ty} : (Ty.result Ty.nil j).den0 := .inl (.inl (), ())
+
+/-- Runs an own command as an internal step: its events are applied and its `ensures` checked, then its answer's
+events are applied. -/
+def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
+    (onAnswer : (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event)).den0) : Except Fault (Acc v) :=
+  if !(x.service == v.name && v.commands.any (·.name == x.name)) then .error (.invalidOwnEffect x.name ["service"])
+  else match admit x.callers x.accepts caller input with
+  | r :: rs => .error (.invalidOwnEffect x.name (r :: rs))
+  | [] =>
+    let cx := ctx a.state a.state.records caller input
+    let a := { a with state := { a.state with fresh := a.state.fresh + 1 } }
+    match x.decide (cx, ()) with
+    | .inl (events, ()) =>
+      let a := applyEvents a events
+      match broken (x.ensures (cx, a.state.records, ())) with
+      | n :: _ => .error (.ensures n)
+      | [] => .ok (applyEvents a (onAnswer (okNil, ())))
+    | .inr (.inl (j, ())) => .ok (applyEvents a (onAnswer (.inr (.inl (j, ())), ())))
+
+/-- Runs an own query as an internal step: its answer's events are applied. -/
+def runQuery (a : Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0)
+    (onAnswer : (Ty.fn [x.output] (.list v.event)).den0) : Except Fault (Acc v) :=
+  if !(x.service == v.name && v.queries.any (·.name == x.name)) then .error (.invalidOwnEffect x.name ["service"])
+  else match admit x.callers x.accepts caller input with
+  | r :: rs => .error (.invalidOwnEffect x.name (r :: rs))
+  | [] => .ok (applyEvents a (onAnswer (x.resolve (ctx a.state a.state.records caller input, ()), ())))
+
+def runOwn (a : Acc v) : EffectV v.event → Except Fault (Acc v)
+  | .request _ => .ok a
+  | .command r c x caller input onAnswer =>
+    match Ty.same r v.records, Ty.same c v.caller with
+    | some ⟨hr⟩, some ⟨hc⟩ => by subst hr hc; exact runCommand a x caller input onAnswer
+    | _, _ => .error (.invalidOwnEffect x.name ["service"])
+  | .query r c x caller input onAnswer =>
+    match Ty.same r v.records, Ty.same c v.caller with
+    | some ⟨hr⟩, some ⟨hc⟩ => by subst hr hc; exact runQuery a x caller input onAnswer
+    | _, _ => .error (.invalidOwnEffect x.name ["service"])
+
+/-- Runs the waiting own commands and queries in order, one internal step each, until none waits; more than `fuel`
+internal steps is a fault. -/
+def settle : Nat → Acc v → Except Fault (Acc v)
+  | fuel, a => match a.own, fuel with
+    | [], _ => .ok a
+    | _ :: _, 0 => .error .cascadeLimit
+    | eff :: rest, f + 1 => do settle f (← runOwn { a with own := rest } eff)
+
+/-- Ends a step: runs what waits and checks the invariants. A fault leaves the state as `s0`. -/
+def finish (s0 : State v) (a : Acc v) (outcome : Outcome) : Result v :=
+  match settle v.bounds.cascade.toNat a with
+  | .error f => ⟨s0, .fault f, [], []⟩
+  | .ok a => match invariants a.state with
+    | n :: _ => ⟨s0, .fault (.invariant n), [], []⟩
+    | [] => ⟨a.state, outcome, a.events, a.out⟩
 
 /-- Fires the timers due at `now`, earliest deadline first, then machines and instances in order. Entering a state
 may start another due timer; the cascade bound limits how many fire. -/
-def fire (s : State v) : (fuel : Nat) → Option (State v × List (EffectV v.event))
+def fire (s : State v) : (fuel : Nat) → Option (State v × List (Sender × EffectV v.event))
   | 0 => none
   | fuel + 1 =>
     let due := s.machines.flatMap fun ⟨_, insts⟩ => insts.filterMap fun i => i.timer.bind fun (d, _) =>
@@ -181,64 +265,53 @@ def fire (s : State v) : (fuel : Nat) → Option (State v × List (EffectV v.eve
         (ms ++ [⟨m, insts⟩], effs, done)) ([], [], false)
       (fire { s with machines } fuel).map fun (s, es) => (s, effs ++ es)
 
-def ctx {r i c : Ty} (s : State v) (records : r.den0) (caller : c.den0) (input : i.den0) : (Ty.ctx r i c).den0 :=
-  .inl (records, input, caller, s.now, s.fresh, ())
-
 end Step
 
 open Step in
-/-- The step: one input, exactly one outcome. -/
+/-- The step: one input, exactly one outcome. A command's `ensures` is checked once its own events are applied,
+before the own commands and queries they start run. -/
 def step (v : ServiceV) (s : State v) : Input v → Result v
   | .command i caller input =>
     let c := v.commands.get i
-    let eqC := (Ty.semWith Dsl.base v.caller).2
     let s' := { s with fresh := s.fresh + 1 }
-    if !c.callers.any (eqC caller) then ⟨s', .invalid ["callers"], []⟩ else
-    match broken (c.accepts (input, ())) with
-    | r :: rs => ⟨s', .invalid (r :: rs), []⟩
+    match admit c.callers c.accepts caller input with
+    | r :: rs => ⟨s', .invalid (r :: rs), [], []⟩
     | [] =>
       let cx := ctx s s.records caller input
       match c.decide (cx, ()) with
-      | .inr (.inl (j, ())) => ⟨s', .rejected ⟨c.rejection, j⟩, []⟩
+      | .inr (.inl (j, ())) => ⟨s', .rejected ⟨c.rejection, j⟩, [], []⟩
       | .inl (events, ()) =>
-        cascade s' s' events (fun s => broken (c.ensures (cx, s.records, ())))
-          (.accepted (events.map (⟨v.event, ·⟩)))
+        let a := applyEvents { state := s' } events
+        match broken (c.ensures (cx, a.state.records, ())) with
+        | n :: _ => ⟨s', .fault (.ensures n), [], []⟩
+        | [] => finish s' a .accepted
   | .query i caller input =>
     let q := v.queries.get i
-    let eqC := (Ty.semWith Dsl.base v.caller).2
-    if !q.callers.any (eqC caller) then ⟨s, .invalid ["callers"], []⟩ else
-    match broken (q.accepts (input, ())) with
-    | r :: rs => ⟨s, .invalid (r :: rs), []⟩
-    | [] => ⟨s, .answered ⟨q.output, q.resolve (ctx s s.records caller input, ())⟩, []⟩
+    match admit q.callers q.accepts caller input with
+    | r :: rs => ⟨s, .invalid (r :: rs), [], []⟩
+    | [] => ⟨s, .answered ⟨q.output, q.resolve (ctx s s.records caller input, ())⟩, [], []⟩
   | .answer to ⟨t, value⟩ =>
     match s.pending.find? (·.id == to) with
-    | none => ⟨s, .fault (.answerUnmatched to), []⟩
-    | some p => match Ty.same t (Ty.result p.effect.output p.effect.rejection) with
-      | none => ⟨s, .fault (.answerUnmatched to), []⟩
+    | none => ⟨s, .fault (.answerUnmatched to), [], []⟩
+    | some p => match Ty.same t (Ty.result p.request.output p.request.rejection) with
+      | none => ⟨s, .fault (.answerUnmatched to), [], []⟩
       | some ⟨h⟩ =>
-        let events := p.effect.onAnswer (h ▸ value, ())
         let s' := { s with pending := s.pending.filter (·.id != to) }
-        cascade s s' events (fun _ => []) (.accepted (events.map (⟨v.event, ·⟩)))
-  | .event i value =>
-    let events := [(v.subscribes.get i).wrap (value, ())]
-    cascade s s events (fun _ => []) (.accepted (events.map (⟨v.event, ·⟩)))
+        finish s (applyEvents { state := s' } (p.request.onAnswer (h ▸ value, ()))) .accepted
+  | .event i value => finish s (applyEvents { state := s } [(v.subscribes.get i).wrap (value, ())]) .accepted
   | .clock time =>
-    if time < s.now then ⟨s, .invalid ["time moves forward"], []⟩ else
+    if time < s.now then ⟨s, .invalid ["time moves forward"], [], []⟩ else
     match fire { s with now := time } (v.bounds.cascade.toNat + 1) with
-    | none => ⟨s, .fault .cascadeLimit, []⟩
-    | some (s', effs) =>
-      let (s', out) := send s' effs
-      match invariants s' with
-      | n :: _ => ⟨s, .fault (.invariant n), []⟩
-      | [] => ⟨s', .accepted [], out⟩
+    | none => ⟨s, .fault .cascadeLimit, [], []⟩
+    | some (s', effs) => finish s (start { state := s' } effs) .accepted
 
-/-- Runs the inputs in order from `s`: the final state and, per input, its outcome and out lines. -/
-def run (v : ServiceV) : State v → List (Input v) → State v × List (Outcome × Step.Bag Step.OutLine)
+/-- Runs the inputs in order from `s`: the final state and every step's result. -/
+def run (v : ServiceV) : State v → List (Input v) → State v × List (Result v)
   | s, [] => (s, [])
   | s, i :: is =>
     let r := step v s i
     let (s', rest) := run v r.state is
-    (s', (r.outcome, r.out) :: rest)
+    (s', r :: rest)
 
 /-- Every input yields exactly one outcome. -/
 theorem run_outcomes (v : ServiceV) : (s : State v) → (is : List (Input v)) → (run v s is).2.length = is.length
@@ -246,7 +319,7 @@ theorem run_outcomes (v : ServiceV) : (s : State v) → (is : List (Input v)) �
   | s, i :: is => by simp only [run, List.length_cons]; rw [run_outcomes v _ is]
 
 /-- The run is determined by the start state and the inputs: the canonical order leaves it no choice. -/
-theorem run_deterministic (v : ServiceV) (s : State v) (is : List (Input v)) (a b : State v × List (Outcome × Step.Bag Step.OutLine))
+theorem run_deterministic (v : ServiceV) (s : State v) (is : List (Input v)) (a b : State v × List (Result v))
     (ha : run v s is = a) (hb : run v s is = b) : a = b := ha ▸ hb
 
 end Tazuna.Ir

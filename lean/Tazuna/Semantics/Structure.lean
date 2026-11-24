@@ -6,7 +6,7 @@ holds data (`Ty.den0`) and the types of that data, so a list of commands can hol
 namespace Tazuna.Ir
 
 /-- A request to an external command; the answer, an output or a rejection, becomes events. -/
-structure EffectV (e : Ty) where
+structure RequestV (e : Ty) where
   external : String
   command : String
   input : Ty
@@ -15,7 +15,9 @@ structure EffectV (e : Ty) where
   value : input.den0
   onAnswer : (Ty.fn [Ty.result output rejection] (.list e)).den0
 
+/-- A command of the service `service`. -/
 structure CommandV (r e c : Ty) where
+  service : String
   name : String
   input : Ty
   rejection : Ty
@@ -24,13 +26,35 @@ structure CommandV (r e c : Ty) where
   decide : (Ty.fn [Ty.ctx r input c] (Ty.result (.list e) rejection)).den0
   ensures : (Ty.fn [Ty.ctx r input c, r] Ty.rules).den0
 
+/-- A query of the service `service`. -/
 structure QueryV (r c : Ty) where
+  service : String
   name : String
   input : Ty
   output : Ty
   callers : List c.den0
   accepts : (Ty.fn [input] Ty.rules).den0
   resolve : (Ty.fn [Ty.ctx r input c] output).den0
+
+/-- A command whose input and rejection types are `i` and `j`: the value of `Command(records, event, caller, input,
+rejection)`, so a handle's types are the command's. -/
+abbrev CommandOf (r e c i j : Ty) := { x : CommandV r e c // x.input = i ∧ x.rejection = j }
+
+abbrev QueryOf (r c i o : Ty) := { x : QueryV r c // x.input = i ∧ x.output = o }
+
+/-- A command or query, as a service lists it. -/
+inductive DefinitionV (r e c : Ty) where
+  | command (x : CommandV r e c)
+  | query (x : QueryV r c)
+
+/-- What a machine or reaction starts: a request to an external, or a command or query of its own service run inside
+the same step. An own command's answer is `Ok(Nil)` once its events are applied, or its rejection. -/
+inductive EffectV (e : Ty) where
+  | request (x : RequestV e)
+  | command (r c : Ty) (x : CommandV r e c) (caller : c.den0) (input : x.input.den0)
+      (onAnswer : (Ty.fn [Ty.result Ty.nil x.rejection] (.list e)).den0)
+  | query (r c : Ty) (x : QueryV r c) (caller : c.den0) (input : x.input.den0)
+      (onAnswer : (Ty.fn [x.output] (.list e)).den0)
 
 structure MachineV (r e : Ty) where
   name : String
@@ -111,8 +135,9 @@ def Dsl.val : Dsl → List Ty → Sem
     let carrier : Type := match k, args with
       | .spec, _ => SpecV
       | .service, _ => ServiceV
-      | .command, [r, e, c] => CommandV r e c
-      | .query, [r, c] => QueryV r c
+      | .command, [r, e, c, i, j] => CommandOf r e c i j
+      | .query, [r, c, i, o] => QueryOf r c i o
+      | .definition, [r, e, c] => DefinitionV r e c
       | .machine, [r, e] => MachineV r e
       | .reaction, [r, e] => ReactionV r e
       | .external, _ => ExternalV

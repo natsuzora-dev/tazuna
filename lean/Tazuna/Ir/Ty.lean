@@ -5,7 +5,7 @@ namespace Tazuna.Ir
 /-- The types of a spec's structure, which the `tazuna` module declares opaque: a spec builds their values with
 built-ins and never looks inside them. `fresh` is the source of new ids a step hands a command. -/
 inductive Dsl where
-  | spec | service | command | query | machine | reaction | external
+  | spec | service | command | query | definition | machine | reaction | external
   | externalCommand | externalQuery | externalEvent | declared | effect | subscription
   | bounds | create | response | fresh
 deriving Repr, DecidableEq, Inhabited
@@ -13,7 +13,7 @@ deriving Repr, DecidableEq, Inhabited
 namespace Dsl
 
 def all : List Dsl :=
-  [.spec, .service, .command, .query, .machine, .reaction, .external, .externalCommand, .externalQuery,
+  [.spec, .service, .command, .query, .definition, .machine, .reaction, .external, .externalCommand, .externalQuery,
    .externalEvent, .declared, .effect, .subscription, .bounds, .create, .response, .fresh]
 
 theorem mem_all (k : Dsl) : k ∈ all := by cases k <;> simp [all]
@@ -22,8 +22,11 @@ theorem mem_all (k : Dsl) : k ∈ all := by cases k <;> simp [all]
 def decl : Dsl → String × List String × String
   | .spec => ("Spec", [], "The services a spec defines and the externals they talk to.")
   | .service => ("Service", [], "A service: its records, the events that write them, and what it reacts to.")
-  | .command => ("Command", ["records", "event", "caller"], "A request that may write records through events.")
-  | .query => ("Query", ["records", "caller"], "A request that answers from the records and writes nothing.")
+  | .command => ("Command", ["records", "event", "caller", "input", "rejection"],
+      "A request that may write records through events.")
+  | .query => ("Query", ["records", "caller", "input", "output"],
+      "A request that answers from the records and writes nothing.")
+  | .definition => ("Definition", ["records", "event", "caller"], "A command or query, as its service lists it.")
   | .machine => ("Machine", ["records", "event"],
       "State kept per instance; an instance lives while its key is among the machine's instances.")
   | .reaction => ("Reaction", ["records", "event"], "Effects for each event, without state of its own.")
@@ -32,7 +35,8 @@ def decl : Dsl → String × List String × String
   | .externalQuery => ("ExternalQuery", ["input", "output"], "A query an external answers.")
   | .externalEvent => ("ExternalEvent", ["event"], "An event an external or another service sends.")
   | .declared => ("Declared", [], "An external's command, query or event, listed in its declaration.")
-  | .effect => ("Effect", ["event"], "A request to an external; its answer becomes events.")
+  | .effect => ("Effect", ["event"],
+      "A request to an external or to a command or query of the same service; its answer becomes events.")
   | .subscription => ("Subscription", ["event"], "Another service's event, received as one of this service's.")
   | .bounds => ("Bounds", ["records"], "How far checking goes.")
   | .create => ("Create", ["records"], "How many keys checking may add to one table of the records.")
@@ -216,6 +220,7 @@ def prelude : List TypeDecl :=
       variants := [⟨"Timer", [⟨some "after", .int⟩, ⟨some "enter", .param 0⟩]⟩] } ]
 
 def Ty.bool : Ty := .adt 0 [] [[], []]
+def Ty.nil : Ty := .adt 1 [] [[]]
 def Ty.spec : Ty := .dsl .spec []
 def Ty.pickError : Ty := .adt 4 [] [[], []]
 def Ty.result (a e : Ty) : Ty := .adt 2 [a, e] [[a], [e]]
@@ -247,6 +252,7 @@ end
 
 /-- The prelude's types at fixed indices are the ones the helpers above name. -/
 example : prelude[0]?.map (fun d => Ty.adt 0 [] (d.variantTys [])) = some Ty.bool := rfl
+example : prelude[1]?.map (fun d => Ty.adt 1 [] (d.variantTys [])) = some Ty.nil := rfl
 example : prelude[4]?.map (fun d => Ty.adt 4 [] (d.variantTys [])) = some Ty.pickError := rfl
 example (r i c : Ty) : prelude[5]?.map (fun d => Ty.adt 5 [r, i, c] (d.variantTys [r, i, c])) = some (Ty.ctx r i c) := rfl
 example (s : Ty) : prelude[6]?.map (fun d => Ty.adt 6 [s] (d.variantTys [s])) = some (Ty.next s) := rfl

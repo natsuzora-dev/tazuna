@@ -36,10 +36,13 @@ pub type Spec
 pub type Service
 
 /// A request that may write records through events.
-pub type Command(records, event, caller)
+pub type Command(records, event, caller, input, rejection)
 
 /// A request that answers from the records and writes nothing.
-pub type Query(records, caller)
+pub type Query(records, caller, input, output)
+
+/// A command or query, as its service lists it.
+pub type Definition(records, event, caller)
 
 /// State kept per instance; an instance lives while its key is among the machine's instances.
 pub type Machine(records, event)
@@ -62,7 +65,7 @@ pub type ExternalEvent(event)
 /// An external's command, query or event, listed in its declaration.
 pub type Declared
 
-/// A request to an external; its answer becomes events.
+/// A request to an external or to a command or query of the same service; its answer becomes events.
 pub type Effect(event)
 
 /// Another service's event, received as one of this service's.
@@ -291,8 +294,7 @@ pub fn service(
   init _init: records,
   apply _apply: fn(records, event) -> records,
   subscribes _subscribes: List(Subscription(event)),
-  commands _commands: List(Command(records, event, caller)),
-  queries _queries: List(Query(records, caller)),
+  requests _requests: List(Definition(records, event, caller)),
   machines _machines: List(Machine(records, event)),
   reactions _reactions: List(Reaction(records, event)),
   invariants _invariants: fn(records) -> List(#(String, Bool)),
@@ -302,8 +304,9 @@ pub fn service(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A command: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects.
+/// A command of the service named `service`: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects.
 pub fn command(
+  service _service: String,
   name _name: String,
   callers _callers: List(caller),
   accepts _accepts: fn(input) -> List(#(String, Bool)),
@@ -311,17 +314,32 @@ pub fn command(
     Result(List(event), rejection),
   ensures _ensures: fn(Ctx(records, input, caller), records) ->
     List(#(String, Bool)),
-) -> Command(records, event, caller) {
+) -> Command(records, event, caller, input, rejection) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A query: it answers from the records and writes nothing.
+/// A query of the service named `service`: it answers from the records and writes nothing.
 pub fn query(
+  service _service: String,
   name _name: String,
   callers _callers: List(caller),
   accepts _accepts: fn(input) -> List(#(String, Bool)),
   resolve _resolve: fn(Ctx(records, input, caller)) -> output,
-) -> Query(records, caller) {
+) -> Query(records, caller, input, output) {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// The command, for its service's list of requests.
+pub fn define_command(
+  _command: Command(records, event, caller, input, rejection),
+) -> Definition(records, event, caller) {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// The query, for its service's list of requests.
+pub fn define_query(
+  _query: Query(records, caller, input, output),
+) -> Definition(records, event, caller) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
@@ -407,6 +425,26 @@ pub fn request(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
+/// An effect: the service runs its own command within the same step; `on_answer` gets Ok(Nil) once the command's events are applied, or its rejection.
+pub fn send_command(
+  command _command: Command(records, event, caller, input, rejection),
+  caller _caller: caller,
+  input _input: input,
+  on_answer _on_answer: fn(Result(Nil, rejection)) -> List(event),
+) -> Effect(event) {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
+/// An effect: the service runs its own query within the same step.
+pub fn send_query(
+  query _query: Query(records, caller, input, output),
+  caller _caller: caller,
+  input _input: input,
+  on_answer _on_answer: fn(output) -> List(event),
+) -> Effect(event) {
+  panic as \"tazuna's built-ins run only in the engine\"
+}
+
 /// Receives another service's or an external's event as one of this service's events.
 pub fn subscribe(
   to _to: ExternalEvent(source),
@@ -485,6 +523,8 @@ pub const builtins = [
   "service",
   "command",
   "query",
+  "define_command",
+  "define_query",
   "machine",
   "reaction",
   "external",
@@ -495,6 +535,8 @@ pub const builtins = [
   "declare_query",
   "declare_event",
   "request",
+  "send_command",
+  "send_query",
   "subscribe",
   "bounds",
   "create",

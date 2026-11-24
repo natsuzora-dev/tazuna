@@ -20,8 +20,9 @@ fn apply(r: Records, _e: Event) -> Records {
   r
 }
 
-fn add(name: String) -> tazuna.Command(Records, Event, Caller) {
+fn add(name: String) -> tazuna.Command(Records, Event, Caller, String, Nil) {
   tazuna.command(
+    service: "tasks",
     name: name,
     callers: [User],
     accepts: fn(_t: String) { [] },
@@ -36,8 +37,7 @@ fn tasks(name: String) -> tazuna.Service {
     init: Records(tasks: tazuna.table_new()),
     apply: apply,
     subscribes: [],
-    commands: [add("add")],
-    queries: [],
+    requests: [tazuna.define_command(add("add"))],
     machines: [],
     reactions: [],
     invariants: fn(_r) { [] },

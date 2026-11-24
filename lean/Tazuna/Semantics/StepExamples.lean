@@ -11,7 +11,7 @@ open Step
 private def I (x : Int) : Int := x
 private def rule (n : String) (b : Bool) : Ty.rules.den0 := [(n, Ty.ofBool b, ())]
 
-def ping : EffectV .int :=
+def ping : EffectV .int := .request
   { external := "mail", command := "ping", input := .str, output := .int, rejection := .str, value := "hi",
     onAnswer := fun (a, ()) => match a with
       | .inl _ => [(1 : Int)]
@@ -27,14 +27,14 @@ def watch : MachineV .int .int :=
     invariants := fun _ => [] }
 
 def add : CommandV .int .int .int :=
-  { name := "add", input := .int, rejection := .str, callers := [(1 : Int)],
+  { service := "sum", name := "add", input := .int, rejection := .str, callers := [(1 : Int)],
     accepts := fun (i, ()) => rule "small" (decide (I i < 100)),
     decide := fun (.inl (_, i, _, _, _, ()), ()) =>
       if 0 < I i then .inl ([i], ()) else .inr (.inl ("positive", ())),
     ensures := fun (.inl (r, _, _, _, _, ()), r', ()) => rule "grows" (decide (I r ≤ I r')) }
 
 def total : QueryV .int .int :=
-  { name := "total", input := .int, output := .int, callers := [(1 : Int)], accepts := fun _ => [],
+  { service := "sum", name := "total", input := .int, output := .int, callers := [(1 : Int)], accepts := fun _ => [],
     resolve := fun (.inl (r, _, _, _, _, ()), ()) => r }
 
 def svc : ServiceV :=
@@ -55,7 +55,7 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run svc s is).
 #guard summary s0 (cmd 1 500) == "invalid [small]"
 -- `decide` rejects, or accepts with its events.
 #guard summary s0 (cmd 1 0) == "rejected"
-#guard summary s0 (cmd 1 5) == "accepted 1"
+#guard summary s0 (cmd 1 5) == "accepted"
 -- An invariant broken after the step is a fault, and the state stays as it was.
 #guard summary s0 (cmd 1 60) == "fault invariant under 50"
 #guard I (step svc s0 (cmd 1 60)).state.records == 0
@@ -73,13 +73,26 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run svc s is).
 #guard summary (after s0 [.clock 5]) (.clock 4) == "invalid [time moves forward]"
 -- The answer to the pending request becomes events; an answer to no pending request is a fault.
 #guard summary (after s0 [cmd 1 5, cmd 1 1, .clock 10]) (.answer 0 ⟨Ty.result .int .str, .inl ((0 : Int), ())⟩) ==
-  "accepted 1"
+  "accepted"
 #guard summary s0 (.answer 0 ⟨Ty.result .int .str, .inl ((0 : Int), ())⟩) == "fault answerUnmatched 0"
 -- An answer of the wrong type matches no request.
 #guard summary (after s0 [cmd 1 5, cmd 1 1, .clock 10]) (.answer 0 ⟨.int, (0 : Int)⟩) == "fault answerUnmatched 0"
--- A step with more events than the cascade bound is a fault.
-def tight : ServiceV := { svc with bounds := { svc.bounds with cascade := 0 } }
-#guard (step tight (State.init tight) (.event ⟨0, by decide⟩ (1 : Int))).outcome.summary == "fault cascadeLimit"
+-- A reaction sends the service's own `add` for some events: 7 adds 2, 1 adds 1 again and again, 3 adds 500.
+def again : ReactionV .int .int :=
+  { name := "again", react := fun e _ _ =>
+      let send (n : Int) : EffectV .int := .command .int .int add (1 : Int) n fun _ => ([] : List Int)
+      if I e = 7 then [send 2] else if I e = 1 then [send 1] else if I e = 3 then [send 500] else [] }
+def loop : ServiceV := { svc with reactions := [again] }
+def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
+-- The own command runs within the step: both events are applied.
+#guard I (step loop (State.init loop) (ev 7)).state.records == 9
+#guard ((step loop (State.init loop) (ev 7)).events.map I) == [7, 2]
+-- An own command with input it does not accept is a fault, not Invalid.
+#guard (step loop (State.init loop) (ev 3)).outcome.summary == "fault invalidOwnEffect add [small]"
+-- More internal steps than the cascade bound is a fault.
+#guard (step loop (State.init loop) (ev 1)).outcome.summary == "fault cascadeLimit"
+-- A service that lists another service's command breaks the owner rule.
+#guard ((SpecV.illegal prelude ⟨[{ svc with name := "other" }], []⟩).filter (·.1 == .owner)).length == 2
 -- Every input has one outcome.
 #guard (run svc s0 [cmd 1 5, cmd 2 5, .clock 3]).2.length == 3
 

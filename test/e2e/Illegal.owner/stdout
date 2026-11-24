@@ -1,1 +1,2 @@
+{"kind":"Illegal.owner","message":"tasks lists mail.stray, which belongs to mail"}
 {"kind":"Illegal.owner","message":"mail lists post.send, which belongs to post"}

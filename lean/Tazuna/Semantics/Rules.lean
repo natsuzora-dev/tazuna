@@ -9,7 +9,7 @@ namespace Tazuna.Ir
 inductive Illegal where
   /-- Two services or externals share a name, or two requests of one service, or two declarations of one external. -/
   | wireName
-  /-- An external lists a command, query or event that another external owns. -/
+  /-- A service or external lists a command, query or event whose handle names another owner. -/
   | owner
   /-- A subscription names an event no external declares and no service of the spec owns. -/
   | unknownSource
@@ -130,6 +130,8 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
   let perService := s.services.flatMap fun v =>
     let requests := v.commands.map (·.name) ++ v.queries.map (·.name)
     let wireNames := (duplicates requests).map fun n => (Illegal.wireName, s!"{v.name}.{n} names more than one request")
+    let owners := (v.commands.map (fun c => (c.service, c.name)) ++ v.queries.map (fun q => (q.service, q.name))).filterMap
+      fun (o, n) => if o == v.name then none else some (Illegal.owner, s!"{v.name} lists {o}.{n}, which belongs to {o}")
     let wireTypes := ([("caller", v.caller), ("event", v.event)] ++
         v.commands.flatMap (fun c => [(c.name ++ " input", c.input), (c.name ++ " rejection", c.rejection)]) ++
         v.queries.flatMap (fun q => [(q.name ++ " input", q.input), (q.name ++ " output", q.output)])).filterMap
@@ -153,7 +155,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
     let negative := ([("items", (b.items : Int)), ("cascade", b.cascade), ("steps", b.steps)] ++
         (v.bounds.creates.zip reads).map (fun (c, ts) => ("create " ++ ", ".intercalate ts, c.atMost))).filterMap
       fun (what, n) => if n < 0 then some (Illegal.bounds, s!"{v.name}: the {what} bound is negative") else none
-    wireNames ++ wireTypes ++ sources ++ creates ++ negative
+    wireNames ++ owners ++ wireTypes ++ sources ++ creates ++ negative
   let perExternal := s.externals.flatMap fun x =>
     let wireNames := (duplicates (x.declared.map (·.name))).map fun n =>
       (Illegal.wireName, s!"{x.name}.{n} is declared more than once")
