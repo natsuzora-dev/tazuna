@@ -3,9 +3,10 @@ import Tazuna.Smt.Starts
 /-! T2 for an event, with machines: the subscription wraps the value into an event, the records apply it, every
 machine reacts (`encodeReact`), and the service's and every instance's invariants are checked on the result, in the
 step's order (the service's first, then machines in declaration order, instances in key order). Each machine's part
-also yields its start slots, the effects its instances start. `event_step` covers a layout without effect kinds, where
-no machine can start an effect (the theorem derives it from the relation: an effect would need a kind);
-`Tazuna.Smt.EventPending` writes the effects into the pending table. -/
+also yields its start slots, the effects its instances start. `event_step` covers a reaction-free service in a layout
+without effect kinds, where no machine can start an effect (the theorem derives it from the relation: an effect would
+need a kind); `Tazuna.Smt.Reactions` covers the rest, writing machines' and reactions' requests into the pending
+table. -/
 
 namespace Tazuna.Smt
 
@@ -47,12 +48,17 @@ end
 section
 variable {T : List TypeDecl} {v : ServiceV}
 
-/-- One event's reaction on a service without reactions: the records apply it and every machine reacts. -/
-theorem react_plain (hx : v.reactions = []) (s : State v) (ev : v.event.den0) :
+/-- The effects the reactions start on an event, reactions in order. -/
+abbrev reactedBy (s : State v) (records : v.records.den0) (ev : v.event.den0) : List (Sender × EffectV v.event) :=
+  v.reactions.flatMap fun x => (x.effectsAt ev records s.now).map (.reaction x.name, ·)
+
+/-- One event's reaction: the records apply it, every machine reacts, then every reaction. -/
+theorem react_eq (s : State v) (ev : v.event.den0) :
     Step.react T s ev =
       ({ s with records := v.apply.fn (s.records, ev, ()),
                 machines := s.machines.map fun ms0 => (Step.machineStep T (v.apply.fn (s.records, ev, ())) s.now ev ms0).1 },
-        s.machines.flatMap fun ms0 => (Step.machineStep T (v.apply.fn (s.records, ev, ())) s.now ev ms0).2) := by
+        (s.machines.flatMap fun ms0 => (Step.machineStep T (v.apply.fn (s.records, ev, ())) s.now ev ms0).2) ++
+          reactedBy s (v.apply.fn (s.records, ev, ())) ev) := by
   have h : ∀ (l : List (Step.MachineState v.records v.event)) acc effs,
       l.foldl (fun (ms, effs) ms0 =>
         let (m', es) := Step.machineStep T (v.apply.fn (s.records, ev, ())) s.now ev ms0; (ms ++ [m'], effs ++ es))
@@ -63,7 +69,7 @@ theorem react_plain (hx : v.reactions = []) (s : State v) (ev : v.event.den0) :
     induction l with
     | nil => intro acc effs; simp
     | cons x l ih => intro acc effs; simp only [List.foldl_cons]; rw [ih]; simp
-  simp only [Step.react, hx, List.flatMap_nil, List.append_nil]
+  simp only [Step.react]
   rw [h]
   simp
 
@@ -82,7 +88,7 @@ theorem step_event_plain (hx : v.reactions = []) (s : State v) (i : Fin v.subscr
   have hnil : (s.machines.flatMap fun ms0 => (Step.machineStep T (v.apply.fn (s.records,
       (v.subscribes.get i).wrap.fn (value, ()), ())) s.now ((v.subscribes.get i).wrap.fn (value, ())) ms0).2) = [] :=
     List.flatMap_eq_nil_iff.2 hq
-  simp only [step, Step.finish, Step.applyEvents, List.foldlM, react_plain hx]
+  simp only [step, Step.finish, Step.applyEvents, List.foldlM, react_eq, reactedBy, hx, List.flatMap_nil, List.append_nil]
   rw [hnil]
   simp only [Step.start, List.foldlM, bind, Except.bind, pure, Except.pure, Step.settle]
   rfl

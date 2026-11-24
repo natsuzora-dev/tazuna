@@ -511,23 +511,6 @@ def _root_.Tazuna.Ir.Step.fireFrom {v : ServiceV} (s : State v) (active : Bool) 
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
-/-- The pending slots hold, where flagged, the entries of the requests written for `effs` at ids from `n0`. -/
-def NewsRel (M : Model) (L : Layout) (shs : List (PendingShape v.event)) (ds : List (String × DeclaredV))
-    (news : List Slot) (effs : List (Sender × EffectV v.event)) (n0 : Nat) : Prop :=
-  ∃ sv zs, SlotsDen M news sv ∧ (∀ p ∈ sv, p.2.length = 2) ∧ Holds2 (ETab L (.dsl .fresh []) (pendingEntry shs)) zs sv ∧
-    ∃ xs, xs.Perm (effs.zipIdx n0) ∧ Forall2 (WritesEntry shs ds) xs zs
-
-theorem newsRel_append {shs : List (PendingShape v.event)} {ds : List (String × DeclaredV)} {S S' : List Slot}
-    {effs effs' : List (Sender × EffectV v.event)} {n0 : Nat} (h : NewsRel M L shs ds S effs n0)
-    (h' : NewsRel M L shs ds S' effs' (n0 + effs.length)) : NewsRel M L shs ds (S ++ S') (effs ++ effs') n0 := by
-  obtain ⟨sv, zs, hS, hw, hh, xs, hp, hq⟩ := h
-  obtain ⟨sv', zs', hS', hw', hh', xs', hp', hq'⟩ := h'
-  refine ⟨sv ++ sv', zs ++ zs', slotsDen_append hS hS', ?_, holds2_append hh hh', xs ++ xs', ?_, forall2_append hq hq'⟩
-  · intro p hp; rcases List.mem_append.1 hp with hp | hp
-    · exact hw p hp
-    · exact hw' p hp
-  · rw [List.zipIdx_append]; exact hp.append hp'
-
 /-- T2 for a round's start slots: where they start at most one effect in all, the pending slots hold, where flagged,
 the request for it at the id `nid`, and the count term denotes how many there are. -/
 theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape v.event)}

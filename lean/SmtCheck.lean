@@ -1,6 +1,6 @@
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.EventStep
-import Tazuna.Smt.EventPending
+import Tazuna.Smt.Reactions
 import Tazuna.Smt.Clock
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
@@ -1762,6 +1762,122 @@ def writeCheck (solver : Solver) : IO Bool := do
       | a => ok ← fail s!"two pending and two new requests in three slots, yet the script is {repr a}"
     return ok
 
+/-! An event whose machine and reaction start requests, for `event_step_effects`: the service `w` above with the
+reaction `fan`, which requests `send` with the event's value plus 1 and plus 2, in that order. From the state of
+`event writes requests` (key 3 in state 0, request 2 pending, next id 40) the event 5 starts the machine's two
+requests at 40 (key 3) and 41 (key 5), then the reaction's at 42 (input 6) and 43 (input 7). The pending table and
+next id read from the model must be the step's, and swapping the reaction's two ids must not pass the comparison.
+With 4 pending slots, one pending and four new requests do not fit: the script is unsat. -/
+
+def fanSendE (k : Int) : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
+  let ev : Expr [] [Ty.reactionCtx recordsT, .int] .int := .var (.there .here)
+  let handle : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+  let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
+  let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [answerTyE]) :=
+    .close ⟨"m", 3, 7, 0⟩ (.cons ev .nil) rfl rfl body
+  .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add ev (.int k)) (.cons clo .nil)))
+
+def fanE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
+  .lam (.list (.cons (fanSendE 1) (.cons (fanSendE 2) .nil)))
+
+def fanR : ReactionV recordsT .int := ⟨"fan", .closed fanE⟩
+
+def fanSvc : ServiceV := { writeSvc with name := "f", reactions := [fanR] }
+
+def fanShapes : List (PendingShape fanSvc.event) := shapes fanSvc writeSites
+
+def fanLayout (slots : Nat) : Layout :=
+  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m", 3, 7, 0⟩] }
+    (reactTys ++ [.tuple [.int], .tuple [], pendingTable fanShapes] ++ Tazuna.Smt.Expr.tys insertE ++
+      Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++ Tazuna.Smt.Expr.tys fanE)
+
+def fanI : Fin fanSvc.subscribes.length := ⟨0, by decide⟩
+
+/-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the event value, v7 the new pending table, v8
+the next id after. -/
+def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot) := do
+  let L := fanLayout slots
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let (ec, ce) ← enc (EventCode.of L fanSvc fanI)
+  let (o, cond) ← enc (encodeEvent L ec S.records (.var 6))
+  let (outs, cm) ← enc (encodeMachines L prelude fanSvc.machines S.machines o.records S.now o.event)
+  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
+  let some (dP, _) := L.find? (pendingEntry fanShapes) | throw "no pending entry"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let (news, nT) ← enc (encodeStarts L prelude fanShapes fanSvc.declared dE dP dopt fanSvc.machines (outs.map (·.starts)) S.nextId)
+  let (rnews, nR, cr) ← enc (encodeReactions L fanShapes fanSvc.declared dE dP fanSvc.reactions o.records S.now o.event nT)
+  let (pT, cp) ← enc (encodePending L fanShapes S.pending (news ++ rnews))
+  let below ← enc (pendingBelowT L fanShapes S.pending S.nextId)
+  let some wf := S.wf L (v := fanSvc) fanShapes | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable fanShapes) | throw "no pending sort"
+  let some msrt := L.srt? startM.table | throw "no table sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let some (d, n) := L.find? (pendingTable fanShapes) | throw "no pending table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry fanShapes]) | throw "no pending slot"
+  pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int],
+          asserts := [wf, below, ce, cond, cm, cr, cp, .eq (.var 7) pT, .eq (.var 8) nR] ++ goal,
+          shows := List.range 9 }, slotsOf d dt n 2 (.var 4))
+
+def fanCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: reactions write requests: {m}"; return false
+  let state (slots : Nat) (Sp : List Slot) : List Term :=
+    let L := fanLayout slots
+    match L.find? recordsT, L.find? (.tuple [Ty.bool, .int, .int]), L.find? startM.table,
+        L.find? (.tuple [Ty.bool, .int, instEntry .int]), L.find? (instEntry .int) with
+    | some (dr, nr), some (drt, _), some (dm, nm), some (dmt, _), some (de, _) =>
+      let Sr := slotsOf dr drt nr 2 (.var 0)
+      let Sm := slotsOf dm dmt nm 2 (.var 5)
+      [Sr[0]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), Sm[0]!.1, .eq (Sm[0]!.2.headD tt) (.int 3),
+        .eq (Term.sel de 0 0 (Sm[0]!.2.getD 1 tt)) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40),
+        Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2)] ++
+        ((List.range (slots - 1)).flatMap fun j => [.not Sr[j + 1]!.1, .not Sm[j + 1]!.1, .not Sp[j + 1]!.1])
+    | _, _, _, _, _ => [.bool false]
+  let mut ok := true
+  match fanScript 5 [] with
+  | .error m => ok ← fail m
+  | .ok (_, Sp) =>
+    match fanScript 5 (state 5 Sp) with
+    | .error m => ok ← fail m
+    | .ok (script, _) =>
+      match ← solver.run script with
+      | .sat vs =>
+        let M := modelOf vs
+        let L := fanLayout 5
+        match (SymState.vars 0 1).decode M L (v := fanSvc) rfl prelude fanShapes,
+            (SymInput.event fanI (.var 6)).decode M L (v := fanSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+              (fun | ⟨0, _⟩ => rfl),
+            decodePending L fanShapes ((Term.var 7).denote M), (vs.lookup 8) with
+        | some s, some x, some pend', some (.int n') =>
+          let r := step prelude fanSvc s x
+          let view (p : Step.Pending fanSvc.event) : Nat × Option Int :=
+            (p.id, intDen p.request.input p.request.value)
+          let sorted (ps : List (Step.Pending fanSvc.event)) := (ps.map view).mergeSort fun a b => a.1 ≤ b.1
+          let outs := (r.out.map (·.id)).mergeSort (· ≤ ·)
+          let swapped := (sorted pend').map fun (id, i) => (if id == 42 then 43 else if id == 43 then 42 else id, i)
+          if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
+          if sorted pend' != sorted r.state.pending || n' != r.state.nextId then
+            ok ← fail s!"the model's pending table holds {sorted pend'} and next id {n'}, the step {sorted r.state.pending} and {r.state.nextId}"
+          if outs != ((sorted pend').map (·.1)).filter (· ≥ 40) then ok ← fail s!"the out lines are {outs}"
+          if (sorted pend').filter (·.1 ≥ 42) != [(42, some 6), (43, some 7)] then
+            ok ← fail s!"the reaction's requests are {(sorted pend').filter (·.1 ≥ 42)}"
+          if (swapped.mergeSort fun a b => a.1 ≤ b.1) == sorted r.state.pending then
+            ok ← fail "the reaction's ids swapped pass the comparison"
+        | _, _, _, _ => ok ← fail "the model does not decode"
+      | a => ok ← fail s!"{repr a}"
+  match fanScript 4 [] with
+  | .error m => ok ← fail m
+  | .ok (_, Sp) =>
+    match fanScript 4 (state 4 Sp) with
+    | .error m => ok ← fail m
+    | .ok (script, _) =>
+      match ← solver.run script with
+      | .unsat => pure ()
+      | a => ok ← fail s!"one pending and four new requests in four slots, yet the script is {repr a}"
+  return ok
+
 /-! A clock line with timers, for `clock_fire_step`: the service `w` above with the cascade bound `cascade`. Key 7
 waits for 80 and key 3 for 90, both entering state 1, which starts a timer due at now + 5 and requests `send`. The
 state holds one request pending at wire id 2, next id 40, now 50; the line's time is 100. Round one fires key 7 (the
@@ -1965,6 +2081,7 @@ def check (z3 : String) : IO Bool := do
   unless ← fireCheck solver do ok := false
   unless ← startsCheck solver do ok := false
   unless ← writeCheck solver do ok := false
+  unless ← fanCheck solver do ok := false
   unless ← clockFireCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
