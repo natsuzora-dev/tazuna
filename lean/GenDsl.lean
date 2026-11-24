@@ -54,6 +54,7 @@ partial def gleamTy (tvars : List String) : Ty → String
   | .table k v => s!"Table({gleamTy tvars k}, {gleamTy tvars v})"
   | .date => "Date"
   | .id => "Id"
+  | .dsl .closure [t] => gleamTy tvars t
   | .dsl k args =>
     let n := k.name
     if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map (gleamTy tvars)) ++ ")"
@@ -89,7 +90,7 @@ def gleamFn (p : Prim) : String :=
         let pre := (q.label.map (· ++ " ")).getD "" ++ "_" ++ q.name ++ ": "
         let whole := s!"  {pre}{labelledTy s.name s.tvars q.label q.ty},\n"
         match q.ty with
-        | .fn ps r =>
+        | .fn ps r | .dsl .closure [.fn ps r] =>
           if whole.length ≤ 81 then whole
           else s!"  {pre}fn(" ++ ", ".intercalate (ps.map (gleamTy s.tvars)) ++ s!") ->\n    {gleamTy s.tvars r},\n"
         | _ => whole

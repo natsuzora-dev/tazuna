@@ -155,6 +155,11 @@ inductive Expr (G : List Ty) : List Ty → Ty → Type
   | neg {Γ} (e : Expr G Γ .int) : Expr G Γ .int
   /-- A built-in at the type arguments `args`, which meet its demands. -/
   | prim {Γ} (p : Prim) (args : List Ty) (h : p.ok args = true) : Expr G Γ (p.ty.inst args)
+  /-- A function a structure value keeps: its source `body` over the values `env` it captures, all data, so the
+  function's code is `body`'s encoding. Elaboration closes each function a structure built-in keeps over the
+  variables it uses. -/
+  | close {Γ Γ' t} (env : Exprs G Γ Γ') (hΓ : (Ty.tuple Γ').isData = true) (ht : t.isData = true)
+      (body : Expr G Γ' t) : Expr G Γ (.dsl .closure [t])
 inductive Exprs (G : List Ty) : List Ty → List Ty → Type
   | nil {Γ} : Exprs G Γ []
   | cons {Γ t ts} (e : Expr G Γ t) (es : Exprs G Γ ts) : Exprs G Γ (t :: ts)

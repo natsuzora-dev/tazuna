@@ -173,7 +173,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     let C := (Ty.param 2).inst args
     let declares : List DeclaredV := declares
     { name, records := R, event := E, caller := C,
-      init := Prim.dn d (.param 0) rfl init, apply := Prim.dn d (.fn [.param 0, .param 1] (.param 0)) rfl apply,
+      init := Prim.dn d (.param 0) rfl init, apply,
       subscribes, machines, reactions,
       declares,
       commands := declares.filterMap fun
@@ -187,23 +187,20 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
           | _, _ => none
         | _ => none,
       sources := declares.filterMap fun | .source n t => some (n, t) | _ => none,
-      invariants := Prim.dn d (.fn [.param 0] Ty.rules) rfl invariants, responses, bounds := bnds, scenarios,
+      invariants, responses, bounds := bnds, scenarios,
       declared := [] }
   | .command, args, h => let d := Prim.dataOf h rfl
     fun (name, callers, accepts, decide, ensures, ()) =>
     Subtype.mk (p := fun (x : CommandV _ _ _) => x.input = (Ty.param 3).inst args ∧ x.rejection = (Ty.param 4).inst args)
     { name := name, input := (Ty.param 3).inst args, rejection := (Ty.param 4).inst args,
       callers := Prim.dn d (.list (.param 2)) rfl callers,
-      accepts := Prim.dn d (.fn [.param 3] Ty.rules) rfl accepts,
-      decide := Prim.dn d (.fn [.ctx (.param 0) (.param 3) (.param 2)] (.result (.list (.param 1)) (.param 4))) rfl decide,
-      ensures := Prim.dn d (.fn [.ctx (.param 0) (.param 3) (.param 2), .param 0] Ty.rules) rfl ensures } ⟨rfl, rfl⟩
+      accepts, decide, ensures } ⟨rfl, rfl⟩
   | .query, args, h => let d := Prim.dataOf h rfl
     fun (name, callers, accepts, resolve, ()) =>
     Subtype.mk (p := fun (x : QueryV _ _) => x.input = (Ty.param 2).inst args ∧ x.output = (Ty.param 3).inst args)
     { name := name, input := (Ty.param 2).inst args, output := (Ty.param 3).inst args,
       callers := Prim.dn d (.list (.param 1)) rfl callers,
-      accepts := Prim.dn d (.fn [.param 2] Ty.rules) rfl accepts,
-      resolve := Prim.dn d (.fn [.ctx (.param 0) (.param 2) (.param 1)] (.param 3)) rfl resolve } ⟨rfl, rfl⟩
+      accepts, resolve } ⟨rfl, rfl⟩
   | .declareCommand, args, _ => fun (x, ()) =>
     .command ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args) x.1
   | .declareQuery, args, _ => fun (x, ()) => .query ((Ty.param 0).inst args) ((Ty.param 2).inst args) x.1
@@ -258,9 +255,8 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
       (cast (congrArg Ty.den0 q.2.1.symm) (Prim.dn d (.param 3) rfl input))
       (cast (congrArg (fun o => (Ty.fn [o] (.list ((Ty.param 1).inst args))).den0) q.2.2.symm)
         (Prim.dn d (.fn [.param 4] (.list (.param 1))) rfl onAnswer))
-  | .subscribe, args, h => let d := Prim.dataOf h rfl
-    fun (name, wrap, ()) =>
-    { source := "", name, event := (Ty.param 1).inst args, wrap := Prim.dn d (.fn [.param 1] (.param 0)) rfl wrap }
+  | .subscribe, args, _ => fun (name, wrap, ()) =>
+    { source := "", name, event := (Ty.param 1).inst args, wrap }
   | .bounds, _, _ => fun (creates, items, cascade, steps, ()) => { creates, items, cascade, steps }
   | .create, args, h => let d := Prim.dataOf h rfl
     fun (table, atMost, ()) =>

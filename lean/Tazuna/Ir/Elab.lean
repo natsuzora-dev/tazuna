@@ -77,6 +77,7 @@ partial def showTy : Ty → String
   | .table k v => s!"tazuna/table.Table({showTy k}, {showTy v})"
   | .date => "tazuna/date.Date"
   | .id => "tazuna.Id"
+  | .dsl .closure [t] => showTy t
   | .dsl k args =>
     let n := "tazuna." ++ k.name
     if args.isEmpty then n else n ++ "(" ++ ", ".intercalate (args.map showTy) ++ ")"
@@ -104,6 +105,7 @@ partial def toTy (σ : List (String × Ty)) : STy → Except String Ty
 /-- Whether a source annotation fits a type: holes and type variables the annotation introduces fit anything. -/
 partial def annotationFits (σ : List (String × Ty)) : STy → Ty → Bool
   | .hole _, _ => true
+  | a, .dsl .closure [t] => annotationFits σ a t
   | .var n, t => match σ.lookup n with
     | some u => (Ty.same u t).isSome
     | none => true
@@ -263,6 +265,48 @@ end Patterns
 def irrefutable {t : Ty} {Δ : List Ty} (pos : At) (p : Pat t Δ) : E Unit :=
   if (exhaustive? t [p.shape]).isSome then pure () else fail pos "let pattern can fail to match"
 
+def _root_.Tazuna.Ir.Var.idx : {Γ : List Ty} → {t : Ty} → Var Γ t → Nat
+  | _, _, .here => 0
+  | _, _, .there v => v.idx + 1
+
+mutual
+/-- The positions in `Γ` of the variables an expression uses, under `d` binders of its own. -/
+partial def usesE {G Γ : List Ty} {t : Ty} (d : Nat) : Expr G Γ t → List Nat
+  | .var v => if d ≤ v.idx then [v.idx - d] else []
+  | .int _ | .str _ | .global _ | .prim .. => []
+  | .ctor _ es | .tuple es => usesEs d es
+  | .field _ _ _ e | .index e _ | .not e | .neg e => usesE d e
+  | .update e p => usesE d e ++ usesP d p
+  | .call f args => usesE d f ++ usesEs d args
+  | @Expr.lam _ _ ps _ body => usesE (d + ps.length) body
+  | .let_ e body => usesE d e ++ usesE (d + 1) body
+  | .case e cs _ => usesE d e ++ usesC d cs
+  | .list items => usesI d items
+  | .bin _ l r => usesE d l ++ usesE d r
+  | .close env _ _ _ => usesEs d env
+partial def usesEs {G Γ : List Ty} {ts : List Ty} (d : Nat) : Exprs G Γ ts → List Nat
+  | .nil => []
+  | .cons e es => usesE d e ++ usesEs d es
+partial def usesI {G Γ : List Ty} {t : Ty} (d : Nat) : Items G Γ t → List Nat
+  | .nil => []
+  | .cons e es => usesE d e ++ usesI d es
+partial def usesP {G Γ : List Ty} {ts : List Ty} (d : Nat) : Patch G Γ ts → List Nat
+  | .nil => []
+  | .keep rest => usesP d rest
+  | .set e rest => usesE d e ++ usesP d rest
+partial def usesC {G Γ : List Ty} {t r : Ty} {sh : List Shape} (d : Nat) : Clauses G Γ t r sh → List Nat
+  | .nil => []
+  | @Clauses.cons _ _ _ _ _ Δ _ body rest => usesE (d + Δ.length) body ++ usesC d rest
+  | @Clauses.guarded _ _ _ _ _ Δ _ g body rest => usesE (d + Δ.length) g ++ usesE (d + Δ.length) body ++ usesC d rest
+end
+
+/-- The variables at the positions `bs` gives, as expressions in `Γ`. -/
+def varsAt {G Γ : List Ty} (pos : At) : (bs : List ((String × Ty) × Nat)) → E (Exprs G Γ (bs.map (·.1.2)))
+  | [] => pure .nil
+  | ((_, t), i) :: bs => do
+    let some v := Var.at? Γ i t | fail pos "internal: a captured variable is not in scope"
+    pure (.cons (.var v) (← varsAt pos bs))
+
 /-- What elaborating one body needs: the type table, the type variables in scope, every global's signature, and the
 instances already elaborated (all a body refers to). -/
 structure Cx (T : List TypeDecl) (G : List Ty) where
@@ -291,11 +335,23 @@ def coerce {Γ : List Ty} (pos : At) (want got : Ty) (e : Expr G Γ got) : E (Ex
   | some ⟨h⟩ => pure (h ▸ e)
   | none => fail pos s!"expected {showTy T want}, found {showTy T got}"
 
+/-- The type as Gleam writes it: a function a structure value keeps is the function. -/
+partial def gleamTy : Ty → Ty
+  | .dsl .closure [t] => gleamTy t
+  | .list t => .list (gleamTy t)
+  | .tuple ts => .tuple (ts.map gleamTy)
+  | .fn ps r => .fn (ps.map gleamTy) (gleamTy r)
+  | .adt i args vs => .adt i (args.map gleamTy) (vs.map (·.map gleamTy))
+  | .bag t => .bag (gleamTy t)
+  | .table k v => .table (gleamTy k) (gleamTy v)
+  | .dsl k args => .dsl k (args.map gleamTy)
+  | t => t
+
 /-- Checks a node's type annotation against the type computed from its children. -/
 def annotated {Γ : List Ty} (pos : At) (ann : STy) (r : (t : Ty) × Expr G Γ t) : E ((t : Ty) × Expr G Γ t) := do
   if let .hole _ := ann then return r
   let want ← toTyAt cx pos ann
-  match Ty.same r.1 want with
+  match Ty.same (gleamTy r.1) want with
   | some _ => pure r
   | none => fail pos s!"annotated {showTy T want}, computed {showTy T r.1}"
 
@@ -527,8 +583,29 @@ partial def applyTo (sc : Scope) (pos : At) (f : Surface.Expr) (arg : Slot T G (
   let fe ← coerce cx pos (.fn [p] r) ft fe
   pure ⟨r, .call fe (.cons (← elabSlot sc p arg) .nil)⟩
 
+/-- A function a structure built-in keeps, closed over the variables it uses: `e` elaborated again in a scope of
+only those, so its source needs no renaming. -/
+partial def elabKept (sc : Scope) (u : Ty) (e : Surface.Expr) : E (Expr G (ctx sc) (.dsl .closure [u])) := do
+  let ⟨u0, x⟩ ← elabExpr sc e
+  let x ← coerce cx e.pos u u0 x
+  let used := usesE 0 x
+  let bs := sc.zipIdx.filter fun (_, i) => used.contains i
+  let sc' : Scope := bs.map (·.1)
+  let ⟨u1, body⟩ ← elabExpr sc' e
+  let body ← coerce cx e.pos u u1 body
+  let env ← varsAt e.pos bs
+  let env ← castList (F := fun Γ' => Exprs G (ctx sc) Γ') e.pos env (b := ctx sc')
+  if hΓ : (Ty.tuple (ctx sc')).isData = true then
+    if ht : u.isData = true then pure (.close env hΓ ht body)
+    else fail e.pos s!"a structure value keeps a function of {showTy T u}, which holds no data"
+  else fail e.pos s!"a function a structure value keeps captures a value that is not data: {", ".intercalate
+    ((sc'.filter fun (_, t) => !t.isData).map (·.1))}"
+
 partial def elabSlot (sc : Scope) (t : Ty) : Slot T G (ctx sc) → E (Expr G (ctx sc) t)
   | .expr e => do
+    if let .dsl .closure [u] := t then
+      let k ← elabKept sc u e
+      return ← coerce cx e.pos t (.dsl .closure [u]) k
     let ⟨u, x⟩ ← elabExpr sc e
     coerce cx e.pos t u x
   | .typed pos u x => coerce cx pos t u x

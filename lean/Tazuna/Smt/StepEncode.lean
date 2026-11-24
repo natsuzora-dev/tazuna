@@ -46,8 +46,8 @@ end
 /-- The codes relate to the query's functions in the model. -/
 structure QueryCode.Rel (M : Model) (L : Layout) {r c : Ty} {q : QueryV r c} (hd : QueryData q) (qc : QueryCode q) :
     Prop where
-  accepts : Smt.Rel M L _ (Ty.up _ hd.accepts q.accepts) qc.accepts
-  resolve : Smt.Rel M L _ (Ty.up _ hd.resolve q.resolve) qc.resolve
+  accepts : Smt.Rel M L _ (Ty.up _ hd.accepts q.accepts.fn) qc.accepts
+  resolve : Smt.Rel M L _ (Ty.up _ hd.resolve q.resolve.fn) qc.resolve
 
 /-- The terms of a query step's outcome: whether the caller is one the query lists, each `accepts` rule's name and
 whether it holds, and the output. -/
@@ -262,7 +262,7 @@ theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (call
     erw [Ty.up_fn _ Ty.rules _ hd.args rfl] at hacc
     have hbroken := rules_broken h5 _ hacc
     have hall := (brokenIn_nil (M := M) rules)
-    cases hb : Step.broken ((v.queries.get i).accepts (input, ())) with
+    cases hb : Step.broken ((v.queries.get i).accepts.fn (input, ())) with
     | cons n ns =>
       simp only [QueryOut.Rel, QueryOut.invalid, hok, hin, Val.toBool, ite_true, hbroken, hb]
     | nil =>
@@ -331,9 +331,9 @@ end
 /-- The codes relate to the service's and the subscription's functions in the model. -/
 structure EventCode.Rel (M : Model) (L : Layout) {v : ServiceV} {i : Fin v.subscribes.length} (hd : EventData v i)
     (ec : EventCode v i) : Prop where
-  apply : Smt.Rel M L _ (Ty.up _ hd.apply v.apply) ec.apply
-  wrap : Smt.Rel M L _ (Ty.up _ hd.wrap (v.subscribes.get i).wrap) ec.wrap
-  invariants : Smt.Rel M L _ (Ty.up _ hd.invariants v.invariants) ec.invariants
+  apply : Smt.Rel M L _ (Ty.up _ hd.apply v.apply.fn) ec.apply
+  wrap : Smt.Rel M L _ (Ty.up _ hd.wrap (v.subscribes.get i).wrap.fn) ec.wrap
+  invariants : Smt.Rel M L _ (Ty.up _ hd.invariants v.invariants.fn) ec.invariants
 
 /-- The terms of an event step: the records after the event, the event, and each invariant's name and whether it
 holds on those records. -/
@@ -362,13 +362,13 @@ variable {M : Model} {L : Layout}
 /-- An event's step on a service without reactions from a state without machine instances, computed. -/
 theorem step_event (v : ServiceV) (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
     (i : Fin v.subscribes.length) (value : (v.subscribes.get i).event.den0) :
-    let ev := (v.subscribes.get i).wrap (value, ())
-    let records := v.apply (s.records, ev, ())
-    step v s (.event i value) = match Step.broken (v.invariants (records, ())) with
+    let ev := (v.subscribes.get i).wrap.fn (value, ())
+    let records := v.apply.fn (s.records, ev, ())
+    step v s (.event i value) = match Step.broken (v.invariants.fn (records, ())) with
       | n :: _ => ⟨s, .fault (.invariant n), [], []⟩
       | [] => ⟨{ s with records }, .accepted, [ev], []⟩ := by
   intro ev records
-  have hinv : ∀ (s' : State v), s'.machines = [] → Step.invariants s' = Step.broken (v.invariants (s'.records, ())) := by
+  have hinv : ∀ (s' : State v), s'.machines = [] → Step.invariants s' = Step.broken (v.invariants.fn (s'.records, ())) := by
     intro s' h; simp [Step.invariants, h]
   simp only [step, Step.finish, Step.applyEvents, List.foldlM, Step.react, hs, List.foldl_nil, hx, List.flatMap_nil,
     List.append_nil, Step.start, bind, Except.bind, pure, Except.pure, Step.settle, List.nil_append]
@@ -409,32 +409,32 @@ theorem event_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.
   erw [Ty.up_fn _ _ _ hd.wrapArgs hd.event] at hev
   have hrc : Smt.Rel M L _ (Ty.up _ hd.records s.records) rc := (rel_ofTerm (need_ok.1 h3) _).2 hrec
   have hargs2 : Smt.Rels M L [v.records, v.event]
-      (Ty.up (.tuple [v.records, v.event]) hd.applyArgs (s.records, (v.subscribes.get i).wrap (value, ()), ()))
+      (Ty.up (.tuple [v.records, v.event]) hd.applyArgs (s.records, (v.subscribes.get i).wrap.fn (value, ()), ()))
       (rc, Code.share _ ev, ()) := by
     show Smt.Rel M L _ (Ty.up (.tuple [v.records, v.event]) hd.applyArgs
-      (s.records, (v.subscribes.get i).wrap (value, ()), ())).1 rc ∧
+      (s.records, (v.subscribes.get i).wrap.fn (value, ()), ())).1 rc ∧
       Smt.Rels M L [v.event] (Ty.up (.tuple [v.records, v.event]) hd.applyArgs
-        (s.records, (v.subscribes.get i).wrap (value, ()), ())).2 (Code.share _ ev, ())
+        (s.records, (v.subscribes.get i).wrap.fn (value, ()), ())).2 (Code.share _ ev, ())
     erw [Ty.up_tuple _ _ _ hd.records (by simp [Ty.isData, Ty.isDatas, hd.event])]
     refine ⟨hrc, ?_⟩
     show Smt.Rel M L _ (Ty.up (.tuple [v.event]) (by simp only [Ty.isData, Ty.isDatas, hd.event, Bool.and_self])
-      ((v.subscribes.get i).wrap (value, ()), ())).1 _ ∧ True
+      ((v.subscribes.get i).wrap.fn (value, ()), ())).1 _ ∧ True
     erw [Ty.up_tuple _ _ _ hd.event rfl]; exact ⟨rel_share hev, trivial⟩
   have hr := he.apply _ _ hargs2 rr c2 h4 hc.2.1
   erw [Ty.up_fn _ _ _ hd.applyArgs hd.records] at hr
   have hr' := rel_share hr
   have hargs3 : Smt.Rels M L [v.records]
-      (Ty.up (.tuple [v.records]) hd.invArgs (v.apply (s.records, (v.subscribes.get i).wrap (value, ()), ()), ()))
+      (Ty.up (.tuple [v.records]) hd.invArgs (v.apply.fn (s.records, (v.subscribes.get i).wrap.fn (value, ()), ()), ()))
       (Code.share _ rr, ()) := by
     show Smt.Rel M L _ (Ty.up (.tuple [v.records]) hd.invArgs
-      (v.apply (s.records, (v.subscribes.get i).wrap (value, ()), ()), ())).1 _ ∧ True
+      (v.apply.fn (s.records, (v.subscribes.get i).wrap.fn (value, ()), ()), ())).1 _ ∧ True
     erw [Ty.up_tuple _ _ _ hd.records rfl]; exact ⟨hr', trivial⟩
   have hinv := he.invariants _ _ hargs3 invs c3 h5 hc.2.2
   erw [Ty.up_fn _ Ty.rules _ hd.invArgs rfl] at hinv
   have hbroken := rules_broken h6 _ hinv
   simp only [r, step_event v hx s hs i value]
   rw [hbroken]
-  cases Step.broken (v.invariants (v.apply (s.records, (v.subscribes.get i).wrap (value, ()), ()), ())) with
+  cases Step.broken (v.invariants.fn (v.apply.fn (s.records, (v.subscribes.get i).wrap.fn (value, ()), ()), ())) with
   | cons n ns => rfl
   | nil =>
     exact ⟨rfl, rfl, rfl, (rel_term (need_ok.1 h7) _).1 hr', _, rfl, (rel_term (need_ok.1 h8) _).1 hev⟩
@@ -464,7 +464,7 @@ variable {M : Model} {L : Layout}
 /-- A clock line's step from a state without machine instances, computed. -/
 theorem step_clock (v : ServiceV) (s : State v) (hs : s.machines = []) (time : Int) :
     step v s (.clock time) = if time < s.now then ⟨s, .invalid ["time moves forward"], [], []⟩ else
-      match Step.broken (v.invariants (s.records, ())) with
+      match Step.broken (v.invariants.fn (s.records, ())) with
       | n :: _ => ⟨s, .fault (.invariant n), [], []⟩
       | [] => ⟨{ s with now := time }, .accepted, [], []⟩ := by
   simp only [step]
@@ -479,7 +479,7 @@ state's is Invalid, a broken invariant's name is the step's fault, and otherwise
 theorem clock_step {v : ServiceV} (s : State v) (hs : s.machines = []) (time : Int) (hrd : v.records.isData = true)
     (inv : Code (Ty.fn [v.records] Ty.rules))
     (hinv : Smt.Rel M L _ (Ty.up _ (by simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hrd])
-      v.invariants) inv)
+      v.invariants.fn) inv)
     {records now st : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
     (hnow : now.denote M = .int s.now) (hst : st.denote M = .int time)
     {o : ClockOut} {cond : Term} (henc : encodeClock L inv records now st = .ok (o, cond)) (hc : Holds M cond) :
@@ -509,7 +509,7 @@ theorem clock_step {v : ServiceV} (s : State v) (hs : s.machines = []) (time : I
     have hi := hinv _ _ hargs invs c h2 hc'
     erw [Ty.up_fn _ Ty.rules _ (by simp [Ty.isData, Ty.isDatas, hrd]) rfl] at hi
     rw [rules_broken h3 _ hi]
-    cases Step.broken (v.invariants (s.records, ())) <;> rfl
+    cases Step.broken (v.invariants.fn (s.records, ())) <;> rfl
   · have hlt : time < s.now := by omega
     simp only [ht, hlt, ite_true, ite_false]
 
@@ -525,7 +525,7 @@ variable {v : ServiceV}
 
 /-- The step in progress after `events` on a service without reactions: the records fold them, nothing starts. -/
 def _root_.Tazuna.Ir.Step.Acc.folded (a : Step.Acc v) (events : List v.event.den0) : Step.Acc v :=
-  { a with state := { a.state with records := events.foldl (fun r ev => v.apply (r, ev, ())) a.state.records },
+  { a with state := { a.state with records := events.foldl (fun r ev => v.apply.fn (r, ev, ())) a.state.records },
            events := a.events ++ events }
 
 /-- Events applied on a service without reactions, from a state without machine instances: the records fold them,
@@ -586,9 +586,9 @@ end
 /-- The codes relate to the command's functions in the model. -/
 structure CommandCode.Rel (M : Model) (L : Layout) {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
     (cc : CommandCode x) : Prop where
-  accepts : Smt.Rel M L _ (Ty.up _ hd.accepts x.accepts) cc.accepts
-  decide : Smt.Rel M L _ (Ty.up _ hd.decide x.decide) cc.decide
-  ensures : Smt.Rel M L _ (Ty.up _ hd.ensures x.ensures) cc.ensures
+  accepts : Smt.Rel M L _ (Ty.up _ hd.accepts x.accepts.fn) cc.accepts
+  decide : Smt.Rel M L _ (Ty.up _ hd.decide x.decide.fn) cc.decide
+  ensures : Smt.Rel M L _ (Ty.up _ hd.ensures x.ensures.fn) cc.ensures
 
 /-- The terms of a command step's outcome: whether the caller is listed and the `accepts` rules, whether `decide`
 accepted, its rejection and its events, the `ensures` rules and the invariants on the records the events leave, and
@@ -721,8 +721,8 @@ step is accepted with the records and events the terms denote. The fresh counter
 theorem command_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
     (i : Fin v.commands.length) (caller : v.caller.den0) (input : (v.commands.get i).input.den0)
     (hd : CommandData (v.commands.get i)) (cc : CommandCode (v.commands.get i)) (hcc : cc.Rel M L hd)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (happ : Smt.Rel M L _ (Ty.up _ hd.apply v.apply) apply)
-    (inv : Code (Ty.fn [v.records] Ty.rules)) (hinv : Smt.Rel M L _ (Ty.up _ hd.invariants v.invariants) inv)
+    (apply : Code (Ty.fn [v.records, v.event] v.records)) (happ : Smt.Rel M L _ (Ty.up _ hd.apply v.apply.fn) apply)
+    (inv : Code (Ty.fn [v.records] Ty.rules)) (hinv : Smt.Rel M L _ (Ty.up _ hd.invariants v.invariants.fn) inv)
     {ks : List Term} (hks : callerTerms L hd.caller (v.commands.get i).callers = some ks)
     {records now fresh sc si : Term}
     (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
@@ -787,7 +787,7 @@ theorem command_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : 
   erw [Ty.up_fn _ Ty.rules _ hd.args rfl] at hacc
   have hbroken := rules_broken h5 _ hacc
   rw [hbroken]
-  cases hb : Step.broken ((v.commands.get i).accepts (input, ())) with
+  cases hb : Step.broken ((v.commands.get i).accepts.fn (input, ())) with
   | cons n ns => rfl
   | nil =>
     simp only
@@ -819,7 +819,7 @@ theorem command_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : 
     have hsh : (Term.share rest).denote M = rest.denote M := Term.denote_share M rest
     have hdata2 : (Ty.adt 2 [.list v.event, (v.commands.get i).rejection] [[(v.commands.get i).rejection]]).isData = true := by
       simp only [Ty.isData, Ty.isDatas, Ty.isDatass, hd.rejection, Bool.and_true]
-    cases hdec : (v.commands.get i).decide (Step.ctx s s.records caller input, ()) with
+    cases hdec : (v.commands.get i).decide.fn (Step.ctx s s.records caller input, ()) with
     | inr q =>
       match q, hdec with
       | .inl (j, ()), hdec =>
@@ -861,31 +861,31 @@ theorem command_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : 
       have hrfc : Smt.Rel M L v.records _ rfc := (rel_ofTerm (need_ok.1 h13) _).2 hrf
       have hargs3 : Smt.Rels M L [Ty.ctx v.records (v.commands.get i).input v.caller, v.records]
           (Ty.up (.tuple [Ty.ctx v.records (v.commands.get i).input v.caller, v.records]) hd.ensArgs
-            (Step.ctx s s.records caller input, events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ()))
+            (Step.ctx s s.records caller input, events.foldl (fun r ev => v.apply.fn (r, ev, ())) s.records, ()))
           (cx, rfc, ()) := by
         show Smt.Rel M L _ (Ty.up (.tuple [Ty.ctx v.records (v.commands.get i).input v.caller, v.records]) hd.ensArgs
-            (Step.ctx s s.records caller input, events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())).1 cx ∧
+            (Step.ctx s s.records caller input, events.foldl (fun r ev => v.apply.fn (r, ev, ())) s.records, ())).1 cx ∧
           Smt.Rels M L [v.records] (Ty.up (.tuple [Ty.ctx v.records (v.commands.get i).input v.caller, v.records])
             hd.ensArgs (Step.ctx s s.records caller input,
-              events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())).2 (rfc, ())
+              events.foldl (fun r ev => v.apply.fn (r, ev, ())) s.records, ())).2 (rfc, ())
         erw [Ty.up_tuple _ _ _ hd.ctx (by simp [Ty.isData, Ty.isDatas, hd.records])]
         refine ⟨hcx, ?_⟩
         show Smt.Rel M L _ (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hd.records])
-          (events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())).1 rfc ∧ True
+          (events.foldl (fun r ev => v.apply.fn (r, ev, ())) s.records, ())).1 rfc ∧ True
         erw [Ty.up_tuple _ _ _ hd.records rfl]; exact ⟨hrfc, trivial⟩
       have hens := hcc.ensures _ _ hargs3 ens c4 h14 hc2''.2.1
       erw [Ty.up_fn _ Ty.rules _ hd.ensArgs rfl] at hens
       have hbe := rules_broken h15 _ hens
       have hargs4 : Smt.Rels M L [v.records] (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hd.records])
-          (events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())) (rfc, ()) := by
+          (events.foldl (fun r ev => v.apply.fn (r, ev, ())) s.records, ())) (rfc, ()) := by
         show Smt.Rel M L _ (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hd.records])
-          (events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())).1 rfc ∧ True
+          (events.foldl (fun r ev => v.apply.fn (r, ev, ())) s.records, ())).1 rfc ∧ True
         erw [Ty.up_tuple _ _ _ hd.records rfl]; exact ⟨hrfc, trivial⟩
       rw [applyEvents_plain hx events _ hs]
       simp only [Step.Acc.folded]
       rw [hbe]
-      cases hbe' : Step.broken ((v.commands.get i).ensures (Step.ctx s s.records caller input,
-          events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())) with
+      cases hbe' : Step.broken ((v.commands.get i).ensures.fn (Step.ctx s s.records caller input,
+          events.foldl (fun r ev => v.apply.fn (r, ev, ())) s.records, ())) with
       | cons n ns => rfl
       | nil =>
         simp only
@@ -898,7 +898,7 @@ theorem command_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : 
         have hbi := rules_broken h17 _ hiv
         rw [hbi]
         simp only [Step.finish, bind, Except.bind, Step.settle, Step.invariants, hs, List.flatMap_nil, List.append_nil]
-        cases Step.broken (v.invariants (events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())) with
+        cases Step.broken (v.invariants.fn (events.foldl (fun r ev => v.apply.fn (r, ev, ())) s.records, ())) with
         | cons n ns => rfl
         | nil =>
           refine ⟨rfl, rfl, rfl, hrf, ?_⟩

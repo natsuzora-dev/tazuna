@@ -2010,7 +2010,7 @@ def GRel (M : Model) (L : Layout) {G : List Ty} (g : Ty.dens G) (gs : Encs G) : 
   ∀ (t : Ty) (v : Var G t) s c, v.enc gs = .ok (s, c) → Holds M c → Rel M L t (v.get g) s
 
 section
-variable {M : Model} {L : Layout} {G : List Ty} (g : Ty.dens G) (gs : Encs G) (hg : GRel M L g gs)
+variable {M : Model} {L : Layout} {G : List Ty} (D : Defs G) (g : Ty.dens G) (gs : Encs G) (hg : GRel M L g gs)
 include hg
 
 set_option linter.unusedSectionVars false
@@ -2020,7 +2020,7 @@ mutual
 variables denote the values of the expression's variables. -/
 theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Codes Γ) → (ρ : Ty.dens Γ) →
     Rels M L Γ ρ σ → (s : Code t) → (c : Term) → encode L gs e σ = .ok (s, c) → Holds M c →
-    Rel M L t (e.eval g ρ) s
+    Rel M L t (e.eval D g ρ) s
   | .int n, _, _, _, s, c, h, _ => by cases h; simp [Rel, RelV, Expr.eval, Term.denote]
   | .str lit, _, _, _, s, c, h, _ => by
     simp only [encode] at h; split at h
@@ -2052,7 +2052,7 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
         obtain rfl := find_det hf hf'
         refine (rel_ofTerm (need_ok.1 h2) _).2 ?_
         obtain ⟨vals, ev, hv⟩ := relAlts_view d 0 vs _ _ hr
-        have hlt := (Alts.view (e.eval g ρ)).1.isLt
+        have hlt := (Alts.view (e.eval D g ρ)).1.isLt
         rw [fieldT_denote d k x _ vals (by simpa using ev) 0 (vs.length - 1) (by omega) (by omega)]
         exact relVs_field _ _ hv k _
       · cases h
@@ -2086,7 +2086,7 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
         obtain rfl := find_det hf hf'
         refine ⟨d, n, hf, ?_⟩
         simp only [Expr.eval]
-        generalize e.eval g ρ = y at hr
+        generalize e.eval D g ρ = y at hr
         rcases y with y | e'
         · obtain ⟨vals, ev, hv⟩ := hr
           have hl := relVs_length _ _ hv
@@ -2116,7 +2116,7 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
     obtain ⟨⟨r, c2⟩, h2, h⟩ := bind_ok.1 h
     cases pure_ok.1 h
     obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-    exact encode_agrees body _ (e.eval g ρ, ρ) ⟨rel_share (encode_agrees e σ ρ hσ x c1 h1 hc1), hσ⟩ _ c2 h2 hc2
+    exact encode_agrees body _ (e.eval D g ρ, ρ) ⟨rel_share (encode_agrees e σ ρ hσ x c1 h1 hc1), hσ⟩ _ c2 h2 hc2
   | .case e cs hx, σ, ρ, hσ, s, c, h, hc => by
     simp only [encode] at h
     obtain ⟨⟨x, c1⟩, h1, h⟩ := bind_ok.1 h
@@ -2170,9 +2170,10 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
     obtain ⟨r, h1, h⟩ := bind_ok.1 h
     cases pure_ok.1 h
     exact primCode_agrees p args hp _ h1
+  | .close .., _, _, _, s, c, h, _ => nomatch h
 theorem encodes_agrees {Γ : List Ty} {ts : List Ty} : (es : Exprs G Γ ts) → (σ : Codes Γ) → (ρ : Ty.dens Γ) →
     Rels M L Γ ρ σ → (ss : Codes ts) → (c : Term) → encodes L gs es σ = .ok (ss, c) → Holds M c →
-    Rels M L ts (Exprs.eval g es ρ) ss
+    Rels M L ts (Exprs.eval D g es ρ) ss
   | .nil, _, _, _, _, _, _, _ => trivial
   | .cons e es, σ, ρ, hσ, ss, c, h, hc => by
     simp only [encodes] at h
@@ -2183,7 +2184,7 @@ theorem encodes_agrees {Γ : List Ty} {ts : List Ty} : (es : Exprs G Γ ts) → 
     exact ⟨encode_agrees e σ ρ hσ x c1 h1 hc1, encodes_agrees es σ ρ hσ xs c2 h2 hc2⟩
 theorem encodeItems_agrees {Γ : List Ty} {t : Ty} : (items : Items G Γ t) → (σ : Codes Γ) → (ρ : Ty.dens Γ) →
     Rels M L Γ ρ σ → (ss : List (Code t)) → (c : Term) → encodeItems L gs items σ = .ok (ss, c) → Holds M c →
-    Forall2 (Rel M L t) (Items.eval g items ρ) ss
+    Forall2 (Rel M L t) (Items.eval D g items ρ) ss
   | .nil, _, _, _, ss, c, h, _ => by cases h; trivial
   | .cons e es, σ, ρ, hσ, ss, c, h, hc => by
     simp only [encodeItems] at h
@@ -2196,7 +2197,7 @@ theorem encodePatch_agrees {Γ : List Ty} {ts : List Ty} : (p : Patch G Γ ts) �
     Rels M L Γ ρ σ → (keep : Nat → Term) → (j : Nat) → (ys : List Term) → (c : Term) →
     encodePatch L gs p σ keep j = .ok (ys, c) → Holds M c → (xs : Ty.dens ts) →
     RelVs L ts xs (Term.denotes M ((List.range ts.length).map fun i => keep (j + i))) →
-    RelVs L ts (Patch.eval g p ρ xs) (Term.denotes M ys)
+    RelVs L ts (Patch.eval D g p ρ xs) (Term.denotes M ys)
   | .nil, _, _, _, _, _, ys, c, h, _, (), _ => by cases h; rfl
   | .keep rest, σ, ρ, hσ, keep, j, ys, c, h, hc, (x, xs), hk => by
     simp only [encodePatch] at h
@@ -2229,7 +2230,7 @@ theorem encodePatch_agrees {Γ : List Ty} {ts : List Ty} : (p : Patch G Γ ts) �
 theorem encodeClauses_agrees {Γ : List Ty} {t r : Ty} {sh : List Shape} : (cs : Clauses G Γ t r sh) →
     (σ : Codes Γ) → (ρ : Ty.dens Γ) → Rels M L Γ ρ σ → (s : Code t) → (x : t.den) → Rel M L t x s →
     (hx : ∃ s ∈ sh, Shape.Matches t s x) → (v : Code r) → (c : Term) →
-    encodeClauses L gs cs σ s = .ok (some (v, c)) → Holds M c → Rel M L r (Clauses.eval g cs ρ x hx) v
+    encodeClauses L gs cs σ s = .ok (some (v, c)) → Holds M c → Rel M L r (Clauses.eval D g cs ρ x hx) v
   | .nil, _, _, _, _, _, _, _, _, _, h, _ => by cases h
   | .cons p body rest, σ, ρ, hσ, s, x, hs, hx, v, c, h, hc => by
     simp only [encodeClauses] at h
@@ -2324,7 +2325,7 @@ theorem Defs.encode_agrees (M : Model) (L : Layout) : {G : List Ty} → (defs : 
   | _ :: _, .snoc defs _ body => by
     intro t v s c h hc
     cases v with
-    | here => exact Smt.encode_agrees _ _ (Defs.encode_agrees M L defs) body () () trivial s c h hc
+    | here => exact Smt.encode_agrees defs _ _ (Defs.encode_agrees M L defs) body () () trivial s c h hc
     | there v => exact Defs.encode_agrees M L defs t v s c h hc
 
 end Tazuna.Smt

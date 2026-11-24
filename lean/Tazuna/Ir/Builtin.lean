@@ -26,7 +26,7 @@ def opaqueTypes : List OpaqueType :=
       fun | [] => some .date | _ => none⟩,
     ⟨"tazuna", "Id", [], "An identifier a step makes fresh, or one from outside the service; ids compare with `==` only.",
       fun | [] => some .id | _ => none⟩ ] ++
-  Dsl.all.map fun k => ⟨"tazuna", k.name, k.decl.2.1, k.decl.2.2,
+  (Dsl.all.filter (· != .closure)).map fun k => ⟨"tazuna", k.name, k.decl.2.1, k.decl.2.2,
     fun args => if args.length == k.decl.2.1.length then some (.dsl k args) else none⟩
 
 /-- The type a global name such as `tazuna/bag.Bag` names at `args`, when a `tazuna` module declares it opaque. -/
@@ -88,6 +88,8 @@ def sig : Prim → PrimSig :=
   let v := param 1
   let p (n : String) (t : Ty) : PrimParam := ⟨none, n, t⟩
   let l (lab : String) (t : Ty) : PrimParam := ⟨some lab, lab, t⟩
+  -- A function the structure value keeps, closed over the data it captures.
+  let kept (t : Ty) : Ty := .dsl .closure [t]
   fun
   | .length => ⟨"length", "The number of code points.", [], [p "string" .str], .int, [], false⟩
   | .bagFromList => ⟨"from_list", "A bag of the list's items.", ["a"], [p "items" (.list a)], .bag a, [], false⟩
@@ -157,10 +159,10 @@ def sig : Prim → PrimSig :=
     { name := "service",
       doc := "A service. `apply` folds an event into the records: events are the only writes. The service owns the commands, queries and sources it declares, and its scenarios run from `init` at time 0.",
       tvars := ["records", "event", "caller"], dataArgs := true, needsEq := [2],
-      params := [l "name" .str, l "init" a, l "apply" (.fn [a, b] a),
+      params := [l "name" .str, l "init" a, l "apply" (kept (.fn [a, b] a)),
         l "subscribes" (.list (.dsl .subscription [b])), l "declares" (.list (.dsl .declared [a, b, param 2])),
         l "machines" (.list (.dsl .machine [a, b])),
-        l "reactions" (.list (.dsl .reaction [a, b])), l "invariants" (.fn [a] Ty.rules),
+        l "reactions" (.list (.dsl .reaction [a, b])), l "invariants" (kept (.fn [a] Ty.rules)),
         l "responses" (.list (.dsl .response [b])), l "bounds" (.dsl .bounds [a]),
         l "scenarios" (.list (.dsl .scenario [a, b, param 2]))],
       ret := .dsl .service [] }
@@ -168,15 +170,15 @@ def sig : Prim → PrimSig :=
     { name := "command",
       doc := "A command: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects. The service that lists it owns it.",
       tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true, needsEq := [2],
-      params := [l "name" .str, l "callers" (.list (param 2)), l "accepts" (.fn [param 3] Ty.rules),
-        l "decide" (.fn [.ctx a (param 3) (param 2)] (.result (.list b) (param 4))),
-        l "ensures" (.fn [.ctx a (param 3) (param 2), a] Ty.rules)],
+      params := [l "name" .str, l "callers" (.list (param 2)), l "accepts" (kept (.fn [param 3] Ty.rules)),
+        l "decide" (kept (.fn [.ctx a (param 3) (param 2)] (.result (.list b) (param 4)))),
+        l "ensures" (kept (.fn [.ctx a (param 3) (param 2), a] Ty.rules))],
       ret := .dsl .command [a, b, param 2, param 3, param 4] }
   | .query =>
     { name := "query", doc := "A query: it answers from the records and writes nothing. The service that lists it owns it.",
       tvars := ["records", "caller", "input", "output"], dataArgs := true, needsEq := [1],
-      params := [l "name" .str, l "callers" (.list b), l "accepts" (.fn [param 2] Ty.rules),
-        l "resolve" (.fn [.ctx a (param 2) b] (param 3))],
+      params := [l "name" .str, l "callers" (.list b), l "accepts" (kept (.fn [param 2] Ty.rules)),
+        l "resolve" (kept (.fn [.ctx a (param 2) b] (param 3)))],
       ret := .dsl .query [a, b, param 2, param 3] }
   | .machine =>
     { name := "machine",
@@ -265,7 +267,7 @@ def sig : Prim → PrimSig :=
   | .subscribe =>
     { name := "subscribe", doc := "Receives the events of another service's or an external's source as this service's events.",
       tvars := ["event", "source"], dataArgs := true,
-      params := [l "to" (.dsl .source [b]), l "wrap" (.fn [b] a)], ret := .dsl .subscription [a] }
+      params := [l "to" (.dsl .source [b]), l "wrap" (kept (.fn [b] a))], ret := .dsl .subscription [a] }
   | .bounds =>
     { name := "bounds",
       doc := "How far checking goes: keys created per table, items per bag, internal steps per input, steps per run.",

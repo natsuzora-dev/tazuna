@@ -5,6 +5,18 @@ holds data (`Ty.den0`) and the types of that data, so a list of commands can hol
 
 namespace Tazuna.Ir
 
+/-- A function a structure value keeps, as its source: `body` over the program's definitions `defs`, with the data
+values `env` it captured, so its meaning is `body`'s value there (`Fun.fn`) and its code is `body`'s encoding. This is
+the closure record of defunctionalization: which function it is, and what it captured. -/
+structure Fun (t : Ty) where
+  G : List Ty
+  defs : Defs G
+  Γ : List Ty
+  env : (Ty.tuple Γ).den0
+  hΓ : (Ty.tuple Γ).isData = true
+  ht : t.isData = true
+  body : Expr G Γ t
+
 /-- A value with its type, as it crosses the wire. -/
 abbrev WireVal := (t : Ty) × t.den0
 
@@ -38,9 +50,9 @@ structure CommandV (r e c : Ty) where
   input : Ty
   rejection : Ty
   callers : List c.den0
-  accepts : (Ty.fn [input] Ty.rules).den0
-  decide : (Ty.fn [Ty.ctx r input c] (Ty.result (.list e) rejection)).den0
-  ensures : (Ty.fn [Ty.ctx r input c, r] Ty.rules).den0
+  accepts : Fun (Ty.fn [input] Ty.rules)
+  decide : Fun (Ty.fn [Ty.ctx r input c] (Ty.result (.list e) rejection))
+  ensures : Fun (Ty.fn [Ty.ctx r input c, r] Ty.rules)
 
 /-- A query; the service that lists it owns it. -/
 structure QueryV (r c : Ty) where
@@ -48,8 +60,8 @@ structure QueryV (r c : Ty) where
   input : Ty
   output : Ty
   callers : List c.den0
-  accepts : (Ty.fn [input] Ty.rules).den0
-  resolve : (Ty.fn [Ty.ctx r input c] output).den0
+  accepts : Fun (Ty.fn [input] Ty.rules)
+  resolve : Fun (Ty.fn [Ty.ctx r input c] output)
 
 /-- A command whose input and rejection types are `i` and `j`: the value of `Command(records, event, caller, input,
 rejection)`, so a handle's types are the command's. -/
@@ -101,7 +113,7 @@ structure SubscriptionV (e : Ty) where
   source : String
   name : String
   event : Ty
-  wrap : (Ty.fn [event] e).den0
+  wrap : Fun (Ty.fn [event] e)
 
 /-- A bound on the keys created in the table `table` reads from the records. -/
 structure CreateV (r : Ty) where
@@ -146,7 +158,7 @@ structure ServiceV where
   event : Ty
   caller : Ty
   init : records.den0
-  apply : (Ty.fn [records, event] records).den0
+  apply : Fun (Ty.fn [records, event] records)
   subscribes : List (SubscriptionV event)
   /-- What it declares, as written. -/
   declares : List DeclaredV
@@ -157,7 +169,7 @@ structure ServiceV where
   sources : List (String × Ty)
   machines : List (MachineV records event)
   reactions : List (ReactionV records event)
-  invariants : (Ty.fn [records] Ty.rules).den0
+  invariants : Fun (Ty.fn [records] Ty.rules)
   responses : List (ResponseV event)
   bounds : BoundsV records
   scenarios : List (ScenarioV records event caller)
@@ -193,6 +205,7 @@ def Dsl.val : Dsl → List Ty → Sem
       | .scenario, [r, e, c] => ScenarioV r e c
       | .step, [r, e, c] => StepV r e c
       | .sender, _ => Sender
+      | .closure, [t] => Fun t
       | _, _ => Unit
     ⟨carrier, fun _ _ => false⟩
 

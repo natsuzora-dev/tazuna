@@ -7,7 +7,7 @@ built-ins and never looks inside them. `fresh` is the source of new ids a step h
 inductive Dsl where
   | spec | service | command | query | machine | reaction | external
   | externalCommand | externalQuery | source | declared | effect | subscription
-  | bounds | create | response | scenario | step | sender | fresh
+  | bounds | create | response | scenario | step | sender | fresh | closure
 deriving Repr, DecidableEq, Inhabited
 
 namespace Dsl
@@ -15,7 +15,7 @@ namespace Dsl
 def all : List Dsl :=
   [.spec, .service, .command, .query, .machine, .reaction, .external, .externalCommand, .externalQuery,
    .source, .declared, .effect, .subscription, .bounds, .create, .response,
-   .scenario, .step, .sender, .fresh]
+   .scenario, .step, .sender, .fresh, .closure]
 
 theorem mem_all (k : Dsl) : k ∈ all := by cases k <;> simp [all]
 
@@ -48,6 +48,8 @@ def decl : Dsl → String × List String × String
   | .step => ("Step", ["records", "event", "caller"], "One step of a scenario.")
   | .sender => ("Sender", [], "What sent a request: a machine instance or a reaction.")
   | .fresh => ("Fresh", [], "Where a command's new ids come from.")
+  | .closure => ("Closure", ["function"],
+      "A function a structure value keeps: Gleam writes it as the function type; Lean keeps its source.")
 
 def name (k : Dsl) : String := (decl k).1
 

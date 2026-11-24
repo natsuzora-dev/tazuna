@@ -12,6 +12,14 @@ open Step
 private def I (x : Int) : Int := x
 private def rule (n : String) (b : Bool) : Ty.rules.den0 := [(n, Ty.ofBool b, ())]
 
+/-- Named rules with one rule. -/
+private def ruleE {Γ : List Ty} (n : String) (b : Expr [] Γ Ty.bool) : Expr [] Γ Ty.rules :=
+  .list (.cons (.tuple (.cons (.str n) (.cons b .nil))) .nil)
+private def recordsE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : Expr [] Γ .int :=
+  .field (ft := .int) "records" 0 (by simp) x
+private def inputE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : Expr [] Γ .int :=
+  .field (ft := .int) "input" 1 (by simp) x
+
 def ping : EffectV .int := .request
   { name := "ping", input := .str, output := .int, rejection := some .str, value := "hi",
     holds := fun _ => [], onAnswer := fun (a, ()) => match a with
@@ -29,22 +37,24 @@ def watch : MachineV .int .int :=
 
 def add : CommandV .int .int .int :=
   { name := "add", input := .int, rejection := .str, callers := [(1 : Int)],
-    accepts := fun (i, ()) => rule "small" (decide (I i < 100)),
-    decide := fun (.inl (_, i, _, _, _, ()), ()) =>
-      if 0 < I i then .inl ([i], ()) else .inr (.inl ("positive", ())),
-    ensures := fun (.inl (r, _, _, _, _, ()), r', ()) => rule "grows" (decide (I r ≤ I r')) }
+    accepts := .closed (.lam (ruleE "small" (.bin .lt (.var .here) (.int 100)))),
+    decide := .closed (.lam (.call (.prim .require [.list .int, .str] rfl)
+      (.cons (.bin .lt (.int 0) (inputE (.var .here))) (.cons (.str "positive")
+        (.cons (.lam (.ctor (i := 2) (args := [.list .int, .str]) ⟨0, by decide⟩
+          (.cons (.list (.cons (inputE (.var .here)) .nil)) .nil))) .nil))))),
+    ensures := .closed (.lam (ruleE "grows" (.bin .le (recordsE (.var .here)) (.var (.there .here))))) }
 
 def total : QueryV .int .int :=
-  { name := "total", input := .int, output := .int, callers := [(1 : Int)], accepts := fun _ => [],
-    resolve := fun (.inl (r, _, _, _, _, ()), ()) => r }
+  { name := "total", input := .int, output := .int, callers := [(1 : Int)], accepts := .closed (.lam (.list .nil)),
+    resolve := .closed (.lam (recordsE (.var .here))) }
 
 def svc : ServiceV :=
   { name := "sum", records := .int, event := .int, caller := .int, init := (0 : Int),
-    apply := fun (r, e, ()) => I r + I e,
-    subscribes := [{ source := "peer", name := "moved", event := .int, wrap := fun (x, ()) => x }],
+    apply := .closed (.lam (.bin .add (.var .here) (.var (.there .here)))),
+    subscribes := [{ source := "peer", name := "moved", event := .int, wrap := .closed (.lam (.var .here)) }],
     declares := [.command .int .int .int add, .query .int .int total],
     commands := [add], queries := [total], sources := [], machines := [watch], reactions := [], scenarios := [],
-    invariants := fun (r, ()) => rule "under 50" (decide (I r < 50)), responses := [],
+    invariants := .closed (.lam (ruleE "under 50" (.bin .lt (.var .here) (.int 50)))), responses := [],
     bounds := { creates := [], items := 3, cascade := 2, steps := 5 },
     declared := [("mail", .externalCommand "ping" .str .int .str)] }
 

@@ -1,3 +1,4 @@
+import Tazuna.Semantics.Eval
 import Tazuna.Semantics.Rules
 
 /-! The step semantics of one service. A step takes one input line and yields exactly one outcome, the events it
@@ -144,7 +145,7 @@ def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) : Machin
 
 /-- One event: apply it, then let every machine and reaction react. -/
 def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV v.event) :=
-  let records := v.apply (s.records, ev, ())
+  let records := v.apply.fn (s.records, ev, ())
   let (machines, effs) := s.machines.foldl (fun (ms, effs) ms0 =>
     let (m', es) := machineStep records s.now ev ms0; (ms ++ [m'], effs ++ es)) ([], [])
   let effs := effs ++ v.reactions.flatMap fun x => (x.react ev records s.now).map (.reaction x.name, ·)
@@ -152,7 +153,7 @@ def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV
 
 /-- The broken invariants of the service and of every machine instance. -/
 def invariants (s : State v) : List String :=
-  broken (v.invariants (s.records, ())) ++
+  broken (v.invariants.fn (s.records, ())) ++
     s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => broken (m.invariants (.inl (i.key, i.state, s.records, s.now, ()), ()))
 
 /-- A step in progress: the state, the events applied and the out lines so far, and the own commands and queries
@@ -192,9 +193,9 @@ def ctx {r i c : Ty} (s : State v) (records : r.den0) (caller : c.den0) (input :
   .inl (records, input, caller, s.now, s.fresh, ())
 
 /-- Why a request is Invalid: a caller it does not list, or the input's broken `accepts` rules. -/
-def admit {i : Ty} (callers : List v.caller.den0) (accepts : (Ty.fn [i] Ty.rules).den0) (caller : v.caller.den0)
+def admit {i : Ty} (callers : List v.caller.den0) (accepts : Fun (Ty.fn [i] Ty.rules)) (caller : v.caller.den0)
     (input : i.den0) : List String :=
-  if callers.any ((Ty.semWith Dsl.base v.caller).2 caller) then broken (accepts (input, ())) else ["callers"]
+  if callers.any ((Ty.semWith Dsl.base v.caller).2 caller) then broken (accepts.fn (input, ())) else ["callers"]
 
 def okNil {j : Ty} : (Ty.result Ty.nil j).den0 := .inl (.inl (), ())
 
@@ -209,10 +210,10 @@ def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v
   | [] => do
     let cx := ctx a.state a.state.records caller input
     let a := { a with state := { a.state with fresh := a.state.fresh + 1 } }
-    match x.decide (cx, ()) with
+    match x.decide.fn (cx, ()) with
     | .inl (events, ()) =>
       let a ← applyEvents a events
-      match broken (x.ensures (cx, a.state.records, ())) with
+      match broken (x.ensures.fn (cx, a.state.records, ())) with
       | n :: _ => .error (.ensures n)
       | [] => applyEvents a (onAnswer (okNil, ()))
     | .inr (.inl (j, ())) => applyEvents a (onAnswer (.inr (.inl (j, ())), ()))
@@ -224,7 +225,7 @@ def runQuery (a : Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0
       (Ty.same q.output x.output).isSome) then .error (.invalidEffect x.name ["service"])
   else match admit x.callers x.accepts caller input with
   | r :: rs => .error (.invalidEffect x.name (r :: rs))
-  | [] => applyEvents a (onAnswer (x.resolve (ctx a.state a.state.records caller input, ()), ()))
+  | [] => applyEvents a (onAnswer (x.resolve.fn (ctx a.state a.state.records caller input, ()), ()))
 
 def runOwn (a : Acc v) : EffectV v.event → Except Fault (Acc v)
   | .request _ => .ok a
@@ -286,19 +287,19 @@ def step (v : ServiceV) (s : State v) : Input v → Result v
     | r :: rs => ⟨s', .invalid (r :: rs), [], []⟩
     | [] =>
       let cx := ctx s s.records caller input
-      match c.decide (cx, ()) with
+      match c.decide.fn (cx, ()) with
       | .inr (.inl (j, ())) => ⟨s', .rejected ⟨c.rejection, j⟩, [], []⟩
       | .inl (events, ()) =>
         match applyEvents { state := s' } events with
         | .error f => ⟨s', .fault f, [], []⟩
-        | .ok a => match broken (c.ensures (cx, a.state.records, ())) with
+        | .ok a => match broken (c.ensures.fn (cx, a.state.records, ())) with
           | n :: _ => ⟨s', .fault (.ensures n), [], []⟩
           | [] => finish s' (.ok a) .accepted
   | .query i caller input =>
     let q := v.queries.get i
     match admit q.callers q.accepts caller input with
     | r :: rs => ⟨s, .invalid (r :: rs), [], []⟩
-    | [] => ⟨s, .answered ⟨q.output, q.resolve (ctx s s.records caller input, ())⟩, [], []⟩
+    | [] => ⟨s, .answered ⟨q.output, q.resolve.fn (ctx s s.records caller input, ())⟩, [], []⟩
   | .answer to ⟨t, value⟩ =>
     match s.pending.find? (·.id == to) with
     | none => ⟨s, .fault (.answerUnmatched (toString to)), [], []⟩
@@ -310,7 +311,7 @@ def step (v : ServiceV) (s : State v) : Input v → Result v
         | [] =>
           let s' := { s with pending := s.pending.filter (·.id != to) }
           finish s (applyEvents { state := s' } (p.request.onAnswer (h ▸ value, ()))) .accepted
-  | .event i value => finish s (applyEvents { state := s } [(v.subscribes.get i).wrap (value, ())]) .accepted
+  | .event i value => finish s (applyEvents { state := s } [(v.subscribes.get i).wrap.fn (value, ())]) .accepted
   | .clock time =>
     if time < s.now then ⟨s, .invalid ["time moves forward"], [], []⟩ else
     match fire { s with now := time } (v.bounds.cascade.toNat + 1) with

@@ -267,7 +267,7 @@ def resolveE : E (.fn [ctxT] (Ty.option .int)) :=
 
 def getQ : QueryV recordsT .str :=
   { name := "get", input := .int, output := Ty.option .int, callers := ["alice"],
-    accepts := Ty.down _ rfl (acceptsE.eval (G := []) () ()), resolve := Ty.down _ rfl (resolveE.eval (G := []) () ()) }
+    accepts := .closed acceptsE, resolve := .closed resolveE }
 
 def getCode (L : Layout) : Except Refusal (QueryCode getQ) := do
   let (a, _) ← encode L (G := []) () acceptsE ()
@@ -276,8 +276,9 @@ def getCode (L : Layout) : Except Refusal (QueryCode getQ) := do
 
 def querySvc : ServiceV :=
   { name := "s", records := recordsT, event := .int, caller := .str, init := Builtin.tableEmpty,
-    apply := fun (r, _, ()) => r, subscribes := [], declares := [], commands := [], queries := [getQ], sources := [],
-    machines := [], reactions := [], invariants := fun _ => [], responses := [], bounds := ⟨[], 0, 0, 0⟩,
+    apply := .closed (.lam (.var .here)), subscribes := [], declares := [], commands := [], queries := [getQ],
+    sources := [],
+    machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [], bounds := ⟨[], 0, 0, 0⟩,
     scenarios := [], declared := [] }
 
 def queryLayout : Layout :=
@@ -385,10 +386,10 @@ def invariantsE : E (.fn [recordsT] Ty.rules) :=
 
 def eventSvc : ServiceV :=
   { name := "e", records := recordsT, event := evT, caller := .str, init := Builtin.tableEmpty,
-    apply := Ty.down _ rfl (applyE.eval (G := []) () ()),
-    subscribes := [⟨"x", "set", evT, Ty.down _ rfl (wrapE.eval (G := []) () ())⟩], declares := [], commands := [],
+    apply := .closed applyE,
+    subscribes := [⟨"x", "set", evT, .closed wrapE⟩], declares := [], commands := [],
     queries := [], sources := [], machines := [], reactions := [],
-    invariants := Ty.down _ rfl (invariantsE.eval (G := []) () ()), responses := [], bounds := ⟨[], 0, 0, 0⟩,
+    invariants := .closed invariantsE, responses := [], bounds := ⟨[], 0, 0, 0⟩,
     scenarios := [], declared := [] }
 
 def eventLayout : Layout :=
@@ -526,8 +527,8 @@ def ensuresE : E (.fn [cctxT, recordsT] Ty.rules) :=
 
 def putC : CommandV recordsT evT .str :=
   { name := "put", input := .int, rejection := .str, callers := ["alice"],
-    accepts := Ty.down _ rfl (acceptsE.eval (G := []) () ()), decide := Ty.down _ rfl (decideE.eval (G := []) () ()),
-    ensures := Ty.down _ rfl (ensuresE.eval (G := []) () ()) }
+    accepts := .closed acceptsE, decide := .closed decideE,
+    ensures := .closed ensuresE }
 
 def commandSvc : ServiceV := { eventSvc with name := "c", commands := [putC] }
 
@@ -618,7 +619,7 @@ def check (z3 : String) : IO Bool := do
         | .sat vs =>
           -- The value read back decodes (T3) to a value `==` to what eval computes.
           let same := match (vs.lookup 0).bind (decodeV L t) with
-            | some y => Ty.deq t y (Expr.eval (G := []) () e ())
+            | some y => Ty.deq t y (Expr.eval (G := []) .nil () e ())
             | none => false
           if !same then
             IO.println s!"smt-check: {name}: the solver's value differs from eval's"; ok := false
@@ -638,7 +639,7 @@ def check (z3 : String) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let back := ((vs.lookup 0).bind (decodeV L .id)).bind (embedV L .id)
-        if back.map (·.print) != (embedV L .id ((freshOf index).eval (G := []) () (step, ()))).map (·.print) then
+        if back.map (·.print) != (embedV L .id ((freshOf index).eval (G := []) .nil () (step, ()))).map (·.print) then
           IO.println s!"smt-check: fresh({step}, {index}): the solver's id differs from eval's"; ok := false
       | a => IO.println s!"smt-check: fresh({step}, {index}): {repr a}"; ok := false
     | .error m => IO.println s!"smt-check: fresh({step}, {index}): {m}"; ok := false

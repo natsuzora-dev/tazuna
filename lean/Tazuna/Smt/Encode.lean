@@ -626,6 +626,7 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
     let (x, c) ← encode e σ
     pure (.sub (.int 0) x, c)
   | .prim p args h, _ => do pure (← primCode L p args h, tt)
+  | .close .., _ => .error (.outside "a function a structure value keeps")
 def encodes {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Codes Γ → Enc (Codes ts)
   | .nil, _ => .ok ((), tt)
   | .cons e es, σ => do
@@ -751,6 +752,7 @@ def Expr.tys {Γ : List Ty} {t : Ty} : Expr G Γ t → List Ty
   | .tuple es => t :: Exprs.tys es
   | .bin _ l r => t :: Expr.tys l ++ Expr.tys r
   | .not e | .neg e => t :: Expr.tys e
+  | .close env _ _ body => t :: Exprs.tys env ++ Expr.tys body
   | .int _ | .str _ | .var _ | .global _ | .prim .. => [t]
 def Exprs.tys {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → List Ty
   | .nil => []
@@ -784,6 +786,7 @@ def Expr.lits {Γ : List Ty} {t : Ty} : Expr G Γ t → List (Ty × Nat)
   | .call f args => Expr.lits f ++ Exprs.lits args
   | .let_ e body | .bin _ e body => Expr.lits e ++ Expr.lits body
   | .case e cs _ => Expr.lits e ++ Clauses.lits cs
+  | .close env _ _ body => Exprs.lits env ++ Expr.lits body
   | .int _ | .str _ | .var _ | .global _ | .prim .. => []
 def Exprs.lits {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → List (Ty × Nat)
   | .nil => []
