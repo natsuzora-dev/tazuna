@@ -43,6 +43,7 @@ def decodeV : (t : Ty) → Val → Option t.den
   | .int, .int n => some n
   | .str, .str s => some s
   | .date, .int n => some n
+  | .dsl .fresh _, .int n => if 0 ≤ n then some n.toNat else none
   | .id, .ctor d' k args => match L.find? .id with
     | some (d, _) => if d' = d then decodeId k args else none
     | none => none
@@ -89,6 +90,7 @@ def embedV : (t : Ty) → t.den → Option Val
   | .int, n => some (.int n)
   | .str, s => some (.str s)
   | .date, n => some (.int n)
+  | .dsl .fresh _, n => some (.int (Int.ofNat n))
   | .id, x => (L.find? .id).map fun (d, _) => idVal d x
   | .adt 0 _ [[], []], x => some (.bool (altsBool x))
   | .adt (i + 1) a vs, x => match L.find? (.adt (i + 1) a vs) with
@@ -220,6 +222,11 @@ mutual
 theorem decode_rel : (t : Ty) → (v : Val) → (x : t.den) → decodeV L t v = some x → RelV L t x v
   | .int, .int n, x, h | .date, .int n, x, h => by cases h; rfl
   | .str, .str s, x, h => by cases h; rfl
+  | .dsl .fresh _, .int n, x, h => by
+    simp only [decodeV] at h
+    split at h
+    · rename_i h0; cases h; show Val.int n = Val.int (Int.ofNat n.toNat); rw [Int.ofNat_eq_natCast, Int.toNat_of_nonneg h0]
+    · cases h
   | .id, .ctor d' k args, x, h => by
     simp only [decodeV] at h
     split at h
@@ -324,6 +331,10 @@ mutual
 theorem decode_embed : (t : Ty) → (x : t.den) → (v : Val) → embedV L t x = some v → decodeV L t v = some x
   | .int, x, v, h | .date, x, v, h => by cases h; rfl
   | .str, x, v, h => by cases h; rfl
+  | .dsl .fresh _, x, v, h => by
+    cases h
+    have hm : ∀ m : Nat, (if 0 ≤ Int.ofNat m then some (Int.ofNat m).toNat else none) = some m := by intro m; simp
+    exact hm x
   | .id, x, v, h => by
     obtain ⟨⟨d, n⟩, hf, rfl⟩ := map_some.1 h
     cases x <;> simp [idVal, decodeV, hf, decodeId] <;> rfl

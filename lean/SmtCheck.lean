@@ -204,6 +204,19 @@ def scriptOf (slots : Ty → Nat) {t : Ty} (e : E t) : Except String (Layout × 
   | .error r, _, _ => throw s!"no encoding: {repr r}"
   | _, _, _ => throw "no sort"
 
+/-- `fresh(source, index)`, with the source a variable the script fixes, as a step fixes its counter. -/
+def freshOf (index : Int) : Expr [] [.dsl .fresh []] .id :=
+  .call (.prim .fresh [] rfl) (.cons (.var .here) (.cons (.int index) .nil))
+
+def freshScript (step : Nat) (index : Int) : Except String (Layout × Script) := do
+  let L := Layout.addTys (fun _ => 3) {} [.id]
+  match encode L (G := []) () (freshOf index) (Term.var 1, ()), L.srt? .id, L.datatypes? with
+  | .ok (code, cond), some srt, some dts =>
+    pure (L, { datatypes := dts, vars := [srt, .int], asserts := [.eq (.var 0) code, .eq (.var 1) (.int step), cond],
+               shows := [0] })
+  | .error r, _, _ => throw s!"no encoding: {repr r}"
+  | _, _, _ => throw "no sort"
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -227,6 +240,16 @@ def check (z3 : String) : IO Bool := do
         | .unsat => pure ()
         | a => IO.println s!"smt-check: {name}: not unsat: {repr a}"; ok := false
       | .error m => IO.println s!"smt-check: {name}: {m}"; ok := false
+  for (step, index) in [(0, 0), (5, -3), (2, 7), (40, -1)] do
+    match freshScript step index with
+    | .ok (L, script) =>
+      match ← solver.run script with
+      | .sat vs =>
+        let back := ((vs.lookup 0).bind (decodeV L .id)).bind (embedV L .id)
+        if back.map (·.print) != (embedV L .id ((freshOf index).eval (G := []) () (step, ()))).map (·.print) then
+          IO.println s!"smt-check: fresh({step}, {index}): the solver's id differs from eval's"; ok := false
+      | a => IO.println s!"smt-check: fresh({step}, {index}): {repr a}"; ok := false
+    | .error m => IO.println s!"smt-check: fresh({step}, {index}): {m}"; ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

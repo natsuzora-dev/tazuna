@@ -41,6 +41,8 @@ def RelV : (t : Ty) → t.den → Val → Prop
       L.find? (.tuple [Ty.bool, k, w]) = some (dt, m) ∧ sv.length = n ∧ v = slotsVal d dt sv ∧
       (∀ p ∈ sv, p.2.length = 2) ∧ ∃ ys : List (k.den × w.den), ys.Perm x.1 ∧
         Holds2 (fun e vs => ∃ zk zv, vs = [zk, zv] ∧ RelV k e.1 zk ∧ RelV w e.2 zv) ys sv
+  /- A fresh-id source is the step's counter. -/
+  | .dsl .fresh _, x, v => v = .int (Int.ofNat x)
   | .list _, _, _ | .fn .., _, _ | .param _, _, _ | .dsl .., _, _ => False
 def RelVs : (ts : List Ty) → Ty.dens ts → List Val → Prop
   | [], _, vals => vals = []
@@ -1414,6 +1416,29 @@ theorem pickCode_rel (lt : Term → Term → Term) (wins : Int → Int → Bool)
       exact adtCtor_rel (vs := [[a], [Ty.pickError]]) ⟨1, by simp⟩ _ tieT h6 (Alts.inj ⟨1, by simp⟩ (), ())
         ⟨_, _, rfl, adtCtor_rel (vs := [[], []]) ⟨1, by simp⟩ [] tieI h5 () rfl, rfl⟩
 
+/-- `freshId`'s number in Int arithmetic. -/
+def freshInt (s x : Int) : Int :=
+  let i := if 0 ≤ x then 2 * x else 2 * (0 - x) - 1
+  (s + i) * (s + i + 1) / 2 + i
+
+theorem freshT_denote (M : Model) {ss si : Term} {s x : Int} (hs : ss.denote M = .int s) (hi : si.denote M = .int x) :
+    (freshT ss si).denote M = .int (freshInt s x) := by
+  unfold freshT freshInt
+  by_cases h : 0 ≤ x
+  · simp [Term.denote, hs, hi, Val.toInt, Val.toBool, h]
+  · simp [Term.denote, hs, hi, Val.toInt, Val.toBool, h]
+
+theorem freshId_int (step : Nat) (index : Int) :
+    ∃ m : Nat, freshId step index = .fresh m ∧ (m : Int) = freshInt step index := by
+  unfold freshId freshInt
+  refine ⟨_, rfl, ?_⟩
+  generalize hN : (if 0 ≤ index then 2 * index.toNat else 2 * (-index).toNat - 1) = iN
+  have hI : (iN : Int) = if 0 ≤ index then 2 * index else 2 * (0 - index) - 1 := by
+    subst hN; split <;> omega
+  rw [← hI]
+  simp only [Int.natCast_add, Int.natCast_ediv, Int.natCast_mul]
+  rfl
+
 /-- Each built-in's code relates to its meaning. -/
 theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : Code (p.ty.inst args))
     (h : primCode L p args hp = .ok s) : Rel M L (p.ty.inst args) (p.den args hp) s := by
@@ -1836,6 +1861,19 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     rw [anySlotT_den ha, hperm.any_eq]
     simp only [Prim.den, toBool_ofBool]
     rfl
+  case fresh =>
+    simp only [primCode] at h; cases h
+    intro ⟨step, index, ()⟩ ⟨ss, si, ()⟩ ⟨hs, hi, _⟩ r c hr _
+    obtain ⟨⟨d, n⟩, h1, hr⟩ := bind_ok.1 hr
+    cases pure_ok.1 hr
+    change RelV L (.dsl .fresh []) step (ss.denote M) at hs
+    change RelV L .int index (si.denote M) at hi
+    simp only [RelV] at hs hi
+    obtain ⟨m, hm, hmi⟩ := freshId_int step index
+    refine ⟨d, n, need_ok.1 h1, ?_⟩
+    show Val.ctor d 0 (Term.denotes M [freshT ss si]) = idVal d (freshId step index)
+    simp only [Term.denotes, freshT_denote M hs hi, hm, idVal]
+    rw [hmi]; rfl
   all_goals simp [primCode] at h
 
 end

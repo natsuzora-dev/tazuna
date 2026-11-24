@@ -384,6 +384,13 @@ def pickCode (lt : Term → Term → Term) (a : Ty) (b : Term) (f : Codes [a] �
   let empty ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 1 [← adtCtor L 4 [] [[], []] 0 []]
   pure (.ite (anySlotT S ws) found (.ite (anySlotT S (S.map fun _ => tt)) tie empty), guardsT S (R.map (·.2)))
 
+/-- `fresh(source, index)`'s number: the Cantor pairing of the step's counter and the index, as `freshId` computes
+it, with the index made a natural number (`2 * index`, or `2 * -index - 1` below zero). -/
+def freshT (step index : Term) : Term :=
+  let i := Term.share (.ite (.le (.int 0) index) (.mul (.int 2) index) (.sub (.mul (.int 2) (.sub (.int 0) index)) (.int 1)))
+  let a := Term.share (.add step i)
+  .add (.div (.mul a (.add a (.int 1))) (.int 2)) i
+
 /-- The code of each built-in that has an exact encoding: a table of term builders indexed by the built-in. -/
 def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal (Code (p.ty.inst args)) :=
   match p, args, h with
@@ -537,6 +544,9 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let a := (Ty.param 2).inst args
     let e := (Ty.param 3).inst args
     pure (.ite hit r (← adtCtor L 2 [a, e] [[a], [e]] 1 [rt]), .ite hit c tt)
+  | .fresh, _, _ => .ok fun (step, index, ()) => do
+    let (d, _) ← need "a layout without Id" (L.find? .id)
+    pure (.ctor d 0 [freshT step index], tt)
   | p, _, _ => .error (.outside s!"the built-in {p.sig.name}")
 
 variable {G : List Ty} (gs : Encs G)
@@ -692,7 +702,7 @@ end
 /-- The sort that codes values of a first-order type. -/
 def srt? (L : Layout) (t : Ty) : Option Srt :=
   match t with
-  | .int | .date => some .int
+  | .int | .date | .dsl .fresh _ => some .int
   | .str => some .str
   | .adt 0 _ vs => if (boolVs? vs).isSome then some .bool else none
   | t => (L.find? t).map fun (d, _) => .dt d
