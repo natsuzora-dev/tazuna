@@ -2,21 +2,39 @@ import Tazuna.Semantics.Step
 import Tazuna.Trace.Line
 
 /-! Running a scenario: each step becomes one input line, the step runs, and its outputs become out lines. The trace
-names ids `id1`, `id2`, ... in the order they first appear, so a snapshot shows what a reader can compare, not the
-engine's numbering. -/
+names fresh ids `id1`, `id2`, ... in the order they first appear, so a snapshot shows what a reader can compare, not
+the engine's numbering. A scenario names an id with `tazuna.id(name)`: the id the trace already calls `name`, or else
+an id from outside the service, which the trace calls by that name from then on. -/
 
 namespace Tazuna.Trace
 
 open Tazuna.Ir Tazuna.Ir.Step
 
-/-- Ids named by their first appearance. -/
+/-- The names a trace gives ids, one to one, each from its first appearance: an id from outside the service is called
+by its own name, and a fresh id by the next `idK` no other id is called. -/
 structure Names where
-  ids : List Nat := []
+  ids : List (IdV × String) := []
+  next : Nat := 1
 
-def Names.name (ns : Names) (n : Nat) : Option String := (ns.ids.idxOf? n).map fun k => s!"id{k + 1}"
+def Names.name (ns : Names) (x : IdV) : Option String := ns.ids.lookup x
 
-def Names.bind (ns : Names) (xs : List Nat) : Names :=
-  xs.foldl (fun ns n => if ns.ids.contains n then ns else ⟨ns.ids ++ [n]⟩) ns
+def Names.taken (ns : Names) (s : String) : Bool := ns.ids.any (·.2 == s)
+
+def Names.bind (ns : Names) (xs : List IdV) : Names :=
+  xs.foldl (fun ns x => if ns.ids.any (·.1 == x) then ns else match x with
+    -- An outside id whose name another id has stays unnamed, so the value has no wire form.
+    | .named s => if ns.taken s then ns else { ns with ids := ns.ids ++ [(x, s)] }
+    | .fresh _ =>
+      -- Of `ids.length + 1` candidates at most `ids.length` are taken.
+      let k := ((List.range (ns.ids.length + 1)).find? fun j => !ns.taken s!"id{ns.next + j}").getD 0
+      { ids := ns.ids ++ [(x, s!"id{ns.next + k}")], next := ns.next + k + 1 }) ns
+
+/-- A scenario's value with each id it names read as the trace names it, when it names only ids (a scenario cannot
+make fresh ones). -/
+def Names.resolve (ns : Names) (T : List TypeDecl) (t : Ty) (x : t.den0) : Option t.den0 :=
+  let written := fun | IdV.named s => some s | .fresh _ => none
+  let read := fun s => some (((ns.ids.find? (·.2 == s)).map (·.1)).getD (.named s))
+  (enc T written t x).bind (dec T read t)
 
 /-- The wire form of a value, naming the ids it holds first. -/
 def Names.enc (ns : Names) (T : List TypeDecl) (t : Ty) (x : t.den0) : Names × Option Wire :=
@@ -96,10 +114,12 @@ def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Exce
   | .command x caller input => do
     let some i := finIdx v.commands fun c => c.name == x.name | throw (.badStep k s!"{v.name} lists no command {x.name}")
     let some ⟨h⟩ := Ty.same x.input (v.commands.get i).input | throw (.badStep k s!"{x.name} has another input type")
+    let (caller, input) ← resolved v.caller x.input caller input
     request x.name (.command i caller (h ▸ input)) caller ⟨x.input, input⟩
   | .query x caller input => do
     let some i := finIdx v.queries fun q => q.name == x.name | throw (.badStep k s!"{v.name} lists no query {x.name}")
     let some ⟨h⟩ := Ty.same x.input (v.queries.get i).input | throw (.badStep k s!"{x.name} has another input type")
+    let (caller, input) ← resolved v.caller x.input caller input
     request x.name (.query i caller (h ▸ input)) caller ⟨x.input, input⟩
   | .wait ms => do
     if ms < 0 then throw (.badStep k "a step waits a negative time")
@@ -109,6 +129,7 @@ def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Exce
     let ps := run.state.pending.filter fun p =>
       p.request.external == ext && p.request.command == cmd && p.sender.matches snd
     let [p] := ps | throw (.badStep k s!"{ps.length} pending requests to {ext}.{cmd} match the sender")
+    let some value := run.names.resolve T (Ty.result o j) value | throw (.badStep k "the answer makes a fresh id")
     let t := run.state.now
     let (ns, w) := match value with
       | .inl (x, ()) => let (ns, w) := run.names.enc T o x; (ns, w.map Except.ok)
@@ -119,10 +140,15 @@ def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Exce
     let some i := finIdx v.subscribes fun sub => sub.source == src && sub.name == name
       | throw (.badStep k s!"{v.name} subscribes to no event {src}.{name}")
     let some ⟨h⟩ := Ty.same ty (v.subscribes.get i).event | throw (.badStep k s!"{src}.{name} has another type")
+    let some x := run.names.resolve T ty x | throw (.badStep k "the event makes a fresh id")
     let (ns, w) := run.names.enc T ty x
     let some w := w | throw (.badStep k "the event has no wire form")
     { run with names := ns }.finish' T v (.event i (h ▸ x)) [.event run.state.now src name w] none k
 where
+  resolved (c i : Ty) (caller : c.den0) (input : i.den0) : Except Stop (c.den0 × i.den0) :=
+    match run.names.resolve T c caller, run.names.resolve T i input with
+    | some caller, some input => pure (caller, input)
+    | _, _ => throw (.badStep k "the request makes a fresh id")
   request (name : String) (input : Input v) (caller : v.caller.den0) (value : WireVal) : Except Stop (Run v) := do
     let id := toString (run.requests + 1)
     let (ns, c) := run.names.enc T v.caller caller

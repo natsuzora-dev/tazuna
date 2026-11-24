@@ -85,7 +85,7 @@ def Ty.default? : (t : Ty) → Option t.den0
   | .param _ => some ()
   | .table _ _ => some ⟨[], .nil⟩
   | .date => some (0 : Int)
-  | .id => some (0 : Nat)
+  | .id => some (IdV.fresh 0)
   | .dsl k _ => by cases k <;> first | exact some (0 : Nat) | exact some ()
 def Ty.defaults? : (ts : List Ty) → Option (Ty.semsWith Dsl.base ts).1
   | [] => some ()

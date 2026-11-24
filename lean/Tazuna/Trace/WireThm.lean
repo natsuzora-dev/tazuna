@@ -57,7 +57,7 @@ theorem decNil_encNil (vs : List (List Ty)) (x : (Ty.semAltsWith Dsl.base vs).1)
   | f :: _, .inr _ => cases f <;> (have h : none = some w := h; cases h)
 
 section
-variable (T : List TypeDecl) (name : Nat → Option String) (lookup : String → Option Nat)
+variable (T : List TypeDecl) (name : IdV → Option String) (lookup : String → Option IdV)
   (hid : ∀ n s, name n = some s → lookup s = some n)
 include hid
 

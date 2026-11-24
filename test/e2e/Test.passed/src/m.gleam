@@ -48,6 +48,17 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, String) {
   )
 }
 
+fn tag() -> tazuna.Command(Records, Event, Caller, Id, String) {
+  tazuna.command(
+    service: "counter",
+    name: "tag",
+    callers: [User],
+    accepts: fn(_id: Id) { [] },
+    decide: fn(c: Ctx(Records, Id, Caller)) { Ok([Tagged(c.input)]) },
+    ensures: fn(_c: Ctx(Records, Id, Caller), _r: Records) { [] },
+  )
+}
+
 fn total() -> tazuna.Query(Records, Caller, Nil, Int) {
   tazuna.query(
     service: "counter",
@@ -104,7 +115,11 @@ fn counter() -> tazuna.Service {
     init: Records(total: 0),
     apply: apply,
     subscribes: [],
-    requests: [tazuna.define_command(add()), tazuna.define_query(total())],
+    requests: [
+      tazuna.define_command(add()),
+      tazuna.define_command(tag()),
+      tazuna.define_query(total()),
+    ],
     machines: [watch()],
     reactions: [],
     invariants: fn(r: Records) { [#("under 50", r.total < 50)] },
@@ -119,6 +134,8 @@ fn basic() -> tazuna.Scenario {
     tazuna.step_query(query: total(), caller: User, input: Nil),
     tazuna.step_command(command: add(), caller: User, input: 0),
     tazuna.step_command(command: add(), caller: User, input: 1),
+    tazuna.step_command(command: tag(), caller: User, input: tazuna.id("id1")),
+    tazuna.step_command(command: tag(), caller: User, input: tazuna.id("guest")),
     tazuna.step_wait(ms: 10),
     tazuna.step_answer(
       command: send(),

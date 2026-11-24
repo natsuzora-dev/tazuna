@@ -22,7 +22,7 @@ def opaqueTypes : List OpaqueType :=
       fun | [k, v] => some (.table k v) | _ => none⟩,
     ⟨"Date", [], "A day. Dates have no calendar: a spec adds days and counts the days between two dates.",
       fun | [] => some .date | _ => none⟩,
-    ⟨"Id", [], "An identifier a step makes fresh; ids compare with `==` only.",
+    ⟨"Id", [], "An identifier a step makes fresh, or one from outside the service; ids compare with `==` only.",
       fun | [] => some .id | _ => none⟩ ] ++
   Dsl.all.map fun k => ⟨k.name, k.decl.2.1, k.decl.2.2,
     fun args => if args.length == k.decl.2.1.length then some (.dsl k args) else none⟩
@@ -50,7 +50,7 @@ inductive Prim where
   | spec | service | command | query | defineCommand | defineQuery | machine | reaction
   | external | externalCommand | externalQuery | externalEvent | declareCommand | declareQuery | declareEvent
   | request | sendCommand | sendQuery | subscribe | bounds | create | response
-  | scenario | stepCommand | stepQuery | stepWait | stepAnswer | stepEvent | fromMachine | fromReaction | fresh
+  | scenario | stepCommand | stepQuery | stepWait | stepAnswer | stepEvent | fromMachine | fromReaction | fresh | id
 deriving Repr, DecidableEq
 
 structure PrimParam where
@@ -308,6 +308,11 @@ def sig : Prim → PrimSig :=
   | .fresh =>
     { name := "fresh", doc := "The `index`-th new id of this step: ids from different steps or indices differ.",
       tvars := [], params := [p "source" (.dsl .fresh []), p "index" .int], ret := .id }
+  | .id =>
+    { name := "id",
+      doc := "The id a trace names `name`, for a scenario: the one an earlier out line showed under that name, or else \
+        an id from outside the service.",
+      tvars := [], params := [p "name" .str], ret := .id }
 
 def all : List Prim :=
   [.length, .bagFromList, .bagInsert, .bagSize, .bagFilter, .bagMap, .bagCount, .bagSum, .bagAny, .bagAll,
@@ -316,7 +321,7 @@ def all : List Prim :=
    .dateDaysBetween, .require, .ref, .spec, .service, .command, .query, .defineCommand, .defineQuery, .machine, .reaction, .external,
    .externalCommand, .externalQuery, .externalEvent, .declareCommand, .declareQuery, .declareEvent, .request,
    .sendCommand, .sendQuery, .subscribe, .bounds, .create, .response, .scenario, .stepCommand, .stepQuery, .stepWait,
-   .stepAnswer, .stepEvent, .fromMachine, .fromReaction, .fresh]
+   .stepAnswer, .stepEvent, .fromMachine, .fromReaction, .fresh, .id]
 
 theorem mem_all (p : Prim) : p ∈ all := by cases p <;> simp [all]
 

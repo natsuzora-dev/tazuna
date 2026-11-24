@@ -114,9 +114,9 @@ def Ty.toOption {t : Ty} : (Ty.option t).den → Option t.den
   | .inr _ => Option.none
 
 /-- Distinct ids for distinct pairs of a step's counter and an index. -/
-def freshId (step : Nat) (index : Int) : Nat :=
+def freshId (step : Nat) (index : Int) : IdV :=
   let i := if 0 ≤ index then 2 * index.toNat else 2 * (-index).toNat - 1
-  (step + i) * (step + i + 1) / 2 + i
+  .fresh ((step + i) * (step + i + 1) / 2 + i)
 
 /-- The value of a built-in at the type arguments `args`, which meet its demands. -/
 def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.inst args).den
@@ -261,6 +261,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     let x : ReactionV ((Ty.param 0).inst args) ((Ty.param 1).inst args) := x
     .reaction x.name
   | .fresh, _, _ => fun (step, index, ()) => freshId step index
+  | .id, _, _ => fun (name, ()) => IdV.named name
   | .ref, args, _ => fun (t, k, rejection, next, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t.1 with
     | .some v => next (v, ())
     | .none => Ty.error rejection

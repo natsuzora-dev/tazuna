@@ -2,7 +2,8 @@ import Tazuna.Trace.Run
 
 /-! Replaying a trace against the spec. Each in line runs as the spec's input; the out lines up to the next in line
 form its window, which must equal the spec's out lines as a multiset. An implementation names its own ids and wire
-ids: each binds to the spec's at its first appearance in an out line, and the binding stays one to one. -/
+ids: each binds to the spec's at its first appearance in an out line, and the binding stays one to one. An id an in
+line names before any out line showed it is an id from outside the service, called by that name. -/
 
 namespace Tazuna.Trace
 
@@ -10,17 +11,24 @@ open Tazuna.Ir Tazuna.Ir.Step
 
 /-- The implementation's names for the spec's ids and wire ids, one to one. -/
 structure Bind where
-  ids : List (Nat × String) := []
+  ids : List (IdV × String) := []
   wires : List (Nat × String) := []
 
 /-- `xs` with `n` named `s`, unless either already has another partner. -/
-def bindPair (xs : List (Nat × String)) (n : Nat) (s : String) : Option (List (Nat × String)) :=
+def bindPair {α : Type} [BEq α] (xs : List (α × String)) (n : α) (s : String) : Option (List (α × String)) :=
   match xs.lookup n, xs.find? (·.2 == s) with
   | some s', _ => if s' == s then some xs else none
   | none, some _ => none
   | none, none => some (xs ++ [(n, s)])
 
-def Bind.id? (b : Bind) (s : String) : Option Nat := (b.ids.find? (·.2 == s)).map (·.1)
+/-- The id an in line names: the one bound to the name, or else the outside id of that name. -/
+def Bind.id? (b : Bind) (s : String) : Option IdV := some (((b.ids.find? (·.2 == s)).map (·.1)).getD (.named s))
+
+/-- The binding with each outside id among `xs` called by its name. -/
+def Bind.outside (b : Bind) (xs : List IdV) : Bind :=
+  xs.foldl (fun b x => match x with
+    | .named s => if b.ids.any (·.1 == x) then b else { b with ids := b.ids ++ [(x, s)] }
+    | .fresh _ => b) b
 
 def Bind.wire? (b : Bind) (s : String) : Option Nat := (b.wires.find? (·.2 == s)).map (·.1)
 
@@ -140,18 +148,18 @@ inductive Verdict where
   | invalid (line : Nat) (message : String)
   | fault (line : Nat) (f : Fault)
 
-/-- The input an in line writes, read with the binding so far, and the id its answer names. -/
-def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option String)
-  | .clock t => if t < s.now then .error "time moves back" else .ok (.clock t, none)
+/-- The input an in line writes, read with the binding so far, the id its answer names, and the ids it holds. -/
+def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option String × List IdV)
+  | .clock t => if t < s.now then .error "time moves back" else .ok (.clock t, none, [])
   | .request t id name c i => do
     if t != s.now then throw s!"the request is at {t}, but a clock line brought time only to {s.now}"
     let caller ← (dec T b.id? v.caller c).elim (.error "the caller does not read as the service's caller type") .ok
     match finIdx v.commands (·.name == name), finIdx v.queries (·.name == name) with
     | some k, _ => match dec T b.id? (v.commands.get k).input i with
-      | some x => .ok (.command k caller x, some id)
+      | some x => .ok (.command k caller x, some id, idsOf v.caller caller ++ idsOf _ x)
       | none => .error s!"the input does not read as {name}'s input type"
     | none, some k => match dec T b.id? (v.queries.get k).input i with
-      | some x => .ok (.query k caller x, some id)
+      | some x => .ok (.query k caller x, some id, idsOf v.caller caller ++ idsOf _ x)
       | none => .error s!"the input does not read as {name}'s input type"
     | none, none => .error s!"{v.name} has no request {name}"
   | .answer t to res => do
@@ -159,7 +167,7 @@ def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option 
     let some id := b.wire? to | throw s!"the answer names {to}, which no request the service sent had"
     match s.pending.find? (·.id == id) with
     -- The step itself faults on an answer to no pending request.
-    | none => .ok (.answer id ⟨Ty.nil, .inl ()⟩, none)
+    | none => .ok (.answer id ⟨Ty.nil, .inl ()⟩, none, [])
     | some p =>
       let o := p.request.output
       let j := p.request.rejection
@@ -167,14 +175,14 @@ def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option 
         | .ok w => (dec T b.id? o w).map fun x => .inl (x, ())
         | .error w => (dec T b.id? j w).map fun x => .inr (.inl (x, ()))
       match value with
-      | some x => .ok (.answer id ⟨Ty.result o j, x⟩, none)
+      | some x => .ok (.answer id ⟨Ty.result o j, x⟩, none, idsOf _ x)
       | none => .error "the answer does not read as the request's output or rejection type"
   | .event t src name w => do
     if t != s.now then throw s!"the event is at {t}, but a clock line brought time only to {s.now}"
     let some k := finIdx v.subscribes fun sub => sub.source == src && sub.name == name
       | throw s!"{v.name} subscribes to no event {src}.{name}"
     match dec T b.id? (v.subscribes.get k).event w with
-    | some x => .ok (.event k x, none)
+    | some x => .ok (.event k x, none, idsOf _ x)
     | none => .error s!"the event does not read as {src}.{name}'s type"
   | _ => .error "an out line where an in line belongs"
 
@@ -191,7 +199,8 @@ def replay (lines : List (Nat × Line)) : Verdict := Id.run do
       rest := more.drop window.length
       match readIn T v s b l with
       | .error m => return .invalid n m
-      | .ok (input, answerTo) =>
+      | .ok (input, answerTo, ids) =>
+        b := b.outside ids
         let r := step v s input
         if let .fault f := r.outcome then
           -- The trace names requests by its own ids, so a fault names the answer's request as the trace does.

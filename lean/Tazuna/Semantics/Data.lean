@@ -32,6 +32,13 @@ def listBeq {α : Type} (f : α → α → Bool) : List α → List α → Bool
   | x :: xs, y :: ys => f x y && listBeq f xs ys
   | _, _ => false
 
+/-- An id: one a step made fresh, or one from outside the service, which a trace and a scenario know by its name. The
+two never meet, so no fresh id equals an outside one. -/
+inductive IdV where
+  | fresh (n : Nat)
+  | named (name : String)
+deriving DecidableEq, Repr, Inhabited
+
 /-- A carrier type with Gleam's `==` on it. -/
 abbrev Sem := (α : Type) × (α → α → Bool)
 
@@ -63,7 +70,7 @@ def Ty.semWith (D : Dsl → List Ty → Sem) : Ty → Sem
   | .table k v => Sem.table (Ty.semWith D k) (Ty.semWith D v)
   -- Days from an arbitrary origin.
   | .date => ⟨Int, fun x y => @BEq.beq Int _ x y⟩
-  | .id => ⟨Nat, fun x y => @BEq.beq Nat _ x y⟩
+  | .id => ⟨IdV, fun x y => decide (x = y)⟩
   | .dsl k args => D k args
 /-- Values of the types `ts`, in order. -/
 def Ty.semsWith (D : Dsl → List Ty → Sem) : List Ty → Sem

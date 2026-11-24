@@ -12,7 +12,8 @@ JSON library.
 - A value of any other custom type, `Option` and `Result` included, is an object: `"tag"` names the variant, and each
   field sits under its label, or under its position (`"0"`, `"1"`) when it has none.
 - A Date is its label `YYYY-MM-DD`.
-- An Id is a string a binding names it by: a trace names ids by their first appearance, never by the engine's numbers.
+- An Id is a string a binding names it by: a trace names a fresh id by its first appearance, never by the engine's
+  numbers, and an id from outside the service by its own name.
 
 Functions and fresh-id sources never cross the wire. -/
 
@@ -64,7 +65,7 @@ def decNil : (vs : List (List Ty)) → Wire → Option (Ty.semAltsWith Dsl.base 
   | _, _ => none
 
 section
-variable (T : List TypeDecl) (name : Nat → Option String)
+variable (T : List TypeDecl) (name : IdV → Option String)
 
 mutual
 /-- The wire form of a value of type `t`, when it has one. `name` writes ids. -/
@@ -100,24 +101,24 @@ end
 
 mutual
 /-- The ids a value holds, in the order its wire form writes them. -/
-def idsOf : (t : Ty) → t.den0 → List Nat
+def idsOf : (t : Ty) → t.den0 → List IdV
   | .list t, xs | .bag t, xs => xs.flatMap (idsOf t)
   | .tuple ts, x => idsOfs ts x
   | .adt _ _ vs, x => idsOfAlts vs x
   | .table k v, x => x.1.flatMap fun (a, b) => idsOf k a ++ idsOf v b
   | .id, n => [n]
   | .int, _ | .str, _ | .date, _ | .fn .., _ | .param _, _ | .dsl .., _ => []
-def idsOfs : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List Nat
+def idsOfs : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List IdV
   | [], () => []
   | t :: ts, (x, xs) => idsOf t x ++ idsOfs ts xs
-def idsOfAlts : (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → List Nat
+def idsOfAlts : (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → List IdV
   | [], x => nomatch x
   | fs :: _, .inl x => idsOfs fs x
   | _ :: vs, .inr y => idsOfAlts vs y
 end
 
 section
-variable (T : List TypeDecl) (lookup : String → Option Nat)
+variable (T : List TypeDecl) (lookup : String → Option IdV)
 
 mutual
 /-- The value of type `t` a wire form writes, when it writes one. `lookup` reads ids. -/

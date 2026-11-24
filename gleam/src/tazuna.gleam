@@ -22,7 +22,7 @@ pub type Table(k, v)
 /// A day. Dates have no calendar: a spec adds days and counts the days between two dates.
 pub type Date
 
-/// An identifier a step makes fresh; ids compare with `==` only.
+/// An identifier a step makes fresh, or one from outside the service; ids compare with `==` only.
 pub type Id
 
 /// The services a spec defines and the externals they talk to.
@@ -551,5 +551,10 @@ pub fn from_reaction(reaction _reaction: Reaction(records, event)) -> Sender {
 
 /// The `index`-th new id of this step: ids from different steps or indices differ.
 pub fn fresh(_source: Fresh, _index: Int) -> Id {
+  panic as "tazuna's built-ins run only in the engine"
+}
+
+/// The id a trace names `name`, for a scenario: the one an earlier out line showed under that name, or else an id from outside the service.
+pub fn id(_name: String) -> Id {
   panic as "tazuna's built-ins run only in the engine"
 }

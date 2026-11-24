@@ -11,6 +11,12 @@
 {"out":"answer","outcome":"accepted","time":0,"to":"4"}
 {"out":"event","time":0,"value":{"amount":1,"tag":"Added"}}
 {"out":"event","time":0,"value":{"id":"id2","tag":"Tagged"}}
+{"caller":{"tag":"User"},"id":"5","in":"request","input":"id1","name":"tag","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"5"}
+{"out":"event","time":0,"value":{"id":"id1","tag":"Tagged"}}
+{"caller":{"tag":"User"},"id":"6","in":"request","input":"guest","name":"tag","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"6"}
+{"out":"event","time":0,"value":{"id":"guest","tag":"Tagged"}}
 {"in":"clock","time":10}
 {"external":"mail","id":"0","input":6,"name":"send","out":"request","time":10}
 {"in":"answer","ok":null,"time":10,"to":"0"}
