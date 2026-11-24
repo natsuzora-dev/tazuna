@@ -406,6 +406,52 @@ def eventCases : List (String × List Term) :=
   [ ("event keeps the invariant", [.var 7]),
     ("event breaks the invariant", [.not (.var 7)]) ]
 
+/-- A clock line on the event service, for `clock_step`: v0..v3 the state, v4 the line's time, v5 whether time moves
+forward, v6 and v7 the invariant's holds and name. -/
+def clockScript (goal : List Term) : Except String Script := do
+  let L := eventLayout
+  let ec ← (eventCode L).mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0
+  let (o, cond) ← (encodeClock L (v := eventSvc) ec.invariants S.records S.now (.var 4)).mapError
+    fun r => s!"no encoding: {repr r}"
+  let some (d, n) := L.find? recordsT | throw "no records datatype"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | throw "no slot datatype"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [(name, holds)] := o.invariants | throw "not one invariant"
+  pure { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, .bool, .bool, .str],
+         asserts := [cond, keysDistinct d dt n S.records, .le (.int 0) S.fresh, .le (.int 0) S.nextId,
+           .eq (.var 5) o.forward, .eq (.var 6) holds, .eq (.var 7) name] ++ goal,
+         shows := List.range 8 }
+
+def clockCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := do
+  match clockScript goal with
+  | .error m => IO.println s!"smt-check: {name}: {m}"; return false
+  | .ok script =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let L := eventLayout
+      match (SymState.vars 0).decode M L (v := eventSvc) rfl [] [],
+          (SymInput.clock (.var 4)).decode M L (v := eventSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+            (fun | ⟨0, _⟩ => rfl) with
+      | some s, some x@(.clock time) =>
+        let r := step eventSvc s x
+        let ok := match (M.vars 5).toBool, brokenIn M [(.var 7, .var 6)], r.outcome with
+          | false, _, .invalid ["time moves forward"] => r.state.now == s.now
+          | true, n :: _, .fault (.invariant n') => n == n' && r.state.now == s.now
+          | true, [], .accepted => r.state.now == time && sameAs L recordsT rfl r.state.records (vs.lookup 0)
+          | _, _, _ => false
+        unless ok do IO.println s!"smt-check: {name}: step says {r.outcome.summary}, the terms differ"
+        return ok
+      | _, _ => IO.println s!"smt-check: {name}: the model does not decode"; return false
+    | a => IO.println s!"smt-check: {name}: {repr a}"; return false
+
+def clockCases : List (String × List Term) :=
+  [ ("clock moves time on", [.var 5, .var 6, .lt (.var 1) (.var 4)]),
+    ("clock reports a broken invariant", [.var 5, .not (.var 6)]),
+    ("clock refuses an earlier time", [.not (.var 5)]) ]
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -443,6 +489,8 @@ def check (z3 : String) : IO Bool := do
     unless ← queryCase solver name goal do ok := false
   for (name, goal) in eventCases do
     unless ← eventCase solver name goal do ok := false
+  for (name, goal) in clockCases do
+    unless ← clockCase solver name goal do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

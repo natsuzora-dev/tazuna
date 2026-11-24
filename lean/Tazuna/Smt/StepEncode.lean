@@ -446,4 +446,78 @@ theorem event_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.
 
 end
 
+/-! The clock kind, from a state without machine instances: no timer is due, so time moves on and the invariants are
+checked on the same records. -/
+
+/-- The terms of a clock step: whether time moves forward, and each invariant's name and whether it holds. -/
+structure ClockOut where
+  forward : Term
+  invariants : List (Term × Term)
+
+/-- A clock step's terms and its condition, from the terms of the records, the time and the clock line's time. -/
+def encodeClock (L : Layout) {v : ServiceV} (invariants : Code (Ty.fn [v.records] Ty.rules)) (records now time : Term) :
+    Except Refusal (ClockOut × Term) := do
+  let rc ← need "records that have no term" (Code.ofTerm? _ records)
+  let (invs, c) ← invariants (rc, ())
+  let rules ← ruleTerms L invs
+  let forward := Term.le now time
+  pure (⟨forward, rules⟩, .ite forward c tt)
+
+section
+variable {M : Model} {L : Layout}
+
+/-- A clock line's step from a state without machine instances, computed. -/
+theorem step_clock (v : ServiceV) (s : State v) (hs : s.machines = []) (time : Int) :
+    step v s (.clock time) = if time < s.now then ⟨s, .invalid ["time moves forward"], [], []⟩ else
+      match Step.broken (v.invariants (s.records, ())) with
+      | n :: _ => ⟨s, .fault (.invariant n), [], []⟩
+      | [] => ⟨{ s with now := time }, .accepted, [], []⟩ := by
+  simp only [step]
+  split
+  · rfl
+  · simp only [Step.fire, hs, List.flatMap_nil, List.min?_nil, Step.finish, Step.start, List.foldlM, bind,
+      Except.bind, pure, Except.pure, Step.settle, Step.invariants, List.append_nil]
+    rfl
+
+/-- T2 for a clock line from a state without machine instances: wherever the condition holds, a time before the
+state's is Invalid, a broken invariant's name is the step's fault, and otherwise time moves on. -/
+theorem clock_step {v : ServiceV} (s : State v) (hs : s.machines = []) (time : Int) (hrd : v.records.isData = true)
+    (inv : Code (Ty.fn [v.records] Ty.rules))
+    (hinv : Smt.Rel M L _ (Ty.up _ (by simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hrd])
+      v.invariants) inv)
+    {records now st : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
+    (hnow : now.denote M = .int s.now) (hst : st.denote M = .int time)
+    {o : ClockOut} {cond : Term} (henc : encodeClock L inv records now st = .ok (o, cond)) (hc : Holds M cond) :
+    let r := step v s (.clock time)
+    if (o.forward.denote M).toBool then
+      match brokenIn M o.invariants with
+      | n :: _ => r = ⟨s, .fault (.invariant n), [], []⟩
+      | [] => r = ⟨{ s with now := time }, .accepted, [], []⟩
+    else r = ⟨s, .invalid ["time moves forward"], [], []⟩ := by
+  intro r
+  obtain ⟨rc, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨invs, c⟩, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨rules, h3, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  simp only [r, step_clock v s hs time, Term.denote, hnow, hst, Val.toInt, Val.toBool, decide_eq_true_eq]
+  by_cases ht : s.now ≤ time
+  · have hlt : ¬time < s.now := by omega
+    simp only [ht, hlt, ite_true, ite_false]
+    have hc' : Holds M c := by
+      simp only [Holds, Term.denote, hnow, hst, Val.toInt, Val.toBool, decide_eq_true_eq, ht, ite_true] at hc
+      exact hc
+    have hrc : Smt.Rel M L _ (Ty.up _ hrd s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
+    have hargs : Smt.Rels M L [v.records] (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hrd])
+        (s.records, ())) (rc, ()) := by
+      show Smt.Rel M L _ (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hrd]) (s.records, ())).1 rc ∧ True
+      erw [Ty.up_tuple _ _ _ hrd rfl]; exact ⟨hrc, trivial⟩
+    have hi := hinv _ _ hargs invs c h2 hc'
+    erw [Ty.up_fn _ Ty.rules _ (by simp [Ty.isData, Ty.isDatas, hrd]) rfl, Ty.up_list _ _ rfl] at hi
+    rw [rules_broken h3 _ hi]
+    cases Step.broken (v.invariants (s.records, ())) <;> rfl
+  · have hlt : time < s.now := by omega
+    simp only [ht, hlt, ite_true, ite_false]
+
+end
+
 end Tazuna.Smt
