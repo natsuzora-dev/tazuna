@@ -122,13 +122,16 @@ variable {v : ServiceV}
 def State.init (v : ServiceV) : State v :=
   { records := v.init, machines := v.machines.map (⟨·, []⟩), pending := [], now := 0, fresh := 0, nextId := 0 }
 
+/-- The timer `after` asks for at `now`: due after its delay, entering its state. -/
+def timerAt {st : Ty} (now : Int) : (Ty.option (Ty.timer st)).den0 → Option (Int × st.den0)
+  | .inl (.inl (d, target, ()), ()) => some (now + (show Int from d), target)
+  | _ => none
+
 /-- An instance entering `st`: its timer and its effect. -/
 def enter {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (key : m.key.den0) (st : m.state.den0) :
     Instance m × List (Sender × EffectV e) :=
-  let timer := match m.after.fn (.inl (key, st, records, now, ()), ()) with
-    | .inl (.inl (d, target, ()), ()) => some (now + (show Int from d), target)
-    | _ => none
-  (⟨key, st, timer⟩, (m.effectAt key st records now).toList.map (.machine m.name ⟨m.key, key⟩, ·))
+  (⟨key, st, timerAt now (m.after.fn (.inl (key, st, records, now, ()), ()))⟩,
+    (m.effectAt key st records now).toList.map (.machine m.name ⟨m.key, key⟩, ·))
 
 variable (T : List TypeDecl)
 
