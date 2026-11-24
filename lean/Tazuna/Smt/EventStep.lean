@@ -2,9 +2,10 @@ import Tazuna.Smt.Starts
 
 /-! T2 for an event, with machines: the subscription wraps the value into an event, the records apply it, every
 machine reacts (`encodeReact`), and the service's and every instance's invariants are checked on the result, in the
-step's order (the service's first, then machines in declaration order, instances in key order). A machine's effects
-are not encoded yet: a machine of a service whose layout has effect kinds is refused, so every machine the encoding
-covers starts no effect, which the theorem derives from the relation (an effect would need a kind). -/
+step's order (the service's first, then machines in declaration order, instances in key order). Each machine's part
+also yields its start slots, the effects its instances start. `event_step` covers a layout without effect kinds, where
+no machine can start an effect (the theorem derives it from the relation: an effect would need a kind);
+`Tazuna.Smt.EventPending` writes the effects into the pending table. -/
 
 namespace Tazuna.Smt
 
@@ -13,20 +14,20 @@ open Tazuna.Ir
 section
 variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
-/-- What one machine's part of an event step encodes: its new instance table and the invariant checks of its slots. -/
+/-- What one machine's part of an event step encodes: its new instance table, the invariant checks of its slots and
+its start slots. -/
 structure MachineOut where
   table : Term
   checks : List InstCheck
+  starts : List (Term × Term × Term)
 
 /-- One machine's reaction to an event and its instances' invariants on the result, with their condition. -/
 def encodeMachine (m : MachineV r e) (tbl records now ev : Term) : Except Refusal (MachineOut × Term) := do
-  let _ ← need' "a machine whose effects would go into the pending table, which is not encoded yet"
-    (L.effectsOf e).isEmpty ()
   let (rc, c0) ← ReactCode.of L m
   let (o, c1) ← encodeReact L m rc tbl records now ev
   let (inv, c2) ← m.invariants.code L
   let (checks, c3) ← encodeInstInvariants L T m inv o.table records now
-  pure (⟨o.table, checks⟩, andT c0 (andT c1 (andT c2 c3)))
+  pure (⟨o.table, checks, o.starts⟩, andT c0 (andT c1 (andT c2 c3)))
 
 /-- Every machine's part of an event step, from its instance table, in the service's order. -/
 def encodeMachines : List (MachineV r e) → List Term → (records now ev : Term) → Except Refusal (List MachineOut × Term)
@@ -97,34 +98,34 @@ theorem opt_some_rel {x : (Ty.dsl .effect [e]).den} {z : Val}
   obtain ⟨_, _, _, vals, -, v1, _, -, hx, -⟩ := h
   exact ⟨v1, hx⟩
 
-/-- T2 for one machine's part of an event step: wherever the condition holds, the machine starts no effect, its new
-table term denotes the instances after the step, and the names read from the model are the broken invariants of those
-instances in key order. -/
-theorem machine_event (m : MachineV r e) (hor : m.key.orderable = true) (hko : m.key.ordered T = true)
+/-- The start slots of one machine's part of an event step hold the effects its instances start. -/
+theorem machine_starts (m : MachineV r e) (hor : m.key.orderable = true)
     (recs : r.den0) (tnow : Int) (ev : e.den0) {records now evT : Term}
     (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hevT : RelV L e (Ty.up _ m.event_data ev) (evT.denote M))
     (tbl : m.table.den0) {x : Term} (htbl : RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M))
     {mo : MachineOut} {c : Term} (henc : encodeMachine L T m x records now evT = .ok (mo, c)) (hc : Holds M c) :
-    (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).2 = [] ∧
-      ∃ tbl', RelV L m.table (Ty.up _ m.table_data tbl') (mo.table.denote M) ∧
-        instancesOf T m tbl' = (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).1.2 ∧
-        instBroken L T M m.key mo.checks =
-          (instancesOf T m tbl').flatMap fun i => Step.broken (m.invariants.fn (.inl (i.key, i.state, recs, tnow, ()), ())) := by
-  obtain ⟨_, h0, henc⟩ := bind_ok.1 henc
-  have hk : (L.effectsOf e).isEmpty = true := by unfold need' at h0; split at h0 <;> simp_all
+    ∃ svX E, SlotsDen M (mo.starts.map fun w => (w.1, [w.2.1, w.2.2])) svX ∧
+      Holds2 (EStart (L := L) m (instancesOf T m tbl) recs tnow ev) E svX ∧
+      E.Perm (Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (recs, ())))) := by
   obtain ⟨⟨rc, c0⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨o, c1⟩, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨inv, c2⟩, h3, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨checks, c3⟩, h4, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   obtain ⟨hc0, hc123⟩ := (holds_andT _ _).1 hc
-  obtain ⟨hc1, hc23⟩ := (holds_andT _ _).1 hc123
-  obtain ⟨hc2, hc3⟩ := (holds_andT _ _).1 hc23
-  obtain ⟨⟨tbl', ht', hi'⟩, svX, E, -, hhX, hEp⟩ := react_step (T := T) m hor h1 hc0 recs tnow ev hrec hnow hevT tbl
-    htbl h2 hc1
-  have hinv := m.invariants.code_fn m.inv_data h3 hc2
-  refine ⟨?_, tbl', ht', hi', instBroken_eq m hko hinv recs tnow hrec hnow tbl' ht' h4 hc3⟩
+  obtain ⟨hc1, -⟩ := (holds_andT _ _).1 hc123
+  exact (react_step (T := T) m hor h1 hc0 recs tnow ev hrec hnow hevT tbl htbl h2 hc1).2
+
+/-- In a layout without effect kinds, a machine's instances start no effect: an effect value would need a kind. -/
+theorem machine_quiet (m : MachineV r e) (hor : m.key.orderable = true)
+    (recs : r.den0) (tnow : Int) (ev : e.den0) {records now evT : Term}
+    (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+    (hevT : RelV L e (Ty.up _ m.event_data ev) (evT.denote M))
+    (tbl : m.table.den0) {x : Term} (htbl : RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M))
+    {mo : MachineOut} {c : Term} (henc : encodeMachine L T m x records now evT = .ok (mo, c)) (hc : Holds M c)
+    (hk : (L.effectsOf e).isEmpty = true) : (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).2 = [] := by
+  obtain ⟨svX, E, -, hhX, hEp⟩ := machine_starts (T := T) m hor recs tnow ev hrec hnow hevT tbl htbl henc hc
   rw [machineStep_effects m (Ty.plain_of_orderable _ hor)]
   refine List.flatMap_eq_nil_iff.2 fun k hkk => ?_
   obtain ⟨vs, ⟨zk, z, -, -, hz⟩⟩ := forall2_mem hhX (hEp.mem_iff.2 hkk)
@@ -140,6 +141,31 @@ theorem machine_event (m : MachineV r e) (hor : m.key.orderable = true) (hko : m
     | .inl () => rfl
     | .inr y => nomatch y
 
+/-- T2 for one machine's part of an event step: wherever the condition holds, its new table term denotes the
+instances after the step, and the names read from the model are the broken invariants of those instances in key
+order. -/
+theorem machine_event (m : MachineV r e) (hor : m.key.orderable = true) (hko : m.key.ordered T = true)
+    (recs : r.den0) (tnow : Int) (ev : e.den0) {records now evT : Term}
+    (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+    (hevT : RelV L e (Ty.up _ m.event_data ev) (evT.denote M))
+    (tbl : m.table.den0) {x : Term} (htbl : RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M))
+    {mo : MachineOut} {c : Term} (henc : encodeMachine L T m x records now evT = .ok (mo, c)) (hc : Holds M c) :
+    ∃ tbl', RelV L m.table (Ty.up _ m.table_data tbl') (mo.table.denote M) ∧
+      instancesOf T m tbl' = (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).1.2 ∧
+      instBroken L T M m.key mo.checks =
+        (instancesOf T m tbl').flatMap fun i => Step.broken (m.invariants.fn (.inl (i.key, i.state, recs, tnow, ()), ())) := by
+  obtain ⟨⟨rc, c0⟩, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨o, c1⟩, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨inv, c2⟩, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨checks, c3⟩, h4, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  obtain ⟨hc0, hc123⟩ := (holds_andT _ _).1 hc
+  obtain ⟨hc1, hc23⟩ := (holds_andT _ _).1 hc123
+  obtain ⟨hc2, hc3⟩ := (holds_andT _ _).1 hc23
+  obtain ⟨⟨tbl', ht', hi'⟩, -⟩ := react_step (T := T) m hor h1 hc0 recs tnow ev hrec hnow hevT tbl htbl h2 hc1
+  have hinv := m.invariants.code_fn m.inv_data h3 hc2
+  exact ⟨tbl', ht', hi', instBroken_eq m hko hinv recs tnow hrec hnow tbl' ht' h4 hc3⟩
+
 end
 
 section
@@ -151,9 +177,8 @@ def instancesBroken (recs : v.records.den0) (tnow : Int) (sms : List (Step.Machi
     List String :=
   sms.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => Step.broken (m.invariants.fn (.inl (i.key, i.state, recs, tnow, ()), ()))
 
-/-- T2 for the machines' part of an event step: wherever the condition holds, no machine starts an effect, the new
-tables denote the machines after the step, and the names read from the model are their broken invariants in the
-step's order. -/
+/-- T2 for the machines' part of an event step: wherever the condition holds, the new tables denote the machines
+after the step, and the names read from the model are their broken invariants in the step's order. -/
 theorem machines_event (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
@@ -162,13 +187,12 @@ theorem machines_event (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) 
     (outs : List MachineOut) → {c : Term} → MachinesRel M L T ms xs sms →
     (∀ m ∈ ms, m.key.orderable = true ∧ m.key.ordered T = true) → encodeMachines L T ms xs records now evT = .ok (outs, c) →
     Holds M c →
-    (∀ ms0 ∈ sms, (Step.machineStep T recs tnow ev ms0).2 = []) ∧
       MachinesRel M L T ms (outs.map (·.table)) (sms.map fun ms0 => (Step.machineStep T recs tnow ev ms0).1) ∧
       machinesBroken L T M ms outs = instancesBroken recs tnow (sms.map fun ms0 => (Step.machineStep T recs tnow ev ms0).1)
   | [], [], [], outs, c, _, _, henc, _ => by
     simp only [encodeMachines, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, -⟩ := henc
-    exact ⟨by simp, trivial, rfl⟩
+    exact ⟨trivial, rfl⟩
   | m :: ms, x :: xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc, hc => by
     obtain ⟨⟨a, c1⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨as, c2⟩, h2, henc⟩ := bind_ok.1 henc
@@ -176,18 +200,38 @@ theorem machines_event (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) 
     obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
     obtain ⟨hor1, hko1⟩ := hor m (by simp)
     subst hsm
-    obtain ⟨hq, tbl', ht', hi', hb⟩ := machine_event (T := T) m hor1 hko1 recs tnow ev hrec hnow hevT tbl htbl h1 hc1
-    obtain ⟨hqs, hrel, hbs⟩ := machines_event recs tnow ev hrd hed hrec hnow hevT ms xs sms as hrest
+    obtain ⟨tbl', ht', hi', hb⟩ := machine_event (T := T) m hor1 hko1 recs tnow ev hrec hnow hevT tbl htbl h1 hc1
+    obtain ⟨hrel, hbs⟩ := machines_event recs tnow ev hrd hed hrec hnow hevT ms xs sms as hrest
       (fun m' hm => hor m' (by simp [hm])) h2 hc2
-    refine ⟨?_, ⟨⟨tbl', ht', ?_⟩, hrel⟩, ?_⟩
-    · intro ms0 hms0
-      rcases List.mem_cons.1 hms0 with rfl | h
-      · exact hq
-      · exact hqs ms0 h
+    refine ⟨⟨⟨tbl', ht', ?_⟩, hrel⟩, ?_⟩
     · rw [hi']; rfl
     · simp only [machinesBroken, List.zip_cons_cons, List.flatMap_cons, List.map_cons, instancesBroken] at hbs ⊢
       rw [hb, hi']
       exact congrArg _ hbs
+  | [], [], _ :: _, _, _, h, _, _, _ | [], _ :: _, _, _, _, h, _, _, _ | _ :: _, [], _, _, _, h, _, _, _
+  | _ :: _, _ :: _, [], _, _, h, _, _, _ => h.elim
+
+/-- In a layout without effect kinds, no machine starts an effect on an event. -/
+theorem machines_quiet (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
+    (hrd : v.records.isData = true) (hed : v.event.isData = true)
+    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+    (hevT : RelV L v.event (Ty.up _ hed ev) (evT.denote M)) (hk : (L.effectsOf v.event).isEmpty = true) :
+    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
+    (outs : List MachineOut) → {c : Term} → MachinesRel M L T ms xs sms →
+    (∀ m ∈ ms, m.key.orderable = true) → encodeMachines L T ms xs records now evT = .ok (outs, c) →
+    Holds M c → ∀ ms0 ∈ sms, (Step.machineStep T recs tnow ev ms0).2 = []
+  | [], [], [], _, _, _, _, _, _ => by simp
+  | m :: ms, x :: xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc, hc => by
+    obtain ⟨⟨a, c1⟩, h1, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨as, c2⟩, h2, henc⟩ := bind_ok.1 henc
+    cases pure_ok.1 henc
+    obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
+    subst hsm
+    intro ms0 hms0
+    rcases List.mem_cons.1 hms0 with rfl | h
+    · exact machine_quiet (T := T) m (hor m (by simp)) recs tnow ev hrec hnow hevT tbl htbl h1 hc1 hk
+    · exact machines_quiet recs tnow ev hrd hed hrec hnow hevT hk ms xs sms as hrest
+        (fun m' hm => hor m' (by simp [hm])) h2 hc2 ms0 h
   | [], [], _ :: _, _, _, h, _, _, _ | [], _ :: _, _, _, _, h, _, _, _ | _ :: _, [], _, _, _, h, _, _, _
   | _ :: _, _ :: _, [], _, _, h, _, _, _ => h.elim
 
@@ -208,7 +252,7 @@ theorem event_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (i : Fin
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     {o : EventOut} {cond : Term} (henc : encodeEvent L ec records sv = .ok (o, cond)) (hc : Holds M cond)
     {outs : List MachineOut} {cm : Term} (hm : encodeMachines L T v.machines xs o.records now o.event = .ok (outs, cm))
-    (hcm : Holds M cm) :
+    (hcm : Holds M cm) (hk : (L.effectsOf v.event).isEmpty = true) :
     let r := step T v s (.event i value)
     match brokenIn M o.invariants ++ machinesBroken L T M v.machines outs with
     | n :: _ => r = ⟨s, .fault (.invariant n), [], []⟩
@@ -219,8 +263,10 @@ theorem event_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (i : Fin
         ∃ e, r.events = [e] ∧ RelV L v.event (Ty.up _ hd.event e) (o.event.denote M) := by
   intro r
   obtain ⟨hr', he', hb'⟩ := event_rel i value hd hec hce hrec hsv henc hc
-  obtain ⟨hq, hrel, hbs⟩ := machines_event (T := T) _ s.now _ hd.records hd.event hr' hnow he' v.machines xs s.machines
-    outs hms hor hm hcm
+  obtain ⟨hrel, hbs⟩ := machines_event (T := T) _ s.now _ hd.records hd.event hr' hnow he' v.machines xs
+    s.machines outs hms hor hm hcm
+  have hq := machines_quiet (T := T) _ s.now _ hd.records hd.event hr' hnow he' hk v.machines xs s.machines outs hms
+    (fun m hm => (hor m hm).1) hm hcm
   simp only [r]
   rw [step_event_plain hx s i value hq]
   let ev := (v.subscribes.get i).wrap.fn (value, ())

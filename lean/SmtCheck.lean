@@ -1,5 +1,6 @@
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.EventStep
+import Tazuna.Smt.EventPending
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 
@@ -1582,6 +1583,114 @@ def startsCheck (solver : Solver) : IO Bool := do
       return ok
     | a => fail s!"{repr a}"
 
+/-! An event whose machine starts requests, for `event_step_effects`: the machine `start` above in a service that
+inserts each event's value into its records and lists the external `mail`'s command `send`. The state holds key 3 in
+state 0 and one request pending at wire id 2, with next id 40; the event 5 makes key 3 enter 1 and key 5 start, so
+both start a `send`. The pending table and next id read from the model must be the step's (the two new requests at 40
+for key 3 and 41 for key 5, beside the old one), and the out lines the new requests; the old pending table must not
+pass the comparison. With two requests already pending, the three slots cannot take two more: the script is unsat,
+and the step really holds four. -/
+
+def wrapIntE : E (.fn [.int] .int) := .lam (.var .here)
+
+def writeSvc : ServiceV :=
+  { insertSvc with name := "w", queries := [], subscribes := [⟨"x", "set", .int, .closed wrapIntE⟩],
+                   machines := [startM], declared := [("mail", .externalCommand "send" .int Ty.nil Ty.nil)] }
+
+def writeSites : List AnySite := Tazuna.Ir.Expr.sites .nil startEffectE
+
+def writeShapes : List (PendingShape writeSvc.event) := shapes writeSvc writeSites
+
+def writeLayout (slots : Nat) : Layout :=
+  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m", 3, 7, 0⟩] }
+    (reactTys ++ [.tuple [.int], pendingTable writeShapes] ++ Tazuna.Smt.Expr.tys insertE ++
+      Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE)
+
+def writeI : Fin writeSvc.subscribes.length := ⟨0, by decide⟩
+
+/-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the event value, v7 the new pending table, v8
+the next id after, v9 the records after, v10 the new instance table. -/
+def writeScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot) := do
+  let L := writeLayout slots
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let (ec, ce) ← enc (EventCode.of L writeSvc writeI)
+  let (o, cond) ← enc (encodeEvent L ec S.records (.var 6))
+  let (outs, cm) ← enc (encodeMachines L prelude writeSvc.machines S.machines o.records S.now o.event)
+  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
+  let some (dP, _) := L.find? (pendingEntry writeShapes) | throw "no pending entry"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let (news, nT) ← enc (encodeStarts L prelude writeShapes writeSvc.declared dE dP dopt writeSvc.machines outs S.nextId)
+  let (pT, cp) ← enc (encodePending L writeShapes S.pending news)
+  let below ← enc (pendingBelowT L writeShapes S.pending S.nextId)
+  let some wf := S.wf L (v := writeSvc) writeShapes | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable writeShapes) | throw "no pending sort"
+  let some msrt := L.srt? startM.table | throw "no table sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [mo] := outs | throw "not one machine"
+  let some (d, n) := L.find? (pendingTable writeShapes) | throw "no pending table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry writeShapes]) | throw "no pending slot"
+  pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int, rsrt, msrt],
+          asserts := [wf, below, ce, cond, cm, cp, .eq (.var 7) pT, .eq (.var 8) nT, .eq (.var 9) o.records,
+            .eq (.var 10) mo.table] ++ goal,
+          shows := List.range 11 }, slotsOf d dt n 2 (.var 4))
+
+/-- What the comparison reads of a pending request: id, external, name, the sender's key and the input. -/
+def pendView (p : Step.Pending writeSvc.event) : Nat × String × String × Option Int × Option Int :=
+  (p.id, p.external, p.request.name, (match p.sender with | .machine _ ⟨t, k⟩ => intDen t k | _ => none),
+    intDen p.request.input p.request.value)
+
+def writeCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: event writes requests: {m}"; return false
+  let L := writeLayout 3
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dm, nm) := L.find? startM.table | fail "no instance table"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (de, _) := L.find? (instEntry .int) | fail "no instance entry"
+  let Sr := slotsOf dr drt nr 2 (.var 0)
+  let Sm := slotsOf dm dmt nm 2 (.var 5)
+  let state (Sp : List Slot) (pend : List Term) := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1,
+    .eq (Sr[0]!.2.headD tt) (.int 3), Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1, .eq (Sm[0]!.2.headD tt) (.int 3),
+    .eq (Term.sel de 0 0 (Sm[0]!.2.getD 1 tt)) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40)] ++
+    pend.zipIdx.map (fun (id, j) => .and Sp[j]!.1 (.eq (Sp[j]!.2.headD tt) id)) ++
+    (List.range (3 - pend.length)).map fun j => .not Sp[pend.length + j]!.1
+  match writeScript 3 [] with
+  | .error m => fail m
+  | .ok (_, Sp) =>
+    let mut ok := true
+    match writeScript 3 (state Sp [.int 2]) with
+    | .error m => ok ← fail m
+    | .ok (script, _) =>
+      match ← solver.run script with
+      | .sat vs =>
+        let M := modelOf vs
+        match (SymState.vars 0 1).decode M L (v := writeSvc) rfl prelude writeShapes,
+            (SymInput.event writeI (.var 6)).decode M L (v := writeSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+              (fun | ⟨0, _⟩ => rfl),
+            decodePending L writeShapes ((Term.var 7).denote M), (vs.lookup 8) with
+        | some s, some x, some pend', some (.int n') =>
+          let r := step prelude writeSvc s x
+          let sorted (ps : List (Step.Pending writeSvc.event)) := (ps.map pendView).mergeSort fun a b => a.1 ≤ b.1
+          let outs := (r.out.map fun l => (l.id, l.external, l.name)).mergeSort fun a b => a.1 ≤ b.1
+          let newOnes := (sorted pend').filter (·.1 ≥ s.nextId) |>.map fun (id, x, nm, _, _) => (id, x, nm)
+          if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
+          if sorted pend' != sorted r.state.pending || n' != r.state.nextId then
+            ok ← fail s!"the model's pending table holds {sorted pend'} and next id {n'}, the step {sorted r.state.pending} and {r.state.nextId}"
+          if outs != newOnes then ok ← fail s!"the out lines are {outs}, the new entries {newOnes}"
+          if (sorted pend').map (·.1) != [2, 40, 41] then ok ← fail s!"the wire ids are {(sorted pend').map (·.1)}"
+          if sorted pend' == sorted s.pending then ok ← fail "the old pending table passes the comparison"
+        | _, _, _, _ => ok ← fail "the model does not decode"
+      | a => ok ← fail s!"{repr a}"
+    match writeScript 3 (state Sp [.int 1, .int 2]) with
+    | .error m => ok ← fail m
+    | .ok (script, _) =>
+      match ← solver.run script with
+      | .unsat => pure ()
+      | a => ok ← fail s!"two pending and two new requests in three slots, yet the script is {repr a}"
+    return ok
+
 /-! A list of effects where no effect kind exists, as a reaction of a service that requests nothing returns: the
 list has no slots, so the solver's list is empty, as eval's `[]` is, and a script that asserts an occupied slot cannot
 be written (the comparison against a one-item list fails). -/
@@ -1675,6 +1784,7 @@ def check (z3 : String) : IO Bool := do
   unless ← reactCheck solver do ok := false
   unless ← stayCheck solver do ok := false
   unless ← startsCheck solver do ok := false
+  unless ← writeCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

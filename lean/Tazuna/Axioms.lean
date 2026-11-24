@@ -13,6 +13,7 @@ import Tazuna.Smt.EventStep
 import Tazuna.Smt.EventExact
 import Tazuna.Smt.CommandExact
 import Tazuna.Smt.PendingWrite
+import Tazuna.Smt.EventPending
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line

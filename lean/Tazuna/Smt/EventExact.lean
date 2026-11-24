@@ -132,7 +132,6 @@ theorem machine_exact (m : MachineV r e) (hor : m.key.orderable = true)
       ∀ i ∈ (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).1.2,
         m.invariants.appFits L.count (.inl (i.key, i.state, recs, tnow, ()), ()) := by
   have hpl := Ty.plain_of_orderable _ hor
-  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨rc, c0⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨o, c1⟩, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨inv, c2⟩, h3, henc⟩ := bind_ok.1 henc
