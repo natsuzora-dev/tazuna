@@ -3,6 +3,7 @@ import Lean.Util.CollectAxioms
 import Tazuna.Cli.Check
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
+import Tazuna.Semantics.StepExamples
 
 /-! Every declaration of the engine rests on Lean's standard axioms only, so no `sorry` or added axiom hides a gap. The
 build fails otherwise. -/
