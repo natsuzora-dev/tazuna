@@ -37,12 +37,6 @@ def roundsFit {v : ServiceV} (s : State v) : Bool → Nat → Prop
       roundsFit { s with machines := (Step.roundOf s.records s.now ab s.machines).1 }
         (ab && (Step.dues s.machines s.now).min?.isSome) k
 
-/-- Whether every machine's invariants fit at its instances: the source, and applied at each instance. -/
-def instChecksFit (recs : r.den0) (now : Int) : List (Step.MachineState r e) → Prop
-  | [] => True
-  | ⟨m, insts⟩ :: rest => (m.invariants.fits S).1 ∧
-      (∀ i ∈ insts, m.invariants.appFits S (.inl (i.key, i.state, recs, now, ()), ())) ∧ instChecksFit recs now rest
-
 theorem firesFit_true (recs : r.den0) (now d d' : Int) : (sms : List (Step.MachineState r e)) →
     (firesFit S T recs now d true sms ↔ firesFit S T recs now d' true sms)
   | [] => Iff.rfl
@@ -163,35 +157,6 @@ theorem rounds_exact {shs : List (PendingShape v.event)} {ds : List (String × D
       exact rounds_exact hrd hord k ({ s with machines := (Step.roundOf s.records s.now ab s.machines).1 } : State v)
         hrec hnow hrel hgo h3
     exact ⟨fun ⟨p1, p2⟩ => ⟨p1, (ih p1).1 p2⟩, fun ⟨p1, p2⟩ => ⟨p1, (ih p1).2 p2⟩⟩
-
-/-- The instance checks ask exactly that every machine's invariants fit at its instances. -/
-theorem instChecks_exact (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd : v.records.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
-    MachinesRel M L T ms xs sms →
-    {checks : List (List InstCheck)} → {c : Term} → encodeInstChecks L T ms xs records now = .ok (checks, c) →
-    (Holds M c ↔ instChecksFit L.count recs tnow sms)
-  | [], [], [], _, checks, c, henc => by
-    simp only [encodeInstChecks, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-    obtain ⟨-, rfl⟩ := henc
-    simp [instChecksFit, holds_tt]
-  | m :: ms, x :: xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, checks, c, henc => by
-    obtain ⟨⟨inv, c0⟩, h1, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨cs, c1⟩, h2, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    subst hsm
-    have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
-    have e0 := (m.invariants.code_exact (M := M) h1).1
-    simp only [instChecksFit]
-    rw [holds_andT, holds_andT, e0, instChecks_exact recs tnow hrd hrec hnow ms xs sms hrest h3]
-    constructor
-    · rintro ⟨p0, p1, p2⟩
-      exact ⟨p0, (instInvariants_exact m h1 (e0.2 p0) recs tnow hrec' hnow tbl htbl h2).1 p1, p2⟩
-    · rintro ⟨p0, p1, p2⟩
-      exact ⟨p0, (instInvariants_exact m h1 (e0.2 p0) recs tnow hrec' hnow tbl htbl h2).2 p1, p2⟩
-  | [], [], _ :: _, h, _, _, _ | [], _ :: _, _, h, _, _, _ | _ :: _, [], _, h, _, _, _
-  | _ :: _, _ :: _, [], h, _, _, _ => h.elim
 
 /-- The condition of a clock line's step is exact: it holds exactly when, if time moves forward, every
 firing round's functions fit, and, unless every round fires, the requests fit the pending table, the service's

@@ -659,20 +659,6 @@ end
 section
 variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
-/-- Every machine's instance invariant checks on the tables `xs`, machines in order. -/
-def encodeInstChecks : List (MachineV r e) → List Term → (records now : Term) → Except Refusal (List (List InstCheck) × Term)
-  | [], [], _, _ => pure ([], tt)
-  | m :: ms, x :: xs, records, now => do
-    let (inv, c0) ← m.invariants.code L
-    let (cs, c1) ← encodeInstInvariants L T m inv x records now
-    let (rest, c2) ← encodeInstChecks ms xs records now
-    pure (cs :: rest, andT c0 (andT c1 c2))
-  | _, _, _, _ => .error (.outside "machines and instance tables that differ in number")
-
-/-- The names of the broken instance invariants the checks read from the model, machines in order. -/
-def checksBroken (M : Model) (ms : List (MachineV r e)) (checks : List (List InstCheck)) : List String :=
-  (ms.zip checks).flatMap fun (m, cs) => instBroken L T M m.key cs
-
 /-- What a clock line's step encodes: whether time moves forward, whether every round fired (the cascade
 bound is exceeded), the instance tables after the rounds, the service's invariants and every instance's checks at the
 line's time, and the pending table and next wire id after the rounds' requests. -/
@@ -706,35 +692,6 @@ end
 
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
-
-/-- The instance checks name the broken invariants of the machines the tables denote. -/
-theorem instChecks_rel (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd : v.records.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
-    MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.ordered T = true) →
-    {checks : List (List InstCheck)} → {c : Term} → encodeInstChecks L T ms xs records now = .ok (checks, c) →
-    Holds M c → checksBroken L T M ms checks = instancesBroken recs tnow sms
-  | [], [], [], _, _, checks, c, henc, _ => by
-    simp only [encodeInstChecks, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-    obtain ⟨rfl, -⟩ := henc
-    rfl
-  | m :: ms, x :: xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, checks, c, henc, hc => by
-    obtain ⟨⟨inv, c0⟩, h1, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨cs, c1⟩, h2, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    obtain ⟨hc0, hc12⟩ := (holds_andT _ _).1 hc
-    obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc12
-    subst hsm
-    have hinv := m.invariants.code_fn m.inv_data h1 hc0
-    have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
-    have hb := instBroken_eq m (hord m (by simp)) hinv recs tnow hrec' hnow tbl htbl h2 hc1
-    have ih := instChecks_rel recs tnow hrd hrec hnow ms xs sms hrest (fun m' hm => hord m' (by simp [hm])) h3 hc2
-    simp only [checksBroken, List.zip_cons_cons, List.flatMap_cons, instancesBroken] at ih ⊢
-    rw [hb]
-    exact congrArg _ ih
-  | [], [], _ :: _, h, _, _, _, _, _ | [], _ :: _, _, h, _, _, _, _, _ | _ :: _, [], _, h, _, _, _, _, _
-  | _ :: _, _ :: _, [], h, _, _, _, _, _ => h.elim
 
 /-- A clock line's step whose rounds fire and whose requests externals list, computed: the requests are written at
 the next ids and sent, then the invariants are checked at the line's time. -/

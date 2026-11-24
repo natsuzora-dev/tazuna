@@ -270,8 +270,9 @@ theorem event_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
     {xs : List Term} (hms : MachinesRel M L T v.machines xs s.machines)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     {o : EventOut} {cond : Term} (henc : encodeEvent L ec records sv = .ok (o, cond)) (hc : Holds M cond)
-    {outs : List MachineOut} {cm : Term} (hm : encodeMachines L T v.machines xs o.records now o.event = .ok (outs, cm))
-    (hcm : Holds M cm) {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
+    {outs : List ReactOut} {cm : Term} (hm : encodeMachines L v.machines xs o.records now o.event = .ok (outs, cm))
+    (hcm : Holds M cm) {checks : List (List InstCheck)} {ck : Term}
+    (hck : encodeInstChecks L T v.machines (outs.map (·.table)) o.records now = .ok (checks, ck)) (hcck : Holds M ck) {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
     {news : List Slot} {nT : Term} (hst : encodeStarts L T shs v.declared dE dP dopt v.machines (outs.map (·.starts)) nextIdT = .ok (news, nT))
@@ -279,7 +280,7 @@ theorem event_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
     (hrx : encodeReactions L shs v.declared dE dP v.reactions o.records now o.event nT = .ok (rnews, nR, cr))
     (hcr : Holds M cr) {pT cp : Term} (hpe : encodePending L shs pending (news ++ rnews) = .ok (pT, cp)) (hcp : Holds M cp) :
     let r := step T v s (.event i value)
-    match brokenIn M o.invariants ++ machinesBroken L T M v.machines outs with
+    match brokenIn M o.invariants ++ checksBroken L T M v.machines checks with
     | n :: _ => r = ⟨s, .fault (.invariant n), [], []⟩
     | [] => r.outcome = .accepted ∧
         (∃ ps, r.out = ps.map Step.Pending.line ∧ r.state.pending = s.pending ++ ps ∧
@@ -294,8 +295,10 @@ theorem event_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
   obtain ⟨hr', he', hb'⟩ := event_rel i value hd hec hce hrec hsv henc hc
   let ev := (v.subscribes.get i).wrap.fn (value, ())
   let recs' := v.apply.fn (s.records, ev, ())
-  obtain ⟨hrel, hbs⟩ := machines_event (T := T) recs' s.now ev hd.records hd.event hr' hnow he' v.machines xs
-    s.machines outs hms hor hm hcm
+  have hrel := machines_event (T := T) recs' s.now ev hd.records hd.event hr' hnow he' v.machines xs
+    s.machines outs hms (fun m hm => (hor m hm).1) hm hcm
+  have hbs := instChecks_rel recs' s.now hd.records hr' hnow v.machines _ _ hrel
+    (by simpa using fun m hm => (hor m hm).2) hck hcck
   have hstarts := machines_starts (T := T) recs' s.now ev hd.records hd.event hr' hnow he' v.machines xs s.machines
     outs hms hor hm hcm
   have hreach : ∀ effs ∈ s.machines.map (fun sm => (Step.machineStep T recs' s.now ev sm).2), ∀ x ∈ effs, x.2.Reach P := by
@@ -317,12 +320,12 @@ theorem event_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
   let s' : State v := { s with records := recs', machines := ms', pending := s.pending ++ ps,
                                nextId := s.nextId + (startedBy T s recs' ev ++ reactedBy s recs' ev).length }
   have hinvs : Step.invariants s' =
-      brokenIn M o.invariants ++ machinesBroken L T M v.machines outs := by
+      brokenIn M o.invariants ++ checksBroken L T M v.machines checks := by
     simp only [Step.invariants]
     rw [hb', hbs]
     rfl
   rw [hinvs]
-  cases brokenIn M o.invariants ++ machinesBroken L T M v.machines outs with
+  cases brokenIn M o.invariants ++ checksBroken L T M v.machines checks with
   | cons n ns => rfl
   | nil =>
     refine ⟨rfl, ⟨ps, rfl, rfl, by rw [hlen], ps', hperm.trans (List.Perm.refl _), hrelP⟩, ?_, rfl, hr', hrel, _, rfl, he'⟩

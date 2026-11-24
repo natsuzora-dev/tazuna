@@ -505,19 +505,20 @@ def evMI : Fin evMSvc.subscribes.length := ⟨0, by decide⟩
 /-- v0..v3 the state, v4 the pending table, v5 the instance table, v6 the value, v7 the records after, v8 the event,
 v9 and v10 the service invariant's holds and name, v11 the new instance table, v12 the new pending table, v13 the
 next id after. -/
-def evMScript (goal : List InstCheck → List Term) : Except String (Script × List MachineOut) := do
+def evMScript (goal : List InstCheck → List Term) : Except String (Script × List (List InstCheck)) := do
   let L := evMLayout
   let (ec, ce) ← (EventCode.of L evMSvc evMI).mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
   let (o, cond) ← (encodeEvent L ec S.records (.var 6)).mapError fun r => s!"no encoding: {repr r}"
-  let (outs, cm) ← (encodeMachines L prelude evMSvc.machines S.machines o.records S.now o.event).mapError
+  let (outs, cm) ← (encodeMachines L evMSvc.machines S.machines o.records S.now o.event).mapError
     fun r => s!"no machine encoding: {repr r}"
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let (checks, ck) ← enc (encodeInstChecks L prelude evMSvc.machines (outs.map ReactOut.table) o.records S.now)
   let shs : List (PendingShape evMSvc.event) := []
   let some (dE, _) := L.find? (.dsl .effect [evT]) | throw "no effect datatype"
   let some (dP, _) := L.find? (pendingEntry shs) | throw "no pending entry"
   let some (dopt, _) := L.find? (Ty.option (.dsl .effect [evT])) | throw "no effect option"
-  let (news, nT) ← enc (encodeStarts L prelude shs evMSvc.declared dE dP dopt evMSvc.machines (outs.map MachineOut.starts)
+  let (news, nT) ← enc (encodeStarts L prelude shs evMSvc.declared dE dP dopt evMSvc.machines (outs.map (·.starts))
     S.nextId)
   let (rnews, nR, cr) ← enc (encodeReactions L shs evMSvc.declared dE dP evMSvc.reactions o.records S.now o.event nT)
   let (pT, cp) ← enc (encodePending L shs S.pending (news ++ rnews))
@@ -530,17 +531,19 @@ def evMScript (goal : List InstCheck → List Term) : Except String (Script × L
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.invariants | throw "not one invariant"
   let [out] := outs | throw "not one machine"
+  let [cs] := checks | throw "not one machine"
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, esrt, rsrt, esrt, .bool, .str, msrt, psrt, .int],
-          asserts := [ce, cond, cm, cr, cp, wf, below, .eq (.var 7) o.records, .eq (.var 8) o.event, .eq (.var 9) holds,
-            .eq (.var 10) name, .eq (.var 11) out.table, .eq (.var 12) pT, .eq (.var 13) nR] ++ goal out.checks,
-          shows := List.range 14 }, outs)
+          asserts := [ce, cond, cm, ck, cr, cp, wf, below, .eq (.var 7) o.records, .eq (.var 8) o.event,
+            .eq (.var 9) holds, .eq (.var 10) name, .eq (.var 11) out.table, .eq (.var 12) pT, .eq (.var 13) nR] ++
+            goal cs,
+          shows := List.range 14 }, checks)
 
 def evMCase (solver : Solver) (name : String) (goal : List InstCheck → List Term) (machineFault : Bool) : IO Bool := do
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: {name}: {m}"; return false
   match evMScript goal with
   | .error m => fail m
-  | .ok (script, outs) =>
+  | .ok (script, checks) =>
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
@@ -549,7 +552,7 @@ def evMCase (solver : Solver) (name : String) (goal : List InstCheck → List Te
           (SymInput.event evMI (.var 6)).decode M L (v := evMSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
             (fun | ⟨0, _⟩ => rfl) with
       | some s, some x =>
-        let names := brokenIn M [(.var 10, .var 9)] ++ machinesBroken L prelude M evMSvc.machines outs
+        let names := brokenIn M [(.var 10, .var 9)] ++ checksBroken L prelude M evMSvc.machines checks
         let view (sms : List (Step.MachineState recordsT evT)) := sms.flatMap fun ⟨_, is⟩ => is.map fun i =>
           (intDen _ i.key, intDen _ i.state)
         let newInsts := match decodeV L evM.table ((Term.var 11).denote M) with
@@ -1808,11 +1811,12 @@ def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : 
   let S := SymState.vars 0 1
   let (ec, ce) ← enc (EventCode.of L v ⟨0, by simp [v, writeSvcOf]⟩)
   let (o, cond) ← enc (encodeEvent L ec S.records (.var 6))
-  let (outs, cm) ← enc (encodeMachines L prelude v.machines S.machines o.records S.now o.event)
+  let (outs, cm) ← enc (encodeMachines L v.machines S.machines o.records S.now o.event)
+  let (_, ck) ← enc (encodeInstChecks L prelude v.machines (outs.map ReactOut.table) o.records S.now)
   let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
   let some (dP, _) := L.find? (pendingEntry shs) | throw "no pending entry"
   let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (news, nT) ← enc (encodeStarts L prelude shs v.declared dE dP dopt v.machines (outs.map MachineOut.starts) S.nextId)
+  let (news, nT) ← enc (encodeStarts L prelude shs v.declared dE dP dopt v.machines (outs.map ReactOut.starts) S.nextId)
   let (pT, cp) ← enc (encodePending L shs S.pending news)
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := v) shs | throw "no well-formedness"
@@ -1824,7 +1828,7 @@ def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : 
   let some (d, n) := L.find? (pendingTable shs) | throw "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry shs]) | throw "no pending slot"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int, rsrt, msrt],
-          asserts := [wf, below, ce, cond, cm, cp, .eq (.var 7) pT, .eq (.var 8) nT, .eq (.var 9) o.records,
+          asserts := [wf, below, ce, cond, cm, ck, cp, .eq (.var 7) pT, .eq (.var 8) nT, .eq (.var 9) o.records,
             .eq (.var 10) mo.table] ++ goal,
           shows := List.range 11 }, slotsOf d dt n 2 (.var 4))
 
@@ -1964,11 +1968,12 @@ def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List S
   let S := SymState.vars 0 1
   let (ec, ce) ← enc (EventCode.of L fanSvc fanI)
   let (o, cond) ← enc (encodeEvent L ec S.records (.var 6))
-  let (outs, cm) ← enc (encodeMachines L prelude fanSvc.machines S.machines o.records S.now o.event)
+  let (outs, cm) ← enc (encodeMachines L fanSvc.machines S.machines o.records S.now o.event)
+  let (_, ck) ← enc (encodeInstChecks L prelude fanSvc.machines (outs.map ReactOut.table) o.records S.now)
   let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
   let some (dP, _) := L.find? (pendingEntry fanShapes) | throw "no pending entry"
   let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (news, nT) ← enc (encodeStarts L prelude fanShapes fanSvc.declared dE dP dopt fanSvc.machines (outs.map (·.starts)) S.nextId)
+  let (news, nT) ← enc (encodeStarts L prelude fanShapes fanSvc.declared dE dP dopt fanSvc.machines (outs.map ReactOut.starts) S.nextId)
   let (rnews, nR, cr) ← enc (encodeReactions L fanShapes fanSvc.declared dE dP fanSvc.reactions o.records S.now o.event nT)
   let (pT, cp) ← enc (encodePending L fanShapes S.pending (news ++ rnews))
   let below ← enc (pendingBelowT L fanShapes S.pending S.nextId)
@@ -1980,7 +1985,7 @@ def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List S
   let some (d, n) := L.find? (pendingTable fanShapes) | throw "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry fanShapes]) | throw "no pending slot"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int],
-          asserts := [wf, below, ce, cond, cm, cr, cp, .eq (.var 7) pT, .eq (.var 8) nR] ++ goal,
+          asserts := [wf, below, ce, cond, cm, ck, cr, cp, .eq (.var 7) pT, .eq (.var 8) nR] ++ goal,
           shows := List.range 9 }, slotsOf d dt n 2 (.var 4))
 
 def fanCheck (solver : Solver) : IO Bool := do

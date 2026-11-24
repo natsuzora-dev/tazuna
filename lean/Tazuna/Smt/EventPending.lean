@@ -253,9 +253,9 @@ theorem machines_starts {v : ServiceV} (recs : v.records.den0) (tnow : Int) (ev 
     (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hevT : RelV L v.event (Ty.up _ hed ev) (evT.denote M)) :
     (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
-    (outs : List MachineOut) → {c : Term} → MachinesRel M L T ms xs sms →
+    (outs : List ReactOut) → {c : Term} → MachinesRel M L T ms xs sms →
     (∀ m ∈ ms, m.key.orderable = true ∧ m.key.ordered T = true) →
-    encodeMachines L T ms xs records now evT = .ok (outs, c) → Holds M c →
+    encodeMachines L ms xs records now evT = .ok (outs, c) → Holds M c →
     StartsRel M L T ms (outs.map (·.starts)) (sms.map fun sm => (Step.machineStep T recs tnow ev sm).2)
   | [], [], [], outs, c, _, _, henc, _ => by
     simp only [encodeMachines, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
