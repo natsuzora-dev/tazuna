@@ -1449,59 +1449,6 @@ def reactCheck (solver : Solver) : IO Bool := do
       return ok
     | a => fail s!"{repr a}"
 
-/-! One firing round on a machine's table at the deadline 90, now 100: keys 7 and 3 (slots in that order) both wait
-for 90, entering state 1. The least key fires: key 3 enters 1, where `after` starts a timer due at 105 to state 2;
-key 7 keeps its timer. The decoded table must be `fireFirst` on the instances in key order; firing the first slot
-(key 7) must fail the comparison. -/
-
-def fireCheck (solver : Solver) : IO Bool := do
-  let L := reactLayout
-  let fail (m : String) : IO Bool := do IO.println s!"smt-check: timer round: {m}"; return false
-  let some (d, n) := L.find? reactM.table | fail "no table"
-  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no slot"
-  let some (de, _) := L.find? (instEntry .int) | fail "no entry"
-  let some (dopt, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
-  let some (dp, _) := L.find? (.tuple [.int, .int]) | fail "no timer"
-  let some wf := (SymState.vars 0 1).wf L (v := reactSvc) [] | fail "no wf"
-  let some rsrt := L.srt? recordsT | fail "no records sort"
-  let some msrt := L.srt? reactM.table | fail "no table sort"
-  let some dts := L.datatypes? | fail "no datatypes"
-  match reactM.after.code L >>= fun (af, c0) =>
-      (encodeFire L prelude reactM af (.var 5) (.bool false) (.var 7) (.var 0) (.var 1)).map fun (o, c) => (o, andT c0 c) with
-  | .error r => fail s!"no encoding: {repr r}"
-  | .ok (o, cond) =>
-    let So := slotsOf d dt n 2 (.var 5)
-    let key (j : Nat) := So[j]!.2.headD tt
-    let state (j : Nat) := Term.sel de 0 0 (So[j]!.2.getD 1 tt)
-    let timer (j : Nat) := Term.sel de 0 1 (So[j]!.2.getD 1 tt)
-    let waits (j : Nat) := [Term.is dopt 0 (timer j), .eq (.sel dp 0 0 (.sel dopt 0 0 (timer j))) (.int 90),
-      .eq (.sel dp 0 1 (.sel dopt 0 0 (timer j))) (.int 1)]
-    let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 7), .eq (state 0) (.int 0), .eq (key 1) (.int 3),
-      .eq (state 1) (.int 0), .eq (.var 1) (.int 100), .eq (.var 7) (.int 90), .eq (.var 6) o.table] ++ waits 0 ++ waits 1
-    let script : Script :=
-      { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, msrt, msrt, .int], asserts := wf :: cond :: goal,
-        shows := List.range 8 }
-    match ← solver.run script with
-    | .sat vs =>
-      let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := reactSvc) rfl prelude [] | fail "the model does not decode"
-      let some tbl := decodeV L reactM.table ((Term.var 6).denote M) | fail "the new table does not decode"
-      let some tbl0 := decodeV L reactM.table ((Term.var 5).denote M) | fail "the old table does not decode"
-      let read := instancesOf prelude reactM (Ty.down _ reactM.table_data tbl)
-      let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
-        (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
-      let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
-      let step := view m (Step.fireFirst m s.records s.now 90 insts).1
-      let bySlot := view reactM (Step.fireFirst reactM s.records s.now 90
-        ((Ty.down _ reactM.table_data tbl0).1.map fun (k, x) => instOf reactM k x)).1
-      let mut ok := true
-      if view reactM read != step || step != [(some 3, some 1, some (105, some 2)), (some 7, some 0, some (90, some 1))] then
-        ok ← fail s!"the new table holds {view reactM read}, the step {step}"
-      if bySlot.mergeSort (fun a b => decide (a.1.getD 0 ≤ b.1.getD 0)) == step then ok ← fail "firing the first slot passes the comparison"
-      if o.hit.denote M != .bool true then ok ← fail "no slot has the deadline"
-      return ok
-    | a => fail s!"{repr a}"
-
 /-! A staying instance whose `after` would outgrow a slot: `after` builds a four-item list, one more than the three
 slots of every type, so wherever it is evaluated the bound is reached. `on` always stays. With key 3 in the old table
 in state 1 and in the records, the instance stays and `after` is not evaluated, so the step is within the bounds and
@@ -1634,6 +1581,76 @@ def startsCheck (solver : Solver) : IO Bool := do
       if count.denote M != .int effs.length then ok ← fail s!"the count is {(count.denote M).print}"
       if agrees (read.zipIdx.map fun ((_, k, w), j) => (40 + j, k, w)) then
         ok ← fail "ids by slot order pass the comparison"
+      return ok
+    | a => fail s!"{repr a}"
+
+/-! One firing round on a machine's table at the deadline 90, now 100: keys 7 and 3 (slots in that order) both wait
+for 90, entering state 1. The least key fires: key 3 enters 1, where `after` starts a timer due at 105 to state 2 and
+`effect` requests `send` with 4; key 7 keeps its timer. The decoded table must be `fireFirst` on the instances in key
+order, and the start slots flagged must hold `fireFirst`'s one effect, key 3's; firing the first slot (key 7) must
+fail both comparisons. -/
+
+def fireCheck (solver : Solver) : IO Bool := do
+  let L := startLayout
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: timer round: {m}"; return false
+  let some (d, n) := L.find? startM.table | fail "no table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no slot"
+  let some (de, _) := L.find? (instEntry .int) | fail "no entry"
+  let some (dopt, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
+  let some (dp, _) := L.find? (.tuple [.int, .int]) | fail "no timer"
+  let some (dxo, _) := L.find? (Ty.option (.dsl .effect [.int])) | fail "no effect option"
+  let some wf := (SymState.vars 0 1).wf L (v := startSvc) [] | fail "no wf"
+  let some rsrt := L.srt? recordsT | fail "no records sort"
+  let some msrt := L.srt? startM.table | fail "no table sort"
+  let some dts := L.datatypes? | fail "no datatypes"
+  match startM.after.code L >>= fun (af, c0) => startM.effect.code L >>= fun (fx, c1) =>
+      (encodeFire L prelude startM af fx (.var 5) (.bool false) (.var 7) (.var 0) (.var 1)).map fun (o, c) =>
+        (o, andT c0 (andT c1 c)) with
+  | .error r => fail s!"no encoding: {repr r}"
+  | .ok (o, cond) =>
+    let So := slotsOf d dt n 2 (.var 5)
+    let key (j : Nat) := So[j]!.2.headD tt
+    let state (j : Nat) := Term.sel de 0 0 (So[j]!.2.getD 1 tt)
+    let timer (j : Nat) := Term.sel de 0 1 (So[j]!.2.getD 1 tt)
+    let waits (j : Nat) := [Term.is dopt 0 (timer j), .eq (.sel dp 0 0 (.sel dopt 0 0 (timer j))) (.int 90),
+      .eq (.sel dp 0 1 (.sel dopt 0 0 (timer j))) (.int 1)]
+    let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 7), .eq (state 0) (.int 0), .eq (key 1) (.int 3),
+      .eq (state 1) (.int 0), .eq (.var 1) (.int 100), .eq (.var 7) (.int 90), .eq (.var 6) o.table] ++ waits 0 ++ waits 1
+    let script : Script :=
+      { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, msrt, msrt, .int], asserts := wf :: cond :: goal,
+        shows := List.range 8 }
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let some s := (SymState.vars 0 1).decode M L (v := startSvc) rfl prelude [] | fail "the model does not decode"
+      let some tbl := decodeV L startM.table ((Term.var 6).denote M) | fail "the new table does not decode"
+      let some tbl0 := decodeV L startM.table ((Term.var 5).denote M) | fail "the old table does not decode"
+      let read := instancesOf prelude startM (Ty.down _ startM.table_data tbl)
+      let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
+        (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+      let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
+      let step := Step.fireFirst m s.records s.now 90 insts
+      let bySlot := Step.fireFirst startM s.records s.now 90
+        ((Ty.down _ startM.table_data tbl0).1.map fun (k, x) => instOf startM k x)
+      let starts := o.starts.filterMap fun (f, k, x) =>
+        if ((Term.and f (.is dxo 0 x)).denote M).toBool then
+          match k.denote M, (Term.sel dxo 0 0 x).denote M with
+          | .int kv, w => some (kv, w)
+          | _, _ => none
+        else none
+      let agrees (effs : List (Sender × EffectV .int)) : Bool :=
+        starts.length == effs.length && (starts.zip effs).all fun ((k, w), (snd, eff)) =>
+          (match snd with | .machine _ ⟨_, kv⟩ => intDen _ kv == some k | _ => false) && effMatches L eff w
+      let mut ok := true
+      if view startM read != view m step.1 ||
+          view m step.1 != [(some 3, some 1, some (105, some 2)), (some 7, some 0, some (90, some 1))] then
+        ok ← fail s!"the new table holds {view startM read}, the step {view m step.1}"
+      if (view startM bySlot.1).mergeSort (fun a b => decide (a.1.getD 0 ≤ b.1.getD 0)) == view m step.1 then
+        ok ← fail "firing the first slot passes the table comparison"
+      if !agrees step.2.1 || step.2.1.length != 1 then
+        ok ← fail s!"the start slots hold {starts.map (·.1)}, the step {step.2.1.length} effects"
+      if agrees bySlot.2.1 then ok ← fail "firing the first slot passes the effect comparison"
+      if o.hit.denote M != .bool true then ok ← fail "no slot has the deadline"
       return ok
     | a => fail s!"{repr a}"
 
