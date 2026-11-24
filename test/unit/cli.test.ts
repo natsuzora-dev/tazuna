@@ -59,7 +59,7 @@ test("tazuna writes an error and exits with 2 for an unknown command, a wrong nu
     [["check", "samples/todo/spec", "--update"], "unknown option --update for check"],
     [["view"], "wrong number of arguments for view"],
     [["view", "samples/todo/spec", "--port"], "missing value for --port"],
-    [["test", "samples/todo/spec", "--depth", "1"], "unknown option --depth for test"],
+    [["generate", "samples/todo/spec", "out", "--depth", "1"], "unknown option --depth for generate"],
     [["test", "samples/todo/spec", "--update", "--update"], "--update given twice"],
     [["view", "samples/todo/spec", "--port", "1", "--port", "2"], "--port given twice"],
   ];

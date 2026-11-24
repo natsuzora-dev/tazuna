@@ -39,7 +39,7 @@ type Invocation =
     }
   | { readonly command: "verify"; readonly root: string; readonly traces: string; readonly coverage: boolean }
   | { readonly command: "prove"; readonly root: string }
-  | { readonly command: "generate"; readonly root: string; readonly out: string; readonly depth: number | undefined }
+  | { readonly command: "generate"; readonly root: string; readonly out: string }
   | { readonly command: "view"; readonly root: string; readonly port: number; readonly viewer: string }
   | { readonly command: "explain"; readonly explanation: Explanation };
 
@@ -162,25 +162,8 @@ const commands = {
     positionals: ["out"],
     description:
       "Write inputs that cover the spec: for each part of a spec service that verify --coverage reports, the shortest sequence of inputs from the service's initial state, within the service's bounds(), whose run in the spec reaches it. generate keeps a sequence unless the runs of the others kept reach every part that its run reaches. Each kept run goes to <out>/<service>/<name>.jsonl as trace lines, named after the part that its sequence was found for; an implementation's tests can send its in lines, and verify can check their traces. generate removes the other files of those folders. It writes one JSON line per part with its outcome, reached, notReached, unreachable, or notEncodable, which docs/guarantees.md defines.",
-    options: {
-      "--depth": {
-        kind: "single",
-        value: "n",
-        description:
-          "Seek sequences of at most n inputs instead of one more than the creations that the bounds() of the service and of the services that it sends requests to allow.",
-      },
-    },
-    parse: ({ root, positionals: [out = ""], options }, io) => {
-      const depth = options["--depth"];
-      if (depth !== undefined && !/^[1-9]\d*$/.test(depth))
-        return { misuse: `invalid depth ${depth} (expected a positive integer)` };
-      return {
-        command: "generate",
-        root,
-        out: resolve(io.cwd, out),
-        depth: depth === undefined ? undefined : Number(depth),
-      };
-    },
+    options: {},
+    parse: ({ root, positionals: [out = ""] }, io) => ({ command: "generate", root, out: resolve(io.cwd, out) }),
   }),
   view: command({
     spec: true,
@@ -420,7 +403,7 @@ export async function main(args: readonly string[], io: Io): Promise<number> {
     case "prove":
       return reportProved(io, spec.root, await proveSpec(spec));
     case "generate":
-      return reportGenerated(io, spec.root, await generateSpec(spec, invocation.out, invocation.depth));
+      return reportGenerated(io, spec.root, await generateSpec(spec, invocation.out));
     case "verify": {
       const verified = verifyTraces(spec, invocation.traces);
       const violations = [

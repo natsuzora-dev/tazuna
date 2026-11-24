@@ -17,13 +17,8 @@ export type GenerateLine = TargetOutcome & { readonly location: Location };
 export async function generateSpec(
   spec: ConvertedSpec,
   out: string,
-  depth: number | undefined,
 ): Promise<{ readonly lines: readonly GenerateLine[]; readonly written: string[]; readonly removed: string[] }> {
-  const { result: generation } = await converse(
-    "generate",
-    { structure: spec.structure, ...(depth === undefined ? {} : { depth }) },
-    solve,
-  );
+  const { result: generation } = await converse("generate", { structure: spec.structure }, solve);
   const written: string[] = [];
   for (const input of generation.inputs) {
     const folder = join(out, input.service);

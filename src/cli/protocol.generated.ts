@@ -171,14 +171,10 @@ export type Request =
       readonly type: "prove";
       readonly structure: Structure;
     }
-  /**
-   * generate's result (Engine.generateOf). Before it the engine sends `solve` responses, each answered by `solved`.
-   * `depth` is the most requests of a sequence, by default one more than the creations that the service's bounds allow.
-   */
+  /** generate's result (Engine.generateOf). Before it the engine sends `solve` responses, each answered by `solved`. */
   | {
       readonly type: "generate";
       readonly structure: Structure;
-      readonly depth?: number;
     }
   /** Z3's output on each script of the engine's last `solve`, in order. */
   | {

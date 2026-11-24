@@ -225,6 +225,7 @@ structure Search where
   spec : Ir.Structure
   st : Service
   creates : List (String × Nat)
+  /-- The most inputs of a sequence: one more than the creations that the bounds of the service and of the services it sends requests to allow. -/
   depth : Nat
   /-- The commands and queries that a client sends. -/
   sendable : List String
@@ -238,7 +239,7 @@ inductive Searchable where
   | blocked (service : String) (creates : List (String × Nat)) (targets : List Uncovered) (why : String)
   | search (x : Search)
 
-def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Searchable := do
+def searchOf (j : Ir.Structure) (service : String) : IO Searchable := do
   let st ← specService j service
   let creates := Ir.createsOf j.bounds service
   let targets := ((targets j).filter (·.part.ref.service == service)).map (·.part)
@@ -248,7 +249,7 @@ def searchOf (j : Ir.Structure) (depth : Option Nat) (service : String) : IO Sea
   let requested := ((st.charts.flatMap fun c => c.states.flatMap (·.activities)) ++ st.automations.map (·.sends)).filterMap
     fun a => if a matches .opens .. || a.ref.service == service then none else some a.ref.service
   let read := creates ++ requested.eraseDups.flatMap (Ir.createsOf j.bounds)
-  pure (.search { spec := j, st, creates, depth := depth.getD (read.foldl (· + ·.2) 0 + 1),
+  pure (.search { spec := j, st, creates, depth := read.foldl (· + ·.2) 0 + 1,
                   sendable := (st.commands ++ st.queries).filter fromClients, targets })
 
 /-- A state of the search: the semantics' state after `inputs`, what the run collected, and the records it created per entity. -/
@@ -579,8 +580,8 @@ def reduce (candidates : List Candidate) : List Candidate := Id.run do
   return kept.filterMap (candidates[·]?)
 
 /-- The own spec services' searches, asking `solve` for the solver's output on each script, in order. -/
-def generateOf (j : Ir.Structure) (depth : Option Nat) (solve : List String → IO (List String)) : IO Generation := do
-  let searchables ← (specServices j).mapM (searchOf j depth)
+def generateOf (j : Ir.Structure) (solve : List String → IO (List String)) : IO Generation := do
+  let searchables ← (specServices j).mapM (searchOf j)
   let searches := searchables.filterMap fun
     | .search x => some x
     | .blocked .. => none

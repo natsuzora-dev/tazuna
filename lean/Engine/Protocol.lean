@@ -62,11 +62,8 @@ inductive Request where
   | parse (schema : Value) (value : Value)
   /-- prove's result of each property (Engine.proveOf). Before it the engine sends a `solve` response. -/
   | prove («structure» : Ir.Structure)
-  /--
-  generate's result (Engine.generateOf). Before it the engine sends `solve` responses, each answered by `solved`.
-  `depth` is the most requests of a sequence, by default one more than the creations that the service's bounds allow.
-  -/
-  | generate («structure» : Ir.Structure) (depth : Option Nat)
+  /-- generate's result (Engine.generateOf). Before it the engine sends `solve` responses, each answered by `solved`. -/
+  | generate («structure» : Ir.Structure)
   /-- Z3's output on each script of the engine's last `solve`, in order. -/
   | solved (outputs : List String)
 

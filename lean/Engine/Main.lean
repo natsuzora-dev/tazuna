@@ -53,7 +53,7 @@ def respond (solve : List String → IO (List String)) : Engine.Request → IO R
     | some (.ok (.ok v)) => .parse true (some v) none false (facts v)
     | some (.ok (.error issues)) => .parse true none (some issues) false (facts value))
   | .prove s => do pure (.prove (← proveOf s solve))
-  | .generate s depth => do pure (.generate (← generateOf s depth solve))
+  | .generate s => do pure (.generate (← generateOf s solve))
   | .solved _ => throw (IO.userError "solved answers no solve")
 where
   unpaired (l : List (Verify.At × Verify.Uncomparable)) : List Unpaired := l.map fun (place, violation) => { «at» := place, violation }
