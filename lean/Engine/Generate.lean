@@ -101,7 +101,7 @@ def _root_.Tazuna.Semantics.Service.Uncovered.ofRequest : Uncovered → Bool
 def rejectedBy (checks : List Check) (name : String) : Option Term := do
   let k ← checks.findIdx? (·.name == name)
   let c ← checks[k]?
-  pure (conj ((checks.take k).map (fun c => .and (.not c.throws) c.passes) ++ [.not c.throws, .not c.passes]))
+  pure (conj ((checks.take k).map (·.held) ++ [.not c.throws, .not c.passes]))
 
 /-- The term that holds when a command's step reaches `part`. -/
 def stepGoal (step : Step) : Uncovered → Option Term

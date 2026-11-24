@@ -78,7 +78,7 @@ def reactionOf (st : Service) (p : Program) (pre : SRecords) (now : Term) (paylo
   let fits := props.map fun pr => fieldHolds ((input.lookup pr.1).getD undefT) pr
   -- The semantics checks the binds, then the guards, each up to the first that fails (workBody), then runs react.
   let checks := bindTerms.map (·.2.2) ++ guards
-  let accepted := conj (checks.map (fun c => Term.and (.not c.throws) c.passes) ++ [.not err])
+  let accepted := conj (checks.map (·.held) ++ [.not err])
   let halts := throwsFirst (checks.map (fun c => (c.throws, c.passes)) ++ [(err, tt)])
   pure { ending := { accepted, halted := { term := halts, fit := .exact } },
          gap := .and accepted (disj (scalars.map (·.2.2))),

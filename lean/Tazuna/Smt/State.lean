@@ -591,6 +591,9 @@ structure Check where
   throws : Term
   passes : Term
 
+/-- That the check passes without throwing. -/
+def Check.held (c : Check) : Term := .and (.not c.throws) c.passes
+
 /-- That `payload` fits the payload schema of the event `event`, which the semantics checks of each emitted event. -/
 def payloadHolds (svc : Service) (event : Ir.Ref) (payload : List (String × Term)) : Holds :=
   let holds := (propertiesWith ((svc.schemaOf (.payload event)).getD (.obj []))).map fun pr =>
@@ -653,9 +656,8 @@ rejected and does not halt: the caller, a ref field, a binds value, a requires c
 exists, in the order the semantics checks them (requirementsRejection, evaluate).
 -/
 def Step.rejections (s : Step) : List (Term × Rejection) :=
-  let held (c : Check) : Term := .and (.not c.throws) c.passes
   let checks := [(s.admitted, ({ kind := .permissionDenied } : Rejection)), (s.refs, { kind := .notFound })] ++
-    (s.binds ++ s.requires).map fun c => (held c, { kind := .requires, reason := some c.name })
+    (s.binds ++ s.requires).map fun c => (c.held, { kind := .requires, reason := some c.name })
   let (before, found) := checks.foldl (fun (before, found) (passes, r) =>
     (Term.and before passes, found ++ [(Term.and before (.not passes), r)])) (tt, [])
   found ++ [(before, { kind := .alreadyExists })]
@@ -749,7 +751,6 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let requireChecks ← requires.mapM fun c => do
     let (v, e) ← seval env [] c.body
     pure ({ name := c.name, throws := e, passes := v.truthy } : Check)
-  let held (c : Check) := Term.and (.not c.throws) c.passes
   let some decide := p.decide.find? (·.definition == svc.ref name) | throw s!"no decide of {name}"
   let (decided, decideErr) ← seval env [] decide.body
   let start : Stepped := { records := pre, used }
@@ -757,7 +758,7 @@ def stepWith (svc : Service) (p : Program) (pre : SRecords) (used : List (String
   let stepped ← stepped
   let named : Facts := { vars := defs.map fun (x, ty, _) => (x, ty), asserts := defs.map fun (x, ty, t) => .eq (.var x ty) t,
                          fit := .exact }
-  let checked := admitted :: refs ++ bindTerms.map (held ·.2) ++ requireChecks.map held
+  let checked := admitted :: refs ++ bindTerms.map (·.2.held) ++ requireChecks.map (·.held)
   let accepted := conj (checked ++ [.not decideErr, .not (stepped.records.duplicated svc)])
   let post := stepped.records
   let throwsIn (env : SEnv) (conditions : List Condition) : Except String Term := do
@@ -861,7 +862,7 @@ def answerOf (svc : Service) (p : Program) (pre : SRecords) (clock : Term) (name
   if let some e := compositeCaller svc callers then throw s!"the caller {e} has a key of several fields"
   let admitted := admitted callers pre caller
   pure { facts := { inputFacts ++ callerFacts with fit := (inputFacts ++ callerFacts).fit.join .over }, input, caller, admitted,
-         answered := conj (admitted :: requireChecks.map (fun c => .and (.not c.throws) c.passes) ++ [.not err]), output,
+         answered := conj (admitted :: requireChecks.map (·.held) ++ [.not err]), output,
          requires := requireChecks }
 
 /-- The term that holds when the ensures `c` of a query fails, or throws, on its answer. -/
