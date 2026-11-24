@@ -1,5 +1,5 @@
 import Tazuna.Smt.Bounds
-import Tazuna.Smt.Starts
+import Tazuna.Smt.EventStep
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 
@@ -366,7 +366,7 @@ def queryCases : List (String × List Term) :=
     ("query refuses an unlisted caller", [.not (.var 6)]),
     ("query refuses a key that is not positive", [.var 6, .not (.var 7)]) ]
 
-/-! An event step on a service without machines or reactions, for `event_step`: the subscription's value is a key
+/-! An event step on a service without machines or reactions, for `event_rel`: the subscription's value is a key
 and a value, the records insert it, and the invariant `small` holds while the table has fewer than three keys. -/
 
 def evT : Ty := .tuple [.int, .int]
@@ -443,6 +443,118 @@ def eventCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
 def eventCases : List (String × List Term) :=
   [ ("event keeps the invariant", [.var 7]),
     ("event breaks the invariant", [.not (.var 7)]) ]
+
+/-! The whole event step with a machine, for `event_step`: the event service above with a machine `calm` whose
+instances are the records' keys; an instance in state 0 enters 1 on any event, and its invariant `calm` holds below
+state 1. The decoded state and input step (`step`) to the outcome the terms give: the first broken name (the
+service's, then the instances' in key order) as the fault, else the records, the event and the new instance table.
+Where an instance breaks `calm`, the step of the same state without the machine must not pass the comparison. -/
+
+def intDen : (t : Ty) → t.den0 → Option Int
+  | .int, x => some x
+  | _, _ => none
+
+def evCtxT : Ty := Ty.machineCtx .int .int recordsT
+
+def evOnE : Expr [] [] (.fn [evCtxT, evT] (Ty.next .int)) :=
+  let st : Expr [] [evCtxT, evT] .int := .field (ft := .int) "state" 1 (by simp) (.var .here)
+  .lam (.case (.bin (.eq rfl) st (.int 0))
+    (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) (.ctor (vs := [[], [.int]]) ⟨1, by decide⟩ (.cons (.int 1) .nil))
+      (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) (.ctor (vs := [[], [.int]]) ⟨0, by decide⟩ .nil) .nil)) ⟨4, rfl⟩)
+
+def evInvE : Expr [] [] (.fn [evCtxT] Ty.rules) :=
+  let st : Expr [] [evCtxT] .int := .field (ft := .int) "state" 1 (by simp) (.var .here)
+  .lam (.list (.cons (.tuple (.cons (.str "calm") (.cons (.bin .lt st (.int 1)) .nil))) .nil))
+
+def evM : MachineV recordsT evT :=
+  { name := "calm", key := .int, state := .int,
+    instances := .closed (.lam (.call (.prim .tableKeys [.int, .int] rfl) (.cons (.var .here) .nil))),
+    initial := (0 : Int), on := .closed evOnE,
+    after := .closed (.lam (.ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil)),
+    effect := .closed (.lam (.ctor (vs := [[Ty.dsl .effect [evT]], []]) ⟨1, by decide⟩ .nil)),
+    invariants := .closed evInvE }
+
+def evMSvc : ServiceV := { eventSvc with name := "em", machines := [evM] }
+
+def evMLayout : Layout :=
+  Layout.addTys (listSlots (fun _ => 3)
+      (Tazuna.Smt.Expr.lits applyE ++ Tazuna.Smt.Expr.lits invariantsE ++ Tazuna.Smt.Expr.lits evInvE)) {}
+    ([recordsT, evT, evM.table, .bag .int, evCtxT, Ty.next .int, Ty.option (Ty.timer .int), Ty.timer .int,
+      Ty.option (.tuple [.int, .int]), .tuple [.int, .int], instEntry .int, Ty.option (.dsl .effect [evT])] ++
+      Tazuna.Smt.Expr.tys applyE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys evOnE ++
+      Tazuna.Smt.Expr.tys evInvE)
+
+def evMI : Fin evMSvc.subscribes.length := ⟨0, by decide⟩
+
+/-- v0..v3 the state, v5 the instance table, v6 the value, v7 the records after, v8 the event, v9 and v10 the
+service invariant's holds and name, v11 the new instance table. -/
+def evMScript (goal : List InstCheck → List Term) : Except String (Script × List MachineOut) := do
+  let L := evMLayout
+  let (ec, ce) ← (EventCode.of L evMSvc evMI).mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let (o, cond) ← (encodeEvent L ec S.records (.var 6)).mapError fun r => s!"no encoding: {repr r}"
+  let (outs, cm) ← (encodeMachines L prelude evMSvc.machines S.machines o.records S.now o.event).mapError
+    fun r => s!"no machine encoding: {repr r}"
+  let some wf := S.wf L (v := evMSvc) [] | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some esrt := L.srt? evT | throw "no event sort"
+  let some msrt := L.srt? evM.table | throw "no table sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [(name, holds)] := o.invariants | throw "not one invariant"
+  let [out] := outs | throw "not one machine"
+  pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, .int, msrt, esrt, rsrt, esrt, .bool, .str, msrt],
+          asserts := [ce, cond, cm, wf, .eq (.var 7) o.records, .eq (.var 8) o.event, .eq (.var 9) holds,
+            .eq (.var 10) name, .eq (.var 11) out.table] ++ goal out.checks,
+          shows := List.range 12 }, outs)
+
+def evMCase (solver : Solver) (name : String) (goal : List InstCheck → List Term) (machineFault : Bool) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: {name}: {m}"; return false
+  match evMScript goal with
+  | .error m => fail m
+  | .ok (script, outs) =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let L := evMLayout
+      match (SymState.vars 0 1).decode M L (v := evMSvc) rfl prelude [],
+          (SymInput.event evMI (.var 6)).decode M L (v := evMSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+            (fun | ⟨0, _⟩ => rfl) with
+      | some s, some x =>
+        let names := brokenIn M [(.var 10, .var 9)] ++ machinesBroken L prelude M evMSvc.machines outs
+        let view (sms : List (Step.MachineState recordsT evT)) := sms.flatMap fun ⟨_, is⟩ => is.map fun i =>
+          (intDen _ i.key, intDen _ i.state)
+        let newInsts := match decodeV L evM.table ((Term.var 11).denote M) with
+          | some tbl => some (view [⟨evM, instancesOf prelude evM (Ty.down _ evM.table_data tbl)⟩])
+          | none => none
+        let agrees (outcome : Outcome) (records : recordsT.den0) (events : List evT.den0)
+            (machines : List (Step.MachineState recordsT evT)) : Bool :=
+          match names, outcome, events with
+          | n :: _, .fault (.invariant n'), [] => n == n' && sameAs L recordsT rfl records (vs.lookup 0)
+          | [], .accepted, [e] => sameAs L recordsT rfl records (vs.lookup 7) && sameAs L evT rfl e (vs.lookup 8) &&
+              newInsts == some (view machines)
+          | _, _, _ => false
+        let r := step prelude evMSvc s x
+        let mut ok := true
+        if !agrees r.outcome r.state.records r.events r.state.machines then
+          ok ← fail s!"step says {r.outcome.summary}, the terms give {names}"
+        if machineFault && names.isEmpty then ok ← fail "no instance breaks its invariant"
+        if machineFault then
+          let s0 : State eventSvc :=
+            { records := s.records, machines := [], pending := [], now := s.now, fresh := s.fresh, nextId := s.nextId }
+          let x0 : Input eventSvc := match x with
+            | .event ⟨0, _⟩ value => .event eventI value
+            | _ => .clock 0
+          let r0 := step prelude eventSvc s0 x0
+          if agrees r0.outcome r0.state.records r0.events [] then
+            ok ← fail "the step without the machine passes the comparison"
+        return ok
+      | _, _ => fail "the model does not decode"
+    | a => fail s!"{repr a}"
+
+def evMCases : List (String × (List InstCheck → List Term) × Bool) :=
+  [ ("event with a machine keeps the invariants", (fun cs => [.var 9, instOkT cs]), false),
+    ("event with a machine breaks an instance invariant", (fun cs => [.var 9, .not (instOkT cs)]), true),
+    ("event with a machine breaks the service invariant", (fun _ => [.not (.var 9)]), false) ]
 
 /-- A clock line on the event service, for `clock_step`: v0..v3 the state, v4 the line's time, v5 whether time moves
 forward, v6 and v7 the invariant's holds and name. -/
@@ -744,10 +856,6 @@ def doorGoals : Option (List Term × List (String × Term)) := do
       .eq (.sel dtm 0 1 (.sel dopt 0 0 (timer 0))) (.int 2),
       .eq (key 1) (.int 1), .eq (.sel de 0 0 (entry 1)) (.int 0), .is dopt 1 (timer 1)],
     [("well-formedness excludes an instance key twice", .and (.and S[0]!.1 S[1]!.1) (.eq (key 0) (key 1)))])
-
-def intDen : (t : Ty) → t.den0 → Option Int
-  | .int, x => some x
-  | _, _ => none
 
 def doorCheck (solver : Solver) : IO Bool := do
   let some (goal, illFormed) := doorGoals | IO.println "smt-check: instances: no layout"; return false
@@ -1484,6 +1592,8 @@ def check (z3 : String) : IO Bool := do
     unless ← queryCase solver name goal do ok := false
   for (name, goal) in eventCases do
     unless ← eventCase solver name goal do ok := false
+  for (name, goal, mf) in evMCases do
+    unless ← evMCase solver name goal mf do ok := false
   for (name, goal) in clockCases do
     unless ← clockCase solver name goal do ok := false
   for (name, goal) in commandCases do
