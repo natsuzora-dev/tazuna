@@ -3,3 +3,5 @@
 
 /// What a spec's root module returns from `spec()`.
 pub type Spec
+// Built-ins begin. `lake exe gen-dsl --write ..` in lean/ writes them; do not edit.
+// Built-ins end.

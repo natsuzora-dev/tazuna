@@ -1,5 +1,5 @@
 name = "tazuna"
-defaultTargets = ["tazuna-engine"]
+defaultTargets = ["tazuna-engine", "gen-dsl"]
 
 [leanOptions]
 autoImplicit = false
@@ -12,3 +12,7 @@ globs = ["Tazuna.+"]
 [[lean_exe]]
 name = "tazuna-engine"
 root = "Main"
+
+[[lean_exe]]
+name = "gen-dsl"
+root = "GenDsl"
