@@ -224,7 +224,7 @@ namespace Path
 def fork (x : Path) (c : Term) (tag : String) : Path := { x with pc := andT x.pc c, name := s!"{x.name}{tag}" }
 
 /-- The paths of `x` after a step that ends as `o`: accepted, rejected, and halted. -/
-def after (x : Path) (o : Outcome) : Path × Path × Path :=
+def after (x : Path) (o : StepEnd) : Path × Path × Path :=
   let halts := o.halted.term
   (x.fork (andT o.accepted (notT halts)) "a", x.fork (andT (notT o.accepted) (notT halts)) "r",
    { x.fork halts "h" with halted := true })
@@ -469,8 +469,8 @@ def react (ce : ChainEnv) (x : Path) (a : Automation) (g : Term) (payload : List
   let r ← reactionOf ce.st ce.p x.records ce.now (.json (SJson.ofTerms payload)) a names
   if !r.facts.vars.isEmpty then throw s!"{a.name} creates a key, which prove does not follow in a chain yet"
   let x := { x with facts := x.facts ++ [(names, r.facts)] }
-  let (fires, skips, halted) := x.after { accepted := andT g r.outcome.accepted,
-                                          halted := { r.outcome.halted with term := andT g r.outcome.halted.term } }
+  let (fires, skips, halted) := x.after { accepted := andT g r.ending.accepted,
+                                          halted := { r.ending.halted with term := andT g r.ending.halted.term } }
   let fires := { fires with gap := .or fires.gap (.and fires.pc r.gap) }
   let fired := if a.sends.isOwn ce.st.service then
       { fires with round := fires.round ++ [({ order := a.order, sender := .automation a.name, command := a.sends.ref.name,
@@ -1137,12 +1137,12 @@ def sendOrders (st : Service) (p : Program) (pre : SRecords) (used : List (Strin
         let r ← reactionOf st p read now (.json (SJson.ofTerms payload)) auto s!"{tag}.r"
         if !r.facts.vars.isEmpty then throw s!"{auto.name} creates a key in a round with a third own command"
         let w := waiting r.input r.valid
-        pure { pre := r.outcome.accepted, facts := payloadFacts ++ read.facts st s!"{tag}.rd" ++ r.facts,
+        pure { pre := r.ending.accepted, facts := payloadFacts ++ read.facts st s!"{tag}.rd" ++ r.facts,
                sending := .input r.input, waiting := fun x => pure ({ x with gap := .or x.gap r.gap }, w) }
       else
         let r ← reactionOf st p pre now (.json (SJson.ofTerms payload)) auto s!"{tag}.r"
         let w := waiting r.input r.valid
-        pure { pre := r.outcome.accepted, facts := payloadFacts ++ r.facts, sending := .payload payload,
+        pure { pre := r.ending.accepted, facts := payloadFacts ++ r.facts, sending := .payload payload,
                waiting := fun x => pure ({ x with gap := .or x.gap r.gap }, w) }
     | .activity chart state key =>
       let some c := st.charts.find? (·.name == chart) | throw s!"no chart {chart}"

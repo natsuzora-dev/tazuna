@@ -396,7 +396,7 @@ def eventWants (st : Service) (n : Node) (terms : Except String (SRecords × Lis
       let .ok r := reactionOf st p pre now (.json payload) a "r" | continue
       let base := facts ++ r.facts
       -- A goal that the reaction sends a command whose input the encoding holds, or that it does not.
-      let fires := Term.and r.outcome.accepted (.not r.gap)
+      let fires := Term.and r.ending.accepted (.not r.gap)
       goals := goals ++ [(base, .not fires)]
       if a.sends.isOwn st.service then
         match stepWith st p pre used a.sends.ref.name (SJson.ofTerms r.input) (callerTerms (.service st.service)) now "rs." with

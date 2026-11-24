@@ -643,7 +643,7 @@ How a step of a chain ends, as terms over where it starts: it is accepted (a com
 sends its command), it halts, or else it is rejected (a command rejects, a reaction does not fire). A halt comes before
 either, as the semantics stops there (Outcome in Semantics.Service.Command).
 -/
-structure Outcome where
+structure StepEnd where
   accepted : Term
   halted : Holds
 
