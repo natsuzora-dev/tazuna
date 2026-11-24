@@ -251,6 +251,13 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     let c : CommandOf ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)
       ((Ty.param 3).inst args) ((Ty.param 4).inst args) := c
     .command c.1 (Prim.dn d (.param 2) rfl caller) (cast (congrArg Ty.den0 c.2.1.symm) (Prim.dn d (.param 3) rfl input))
+      fun _ => []
+  | .stepCommandThen, args, h => let d := Prim.dataOf h rfl
+    fun (c, caller, input, next, ()) =>
+    let c : CommandOf ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)
+      ((Ty.param 3).inst args) ((Ty.param 4).inst args) := c
+    .command c.1 (Prim.dn d (.param 2) rfl caller) (cast (congrArg Ty.den0 c.2.1.symm) (Prim.dn d (.param 3) rfl input))
+      fun n => next (n, ())
   | .stepQuery, args, h => let d := Prim.dataOf h rfl
     fun (q, caller, input, ()) =>
     let q : QueryOf ((Ty.param 0).inst args) ((Ty.param 2).inst args) ((Ty.param 3).inst args)
@@ -272,7 +279,6 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     let x : ReactionV ((Ty.param 0).inst args) ((Ty.param 1).inst args) := x
     .reaction x.name
   | .fresh, _, _ => fun (step, index, ()) => freshId step index
-  | .id, _, _ => fun (name, ()) => IdV.named name
   | .ref, args, _ => fun (t, k, rejection, next, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t.1 with
     | .some v => next (v, ())
     | .none => Ty.error rejection

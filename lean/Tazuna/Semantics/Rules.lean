@@ -184,7 +184,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) : List (Illegal × String) :=
           let other (o n : String) := if o == sc.service then none
             else some (Illegal.scenario, s!"{here}: step {k + 1} sends {o}.{n}, a request of another service")
           match st with
-          | .command x _ _ => other x.service x.name
+          | .command x _ _ _ => other x.service x.name
           | .query x _ _ => other x.service x.name
           | _ => none
     fileName ++ steps

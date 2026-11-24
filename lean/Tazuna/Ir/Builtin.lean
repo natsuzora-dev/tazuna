@@ -50,7 +50,7 @@ inductive Prim where
   | spec | service | command | query | defineCommand | defineQuery | machine | reaction
   | external | externalCommand | externalQuery | externalEvent | declareCommand | declareQuery | declareEvent
   | requestCommand | requestQuery | sendCommand | sendQuery | subscribe | bounds | create | response
-  | scenario | stepCommand | stepQuery | stepWait | stepAnswerCommand | stepAnswerQuery | stepEvent | fromMachine | fromReaction | fresh | id
+  | scenario | stepCommand | stepQuery | stepWait | stepAnswerCommand | stepAnswerQuery | stepEvent | fromMachine | fromReaction | fresh | stepCommandThen
 deriving Repr, DecidableEq
 
 structure PrimParam where
@@ -322,11 +322,13 @@ def sig : Prim → PrimSig :=
   | .fresh =>
     { name := "fresh", doc := "The `index`-th new id of this step: ids from different steps or indices differ.",
       tvars := [], params := [p "source" (.dsl .fresh []), p "index" .int], ret := .id }
-  | .id =>
-    { name := "id",
-      doc := "The id a trace names `name`, for a scenario: the one an earlier out line showed under that name, or else \
-        an id from outside the service.",
-      tvars := [], params := [p "name" .str], ret := .id }
+  | .stepCommandThen =>
+    { name := "step_command_then",
+      doc := "A step: the caller sends the command, and `then` gives the steps after it. `then` receives the source of the command's new ids, so `fresh(source, index)` is the id the command made with `fresh(ctx.fresh, index)`; written with `use`, the source is a variable gleam checks.",
+      tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true,
+      params := [l "command" (.dsl .command [a, b, param 2, param 3, param 4]), l "caller" (param 2),
+        l "input" (param 3), l "then" (.fn [.dsl .fresh []] (.list (.dsl .step [a, b, param 2])))],
+      ret := .dsl .step [a, b, param 2] }
 
 def all : List Prim :=
   [.length, .bagFromList, .bagInsert, .bagSize, .bagFilter, .bagMap, .bagCount, .bagSum, .bagAny, .bagAll,
@@ -335,7 +337,7 @@ def all : List Prim :=
    .dateDaysBetween, .require, .ref, .spec, .service, .command, .query, .defineCommand, .defineQuery, .machine, .reaction, .external,
    .externalCommand, .externalQuery, .externalEvent, .declareCommand, .declareQuery, .declareEvent, .requestCommand, .requestQuery,
    .sendCommand, .sendQuery, .subscribe, .bounds, .create, .response, .scenario, .stepCommand, .stepQuery, .stepWait,
-   .stepAnswerCommand, .stepAnswerQuery, .stepEvent, .fromMachine, .fromReaction, .fresh, .id]
+   .stepAnswerCommand, .stepAnswerQuery, .stepEvent, .fromMachine, .fromReaction, .fresh, .stepCommandThen]
 
 theorem mem_all (p : Prim) : p ∈ all := by cases p <;> simp [all]
 

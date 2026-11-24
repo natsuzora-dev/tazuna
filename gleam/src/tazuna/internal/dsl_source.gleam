@@ -576,8 +576,13 @@ pub fn fresh(_source: Fresh, _index: Int) -> Id {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// The id a trace names `name`, for a scenario: the one an earlier out line showed under that name, or else an id from outside the service.
-pub fn id(_name: String) -> Id {
+/// A step: the caller sends the command, and `then` gives the steps after it. `then` receives the source of the command's new ids, so `fresh(source, index)` is the id the command made with `fresh(ctx.fresh, index)`; written with `use`, the source is a variable gleam checks.
+pub fn step_command_then(
+  command _command: Command(records, event, caller, input, rejection),
+  caller _caller: caller,
+  input _input: input,
+  then _then: fn(Fresh) -> List(Step(records, event, caller)),
+) -> Step(records, event, caller) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 "
@@ -647,7 +652,7 @@ pub const builtins = [
   "from_machine",
   "from_reaction",
   "fresh",
-  "id",
+  "step_command_then",
 ]
 
 /// The built-ins whose type variables, by name, must be types `==` works on.

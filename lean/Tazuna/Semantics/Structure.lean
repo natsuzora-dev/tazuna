@@ -146,7 +146,8 @@ structure ServiceV where
 
 /-- One step of a scenario, typed by its service's records, event and caller. -/
 inductive StepV (r e c : Ty) where
-  | command (x : CommandV r e c) (caller : c.den0) (input : x.input.den0)
+  /-- The command, then the steps `next` gives for the counter its new ids came from (`Ctx.fresh`). -/
+  | command (x : CommandV r e c) (caller : c.den0) (input : x.input.den0) (next : Nat → List (StepV r e c))
   | query (x : QueryV r c) (caller : c.den0) (input : x.input.den0)
   /-- Time moves on by `ms`: a clock line, which fires the timers due. -/
   | wait (ms : Int)

@@ -134,12 +134,23 @@ fn counter() -> tazuna.Service {
 
 fn basic() -> tazuna.Scenario {
   tazuna.scenario(service: "counter", name: "basic", steps: [
-    tazuna.step_command(command: add(), caller: User, input: 5),
+    {
+      use added <- tazuna.step_command_then(
+        command: add(),
+        caller: User,
+        input: 5,
+      )
+      [
+        tazuna.step_command(
+          command: tag(),
+          caller: User,
+          input: tazuna.fresh(added, 0),
+        ),
+      ]
+    },
     tazuna.step_query(query: total(), caller: User, input: Nil),
     tazuna.step_command(command: add(), caller: User, input: 0),
     tazuna.step_command(command: add(), caller: User, input: 1),
-    tazuna.step_command(command: tag(), caller: User, input: tazuna.id("id1")),
-    tazuna.step_command(command: tag(), caller: User, input: tazuna.id("guest")),
     tazuna.step_wait(ms: 10),
     tazuna.step_answer_command(
       command: send(),

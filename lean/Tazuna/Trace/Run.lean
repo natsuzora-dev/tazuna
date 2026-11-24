@@ -3,8 +3,8 @@ import Tazuna.Trace.Line
 
 /-! Running a scenario: each step becomes one input line, the step runs, and its outputs become out lines. The trace
 names fresh ids `id1`, `id2`, ... in the order they first appear, so a snapshot shows what a reader can compare, not
-the engine's numbering. A scenario names an id with `tazuna.id(name)`: the id the trace already calls `name`, or else
-an id from outside the service, which the trace calls by that name from then on. -/
+the engine's numbering. A scenario never names an id by text: a command step hands the steps after it the source its
+new ids came from. -/
 
 namespace Tazuna.Trace
 
@@ -28,13 +28,6 @@ def Names.bind (ns : Names) (xs : List IdV) : Names :=
       -- Of `ids.length + 1` candidates at most `ids.length` are taken.
       let k := ((List.range (ns.ids.length + 1)).find? fun j => !ns.taken s!"id{ns.next + j}").getD 0
       { ids := ns.ids ++ [(x, s!"id{ns.next + k}")], next := ns.next + k + 1 }) ns
-
-/-- A scenario's value with each id it names read as the trace names it, when it names only ids (a scenario cannot
-make fresh ones). -/
-def Names.resolve (ns : Names) (T : List TypeDecl) (t : Ty) (x : t.den0) : Option t.den0 :=
-  let written := fun | IdV.named s => some s | .fresh _ => none
-  let read := fun s => some (((ns.ids.find? (·.2 == s)).map (·.1)).getD (.named s))
-  (enc T written t x).bind (dec T read t)
 
 /-- The wire form of a value, naming the ids it holds first. -/
 def Names.enc (ns : Names) (T : List TypeDecl) (t : Ty) (x : t.den0) : Names × Option Wire :=
@@ -119,15 +112,15 @@ def Run.finish' (run : Run v) (input : Input v) (inLines : List Line) (answerTo 
 
 /-- One scenario step: its input, run, and its in and out lines. -/
 def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Except Stop (Run v)
-  | .command x caller input => do
+  | .command x caller input _ => do
+    if x.service != v.name then throw (.badStep k s!"{x.service}.{x.name} is a request of another service")
     let some i := finIdx v.commands fun c => c.name == x.name | throw (.badStep k s!"{v.name} lists no command {x.name}")
     let some ⟨h⟩ := Ty.same x.input (v.commands.get i).input | throw (.badStep k s!"{x.name} has another input type")
-    let (caller, input) ← resolved v.caller x.input caller input
     request x.name (.command i caller (h ▸ input)) caller ⟨x.input, input⟩
   | .query x caller input => do
     let some i := finIdx v.queries fun q => q.name == x.name | throw (.badStep k s!"{v.name} lists no query {x.name}")
     let some ⟨h⟩ := Ty.same x.input (v.queries.get i).input | throw (.badStep k s!"{x.name} has another input type")
-    let (caller, input) ← resolved v.caller x.input caller input
+    if x.service != v.name then throw (.badStep k s!"{x.service}.{x.name} is a request of another service")
     request x.name (.query i caller (h ▸ input)) caller ⟨x.input, input⟩
   | .wait ms => do
     if ms < 0 then throw (.badStep k "a step waits a negative time")
@@ -137,7 +130,6 @@ def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Exce
     let ps := run.state.pending.filter fun p =>
       p.request.external == ext && p.request.name == name && p.sender.matches snd
     let [p] := ps | throw (.badStep k s!"{ps.length} pending requests to {ext}.{name} match the sender")
-    let some value := run.names.resolve T ty value | throw (.badStep k "the answer makes a fresh id")
     let some ⟨h⟩ := Ty.same ty (answerTy p.request.output p.request.rejection)
       | throw (.badStep k s!"the answer's type is not the type of answers to {ext}.{name}")
     let (ns, w) := run.names.answerWire T p.request.output p.request.rejection (h ▸ value)
@@ -147,15 +139,10 @@ def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Exce
     let some i := finIdx v.subscribes fun sub => sub.source == src && sub.name == name
       | throw (.badStep k s!"{v.name} subscribes to no event {src}.{name}")
     let some ⟨h⟩ := Ty.same ty (v.subscribes.get i).event | throw (.badStep k s!"{src}.{name} has another type")
-    let some x := run.names.resolve T ty x | throw (.badStep k "the event makes a fresh id")
     let (ns, w) := run.names.enc T ty x
     let some w := w | throw (.badStep k "the event has no wire form")
     { run with names := ns }.finish' T v (.event i (h ▸ x)) [.event run.state.now src name w] none k
 where
-  resolved (c i : Ty) (caller : c.den0) (input : i.den0) : Except Stop (c.den0 × i.den0) :=
-    match run.names.resolve T c caller, run.names.resolve T i input with
-    | some caller, some input => pure (caller, input)
-    | _, _ => throw (.badStep k "the request makes a fresh id")
   request (name : String) (input : Input v) (caller : v.caller.den0) (value : WireVal) : Except Stop (Run v) := do
     let id := toString (run.requests + 1)
     let (ns, c) := run.names.enc T v.caller caller
@@ -168,13 +155,29 @@ where
 
 end
 
+instance : Inhabited Stop := ⟨.badStep 0 ""⟩
+
+/-- Runs the steps in order, numbering them from `k + 1`; the steps a command hands on run right after it. A
+continuation is a function the spec wrote, so nothing bounds how deep it nests and the run is `partial`. -/
+partial def runSteps (T : List TypeDecl) (v : ServiceV) (run : Run v) (k : Nat) :
+    List (StepV v.records v.event v.caller) → Except Stop (Run v × Nat)
+  | [] => pure (run, k)
+  | st :: rest => do
+    let fresh := run.state.fresh
+    let run ← run.step T v (k + 1) st
+    match st with
+    | .command _ _ _ next =>
+      let (run, k) ← runSteps T v run (k + 1) (next fresh)
+      runSteps T v run k rest
+    | _ => runSteps T v run (k + 1) rest
+
 /-- The header line of a trace of `service`. -/
 def header (service : String) : Wire := .obj [("trace", .num 1), ("service", .str service)]
 
 /-- The trace of a scenario, header first, or why it stopped. -/
 def runScenario (T : List TypeDecl) (v : ServiceV) (steps : List (StepV v.records v.event v.caller)) :
     Except Stop (List Wire) := do
-  let run ← steps.zipIdx.foldlM (fun run (st, k) => run.step T v (k + 1) st) ({ state := State.init v } : Run v)
+  let (run, _) ← runSteps T v ({ state := State.init v } : Run v) 0 steps
   pure (header v.name :: run.lines.map Line.toWire)
 
 end Tazuna.Trace
