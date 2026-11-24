@@ -2,4 +2,14 @@
 set -eu
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.elan/bin:$PATH"
+
+# The JavaScript target needs only node. Erlang/OTP joins when the launcher gets its Erlang FFI.
+(cd gleam && gleam format --check src test && gleam build --target javascript --warnings-as-errors)
 (cd lean && lake build --wfail)
+
+gleam_version=$(sed -n 's/^version = "\(.*\)"$/\1/p' gleam/gleam.toml)
+lean_version=$(cd lean && lake exe tazuna-engine)
+if [ "$gleam_version" != "$lean_version" ]; then
+  echo "gleam/gleam.toml has version $gleam_version but the engine prints $lean_version. Make them the same."
+  exit 1
+fi

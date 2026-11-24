@@ -1,0 +1,11 @@
+name = "tazuna"
+version = "0.7.0"
+description = "Write service specs in Gleam; check, test, and prove them with Lean and Z3."
+licences = ["MIT"]
+repository = { type = "github", user = "natsuzora-dev", repo = "tazuna" }
+
+[dependencies]
+gleam_stdlib = ">= 1.0.0 and < 2.0.0"
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
