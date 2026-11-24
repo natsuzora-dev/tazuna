@@ -38,6 +38,13 @@ def bagMatch {α β : Type} (f : α → β → Bind → List Bind) : List α →
     | none => []
   | _, _, _ => []
 
+/-- Whether a Bool's or Nil's wire form is the one written. -/
+def matchLiteral (expected : Option Wire) (w : Wire) (b : Bind) : List Bind :=
+  match expected, w with
+  | some (.bool x), .bool y => if x == y then [b] else []
+  | some .null, .null => [b]
+  | _, _ => []
+
 section
 variable (T : List TypeDecl)
 
@@ -49,7 +56,11 @@ def matchVal : (t : Ty) → t.den0 → Wire → Bind → List Bind
   | .list t, xs, .arr ws, b => seqMatch (matchVal t) xs ws b
   | .bag t, xs, .arr ws, b => bagMatch (matchVal t) xs ws b
   | .tuple ts, x, .arr ws, b => matchs ts x ws b
-  | .adt i _ vs, x, .obj kvs, b => matchAlts ((T[i]?.map (·.variants)).getD []) kvs 0 vs x b
+  | .adt i _ vs, x, w, b =>
+    if i = 0 then matchLiteral (encBool vs x) w b else if i = 1 then matchLiteral (encNil vs x) w b
+    else match w with
+      | .obj kvs => matchAlts ((T[i]?.map (·.variants)).getD []) kvs 0 vs x b
+      | _ => []
   | .table k v, x, .arr ws, b => bagMatch (fun (p : k.den0 × v.den0) w b => match w with
       | .arr [wk, wv] => (matchVal k p.1 wk b).flatMap (matchVal v p.2 wv)
       | _ => []) x.1 ws b

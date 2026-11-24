@@ -3,7 +3,7 @@
 {"out":"answer","outcome":"accepted","time":0,"to":"1"}
 {"out":"event","time":0,"value":{"amount":5,"tag":"Added"}}
 {"out":"event","time":0,"value":{"id":"id1","tag":"Tagged"}}
-{"caller":{"tag":"User"},"id":"2","in":"request","input":{"tag":"Nil"},"name":"total","time":0}
+{"caller":{"tag":"User"},"id":"2","in":"request","input":null,"name":"total","time":0}
 {"out":"answer","outcome":"answered","output":5,"time":0,"to":"2"}
 {"caller":{"tag":"User"},"id":"3","in":"request","input":0,"name":"add","time":0}
 {"out":"answer","outcome":"invalid","rules":["positive"],"time":0,"to":"3"}
@@ -13,5 +13,5 @@
 {"out":"event","time":0,"value":{"id":"id2","tag":"Tagged"}}
 {"in":"clock","time":10}
 {"external":"mail","id":"0","input":7,"name":"send","out":"request","time":10}
-{"in":"answer","ok":{"tag":"Nil"},"time":10,"to":"0"}
+{"in":"answer","ok":null,"time":10,"to":"0"}
 {"out":"event","time":10,"value":{"tag":"Pinged"}}

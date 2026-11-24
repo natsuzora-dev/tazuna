@@ -34,6 +34,28 @@ theorem lookup_zip : (keys : List String) → (ws : List Wire) → keys.Nodup �
       have hk : (k == key) = false := by simp [hk']
       simp only [hk]; exact lookup_zip keys ws hnd.2 k w h
 
+-- `encBool` and `encNil` have overlapping patterns, so each case unfolds them by definition.
+theorem decBool_encBool (vs : List (List Ty)) (x : (Ty.semAltsWith Dsl.base vs).1) (w : Wire)
+    (h : encBool vs x = some w) : decBool vs w = some x := by
+  match vs, x with
+  | [], x => exact nomatch x
+  | [] :: _, .inl () => have h : some (Wire.bool true) = some w := h; cases h; rfl
+  | (_ :: _) :: _, .inl _ => have h : none = some w := h; cases h
+  | f :: vs, .inr y =>
+    match vs, y with
+    | [], y => exact nomatch y
+    | [] :: _, .inl () => cases f <;> (have h : some (Wire.bool false) = some w := h; cases h; rfl)
+    | (_ :: _) :: _, .inl _ => cases f <;> (have h : none = some w := h; cases h)
+    | g :: _, .inr _ => cases f <;> cases g <;> (have h : none = some w := h; cases h)
+
+theorem decNil_encNil (vs : List (List Ty)) (x : (Ty.semAltsWith Dsl.base vs).1) (w : Wire)
+    (h : encNil vs x = some w) : decNil vs w = some x := by
+  match vs, x with
+  | [], x => exact nomatch x
+  | [] :: _, .inl () => have h : some Wire.null = some w := h; cases h; rfl
+  | (_ :: _) :: _, .inl _ => have h : none = some w := h; cases h
+  | f :: _, .inr _ => cases f <;> (have h : none = some w := h; cases h)
+
 section
 variable (T : List TypeDecl) (name : Nat → Option String) (lookup : String → Option Nat)
   (hid : ∀ n s, name n = some s → lookup s = some n)
@@ -55,16 +77,17 @@ theorem dec_enc : (t : Ty) → (x : t.den0) → (w : Wire) → enc T name t x = 
     simp only [enc, Option.map_eq_some_iff] at h
     obtain ⟨ws, hws, rfl⟩ := h
     exact decs_encs ts x ws hws
-  | .adt i _ vs, x, w, h => by
-    rw [enc] at h
+  | .adt 0 _ vs, x, w, h => decBool_encBool vs x w h
+  | .adt 1 _ vs, x, w, h => decNil_encNil vs x w h
+  | .adt (i + 2) _ vs, x, w, h => by
     obtain ⟨kvs, tag, k, rfl, htag, hk, _, hdec⟩ := decAlts_encAlts vs _ 0 x w h
     show (do
-      let decl := (T[i]?.map (·.variants)).getD []
+      let decl := (T[i + 2]?.map (·.variants)).getD []
       let .str tag ← kvs.lookup "tag" | none
       let k ← decl.findIdx? (·.name == tag)
       decAlts T lookup decl kvs k 0 vs) = some x
     rw [htag]
-    show (List.findIdx? (fun (var : Variant) => var.name == tag) ((T[i]?.map (·.variants)).getD []) >>= fun k => decAlts T lookup ((T[i]?.map (·.variants)).getD []) kvs k 0 vs) = some x
+    show (List.findIdx? (fun (var : Variant) => var.name == tag) ((T[i + 2]?.map (·.variants)).getD []) >>= fun k => decAlts T lookup ((T[i + 2]?.map (·.variants)).getD []) kvs k 0 vs) = some x
     rw [hk]
     exact hdec
   | .table k v, x, w, h => by

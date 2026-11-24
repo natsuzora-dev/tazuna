@@ -8,8 +8,9 @@ JSON library.
 - An Int is a number and a String a string.
 - A List, a Bag and a tuple are arrays; a Bag's array is a multiset.
 - A Table is an array of `[key, value]` pairs.
-- A value of a custom type, `Bool` and `Option` included, is an object: `"tag"` names the variant, and each field sits
-  under its label, or under its position (`"0"`, `"1"`) when it has none.
+- A Bool is `true` or `false`, and Nil is `null`: JSON's own literals.
+- A value of any other custom type, `Option` and `Result` included, is an object: `"tag"` names the variant, and each
+  field sits under its label, or under its position (`"0"`, `"1"`) when it has none.
 - A Date is its label `YYYY-MM-DD`.
 - An Id is a string a binding names it by: a trace names ids by their first appearance, never by the engine's numbers.
 
@@ -40,6 +41,28 @@ is `tag`. -/
 def writable (decl : List Variant) (k : Nat) (var : Variant) : Bool :=
   decl.findIdx? (·.name == var.name) == some k && (fieldKeys var.fields).Nodup && !(fieldKeys var.fields).contains "tag"
 
+/-- A Bool: the prelude's type 0, whose variants `True` and `False` have no fields. -/
+def encBool : (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → Option Wire
+  | [] :: _, .inl _ => some (.bool true)
+  | _ :: vs, .inr y => match vs, y with
+    | [] :: _, .inl _ => some (.bool false)
+    | _, _ => none
+  | _, _ => none
+
+/-- Nil: the prelude's type 1, whose one variant has no fields. -/
+def encNil : (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → Option Wire
+  | [] :: _, .inl _ => some .null
+  | _, _ => none
+
+def decBool : (vs : List (List Ty)) → Wire → Option (Ty.semAltsWith Dsl.base vs).1
+  | [] :: _, .bool true => some (.inl ())
+  | _ :: [] :: _, .bool false => some (.inr (.inl ()))
+  | _, _ => none
+
+def decNil : (vs : List (List Ty)) → Wire → Option (Ty.semAltsWith Dsl.base vs).1
+  | [] :: _, .null => some (.inl ())
+  | _, _ => none
+
 section
 variable (T : List TypeDecl) (name : Nat → Option String)
 
@@ -51,7 +74,9 @@ def enc : (t : Ty) → t.den0 → Option Wire
   | .list t, xs => (xs.mapM (enc t)).map .arr
   | .bag t, xs => (xs.mapM (enc t)).map .arr
   | .tuple ts, x => (encs ts x).map .arr
-  | .adt i _ vs, x => encAlts ((T[i]?.map (·.variants)).getD []) 0 vs x
+  | .adt i _ vs, x =>
+    if i = 0 then encBool vs x else if i = 1 then encNil vs x
+    else encAlts ((T[i]?.map (·.variants)).getD []) 0 vs x
   | .table k v, x => (x.1.mapM fun (a, b) => do pure (Wire.arr [← enc k a, ← enc v b])).map .arr
   | .date, d => (renderDate? d).map .str
   | .id, n => (name n).map .str
@@ -102,11 +127,15 @@ def dec : (t : Ty) → Wire → Option t.den0
   | .list t, .arr ws => ws.mapM (dec t)
   | .bag t, .arr ws => ws.mapM (dec t)
   | .tuple ts, .arr ws => decs ts ws
-  | .adt i _ vs, .obj kvs => do
-    let decl := (T[i]?.map (·.variants)).getD []
-    let .str tag ← kvs.lookup "tag" | none
-    let k ← decl.findIdx? (·.name == tag)
-    decAlts decl kvs k 0 vs
+  | .adt i _ vs, w =>
+    if i = 0 then decBool vs w else if i = 1 then decNil vs w
+    else match w with
+      | .obj kvs => do
+        let decl := (T[i]?.map (·.variants)).getD []
+        let .str tag ← kvs.lookup "tag" | none
+        let k ← decl.findIdx? (·.name == tag)
+        decAlts decl kvs k 0 vs
+      | _ => none
   | .table k v, .arr ws => do
     let pairs ← ws.mapM fun
       | .arr [a, b] => do pure (← dec k a, ← dec v b)
