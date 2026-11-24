@@ -1,8 +1,9 @@
+import Tazuna.Smt.Share
 import Tazuna.Smt.Syntax
 
-/-! A script is one question to the solver in standard SMT-LIB 2.6: declarations, assertions, a plain `(check-sat)`
-and, for a sat answer, the values of the variables it asks for. The answer names each value by its variable, so a
-caller reads values by name, never by position. -/
+/-! A script is one question to the solver in standard SMT-LIB 2.6: declarations, definitions of its shared terms,
+assertions, a plain `(check-sat)` and, for a sat answer, the values of the variables it asks for. The answer names
+each value by its variable, so a caller reads values by name, never by position. -/
 
 namespace Tazuna.Smt
 
@@ -18,6 +19,17 @@ def Datatype.text (i : Nat) (d : Datatype) : String :=
     s!"({(Name.ctor i k).text}{String.join fields})"
   s!"(declare-datatypes ((D{i} 0)) (({" ".intercalate (d.ctors.zipIdx.map fun (fs, k) => ctor k fs)})))"
 
+/-- The sort of a term, given the sorts of the datatypes' fields, of the variables and of the definitions. -/
+def Term.srt? (dts : List Datatype) (vars : List Srt) (defs : Array Srt) : Term → Option Srt
+  | .var n => vars[n]?
+  | .ref i => defs[i]?
+  | .int _ | .add .. | .sub .. | .mul .. | .div .. | .mod .. | .len _ => some .int
+  | .str _ | .cat .. => some .str
+  | .bool _ | .not _ | .and .. | .or .. | .eq .. | .lt .. | .le .. | .is .. => some .bool
+  | .ite _ a _ | .shared _ a => a.srt? dts vars defs
+  | .ctor d _ _ => some (.dt d)
+  | .sel d k j _ => do (← (← (← dts[d]?).ctors[k]?)[j]?)
+
 structure Script where
   /-- Datatype `i` may refer only to datatypes before it. -/
   datatypes : List Datatype := []
@@ -27,18 +39,30 @@ structure Script where
   /-- The variables whose values a sat answer reports. -/
   shows : List Nat := []
 
-/-- The script's text after the solver's header lines. -/
-def Script.text (s : Script) (header : List String) : String :=
+/-- The assertions with shared terms as references, and the bodies of the definitions with their sorts, in order.
+`none` when a body has no sort, which the encoding never builds. -/
+def Script.shared (s : Script) : Option (List Term × List (Term × Srt)) := do
+  let (asserts, D) := Term.extracts s.asserts {}
+  let sorts ← D.entries.foldlM (fun acc (_, b) => do pure (acc.push (← b.srt? s.datatypes s.vars acc))) #[]
+  pure (asserts, (D.entries.toList.map (·.2)).zip sorts.toList)
+
+/-- The script's text after the solver's header lines; `none` as `Script.shared`. -/
+def Script.text (s : Script) (header : List String) : Option String := do
+  let (asserts, defs) ← s.shared
   let lines := header ++ ["(set-option :produce-models true)", "(set-logic ALL)"] ++
     s.datatypes.zipIdx.map (fun (d, i) => d.text i) ++
     s.vars.zipIdx.map (fun (srt, n) => s!"(declare-const {(Name.var n).text} {srt.text})") ++
-    s.asserts.map (fun t => s!"(assert {t.print})") ++ ["(check-sat)"] ++
+    defs.zipIdx.map (fun ((b, srt), i) => s!"(define-fun {(Name.def_ i).text} () {srt.text} {b.print})") ++
+    asserts.map (fun t => s!"(assert {t.print})") ++ ["(check-sat)"] ++
     (if s.shows.isEmpty then [] else
       [s!"(get-value ({" ".intercalate (s.shows.map fun n => (Name.var n).text)}))"])
-  "\n".intercalate lines ++ "\n"
+  pure ("\n".intercalate lines ++ "\n")
 
-/-- Whether every string the script writes lies in the SMT-LIB domain, so the printer writes it as itself. -/
-def Script.inDomain (s : Script) : Bool := s.asserts.all Term.inDomain
+/-- Whether the printer writes every term of the script as itself: every string lies in the SMT-LIB domain. -/
+def Script.inDomain (s : Script) : Bool :=
+  match s.shared with
+  | some (asserts, defs) => asserts.all Term.inDomain && defs.all (·.1.inDomain)
+  | none => false
 
 inductive Answer where
   /-- Satisfiable, with the value of each variable asked for. -/

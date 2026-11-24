@@ -23,10 +23,11 @@ def Solver.header (s : Solver) : List String :=
 
 /-- Runs one script and reads the answer. -/
 def Solver.run (s : Solver) (script : Script) : IO Answer := do
+  let some text := script.text s.header | return .unknown "a shared term of the script has no sort"
   let child ← IO.Process.spawn
     { cmd := s.path, args := #["-in", "-smt2"], stdin := .piped, stdout := .piped, stderr := .null }
   let (stdin, child) ← child.takeStdin
-  stdin.putStr (script.text s.header)
+  stdin.putStr text
   stdin.flush
   -- Dropping the handle closes the solver's stdin, so it reads to the end.
   let _ := stdin

@@ -91,6 +91,17 @@ theorem rel_ofTerm : {t : Ty} → {x : Term} → {s : Code t} → Code.ofTerm? t
   | .bag _, _, _, h, _ | .table .., _, _, h, _ | .date, _, _, h, _ | .id, _, _, h, _ | .dsl .., _, _, h, _ => by
     cases h; exact Iff.rfl
 
+theorem rel_share : {t : Ty} → {v : t.den} → {s : Code t} → Rel M L t v s → Rel M L t v (Code.share t s)
+  | .fn .., _, _, h | .list _, _, _, h => h
+  | .int, _, s, h | .str, _, s, h | .tuple _, _, s, h | .adt .., _, s, h | .param _, _, s, h | .bag _, _, s, h
+  | .table .., _, s, h | .date, _, s, h | .id, _, s, h | .dsl .., _, s, h => by
+    simp only [Code.share, Rel] at h ⊢; rw [Term.denote_share M s]; exact h
+
+theorem rels_share : {ts : List Ty} → {vs : Ty.dens ts} → {ss : Codes ts} → Rels M L ts vs ss →
+    Rels M L ts vs (Codes.share ts ss)
+  | [], _, _, _ => trivial
+  | _ :: _, _, _, ⟨h, hs⟩ => ⟨rel_share h, rels_share hs⟩
+
 theorem rels_terms : {ts : List Ty} → {ss : Codes ts} → {xs : List Term} → Codes.terms? ts ss = some xs →
     (vs : Ty.dens ts) → Rels M L ts vs ss → RelVs L ts vs (Term.denotes M xs)
   | [], (), _, h, _, _ => by cases h; rfl
@@ -1240,7 +1251,7 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
     cases pure_ok.1 h
     obtain ⟨hc1, hc'⟩ := (holds_andT _ _).1 hc
     obtain ⟨hc2, hc3⟩ := (holds_andT _ _).1 hc'
-    exact encode_agrees f σ ρ hσ sf c1 h1 hc1 _ ss (encodes_agrees args σ ρ hσ ss c2 h2 hc2) _ c3 h3 hc3
+    exact encode_agrees f σ ρ hσ sf c1 h1 hc1 _ _ (rels_share (encodes_agrees args σ ρ hσ ss c2 h2 hc2)) _ c3 h3 hc3
   | .lam body, σ, ρ, hσ, s, c, h, _ => by
     cases h
     intro xs ss hxs r c' hr hc'
@@ -1251,7 +1262,7 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
     obtain ⟨⟨r, c2⟩, h2, h⟩ := bind_ok.1 h
     cases pure_ok.1 h
     obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-    exact encode_agrees body (x, σ) (e.eval g ρ, ρ) ⟨encode_agrees e σ ρ hσ x c1 h1 hc1, hσ⟩ _ c2 h2 hc2
+    exact encode_agrees body _ (e.eval g ρ, ρ) ⟨rel_share (encode_agrees e σ ρ hσ x c1 h1 hc1), hσ⟩ _ c2 h2 hc2
   | .case e cs hx, σ, ρ, hσ, s, c, h, hc => by
     simp only [encode] at h
     obtain ⟨⟨x, c1⟩, h1, h⟩ := bind_ok.1 h
@@ -1262,7 +1273,7 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
       obtain ⟨r, c2⟩ := rc
       cases pure_ok.1 h
       obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-      exact encodeClauses_agrees cs σ ρ hσ x _ (encode_agrees e σ ρ hσ x c1 h1 hc1) _ _ c2 h2 hc2
+      exact encodeClauses_agrees cs σ ρ hσ _ _ (rel_share (encode_agrees e σ ρ hσ x c1 h1 hc1)) _ _ c2 h2 hc2
   | .list items, σ, ρ, hσ, s, c, h, hc => encodeItems_agrees items σ ρ hσ s c h hc
   | @Expr.tuple _ _ ts es, σ, ρ, hσ, s, c, h, hc => by
     simp only [encode] at h

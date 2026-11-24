@@ -73,6 +73,16 @@ def Code.ofTerm? : (t : Ty) → Term → Option (Code t)
   | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
   | .dsl .., s => some s
 
+/-- The code shared (`Term.share`) when it is a term: a bound variable may be used any number of times. -/
+def Code.share : (t : Ty) → Code t → Code t
+  | .fn .., s | .list _, s => s
+  | .int, s | .str, s | .tuple _, s | .adt .., s | .param _, s | .bag _, s | .table .., s | .date, s | .id, s
+  | .dsl .., s => Term.share s
+
+def Codes.share : (ts : List Ty) → Codes ts → Codes ts
+  | [], () => ()
+  | t :: ts, (s, ss) => (Code.share t s, Codes.share ts ss)
+
 def Codes.terms? : (ts : List Ty) → Codes ts → Option (List Term)
   | [], () => some []
   | t :: ts, (s, ss) => do pure ((← Code.term? t s) :: (← Codes.terms? ts ss))
@@ -452,16 +462,16 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
   | .call f args, σ => do
     let (sf, c1) ← encode f σ
     let (ss, c2) ← encodes args σ
-    let (r, c3) ← sf ss
+    let (r, c3) ← sf (Codes.share _ ss)
     pure (r, andT c1 (andT c2 c3))
   | .lam body, σ => .ok (fun xs => encode body (Codes.append xs σ), tt)
   | .let_ e body, σ => do
     let (s, c1) ← encode e σ
-    let (r, c2) ← encode body (s, σ)
+    let (r, c2) ← encode body (Code.share _ s, σ)
     pure (r, andT c1 c2)
   | .case e cs _, σ => do
     let (s, c1) ← encode e σ
-    match ← encodeClauses cs σ s with
+    match ← encodeClauses cs σ (Code.share _ s) with
     | some (r, c2) => pure (r, andT c1 c2)
     | none => .error (.outside "a case without clauses")
   | .list items, σ => encodeItems items σ

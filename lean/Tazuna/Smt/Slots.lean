@@ -13,14 +13,15 @@ abbrev Slot := Term × List Term
 
 def tt : Term := .bool true
 
-/-- The `n` slots of the collection `s`, each with `w` item terms. -/
+/-- The `n` slots of the collection `s`, each with `w` item terms. They select from `s` `n * (w + 1)` times, so `s`
+is shared. -/
 def slotsOf (d dt n w : Nat) (s : Term) : List Slot :=
   (List.range n).map fun i =>
-    let x := Term.sel d 0 i s
+    let x := Term.sel d 0 i s.share
     (.sel dt 0 0 x, (List.range w).map fun j => .sel dt 0 (j + 1) x)
 
-/-- The collection holding these slots. -/
-def slotsTerm (d dt : Nat) (S : List Slot) : Term := .ctor d 0 (S.map fun (f, xs) => .ctor dt 0 (f :: xs))
+/-- The collection holding these slots, shared: the next operation on it selects each slot. -/
+def slotsTerm (d dt : Nat) (S : List Slot) : Term := Term.share (.ctor d 0 (S.map fun (f, xs) => .ctor dt 0 (f :: xs)))
 
 def sumT : List Term → Term
   | [] => .int 0
@@ -92,10 +93,10 @@ def slotAt (d dt w : Nat) (s : Term) (m : Nat) : Slot :=
 
 theorem slotsOf_den (d dt w : Nat) (s : Term) (sv : List (Bool × List Val)) (hs : s.denote M = slotsVal d dt sv)
     (hw : ∀ p ∈ sv, p.2.length = w) : SlotsDen M (slotsOf d dt sv.length w s) sv := by
-  have key : ∀ (k : Nat) (rest : List (Bool × List Val)), (∀ p ∈ rest, p.2.length = w) →
+  have key : ∀ (s : Term) (hs : s.denote M = slotsVal d dt sv) (k : Nat) (rest : List (Bool × List Val)), (∀ p ∈ rest, p.2.length = w) →
       (∀ i (h : i < rest.length), (Term.sel d 0 (k + i) s).denote M = .ctor dt 0 (.bool rest[i].1 :: rest[i].2)) →
       SlotsDen M ((List.range rest.length).map fun i => slotAt d dt w s (k + i)) rest := by
-    intro k rest
+    intro s _ k rest
     induction rest generalizing k with
     | nil => intro _ _; trivial
     | cons p rest ih =>
@@ -118,7 +119,7 @@ theorem slotsOf_den (d dt w : Nat) (s : Term) (sv : List (Bool × List Val)) (hs
           have := hi (i + 1) (by simp; omega)
           rw [show k + 1 + i = k + (i + 1) by omega]
           simpa using this)
-  have := key 0 sv hw (fun i h => by simp [Term.denote, hs, slotsVal, h])
+  have := key s.share (by simp [hs]) 0 sv hw (fun i h => by simp [Term.denote, hs, slotsVal, h])
   simpa [slotsOf, slotAt] using this
 
 theorem denotes_slots (dt : Nat) : {S : List Slot} → {sv : List (Bool × List Val)} → SlotsDen M S sv →
@@ -129,7 +130,7 @@ theorem denotes_slots (dt : Nat) : {S : List Slot} → {sv : List (Bool × List 
 
 theorem slotsTerm_den (d dt : Nat) {S : List Slot} {sv : List (Bool × List Val)} (h : SlotsDen M S sv) :
     (slotsTerm d dt S).denote M = slotsVal d dt sv := by
-  simp only [slotsTerm, slotsVal, Term.denote, denotes_slots dt h]
+  simp only [slotsTerm, Term.denote_share, slotsVal, Term.denote, denotes_slots dt h]
 
 /-- The number of occupied slots. -/
 def sizeT (S : List Slot) : Term := sumT (S.map fun (f, _) => .ite f (.int 1) (.int 0))

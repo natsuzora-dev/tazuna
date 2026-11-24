@@ -1,7 +1,8 @@
 import Tazuna.Smt.Text
 
 /-! Terms and values as S-expressions. Names are generated so that reading them back needs no table: variable `n` is
-`v<n>`, constructor `k` of datatype `d` is `D<d>_<k>` and its field `j` is `D<d>_<k>_<j>`. `Term.ofSExp_toSExp` and
+`v<n>`, constructor `k` of datatype `d` is `D<d>_<k>`, its field `j` is `D<d>_<k>_<j>`, and a script's definition `i`
+is `s<i>`. `Term.ofSExp_toSExp` and
 `Term.parse_print` prove that reading a printed term gives it back; values are terms without variables or
 operations, so the same holds for them (`Val.parse_print`). -/
 
@@ -24,18 +25,23 @@ inductive Name where
   | var (n : Nat)
   | ctor (d k : Nat)
   | sel (d k j : Nat)
+  | def_ (i : Nat)
 deriving DecidableEq, Repr
 
 def Name.chars : Name → List Char
   | .var n => 'v' :: decChars n
   | .ctor d k => 'D' :: decChars d ++ '_' :: decChars k
   | .sel d k j => 'D' :: decChars d ++ '_' :: decChars k ++ '_' :: decChars j
+  | .def_ i => 's' :: decChars i
 
 def Name.text (n : Name) : String := String.ofList n.chars
 
 def Name.read : List Char → Option Name
   | 'v' :: cs => match readNat cs with
     | some (n, []) => some (.var n)
+    | _ => none
+  | 's' :: cs => match readNat cs with
+    | some (i, []) => some (.def_ i)
     | _ => none
   | 'D' :: cs => match readNat cs with
     | some (d, '_' :: cs) => match readNat cs with
@@ -116,6 +122,9 @@ def Term.toSExp : Term → SExp
   | .ctor d k (a :: as) => .list (.sym (Name.ctor d k).text :: Term.toSExps (a :: as))
   | .is d k a => .list [.list [.sym "_", .sym "is", .sym (Name.ctor d k).text], a.toSExp]
   | .sel d k j a => .list [.sym (Name.sel d k j).text, a.toSExp]
+  | .ref i => .sym (Name.def_ i).text
+  /- A script prints a shared term only as a reference to its definition (`Term.extract`), never this way. -/
+  | .shared _ t => t.toSExp
 def Term.toSExps : List Term → List SExp
   | [] => []
   | t :: ts => t.toSExp :: Term.toSExps ts
@@ -128,6 +137,7 @@ def Term.ofSExp : SExp → Option Term
   | .sym s => match classify s with
     | .lit b => some (.bool b)
     | .name (.var n) => some (.var n)
+    | .name (.def_ i) => some (.ref i)
     | .name (.ctor d k) => some (.ctor d k [])
     | _ => none
   | .list [.sym f, a] => match classify f with
@@ -193,6 +203,8 @@ theorem Name.read_chars (nm : Name) : Name.read nm.chars = some nm := by
   cases nm with
   | var n => simp only [Name.chars, Name.read]; rw [show decChars n = decChars n ++ [] from by simp,
       readNat_dec n [] (by simp)]
+  | def_ i => simp only [Name.chars, Name.read]; rw [show decChars i = decChars i ++ [] from by simp,
+      readNat_dec i [] (by simp)]
   | ctor d k =>
     simp only [Name.chars, List.cons_append, Name.read]
     rw [readNat_dec d _ (by simp [underscore_not_digit])]
@@ -217,45 +229,74 @@ theorem classify_fixed : classify "not" = .op1 .not ∧ classify "str.len" = .op
   decide
 
 mutual
-theorem Term.ofSExp_toSExp : (t : Term) → Term.ofSExp t.toSExp = some t
-  | .var n => by simp [Term.toSExp, Term.ofSExp, classify_name]
-  | .int n => by
+/-- Whether the printer writes the term as itself: every string literal lies in the SMT-LIB string domain, and no
+shared term is in it (a script prints those as references to its definitions). -/
+def Term.inDomain : Term → Bool
+  | .str s => Smt.inDomain s
+  | .var _ | .int _ | .bool _ | .ref _ => true
+  | .shared .. => false
+  | .not a | .len a | .is _ _ a | .sel _ _ _ a => a.inDomain
+  | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
+  | .cat a b => a.inDomain && b.inDomain
+  | .ite c a b => c.inDomain && a.inDomain && b.inDomain
+  | .ctor _ _ args => Term.inDomains args
+def Term.inDomains : List Term → Bool
+  | [] => true
+  | t :: ts => t.inDomain && Term.inDomains ts
+end
+
+mutual
+theorem Term.ofSExp_toSExp : (t : Term) → t.inDomain = true → Term.ofSExp t.toSExp = some t
+  | .var n, _ => by simp [Term.toSExp, Term.ofSExp, classify_name]
+  | .ref i, _ => by simp [Term.toSExp, Term.ofSExp, classify_name]
+  | .int n, _ => by
     by_cases h : 0 ≤ n
     · simp [Term.toSExp, Term.ofSExp, h]; omega
     · simp [Term.toSExp, Term.ofSExp, h, classify_fixed]; omega
-  | .str s => by simp [Term.toSExp, Term.ofSExp]
-  | .bool b => by cases b <;> simp [Term.toSExp, Term.ofSExp, classify_fixed]
-  | .not a => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Op1.mk]
-  | .len a => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Op1.mk]
-  | .and a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .or a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .eq a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .lt a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .le a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .add a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .sub a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .mul a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .div a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .mod a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .cat a b => by simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b, Op2.mk]
-  | .ite c a b => by
-    simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp c, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b]
-  | .ctor d k [] => by simp [Term.toSExp, Term.ofSExp, classify_name]
-  | .ctor d k [a] => by simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a]
-  | .ctor d k [a, b] => by
-    simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b]
-  | .ctor d k [a, b, c] => by
-    simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a, Term.ofSExp_toSExp b,
-      Term.ofSExp_toSExp c]
-  | .ctor d k (a :: b :: c :: e :: rest) => by
-    have := Term.ofSExps_toSExps (a :: b :: c :: e :: rest)
+  | .str s, _ => by simp [Term.toSExp, Term.ofSExp]
+  | .bool b, _ => by cases b <;> simp [Term.toSExp, Term.ofSExp, classify_fixed]
+  | .shared .., h => by simp [Term.inDomain] at h
+  | .not a, h => by
+    simp only [Term.inDomain] at h
+    simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a h, Op1.mk]
+  | .len a, h => by
+    simp only [Term.inDomain] at h
+    simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a h, Op1.mk]
+  | .and a b, h | .or a b, h | .eq a b, h | .lt a b, h | .le a b, h | .add a b, h | .sub a b, h | .mul a b, h
+  | .div a b, h | .mod a b, h | .cat a b, h => by
+    simp only [Term.inDomain, Bool.and_eq_true] at h
+    simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp a h.1, Term.ofSExp_toSExp b h.2, Op2.mk]
+  | .ite c a b, h => by
+    simp only [Term.inDomain, Bool.and_eq_true] at h
+    simp [Term.toSExp, Term.ofSExp, classify_fixed, Term.ofSExp_toSExp c h.1.1, Term.ofSExp_toSExp a h.1.2,
+      Term.ofSExp_toSExp b h.2]
+  | .ctor d k [], _ => by simp [Term.toSExp, Term.ofSExp, classify_name]
+  | .ctor d k [a], h => by
+    simp only [Term.inDomain, Term.inDomains, Bool.and_eq_true] at h
+    simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a h.1]
+  | .ctor d k [a, b], h => by
+    simp only [Term.inDomain, Term.inDomains, Bool.and_eq_true] at h
+    simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a h.1, Term.ofSExp_toSExp b h.2.1]
+  | .ctor d k [a, b, c], h => by
+    simp only [Term.inDomain, Term.inDomains, Bool.and_eq_true] at h
+    simp [Term.toSExp, Term.toSExps, Term.ofSExp, classify_name, Term.ofSExp_toSExp a h.1, Term.ofSExp_toSExp b h.2.1,
+      Term.ofSExp_toSExp c h.2.2.1]
+  | .ctor d k (a :: b :: c :: e :: rest), h => by
+    simp only [Term.inDomain] at h
+    have := Term.ofSExps_toSExps (a :: b :: c :: e :: rest) h
     simp only [Term.toSExp, Term.toSExps] at this ⊢
     simp [Term.ofSExp, classify_name, this]
-  | .is d k a => by simp [Term.toSExp, Term.ofSExp, classify_fixed, classify_name, Term.ofSExp_toSExp a]
-  | .sel d k j a => by simp [Term.toSExp, Term.ofSExp, classify_name, Term.ofSExp_toSExp a]
-theorem Term.ofSExps_toSExps : (ts : List Term) → Term.ofSExps (Term.toSExps ts) = some ts
-  | [] => rfl
-  | t :: ts => by simp [Term.toSExps, Term.ofSExps, Term.ofSExp_toSExp t, Term.ofSExps_toSExps ts]
+  | .is d k a, h => by
+    simp only [Term.inDomain] at h
+    simp [Term.toSExp, Term.ofSExp, classify_fixed, classify_name, Term.ofSExp_toSExp a h]
+  | .sel d k j a, h => by
+    simp only [Term.inDomain] at h
+    simp [Term.toSExp, Term.ofSExp, classify_name, Term.ofSExp_toSExp a h]
+theorem Term.ofSExps_toSExps : (ts : List Term) → Term.inDomains ts = true → Term.ofSExps (Term.toSExps ts) = some ts
+  | [], _ => rfl
+  | t :: ts, h => by
+    simp only [Term.inDomains, Bool.and_eq_true] at h
+    simp [Term.toSExps, Term.ofSExps, Term.ofSExp_toSExp t h.1, Term.ofSExps_toSExps ts h.2]
 end
 
 /-! Printing and reading whole terms and values. -/
@@ -322,7 +363,8 @@ theorem simpleSym_name (nm : Name) : simpleSym nm.text = true := by
   cases nm <;>
     simp [simpleSym, Name.text, Name.chars, String.toList_ofList, List.all_eq_true, hu,
       show isDigit 'v' = false from by decide, show isSymChar 'v' = true from by decide,
-      show isDigit 'D' = false from by decide, show isSymChar 'D' = true from by decide] <;>
+      show isDigit 'D' = false from by decide, show isSymChar 'D' = true from by decide,
+      show isDigit 's' = false from by decide, show isSymChar 's' = true from by decide] <;>
     first | exact ⟨hd _, hd _, hd _⟩ | exact ⟨hd _, hd _⟩ | exact hd _
 
 theorem simpleSym_fixed : simpleSym "not" ∧ simpleSym "str.len" ∧ simpleSym "and" ∧ simpleSym "or" ∧ simpleSym "=" ∧
@@ -330,24 +372,12 @@ theorem simpleSym_fixed : simpleSym "not" ∧ simpleSym "str.len" ∧ simpleSym 
     simpleSym "mod" ∧ simpleSym "str.++" ∧ simpleSym "ite" ∧ simpleSym "true" ∧ simpleSym "false" ∧
     simpleSym "_" ∧ simpleSym "is" := by decide
 
-mutual
-/-- Whether every string literal of the term lies in the SMT-LIB string domain. -/
-def Term.inDomain : Term → Bool
-  | .str s => Smt.inDomain s
-  | .var _ | .int _ | .bool _ => true
-  | .not a | .len a | .is _ _ a | .sel _ _ _ a => a.inDomain
-  | .and a b | .or a b | .eq a b | .lt a b | .le a b | .add a b | .sub a b | .mul a b | .div a b | .mod a b
-  | .cat a b => a.inDomain && b.inDomain
-  | .ite c a b => c.inDomain && a.inDomain && b.inDomain
-  | .ctor _ _ args => Term.inDomains args
-def Term.inDomains : List Term → Bool
-  | [] => true
-  | t :: ts => t.inDomain && Term.inDomains ts
-end
 
 mutual
 theorem Term.toSExp_ok : (t : Term) → t.inDomain = true → t.toSExp.ok = true
   | .var n, _ => by simp [Term.toSExp, SExp.ok, simpleSym_name]
+  | .ref i, _ => by simp [Term.toSExp, SExp.ok, simpleSym_name]
+  | .shared .., h => by simp [Term.inDomain] at h
   | .int n, _ => by
     by_cases h : 0 ≤ n <;> simp [Term.toSExp, SExp.ok, SExp.oks, h, simpleSym_fixed]
   | .str s, h => by simpa [Term.toSExp, SExp.ok, Term.inDomain] using h
@@ -388,7 +418,7 @@ def Term.parse (text : String) : Option Term := (SExp.parse text).bind Term.ofSE
 
 /-- Reading back a printed term gives it, when its strings lie in the SMT-LIB domain. -/
 theorem Term.parse_print (t : Term) (h : t.inDomain = true) : Term.parse t.print = some t := by
-  simp [Term.parse, Term.print, SExp.parse_print _ (SExp.ok_wf _ (Term.toSExp_ok t h)), Term.ofSExp_toSExp]
+  simp [Term.parse, Term.print, SExp.parse_print _ (SExp.ok_wf _ (Term.toSExp_ok t h)), Term.ofSExp_toSExp t h]
 
 mutual
 def Val.toTerm : Val → Term

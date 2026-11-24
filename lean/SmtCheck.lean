@@ -68,6 +68,17 @@ def tableAnyV (t : E (.table .int .str)) (v : String) : E Ty.bool :=
     (.cons t (.cons (.lam (.bin (.eq rfl) (.var (.there .here)) (.str v))) .nil))
 def tableSize (t : E (.table .int .str)) : E .int := .call (.prim .tableSize [.int, .str] rfl) (.cons t .nil)
 
+/-- `n` inserts into a new table, cycling through three keys, so the table stays within its three slots. As trees,
+the terms would grow about seventyfold per insert; shared, the script grows by one definition per insert. -/
+def inserts : Nat → E (.table .int .str)
+  | 0 => .call (.prim .tableNew [.int, .str] rfl) .nil
+  | n + 1 => .call (.prim .tableInsert [.int, .str] rfl)
+    (.cons (inserts n) (.cons (.int (n % 3)) (.cons (.str s!"v{n}") .nil)))
+/-- `let x = 1; let x = x + x; ...`, `n` times: a tree of `2 ^ n` leaves, a script of `n` definitions. -/
+def doubling : Nat → (Γ : List Ty) → Expr [] Γ .int
+  | 0, _ => .int 1
+  | n + 1, Γ => .let_ (doubling n Γ) (.bin .add (.var .here) (.var .here))
+
 def cases : List (String × (t : Ty) × E t) :=
   [ ("truncating division", ⟨.int, .bin .div (.int (-7)) (.int 2)⟩),
     ("division by a negative", ⟨.int, .bin .div (.int 7) (.int (-2))⟩),
@@ -112,6 +123,8 @@ def cases : List (String × (t : Ty) × E t) :=
     ("table remove", ⟨.int, tableSize (.call (.prim .tableRemove [.int, .str] rfl) (.cons t2 (.cons (.int 1) .nil)))⟩),
     ("table insert into new", ⟨.int, tableSize (.call (.prim .tableInsert [.int, .str] rfl)
       (.cons (.call (.prim .tableNew [.int, .str] rfl) .nil) (.cons (.int 5) (.cons (.str "x") .nil))))⟩),
+    ("twelve inserts share their tables", ⟨Ty.bool, tableAnyV (inserts 12) "v11"⟩),
+    ("forty lets share their values", ⟨.int, doubling 40 []⟩),
     ("require passes", ⟨Ty.result .int .str, .call (.prim .require [.int, .str] rfl)
       (.cons (.bin .lt (.int 1) (.int 2)) (.cons (.str "no")
         (.cons (.lam (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons (.int 1) .nil))) .nil)))⟩) ]
