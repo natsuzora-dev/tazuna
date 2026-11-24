@@ -5,6 +5,7 @@ import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
 import Tazuna.Semantics.Reach
+import Tazuna.Semantics.PendingInv
 import Tazuna.Smt.Decode
 import Tazuna.Smt.StepEncode
 import Tazuna.Smt.Bounds
