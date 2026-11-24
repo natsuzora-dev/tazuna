@@ -228,6 +228,21 @@ def encodePats {ts : List Ty} {Δ : List Ty} : Pats ts Δ → Codes ts → Excep
     pure (andT m1 m2, Codes.append δ1 δ2)
 end
 
+/-- The code of each built-in that has an exact encoding: a table of term builders indexed by the built-in. -/
+def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal (Code (p.ty.inst args)) :=
+  match p, args, h with
+  | .length, _, _ => .ok fun (s, ()) => .ok (.len s, tt)
+  | .dateAddDays, _, _ => .ok fun (d, n, ()) => .ok (.add d n, tt)
+  | .dateDaysBetween, _, _ => .ok fun (a, b, ()) => .ok (.sub b a, tt)
+  | .require, args, _ => .ok fun (holds, rej, next, ()) => do
+    let (v, c) ← next ()
+    let r ← need "a rejection that has no term" (Code.term? _ rej)
+    let a := (Ty.param 0).inst args
+    let e := (Ty.param 1).inst args
+    let err ← adtCtor L 2 [a, e] [[a], [e]] 1 [r]
+    pure (.ite holds v err, .ite holds c tt)
+  | p, _, _ => .error (.outside s!"the built-in {p.sig.name}")
+
 variable {G : List Ty} (gs : Encs G)
 
 mutual
@@ -291,7 +306,7 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
   | .neg e, σ => do
     let (x, c) ← encode e σ
     pure (.sub (.int 0) x, c)
-  | .prim _ _ _, _ => .error (.outside "a built-in")
+  | .prim p args h, _ => do pure (← primCode L p args h, tt)
 def encodes {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Codes Γ → Enc (Codes ts)
   | .nil, _ => .ok ((), tt)
   | .cons e es, σ => do

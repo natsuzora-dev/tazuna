@@ -640,6 +640,62 @@ theorem denotes_map (ts : List Term) : Term.denotes M ts = ts.map (Term.denote M
 
 end
 
+section
+variable {M : Model} {L : Layout}
+
+/-- Each built-in's code relates to its meaning. -/
+theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : Code (p.ty.inst args))
+    (h : primCode L p args hp = .ok s) : Rel M L (p.ty.inst args) (p.den args hp) s := by
+  cases p
+  case length =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, ()⟩ ⟨sx, ()⟩ ⟨hx, _⟩ r c hr _
+    cases hr
+    change Rel M L .str x sx at hx
+    show Rel M L .int _ (Term.len sx)
+    simp only [Rel, RelV] at hx ⊢
+    simp [Term.denote, hx, Val.toStr]; rfl
+  case dateAddDays =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, y, ()⟩ ⟨sx, sy, ()⟩ ⟨hx, hy, _⟩ r c hr _
+    cases hr
+    change Rel M L .date x sx at hx
+    change Rel M L .int y sy at hy
+    show Rel M L .date _ (Term.add sx sy)
+    simp only [Rel, RelV] at hx hy ⊢
+    simp [Term.denote, hx, hy, Val.toInt]; rfl
+  case dateDaysBetween =>
+    simp only [primCode] at h; cases h
+    intro ⟨x, y, ()⟩ ⟨sx, sy, ()⟩ ⟨hx, hy, _⟩ r c hr _
+    cases hr
+    change Rel M L .date x sx at hx
+    change Rel M L .date y sy at hy
+    show Rel M L .int _ (Term.sub sy sx)
+    simp only [Rel, RelV] at hx hy ⊢
+    simp [Term.denote, hx, hy, Val.toInt]; rfl
+  case require =>
+    simp only [primCode] at h; cases h
+    intro ⟨b, rej, next, ()⟩ ⟨sb, srej, snext, ()⟩ ⟨hb, hrej, hnext, _⟩ r c hr hc
+    obtain ⟨⟨v, c1⟩, h1, hr⟩ := bind_ok.1 hr
+    obtain ⟨t, h2, hr⟩ := bind_ok.1 hr
+    obtain ⟨err, h3, hr⟩ := bind_ok.1 hr
+    cases pure_ok.1 hr
+    have hb' := (rel_bool _ _).1 hb
+    have hv := hnext () () trivial v c1 h1
+    have he := adtCtor_rel (M := M) (vs := [[_], [_]]) ⟨1, by simp⟩ [t] err h3 (rej, ())
+      ⟨_, _, rfl, (rel_term (need_ok.1 h2) _).1 hrej, rfl⟩
+    show RelV L (.adt 2 [_, _] [[_], [_]]) (if Ty.toBool b then next () else Ty.error rej)
+      (Term.denote M (Term.ite sb v err))
+    simp only [Holds, Term.denote, hb', Val.toBool] at hc ⊢
+    by_cases hbt : Ty.toBool b = true
+    · simp only [hbt, ite_true] at hc ⊢
+      exact hv hc
+    · simp only [hbt, Bool.false_eq_true, ite_false] at hc ⊢
+      exact he
+  all_goals simp [primCode] at h
+
+end
+
 theorem encodeClauses_none {L : Layout} {G : List Ty} {gs : Encs G} {Γ : List Ty} {t r : Ty} {sh : List Shape} :
     (cs : Clauses G Γ t r sh) → (σ : Codes Γ) → (s : Code t) → encodeClauses L gs cs σ s = .ok none → sh = []
   | .nil, _, _, _ => rfl
@@ -815,7 +871,11 @@ theorem encode_agrees {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (σ : Code
     have := encode_agrees e σ ρ hσ x _ h1 hc
     simp only [Rel, RelV] at this ⊢
     simp [Expr.eval, Term.denote, this, Val.toInt]; omega
-  | .prim .., _, _, _, _, _, h, _ => by cases h
+  | .prim p args hp, _, _, _, s, c, h, _ => by
+    simp only [encode] at h
+    obtain ⟨r, h1, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    exact primCode_agrees p args hp _ h1
 theorem encodes_agrees {Γ : List Ty} {ts : List Ty} : (es : Exprs G Γ ts) → (σ : Codes Γ) → (ρ : Ty.dens Γ) →
     Rels M L Γ ρ σ → (ss : Codes ts) → (c : Term) → encodes L gs es σ = .ok (ss, c) → Holds M c →
     Rels M L ts (Exprs.eval g es ρ) ss

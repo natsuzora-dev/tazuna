@@ -76,7 +76,14 @@ def cases : List (String × (t : Ty) × E t) :=
     ("case on a record", ⟨.str, .case square
       (.cons (.ctor (vs := [[.int, .str], [.int]]) ⟨0, by decide⟩ (.cons .wild (.cons .bind .nil))) (.var .here)
         (.cons (.ctor (vs := [[.int, .str], [.int]]) ⟨1, by decide⟩ (.cons .wild .nil)) (.str "circle") .nil))
-      ⟨10, rfl⟩⟩) ]
+      ⟨10, rfl⟩⟩),
+    ("length counts code points", ⟨.int, .call (.prim .length [] rfl) (.cons (.str "e\u0301😀a") .nil)⟩),
+    ("require rejects", ⟨Ty.result .int .str, .call (.prim .require [.int, .str] rfl)
+      (.cons (.bin .lt (.int 2) (.int 1)) (.cons (.str "no")
+        (.cons (.lam (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons (.int 1) .nil))) .nil)))⟩),
+    ("require passes", ⟨Ty.result .int .str, .call (.prim .require [.int, .str] rfl)
+      (.cons (.bin .lt (.int 1) (.int 2)) (.cons (.str "no")
+        (.cons (.lam (.ctor (vs := [[.int], [.str]]) ⟨0, by decide⟩ (.cons (.int 1) .nil))) .nil)))⟩) ]
 
 def dt : Script :=
   { datatypes := [Datatype.mk [[.int, .str], []], Datatype.mk [[.dt 0]]], vars := [.dt 1, .dt 0],
