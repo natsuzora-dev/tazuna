@@ -25,7 +25,7 @@ deriving Repr
 
 /-- What a kept function's code says of it: where it is written and the types of the values it captured. -/
 structure SiteKey where
-  site : Nat × Nat
+  site : SiteId
   Γ : List Ty
 
 /-- One kind of effect a program writes: a request to the external command (with a rejection type) or query `name`

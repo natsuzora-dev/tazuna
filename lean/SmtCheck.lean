@@ -617,8 +617,8 @@ def insertE : E (.fn [recordsT, .int] recordsT) :=
     (.cons (.var .here) (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))))
 
 def pendingSites : List AnySite :=
-  [⟨[.int], _, ⟨(1, 1), [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨(2, 1), [], .nil, rfl, rfl, rateAnswerE⟩⟩,
-   ⟨[], _, ⟨(3, 1), [], .nil, rfl, rfl, rateEnsuresE⟩⟩]
+  [⟨[.int], _, ⟨⟨"m", 1, 1⟩, [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨⟨"m", 2, 1⟩, [], .nil, rfl, rfl, rateAnswerE⟩⟩,
+   ⟨[], _, ⟨⟨"m", 3, 1⟩, [], .nil, rfl, rfl, rateEnsuresE⟩⟩]
 
 def askR : ReactionV recordsT .int := ⟨"ask", fun _ _ _ => []⟩
 
@@ -1039,7 +1039,7 @@ def boundCheck (solver : Solver) : IO Bool := do
   return ok
 
 /-! An effect value as its kind's variant: `request_command(external_command("send"), x + k, fn(_) { [x] })` with
-`x` free, the `on_answer` site (3, 7) capturing `x`. The layout lists a second kind first, at another site, so the
+`x` free, the `on_answer` site m:3:7 capturing `x`. The layout lists a second kind first, at another site, so the
 variant index is not 0 by accident. The solver's value of the effect must be the variant of the effect `eval` builds
 at the solver's `x`: the same kind (name and site), the input, and the captured value. -/
 
@@ -1050,14 +1050,14 @@ def sendE (k : Int) : Expr [] [.int] (.dsl .effect [.int]) :=
   let handle : Expr [] [.int] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
-  let clo : Expr [] [.int] (.dsl .closure [answerTyE]) := .close (3, 7) (.cons (.var .here) .nil) rfl rfl body
+  let clo : Expr [] [.int] (.dsl .closure [answerTyE]) := .close ⟨"m", 3, 7⟩ (.cons (.var .here) .nil) rfl rfl body
   .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add (.var .here) (.int k)) (.cons clo .nil)))
 
-def sendKey (site : Nat × Nat) : EffectKey :=
+def sendKey (site : SiteId) : EffectKey :=
   ⟨.int, "send", .int, Ty.nil, some Ty.nil, none, ⟨site, [.int]⟩⟩
 
 def effLayout : Layout :=
-  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey (9, 9), sendKey (3, 7)] }
+  Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2) { effects := [sendKey ⟨"m", 9, 9⟩, sendKey ⟨"m", 3, 7⟩] }
     [.dsl .effect [.int], .int])
 
 /-- Whether the solver's value `v` is the variant of the effect `eff` holds: its kind's name and site, its input and

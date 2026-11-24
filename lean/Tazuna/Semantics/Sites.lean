@@ -12,7 +12,7 @@ namespace Tazuna.Ir
 /-- Where a program writes a kept function: its source over the definitions before the global that holds it, with
 the types `Γ` of the values it captures. With those values it is the closure record `Site.fn`. -/
 structure Site (Γ : List Ty) (t : Ty) where
-  site : Nat × Nat
+  site : SiteId
   G : List Ty
   defs : Defs G
   hΓ : (Ty.tuple Γ).isData = true

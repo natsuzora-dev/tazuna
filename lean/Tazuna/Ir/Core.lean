@@ -5,6 +5,14 @@ import Tazuna.Ir.Builtin
 
 namespace Tazuna.Ir
 
+/-- Where a program writes a kept function: the module and the line and column in its source. Positions alone repeat
+across modules. -/
+structure SiteId where
+  module : String
+  line : Nat
+  col : Nat
+deriving DecidableEq, Repr
+
 /-- A variable of type `t` in the context `Γ`, the innermost binding first. -/
 inductive Var : List Ty → Ty → Type
   | here {Γ t} : Var (t :: Γ) t
@@ -157,8 +165,8 @@ inductive Expr (G : List Ty) : List Ty → Ty → Type
   | prim {Γ} (p : Prim) (args : List Ty) (h : p.ok args = true) : Expr G Γ (p.ty.inst args)
   /-- A function a structure value keeps: its source `body` over the values `env` it captures, all data, so the
   function's code is `body`'s encoding. Elaboration closes each function a structure built-in keeps over the
-  variables it uses, and names it by `site`, the line and column where it is written. -/
-  | close {Γ Γ' t} (site : Nat × Nat) (env : Exprs G Γ Γ') (hΓ : (Ty.tuple Γ').isData = true) (ht : t.isData = true)
+  variables it uses, and names it by `site`, where it is written. -/
+  | close {Γ Γ' t} (site : SiteId) (env : Exprs G Γ Γ') (hΓ : (Ty.tuple Γ').isData = true) (ht : t.isData = true)
       (body : Expr G Γ' t) : Expr G Γ (.dsl .closure [t])
 inductive Exprs (G : List Ty) : List Ty → List Ty → Type
   | nil {Γ} : Exprs G Γ []

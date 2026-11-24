@@ -10,7 +10,7 @@ values `env` it captured, so its meaning is `body`'s value there (`Fun.fn`) and 
 the closure record of defunctionalization: which function it is, and what it captured. -/
 structure Fun (t : Ty) where
   /-- Where the function is written, as `Expr.close` names it. -/
-  site : Nat × Nat
+  site : SiteId
   G : List Ty
   defs : Defs G
   Γ : List Ty
