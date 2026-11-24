@@ -9,6 +9,7 @@ import Tazuna.Smt.StepEncode
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.EventStep
 import Tazuna.Smt.EventExact
+import Tazuna.Smt.CommandExact
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
