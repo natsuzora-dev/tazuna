@@ -66,7 +66,7 @@ pub type Param {
 
 pub type Stmt {
   Let(at: At, pattern: Pat, annotation: Option(Annotation), value: Expr)
-  Use(at: At, patterns: List(Pat), call: Expr)
+  Use(at: At, patterns: List(#(Pat, Option(Annotation))), call: Expr)
   Do(value: Expr)
 }
 
@@ -102,6 +102,11 @@ pub type Variant {
   Variant(name: String, fields: List(#(Option(String), Ty)))
 }
 
+/// `ty` is the aliased type as written; it may name other aliases.
+pub type Alias {
+  Alias(name: String, params: List(String), ty: Ty, at: At)
+}
+
 pub type Function {
   Function(name: String, params: List(FnParam), ret: Ty, body: Expr, at: At)
 }
@@ -119,6 +124,7 @@ pub type Program {
     root: String,
     sources: List(#(String, String)),
     types: List(TypeDef),
+    aliases: List(Alias),
     functions: List(Function),
     constants: List(Constant),
     solved: Dict(Int, Ty),
@@ -181,6 +187,19 @@ pub fn to_json(p: Program) -> Json {
               ),
             ),
             #("at", at_json(t.at)),
+          ])
+        }),
+      ),
+    ),
+    #(
+      "aliases",
+      Array(
+        list.map(p.aliases, fn(a) {
+          Object([
+            #("name", Str(a.name)),
+            #("params", Array(list.map(a.params, Str))),
+            #("ty", ty(a.ty)),
+            #("at", at_json(a.at)),
           ])
         }),
       ),
@@ -397,7 +416,17 @@ fn stmt_json(s: Stmt, ty: fn(Ty) -> Json) -> Json {
       Object([
         #("stmt", Str("use")),
         #("at", at_json(at)),
-        #("patterns", Array(list.map(ps, pat_json(_, ty)))),
+        #(
+          "patterns",
+          Array(
+            list.map(ps, fn(p) {
+              Object([
+                #("pattern", pat_json(p.0, ty)),
+                ..optional("annotation", p.1, annotation_json)
+              ])
+            }),
+          ),
+        ),
         #("call", expr_json(call, ty)),
       ])
     Do(v) -> Object([#("stmt", Str("expr")), #("value", expr_json(v, ty))])

@@ -117,8 +117,9 @@ partial def findCycle (c : Ctx) : Except LoadError Unit := do
     return g.name :: finished
   discard <| c.globals.foldlM (fun finished g => visit [] finished g) []
 
-def userTypes (fileOf : String → Option String) (types : List Surface.TypeDef) : Except LoadError (List TypeDecl) := do
-  let names := prelude.map (·.name) ++ types.map (·.name)
+def userTypes (fileOf : String → Option String) (types : List Surface.TypeDef) (aliases : List Surface.AliasDef) :
+    Except LoadError (List TypeDecl) := do
+  let names := prelude.map (·.name) ++ types.map (·.name) ++ aliases.map (·.name)
   if let some n := nodup names then throw ⟨none, none, s!"type {n} is declared twice or is built in"⟩
   let shells : List TypeDecl := prelude ++ types.map fun t => { name := t.name, params := t.params, variants := [] }
   types.mapM fun t => do
@@ -134,6 +135,22 @@ def userTypes (fileOf : String → Option String) (types : List Surface.TypeDef)
         | .error e => throw (err e)
       pure ({ name := v, fields } : Variant)
     pure { name := t.name, params := t.params, variants }
+
+/-- Every alias must stand for a type, even one nothing uses: its parameters distinct, its body's type variables among
+them, and its expansion free of cycles and well formed. -/
+def checkAliases (fileOf : String → Option String) (T : List TypeDecl) (aliases : List Surface.AliasDef) :
+    Except LoadError Unit :=
+  aliases.forM fun a => do
+    let err (msg : String) : LoadError := ⟨fileOf a.name, some a.pos, s!"{a.name}: {msg}"⟩
+    if builtinName a.name || a.name.startsWith "tazuna." then throw (err "this type belongs to Lean")
+    if let some p := nodup a.params then throw (err s!"type parameter {p} is declared twice")
+    if let some v := (tvarsOf [] a.ty).find? (!a.params.contains ·) then throw (err s!"unbound type variable {v}")
+    let body ← match Surface.expandAliases aliases [a.name] a.ty with
+      | .ok t => pure t
+      | .error e => throw (err e)
+    match toTy T (a.params.zipIdx.map fun (p, k) => (p, Ty.param k)) body with
+    | .ok _ => pure ()
+    | .error e => throw (err e)
 
 def globalsOf (fileOf : String → Option String) (p : Surface.Program) : Except LoadError (List Global) := do
   let fns ← p.functions.mapM fun f => do
@@ -157,8 +174,9 @@ def load (rootTy : Ty) (j : Lean.Json) : Except LoadError (Program rootTy) := do
   unless p.version == irVersion do
     throw ⟨none, none, s!"IR version {p.version}; this engine reads version {irVersion}"⟩
   let fileOf (g : String) := p.sources.lookup (moduleOf g)
-  let user ← userTypes fileOf p.types
+  let user ← userTypes fileOf p.types p.aliases
   let T := prelude ++ user
+  checkAliases fileOf T p.aliases
   let globals ← globalsOf fileOf p
   let c : Ctx := { sources := p.sources, globals }
   findCycle c

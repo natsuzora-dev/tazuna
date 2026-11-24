@@ -6,12 +6,14 @@ source text; Lean gives them meaning in `Tazuna.Ir.Elab`.
 
 The JSON contract, version 2:
 
-- Program: `{"tazuna_ir": 2, "root", "sources": [{"module", "path"}], "types", "functions", "constants"}`. A global's
-  name is `module.name`; its module's source path locates its errors.
+- Program: `{"tazuna_ir": 2, "root", "sources": [{"module", "path"}], "types", "aliases", "functions", "constants"}`.
+  A global's name is `module.name`; its module's source path locates its errors.
 - Type: `{"con": name, "args": [..]}`, `{"fn": [..], "ret"}`, `{"tuple": [..]}`, `{"var": name}`, and in source
   annotations only `{"hole": text}`.
-- Declarations: types `{"name", "params", "variants": [{"name", "fields": [{"label"?, "ty"}]}], "at"}`; functions
+- Declarations: types `{"name", "params", "variants": [{"name", "fields": [{"label"?, "ty"}]}], "at"}`; type aliases
+  `{"name", "params", "ty", "at"}`, which any type in the IR may name; functions
   `{"name", "params": [{"label"?, "name", "ty"}], "ret", "body", "at"}`; constants `{"name", "ty", "value", "at"}`.
+- A `use` statement's patterns are `{"pattern", "annotation"?}`.
 - Every expression and pattern carries `"ty"` and `"at": [line, column]`. Operators (`"bin"`, `"un"`) name Gleam's symbol
   in `"operator"`.
 - Arguments of calls, constructors, record updates and constructor patterns are `{"label"?, "value"?}` (patterns:
@@ -81,7 +83,7 @@ inductive Param where
   | mk (name : String) (ty : STy) (annotation : Option STy)
 inductive Stmt where
   | let_ (pos : At) (pattern : Pat) (annotation : Option STy) (value : Expr)
-  | use (pos : At) (patterns : List Pat) (call : Expr)
+  | use (pos : At) (patterns : List (Pat × Option STy)) (call : Expr)
   | expr (value : Expr)
 inductive Clause where
   | mk (alternatives : List (List Pat)) (guard : Option Expr) (body : Expr)
@@ -95,6 +97,12 @@ structure TypeDef where
   name : String
   params : List String
   variants : List (String × List (Option String × STy))
+  pos : At
+
+structure AliasDef where
+  name : String
+  params : List String
+  ty : STy
   pos : At
 
 structure FunDef where
@@ -115,11 +123,13 @@ structure Program where
   root : String
   sources : List (String × String)
   types : List TypeDef
+  aliases : List AliasDef
   functions : List FunDef
   constants : List ConstDef
 
-/-- A JSON reading error, with the position of the innermost node read so far. -/
-abbrev R := ExceptT String (StateM (Option At))
+/-- A JSON reading error, with the position of the innermost node read so far. Types are read with the program's
+aliases in hand. -/
+abbrev R := ReaderT (List AliasDef) (ExceptT String (StateM (Option At)))
 
 def get (j : Json) (k : String) : R Json :=
   match j.getObjVal? k with
@@ -152,16 +162,16 @@ def readAt (j : Json) : R At := do
     | _, _ => throw "\"at\" must be [line, column]"
   | _ => throw "\"at\" must be [line, column]"
 
-partial def readTy (j : Json) : R STy := do
+partial def readTyAsWritten (j : Json) : R STy := do
   if let some n := opt j "con" then
     let .ok n := n.getStr? | throw "\"con\" must be a string"
-    return .con n (← (← arr j "args").mapM readTy)
+    return .con n (← (← arr j "args").mapM readTyAsWritten)
   if let some ps := opt j "fn" then
     let .ok ps := ps.getArr? | throw "\"fn\" must be an array"
-    return .fn (← ps.toList.mapM readTy) (← readTy (← get j "ret"))
+    return .fn (← ps.toList.mapM readTyAsWritten) (← readTyAsWritten (← get j "ret"))
   if let some ts := opt j "tuple" then
     let .ok ts := ts.getArr? | throw "\"tuple\" must be an array"
-    return .tuple (← ts.toList.mapM readTy)
+    return .tuple (← ts.toList.mapM readTyAsWritten)
   if let some n := opt j "var" then
     let .ok n := n.getStr? | throw "\"var\" must be a string"
     return .var n
@@ -169,6 +179,35 @@ partial def readTy (j : Json) : R STy := do
     let .ok n := n.getStr? | throw "\"hole\" must be a string"
     return .hole n
   throw s!"not a type: {j.compress.take 120}"
+
+partial def substVars (by_ : List (String × STy)) : STy → STy
+  | .var n => (by_.lookup n).getD (.var n)
+  | .con n args => .con n (args.map (substVars by_))
+  | .fn ps r => .fn (ps.map (substVars by_)) (substVars by_ r)
+  | .tuple ts => .tuple (ts.map (substVars by_))
+  | .hole h => .hole h
+
+/-- Replaces every alias by the type it stands for. `visiting` holds the aliases being expanded, so an alias that
+refers to itself is an error instead of a loop. -/
+partial def expandAliases (aliases : List AliasDef) (visiting : List String) : STy → Except String STy
+  | .con n args => do
+    let args ← args.mapM (expandAliases aliases visiting)
+    match aliases.find? (·.name == n) with
+    | none => pure (.con n args)
+    | some a =>
+      if visiting.contains n then throw s!"type alias {n} refers to itself"
+      unless a.params.length == args.length do
+        throw s!"type alias {n} takes {a.params.length} arguments, given {args.length}"
+      expandAliases aliases (n :: visiting) (substVars (a.params.zip args) a.ty)
+  | .fn ps r => return .fn (← ps.mapM (expandAliases aliases visiting)) (← expandAliases aliases visiting r)
+  | .tuple ts => return .tuple (← ts.mapM (expandAliases aliases visiting))
+  | t => pure t
+
+/-- A type with its aliases expanded: elaboration never sees an alias. -/
+def readTy (j : Json) : R STy := do
+  match expandAliases (← read) [] (← readTyAsWritten j) with
+  | .ok t => pure t
+  | .error e => throw e
 
 def optTy (j : Json) (k : String) : R (Option STy) :=
   match opt j k with | none => pure none | some t => some <$> readTy t
@@ -207,7 +246,9 @@ partial def readStmt (j : Json) : R Stmt := do
   match ← str j "stmt" with
   | "let" => pure (.let_ (← readAt j) (← readPat (← get j "pattern")) (← optTy j "annotation")
       (← readExpr (← get j "value")))
-  | "use" => pure (.use (← readAt j) (← (← arr j "patterns").mapM readPat) (← readExpr (← get j "call")))
+  | "use" =>
+    let pats ← (← arr j "patterns").mapM fun p => do return (← readPat (← get p "pattern"), ← optTy p "annotation")
+    pure (.use (← readAt j) pats (← readExpr (← get j "call")))
   | "expr" => pure (.expr (← readExpr (← get j "value")))
   | s => throw s!"unknown statement \"{s}\""
 
@@ -259,13 +300,13 @@ structure ReadError where
   pos : Option At
   message : String
 
-def inGlobal {α} (name : String) (r : R α) : ExceptT ReadError Id α :=
-  match (r.run.run none) with
+def inGlobal {α} (aliases : List AliasDef) (name : String) (r : R α) : ExceptT ReadError Id α :=
+  match ((r.run aliases).run.run none) with
   | (.ok a, _) => pure a
   | (.error e, pos) => throw ⟨some name, pos, e⟩
 
 def topLevel {α} (r : R α) : ExceptT ReadError Id α :=
-  match (r.run.run none) with
+  match ((r.run []).run.run none) with
   | (.ok a, _) => pure a
   | (.error e, pos) => throw ⟨none, pos, e⟩
 
@@ -273,9 +314,15 @@ def readProgram (j : Json) : Except ReadError Program := do
   let version ← topLevel (nat j "tazuna_ir")
   let root ← topLevel (str j "root")
   let sources ← topLevel do (← arr j "sources").mapM fun s => do return (← str s "module", ← str s "path")
+  let aliases ← (← topLevel (arr j "aliases")).mapM fun a => do
+    let name ← topLevel (str a "name")
+    inGlobal [] name do
+      let params ← (← arr a "params").mapM fun p => match p.getStr? with
+        | .ok s => pure s | .error _ => throw "a type parameter must be a string"
+      return { name, params, ty := ← readTyAsWritten (← get a "ty"), pos := ← readAt a : AliasDef }
   let types ← (← topLevel (arr j "types")).mapM fun t => do
     let name ← topLevel (str t "name")
-    inGlobal name do
+    inGlobal aliases name do
       let variants ← (← arr t "variants").mapM fun v => do
         return (← str v "name", ← (← arr v "fields").mapM fun f => do return (← optStr f "label", ← readTy (← get f "ty")))
       let params ← (← arr t "params").mapM fun p => match p.getStr? with
@@ -283,16 +330,16 @@ def readProgram (j : Json) : Except ReadError Program := do
       return { name, params, variants, pos := ← readAt t : TypeDef }
   let functions ← (← topLevel (arr j "functions")).mapM fun f => do
     let name ← topLevel (str f "name")
-    inGlobal name do
+    inGlobal aliases name do
       let pos ← readAt f
       let params ← (← arr f "params").mapM fun p => do
         return (← optStr p "label", ← str p "name", ← readTy (← get p "ty"))
       return { name, params, ret := ← readTy (← get f "ret"), body := ← readExpr (← get f "body"), pos : FunDef }
   let constants ← (← topLevel (arr j "constants")).mapM fun c => do
     let name ← topLevel (str c "name")
-    inGlobal name do
+    inGlobal aliases name do
       let pos ← readAt c
       return { name, ty := ← readTy (← get c "ty"), value := ← readExpr (← get c "value"), pos : ConstDef }
-  return { version, root, sources, types, functions, constants }
+  return { version, root, sources, types, aliases, functions, constants }
 
 end Tazuna.Ir.Surface

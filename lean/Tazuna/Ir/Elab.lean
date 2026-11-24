@@ -10,7 +10,9 @@ import Tazuna.Ir.Surface
 - `use p <- f(a)` followed by the rest of the block is `f(a, fn(p) { rest })`, the callback filling a place like an
   unlabelled argument written last. A `use` call node's type is the type of that whole call; so is the type of a call
   node a pipe inserts into.
-- `let p = e` followed by the rest of the block matches `e` against `p`, which must be irrefutable.
+- `let p = e` followed by the rest of the block matches `e` against `p`, which must be irrefutable. A block that ends
+  with `let p = e` has the value of `e`.
+- Type aliases are expanded when the IR is read (`Tazuna.Ir.Surface.readTy`), so elaboration never sees one.
 - `case a, b { p, q | r, s -> .. }` matches the tuple `#(a, b)`; each alternative is its own clause.
 - A labelled argument or pattern without a value is the variable named by the label.
 
@@ -262,7 +264,7 @@ callback with its patterns and the rest of the block. -/
 inductive Slot (T : List TypeDecl) (G : List Ty) (Γ : List Ty) where
   | expr (e : Surface.Expr)
   | typed (pos : At) (t : Ty) (e : Expr T G Γ t)
-  | callback (pos : At) (patterns : List Surface.Pat) (rest : List Surface.Stmt)
+  | callback (pos : At) (patterns : List (Surface.Pat × Option STy)) (rest : List Surface.Stmt)
 
 section Exprs
 variable {T : List TypeDecl} {G : List Ty} (cx : Cx T G)
@@ -472,7 +474,10 @@ partial def elabSlot (sc : Scope) (t : Ty) : Slot T G (ctx sc) → E (Expr T G (
   | .callback pos pats rest => do
     let .fn ps r := t | fail pos s!"use callback where {showTy T t} is expected"
     unless ps.length == pats.length do fail pos s!"use binds {pats.length} values; the callback takes {ps.length}"
-    let named := pats.mapIdx fun k p => match p with
+    for ((_, ann), t) in pats.zip ps do
+      if let some a := ann then
+        unless annotationFits T cx.σ a t do fail pos s!"use pattern annotated with a type that is not {showTy T t}"
+    let named := pats.mapIdx fun k (p, _) => match p with
       | .mk _ _ (.var n) => (n, none)
       | .mk _ _ (.discard _) => ("", none)
       | p => (s!"use pattern {k}", some p)
@@ -516,7 +521,14 @@ partial def elabItems (sc : Scope) (t : Ty) : List Surface.Expr → E (Items T G
 partial def elabBlock (sc : Scope) (pos : At) : List Surface.Stmt → E ((t : Ty) × Expr T G (ctx sc) t)
   | [] => fail pos "empty block"
   | [.expr e] => elabExpr sc e
-  | [.let_ p ..] | [.use p ..] => fail p "a block ends with an assignment"
+  | [.let_ p pat ann value] => do
+    let ⟨t, x⟩ ← elabExpr sc value
+    if let some a := ann then
+      unless annotationFits T cx.σ a t do fail p s!"let annotated with a type that is not {showTy T t}"
+    let ⟨_, pat'⟩ ← elabPatTop T cx.σ p t pat
+    unless Pat.irrefutable pat' do fail p "let pattern can fail to match"
+    pure ⟨t, x⟩
+  | [.use p ..] => fail p "a block ends with use"
   | .expr e :: rest => do
     let ⟨t, x⟩ ← elabExpr sc e
     let ⟨r, body⟩ ← elabBlock (("", t) :: sc) pos rest

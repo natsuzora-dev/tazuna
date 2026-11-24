@@ -39,15 +39,12 @@ pub type Restricted {
   External
   ForeignFunction
   ForeignType
-  TypeAlias
   Recursion
   ShadowedImport
   MixedReference
   MultiVariantUpdate
   VariantField
   ConstructorValue
-  TrailingLet
-  UseAnnotation
   AnnotationNeeded
 }
 
@@ -66,15 +63,12 @@ pub const restricted = [
   External,
   ForeignFunction,
   ForeignType,
-  TypeAlias,
   Recursion,
   ShadowedImport,
   MixedReference,
   MultiVariantUpdate,
   VariantField,
   ConstructorValue,
-  TrailingLet,
-  UseAnnotation,
   AnnotationNeeded,
 ]
 
@@ -108,15 +102,12 @@ pub fn kind_name(kind: Kind) -> String {
         External -> "external"
         ForeignFunction -> "foreignFunction"
         ForeignType -> "foreignType"
-        TypeAlias -> "typeAlias"
         Recursion -> "recursion"
         ShadowedImport -> "shadowedImport"
         MixedReference -> "mixedReference"
         MultiVariantUpdate -> "multiVariantUpdate"
         VariantField -> "variantField"
         ConstructorValue -> "constructorValue"
-        TrailingLet -> "trailingLet"
-        UseAnnotation -> "useAnnotation"
         AnnotationNeeded -> "annotationNeeded"
       }
   }
@@ -158,9 +149,11 @@ type TypeInfo {
   TypeInfo(params: List(String), variants: List(ir.Variant))
 }
 
+/// `ty` has its aliases expanded, for typing; `written` keeps them, for the IR
+/// and printing back.
 type Global {
-  GFn(labels: List(Option(String)), tvars: List(String), ty: Ty)
-  GConst(ty: Ty)
+  GFn(labels: List(Option(String)), tvars: List(String), ty: Ty, written: Ty)
+  GConst(ty: Ty, written: Ty)
   GCtor(type_: String, variant: String)
 }
 
@@ -168,7 +161,8 @@ type Env {
   Env(
     mods: Dict(String, Mod),
     types: Dict(String, TypeInfo),
-    aliases: List(String),
+    /// Alias to its parameters and the type it stands for, as written.
+    aliases: Dict(String, #(List(String), Ty)),
     globals: Dict(String, Global),
   )
 }
@@ -269,11 +263,13 @@ pub fn convert(
     Env(
       mods: dict.from_list(list.map([dsl, ..mods], fn(m) { #(m.name, m) })),
       types: dict.new(),
-      aliases: list.flat_map(mods, fn(m) {
-        list.map(m.ast.type_aliases, fn(a) {
-          m.name <> "." <> a.definition.name
-        })
-      }),
+      aliases: dict.from_list(
+        list.flat_map([dsl, ..mods], fn(m) {
+          list.map(m.ast.type_aliases, fn(a) {
+            #(m.name <> "." <> a.definition.name, #([], Tuple([])))
+          })
+        }),
+      ),
       globals: dict.new(),
     )
   let names_only =
@@ -298,14 +294,45 @@ pub fn convert(
     })
     |> partition
   use <- bail(type_findings)
+  let #(aliases, alias_findings) =
+    list.flat_map([dsl, ..mods], fn(m) {
+      list.map(list.reverse(m.ast.type_aliases), fn(d) {
+        let a = d.definition
+        declared(names_only, m, a.aliased)
+        |> result.map(ir.Alias(
+          m.name <> "." <> a.name,
+          a.parameters,
+          _,
+          position(m, a.location.start),
+        ))
+      })
+    })
+    |> partition
+  use <- bail(alias_findings)
+  let with_aliases =
+    Env(
+      ..env0,
+      aliases: dict.from_list(
+        list.map(aliases, fn(a) { #(a.name, #(a.params, a.ty)) }),
+      ),
+    )
   let types =
     dict.merge(
       dict.from_list(prelude_types()),
       dict.from_list(
-        list.map(typedefs, fn(t) { #(t.name, TypeInfo(t.params, t.variants)) }),
+        list.map(typedefs, fn(t) {
+          let variants =
+            list.map(t.variants, fn(v) {
+              ir.Variant(
+                v.name,
+                list.map(v.fields, fn(f) { #(f.0, expand(with_aliases, f.1)) }),
+              )
+            })
+          #(t.name, TypeInfo(t.params, variants))
+        }),
       ),
     )
-  let env1 = Env(..env0, types:)
+  let env1 = Env(..with_aliases, types:)
   let #(sigs, sig_findings) =
     list.flat_map([dsl, ..mods], fn(m) {
       list.append(
@@ -358,13 +385,14 @@ pub fn convert(
     })
   use <- bail(list.reverse(findings))
   use <- bail(recursion(refs))
-  let user_types =
-    list.filter(typedefs, fn(t) { names.split(t.name).0 != dsl_module })
+  let user = fn(name) { names.split(name).0 != dsl_module }
+  let user_types = list.filter(typedefs, fn(t) { user(t.name) })
   let program =
     ir.Program(
       root: root_module <> ".spec",
       sources: list.map(mods, fn(m) { #(m.name, m.path) }),
       types: user_types,
+      aliases: list.filter(aliases, fn(a) { user(a.name) }),
       functions: list.reverse(functions),
       constants: list.reverse(constants),
       solved: st.solved,
@@ -402,6 +430,7 @@ fn round_trip(p: ir.Program, m: Mod) -> Result(Finding, Nil) {
       m.imports,
       m.ast,
       list.filter(p.types, fn(t) { mine(t.name) }),
+      list.filter(p.aliases, fn(a) { mine(a.name) }),
       list.filter(p.constants, fn(c) { mine(c.name) }),
       list.filter(p.functions, fn(f) { mine(f.name) }),
     )
@@ -413,17 +442,6 @@ fn round_trip(p: ir.Program, m: Mod) -> Result(Finding, Nil) {
 
 /// Findings about a module's declarations as a whole.
 fn module_findings(m: Mod) -> List(Finding) {
-  let aliases =
-    list.map(m.ast.type_aliases, fn(d) {
-      finding(
-        m,
-        TypeAlias,
-        d.definition.location,
-        "type alias "
-          <> d.definition.name
-          <> ": the IR has no aliases; write the type it stands for",
-      )
-    })
   let externals =
     list.filter_map(m.ast.functions, fn(d) {
       case list.any(d.attributes, fn(a) { a.name == "external" }) {
@@ -478,7 +496,6 @@ fn module_findings(m: Mod) -> List(Finding) {
     })
   }
   list.flatten([
-    aliases,
     externals,
     shadowed(own_values, m.imports.values),
     shadowed(own_types, m.imports.types),
@@ -542,18 +559,9 @@ fn type_global(
   name: String,
 ) -> Result(String, Finding) {
   let known = fn(global) {
-    case list.contains(env.aliases, global), dict.has_key(env.types, global) {
-      True, _ ->
-        Error(finding(
-          m,
-          TypeAlias,
-          span,
-          "type alias "
-            <> name
-            <> ": the IR has no aliases; write the type it stands for",
-        ))
-      False, True -> Ok(global)
-      False, False ->
+    case dict.has_key(env.aliases, global) || dict.has_key(env.types, global) {
+      True -> Ok(global)
+      False ->
         Error(finding(
           m,
           ForeignType,
@@ -590,7 +598,7 @@ fn type_global(
     None -> {
       let own = m.name <> "." <> name
       case
-        dict.has_key(env.types, own) || list.contains(env.aliases, own),
+        dict.has_key(env.types, own) || dict.has_key(env.aliases, own),
         list.key_find(m.imports.types, name),
         name
       {
@@ -647,6 +655,24 @@ fn declared(env: Env, m: Mod, t: g.Type) -> Result(Ty, Finding) {
       use args <- result.map(list.try_map(args, declared(env, m, _)))
       Con(global, args)
     }
+  }
+}
+
+/// Replaces every alias by the type it stands for. `gleam build` has refused
+/// aliases that refer to themselves.
+fn expand(env: Env, t: Ty) -> Ty {
+  case t {
+    Con(n, args) -> {
+      let args = list.map(args, expand(env, _))
+      case dict.get(env.aliases, n) {
+        Ok(#(params, body)) ->
+          expand(env, instantiate(body, list.zip(params, args)))
+        Error(_) -> Con(n, args)
+      }
+    }
+    Fun(ps, r) -> Fun(list.map(ps, expand(env, _)), expand(env, r))
+    Tuple(items) -> Tuple(list.map(items, expand(env, _)))
+    Var(_) | Meta(_) -> t
   }
 }
 
@@ -716,10 +742,11 @@ fn function_sig(
     Some(t) -> declared(env, m, t)
     None -> Error(needed)
   })
-  let ty = Fun(ps, r)
+  let written = Fun(ps, r)
+  let ty = expand(env, written)
   #(
     m.name <> "." <> f.name,
-    GFn(list.map(f.parameters, fn(p) { p.label }), tvars([], ty), ty),
+    GFn(list.map(f.parameters, fn(p) { p.label }), tvars([], ty), ty, written),
   )
 }
 
@@ -731,7 +758,9 @@ fn constant_sig(
   case c.annotation {
     Some(t) ->
       declared(env, m, t)
-      |> result.map(fn(t) { #(m.name <> "." <> c.name, GConst(t)) })
+      |> result.map(fn(t) {
+        #(m.name <> "." <> c.name, GConst(expand(env, t), t))
+      })
     None ->
       Error(finding(
         m,
@@ -855,24 +884,25 @@ fn bind(cx: Cx, bindings: List(#(String, Ty))) -> Cx {
 
 fn function(env: Env, m: Mod, st: St, f: g.Function) -> R(ir.Function) {
   let name = m.name <> "." <> f.name
-  let assert Ok(GFn(_, tvs, Fun(ps, r))) = dict.get(env.globals, name)
+  let assert Ok(GFn(_, tvs, Fun(ps, r), Fun(written_ps, written_r))) =
+    dict.get(env.globals, name)
   let params =
-    list.map2(f.parameters, ps, fn(p, t) {
+    list.map2(f.parameters, written_ps, fn(p, t) {
       ir.FnParam(p.label, param_name(p.name), t)
     })
-  let cx =
-    Cx(env, m, dict.from_list(list.map(params, fn(p) { #(p.name, p.ty) })), tvs)
+  let scope = list.map2(params, ps, fn(p, t) { #(p.name, t) }) |> dict.from_list
+  let cx = Cx(env, m, scope, tvs)
   use #(body, st) <- result.try(body(cx, st, f.location, f.body))
   use st <- result.map(expect(cx, st, f.location, r, body.ty))
-  #(ir.Function(name, params, r, body, at(cx, f.location)), st)
+  #(ir.Function(name, params, written_r, body, at(cx, f.location)), st)
 }
 
 fn constant(env: Env, m: Mod, st: St, c: g.Constant) -> R(ir.Constant) {
   let name = m.name <> "." <> c.name
-  let assert Ok(GConst(t)) = dict.get(env.globals, name)
+  let assert Ok(GConst(t, written)) = dict.get(env.globals, name)
   let cx = Cx(env, m, dict.new(), [])
   use #(value, st) <- result.map(check(cx, st, c.value, t))
-  #(ir.Constant(name, t, value, at(cx, c.location)), st)
+  #(ir.Constant(name, written, value, at(cx, c.location)), st)
 }
 
 /// A function or lambda body: one expression stays itself, anything else is a
@@ -1198,12 +1228,12 @@ fn global_value(
 ) -> R(Expr) {
   let st = St(..st, refs: [#(global, span), ..st.refs])
   case gl {
-    GFn(_, tvs, ty) -> {
+    GFn(_, tvs, ty, _) -> {
       let #(metas, st) = fresh_many(st, list.length(tvs))
       let by = list.zip(tvs, metas)
       Ok(#(node(cx, span, instantiate(ty, by), ir.Ref(global, by)), st))
     }
-    GConst(ty) -> Ok(#(node(cx, span, ty, ir.Ref(global, [])), st))
+    GConst(ty, _) -> Ok(#(node(cx, span, ty, ir.Ref(global, [])), st))
     GCtor(type_, variant) -> {
       let #(t, fields, _, st) = constructor_type(cx, st, type_, variant)
       case fields {
@@ -1468,7 +1498,7 @@ fn annotation(cx: Cx, st: St, t: g.Type) -> R(#(Annotation, Ty)) {
       #(
         #(
           ir.ACon(global, list.map(args, fn(i) { i.0 })),
-          Con(global, list.map(args, fn(i) { i.1 })),
+          expand(cx.env, Con(global, list.map(args, fn(i) { i.1 }))),
         ),
         st,
       )
@@ -1514,7 +1544,7 @@ fn callee(cx: Cx, st: St, f: g.Expression) -> R(Callee) {
           use #(x, st) <- result.map(global_value(cx, st, span, global, gl))
           #(CFn(x, labels), st)
         }
-        GConst(_) -> {
+        GConst(..) -> {
           use #(x, st) <- result.map(global_value(cx, st, span, global, gl))
           #(CFn(x, []), st)
         }
@@ -1586,7 +1616,7 @@ fn apply(
   args: List(g.Field(g.Expression)),
   piped: Option(Expr),
   callback: Option(Callback),
-) -> R(#(Expr, Option(#(List(Pat), List(Stmt))))) {
+) -> R(#(Expr, Option(#(List(#(Pat, Option(Annotation))), List(Stmt))))) {
   let source =
     list.index_map(args, fn(a, k) {
       case a {
@@ -1722,7 +1752,7 @@ fn use_callback(
   st: St,
   b: Callback,
   want: Ty,
-) -> R(#(List(Pat), List(Stmt))) {
+) -> R(#(List(#(Pat, Option(Annotation))), List(Stmt))) {
   use #(ps, r, st) <- result.try(case prune(st, want) {
     Fun(ps, r) -> Ok(#(ps, r, st))
     t -> {
@@ -1736,19 +1766,16 @@ fn use_callback(
     list.try_fold(list.zip(b.patterns, ps), #([], [], st), fn(acc, p) {
       let #(pats, bindings, st) = acc
       let #(up, t) = p
-      case up.annotation {
-        Some(a) ->
-          Error(finding(
-            cx.m,
-            UseAnnotation,
-            a.location,
-            "the IR keeps no annotation on a use pattern; annotate the callback's parameter where the function is defined",
-          ))
-        None -> {
-          use #(#(pat, bs), st) <- result.map(pattern(cx, st, up.pattern, t))
-          #(list.append(pats, [pat]), list.append(bindings, bs), st)
+      use #(ann, st) <- result.try(case up.annotation {
+        Some(a) -> {
+          use #(#(a, at), st) <- result.try(annotation(cx, st, a))
+          use st <- result.map(expect(cx, st, b.span, at, t))
+          #(Some(a), st)
         }
-      }
+        None -> Ok(#(None, st))
+      })
+      use #(#(pat, bs), st) <- result.map(pattern(cx, st, up.pattern, t))
+      #(list.append(pats, [#(pat, ann)]), list.append(bindings, bs), st)
     }),
   )
   use #(#(stmts, t), st) <- result.try(block(
@@ -1852,13 +1879,6 @@ fn block(
         s,
         "let assert: a spec names its failures; use case and a rejection",
       ))
-    [g.Assignment(s, g.Let, ..)] ->
-      Error(finding(
-        cx.m,
-        TrailingLet,
-        s,
-        "a block that ends with let: end it with the value",
-      ))
     [g.Assignment(s, g.Let, p, ann, value), ..rest] -> {
       use #(ann, st) <- result.try(case ann {
         Some(a) ->
@@ -1871,7 +1891,10 @@ fn block(
       })
       use #(#(pat, bindings), st) <- result.try(pattern(cx, st, p, v.ty))
       let stmt = ir.Let(at(cx, s), pat, option.map(ann, fn(a) { a.0 }), v)
-      prepend(block(bind(cx, bindings), st, span, rest), stmt)
+      case rest {
+        [] -> Ok(#(#([stmt], v.ty), st))
+        _ -> prepend(block(bind(cx, bindings), st, span, rest), stmt)
+      }
     }
     [g.Use(s, patterns, function), ..rest] -> {
       let b = Callback(s, patterns, rest)

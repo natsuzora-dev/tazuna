@@ -64,6 +64,7 @@ pub fn round_trip_catches_a_same_type_label_swap_test() {
       names.imports("corpus/main", ast.imports),
       ast,
       list.filter(program.types, fn(t) { mine(t.name) }),
+      list.filter(program.aliases, fn(a) { mine(a.name) }),
       list.filter(program.constants, fn(c) { mine(c.name) }),
       list.filter(functions, fn(f) { mine(f.name) }),
     )
@@ -120,10 +121,6 @@ fn example(kind: Restricted) -> #(String, Int) {
       "import gleam/dict\n\npub fn f(d: dict.Dict(Int, Int)) -> Int {\n  1\n}",
       3,
     )
-    convert.TypeAlias -> #(
-      "pub type N =\n  Int\n\npub fn f() -> Int {\n  1\n}",
-      1,
-    )
     convert.Recursion -> #(
       "pub fn f(n: Int) -> Int {\n  g(n)\n}\n\npub fn g(n: Int) -> Int {\n  f(n)\n}",
       2,
@@ -146,11 +143,6 @@ fn example(kind: Restricted) -> #(String, Int) {
     )
     convert.ConstructorValue -> #(
       "pub type B {\n  B(n: Int)\n}\n\npub fn f() -> fn(Int) -> B {\n  B\n}",
-      6,
-    )
-    convert.TrailingLet -> #("pub fn f() -> Int {\n  let x = 1\n}", 2)
-    convert.UseAnnotation -> #(
-      "pub fn w(f: fn(Int) -> Int) -> Int {\n  f(1)\n}\n\npub fn f() -> Int {\n  use x: Int <- w\n  x\n}",
       6,
     )
     convert.AnnotationNeeded -> #("pub fn f(x) -> Int {\n  1\n}", 1)

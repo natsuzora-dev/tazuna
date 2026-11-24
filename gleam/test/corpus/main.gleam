@@ -1,6 +1,6 @@
 //// Converter corpus: every construct the converter maps, written for it.
 
-import corpus/shapes.{type Shape, Circle, Rect}
+import corpus/shapes.{type Count, type Shape, Circle, Rect}
 import gleam/option.{type Option, None, Some}
 import tazuna
 
@@ -51,7 +51,7 @@ pub fn with_unit(f: fn(Nil) -> Int) -> Int {
 }
 
 pub fn uses() -> Result(Int, String) {
-  use n, _s <- with_callback(3)
+  use n: Count, _s <- with_callback(3)
   Ok(n + units())
 }
 
@@ -124,6 +124,15 @@ pub fn lists() -> List(List(Int)) {
 
 pub fn bodies() -> fn() -> Int {
   fn() { { 1 } }
+}
+
+pub fn aliases(n: Count) -> shapes.Counts {
+  let pair: shapes.Twice(Count) = #(n, shapes.tally(of: #(n, 1)).total)
+  pair
+}
+
+pub fn trailing(n: Count) -> #(Int, Count) {
+  let #(_a, _): shapes.Counts = #(n, n)
 }
 
 pub fn statements(f: fn() -> Int) -> Int {

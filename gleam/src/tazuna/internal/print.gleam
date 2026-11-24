@@ -20,10 +20,11 @@ pub fn round_trip(
   imports: Imports,
   source: g.Module,
   types: List(ir.TypeDef),
+  aliases: List(ir.Alias),
   constants: List(ir.Constant),
   functions: List(ir.Function),
 ) -> Result(Nil, String) {
-  let text = module(imports, types, constants, functions)
+  let text = module(imports, types, aliases, constants, functions)
   use printed <- result.try(
     g.module(text)
     |> result.replace_error("the printed IR is not Gleam:\n" <> text),
@@ -45,6 +46,15 @@ pub fn round_trip(
           }),
         )
       },
+    ),
+  )
+  use _ <- result.try(
+    same(
+      "type alias",
+      source.type_aliases,
+      printed.type_aliases,
+      fn(d) { d.definition.name },
+      fn(d) { g.TypeAlias(..d.definition, publicity: g.Private) },
     ),
   )
   use _ <- result.try(
@@ -104,12 +114,16 @@ fn without_spans(s: String) -> String {
 pub fn module(
   imports: Imports,
   types: List(ir.TypeDef),
+  aliases: List(ir.Alias),
   constants: List(ir.Constant),
   functions: List(ir.Function),
 ) -> String {
   let p = Printer(imports)
   list.flatten([
     list.map(types, type_def(p, _)),
+    list.map(aliases, fn(a) {
+      "type " <> applied(local(a.name), a.params) <> " = " <> ty(p, a.ty)
+    }),
     list.map(constants, fn(c) {
       "const "
       <> local(c.name)
@@ -235,7 +249,10 @@ fn stmt(p: Printer, s: Stmt) -> String {
     ir.Let(_, pat, ann, v) ->
       "let " <> pattern(p, pat) <> annotated(p, ann) <> " = " <> expr(p, v)
     ir.Use(_, pats, call) ->
-      "use " <> commas(list.map(pats, pattern(p, _))) <> " <- " <> expr(p, call)
+      "use "
+      <> commas(list.map(pats, fn(q) { pattern(p, q.0) <> annotated(p, q.1) }))
+      <> " <- "
+      <> expr(p, call)
     ir.Do(v) -> expr(p, v)
   }
 }

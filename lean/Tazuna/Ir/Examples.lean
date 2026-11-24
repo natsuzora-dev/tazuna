@@ -41,8 +41,10 @@ def field (l c : Nat) (ty record : Json) (label : String) : Json :=
 def tuple (l c : Nat) (ty : Json) (items : List Json) : Json := node "tuple" ty l c [("items", arr items)]
 def block (l c : Nat) (ty : Json) (stmts : List Json) : Json := node "block" ty l c [("stmts", arr stmts)]
 def sLet (l c : Nat) (p v : Json) : Json := Json.mkObj [("stmt", "let"), ("at", pos l c), ("pattern", p), ("value", v)]
-def sUse (l c : Nat) (ps : List Json) (f : Json) : Json :=
-  Json.mkObj [("stmt", "use"), ("at", pos l c), ("patterns", arr ps), ("call", f)]
+def sUse (l c : Nat) (ps : List Json) (f : Json) (annotations : List (Option Json) := []) : Json :=
+  let pats := ps.zipIdx.map fun (p, k) =>
+    Json.mkObj ([("pattern", p)] ++ ((annotations[k]?.join).map ("annotation", ·)).toList)
+  Json.mkObj [("stmt", "use"), ("at", pos l c), ("patterns", arr pats), ("call", f)]
 def sExpr (v : Json) : Json := Json.mkObj [("stmt", "expr"), ("value", v)]
 def case (l c : Nat) (ty : Json) (subjects clauses : List Json) : Json :=
   node "case" ty l c [("subjects", arr subjects), ("clauses", arr clauses)]
@@ -70,9 +72,12 @@ def typeDecl (name : String) (variants : List (String × List (Option String × 
     Json.mkObj [("name", v), ("fields", arr (fs.map fun (lab, t) =>
       Json.mkObj ((lab.map fun l => ("label", Json.str l)).toList ++ [("ty", t)])))]))]
 
-def program (types functions constants : List Json) (root : String := "m.main") : Json :=
+def alias (name : String) (params : List String) (ty : Json) (l : Nat := 1) : Json :=
+  Json.mkObj [("name", name), ("params", arr (params.map Json.str)), ("ty", ty), ("at", pos l 1)]
+
+def program (types functions constants : List Json) (root : String := "m.main") (aliases : List Json := []) : Json :=
   Json.mkObj [("tazuna_ir", 2), ("root", root), ("sources", arr [json% {"module": "m", "path": "src/m.gleam"}]),
-    ("types", arr types), ("functions", arr functions), ("constants", arr constants)]
+    ("types", arr types), ("aliases", arr aliases), ("functions", arr functions), ("constants", arr constants)]
 
 /-- `pub type Box { Box(left: Int, right: String) }` -/
 def box : Json := typeDecl "m.Box" [("Box", [(some "left", I), (some "right", S)])]
@@ -157,8 +162,8 @@ def lastStr {T : List TypeDecl} : {G : List Ty} → Defs T G → Option String
 #guard verdict rootStr wellTyped == "accepted"
 
 /-- A small program around one function `m.main` returning `ret`. -/
-def withMain (ret body : Json) (fns : List Json := []) (consts : List Json := []) : Json :=
-  program [box, shape] ([sub, twice, id] ++ fns ++ [function "m.main" [] ret body 40]) consts
+def withMain (ret body : Json) (fns : List Json := []) (consts : List Json := []) (aliases : List Json := []) : Json :=
+  program [box, shape] ([sub, twice, id] ++ fns ++ [function "m.main" [] ret body 40]) consts (aliases := aliases)
 
 #guard (match loaded rootStr (withMain S (str 40 3 "\"a\\u{1F600}\\n\\\"\"")) with
   | .ok p => lastStr p.defs == some ("a" ++ String.singleton (Char.ofNat 0x1F600) ++ "\n\"")
@@ -218,6 +223,52 @@ def withMain (ret body : Json) (fns : List Json := []) (consts : List Json := []
     sLet 40 3 (pCtor 40 7 shapeT "m.Shape" "Circle" [pArg (pVar 40 14 I "r"), pArg (pDiscard 40 17 S)])
       (ctor 40 22 shapeT "m.Shape" "Circle" [arg (int 40 29 "1"), arg (str 40 32 "\"c\"")]),
     sExpr (var 41 3 I "r")]))
+  == "src/m.gleam:40:3: m.main: let pattern can fail to match"
+
+-- Aliases: `type Two(a) = #(a, a)`, `type Count = Int`, `type Counts = Two(Count)`, declared after their use, and
+-- `fn pair(n: Count) -> Counts { #(n, n) }`. A function's signature, a field and a node's type may name them.
+def aliases : List Json :=
+  [alias "m.Counts" [] (json% {"con": "m.Two", "args": [{"con": "m.Count", "args": []}]}) 3,
+   alias "m.Two" ["a"] (tupT [varT "a", varT "a"]) 1, alias "m.Count" [] I 2]
+#guard verdict (.fn [] .int) (program [typeDecl "m.Tally" [("Tally", [(some "n", named "m.Count")])]]
+    [function "m.pair" [param none "n" (named "m.Count")] (named "m.Counts")
+      (tuple 5 3 (named "m.Counts") [var 5 5 (named "m.Count") "n", var 5 8 I "n"]) 5,
+     function "m.main" [] (named "m.Count")
+      (field 6 3 I (ctor 6 3 (named "m.Tally") "m.Tally" "Tally" [larg "n" (int 6 12 "1")]) "n") 6] []
+    (aliases := aliases))
+  == "accepted"
+-- An alias that refers to itself is refused even when nothing uses it.
+#guard verdict (.fn [] .int) (withMain I (int 40 3 "1")
+    (aliases := [alias "m.Loop" [] (tupT [named "m.Loop", I]) 7]))
+  == "src/m.gleam:7:1: m.Loop: type alias m.Loop refers to itself"
+#guard verdict (.fn [] .int) (withMain I (int 40 3 "1")
+    (aliases := [alias "m.Count" [] (json% {"con": "m.Two", "args": [{"con": "Int", "args": []}, {"con": "Int", "args": []}]}) 2,
+      alias "m.Two" ["a"] (tupT [varT "a", varT "a"]) 1]))
+  == "src/m.gleam:2:1: m.Count: type alias m.Two takes 1 arguments, given 2"
+#guard verdict (.fn [] .int) (withMain I (int 40 3 "1") (aliases := [alias "m.Box" [] I 7]))
+  == "type m.Box is declared twice or is built in"
+
+-- A use pattern's annotation: `use y: Int <- twice(n: 1)` holds; `use y: String <- ..` does not.
+def useTwice (ann : Json) : Json := block 40 3 I [
+  sUse 40 3 [pVar 40 7 I "y"] (call 40 17 I (ref 40 17 (fnT [fnT [I] I, I] I) "m.twice") [larg "n" (int 40 25 "1")])
+    [some ann],
+  sExpr (var 41 3 I "y")]
+#guard verdict (.fn [] .int) (withMain I (useTwice I)) == "accepted"
+#guard verdict (.fn [] .int) (withMain I (useTwice S))
+  == "src/m.gleam:40:3: m.main: use pattern annotated with a type that is not Int"
+
+-- A block that ends with `let` has the let's value: `{ let #(a, _) = #(7, "s") }` is `#(7, "s")`, and
+-- `{ let x = 7 }` is 7.
+#guard verdict (.fn [] (.tuple [.int, .str])) (withMain (tupT [I, S]) (block 40 3 (tupT [I, S]) [
+    sLet 40 3 (pTuple 40 7 (tupT [I, S]) [pVar 40 9 I "a", pDiscard 40 12 S])
+      (tuple 40 17 (tupT [I, S]) [int 40 19 "7", str 40 22 "\"s\""])]))
+  == "accepted"
+#guard (match loaded (.fn [] .int) (withMain I (block 40 3 I [sLet 40 3 (pVar 40 7 I "x") (int 40 11 "7")])) with
+  | .ok p => lastInt p.defs == some 7
+  | .error _ => false)
+#guard verdict (.fn [] .int) (withMain I (block 40 3 I [
+    sLet 40 3 (pCtor 40 7 shapeT "m.Shape" "Circle" [pArg (pVar 40 14 I "r"), pArg (pDiscard 40 17 S)])
+      (ctor 40 22 shapeT "m.Shape" "Circle" [arg (int 40 29 "1"), arg (str 40 32 "\"c\"")])]))
   == "src/m.gleam:40:3: m.main: let pattern can fail to match"
 
 -- The root's type.
