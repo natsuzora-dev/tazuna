@@ -89,6 +89,8 @@ export type Malformed =
    * SQL primary key column is NOT NULL.
    */
   | Of<"nullableKeyField", DefinitionRef, { readonly field: string }>
+  /** The key field `field` is `ref.self()`, whose schema is the entity's key, so the key would be made of itself. */
+  | Of<"selfRefKeyField", DefinitionRef, { readonly field: string }>
   /** A `ref.self()` at `path` is outside the fields of `entity()`, where no entity's key gives it a schema. */
   | Of<"misplacedSelfRef", DefinitionRef, { readonly path: readonly string[] }>
   | Of<"misplacedSelfRef", null, { readonly name: string; readonly path: readonly string[] }>

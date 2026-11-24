@@ -167,12 +167,13 @@ export function entity<
   responses?: { readonly [N in Rs]: Response<{ record: Row<SelfResolved<S, K>> } & Now> };
 }): KeyedEntity<SelfResolved<S, K>, K> {
   const fields: Record<string, z.ZodType> = { ...definition.fields };
-  const keyFields: readonly string[] = typeof definition.key === "string" ? [definition.key] : definition.key;
-  for (const f of keyFields)
-    if (selfRefs.has(fields[f] as z.ZodType)) throw new TypeError("the key field of an entity cannot be ref.self()");
-  // A clone, so that a schema that the key field shares with other fields does not mark them as key positions too.
+  // A clone, so that a schema that the key field shares with other fields does not mark them as key positions too. A
+  // ref.self() key field stays itself, for load to report (Malformed.selfRefKeyField).
   const single = typeof definition.key === "string" ? definition.key : undefined;
-  const key = single === undefined ? undefined : (fields[single] as z.ZodType).clone();
+  const key =
+    single === undefined || selfRefs.has(fields[single] as z.ZodType)
+      ? undefined
+      : (fields[single] as z.ZodType).clone();
   if (single !== undefined && key !== undefined) {
     const target = refTargets.get(fields[single] as z.ZodType);
     if (target !== undefined) refTargets.set(key, target);
@@ -241,9 +242,10 @@ export function ref<E extends AnyKeyedEntity>(target: E): Ref<E> {
  */
 ref.self = (): SelfRef => {
   // One outside the fields of entity() reads no value until load reports it (Malformed.misplacedSelfRef).
+  // One that is a key field itself reads no value either, since its key would be itself.
   const schema: z.ZodType = z.lazy(() => {
     const owner = refTargets.get(schema);
-    return owner === undefined ? z.never() : keySchema(owner);
+    return owner === undefined || selfRefKeyFields(owner).length > 0 ? z.never() : keySchema(owner);
   });
   selfRefs.add(schema);
   return schema as SelfRef;
@@ -251,6 +253,10 @@ ref.self = (): SelfRef => {
 
 /** Whether `schema` is a `ref.self()`, a z.lazy that reads its entity's key field once the entity is defined. */
 export const isSelfRef = (schema: z.ZodType): boolean => selfRefs.has(schema);
+
+/** The key fields of `entity` that are `ref.self()`. */
+export const selfRefKeyFields = (entity: AnyKeyedEntity): readonly string[] =>
+  keyFieldsOf(entity).filter((f) => selfRefs.has(entity.fields[f] as z.ZodType));
 
 /** Whether `schema` is a `ref.self()` that no `entity()` claimed, as one outside the fields of an entity is. */
 export const misplacedSelfRef = (schema: z.ZodType): boolean => selfRefs.has(schema) && !refTargets.has(schema);
