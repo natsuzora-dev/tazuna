@@ -496,22 +496,6 @@ open Tazuna.Ir
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 
-theorem find?_perm_unique {α : Type} {p : α → Bool} {l₁ l₂ : List α} (h : l₁.Perm l₂)
-    (hu : ∀ a ∈ l₁, ∀ b ∈ l₁, p a = true → p b = true → a = b) : l₁.find? p = l₂.find? p := by
-  cases h1 : l₁.find? p with
-  | some a =>
-    have ha := List.mem_of_find?_eq_some h1
-    have hpa := List.find?_some h1
-    cases h2 : l₂.find? p with
-    | some b => exact congrArg some (hu a ha b (h.mem_iff.2 (List.mem_of_find?_eq_some h2)) hpa (List.find?_some h2))
-    | none => exact absurd hpa (by simpa using List.find?_eq_none.1 h2 a (h.mem_iff.1 ha))
-  | none =>
-    cases h2 : l₂.find? p with
-    | some b =>
-      have hb := List.mem_of_find?_eq_some h2
-      exact absurd (List.find?_some h2) (by simpa using List.find?_eq_none.1 h1 b (h.mem_iff.2 hb))
-    | none => rfl
-
 /-- Looking a key up in the old table's slots: some occupied slot's key equals it exactly when the table's entries
 hold it, and the picked entry is the first such entry's. -/
 theorem lookup_slots (m : MachineV r e) {kc : Code m.key} {k : m.key.den} (hk : Smt.Rel M L m.key k kc) (dflt : Term) :

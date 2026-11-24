@@ -450,6 +450,22 @@ theorem map_fst_snd_iff {α β : Type} :
     · rintro ⟨⟨h1, h2⟩, h3, h4⟩; exact ⟨⟨h1, h3⟩, h2, h4⟩
     · rintro ⟨⟨h1, h3⟩, h2, h4⟩; exact ⟨⟨h1, h2⟩, h3, h4⟩
 
+theorem find?_perm_unique {α : Type} {p : α → Bool} {l₁ l₂ : List α} (h : l₁.Perm l₂)
+    (hu : ∀ a ∈ l₁, ∀ b ∈ l₁, p a = true → p b = true → a = b) : l₁.find? p = l₂.find? p := by
+  cases h1 : l₁.find? p with
+  | some a =>
+    have ha := List.mem_of_find?_eq_some h1
+    have hpa := List.find?_some h1
+    cases h2 : l₂.find? p with
+    | some b => exact congrArg some (hu a ha b (h.mem_iff.2 (List.mem_of_find?_eq_some h2)) hpa (List.find?_some h2))
+    | none => exact absurd hpa (by simpa using List.find?_eq_none.1 h2 a (h.mem_iff.1 ha))
+  | none =>
+    cases h2 : l₂.find? p with
+    | some b =>
+      have hb := List.mem_of_find?_eq_some h2
+      exact absurd (List.find?_some h2) (by simpa using List.find?_eq_none.1 h1 b (h.mem_iff.2 hb))
+    | none => rfl
+
 end Lemmas
 
 section
