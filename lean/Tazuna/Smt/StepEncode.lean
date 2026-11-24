@@ -515,4 +515,394 @@ theorem clock_step {v : ServiceV} (s : State v) (hs : s.machines = []) (time : I
 
 end
 
+/-! The command kind, on a service without reactions and a state without machine instances: the caller and the
+`accepts` rules admit the input, `decide` accepts with events or rejects, the events apply in order, then the
+command's `ensures` and the service's invariants are checked on the records they leave. Every outcome advances the
+fresh counter. -/
+
+section
+variable {v : ServiceV}
+
+/-- The step in progress after `events` on a service without reactions: the records fold them, nothing starts. -/
+def _root_.Tazuna.Ir.Step.Acc.folded (a : Step.Acc v) (events : List v.event.den0) : Step.Acc v :=
+  { a with state := { a.state with records := events.foldl (fun r ev => v.apply (r, ev, ())) a.state.records },
+           events := a.events ++ events }
+
+/-- Events applied on a service without reactions, from a state without machine instances: the records fold them,
+and nothing starts. -/
+theorem applyEvents_plain (hx : v.reactions = []) : (events : List v.event.den0) → (a : Step.Acc v) →
+    a.state.machines = [] → Step.applyEvents a events = .ok (a.folded events)
+  | [], a, _ => by simp [Step.applyEvents, List.foldlM, pure, Except.pure, Step.Acc.folded]
+  | ev :: evs, a, hm => by
+    have h1 : Step.applyEvents a (ev :: evs) = Step.applyEvents (a.folded [ev]) evs := by
+      simp only [Step.applyEvents, List.foldlM, Step.react, hm, List.foldl_nil, hx, List.flatMap_nil, List.append_nil,
+        Step.start, bind, Except.bind, pure, Except.pure, Step.Acc.folded, List.foldl_cons]
+    rw [h1, applyEvents_plain hx evs _ (by simpa [Step.Acc.folded] using hm)]
+    simp [Step.Acc.folded]
+
+end
+
+/-- The codes of a command's functions. -/
+structure CommandCode {r e c : Ty} (x : CommandV r e c) where
+  accepts : Code (Ty.fn [x.input] Ty.rules)
+  decide : Code (Ty.fn [Ty.ctx r x.input c] (Ty.result (.list e) x.rejection))
+  ensures : Code (Ty.fn [Ty.ctx r x.input c, r] Ty.rules)
+
+/-- A command's types are data, as the `command` built-in demands of its type arguments. -/
+structure CommandData {r e c : Ty} (x : CommandV r e c) : Prop where
+  records : r.isData = true
+  event : e.isData = true
+  caller : c.isData = true
+  input : x.input.isData = true
+  rejection : x.rejection.isData = true
+
+section
+variable {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
+include hd
+
+theorem CommandData.accepts : (Ty.fn [x.input] Ty.rules).isData = true := by
+  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.input]
+theorem CommandData.args : (Ty.tuple [x.input]).isData = true := by simp [Ty.isData, Ty.isDatas, hd.input]
+theorem CommandData.ctx : (Ty.ctx r x.input c).isData = true := by
+  simp [Ty.ctx, Ty.isData, Ty.isDatas, Ty.isDatass, hd.records, hd.input, hd.caller]
+theorem CommandData.ctxArgs : (Ty.tuple [Ty.ctx r x.input c]).isData = true := by
+  simp [Ty.isData, Ty.isDatas, hd.ctx]
+theorem CommandData.events : (Ty.list e).isData = true := by simp [Ty.isData, hd.event]
+theorem CommandData.result : (Ty.result (.list e) x.rejection).isData = true := by
+  simp [Ty.result, Ty.isData, Ty.isDatas, Ty.isDatass, hd.event, hd.rejection]
+theorem CommandData.decide : (Ty.fn [Ty.ctx r x.input c] (Ty.result (.list e) x.rejection)).isData = true := by
+  simp only [Ty.isData, Ty.isDatas, hd.ctx, hd.result, Bool.and_self]
+theorem CommandData.ensures : (Ty.fn [Ty.ctx r x.input c, r] Ty.rules).isData = true := by
+  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.ctx, hd.records]
+theorem CommandData.ensArgs : (Ty.tuple [Ty.ctx r x.input c, r]).isData = true := by
+  simp [Ty.isData, Ty.isDatas, hd.ctx, hd.records]
+theorem CommandData.apply : (Ty.fn [r, e] r).isData = true := by
+  simp [Ty.isData, Ty.isDatas, hd.records, hd.event]
+theorem CommandData.invariants : (Ty.fn [r] Ty.rules).isData = true := by
+  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.records]
+
+end
+
+/-- The codes relate to the command's functions in the model. -/
+structure CommandCode.Rel (M : Model) (L : Layout) {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
+    (cc : CommandCode x) : Prop where
+  accepts : Smt.Rel M L _ (Ty.up _ hd.accepts x.accepts) cc.accepts
+  decide : Smt.Rel M L _ (Ty.up _ hd.decide x.decide) cc.decide
+  ensures : Smt.Rel M L _ (Ty.up _ hd.ensures x.ensures) cc.ensures
+
+/-- The terms of a command step's outcome: whether the caller is listed and the `accepts` rules, whether `decide`
+accepted, its rejection and its events, the `ensures` rules and the invariants on the records the events leave, and
+those records. -/
+structure CommandOut where
+  callerOk : Term
+  rules : List (Term × Term)
+  ok : Term
+  rejection : Term
+  events : Term
+  ensures : List (Term × Term)
+  records : Term
+  invariants : List (Term × Term)
+
+section
+variable (L : Layout)
+
+/-- The records after each occupied slot's event in turn from `rt`, with the condition that each application's
+holds. -/
+def applyAll {r e : Ty} (apply : Code (Ty.fn [r, e] r)) : Term → List Slot → Except Refusal (Term × Term)
+  | rt, [] => .ok (rt, tt)
+  | rt, (f, xs) :: S => do
+    let rc ← need "records that have no term" (Code.ofTerm? r rt)
+    let ec ← need "an event that has no term" (Code.ofTerm? e (xs.headD tt))
+    let (r', c) ← apply (rc, ec, ())
+    let r't ← need "records that have no term" (Code.term? r r')
+    let (rf, c') ← applyAll apply (Term.share (.ite f r't rt)) S
+    pure (rf, andT (.ite f c tt) c')
+
+/-- A command step's outcome terms and its condition, from the codes of the command's and the service's functions,
+the terms of the records, the time, the fresh counter, the caller and the input, and the listed callers' constants.
+The condition asks only for what the step computes. -/
+def encodeCommand {r e c : Ty} (x : CommandV r e c) (cc : CommandCode x) (apply : Code (Ty.fn [r, e] r))
+    (invariants : Code (Ty.fn [r] Ty.rules)) (callers : List Term) (records now fresh caller input : Term) :
+    Except Refusal (CommandOut × Term) := do
+  let cc0 ← need "a caller that has no term" (Code.ofTerm? c caller)
+  let eqs ← callers.mapM fun k => do eqCode L c cc0 (← need "a caller that has no term" (Code.ofTerm? c k))
+  let ic ← need "an input that has no term" (Code.ofTerm? x.input input)
+  let (rs, c1) ← cc.accepts (ic, ())
+  let rules ← ruleTerms L rs
+  let ctx ← adtCtor L 5 [r, x.input, c] [[r, x.input, c, .int, .dsl .fresh []]] 0 [records, input, caller, now, fresh]
+  let cx ← need "a context that has no term" (Code.ofTerm? (Ty.ctx r x.input c) (Term.share ctx))
+  let (res, c2) ← cc.decide (cx, ())
+  let rest ← need "a result that has no term" (Code.term? _ res)
+  let (d, _) ← need "a layout without the result type" (L.find? (Ty.result (.list e) x.rejection))
+  let res := Term.share rest
+  let evs := Term.sel d 0 0 res
+  let (dl, n, dt) ← collD L (.list e) [e]
+  let (rf, c3) ← applyAll apply records (slotsOf dl dt n 1 evs)
+  let rfc ← need "records that have no term" (Code.ofTerm? r rf)
+  let (ens, c4) ← cc.ensures (cx, rfc, ())
+  let ensures ← ruleTerms L ens
+  let (invs, c5) ← invariants (rfc, ())
+  let invariants ← ruleTerms L invs
+  let callerOk := anyT eqs
+  let ok := Term.is d 0 res
+  pure (⟨callerOk, rules, ok, .sel d 1 0 res, evs, ensures, rf, invariants⟩,
+    .ite callerOk (andT c1 (.ite (allT (rules.map (·.2))) (andT c2 (.ite ok (andT c3 (andT c4
+      (.ite (allT (ensures.map (·.2))) c5 tt))) tt)) tt)) tt)
+
+end
+
+section
+variable {M : Model} {L : Layout}
+
+/-- Applying the events of a list's slots in turn: the records term denotes the records the events fold into. -/
+theorem applyAll_rel {r e : Ty} {apply : Code (Ty.fn [r, e] r)} {g : (Ty.fn [r, e] r).den}
+    (hg : Smt.Rel M L _ g apply) : (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv →
+    (∀ p ∈ sv, p.2.length = 1) → (evs : List e.den) → Holds2 (EBag L e) evs sv → (r0 : r.den) → (rt : Term) →
+    RelV L r r0 (rt.denote M) → (rf c : Term) → applyAll apply rt S = .ok (rf, c) → Holds M c →
+    RelV L r (evs.foldl (fun x ev => g (x, ev, ())) r0) (rf.denote M)
+  | [], [], _, _, evs, hev, r0, rt, hr, rf, c, h, _ => by
+    cases evs with
+    | nil => simp only [applyAll] at h; cases h; exact hr
+    | cons _ _ => exact hev.elim
+  | (f, xs) :: S, (b, vs) :: sv, ⟨hf, hxs, hS⟩, hw, evs, hev, r0, rt, hr, rf, c, h, hc => by
+    simp only [applyAll] at h
+    obtain ⟨rc, h1, h⟩ := bind_ok.1 h
+    obtain ⟨ec, h2, h⟩ := bind_ok.1 h
+    obtain ⟨⟨r', c0⟩, h3, h⟩ := bind_ok.1 h
+    obtain ⟨r't, h4, h⟩ := bind_ok.1 h
+    obtain ⟨⟨rf', c'⟩, h5, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
+    have hw' : ∀ p ∈ sv, p.2.length = 1 := fun p hp => hw p (by simp [hp])
+    cases b with
+    | false =>
+      have hite : (Term.share (.ite f r't rt)).denote M = rt.denote M := by
+        simp [Term.denote, hf, Val.toBool]
+      exact applyAll_rel hg S sv hS hw' evs (by simpa [Holds2, occupied] using hev) r0 _ (hite ▸ hr) _ c' h5 hc2
+    | true =>
+      match evs, hev with
+      | ev :: evs, ⟨⟨z, hz, hez⟩, hrest⟩ =>
+        subst hz
+        obtain ⟨x0, rfl, hx0⟩ : ∃ x0, xs = [x0] ∧ x0.denote M = z := by
+          match xs, hxs with
+          | [x0], h => exact ⟨x0, rfl, by simpa [Term.denotes] using h⟩
+        have hc1' : Holds M c0 := by simpa [Holds, Term.denote, hf, Val.toBool] using hc1
+        have hrc : Smt.Rel M L r r0 rc := (rel_ofTerm (need_ok.1 h1) _).2 hr
+        have hec : Smt.Rel M L e ev ec := (rel_ofTerm (need_ok.1 h2) _).2 (by simpa [hx0] using hez)
+        have hr' := hg (r0, ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' c0 h3 hc1'
+        have hite : (Term.share (.ite f r't rt)).denote M = r't.denote M := by
+          simp [Term.denote, hf, Val.toBool]
+        exact applyAll_rel hg S sv hS hw' evs hrest _ _ (hite ▸ (rel_term (need_ok.1 h4) _).1 hr') _ c' h5 hc2
+  | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _ | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _ => h.elim
+
+end
+
+section
+variable {M : Model} {L : Layout}
+
+theorem up_foldl {r e : Ty} (hr : r.isData = true) (he : e.isData = true) (h : (Ty.fn [r, e] r).isData = true)
+    (g : (Ty.fn [r, e] r).den0) : (evs : List e.den0) → (r0 : r.den0) →
+    Ty.up r hr (evs.foldl (fun x ev => g (x, ev, ())) r0) =
+      (evs.map (Ty.up e he)).foldl (fun x ev => (Ty.up _ h g) (x, ev, ())) (Ty.up r hr r0)
+  | [], _ => rfl
+  | ev :: evs, r0 => by
+    simp only [List.foldl_cons, List.map_cons]
+    rw [up_foldl hr he h g evs]
+    congr 1
+    have hargs : (Ty.tuple [r, e]).isData = true := by simp [Ty.isData, Ty.isDatas, hr, he]
+    have := Ty.up_fn [r, e] r h hargs hr g (r0, ev, ())
+    erw [Ty.up_tuple _ _ _ hr (by simp [Ty.isData, Ty.isDatas, he]), Ty.up_tuple _ _ _ he rfl] at this
+    exact this.symm
+
+/-- T2 for a command on a service without reactions, from a state without machine instances: wherever the condition
+holds, the outcome terms decide the step's outcome. An unlisted caller or a broken `accepts` rule is Invalid; a
+rejection is the rejection the terms denote; a broken `ensures` rule or invariant is the step's fault; otherwise the
+step is accepted with the records and events the terms denote. The fresh counter advances in every case. -/
+theorem command_step {v : ServiceV} (hx : v.reactions = []) (s : State v) (hs : s.machines = [])
+    (i : Fin v.commands.length) (caller : v.caller.den0) (input : (v.commands.get i).input.den0)
+    (hd : CommandData (v.commands.get i)) (cc : CommandCode (v.commands.get i)) (hcc : cc.Rel M L hd)
+    (apply : Code (Ty.fn [v.records, v.event] v.records)) (happ : Smt.Rel M L _ (Ty.up _ hd.apply v.apply) apply)
+    (inv : Code (Ty.fn [v.records] Ty.rules)) (hinv : Smt.Rel M L _ (Ty.up _ hd.invariants v.invariants) inv)
+    {ks : List Term} (hks : callerTerms L hd.caller (v.commands.get i).callers = some ks)
+    {records now fresh sc si : Term}
+    (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
+    (hnow : now.denote M = .int s.now) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
+    (hsc : RelV L v.caller (Ty.up _ hd.caller caller) (sc.denote M))
+    (hsi : RelV L (v.commands.get i).input (Ty.up _ hd.input input) (si.denote M))
+    {o : CommandOut} {cond : Term}
+    (henc : encodeCommand L (v.commands.get i) cc apply inv ks records now fresh sc si = .ok (o, cond))
+    (hc : Holds M cond) :
+    let r := step v s (.command i caller input)
+    let s' := { s with fresh := s.fresh + 1 }
+    if (o.callerOk.denote M).toBool then
+      match brokenIn M o.rules with
+      | n :: ns => r = ⟨s', .invalid (n :: ns), [], []⟩
+      | [] =>
+        if (o.ok.denote M).toBool then
+          match brokenIn M o.ensures with
+          | n :: _ => r = ⟨s', .fault (.ensures n), [], []⟩
+          | [] => match brokenIn M o.invariants with
+            | n :: _ => r = ⟨s', .fault (.invariant n), [], []⟩
+            | [] => r.outcome = .accepted ∧ r.out = [] ∧ r.state = { s' with records := r.state.records } ∧
+                RelV L v.records (Ty.up _ hd.records r.state.records) (o.records.denote M) ∧
+                RelV L (.list v.event) (Ty.up _ hd.events r.events) (o.events.denote M)
+        else r.state = s' ∧ ∃ j, r.outcome = .rejected ⟨(v.commands.get i).rejection, j⟩ ∧
+          RelV L _ (Ty.up _ hd.rejection j) (o.rejection.denote M)
+    else r = ⟨s', .invalid ["callers"], [], []⟩ := by
+  intro r s'
+  obtain ⟨cc0, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨rs, c1⟩, h4, henc⟩ := bind_ok.1 henc
+  obtain ⟨rules, h5, henc⟩ := bind_ok.1 henc
+  obtain ⟨ctx, h6, henc⟩ := bind_ok.1 henc
+  obtain ⟨cx, h7, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨res, c2⟩, h8, henc⟩ := bind_ok.1 henc
+  obtain ⟨rest, h9, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨d, dn⟩, h10, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨dl, n, dt⟩, h11, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨rf, c3⟩, h12, henc⟩ := bind_ok.1 henc
+  obtain ⟨rfc, h13, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨ens, c4⟩, h14, henc⟩ := bind_ok.1 henc
+  obtain ⟨ensures, h15, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨invs, c5⟩, h16, henc⟩ := bind_ok.1 henc
+  obtain ⟨invariants, h17, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  have hcc0 : Smt.Rel M L v.caller (Ty.up _ hd.caller caller) cc0 := (rel_ofTerm (need_ok.1 h1) _).2 hsc
+  have hok := callers_any hd.caller hcc0 (v.commands.get i).callers ks hks eqs h2
+  simp only [r, s', step, Step.admit]
+  cases hin : (v.commands.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
+  case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
+  simp only [hok, hin, Val.toBool, ite_true]
+  have hc' : Holds M (andT c1 (.ite (allT (rules.map (·.2))) (andT c2 (.ite (Term.is d 0 (Term.share rest))
+      (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) c5 tt))) tt)) tt)) := by
+    simpa only [Holds, Term.denote, hok, hin, Val.toBool, ite_true] using hc
+  rw [holds_andT] at hc'
+  have hic : Smt.Rel M L _ (Ty.up _ hd.input input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
+  have hargs : Smt.Rels M L [(v.commands.get i).input]
+      (Ty.up (.tuple [(v.commands.get i).input]) hd.args (input, ())) (ic, ()) := by
+    show Smt.Rel M L _ (Ty.up (.tuple [(v.commands.get i).input]) hd.args (input, ())).1 ic ∧ True
+    erw [Ty.up_tuple _ _ _ hd.input rfl]; exact ⟨hic, trivial⟩
+  have hacc := hcc.accepts _ (ic, ()) hargs rs c1 h4 hc'.1
+  erw [Ty.up_fn _ Ty.rules _ hd.args rfl] at hacc
+  have hbroken := rules_broken h5 _ hacc
+  rw [hbroken]
+  cases hb : Step.broken ((v.commands.get i).accepts (input, ())) with
+  | cons n ns => rfl
+  | nil =>
+    simp only
+    have hallT : (allT (rules.map (·.2))).denote M = .bool true := by
+      rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil rules).1 (hbroken.trans hb))
+    have hc2' : Holds M (andT c2 (.ite (Term.is d 0 (Term.share rest))
+        (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) c5 tt))) tt)) := by
+      have := hc'.2; simp only [Holds, Term.denote, hallT, Val.toBool, ite_true] at this; exact this
+    rw [holds_andT] at hc2'
+    have hctx := adtCtor_rel (L := L) (M := M)
+      (vs := [[v.records, (v.commands.get i).input, v.caller, .int, .dsl .fresh []]])
+      ⟨0, by simp⟩ _ _ h6
+      (Ty.up _ hd.records s.records, Ty.up _ hd.input input, Ty.up _ hd.caller caller, s.now, s.fresh, ())
+      ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
+    rw [← up_ctx hd.records hd.input hd.caller hd.ctx] at hctx
+    have hcx : Smt.Rel M L _ (Ty.up _ hd.ctx (Step.ctx s s.records caller input)) cx :=
+      (rel_ofTerm (need_ok.1 h7) _).2 (by rw [Term.denote_share]; exact hctx)
+    have hargs' : Smt.Rels M L [Ty.ctx v.records (v.commands.get i).input v.caller]
+        (Ty.up (.tuple [Ty.ctx v.records (v.commands.get i).input v.caller]) hd.ctxArgs
+          (Step.ctx s s.records caller input, ())) (cx, ()) := by
+      show Smt.Rel M L _ (Ty.up (.tuple [Ty.ctx v.records (v.commands.get i).input v.caller]) hd.ctxArgs
+        (Step.ctx s s.records caller input, ())).1 cx ∧ True
+      erw [Ty.up_tuple _ _ _ hd.ctx rfl]; exact ⟨hcx, trivial⟩
+    have hres := hcc.decide _ (cx, ()) hargs' res c2 h8 hc2'.1
+    erw [Ty.up_fn _ _ _ hd.ctxArgs hd.result] at hres
+    have hres' := (rel_term (need_ok.1 h9) _).1 hres
+    have hfd := need_ok.1 h10
+    have hc2'' := hc2'.2
+    have hsh : (Term.share rest).denote M = rest.denote M := Term.denote_share M rest
+    have hdata2 : (Ty.adt 2 [.list v.event, (v.commands.get i).rejection] [[(v.commands.get i).rejection]]).isData = true := by
+      simp only [Ty.isData, Ty.isDatas, Ty.isDatass, hd.rejection, Bool.and_true]
+    cases hdec : (v.commands.get i).decide (Step.ctx s s.records caller input, ()) with
+    | inr q =>
+      match q, hdec with
+      | .inl (j, ()), hdec =>
+        rw [hdec] at hres'
+        erw [Ty.up_inr 2 _ _ _ hd.result hdata2, Ty.up_inl 2 _ _ _ hdata2 (by simp only [Ty.isData, Ty.isDatas, hd.rejection, Bool.and_true]),
+          Ty.up_tuple _ _ _ hd.rejection rfl] at hres'
+        obtain ⟨d', n', hf', vals, hw, rv, rest', rfl, hrv, rfl⟩ := hres'
+        obtain rfl := find_det hfd hf'
+        have hok' : (Term.is d 0 (Term.share rest)).denote M = .bool false := by
+          simp [Term.denote, hsh, hw]
+        simp only [hok', Bool.false_eq_true, ite_false]
+        refine ⟨by trivial, j, by trivial, ?_⟩
+        simp only [Term.denote, hsh, hw, and_self, ite_true, List.getElem?_cons_zero, Option.getD_some]
+        exact hrv
+      | .inr e, _ => exact e.elim
+    | inl p =>
+      obtain ⟨events, ⟨⟩⟩ := p
+      rw [hdec] at hres'
+      erw [Ty.up_inl 2 _ _ _ hd.result (by simp only [Ty.isData, Ty.isDatas, hd.event, Bool.and_true]),
+        Ty.up_tuple _ _ _ hd.events rfl] at hres'
+      obtain ⟨d', n', hf', vals, hw, ev, rest', rfl, hev, rfl⟩ := hres'
+      obtain rfl := find_det hfd hf'
+      have hok' : (Term.is d 0 (Term.share rest)).denote M = .bool true := by
+        simp [Term.denote, hsh, hw]
+      simp only [hok', ite_true]
+      replace hc2'' : Holds M (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) c5 tt))) := by
+        have := hc2''
+        simp only [Holds, Term.denote, Term.denote_share, hw, beq_self_eq_true, Bool.and_self, Val.toBool,
+          ite_true] at this
+        exact this
+      rw [holds_andT, holds_andT] at hc2''
+      have hevs : Smt.Rel M L (.list v.event) (Ty.up _ hd.events events) (Term.sel d 0 0 (Term.share rest)) := by
+        show RelV _ _ _ _
+        rw [sel_ctor 0 (hsh.trans hw)]; exact hev
+      obtain ⟨sv, hS, -, hsw, hh⟩ := list_view hevs h11
+      erw [Ty.up_list _ _ hd.event] at hh
+      have hrf := applyAll_rel happ _ sv hS hsw _ hh _ records hrec rf c3 h12 hc2''.1
+      erw [← up_foldl hd.records hd.event hd.apply] at hrf
+      have hrfc : Smt.Rel M L v.records _ rfc := (rel_ofTerm (need_ok.1 h13) _).2 hrf
+      have hargs3 : Smt.Rels M L [Ty.ctx v.records (v.commands.get i).input v.caller, v.records]
+          (Ty.up (.tuple [Ty.ctx v.records (v.commands.get i).input v.caller, v.records]) hd.ensArgs
+            (Step.ctx s s.records caller input, events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ()))
+          (cx, rfc, ()) := by
+        show Smt.Rel M L _ (Ty.up (.tuple [Ty.ctx v.records (v.commands.get i).input v.caller, v.records]) hd.ensArgs
+            (Step.ctx s s.records caller input, events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())).1 cx ∧
+          Smt.Rels M L [v.records] (Ty.up (.tuple [Ty.ctx v.records (v.commands.get i).input v.caller, v.records])
+            hd.ensArgs (Step.ctx s s.records caller input,
+              events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())).2 (rfc, ())
+        erw [Ty.up_tuple _ _ _ hd.ctx (by simp [Ty.isData, Ty.isDatas, hd.records])]
+        refine ⟨hcx, ?_⟩
+        show Smt.Rel M L _ (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hd.records])
+          (events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())).1 rfc ∧ True
+        erw [Ty.up_tuple _ _ _ hd.records rfl]; exact ⟨hrfc, trivial⟩
+      have hens := hcc.ensures _ _ hargs3 ens c4 h14 hc2''.2.1
+      erw [Ty.up_fn _ Ty.rules _ hd.ensArgs rfl] at hens
+      have hbe := rules_broken h15 _ hens
+      have hargs4 : Smt.Rels M L [v.records] (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hd.records])
+          (events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())) (rfc, ()) := by
+        show Smt.Rel M L _ (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hd.records])
+          (events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())).1 rfc ∧ True
+        erw [Ty.up_tuple _ _ _ hd.records rfl]; exact ⟨hrfc, trivial⟩
+      rw [applyEvents_plain hx events _ hs]
+      simp only [Step.Acc.folded]
+      rw [hbe]
+      cases hbe' : Step.broken ((v.commands.get i).ensures (Step.ctx s s.records caller input,
+          events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())) with
+      | cons n ns => rfl
+      | nil =>
+        simp only
+        have hallE : (allT (ensures.map (·.2))).denote M = .bool true := by
+          rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil ensures).1 (hbe.trans hbe'))
+        have hc5 : Holds M c5 := by
+          have := hc2''.2.2; simp only [Holds, Term.denote, hallE, Val.toBool, ite_true] at this; exact this
+        have hiv := hinv _ _ hargs4 invs c5 h16 hc5
+        erw [Ty.up_fn _ Ty.rules _ (by simp [Ty.isData, Ty.isDatas, hd.records]) rfl] at hiv
+        have hbi := rules_broken h17 _ hiv
+        rw [hbi]
+        simp only [Step.finish, bind, Except.bind, Step.settle, Step.invariants, hs, List.flatMap_nil, List.append_nil]
+        cases Step.broken (v.invariants (events.foldl (fun r ev => v.apply (r, ev, ())) s.records, ())) with
+        | cons n ns => rfl
+        | nil =>
+          refine ⟨rfl, rfl, rfl, hrf, ?_⟩
+          rw [sel_ctor 0 (hsh.trans hw)]; exact hev
+end
+
 end Tazuna.Smt

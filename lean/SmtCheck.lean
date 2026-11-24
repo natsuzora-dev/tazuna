@@ -496,6 +496,117 @@ def clockCases : List (String × List Term) :=
     ("clock reports a broken invariant", [.var 5, .not (.var 6)]),
     ("clock refuses an earlier time", [.not (.var 5)]) ]
 
+/-! A command step on the event service, for `command_step`: `put` takes a key from the caller "alice", accepts a
+positive key, rejects a key above 10, accepts 7 with no events and any other key with two events that insert it and
+the next key; it ensures the records grew, and the invariant `small` holds below three keys. -/
+
+def cctxT : Ty := Ty.ctx recordsT .int .str
+
+def inputOf : Expr [] [cctxT] .int := .field (ft := .int) "input" 1 (by simp) (.var .here)
+
+def boolCase {Γ : List Ty} {r : Ty} (c : Expr [] Γ Ty.bool) (yes no : Expr [] Γ r) : Expr [] Γ r :=
+  .case c (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) yes
+    (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) no .nil)) ⟨10, rfl⟩
+
+def decideE : E (.fn [cctxT] (Ty.result (.list evT) .str)) :=
+  let pair (k : Expr [] [cctxT] .int) (v : Int) : Expr [] [cctxT] evT := .tuple (.cons k (.cons (.int v) .nil))
+  .lam (boolCase (.bin .gt inputOf (.int 10))
+    (.ctor (vs := [[.list evT], [.str]]) ⟨1, by decide⟩ (.cons (.str "big") .nil))
+    (boolCase (.bin (.eq rfl) inputOf (.int 7))
+      (.ctor (vs := [[.list evT], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil))
+      (.ctor (vs := [[.list evT], [.str]]) ⟨0, by decide⟩
+        (.cons (.list (.cons (pair inputOf 1) (.cons (pair (.bin .add inputOf (.int 1)) 2) .nil))) .nil))))
+
+def ensuresE : E (.fn [cctxT, recordsT] Ty.rules) :=
+  let size {Γ : List Ty} (t : Expr [] Γ recordsT) : Expr [] Γ .int :=
+    .call (.prim .tableSize [.int, .int] rfl) (.cons t .nil)
+  .lam (.list (.cons (.tuple (.cons (.str "grows")
+    (.cons (.bin .gt (size (.var (.there .here))) (size (.field (ft := recordsT) "records" 0 (by simp) (.var .here))))
+      .nil))) .nil))
+
+def putC : CommandV recordsT evT .str :=
+  { name := "put", input := .int, rejection := .str, callers := ["alice"],
+    accepts := Ty.down _ rfl (acceptsE.eval (G := []) () ()), decide := Ty.down _ rfl (decideE.eval (G := []) () ()),
+    ensures := Ty.down _ rfl (ensuresE.eval (G := []) () ()) }
+
+def commandSvc : ServiceV := { eventSvc with name := "c", commands := [putC] }
+
+def commandLayout : Layout :=
+  let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits decideE ++ Tazuna.Smt.Expr.lits ensuresE ++
+    Tazuna.Smt.Expr.lits applyE ++ Tazuna.Smt.Expr.lits invariantsE
+  Layout.addTys (listSlots (fun _ => 3) lits) {} (recordsT :: evT :: .id :: Tazuna.Smt.Expr.tys acceptsE ++
+    Tazuna.Smt.Expr.tys decideE ++ Tazuna.Smt.Expr.tys ensuresE ++ Tazuna.Smt.Expr.tys applyE ++
+    Tazuna.Smt.Expr.tys invariantsE)
+
+/-- v0..v3 the state, v4 the caller, v5 the key, then the outcome terms: v6 caller listed, v7 and v8 the `accepts`
+rule, v9 accepted by `decide`, v10 the rejection, v11 the events, v12 and v13 the `ensures` rule, v14 the records
+after, v15 and v16 the invariant. -/
+def commandScript (goal : List Term) : Except String Script := do
+  let L := commandLayout
+  let enc {t : Ty} (e : E t) : Except String (Code t) := do
+    let (c, _) ← (encode L (G := []) () e ()).mapError fun r => s!"no encoding: {repr r}"
+    pure c
+  let cc : CommandCode putC := ⟨← enc acceptsE, ← enc decideE, ← enc ensuresE⟩
+  let some ks := callerTerms L rfl putC.callers | throw "no caller terms"
+  let S := SymState.vars 0
+  let (o, cond) ← (encodeCommand L putC cc (← enc applyE) (← enc invariantsE) ks S.records S.now S.fresh (.var 4)
+    (.var 5)).mapError fun r => s!"no encoding: {repr r}"
+  let some wf := S.wf L (v := commandSvc) | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some lsrt := L.srt? (.list evT) | throw "no events sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [(an, ah)] := o.rules | throw "not one rule"
+  let [(en, eh)] := o.ensures | throw "not one ensures rule"
+  let [(iname, ih)] := o.invariants | throw "not one invariant"
+  pure { datatypes := dts,
+         vars := [rsrt, .int, .int, .int, .str, .int, .bool, .bool, .str, .bool, .str, lsrt, .bool, .str, rsrt, .bool,
+           .str],
+         asserts := [cond, wf, .eq (.var 6) o.callerOk, .eq (.var 7) ah, .eq (.var 8) an, .eq (.var 9) o.ok,
+           .eq (.var 10) o.rejection, .eq (.var 11) o.events, .eq (.var 12) eh, .eq (.var 13) en,
+           .eq (.var 14) o.records, .eq (.var 15) ih, .eq (.var 16) iname] ++ goal,
+         shows := List.range 17 }
+
+def commandCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := do
+  match commandScript goal with
+  | .error m => IO.println s!"smt-check: {name}: {m}"; return false
+  | .ok script =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let L := commandLayout
+      let i : Fin commandSvc.commands.length := ⟨0, by decide⟩
+      match (SymState.vars 0).decode M L (v := commandSvc) rfl [] [],
+          (SymInput.command i (.var 4) (.var 5)).decode M L (v := commandSvc) rfl (fun | ⟨0, _⟩ => rfl)
+            (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl) with
+      | some s, some x =>
+        let r := step commandSvc s x
+        let one (n h : Nat) := brokenIn M [(.var n, .var h)]
+        let ok := r.state.fresh == s.fresh + 1 && match (M.vars 6).toBool, one 8 7, (M.vars 9).toBool, one 13 12,
+            one 16 15, r.outcome with
+          | false, _, _, _, _, .invalid ["callers"] => true
+          | true, n :: ns, _, _, _, .invalid ms => n :: ns == ms
+          | true, [], false, _, _, .rejected ⟨t, j⟩ =>
+            match Ty.same t .str with
+            | some ⟨h⟩ => sameAs L .str rfl (h ▸ j) (vs.lookup 10)
+            | none => false
+          | true, [], true, n :: _, _, .fault (.ensures n') => n == n'
+          | true, [], true, [], n :: _, .fault (.invariant n') => n == n'
+          | true, [], true, [], [], .accepted => sameAs L recordsT rfl r.state.records (vs.lookup 14) &&
+            sameAs L (.list evT) rfl r.events (vs.lookup 11)
+          | _, _, _, _, _, _ => false
+        unless ok do IO.println s!"smt-check: {name}: step says {r.outcome.summary}, the terms differ"
+        return ok
+      | _, _ => IO.println s!"smt-check: {name}: the model does not decode"; return false
+    | a => IO.println s!"smt-check: {name}: {repr a}"; return false
+
+def commandCases : List (String × List Term) :=
+  [ ("command accepts a key", [.var 6, .var 7, .var 9, .var 12, .var 15]),
+    ("command rejects a big key", [.var 6, .var 7, .not (.var 9)]),
+    ("command refuses an unlisted caller", [.not (.var 6)]),
+    ("command refuses a key that is not positive", [.var 6, .not (.var 7)]),
+    ("command breaks its ensures", [.var 6, .var 7, .var 9, .not (.var 12)]),
+    ("command breaks the invariant", [.var 6, .var 7, .var 9, .var 12, .not (.var 15)]) ]
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -547,6 +658,8 @@ def check (z3 : String) : IO Bool := do
     unless ← eventCase solver name goal do ok := false
   for (name, goal) in clockCases do
     unless ← clockCase solver name goal do ok := false
+  for (name, goal) in commandCases do
+    unless ← commandCase solver name goal do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

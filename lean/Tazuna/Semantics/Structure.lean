@@ -222,6 +222,9 @@ theorem cast_prod {A A' B B' : Type} (eA : A = A') (eB : B = B') (e : (A × B) =
 theorem cast_sumL {A A' B B' : Type} (eA : A = A') (eB : B = B') (e : (A ⊕ B) = (A' ⊕ B')) (a : A) :
     cast e (Sum.inl a : A ⊕ B) = Sum.inl (cast eA a) := by subst eA; subst eB; rfl
 
+theorem cast_sumR {A A' B B' : Type} (eA : A = A') (eB : B = B') (e : (A ⊕ B) = (A' ⊕ B')) (b : B) :
+    cast e (Sum.inr b : A ⊕ B) = Sum.inr (cast eB b) := by subst eA; subst eB; rfl
+
 theorem cast_list {A A' : Type} (eA : A = A') (e : List A = List A') (xs : List A) :
     cast e xs = xs.map (cast eA) := by
   subst eA
@@ -248,6 +251,13 @@ theorem Ty.up_inl (k : Nat) (a : List Ty) (fs : List Ty) (vs : List (List Ty)) (
   have hvs : Ty.isDatass vs = true := by simp_all [Ty.isData, Ty.isDatass]
   unfold Ty.up
   exact cast_sumL _ (congrArg Sigma.fst (Ty.semAltsWith_data Dsl.val_fresh vs hvs)).symm _ x
+
+theorem Ty.up_inr (k : Nat) (a : List Ty) (fs : List Ty) (vs : List (List Ty)) (h : (Ty.adt k a (fs :: vs)).isData = true)
+    (hvs : (Ty.adt k a vs).isData = true) (y : (Ty.semAltsWith Dsl.base vs).1) :
+    Ty.up (.adt k a (fs :: vs)) h (.inr y) = .inr (Ty.up (.adt k a vs) hvs y) := by
+  have hfs : Ty.isDatas fs = true := by simp_all [Ty.isData, Ty.isDatass]
+  unfold Ty.up
+  exact cast_sumR (congrArg Sigma.fst (Ty.semsWith_data Dsl.val_fresh fs hfs)).symm _ _ y
 
 theorem Ty.up_int (h : Ty.int.isData = true) (n : Ty.int.den0) : Ty.up .int h n = n := rfl
 theorem Ty.up_fresh (h : (Ty.dsl .fresh []).isData = true) (n : (Ty.dsl .fresh []).den0) : Ty.up (.dsl .fresh []) h n = n := rfl
