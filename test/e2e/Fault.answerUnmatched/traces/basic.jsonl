@@ -12,7 +12,7 @@
 {"out":"event","time":0,"value":{"amount":1,"tag":"Added"}}
 {"out":"event","time":0,"value":{"id":"id2","tag":"Tagged"}}
 {"in":"clock","time":10}
-{"external":"mail","id":"0","input":6,"name":"send","out":"request","time":10}
-{"in":"answer","ok":null,"time":10,"to":"0"}
+{"external":"mail","id":"r-9","input":6,"name":"send","out":"request","time":10}
+{"in":"answer","ok":null,"time":10,"to":"r-9"}
 {"out":"event","time":10,"value":{"tag":"Pinged"}}
-{"in":"answer","ok":null,"time":10,"to":"0"}
+{"in":"answer","ok":null,"time":10,"to":"r-9"}

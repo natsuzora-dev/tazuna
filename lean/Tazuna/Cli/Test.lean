@@ -13,7 +13,7 @@ open Tazuna.Ir Tazuna.Trace
 def faultFields : Fault → List (String × Json)
   | .invariant n | .ensures n => [("rule", Json.str n)]
   | .cascadeLimit => []
-  | .answerUnmatched to => [("to", Json.str (toString to))]
+  | .answerUnmatched to => [("to", Json.str to)]
   | .invalidOwnEffect n rs => [("request", Json.str n), ("rules", Json.arr (rs.map Json.str).toArray)]
 
 /-- The scenario's steps, typed by its service, when the types agree; the structure rules have checked that they do. -/

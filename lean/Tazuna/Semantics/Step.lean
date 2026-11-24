@@ -76,8 +76,9 @@ inductive Fault where
   | ensures (name : String)
   /-- The step took more internal steps than `bounds.cascade`. -/
   | cascadeLimit
-  /-- An answer names no pending request, or not with the types that request has. -/
-  | answerUnmatched (to : Nat)
+  /-- An answer names no pending request, or not with the types that request has. `to` is the name the input gave
+  the request. -/
+  | answerUnmatched (to : String)
   /-- An effect ran a command or query that was Invalid (the rules broken, as Invalid names them) or that the service
   does not list (`service`). -/
   | invalidOwnEffect (name : String) (rules : List String)
@@ -284,9 +285,9 @@ def step (v : ServiceV) (s : State v) : Input v → Result v
     | [] => ⟨s, .answered ⟨q.output, q.resolve (ctx s s.records caller input, ())⟩, [], []⟩
   | .answer to ⟨t, value⟩ =>
     match s.pending.find? (·.id == to) with
-    | none => ⟨s, .fault (.answerUnmatched to), [], []⟩
+    | none => ⟨s, .fault (.answerUnmatched (toString to)), [], []⟩
     | some p => match Ty.same t (Ty.result p.request.output p.request.rejection) with
-      | none => ⟨s, .fault (.answerUnmatched to), [], []⟩
+      | none => ⟨s, .fault (.answerUnmatched (toString to)), [], []⟩
       | some ⟨h⟩ =>
         let s' := { s with pending := s.pending.filter (·.id != to) }
         finish s (applyEvents { state := s' } (p.request.onAnswer (h ▸ value, ()))) .accepted
