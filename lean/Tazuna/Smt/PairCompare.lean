@@ -1,4 +1,4 @@
-import Tazuna.Smt.SameCode
+import Tazuna.Smt.CodeInjective
 import Tazuna.Smt.Fire
 import Tazuna.Smt.Decide
 import Tazuna.Smt.Verdict

@@ -984,26 +984,38 @@ variable {v : ServiceV}
 /-- Steps in progress that are the same up to a renaming of the names made from the counter `f0` and the next wire id
 `n0` on, at the same counter and next wire id: the base of the equivalence the own cascade is checked up to. Names
 made before stay as they are, as the oracle keeps the names earlier lines showed. -/
-def OwnRel (f0 n0 : Nat) (a a' : Acc v) : Prop :=
+def RenamedFrom (f0 n0 : Nat) (a a' : Acc v) : Prop :=
   ∃ R : Ren, Acc.Rel R a a' ∧ a.state.fresh = a'.state.fresh ∧ a.state.nextId = a'.state.nextId ∧
     n0 ≤ a.state.nextId ∧ (∀ n, (n < f0 ∨ a.state.fresh ≤ n) → R.ctr.rel n n) ∧ ∀ i < n0, R.wire.rel i i
 
-theorem OwnRel.symm {f0 n0 : Nat} {a a' : Acc v} : OwnRel f0 n0 a a' → OwnRel f0 n0 a' a
+theorem RenamedFrom.symm {f0 n0 : Nat} {a a' : Acc v} : RenamedFrom f0 n0 a a' → RenamedFrom f0 n0 a' a
   | ⟨R, h, hf, hn, hn0, hfix, hw⟩ =>
     ⟨R.inv, Acc.rel_inv h, hf.symm, hn.symm, hn ▸ hn0, fun n hn' => hfix n (hf ▸ hn'), fun i hi => hw i hi⟩
 
 /-- Fixing more names is a finer equivalence. -/
-theorem OwnRel.mono {f0 n0 f1 n1 : Nat} (hf : f0 ≤ f1) (hn : n0 ≤ n1) {a a' : Acc v} :
-    OwnRel f1 n1 a a' → OwnRel f0 n0 a a'
+theorem RenamedFrom.mono {f0 n0 f1 n1 : Nat} (hf : f0 ≤ f1) (hn : n0 ≤ n1) {a a' : Acc v} :
+    RenamedFrom f1 n1 a a' → RenamedFrom f0 n0 a a'
   | ⟨R, h, hfr, hni, hn1, hfix, hw⟩ =>
     ⟨R, h, hfr, hni, Nat.le_trans hn hn1, fun n hn' => hfix n (hn'.imp (fun h => by omega) id),
       fun i hi => hw i (by omega)⟩
 
+/-- The two orders' equivalence: the same up to renaming the wire ids and the ids made from the counter `f0` and the
+next wire id `n0` on, collections as multisets. -/
+abbrev Same (f0 n0 : Nat) : Acc v → Acc v → Prop := Diamond.Closure (RenamedFrom f0 n0)
+
+theorem Same.mono {f0 n0 f1 n1 : Nat} (hf : f0 ≤ f1) (hn : n0 ≤ n1) {a b : Acc v} (h : Same f1 n1 a b) :
+    Same f0 n0 a b := by
+  induction h with
+  | base h => exact .base (h.mono hf hn)
+  | refl a => exact .refl a
+  | symm _ ih => exact .symm ih
+  | trans _ _ ih1 ih2 => exact .trans ih1 ih2
+
 /-- The own cascade respects renaming: equivalent steps in progress have as many own effects waiting, and running
 any one of them has a partner on the other side that ends equivalently or also faults. -/
 theorem ownSys_simulates (T : List TypeDecl) (hv : v.Equivariant) (f0 n0 : Nat) :
-    Diamond.Simulates (ownSys T v) (Diamond.Closure (OwnRel (v := v) f0 n0)) := by
-  refine Diamond.Simulates.closure OwnRel.symm ?_
+    Diamond.Simulates (ownSys T v) (Same (v := v) f0 n0) := by
+  refine Diamond.Simulates.closure RenamedFrom.symm ?_
   intro a a' ⟨R, ha, hf, hn, hn0, hfix, hw⟩
   have hown := ha.2.2.2.2.2
   refine ⟨hown.length_eq, fun i hi => ?_⟩

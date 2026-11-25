@@ -1,5 +1,5 @@
 import Tazuna.Smt.OwnCoded
-import Tazuna.Smt.FiresForward
+import Tazuna.Smt.Timer
 import Tazuna.Semantics.NoTimer
 
 /-! T5 from the pair lines' answers, scoped to the slots, as every verdict is: where each listed pair of own kinds
@@ -130,7 +130,7 @@ def TimersFit (L : Layout) {r e : Ty} (records : r.den0) : {ms : List (MachineV 
 /-- What a timer line's answers say: the machine sets no timer (it gets no line), or both its questions are unsat
 (`Prove.proved`). -/
 def TimerLine (L : Layout) {r e : Ty} (m : MachineV r e) : Prop :=
-  m.noTimer = true ∨ ∃ bq tq, backQuestions L m = .ok (bq, tq) ∧ Unsat L (backTys m) bq ∧ Unsat L (backTys m) tq
+  m.noTimer = true ∨ ∃ bq tq, timerQuestions L m = .ok (bq, tq) ∧ Unsat L (timerTys m) bq ∧ Unsat L (timerTys m) tq
 
 /-- What a timer line says: the timer `after` sets at a context that fits the slots is no earlier than the time it is
 set at. -/
@@ -144,15 +144,15 @@ theorem forward_of_line {r e : Ty} {m : MachineV r e}
   obtain ⟨zs, hs⟩ := Option.isSome_iff_exists.1 hc.2.1
   obtain ⟨zr, hr⟩ := Option.isSome_iff_exists.1 hc.2.2
   let M := coverModel [zk, zs, zr, .int now]
-  have hM : ∀ n (h : n < (backTys m).length), Sorted L (backTys m)[n] (M.vars n) := by
+  have hM : ∀ n (h : n < (timerTys m).length), Sorted L (timerTys m)[n] (M.vars n) := by
     intro n hn
-    simp only [backTys, List.length_cons, List.length_nil] at hn
+    simp only [timerTys, List.length_cons, List.length_nil] at hn
     match n, hn with
     | 0, _ => exact sorted_of_embed hk
     | 1, _ => exact sorted_of_embed hs
     | 2, _ => exact sorted_of_embed hr
     | 3, _ => exact ⟨now, rfl⟩
-  exact (back_sound m hq ht hM ⟨key, st, records, now, decode_embed _ _ _ hk, decode_embed _ _ _ hs,
+  exact (timer_sound m hq ht hM ⟨key, st, records, now, decode_embed _ _ _ hk, decode_embed _ _ _ hs,
     decode_embed _ _ _ hr, rfl⟩).2 hb
 
 theorem firesAt_of_lines {r e : Ty} {records : r.den0} {now : Int} : {ms : List (MachineV r e)} →

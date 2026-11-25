@@ -16,7 +16,7 @@ import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Interleave
 import Tazuna.Semantics.NoTimer
 import Tazuna.Semantics.StepRename
-import Tazuna.Smt.FiresForward
+import Tazuna.Smt.Timer
 import Tazuna.Smt.Pair
 import Tazuna.Smt.PairLine
 import Tazuna.Smt.Lines
@@ -117,10 +117,10 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.run_lines,
     -- A timer line's counterexample is honest: a model is a context whose timer falls back, so timers do not fire
     -- forward.
-    ``Tazuna.Smt.back_violates,
+    ``Tazuna.Smt.timer_violates,
     -- No unsat answer is free and none is out of reach: `Unsat` asks that the sorts hold values, and the sorts of every
     -- question an encoder builds in a layout whose datatypes have sorts (as `Layout.ofParts`'s, `sorted_ofParts`) do.
-    ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.back_sorts]
+    ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.timer_sorts]
   let mut used : NameSet := {}
   let mut usedByOther : NameSet := {}
   let mut todo := roots

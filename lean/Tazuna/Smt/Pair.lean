@@ -1,4 +1,4 @@
-import Tazuna.Smt.PairSame
+import Tazuna.Smt.PairCompare
 import Tazuna.Smt.Cti
 import Tazuna.Smt.InternalDispatch
 import Tazuna.Smt.Names

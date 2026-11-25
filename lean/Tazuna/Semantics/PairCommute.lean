@@ -90,18 +90,6 @@ theorem Acc.Rel.mapWire {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') {σ : Nat 
     rintro _ ⟨o, ho, rfl⟩
     exact hlt _ (ho' o ho)
 
-/-- The two orders' equivalence: the same up to renaming the wire ids and the ids made from the counter `f0` and the
-next wire id `n0` on, collections as multisets. -/
-abbrev Same (f0 n0 : Nat) : Acc v → Acc v → Prop := Diamond.Closure (OwnRel f0 n0)
-
-theorem Same.mono {f0 n0 f1 n1 : Nat} (hf : f0 ≤ f1) (hn : n0 ≤ n1) {a b : Acc v} (h : Same f1 n1 a b) :
-    Same f0 n0 a b := by
-  induction h with
-  | base h => exact .base (h.mono hf hn)
-  | refl a => exact .refl a
-  | symm _ ih => exact .symm ih
-  | trans _ _ ih1 ih2 => exact .trans ih1 ih2
-
 /-- `e2` then `e1` with each effect's names as they are when `e1` runs first: `e2` takes the counter after `e1`'s, and
 the wire ids `e1` sends come first, then `e2`'s. -/
 def canonPair (a0 : Acc v) (e1 e2 : EffectV v.event) : Except Fault (Acc v) := do

@@ -1,6 +1,6 @@
 import Tazuna.Smt.Pair
 import Tazuna.Smt.Cover
-import Tazuna.Smt.FiresForward
+import Tazuna.Smt.Timer
 import Tazuna.Smt.NoGap
 
 /-! Every sort a script declares holds a value, so `Unsat`'s premise is never free: a sort with no value would make
@@ -9,7 +9,7 @@ its datatypes from `Layout.datatypes?`; where both are found, every data
 type's sort holds a value of `Sorted` (`sorted_exists`) and every effect type's a value of `EffSorted`
 (`varSorted_exists`): a constructor whose fields' sorts are found too, or a collection whose slots are all free.
 `sorts_inhabited` gives the `sorts` field of `Unsat` for the scripts of each question family: an input kind's step and
-bound questions (`questions`), a pair of own kinds' (`pairQuestions`) and a timer machine's (`backQuestions`). -/
+bound questions (`questions`), a pair of own kinds' (`pairQuestions`) and a timer machine's (`timerQuestions`). -/
 
 namespace Tazuna.Smt
 
@@ -217,15 +217,15 @@ theorem pair_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnySite} 
   · exact .inr ⟨_, rfl⟩
 
 /-- The sorts of a timer machine's questions hold values: its key's, its state's, the records' and Int's. -/
-theorem back_sorts (hL : SortedLayout L) {r e : Ty} {m : MachineV r e} {x} (hq : backQuestions L m = .ok x) :
-    SortsInhabited L (backTys m) := by
-  simp only [backQuestions] at hq
+theorem timer_sorts (hL : SortedLayout L) {r e : Ty} {m : MachineV r e} {x} (hq : timerQuestions L m = .ok x) :
+    SortsInhabited L (timerTys m) := by
+  simp only [timerQuestions] at hq
   obtain ⟨_, -, hq⟩ := bind_ok.1 hq
   obtain ⟨_, -, hq⟩ := bind_ok.1 hq
   obtain ⟨vars, hvars, hq⟩ := bind_ok.1 hq
   obtain ⟨dts, hdts, -⟩ := bind_ok.1 hq
   refine sorts_inhabited hL (need_ok.1 hdts) (mapM_need hvars) fun t ht => .inl ?_
-  simp only [backTys, List.mem_cons, List.not_mem_nil, or_false] at ht
+  simp only [timerTys, List.mem_cons, List.not_mem_nil, or_false] at ht
   rcases ht with rfl | rfl | rfl | rfl
   · exact m.key_data
   · exact m.state_data

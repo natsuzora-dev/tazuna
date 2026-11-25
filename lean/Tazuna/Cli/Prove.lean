@@ -3,7 +3,7 @@ import Tazuna.Trace.Run
 import Tazuna.Smt.Prove
 import Tazuna.Semantics.After
 import Tazuna.Smt.ServiceLayout
-import Tazuna.Smt.FiresForward
+import Tazuna.Smt.Timer
 import Tazuna.Semantics.NoTimer
 import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Pair
@@ -245,7 +245,7 @@ def boundReport (service step : String) : Smt.Answer → Except String Report
   | .sat _ => .ok (.boundReached service step)
   | .unknown why => .ok (.undecided (.undecided .unknown) service step none [("why", Json.str why)])
 
-/-- The report of a timer machine's target question (`backQuestions`): a model is a context where `after` sets a timer
+/-- The report of a timer machine's target question (`timerQuestions`): a model is a context where `after` sets a timer
 before the time it sets it at, recomputed in Lean from the model's values. -/
 def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a : Smt.Answer) :
     Except String Report :=
@@ -365,7 +365,7 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
   for m in v.machines.filter (!·.noTimer) do
     let g := Target.timer m.name
     let step := "timer " ++ m.name
-    match backQuestions L m with
+    match timerQuestions L m with
     | .error r =>
       match refusalLine c.T r with
       | some (k, fields) => items := items ++ [.ready (.undecided k v.name step none fields)]

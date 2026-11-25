@@ -1,5 +1,5 @@
 import Tazuna.Smt.State
-import Tazuna.Smt.SameCode
+import Tazuna.Smt.CodeInjective
 import Tazuna.Semantics.Valid
 
 /-! Which names a stored value holds, as a term: every fresh id it holds was made before the counter `n`, and so was

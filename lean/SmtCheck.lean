@@ -4,7 +4,7 @@ import Tazuna.Semantics.After
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.Solver
 import Tazuna.Smt.ServiceLayout
-import Tazuna.Smt.FiresForward
+import Tazuna.Smt.Timer
 import Tazuna.Smt.Pair
 import Tazuna.Smt.PairOrders
 
@@ -1488,7 +1488,7 @@ def machineEffectCheck (solver : Solver) : IO Bool := do
       | a => IO.println s!"smt-check: machine effect: {repr a}"; ok := false
   return ok
 
-/-! T5's timer question for one machine (`backQuestions`), with `after` from its kept source over Int keys, states and
+/-! T5's timer question for one machine (`timerQuestions`), with `after` from its kept source over Int keys, states and
 records. `forwardE` sets `Timer(ctx.state, ctx.state)` where the state is not negative and no timer otherwise, so its
 target question is unsat; `backE` sets `Timer(ctx.key, ctx.state)`, so a negative key sets a timer before the time and
 the target question is sat, and the model's context must be one where Lean's `after` sets such a timer. Nothing has
@@ -1523,7 +1523,7 @@ def timerLayout : Layout :=
 def timerCheck (solver : Solver) : IO Bool := do
   let mut ok := true
   for (name, af, back) in [("forward", forwardE, false), ("back", backE, true)] do
-    match backQuestions timerLayout (timerM af) with
+    match timerQuestions timerLayout (timerM af) with
     | .error r => IO.println s!"smt-check: timer {name}: no questions: {repr r}"; ok := false
     | .ok (bq, tq) =>
       match ← solver.run bq with
@@ -3658,7 +3658,7 @@ def familyQuestions : Except String (List (String × Script × Nat)) := do
   let pL := pairLayoutOf 3
   let psenv ← (StepEnv.of pL (shapes pairSvc)).mapError fun r => s!"no pair step environment: {repr r}"
   let (_, pq) ← (pairQuestions pL prelude pairSites pairSvc psenv 1 1).mapError fun r => s!"no pair questions: {repr r}"
-  let (_, tq) ← (backQuestions timerLayout (timerM backE)).mapError fun r => s!"no timer questions: {repr r}"
+  let (_, tq) ← (timerQuestions timerLayout (timerM backE)).mapError fun r => s!"no timer questions: {repr r}"
   pure [("step", target.script, 3), ("bound", bound.script, 3), ("pair", pq, 5), ("timer", tq, 4)]
 
 def familyCheck (solver : Solver) : IO Bool := do
