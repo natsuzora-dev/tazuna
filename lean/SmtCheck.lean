@@ -3384,32 +3384,57 @@ def check (z3 : String) : IO Bool := do
 and declarations included. -/
 def nodes (s : Script) : Nat := ((s.text []).getD "").foldl (fun n c => if c == '(' then n + 1 else n) 0
 
-/-- The step scripts' sizes at 2, 4, 8 and 16 slots, one line each: what the encoding costs as slots grow. -/
-def sizes : IO UInt32 := do
-  let row (name : String) (f : Nat → Except String Script) : IO Unit := do
-    let ns := [2, 4, 8, 16].map fun k => match f k with
-      | .ok s => toString (nodes s)
-      | .error m => s!"({m})"
-    IO.println s!"{name}: {"/".intercalate ns}"
-  row "event" fun k => (·.1) <$> writeScript k []
-  row "event list" fun k => (·.1) <$> eventsScript k []
-  row "command" fun k => (·.1) <$> twiceScriptOf k []
-  row "answer" fun k => (·.1) <$> answerMScriptOf k []
-  row "clock" fun k => (·.1) <$> clockFireScript 2 k []
-  row "own command step" fun k => (·.1) <$> internalScriptOf k []
+/-- The step scripts whose sizes are measured, each as a function of the slots (or the bound, or the levels). -/
+def sizeRows : List (String × (Nat → Except String Script)) :=
   let queue : List (Layout → Except Refusal Term) :=
     [fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5], fun L => ownT L nextKey (.str "alice") (.int 3) []]
-  row "own effect step (3 kinds)" fun k => (·.1) <$> dispScriptOf k queue[0]! []
-  row "cascade of 2" fun k => (·.1) <$> cascadeTermsOf k 2 queue []
-  row "cascade at 3 slots (bound, not slots)" fun k => (·.1) <$> cascadeTermsOf 3 k queue []
-  row "event with a cascade of 1" fun k => (·.1) <$> cascEventTermsOf 1 k []
-  row "event with a cascade at 3 slots (bound, not slots)" fun k => (·.1) <$> cascEventTermsOf k 3 []
-  row "clock whose timers queue own commands (bound 2)" fun k => (·.1) <$> tickClockTermsOf 2 k []
-  row "re-shared chain (levels, not slots)" fun k => pure (reshared k)
-  return 0
+  [("event", fun k => (·.1) <$> writeScript k []),
+   ("event list", fun k => (·.1) <$> eventsScript k []),
+   ("command", fun k => (·.1) <$> twiceScriptOf k []),
+   ("answer", fun k => (·.1) <$> answerMScriptOf k []),
+   ("clock", fun k => (·.1) <$> clockFireScript 2 k []),
+   ("own command step", fun k => (·.1) <$> internalScriptOf k []),
+   ("own effect step (3 kinds)", fun k => (·.1) <$> dispScriptOf k queue[0]! []),
+   ("cascade of 2", fun k => (·.1) <$> cascadeTermsOf k 2 queue []),
+   ("cascade at 3 slots (bound, not slots)", fun k => (·.1) <$> cascadeTermsOf 3 k queue []),
+   ("event with a cascade of 1", fun k => (·.1) <$> cascEventTermsOf 1 k []),
+   ("event with a cascade at 3 slots (bound, not slots)", fun k => (·.1) <$> cascEventTermsOf k 3 []),
+   ("clock whose timers queue own commands (bound 2)", fun k => (·.1) <$> tickClockTermsOf 2 k []),
+   ("re-shared chain (levels, not slots)", fun k => pure (reshared k))]
+
+/-- Prints the step scripts' sizes at 2, 4, 8 and 16, one row each. With a budget file, whose rows have the same form,
+a size above its budget, a row without a budget or a budget without a row fails: the size of what the solver reads is
+part of what a change must explain. A row stops at its first size over budget, since a term that is no longer shared
+can grow exponentially and the larger scripts would not finish. -/
+def sizes (budget : Option System.FilePath) : IO UInt32 := do
+  let budgets ← match budget with
+    | none => pure []
+    | some path => pure <| ((← IO.FS.lines path).toList.filter (· != "")).map fun l =>
+      match l.splitOn ": " with
+      | [name, ns] => (name, ns.splitOn "/" |>.map String.toNat?)
+      | _ => (l, [])
+  let mut ok := true
+  for (name, f) in sizeRows do
+    let bs := budgets.lookup name
+    if budget.isSome && bs.isNone then IO.println s!"smt-check: {name} has no budget"; ok := false
+    let mut cells := #[]
+    for (k, i) in [2, 4, 8, 16].zipIdx do
+      match f k, (bs.getD [])[i]?.join with
+      | .error m, _ => cells := cells.push s!"({m})"; ok := false
+      | .ok s, b =>
+        let n := nodes s
+        cells := cells.push (toString n)
+        if let some b := b then
+          if n > b then IO.println s!"smt-check: {name} at {k} has {n} nodes, over its budget of {b}"; ok := false; break
+        else if bs.isSome then IO.println s!"smt-check: {name} at {k} has no budget"; ok := false
+    IO.println s!"{name}: {"/".intercalate cells.toList}"
+  for (name, _) in budgets do
+    unless sizeRows.any (·.1 == name) do IO.println s!"smt-check: the budget of {name} measures no row"; ok := false
+  return if ok then 0 else 1
 
 def main (args : List String) : IO UInt32 := do
   match args with
-  | ["--sizes"] => sizes
+  | ["--sizes"] => sizes none
+  | ["--sizes", budget] => sizes (some budget)
   | [z3] => return if ← check z3 then 0 else 1
-  | _ => IO.eprintln "usage: smt-check <z3 executable> | smt-check --sizes"; return 3
+  | _ => IO.eprintln "usage: smt-check <z3 executable> | smt-check --sizes [budget file]"; return 3
