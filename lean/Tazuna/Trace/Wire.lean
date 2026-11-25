@@ -31,6 +31,8 @@ inductive Wire where
   | obj (kvs : List (String × Wire))
 deriving Inhabited, Repr
 
+-- A field without a label is keyed by its position, as Gleam writes it.
+set_option linter.tazuna.silentDefault false in
 /-- The keys a variant's fields sit under: their labels, or their positions. -/
 def fieldKeys (fs : List Field) : List String :=
   fs.zipIdx.map fun (f, k) => f.label.getD (toString k)
@@ -65,6 +67,8 @@ def decNil : (vs : List (List Ty)) → Wire → Option (Ty.semAltsWith Dsl.base 
 section
 variable (T : List TypeDecl) (name : IdV → Option String)
 
+-- A type index past the table has no variants, so no tag matches.
+set_option linter.tazuna.silentDefault false in
 mutual
 /-- The wire form of a value of type `t`, when it has one. `name` writes ids. -/
 def enc : (t : Ty) → t.den0 → Option Wire
@@ -124,6 +128,8 @@ end
 section
 variable (T : List TypeDecl) (lookup : String → Option IdV)
 
+-- A type index past the table has no variants, so no tag matches.
+set_option linter.tazuna.silentDefault false in
 mutual
 /-- The value of type `t` a wire form writes, when it writes one. `lookup` reads ids. -/
 def dec : (t : Ty) → Wire → Option t.den0

@@ -27,6 +27,8 @@ def Names.wire (ns : Names) (n : Nat) : Names × String :=
   | some w => (ns, w)
   | none => let w := s!"r{ns.wires.length + 1}"; ({ ns with wires := ns.wires ++ [(n, w)] }, w)
 
+-- One of ids.length + 1 candidate names is free, so the default is never read.
+set_option linter.tazuna.silentDefault false in
 def Names.bind (ns : Names) (xs : List IdV) : Names :=
   xs.foldl (fun ns x => if ns.ids.any (·.1 == x) then ns else match x with
     -- An outside id whose name another id has stays unnamed, so the value has no wire form.

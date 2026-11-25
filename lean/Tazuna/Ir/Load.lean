@@ -23,6 +23,8 @@ structure Global where
 
 def moduleOf (name : String) : String := ".".intercalate (name.splitOn ".").dropLast
 
+-- An argument or clause without an expression references nothing.
+set_option linter.tazuna.silentDefault false in
 /-- Every global reference in an expression, with its position and type arguments. -/
 partial def refs : Surface.Expr → List (String × At × List (String × STy))
   | .mk pos _ node =>

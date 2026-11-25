@@ -1,3 +1,5 @@
+import Tazuna.Linter
+
 /-! Gleam's meaning for the operators whose edges differ between languages. A spec means what Gleam on Erlang means
 (design, Revision 1). Where the Gleam language tour states the rule, the comment cites it; where it does not, the rule
 was observed by running gleam 1.19.2 on both targets (`-7 / 2 = -3`, `-7 % 2 = -1`, `7 / -2 = -3`, `7 % -2 = 1`,

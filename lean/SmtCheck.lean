@@ -2,6 +2,9 @@ import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.Solver
 
+-- Test scaffolding: a value the model leaves out reads as a default that the checks then reject.
+set_option linter.tazuna.silentDefault false
+
 /-! Runs the solver on printed scripts and reads its answers back: the theorems cover printing and reading our own
 text, and this check covers what only the solver can say, that it reads the text as SMT-LIB and prints values the
 reader reads. Each case encodes a closed expression, asks the solver for a variable equal to it, and compares the

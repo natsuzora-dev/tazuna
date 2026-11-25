@@ -17,6 +17,8 @@ def faultFields : Fault → List (String × Json)
 
 def textLines (text : String) : List String := (text.splitOn "\n").filter (!·.isEmpty)
 
+-- Report text: an absent line shows as empty or null.
+set_option linter.tazuna.silentDefault false in
 /-- Runs one scenario and compares or writes its snapshot; returns whether it passed. -/
 def testScenario (T : List TypeDecl) (v : ServiceV) (sc : ScenarioV v.records v.event v.caller) (update : Bool) :
     IO Bool := do

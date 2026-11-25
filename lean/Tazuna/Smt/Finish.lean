@@ -67,6 +67,8 @@ structure FinishOut (v : ServiceV) where
 section
 variable (L : Layout) (T : List TypeDecl)
 
+-- `queueAt` reads the default effect only where no own slot holds the place, and no fit asks that value.
+set_option linter.tazuna.silentDefault false in
 /-- A step's end after the events loop `o`, from the pending table term the step began with: its terms, its condition
 and the codes' condition. The pending write and the invariants are asked only where the cascade does not fault, since
 the step then leaves the state it began with. -/

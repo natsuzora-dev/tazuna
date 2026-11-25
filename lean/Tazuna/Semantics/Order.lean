@@ -234,9 +234,13 @@ theorem sort_eq_iff {α : Type} [Ord α] [Std.TransOrd α] [Std.LawfulEqOrd α] 
 
 end Erl
 
+-- A display name: an index past the variants prints empty.
+set_option linter.tazuna.silentDefault false in
 /-- The atom of variant `k` of a declaration's variants. -/
 def atomAt (decl : List Variant) (k : Nat) : String := ((decl[k]?).map (atomName ·.name)).getD ""
 
+-- A display name: an index past the type table has no variants to print.
+set_option linter.tazuna.silentDefault false in
 /-- The variants of the declaration a `Ty.adt` names by its index. -/
 def variantsAt (T : List TypeDecl) (i : Nat) : List Variant := (T[i]?.map (·.variants)).getD []
 

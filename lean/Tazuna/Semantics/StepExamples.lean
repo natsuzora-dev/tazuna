@@ -153,6 +153,8 @@ def ev (x : Int) : Input loop := .event ⟨0, by decide⟩ x
 -- So does a service that declares an external's command.
 #guard ((SpecV.illegal prelude ⟨[{ svc with declares := [.externalCommand "ping" .str .int .str] }], []⟩ []).filter
   (·.1 == .owner)).length == 1
+-- A test helper: a run with no step prints empty.
+set_option linter.tazuna.silentDefault false in
 /-- The outcome of the last of the inputs, run from the initial state. -/
 def last (v : ServiceV) (is : List (Input v)) : String :=
   (((run prelude v (State.init v) is).2.getLast?).map (·.outcome.summary)).getD ""

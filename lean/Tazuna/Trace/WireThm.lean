@@ -67,6 +67,8 @@ include hid
 
 attribute [local instance] lexOrd
 
+-- A type index past the table has no variants, so no tag matches.
+set_option linter.tazuna.silentDefault false in
 mutual
 theorem dec_enc : (t : Ty) → t.ordered T = true → (x : t.den0) → (w : Wire) → enc T name t x = some w →
     ∃ y, dec T lookup t w = some y ∧ Ty.erl T t y = Ty.erl T t x

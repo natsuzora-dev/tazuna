@@ -255,6 +255,8 @@ def probeAlts : (vs : List (List Ty)) → Nat → Nat → Option (Ty.semAltsWith
   | fs :: _, 0, k => (probeFields fs k).map .inl
   | _ :: vs, i + 1, k => (probeAlts vs i k).map .inr
 
+-- Probe labels for messages: a field without a label is named by its position.
+set_option linter.tazuna.silentDefault false in
 /-- The table fields of a records type, each with its label and a records value whose only nonempty table it is. A
 table whose key or value type has no value never holds an entry, so it has no probe. -/
 def tableProbes (T : List TypeDecl) : (r : Ty) → List (String × r.den0)

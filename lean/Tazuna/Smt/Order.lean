@@ -19,6 +19,8 @@ def lexT (a b : Term × Term) : Term × Term :=
   let eq := Term.and a.2 (.not a.1)
   (.or a.1 (.and eq b.1), .or a.1 (.and eq b.2))
 
+-- Every index comes from `List.range ats.length`, so the default is never read (`getD_map_range`).
+set_option linter.tazuna.silentDefault false in
 /-- Pairs of variant indices below `n` whose atoms stand in `rel`. -/
 def atomPairs (ats : List String) (rel : String → String → Bool) : List (Nat × Nat) :=
   (List.range ats.length).flatMap fun k => (List.range ats.length).filterMap fun j =>
@@ -99,6 +101,8 @@ theorem int_cmp (a b : Int) : (compare a b == .lt) = decide (a < b) ∧ (compare
     · simp [e]
     · simp [h, e]; omega
 
+-- Every index comes from `List.range ats.length`, so the default is never read (`getD_map_range`).
+set_option linter.tazuna.silentDefault false in
 theorem mem_atomPairs {ats : List String} {rel : String → String → Bool} {k j : Nat} :
     (k, j) ∈ atomPairs ats rel ↔ k < ats.length ∧ j < ats.length ∧ rel (ats.getD k "") (ats.getD j "") = true := by
   simp only [atomPairs, List.mem_flatMap, List.mem_range, List.mem_filterMap]
@@ -128,6 +132,8 @@ theorem anyPairs_den {isK : Nat → Term → Term} {x y : Term} {n kx ky : Nat}
     have hb := hps _ h
     exact ⟨_, List.mem_map.2 ⟨(kx, ky), h, rfl⟩, by simp [Term.denote, hx kx hb.1, hy ky hb.2, Val.toBool]⟩
 
+-- Every index comes from `List.range ats.length`, so the default is never read (`getD_map_range`).
+set_option linter.tazuna.silentDefault false in
 theorem enumOrd_den {isK : Nat → Term → Term} {x y : Term} {kx ky : Nat} (ats : List String)
     (hkx : kx < ats.length) (hky : ky < ats.length)
     (hx : ∀ k < ats.length, (isK k x).denote M = .bool (k == kx))
@@ -185,6 +191,8 @@ theorem erl_compare (a b : Erl) : compare a b = Erl.cmp a b := rfl
 theorem string_compare_self (s : String) : compare s s = .eq := by
   simp only [compare, String.compare, compareOfLessAndEq]; simp
 
+-- The lemma that shows the default unread.
+set_option linter.tazuna.silentDefault false in
 theorem getD_map_range (f : Nat → String) {k n : Nat} (h : k < n) : ((List.range n).map f).getD k "" = f k := by
   simp [List.getD_eq_getElem?_getD, h]
 

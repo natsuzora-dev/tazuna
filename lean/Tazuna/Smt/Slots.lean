@@ -104,6 +104,8 @@ theorem denotes_eq_map (ts : List Term) : Term.denotes M ts = ts.map (Term.denot
   | nil => rfl
   | cons t ts ih => simp [Term.denotes, ih]
 
+-- SMT-LIB leaves a selector on a field its constructor lacks to the model, and the default stands for that value.
+set_option linter.tazuna.silentDefault false in
 theorem sel_ctor {x : Term} {d k : Nat} {vs : List Val} (j : Nat) (h : x.denote M = .ctor d k vs) :
     (Term.sel d k j x).denote M = vs[j]?.getD default := by
   simp [Term.denote, h]

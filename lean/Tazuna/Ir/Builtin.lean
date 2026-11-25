@@ -363,6 +363,8 @@ def ty (p : Prim) : Ty := .fn (p.sig.params.map (·.ty)) p.sig.ret
 
 def labels (p : Prim) : List (Option String) := p.sig.params.map (·.label)
 
+-- A missing type argument is not comparable, so the check fails.
+set_option linter.tazuna.silentDefault false in
 /-- Whether the type arguments meet the signature's demands. -/
 def ok (p : Prim) (args : List Ty) : Bool :=
   args.length == p.sig.tvars.length && p.sig.needsEq.all (fun k => (args[k]?.map Ty.comparable).getD false) &&

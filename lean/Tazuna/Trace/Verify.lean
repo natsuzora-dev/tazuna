@@ -21,6 +21,8 @@ def bindPair {α : Type} [BEq α] (xs : List (α × String)) (n : α) (s : Strin
   | none, some _ => none
   | none, none => some (xs ++ [(n, s)])
 
+-- An id the trace has not bound is a named id.
+set_option linter.tazuna.silentDefault false in
 /-- The id an in line names: the one bound to the name, or else the outside id of that name. -/
 def Bind.id? (b : Bind) (s : String) : Option IdV := some (((b.ids.find? (·.2 == s)).map (·.1)).getD (.named s))
 
@@ -56,6 +58,8 @@ def matchLiteral (expected : Option Wire) (w : Wire) (b : Bind) : List Bind :=
 section
 variable (T : List TypeDecl)
 
+-- A type index past the table has no variants, so no tag matches.
+set_option linter.tazuna.silentDefault false in
 mutual
 /-- Every extension of the binding under which the wire form writes the value. -/
 def matchVal : (t : Ty) → t.den0 → Wire → Bind → List Bind
@@ -123,11 +127,15 @@ def matchExpect (now : Int) (e : Expect v) (l : Line) (b : Bind) : List Bind :=
       | none => []
   | _, _ => []
 
+-- No answer target means no answered line.
+set_option linter.tazuna.silentDefault false in
 /-- The out lines the spec expects of a step's result. -/
 def expects (answerTo : Option String) (r : Result v) : List (Expect v) :=
   (answerTo.map fun to => [Expect.answered to r.outcome]).getD [] ++ r.events.map .applied ++
     r.out.map fun o => .sent o.id o.external o.name o.input
 
+-- Message text: an unbound wire id prints as `?<id>`.
+set_option linter.tazuna.silentDefault false in
 /-- The expected out lines, written with the binding so far. -/
 def Expect.toLine (now : Int) (b : Bind) : Expect v → Option Line
   | .answered to o => match o with

@@ -9,6 +9,8 @@ namespace Tazuna.Cli
 
 open Lean (Json)
 
+-- An error without a position has no line or column fields.
+set_option linter.tazuna.silentDefault false in
 def invalidIrLine (e : Ir.Elab.LoadError) : Json :=
   Json.mkObj ([("kind", Json.str Kind.invalidIr.name)] ++ (e.file.map fun f => ("file", Json.str f)).toList ++
     (e.pos.map fun p => [("line", Json.num p.line), ("col", Json.num p.col)]).getD [] ++

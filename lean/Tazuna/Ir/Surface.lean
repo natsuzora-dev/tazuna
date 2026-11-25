@@ -1,4 +1,5 @@
 import Lean.Data.Json
+import Tazuna.Linter
 
 /-! The IR as the converter writes it: Gleam's syntax with names resolved and every node annotated with its type. It
 keeps the surface constructs (pipe, `use`, shorthand labels, let patterns, alternative patterns) and literals as
@@ -185,6 +186,8 @@ partial def readTyAsWritten (j : Json) : R STy := do
     return .hole n
   throw s!"not a type: {j.compress.take 120}"
 
+-- A type variable the substitution does not bind stays itself.
+set_option linter.tazuna.silentDefault false in
 partial def substVars (by_ : List (String × STy)) : STy → STy
   | .var n => (by_.lookup n).getD (.var n)
   | .con n args => .con n (args.map (substVars by_))

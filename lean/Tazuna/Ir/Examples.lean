@@ -143,6 +143,8 @@ def wellTyped : Json := program [box, shape]
 
 def loaded (rootTy : Ty) (j : Json) : Except Elab.LoadError (Program rootTy) := Load.load rootTy j
 
+-- Message text: an error without a file prints `?`.
+set_option linter.tazuna.silentDefault false in
 /-- The message of a refused IR with its position, or `accepted`. -/
 def verdict (rootTy : Ty) (j : Json) : String :=
   match loaded rootTy j with

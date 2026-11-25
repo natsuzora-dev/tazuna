@@ -1,6 +1,9 @@
 import Tazuna.Ir.Builtin
 import Tazuna.Ir.Literal
 
+-- Generated Gleam text: an unnamed type or label prints a placeholder.
+set_option linter.tazuna.silentDefault false
+
 /-- A module of the `tazuna` package that gen-dsl writes: its name, its path under gleam/src, what it is, and the
 lines before its declarations (imports and, for `tazuna`, the launcher's entry point). -/
 structure DslModule where

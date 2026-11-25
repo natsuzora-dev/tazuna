@@ -115,6 +115,8 @@ def SenderShape.sender : {ks : List Ty} → SenderShape ks → (Ty.tuple ks).den
   | _, .machine n k, (key, ()) => .machine n ⟨k, key⟩
   | _, .reaction n, () => .reaction n
 
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
 /-- One shape of request an effect makes: the external command or query of the service's `declared` it asks for,
 and the sites of its `on_answer` and, for a query, of its `ensures`. -/
 structure RequestShape (e : Ty) where
@@ -130,9 +132,13 @@ structure RequestShape (e : Ty) where
   /-- What varies, each value data: the input, and the values each site captured. -/
   hfields : (Ty.tuple [input, .tuple ((ensures.map (·.1)).getD []), .tuple answerΓ]).isData = true
 
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
 /-- The types of the values the `ensures` captured; none without one. -/
 def RequestShape.ensuresΓ {e : Ty} (sh : RequestShape e) : List Ty := (sh.ensures.map (·.1)).getD []
 
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
 /-- The `ensures` closure record with the captured values `env`. -/
 def ensuresFn {t : Ty} : (ens : Option ((Γ : List Ty) × Site Γ t)) → (Ty.tuple ((ens.map (·.1)).getD [])).den0 →
     Option (Fun t)
@@ -167,6 +173,8 @@ def PendingShape.pending {e : Ty} (sh : PendingShape e) (id : Nat) (x : Ty.dens 
 def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks) :=
   v.machines.map (fun m => ⟨[m.key], .machine m.name m.key⟩) ++ v.reactions.map fun x => ⟨[], .reaction x.name⟩
 
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
 /-- Every shape of request a service's effects can make, given the program's sites: each external command or query
 the service may request, and each site of the type its `on_answer` and `ensures` must have, whose fields are data. -/
 def requestShapes (v : ServiceV) (sites : List AnySite) : List (RequestShape v.event) :=

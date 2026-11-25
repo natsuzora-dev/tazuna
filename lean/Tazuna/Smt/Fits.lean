@@ -68,6 +68,8 @@ def insertsFit {k v : Sem} (n : Nat) : List (k.1 × v.1 × Unit) → (Sem.table 
 section
 variable (S : Ty → Nat)
 
+-- The built-in's arity (`Prim.ok`) guarantees the type argument, so the default is never read.
+set_option linter.tazuna.silentDefault false in
 /-- What each built-in carries: a built-in that builds a bag or table fits when the result has at most its type's
 slot count of items, one that applies a function fits when each application does, and `require` and `ref` fit when
 the continuation they take does. -/

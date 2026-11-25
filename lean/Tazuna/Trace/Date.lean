@@ -1,3 +1,5 @@
+import Tazuna.Linter
+
 /-! Dates on the wire. A date is its day number since 1970-01-01; a trace writes it as the label `YYYY-MM-DD` of a
 proleptic Gregorian day in years 0000 through 9999. Carried over from smt-foundation with its proof
 (`Tazuna.Trace.DateThm`). -/
@@ -25,6 +27,8 @@ def civilFromDays (z : Int) : Int × Int × Int :=
   let m := if decide (mp < 10) then mp + 3 else mp - 9
   (if decide (m ≤ 2) then yoe + era * 400 + 1 else yoe + era * 400, m, d)
 
+-- A position past the string reads as -1, which no digit test accepts.
+set_option linter.tazuna.silentDefault false in
 /-- The code point of character `i` of `s`, or -1 past its end. -/
 def codeAt (s : String) (i : Nat) : Int := (s.toList[i]?.map (fun c => (c.toNat : Int))).getD (-1)
 

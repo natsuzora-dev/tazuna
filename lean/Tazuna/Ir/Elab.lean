@@ -63,6 +63,8 @@ variable (T : List TypeDecl)
 
 def typeIndex (name : String) : Option Nat := T.findIdx? (·.name == name)
 
+-- Message text: a type index past the table prints as `type<i>`.
+set_option linter.tazuna.silentDefault false in
 partial def showTy : Ty → String
   | .int => "Int"
   | .str => "String"
@@ -405,11 +407,15 @@ def etaCapture (pos : At) (ann p r : STy) (label : Option String) (f : Surface.E
     | _ => .call f args
   .mk pos ann (.lam [.mk "$" p none] none (.mk pos r body))
 
+-- The parser gives every shorthand argument a label, so the default is never read.
+set_option linter.tazuna.silentDefault false in
 def placedArgs {Γ : List Ty} (args : List Surface.Arg) : List (Placed (Slot T G Γ)) :=
   args.map fun
     | .mk pos label (some v) => { pos, label, value := .expr v }
     | .mk pos label none => { pos, label, value := .expr (shorthand pos (label.getD "")) }
 
+-- Message text prints an unknown type argument as `?`; a function without declared labels takes none per parameter.
+set_option linter.tazuna.silentDefault false in
 mutual
 partial def elabExpr (sc : Scope) : Surface.Expr → E ((t : Ty) × Expr G (ctx sc) t)
   | .mk pos ann node => do

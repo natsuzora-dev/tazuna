@@ -1,3 +1,5 @@
+import Tazuna.Linter
+
 /-! Types after elaboration, the declarations of the types a program defines, and the types Lean owns. -/
 
 namespace Tazuna.Ir
@@ -127,6 +129,8 @@ def samess : (a b : List (List Ty)) → Option (PLift (a = b))
   | _, _ => none
 end
 
+-- A type parameter past the arguments stays itself, unapplied.
+set_option linter.tazuna.silentDefault false in
 mutual
 /-- Replaces `param k` with `args[k]`. -/
 def inst (args : List Ty) : Ty → Ty

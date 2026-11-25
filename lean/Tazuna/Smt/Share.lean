@@ -18,11 +18,15 @@ structure Defs where
   /-- Candidate entries by the shared term's hash. -/
   index : Std.HashMap UInt64 (List Nat) := {}
 
+-- A hash with no bucket has no entries.
+set_option linter.tazuna.silentDefault false in
 def Defs.find? (D : Defs) (h : UInt64) (t : Term) : Option Nat :=
   (D.index.getD h []).find? fun i => match D.entries[i]? with
     | some (o, _) => o.same t
     | none => false
 
+-- A hash with no bucket has no entries.
+set_option linter.tazuna.silentDefault false in
 def Defs.add (D : Defs) (h : UInt64) (t b : Term) : Defs :=
   { entries := D.entries.push (t, b), index := D.index.insert h (D.entries.size :: D.index.getD h []) }
 

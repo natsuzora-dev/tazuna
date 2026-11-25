@@ -118,6 +118,9 @@ def freshId (step : Nat) (index : Int) : IdV :=
   let i := if 0 ≤ index then 2 * index.toNat else 2 * (-index).toNat - 1
   .fresh ((step + i) * (step + i + 1) / 2 + i)
 
+-- The built-in's arity (`Prim.ok`) guarantees the type argument, so that default is never read. A subscription
+-- whose event no source declares has no owner, which the empty name says.
+set_option linter.tazuna.silentDefault false in
 /-- The value of a built-in at the type arguments `args`, which meet its demands. -/
 def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.inst args).den
   | .length, _, _ => fun (s, ()) => Gleam.length s

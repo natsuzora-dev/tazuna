@@ -239,6 +239,8 @@ theorem fault_query (name : String) (o : OwnQueryOut v) :
   · rfl
   · cases brokenIn M o.rules <;> rfl
 
+-- SMT-LIB leaves a selector on a field its constructor lacks to the model, and the default stands for that value.
+set_option linter.tazuna.silentDefault false in
 /-- One own kind's internal step, for an own effect of the kind: where the codes' condition holds, the condition
 holds exactly when the internal step `Step.runOwn` runs fits (`ownFits`); wherever it holds, the fault term holds
 exactly when the outcome terms name a fault, which is `Step.runOwn`'s, and otherwise the internal step runs to its end

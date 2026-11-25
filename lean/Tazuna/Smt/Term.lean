@@ -1,3 +1,5 @@
+import Tazuna.Linter
+
 /-! The SMT-LIB terms tazuna sends to a solver, and what each means in a model (`Term.denote`). The solver is any that
 reads standard SMT-LIB 2.6 with the theories of Ints and Strings and declared datatypes; `denote` states the
 meaning those standards give each operation, so the theorems about the encoding hold for every model a solver may
@@ -225,6 +227,8 @@ structure Model where
   /-- The value of each definition `s<i>`; a model of a script gives each the value of its body. -/
   defs : Nat → Val
 
+-- SMT-LIB leaves a selector on a field its constructor lacks to the model, and the default stands for that value.
+set_option linter.tazuna.silentDefault false in
 mutual
 def Term.denote (M : Model) : Term → Val
   | .var n => M.vars n

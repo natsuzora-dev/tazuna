@@ -8,6 +8,13 @@ export PATH="$HOME/.elan/bin:$PATH"
 (cd gleam && gleam format --check src test &&
   gleam build --target javascript --warnings-as-errors && gleam test --target javascript &&
   gleam build --target erlang --warnings-as-errors && gleam test --target erlang)
+# The linters run only in modules that import them. A module with no tazuna import would miss them, so every module
+# but the linters' own imports one, and the modules that import nothing else of tazuna's import Tazuna.Linter.
+unlinted=$(cd lean && grep -L '^import Tazuna\.' $(find Tazuna -name '*.lean' ! -path 'Tazuna/Linter*') *.lean || true)
+if [ -n "$unlinted" ]; then
+  echo "These Lean modules import no tazuna module, so the linters skip them. Import Tazuna.Linter: $unlinted"
+  exit 1
+fi
 (cd lean && lake build --wfail && lake exe gen-dsl ..)
 
 gleam_version=$(sed -n 's/^version = "\(.*\)"$/\1/p' gleam/gleam.toml)

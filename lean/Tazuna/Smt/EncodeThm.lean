@@ -443,6 +443,8 @@ theorem relVs_length : {ts : List Ty} → (y : Ty.dens ts) → (vals : List Val)
   | [], _, _, h => by simp only [RelVs] at h; simp [h]
   | _ :: _, (_, _), _, ⟨_, _, e, _, h⟩ => by subst e; simp [relVs_length _ _ h]
 
+-- SMT-LIB leaves a selector on a field its constructor lacks to the model, and the default stands for that value.
+set_option linter.tazuna.silentDefault false in
 theorem relVs_field : {ts : List Ty} → {t : Ty} → (y : Ty.dens ts) → (vals : List Val) → RelVs L ts y vals →
     (k : Nat) → (h : ts[k]? = some t) → RelV L t (Dens.field y k h) (vals[k]?.getD default)
   | [], _, _, _, _, _, h => nomatch h
@@ -452,6 +454,8 @@ theorem relVs_field : {ts : List Ty} → {t : Ty} → (y : Ty.dens ts) → (vals
   | _ :: _, _, (_, _), _, ⟨_, _, e, _, h2⟩, k + 1, h => by
     subst e; exact relVs_field _ _ h2 k (by simpa using h)
 
+-- SMT-LIB leaves a selector on a field its constructor lacks to the model, and the default stands for that value.
+set_option linter.tazuna.silentDefault false in
 theorem relVs_get : {ts : List Ty} → (y : Ty.dens ts) → (vals : List Val) → RelVs L ts y vals →
     (k : Fin ts.length) → RelV L (ts.get k) (Dens.get y k) (vals[k.val]?.getD default)
   | _ :: _, (_, _), _, ⟨_, _, e, h1, _⟩, ⟨0, _⟩ => by subst e; exact h1
@@ -469,6 +473,8 @@ theorem denotes_sels (M : Model) (d k : Nat) (x : Term) (vals : List Val) (hx : 
   intro j h1 h2
   simp [Term.denote, hx, h2]
 
+-- SMT-LIB leaves a selector on a field its constructor lacks to the model, and the default stands for that value.
+set_option linter.tazuna.silentDefault false in
 theorem fieldT_denote (d j : Nat) (x : Term) (i : Nat) (vals : List Val) (hx : x.denote M = .ctor d i vals) :
     (k n : Nat) → k ≤ i → i ≤ k + n → (fieldT d j x k n).denote M = vals[j]?.getD default
   | k, 0, h1, h2 => by
@@ -1751,6 +1757,8 @@ theorem EffectKey.eq_of_same {a b : EffectKey} (h : a.same b = true) : a = b := 
   rw [Ty.eq_of_same he, hn, Ty.eq_of_same hi, Ty.eq_of_same ho, optSame_eq (fun _ _ => Ty.eq_of_same) hj,
     optSame_eq (fun _ _ => SiteKey.eq_of_same) hen, SiteKey.eq_of_same han]
 
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
 /-- An effect's code is its kind's variant, with the input and the captured values' tuples as its fields. -/
 theorem effectT_ok {key : EffectKey} {it : Term} {ens ans : List Term} {t : Term}
     (h : effectT L key it ens ans = .ok t) :

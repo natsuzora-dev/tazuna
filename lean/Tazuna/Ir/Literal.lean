@@ -1,3 +1,5 @@
+import Tazuna.Linter
+
 /-! Gleam's literal tokens. The IR carries an Int or String literal as the exact source text, and Lean reads it here by
 Gleam's lexical rules, so the converter never decides what a literal means. -/
 

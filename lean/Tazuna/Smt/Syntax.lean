@@ -86,6 +86,8 @@ def symbols : List (String × Sym) :=
    ("mod", .op2 .mod), ("str.++", .op2 .cat), ("str.<", .op2 .slt), ("ite", .ite), ("true", .lit true), ("false", .lit false),
    ("_", .under), ("is", .is)]
 
+-- A symbol the table does not list is unknown, which the default says.
+set_option linter.tazuna.silentDefault false in
 def classify (s : String) : Sym :=
   match Name.read s.toList with
   | some n => .name n

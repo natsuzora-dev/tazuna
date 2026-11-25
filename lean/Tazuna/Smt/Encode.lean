@@ -80,6 +80,8 @@ structure EffectKey where
   ensures : Option SiteKey
   answer : SiteKey
 
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
 /-- The types of what varies among the effects of a kind. -/
 def EffectKey.fields (k : EffectKey) : List Ty :=
   [k.input, .tuple ((k.ensures.map (·.Γ)).getD []), .tuple k.answer.Γ]
@@ -608,6 +610,8 @@ def freshT (step index : Term) : Term :=
   let a := Term.share (.add step i)
   .add (.div (.mul a (.add a (.int 1))) (.int 2)) i
 
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
 /-- An effect of the kind `key`: its variant of the effect datatype, with the input and the terms of the values the
 `ensures` and `on_answer` sites captured. -/
 def effectT (key : EffectKey) (input : Term) (ens answer : List Term) : Except Refusal Term := do

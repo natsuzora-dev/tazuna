@@ -121,6 +121,8 @@ theorem mem_sitesOf {sites : List AnySite} {t : Ty} {Γ : List Ty} {s : Site Γ 
     cases hs
     exact hm
 
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
 /-- Every shape a service's states can hold names sites of the program. -/
 theorem shapes_inSites {v : ServiceV} {P : List AnySite} {sh : PendingShape v.event} (h : sh ∈ shapes v P) :
     sh.InSites P := by

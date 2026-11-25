@@ -1,3 +1,5 @@
+import Tazuna.Linter
+
 /-! `Forall2` and its lemmas. Core Lean has no `List.Forall₂`. -/
 
 namespace Tazuna.Smt
