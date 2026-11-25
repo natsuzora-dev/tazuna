@@ -19,8 +19,7 @@ import Tazuna.Semantics.StepRename
 import Tazuna.Smt.Commute
 import Tazuna.Smt.Pairs
 import Tazuna.Smt.FiresForward
-import Tazuna.Smt.SameCode
-import Tazuna.Smt.Names
+import Tazuna.Smt.Pair
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -50,7 +49,7 @@ elab "#check_tazuna_axioms" : command => do
   -- The theorems the engine's answers rest on: a double-backquoted name that no longer exists fails to elaborate.
   for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound,
       ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent,
-      ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete] do
+      ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete, ``Tazuna.Smt.pairs_sound] do
     unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms
@@ -106,15 +105,13 @@ elab "#check_tazuna_reach" : command => do
     -- T5 for runs: those cascades are every cascade a run on valid inputs starts, since valid inputs keep every name
     -- of a state below its counter.
     ``Tazuna.Smt.runs_confluent,
-    -- T5b: the pair questions cover every two own effects a model codes, in both orders, self-pairs included.
-    ``Tazuna.Smt.ownPairs_complete,
+    -- T5's pair questions, one per ordered pair of own kinds: unsat answers to a pair's two questions mean its two
+    -- effects commute in the canonical sense from every state a model decodes to whose names are below its counter;
+    -- over every listed pair, any two own effects a model codes (T5b, `ownPairs_complete`).
+    ``Tazuna.Smt.pairs_sound,
     -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
     -- forward; unsat answers mean no context within the slots has one.
-    ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound,
-    -- For the pair questions T5 asks (U11 part c, not yet built): equal codes are the same value up to multisets, so
-    -- comparing codes compares results without searching for a renaming; and every state on valid inputs makes the
-    -- names term hold, so the questions may assume it.
-    ``Tazuna.Smt.rel0_same, ``Tazuna.Smt.stateSupp_names]
+    ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do
