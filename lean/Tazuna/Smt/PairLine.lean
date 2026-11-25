@@ -67,7 +67,6 @@ unsat, any two waiting own effects commute from every step in progress whose sta
 below its counter, whose pending requests and waiting effects are the program's, and whose two effects a script can
 hold. -/
 theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
-    (hrc : v.records.comparable = true) (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
     (hall : ∀ p ∈ L.ownPairs v.event, ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧
       Unsat L (pairTys v) bq ∧ Unsat L (pairTys v) tq)
     {a0 : Step.Acc v} (hkeys : Step.KeysOk T a0.state) (hW : Within L (shapes v) a0.state)
@@ -76,7 +75,7 @@ theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E 
     (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P) :
     Step.PairCommutes T a0 x1 x2 := by
   obtain ⟨M, hM, hS, hx1, hx2⟩ := pair_model hkeys hW he1 he2
-  exact pairs_sound (M := M) chk senv hrc hmc hall hM hS hinv.below hsupp rfl hqk hsa hx1 hx2 hown1 hown2 hreach1
+  exact pairs_sound (M := M) chk senv hall hM hS hinv.below hsupp rfl hqk hsa hx1 hx2 hown1 hown2 hreach1
     hreach2
 
 /-- What a pair question's codes condition says: `apply` fits, and so do the functions of each of the two own kinds
@@ -108,8 +107,7 @@ theorem pair_codes {M : Model} {P : List AnySite} {senv : StepEnv L (shapes v)} 
 question unsat and its codes fit, two waiting own effects commute from every step in progress `pairs_at` speaks of
 where every internal step the two orders run fits the slots. -/
 theorem pairsWithin_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
-    (senv : StepEnv L (shapes v)) (hrc : v.records.comparable = true)
-    (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
+    (senv : StepEnv L (shapes v))
     (hall : ∀ p ∈ L.ownPairs v.event, ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧
       Unsat L (pairTys v) tq ∧ PairCodesFit L P v p.1 p.2)
     {a0 : Step.Acc v} (hkeys : Step.KeysOk T a0.state) (hW : Within L (shapes v) a0.state)
@@ -145,7 +143,7 @@ theorem pairsWithin_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     rintro a (rfl | rfl | rfl | rfl | rfl)
     · exact wf_of_decodeState (need_ok.1 hwf) hS
     · exact (pendingBelow_iff hR.pending hR.nextId hbl).2 hinv.below
-    · exact stateSupp_names hR hsupp hrc hmc (need_ok.1 hnames)
+    · exact stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames)
     · exact ht1
     · exact ht2
   obtain ⟨a, ha, hna⟩ := ht.noModel M hM
@@ -155,7 +153,7 @@ theorem pairsWithin_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   rcases ha with rfl | rfl | rfl
   · exact (hna hcodes).elim
   · exact (hna hcond).elim
-  exact pair_commutes chk senv hrc hmc hR hinv' hqk hsa (t1 := .var (pairVar v)) (t2 := .var (pairVar v + 1)) hx1
+  exact pair_commutes chk senv hR hinv' hqk hsa (t1 := .var (pairVar v)) (t2 := .var (pairVar v + 1)) hx1
     hx2 hown1 hown2 hreach1 hreach2 ht1 ht2 ho hcodes hcond hna
 
 end

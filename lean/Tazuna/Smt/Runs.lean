@@ -23,7 +23,7 @@ theorem begins_keeps (c : CheckedSpec) (hv : v ∈ c.spec.services) {s : State v
     (hs : Step.StateSupp s) (hk : Step.KeysOk c.T s) {x : Input v} (hx : x.Valid s) {a : Step.Acc v}
     (h : Step.Begins c.T s x a) : Lines.Keeps c.T c.P a := by
   have hr := (c.checked v hv).reach
-  obtain ⟨hsupp, hpend⟩ := Step.begins_supp c.T (c.equivariant v hv) (c.states hv) hs hinv.below hx h
+  obtain ⟨hsupp, hpend⟩ := Step.begins_supp c.T (c.equivariant v hv) hs hinv.below hx h
   have hnil : ∀ s' : State v, Step.QueueOk c.P ({ state := s' } : Step.Acc v) := fun _ x hx => nomatch hx
   refine ⟨hsupp, ?_, ?_, ?_, hpend⟩
   · cases h with
@@ -66,7 +66,7 @@ theorem run_keeps (c : CheckedSpec) (hv : v ∈ c.spec.services) {xs : List (Inp
   have he := c.equivariant v hv
   have hr := (c.checked v hv).reach
   exact ⟨run_inv c.T hr _ Step.init_inv xs,
-    Step.run_supp c.T he (c.states hv) hr _ Step.init_inv (Step.init_supp he) xs hxs,
+    Step.run_supp c.T he hr _ Step.init_inv (Step.init_supp he) xs hxs,
     run_keys c.T _ (Step.init_keys c.T fun m hm => ((c.checked v hv).keys m hm).2) xs⟩
 
 /-- Own effects coded by values are ones a script can hold, where they are own commands and queries. -/

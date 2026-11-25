@@ -213,8 +213,7 @@ not commuting, the two effects commute from every step in progress whose state t
 pending requests and own queue hold kept functions of `P`, and which relates to itself under every renaming keeping
 its counters (`Step.PairCommutes`). -/
 theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
-    (senv : StepEnv L (shapes v)) (hrc : v.records.comparable = true)
-    (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
+    (senv : StepEnv L (shapes v))
     {S : SymState v} {a0 : Step.Acc v} (hR : StateRel M L T (shapes v) S a0.state) (hinv : Step.Inv P a0.state)
     (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0) {t1 t2 : Term} {x1 x2 : EffectV v.event}
     (hx1 : RelV L (.dsl .effect [v.event]) x1 (t1.denote M)) (hx2 : RelV L (.dsl .effect [v.event]) x2 (t2.denote M))
@@ -351,8 +350,8 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
         unfold wireSwap; split <;> (try split) <;> omega
       refine .inl ?_
       simp only [Diamond.Lift, pure, Except.pure]
-      refine (same_of_parts h0 (rel0_of_eqFn v.records_data hrc hr2 hr4 hrecEq hrq)
-        (machines_of_eq v.machines hmc hm2 hm4 htabEq htq) (PA := psA1 ++ psA2)
+      refine (same_of_parts h0 (rel0_of_eqFn v.records_data chk.recordsComparable hr2 hr4 hrecEq hrq)
+        (machines_of_eq v.machines chk.machinesComparable hm2 hm4 htabEq htq) (PA := psA1 ++ psA2)
         (PC := (psC2 ++ psC1).map fun p => { p with id := (wireSwap a0.state.nextId (a0.state.nextId + psC2.length)
           (a0.state.nextId + psC2.length + psC1.length)) p.id })
         (OA := os1 ++ os2) (OC := os3 ++ os4) (EA := ev1 ++ ev2) (EC := ev3 ++ ev4) ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
@@ -528,7 +527,6 @@ theorem pair_fits {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
 every step in progress whose state a model's values decode to, with its pending ids below its next id and its names
 below its counter, and which relates to itself under every renaming keeping its counters. -/
 theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
-    (hrc : v.records.comparable = true) (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
     {k1 k2 : Nat} {bq tq : Script} (hq : pairQuestions L T P v senv k1 k2 = .ok (bq, tq))
     (hbq : Unsat L (pairTys v) bq) (htq : Unsat L (pairTys v) tq)
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
@@ -552,7 +550,7 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
   have hR := decode_state hS
   have hwfH : Holds M wf := wf_of_decodeState (need_ok.1 hwf) hS
   have hblH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbl).2 hbelow
-  have hnH : Holds M names := stateSupp_names hR hsupp hrc hmc (need_ok.1 hnames)
+  have hnH : Holds M names := stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames)
   have hpre : ∀ a ∈ [wf, below, names, Term.is senv.dE ((L.effectsOf v.event).length + k1) (.var (pairVar v)),
       .is senv.dE ((L.effectsOf v.event).length + k2) (.var (pairVar v + 1))], Holds M a := by
     simp only [List.mem_cons, List.not_mem_nil, or_false]
@@ -576,7 +574,7 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
   · exact (hna' hna.1).elim
   · exact (hna' hna.2).elim
   subst has
-  exact pair_commutes chk senv hrc hmc hR (decode_inv chk.reach hS hbelow) hqk hsa (t1 := .var (pairVar v))
+  exact pair_commutes chk senv hR (decode_inv chk.reach hS hbelow) hqk hsa (t1 := .var (pairVar v))
     (t2 := .var (pairVar v + 1)) hx1 hx2 hown1 hown2
     hreach1 hreach2 ht1 ht2 ho hna.1 hna.2 hna'
 
@@ -584,7 +582,6 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
 two own effects a model codes commute from every step in progress `pair_sound` covers (the pairs cover every two own
 effects, `ownPairs_complete`). -/
 theorem pairs_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
-    (hrc : v.records.comparable = true) (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
     (hall : ∀ p ∈ L.ownPairs v.event, ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧
       Unsat L (pairTys v) bq ∧ Unsat L (pairTys v) tq)
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
@@ -602,7 +599,7 @@ theorem pairs_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
   have htest : ∀ (j : Nat) (vals : List Val) (i : Nat), M.vars i = .ctor senv.dE ((L.effectsOf v.event).length + j) vals →
       Holds M (.is senv.dE ((L.effectsOf v.event).length + j) (.var i)) := fun j vals i h => by
     simp [Holds, Term.denote, h, Val.toBool]
-  exact pair_sound chk senv hrc hmc hq hb ht hM hS hbelow hsupp has hqk hsa hx1 hx2 hown1 hown2 hreach1 hreach2
+  exact pair_sound chk senv hq hb ht hM hS hbelow hsupp has hqk hsa hx1 hx2 hown1 hown2 hreach1 hreach2
     (htest _ _ _ hz1) (htest _ _ _ hz2)
 
 end

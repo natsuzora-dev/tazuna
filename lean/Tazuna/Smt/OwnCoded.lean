@@ -167,7 +167,6 @@ variable {L : Layout} {T : List TypeDecl} {v : ServiceV}
 /-- What a pair line says of a waiting own effect's step from a state that fits the slots: where the bound question of
 each listed pair is unsat, or its codes fit and the step fits, each own effect the step queues is coded. -/
 theorem queued_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
-    (hrc : v.records.comparable = true) (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
     {a0 : Step.Acc v} (hkeys : Step.KeysOk T a0.state) (hW : Within L (shapes v) a0.state)
     (hinv : Step.Inv P a0.state) (hsupp : Step.StateSupp a0.state) (hqk : Step.QueueOk P a0)
     {x : EffectV v.event} (hx : EffCoded L x) (hown : x.isRequest = false) (hreach : x.Reach P)
@@ -199,7 +198,7 @@ theorem queued_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
         rintro a (rfl | rfl | rfl | rfl | rfl)
         · exact wf_of_decodeState (need_ok.1 hwf) hS
         · exact (pendingBelow_iff hR.pending hR.nextId hbl).2 hinv.below
-        · exact stateSupp_names hR hsupp hrc hmc (need_ok.1 hnames)
+        · exact stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames)
         · exact ht1
         · exact ht2
       obtain ⟨a, ha, hna⟩ := hb.noModel M hM
@@ -214,7 +213,6 @@ theorem queued_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
 
 /-- A cascade's step keeps every waiting own effect coded where the pair lines speak for it (`queued_at`). -/
 theorem coded_step {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
-    (hrc : v.records.comparable = true) (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
     {a : Step.Acc v} (hkeys : Step.KeysOk T a.state) (hW : Within L (shapes v) a.state) (hinv : Step.Inv P a.state)
     (hsupp : Step.Supp a) (hpend : Step.PendAt a.state.fresh a) (hqk : Step.QueueOk P a)
     (hc : ∀ x ∈ a.own, EffCoded L x) {i : Nat} (hi : i < a.own.length)
@@ -225,7 +223,7 @@ theorem coded_step {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
   have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
   have hq' : Step.QueueOk P { a with own := a.own.eraseIdx i } := fun x hx => hqk x (Step.mem_eraseIdx hx)
   have hs : Step.StateSupp a.state := Step.StateSupp.of_supp hsupp hpend
-  obtain ⟨os, hos, hcod⟩ := queued_at chk senv hrc hmc (a0 := { a with own := a.own.eraseIdx i }) hkeys hW hinv hs hq'
+  obtain ⟨os, hos, hcod⟩ := queued_at chk senv (a0 := { a with own := a.own.eraseIdx i }) hkeys hW hinv hs hq'
     (hc _ hmem) (hqk _ hmem).1 (hqk _ hmem).2 hcf d hd
   have hqd := Step.runOwn_queue T chk.reach { a with own := a.own.eraseIdx i } hinv hq' _ hd
   intro y hy

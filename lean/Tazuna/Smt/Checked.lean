@@ -65,6 +65,69 @@ theorem Checked.machines {P : List AnySite} {E : List AnyEffectSite} {T : List T
 theorem Checked.reactions {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
     (hk : Checked P E T v) : ∀ x ∈ v.reactions, x.Reach P E := hk.reach.reactions
 
+mutual
+theorem comparable_of_plain : (t : Ty) → t.plain = true → t.comparable = true
+  | .int, _ | .date, _ | .str, _ | .id, _ => rfl
+  | .tuple ts, h => comparables_of_plains ts h
+  | .adt _ _ vs, h => comparabless_of_plainss vs h
+  | .list _, h | .bag _, h | .table .., h | .fn .., h | .param _, h | .dsl .., h => by simp [Ty.plain] at h
+theorem comparables_of_plains : (ts : List Ty) → Ty.plains ts = true → Ty.comparables ts = true
+  | [], _ => rfl
+  | t :: ts, h => by
+    simp only [Ty.plains, Bool.and_eq_true] at h
+    simp [Ty.comparables, comparable_of_plain t h.1, comparables_of_plains ts h.2]
+theorem comparabless_of_plainss : (vs : List (List Ty)) → Ty.plainss vs = true → Ty.comparabless vs = true
+  | [], _ => rfl
+  | ts :: vs, h => by
+    simp only [Ty.plainss, Bool.and_eq_true] at h
+    simp [Ty.comparabless, comparables_of_plains ts h.1, comparabless_of_plainss vs h.2]
+end
+
+mutual
+theorem comparable_of_embeddable : (t : Ty) → t.embeddable = true → t.comparable = true
+  | .int, _ | .date, _ | .str, _ | .id, _ => rfl
+  | .dsl k _, h => h
+  | .adt 0 _ vs, h => by
+    simp only [Ty.embeddable, Option.isSome_iff_exists] at h
+    obtain ⟨⟨rfl⟩, _⟩ := h
+    rfl
+  | .adt (_ + 1) _ vs, h => comparabless_of_embeddabless vs h
+  | .tuple ts, h => comparables_of_embeddables ts h
+  | .list t, h | .bag t, h => comparable_of_embeddable t h
+  | .table k v, h => by
+    simp only [Ty.embeddable, Bool.and_eq_true] at h
+    simp [Ty.comparable, comparable_of_embeddable k h.1, comparable_of_embeddable v h.2]
+  | .fn _ _, h | .param _, h => by simp [Ty.embeddable] at h
+theorem comparables_of_embeddables : (ts : List Ty) → Ty.embeddables ts = true → Ty.comparables ts = true
+  | [], _ => rfl
+  | t :: ts, h => by
+    simp only [Ty.embeddables, Bool.and_eq_true] at h
+    simp [Ty.comparables, comparable_of_embeddable t h.1, comparables_of_embeddables ts h.2]
+theorem comparabless_of_embeddabless : (vs : List (List Ty)) → Ty.embeddabless vs = true → Ty.comparabless vs = true
+  | [], _ => rfl
+  | ts :: vs, h => by
+    simp only [Ty.embeddabless, Bool.and_eq_true] at h
+    simp [Ty.comparabless, comparables_of_embeddables ts h.1, comparabless_of_embeddabless vs h.2]
+end
+
+/-- A checked service's records are comparable: its records type is embeddable. -/
+theorem Checked.recordsComparable {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
+    (hk : Checked P E T v) : v.records.comparable = true := by
+  have h := hk.stateTys
+  simp only [ServiceV.stateTys, Bool.and_eq_true] at h
+  exact comparable_of_embeddable _ h.1.1.1.1.1
+
+/-- A checked service's machine keys and states are comparable: keys have the canonical order, and instance tables are
+embeddable. -/
+theorem Checked.machinesComparable {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
+    (hk : Checked P E T v) : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true := fun m hm => by
+  refine ⟨comparable_of_plain _ (Ty.plain_of_orderable _ (hk.keys m hm).1), ?_⟩
+  have h := hk.stateTys
+  simp only [ServiceV.stateTys, Bool.and_eq_true, List.all_eq_true] at h
+  have hm' := (h.1.1.1.2 m hm)
+  simp only [MachineV.table, instEntry, Ty.embeddable, Ty.embeddables, Bool.and_eq_true] at hm'
+  exact comparable_of_embeddable _ hm'.1.2.1
+
 /-- The handle has a literal name, and an external one is declared in each service's `declared`, as check's
 unknownHandle rule compares them. -/
 def _root_.Tazuna.Ir.HandleSite.Named (s : SpecV) (h : HandleSite) : Prop :=

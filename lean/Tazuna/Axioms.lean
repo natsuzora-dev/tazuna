@@ -16,7 +16,6 @@ import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Interleave
 import Tazuna.Semantics.NoTimer
 import Tazuna.Semantics.StepRename
-import Tazuna.Smt.Commute
 import Tazuna.Smt.Pairs
 import Tazuna.Smt.FiresForward
 import Tazuna.Smt.Pair

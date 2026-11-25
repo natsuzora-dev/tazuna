@@ -1,5 +1,4 @@
 import Tazuna.Smt.OwnCoded
-import Tazuna.Smt.Commute
 import Tazuna.Smt.FiresForward
 import Tazuna.Semantics.NoTimer
 
@@ -19,6 +18,17 @@ so each timer that fires in any order needs only its context to fit the slots. -
 namespace Tazuna.Smt
 
 open Tazuna.Ir
+
+/-- Every service of a checked spec respects every renaming of the ids steps make: its functions and the values they
+captured relate to themselves under every renaming, and its caller, key and state types are comparable. -/
+theorem CheckedSpec.equivariant (c : CheckedSpec) : ∀ v ∈ c.spec.services, v.Equivariant := by
+  intro v hv
+  have hk := c.checked v hv
+  refine ⟨?_, fun m hm => (hk.machinesComparable m hm).1, fun m hm => (hk.machinesComparable m hm).2, fun R => ?_⟩
+  · have h := hk.stateTys
+    simp only [ServiceV.stateTys, Bool.and_eq_true] at h
+    exact comparable_of_embeddable _ h.2.1
+  · exact Var.get_rel c.program.root (Defs.eval_rel (R := R) c.program.defs) () () trivial rfl v hv
 
 section
 variable {L : Layout} {v : ServiceV}
@@ -56,14 +66,13 @@ theorem keeps_preserved {T : List TypeDecl} {P : List AnySite} {E : List AnyEffe
 /-- A cascade's step from a step in progress it keeps, whose state fits the slots and whose waiting own effects are
 coded, keeps them coded where the pair lines speak for the step (`coded_step`). -/
 theorem coded_preserved {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} (chk : Checked P E T v)
-    (senv : StepEnv L (shapes v)) (hrc : v.records.comparable = true)
-    (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true) {a b : Step.Acc v} {i : Nat}
+    (senv : StepEnv L (shapes v)) {a b : Step.Acc v} {i : Nat}
     (ha : Lines.Keeps T P a) (hW : Within L (shapes v) a.state) (hc : Lines.Coded L a) (hi : i < a.own.length)
     (hcf : ∀ p ∈ L.ownPairs v.event, ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧
       (Unsat L (pairTys v) bq ∨ PairCodesFit L P v p.1 p.2 ∧ ownFits L.count T a.state a.own[i]))
     (hb : (Step.ownSys T v).pick a i = .ok b) : Lines.Coded L b := by
   simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hb
-  exact coded_step chk senv hrc hmc ha.keys hW ha.inv ha.supp ha.pend ha.queue hc hi hcf hb
+  exact coded_step chk senv ha.keys hW ha.inv ha.supp ha.pend ha.queue hc hi hcf hb
 
 /-- At a step in progress a cascade keeps, which fits the slots, two of its waiting effects meet a pair question's
 preconditions with the rest of the queue as the step in progress. -/
@@ -80,10 +89,6 @@ theorem pair_pre {T : List TypeDecl} {P : List AnySite} {a : Step.Acc v} (ha : L
     (ha.queue _ (List.getElem_mem hi)).1, (ha.queue _ (List.getElem_mem hj)).1,
     (ha.queue _ (List.getElem_mem hi)).2, (ha.queue _ (List.getElem_mem hj)).2⟩
 
-theorem CheckedSpec.recordsComparable (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) :
-    v.records.comparable = true :=
-  comparable_of_embeddable _ (stateTys_iff.1 (c.checked v hv).stateTys).1.1
-
 /-- T5 from the pair lines, scoped to the slots: where every listed pair of own kinds has both questions unsat
 (`Prove.proved`), every order of a cascade from a step in progress whose names are below its counter and whose waiting
 own effects a script can hold ends as `settle` does, up to renaming the names the cascade made, or both fault,
@@ -98,17 +103,15 @@ theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : Ste
       Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a) := by
   have he := c.equivariant v hv
   have chk := c.checked v hv
-  have hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true :=
-    fun m hm => ⟨he.keys m hm, c.states hv m hm⟩
   intro fuel r hr
   refine Step.cascade_agrees c.T he
     (J := fun b => Diamond.Reach (Step.ownSys c.T v) a b ∧ Lines.Keeps c.T c.P b ∧ Lines.Coded L b)
     (fun b i d hb hi hd => ⟨.step hb.1 hi hd, keeps_preserved he chk.reach b i d hb.2.1 hi hd,
-      coded_preserved chk senv (c.recordsComparable hv) hmc hb.2.1 (hfit b hb.1) hb.2.2 hi
+      coded_preserved chk senv hb.2.1 (hfit b hb.1) hb.2.2 hi
         (fun p hp => by obtain ⟨bq, tq, hq, hb, -⟩ := hall p hp; exact ⟨bq, tq, hq, .inl hb⟩) hd⟩)
     (fun b _ hb i j hi hj _ => ?_) fuel a ha.supp ⟨.refl, ha, hcoded⟩ hr
   obtain ⟨hk, hs, hq, hsa, ho1, ho2, hr1, hr2⟩ := pair_pre hb.2.1 hi hj
-  exact pairs_at chk senv (c.recordsComparable hv) hmc hall hk (hfit b hb.1) hb.2.1.inv hs hq hsa
+  exact pairs_at chk senv hall hk (hfit b hb.1) hb.2.1.inv hs hq hsa
     (hb.2.2 _ (List.getElem_mem hi)) (hb.2.2 _ (List.getElem_mem hj)) ho1 ho2 hr1 hr2
 
 /-- T5 from pair lines that read `Prove.withinBounds`: where every listed pair of own kinds has its target question
@@ -126,19 +129,17 @@ theorem cascade_within (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : St
       Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a) := by
   have he := c.equivariant v hv
   have chk := c.checked v hv
-  have hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true :=
-    fun m hm => ⟨he.keys m hm, c.states hv m hm⟩
   intro fuel r hr
   refine Step.cascade_agrees c.T he
     (J := fun b => Diamond.Reach (Step.ownSys c.T v) a b ∧ Lines.Keeps c.T c.P b ∧ Lines.Coded L b)
     (fun b i d hb hi hd => ⟨.step hb.1 hi hd, keeps_preserved he chk.reach b i d hb.2.1 hi hd,
-      coded_preserved chk senv (c.recordsComparable hv) hmc hb.2.1 (hfit b hb.1).1 hb.2.2 hi
+      coded_preserved chk senv hb.2.1 (hfit b hb.1).1 hb.2.2 hi
         (fun p hp => by
           obtain ⟨bq, tq, hq, -, hc⟩ := hall p hp; exact ⟨bq, tq, hq, .inr ⟨hc, (hfit b hb.1).2.1 i hi⟩⟩) hd⟩)
     (fun b _ hb i j hi hj hij => ?_) fuel a ha.supp ⟨.refl, ha, hcoded⟩ hr
   obtain ⟨hk, hs, hq, hsa, ho1, ho2, hr1, hr2⟩ := pair_pre hb.2.1 hi hj
   obtain ⟨hW, -, hpf⟩ := hfit b hb.1
-  exact pairsWithin_at chk senv (c.recordsComparable hv) hmc hall hk hW hb.2.1.inv hs hq hsa
+  exact pairsWithin_at chk senv hall hk hW hb.2.1.inv hs hq hsa
     (hb.2.2 _ (List.getElem_mem hi)) (hb.2.2 _ (List.getElem_mem hj)) ho1 ho2 hr1 hr2 (hpf i j hi hj hij)
 
 /-- A timer's context fits the slots: the instance's key, the state its timer moves it to and the records embed. -/

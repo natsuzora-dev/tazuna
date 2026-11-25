@@ -740,10 +740,12 @@ end Machine
 variable {v : ServiceV}
 
 /-- A service whose functions respect every renaming of counters: its kept functions, the values they captured, the
-callers it lists and its machines' initial states. Callers and machine keys are comparable, as check requires. -/
+callers it lists and its machines' initial states. Callers and machine keys and states are comparable, as check
+requires. -/
 structure _root_.Tazuna.Ir.ServiceV.Equivariant (v : ServiceV) : Prop where
   caller : v.caller.comparable = true
   keys : ∀ m ∈ v.machines, m.key.comparable = true
+  states : ∀ m ∈ v.machines, m.state.comparable = true
   self : ∀ R, v.Self R
 
 theorem _root_.Tazuna.Ir.ServiceV.Equivariant.machines (hv : v.Equivariant) : ∀ m ∈ v.machines, m.Equi :=

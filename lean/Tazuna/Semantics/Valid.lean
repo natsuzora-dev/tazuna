@@ -485,11 +485,11 @@ theorem fire_self {v : ServiceV} (hms : ∀ m ∈ v.machines, m.Equi ∧ m.state
 end Fire
 
 /-- A clock line's step in progress, before its cascade, has its names below its counter. -/
-theorem clock_begin (hv : v.Equivariant) (hst : ∀ m ∈ v.machines, m.state.comparable = true) {s : State v}
+theorem clock_begin (hv : v.Equivariant) {s : State v}
     (hs : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) (time : Int) {fuel : Nat} {s' : State v}
     {effs : List (Sender × EffectV v.event)} (hf : fire { s with now := time } fuel = some (s', effs)) {a : Acc v}
     (h : start { state := s' } effs = .ok a) : Supp a ∧ PendAt a.state.fresh a := by
-  obtain ⟨hm', he, hr, hp, hfr, hn⟩ := fire_self (n := s.fresh) (fun m hm => ⟨hv.machines m hm, hst m hm⟩) fuel
+  obtain ⟨hm', he, hr, hp, hfr, hn⟩ := fire_self (n := s.fresh) (fun m hm => ⟨hv.machines m hm, hv.states m hm⟩) fuel
     { s with now := time } (fun P hP => (hs.data P hP).1) (fun P hP => (hs.data P hP).2) hf
   have hs' : StateSupp s' := ⟨fun P hP => by
       rw [hfr] at hP
@@ -523,7 +523,7 @@ theorem finish_supp (hv : v.Equivariant) {s0 : State v} (hs0 : StateSupp s0) (x 
         exact StateSupp.of_supp hb1 hb2
 
 /-- A step on a valid input keeps the state's names below its counter. -/
-theorem step_supp (hv : v.Equivariant) (hst : ∀ m ∈ v.machines, m.state.comparable = true) {s : State v}
+theorem step_supp (hv : v.Equivariant) {s : State v}
     (hs : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) (x : Input v) (hx : x.Valid s) :
     StateSupp (step T v s x).state := by
   have hfresh : StateSupp ({ s with fresh := s.fresh + 1 } : State v) :=
@@ -564,7 +564,7 @@ theorem step_supp (hv : v.Equivariant) (hst : ∀ m ∈ v.machines, m.state.comp
     · split
       · exact hs
       · rename_i s' effs hr
-        exact finish_supp T hv hs _ (fun a ha => clock_begin hv hst hs hb time hr ha) _
+        exact finish_supp T hv hs _ (fun a ha => clock_begin hv hs hb time hr ha) _
 
 /-- Inputs each valid at the state the run has reached when it comes. -/
 def ValidRun : State v → List (Input v) → Prop
@@ -581,16 +581,16 @@ theorem init_supp (hv : v.Equivariant) : StateSupp (State.init v) :=
   ⟨fun P _ => ⟨(hv.self P).init, machines_empty P v.machines⟩, fun _ h => nomatch h⟩
 
 /-- Every state a run on valid inputs reaches from a state whose names are below its counter keeps them so. -/
-theorem run_supp (hv : v.Equivariant) (hst : ∀ m ∈ v.machines, m.state.comparable = true) {P : List AnySite}
+theorem run_supp (hv : v.Equivariant) {P : List AnySite}
     {E : List AnyEffectSite} (hr : v.Reach P E) : (s : State v) → Inv P s → StateSupp s → (xs : List (Input v)) →
     ValidRun T s xs → StateSupp (run T v s xs).1
   | _, _, hs, [], _ => hs
   | s, hi, hs, x :: xs, ⟨hx, hxs⟩ =>
-    run_supp hv hst hr _ (step_inv T hr s hi x) (step_supp T hv hst hs hi.below x hx) xs hxs
+    run_supp hv hr _ (step_inv T hr s hi x) (step_supp T hv hs hi.below x hx) xs hxs
 
 /-- Every cascade a step on a valid input starts, from a state whose names are below its counter, is one T5 speaks
 about, and its pending requests' names are below its counter. -/
-theorem begins_supp (hv : v.Equivariant) (hst : ∀ m ∈ v.machines, m.state.comparable = true) {s : State v}
+theorem begins_supp (hv : v.Equivariant) {s : State v}
     (hs : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) {x : Input v} (hx : x.Valid s) {a : Acc v}
     (h : Begins T s x a) : Supp a ∧ PendAt a.state.fresh a := by
   cases h with
@@ -598,7 +598,7 @@ theorem begins_supp (hv : v.Equivariant) (hst : ∀ m ∈ v.machines, m.state.co
     exact command_begin T hv hs hb (List.get_mem _ _) (fun P hP => (hx P hP).1) (fun P hP => (hx P hP).2) h
   | answer to value p h a hp _ happ => exact answer_begin T hv hs hb (List.mem_of_find?_eq_some hp) to hx h happ
   | event i value a h => exact event_begin T hv hs hb i hx h
-  | clock time s' effs a _ hf h => exact clock_begin hv hst hs hb time hf h
+  | clock time s' effs a _ hf h => exact clock_begin hv hs hb time hf h
 
 end Step
 
