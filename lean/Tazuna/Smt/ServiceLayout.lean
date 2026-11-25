@@ -69,17 +69,19 @@ structure ProgramParts where
 def _root_.Tazuna.Ir.Defs.parts {G : List Ty} (defs : Defs G) : ProgramParts :=
   ⟨defs.sites, defs.handles, defs.tys, defs.lits⟩
 
-/-- The event types whose effects the program codes: the service's first, then each effect type's. Any code of the
-program may run in a step, another service's included. -/
+/-- The event types an effect of the program can have a kind of: the service's first, then each whose list a site of
+one argument returns, as an `on_answer` does. Any code of the program may run in a step, another service's
+included. -/
 def eventTys (p : ProgramParts) (v : ServiceV) : List Ty :=
-  dedupBy (fun a b => (Ty.same a b).isSome) (v.event :: p.tys.filterMap fun | .dsl .effect [e] => some e | _ => none)
+  dedupBy (fun a b => (Ty.same a b).isSome)
+    (v.event :: p.sites.filterMap fun ⟨_, t, _⟩ => match t with | .fn [_] (.list e) => some e | _ => none)
 
 /-- The kinds of effect of the service's scripts, from the program it came from, before any datatype: those whose
 fields have sorts, so every datatype of the layout has one. -/
 def Layout.kindsOf (p : ProgramParts) (v : ServiceV) : Layout :=
   { effects := dedupBy EffectKey.same (((eventTys p v).flatMap fun e =>
-      (requestShapesAt v.declared e p.sites).map (·.key)).filter (Ty.sortables ·.fields)),
-    owns := dedupBy OwnKey.same ((p.handles.flatMap (ownKeys (eventTys p v) p.sites)).filter (Ty.sortables ·.fields)) }
+      (requestShapesAt v.declared e p.sites).map (·.key)).filter (Ty.sorteds ·.fields)),
+    owns := dedupBy OwnKey.same ((p.handles.flatMap (ownKeys (eventTys p v) p.sites)).filter (Ty.sorteds ·.fields)) }
 
 /-- The layout of the service's scripts, from the program it came from: the datatypes of the types with sorts. -/
 def Layout.ofParts (p : ProgramParts) (v : ServiceV) : Layout :=

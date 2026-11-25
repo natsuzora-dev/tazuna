@@ -162,30 +162,38 @@ theorem wfMachines_isSome {L : Layout} : (ms : List (MachineV v.records v.event)
     exact wfMachines_isSome ms (fun m' h' => hm m' (by simp [h'])) xs
 
 mutual
-theorem sortable_of_embeddable : (t : Ty) → t.embeddable = true → t.sortable = true
+theorem sorted_of_embeddable : (t : Ty) → t.embeddable = true → t.sorted = true
   | .int, _ | .str, _ | .date, _ | .id, _ => rfl
   | .dsl k _, h => by simp only [Ty.embeddable, beq_iff_eq] at h; subst h; rfl
   | .adt 0 _ vs, h => by
     simp only [Ty.embeddable, Option.isSome_iff_exists] at h
     obtain ⟨⟨rfl⟩, -⟩ := h; rfl
-  | .adt (_ + 1) _ vs, h => sortabless_of_embeddabless vs h
-  | .tuple ts, h => sortables_of_embeddables ts h
-  | .list t, h | .bag t, h => sortable_of_embeddable t h
+  | .adt (_ + 1) _ vs, h => sortedss_of_embeddabless vs h
+  | .tuple ts, h => sorteds_of_embeddables ts h
+  | .list t, h | .bag t, h => sorted_of_embeddable t h
   | .table k w, h => by
     simp only [Ty.embeddable, Bool.and_eq_true] at h
-    simp [Ty.sortable, sortable_of_embeddable k h.1, sortable_of_embeddable w h.2]
+    simp [Ty.sorted, sorted_of_embeddable k h.1, sorted_of_embeddable w h.2]
   | .fn .., h | .param _, h => by simp [Ty.embeddable] at h
-theorem sortables_of_embeddables : (ts : List Ty) → Ty.embeddables ts = true → Ty.sortables ts = true
+theorem sorteds_of_embeddables : (ts : List Ty) → Ty.embeddables ts = true → Ty.sorteds ts = true
   | [], _ => rfl
   | t :: ts, h => by
     simp only [Ty.embeddables, Bool.and_eq_true] at h
-    simp [Ty.sortables, sortable_of_embeddable t h.1, sortables_of_embeddables ts h.2]
-theorem sortabless_of_embeddabless : (vs : List (List Ty)) → Ty.embeddabless vs = true → Ty.sortabless vs = true
+    simp [Ty.sorteds, sorted_of_embeddable t h.1, sorteds_of_embeddables ts h.2]
+theorem sortedss_of_embeddabless : (vs : List (List Ty)) → Ty.embeddabless vs = true → Ty.sortedss vs = true
   | [], _ => rfl
   | ts :: vs, h => by
     simp only [Ty.embeddabless, Bool.and_eq_true] at h
-    simp [Ty.sortabless, sortables_of_embeddables ts h.1, sortabless_of_embeddabless vs h.2]
+    simp [Ty.sortedss, sorteds_of_embeddables ts h.1, sortedss_of_embeddabless vs h.2]
 end
+
+theorem sortable_of_sorted : (t : Ty) → t.sorted = true → t.sortable = true
+  | .fn .., h => by simp [Ty.sorted] at h
+  | .int, h | .str, h | .date, h | .id, h | .param _, h | .list _, h | .bag _, h | .tuple _, h | .adt .., h
+  | .table .., h | .dsl .., h => by simpa [Ty.sortable] using h
+
+theorem sortable_of_embeddable (t : Ty) (h : t.embeddable = true) : t.sortable = true :=
+  sortable_of_sorted t (sorted_of_embeddable t h)
 
 /-- Every step type of a checked service has a sort, so its datatypes are in the service's layout. -/
 theorem stepTys_has (hk : Checked defs.sites T v) : ∀ t ∈ stepTys v defs.sites, (Layout.ofService defs v).Has t := by
@@ -197,13 +205,13 @@ theorem stepTys_has (hk : Checked defs.sites T v) : ∀ t ∈ stepTys v defs.sit
     · exact sortable_of_embeddable _ her
     · exact sortable_of_embeddable _ hee
     · exact sortable_of_embeddable _ hec
-    · simp [Ty.option, Ty.sortable, Ty.sortables, Ty.sortabless, sortable_of_embeddable _ hee]
+    · exact sortable_of_sorted _ (by simp [Ty.option, Ty.sorted, Ty.sorteds, Ty.sortedss, sorted_of_embeddable _ hee])
     · exact sortable_of_embeddable _ (embeddable_pending hep)
     · rfl
     · exact sortable_of_embeddable _ (hms m hm).1
-    · have h := sortable_of_embeddable _ (hms m hm).1
-      simp only [MachineV.table, Ty.sortable, Bool.and_eq_true] at h
-      simp [Ty.sortable, Ty.sortables, h.1]
+    · have h := sorted_of_embeddable _ (hms m hm).1
+      simp only [MachineV.table, Ty.sorted, Bool.and_eq_true] at h
+      exact sortable_of_sorted _ (by simp [Ty.sorted, Ty.sorteds, h.1])
   exact fun t ht => ofService_has defs v t (List.mem_filter.2 ⟨List.mem_append_left _ ht, hsort t ht⟩)
 
 /-- The well-formedness term of a checked service's symbolic state is always built in its layout. -/

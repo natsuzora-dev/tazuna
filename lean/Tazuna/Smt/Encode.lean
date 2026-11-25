@@ -285,25 +285,35 @@ end Tazuna.Smt
 namespace Tazuna.Ir
 
 mutual
-/-- Whether every datatype of the type has an SMT sort: no type variable, and no structure value but effects and
-fresh-id sources. The program's types include those of the spec's structure (lists of declarations, services); those
-values are never coded, so they get no datatype. -/
-def Ty.sortable : Ty → Bool
+/-- Whether the type has an SMT sort: data with no function or type variable inside, an effect of such an event type,
+or a fresh-id source. The program's types include those of the spec's structure (lists of declarations, services);
+those values are never coded, so they get no datatype. -/
+def Ty.sorted : Ty → Bool
   | .int | .str | .date | .id => true
-  | .param _ => false
-  | .list t | .bag t => Ty.sortable t
-  | .tuple ts => Ty.sortables ts
-  | .fn ps r => Ty.sortables ps && Ty.sortable r
-  | .adt _ _ vs => Ty.sortabless vs
-  | .table k v => Ty.sortable k && Ty.sortable v
-  | .dsl .effect [e] => Ty.sortable e
+  | .param _ | .fn .. => false
+  | .list t | .bag t => Ty.sorted t
+  | .tuple ts => Ty.sorteds ts
+  | .adt _ _ vs => Ty.sortedss vs
+  | .table k v => Ty.sorted k && Ty.sorted v
+  | .dsl .effect [e] => Ty.sorted e
   | .dsl k _ => k == .fresh
+def Ty.sorteds : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.sorted t && Ty.sorteds ts
+def Ty.sortedss : List (List Ty) → Bool
+  | [] => true
+  | ts :: vs => Ty.sorteds ts && Ty.sortedss vs
+end
+
+mutual
+/-- Whether every datatype of the type has an SMT sort: a function's parameters and result have theirs, any other
+type has a sort. A function is coded by a Lean function, so it needs no sort of its own. -/
+def Ty.sortable : Ty → Bool
+  | .fn ps r => Ty.sortables ps && Ty.sortable r
+  | t => t.sorted
 def Ty.sortables : List Ty → Bool
   | [] => true
   | t :: ts => Ty.sortable t && Ty.sortables ts
-def Ty.sortabless : List (List Ty) → Bool
-  | [] => true
-  | ts :: vs => Ty.sortables ts && Ty.sortabless vs
 end
 
 
@@ -333,9 +343,10 @@ open Tazuna.Ir
 /-- The layout lacks the datatype of `t`: a gap when `t` has a sort, else the limit that it has none. -/
 def lacks (t : Ty) : Refusal := if t.sortable then .layout (.type t) else .limit (.unsortable t)
 
-/-- The layout lacks the kind of effect with these fields: a gap when they have sorts, else the limit. -/
+/-- The layout lacks the kind of effect with these fields: a gap when they are data with sorts, else the limit. -/
 def lacksKind (name : String) (fields : List Ty) : Refusal :=
-  if Ty.sortables fields then .layout (.effectKind name) else .limit (.unsortable (.tuple fields))
+  if !(Ty.tuple fields).isData then .limit (.function (.tuple fields))
+  else if Ty.sorteds fields then .layout (.effectKind name) else .limit (.unsortable (.tuple fields))
 
 /-- Selects field `j` of whichever of the constructors `k`, `k + 1`, ..., `k + n` built `x`; every one of them has
 the field. -/
