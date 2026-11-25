@@ -59,7 +59,7 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
     let ks ← callersOf L x.callers
-    let (o, c, cs) ← encodeCommand L T P v (shapes v P) senv x cc apply inv ks S caller input
+    let ⟨o, c, cs⟩ ← encodeCommand L T P v (shapes v P) senv x cc apply inv ks S caller input
     pure ⟨.command o, c, andT cx (andT ca ci), cs⟩
   | .query i caller input => do
     let q := v.queries.get i
@@ -71,19 +71,19 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
     let sh ← need "an answer shape past the pending shapes" (shapes v P)[k]?
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let (o, c, cs) ← encodeAnswer L T P (shapes v P) k sh j senv apply inv S to value
+    let ⟨o, c, cs⟩ ← encodeAnswer L T P (shapes v P) k sh j senv apply inv S to value
     pure ⟨.answer o, c, andT ca ci, cs⟩
   | .unmatched t to _ => do
     let u ← answerUnmatchedT L (shapes v P) t S.pending to
     pure ⟨.unmatched u, tt, tt, tt⟩
   | .event i value => do
     let (ec, ce) ← EventCode.of L v i
-    let (o, c, cs) ← encodeEvent L T P v (shapes v P) senv ec S value
+    let ⟨o, c, cs⟩ ← encodeEvent L T P v (shapes v P) senv ec S value
     pure ⟨.event o, c, ce, cs⟩
   | .clock time => do
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let (o, c, cs) ← encodeClock L T P v (shapes v P) senv apply inv S time
+    let ⟨o, c, cs⟩ ← encodeClock L T P v (shapes v P) senv apply inv S time
     pure ⟨.clock o, c, andT ca ci, cs⟩
 
 end

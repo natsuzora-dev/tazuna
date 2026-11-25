@@ -72,15 +72,15 @@ and the codes' condition. The pending write and the invariants are asked only wh
 the step then leaves the state it began with. -/
 def encodeFinish (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (inv : Code (Ty.fn [v.records] Ty.rules))
-    (now fresh pending : Term) (o : EventsOut) : Except Refusal (FinishOut × Term × Term) := do
+    (now fresh pending : Term) (o : EventsOut) : Except Refusal (Encoded FinishOut) := do
   -- `queueAt` reads the default only where no own slot holds the place, so its value is never asked.
   let dflt := (effectDefault L v.event).getD tt
-  let (so, cs, cx) ← encodeSettle L T P v shs senv apply dflt now v.bounds.cascade.toNat 0 o.owns
+  let ⟨so, cs, cx⟩ ← encodeSettle L T P v shs senv apply dflt now v.bounds.cascade.toNat 0 o.owns
     ⟨.bool false, o, fresh⟩
   let (pT, cp) ← encodePending L shs pending (o.news ++ so.terms.done.news)
   let (rules, ci) ← encodeInvariants L inv so.terms.done.records
   let (checks, ck) ← encodeInstChecks L T v.machines so.terms.done.tables so.terms.done.records now
-  pure (⟨so, pT, rules, checks⟩, andT cs (.ite so.faultT tt (andT cp (andT ci ck))), cx)
+  pure ⟨⟨so, pT, rules, checks⟩, andT cs (.ite so.faultT tt (andT cp (andT ci ck))), cx⟩
 
 end
 
@@ -158,7 +158,7 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     {o : EventsOut} {r : Except Fault (Step.Acc v)} (hdone : SettleDone M L T shs a ⟨.bool false, o, fresh⟩ r)
     (hr : ∀ a1, r = .ok a1 → Step.Inv P a1.state ∧ Step.QueueOk P a1)
     {fo : FinishOut} {c cx : Term}
-    (henc : encodeFinish L T P v shs senv apply inv now fresh pending o = .ok (fo, c, cx))
+    (henc : encodeFinish L T P v shs senv apply inv now fresh pending o = .ok ⟨fo, c, cx⟩)
     (hcx : Holds M cx) :
     (Holds M c ↔ finishFits L.count T shs r) ∧
     (Holds M c → Finished M L T shs fo s0 a outcome (Step.finish T s0 r outcome)) := by

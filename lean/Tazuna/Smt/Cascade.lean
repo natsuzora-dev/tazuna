@@ -33,21 +33,21 @@ variable (L : Layout) (T : List TypeDecl)
 (its slots are not read): its terms, its condition (each internal step's, where it runs) and the codes' condition. -/
 def encodeSettle (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (dflt now : Term) :
-    (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → Except Refusal (SettleOut × Term × Term)
+    (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → Except Refusal (Encoded SettleOut)
   | 0, k, S, t =>
-    pure (⟨[], .and (.not t.fault) (queueAt dflt S (.int k)).1, ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩⟩,
-      tt, tt)
+    pure ⟨⟨[], .and (.not t.fault) (queueAt dflt S (.int k)).1, ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩⟩,
+      tt, tt⟩
   | f + 1, k, S, t => do
     let qa := queueAt dflt S (.int k)
     let act := Term.share (.and (.not t.fault) qa.1)
-    let (o, c, cx) ← encodeOwnStep L T P v shs senv apply t.done.records now t.fresh t.done.nextId t.done.queued qa.2
+    let ⟨o, c, cx⟩ ← encodeOwnStep L T P v shs senv apply t.done.records now t.fresh t.done.nextId t.done.queued qa.2
       t.done.tables
     let t1 := pickTerms act o.terms ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩
-    let (rest, c', cx') ← encodeSettle P v shs senv apply dflt now f (k + 1) (S ++ t1.done.owns) t1
-    pure (⟨(act, o) :: rest.steps, rest.over,
+    let ⟨rest, c', cx'⟩ ← encodeSettle P v shs senv apply dflt now f (k + 1) (S ++ t1.done.owns) t1
+    pure ⟨⟨(act, o) :: rest.steps, rest.over,
         { rest.terms with done := { rest.terms.done with news := t1.done.news ++ rest.terms.done.news,
                                                          owns := t1.done.owns ++ rest.terms.done.owns } }⟩,
-      andT (.ite act c tt) c', andT cx cx')
+      andT (.ite act c tt) c', andT cx cx'⟩
 
 end
 
@@ -111,16 +111,16 @@ theorem fold_width (base : StepTerms) (hb : base.done.news = [] ∧ base.done.ow
 theorem encodeOwnStep_width {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {records now fresh n q eff : Term} {xs : List Term}
     {o : OwnStepOut} {c cx : Term}
-    (h : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok (o, c, cx)) :
+    (h : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok ⟨o, c, cx⟩) :
     (∀ sl ∈ o.terms.done.news, sl.2.length = 2) ∧ ∀ sl ∈ o.terms.done.owns, sl.2.length = 2 := by
   obtain ⟨ks, hks, h⟩ := bind_ok.1 h
   cases pure_ok.1 h
   have hF := mapM_ok _ _ _ hks
-  have := fold_width ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩ (ks.map fun k => (k.1, k.2.2.1)) (by
+  have := fold_width ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩ (ks.map fun k => (k.1, k.2.out.terms)) (by
     intro y hy
     obtain ⟨z, hz, rfl⟩ := List.mem_map.1 hy
     obtain ⟨⟨key', i'⟩, -, hR'⟩ := forall2_mem_right hF z hz
-    obtain ⟨⟨ko', st', c', cx'⟩, hkind', hR'⟩ := bind_ok.1 hR'
+    obtain ⟨⟨⟨ko', st'⟩, c', cx'⟩, hkind', hR'⟩ := bind_ok.1 hR'
     cases pure_ok.1 hR'
     exact encodeOwnKind_width hkind')
   rw [List.foldr_map] at this
@@ -130,10 +130,10 @@ theorem encodeOwnStep_width {P : List AnySite} {shs : List (PendingShape v.event
 theorem settle_fault_stays {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {dflt now : Term} :
     (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → t.fault.denote M = .bool true →
-    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok (o, c, cx) →
+    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
     o.terms.fault.denote M = .bool true
   | 0, _, _, _, htf, _, _, _, henc => by
-    simp only [encodeSettle, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
+    simp only [encodeSettle, pure, Except.pure, Except.ok.injEq] at henc
     obtain ⟨rfl, -, -⟩ := henc
     exact htf
   | f + 1, k, S, t, htf, _, _, _, henc => by
@@ -160,14 +160,14 @@ theorem settle_rel {P : List AnySite} (chk : Checked P T v) {shs : List (Pending
     MachinesRel M L T v.machines t.done.tables a.state.machines →
     t.fresh.denote M = .int (Int.ofNat a.state.fresh) → t.done.nextId.denote M = .int (Int.ofNat a.state.nextId) →
     t.done.queued.denote M = .int ((a.own.length : Nat) : Int) →
-    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok (o, c, cx) →
+    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
     Holds M c → Holds M cx →
     o.faultT.denote M = .bool (o.fault? M).isSome ∧
     match o.fault? M with
     | some f => Step.settleFrom T fuel k a = .error f
     | none => SettleDone M L T shs a o.terms (Step.settleFrom T fuel k a)
   | 0, k, S, t, a, _, _, hS, _, htf, hrec, hms, hfr, hn, hq, o, c, cx, henc, _, _ => by
-    simp only [encodeSettle, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
+    simp only [encodeSettle, pure, Except.pure, Except.ok.injEq] at henc
     obtain ⟨rfl, rfl, rfl⟩ := henc
     have hk := queueAt_rel dflt hS (k := .int k) k (by simp [Term.denote])
     refine ⟨?_, ?_⟩
@@ -326,10 +326,10 @@ def settleFits (S : Ty → Nat) (T : List TypeDecl) : Nat → Nat → Step.Acc v
 theorem settle_cond_fault {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {dflt now : Term} :
     (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → t.fault.denote M = .bool true →
-    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok (o, c, cx) →
+    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
     Holds M c
   | 0, _, _, _, _, _, _, _, henc => by
-    simp only [encodeSettle, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
+    simp only [encodeSettle, pure, Except.pure, Except.ok.injEq] at henc
     obtain ⟨-, rfl, -⟩ := henc
     exact holds_tt
   | f + 1, k, S, t, htf, _, _, _, henc => by
@@ -355,10 +355,10 @@ theorem settle_exact {P : List AnySite} (chk : Checked P T v) {shs : List (Pendi
     MachinesRel M L T v.machines t.done.tables a.state.machines →
     t.fresh.denote M = .int (Int.ofNat a.state.fresh) → t.done.nextId.denote M = .int (Int.ofNat a.state.nextId) →
     t.done.queued.denote M = .int ((a.own.length : Nat) : Int) →
-    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok (o, c, cx) →
+    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
     Holds M cx → (Holds M c ↔ settleFits L.count T fuel k a)
   | 0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, henc, _ => by
-    simp only [encodeSettle, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
+    simp only [encodeSettle, pure, Except.pure, Except.ok.injEq] at henc
     obtain ⟨-, rfl, -⟩ := henc
     exact iff_of_true holds_tt trivial
   | f + 1, k, S, t, a, hinv, hqok, hS, hnow, htf, hrec, hms, hfr, hn, hq, o, c, cx, henc, hcx => by

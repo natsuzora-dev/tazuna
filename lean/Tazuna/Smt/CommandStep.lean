@@ -32,7 +32,7 @@ def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (callers : List Term)
     (S : SymState) (caller input : Term) :
-    Except Refusal (CommandOut × Term × Term) := do
+    Except Refusal (Encoded CommandOut) := do
   let (a, c1) ← encodeAdmit L cc.accepts callers S.records S.now S.fresh caller input
   let (res, c2) ← cc.decide (a.ctx, ())
   let rest ← need "a result that has no term" (Code.term? _ res)
@@ -44,11 +44,11 @@ def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
   let rfc ← need "records that have no term" (Code.ofTerm? v.records o.records)
   let (ens, c4) ← cc.ensures (a.ctx, rfc, ())
   let ensures ← ruleTerms L ens
-  let (fo, cf, cfx) ← encodeFinish L T P v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending o
+  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending o
   let ok := Term.is d 0 res
-  pure (⟨a.callerOk, a.rules, ok, .sel d 1 0 res, evs, o, ensures, fo⟩,
+  pure ⟨⟨a.callerOk, a.rules, ok, .sel d 1 0 res, evs, o, ensures, fo⟩,
     .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) (andT c2 (.ite ok (andT c3 (andT c4
-      (.ite (allT (ensures.map (·.2))) cf tt))) tt)) tt)) tt, cfx)
+      (.ite (allT (ensures.map (·.2))) cf tt))) tt)) tt)) tt, cfx⟩
 
 end
 
@@ -97,7 +97,7 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     (hsc : RelV L v.caller (Ty.up _ ((v.commands.get i).data).caller caller) (sc.denote M))
     (hsi : RelV L (v.commands.get i).input (Ty.up _ ((v.commands.get i).data).input input) (si.denote M))
     {o : CommandOut} {cond cfx : Term}
-    (henc : encodeCommand L T P v shs senv (v.commands.get i) cc apply inv ks S sc si = .ok (o, cond, cfx)) (hcfx : Holds M cfx) :
+    (henc : encodeCommand L T P v shs senv (v.commands.get i) cc apply inv ks S sc si = .ok ⟨o, cond, cfx⟩) (hcfx : Holds M cfx) :
     let x := v.commands.get i
     let ctx := Step.ctx s s.records caller input
     let r := step T v s (.command i caller input)

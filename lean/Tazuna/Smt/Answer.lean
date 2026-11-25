@@ -231,7 +231,7 @@ codes' condition, from the codes of the service's `apply` and `invariants` and t
 the answer names and the answer. -/
 def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat) (sh : PendingShape v.event) (j : Nat)
     (senv : StepEnv L shs) (apply : Code (Ty.fn [v.records, v.event] v.records))
-    (invariants : Code (Ty.fn [v.records] Ty.rules)) (S : SymState) (to value : Term) : Except Refusal (AnswerOut × Term × Term) := do
+    (invariants : Code (Ty.fn [v.records] Ty.rules)) (S : SymState) (to value : Term) : Except Refusal (Encoded AnswerOut) := do
   let (d, n, dt) ← collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs]
   let (de, _) ← need "a layout without the pending entry" (L.find? (pendingEntry shs))
   let PS := slotsOf d dt n 2 S.pending
@@ -247,10 +247,10 @@ def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat
   let evt ← need "events that have no term" (Code.term? _ evs)
   let (dl, nl, dtl) ← collD L (.list v.event) [v.event]
   let (o, c4) ← encodeEvents L T v shs senv apply S.now (slotsOf dl dtl nl 1 evt) S.records S.machines S.nextId (.int 0)
-  let (fo, cf, cfx) ← encodeFinish L T P v shs senv apply invariants S.now S.fresh
+  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now S.fresh
     (slotsTerm d dt (filterSlots PS (keepQs to PS))) o
-  pure (⟨hit, rules, evt, o, fo⟩,
-    .ite hit (andT c1 (andT c2 (andT c3 (.ite (allT (rules.map (·.2))) (andT c4 cf) tt)))) tt, cfx)
+  pure ⟨⟨hit, rules, evt, o, fo⟩,
+    .ite hit (andT c1 (andT c2 (andT c3 (.ite (allT (rules.map (·.2))) (andT c4 cf) tt)))) tt, cfx⟩
 
 end
 
@@ -314,7 +314,7 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     (hval : RelV L _ (Ty.up _ hans value) (valT.denote M))
     {o : AnswerOut} {cond cfx : Term}
     (henc : encodeAnswer L T P shs k sh j senv apply inv S toT valT =
-      .ok (o, cond, cfx)) (hcfx : Holds M cfx) :
+      .ok ⟨o, cond, cfx⟩) (hcfx : Holds M cfx) :
     let r := step T v s (.answer to ⟨_, value⟩)
     (Holds M cond ↔ (Holds M o.hit →
       ∀ p, s.pending.find? (·.id == to) = some p → answerFits L.count T shs s p to ⟨_, value⟩)) ∧

@@ -23,6 +23,13 @@ inductive Refusal where
   | outside (what : String)
 deriving Repr
 
+/-- An encoder's terms with its two conditions: `cond`, what the terms ask of the values (exact against the step's
+`Fits`), and `codes`, what the codes built at captured values ask, which holds wherever those values are the program's. -/
+structure Encoded (α : Type) where
+  out : α
+  cond : Term
+  codes : Term
+
 /-- What a kept function's code says of it: where it is written and the types of the values it captured. -/
 structure SiteKey where
   site : SiteId

@@ -134,11 +134,11 @@ structure EventOut where
 /-- An event step's terms, its condition and the codes' condition, from the subscription's and the service's codes
 and the terms of the state and the received value. -/
 def encodeEvent (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    {i : Fin v.subscribes.length} (ec : EventCode v i) (S : SymState) (value : Term) : Except Refusal (EventOut × Term × Term) := do
+    {i : Fin v.subscribes.length} (ec : EventCode v i) (S : SymState) (value : Term) : Except Refusal (Encoded EventOut) := do
   let (et, cw) ← encodeWrap ec value
   let (o, c) ← encodeEvents L T v shs senv ec.apply S.now [(tt, [et])] S.records S.machines S.nextId (.int 0)
-  let (fo, cf, cx) ← encodeFinish L T P v shs senv ec.apply ec.invariants S.now S.fresh S.pending o
-  pure (⟨et, o, fo⟩, andT cw (andT c cf), cx)
+  let ⟨fo, cf, cx⟩ ← encodeFinish L T P v shs senv ec.apply ec.invariants S.now S.fresh S.pending o
+  pure ⟨⟨et, o, fo⟩, andT cw (andT c cf), cx⟩
 
 end
 
@@ -155,7 +155,7 @@ theorem event_encode {P : List AnySite} (chk : Checked P T v)
     (hsv : RelV L _ (Ty.up _ ((v.eventData i)).value value) (sv.denote M))
     (senv : StepEnv L shs)
     {o : EventOut} {c cx : Term}
-    (henc : encodeEvent L T P v shs senv ec S sv = .ok (o, c, cx))
+    (henc : encodeEvent L T P v shs senv ec S sv = .ok ⟨o, c, cx⟩)
     (hcx : Holds M cx) :
     let ev := (v.subscribes.get i).wrap.fn (value, ())
     (Holds M c ↔ (v.subscribes.get i).wrap.appFits L.count (value, ()) ∧ eventsFit L.count T s [ev] ∧

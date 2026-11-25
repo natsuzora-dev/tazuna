@@ -2784,7 +2784,7 @@ def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal :
   let (apply, ca) ← enc (dispSvc.apply.code L)
   let senv ← enc (StepEnv.of L dispShapes)
   let eff ← enc (effect L)
-  let (o, cond, codes) ← enc (encodeOwnStep L prelude dispSites dispSvc dispShapes senv apply S.records S.now
+  let ⟨o, cond, codes⟩ ← enc (encodeOwnStep L prelude dispSites dispSvc dispShapes senv apply S.records S.now
     S.fresh S.nextId (.int 0) (.var 6) S.machines)
   let below ← enc (pendingBelowT L dispShapes S.pending S.nextId)
   let some wf := S.wf L (v := dispSvc) dispShapes | throw "no well-formedness"
@@ -2909,7 +2909,7 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
   let effs ← effects.mapM fun f => enc (f L)
   let queue : List Slot := effs.zipIdx.map fun (e, j) => (tt, [.int j, e])
   let t : StepTerms := ⟨.bool false, ⟨S.records, S.machines, S.nextId, [], [], .int effs.length⟩, S.fresh⟩
-  let (o, cond, codes) ← enc (encodeSettle L prelude dispSites dispSvc dispShapes senv apply (effs.headD tt) S.now
+  let ⟨o, cond, codes⟩ ← enc (encodeSettle L prelude dispSites dispSvc dispShapes senv apply (effs.headD tt) S.now
     fuel 0 queue t)
   let below ← enc (pendingBelowT L dispShapes S.pending S.nextId)
   let some wf := S.wf L (v := dispSvc) dispShapes | throw "no well-formedness"

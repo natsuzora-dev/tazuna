@@ -734,13 +734,13 @@ from the requests and own effects the rounds start. Each part's condition is ask
 the second term is the codes' condition. -/
 def encodeClock (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (invariants : Code (Ty.fn [v.records] Ty.rules))
-    (S : SymState) (time : Term) : Except Refusal (ClockOut × Term × Term) := do
+    (S : SymState) (time : Term) : Except Refusal (Encoded ClockOut) := do
   let (ro, cr) ← encodeRounds L T shs v.declared senv v.machines S.records time (v.bounds.cascade.toNat + 1) S.machines tt
     S.nextId (.int 0)
-  let (fo, cf, cfx) ← encodeFinish L T P v shs senv apply invariants time S.fresh S.pending
+  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants time S.fresh S.pending
     ⟨S.records, ro.tables, ro.nextId, ro.news, ro.owns, ro.queued⟩
   let forward := Term.le S.now time
-  pure (⟨forward, ro.over, ro, fo⟩, .ite forward (andT cr (.ite ro.over tt cf)) tt, cfx)
+  pure ⟨⟨forward, ro.over, ro, fo⟩, .ite forward (andT cr (.ite ro.over tt cf)) tt, cfx⟩
 
 end
 
@@ -931,7 +931,7 @@ theorem clock_encode {P : List AnySite} (chk : Checked P T v)
     {S : SymState} (hR : StateRel M L T shs S s) {st : Term} (hst : st.denote M = .int time)
     (senv : StepEnv L shs)
     {o : ClockOut} {cond cfx : Term}
-    (henc : encodeClock L T P v shs senv apply inv S st = .ok (o, cond, cfx))
+    (henc : encodeClock L T P v shs senv apply inv S st = .ok ⟨o, cond, cfx⟩)
     (hcfx : Holds M cfx) :
     let r := step T v s (.clock time)
     (Holds M cond ↔ (s.now ≤ time →
