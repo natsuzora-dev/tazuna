@@ -388,14 +388,16 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
           have hrel := (machines_encode (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
             (fun m hm => (chk.keys m hm).1) h5).2 hcm
-          have hstarts := machines_starts (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
-            chk.keys h5 hcm
-          have hreach : ∀ effs ∈ s.machines.toSigma.map (fun sm => (Step.machineStep T recs' s.now ev sm.1 sm.2).2),
-              ∀ x ∈ effs, x.2.Reach P := by
-            intro effs he x hx
+          obtain ⟨effss, hstarts, hfls⟩ := machines_starts (T := T) recs' s.now ev hrt hnow hevT v.machines xs
+            s.machines outs hms chk.keys h5 hcm
+          have hreach : ∀ x ∈ effss.toList.flatten, x.2.Reach P := by
+            intro x hx
+            rw [hfls] at hx
+            obtain ⟨effs, he, hx⟩ := List.mem_flatten.1 hx
             obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 he
             exact Step.machineStep_reach T recs' s.now ev sm.1 sm.2 (chk.machines _ (PerMachine.fst_mem hsm)) x hx
           obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel chk.sites hshs senv v.machines _ _ hstarts hreach hn hq h6
+          rw [hfls] at hnT hnews1 hqT hown1
           have hnews1' : NewsRel M L shs v.declared news (Step.reqsOf (startedBy T s recs' ev)) n0 := hnews1
           have hown1' : OwnRel M L oS (Step.queuedOf (startedBy T s recs' ev)) q0 := hown1
           obtain ⟨hnR, hnews2, hqR, hown2⟩ := (reactions_encode chk.sites hshs senv.hE senv.hPE recs' s.now ev

@@ -449,23 +449,25 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     (senv : StepEnv L shs) {nid q : Term} {n0 q0 : Nat}
     (hn : nid.denote M = .int n0) (hq : q.denote M = .int q0) :
     (ms : List (MachineV v.records v.event)) → (sts : PerMachine (fun _ => List StartSlot) ms) →
-    (effss : List (List (Sender × EffectV v.event))) → StartsRel M L T ms sts effss → effss.flatten.length ≤ 1 →
-    (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
+    (effss : PerMachine (fun _ => List (Sender × EffectV v.event)) ms) → StartsRel M L T ms sts effss →
+    effss.toList.flatten.length ≤ 1 → (∀ x ∈ effss.toList.flatten, x.2.Reach P) →
     {news : List PendingSlot} → {cnt : Term} → {owns : List OwnSlot} → {ocnt : Term} →
     roundStarts L shs ds senv ms sts nid q = .ok (news, cnt, owns, ocnt) →
-    cnt.denote M = .int (Step.reqsOf effss.flatten).length ∧ NewsRel M L shs ds news (Step.reqsOf effss.flatten) n0 ∧
-      ocnt.denote M = .int (Step.queuedOf effss.flatten).length ∧ OwnRel M L owns (Step.queuedOf effss.flatten) q0
-  | [], .nil, [], _, _, _, news, cnt, owns, ocnt, henc => by
+    cnt.denote M = .int (Step.reqsOf effss.toList.flatten).length ∧
+      NewsRel M L shs ds news (Step.reqsOf effss.toList.flatten) n0 ∧
+      ocnt.denote M = .int (Step.queuedOf effss.toList.flatten).length ∧
+      OwnRel M L owns (Step.queuedOf effss.toList.flatten) q0
+  | [], .nil, .nil, _, _, _, news, cnt, owns, ocnt, henc => by
     simp only [roundStarts, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, rfl, rfl, rfl⟩ := henc
     exact ⟨rfl, ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩, rfl, ownRel_nil q0⟩
-  | m :: ms, .cons st sts, effs :: effss, ⟨hst, hrest⟩, hone, hreach, news, cnt, owns, ocnt, henc => by
+  | m :: ms, .cons st sts, .cons effs effss, ⟨hst, hrest⟩, hone, hreach, news, cnt, owns, ocnt, henc => by
     obtain ⟨⟨dk, nk⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨js, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨dflt, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨rest, k, orest, ko⟩, h3, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
-    rw [List.flatten_cons, List.length_append] at hone
+    rw [PerMachine.toList_cons, List.flatten_cons, List.length_append] at hone
     have hparts : StartSlots M L T m (if (L.ownsOf v.event).isEmpty then st else (st.map
           (splitStart senv.dE (L.effectsOf v.event).length (L.ownsOf v.event).length senv.dopt)).map (·.1)) (Step.reqsOf effs) ∧
         (startCount senv.dopt (if (L.ownsOf v.event).isEmpty then [] else (st.map
@@ -497,13 +499,13 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     obtain ⟨svS, ys, hS, hyp, hy⟩ := once_starts m senv.hopt κ F hX hh hEp (heffs ▸ hreqlen) hn
     rw [← heffs] at hyp hcount
     have hmem : ∀ x ∈ ys, x.1 ∈ Step.reqsOf effs := fun x hx => List.fst_mem_of_mem_zipIdx (hyp.mem_iff.1 hx)
-    have hr : ∀ x ∈ ys, x.1.2.Reach P := fun x hx => hreach effs (by simp) x.1 (List.mem_filter.1 (hmem x hx)).1
+    have hr : ∀ x ∈ ys, x.1.2.Reach P := fun x hx => hreach x.1 (by simp [(List.mem_filter.1 (hmem x hx)).1])
     have hrq : ∀ x ∈ ys, x.1.2.isRequest = true := fun x hx => (List.mem_filter.1 (hmem x hx)).2
     obtain ⟨sv1, zs1, hS1, -, hw1, hh1, hq1⟩ := entrySlots_rel hP m hshs h2 senv.hE senv.hPE (need_ok.1 h1) dflt hS hy hr hrq
     obtain ⟨hk, hnews, hko, hown⟩ := roundStarts_rel hP hshs senv hn hq ms sts effss hrest (by omega)
-      (fun effs' h => hreach effs' (by simp [h])) h3
-    have hor : effs.length = 0 ∨ effss.flatten.length = 0 := by omega
-    simp only [Step.reqsOf, Step.queuedOf, List.flatten_cons, List.filter_append, List.map_append,
+      (fun x h => hreach x (by simp [h])) h3
+    have hor : effs.length = 0 ∨ effss.toList.flatten.length = 0 := by omega
+    simp only [Step.reqsOf, Step.queuedOf, PerMachine.toList_cons, List.flatten_cons, List.filter_append, List.map_append,
       List.length_append] at hk hnews hko hown ⊢
     refine ⟨?_, ?_, ?_, ?_⟩
     · simp only [Term.denote, hcount, hk, Val.toInt]; push_cast; rfl
@@ -521,7 +523,6 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
       · rw [List.length_eq_zero_iff.1 h0] at hown ⊢
         obtain ⟨a, b, c, d, e, f⟩ := hown
         exact ownRel_append hO ⟨a, b, c, d, e, by simpa using f⟩
-  | [], .nil, _ :: _, h, _, _, _, _, _, _, _ | _ :: _, .cons _ _, [], h, _, _, _, _, _, _, _ => h.elim
 
 end
 
@@ -627,11 +628,12 @@ theorem fires_encode (recs : v.records.den0) (tnow : Int) {records now : Term}
     {os : PerMachine (fun _ => FireOut) ms} → {c : Term} → encodeFires L T ms xs done d records now = .ok (os, c) →
     (Holds M c ↔ firesFit L.count T recs tnow dv b sms) ∧
     (Holds M c → MachinesRel M L T ms (os.map (·.table)) (Step.fireMachines recs tnow dv b sms).1 ∧
-      ∃ effss, StartsRel M L T ms (os.map (·.starts)) effss ∧ effss.flatten = (Step.fireMachines recs tnow dv b sms).2.1)
+      ∃ effss, StartsRel M L T ms (os.map (·.starts)) effss ∧
+        effss.toList.flatten = (Step.fireMachines recs tnow dv b sms).2.1)
   | [], .nil, .nil, _, _, done, b, hdone, os, c, henc => by
     simp only [encodeFires, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, rfl⟩ := henc
-    exact ⟨by simp [firesFit, holds_tt], fun _ => ⟨trivial, [], trivial, by simp [Step.fireMachines]⟩⟩
+    exact ⟨by simp [firesFit, holds_tt], fun _ => ⟨trivial, .nil, trivial, by simp [Step.fireMachines]⟩⟩
   | m :: ms, .cons x xs, .cons insts sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, done, b, hdone, os, c, henc => by
     obtain ⟨⟨af, c0⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨fx, c1⟩, h2, henc⟩ := bind_ok.1 henc
@@ -672,10 +674,11 @@ theorem fires_encode (recs : v.records.den0) (tnow : Int) {records now : Term}
       obtain ⟨hrel, effss, hst, hfl⟩ := (fires_encode recs tnow hrec hnow hd ms xs sms hrest
         (fun m' hm => hord m' (by simp [hm])) hdone' h4).2 hc3
       rw [fireMachines_cons (T := T) m ho recs tnow dv b (instancesOf_ok (T := T) m tbl) sms]
-      refine ⟨⟨⟨tbl', ht', ?_⟩, hrel⟩, _ :: effss, ⟨⟨_, Step.Instance.key, _, E, _, svX, hX, hhX, hEp,
+      refine ⟨⟨⟨tbl', ht', ?_⟩, hrel⟩, .cons ((instancesOf T m tbl).flatMap fun a => (sentBy m Step.Instance.key
+        (fun i => firedOpt m recs tnow (!b && Step.firesIn T m dv (instancesOf T m tbl) i) i) a).toList) effss, ⟨⟨_, Step.Instance.key, _, E, _, svX, hX, hhX, hEp,
         instancesOk_lt (T := T) m ho (instancesOf_ok (T := T) m tbl), rfl⟩, hst⟩, ?_⟩
       · rw [hi']
-      · rw [List.flatten_cons, hfl]
+      · rw [PerMachine.toList_cons, List.flatten_cons, hfl]
 
 /-- A firing round: the condition holds exactly when its functions fit (`roundFit`), and wherever it holds whether it
 fires, the new tables, and the effects of `Step.roundOf`, machine by machine. -/
@@ -688,7 +691,8 @@ theorem round_encode (recs : v.records.den0) (tnow : Int) {records now : Term}
     (Holds M c ↔ roundFit L.count T recs tnow ab sms) ∧
     (Holds M c → ro.go.denote M = .bool (ab && (Step.dues sms.toSigma tnow).min?.isSome) ∧
       MachinesRel M L T ms (ro.fires.map (·.table)) (Step.roundOf recs tnow ab sms).1 ∧
-      ∃ effss, StartsRel M L T ms (ro.fires.map (·.starts)) effss ∧ effss.flatten = (Step.roundOf recs tnow ab sms).2) := by
+      ∃ effss, StartsRel M L T ms (ro.fires.map (·.starts)) effss ∧
+        effss.toList.flatten = (Step.roundOf recs tnow ab sms).2) := by
   obtain ⟨dues, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨os, c'⟩, h2, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
@@ -787,8 +791,7 @@ theorem rounds_encode {P : List AnySite} (hP : SitesUnique P) {shs : List (Pendi
     · obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
       obtain ⟨hgo, hrel, effss, hst, hfl⟩ := (round_encode s.records s.now hrec hnow hms hord hact h1).2 hc1
       have hr1 := roundOf_reach s.records s.now ab s.machines hreach
-      have hreff : ∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P := fun effs he x hx =>
-        hr1 x (hfl ▸ List.mem_flatten.2 ⟨effs, he, hx⟩)
+      have hreff : ∀ x ∈ effss.toList.flatten, x.2.Reach P := fun x hx => hr1 x (hfl ▸ hx)
       obtain ⟨hcnt, hnews, hcntO, hown⟩ := roundStarts_rel hP hshs senv hnid hq v.machines _ effss hst
         (hfl ▸ roundOf_effs s.records s.now ab s.machines) hreff h2
       rw [hfl] at hcnt hnews hcntO hown
