@@ -1,11 +1,12 @@
 import tazuna.{type Ctx}
+import tazuna/table.{type Table}
 
 pub type Records {
-  Records(total: Int)
+  Records(tasks: Table(Int, String))
 }
 
 pub type Event {
-  Added(amount: Int)
+  Added(key: Int, title: String)
 }
 
 pub type Caller {
@@ -14,7 +15,7 @@ pub type Caller {
 
 fn apply(r: Records, e: Event) -> Records {
   case e {
-    Added(n) -> Records(total: r.total + n)
+    Added(k, t) -> Records(tasks: table.insert(r.tasks, k, t))
   }
 }
 
@@ -22,30 +23,33 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, Nil) {
   tazuna.command(
     name: "add",
     callers: [User],
-    accepts: fn(n: Int) { [#("positive", n > 0)] },
-    decide: fn(c: Ctx(Records, Int, Caller)) { Ok([Added(c.input)]) },
-    ensures: fn(c: Ctx(Records, Int, Caller), r: Records) {
-      [#("grows", r.total > c.records.total)]
-    },
+    accepts: fn(_k: Int) { [] },
+    decide: fn(c: Ctx(Records, Int, Caller)) { Ok([Added(c.input, "task")]) },
+    ensures: fn(_c, _r) { [] },
   )
 }
 
-fn counter() -> tazuna.Service {
+fn tasks() -> tazuna.Service {
   tazuna.service(
-    name: "counter",
-    init: Records(total: 0),
+    name: "tasks",
+    init: Records(tasks: table.new()),
     apply: apply,
     subscribes: [],
     declares: [tazuna.declare_command(add())],
     machines: [],
     reactions: [],
-    invariants: fn(r: Records) { [#("not negative", r.total >= 0)] },
+    invariants: fn(r: Records) { [#("at most 2", table.size(r.tasks) <= 2)] },
     responses: [],
-    bounds: tazuna.bounds(creates: [], items: 1, cascade: 1, steps: 5),
+    bounds: tazuna.bounds(
+      creates: [tazuna.create(table: fn(r: Records) { r.tasks }, at_most: 2)],
+      items: 1,
+      cascade: 1,
+      steps: 5,
+    ),
     scenarios: [],
   )
 }
 
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(services: [counter()], externals: [])
+  tazuna.spec(services: [tasks()], externals: [])
 }

@@ -19,9 +19,12 @@ deriving DecidableEq
 
 /-- What `prove` found for one question. -/
 inductive Tazuna.ProveKind : Type
-  /-- No step of the input kind from a state of the right shape breaks the target. -/
+  /-- No step of the input kind from a state of the right shape breaks the target, and no such step goes past the
+  slots the bounds give. -/
   | proved
-  /-- No step of the input kind from a state of the right shape leaves the slots or a side condition. -/
+  /-- No step of the input kind from a state of the right shape breaks the target while it stays within the slots,
+  but such a step can go past them: the line names the bounds a witness went past. A success, as Alloy reports no
+  counterexample within its scope. -/
   | withinBounds
   /-- A state and input whose step breaks the target: exit code 1. -/
   | violated
@@ -31,8 +34,6 @@ deriving DecidableEq
 inductive Tazuna.UndecidedKind : Type
   /-- The solver answered unknown or ran out of time or resources. -/
   | unknown
-  /-- A step of the input kind can leave the slots its bounds give, so the step questions do not cover it. -/
-  | boundReached
   /-- The spec uses what the encoding has no terms for. -/
   | limit
   /-- A string literal holds a code point above U+2FFFF, outside SMT-LIB's strings. -/
@@ -96,13 +97,12 @@ def ProveKind.name : ProveKind → String
   | .withinBounds => "withinBounds"
   | .violated => "violated"
 
-def UndecidedKind.all : List UndecidedKind := [.unknown, .boundReached, .limit, .unencodableString]
+def UndecidedKind.all : List UndecidedKind := [.unknown, .limit, .unencodableString]
 
 theorem UndecidedKind.mem_all (k : UndecidedKind) : k ∈ UndecidedKind.all := by cases k <;> simp [UndecidedKind.all]
 
 def UndecidedKind.name : UndecidedKind → String
   | .unknown => "unknown"
-  | .boundReached => "boundReached"
   | .limit => "limit"
   | .unencodableString => "unencodableString"
 

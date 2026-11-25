@@ -44,11 +44,6 @@ def _root_.Tazuna.Smt.SymInput.text : SymInput v shs n → String
   | .event i _ => "event " ++ (v.subscribes.get i).name
   | .clock _ => "clock"
 
-/-- Whether only the target questions of this input kind decide an `ensures` target of the command. -/
-def _root_.Tazuna.Smt.SymInput.command? : SymInput v shs n → Option String
-  | .command i .. => some (v.commands.get i).name
-  | _ => none
-
 end
 
 -- A script's answer reports every variable it declares, so the default is never read.
@@ -107,21 +102,21 @@ def brokenAt {v : ServiceV} (s : State v) : Target → List String
 /-- One line of the report, with what decides the verdicts of the targets it is about. -/
 inductive Report where
   /-- The question about `target` (none: the bound question) of the input kind `step` was unsat. -/
-  | unsat (service step : String) (command? : Option String) (target : Option Target)
+  | unsat (service step : String) (target : Option Target)
   /-- A state and input that break the target, from the initial state or from a state of the right shape. -/
   | violated (service step : String) (target : Target) (fields : List (String × Json))
-  /-- A state of the right shape whose step of the kind leaves the slots or a side condition. -/
-  | boundReached (service step : String) (command? : Option String) (fields : List (String × Json))
+  /-- A state of the right shape whose step of the kind goes past the bounds `bounds`, as far as the state it leaves
+  shows them. -/
+  | boundReached (service step : String) (bounds : List Json)
   /-- No verdict: the solver's, or a refusal of the encoding. -/
-  | undecided (kind : Kind) (service step : String) (command? : Option String) (target : Option Target)
-      (fields : List (String × Json))
+  | undecided (kind : Kind) (service step : String) (target : Option Target) (fields : List (String × Json))
 
 /-- A line of the report in its place: known at once, or the answer to a question. -/
 inductive Item where
   | ready (r : Report)
   | ask (o : Obligation (Except String Report))
   /-- A question `--only` leaves out: it prints nothing, and its target is not proved. -/
-  | skipped (service : String) (command? : Option String) (target : Option Target)
+  | skipped (service : String) (target : Target)
 
 structure ServiceItems where
   items : List Item := []
@@ -158,6 +153,46 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .unsortable t => s!"a value of {tyText T t} holds a type variable or a structure value"
   | .slots t => s!"a value the spec writes of {tyText T t} holds more items than its bounds give"
 
+mutual
+/-- The collection types inside the value that hold more items than the layout gives them, with their sizes. -/
+def overV (L : Layout) : (t : Ty) → t.den → List (Ty × Nat)
+  | .list t, xs => (if (show List t.den from xs).length > L.count (.list t) then [(.list t, xs.length)] else []) ++
+      (show List t.den from xs).flatMap (overV L t)
+  | .bag t, xs => (if (show List t.den from xs).length > L.count (.bag t) then [(.bag t, xs.length)] else []) ++
+      (show List t.den from xs).flatMap (overV L t)
+  | .table k w, x => (if x.1.length > L.count (.table k w) then [(.table k w, x.1.length)] else []) ++
+      x.1.flatMap fun e => overV L k e.1 ++ overV L w e.2
+  | .tuple ts, x => overVs L ts x
+  | .adt (_ + 1) _ vs, x => overAlts L vs x
+  | _, _ => []
+def overVs (L : Layout) : (ts : List Ty) → Ty.dens ts → List (Ty × Nat)
+  | [], _ => []
+  | t :: ts, (x, xs) => overV L t x ++ overVs L ts xs
+def overAlts (L : Layout) : (vs : List (List Ty)) → Ty.alts vs → List (Ty × Nat)
+  | [], _ => []
+  | fs :: _, .inl x => overVs L fs x
+  | _ :: vs, .inr y => overAlts L vs y
+end
+
+/-- The bounds a state goes past: each collection type that holds more items than its slots, with the bound the slots
+come from. A step can also go past a bound only inside, in a value no state keeps; then the list is empty. -/
+def boundsPast (T : List TypeDecl) (L : Layout) {v : ServiceV} (shs : List (PendingShape v.event)) (s : State v) :
+    List Json :=
+  let over := overV L v.records (Ty.up _ v.records_data s.records) ++
+    (if s.pending.length > L.count (pendingTable shs) then [(pendingTable shs, s.pending.length)] else []) ++
+    s.machines.toSigma.filterMap fun ⟨m, insts⟩ =>
+      if insts.length > L.count m.table then some (m.table, insts.length) else none
+  let firsts := over.foldl (fun (acc : List (Ty × Nat)) o =>
+    if acc.any fun a => (Ty.same a.1 o.1).isSome then acc else acc ++ [o]) []
+  firsts.map fun (t, n) =>
+    Json.mkObj [("type", Json.str (tyText T t)), ("bound", Json.str (boundName t)), ("slots", Lean.toJson (L.count t)),
+      ("size", Lean.toJson n)]
+where
+  boundName : Ty → String
+    | .table k w => if v.bounds.creates.any (·.bounds (.table k w)) then "creates" else "items"
+    | .list _ => "list literals"
+    | _ => "items"
+
 def refusalLine (T : List TypeDecl) (r : Refusal) : Option (Kind × List (String × Json)) :=
   match r with
   | .unencodableString s => some (.undecided .unencodableString, [("string", Json.str s)])
@@ -181,7 +216,7 @@ def initReports (targets : List Target) : List Report :=
         let st := (stateWire c.T s).run' {}
         some (.violated v.name "init" g [("from", Json.str "init"), ("state", st.toJson),
           ("violated", Json.arr (broken.map Json.str).toArray)])
-      else some (.unsat v.name "init" none (some g))
+      else some (.unsat v.name "init" (some g))
     | _ => none
 
 -- A step that does not reach its invariant check shows no state after it, nor rules broken there; out lines without
@@ -192,8 +227,8 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v c.P)) (q : Question v 
     (a : Smt.Answer) : Except String Report :=
   let name := q.input.text
   match a with
-  | .unsat => .ok (.unsat v.name name q.input.command? q.target)
-  | .unknown why => .ok (.undecided (.undecided .unknown) v.name name q.input.command? q.target [("why", Json.str why)])
+  | .unsat => .ok (.unsat v.name name q.target)
+  | .unknown why => .ok (.undecided (.undecided .unknown) v.name name q.target [("why", Json.str why)])
   | .sat vs =>
     let M := modelOf vs
     if hc : v.caller.isData = true then
@@ -214,7 +249,8 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v c.P)) (q : Question v 
             ("out", Json.arr ((outs.getD []).map (·.toWire.toJson)).toArray)]
         let fields : List (String × Json) := shown.run' {}
         match q.target with
-        | none => .ok (.boundReached v.name name q.input.command? fields)
+        | none => .ok (.boundReached v.name name
+            ((after.map fun (a : Acc v) => boundsPast c.T L (shapes v c.P) a.state).getD []))
         | some g =>
           let violated := match g, r.outcome with
             | .ensures .., .fault (.ensures n) => [n]
@@ -238,18 +274,23 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
     match questions L c.T c.P v senv inp with
     | .error r =>
       match refusalLine c.T r with
-      | some (k, fields) => items := items ++ [.ready (.undecided k v.name step inp.command? none fields)]
+      | some (k, fields) => items := items ++ [.ready (.undecided k v.name step none fields)]
       | none => return { internal := some s!"service {v.name}, {step}: the encoding refused: {reprStr r}" }
     | .ok (gs, qs) =>
       for g in gs do
         unless targets.contains g do targets := targets ++ [g]
-      for q in qs do
-        let name := v.name ++ "/" ++ ((q.target.map Target.text).getD "bounds") ++ "/" ++ step
-        items := items ++ [if only name then .ask ⟨q.script, answerReport c v L senv q⟩
-          else .skipped v.name inp.command? q.target]
+      let kept := qs.filter fun q => match q.target with
+        | some g => only (v.name ++ "/" ++ g.text ++ "/" ++ step)
+        | none => true
+      -- The bound question decides whether a kept target's lines say proved or within the bounds, so it is asked
+      -- whenever a target question of its kind is.
+      let asked := if kept.any (·.target.isSome) then kept else []
+      items := items ++ asked.map (fun q => .ask ⟨q.script, answerReport c v L senv q⟩) ++
+        (qs.filterMap fun q => q.target.bind fun g => if kept.any (·.target == some g) then none else some g).map
+          (.skipped v.name)
   let init := (initReports c v targets).map fun r => match r with
-    | .unsat _ _ _ (some g) | .violated _ _ g _ =>
-      if only (v.name ++ "/" ++ g.text ++ "/init") then Item.ready r else .skipped v.name none (some g)
+    | .unsat _ _ (some g) | .violated _ _ g _ =>
+      if only (v.name ++ "/" ++ g.text ++ "/init") then Item.ready r else .skipped v.name g
     | r => .ready r
   return { items := init ++ items }
 
@@ -277,34 +318,38 @@ def Report.service : Report → String
   | .unsat s .. | .violated s .. | .boundReached s .. | .undecided _ s .. => s
 
 def targetOf : Report → Option Target
-  | .unsat _ _ _ g | .undecided _ _ _ _ g _ => g
+  | .unsat _ _ g | .undecided _ _ _ g _ => g
   | .violated _ _ g _ => some g
   | .boundReached .. => none
 
-/-- Whether the report keeps the target from Proved: a violation, no verdict, or a step that may leave the slots,
-of an input kind the target needs (every kind for an invariant, its command for an `ensures`). -/
+/-- Whether the report keeps the target from holding within the bounds: a violation of it, or no verdict for it or
+for an input kind (a refused encoding or an unknown bound question, which may hide any target's question). -/
 def blocks (service : String) (g : Target) : Report → Bool
-  | .unsat .. => false
+  | .unsat .. | .boundReached .. => false
   | .violated s _ g' _ => s == service && g' == g
-  | .boundReached s _ cmd _ | .undecided _ s _ cmd none _ => s == service && (match g with
-    | .ensures c _ => cmd == some c
-    | .invariant .. => true)
-  | .undecided _ s _ _ (some g') _ => s == service && g' == g
+  | .undecided _ s _ none _ => s == service
+  | .undecided _ s _ (some g') _ => s == service && g' == g
 
-def lineOf (unproved : String → List Target) : Report → Kind × List (String × Json)
-  | .unsat s step _ (some g) =>
-    (.prove .proved, [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step),
-      ("assumes", Json.arr (((unproved s).filter fun g' => g'.isInvariant && g' != g).map (Json.str ·.text)).toArray)])
-  | .unsat s step _ none =>
-    (.prove .withinBounds, [("service", Json.str s), ("step", Json.str step)])
+/-- The line of a report, given the targets not proved and the bounds each input kind's step can go past (none: the
+bound question was unsat). A bound question prints no line of its own: it decides whether its kind's target lines say
+proved or within the bounds. -/
+def lineOf (unproved : String → List Target) (past : String → String → Option (List Json)) :
+    Report → Option (Kind × List (String × Json))
+  | .unsat s step (some g) =>
+    let common := [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step), assumes s g]
+    some <| match past s step with
+      | none => (.prove .proved, common)
+      | some bs => (.prove .withinBounds, common ++ [("bounds", Json.arr bs.toArray)])
+  | .unsat _ _ none | .boundReached .. => none
   | .violated s step g fields =>
-    (.prove .violated, [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step)] ++ fields ++
-      [("assumes", Json.arr (((unproved s).filter fun g' => g'.isInvariant && g' != g).map (Json.str ·.text)).toArray)])
-  | .boundReached s step _ fields =>
-    (.undecided .boundReached, [("service", Json.str s), ("step", Json.str step)] ++ fields)
-  | .undecided k s step _ g fields =>
-    (k, [("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++
+    some (.prove .violated, [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step)] ++ fields ++
+      [assumes s g])
+  | .undecided k s step g fields =>
+    some (k, [("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++
       [("step", Json.str step)] ++ fields)
+where
+  assumes (s : String) (g : Target) : String × Json :=
+    ("assumes", Json.arr (((unproved s).filter fun g' => g'.isInvariant && g' != g).map (Json.str ·.text)).toArray)
 
 /-- The options of `prove`: the prefix `--only` keeps questions by, how many solvers run at once, and the cache
 directory. -/
@@ -333,12 +378,12 @@ def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
     let answers : Array (Except String Report) ← runAll opts.jobs
       (fun o => do pure (o.read (← solver.runCached cache o.script))) asks
     let mut reports : List Report := []
-    let mut skipped : List (String × Option String × Option Target) := []
+    let mut skipped : List (String × Target) := []
     let mut k := 0
     for it in items do
       match it with
       | .ready r => reports := reports ++ [r]
-      | .skipped s cmd g => skipped := skipped ++ [(s, cmd, g)]
+      | .skipped s g => skipped := skipped ++ [(s, g)]
       | .ask _ =>
         match (answers[k]? : Option (Except String Report)) with
         | some (.ok r) => reports := reports ++ [r]
@@ -349,20 +394,21 @@ def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
         k := k + 1
     let targets := (items.filterMap fun
       | .ready r => (targetOf r).map (r.service, ·)
-      | .skipped s _ g => g.map (s, ·)
+      | .skipped s g => some (s, g)
       | .ask _ => none) ++ reports.filterMap fun r => (targetOf r).map (r.service, ·)
-    let skips (s : String) (g : Target) : Bool := skipped.any fun (s', cmd, g') => s' == s && match g', g with
-      | some g', g => g' == g
-      | none, .ensures c _ => cmd == some c
-      | none, .invariant .. => true
+    let skips (s : String) (g : Target) : Bool := skipped.any fun (s', g') => s' == s && g' == g
     let unproved (s : String) : List Target :=
       (targets.filterMap fun (s', g) => if s' == s && (reports.any (blocks s g) || skips s g) then some g else none).foldl
         (fun acc g => if acc.contains g then acc else acc ++ [g]) []
+    -- A bound question with no verdict leaves its kind's lines within the bounds, naming none.
+    let past (s step : String) : Option (List Json) := reports.findSome? fun
+      | .boundReached s' step' bs => if s' == s && step' == step then some bs else none
+      | .undecided _ s' step' none _ => if s' == s && step' == step then some [] else none
+      | _ => none
     for r in reports do
-      let (kind, fields) := lineOf unproved r
-      printLine kind fields
+      if let some (kind, fields) := lineOf unproved past r then printLine kind fields
     if reports.any fun | .violated .. => true | _ => false then return 1
-    if reports.any fun | .boundReached .. | .undecided .. => true | _ => false then return 2
+    if reports.any fun | .undecided .. => true | _ => false then return 2
     return 0
 
 -- An IR path without a directory part is in the working directory.

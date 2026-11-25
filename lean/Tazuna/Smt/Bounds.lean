@@ -8,8 +8,7 @@ need. Where creates of one type differ, the smaller ones are terms: `createsT` s
 create's table has at most `at_most` occupied slots. `createsT_encode` proves the term exact: in every model where the
 codes' condition holds it holds exactly when the records it denotes are within every create (`within`), and the codes'
 condition is exact too. So a script asserts it of the state before a step, and its negation of the state after one is
-the bound-reached condition (`boundReachedT`): a model of it is a step that leaves the bounds, which prove reports as
-`Undecided.boundReached`. -/
+the bound-reached condition (`boundReachedT`): a model of it is a step that leaves the bounds. -/
 
 namespace Tazuna.Smt
 
