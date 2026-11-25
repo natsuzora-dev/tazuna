@@ -531,7 +531,7 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     (hrc : v.records.comparable = true) (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
     {k1 k2 : Nat} {bq tq : Script} (hq : pairQuestions L T P v senv k1 k2 = .ok (bq, tq))
     (hbq : Unsat L (pairTys v) bq) (htq : Unsat L (pairTys v) tq)
-    (hM : ∀ n (h : n < (pairTys v).length), Sorted L (pairTys v)[n] (M.vars n))
+    (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hbelow : ∀ p ∈ s.pending, p.id < s.nextId) (hsupp : Step.StateSupp s)
     {a0 : Step.Acc v} (has : a0.state = s) (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0)
@@ -587,7 +587,7 @@ theorem pairs_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
     (hrc : v.records.comparable = true) (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
     (hall : ∀ p ∈ L.ownPairs v.event, ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧
       Unsat L (pairTys v) bq ∧ Unsat L (pairTys v) tq)
-    (hM : ∀ n (h : n < (pairTys v).length), Sorted L (pairTys v)[n] (M.vars n))
+    (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hbelow : ∀ p ∈ s.pending, p.id < s.nextId) (hsupp : Step.StateSupp s)
     {a0 : Step.Acc v} (has : a0.state = s) (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0)

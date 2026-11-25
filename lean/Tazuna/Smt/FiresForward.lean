@@ -195,7 +195,7 @@ theorem back_sound (m : MachineV r e) {bq tq : Script} (hq : backQuestions L m =
   have hfwd : Holds M c0 → Holds M c → ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1 := by
     intro hc0 hc y hy
     refine Int.not_lt.1 fun hlt => ?_
-    obtain ⟨a, ha, hna⟩ := ht M hM
+    obtain ⟨a, ha, hna⟩ := ht M fun n h => varSorted_of_sorted (hM n h)
     simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at ha
     rcases ha with ha | rfl | rfl | rfl
     · exact hna (hw a ha)
@@ -205,7 +205,7 @@ theorem back_sound (m : MachineV r e) {bq tq : Script} (hq : backQuestions L m =
   refine ⟨fun hf ha => ?_, fun hb => ?_⟩
   · have hc0 := henc.1.2 hf
     exact hfwd hc0 (((henc.2 hc0).1).2 ha)
-  · obtain ⟨a, ha, hna⟩ := hb M hM
+  · obtain ⟨a, ha, hna⟩ := hb M fun n h => varSorted_of_sorted (hM n h)
     simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at ha
     rcases ha with ha | rfl
     · exact (hna (hw a ha)).elim

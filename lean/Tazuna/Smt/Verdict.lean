@@ -11,11 +11,28 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
+/-- A value of an effect type's datatype: one of its variants, request kinds then own kinds, with fields of their
+sorts. `Sorted` holds of no effect value: only a pair question has variables of an effect type. -/
+def EffSorted (L : Layout) (e : Ty) (w : Val) : Prop :=
+  ∃ d n k vals fs, L.find? (.dsl .effect [e]) = some (d, n) ∧ w = .ctor d k vals ∧ (L.effectFields e)[k]? = some fs ∧
+    SortedVs L fs vals
+
+/-- A value of the sort a script declares a variable of the type at. -/
+def VarSorted (L : Layout) : Ty → Val → Prop
+  | .dsl .effect [e], w => EffSorted L e w
+  | t, w => Sorted L t w
+
+theorem varSorted_of_sorted {L : Layout} {t : Ty} {w : Val} (h : Sorted L t w) : VarSorted L t w := by
+  unfold VarSorted
+  split
+  · simp [Sorted] at h
+  · exact h
+
 /-- The solver found no model of the script: no model whose variables hold values of the sorts of the types `tys`
 satisfies every assertion. A model of the script as SMT-LIB reads it is such a model (`Term.denote` states the
 standard's meaning), so this is what an unsat answer says. -/
 def Unsat (L : Layout) (tys : List Ty) (s : Script) : Prop :=
-  ∀ M : Model, (∀ n (h : n < tys.length), Sorted L tys[n] (M.vars n)) → ∃ a ∈ s.asserts, ¬ Holds M a
+  ∀ M : Model, (∀ n (h : n < tys.length), VarSorted L tys[n] (M.vars n)) → ∃ a ∈ s.asserts, ¬ Holds M a
 
 section
 variable {M : Model}
@@ -662,7 +679,7 @@ theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨hc, M, hM, hS, hx, hcase⟩ := hcov
   exact question_sound chk senv inp hq hS (run_inv T chk.reach _ Step.init_inv is)
-    (Tazuna.Ir.run_invariants T _ is hinit) hx hcase f hf fun q hq' hrel => hun q hq' hrel M hM
+    (Tazuna.Ir.run_invariants T _ is hinit) hx hcase f hf fun q hq' hrel => hun q hq' hrel M fun n h => varSorted_of_sorted (hM n h)
 
 end
 
