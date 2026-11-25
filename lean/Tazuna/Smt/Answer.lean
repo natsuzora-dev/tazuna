@@ -79,14 +79,12 @@ def ensuresTerms {e : Ty} (sh : PendingShape e) (de k : Nat) (entry : Term)
     pure (← ruleTerms L rs, andT c c')
 
 /-- Whether no slot holds the request `to` names as an entry of a shape whose answers have the type `t`. -/
-def answerUnmatchedT (shs : List (PendingShape v.event)) (t : Ty) (pending to : Term) : Except Refusal Term := do
-  let (d, n, dt) ← collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs]
-  let (de, _) ← need "a layout without the pending entry" (L.find? (pendingEntry shs))
+def answerUnmatchedT {shs : List (PendingShape v.event)} (senv : StepEnv L shs) (t : Ty) (pending to : Term) : Term :=
   let typed := (List.range shs.length).filter fun k => match shs[k]? with
     | some sh => (Ty.same (answerTy sh.output sh.rejection) t).isSome
     | none => false
-  pure (allT ((pendingSlotsOf d dt n pending).map fun s =>
-    .not (.and s.flag (.and (.eq s.id to) (anyT (typed.map fun k => .is de k s.entry))))))
+  allT ((pendingSlotsOf senv.dT senv.dtT senv.nT pending).map fun s =>
+    .not (.and s.flag (.and (.eq s.id to) (anyT (typed.map fun k => .is senv.dP k s.entry)))))
 
 end
 
@@ -118,24 +116,20 @@ theorem slot_mem {w : Nat} : {S : List (Slot w)} → {sv : List (Bool × List Va
 /-- Where the term holds, the request the wire id names, if any, has answers of another type than `t`. -/
 theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : Nat) (t : Ty)
     {pending toT : Term} (hpend : PendingRel L shs (pending.denote M) s.pending)
-    (hto : toT.denote M = .int (Int.ofNat to)) {u : Term} (henc : answerUnmatchedT L shs t pending toT = .ok u)
-    (hu : Holds M u) (p : Step.Pending v.event) (hf : s.pending.find? (·.id == to) = some p) :
+    (hto : toT.denote M = .int (Int.ofNat to)) (senv : StepEnv L shs) (hu : Holds M (answerUnmatchedT L senv t pending toT)) (p : Step.Pending v.event) (hf : s.pending.find? (·.id == to) = some p) :
     Ty.same t (answerTy p.request.output p.request.rejection) = none := by
-  match shs, hpend, henc with
-  | [], ⟨tbl, _, hlist⟩, _ =>
+  match shs, hpend, senv, hu with
+  | [], ⟨tbl, _, hlist⟩, _, _ =>
     match tbl, hlist with
     | ⟨[], _⟩, hlist => simp only [pendingList, List.map_nil] at hlist; simp [← hlist] at hf
     | ⟨(_, x) :: _, _⟩, _ => exact nomatch x
-  | sh0 :: rest, ⟨tbl, htbl, hlist⟩, henc =>
-  obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨de, dn⟩, h2, henc⟩ := bind_ok.1 henc
-  cases pure_ok.1 henc
+  | sh0 :: rest, ⟨tbl, htbl, hlist⟩, senv, hu =>
   -- The request found sits in an occupied slot with its wire id.
   have hp := List.mem_of_find?_eq_some hf
   have hpid : p.id = to := by simpa using List.find?_some hf
   rw [← hlist] at hp
   obtain ⟨⟨y1, y2⟩, hy, rfl⟩ := List.mem_map.1 hp
-  obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := table_view (M := M) htbl h1
+  obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := table_view (M := M) htbl senv.hT
   obtain ⟨vs, hvs, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_left hh (y1, y2) (hperm.mem_iff.2 hy)
   have hocc : (true, vs) ∈ sv := by
     simp only [occupied, List.mem_filterMap] at hvs
@@ -149,7 +143,7 @@ theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : 
   simp only [PendingSlot.slot, Term.denotes, List.cons.injEq, and_true] at hxs2 hf1
   obtain ⟨htk, hte⟩ := hxs2
   obtain ⟨d', n', hf', hra⟩ := hzv
-  have hde := find_det hf' (need_ok.1 h2)
+  have hde := find_det hf' senv.hPE
   subst d'
   obtain ⟨j', sh', fx, vals, hj', hzv', -, hpo⟩ := relAlts_pending (L := L) y1 (sh0 :: rest) 0 y2 zv hra
   -- The slot's test is false, so no shape of the answer's type is that entry's.
@@ -173,7 +167,7 @@ theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : 
     have hX : Holds M (f.and ((tk.eq toT).and (anyT (((List.range (sh0 :: rest).length).filter fun k =>
         match (sh0 :: rest)[k]? with
         | some sh => (Ty.same (answerTy sh.output sh.rejection) t).isSome
-        | none => false).map fun k => Term.is de k te)))) := by
+        | none => false).map fun k => Term.is senv.dP k te)))) := by
       rw [holds_and, holds_and]
       refine ⟨by simp [Holds, hf1, Val.toBool], ?_, ?_⟩
       · simp only [Holds, Term.denote, htk, hzk, hto, hkey, Val.toBool]
@@ -181,7 +175,7 @@ theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : 
         simp [Val.beq]
       · simp only [Holds]; rw [anyT_denote]
         rw [Nat.zero_add] at hzv'
-        refine List.any_eq_true.2 ⟨Term.is de j' te, List.mem_map_of_mem htyped, ?_⟩
+        refine List.any_eq_true.2 ⟨Term.is senv.dP j' te, List.mem_map_of_mem htyped, ?_⟩
         simp [Term.denote, hte, hzv', Val.toBool]
     have hX' : (Term.denote M _).toBool = true := hX
     have hs' : (Val.bool !(Term.denote M _).toBool).toBool = true := hslot
@@ -192,12 +186,11 @@ theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : 
 is `Fault.answerUnmatched`, whatever the records. -/
 theorem answer_unmatched (s : State v) {shs : List (PendingShape v.event)} (to : Nat) (t : Ty) (value : t.den0)
     {pending toT : Term} (hpend : PendingRel L shs (pending.denote M) s.pending)
-    (hto : toT.denote M = .int (Int.ofNat to)) {u : Term} (henc : answerUnmatchedT L shs t pending toT = .ok u)
-    (hu : Holds M u) :
+    (hto : toT.denote M = .int (Int.ofNat to)) (senv : StepEnv L shs) (hu : Holds M (answerUnmatchedT L senv t pending toT)) :
     step T v s (.answer to ⟨t, value⟩) = ⟨s, .fault .answerUnmatched, [], []⟩ := by
   cases hf : s.pending.find? (·.id == to) with
   | none => simp only [step, hf]
-  | some p => simp only [step, hf, unmatched_types s to t hpend hto henc hu p hf]
+  | some p => simp only [step, hf, unmatched_types s to t hpend hto senv hu p hf]
 
 end
 

@@ -72,9 +72,7 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
     let (inv, ci) ← v.invariants.code L
     let ⟨o, c, cs⟩ ← encodeAnswer L T P (shapes v P) k (shapes v P)[k] senv j apply inv S to value
     pure ⟨.answer o, c, andT ca ci, cs⟩
-  | .unmatched t to _ => do
-    let u ← answerUnmatchedT L (shapes v P) t S.pending to
-    pure ⟨.unmatched u, tt, tt, tt⟩
+  | .unmatched t to _ => pure ⟨.unmatched (answerUnmatchedT L senv t S.pending to), tt, tt, tt⟩
   | .event i value => do
     let (ec, ce) ← EventCode.of L v i
     let ⟨o, c, cs⟩ ← encodeEvent L T P v (shapes v P) senv ec S value
@@ -223,12 +221,11 @@ theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     have ex := answer_encode chk (fun _ => shapes_inSites) s hinv hk to value happ hca hinvc hci senv j hR hto hty hval hans hcs
     exact ⟨by rw [ex.1]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond => ex.2 hcond hhit⟩
   | unmatched ty toT valT =>
-    obtain ⟨u, hu, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     obtain ⟨-, to, value, rfl, hto, -⟩ := decode_answer hx
-    refine ⟨by simp [holds_tt, codesFit], fun _ _ hcase => ⟨?_, fun _ => answer_unmatched s to ty value hR.pending hto hu hcase⟩⟩
+    refine ⟨by simp [holds_tt, codesFit], fun _ _ hcase => ⟨?_, fun _ => answer_unmatched s to ty value hR.pending hto senv hcase⟩⟩
     refine ⟨fun _ p hf => ?_, fun _ => holds_tt⟩
-    simp [answerFits, unmatched_types s to ty hR.pending hto hu hcase p hf]
+    simp [answerFits, unmatched_types s to ty hR.pending hto senv hcase p hf]
   | event i sv =>
     obtain ⟨value, rfl, hsv⟩ := decode_event hx
     obtain ⟨⟨ec, ce⟩, hec, henc⟩ := bind_ok.1 henc
