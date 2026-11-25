@@ -296,6 +296,27 @@ theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : S
     exact verdict_covered chk senv f hf hinit inp hqs hun is x hcov
   · exact h f hf
 
+/-- The meaning of `Prove.withinBounds`: where the solver answers unsat to every input kind's questions about the
+targets the fault `f` falls under, whatever the bound questions answer, no step of a run from an initial state whose
+invariants hold faults with `f`, wherever the state the run reached and the input fit the slots and the step stays
+within them. -/
+theorem within_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P)) (f : Fault)
+    (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
+    (hq : ∀ inp ∈ stepInputs v (shapes v P) senv.nT (5 + v.machines.length), ∃ gs qs,
+      questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (∃ g, q.target = some g ∧ g.covers f = true) →
+        Unsat L (stateTys v (shapes v P) ++ inp.tys) q.script)
+    (is : List (Input v)) (x : Input v) (hs : Within L (shapes v P) (run T v (Step.State.init v) is).1)
+    (hx : (inputVals L chk.callerData x).isSome) (hfit : StepFits L T P v (run T v (Step.State.init v) is).1 x) :
+    (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
+  obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
+  have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
+  rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hs x hivs
+    with ⟨inp, hmem, hc, M, hM, hS, hxd, hcase⟩ | h
+  · obtain ⟨gs, qs, hqs, hun⟩ := hq inp hmem
+    exact question_within chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is)
+      (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg => hun q hq' hg M hM
+  · exact h f hf
+
 end
 
 end Tazuna.Smt

@@ -154,6 +154,38 @@ theorem shapes_inSites {v : ServiceV} {P : List AnySite} {sh : PendingShape v.ev
     · cases hrq
   · cases h
 
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
+/-- A shape has a rejection exactly when it has no `ensures`: a command's request, or a query's. -/
+theorem shapes_rejection {v : ServiceV} {P : List AnySite} {sh : PendingShape v.event} (h : sh ∈ shapes v P) :
+    sh.rejection.isSome = sh.ensures.isNone := by
+  simp only [shapes, List.mem_flatMap] at h
+  obtain ⟨⟨ks, snd⟩, -, h⟩ := h
+  split at h
+  · simp only [List.mem_map] at h
+    obtain ⟨rq, hrq, rfl⟩ := h
+    simp only [requestShapes, requestShapesAt, List.mem_flatMap] at hrq
+    obtain ⟨⟨x, d⟩, -, hrq⟩ := hrq
+    have hmk : ∀ (name : String) (i o : Ty) (j : Option Ty)
+        (ens : Option ((Γ : List Ty) × Site Γ (Ty.fn [i, answerTy o j] Ty.rules))), j.isSome = ens.isNone →
+        ∀ rq' ∈ ((sitesOf P (Ty.fn [answerTy o j] (.list v.event))).filterMap
+          fun (⟨aΓ, a⟩ : (Γ : List Ty) × Site Γ _) =>
+          if h : (Ty.tuple [i, .tuple ((ens.map (·.1)).getD []), .tuple aΓ]).isData = true then
+            some (⟨x, name, i, o, j, ens, aΓ, a, h⟩ : RequestShape v.event) else none),
+        rq'.rejection.isSome = rq'.ensures.isNone := by
+      intro name i o j ens hje rq' hrq'
+      simp only [List.mem_filterMap] at hrq'
+      obtain ⟨⟨aΓ, a⟩, -, hrq'⟩ := hrq'
+      split at hrq'
+      · cases hrq'; exact hje
+      · cases hrq'
+    split at hrq
+    · exact hmk _ _ _ _ none rfl rq hrq
+    · obtain ⟨es, -, hrq⟩ := List.mem_flatMap.1 hrq
+      exact hmk _ _ _ none (some es) rfl rq hrq
+    · cases hrq
+  · cases h
+
 /-- Whether a site is the one a kept function's code names. -/
 def siteMatch {Γ : List Ty} {t : Ty} (s : Site Γ t) (k : SiteKey) : Bool :=
   s.site == k.site && (Ty.sames Γ k.Γ).isSome

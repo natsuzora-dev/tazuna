@@ -6,6 +6,7 @@ import Tazuna.Cli.Prove
 import Tazuna.Semantics.After
 import Tazuna.Smt.Prove
 import Tazuna.Smt.Cover
+import Tazuna.Smt.Cti
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
@@ -40,7 +41,8 @@ elab "#check_tazuna_axioms" : command => do
       unless allowed.contains a do throwError "{n} depends on the axiom {a}"
   if checked == 0 then throwError "no Tazuna declarations found"
   -- The theorems the engine's answers rest on: a double-backquoted name that no longer exists fails to elaborate.
-  for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound] do
+  for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound,
+      ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound] do
     unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms
@@ -81,7 +83,13 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.encodeStep_ofService,
     -- T4: unsat answers to every input kind's bound question and its questions about the rules named n mean no step
     -- within the slots of a run from an initial state whose invariants hold faults naming n.
-    ``Tazuna.Smt.verdict_sound]
+    ``Tazuna.Smt.verdict_sound,
+    -- What Prove.withinBounds says: unsat questions about the rules named n, whatever the bound questions answer, mean
+    -- no step of such a run that stays within the slots faults naming n.
+    ``Tazuna.Smt.within_sound,
+    -- A counterexample is honest: a model of a target question decodes to a state with the step invariant and every
+    -- invariant holding, whose step in Lean is the one the terms say.
+    ``Tazuna.Smt.cti_sound]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do

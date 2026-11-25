@@ -1,5 +1,6 @@
 import Tazuna.Smt.Prove
 import Tazuna.Semantics.After
+import Tazuna.Smt.StepSites
 
 /-! T4 for a step: where the solver finds no model of an input kind's bound question and of its questions about the
 targets a fault `f` falls under (the invariant or `ensures` rules of its name, the cascade bound, the own command or
@@ -139,6 +140,23 @@ theorem instHold_of_nil : (ms : List (MachineV r e)) → (checks : PerMachine (f
     by_cases ho : Holds M c.occupied
     · exact .inr (instBroken_nil h.1 c hc ho)
     · exact .inl ho
+
+/-- Where every instance's rules hold, no instance's rule is broken. -/
+theorem nil_of_instHold : (ms : List (MachineV r e)) → (checks : PerMachine (fun _ => List InstCheck) ms) →
+    Holds M (allT (checks.toList.map instHoldT)) → checksBroken L T M ms checks = []
+  | [], .nil, _ => rfl
+  | m :: ms, .cons cs rest, h => by
+    simp only [PerMachine.toList, List.map_cons] at h
+    rw [show allT (instHoldT cs :: rest.toList.map instHoldT) = .and (instHoldT cs) (allT (rest.toList.map instHoldT))
+      from rfl, holds_and] at h
+    simp only [checksBroken, List.append_eq_nil_iff]
+    refine ⟨List.eq_nil_iff_forall_not_mem.2 fun n hn => ?_, nil_of_instHold ms rest h.2⟩
+    obtain ⟨c, hc, ho, hn⟩ := mem_instBroken hn
+    have hhold := (holds_allT _).1 h.1 _ (List.mem_map_of_mem hc)
+    rw [holds_or, holds_not, holds_allT_rules] at hhold
+    rcases hhold with hno | hnil
+    · exact hno ho
+    · rw [hnil] at hn; cases hn
 
 /-- An instance rule named `n` broken at a step's end makes the question of its machine and name true. -/
 theorem instBrokenT_of_mem : (ms : List (MachineV r e)) → (checks : PerMachine (fun _ => List InstCheck) ms) →
@@ -484,6 +502,131 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
       simp [hbr]
   obtain ⟨a, ha, hna⟩ := hun ⟨inp, some g, _⟩
     (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) (.inr ⟨g, rfl, hn⟩)
+  simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  · exact hna hwfH
+  · exact hna hbelowH
+  · exact hna hcaseH
+  · exact hna hside
+  · exact hna hheldH
+  · exact hna hcond
+  · exact hna hbr
+
+end
+
+section
+variable (S : Ty → Nat) {v : ServiceV}
+
+/-- Whether the codes of the functions a step on the input applies fit their slots: `codesFit` of its kind. -/
+def inputCodesFit : Input v → Prop
+  | .command i _ _ =>
+    let x := v.commands.get i
+    ((x.accepts.fits S).1 ∧ (x.decide.fits S).1 ∧ (x.ensures.fits S).1) ∧ (v.apply.fits S).1 ∧ (v.invariants.fits S).1
+  | .query i _ _ => ((v.queries.get i).accepts.fits S).1 ∧ ((v.queries.get i).resolve.fits S).1
+  | .answer .. => (v.apply.fits S).1 ∧ (v.invariants.fits S).1
+  | .event i _ => (v.apply.fits S).1 ∧ ((v.subscribes.get i).wrap.fits S).1 ∧ (v.invariants.fits S).1
+  | .clock _ => (v.apply.fits S).1 ∧ (v.invariants.fits S).1
+
+end
+
+/-- Whether the own kinds' codes fit where a step on the input runs a cascade: every kind's step but a query's. -/
+def inputSitesFit (L : Layout) (P : List AnySite) {v : ServiceV} : Input v → Prop
+  | .query .. => True
+  | _ => SitesFit L P v
+
+/-- Whether the step from `s` on `x` stays within the slots: the codes of what it applies, the cascade's own kinds'
+codes (no query runs a cascade), the invariants at `s`, and what the step applies all fit. -/
+def StepFits (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (s : State v) (x : Input v) : Prop :=
+  inputCodesFit L.count x ∧ inputSitesFit L P x ∧
+    (v.invariants.fits L.count).1 ∧ v.invariants.appFits L.count (s.records, ()) ∧
+    instChecksFit L.count s.records s.now s.machines ∧ stepFits L.count T (shapes v P) s x
+
+section
+variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
+
+theorem codesFit_of_decode {shs : List (PendingShape v.event)} {n : Nat} {hc : v.caller.isData = true}
+    {inp : SymInput v shs n} {x : Input v} (hx : inp.decode M L hc = some x) (h : inputCodesFit L.count x) :
+    codesFit L.count inp := by
+  cases inp with
+  | command => obtain ⟨_, _, rfl, -, -⟩ := decode_command hx; exact h
+  | query => obtain ⟨_, _, rfl, -, -⟩ := decode_query hx; exact h
+  | answer => obtain ⟨_, _, _, rfl, -, -⟩ := decode_answer hx; exact h
+  | unmatched => trivial
+  | event => obtain ⟨_, rfl, -⟩ := decode_event hx; exact h
+  | clock => obtain ⟨_, rfl, -⟩ := decode_clock hx; exact h
+
+theorem sites_of_decode {P : List AnySite} (senv : StepEnv L (shapes v P)) {S : SymState v}
+    {inp : SymInput v (shapes v P) senv.nT} {t : EncodedStep v} (henc : encodeStep L T P v senv S inp = .ok t)
+    {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x) (h : inputSitesFit L P x) :
+    Holds M t.sites := by
+  have hs := step_sites (M := M) senv S henc
+  cases inp with
+  | command => obtain ⟨_, _, rfl, -, -⟩ := decode_command hx; exact hs.2 h
+  | query => exact hs.2 trivial
+  | answer => obtain ⟨_, _, _, rfl, -, -⟩ := decode_answer hx; exact hs.2 h
+  | unmatched => exact hs.2 trivial
+  | event => obtain ⟨_, rfl, -⟩ := decode_event hx; exact hs.2 h
+  | clock => obtain ⟨_, rfl, -⟩ := decode_clock hx; exact hs.2 h
+
+/-- T4 for one input kind within the slots, in one model: where the symbolic state and input decode to a state of the
+right shape whose invariants hold and to an input of the kind whose step stays within the slots, and the model
+satisfies no question about a target `f` falls under, the step does not fault with `f`. No bound question is needed:
+within the slots every side condition is exact, so it holds. -/
+theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
+    (senv : StepEnv L (shapes v P)) (inp : SymInput v (shapes v P) senv.nT)
+    {gs : List Target} {qs : List (Question v (shapes v P) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
+    {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v P) = some s)
+    (hinv : Step.Inv P s) (hheld : Step.invariants s = [])
+    {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
+    (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
+    (hfit : StepFits L T P v s x) (f : Fault) (hf : f ≠ .answerUnmatched)
+    (hun : ∀ q ∈ qs, (∃ g, q.target = some g ∧ g.covers f = true) → ∃ a ∈ q.script.asserts, ¬ Holds M a) :
+    (step T v s x).outcome ≠ .fault f := by
+  intro hfault
+  obtain ⟨hcf, hsf, hif, haf, hkf, hstf⟩ := hfit
+  obtain ⟨t, ht, hq⟩ := bind_ok.1 hq
+  obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
+  obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
+  obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
+  obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
+  obtain ⟨⟨checks, ck⟩, hchecks, hq⟩ := bind_ok.1 hq
+  obtain ⟨vars, -, hq⟩ := bind_ok.1 hq
+  obtain ⟨dts, -, hq⟩ := bind_ok.1 hq
+  cases pure_ok.1 hq
+  have hR := decode_state hS
+  have hwfH : Holds M wf := wf_of_decodeState (need_ok.1 hwf) hS
+  have hbelowH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below
+  have hcaseH := hcase t ht
+  have henc := step_encode chk senv hS hinv hx ht
+  have hcodes := henc.1.2 (codesFit_of_decode hx hcf)
+  have hsites := sites_of_decode senv ht hx hsf
+  have hci0 := (v.invariants.code_exact (M := M) hinvc).1.2 hif
+  have hci := (invariants_exact v.invariants v.records_data hinvc hci0 s.records hR.records hrules).2 haf
+  have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
+  have hbs := instChecks_encode s.records s.now hR.records hR.now v.machines _ s.machines hR.machines hord hchecks
+  have hck := hbs.1.2 hkf
+  have hside : Holds M (andT t.codes (andT t.sites (andT ci0 (andT ci ck)))) := by
+    simp only [holds_andT]; exact ⟨hcodes, hsites, hci0, hci, hck⟩
+  have hcond := ((henc.2 hcodes hsites hcaseH).1).2 hstf
+  have hfd : (Ty.fn [v.records] Ty.rules).isData = true := by
+    simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, v.records_data]
+  have hb := invariants_rel v.invariants v.records_data hfd (v.invariants.code_fn hfd hinvc hci0) s.records hR.records
+    hrules hci
+  have hsplit : Step.invariants s = Step.broken (v.invariants.fn (s.records, ())) ++ instancesBroken s.records s.now s.machines := rfl
+  rw [hsplit, List.append_eq_nil_iff] at hheld
+  have hheldH : Holds M (andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT))) :=
+    (holds_andT _ _).2 ⟨(holds_allT_rules _).2 (hb.trans hheld.1), instHold_of_nil _ _ ((hbs.2 hck).trans hheld.2)⟩
+  have hrel := ((henc.2 hcodes hsites hcaseH).2) hcond
+  obtain ⟨g, hg, hn, hbr⟩ := rel_faults (command?_of_decode hx) hrel hfault hf
+  have hkeep : ((t.out.breaks inp.command? g).const?.map Val.toBool != some false) = true := by
+    cases hk : (t.out.breaks inp.command? g).const? with
+    | none => rfl
+    | some w =>
+      have hw := Term.const?_denote M _ hk
+      simp only [Holds, hw] at hbr
+      simp [hbr]
+  obtain ⟨a, ha, hna⟩ := hun ⟨inp, some g, _⟩
+    (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) ⟨g, rfl, hn⟩
   simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
   rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
