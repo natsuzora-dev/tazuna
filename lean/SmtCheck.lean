@@ -2,7 +2,7 @@ import Tazuna.Smt.Bounds
 import Tazuna.Smt.EventStep
 import Tazuna.Smt.Reactions
 import Tazuna.Smt.Answer
-import Tazuna.Smt.Internal
+import Tazuna.Smt.OwnStep
 import Tazuna.Smt.Clock
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
@@ -2801,6 +2801,125 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
       | _, _ => fail "the model does not decode"
     | a => fail s!"{repr a}"
 
+/-! An own effect's internal step, for `ownStep_rel`: the service lists the command `twice` and the query `next` above,
+and the layout has three own kinds, `twice`, `next` and `gone`, which the service does not list. From the same state,
+the effect term is in turn alice's `twice 3` with 5 captured, her `next 3`, and her `gone 3`. The records, instance
+table, next id, fresh counter and new wire ids read from the model must be what `Step.runOwn` leaves for the effect,
+and must differ from what it leaves for the other kind's effect; `gone` must fault as `Step.runOwn` does. -/
+
+def dispSvc : ServiceV := { twiceSvc with name := "o", queries := [nextQ] }
+
+def dispShapes : List (PendingShape dispSvc.event) := shapes dispSvc writeSites
+
+def dispSites : List AnySite := writeSites ++ [⟨[.int], _, answerFive⟩, ⟨[], _, answerIsEvent⟩]
+
+def twiceKey : OwnKey := .command .int "twice" .str .int .str ⟨answerFive.site, [.int]⟩
+def nextKey : OwnKey := .query .int "next" .str .int .int ⟨answerIsEvent.site, []⟩
+def goneKey : OwnKey := .command .int "gone" .str .int .str ⟨answerFive.site, [.int]⟩
+
+def dispLayoutOf (slots : Nat) : Layout :=
+  let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE
+  Layout.addTys (listSlots (fun _ => slots) lits)
+    { effects := [sendKey ⟨"m", 3, 7, 0⟩], owns := [twiceKey, nextKey, goneKey] }
+    (reactTys ++ [.tuple [.int], .tuple [], .list .int, .id, cctxT, Ty.result (.list .int) .str, pendingTable dispShapes,
+      Ty.result Ty.nil .str, Ty.nil] ++
+      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
+      Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE ++ Tazuna.Smt.Expr.tys nextResolveE)
+
+/-- v0..v5 the state, v6 the effect, v7 the records after, v8 the next id after, v9 the instance table after, v10 the
+fault, v11 the fresh counter after, then per new request slot its flag and id. -/
+def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal : List Term) :
+    Except String (Script × Nat × OwnStepOut) := do
+  let L := dispLayoutOf slots
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let (apply, ca) ← enc (dispSvc.apply.code L)
+  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
+  let some (dP, _) := L.find? (pendingEntry dispShapes) | throw "no pending entry"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let eff ← enc (effect L)
+  let (o, cond, codes) ← enc (encodeOwnStep L prelude dispSites dispSvc dispShapes dE dP dopt apply S.records S.now
+    S.fresh S.nextId (.int 0) (.var 6) S.machines)
+  let below ← enc (pendingBelowT L dispShapes S.pending S.nextId)
+  let some wf := S.wf L (v := dispSvc) dispShapes | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable dispShapes) | throw "no pending sort"
+  let some msrt := L.srt? startM.table | throw "no table sort"
+  let some esrt := L.srt? (.dsl .effect [.int]) | throw "no effect sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [tbl] := o.terms.done.tables | throw "not one machine"
+  let news := o.terms.done.news
+  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (12 + 2 * j)) f, .eq (.var (13 + 2 * j)) (xs.headD tt)]
+  pure ({ datatypes := dts,
+          vars := [rsrt, .int, .int, .int, psrt, msrt, esrt, rsrt, .int, msrt, .bool, .int] ++
+            (news.map fun _ => [Srt.bool, .int]).flatten,
+          asserts := [wf, below, ca, codes, cond, .eq (.var 6) eff, .eq (.var 7) o.terms.done.records,
+            .eq (.var 8) o.terms.done.nextId, .eq (.var 9) tbl, .eq (.var 10) o.terms.fault,
+            .eq (.var 11) o.terms.fresh] ++ slots ++ goal,
+          shows := List.range (12 + 2 * news.length) }, news.length, o)
+
+def dispCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: an own effect's internal step: {m}"; return false
+  let L := dispLayoutOf 3
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dm, nm) := L.find? startM.table | fail "no instance table"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dp, np) := L.find? (pendingTable dispShapes) | fail "no pending table"
+  let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry dispShapes]) | fail "no pending slot"
+  let Sr := slotsOf dr drt nr 2 (.var 0)
+  let Sm := slotsOf dm dmt nm 2 (.var 5)
+  let Sp := slotsOf dp dpt np 2 (.var 4)
+  let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
+    Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
+    .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
+  let twiceFx : EffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let nextFx : EffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
+  let goneFx : EffectV dispSvc.event := .command "gone" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let cases : List (String × (Layout → Except Refusal Term) × EffectV dispSvc.event × EffectV dispSvc.event) :=
+    [("twice", fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5], twiceFx, nextFx),
+     ("next", fun L => ownT L nextKey (.str "alice") (.int 3) [], nextFx, twiceFx),
+     ("gone", fun L => ownT L goneKey (.str "alice") (.int 3) [.int 5], goneFx, twiceFx)]
+  let mut ok := true
+  for (name, effect, fx, other) in cases do
+    match dispScriptOf 3 effect goal with
+    | .error m => ok ← fail s!"{name}: {m}"
+    | .ok (script, nn, o) =>
+      match ← solver.run script with
+      | .sat vs =>
+        let M := modelOf vs
+        let after : SymState := { records := .var 7, now := .var 1, fresh := .var 11, nextId := .var 8,
+                                  pending := .var 4, machines := [.var 9] }
+        match (SymState.vars 0 1).decode M L (v := dispSvc) rfl prelude dispShapes,
+            after.decode M L (v := dispSvc) rfl prelude dispShapes with
+        | some s, some s' =>
+          let view (sms : List (Step.MachineState dispSvc.records dispSvc.event)) :=
+            sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
+              (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
+          let flag (n : Nat) := vs.lookup n == some (.bool true)
+          let ids := ((List.range nn).filterMap fun j =>
+            if flag (12 + 2 * j) then natOf ((vs.lookup (13 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
+          let same (a : Step.Acc dispSvc) : Bool :=
+            sameAs L recordsT rfl a.state.records (vs.lookup 7) && view s'.machines == view a.state.machines &&
+              vs.lookup 8 == some (.int a.state.nextId) && vs.lookup 11 == some (.int a.state.fresh) &&
+              ids == ((a.state.pending.filter (·.id != 2)).map (·.id)).mergeSort (· ≤ ·)
+          let faults := flag 10
+          match Step.runOwn prelude ({ state := s } : Step.Acc dispSvc) fx,
+              Step.runOwn prelude ({ state := s } : Step.Acc dispSvc) other with
+          | .ok a, .ok b =>
+            if faults || (o.fault? M).isSome then ok ← fail s!"{name}: the model faults, the step does not"
+            if !same a then
+              ok ← fail s!"{name}: the model's records, table, next id {repr (vs.lookup 8)}, fresh {repr (vs.lookup 11)} or wire ids {ids} differ from the step's (next id {a.state.nextId}, fresh {a.state.fresh})"
+            if same b then ok ← fail s!"{name}: the other kind's internal step passes the comparison"
+          | .error f, _ =>
+            let got := (o.fault? M).map fun g => (Outcome.fault g).summary
+            if !faults || got != some (Outcome.fault f).summary then
+              ok ← fail s!"{name}: the step faults with {(Outcome.fault f).summary}, the model with {got}"
+          | _, .error _ => ok ← fail s!"{name}: the other kind's internal step faults"
+        | _, _ => ok ← fail s!"{name}: the model does not decode"
+      | a => ok ← fail s!"{name}: {repr a}"
+  return ok
+
 /-- A chain of `depth` levels where each level builds the same shared term twice as two objects over the level
 below: what an encoder does when it shares a term at each use instead of where it is built. Its script has one
 definition per level, and printing it must not compare the copies as trees (exponential in depth). -/
@@ -2906,6 +3025,7 @@ def check (z3 : String) : IO Bool := do
   unless ← mixCheck solver do ok := false
   unless ← internalCheck solver do ok := false
   unless ← ownQueryCheck solver do ok := false
+  unless ← dispCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
