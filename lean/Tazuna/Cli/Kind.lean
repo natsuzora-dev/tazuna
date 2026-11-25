@@ -39,6 +39,10 @@ inductive Tazuna.UndecidedKind : Type
   | limit
   /-- A string literal holds a code point above U+2FFFF, outside SMT-LIB's strings. -/
   | unencodableString
+  /-- Two own steps whose orders the solver found different, with each step keeping the ids it made, end the same
+  once those ids are renamed, as the oracle names ids by first appearance; or they sent too many requests to search
+  every renaming of them. The two orders are shown. -/
+  | upToRenaming
 deriving DecidableEq
 
 /-- Every kind of line the engine writes to stdout. test/e2e holds one case per kind, enumerated from `Kind.all`. -/
@@ -98,7 +102,7 @@ def ProveKind.name : ProveKind → String
   | .withinBounds => "withinBounds"
   | .violated => "violated"
 
-def UndecidedKind.all : List UndecidedKind := [.unknown, .limit, .unencodableString]
+def UndecidedKind.all : List UndecidedKind := [.unknown, .limit, .unencodableString, .upToRenaming]
 
 theorem UndecidedKind.mem_all (k : UndecidedKind) : k ∈ UndecidedKind.all := by cases k <;> simp [UndecidedKind.all]
 
@@ -106,6 +110,7 @@ def UndecidedKind.name : UndecidedKind → String
   | .unknown => "unknown"
   | .limit => "limit"
   | .unencodableString => "unencodableString"
+  | .upToRenaming => "upToRenaming"
 
 namespace Kind
 

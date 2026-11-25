@@ -87,6 +87,25 @@ def pairQuestions (k1 k2 : Nat) : Except Refusal (Script × Script) := do
     { datatypes := dts, vars, asserts := [wf, below, names] ++ tests ++ asserts, shows := List.range (pairTys v).length }
   pure (script [.or (.not o.codes) (.not o.cond)], script [o.codes, o.cond, o.viol])
 
+/-- The data value of type `t` an SMT value codes. -/
+def readData (t : Ty) (z : Val) : Option t.den0 :=
+  if h : t.isData = true then (decodeV L t z).map (Ty.down t h) else none
+
+/-- The own effect of the `k`-th own kind that a model's value codes: the kind's command or query with the caller and
+input its fields code, answered by the program's site the kind names with the captured values its last field codes. -/
+def decodeOwn (k : Nat) (z : Val) : Option (EffectV v.event) := do
+  let key ← (L.ownsOf v.event)[k]?
+  let .ctor _ i vals := z | none
+  if i ≠ (L.effectsOf v.event).length + k then none
+  match key, vals with
+  | .command _ name c j rj a, [vc, vi, va] =>
+    let ⟨Γ, site⟩ ← siteFor P (Ty.fn [Ty.result Ty.nil rj] (.list v.event)) a
+    pure (.command name c j rj (← readData L c vc) (← readData L j vi) (site.fn (← readData L (.tuple Γ) va)))
+  | .query _ name c j o a, [vc, vi, va] =>
+    let ⟨Γ, site⟩ ← siteFor P (Ty.fn [o] (.list v.event)) a
+    pure (.query name c j o (← readData L c vc) (← readData L j vi) (site.fn (← readData L (.tuple Γ) va)))
+  | _, _ => none
+
 end
 
 section

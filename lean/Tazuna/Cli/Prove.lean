@@ -5,6 +5,8 @@ import Tazuna.Semantics.After
 import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.FiresForward
 import Tazuna.Semantics.NoTimer
+import Tazuna.Semantics.SameCheck
+import Tazuna.Smt.Pair
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
 question per input kind for the step, one line per question. -/
@@ -21,6 +23,7 @@ def _root_.Tazuna.Smt.Target.text : Target → String
   | .cascade => "cascade bound"
   | .effect c => "effect " ++ c ++ " accepted"
   | .timer m => "timers of " ++ m ++ " fire forward"
+  | .pair a b => a ++ " and " ++ b ++ " commute"
 where
   ruleText : Option String → String
     | some r => r
@@ -273,6 +276,73 @@ def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a
       | none => .error s!"a model of {step} sets no timer"
     | _, _, _, _ => .error s!"a model of {step} does not decode"
 
+/-- An own kind as a line names it: its command or query, and where its `on_answer` is written when another own kind
+has the same name. -/
+def ownText (owns : List OwnKey) (key : OwnKey) : String :=
+  let word := match key with
+    | .command .. => "command"
+    | .query .. => "query"
+  let a := key.answer.site
+  if (owns.filter (·.name == key.name)).length > 1 then s!"own {word} {key.name} answered at {a.module}:{a.line}:{a.col}"
+  else s!"own {word} {key.name}"
+
+def effectWire (T : List TypeDecl) {e : Ty} : EffectV e → Show Wire
+  | .request r => do pure (.obj [("request", .str r.name), ("input", ← wireOf T r.input r.value)])
+  | .command name c i _ caller value _ => do
+    pure (.obj [("command", .str name), ("caller", ← wireOf T c caller), ("input", ← wireOf T i value)])
+  | .query name c i _ caller value _ => do
+    pure (.obj [("query", .str name), ("caller", ← wireOf T c caller), ("input", ← wireOf T i value)])
+
+/-- Where one order of a pair ends: its fault, or the state with the events it applied and the own effects it queued. -/
+def orderWire (T : List TypeDecl) {v : ServiceV} : Except Fault (Acc v) → Show Wire
+  | .error f => pure (.obj [("outcome", .str (Outcome.fault f).summary)])
+  | .ok a => do
+    let st ← stateWire T a.state
+    let evs ← a.events.mapM (wireOf T v.event)
+    let own ← a.own.mapM (effectWire T)
+    pure (.obj [("outcome", .str "accepted"), ("state", st), ("events", .arr evs), ("queued", .arr own)])
+
+/-- The report of a pair's target question (`pairQuestions`): a model is a state and two own effects whose two orders
+the solver finds different with each effect keeping the ids it made. Lean runs both orders from the model's state;
+where they agree up to renaming the ids the pair made (`Step.sameUpToPair`), the line is undecided, else violated. -/
+def pairReport (L : Layout) (k1 k2 : Nat) (g : Target) (step : String) (a : Smt.Answer) : Except String Report :=
+  match a with
+  | .unsat => .ok (.unsat v.name step (some g))
+  | .unknown why => .ok (.undecided (.undecided .unknown) v.name step (some g) [("why", Json.str why)])
+  | .sat vs =>
+    let M := modelOf vs
+    match (SymState.vars (v := v) 0).decode M L c.T (shapes v), decodeOwn L c.P v k1 (M.vars (pairVar v)),
+        decodeOwn L c.P v k2 (M.vars (pairVar v + 1)) with
+    | some s, some e1, some e2 =>
+      let a0 : Acc v := { state := s }
+      match runOwn c.T a0 e1 with
+      | .error _ => .error s!"a model of {step} faults in its first step"
+      | .ok b =>
+        let one := runOwn c.T b e2
+        let other := canonPair c.T a0 e1 e2
+        let alone := runOwn c.T (a0.withFresh (s.fresh + 1)) e2
+        let shown (more : List (String × Json)) : List (String × Json) := (do
+          let st ← stateWire c.T s
+          let w1 ← effectWire c.T e1
+          let w2 ← effectWire c.T e2
+          let o1 ← orderWire c.T one
+          let o2 ← orderWire c.T other
+          pure ([("from", Json.str "validState"), ("state", st.toJson), ("first", w1.toJson), ("second", w2.toJson),
+            ("firstThenSecond", o1.toJson), ("secondThenFirst", o2.toJson)] ++ more) : Show _).run' {}
+        let violated := Report.violated v.name step g (shown [("violated", Json.arr #[Json.str "steps do not commute"])])
+        match alone, one, other with
+        | .error _, .error _, _ => .error s!"a model of {step} has the second step fault in both orders"
+        | .error _, .ok _, _ => .ok violated
+        | .ok _, .error _, .error _ => .error s!"a model of {step} has both orders fault"
+        | .ok _, .ok A, .ok C =>
+          match sameUpToPair s.fresh s.nextId A C with
+          | some false => .ok violated
+          | some true => .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown []))
+          | none => .ok (.undecided (.undecided .upToRenaming) v.name step (some g)
+              (shown [("why", Json.str s!"the two steps sent more than {wireSearchCap} requests")]))
+        | .ok _, _, _ => .ok violated
+    | _, _, _ => .error s!"a model of {step} does not decode"
+
 -- The bound question has no target, and its name says so.
 set_option linter.tazuna.silentDefault false in
 /-- Every line of the service in order: the base case, then each input kind's questions. -/
@@ -314,6 +384,21 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
     | .ok (bq, tq) =>
       items := items ++ if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
         [.ask ⟨bq, boundReport v.name step⟩, .ask ⟨tq, timerReport c v L m step⟩]
+      else [.skipped v.name g]
+  let owns := L.ownsOf v.event
+  for (k1, k2) in L.ownPairs v.event do
+    let (some key1, some key2) := (owns[k1]?, owns[k2]?)
+      | return { internal := some s!"service {v.name}: own kind {k1} or {k2} missing" }
+    let g := Target.pair (ownText owns key1) (ownText owns key2)
+    let step := ownText owns key1 ++ " then " ++ ownText owns key2
+    match pairQuestions L c.T c.P v senv k1 k2 with
+    | .error r =>
+      match refusalLine c.T r with
+      | some (k, fields) => items := items ++ [.ready (.undecided k v.name step none fields)]
+      | none => return { internal := some s!"service {v.name}, {step}: the encoding refused: {reprStr r}" }
+    | .ok (bq, tq) =>
+      items := items ++ if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
+        [.ask ⟨bq, boundReport v.name step⟩, .ask ⟨tq, pairReport c v L k1 k2 g step⟩]
       else [.skipped v.name g]
   let init := (initReports c v targets).map fun r => match r with
     | .unsat _ _ (some g) | .violated _ _ g _ =>
@@ -375,13 +460,16 @@ def lineOf (unproved : String → List Target) (past : String → String → Opt
     some (k, [("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++
       [("step", Json.str step)] ++ fields)
 where
-  /-- The invariants a line's question assumes on the state before the step; a timer machine's question assumes
-  none, since its context is any key, state, records and time. -/
+  /-- What a line's question assumes: the invariants on the state before the step; none for a timer machine's
+  question, whose context is any key, state, records and time; for a pair's, that every input carries only ids the
+  service made or names from outside (`Input.Valid`), which keeps every name of a state below its counter, as the
+  question's state has them, and no invariant. -/
   assumes (s : String) (g : Target) : String × Json :=
-    let held : List Target := match g with
+    let held : List String := match g with
       | .timer _ => []
-      | _ => (unproved s).filter fun g' => g'.isInvariant && g' != g
-    ("assumes", Json.arr (held.map (Json.str ·.text)).toArray)
+      | .pair .. => ["inputs carry only ids the service made or names from outside"]
+      | _ => ((unproved s).filter fun g' => g'.isInvariant && g' != g).map (·.text)
+    ("assumes", Json.arr (held.map Json.str).toArray)
 
 /-- The options of `prove`: the prefix `--only` keeps questions by, how many solvers run at once, and the cache
 directory. -/

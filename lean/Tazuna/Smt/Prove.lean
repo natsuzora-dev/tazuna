@@ -169,6 +169,9 @@ inductive Target where
   /-- The machine's `after` setting a timer before the time it sets it at, which would let the timers due at one
   deadline of a clock line fire out of the order their deadlines give (T5's `Step.FiresForward`). -/
   | timer (machine : String)
+  /-- Two waiting own effects of these kinds, `first` running first, ending otherwise than the other order (T5's
+  `Step.PairCommutes`). -/
+  | pair (first second : String)
 deriving DecidableEq, Repr
 
 /-- Whether a step that faults with `f` breaks the target. -/
