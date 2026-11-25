@@ -3587,7 +3587,7 @@ def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : L
         match (SymState.vars (v := v) 0).decode M L prelude (shapes v), pairEffect L (M.vars n),
             pairEffect L (M.vars (n + 1)) with
         | some s, some e1, some e2 =>
-          unless pairOrders prelude { state := s } (hev ▸ e1) (hev ▸ e2) matches .ok (some false) do
+          unless (pairOrders prelude { state := s } (hev ▸ e1) (hev ▸ e2)).toOption.any (·.violated) do
             ok ← fail s!"{name}: the model's effects commute in Lean"
         | _, _, _ => ok ← fail s!"{name}: the model does not decode"
       | a, _ => ok ← fail s!"{name}: {repr a}"

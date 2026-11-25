@@ -70,33 +70,83 @@ def perms : List Nat → List (List Nat)
 /-- The most wire ids a pair may send for `sameUpToPair` to search their orders. -/
 def wireSearchCap : Nat := 7
 
-/-- Whether `A` and `C`, the two orders of a pair run from a step with the counter `f` and the next wire id `n0`,
-are the same once the names the pair made are renamed: the counters `f` and `f + 1` kept or swapped, and the wire ids
-from `n0` on permuted. None when the pair sent more wire ids than `wireSearchCap`. -/
-def sameUpToPair (f n0 : Nat) (A C : Acc v) : Option Bool :=
-  let k := C.state.nextId - n0
-  if k > wireSearchCap then none else
-  let target := accTerm id id A
-  some ([id, swapFn f].any fun σ => (perms (List.range k)).any fun p =>
-    accTerm σ (fun i => match p[i - n0]? with
-      | some j => if n0 ≤ i then n0 + j else i
-      | none => i) C == target)
+/-- The wire id `i` with the block of `p.length` wire ids from `n0` permuted by `p`; ids outside the block are kept. -/
+def permWire (n0 : Nat) (p : List Nat) (i : Nat) : Nat :=
+  if h : n0 ≤ i ∧ i - n0 < p.length then n0 + p[i - n0] else i
 
-/-- How the two orders of a pair of own effects compare, run in Lean from a step in progress: `e1` then `e2`, and
-the canonical other order (`Step.canonPair`). `some false` where they do not commute: the second faults alone but not
-after the first, or the two orders end differently under every renaming `sameUpToPair` searches. `some true` where
-they end the same up to such a renaming, and none where the pair sent more wire ids than the search covers. An error
-names what no counterexample of a pair's target question gives: the first faults, the second faults in both orders,
-or both orders fault. -/
-def pairOrders (T : List TypeDecl) (a0 : Step.Acc v) (e1 e2 : OwnEffectV v.event) : Except String (Option Bool) :=
+/-- How `A` and `C`, the two orders of a pair run from a step with the counter `f` and the next wire id `n0`, compare
+once the names the pair made are renamed (the counters `f` and `f + 1` kept or swapped, the wire ids from `n0` on
+permuted): the same under one of those renamings, different under each, or not searched because the pair sent more
+wire ids than `wireSearchCap`. -/
+inductive Renamed where
+  | same
+  | differ
+  | capped (sends : Nat)
+
+def sameUpToPair (f n0 : Nat) (A C : Acc v) : Renamed :=
+  let k := C.state.nextId - n0
+  if k > wireSearchCap then .capped k else
+  let target := accTerm id id A
+  if [id, swapFn f].any (fun σ => (perms (List.range k)).any fun p => accTerm σ (permWire n0 p) C == target) then .same
+  else .differ
+
+/-- How the two orders of a pair of own effects compare, run in Lean from a step in progress: `e1` then `e2`, and the
+canonical other order (`Step.canonPair`). -/
+inductive PairOrders where
+  /-- The second faults alone but not after the first. -/
+  | disabled
+  /-- One order faults and the other does not. -/
+  | faultsInOneOrder
+  /-- Both end, differently under every renaming `sameUpToPair` searches. -/
+  | differ
+  /-- Both end the same up to a renaming of the names the pair made. -/
+  | sameUpToRenaming
+  /-- The pair sent `sends` wire ids, more than `wireSearchCap`, so no renaming was searched. -/
+  | capped (sends : Nat)
+
+/-- Whether the orders show that the pair does not commute: what makes a pair line violated. -/
+def PairOrders.violated : PairOrders → Bool
+  | .disabled | .faultsInOneOrder | .differ => true
+  | .sameUpToRenaming | .capped _ => false
+
+/-- The two orders of a pair, or what no counterexample of a pair's target question gives: the first faults, the
+second faults in both orders, or both orders fault. -/
+def pairOrders (T : List TypeDecl) (a0 : Step.Acc v) (e1 e2 : OwnEffectV v.event) : Except String PairOrders :=
   match Step.runOwn T a0 e1 with
   | .error _ => .error "faults in its first step"
   | .ok b =>
     match Step.runOwn T (a0.withFresh (a0.state.fresh + 1)) e2, Step.runOwn T b e2, Step.canonPair T a0 e1 e2 with
     | .error _, .error _, _ => .error "has the second step fault in both orders"
-    | .error _, .ok _, _ => .ok (some false)
+    | .error _, .ok _, _ => .ok .disabled
     | .ok _, .error _, .error _ => .error "has both orders fault"
-    | .ok _, .ok A, .ok C => .ok (sameUpToPair a0.state.fresh a0.state.nextId A C)
-    | .ok _, _, _ => .ok (some false)
+    | .ok _, .error _, .ok _ | .ok _, .ok _, .error _ => .ok .faultsInOneOrder
+    | .ok _, .ok A, .ok C =>
+      .ok (match sameUpToPair a0.state.fresh a0.state.nextId A C with
+        | .same => .sameUpToRenaming
+        | .differ => .differ
+        | .capped n => .capped n)
+
+/-- A pair whose orders show a disabling or a fault in one order only does not commute. That two orders ending
+differently under every renaming searched do not commute rests on the search covering every renaming `Step.Same`
+allows, which is not proved. -/
+theorem pair_violates (T : List TypeDecl) {a0 : Step.Acc v} {e1 e2 : OwnEffectV v.event} {r : PairOrders}
+    (h : pairOrders T a0 e1 e2 = .ok r) (hr : r = .disabled ∨ r = .faultsInOneOrder) :
+    ¬ Step.PairCommutes T a0 e1 e2 := by
+  intro hc
+  unfold pairOrders at h
+  cases h1 : Step.runOwn T a0 e1 with
+  | error _ => rw [h1] at h; cases h
+  | ok b =>
+    rw [h1] at h
+    obtain ⟨hc1, hc2⟩ := hc b h1
+    cases h2 : Step.runOwn T (a0.withFresh (a0.state.fresh + 1)) e2 <;>
+      cases h3 : Step.runOwn T b e2 <;> cases h4 : Step.canonPair T a0 e1 e2 <;>
+      simp only [h2, h3, h4] at h hc1 hc2
+    all_goals first
+      | exact (hc2 _ rfl).elim
+      | exact (hc1 _ rfl).elim (fun h => h.elim) fun h => h.2.elim
+      | exact (hc1 _ rfl).elim (fun h => h.elim) fun h => h.1.elim
+      | (cases h; split at hr <;> simp at hr)
+      | cases h
 
 end Tazuna.Smt

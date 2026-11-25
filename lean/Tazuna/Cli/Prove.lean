@@ -325,11 +325,14 @@ def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : St
           ("firstThenSecond", o1.toJson), ("secondThenFirst", o2.toJson)] ++ more) : Show _).run' {}
       match pairOrders c.T a0 e1 e2 with
       | .error why => .error s!"a model of {step} {why}"
-      | .ok (some false) =>
-        .ok (Report.violated v.name step g (shown [("violated", Json.arr #[Json.str "steps do not commute"])]))
-      | .ok (some true) => .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown []))
-      | .ok none => .ok (.undecided (.undecided .upToRenaming) v.name step (some g)
-          (shown [("why", Json.str s!"the two steps sent more than {wireSearchCap} requests")]))
+      | .ok r =>
+        if r.violated then
+          .ok (Report.violated v.name step g (shown [("violated", Json.arr #[Json.str "steps do not commute"])]))
+        else
+          let why := match r with
+            | .capped _ => [("why", Json.str s!"the two steps sent more than {wireSearchCap} requests")]
+            | _ => []
+          .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown why))
     | _, _, _ => .error s!"a model of {step} does not decode"
 
 /-- The line of a refused encoding: undecided where the refusal is the spec's, else an engine bug. -/
