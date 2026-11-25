@@ -24,7 +24,7 @@ def ruleTerms (rs : Term) : Except Refusal (List (Term × Term)) := do
   let (dl, n, dt) ← collD L Ty.rules [.tuple [.str, Ty.bool]]
   let d ← tupleD L [.str, Ty.bool]
   pure ((slotsOf dl dt n 1 rs).map fun sl =>
-    (.sel d 0 0 (sl.2.headD tt), .or (.not sl.1) (.sel d 0 1 (sl.2.headD tt))))
+    (.sel d 0 0 sl.2[0], .or (.not sl.1) (.sel d 0 1 sl.2[0])))
 
 /-- The terms of a request's admission, which commands and queries share: whether the caller is listed, the `accepts`
 rules, and the context their functions read. -/
@@ -107,19 +107,19 @@ theorem callers_any {c : Ty} (hc : c.isData = true) {caller : c.den0} {cc : Code
     simp only [anyT, Term.denote, heq, ih, Val.toBool, List.any_cons]
 
 theorem rules_broken_map {d m : Nat} (hdm : L.find? (.tuple [.str, Ty.bool]) = some (d, m)) :
-    (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 1) →
+    (S : List (Slot 1)) → (sv : List (Bool × List Val)) → SlotsDen M S sv →
     (xs : Ty.rules.den0) → Holds2 (EBag L (.tuple [.str, Ty.bool])) (xs.map (Ty.up (.tuple [.str, Ty.bool]) rfl)) sv →
-    brokenIn M (S.map fun sl => (.sel d 0 0 (sl.2.headD tt), .or (.not sl.1) (.sel d 0 1 (sl.2.headD tt)))) =
+    brokenIn M (S.map fun sl => (.sel d 0 0 sl.2[0], .or (.not sl.1) (.sel d 0 1 sl.2[0]))) =
       Step.broken xs
-  | [], [], _, _, xs, hx => by
+  | [], [], _, xs, hx => by
     cases xs with
     | nil => rfl
     | cons _ _ => exact hx.elim
-  | (f, ys) :: S, (b, vs) :: sv, ⟨hf, hys, hS⟩, hw, xs, hx => by
-    have hw' : ∀ p ∈ sv, p.2.length = 1 := fun p hp => hw p (by simp [hp])
+  | (f, ys) :: S, (b, vs) :: sv, ⟨hf, hys, hS⟩, xs, hx => by
+    obtain ⟨y0, rfl⟩ := ys.one
     cases b with
     | false =>
-      have ih := rules_broken_map hdm S sv hS hw' xs (by simpa [Holds2, occupied] using hx)
+      have ih := rules_broken_map hdm S sv hS xs (by simpa [Holds2, occupied] using hx)
       simp only [brokenIn, List.map_cons, List.filterMap_cons] at ih ⊢
       rw [← ih]
       simp [Term.denote, hf, Val.toBool]
@@ -127,11 +127,8 @@ theorem rules_broken_map {d m : Nat} (hdm : L.find? (.tuple [.str, Ty.bool]) = s
       match xs, hx with
       | (n, bb, ()) :: xs, ⟨⟨z, hz, hxt⟩, hxs⟩ =>
         subst hz
-        have hl := hw (true, [z]) (by simp)
-        obtain ⟨y0, rfl, hy0⟩ : ∃ y0, ys = [y0] ∧ y0.denote M = z := by
-          match ys, hys with
-          | [y0], h => exact ⟨y0, rfl, by simpa [Term.denotes] using h⟩
-        have ih := rules_broken_map hdm S sv hS hw' xs hxs
+        have hy0 : y0.denote M = z := by simpa [Term.denotes] using hys
+        have ih := rules_broken_map hdm S sv hS xs hxs
         obtain ⟨d', m', vals, hf', hv, hrel⟩ := hxt
         rw [hdm] at hf'; cases hf'
         obtain ⟨vn, vs, rfl, hn, vb, vs', rfl, hb, rfl⟩ := hrel
@@ -140,13 +137,13 @@ theorem rules_broken_map {d m : Nat} (hdm : L.find? (.tuple [.str, Ty.bool]) = s
         simp only [brokenIn, Step.broken] at ih
         simp only [brokenIn, Step.broken, List.map_cons, List.filterMap_cons]
         rw [ih]
-        simp only [List.headD_cons, Term.denote, hf, hy0, hv, hn, hb, and_self, ite_true, List.getElem?_cons_zero,
+        simp only [SlotItems.getElem_mk, List.getElem_cons_zero, Term.denote, hf, hy0, hv, hn, hb, and_self, ite_true, List.getElem?_cons_zero,
           List.getElem?_cons_succ, Option.getD_some, Val.toBool, Val.toStr, Bool.not_true, Bool.false_or]
         rcases bb with ⟨⟩ | ⟨⟨⟩⟩ | e
         · rfl
         · rfl
         · exact e.elim
-  | [], _ :: _, h, _, _, _ | _ :: _, [], h, _, _, _ => h.elim
+  | [], _ :: _, h, _, _ | _ :: _, [], h, _, _ => h.elim
 
 /-- The rules' terms: each name and holds term denotes the rule's name and whether it holds. -/
 theorem rules_broken {rs : Term} {rules : List (Term × Term)} (hr : ruleTerms L rs = .ok rules)
@@ -156,9 +153,9 @@ theorem rules_broken {rs : Term} {rules : List (Term × Term)} (hr : ruleTerms L
   obtain ⟨d, hd, hr⟩ := bind_ok.1 hr
   cases pure_ok.1 hr
   obtain ⟨m, hdm⟩ := tupleD_ok hd
-  obtain ⟨sv, hS, -, hw, hh⟩ := list_view hx hc
+  obtain ⟨sv, hS, -, -, hh⟩ := list_view hx hc
   erw [Ty.up_list _ _ rfl] at hh
-  exact rules_broken_map hdm _ sv hS hw xs hh
+  exact rules_broken_map hdm _ sv hS xs hh
 
 /-- The context a step builds for a query or command, read at the level codes relate to. -/
 theorem up_ctx {v : ServiceV} {r i c : Ty} (hr : r.isData = true) (hi : i.isData = true) (hc : c.isData = true)

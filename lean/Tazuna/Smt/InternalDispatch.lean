@@ -188,118 +188,6 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
-/-- Every slot an events loop writes, news or own, holds two items. -/
-theorem encodeEvents_width {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {now : Term} :
-    (S : List Slot) → {records : Term} → {xs : PerMachine Term v.machines} → {n q : Term} → {o : EventsOut v} → {c : Term} →
-    encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
-    (∀ sl ∈ o.news, sl.2.length = 2) ∧ ∀ sl ∈ o.owns, sl.2.length = 2
-  | [], _, _, _, _, _, _, h => by
-    simp only [encodeEvents, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
-    obtain ⟨rfl, -⟩ := h
-    simp
-  | (f, ys) :: S, _, _, _, _, _, _, h => by
-    obtain ⟨rc, -, h⟩ := bind_ok.1 h
-    obtain ⟨ec, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨r', ca⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨rt, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨outs, cm⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨news, nT, oS, qT⟩, h6, h⟩ := bind_ok.1 h
-    obtain ⟨⟨rnews, nR, rown, qR, cr⟩, h7, h⟩ := bind_ok.1 h
-    obtain ⟨⟨o', c'⟩, h8, h⟩ := bind_ok.1 h
-    cases pure_ok.1 h
-    have hw6 := encodeStarts_width _ _ h6
-    have hw7 := encodeReactions_width _ h7
-    have ih := encodeEvents_width S h8
-    have hg : ∀ (A B : List Slot), (∀ sl ∈ A, sl.2.length = 2) → (∀ sl ∈ B, sl.2.length = 2) →
-        ∀ sl ∈ gateSlots f A ++ B, sl.2.length = 2 := by
-      intro A B hA hB sl hsl
-      rcases List.mem_append.1 hsl with hsl | hsl
-      · obtain ⟨sl', hsl', rfl⟩ := List.mem_map.1 hsl
-        exact hA sl' hsl'
-      · exact hB sl hsl
-    refine ⟨hg _ _ ?_ ih.1, hg _ _ ?_ ih.2⟩
-    · intro sl hsl
-      rcases List.mem_append.1 hsl with hsl | hsl
-      · exact hw6.1 sl hsl
-      · exact hw7.1 sl hsl
-    · intro sl hsl
-      rcases List.mem_append.1 hsl with hsl | hsl
-      · exact hw6.2 sl hsl
-      · exact hw7.2 sl hsl
-
-theorem width_append {A B : List Slot} (hA : ∀ sl ∈ A, sl.2.length = 2) (hB : ∀ sl ∈ B, sl.2.length = 2) :
-    ∀ sl ∈ A ++ B, sl.2.length = 2 := by
-  intro sl hsl
-  rcases List.mem_append.1 hsl with hsl | hsl
-  · exact hA sl hsl
-  · exact hB sl hsl
-
-theorem width_gate (f : Term) {A : List Slot} (hA : ∀ sl ∈ A, sl.2.length = 2) : ∀ sl ∈ gateSlots f A, sl.2.length = 2 := by
-  intro sl hsl
-  obtain ⟨sl', hsl', rfl⟩ := List.mem_map.1 hsl
-  exact hA sl' hsl'
-
-/-- The step terms of one own kind write slots of two items. -/
-theorem encodeOwnKind_width {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs} {nR : Nat}
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {records now fresh n q eff : Term} {xs : PerMachine Term v.machines}
-    {j : Nat} {key : OwnKey} {ko : OwnKindOut v} {st : StepTerms v} {c cx : Term}
-    (h : encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key = .ok ⟨⟨ko, st⟩, c, cx⟩) :
-    (∀ sl ∈ st.done.news, sl.2.length = 2) ∧ ∀ sl ∈ st.done.owns, sl.2.length = 2 := by
-  obtain ⟨sh, -, h⟩ := bind_ok.1 h
-  cases sh with
-  | missing name => cases pure_ok.1 h; simp
-  | command x Γ site =>
-    obtain ⟨⟨cc, cx'⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨ks, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨da, dn⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨σ, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨o, c'⟩, henc, h⟩ := bind_ok.1 h
-    cases pure_ok.1 h
-    unfold encodeOwnCommand at henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨dc, _⟩, hd, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨o2, _⟩, h23, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    unfold encodeDecide at hd
-    obtain ⟨⟨_, _⟩, -, hd⟩ := bind_ok.1 hd
-    obtain ⟨_, -, hd⟩ := bind_ok.1 hd
-    obtain ⟨⟨_, _⟩, -, hd⟩ := bind_ok.1 hd
-    obtain ⟨⟨_, _, _⟩, -, hd⟩ := bind_ok.1 hd
-    obtain ⟨⟨o1, _⟩, h12, hd⟩ := bind_ok.1 hd
-    obtain ⟨_, -, hd⟩ := bind_ok.1 hd
-    obtain ⟨⟨_, _⟩, -, hd⟩ := bind_ok.1 hd
-    obtain ⟨_, -, hd⟩ := bind_ok.1 hd
-    cases pure_ok.1 hd
-    have w1 := encodeEvents_width _ h12
-    have w2 := encodeEvents_width _ h23
-    exact ⟨width_append w1.1 w2.1, width_append w1.2 w2.2⟩
-  | query x Γ site =>
-    obtain ⟨⟨qc, cq⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨ks, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨da, dn⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨σ, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨o, c'⟩, henc, h⟩ := bind_ok.1 h
-    cases pure_ok.1 h
-    unfold encodeOwnQuery at henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨o1, _⟩, h13, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    exact encodeEvents_width _ h13
-
 /-- A function that reaches `P` is found at its own site and captures' types: a kind of an effect that reaches `P`
 always has its site. -/
 theorem siteFor_reach {P : List AnySite} {t : Ty} {k : SiteKey} {f : Fun t} (hP : f.asSite ∈ P)
@@ -623,7 +511,6 @@ theorem pick_tables_false {r e : Ty} {c : Term} (hc : c.denote M = .bool false) 
 /-- Step terms of kinds whose tests all fail write no news and no own effect. -/
 theorem fold_none {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ base.done.owns = []) :
     (ks : List (Term × StepTerms v)) → (∀ k ∈ ks, k.1.denote M = .bool false) →
-    (∀ k ∈ ks, (∀ sl ∈ k.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ k.2.done.owns, sl.2.length = 2) →
     let t := ks.foldr (fun k t => pickTerms k.1 k.2 t) base
     t.fault.denote M = base.fault.denote M ∧ t.fresh.denote M = base.fresh.denote M ∧
       t.done.records.denote M = base.done.records.denote M ∧ t.done.nextId.denote M = base.done.nextId.denote M ∧
@@ -631,35 +518,30 @@ theorem fold_none {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ ba
       Term.denotes M t.done.tables.toList = Term.denotes M base.done.tables.toList ∧
       (∀ (shs : List (PendingShape e)) ds n0, NewsRel M L shs ds t.done.news [] n0) ∧
       ∀ q0, OwnRel M L t.done.owns ([] : List (EffectV e)) q0
-  | [], _, _ => by
+  | [], _ => by
     simp only [List.foldr_nil, hb, true_and]
     exact ⟨fun _ _ _ => ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩,
       fun q0 => ownRel_nil q0⟩
-  | (c, a) :: ks, hf, hw => by
+  | (c, a) :: ks, hf => by
     have hc : c.denote M = .bool false := hf (c, a) (by simp)
     obtain ⟨i1, i2, i3, i4, i5, i6, i7, i8⟩ := fold_none (e := e) base hb ks (fun k h => hf k (List.mem_cons_of_mem _ h))
-      (fun k h => hw k (List.mem_cons_of_mem _ h))
-    have hwa := hw (c, a) (by simp)
     have hpick : ∀ x y : Term, (Term.share (.ite c x y)).denote M = y.denote M := fun x y => by
       simp [Term.denote, hc, toBool_bool]
     simp only [List.foldr_cons, pickTerms, hpick]
     refine ⟨i1, i2, i3, i4, i5, ?_, fun shs ds n0 => ?_, fun q0 => ?_⟩
     · rw [pick_tables_false hc]; exact i6
-    · have := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := ds) hc hwa.1 n0) (i7 shs ds n0)
-      exact this
-    · have := ownRel_append (ownRel_gate_false (L := L) (e := e) hc hwa.2 q0) (i8 q0)
-      exact this
+    · exact newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := ds) hc n0) (i7 shs ds n0)
+    · exact ownRel_append (ownRel_gate_false (L := L) (e := e) hc q0) (i8 q0)
 
 /-- Merged step terms agree with those of the one kind whose test holds. -/
 theorem fold_hit {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ base.done.owns = []) :
     (ks : List (Term × StepTerms v)) → (k : Nat) → {c : Term} → {st : StepTerms v} → ks[k]? = some (c, st) →
     (∀ (i : Nat) (kk : Term × StepTerms v), ks[i]? = some kk → kk.1.denote M = .bool (decide (i = k))) →
-    (∀ kk ∈ ks, (∀ sl ∈ kk.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ kk.2.done.owns, sl.2.length = 2) →
     let t := ks.foldr (fun k t => pickTerms k.1 k.2 t) base
     Agrees M L e t st ∧
       Term.denotes M t.done.tables.toList = Term.denotes M st.done.tables.toList
-  | [], _, _, _, h, _, _ => by simp at h
-  | (c', a) :: ks, 0, c, st, hk, ht, hw => by
+  | [], _, _, _, h, _ => by simp at h
+  | (c', a) :: ks, 0, c, st, hk, ht => by
     simp only [List.getElem?_cons_zero, Option.some.injEq, Prod.mk.injEq] at hk
     obtain ⟨rfl, rfl⟩ := hk
     have hc : c'.denote M = .bool true := by simpa using ht 0 (c', a) rfl
@@ -667,7 +549,6 @@ theorem fold_hit {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ bas
       (fun kk h => by
         obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem h
         simpa using ht (i + 1) ks[i] (by simp))
-      (fun kk h => hw kk (List.mem_cons_of_mem _ h))
     have hpick : ∀ x y : Term, (Term.share (.ite c' x y)).denote M = x.denote M := fun x y => by
       simp [Term.denote, hc, toBool_bool]
     refine ⟨⟨hpick _ _, hpick _ _, hpick _ _, hpick _ _, hpick _ _, fun shs ds effs n0 h => ?_, fun os q0 h => ?_⟩,
@@ -682,19 +563,17 @@ theorem fold_hit {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ bas
         (List.foldr (fun k t => pickTerms k.1 k.2 t) base ks).done.tables).toList = _
       rw [pick_tables hc]
       rfl
-  | (c', a) :: ks, j + 1, c, st, hk, ht, hw => by
+  | (c', a) :: ks, j + 1, c, st, hk, ht => by
     have hc : c'.denote M = .bool false := by simpa using ht 0 (c', a) rfl
     obtain ⟨h1, h2⟩ := fold_hit (e := e) base hb ks j (by simpa using hk)
       (fun i kk h => by simpa using ht (i + 1) kk (by simpa using h))
-      (fun kk h => hw kk (List.mem_cons_of_mem _ h))
-    have hwa := hw (c', a) (by simp)
     have hpick : ∀ x y : Term, (Term.share (.ite c' x y)).denote M = y.denote M := fun x y => by
       simp [Term.denote, hc, toBool_bool]
     refine ⟨⟨(hpick _ _).trans h1.fault, (hpick _ _).trans h1.fresh, (hpick _ _).trans h1.records,
       (hpick _ _).trans h1.nextId, (hpick _ _).trans h1.queued, fun shs ds effs n0 h => ?_, fun os q0 h => ?_⟩,
       ?_⟩
-    · exact newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := ds) hc hwa.1 n0) (h1.news shs ds effs n0 h)
-    · exact ownRel_append (ownRel_gate_false (L := L) (e := e) hc hwa.2 q0) (h1.owns os q0 h)
+    · exact newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := ds) hc n0) (h1.news shs ds effs n0 h)
+    · exact ownRel_append (ownRel_gate_false (L := L) (e := e) hc q0) (h1.owns os q0 h)
     · show Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c' x y)) a.done.tables
         (List.foldr (fun k t => pickTerms k.1 k.2 t) base ks).done.tables).toList = _
       rw [pick_tables_false hc]
@@ -801,14 +680,6 @@ theorem ownStep_encode {P : List AnySite} (chk : Checked P T v)
       simpa [htk, toBool_bool] using this
     obtain ⟨hfault, hrun⟩ := (ownKind_encode chk hshs a happ hca senv hrec hnow hfresh hn hq
       hms x hreach heff' hkey hkind hcxk).2 hck
-    have hwid : ∀ y ∈ ks.map (fun k => (k.1, k.2.out.terms)),
-        (∀ sl ∈ y.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ y.2.done.owns, sl.2.length = 2 := by
-      intro y hy
-      obtain ⟨z, hz, rfl⟩ := List.mem_map.1 hy
-      obtain ⟨⟨key', i'⟩, -, hR'⟩ := forall2_mem_right hF z hz
-      obtain ⟨⟨⟨ko', st'⟩, c', cx'⟩, hkind', hR'⟩ := bind_ok.1 hR'
-      cases pure_ok.1 hR'
-      exact encodeOwnKind_width hkind'
     obtain ⟨hag, htab⟩ := fold_hit (e := v.event) (M := M) (L := L) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩
       (ks.map fun k => (k.1, k.2.out.terms)) k (c := Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)))
       (st := st) (by simp [hkk])
@@ -816,7 +687,6 @@ theorem ownStep_encode {P : List AnySite} (chk : Checked P T v)
         rw [List.getElem?_map] at hy
         obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.1 hy
         exact htests i z hz)
-      hwid
     rw [List.foldr_map] at hag htab
     have hfk : (OwnStepOut.fault? M ⟨ks.map fun k => (k.1, k.2.out.kind),
         ks.foldr (fun k t => pickTerms k.1 k.2.out.terms t) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩) = ko.fault? M := by

@@ -33,7 +33,7 @@ variable (L : Layout) (T : List TypeDecl)
 (its slots are not read): its terms, its condition (each internal step's, where it runs) and the codes' condition. -/
 def encodeSettle (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (dflt now : Term) :
-    (fuel k : Nat) → (S : List Slot) → (t : StepTerms v) → Except Refusal (Encoded (SettleOut v))
+    (fuel k : Nat) → (S : List (Slot 2)) → (t : StepTerms v) → Except Refusal (Encoded (SettleOut v))
   | 0, k, S, t =>
     pure ⟨⟨[], .and (.not t.fault) (queueAt dflt S (.int k)).1, ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩⟩,
       tt, tt⟩
@@ -66,40 +66,10 @@ theorem settle_fault_skip {act : Term} {o : OwnStepOut v} {steps : List (Term ×
     SettleOut.fault? M ⟨(act, o) :: steps, over, t⟩ = SettleOut.fault? M ⟨steps, over, t'⟩ := by
   simp only [SettleOut.fault?, List.find?_cons, h]
 
-theorem fold_width (base : StepTerms v) (hb : base.done.news = [] ∧ base.done.owns = []) :
-    (ks : List (Term × StepTerms v)) →
-    (∀ kk ∈ ks, (∀ sl ∈ kk.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ kk.2.done.owns, sl.2.length = 2) →
-    (∀ sl ∈ (ks.foldr (fun k t => pickTerms k.1 k.2 t) base).done.news, sl.2.length = 2) ∧
-      ∀ sl ∈ (ks.foldr (fun k t => pickTerms k.1 k.2 t) base).done.owns, sl.2.length = 2
-  | [], _ => by simp [hb]
-  | (c, a) :: ks, hw => by
-    have ih := fold_width base hb ks fun kk h => hw kk (List.mem_cons_of_mem _ h)
-    have ha := hw (c, a) (by simp)
-    exact ⟨width_append (width_gate c ha.1) ih.1, width_append (width_gate c ha.2) ih.2⟩
-
-/-- The merged step terms of an own effect write slots of two items. -/
-theorem encodeOwnStep_width {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {records now fresh n q eff : Term} {xs : PerMachine Term v.machines}
-    {o : OwnStepOut v} {c cx : Term}
-    (h : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok ⟨o, c, cx⟩) :
-    (∀ sl ∈ o.terms.done.news, sl.2.length = 2) ∧ ∀ sl ∈ o.terms.done.owns, sl.2.length = 2 := by
-  obtain ⟨ks, hks, h⟩ := bind_ok.1 h
-  cases pure_ok.1 h
-  have hF := mapM_ok _ _ _ hks
-  have := fold_width ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩ (ks.map fun k => (k.1, k.2.out.terms)) (by
-    intro y hy
-    obtain ⟨z, hz, rfl⟩ := List.mem_map.1 hy
-    obtain ⟨⟨key', i'⟩, -, hR'⟩ := forall2_mem_right hF z hz
-    obtain ⟨⟨⟨ko', st'⟩, c', cx'⟩, hkind', hR'⟩ := bind_ok.1 hR'
-    cases pure_ok.1 hR'
-    exact encodeOwnKind_width hkind')
-  rw [List.foldr_map] at this
-  exact this
-
 /-- Once an internal step faulted, the cascade's fault term stays true. -/
 theorem settle_fault_stays {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {dflt now : Term} :
-    (fuel k : Nat) → (S : List Slot) → (t : StepTerms v) → t.fault.denote M = .bool true →
+    (fuel k : Nat) → (S : List (Slot 2)) → (t : StepTerms v) → t.fault.denote M = .bool true →
     {o : SettleOut v} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
     o.terms.fault.denote M = .bool true
   | 0, _, _, _, htf, _, _, _, henc => by
@@ -129,7 +99,7 @@ def settleFits (S : Ty → Nat) (T : List TypeDecl) : Nat → Nat → Step.Acc v
 /-- After a fault no internal step runs, so the cascade's condition asks for nothing. -/
 theorem settle_cond_fault {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {dflt now : Term} :
-    (fuel k : Nat) → (S : List Slot) → (t : StepTerms v) → t.fault.denote M = .bool true →
+    (fuel k : Nat) → (S : List (Slot 2)) → (t : StepTerms v) → t.fault.denote M = .bool true →
     {o : SettleOut v} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
     Holds M c
   | 0, _, _, _, _, _, _, _, henc => by
@@ -155,7 +125,7 @@ theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs) {dflt now : Term} :
-    (fuel k : Nat) → (S : List Slot) → (t : StepTerms v) → (a : Step.Acc v) → Step.Inv P a.state →
+    (fuel k : Nat) → (S : List (Slot 2)) → (t : StepTerms v) → (a : Step.Acc v) → Step.Inv P a.state →
     Step.QueueOk P a → OwnRel M L S a.own 0 → now.denote M = .int a.state.now → t.fault.denote M = .bool false →
     RelV L v.records (Ty.up _ v.records_data a.state.records) (t.done.records.denote M) →
     MachinesRel M L T v.machines t.done.tables a.state.machines →
@@ -198,7 +168,6 @@ theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     have hact : (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1)).denote M =
         .bool (decide (k < a.own.length)) := by
       simp [Term.denote, htf, hk.1, toBool_bool]
-    have hw1 := encodeOwnStep_width h1
     refine ⟨?_, fun hc => ?_⟩
     · rw [holds_andT]
       by_cases hlt : k < a.own.length
@@ -266,8 +235,8 @@ theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             y.denote M := fun x y => by simp [Term.denote, hact', toBool_bool]
         have hS1 : OwnRel M L (S ++ (gateSlots (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
             o1.terms.done.owns ++ [])) a.own 0 := by
-          have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' hw1.2 (0 + a.own.length))
-            (ownRel_nil _))
+          have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact'
+            (S := o1.terms.done.owns) (0 + a.own.length)) (ownRel_nil _))
           simpa using this
         have e2 := (settle_encode chk hshs happ hca senv f (k + 1) _ _ _ hinv hqok hS1
           hnow (by simp only [pickTerms]; rw [hpick]; exact htf)
@@ -372,8 +341,8 @@ theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
         rw [settle_fault_skip (t' := rest.terms) (by simp [hact', toBool_bool])]
         have hS1 : OwnRel M L (S ++ (gateSlots (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
             o1.terms.done.owns ++ [])) a.own 0 := by
-          have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' hw1.2 (0 + a.own.length))
-            (ownRel_nil _))
+          have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact'
+            (S := o1.terms.done.owns) (0 + a.own.length)) (ownRel_nil _))
           simpa using this
         have IH := (settle_encode chk hshs happ hca senv f (k + 1) _ _ _ hinv hqok hS1
           hnow (by simp only [pickTerms]; rw [hpick]; exact htf)
@@ -392,11 +361,11 @@ theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
         | none =>
           rintro ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, s5, s6, s7⟩
           refine ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, ?_, s6, ?_⟩
-          · have h0 := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hact' hw1.1
-              a.state.nextId) (newsRel_nil (L := L) (M := M))
+          · have h0 := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hact'
+              (S := o1.terms.done.news) a.state.nextId) (newsRel_nil (L := L) (M := M))
             exact newsRel_append h0 s5
-          · have h0 := ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' hw1.2 a.own.length)
-              (ownRel_nil _)
+          · have h0 := ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' (S := o1.terms.done.owns)
+              a.own.length) (ownRel_nil _)
             exact ownRel_append h0 s7
 
 end

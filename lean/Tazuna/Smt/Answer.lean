@@ -16,8 +16,8 @@ variable {T : List Ir.TypeDecl}
 section
 variable {M : Model} {L : Layout}
 
-theorem slot_at : {S : List Slot} → {sv : List (Bool × List Val)} → SlotsDen M S sv → (j : Nat) → {f : Term} →
-    {xs : List Term} → S[j]? = some (f, xs) → ∃ b, (b, Term.denotes M xs) ∈ sv ∧ f.denote M = .bool b
+theorem slot_at {w : Nat} : {S : List (Slot w)} → {sv : List (Bool × List Val)} → SlotsDen M S sv → (j : Nat) →
+    {f : Term} → {xs : SlotItems w} → S[j]? = some (f, xs) → ∃ b, (b, Term.denotes M xs.1) ∈ sv ∧ f.denote M = .bool b
   | [], [], _, _, _, _, h => by simp at h
   | (f, xs) :: S, (b, vs) :: sv, ⟨hf, hxs, hS⟩, 0, _, _, h => by
     simp only [List.getElem?_cons_zero, Option.some.injEq, Prod.mk.injEq] at h
@@ -86,7 +86,7 @@ def answerUnmatchedT (shs : List (PendingShape v.event)) (t : Ty) (pending to : 
     | some sh => (Ty.same (answerTy sh.output sh.rejection) t).isSome
     | none => false
   pure (allT ((slotsOf d dt n 2 pending).map fun (f, xs) =>
-    .not (.and f (.and (.eq (xs.headD tt) to) (anyT (typed.map fun k => .is de k (xs.getD 1 tt)))))))
+    .not (.and f (.and (.eq xs[0] to) (anyT (typed.map fun k => .is de k xs[1]))))))
 
 end
 
@@ -106,8 +106,8 @@ theorem filter_pendingList (shs : List (PendingShape v.event)) (to : Nat)
   · simp [h]
   · simp [h, Ne.symm h]
 
-theorem slot_mem : {S : List Slot} → {sv : List (Bool × List Val)} → SlotsDen M S sv → ∀ p ∈ sv,
-    ∃ q ∈ S, q.1.denote M = .bool p.1 ∧ Term.denotes M q.2 = p.2
+theorem slot_mem {w : Nat} : {S : List (Slot w)} → {sv : List (Bool × List Val)} → SlotsDen M S sv → ∀ p ∈ sv,
+    ∃ q ∈ S, q.1.denote M = .bool p.1 ∧ Term.denotes M q.2.1 = p.2
   | [], [], _, _, hp => by simp at hp
   | (f, xs) :: S, (b, vs) :: sv, ⟨hf, hxs, hS⟩, p, hp => by
     rcases List.mem_cons.1 hp with rfl | hp
@@ -144,9 +144,7 @@ theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : 
     exact he ▸ hm
   obtain ⟨⟨f, xs⟩, hq, hf1, hxs2⟩ := slot_mem hS _ hocc
   rw [hxs] at hxs2
-  obtain ⟨tk, te, rfl⟩ : ∃ tk te, xs = [tk, te] := by
-    match xs, hxs2 with
-    | [tk, te], _ => exact ⟨tk, te, rfl⟩
+  obtain ⟨tk, te, rfl⟩ := xs.two
   simp only [Term.denotes, List.cons.injEq, and_true] at hxs2
   obtain ⟨htk, hte⟩ := hxs2
   obtain ⟨d', n', hf', hra⟩ := hzv
@@ -155,7 +153,7 @@ theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : 
   obtain ⟨j', sh', fx, vals, hj', hzv', -, hpo⟩ := relAlts_pending (L := L) y1 (sh0 :: rest) 0 y2 zv hra
   -- The slot's test is false, so no shape of the answer's type is that entry's.
   have hslot := (holds_allT _).1 hu _ (List.mem_map_of_mem hq)
-  simp only [List.headD_cons, List.getD_cons_succ, List.getD_cons_zero] at hslot
+  simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ] at hslot
   have hkey : (y1 : Nat) = to := (pendingOf_id _ _ _).symm.trans hpid
   change zk = Val.int (Int.ofNat y1) at hzk
   dsimp only
@@ -236,8 +234,8 @@ def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat
   let (de, _) ← need "a layout without the pending entry" (L.find? (pendingEntry shs))
   let PS := slotsOf d dt n 2 S.pending
   let (f, xs) ← need "a slot past the pending table" PS[j]?
-  let entry := xs.getD 1 tt
-  let hit := Term.and f (.and (.eq (xs.headD tt) to) (.is de k entry))
+  let entry := xs[1]
+  let hit := Term.and f (.and (.eq xs[0] to) (.is de k entry))
   let (da, _) ← need "a layout without the captures' tuple" (L.find? (.tuple sh.answerΓ))
   let σa ← need "captures that have no term" (tupleCodes da sh.answerΓ (.sel de k 3 entry) 0)
   let vc ← need "an answer that has no term" (Code.ofTerm? _ value)
@@ -355,12 +353,10 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     subst hb
     obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_right hh _ (by
       simp only [occupied, List.mem_filterMap]; exact ⟨_, hbsv, rfl⟩)
-    obtain ⟨tk, te, rfl⟩ : ∃ tk te, xs = [tk, te] := by
-      match xs, hxs with
-      | [tk, te], _ => exact ⟨tk, te, rfl⟩
+    obtain ⟨tk, te, rfl⟩ := xs.two
     simp only [Term.denotes, List.cons.injEq, and_true] at hxs
     obtain ⟨htk, hte⟩ := hxs
-    simp only [List.headD_cons, List.getD_cons_succ, List.getD_cons_zero] at hheq hhis h5 h9
+    simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ] at hheq hhis h5 h9
     have hkey : (y.1 : Nat) = to := by
       have e := Val.eq_of_beq _ _ (by simp only [Holds, Term.denote, Val.toBool] at hheq; exact hheq)
       change zk = Val.int (Int.ofNat y.1) at hzk
@@ -557,7 +553,7 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
       have hlv := (rel_term (need_ok.1 h10) _).2 hevs'
       have hee : evs = evt := Option.some.inj (need_ok.1 h10)
       subst hee
-      obtain ⟨svl, hSl, -, hswl, hhl⟩ := list_view (M := M) hlv h11
+      obtain ⟨svl, hSl, -, -, hhl⟩ := list_view (M := M) hlv h11
       erw [Ty.up_list _ _ v.event_data] at hhl
       have hbroken := hens.2 hc3
       have hall : ((allT (rules.map (·.2))).denote M).toBool = decide (Step.broken (match ensuresFn sh.ensures
@@ -573,12 +569,12 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
       let sA := (Step.reactAll T s' evL).1
       have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
       have e4 : Holds M c4 ↔ eventsFit L.count T s' evL :=
-        (events_encode chk hshs happ hca senv _ svl hSl hswl _ hhl s' hR.now hR.records hR.machines h12).1
+        (events_encode chk hshs happ hca senv _ svl hSl _ hhl s' hR.now hR.records hR.machines h12).1
       have hinv' : Step.Inv P s' := hsinv.filterPending _
       have ef : Holds M c4 → (Holds M cf ↔ finishFits L.count T (sh0 :: rest) (Step.applyEvents T { state := s' } evL)) :=
         fun hc4 => (finish_encode chk hshs happ hca hinv hci senv s .accepted
           { state := s' } rfl hinv' hR.now hrem (loop_acc (T := T) chk hshs happ hca senv
-            { state := s' } hR.now hSl hswl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4) (applyEvents_ok chk.reactions _ rfl hinv' _) h12'
+            { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4) (applyEvents_ok chk.reactions _ rfl hinv' _) h12'
           hcfx).1
       constructor
       · rintro ⟨hc4, hcf⟩
@@ -611,12 +607,10 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     subst hb
     obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_right hh _ (by
       simp only [occupied, List.mem_filterMap]; exact ⟨_, hbsv, rfl⟩)
-    obtain ⟨tk, te, rfl⟩ : ∃ tk te, xs = [tk, te] := by
-      match xs, hxs with
-      | [tk, te], _ => exact ⟨tk, te, rfl⟩
+    obtain ⟨tk, te, rfl⟩ := xs.two
     simp only [Term.denotes, List.cons.injEq, and_true] at hxs
     obtain ⟨htk, hte⟩ := hxs
-    simp only [List.headD_cons, List.getD_cons_succ, List.getD_cons_zero] at hheq hhis h5 h9 hc
+    simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ] at hheq hhis h5 h9 hc
     have hkey : (y.1 : Nat) = to := by
       have e := Val.eq_of_beq _ _ (by simp only [Holds, Term.denote, Val.toBool] at hheq; exact hheq)
       change zk = Val.int (Int.ofNat y.1) at hzk
@@ -785,12 +779,12 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     have hlv := (rel_term (need_ok.1 h10) _).2 hevs'
     have hee : evs = evt := Option.some.inj (need_ok.1 h10)
     subst hee
-    obtain ⟨svl, hSl, -, hswl, hhl⟩ := list_view (M := M) hlv h11
+    obtain ⟨svl, hSl, -, -, hhl⟩ := list_view (M := M) hlv h11
     erw [Ty.up_list _ _ v.event_data] at hhl
     let s' : State v := { s with pending := s.pending.filter (·.id != to) }
     have hinv' : Step.Inv P s' := hsinv.filterPending _
     have hdone := loop_acc (T := T) chk hshs happ0 hca senv
-      { state := s' } hR.now hSl hswl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4
+      { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4
     exact (finish_encode chk hshs happ0 hca hinv0 hci senv s
       .accepted { state := s' } rfl hinv' hR.now hrem hdone (applyEvents_ok chk.reactions _ rfl hinv' _) h12' hcfx).2 hcf
 

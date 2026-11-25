@@ -9,6 +9,9 @@ value, decoded, with `eval`. Usage: smt-check <z3 executable>. -/
 
 open Tazuna.Ir Tazuna.Smt
 
+/-- The cases read slots by `S[j]!`, which a case's layout always has. -/
+instance {w : Nat} : Inhabited (SlotItems w) := ⟨⟨List.replicate w tt, by simp⟩⟩
+
 abbrev E (t : Ty) := Expr [] [] t
 
 def optI : Ty := Ty.option .int
@@ -318,7 +321,7 @@ def illFormed : List (String × Term) :=
   | some (d, n), some (dt, _) =>
     let S := slotsOf d dt n 2 (.var 0)
     [("well-formedness excludes a repeated key",
-        .and (.and S[0]!.1 S[1]!.1) (.eq (S[0]!.2.headD tt) (S[1]!.2.headD tt))),
+        .and (.and S[0]!.1 S[1]!.1) (.eq (S[0]!.2[0]) (S[1]!.2[0]))),
      ("well-formedness excludes a negative counter", .lt (.var 2) (.int 0))]
   | _, _ => []
 
@@ -789,7 +792,7 @@ def pendingLayout : Layout :=
     Tazuna.Smt.Expr.tys rateAnswerE ++ Tazuna.Smt.Expr.tys rateEnsuresE)
 
 /-- The pending table's slots in v4, and the entry datatype. -/
-def pendingSlots : Option (List Slot × Nat) :=
+def pendingSlots : Option (List (Slot 2) × Nat) :=
   match pendingLayout.find? (pendingTable pendingShapes),
       pendingLayout.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry pendingShapes]),
       pendingLayout.find? (pendingEntry pendingShapes) with
@@ -809,8 +812,8 @@ def pendingScript (withWf : Bool) (goal : List Term) : Except String Script := d
 another request; with a repeated wire id or a negative one the well-formedness makes the goal unsat. -/
 def pendingGoals : Option (List Term × List (String × Term)) := do
   let (S, de) ← pendingSlots
-  let id (j : Nat) := (S[j]!.2.headD tt)
-  let entry (j : Nat) := (S[j]!.2.getD 1 tt)
+  let id (j : Nat) := (S[j]!.2[0])
+  let entry (j : Nat) := (S[j]!.2[1])
   let rate := Term.and (.is de 1 (entry 0)) (.eq (.sel 1000 0 0 (.sel de 1 3 (entry 0))) (.int 7))
   pure ([S[0]!.1, S[1]!.1, .eq (id 0) (.int 3), rate],
     [("well-formedness excludes a repeated wire id", .and (.and S[0]!.1 S[1]!.1) (.eq (id 0) (id 1))),
@@ -886,8 +889,8 @@ def doorGoals : Option (List Term × List (String × Term)) := do
   let (dopt, _) ← doorLayout.find? (Ty.option (.tuple [.int, .int]))
   let (dtm, _) ← doorLayout.find? (.tuple [.int, .int])
   let S := slotsOf d dt n 2 (.var 5)
-  let key (j : Nat) := S[j]!.2.headD tt
-  let entry (j : Nat) := S[j]!.2.getD 1 tt
+  let key (j : Nat) := S[j]!.2[0]
+  let entry (j : Nat) := S[j]!.2[1]
   let timer (j : Nat) := Term.sel de 0 1 (entry j)
   pure ([S[0]!.1, S[1]!.1, .not S[2]!.1, .eq (key 0) (.int 3), .eq (.sel de 0 0 (entry 0)) (.int 1),
       .is dopt 0 (timer 0), .eq (.sel dtm 0 0 (.sel dopt 0 0 (timer 0))) (.int 10),
@@ -1028,7 +1031,7 @@ def unmatchedScript : Except String Script := do
   -- Slot 0 holds a request with the wire id, so the answer names a request of another type.
   let some (S, _) := pendingSlots | throw "no layout"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, .int, .int],
-         asserts := [wf, u, .le (.int 0) (.var 5), S[0]!.1, .eq (S[0]!.2.headD tt) (.var 5)], shows := List.range 7 }
+         asserts := [wf, u, .le (.int 0) (.var 5), S[0]!.1, .eq (S[0]!.2[0]) (.var 5)], shows := List.range 7 }
 
 /-- Runs the step from the decoded state and input and compares it with what the terms say; true when they agree. -/
 def answerAgrees (vs : List (Nat × Val)) (unmatched : Bool) : Bool :=
@@ -1444,8 +1447,8 @@ def invariantCheck (solver : Solver) : IO Bool := do
   | .error r => IO.println s!"smt-check: machine invariants: no encoding: {repr r}"; return false
   | .ok (checks, cond) =>
     let S := slotsOf d dt n 2 (.var 5)
-    let key (j : Nat) := S[j]!.2.headD tt
-    let state (j : Nat) := Term.sel de 0 0 (S[j]!.2.getD 1 tt)
+    let key (j : Nat) := S[j]!.2[0]
+    let state (j : Nat) := Term.sel de 0 0 (S[j]!.2[1])
     let goal := [S[0]!.1, S[1]!.1, .not S[2]!.1, .eq (key 0) (.int 3), .eq (state 0) (.int 7), .eq (key 1) (.int 1),
       .eq (state 1) (.int 9)]
     let script : Script :=
@@ -1515,12 +1518,12 @@ def reactCheck (solver : Solver) : IO Bool := do
   | .ok (newT, cond) =>
     let So := slotsOf d dt n 2 (.var 5)
     let Sr := slotsOf dr drt nr 2 (.var 0)
-    let key (j : Nat) := So[j]!.2.headD tt
-    let state (j : Nat) := Term.sel de 0 0 (So[j]!.2.getD 1 tt)
-    let timer (j : Nat) := Term.sel de 0 1 (So[j]!.2.getD 1 tt)
+    let key (j : Nat) := So[j]!.2[0]
+    let state (j : Nat) := Term.sel de 0 0 (So[j]!.2[1])
+    let timer (j : Nat) := Term.sel de 0 1 (So[j]!.2[1])
     let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 3), .eq (state 0) (.int 0), .is dopt 1 (timer 0),
       .eq (key 1) (.int 7), .eq (state 1) (.int 1), .is dopt 1 (timer 1), Sr[0]!.1, Sr[1]!.1, .not Sr[2]!.1,
-      .eq (Sr[0]!.2.headD tt) (.int 5), .eq (Sr[1]!.2.headD tt) (.int 3), .eq (.var 1) (.int 100),
+      .eq (Sr[0]!.2[0]) (.int 5), .eq (Sr[1]!.2[0]) (.int 3), .eq (.var 1) (.int 100),
       .eq (.var 6) newT]
     let script : Script :=
       { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, msrt, .int], asserts := wf :: cond :: goal,
@@ -1580,12 +1583,12 @@ def stayCheck (solver : Solver) : IO Bool := do
   | .ok (newT, cond) =>
     let So := slotsOf d dt n 2 (.var 5)
     let Sr := slotsOf dr drt nr 2 (.var 0)
-    let records := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), .eq (.var 6) newT]
+    let records := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2[0]) (.int 3), .eq (.var 6) newT]
     let script (old : List Term) : Script :=
       { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, msrt, .int],
         asserts := wf :: cond :: old ++ records, shows := List.range 8 }
-    let stays := [So[0]!.1, .not So[1]!.1, .not So[2]!.1, .eq (So[0]!.2.headD tt) (.int 3),
-      .eq (Term.sel de 0 0 (So[0]!.2.getD 1 tt)) (.int 1)]
+    let stays := [So[0]!.1, .not So[1]!.1, .not So[2]!.1, .eq (So[0]!.2[0]) (.int 3),
+      .eq (Term.sel de 0 0 (So[0]!.2[1])) (.int 1)]
     let stayed ← match ← solver.run (script stays) with
     | .sat vs => do
       let M := modelOf vs
@@ -1650,7 +1653,7 @@ def startsCheck (solver : Solver) : IO Bool := do
   | .error r => fail s!"no encoding: {repr r}"
   | .ok (S, count, cond) =>
     let Sr := slotsOf dr drt nr 2 (.var 0)
-    let goal := [Sr[0]!.1, Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2.headD tt) (.int 5), .eq (Sr[1]!.2.headD tt) (.int 3),
+    let goal := [Sr[0]!.1, Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2[0]) (.int 5), .eq (Sr[1]!.2[0]) (.int 3),
       .eq (.var 1) (.int 100), .eq (.var 3) (.int 40)]
     let script : Script :=
       { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int], asserts := wf :: cond :: goal,
@@ -1707,9 +1710,9 @@ def fireCheck (solver : Solver) : IO Bool := do
   | .error r => fail s!"no encoding: {repr r}"
   | .ok (o, cond) =>
     let So := slotsOf d dt n 2 (.var 5)
-    let key (j : Nat) := So[j]!.2.headD tt
-    let state (j : Nat) := Term.sel de 0 0 (So[j]!.2.getD 1 tt)
-    let timer (j : Nat) := Term.sel de 0 1 (So[j]!.2.getD 1 tt)
+    let key (j : Nat) := So[j]!.2[0]
+    let state (j : Nat) := Term.sel de 0 0 (So[j]!.2[1])
+    let timer (j : Nat) := Term.sel de 0 1 (So[j]!.2[1])
     let waits (j : Nat) := [Term.is dopt 0 (timer j), .eq (.sel dp 0 0 (.sel dopt 0 0 (timer j))) (.int 90),
       .eq (.sel dp 0 1 (.sel dopt 0 0 (timer j))) (.int 1)]
     let goal := [So[0]!.1, So[1]!.1, .not So[2]!.1, .eq (key 0) (.int 7), .eq (state 0) (.int 0), .eq (key 1) (.int 3),
@@ -1786,7 +1789,7 @@ def writeI : Fin writeSvc.subscribes.length := ⟨0, by decide⟩
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the event value, v7 the new pending table, v8
 the next id after, v9 the records after, v10 the new instance table. -/
 def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : Nat) (goal : List Term) :
-    Except String (Script × List Slot) := do
+    Except String (Script × List (Slot 2)) := do
   let v := writeSvcOf m
   let shs := writeShapesOf m
   let L := writeLayoutOf m keys slots
@@ -1808,7 +1811,7 @@ def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : 
             .eq (.var 9) d.records, .eq (.var 10) tbl] ++ goal,
           shows := List.range 11 }, slotsOf dp dt n 2 (.var 4))
 
-def writeScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot) :=
+def writeScript (slots : Nat) (goal : List Term) : Except String (Script × List (Slot 2)) :=
   writeScriptOf startM [sendKey ⟨"m", 3, 7, 0⟩] slots goal
 
 /-- What the comparison reads of a pending request: id, external, name, the sender's key and the input. -/
@@ -1826,10 +1829,10 @@ def writeCheck (solver : Solver) : IO Bool := do
   let some (de, _) := L.find? (instEntry .int) | fail "no instance entry"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
-  let state (Sp : List Slot) (pend : List Term) := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1,
-    .eq (Sr[0]!.2.headD tt) (.int 3), Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1, .eq (Sm[0]!.2.headD tt) (.int 3),
-    .eq (Term.sel de 0 0 (Sm[0]!.2.getD 1 tt)) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40)] ++
-    pend.zipIdx.map (fun (id, j) => .and Sp[j]!.1 (.eq (Sp[j]!.2.headD tt) id)) ++
+  let state (Sp : List (Slot 2)) (pend : List Term) := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1,
+    .eq (Sr[0]!.2[0]) (.int 3), Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1, .eq (Sm[0]!.2[0]) (.int 3),
+    .eq (Term.sel de 0 0 (Sm[0]!.2[1])) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40)] ++
+    pend.zipIdx.map (fun (id, j) => .and Sp[j]!.1 (.eq (Sp[j]!.2[0]) id)) ++
     (List.range (3 - pend.length)).map fun j => .not Sp[pend.length + j]!.1
   match writeScript 3 [] with
   | .error m => fail m
@@ -1882,9 +1885,9 @@ def quietCheck (solver : Solver) : IO Bool := do
   match writeScriptOf reactM [] 3 [] with
   | .error m => fail m
   | .ok (_, Sp) =>
-    let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), .not Sm[0]!.1,
+    let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2[0]) (.int 3), .not Sm[0]!.1,
       .not Sm[1]!.1, .not Sm[2]!.1, .eq (.var 6) (.int 5), .eq (.var 3) (.int 40), Sp[0]!.1,
-      .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1]
+      .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1]
     match writeScriptOf reactM [] 3 goal with
     | .error m => fail m
     | .ok (script, _) =>
@@ -1937,7 +1940,7 @@ def fanI : Fin fanSvc.subscribes.length := ⟨0, by decide⟩
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the event value, v7 the new pending table, v8
 the next id after. -/
-def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot) := do
+def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List (Slot 2)) := do
   let L := fanLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
@@ -1957,16 +1960,16 @@ def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List S
 
 def fanCheck (solver : Solver) : IO Bool := do
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: reactions write requests: {m}"; return false
-  let state (slots : Nat) (Sp : List Slot) : List Term :=
+  let state (slots : Nat) (Sp : List (Slot 2)) : List Term :=
     let L := fanLayout slots
     match L.find? recordsT, L.find? (.tuple [Ty.bool, .int, .int]), L.find? startM.table,
         L.find? (.tuple [Ty.bool, .int, instEntry .int]), L.find? (instEntry .int) with
     | some (dr, nr), some (drt, _), some (dm, nm), some (dmt, _), some (de, _) =>
       let Sr := slotsOf dr drt nr 2 (.var 0)
       let Sm := slotsOf dm dmt nm 2 (.var 5)
-      [Sr[0]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), Sm[0]!.1, .eq (Sm[0]!.2.headD tt) (.int 3),
-        .eq (Term.sel de 0 0 (Sm[0]!.2.getD 1 tt)) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40),
-        Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2)] ++
+      [Sr[0]!.1, .eq (Sr[0]!.2[0]) (.int 3), Sm[0]!.1, .eq (Sm[0]!.2[0]) (.int 3),
+        .eq (Term.sel de 0 0 (Sm[0]!.2[1])) (.int 0), .eq (.var 6) (.int 5), .eq (.var 3) (.int 40),
+        Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2)] ++
         ((List.range (slots - 1)).flatMap fun j => [.not Sr[j + 1]!.1, .not Sm[j + 1]!.1, .not Sp[j + 1]!.1])
     | _, _, _, _, _ => [.bool false]
   let mut ok := true
@@ -2061,12 +2064,12 @@ def clockFireCheck (solver : Solver) : IO Bool := do
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf d dt n 2 (.var 4)
-  let waits (j : Nat) (key dl : Int) := [Sm[j]!.1, .eq (Sm[j]!.2.headD tt) (.int key),
-    .eq (Term.sel de 0 0 (Sm[j]!.2.getD 1 tt)) (.int 0), .is dto 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)),
-    .eq (.sel dp 0 0 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)))) (.int dl),
-    .eq (.sel dp 0 1 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)))) (.int 1)]
-  let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), .not Sm[2]!.1,
-    .eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2),
+  let waits (j : Nat) (key dl : Int) := [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key),
+    .eq (Term.sel de 0 0 (Sm[j]!.2[1])) (.int 0), .is dto 0 (Term.sel de 0 1 (Sm[j]!.2[1])),
+    .eq (.sel dp 0 0 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int dl),
+    .eq (.sel dp 0 1 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int 1)]
+  let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2[0]) (.int 3), .not Sm[2]!.1,
+    .eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2),
     .not Sp[1]!.1, .not Sp[2]!.1] ++ waits 0 7 80 ++ waits 1 3 90
   let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
     (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
@@ -2157,7 +2160,7 @@ def eventsLayout (slots : Nat) : Layout :=
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the event list, v7 the new pending table, v8
 the next id after, v9 the records after, v10 the new instance table. -/
-def eventsScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot × List Slot) := do
+def eventsScript (slots : Nat) (goal : List Term) : Except String (Script × List (Slot 2) × List (Slot 1)) := do
   let L := eventsLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
@@ -2196,9 +2199,9 @@ def eventsCheck (solver : Solver) : IO Bool := do
   | .error m => fail m
   | .ok (_, Sp, Se) =>
     let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
-      Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
-      .eq (.var 3) (.int 40), Se[0]!.1, .eq (Se[0]!.2.headD tt) (.int 3), Se[1]!.1, .eq (Se[1]!.2.headD tt) (.int 3),
-      .not Se[2]!.1, .eq (Se[2]!.2.headD tt) (.int 9)]
+      Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
+      .eq (.var 3) (.int 40), Se[0]!.1, .eq (Se[0]!.2[0]) (.int 3), Se[1]!.1, .eq (Se[1]!.2[0]) (.int 3),
+      .not Se[2]!.1, .eq (Se[2]!.2[0]) (.int 9)]
     match eventsScript 3 goal with
     | .error m => fail m
     | .ok (script, _, _) =>
@@ -2259,7 +2262,7 @@ def twiceLayoutOf (slots : Nat) : Layout :=
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the caller, v7 the input, v8 the new pending
 table, v9 the next id after, v10 the records after, v11 the new instance table. -/
-def twiceScriptOf (slots : Nat) (goal : List Term) : Except String (Script × List Slot) := do
+def twiceScriptOf (slots : Nat) (goal : List Term) : Except String (Script × List (Slot 2)) := do
   let L := twiceLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
@@ -2282,7 +2285,7 @@ def twiceScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Li
 
 def twiceLayout : Layout := twiceLayoutOf 3
 
-def twiceScript (goal : List Term) : Except String (Script × List Slot) := twiceScriptOf 3 goal
+def twiceScript (goal : List Term) : Except String (Script × List (Slot 2)) := twiceScriptOf 3 goal
 
 def twiceCheck (solver : Solver) : IO Bool := do
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: a command's events reach machines: {m}"; return false
@@ -2297,7 +2300,7 @@ def twiceCheck (solver : Solver) : IO Bool := do
   | .error m => fail m
   | .ok (_, Sp) =>
     let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
-      Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
+      Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
       .eq (.var 3) (.int 40), .eq (.var 6) (.str "alice"), .eq (.var 7) (.int 3)]
     match twiceScript goal with
     | .error m => fail m
@@ -2385,10 +2388,10 @@ def answerMCheck (solver : Solver) : IO Bool := do
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf dp dpt np 2 (.var 4)
-  let entry := Sp[0]!.2.getD 1 tt
-  let goal := [Sr[0]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), .not Sr[1]!.1, .not Sr[2]!.1,
-    Sm[0]!.1, .eq (Sm[0]!.2.headD tt) (.int 3), .eq (Term.sel de 0 0 (Sm[0]!.2.getD 1 tt)) (.int 0),
-    .is dtop 1 (Term.sel de 0 1 (Sm[0]!.2.getD 1 tt)), .not Sm[1]!.1, .not Sm[2]!.1,
+  let entry := Sp[0]!.2[1]
+  let goal := [Sr[0]!.1, .eq (Sr[0]!.2[0]) (.int 3), .not Sr[1]!.1, .not Sr[2]!.1,
+    Sm[0]!.1, .eq (Sm[0]!.2[0]) (.int 3), .eq (Term.sel de 0 0 (Sm[0]!.2[1])) (.int 0),
+    .is dtop 1 (Term.sel de 0 1 (Sm[0]!.2[1])), .not Sm[1]!.1, .not Sm[2]!.1,
     .eq (Term.sel d1 0 0 (Term.sel dpe 0 3 entry)) (.int 3), .not Sp[1]!.1, .not Sp[2]!.1,
     .eq (.var 1) (.int 100), .eq (.var 3) (.int 40), .is dres 0 (.var 6)]
   match answerMScript goal with
@@ -2467,7 +2470,7 @@ def mixScript (slots : Nat) (goal : List Term) : Except String (Script × Nat ×
   let S := SymState.vars 0
   let (apply, ca) ← enc (mixSvc.apply.code L)
   let senv ← enc (StepEnv.of L mixShapes)
-  let (o, c) ← enc (encodeEvents L prelude mixSvc mixShapes senv apply S.now [(tt, [.var 6])] S.records
+  let (o, c) ← enc (encodeEvents L prelude mixSvc mixShapes senv apply S.now [(tt, ⟨[.var 6], rfl⟩)] S.records
     S.machines S.nextId (.int 0))
   let some wf := S.wf L (v := mixSvc) mixShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -2477,10 +2480,10 @@ def mixScript (slots : Nat) (goal : List Term) : Except String (Script × Nat ×
   let some dts := L.datatypes? | throw "no datatypes"
   let base := 9
   let news := o.news.zipIdx.flatMap fun ((f, xs), j) =>
-    [.eq (.var (base + 2 * j)) f, .eq (.var (base + 2 * j + 1)) (xs.headD tt)]
+    [.eq (.var (base + 2 * j)) f, .eq (.var (base + 2 * j + 1)) xs[0]]
   let ob := base + 2 * o.news.length
   let owns := o.owns.zipIdx.flatMap fun ((f, xs), j) =>
-    [.eq (.var (ob + 3 * j)) f, .eq (.var (ob + 3 * j + 1)) (xs.headD tt), .eq (.var (ob + 3 * j + 2)) (xs.getD 1 tt)]
+    [.eq (.var (ob + 3 * j)) f, .eq (.var (ob + 3 * j + 1)) xs[0], .eq (.var (ob + 3 * j + 2)) xs[1]]
   let vars := [rsrt, .int, .int, .int, psrt, msrt, .int, .int, .int] ++
     (o.news.map fun _ => [Srt.bool, .int]).flatten ++ (o.owns.map fun _ => [Srt.bool, .int, esrt]).flatten
   let hb := vars.length
@@ -2590,7 +2593,7 @@ def internalScriptOf (slots : Nat) (goal : List Term) : Except String (Script ×
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.answered.tables.toList | throw "not one machine"
   let news := o.decided.after.news ++ o.answered.news
-  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) (xs.headD tt)]
+  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) xs[0]]
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, .str, .int, rsrt, .int, msrt] ++
             (news.map fun _ => [Srt.bool, .int]).flatten,
@@ -2611,7 +2614,7 @@ def internalCheck (solver : Solver) : IO Bool := do
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf dp dpt np 2 (.var 4)
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
-    Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
+    Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
     .eq (.var 3) (.int 40), .eq (.var 6) (.str "alice"), .eq (.var 7) (.int 3)]
   match internalScriptOf 3 goal with
   | .error m => fail m
@@ -2691,7 +2694,7 @@ def ownQueryScript (goal : List Term) : Except String (Script × Nat) := do
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.answered.tables.toList | throw "not one machine"
   let news := o.answered.news
-  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) (xs.headD tt)]
+  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) xs[0]]
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, .str, .int, rsrt, .int, msrt] ++
             (news.map fun _ => [Srt.bool, .int]).flatten,
@@ -2712,7 +2715,7 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf dp dpt np 2 (.var 4)
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
-    Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
+    Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
     .eq (.var 3) (.int 40), .eq (.var 6) (.str "alice"), .eq (.var 7) (.int 3)]
   match ownQueryScript goal with
   | .error m => fail m
@@ -2797,7 +2800,7 @@ def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal :
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.terms.done.tables.toList | throw "not one machine"
   let news := o.terms.done.news
-  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (12 + 2 * j)) f, .eq (.var (13 + 2 * j)) (xs.headD tt)]
+  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (12 + 2 * j)) f, .eq (.var (13 + 2 * j)) xs[0]]
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, esrt, rsrt, .int, msrt, .bool, .int] ++
             (news.map fun _ => [Srt.bool, .int]).flatten,
@@ -2819,7 +2822,7 @@ def dispCheck (solver : Solver) : IO Bool := do
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf dp dpt np 2 (.var 4)
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
-    Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
+    Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
     .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
   let twiceFx : EffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
   let nextFx : EffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
@@ -2910,7 +2913,7 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
   let (apply, ca) ← enc (dispSvc.apply.code L)
   let senv ← enc (StepEnv.of L dispShapes)
   let effs ← effects.mapM fun f => enc (f L)
-  let queue : List Slot := effs.zipIdx.map fun (e, j) => (tt, [.int j, e])
+  let queue : List (Slot 2) := effs.zipIdx.map fun (e, j) => (tt, ⟨[.int j, e], rfl⟩)
   let t : StepTerms dispSvc := ⟨.bool false, ⟨S.records, S.machines, S.nextId, [], [], .int effs.length⟩, S.fresh⟩
   let ⟨o, cond, codes⟩ ← enc (encodeSettle L prelude dispSites dispSvc dispShapes senv apply (effs.headD tt) S.now
     fuel 0 queue t)
@@ -2922,7 +2925,7 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.terms.done.tables.toList | throw "not one machine"
   let news := o.terms.done.news
-  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (12 + 2 * j)) f, .eq (.var (13 + 2 * j)) (xs.headD tt)]
+  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (12 + 2 * j)) f, .eq (.var (13 + 2 * j)) xs[0]]
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, rsrt, .int, msrt, .bool, .bool, .int] ++
             (news.map fun _ => [Srt.bool, .int]).flatten,
@@ -2951,7 +2954,7 @@ def cascadeCheck (solver : Solver) : IO Bool := do
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf dp dpt np 2 (.var 4)
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
-    Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
+    Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
     .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
   let twiceT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5]
   let nextT : Layout → Except Refusal Term := fun L => ownT L nextKey (.str "alice") (.int 3) []
@@ -3093,7 +3096,7 @@ def cascEventCheck (solver : Solver) : IO Bool := do
     let Sm := slotsOf dm dmt nm 2 (.var 5)
     let Sp := slotsOf dp dpt np 2 (.var 4)
     let goal := (Sr ++ Sm ++ Sp.drop 1).map (fun sl => Term.not sl.1) ++
-      [Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .eq (.var 1) (.int 100), .eq (.var 2) (.int 7),
+      [Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .eq (.var 1) (.int 100), .eq (.var 2) (.int 7),
         .eq (.var 3) (.int 40), .eq (.var 6) (.int 3)]
     match cascEventScriptOf cascade 5 goal with
     | .error m => ok ← fail s!"{name}: {m}"
@@ -3204,11 +3207,11 @@ def tickClockCheck (solver : Solver) : IO Bool := do
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
   let Sp := slotsOf d dt n 2 (.var 4)
-  let waits (j : Nat) (key dl : Int) := [Sm[j]!.1, .eq (Sm[j]!.2.headD tt) (.int key),
-    .eq (Term.sel de 0 0 (Sm[j]!.2.getD 1 tt)) (.int 0), .is dto 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)),
-    .eq (.sel dp 0 0 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)))) (.int dl),
-    .eq (.sel dp 0 1 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)))) (.int 1)]
-  let goal := [Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2),
+  let waits (j : Nat) (key dl : Int) := [Sm[j]!.1, .eq (Sm[j]!.2[0]) (.int key),
+    .eq (Term.sel de 0 0 (Sm[j]!.2[1])) (.int 0), .is dto 0 (Term.sel de 0 1 (Sm[j]!.2[1])),
+    .eq (.sel dp 0 0 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int dl),
+    .eq (.sel dp 0 1 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int 1)]
+  let goal := [Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2),
     .eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), .eq (.var 2) (.int 7)] ++
     ((Sr ++ Sm.drop 2 ++ Sp.drop 1).map fun sl => Term.not sl.1) ++ waits 0 7 80 ++ waits 1 3 90
   match tickClockTermsOf 2 5 goal with

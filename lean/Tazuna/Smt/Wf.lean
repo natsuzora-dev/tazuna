@@ -35,10 +35,10 @@ section
 variable (L : Layout)
 
 /-- Whether no two occupied slots hold the same key (the first item), by SMT-LIB's `=` in either direction. -/
-def distinctT : List Slot → Term
+def distinctT : List (Slot 2) → Term
   | [] => tt
-  | (f, xs) :: S => .and (allT (S.map fun sl : Slot =>
-      .not (.and (.and f sl.1) (.or (.eq (xs.headD tt) (sl.2.headD tt)) (.eq (sl.2.headD tt) (xs.headD tt))))))
+  | (f, xs) :: S => .and (allT (S.map fun sl : Slot 2 =>
+      .not (.and (.and f sl.1) (.or (.eq xs[0] sl.2[0]) (.eq sl.2[0] xs[0])))))
     (distinctT S)
 
 mutual
@@ -53,17 +53,17 @@ def wfT : Ty → Term → Option Term
   | .tuple ts, x => (L.find? (.tuple ts)).bind fun (d, _) => wfFields d 0 ts x 0
   | .bag t, x => match L.find? (.bag t), L.find? (.tuple [Ty.bool, t]) with
     | some (d, n), some (dt, _) =>
-      ((slotsOf d dt n 1 x).mapM fun sl : Slot => (wfT t (sl.2.headD tt)).map (Term.or (.not sl.1) ·)).map allT
+      ((slotsOf d dt n 1 x).mapM fun sl : Slot 1 => (wfT t sl.2[0]).map (Term.or (.not sl.1) ·)).map allT
     | _, _ => none
   | .list t, x => match L.find? (.list t), L.find? (.tuple [Ty.bool, t]) with
     | some (d, n), some (dt, _) =>
-      ((slotsOf d dt n 1 x).mapM fun sl : Slot => (wfT t (sl.2.headD tt)).map (Term.or (.not sl.1) ·)).map allT
+      ((slotsOf d dt n 1 x).mapM fun sl : Slot 1 => (wfT t sl.2[0]).map (Term.or (.not sl.1) ·)).map allT
     | _, _ => none
   | .table k w, x => match L.find? (.table k w), L.find? (.tuple [Ty.bool, k, w]) with
     | some (d, n), some (dt, _) =>
       if k.eqable then
-        ((slotsOf d dt n 2 x).mapM fun sl : Slot => ((wfT k (sl.2.headD tt)).bind fun ck =>
-          (wfT w (sl.2.getD 1 tt)).map fun cw => Term.and ck cw).map (Term.or (.not sl.1) ·)).map fun cs =>
+        ((slotsOf d dt n 2 x).mapM fun sl : Slot 2 => ((wfT k sl.2[0]).bind fun ck =>
+          (wfT w sl.2[1]).map fun cw => Term.and ck cw).map (Term.or (.not sl.1) ·)).map fun cs =>
             .and (allT cs) (distinctT (slotsOf d dt n 2 x))
       else none
     | _, _ => none
@@ -125,20 +125,17 @@ theorem holds_or_not (f c : Term) (b : Bool) (hf : f.denote M = .bool b) :
     Holds M (.or (.not f) c) ↔ (b = true → Holds M c) := by
   cases b <;> simp [Holds, Term.denote, hf, Val.toBool]
 
-theorem headD_denote (xs : List Term) : (xs.headD tt).denote M = (Term.denotes M xs).headD (.bool true) := by
-  cases xs <;> rfl
-
 theorem mapM_isSome {α β : Type} (f : α → Option β) : (xs : List α) → (xs.mapM f).isSome = xs.all fun x => (f x).isSome
   | [] => rfl
   | x :: xs => by
     cases h : f x <;> simp [List.mapM_cons, h, ← mapM_isSome f xs]; cases xs.mapM f <;> rfl
 
 /-- The slot-wise part of well-formedness: a term per slot that holds when the slot is free or its items `P`. -/
-theorem slots_all {g : List Term → Option Term} {P : List Val → Bool} {Q : List Val → Prop}
-    (hg : ∀ xs c, g xs = some c → Q (Term.denotes M xs) → (Holds M c ↔ P (Term.denotes M xs) = true)) :
-    (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.1 = true → Q p.2) →
+theorem slots_all {w : Nat} {g : SlotItems w → Option Term} {P : List Val → Bool} {Q : List Val → Prop}
+    (hg : ∀ (xs : SlotItems w) c, g xs = some c → Q (Term.denotes M xs.1) → (Holds M c ↔ P (Term.denotes M xs.1) = true)) :
+    (S : List (Slot w)) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.1 = true → Q p.2) →
     (cs : List Term) →
-    S.mapM (fun sl : Slot => (g sl.2).map (Term.or (.not sl.1) ·)) = some cs →
+    S.mapM (fun sl : Slot w => (g sl.2).map (Term.or (.not sl.1) ·)) = some cs →
     (Holds M (allT cs) ↔ (occupied sv).all P = true)
   | [], [], _, _, cs, h => by simp only [List.mapM_nil, Option.pure_def, Option.some.injEq] at h; subst h; simp [Holds, allT, tt, Term.denote, Val.toBool, occupied]
   | (f, xs) :: S, (b, vs) :: sv, ⟨hf, hxs, hS⟩, hQ, cs, h => by
@@ -157,16 +154,17 @@ theorem slots_all {g : List Term → Option Term} {P : List Val → Bool} {Q : L
       rw [hgc]; simp [occupied]
 
 /-- `distinctT` holds when the occupied slots' keys differ pairwise. -/
-theorem distinctT_den : (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv →
+theorem distinctT_den : (S : List (Slot 2)) → (sv : List (Bool × List Val)) → SlotsDen M S sv →
     (Holds M (distinctT S) ↔ (occupied sv).Pairwise fun a b =>
-      (a.headD (.bool true) == b.headD (.bool true)) = false ∧ (b.headD (.bool true) == a.headD (.bool true)) = false)
+      ∀ ka ∈ a.head?, ∀ kb ∈ b.head?, (ka == kb) = false ∧ (kb == ka) = false)
   | [], [], _ => by simp [distinctT, Holds, tt, Term.denote, Val.toBool, occupied]
   | (f, xs) :: S, (b, vs) :: sv, ⟨hf, hxs, hS⟩ => by
     have ih := distinctT_den S sv hS
-    have hrow : Holds M (allT (S.map fun sl : Slot =>
-        .not (.and (.and f sl.1) (.or (.eq (xs.headD tt) (sl.2.headD tt)) (.eq (sl.2.headD tt) (xs.headD tt)))))) ↔
-        (b = true → ∀ q ∈ occupied sv, (vs.headD (.bool true) == q.headD (.bool true)) = false ∧
-          (q.headD (.bool true) == vs.headD (.bool true)) = false) := by
+    obtain ⟨x0, x1, rfl⟩ := xs.two
+    subst hxs
+    have hrow : Holds M (allT (S.map fun sl : Slot 2 =>
+        .not (.and (.and f sl.1) (.or (.eq x0 sl.2[0]) (.eq sl.2[0] x0))))) ↔
+        (b = true → ∀ q ∈ occupied sv, ∀ kb ∈ q.head?, (x0.denote M == kb) = false ∧ (kb == x0.denote M) = false) := by
       clear ih
       induction S generalizing sv with
       | nil => cases sv with
@@ -174,16 +172,18 @@ theorem distinctT_den : (S : List Slot) → (sv : List (Bool × List Val)) → S
         | cons _ _ => exact hS.elim
       | cons s S ih' =>
         obtain ⟨f', xs'⟩ := s
+        obtain ⟨y0, y1, rfl⟩ := xs'.two
         match sv, hS with
         | (b', vs') :: sv', ⟨hf', hxs', hS'⟩ =>
+          subst hxs'
           have := ih' sv' hS'
           simp only [List.map_cons, allT]
           rw [holds_and, this]
-          simp only [Holds, Term.denote, hf, hf', headD_denote, hxs, hxs', Val.toBool]
-          cases b <;> cases b' <;> simp [occupied]
-    simp only [distinctT]
+          simp only [Holds, Term.denote, hf, hf', SlotItems.getElem_mk, List.getElem_cons_zero, Val.toBool]
+          cases b <;> cases b' <;> simp [occupied, Term.denotes]
+    simp only [distinctT, SlotItems.getElem_mk, List.getElem_cons_zero]
     rw [holds_and, hrow, ih]
-    cases b <;> simp [occupied, List.pairwise_cons]
+    cases b <;> simp [occupied, List.pairwise_cons, Term.denotes]
 
 theorem isSome_map {α β : Type} (f : α → β) (o : Option α) : (o.map f).isSome = o.isSome := by cases o <;> rfl
 
@@ -196,14 +196,15 @@ theorem pairwise_forall2 {α β : Type} {E : α → β → Prop} {P : α → α 
       forall2_all (fun a' b' h' => hPR a b a' b' hab h') as bs h]
   | [], _ :: _, h | _ :: _, [], h => h.elim
 
-theorem singleton_terms {xs : List Term} {z : Val} (h : Term.denotes M xs = [z]) : ∃ x, xs = [x] ∧ x.denote M = z := by
-  match xs, h with
-  | [x], h => exact ⟨x, rfl, by simpa [Term.denotes] using h⟩
+theorem singleton_terms {xs : SlotItems 1} {z : Val} (h : Term.denotes M xs.1 = [z]) :
+    ∃ x, xs = ⟨[x], rfl⟩ ∧ x.denote M = z := by
+  obtain ⟨x, rfl⟩ := xs.one
+  exact ⟨x, rfl, by simpa [Term.denotes] using h⟩
 
-theorem pair_terms {xs : List Term} {a b : Val} (h : Term.denotes M xs = [a, b]) :
-    ∃ x y, xs = [x, y] ∧ x.denote M = a ∧ y.denote M = b := by
-  match xs, h with
-  | [x, y], h => simp only [Term.denotes, List.cons.injEq, and_true] at h; exact ⟨x, y, rfl, h.1, h.2⟩
+theorem pair_terms {xs : SlotItems 2} {a b : Val} (h : Term.denotes M xs.1 = [a, b]) :
+    ∃ x y, xs = ⟨[x, y], rfl⟩ ∧ x.denote M = a ∧ y.denote M = b := by
+  obtain ⟨x, y, rfl⟩ := xs.two
+  simp only [Term.denotes, List.cons.injEq, and_true] at h; exact ⟨x, y, rfl, h.1, h.2⟩
 
 mutual
 /-- Well-formedness characterizes decoding: for a value of the type's sort, the term holds exactly when the value
@@ -247,12 +248,12 @@ theorem wf_iff : (t : Ty) → (x : Term) → (c : Term) → wfT L t x = some c �
         ((occupied sv).mapM fun | [z] => decodeV L t z | _ => none).isSome := by
       simp only [decodeV, hf, hft, hsv]; rfl
     rw [hdec, mapM_isSome]
-    refine slots_all (g := fun xs => wfT L t (xs.headD tt)) (Q := fun vs => ∃ z, vs = [z] ∧ Sorted L t z) ?_ _ sv
+    refine slots_all (g := fun xs => wfT L t xs[0]) (Q := fun vs => ∃ z, vs = [z] ∧ Sorted L t z) ?_ _ sv
       hS ?_ cs hcs
     · intro xs c' hc' ⟨z, hz, hzs⟩
       obtain ⟨x0, rfl, hx0⟩ := singleton_terms hz
       rw [hz]
-      simp only [List.headD_cons] at hc'
+      simp only [SlotItems.getElem_mk, List.getElem_cons_zero] at hc'
       have := wf_iff t x0 c' hc' (hx0 ▸ hzs)
       rw [hx0] at this
       exact this
@@ -270,12 +271,12 @@ theorem wf_iff : (t : Ty) → (x : Term) → (c : Term) → wfT L t x = some c �
         ((occupied sv).mapM fun | [z] => decodeV L t z | _ => none).isSome := by
       simp only [decodeV, hf, hft, hsv]; rfl
     rw [hdec, mapM_isSome]
-    refine slots_all (g := fun xs => wfT L t (xs.headD tt)) (Q := fun vs => ∃ z, vs = [z] ∧ Sorted L t z) ?_ _ sv
+    refine slots_all (g := fun xs => wfT L t xs[0]) (Q := fun vs => ∃ z, vs = [z] ∧ Sorted L t z) ?_ _ sv
       hS ?_ cs hcs
     · intro xs c' hc' ⟨z, hz, hzs⟩
       obtain ⟨x0, rfl, hx0⟩ := singleton_terms hz
       rw [hz]
-      simp only [List.headD_cons] at hc'
+      simp only [SlotItems.getElem_mk, List.getElem_cons_zero] at hc'
       have := wf_iff t x0 c' hc' (hx0 ▸ hzs)
       rw [hx0] at this
       exact this
@@ -299,14 +300,14 @@ theorem wf_iff : (t : Ty) → (x : Term) → (c : Term) → wfT L t x = some c �
       let f2 : List Val → Option (k.den × w.den) := fun
         | [zk, zv] => (decodeV L k zk).bind fun a => (decodeV L w zv).map fun b => (a, b)
         | _ => none
-      have hall := slots_all (g := fun xs => (wfT L k (xs.headD tt)).bind fun ck =>
-          (wfT L w (xs.getD 1 tt)).map fun cw => Term.and ck cw) (P := fun vs => (f2 vs).isSome)
+      have hall := slots_all (g := fun xs : SlotItems 2 => (wfT L k xs[0]).bind fun ck =>
+          (wfT L w xs[1]).map fun cw => Term.and ck cw) (P := fun vs => (f2 vs).isSome)
         (Q := fun vs => ∃ zk zv, vs = [zk, zv] ∧ Sorted L k zk ∧ Sorted L w zv) ?_ _ sv hS hP cs ?_
       rotate_left
       · intro xs c' hc' ⟨zk, zv, hz, hsk, hsw⟩
         obtain ⟨x0, x1, rfl, hx0, hx1⟩ := pair_terms hz
         rw [hz]
-        simp only [List.headD_cons, List.getD_cons_succ, List.getD_cons_zero] at hc'
+        simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ] at hc'
         obtain ⟨ck, hck, hc'⟩ := Option.bind_eq_some_iff.1 hc'
         obtain ⟨cw, hcw, rfl⟩ := Option.map_eq_some_iff.1 hc'
         have h0 := wf_iff k x0 ck hck (hx0 ▸ hsk)
@@ -343,7 +344,7 @@ theorem wf_iff : (t : Ty) → (x : Term) → (c : Term) → wfT L t x = some c �
         rw [← pairwise_forall2 (P := fun (a b : k.den × w.den) => (Ty.semWith Dsl.val k).2 a.1 b.1 = false ∧
           (Ty.semWith Dsl.val k).2 b.1 a.1 = false) (fun e vs e' vs' ⟨zk, zv, h1, h2, _⟩ ⟨zk', zv', h1', h2', _⟩ => by
           subst h1 h1'
-          simp only [List.headD_cons]
+          simp only [List.head?_cons, Option.mem_def, Option.some.injEq, forall_eq']
           rw [show (zk == zk') = Ty.deq k e.1 e'.1 from relV_beq k hk _ _ _ _ (decode_rel _ _ _ h2) (decode_rel _ _ _ h2'),
             show (zk' == zk) = Ty.deq k e'.1 e.1 from relV_beq k hk _ _ _ _ (decode_rel _ _ _ h2') (decode_rel _ _ _ h2)]) _ _ h2]
         split <;> simp_all

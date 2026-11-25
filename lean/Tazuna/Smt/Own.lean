@@ -22,25 +22,25 @@ def splitStart (dE nR nO dopt : Nat) (w : StartSlot) : StartSlot × StartSlot :=
   (⟨w.flag, w.key, Term.share (.ite own (.ctor dopt 1 []) w.effect)⟩, ⟨w.flag, w.key, Term.share (.ite own w.effect (.ctor dopt 1 []))⟩)
 
 /-- The own slots of start slots ranked like wire ids: each flagged slot holds its place in the queue and its effect. -/
-def ownItems (S : List Slot) : List Slot := S.map fun (f, xs) => (f, [xs.headD tt, xs.getD 2 tt])
+def ownItems (S : List (Slot 3)) : List (Slot 2) := S.map fun (f, xs) => (f, ⟨[xs[0], xs[2]], rfl⟩)
 
 /-- A list's effect slots as own slots, each occupied slot at the place `q` plus the occupied slots before it, and the
 place after them. -/
-def ownSlots : List Slot → Term → List Slot × Term
+def ownSlots : List (Slot 1) → Term → List (Slot 2) × Term
   | [], q => ([], q)
   | (f, xs) :: S, q =>
     let rest := ownSlots S (Term.share (.add q (.ite f (.int 1) (.int 0))))
-    ((f, [q, xs.headD tt]) :: rest.1, rest.2)
+    ((f, ⟨[q, xs[0]], rfl⟩) :: rest.1, rest.2)
 
 /-- The slots with each flag and-ed with whether its effect is a request (`own` false) or an own command or query. -/
-def gateOwn (dE nR nO : Nat) (own : Bool) (S : List Slot) : List Slot :=
-  S.map fun (f, xs) => let o := isOwnT dE nR nO (xs.headD tt); (Term.share (.and f (if own then o else .not o)), xs)
+def gateOwn (dE nR nO : Nat) (own : Bool) (S : List (Slot 1)) : List (Slot 1) :=
+  S.map fun (f, xs) => let o := isOwnT dE nR nO xs[0]; (Term.share (.and f (if own then o else .not o)), xs)
 
 /-- The own effect at the queue place `k`: whether a flagged own slot holds that place, and its effect (`dflt`, any
 term of the effect's sort, where none does). An internal step runs the own effect at its place. -/
-def queueAt (dflt : Term) (S : List Slot) (k : Term) : Term × Term :=
-  (anyT (S.map fun (f, xs) => .and f (.eq (xs.headD tt) k)),
-    pickT dflt (S.map fun (f, xs) => (f, .eq (xs.headD tt) k, xs.getD 1 tt)))
+def queueAt (dflt : Term) (S : List (Slot 2)) (k : Term) : Term × Term :=
+  (anyT (S.map fun (f, xs) => .and f (.eq xs[0] k)),
+    pickT dflt (S.map fun (f, xs) => (f, .eq xs[0] k, xs[1])))
 
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
@@ -51,7 +51,7 @@ def EOwn (L : Layout) (e : Ty) : EffectV e × Nat → List Val → Prop :=
 
 /-- The own slots hold, where flagged, the own commands and queries `os` with their places in the queue from `q0`, in
 some order. -/
-def OwnRel (M : Model) (L : Layout) (S : List Slot) (os : List (EffectV e)) (q0 : Nat) : Prop :=
+def OwnRel (M : Model) (L : Layout) (S : List (Slot 2)) (os : List (EffectV e)) (q0 : Nat) : Prop :=
   ∃ sv zs, SlotsDen M S sv ∧ (∀ p ∈ sv, p.2.length = 2) ∧ Holds2 (EOwn L e) zs sv ∧ zs.Perm (os.zipIdx q0)
 
 /-- The variant test reads whether an effect is an own command or query. -/
@@ -98,7 +98,7 @@ theorem request_of_rel (ho : L.ownsOf e = []) {x : EffectV e} {z : Val} (h : Rel
 theorem ownRel_nil (q0 : Nat) : OwnRel M L [] ([] : List (EffectV e)) q0 :=
   ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], by simp⟩
 
-theorem ownRel_append {S S' : List Slot} {os os' : List (EffectV e)} {q0 : Nat} (h : OwnRel M L S os q0)
+theorem ownRel_append {S S' : List (Slot 2)} {os os' : List (EffectV e)} {q0 : Nat} (h : OwnRel M L S os q0)
     (h' : OwnRel M L S' os' (q0 + os.length)) : OwnRel M L (S ++ S') (os ++ os') q0 := by
   obtain ⟨sv, zs, hS, hw, hh, hp⟩ := h
   obtain ⟨sv', zs', hS', hw', hh', hp'⟩ := h'
@@ -190,7 +190,7 @@ theorem startSlots_map (m : MachineV r e) {α : Type} {κ : α → m.key.den0} {
       RelV L (Ty.option (.dsl .effect [e])) (G v) ((g w).denote M)) :
     (ws : List StartSlot) → (sv : List (Bool × List Val)) → (E : List α) →
     SlotsDen M (ws.map StartSlot.slot) sv → Holds2 (EOpt (L := L) m κ F) E sv →
-    ∃ sv', SlotsDen M (ws.map fun w => (w.1, [w.key, g w])) sv' ∧ Holds2 (EOpt (L := L) m κ fun a => G (F a)) E sv'
+    ∃ sv', SlotsDen M (ws.map fun w => (w.1, (⟨[w.key, g w], rfl⟩ : SlotItems 2))) sv' ∧ Holds2 (EOpt (L := L) m κ fun a => G (F a)) E sv'
   | [], [], E, _, hE => by
     cases E with
     | nil => exact ⟨[], trivial, trivial⟩
@@ -215,7 +215,7 @@ theorem startSlots_map (m : MachineV r e) {α : Type} {κ : α → m.key.den0} {
 /-- An effect list's slots gated by the variant test hold, where occupied, the requests (`own` false) or the own
 commands and queries among the effects, in order. -/
 theorem gateOwn_rel {dE nE : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE)) (own : Bool) :
-    (S : List Slot) → (sv : List (Bool × List Val)) → (effs : List (EffectV e)) → SlotsDen M S sv →
+    (S : List (Slot 1)) → (sv : List (Bool × List Val)) → (effs : List (EffectV e)) → SlotsDen M S sv →
     Holds2 (EBag L (.dsl .effect [e])) effs sv →
     ∃ sv', SlotsDen M (gateOwn dE (L.effectsOf e).length (L.ownsOf e).length own S) sv' ∧
       Holds2 (EBag L (.dsl .effect [e])) (effs.filter fun x => own == !x.isRequest) sv'
@@ -233,12 +233,11 @@ theorem gateOwn_rel {dE nE : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, n
       | x :: effs, ⟨⟨z, hz, hxz⟩, hh⟩ =>
         obtain ⟨sv', h1, h2⟩ := gateOwn_rel hE own S sv effs hS hh
         rw [hz] at hx
-        obtain ⟨t, rfl, ht⟩ : ∃ t, xs = [t] ∧ t.denote M = z := by
-          match xs, hx with
-          | [t], hx => simp only [Term.denotes, List.cons.injEq, and_true] at hx; exact ⟨t, rfl, hx⟩
+        obtain ⟨t, rfl⟩ := xs.one
+        have ht : t.denote M = z := by simpa [Term.denotes] using hx
         have ho := isOwn_den (M := M) hE (t := t) (by rw [ht]; exact hxz)
         refine ⟨(own == !x.isRequest, [z]) :: sv', ⟨?_, by simp [Term.denotes, ht], h1⟩, ?_⟩
-        · cases own <;> simp [Term.denote, hf, ho, Val.toBool]
+        · cases own <;> simp [Term.denote, hf, ho, Val.toBool, SlotItems.getElem_mk]
         · cases hp : (own == !x.isRequest)
           · have hfl : (x :: effs).filter (fun x => own == !x.isRequest) = effs.filter (fun x => own == !x.isRequest) :=
               List.filter_cons_of_neg (by simp [hp])
@@ -254,7 +253,7 @@ theorem gateOwn_rel {dE nE : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, n
 
 /-- T2 for an effect list's own slots: the own slots hold, where occupied, the effects in list order at the places from
 `q0`, and the place term after them denotes the place after them. -/
-theorem ownSlots_rel : (S : List Slot) → (sv : List (Bool × List Val)) → (os : List (EffectV e)) → SlotsDen M S sv →
+theorem ownSlots_rel : (S : List (Slot 1)) → (sv : List (Bool × List Val)) → (os : List (EffectV e)) → SlotsDen M S sv →
     Holds2 (EBag L (.dsl .effect [e])) os sv → {q : Term} → {q0 : Nat} → q.denote M = .int q0 →
     (ownSlots S q).2.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L (ownSlots S q).1 os q0
   | [], [], os, _, hh, q, q0, hq => by
@@ -262,7 +261,7 @@ theorem ownSlots_rel : (S : List Slot) → (sv : List (Bool × List Val)) → (o
     | nil => exact ⟨by simpa [ownSlots] using hq, ownRel_nil q0⟩
     | cons _ _ => exact hh.elim
   | (f, xs) :: S, (b, vs) :: sv, os, ⟨hf, hx, hS⟩, hh, q, q0, hq => by
-    have hl : (Term.denotes M [q, xs.headD tt]).length = 2 := rfl
+    have hl : (Term.denotes M [q, xs[0]]).length = 2 := rfl
     cases b with
     | false =>
       have hq' : (Term.share (.add q (.ite f (.int 1) (.int 0)))).denote M = .int q0 := by
@@ -278,9 +277,8 @@ theorem ownSlots_rel : (S : List Slot) → (sv : List (Bool × List Val)) → (o
           simp [Term.denote_share, Term.denote, hq, hf, Val.toInt, Val.toBool]
         obtain ⟨h1, sv', zs, hS', hw, hh', hp⟩ := ownSlots_rel S sv os hS hh hq'
         rw [hz] at hx
-        obtain ⟨t, rfl, ht⟩ : ∃ t, xs = [t] ∧ t.denote M = z := by
-          match xs, hx with
-          | [t], hx => simp only [Term.denotes, List.cons.injEq, and_true] at hx; exact ⟨t, rfl, hx⟩
+        obtain ⟨t, rfl⟩ := xs.one
+        have ht : t.denote M = z := by simpa [Term.denotes] using hx
         refine ⟨by show (ownSlots S _).2.denote M = _; rw [h1]; simp; omega, (true, _) :: sv', (x, q0) :: zs,
           ⟨hf, rfl, hS'⟩, ?_, ⟨⟨z, by simp [Term.denotes, hq, ht], hxz⟩, hh'⟩, ?_⟩
         · simp only [List.mem_cons, forall_eq_or_imp]
@@ -290,12 +288,12 @@ theorem ownSlots_rel : (S : List Slot) → (sv : List (Bool × List Val)) → (o
   | [], _ :: _, _, h, _, _, _, _ | _ :: _, [], _, h, _, _, _, _ => h.elim
 
 theorem queueAt_slots (dflt : Term) {k : Term} {K : Int} (hk : k.denote M = .int K) :
-    (S : List Slot) → (sv : List (Bool × List Val)) → (zs : List (EffectV e × Nat)) → SlotsDen M S sv →
+    (S : List (Slot 2)) → (sv : List (Bool × List Val)) → (zs : List (EffectV e × Nat)) → SlotsDen M S sv →
     Holds2 (EOwn L e) zs sv →
-    ((S.map fun (f, xs) => Term.and f (.eq (xs.headD tt) k)).any fun t => (t.denote M).toBool) =
+    ((S.map fun (f, xs) => Term.and f (.eq xs[0] k)).any fun t => (t.denote M).toBool) =
         (zs.any fun z => (z.2 : Int) == K) ∧
       ∀ z, zs.find? (fun z => (z.2 : Int) == K) = some z →
-        RelV L (.dsl .effect [e]) z.1 ((pickT dflt (S.map fun (f, xs) => (f, .eq (xs.headD tt) k, xs.getD 1 tt))).denote M)
+        RelV L (.dsl .effect [e]) z.1 ((pickT dflt (S.map fun (f, xs) => (f, .eq xs[0] k, xs[1]))).denote M)
   | [], [], zs, _, hh => by
     cases zs with
     | nil => exact ⟨rfl, fun z h => by simp at h⟩
@@ -321,31 +319,29 @@ theorem queueAt_slots (dflt : Term) {k : Term} {K : Int} (hk : k.denote M = .int
       | z :: zs, ⟨⟨zx, hz, hzx⟩, hh⟩ =>
         obtain ⟨h1, h2⟩ := queueAt_slots dflt hk S sv zs hS hh
         rw [← hx] at hz
-        obtain ⟨a, c, rfl, ha, hc⟩ : ∃ a c, xs = [a, c] ∧ a.denote M = .int (z.2 : Int) ∧ c.denote M = zx := by
-          match xs, hz with
-          | [a, c], hz =>
-            simp only [Term.denotes, List.cons.injEq, and_true] at hz
-            exact ⟨a, c, rfl, hz.1, hz.2⟩
-          | [], hz | [_], hz | _ :: _ :: _ :: _, hz => simp [Term.denotes] at hz
+        obtain ⟨a, c, rfl⟩ := xs.two
+        simp only [Term.denotes, List.cons.injEq, and_true] at hz
+        obtain ⟨ha, hc⟩ := hz
         have hhit : (Term.eq a k).denote M = .bool ((z.2 : Int) == K) := by
           show Val.bool (a.denote M == k.denote M) = _
           rw [ha, hk]; rfl
         refine ⟨?_, fun z' hz' => ?_⟩
-        · simp only [List.map_cons, List.any_cons, hand, List.headD_cons, hhit, Val.toBool, Bool.true_and]
+        · simp only [List.map_cons, List.any_cons, hand, SlotItems.getElem_mk, List.getElem_cons_zero, hhit, Val.toBool,
+            Bool.true_and]
           congr 1
-        · simp only [List.map_cons, hpick, List.headD_cons, hhit, Val.toBool, Bool.true_and]
+        · simp only [List.map_cons, hpick, SlotItems.getElem_mk, List.getElem_cons_zero, hhit, Val.toBool, Bool.true_and]
           cases hq : ((z.2 : Int) == K)
           · simp only [List.find?_cons, hq] at hz'
             exact h2 z' hz'
           · simp only [List.find?_cons, hq, Option.some.injEq] at hz'
             subst hz'
-            simp only [ite_true, List.getD_cons_succ, List.getD_cons_zero, hc]
+            simp only [ite_true, List.getElem_cons_succ, List.getElem_cons_zero, hc]
             exact hzx
   | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ => h.elim
 
 /-- T2 for the queue's head at place `q0 + i`: a flagged own slot holds that place exactly when the queue has an `i`-th
 own effect, and then the effect term denotes it. -/
-theorem queueAt_rel (dflt : Term) {S : List Slot} {os : List (EffectV e)} {q0 : Nat} (h : OwnRel M L S os q0)
+theorem queueAt_rel (dflt : Term) {S : List (Slot 2)} {os : List (EffectV e)} {q0 : Nat} (h : OwnRel M L S os q0)
     {k : Term} (i : Nat) (hk : k.denote M = .int ((q0 + i : Nat) : Int)) :
     (queueAt dflt S k).1.denote M = .bool (decide (i < os.length)) ∧
       ∀ hi : i < os.length, RelV L (.dsl .effect [e]) os[i] ((queueAt dflt S k).2.denote M) := by

@@ -355,15 +355,15 @@ def defaultWith : Ty → Option Term
   | .bag t => do
     let (d, n) ← L.find? (.bag t)
     let (dt, _) ← L.find? (.tuple [Ty.bool, t])
-    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultWith t])))
+    pure (slotsTerm d dt (List.replicate n (.bool false, ⟨[← defaultWith t], rfl⟩)))
   | .table k v => do
     let (d, n) ← L.find? (.table k v)
     let (dt, _) ← L.find? (.tuple [Ty.bool, k, v])
-    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultWith k, ← defaultWith v])))
+    pure (slotsTerm d dt (List.replicate n (.bool false, ⟨[← defaultWith k, ← defaultWith v], rfl⟩)))
   | .list t => do
     let (d, n) ← L.find? (.list t)
     let (dt, _) ← L.find? (.tuple [Ty.bool, t])
-    pure (slotsTerm d dt (List.replicate n (.bool false, [← defaultWith t])))
+    pure (slotsTerm d dt (List.replicate n (.bool false, ⟨[← defaultWith t], rfl⟩)))
   | .dsl k a => dsl k a
   | .fn .. | .param _ => none
 def defaultsWith : List Ty → Option (List Term)
@@ -397,53 +397,73 @@ def collD (c : Ty) (item : List Ty) : Except Refusal (Nat × Nat × Nat) :=
   | some (d, n), some (dt, _) => .ok (d, n, dt)
   | _, _ => .error (lacks c)
 
+theorem mapM_some_length {α β : Type} (g : α → Option β) : (xs : List α) → (ys : List β) → xs.mapM g = some ys →
+    ys.length = xs.length
+  | [], ys, h => by simp only [List.mapM_nil, pure, Option.some.injEq] at h; subst h; rfl
+  | x :: xs, ys, h => by
+    rw [List.mapM_cons] at h
+    cases hx : g x with
+    | none => simp [hx, bind, Option.bind] at h
+    | some y =>
+      cases hxs : xs.mapM g with
+      | none => simp [hx, hxs, bind, Option.bind] at h
+      | some ys' =>
+        simp only [hx, hxs, bind, Option.bind, pure, Option.some.injEq] at h
+        subst h
+        simp [mapM_some_length g xs ys' hxs]
+
+/-- A term of each item type, for the items of free slots. -/
+def defaultItems (item : List Ty) : Except Refusal (SlotItems item.length) :=
+  match h : item.mapM (defaultT L) with
+  | some xs => .ok ⟨xs, mapM_some_length _ _ _ h⟩
+  | none => .error (.outside "an item type without a default term")
+
 /-- `n` free slots. -/
-def emptySlots (item : List Ty) (n : Nat) : Except Refusal (List Slot) := do
-  let xs ← need "an item type without a default term" (item.mapM (defaultT L))
-  pure (List.replicate n (.bool false, xs))
+def emptySlots (item : List Ty) (n : Nat) : Except Refusal (List (Slot item.length)) := do
+  pure (List.replicate n (.bool false, ← defaultItems L item))
 
 /-- The collection of type `c` with items `item` holding the slots `S`, carried into its own slot count, with the
 condition that they fit. -/
-def collOf (c : Ty) (item : List Ty) (S : List Slot) : Except Refusal (Term × Term) := do
+def collOf (c : Ty) (item : List Ty) (S : List (Slot item.length)) : Except Refusal (Term × Term) := do
   let (d, n, dt) ← collD L c item
-  let dflt ← need "an item type without a default term" (item.mapM (defaultT L))
+  let dflt ← defaultItems L item
   let rs := resizeSlots d dt dflt n S
   pure (slotsTerm d dt rs.1, rs.2)
 
 /-- A function's code applied to a slot's items. -/
-def slotApply {ps : List Ty} {r : Ty} (f : Codes ps → Except Refusal (Code r × Term)) (xs : List Term) :
+def slotApply {ps : List Ty} {r : Ty} {w : Nat} (f : Codes ps → Except Refusal (Code r × Term)) (xs : SlotItems w) :
     Except Refusal (Code r × Term) := do
-  f (← need "an item that has no term" (Codes.ofTerms? ps xs))
+  f (← need "an item that has no term" (Codes.ofTerms? ps xs.1))
 
 /-- A function's code applied to each slot's items: the term of its result and its condition. -/
-def slotTerms {ps : List Ty} {r : Ty} (f : Codes ps → Except Refusal (Code r × Term)) (S : List Slot) :
+def slotTerms {ps : List Ty} {r : Ty} {w : Nat} (f : Codes ps → Except Refusal (Code r × Term)) (S : List (Slot w)) :
     Except Refusal (List (Term × Term)) :=
   S.mapM fun sl => do
     let (v, c) ← slotApply f sl.2
     pure (← need "a result that has no term" (Code.term? r v), c)
 
 /-- Whether a slot's key differs from `key`, as `table.remove` compares: in either direction. -/
-def keepQs (key : Term) (S : List Slot) : List Term :=
-  S.map fun (_, xs) => .not (.or (.eq key (xs.headD key)) (.eq (xs.headD key) key))
+def keepQs (key : Term) (S : List (Slot 2)) : List Term :=
+  S.map fun (_, xs) => .not (.or (.eq key xs[0]) (.eq xs[0] key))
 
 /-- The table's slots after `table.insert`: the key's slot freed, then the entry in the first free slot. -/
-def putSlots (S : List Slot) (k v : Term) : List Slot × Term :=
-  let (S', p) := insertSlots [k, v] tt (filterSlots S (keepQs k S))
+def putSlots (S : List (Slot 2)) (k v : Term) : List (Slot 2) × Term :=
+  let (S', p) := insertSlots ⟨[k, v], rfl⟩ tt (filterSlots S (keepQs k S))
   (S', .not p)
 
 def need' {α : Type} (what : String) (b : Bool) (a : α) : Except Refusal α :=
   if b then .ok a else .error (.outside what)
 
 /-- The slots `T` where `f` holds and `S` where it does not, slot by slot. -/
-def iteSlots (f : Term) (T S : List Slot) : List Slot :=
-  List.zipWith (fun a b => (.ite f a.1 b.1, List.zipWith (.ite f) a.2 b.2)) T S
+def iteSlots {w : Nat} (f : Term) (T S : List (Slot w)) : List (Slot w) :=
+  List.zipWith (fun a b => (.ite f a.1 b.1, ⟨List.zipWith (.ite f) a.2.1 b.2.1, by simp [a.2.2, b.2.2]⟩)) T S
 
 /-- The table's slots after `table.insert` of each pair a list's slots hold, occupied ones in order, shared after each
 insertion, with the condition that each found a slot. `dp` is the pairs' datatype. -/
-def putFrom (d dt dp : Nat) : List Slot → List Slot → List Slot × Term
+def putFrom (d dt dp : Nat) : List (Slot 2) → List (Slot 1) → List (Slot 2) × Term
   | S, [] => (S, tt)
   | S, (f, xs) :: P =>
-    let (S', c) := putSlots S (.sel dp 0 0 (xs.headD tt)) (.sel dp 0 1 (xs.headD tt))
+    let (S', c) := putSlots S (.sel dp 0 0 xs[0]) (.sel dp 0 1 xs[0])
     let T := iteSlots f S' S
     let (S'', c') := putFrom d dt dp (slotsOf d dt T.length 2 (slotsTerm d dt T)) P
     (S'', andT (.ite f c tt) c')
@@ -454,16 +474,16 @@ def listOf (t : Ty) (items : List Term) : Except Refusal (Term × Term) := do
   let (d, n, dt) ← collD L (.list t) [t]
   let dflt ← need "an item type without a default term" (defaultT L t)
   if items.length ≤ n then
-    pure (slotsTerm d dt (items.map (tt, [·]) ++ List.replicate (n - items.length) (.bool false, [dflt])), tt)
-  else pure (slotsTerm d dt [], .bool false)
+    pure (slotsTerm d dt (items.map (tt, ⟨[·], rfl⟩) ++ List.replicate (n - items.length) (.bool false, ⟨[dflt], rfl⟩)), tt)
+  else pure (slotsTerm (w := 1) d dt [], .bool false)
 
 /-- Whether each slot's key is `key`. -/
-def hitQs (key : Term) (S : List Slot) : List Term := S.map fun sl => .eq key (sl.2.headD key)
+def hitQs (key : Term) (S : List (Slot 2)) : List Term := S.map fun sl => .eq key sl.2[0]
 
 /-- A lookup of `key` in a table's slots: whether an occupied slot has the key, and the value of the first that has
 it (`dv` when none has). A table's keys are unique, so the first is the only one, whatever the slots' order. -/
-def lookupT (key dv : Term) (S : List Slot) : Term × Term :=
-  (anySlotT S (hitQs key S), pickT dv (List.zipWith (fun sl q => (sl.1, q, sl.2.getD 1 dv)) S (hitQs key S)))
+def lookupT (key dv : Term) (S : List (Slot 2)) : Term × Term :=
+  (anySlotT S (hitQs key S), pickT dv (List.zipWith (fun sl q => (sl.1, q, sl.2[1])) S (hitQs key S)))
 
 /-- The table's slots and the lookup of the key's code in them. -/
 def lookupCode (k v : Ty) (t key : Term) : Except Refusal (Term × Term) := do
@@ -473,18 +493,18 @@ def lookupCode (k v : Ty) (t key : Term) : Except Refusal (Term × Term) := do
   pure (lookupT kt dv (slotsOf d dt n 2 t))
 
 /-- How often `x` occurs among the occupied slots' items, by SMT-LIB's `=`. -/
-def countEqT (x : Term) (S : List Slot) : Term := countT S (S.map fun sl => .eq x (sl.2.headD x))
+def countEqT (x : Term) (S : List (Slot 1)) : Term := countT S (S.map fun sl => .eq x sl.2[0])
 
 /-- `==` on bags: as many items, and each item of the first occurs as often in the second. -/
-def bagEqT (A B : List Slot) : Term :=
+def bagEqT (A B : List (Slot 1)) : Term :=
   .and (.eq (sizeT A) (sizeT B))
-    (allSlotT A (A.map fun sl => .eq (countEqT (sl.2.headD tt) A) (countEqT (sl.2.headD tt) B)))
+    (allSlotT A (A.map fun sl => .eq (countEqT sl.2[0] A) (countEqT sl.2[0] B)))
 
 /-- `==` on tables: as many entries, and each key of the first has an equal value in the second. -/
-def tableEqT (dv : Term) (A B : List Slot) : Term :=
+def tableEqT (dv : Term) (A B : List (Slot 2)) : Term :=
   .and (.eq (sizeT A) (sizeT B))
     (allSlotT A (A.map fun sl =>
-      .and (lookupT (sl.2.headD dv) dv B).1 (.eq (sl.2.getD 1 dv) (lookupT (sl.2.headD dv) dv B).2)))
+      .and (lookupT sl.2[0] dv B).1 (.eq sl.2[1] (lookupT sl.2[0] dv B).2)))
 
 /-- Gleam's `==`: SMT-LIB's `=` where codes are unique, and multiset or map equality over the slots of bags and
 tables, whose slots can hold the same items in another order. -/
@@ -529,7 +549,7 @@ def pickCode (lt : Term → Term → Term) (a : Ty) (b : Term) (f : Codes [a] �
   let ws := ks.map fun k => Term.share (.eq (countT S (ks.map fun k' => .not (lt k k'))) (.int 1))
   let dv ← need "an item type without a default term" (defaultT L a)
   let found ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 0
-    [pickT dv (List.zipWith (fun sl w => (sl.1, w, sl.2.headD dv)) S ws)]
+    [pickT dv (List.zipWith (fun sl w => (sl.1, w, sl.2[0])) S ws)]
   let tie ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 1 [← adtCtor L 4 [] [[], []] 1 []]
   let empty ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 1 [← adtCtor L 4 [] [[], []] 0 []]
   pure (.ite (anySlotT S ws) found (.ite (anySlotT S (S.map fun _ => tt)) tie empty), guardsT S (R.map (·.2)))
@@ -594,7 +614,7 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let S := slotsOf d dt n 1 b
     let R ← slotTerms f S
     let (r, c) ← collOf L (.bag ((Ty.param 1).inst args)) [(Ty.param 1).inst args]
-      (mapSlots (fun _ q => [q]) S (R.map (·.1)))
+      (mapSlots (fun _ q => ⟨[q], rfl⟩) S (R.map (·.1)))
     pure (r, andT (guardsT S (R.map (·.2))) c)
   | .bagAny, args, _ => .ok fun (b, f, ()) => do
     let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
@@ -609,14 +629,14 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
   | .bagInsert, args, _ => .ok fun (b, x, ()) => do
     let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
     let xt ← need "an item that has no term" (Code.term? _ x)
-    let (S', p) := insertSlots [xt] tt (slotsOf d dt n 1 b)
+    let (S', p) := insertSlots ⟨[xt], rfl⟩ tt (slotsOf d dt n 1 b)
     pure (slotsTerm d dt S', .not p)
   | .bagContains, args, _ => .ok fun (b, x, ()) => do
     let a := (Ty.param 0).inst args
     let (d, n, dt) ← collD L (.bag a) [a]
     let xt ← need' "an item type whose == is not SMT-LIB's =" a.eqable (← need "an item that has no term" (Code.term? _ x))
     let S := slotsOf d dt n 1 b
-    pure (anySlotT S (S.map fun sl => .eq xt (sl.2.headD xt)), tt)
+    pure (anySlotT S (S.map fun sl => .eq xt sl.2[0]), tt)
   | .bagMinBy, args, _ => .ok fun (b, f, ()) => pickCode L (fun k k' => .lt k k') ((Ty.param 0).inst args) b f
   | .bagMaxBy, args, _ => .ok fun (b, f, ()) => pickCode L (fun k k' => .lt k' k) ((Ty.param 0).inst args) b f
   | .tableNew, args, _ => .ok fun () => do
@@ -640,18 +660,18 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let S := slotsOf d dt n 2 t
     let R ← slotTerms f S
     let (r, c) ← collOf L (.table k ((Ty.param 2).inst args)) [k, (Ty.param 2).inst args]
-      (mapSlots (fun xs q => [xs.headD q, q]) S (R.map (·.1)))
+      (mapSlots (fun xs q => ⟨[xs[0], q], rfl⟩) S (R.map (·.1)))
     pure (r, andT (guardsT S (R.map (·.2))) c)
   | .tableKeys, args, _ => .ok fun (t, ()) => do
     let k := (Ty.param 0).inst args
     let (d, n, dt) ← collD L (.table k ((Ty.param 1).inst args)) [k, (Ty.param 1).inst args]
     let S := slotsOf d dt n 2 t
-    collOf L (.bag k) [k] (mapSlots (fun xs q => [xs.headD q]) S (S.map fun _ => tt))
+    collOf L (.bag k) [k] (mapSlots (fun xs _ => ⟨[xs[0]], rfl⟩) S (S.map fun _ => tt))
   | .tableValues, args, _ => .ok fun (t, ()) => do
     let v := (Ty.param 1).inst args
     let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) v) [(Ty.param 0).inst args, v]
     let S := slotsOf d dt n 2 t
-    collOf L (.bag v) [v] (mapSlots (fun xs q => [xs.getD 1 q]) S (S.map fun _ => tt))
+    collOf L (.bag v) [v] (mapSlots (fun xs _ => ⟨[xs[1]], rfl⟩) S (S.map fun _ => tt))
   | .tableCount, args, _ => .ok fun (t, f, ()) => do
     let (d, n, dt) ← collD L (.table ((Ty.param 0).inst args) ((Ty.param 1).inst args))
       [(Ty.param 0).inst args, (Ty.param 1).inst args]

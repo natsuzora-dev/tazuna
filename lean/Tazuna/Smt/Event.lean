@@ -136,7 +136,7 @@ and the terms of the state and the received value. -/
 def encodeEvent (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     {i : Fin v.subscribes.length} (ec : EventCode v i) (S : SymState v) (value : Term) : Except Refusal (Encoded (EventOut v)) := do
   let (et, cw) ← encodeWrap ec value
-  let (o, c) ← encodeEvents L T v shs senv ec.apply S.now [(tt, [et])] S.records S.machines S.nextId (.int 0)
+  let (o, c) ← encodeEvents L T v shs senv ec.apply S.now [(tt, ⟨[et], rfl⟩)] S.records S.machines S.nextId (.int 0)
   let ⟨fo, cf, cx⟩ ← encodeFinish L T P v shs senv ec.apply ec.invariants S.now S.fresh S.pending o
   pure ⟨⟨et, o, fo⟩, andT cw (andT c cf), cx⟩
 
@@ -176,13 +176,13 @@ theorem event_encode {P : List AnySite} (chk : Checked P T v)
   have hevT : Holds M cw → Forall2 (fun ev y => ∃ z, y = [z] ∧ RelV L v.event (Ty.up _ v.event_data ev) z) [ev]
       (occupied [(true, [et.denote M])]) := fun hcw => ⟨⟨_, rfl, ew.2 hcw⟩, trivial⟩
   have e2 : ∀ hcw : Holds M cw, (Holds M ce' ↔ eventsFit L.count T s [ev]) := fun hcw =>
-    (events_encode chk hshs g1 hc1 senv [(tt, [et])] [(true, [et.denote M])]
-      ⟨rfl, rfl, trivial⟩ (by simp) [ev] (hevT hcw) s hR.now hR.records hR.machines hev).1
+    (events_encode chk hshs g1 hc1 senv [(tt, ⟨[et], rfl⟩)] [(true, [et.denote M])]
+      ⟨rfl, rfl, trivial⟩ [ev] (hevT hcw) s hR.now hR.records hR.machines hev).1
   have ef := fun (hcw : Holds M cw) (hc : Holds M ce') =>
     finish_encode chk hshs g1 hc1 g3 hc3 senv s
       .accepted { state := s } rfl hinv hR.now hR.pending
       (loop_acc (T := T) chk hshs g1 hc1 senv
-        { state := s } hR.now (S := [(tt, [et])]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩ (by simp)
+        { state := s } hR.now (S := [(tt, ⟨[et], rfl⟩)]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩
         (evs := [ev]) (hevT hcw) hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh hev hc)
       (applyEvents_ok chk.reactions _ rfl hinv _) hf hcx
   rw [holds_andT, holds_andT]

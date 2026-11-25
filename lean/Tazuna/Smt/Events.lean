@@ -94,12 +94,12 @@ structure EventsOut (v : ServiceV) where
   records : Term
   tables : PerMachine Term v.machines
   nextId : Term
-  news : List Slot
-  owns : List Slot
+  news : List (Slot 2)
+  owns : List (Slot 2)
   queued : Term
 
 /-- The slots with each flag and-ed with `f`. -/
-def gateSlots (f : Term) (S : List Slot) : List Slot := S.map fun (g, xs) => (Term.share (.and f g), xs)
+def gateSlots {w : Nat} (f : Term) (S : List (Slot w)) : List (Slot w) := S.map fun (g, xs) => (Term.share (.and f g), xs)
 
 section
 variable (L : Layout) (T : List TypeDecl)
@@ -110,11 +110,11 @@ place (own commands and queries), then every reaction's effects follow; the cond
 applications. -/
 def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (now : Term) :
-    List Slot → (records : Term) → (xs : PerMachine Term v.machines) → (n q : Term) →
+    List (Slot 1) → (records : Term) → (xs : PerMachine Term v.machines) → (n q : Term) →
     Except Refusal (EventsOut v × Term)
   | [], records, xs, n, q => pure (⟨records, xs, n, [], [], q⟩, tt)
   | (f, ys) :: S, records, xs, n, q => do
-    let ev := Term.share (ys.headD tt)
+    let ev := Term.share ys[0]
     let rc ← need "records that have no term" (Code.ofTerm? v.records records)
     let ec ← need "an event that has no term" (Code.ofTerm? v.event ev)
     let (r', ca) ← apply (rc, ec, ())
@@ -134,108 +134,15 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 
-theorem ownStarts_width {m : MachineV r e} {dopt : Nat} {none : Bool} {os : List (StartSlot)} {q : Term}
-    {oS : List Slot} {q' : Term} (h : ownStarts L T m dopt none os q = .ok (oS, q')) : ∀ sl ∈ oS, sl.2.length = 2 := by
-  unfold ownStarts at h
-  split at h
-  · cases pure_ok.1 h; simp
-  · obtain ⟨S, -, h⟩ := bind_ok.1 h
-    cases pure_ok.1 h
-    intro sl hsl
-    obtain ⟨⟨f, xs⟩, -, rfl⟩ := List.mem_map.1 hsl
-    rfl
-
-theorem encodeStarts_width {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {senv : StepEnv L shs} :
-    (ms : List (MachineV r e)) → (sts : PerMachine (List StartSlot) ms) → {n q : Term} → {news : List Slot} →
-    {n' : Term} → {owns : List Slot} → {q' : Term} →
-    encodeStarts L T shs ds senv ms sts n q = .ok (news, n', owns, q') →
-    (∀ sl ∈ news, sl.2.length = 2) ∧ ∀ sl ∈ owns, sl.2.length = 2
-  | [], .nil, _, _, _, _, _, _, h => by
-    simp only [encodeStarts, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
-    obtain ⟨rfl, -, rfl, -⟩ := h
-    simp
-  | m :: ms, .cons st sts, _, _, _, _, _, _, h => by
-    obtain ⟨⟨dk, nk⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨js, -, h⟩ := bind_ok.1 h
-    obtain ⟨dflt, -, h⟩ := bind_ok.1 h
-    obtain ⟨S, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨oS, q1⟩, h5, h⟩ := bind_ok.1 h
-    obtain ⟨⟨rest, n'', orest, q''⟩, h4, h⟩ := bind_ok.1 h
-    cases pure_ok.1 h
-    have ih := encodeStarts_width ms sts h4
-    refine ⟨fun sl hsl => ?_, fun sl hsl => ?_⟩
-    · rcases List.mem_append.1 hsl with hsl | hsl
-      · obtain ⟨⟨f, xs⟩, -, rfl⟩ := List.mem_map.1 hsl
-        rfl
-      · exact ih.1 sl hsl
-    · rcases List.mem_append.1 hsl with hsl | hsl
-      · exact ownStarts_width h5 sl hsl
-      · exact ih.2 sl hsl
-
-theorem reactSlots_width {dE dP dk : Nat} {dflt : Term} {js : List Nat} :
-    (S : List Slot) → (n : Term) → ∀ sl ∈ (reactSlots dE dP dk dflt js S n).1, sl.2.length = 2
-  | [], _ => by simp [reactSlots]
-  | (f, xs) :: S, n => by
-    intro sl hsl
-    simp only [reactSlots, List.mem_cons] at hsl
-    rcases hsl with rfl | hsl
-    · rfl
-    · exact reactSlots_width S _ sl hsl
-
-theorem ownSlots_width : (S : List Slot) → (q : Term) → ∀ sl ∈ (ownSlots S q).1, sl.2.length = 2
-  | [], _ => by simp [ownSlots]
-  | (f, xs) :: S, q => by
-    intro sl hsl
-    simp only [ownSlots, List.mem_cons] at hsl
-    rcases hsl with rfl | hsl
-    · rfl
-    · exact ownSlots_width S _ sl hsl
-
-theorem encodeReactions_width {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {dE dP : Nat} :
-    (xs : List (ReactionV r e)) → {records now ev n q : Term} → {news : List Slot} → {n' : Term} →
-    {owns : List Slot} → {q' c : Term} →
-    encodeReactions L shs ds dE dP xs records now ev n q = .ok (news, n', owns, q', c) →
-    (∀ sl ∈ news, sl.2.length = 2) ∧ ∀ sl ∈ owns, sl.2.length = 2
-  | [], _, _, _, _, _, _, _, _, _, _, h => by
-    simp only [encodeReactions, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
-    obtain ⟨rfl, -, rfl, -⟩ := h
-    simp
-  | x :: xs, _, _, _, _, _, _, _, _, _, _, h => by
-    obtain ⟨⟨rc, c0⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨ctxT, -, h⟩ := bind_ok.1 h
-    obtain ⟨cx, -, h⟩ := bind_ok.1 h
-    obtain ⟨evc, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨l, c1⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨lt, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨d, nl, dt⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨dk, nk⟩, -, h⟩ := bind_ok.1 h
-    obtain ⟨js, -, h⟩ := bind_ok.1 h
-    obtain ⟨dflt, -, h⟩ := bind_ok.1 h
-    obtain ⟨⟨rest, n'', orest, q'', c2⟩, h10, h⟩ := bind_ok.1 h
-    cases pure_ok.1 h
-    have ih := encodeReactions_width xs h10
-    refine ⟨fun sl hsl => ?_, fun sl hsl => ?_⟩
-    · rcases List.mem_append.1 hsl with hsl | hsl
-      · exact reactSlots_width _ _ sl hsl
-      · exact ih.1 sl hsl
-    · rcases List.mem_append.1 hsl with hsl | hsl
-      · have hw : ∀ (b : Bool) (S : List Slot) (q : Term),
-            ∀ sl ∈ (if b then (([] : List Slot), q) else ownSlots S q).1, sl.2.length = 2 := by
-          intro b S q; cases b
-          · exact ownSlots_width S q
-          · simp
-        exact hw _ _ _ sl hsl
-      · exact ih.2 sl hsl
-
-theorem gate_true {f : Term} (hf : f.denote M = .bool true) :
-    {S : List Slot} → {sv : List (Bool × List Val)} → SlotsDen M S sv → SlotsDen M (gateSlots f S) sv
+theorem gate_true {f : Term} (hf : f.denote M = .bool true) {w : Nat} :
+    {S : List (Slot w)} → {sv : List (Bool × List Val)} → SlotsDen M S sv → SlotsDen M (gateSlots f S) sv
   | [], [], _ => trivial
   | (g, xs) :: S, (b, vs) :: sv, ⟨hg, hxs, hS⟩ =>
     ⟨by simp [Term.denote, hf, hg, Val.toBool], hxs, gate_true hf (S := S) (sv := sv) hS⟩
   | [], _ :: _, h | _ :: _, [], h => h.elim
 
 theorem newsRel_gate {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {f : Term}
-    (hf : f.denote M = .bool true) {S : List Slot} {effs : List (Sender × EffectV e)} {n0 : Nat}
+    (hf : f.denote M = .bool true) {S : List (Slot 2)} {effs : List (Sender × EffectV e)} {n0 : Nat}
     (h : NewsRel M L shs ds S effs n0) : NewsRel M L shs ds (gateSlots f S) effs n0 := by
   obtain ⟨sv, zs, hS, hw, hh, xs, hp, hq⟩ := h
   exact ⟨sv, zs, gate_true hf hS, hw, hh, xs, hp, hq⟩
@@ -246,43 +153,41 @@ theorem denotes_length : (xs : List Term) → (Term.denotes M xs).length = xs.le
 
 /-- Slots gated by a false flag hold nothing. -/
 theorem newsRel_gate_false {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {f : Term}
-    (hf : f.denote M = .bool false) {S : List Slot} (hw : ∀ sl ∈ S, sl.2.length = 2) (n0 : Nat) :
+    (hf : f.denote M = .bool false) {S : List (Slot 2)} (n0 : Nat) :
     NewsRel M L shs ds (gateSlots f S) [] n0 := by
-  have hS : SlotsDen M (gateSlots f S) (S.map fun sl => (false, Term.denotes M sl.2)) := by
+  have hS : SlotsDen M (gateSlots f S) (S.map fun sl => (false, Term.denotes M sl.2.1)) := by
     induction S with
     | nil => trivial
-    | cons sl S ih =>
-      exact ⟨by simp [Term.denote, hf, Val.toBool], rfl, ih fun sl' h => hw sl' (by simp [h])⟩
-  have hocc : occupied (S.map fun sl => (false, Term.denotes M sl.2)) = [] := by
+    | cons sl S ih => exact ⟨by simp [Term.denote, hf, Val.toBool], rfl, ih⟩
+  have hocc : occupied (S.map fun sl => (false, Term.denotes M sl.2.1)) = [] := by
     induction S with
     | nil => rfl
     | cons sl S ih => simp [occupied]
   refine ⟨_, [], hS, ?_, by simp [Holds2, hocc, Forall2], [], by simp, trivial⟩
   intro p hp
-  obtain ⟨sl, hsl, rfl⟩ := List.mem_map.1 hp
-  simp [denotes_length, hw sl hsl]
+  obtain ⟨sl, -, rfl⟩ := List.mem_map.1 hp
+  simp [denotes_length, sl.2.2]
 
-theorem ownRel_gate {f : Term} (hf : f.denote M = .bool true) {S : List Slot} {os : List (EffectV e)} {q0 : Nat}
+theorem ownRel_gate {f : Term} (hf : f.denote M = .bool true) {S : List (Slot 2)} {os : List (EffectV e)} {q0 : Nat}
     (h : OwnRel M L S os q0) : OwnRel M L (gateSlots f S) os q0 := by
   obtain ⟨sv, zs, hS, hw, hh, hp⟩ := h
   exact ⟨sv, zs, gate_true hf hS, hw, hh, hp⟩
 
 /-- Own slots gated by a false flag hold nothing. -/
-theorem ownRel_gate_false {f : Term} (hf : f.denote M = .bool false) {S : List Slot}
-    (hw : ∀ sl ∈ S, sl.2.length = 2) (q0 : Nat) : OwnRel M L (gateSlots f S) ([] : List (EffectV e)) q0 := by
-  have hS : SlotsDen M (gateSlots f S) (S.map fun sl => (false, Term.denotes M sl.2)) := by
+theorem ownRel_gate_false {f : Term} (hf : f.denote M = .bool false) {S : List (Slot 2)}
+    (q0 : Nat) : OwnRel M L (gateSlots f S) ([] : List (EffectV e)) q0 := by
+  have hS : SlotsDen M (gateSlots f S) (S.map fun sl => (false, Term.denotes M sl.2.1)) := by
     induction S with
     | nil => trivial
-    | cons sl S ih =>
-      exact ⟨by simp [Term.denote, hf, Val.toBool], rfl, ih fun sl' h => hw sl' (by simp [h])⟩
-  have hocc : occupied (S.map fun sl => (false, Term.denotes M sl.2)) = [] := by
+    | cons sl S ih => exact ⟨by simp [Term.denote, hf, Val.toBool], rfl, ih⟩
+  have hocc : occupied (S.map fun sl => (false, Term.denotes M sl.2.1)) = [] := by
     induction S with
     | nil => rfl
     | cons sl S ih => simp [occupied]
   refine ⟨_, [], hS, ?_, by simp [Holds2, hocc, Forall2], by simp⟩
   intro p hp
-  obtain ⟨sl, hsl, rfl⟩ := List.mem_map.1 hp
-  simp [denotes_length, hw sl hsl]
+  obtain ⟨sl, -, rfl⟩ := List.mem_map.1 hp
+  simp [denotes_length, sl.2.2]
 
 theorem machinesRel_mem {v : ServiceV} : (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
     (sms : List (Step.MachineState v.records v.event)) → MachinesRel M L T ms xs sms → ∀ sm ∈ sms, sm.1 ∈ ms
@@ -316,9 +221,10 @@ section
 variable {L : Layout} {T : List TypeDecl} {M : Model}
 
 /-- An occupied slot of one item holds one term, denoting the item. -/
-theorem one_item {ys : List Term} {z : Val} (h : Term.denotes M ys = [z]) : ∃ t, ys = [t] ∧ t.denote M = z := by
-  match ys, h with
-  | [t], h => simp only [Term.denotes, List.cons.injEq, and_true] at h; exact ⟨t, rfl, h⟩
+theorem one_item {ys : SlotItems 1} {z : Val} (h : Term.denotes M ys.1 = [z]) :
+    ∃ t, ys = ⟨[t], rfl⟩ ∧ t.denote M = z := by
+  obtain ⟨t, rfl⟩ := ys.one
+  simp only [Term.denotes, List.cons.injEq, and_true] at h; exact ⟨t, rfl, h⟩
 
 
 end
@@ -346,7 +252,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca0 : Term} (hap : v.apply.code L = .ok (apply, ca0))
     (hca0 : Holds M ca0) (senv : StepEnv L shs) {now : Term} :
-    (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 1) →
+    (S : List (Slot 1)) → (sv : List (Bool × List Val)) → SlotsDen M S sv →
     (evs : List v.event.den0) → Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv →
     (s : State v) → now.denote M = .int s.now →
     {records : Term} → RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M) →
@@ -360,7 +266,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
       NewsRel M L shs v.declared o.news (Step.reqsOf (Step.reactAll T s evs).2) n0 ∧
       o.queued.denote M = .int ((q0 + (Step.queuedOf (Step.reactAll T s evs).2).length : Nat) : Int) ∧
       OwnRel M L o.owns (Step.queuedOf (Step.reactAll T s evs).2) q0)
-  | [], [], _, _, evs, hev, s, _, records, hrec, xs, hms, n, q, o, c, henc => by
+  | [], [], _, evs, hev, s, _, records, hrec, xs, hms, n, q, o, c, henc => by
     cases evs with
     | cons _ _ => exact hev.elim
     | nil =>
@@ -369,7 +275,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
       refine ⟨by simp [holds_tt, eventsFit], fun hn hq _ => ?_⟩
       exact ⟨hrec, hms, by simpa [Step.reactAll] using hn, ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2],
         [], by simp [Step.reactAll], trivial⟩, by simpa [Step.reactAll] using hq, ownRel_nil _⟩
-  | (f, ys) :: S, (b, vs) :: sv, ⟨hf, hys, hS⟩, hw, evs, hev, s, hnow, records, hrec, xs, hms, n, q, o, c, henc => by
+  | (f, ys) :: S, (b, vs) :: sv, ⟨hf, hys, hS⟩, evs, hev, s, hnow, records, hrec, xs, hms, n, q, o, c, henc => by
     have hor : ∀ m ∈ v.machines, m.key.orderable = true := fun m hm => (chk.keys m hm).1
     have happ := v.apply.code_fn v.apply.ht hap hca0
     obtain ⟨rc, h1, henc⟩ := bind_ok.1 henc
@@ -381,7 +287,6 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     obtain ⟨⟨rnews, nR, rown, qR, cr⟩, h7, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o', c'⟩, h8, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
-    have hw' : ∀ p ∈ sv, p.2.length = 1 := fun p hp => hw p (by simp [hp])
     refine ⟨?_, fun {n0 q0} hn hq hc => ?_⟩
     · rw [holds_andT]
       cases b with
@@ -393,7 +298,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
           (by simpa using hms)
         rw [holds_ite_tt (b := false) (by simp [hf, Val.toBool])]
         simp only [Bool.false_eq_true, false_implies, true_and]
-        exact (events_encode chk hshs hap hca0 senv S sv hS hw' evs (by simpa [Holds2, occupied] using hev) s hnow hrec'
+        exact (events_encode chk hshs hap hca0 senv S sv hS evs (by simpa [Holds2, occupied] using hev) s hnow hrec'
           hms' h8).1
       | true =>
         match evs, hev with
@@ -401,7 +306,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
           obtain ⟨t, rfl, ht⟩ := one_item (hys.trans hz)
           rw [holds_ite_tt (b := true) (by simp [hf, Val.toBool])]
           simp only [true_implies, eventsFit]
-          have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share ([t].headD tt)).denote M) := by
+          have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share (⟨[t], rfl⟩ : SlotItems 1)[0]).denote M) := by
             simpa [ht] using hez
           let recs' := v.apply.fn (s.records, ev, ())
           have hrc : Smt.Rel M L v.records (Ty.up _ v.records_data s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
@@ -434,7 +339,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
               have hms' := machinesRel_pick (T := T) hf v.machines (outs.map (·.table)) xs _
                 (by simpa using hrel)
               have hre := react_eq (T := T) s ev
-              exact (events_encode chk hshs hap hca0 senv S sv hS hw' evs hrest (Step.react T s ev).1 hnow
+              exact (events_encode chk hshs hap hca0 senv S sv hS evs hrest (Step.react T s ev).1 hnow
                 (by rw [hre]; exact hrec') (by rw [hre]; exact hms') h8).1
           rw [holds_andT, holds_andT]
           constructor
@@ -445,18 +350,6 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             have hcm := (e2 hca).2 p1
             exact ⟨⟨hca, hcm, (e3 hca).2 p2⟩, (e4 hca hcm).2 p3⟩
     · obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-      have hw6 := encodeStarts_width _ _ h6
-      have hw7 := encodeReactions_width _ h7
-      have hwid : ∀ sl ∈ news ++ rnews, sl.2.length = 2 := by
-        intro sl hsl
-        rcases List.mem_append.1 hsl with hsl | hsl
-        · exact hw6.1 sl hsl
-        · exact hw7.1 sl hsl
-      have howid : ∀ sl ∈ oS ++ rown, sl.2.length = 2 := by
-        intro sl hsl
-        rcases List.mem_append.1 hsl with hsl | hsl
-        · exact hw6.2 sl hsl
-        · exact hw7.2 sl hsl
       have hfl : ∀ a b : List (Sender × EffectV v.event), Step.reqsOf (a ++ b) = Step.reqsOf a ++ Step.reqsOf b ∧
           Step.queuedOf (a ++ b) = Step.queuedOf a ++ Step.queuedOf b := fun _ _ => by
         simp [Step.reqsOf, Step.queuedOf, List.filter_append]
@@ -469,12 +362,12 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
           (by simpa using hms)
         have hn' : (Term.share (.ite f nR n)).denote M = .int n0 := by simpa [Term.denote, hf, Val.toBool] using hn
         have hq' : (Term.share (.ite f qR q)).denote M = .int q0 := by simpa [Term.denote, hf, Val.toBool] using hq
-        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hap hca0 senv S sv hS hw' evs
+        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hap hca0 senv S sv hS evs
           (by simpa [Holds2, occupied] using hev) s hnow hrec' hms' h8).2 hn' hq' hc2
         refine ⟨r1, r2, r3, ?_, r5, ?_⟩
-        · have := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hf hwid n0) (by simpa using r4)
+        · have := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hf (S := news ++ rnews) n0) (by simpa using r4)
           simpa using this
-        · have := ownRel_append (ownRel_gate_false (M := M) (L := L) (e := v.event) hf howid q0) (by simpa using r6)
+        · have := ownRel_append (ownRel_gate_false (M := M) (L := L) (e := v.event) hf (S := oS ++ rown) q0) (by simpa using r6)
           simpa using this
       | true =>
         match evs, hev with
@@ -483,7 +376,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
           have hc1' : Holds M (andT ca (andT cm cr)) := by simpa [Holds, Term.denote, hf, Val.toBool] using hc1
           obtain ⟨hca, hcm, hcr⟩ : Holds M ca ∧ Holds M cm ∧ Holds M cr := by
             rw [holds_andT, holds_andT] at hc1'; exact hc1'
-          have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share ([t].headD tt)).denote M) := by
+          have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share (⟨[t], rfl⟩ : SlotItems 1)[0]).denote M) := by
             simpa [ht] using hez
           let recs' := v.apply.fn (s.records, ev, ())
           have hrc : Smt.Rel M L v.records (Ty.up _ v.records_data s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
@@ -528,7 +421,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             congr 2
             omega
           have hre := react_eq (T := T) s ev
-          obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hap hca0 senv S sv hS hw' evs
+          obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hap hca0 senv S sv hS evs
             hrest (Step.react T s ev).1 hnow (by rw [hre]; exact hrec') (by rw [hre]; exact hms')
             h8).2 hn' hq' hc2
           have hlen : (Step.react T s ev).2 = startedBy T s recs' ev ++ reactedBy s recs' ev := by rw [hre]
@@ -551,8 +444,8 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             have hA := ownRel_append hown1' (e3 ▸ hown2)
             rw [← (hfl _ _).2] at hA
             exact ownRel_append (ownRel_gate hf hA) r6
-  | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _, _, _, _, _
-  | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => h.elim
+  | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _, _, _, _
+  | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _, _, _, _ => h.elim
 
 end
 

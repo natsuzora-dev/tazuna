@@ -203,7 +203,7 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
       evs c6 h21).1
     rw [this]; unfold Fun.appFits; rw [hfit]
   have hview : ∀ (ans : (Ty.result Ty.nil x.rejection).den0), Smt.Rel M L _ (Ty.up _ hrn ans) ac → Holds M c5 →
-      Holds M c6 → ∃ sv, SlotsDen M (slotsOf dl dt nl 1 evt) sv ∧ (∀ p ∈ sv, p.2.length = 1) ∧
+      Holds M c6 → ∃ sv, SlotsDen M (slotsOf dl dt nl 1 evt) sv ∧
         Holds2 (EBag L v.event) (((site.fn env).fn ⟨ans, ()⟩).map (Ty.up _ v.event_data)) sv := fun ans hac hc5 hc6 => by
     have hoa := encode_agrees site.defs site.defs.eval (site.defs.encode L) (Defs.encode_agrees M L site.defs)
       site.body σ _ hσ oa c5 h20 hc5
@@ -212,9 +212,9 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
     have hevs2 := hoa' _ (ac, ()) (rels1 hrn hta hac) evs c6 h21 hc6
     erw [Ty.up_fn _ _ _ hta hle] at hevs2
     have hevt := (rel_term (need_ok.1 h22) _).1 hevs2
-    obtain ⟨sv2, hS2, -, hsw2, hh2⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h11
+    obtain ⟨sv2, hS2, -, -, hh2⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h11
     erw [Ty.up_list _ _ v.event_data] at hh2
-    exact ⟨sv2, hS2, hsw2, hh2⟩
+    exact ⟨sv2, hS2, hh2⟩
   have etail : ∀ (s : State v) (ans : (Ty.result Ty.nil x.rejection).den0), Smt.Rel M L _ (Ty.up _ hrn ans) ac →
       now.denote M = .int s.now → RelV L v.records (Ty.up _ v.records_data s.records) (dc.after.records.denote M) →
       MachinesRel M L T v.machines dc.after.tables s.machines →
@@ -222,8 +222,8 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
     rw [holds_andT, holds_andT]
     have e7 : Holds M c5 → Holds M c6 → (Holds M c7 ↔ eventsFit L.count T s ((site.fn env).fn ⟨ans, ()⟩)) :=
       fun hc5 hc6 => by
-        obtain ⟨sv2, hS2, hsw2, hh2⟩ := hview ans hac hc5 hc6
-        exact (events_encode chk hshs happ hca senv _ sv2 hS2 hsw2 _ hh2 s hnw hr hm h23).1
+        obtain ⟨sv2, hS2, hh2⟩ := hview ans hac hc5 hc6
+        exact (events_encode chk hshs happ hca senv _ sv2 hS2 _ hh2 s hnw hr hm h23).1
     constructor
     · rintro ⟨hc5, hc6, hc7⟩
       exact ⟨e5.1 hc5, (e6 ans hac hc5).1 hc6, (e7 hc5 hc6).1 hc7⟩
@@ -242,8 +242,8 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
     fun a2 q1 ans hac hnw hr hm hf hn2 hq2 h567 => by
       obtain ⟨hc5, hc6, hc7⟩ : Holds M c5 ∧ Holds M c6 ∧ Holds M c7 := by
         rw [holds_andT, holds_andT] at h567; exact h567
-      obtain ⟨sv2, hS2, hsw2, hh2⟩ := hview ans hac hc5 hc6
-      exact loop_acc (T := T) chk hshs happ hca senv a2 hnw hS2 hsw2 hh2 hr hm hn2 hq2 hf h23 hc7
+      obtain ⟨sv2, hS2, hh2⟩ := hview ans hac hc5 hc6
+      exact loop_acc (T := T) chk hshs happ hca senv a2 hnw hS2 hh2 hr hm hn2 hq2 hf h23 hc7
   have hacR : ∀ j, RelV L x.rejection (Ty.up _ x.data.rejection j) (dc.rejection.denote M) →
       dc.ok.denote M = .bool false → Smt.Rel M L _ (Ty.up _ hrn (.inr (.inl (j, ())))) ac := fun j hrj hokf => by
     have herr := adtCtor_rel (L := L) (M := M) (vs := [[Ty.nil], [x.rejection]]) ⟨1, by simp⟩ _ _ h18
@@ -478,9 +478,9 @@ theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pe
         have hevs := hoa' _ (out, ()) (rels1 x.data.output hta hres) evs c4 h10 hc4
         erw [Ty.up_fn _ _ _ hta hle] at hevs
         have hevt := (rel_term (need_ok.1 h11) _).1 hevs
-        obtain ⟨sv, hS, -, hsw, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
+        obtain ⟨sv, hS, -, -, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
         erw [Ty.up_list _ _ v.event_data] at hh
-        exact (events_encode chk hshs happ hca senv _ sv hS hsw _ hh a.state hnow hrec hms h13).1
+        exact (events_encode chk hshs happ hca senv _ sv hS _ hh a.state hnow hrec hms h13).1
       rw [holds_andT, holds_andT]
       constructor
       · rintro ⟨hc3, hc4, hc5⟩
@@ -542,11 +542,11 @@ theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pe
     have hevs := hoa' _ (out, ()) (rels1 x.data.output hta hres) evs c4 h10 hc4
     erw [Ty.up_fn _ _ _ hta hle] at hevs
     have hevt := (rel_term (need_ok.1 h11) _).1 hevs
-    obtain ⟨sv, hS, -, hsw, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
+    obtain ⟨sv, hS, -, -, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
     erw [Ty.up_list _ _ v.event_data] at hh
     let evs1 : List v.event.den0 := (site.fn env).fn ⟨x.resolve.fn ⟨Step.ctx a.state a.state.records caller input, ()⟩, ()⟩
     change Holds2 (EBag L v.event) (evs1.map (Ty.up _ v.event_data)) sv at hh
-    exact loop_acc (T := T) chk hshs happ hca senv a hnow hS hsw hh hrec hms hn hq hfresh h13 hc5
+    exact loop_acc (T := T) chk hshs happ hca senv a hnow hS hh hrec hms hn hq hfresh h13 hc5
 
 end
 

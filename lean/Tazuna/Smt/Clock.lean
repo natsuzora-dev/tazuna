@@ -67,9 +67,9 @@ def dueOf {r e : Ty} {m : MachineV r e} (now : Int) (i : Step.Instance m) : Opti
   i.timer.bind fun (d, _) => if d ≤ now then some d else none
 
 /-- Per slot of a table, whether it holds a timer due at `now`, and its deadline. -/
-def dueSlots (de dent dp : Nat) (So : List Slot) (now : Term) : List (Term × Term) :=
+def dueSlots (de dent dp : Nat) (So : List (Slot 2)) (now : Term) : List (Term × Term) :=
   So.map fun (f, xs) =>
-    let tm := Term.sel de 0 1 (xs.getD 1 tt)
+    let tm := Term.sel de 0 1 xs[1]
     let dl := Term.sel dp 0 0 (Term.sel dent 0 0 tm)
     (.and f (.and (.is dent 0 tm) (.le dl now)), dl)
 
@@ -173,8 +173,9 @@ variable {L : Layout} {M : Model} {r e : Ty}
 
 /-- The timer term of a table slot denotes the timer of the instance it holds. -/
 theorem item_timer (m : MachineV r e) {de nde : Nat} (hde : L.find? (instEntry m.state) = some (de, nde))
-    (y : m.key.den × (instEntry m.state).den) (xs : List Term) (h : ETab L m.key (instEntry m.state) y (Term.denotes M xs)) :
-    RelV L _ (Ty.up _ m.timer_data (timerVal (instOfD m y).timer)) ((Term.sel de 0 1 (xs.getD 1 tt)).denote M) := by
+    (y : m.key.den × (instEntry m.state).den) (xs : SlotItems 2)
+    (h : ETab L m.key (instEntry m.state) y (Term.denotes M xs.1)) :
+    RelV L _ (Ty.up _ m.timer_data (timerVal (instOfD m y).timer)) ((Term.sel de 0 1 xs[1]).denote M) := by
   obtain ⟨zk, zv, hvs, hk, hv⟩ := h
   obtain ⟨xk, xe, rfl, hxk, hxe⟩ := pair_terms hvs
   have hy2 : Ty.up _ m.entry_data (Ty.down _ m.entry_data y.2) = y.2 := Ty.up_down _ _ _
@@ -185,14 +186,14 @@ theorem item_timer (m : MachineV r e) {de nde : Nat} (hde : L.find? (instEntry m
   rw [← hy2] at hv
   obtain ⟨v0, v1, hzv, -, hv1⟩ := (entry_rel_iff m hde st t zv).1 hv
   have hsel : (Term.sel de 0 1 xe).denote M = v1 := by rw [sel_ctor 1 (hxe.trans hzv)]; rfl
-  simp only [List.getD_cons_succ, List.getD_cons_zero]
+  simp only [SlotItems.getElem_mk, List.getElem_cons_succ, List.getElem_cons_zero]
   rw [hsel, hinst]; simpa [val_timerOf] using hv1
 
 /-- The due terms of a table's slots denote, slot by slot, the due deadlines of the instances they hold. -/
 theorem dueSlots_rel (m : MachineV r e) {de nde dent nent dp np : Nat} (hde : L.find? (instEntry m.state) = some (de, nde))
     (hdent : L.find? (Ty.option (.tuple [.int, m.state])) = some (dent, nent))
     (hdp : L.find? (.tuple [.int, m.state]) = some (dp, np)) {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
-    {So : List Slot} → {sv : List (Bool × List Val)} → {ys : List (m.key.den × (instEntry m.state).den)} →
+    {So : List (Slot 2)} → {sv : List (Bool × List Val)} → {ys : List (m.key.den × (instEntry m.state).den)} →
     SlotsDen M So sv → Holds2 (ETab L m.key (instEntry m.state)) ys sv →
     ∃ os, Forall2 (DueRel M) (dueSlots de dent dp So now) os ∧
       os.filterMap id = (ys.map (instOfD m)).filterMap (dueOf tnow)
@@ -224,7 +225,7 @@ theorem dueSlots_rel (m : MachineV r e) {de nde dent nent dp np : Nat} (hde : L.
           | some p =>
             obtain ⟨dl, tg⟩ := p
             have hX := hdl dl tg htm
-            generalize Term.sel dp 0 0 (Term.sel dent 0 0 (Term.sel de 0 1 (xs.getD 1 tt))) = X at hX ⊢
+            generalize Term.sel dp 0 0 (Term.sel dent 0 0 (Term.sel de 0 1 xs[1])) = X at hX ⊢
             simp only [Term.denote, hX, hnow, Val.toBool, Val.toInt, Option.isSome_some, Bool.true_and,
               Option.bind_some]
             by_cases hle : dl ≤ tnow <;> simp [hle]
@@ -365,10 +366,10 @@ round's wire ids after the earlier rounds'), the next wire id after them, whethe
 slots of the own commands and queries the rounds queue with the queue place after them. -/
 structure RoundsOut (ms : List (MachineV r e)) where
   tables : PerMachine Term ms
-  news : List Slot
+  news : List (Slot 2)
   nextId : Term
   over : Term
-  owns : List Slot
+  owns : List (Slot 2)
   queued : Term
 
 /-- The pending slots of the requests a round's start slots start, machine by machine, with how many, and the own
@@ -376,7 +377,7 @@ slots of the own commands and queries they queue, with how many. A round fires a
 slot takes the round's next id `nid` and every own slot the round's queue place `q`. -/
 def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (senv : StepEnv L shs) :
     (ms : List (MachineV r e)) → PerMachine (List StartSlot) ms → (nid q : Term) →
-    Except Refusal (List Slot × Term × List Slot × Term)
+    Except Refusal (List (Slot 2) × Term × List (Slot 2) × Term)
   | [], .nil, _, _ => pure ([], .int 0, [], .int 0)
   | m :: ms, .cons st sts, nid, q => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
@@ -424,7 +425,7 @@ theorem own_once (m : MachineV v.records v.event) {dopt nopt : Nat}
   obtain ⟨svS, ys, hS', hyp, hy⟩ := once_starts m hopt κ F hX hh hEp hone hq
   refine ⟨hcount, ?_⟩
   obtain ⟨sv', zs, h1, -, h3, h4, h5⟩ := mapItems_den (M := M) (Q := fun (y : (Sender × EffectV v.event) × Nat) z =>
-    z = (y.1.2, y.2)) (E' := EOwn L v.event) (fun xs => [xs.headD tt, xs.getD 2 tt]) 2 (fun _ => rfl) (by
+    z = (y.1.2, y.2)) (E' := EOwn L v.event) (fun xs : SlotItems 3 => (⟨[xs[0], xs[2]], rfl⟩ : SlotItems 2)) (by
       rintro ⟨⟨snd, eff⟩, id⟩ xs ⟨k, zk, zx, hvs, -, -, hzx⟩
       obtain ⟨a, b, c, rfl, ha, -, hc⟩ := triple_terms hvs
       exact ⟨(eff, id), ⟨zx, by simp [Term.denotes, ha, hc], hzx⟩, rfl⟩) hS' hy
@@ -449,7 +450,7 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     (ms : List (MachineV v.records v.event)) → (sts : PerMachine (List StartSlot) ms) →
     (effss : List (List (Sender × EffectV v.event))) → StartsRel M L T ms sts effss → effss.flatten.length ≤ 1 →
     (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
-    {news : List Slot} → {cnt : Term} → {owns : List Slot} → {ocnt : Term} →
+    {news : List (Slot 2)} → {cnt : Term} → {owns : List (Slot 2)} → {ocnt : Term} →
     roundStarts L shs ds senv ms sts nid q = .ok (news, cnt, owns, ocnt) →
     cnt.denote M = .int (Step.reqsOf effss.flatten).length ∧ NewsRel M L shs ds news (Step.reqsOf effss.flatten) n0 ∧
       ocnt.denote M = .int (Step.queuedOf effss.flatten).length ∧ OwnRel M L owns (Step.queuedOf effss.flatten) q0

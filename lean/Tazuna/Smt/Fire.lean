@@ -70,19 +70,20 @@ def leT (t : Ty) (x y : Term) : Term :=
   | none => tt
 
 /-- Per slot of a table: whether its timer has the deadline `d`. -/
-def hitsT (de dent dp : Nat) (So : List Slot) (d : Term) : List Term :=
-  So.map fun (_, xs) => hitT dent dp (.sel de 0 1 (xs.getD 1 tt)) d
+def hitsT (de dent dp : Nat) (So : List (Slot 2)) (d : Term) : List Term :=
+  So.map fun (_, xs) => hitT dent dp (.sel de 0 1 xs[1]) d
 
 /-- One slot's part of a firing round: its new entry, the effect option it starts, and the condition of `after` and
 `effect` where the slot fires. It fires where no earlier machine fired (`done`), its timer has the deadline `d`, and
 every slot with that deadline has a key no smaller. -/
 def fireAt (m : MachineV r e) (after : Code (Ty.fn [Ty.machineCtx m.key m.state r] (Ty.option (Ty.timer m.state))))
     (fx : Code (Ty.fn [Ty.machineCtx m.key m.state r] (Ty.option (.dsl .effect [e]))))
-    (de dent dp : Nat) (So : List Slot) (done d records now noneT : Term) : Slot → Except Refusal (Term × Term × Term)
+    (de dent dp : Nat) (So : List (Slot 2)) (done d records now noneT : Term) :
+    Slot 2 → Except Refusal (Term × Term × Term)
   | (_, xs) => do
-    let key := xs.headD tt
-    let tm := Term.sel de 0 1 (xs.getD 1 tt)
-    let les := So.map fun (_, ys) => Term.or (.not (hitT dent dp (.sel de 0 1 (ys.getD 1 tt)) d)) (leT L T m.key key (ys.headD tt))
+    let key := xs[0]
+    let tm := Term.sel de 0 1 xs[1]
+    let les := So.map fun (_, ys) => Term.or (.not (hitT dent dp (.sel de 0 1 ys[1]) d)) (leT L T m.key key ys[0])
     let fires := Term.share (.and (.not done) (.and (hitT dent dp tm d) (allSlotT So les)))
     let tg := targetT dent dp tm
     let nctx ← need "a context that has no term" (Code.ofTerm? _ (← instCtxT L m key tg records now))
@@ -90,7 +91,7 @@ def fireAt (m : MachineV r e) (after : Code (Ty.fn [Ty.machineCtx m.key m.state 
     let at_ ← need "a timer that has no term" (Code.term? _ a)
     let (x, cx) ← fx (nctx, ())
     let xt ← need "an effect that has no term" (Code.term? _ x)
-    pure (.ite fires (.ctor de 0 [tg, ← timerT L m now at_]) (xs.getD 1 tt), .ite fires xt noneT, .ite fires (andT c cx) tt)
+    pure (.ite fires (.ctor de 0 [tg, ← timerT L m now at_]) xs[1], .ite fires xt noneT, .ite fires (andT c cx) tt)
 
 /-- What a firing round encodes on one machine: the new instance table, whether some slot has the deadline, and per
 slot its flag, key and the effect option it starts. -/
@@ -112,8 +113,8 @@ def encodeFire (m : MachineV r e) (after : Code (Ty.fn [Ty.machineCtx m.key m.st
   let _ ← need "a key type without order terms" (ordT L T m.key tt tt)
   let So := slotsOf dd dt n 2 tbl
   let outs ← So.mapM (fireAt L T m after fx de dent dp So done d records now (.ctor dopt 1 []))
-  pure (⟨slotsTerm dd dt (mapSlots (fun xs q => [xs.headD tt, q]) So (outs.map (·.1))), anySlotT So (hitsT de dent dp So d),
-      List.zipWith (fun (f, xs) q => ⟨f, xs.headD tt, q⟩) So (outs.map (·.2.1))⟩,
+  pure (⟨slotsTerm dd dt (mapSlots (fun xs q => (⟨[xs[0], q], rfl⟩ : SlotItems 2)) So (outs.map (·.1))),
+      anySlotT So (hitsT de dent dp So d), List.zipWith (fun (f, xs) q => ⟨f, xs[0], q⟩) So (outs.map (·.2.1))⟩,
     guardsT So (outs.map (·.2.2)))
 
 end
@@ -170,13 +171,13 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 the state the timer enters. -/
 theorem fire_item (m : MachineV r e) {de nde dent nent dp np : Nat} (hde : L.find? (instEntry m.state) = some (de, nde))
     (hdent : L.find? (Ty.option (.tuple [.int, m.state])) = some (dent, nent)) (hdp : L.find? (.tuple [.int, m.state]) = some (dp, np))
-    {d : Term} {dv : Int} (hd : d.denote M = .int dv) (y : m.key.den × (instEntry m.state).den) (xs : List Term)
-    (h : ETab L m.key (instEntry m.state) y (Term.denotes M xs)) :
-    RelV L m.key (Ty.up _ m.key_data (instOfD m y).key) ((xs.headD tt).denote M) ∧
-      (hitT dent dp (.sel de 0 1 (xs.getD 1 tt)) d).denote M = .bool (Step.hitsAt dv (instOfD m y)) ∧
-      RelV L (instEntry m.state) (Ty.up _ m.entry_data (entryOf (instOfD m y))) ((xs.getD 1 tt).denote M) ∧
+    {d : Term} {dv : Int} (hd : d.denote M = .int dv) (y : m.key.den × (instEntry m.state).den) (xs : SlotItems 2)
+    (h : ETab L m.key (instEntry m.state) y (Term.denotes M xs.1)) :
+    RelV L m.key (Ty.up _ m.key_data (instOfD m y).key) (xs[0].denote M) ∧
+      (hitT dent dp (.sel de 0 1 xs[1]) d).denote M = .bool (Step.hitsAt dv (instOfD m y)) ∧
+      RelV L (instEntry m.state) (Ty.up _ m.entry_data (entryOf (instOfD m y))) (xs[1].denote M) ∧
       ∀ dl tg, (instOfD m y).timer = some (dl, tg) →
-        RelV L m.state (Ty.up _ m.state_data tg) ((targetT dent dp (.sel de 0 1 (xs.getD 1 tt))).denote M) := by
+        RelV L m.state (Ty.up _ m.state_data tg) ((targetT dent dp (.sel de 0 1 xs[1])).denote M) := by
   obtain ⟨zk, zv, hvs, hk, hv⟩ := h
   obtain ⟨xk, xe, rfl, hxk, hxe⟩ := pair_terms hvs
   have hku : Ty.up _ m.key_data (instOfD m y).key = y.1 := Ty.up_down _ _ _
@@ -193,6 +194,7 @@ theorem fire_item (m : MachineV r e) {de nde dent nent dp np : Nat} (hde : L.fin
   have ht : RelV L _ (Ty.up _ m.timer_data (timerVal (instOfD m y).timer)) ((Term.sel de 0 1 xe).denote M) := by
     rw [hsel, hinst]; simpa [val_timerOf] using hv1
   obtain ⟨hhit, htg⟩ := timer_terms m hdent hdp (instOfD m y) hd ht
+  simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ]
   refine ⟨hku ▸ hxk ▸ hk, hhit, heu ▸ hxe ▸ hy2 ▸ hv, htg⟩
 end
 
@@ -211,25 +213,26 @@ theorem perm_any {α : Type} {l l' : List α} (h : l.Perm l') (p : α → Bool) 
 theorem fires_den (m : MachineV r e) {de nde dent nent dp np : Nat} (hde : L.find? (instEntry m.state) = some (de, nde))
     (hdent : L.find? (Ty.option (.tuple [.int, m.state])) = some (dent, nent)) (hdp : L.find? (.tuple [.int, m.state]) = some (dp, np))
     {done d : Term} {b : Bool} {dv : Int} (hdone : done.denote M = .bool b) (hd : d.denote M = .int dv)
-    (hord : ∀ a b, ∃ p, ordT L T m.key a b = some p) (tbl : m.table.den0) {So : List Slot}
+    (hord : ∀ a b, ∃ p, ordT L T m.key a b = some p) (tbl : m.table.den0) {So : List (Slot 2)}
     {sv : List (Bool × List Val)} {ys : List (m.key.den × (instEntry m.state).den)} (hS : SlotsDen M So sv)
     (hh : Holds2 (ETab L m.key (instEntry m.state)) ys sv) (hperm : (ys.map (instOfD m)).Perm (instancesOf T m tbl))
-    (yi : m.key.den × (instEntry m.state).den) (xsi : List Term) (hi : ETab L m.key (instEntry m.state) yi (Term.denotes M xsi)) :
-    (Term.and (.not done) (.and (hitT dent dp (.sel de 0 1 (xsi.getD 1 tt)) d)
-      (allSlotT So (So.map fun (_, ys') => Term.or (.not (hitT dent dp (.sel de 0 1 (ys'.getD 1 tt)) d))
-        (leT L T m.key (xsi.headD tt) (ys'.headD tt)))))).denote M =
+    (yi : m.key.den × (instEntry m.state).den) (xsi : SlotItems 2)
+    (hi : ETab L m.key (instEntry m.state) yi (Term.denotes M xsi.1)) :
+    (Term.and (.not done) (.and (hitT dent dp (.sel de 0 1 xsi[1]) d)
+      (allSlotT So (So.map fun (_, ys') => Term.or (.not (hitT dent dp (.sel de 0 1 ys'[1]) d))
+        (leT L T m.key xsi[0] ys'[0]))))).denote M =
       .bool (!b && Step.firesIn T m dv (instancesOf T m tbl) (instOfD m yi)) := by
   have hitem := fire_item m hde hdent hdp hd
   let insts := instancesOf T m tbl
   obtain ⟨hki, hhi, -, -⟩ := hitem yi xsi hi
   have hal : AlignedV M (ETab L m.key (instEntry m.state)) (fun y v => v = .bool (!Step.hitsAt dv (instOfD m y) ||
       (Ty.cmp T m.key (instOfD m yi).key (instOfD m y).key).isLE)) So
-      (So.map fun (_, ys') => Term.or (.not (hitT dent dp (.sel de 0 1 (ys'.getD 1 tt)) d))
-        (leT L T m.key (xsi.headD tt) (ys'.headD tt))) sv ys := by
-    refine aligned_map (fun ys' => Term.or (.not (hitT dent dp (.sel de 0 1 (ys'.getD 1 tt)) d))
-      (leT L T m.key (xsi.headD tt) (ys'.headD tt))) (fun y xs h => ?_) hS hh
+      (So.map fun (_, ys') => Term.or (.not (hitT dent dp (.sel de 0 1 ys'[1]) d))
+        (leT L T m.key xsi[0] ys'[0])) sv ys := by
+    refine aligned_map (fun ys' => Term.or (.not (hitT dent dp (.sel de 0 1 ys'[1]) d))
+      (leT L T m.key xsi[0] ys'[0])) (fun y xs h => ?_) hS hh
     obtain ⟨hk, hhy, -, -⟩ := hitem y xs h
-    obtain ⟨pq, hpq⟩ := hord (xsi.headD tt) (xs.headD tt)
+    obtain ⟨pq, hpq⟩ := hord xsi[0] xs[0]
     have hod := ordT_rel L T m.key _ _ pq hpq m.key_data _ _ hki hk
     simp only [Term.denote, hhy, leT, hpq, hod.2, Val.toBool]
   have hall := allSlotT_den hal
@@ -260,12 +263,12 @@ theorem fireAt_rel (m : MachineV r e)
     (hdent : L.find? (Ty.option (.tuple [.int, m.state])) = some (dent, nent))
     (hdp : L.find? (.tuple [.int, m.state]) = some (dp, np))
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt))
-    {So : List Slot} {done d : Term} {dv : Int} (hd : d.denote M = .int dv) {fb : Bool}
-    {f : Term} {xs : List Term} (y : m.key.den × (instEntry m.state).den)
-    (hE : ETab L m.key (instEntry m.state) y (Term.denotes M xs))
-    (hfy : (Term.and (.not done) (.and (hitT dent dp (.sel de 0 1 (xs.getD 1 tt)) d)
-      (allSlotT So (So.map fun (_, ys') => Term.or (.not (hitT dent dp (.sel de 0 1 (ys'.getD 1 tt)) d))
-        (leT L T m.key (xs.headD tt) (ys'.headD tt)))))).denote M = .bool fb)
+    {So : List (Slot 2)} {done d : Term} {dv : Int} (hd : d.denote M = .int dv) {fb : Bool}
+    {f : Term} {xs : SlotItems 2} (y : m.key.den × (instEntry m.state).den)
+    (hE : ETab L m.key (instEntry m.state) y (Term.denotes M xs.1))
+    (hfy : (Term.and (.not done) (.and (hitT dent dp (.sel de 0 1 xs[1]) d)
+      (allSlotT So (So.map fun (_, ys') => Term.or (.not (hitT dent dp (.sel de 0 1 ys'[1]) d))
+        (leT L T m.key xs[0] ys'[0]))))).denote M = .bool fb)
     (hhit : fb = true → Step.hitsAt dv (instOfD m y) = true)
     {q x c : Term} (hg : fireAt L T m af fx de dent dp So done d records now (.ctor dopt 1 []) (f, xs) = .ok (q, x, c))
     (hc : Holds M c) :
@@ -313,7 +316,8 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 
-theorem forall2_guards {γ : Type} (π : γ → Term) {G : Slot → γ → Prop} : {S : List Slot} → {os : List γ} →
+theorem forall2_guards {γ : Type} {w : Nat} (π : γ → Term) {G : Slot w → γ → Prop} : {S : List (Slot w)} →
+    {os : List γ} →
     Forall2 G S os → Forall2 (fun sl c' => ∃ q, G sl q ∧ c' = .or (.not sl.1) (π q)) S
       (List.zipWith (fun (f, _) c => Term.or (.not f) c) S (os.map π))
   | [], [], _ => trivial
@@ -361,7 +365,7 @@ theorem fire_encode (m : MachineV r e) {af : Code (Ty.fn [Ty.machineCtx m.key m.
     rw [need_ok.1 h6] at this
     exact Option.isSome_iff_exists.1 (by simpa using this)
   have htbl' : Smt.Rel M L (.table m.key (instEntry m.state)) (Ty.up _ m.table_data tbl) x := htbl
-  obtain ⟨sv, ys, hS, hl, hw, hp, hh⟩ := table_view htbl' h1
+  obtain ⟨sv, ys, hS, hl, -, hp, hh⟩ := table_view htbl' h1
   have hperm : (ys.map (instOfD m)).Perm (instancesOf T m tbl) := instancesOf_perm m tbl hp
   have hitem := fire_item m hde h3 hdp hd
   have hfires := fires_den (T := T) m hde h3 hdp hdone hd hord tbl hS hh hperm
@@ -436,9 +440,9 @@ theorem fire_encode (m : MachineV r e) {af : Code (Ty.fn [Ty.machineCtx m.key m.
       firedOpt m recs tnow (!b && Step.firesIn T m dv (instancesOf T m tbl) i) i
     have hguard : ∀ (p : Term × Term × Term → Term), ((guardsT So ((outs.map fun o => (p o, o.2.2)).map (·.2))).denote M).toBool = true := by
       intro p; rw [List.map_map]; exact hc
-    have hslot : ∀ (sl : Slot) (r : Term × Term × Term) (y : m.key.den × (instEntry m.state).den),
+    have hslot : ∀ (sl : Slot 2) (r : Term × Term × Term) (y : m.key.den × (instEntry m.state).den),
         fireAt L T m af fx de dent dp So done d records now (.ctor dopt 1 []) sl = .ok r →
-        ETab L m.key (instEntry m.state) y (Term.denotes M sl.2) → Holds M r.2.2 →
+        ETab L m.key (instEntry m.state) y (Term.denotes M sl.2.1) → Holds M r.2.2 →
         RelV L (instEntry m.state) (Ty.up _ m.entry_data (entryOf (F (instOfD m y)))) (r.1.denote M) ∧
         RelV L (Ty.option (.dsl .effect [e])) (Fo (instOfD m y)) (r.2.1.denote M) := by
       rintro ⟨f, xs⟩ ⟨q, xo, cq⟩ y hG hE hcq
@@ -446,7 +450,7 @@ theorem fire_encode (m : MachineV r e) {af : Code (Ty.fn [Ty.machineCtx m.key m.
         (fun h => by simp only [Step.firesIn, Bool.and_eq_true] at h; exact h.2.1) hG hcq
     have hhits : AlignedV M (ETab L m.key (instEntry m.state)) (fun y v => v = .bool (Step.hitsAt dv (instOfD m y)))
         So (hitsT de dent dp So d) sv ys :=
-      aligned_map (fun xs => hitT dent dp (.sel de 0 1 (xs.getD 1 tt)) d) (fun y xs h => (hitem y xs h).2.1) hS hh
+      aligned_map (fun xs => hitT dent dp (.sel de 0 1 xs[1]) d) (fun y xs h => (hitem y xs h).2.1) hS hh
     have hany : (anySlotT So (hitsT de dent dp So d)).denote M = .bool ((instancesOf T m tbl).any (Step.hitsAt dv)) := by
       rw [anySlotT_den hhits, ← perm_any hperm, List.any_map]; rfl
     have hal : AlignedV M (ETab L m.key (instEntry m.state))
@@ -469,8 +473,8 @@ theorem fire_encode (m : MachineV r e) {af : Code (Ty.fn [Ty.machineCtx m.key m.
     · let g : m.key.den × (instEntry m.state).den → m.key.den × (instEntry m.state).den :=
         fun y => (y.1, Ty.up _ m.entry_data (entryOf (F (instOfD m y))))
       obtain ⟨sv', hS', hl', hw', hh'⟩ := mapSlots_den (E' := ETab L m.key (instEntry m.state)) g
-        (fun xs q => [xs.headD tt, q]) 2
-        (fun y xs q h hq => ⟨_, _, rfl, (Ty.up_down _ m.key_data y.1) ▸ (hitem y xs h).1, hq⟩) (fun _ _ => rfl) hal
+        (fun xs q => (⟨[xs[0], q], rfl⟩ : SlotItems 2))
+        (fun y xs q h hq => ⟨_, _, rfl, (Ty.up_down _ m.key_data y.1) ▸ (hitem y xs h).1, hq⟩) hal
       have hkey : ∀ i, (F i).key = i.key := fun i => by
         simp only [F]; split
         · exact Step.fired_key m recs tnow i
@@ -493,8 +497,8 @@ theorem fire_encode (m : MachineV r e) {af : Code (Ty.fn [Ty.machineCtx m.key m.
       simp only [instEntries, List.map_map]
       rfl
     · obtain ⟨svX, hSX, -, -, hhX⟩ := mapSlots_den (E' := EOpt (L := L) m Step.Instance.key Fo) (instOfD m)
-        (fun xs q => [xs.headD tt, q]) 2
-        (fun y xs q h hq => ⟨_, _, rfl, (hitem y xs h).1, hq⟩) (fun _ _ => rfl) halx
+        (fun xs q => (⟨[xs[0], q], rfl⟩ : SlotItems 2))
+        (fun y xs q h hq => ⟨_, _, rfl, (hitem y xs h).1, hq⟩) halx
       refine ⟨svX, ys.map (instOfD m), ?_, hhX, hperm⟩
       rw [List.map_zipWith]
       exact hSX

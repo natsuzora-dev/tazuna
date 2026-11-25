@@ -19,21 +19,21 @@ def startFlag (dopt : Nat) (s : StartSlot) : Term := .and s.flag (.is dopt 0 s.e
 /-- One start slot's effect slot, from all the start slots: flagged by `startFlag`, it holds the wire id (`nextId`
 plus the number of flagged slots with a smaller key), the key and the effect. -/
 def rankStart (m : MachineV r e) (dopt : Nat) (nextId : Term) (all : List (StartSlot))
-    (s : StartSlot) : Except Refusal Slot := do
+    (s : StartSlot) : Except Refusal (Slot 3) := do
   let below ← all.mapM fun s' => do
     let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.key s.key)
     pure (Term.ite (.and (startFlag dopt s') lt) (.int 1) (.int 0))
-  pure (startFlag dopt s, [Term.share (.add nextId (sumT below)), s.key, .sel dopt 0 0 s.effect])
+  pure (startFlag dopt s, ⟨[Term.share (.add nextId (sumT below)), s.key, .sel dopt 0 0 s.effect], rfl⟩)
 
 /-- The effect slots of a machine's start slots. -/
 def rankStarts (m : MachineV r e) (dopt : Nat) (nextId : Term) (starts : List (StartSlot)) :
-    Except Refusal (List Slot) :=
+    Except Refusal (List (Slot 3)) :=
   starts.mapM (rankStart L T m dopt nextId starts)
 
 /-- A start slot's effect slot where at most one slot starts an effect, so the id needs no rank: flagged by
 `startFlag`, it holds `nextId`, the key and the effect. -/
-def onceStart (dopt : Nat) (nextId : Term) (s : StartSlot) : Slot :=
-  (startFlag dopt s, [nextId, s.key, .sel dopt 0 0 s.effect])
+def onceStart (dopt : Nat) (nextId : Term) (s : StartSlot) : Slot 3 :=
+  (startFlag dopt s, ⟨[nextId, s.key, .sel dopt 0 0 s.effect], rfl⟩)
 
 /-- How many effects the start slots start. -/
 def startCount (dopt : Nat) (starts : List (StartSlot)) : Term :=
@@ -228,7 +228,7 @@ theorem below_sum {s : StartSlot} {a : α}
 
 /-- The effect slots of start slots hold, where flagged, each effect an item starts, with its wire id. -/
 theorem rank_slots {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int)) :
-    (ws : List (StartSlot)) → (sv : List (Bool × List Val)) → (E : List α) → (S : List Slot) →
+    (ws : List (StartSlot)) → (sv : List (Bool × List Val)) → (E : List α) → (S : List (Slot 3)) →
     SlotsDen M (ws.map StartSlot.slot) sv → Holds2 (EOpt (L := L) m κ F) E sv →
     Forall2 (fun s o => rankStart L T m dopt nextId all s = .ok o) ws S →
     ∃ svS, SlotsDen M S svS ∧ Holds2 (EEff (L := L) m) (E.filterMap fun a => (sentBy m κ F a).map
@@ -252,8 +252,7 @@ theorem rank_slots {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 :
         have hsum := below_sum m hopt κ F hX hh hEp (s := w) (by rw [hvs]; exact ha) (mapM_ok _ _ _ hbel)
         obtain ⟨svS, hS', hh'⟩ := rank_slots hn ws sv E S hS hE hos
         obtain ⟨zk, z, rfl, hk, hz⟩ := ha
-        rw [hden] at hvs
-        simp only [List.cons.injEq, and_true] at hvs
+        simp only [hden, List.cons.injEq, and_true] at hvs
         rcases opt_view hopt hz with ⟨x', zx, hv, hzv, hx'⟩ | ⟨hv, hzv⟩
         · have hsent : sentBy m κ F a = some (.machine m.name ⟨m.key, κ a⟩, x') := by
             simp only [sentBy, hv, Ty.toOption]; rfl
@@ -284,7 +283,7 @@ theorem rank_starts (m : MachineV r e) {dopt nopt : Nat}
     (hh : Holds2 (EOpt (L := L) m κ F) E svX) (hEp : E.Perm items)
     (hks : items.Pairwise fun a b => Ty.cmp T m.key (κ a) (κ b) = .lt)
     {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int))
-    {S : List Slot} (hS : rankStarts L T m dopt nextId starts = .ok S) :
+    {S : List (Slot 3)} (hS : rankStarts L T m dopt nextId starts = .ok S) :
     let effs := items.flatMap fun a => (sentBy m κ F a).toList
     (startCount dopt starts).denote M = .int effs.length ∧
       ∃ svS ys, SlotsDen M S svS ∧ ys.Perm (effs.zipIdx n0) ∧ Holds2 (EEff (L := L) m) ys svS := by
@@ -322,8 +321,7 @@ theorem once_slots (m : MachineV r e) {dopt nopt : Nat}
       | a :: E, ⟨ha, hE⟩ =>
         obtain ⟨svS, hS', hh'⟩ := once_slots m hopt κ F hn ws sv E hS hE
         obtain ⟨zk, z, rfl, hk, hz⟩ := ha
-        rw [hden] at hvs
-        simp only [List.cons.injEq, and_true] at hvs
+        simp only [hden, List.cons.injEq, and_true] at hvs
         rcases opt_view hopt hz with ⟨x', zx, hv, hzv, hx'⟩ | ⟨hv, hzv⟩
         · have hsent : sentBy m κ F a = some (.machine m.name ⟨m.key, κ a⟩, x') := by
             simp only [sentBy, hv, Ty.toOption]; rfl
