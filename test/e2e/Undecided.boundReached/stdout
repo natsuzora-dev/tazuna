@@ -1,0 +1,5 @@
+{"assumes":[],"kind":"Prove.proved","service":"tasks","step":"init","target":"invariant at most 2"}
+{"after":{"fresh":1,"machines":{},"nextId":0,"now":0,"pending":[],"records":{"tag":"Records","tasks":[[2,"!0!"],[3,"!0!"],[4,"task"]]}},"from":"validState","input":{"caller":{"tag":"User"},"command":"add","input":4},"kind":"Undecided.boundReached","out":[],"outcome":"fault invariant at most 2","service":"tasks","state":{"fresh":0,"machines":{},"nextId":0,"now":0,"pending":[],"records":{"tag":"Records","tasks":[[2,"!0!"],[3,"!0!"]]}},"step":"command add"}
+{"assumes":[],"kind":"Prove.proved","service":"tasks","step":"command add","target":"invariant at most 2"}
+{"kind":"Prove.withinBounds","service":"tasks","step":"clock"}
+{"assumes":[],"kind":"Prove.proved","service":"tasks","step":"clock","target":"invariant at most 2"}

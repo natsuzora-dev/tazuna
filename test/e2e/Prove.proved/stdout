@@ -1,0 +1,6 @@
+{"assumes":[],"kind":"Prove.proved","service":"counter","step":"init","target":"invariant not negative"}
+{"kind":"Prove.withinBounds","service":"counter","step":"command add"}
+{"assumes":[],"kind":"Prove.proved","service":"counter","step":"command add","target":"invariant not negative"}
+{"assumes":[],"kind":"Prove.proved","service":"counter","step":"command add","target":"add ensures grows"}
+{"kind":"Prove.withinBounds","service":"counter","step":"clock"}
+{"assumes":[],"kind":"Prove.proved","service":"counter","step":"clock","target":"invariant not negative"}

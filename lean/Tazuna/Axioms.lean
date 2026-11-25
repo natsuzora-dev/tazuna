@@ -2,6 +2,9 @@ import Lean.Elab.Command
 import Lean.Util.CollectAxioms
 import Lean.Meta.Tactic.Simp.SimpTheorems
 import Tazuna.Cli.Test
+import Tazuna.Cli.Prove
+import Tazuna.Semantics.After
+import Tazuna.Smt.Prove
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
@@ -75,6 +78,8 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.embedState_ofService, ``Tazuna.Smt.wf_ofService,
     -- In each service's layout, the step encoding meets no layout gap: refusals are the spec's, never the builder's.
     ``Tazuna.Smt.encodeStep_ofService,
+    -- A rule's name read from its terms is the literal the terms hold in every model, so a target names its rules.
+    ``Tazuna.Smt.Term.const?_denote,
     -- For U10, which asserts well-formedness, the wire-id invariant and the create bounds: each loses no model.
     ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff]
   let mut used : NameSet := {}

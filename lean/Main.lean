@@ -1,4 +1,5 @@
 import Tazuna.Cli.Test
+import Tazuna.Cli.Prove
 import Tazuna.Version
 
 /-- `tazuna-engine` prints the version. The launcher runs `tazuna-engine <command> <root> [...] --ir <path>`, with the
@@ -10,6 +11,8 @@ def main (args : List String) : IO UInt32 := do
   | ["test", root, "--ir", path] => Tazuna.Cli.test root path false
   | ["test", root, "--update", "--ir", path] => Tazuna.Cli.test root path true
   | ["verify", root, dir, "--ir", path] => Tazuna.Cli.verify root dir path
+  | ["prove", root, "--ir", path] => Tazuna.Cli.prove root path none
+  | ["prove", root, "--only", prefix_, "--ir", path] => Tazuna.Cli.prove root path (some prefix_)
   | _ =>
-    IO.eprintln "usage: tazuna-engine [check <root> | test <root> [--update] | verify <root> <traces-dir>] --ir <ir.json>"
+    IO.eprintln "usage: tazuna-engine [check <root> | test <root> [--update] | verify <root> <traces-dir> | prove <root> [--only <prefix>]] --ir <ir.json>"
     return 3

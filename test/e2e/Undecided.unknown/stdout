@@ -1,0 +1,5 @@
+{"assumes":[],"kind":"Prove.proved","service":"cubes","step":"init","target":"invariant no cube sum"}
+{"kind":"Prove.withinBounds","service":"cubes","step":"command set"}
+{"kind":"Undecided.unknown","service":"cubes","step":"command set","target":"invariant no cube sum","why":"the solver answered unknown"}
+{"kind":"Prove.withinBounds","service":"cubes","step":"clock"}
+{"assumes":[],"kind":"Prove.proved","service":"cubes","step":"clock","target":"invariant no cube sum"}

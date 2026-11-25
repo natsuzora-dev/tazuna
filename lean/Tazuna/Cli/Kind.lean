@@ -17,6 +17,28 @@ inductive Tazuna.TestKind : Type
   | badStep
 deriving DecidableEq
 
+/-- What `prove` found for one question. -/
+inductive Tazuna.ProveKind : Type
+  /-- No step of the input kind from a state of the right shape breaks the target. -/
+  | proved
+  /-- No step of the input kind from a state of the right shape leaves the slots or a side condition. -/
+  | withinBounds
+  /-- A state and input whose step breaks the target: exit code 1. -/
+  | violated
+deriving DecidableEq
+
+/-- Why `prove` has no verdict for a question: exit code 2 when nothing is violated. -/
+inductive Tazuna.UndecidedKind : Type
+  /-- The solver answered unknown or ran out of time or resources. -/
+  | unknown
+  /-- A step of the input kind can leave the slots its bounds give, so the step questions do not cover it. -/
+  | boundReached
+  /-- The spec uses what the encoding has no terms for. -/
+  | limit
+  /-- A string literal holds a code point above U+2FFFF, outside SMT-LIB's strings. -/
+  | unencodableString
+deriving DecidableEq
+
 /-- Every kind of line the engine writes to stdout. test/e2e holds one case per kind, enumerated from `Kind.all`. -/
 inductive Tazuna.Kind : Type
   /-- The IR the launcher handed over does not load: a converter bug, reported with exit code 4. -/
@@ -32,6 +54,8 @@ inductive Tazuna.Kind : Type
   | verifyDiffers
   /-- A trace line does not read as a line of the service, or breaks the order of time: exit code 1. -/
   | traceInvalid
+  | prove (k : Tazuna.ProveKind)
+  | undecided (k : Tazuna.UndecidedKind)
 
 namespace Tazuna
 
@@ -63,6 +87,25 @@ def TestKind.name : TestKind → String
   | .written => "written"
   | .badStep => "badStep"
 
+def ProveKind.all : List ProveKind := [.proved, .withinBounds, .violated]
+
+theorem ProveKind.mem_all (k : ProveKind) : k ∈ ProveKind.all := by cases k <;> simp [ProveKind.all]
+
+def ProveKind.name : ProveKind → String
+  | .proved => "proved"
+  | .withinBounds => "withinBounds"
+  | .violated => "violated"
+
+def UndecidedKind.all : List UndecidedKind := [.unknown, .boundReached, .limit, .unencodableString]
+
+theorem UndecidedKind.mem_all (k : UndecidedKind) : k ∈ UndecidedKind.all := by cases k <;> simp [UndecidedKind.all]
+
+def UndecidedKind.name : UndecidedKind → String
+  | .unknown => "unknown"
+  | .boundReached => "boundReached"
+  | .limit => "limit"
+  | .unencodableString => "unencodableString"
+
 namespace Kind
 
 /-- The name a line carries as its `kind`, such as `Illegal.wireName`. -/
@@ -74,16 +117,20 @@ def name : Kind → String
   | verifyPassed => "Verify.passed"
   | verifyDiffers => "Verify.differs"
   | traceInvalid => "Trace.invalid"
+  | prove k => "Prove." ++ k.name
+  | undecided k => "Undecided." ++ k.name
 
 def all : List Kind :=
   invalidIr :: Ir.Illegal.all.map illegal ++ FaultKind.all.map fault ++ TestKind.all.map test ++
-    [verifyPassed, verifyDiffers, traceInvalid]
+    [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++ UndecidedKind.all.map undecided
 
 theorem mem_all (k : Kind) : k ∈ all := by
   cases k with
   | illegal k => simp [all, Ir.Illegal.mem_all]
   | fault k => simp [all, FaultKind.mem_all]
   | test k => simp [all, TestKind.mem_all]
+  | prove k => simp [all, ProveKind.mem_all]
+  | undecided k => simp [all, UndecidedKind.mem_all]
   | _ => simp [all]
 
 end Kind
