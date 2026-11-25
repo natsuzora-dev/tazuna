@@ -511,7 +511,7 @@ theorem adtCtor_rel {i : Nat} {args : List Ty} {vs : List (List Ty)} (v : Fin vs
 /-- A constructor test and its fields' terms denote whether the value is that variant, and its fields. -/
 theorem adtView_rel {i : Nat} {args : List Ty} {vs : List (List Ty)} (v : Fin vs.length) (s : Term)
     (x : Ty.alts vs) (hx : RelV L (.adt i args vs) x (s.denote M)) (m : Term) (fts : List Term)
-    (h : adtView L i args vs v.val s = .ok (m, fts)) :
+    (h : adtView L i args vs v s = .ok (m, fts)) :
     m.denote M = .bool (Alts.proj x v).isSome ∧
       ∀ y, Alts.proj x v = some y → RelVs L (vs.get v) y (Term.denotes M fts) := by
   cases i with
@@ -542,8 +542,7 @@ theorem adtView_rel {i : Nat} {args : List Ty} {vs : List (List Ty)} (v : Fin vs
         have := hiff.2 (by simp [hy]); omega
       subst hj
       have hl := relVs_length _ _ (hv y hy)
-      have : (vs[v.val]?.getD []).length = vals.length := by
-        rw [hl]; simp
+      have : (vs.get v).length = vals.length := hl.symm
       rw [this, denotes_sels M d v.val s vals e]
       exact hv y hy
 

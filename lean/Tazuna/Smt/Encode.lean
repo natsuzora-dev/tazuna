@@ -287,14 +287,14 @@ def adtCtor (i : Nat) (args : List Ty) (vs : List (List Ty)) (k : Nat) (fs : Lis
     | none => .error (lacks (.adt (i + 1) args vs))
 
 /-- Whether `x` is constructor `k` of ADT `i`, and its fields' terms. -/
-def adtView (i : Nat) (args : List Ty) (vs : List (List Ty)) (k : Nat) (x : Term) :
+def adtView (i : Nat) (args : List Ty) (vs : List (List Ty)) (k : Fin vs.length) (x : Term) :
     Except Refusal (Term × List Term) :=
   match i with
   | 0 => match boolVs? vs with
-    | some _ => .ok (if k = 0 then x else .not x, [])
+    | some _ => .ok (if k.val = 0 then x else .not x, [])
     | none => .error (.outside "ADT 0 that is not Bool")
   | i + 1 => match L.find? (.adt (i + 1) args vs) with
-    | some (d, _) => .ok (.is d k x, (List.range ((vs[k]?.getD []).length)).map fun j => .sel d k j x)
+    | some (d, _) => .ok (.is d k x, (List.range (vs.get k).length).map fun j => .sel d k j x)
     | none => .error (lacks (.adt (i + 1) args vs))
 
 def tupleD (ts : List Ty) : Except Refusal Nat :=
@@ -319,7 +319,7 @@ def encodePat {t : Ty} {Δ : List Ty} : Pat t Δ → Code t → Except Refusal (
       (Codes.ofTerms? ts ((List.range ts.length).map fun j => .sel d 0 j s))
     encodePats ps fs
   | @Pat.ctor i args vs _ v ps, s => do
-    let (m, fts) ← adtView L i args vs v.val s
+    let (m, fts) ← adtView L i args vs v s
     let fs ← need "a field that has no term" (Codes.ofTerms? (vs.get v) fts)
     let (m', δ) ← encodePats ps fs
     pure (andT m m', δ)
