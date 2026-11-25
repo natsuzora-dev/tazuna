@@ -23,7 +23,7 @@ def rankStart (m : MachineV r e) (dopt : Nat) (nextId : Term) (all : List (Term 
   let below ← all.mapM fun s' => do
     let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.2.1 s.2.1)
     pure (Term.ite (.and (startFlag dopt s') lt) (.int 1) (.int 0))
-  pure (startFlag dopt s, [.add nextId (sumT below), s.2.1, .sel dopt 0 0 s.2.2])
+  pure (startFlag dopt s, [Term.share (.add nextId (sumT below)), s.2.1, .sel dopt 0 0 s.2.2])
 
 /-- The effect slots of a machine's start slots. -/
 def rankStarts (m : MachineV r e) (dopt : Nat) (nextId : Term) (starts : List (Term × Term × Term)) :
@@ -270,7 +270,7 @@ theorem rank_slots {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 :
           refine ⟨(true, [.int ((n0 + rankBy (T := T) m κ F items a : Nat) : Int), zk, zx]) :: svS,
             ⟨?_, ?_, hS'⟩, ?_⟩
           · simp [startFlag, Term.denote, hf, hvs.2, hzv, Val.toBool]
-          · simp only [Term.denotes, Term.denote, hn, hsum, Val.toInt, hvs.1, hvs.2, hzv]
+          · simp only [Term.denotes, Term.denote_share, Term.denote, hn, hsum, Val.toInt, hvs.1, hvs.2, hzv]
             simp
           · simp only [List.filterMap_cons, hsent]
             exact ⟨⟨κ a, zk, zx, rfl, rfl, hk, hx'⟩, hh'⟩

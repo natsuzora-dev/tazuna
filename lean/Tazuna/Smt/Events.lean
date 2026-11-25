@@ -106,7 +106,7 @@ structure EventsOut where
   queued : Term
 
 /-- The slots with each flag and-ed with `f`. -/
-def gateSlots (f : Term) (S : List Slot) : List Slot := S.map fun (g, xs) => (.and f g, xs)
+def gateSlots (f : Term) (S : List Slot) : List Slot := S.map fun (g, xs) => (Term.share (.and f g), xs)
 
 section
 variable (L : Layout) (T : List TypeDecl)

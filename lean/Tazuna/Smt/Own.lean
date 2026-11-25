@@ -45,7 +45,7 @@ def ownSlots : List Slot → Term → List Slot × Term
 
 /-- The slots with each flag and-ed with whether its effect is a request (`own` false) or an own command or query. -/
 def gateOwn (dE nR nO : Nat) (own : Bool) (S : List Slot) : List Slot :=
-  S.map fun (f, xs) => let o := isOwnT dE nR nO (xs.headD tt); (.and f (if own then o else .not o), xs)
+  S.map fun (f, xs) => let o := isOwnT dE nR nO (xs.headD tt); (Term.share (.and f (if own then o else .not o)), xs)
 
 /-- The own effect at the queue place `k`: whether a flagged own slot holds that place, and its effect (`dflt`, any
 term of the effect's sort, where none does). An internal step runs the own effect at its place. -/
