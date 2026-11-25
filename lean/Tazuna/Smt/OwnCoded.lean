@@ -20,13 +20,11 @@ theorem pair_queued {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
     {t1 t2 : Term} {x1 : OwnEffectV v.event}
     (hx1 : RelV L (.dsl .effect [v.event]) x1.effect (t1.denote M))
     (hreach1 : x1.effect.Reach P)
-    {k1 k2 : Nat} (ht1 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k1) t1))
+    {k1 k2 : OwnPlace L v.event} (ht1 : Holds M (.is senv.dE (L.ownCtor v.event k1) t1))
     {o : PairOut} (henc : encodePair L T P v senv S t1 t2 k1 k2 = .ok o) (hcodes : Holds M o.codes)
     (hfit : ownFits L.count T a0.state x1) :
     ∀ b, Step.runOwn T a0 x1 = .ok b → ∃ os, b.own = a0.own ++ os ∧ ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [v.event]) y.effect z := by
   obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
-  obtain ⟨key1, hkey1, henc⟩ := bind_ok.1 henc
-  obtain ⟨key2, -, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨⟨ko1, a1⟩, c1, y1⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   obtain ⟨_, -, henc⟩ := bind_ok.1 henc
@@ -37,7 +35,7 @@ theorem pair_queued {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
   simp only [holds_allT, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq] at hcodes
   obtain ⟨hca, hy1, -, -, -⟩ := hcodes
   have hshs : ∀ sh ∈ shapes v, sh.InSites P := fun _ => shapes_inSites chk.reach
-  obtain ⟨vals1, he1, hk1⟩ := own_key hx1 ht1 rfl (need_ok.1 hkey1)
+  obtain ⟨vals1, he1, hk1⟩ := own_key hx1 ht1 rfl
   have hq0 : (Term.int 0).denote M = .int ((0 : Nat) : Int) := rfl
   have eA1 := ownKind_encode chk hshs (shapesHold_shapes v) a0 happ hca senv hR.records hR.now hR.fresh hR.nextId hq0
     hR.machines x1 hreach1 he1 hk1 h1 hy1

@@ -305,7 +305,7 @@ def orderWire (T : List TypeDecl) {v : ServiceV} : Except Fault (Acc v) → Show
 /-- The report of a pair's target question (`pairQuestions`): a model is a state and two own effects whose two orders
 the solver finds different with each effect keeping the ids it made. Lean runs both orders from the model's state;
 where they agree up to renaming the ids the pair made (`pairOrders`), the line is undecided, else violated. -/
-def pairReport (L : Layout) (k1 k2 : Nat) (g : Target) (step : String) (a : Smt.Answer) : Except String Report :=
+def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : String) (a : Smt.Answer) : Except String Report :=
   match a with
   | .unsat => .ok (.unsat v.name step (some g))
   | .unknown why => .ok (.undecided (.undecided .unknown) v.name step (some g) [("why", Json.str why)])
@@ -385,8 +385,8 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
     | .error why => return { internal := some why }
   let owns := L.ownsOf v.event
   for (k1, k2) in L.ownPairs v.event do
-    let (some key1, some key2) := (owns[k1]?, owns[k2]?)
-      | return { internal := some s!"service {v.name}: own kind {k1} or {k2} missing" }
+    let key1 := owns[k1]
+    let key2 := owns[k2]
     let g := Target.pair (ownText owns key1) (ownText owns key2)
     let step := ownText owns key1 ++ " then " ++ ownText owns key2
     match familyItems c v only g step (pairQuestions L c.T c.P v senv k1 k2) (pairReport c v L k1 k2 g step) with

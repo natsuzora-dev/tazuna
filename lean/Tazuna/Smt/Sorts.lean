@@ -200,7 +200,7 @@ theorem questions_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnyS
 
 /-- The sorts of a pair of own kinds' questions hold values: the state's, and the effect datatype's twice. -/
 theorem pair_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnySite} {v : ServiceV}
-    {senv : StepEnv L (shapes v)} {k1 k2 : Nat} {r} (hq : pairQuestions L T P v senv k1 k2 = .ok r) :
+    {senv : StepEnv L (shapes v)} {k1 k2 : OwnPlace L v.event} {r} (hq : pairQuestions L T P v senv k1 k2 = .ok r) :
     SortsInhabited L (pairTys v) := by
   simp only [pairQuestions] at hq
   obtain ⟨_, -, hq⟩ := bind_ok.1 hq

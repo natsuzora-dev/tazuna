@@ -3547,11 +3547,16 @@ def pairLayoutFor (v : ServiceV) (slots : Nat) : Layout :=
 
 def pairLayoutOf (slots : Nat) : Layout := pairLayoutFor pairSvc slots
 
+/-- The own kind at the place `k` of a fixture's layout. -/
+def ownPlace (L : Layout) (e : Ty) (k : Nat) : Except String (OwnPlace L e) :=
+  if h : k < (L.ownsOf e).length then .ok ⟨k, h⟩ else .error s!"no own kind {k}"
+
 /-- The target question of the pair of own kinds `k1`, `k2` of the service `p` at `slots`. -/
 def pairTarget (slots k1 k2 : Nat) : Except String Script := do
   let L := pairLayoutOf slots
   let senv ← (StepEnv.of L (shapes pairSvc)).mapError fun r => s!"no step environment: {repr r}"
-  let (_, tq) ← (pairQuestions L prelude pairSites pairSvc senv k1 k2).mapError fun r => s!"no questions: {repr r}"
+  let (_, tq) ← (pairQuestions L prelude pairSites pairSvc senv (← ownPlace L _ k1) (← ownPlace L _ k2)).mapError
+    fun r => s!"no questions: {repr r}"
   pure tq
 
 /-- The own command a model's value of the effect datatype codes, by its variant's place among the own kinds. -/
@@ -3570,7 +3575,8 @@ def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : L
   let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
   let mut ok := true
   for (name, k1, k2, commutes) in cases do
-    match pairQuestions L prelude sites v senv k1 k2 with
+    let (.ok p1, .ok p2) := (ownPlace L v.event k1, ownPlace L v.event k2) | ok ← fail s!"{name}: no own kind"
+    match pairQuestions L prelude sites v senv p1 p2 with
     | .error r => ok ← fail s!"{name}: no questions: {repr r}"
     | .ok (_, tq) =>
       match ← solver.run tq, commutes with
@@ -3624,7 +3630,8 @@ def reqTarget (slots : Nat) : Except String Script := do
   let v := reqSvc "echo" echoE
   let L := pairLayoutFor v slots
   let senv ← (StepEnv.of L (shapes v)).mapError fun r => s!"no step environment: {repr r}"
-  let (_, tq) ← (pairQuestions L prelude (reqSites v) v senv 0 0).mapError fun r => s!"no questions: {repr r}"
+  let k ← ownPlace L v.event 0
+  let (_, tq) ← (pairQuestions L prelude (reqSites v) v senv k k).mapError fun r => s!"no questions: {repr r}"
   pure tq
 
 def pairCheck (solver : Solver) : IO Bool := do
@@ -3657,7 +3664,8 @@ def familyQuestions : Except String (List (String × Script × Nat)) := do
   let some target := qs.find? (·.target == some (.invariant none (some "small"))) | throw "no question about small"
   let pL := pairLayoutOf 3
   let psenv ← (StepEnv.of pL (shapes pairSvc)).mapError fun r => s!"no pair step environment: {repr r}"
-  let (_, pq) ← (pairQuestions pL prelude pairSites pairSvc psenv 1 1).mapError fun r => s!"no pair questions: {repr r}"
+  let pk ← ownPlace pL _ 1
+  let (_, pq) ← (pairQuestions pL prelude pairSites pairSvc psenv pk pk).mapError fun r => s!"no pair questions: {repr r}"
   let (_, tq) ← (timerQuestions timerLayout (timerM backE)).mapError fun r => s!"no timer questions: {repr r}"
   pure [("step", target.script, 3), ("bound", bound.script, 3), ("pair", pq, 5), ("timer", tq, 4)]
 
