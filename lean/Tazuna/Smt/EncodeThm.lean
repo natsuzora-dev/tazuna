@@ -1345,11 +1345,6 @@ theorem lookup_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L 
 theorem natCast_beq (m n : Nat) : ((m : Int) == (n : Int)) = (m == n) := by
   rw [Bool.eq_iff_iff]; simp only [beq_iff_eq]; omega
 
-theorem bagBeq_perm {α : Type} (f : α → α → Bool) {xs xs' ys ys' : List α} (hx : xs.Perm xs') (hy : ys.Perm ys') :
-    bagBeq f xs ys = bagBeq f xs' ys' := by
-  simp only [bagBeq, countBy, hx.length_eq, hy.length_eq, hx.all_eq, fun z => (hx.filter (f z)).length_eq,
-    fun z => (hy.filter (f z)).length_eq]
-
 /-- How often an item occurs among a bag's slots. -/
 theorem countEqT_den {a : Ty} (heq : a.eqable = true) {z : a.den} {x : Term} (hz : RelV L a z (x.denote M))
     {S : List (Slot 1)} {sv : List (Bool × List Val)} {ys : List a.den} (hS : SlotsDen M S sv)

@@ -2,7 +2,7 @@ import Tazuna.Linter
 
 /-! `Forall2` and its lemmas. Core Lean has no `List.Forall₂`. -/
 
-namespace Tazuna.Smt
+namespace Tazuna.Ir
 
 section
 variable {α α' β β' γ δ ε : Type}
@@ -199,4 +199,4 @@ where
 
 end
 
-end Tazuna.Smt
+end Tazuna.Ir

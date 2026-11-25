@@ -77,6 +77,12 @@ def Ty.toBool : Ty.bool.den → Bool
   | .inr _ => false
 
 
+/-- Multiset equality reads neither list's order. -/
+theorem bagBeq_perm {α : Type} (f : α → α → Bool) {xs xs' ys ys' : List α} (hx : xs.Perm xs') (hy : ys.Perm ys') :
+    bagBeq f xs ys = bagBeq f xs' ys' := by
+  simp only [bagBeq, countBy, hx.length_eq, hy.length_eq, hx.all_eq, fun z => (hx.filter (f z)).length_eq,
+    fun z => (hy.filter (f z)).length_eq]
+
 /-- `==` on bags ignores order: reordering a bag gives an equal bag. -/
 theorem Ty.deq_bag_perm (t : Ty) {xs ys : List t.den} (h : xs.Perm ys) : Ty.deq (.bag t) xs ys = true := by
   show bagBeq (Ty.deq t) xs ys = true

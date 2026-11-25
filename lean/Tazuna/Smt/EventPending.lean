@@ -38,7 +38,7 @@ abbrev queuedOf {e : Ty} (effs : List (Sender × EffectV e)) : List (EffectV e) 
 /-- Starting effects writes the requests, which externals list, into the pending table at the next ids and sends
 them, and queues the own commands and queries, each in order. -/
 theorem start_requests (a : Acc v) : (effs : List (Sender × EffectV v.event)) → (ps : List (Pending v.event)) →
-    Tazuna.Smt.Forall2 (Writes v.declared) ((reqsOf effs).zipIdx a.state.nextId) ps →
+    Tazuna.Ir.Forall2 (Writes v.declared) ((reqsOf effs).zipIdx a.state.nextId) ps →
     start a effs = .ok ((a.wrote ps (a.state.nextId + (reqsOf effs).length)).queued (queuedOf effs))
   | [], [], _ => by
     obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a

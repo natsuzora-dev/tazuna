@@ -54,7 +54,7 @@ theorem reactAll_fresh (s : State v) (evs : List v.event.den0) : (reactAll T s e
 /-- Events whose machines and reactions start requests that externals list: the records and machines react to each in
 turn, the requests are written at the next ids and sent, and the own commands and queries are queued. -/
 theorem applyEvents_requests : (evs : List v.event.den0) → (a : Acc v) → (ps : List (Pending v.event)) →
-    Tazuna.Smt.Forall2 (Writes v.declared) ((reqsOf (reactAll T a.state evs).2).zipIdx a.state.nextId) ps →
+    Tazuna.Ir.Forall2 (Writes v.declared) ((reqsOf (reactAll T a.state evs).2).zipIdx a.state.nextId) ps →
     applyEvents T a evs = .ok (({ a with state := (reactAll T a.state evs).1, events := a.events ++ evs }.wrote ps
       (a.state.nextId + (reqsOf (reactAll T a.state evs).2).length)).queued (queuedOf (reactAll T a.state evs).2))
   | [], a, [], _ => by
@@ -62,7 +62,7 @@ theorem applyEvents_requests : (evs : List v.event.den0) → (a : Acc v) → (ps
     simp [applyEvents, reactAll, Acc.wrote, Acc.queued, pure, Except.pure]
   | ev :: evs, a, ps, hps => by
     simp only [reactAll, reqsOf, List.filter_append, List.zipIdx_append] at hps
-    obtain ⟨ps1, ps2, rfl, h1, h2⟩ := Tazuna.Smt.forall2_split _ _ hps
+    obtain ⟨ps1, ps2, rfl, h1, h2⟩ := Tazuna.Ir.forall2_split _ _ hps
     have hs : applyEvents T a (ev :: evs) =
         (start { a with state := (react T a.state ev).1, events := a.events ++ [ev] } (react T a.state ev).2) >>=
           fun a' => applyEvents T a' evs := rfl

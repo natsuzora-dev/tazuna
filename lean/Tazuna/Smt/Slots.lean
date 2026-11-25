@@ -1,5 +1,5 @@
 import Tazuna.Smt.Term
-import Tazuna.Smt.Forall2
+import Tazuna.Semantics.Forall2
 
 /-! Bags and tables as slots. A collection of type `c` is a value of datatype `d` with one constructor holding `n`
 slots, the slot count its layout gives `c`; each slot is a tuple `(occupied, item...)` of datatype `dt`, with one item
@@ -8,6 +8,8 @@ bags and tables have no order a spec can observe. Operations work slot by slot, 
 an insertion takes the first free slot, and its condition says one was free. -/
 
 namespace Tazuna.Smt
+
+open Tazuna.Ir (Forall2)
 
 /-- A slot's item terms, as many as its width (Mathlib's `List.Vector` precedent: a list with its length in its type),
 so reading an item needs no fallback. -/
