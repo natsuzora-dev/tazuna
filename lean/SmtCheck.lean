@@ -2,6 +2,7 @@ import Tazuna.Smt.Bounds
 import Tazuna.Smt.EventStep
 import Tazuna.Smt.Reactions
 import Tazuna.Smt.Answer
+import Tazuna.Smt.Internal
 import Tazuna.Smt.Clock
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
@@ -2600,6 +2601,106 @@ def mixCheck (solver : Solver) : IO Bool := do
           return ok
     | a => fail s!"{repr a}"
 
+/-! An own command's internal step, for `ownCommand_rel`: the command `twice` above runs as an own effect whose
+`on_answer` captured 5 and returns [5] on any answer. From the state of `a command's events reach machines` (no
+records, no instances, request 2 pending, next id 40, now 100), alice's `twice 3` applies 3 twice (key 3 starts with a
+request at 40, then enters 1 with a request at 41), its `ensures` holds, and `on_answer` applies 5. The records,
+instance table, next id and new wire ids read from the model must be what `Step.runCommand` leaves; applying only
+`decide`'s events must not pass the comparison. -/
+
+def answerFiveE : Expr [] [.int] (.fn [Ty.result Ty.nil .str] (.list .int)) := .lam (.list (.cons (.var (.there .here)) .nil))
+
+def answerFive : Site [.int] (.fn [Ty.result Ty.nil .str] (.list .int)) := ⟨⟨"m", 22, 1, 0⟩, [], .nil, rfl, rfl, answerFiveE⟩
+
+def internalLayoutOf (slots : Nat) : Layout :=
+  Layout.addTys (fun _ => slots) (twiceLayoutOf slots) [Ty.result Ty.nil .str, Ty.nil]
+
+def internalLayout : Layout := internalLayoutOf 3
+
+/-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the caller, v7 the input, v8 the records
+after, v9 the next id after, v10 the instance table after, then per new request slot its flag and id. -/
+def internalScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Nat) := do
+  let L := internalLayoutOf slots
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let (cc, cx) ← enc (CommandCode.of L twiceC)
+  let (apply, ca) ← enc (twiceSvc.apply.code L)
+  let some ks := callerTerms L rfl twiceC.callers | throw "no caller terms"
+  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
+  let some (dP, _) := L.find? (pendingEntry twiceShapes) | throw "no pending entry"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let some five := Code.ofTerm? .int (.int 5) | throw "no capture code"
+  let (o, cond) ← enc (encodeOwnCommand L prelude twiceSvc twiceShapes dE dP dopt twiceC cc answerFive (five, ()) apply
+    ks S.records S.now S.fresh S.nextId (.int 0) (.var 6) (.var 7) S.machines)
+  let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
+  let some wf := S.wf L (v := twiceSvc) twiceShapes | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable twiceShapes) | throw "no pending sort"
+  let some msrt := L.srt? startM.table | throw "no table sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [tbl] := o.answered.tables | throw "not one machine"
+  let news := o.decided.news ++ o.answered.news
+  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) (xs.headD tt)]
+  pure ({ datatypes := dts,
+          vars := [rsrt, .int, .int, .int, psrt, msrt, .str, .int, rsrt, .int, msrt] ++
+            (news.map fun _ => [Srt.bool, .int]).flatten,
+          asserts := [wf, below, cx, ca, cond, .eq (.var 8) o.answered.records, .eq (.var 9) o.answered.nextId,
+            .eq (.var 10) tbl] ++ slots ++ goal,
+          shows := List.range (11 + 2 * news.length) }, news.length)
+
+def internalCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: an own command's internal step: {m}"; return false
+  let L := internalLayout
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dm, nm) := L.find? startM.table | fail "no instance table"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dp, np) := L.find? (pendingTable twiceShapes) | fail "no pending table"
+  let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry twiceShapes]) | fail "no pending slot"
+  let Sr := slotsOf dr drt nr 2 (.var 0)
+  let Sm := slotsOf dm dmt nm 2 (.var 5)
+  let Sp := slotsOf dp dpt np 2 (.var 4)
+  let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
+    Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
+    .eq (.var 3) (.int 40), .eq (.var 6) (.str "alice"), .eq (.var 7) (.int 3)]
+  match internalScriptOf 3 goal with
+  | .error m => fail m
+  | .ok (script, nn) =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let after : SymState := { records := .var 8, now := .var 1, fresh := .var 2, nextId := .var 9,
+                                pending := .var 4, machines := [.var 10] }
+      match (SymState.vars 0 1).decode M L (v := twiceSvc) rfl prelude twiceShapes,
+          after.decode M L (v := twiceSvc) rfl prelude twiceShapes with
+      | some s, some s' =>
+        let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
+          sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
+            (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
+        let flag (n : Nat) := vs.lookup n == some (.bool true)
+        let ids := ((List.range nn).filterMap fun j =>
+          if flag (11 + 2 * j) then natOf ((vs.lookup (12 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
+        match Step.runCommand prelude ({ state := s } : Step.Acc twiceSvc) twiceC ("alice" : String) (3 : Int)
+            (answerFive.fn ((5 : Int), ())) with
+        | .error _ => fail "the internal step faults"
+        | .ok a =>
+          let stepIds := ((a.state.pending.filter (·.id != 2)).map (·.id)).mergeSort (· ≤ ·)
+          let mut ok := true
+          if !sameAs L recordsT rfl a.state.records (vs.lookup 8) then ok ← fail "the records differ from the step's"
+          if view s'.machines != view a.state.machines then
+            ok ← fail s!"the new table holds {view s'.machines}, the step {view a.state.machines}"
+          if ids != stepIds || vs.lookup 9 != some (.int a.state.nextId) || ids.take 2 != [40, 41] then
+            ok ← fail s!"the new wire ids are {ids} and next id {repr (vs.lookup 9)}, the step's {stepIds} and {a.state.nextId}"
+          if a.state.fresh != s.fresh + 1 then ok ← fail "the fresh counter did not advance"
+          match Step.applyEvents prelude ({ state := s } : Step.Acc twiceSvc) [(3 : Int), (3 : Int)] with
+          | .ok b =>
+            if sameAs L recordsT rfl b.state.records (vs.lookup 8) && view s'.machines == view b.state.machines then
+              ok ← fail "applying only decide's events passes the comparison"
+          | .error _ => ok ← fail "decide's events fault"
+          return ok
+      | _, _ => fail "the model does not decode"
+    | a => fail s!"{repr a}"
+
 /-- A chain of `depth` levels where each level builds the same shared term twice as two objects over the level
 below: what an encoder does when it shares a term at each use instead of where it is built. Its script has one
 definition per level, and printing it must not compare the copies as trees (exponential in depth). -/
@@ -2703,6 +2804,7 @@ def check (z3 : String) : IO Bool := do
   unless ← answerMCheck solver do ok := false
   unless ← reshareCheck 40 do ok := false
   unless ← mixCheck solver do ok := false
+  unless ← internalCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
@@ -2731,6 +2833,7 @@ def sizes : IO UInt32 := do
   row "command" fun k => (·.1) <$> twiceScriptOf k []
   row "answer" fun k => (·.1) <$> answerMScriptOf k []
   row "clock" fun k => (·.1) <$> clockFireScript 2 k []
+  row "own command step" fun k => (·.1) <$> internalScriptOf k []
   row "re-shared chain (levels, not slots)" fun k => pure (reshared k)
   return 0
 
