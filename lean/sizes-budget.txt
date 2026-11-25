@@ -11,4 +11,5 @@ event with a cascade of 1: 8225/23171/76527/277096
 event with a cascade at 3 slots (bound, not slots): 26092/49583/99550/211432
 clock whose timers queue own commands (bound 2): 13555/39662/132305/479305
 pair question (insert, capped insert): 3207/9403/32149/119061
+pair question (insert, insert) sending requests: 5032/16424/59745/228543
 re-shared chain (levels, not slots): 17/29/54/102

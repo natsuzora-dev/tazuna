@@ -139,6 +139,102 @@ theorem relAlts_same (d : Nat) : (k : Nat) → (vs : List (List Ty)) → Ty.isDa
     omega
 end
 
+theorem relDAlts_index (d : Nat) : (k : Nat) → (vs : List (List Ty)) → (x : (Ty.semAltsWith Dsl.base vs).1) →
+    {w : Val} → RelDAlts L d k vs x w → ∃ j vals, w = .ctor d j vals ∧ k ≤ j
+  | k, _ :: _, .inl _, _, ⟨vals, e, _⟩ => ⟨k, vals, e, Nat.le_refl k⟩
+  | k, _ :: vs, .inr y, _, h => by
+    obtain ⟨j, vals, e, hj⟩ := relDAlts_index d (k + 1) vs y h
+    exact ⟨j, vals, e, by omega⟩
+
+mutual
+/-- Two values as a step holds them with one code relate with every id renamed to itself, bags and tables read as
+multisets: `relV_same` for the values effects and kept functions carry, whose types need not be data (a code of a
+type with no code holds no value). -/
+theorem relD_same : (t : Ty) → {x y : t.den0} → {z : Val} → RelD L t x z → RelD L t y z → Ty.rel0 PBij.refl t x y
+  | .int, _, _, _, hx, hy | .str, _, _, _, hx, hy | .date, _, _, _, hx, hy => by
+    simp only [RelD] at hx hy
+    rw [hx] at hy
+    cases hy
+    rfl
+  | .id, x, y, _, ⟨d, _, hf, hx⟩, ⟨d', _, hf', hy⟩ => by
+    obtain rfl := find_det hf hf'
+    rw [hx] at hy
+    obtain rfl := idVal_inj hy
+    exact IdV.rel_refl x
+  | .adt 0 _ vs, x, y, _, ⟨h, hx⟩, ⟨_, hy⟩ => by
+    subst h
+    rw [hx] at hy
+    rcases x with _ | _ | e <;> rcases y with _ | _ | e' <;>
+      first | trivial | exact nomatch e | exact nomatch e' | simp [altsBool0] at hy
+  | .adt (_ + 1) _ vs, _, _, _, ⟨d, _, hf, hx⟩, ⟨d', _, hf', hy⟩ => by
+    obtain rfl := find_det hf hf'
+    exact relDAlts_same d 0 vs hx hy
+  | .tuple ts, _, _, _, ⟨d, _, vals, hf, hx, hvs⟩, ⟨d', _, vals', hf', hy, hvs'⟩ => by
+    obtain rfl := find_det hf hf'
+    rw [hx] at hy
+    cases hy
+    exact relDs_same ts hvs hvs'
+  | .bag t, _, _, _, ⟨d, _, dt, _, sv, hf, hft, _, hx, _, ys, hp, hh⟩,
+      ⟨d', _, dt', _, sv', hf', hft', _, hy, _, ys', hp', hh'⟩ => by
+    obtain rfl := find_det hf hf'
+    obtain rfl := find_det hft hft'
+    rw [hx] at hy
+    obtain rfl := slotsVal_inj hy
+    have hs : Forall2 (Ty.rel0 PBij.refl t) ys ys' := holds2_same (fun _ _ _ ⟨_, e1, h1⟩ ⟨_, e2, h2⟩ => by
+      rw [e1, List.cons.injEq] at e2
+      exact relD_same t h1 (e2.1 ▸ h2)) hh hh'
+    exact ((Multi.of_forall2 hs).perm_left hp).perm_right hp'
+  | .table k w, _, _, _, ⟨d, _, dt, _, sv, hf, hft, _, hx, _, ys, hp, hh⟩,
+      ⟨d', _, dt', _, sv', hf', hft', _, hy, _, ys', hp', hh'⟩ => by
+    obtain rfl := find_det hf hf'
+    obtain rfl := find_det hft hft'
+    rw [hx] at hy
+    obtain rfl := slotsVal_inj hy
+    have hs : Forall2 (fun e e' => Ty.rel0 PBij.refl k e.1 e'.1 ∧ Ty.rel0 PBij.refl w e.2 e'.2) ys ys' :=
+      holds2_same (fun _ _ _ ⟨_, _, e1, hk1, hw1⟩ ⟨_, _, e2, hk2, hw2⟩ => by
+        rw [e1, List.cons.injEq, List.cons.injEq] at e2
+        exact ⟨relD_same k hk1 (e2.1 ▸ hk2), relD_same w hw1 (e2.2.1 ▸ hw2)⟩) hh hh'
+    exact ((Multi.of_forall2 hs).perm_left hp).perm_right hp'
+  | .list t, _, _, _, ⟨d, _, dt, _, sv, hf, hft, _, hx, _, hh⟩, ⟨d', _, dt', _, sv', hf', hft', _, hy, _, hh'⟩ => by
+    obtain rfl := find_det hf hf'
+    obtain rfl := find_det hft hft'
+    rw [hx] at hy
+    obtain rfl := slotsVal_inj hy
+    exact holds2_same (fun _ _ _ ⟨_, e1, h1⟩ ⟨_, e2, h2⟩ => by
+      rw [e1, List.cons.injEq] at e2
+      exact relD_same t h1 (e2.1 ▸ h2)) hh hh'
+  | .dsl k _, x, y, _, hx, hy => by
+    cases k <;> simp only [RelD] at hx
+    change _ = Val.int (Int.ofNat y) at hy
+    rw [hx] at hy
+    cases hy
+    rfl
+  | .fn .., _, _, _, hx, _ | .param _, _, _, _, hx, _ => hx.elim
+theorem relDs_same : (ts : List Ty) → {x y : (Ty.semsWith Dsl.base ts).1} → {vals : List Val} → RelDs L ts x vals →
+    RelDs L ts y vals → Ty.relsWith Dsl.base (Dsl.rel0 PBij.refl) PBij.refl ts x y
+  | [], _, _, _, _, _ => trivial
+  | t :: ts, _, _, _, ⟨_, _, e, h, hs⟩, ⟨_, _, e', h', hs'⟩ => by
+    rw [e, List.cons.injEq] at e'
+    obtain ⟨rfl, rfl⟩ := e'
+    exact ⟨relD_same t h h', relDs_same ts hs hs'⟩
+theorem relDAlts_same (d : Nat) : (k : Nat) → (vs : List (List Ty)) → {x y : (Ty.semAltsWith Dsl.base vs).1} →
+    {z : Val} → RelDAlts L d k vs x z → RelDAlts L d k vs y z →
+    Ty.relAltsWith Dsl.base (Dsl.rel0 PBij.refl) PBij.refl vs x y
+  | k, fs :: _, .inl _, .inl _, _, ⟨_, e, h⟩, ⟨_, e', h'⟩ => by
+    rw [e, Val.ctor.injEq] at e'
+    obtain ⟨-, -, rfl⟩ := e'
+    exact relDs_same fs h h'
+  | k, _ :: vs, .inr _, .inr _, _, h, h' => relDAlts_same d (k + 1) vs h h'
+  | k, _ :: vs, .inl _, .inr y, _, ⟨_, e, _⟩, h' => by
+    obtain ⟨j, _, e', hj⟩ := relDAlts_index d (k + 1) vs y h'
+    rw [e, Val.ctor.injEq] at e'
+    omega
+  | k, _ :: vs, .inr x, .inl _, _, h, ⟨_, e', _⟩ => by
+    obtain ⟨j, _, e, hj⟩ := relDAlts_index d (k + 1) vs x h
+    rw [e, Val.ctor.injEq] at e'
+    omega
+end
+
 /-- Two stored data values whose codes are one value are the same, bags and tables read as multisets. -/
 theorem rel0_same {t : Ty} (hd : t.isData = true) {x y : t.den0} {z : Val} (hx : RelV L t (Ty.up t hd x) z)
     (hy : RelV L t (Ty.up t hd y) z) : Ty.rel0 PBij.refl t x y := by

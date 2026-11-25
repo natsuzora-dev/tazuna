@@ -1,4 +1,5 @@
 import Tazuna.Smt.PairSame
+import Tazuna.Smt.Cti
 import Tazuna.Smt.InternalDispatch
 import Tazuna.Smt.Names
 import Tazuna.Smt.Pairs
@@ -8,11 +9,12 @@ import Tazuna.Semantics.PairCommute
 the first effect runs then the second (order A), and the second runs at the next counter then the first at the
 current one (the canonical order, `Step.canonPair`), each internal step encoded for its kind. The two orders commute
 when the first does not fault, or when the second faults first and still faults after it, or when both orders fault,
-or when both end with records and instance tables Gleam's `==` finds equal, each effect applying the same events in
-the same slots, and no step sending a request or queueing an own effect. The last clause is stricter than the
-semantics: a pair whose steps send requests or queue own effects is reported as not commuting even where it does, so
-the question can only say "do not commute" too often, never "commute" wrongly (`pair_sound`). Comparing what such
-steps send needs the wire ids the canonical order renumbers and the kept functions requests hold, and is left out. -/
+or when both end with records and instance tables Gleam's `==` finds equal and each effect does the same in both
+orders: it applies the same events, sends the same requests at the same ids counted from where its step starts, and
+queues the same own commands and queries, each in the same slots. In the canonical order each effect gets the counter
+and the wire ids it gets in order A, so no renaming is searched for (`pair_sound`). Comparing slot by slot is stricter
+than the semantics, which reads every collection as a multiset: a pair whose steps write the same things into other
+slots is reported as not commuting, never the other way round. -/
 
 namespace Tazuna.Smt
 
@@ -28,9 +30,6 @@ def tablesEqT {r e : Ty} : (ms : List (MachineV r e)) → PerMachine (fun _ => T
   | m :: ms, .cons x xs, .cons y ys => do
     let f ← eqFn L m.table
     pure (.and (f x y) (← tablesEqT ms xs ys))
-
-/-- The flags of the slots a step's requests and own effects fill. -/
-def StepTerms.sent {v : ServiceV} (t : StepTerms v) : List Term := t.done.news.map (·.flag) ++ t.done.owns.map (·.flag)
 
 /-- A pair question's terms: whether the two orders do not commute, the condition that every step reached fits, and
 the codes' condition. -/
@@ -57,7 +56,9 @@ def encodePair (S : SymState v) (e1 e2 : Term) (k1 k2 : Nat) : Except Refusal Pa
   let recEq ← eqFn L v.records
   let tabEq ← tablesEqT L v.machines a2.done.tables b2.done.tables
   let same := allT [recEq a2.done.records b2.done.records, tabEq, slotsEqT a1.done.events b2.done.events,
-    slotsEqT a2.done.events b1.done.events, noneT (a1.sent ++ a2.sent ++ b1.sent ++ b2.sent)]
+    slotsEqT a2.done.events b1.done.events, newsEqT S.nextId b1.done.nextId a1.done.news b2.done.news,
+    newsEqT a1.done.nextId S.nextId a2.done.news b1.done.news, ownsEqT a1.done.owns b2.done.owns,
+    ownsEqT a2.done.owns b1.done.owns]
   let viol := Term.and (.not a1.fault) (.or (.and b1.fault (.not a2.fault))
     (.and (.not b1.fault) (.and (.not (.and a2.fault b2.fault)) (.not (.and (.not a2.fault) (.and (.not b2.fault) same))))))
   pure ⟨viol, allT [c1, c3, .ite a1.fault tt c2, .ite b1.fault tt c4], allT [ca, x1, x2, x3, x4]⟩
@@ -91,47 +92,68 @@ end
 section
 variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV}
 
-/-- Two steps in progress that keep `a0`'s pending requests, out lines and own effects, whose records and instances are
-the same, and whose events after `a0`'s are the same in some order, are the same up to renaming. -/
-theorem same_of_quiet {a0 A C : Step.Acc v} {W : PBij} (h0 : Step.Acc.Rel ⟨PBij.refl, W⟩ a0 a0)
+/-- The wire ids from `n` on, each to itself. -/
+def PBij.from (n : Nat) : PBij :=
+  ⟨fun a b => n ≤ a ∧ a = b, fun h h' => h.2.symm.trans h'.2, fun h h' => h.2.trans h'.2.symm⟩
+
+/-- Two steps in progress that extend `a0` by alike requests at the same ids from `a0`'s next id on (with their out
+lines), by related own effects and events, and whose records and instances relate, are the same up to renaming: the
+renaming keeps `a0`'s names as `a0` relates to itself and every wire id from its next one on. -/
+theorem same_of_parts {a0 A C : Step.Acc v} {W : PBij} (h0 : Step.Acc.Rel ⟨PBij.refl, W⟩ a0 a0)
     (hr : Ty.rel0 PBij.refl v.records A.state.records C.state.records)
     (hm : Step.Machines.Rel PBij.refl A.state.machines C.state.machines)
-    (hpA : A.state.pending = a0.state.pending) (hpC : C.state.pending = a0.state.pending)
+    {PA PC : List (Step.Pending v.event)} (hpA : A.state.pending = a0.state.pending ++ PA)
+    (hpC : C.state.pending = a0.state.pending ++ PC)
+    (hP : Multi (fun p q => p.id = q.id ∧ PendingAlike PBij.refl p q) PA PC)
+    (hPn : ∀ p ∈ PA, a0.state.nextId ≤ p.id ∧ p.id < A.state.nextId)
     (hnA : A.state.now = a0.state.now) (hnC : C.state.now = a0.state.now)
-    (hiA : A.state.nextId = a0.state.nextId) (hiC : C.state.nextId = a0.state.nextId)
-    (hoA : A.out = a0.out) (hoC : C.out = a0.out) (hwA : A.own = a0.own) (hwC : C.own = a0.own)
+    (hi : A.state.nextId = C.state.nextId) (hiA : a0.state.nextId ≤ A.state.nextId)
+    (hoA : A.out = a0.out ++ PA.map Step.Pending.line) (hoC : C.out = a0.out ++ PC.map Step.Pending.line)
+    {OA OC : List (EffectV v.event)} (hwA : A.own = a0.own ++ OA) (hwC : C.own = a0.own ++ OC)
+    (hO : Multi (EffectV.Rel PBij.refl) OA OC)
     {EA EC : List v.event.den0} (heA : A.events = a0.events ++ EA) (heC : C.events = a0.events ++ EC)
     (he : Multi (Ty.rel0 PBij.refl v.event) EA EC) (hf : A.state.fresh = C.state.fresh) : Step.Same A C := by
   obtain ⟨⟨-, -, hp, -, hb, -⟩, hev, hout, ho, -, hown⟩ := h0
-  refine .base ⟨⟨PBij.refl, W⟩, ⟨⟨hr, hm, ?_, hnA.trans hnC.symm, ?_, ?_⟩, ?_, ?_, ?_, ?_, ?_⟩, hf,
-    hiA.trans hiC.symm, fun _ _ => rfl⟩
-  · rw [hpA, hpC]; exact hp
-  · rw [hpA, hiA]; exact hb
-  · rw [hpC, hiC]; exact hb
+  let R : Ren := (⟨PBij.refl, W⟩ : Ren).withWire a0.state.nextId a0.state.nextId (PBij.from a0.state.nextId)
+    fun h => ⟨h.1, h.2 ▸ h.1⟩
+  have hlow : ∀ {i j}, i < a0.state.nextId → j < a0.state.nextId → W.rel i j → R.wire.rel i j :=
+    fun hi hj h => .inl ⟨hi, hj, h⟩
+  have hPC : ∀ q ∈ PC, a0.state.nextId ≤ q.id ∧ q.id < A.state.nextId := fun q hq => by
+    obtain ⟨p, hp', hpq, -⟩ := hP.flip.mem_left hq
+    rw [← hpq]; exact hPn p hp'
+  have hnew : Multi (Step.Pending.Rel R) PA PC :=
+    hP.imp_mem fun p hp' _ _ h => ⟨.inr ⟨(hPn p hp').1, h.1⟩, h.2⟩
+  have hbelow : ∀ {xs : List (Step.Pending v.event)}, (∀ q ∈ xs, q.id < A.state.nextId) →
+      ∀ q ∈ a0.state.pending ++ xs, q.id < A.state.nextId := fun hx q hq =>
+    (List.mem_append.1 hq).elim (fun h => Nat.lt_of_lt_of_le (hb q h) hiA) (hx q)
+  have hobelow : ∀ {xs : List (Step.Pending v.event)}, (∀ q ∈ xs, q.id < A.state.nextId) →
+      ∀ o ∈ a0.out ++ xs.map Step.Pending.line, o.id < A.state.nextId := fun hx o hq =>
+    (List.mem_append.1 hq).elim (fun h => Nat.lt_of_lt_of_le (ho o h) hiA)
+      fun h => by obtain ⟨q, hq', rfl⟩ := List.mem_map.1 h; exact hx q hq'
+  refine .base ⟨R, ⟨⟨hr, hm, ?_, hnA.trans hnC.symm, ?_, ?_⟩, ?_, ?_, ?_, ?_, ?_⟩, hf, hi, fun _ _ => rfl⟩
+  · rw [hpA, hpC]
+    exact (hp.imp_mem fun p hp' q hq h => ⟨hlow (hb p hp') (hb q hq) h.1, h.2⟩).append hnew
+  · rw [hpA]; exact hbelow fun q hq => (hPn q hq).2
+  · rw [hpC, ← hi]; exact hbelow fun q hq => (hPC q hq).2
   · rw [heA, heC]; exact hev.append he
-  · rw [hoA, hoC]; exact hout
-  · rw [hoA, hiA]; exact ho
-  · rw [hoC, hiC]; exact ho
-  · rw [hwA, hwC]; exact hown
+  · rw [hoA, hoC]
+    exact (hout.imp_mem fun o ho' o' ho'' h => ⟨hlow (ho o ho') (ho o' ho'') h.1, h.2⟩).append
+      (hnew.map fun _ _ h => Step.Pending.rel_line h)
+  · rw [hoA]; exact hobelow fun q hq => (hPn q hq).2
+  · rw [hoC, ← hi]; exact hobelow fun q hq => (hPC q hq).2
+  · rw [hwA, hwC]; exact hown.append hO
 
-/-- A run that sends no request and queues nothing, as `AccRel` says of it with no flag of its news and own slots
-holding. -/
-theorem quiet_run {shs : List (PendingShape v.event)} {a : Step.Acc v} {o : EventsOut v} {f : Term} {q0 : Nat}
-    {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs a o f q0 r)
-    (hq : Holds M (noneT (o.news.map (·.flag) ++ o.owns.map (·.flag)))) :
-    ∃ (recs : v.records.den0) (ms : Step.Machines v.machines) (fr : Nat) (evs : List v.event.den0), r = .ok ⟨{ a.state with records := recs, machines := ms, fresh := fr },
-        a.events ++ evs, a.out, a.own⟩ ∧
-      RelV L v.records (Ty.up _ v.records_data recs) (o.records.denote M) ∧ MachinesRel M L T v.machines o.tables ms ∧
-      f.denote M = .int (fr : Int) ∧ o.nextId.denote M = .int (Int.ofNat a.state.nextId) ∧
-      o.queued.denote M = .int (q0 : Int) ∧ EventsRel M L o.events evs := by
-  obtain ⟨recs, ms, fr, evs, effs, os, hr, r1, r2, r3, r4, r5, r6, r7, r8⟩ := h
-  simp only [noneT, List.map_append, holds_allT, List.mem_append] at hq
-  have he := news_nil r5 (by simp only [noneT, holds_allT]; exact fun c hc => hq c (.inl hc))
-  have ho := owns_nil r7 (by simp only [noneT, holds_allT]; exact fun c hc => hq c (.inr hc))
-  subst he ho
-  refine ⟨recs, ms, fr, evs, ?_, r1, r2, r3, by simpa using r4, by simpa using r6, r8⟩
-  rw [hr [] trivial]
-  simp
+theorem map_self {α : Type} {f : α → α} : {l : List α} → (∀ a ∈ l, f a = a) → l.map f = l
+  | [], _ => rfl
+  | a :: l, h => by rw [List.map_cons, h a List.mem_cons_self, map_self fun b hb => h b (List.mem_cons_of_mem _ hb)]
+
+/-- Requests alike, each at the id `σ` gives the other's, are alike at the same ids once the second side's ids are
+renamed by `σ`. -/
+theorem multi_rewire {e : Ty} {σ : Nat → Nat} {xs ys : List (Step.Pending e)}
+    (h : Multi (fun p q => p.id = σ q.id ∧ PendingAlike PBij.refl p q) xs ys) :
+    Multi (fun p q => p.id = q.id ∧ PendingAlike PBij.refl p q) xs (ys.map fun q => { q with id := σ q.id }) := by
+  simpa using h.map (r' := fun p q => p.id = q.id ∧ PendingAlike PBij.refl p q) (f := id)
+    (g := fun q : Step.Pending e => { q with id := σ q.id }) fun _ _ h => h
 
 /-- The variant test of an own kind's place and an effect's code give the kind's facts of the effect. -/
 theorem own_key {x : EffectV v.event} (hown : x.isRequest = false) {senv : StepEnv L (shapes v)} {z : Val}
@@ -175,28 +197,18 @@ theorem machines_of_eq : (ms : List (MachineV v.records v.event)) →
     exact ⟨insts_of_table (rel0_of_eqFn m.table_data htc hta htb hf hh.1),
       machines_of_eq ms (fun m' hm' => hc m' (List.mem_cons_of_mem _ hm')) ha hb hc' hh.2⟩
 
-theorem wireSwap_self (n i : Nat) : wireSwap n n n i = i := by
-  unfold wireSwap
-  split <;> (try split) <;> omega
-
-theorem mapWire_self (n : Nat) (a : Step.Acc v) : a.mapWire (wireSwap n n n) = a := by
-  simp [Step.Acc.mapWire, wireSwap_self]
-
-theorem noneT_append (xs ys : List Term) : Holds M (noneT (xs ++ ys)) ↔ Holds M (noneT xs) ∧ Holds M (noneT ys) := by
-  simp only [noneT, List.map_append, holds_allT, List.mem_append]
-  exact ⟨fun h => ⟨fun c hc => h c (.inl hc), fun c hc => h c (.inr hc)⟩, fun h c hc => hc.elim (h.1 c) (h.2 c)⟩
-
 theorem fault_true {t : Term} {o : Option Fault} (h : t.denote M = .bool o.isSome) : Holds M t ↔ o.isSome := by
   simp [Holds, h, Val.toBool]
 
 /-- A pair question's terms: where the codes' condition and the condition hold and the two orders are not reported as
-not commuting, the two effects commute from every step in progress whose state the symbolic state denotes and which
-relates to itself under every renaming keeping its counters (`Step.PairCommutes`). -/
+not commuting, the two effects commute from every step in progress whose state the symbolic state denotes, whose
+pending requests and own queue hold kept functions of `P`, and which relates to itself under every renaming keeping
+its counters (`Step.PairCommutes`). -/
 theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v)) (hrc : v.records.comparable = true)
     (hmc : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
-    {S : SymState v} {a0 : Step.Acc v} (hR : StateRel M L T (shapes v) S a0.state)
-    (hsa : Step.SelfAt a0.state.fresh a0) {t1 t2 : Term} {x1 x2 : EffectV v.event}
+    {S : SymState v} {a0 : Step.Acc v} (hR : StateRel M L T (shapes v) S a0.state) (hinv : Step.Inv P a0.state)
+    (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0) {t1 t2 : Term} {x1 x2 : EffectV v.event}
     (hx1 : RelV L (.dsl .effect [v.event]) x1 (t1.denote M)) (hx2 : RelV L (.dsl .effect [v.event]) x2 (t2.denote M))
     (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P)
     {k1 k2 : Nat} (ht1 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k1) t1))
@@ -238,7 +250,9 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
   have hc2' : Holds M c2 := by
     rw [holds_ite] at hc2
     simpa [show (a1.fault.denote M).toBool = false by simpa [Holds] using hfa1] using hc2
-  obtain ⟨hbr, hbm, hbf, hbn, hbnow, os1, hbo, hbq, -⟩ := hA1.ends
+  obtain ⟨hbr, hbm, hbf, hbn, hbnow, _, -, hbq, -⟩ := hA1.ends
+  have hqb := Step.runOwn_queue T chk.reach a0 hinv hqk x1 hb
+  have hinvb := Step.runOwn_inv T chk.reach a0 hinv x1 hb
   have eA2 := ownKind_encode chk hshs (shapesHold_shapes v) b happ hca senv hbr (hR.now.trans (by rw [hbnow])) hbf hbn
     hbq hbm x2 hreach2 he2 hk2 h2 hy2
   obtain ⟨hfA2, hA2⟩ := eA2.2 hc2'
@@ -259,7 +273,12 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     have hc4' : Holds M c4 := by
       rw [holds_ite] at hc4
       simpa [show (b1.fault.denote M).toBool = false by simpa [Holds] using hfb1] using hc4
-    obtain ⟨hcr, hcm, -, hcn, hcnow, os3, hco, hcq, -⟩ := hC1.ends
+    obtain ⟨hcr, hcm, -, hcn, hcnow, _, -, hcq, -⟩ := hC1.ends
+    have hqc := Step.runOwn_queue T chk.reach { a0 with state := { a0.state with fresh := f + 1 } }
+      (hinv.congr rfl rfl) hqk x2 hc
+    have hinvc : Step.Inv P (c.withFresh f).state :=
+      (Step.runOwn_inv T chk.reach { a0 with state := { a0.state with fresh := f + 1 } } (hinv.congr rfl rfl) x2
+        hc).congr rfl rfl
     have hff : S.fresh.denote M = .int (Int.ofNat (c.withFresh f).state.fresh) := by
       simp only [Step.Acc.withFresh]; rw [hR.fresh, hf]
     have eC2 := ownKind_encode chk hshs (shapesHold_shapes v) (c.withFresh f) happ hca senv hcr
@@ -270,7 +289,9 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     have hv := (hviol hfa1).2 hfb1
     have key : (Holds M a2.fault ∧ Holds M b2.fault) ∨ (¬ Holds M a2.fault ∧ ¬ Holds M b2.fault ∧
         Holds M (allT [recEq a2.done.records b2.done.records, tabEq, slotsEqT a1.done.events b2.done.events,
-          slotsEqT a2.done.events b1.done.events, noneT (a1.sent ++ a2.sent ++ b1.sent ++ b2.sent)])) := by
+          slotsEqT a2.done.events b1.done.events, newsEqT S.nextId b1.done.nextId a1.done.news b2.done.news,
+          newsEqT a1.done.nextId S.nextId a2.done.news b1.done.news, ownsEqT a1.done.owns b2.done.owns,
+          ownsEqT a2.done.owns b1.done.owns])) := by
       by_cases ha : Holds M a2.fault <;> by_cases hb' : Holds M b2.fault
       · exact .inl ⟨ha, hb'⟩
       · exact absurd (fun hna _ => absurd ha hna) (hv fun _ => hb')
@@ -289,26 +310,74 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       rw [hg2] at hA2
       rw [hg4] at hC2
       simp only at hA2 hC2
-      simp only [holds_allT, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq,
-        noneT_append] at hsame
-      obtain ⟨hrq, htq, he14, he23, ⟨⟨hq1, hq2⟩, hq3⟩, hq4⟩ := hsame
-      obtain ⟨r1, m1, fr1, ev1, hb1, -, -, -, -, -, hev1⟩ := quiet_run hA1 hq1
-      obtain ⟨r2, m2, fr2, ev2, hb2', hr2, hm2, -, -, -, hev2⟩ := quiet_run hA2 hq2
-      obtain ⟨r3, m3, fr3, ev3, hc3', -, -, -, -, -, hev3⟩ := quiet_run hC1 hq3
-      obtain ⟨r4, m4, fr4, ev4, hd4, hr4, hm4, -, -, -, hev4⟩ := quiet_run hC2 hq4
+      simp only [holds_allT, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq] at hsame
+      obtain ⟨hrq, htq, he14, he23, hn14, hn23, ho14, ho23⟩ := hsame
+      obtain ⟨r1, m1, fr1, ev1, effs1, os1, hW1, -, -, -, -, hN1, -, hO1, hev1⟩ := hA1
+      obtain ⟨r2, m2, fr2, ev2, effs2, os2, hW2, hr2, hm2, -, -, hN2, -, hO2, hev2⟩ := hA2
+      obtain ⟨r3, m3, fr3, ev3, effs3, os3, hW3, -, -, -, -, hN3, -, hO3, hev3⟩ := hC1
+      obtain ⟨r4, m4, fr4, ev4, effs4, os4, hW4, hr4, hm4, -, -, hN4, -, hO4, hev4⟩ := hC2
+      obtain ⟨psA1, psC1, hwA1, hwC1, hP1⟩ := news_same hN1 hN4 hR.nextId hcn hn14
+      obtain ⟨psA2, psC2, hwA2, hwC2, hP2⟩ := news_same hN2 hN3 hbn hR.nextId hn23
+      obtain rfl := Except.ok.inj (hW1 psA1 hwA1)
+      obtain rfl := Except.ok.inj (hW3 psC2 hwC2)
+      have hqA := Step.runOwn_queue T chk.reach _ hinvb hqb x2 (hW2 psA2 hwA2)
+      have hqd := Step.runOwn_queue T chk.reach _ hinvc hqc x1 (hW4 psC1 hwC1)
+      have hO14 := owns_same chk.sites hO1 hO4 ho14 (fun x hx => hqb x (List.mem_append_right _ hx))
+        (fun x hx => (hqd x (List.mem_append_right _ hx)).2)
+      have hO23 := owns_same chk.sites hO2 hO3 ho23 (fun x hx => hqA x (List.mem_append_right _ hx))
+        (fun x hx => (hqc x (List.mem_append_right _ hx)).2)
       have hfb := Step.runOwn_fresh T hown1 hb
-      have hfa := Step.runOwn_fresh T hown2 hb2'
-      obtain rfl := Except.ok.inj hb1
-      obtain rfl := Except.ok.inj hc3'
-      rw [hb2', hd4]
-      simp only at hfa hfb ⊢
-      rw [mapWire_self]
+      have hfa := Step.runOwn_fresh T hown2 (hW2 psA2 hwA2)
+      have hl1 := hP1.length_eq
+      have hl2 := hP2.length_eq
+      have hiA1 := writes_ids hwA1
+      have hiA2 := writes_ids hwA2
+      have hiC1 := writes_ids hwC1
+      have hiC2 := writes_ids hwC2
+      rw [hW2 psA2 hwA2, hW4 psC1 hwC1]
+      simp only at hfa hfb hiA2 hiC1 hP1 hP2 ⊢
       obtain ⟨W, h0⟩ := hsa PBij.refl fun _ _ => rfl
-      refine .inl (same_of_quiet h0 (rel0_of_eqFn v.records_data hrc hr2 hr4 hrecEq hrq)
-        (machines_of_eq v.machines hmc hm2 hm4 htabEq htq) rfl rfl rfl rfl rfl rfl rfl rfl rfl rfl
-        (EA := ev1 ++ ev2) (EC := ev3 ++ ev4) (by simp) (by simp) ?_ (by rw [hfa, hfb, hf]))
-      exact (Multi.of_forall2 (forall2_append (events_of_slotsEq hev1 hev4 he14) (events_of_slotsEq hev2 hev3 he23))).perm_right
-        List.perm_append_comm
+      have hob := h0.2.2.2.1
+      have hpb := hinv.below
+      have hfix : ∀ {m k i : Nat}, i < a0.state.nextId → wireSwap a0.state.nextId m k i = i := fun h => by
+        unfold wireSwap; split <;> (try split) <;> omega
+      refine .inl (same_of_parts h0 (rel0_of_eqFn v.records_data hrc hr2 hr4 hrecEq hrq)
+        (machines_of_eq v.machines hmc hm2 hm4 htabEq htq) (PA := psA1 ++ psA2)
+        (PC := (psC2 ++ psC1).map fun p => { p with id := (wireSwap a0.state.nextId (a0.state.nextId + psC2.length)
+          (a0.state.nextId + psC2.length + psC1.length)) p.id })
+        (OA := os1 ++ os2) (OC := os3 ++ os4) (EA := ev1 ++ ev2) (EC := ev3 ++ ev4) ?_ ?_ ?_ ?_ rfl rfl ?_ ?_ ?_ ?_
+        ?_ ?_ ((hO14.append hO23).perm_right List.perm_append_comm) ?_ ?_ ?_ ?_)
+      · exact List.append_assoc _ _ _
+      · simp only [Step.Acc.mapWire, List.append_assoc, List.map_append]
+        exact congrArg (· ++ _) (map_self fun p hp => by simp only [hfix (hpb p hp)])
+      · have h1 := hP1.imp_mem (r' := fun p q => p.id = wireSwap a0.state.nextId (a0.state.nextId + psC2.length)
+            (a0.state.nextId + psC2.length + psC1.length) q.id ∧ PendingAlike PBij.refl p q) fun p hp q hq h => by
+          refine ⟨?_, h.2⟩
+          have := hiC1 q hq
+          unfold wireSwap; split <;> (try split) <;> omega
+        have h2 := hP2.imp_mem (r' := fun p q => p.id = wireSwap a0.state.nextId (a0.state.nextId + psC2.length)
+            (a0.state.nextId + psC2.length + psC1.length) q.id ∧ PendingAlike PBij.refl p q) fun p hp q hq h => by
+          refine ⟨?_, h.2⟩
+          have := hiC2 q hq
+          unfold wireSwap; split <;> (try split) <;> omega
+        rw [List.map_append]
+        exact ((multi_rewire h1).append (multi_rewire h2)).perm_right List.perm_append_comm
+      · intro p hp
+        rcases List.mem_append.1 hp with h | h
+        · have := hiA1 p h; dsimp only at this ⊢; omega
+        · have := hiA2 p h; dsimp only at this ⊢; omega
+      · simp only [Step.Acc.mapWire]; omega
+      · dsimp only; omega
+      · simp [List.append_assoc]
+      · simp only [Step.Acc.mapWire, List.append_assoc, List.map_append, List.map_map]
+        exact congrArg (· ++ _) (map_self fun o ho => by simp only [hfix (hob o ho)])
+      · exact List.append_assoc _ _ _
+      · simp [Step.Acc.mapWire, List.append_assoc]
+      · simp [List.append_assoc]
+      · simp [Step.Acc.mapWire, List.append_assoc]
+      · exact (Multi.of_forall2 (forall2_append (events_of_slotsEq hev1 hev4 he14)
+          (events_of_slotsEq hev2 hev3 he23))).perm_right List.perm_append_comm
+      · simp only [Step.Acc.mapWire]; omega
   · revert hC1
     cases hko3 : ko3.fault? M with
     | none =>
@@ -336,7 +405,8 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     (hM : ∀ n (h : n < (pairTys v).length), Sorted L (pairTys v)[n] (M.vars n))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hbelow : ∀ p ∈ s.pending, p.id < s.nextId) (hsupp : Step.StateSupp s)
-    {a0 : Step.Acc v} (has : a0.state = s) (hsa : Step.SelfAt a0.state.fresh a0) {x1 x2 : EffectV v.event}
+    {a0 : Step.Acc v} (has : a0.state = s) (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0)
+    {x1 x2 : EffectV v.event}
     (hx1 : RelV L (.dsl .effect [v.event]) x1 (M.vars (pairVar v)))
     (hx2 : RelV L (.dsl .effect [v.event]) x2 (M.vars (pairVar v + 1)))
     (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P)
@@ -377,7 +447,8 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
   · exact (hna' hna.1).elim
   · exact (hna' hna.2).elim
   subst has
-  exact pair_commutes chk senv hrc hmc hR hsa (t1 := .var (pairVar v)) (t2 := .var (pairVar v + 1)) hx1 hx2 hown1 hown2
+  exact pair_commutes chk senv hrc hmc hR (decode_inv chk.reach hS hbelow) hqk hsa (t1 := .var (pairVar v))
+    (t2 := .var (pairVar v + 1)) hx1 hx2 hown1 hown2
     hreach1 hreach2 ht1 ht2 ho hna.1 hna.2 hna'
 
 /-- T5's pair hypothesis for any two own effects: where every listed pair of own kinds has both questions unsat, any
@@ -390,7 +461,8 @@ theorem pairs_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
     (hM : ∀ n (h : n < (pairTys v).length), Sorted L (pairTys v)[n] (M.vars n))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hbelow : ∀ p ∈ s.pending, p.id < s.nextId) (hsupp : Step.StateSupp s)
-    {a0 : Step.Acc v} (has : a0.state = s) (hsa : Step.SelfAt a0.state.fresh a0) {x1 x2 : EffectV v.event}
+    {a0 : Step.Acc v} (has : a0.state = s) (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0)
+    {x1 x2 : EffectV v.event}
     (hx1 : RelV L (.dsl .effect [v.event]) x1 (M.vars (pairVar v)))
     (hx2 : RelV L (.dsl .effect [v.event]) x2 (M.vars (pairVar v + 1)))
     (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P) :
@@ -401,7 +473,7 @@ theorem pairs_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
   have htest : ∀ (j : Nat) (vals : List Val) (i : Nat), M.vars i = .ctor senv.dE ((L.effectsOf v.event).length + j) vals →
       Holds M (.is senv.dE ((L.effectsOf v.event).length + j) (.var i)) := fun j vals i h => by
     simp [Holds, Term.denote, h, Val.toBool]
-  exact pair_sound chk senv hrc hmc hq hb ht hM hS hbelow hsupp has hsa hx1 hx2 hown1 hown2 hreach1 hreach2
+  exact pair_sound chk senv hrc hmc hq hb ht hM hS hbelow hsupp has hqk hsa hx1 hx2 hown1 hown2 hreach1 hreach2
     (htest _ _ _ hz1) (htest _ _ _ hz2)
 
 end

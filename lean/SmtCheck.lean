@@ -3494,12 +3494,14 @@ def pairKey (name : String) : OwnKey := .command evT name .str .int .str ⟨pair
 
 def pairSites : List AnySite := (svcParts pairSvc).sites ++ [⟨[], _, pairOnAnswer⟩]
 
-/-- The service's layout with alice's three own kinds added by hand: no function of the service queues them. -/
-def pairLayoutOf (slots : Nat) : Layout :=
-  let L := svcLayout pairSvc slots (joinParts [siteParts pairOnAnswer,
+/-- A service's layout with alice's three own kinds added by hand: no function of the service queues them. -/
+def pairLayoutFor (v : ServiceV) (slots : Nat) : Layout :=
+  let L := svcLayout v slots (joinParts [siteParts pairOnAnswer,
     ⟨[], [], [Ty.nil, Ty.result Ty.nil .str, .tuple []], []⟩])
   Layout.addTys (fun _ => slots) { effects := L.effects, owns := L.owns ++ ["ins", "set", "cap"].map pairKey }
     (L.types.map (·.1))
+
+def pairLayoutOf (slots : Nat) : Layout := pairLayoutFor pairSvc slots
 
 /-- The target question of the pair of own kinds `k1`, `k2` of the service `p` at `slots`. -/
 def pairTarget (slots k1 k2 : Nat) : Except String Script := do
@@ -3515,41 +3517,100 @@ def pairEffect (L : Layout) : Val → Option (EffectV evT)
       .command name .str .int .str c i (pairOnAnswer.fn ())
   | _ => none
 
+/-- Two lists of pending requests hold the same wire ids with the same inputs. -/
+def samePending {e : Ty} (ps qs : List (Step.Pending e)) : Bool :=
+  ps.length == qs.length && ps.all fun p => qs.any fun q => p.id == q.id &&
+    match Ty.same p.request.input q.request.input with
+    | some ⟨h⟩ => Ty.deq0 _ (h ▸ p.request.value) q.request.value
+    | none => false
+
 /-- Whether two own effects do not commute from a step in progress, run in Lean in both orders, the other one
-canonical: the first runs, and the second faults after it alone, or the two orders end with different records. -/
-def pairDiffers (a0 : Step.Acc pairSvc) (e1 e2 : EffectV evT) : Bool :=
+canonical (`Step.canonPair`): the first runs, and the second faults after it alone, or the two orders end with
+different records or different pending requests (wire ids and inputs). -/
+def pairDiffers (v : ServiceV) (a0 : Step.Acc v) (e1 e2 : EffectV v.event) : Bool :=
   let f := a0.state.fresh
   match Step.runOwn prelude a0 e1, Step.runOwn prelude (a0.withFresh (f + 1)) e2 with
   | .error _, _ => false
   | .ok b, .error _ => match Step.runOwn prelude b e2 with
     | .ok _ => true
     | .error _ => false
-  | .ok b, .ok c => match Step.runOwn prelude b e2, Step.runOwn prelude (c.withFresh f) e1 with
+  | .ok b, .ok _ => match Step.runOwn prelude b e2, Step.canonPair prelude a0 e1 e2 with
     | .error _, .error _ => false
-    | .ok x, .ok y => !Ty.deq0 recordsT x.state.records y.state.records
+    | .ok x, .ok y => !Ty.deq0 v.records x.state.records y.state.records || !samePending x.state.pending y.state.pending
     | _, _ => true
 
-def pairCheck (solver : Solver) : IO Bool := do
-  let L := pairLayoutOf 3
-  let fail (m : String) : IO Bool := do IO.println s!"smt-check: pair questions: {m}"; return false
-  let .ok senv := StepEnv.of L (shapes pairSvc) | fail "no step environment"
+/-- The pair questions of `v`'s own kinds in its layout at 3 slots: each listed pair's target question must be unsat
+when it commutes, and otherwise sat with a model whose state and effects do not commute in Lean. -/
+def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : List (String × Nat × Nat × Bool))
+    (hev : v.event = evT) : IO Bool := do
+  let L := pairLayoutFor v 3
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: pair questions ({v.name}): {m}"; return false
+  let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
   let mut ok := true
-  for (name, k1, k2, commutes) in [("ins ins", 0, 0, true), ("set set", 1, 1, false), ("ins cap", 0, 2, false)] do
-    match pairQuestions L prelude pairSites pairSvc senv k1 k2 with
+  for (name, k1, k2, commutes) in cases do
+    match pairQuestions L prelude sites v senv k1 k2 with
     | .error r => ok ← fail s!"{name}: no questions: {repr r}"
     | .ok (_, tq) =>
       match ← solver.run tq, commutes with
       | .unsat, true => pure ()
       | .sat vs, false =>
         let M := modelOf vs
-        let n := pairVar pairSvc
-        match (SymState.vars (v := pairSvc) 0).decode M L prelude (shapes pairSvc), pairEffect L (M.vars n),
+        let n := pairVar v
+        match (SymState.vars (v := v) 0).decode M L prelude (shapes v), pairEffect L (M.vars n),
             pairEffect L (M.vars (n + 1)) with
         | some s, some e1, some e2 =>
-          unless pairDiffers { state := s } e1 e2 do ok ← fail s!"{name}: the model's effects commute in Lean"
+          unless pairDiffers v { state := s } (hev ▸ e1) (hev ▸ e2) do
+            ok ← fail s!"{name}: the model's effects commute in Lean"
         | _, _, _ => ok ← fail s!"{name}: the model does not decode"
       | a, _ => ok ← fail s!"{name}: {repr a}"
   return ok
+
+/-! Pair questions whose steps send requests: the service `p` with the reaction `echo`, which asks `mail` to `send`
+the event's key, or `count`, which sends how many rows the records hold, each `on_answer` capturing the event's key.
+Two `ins` with `echo` commute: each sends the same request at the same wire id counted from where its step starts,
+whichever runs first, so the question is unsat. With `count` the first `ins` sends one row fewer than it does after
+the other `ins`, so the question is sat and the model's effects must not commute in Lean. -/
+
+def reqCtxT : Ty := Ty.reactionCtx recordsT
+
+def reqAnswerE : Expr [] [.int] (.fn [Ty.result Ty.nil Ty.nil] (.list evT)) := .lam (.list .nil)
+
+/-- A request to `mail`'s `send` with the input `input`, whose `on_answer` captures the event's key. -/
+def reqSendE (input : Expr [] [reqCtxT, evT] .int) : Expr [] [reqCtxT, evT] (.dsl .effect [evT]) :=
+  let key : Expr [] [reqCtxT, evT] .int := .index (ts := [.int, .int]) (.var (.there .here)) ⟨0, by decide⟩
+  let handle : Expr [] [reqCtxT, evT] (.dsl .externalCommand [.int, Ty.nil, Ty.nil]) :=
+    .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
+  let clo : Expr [] [reqCtxT, evT] (.dsl .closure [.fn [Ty.result Ty.nil Ty.nil] (.list evT)]) :=
+    .close ⟨"m", 32, 1, 0⟩ (.cons key .nil) rfl rfl reqAnswerE
+  .call (.prim .requestCommand [evT, .int, Ty.nil, Ty.nil] rfl) (.cons handle (.cons input (.cons clo .nil)))
+
+def echoE : Expr [] [] (.fn [reqCtxT, evT] (.list (.dsl .effect [evT]))) :=
+  .lam (.list (.cons (reqSendE (.index (ts := [.int, .int]) (.var (.there .here)) ⟨0, by decide⟩)) .nil))
+
+def countE : Expr [] [] (.fn [reqCtxT, evT] (.list (.dsl .effect [evT]))) :=
+  .lam (.list (.cons (reqSendE (.call (.prim .tableSize [.int, .int] rfl)
+    (.cons (.field (ft := recordsT) "records" 0 (by simp) (.var .here)) .nil))) .nil))
+
+def reqSvc (name : String) (react : Expr [] [] (.fn [reqCtxT, evT] (.list (.dsl .effect [evT])))) : ServiceV :=
+  { pairSvc with name := name, reactions := [⟨name, .closed react⟩],
+                 declared := [("mail", .externalCommand "send" .int Ty.nil Ty.nil)] }
+
+def reqSites (v : ServiceV) : List AnySite := (svcParts v).sites ++ [⟨[], _, pairOnAnswer⟩]
+
+/-- The target question of the pair (`ins`, `ins`) of the service `echo` at `slots`. -/
+def reqTarget (slots : Nat) : Except String Script := do
+  let v := reqSvc "echo" echoE
+  let L := pairLayoutFor v slots
+  let senv ← (StepEnv.of L (shapes v)).mapError fun r => s!"no step environment: {repr r}"
+  let (_, tq) ← (pairQuestions L prelude (reqSites v) v senv 0 0).mapError fun r => s!"no questions: {repr r}"
+  pure tq
+
+def pairCheck (solver : Solver) : IO Bool := do
+  let a ← pairCases solver pairSvc pairSites [("ins ins", 0, 0, true), ("set set", 1, 1, false),
+    ("ins cap", 0, 2, false)] rfl
+  let b ← pairCases solver (reqSvc "echo" echoE) (reqSites (reqSvc "echo" echoE)) [("ins ins", 0, 0, true)] rfl
+  let c ← pairCases solver (reqSvc "count" countE) (reqSites (reqSvc "count" countE)) [("ins ins", 0, 0, false)] rfl
+  return a && b && c
 
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
@@ -3674,6 +3735,7 @@ def sizeRows : List (String × (Nat → Except String Script)) :=
    ("event with a cascade at 3 slots (bound, not slots)", fun k => (·.1) <$> cascEventTermsOf k 3 []),
    ("clock whose timers queue own commands (bound 2)", fun k => (·.1) <$> tickClockTermsOf 2 k []),
    ("pair question (insert, capped insert)", fun k => pairTarget k 0 2),
+   ("pair question (insert, insert) sending requests", reqTarget),
    ("re-shared chain (levels, not slots)", fun k => pure (reshared k))]
 
 /-- Prints the step scripts' sizes at 2, 4, 8 and 16, one row each. With a budget file, whose rows have the same form,
