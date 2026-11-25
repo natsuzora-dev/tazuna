@@ -3252,7 +3252,7 @@ def tickClockCheck (solver : Solver) : IO Bool := do
         if r.state.fresh != s.fresh + 2 then ok ← fail s!"the step ran {r.state.fresh - s.fresh} internal steps, not 2"
         if !same r.state then
           ok ← fail s!"the model's state (next id {s'.nextId}, fresh {s'.fresh}, ids {ids s'}, table {view s'.machines.toSigma}) is not the step's (next id {r.state.nextId}, fresh {r.state.fresh}, ids {ids r.state}, table {view r.state.machines.toSigma})"
-        match Step.fire { s with now := 100 } (v.bounds.cascade.toNat + 1) with
+        match Step.fire { s with now := 100 } (v.bounds.cascadeNat + 1) with
         | some (s1, _) => if same s1 then ok ← fail "the rounds without the cascade pass the comparison"
         | none => ok ← fail "the rounds exceed the bound"
         return ok

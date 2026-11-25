@@ -77,7 +77,7 @@ def encodeFinish (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.e
     (now fresh pending : Term) (o : EventsOut v) : Except Refusal (Encoded (FinishOut v)) := do
   -- `queueAt` reads the default only where no own slot holds the place, so its value is never asked.
   let dflt := (effectDefault L v.event).getD tt
-  let ⟨so, cs, cx⟩ ← encodeSettle L T P v shs senv apply dflt now v.bounds.cascade.toNat 0 o.owns
+  let ⟨so, cs, cx⟩ ← encodeSettle L T P v shs senv apply dflt now v.bounds.cascadeNat 0 o.owns
     ⟨.bool false, o, fresh⟩
   let (pT, cp) ← encodePending L shs pending (o.news ++ so.terms.done.news)
   let (rules, ci) ← encodeInvariants L inv so.terms.done.records
@@ -116,8 +116,8 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl)
 machine's invariants on the state it leaves. -/
 def finishFits (S : Ty → Nat) (T : List TypeDecl) (shs : List (PendingShape v.event)) (r : Except Fault (Step.Acc v)) :
     Prop :=
-  ∀ a1, r = .ok a1 → settleFits S T v.bounds.cascade.toNat 0 a1 ∧
-    ∀ a2, Step.settleFrom T v.bounds.cascade.toNat 0 a1 = .ok a2 →
+  ∀ a1, r = .ok a1 → settleFits S T v.bounds.cascadeNat 0 a1 ∧
+    ∀ a2, Step.settleFrom T v.bounds.cascadeNat 0 a1 = .ok a2 →
       a2.state.pending.length ≤ S (pendingTable shs) ∧ v.invariants.appFits S (a2.state.records, ()) ∧
       instChecksFit S a2.state.records a2.state.now a2.state.machines
 
@@ -164,16 +164,16 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     have e3' : fresh.denote M = .int (Int.ofNat a1.state.fresh) := by rw [← hA]; exact e3
     have hnow1 : now.denote M = .int a1.state.now := by rw [← hA]; exact hnow
     obtain ⟨es, hrel⟩ := settle_encode chk hshs happ hca senv
-      v.bounds.cascade.toNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 hS1 hnow1 rfl e1' e2' e3' hn1 hq1' hset hcx
-    have hfits : finishFits L.count T shs r ↔ settleFits L.count T v.bounds.cascade.toNat 0 a1 ∧
-        ∀ a2, Step.settleFrom T v.bounds.cascade.toNat 0 a1 = .ok a2 →
+      v.bounds.cascadeNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 hS1 hnow1 rfl e1' e2' e3' hn1 hq1' hset hcx
+    have hfits : finishFits L.count T shs r ↔ settleFits L.count T v.bounds.cascadeNat 0 a1 ∧
+        ∀ a2, Step.settleFrom T v.bounds.cascadeNat 0 a1 = .ok a2 →
           a2.state.pending.length ≤ L.count (pendingTable shs) ∧ v.invariants.appFits L.count (a2.state.records, ()) ∧
           instChecksFit L.count a2.state.records a2.state.now a2.state.machines := by
       rw [hra]
       exact ⟨fun h => h _ rfl, fun h a1 e => by cases e; exact h⟩
     rw [hfits, holds_andT]
     have key : ∀ hcs : Holds M cs, (Holds M (.ite so.faultT tt (andT cp (andT ci ck))) ↔
-        ∀ a2, Step.settleFrom T v.bounds.cascade.toNat 0 a1 = .ok a2 →
+        ∀ a2, Step.settleFrom T v.bounds.cascadeNat 0 a1 = .ok a2 →
           a2.state.pending.length ≤ L.count (pendingTable shs) ∧ v.invariants.appFits L.count (a2.state.records, ()) ∧
           instChecksFit L.count a2.state.records a2.state.now a2.state.machines) := by
       intro hcs
@@ -204,7 +204,7 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
         have ep := pending_exact hpend hS hw hh hp hq hpe
         have ei := invariants_exact v.invariants v.records_data hinvc hci0 recs2 f1 hi
         have ek := (instChecks_encode recs2 _ f1 hnow v.machines _ _ f2 (fun m hm => (chk.keys m hm).2) hck).1
-        have hall : ∀ a2, Step.settleFrom T v.bounds.cascade.toNat 0 _ = .ok a2 ↔ a2 = _ := fun a2 => by
+        have hall : ∀ a2, Step.settleFrom T v.bounds.cascadeNat 0 _ = .ok a2 ↔ a2 = _ := fun a2 => by
           rw [hr2 ps2 hps2]; exact ⟨fun h => by cases h; rfl, fun h => by rw [h]⟩
         simp only [hall, forall_eq]
         rw [holds_andT, holds_andT, ep, ei, ek]
@@ -221,7 +221,7 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
       simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, v.records_data]
     have hinvR := v.invariants.code_fn hfd hinvc hci0
     obtain ⟨hF, hm⟩ := (settle_encode chk hshs happ hca senv
-      v.bounds.cascade.toNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 (by simpa [hown] using e7) hnow rfl e1 e2 e3
+      v.bounds.cascadeNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 (by simpa [hown] using e7) hnow rfl e1 e2 e3
       (by rw [e4, ← hl1]; rfl) (by simpa [hown] using e6) hset hcx).2 hcs
     unfold Finished Step.finish
     rw [hra]

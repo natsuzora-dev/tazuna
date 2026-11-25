@@ -25,9 +25,9 @@ def _root_.Tazuna.Ir.CreateV.bounds (c : CreateV r) (t : Ty) : Bool := (Ty.same 
 no create bounds, `items`. Lists get theirs from their literals (`listSlots`). -/
 def boundSlots (b : BoundsV r) : Ty → Nat
   | .table k v => match b.creates.filter (·.bounds (.table k v)) with
-    | [] => b.items.toNat
-    | cs => cs.foldl (fun m c => max m c.atMost.toNat) 0
-  | .bag _ => b.items.toNat
+    | [] => b.itemsNat
+    | cs => cs.foldl (fun m c => max m c.atMostNat) 0
+  | .bag _ => b.itemsNat
   | _ => 0
 
 /-- The records are within every create: each one's table holds at most `at_most` records. -/
@@ -49,13 +49,13 @@ theorem foldl_max_ge {α : Type} (g : α → Nat) : (xs : List α) → (m : Nat)
 
 /-- Every table a create bounds fits its type's slots. -/
 theorem atMost_le_slots {r : Ty} (b : BoundsV r) (c : CreateV r) (hc : c ∈ b.creates) :
-    c.atMost.toNat ≤ boundSlots b (.table c.key c.value) := by
+    c.atMostNat ≤ boundSlots b (.table c.key c.value) := by
   have hm : c ∈ b.creates.filter (·.bounds (.table c.key c.value)) :=
     List.mem_filter.2 ⟨hc, by simp [CreateV.bounds, Ty_same_self]⟩
   simp only [boundSlots]
   split
   · rename_i h; rw [h] at hm; nomatch hm
-  · exact (foldl_max_ge (fun c : CreateV r => c.atMost.toNat) _ 0).2 c hm
+  · exact (foldl_max_ge (fun c : CreateV r => c.atMostNat) _ 0).2 c hm
 
 section
 variable (L : Layout) {r : Ty}

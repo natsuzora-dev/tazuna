@@ -317,7 +317,7 @@ def settle : Nat → Acc v → Except Fault (Acc v)
 
 /-- Ends a step: runs what waits and checks the invariants. A fault leaves the state as `s0`. -/
 def finish (s0 : State v) (a : Except Fault (Acc v)) (outcome : Outcome) : Result v :=
-  match a >>= settle T v.bounds.cascade.toNat with
+  match a >>= settle T v.bounds.cascadeNat with
   | .error f => ⟨s0, .fault f, [], []⟩
   | .ok a => match invariants a.state with
     | n :: _ => ⟨s0, .fault (.invariant n), [], []⟩
@@ -404,7 +404,7 @@ def step (T : List TypeDecl) (v : ServiceV) (s : State v) : Input v → Result v
   | .event i value => finish T s (applyEvents T { state := s } [(v.subscribes.get i).wrap.fn (value, ())]) .accepted
   | .clock time =>
     if time < s.now then ⟨s, .invalid ["time moves forward"], [], []⟩ else
-    match fire { s with now := time } (v.bounds.cascade.toNat + 1) with
+    match fire { s with now := time } (v.bounds.cascadeNat + 1) with
     | none => ⟨s, .fault .cascadeLimit, [], []⟩
     | some (s', effs) => finish T s (start { state := s' } effs) .accepted
 

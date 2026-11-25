@@ -140,11 +140,19 @@ structure CreateV (r : Ty) where
   table : Fun (Ty.fn [r] (.table key value))
   atMost : Int
 
+/-- The bounds as the spec writes them, in Gleam's Int. -/
 structure BoundsV (r : Ty) where
   creates : List (CreateV r)
   items : Int
   cascade : Int
   steps : Int
+
+/-! The bounds as counts, for everything after check. Check rejects a negative bound (`Illegal.bounds`), so `toNat`
+loses nothing there; these are the only places that convert. -/
+
+def CreateV.atMostNat {r : Ty} (c : CreateV r) : Nat := c.atMost.toNat
+def BoundsV.itemsNat {r : Ty} (b : BoundsV r) : Nat := b.items.toNat
+def BoundsV.cascadeNat {r : Ty} (b : BoundsV r) : Nat := b.cascade.toNat
 
 structure ResponseV (e : Ty) where
   name : String

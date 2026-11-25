@@ -31,7 +31,7 @@ lean/.lake/build/bin/tazuna-engine check corpus/main --ir gleam/build/corpus.ir.
 # The solver must read the printed scripts and print values the engine reads back.
 lean/.lake/build/bin/smt-check "$(command -v z3)" || { echo "The solver check failed (is z3 on PATH?)."; exit 1; }
 
-# A term built twice instead of shared grows the scripts without failing a proof (run-log 83), so the sizes have a
+# A term built twice instead of shared grows the scripts without failing a proof, so the sizes have a
 # budget. Raise a budget only with the cause of the growth in the commit message.
 sizes=$(lean/.lake/build/bin/smt-check --sizes lean/sizes-budget.txt) || {
   echo "$sizes" | grep '^smt-check:'

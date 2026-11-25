@@ -194,14 +194,14 @@ theorem fire_prepend (q : Bag (Pending v.event)) :
 theorem finish_equiv (T : List TypeDecl) {s0 s0' : State v} (hs : s0.Equiv s0') (x : Except Fault (Acc v))
     {q q' : Bag (Pending v.event)} (hq : q.Perm q') (o : Outcome) :
     (finish T s0 (x.map (Acc.prepend q)) o).Equiv (finish T s0' (x.map (Acc.prepend q')) o) := by
-  have h : ∀ q, (x.map (Acc.prepend q) >>= settle T v.bounds.cascade.toNat) =
-      (x >>= settle T v.bounds.cascade.toNat).map (Acc.prepend q) := fun q => by
+  have h : ∀ q, (x.map (Acc.prepend q) >>= settle T v.bounds.cascadeNat) =
+      (x >>= settle T v.bounds.cascadeNat).map (Acc.prepend q) := fun q => by
     cases x with
     | error => rfl
     | ok a => exact settle_prepend T q _ a
   unfold finish
   rw [h, h]
-  cases x >>= settle T v.bounds.cascade.toNat with
+  cases x >>= settle T v.bounds.cascadeNat with
   | error => exact ⟨hs, rfl, rfl, rfl⟩
   | ok a =>
     have hi : ∀ q, invariants (a.prepend q).state = invariants a.state := fun _ => rfl
@@ -284,7 +284,7 @@ theorem step_perm (T : List TypeDecl) {v : ServiceV} {s t : State v} (h : s.Equi
     · simp only [ht, ite_true]; exact hres e _ p p' hp
     · simp only [ht, ite_false]
       rw [hnow, hnow, fire_prepend, fire_prepend]
-      cases fire { e with now := time } (v.bounds.cascade.toNat + 1) with
+      cases fire { e with now := time } (v.bounds.cascadeNat + 1) with
       | none => exact hres e _ p p' hp
       | some r =>
         obtain ⟨s', effs⟩ := r
