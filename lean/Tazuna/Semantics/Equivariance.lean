@@ -237,6 +237,21 @@ theorem Self.of_stripped {vs ws : List ServiceV}
       · exact h.1 he.1
       · exact ih h.2 he.2 x hx
 
+/-- Items that are the same once stripped relate to themselves where the relation says so. -/
+theorem self_of_map {α : Type} {c : α → α} {P : α → Prop} {xs ys : List α}
+    (h : Forall2 (fun x y => c x = c y → P x) xs ys) (he : xs.map c = ys.map c) : ∀ x ∈ xs, P x := by
+  induction xs generalizing ys with
+  | nil => intro _ hx; nomatch hx
+  | cons x xs ih =>
+    cases ys with
+    | nil => exact h.elim
+    | cons y ys =>
+      simp only [List.map_cons, List.cons.injEq] at he
+      intro z hz
+      rcases List.mem_cons.1 hz with rfl | hz
+      · exact h.1 he.1
+      · exact ih h.2 he.2 z hz
+
 theorem map_stripped (f : ServiceV → ServiceV) (hf : ∀ v, (f v).stripped = v.stripped) :
     (l : List ServiceV) → (l.map f).map ServiceV.stripped = l.map ServiceV.stripped
   | [] => rfl
@@ -452,19 +467,30 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     rintro ⟨vs, xs, ⟨⟩⟩ ⟨vs', xs', ⟨⟩⟩ ⟨hvs, -, -⟩ h
     simp only [Prim.den] at h
     have hm := congrArg (List.map ServiceV.stripped) (SpecV.mk.inj h).1
-    replace hm := stripped_of_map (by intro _; rfl) (by intro _; rfl) hm
+    replace hm := stripped_of_map (fun _ => by simp [ServiceV.stripped, SubscriptionV.stripped, Function.comp_def])
+      (fun _ => by simp [ServiceV.stripped, SubscriptionV.stripped, Function.comp_def]) hm
     intro v hv
     obtain ⟨w, hw, rfl⟩ := List.mem_map.1 hv
     have hs := Self.of_stripped hvs hm w hw
-    exact ⟨hs.apply, hs.commands, hs.queries, hs.machines, hs.reactions⟩
+    refine ⟨hs.init, hs.apply, fun s hs' => ?_, hs.commands, hs.queries, hs.machines, hs.reactions⟩
+    obtain ⟨s0, hs0, rfl⟩ := List.mem_map.1 hs'
+    exact hs.subscribes s0 hs0
   | service =>
     rintro ⟨n, ini, app, subs, ds, ms, xs, inv, rsp, bnd, scs, ⟨⟩⟩
       ⟨n', ini', app', subs', ds', ms', xs', inv', rsp', bnd', scs', ⟨⟩⟩
-      ⟨-, -, happ, -, hds, hms, hxs, -⟩ h
+      ⟨-, hini, happ, hsubs, hds, hms, hxs, -⟩ h
     simp only [ServiceV.stripped, ServiceV.mk.injEq] at h
-    obtain ⟨-, -, -, -, -, rfl, -, rfl, -, -, -, rfl, rfl, -⟩ := h
-    exact ⟨happ, Self.commands_of (forall2_self hds), Self.queries_of (forall2_self hds),
+    obtain ⟨-, -, -, -, hini', rfl, hsubs', rfl, -, -, -, rfl, rfl, -⟩ := h
+    have hi := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.param 0) rfl) hini
+    exact ⟨(congrArg (Ty.rel0 R _ _) (eq_of_heq hini')).mpr hi, happ, self_of_map hsubs (eq_of_heq hsubs'),
+      Self.commands_of (forall2_self hds), Self.queries_of (forall2_self hds),
       fun m hm => (forall2_self hms m hm).2 rfl, fun x hx => (forall2_self hxs x hx).2 rfl⟩
+  | subscribe =>
+    rintro ⟨n, w, ⟨⟩⟩ ⟨n', w', ⟨⟩⟩ ⟨-, hw, -⟩ h
+    simp only [Prim.den, SubscriptionV.stripped] at h
+    obtain ⟨-, -, -, hw'⟩ := SubscriptionV.mk.inj h
+    cases eq_of_heq hw'
+    exact hw
   | externalCommand => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
   | externalQuery => rintro ⟨n, f, _⟩ ⟨n', f', _⟩ ⟨hn, hf, -⟩; exact ⟨hn, hf⟩
   | source => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
@@ -500,7 +526,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     show Sender.Rel R (.reaction x.name) (.reaction x'.name)
     rw [hx]
     exact .reaction _
-  | external | subscribe | bounds | create | response | scenario | stepCommand | stepQuery | stepWait
+  | external | bounds | create | response | scenario | stepCommand | stepQuery | stepWait
   | stepAnswerCommand | stepAnswerQuery | stepEvent | stepCommandThen => intro _ _ _; trivial
 
 /-! The fundamental lemma. -/

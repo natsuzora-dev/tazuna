@@ -589,7 +589,9 @@ def DeclaredV.Self : DeclaredV → Prop
   | _ => True
 
 structure ServiceV.Self (v : ServiceV) : Prop where
+  init : Ty.rel0 R v.records v.init v.init
   apply : Fun.Rel R v.apply v.apply
+  subscribes : ∀ s ∈ v.subscribes, Fun.Rel R s.wrap s.wrap
   commands : ∀ x ∈ v.commands, x.Self R
   queries : ∀ x ∈ v.queries, x.Self R
   machines : ∀ m ∈ v.machines, m.Self R
@@ -597,8 +599,12 @@ structure ServiceV.Self (v : ServiceV) : Prop where
 
 end Self
 
+/-- A subscription without the source `spec` finds for it. -/
+def SubscriptionV.stripped {e : Ty} (s : SubscriptionV e) : SubscriptionV e := { s with source := "" }
+
 /-- A service without what `spec` fills in, which `ServiceV.Self` does not read. -/
-def ServiceV.stripped (v : ServiceV) : ServiceV := { v with declared := [], subscribes := [] }
+def ServiceV.stripped (v : ServiceV) : ServiceV :=
+  { v with declared := [], subscribes := v.subscribes.map SubscriptionV.stripped }
 
 /-- What structure values relate by. A command, query, machine or reaction is read by a step through its name, so
 related ones have the same name; a structure value that is the same on both sides keeps parts related to themselves,
@@ -611,6 +617,7 @@ def Dsl.relV (R : PBij) : (k : Dsl) → (a : List Ty) → (Dsl.val k a).1 → (D
   | .closure, [_], f, g => Fun.Rel R f g
   | .effectClosure, [.fn _ _], f, g => f = g → Ty.rel0 R (.tuple f.Γ) f.env f.env
   | .sender, _, x, y => Sender.Rel R x y
+  | .subscription, [_], x, y => x.stripped = y.stripped → Fun.Rel R x.wrap x.wrap
   | .spec, _, s, s' => s = s' → ∀ v ∈ (s : SpecV).services, v.Self R
   | .service, _, v, w => ServiceV.stripped v = ServiceV.stripped w → ServiceV.Self R v
   | .declared, _, d, d' => d = d' → DeclaredV.Self R d
