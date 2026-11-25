@@ -562,7 +562,7 @@ def encodeClock (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.ev
   let (ro, cr) ← encodeRounds L T shs v.declared senv v.machines S.records time (v.bounds.cascadeNat + 1) S.machines tt
     S.nextId (.int 0)
   let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants time S.fresh S.pending
-    ⟨S.records, ro.tables, ro.nextId, ro.news, ro.owns, ro.queued⟩
+    ⟨S.records, ro.tables, ro.nextId, ro.news, ro.owns, ro.queued, []⟩
   let forward := Term.le S.now time
   pure ⟨⟨forward, ro.over, ro, fo⟩, .ite forward (andT cr (.ite ro.over tt cf)) tt, cfx⟩
 
@@ -581,10 +581,11 @@ theorem rounds_done {shs : List (PendingShape v.event)} (s : State v) (time : In
     (hnews : NewsRel M L shs v.declared o.news (Step.reqsOf effs) s.nextId)
     (hq : o.queued.denote M = .int ((0 + (Step.queuedOf effs).length : Nat) : Int))
     (hown : OwnRel M L o.owns (Step.queuedOf effs) 0) :
-    AccRel M L T shs { state := { s with now := time } } ⟨records, o.tables, o.nextId, o.news, o.owns, o.queued⟩ fresh 0
+    AccRel M L T shs { state := { s with now := time } } ⟨records, o.tables, o.nextId, o.news, o.owns, o.queued, []⟩
+      fresh 0
       (Step.start { state := s' } effs) := by
   refine ⟨s.records, s'.machines, s.fresh, [], Step.reqsOf effs, Step.queuedOf effs, fun ps hps => ?_, hrec, hms,
-    hfresh, hn, hnews, by simpa using hq, by simpa using hown⟩
+    hfresh, hn, hnews, by simpa using hq, by simpa using hown, eventsRel_nil⟩
   have hn' : s'.nextId = s.nextId := by rw [hs']
   rw [Step.start_requests _ effs ps (by rw [hn']; exact hps)]
   have hl := forall2_zipIdx_length _ _ hps

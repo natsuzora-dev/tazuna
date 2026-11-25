@@ -140,7 +140,7 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     (hcx : Holds M cx) :
     (Holds M c ↔ finishFits L.count T shs r) ∧
     (Holds M c → Finished M L T shs fo s0 a outcome (Step.finish T s0 r outcome)) := by
-  obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, e1, e2, e3, e4, e5, e6, e7⟩ := hdone
+  obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, e1, e2, e3, e4, e5, e6, e7, -⟩ := hdone
   obtain ⟨ps1, hps1⟩ := newsRel_writes e5
   have hl1 := forall2_zipIdx_length _ _ hps1
   have hra := hr1 ps1 hps1

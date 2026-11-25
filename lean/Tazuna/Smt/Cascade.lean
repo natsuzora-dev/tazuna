@@ -10,7 +10,8 @@ namespace Tazuna.Smt
 open Tazuna.Ir
 
 /-- The terms of the cascade: each internal step's flag (it runs) and terms, whether a place past the bound is
-occupied, and the step terms after the last internal step, whose slots are every internal step's news and own slots. -/
+occupied, and the step terms after the last internal step, whose slots are every internal step's news, own and event
+slots. -/
 structure SettleOut (v : ServiceV) where
   steps : List (Term × OwnStepOut v)
   over : Term
@@ -35,18 +36,19 @@ def encodeSettle (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.e
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (dflt now : Term) :
     (fuel k : Nat) → (S : List OwnSlot) → (t : StepTerms v) → Except Refusal (Encoded (SettleOut v))
   | 0, k, S, t =>
-    pure ⟨⟨[], .and (.not t.fault) (queueAt dflt S (.int k)).1, ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩⟩,
+    pure ⟨⟨[], .and (.not t.fault) (queueAt dflt S (.int k)).1, ⟨t.fault, { t.done with news := [], owns := [], events := [] }, t.fresh⟩⟩,
       tt, tt⟩
   | f + 1, k, S, t => do
     let qa := queueAt dflt S (.int k)
     let act := Term.share (.and (.not t.fault) qa.1)
     let ⟨o, c, cx⟩ ← encodeOwnStep L T P v shs senv apply t.done.records now t.fresh t.done.nextId t.done.queued qa.2
       t.done.tables
-    let t1 := pickTerms act o.terms ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩
+    let t1 := pickTerms act o.terms ⟨t.fault, { t.done with news := [], owns := [], events := [] }, t.fresh⟩
     let ⟨rest, c', cx'⟩ ← encodeSettle P v shs senv apply dflt now f (k + 1) (S ++ t1.done.owns) t1
     pure ⟨⟨(act, o) :: rest.steps, rest.over,
         { rest.terms with done := { rest.terms.done with news := t1.done.news ++ rest.terms.done.news,
-                                                         owns := t1.done.owns ++ rest.terms.done.owns } }⟩,
+                                                         owns := t1.done.owns ++ rest.terms.done.owns,
+                                                         events := t1.done.events ++ rest.terms.done.events } }⟩,
       andT (.ite act c tt) c', andT cx cx'⟩
 
 end
@@ -83,7 +85,7 @@ theorem settle_fault_stays {P : List AnySite} {shs : List (PendingShape v.event)
     have hact : (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1)).denote M = .bool false := by
       simp [Term.denote, htf, toBool_bool]
     have h1 : (pickTerms (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1)) o1.terms
-        ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩).fault.denote M = .bool true := by
+        ⟨t.fault, { t.done with news := [], owns := [], events := [] }, t.fresh⟩).fault.denote M = .bool true := by
       simp only [pickTerms, Term.denote_share, Term.denote, hact, toBool_bool, Bool.false_eq_true, ite_false]; exact htf
     have h3 := settle_fault_stays f (k + 1) _ _ h1 h2
     exact h3
@@ -155,7 +157,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       rw [settleFrom_none 0 k a (List.getElem?_eq_none (by omega))]
       refine ⟨a.state.records, a.state.machines, a.state.fresh, [], [], [], fun ps hps => ?_, hrec, hms, hfr,
         by simpa using hn, ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩,
-        by simpa using hq, ownRel_nil _⟩
+        by simpa using hq, ownRel_nil _, eventsRel_nil⟩
       cases ps with
       | nil => simp
       | cons => exact hps.elim
@@ -194,7 +196,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
             simp only [pickTerms]; rw [hpick, hfault, hof]; rfl
           | none =>
             intro hdone
-            have hA1 := AccRel.pick (b := ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩) hact' ⟨rfl, rfl⟩ hdone
+            have hA1 := AccRel.pick (b := ⟨t.fault, { t.done with news := [], owns := [], events := [] }, t.fresh⟩) hact' ⟨rfl, rfl, rfl⟩ hdone
             obtain ⟨a1, hrun0⟩ := hA1.ok
             obtain ⟨r1, r2, r3, r4, rnow, os0, hown1, r5, r6⟩ := (hrun0 ▸ hA1).ends
             rw [(settle_encode chk hshs hshp happ hca senv f (k + 1) _ _ _
@@ -271,7 +273,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           intro hdone
           have hff : (o1.terms.fault.denote M).toBool = false := by rw [hfault, hof]; rfl
           rw [settle_fault_skip (t' := rest.terms) (by simp [hact', hff, toBool_bool])]
-          have hA1 := AccRel.pick (b := ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩) hact' ⟨rfl, rfl⟩ hdone
+          have hA1 := AccRel.pick (b := ⟨t.fault, { t.done with news := [], owns := [], events := [] }, t.fresh⟩) hact' ⟨rfl, rfl, rfl⟩ hdone
           obtain ⟨a1, hrun0⟩ := hA1.ok
           obtain ⟨r1, r2, r3, r4, rnow, os0, hown1, r5, r6⟩ := (hrun0 ▸ hA1).ends
           obtain ⟨IHF, IH⟩ := (settle_encode chk hshs hshp happ hca senv f (k + 1) _ _ _
@@ -318,14 +320,17 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
         cases rest.fault? M with
         | some f'' => exact id
         | none =>
-          rintro ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, s5, s6, s7⟩
-          refine ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, ?_, s6, ?_⟩
+          rintro ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, s5, s6, s7, s8⟩
+          refine ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, ?_, s6, ?_, ?_⟩
           · have h0 := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hact'
               (S := o1.terms.done.news) a.state.nextId) (newsRel_nil (L := L) (M := M))
             exact newsRel_append h0 s5
           · have h0 := ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' (S := o1.terms.done.owns)
               a.own.length) (ownRel_nil _)
             exact ownRel_append h0 s7
+          · have h0 := eventsRel_append (eventsRel_gate_false (M := M) (L := L) (v := v) hact' o1.terms.done.events)
+              eventsRel_nil
+            simpa [pickTerms] using eventsRel_append h0 s8
 
 end
 

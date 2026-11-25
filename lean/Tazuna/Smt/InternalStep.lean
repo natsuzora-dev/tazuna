@@ -21,10 +21,11 @@ structure OwnCommandOut (v : ServiceV) where
   decided : DecideOut v
   answered : EventsOut v
 
-/-- What an own command's internal step leaves: the loop after `on_answer`, with the news and own slots of both
-loops. -/
+/-- What an own command's internal step leaves: the loop after `on_answer`, with the news, own and event slots of
+both loops. -/
 def OwnCommandOut.done {v : ServiceV} (o : OwnCommandOut v) : EventsOut v :=
-  { o.answered with news := o.decided.after.news ++ o.answered.news, owns := o.decided.after.owns ++ o.answered.owns }
+  { o.answered with news := o.decided.after.news ++ o.answered.news, owns := o.decided.after.owns ++ o.answered.owns,
+                    events := o.decided.after.events ++ o.answered.events }
 
 /-- The terms of an own query's internal step: whether the caller is listed, the `accepts` rules, and what the
 events loop leaves after `on_answer`'s events. -/

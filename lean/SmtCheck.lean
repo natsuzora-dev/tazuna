@@ -3017,7 +3017,7 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
   let senv ← enc (StepEnv.of L dispShapes)
   let effs ← effects.mapM fun f => enc (f L)
   let queue : List OwnSlot := effs.zipIdx.map fun (e, j) => ⟨tt, .int j, e⟩
-  let t : StepTerms dispSvc := ⟨.bool false, ⟨S.records, S.machines, S.nextId, [], [], .int effs.length⟩, S.fresh⟩
+  let t : StepTerms dispSvc := ⟨.bool false, ⟨S.records, S.machines, S.nextId, [], [], .int effs.length, []⟩, S.fresh⟩
   let ⟨o, cond, codes⟩ ← enc (encodeSettle L prelude dispSites dispSvc dispShapes senv apply (effs.headD tt) S.now
     fuel 0 queue t)
   let below ← enc (pendingBelowT L dispShapes S.pending S.nextId)

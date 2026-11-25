@@ -58,6 +58,28 @@ theorem gate_false_events {f : Term} (hf : f.denote M = .bool false) :
     exact ⟨(false, Term.denotes M xs.1) :: sv, ⟨by simp [Term.denote, hf, Val.toBool], rfl, hS⟩,
       by simpa [Holds2, occupied] using hh⟩
 
+/-- The slots hold, where occupied, the events `evs` in order. -/
+def EventsRel (M : Model) (L : Layout) (S : List (Slot 1)) (evs : List v.event.den0) : Prop :=
+  ∃ sv, SlotsDen M S sv ∧ Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv
+
+theorem eventsRel_nil : EventsRel M L ([] : List (Slot 1)) ([] : List v.event.den0) :=
+  ⟨[], trivial, by simp [Holds2, occupied, Forall2]⟩
+
+theorem eventsRel_append {S S' : List (Slot 1)} {evs evs' : List v.event.den0} (h : EventsRel M L S evs)
+    (h' : EventsRel M L S' evs') : EventsRel M L (S ++ S') (evs ++ evs') := by
+  obtain ⟨sv, hS, hh⟩ := h
+  obtain ⟨sv', hS', hh'⟩ := h'
+  exact ⟨sv ++ sv', slotsDen_append hS hS', by simpa using holds2_append hh hh'⟩
+
+theorem eventsRel_gate {f : Term} (hf : f.denote M = .bool true) {S : List (Slot 1)} {evs : List v.event.den0}
+    (h : EventsRel M L S evs) : EventsRel M L (gateSlots f S) evs := by
+  obtain ⟨sv, hS, hh⟩ := h
+  exact ⟨sv, gate_true hf hS, hh⟩
+
+theorem eventsRel_gate_false {f : Term} (hf : f.denote M = .bool false) (S : List (Slot 1)) :
+    EventsRel M L (gateSlots f S) ([] : List v.event.den0) :=
+  gate_false_events hf S
+
 /-- The news slots name pending requests for the requests they hold: externals list each. -/
 theorem newsRel_writes {shs : List (PendingShape v.event)} {ds : List (String × DeclaredV)} {news : List PendingSlot}
     {effs : List (Sender × EffectV v.event)} {n0 : Nat} (h : NewsRel M L shs ds news effs n0) :
@@ -97,9 +119,9 @@ theorem loop_apply {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
 
 
 /-- What a run from `a` leaves when it ends without a fault, as the terms say: the records and machines `o` denotes,
-the fresh counter `fresh` denotes, the events `evs` applied, the requests `effs` started at wire ids from `a`'s next id
-(for whichever pending requests `ps` the step writes for them, as the news slots hold), and the own commands and
-queries `os` queued at places from `q0`, as the own slots hold. -/
+the fresh counter `fresh` denotes, the events `evs` applied, as the event slots hold, the requests `effs` started at
+wire ids from `a`'s next id (for whichever pending requests `ps` the step writes for them, as the news slots hold),
+and the own commands and queries `os` queued at places from `q0`, as the own slots hold. -/
 def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShape v.event)) (a : Step.Acc v)
     (o : EventsOut v) (fresh : Term) (q0 : Nat) (r : Except Fault (Step.Acc v)) : Prop :=
   ∃ (recs : v.records.den0) (ms : Step.Machines v.machines) (fr : Nat) (evs : List v.event.den0)
@@ -112,7 +134,7 @@ def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShap
     fresh.denote M = .int (fr : Int) ∧
     o.nextId.denote M = .int ((a.state.nextId + effs.length : Nat) : Int) ∧
     NewsRel M L shs v.declared o.news effs a.state.nextId ∧
-    o.queued.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L o.owns os q0
+    o.queued.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L o.owns os q0 ∧ EventsRel M L o.events evs
 
 /-- The events loop over a list's slots from a step in progress, as `AccRel` says of `applyEvents`' result. -/
 theorem loop_acc {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
@@ -130,7 +152,8 @@ theorem loop_acc {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E 
     AccRel M L T shs a o fresh q0 (Step.applyEvents T a evs) := by
   obtain ⟨r1, r2, r3, r4, r5, r6, hr⟩ := loop_apply chk hshs hshp happ hca senv a hnow hS hev hrec hms hn hq henc hc
   refine ⟨_, _, a.state.fresh, evs, Step.reqsOf (Step.reactAll T a.state evs).2,
-    Step.queuedOf (Step.reactAll T a.state evs).2, fun ps hps => ?_, r1, r2, hfresh, r3, r4, r5, r6⟩
+    Step.queuedOf (Step.reactAll T a.state evs).2, fun ps hps => ?_, r1, r2, hfresh, r3, r4, r5, r6,
+    ⟨sv, by rw [encodeEvents_events S henc]; exact hS, hev⟩⟩
   rw [hr ps hps]
   have hl := forall2_zipIdx_length _ _ hps
   have hk := Step.reactAll_keeps T a.state evs
@@ -162,7 +185,7 @@ theorem AccRel.ends {shs : List (PendingShape v.event)} {a a' : Step.Acc v} {o :
       MachinesRel M L T v.machines o.tables a'.state.machines ∧ f.denote M = .int (Int.ofNat a'.state.fresh) ∧
       o.nextId.denote M = .int (Int.ofNat a'.state.nextId) ∧ a'.state.now = a.state.now ∧
       ∃ os, a'.own = a.own ++ os ∧ o.queued.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L o.owns os q0 := by
-  obtain ⟨recs, ms, fr, evs, effs, os, hr, r1, r2, r3, r4, r5, r6, r7⟩ := h
+  obtain ⟨recs, ms, fr, evs, effs, os, hr, r1, r2, r3, r4, r5, r6, r7, -⟩ := h
   obtain ⟨ps, hps⟩ := newsRel_writes r5
   obtain rfl := Except.ok.inj (hr ps hps)
   exact ⟨r1, r2, r3, by rw [r4, forall2_zipIdx_length _ _ hps]; rfl, rfl, os, rfl, r6, r7⟩
@@ -170,12 +193,12 @@ theorem AccRel.ends {shs : List (PendingShape v.event)} {a a' : Step.Acc v} {o :
 /-- A run that `AccRel` describes ends without a fault. -/
 theorem AccRel.ok {shs : List (PendingShape v.event)} {a : Step.Acc v} {o : EventsOut v} {f : Term} {q0 : Nat}
     {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs a o f q0 r) : ∃ a', r = .ok a' := by
-  obtain ⟨_, _, _, _, _, _, hr, -, -, -, -, r5, -, -⟩ := h
+  obtain ⟨_, _, _, _, _, _, hr, -, -, -, -, r5, -, -, -⟩ := h
   obtain ⟨ps, hps⟩ := newsRel_writes r5
   exact ⟨_, hr ps hps⟩
 
 /-- Two runs in turn: what the first leaves, then the second from the state the first's terms denote, is what the
-two leave together, the news and own slots of both. -/
+two leave together, the news, own and event slots of both. -/
 theorem AccRel.bind {shs : List (PendingShape v.event)} {a : Step.Acc v} {o1 o2 : EventsOut v} {f1 f2 : Term}
     {q0 : Nat} {r : Except Fault (Step.Acc v)} {g : Step.Acc v → Except Fault (Step.Acc v)}
     (h1 : AccRel M L T shs a o1 f1 q0 r)
@@ -184,15 +207,17 @@ theorem AccRel.bind {shs : List (PendingShape v.event)} {a : Step.Acc v} {o1 o2 
       MachinesRel M L T v.machines o1.tables a1.state.machines → f1.denote M = .int (Int.ofNat a1.state.fresh) →
       o1.nextId.denote M = .int (Int.ofNat a1.state.nextId) → o1.queued.denote M = .int ((q0 + os.length : Nat) : Int) →
       OwnRel M L o1.owns os q0 → AccRel M L T shs a1 o2 f2 (q0 + os.length) (g a1)) :
-    AccRel M L T shs a { o2 with news := o1.news ++ o2.news, owns := o1.owns ++ o2.owns } f2 q0 (r >>= g) := by
-  obtain ⟨recs0, ms0, fr0, evs0, effs0, os0, hr0, r1, r2, r3, r4, r5, r6, r7⟩ := h1
+    AccRel M L T shs a
+      { o2 with news := o1.news ++ o2.news, owns := o1.owns ++ o2.owns, events := o1.events ++ o2.events } f2 q0
+      (r >>= g) := by
+  obtain ⟨recs0, ms0, fr0, evs0, effs0, os0, hr0, r1, r2, r3, r4, r5, r6, r7, r8⟩ := h1
   obtain ⟨ps0, hps0⟩ := newsRel_writes r5
   have hl0 := forall2_zipIdx_length _ _ hps0
   have hrun0 := hr0 ps0 hps0
-  obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, s5, s6, s7⟩ :=
+  obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, s5, s6, s7, s8⟩ :=
     h2 _ os0 hrun0 rfl r1 r2 r3 (by rw [r4, hl0]; rfl) r6 r7
   refine ⟨recs1, ms1, fr1, evs0 ++ evs1, effs0 ++ effs1, os0 ++ os1, fun ps hps => ?_, s1, s2, s3, ?_,
-    newsRel_append r5 (by simpa [hl0] using s5), ?_, ownRel_append r7 (by simpa using s7)⟩
+    newsRel_append r5 (by simpa [hl0] using s5), ?_, ownRel_append r7 (by simpa using s7), eventsRel_append r8 s8⟩
   · rw [List.zipIdx_append] at hps
     obtain ⟨ps0', ps1, rfl, hps0', hps1⟩ := forall2_split _ _ hps
     obtain rfl := writes_unique hps0' hps0
@@ -300,7 +325,7 @@ theorem decide_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           Nat.add_zero] at p1 p2 p3 p4 p5 p6
         refine ⟨hok', by simpa [Term.denote, hsh, hw] using hrv,
           a.state.records, a.state.machines, a.state.fresh, [], [], [], fun ps hps => ?_, p1, p2, hfresh, p3, p4,
-          by simpa using p5, p6⟩
+          by simpa using p5, p6, ⟨sv1, by rw [encodeEvents_events _ h12]; exact hS1, by simpa using hh1⟩⟩
         cases ps with
         | nil => simp
         | cons => exact hps.elim

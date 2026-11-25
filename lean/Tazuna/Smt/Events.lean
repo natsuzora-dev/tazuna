@@ -88,8 +88,8 @@ namespace Tazuna.Smt
 open Tazuna.Ir
 
 /-- What a list of events encodes: the records and instance tables after them, the next wire id after the requests
-they start, those requests' pending slots, the own slots of the own commands and queries they queue, and the queue
-place after them. -/
+they start, those requests' pending slots, the own slots of the own commands and queries they queue, the queue
+place after them, and the slots of the events applied, in order. -/
 structure EventsOut (v : ServiceV) where
   records : Term
   tables : PerMachine (fun _ => Term) v.machines
@@ -97,6 +97,7 @@ structure EventsOut (v : ServiceV) where
   news : List PendingSlot
   owns : List OwnSlot
   queued : Term
+  events : List (Slot 1)
 
 /-- The slots with each flag and-ed with `f`. -/
 def gateSlots {w : Nat} (f : Term) (S : List (Slot w)) : List (Slot w) := S.map fun (g, xs) => (Term.share (.and f g), xs)
@@ -112,7 +113,7 @@ def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (senv : Step
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (now : Term) :
     List (Slot 1) → (records : Term) → (xs : PerMachine (fun _ => Term) v.machines) → (n q : Term) →
     Except Refusal (EventsOut v × Term)
-  | [], records, xs, n, q => pure (⟨records, xs, n, [], [], q⟩, tt)
+  | [], records, xs, n, q => pure (⟨records, xs, n, [], [], q, []⟩, tt)
   | (f, ys) :: S, records, xs, n, q => do
     let ev := Term.share ys[0]
     let rc ← Code.ofDataE v.records records
@@ -127,7 +128,7 @@ def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (senv : Step
     let (o, c) ← encodeEvents v shs senv apply now S (pick rt records)
       (PerMachine.zipWith pick (outs.map (·.table)) xs) (pick nR n) (pick qR q)
     pure (⟨o.records, o.tables, o.nextId, gatePending f (news ++ rnews) ++ o.news, gateOwns f (oS ++ rown) ++ o.owns,
-      o.queued⟩, andT (.ite f (andT ca (andT cm cr)) tt) c)
+      o.queued, (f, ys) :: o.events⟩, andT (.ite f (andT ca (andT cm cr)) tt) c)
 
 end
 
@@ -232,6 +233,27 @@ end
 
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
+
+/-- The events loop's event slots are the slots it ran over. -/
+theorem encodeEvents_events {v : ServiceV} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} {now : Term} :
+    (S : List (Slot 1)) → {records : Term} → {xs : PerMachine (fun _ => Term) v.machines} → {n q : Term} →
+    {o : EventsOut v} → {c : Term} → encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
+    o.events = S
+  | [], _, _, _, _, _, _, h => by
+    simp only [encodeEvents, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+    rw [← h.1]
+  | (f, ys) :: S, _, _, _, _, _, _, h => by
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
+    obtain ⟨⟨o', c'⟩, h8, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    rw [encodeEvents_events S h8]
 
 /-- Whether the functions a list of events applies fit, event by event on the state the events before it left: the
 records' `apply`, every machine's reaction and every reaction. -/

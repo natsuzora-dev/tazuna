@@ -68,7 +68,7 @@ def OwnKindOut.fault? {v : ServiceV} (M : Model) : OwnKindOut v → Option Fault
   | .missing name => some (.invalidEffect name ["service"])
 
 /-- What an internal step leaves: whether it faults, the events loop's terms after it (any terms on a fault), with
-the news and own slots of every loop it ran, and the fresh counter. -/
+the news, own and event slots of every loop it ran, and the fresh counter. -/
 structure StepTerms (v : ServiceV) where
   fault : Term
   done : EventsOut v
@@ -85,7 +85,7 @@ def pickTerms {v : ServiceV} (c : Term) (a b : StepTerms v) : StepTerms v :=
   ⟨p a.fault b.fault,
     ⟨p a.done.records b.done.records, PerMachine.zipWith p a.done.tables b.done.tables,
       p a.done.nextId b.done.nextId, gatePending c a.done.news ++ b.done.news, gateOwns c a.done.owns ++ b.done.owns,
-      p a.done.queued b.done.queued⟩,
+      p a.done.queued b.done.queued, gateSlots c a.done.events ++ b.done.events⟩,
     p a.fresh b.fresh⟩
 
 /-- The terms of an own effect's internal step: each own kind's variant test with its outcome terms, and the merged
@@ -109,7 +109,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
   let sel (i : Nat) := Term.sel senv.dE (nR + j) i eff
   match ownShape v P key with
   -- An unreached kind's terms are never read, so it takes the unlisted kind's constant terms.
-  | .unlisted name | .unreached name => pure ⟨⟨.missing name, ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩, tt, tt⟩
+  | .unlisted name | .unreached name => pure ⟨⟨.missing name, ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩⟩, tt, tt⟩
   | .command x Γ site =>
     let (cc, cx) ← CommandCode.of L x
     let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.caller x.callers)
@@ -138,7 +138,7 @@ def encodeOwnStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
   let eff := Term.share eff
   let ks ← (L.ownsOf v.event).zipIdx.mapM fun (key, j) => do
     pure (Term.share (.is senv.dE (nR + j) eff), ← encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key)
-  let base : StepTerms v := ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩
+  let base : StepTerms v := ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩
   pure ⟨⟨ks.map fun k => (k.1, k.2.out.kind), ks.foldr (fun k t => pickTerms k.1 k.2.out.terms t) base⟩,
     allT (ks.map fun k => .ite k.1 k.2.cond tt), allT (ks.map (·.2.codes))⟩
 
@@ -459,7 +459,8 @@ theorem machinesRel_congr : (ms : List (MachineV v.records v.event)) → (xs ys 
     simp only [PerMachine.toList_cons, Term.denotes, List.cons.injEq] at he
     exact ⟨⟨tbl, he.1 ▸ ht, hs⟩, machinesRel_congr ms xs ys sms he.2 h⟩
 
-/-- Two step terms say the same in the model: the same values, and slots holding the same news and own effects. -/
+/-- Two step terms say the same in the model: the same values, and slots holding the same news, own effects and
+events. -/
 structure Agrees (M : Model) (L : Layout) (e : Ty) (a b : StepTerms v) : Prop where
   fault : a.fault.denote M = b.fault.denote M
   fresh : a.fresh.denote M = b.fresh.denote M
@@ -469,15 +470,16 @@ structure Agrees (M : Model) (L : Layout) (e : Ty) (a b : StepTerms v) : Prop wh
   news : ∀ (shs : List (PendingShape e)) ds effs n0, NewsRel M L shs ds b.done.news effs n0 →
     NewsRel M L shs ds a.done.news effs n0
   owns : ∀ (os : List (EffectV e)) q0, OwnRel M L b.done.owns os q0 → OwnRel M L a.done.owns os q0
+  events : ∀ evs : List v.event.den0, EventsRel M L b.done.events evs → EventsRel M L a.done.events evs
 
 theorem AccRel.congr {a b : StepTerms v} (hab : Agrees M L v.event a b)
     (ht : Term.denotes M a.done.tables.toList = Term.denotes M b.done.tables.toList)
     {shs : List (PendingShape v.event)} {acc : Step.Acc v} {q0 : Nat}
     {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs acc b.done b.fresh q0 r) :
     AccRel M L T shs acc a.done a.fresh q0 r := by
-  obtain ⟨recs, ms, fr, evs, effs, os, hr, h1, h2, h3, h4, h5, h6, h7⟩ := h
+  obtain ⟨recs, ms, fr, evs, effs, os, hr, h1, h2, h3, h4, h5, h6, h7, h8⟩ := h
   exact ⟨recs, ms, fr, evs, effs, os, hr, hab.records ▸ h1, machinesRel_congr _ _ _ _ ht.symm h2, hab.fresh ▸ h3,
-    hab.nextId ▸ h4, hab.news _ _ _ _ h5, hab.queued ▸ h6, hab.owns _ _ h7⟩
+    hab.nextId ▸ h4, hab.news _ _ _ _ h5, hab.queued ▸ h6, hab.owns _ _ h7, hab.events _ h8⟩
 
 theorem pick_tables {r e : Ty} {c : Term} {bc : Bool} (hc : c.denote M = .bool bc) : {ms : List (MachineV r e)} →
     (A B : PerMachine (fun _ => Term) ms) →
@@ -495,12 +497,13 @@ theorem pick_tables_false {r e : Ty} {c : Term} (hc : c.denote M = .bool false) 
 
 /-- The terms picked where the flag holds, over terms that write nothing, say of a run what the picked terms say. -/
 theorem AccRel.pick {c : Term} (hc : c.denote M = .bool true) {o b : StepTerms v}
-    (hb : b.done.news = [] ∧ b.done.owns = []) {shs : List (PendingShape v.event)} {acc : Step.Acc v} {q0 : Nat}
-    {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs acc o.done o.fresh q0 r) :
+    (hb : b.done.news = [] ∧ b.done.owns = [] ∧ b.done.events = []) {shs : List (PendingShape v.event)}
+    {acc : Step.Acc v} {q0 : Nat} {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs acc o.done o.fresh q0 r) :
     AccRel M L T shs acc (pickTerms c o b).done (pickTerms c o b).fresh q0 r := by
-  obtain ⟨recs, ms, fr, evs, effs, os, hr, h1, h2, h3, h4, h5, h6, h7⟩ := h
+  obtain ⟨recs, ms, fr, evs, effs, os, hr, h1, h2, h3, h4, h5, h6, h7, h8⟩ := h
   have hp (x y : Term) : (Term.share (.ite c x y)).denote M = x.denote M := by simp [Term.denote, hc, toBool_bool]
-  refine ⟨recs, ms, fr, evs, effs, os, hr, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> simp only [pickTerms, hb.1, hb.2, hp]
+  refine ⟨recs, ms, fr, evs, effs, os, hr, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp only [pickTerms, hb.1, hb.2.1, hb.2.2, hp]
   · exact h1
   · exact machinesRel_congr _ _ _ _ (pick_tables hc _ _).symm h2
   · exact h3
@@ -508,9 +511,11 @@ theorem AccRel.pick {c : Term} (hc : c.denote M = .bool true) {o b : StepTerms v
   · simpa using newsRel_gate hc h5
   · exact h6
   · simpa using ownRel_gate hc h7
+  · simpa using eventsRel_gate hc h8
 
-/-- Step terms of kinds whose tests all fail write no news and no own effect. -/
-theorem fold_none {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ base.done.owns = []) :
+/-- Step terms of kinds whose tests all fail write no news, no own effect and no event. -/
+theorem fold_none {e : Ty} (base : StepTerms v)
+    (hb : base.done.news = [] ∧ base.done.owns = [] ∧ base.done.events = []) :
     (ks : List (Term × StepTerms v)) → (∀ k ∈ ks, k.1.denote M = .bool false) →
     let t := ks.foldr (fun k t => pickTerms k.1 k.2 t) base
     t.fault.denote M = base.fault.denote M ∧ t.fresh.denote M = base.fresh.denote M ∧
@@ -518,24 +523,28 @@ theorem fold_none {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ ba
       t.done.queued.denote M = base.done.queued.denote M ∧
       Term.denotes M t.done.tables.toList = Term.denotes M base.done.tables.toList ∧
       (∀ (shs : List (PendingShape e)) ds n0, NewsRel M L shs ds t.done.news [] n0) ∧
-      ∀ q0, OwnRel M L t.done.owns ([] : List (EffectV e)) q0
+      (∀ q0, OwnRel M L t.done.owns ([] : List (EffectV e)) q0) ∧
+        EventsRel M L t.done.events ([] : List v.event.den0)
   | [], _ => by
-    simp only [List.foldr_nil, hb, true_and]
-    exact ⟨fun _ _ _ => ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩,
-      fun q0 => ownRel_nil q0⟩
+    simp only [List.foldr_nil, hb]
+    exact ⟨trivial, trivial, trivial, trivial, trivial, trivial,
+      fun _ _ _ => ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩,
+      fun q0 => ownRel_nil q0, eventsRel_nil⟩
   | (c, a) :: ks, hf => by
     have hc : c.denote M = .bool false := hf (c, a) (by simp)
-    obtain ⟨i1, i2, i3, i4, i5, i6, i7, i8⟩ := fold_none (e := e) base hb ks (fun k h => hf k (List.mem_cons_of_mem _ h))
+    obtain ⟨i1, i2, i3, i4, i5, i6, i7, i8, i9⟩ := fold_none (e := e) base hb ks (fun k h => hf k (List.mem_cons_of_mem _ h))
     have hpick : ∀ x y : Term, (Term.share (.ite c x y)).denote M = y.denote M := fun x y => by
       simp [Term.denote, hc, toBool_bool]
     simp only [List.foldr_cons, pickTerms, hpick]
-    refine ⟨i1, i2, i3, i4, i5, ?_, fun shs ds n0 => ?_, fun q0 => ?_⟩
+    refine ⟨i1, i2, i3, i4, i5, ?_, fun shs ds n0 => ?_, fun q0 => ?_, ?_⟩
     · rw [pick_tables_false hc]; exact i6
     · exact newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := ds) hc n0) (i7 shs ds n0)
     · exact ownRel_append (ownRel_gate_false (L := L) (e := e) hc q0) (i8 q0)
+    · exact eventsRel_append (eventsRel_gate_false hc _) i9
 
 /-- Merged step terms agree with those of the one kind whose test holds. -/
-theorem fold_hit {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ base.done.owns = []) :
+theorem fold_hit {e : Ty} (base : StepTerms v)
+    (hb : base.done.news = [] ∧ base.done.owns = [] ∧ base.done.events = []) :
     (ks : List (Term × StepTerms v)) → (k : Nat) → {c : Term} → {st : StepTerms v} → ks[k]? = some (c, st) →
     (∀ (i : Nat) (kk : Term × StepTerms v), ks[i]? = some kk → kk.1.denote M = .bool (decide (i = k))) →
     let t := ks.foldr (fun k t => pickTerms k.1 k.2 t) base
@@ -546,18 +555,21 @@ theorem fold_hit {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ bas
     simp only [List.getElem?_cons_zero, Option.some.injEq, Prod.mk.injEq] at hk
     obtain ⟨rfl, rfl⟩ := hk
     have hc : c'.denote M = .bool true := by simpa using ht 0 (c', a) rfl
-    obtain ⟨-, -, -, -, -, -, i7, i8⟩ := fold_none (e := e) base hb ks
+    obtain ⟨-, -, -, -, -, -, i7, i8, i9⟩ := fold_none (e := e) base hb ks
       (fun kk h => by
         obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem h
         simpa using ht (i + 1) ks[i] (by simp))
     have hpick : ∀ x y : Term, (Term.share (.ite c' x y)).denote M = x.denote M := fun x y => by
       simp [Term.denote, hc, toBool_bool]
-    refine ⟨⟨hpick _ _, hpick _ _, hpick _ _, hpick _ _, hpick _ _, fun shs ds effs n0 h => ?_, fun os q0 h => ?_⟩,
-      ?_⟩
+    refine ⟨⟨hpick _ _, hpick _ _, hpick _ _, hpick _ _, hpick _ _, fun shs ds effs n0 h => ?_, fun os q0 h => ?_,
+      fun evs h => ?_⟩, ?_⟩
     · have := newsRel_append (newsRel_gate (L := L) hc h) (i7 shs ds (n0 + effs.length))
       rw [List.append_nil] at this
       exact this
     · have := ownRel_append (ownRel_gate (L := L) hc h) (i8 (q0 + os.length))
+      rw [List.append_nil] at this
+      exact this
+    · have := eventsRel_append (eventsRel_gate hc h) i9
       rw [List.append_nil] at this
       exact this
     · show Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c' x y)) a.done.tables
@@ -571,10 +583,11 @@ theorem fold_hit {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ bas
     have hpick : ∀ x y : Term, (Term.share (.ite c' x y)).denote M = y.denote M := fun x y => by
       simp [Term.denote, hc, toBool_bool]
     refine ⟨⟨(hpick _ _).trans h1.fault, (hpick _ _).trans h1.fresh, (hpick _ _).trans h1.records,
-      (hpick _ _).trans h1.nextId, (hpick _ _).trans h1.queued, fun shs ds effs n0 h => ?_, fun os q0 h => ?_⟩,
-      ?_⟩
+      (hpick _ _).trans h1.nextId, (hpick _ _).trans h1.queued, fun shs ds effs n0 h => ?_, fun os q0 h => ?_,
+      fun evs h => ?_⟩, ?_⟩
     · exact newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := ds) hc n0) (h1.news shs ds effs n0 h)
     · exact ownRel_append (ownRel_gate_false (L := L) (e := e) hc q0) (h1.owns os q0 h)
+    · exact eventsRel_append (eventsRel_gate_false hc _) (h1.events evs h)
     · show Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c' x y)) a.done.tables
         (List.foldr (fun k t => pickTerms k.1 k.2 t) base ks).done.tables).toList = _
       rw [pick_tables_false hc]
@@ -681,7 +694,7 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
       simpa [htk, toBool_bool] using this
     obtain ⟨hfault, hrun⟩ := (ownKind_encode chk hshs hshp a happ hca senv hrec hnow hfresh hn hq
       hms x hreach heff' hkey hkind hcxk).2 hck
-    obtain ⟨hag, htab⟩ := fold_hit (e := v.event) (M := M) (L := L) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩
+    obtain ⟨hag, htab⟩ := fold_hit (e := v.event) (M := M) (L := L) ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩ ⟨rfl, rfl, rfl⟩
       (ks.map fun k => (k.1, k.2.out.terms)) k (c := Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)))
       (st := st) (by simp [hkk])
       (fun i y hy => by
@@ -690,7 +703,7 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
         exact htests i z hz)
     rw [List.foldr_map] at hag htab
     have hfk : (OwnStepOut.fault? M ⟨ks.map fun k => (k.1, k.2.out.kind),
-        ks.foldr (fun k t => pickTerms k.1 k.2.out.terms t) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩) = ko.fault? M := by
+        ks.foldr (fun k t => pickTerms k.1 k.2.out.terms t) ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩⟩) = ko.fault? M := by
       unfold OwnStepOut.fault?
       rw [find_hit (k := k) (ks.map fun k => (k.1, k.2.out.kind))
         (y := (Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)), ko)) (by simp [hkk])
