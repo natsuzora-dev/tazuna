@@ -16,18 +16,16 @@ def _root_.Tazuna.Smt.Target.text : Target → String
   | .invariant none r => "invariant " ++ ruleText r
   | .invariant (some m) r => m ++ " invariant " ++ ruleText r
   | .ensures c r => c ++ " ensures " ++ ruleText r
+  | .cascade => "cascade bound"
+  | .effect c => "effect " ++ c ++ " accepted"
 where
   ruleText : Option String → String
     | some r => r
     | none => "(a computed name)"
 
-def _root_.Tazuna.Smt.Target.machine? : Target → Option String
-  | .invariant m _ => m
-  | .ensures .. => none
-
 def _root_.Tazuna.Smt.Target.isInvariant : Target → Bool
   | .invariant .. => true
-  | .ensures .. => false
+  | _ => false
 
 section
 variable {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat}
@@ -97,7 +95,7 @@ def brokenAt {v : ServiceV} (s : State v) : Target → List String
   | .invariant (some name) _ => s.machines.toSigma.flatMap fun ⟨m, insts⟩ =>
     if m.name = name then insts.flatMap fun i => broken (m.invariants.fn (.inl (i.key, i.state, s.records, s.now, ()), ()))
     else []
-  | .ensures .. => []
+  | _ => []
 
 /-- One line of the report, with what decides the verdicts of the targets it is about. -/
 inductive Report where
@@ -185,7 +183,8 @@ def boundsPast (T : List TypeDecl) (L : Layout) {v : ServiceV} (shs : List (Pend
   let firsts := over.foldl (fun (acc : List (Ty × Nat)) o =>
     if acc.any fun a => (Ty.same a.1 o.1).isSome then acc else acc ++ [o]) []
   firsts.map fun (t, n) =>
-    Json.mkObj [("type", Json.str (tyText T t)), ("bound", Json.str (boundName t)), ("slots", Lean.toJson (L.count t)),
+    let name := if (Ty.same t (pendingTable shs)).isSome then "pending requests" else tyText T t
+    Json.mkObj [("type", Json.str name), ("bound", Json.str (boundName t)), ("slots", Lean.toJson (L.count t)),
       ("size", Lean.toJson n)]
 where
   boundName : Ty → String
@@ -253,8 +252,10 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v c.P)) (q : Question v 
             ((after.map fun (a : Acc v) => boundsPast c.T L (shapes v c.P) a.state).getD []))
         | some g =>
           let violated := match g, r.outcome with
-            | .ensures .., .fault (.ensures n) => [n]
-            | g, _ => (after.map fun (a : Acc v) => brokenAt a.state g).getD []
+            | .invariant .., _ => (after.map fun (a : Acc v) => brokenAt a.state g).getD []
+            | _, .fault (.ensures n) => [n]
+            | _, .fault (.invalidEffect _ rs) => rs
+            | _, _ => []
           .ok (.violated v.name name g (fields ++ [("violated", Json.arr (violated.map Json.str).toArray)]))
       | _, _ => .error s!"a model of {name} does not decode"
     else .error "the caller type is no data"

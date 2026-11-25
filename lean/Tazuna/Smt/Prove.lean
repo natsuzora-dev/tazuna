@@ -153,13 +153,30 @@ theorem Term.constF_denote (M : Model) : (f : Nat) → (t : Term) → {w : Val} 
 theorem Term.const?_denote (M : Model) (t : Term) {w : Val} (h : t.const? = some w) : t.denote M = w :=
   Term.constF_denote M 256 t h
 
-/-- What `prove` shows a step never does: break one named rule. A rule is named by the literal the spec gives it;
-`none` stands for every rule whose name the spec computes from values. -/
+/-- What `prove` shows a step never does: fault by breaking one named rule, or by a spec bug the cascade can make. A
+rule is named by the literal the spec gives it; `none` stands for every rule whose name the spec computes from
+values. -/
 inductive Target where
   /-- A service invariant (`machine` none) or an instance invariant of the machine `machine`. -/
   | invariant (machine : Option String) (rule : Option String)
+  /-- An `ensures` rule of the command, run as the input or as an internal step. -/
   | ensures (command : String) (rule : Option String)
+  /-- More internal steps than the cascade bound: `Fault.cascadeLimit`. -/
+  | cascade
+  /-- An own effect asking the service's command or query `name` for what it does not accept, or the service lacking
+  it: `Fault.invalidEffect`. -/
+  | effect (name : String)
 deriving DecidableEq, Repr
+
+/-- Whether a step that faults with `f` breaks the target. -/
+def Target.covers : Target → Fault → Bool
+  | .invariant _ (some r), .invariant n => r == n
+  | .invariant _ none, .invariant _ => true
+  | .ensures _ (some r), .ensures n => r == n
+  | .ensures _ none, .ensures _ => true
+  | .cascade, .cascadeLimit => true
+  | .effect c, .invalidEffect c' _ => c == c'
+  | _, _ => false
 
 /-- The name a rule's terms give it: none for a rule that holds in every model, the literal, or `some none` for a
 name the model decides. -/
@@ -169,9 +186,12 @@ def ruleName? (rule : Term × Term) : Option (Option String) :=
     | some (.str s) => some (some s)
     | _ => some none
 
+/-- The items, each once, in their order. -/
+def dedup {α : Type} [BEq α] (xs : List α) : List α :=
+  xs.foldl (fun acc n => if acc.contains n then acc else acc ++ [n]) []
+
 /-- The names of the rules, each once, in their order. -/
-def ruleNames (rules : List (Term × Term)) : List (Option String) :=
-  (rules.filterMap ruleName?).foldl (fun acc n => if acc.contains n then acc else acc ++ [n]) []
+def ruleNames (rules : List (Term × Term)) : List (Option String) := dedup (rules.filterMap ruleName?)
 
 /-- Whether a rule of the name `sel` is broken. -/
 def brokenT (sel : Option String) (rules : List (Term × Term)) : Term :=
@@ -249,14 +269,76 @@ def StepOut.invTargets {v : ServiceV} (o : StepOut v) : List Target :=
   | some fo => invariantTargets fo.invariants fo.checks
   | none => []
 
-/-- Whether the step breaks the target. -/
-def StepOut.breaks {v : ServiceV} (o : StepOut v) : Target → Term
+section
+variable {v : ServiceV}
+
+/-- What an own kind's internal step can break: its `ensures` rules, and its input, caller or presence. -/
+def OwnKindOut.targets : OwnKindOut v → List Target
+  | .command name o => (ruleNames o.decided.ensures).map (.ensures name) ++ [.effect name]
+  | .query name _ | .missing name => [.effect name]
+
+/-- Whether the internal step breaks the target, as its fault names it (`OwnKindOut.fault?`). -/
+def OwnKindOut.breaks : OwnKindOut v → Target → Term
+  | .command name o, .ensures c rule =>
+    if name = c then andT o.callerOk (andT (allT (o.rules.map (·.2))) (andT o.decided.ok (brokenT rule o.decided.ensures)))
+    else .bool false
+  | .command name o, .effect c => if name = c then .or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))) else .bool false
+  | .query name o, .effect c => if name = c then .or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))) else .bool false
+  | .missing name, .effect c => if name = c then tt else .bool false
+  | _, _ => .bool false
+
+/-- What the cascade can break: each own kind's targets, and its bound. -/
+def SettleOut.targets (o : SettleOut v) : List Target :=
+  o.steps.flatMap (fun st => st.2.kinds.flatMap (·.2.targets)) ++ [.cascade]
+
+/-- Whether the cascade faults by the target: a place past the bound is occupied, or an internal step that runs
+breaks it in the kind its effect is. -/
+def SettleOut.breaks (o : SettleOut v) : Target → Term
+  | .cascade => o.over
+  | g => anyT (o.steps.map fun st => andT st.1 (anyT (st.2.kinds.map fun k => andT k.1 (k.2.breaks g))))
+
+/-- What the input itself can break, where it is the command `cmd`: the command's `ensures` rules, or a clock line's
+bound on firing rounds. -/
+def StepOut.topTargets (o : StepOut v) (cmd : Option String) : List Target :=
+  match o, cmd with
+  | .command co, some c => (ruleNames co.decided.ensures).map (.ensures c)
+  | .clock _, _ => [.cascade]
+  | _, _ => []
+
+/-- Whether the input itself breaks the target. -/
+def StepOut.topBreaks (o : StepOut v) (cmd : Option String) : Target → List Term
+  | .ensures c rule => match o with
+    | .command co => if cmd = some c then
+        [andT co.callerOk (andT (allT (co.rules.map (·.2))) (andT co.decided.ok (brokenT rule co.decided.ensures)))]
+      else []
+    | _ => []
+  | .cascade => match o with
+    | .clock co => [andT co.forward co.over]
+    | _ => []
+  | _ => []
+
+/-- What the step can break, where its input is the command `cmd`. -/
+def StepOut.targets (o : StepOut v) (cmd : Option String) : List Target :=
+  o.invTargets ++ o.topTargets cmd ++ match o.finish? with
+    | some fo => fo.settle.targets
+    | none => []
+
+/-- Whether the step breaks the target, where its input is the command `cmd`: an invariant at the step's end, or a
+fault of the input itself or of the cascade once the step gets to its end. -/
+def StepOut.breaks (o : StepOut v) (cmd : Option String) : Target → Term
   | .invariant mach rule => match o.finish? with
     | some fo => andT o.reached (andT (.not fo.settle.faultT) (fo.broken mach rule))
     | none => .bool false
-  | .ensures _ rule => match o with
-    | .command co => andT co.callerOk (andT (allT (co.rules.map (·.2))) (andT co.decided.ok (brokenT rule co.decided.ensures)))
-    | _ => .bool false
+  | g => anyT (o.topBreaks cmd g ++ match o.finish? with
+    | some fo => [andT o.reached (fo.settle.breaks g)]
+    | none => [])
+
+end
+
+/-- The command an input names. -/
+def SymInput.command? {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat} : SymInput v shs n → Option String
+  | .command i .. => some (v.commands.get i).name
+  | _ => none
 
 /-- One question to the solver: the input kind it is about, the target it asks to break (none: whether a step of
 the kind can leave the slots or a side condition fail), and the script. -/
@@ -294,12 +376,11 @@ def questions (inp : SymInput v (shapes v P) senv.nT) :
   let dts ← need (.layout (.type v.records)) L.datatypes?
   let script (asserts : List Term) : Script :=
     { datatypes := dts, vars, asserts := [wf, below, t.out.case] ++ asserts, shows := List.range tys.length }
-  let ensures := match inp, t.out with
-    | .command i .., .command o => (ruleNames o.decided.ensures).map (.ensures (v.commands.get i).name)
-    | _, _ => []
-  let targets := t.out.invTargets ++ ensures
+  let cmd := inp.command?
+  let targets := (dedup (t.out.targets cmd)).filter
+    fun g => (t.out.breaks cmd g).const?.map Val.toBool != some false
   pure (targets, ⟨inp, none, script [.or (.not side) (andT held (.not t.cond))]⟩ ::
-    targets.map fun g => ⟨inp, some g, script [side, held, t.cond, t.out.breaks g]⟩)
+    targets.map fun g => ⟨inp, some g, script [side, held, t.cond, t.out.breaks cmd g]⟩)
 
 end
 

@@ -2,8 +2,8 @@ import Tazuna.Smt.Prove
 import Tazuna.Semantics.After
 
 /-! T4 for a step: where the solver finds no model of an input kind's bound question and of its questions about the
-invariant rules named `r`, no step of that kind from a state of the right shape whose invariants hold faults naming
-`r`. Steps that fault leave the state they began with, and the others commit only states whose invariants hold, so
+targets a fault `f` falls under (the invariant or `ensures` rules of its name, the cascade bound, the own command or
+query it names), no step of that kind from a state of the right shape whose invariants hold faults with `f`. Steps that fault leave the state they began with, and the others commit only states whose invariants hold, so
 every state a run reaches from an initial state whose invariants hold is such a state. -/
 
 namespace Tazuna.Smt
@@ -42,12 +42,11 @@ theorem mem_brokenIn {rules : List (Term × Term)} {n : String} (h : n ∈ broke
     cases h
     exact ⟨(a, b), hm, by simpa [Holds] using hb, rfl⟩
 
-theorem mem_ruleNames {rules : List (Term × Term)} {rule : Term × Term} {g : Option String} (hm : rule ∈ rules)
-    (hg : ruleName? rule = some g) : g ∈ ruleNames rules := by
-  have key : ∀ (xs acc : List (Option String)), (g ∈ acc ∨ g ∈ xs) →
-      g ∈ xs.foldl (fun acc n => if acc.contains n then acc else acc ++ [n]) acc := by
-    intro xs
-    induction xs with
+theorem mem_dedup {α : Type} [BEq α] [LawfulBEq α] {xs : List α} {x : α} (h : x ∈ xs) : x ∈ dedup xs := by
+  have key : ∀ (ys acc : List α), (x ∈ acc ∨ x ∈ ys) →
+      x ∈ ys.foldl (fun acc n => if acc.contains n then acc else acc ++ [n]) acc := by
+    intro ys
+    induction ys with
     | nil => intro acc h; simpa using h
     | cons y ys ih =>
       intro acc h
@@ -65,7 +64,11 @@ theorem mem_ruleNames {rules : List (Term × Term)} {rule : Term × Term} {g : O
         · rcases List.mem_cons.1 h with rfl | h
           · exact .inl (by simp)
           · exact .inr h
-  exact key _ [] (.inr (List.mem_filterMap.2 ⟨rule, hm, hg⟩))
+  exact key xs [] (.inr h)
+
+theorem mem_ruleNames {rules : List (Term × Term)} {rule : Term × Term} {g : Option String} (hm : rule ∈ rules)
+    (hg : ruleName? rule = some g) : g ∈ ruleNames rules :=
+  mem_dedup (List.mem_filterMap.2 ⟨rule, hm, hg⟩)
 
 /-- A broken rule's name, as its terms give it, is the string the model gives or one the model decides. -/
 theorem ruleName_of_broken {rule : Term × Term} {r : String} (hb : ¬ Holds M rule.2) (hn : (rule.1.denote M).toStr = r) :
@@ -162,32 +165,6 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
-/-- An internal step faults by its admission or its `ensures`, never by an invariant: those are checked once, at the
-step's end. -/
-theorem settle_fault_ne (o : SettleOut v) (n : String) : o.fault? M ≠ some (.invariant n) := by
-  unfold SettleOut.fault?
-  split
-  · rename_i st _
-    unfold OwnStepOut.fault?
-    intro h
-    obtain ⟨k, -, hk⟩ := Option.bind_eq_some_iff.1 h
-    obtain ⟨_, ko⟩ := k
-    cases ko with
-    | command name o =>
-      simp only [OwnKindOut.fault?] at hk
-      split at hk
-      · split at hk
-        · cases hk
-        · split at hk <;> cases hk
-      · cases hk
-    | query name o =>
-      simp only [OwnKindOut.fault?] at hk
-      split at hk
-      · split at hk <;> cases hk
-      · cases hk
-    | missing name => simp [OwnKindOut.fault?] at hk
-  · split <;> simp
-
 theorem instBrokenT_mono {g : Option String} {cs cs' : List InstCheck} (hsub : ∀ c ∈ cs, c ∈ cs')
     (h : Holds M (instBrokenT g cs)) : Holds M (instBrokenT g cs') := by
   unfold instBrokenT at h ⊢
@@ -196,44 +173,127 @@ theorem instBrokenT_mono {g : Option String} {cs cs' : List InstCheck} (hsub : �
   obtain ⟨c, hc, rfl⟩ := List.mem_map.1 hx
   exact ⟨_, List.mem_map_of_mem (hsub c hc), hh⟩
 
-/-- Whether the target is an invariant rule named `n` or one whose name the model decides. -/
-def Target.Names (n : String) : Target → Prop
-  | .invariant _ (some r) => r = n
-  | .invariant _ none => True
-  | .ensures .. => False
+/-- An internal step's fault breaks one of its kind's targets, as the kind's terms say. -/
+theorem kind_breaks {f : Fault} : (k : OwnKindOut v) → k.fault? M = some f →
+    ∃ g ∈ k.targets, g.covers f = true ∧ Holds M (k.breaks g)
+  | .command name o, h => by
+    simp only [OwnKindOut.fault?] at h
+    split at h
+    · rename_i hcall
+      split at h
+      · rename_i n ns hl
+        cases h
+        refine ⟨.effect name, by simp [OwnKindOut.targets], by simp [Target.covers], ?_⟩
+        simp only [OwnKindOut.breaks, ite_true, holds_or, holds_not, holds_allT_rules, hl]
+        exact .inr (by simp)
+      · rename_i hl
+        split at h
+        · rename_i n rest hok hens
+          cases h
+          obtain ⟨g, hg, hmem, hb⟩ := brokenT_of_mem (M := M) (r := n) (by rw [hens]; simp)
+          refine ⟨.ensures name g, by simp [OwnKindOut.targets, hmem], by rcases hg with rfl | rfl <;> simp [Target.covers], ?_⟩
+          simp only [OwnKindOut.breaks, ite_true]
+          exact (holds_andT _ _).2 ⟨by simpa [Holds] using hcall, (holds_andT _ _).2 ⟨(holds_allT_rules _).2 hl,
+            (holds_andT _ _).2 ⟨by simpa [Holds] using hok, hb⟩⟩⟩
+        · cases h
+    · rename_i hcall
+      cases h
+      refine ⟨.effect name, by simp [OwnKindOut.targets], by simp [Target.covers], ?_⟩
+      simp only [OwnKindOut.breaks, ite_true, holds_or, holds_not]
+      exact .inl (by simpa [Holds] using hcall)
+  | .query name o, h => by
+    simp only [OwnKindOut.fault?] at h
+    split at h
+    · split at h
+      · rename_i n ns hl
+        cases h
+        refine ⟨.effect name, by simp [OwnKindOut.targets], by simp [Target.covers], ?_⟩
+        simp only [OwnKindOut.breaks, ite_true, holds_or, holds_not, holds_allT_rules, hl]
+        exact .inr (by simp)
+      · cases h
+    · rename_i hcall
+      cases h
+      refine ⟨.effect name, by simp [OwnKindOut.targets], by simp [Target.covers], ?_⟩
+      simp only [OwnKindOut.breaks, ite_true, holds_or, holds_not]
+      exact .inl (by simpa [Holds] using hcall)
+  | .missing name, h => by
+    simp only [OwnKindOut.fault?, Option.some.injEq] at h
+    subst h
+    exact ⟨.effect name, by simp [OwnKindOut.targets], by simp [Target.covers], by simp [OwnKindOut.breaks, holds_tt]⟩
 
-/-- Where a step's end faults naming the invariant `n`, the cascade does not fault and the end breaks a target of
-that name. -/
-theorem finished_breaks {shs : List (PendingShape v.event)} {fo : FinishOut v} {s0 : State v} {a : Step.Acc v}
-    {outcome : Outcome} {res : Result v} {n : String} (hf : Finished M L T shs fo s0 a outcome res)
-    (ho : res.outcome = .fault (.invariant n)) (hacc : outcome ≠ .fault (.invariant n)) :
-    ¬ Holds M fo.settle.faultT ∧ ∃ g ∈ invariantTargets fo.invariants fo.checks, g.Names n ∧
-      ∃ mach rule, g = .invariant mach rule ∧ Holds M (fo.broken mach rule) := by
+theorem kind_breaks_ne {k : OwnKindOut v} {g : Target} (h : Holds M (k.breaks g)) : g ≠ .cascade ∧ ∀ m r, g ≠ .invariant m r := by
+  refine ⟨?_, fun m r => ?_⟩ <;> rintro rfl <;> cases k <;> simp [OwnKindOut.breaks, Holds, Term.denote, Val.toBool] at h
+
+/-- The cascade's fault breaks one of its targets, as its terms say: an internal step it runs breaks one of its
+kind's, or a place past the bound is occupied. -/
+theorem settle_breaks {f : Fault} (o : SettleOut v) (h : o.fault? M = some f) :
+    ∃ g ∈ o.targets, g.covers f = true ∧ Holds M (o.breaks g) := by
+  unfold SettleOut.fault? at h
+  split at h
+  · rename_i st hst
+    have hmem := List.mem_of_find?_eq_some hst
+    have hpred := List.find?_some hst
+    simp only [Bool.and_eq_true] at hpred
+    obtain ⟨k, hk, hkf⟩ := Option.bind_eq_some_iff.1 h
+    have hkm := List.mem_of_find?_eq_some hk
+    have htest := List.find?_some hk
+    obtain ⟨g, hg, hcov, hbr⟩ := kind_breaks k.2 hkf
+    refine ⟨g, List.mem_append_left _ (List.mem_flatMap.2 ⟨st, hmem, List.mem_flatMap.2 ⟨k, hkm, hg⟩⟩), hcov, ?_⟩
+    have hb : Holds M (anyT (o.steps.map fun st => andT st.1 (anyT (st.2.kinds.map fun k => andT k.1 (k.2.breaks g))))) :=
+      (holds_anyT _).2 ⟨_, List.mem_map_of_mem hmem, (holds_andT _ _).2 ⟨hpred.1,
+        (holds_anyT _).2 ⟨_, List.mem_map_of_mem hkm, (holds_andT _ _).2 ⟨htest, hbr⟩⟩⟩⟩
+    obtain ⟨hnc, hni⟩ := kind_breaks_ne hbr
+    cases g with
+    | cascade => exact absurd rfl hnc
+    | invariant m r => exact absurd rfl (hni m r)
+    | _ => exact hb
+  · split at h
+    · rename_i hover
+      cases h
+      exact ⟨.cascade, by simp [SettleOut.targets], rfl, hover⟩
+    · cases h
+
+theorem settle_targets_ne {o : SettleOut v} {g : Target} (h : g ∈ o.targets) : ∀ m r, g ≠ .invariant m r := by
+  intro m r hg
+  subst hg
+  simp only [SettleOut.targets, List.mem_append, List.mem_flatMap, List.mem_singleton] at h
+  rcases h with ⟨_, _, k, _, hk⟩ | h
+  · cases hk' : k.2 <;> simp [hk', OwnKindOut.targets] at hk
+  · cases h
+
+/-- Where a step's end faults with `f` other than its own outcome, the cascade breaks one of its targets, or the
+cascade does not fault and the end breaks an invariant target. -/
+theorem finished_faults {shs : List (PendingShape v.event)} {fo : FinishOut v} {s0 : State v} {a : Step.Acc v}
+    {outcome : Outcome} {res : Result v} {f : Fault} (hf : Finished M L T shs fo s0 a outcome res)
+    (ho : res.outcome = .fault f) (hacc : outcome ≠ .fault f) :
+    (∃ g ∈ fo.settle.targets, g.covers f = true ∧ Holds M (fo.settle.breaks g)) ∨
+    (¬ Holds M fo.settle.faultT ∧ ∃ g ∈ invariantTargets fo.invariants fo.checks, g.covers f = true ∧
+      ∃ mach rule, g = .invariant mach rule ∧ Holds M (fo.broken mach rule)) := by
   obtain ⟨hF, hm⟩ := hf
   cases hfo : fo.settle.fault? M with
-  | some f =>
+  | some f' =>
     rw [hfo] at hm
     simp only at hm
     subst hm
     cases ho
-    exact absurd hfo (settle_fault_ne _ n)
+    exact .inl (settle_breaks _ hfo)
   | none =>
     rw [hfo] at hm hF
-    refine ⟨by simp [Holds, hF, Val.toBool], ?_⟩
+    refine .inr ⟨by simp [Holds, hF, Val.toBool], ?_⟩
     simp only at hm
     split at hm
-    · rename_i n' rest hl
+    · rename_i n rest hl
       subst hm
       cases ho
       have hmem : n ∈ brokenIn M fo.invariants ++ checksBroken L T M v.machines fo.checks := by rw [hl]; simp
       rcases List.mem_append.1 hmem with h | h
       · obtain ⟨g, hg, hmemg, hb⟩ := brokenT_of_mem h
         refine ⟨.invariant none g, List.mem_append_left _ (List.mem_map_of_mem hmemg), ?_, none, g, rfl, hb⟩
-        rcases hg with rfl | rfl <;> simp [Target.Names]
+        rcases hg with rfl | rfl <;> simp [Target.covers]
       · obtain ⟨mc, hmc, g, hg, hmemg, hb⟩ := instBrokenT_of_mem v.machines fo.checks h
         refine ⟨.invariant (some mc.1.name) g,
           List.mem_append_right _ (List.mem_flatMap.2 ⟨mc, hmc, List.mem_map_of_mem hmemg⟩), ?_, some mc.1.name, g, rfl, ?_⟩
-        · rcases hg with rfl | rfl <;> simp [Target.Names]
+        · rcases hg with rfl | rfl <;> simp [Target.covers]
         · refine instBrokenT_mono (fun c hc => ?_) hb
           simp only [machineChecks, List.mem_flatMap]
           exact ⟨mc, hmc, by simp [hc]⟩
@@ -241,24 +301,32 @@ theorem finished_breaks {shs : List (PendingShape v.event)} {fo : FinishOut v} {
       rw [hr] at ho
       exact absurd ho hacc
 
-theorem breaks_of_finished {o : StepOut v} {fo : FinishOut v} (hfo : o.finish? = some fo) (hreach : Holds M o.reached)
-    {shs : List (PendingShape v.event)} {s0 : State v} {a : Step.Acc v} {res : Result v} {n : String}
-    (hf : Finished M L T shs fo s0 a .accepted res) (ho : res.outcome = .fault (.invariant n)) :
-    ∃ g ∈ o.invTargets, g.Names n ∧ Holds M (o.breaks g) := by
-  obtain ⟨hF, g, hg, hn, mach, rule, rfl, hb⟩ := finished_breaks hf ho (by simp)
-  refine ⟨_, by simp [StepOut.invTargets, hfo, hg], hn, ?_⟩
-  simp only [StepOut.breaks, hfo]
-  exact (holds_andT _ _).2 ⟨hreach, (holds_andT _ _).2 ⟨(holds_not _).2 hF, hb⟩⟩
+theorem breaks_of_finished {o : StepOut v} {cmd : Option String} {fo : FinishOut v} (hfo : o.finish? = some fo)
+    (hreach : Holds M o.reached) {shs : List (PendingShape v.event)} {s0 : State v} {a : Step.Acc v} {res : Result v}
+    {f : Fault} (hf : Finished M L T shs fo s0 a .accepted res) (ho : res.outcome = .fault f) :
+    ∃ g ∈ o.targets cmd, g.covers f = true ∧ Holds M (o.breaks cmd g) := by
+  rcases finished_faults hf ho (by simp) with ⟨g, hg, hcov, hb⟩ | ⟨hF, g, hg, hcov, mach, rule, rfl, hb⟩
+  · refine ⟨g, by simp [StepOut.targets, hfo, hg], hcov, ?_⟩
+    have hs : Holds M (anyT (o.topBreaks cmd g ++ [andT o.reached (fo.settle.breaks g)])) :=
+      (holds_anyT _).2 ⟨_, List.mem_append_right _ (List.mem_singleton_self _), (holds_andT _ _).2 ⟨hreach, hb⟩⟩
+    cases g with
+    | invariant m r => exact absurd rfl (settle_targets_ne hg m r)
+    | _ => simpa only [StepOut.breaks, hfo] using hs
+  · refine ⟨_, by simp [StepOut.targets, StepOut.invTargets, hfo, hg], hcov, ?_⟩
+    simp only [StepOut.breaks, hfo]
+    exact (holds_andT _ _).2 ⟨hreach, (holds_andT _ _).2 ⟨(holds_not _).2 hF, hb⟩⟩
 
-/-- Where a step's terms say what its result is and the result faults naming the invariant `n`, the step breaks a
-target of that name. -/
-theorem rel_breaks {shs : List (PendingShape v.event)} {s : State v} {o : StepOut v} {x : Input v} {res : Result v}
-    {n : String} (hrel : o.Rel M L T shs s x res) (ho : res.outcome = .fault (.invariant n)) :
-    ∃ g ∈ o.invTargets, g.Names n ∧ Holds M (o.breaks g) := by
+/-- Where a step's terms say what its result is and the result faults with `f`, other than an answer naming no
+request, the step breaks one of its targets that `f` falls under. `cmd` is the command the input names. -/
+theorem rel_faults {shs : List (PendingShape v.event)} {s : State v} {o : StepOut v} {x : Input v} {res : Result v}
+    {f : Fault} {cmd : Option String} (hcmd : ∀ i c y, x = .command i c y → cmd = some (v.commands.get i).name)
+    (hrel : o.Rel M L T shs s x res) (ho : res.outcome = .fault f) (hf : f ≠ .answerUnmatched) :
+    ∃ g ∈ o.targets cmd, g.covers f = true ∧ Holds M (o.breaks cmd g) := by
   cases o with
   | command co =>
     cases x with
     | command i caller input =>
+      have hc := hcmd i caller input rfl
       simp only [StepOut.Rel] at hrel
       split at hrel
       · rename_i hcall
@@ -268,7 +336,15 @@ theorem rel_breaks {shs : List (PendingShape v.event)} {s : State v} {o : StepOu
           split at hrel
           · rename_i hok
             split at hrel
-            · subst hrel; cases ho
+            · rename_i n rest hens
+              subst hrel; cases ho
+              obtain ⟨g, hg, hmem, hb⟩ := brokenT_of_mem (M := M) (r := n) (by rw [hens]; simp)
+              refine ⟨.ensures (v.commands.get i).name g, by simp [StepOut.targets, StepOut.topTargets, hc, hmem],
+                by rcases hg with rfl | rfl <;> simp [Target.covers], ?_⟩
+              simp only [StepOut.breaks, StepOut.topBreaks, hc, ite_true]
+              exact (holds_anyT _).2 ⟨_, List.mem_append_left _ (List.mem_singleton_self _),
+                (holds_andT _ _).2 ⟨hcall, (holds_andT _ _).2 ⟨(holds_allT_rules _).2 hrules,
+                  (holds_andT _ _).2 ⟨hok, hb⟩⟩⟩⟩
             · rename_i hens
               refine breaks_of_finished rfl ?_ hrel ho
               simp only [StepOut.reached]
@@ -296,7 +372,7 @@ theorem rel_breaks {shs : List (PendingShape v.event)} {s : State v} {o : StepOu
     | _ => cases hrel
   | unmatched u =>
     cases x with
-    | answer to value => simp only [StepOut.Rel] at hrel; subst hrel; cases ho
+    | answer to value => simp only [StepOut.Rel] at hrel; subst hrel; cases ho; exact absurd rfl hf
     | _ => cases hrel
   | event eo =>
     cases x with
@@ -309,7 +385,12 @@ theorem rel_breaks {shs : List (PendingShape v.event)} {s : State v} {o : StepOu
       split at hrel
       · rename_i hfw
         split at hrel
-        · subst hrel; cases ho
+        · rename_i hover
+          subst hrel; cases ho
+          refine ⟨.cascade, by simp [StepOut.targets, StepOut.topTargets], rfl, ?_⟩
+          simp only [StepOut.breaks, StepOut.topBreaks]
+          exact (holds_anyT _).2 ⟨_, List.mem_append_left _ (List.mem_singleton_self _),
+            (holds_andT _ _).2 ⟨hfw, by simpa [Holds] using hover⟩⟩
         · rename_i hover
           refine breaks_of_finished rfl ?_ hrel ho
           simp only [StepOut.reached]
@@ -328,9 +409,25 @@ theorem bound_holds {side held cond : Term} (h : ¬ Holds M (.or (.not side) (an
   exact ⟨Classical.byContradiction fun h' => h (.inl h'),
     fun hh => Classical.byContradiction fun h' => h (.inr ⟨hh, h'⟩)⟩
 
+/-- A command input decodes from the symbolic input of its command. -/
+theorem command?_of_decode {shs : List (PendingShape v.event)} {n : Nat} {hc : v.caller.isData = true}
+    {inp : SymInput v shs n} {x : Input v} (hx : inp.decode M L hc = some x) :
+    ∀ i c y, x = .command i c y → inp.command? = some (v.commands.get i).name := by
+  intro i c y hxc
+  subst hxc
+  cases inp with
+  | command i' sc si =>
+    obtain ⟨_, _, h, -, -⟩ := decode_command hx
+    cases h; rfl
+  | query i' sc si => obtain ⟨_, _, h, -, -⟩ := decode_query hx; cases h
+  | answer k j to w => obtain ⟨_, _, _, h, -, -⟩ := decode_answer hx; cases h
+  | unmatched t to w => obtain ⟨_, _, _, h, -, -⟩ := decode_answer hx; cases h
+  | event i' sv => obtain ⟨_, h, -⟩ := decode_event hx; cases h
+  | clock st => obtain ⟨_, h, -⟩ := decode_clock hx; cases h
+
 /-- T4 for one input kind, in one model: where the symbolic state and input decode to a state of the right shape
 whose invariants hold and to an input of the kind, and the model satisfies the bound question of the kind or a
-question about a rule named `n` nowhere, the step faults naming no invariant `n`. -/
+question about a target `f` falls under nowhere, the step does not fault with `f`. -/
 theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v P)) (inp : SymInput v (shapes v P) senv.nT)
     {gs : List Target} {qs : List (Question v (shapes v P) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
@@ -338,9 +435,10 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     (hinv : Step.Inv P s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
-    (n : String)
-    (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.Names n) → ∃ a ∈ q.script.asserts, ¬ Holds M a) :
-    (step T v s x).outcome ≠ .fault (.invariant n) := by
+    (f : Fault) (hf : f ≠ .answerUnmatched)
+    (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
+      ∃ a ∈ q.script.asserts, ¬ Holds M a) :
+    (step T v s x).outcome ≠ .fault f := by
   intro hfault
   obtain ⟨t, ht, hq⟩ := bind_ok.1 hq
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
@@ -376,9 +474,16 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     (holds_andT _ _).2 ⟨(holds_allT_rules _).2 (hb.trans hheld.1), instHold_of_nil _ _ (hbs.trans hheld.2)⟩
   have hcond := hcondOf hheldH
   have hrel := ((step_encode chk senv hS hinv hx ht).2 hcodes hsites hcaseH).2 hcond
-  obtain ⟨g, hg, hn, hbr⟩ := rel_breaks hrel hfault
-  obtain ⟨a, ha, hna⟩ := hun ⟨inp, some g, _⟩ (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_append_left _ hg, rfl⟩))
-    (.inr ⟨g, rfl, hn⟩)
+  obtain ⟨g, hg, hn, hbr⟩ := rel_faults (command?_of_decode hx) hrel hfault hf
+  have hkeep : ((t.out.breaks inp.command? g).const?.map Val.toBool != some false) = true := by
+    cases hk : (t.out.breaks inp.command? g).const? with
+    | none => rfl
+    | some w =>
+      have hw := Term.const?_denote M _ hk
+      simp only [Holds, hw] at hbr
+      simp [hbr]
+  obtain ⟨a, ha, hna⟩ := hun ⟨inp, some g, _⟩
+    (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) (.inr ⟨g, rfl, hn⟩)
   simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
   rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
@@ -400,21 +505,21 @@ def Covered (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (
     ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case
 
 /-- T4 at the states and inputs the questions cover: where the solver answers unsat to an input kind's bound
-question and to its questions about the invariant rules named `n`, no step of a run from an initial state whose
-invariants hold faults naming `n` at a state and input those questions cover. The proved invariants are assumed of
+question and to its questions about the targets the fault `f` falls under, no step of a run from an initial state
+whose invariants hold faults with `f` at a state and input those questions cover. The proved invariants are assumed of
 the state before each step, which is sound because every state such a run reaches has them (`run_invariants`: a step
 that breaks one leaves the state it began with). -/
 theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P))
-    (n : String) (hinit : Step.invariants (Step.State.init v) = [])
+    (f : Fault) (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
     (inp : SymInput v (shapes v P) senv.nT) {gs : List Target} {qs : List (Question v (shapes v P) senv.nT)}
     (hq : questions L T P v senv inp = .ok (gs, qs))
-    (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.Names n) →
+    (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
       Unsat L (stateTys v (shapes v P) ++ inp.tys) q.script)
     (is : List (Input v)) (x : Input v) (hcov : Covered L T P v senv inp (run T v (Step.State.init v) is).1 x) :
-    (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault (.invariant n) := by
+    (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨hc, M, hM, hS, hx, hcase⟩ := hcov
   exact question_sound chk senv inp hq hS (run_inv T chk.reach _ Step.init_inv is)
-    (Tazuna.Ir.run_invariants T _ is hinit) hx hcase n fun q hq' hrel => hun q hq' hrel M hM
+    (Tazuna.Ir.run_invariants T _ is hinit) hx hcase f hf fun q hq' hrel => hun q hq' hrel M hM
 
 end
 

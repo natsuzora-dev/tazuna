@@ -275,24 +275,26 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
           exact ⟨htd, _, decode_embed _ _ _ hw, Ty.down_up _ _ _⟩
     · cases hx
 
-/-- T4: where the solver answers unsat to every input kind's bound question and to its questions about the
-invariant rules named `n`, no step of a run from an initial state whose invariants hold faults naming `n`, wherever
-the state the run reached and the input fit the slots. -/
-theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P)) (n : String)
-    (hinit : Step.invariants (Step.State.init v) = [])
+/-- T4: where the solver answers unsat to every input kind's bound question and to its questions about the targets
+the fault `f` falls under (an invariant or `ensures` rule of its name, the cascade bound, the own command or query it
+names), no step of a run from an initial state whose invariants hold faults with `f`, wherever the state the run
+reached and the input fit the slots. An answer that names no request is the one fault no question is about: it is
+the outside's mistake, not the spec's. -/
+theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P)) (f : Fault)
+    (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
     (hq : ∀ inp ∈ stepInputs v (shapes v P) senv.nT (5 + v.machines.length), ∃ gs qs,
-      questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.Names n) →
+      questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
         Unsat L (stateTys v (shapes v P) ++ inp.tys) q.script)
     (is : List (Input v)) (x : Input v) (hs : Within L (shapes v P) (run T v (Step.State.init v) is).1)
     (hx : (inputVals L chk.callerData x).isSome) :
-    (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault (.invariant n) := by
+    (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
   rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hs x hivs
     with ⟨inp, hmem, hcov⟩ | h
   · obtain ⟨gs, qs, hqs, hun⟩ := hq inp hmem
-    exact verdict_covered chk senv n hinit inp hqs hun is x hcov
-  · exact h _ (by simp)
+    exact verdict_covered chk senv f hf hinit inp hqs hun is x hcov
+  · exact h f hf
 
 end
 

@@ -3295,7 +3295,10 @@ def reshareCheck (depth : Nat) : IO Bool := do
 
 /-! prove's questions (`questions`, `question_sound`): on the event service with the machine `calm`, each target's
 question is sat, and the step from the state and input the model decodes to reaches its end in a state that breaks the
-target's rule (`Step.settled`). A question asking the target's terms not to hold must not pass that comparison. -/
+target's rule (`Step.settled`). On the cascade service `c`, whose reaction queues an own `put (ev + 10)` that accepts
+only positive inputs, the cascade's targets: with bound 1 the own effect `put` can be Invalid, and with bound 0 the
+queued `put` is past the bound; each question's decoded step faults as the target says (`Target.covers`). A question
+asking the target's terms not to hold must not pass that comparison. -/
 
 def settledBreaks (v : ServiceV) (s : State v) (x : Input v) : Target → Bool
   | .invariant none (some r) => match Step.settled prelude s x with
@@ -3305,35 +3308,48 @@ def settledBreaks (v : ServiceV) (s : State v) (x : Input v) : Target → Bool
     | some a => a.state.machines.toSigma.any fun ⟨m', insts⟩ => m'.name == m && insts.any fun i =>
         (Step.broken (m'.invariants.fn (.inl (i.key, i.state, a.state.records, a.state.now, ()), ()))).contains r
     | none => false
-  | _ => false
+  | .invariant _ none => false
+  | g => match (step prelude v s x).outcome with
+    | .fault f => g.covers f
+    | _ => false
 
-def proveCheck (solver : Solver) : IO Bool := do
-  let fail (m : String) : IO Bool := do IO.println s!"smt-check: prove's questions: {m}"; return false
-  let v := evMSvc
+def proveCase (solver : Solver) (name : String) (v : ServiceV) (hc : v.caller.isData = true) (P : List AnySite)
+    (i : Fin v.subscribes.length) (want asked : List Target) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: prove's questions, {name}: {m}"; return false
   let L := svcLayout v 3
-  let .ok senv := StepEnv.of L (shapes v []) | fail "no step environment"
-  let inp : SymInput v (shapes v []) senv.nT := .event evMI (.var (5 + v.machines.length))
-  match questions L prelude [] v senv inp with
+  let .ok senv := StepEnv.of L (shapes v P) | fail "no step environment"
+  let inp : SymInput v (shapes v P) senv.nT := .event i (.var (5 + v.machines.length))
+  match questions L prelude P v senv inp with
   | .error r => fail s!"no questions: {repr r}"
   | .ok (gs, qs) =>
-    unless gs == [.invariant none (some "small"), .invariant (some "calm") (some "calm")] do
-      return ← fail s!"the targets are {repr gs}"
+    unless gs == want do return ← fail s!"the targets are {repr gs}"
     let mut ok := true
     for q in qs do
       let some g := q.target | continue
+      unless asked.contains g do continue
       for negated in [false, true] do
         let asserts := if negated then q.script.asserts.dropLast ++ q.script.asserts.getLast?.toList.map .not
           else q.script.asserts
         match ← solver.run { q.script with asserts } with
         | .sat vs =>
           let M := modelOf vs
-          match (SymState.vars (v := v) 0).decode M L prelude (shapes v []), inp.decode M L rfl with
+          match (SymState.vars (v := v) 0).decode M L prelude (shapes v P), inp.decode M L hc with
           | some st, some x =>
             if settledBreaks v st x g == negated then
               ok ← fail s!"{repr g} (negated {negated}): the step from the model's state and input disagrees"
           | _, _ => ok ← fail s!"{repr g}: the model does not decode"
         | a => ok ← fail s!"{repr g} (negated {negated}): {repr a}"
     return ok
+
+def proveCheck (solver : Solver) : IO Bool := do
+  let a ← proveCase solver "machine invariants" evMSvc rfl [] evMI
+    [.invariant none (some "small"), .invariant (some "calm") (some "calm")]
+    [.invariant none (some "small"), .invariant (some "calm") (some "calm")]
+  let b ← proveCase solver "cascade bound 1" (cascSvc 1) rfl cascSites ⟨0, by decide⟩
+    [.invariant none (some "small"), .invariant (some "start") none, .effect "put", .cascade] [.effect "put", .cascade]
+  let c ← proveCase solver "cascade bound 0" (cascSvc 0) rfl cascSites ⟨0, by decide⟩
+    [.invariant none (some "small"), .invariant (some "start") none, .cascade] [.cascade]
+  return a && b && c
 
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
