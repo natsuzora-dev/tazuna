@@ -133,7 +133,7 @@ theorem events_apply {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx
     {records : Term} (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
     {xs : List Term} (hms : MachinesRel M L T v.machines xs a.state.machines)
     {nT : Term} (hn : nT.denote M = .int (Int.ofNat a.state.nextId))
-    {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs dE dP dopt apply now S records xs nT = .ok (o, c))
+    {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs dE dP dopt apply now S records xs nT (.int 0) = .ok (o, c))
     (hc : Holds M c) {pending : Term} (hpend : PendingRel L shs (pending.denote M) a.state.pending)
     {pT cp : Term} (hpe : encodePending L shs pending o.news = .ok (pT, cp)) (hcp : Holds M cp) :
     ∃ ps, Step.applyEvents T a evs = .ok ({ a with state := (Step.reactAll T a.state evs).1, events := a.events ++ evs }.wrote
@@ -147,14 +147,17 @@ theorem events_apply {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx
     rw [← hinv.machinesOf] at hm
     obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 hm
     exact hinv.machines sm hsm
-  obtain ⟨r1, r2, r3, sv', zs, hS', hw', hh', xs', hxp, hq⟩ := events_rel hP hvx hvm hshs hor hrd hed hap happ hE hPE
-    hopt S sv hS hw evs hev a.state hnow hrec hms hn henc hc
+  obtain ⟨r1, r2, r3, ⟨sv', zs, hS', hw', hh', xs', hxp, hq⟩, -, r6⟩ := events_rel hP hvx hvm hshs hor hrd hed hap
+    happ hE hPE hopt S sv hS hw evs hev a.state hnow hrec hms hn rfl henc hc
   obtain ⟨ps, hps, ps', hperm, hrelP⟩ := pending_rel hpend hinv.below hinv.nodup hS' hw' hh' hxp hq hpe hcp
-  have hlen : ps.length = (Step.reactAll T a.state evs).2.length := by
+  have hlen : ps.length = (Step.reqsOf (Step.reactAll T a.state evs).2).length := by
     rw [← forall2_length hps, List.length_zipIdx]
+  have hq0 : Step.queuedOf (Step.reactAll T a.state evs).2 = [] :=
+    ownRel_noOwns (encodePending_noOwns hpe) (fun x hx => by
+      obtain ⟨y, hy, rfl⟩ := List.mem_map.1 hx
+      simpa using (List.mem_filter.1 hy).2) r6
   refine ⟨ps, ?_, ⟨ps', hperm, hrelP⟩, r1, r2, ?_⟩
-  · obtain ⟨hr, hq⟩ := Step.reqs_of_writes hps
-    rw [Step.applyEvents_requests T evs a ps (by rw [hr]; exact hps), hr, hq, hlen]
+  · rw [Step.applyEvents_requests T evs a ps hps, hq0, hlen]
     simp [Step.Acc.queued]
   · rw [r3, hlen]; rfl
 
@@ -178,7 +181,7 @@ theorem event_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
     {o : EventsOut} {c : Term}
-    (henc : encodeEvents L T v shs dE dP dopt ec.apply now [(tt, [et])] records xs nextIdT = .ok (o, c))
+    (henc : encodeEvents L T v shs dE dP dopt ec.apply now [(tt, [et])] records xs nextIdT (.int 0) = .ok (o, c))
     (hc : Holds M c) {rules : List (Term × Term)} {ci : Term}
     (hi : encodeInvariants L ec.invariants o.records = .ok (rules, ci)) (hci : Holds M ci)
     {checks : List (List InstCheck)} {ck : Term}
@@ -247,7 +250,7 @@ theorem event_step_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x �
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
     {o : EventsOut} {c : Term}
-    (henc : encodeEvents L T v shs dE dP dopt ec.apply now [(tt, [et])] records xs nextIdT = .ok (o, c))
+    (henc : encodeEvents L T v shs dE dP dopt ec.apply now [(tt, [et])] records xs nextIdT (.int 0) = .ok (o, c))
     {rules : List (Term × Term)} {ci : Term} (hi : encodeInvariants L ec.invariants o.records = .ok (rules, ci))
     {checks : List (List InstCheck)} {ck : Term}
     (hck : encodeInstChecks L T v.machines o.tables o.records now = .ok (checks, ck)) :
@@ -277,7 +280,7 @@ theorem event_step_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x �
     have hevT := wrap_rel i value hd he hsv hwr hcw
     obtain ⟨r1, r2, -⟩ := events_rel hP hvx hvm hshs hor hd.records hd.event hd.apply he.apply hE hPE hopt
       [(tt, [et])] [(true, [et.denote M])] ⟨rfl, rfl, trivial⟩ (by simp) [ev] ⟨⟨_, rfl, hevT⟩, trivial⟩ s hnow hrec hms
-      hnid henc hc
+      hnid rfl henc hc
     exact ⟨r1, r2⟩
   have e2 : ∀ (hce : Holds M (andT c1' (andT c2' c3'))) (hcw : Holds M cw), (Holds M c ↔ eventsFit L.count T s [ev]) :=
     fun hce hcw => by

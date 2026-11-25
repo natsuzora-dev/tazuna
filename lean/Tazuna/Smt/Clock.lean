@@ -478,13 +478,15 @@ structure RoundsOut where
   over : Term
 
 /-- The pending slots of a round's start slots, machine by machine, and how many effects they start. A round fires at
-most one instance, so every slot takes the round's next id `nid`. -/
+most one instance, so every slot takes the round's next id `nid`. Refused while the layout has own kinds (`noOwns`):
+a timer that starts an own command or query needs the cascade. -/
 def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (dE dP dopt : Nat) :
     List (MachineV r e) → List (List (Term × Term × Term)) → Term → Except Refusal (List Slot × Term)
   | [], [], _ => pure ([], .int 0)
   | m :: ms, st :: sts, nid => do
+    noOwns L e
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
-    let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e) (L.ownsOf e)
+    let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
     let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
     let (rest, k) ← roundStarts shs ds dE dP dopt ms sts nid
     pure (entrySlots dE dP dk dflt js (st.map (onceStart dopt nid)) ++ rest, .add (startCount dopt st) k)
@@ -531,6 +533,8 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     exact ⟨rfl, [], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩
   | m :: ms, st :: sts, effs :: effss, ⟨⟨α, κ, F, E, items, svX, hX, hh, hEp, _, heffs⟩, hrest⟩, hone, hreach,
       news, cnt, henc => by
+    obtain ⟨_, h0, henc⟩ := bind_ok.1 henc
+    have ho := noOwns_ok h0
     obtain ⟨⟨dk, nk⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨js, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨dflt, -, henc⟩ := bind_ok.1 henc
@@ -542,7 +546,10 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     rw [← heffs] at hyp hcount
     have hr : ∀ x ∈ ys, x.1.2.Reach P := fun x hx =>
       hreach effs (by simp) x.1 (List.fst_mem_of_mem_zipIdx (hyp.mem_iff.1 hx))
-    obtain ⟨sv1, zs1, hS1, -, hw1, hh1, hq1⟩ := entrySlots_rel hP m hshs h2 hE hPE (need_ok.1 h1) dflt hS hy hr
+    have hrq : ∀ x ∈ ys, x.1.2.isRequest = true := fun x hx => by
+      obtain ⟨vs, -, k, zk, zx, -, -, -, hzx⟩ := forall2_mem_left hy hx
+      exact request_of_rel ho hzx
+    obtain ⟨sv1, zs1, hS1, -, hw1, hh1, hq1⟩ := entrySlots_rel hP m hshs h2 hE hPE (need_ok.1 h1) dflt hS hy hr hrq
     obtain ⟨hk, hnews⟩ := roundStarts_rel hP hshs hE hPE hopt hn ms sts effss hrest (by omega)
       (fun effs' h => hreach effs' (by simp [h])) h3
     refine ⟨?_, ?_⟩

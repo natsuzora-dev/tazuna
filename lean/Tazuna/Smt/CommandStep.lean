@@ -48,7 +48,7 @@ def encodeCommand (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt
   let res := Term.share rest
   let evs := Term.sel d 0 0 res
   let (dl, n, dt) ← collD L (.list v.event) [v.event]
-  let (o, c3) ← encodeEvents L T v shs dE dP dopt apply now (slotsOf dl dt n 1 evs) records xs nextId
+  let (o, c3) ← encodeEvents L T v shs dE dP dopt apply now (slotsOf dl dt n 1 evs) records xs nextId (.int 0)
   let (pT, cp) ← encodePending L shs pending o.news
   let rfc ← need "records that have no term" (Code.ofTerm? v.records o.records)
   let (ens, c4) ← cc.ensures (cx, rfc, ())
@@ -282,7 +282,7 @@ def decidedFits (S : Ty → Nat) (T : List TypeDecl) (shs : List (PendingShape v
     (Ty.result (.list v.event) x.rejection).den0 → Prop
   | .inl (events, ()) =>
     let sA := Step.reactAll T s events
-    eventsFit S T s events ∧ s.pending.length + sA.2.length ≤ S (pendingTable shs) ∧
+    eventsFit S T s events ∧ s.pending.length + (Step.reqsOf sA.2).length ≤ S (pendingTable shs) ∧
       x.ensures.appFits S (ctx, sA.1.records, ()) ∧
       (Step.broken (x.ensures.fn (ctx, sA.1.records, ())) = [] →
         v.invariants.appFits S (sA.1.records, ()) ∧ instChecksFit S sA.1.records s.now sA.1.machines)
@@ -446,12 +446,12 @@ theorem command_exact {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hv
           events_exact (fun m hm => (hor m hm).1) hd.records hd.event happ hca _ sv hS hsw events hh s1 hnow hrec hms h12
         have hrel : Holds M c3 → RelV L v.records (Ty.up _ hd.records sA.records) (oe.records.denote M) ∧
             MachinesRel M L T v.machines oe.tables sA.machines ∧
-            NewsRel M L shs v.declared oe.news (Step.reactAll T s1 events).2 s1.nextId := fun hc3 => by
-          obtain ⟨r1, r2, -, r4⟩ := events_rel hP hvx hvm hshs hor hd.records hd.event hd.apply happ' hE hPE hopt _ sv
-            hS hsw events hh s1 hnow hrec hms hnid h12 hc3
+            NewsRel M L shs v.declared oe.news (Step.reqsOf (Step.reactAll T s1 events).2) s1.nextId := fun hc3 => by
+          obtain ⟨r1, r2, -, r4, -, -⟩ := events_rel hP hvx hvm hshs hor hd.records hd.event hd.apply happ' hE hPE hopt _ sv
+            hS hsw events hh s1 hnow hrec hms hnid rfl h12 hc3
           exact ⟨r1, r2, r4⟩
         have ecp : Holds M c3 → (Holds M cp ↔
-            s1.pending.length + (Step.reactAll T s1 events).2.length ≤ L.count (pendingTable shs)) := fun hc3 => by
+            s1.pending.length + (Step.reqsOf (Step.reactAll T s1 events).2).length ≤ L.count (pendingTable shs)) := fun hc3 => by
           obtain ⟨-, -, sv', zs, hS', hw', hh', xs', hxp, hq⟩ := hrel hc3
           exact pending_exact hpend hS' hw' hh' hxp hq h12'
         have e45 : Holds M c3 → (Holds M c4 ↔ x.ensures.appFits L.count (ctx, sA.records, ())) ∧

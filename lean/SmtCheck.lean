@@ -419,7 +419,8 @@ def eventTerms (L : Layout) (v : ServiceV) (i : Fin v.subscribes.length) (shs : 
   let (et, cw) ← enc (encodeWrap ec value)
   let idx (t : Ty) := ((L.find? t).map (·.1)).getD 0
   let (o, c) ← enc (encodeEvents L prelude v shs (idx (.dsl .effect [v.event])) (idx (pendingEntry shs))
-    (idx (Ty.option (.dsl .effect [v.event]))) ec.apply S.now [(tt, [et])] S.records S.machines S.nextId)
+    (idx (Ty.option (.dsl .effect [v.event]))) ec.apply S.now [(tt, [et])] S.records S.machines S.nextId
+    (.int 0))
   let (rules, ci) ← enc (encodeInvariants L ec.invariants o.records)
   pure (et, o, rules, ce, andT cw (andT c ci))
 
@@ -2198,7 +2199,7 @@ def eventsScript (slots : Nat) (goal : List Term) : Except String (Script × Lis
   let some (dP, _) := L.find? (pendingEntry writeShapes) | throw "no pending entry"
   let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
   let (o, c) ← enc (encodeEvents L prelude writeSvc writeShapes dE dP dopt apply S.now (slotsOf dl dlt nl 1 (.var 6))
-    S.records S.machines S.nextId)
+    S.records S.machines S.nextId (.int 0))
   let (pT, cp) ← enc (encodePending L writeShapes S.pending o.news)
   let below ← enc (pendingBelowT L writeShapes S.pending S.nextId)
   let some wf := S.wf L (v := writeSvc) writeShapes | throw "no well-formedness"
@@ -2464,6 +2465,128 @@ def answerMCheck (solver : Solver) : IO Bool := do
       | _, _, _ => fail "the model does not decode"
     | a => fail s!"{repr a}"
 
+/-! An event whose reaction starts own commands beside a request, for `events_rel`: the service `w` above with the
+reaction `mix`, which returns `[send_command(put, "alice", ev + 1, ..), request_command(send, ev + 2, ..),
+send_command(put, "alice", ev + 3, ..)]`. From no records, no instances and next id 40, the event 3 starts key 3,
+whose request takes id 40; the reaction's request takes 41, as own commands take no wire id, and the own commands
+queue at places 0 and 1 in list order (inputs 4 and 6). The ids, the next id, and the own slots' places and inputs read
+from the model must be what `applyEvents` leaves; the queue in the other order must not pass the comparison. -/
+
+def putHandleE {Γ : List Ty} : Expr [] Γ (.dsl .command [recordsT, .int, .str, .int, .str]) :=
+  .call (.prim .command [recordsT, .int, .str, .int, .str] rfl)
+    (.cons (.str "put") (.cons (.list (.cons (.str "alice") .nil))
+      (.cons (.close ⟨"m", 20, 1, 0⟩ .nil rfl rfl acceptsE)
+        (.cons (.close ⟨"m", 20, 2, 0⟩ .nil rfl rfl twiceDecideE)
+          (.cons (.close ⟨"m", 20, 3, 0⟩ .nil rfl rfl (.lam (.list .nil) : E (.fn [cctxT, recordsT] Ty.rules))) .nil)))))
+
+def mixPutE (k : Int) : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
+  let ev : Expr [] [Ty.reactionCtx recordsT, .int] .int := .var (.there .here)
+  let body : Expr [] [.int] (.fn [Ty.result Ty.nil .str] (.list .int)) := .lam (.list (.cons (.var (.there .here)) .nil))
+  let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [.fn [Ty.result Ty.nil .str] (.list .int)]) :=
+    .close ⟨"m", 21, 1, 0⟩ (.cons ev .nil) rfl rfl body
+  .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
+    (.cons putHandleE (.cons (.str "alice") (.cons (.bin .add ev (.int k)) (.cons clo .nil))))
+
+def mixE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
+  .lam (.list (.cons (mixPutE 1) (.cons (fanSendE 2) (.cons (mixPutE 3) .nil))))
+
+def mixSvc : ServiceV := { writeSvc with name := "x", reactions := [⟨"mix", .closed mixE⟩] }
+
+def mixShapes : List (PendingShape mixSvc.event) := shapes mixSvc writeSites
+
+def putKey : OwnKey := .command .int "put" .str .int .str ⟨⟨"m", 21, 1, 0⟩, [.int]⟩
+
+def mixLayout (slots : Nat) : Layout :=
+  let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE ++ Tazuna.Smt.Expr.lits mixE
+  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m", 3, 7, 0⟩], owns := [putKey] }
+    (reactTys ++ [.tuple [.int], .tuple [], .list .int, cctxT, Ty.result (.list .int) .str, pendingTable mixShapes] ++
+      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
+      Tazuna.Smt.Expr.tys mixE ++ Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE)
+
+/-- v0..v5 the state (v5 the instance table), v6 the event value, v7 the next id after, v8 the queue place after, then
+per request slot its flag and id, and per own slot its flag, place and effect. -/
+def mixScript (slots : Nat) (goal : List Term) : Except String (Script × Nat × Nat) := do
+  let L := mixLayout slots
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let (apply, ca) ← enc (mixSvc.apply.code L)
+  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
+  let some (dP, _) := L.find? (pendingEntry mixShapes) | throw "no pending entry"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let (o, c) ← enc (encodeEvents L prelude mixSvc mixShapes dE dP dopt apply S.now [(tt, [.var 6])] S.records
+    S.machines S.nextId (.int 0))
+  let some wf := S.wf L (v := mixSvc) mixShapes | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable mixShapes) | throw "no pending sort"
+  let some msrt := L.srt? startM.table | throw "no table sort"
+  let some esrt := L.srt? (.dsl .effect [.int]) | throw "no effect sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let base := 9
+  let news := o.news.zipIdx.flatMap fun ((f, xs), j) =>
+    [.eq (.var (base + 2 * j)) f, .eq (.var (base + 2 * j + 1)) (xs.headD tt)]
+  let ob := base + 2 * o.news.length
+  let owns := o.owns.zipIdx.flatMap fun ((f, xs), j) =>
+    [.eq (.var (ob + 3 * j)) f, .eq (.var (ob + 3 * j + 1)) (xs.headD tt), .eq (.var (ob + 3 * j + 2)) (xs.getD 1 tt)]
+  let vars := [rsrt, .int, .int, .int, psrt, msrt, .int, .int, .int] ++
+    (o.news.map fun _ => [Srt.bool, .int]).flatten ++ (o.owns.map fun _ => [Srt.bool, .int, esrt]).flatten
+  pure ({ datatypes := dts, vars, asserts := [wf, ca, c, .eq (.var 7) o.nextId, .eq (.var 8) o.queued] ++ news ++ owns ++ goal,
+          shows := List.range vars.length }, o.news.length, o.owns.length)
+
+def mixCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: events queue own commands: {m}"; return false
+  let L := mixLayout 3
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dm, nm) := L.find? startM.table | fail "no instance table"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (dp, np) := L.find? (pendingTable mixShapes) | fail "no pending table"
+  let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry mixShapes]) | fail "no pending slot"
+  let Sr := slotsOf dr drt nr 2 (.var 0)
+  let Sm := slotsOf dm dmt nm 2 (.var 5)
+  let Sp := slotsOf dp dpt np 2 (.var 4)
+  let goal := (Sr ++ Sm ++ Sp).map (fun sl => Term.not sl.1) ++
+    [.eq (.var 1) (.int 100), .eq (.var 3) (.int 40), .eq (.var 6) (.int 3)]
+  match mixScript 3 goal with
+  | .error m => fail m
+  | .ok (script, nn, no) =>
+    match ← solver.run script with
+    | .sat vs =>
+      match (SymState.vars 0 1).decode (modelOf vs) L (v := mixSvc) rfl prelude mixShapes with
+      | none => fail "the model does not decode"
+      | some s =>
+        match Step.applyEvents prelude ({ state := s } : Step.Acc mixSvc) [(3 : Int)] with
+        | .error _ => fail "the step faults"
+        | .ok a =>
+          let flag (n : Nat) := vs.lookup n == some (.bool true)
+          let ids := ((List.range nn).filterMap fun j =>
+            if flag (9 + 2 * j) then natOf ((vs.lookup (10 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
+          let ob := 9 + 2 * nn
+          let inputOf : Val → Option Int
+            | .ctor _ _ [_, .int x, _] => some x
+            | _ => none
+          let queue := (((List.range no).filterMap fun j =>
+            if flag (ob + 3 * j) then
+              match vs.lookup (ob + 3 * j + 1), (vs.lookup (ob + 3 * j + 2)).bind inputOf with
+              | some (.int q), some x => some (q, x)
+              | _, _ => none
+            else none).mergeSort fun a b => a.1 ≤ b.1)
+          let stepIds := ((a.state.pending.map (·.id)).mergeSort (· ≤ ·))
+          let stepQueue : List Int := a.own.filterMap fun
+            | .command _ _ i _ _ value _ => match Ty.same i .int with
+              | some ⟨h⟩ => some (cast (congrArg Ty.den0 h) value)
+              | none => none
+            | _ => none
+          let mut ok := true
+          if ids != stepIds || ids != [40, 41] then ok ← fail s!"the wire ids are {ids}, the step's {stepIds}"
+          if vs.lookup 7 != some (.int a.state.nextId) then ok ← fail s!"the next id is {repr (vs.lookup 7)}"
+          if queue.map (·.1) != [0, 1] || vs.lookup 8 != some (.int 2) then
+            ok ← fail s!"the queue places are {queue.map (·.1)}, the place after {repr (vs.lookup 8)}"
+          if queue.map (·.2) != stepQueue || stepQueue != [4, 6] then
+            ok ← fail s!"the queue holds {queue.map (·.2)}, the step's {stepQueue}"
+          if queue.reverse.map (·.2) == stepQueue then ok ← fail "the queue in the other order passes the comparison"
+          return ok
+    | a => fail s!"{repr a}"
+
 /-- A chain of `depth` levels where each level builds the same shared term twice as two objects over the level
 below: what an encoder does when it shares a term at each use instead of where it is built. Its script has one
 definition per level, and printing it must not compare the copies as trees (exponential in depth). -/
@@ -2566,6 +2689,7 @@ def check (z3 : String) : IO Bool := do
   unless ← twiceCheck solver do ok := false
   unless ← answerMCheck solver do ok := false
   unless ← reshareCheck 40 do ok := false
+  unless ← mixCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

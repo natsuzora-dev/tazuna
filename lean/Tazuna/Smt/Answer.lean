@@ -46,7 +46,7 @@ def encodeAnswer (shs : List (PendingShape v.event)) (k : Nat) (sh : PendingShap
   let (rules, c3) ← ensuresTerms L sh de k entry vc
   let evt ← need "events that have no term" (Code.term? _ evs)
   let (dl, nl, dtl) ← collD L (.list v.event) [v.event]
-  let (o, c4) ← encodeEvents L T v shs dE dP dopt apply now (slotsOf dl dtl nl 1 evt) records mts nextId
+  let (o, c4) ← encodeEvents L T v shs dE dP dopt apply now (slotsOf dl dtl nl 1 evt) records mts nextId (.int 0)
   let (pT, cp) ← encodePending L shs (slotsTerm d dt (filterSlots S (keepQs to S))) o.news
   let rfc ← need "records that have no term" (Code.ofTerm? v.records o.records)
   let (invs, c5) ← invariants (rfc, ())
@@ -375,7 +375,8 @@ def answerFits (S : Ty → Nat) (T : List TypeDecl) (shs : List (PendingShape v.
       (Step.broken (p.request.holds (h ▸ a.2)) = [] →
         eventsFit S T { s with pending := s.pending.filter (·.id != to) } evs ∧
           (s.pending.filter (·.id != to)).length +
-            (Step.reactAll T { s with pending := s.pending.filter (·.id != to) } evs).2.length ≤ S (pendingTable shs) ∧
+            (Step.reqsOf (Step.reactAll T { s with pending := s.pending.filter (·.id != to) } evs).2).length ≤
+              S (pendingTable shs) ∧
           v.invariants.appFits S ((Step.reactAll T { s with pending := s.pending.filter (·.id != to) } evs).1.records, ()) ∧
           instChecksFit S (Step.reactAll T { s with pending := s.pending.filter (·.id != to) } evs).1.records s.now
             (Step.reactAll T { s with pending := s.pending.filter (·.id != to) } evs).1.machines)
@@ -630,8 +631,9 @@ theorem answer_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
           | none => []) = [] →
         eventsFit L.count T { s with pending := s.pending.filter (·.id != to) }
             ((sh.onAnswer.fn (Ty.down _ hd3 f3)).fn (value, ())) ∧
-          (s.pending.filter (·.id != to)).length + (Step.reactAll T { s with pending := s.pending.filter (·.id != to) }
-            ((sh.onAnswer.fn (Ty.down _ hd3 f3)).fn (value, ()))).2.length ≤ L.count (pendingTable (sh0 :: rest)) ∧
+          (s.pending.filter (·.id != to)).length + (Step.reqsOf (Step.reactAll T
+            { s with pending := s.pending.filter (·.id != to) }
+            ((sh.onAnswer.fn (Ty.down _ hd3 f3)).fn (value, ()))).2).length ≤ L.count (pendingTable (sh0 :: rest)) ∧
           v.invariants.appFits L.count ((Step.reactAll T { s with pending := s.pending.filter (·.id != to) }
             ((sh.onAnswer.fn (Ty.down _ hd3 f3)).fn (value, ()))).1.records, ()) ∧
           instChecksFit L.count (Step.reactAll T { s with pending := s.pending.filter (·.id != to) }
@@ -676,12 +678,12 @@ theorem answer_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
       events_exact (fun m hm => (hor m hm).1) hrd hed happ hca _ svl hSl hswl _ hhl s' hnow hrec hms h12
     have hrel : Holds M c4 → RelV L v.records (Ty.up _ hrd sA.records) (oe.records.denote M) ∧
         MachinesRel M L T v.machines oe.tables sA.machines ∧
-        NewsRel M L (sh0 :: rest) v.declared oe.news (Step.reactAll T s' evL).2 s'.nextId := fun hc4 => by
-      obtain ⟨r1, r2, -, r4⟩ := events_rel hP hvx hvm hshs hor hrd hed hap happ' hE hPE hopt _ svl hSl hswl _ hhl s'
-        hnow hrec hms hnid h12 hc4
+        NewsRel M L (sh0 :: rest) v.declared oe.news (Step.reqsOf (Step.reactAll T s' evL).2) s'.nextId := fun hc4 => by
+      obtain ⟨r1, r2, -, r4, -, -⟩ := events_rel hP hvx hvm hshs hor hrd hed hap happ' hE hPE hopt _ svl hSl hswl _ hhl s'
+        hnow hrec hms hnid rfl h12 hc4
       exact ⟨r1, r2, r4⟩
     have ecp : Holds M c4 → (Holds M cp ↔
-        (s.pending.filter (·.id != to)).length + (Step.reactAll T s' evL).2.length ≤
+        (s.pending.filter (·.id != to)).length + (Step.reqsOf (Step.reactAll T s' evL).2).length ≤
           L.count (pendingTable (sh0 :: rest))) := fun hc4 => by
       obtain ⟨-, -, sv', zs, hS', hw', hh', xs', hxp, hq⟩ := hrel hc4
       exact pending_exact hrem hS' hw' hh' hxp hq h12'

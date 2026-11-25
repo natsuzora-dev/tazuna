@@ -187,6 +187,11 @@ def _root_.Tazuna.Ir.RequestV.declaredBy {e : Ty} (r : RequestV e) (xd : String 
 def _root_.Tazuna.Ir.RequestV.ownerIn {e : Ty} (r : RequestV e) (ds : List (String × DeclaredV)) : Option String :=
   (ds.find? r.declaredBy).map (·.1)
 
+/-- Whether an effect is a request to an external, which goes out at once; the others wait in the own queue. -/
+def _root_.Tazuna.Ir.EffectV.isRequest {e : Ty} : EffectV e → Bool
+  | .request _ => true
+  | _ => false
+
 /-- Starts effects in order: a request to an external goes out with a fresh wire id; an own command or query waits. -/
 def start (a : Acc v) (effs : List (Sender × EffectV v.event)) : Except Fault (Acc v) :=
   effs.foldlM (fun a (snd, eff) => match eff with

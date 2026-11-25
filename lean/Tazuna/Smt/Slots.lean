@@ -522,4 +522,40 @@ theorem occupied_empty (vs : List Val) (n : Nat) : occupied (List.replicate n (f
 
 end
 
+section
+variable {M : Model}
+
+/-- Slots whose items a function of the item terms rewrites. -/
+theorem mapItems_den {α β : Type} {E : α → List Val → Prop} {E' : β → List Val → Prop} {Q : α → β → Prop}
+    (N : List Term → List Term) (w : Nat) (hw : ∀ xs, (N xs).length = w)
+    (hN : ∀ y xs, E y (Term.denotes M xs) → ∃ z, E' z (Term.denotes M (N xs)) ∧ Q y z) :
+    {S : List Slot} → {sv : List (Bool × List Val)} → {ys : List α} → SlotsDen M S sv → Holds2 E ys sv →
+    ∃ sv' zs, SlotsDen M (S.map fun (f, xs) => (f, N xs)) sv' ∧ sv'.length = sv.length ∧
+      (∀ p ∈ sv', p.2.length = w) ∧ Holds2 E' zs sv' ∧ Forall2 Q ys zs
+  | [], [], ys, _, hy => by
+    cases ys with
+    | nil => exact ⟨[], [], trivial, rfl, by simp, by simp [Holds2, occupied, Forall2], trivial⟩
+    | cons _ _ => exact hy.elim
+  | (f, xs) :: S, (b, vs) :: sv, ys, ⟨hf, hx, hS⟩, hy => by
+    have hl : ∀ q, q = (b, Term.denotes M (N xs)) → q.2.length = w := by
+      intro q hq; subst hq; rw [denotes_eq_map, List.length_map, hw]
+    cases b with
+    | false =>
+      obtain ⟨sv', zs, h1, h2, h3, h4, h5⟩ := mapItems_den N w hw hN hS (by simpa [Holds2, occupied] using hy)
+      refine ⟨(false, Term.denotes M (N xs)) :: sv', zs, ⟨hf, rfl, h1⟩, by simp [h2], ?_, by
+        simpa [Holds2, occupied] using h4, h5⟩
+      simp only [List.mem_cons, forall_eq_or_imp]
+      exact ⟨hl _ rfl, h3⟩
+    | true =>
+      match ys, hy with
+      | y :: ys, ⟨hey, hy⟩ =>
+        obtain ⟨z, hz, hq⟩ := hN y xs (hx ▸ hey)
+        obtain ⟨sv', zs, h1, h2, h3, h4, h5⟩ := mapItems_den N w hw hN hS hy
+        refine ⟨(true, Term.denotes M (N xs)) :: sv', z :: zs, ⟨hf, rfl, h1⟩, by simp [h2], ?_, ⟨hz, h4⟩, ⟨hq, h5⟩⟩
+        simp only [List.mem_cons, forall_eq_or_imp]
+        exact ⟨hl _ rfl, h3⟩
+  | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ => h.elim
+
+end
+
 end Tazuna.Smt

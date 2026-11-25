@@ -300,15 +300,12 @@ theorem relAlts_pendingInj (d : Nat) : (shs : List (PendingShape e)) → (k j : 
     exact this
 
 /-- The shape index of each request kind, for requests the sender `snd` starts: the shape that fits the kind and the
-external that lists it. Own kinds `owns` are refused: their effects run as internal steps, which this encoding does
-not unroll yet. -/
+external that lists it. Own kinds have none: their effects never reach the pending table. -/
 def shapeIdxs (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (snd : (ks : List Ty) × SenderShape ks)
-    (keys : List EffectKey) (owns : List OwnKey) : Except Refusal (List Nat) :=
-  if owns.isEmpty then
-    keys.mapM fun key => do
-      let x ← need "an effect kind that no external declares" (key.owner ds)
-      need "an effect kind without a pending shape" (shs.findIdx? (·.fits snd key x))
-  else .error (.outside "own commands and queries as internal steps")
+    (keys : List EffectKey) : Except Refusal (List Nat) :=
+  keys.mapM fun key => do
+    let x ← need "an effect kind that no external declares" (key.owner ds)
+    need "an effect kind without a pending shape" (shs.findIdx? (·.fits snd key x))
 
 /-- The pending entry of the effect kind `i`'s value `eff`, with the shape `j` and the sender's key tuple items
 `keyT`. -/
@@ -351,29 +348,27 @@ items denote them, the entry term denotes an entry that codes the request with i
 it. -/
 theorem entry_rel {M : Model} {P : List AnySite} (hP : SitesUnique P) {e : Ty} {ks : List Ty} (sd : SenderShape ks)
     {shs : List (PendingShape e)} (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List Nat}
-    (hjs : shapeIdxs shs ds ⟨ks, sd⟩ (L.effectsOf e) (L.ownsOf e) = .ok js)
+    (hjs : shapeIdxs shs ds ⟨ks, sd⟩ (L.effectsOf e) = .ok js)
     {dE nE dP nP dk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (kv : (Ty.tuple ks).den0) {keyT : List Term} (hK : RelD L (.tuple ks) kv (.ctor dk 0 (Term.denotes M keyT)))
-    {eff : EffectV e} (hr : eff.Reach P) {effT : Term} (heff : RelV L (.dsl .effect [e]) eff (effT.denote M))
-    (id : Nat) (dflt : Term) :
+    {eff : EffectV e} (hr : eff.Reach P) (hreq : eff.isRequest = true) {effT : Term}
+    (heff : RelV L (.dsl .effect [e]) eff (effT.denote M)) (id : Nat) (dflt : Term) :
     ∃ req x, eff = .request req ∧ req.ownerIn ds = some x ∧ ∃ y,
       RelV L (pendingEntry shs) y ((entryT dE dP dk dflt keyT effT 0 js).denote M) ∧
       pendingOf shs id y = ⟨id, sd.sender kv, x, req⟩ := by
-  have ho : (L.ownsOf e).isEmpty = true := by
-    unfold shapeIdxs at hjs; split at hjs
-    · assumption
-    · cases hjs
-  have hjs' := hjs
-  simp only [shapeIdxs, ho, ↓reduceIte] at hjs'
-  obtain ⟨d, n, hd, ⟨i, key, vals, hki, hz, hh⟩ | ⟨i, key, vals, hki, -, -⟩⟩ := heff
-  case inr => rw [List.isEmpty_iff.1 ho] at hki; simp at hki
+  obtain ⟨d, n, hd, ⟨i, key, vals, hki, hz, hh⟩ | ⟨i, key, vals, -, -, hh⟩⟩ := heff
+  case inr =>
+    cases eff with
+    | request => cases key <;> exact hh.elim
+    | command => cases hreq
+    | query => cases hreq
   obtain rfl : dE = d := find_det hE hd
   cases eff with
   | command => exact hh.elim
   | query => exact hh.elim
   | request req =>
-    obtain ⟨j, hj, hbody⟩ := forall2_getElem? (mapM_ok _ _ _ hjs') hki
+    obtain ⟨j, hj, hbody⟩ := forall2_getElem? (mapM_ok _ _ _ hjs) hki
     obtain ⟨x, hx, hbody⟩ := bind_ok.1 hbody
     have hfind := need_ok.1 hbody
     obtain ⟨hlt, hfit, -⟩ := List.findIdx?_eq_some_iff_getElem.1 hfind
