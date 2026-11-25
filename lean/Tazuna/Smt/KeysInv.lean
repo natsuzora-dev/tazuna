@@ -138,7 +138,7 @@ theorem runOwn_keys (a : Acc v) (ha : KeysOk T a.state) (eff : EffectV v.event) 
     simp only [runQuery] at h
     split at h
     · cases h
-    · exact applyEvents_keys T _ _ ha h
+    · exact applyEvents_keys T _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ha h
   revert h
   cases eff with
   | request => intro h; simp only [runOwn, Except.ok.injEq] at h; exact h ▸ ha

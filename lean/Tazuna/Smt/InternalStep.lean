@@ -395,7 +395,7 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
 /-- An own query's internal step: the condition holds exactly when, for a listed caller, `accepts` fits at the input
 and, where its rules hold, `resolve` fits at the context and `on_answer`'s part for the output fits. Wherever it holds,
 an unlisted caller or a broken `accepts` rule is `Fault.invalidEffect`, and otherwise the internal step runs to its
-end with what the terms denote (`AccRel`); a query leaves the fresh counter as it was. -/
+end with what the terms denote (`AccRel`), the fresh counter advanced as for a command. -/
 theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared) (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0)
     (input : x.input.den0) {qc : QueryCode x} {cq : Term} (hqc : QueryCode.of L x = .ok (qc, cq)) (hcq : Holds M cq)
@@ -424,7 +424,7 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
       if (o.callerOk.denote M).toBool then
         match brokenIn M o.rules with
         | n :: ns => r = .error (.invalidEffect x.name (n :: ns))
-        | [] => AccRel M L T shs a o.answered fresh q0 r
+        | [] => AccRel M L T shs a o.answered (.add fresh (.int 1)) q0 r
       else r = .error (.invalidEffect x.name ["callers"])) := by
   intro ctx r
   have hqc' := QueryCode.rel_of hqc hcq
@@ -546,7 +546,10 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     erw [Ty.up_list _ _ v.event_data] at hh
     let evs1 : List v.event.den0 := (site.fn env).fn ⟨x.resolve.fn ⟨Step.ctx a.state a.state.records caller input, ()⟩, ()⟩
     change Holds2 (EBag L v.event) (evs1.map (Ty.up _ v.event_data)) sv at hh
-    exact loop_acc (T := T) chk hshs hshp happ hca senv a hnow hS hh hrec hms hn hq hfresh h13 hc5
+    have hfr1 : (Term.add fresh (.int 1)).denote M = .int (Int.ofNat (a.state.fresh + 1)) := by
+      simp only [Term.denote, hfresh]; rfl
+    exact AccRel.of_fresh (loop_acc (T := T) chk hshs hshp happ hca senv
+      { a with state := { a.state with fresh := a.state.fresh + 1 } } hnow hS hh hrec hms hn hq hfr1 h13 hc5)
 
 end
 

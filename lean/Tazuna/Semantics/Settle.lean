@@ -72,7 +72,7 @@ theorem runQuery_own (T : List TypeDecl) (xs : List (EffectV v.event)) (a : Acc 
   rw [show execQuery (a.ownFront xs).state x caller input = execQuery a.state x caller input from rfl]
   split
   · rfl
-  · exact applyEvents_own T xs _ _
+  · exact applyEvents_own T xs _ { a with state := { a.state with fresh := a.state.fresh + 1 } }
 
 theorem runOwn_own (T : List TypeDecl) (xs : List (EffectV v.event)) (a : Acc v) (eff : EffectV v.event) :
     runOwn T (a.ownFront xs) eff = (runOwn T a eff).map (Acc.ownFront xs) := by

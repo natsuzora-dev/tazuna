@@ -126,7 +126,8 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     let (da, _) ← L.findE (.tuple Γ)
     let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
     let (o, c) ← encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
-    pure ⟨⟨.query x.name o, ⟨.or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))), o.answered, fresh⟩⟩, c, cq⟩
+    pure ⟨⟨.query x.name o, ⟨.or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))), o.answered, .add fresh (.int 1)⟩⟩,
+      c, cq⟩
 
 /-- The internal step for the own effect term `eff`: every own kind's, merged by the variant tests; its condition
 asks each kind's only where its test holds. The second term is the codes' condition, which holds statically. -/

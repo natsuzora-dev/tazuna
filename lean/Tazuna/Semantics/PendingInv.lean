@@ -338,7 +338,7 @@ theorem runQuery_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : In
   simp only [runQuery] at h
   split at h
   · cases h
-  · exact applyEvents_inv T hv _ _ ha h
+  · exact applyEvents_inv T hv _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ⟨ha.1, ha.2, ha.3, ha.4⟩ h
 
 theorem runOwn_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state) (eff : EffectV v.event)
     {a' : Acc v} (h : runOwn T a eff = .ok a') : Inv P a'.state := by
@@ -475,7 +475,7 @@ theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : In
     simp only [runQuery] at h
     split at h
     · cases h
-    · exact applyEvents_queue T hv _ _ h ha hq
+    · exact applyEvents_queue T hv _ { a with state := { a.state with fresh := a.state.fresh + 1 } } h ⟨ha.1, ha.2, ha.3, ha.4⟩ hq
   revert h
   cases eff with
   | request => intro h; simp only [runOwn, Except.ok.injEq] at h; exact h ▸ hq

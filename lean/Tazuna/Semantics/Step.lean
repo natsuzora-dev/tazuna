@@ -64,7 +64,7 @@ structure State (v : ServiceV) where
   /-- Requests sent and not yet answered: a multiset. -/
   pending : Bag (Pending v.event)
   now : Int
-  /-- The counter `fresh` builds ids from; every command step advances it. -/
+  /-- The counter `fresh` builds ids from; every command step and every own query advances it. -/
   fresh : Nat
   /-- The next wire id. -/
   nextId : Nat
@@ -274,7 +274,7 @@ def runQuery (a : Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0
     (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) : Except Fault (Acc v) :=
   match execQuery a.state x caller input with
   | .error rs => .error (.invalidEffect x.name rs)
-  | .ok o => applyEvents T a (onAnswer.fn (o, ()))
+  | .ok o => applyEvents T { a with state := { a.state with fresh := a.state.fresh + 1 } } (onAnswer.fn (o, ()))
 
 /-- The command the service lists by the name and types an effect gives. -/
 def ownCommand (name : String) (i j : Ty) :

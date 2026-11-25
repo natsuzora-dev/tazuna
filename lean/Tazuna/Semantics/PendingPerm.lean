@@ -126,7 +126,7 @@ theorem runQuery_prepend (T : List TypeDecl) (q : Bag (Pending v.event)) (a : Ac
   rw [Acc.prepend_state, execQuery_prepend]
   split
   · rfl
-  · exact applyEvents_prepend T q _ _
+  · exact applyEvents_prepend T q _ { a with state := { a.state with fresh := a.state.fresh + 1 } }
 
 theorem runOwn_prepend (T : List TypeDecl) (q : Bag (Pending v.event)) (a : Acc v) (eff : EffectV v.event) :
     runOwn T (a.prepend q) eff = (runOwn T a eff).map (Acc.prepend q) := by

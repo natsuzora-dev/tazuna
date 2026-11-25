@@ -863,8 +863,12 @@ theorem runQuery_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : 
   | nil =>
     have hcx : Ty.rel0 R.ctr (Ty.ctx v.records x.input v.caller) (ctx a.state a.state.records c i)
         (ctx a'.state a'.state.records c' i') := ⟨ha.1.1, hi, hc, ha.1.2.2.2.1, hctr, trivial⟩
-    exact applyEvents_rel T hv R (hf _ _ ⟨hres (ctx a.state a.state.records c i, ())
-      (ctx a'.state a'.state.records c' i', ()) ⟨hcx, trivial⟩, trivial⟩) ha
+    obtain ⟨hst, hevs0, hout, ho, ho', hown⟩ := ha
+    exact (applyEvents_rel T hv R (hf _ _ ⟨hres (ctx a.state a.state.records c i, ())
+      (ctx a'.state a'.state.records c' i', ()) ⟨hcx, trivial⟩, trivial⟩)
+      (a := { a with state := { a.state with fresh := a.state.fresh + 1 } })
+      (a' := { a' with state := { a'.state with fresh := a'.state.fresh + 1 } })
+      ⟨hst, hevs0, hout, ho, ho', hown⟩).shift 1 rfl rfl rfl rfl
 
 theorem ownCommand_mem {name : String} {i j : Ty}
     {x : (x : CommandV v.records v.event v.caller) ×' (i = x.input ∧ j = x.rejection)}
