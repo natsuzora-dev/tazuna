@@ -28,8 +28,9 @@ def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (callers : List Term)
     (S : SymState v) (caller input : Term) :
     Except Refusal (Encoded (CommandOut v)) := do
-  let (a, c1) ← encodeAdmit L cc.accepts callers S.records S.now S.fresh caller input
-  let (dc, cd) ← encodeDecide L T v shs senv x cc apply a.ctx S.now S.records S.machines S.nextId (.int 0)
+  let (a, c1) ← encodeAdmit (c := v.caller) L cc.accepts callers caller input
+  let cx ← encodeCtx L S.records S.now S.fresh caller input
+  let (dc, cd) ← encodeDecide L T v shs senv x cc apply cx S.now S.records S.machines S.nextId (.int 0)
   let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending dc.after
   pure ⟨⟨a.callerOk, a.rules, dc, fo⟩,
     .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2)))
@@ -100,12 +101,14 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
   intro x ctx r s'
   have hcR := CommandCode.rel_of hcc hccx
   obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨cx, h1', henc⟩ := bind_ok.1 henc
   obtain ⟨⟨dc, cd⟩, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨fo, cf, cfx'⟩, h3, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨hok, hbr, hcx⟩ := admit_rel v.records_data ((v.commands.get i).data).input ((v.commands.get i).data).caller
-    ((v.commands.get i).data).ctx _ ((v.commands.get i).data).accepts hcR.accepts _ hks s caller input
-    hR.records hR.now hR.fresh hsc hsi h1
+  obtain ⟨hok, hbr⟩ := admit_rel ((v.commands.get i).data).input ((v.commands.get i).data).caller _
+    ((v.commands.get i).data).accepts hcR.accepts _ hks caller input hsc hsi h1
+  have hcx := commandCtx_rel v.records_data ((v.commands.get i).data).input ((v.commands.get i).data).caller
+    ((v.commands.get i).data).ctx s caller input hR.records hR.now hR.fresh hsc hsi h1'
   let s1 : State v := { s with fresh := s.fresh + 1 }
   have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl
   have D := decide_encode chk hshs hshp x hcc hccx happ hca senv { state := s1 } ctx hcx hR.now hR.records hR.machines

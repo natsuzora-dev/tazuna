@@ -44,8 +44,9 @@ def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (senv : 
     (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (σ : Codes Γ)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
     (records now fresh n q caller input : Term) (xs : PerMachine (fun _ => Term) v.machines) : Except Refusal (OwnCommandOut v × Term) := do
-  let (a, c1) ← encodeAdmit L cc.accepts callers records now fresh caller input
-  let (dc, cd) ← encodeDecide L T v shs senv x cc apply a.ctx now records xs n q
+  let (a, c1) ← encodeAdmit (c := v.caller) L cc.accepts callers caller input
+  let cx ← encodeCtx L records now fresh caller input
+  let (dc, cd) ← encodeDecide L T v shs senv x cc apply cx now records xs n q
   let nil ← adtCtor L 1 [] [[]] 0 []
   let okNil ← adtCtor L 2 [Ty.nil, x.rejection] [[Ty.nil], [x.rejection]] 0 [nil]
   let err ← adtCtor L 2 [Ty.nil, x.rejection] [[Ty.nil], [x.rejection]] 1 [dc.rejection]
@@ -68,9 +69,10 @@ through the events loop. -/
 def encodeOwnQuery (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : QueryV v.records v.caller) (qc : QueryCode x) {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event)))
     (σ : Codes Γ) (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
-    (records now fresh n q caller input : Term) (xs : PerMachine (fun _ => Term) v.machines) : Except Refusal (OwnQueryOut v × Term) := do
-  let (a, c1) ← encodeAdmit L qc.accepts callers records now fresh caller input
-  let (out, c2) ← qc.resolve (a.ctx, ())
+    (records now n q caller input : Term) (xs : PerMachine (fun _ => Term) v.machines) : Except Refusal (OwnQueryOut v × Term) := do
+  let (a, c1) ← encodeAdmit (c := v.caller) L qc.accepts callers caller input
+  let cx ← encodeQueryCtx L records now caller input
+  let (out, c2) ← qc.resolve (cx, ())
   let (oa, c3) ← site.code L σ
   let (evs, c4) ← oa (out, ())
   let evt ← Code.dataTermE _ evs
@@ -168,6 +170,7 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
   intro ctx r
   have hcc' := CommandCode.rel_of hcc hccx
   obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨cx, h1', henc⟩ := bind_ok.1 henc
   obtain ⟨⟨dc, cd⟩, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨nil, h16, henc⟩ := bind_ok.1 henc
   obtain ⟨okNil, h17, henc⟩ := bind_ok.1 henc
@@ -179,8 +182,9 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
   obtain ⟨⟨dl, nl, dt⟩, h11, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨o2, c7⟩, h23, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨hok, hbr, hcx⟩ := admit_rel v.records_data x.data.input x.data.caller x.data.ctx _ x.data.accepts
-    hcc'.accepts _ hks a.state caller input hrec hnow hfresh hsc hsi h1
+  obtain ⟨hok, hbr⟩ := admit_rel x.data.input x.data.caller _ x.data.accepts hcc'.accepts _ hks caller input hsc hsi h1
+  have hcx := commandCtx_rel v.records_data x.data.input x.data.caller x.data.ctx a.state caller input hrec hnow hfresh hsc hsi
+    h1'
   let a1 : Step.Acc v := { a with state := { a.state with fresh := a.state.fresh + 1 } }
   have hfr1 : (Term.add fresh (.int 1)).denote M = .int (Int.ofNat a1.state.fresh) := by
     simp only [Term.denote, hfresh]; rfl
@@ -413,8 +417,8 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (hsc : RelV L v.caller (Ty.up _ x.data.caller caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ x.data.input input) (si.denote M))
     {o : OwnQueryOut v} {cond : Term}
-    (henc : encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q sc si xs = .ok (o, cond)) :
-    let ctx := Step.ctx a.state a.state.records caller input
+    (henc : encodeOwnQuery L T v shs senv x qc site σ apply ks records now n q sc si xs = .ok (o, cond)) :
+    let ctx := Step.queryCtx a.state a.state.records caller input
     let r := Step.runQuery T a x caller input (site.fn env)
     (Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
       x.accepts.appFits L.count (input, ()) ∧
@@ -433,6 +437,7 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   cases pure_ok.1 hqc0
   obtain ⟨hca1, hca2⟩ := (holds_andT _ _).1 hcq
   obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨cx, h1', henc⟩ := bind_ok.1 henc
   obtain ⟨⟨out, c2⟩, h8, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨oa, c3⟩, h9, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨evs, c4⟩, h10, henc⟩ := bind_ok.1 henc
@@ -440,8 +445,9 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   obtain ⟨⟨dl, nl, dt⟩, h12, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨o1, c5⟩, h13, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨hok, hbr, hcx⟩ := admit_rel v.records_data x.data.input x.data.caller x.data.ctx _ x.data.accepts
-    hqc'.accepts _ hks a.state caller input hrec hnow hfresh hsc hsi h1
+  obtain ⟨hok, hbr⟩ := admit_rel x.data.input x.data.caller _ x.data.accepts hqc'.accepts _ hks caller input hsc hsi h1
+  have hcx := queryCtx_rel v.records_data x.data.input x.data.caller x.data.ctx a.state caller input hrec hnow hsc hsi
+    h1'
   refine ⟨?_, fun hc => ?_⟩
   · unfold onAnswerFits
     rw [holds_ite_tt (by rw [hok])]
@@ -450,7 +456,7 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     have e1 := admit_exact x.data.input x.accepts g1 hca1 input hsi h1
     have hargs' := rels1 x.data.ctx x.data.ctxArgs hcx
     have e2 : Holds M c2 ↔ x.resolve.appFits L.count (ctx, ()) :=
-      x.resolve.app_exact g2 hca2 (by simp [Ty.ctx, Ty.isFn]) _ _ hargs' h8
+      x.resolve.app_exact g2 hca2 (by simp [Ty.queryCtx, Ty.isFn]) _ _ hargs' h8
     have hta : (Ty.tuple [x.output]).isData = true := by simp [Ty.isData, Ty.isDatas, x.data.output]
     have hle : (Ty.list v.event).isData = true := by simp [Ty.isData, v.event_data]
     have x1 := encode_exact site.defs site.defs.eval (site.defs.encode L) (site.defs.fits L.count)
@@ -463,7 +469,7 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     have hrest : Holds M c2 → (Holds M (andT c3 (andT c4 c5)) ↔ ((site.fn env).fits L.count).1 ∧
         (site.fn env).appFits L.count ⟨x.resolve.fn (ctx, ()), ()⟩ ∧
         eventsFit L.count T a.state ((site.fn env).fn ⟨x.resolve.fn (ctx, ()), ()⟩)) := fun hc2 => by
-      have hres := hqc'.resolve _ (adm.ctx, ()) hargs' out c2 h8 hc2
+      have hres := hqc'.resolve _ (cx, ()) hargs' out c2 h8 hc2
       erw [Ty.up_fn _ _ _ x.data.ctxArgs x.data.output] at hres
       have e4 : Holds M c3 → (Holds M c4 ↔ (site.fn env).appFits L.count ⟨x.resolve.fn (ctx, ()), ()⟩) := fun hc3 => by
         have := (x1.2 hc3 _ (FTs.dflt _) (out, ()) (rels1 x.data.output hta hres)
@@ -531,7 +537,7 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
       have := hc'.2; simp only [Holds, Term.denote, hallT, Val.toBool, ite_true] at this
       have h : Holds M (andT c2 (andT c3 (andT c4 c5))) := this
       rw [holds_andT, holds_andT, holds_andT] at h; exact h
-    have hres := hqc.resolve _ (adm.ctx, ()) (rels1 x.data.ctx x.data.ctxArgs hcx) out c2 h8 hc2
+    have hres := hqc.resolve _ (cx, ()) (rels1 x.data.ctx x.data.ctxArgs hcx) out c2 h8 hc2
     erw [Ty.up_fn _ _ _ x.data.ctxArgs x.data.output] at hres
     have hle : (Ty.list v.event).isData = true := by simp [Ty.isData, v.event_data]
     have hta : (Ty.tuple [x.output]).isData = true := by simp [Ty.isData, Ty.isDatas, x.data.output]
@@ -544,7 +550,7 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     have hevt := (rel_term (need_ok.1 h11) _).1 hevs
     obtain ⟨sv, hS, -, -, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
     erw [Ty.up_list _ _ v.event_data] at hh
-    let evs1 : List v.event.den0 := (site.fn env).fn ⟨x.resolve.fn ⟨Step.ctx a.state a.state.records caller input, ()⟩, ()⟩
+    let evs1 : List v.event.den0 := (site.fn env).fn ⟨x.resolve.fn ⟨Step.queryCtx a.state a.state.records caller input, ()⟩, ()⟩
     change Holds2 (EBag L v.event) (evs1.map (Ty.up _ v.event_data)) sv at hh
     have hfr1 : (Term.add fresh (.int 1)).denote M = .int (Int.ofNat (a.state.fresh + 1)) := by
       simp only [Term.denote, hfresh]; rfl

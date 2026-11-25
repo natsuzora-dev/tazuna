@@ -64,7 +64,8 @@ structure State (v : ServiceV) where
   /-- Requests sent and not yet answered: a multiset. -/
   pending : Bag (Pending v.event)
   now : Int
-  /-- The counter `fresh` builds ids from; every command step and every own query advances it. -/
+  /-- The counter `fresh` builds ids from; only commands read it. Every command step and every own query advances it,
+  so the two orders of two internal steps differ by swapping two counters. -/
   fresh : Nat
   /-- The next wire id. -/
   nextId : Nat
@@ -223,6 +224,10 @@ def applyEvents (a : Acc v) (events : List v.event.den0) : Except Fault (Acc v) 
 def ctx {r i c : Ty} (s : State v) (records : r.den0) (caller : c.den0) (input : i.den0) : (Ty.ctx r i c).den0 :=
   .inl (records, input, caller, s.now, s.fresh, ())
 
+def queryCtx {r i c : Ty} (s : State v) (records : r.den0) (caller : c.den0) (input : i.den0) :
+    (Ty.queryCtx r i c).den0 :=
+  .inl (records, input, caller, s.now, ())
+
 /-- Why a request is Invalid: a caller it does not list, or the input's broken `accepts` rules. -/
 def admit {i : Ty} (callers : List v.caller.den0) (accepts : Fun (Ty.fn [i] Ty.rules)) (caller : v.caller.den0)
     (input : i.den0) : List String :=
@@ -259,7 +264,7 @@ def execQuery (s : State v) (x : QueryV v.records v.caller) (caller : v.caller.d
     Except (List String) x.output.den0 :=
   match admit x.callers x.accepts caller input with
   | r :: rs => .error (r :: rs)
-  | [] => .ok (x.resolve.fn (ctx s s.records caller input, ()))
+  | [] => .ok (x.resolve.fn (queryCtx s s.records caller input, ()))
 
 /-- Runs an own command as an internal step: its answer's events are applied after it runs. -/
 def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)

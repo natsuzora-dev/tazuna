@@ -250,7 +250,10 @@ def prelude : List TypeDecl :=
       variants := [⟨"MachineCtx", [⟨some "key", .param 0⟩, ⟨some "state", .param 1⟩, ⟨some "records", .param 2⟩,
         ⟨some "now", .int⟩]⟩] },
     { name := "tazuna.ReactionCtx", params := ["records"],
-      variants := [⟨"ReactionCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] } ]
+      variants := [⟨"ReactionCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] },
+    { name := "tazuna.QueryCtx", params := ["records", "input", "caller"],
+      variants := [⟨"QueryCtx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩, ⟨some "caller", .param 2⟩,
+        ⟨some "now", .int⟩]⟩] } ]
 
 def Ty.bool : Ty := .adt 0 [] [[], []]
 def Ty.nil : Ty := .adt 1 [] [[]]
@@ -265,6 +268,8 @@ def Ty.timer (s : Ty) : Ty := .adt 7 [s] [[.int, s]]
 def Ty.machineCtx (k s r : Ty) : Ty := .adt 8 [k, s, r] [[k, s, r, .int]]
 /-- What a reaction sees: the records and the time. -/
 def Ty.reactionCtx (r : Ty) : Ty := .adt 9 [r] [[r, .int]]
+/-- What a query's `resolve` sees: a command's context without the source of fresh ids, since a query makes none. -/
+def Ty.queryCtx (r i c : Ty) : Ty := .adt 10 [r, i, c] [[r, i, c, .int]]
 /-- Named rules, as `invariants`, `accepts` and `ensures` return them. -/
 def Ty.rules : Ty := .list (.tuple [.str, .bool])
 
@@ -297,6 +302,8 @@ example (s : Ty) : prelude[7]?.map (fun d => Ty.adt 7 [s] (d.variantTys [s])) = 
 example (k s r : Ty) : prelude[8]?.map (fun d => Ty.adt 8 [k, s, r] (d.variantTys [k, s, r])) =
   some (Ty.machineCtx k s r) := rfl
 example (r : Ty) : prelude[9]?.map (fun d => Ty.adt 9 [r] (d.variantTys [r])) = some (Ty.reactionCtx r) := rfl
+example (r i c : Ty) : prelude[10]?.map (fun d => Ty.adt 10 [r, i, c] (d.variantTys [r, i, c])) =
+  some (Ty.queryCtx r i c) := rfl
 example (a e : Ty) : prelude[2]?.map (fun d => Ty.adt 2 [a, e] (d.variantTys [a, e])) = some (Ty.result a e) := rfl
 example (a : Ty) : prelude[3]?.map (fun d => Ty.adt 3 [a] (d.variantTys [a])) = some (Ty.option a) := rfl
 

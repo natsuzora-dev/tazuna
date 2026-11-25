@@ -137,6 +137,7 @@ theorem step_sites {P : List AnySite} {v : ServiceV} (senv : StepEnv L (shapes v
     unfold encodeCommand at hcmd
     obtain ⟨_, -, hcmd⟩ := bind_ok.1 hcmd
     obtain ⟨_, -, hcmd⟩ := bind_ok.1 hcmd
+    obtain ⟨_, -, hcmd⟩ := bind_ok.1 hcmd
     obtain ⟨⟨fo, cf, cfx⟩, hf, hcmd⟩ := bind_ok.1 hcmd
     cases pure_ok.1 hcmd
     exact finish_codes hf

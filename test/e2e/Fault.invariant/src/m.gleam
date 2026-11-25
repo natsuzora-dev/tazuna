@@ -1,5 +1,5 @@
 import gleam/option.{None, Some}
-import tazuna.{type Ctx, type Id}
+import tazuna.{type Ctx, type Id, type QueryCtx}
 import tazuna/bag
 
 pub type Records {
@@ -57,7 +57,7 @@ fn total() -> tazuna.Query(Records, Caller, Nil, Int) {
     name: "total",
     callers: [User],
     accepts: fn(_n) { [] },
-    resolve: fn(c: Ctx(Records, Nil, Caller)) { c.records.total },
+    resolve: fn(c: QueryCtx(Records, Nil, Caller)) { c.records.total },
   )
 }
 

@@ -44,6 +44,7 @@ def builtinAliases : List (Surface.AliasDef × String) :=
 the field or parameter label, the alias). -/
 def timeAliases : List (String × String × String) :=
   [ ("tazuna.Ctx", "now", "Instant"), ("tazuna.MachineCtx", "now", "Instant"), ("tazuna.ReactionCtx", "now", "Instant"),
+    ("tazuna.QueryCtx", "now", "Instant"),
     ("tazuna.Timer", "after", "Duration"), ("response", "within", "Duration"), ("step_wait", "for", "Duration") ]
 
 /-- The built-in functions. -/
@@ -177,10 +178,10 @@ def sig : Prim → PrimSig :=
         l "ensures" (kept (.fn [.ctx a (param 3) (param 2), a] Ty.rules))],
       ret := .dsl .command [a, b, param 2, param 3, param 4] }
   | .query =>
-    { name := "query", doc := "A query, named by a string literal: it answers from the records and writes nothing. The service that lists it owns it.",
+    { name := "query", doc := "A query, named by a string literal: it answers from the records, writes nothing and makes no ids, so `resolve` sees no source of fresh ids. The service that lists it owns it.",
       tvars := ["records", "caller", "input", "output"], dataArgs := true, needsEq := [1],
       params := [l "name" .str, l "callers" (.list b), l "accepts" (kept (.fn [param 2] Ty.rules)),
-        l "resolve" (kept (.fn [.ctx a (param 2) b] (param 3)))],
+        l "resolve" (kept (.fn [.queryCtx a (param 2) b] (param 3)))],
       ret := .dsl .query [a, b, param 2, param 3] }
   | .machine =>
     { name := "machine",

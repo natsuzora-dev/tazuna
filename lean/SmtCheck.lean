@@ -296,7 +296,7 @@ def siteParts {Γ : List Ty} {t : Ty} (s : Site Γ t) : ProgramParts :=
   ⟨[⟨Γ, t, s⟩], Tazuna.Ir.Expr.handles s.body, Tazuna.Smt.Expr.tys s.body, Tazuna.Smt.Expr.lits s.body⟩
 
 def recordsT : Ty := .table .int .int
-def ctxT : Ty := Ty.ctx recordsT .int .str
+def qctxT : Ty := Ty.queryCtx recordsT .int .str
 
 /-- The pending table of a service without pending shapes: its state's layout holds it, and well-formedness keeps it
 empty. -/
@@ -323,7 +323,7 @@ def answerAt {v : ServiceV} {shs : List (PendingShape v.event)} (k j : Nat) (to 
 def acceptsE : E (.fn [.int] Ty.rules) :=
   .lam (.list (.cons (.tuple (.cons (.str "positive") (.cons (.bin .gt (.var .here) (.int 0)) .nil))) .nil))
 
-def resolveE : E (.fn [ctxT] (Ty.option .int)) :=
+def resolveE : E (.fn [qctxT] (Ty.option .int)) :=
   .lam (.call (.prim .tableGet [.int, .int] rfl)
     (.cons (.field (ft := recordsT) "records" 0 (by simp) (.var .here))
       (.cons (.field (ft := .int) "input" 1 (by simp) (.var .here)) .nil)))
@@ -2707,7 +2707,8 @@ def internalCheck (solver : Solver) : IO Bool := do
 key 4 starts with a request at 40. The records, instance table, next id and new wire ids read from the model must be
 what `Step.runQuery` leaves; an `on_answer` that returns no event must not pass the comparison. -/
 
-def nextResolveE : E (.fn [cctxT] .int) := .lam (.bin .add inputOf (.int 1))
+def nextResolveE : E (.fn [qctxT] .int) :=
+  .lam (.bin .add (.field (ft := .int) "input" 1 (by simp) (.var .here)) (.int 1))
 
 def nextQ : QueryV recordsT .str :=
   { name := "next", input := .int, output := .int, callers := ["alice"], accepts := .closed acceptsE,
@@ -2733,7 +2734,7 @@ def ownQueryScript (goal : List Term) : Except String (Script × Nat) := do
   let some ks := callerTerms L rfl nextQ.callers | throw "no caller terms"
   let senv ← enc (StepEnv.of L twiceShapes)
   let (o, cond) ← enc (encodeOwnQuery L prelude twiceSvc twiceShapes senv nextQ qc answerIsEvent () apply ks
-    S.records S.now S.fresh S.nextId (.int 0) (.var 6) (.var 7) S.machines)
+    S.records S.now S.nextId (.int 0) (.var 6) (.var 7) S.machines)
   let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
   let some wf := S.wf L (v := twiceSvc) twiceShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"

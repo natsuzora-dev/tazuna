@@ -125,7 +125,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.caller x.callers)
     let (da, _) ← L.findE (.tuple Γ)
     let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
-    let (o, c) ← encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
+    let (o, c) ← encodeOwnQuery L T v shs senv x qc site σ apply ks records now n q (sel 0) (sel 1) xs
     pure ⟨⟨.query x.name o, ⟨.or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))), o.answered, .add fresh (.int 1)⟩⟩,
       c, cq⟩
 
@@ -162,7 +162,7 @@ def ownCommandFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : Comma
 /-- Whether an own query's internal step fits from `s`: what `ownQuery_encode` says its condition holds for. -/
 def ownQueryFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : QueryV v.records v.caller)
     (caller : v.caller.den0) (input : x.input.den0) (oa : Fun (Ty.fn [x.output] (.list v.event))) : Prop :=
-  let ctx := Step.ctx s s.records caller input
+  let ctx := Step.queryCtx s s.records caller input
   x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
     x.accepts.appFits S (input, ()) ∧
     (Step.broken (x.accepts.fn (input, ())) = [] →

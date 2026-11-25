@@ -71,21 +71,32 @@ theorem ordFields_some (T : List TypeDecl) (d : Nat) : (ts : List Ty) → Ty.ord
     simp [ordFields, ha, hb]
 end
 
-/-- A request's admission, from an `accepts` code with no gap behind it, has none: its context code is available. -/
-theorem encodeAdmit_sound (hL : SortedLayout L) {r i c : Ty} {accepts : Code (Ty.fn [i] Ty.rules)}
+/-- A request's admission, from an `accepts` code with no gap behind it, has none. -/
+theorem encodeAdmit_sound (hL : SortedLayout L) {i c : Ty} {accepts : Code (Ty.fn [i] Ty.rules)}
     (hacc : CodeOk L P ds H _ accepts) (hc : Avail L c) (hi : Avail L i) (hr : Got L Ty.rules)
-    (hctx : Avail L (Ty.ctx r i c)) (callers : List Term) (records now fresh caller input : Term) :
-    Sound (fun o => CodeOk L P ds H (Ty.ctx r i c) o.1.ctx)
-      (encodeAdmit (r := r) (c := c) L accepts callers records now fresh caller input) := by
+    (callers : List Term) (caller input : Term) :
+    Sound (fun _ => True) (encodeAdmit (c := c) L accepts callers caller input) := by
   unfold encodeAdmit
   refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) caller hc) fun cc hcc => ?_
   refine sound_bind (sound_mapM callers fun k _ =>
     sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) k hc) fun _ _ => eqCode_sound hL cc _ hcc) fun _ _ => ?_
   refine sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) input hi) fun ic hic => ?_
   refine sound_bind (apply_sound hacc ⟨hic, trivial⟩ (avail_of_got hr)) fun _ _ => ?_
-  refine sound_bind (ruleTerms_sound hL hr _) fun _ _ => ?_
+  exact sound_bind (ruleTerms_sound hL hr _) fun _ _ => trivial
+
+/-- A command's context, where its type is available, has its code available. -/
+theorem encodeCtx_sound {r i c : Ty} (hctx : Avail L (Ty.ctx r i c)) (records now fresh caller input : Term) :
+    Sound (fun o => CodeOk L P ds H (Ty.ctx r i c) o) (encodeCtx L records now fresh caller input) := by
+  unfold encodeCtx
   refine sound_bind (adtCtor_sound hctx _ _) fun _ _ => ?_
-  exact sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) _ hctx) fun _ h => h
+  exact ofDataE_sound (P := P) (ds := ds) (H := H) _ hctx
+
+/-- A query's context, where its type is available, has its code available. -/
+theorem encodeQueryCtx_sound {r i c : Ty} (hctx : Avail L (Ty.queryCtx r i c)) (records now caller input : Term) :
+    Sound (fun o => CodeOk L P ds H (Ty.queryCtx r i c) o) (encodeQueryCtx L records now caller input) := by
+  unfold encodeQueryCtx
+  refine sound_bind (adtCtor_sound hctx _ _) fun _ _ => ?_
+  exact ofDataE_sound (P := P) (ds := ds) (H := H) _ hctx
 
 /-- The service's invariants on a records term, from a code with no gap behind it, have none. -/
 theorem encodeInvariants_sound (hL : SortedLayout L) {r : Ty} {inv : Code (Ty.fn [r] Ty.rules)}
@@ -98,11 +109,12 @@ theorem encodeInvariants_sound (hL : SortedLayout L) {r : Ty} {inv : Code (Ty.fn
 
 theorem encodeQuery_sound (hL : SortedLayout L) {r c : Ty} {v : ServiceV} (q : QueryV r c) (qc : QueryCode q)
     (hacc : CodeOk L P ds H _ qc.accepts) (hres : CodeOk L P ds H _ qc.resolve) (hc : Avail L c)
-    (hi : Avail L q.input) (ho : Avail L q.output) (hr : Got L Ty.rules) (hctx : Avail L (Ty.ctx r q.input c))
+    (hi : Avail L q.input) (ho : Avail L q.output) (hr : Got L Ty.rules) (hctx : Avail L (Ty.queryCtx r q.input c))
     (callers : List Term) (S : SymState v) (caller input : Term) :
     Sound (fun _ => True) (encodeQuery L q qc callers S caller input) := by
   unfold encodeQuery
-  refine sound_bind (encodeAdmit_sound hL hacc hc hi hr hctx _ _ _ _ _ _) fun a ha => ?_
+  refine sound_bind (encodeAdmit_sound hL hacc hc hi hr _ _ _) fun _ _ => ?_
+  refine sound_bind (encodeQueryCtx_sound (P := P) (ds := ds) (H := H) hctx _ _ _ _) fun a ha => ?_
   refine sound_bind (apply_sound hres ⟨ha, trivial⟩ ho) fun _ _ => ?_
   exact sound_bind (dataTermE_sound _) fun _ _ => trivial
 
@@ -402,7 +414,7 @@ structure QueryOk (L : Layout) (P : List AnySite) (ds : List (String × Declared
   resolve : Sound (fun p => CodeOk L P ds H _ p.1) (q.resolve.code L)
   input : Avail L q.input
   output : Avail L q.output
-  ctx : Avail L (Ty.ctx v.records q.input v.caller)
+  ctx : Avail L (Ty.queryCtx v.records q.input v.caller)
 
 /-- What an own kind's internal step needs: its command's or query's, the captured values' tuple, and its site. -/
 def OwnOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite) (v : ServiceV)
@@ -529,8 +541,8 @@ theorem encodeOwnCommand_sound {shs : List (PendingShape v.event)} (h : ServiceG
       (encodeOwnCommand L T v shs senv x cc site σ apply callers records now fresh n q caller input xs) := by
   have hL := h.sorted
   unfold encodeOwnCommand
-  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.caller) hx.input h.rules hx.ctx _ _ _ _ _ _)
-    fun a ha => ?_
+  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.caller) hx.input h.rules _ _ _) fun _ _ => ?_
+  refine sound_bind (encodeCtx_sound (P := P) (ds := ds) (H := H) hx.ctx _ _ _ _ _) fun a ha => ?_
   refine sound_bind (encodeDecide_sound h T senv hx hdec hens happ ha _ _ _ _ _) fun _ _ => ?_
   refine sound_bind (adtCtor_sound hnil _ _) fun _ _ => ?_
   refine sound_bind (adtCtor_sound hans _ _) fun _ _ => ?_
@@ -547,14 +559,14 @@ theorem encodeOwnQuery_sound {shs : List (PendingShape v.event)} (h : ServiceGot
     {qc : QueryCode x} (hacc : CodeOk L P ds H _ qc.accepts) (hres : CodeOk L P ds H _ qc.resolve) {Γ : List Ty}
     (site : Site Γ (Ty.fn [x.output] (.list v.event))) (hs : SiteCodeOk L P ds H ⟨Γ, _, site⟩)
     {σ : Codes Γ} (hσ : CodesOk L P ds H Γ σ) {apply : Code (Ty.fn [v.records, v.event] v.records)}
-    (happ : CodeOk L P ds H _ apply) (callers : List Term) (records now fresh n q caller input : Term)
+    (happ : CodeOk L P ds H _ apply) (callers : List Term) (records now n q caller input : Term)
     (xs : PerMachine (fun _ => Term) v.machines) :
     Sound (fun _ => True)
-      (encodeOwnQuery L T v shs senv x qc site σ apply callers records now fresh n q caller input xs) := by
+      (encodeOwnQuery L T v shs senv x qc site σ apply callers records now n q caller input xs) := by
   have hL := h.sorted
   unfold encodeOwnQuery
-  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.caller) hx.input h.rules hx.ctx _ _ _ _ _ _)
-    fun a ha => ?_
+  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.caller) hx.input h.rules _ _ _) fun _ _ => ?_
+  refine sound_bind (encodeQueryCtx_sound (P := P) (ds := ds) (H := H) hx.ctx _ _ _ _) fun a ha => ?_
   refine sound_bind (apply_sound hres ⟨ha, trivial⟩ hx.output) fun _ hout => ?_
   refine sound_bind (hs σ hσ) fun _ hoa => ?_
   refine sound_bind (apply_sound hoa ⟨hout, trivial⟩ (avail_of_got h.events)) fun _ _ => ?_
@@ -590,7 +602,7 @@ theorem encodeOwnKind_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
     refine sound_bind sound_need_limit fun _ _ => ?_
     refine sound_bind (findE_sound hL (avail_of_got hg) has_find_tuple) fun _ _ => ?_
     refine sound_bind (capturedCodes_sound (P := P) (ds := ds) (H := H) hg _ _) fun σ hσ => ?_
-    exact sound_bind (encodeOwnQuery_sound h T senv hx h1 h2 site hs hσ happ _ _ _ _ _ _ _ _ _) fun _ _ => trivial
+    exact sound_bind (encodeOwnQuery_sound h T senv hx h1 h2 site hs hσ happ _ _ _ _ _ _ _ _) fun _ _ => trivial
 
 theorem encodeOwnStep_sound {shs : List (PendingShape v.event)} (h : ServiceGot L P ds H v shs) (T : List TypeDecl)
     (senv : StepEnv L shs) {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : CodeOk L P ds H _ apply)
@@ -636,8 +648,8 @@ theorem encodeCommand_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
     Sound (fun _ => True) (encodeCommand L T P v shs senv x cc apply inv callers S caller input) := by
   have hL := h.sorted
   unfold encodeCommand
-  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.caller) hx.input h.rules hx.ctx _ _ _ _ _ _)
-    fun a ha => ?_
+  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.caller) hx.input h.rules _ _ _) fun _ _ => ?_
+  refine sound_bind (encodeCtx_sound (P := P) (ds := ds) (H := H) hx.ctx _ _ _ _ _) fun a ha => ?_
   refine sound_bind (encodeDecide_sound h T senv hx hdec hens happ ha _ _ _ _ _) fun _ _ => ?_
   exact sound_bind (encodeFinish_sound h T senv happ hinv _ _ _ _) fun _ _ => trivial
 
@@ -890,6 +902,12 @@ theorem sorted_avail_ctx {L : Layout} {r i c : Ty} (h : Avail L (Ty.ctx r i c)) 
     simp [Ty.ctx, Ty.sorted, Ty.sortedss, Ty.sorteds, hr, hi, hc]
   exact (got_adt ⟨h hs, hs⟩ ⟨0, by simp⟩ i (by simp)).1
 
+theorem sorted_avail_queryCtx {L : Layout} {r i c : Ty} (h : Avail L (Ty.queryCtx r i c)) (hr : r.sorted = true)
+    (hc : c.sorted = true) : Avail L i := fun hi => by
+  have hs : (Ty.queryCtx r i c).sorted = true := by
+    simp [Ty.queryCtx, Ty.sorted, Ty.sortedss, Ty.sorteds, hr, hi, hc]
+  exact (got_adt ⟨h hs, hs⟩ ⟨0, by simp⟩ i (by simp)).1
+
 section
 variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services)
 include hv
@@ -1107,14 +1125,14 @@ theorem queryOk_ofService {q : QueryV v.records v.caller} (hq : q ∈ v.queries)
     QueryOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v q := by
   have chk := c.checked v hv
   obtain ⟨⟨her, -⟩, -, -, -, -, ⟨hec, -⟩⟩ := stateTys_iff.1 chk.stateTys
-  have hu : ∀ t ∈ [Ty.ctx v.records q.input v.caller, q.output],
+  have hu : ∀ t ∈ [Ty.queryCtx v.records q.input v.caller, q.output],
       t ∈ useTys v (Layout.kindsOf c.program.defs.parts v) := fun t ht => by
     simp only [useTys, List.mem_append, List.mem_flatMap]
     exact .inl (.inl (.inl (.inr ⟨q, hq, ht⟩)))
   have hr := chk.reach.queries q hq
   have hq' := root_query hq
   exact ⟨Fun.code_ofService c hv _ hr.accepts hq'.1, Fun.code_ofService c hv _ hr.resolve hq'.2,
-    sorted_avail_ctx (avail_use c v (hu _ (by simp))) (sorted_of_embeddable _ her) (sorted_of_embeddable _ hec),
+    sorted_avail_queryCtx (avail_use c v (hu _ (by simp))) (sorted_of_embeddable _ her) (sorted_of_embeddable _ hec),
     avail_use c v (hu _ (by simp)), avail_use c v (hu _ (by simp))⟩
 
 theorem Fun.uses_sub {t : Ty} {f : Fun t} (hf : f.asSite ∈ c.P) : ∀ s ∈ f.uses.1, s ∈ c.P := by

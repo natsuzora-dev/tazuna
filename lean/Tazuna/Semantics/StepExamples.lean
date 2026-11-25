@@ -19,6 +19,8 @@ private def recordsE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : E
   .field (ft := .int) "records" 0 (by simp) x
 private def inputE {Γ : List Ty} (x : Expr [] Γ (Ty.ctx .int .int .int)) : Expr [] Γ .int :=
   .field (ft := .int) "input" 1 (by simp) x
+private def queryRecordsE {Γ : List Ty} (x : Expr [] Γ (Ty.queryCtx .int .int .int)) : Expr [] Γ .int :=
+  .field (ft := .int) "records" 0 (by simp) x
 
 private def iteE {Γ : List Ty} {r : Ty} (c : Expr [] Γ Ty.bool) (a b : Expr [] Γ r) : Expr [] Γ r :=
   .case c (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) a (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) b .nil))
@@ -84,7 +86,7 @@ private def addE {Γ : List Ty} : Expr [] Γ (.dsl .command [.int, .int, .int, .
 
 def total : QueryV .int .int :=
   { name := "total", input := .int, output := .int, callers := [(1 : Int)], accepts := .closed (.lam (.list .nil)),
-    resolve := .closed (.lam (recordsE (.var .here))) }
+    resolve := .closed (.lam (queryRecordsE (.var .here))) }
 
 def svc : ServiceV :=
   { name := "sum", records := .int, event := .int, caller := .int, init := (0 : Int),

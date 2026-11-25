@@ -76,7 +76,7 @@ structure QueryV (r c : Ty) where
   output : Ty
   callers : List c.den0
   accepts : Fun (Ty.fn [input] Ty.rules)
-  resolve : Fun (Ty.fn [Ty.ctx r input c] output)
+  resolve : Fun (Ty.fn [Ty.queryCtx r input c] output)
 
 /-- A command whose input and rejection types are `i` and `j`: the value of `Command(records, event, caller, input,
 rejection)`, so a handle's types are the command's. -/

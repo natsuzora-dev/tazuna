@@ -10,7 +10,7 @@ open Tazuna.Ir
 /-- The codes of a query's functions. -/
 structure QueryCode {r c : Ty} (q : QueryV r c) where
   accepts : Code (Ty.fn [q.input] Ty.rules)
-  resolve : Code (Ty.fn [Ty.ctx r q.input c] q.output)
+  resolve : Code (Ty.fn [Ty.queryCtx r q.input c] q.output)
 
 /-- A query's types are data, as the `query` built-in demands of its type arguments. -/
 structure QueryData {r c : Ty} (q : QueryV r c) : Prop where
@@ -22,7 +22,7 @@ structure QueryData {r c : Ty} (q : QueryV r c) : Prop where
 /-- A query's types are data, since its `resolve` is. -/
 theorem _root_.Tazuna.Ir.QueryV.data {r c : Ty} (q : QueryV r c) : QueryData q := by
   have h := q.resolve.ht
-  simp only [Ty.ctx, Ty.isData, Ty.isDatas, Ty.isDatass, Bool.and_eq_true] at h
+  simp only [Ty.queryCtx, Ty.isData, Ty.isDatas, Ty.isDatass, Bool.and_eq_true] at h
   exact ⟨h.1.1.1.1, h.1.1.1.2.2.1, h.1.1.1.2.1, h.2⟩
 
 section
@@ -31,11 +31,11 @@ include hd
 
 theorem QueryData.accepts : (Ty.fn [q.input] Ty.rules).isData = true := by
   simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.input]
-theorem QueryData.ctx : (Ty.ctx r q.input c).isData = true := by
-  simp [Ty.ctx, Ty.isData, Ty.isDatas, Ty.isDatass, hd.records, hd.input, hd.caller]
-theorem QueryData.resolve : (Ty.fn [Ty.ctx r q.input c] q.output).isData = true := by
+theorem QueryData.ctx : (Ty.queryCtx r q.input c).isData = true := by
+  simp [Ty.queryCtx, Ty.isData, Ty.isDatas, Ty.isDatass, hd.records, hd.input, hd.caller]
+theorem QueryData.resolve : (Ty.fn [Ty.queryCtx r q.input c] q.output).isData = true := by
   simp [Ty.isData, Ty.isDatas, hd.ctx, hd.output]
-theorem QueryData.ctxArgs : (Ty.tuple [Ty.ctx r q.input c]).isData = true := by
+theorem QueryData.ctxArgs : (Ty.tuple [Ty.queryCtx r q.input c]).isData = true := by
   simp [Ty.isData, Ty.isDatas, hd.ctx]
 
 end
@@ -79,13 +79,14 @@ structure QueryOut where
 section
 variable (L : Layout)
 
-/-- A query step's outcome terms and its condition, from the terms of the records, the time, the fresh counter, the
-caller and the input, and the constants of the listed callers. The condition asks only for what the step computes:
+/-- A query step's outcome terms and its condition, from the terms of the records, the time, the caller and the
+input, and the constants of the listed callers. The condition asks only for what the step computes:
 the rules when the caller is listed, the output when the rules hold too. -/
 def encodeQuery {r c : Ty} {v : ServiceV} (q : QueryV r c) (qc : QueryCode q) (callers : List Term)
     (S : SymState v) (caller input : Term) : Except Refusal (QueryOut × Term) := do
-  let (a, c1) ← encodeAdmit L qc.accepts callers S.records S.now S.fresh caller input
-  let (o, c2) ← qc.resolve (a.ctx, ())
+  let (a, c1) ← encodeAdmit (c := c) L qc.accepts callers caller input
+  let cx ← encodeQueryCtx L S.records S.now caller input
+  let (o, c2) ← qc.resolve (cx, ())
   let ot ← Code.dataTermE q.output o
   pure (⟨a.callerOk, a.rules, ot⟩, .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) c2 tt)) tt)
 
@@ -114,7 +115,7 @@ def queryFits (S : Ty → Nat) {v : ServiceV} (s : State v) (q : QueryV v.record
     (input : q.input.den0) : Prop :=
   q.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
     q.accepts.appFits S (input, ()) ∧
-      (Step.broken (q.accepts.fn (input, ())) = [] → q.resolve.appFits S (Step.ctx s s.records caller input, ()))
+      (Step.broken (q.accepts.fn (input, ())) = [] → q.resolve.appFits S (Step.queryCtx s s.records caller input, ()))
 
 /-- A query step's condition is exact and gives T2: where the codes' condition holds, the condition holds exactly
 when what the step applies fits (`queryFits`), and wherever it holds the outcome terms denote the step's outcome and
@@ -135,14 +136,17 @@ theorem query_encode {v : ServiceV} (s : State v) (i : Fin v.queries.length) (ca
   cases pure_ok.1 hqc'
   obtain ⟨hca1, hca2⟩ := (holds_andT _ _).1 hcq
   obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨cx, h7, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨out, c2⟩, h8, henc⟩ := bind_ok.1 henc
   obtain ⟨ot, h9, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨hok, hbr, hcx⟩ := admit_rel ((v.queries.get i).data).records ((v.queries.get i).data).input ((v.queries.get i).data).caller ((v.queries.get i).data).ctx _ ((v.queries.get i).data).accepts hq.accepts _ hks s caller input
-    hR.records hR.now hR.fresh hsc hsi h1
+  obtain ⟨hok, hbr⟩ := admit_rel ((v.queries.get i).data).input ((v.queries.get i).data).caller _
+    ((v.queries.get i).data).accepts hq.accepts _ hks caller input hsc hsi h1
+  have hcx := queryCtx_rel ((v.queries.get i).data).records ((v.queries.get i).data).input
+    ((v.queries.get i).data).caller ((v.queries.get i).data).ctx s caller input hR.records hR.now hsc hsi h7
   have e1 := admit_exact ((v.queries.get i).data).input (v.queries.get i).accepts g1 hca1 input hsi h1
-  have e2 : Holds M c2 ↔ (v.queries.get i).resolve.appFits L.count (Step.ctx s s.records caller input, ()) :=
-    (v.queries.get i).resolve.app_exact g2 hca2 (by simp [Ty.ctx, Ty.isFn]) _ _ (rels1 ((v.queries.get i).data).ctx ((v.queries.get i).data).ctxArgs hcx) h8
+  have e2 : Holds M c2 ↔ (v.queries.get i).resolve.appFits L.count (Step.queryCtx s s.records caller input, ()) :=
+    (v.queries.get i).resolve.app_exact g2 hca2 (by simp [Ty.queryCtx, Ty.isFn]) _ _ (rels1 ((v.queries.get i).data).ctx ((v.queries.get i).data).ctxArgs hcx) h8
   have hrules : ∀ hc1 : Holds M c1, ((allT (adm.rules.map (·.2))).denote M).toBool =
       decide (Step.broken ((v.queries.get i).accepts.fn (input, ())) = []) := fun hc1 => by
     rw [toBool_allT_rules, hbr hc1]
@@ -175,7 +179,7 @@ theorem query_encode {v : ServiceV} (s : State v) (i : Fin v.queries.length) (ca
           have := (holds_ite _ _ _).1 hc2
           rw [hrules hc1, hb] at this
           simpa using this
-        have hres := hq.resolve _ (adm.ctx, ()) (rels1 ((v.queries.get i).data).ctx ((v.queries.get i).data).ctxArgs hcx) out c2 h8 hc2'
+        have hres := hq.resolve _ (cx, ()) (rels1 ((v.queries.get i).data).ctx ((v.queries.get i).data).ctxArgs hcx) out c2 h8 hc2'
         erw [Ty.up_fn _ _ _ ((v.queries.get i).data).ctxArgs ((v.queries.get i).data).output] at hres
         simp only [QueryOut.Rel, QueryOut.invalid, hok, hin, Val.toBool, ite_true, hbroken]
         exact ⟨trivial, trivial, (rel_term (need_ok.1 h9) _).1 hres⟩

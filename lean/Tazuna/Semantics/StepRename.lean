@@ -851,7 +851,7 @@ theorem runCommand_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' 
         ⟨⟨hj, trivial⟩, trivial⟩) ha1).shift 1 rfl rfl rfl rfl
 
 theorem runQuery_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a')
-    (hctr : R.ctr.rel a.state.fresh a'.state.fresh) {x : QueryV v.records v.caller} (hx : x ∈ v.queries)
+    {x : QueryV v.records v.caller} (hx : x ∈ v.queries)
     {c c' : v.caller.den0} (hc : Ty.rel0 R.ctr v.caller c c') {i i' : x.input.den0} (hi : Ty.rel0 R.ctr x.input i i')
     {f f' : Fun (Ty.fn [x.output] (.list v.event))} (hf : Fun.Rel R.ctr f f') :
     Lifted R a a' (runQuery T a x c i f) (runQuery T a' x c' i' f') := by
@@ -861,11 +861,11 @@ theorem runQuery_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : 
   cases admit x.callers x.accepts c' i' with
   | cons r rs => exact lifted_error
   | nil =>
-    have hcx : Ty.rel0 R.ctr (Ty.ctx v.records x.input v.caller) (ctx a.state a.state.records c i)
-        (ctx a'.state a'.state.records c' i') := ⟨ha.1.1, hi, hc, ha.1.2.2.2.1, hctr, trivial⟩
+    have hcx : Ty.rel0 R.ctr (Ty.queryCtx v.records x.input v.caller) (queryCtx a.state a.state.records c i)
+        (queryCtx a'.state a'.state.records c' i') := ⟨ha.1.1, hi, hc, ha.1.2.2.2.1, trivial⟩
     obtain ⟨hst, hevs0, hout, ho, ho', hown⟩ := ha
-    exact (applyEvents_rel T hv R (hf _ _ ⟨hres (ctx a.state a.state.records c i, ())
-      (ctx a'.state a'.state.records c' i', ()) ⟨hcx, trivial⟩, trivial⟩)
+    exact (applyEvents_rel T hv R (hf _ _ ⟨hres (queryCtx a.state a.state.records c i, ())
+      (queryCtx a'.state a'.state.records c' i', ()) ⟨hcx, trivial⟩, trivial⟩)
       (a := { a with state := { a.state with fresh := a.state.fresh + 1 } })
       (a' := { a' with state := { a'.state with fresh := a'.state.fresh + 1 } })
       ⟨hst, hevs0, hout, ho, ho', hown⟩).shift 1 rfl rfl rfl rfl
@@ -927,7 +927,7 @@ theorem runOwn_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Ac
         have hmem := ownQuery_mem hox
         obtain ⟨x, hi, ho⟩ := x
         subst hcp hi ho
-        exact runQuery_rel T hv ha hctr hmem hc hval hf
+        exact runQuery_rel T hv ha hmem hc hval hf
 
 end Step
 

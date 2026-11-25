@@ -115,6 +115,10 @@ pub type ReactionCtx(records) {
   ReactionCtx(records: records, now: Instant)
 }
 
+pub type QueryCtx(records, input, caller) {
+  QueryCtx(records: records, input: input, caller: caller, now: Instant)
+}
+
 /// A point in time, in milliseconds.
 pub type Instant =
   Int
@@ -178,12 +182,12 @@ pub fn command(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A query, named by a string literal: it answers from the records and writes nothing. The service that lists it owns it.
+/// A query, named by a string literal: it answers from the records, writes nothing and makes no ids, so `resolve` sees no source of fresh ids. The service that lists it owns it.
 pub fn query(
   name _name: String,
   callers _callers: List(caller),
   accepts _accepts: fn(input) -> Rules,
-  resolve _resolve: fn(Ctx(records, input, caller)) -> output,
+  resolve _resolve: fn(QueryCtx(records, input, caller)) -> output,
 ) -> Query(records, caller, input, output) {
   panic as \"tazuna's built-ins run only in the engine\"
 }

@@ -319,13 +319,13 @@ theorem runQuery_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wi
   | cons r rs => simp [had] at h
   | nil =>
     simp only [had] at h
-    have hans : ∀ ev ∈ (show List v.event.den0 from f.fn (x.resolve.fn (ctx a.state a.state.records c i, ()), ())),
+    have hans : ∀ ev ∈ (show List v.event.den0 from f.fn (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())),
         ∀ P : PBij,
         P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.event ev ev := fun ev hev P hP => by
       obtain ⟨W, hA⟩ := ha P hP
-      exact forall2_self (hf P hP (x.resolve.fn (ctx a.state a.state.records c i, ()), ())
-        (x.resolve.fn (ctx a.state a.state.records c i, ()), ()) ⟨((hv.self P).queries x hx).resolve _ _
-        ⟨⟨hA.1.1, hi P hP, hc P hP, rfl, hP _ (Nat.lt_succ_self _), trivial⟩, trivial⟩, trivial⟩) ev hev
+      exact forall2_self (hf P hP (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())
+        (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ()) ⟨((hv.self P).queries x hx).resolve _ _
+        ⟨⟨hA.1.1, hi P hP, hc P hP, rfl, trivial⟩, trivial⟩, trivial⟩) ev hev
     exact applyEvents_self T hv hkw _ _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ha.fresh hans b h
 
 theorem start_fresh : (effs : List (Sender × EffectV v.event)) → (a : Acc v) → {b : Acc v} → start a effs = .ok b →

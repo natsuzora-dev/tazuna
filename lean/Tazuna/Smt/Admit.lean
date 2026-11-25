@@ -1,9 +1,9 @@
 import Tazuna.Smt.EncodeExact
 import Tazuna.Smt.State
 
-/-! A request's admission, which commands and queries share before they differ: whether the caller is listed, the
-`accepts` rules' terms, and the context their functions read (`encodeAdmit`, `admit_rel`, `admit_exact`), with the
-rules' terms every step kind reads (`ruleTerms`, `brokenIn`). -/
+/-! A request's admission, which commands and queries share before they differ: whether the caller is listed and the
+`accepts` rules' terms (`encodeAdmit`, `admit_rel`, `admit_exact`), the contexts their functions read (`encodeCtx`,
+`encodeQueryCtx`), and the rules' terms every step kind reads (`ruleTerms`, `brokenIn`). -/
 
 namespace Tazuna.Smt
 
@@ -26,25 +26,33 @@ def ruleTerms (rs : Term) : Except Refusal (List (Term × Term)) := do
   pure ((slotsOf dl dt n 1 rs).map fun sl =>
     (.sel d 0 0 sl.2[0], .or (.not sl.1) (.sel d 0 1 sl.2[0])))
 
-/-- The terms of a request's admission, which commands and queries share: whether the caller is listed, the `accepts`
-rules, and the context their functions read. -/
-structure AdmitOut (r i c : Ty) where
+/-- The terms of a request's admission, which commands and queries share: whether the caller is listed and the
+`accepts` rules. -/
+structure AdmitOut where
   callerOk : Term
   rules : List (Term × Term)
-  ctx : Code (Ty.ctx r i c)
 
 /-- A request's admission terms and `accepts`' condition, from its code, the constants of the listed callers, and the
-terms of the records, the time, the fresh counter, the caller and the input. -/
-def encodeAdmit {r i c : Ty} (accepts : Code (Ty.fn [i] Ty.rules)) (callers : List Term)
-    (records now fresh caller input : Term) : Except Refusal (AdmitOut r i c × Term) := do
+terms of the caller and the input. -/
+def encodeAdmit {i c : Ty} (accepts : Code (Ty.fn [i] Ty.rules)) (callers : List Term) (caller input : Term) :
+    Except Refusal (AdmitOut × Term) := do
   let cc ← Code.ofDataE c caller
   let eqs ← callers.mapM fun k => do eqCode L c cc (← Code.ofDataE c k)
   let ic ← Code.ofDataE i input
   let (rs, c1) ← accepts (ic, ())
   let rules ← ruleTerms L rs
+  pure (⟨anyT eqs, rules⟩, c1)
+
+/-- The context a command's functions read, from the terms of the records, the input, the caller, the time and the
+fresh counter. -/
+def encodeCtx {r i c : Ty} (records now fresh caller input : Term) : Except Refusal (Code (Ty.ctx r i c)) := do
   let ctx ← adtCtor L 5 [r, i, c] [[r, i, c, .int, .dsl .fresh []]] 0 [records, input, caller, now, fresh]
-  let cx ← Code.ofDataE (Ty.ctx r i c) (Term.share ctx)
-  pure (⟨anyT eqs, rules, cx⟩, c1)
+  Code.ofDataE (Ty.ctx r i c) (Term.share ctx)
+
+/-- The context a query's `resolve` reads: a command's without the fresh counter, since a query makes no ids. -/
+def encodeQueryCtx {r i c : Ty} (records now caller input : Term) : Except Refusal (Code (Ty.queryCtx r i c)) := do
+  let ctx ← adtCtor L 10 [r, i, c] [[r, i, c, .int]] 0 [records, input, caller, now]
+  Code.ofDataE (Ty.queryCtx r i c) (Term.share ctx)
 
 end
 
@@ -157,7 +165,7 @@ theorem rules_broken {rs : Term} {rules : List (Term × Term)} (hr : ruleTerms L
   erw [Ty.up_list _ _ rfl] at hh
   exact rules_broken_map hdm _ sv hS xs hh
 
-/-- The context a step builds for a query or command, read at the level codes relate to. -/
+/-- The context a step builds for a command, read at the level codes relate to. -/
 theorem up_ctx {v : ServiceV} {r i c : Ty} (hr : r.isData = true) (hi : i.isData = true) (hc : c.isData = true)
     (h : (Ty.ctx r i c).isData = true) (s : State v) (records : r.den0) (caller : c.den0) (input : i.den0) :
     Ty.up _ h (Step.ctx s records caller input) =
@@ -174,46 +182,83 @@ theorem up_ctx {v : ServiceV} {r i c : Ty} (hr : r.isData = true) (hi : i.isData
   refine (Ty.up_tuple _ _ _ rfl (by simp [Ty.isData, Ty.isDatas]) _).trans (congrArg _ ?_)
   exact (Ty.up_tuple _ _ _ (by simp [Ty.isData]) rfl _)
 
+/-- The context a step builds for a query, read at the level codes relate to. -/
+theorem up_queryCtx {v : ServiceV} {r i c : Ty} (hr : r.isData = true) (hi : i.isData = true) (hc : c.isData = true)
+    (h : (Ty.queryCtx r i c).isData = true) (s : State v) (records : r.den0) (caller : c.den0) (input : i.den0) :
+    Ty.up _ h (Step.queryCtx s records caller input) =
+      Alts.inj (vs := [[r, i, c, .int]]) ⟨0, by simp⟩
+        (Ty.up r hr records, Ty.up i hi input, Ty.up c hc caller, s.now, ()) := by
+  unfold Step.queryCtx
+  refine (Ty.up_inl 10 [r, i, c] [r, i, c, .int] [] h
+    (by simp [Ty.isData, Ty.isDatas, hr, hi, hc]) _).trans ?_
+  show Sum.inl _ = Sum.inl _
+  congr 1
+  refine (Ty.up_tuple _ _ _ hr (by simp [Ty.isData, Ty.isDatas, hi, hc]) _).trans (congrArg _ ?_)
+  refine (Ty.up_tuple _ _ _ hi (by simp [Ty.isData, Ty.isDatas, hc]) _).trans (congrArg _ ?_)
+  refine (Ty.up_tuple _ _ _ hc (by simp [Ty.isData, Ty.isDatas]) _).trans (congrArg _ ?_)
+  exact (Ty.up_tuple _ _ _ rfl rfl _)
+
 theorem rels1 {a : Ty} (ha : a.isData = true) (h : (Ty.tuple [a]).isData = true) {x : a.den0} {cx : Code a}
     (hx : Smt.Rel M L a (Ty.up a ha x) cx) : Smt.Rels M L [a] (Ty.up (.tuple [a]) h (x, ())) (cx, ()) := by
   show Smt.Rel M L _ (Ty.up (.tuple [a]) h (x, ())).1 cx ∧ True
   erw [Ty.up_tuple _ _ _ ha rfl]; exact ⟨hx, trivial⟩
 
-/-- What a request's admission terms say: whether the caller is listed, the rules `accepts` breaks wherever its
-condition holds, and the context at the state the terms denote. -/
-theorem admit_rel {v : ServiceV} {i : Ty} (hr : v.records.isData = true) (hi : i.isData = true)
-    (hc : v.caller.isData = true) (hctx : (Ty.ctx v.records i v.caller).isData = true)
+/-- What a request's admission terms say: whether the caller is listed, and the rules `accepts` breaks wherever its
+condition holds. -/
+theorem admit_rel {v : ServiceV} {i : Ty} (hi : i.isData = true) (hc : v.caller.isData = true)
     (accepts : Fun (Ty.fn [i] Ty.rules)) (hA : (Ty.fn [i] Ty.rules).isData = true) {ac : Code (Ty.fn [i] Ty.rules)}
     (hac : Smt.Rel M L _ (Ty.up _ hA accepts.fn) ac) (callers : List v.caller.den0) {ks : List Term}
-    (hks : callerTerms L hc callers = some ks) (s : State v) (caller : v.caller.den0) (input : i.den0)
-    {records now fresh sc si : Term} (hrec : RelV L v.records (Ty.up _ hr s.records) (records.denote M))
-    (hnow : now.denote M = .int s.now) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
+    (hks : callerTerms L hc callers = some ks) (caller : v.caller.den0) (input : i.den0) {sc si : Term}
     (hsc : RelV L v.caller (Ty.up _ hc caller) (sc.denote M)) (hsi : RelV L i (Ty.up _ hi input) (si.denote M))
-    {a : AdmitOut v.records i v.caller} {c1 : Term} (henc : encodeAdmit L ac ks records now fresh sc si = .ok (a, c1)) :
+    {a : AdmitOut} {c1 : Term} (henc : encodeAdmit (c := v.caller) L ac ks sc si = .ok (a, c1)) :
     a.callerOk.denote M = .bool (callers.any ((Ty.semWith Dsl.base v.caller).2 caller)) ∧
-      (Holds M c1 → brokenIn M a.rules = Step.broken (accepts.fn (input, ()))) ∧
-      Smt.Rel M L _ (Ty.up _ hctx (Step.ctx s s.records caller input)) a.ctx := by
+      (Holds M c1 → brokenIn M a.rules = Step.broken (accepts.fn (input, ()))) := by
   obtain ⟨cc0, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨rs, c1'⟩, h4, henc⟩ := bind_ok.1 henc
   obtain ⟨rules, h5, henc⟩ := bind_ok.1 henc
-  obtain ⟨ctx, h6, henc⟩ := bind_ok.1 henc
-  obtain ⟨cx, h7, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   have hcc0 : Smt.Rel M L v.caller (Ty.up _ hc caller) cc0 := (rel_ofTerm (need_ok.1 h1) _).2 hsc
-  refine ⟨callers_any hc hcc0 callers ks hks eqs h2, fun hc1 => ?_, ?_⟩
-  · have hic : Smt.Rel M L _ (Ty.up _ hi input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
-    have hargs : (Ty.tuple [i]).isData = true := by simp [Ty.isData, Ty.isDatas, hi]
-    have hacc := hac _ (ic, ()) (rels1 hi hargs hic) rs c1 h4 hc1
-    erw [Ty.up_fn _ Ty.rules _ hargs rfl] at hacc
-    exact rules_broken h5 _ hacc
-  · have hctxT := adtCtor_rel (L := L) (M := M) (vs := [[v.records, i, v.caller, .int, .dsl .fresh []]])
-      ⟨0, by simp⟩ _ _ h6
-      (Ty.up _ hr s.records, Ty.up _ hi input, Ty.up _ hc caller, s.now, s.fresh, ())
-      ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
-    rw [← up_ctx hr hi hc hctx] at hctxT
-    exact (rel_ofTerm (need_ok.1 h7) _).2 (by rw [Term.denote_share]; exact hctxT)
+  refine ⟨callers_any hc hcc0 callers ks hks eqs h2, fun hc1 => ?_⟩
+  have hic : Smt.Rel M L _ (Ty.up _ hi input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
+  have hargs : (Ty.tuple [i]).isData = true := by simp [Ty.isData, Ty.isDatas, hi]
+  have hacc := hac _ (ic, ()) (rels1 hi hargs hic) rs c1 h4 hc1
+  erw [Ty.up_fn _ Ty.rules _ hargs rfl] at hacc
+  exact rules_broken h5 _ hacc
+
+/-- A command's context code denotes the context at the state the terms denote. -/
+theorem commandCtx_rel {v : ServiceV} {i : Ty} (hr : v.records.isData = true) (hi : i.isData = true)
+    (hc : v.caller.isData = true) (hctx : (Ty.ctx v.records i v.caller).isData = true) (s : State v)
+    (caller : v.caller.den0) (input : i.den0) {records now fresh sc si : Term}
+    (hrec : RelV L v.records (Ty.up _ hr s.records) (records.denote M))
+    (hnow : now.denote M = .int s.now) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
+    (hsc : RelV L v.caller (Ty.up _ hc caller) (sc.denote M)) (hsi : RelV L i (Ty.up _ hi input) (si.denote M))
+    {cx : Code (Ty.ctx v.records i v.caller)} (henc : encodeCtx L records now fresh sc si = .ok cx) :
+    Smt.Rel M L _ (Ty.up _ hctx (Step.ctx s s.records caller input)) cx := by
+  obtain ⟨ctx, h6, h7⟩ := bind_ok.1 henc
+  have hctxT := adtCtor_rel (L := L) (M := M) (vs := [[v.records, i, v.caller, .int, .dsl .fresh []]])
+    ⟨0, by simp⟩ _ _ h6
+    (Ty.up _ hr s.records, Ty.up _ hi input, Ty.up _ hc caller, s.now, s.fresh, ())
+    ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
+  rw [← up_ctx hr hi hc hctx] at hctxT
+  exact (rel_ofTerm (need_ok.1 h7) _).2 (by rw [Term.denote_share]; exact hctxT)
+
+/-- A query's context code denotes the query context at the state the terms denote. -/
+theorem queryCtx_rel {v : ServiceV} {i : Ty} (hr : v.records.isData = true) (hi : i.isData = true)
+    (hc : v.caller.isData = true) (hctx : (Ty.queryCtx v.records i v.caller).isData = true) (s : State v)
+    (caller : v.caller.den0) (input : i.den0) {records now sc si : Term}
+    (hrec : RelV L v.records (Ty.up _ hr s.records) (records.denote M)) (hnow : now.denote M = .int s.now)
+    (hsc : RelV L v.caller (Ty.up _ hc caller) (sc.denote M)) (hsi : RelV L i (Ty.up _ hi input) (si.denote M))
+    {cx : Code (Ty.queryCtx v.records i v.caller)} (henc : encodeQueryCtx L records now sc si = .ok cx) :
+    Smt.Rel M L _ (Ty.up _ hctx (Step.queryCtx s s.records caller input)) cx := by
+  obtain ⟨ctx, h6, h7⟩ := bind_ok.1 henc
+  have hctxT := adtCtor_rel (L := L) (M := M) (vs := [[v.records, i, v.caller, .int]])
+    ⟨0, by simp⟩ _ _ h6
+    (Ty.up _ hr s.records, Ty.up _ hi input, Ty.up _ hc caller, s.now, ())
+    ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, rfl⟩
+  rw [← up_queryCtx hr hi hc hctx] at hctxT
+  exact (rel_ofTerm (need_ok.1 h7) _).2 (by rw [Term.denote_share]; exact hctxT)
 
 end
 
@@ -239,17 +284,15 @@ theorem rels2 {a b : Ty} (ha : a.isData = true) (hb : b.isData = true) (h : (Ty.
   erw [Ty.up_tuple _ _ _ hb rfl]; exact ⟨hy, trivial⟩
 
 /-- `accepts`' condition in a request's admission is exact. -/
-theorem admit_exact {r i c : Ty} (hi : i.isData = true) (accepts : Fun (Ty.fn [i] Ty.rules))
+theorem admit_exact {i c : Ty} (hi : i.isData = true) (accepts : Fun (Ty.fn [i] Ty.rules))
     {ac : Code (Ty.fn [i] Ty.rules)} {ca : Term} (hcode : accepts.code L = .ok (ac, ca)) (hca : Holds M ca)
-    {ks : List Term} (input : i.den0) {records now fresh sc si : Term} (hsi : RelV L i (Ty.up _ hi input) (si.denote M))
-    {a : AdmitOut r i c} {c1 : Term} (henc : encodeAdmit L ac ks records now fresh sc si = .ok (a, c1)) :
+    {ks : List Term} (input : i.den0) {sc si : Term} (hsi : RelV L i (Ty.up _ hi input) (si.denote M))
+    {a : AdmitOut} {c1 : Term} (henc : encodeAdmit (c := c) L ac ks sc si = .ok (a, c1)) :
     Holds M c1 ↔ accepts.appFits L.count (input, ()) := by
   obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨rs, c1'⟩, h4, henc⟩ := bind_ok.1 henc
-  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   have hic : Smt.Rel M L _ (Ty.up _ hi input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
