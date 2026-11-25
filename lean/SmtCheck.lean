@@ -3655,6 +3655,45 @@ def pairCheck (solver : Solver) : IO Bool := do
   let c ← pairCases solver (reqSvc "count" countE) (reqSites (reqSvc "count" countE)) [("ins ins", 0, 0, false)] rfl
   return a && b && c
 
+/-! Every question family can be sat (run-log 147: a sort with no value made every pair question unsat whatever it
+asked). For each family, a question of a real layout is sat, and so are the assertions it shares with every question
+of its family, the context it asks about: an input kind's step question (the event of the service `em` breaks
+`small`) and its bound question (without `small`, the event of `e` inserts a fourth key into three slots) after the well-formed state, its
+wire ids and the input's case; a pair question (`set`, `set`) after the state, its names and the two variant tests; a
+timer question (`back`) after the well-formed context. A context that no model meets would make each of its family's
+questions unsat for free. -/
+
+/-- A family's question, and how many of its first assertions are the context every question of the family shares. -/
+def familyQuestions : Except String (List (String × Script × Nat)) := do
+  let v := evMSvc
+  let L := svcLayout v 3
+  let senv ← (StepEnv.of L (shapes v)).mapError fun r => s!"no step environment: {repr r}"
+  let inp : SymInput v (shapes v) senv.nT := .event evMI (.var (5 + v.machines.length))
+  let (_, qs) ← (questions L prelude [] v senv inp).mapError fun r => s!"no questions: {repr r}"
+  let ov : ServiceV := { eventSvc with name := "open", invariants := .closed noRulesE }
+  let oL := svcLayout ov 3
+  let osenv ← (StepEnv.of oL (shapes ov)).mapError fun r => s!"no step environment: {repr r}"
+  let (_, oqs) ← (questions oL prelude [] ov osenv (.event eventI (.var 5))).mapError fun r => s!"no questions: {repr r}"
+  let some bound := oqs.find? (·.target.isNone) | throw "no bound question"
+  let some target := qs.find? (·.target == some (.invariant none (some "small"))) | throw "no question about small"
+  let pL := pairLayoutOf 3
+  let psenv ← (StepEnv.of pL (shapes pairSvc)).mapError fun r => s!"no pair step environment: {repr r}"
+  let (_, pq) ← (pairQuestions pL prelude pairSites pairSvc psenv 1 1).mapError fun r => s!"no pair questions: {repr r}"
+  let (_, tq) ← (backQuestions timerLayout (timerM backE)).mapError fun r => s!"no timer questions: {repr r}"
+  pure [("step", target.script, 3), ("bound", bound.script, 3), ("pair", pq, 5), ("timer", tq, 4)]
+
+def familyCheck (solver : Solver) : IO Bool := do
+  match familyQuestions with
+  | .error m => IO.println s!"smt-check: question families: {m}"; return false
+  | .ok fams =>
+    let mut ok := true
+    for (name, q, ctx) in fams do
+      for (part, script) in [("context", { q with asserts := q.asserts.take ctx }), ("question", q)] do
+        match ← solver.run script with
+        | .sat _ => pure ()
+        | a => IO.println s!"smt-check: {name} family's {part} is not sat: {repr a}"; ok := false
+    return ok
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -3718,6 +3757,7 @@ def check (z3 : String) : IO Bool := do
   unless ← boundCheck solver do ok := false
   unless ← effectCheck solver do ok := false
   unless ← ownEffectCheck solver do ok := false
+  unless ← familyCheck solver do ok := false
   unless ← effectListCheck solver do ok := false
   unless ← machineEffectCheck solver do ok := false
   unless ← timerCheck solver do ok := false
