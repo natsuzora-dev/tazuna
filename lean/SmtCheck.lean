@@ -1,7 +1,7 @@
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.EventStep
 import Tazuna.Smt.Reactions
-import Tazuna.Smt.CommandStep
+import Tazuna.Smt.Answer
 import Tazuna.Smt.Clock
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
@@ -800,7 +800,8 @@ def pendingShapes : List (PendingShape pendingSvc.event) := shapes pendingSvc pe
 def pendingLayout : Layout :=
   let lits := Tazuna.Smt.Expr.lits insertE ++ Tazuna.Smt.Expr.lits invariantsE ++ Tazuna.Smt.Expr.lits payAnswerE ++
     Tazuna.Smt.Expr.lits rateAnswerE ++ Tazuna.Smt.Expr.lits rateEnsuresE
-  Layout.addTys (listSlots (fun _ => 3) lits) {} (recordsT :: pendingTable pendingShapes :: .list .int ::
+  Layout.addTys (listSlots (fun _ => 3) lits) {} (recordsT :: pendingTable pendingShapes :: .list .int :: .tuple [] ::
+    Ty.reactionCtx recordsT :: .list (.dsl .effect [.int]) :: Ty.option (.dsl .effect [.int]) ::
     Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys payAnswerE ++
     Tazuna.Smt.Expr.tys rateAnswerE ++ Tazuna.Smt.Expr.tys rateEnsuresE)
 
@@ -1020,8 +1021,10 @@ def answerScript (shift : Int) (goal : List Term) : Except String Script := do
   let (apply, ca) ← enc (pendingSvc.apply.code L)
   let (inv, ci) ← enc (pendingSvc.invariants.code L)
   let S := SymState.vars 0
-  let (o, cond) ← enc (encodeAnswer L pendingShapes 1 sh 0 apply inv S.records S.pending (.var 5)
-    (.add (.var 6) (.int shift)))
+  let idx (t : Ty) := ((L.find? t).map (·.1)).getD 0
+  let (o, cond) ← enc (encodeAnswer L prelude pendingShapes 1 sh 0 (idx (.dsl .effect [.int]))
+    (idx (pendingEntry pendingShapes)) (idx (Ty.option (.dsl .effect [.int]))) apply inv S.records S.pending (.var 5)
+    (.add (.var 6) (.int shift)) S.now S.nextId S.machines)
   let some wf := S.wf L (v := pendingSvc) pendingShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some psrt := L.srt? (pendingTable pendingShapes) | throw "no pending sort"
@@ -1032,7 +1035,7 @@ def answerScript (shift : Int) (goal : List Term) : Except String Script := do
   pure { datatypes := dts,
          vars := [rsrt, .int, .int, .int, psrt, .int, .int, .bool, .bool, .str, lsrt, rsrt, .bool, .str, psrt],
          asserts := [ca, ci, cond, wf, .le (.int 0) (.var 5), .eq (.var 7) o.hit, .eq (.var 8) rh, .eq (.var 9) rn,
-           .eq (.var 10) o.events, .eq (.var 11) o.records, .eq (.var 12) ih, .eq (.var 13) iname,
+           .eq (.var 10) o.events, .eq (.var 11) o.after.records, .eq (.var 12) ih, .eq (.var 13) iname,
            .eq (.var 14) o.pending] ++ goal,
          shows := List.range 15 }
 
@@ -2364,6 +2367,103 @@ def twiceCheck (solver : Solver) : IO Bool := do
         | _, _ => fail "the model does not decode"
       | a => fail s!"{repr a}"
 
+/-! An answer whose events reach machines, for `answer_step`: the service `w` above, with key 3 in the records and its
+instance in state 0, at now 100 and next id 40. Request 2 in slot 0 is the instance's `send`, whose `on_answer`
+captured key 3. The answer Ok to 2 makes `on_answer` return [3]; applying 3 lets the instance enter 1 (timer due at
+105) and request `send` again at id 40, and request 2 leaves the table. The records, instance table, pending table
+and next id read from the model must be the step's; the table before the machine reacts must not pass the
+comparison. -/
+
+def answerMLayoutOf (slots : Nat) : Layout :=
+  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m", 3, 7, 0⟩] }
+    (reactTys ++ [.tuple [.int], .tuple [], .list .int, answerTy Ty.nil Ty.nil, pendingTable writeShapes] ++
+      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
+      Tazuna.Smt.Expr.tys startEffectE)
+
+/-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the answer, v7 the new pending table, v8 the
+next id after, v9 the records after, v10 the new instance table. -/
+def answerMScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Term) := do
+  let L := answerMLayoutOf slots
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let some sh := writeShapes[0]? | throw "no shape"
+  let (apply, ca) ← enc (writeSvc.apply.code L)
+  let (inv, ci) ← enc (writeSvc.invariants.code L)
+  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
+  let some (dP, _) := L.find? (pendingEntry writeShapes) | throw "no pending entry"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let (o, cond) ← enc (encodeAnswer L prelude writeShapes 0 sh 0 dE dP dopt apply inv S.records S.pending (.int 2)
+    (.var 6) S.now S.nextId S.machines)
+  let below ← enc (pendingBelowT L writeShapes S.pending S.nextId)
+  let some wf := S.wf L (v := writeSvc) writeShapes | throw "no well-formedness"
+  let some wfa := wfT L (answerTy Ty.nil Ty.nil) (.var 6) | throw "no answer well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable writeShapes) | throw "no pending sort"
+  let some msrt := L.srt? startM.table | throw "no table sort"
+  let some asrt := L.srt? (answerTy Ty.nil Ty.nil) | throw "no answer sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [tbl] := o.after.tables | throw "not one machine"
+  pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, asrt, psrt, .int, rsrt, msrt],
+          asserts := [wf, wfa, below, ca, ci, cond, o.hit, .eq (.var 7) o.pending, .eq (.var 8) o.after.nextId,
+            .eq (.var 9) o.after.records, .eq (.var 10) tbl] ++ goal,
+          shows := List.range 11 }, o.hit)
+
+def answerMLayout : Layout := answerMLayoutOf 3
+
+def answerMScript (goal : List Term) : Except String (Script × Term) := answerMScriptOf 3 goal
+
+def answerMCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: an answer's events reach machines: {m}"; return false
+  let L := answerMLayout
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dm, nm) := L.find? startM.table | fail "no instance table"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (de, _) := L.find? (instEntry .int) | fail "no instance entry"
+  let some (dtop, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
+  let some (dp, np) := L.find? (pendingTable writeShapes) | fail "no pending table"
+  let some (dpt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry writeShapes]) | fail "no pending slot"
+  let some (dpe, _) := L.find? (pendingEntry writeShapes) | fail "no pending entry"
+  let some (d1, _) := L.find? (.tuple [.int]) | fail "no key tuple"
+  let some (dres, _) := L.find? (answerTy Ty.nil Ty.nil) | fail "no answer type"
+  let Sr := slotsOf dr drt nr 2 (.var 0)
+  let Sm := slotsOf dm dmt nm 2 (.var 5)
+  let Sp := slotsOf dp dpt np 2 (.var 4)
+  let entry := Sp[0]!.2.getD 1 tt
+  let goal := [Sr[0]!.1, .eq (Sr[0]!.2.headD tt) (.int 3), .not Sr[1]!.1, .not Sr[2]!.1,
+    Sm[0]!.1, .eq (Sm[0]!.2.headD tt) (.int 3), .eq (Term.sel de 0 0 (Sm[0]!.2.getD 1 tt)) (.int 0),
+    .is dtop 1 (Term.sel de 0 1 (Sm[0]!.2.getD 1 tt)), .not Sm[1]!.1, .not Sm[2]!.1,
+    .eq (Term.sel d1 0 0 (Term.sel dpe 0 3 entry)) (.int 3), .not Sp[1]!.1, .not Sp[2]!.1,
+    .eq (.var 1) (.int 100), .eq (.var 3) (.int 40), .is dres 0 (.var 6)]
+  match answerMScript goal with
+  | .error m => fail m
+  | .ok (script, _) =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let after : SymState := { records := .var 9, now := .var 1, fresh := .var 2, nextId := .var 8,
+                                pending := .var 7, machines := [.var 10] }
+      match (SymState.vars 0 1).decode M L (v := writeSvc) rfl prelude writeShapes,
+          after.decode M L (v := writeSvc) rfl prelude writeShapes,
+          (vs.lookup 6).bind (decodeV L (answerTy Ty.nil Ty.nil)) with
+      | some s, some s', some y =>
+        let r := step prelude writeSvc s (.answer 2 ⟨answerTy Ty.nil Ty.nil, Ty.down _ rfl y⟩)
+        let view (sms : List (Step.MachineState writeSvc.records writeSvc.event)) :=
+          sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+        let sorted (ps : List (Step.Pending writeSvc.event)) := (ps.map pendView).mergeSort fun a b => a.1 ≤ b.1
+        let mut ok := true
+        if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
+        if !sameAs L recordsT rfl r.state.records (vs.lookup 9) then ok ← fail "the records differ from the step's"
+        if view s'.machines != view r.state.machines || view s'.machines != [[(some 3, some 1, some (105, some 2))]] then
+          ok ← fail s!"the new table holds {view s'.machines}, the step {view r.state.machines}"
+        if sorted s'.pending != sorted r.state.pending || s'.nextId != r.state.nextId ||
+            (sorted s'.pending).map (·.1) != [40] then
+          ok ← fail s!"the model's pending table holds {sorted s'.pending} and next id {s'.nextId}, the step {sorted r.state.pending} and {r.state.nextId}"
+        if view s'.machines == view s.machines then ok ← fail "the table before the machine reacts passes the comparison"
+        return ok
+      | _, _, _ => fail "the model does not decode"
+    | a => fail s!"{repr a}"
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -2440,6 +2540,7 @@ def check (z3 : String) : IO Bool := do
   unless ← clockFireCheck solver do ok := false
   unless ← eventsCheck solver do ok := false
   unless ← twiceCheck solver do ok := false
+  unless ← answerMCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

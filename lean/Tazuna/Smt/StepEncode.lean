@@ -370,31 +370,7 @@ theorem EventCode.rel_of {M : Model} {L : Layout} {v : ServiceV} {i : Fin v.subs
   have hc' := (holds_andT _ _).1 hc.2
   exact ⟨v.apply.code_fn _ h1 hc.1, (v.subscribes.get i).wrap.code_fn _ h2 hc'.1, v.invariants.code_fn _ h3 hc'.2⟩
 
-/-! A command's codes, and the records an event list folds into on a service without reactions and a state without
-machine instances (`applyAll`, which the answer step still uses). `Tazuna.Smt.CommandStep` encodes the command
-kind. -/
-
-section
-variable {v : ServiceV}
-
-/-- The step in progress after `events` on a service without reactions: the records fold them, nothing starts. -/
-def _root_.Tazuna.Ir.Step.Acc.folded (a : Step.Acc v) (events : List v.event.den0) : Step.Acc v :=
-  { a with state := { a.state with records := events.foldl (fun r ev => v.apply.fn (r, ev, ())) a.state.records },
-           events := a.events ++ events }
-
-/-- Events applied on a service without reactions, from a state without machine instances: the records fold them,
-and nothing starts. -/
-theorem applyEvents_plain (hx : v.reactions = []) : (events : List v.event.den0) → (a : Step.Acc v) →
-    a.state.machines = [] → Step.applyEvents T a events = .ok (a.folded events)
-  | [], a, _ => by simp [Step.applyEvents, List.foldlM, pure, Except.pure, Step.Acc.folded]
-  | ev :: evs, a, hm => by
-    have h1 : Step.applyEvents T a (ev :: evs) = Step.applyEvents T (a.folded [ev]) evs := by
-      simp only [Step.applyEvents, List.foldlM, Step.react, hm, List.foldl_nil, hx, List.flatMap_nil, List.append_nil,
-        Step.start, bind, Except.bind, pure, Except.pure, Step.Acc.folded, List.foldl_cons]
-    rw [h1, applyEvents_plain hx evs _ (by simpa [Step.Acc.folded] using hm)]
-    simp [Step.Acc.folded]
-
-end
+/-! A command's codes and the facts its data types give. `Tazuna.Smt.CommandStep` encodes the command kind. -/
 
 /-- The codes of a command's functions. -/
 structure CommandCode {r e c : Ty} (x : CommandV r e c) where
@@ -460,87 +436,5 @@ theorem CommandCode.rel_of {M : Model} {L : Layout} {r e c : Ty} {x : CommandV r
   have hc := (holds_andT _ _).1 hc
   have hc' := (holds_andT _ _).1 hc.2
   exact ⟨x.accepts.code_fn _ h1 hc.1, x.decide.code_fn _ h2 hc'.1, x.ensures.code_fn _ h3 hc'.2⟩
-
-section
-variable (L : Layout)
-
-/-- The records after each occupied slot's event in turn from `rt`, with the condition that each application's
-holds. -/
-def applyAll {r e : Ty} (apply : Code (Ty.fn [r, e] r)) : Term → List Slot → Except Refusal (Term × Term)
-  | rt, [] => .ok (rt, tt)
-  | rt, (f, xs) :: S => do
-    let rc ← need "records that have no term" (Code.ofTerm? r rt)
-    let ec ← need "an event that has no term" (Code.ofTerm? e (xs.headD tt))
-    let (r', c) ← apply (rc, ec, ())
-    let r't ← need "records that have no term" (Code.term? r r')
-    let (rf, c') ← applyAll apply (Term.share (.ite f r't rt)) S
-    pure (rf, andT (.ite f c tt) c')
-
-end
-
-section
-variable {M : Model} {L : Layout}
-
-/-- Applying the events of a list's slots in turn: the records term denotes the records the events fold into. -/
-theorem applyAll_rel {r e : Ty} {apply : Code (Ty.fn [r, e] r)} {g : (Ty.fn [r, e] r).den}
-    (hg : Smt.Rel M L _ g apply) : (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv →
-    (∀ p ∈ sv, p.2.length = 1) → (evs : List e.den) → Holds2 (EBag L e) evs sv → (r0 : r.den) → (rt : Term) →
-    RelV L r r0 (rt.denote M) → (rf c : Term) → applyAll apply rt S = .ok (rf, c) → Holds M c →
-    RelV L r (evs.foldl (fun x ev => g (x, ev, ())) r0) (rf.denote M)
-  | [], [], _, _, evs, hev, r0, rt, hr, rf, c, h, _ => by
-    cases evs with
-    | nil => simp only [applyAll] at h; cases h; exact hr
-    | cons _ _ => exact hev.elim
-  | (f, xs) :: S, (b, vs) :: sv, ⟨hf, hxs, hS⟩, hw, evs, hev, r0, rt, hr, rf, c, h, hc => by
-    simp only [applyAll] at h
-    obtain ⟨rc, h1, h⟩ := bind_ok.1 h
-    obtain ⟨ec, h2, h⟩ := bind_ok.1 h
-    obtain ⟨⟨r', c0⟩, h3, h⟩ := bind_ok.1 h
-    obtain ⟨r't, h4, h⟩ := bind_ok.1 h
-    obtain ⟨⟨rf', c'⟩, h5, h⟩ := bind_ok.1 h
-    cases pure_ok.1 h
-    obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-    have hw' : ∀ p ∈ sv, p.2.length = 1 := fun p hp => hw p (by simp [hp])
-    cases b with
-    | false =>
-      have hite : (Term.share (.ite f r't rt)).denote M = rt.denote M := by
-        simp [Term.denote, hf, Val.toBool]
-      exact applyAll_rel hg S sv hS hw' evs (by simpa [Holds2, occupied] using hev) r0 _ (hite ▸ hr) _ c' h5 hc2
-    | true =>
-      match evs, hev with
-      | ev :: evs, ⟨⟨z, hz, hez⟩, hrest⟩ =>
-        subst hz
-        obtain ⟨x0, rfl, hx0⟩ : ∃ x0, xs = [x0] ∧ x0.denote M = z := by
-          match xs, hxs with
-          | [x0], h => exact ⟨x0, rfl, by simpa [Term.denotes] using h⟩
-        have hc1' : Holds M c0 := by simpa [Holds, Term.denote, hf, Val.toBool] using hc1
-        have hrc : Smt.Rel M L r r0 rc := (rel_ofTerm (need_ok.1 h1) _).2 hr
-        have hec : Smt.Rel M L e ev ec := (rel_ofTerm (need_ok.1 h2) _).2 (by simpa [hx0] using hez)
-        have hr' := hg (r0, ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' c0 h3 hc1'
-        have hite : (Term.share (.ite f r't rt)).denote M = r't.denote M := by
-          simp [Term.denote, hf, Val.toBool]
-        exact applyAll_rel hg S sv hS hw' evs hrest _ _ (hite ▸ (rel_term (need_ok.1 h4) _).1 hr') _ c' h5 hc2
-  | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _ | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _ => h.elim
-
-end
-
-section
-variable {M : Model} {L : Layout}
-
-theorem up_foldl {r e : Ty} (hr : r.isData = true) (he : e.isData = true) (h : (Ty.fn [r, e] r).isData = true)
-    (g : (Ty.fn [r, e] r).den0) : (evs : List e.den0) → (r0 : r.den0) →
-    Ty.up r hr (evs.foldl (fun x ev => g (x, ev, ())) r0) =
-      (evs.map (Ty.up e he)).foldl (fun x ev => (Ty.up _ h g) (x, ev, ())) (Ty.up r hr r0)
-  | [], _ => rfl
-  | ev :: evs, r0 => by
-    simp only [List.foldl_cons, List.map_cons]
-    rw [up_foldl hr he h g evs]
-    congr 1
-    have hargs : (Ty.tuple [r, e]).isData = true := by simp [Ty.isData, Ty.isDatas, hr, he]
-    have := Ty.up_fn [r, e] r h hargs hr g (r0, ev, ())
-    erw [Ty.up_tuple _ _ _ hr (by simp [Ty.isData, Ty.isDatas, he]), Ty.up_tuple _ _ _ he rfl] at this
-    exact this.symm
-
-end
 
 end Tazuna.Smt
