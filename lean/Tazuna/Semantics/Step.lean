@@ -219,29 +219,51 @@ def admit {i : Ty} (callers : List v.caller.den0) (accepts : Fun (Ty.fn [i] Ty.r
 
 def okNil {j : Ty} : (Ty.result Ty.nil j).den0 := .inl (.inl (), ())
 
-/-- Runs an own command as an internal step: its events are applied and its `ensures` checked, then its answer's
-events are applied. -/
-def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
-    (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) : Except Fault (Acc v) :=
+/-- How a command runs up to its answer: Invalid with the broken rules, rejected by `decide` (the fresh counter
+advanced), or accepted with its events applied and `ensures` holding. Applying the events may fault, and a broken
+`ensures` rule is a fault. -/
+inductive Ran (v : ServiceV) (j : Ty) where
+  | invalid (rules : List String)
+  | rejected (a : Acc v) (rejection : j.den0)
+  | accepted (a : Acc v)
+
+/-- Runs a command from the step in progress `a`, for the step's input and for an own command alike. -/
+def execCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) :
+    Except Fault (Ran v x.rejection) :=
   match admit x.callers x.accepts caller input with
-  | r :: rs => .error (.invalidEffect x.name (r :: rs))
-  | [] => do
+  | r :: rs => .ok (.invalid (r :: rs))
+  | [] =>
     let cx := ctx a.state a.state.records caller input
     let a := { a with state := { a.state with fresh := a.state.fresh + 1 } }
     match x.decide.fn (cx, ()) with
-    | .inl (events, ()) =>
+    | .inl (events, ()) => do
       let a ← applyEvents T a events
       match broken (x.ensures.fn (cx, a.state.records, ())) with
       | n :: _ => .error (.ensures n)
-      | [] => applyEvents T a (onAnswer.fn (okNil, ()))
-    | .inr (.inl (j, ())) => applyEvents T a (onAnswer.fn (.inr (.inl (j, ())), ()))
+      | [] => .ok (.accepted a)
+    | .inr (.inl (j, ())) => .ok (.rejected a j)
+
+/-- Runs a query at the state `s`: its answer, or the broken rules that make it Invalid. -/
+def execQuery (s : State v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0) :
+    Except (List String) x.output.den0 :=
+  match admit x.callers x.accepts caller input with
+  | r :: rs => .error (r :: rs)
+  | [] => .ok (x.resolve.fn (ctx s s.records caller input, ()))
+
+/-- Runs an own command as an internal step: its answer's events are applied after it runs. -/
+def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
+    (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) : Except Fault (Acc v) := do
+  match ← execCommand T a x caller input with
+  | .invalid rs => .error (.invalidEffect x.name rs)
+  | .accepted a => applyEvents T a (onAnswer.fn (okNil, ()))
+  | .rejected a j => applyEvents T a (onAnswer.fn (.inr (.inl (j, ())), ()))
 
 /-- Runs an own query as an internal step: its answer's events are applied. -/
 def runQuery (a : Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) : Except Fault (Acc v) :=
-  match admit x.callers x.accepts caller input with
-  | r :: rs => .error (.invalidEffect x.name (r :: rs))
-  | [] => applyEvents T a (onAnswer.fn (x.resolve.fn (ctx a.state a.state.records caller input, ()), ()))
+  match execQuery a.state x caller input with
+  | .error rs => .error (.invalidEffect x.name rs)
+  | .ok o => applyEvents T a (onAnswer.fn (o, ()))
 
 /-- The command the service lists by the name and types an effect gives. -/
 def ownCommand (name : String) (i j : Ty) :
@@ -347,23 +369,16 @@ def step (T : List TypeDecl) (v : ServiceV) (s : State v) : Input v → Result v
   | .command i caller input =>
     let c := v.commands.get i
     let s' := { s with fresh := s.fresh + 1 }
-    match admit c.callers c.accepts caller input with
-    | r :: rs => ⟨s', .invalid (r :: rs), [], []⟩
-    | [] =>
-      let cx := ctx s s.records caller input
-      match c.decide.fn (cx, ()) with
-      | .inr (.inl (j, ())) => ⟨s', .rejected ⟨c.rejection, j⟩, [], []⟩
-      | .inl (events, ()) =>
-        match applyEvents T { state := s' } events with
-        | .error f => ⟨s', .fault f, [], []⟩
-        | .ok a => match broken (c.ensures.fn (cx, a.state.records, ())) with
-          | n :: _ => ⟨s', .fault (.ensures n), [], []⟩
-          | [] => finish T s' (.ok a) .accepted
+    match execCommand T { state := s } c caller input with
+    | .ok (.invalid rs) => ⟨s', .invalid rs, [], []⟩
+    | .ok (.rejected _ j) => ⟨s', .rejected ⟨c.rejection, j⟩, [], []⟩
+    | .error f => ⟨s', .fault f, [], []⟩
+    | .ok (.accepted a) => finish T s' (.ok a) .accepted
   | .query i caller input =>
     let q := v.queries.get i
-    match admit q.callers q.accepts caller input with
-    | r :: rs => ⟨s, .invalid (r :: rs), [], []⟩
-    | [] => ⟨s, .answered ⟨q.output, q.resolve.fn (ctx s s.records caller input, ())⟩, [], []⟩
+    match execQuery s q caller input with
+    | .error rs => ⟨s, .invalid rs, [], []⟩
+    | .ok o => ⟨s, .answered ⟨q.output, o⟩, [], []⟩
   | .answer to ⟨t, value⟩ =>
     match s.pending.find? (·.id == to) with
     | none => ⟨s, .fault .answerUnmatched, [], []⟩

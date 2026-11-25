@@ -79,11 +79,16 @@ theorem applyEvents_prepend (T : List TypeDecl) (q : Bag (Pending v.event)) (eve
     refine foldlM_map_comm _ (Acc.prepend q) (fun a ev => ?_) events a
     exact start_prepend q (react T a.state ev).2 { a with state := (react T a.state ev).1, events := a.events ++ [ev] }
 
-theorem runCommand_prepend (T : List TypeDecl) (q : Bag (Pending v.event)) (a : Acc v)
-    (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
-    (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) :
-    runCommand T (a.prepend q) x caller input onAnswer = (runCommand T a x caller input onAnswer).map (Acc.prepend q) := by
-  unfold runCommand
+/-- A command's run with `f` applied to the step in progress it leaves. -/
+def Ran.map {j : Ty} (f : Acc v → Acc v) : Ran v j → Ran v j
+  | .invalid rs => .invalid rs
+  | .rejected a k => .rejected (f a) k
+  | .accepted a => .accepted (f a)
+
+theorem execCommand_prepend (T : List TypeDecl) (q : Bag (Pending v.event)) (a : Acc v)
+    (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) :
+    execCommand T (a.prepend q) x caller input = (execCommand T a x caller input).map (Ran.map (Acc.prepend q)) := by
+  unfold execCommand
   rw [show ctx (a.prepend q).state (a.prepend q).state.records caller input = ctx a.state a.state.records caller input
     from rfl]
   split
@@ -95,15 +100,30 @@ theorem runCommand_prepend (T : List TypeDecl) (q : Bag (Pending v.event)) (a : 
       erw [applyEvents_prepend T q]
       refine map_bind_comm _ _ _ _ _ fun a1 => ?_
       rw [show (Acc.prepend q a1).state.records = a1.state.records from rfl]
-      split
-      · rfl
-      · exact applyEvents_prepend T q _ a1
-    · exact applyEvents_prepend T q _ { a with state := { a.state with fresh := a.state.fresh + 1 } }
+      split <;> rfl
+    · rfl
+
+theorem runCommand_prepend (T : List TypeDecl) (q : Bag (Pending v.event)) (a : Acc v)
+    (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
+    (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) :
+    runCommand T (a.prepend q) x caller input onAnswer = (runCommand T a x caller input onAnswer).map (Acc.prepend q) := by
+  unfold runCommand
+  rw [execCommand_prepend]
+  refine map_bind_comm _ _ _ _ _ fun r => ?_
+  cases r with
+  | invalid => rfl
+  | accepted a1 => exact applyEvents_prepend T q _ a1
+  | rejected a1 j => exact applyEvents_prepend T q _ a1
+
+theorem execQuery_prepend (q : Bag (Pending v.event)) (s : State v) (x : QueryV v.records v.caller)
+    (caller : v.caller.den0) (input : x.input.den0) : execQuery (s.prepend q) x caller input = execQuery s x caller input :=
+  rfl
 
 theorem runQuery_prepend (T : List TypeDecl) (q : Bag (Pending v.event)) (a : Acc v) (x : QueryV v.records v.caller)
     (caller : v.caller.den0) (input : x.input.den0) (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) :
     runQuery T (a.prepend q) x caller input onAnswer = (runQuery T a x caller input onAnswer).map (Acc.prepend q) := by
   unfold runQuery
+  rw [Acc.prepend_state, execQuery_prepend]
   split
   · rfl
   · exact applyEvents_prepend T q _ _
@@ -211,24 +231,19 @@ theorem step_perm (T : List TypeDecl) {v : ServiceV} {s t : State v} (h : s.Equi
       Acc.prepend q { state := { e with fresh := e.fresh + 1 } } := fun _ => rfl
   cases i with
   | command i caller input =>
-    simp only [step, State.prepend_records, State.prepend_now, State.prepend_fresh, State.prepend_machines,
-      State.prepend_nextId, ctx_prepend]
-    split
-    · exact hres { e with fresh := e.fresh + 1 } _ p p' hp
-    · split
-      · exact hres { e with fresh := e.fresh + 1 } _ p p' hp
-      · rename_i events _
-        rw [hacc, hacc]
-        erw [applyEvents_prepend, applyEvents_prepend]
-        cases applyEvents T { state := { e with fresh := e.fresh + 1 } } events with
-        | error => exact hres { e with fresh := e.fresh + 1 } _ p p' hp
-        | ok a =>
-          simp only [Except.map, Acc.prepend_state, State.prepend_records]
-          split
-          · exact hres { e with fresh := e.fresh + 1 } _ p p' hp
-          · exact finish_equiv T (State.Equiv.prepend (s := { e with fresh := e.fresh + 1 }) hp) (.ok a) hp _
+    simp only [step]
+    rw [show ({ state := e.prepend p } : Acc v) = Acc.prepend p { state := e } from rfl,
+      show ({ state := e.prepend p' } : Acc v) = Acc.prepend p' { state := e } from rfl,
+      execCommand_prepend, execCommand_prepend]
+    cases execCommand T { state := e } (v.commands.get i) caller input with
+    | error => exact hres { e with fresh := e.fresh + 1 } _ p p' hp
+    | ok r =>
+      cases r with
+      | invalid => exact hres { e with fresh := e.fresh + 1 } _ p p' hp
+      | rejected => exact hres { e with fresh := e.fresh + 1 } _ p p' hp
+      | accepted a => exact finish_equiv T (State.Equiv.prepend (s := { e with fresh := e.fresh + 1 }) hp) (.ok a) hp _
   | query i caller input =>
-    simp only [step, State.prepend_records, ctx_prepend]
+    simp only [step, execQuery_prepend]
     split
     · exact hres e _ p p' hp
     · exact hres e _ p p' hp

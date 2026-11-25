@@ -262,7 +262,7 @@ theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (call
   have hok := callers_any hd.caller hcc (v.queries.get i).callers ks hks eqs h2
   simp only [step]
   refine ⟨by split <;> rfl, ?_⟩
-  simp only [Step.admit]
+  simp only [Step.execQuery, Step.admit]
   by_cases hin : (v.queries.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true
   · simp only [hin, ite_true]
     have hic : Smt.Rel M L (v.queries.get i).input (Ty.up _ hd.input input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi

@@ -327,25 +327,46 @@ theorem applyEvents_inv (T : List TypeDecl) (hv : v.Reach P) (events : List v.ev
       obtain ⟨hs, he, hf⟩ := react_inv T hv a.state ev ha
       exact ih a1 (start_inv _ _ hs he hf h1) h
 
+/-- What a command leaves: its events applied after the fresh counter advances, or that alone on a rejection. -/
+theorem execCommand_acc (T : List TypeDecl) (a : Acc v) (x : CommandV v.records v.event v.caller)
+    (caller : v.caller.den0) (input : x.input.den0) {r : Ran v x.rejection} (h : execCommand T a x caller input = .ok r)
+    (a' : Acc v) (ha' : r = .accepted a' ∨ ∃ j, r = .rejected a' j) :
+    a' = { a with state := { a.state with fresh := a.state.fresh + 1 } } ∨
+      ∃ evs, applyEvents T { a with state := { a.state with fresh := a.state.fresh + 1 } } evs = .ok a' := by
+  simp only [execCommand] at h
+  split at h
+  · cases h; rcases ha' with h | ⟨_, h⟩ <;> cases h
+  · split at h
+    · simp only [bind, Except.bind] at h
+      split at h
+      · cases h
+      · rename_i a1 h1
+        split at h
+        · cases h
+        · cases h; rcases ha' with h | ⟨_, h⟩ <;> cases h; exact .inr ⟨_, h1⟩
+    · cases h; rcases ha' with h | ⟨_, h⟩ <;> cases h; exact .inl rfl
+
+theorem execCommand_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state)
+    (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) {r : Ran v x.rejection}
+    (h : execCommand T a x caller input = .ok r) (a' : Acc v) (ha' : r = .accepted a' ∨ ∃ j, r = .rejected a' j) :
+    Inv P a'.state := by
+  rcases execCommand_acc T a x caller input h a' ha' with rfl | ⟨_, he⟩
+  · exact Inv.congr ha rfl rfl rfl
+  · exact applyEvents_inv T hv _ { a with state := { a.state with fresh := a.state.fresh + 1 } } (Inv.congr ha rfl rfl rfl) he
+
 theorem runCommand_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state)
     (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) {a' : Acc v}
     (h : runCommand T a x caller input onAnswer = .ok a') : Inv P a'.state := by
-  have hfresh : ∀ k, Inv P ({ a with state := { a.state with fresh := k } } : Acc v).state :=
-    fun _ => Inv.congr ha rfl rfl rfl
-  simp only [runCommand] at h
+  simp only [runCommand, bind, Except.bind] at h
   split at h
   · cases h
-  · simp only [bind, Except.bind] at h
+  · rename_i r hr
+    have hi := execCommand_inv T hv a ha x caller input hr
     split at h
-    · split at h
-      · cases h
-      · rename_i a1 h1
-        have h1' := applyEvents_inv T hv _ _ (hfresh _) h1
-        split at h
-        · cases h
-        · exact applyEvents_inv T hv _ _ h1' h
-    · exact applyEvents_inv T hv _ _ (hfresh _) h
+    · cases h
+    · exact applyEvents_inv T hv _ _ (hi _ (.inl rfl)) h
+    · exact applyEvents_inv T hv _ _ (hi _ (.inr ⟨_, rfl⟩)) h
 
 theorem runQuery_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state)
     (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0)
@@ -467,25 +488,24 @@ theorem applyEvents_queue (T : List TypeDecl) (hv : v.Reach P) (events : List v.
 
 theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state) (hq : QueueOk P a)
     (eff : EffectV v.event) {a' : Acc v} (h : runOwn T a eff = .ok a') : QueueOk P a' := by
-  have hfresh : ∀ k, Inv P ({ a with state := { a.state with fresh := k } } : Acc v).state :=
-    fun _ => Inv.congr ha rfl rfl rfl
   have hcmd : ∀ (x : CommandV v.records v.event v.caller) caller input onAnswer,
       runCommand T a x caller input onAnswer = .ok a' → QueueOk P a' := by
     intro x caller input onAnswer h
-    simp only [runCommand] at h
+    simp only [runCommand, bind, Except.bind] at h
     split at h
     · cases h
-    · simp only [bind, Except.bind] at h
+    · rename_i r hr
+      have hq1 : ∀ a1, (r = .accepted a1 ∨ ∃ j, r = .rejected a1 j) → Inv P a1.state ∧ QueueOk P a1 := by
+        intro a1 ha1
+        refine ⟨execCommand_inv T hv a ha x caller input hr a1 ha1, ?_⟩
+        rcases execCommand_acc T a x caller input hr a1 ha1 with rfl | ⟨_, he⟩
+        · exact hq
+        · exact applyEvents_queue T hv _ { a with state := { a.state with fresh := a.state.fresh + 1 } } he
+            (Inv.congr ha rfl rfl rfl) hq
       split at h
-      · split at h
-        · cases h
-        · rename_i a1 h1
-          have h1i := applyEvents_inv T hv _ _ (hfresh _) h1
-          have h1q := applyEvents_queue T hv _ _ h1 (hfresh _) hq
-          split at h
-          · cases h
-          · exact applyEvents_queue T hv _ _ h h1i h1q
-      · exact applyEvents_queue T hv _ _ h (hfresh _) hq
+      · cases h
+      · obtain ⟨h1, h2⟩ := hq1 _ (.inl rfl); exact applyEvents_queue T hv _ _ h h1 h2
+      · obtain ⟨h1, h2⟩ := hq1 _ (.inr ⟨_, rfl⟩); exact applyEvents_queue T hv _ _ h h1 h2
   have hqry : ∀ (x : QueryV v.records v.caller) caller input onAnswer,
       runQuery T a x caller input onAnswer = .ok a' → QueueOk P a' := by
     intro x caller input onAnswer h
@@ -562,15 +582,11 @@ theorem step_inv (T : List TypeDecl) {P : List AnySite} {v : ServiceV} (hv : v.R
     simp only [step]
     split
     · exact hfresh _
-    · split
-      · exact hfresh _
-      · split
-        · exact hfresh _
-        · rename_i a ha
-          split
-          · exact hfresh _
-          · exact finish_inv T hv _ (hfresh _) _ (fun a' h => by
-              cases h; exact applyEvents_inv T hv _ _ (hfresh _) ha) _
+    · exact hfresh _
+    · exact hfresh _
+    · rename_i a ha
+      exact finish_inv T hv _ (hfresh _) _ (fun a' h => by
+        cases h; exact execCommand_inv T hv _ hs _ _ _ ha _ (.inl rfl)) _
   | query i caller input =>
     simp only [step]
     split <;> exact hs

@@ -280,7 +280,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
     exact hinv.machines sm hsm
   have hcc0 : Smt.Rel M L v.caller (Ty.up _ hd.caller caller) cc0 := (rel_ofTerm (need_ok.1 h1) _).2 hsc
   have hok := callers_any hd.caller hcc0 x.callers ks hks eqs h2
-  simp only [r, Step.runCommand, Step.admit]
+  simp only [r, Step.runCommand, Step.execCommand, Step.admit, bind, Except.bind]
   cases hin : x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
   case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
   simp only [hok, hin, Val.toBool, ite_true]
@@ -419,7 +419,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
     | cons n ns =>
       obtain ⟨ps1, hps1⟩ := newsRel_writes p4
       erw [p7 ps1 hps1]
-      simp only [Step.Acc.wrote, Step.Acc.queued, bind, Except.bind]
+      simp only [Step.Acc.wrote, Step.Acc.queued]
       erw [hbe']
     | nil =>
     have hallE : (allT (ensures.map (·.2))).denote M = .bool true := by
@@ -474,7 +474,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
         simp [a2', Step.Acc.wrote, Step.Acc.queued, hpA, N1, a1]
       erw [hs2, Step.reactAll_with T sA _ N1] at q7
       erw [p7 ps1 hps1]
-      simp only [bind, Except.bind]
+      dsimp only
       erw [hbe']
       dsimp only
       rw [show (({ a1 with state := sA, events := @HAppend.hAppend (List v.event.den0) (List v.event.den0) _ _ a1.events events } : Step.Acc v).wrote ps1
@@ -856,7 +856,7 @@ theorem ownQuery_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
   cases pure_ok.1 henc
   have hcc0 : Smt.Rel M L v.caller (Ty.up _ hd.caller caller) cc0 := (rel_ofTerm (need_ok.1 h1) _).2 hsc
   have hok := callers_any hd.caller hcc0 x.callers ks hks eqs h2
-  simp only [r, Step.runQuery, Step.admit]
+  simp only [r, Step.runQuery, Step.execQuery, Step.admit]
   cases hin : x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
   case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
   simp only [hok, hin, Val.toBool, ite_true]

@@ -129,7 +129,7 @@ theorem command_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx
   cases pure_ok.1 henc
   have hcc0 : Smt.Rel M L v.caller (Ty.up _ hd.caller caller) cc0 := (rel_ofTerm (need_ok.1 h1) _).2 hsc
   have hok := callers_any hd.caller hcc0 (v.commands.get i).callers ks hks eqs h2
-  simp only [r, s', step, Step.admit]
+  simp only [r, s', step, Step.execCommand, Step.admit, bind, Except.bind]
   cases hin : (v.commands.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
   case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
   simp only [hok, hin, Val.toBool, ite_true]

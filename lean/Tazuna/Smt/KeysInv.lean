@@ -121,25 +121,27 @@ theorem applyEvents_keys (events : List v.event.den0) :
     · rename_i a1 h1
       exact ih a1 ((react_keys T a.state ev ha).congr T (start_machines _ _ h1)) h
 
+theorem execCommand_keys (a : Acc v) (ha : KeysOk T a.state) (x : CommandV v.records v.event v.caller)
+    (caller : v.caller.den0) (input : x.input.den0) {r : Ran v x.rejection} (h : execCommand T a x caller input = .ok r)
+    (a' : Acc v) (ha' : r = .accepted a' ∨ ∃ j, r = .rejected a' j) : KeysOk T a'.state := by
+  rcases execCommand_acc T a x caller input h a' ha' with rfl | ⟨_, he⟩
+  · exact ha
+  · exact applyEvents_keys T _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ha he
+
 theorem runOwn_keys (a : Acc v) (ha : KeysOk T a.state) (eff : EffectV v.event) {a' : Acc v}
     (h : runOwn T a eff = .ok a') : KeysOk T a'.state := by
   have hcmd : ∀ (x : CommandV v.records v.event v.caller) caller input onAnswer {a' : Acc v},
       runCommand T a x caller input onAnswer = .ok a' → KeysOk T a'.state := by
     intro x caller input onAnswer a' h
-    have hfresh : ∀ k, KeysOk T ({ a with state := { a.state with fresh := k } } : Acc v).state := fun _ => ha
-    simp only [runCommand] at h
+    simp only [runCommand, bind, Except.bind] at h
     split at h
     · cases h
-    · simp only [bind, Except.bind] at h
+    · rename_i r hr
+      have hk := execCommand_keys T a ha x caller input hr
       split at h
-      · split at h
-        · cases h
-        · rename_i a1 h1
-          have h1' := applyEvents_keys T _ _ (hfresh _) h1
-          split at h
-          · cases h
-          · exact applyEvents_keys T _ _ h1' h
-      · exact applyEvents_keys T _ _ (hfresh _) h
+      · cases h
+      · exact applyEvents_keys T _ _ (hk _ (.inl rfl)) h
+      · exact applyEvents_keys T _ _ (hk _ (.inr ⟨_, rfl⟩)) h
   have hqry : ∀ (x : QueryV v.records v.caller) caller input onAnswer {a' : Acc v},
       runQuery T a x caller input onAnswer = .ok a' → KeysOk T a'.state := by
     intro x caller input onAnswer a' h
@@ -232,15 +234,11 @@ theorem step_keys (T : List TypeDecl) {v : ServiceV} (s : State v) (hs : KeysOk 
     simp only [step]
     split
     · exact hs
-    · split
-      · exact hs
-      · split
-        · exact hs
-        · rename_i a ha
-          split
-          · exact hs
-          · exact finish_keys T { s with fresh := s.fresh + 1 } hs (.ok a) (fun a' h => by
-              cases h; exact applyEvents_keys T _ _ hs ha) _
+    · exact hs
+    · exact hs
+    · rename_i a ha
+      exact finish_keys T { s with fresh := s.fresh + 1 } hs (.ok a) (fun a' h => by
+        cases h; exact execCommand_keys T _ hs _ _ _ ha _ (.inl rfl)) _
   | query i caller input =>
     simp only [step]
     split <;> exact hs
