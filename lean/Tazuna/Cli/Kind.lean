@@ -36,7 +36,7 @@ inductive Tazuna.UndecidedKind : Type
   /-- The solver answered unknown or ran out of time or resources. -/
   | unknown
   /-- The spec uses what the encoding has no terms for, or a pair's counterexample needs a search for a renaming
-  larger than prove runs. -/
+  larger than prove runs or a comparison of the functions its two orders keep. -/
   | limit
   /-- A string literal holds a code point above U+2FFFF, outside SMT-LIB's strings. -/
   | unencodableString

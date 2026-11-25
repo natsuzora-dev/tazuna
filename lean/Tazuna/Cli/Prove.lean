@@ -158,6 +158,7 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .unsortable t => s!"a value of {tyText T t} holds a type variable or a structure value"
   | .slots t => s!"a value the spec writes of {tyText T t} holds more items than its bounds give"
   | .renamings n => s!"the two steps sent {n} requests, more than the {wireSearchCap} whose renamings are searched"
+  | .keptFunctions => "the two orders end with the same data but keep different functions, whose results are not compared"
 
 /-- Every bound a step of the service can go past: each table and bag type of its layout, with the bound its slots
 come from, and the pending requests where the service has a request shape. A list's slots are its type's longest
@@ -302,8 +303,9 @@ def orderWire (T : List TypeDecl) {v : ServiceV} : Except Fault (Acc v) → Show
     pure (.obj [("outcome", .str "accepted"), ("state", st), ("events", .arr evs), ("queued", .arr own)])
 
 /-- The report of a pair's target question (`pairQuestions`): a model is a state and two own effects whose two orders
-the solver finds different with each effect keeping the ids it made. Lean runs both orders from the model's state;
-where they agree up to renaming the ids the pair made (`pairOrders`), the line is undecided, else violated. -/
+the solver finds different with each effect keeping the ids it made. Lean runs both orders from the model's state
+(`pairOrders`): where they agree up to renaming the ids the pair made, or differ only in the functions they keep, the
+line is undecided, else violated. -/
 def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : String) (a : Smt.Answer) : Except String Report :=
   match a with
   | .unsat => .ok (.unsat v.name step (some g))
@@ -330,6 +332,8 @@ def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : St
         else match r with
           | .capped n =>
             .ok (.undecided (.undecided .limit) v.name step (some g) (shown [("limit", Json.str ((Limit.renamings n).text c.T))]))
+          | .keptDiffer =>
+            .ok (.undecided (.undecided .limit) v.name step (some g) (shown [("limit", Json.str (Limit.keptFunctions.text c.T))]))
           | _ => .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown []))
     | _, _, _ => .error s!"a model of {step} does not decode"
 

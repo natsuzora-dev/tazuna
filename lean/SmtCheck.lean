@@ -3565,29 +3565,42 @@ def pairEffect (L : Layout) : Val → Option (OwnEffectV evT)
       .command name .str .int .str c i (pairOnAnswer.fn ())
   | _ => none
 
-/-- The pair questions of `v`'s own kinds in its layout at 3 slots: each listed pair's target question must be unsat
-when it commutes, and otherwise sat with a model whose state and effects do not commute in Lean. -/
-def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : List (String × Nat × Nat × Bool))
+/-- What a fixture's pair question must give: unsat, or a model whose two orders Lean finds not commuting
+(`PairOrders.violated`), or one whose orders Lean finds the same in data but keeping different functions. -/
+inductive PairWant where
+  | commutes
+  | violated
+  | keptDiffer
+
+/-- The pair questions of `v`'s own kinds in its layout at 3 slots: each listed pair's target question must give what
+the case wants. -/
+def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : List (String × Nat × Nat × PairWant))
     (hev : v.event = evT) : IO Bool := do
   let L := pairLayoutFor v 3
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: pair questions ({v.name}): {m}"; return false
   let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
   let mut ok := true
-  for (name, k1, k2, commutes) in cases do
+  for (name, k1, k2, want) in cases do
     let (.ok p1, .ok p2) := (ownPlace L v.event k1, ownPlace L v.event k2) | ok ← fail s!"{name}: no own kind"
     match pairQuestions L prelude sites v senv p1 p2 with
     | .error r => ok ← fail s!"{name}: no questions: {repr r}"
     | .ok (_, tq) =>
-      match ← solver.run tq.script, commutes with
-      | .unsat, true => pure ()
-      | .sat vs, false =>
+      match ← solver.run tq.script, want with
+      | .unsat, .commutes => pure ()
+      | .sat vs, .violated | .sat vs, .keptDiffer =>
         let M := modelOf vs
         let n := pairVar v
         match (SymState.vars (v := v) 0).decode M L prelude (shapes v), pairEffect L (M.vars n),
             pairEffect L (M.vars (n + 1)) with
         | some s, some e1, some e2 =>
-          unless (pairOrders prelude { state := s } (hev ▸ e1) (hev ▸ e2)).toOption.any (·.violated) do
-            ok ← fail s!"{name}: the model's effects commute in Lean"
+          let got := (pairOrders prelude { state := s } (hev ▸ e1) (hev ▸ e2)).toOption
+          match want with
+          | .keptDiffer =>
+            unless got.any (fun | .keptDiffer => true | _ => false) do
+              ok ← fail s!"{name}: the model's orders do not differ only in kept functions in Lean"
+          | _ =>
+            unless got.any (·.violated) do
+              ok ← fail s!"{name}: the model's effects commute in Lean"
         | _, _, _ => ok ← fail s!"{name}: the model does not decode"
       | a, _ => ok ← fail s!"{name}: {repr a}"
   return ok
@@ -3596,7 +3609,10 @@ def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : L
 the event's key, or `count`, which sends how many rows the records hold, each `on_answer` capturing the event's key.
 Two `ins` with `echo` commute: each sends the same request at the same wire id counted from where its step starts,
 whichever runs first, so the question is unsat. With `count` the first `ins` sends one row fewer than it does after
-the other `ins`, so the question is sat and the model's effects must not commute in Lean. -/
+the other `ins`, so the question, which keeps each step's wire ids, is sat; with the wire ids swapped the two orders
+send the same counts, and differ only in which key each `on_answer` captures. `on_answer` ignores it, so the orders
+behave alike, but Lean does not compare what functions do: the model must read as differing only in kept functions,
+never as not commuting. -/
 
 def reqCtxT : Ty := Ty.reactionCtx recordsT
 
@@ -3634,10 +3650,11 @@ def reqTarget (slots : Nat) : Except String Script := do
   pure tq.script
 
 def pairCheck (solver : Solver) : IO Bool := do
-  let a ← pairCases solver pairSvc pairSites [("ins ins", 0, 0, true), ("set set", 1, 1, false),
-    ("ins cap", 0, 2, false)] rfl
-  let b ← pairCases solver (reqSvc "echo" echoE) (reqSites (reqSvc "echo" echoE)) [("ins ins", 0, 0, true)] rfl
-  let c ← pairCases solver (reqSvc "count" countE) (reqSites (reqSvc "count" countE)) [("ins ins", 0, 0, false)] rfl
+  let a ← pairCases solver pairSvc pairSites [("ins ins", 0, 0, .commutes), ("set set", 1, 1, .violated),
+    ("ins cap", 0, 2, .violated)] rfl
+  let b ← pairCases solver (reqSvc "echo" echoE) (reqSites (reqSvc "echo" echoE)) [("ins ins", 0, 0, .commutes)] rfl
+  let c ← pairCases solver (reqSvc "count" countE) (reqSites (reqSvc "count" countE))
+    [("ins ins", 0, 0, .keptDiffer)] rfl
   return a && b && c
 
 /-! Every question family can be sat (a sort with no value, or a context no model meets, would make every question of

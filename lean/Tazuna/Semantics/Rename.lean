@@ -417,6 +417,50 @@ theorem Ty.canonAlts_iff : (k : Nat) → (vs : List (List Ty)) → Ty.comparable
     omega
 end
 
+theorem Multi.sort_map {α β γ : Type} [Ord γ] [Std.TransOrd γ] [Std.LawfulEqOrd γ] {r : α → β → Prop}
+    {f : α → γ} {g : β → γ} (h : ∀ a b, r a b → f a = g b) {xs : List α} {ys : List β} :
+    Multi r xs ys → Erl.sort (xs.map f) = Erl.sort (ys.map g)
+  | ⟨_, hz, hp⟩ => by rw [forall2_map_eq f g h hz]; exact (Erl.sort_eq_iff _ _).2 (hp.map g)
+
+mutual
+/-- Related data values are one term once each side's counters are renamed so that related counters meet:
+`Ty.canonBy` reads exactly what `Ty.rel0` compares by equality, and reads functions as nothing. -/
+theorem Ty.canonBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') :
+    (t : Ty) → (x y : t.den0) → Ty.rel0 R t x y → Ty.canonBy σ' t x = Ty.canonBy σ t y
+  | .int, _, _, h | .str, _, _, h | .date, _, _, h => by
+    show Ty.canonBy σ' _ _ = Ty.canonBy σ _ _
+    cases h; rfl
+  | .list t, _, _, h => congrArg Erl.list (forall2_map_eq _ _ (Ty.canonBy_rel hσ t) h)
+  | .bag t, _, _, h => congrArg Erl.list (Multi.sort_map (Ty.canonBy_rel hσ t) h)
+  | .table k v, x, y, h => by
+    have e := Multi.sort_map (f := fun e => (Ty.canonBy σ' k e.1, Ty.canonBy σ' v e.2))
+      (g := fun e => (Ty.canonBy σ k e.1, Ty.canonBy σ v e.2))
+      (fun a b hab => by rw [Ty.canonBy_rel hσ k _ _ hab.1, Ty.canonBy_rel hσ v _ _ hab.2]) h
+    simp only [Ty.canonBy, e]
+  | .tuple ts, x, y, h => congrArg Erl.tuple (Ty.canonsBy_rel hσ ts x y h)
+  | .adt _ _ vs, x, y, h => Ty.canonAltsBy_rel hσ 0 vs x y h
+  | .fn .., _, _, _ | .param _, _, _, _ => rfl
+  | .id, x, y, h => by
+    rcases h with ⟨s, rfl, rfl⟩ | ⟨c, c', i, hc, rfl, rfl⟩
+    · rfl
+    · simp only [Ty.canonBy, hσ hc]
+  | .dsl k _, x, y, h => by
+    cases k <;> first | rfl | exact congrArg (fun n : Nat => Erl.int n) (hσ h)
+theorem Ty.canonsBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') :
+    (ts : List Ty) → (x y : (Ty.semsWith Dsl.base ts).1) → Ty.relsWith Dsl.base (Dsl.rel0 R) R ts x y →
+    Ty.canonsBy σ' ts x = Ty.canonsBy σ ts y
+  | [], (), (), _ => rfl
+  | t :: ts, (x, xs), (y, ys), ⟨h, hs⟩ => by
+    simp only [Ty.canonsBy, Ty.canonBy_rel hσ t x y h, Ty.canonsBy_rel hσ ts xs ys hs]
+theorem Ty.canonAltsBy_rel {R : PBij} {σ σ' : Nat → Nat} (hσ : ∀ {c c'}, R.rel c c' → σ' c = σ c') (k : Nat) :
+    (vs : List (List Ty)) → (x y : (Ty.semAltsWith Dsl.base vs).1) →
+    Ty.relAltsWith Dsl.base (Dsl.rel0 R) R vs x y → Ty.canonAltsBy σ' k vs x = Ty.canonAltsBy σ k vs y
+  | [], x, _, _ => nomatch x
+  | fs :: _, .inl x, .inl y, h => by simp only [Ty.canonAltsBy, Ty.canonsBy_rel hσ fs x y h]
+  | _ :: vs, .inr x, .inr y, h => Ty.canonAltsBy_rel hσ (k + 1) vs x y h
+  | _ :: _, .inl _, .inr _, h | _ :: _, .inr _, .inl _, h => h.elim
+end
+
 end Canon
 
 /-- Gleam's `==` on data, as data values carry it. -/

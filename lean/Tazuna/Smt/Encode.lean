@@ -35,6 +35,10 @@ inductive Limit where
   a renaming of their wire ids takes (`wireSearchCap`), so whether the orders end the same is not known. Never an
   encoder's refusal: prove reads it from a pair's counterexample. -/
   | renamings (sends : Nat)
+  /-- Two own steps whose orders end with the same data up to renaming keep different functions (by site or captured
+  values), and what functions do is not compared, so whether the orders end the same is not known. Never an encoder's
+  refusal: prove reads it from a pair's counterexample. -/
+  | keptFunctions
 deriving Repr
 
 /-- What a layout lacks that an encoding needs. A layout built for the program has none of these. -/

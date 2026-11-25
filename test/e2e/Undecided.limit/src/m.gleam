@@ -16,7 +16,10 @@ pub type Caller {
 fn apply(r: Records, e: Event) -> Records {
   case e {
     Seen(n) ->
-      Records(seen: table.insert(r.seen, n, n), last: table.insert(r.last, n, n))
+      Records(
+        seen: table.insert(r.seen, n, n),
+        last: table.insert(r.last, n, n),
+      )
   }
 }
 
@@ -54,6 +57,125 @@ fn watcher() -> tazuna.Service {
   )
 }
 
+// The two orders of asker's own commands end with the same data but keep different on_answer functions, whose
+// results prove does not compare.
+pub type AskRecords {
+  AskRecords(flag: Bool)
+}
+
+pub type AskEvent {
+  Went
+  Set
+  Asked
+}
+
+fn ask_apply(r: AskRecords, e: AskEvent) -> AskRecords {
+  case e {
+    Set -> AskRecords(flag: True)
+    _ -> r
+  }
+}
+
+fn go() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, Nil) {
+  tazuna.command(
+    name: "go",
+    callers: [User],
+    accepts: fn(_n: Nil) { [] },
+    decide: fn(_c: Ctx(AskRecords, Nil, Caller)) { Ok([Went]) },
+    ensures: fn(_c, _r) { [] },
+  )
+}
+
+fn set() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, Nil) {
+  tazuna.command(
+    name: "set",
+    callers: [User],
+    accepts: fn(_n: Nil) { [] },
+    decide: fn(_c: Ctx(AskRecords, Nil, Caller)) { Ok([Set]) },
+    ensures: fn(_c, _r) { [] },
+  )
+}
+
+fn ask() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, Nil) {
+  tazuna.command(
+    name: "ask",
+    callers: [User],
+    accepts: fn(_n: Nil) { [] },
+    decide: fn(_c: Ctx(AskRecords, Nil, Caller)) { Ok([Asked]) },
+    ensures: fn(_c, _r) { [] },
+  )
+}
+
+fn ping() -> tazuna.ExternalCommand(Int, Nil, Nil) {
+  tazuna.external_command(name: "ping")
+}
+
+fn both() -> tazuna.Reaction(AskRecords, AskEvent) {
+  tazuna.reaction(
+    name: "both",
+    react: fn(c: tazuna.ReactionCtx(AskRecords), e: AskEvent) {
+      case e {
+        Went -> [
+          tazuna.send_command(
+            command: set(),
+            caller: User,
+            input: Nil,
+            on_answer: fn(_a) { [] },
+          ),
+          tazuna.send_command(
+            command: ask(),
+            caller: User,
+            input: Nil,
+            on_answer: fn(_a) { [] },
+          ),
+        ]
+        Asked ->
+          case c.records.flag {
+            True -> [
+              tazuna.request_command(
+                command: ping(),
+                input: 1,
+                on_answer: fn(_a) { [] },
+              ),
+            ]
+            False -> [
+              tazuna.request_command(
+                command: ping(),
+                input: 1,
+                on_answer: fn(_b) { [] },
+              ),
+            ]
+          }
+        Set -> []
+      }
+    },
+  )
+}
+
+fn asker() -> tazuna.Service {
+  tazuna.service(
+    name: "asker",
+    init: AskRecords(flag: False),
+    apply: ask_apply,
+    subscribes: [],
+    declares: [
+      tazuna.declare_command(go()),
+      tazuna.declare_command(set()),
+      tazuna.declare_command(ask()),
+    ],
+    machines: [],
+    reactions: [both()],
+    invariants: fn(_r: AskRecords) { [] },
+    responses: [],
+    bounds: tazuna.bounds(creates: [], items: 2, cascade: 3, steps: 3),
+    scenarios: [],
+  )
+}
+
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(services: [watcher()], externals: [])
+  tazuna.spec(services: [watcher(), asker()], externals: [
+    tazuna.external(name: "mail", declares: [
+      tazuna.declare_external_command(ping()),
+    ]),
+  ])
 }
