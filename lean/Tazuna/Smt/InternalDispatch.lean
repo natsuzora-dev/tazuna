@@ -55,7 +55,7 @@ def OwnKindOut.fault? (M : Model) : OwnKindOut → Option Fault
       match brokenIn M o.rules with
       | n :: ns => some (.invalidEffect name (n :: ns))
       | [] =>
-        match (o.ok.denote M).toBool, brokenIn M o.ensures with
+        match (o.decided.ok.denote M).toBool, brokenIn M o.decided.ensures with
         | true, n :: _ => some (.ensures n)
         | _, _ => none
     else some (.invalidEffect name ["callers"])
@@ -117,7 +117,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     let σ ← need "captures that have no term" (tupleCodes da Γ (sel 2) 0)
     let (o, c) ← encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
     let fault := Term.or (.not o.callerOk)
-      (.or (.not (allT (o.rules.map (·.2)))) (.and o.ok (.not (allT (o.ensures.map (·.2))))))
+      (.or (.not (allT (o.rules.map (·.2)))) (.and o.decided.ok (.not (allT (o.decided.ensures.map (·.2))))))
     pure ⟨⟨.command x.name o,
       ⟨fault, o.done, .add fresh (.int 1)⟩⟩, c, cx⟩
   | .query x Γ site =>
@@ -149,7 +149,7 @@ end
 section
 variable {v : ServiceV}
 
-/-- Whether an own command's internal step fits from `s`: what `ownCommand_exact` says its condition holds for. -/
+/-- Whether an own command's internal step fits from `s`: what `ownCommand_encode` says its condition holds for. -/
 def ownCommandFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : CommandV v.records v.event v.caller)
     (caller : v.caller.den0) (input : x.input.den0)
     (oa : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) : Prop :=
@@ -258,23 +258,27 @@ theorem encodeOwnKind_width {P : List AnySite} {shs : List (PendingShape v.event
     cases pure_ok.1 h
     unfold encodeOwnCommand at henc
     obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨dc, _⟩, hd, henc⟩ := bind_ok.1 henc
+    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
     obtain ⟨_, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
+    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨_, _, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨o1, _⟩, h12, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o2, _⟩, h23, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
+    unfold encodeDecide at hd
+    obtain ⟨⟨_, _⟩, -, hd⟩ := bind_ok.1 hd
+    obtain ⟨_, -, hd⟩ := bind_ok.1 hd
+    obtain ⟨⟨_, _⟩, -, hd⟩ := bind_ok.1 hd
+    obtain ⟨⟨_, _, _⟩, -, hd⟩ := bind_ok.1 hd
+    obtain ⟨⟨o1, _⟩, h12, hd⟩ := bind_ok.1 hd
+    obtain ⟨_, -, hd⟩ := bind_ok.1 hd
+    obtain ⟨⟨_, _⟩, -, hd⟩ := bind_ok.1 hd
+    obtain ⟨_, -, hd⟩ := bind_ok.1 hd
+    cases pure_ok.1 hd
     have w1 := encodeEvents_width _ h12
     have w2 := encodeEvents_width _ h23
     exact ⟨width_append w1.1 w2.1, width_append w1.2 w2.2⟩
@@ -330,17 +334,15 @@ theorem ownQuery_mem {name : String} {i o : Ty} {x : QueryV v.records v.caller}
     · cases hf
   · cases hf
 
-theorem toBool_bool (b : Bool) : (Val.bool b).toBool = b := rfl
-
 theorem fault_command (name : String) (o : OwnCommandOut) :
     Term.denote M (.or (.not o.callerOk) (.or (.not (allT (o.rules.map (·.2))))
-      (.and o.ok (.not (allT (o.ensures.map (·.2))))))) = .bool ((OwnKindOut.command name o).fault? M).isSome := by
+      (.and o.decided.ok (.not (allT (o.decided.ensures.map (·.2))))))) = .bool ((OwnKindOut.command name o).fault? M).isSome := by
   simp only [Term.denote, allT_rules, OwnKindOut.fault?, toBool_bool]
   cases (o.callerOk.denote M).toBool
   · rfl
   · cases brokenIn M o.rules with
     | cons n ns => rfl
-    | nil => cases (o.ok.denote M).toBool <;> cases brokenIn M o.ensures <;> rfl
+    | nil => cases (o.decided.ok.denote M).toBool <;> cases brokenIn M o.decided.ensures <;> rfl
 
 theorem fault_query (name : String) (o : OwnQueryOut) :
     Term.denote M (.or (.not o.callerOk) (.not (allT (o.rules.map (·.2))))) =
@@ -447,13 +449,12 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
     have hsi : RelV L x.input (Ty.up _ hd.input value)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have H := ownCommand_rel chk hshs a hinv x caller value hcc hcx happ hca s oenv hσ' hks' senv
-      hrec hnow hfresh hn hq hms hsc hsi hoe hc
+    have H := (ownCommand_encode chk hshs a x caller value hcc hcx happ hca s oenv hσ'
+      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe).2 hc
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
     refine ⟨fault_command x.name o, ?_⟩
     simp only [OwnKindOut.fault?]
-    dsimp only at H
     split at H
     · rename_i hco
       simp only [hco, ite_true]
@@ -468,7 +469,7 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
           simp only [hok, hb']
           exact H
         · rename_i hne
-          have hnone : (match (o.ok.denote M).toBool, brokenIn M o.ensures with
+          have hnone : (match (o.decided.ok.denote M).toBool, brokenIn M o.decided.ensures with
               | true, n :: _ => some (Fault.ensures n)
               | _, _ => none) = none := by
             split
@@ -922,8 +923,8 @@ theorem ownKind_exact {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
       rw [hsel]; exact relD_up _ _ _ _ hvi
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
-    exact ownCommand_exact chk hshs a x caller value hcc hcx happ hca s oenv hσ'
-      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe
+    exact (ownCommand_encode chk hshs a x caller value hcc hcx happ hca s oenv hσ'
+      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe).1
   | query e name c0 i jj a0 =>
     cases x with
     | request => exact hkey.elim

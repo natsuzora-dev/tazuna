@@ -139,12 +139,12 @@ def StepOut.Rel (shs : List (PendingShape v.event)) (s : State v) :
       match brokenIn M o.rules with
       | n :: ns => r = ⟨s', .invalid (n :: ns), [], []⟩
       | [] =>
-        if (o.ok.denote M).toBool then
-          match brokenIn M o.ensures with
+        if (o.decided.ok.denote M).toBool then
+          match brokenIn M o.decided.ensures with
           | n :: _ => r = ⟨s', .fault (.ensures n), [], []⟩
           | [] => Finished M L T shs o.finish s' { state := s' } .accepted r
         else r.state = s' ∧ ∃ j, r.outcome = .rejected ⟨(v.commands.get i).rejection, j⟩ ∧
-          RelV L _ (Ty.up _ ((v.commands.get i).data).rejection j) (o.rejection.denote M)
+          RelV L _ (Ty.up _ ((v.commands.get i).data).rejection j) (o.decided.rejection.denote M)
     else r = ⟨s', .invalid ["callers"], [], []⟩
   | .query o, .query i _ _, r => r.state = s ∧ o.Rel M L ((v.queries.get i).data).output r.outcome
   | .answer o, .answer to _, r =>

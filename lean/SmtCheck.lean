@@ -697,14 +697,14 @@ def commandScript (goal : List Term) : Except String Script := do
   let some psrt := L.srt? (noPending commandSvc) | throw "no pending sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let [(an, ah)] := o.rules | throw "not one rule"
-  let [(en, eh)] := o.ensures | throw "not one ensures rule"
+  let [(en, eh)] := o.decided.ensures | throw "not one ensures rule"
   let [(iname, ih)] := o.finish.invariants | throw "not one invariant"
   pure { datatypes := dts,
          vars := [rsrt, .int, .int, .int, .str, .int, .bool, .bool, .str, .bool, .str, lsrt, .bool, .str, rsrt, .bool,
            .str, psrt],
-         asserts := [t.codes, t.sites, t.cond, wf, .eq (.var 6) o.callerOk, .eq (.var 7) ah, .eq (.var 8) an, .eq (.var 9) o.ok,
-           .eq (.var 10) o.rejection, .eq (.var 11) o.events, .eq (.var 12) eh, .eq (.var 13) en,
-           .eq (.var 14) o.after.records, .eq (.var 15) ih, .eq (.var 16) iname] ++ goal,
+         asserts := [t.codes, t.sites, t.cond, wf, .eq (.var 6) o.callerOk, .eq (.var 7) ah, .eq (.var 8) an, .eq (.var 9) o.decided.ok,
+           .eq (.var 10) o.decided.rejection, .eq (.var 11) o.decided.events, .eq (.var 12) eh, .eq (.var 13) en,
+           .eq (.var 14) o.decided.after.records, .eq (.var 15) ih, .eq (.var 16) iname] ++ goal,
          shows := List.range 18 }
 
 def commandCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := do
@@ -2587,7 +2587,7 @@ def internalScriptOf (slots : Nat) (goal : List Term) : Except String (Script ×
   let some msrt := L.srt? startM.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.answered.tables | throw "not one machine"
-  let news := o.decided.news ++ o.answered.news
+  let news := o.decided.after.news ++ o.answered.news
   let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) (xs.headD tt)]
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, .str, .int, rsrt, .int, msrt] ++
@@ -2885,7 +2885,8 @@ def namedRules (rs : List (Term × Term)) : Named (List (Term × Term)) :=
 def namedKind : OwnKindOut → Named OwnKindOut
   | .command name o => do
     pure (.command name { o with callerOk := ← named .bool o.callerOk, rules := ← namedRules o.rules,
-                                 ok := ← named .bool o.ok, ensures := ← namedRules o.ensures })
+                                 decided := { o.decided with ok := ← named .bool o.decided.ok,
+                                                             ensures := ← namedRules o.decided.ensures } })
   | .query name o => do
     pure (.query name { o with callerOk := ← named .bool o.callerOk, rules := ← namedRules o.rules })
   | .missing name => pure (.missing name)

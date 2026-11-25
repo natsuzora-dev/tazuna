@@ -9,17 +9,12 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-/-- The terms of a command step's outcome: whether the caller is listed and the `accepts` rules, whether `decide`
-accepted, its rejection and its events, what the events loop leaves, the `ensures` rules on the records after, and the
-step's end. -/
+/-- The terms of a command step's outcome: whether the caller is listed and the `accepts` rules, `decide` and what
+follows it, and the step's end. -/
 structure CommandOut where
   callerOk : Term
   rules : List (Term × Term)
-  ok : Term
-  rejection : Term
-  events : Term
-  after : EventsOut
-  ensures : List (Term × Term)
+  decided : DecideOut
   finish : FinishOut
 
 section
@@ -27,51 +22,34 @@ variable (L : Layout) (T : List TypeDecl)
 
 /-- A command step's outcome terms, its condition and the codes' condition, from the codes of the command's and the
 service's functions, the terms of the state, the caller and the input, and the listed callers' constants. The
-condition asks only for what the step computes. -/
+condition asks only for what the step computes: the step's end only where `decide` accepted and `ensures` held. -/
 def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (callers : List Term)
     (S : SymState) (caller input : Term) :
     Except Refusal (Encoded CommandOut) := do
   let (a, c1) ← encodeAdmit L cc.accepts callers S.records S.now S.fresh caller input
-  let (res, c2) ← cc.decide (a.ctx, ())
-  let rest ← need "a result that has no term" (Code.term? _ res)
-  let (d, _) ← need "a layout without the result type" (L.find? (Ty.result (.list v.event) x.rejection))
-  let res := Term.share rest
-  let evs := Term.sel d 0 0 res
-  let (dl, n, dt) ← collD L (.list v.event) [v.event]
-  let (o, c3) ← encodeEvents L T v shs senv apply S.now (slotsOf dl dt n 1 evs) S.records S.machines S.nextId (.int 0)
-  let rfc ← need "records that have no term" (Code.ofTerm? v.records o.records)
-  let (ens, c4) ← cc.ensures (a.ctx, rfc, ())
-  let ensures ← ruleTerms L ens
-  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending o
-  let ok := Term.is d 0 res
-  pure ⟨⟨a.callerOk, a.rules, ok, .sel d 1 0 res, evs, o, ensures, fo⟩,
-    .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) (andT c2 (.ite ok (andT c3 (andT c4
-      (.ite (allT (ensures.map (·.2))) cf tt))) tt)) tt)) tt, cfx⟩
-
-end
-
-section
-variable {M : Model} {L : Layout} {T : List TypeDecl}
+  let (dc, cd) ← encodeDecide L T v shs senv x cc apply a.ctx S.now S.records S.machines S.nextId (.int 0)
+  let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending dc.after
+  pure ⟨⟨a.callerOk, a.rules, dc, fo⟩,
+    .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2)))
+      (andT cd (.ite (.and dc.ok (allT (dc.ensures.map (·.2)))) cf tt)) tt)) tt, cfx⟩
 
 end
 
 section
 variable {v : ServiceV}
 
-/-- Whether what a command step does after `decide` fits, for what `decide` returned: on acceptance, the events'
-applications in turn from `s` (`eventsFit`), `ensures` at the records they leave and, where its rules hold, the step's
-end (`finishFits`). -/
+/-- Whether what a command step does after `decide` fits, for what `decide` returned: what follows it
+(`decideFits`) and, on acceptance where `ensures`' rules hold, the step's end (`finishFits`). -/
 def decidedFits (S : Ty → Nat) (T : List TypeDecl) (shs : List (PendingShape v.event)) (s : State v)
     (x : CommandV v.records v.event v.caller) (ctx : (Ty.ctx v.records x.input v.caller).den0) :
     (Ty.result (.list v.event) x.rejection).den0 → Prop
   | .inl (events, ()) =>
-    let sA := Step.reactAll T s events
-    eventsFit S T s events ∧ x.ensures.appFits S (ctx, sA.1.records, ()) ∧
-      (Step.broken (x.ensures.fn (ctx, sA.1.records, ())) = [] →
+    decideFits S T s x ctx (.inl (events, ())) ∧
+      (Step.broken (x.ensures.fn (ctx, (Step.reactAll T s events).1.records, ())) = [] →
         finishFits S T shs (Step.applyEvents T { state := s } events))
-  | .inr _ => True
+  | .inr r => decideFits S T s x ctx (.inr r)
 
 end
 
@@ -112,167 +90,90 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
         match brokenIn M o.rules with
         | n :: ns => r = ⟨s', .invalid (n :: ns), [], []⟩
         | [] =>
-          if (o.ok.denote M).toBool then
-            match brokenIn M o.ensures with
+          if (o.decided.ok.denote M).toBool then
+            match brokenIn M o.decided.ensures with
             | n :: _ => r = ⟨s', .fault (.ensures n), [], []⟩
             | [] => Finished M L T shs o.finish s' { state := s' } .accepted r
           else r.state = s' ∧ ∃ j, r.outcome = .rejected ⟨(v.commands.get i).rejection, j⟩ ∧
-            RelV L _ (Ty.up _ ((v.commands.get i).data).rejection j) (o.rejection.denote M)
+            RelV L _ (Ty.up _ ((v.commands.get i).data).rejection j) (o.decided.rejection.denote M)
       else r = ⟨s', .invalid ["callers"], [], []⟩) := by
   intro x ctx r s'
   have hcR := CommandCode.rel_of hcc hccx
   obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨res, c2⟩, h8, henc⟩ := bind_ok.1 henc
-  obtain ⟨rest, h9, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨d, dn⟩, h10, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨dl, n, dt⟩, h11, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨oe, c3⟩, h12, henc⟩ := bind_ok.1 henc
-  obtain ⟨rfc, h13, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨ens, c4⟩, h14, henc⟩ := bind_ok.1 henc
-  obtain ⟨ensures, h15, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨fo, cf, cfx'⟩, h16, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨dc, cd⟩, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨fo, cf, cfx'⟩, h3, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨hok, hbr, hcx⟩ := admit_rel v.records_data ((v.commands.get i).data).input ((v.commands.get i).data).caller ((v.commands.get i).data).ctx _ ((v.commands.get i).data).accepts hcR.accepts _ hks s caller input
+  obtain ⟨hok, hbr, hcx⟩ := admit_rel v.records_data ((v.commands.get i).data).input ((v.commands.get i).data).caller
+    ((v.commands.get i).data).ctx _ ((v.commands.get i).data).accepts hcR.accepts _ hks s caller input
     hR.records hR.now hR.fresh hsc hsi h1
+  let s1 : State v := { s with fresh := s.fresh + 1 }
+  have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
+  have D := decide_encode chk hshs x hcc hccx happ hca senv { state := s1 } ctx hcx hR.now hR.records hR.machines
+    hR.nextId (q := .int 0) (q0 := 0) rfl (fresh := .add S.fresh (.int 1)) (by simp [Term.denote, hR.fresh, s1, Val.toInt])
+    h2
+  have hfin := fun events (hacc : AccRel M L T shs { state := s1 } dc.after (.add S.fresh (.int 1)) 0
+      (Step.applyEvents T { state := s1 } events)) =>
+    finish_encode chk hshs happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hacc
+      (applyEvents_ok chk.reactions _ rfl hinv1 events) h3 hcfx
   refine ⟨?_, fun hc => ?_⟩
-  · obtain ⟨⟨a, c1'⟩, g1, hcc0⟩ := bind_ok.1 hcc
-    obtain ⟨⟨d', c2'⟩, g2, hcc0⟩ := bind_ok.1 hcc0
-    obtain ⟨⟨n', c3'⟩, g3, hcc0⟩ := bind_ok.1 hcc0
+  · obtain ⟨⟨_, c1'⟩, g1, hcc0⟩ := bind_ok.1 hcc
+    obtain ⟨_, -, hcc0⟩ := bind_ok.1 hcc0
+    obtain ⟨_, -, hcc0⟩ := bind_ok.1 hcc0
     cases pure_ok.1 hcc0
-    obtain ⟨hca1, hca23⟩ := (holds_andT _ _).1 hccx
-    obtain ⟨hca2, hca3⟩ := (holds_andT _ _).1 hca23
-    have happ' := v.apply.code_fn v.apply.ht happ hca
+    obtain ⟨hca1, -⟩ := (holds_andT _ _).1 hccx
     rw [holds_ite_tt (by rw [hok])]
     refine imp_congr_right fun _ => ?_
     rw [holds_andT]
     have e1 := admit_exact ((v.commands.get i).data).input x.accepts g1 hca1 input hsi h1
-    have hargs' := rels1 ((v.commands.get i).data).ctx ((v.commands.get i).data).ctxArgs hcx
-    have e2 : Holds M c2 ↔ x.decide.appFits L.count (ctx, ()) :=
-      x.decide.app_exact g2 hca2 (by simp [Ty.ctx, Ty.isFn]) _ _ hargs' h8
-    have hrest : Holds M c1 → (Holds M (.ite (allT (adm.rules.map (·.2))) (andT c2 (.ite (Term.is d 0 (Term.share rest))
-        (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) cf tt))) tt)) tt) ↔
+    have hrest : Holds M c1 → (Holds M (.ite (allT (adm.rules.map (·.2)))
+        (andT cd (.ite (.and dc.ok (allT (dc.ensures.map (·.2)))) cf tt)) tt) ↔
         (Step.broken (x.accepts.fn (input, ())) = [] →
-          x.decide.appFits L.count (ctx, ()) ∧
-            decidedFits L.count T shs { s with fresh := s.fresh + 1 } x ctx (x.decide.fn (ctx, ())))) := fun hc1 => by
-      have hbroken := hbr hc1
+          x.decide.appFits L.count (ctx, ()) ∧ decidedFits L.count T shs s1 x ctx (x.decide.fn (ctx, ())))) := fun hc1 => by
       have hall : ((allT (adm.rules.map (·.2))).denote M).toBool = decide (Step.broken (x.accepts.fn (input, ())) = []) := by
-        rw [toBool_allT_rules, hbroken]
+        rw [toBool_allT_rules, hbr hc1]
       rw [holds_ite_tt hall, decide_eq_true_iff]
       refine imp_congr_right fun _ => ?_
-      rw [holds_andT]
-      have hdec : Holds M c2 → (Holds M (.ite (Term.is d 0 (Term.share rest))
-          (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) cf tt))) tt) ↔
-          decidedFits L.count T shs { s with fresh := s.fresh + 1 } x ctx (x.decide.fn (ctx, ()))) := fun hc2 => by
-        have hres := hcR.decide _ (adm.ctx, ()) hargs' res c2 h8 hc2
-        erw [Ty.up_fn _ _ _ ((v.commands.get i).data).ctxArgs ((v.commands.get i).data).result] at hres
-        have hres' := (rel_term (need_ok.1 h9) _).1 hres
-        have hfd := need_ok.1 h10
-        have hsh : (Term.share rest).denote M = rest.denote M := Term.denote_share M rest
-        have hdata2 : (Ty.adt 2 [.list v.event, (v.commands.get i).rejection]
-            [[(v.commands.get i).rejection]]).isData = true := by
-          simp only [Ty.isData, Ty.isDatas, Ty.isDatass, ((v.commands.get i).data).rejection, Bool.and_true]
-        cases hdv : (v.commands.get i).decide.fn (Step.ctx s s.records caller input, ()) with
-        | inr q =>
-          match q, hdv with
-          | .inl (j, ()), hdv =>
-            rw [hdv] at hres'
-            erw [Ty.up_inr 2 _ _ _ ((v.commands.get i).data).result hdata2, Ty.up_inl 2 _ _ _ hdata2
-              (by simp only [Ty.isData, Ty.isDatas, ((v.commands.get i).data).rejection, Bool.and_true]),
-              Ty.up_tuple _ _ _ ((v.commands.get i).data).rejection rfl] at hres'
-            obtain ⟨d', n', hf', vals, hw, rv, rest', rfl, hrv, rfl⟩ := hres'
-            obtain rfl := find_det hfd hf'
-            have hok' : ((Term.is d 0 (Term.share rest)).denote M).toBool = false := by
-              simp [Term.denote, hsh, hw, Val.toBool]
-            rw [holds_ite_tt hok']
-            simp [decidedFits]
-          | .inr e, _ => exact e.elim
-        | inl p =>
-          obtain ⟨events, ⟨⟩⟩ := p
-          rw [hdv] at hres'
-          erw [Ty.up_inl 2 _ _ _ ((v.commands.get i).data).result (by simp only [Ty.isData, Ty.isDatas, v.event_data, Bool.and_true]),
-            Ty.up_tuple _ _ _ ((v.commands.get i).data).events rfl] at hres'
-          obtain ⟨d', n', hf', vals, hw, ev, rest', rfl, hev, rfl⟩ := hres'
-          obtain rfl := find_det hfd hf'
-          have hok' : ((Term.is d 0 (Term.share rest)).denote M).toBool = true := by
-            simp [Term.denote, hsh, hw, Val.toBool]
-          rw [holds_ite_tt hok']
-          simp only [true_implies, decidedFits]
-          have hevs : Smt.Rel M L (.list v.event) (Ty.up _ ((v.commands.get i).data).events events) (Term.sel d 0 0 (Term.share rest)) := by
-            show RelV _ _ _ _
-            rw [sel_ctor 0 (hsh.trans hw)]; exact hev
-          obtain ⟨sv, hS, -, hsw, hh⟩ := list_view hevs h11
-          erw [Ty.up_list _ _ v.event_data] at hh
-          let s1 : State v := { s with fresh := s.fresh + 1 }
-          let sA := (Step.reactAll T s1 events).1
-          have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
-          have e3 : Holds M c3 ↔ eventsFit L.count T s1 events :=
-            events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv hS hsw events hh s1 hR.now hR.records hR.machines h12
-          have hdone : Holds M c3 → AccRel M L T shs { state := s1 } oe (.add S.fresh (.int 1)) 0
-              (Step.applyEvents T { state := s1 } events) := fun hc3 =>
-            loop_acc (T := T) chk hshs happ' senv
-              { state := s1 } hR.now hS hsw hh hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl
-              (by simp [Term.denote, hR.fresh, s1, Val.toInt]) h12 hc3
-          have hrf : Holds M c3 → RelV L v.records (Ty.up _ v.records_data sA.records) (oe.records.denote M) := fun hc3 =>
-            (events_rel chk hshs happ' senv _ sv hS hsw
-              events hh s1 hR.now hR.records hR.machines hR.nextId rfl h12 hc3).1
-          have e45 : Holds M c3 → (Holds M c4 ↔ x.ensures.appFits L.count (ctx, sA.records, ())) ∧
-              (Holds M c4 → (Holds M (.ite (allT (ensures.map (·.2))) cf tt) ↔
-                (Step.broken (x.ensures.fn (ctx, sA.records, ())) = [] →
-                  finishFits L.count T shs (Step.applyEvents T { state := s1 } events)))) := by
-            intro hc3
-            have hrfc : Smt.Rel M L v.records (Ty.up _ v.records_data sA.records) rfc :=
-              (rel_ofTerm (need_ok.1 h13) _).2 (hrf hc3)
-            have hargs3 := rels2 ((v.commands.get i).data).ctx v.records_data ((v.commands.get i).data).ensArgs hcx hrfc
-            refine ⟨x.ensures.app_exact g3 hca3 (by
-              intro t ht
-              simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
-              rcases ht with rfl | rfl
-              · simp [Ty.ctx, Ty.isFn]
-              · exact ofTerm_notFn (need_ok.1 h13)) _ _ hargs3 h14, fun hc4 => ?_⟩
-            have hens := hcR.ensures _ _ hargs3 ens c4 h14 hc4
-            erw [Ty.up_fn _ Ty.rules _ ((v.commands.get i).data).ensArgs rfl] at hens
-            have hbe := rules_broken h15 _ hens
-            have hallE : ((allT (ensures.map (·.2))).denote M).toBool =
-                decide (Step.broken (x.ensures.fn (ctx, sA.records, ())) = []) := by
-              rw [allT_denote, Val.toBool, ← hbe]
-              by_cases hb : brokenIn M ensures = []
-              · simp [(brokenIn_nil ensures).1 hb, hb]
-              · have : (ensures.map (·.2)).all (fun t => (t.denote M).toBool) ≠ true := fun h =>
-                  hb ((brokenIn_nil (M := M) ensures).2 h)
-                simp [hb]; simpa using this
-            rw [holds_ite_tt hallE, decide_eq_true_iff]
-            refine imp_congr_right fun _ => ?_
-            exact (finish_encode chk hshs happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending (hdone hc3) (applyEvents_ok chk.reactions _ rfl hinv1 events)
-              h16 hcfx).1
-          rw [holds_andT, holds_andT]
-          constructor
-          · rintro ⟨hc3, hc4, hc5⟩
-            exact ⟨e3.1 hc3, ((e45 hc3).1).1 hc4, ((e45 hc3).2 hc4).1 hc5⟩
-          · rintro ⟨p3, p4, p5⟩
-            have hc3 := e3.2 p3
-            have hc4 := ((e45 hc3).1).2 p4
-            exact ⟨hc3, hc4, ((e45 hc3).2 hc4).2 p5⟩
-      constructor
-      · rintro ⟨hc2, hx⟩
-        exact ⟨e2.1 hc2, (hdec hc2).1 hx⟩
-      · rintro ⟨p2, px⟩
-        have hc2 := e2.2 p2
-        exact ⟨hc2, (hdec hc2).2 px⟩
+      rw [holds_andT, D.1]
+      have R := D.2
+      have E := D.1
+      revert R E
+      cases hdv : x.decide.fn (ctx, ()) with
+      | inr q =>
+        match q, hdv with
+        | .inl (j, ()), _ =>
+          intro R E
+          simp only [decidedFits]
+          refine ⟨fun h => h.1, fun h => ⟨h, ?_⟩⟩
+          obtain ⟨hokf, -, -⟩ := R (E.2 h)
+          rw [holds_ite_tt (b := false) (by simp only [Term.denote, toBool_bool, hokf, Bool.false_and])]
+          simp
+        | .inr e, _ => exact e.elim
+      | inl p =>
+        obtain ⟨events, ⟨⟩⟩ := p
+        intro R E
+        simp only [decidedFits]
+        have tail : x.decide.appFits L.count (ctx, ()) ∧ decideFits L.count T s1 x ctx (.inl (events, ())) →
+            (Holds M (.ite (.and dc.ok (allT (dc.ensures.map (·.2)))) cf tt) ↔
+              (Step.broken (x.ensures.fn (ctx, (Step.reactAll T s1 events).1.records, ())) = [] →
+                finishFits L.count T shs (Step.applyEvents T { state := s1 } events))) := fun h => by
+          obtain ⟨hokt, hbe, hacc, -⟩ := R (E.2 h)
+          rw [holds_ite_tt (b := decide (Step.broken (x.ensures.fn (ctx, (Step.reactAll T s1 events).1.records, ())) = []))
+            (by simp only [Term.denote, toBool_bool, hokt, toBool_allT_rules, hbe, Bool.true_and]), decide_eq_true_iff]
+          exact imp_congr_right fun _ => (hfin events hacc).1
+        exact ⟨fun ⟨⟨p2, pd⟩, ht⟩ => ⟨p2, pd, (tail ⟨p2, pd⟩).1 ht⟩,
+          fun ⟨p2, pd, pt⟩ => ⟨⟨p2, pd⟩, (tail ⟨p2, pd⟩).2 pt⟩⟩
     constructor
     · rintro ⟨hc1, hx⟩
       exact ⟨e1.1 hc1, (hrest hc1).1 hx⟩
     · rintro ⟨p1, px⟩
       have hc1 := e1.2 p1
       exact ⟨hc1, (hrest hc1).2 px⟩
-  · have happ0 := happ
-    have hinv0 := hinv
-    have happ := v.apply.code_fn v.apply.ht happ hca
-    simp only [r, s', step, Step.execCommand, Step.admit, bind, Except.bind]
+  · simp only [r, s', step, Step.execCommand, Step.admit, bind, Except.bind]
     cases hin : (v.commands.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
     case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
     simp only [hok, hin, Val.toBool, ite_true]
-    have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2))) (andT c2 (.ite (Term.is d 0 (Term.share rest))
-        (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) cf tt))) tt)) tt)) := by
+    have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2)))
+        (andT cd (.ite (.and dc.ok (allT (dc.ensures.map (·.2)))) cf tt)) tt)) := by
       simpa only [Holds, Term.denote, hok, hin, Val.toBool, ite_true] using hc
     rw [holds_andT] at hc'
     have hbroken := hbr hc'.1
@@ -281,86 +182,43 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     | cons n ns => rfl
     | nil =>
       simp only
-      have hallT : (allT (adm.rules.map (·.2))).denote M = .bool true := by
-        rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil adm.rules).1 (hbroken.trans hb))
-      have hc2' : Holds M (andT c2 (.ite (Term.is d 0 (Term.share rest))
-          (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) cf tt))) tt)) := by
-        have := hc'.2; simp only [Holds, Term.denote, hallT, Val.toBool, ite_true] at this; exact this
-      rw [holds_andT] at hc2'
-      have hres := hcR.decide _ (adm.ctx, ()) (rels1 ((v.commands.get i).data).ctx ((v.commands.get i).data).ctxArgs hcx) res c2 h8 hc2'.1
-      erw [Ty.up_fn _ _ _ ((v.commands.get i).data).ctxArgs ((v.commands.get i).data).result] at hres
-      have hres' := (rel_term (need_ok.1 h9) _).1 hres
-      have hfd := need_ok.1 h10
-      have hc2'' := hc2'.2
-      have hsh : (Term.share rest).denote M = rest.denote M := Term.denote_share M rest
-      have hdata2 : (Ty.adt 2 [.list v.event, (v.commands.get i).rejection] [[(v.commands.get i).rejection]]).isData = true := by
-        simp only [Ty.isData, Ty.isDatas, Ty.isDatass, ((v.commands.get i).data).rejection, Bool.and_true]
+      have hallT : ((allT (adm.rules.map (·.2))).denote M).toBool = true := by
+        rw [toBool_allT_rules, hbroken, hb]; rfl
+      have hcd' := (holds_ite_tt hallT).1 hc'.2 rfl
+      obtain ⟨hcd, hct⟩ := (holds_andT _ _).1 hcd'
+      have R := D.2 hcd
+      revert R
       cases hdec : (v.commands.get i).decide.fn (Step.ctx s s.records caller input, ()) with
       | inr q =>
         match q, hdec with
-        | .inl (j, ()), hdec =>
-          rw [hdec] at hres'
-          erw [Ty.up_inr 2 _ _ _ ((v.commands.get i).data).result hdata2, Ty.up_inl 2 _ _ _ hdata2 (by simp only [Ty.isData, Ty.isDatas, ((v.commands.get i).data).rejection, Bool.and_true]),
-            Ty.up_tuple _ _ _ ((v.commands.get i).data).rejection rfl] at hres'
-          obtain ⟨d', n', hf', vals, hw, rv, rest', rfl, hrv, rfl⟩ := hres'
-          obtain rfl := find_det hfd hf'
-          have hok' : (Term.is d 0 (Term.share rest)).denote M = .bool false := by
-            simp [Term.denote, hsh, hw]
-          simp only [hok', Bool.false_eq_true, ite_false]
-          refine ⟨by trivial, j, by trivial, ?_⟩
-          simp only [Term.denote, hsh, hw, and_self, ite_true, List.getElem?_cons_zero, Option.getD_some]
-          exact hrv
+        | .inl (j, ()), _ =>
+          rintro ⟨hokf, hrj, -⟩
+          simp only [hokf, Bool.false_eq_true, ite_false]
+          exact ⟨by trivial, j, by trivial, hrj⟩
         | .inr e, _ => exact e.elim
       | inl p =>
         obtain ⟨events, ⟨⟩⟩ := p
-        rw [hdec] at hres'
-        erw [Ty.up_inl 2 _ _ _ ((v.commands.get i).data).result (by simp only [Ty.isData, Ty.isDatas, v.event_data, Bool.and_true]),
-          Ty.up_tuple _ _ _ ((v.commands.get i).data).events rfl] at hres'
-        obtain ⟨d', n', hf', vals, hw, ev, rest', rfl, hev, rfl⟩ := hres'
-        obtain rfl := find_det hfd hf'
-        have hok' : (Term.is d 0 (Term.share rest)).denote M = .bool true := by
-          simp [Term.denote, hsh, hw]
-        simp only [hok', ite_true]
-        replace hc2'' : Holds M (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) cf tt))) := by
-          have := hc2''
-          simp only [Holds, Term.denote, Term.denote_share, hw, beq_self_eq_true, Bool.and_self, Val.toBool,
-            ite_true] at this
-          exact this
-        obtain ⟨hc3, hc4, hc5⟩ : Holds M c3 ∧ Holds M c4 ∧ Holds M (.ite (allT (ensures.map (·.2))) cf tt) := by
-          rw [holds_andT, holds_andT] at hc2''; exact hc2''
-        have hevs : Smt.Rel M L (.list v.event) (Ty.up _ ((v.commands.get i).data).events events) (Term.sel d 0 0 (Term.share rest)) := by
-          show RelV _ _ _ _
-          rw [sel_ctor 0 (hsh.trans hw)]; exact hev
-        obtain ⟨sv, hS, -, hsw, hh⟩ := list_view hevs h11
-        erw [Ty.up_list _ _ v.event_data] at hh
-        let s1 : State v := { s with fresh := s.fresh + 1 }
-        have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
-        have hdone := loop_acc (T := T) chk hshs happ senv { state := s1 } hR.now hS hsw hh hR.records hR.machines hR.nextId
-          (q := .int 0) (q0 := 0) rfl (fresh := .add S.fresh (.int 1))
-          (by simp [Term.denote, hR.fresh, s1, Val.toInt]) h12 hc3
-        have hd2 := hdone
-        obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, e1, -, -, -, e5, -, -⟩ := hd2
+        rintro ⟨hokt, hbe, hacc, hrecs, -⟩
+        simp only [hokt, ite_true]
+        obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, -, -, -, -, e5, -, -⟩ := id hacc
         obtain ⟨ps1, hps1⟩ := newsRel_writes e5
         have happly := hr1 ps1 hps1
+        have hr := hrecs _ happly
         rw [happly]
-        dsimp only
-        have hrfc : Smt.Rel M L v.records (Ty.up _ v.records_data recs1) rfc := (rel_ofTerm (need_ok.1 h13) _).2 e1
-        have hens := hcR.ensures _ _ (rels2 ((v.commands.get i).data).ctx v.records_data ((v.commands.get i).data).ensArgs hcx hrfc) ens c4 h14 hc4
-        erw [Ty.up_fn _ Ty.rules _ ((v.commands.get i).data).ensArgs rfl] at hens
-        have hbe := rules_broken h15 _ hens
-        rw [hbe]
+        dsimp only at hr ⊢
+        rw [hbe, ← hr]
         cases hbe' : Step.broken ((v.commands.get i).ensures.fn (Step.ctx s s.records caller input, recs1, ())) with
         | cons n ns => rfl
         | nil =>
           simp only
-          have hallE : (allT (ensures.map (·.2))).denote M = .bool true := by
-            rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil ensures).1 (hbe.trans hbe'))
-          have hcf : Holds M cf := by
-            have := hc5; simp only [Holds, Term.denote, hallE, Val.toBool, ite_true] at this
-            exact this
-          rw [happly] at hdone
-          exact (finish_encode chk hshs happ0 hca hinv0 hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hdone
-            (fun a1 h => applyEvents_ok chk.reactions _ rfl hinv1 events a1 (happly.trans h)) h16 hcfx).2 hcf
+          have hcf : Holds M cf := (holds_ite_tt (b := true)
+            (by
+              simp only [Term.denote, toBool_bool, hokt, toBool_allT_rules, hbe, Bool.true_and]
+              exact decide_eq_true (by rw [← hr]; exact hbe'))).1 hct rfl
+          rw [happly] at hacc
+          exact (finish_encode chk hshs happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hacc
+            (fun a1 h => applyEvents_ok chk.reactions _ rfl hinv1 events a1 (happly.trans h)) h3 hcfx).2 hcf
+
 end
 
 end Tazuna.Smt

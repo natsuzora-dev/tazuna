@@ -61,18 +61,6 @@ theorem newsRel_nil {e : Ty} {shs : List (PendingShape e)} {ds : List (String ×
 theorem settleFrom_none (fuel k : Nat) (a : Step.Acc v) (h : a.own[k]? = none) : Step.settleFrom T fuel k a = .ok a := by
   unfold Step.settleFrom; rw [h]
 
-theorem writes_unique {ds : List (String × DeclaredV)} {e : Ty} :
-    {xs : List ((Sender × EffectV e) × Nat)} → {ps qs : List (Step.Pending e)} →
-    Forall2 (Step.Writes ds) xs ps → Forall2 (Step.Writes ds) xs qs → ps = qs
-  | [], [], [], _, _ => rfl
-  | _ :: _, _ :: _, _ :: _, ⟨⟨r, o, hr, ho, rfl⟩, h⟩, ⟨⟨r', o', hr', ho', rfl⟩, h'⟩ => by
-    rw [hr] at hr'
-    cases hr'
-    rw [ho] at ho'
-    cases ho'
-    rw [writes_unique h h']
-  | [], [], _ :: _, _, h | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ | _ :: _, _ :: _, [], _, h => h.elim
-
 theorem settle_fault_skip {act : Term} {o : OwnStepOut} {steps : List (Term × OwnStepOut)} {over : Term}
     {t t' : StepTerms} (h : ((act.denote M).toBool && (o.terms.fault.denote M).toBool) = false) :
     SettleOut.fault? M ⟨(act, o) :: steps, over, t⟩ = SettleOut.fault? M ⟨steps, over, t'⟩ := by
