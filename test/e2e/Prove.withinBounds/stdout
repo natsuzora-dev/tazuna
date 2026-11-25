@@ -1,3 +1,3 @@
 {"assumes":[],"kind":"Prove.proved","service":"tasks","step":"init","target":"invariant at most 2"}
-{"assumes":[],"bounds":[{"bound":"creates","size":3,"slots":2,"type":"Table(Int, String)"}],"kind":"Prove.withinBounds","service":"tasks","step":"command add","target":"invariant at most 2"}
+{"assumes":[],"bounds":[{"bound":"creates","slots":2,"type":"Table(Int, String)"}],"kind":"Prove.withinBounds","service":"tasks","step":"command add","target":"invariant at most 2"}
 {"assumes":[],"kind":"Prove.proved","service":"tasks","step":"clock","target":"invariant at most 2"}

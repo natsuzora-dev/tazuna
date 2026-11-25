@@ -23,7 +23,8 @@ inductive Tazuna.ProveKind : Type
   slots the bounds give. -/
   | proved
   /-- No step of the input kind from a state of the right shape breaks the target while it stays within the slots,
-  but such a step can go past them: the line names the bounds a witness went past. A success, as Alloy reports no
+  but such a step can go past them: the line names every bound a step of the service can go past (its tables and
+  bags, and its pending requests where it sends any), the same for every run. A success, as Alloy reports no
   counterexample within its scope. -/
   | withinBounds
   /-- A state and input whose step breaks the target: exit code 1. -/

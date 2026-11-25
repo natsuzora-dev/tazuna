@@ -103,9 +103,8 @@ inductive Report where
   | unsat (service step : String) (target : Option Target)
   /-- A state and input that break the target, from the initial state or from a state of the right shape. -/
   | violated (service step : String) (target : Target) (fields : List (String × Json))
-  /-- A state of the right shape whose step of the kind goes past the bounds `bounds`, as far as the state it leaves
-  shows them. -/
-  | boundReached (service step : String) (bounds : List Json)
+  /-- A state of the right shape whose step of the kind leaves the slots. -/
+  | boundReached (service step : String)
   /-- No verdict: the solver's, or a refusal of the encoding. -/
   | undecided (kind : Kind) (service step : String) (target : Option Target) (fields : List (String × Json))
 
@@ -118,6 +117,8 @@ inductive Item where
 
 structure ServiceItems where
   items : List Item := []
+  /-- The bounds of the service's scope (`scopeBounds`). -/
+  scope : List Json := []
   /-- An engine bug: a state its proofs rule out. -/
   internal : Option String := none
 
@@ -151,46 +152,19 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .unsortable t => s!"a value of {tyText T t} holds a type variable or a structure value"
   | .slots t => s!"a value the spec writes of {tyText T t} holds more items than its bounds give"
 
-mutual
-/-- The collection types inside the value that hold more items than the layout gives them, with their sizes. -/
-def overV (L : Layout) : (t : Ty) → t.den → List (Ty × Nat)
-  | .list t, xs => (if (show List t.den from xs).length > L.count (.list t) then [(.list t, xs.length)] else []) ++
-      (show List t.den from xs).flatMap (overV L t)
-  | .bag t, xs => (if (show List t.den from xs).length > L.count (.bag t) then [(.bag t, xs.length)] else []) ++
-      (show List t.den from xs).flatMap (overV L t)
-  | .table k w, x => (if x.1.length > L.count (.table k w) then [(.table k w, x.1.length)] else []) ++
-      x.1.flatMap fun e => overV L k e.1 ++ overV L w e.2
-  | .tuple ts, x => overVs L ts x
-  | .adt (_ + 1) _ vs, x => overAlts L vs x
-  | _, _ => []
-def overVs (L : Layout) : (ts : List Ty) → Ty.dens ts → List (Ty × Nat)
-  | [], _ => []
-  | t :: ts, (x, xs) => overV L t x ++ overVs L ts xs
-def overAlts (L : Layout) : (vs : List (List Ty)) → Ty.alts vs → List (Ty × Nat)
-  | [], _ => []
-  | fs :: _, .inl x => overVs L fs x
-  | _ :: vs, .inr y => overAlts L vs y
-end
-
-/-- The bounds a state goes past: each collection type that holds more items than its slots, with the bound the slots
-come from. A step can also go past a bound only inside, in a value no state keeps; then the list is empty. -/
-def boundsPast (T : List TypeDecl) (L : Layout) {v : ServiceV} (shs : List (PendingShape v.event)) (s : State v) :
-    List Json :=
-  let over := overV L v.records (Ty.up _ v.records_data s.records) ++
-    (if s.pending.length > L.count (pendingTable shs) then [(pendingTable shs, s.pending.length)] else []) ++
-    s.machines.toSigma.filterMap fun ⟨m, insts⟩ =>
-      if insts.length > L.count m.table then some (m.table, insts.length) else none
-  let firsts := over.foldl (fun (acc : List (Ty × Nat)) o =>
-    if acc.any fun a => (Ty.same a.1 o.1).isSome then acc else acc ++ [o]) []
-  firsts.map fun (t, n) =>
-    let name := if (Ty.same t (pendingTable shs)).isSome then "pending requests" else tyText T t
-    Json.mkObj [("type", Json.str name), ("bound", Json.str (boundName t)), ("slots", Lean.toJson (L.count t)),
-      ("size", Lean.toJson n)]
-where
-  boundName : Ty → String
-    | .table k w => if v.bounds.creates.any (·.bounds (.table k w)) then "creates" else "items"
-    | .list _ => "list literals"
-    | _ => "items"
+/-- Every bound a step of the service can go past: each table and bag type of its layout, with the bound its slots
+come from, and the pending requests where the service has a request shape. A list's slots are its type's longest
+literal and no built-in makes a longer list, so no list bound is ever past. -/
+def scopeBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
+  L.types.filterMap fun (t, n) =>
+    let line (name bound : String) : Option Json :=
+      some (Json.mkObj [("type", Json.str name), ("bound", Json.str bound), ("slots", Lean.toJson n)])
+    if (Ty.same t (pendingTable (shapes v))).isSome then
+      if (shapes v).isEmpty then none else line "pending requests" "items"
+    else match t with
+      | .table k w => line (tyText T t) (if v.bounds.creates.any (·.bounds (.table k w)) then "creates" else "items")
+      | .bag _ => line (tyText T t) "items"
+      | _ => none
 
 def refusalLine (T : List TypeDecl) (r : Refusal) : Option (Kind × List (String × Json)) :=
   match r with
@@ -248,8 +222,7 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v)) (q : Question v (sha
             ("out", Json.arr ((outs.getD []).map (·.toWire.toJson)).toArray)]
         let fields : List (String × Json) := shown.run' {}
         match q.target with
-        | none => .ok (.boundReached v.name name
-            ((after.map fun (a : Acc v) => boundsPast c.T L (shapes v) a.state).getD []))
+        | none => .ok (.boundReached v.name name)
         | some g =>
           let violated := match g, r.outcome with
             | .invariant .., _ => (after.map fun (a : Acc v) => brokenAt a.state g).getD []
@@ -293,7 +266,7 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
     | .unsat _ _ (some g) | .violated _ _ g _ =>
       if only (v.name ++ "/" ++ g.text ++ "/init") then Item.ready r else .skipped v.name g
     | r => .ready r
-  return { items := init ++ items }
+  return { items := init ++ items, scope := scopeBounds c.T L v }
 
 end
 
@@ -359,6 +332,8 @@ structure ProveOptions where
   jobs : Nat := 4
   cache : System.FilePath
 
+-- Every service a report names has a scope, so the empty list is never read.
+set_option linter.tazuna.silentDefault false in
 def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
   match ← loadSpec root path with
   | .error code => return code
@@ -368,12 +343,14 @@ def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
       | some p => p.isPrefixOf name
       | none => true
     let mut items : List Item := []
+    let mut scopes : List (String × List Json) := []
     for v in c.spec.services do
       let r := serviceItems c v keep
       if let some m := r.internal then
         IO.eprintln s!"tazuna-engine: internal error: {m}"
         return 4
       items := items ++ r.items
+      scopes := scopes ++ [(v.name, r.scope)]
     let asks := (items.filterMap fun | .ask o => some o | _ => none).toArray
     let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
     let answers : Array (Except String Report) ← runAll opts.jobs
@@ -401,11 +378,17 @@ def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
     let unproved (s : String) : List Target :=
       (targets.filterMap fun (s', g) => if s' == s && (reports.any (blocks s g) || skips s g) then some g else none).foldl
         (fun acc g => if acc.contains g then acc else acc ++ [g]) []
-    -- A bound question with no verdict leaves its kind's lines within the bounds, naming none.
-    let past (s step : String) : Option (List Json) := reports.findSome? fun
-      | .boundReached s' step' bs => if s' == s && step' == step then some bs else none
-      | .undecided _ s' step' none _ => if s' == s && step' == step then some [] else none
-      | _ => none
+    -- A bound question with no verdict leaves its kind's lines within the bounds too.
+    let left (s step : String) : Bool := reports.any fun
+      | .boundReached s' step' | .undecided _ s' step' none _ => s' == s && step' == step
+      | _ => false
+    let scope (s : String) : List Json := (scopes.lookup s).getD []
+    if let some (s, step) := reports.findSome? (fun r => match r with
+        | .boundReached s step => if (scope s).isEmpty then some (s, step) else none
+        | _ => none) then
+      IO.eprintln s!"tazuna-engine: internal error: service {s}, {step}: a step left the slots of a layout with no collection"
+      return 4
+    let past (s step : String) : Option (List Json) := if left s step then some (scope s) else none
     for r in reports do
       if let some (kind, fields) := lineOf unproved past r then printLine kind fields
     if reports.any fun | .violated .. => true | _ => false then return 1
