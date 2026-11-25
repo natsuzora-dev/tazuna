@@ -1,10 +1,12 @@
 import Tazuna.Smt.Step
 import Tazuna.Smt.NoGap
 
-/-! No layout gap in the step: every encoder `encodeStep` runs, in a layout that has the step's types, refuses only
-for the spec's reasons. Each encoder's lemma takes the types it looks up as `Got` or `Avail` facts and the codes it
-applies as `CodeOk`, as `NoGap`'s expression encoder takes `Covers`; `StepNoGap` composes them and the service's
-layout supplies every fact. -/
+/-! No layout gap in the step: `encodeStep` refuses only for the spec's reasons in each service's layout built from a
+checked spec (`encodeStep_ofService`). Each encoder's lemma takes the types it looks up as `Got` or `Avail` facts and
+the codes it applies as `CodeOk`, as `NoGap`'s expression encoder takes `Covers`; `ServiceGot` bundles them, and
+`serviceGot_ofService` proves the builder supplies every one: the step's types are listed (`stepTys`, `useTys`),
+every function the service keeps is a record of the program's sites or effect sites (`ServiceV.Reach`), and every
+request kind has a pending shape for every sender (`shapes_fit`). -/
 
 namespace Tazuna.Smt
 
@@ -861,6 +863,399 @@ theorem encodeStep_sound (h : ServiceGot L P ds H v (shapes v P))
     simp only [encodeStep]
     refine sound_bind h.apply fun _ happ => sound_bind h.invariants fun _ hinv => ?_
     exact sound_bind (encodeClock_sound h T senv happ hinv _ _) fun _ _ => trivial
+
+end
+
+
+/-! The service's layout has every type the step looks up, and every code it applies has no gap behind it. -/
+
+section
+variable (c : CheckedSpec) (v : ServiceV)
+
+theorem avail_use {t : Ty} (ht : t ∈ useTys v c.P (Layout.kindsOf c.program.defs.parts v)) :
+    Avail (Layout.ofService c.program.defs v) t := fun hs =>
+  ofService_has _ v t (List.mem_filter.2 ⟨List.mem_append_right _ ht, sortable_of_sorted t hs⟩)
+
+theorem avail_stepTy {t : Ty} (ht : t ∈ stepTys v c.P) : Avail (Layout.ofService c.program.defs v) t := fun hs =>
+  ofService_has _ v t (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_left _ ht), sortable_of_sorted t hs⟩)
+
+theorem got_of_avail {L : Layout} {t : Ty} (h : Avail L t) (hs : t.sorted = true) : Got L t := ⟨h hs, hs⟩
+
+theorem count_ofService {t : Ty} {x : Nat × Nat} (h : (Layout.ofService c.program.defs v).find? t = some x) :
+    x.2 = Layout.effectSlots (listSlots (stepSlots v) c.program.defs.lits) (Layout.kindsOf c.program.defs.parts v) t := by
+  have := ofService_count c.program.defs v (t := t) (by simp [h])
+  simpa [Layout.count, h] using this
+
+end
+
+theorem sorted_avail_ctx {L : Layout} {r i c : Ty} (h : Avail L (Ty.ctx r i c)) (hr : r.sorted = true)
+    (hc : c.sorted = true) : Avail L i := fun hi => by
+  have hs : (Ty.ctx r i c).sorted = true := by
+    simp [Ty.ctx, Ty.sorted, Ty.sortedss, Ty.sorteds, hr, hi, hc]
+  exact (got_adt ⟨h hs, hs⟩ ⟨0, by simp⟩ i (by simp)).1
+
+section
+variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services)
+include hv
+
+theorem machineGot_ofService {m : MachineV v.records v.event} (hm : m ∈ v.machines) :
+    MachineGot (Layout.ofService c.program.defs v) m := by
+  have chk := c.checked v hv
+  obtain ⟨⟨her, -⟩, hms, -, -, ⟨hee, -⟩, -⟩ := stateTys_iff.1 chk.stateTys
+  have ht := sorted_of_embeddable _ (hms m hm).1
+  have hkey : m.key.sorted = true := by simp only [MachineV.table, Ty.sorted, Bool.and_eq_true] at ht; exact ht.1
+  have hst : m.state.sorted = true := by
+    simp only [MachineV.table, instEntry, Ty.sorted, Ty.sorteds, Bool.and_eq_true] at ht; exact ht.2.1
+  have hu : ∀ t ∈ [Ty.machineCtx m.key m.state v.records, Ty.next m.state, Ty.option (Ty.timer m.state), .bag m.key],
+      t ∈ useTys v c.P (Layout.kindsOf c.program.defs.parts v) := fun t ht => by
+    simp only [useTys, List.mem_append, List.mem_flatMap]
+    exact .inl (.inl (.inl (.inl (.inl (.inr ⟨m, hm, ht⟩)))))
+  refine ⟨got_of_avail (avail_stepTy c v
+      (List.mem_append_left _ (List.mem_append_right _ (List.mem_map_of_mem (f := (·.table)) hm)))) ht, avail_use c v (hu _ (by simp)),
+    got_of_avail (avail_use c v (hu _ (by simp))) (by simp [Ty.next, Ty.sorted, Ty.sortedss, Ty.sorteds, hst]),
+    got_of_avail (avail_use c v (hu _ (by simp)))
+      (by simp [Ty.option, Ty.timer, Ty.sorted, Ty.sortedss, Ty.sorteds, hst]),
+    got_of_avail (avail_use c v (hu _ (by simp))) (by simp [Ty.sorted, hkey]), (chk.keys m hm).1, ?_,
+    avail_stepTy c v (by simp [stepTys]), avail_stepTy c v (by simp [stepTys]),
+    got_of_avail (avail_stepTy c v (by simp [stepTys]))
+      (by simp [Ty.option, Ty.sorted, Ty.sortedss, Ty.sorteds, sorted_of_embeddable _ hee]),
+    got_of_avail (avail_use c v (by simp [useTys])) (by decide)⟩
+  intro x y hx hy
+  rw [count_ofService c v hx, count_ofService c v hy]
+  have hany : v.machines.any (fun m' => (Ty.same m'.table m.table).isSome) = true :=
+    List.any_eq_true.2 ⟨m, hm, Ty_same_self _⟩
+  have hge : v.bounds.itemsNat ≤ stepSlots v m.table := by
+    unfold stepSlots; simp only [hany, ↓reduceIte]; exact Nat.le_max_right _ _
+  change stepSlots v (.bag m.key) ≤ stepSlots v m.table
+  rw [stepSlots_plain v (by simp)]
+  exact hge
+
+end
+
+
+theorem senderSame_self : {ks : List Ty} → (a : SenderShape ks) → senderSame a a = true
+  | _, .machine n k => by simp [senderSame, Ty_same_self]
+  | _, .reaction n => by simp [senderSame]
+
+/-- A request shape of the service's effects has an external in `declared` and a pending shape for every sender with
+a data key, from that external: the owner `EffectKey.owner` finds may be another external listing the same command or
+query, which writes the same shape. -/
+theorem shapes_fit {v : ServiceV} {P : List AnySite} {snd : (ks : List Ty) × SenderShape ks}
+    (hsnd : snd ∈ senderShapes v) (hd : (Ty.tuple snd.1).isData = true) {rs : RequestShape v.event}
+    (hrs : rs ∈ requestShapesAt v.declared v.event P) :
+    ∃ x, rs.key.owner v.declared = some x ∧ ((shapes v P).findIdx? (·.fits snd rs.key x)).isSome = true := by
+  have hmem : ∀ rs1 : RequestShape v.event, rs1 ∈ requestShapesAt v.declared v.event P →
+      ({ rs1 with ks := snd.1, sender := snd.2, hks := hd } : PendingShape v.event) ∈ shapes v P := by
+    intro rs1 h1
+    simp only [shapes, List.mem_flatMap]
+    exact ⟨snd, hsnd, by simp only [hd, dite_true, requestShapes]; exact List.mem_map_of_mem h1⟩
+  simp only [requestShapesAt, List.mem_flatMap] at hrs
+  obtain ⟨⟨x0, d0⟩, hd0, hrs⟩ := hrs
+  cases d0 with
+  | externalCommand n i o j =>
+    simp only [List.mem_filterMap] at hrs
+    obtain ⟨⟨aΓ, a⟩, ha, hrs⟩ := hrs
+    split at hrs
+    · rename_i hdata
+      obtain rfl := Option.some.inj hrs
+      cases hown : (RequestShape.key _ : EffectKey).owner v.declared with
+      | none =>
+        unfold EffectKey.owner at hown
+        rw [Option.map_eq_none_iff, List.find?_eq_none] at hown
+        exact absurd (hown _ hd0) (by simp [RequestShape.key, Ty_same_self])
+      | some x1' =>
+        unfold EffectKey.owner at hown
+        obtain ⟨⟨x1, d1⟩, hf, rfl⟩ := Option.map_eq_some_iff.1 hown
+        have hy := List.find?_some hf
+        have hym := List.mem_of_find?_eq_some hf
+        cases d1 with
+        | externalCommand n' i' o' j' =>
+          simp only [RequestShape.key, Bool.and_eq_true, beq_iff_eq] at hy
+          obtain ⟨⟨⟨rfl, hi⟩, ho⟩, hj⟩ := hy
+          obtain rfl := eq_of_same hi; obtain rfl := eq_of_same ho; obtain rfl := eq_of_same hj
+          refine ⟨x1, rfl, ?_⟩
+          rw [List.findIdx?_isSome, List.any_eq_true]
+          refine ⟨_, hmem ⟨x1, n', i', o', some j', none, aΓ, a, hdata⟩ ?_, ?_⟩
+          · simp only [requestShapesAt, List.mem_flatMap]
+            exact ⟨(x1, .externalCommand n' i' o' j'), hym, List.mem_filterMap.2 ⟨⟨aΓ, a⟩, ha, by
+              simp only [Option.map_none, Option.getD_none] at hdata; simp [hdata]⟩⟩
+          · simp [PendingShape.fits, senderSame_self, RequestShape.key, Ty_same_self, optSame, siteMatch, Ty_sames_self]
+        | externalQuery _ _ _ _ => simp [RequestShape.key] at hy
+        | command _ _ _ _ | query _ _ _ | source _ _ => simp at hy
+    · cases hrs
+  | externalQuery n i o f =>
+    obtain ⟨s1, hes, hrs⟩ := List.mem_flatMap.1 hrs
+    obtain ⟨⟨aΓ, a⟩, ha, hrs⟩ := List.mem_filterMap.1 hrs
+    split at hrs
+    · rename_i hdata
+      obtain rfl := Option.some.inj hrs
+      cases hown : (RequestShape.key _ : EffectKey).owner v.declared with
+      | none =>
+        unfold EffectKey.owner at hown
+        rw [Option.map_eq_none_iff, List.find?_eq_none] at hown
+        exact absurd (hown _ hd0) (by simp [RequestShape.key, Ty_same_self])
+      | some x1' =>
+        unfold EffectKey.owner at hown
+        obtain ⟨⟨x1, d1⟩, hf, rfl⟩ := Option.map_eq_some_iff.1 hown
+        have hy := List.find?_some hf
+        have hym := List.mem_of_find?_eq_some hf
+        cases d1 with
+        | externalQuery n' i' o' f' =>
+          simp only [RequestShape.key, Bool.and_eq_true, beq_iff_eq] at hy
+          obtain ⟨⟨rfl, hi⟩, ho⟩ := hy
+          obtain rfl := eq_of_same hi; obtain rfl := eq_of_same ho
+          refine ⟨x1, rfl, ?_⟩
+          rw [List.findIdx?_isSome, List.any_eq_true]
+          refine ⟨_, hmem ⟨x1, n', i', o', none, some s1, aΓ, a, hdata⟩ ?_, ?_⟩
+          · simp only [requestShapesAt, List.mem_flatMap]
+            exact ⟨(x1, .externalQuery n' i' o' f'), hym, List.mem_flatMap.2 ⟨s1, hes,
+              List.mem_filterMap.2 ⟨⟨aΓ, a⟩, ha, by
+              simp only [Option.map_some, Option.getD_some] at hdata; simp [hdata]⟩⟩⟩
+          · simp [PendingShape.fits, senderSame_self, RequestShape.key, Ty_same_self, optSame, siteMatch, Ty_sames_self]
+        | externalCommand _ _ _ _ => simp [RequestShape.key] at hy
+        | command _ _ _ _ | query _ _ _ | source _ _ => simp at hy
+    · cases hrs
+  | command _ _ _ _ | query _ _ _ | source _ _ => simp at hrs
+
+theorem shapesOk_ofService (c : CheckedSpec) (v : ServiceV) {snd : (ks : List Ty) × SenderShape ks}
+    (hsnd : snd ∈ senderShapes v) (hd : (Ty.tuple snd.1).isData = true) :
+    ShapesOk (Layout.ofService c.program.defs v) (shapes v c.P) v.declared snd := by
+  intro key hk
+  simp only [Layout.effectsOf, List.mem_filter] at hk
+  obtain ⟨hk, hev⟩ := hk
+  rw [(allSorted_ofParts _ v).2.1] at hk
+  simp only [Layout.kindsOf] at hk
+  rw [mem_dedupBy effectKey_same_iff, List.mem_filter] at hk
+  obtain ⟨e, -, hk⟩ := List.mem_flatMap.1 hk.1
+  obtain ⟨rs, hrs, rfl⟩ := List.mem_map.1 hk
+  obtain rfl : e = v.event := eq_of_same hev
+  exact shapes_fit hsnd hd hrs
+
+
+theorem ownCommand_mem {v : ServiceV} {n : String} {i j : Ty} {x : CommandV v.records v.event v.caller}
+    {h : i = x.input ∧ j = x.rejection} (hx : Step.ownCommand (v := v) n i j = some ⟨x, h⟩) : x ∈ v.commands := by
+  obtain ⟨y, hy, hf⟩ := List.exists_of_findSome?_eq_some hx
+  split at hf
+  · split at hf
+    · cases hf; exact hy
+    · cases hf
+  · cases hf
+
+theorem ownShape_command {v : ServiceV} {P : List AnySite} {key : OwnKey} {x : CommandV v.records v.event v.caller}
+    {Γ : List Ty} {site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))}
+    (h : ownShape v P key = .command x Γ site) :
+    x ∈ v.commands ∧ (⟨Γ, _, site⟩ : AnySite) ∈ P ∧ ∃ e n c i a, key = .command e n c i x.rejection a ∧ Γ = a.Γ := by
+  cases key with
+  | command e n c i j a =>
+    unfold ownShape at h
+    dsimp only at h
+    revert h
+    generalize hoc : Ty.same c v.caller = oc
+    generalize hox : Step.ownCommand (v := v) n i j = ox
+    intro h
+    cases oc with
+    | none => cases ox <;> (dsimp only at h; cases h)
+    | some hc =>
+      cases ox with
+      | none => dsimp only at h; cases h
+      | some xx =>
+        obtain ⟨x', hi, hj⟩ := xx
+        dsimp only at h
+        revert h
+        generalize hsf : siteFor P _ a = sf
+        intro h
+        cases sf with
+        | none => dsimp only at h; cases h
+        | some gs =>
+          obtain ⟨Γ', s'⟩ := gs
+          cases h
+          obtain ⟨hm, -, hΓ⟩ := siteFor_spec hsf
+          exact ⟨ownCommand_mem hox, hm, e, n, c, i, a, by rw [hj], hΓ⟩
+  | query e n c i o a =>
+    unfold ownShape at h
+    dsimp only at h
+    revert h
+    generalize Ty.same c v.caller = oc
+    generalize Step.ownQuery (v := v) n i o = ox
+    intro h
+    cases oc with
+    | none => cases ox <;> (dsimp only at h; cases h)
+    | some hc =>
+      cases ox with
+      | none => dsimp only at h; cases h
+      | some xx =>
+        dsimp only at h
+        revert h
+        generalize siteFor P _ a = sf
+        intro h
+        cases sf <;> (dsimp only at h; cases h)
+
+theorem ownShape_query {v : ServiceV} {P : List AnySite} {key : OwnKey} {x : QueryV v.records v.caller}
+    {Γ : List Ty} {site : Site Γ (Ty.fn [x.output] (.list v.event))} (h : ownShape v P key = .query x Γ site) :
+    x ∈ v.queries ∧ (⟨Γ, _, site⟩ : AnySite) ∈ P ∧ ∃ e n c i o a, key = .query e n c i o a ∧ Γ = a.Γ := by
+  cases key with
+  | query e n c i o a =>
+    unfold ownShape at h
+    dsimp only at h
+    revert h
+    generalize hoc : Ty.same c v.caller = oc
+    generalize hox : Step.ownQuery (v := v) n i o = ox
+    intro h
+    cases oc with
+    | none => cases ox <;> (dsimp only at h; cases h)
+    | some hc =>
+      cases ox with
+      | none => dsimp only at h; cases h
+      | some xx =>
+        obtain ⟨x', hi, ho⟩ := xx
+        dsimp only at h
+        revert h
+        generalize hsf : siteFor P _ a = sf
+        intro h
+        cases sf with
+        | none => dsimp only at h; cases h
+        | some gs =>
+          obtain ⟨Γ', s'⟩ := gs
+          cases h
+          obtain ⟨hm, -, hΓ⟩ := siteFor_spec hsf
+          exact ⟨ownQuery_mem hox, hm, e, n, c, i, o, a, rfl, hΓ⟩
+  | command e n c i j a =>
+    unfold ownShape at h
+    dsimp only at h
+    revert h
+    generalize Ty.same c v.caller = oc
+    generalize Step.ownCommand (v := v) n i j = ox
+    intro h
+    cases oc with
+    | none => cases ox <;> (dsimp only at h; cases h)
+    | some hc =>
+      cases ox with
+      | none => dsimp only at h; cases h
+      | some xx =>
+        dsimp only at h
+        revert h
+        generalize siteFor P _ a = sf
+        intro h
+        cases sf <;> (dsimp only at h; cases h)
+
+
+section
+variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services)
+include hv
+
+theorem commandOk_ofService {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) :
+    CommandOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v x := by
+  have chk := c.checked v hv
+  obtain ⟨⟨her, -⟩, -, -, -, -, ⟨hec, -⟩⟩ := stateTys_iff.1 chk.stateTys
+  have hu : ∀ t ∈ [Ty.ctx v.records x.input v.caller, Ty.result (.list v.event) x.rejection],
+      t ∈ useTys v c.P (Layout.kindsOf c.program.defs.parts v) := fun t ht => by
+    simp only [useTys, List.mem_append, List.mem_flatMap]
+    exact .inl (.inl (.inl (.inl (.inr ⟨x, hx, ht⟩))))
+  have hr := chk.reach.commands x hx
+  exact ⟨Fun.code_ofService c hv _ hr.accepts, Fun.code_ofService c hv _ hr.decide,
+    Fun.code_ofService c hv _ hr.ensures,
+    sorted_avail_ctx (avail_use c v (hu _ (by simp))) (sorted_of_embeddable _ her) (sorted_of_embeddable _ hec),
+    avail_use c v (hu _ (by simp)), avail_use c v (hu _ (by simp))⟩
+
+theorem queryOk_ofService {q : QueryV v.records v.caller} (hq : q ∈ v.queries) :
+    QueryOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v q := by
+  have chk := c.checked v hv
+  obtain ⟨⟨her, -⟩, -, -, -, -, ⟨hec, -⟩⟩ := stateTys_iff.1 chk.stateTys
+  have hu : ∀ t ∈ [Ty.ctx v.records q.input v.caller, q.output],
+      t ∈ useTys v c.P (Layout.kindsOf c.program.defs.parts v) := fun t ht => by
+    simp only [useTys, List.mem_append, List.mem_flatMap]
+    exact .inl (.inl (.inl (.inr ⟨q, hq, ht⟩)))
+  have hr := chk.reach.queries q hq
+  exact ⟨Fun.code_ofService c hv _ hr.accepts, Fun.code_ofService c hv _ hr.resolve,
+    sorted_avail_ctx (avail_use c v (hu _ (by simp))) (sorted_of_embeddable _ her) (sorted_of_embeddable _ hec),
+    avail_use c v (hu _ (by simp)), avail_use c v (hu _ (by simp))⟩
+
+theorem ownOk_ofService {key : OwnKey} (hk : key ∈ (Layout.ofService c.program.defs v).ownsOf v.event) :
+    OwnOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v key := by
+  have hkK : key ∈ (Layout.kindsOf c.program.defs.parts v).owns := by
+    rw [← (allSorted_ofParts _ v).2.2]; exact (List.mem_filter.1 hk).1
+  have hf := ((kindsOf_fields _ v).2 key hkK).1
+  have hu : ∀ t ∈ (match key with
+      | .command _ _ _ _ j a => [Ty.nil, Ty.result Ty.nil j, .tuple a.Γ]
+      | .query _ _ _ _ _ a => [.tuple a.Γ]), t ∈ useTys v c.P (Layout.kindsOf c.program.defs.parts v) := fun t ht => by
+    simp only [useTys, List.mem_append, List.mem_flatMap]
+    exact .inr ⟨key, hkK, ht⟩
+  unfold OwnOk
+  split
+  · rename_i x Γ site hsh
+    obtain ⟨hx, hm, e, n, cc, i, a, rfl, rfl⟩ := ownShape_command hsh
+    simp only [OwnKey.fields, Ty.sorteds, Bool.and_eq_true] at hf
+    exact ⟨commandOk_ofService hv hx, got_of_avail (avail_use c v (hu _ (by simp))) (by simpa [Ty.sorted] using hf.2.2.1),
+      sites_ofService c hv _ hm, avail_use c v (hu _ (by simp)), avail_use c v (hu _ (by simp))⟩
+  · rename_i x Γ site hsh
+    obtain ⟨hx, hm, e, n, cc, i, o, a, rfl, rfl⟩ := ownShape_query hsh
+    simp only [OwnKey.fields, Ty.sorteds, Bool.and_eq_true] at hf
+    exact ⟨queryOk_ofService hv hx, got_of_avail (avail_use c v (hu _ (by simp))) (by simpa [Ty.sorted] using hf.2.2.1),
+      sites_ofService c hv _ hm⟩
+  · trivial
+
+theorem entry_ofService : Got (Layout.ofService c.program.defs v) (pendingEntry (shapes v c.P)) := by
+  have chk := c.checked v hv
+  obtain ⟨-, -, hep, -, -, -⟩ := stateTys_iff.1 chk.stateTys
+  exact (got_table (got_of_avail (avail_stepTy c v (t := pendingTable (shapes v c.P)) (List.mem_append_left _ (List.mem_append_left _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+    (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)))))))
+    (sorted_of_embeddable _ (embeddable_pending hep)))).2.1
+
+theorem answerOk_ofService {sh : PendingShape v.event} (hsh : sh ∈ shapes v c.P) :
+    AnswerOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles sh := by
+  obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hsh
+  have hf := got_adt (entry_ofService hv) ⟨k, by simpa using hk⟩
+  simp only [List.get_eq_getElem, List.getElem_map, PendingShape.fields, RequestShape.fields] at hf
+  have hin := shapes_inSites hsh
+  exact ⟨hf _ (by simp), hf _ (by simp), avail_of_got (hf _ (by simp)),
+    avail_use c v (by simp only [useTys, List.mem_append, List.mem_map]; exact .inl (.inr ⟨_, hsh, rfl⟩)),
+    sites_ofService c hv _ hin.1, fun s hs => sites_ofService c hv _ (hin.2 s hs)⟩
+
+theorem serviceGot_ofService :
+    ServiceGot (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v (shapes v c.P) := by
+  have chk := c.checked v hv
+  obtain ⟨⟨her, -⟩, hms, hep, -, ⟨hee, -⟩, ⟨hec, -⟩⟩ := stateTys_iff.1 chk.stateTys
+  have hC := covers_ofParts c.program.defs.parts v
+  have hev := sorted_of_embeddable _ hee
+  refine ⟨hC.sorted, hC, got_of_avail (avail_stepTy c v (by simp [stepTys])) (sorted_of_embeddable _ her),
+    got_of_avail (avail_stepTy c v (by simp [stepTys])) hev,
+    got_of_avail (avail_stepTy c v (by simp [stepTys])) (sorted_of_embeddable _ hec),
+    got_of_avail (avail_use c v (by simp [useTys])) (by decide),
+    got_of_avail (avail_use c v (by simp [useTys])) (by simpa [Ty.sorted] using hev),
+    got_of_avail (avail_stepTy c v (by simp [stepTys])) rfl,
+    got_of_avail (avail_stepTy c v (t := pendingTable (shapes v c.P)) (List.mem_append_left _ (List.mem_append_left _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+      (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)))))))
+      (sorted_of_embeddable _ (embeddable_pending hep)),
+    Fun.code_ofService c hv _ chk.reach.apply, Fun.code_ofService c hv _ chk.reach.invariants,
+    fun m hm => ?_, fun x hx => ?_, fun x hx => commandOk_ofService hv hx, fun q hq => queryOk_ofService hv hq,
+    fun i => ?_, fun key hk => ownOk_ofService hv hk⟩
+  · have hr := chk.reach.machines m hm
+    have hkey : m.key.sorted = true := by
+      have ht := sorted_of_embeddable _ (hms m hm).1
+      simp only [MachineV.table, Ty.sorted, Bool.and_eq_true] at ht; exact ht.1
+    refine ⟨⟨machineGot_ofService hv hm, Fun.code_ofService c hv _ hr.instances, Fun.code_ofService c hv _ hr.on,
+      Fun.code_ofService c hv _ hr.after, EffectFun.code_ofService c hv _ hr.effect.site,
+      Fun.code_ofService c hv _ hr.invariants⟩,
+      got_of_avail (avail_stepTy c v (List.mem_append_right _ (List.mem_map_of_mem (f := fun m => Ty.tuple [m.key]) hm)))
+        (by simp [Ty.sorted, Ty.sorteds, hkey]), ?_⟩
+    exact shapesOk_ofService c v (List.mem_append_left _ (List.mem_map_of_mem (f := fun m => (⟨[m.key], .machine m.name m.key⟩ : (ks : List Ty) × SenderShape ks)) hm))
+      (by simp [Ty.isData, Ty.isDatas, m.key_data])
+  · have hu : ∀ t ∈ [Ty.reactionCtx v.records, .list (.dsl .effect [v.event])],
+        t ∈ useTys v c.P (Layout.kindsOf c.program.defs.parts v) := fun t ht => by
+      simp only [useTys, List.mem_append, List.mem_flatMap]
+      exact .inl (.inl (.inl (.inl (.inl (.inl (.inr ⟨x, hx, ht⟩))))))
+    exact ⟨EffectFun.code_ofService c hv _ (chk.reach.reactions x hx).site,
+      shapesOk_ofService c v (List.mem_append_right _ (List.mem_map_of_mem (f := fun x => (⟨[], .reaction x.name⟩ : (ks : List Ty) × SenderShape ks)) hx)) rfl,
+      avail_use c v (hu _ (by simp)), got_of_avail (avail_use c v (hu _ (by simp))) (by simpa [Ty.sorted] using hev)⟩
+  · exact ⟨avail_use c v (by simp only [useTys, List.mem_append, List.mem_map]; exact .inl (.inl (.inr ⟨_, List.get_mem _ i, rfl⟩))),
+      Fun.code_ofService c hv _ (chk.reach.subscribes _ (List.get_mem _ i))⟩
+
+/-- In each service's layout, built from a checked spec's program, the step encoding never refuses with a layout gap:
+every refusal is the spec's (a limit, a string outside SMT-LIB's, a case the types rule out). -/
+theorem encodeStep_ofService (T : List TypeDecl) (senv : StepEnv (Layout.ofService c.program.defs v) (shapes v c.P))
+    (S : SymState v) (inp : SymInput v (shapes v c.P) senv.nT) :
+    Sound (fun _ => True) (encodeStep (Layout.ofService c.program.defs v) T c.P v senv S inp) :=
+  encodeStep_sound (serviceGot_ofService hv) (fun _ hsh => answerOk_ofService hv hsh) T senv S inp
 
 end
 
