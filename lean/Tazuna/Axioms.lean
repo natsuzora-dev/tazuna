@@ -18,6 +18,7 @@ import Tazuna.Semantics.Interleave
 import Tazuna.Semantics.StepRename
 import Tazuna.Smt.Commute
 import Tazuna.Smt.Pairs
+import Tazuna.Smt.FiresForward
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -104,7 +105,10 @@ elab "#check_tazuna_reach" : command => do
     -- of a state below its counter.
     ``Tazuna.Smt.runs_confluent,
     -- T5b: the pair questions cover every two own effects a model codes, in both orders, self-pairs included.
-    ``Tazuna.Smt.ownPairs_complete]
+    ``Tazuna.Smt.ownPairs_complete,
+    -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
+    -- forward; unsat answers mean no context within the slots has one.
+    ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do

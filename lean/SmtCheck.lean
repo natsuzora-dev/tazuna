@@ -4,6 +4,7 @@ import Tazuna.Semantics.After
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.Solver
 import Tazuna.Smt.ServiceLayout
+import Tazuna.Smt.FiresForward
 
 -- Test scaffolding: a value the model leaves out reads as a default that the checks then reject.
 set_option linter.tazuna.silentDefault false
@@ -1459,6 +1460,60 @@ def machineEffectCheck (solver : Solver) : IO Bool := do
             IO.println "smt-check: machine effect: the comparison accepts another key"; ok := false
         | _, _, _ => IO.println "smt-check: machine effect: no values"; ok := false
       | a => IO.println s!"smt-check: machine effect: {repr a}"; ok := false
+  return ok
+
+/-! T5's timer question for one machine (`backQuestions`), with `after` from its kept source over Int keys, states and
+records. `forwardE` sets `Timer(ctx.state, ctx.state)` where the state is not negative and no timer otherwise, so its
+target question is unsat; `backE` sets `Timer(ctx.key, ctx.state)`, so a negative key sets a timer before the time and
+the target question is sat, and the model's context must be one where Lean's `after` sets such a timer. Nothing has
+slots here, so both bound questions are unsat. -/
+
+def timerAfterE (delay : Expr [] [mctxT] .int) (guard : Bool) : Expr [] [] (.fn [mctxT] (Ty.option (Ty.timer .int))) :=
+  let ctx : Expr [] [mctxT] mctxT := .var .here
+  let st : Expr [] [mctxT] .int := .field (ft := .int) "state" 1 (by simp) ctx
+  let some' : Expr [] [mctxT] (Ty.option (Ty.timer .int)) := .ctor (vs := [[Ty.timer .int], []]) ⟨0, by decide⟩
+    (.cons (.ctor (vs := [[.int, .int]]) ⟨0, by decide⟩ (.cons delay (.cons st .nil))) .nil)
+  let none' : Expr [] [mctxT] (Ty.option (Ty.timer .int)) := .ctor (vs := [[Ty.timer .int], []]) ⟨1, by decide⟩ .nil
+  if guard then
+    .lam (.case (.bin .lt st (.int 0))
+      (.cons (.ctor (vs := [[], []]) ⟨0, by decide⟩ .nil) none' (.cons (.ctor (vs := [[], []]) ⟨1, by decide⟩ .nil) some' .nil))
+      ⟨4, rfl⟩)
+  else .lam some'
+
+def timerM (af : Expr [] [] (.fn [mctxT] (Ty.option (Ty.timer .int)))) : MachineV .int .int :=
+  { name := "t", key := .int, state := .int, instances := effectM.instances, initial := (0 : Int), on := effectM.on,
+    after := .closed af, effect := .closed (.lam (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil)),
+    invariants := effectM.invariants }
+
+def forwardE : Expr [] [] (.fn [mctxT] (Ty.option (Ty.timer .int))) :=
+  timerAfterE (.field (ft := .int) "state" 1 (by simp) (.var .here)) true
+def backE : Expr [] [] (.fn [mctxT] (Ty.option (Ty.timer .int))) :=
+  timerAfterE (.field (ft := .int) "key" 0 (by simp) (.var .here)) false
+
+def timerLayout : Layout :=
+  Layout.addTys (fun _ => 2) {} [mctxT, Ty.option (Ty.timer .int), Ty.timer .int, Ty.option (.tuple [.int, .int]),
+    .tuple [.int, .int], Ty.bool]
+
+def timerCheck (solver : Solver) : IO Bool := do
+  let mut ok := true
+  for (name, af, back) in [("forward", forwardE, false), ("back", backE, true)] do
+    match backQuestions timerLayout (timerM af) with
+    | .error r => IO.println s!"smt-check: timer {name}: no questions: {repr r}"; ok := false
+    | .ok (bq, tq) =>
+      match ← solver.run bq with
+      | .unsat => pure ()
+      | a => IO.println s!"smt-check: timer {name}: bound question not unsat: {repr a}"; ok := false
+      match ← solver.run tq, back with
+      | .unsat, false => pure ()
+      | .sat vs, true =>
+        match vs.lookup 0, vs.lookup 1, vs.lookup 2, vs.lookup 3 with
+        | some (.int key), some (.int st), some (.int recs), some (.int now) =>
+          match Step.timerAt now ((timerM af).after.fn (.inl (key, st, recs, now, ()), ())) with
+          | some (d, _) => unless d < now do
+              IO.println s!"smt-check: timer back: Lean's timer at {d} is not before {now}"; ok := false
+          | none => IO.println "smt-check: timer back: Lean's after sets no timer"; ok := false
+        | _, _, _, _ => IO.println "smt-check: timer back: no values"; ok := false
+      | a, _ => IO.println s!"smt-check: timer {name}: target question: {repr a}"; ok := false
   return ok
 
 /-! Machine invariants over the instance table: `fn(ctx) { [#(case ctx.key == 1 { True -> "one" False -> "other" },
@@ -3440,6 +3495,7 @@ def check (z3 : String) : IO Bool := do
   unless ← ownEffectCheck solver do ok := false
   unless ← effectListCheck solver do ok := false
   unless ← machineEffectCheck solver do ok := false
+  unless ← timerCheck solver do ok := false
   unless ← noEffectsCheck solver do ok := false
   unless ← invariantCheck solver do ok := false
   unless ← reactCheck solver do ok := false

@@ -223,6 +223,24 @@ def FiresForward (ms : List (MachineV r e)) : Prop :=
   ∀ m ∈ ms, ∀ (records : r.den0) (now d : Int) (i : Instance m), hitsAt d i = true → d ≤ now →
     ∀ x ∈ (fired m records now i).1.timer, d ≤ x.1
 
+/-- The timer `m`'s `after` sets is never before the time it is set at: what one machine needs for `FiresForward`,
+asked of every key, state, records and time, which is one question per timer machine. -/
+def TimerForward (m : MachineV r e) : Prop :=
+  ∀ (records : r.den0) (now : Int) (key : m.key.den0) (st : m.state.den0),
+    ∀ x ∈ timerAt now (m.after.fn (.inl (key, st, records, now, ()), ())), now ≤ x.1
+
+/-- Timers fire forward exactly when no machine's `after` sets a timer before the time it is set at: a fired timer is
+set at a time no earlier than its deadline, and any state at any time is the target of some due timer. -/
+theorem firesForward_iff (ms : List (MachineV r e)) : FiresForward ms ↔ ∀ m ∈ ms, TimerForward m := by
+  constructor
+  · intro h m hm records now key st x hx
+    exact h m hm records now now ⟨key, st, some (now, st)⟩ (by simp [hitsAt]) (Int.le_refl _) x hx
+  · intro h m hm records now d i hd hdn x hx
+    obtain ⟨key, st, tm⟩ := i
+    cases tm with
+    | none => simp [hitsAt] at hd
+    | some p => exact Int.le_trans hdn (h m hm records now key p.2 x hx)
+
 /-- What firing the `k`-th and then a `j`-th due instance gives, against the other order: the same instances, and the
 same effects in some order. -/
 def FiredBoth {α β : Type} (fireK : Nat → α → α × List β) (count : α → Nat) (l : α) (k1 k2 : Nat) : Prop :=
