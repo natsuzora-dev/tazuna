@@ -17,7 +17,7 @@ import Tazuna.Smt.CommandExact
 import Tazuna.Smt.PendingWrite
 import Tazuna.Smt.EventPending
 import Tazuna.Smt.Reactions
-import Tazuna.Smt.Finish
+import Tazuna.Smt.CommandStep
 import Tazuna.Smt.Fire
 import Tazuna.Smt.Clock
 import Tazuna.Smt.ClockExact

@@ -1,7 +1,7 @@
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.EventStep
 import Tazuna.Smt.Reactions
-import Tazuna.Smt.Finish
+import Tazuna.Smt.CommandStep
 import Tazuna.Smt.Clock
 import Tazuna.Smt.Order
 import Tazuna.Smt.Solver
@@ -705,8 +705,9 @@ def commandScript (goal : List Term) : Except String Script := do
   let (inv, ci) ← enc (commandSvc.invariants.code L)
   let some ks := callerTerms L rfl putC.callers | throw "no caller terms"
   let S := stateAt 17
-  let (o, cond) ← (encodeCommand L putC cc apply inv ks S.records S.now S.fresh (.var 4)
-    (.var 5)).mapError fun r => s!"no encoding: {repr r}"
+  let idx (t : Ty) := ((L.find? t).map (·.1)).getD 0
+  let (o, cond) ← enc (encodeCommand L prelude commandSvc [] (idx (.dsl .effect [evT])) (idx (pendingEntry ([] : List (PendingShape evT)))) 0 putC cc
+    apply inv ks S.records S.now S.fresh S.nextId S.pending (.var 4) (.var 5) S.machines)
   let some wf := S.wf L (v := commandSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some lsrt := L.srt? (.list evT) | throw "no events sort"
@@ -720,7 +721,7 @@ def commandScript (goal : List Term) : Except String Script := do
            .str, psrt],
          asserts := [cx, ca, ci, cond, wf, .eq (.var 6) o.callerOk, .eq (.var 7) ah, .eq (.var 8) an, .eq (.var 9) o.ok,
            .eq (.var 10) o.rejection, .eq (.var 11) o.events, .eq (.var 12) eh, .eq (.var 13) en,
-           .eq (.var 14) o.records, .eq (.var 15) ih, .eq (.var 16) iname] ++ goal,
+           .eq (.var 14) o.after.records, .eq (.var 15) ih, .eq (.var 16) iname] ++ goal,
          shows := List.range 18 }
 
 def commandCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := do
@@ -2261,6 +2262,108 @@ def eventsCheck (solver : Solver) : IO Bool := do
         | _, _, _ => fail "the model does not decode"
       | a => fail s!"{repr a}"
 
+/-! A command whose events reach machines, for `command_step`: the service `w` above with the command `twice`, whose
+`decide` accepts any positive input with the events [input, input]. From the state of `a list of events` (no records,
+no instances, request 2 pending, next id 40, now 100), alice's `twice 3` applies 3 twice: the first starts key 3 at
+0 (request at 40), the second enters 1 (request at 41). The step must be accepted, and the records, instance table,
+pending table and next id read from the model must be its own; applying only the first event must not pass the
+comparison. -/
+
+def twiceDecideE : E (.fn [cctxT] (Ty.result (.list .int) .str)) :=
+  .lam (.ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (.list (.cons inputOf (.cons inputOf .nil))) .nil))
+
+def twiceC : CommandV recordsT .int .str :=
+  { name := "twice", input := .int, rejection := .str, callers := ["alice"], accepts := .closed acceptsE,
+    decide := .closed twiceDecideE, ensures := .closed (.lam (.list .nil)) }
+
+def twiceSvc : ServiceV := { writeSvc with name := "t", commands := [twiceC] }
+
+def twiceShapes : List (PendingShape twiceSvc.event) := shapes twiceSvc writeSites
+
+def twiceLayoutOf (slots : Nat) : Layout :=
+  let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE
+  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m", 3, 7, 0⟩] }
+    (reactTys ++ [.tuple [.int], .tuple [], .list .int, .id, cctxT, Ty.result (.list .int) .str, pendingTable twiceShapes] ++
+      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
+      Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE)
+
+/-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the caller, v7 the input, v8 the new pending
+table, v9 the next id after, v10 the records after, v11 the new instance table. -/
+def twiceScriptOf (slots : Nat) (goal : List Term) : Except String (Script × List Slot) := do
+  let L := twiceLayoutOf slots
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let (cc, cx) ← enc (CommandCode.of L twiceC)
+  let (apply, ca) ← enc (twiceSvc.apply.code L)
+  let (inv, ci) ← enc (twiceSvc.invariants.code L)
+  let some ks := callerTerms L rfl twiceC.callers | throw "no caller terms"
+  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
+  let some (dP, _) := L.find? (pendingEntry twiceShapes) | throw "no pending entry"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let (o, cond) ← enc (encodeCommand L prelude twiceSvc twiceShapes dE dP dopt twiceC cc apply inv ks S.records S.now
+    S.fresh S.nextId S.pending (.var 6) (.var 7) S.machines)
+  let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
+  let some wf := S.wf L (v := twiceSvc) twiceShapes | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable twiceShapes) | throw "no pending sort"
+  let some msrt := L.srt? startM.table | throw "no table sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let [tbl] := o.after.tables | throw "not one machine"
+  let some (d, n) := L.find? (pendingTable twiceShapes) | throw "no pending table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry twiceShapes]) | throw "no pending slot"
+  pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .str, .int, psrt, .int, rsrt, msrt],
+          asserts := [wf, below, cx, ca, ci, cond, .eq (.var 8) o.pending, .eq (.var 9) o.after.nextId,
+            .eq (.var 10) o.after.records, .eq (.var 11) tbl] ++ goal,
+          shows := List.range 12 }, slotsOf d dt n 2 (.var 4))
+
+def twiceLayout : Layout := twiceLayoutOf 3
+
+def twiceScript (goal : List Term) : Except String (Script × List Slot) := twiceScriptOf 3 goal
+
+def twiceCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: a command's events reach machines: {m}"; return false
+  let L := twiceLayout
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dm, nm) := L.find? startM.table | fail "no instance table"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let Sr := slotsOf dr drt nr 2 (.var 0)
+  let Sm := slotsOf dm dmt nm 2 (.var 5)
+  match twiceScript [] with
+  | .error m => fail m
+  | .ok (_, Sp) =>
+    let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
+      Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
+      .eq (.var 3) (.int 40), .eq (.var 6) (.str "alice"), .eq (.var 7) (.int 3)]
+    match twiceScript goal with
+    | .error m => fail m
+    | .ok (script, _) =>
+      match ← solver.run script with
+      | .sat vs =>
+        let M := modelOf vs
+        let after : SymState := { records := .var 10, now := .var 1, fresh := .var 2, nextId := .var 9,
+                                  pending := .var 8, machines := [.var 11] }
+        match (SymState.vars 0 1).decode M L (v := twiceSvc) rfl prelude twiceShapes,
+            after.decode M L (v := twiceSvc) rfl prelude twiceShapes with
+        | some s, some s' =>
+          let r := step prelude twiceSvc s (.command ⟨0, by decide⟩ ("alice" : String) (3 : Int))
+          let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
+            sms.map fun ⟨_, is⟩ => is.map fun i => (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
+          let ids (ps : List (Step.Pending twiceSvc.event)) := (ps.map (·.id)).mergeSort (· ≤ ·)
+          let mut ok := true
+          if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
+          if !sameAs L recordsT rfl r.state.records (vs.lookup 10) then ok ← fail "the records differ from the step's"
+          if view s'.machines != view r.state.machines || view s'.machines != [[(some 3, some 1, some (105, some 2))]] then
+            ok ← fail s!"the new table holds {view s'.machines}, the step {view r.state.machines}"
+          if ids s'.pending != ids r.state.pending || s'.nextId != r.state.nextId || ids s'.pending != [2, 40, 41] then
+            ok ← fail s!"the model's pending ids are {ids s'.pending} and next id {s'.nextId}, the step's {ids r.state.pending} and {r.state.nextId}"
+          match Step.applyEvents prelude ({ state := s } : Step.Acc twiceSvc) [(3 : Int)] with
+          | .ok b => if view s'.machines == view b.state.machines then ok ← fail "applying only the first event passes the comparison"
+          | .error _ => ok ← fail "one event faults"
+          return ok
+        | _, _ => fail "the model does not decode"
+      | a => fail s!"{repr a}"
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -2336,6 +2439,7 @@ def check (z3 : String) : IO Bool := do
   unless ← fanCheck solver do ok := false
   unless ← clockFireCheck solver do ok := false
   unless ← eventsCheck solver do ok := false
+  unless ← twiceCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
