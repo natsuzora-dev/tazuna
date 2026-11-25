@@ -4,8 +4,8 @@ import Tazuna.Smt.CommandExact
 /-! A list of events in one step, as a command's events, an answer's or one event: each event in turn is applied, every
 machine reacts to it, then every reaction, and the requests they start are written at the next wire ids. The encoding
 runs over the list's slots (`encodeEvents`); an occupied slot takes the records, instance tables and next id the slot
-before it left, an empty one passes them on, and its requests' flags are and-ed with its own, as `applyAll` does for
-records alone. The invariants are the caller's: a step checks them once, after all its events. -/
+before it left, an empty one passes them on, and its requests' flags are and-ed with its own, so whatever its free
+item holds starts nothing. The invariants are the caller's: a step checks them once, after all its events. -/
 
 namespace Tazuna.Ir
 
