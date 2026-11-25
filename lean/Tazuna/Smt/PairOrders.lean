@@ -1,47 +1,25 @@
 import Tazuna.Semantics.PairCommute
 
 /-! Whether the two orders of a pair of own effects end the same once the names the pair made are renamed, run in
-Lean on a counterexample. The solver compares the two orders with each effect keeping the names it made (the canonical
-order, `Step.canonPair`), which needs no search but is stricter than `Step.Same`: two effects that each write the id
-they made under one key end with different ids that a renaming would match. `sameUpToPair` searches the renamings
-`Same` allows from the pair's start, which are few: the two counters the pair used kept or swapped, and the wire ids it
-sent permuted. Each step in progress is read as one term (`Acc.term`) with collections as sorted lists, as `Ty.canon`
-reads bags and tables, so equal terms mean the same values up to the order of multisets. Kept functions compare by
-their site and captured values. -/
+Lean on a counterexample of a pair question. The solver compares the two orders with each effect keeping the names it
+made (the canonical order, `Step.canonPair`), which needs no search but is stricter than `Step.Same`: two effects
+that each write the id they made under one key end with different ids that a renaming would match.
+`sameUpToPair` searches the renamings `Same` allows from the pair's start, which are few: the two counters the pair
+used kept or swapped, and the wire ids it sent permuted. Each step in progress is read as one term (`accTerm`) with
+collections as sorted lists, as `Ty.canon` reads bags and tables, so equal terms mean the same values up to the order
+of multisets. Kept functions compare by their site and captured values. `pairOrders` is the one reading of a pair's
+two orders that prove's pair lines and smt-check both use. -/
 
-namespace Tazuna.Ir
+namespace Tazuna.Smt
+
+open Tazuna.Ir Tazuna.Ir.Step
 
 attribute [local instance] lexOrd
 
-mutual
-/-- `Ty.canon` with each fresh id's step counter renamed by `σ`. -/
-def Ty.canonBy (σ : Nat → Nat) : (t : Ty) → t.den0 → Erl
-  | .int, n => .int n
-  | .str, s => .bin s
-  | .list t, xs => .list (xs.map (Ty.canonBy σ t))
-  | .bag t, xs => .list (Erl.sort (xs.map (Ty.canonBy σ t)))
-  | .tuple ts, x => .tuple (Ty.canonsBy σ ts x)
-  | .adt _ _ vs, x => Ty.canonAltsBy σ 0 vs x
-  | .table k v, x =>
-    let ps := Erl.sort (x.1.map fun e => (Ty.canonBy σ k e.1, Ty.canonBy σ v e.2))
-    .map (ps.map (·.1)) (ps.map (·.2))
-  | .date, d => .int d
-  | .id, .fresh s i => .tuple [.int (σ s), .int i]
-  | .id, .named s => .bin s
-  | .dsl .fresh _, n => .int (σ (show Nat from n))
-  | .param _, _ | .fn .., _ | .dsl .., _ => .atom ""
-def Ty.canonsBy (σ : Nat → Nat) : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List Erl
-  | [], () => []
-  | t :: ts, (x, xs) => Ty.canonBy σ t x :: Ty.canonsBy σ ts xs
-def Ty.canonAltsBy (σ : Nat → Nat) (k : Nat) : (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → Erl
-  | [], x => nomatch x
-  | fs :: _, .inl x => .tuple (.int k :: Ty.canonsBy σ fs x)
-  | _ :: vs, .inr y => Ty.canonAltsBy σ (k + 1) vs y
-end
+variable {v : ServiceV}
 
-namespace Step
-
-variable {v : ServiceV} (σ τ : Nat → Nat)
+section Terms
+variable (σ τ : Nat → Nat)
 
 def siteTerm (s : SiteId) : Erl := .tuple [.bin s.module, .int s.line, .int s.col, .int s.index]
 
@@ -73,7 +51,7 @@ def machinesTerm {r e : Ty} : {ms : List (MachineV r e)} → Machines ms → Lis
 
 /-- A step in progress as one term, with fresh ids' counters renamed by `σ` and wire ids by `τ`, and every multiset
 as a sorted list. -/
-def Acc.term (a : Acc v) : Erl :=
+def accTerm (a : Acc v) : Erl :=
   .tuple [Ty.canonBy σ v.records a.state.records, .list (machinesTerm σ a.state.machines),
     .list (Erl.sort (a.state.pending.map fun p =>
       .tuple [.int (τ p.id), senderTerm σ p.sender, .bin p.external, requestTerm σ p.request])),
@@ -81,6 +59,8 @@ def Acc.term (a : Acc v) : Erl :=
     .list (Erl.sort (a.events.map (Ty.canonBy σ v.event))),
     .list (Erl.sort (a.out.map fun o => .tuple [.int (τ o.id), .bin o.external, .bin o.name, wireTerm σ o.input])),
     .list (Erl.sort (a.own.map (effectTerm σ)))]
+
+end Terms
 
 /-- Every order of the list. -/
 def perms : List Nat → List (List Nat)
@@ -96,12 +76,27 @@ from `n0` on permuted. None when the pair sent more wire ids than `wireSearchCap
 def sameUpToPair (f n0 : Nat) (A C : Acc v) : Option Bool :=
   let k := C.state.nextId - n0
   if k > wireSearchCap then none else
-  let target := A.term id id
+  let target := accTerm id id A
   some ([id, swapFn f].any fun σ => (perms (List.range k)).any fun p =>
-    C.term σ (fun i => match p[i - n0]? with
+    accTerm σ (fun i => match p[i - n0]? with
       | some j => if n0 ≤ i then n0 + j else i
-      | none => i) == target)
+      | none => i) C == target)
 
-end Step
+/-- How the two orders of a pair of own effects compare, run in Lean from a step in progress: `e1` then `e2`, and
+the canonical other order (`Step.canonPair`). `some false` where they do not commute: the second faults alone but not
+after the first, or the two orders end differently under every renaming `sameUpToPair` searches. `some true` where
+they end the same up to such a renaming, and none where the pair sent more wire ids than the search covers. An error
+names what no counterexample of a pair's target question gives: the first faults, the second faults in both orders,
+or both orders fault. -/
+def pairOrders (T : List TypeDecl) (a0 : Step.Acc v) (e1 e2 : EffectV v.event) : Except String (Option Bool) :=
+  match Step.runOwn T a0 e1 with
+  | .error _ => .error "faults in its first step"
+  | .ok b =>
+    match Step.runOwn T (a0.withFresh (a0.state.fresh + 1)) e2, Step.runOwn T b e2, Step.canonPair T a0 e1 e2 with
+    | .error _, .error _, _ => .error "has the second step fault in both orders"
+    | .error _, .ok _, _ => .ok (some false)
+    | .ok _, .error _, .error _ => .error "has both orders fault"
+    | .ok _, .ok A, .ok C => .ok (sameUpToPair a0.state.fresh a0.state.nextId A C)
+    | .ok _, _, _ => .ok (some false)
 
-end Tazuna.Ir
+end Tazuna.Smt

@@ -6,6 +6,7 @@ import Tazuna.Smt.Solver
 import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.FiresForward
 import Tazuna.Smt.Pair
+import Tazuna.Smt.PairOrders
 
 -- Test scaffolding: a value the model leaves out reads as a default that the checks then reject.
 set_option linter.tazuna.silentDefault false
@@ -3560,28 +3561,6 @@ def pairEffect (L : Layout) : Val → Option (EffectV evT)
       .command name .str .int .str c i (pairOnAnswer.fn ())
   | _ => none
 
-/-- Two lists of pending requests hold the same wire ids with the same inputs. -/
-def samePending {e : Ty} (ps qs : List (Step.Pending e)) : Bool :=
-  ps.length == qs.length && ps.all fun p => qs.any fun q => p.id == q.id &&
-    match Ty.same p.request.input q.request.input with
-    | some ⟨h⟩ => Ty.deq0 _ (h ▸ p.request.value) q.request.value
-    | none => false
-
-/-- Whether two own effects do not commute from a step in progress, run in Lean in both orders, the other one
-canonical (`Step.canonPair`): the first runs, and the second faults after it alone, or the two orders end with
-different records or different pending requests (wire ids and inputs). -/
-def pairDiffers (v : ServiceV) (a0 : Step.Acc v) (e1 e2 : EffectV v.event) : Bool :=
-  let f := a0.state.fresh
-  match Step.runOwn prelude a0 e1, Step.runOwn prelude (a0.withFresh (f + 1)) e2 with
-  | .error _, _ => false
-  | .ok b, .error _ => match Step.runOwn prelude b e2 with
-    | .ok _ => true
-    | .error _ => false
-  | .ok b, .ok _ => match Step.runOwn prelude b e2, Step.canonPair prelude a0 e1 e2 with
-    | .error _, .error _ => false
-    | .ok x, .ok y => !Ty.deq0 v.records x.state.records y.state.records || !samePending x.state.pending y.state.pending
-    | _, _ => true
-
 /-- The pair questions of `v`'s own kinds in its layout at 3 slots: each listed pair's target question must be unsat
 when it commutes, and otherwise sat with a model whose state and effects do not commute in Lean. -/
 def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : List (String × Nat × Nat × Bool))
@@ -3602,7 +3581,7 @@ def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : L
         match (SymState.vars (v := v) 0).decode M L prelude (shapes v), pairEffect L (M.vars n),
             pairEffect L (M.vars (n + 1)) with
         | some s, some e1, some e2 =>
-          unless pairDiffers v { state := s } (hev ▸ e1) (hev ▸ e2) do
+          unless pairOrders prelude { state := s } (hev ▸ e1) (hev ▸ e2) matches .ok (some false) do
             ok ← fail s!"{name}: the model's effects commute in Lean"
         | _, _, _ => ok ← fail s!"{name}: the model does not decode"
       | a, _ => ok ← fail s!"{name}: {repr a}"

@@ -5,7 +5,7 @@ import Tazuna.Semantics.After
 import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.FiresForward
 import Tazuna.Semantics.NoTimer
-import Tazuna.Semantics.SameCheck
+import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Pair
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
@@ -304,7 +304,7 @@ def orderWire (T : List TypeDecl) {v : ServiceV} : Except Fault (Acc v) → Show
 
 /-- The report of a pair's target question (`pairQuestions`): a model is a state and two own effects whose two orders
 the solver finds different with each effect keeping the ids it made. Lean runs both orders from the model's state;
-where they agree up to renaming the ids the pair made (`Step.sameUpToPair`), the line is undecided, else violated. -/
+where they agree up to renaming the ids the pair made (`pairOrders`), the line is undecided, else violated. -/
 def pairReport (L : Layout) (k1 k2 : Nat) (g : Target) (step : String) (a : Smt.Answer) : Except String Report :=
   match a with
   | .unsat => .ok (.unsat v.name step (some g))
@@ -315,32 +315,21 @@ def pairReport (L : Layout) (k1 k2 : Nat) (g : Target) (step : String) (a : Smt.
         decodeOwn L c.P v k2 (M.vars (pairVar v + 1)) with
     | some s, some e1, some e2 =>
       let a0 : Acc v := { state := s }
-      match runOwn c.T a0 e1 with
-      | .error _ => .error s!"a model of {step} faults in its first step"
-      | .ok b =>
-        let one := runOwn c.T b e2
-        let other := canonPair c.T a0 e1 e2
-        let alone := runOwn c.T (a0.withFresh (s.fresh + 1)) e2
-        let shown (more : List (String × Json)) : List (String × Json) := (do
-          let st ← stateWire c.T s
-          let w1 ← effectWire c.T e1
-          let w2 ← effectWire c.T e2
-          let o1 ← orderWire c.T one
-          let o2 ← orderWire c.T other
-          pure ([("from", Json.str "validState"), ("state", st.toJson), ("first", w1.toJson), ("second", w2.toJson),
-            ("firstThenSecond", o1.toJson), ("secondThenFirst", o2.toJson)] ++ more) : Show _).run' {}
-        let violated := Report.violated v.name step g (shown [("violated", Json.arr #[Json.str "steps do not commute"])])
-        match alone, one, other with
-        | .error _, .error _, _ => .error s!"a model of {step} has the second step fault in both orders"
-        | .error _, .ok _, _ => .ok violated
-        | .ok _, .error _, .error _ => .error s!"a model of {step} has both orders fault"
-        | .ok _, .ok A, .ok C =>
-          match sameUpToPair s.fresh s.nextId A C with
-          | some false => .ok violated
-          | some true => .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown []))
-          | none => .ok (.undecided (.undecided .upToRenaming) v.name step (some g)
-              (shown [("why", Json.str s!"the two steps sent more than {wireSearchCap} requests")]))
-        | .ok _, _, _ => .ok violated
+      let shown (more : List (String × Json)) : List (String × Json) := (do
+        let st ← stateWire c.T s
+        let w1 ← effectWire c.T e1
+        let w2 ← effectWire c.T e2
+        let o1 ← orderWire c.T (runOwn c.T a0 e1 >>= fun b => runOwn c.T b e2)
+        let o2 ← orderWire c.T (canonPair c.T a0 e1 e2)
+        pure ([("from", Json.str "validState"), ("state", st.toJson), ("first", w1.toJson), ("second", w2.toJson),
+          ("firstThenSecond", o1.toJson), ("secondThenFirst", o2.toJson)] ++ more) : Show _).run' {}
+      match pairOrders c.T a0 e1 e2 with
+      | .error why => .error s!"a model of {step} {why}"
+      | .ok (some false) =>
+        .ok (Report.violated v.name step g (shown [("violated", Json.arr #[Json.str "steps do not commute"])]))
+      | .ok (some true) => .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown []))
+      | .ok none => .ok (.undecided (.undecided .upToRenaming) v.name step (some g)
+          (shown [("why", Json.str s!"the two steps sent more than {wireSearchCap} requests")]))
     | _, _, _ => .error s!"a model of {step} does not decode"
 
 -- The bound question has no target, and its name says so.

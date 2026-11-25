@@ -254,30 +254,36 @@ section Canon
 attribute [local instance] lexOrd
 
 mutual
-/-- A data value as a term that two values share exactly when `==` holds between them, on comparable types. -/
-def Ty.canon : (t : Ty) → t.den0 → Erl
+/-- A data value as a term, with each fresh id's step counter renamed by `σ`. -/
+def Ty.canonBy (σ : Nat → Nat) : (t : Ty) → t.den0 → Erl
   | .int, n => .int n
   | .str, s => .bin s
-  | .list t, xs => .list (xs.map (Ty.canon t))
-  | .bag t, xs => .list (Erl.sort (xs.map (Ty.canon t)))
-  | .tuple ts, x => .tuple (Ty.canons ts x)
-  | .adt _ _ vs, x => Ty.canonAlts 0 vs x
+  | .list t, xs => .list (xs.map (Ty.canonBy σ t))
+  | .bag t, xs => .list (Erl.sort (xs.map (Ty.canonBy σ t)))
+  | .tuple ts, x => .tuple (Ty.canonsBy σ ts x)
+  | .adt _ _ vs, x => Ty.canonAltsBy σ 0 vs x
   | .table k v, x =>
-    let ps := Erl.sort (x.1.map fun e => (Ty.canon k e.1, Ty.canon v e.2))
+    let ps := Erl.sort (x.1.map fun e => (Ty.canonBy σ k e.1, Ty.canonBy σ v e.2))
     .map (ps.map (·.1)) (ps.map (·.2))
   | .date, d => .int d
-  | .id, .fresh s i => .tuple [.int s, .int i]
+  | .id, .fresh s i => .tuple [.int (σ s), .int i]
   | .id, .named s => .bin s
-  | .dsl .fresh _, n => .int (show Nat from n)
+  | .dsl .fresh _, n => .int (σ (show Nat from n))
   | .param _, _ | .fn .., _ | .dsl .., _ => .atom ""
-def Ty.canons : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List Erl
+def Ty.canonsBy (σ : Nat → Nat) : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List Erl
   | [], () => []
-  | t :: ts, (x, xs) => Ty.canon t x :: Ty.canons ts xs
-def Ty.canonAlts (k : Nat) : (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → Erl
+  | t :: ts, (x, xs) => Ty.canonBy σ t x :: Ty.canonsBy σ ts xs
+def Ty.canonAltsBy (σ : Nat → Nat) (k : Nat) : (vs : List (List Ty)) → (Ty.semAltsWith Dsl.base vs).1 → Erl
   | [], x => nomatch x
-  | fs :: _, .inl x => .tuple (.int k :: Ty.canons fs x)
-  | _ :: vs, .inr y => Ty.canonAlts (k + 1) vs y
+  | fs :: _, .inl x => .tuple (.int k :: Ty.canonsBy σ fs x)
+  | _ :: vs, .inr y => Ty.canonAltsBy σ (k + 1) vs y
 end
+
+/-- A data value as a term that two values share exactly when `==` holds between them, on comparable types. -/
+abbrev Ty.canon (t : Ty) (x : t.den0) : Erl := Ty.canonBy _root_.id t x
+abbrev Ty.canons (ts : List Ty) (x : (Ty.semsWith Dsl.base ts).1) : List Erl := Ty.canonsBy _root_.id ts x
+abbrev Ty.canonAlts (k : Nat) (vs : List (List Ty)) (x : (Ty.semAltsWith Dsl.base vs).1) : Erl :=
+  Ty.canonAltsBy _root_.id k vs x
 
 theorem Ty.canonAlts_tag : (k : Nat) → (vs : List (List Ty)) → (y : (Ty.semAltsWith Dsl.base vs).1) →
     ∃ m ≥ k, ∃ rest, Ty.canonAlts k vs y = .tuple (.int (m : Nat) :: rest)
@@ -293,8 +299,8 @@ theorem Ty.canon_iff : (t : Ty) → t.comparable = true → (x y : t.den0) →
   | .int, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
   | .str, _, x, y => (beq_iff_eq (α := String) (a := x) (b := y)).trans ⟨congrArg Erl.bin, Erl.bin.inj⟩
   | .date, _, x, y => (beq_iff_eq (α := Int) (a := x) (b := y)).trans ⟨congrArg Erl.int, Erl.int.inj⟩
-  | .param _, _, x, y => by simp [Ty.semWith, Ty.canon]
-  | .id, _, x, y => by cases x <;> cases y <;> simp [Ty.semWith, Ty.canon]; omega
+  | .param _, _, x, y => by simp [Ty.semWith, Ty.canon, Ty.canonBy]
+  | .id, _, x, y => by cases x <;> cases y <;> simp [Ty.semWith, Ty.canon, Ty.canonBy]; omega
   | .list t, h, xs, ys => by
     show listBeq _ xs ys = true ↔ Erl.list _ = Erl.list _
     rw [Erl.list.injEq]
@@ -324,7 +330,7 @@ theorem Ty.canons_iff : (ts : List Ty) → Ty.comparables ts = true → (x y : (
   | t :: ts, h, (x, xs), (y, ys) => by
     simp only [Ty.comparables, Bool.and_eq_true] at h
     show ((Ty.semWith Dsl.base t).2 x y && (Ty.semsWith Dsl.base ts).2 xs ys) = true ↔ _
-    simp only [Bool.and_eq_true, Ty.canons, List.cons.injEq, Ty.canon_iff t h.1 x y, Ty.canons_iff ts h.2 xs ys]
+    simp only [Bool.and_eq_true, Ty.canons, Ty.canonsBy, List.cons.injEq, Ty.canon_iff t h.1 x y, Ty.canons_iff ts h.2 xs ys]
 theorem Ty.canonAlts_iff : (k : Nat) → (vs : List (List Ty)) → Ty.comparabless vs = true →
     (x y : (Ty.semAltsWith Dsl.base vs).1) →
     ((Ty.semAltsWith Dsl.base vs).2 x y = true ↔ Ty.canonAlts k vs x = Ty.canonAlts k vs y)
@@ -332,7 +338,7 @@ theorem Ty.canonAlts_iff : (k : Nat) → (vs : List (List Ty)) → Ty.comparable
   | k, fs :: _, h, .inl x, .inl y => by
     simp only [Ty.comparabless, Bool.and_eq_true] at h
     show (Ty.semsWith Dsl.base fs).2 x y = true ↔ _
-    simp only [Ty.canonAlts, Erl.tuple.injEq, List.cons.injEq, true_and]
+    simp only [Ty.canonAlts, Ty.canonAltsBy, Erl.tuple.injEq, List.cons.injEq, true_and]
     exact Ty.canons_iff fs h.1 x y
   | k, _ :: vs, h, .inr x, .inr y => by
     simp only [Ty.comparabless, Bool.and_eq_true] at h
@@ -341,12 +347,12 @@ theorem Ty.canonAlts_iff : (k : Nat) → (vs : List (List Ty)) → Ty.comparable
   | k, _ :: vs, _, .inl x, .inr y => by
     simp only [Ty.semAltsWith, Sem.sum, Bool.false_eq_true, false_iff]
     obtain ⟨m, hm, rest, ht⟩ := Ty.canonAlts_tag (k + 1) vs y
-    simp only [Ty.canonAlts, ht, Erl.tuple.injEq, List.cons.injEq, Erl.int.injEq, Int.ofNat_inj]
+    simp only [Ty.canonAlts, Ty.canonAltsBy, ht, Erl.tuple.injEq, List.cons.injEq, Erl.int.injEq, Int.ofNat_inj]
     omega
   | k, _ :: vs, _, .inr x, .inl y => by
     simp only [Ty.semAltsWith, Sem.sum, Bool.false_eq_true, false_iff]
     obtain ⟨m, hm, rest, ht⟩ := Ty.canonAlts_tag (k + 1) vs x
-    simp only [Ty.canonAlts, ht, Erl.tuple.injEq, List.cons.injEq, Erl.int.injEq, Int.ofNat_inj]
+    simp only [Ty.canonAlts, Ty.canonAltsBy, ht, Erl.tuple.injEq, List.cons.injEq, Erl.int.injEq, Int.ofNat_inj]
     omega
 end
 
