@@ -2,18 +2,17 @@ import Tazuna.Smt.OwnCoded
 import Tazuna.Smt.FiresForward
 import Tazuna.Semantics.NoTimer
 
-/-! T5 from the pair lines' answers, scoped to the slots, as every verdict is (run-log 121): where each listed pair of
-own kinds reads `Prove.proved`, every order of a cascade ends as `settle` does, up to renaming, or both fault, for
-every cascade that starts with waiting own effects a script can hold and every state of which, in any order, fits the
-slots (`cascade_lines`). The pair questions are asked over a free symbolic state, so no order of the cascade needs
-encoding: what each state reached in any order must meet is the question's preconditions, which the states of a
-cascade keep (`Lines.Keeps`): names below the counter, pending requests below the next id and of the program's sites,
-waiting effects of its sites, instances in the step's form; and its waiting effects stay ones a script can hold
-(`Lines.Coded`, `coded_preserved`), since the bound question of each effect's pair with itself makes its step fit.
-Where the lines read `Prove.withinBounds`, the same holds where every pair's codes fit and every internal step the
-cascade or two waiting effects in either order run fits too (`cascade_within`). The timer lines say the same of a
-clock line's timers (`timers_lines`): a timer machine's question is asked over a free key, state, records and time,
-so each timer that fires in any order needs only its context to fit the slots. -/
+/-! T5 from the pair lines' answers, scoped to the slots, as every verdict is: where each listed pair of own kinds
+reads `Prove.proved`, or `Prove.withinBounds` and the steps it names fit, every order of a cascade ends as `settle`
+does, up to renaming, or both fault, for every cascade that starts with waiting own effects some value codes and every
+state of which, in any order, fits the slots (`cascade_lines`). The pair questions are asked over a free symbolic
+state, so no order of the cascade needs encoding: what each state reached in any order must meet is the questions'
+preconditions, which the states of a cascade keep (`CascadeKeeps`): names below the counter, pending requests below
+the next id and of the program's sites, waiting effects of its sites, instances in the step's form; and its waiting
+effects stay coded (`coded_preserved`), since the bound question of each effect's pair with itself makes its step fit,
+or the line's scope does. The timer lines say the same of a clock line's timers (`timers_lines`): a timer machine's
+question is asked over a free key, state, records and time, so each timer that fires in any order needs only its
+context to fit the slots. -/
 
 namespace Tazuna.Smt
 
@@ -35,18 +34,15 @@ variable {L : Layout} {v : ServiceV}
 
 /-- What a cascade's states keep and a pair question assumes of its state: the counters' invariants, the program's
 sites, instances in the step's form, and every pending request's names below the counter. -/
-structure Lines.Keeps (T : List TypeDecl) (P : List AnySite) (a : Step.Acc v) : Prop where
+structure CascadeKeeps (T : List TypeDecl) (P : List AnySite) (a : Step.Acc v) : Prop where
   supp : Step.Supp a
   inv : Step.Inv P a.state
   queue : Step.QueueOk P a
   keys : Step.KeysOk T a.state
   pend : Step.PendAt a.state.fresh a
 
-/-- Every waiting own effect is one a script can hold. -/
-def Lines.Coded (L : Layout) (a : Step.Acc v) : Prop := ∀ x ∈ a.own, EffCoded L x
-
 theorem keeps_preserved {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite} (hv : v.Equivariant)
-    (hr : v.Reach P E) : Diamond.Preserved (Step.ownSys T v) (Lines.Keeps T P) := by
+    (hr : v.Reach P E) : Diamond.Preserved (Step.ownSys T v) (CascadeKeeps T P) := by
   intro a i b ha hi hb
   have hs := Step.ownSys_preserved T hv a i b ha.supp hi hb
   simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hb
@@ -67,16 +63,15 @@ theorem keeps_preserved {T : List TypeDecl} {P : List AnySite} {E : List AnyEffe
 coded, keeps them coded where the pair lines speak for the step (`coded_step`). -/
 theorem coded_preserved {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v)) {a b : Step.Acc v} {i : Nat}
-    (ha : Lines.Keeps T P a) (hW : Within L (shapes v) a.state) (hc : Lines.Coded L a) (hi : i < a.own.length)
-    (hcf : ∀ p ∈ L.ownPairs v.event, ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧
-      (Unsat L (pairTys v) bq ∨ PairCodesFit L P v p.1 p.2 ∧ ownFits L.count T a.state a.own[i]))
-    (hb : (Step.ownSys T v).pick a i = .ok b) : Lines.Coded L b := by
+    (ha : CascadeKeeps T P a) (hW : Within L (shapes v) a.state) (hc : QueueCoded L a) (hi : i < a.own.length)
+    (hcf : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (ownFits L.count T a.state a.own[i]) p)
+    (hb : (Step.ownSys T v).pick a i = .ok b) : QueueCoded L b := by
   simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hb
   exact coded_step chk senv ha.keys hW ha.inv ha.supp ha.pend ha.queue hc hi hcf hb
 
 /-- At a step in progress a cascade keeps, which fits the slots, two of its waiting effects meet a pair question's
 preconditions with the rest of the queue as the step in progress. -/
-theorem pair_pre {T : List TypeDecl} {P : List AnySite} {a : Step.Acc v} (ha : Lines.Keeps T P a) {i j : Nat}
+theorem pair_pre {T : List TypeDecl} {P : List AnySite} {a : Step.Acc v} (ha : CascadeKeeps T P a) {i j : Nat}
     (hi : i < a.own.length) (hj : j < a.own.length) :
     Step.KeysOk T { a with own := Step.dropTwo a.own i j }.state ∧
       Step.StateSupp { a with own := Step.dropTwo a.own i j }.state ∧
@@ -89,15 +84,21 @@ theorem pair_pre {T : List TypeDecl} {P : List AnySite} {a : Step.Acc v} (ha : L
     (ha.queue _ (List.getElem_mem hi)).1, (ha.queue _ (List.getElem_mem hj)).1,
     (ha.queue _ (List.getElem_mem hi)).2, (ha.queue _ (List.getElem_mem hj)).2⟩
 
-/-- T5 from the pair lines, scoped to the slots: where every listed pair of own kinds has both questions unsat
-(`Prove.proved`), every order of a cascade from a step in progress whose names are below its counter and whose waiting
-own effects a script can hold ends as `settle` does, up to renaming the names the cascade made, or both fault,
-wherever every step in progress the cascade reaches in any order fits the slots. The effects it queues stay ones a
-script can hold (`coded_preserved`). -/
+/-- What `Prove.withinBounds` names for a cascade: every step in progress it reaches in any order runs each of its
+waiting effects, and every two of them in either order, within the slots. -/
+def CascadeFits (L : Layout) (T : List TypeDecl) (a : Step.Acc v) : Prop :=
+  ∀ b, Diamond.Reach (Step.ownSys T v) a b → (∀ i (hi : i < b.own.length), ownFits L.count T b.state b.own[i]) ∧
+    ∀ i j (hi : i < b.own.length) (hj : j < b.own.length), i ≠ j →
+      PairFits L.count T { b with own := Step.dropTwo b.own i j } b.own[i] b.own[j]
+
+/-- T5 from the pair lines, scoped to the slots: where every listed pair of own kinds reads proved, or within the
+bounds and the cascade fits (`CascadeFits`), every order of a cascade from a step in progress it keeps, whose waiting
+own effects are coded, ends as `settle` does, up to renaming the names the cascade made, or both fault, wherever
+every step in progress the cascade reaches in any order fits the slots. The effects it queues stay coded
+(`coded_preserved`). -/
 theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : StepEnv L (shapes v))
-    (hall : ∀ p ∈ L.ownPairs v.event, ∃ bq tq, pairQuestions L c.T c.P v senv p.1 p.2 = .ok (bq, tq) ∧
-      Unsat L (pairTys v) bq ∧ Unsat L (pairTys v) tq)
-    {a : Step.Acc v} (ha : Lines.Keeps c.T c.P a) (hcoded : Lines.Coded L a)
+    {a : Step.Acc v} (ha : CascadeKeeps c.T c.P a) (hcoded : QueueCoded L a)
+    (hall : ∀ p ∈ L.ownPairs v.event, PairLine L c.T c.P v senv (CascadeFits L c.T a) p)
     (hfit : ∀ b, Diamond.Reach (Step.ownSys c.T v) a b → Within L (shapes v) b.state) :
     ∀ fuel {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r →
       Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a) := by
@@ -105,42 +106,14 @@ theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : Ste
   have chk := c.checked v hv
   intro fuel r hr
   refine Step.cascade_agrees c.T he
-    (J := fun b => Diamond.Reach (Step.ownSys c.T v) a b ∧ Lines.Keeps c.T c.P b ∧ Lines.Coded L b)
+    (J := fun b => Diamond.Reach (Step.ownSys c.T v) a b ∧ CascadeKeeps c.T c.P b ∧ QueueCoded L b)
     (fun b i d hb hi hd => ⟨.step hb.1 hi hd, keeps_preserved he chk.reach b i d hb.2.1 hi hd,
       coded_preserved chk senv hb.2.1 (hfit b hb.1) hb.2.2 hi
-        (fun p hp => by obtain ⟨bq, tq, hq, hb, -⟩ := hall p hp; exact ⟨bq, tq, hq, .inl hb⟩) hd⟩)
-    (fun b _ hb i j hi hj _ => ?_) fuel a ha.supp ⟨.refl, ha, hcoded⟩ hr
-  obtain ⟨hk, hs, hq, hsa, ho1, ho2, hr1, hr2⟩ := pair_pre hb.2.1 hi hj
-  exact pairs_at chk senv hall hk (hfit b hb.1) hb.2.1.inv hs hq hsa
-    (hb.2.2 _ (List.getElem_mem hi)) (hb.2.2 _ (List.getElem_mem hj)) ho1 ho2 hr1 hr2
-
-/-- T5 from pair lines that read `Prove.withinBounds`: where every listed pair of own kinds has its target question
-unsat and its codes fit, `cascade_lines` holds of every cascade whose states also run each of their waiting effects,
-and every two of them in either order, within the slots. -/
-theorem cascade_within (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : StepEnv L (shapes v))
-    (hall : ∀ p ∈ L.ownPairs v.event, ∃ bq tq, pairQuestions L c.T c.P v senv p.1 p.2 = .ok (bq, tq) ∧
-      Unsat L (pairTys v) tq ∧ PairCodesFit L c.P v p.1 p.2)
-    {a : Step.Acc v} (ha : Lines.Keeps c.T c.P a) (hcoded : Lines.Coded L a)
-    (hfit : ∀ b, Diamond.Reach (Step.ownSys c.T v) a b → Within L (shapes v) b.state ∧
-      (∀ i (hi : i < b.own.length), ownFits L.count c.T b.state b.own[i]) ∧
-      ∀ i j (hi : i < b.own.length) (hj : j < b.own.length), i ≠ j →
-        PairFits L.count c.T { b with own := Step.dropTwo b.own i j } b.own[i] b.own[j]) :
-    ∀ fuel {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r →
-      Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a) := by
-  have he := c.equivariant v hv
-  have chk := c.checked v hv
-  intro fuel r hr
-  refine Step.cascade_agrees c.T he
-    (J := fun b => Diamond.Reach (Step.ownSys c.T v) a b ∧ Lines.Keeps c.T c.P b ∧ Lines.Coded L b)
-    (fun b i d hb hi hd => ⟨.step hb.1 hi hd, keeps_preserved he chk.reach b i d hb.2.1 hi hd,
-      coded_preserved chk senv hb.2.1 (hfit b hb.1).1 hb.2.2 hi
-        (fun p hp => by
-          obtain ⟨bq, tq, hq, -, hc⟩ := hall p hp; exact ⟨bq, tq, hq, .inr ⟨hc, (hfit b hb.1).2.1 i hi⟩⟩) hd⟩)
+        (fun p hp => (hall p hp).mono fun h => (h b hb.1).1 i hi) hd⟩)
     (fun b _ hb i j hi hj hij => ?_) fuel a ha.supp ⟨.refl, ha, hcoded⟩ hr
   obtain ⟨hk, hs, hq, hsa, ho1, ho2, hr1, hr2⟩ := pair_pre hb.2.1 hi hj
-  obtain ⟨hW, -, hpf⟩ := hfit b hb.1
-  exact pairsWithin_at chk senv hall hk hW hb.2.1.inv hs hq hsa
-    (hb.2.2 _ (List.getElem_mem hi)) (hb.2.2 _ (List.getElem_mem hj)) ho1 ho2 hr1 hr2 (hpf i j hi hj hij)
+  exact pairs_at chk senv (fun p hp => (hall p hp).mono fun h => (h b hb.1).2 i j hi hj hij) hk (hfit b hb.1)
+    hb.2.1.inv hs hq hsa (hb.2.2 _ (List.getElem_mem hi)) (hb.2.2 _ (List.getElem_mem hj)) ho1 ho2 hr1 hr2
 
 /-- A timer's context fits the slots: the instance's key, the state its timer moves it to and the records embed. -/
 def CtxFits (L : Layout) {r e : Ty} (m : MachineV r e) (records : r.den0) (key : m.key.den0) (st : m.state.den0) :
@@ -154,11 +127,15 @@ def TimersFit (L : Layout) {r e : Ty} (records : r.den0) : {ms : List (MachineV 
   | m :: _, .cons insts rest =>
     (∀ i ∈ insts, ∀ p, i.timer = some p → CtxFits L m records i.key p.2) ∧ TimersFit L records rest
 
-/-- What a timer line says: where the machine sets no timer, or both its questions are unsat, the timer `after` sets
-at a context that fits the slots is no earlier than the time it is set at. -/
+/-- What a timer line's answers say: the machine sets no timer (it gets no line), or both its questions are unsat
+(`Prove.proved`). -/
+def TimerLine (L : Layout) {r e : Ty} (m : MachineV r e) : Prop :=
+  m.noTimer = true ∨ ∃ bq tq, backQuestions L m = .ok (bq, tq) ∧ Unsat L (backTys m) bq ∧ Unsat L (backTys m) tq
+
+/-- What a timer line says: the timer `after` sets at a context that fits the slots is no earlier than the time it is
+set at. -/
 theorem forward_of_line {r e : Ty} {m : MachineV r e}
-    (hq : m.noTimer = true ∨ ∃ bq tq, backQuestions L m = .ok (bq, tq) ∧ Unsat L (backTys m) bq ∧
-      Unsat L (backTys m) tq)
+    (hq : TimerLine L m)
     {records : r.den0} {now : Int} {key : m.key.den0} {st : m.state.den0} (hc : CtxFits L m records key st) :
     ∀ y ∈ Step.timerAt now (m.after.fn (.inl (key, st, records, now, ()), ())), now ≤ y.1 := by
   rcases hq with hn | ⟨bq, tq, hq, hb, ht⟩
@@ -179,8 +156,7 @@ theorem forward_of_line {r e : Ty} {m : MachineV r e}
     decode_embed _ _ _ hr, rfl⟩).2 hb
 
 theorem firesAt_of_lines {r e : Ty} {records : r.den0} {now : Int} : {ms : List (MachineV r e)} →
-    (∀ m ∈ ms, m.noTimer = true ∨ ∃ bq tq, backQuestions L m = .ok (bq, tq) ∧ Unsat L (backTys m) bq ∧
-      Unsat L (backTys m) tq) →
+    (∀ m ∈ ms, TimerLine L m) →
     (l : Step.Machines ms) → TimersFit L records l → Step.FiresAt records now l
   | [], _, .nil, _ => trivial
   | m :: _, hq, .cons insts rest, hf => by
@@ -194,13 +170,12 @@ theorem firesAt_of_lines {r e : Ty} {records : r.den0} {now : Int} : {ms : List 
       have hc := hi _ hmem p rfl
       exact Int.le_trans hdn (forward_of_line (hq m List.mem_cons_self) hc y hy)
 
-/-- T5 for a clock line's timers from the timer lines, scoped to the slots: where every machine sets no timer or has
-both its questions unsat, every order of the timers due at one deadline ends as `fire` does, the same state and the
+/-- T5 for a clock line's timers from the timer lines, scoped to the slots: where every timer line reads proved, every
+order of the timers due at one deadline ends as `fire` does, the same state and the
 same effects in some order, wherever every timer set in a state the firing reaches in any order has a context that
 fits the slots. -/
 theorem timers_lines {v : ServiceV}
-    (hq : ∀ m ∈ v.machines, m.noTimer = true ∨ ∃ bq tq, backQuestions L m = .ok (bq, tq) ∧
-      Unsat L (backTys m) bq ∧ Unsat L (backTys m) tq)
+    (hq : ∀ m ∈ v.machines, TimerLine L m)
     (fuel : Nat) (s : State v)
     (hfit : ∀ a, Diamond.Reach (Step.timerSys v) (s, []) a → TimersFit L a.1.records a.1.machines)
     {r : Except Fault (State v × List (Sender × EffectV v.event))} (hr : Diamond.Runs (Step.timerSys v) fuel (s, []) r) :

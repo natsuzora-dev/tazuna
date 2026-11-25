@@ -110,10 +110,12 @@ elab "#check_tazuna_reach" : command => do
     -- A counterexample is honest: a model of a target question decodes to a state with the step invariant and every
     -- invariant holding, whose step in Lean is the one the terms say.
     ``Tazuna.Smt.cti_sound,
-    -- T5 for runs, scoped to the slots: from the initial state on valid inputs, where the step, pair and timer lines
-    -- read proved (or within the bounds, where the steps fit), every order of every cascade a step starts, and of every
-    -- clock line's timers, ends as the semantics' order does, up to renaming, or both fault.
-    ``Tazuna.Smt.run_lines, ``Tazuna.Smt.run_within,
+    -- T5 for runs, scoped to the slots: from the initial state on valid inputs, where each step and pair line reads
+    -- proved, or within the bounds where the steps it names fit, and each timer line reads proved, every order of every
+    -- cascade a step starts, and of every clock line's timers, ends as the semantics' order does, up to renaming, or
+    -- both fault. Its chain: `cascade_lines` and `timers_lines` (Smt/Lines), `Step.cascade_agrees` and
+    -- `Step.timers_agree` (Semantics), `Diamond.runs_agree` (Semantics/Diamond).
+    ``Tazuna.Smt.run_lines,
     -- A timer line's counterexample is honest: a model is a context whose timer falls back, so timers do not fire
     -- forward.
     ``Tazuna.Smt.back_violates,

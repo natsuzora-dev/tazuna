@@ -523,23 +523,57 @@ theorem pair_fits {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
       | error g => exact absurd ⟨g, hr⟩ hn
       | ok c => exact (hs3 c hr).2 (hp4 c hr)
 
-/-- T5's pair hypothesis from a pair's questions: where both are unsat, the two effects of the pair's kinds commute from
-every step in progress whose state a model's values decode to, with its pending ids below its next id and its names
-below its counter, and which relates to itself under every renaming keeping its counters. -/
-theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
+/-- What a pair question's codes condition says: `apply` fits, and so do the functions of each of the two own kinds
+the question names. -/
+def PairCodesFit (L : Layout) (P : List AnySite) (v : ServiceV) (k1 k2 : Nat) : Prop :=
+  (v.apply.fits L.count).1 ∧ ∀ k ∈ [k1, k2], ∀ key, (L.ownsOf v.event)[k]? = some key → (ownShape v P key).CodesFit L.count
+
+theorem pair_codes {P : List AnySite} {senv : StepEnv L (shapes v)} {S : SymState v} {t1 t2 : Term}
+    {k1 k2 : Nat} {o : PairOut} (henc : encodePair L T P v senv S t1 t2 k1 k2 = .ok o) :
+    Holds M o.codes ↔ PairCodesFit L P v k1 k2 := by
+  obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
+  obtain ⟨key1, hkey1, henc⟩ := bind_ok.1 henc
+  obtain ⟨key2, hkey2, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, h4, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  have hk1 := need_ok.1 hkey1
+  have hk2 := need_ok.1 hkey2
+  simp only [holds_allT, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq,
+    (v.apply.code_exact (M := M) happ).1, ownKind_codes h1, ownKind_codes h2, ownKind_codes h3, ownKind_codes h4,
+    PairCodesFit, hk1, hk2, Option.some.injEq, forall_eq']
+  exact ⟨fun ⟨a, b, c, _, _⟩ => ⟨a, b, c⟩, fun ⟨a, b, c⟩ => ⟨a, b, c, c, b⟩⟩
+
+/-- What a pair line's answers say, whichever verdict it reads: its target question is unsat, and its bound question is
+unsat (`Prove.proved`) or its codes fit and `F` holds, the fit of the steps the line's scope names
+(`Prove.withinBounds`). -/
+def PairLine (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
+    (F : Prop) (p : Nat × Nat) : Prop :=
+  ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧ Unsat L (pairTys v) tq ∧
+    (Unsat L (pairTys v) bq ∨ PairCodesFit L P v p.1 p.2 ∧ F)
+
+theorem PairLine.mono {P : List AnySite} {senv : StepEnv L (shapes v)} {F G : Prop} (h : F → G) {p : Nat × Nat} :
+    PairLine L T P v senv F p → PairLine L T P v senv G p
+  | ⟨bq, tq, hq, ht, hb⟩ => ⟨bq, tq, hq, ht, hb.imp_right fun ⟨hc, hf⟩ => ⟨hc, h hf⟩⟩
+
+/-- A pair's questions at a model of their variables whose state is one a pair question assumes (pending ids below
+the next id, names below the counter) and whose effect variables hold the pair's kinds: the questions' context holds,
+so an unsat bound question makes the codes and the condition hold, and an unsat target question leaves only orders
+that agree. -/
+theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
     {k1 k2 : Nat} {bq tq : Script} (hq : pairQuestions L T P v senv k1 k2 = .ok (bq, tq))
-    (hbq : Unsat L (pairTys v) bq) (htq : Unsat L (pairTys v) tq)
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hbelow : ∀ p ∈ s.pending, p.id < s.nextId) (hsupp : Step.StateSupp s)
-    {a0 : Step.Acc v} (has : a0.state = s) (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0)
-    {x1 x2 : EffectV v.event}
-    (hx1 : RelV L (.dsl .effect [v.event]) x1 (M.vars (pairVar v)))
-    (hx2 : RelV L (.dsl .effect [v.event]) x2 (M.vars (pairVar v + 1)))
-    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P)
     (ht1 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k1) (.var (pairVar v))))
     (ht2 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k2) (.var (pairVar v + 1)))) :
-    Step.PairCommutes T a0 x1 x2 := by
+    ∃ o, encodePair L T P v senv (SymState.vars 0) (.var (pairVar v)) (.var (pairVar v + 1)) k1 k2 = .ok o ∧
+      (Unsat L (pairTys v) bq → Holds M o.codes ∧ Holds M o.cond) ∧
+      (Unsat L (pairTys v) tq → Holds M o.codes → Holds M o.cond → ¬ Holds M o.viol) := by
   obtain ⟨o, ho, hq⟩ := bind_ok.1 hq
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbl, hq⟩ := bind_ok.1 hq
@@ -548,59 +582,73 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
   obtain ⟨dts, -, hq⟩ := bind_ok.1 hq
   cases pure_ok.1 hq
   have hR := decode_state hS
-  have hwfH : Holds M wf := wf_of_decodeState (need_ok.1 hwf) hS
-  have hblH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbl).2 hbelow
-  have hnH : Holds M names := stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames)
   have hpre : ∀ a ∈ [wf, below, names, Term.is senv.dE ((L.effectsOf v.event).length + k1) (.var (pairVar v)),
       .is senv.dE ((L.effectsOf v.event).length + k2) (.var (pairVar v + 1))], Holds M a := by
     simp only [List.mem_cons, List.not_mem_nil, or_false]
     rintro a (rfl | rfl | rfl | rfl | rfl)
-    · exact hwfH
-    · exact hblH
-    · exact hnH
+    · exact wf_of_decodeState (need_ok.1 hwf) hS
+    · exact (pendingBelow_iff hR.pending hR.nextId hbl).2 hbelow
+    · exact stateSupp_names hR hsupp chk.recordsComparable chk.machinesComparable (need_ok.1 hnames)
     · exact ht1
     · exact ht2
-  obtain ⟨a, ha, hna⟩ := hbq.noModel M hM
-  rcases List.mem_append.1 ha with ha | ha
-  · exact (hna (hpre a ha)).elim
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
-  subst ha
-  simp only [holds_or, holds_not, not_or, Classical.not_not] at hna
-  obtain ⟨a, ha, hna'⟩ := htq.noModel M hM
-  rcases List.mem_append.1 ha with ha | ha
-  · exact (hna' (hpre a ha)).elim
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
-  rcases ha with rfl | rfl | rfl
-  · exact (hna' hna.1).elim
-  · exact (hna' hna.2).elim
-  subst has
-  exact pair_commutes chk senv hR (decode_inv chk.reach hS hbelow) hqk hsa (t1 := .var (pairVar v))
-    (t2 := .var (pairVar v + 1)) hx1 hx2 hown1 hown2
-    hreach1 hreach2 ht1 ht2 ho hna.1 hna.2 hna'
+  refine ⟨o, ho, fun hbq => ?_, fun htq hc hd hv => ?_⟩
+  · obtain ⟨a, ha, hna⟩ := hbq.noModel M hM
+    rcases List.mem_append.1 ha with ha | ha
+    · exact (hna (hpre a ha)).elim
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+    subst ha
+    simp only [holds_or, holds_not, not_or, Classical.not_not] at hna
+    exact hna
+  · obtain ⟨a, ha, hna⟩ := htq.noModel M hM
+    rcases List.mem_append.1 ha with ha | ha
+    · exact hna (hpre a ha)
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+    rcases ha with rfl | rfl | rfl
+    · exact hna hc
+    · exact hna hd
+    · exact hna hv
 
-/-- T5's pair hypothesis for any two own effects: where every listed pair of own kinds has both questions unsat, any
-two own effects a model codes commute from every step in progress `pair_sound` covers (the pairs cover every two own
-effects, `ownPairs_complete`). -/
-theorem pairs_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
-    (hall : ∀ p ∈ L.ownPairs v.event, ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧
-      Unsat L (pairTys v) bq ∧ Unsat L (pairTys v) tq)
-    (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
-    {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
-    (hbelow : ∀ p ∈ s.pending, p.id < s.nextId) (hsupp : Step.StateSupp s)
-    {a0 : Step.Acc v} (has : a0.state = s) (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0)
-    {x1 x2 : EffectV v.event}
+/-- Two own effects a model codes are effects of a listed pair of own kinds, whose tests the model's effect variables
+pass (T5b, `ownPairs_complete`). -/
+theorem pair_kinds (senv : StepEnv L (shapes v)) {x1 x2 : EffectV v.event}
     (hx1 : RelV L (.dsl .effect [v.event]) x1 (M.vars (pairVar v)))
     (hx2 : RelV L (.dsl .effect [v.event]) x2 (M.vars (pairVar v + 1)))
-    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P) :
-    Step.PairCommutes T a0 x1 x2 := by
+    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) :
+    ∃ p ∈ L.ownPairs v.event, Holds M (.is senv.dE ((L.effectsOf v.event).length + p.1) (.var (pairVar v))) ∧
+      Holds M (.is senv.dE ((L.effectsOf v.event).length + p.2) (.var (pairVar v + 1))) := by
   obtain ⟨p, hp, d, n, vals1, vals2, hd, hz1, hz2⟩ := ownPairs_complete hx1 hx2 hown1 hown2
   obtain rfl := find_det hd senv.hE
-  obtain ⟨bq, tq, hq, hb, ht⟩ := hall p hp
   have htest : ∀ (j : Nat) (vals : List Val) (i : Nat), M.vars i = .ctor senv.dE ((L.effectsOf v.event).length + j) vals →
       Holds M (.is senv.dE ((L.effectsOf v.event).length + j) (.var i)) := fun j vals i h => by
     simp [Holds, Term.denote, h, Val.toBool]
-  exact pair_sound chk senv hq hb ht hM hS hbelow hsupp has hqk hsa hx1 hx2 hown1 hown2 hreach1 hreach2
-    (htest _ _ _ hz1) (htest _ _ _ hz2)
+  exact ⟨p, hp, htest _ _ _ hz1, htest _ _ _ hz2⟩
+
+/-- T5's pair hypothesis from a pair line: where it reads proved, or within the bounds and the two orders fit the
+slots, the two effects of the pair's kinds commute from every step in progress whose state a model's values decode
+to, with its pending ids below its next id and its names below its counter, and which relates to itself under every
+renaming keeping its counters. -/
+theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
+    {a0 : Step.Acc v} {x1 x2 : EffectV v.event} {k1 k2 : Nat}
+    (hl : PairLine L T P v senv (PairFits L.count T a0 x1 x2) (k1, k2))
+    (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
+    (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some a0.state)
+    (hbelow : ∀ p ∈ a0.state.pending, p.id < a0.state.nextId) (hsupp : Step.StateSupp a0.state)
+    (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0)
+    (hx1 : RelV L (.dsl .effect [v.event]) x1 (M.vars (pairVar v)))
+    (hx2 : RelV L (.dsl .effect [v.event]) x2 (M.vars (pairVar v + 1)))
+    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P)
+    (ht1 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k1) (.var (pairVar v))))
+    (ht2 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k2) (.var (pairVar v + 1)))) :
+    Step.PairCommutes T a0 x1 x2 := by
+  obtain ⟨bq, tq, hq, htq, hbq⟩ := hl
+  obtain ⟨o, ho, hb, ht⟩ := pair_unfold chk senv hq hM hS hbelow hsupp ht1 ht2
+  have hR := decode_state hS
+  have hinv := decode_inv chk.reach hS hbelow
+  have hcc : Holds M o.codes ∧ Holds M o.cond := hbq.elim hb fun ⟨hc, hf⟩ =>
+    have hcodes := (pair_codes ho).2 hc
+    ⟨hcodes, (pair_fits chk senv hR hinv hqk hx1 hx2 hown1 hown2 hreach1 hreach2 ht1 ht2 ho hcodes).2 hf⟩
+  exact pair_commutes chk senv hR hinv hqk hsa (t1 := .var (pairVar v)) (t2 := .var (pairVar v + 1)) hx1 hx2 hown1
+    hown2 hreach1 hreach2 ht1 ht2 ho hcc.1 hcc.2 (ht htq hcc.1 hcc.2)
 
 end
 
