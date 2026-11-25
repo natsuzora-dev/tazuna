@@ -113,8 +113,9 @@ elab "#check_tazuna_reach" : command => do
     -- of a state below its counter.
     ``Tazuna.Smt.runs_confluent,
     -- T5 from the pair lines, scoped to the slots: where every pair line reads proved, every order of a cascade
-    -- whose states, in any order, fit the slots ends as the semantics' order does, up to renaming, or both fault; where
-    -- they read within the bounds, the same where the two orders of every pair also run within the slots.
+    -- that starts with own effects a script can hold and whose states, in any order, fit the slots ends as the
+    -- semantics' order does, up to renaming, or both fault; where they read within the bounds, the same where its
+    -- steps and the two orders of every pair also run within the slots.
     ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within,
     -- The same of a clock line's timers from the timer lines: where every timer machine's questions are unsat, every
     -- order of the timers due at one deadline ends as the semantics' does, wherever each fired timer's context fits.

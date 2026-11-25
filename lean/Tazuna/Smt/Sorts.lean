@@ -1,4 +1,5 @@
-import Tazuna.Smt.Lines
+import Tazuna.Smt.PairLine
+import Tazuna.Smt.FiresForward
 import Tazuna.Smt.NoGap
 
 /-! Every sort a script declares holds a value, so `Unsat`'s premise is never free (run-log 147). A script declares its
