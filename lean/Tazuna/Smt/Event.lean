@@ -27,8 +27,6 @@ section
 variable {v : ServiceV} {i : Fin v.subscribes.length} (hd : EventData v i)
 include hd
 
-theorem EventData.apply : (Ty.fn [v.records, v.event] v.records).isData = true := by
-  simp [Ty.isData, Ty.isDatas, hd.records, hd.event]
 theorem EventData.wrap : (Ty.fn [(v.subscribes.get i).event] v.event).isData = true := by
   simp only [Ty.isData, Ty.isDatas, hd.value, hd.event, Bool.and_self]
 theorem EventData.wrapArgs : (Ty.tuple [(v.subscribes.get i).event]).isData = true := by

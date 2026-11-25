@@ -31,7 +31,6 @@ include hd
 
 theorem QueryData.accepts : (Ty.fn [q.input] Ty.rules).isData = true := by
   simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.input]
-theorem QueryData.args : (Ty.tuple [q.input]).isData = true := by simp [Ty.isData, Ty.isDatas, hd.input]
 theorem QueryData.ctx : (Ty.ctx r q.input c).isData = true := by
   simp [Ty.ctx, Ty.isData, Ty.isDatas, Ty.isDatass, hd.records, hd.input, hd.caller]
 theorem QueryData.resolve : (Ty.fn [Ty.ctx r q.input c] q.output).isData = true := by

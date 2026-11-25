@@ -1,5 +1,6 @@
 import Lean.Elab.Command
 import Lean.Util.CollectAxioms
+import Lean.Meta.Tactic.Simp.SimpTheorems
 import Tazuna.Cli.Test
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
@@ -34,3 +35,51 @@ elab "#check_tazuna_axioms" : command => do
     unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms
+
+/-- Whether a theorem is one Lean generates for a definition or a structure, rather than one written in the source. -/
+def generatedTheorem (env : Lean.Environment) : Lean.Name → Bool
+  | n@(.str p s) => s.startsWith "eq_" || s ∈ ["eq", "inj", "injEq", "sizeOf_spec", "congr_simp"] || n.isInternal ||
+    (Lean.getStructureInfo? env p).any (·.fieldNames.contains (.mkSimple s))
+  | _ => true
+
+/-! Every theorem of the SMT layer is used by a root: a theorem the engine's answers rest on, or one listed below for
+what U10 will use. A theorem nothing uses is dead or has lost its user, as the step's exactness did when per-kind
+theorems were deleted without notice. `simp` uses a lemma proved by `rfl` without naming it in the proof, so those
+are not checked. -/
+
+open Lean Elab Command in
+elab "#check_tazuna_reach" : command => do
+  let env ← getEnv
+  let roots := [
+    -- T2 for every step kind, and the bound-reached condition the step scripts ask.
+    ``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff,
+    -- T3: a model's values decode to a state a run reaches, and the well-formedness holds of decoded values.
+    ``Tazuna.Smt.decode_run, ``Tazuna.Smt.wf_decode,
+    -- SMT-LIB text: printing then parsing gives the terms and values back, and shared definitions keep the meaning.
+    ``Tazuna.Smt.Term.parse_print, ``Tazuna.Smt.Val.parse_print, ``Tazuna.Smt.shared_agrees,
+    ``Tazuna.Smt.shared_conservative,
+    -- For U10, which asserts well-formedness, the wire-id invariant and the create bounds: each loses no model.
+    ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff,
+    ``Tazuna.Smt.atMost_le_slots]
+  let mut used : NameSet := {}
+  let mut todo := roots
+  while !todo.isEmpty do
+    let n := todo.head!
+    todo := todo.tail!
+    if used.contains n then continue
+    used := used.insert n
+    let some ci := env.find? n | throwError "{n} is missing"
+    let next := match ci with
+      | .thmInfo t => ci.getUsedConstantsAsSet.toList ++ t.all
+      | _ => ci.getUsedConstantsAsSet.toList
+    todo := next.filter (!used.contains ·) ++ todo
+  let mut unused := #[]
+  for (n, ci) in env.constants.toList do
+    unless (`Tazuna.Smt).isPrefixOf n && ci matches .thmInfo _ do continue
+    if used.contains n || generatedTheorem env n then continue
+    if (← liftCoreM (Meta.isRflTheorem n)) then continue
+    unused := unused.push n
+  unless unused.isEmpty do
+    throwError "no root uses these theorems; delete them or name their user: {unused.qsort (·.toString < ·.toString)}"
+
+#check_tazuna_reach

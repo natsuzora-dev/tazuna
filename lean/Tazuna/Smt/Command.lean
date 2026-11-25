@@ -33,7 +33,6 @@ include hd
 
 theorem CommandData.accepts : (Ty.fn [x.input] Ty.rules).isData = true := by
   simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.input]
-theorem CommandData.args : (Ty.tuple [x.input]).isData = true := by simp [Ty.isData, Ty.isDatas, hd.input]
 theorem CommandData.ctx : (Ty.ctx r x.input c).isData = true := by
   simp [Ty.ctx, Ty.isData, Ty.isDatas, Ty.isDatass, hd.records, hd.input, hd.caller]
 theorem CommandData.ctxArgs : (Ty.tuple [Ty.ctx r x.input c]).isData = true := by
@@ -47,10 +46,6 @@ theorem CommandData.ensures : (Ty.fn [Ty.ctx r x.input c, r] Ty.rules).isData = 
   simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.ctx, hd.records]
 theorem CommandData.ensArgs : (Ty.tuple [Ty.ctx r x.input c, r]).isData = true := by
   simp [Ty.isData, Ty.isDatas, hd.ctx, hd.records]
-theorem CommandData.apply : (Ty.fn [r, e] r).isData = true := by
-  simp [Ty.isData, Ty.isDatas, hd.records, hd.event]
-theorem CommandData.invariants : (Ty.fn [r] Ty.rules).isData = true := by
-  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.records]
 
 end
 

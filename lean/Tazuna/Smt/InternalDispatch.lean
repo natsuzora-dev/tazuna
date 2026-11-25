@@ -203,15 +203,6 @@ theorem siteFor_spec {P : List AnySite} {t : Ty} {k : SiteKey} {Γ : List Ty} {s
   simp only [siteMatch, Bool.and_eq_true, beq_iff_eq] at hs
   exact ⟨mem_sitesOf hm, hs.1, eq_of_sames hs.2⟩
 
-theorem ownCommand_mem {name : String} {i j : Ty} {x : CommandV v.records v.event v.caller}
-    {h : i = x.input ∧ j = x.rejection} (hx : Step.ownCommand (v := v) name i j = some ⟨x, h⟩) : x ∈ v.commands := by
-  obtain ⟨y, hy, hf⟩ := List.exists_of_findSome?_eq_some hx
-  split at hf
-  · split at hf
-    · cases hf; exact hy
-    · cases hf
-  · cases hf
-
 theorem ownQuery_mem {name : String} {i o : Ty} {x : QueryV v.records v.caller}
     {h : i = x.input ∧ o = x.output} (hx : Step.ownQuery (v := v) name i o = some ⟨x, h⟩) : x ∈ v.queries := by
   obtain ⟨y, hy, hf⟩ := List.exists_of_findSome?_eq_some hx
