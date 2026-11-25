@@ -402,24 +402,36 @@ theorem mem_dues_filterMap {l : List (Instance m)} {x : Int} :
     exact ⟨i, hi, by simp [ht, hx]⟩
 
 
-theorem dues_fire_ge {k : Nat} {now0 : Int} (hd0 : d ≤ now) : {ms : List (MachineV r e)} → FiresForward ms →
-    (l : Machines ms) → (∀ x ∈ dues l.toSigma now0, d ≤ x) →
+/-- Every instance of `l` whose timer fires sets no timer before its deadline, at these records and this time: what
+`FiresForward` says of the instances one state holds. -/
+def FiresAt (records : r.den0) (now : Int) : {ms : List (MachineV r e)} → Machines ms → Prop
+  | [], .nil => True
+  | m :: _, .cons insts rest => (∀ i ∈ insts, ∀ d : Int, hitsAt d i = true → d ≤ now →
+      ∀ x ∈ (fired m records now i).1.timer, d ≤ x.1) ∧ FiresAt records now rest
+
+theorem firesAt_of {ms : List (MachineV r e)} (hF : FiresForward ms) (records : r.den0) (now : Int) :
+    (l : Machines ms) → FiresAt records now l
+  | .nil => trivial
+  | .cons _ rest => ⟨fun i _ d hd hdn => hF _ List.mem_cons_self records now d i hd hdn,
+      firesAt_of (fun m hm => hF m (List.mem_cons_of_mem _ hm)) records now rest⟩
+
+theorem dues_fireAt_ge {k : Nat} {now0 : Int} (hd0 : d ≤ now) : {ms : List (MachineV r e)} → (l : Machines ms) →
+    FiresAt records now l → (∀ x ∈ dues l.toSigma now0, d ≤ x) →
     ∀ x ∈ dues (fireMachinesAt records now d k l).1.toSigma now0, d ≤ x
-  | _, _, .nil, _, x, hx => by simp [fireMachinesAt, dues] at hx
-  | _, hF, .cons insts rest, hl, x, hx => by
+  | _, .nil, _, _, x, hx => by simp [fireMachinesAt, dues] at hx
+  | _, .cons insts rest, hF, hl, x, hx => by
     rw [dues_cons] at hl
     by_cases hk : k < insts.countP (hitsAt d)
     · rw [fireMachinesAt_lt rest hk, dues_cons, List.mem_append, mem_dues_filterMap] at hx
       rcases hx with ⟨y, hy, st, ht, hx⟩ | hx
       · rcases mem_fireNth y hy with hy | ⟨i, hi, hh, rfl⟩
         · exact hl x (List.mem_append_left _ (mem_dues_filterMap.2 ⟨y, hy, st, ht, hx⟩))
-        · exact hF _ List.mem_cons_self records now d i hh hd0 (x, st) ht
+        · exact hF.1 i hi d hh hd0 (x, st) ht
       · exact hl x (List.mem_append_right _ hx)
     · rw [fireMachinesAt_ge rest (by omega), dues_cons, List.mem_append] at hx
       rcases hx with hx | hx
       · exact hl x (List.mem_append_left _ hx)
-      · exact dues_fire_ge hd0 (fun m hm => hF m (List.mem_cons_of_mem _ hm)) rest
-          (fun y hy => hl y (List.mem_append_right _ hy)) x hx
+      · exact dues_fireAt_ge hd0 rest hF.2 (fun y hy => hl y (List.mem_append_right _ hy)) x hx
 
 theorem mem_dues_of_hit {now0 : Int} (hd : d ≤ now0) : {ms : List (MachineV r e)} → (l : Machines ms) →
     0 < hitCount d l → d ∈ dues l.toSigma now0
@@ -460,9 +472,10 @@ theorem timerSys_simulates {v : ServiceV} : Diamond.Simulates (timerSys v) Timer
   · exact ⟨rfl, hp⟩
   · exact ⟨rfl, hp.append_right _⟩
 
-theorem timerSys_commutes {v : ServiceV} (hF : FiresForward v.machines) :
-    Diamond.Commutes (timerSys v) (fun _ => True) TimerEq := by
-  rintro ⟨s, acc⟩ - i j hi hj hij b hb
+theorem timerSys_commutes {v : ServiceV} {I : State v × List (Sender × EffectV v.event) → Prop}
+    (hF : ∀ a, I a → FiresAt a.1.records a.1.now a.1.machines) :
+    Diamond.Commutes (timerSys v) I TimerEq := by
+  rintro ⟨s, acc⟩ hI i j hi hj hij b hb
   simp only [timerSys] at hi hj hb ⊢
   cases hm : (dues s.machines.toSigma s.now).min? with
   | none => rw [hm] at hi; exact absurd hi (Nat.not_lt_zero _)
@@ -477,7 +490,7 @@ theorem timerSys_commutes {v : ServiceV} (hF : FiresForward v.machines) :
     cases hc
     have keep : ∀ k, 0 < hitCount d (fireMachinesAt s.records s.now d k s.machines).1 →
         (dues (fireMachinesAt s.records s.now d k s.machines).1.toSigma s.now).min? = some d := fun k hk =>
-      List.min?_eq_some_iff.2 ⟨mem_dues_of_hit hdn _ hk, dues_fire_ge hdn hF s.machines hdl⟩
+      List.min?_eq_some_iff.2 ⟨mem_dues_of_hit hdn _ hk, dues_fireAt_ge hdn s.machines (hF _ hI) hdl⟩
     refine ⟨j', ?_, i', ?_, ?_⟩
     · simp only [keep i (by omega)]; exact hj'
     · simp only [keep j (by omega)]; exact hi'
@@ -491,7 +504,17 @@ same state, and the same effects in some order. -/
 theorem timers_agree {v : ServiceV} (hF : FiresForward v.machines) (fuel : Nat) (s : State v)
     {r : Except Fault (State v × List (Sender × EffectV v.event))} (hr : Diamond.Runs (timerSys v) fuel (s, []) r) :
     Diamond.Agree TimerEq r (fireResult s (fuel + 1)) :=
-  fire_agrees timerEq_equiv timerSys_simulates (timerSys_commutes hF) (fun _ _ _ _ _ _ => trivial) fuel s trivial hr
+  fire_agrees timerEq_equiv timerSys_simulates (I := fun _ => True)
+    (timerSys_commutes fun a _ => firesAt_of hF a.1.records a.1.now a.1.machines) (fun _ _ _ _ _ _ => trivial) fuel s
+    trivial hr
+
+/-- Where the timers of every state a clock line's firing reaches in any order fire forward there, every order of the
+timers due at one deadline ends as `fire` does: the same state, and the same effects in some order. -/
+theorem timers_agree_at {v : ServiceV} (fuel : Nat) (s : State v)
+    (hF : ∀ a, Diamond.Reach (timerSys v) (s, []) a → FiresAt a.1.records a.1.now a.1.machines)
+    {r : Except Fault (State v × List (Sender × EffectV v.event))} (hr : Diamond.Runs (timerSys v) fuel (s, []) r) :
+    Diamond.Agree TimerEq r (fireResult s (fuel + 1)) :=
+  fire_agrees timerEq_equiv timerSys_simulates (timerSys_commutes hF) (Diamond.reach_preserved _ _) fuel s .refl hr
 
 end Timers
 

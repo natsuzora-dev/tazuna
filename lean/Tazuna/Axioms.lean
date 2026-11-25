@@ -53,7 +53,7 @@ elab "#check_tazuna_axioms" : command => do
   for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound,
       ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent,
       ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete, ``Tazuna.Smt.pairs_sound,
-      ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within,
+      ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within, ``Tazuna.Smt.timers_lines,
       ``Tazuna.Ir.Step.timerForward_of_noTimer] do
     unless env.contains n do throwError "{n} is missing"
 
@@ -114,6 +114,9 @@ elab "#check_tazuna_reach" : command => do
     -- whose states, in any order, fit the slots ends as the semantics' order does, up to renaming, or both fault; where
     -- they read within the bounds, the same where the two orders of every pair also run within the slots.
     ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within,
+    -- The same of a clock line's timers from the timer lines: where every timer machine's questions are unsat, every
+    -- order of the timers due at one deadline ends as the semantics' does, wherever each fired timer's context fits.
+    ``Tazuna.Smt.timers_lines,
     -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
     -- forward; unsat answers mean no context within the slots has one.
     ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound]

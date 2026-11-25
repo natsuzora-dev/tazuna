@@ -1,5 +1,7 @@
 import Tazuna.Smt.PairLine
 import Tazuna.Smt.Commute
+import Tazuna.Smt.FiresForward
+import Tazuna.Semantics.NoTimer
 
 /-! T5 from the pair lines' answers, scoped to the slots, as every verdict is (run-log 121): where each listed pair of
 own kinds reads `Prove.proved`, every order of a cascade ends as `settle` does, up to renaming, or both fault, for
@@ -8,7 +10,9 @@ every cascade every state of which, in any order, fits the slots and has waiting
 what each state reached in any order must meet is the question's preconditions, which the states of a cascade keep
 (`Lines.Keeps`): names below the counter, pending requests below the next id and of the program's sites, waiting
 effects of its sites, instances in the step's form. Where the lines read `Prove.withinBounds`, the same holds where
-every pair's codes fit and every internal step two waiting effects run in either order fits too (`cascade_within`). -/
+every pair's codes fit and every internal step two waiting effects run in either order fits too (`cascade_within`). The timer lines say the same
+of a clock line's timers (`timers_lines`): a timer machine's question is asked over a free key, state, records and
+time, so each timer that fires in any order needs only its context to fit the slots. -/
 
 namespace Tazuna.Smt
 
@@ -114,6 +118,71 @@ theorem cascade_within (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : St
   obtain ⟨⟨hW, hcoded⟩, hpf⟩ := hfit b hb.1
   exact pairsWithin_at chk senv (c.recordsComparable hv) hmc hall hk hW hb.2.inv hs hq hsa
     (hcoded _ (List.getElem_mem hi)) (hcoded _ (List.getElem_mem hj)) ho1 ho2 hr1 hr2 (hpf i j hi hj hij)
+
+/-- A timer's context fits the slots: the instance's key, the state its timer moves it to and the records embed. -/
+def CtxFits (L : Layout) {r e : Ty} (m : MachineV r e) (records : r.den0) (key : m.key.den0) (st : m.state.den0) :
+    Prop :=
+  (embedV L m.key (Ty.up _ m.key_data key)).isSome ∧ (embedV L m.state (Ty.up _ m.state_data st)).isSome ∧
+    (embedV L r (Ty.up _ m.records_data records)).isSome
+
+/-- Every set timer of `l` has a context that fits the slots. -/
+def TimersFit (L : Layout) {r e : Ty} (records : r.den0) : {ms : List (MachineV r e)} → Step.Machines ms → Prop
+  | [], .nil => True
+  | m :: _, .cons insts rest =>
+    (∀ i ∈ insts, ∀ p, i.timer = some p → CtxFits L m records i.key p.2) ∧ TimersFit L records rest
+
+/-- What a timer line says: where the machine sets no timer, or both its questions are unsat, the timer `after` sets
+at a context that fits the slots is no earlier than the time it is set at. -/
+theorem forward_of_line {r e : Ty} {m : MachineV r e}
+    (hq : m.noTimer = true ∨ ∃ bq tq, backQuestions L m = .ok (bq, tq) ∧ Unsat L (backTys m) bq ∧
+      Unsat L (backTys m) tq)
+    {records : r.den0} {now : Int} {key : m.key.den0} {st : m.state.den0} (hc : CtxFits L m records key st) :
+    ∀ y ∈ Step.timerAt now (m.after.fn (.inl (key, st, records, now, ()), ())), now ≤ y.1 := by
+  rcases hq with hn | ⟨bq, tq, hq, hb, ht⟩
+  · exact Step.timerForward_of_noTimer hn records now key st
+  obtain ⟨zk, hk⟩ := Option.isSome_iff_exists.1 hc.1
+  obtain ⟨zs, hs⟩ := Option.isSome_iff_exists.1 hc.2.1
+  obtain ⟨zr, hr⟩ := Option.isSome_iff_exists.1 hc.2.2
+  let M := coverModel [zk, zs, zr, .int now]
+  have hM : ∀ n (h : n < (backTys m).length), Sorted L (backTys m)[n] (M.vars n) := by
+    intro n hn
+    simp only [backTys, List.length_cons, List.length_nil] at hn
+    match n, hn with
+    | 0, _ => exact sorted_of_embed hk
+    | 1, _ => exact sorted_of_embed hs
+    | 2, _ => exact sorted_of_embed hr
+    | 3, _ => exact ⟨now, rfl⟩
+  exact (back_sound m hq ht hM ⟨key, st, records, now, decode_embed _ _ _ hk, decode_embed _ _ _ hs,
+    decode_embed _ _ _ hr, rfl⟩).2 hb
+
+theorem firesAt_of_lines {r e : Ty} {records : r.den0} {now : Int} : {ms : List (MachineV r e)} →
+    (∀ m ∈ ms, m.noTimer = true ∨ ∃ bq tq, backQuestions L m = .ok (bq, tq) ∧ Unsat L (backTys m) bq ∧
+      Unsat L (backTys m) tq) →
+    (l : Step.Machines ms) → TimersFit L records l → Step.FiresAt records now l
+  | [], _, .nil, _ => trivial
+  | m :: _, hq, .cons insts rest, hf => by
+    obtain ⟨hi, hrest⟩ : _ ∧ _ := hf
+    refine ⟨fun i hmem d hd hdn y hy => ?_,
+      firesAt_of_lines (fun m' hm' => hq m' (List.mem_cons_of_mem _ hm')) rest hrest⟩
+    obtain ⟨key, st, tm⟩ := i
+    cases tm with
+    | none => simp [Step.hitsAt] at hd
+    | some p =>
+      have hc := hi _ hmem p rfl
+      exact Int.le_trans hdn (forward_of_line (hq m List.mem_cons_self) hc y hy)
+
+/-- T5 for a clock line's timers from the timer lines, scoped to the slots: where every machine sets no timer or has
+both its questions unsat, every order of the timers due at one deadline ends as `fire` does, the same state and the
+same effects in some order, wherever every timer set in a state the firing reaches in any order has a context that
+fits the slots. -/
+theorem timers_lines {v : ServiceV}
+    (hq : ∀ m ∈ v.machines, m.noTimer = true ∨ ∃ bq tq, backQuestions L m = .ok (bq, tq) ∧
+      Unsat L (backTys m) bq ∧ Unsat L (backTys m) tq)
+    (fuel : Nat) (s : State v)
+    (hfit : ∀ a, Diamond.Reach (Step.timerSys v) (s, []) a → TimersFit L a.1.records a.1.machines)
+    {r : Except Fault (State v × List (Sender × EffectV v.event))} (hr : Diamond.Runs (Step.timerSys v) fuel (s, []) r) :
+    Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1)) :=
+  Step.timers_agree_at fuel s (fun a ha => firesAt_of_lines hq a.1.machines (hfit a ha)) hr
 
 end
 
