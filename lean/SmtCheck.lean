@@ -5,6 +5,7 @@ import Tazuna.Smt.Bounds
 import Tazuna.Smt.Solver
 import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.FiresForward
+import Tazuna.Smt.Pair
 
 -- Test scaffolding: a value the model leaves out reads as a default that the checks then reject.
 set_option linter.tazuna.silentDefault false
@@ -3455,6 +3456,94 @@ def proveCheck (solver : Solver) : IO Bool := do
     [.invariant none (some "small"), .invariant (some "start") none, .cascade] [.cascade]
   return a && b && c
 
+/-! T5's pair questions (`pairQuestions`, `pair_sound`): the service `p` keeps rows of `#(key, value)`, and alice's
+own commands are `ins k`, which inserts `#(k, k)`, `set k`, which writes `#(0, k)`, and `cap k`, which inserts
+`#(k, k)` and ensures at most one row. Two `ins` commute from every state (rows in other slots are the same table), so
+that question is unsat; two `set` do not (the last writer wins), and `ins` then `cap` disables `cap` (its `ensures`
+fails after the row `ins` adds), so those are sat, and the model's state and effects, run in Lean in both orders, must
+not commute: the first effect runs, and the second faults after it while it did not first, or the two orders end with
+different records. -/
+
+def pairOnAnswer : Site [] (.fn [Ty.result Ty.nil .str] (.list evT)) := ⟨⟨"m", 31, 1, 0⟩, [], .nil, rfl, rfl, .lam (.list .nil)⟩
+
+/-- `Ok([#(key, input)])`, the key from the input. -/
+def rowDecideE (key : Expr [] [cctxT] .int) : E (.fn [cctxT] (Ty.result (.list evT) .str)) :=
+  .lam (.ctor (vs := [[.list evT], [.str]]) ⟨0, by decide⟩
+    (.cons (.list (.cons (.tuple (.cons key (.cons inputOf .nil))) .nil)) .nil))
+
+def atMostOneE : E (.fn [cctxT, recordsT] Ty.rules) :=
+  .lam (.list (.cons (.tuple (.cons (.str "one")
+    (.cons (.bin .le (.call (.prim .tableSize [.int, .int] rfl) (.cons (.var (.there .here)) .nil)) (.int 1)) .nil))) .nil))
+
+def rowC (name : String) (key : Expr [] [cctxT] .int) (ens : E (.fn [cctxT, recordsT] Ty.rules)) :
+    CommandV recordsT evT .str :=
+  { name := name, input := .int, rejection := .str, callers := ["alice"], accepts := .closed (.lam (.list .nil)),
+    decide := .closed (rowDecideE key), ensures := .closed ens }
+
+def noRulesE : E (.fn [recordsT] Ty.rules) := .lam (.list .nil)
+
+def noEnsuresE : E (.fn [cctxT, recordsT] Ty.rules) := .lam (.list .nil)
+
+def pairCommands : List (CommandV recordsT evT .str) :=
+  [rowC "ins" inputOf noEnsuresE, rowC "set" (.int 0) noEnsuresE, rowC "cap" inputOf atMostOneE]
+
+def pairSvc : ServiceV :=
+  { eventSvc with name := "p", subscribes := [], invariants := .closed noRulesE, commands := pairCommands }
+
+def pairKey (name : String) : OwnKey := .command evT name .str .int .str ⟨pairOnAnswer.site, []⟩
+
+def pairSites : List AnySite := (svcParts pairSvc).sites ++ [⟨[], _, pairOnAnswer⟩]
+
+/-- The service's layout with alice's three own kinds added by hand: no function of the service queues them. -/
+def pairLayout : Layout :=
+  let L := svcLayout pairSvc 3 (joinParts [siteParts pairOnAnswer,
+    ⟨[], [], [Ty.nil, Ty.result Ty.nil .str, .tuple []], []⟩])
+  Layout.addTys (fun _ => 3) { effects := L.effects, owns := L.owns ++ ["ins", "set", "cap"].map pairKey }
+    (L.types.map (·.1))
+
+/-- The own command a model's value of the effect datatype codes, by its variant's place among the own kinds. -/
+def pairEffect (L : Layout) : Val → Option (EffectV evT)
+  | .ctor _ k [.str c, .int i, _] =>
+    (["ins", "set", "cap"][k - (L.effectsOf evT).length]?).map fun name =>
+      .command name .str .int .str c i (pairOnAnswer.fn ())
+  | _ => none
+
+/-- Whether two own effects do not commute from a step in progress, run in Lean in both orders, the other one
+canonical: the first runs, and the second faults after it alone, or the two orders end with different records. -/
+def pairDiffers (a0 : Step.Acc pairSvc) (e1 e2 : EffectV evT) : Bool :=
+  let f := a0.state.fresh
+  match Step.runOwn prelude a0 e1, Step.runOwn prelude (a0.withFresh (f + 1)) e2 with
+  | .error _, _ => false
+  | .ok b, .error _ => match Step.runOwn prelude b e2 with
+    | .ok _ => true
+    | .error _ => false
+  | .ok b, .ok c => match Step.runOwn prelude b e2, Step.runOwn prelude (c.withFresh f) e1 with
+    | .error _, .error _ => false
+    | .ok x, .ok y => !Ty.deq0 recordsT x.state.records y.state.records
+    | _, _ => true
+
+def pairCheck (solver : Solver) : IO Bool := do
+  let L := pairLayout
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: pair questions: {m}"; return false
+  let .ok senv := StepEnv.of L (shapes pairSvc) | fail "no step environment"
+  let mut ok := true
+  for (name, k1, k2, commutes) in [("ins ins", 0, 0, true), ("set set", 1, 1, false), ("ins cap", 0, 2, false)] do
+    match pairQuestions L prelude pairSites pairSvc senv k1 k2 with
+    | .error r => ok ← fail s!"{name}: no questions: {repr r}"
+    | .ok (_, tq) =>
+      match ← solver.run tq, commutes with
+      | .unsat, true => pure ()
+      | .sat vs, false =>
+        let M := modelOf vs
+        let n := pairVar pairSvc
+        match (SymState.vars (v := pairSvc) 0).decode M L prelude (shapes pairSvc), pairEffect L (M.vars n),
+            pairEffect L (M.vars (n + 1)) with
+        | some s, some e1, some e2 =>
+          unless pairDiffers { state := s } e1 e2 do ok ← fail s!"{name}: the model's effects commute in Lean"
+        | _, _, _ => ok ← fail s!"{name}: the model does not decode"
+      | a, _ => ok ← fail s!"{name}: {repr a}"
+  return ok
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -3521,6 +3610,7 @@ def check (z3 : String) : IO Bool := do
   unless ← effectListCheck solver do ok := false
   unless ← machineEffectCheck solver do ok := false
   unless ← timerCheck solver do ok := false
+  unless ← pairCheck solver do ok := false
   unless ← noEffectsCheck solver do ok := false
   unless ← invariantCheck solver do ok := false
   unless ← reactCheck solver do ok := false
