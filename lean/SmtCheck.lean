@@ -250,7 +250,7 @@ def freshScript (step : Nat) (index : Int) : Except String (Layout × Script) :=
   | .error r, _, _ => throw s!"no encoding: {repr r}"
   | _, _, _ => throw "no sort"
 
-/-! A query step on a small service, for `query_encode`: the records are a table of Int to Int, the query `get` takes a
+/-! A query step on a small service, for `step_encode`: the records are a table of Int to Int, the query `get` takes a
 key from the caller "alice", accepts a positive key, and answers `table.get(ctx.records, key)`. Each case asks the
 solver for a state and input whose outcome terms meet a goal, decodes them, runs `step` on what they decode to, and
 compares its outcome with what the outcome terms denote in the model. Every code is the service's own: the encoding
@@ -265,6 +265,14 @@ def noPending (v : ServiceV) : Ty := pendingTable ([] : List (PendingShape v.eve
 
 /-- The symbolic state at `v0..v3` with the pending table at `vk`, for scripts whose `v4` holds an input. -/
 def stateAt (k : Nat) : SymState := { SymState.vars 0 with pending := .var k }
+
+/-- A step's terms through `encodeStep`, the encoding `step_encode` proves. A service without effects has no effect,
+pending entry or effect option datatype, and its encoders never read those indices, so a missing one is 0. -/
+def stepOf (L : Layout) (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (S : SymState)
+    (inp : SymInput v) : Except String EncodedStep :=
+  let idx (t : Ty) := ((L.find? t).map (·.1)).getD 0
+  (encodeStep L prelude P v shs (idx (.dsl .effect [v.event])) (idx (pendingEntry shs))
+    (idx (Ty.option (.dsl .effect [v.event]))) S inp).mapError fun r => s!"no encoding: {repr r}"
 
 def acceptsE : E (.fn [.int] Ty.rules) :=
   .lam (.list (.cons (.tuple (.cons (.str "positive") (.cons (.bin .gt (.var .here) (.int 0)) .nil))) .nil))
@@ -293,11 +301,9 @@ def queryLayout : Layout :=
 terms (caller listed, the rule's holds and name, the output), v10 the pending table. -/
 def queryScript (goal : List Term) : Except String (Script × QueryOut) := do
   let L := queryLayout
-  let (qc, cq) ← (QueryCode.of L getQ).mapError fun r => s!"no encoding: {repr r}"
-  let some ks := callerTerms L rfl getQ.callers | throw "no caller terms"
   let S := stateAt 10
-  let (o, cond) ← (encodeQuery L getQ qc ks S.records S.now S.fresh (.var 4) (.var 5)).mapError
-    fun r => s!"no encoding: {repr r}"
+  let t ← stepOf L [] querySvc [] S (.query ⟨0, by decide⟩ (.var 4) (.var 5))
+  let .query o := t.out | throw "not a query's terms"
   let some wf := S.wf L (v := querySvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some osrt := L.srt? (Ty.option .int) | throw "no output sort"
@@ -305,7 +311,7 @@ def queryScript (goal : List Term) : Except String (Script × QueryOut) := do
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.rules | throw "not one rule"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, .str, .int, .bool, .bool, .str, osrt, psrt],
-          asserts := [cq, cond, wf,
+          asserts := [t.codes, t.sites, t.cond, wf,
             .eq (.var 6) o.callerOk, .eq (.var 7) holds, .eq (.var 8) name, .eq (.var 9) o.output] ++ goal,
           shows := List.range 11 }, o)
 
@@ -374,7 +380,7 @@ def queryCases : List (String × List Term) :=
     ("query refuses an unlisted caller", [.not (.var 6)]),
     ("query refuses a key that is not positive", [.var 6, .not (.var 7)]) ]
 
-/-! An event step on a service without machines or reactions, for `event_step`: the subscription's value is a key
+/-! An event step on a service without machines or reactions, for `step_encode`: the subscription's value is a key
 and a value, the records insert it, and the invariant `small` holds while the table has fewer than three keys. -/
 
 def evT : Ty := .tuple [.int, .int]
@@ -405,36 +411,28 @@ def eventLayout : Layout :=
 
 def eventI : Fin eventSvc.subscribes.length := ⟨0, by decide⟩
 
-/-- An event step's terms on the symbolic state `S` and the received value, as `event_step` takes them: the event the
-wrap gives, the events loop over its one slot, the service's invariants on the records after, the codes' condition
-and the wrap's, loop's and invariants' conditions together. -/
-def eventTerms (L : Layout) (v : ServiceV) (i : Fin v.subscribes.length) (shs : List (PendingShape v.event))
-    (S : SymState) (value : Term) : Except String (Term × EventsOut × List (Term × Term) × Term × Term) := do
-  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let (ec, ce) ← enc (EventCode.of L v i)
-  let (et, cw) ← enc (encodeWrap ec value)
-  let idx (t : Ty) := ((L.find? t).map (·.1)).getD 0
-  let (o, c) ← enc (encodeEvents L prelude v shs (idx (.dsl .effect [v.event])) (idx (pendingEntry shs))
-    (idx (Ty.option (.dsl .effect [v.event]))) ec.apply S.now [(tt, [et])] S.records S.machines S.nextId
-    (.int 0))
-  let (rules, ci) ← enc (encodeInvariants L ec.invariants o.records)
-  pure (et, o, rules, ce, andT cw (andT c ci))
+/-- An event step's terms through `encodeStep`. -/
+def eventTerms (L : Layout) (P : List AnySite) (v : ServiceV) (i : Fin v.subscribes.length)
+    (shs : List (PendingShape v.event)) (S : SymState) (value : Term) : Except String (EventOut × EncodedStep) := do
+  let t ← stepOf L P v shs S (.event i value)
+  let .event o := t.out | throw "not an event's terms"
+  pure (o, t)
 
 /-- v0..v3 the state, v4 the value, v5 the records after, v6 the event, v7 and v8 the invariant's holds and name, v9
 the pending table. -/
 def eventScript (goal : List Term) : Except String Script := do
   let L := eventLayout
   let S := stateAt 9
-  let (et, o, rules, ce, cond) ← eventTerms L eventSvc eventI [] S (.var 4)
+  let (o, t) ← eventTerms L [] eventSvc eventI [] S (.var 4)
   let some wf := S.wf L (v := eventSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some esrt := L.srt? evT | throw "no event sort"
   let some psrt := L.srt? (noPending eventSvc) | throw "no pending sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [(name, holds)] := rules | throw "not one invariant"
+  let [(name, holds)] := o.finish.invariants | throw "not one invariant"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, esrt, rsrt, esrt, .bool, .str, psrt],
-         asserts := [ce, cond, wf,
-           .eq (.var 5) o.records, .eq (.var 6) et, .eq (.var 7) holds, .eq (.var 8) name] ++ goal,
+         asserts := [t.codes, t.sites, t.cond, wf, .eq (.var 5) o.finish.settle.terms.done.records, .eq (.var 6) o.event,
+           .eq (.var 7) holds, .eq (.var 8) name] ++ goal,
          shows := List.range 10 }
 
 /-- Whether the model's value decodes to a value `==` to `x`. -/
@@ -469,7 +467,7 @@ def eventCases : List (String × List Term) :=
   [ ("event keeps the invariant", [.var 7]),
     ("event breaks the invariant", [.not (.var 7)]) ]
 
-/-! The whole event step with a machine and no pending shape, for `event_step`: the event service above with a
+/-! The whole event step with a machine and no pending shape, for `step_encode`: the event service above with a
 machine `calm` whose instances are the records' keys; an instance in state 0 enters 1 on any event, and its invariant
 `calm` holds below state 1. The decoded state and input step (`step`) to the outcome the terms give: the first broken
 name (the service's, then the instances' in key order) as the fault, else the records, the event, the new instance
@@ -521,9 +519,9 @@ def evMScript (goal : List InstCheck → List Term) : Except String (Script × L
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
   let shs : List (PendingShape evMSvc.event) := []
-  let (et, o, rules, ce, cond) ← eventTerms L evMSvc evMI shs S (.var 6)
-  let (checks, ck) ← enc (encodeInstChecks L prelude evMSvc.machines o.tables o.records S.now)
-  let (pT, cp) ← enc (encodePending L shs S.pending o.news)
+  let (o, t) ← eventTerms L [] evMSvc evMI shs S (.var 6)
+  let d := o.finish.settle.terms.done
+  let checks := o.finish.checks
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := evMSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -531,14 +529,14 @@ def evMScript (goal : List InstCheck → List Term) : Except String (Script × L
   let some msrt := L.srt? evM.table | throw "no table sort"
   let some psrt := L.srt? (noPending evMSvc) | throw "no pending sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [(name, holds)] := rules | throw "not one invariant"
-  let [tbl] := o.tables | throw "not one machine"
+  let [(name, holds)] := o.finish.invariants | throw "not one invariant"
+  let [tbl] := d.tables | throw "not one machine"
   let [cs] := checks | throw "not one machine"
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, esrt, rsrt, esrt, .bool, .str, msrt, psrt, .int],
-          asserts := [ce, cond, ck, cp, wf, below, .eq (.var 7) o.records, .eq (.var 8) et,
-            .eq (.var 9) holds, .eq (.var 10) name, .eq (.var 11) tbl, .eq (.var 12) pT, .eq (.var 13) o.nextId] ++
-            goal cs,
+          asserts := [t.codes, t.sites, t.cond, wf, below, .eq (.var 7) d.records, .eq (.var 8) o.event,
+            .eq (.var 9) holds, .eq (.var 10) name, .eq (.var 11) tbl, .eq (.var 12) o.finish.pending,
+            .eq (.var 13) d.nextId] ++ goal cs,
           shows := List.range 14 }, checks)
 
 def evMCase (solver : Solver) (name : String) (goal : List InstCheck → List Term) (machineFault : Bool) : IO Bool := do
@@ -599,21 +597,16 @@ def evMCases : List (String × (List InstCheck → List Term) × Bool) :=
     ("event with a machine breaks an instance invariant", (fun cs => [.var 9, .not (instancesKeep cs)]), true),
     ("event with a machine breaks the service invariant", (fun _ => [.not (.var 9)]), false) ]
 
-/-- A clock line on the event service, which has no machine and no pending shape, for `clock_step`: v0..v3 the state,
+/-- A clock line on the event service, which has no machine and no pending shape, for `step_encode`: v0..v3 the state,
 v4 the line's time, v5 whether time moves forward, v6 and v7 the invariant's holds and name, v8 whether every round
 fired, v9 the pending table, v10 the new pending table, v11 the next id after. -/
 def clockScript (goal : List Term) : Except String Script := do
   let L := eventLayout
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let shs : List (PendingShape eventSvc.event) := []
-  let (inv, ci) ← enc (eventSvc.invariants.code L)
-  let (apply, ca) ← enc (eventSvc.apply.code L)
   let S := stateAt 9
-  let some (dE, _) := L.find? (.dsl .effect [evT]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry shs) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [evT])) | throw "no effect option"
-  let (o, cond, cfx) ← enc (encodeClock L prelude [] eventSvc shs dE dP dopt apply inv S.records S.now (.var 4) S.fresh
-    S.pending S.nextId [])
+  let t ← stepOf L [] eventSvc shs S (.clock (.var 4))
+  let .clock o := t.out | throw "not a clock line's terms"
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := eventSvc) shs | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -621,7 +614,7 @@ def clockScript (goal : List Term) : Except String Script := do
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.finish.invariants | throw "not one invariant"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, .int, .bool, .bool, .str, .bool, psrt, psrt, .int],
-         asserts := [ci, ca, cfx, cond, wf, below, .eq (.var 5) o.forward, .eq (.var 6) holds, .eq (.var 7) name,
+         asserts := [t.codes, t.sites, t.cond, wf, below, .eq (.var 5) o.forward, .eq (.var 6) holds, .eq (.var 7) name,
            .eq (.var 8) o.over, .eq (.var 10) o.finish.pending, .eq (.var 11) o.finish.settle.terms.done.nextId] ++ goal,
          shows := List.range 12 }
 
@@ -655,7 +648,7 @@ def clockCases : List (String × List Term) :=
     ("clock reports a broken invariant", [.var 5, .not (.var 6)]),
     ("clock refuses an earlier time", [.not (.var 5)]) ]
 
-/-! A command step on the event service, for `command_step`: `put` takes a key from the caller "alice", accepts a
+/-! A command step on the event service, for `step_encode`: `put` takes a key from the caller "alice", accepts a
 positive key, rejects a key above 10, accepts 7 with no events and any other key with two events that insert it and
 the next key; it ensures the records grew, and the invariant `small` holds below three keys. -/
 
@@ -702,16 +695,9 @@ rule, v9 accepted by `decide`, v10 the rejection, v11 the events, v12 and v13 th
 after, v15 and v16 the invariant, v17 the pending table. -/
 def commandScript (goal : List Term) : Except String Script := do
   let L := commandLayout
-  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let (cc, cx) ← enc (CommandCode.of L putC)
-  let (apply, ca) ← enc (commandSvc.apply.code L)
-  let (inv, ci) ← enc (commandSvc.invariants.code L)
-  let some ks := callerTerms L rfl putC.callers | throw "no caller terms"
   let S := stateAt 17
-  let idx (t : Ty) := ((L.find? t).map (·.1)).getD 0
-  let (o, cond, cfx) ← enc (encodeCommand L prelude [] commandSvc [] (idx (.dsl .effect [evT]))
-    (idx (pendingEntry ([] : List (PendingShape evT)))) (idx (Ty.option (.dsl .effect [evT]))) putC cc
-    apply inv ks S.records S.now S.fresh S.nextId S.pending (.var 4) (.var 5) S.machines)
+  let t ← stepOf L [] commandSvc [] S (.command ⟨0, by decide⟩ (.var 4) (.var 5))
+  let .command o := t.out | throw "not a command's terms"
   let some wf := S.wf L (v := commandSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some lsrt := L.srt? (.list evT) | throw "no events sort"
@@ -723,7 +709,7 @@ def commandScript (goal : List Term) : Except String Script := do
   pure { datatypes := dts,
          vars := [rsrt, .int, .int, .int, .str, .int, .bool, .bool, .str, .bool, .str, lsrt, .bool, .str, rsrt, .bool,
            .str, psrt],
-         asserts := [cx, ca, ci, cfx, cond, wf, .eq (.var 6) o.callerOk, .eq (.var 7) ah, .eq (.var 8) an, .eq (.var 9) o.ok,
+         asserts := [t.codes, t.sites, t.cond, wf, .eq (.var 6) o.callerOk, .eq (.var 7) ah, .eq (.var 8) an, .eq (.var 9) o.ok,
            .eq (.var 10) o.rejection, .eq (.var 11) o.events, .eq (.var 12) eh, .eq (.var 13) en,
            .eq (.var 14) o.after.records, .eq (.var 15) ih, .eq (.var 16) iname] ++ goal,
          shows := List.range 18 }
@@ -1011,7 +997,7 @@ def orderCheck (solver : Solver) : IO Bool := do
     | .error m, _ | _, .error m => IO.println s!"smt-check: order {c.name}: {m}"; ok := false
   return ok
 
-/-! An answer step on the pending service, for `answer_step` and `answer_unmatched`: the answer to the `rate` request
+/-! An answer step on the pending service, for `step_encode`: the answer to the `rate` request
 (shape 1) in slot 0. `rate` ensures a positive answer, its `on_answer` yields the answer plus the captured value, the
 records insert that event, and the invariant `small` holds below three keys. -/
 
@@ -1020,15 +1006,9 @@ the `ensures` rule, v10 the events, v11 the records after, v12 and v13 the invar
 `shift` adds to the answer the terms read, which breaks the encoding on purpose. -/
 def answerScript (shift : Int) (goal : List Term) : Except String Script := do
   let L := pendingLayout
-  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let some sh := pendingShapes[1]? | throw "no rate shape"
-  let (apply, ca) ← enc (pendingSvc.apply.code L)
-  let (inv, ci) ← enc (pendingSvc.invariants.code L)
   let S := SymState.vars 0
-  let idx (t : Ty) := ((L.find? t).map (·.1)).getD 0
-  let (o, cond, cfx) ← enc (encodeAnswer L prelude [] pendingShapes 1 sh 0 (idx (.dsl .effect [.int]))
-    (idx (pendingEntry pendingShapes)) (idx (Ty.option (.dsl .effect [.int]))) apply inv S.records S.pending (.var 5)
-    (.add (.var 6) (.int shift)) S.now S.fresh S.nextId S.machines)
+  let t ← stepOf L [] pendingSvc pendingShapes S (.answer 1 0 (.var 5) (.add (.var 6) (.int shift)))
+  let .answer o := t.out | throw "not an answer's terms"
   let some wf := S.wf L (v := pendingSvc) pendingShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some psrt := L.srt? (pendingTable pendingShapes) | throw "no pending sort"
@@ -1038,7 +1018,7 @@ def answerScript (shift : Int) (goal : List Term) : Except String Script := do
   let [(iname, ih)] := o.finish.invariants | throw "not one invariant"
   pure { datatypes := dts,
          vars := [rsrt, .int, .int, .int, psrt, .int, .int, .bool, .bool, .str, lsrt, rsrt, .bool, .str, psrt],
-         asserts := [ca, ci, cfx, cond, wf, .le (.int 0) (.var 5), .eq (.var 7) o.hit, .eq (.var 8) rh, .eq (.var 9) rn,
+         asserts := [t.codes, t.sites, t.cond, wf, .le (.int 0) (.var 5), .eq (.var 7) o.hit, .eq (.var 8) rh, .eq (.var 9) rn,
            .eq (.var 10) o.events, .eq (.var 11) o.finish.settle.terms.done.records, .eq (.var 12) ih,
            .eq (.var 13) iname, .eq (.var 14) o.finish.pending] ++ goal,
          shows := List.range 15 }
@@ -1046,7 +1026,8 @@ def answerScript (shift : Int) (goal : List Term) : Except String Script := do
 /-- The script whose goal is that no slot holds a request of the answer's type that the wire id names. -/
 def unmatchedScript : Except String Script := do
   let L := pendingLayout
-  let u ← (answerUnmatchedT L pendingShapes .int (.var 4) (.var 5)).mapError fun r => s!"no encoding: {repr r}"
+  let t ← stepOf L [] pendingSvc pendingShapes (SymState.vars 0) (.unmatched .int (.var 5) (.var 6))
+  let .unmatched u := t.out | throw "not an unmatched answer's terms"
   let some wf := (SymState.vars 0).wf L (v := pendingSvc) pendingShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some psrt := L.srt? (pendingTable pendingShapes) | throw "no pending sort"
@@ -1146,17 +1127,17 @@ def boundScript (atMostB : Int) (withLimits : Bool) (goal : List Term) : Except 
   let L := boundLayout
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := stateAt 7
-  let (_, o, _, ce, cond) ← eventTerms L boundSvc boundI [] S (.var 4)
+  let (o, t) ← eventTerms L [] boundSvc boundI [] S (.var 4)
   let (pre, cpre) ← enc (createsT L S.records (createsB atMostB))
-  let (reached, creached) ← enc (boundReachedT L (createsB atMostB) cond o.records)
+  let (reached, creached) ← enc (boundReachedT L (createsB atMostB) t.cond o.finish.settle.terms.done.records)
   let some wf := S.wf L (v := boundSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsB | throw "no records sort"
   let some esrt := L.srt? evT | throw "no event sort"
   let some psrt := L.srt? (noPending boundSvc) | throw "no pending sort"
   let some dts := L.datatypes? | throw "no datatypes"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, esrt, rsrt, .bool, psrt],
-         asserts := [ce, cpre, creached, wf] ++ (if withLimits then [pre] else []) ++
-           [.eq (.var 5) o.records, .eq (.var 6) reached] ++ goal,
+         asserts := [t.codes, t.sites, cpre, creached, wf] ++ (if withLimits then [pre] else []) ++
+           [.eq (.var 5) o.finish.settle.terms.done.records, .eq (.var 6) reached] ++ goal,
          shows := List.range 8 }
 
 /-- Whether the step from the decoded state and value leaves the bounds as the terms say it does. -/
@@ -1779,7 +1760,7 @@ def fireCheck (solver : Solver) : IO Bool := do
       return ok
     | a => fail s!"{repr a}"
 
-/-! An event whose machine starts requests, for `event_step`: the machine `start` above in a service that
+/-! An event whose machine starts requests, for `step_encode`: the machine `start` above in a service that
 inserts each event's value into its records and lists the external `mail`'s command `send`. The state holds key 3 in
 state 0 and one request pending at wire id 2, with next id 40; the event 5 makes key 3 enter 1 and key 5 start, so
 both start a `send`. The pending table and next id read from the model must be the step's (the two new requests at 40
@@ -1819,22 +1800,21 @@ def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : 
   let L := writeLayoutOf m keys slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let (_, o, _, ce, cond) ← eventTerms L v ⟨0, by simp [v, writeSvcOf]⟩ shs S (.var 6)
-  let (_, ck) ← enc (encodeInstChecks L prelude v.machines o.tables o.records S.now)
-  let (pT, cp) ← enc (encodePending L shs S.pending o.news)
+  let (o, t) ← eventTerms L writeSites v ⟨0, by simp [v, writeSvcOf]⟩ shs S (.var 6)
+  let d := o.finish.settle.terms.done
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := v) shs | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some psrt := L.srt? (pendingTable shs) | throw "no pending sort"
   let some msrt := L.srt? m.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [tbl] := o.tables | throw "not one machine"
-  let some (d, n) := L.find? (pendingTable shs) | throw "no pending table"
+  let [tbl] := d.tables | throw "not one machine"
+  let some (dp, n) := L.find? (pendingTable shs) | throw "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry shs]) | throw "no pending slot"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int, rsrt, msrt],
-          asserts := [wf, below, ce, cond, ck, cp, .eq (.var 7) pT, .eq (.var 8) o.nextId, .eq (.var 9) o.records,
-            .eq (.var 10) tbl] ++ goal,
-          shows := List.range 11 }, slotsOf d dt n 2 (.var 4))
+          asserts := [wf, below, t.codes, t.sites, t.cond, .eq (.var 7) o.finish.pending, .eq (.var 8) d.nextId,
+            .eq (.var 9) d.records, .eq (.var 10) tbl] ++ goal,
+          shows := List.range 11 }, slotsOf dp dt n 2 (.var 4))
 
 def writeScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot) :=
   writeScriptOf startM [sendKey ⟨"m", 3, 7, 0⟩] slots goal
@@ -1932,7 +1912,7 @@ def quietCheck (solver : Solver) : IO Bool := do
         | _, _, _ => fail "the model does not decode"
       | a => fail s!"{repr a}"
 
-/-! An event whose machine and reaction start requests, for `event_step`: the service `w` above with the
+/-! An event whose machine and reaction start requests, for `step_encode`: the service `w` above with the
 reaction `fan`, which requests `send` with the event's value plus 1 and plus 2, in that order. From the state of
 `event writes requests` (key 3 in state 0, request 2 pending, next id 40) the event 5 starts the machine's two
 requests at 40 (key 3) and 41 (key 5), then the reaction's at 42 (input 6) and 43 (input 7). The pending table and
@@ -1970,9 +1950,7 @@ def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List S
   let L := fanLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let (_, o, _, ce, cond) ← eventTerms L fanSvc fanI fanShapes S (.var 6)
-  let (_, ck) ← enc (encodeInstChecks L prelude fanSvc.machines o.tables o.records S.now)
-  let (pT, cp) ← enc (encodePending L fanShapes S.pending o.news)
+  let (o, t) ← eventTerms L writeSites fanSvc fanI fanShapes S (.var 6)
   let below ← enc (pendingBelowT L fanShapes S.pending S.nextId)
   let some wf := S.wf L (v := fanSvc) fanShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -1982,7 +1960,8 @@ def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List S
   let some (d, n) := L.find? (pendingTable fanShapes) | throw "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry fanShapes]) | throw "no pending slot"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int],
-          asserts := [wf, below, ce, cond, ck, cp, .eq (.var 7) pT, .eq (.var 8) o.nextId] ++ goal,
+          asserts := [wf, below, t.codes, t.sites, t.cond, .eq (.var 7) o.finish.pending,
+            .eq (.var 8) o.finish.settle.terms.done.nextId] ++ goal,
           shows := List.range 9 }, slotsOf d dt n 2 (.var 4))
 
 def fanCheck (solver : Solver) : IO Bool := do
@@ -2042,7 +2021,7 @@ def fanCheck (solver : Solver) : IO Bool := do
       | a => ok ← fail s!"one pending and four new requests in four slots, yet the script is {repr a}"
   return ok
 
-/-! A clock line with timers, for `clock_step`: the service `w` above with the cascade bound `cascade`. Key 7
+/-! A clock line with timers, for `step_encode`: the service `w` above with the cascade bound `cascade`. Key 7
 waits for 80 and key 3 for 90, both entering state 1, which starts a timer due at now + 5 and requests `send`. The
 state holds one request pending at wire id 2, next id 40, now 50; the line's time is 100. Round one fires key 7 (the
 earliest deadline, though key 3 is smaller), round two key 3, and round three finds no due timer. With cascade 2 the
@@ -2062,13 +2041,8 @@ def clockFireScript (cascade : Int) (slots : Nat) (goal : List Term) : Except St
   let L := writeLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry (clockShapes cascade)) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (inv, ci) ← enc (v.invariants.code L)
-  let (apply, ca) ← enc (v.apply.code L)
-  let (o, cond, cfx) ← enc (encodeClock L prelude writeSites v (clockShapes cascade) dE dP dopt apply inv S.records
-    S.now (.var 6) S.fresh S.pending S.nextId S.machines)
+  let t ← stepOf L writeSites v (clockShapes cascade) S (.clock (.var 6))
+  let .clock o := t.out | throw "not a clock line's terms"
   let below ← enc (pendingBelowT L (clockShapes cascade) S.pending S.nextId)
   let some wf := S.wf L (v := v) (clockShapes cascade) | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -2077,7 +2051,7 @@ def clockFireScript (cascade : Int) (slots : Nat) (goal : List Term) : Except St
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.finish.settle.terms.done.tables | throw "not one machine"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int, msrt],
-          asserts := [wf, below, ci, ca, cfx, cond, .eq (.var 7) o.finish.pending,
+          asserts := [wf, below, t.codes, t.sites, t.cond, .eq (.var 7) o.finish.pending,
             .eq (.var 8) o.finish.settle.terms.done.nextId, .eq (.var 9) tbl] ++ goal,
           shows := List.range 10 }, o)
 
@@ -2269,7 +2243,7 @@ def eventsCheck (solver : Solver) : IO Bool := do
         | _, _, _ => fail "the model does not decode"
       | a => fail s!"{repr a}"
 
-/-! A command whose events reach machines, for `command_step`: the service `w` above with the command `twice`, whose
+/-! A command whose events reach machines, for `step_encode`: the service `w` above with the command `twice`, whose
 `decide` accepts any positive input with the events [input, input]. From the state of `a list of events` (no records,
 no instances, request 2 pending, next id 40, now 100), alice's `twice 3` applies 3 twice: the first starts key 3 at
 0 (request at 40), the second enters 1 (request at 41). The step must be accepted, and the records, instance table,
@@ -2300,15 +2274,8 @@ def twiceScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Li
   let L := twiceLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let (cc, cx) ← enc (CommandCode.of L twiceC)
-  let (apply, ca) ← enc (twiceSvc.apply.code L)
-  let (inv, ci) ← enc (twiceSvc.invariants.code L)
-  let some ks := callerTerms L rfl twiceC.callers | throw "no caller terms"
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry twiceShapes) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (o, cond, cfx) ← enc (encodeCommand L prelude writeSites twiceSvc twiceShapes dE dP dopt twiceC cc apply inv ks
-    S.records S.now S.fresh S.nextId S.pending (.var 6) (.var 7) S.machines)
+  let t ← stepOf L writeSites twiceSvc twiceShapes S (.command ⟨0, by decide⟩ (.var 6) (.var 7))
+  let .command o := t.out | throw "not a command's terms"
   let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
   let some wf := S.wf L (v := twiceSvc) twiceShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -2320,7 +2287,7 @@ def twiceScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Li
   let some (dp, n) := L.find? (pendingTable twiceShapes) | throw "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry twiceShapes]) | throw "no pending slot"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .str, .int, psrt, .int, rsrt, msrt],
-          asserts := [wf, below, cx, ca, ci, cfx, cond, .eq (.var 8) o.finish.pending, .eq (.var 9) d.nextId,
+          asserts := [wf, below, t.codes, t.sites, t.cond, .eq (.var 8) o.finish.pending, .eq (.var 9) d.nextId,
             .eq (.var 10) d.records, .eq (.var 11) tbl] ++ goal,
           shows := List.range 12 }, slotsOf dp dt n 2 (.var 4))
 
@@ -2372,7 +2339,7 @@ def twiceCheck (solver : Solver) : IO Bool := do
         | _, _ => fail "the model does not decode"
       | a => fail s!"{repr a}"
 
-/-! An answer whose events reach machines, for `answer_step`: the service `w` above, with key 3 in the records and its
+/-! An answer whose events reach machines, for `step_encode`: the service `w` above, with key 3 in the records and its
 instance in state 0, at now 100 and next id 40. Request 2 in slot 0 is the instance's `send`, whose `on_answer`
 captured key 3. The answer Ok to 2 makes `on_answer` return [3]; applying 3 lets the instance enter 1 (timer due at
 105) and request `send` again at id 40, and request 2 leaves the table. The records, instance table, pending table
@@ -2391,14 +2358,8 @@ def answerMScriptOf (slots : Nat) (goal : List Term) : Except String (Script × 
   let L := answerMLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let some sh := writeShapes[0]? | throw "no shape"
-  let (apply, ca) ← enc (writeSvc.apply.code L)
-  let (inv, ci) ← enc (writeSvc.invariants.code L)
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry writeShapes) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (o, cond, cfx) ← enc (encodeAnswer L prelude writeSites writeShapes 0 sh 0 dE dP dopt apply inv S.records
-    S.pending (.int 2) (.var 6) S.now S.fresh S.nextId S.machines)
+  let t ← stepOf L writeSites writeSvc writeShapes S (.answer 0 0 (.int 2) (.var 6))
+  let .answer o := t.out | throw "not an answer's terms"
   let below ← enc (pendingBelowT L writeShapes S.pending S.nextId)
   let some wf := S.wf L (v := writeSvc) writeShapes | throw "no well-formedness"
   let some wfa := wfT L (answerTy Ty.nil Ty.nil) (.var 6) | throw "no answer well-formedness"
@@ -2410,7 +2371,7 @@ def answerMScriptOf (slots : Nat) (goal : List Term) : Except String (Script × 
   let d := o.finish.settle.terms.done
   let [tbl] := d.tables | throw "not one machine"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, asrt, psrt, .int, rsrt, msrt],
-          asserts := [wf, wfa, below, ca, ci, cfx, cond, o.hit, .eq (.var 7) o.finish.pending, .eq (.var 8) d.nextId,
+          asserts := [wf, wfa, below, t.codes, t.sites, t.cond, o.hit, .eq (.var 7) o.finish.pending, .eq (.var 8) d.nextId,
             .eq (.var 9) d.records, .eq (.var 10) tbl] ++ goal,
           shows := List.range 11 }, o.hit)
 
@@ -3062,7 +3023,7 @@ def cascadeCheck (solver : Solver) : IO Bool := do
       | a => ok ← fail s!"{name}: {repr a}"
   return ok
 
-/-! A whole event step with its cascade, for `event_step`: the service `c` is `w` above with the command `put` (`twice`
+/-! A whole event step with its cascade, for `step_encode`: the service `c` is `w` above with the command `put` (`twice`
 renamed) and the reaction `once`, which queues alice's `put (ev + 10)`, answered with no events, for an event below 5.
 From no records, no instances, request 2 pending, next id 40, fresh 7 and now 100, the event 3 runs through the events
 loop and queues `put 13`. With bound 1 the internal step runs and the step is accepted: the records, table, pending
@@ -3109,15 +3070,8 @@ def cascEventTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except S
   let L := cascLayout cascade slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let (ec, ce) ← enc (EventCode.of L v ⟨0, by simp [v, cascSvc, writeSvc, writeSvcOf]⟩)
-  let (et, cw) ← enc (encodeWrap ec (.var 6))
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry shs) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (o, c) ← enc (encodeEvents L prelude v shs dE dP dopt ec.apply S.now [(tt, [et])] S.records S.machines S.nextId
-    (.int 0))
-  let (fo, cf, cfx) ← enc (encodeFinish L prelude cascSites v shs dE dP dopt ec.apply ec.invariants S.now S.fresh
-    S.pending o)
+  let (o, t) ← eventTerms L cascSites v ⟨0, by simp [v, cascSvc, writeSvc, writeSvcOf]⟩ shs S (.var 6)
+  let fo := o.finish
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := v) shs | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -3128,7 +3082,7 @@ def cascEventTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except S
   let [tbl] := d.tables | throw "not one machine"
   let script : Script :=
     { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, rsrt, .int, .int, psrt, msrt],
-      asserts := [wf, below, ce, cw, c, cf, cfx, .eq (.var 7) d.records, .eq (.var 8) fo.settle.terms.fresh,
+      asserts := [wf, below, t.codes, t.cond, t.sites, .eq (.var 7) d.records, .eq (.var 8) fo.settle.terms.fresh,
         .eq (.var 9) d.nextId, .eq (.var 10) fo.pending, .eq (.var 11) tbl] ++ goal }
   pure (script, fo)
 
@@ -3194,7 +3148,7 @@ def cascEventCheck (solver : Solver) : IO Bool := do
       | a => ok ← fail s!"{name}: {repr a}"
   return ok
 
-/-! A clock line whose timers queue own commands, for `clock_step`: the machine `tick` is `start` whose effect, for a key
+/-! A clock line whose timers queue own commands, for `step_encode`: the machine `tick` is `start` whose effect, for a key
 below 10, is alice's `put (key + 10)` answered with no events, in the service `c` above without its reaction. From the
 state of `clock fires timers` without its record (keys 7 and 3 due at 80 and 90, request 2 pending, next id 40, now
 50), the line at 100
@@ -3235,13 +3189,8 @@ def tickClockTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except S
   let L := tickLayout cascade slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let (apply, ca) ← enc (v.apply.code L)
-  let (inv, ci) ← enc (v.invariants.code L)
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry shs) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (o, cond, cfx) ← enc (encodeClock L prelude cascSites v shs dE dP dopt apply inv S.records S.now (.var 6) S.fresh
-    S.pending S.nextId S.machines)
+  let t ← stepOf L cascSites v shs S (.clock (.var 6))
+  let .clock o := t.out | throw "not a clock line's terms"
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := v) shs | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -3252,7 +3201,7 @@ def tickClockTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except S
   let [tbl] := d.tables | throw "not one machine"
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, .int, rsrt, .int, .int, psrt, msrt, .bool],
-          asserts := [wf, below, ca, ci, cfx, cond, .eq (.var 7) d.records, .eq (.var 8) o.finish.settle.terms.fresh,
+          asserts := [wf, below, t.codes, t.sites, t.cond, .eq (.var 7) d.records, .eq (.var 8) o.finish.settle.terms.fresh,
             .eq (.var 9) d.nextId, .eq (.var 10) o.finish.pending, .eq (.var 11) tbl, .eq (.var 12) o.over] ++ goal,
           shows := List.range 13 }, o)
 
