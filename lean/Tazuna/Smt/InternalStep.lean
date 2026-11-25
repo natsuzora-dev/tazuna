@@ -38,7 +38,7 @@ variable (L : Layout) (T : List TypeDecl)
 /-- An own command's internal step terms and condition, from the codes of the command and of its `on_answer` site
 over the captured values `σ`, the terms of the running state, the caller and the input, and the listed callers'
 constants. The condition asks only for what the internal step computes. -/
-def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt : Nat)
+def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) {Γ : List Ty}
     (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (σ : Codes Γ)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
@@ -50,7 +50,7 @@ def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP d
   let res := Term.share rest
   let ok := Term.is d 0 res
   let (dl, nl, dt) ← collD L (.list v.event) [v.event]
-  let (o1, c3) ← encodeEvents L T v shs dE dP dopt apply now (gateSlots ok (slotsOf dl dt nl 1 (.sel d 0 0 res)))
+  let (o1, c3) ← encodeEvents L T v shs senv apply now (gateSlots ok (slotsOf dl dt nl 1 (.sel d 0 0 res)))
     records xs n q
   let rfc ← need "records that have no term" (Code.ofTerm? v.records o1.records)
   let (ens, c4) ← cc.ensures (a.ctx, rfc, ())
@@ -62,7 +62,7 @@ def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP d
   let (oa, c5) ← site.code L σ
   let (evs, c6) ← oa (ac, ())
   let evt ← need "events that have no term" (Code.term? _ evs)
-  let (o2, c7) ← encodeEvents L T v shs dE dP dopt apply now (slotsOf dl dt nl 1 evt) o1.records o1.tables o1.nextId
+  let (o2, c7) ← encodeEvents L T v shs senv apply now (slotsOf dl dt nl 1 evt) o1.records o1.tables o1.nextId
     o1.queued
   pure (⟨a.callerOk, a.rules, ok, ensures, o1, o2⟩,
     .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) (andT c2 (andT c3 (andT (.ite ok c4 tt)
@@ -73,7 +73,7 @@ def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP d
 the captured values `σ`, the terms of the running state, the caller and the input, and the listed callers'
 constants: the caller and the `accepts` rules admit the input, `resolve` answers, and `on_answer`'s events run
 through the events loop. -/
-def encodeOwnQuery (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt : Nat)
+def encodeOwnQuery (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : QueryV v.records v.caller) (qc : QueryCode x) {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event)))
     (σ : Codes Γ) (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
     (records now fresh n q caller input : Term) (xs : List Term) : Except Refusal (OwnQueryOut × Term) := do
@@ -83,7 +83,7 @@ def encodeOwnQuery (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dop
   let (evs, c4) ← oa (out, ())
   let evt ← need "events that have no term" (Code.term? _ evs)
   let (dl, nl, dt) ← collD L (.list v.event) [v.event]
-  let (o, c5) ← encodeEvents L T v shs dE dP dopt apply now (slotsOf dl dt nl 1 evt) records xs n q
+  let (o, c5) ← encodeEvents L T v shs senv apply now (slotsOf dl dt nl 1 evt) records xs n q
   pure (⟨a.callerOk, a.rules, o⟩,
     .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) (andT c2 (andT c3 (andT c4 c5))) tt)) tt)
 
@@ -129,16 +129,14 @@ theorem loop_apply {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     (hap : (Ty.fn [v.records, v.event] v.records).isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ hap v.apply.fn) apply)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     (hvm : ∀ m ∈ v.machines, m.Reach P) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
     {S : List Slot} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 1)
     {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ hed)) sv)
     {records : Term} (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
     {xs : List Term} (hms : MachinesRel M L T v.machines xs a.state.machines)
     {n q : Term} {q0 : Nat} (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
-    {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs dE dP dopt apply now S records xs n q = .ok (o, c))
+    {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c))
     (hc : Holds M c) :
     let effs := (Step.reactAll T a.state evs).2
     RelV L v.records (Ty.up _ hrd (Step.reactAll T a.state evs).1.records) (o.records.denote M) ∧
@@ -150,7 +148,7 @@ theorem loop_apply {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
       ∀ ps, Forall2 (Step.Writes v.declared) ((Step.reqsOf effs).zipIdx a.state.nextId) ps →
         Step.applyEvents T a evs = .ok (({ a with state := (Step.reactAll T a.state evs).1, events := a.events ++ evs }.wrote
           ps (a.state.nextId + (Step.reqsOf effs).length)).queued (Step.queuedOf effs)) := by
-  obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel hP hvx hvm hshs hor hrd hed hap happ hE hPE hopt S sv hS hw evs hev
+  obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel hP hvx hvm hshs hor hrd hed hap happ senv S sv hS hw evs hev
     a.state hnow hrec hms hn hq henc hc
   exact ⟨r1, r2, r3, r4, r5, r6, fun ps hps => Step.applyEvents_requests T evs a ps hps⟩
 
@@ -208,9 +206,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
     {Γ : List Ty} (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (env : (Ty.tuple Γ).den0)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ)
     {ks : List Term} (hks : callerTerms L hd.caller x.callers = some ks)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     {records now fresh n q sc si : Term} {xs : List Term} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ hd.records a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
@@ -219,7 +215,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
     (hsc : RelV L v.caller (Ty.up _ hd.caller caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ hd.input input) (si.denote M))
     {o : OwnCommandOut} {cond : Term}
-    (henc : encodeOwnCommand L T v shs dE dP dopt x cc site σ apply ks records now fresh n q sc si xs = .ok (o, cond))
+    (henc : encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q sc si xs = .ok (o, cond))
     (hc : Holds M cond) :
     let r := Step.runCommand T a x caller input (site.fn env)
     if (o.callerOk.denote M).toBool then
@@ -328,8 +324,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
       rw [holds_andT, holds_andT] at hct; exact hct
     obtain ⟨sv1, hS1, hw1, hh1⟩ := gate_false_events (L := L) (v := v) hok' _
       (slotsOf_width dl dt nl 1 (.sel d 0 0 (Term.share rest)))
-    obtain ⟨p1, p2, p3, p4, p5, p6, -⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ hE hPE
-      hopt hvm a1 hnow hS1 hw1 (evs := []) (by simpa using hh1) hrec hms hn hq h12 hc3
+    obtain ⟨p1, p2, p3, p4, p5, p6, -⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ senv hvm a1 hnow hS1 hw1 (evs := []) (by simpa using hh1) hrec hms hn hq h12 hc3
     simp only [Step.reactAll, Step.reqsOf, Step.queuedOf, List.filter_nil, List.map_nil, List.length_nil,
       Nat.add_zero] at p1 p2 p3 p4 p5 p6
     have hrj : RelV L x.rejection (Ty.up _ hd.rejection j) ((Term.sel d 1 0 (Term.share rest)).denote M) := by
@@ -344,8 +339,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
     have hevt := (rel_term (need_ok.1 h22) _).1 hevs2
     obtain ⟨sv2, hS2, -, hsw2, hh2⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h11
     erw [Ty.up_list _ _ hd.event] at hh2
-    obtain ⟨q1, q2, q3, q4, q5, q6, q7⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ hE hPE
-      hopt hvm a1 hnow hS2 hsw2 hh2 p1 p2 p3 p5 h23 hc7
+    obtain ⟨q1, q2, q3, q4, q5, q6, q7⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ senv hvm a1 hnow hS2 hsw2 hh2 p1 p2 p3 p5 h23 hc7
     have hkeep := Step.reactAll_keeps T a1.state
       ((site.fn env).fn ((.inr (.inl (j, ())) : (Ty.result Ty.nil x.rejection).den0), ()))
     refine ⟨_, _, (site.fn env).fn ((.inr (.inl (j, ())) : (Ty.result Ty.nil x.rejection).den0), ()), _, _, ?_, q1, q2,
@@ -374,8 +368,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
       rw [sel_ctor 0 (hsh.trans hw)]; exact hev
     obtain ⟨sv, hS, -, hsw, hh⟩ := list_view hevs h11
     erw [Ty.up_list _ _ hd.event] at hh
-    obtain ⟨p1, p2, p3, p4, p5, p6, p7⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ hE hPE
-      hopt hvm a1 hnow (gate_true hok' hS) hsw hh hrec hms hn hq h12 hc3
+    obtain ⟨p1, p2, p3, p4, p5, p6, p7⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ senv hvm a1 hnow (gate_true hok' hS) hsw hh hrec hms hn hq h12 hc3
     let sA := (Step.reactAll T a1.state events).1
     have hpA : sA.pending = a.state.pending := Step.reactAll_pending T a1.state events
     have hnA : sA.now = a.state.now := Step.reactAll_now T a1.state events
@@ -423,8 +416,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
     let reqs1 := Step.reqsOf (Step.reactAll T a1.state events).2
     let N1 := a.state.nextId + reqs1.length
     let a2 : Step.Acc v := { state := { sA with pending := sA.pending, nextId := N1 } }
-    obtain ⟨q1, q2, q3, q4, q5, q6, -⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ hE hPE
-      hopt hvm a2 (by rw [← hnA] at hnow; exact hnow) hS2 hsw2 hh2 p1 p2 p3 p5 h23 hc7
+    obtain ⟨q1, q2, q3, q4, q5, q6, -⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ senv hvm a2 (by rw [← hnA] at hnow; exact hnow) hS2 hsw2 hh2 p1 p2 p3 p5 h23 hc7
     dsimp only [a2] at q1 q2 q3 q4 q5 q6
     erw [Step.reactAll_with T sA sA.pending N1] at q1 q2 q3 q4 q5 q6
     refine ⟨(Step.reactAll T sA evs2).1.records, (Step.reactAll T sA evs2).1.machines,
@@ -437,8 +429,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
       have hl1 := forall2_zipIdx_length _ _ hps1
       let a2' : Step.Acc v := ((({ a1 with state := sA, events := @HAppend.hAppend (List v.event.den0) (List v.event.den0) _ _ a1.events events } : Step.Acc v).wrote ps1
         (a1.state.nextId + reqs1.length)).queued (Step.queuedOf (Step.reactAll T a1.state events).2))
-      obtain ⟨-, -, -, -, -, -, q7⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ hE hPE
-        hopt hvm a2' (by rw [← hnA] at hnow; exact hnow) hS2 hsw2 hh2 p1 p2 p3 p5 h23 hc7
+      obtain ⟨-, -, -, -, -, -, q7⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hd.event hd.apply happ senv hvm a2' (by rw [← hnA] at hnow; exact hnow) hS2 hsw2 hh2 p1 p2 p3 p5 h23 hc7
       have hs2 : a2'.state = { sA with pending := a.state.pending ++ ps1, nextId := N1 } := by
         simp [a2', Step.Acc.wrote, Step.Acc.queued, hpA, N1, a1]
       erw [hs2, Step.reactAll_with T sA _ N1] at q7
@@ -491,9 +482,7 @@ theorem ownCommand_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x �
     {Γ : List Ty} (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (env : (Ty.tuple Γ).den0)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
     {ks : List Term} (hks : callerTerms L hd.caller x.callers = some ks)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     {records now fresh n q sc si : Term} {xs : List Term} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ hd.records a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
@@ -502,7 +491,7 @@ theorem ownCommand_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x �
     (hsc : RelV L v.caller (Ty.up _ hd.caller caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ hd.input input) (si.denote M))
     {o : OwnCommandOut} {cond : Term}
-    (henc : encodeOwnCommand L T v shs dE dP dopt x cc site σ apply ks records now fresh n q sc si xs = .ok (o, cond)) :
+    (henc : encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q sc si xs = .ok (o, cond)) :
     let ctx := Step.ctx a.state a.state.records caller input
     Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
       x.accepts.appFits L.count (input, ()) ∧
@@ -630,7 +619,7 @@ theorem ownCommand_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x �
         have hc3 : Holds M c3 :=
           (events_exact (fun m hm => (hor m hm).1) hd.records hd.event happ hca _ sv1 hS1 hw1 [] (by simpa using hh1) s1
             hnow hrec hms h12).2 trivial
-        obtain ⟨r1, r2, -⟩ := events_rel hP hvx hvm hshs hor hd.records hd.event hd.apply happ' hE hPE hopt _ sv1 hS1
+        obtain ⟨r1, r2, -⟩ := events_rel hP hvx hvm hshs hor hd.records hd.event hd.apply happ' senv _ sv1 hS1
           hw1 [] (by simpa using hh1) s1 hnow hrec hms hn hq h12 hc3
         simp only [Step.reactAll] at r1 r2
         have hite : ∀ t u : Term, (Term.ite (Term.is d 0 (Term.share rest)) t u).denote M = u.denote M := fun t u => by
@@ -680,7 +669,7 @@ theorem ownCommand_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x �
             hnow hrec hms h12
         have hrel : Holds M c3 → RelV L v.records (Ty.up _ hd.records sA.records) (o1.records.denote M) ∧
             MachinesRel M L T v.machines o1.tables sA.machines := fun hc3 => by
-          obtain ⟨r1, r2, -⟩ := events_rel hP hvx hvm hshs hor hd.records hd.event hd.apply happ' hE hPE hopt _ sv
+          obtain ⟨r1, r2, -⟩ := events_rel hP hvx hvm hshs hor hd.records hd.event hd.apply happ' senv _ sv
             (gate_true hok' hS) hsw events hh s1 hnow hrec hms hn hq h12 hc3
           exact ⟨r1, r2⟩
         have e4 : Holds M c3 → (Holds M c4 ↔ x.ensures.appFits L.count (ctx, sA.records, ())) ∧
@@ -763,9 +752,7 @@ theorem ownQuery_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
     {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event))) (env : (Ty.tuple Γ).den0)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ)
     {ks : List Term} (hks : callerTerms L hd.caller x.callers = some ks)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     {records now fresh n q sc si : Term} {xs : List Term} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ hd.records a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
@@ -774,7 +761,7 @@ theorem ownQuery_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
     (hsc : RelV L v.caller (Ty.up _ hd.caller caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ hd.input input) (si.denote M))
     {o : OwnQueryOut} {cond : Term}
-    (henc : encodeOwnQuery L T v shs dE dP dopt x qc site σ apply ks records now fresh n q sc si xs = .ok (o, cond))
+    (henc : encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q sc si xs = .ok (o, cond))
     (hc : Holds M cond) :
     let r := Step.runQuery T a x caller input (site.fn env)
     if (o.callerOk.denote M).toBool then
@@ -830,8 +817,7 @@ theorem ownQuery_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
   erw [Ty.up_list _ _ hed] at hh
   let evs1 : List v.event.den0 := (site.fn env).fn ⟨x.resolve.fn ⟨Step.ctx a.state a.state.records caller input, ()⟩, ()⟩
   change Holds2 (EBag L v.event) (evs1.map (Ty.up _ hed)) sv at hh
-  obtain ⟨q1, q2, q3, q4, q5, q6, q7⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hed hap happ hE hPE
-    hopt hvm a hnow hS hsw hh hrec hms hn hq h13 hc5
+  obtain ⟨q1, q2, q3, q4, q5, q6, q7⟩ := loop_apply (T := T) hP hvx hshs hor hd.records hed hap happ senv hvm a hnow hS hsw hh hrec hms hn hq h13 hc5
   have hkeep := Step.reactAll_keeps T a.state evs1
   refine ⟨_, _, evs1, _, _, fun ps hps => ?_, q1, q2, q3, q4, q5, q6⟩
   erw [q7 ps hps]
@@ -849,7 +835,7 @@ theorem ownQuery_exact (a : Step.Acc v) (hor : ∀ m ∈ v.machines, m.key.order
     {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event))) (env : (Ty.tuple Γ).den0)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
     (hout : x.output.isFn = false) {ks : List Term} (hks : callerTerms L hd.caller x.callers = some ks)
-    {shs : List (PendingShape v.event)} {dE dP dopt : Nat}
+    {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {records now fresh n q sc si : Term} {xs : List Term}
     (hrec : RelV L v.records (Ty.up _ hd.records a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
@@ -857,7 +843,7 @@ theorem ownQuery_exact (a : Step.Acc v) (hor : ∀ m ∈ v.machines, m.key.order
     (hsc : RelV L v.caller (Ty.up _ hd.caller caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ hd.input input) (si.denote M))
     {o : OwnQueryOut} {cond : Term}
-    (henc : encodeOwnQuery L T v shs dE dP dopt x qc site σ apply ks records now fresh n q sc si xs = .ok (o, cond)) :
+    (henc : encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q sc si xs = .ok (o, cond)) :
     let ctx := Step.ctx a.state a.state.records caller input
     Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
       x.accepts.appFits L.count (input, ()) ∧

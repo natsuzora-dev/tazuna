@@ -51,7 +51,7 @@ def callersOf {c : Ty} (callers : List c.den0) : Except Refusal (List Term) :=
   else .error (.outside "a caller type that is not data")
 
 /-- A step's terms from the symbolic state and input, by the input's kind. -/
-def encodeStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt : Nat)
+def encodeStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (S : SymState) : SymInput v → Except Refusal EncodedStep
   | .command i caller input => do
     let x := v.commands.get i
@@ -59,7 +59,7 @@ def encodeStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.eve
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
     let ks ← callersOf L x.callers
-    let (o, c, cs) ← encodeCommand L T P v shs dE dP dopt x cc apply inv ks S.records S.now S.fresh S.nextId S.pending
+    let (o, c, cs) ← encodeCommand L T P v shs senv x cc apply inv ks S.records S.now S.fresh S.nextId S.pending
       caller input S.machines
     pure ⟨.command o, c, andT cx (andT ca ci), cs⟩
   | .query i caller input => do
@@ -72,7 +72,7 @@ def encodeStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.eve
     let sh ← need "an answer shape past the pending shapes" shs[k]?
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let (o, c, cs) ← encodeAnswer L T P shs k sh j dE dP dopt apply inv S.records S.pending to value S.now S.fresh
+    let (o, c, cs) ← encodeAnswer L T P shs k sh j senv apply inv S.records S.pending to value S.now S.fresh
       S.nextId S.machines
     pure ⟨.answer o, c, andT ca ci, cs⟩
   | .unmatched t to _ => do
@@ -80,12 +80,12 @@ def encodeStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.eve
     pure ⟨.unmatched u, tt, tt, tt⟩
   | .event i value => do
     let (ec, ce) ← EventCode.of L v i
-    let (o, c, cs) ← encodeEvent L T P v shs dE dP dopt ec S.records S.now S.fresh S.nextId S.pending S.machines value
+    let (o, c, cs) ← encodeEvent L T P v shs senv ec S.records S.now S.fresh S.nextId S.pending S.machines value
     pure ⟨.event o, c, ce, cs⟩
   | .clock time => do
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let (o, c, cs) ← encodeClock L T P v shs dE dP dopt apply inv S.records S.now time S.fresh S.pending S.nextId
+    let (o, c, cs) ← encodeClock L T P v shs senv apply inv S.records S.now time S.fresh S.pending S.nextId
       S.machines
     pure ⟨.clock o, c, andT ca ci, cs⟩
 
@@ -188,12 +188,10 @@ theorem step_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
     (hqout : ∀ x ∈ v.queries, x.output.isFn = false) (hrd : v.records.isData = true) (hed : v.event.isData = true)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     {S : SymState} {s : State v} (hS : S.decode M L hrd T shs = some s) (hinv : Step.Inv P s)
     {inp : SymInput v} {hc hin hq he} {x : Input v} (hx : inp.decode M L shs hc hin hq he = some x)
-    {t : EncodedStep} (henc : encodeStep L T P v shs dE dP dopt S inp = .ok t) :
+    {t : EncodedStep} (henc : encodeStep L T P v shs senv S inp = .ok t) :
     (Holds M t.codes ↔ codesFit L.count inp) ∧
     (Holds M t.codes → Holds M t.sites → Holds M t.out.case →
       (Holds M t.cond ↔ stepFits L.count T shs s x) ∧
@@ -213,7 +211,7 @@ theorem step_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
     obtain ⟨hcx, hca, hci⟩ : Holds M cx ∧ Holds M ca ∧ Holds M ci := by
       rw [holds_andT, holds_andT] at hcodes; exact hcodes
     have hks' := callersOf_ok hd.caller hks
-    exact command_encode hP hvx hshs hor hcd hqd hqout s hinv i caller input hd hcc hcx happ hca hinvc hci hks' hE hPE hopt
+    exact command_encode hP hvx hshs hor hcd hqd hqout s hinv i caller input hd hcc hcx happ hca hinvc hci hks' senv
       hrec hnow hfresh hnid hpend hms hsc hsi hcmd hcs
   | query i sc si =>
     obtain ⟨caller, input, rfl, hsc, hsi⟩ := decode_query hx
@@ -236,7 +234,7 @@ theorem step_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
     have hx' : decodeAnswer M L (answerTy sh.output sh.rejection) toT valT = some x := by
       simpa [SymInput.decode, hk] using hx
     obtain ⟨hty, to, value, rfl, hto, hval⟩ := decode_answer hx'
-    have ex := answer_encode hP hvx hshs hor hcd hqd hqout s hinv hrd hk j to value happ hca hinvc hci hE hPE hopt hrec
+    have ex := answer_encode hP hvx hshs hor hcd hqd hqout s hinv hrd hk j to value happ hca hinvc hci senv hrec
       hpend hto hnow hfresh hnid hms hty hval hans hcs
     exact ⟨by rw [ex.1]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond => ex.2 hcond hhit⟩
   | unmatched ty toT valT =>
@@ -253,7 +251,7 @@ theorem step_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
     obtain ⟨⟨o, c, cs⟩, hev, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     exact ⟨eventCode_exact hec, fun hce hcs _ =>
-      event_encode hP hvx hshs hor hcd hqd hqout s hinv i value hd hec hce hrec hsv hnow hnid hfresh hpend hms hE hPE hopt
+      event_encode hP hvx hshs hor hcd hqd hqout s hinv i value hd hec hce hrec hsv hnow hnid hfresh hpend hms senv
         hev hcs⟩
   | clock st =>
     obtain ⟨time, rfl, hst⟩ := decode_clock hx
@@ -264,7 +262,7 @@ theorem step_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
     refine ⟨apply_inv_exact happ hinvc, fun hcodes hcs _ => ?_⟩
     obtain ⟨hca, hci⟩ := (holds_andT _ _).1 hcodes
     exact clock_encode hP hvx hshs hor hcd hqd hqout s hinv time hrd hed happ hca hinvc hci hrec hnow hst hfresh hnid
-      hpend hms hE hPE hopt hcl hcs
+      hpend hms senv hcl hcs
 
 end
 

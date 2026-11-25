@@ -230,7 +230,7 @@ variable (L : Layout) (T : List TypeDecl) {v : ServiceV}
 codes' condition, from the codes of the service's `apply` and `invariants` and the terms of the state, the wire id
 the answer names and the answer. -/
 def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat) (sh : PendingShape v.event) (j : Nat)
-    (dE dP dopt : Nat) (apply : Code (Ty.fn [v.records, v.event] v.records))
+    (senv : StepEnv L shs) (apply : Code (Ty.fn [v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (records pending to value now fresh nextId : Term)
     (mts : List Term) : Except Refusal (AnswerOut × Term × Term) := do
   let (d, n, dt) ← collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs]
@@ -247,8 +247,8 @@ def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat
   let (rules, c3) ← ensuresTerms L sh de k entry vc
   let evt ← need "events that have no term" (Code.term? _ evs)
   let (dl, nl, dtl) ← collD L (.list v.event) [v.event]
-  let (o, c4) ← encodeEvents L T v shs dE dP dopt apply now (slotsOf dl dtl nl 1 evt) records mts nextId (.int 0)
-  let (fo, cf, cfx) ← encodeFinish L T P v shs dE dP dopt apply invariants now fresh
+  let (o, c4) ← encodeEvents L T v shs senv apply now (slotsOf dl dtl nl 1 evt) records mts nextId (.int 0)
+  let (fo, cf, cfx) ← encodeFinish L T P v shs senv apply invariants now fresh
     (slotsTerm d dt (filterSlots S (keepQs to S))) o
   pure (⟨hit, rules, evt, o, fo⟩,
     .ite hit (andT c1 (andT c2 (andT c3 (.ite (allT (rules.map (·.2))) (andT c4 cf) tt)))) tt, cfx)
@@ -312,9 +312,7 @@ theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hinv : v.invariants.code L = .ok (inv, ci)) (hci : Holds M ci)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     {records pending toT valT now fresh nextIdT : Term} {mts : List Term}
     (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
     (hpend : PendingRel L shs (pending.denote M) s.pending) (hto : toT.denote M = .int (Int.ofNat to))
@@ -324,7 +322,7 @@ theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     (hans : (answerTy sh.output sh.rejection).isData = true)
     (hval : RelV L _ (Ty.up _ hans value) (valT.denote M))
     {o : AnswerOut} {cond cfx : Term}
-    (henc : encodeAnswer L T P shs k sh j dE dP dopt apply inv records pending toT valT now fresh nextIdT mts =
+    (henc : encodeAnswer L T P shs k sh j senv apply inv records pending toT valT now fresh nextIdT mts =
       .ok (o, cond, cfx)) (hcfx : Holds M cfx) :
     let r := step T v s (.answer to ⟨_, value⟩)
     (Holds M cond ↔ (Holds M o.hit →
@@ -354,8 +352,8 @@ theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       have := sh.onAnswer.ht; simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at this; exact this.2
     have happ' := v.apply.code_fn (by simp [Ty.isData, Ty.isDatas, hrd, hed]) happ hca
     have hinv' := v.invariants.code_fn (by simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hrd]) hinv hci
-    match shs, hk, hpend, henc, hshs, hPE with
-    | sh0 :: rest, hk, ⟨tbl, htbl, hlist⟩, henc, hshs, hPE =>
+    match shs, hk, hpend, henc, hshs, senv with
+    | sh0 :: rest, hk, ⟨tbl, htbl, hlist⟩, henc, hshs, senv =>
     rw [holds_ite_hit]
     refine imp_congr_right fun hhit => ?_
     -- The slot holds the request `to` names, as an entry of the shape `sh`.
@@ -588,8 +586,8 @@ theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
         events_exact (fun m hm => (hor m hm).1) hrd hed happ hca _ svl hSl hswl _ hhl s' hnow hrec hms h12
       have hinv' : Step.Inv P s' := hsinv.filterPending _
       have ef : Holds M c4 → (Holds M cf ↔ finishFits L.count T (sh0 :: rest) (Step.applyEvents T { state := s' } evL)) :=
-        fun hc4 => (finish_encode hP hvx hvm hshs hor hcd hqd hqout hrd hed happ hca hinv hci hE hPE hopt s .accepted
-          { state := s' } rfl hinv' hnow hrem (events_done (T := T) hP hvx hvm hshs hor hrd hed hap happ' hE hPE hopt
+        fun hc4 => (finish_encode hP hvx hvm hshs hor hcd hqd hqout hrd hed happ hca hinv hci senv s .accepted
+          { state := s' } rfl hinv' hnow hrem (events_done (T := T) hP hvx hvm hshs hor hrd hed hap happ' senv
             { state := s' } rfl hnow hSl hswl hhl hrec hms hnid hfresh h12 hc4) (applyEvents_ok hvx _ rfl hinv' _) h12'
           hcfx).1
       constructor
@@ -612,8 +610,8 @@ theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     have happ0 := happ
     have hinv0 := hinv
     have happ := v.apply.code_fn (by simp [Ty.isData, Ty.isDatas, hrd, hed]) happ hca
-    match shs, hk, hpend, henc, hshs, hPE with
-    | sh0 :: rest, hk, ⟨tbl, htbl, hlist⟩, henc, hshs, hPE =>
+    match shs, hk, hpend, henc, hshs, senv with
+    | sh0 :: rest, hk, ⟨tbl, htbl, hlist⟩, henc, hshs, senv =>
     -- The slot holds the request `to` names, as an entry of the shape `sh`.
     obtain ⟨hhf, hhrest⟩ := (holds_and _ _).1 hhit
     obtain ⟨hheq, hhis⟩ := (holds_and _ _).1 hhrest
@@ -801,9 +799,9 @@ theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     erw [Ty.up_list _ _ hed] at hhl
     let s' : State v := { s with pending := s.pending.filter (·.id != to) }
     have hinv' : Step.Inv P s' := hsinv.filterPending _
-    have hdone := events_done (T := T) hP hvx hinv'.machinesReach hshs hor hrd hed hap happ hE hPE hopt
+    have hdone := events_done (T := T) hP hvx hinv'.machinesReach hshs hor hrd hed hap happ senv
       { state := s' } rfl hnow hSl hswl hhl hrec hms hnid hfresh h12 hc4
-    exact (finish_encode hP hvx hinv'.machinesReach hshs hor hcd hqd hqout hrd hed happ0 hca hinv0 hci hE hPE hopt s
+    exact (finish_encode hP hvx hinv'.machinesReach hshs hor hcd hqd hqout hrd hed happ0 hca hinv0 hci senv s
       .accepted { state := s' } rfl hinv' hnow hrem hdone (applyEvents_ok hvx _ rfl hinv' _) h12' hcfx).2 hcf
 
 end

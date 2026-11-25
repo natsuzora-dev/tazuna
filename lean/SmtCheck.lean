@@ -266,13 +266,10 @@ def noPending (v : ServiceV) : Ty := pendingTable ([] : List (PendingShape v.eve
 /-- The symbolic state at `v0..v3` with the pending table at `vk`, for scripts whose `v4` holds an input. -/
 def stateAt (k : Nat) : SymState := { SymState.vars 0 with pending := .var k }
 
-/-- A step's terms through `encodeStep`, the encoding `step_encode` proves. A service without effects has no effect,
-pending entry or effect option datatype, and its encoders never read those indices, so a missing one is 0. -/
+/-- A step's terms through `encodeStep`, the encoding `step_encode` proves. -/
 def stepOf (L : Layout) (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (S : SymState)
     (inp : SymInput v) : Except String EncodedStep :=
-  let idx (t : Ty) := ((L.find? t).map (·.1)).getD 0
-  (encodeStep L prelude P v shs (idx (.dsl .effect [v.event])) (idx (pendingEntry shs))
-    (idx (Ty.option (.dsl .effect [v.event]))) S inp).mapError fun r => s!"no encoding: {repr r}"
+  (do encodeStep L prelude P v shs (← StepEnv.of L shs) S inp).mapError fun r => s!"no encoding: {repr r}"
 
 def acceptsE : E (.fn [.int] Ty.rules) :=
   .lam (.list (.cons (.tuple (.cons (.str "positive") (.cons (.bin .gt (.var .here) (.int 0)) .nil))) .nil))
@@ -295,7 +292,7 @@ def querySvc : ServiceV :=
 
 def queryLayout : Layout :=
   Layout.addTys (listSlots (fun _ => 3) (Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits resolveE)) {}
-    (recordsT :: .id :: noPending querySvc :: Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys resolveE)
+    (recordsT :: .id :: noPending querySvc :: Ty.option (.dsl .effect [querySvc.event]) :: Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys resolveE)
 
 /-- The script for one goal on the outcome terms: v0..v3 the state, v4 the caller, v5 the key, v6..v9 the outcome
 terms (caller listed, the rule's holds and name, the output), v10 the pending table. -/
@@ -686,7 +683,8 @@ def commandSvc : ServiceV := { eventSvc with name := "c", commands := [putC] }
 def commandLayout : Layout :=
   let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits decideE ++ Tazuna.Smt.Expr.lits ensuresE ++
     Tazuna.Smt.Expr.lits applyE ++ Tazuna.Smt.Expr.lits invariantsE
-  Layout.addTys (listSlots (fun _ => 3) lits) {} (recordsT :: evT :: .id :: noPending commandSvc :: Tazuna.Smt.Expr.tys acceptsE ++
+  Layout.addTys (listSlots (fun _ => 3) lits) {} (recordsT :: evT :: .id :: noPending commandSvc :: Ty.option (.dsl .effect [evT]) ::
+    Tazuna.Smt.Expr.tys acceptsE ++
     Tazuna.Smt.Expr.tys decideE ++ Tazuna.Smt.Expr.tys ensuresE ++ Tazuna.Smt.Expr.tys applyE ++
     Tazuna.Smt.Expr.tys invariantsE)
 
@@ -1117,7 +1115,7 @@ def boundSvc : ServiceV :=
 def boundLayout : Layout :=
   let lits := Tazuna.Smt.Expr.lits applyB
   Layout.addTys (listSlots (boundSlots boundSvc.bounds) lits) {} (recordsB :: evT :: Tazuna.Smt.Expr.tys applyB ++
-    Tazuna.Smt.Expr.tys tableA ++ [Ty.rules, noPending boundSvc])
+    Tazuna.Smt.Expr.tys tableA ++ [Ty.rules, noPending boundSvc, Ty.option (.dsl .effect [evT])])
 
 def boundI : Fin boundSvc.subscribes.length := ⟨0, by decide⟩
 
@@ -2172,10 +2170,8 @@ def eventsScript (slots : Nat) (goal : List Term) : Except String (Script × Lis
   let S := SymState.vars 0 1
   let (apply, ca) ← enc (writeSvc.apply.code L)
   let (dl, nl, dlt) ← enc (collD L (.list .int) [.int])
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry writeShapes) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (o, c) ← enc (encodeEvents L prelude writeSvc writeShapes dE dP dopt apply S.now (slotsOf dl dlt nl 1 (.var 6))
+  let senv ← enc (StepEnv.of L writeShapes)
+  let (o, c) ← enc (encodeEvents L prelude writeSvc writeShapes senv apply S.now (slotsOf dl dlt nl 1 (.var 6))
     S.records S.machines S.nextId (.int 0))
   let (pT, cp) ← enc (encodePending L writeShapes S.pending o.news)
   let below ← enc (pendingBelowT L writeShapes S.pending S.nextId)
@@ -2477,10 +2473,8 @@ def mixScript (slots : Nat) (goal : List Term) : Except String (Script × Nat ×
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
   let (apply, ca) ← enc (mixSvc.apply.code L)
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry mixShapes) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (o, c) ← enc (encodeEvents L prelude mixSvc mixShapes dE dP dopt apply S.now [(tt, [.var 6])] S.records
+  let senv ← enc (StepEnv.of L mixShapes)
+  let (o, c) ← enc (encodeEvents L prelude mixSvc mixShapes senv apply S.now [(tt, [.var 6])] S.records
     S.machines S.nextId (.int 0))
   let some wf := S.wf L (v := mixSvc) mixShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -2591,11 +2585,9 @@ def internalScriptOf (slots : Nat) (goal : List Term) : Except String (Script ×
   let (cc, cx) ← enc (CommandCode.of L twiceC)
   let (apply, ca) ← enc (twiceSvc.apply.code L)
   let some ks := callerTerms L rfl twiceC.callers | throw "no caller terms"
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry twiceShapes) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let senv ← enc (StepEnv.of L twiceShapes)
   let some five := Code.ofTerm? .int (.int 5) | throw "no capture code"
-  let (o, cond) ← enc (encodeOwnCommand L prelude twiceSvc twiceShapes dE dP dopt twiceC cc answerFive (five, ()) apply
+  let (o, cond) ← enc (encodeOwnCommand L prelude twiceSvc twiceShapes senv twiceC cc answerFive (five, ()) apply
     ks S.records S.now S.fresh S.nextId (.int 0) (.var 6) (.var 7) S.machines)
   let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
   let some wf := S.wf L (v := twiceSvc) twiceShapes | throw "no well-formedness"
@@ -2695,10 +2687,8 @@ def ownQueryScript (goal : List Term) : Except String (Script × Nat) := do
   let (qc, cq) ← enc (QueryCode.of L nextQ)
   let (apply, ca) ← enc (twiceSvc.apply.code L)
   let some ks := callerTerms L rfl nextQ.callers | throw "no caller terms"
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry twiceShapes) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
-  let (o, cond) ← enc (encodeOwnQuery L prelude twiceSvc twiceShapes dE dP dopt nextQ qc answerIsEvent () apply ks
+  let senv ← enc (StepEnv.of L twiceShapes)
+  let (o, cond) ← enc (encodeOwnQuery L prelude twiceSvc twiceShapes senv nextQ qc answerIsEvent () apply ks
     S.records S.now S.fresh S.nextId (.int 0) (.var 6) (.var 7) S.machines)
   let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
   let some wf := S.wf L (v := twiceSvc) twiceShapes | throw "no well-formedness"
@@ -2801,11 +2791,9 @@ def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal :
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
   let (apply, ca) ← enc (dispSvc.apply.code L)
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry dispShapes) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let senv ← enc (StepEnv.of L dispShapes)
   let eff ← enc (effect L)
-  let (o, cond, codes) ← enc (encodeOwnStep L prelude dispSites dispSvc dispShapes dE dP dopt apply S.records S.now
+  let (o, cond, codes) ← enc (encodeOwnStep L prelude dispSites dispSvc dispShapes senv apply S.records S.now
     S.fresh S.nextId (.int 0) (.var 6) S.machines)
   let below ← enc (pendingBelowT L dispShapes S.pending S.nextId)
   let some wf := S.wf L (v := dispSvc) dispShapes | throw "no well-formedness"
@@ -2926,13 +2914,11 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
   let (apply, ca) ← enc (dispSvc.apply.code L)
-  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
-  let some (dP, _) := L.find? (pendingEntry dispShapes) | throw "no pending entry"
-  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let senv ← enc (StepEnv.of L dispShapes)
   let effs ← effects.mapM fun f => enc (f L)
   let queue : List Slot := effs.zipIdx.map fun (e, j) => (tt, [.int j, e])
   let t : StepTerms := ⟨.bool false, ⟨S.records, S.machines, S.nextId, [], [], .int effs.length⟩, S.fresh⟩
-  let (o, cond, codes) ← enc (encodeSettle L prelude dispSites dispSvc dispShapes dE dP dopt apply (effs.headD tt) S.now
+  let (o, cond, codes) ← enc (encodeSettle L prelude dispSites dispSvc dispShapes senv apply (effs.headD tt) S.now
     fuel 0 queue t)
   let below ← enc (pendingBelowT L dispShapes S.pending S.nextId)
   let some wf := S.wf L (v := dispSvc) dispShapes | throw "no well-formedness"

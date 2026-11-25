@@ -1,4 +1,4 @@
-import Tazuna.Smt.PendingWrite
+import Tazuna.Smt.StepEnv
 import Tazuna.Smt.Own
 import Tazuna.Smt.EncodeExact
 
@@ -123,7 +123,7 @@ def ownStarts (m : MachineV r e) (dopt : Nat) (none : Bool) (os : List (Term × 
 machines before it, the next wire id after them all, the own slots of the own commands and queries they start, each
 at its place in the queue from `q`, and the place after them. With no own kinds every effect is a request, and the
 start slots are used as they are. -/
-def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (dE dP dopt : Nat) :
+def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (senv : StepEnv L shs) :
     List (MachineV r e) → List (List (Term × Term × Term)) → (n q : Term) →
     Except Refusal (List Slot × Term × List Slot × Term)
   | [], [], n, q => pure ([], n, [], q)
@@ -131,12 +131,12 @@ def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV))
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
     let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
     let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
-    let sp := st.map (splitStart dE (L.effectsOf e).length (L.ownsOf e).length dopt)
+    let sp := st.map (splitStart senv.dE (L.effectsOf e).length (L.ownsOf e).length senv.dopt)
     let rq := if (L.ownsOf e).isEmpty then st else sp.map (·.1)
-    let S ← rankStarts L T m dopt n rq
-    let (oS, q') ← ownStarts L T m dopt (L.ownsOf e).isEmpty (sp.map (·.2)) q
-    let (rest, n', orest, q'') ← encodeStarts shs ds dE dP dopt ms sts (.add n (startCount dopt rq)) q'
-    pure (entrySlots dE dP dk dflt js S ++ rest, n', oS ++ orest, q'')
+    let S ← rankStarts L T m senv.dopt n rq
+    let (oS, q') ← ownStarts L T m senv.dopt (L.ownsOf e).isEmpty (sp.map (·.2)) q
+    let (rest, n', orest, q'') ← encodeStarts shs ds senv ms sts (.add n (startCount senv.dopt rq)) q'
+    pure (entrySlots senv.dE senv.dP dk dflt js S ++ rest, n', oS ++ orest, q'')
   | _, _, _, _ => .error (.outside "machines and start slots that differ in number")
 
 /-- The pending table with the new entries moved into its free slots, and the condition that they fit. -/
@@ -335,14 +335,12 @@ id term denotes the next id after them, and the own slots hold the own commands 
 places from `q0`. -/
 theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape e)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt)) :
+    (senv : StepEnv L shs) :
     (ms : List (MachineV r e)) → (sts : List (List (Term × Term × Term))) → (effss : List (List (Sender × EffectV e))) →
     StartsRel M L T ms sts effss → (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
     {n q : Term} → {n0 q0 : Nat} → n.denote M = .int n0 → q.denote M = .int q0 →
     {news : List Slot} → {n' : Term} → {owns : List Slot} → {q' : Term} →
-    encodeStarts L T shs ds dE dP dopt ms sts n q = .ok (news, n', owns, q') →
+    encodeStarts L T shs ds senv ms sts n q = .ok (news, n', owns, q') →
     n'.denote M = .int ((n0 + (Step.reqsOf effss.flatten).length : Nat) : Int) ∧
       NewsRel M L shs ds news (Step.reqsOf effss.flatten) n0 ∧
       q'.denote M = .int ((q0 + (Step.queuedOf effss.flatten).length : Nat) : Int) ∧
@@ -362,7 +360,7 @@ theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
     cases pure_ok.1 henc
     -- The requests' start slots, and the own commands and queries' slots with their places.
     have hparts : StartSlots M L T m (if (L.ownsOf e).isEmpty then st else (st.map
-          (splitStart dE (L.effectsOf e).length (L.ownsOf e).length dopt)).map (·.1)) (Step.reqsOf effs) ∧
+          (splitStart senv.dE (L.effectsOf e).length (L.ownsOf e).length senv.dopt)).map (·.1)) (Step.reqsOf effs) ∧
         q1.denote M = .int ((q0 + (Step.queuedOf effs).length : Nat) : Int) ∧
         OwnRel M L oS (Step.queuedOf effs) q0 := by
       by_cases ho : (L.ownsOf e).isEmpty
@@ -375,27 +373,27 @@ theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
         rw [hr, hq0]
         exact ⟨hst, by simpa using hq, ownRel_nil q0⟩
       · simp only [ownStarts, ho, ↓reduceIte, Bool.false_eq_true] at h5 ⊢
-        obtain ⟨hreq, hown⟩ := startSlots_split hE hopt m hst
+        obtain ⟨hreq, hown⟩ := startSlots_split senv.hE senv.hopt m hst
         obtain ⟨SO, hSO, h5⟩ := bind_ok.1 h5
         cases pure_ok.1 h5
-        obtain ⟨hcO, hO⟩ := own_ranked m hopt (by simpa only [List.map_map, Function.comp_def] using hown) hq hSO
+        obtain ⟨hcO, hO⟩ := own_ranked m senv.hopt (by simpa only [List.map_map, Function.comp_def] using hown) hq hSO
         refine ⟨by simpa only [List.map_map, Function.comp_def] using hreq, ?_, hO⟩
         simp only [Term.denote, hq, hcO, Val.toInt, Step.queuedOf, List.length_map]; push_cast; rfl
     obtain ⟨hR, hq1, hO1⟩ := hparts
     obtain ⟨α, κ, F, E, items, svX, hX, hh, hEp, hks, heffs⟩ := hR
-    obtain ⟨hcount, svS, ys, hS, hyp, hy⟩ := rank_starts (T := T) m hopt κ F hX hh hEp hks hn h3
+    obtain ⟨hcount, svS, ys, hS, hyp, hy⟩ := rank_starts (T := T) m senv.hopt κ F hX hh hEp hks hn h3
     rw [← heffs] at hyp hcount
     have hmem : ∀ x ∈ ys, x.1 ∈ Step.reqsOf effs := fun x hx => List.fst_mem_of_mem_zipIdx (hyp.mem_iff.1 hx)
     have hr : ∀ x ∈ ys, x.1.2.Reach P := fun x hx => hreach effs (by simp) x.1 (List.mem_filter.1 (hmem x hx)).1
     have hrq : ∀ x ∈ ys, x.1.2.isRequest = true := fun x hx => (List.mem_filter.1 (hmem x hx)).2
     obtain ⟨sv1, zs1, hS1, -, hw1, hh1, hq1'⟩ :=
-      entrySlots_rel hP m hshs h2 hE hPE (need_ok.1 h1) dflt hS hy hr hrq
-    have hn' : (Term.add n (startCount dopt (if (L.ownsOf e).isEmpty then st else (st.map
-        (splitStart dE (L.effectsOf e).length (L.ownsOf e).length dopt)).map (·.1)))).denote M =
+      entrySlots_rel hP m hshs h2 senv.hE senv.hPE (need_ok.1 h1) dflt hS hy hr hrq
+    have hn' : (Term.add n (startCount senv.dopt (if (L.ownsOf e).isEmpty then st else (st.map
+        (splitStart senv.dE (L.effectsOf e).length (L.ownsOf e).length senv.dopt)).map (·.1)))).denote M =
         .int ((n0 + (Step.reqsOf effs).length : Nat) : Int) := by
       simp only [Term.denote, hn, hcount, Val.toInt]; push_cast; rfl
     obtain ⟨hn2, hnews2, hq2, ho2⟩ :=
-      starts_rel hP hshs hE hPE hopt ms sts effss hrest (fun effs' h => hreach effs' (by simp [h])) hn' hq1 h4
+      starts_rel hP hshs senv ms sts effss hrest (fun effs' h => hreach effs' (by simp [h])) hn' hq1 h4
     have hfl : ∀ effs' : List (Sender × EffectV e), Step.reqsOf (effs ++ effs') = Step.reqsOf effs ++ Step.reqsOf effs' ∧
         Step.queuedOf (effs ++ effs') = Step.queuedOf effs ++ Step.queuedOf effs' := fun _ => by
       simp [Step.reqsOf, Step.queuedOf, List.filter_append]

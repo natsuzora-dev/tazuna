@@ -107,7 +107,7 @@ variable (L : Layout) (T : List TypeDecl)
 occupied slot's event is applied, every machine reacts, its starts are ranked from the next id (requests) and the queue
 place (own commands and queries), then every reaction's effects follow; the condition asks for each occupied slot's
 applications. -/
-def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt : Nat)
+def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (now : Term) :
     List Slot → (records : Term) → (xs : List Term) → (n q : Term) → Except Refusal (EventsOut × Term)
   | [], records, xs, n, q => pure (⟨records, xs, n, [], [], q⟩, tt)
@@ -119,10 +119,10 @@ def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt 
     let rt ← need "records that have no term" (Code.term? v.records r')
     let rt := Term.share rt
     let (outs, cm) ← encodeMachines L v.machines xs rt now ev
-    let (news, nT, oS, qT) ← encodeStarts L T shs v.declared dE dP dopt v.machines (outs.map (·.starts)) n q
-    let (rnews, nR, rown, qR, cr) ← encodeReactions L shs v.declared dE dP v.reactions rt now ev nT qT
+    let (news, nT, oS, qT) ← encodeStarts L T shs v.declared senv v.machines (outs.map (·.starts)) n q
+    let (rnews, nR, rown, qR, cr) ← encodeReactions L shs v.declared senv.dE senv.dP v.reactions rt now ev nT qT
     let pick (a b : Term) := Term.share (.ite f a b)
-    let (o, c) ← encodeEvents v shs dE dP dopt apply now S (pick rt records)
+    let (o, c) ← encodeEvents v shs senv apply now S (pick rt records)
       ((outs.map (·.table)).zipWith pick xs) (pick nR n) (pick qR q)
     pure (⟨o.records, o.tables, o.nextId, gateSlots f (news ++ rnews) ++ o.news, gateSlots f (oS ++ rown) ++ o.owns,
       o.queued⟩, andT (.ite f (andT ca (andT cm cr)) tt) c)
@@ -156,10 +156,10 @@ theorem ownStarts_width {m : MachineV r e} {dopt : Nat} {none : Bool} {os : List
     obtain ⟨⟨f, xs⟩, -, rfl⟩ := List.mem_map.1 hsl
     rfl
 
-theorem encodeStarts_width {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {dE dP dopt : Nat} :
+theorem encodeStarts_width {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {senv : StepEnv L shs} :
     (ms : List (MachineV r e)) → (sts : List (List (Term × Term × Term))) → {n q : Term} → {news : List Slot} →
     {n' : Term} → {owns : List Slot} → {q' : Term} →
-    encodeStarts L T shs ds dE dP dopt ms sts n q = .ok (news, n', owns, q') →
+    encodeStarts L T shs ds senv ms sts n q = .ok (news, n', owns, q') →
     (∀ sl ∈ news, sl.2.length = 2) ∧ ∀ sl ∈ owns, sl.2.length = 2
   | [], [], _, _, _, _, _, _, h => by
     simp only [encodeStarts, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
@@ -350,16 +350,14 @@ theorem events_rel {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     (hap : (Ty.fn [v.records, v.event] v.records).isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ hap v.apply.fn) apply)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt)) {now : Term} :
+    (senv : StepEnv L shs) {now : Term} :
     (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 1) →
     (evs : List v.event.den0) → Holds2 (EBag L v.event) (evs.map (Ty.up _ hed)) sv →
     (s : State v) → now.denote M = .int s.now →
     {records : Term} → RelV L v.records (Ty.up _ hrd s.records) (records.denote M) →
     {xs : List Term} → MachinesRel M L T v.machines xs s.machines →
     {n q : Term} → {n0 q0 : Nat} → n.denote M = .int n0 → q.denote M = .int q0 →
-    {o : EventsOut} → {c : Term} → encodeEvents L T v shs dE dP dopt apply now S records xs n q = .ok (o, c) →
+    {o : EventsOut} → {c : Term} → encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
     Holds M c →
     RelV L v.records (Ty.up _ hrd (Step.reactAll T s evs).1.records) (o.records.denote M) ∧
       MachinesRel M L T v.machines o.tables (Step.reactAll T s evs).1.machines ∧
@@ -414,7 +412,7 @@ theorem events_rel {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
         (by simpa using hms)
       have hn' : (Term.share (.ite f nR n)).denote M = .int n0 := by simpa [Term.denote, hf, Val.toBool] using hn
       have hq' : (Term.share (.ite f qR q)).denote M = .int q0 := by simpa [Term.denote, hf, Val.toBool] using hq
-      obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel hP hvx hvm hshs hor hrd hed hap happ hE hPE hopt S sv hS hw' evs
+      obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel hP hvx hvm hshs hor hrd hed hap happ senv S sv hS hw' evs
         (by simpa [Holds2, occupied] using hev) s hnow hrec' hms' hn' hq' h8 hc2
       refine ⟨r1, r2, r3, ?_, r5, ?_⟩
       · have := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hf hwid n0) (by simpa using r4)
@@ -447,10 +445,10 @@ theorem events_rel {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
           obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 he
           exact (Step.machineStep_reach T recs' s.now ev sm
             (hvm _ (machinesRel_mem v.machines xs s.machines hms sm hsm))).2 x hx
-        obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel hP hshs hE hPE hopt v.machines _ _ hstarts hreach hn hq h6
+        obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel hP hshs senv v.machines _ _ hstarts hreach hn hq h6
         have hnews1' : NewsRel M L shs v.declared news (Step.reqsOf (startedBy T s recs' ev)) n0 := hnews1
         have hown1' : OwnRel M L oS (Step.queuedOf (startedBy T s recs' ev)) q0 := hown1
-        obtain ⟨hnR, hnews2, hqR, hown2⟩ := reactions_rel hP hshs hE hPE recs' s.now ev hrd hed hrt hnow hevT v.reactions
+        obtain ⟨hnR, hnews2, hqR, hown2⟩ := reactions_rel hP hshs senv.hE senv.hPE recs' s.now ev hrd hed hrt hnow hevT v.reactions
           hvx hnT hqT h7 hcr
         have hrec' : RelV L v.records (Ty.up _ hrd recs')
             ((Term.share (.ite f (Term.share rt) records)).denote M) := by
@@ -473,7 +471,7 @@ theorem events_rel {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
           congr 2
           omega
         have hre := react_eq (T := T) s ev
-        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel hP hvx hvm hshs hor hrd hed hap happ hE hPE hopt S sv hS hw' evs
+        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel hP hvx hvm hshs hor hrd hed hap happ senv S sv hS hw' evs
           hrest (Step.react T s ev).1 hnow (by rw [hre]; exact hrec') (by rw [hre]; exact hms')
           hn' hq' h8 hc2
         have hlen : (Step.react T s ev).2 = startedBy T s recs' ev ++ reactedBy s recs' ev := by rw [hre]
@@ -520,13 +518,13 @@ the events before it left. -/
 theorem events_exact {shs : List (PendingShape v.event)} (hor : ∀ m ∈ v.machines, m.key.orderable = true)
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca0 : Term} (hf : v.apply.code L = .ok (apply, ca0))
-    (hca0 : Holds M ca0) {dE dP dopt : Nat} {now : Term} :
+    (hca0 : Holds M ca0) {senv : StepEnv L shs} {now : Term} :
     (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 1) →
     (evs : List v.event.den0) → Holds2 (EBag L v.event) (evs.map (Ty.up _ hed)) sv →
     (s : State v) → now.denote M = .int s.now →
     {records : Term} → RelV L v.records (Ty.up _ hrd s.records) (records.denote M) →
     {xs : List Term} → MachinesRel M L T v.machines xs s.machines → {n q : Term} →
-    {o : EventsOut} → {c : Term} → encodeEvents L T v shs dE dP dopt apply now S records xs n q = .ok (o, c) →
+    {o : EventsOut} → {c : Term} → encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
     (Holds M c ↔ eventsFit L.count T s evs)
   | [], [], _, _, evs, hev, s, _, records, _, xs, _, n, q, o, c, henc => by
     cases evs with

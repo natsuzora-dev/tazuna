@@ -31,7 +31,7 @@ variable (L : Layout) (T : List TypeDecl)
 
 /-- The cascade from queue place `k` with `fuel` internal steps left, over the own slots `S` and the step terms `t`
 (its slots are not read): its terms, its condition (each internal step's, where it runs) and the codes' condition. -/
-def encodeSettle (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt : Nat)
+def encodeSettle (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (dflt now : Term) :
     (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → Except Refusal (SettleOut × Term × Term)
   | 0, k, S, t =>
@@ -40,10 +40,10 @@ def encodeSettle (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.e
   | f + 1, k, S, t => do
     let qa := queueAt dflt S (.int k)
     let act := Term.share (.and (.not t.fault) qa.1)
-    let (o, c, cx) ← encodeOwnStep L T P v shs dE dP dopt apply t.done.records now t.fresh t.done.nextId t.done.queued qa.2
+    let (o, c, cx) ← encodeOwnStep L T P v shs senv apply t.done.records now t.fresh t.done.nextId t.done.queued qa.2
       t.done.tables
     let t1 := pickTerms act o.terms ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩
-    let (rest, c', cx') ← encodeSettle P v shs dE dP dopt apply dflt now f (k + 1) (S ++ t1.done.owns) t1
+    let (rest, c', cx') ← encodeSettle P v shs senv apply dflt now f (k + 1) (S ++ t1.done.owns) t1
     pure (⟨(act, o) :: rest.steps, rest.over,
         { rest.terms with done := { rest.terms.done with news := t1.done.news ++ rest.terms.done.news,
                                                          owns := t1.done.owns ++ rest.terms.done.owns } }⟩,
@@ -108,10 +108,10 @@ theorem fold_width (base : StepTerms) (hb : base.done.news = [] ∧ base.done.ow
     exact ⟨width_append (width_gate c ha.1) ih.1, width_append (width_gate c ha.2) ih.2⟩
 
 /-- The merged step terms of an own effect write slots of two items. -/
-theorem encodeOwnStep_width {P : List AnySite} {shs : List (PendingShape v.event)} {dE dP dopt : Nat}
+theorem encodeOwnStep_width {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {records now fresh n q eff : Term} {xs : List Term}
     {o : OwnStepOut} {c cx : Term}
-    (h : encodeOwnStep L T P v shs dE dP dopt apply records now fresh n q eff xs = .ok (o, c, cx)) :
+    (h : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok (o, c, cx)) :
     (∀ sl ∈ o.terms.done.news, sl.2.length = 2) ∧ ∀ sl ∈ o.terms.done.owns, sl.2.length = 2 := by
   obtain ⟨ks, hks, h⟩ := bind_ok.1 h
   cases pure_ok.1 h
@@ -127,10 +127,10 @@ theorem encodeOwnStep_width {P : List AnySite} {shs : List (PendingShape v.event
   exact this
 
 /-- Once an internal step faulted, the cascade's fault term stays true. -/
-theorem settle_fault_stays {P : List AnySite} {shs : List (PendingShape v.event)} {dE dP dopt : Nat}
+theorem settle_fault_stays {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {dflt now : Term} :
     (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → t.fault.denote M = .bool true →
-    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs dE dP dopt apply dflt now fuel k S t = .ok (o, c, cx) →
+    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok (o, c, cx) →
     o.terms.fault.denote M = .bool true
   | 0, _, _, _, htf, _, _, _, henc => by
     simp only [encodeSettle, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
@@ -157,16 +157,14 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt)) {dflt now : Term} :
+    (senv : StepEnv L shs) {dflt now : Term} :
     (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → (a : Step.Acc v) → Step.Inv P a.state →
     Step.QueueOk P a → OwnRel M L S a.own 0 → now.denote M = .int a.state.now → t.fault.denote M = .bool false →
     RelV L v.records (Ty.up _ hrd a.state.records) (t.done.records.denote M) →
     MachinesRel M L T v.machines t.done.tables a.state.machines →
     t.fresh.denote M = .int (Int.ofNat a.state.fresh) → t.done.nextId.denote M = .int (Int.ofNat a.state.nextId) →
     t.done.queued.denote M = .int ((a.own.length : Nat) : Int) →
-    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs dE dP dopt apply dflt now fuel k S t = .ok (o, c, cx) →
+    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok (o, c, cx) →
     Holds M c → Holds M cx →
     o.faultT.denote M = .bool (o.fault? M).isSome ∧
     match o.fault? M with
@@ -211,7 +209,7 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
         rw [hact'] at this
         simpa only [toBool_bool, ite_true] using this
       obtain ⟨hown, hreach⟩ := hqok _ (List.getElem_mem hlt)
-      obtain ⟨hfault, hrun⟩ := ownStep_rel hP hvx hshs hor a hinv hcd hqd hrd hed happ hca hE hPE hopt hrec hnow hfr hn hq
+      obtain ⟨hfault, hrun⟩ := ownStep_rel hP hvx hshs hor a hinv hcd hqd hrd hed happ hca senv hrec hnow hfr hn hq
         hms a.own[k] (hk.2 hlt) hown hreach h1 hc1 hcx1
       have hsem : Step.settleFrom T (f + 1) k a = (Step.runOwn T a a.own[k]) >>= Step.settleFrom T f (k + 1) := by
         exact Step.settleFrom.eq_3 T k a a.own[k] f (List.getElem?_eq_getElem hlt)
@@ -249,7 +247,7 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
           have := ownRel_append (ownRel_gate (L := L) hact' r6) (ownRel_nil (a.own.length + os0.length))
           rw [List.append_nil] at this
           simpa using this
-        have IH := settle_rel hP hvx hvm hshs hor hcd hqd hrd hed happ hca hE hPE hopt f (k + 1) _ _ _ hinv1 hq1 hS1
+        have IH := settle_rel hP hvx hvm hshs hor hcd hqd hrd hed happ hca senv f (k + 1) _ _ _ hinv1 hq1 hS1
           hnow (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl)
           (by simp only [pickTerms]; rw [hpick]; exact r1)
           (by
@@ -296,7 +294,7 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
         have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' hw1.2 (0 + a.own.length))
           (ownRel_nil _))
         simpa using this
-      have IH := settle_rel hP hvx hvm hshs hor hcd hqd hrd hed happ hca hE hPE hopt f (k + 1) _ _ _ hinv hqok hS1
+      have IH := settle_rel hP hvx hvm hshs hor hcd hqd hrd hed happ hca senv f (k + 1) _ _ _ hinv hqok hS1
         hnow (by simp only [pickTerms]; rw [hpick]; exact htf)
         (by simp only [pickTerms]; rw [hpick]; exact hrec)
         (by simp only [pickTerms]; exact machinesRel_congr _ _ _ _ (pick_tables_false hact' _ _).symm hms)
@@ -329,10 +327,10 @@ def settleFits (S : Ty → Nat) (T : List TypeDecl) : Nat → Nat → Step.Acc v
     | some eff => ownFits S T a.state eff ∧ ∀ a', Step.runOwn T a eff = .ok a' → settleFits S T f (k + 1) a'
 
 /-- After a fault no internal step runs, so the cascade's condition asks for nothing. -/
-theorem settle_cond_fault {P : List AnySite} {shs : List (PendingShape v.event)} {dE dP dopt : Nat}
+theorem settle_cond_fault {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {dflt now : Term} :
     (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → t.fault.denote M = .bool true →
-    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs dE dP dopt apply dflt now fuel k S t = .ok (o, c, cx) →
+    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok (o, c, cx) →
     Holds M c
   | 0, _, _, _, _, _, _, _, henc => by
     simp only [encodeSettle, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
@@ -359,16 +357,14 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt)) {dflt now : Term} :
+    (senv : StepEnv L shs) {dflt now : Term} :
     (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → (a : Step.Acc v) → Step.Inv P a.state →
     Step.QueueOk P a → OwnRel M L S a.own 0 → now.denote M = .int a.state.now → t.fault.denote M = .bool false →
     RelV L v.records (Ty.up _ hrd a.state.records) (t.done.records.denote M) →
     MachinesRel M L T v.machines t.done.tables a.state.machines →
     t.fresh.denote M = .int (Int.ofNat a.state.fresh) → t.done.nextId.denote M = .int (Int.ofNat a.state.nextId) →
     t.done.queued.denote M = .int ((a.own.length : Nat) : Int) →
-    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs dE dP dopt apply dflt now fuel k S t = .ok (o, c, cx) →
+    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok (o, c, cx) →
     Holds M cx → (Holds M c ↔ settleFits L.count T fuel k a)
   | 0, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, henc, _ => by
     simp only [encodeSettle, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
@@ -389,7 +385,7 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
     · have hact' := hact
       simp only [hlt, decide_true] at hact'
       obtain ⟨hown, hreach⟩ := hqok _ (List.getElem_mem hlt)
-      have e1 := ownStep_exact hP hvx hvm hshs hor a hcd hqd hqout hrd hed happ hca hE hPE hopt hrec hnow hfr hn hq hms
+      have e1 := ownStep_exact hP hvx hvm hshs hor a hcd hqd hqout hrd hed happ hca senv hrec hnow hfr hn hq hms
         a.own[k] (hk.2 hlt) hown hreach h1 hcx1
       have hite : Holds M (.ite (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1)) c1 tt) ↔ Holds M c1 := by
         rw [holds_ite, hact']; simp only [toBool_bool, ite_true]
@@ -399,7 +395,7 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
           x.denote M := fun x y => by simp [Term.denote, hact', toBool_bool]
       have tail : Holds M c1 → (Holds M c2 ↔ ∀ a', Step.runOwn T a a.own[k] = .ok a' → settleFits L.count T f (k + 1) a') := by
         intro hc1
-        obtain ⟨hfault, hrun⟩ := ownStep_rel hP hvx hshs hor a hinv hcd hqd hrd hed happ hca hE hPE hopt hrec hnow hfr hn hq
+        obtain ⟨hfault, hrun⟩ := ownStep_rel hP hvx hshs hor a hinv hcd hqd hrd hed happ hca senv hrec hnow hfr hn hq
           hms a.own[k] (hk.2 hlt) hown hreach h1 hc1 hcx1
         revert hrun
         cases hof : o1.fault? M with
@@ -423,7 +419,7 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
             have := ownRel_append (ownRel_gate (L := L) hact' r6) (ownRel_nil (a.own.length + os0.length))
             rw [List.append_nil] at this
             simpa using this
-          rw [settle_exact hP hvx hvm hshs hor hcd hqd hqout hrd hed happ hca hE hPE hopt f (k + 1) _ _ _ hinv1 hq1 hS1
+          rw [settle_exact hP hvx hvm hshs hor hcd hqd hqout hrd hed happ hca senv f (k + 1) _ _ _ hinv1 hq1 hS1
             hnow (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl)
             (by simp only [pickTerms]; rw [hpick]; exact r1)
             (by
@@ -456,7 +452,7 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
         have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' hw1.2 (0 + a.own.length))
           (ownRel_nil _))
         simpa using this
-      have e2 := settle_exact hP hvx hvm hshs hor hcd hqd hqout hrd hed happ hca hE hPE hopt f (k + 1) _ _ _ hinv hqok hS1
+      have e2 := settle_exact hP hvx hvm hshs hor hcd hqd hqout hrd hed happ hca senv f (k + 1) _ _ _ hinv hqok hS1
         hnow (by simp only [pickTerms]; rw [hpick]; exact htf)
         (by simp only [pickTerms]; rw [hpick]; exact hrec)
         (by simp only [pickTerms]; exact machinesRel_congr _ _ _ _ (pick_tables_false hact' _ _).symm hms)

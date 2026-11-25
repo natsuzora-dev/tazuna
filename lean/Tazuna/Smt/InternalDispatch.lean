@@ -98,10 +98,10 @@ variable (L : Layout) (T : List TypeDecl)
 
 /-- One own kind's internal step for the effect term `eff`, read as the kind's variant `nR + j`: its outcome and step
 terms, its condition, and the condition of the command's or query's codes. -/
-def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt nR : Nat)
+def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs) (nR : Nat)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : List Term)
     (j : Nat) (key : OwnKey) : Except Refusal (OwnKindOut × StepTerms × Term × Term) := do
-  let sel (i : Nat) := Term.sel dE (nR + j) i eff
+  let sel (i : Nat) := Term.sel senv.dE (nR + j) i eff
   match ← ownShape v P key with
   | .missing name => pure (.missing name, ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩, tt, tt)
   | .command x Γ site =>
@@ -110,7 +110,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
       (if h : v.caller.isData = true then callerTerms L h x.callers else none)
     let (da, _) ← need "a layout without the captures' tuple" (L.find? (.tuple Γ))
     let σ ← need "captures that have no term" (tupleCodes da Γ (sel 2) 0)
-    let (o, c) ← encodeOwnCommand L T v shs dE dP dopt x cc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
+    let (o, c) ← encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
     let fault := Term.or (.not o.callerOk)
       (.or (.not (allT (o.rules.map (·.2)))) (.and o.ok (.not (allT (o.ensures.map (·.2))))))
     pure (.command x.name o,
@@ -122,19 +122,19 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
       (if h : v.caller.isData = true then callerTerms L h x.callers else none)
     let (da, _) ← need "a layout without the captures' tuple" (L.find? (.tuple Γ))
     let σ ← need "captures that have no term" (tupleCodes da Γ (sel 2) 0)
-    let (o, c) ← encodeOwnQuery L T v shs dE dP dopt x qc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
+    let (o, c) ← encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
     pure (.query x.name o, ⟨.or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))), o.answered, fresh⟩, c, cq)
 
 /-- The internal step for the own effect term `eff`: every own kind's, merged by the variant tests; its condition
 asks each kind's only where its test holds. The second term is the codes' condition, which holds statically. -/
-def encodeOwnStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt : Nat)
+def encodeOwnStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : List Term) :
     Except Refusal (OwnStepOut × Term × Term) := do
   let nR := (L.effectsOf v.event).length
   let eff := Term.share eff
   let ks ← (L.ownsOf v.event).zipIdx.mapM fun (key, j) => do
-    let (ko, st, c, cx) ← encodeOwnKind L T P v shs dE dP dopt nR apply records now fresh n q eff xs j key
-    pure (Term.share (.is dE (nR + j) eff), ko, st, c, cx)
+    let (ko, st, c, cx) ← encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key
+    pure (Term.share (.is senv.dE (nR + j) eff), ko, st, c, cx)
   let base : StepTerms := ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩
   pure (⟨ks.map fun k => (k.1, k.2.1), ks.foldr (fun k t => pickTerms k.1 k.2.2.1 t) base⟩,
     allT (ks.map fun k => .ite k.1 k.2.2.2.1 tt), allT (ks.map (·.2.2.2.2)))
@@ -186,10 +186,10 @@ section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- Every slot an events loop writes, news or own, holds two items. -/
-theorem encodeEvents_width {shs : List (PendingShape v.event)} {dE dP dopt : Nat}
+theorem encodeEvents_width {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {now : Term} :
     (S : List Slot) → {records : Term} → {xs : List Term} → {n q : Term} → {o : EventsOut} → {c : Term} →
-    encodeEvents L T v shs dE dP dopt apply now S records xs n q = .ok (o, c) →
+    encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
     (∀ sl ∈ o.news, sl.2.length = 2) ∧ ∀ sl ∈ o.owns, sl.2.length = 2
   | [], _, _, _, _, _, _, h => by
     simp only [encodeEvents, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
@@ -238,10 +238,10 @@ theorem width_gate (f : Term) {A : List Slot} (hA : ∀ sl ∈ A, sl.2.length = 
   exact hA sl' hsl'
 
 /-- The step terms of one own kind write slots of two items. -/
-theorem encodeOwnKind_width {P : List AnySite} {shs : List (PendingShape v.event)} {dE dP dopt nR : Nat}
+theorem encodeOwnKind_width {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs} {nR : Nat}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {records now fresh n q eff : Term} {xs : List Term}
     {j : Nat} {key : OwnKey} {ko : OwnKindOut} {st : StepTerms} {c cx : Term}
-    (h : encodeOwnKind L T P v shs dE dP dopt nR apply records now fresh n q eff xs j key = .ok (ko, st, c, cx)) :
+    (h : encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key = .ok (ko, st, c, cx)) :
     (∀ sl ∈ st.done.news, sl.2.length = 2) ∧ ∀ sl ∈ st.done.owns, sl.2.length = 2 := by
   obtain ⟨sh, -, h⟩ := bind_ok.1 h
   cases sh with
@@ -358,18 +358,16 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
     {j : Nat} {key : OwnKey} (x : EffectV v.event) (hreach : x.Reach P) {vals : List Val}
-    (heff : eff.denote M = .ctor dE ((L.effectsOf v.event).length + j) vals) (hkey : key.Holds L x vals)
+    (heff : eff.denote M = .ctor senv.dE ((L.effectsOf v.event).length + j) vals) (hkey : key.Holds L x vals)
     {ko : OwnKindOut} {st : StepTerms} {c cx : Term}
-    (henc : encodeOwnKind L T P v shs dE dP dopt (L.effectsOf v.event).length apply records now fresh n q eff xs j key =
+    (henc : encodeOwnKind L T P v shs senv (L.effectsOf v.event).length apply records now fresh n q eff xs j key =
       .ok (ko, st, c, cx))
     (hc : Holds M c) (hcx : Holds M cx) :
     st.fault.denote M = .bool (ko.fault? M).isSome ∧
@@ -377,7 +375,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     | some f => Step.runOwn T a x = .error f
     | none => ∃ fr : Nat, st.fresh.denote M = .int (fr : Int) ∧
         InternalDone M L T hrd shs a fr st.done st.done.news st.done.owns q0 (Step.runOwn T a x) := by
-  have hsel : ∀ i, (Term.sel dE ((L.effectsOf v.event).length + j) i eff).denote M = vals[i]?.getD default :=
+  have hsel : ∀ i, (Term.sel senv.dE ((L.effectsOf v.event).length + j) i eff).denote M = vals[i]?.getD default :=
     fun i => sel_ctor i heff
   obtain ⟨sh, hsh, henc⟩ := bind_ok.1 henc
   cases key with
@@ -445,12 +443,12 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
       · exact h
       · cases h
     have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
-        ((Term.sel dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvc
     have hsi : RelV L x.input (Ty.up _ hd.input value)
-        ((Term.sel dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have H := ownCommand_rel hP hvx hshs hor a hinv x caller value hd hcc hcx happ hca s oenv hσ' hks' hE hPE hopt
+    have H := ownCommand_rel hP hvx hshs hor a hinv x caller value hd hcc hcx happ hca s oenv hσ' hks' senv
       hrec hnow hfresh hn hq hms hsc hsi hoe hc
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
@@ -548,17 +546,17 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
       · exact h
       · cases h
     have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
-        ((Term.sel dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvc
     have hsi : RelV L x.input (Ty.up _ hd.input value)
-        ((Term.sel dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
     have hvm : ∀ m ∈ v.machines, m.Reach P := by
       intro m hm
       rw [← hinv.machinesOf] at hm
       obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 hm
       exact hinv.machines sm hsm
-    have H := ownQuery_rel hP hvx hvm hshs hor hed a x caller value hd hqc hcx happ hca s oenv hσ' hks' hE hPE hopt
+    have H := ownQuery_rel hP hvx hvm hshs hor hed a x caller value hd hqc hcx happ hca s oenv hσ' hks' senv
       hrec hnow hfresh hn hq hms hsc hsi hoe hc
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
@@ -746,9 +744,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
@@ -757,7 +753,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     (x : EffectV v.event) (hx : RelV L (.dsl .effect [v.event]) x (eff.denote M)) (hown : x.isRequest = false)
     (hreach : x.Reach P)
     {o : OwnStepOut} {cond codes : Term}
-    (henc : encodeOwnStep L T P v shs dE dP dopt apply records now fresh n q eff xs = .ok (o, cond, codes))
+    (henc : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok (o, cond, codes))
     (hc : Holds M cond) (hcodes : Holds M codes) :
     o.terms.fault.denote M = .bool (o.fault? M).isSome ∧
     match o.fault? M with
@@ -768,14 +764,14 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
   cases pure_ok.1 henc
   have hx' : EffRel L x (eff.denote M) := hx
   obtain ⟨d, nn, hd, hx'⟩ := hx'
-  cases (Prod.mk.inj (Option.some.inj (hE.symm.trans hd))).1
+  cases (Prod.mk.inj (Option.some.inj (senv.hE.symm.trans hd))).1
   rcases hx' with ⟨k, key, vals, -, -, hh⟩ | ⟨k, key, vals, hk, heff, hkey⟩
   · cases x with
     | request => simp [EffectV.isRequest] at hown
     | command => exact hh.elim
     | query => exact hh.elim
   have hF := mapM_ok _ _ _ hks
-  have heff' : (Term.share eff).denote M = .ctor dE ((L.effectsOf v.event).length + k) vals := by
+  have heff' : (Term.share eff).denote M = .ctor senv.dE ((L.effectsOf v.event).length + k) vals := by
     rw [Term.denote_share]; exact heff
   have hzk : ((L.ownsOf v.event).zipIdx)[k]? = some (key, k) := by
     rw [List.getElem?_zipIdx, hk]; simp
@@ -803,7 +799,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     have := (holds_ite _ _ _).1 hcall
     simpa [htk, toBool_bool] using this
   have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-  obtain ⟨hfault, hrun⟩ := ownKind_rel hP hvx hshs hor a hinv hcd hqd hrd hed happ hca hE hPE hopt hrec hnow hfresh hn hq
+  obtain ⟨hfault, hrun⟩ := ownKind_rel hP hvx hshs hor a hinv hcd hqd hrd hed happ hca senv hrec hnow hfresh hn hq
     hms x hreach heff' hkey hkind hck hcxk
   have hwid : ∀ y ∈ ks.map (fun k => (k.1, k.2.2.1)),
       (∀ sl ∈ y.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ y.2.done.owns, sl.2.length = 2 := by
@@ -814,7 +810,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     cases pure_ok.1 hR'
     exact encodeOwnKind_width hkind'
   obtain ⟨hag, htab⟩ := fold_hit (e := v.event) (M := M) (L := L) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩
-    (ks.map fun k => (k.1, k.2.2.1)) k (c := Term.share (.is dE ((L.effectsOf v.event).length + k) (Term.share eff)))
+    (ks.map fun k => (k.1, k.2.2.1)) k (c := Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)))
     (st := st) (by simp [hkk])
     (fun i y hy => by
       rw [List.getElem?_map] at hy
@@ -826,7 +822,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
       ks.foldr (fun k t => pickTerms k.1 k.2.2.1 t) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩) = ko.fault? M := by
     unfold OwnStepOut.fault?
     rw [find_hit (k := k) (ks.map fun k => (k.1, k.2.1))
-      (y := (Term.share (.is dE ((L.effectsOf v.event).length + k) (Term.share eff)), ko)) (by simp [hkk])
+      (y := (Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)), ko)) (by simp [hkk])
       (fun i y hy => by
         rw [List.getElem?_map] at hy
         obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.1 hy
@@ -853,22 +849,20 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
     {j : Nat} {key : OwnKey} (x : EffectV v.event) (hreach : x.Reach P) {vals : List Val}
-    (heff : eff.denote M = .ctor dE ((L.effectsOf v.event).length + j) vals) (hkey : key.Holds L x vals)
+    (heff : eff.denote M = .ctor senv.dE ((L.effectsOf v.event).length + j) vals) (hkey : key.Holds L x vals)
     {ko : OwnKindOut} {st : StepTerms} {c cx : Term}
-    (henc : encodeOwnKind L T P v shs dE dP dopt (L.effectsOf v.event).length apply records now fresh n q eff xs j key =
+    (henc : encodeOwnKind L T P v shs senv (L.effectsOf v.event).length apply records now fresh n q eff xs j key =
       .ok (ko, st, c, cx))
     (hcx : Holds M cx) :
     Holds M c ↔ ownFits L.count T a.state x := by
-  have hsel : ∀ i, (Term.sel dE ((L.effectsOf v.event).length + j) i eff).denote M = vals[i]?.getD default :=
+  have hsel : ∀ i, (Term.sel senv.dE ((L.effectsOf v.event).length + j) i eff).denote M = vals[i]?.getD default :=
     fun i => sel_ctor i heff
   obtain ⟨sh, hsh, henc⟩ := bind_ok.1 henc
   cases key with
@@ -933,15 +927,15 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       · exact h
       · cases h
     have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
-        ((Term.sel dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvc
     have hsi : RelV L x.input (Ty.up _ hd.input value)
-        ((Term.sel dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
     exact ownCommand_exact hP hvx hvm hshs hor a x caller value hd hcc hcx happ hca s oenv hσ'
-      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' hE hPE hopt hrec hnow hfresh hn hq hms hsc hsi hoe
+      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe
   | query e name c0 i jj a0 =>
     cases x with
     | request => exact hkey.elim
@@ -1003,10 +997,10 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       · exact h
       · cases h
     have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
-        ((Term.sel dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvc
     have hsi : RelV L x.input (Ty.up _ hd.input value)
-        ((Term.sel dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
@@ -1023,9 +1017,7 @@ theorem ownStep_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
-    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
@@ -1034,21 +1026,21 @@ theorem ownStep_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     (x : EffectV v.event) (hx : RelV L (.dsl .effect [v.event]) x (eff.denote M)) (hown : x.isRequest = false)
     (hreach : x.Reach P)
     {o : OwnStepOut} {cond codes : Term}
-    (henc : encodeOwnStep L T P v shs dE dP dopt apply records now fresh n q eff xs = .ok (o, cond, codes))
+    (henc : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok (o, cond, codes))
     (hcodes : Holds M codes) :
     Holds M cond ↔ ownFits L.count T a.state x := by
   obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   have hx' : EffRel L x (eff.denote M) := hx
   obtain ⟨d, nn, hd, hx'⟩ := hx'
-  cases (Prod.mk.inj (Option.some.inj (hE.symm.trans hd))).1
+  cases (Prod.mk.inj (Option.some.inj (senv.hE.symm.trans hd))).1
   rcases hx' with ⟨k, key, vals, -, -, hh⟩ | ⟨k, key, vals, hk, heff, hkey⟩
   · cases x with
     | request => simp [EffectV.isRequest] at hown
     | command => exact hh.elim
     | query => exact hh.elim
   have hF := mapM_ok _ _ _ hks
-  have heff' : (Term.share eff).denote M = .ctor dE ((L.effectsOf v.event).length + k) vals := by
+  have heff' : (Term.share eff).denote M = .ctor senv.dE ((L.effectsOf v.event).length + k) vals := by
     rw [Term.denote_share]; exact heff
   have hzk : ((L.ownsOf v.event).zipIdx)[k]? = some (key, k) := by
     rw [List.getElem?_zipIdx, hk]; simp
@@ -1070,7 +1062,7 @@ theorem ownStep_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     · subst h; simp
     · simp [h, Ne.symm h]
   have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-  rw [← ownKind_exact hP hvx hvm hshs hor a hcd hqd hqout hrd hed happ hca hE hPE hopt hrec hnow hfresh hn hq hms x
+  rw [← ownKind_exact hP hvx hvm hshs hor a hcd hqd hqout hrd hed happ hca senv hrec hnow hfresh hn hq hms x
     hreach heff' hkey hkind hcxk, holds_allT]
   have htk := htests k _ hkk
   simp only [decide_true] at htk
