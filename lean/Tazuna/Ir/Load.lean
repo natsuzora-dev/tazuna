@@ -216,12 +216,16 @@ def load (rootTy : Ty) (j : Lean.Json) : Except LoadError (Program rootTy) := do
   let c : Ctx := { sources := p.sources, globals }
   findCycle c
   let some root := globals.find? (·.name == p.root) | throw ⟨none, none, s!"root {p.root} is not defined"⟩
-  let run : M T Unit := do
+  -- Every global is elaborated at its own type variables so that unused code is checked too, but the program holds only
+  -- the root and the instances it demands: a copy at type variables never runs, and its kept functions and handles
+  -- would give the pending table and the layout types that have no value.
+  let all : M T Unit := do
     for g in globals do
       demand c g.name (g.sig.tvars.zipIdx.map fun (_, k) => Ty.param k)
-  let ((), st) ← run.run { G := [], defs := .nil, done := [] }
+  discard <| all.run { G := [], defs := .nil, done := [] }
   unless root.sig.tvars.isEmpty && root.sig.labels.isSome do
     throw ⟨c.file root.name, some root.pos, s!"root {root.name} must be a function without type variables"⟩
+  let ((), st) ← (demand c root.name [] : M T Unit).run { G := [], defs := .nil, done := [] }
   let some ⟨t, v⟩ := st.glob root.name [] | throw ⟨none, none, "internal: root not elaborated"⟩
   match Ty.same t rootTy with
   | some ⟨h⟩ => pure { types := T, globals := st.G, defs := st.defs, root := h ▸ v }

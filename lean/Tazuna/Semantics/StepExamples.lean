@@ -164,8 +164,6 @@ def last (v : ServiceV) (is : List (Input v)) : String :=
   (·.1 == .unknownHandle)).isEmpty
 #guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .int]⟩]⟩ (pingE (Γ := [])).handles).filter
   (·.1 == .unknownHandle)).length == 1
-#guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"external command", some "ping", [.param 0, .int, .str]⟩]).filter
-  (·.1 == .unknownHandle)).isEmpty
 -- A handle whose name is no string literal is Illegal.handleName, own ones included; an own handle with a literal name
 -- needs no external.
 #guard ((SpecV.illegal prelude ⟨[svc], []⟩ [⟨"command", none, [.int]⟩, ⟨"external query", none, [.int]⟩]).filter

@@ -15,8 +15,8 @@ namespace Tazuna.Ir
 
 mutual
 /-- Whether every datatype of the type has an SMT sort: no type variable, and no structure value but effects and
-fresh-id sources. The program's types include those of the spec's structure (lists of declarations, services), and
-generic functions elaborated at their own type variables; those values are never coded, so they get no datatype. -/
+fresh-id sources. The program's types include those of the spec's structure (lists of declarations, services); those
+values are never coded, so they get no datatype. -/
 def Ty.sortable : Ty → Bool
   | .int | .str | .date | .id => true
   | .param _ => false
@@ -87,7 +87,7 @@ def stepTys (v : ServiceV) (P : List AnySite) : List Ty :=
 /-- The kinds of effect of the service's scripts, from the program `defs` it came from, before any datatype. -/
 def Layout.kindsOf {G : List Ty} (defs : Defs G) (v : ServiceV) : Layout :=
   { effects := dedupBy EffectKey.same ((requestShapes v defs.sites).map (·.key)),
-    owns := dedupBy OwnKey.same ((defs.handles.filter (Ty.grounds ·.types)).flatMap (ownKeys v.event defs.sites)) }
+    owns := dedupBy OwnKey.same (defs.handles.flatMap (ownKeys v.event defs.sites)) }
 
 /-- The layout of the service's scripts, from the program `defs` it came from. -/
 def Layout.ofService {G : List Ty} (defs : Defs G) (v : ServiceV) : Layout :=
