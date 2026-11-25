@@ -15,7 +15,7 @@ variable (L : Layout)
 /-- The service's invariants on the records term: each rule's name and whether it holds, with the condition. -/
 def encodeInvariants {r : Ty} (inv : Code (Ty.fn [r] Ty.rules)) (records : Term) :
     Except Refusal (List (Term × Term) × Term) := do
-  let rc ← need "records that have no term" (Code.ofTerm? r records)
+  let rc ← Code.ofTermE r records
   let (invs, c) ← inv (rc, ())
   let rules ← ruleTerms L invs
   pure (rules, c)

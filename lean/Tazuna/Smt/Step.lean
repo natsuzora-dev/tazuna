@@ -45,11 +45,6 @@ structure EncodedStep (v : ServiceV) where
 section
 variable (L : Layout) (T : List TypeDecl)
 
-/-- The constants of the callers a definition lists. -/
-def callersOf {c : Ty} (callers : List c.den0) : Except Refusal (List Term) :=
-  if hc : c.isData = true then need "a caller that has no constant" (callerTerms L hc callers)
-  else .error (.outside "a caller type that is not data")
-
 /-- A step's terms from the symbolic state and input, by the input's kind. -/
 def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
     (S : SymState v) : SymInput v (shapes v P) senv.nT → Except Refusal (EncodedStep v)
@@ -58,13 +53,13 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
     let (cc, cx) ← CommandCode.of L x
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let ks ← callersOf L x.callers
+    let ks ← need (lacks v.caller) (callerTerms L x.data.caller x.callers)
     let ⟨o, c, cs⟩ ← encodeCommand L T P v (shapes v P) senv x cc apply inv ks S caller input
     pure ⟨.command o, c, andT cx (andT ca ci), cs⟩
   | .query i caller input => do
     let q := v.queries.get i
     let (qc, cq) ← QueryCode.of L q
-    let ks ← callersOf L q.callers
+    let ks ← need (lacks v.caller) (callerTerms L q.data.caller q.callers)
     let (o, c) ← encodeQuery L q qc ks S caller input
     pure ⟨.query o, c, cq, tt⟩
   | .answer k j to value => do
@@ -162,10 +157,6 @@ end
 section
 variable {M : Model} {L : Layout} {T : List TypeDecl}
 
-theorem callersOf_ok {c : Ty} (hc : c.isData = true) {callers : List c.den0} {ks : List Term}
-    (h : callersOf L callers = .ok ks) : callerTerms L hc callers = some ks := by
-  simp only [callersOf, hc, dite_true] at h; exact need_ok.1 h
-
 theorem apply_inv_exact {v : ServiceV} {apply : Code (Ty.fn [v.records, v.event] v.records)}
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ca ci : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hinv : v.invariants.code L = .ok (inv, ci)) :
@@ -198,7 +189,7 @@ theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     refine ⟨by rw [holds_andT, commandCode_exact hcc, apply_inv_exact happ hinvc]; rfl, fun hcodes hcs _ => ?_⟩
     obtain ⟨hcx, hca, hci⟩ : Holds M cx ∧ Holds M ca ∧ Holds M ci := by
       rw [holds_andT, holds_andT] at hcodes; exact hcodes
-    have hks' := callersOf_ok (v.commands.get i).data.caller hks
+    have hks' := need_ok.1 hks
     exact command_encode chk (fun _ => shapes_inSites) s hinv i caller input hcc hcx happ hca hinvc hci hks' senv hR hsc hsi hcmd hcs
   | query i sc si =>
     obtain ⟨caller, input, rfl, hsc, hsi⟩ := decode_query hx
@@ -207,7 +198,7 @@ theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     obtain ⟨⟨o, c⟩, hqe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     exact ⟨queryCode_exact hqc, fun hcq _ _ =>
-      query_encode s i caller input hqc hcq (callersOf_ok (v.queries.get i).data.caller hks) hR hsc hsi hqe⟩
+      query_encode s i caller input hqc hcq (need_ok.1 hks) hR hsc hsi hqe⟩
   | answer k j toT valT =>
     have hk : (shapes v P)[(k : Nat)]? = some (shapes v P)[k] := List.getElem?_eq_getElem k.2
     obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc

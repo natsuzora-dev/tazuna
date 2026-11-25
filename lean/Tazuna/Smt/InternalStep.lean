@@ -49,10 +49,10 @@ def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (senv : 
   let nil ← adtCtor L 1 [] [[]] 0 []
   let okNil ← adtCtor L 2 [Ty.nil, x.rejection] [[Ty.nil], [x.rejection]] 0 [nil]
   let err ← adtCtor L 2 [Ty.nil, x.rejection] [[Ty.nil], [x.rejection]] 1 [dc.rejection]
-  let ac ← need "an answer that has no term" (Code.ofTerm? (Ty.result Ty.nil x.rejection) (Term.share (.ite dc.ok okNil err)))
+  let ac ← Code.ofTermE (Ty.result Ty.nil x.rejection) (Term.share (.ite dc.ok okNil err))
   let (oa, c5) ← site.code L σ
   let (evs, c6) ← oa (ac, ())
-  let evt ← need "events that have no term" (Code.term? _ evs)
+  let evt ← Code.termE _ evs
   let (dl, nl, dt) ← collD L (.list v.event) [v.event]
   let (o2, c7) ← encodeEvents L T v shs senv apply now (slotsOf dl dt nl 1 evt) dc.after.records dc.after.tables
     dc.after.nextId dc.after.queued
@@ -73,7 +73,7 @@ def encodeOwnQuery (v : ServiceV) (shs : List (PendingShape v.event)) (senv : St
   let (out, c2) ← qc.resolve (a.ctx, ())
   let (oa, c3) ← site.code L σ
   let (evs, c4) ← oa (out, ())
-  let evt ← need "events that have no term" (Code.term? _ evs)
+  let evt ← Code.termE _ evs
   let (dl, nl, dt) ← collD L (.list v.event) [v.event]
   let (o, c5) ← encodeEvents L T v shs senv apply now (slotsOf dl dt nl 1 evt) records xs n q
   pure (⟨a.callerOk, a.rules, o⟩,

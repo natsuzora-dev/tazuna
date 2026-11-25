@@ -266,7 +266,7 @@ def dueAll : (ms : List (MachineV r e)) → PerMachine (fun _ => Term) ms → Te
   | m :: ms, .cons x xs, now => do
     let (dd, n, dt) ← collD L m.table [m.key, instEntry m.state]
     let de ← tupleD L [m.state, Ty.option (.tuple [.int, m.state])]
-    let (dent, _) ← need "a layout without the entry's timer" (L.find? (Ty.option (.tuple [.int, m.state])))
+    let (dent, _) ← L.findE (Ty.option (.tuple [.int, m.state]))
     let dp ← tupleD L [.int, m.state]
     let rest ← dueAll ms xs now
     pure (dueSlots de dent dp (instSlotsOf dd dt n x) now ++ rest)
@@ -380,9 +380,9 @@ def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) 
     Except Refusal (List PendingSlot × Term × List OwnSlot × Term)
   | [], .nil, _, _ => pure ([], .int 0, [], .int 0)
   | m :: ms, .cons st sts, nid, q => do
-    let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
+    let (dk, _) ← L.findE (.tuple [m.key])
     let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
-    let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
+    let dflt ← defaultE L (pendingEntry shs)
     let sp := st.map (splitStart senv.dE (L.effectsOf e).length (L.ownsOf e).length senv.dopt)
     let rq := if (L.ownsOf e).isEmpty then st else sp.map (·.1)
     let oq := if (L.ownsOf e).isEmpty then [] else sp.map (·.2)

@@ -32,9 +32,9 @@ def StepEnv.of (L : Layout) {e : Ty} (shs : List (PendingShape e)) : Except Refu
     hT : collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs] with
   | some (dE, nE), some (dP, nP), some (dopt, nopt), .ok (dT, nT, dtT) =>
     .ok ⟨dE, nE, hE, dP, nP, hPE, dopt, nopt, hopt, dT, nT, dtT, hT⟩
-  | none, _, _, _ => .error (.outside "a layout without the effect type")
-  | _, none, _, _ => .error (.outside "a layout without the pending entry")
-  | _, _, none, _ => .error (.outside "a layout without the effect option")
+  | none, _, _, _ => .error (lacks (.dsl .effect [e]))
+  | _, none, _, _ => .error (lacks (pendingEntry shs))
+  | _, _, none, _ => .error (lacks (Ty.option (.dsl .effect [e])))
   | _, _, _, .error r => .error r
 
 end Tazuna.Smt

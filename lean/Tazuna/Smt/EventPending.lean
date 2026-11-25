@@ -161,9 +161,9 @@ def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV))
     Except Refusal (List PendingSlot × Term × List OwnSlot × Term)
   | [], .nil, n, q => pure ([], n, [], q)
   | m :: ms, .cons st sts, n, q => do
-    let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
+    let (dk, _) ← L.findE (.tuple [m.key])
     let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
-    let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
+    let dflt ← defaultE L (pendingEntry shs)
     let sp := st.map (splitStart senv.dE (L.effectsOf e).length (L.ownsOf e).length senv.dopt)
     let rq := if (L.ownsOf e).isEmpty then st else sp.map (·.1)
     let S ← rankStarts L T m senv.dopt n rq

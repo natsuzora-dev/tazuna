@@ -800,7 +800,7 @@ theorem map_ok {ε α β : Type} {x : Except ε α} {f : α → β} {b : β} :
 theorem pure_ok {ε α : Type} {a b : α} : (pure a : Except ε α) = .ok b ↔ a = b := by
   simp [pure, Except.pure]
 
-theorem need_ok {α : Type} {w : String} {o : Option α} {a : α} : need w o = .ok a ↔ o = some a := by
+theorem need_ok {α : Type} {w : Refusal} {o : Option α} {a : α} : need w o = .ok a ↔ o = some a := by
   cases o <;> simp [need]
 
 theorem tupleD_ok {ts : List Ty} {d : Nat} (h : tupleD L ts = .ok d) : ∃ n, L.find? (.tuple ts) = some (d, n) := by
@@ -1004,7 +1004,7 @@ theorem collOf_rel {α : Type} {E : α → List Val → Prop} {c : Ty} {item : L
   obtain ⟨sv', ys', h3, h4, h5, h6, h7⟩ := resize_rel d dt n dflt hS hw hy hc
   exact ⟨d, n, dt, _, sv', ys', h1, rfl, h3, h4, h5, h6, h7⟩
 
-theorem need'_ok {α : Type} {w : String} {b : Bool} {a a' : α} (h : need' w b a = .ok a') : b = true ∧ a' = a := by
+theorem need'_ok {α : Type} {w : Refusal} {b : Bool} {a a' : α} (h : need' w b a = .ok a') : b = true ∧ a' = a := by
   unfold need' at h; split at h
   · cases h; exact ⟨by assumption, rfl⟩
   · cases h
@@ -1153,7 +1153,7 @@ theorem list_view {t : Ty} {xs : (Ty.list t).den} {b : Term} (hb : Rel M L (.lis
   refine ⟨sv, ?_, hl, hw, hh⟩
   rw [← hl]; exact slotsOf_den d dt 1 b sv hv hw
 
-theorem items_terms {t : Ty} {w : String} : {xs : List t.den} → {items : List (Code t)} → {ts : List Term} →
+theorem items_terms {t : Ty} {w : Refusal} : {xs : List t.den} → {items : List (Code t)} → {ts : List Term} →
     Forall2 (Rel M L t) xs items → Forall2 (fun x y => need w (Code.term? t x) = .ok y) items ts →
     Forall2 (fun x tm => RelV L t x (Term.denote M tm)) xs ts
   | [], [], [], _, _ => trivial

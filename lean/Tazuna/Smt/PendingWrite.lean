@@ -302,8 +302,8 @@ external that lists it. Own kinds have none: their effects never reach the pendi
 def shapeIdxs (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (snd : (ks : List Ty) × SenderShape ks)
     (keys : List EffectKey) : Except Refusal (List Nat) :=
   keys.mapM fun key => do
-    let x ← need "an effect kind that no external declares" (key.owner ds)
-    need "an effect kind without a pending shape" (shs.findIdx? (·.fits snd key x))
+    let x ← need (.layout (.effectKind key.name)) (key.owner ds)
+    need (.layout (.effectKind key.name)) (shs.findIdx? (·.fits snd key x))
 
 /-- The pending entry of the effect kind `i`'s value `eff`, with the shape `j` and the sender's key tuple items
 `keyT`. -/

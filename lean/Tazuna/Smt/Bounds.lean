@@ -63,7 +63,7 @@ variable (L : Layout) {r : Ty}
 /-- One create's limit at the records term `records`, with its condition. -/
 def createT (c : CreateV r) (records : Term) : Except Refusal (Term × Term) := do
   let (f, c1) ← c.table.code L
-  let rc ← need "records that have no term" (Code.ofTerm? r records)
+  let rc ← Code.ofTermE r records
   let (t, c2) ← f (rc, ())
   let (d, n, dt) ← collD L (.table c.key c.value) [c.key, c.value]
   pure (.le (sizeT (slotsOf d dt n 2 t)) (.int c.atMost), andT c1 c2)

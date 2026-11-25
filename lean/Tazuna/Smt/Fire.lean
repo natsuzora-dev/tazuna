@@ -85,11 +85,11 @@ def fireAt (m : MachineV r e) (after : Code (Ty.fn [Ty.machineCtx m.key m.state 
     let les := So.map fun s => Term.or (.not (hitT dent dp (.sel de 0 1 s.entry) d)) (leT L T m.key key s.key)
     let fires := Term.share (.and (.not done) (.and (hitT dent dp tm d) (allSlotT (So.map InstSlot.slot) les)))
     let tg := targetT dent dp tm
-    let nctx ← need "a context that has no term" (Code.ofTerm? _ (← instCtxT L m key tg records now))
+    let nctx ← Code.ofTermE _ (← instCtxT L m key tg records now)
     let (a, c) ← after (nctx, ())
-    let at_ ← need "a timer that has no term" (Code.term? _ a)
+    let at_ ← Code.termE _ a
     let (x, cx) ← fx (nctx, ())
-    let xt ← need "an effect that has no term" (Code.term? _ x)
+    let xt ← Code.termE _ x
     pure (.ite fires (.ctor de 0 [tg, ← timerT L m now at_]) entry, .ite fires xt noneT, .ite fires (andT c cx) tt)
 
 /-- What a firing round encodes on one machine: the new instance table, whether some slot has the deadline, and per
@@ -106,10 +106,10 @@ def encodeFire (m : MachineV r e) (after : Code (Ty.fn [Ty.machineCtx m.key m.st
     (tbl done d records now : Term) : Except Refusal (FireOut × Term) := do
   let (dd, n, dt) ← collD L m.table [m.key, instEntry m.state]
   let de ← tupleD L [m.state, Ty.option (.tuple [.int, m.state])]
-  let (dent, _) ← need "a layout without the entry's timer" (L.find? (Ty.option (.tuple [.int, m.state])))
+  let (dent, _) ← L.findE (Ty.option (.tuple [.int, m.state]))
   let dp ← tupleD L [.int, m.state]
-  let (dopt, _) ← need "a layout without the effect option" (L.find? (Ty.option (.dsl .effect [e])))
-  let _ ← need "a key type without order terms" (ordT L T m.key tt tt)
+  let (dopt, _) ← L.findE (Ty.option (.dsl .effect [e]))
+  let _ ← need (lacks m.key) (ordT L T m.key tt tt)
   let So := instSlotsOf dd dt n tbl
   let outs ← So.mapM (fireAt L T m after fx de dent dp So done d records now (.ctor dopt 1 []))
   pure (⟨slotsTerm dd dt ((List.zipWith (fun s q => { s with entry := q }) So (outs.map (·.1))).map InstSlot.slot),

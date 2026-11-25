@@ -115,10 +115,10 @@ def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (senv : Step
   | [], records, xs, n, q => pure (⟨records, xs, n, [], [], q⟩, tt)
   | (f, ys) :: S, records, xs, n, q => do
     let ev := Term.share ys[0]
-    let rc ← need "records that have no term" (Code.ofTerm? v.records records)
-    let ec ← need "an event that has no term" (Code.ofTerm? v.event ev)
+    let rc ← Code.ofTermE v.records records
+    let ec ← Code.ofTermE v.event ev
     let (r', ca) ← apply (rc, ec, ())
-    let rt ← need "records that have no term" (Code.term? v.records r')
+    let rt ← Code.termE v.records r'
     let rt := Term.share rt
     let (outs, cm) ← encodeMachines L v.machines xs rt now ev
     let (news, nT, oS, qT) ← encodeStarts L T shs v.declared senv v.machines (outs.map (·.starts)) n q

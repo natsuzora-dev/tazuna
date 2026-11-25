@@ -11,36 +11,36 @@ namespace Tazuna.Smt
 open Tazuna.Ir
 
 /-- What an own kind runs, fixed from its name and types: the service's command or query with the program's site of
-its `on_answer`, or nothing the service lists, which `Step.runOwn` makes `Fault.invalidEffect`. -/
+its `on_answer`; nothing the service lists, which `Step.runOwn` makes `Fault.invalidEffect`; or a listed one whose
+`on_answer` site `P` lacks, which no effect that reaches `P` has (`siteFor_reach`). -/
 inductive OwnShape (v : ServiceV) where
   | command (x : CommandV v.records v.event v.caller) (Γ : List Ty)
       (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event)))
   | query (x : QueryV v.records v.caller) (Γ : List Ty) (site : Site Γ (Ty.fn [x.output] (.list v.event)))
-  | missing (name : String)
+  | unlisted (name : String)
+  | unreached (name : String)
 
 /-- The site of `P` of the type `t` that a kept function's code names. -/
 def siteFor (P : List AnySite) (t : Ty) (k : SiteKey) : Option ((Γ : List Ty) × Site Γ t) :=
   (sitesOf P t).find? fun s => siteMatch s.2 k
 
 /-- The shape of an own kind: the command or query `Step.runOwn` runs for its effects, and the site of `P` its
-`on_answer` is written at. A kind whose site `P` lacks has no effect that reaches `P` (`siteFor_reach`), so its
-terms are never read and it takes the constant terms of `.missing`; a layout may list kinds the program never
-builds. -/
-def ownShape (v : ServiceV) (P : List AnySite) : OwnKey → Except Refusal (OwnShape v)
+`on_answer` is written at. A layout may list kinds the program never builds. -/
+def ownShape (v : ServiceV) (P : List AnySite) : OwnKey → OwnShape v
   | .command _ name c i j a =>
     match Ty.same c v.caller, Step.ownCommand (v := v) name i j with
     | some _, some ⟨x, _, _⟩ =>
       match siteFor P (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event)) a with
-      | some gs => pure (.command x gs.1 gs.2)
-      | none => pure (.missing name)
-    | _, _ => pure (.missing name)
+      | some gs => .command x gs.1 gs.2
+      | none => .unreached name
+    | _, _ => .unlisted name
   | .query _ name c i o a =>
     match Ty.same c v.caller, Step.ownQuery (v := v) name i o with
     | some _, some ⟨x, _, _⟩ =>
       match siteFor P (Ty.fn [x.output] (.list v.event)) a with
-      | some gs => pure (.query x gs.1 gs.2)
-      | none => pure (.missing name)
-    | _, _ => pure (.missing name)
+      | some gs => .query x gs.1 gs.2
+      | none => .unreached name
+    | _, _ => .unlisted name
 
 /-- The outcome terms of one own kind's internal step. -/
 inductive OwnKindOut (v : ServiceV) where
@@ -107,14 +107,14 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines)
     (j : Nat) (key : OwnKey) : Except Refusal (Encoded (OwnKindStep v)) := do
   let sel (i : Nat) := Term.sel senv.dE (nR + j) i eff
-  match ← ownShape v P key with
-  | .missing name => pure ⟨⟨.missing name, ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩, tt, tt⟩
+  match ownShape v P key with
+  -- An unreached kind's terms are never read, so it takes the unlisted kind's constant terms.
+  | .unlisted name | .unreached name => pure ⟨⟨.missing name, ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩, tt, tt⟩
   | .command x Γ site =>
     let (cc, cx) ← CommandCode.of L x
-    let ks ← need "callers that have no term"
-      (if h : v.caller.isData = true then callerTerms L h x.callers else none)
-    let (da, _) ← need "a layout without the captures' tuple" (L.find? (.tuple Γ))
-    let σ ← need "captures that have no term" (tupleCodes da Γ (sel 2) 0)
+    let ks ← need (lacks v.caller) (callerTerms L x.data.caller x.callers)
+    let (da, _) ← L.findE (.tuple Γ)
+    let σ ← need (.limit (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
     let (o, c) ← encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
     let fault := Term.or (.not o.callerOk)
       (.or (.not (allT (o.rules.map (·.2)))) (.and o.decided.ok (.not (allT (o.decided.ensures.map (·.2))))))
@@ -122,10 +122,9 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
       ⟨fault, o.done, .add fresh (.int 1)⟩⟩, c, cx⟩
   | .query x Γ site =>
     let (qc, cq) ← QueryCode.of L x
-    let ks ← need "callers that have no term"
-      (if h : v.caller.isData = true then callerTerms L h x.callers else none)
-    let (da, _) ← need "a layout without the captures' tuple" (L.find? (.tuple Γ))
-    let σ ← need "captures that have no term" (tupleCodes da Γ (sel 2) 0)
+    let ks ← need (lacks v.caller) (callerTerms L x.data.caller x.callers)
+    let (da, _) ← L.findE (.tuple Γ)
+    let σ ← need (.limit (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
     let (o, c) ← encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
     pure ⟨⟨.query x.name o, ⟨.or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))), o.answered, fresh⟩⟩, c, cq⟩
 
@@ -268,7 +267,8 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
       | none => AccRel M L T shs a st.done st.fresh q0 (Step.runOwn T a x)) := by
   have hsel : ∀ i, (Term.sel senv.dE ((L.effectsOf v.event).length + j) i eff).denote M = vals[i]?.getD default :=
     fun i => sel_ctor i heff
-  obtain ⟨sh, hsh, henc⟩ := bind_ok.1 henc
+  unfold encodeOwnKind at henc
+  generalize hsh : ownShape v P key = sh at henc
   cases key with
   | command e name c0 i jj a0 =>
     cases x with
@@ -283,20 +283,20 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
     generalize hoc : Ty.same c' v.caller = oc
     generalize hox : Step.ownCommand (v := v) name' i' j' = ox
     intro hsh
-    have miss : ∀ (h : sh = .missing name'), Holds M c ∧ Term.denote M st.fault = .bool (ko.fault? M).isSome ∧
+    have miss : ∀ (h : sh = .unlisted name'), Holds M c ∧ Term.denote M st.fault = .bool (ko.fault? M).isSome ∧
         ko.fault? M = some (.invalidEffect name' ["service"]) := by
       intro h; subst h; cases pure_ok.1 henc; exact ⟨holds_tt, rfl, rfl⟩
     cases oc with
     | none =>
       cases ox <;>
       · dsimp only at hsh ⊢
-        obtain ⟨h0, h1, h2⟩ := miss (pure_ok.1 hsh).symm
+        obtain ⟨h0, h1, h2⟩ := miss hsh.symm
         exact ⟨iff_of_true h0 trivial, fun _ => by rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩⟩
     | some hc =>
     cases ox with
     | none =>
       dsimp only at hsh ⊢
-      obtain ⟨h0, h1, h2⟩ := miss (pure_ok.1 hsh).symm
+      obtain ⟨h0, h1, h2⟩ := miss hsh.symm
       exact ⟨iff_of_true h0 trivial, fun _ => by rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩⟩
     | some xx =>
     obtain ⟨hc⟩ := hc
@@ -310,7 +310,7 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
     | none => exact absurd hsf (siteFor_reach hreach hsite hΓ)
     | some gs =>
     obtain ⟨Γ, s⟩ := gs
-    cases pure_ok.1 hsh
+    subst hsh
     obtain ⟨⟨cc, cx'⟩, hcc, henc⟩ := bind_ok.1 henc
     obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨da, dn⟩, hda, henc⟩ := bind_ok.1 henc
@@ -328,11 +328,7 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
     obtain rfl := find_det hd' (need_ok.1 hda)
     have hσ' : Rels M L _ (Ty.up _ s.hΓ oenv) σ :=
       tupleCodes_rels _ [] vals' _ σ (by rw [hsel]; rfl) (relDs_up _ s.hΓ oenv vals' hrds) (need_ok.1 hσ)
-    have hks' : callerTerms L hd.caller x.callers = some ks := by
-      have h := need_ok.1 hks
-      split at h
-      · exact h
-      · cases h
+    have hks' : callerTerms L hd.caller x.callers = some ks := need_ok.1 hks
     have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvc
@@ -385,20 +381,20 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
     generalize hoc : Ty.same c' v.caller = oc
     generalize hox : Step.ownQuery (v := v) name' i' j' = ox
     intro hsh
-    have miss : ∀ (h : sh = .missing name'), Holds M c ∧ Term.denote M st.fault = .bool (ko.fault? M).isSome ∧
+    have miss : ∀ (h : sh = .unlisted name'), Holds M c ∧ Term.denote M st.fault = .bool (ko.fault? M).isSome ∧
         ko.fault? M = some (.invalidEffect name' ["service"]) := by
       intro h; subst h; cases pure_ok.1 henc; exact ⟨holds_tt, rfl, rfl⟩
     cases oc with
     | none =>
       cases ox <;>
       · dsimp only at hsh ⊢
-        obtain ⟨h0, h1, h2⟩ := miss (pure_ok.1 hsh).symm
+        obtain ⟨h0, h1, h2⟩ := miss hsh.symm
         exact ⟨iff_of_true h0 trivial, fun _ => by rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩⟩
     | some hc =>
     cases ox with
     | none =>
       dsimp only at hsh ⊢
-      obtain ⟨h0, h1, h2⟩ := miss (pure_ok.1 hsh).symm
+      obtain ⟨h0, h1, h2⟩ := miss hsh.symm
       exact ⟨iff_of_true h0 trivial, fun _ => by rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩⟩
     | some xx =>
     obtain ⟨hc⟩ := hc
@@ -412,7 +408,7 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
     | none => exact absurd hsf (siteFor_reach hreach hsite hΓ)
     | some gs =>
     obtain ⟨Γ, s⟩ := gs
-    cases pure_ok.1 hsh
+    subst hsh
     obtain ⟨⟨qc, cx'⟩, hqc, henc⟩ := bind_ok.1 henc
     obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨da, dn⟩, hda, henc⟩ := bind_ok.1 henc
@@ -430,11 +426,7 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
     obtain rfl := find_det hd' (need_ok.1 hda)
     have hσ' : Rels M L _ (Ty.up _ s.hΓ oenv) σ :=
       tupleCodes_rels _ [] vals' _ σ (by rw [hsel]; rfl) (relDs_up _ s.hΓ oenv vals' hrds) (need_ok.1 hσ)
-    have hks' : callerTerms L hd.caller x.callers = some ks := by
-      have h := need_ok.1 hks
-      split at h
-      · exact h
-      · cases h
+    have hks' : callerTerms L hd.caller x.callers = some ks := need_ok.1 hks
     have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvc

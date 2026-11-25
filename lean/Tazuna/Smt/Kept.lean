@@ -22,12 +22,12 @@ def envCodes : (Γ : List Ty) → Ty.dens Γ → Option (Codes Γ)
 
 /-- A kept function's code and condition. -/
 def _root_.Tazuna.Ir.Fun.code {t : Ty} (f : Fun t) : Enc (Code t) := do
-  let σ ← need "a kept function that captured a function" (envCodes L f.Γ (Ty.up _ f.hΓ f.env))
+  let σ ← need (.limit (.function (.tuple f.Γ))) (envCodes L f.Γ (Ty.up _ f.hΓ f.env))
   encode L (f.defs.encode L) f.body σ
 
 /-- The code and condition of a kept function that returns effects, from its source the same way. -/
 def _root_.Tazuna.Ir.EffectFun.code {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Enc (Code (.fn ps r)) := do
-  let σ ← need "a kept function that captured a function" (envCodes L f.Γ (Ty.up _ f.hΓ f.env))
+  let σ ← need (.limit (.function (.tuple f.Γ))) (envCodes L f.Γ (Ty.up _ f.hΓ f.env))
   encode L (f.defs.encode L) f.body σ
 
 end

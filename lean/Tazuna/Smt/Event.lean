@@ -68,9 +68,9 @@ variable (L : Layout)
 /-- The event a subscription wraps the received value into, with its condition. -/
 def encodeWrap {v : ServiceV} {i : Fin v.subscribes.length} (ec : EventCode v i) (value : Term) :
     Except Refusal (Term × Term) := do
-  let vc ← need "a value that has no term" (Code.ofTerm? _ value)
+  let vc ← Code.ofTermE _ value
   let (ev, c) ← ec.wrap (vc, ())
-  let et ← need "an event that has no term" (Code.term? _ ev)
+  let et ← Code.termE _ ev
   pure (et, c)
 
 end

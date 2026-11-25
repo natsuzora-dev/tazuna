@@ -40,14 +40,14 @@ def encodeReactions (shs : List (PendingShape e)) (ds : List (String × Declared
   | [], _, _, _, n, q => pure ([], n, [], q, tt)
   | x :: xs, records, now, ev, n, q => do
     let (rc, c0) ← x.react.code L
-    let cx ← need "a context that has no term" (Code.ofTerm? _ (← reactionCtxT (r := r) L records now))
-    let evc ← need "an event that has no term" (Code.ofTerm? e ev)
+    let cx ← Code.ofTermE _ (← reactionCtxT (r := r) L records now)
+    let evc ← Code.ofTermE e ev
     let (l, c1) ← rc (cx, evc, ())
-    let lt ← need "a list that has no term" (Code.term? _ l)
+    let lt ← Code.termE _ l
     let (d, nl, dt) ← collD L (.list (.dsl .effect [e])) [.dsl .effect [e]]
-    let (dk, _) ← need "a layout without the empty key tuple" (L.find? (.tuple []))
+    let (dk, _) ← L.findE (.tuple [])
     let js ← shapeIdxs shs ds ⟨[], .reaction x.name⟩ (L.effectsOf e)
-    let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
+    let dflt ← defaultE L (pendingEntry shs)
     let LS := slotsOf d dt nl 1 lt
     let none := (L.ownsOf e).isEmpty
     let gate (own : Bool) := gateOwn dE (L.effectsOf e).length (L.ownsOf e).length own LS

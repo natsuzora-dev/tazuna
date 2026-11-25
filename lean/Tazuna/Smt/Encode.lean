@@ -15,12 +15,44 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-/-- Why an expression has no encoding. -/
+/-- A construct a spec can write that the fragment leaves out. -/
+inductive Limit where
+  /-- A value of the type is a function or a handle where the encoding needs a term. -/
+  | function (t : Ty)
+  /-- Gleam's `==` on the type is not SMT-LIB's `=` (a bag or a table compares its slots in their order). -/
+  | equality (t : Ty)
+  /-- A handle, command or query named by an expression that is no literal. -/
+  | dynamicName
+  | builtin (name : String)
+  /-- A kept function whose result is effects. -/
+  | effectClosure
+deriving Repr
+
+/-- What a layout lacks that an encoding needs. A layout built for the program has none of these. -/
+inductive LayoutGap where
+  /-- The datatype of the type, a datatype a default or a constant of it needs, or slots for a constant of it. -/
+  | type (t : Ty)
+  /-- A variant of the effect datatype for the kind of effect, or a pending shape or external for it. -/
+  | effectKind (name : String)
+  /-- An instance table with fewer slots than its machine's instance bag. -/
+  | instanceSlots (t : Ty)
+deriving Repr
+
+/-- A case the program's types rule out but the IR's do not. -/
+inductive Unexpected where
+  /-- ADT 0, which every program's type table declares as Bool, with other variants. -/
+  | adtZero
+  | emptyCase
+deriving Repr
+
+/-- Why an expression has no encoding: a limit of the fragment the spec reached, a gap in the layout, or a case the
+program's types rule out. -/
 inductive Refusal where
   /-- A string literal holds a code point above U+2FFFF, outside SMT-LIB's strings. -/
   | unencodableString (s : String)
-  /-- The expression uses a construct or type outside the fragment. -/
-  | outside (what : String)
+  | limit (l : Limit)
+  | layout (g : LayoutGap)
+  | unexpected (u : Unexpected)
 deriving Repr
 
 /-- An encoder's terms with its two conditions: `cond`, what the terms ask of the values (exact against the step's
@@ -62,6 +94,9 @@ inductive OwnKey where
 
 def OwnKey.event : OwnKey → Ty
   | .command e .. | .query e .. => e
+
+def OwnKey.name : OwnKey → String
+  | .command _ n .. | .query _ n .. => n
 
 def OwnKey.answer : OwnKey → SiteKey
   | .command _ _ _ _ _ a | .query _ _ _ _ _ a => a
@@ -265,7 +300,7 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-def lacks (t : Ty) : Refusal := .outside s!"a type the layout lacks: {repr t}"
+def lacks (t : Ty) : Refusal := .layout (.type t)
 
 /-- Selects field `j` of whichever of the constructors `k`, `k + 1`, ..., `k + n` built `x`; every one of them has
 the field. -/
@@ -281,7 +316,7 @@ def adtCtor (i : Nat) (args : List Ty) (vs : List (List Ty)) (k : Nat) (fs : Lis
   match i with
   | 0 => match boolVs? vs with
     | some _ => .ok (.bool (k == 0))
-    | none => .error (.outside "ADT 0 that is not Bool")
+    | none => .error (.unexpected .adtZero)
   | i + 1 => match L.find? (.adt (i + 1) args vs) with
     | some (d, _) => .ok (.ctor d k fs)
     | none => .error (lacks (.adt (i + 1) args vs))
@@ -292,7 +327,7 @@ def adtView (i : Nat) (args : List Ty) (vs : List (List Ty)) (k : Fin vs.length)
   match i with
   | 0 => match boolVs? vs with
     | some _ => .ok (if k.val = 0 then x else .not x, [])
-    | none => .error (.outside "ADT 0 that is not Bool")
+    | none => .error (.unexpected .adtZero)
   | i + 1 => match L.find? (.adt (i + 1) args vs) with
     | some (d, _) => .ok (.is d k x, (List.range (vs.get k).length).map fun j => .sel d k j x)
     | none => .error (lacks (.adt (i + 1) args vs))
@@ -302,9 +337,18 @@ def tupleD (ts : List Ty) : Except Refusal Nat :=
   | some (d, _) => .ok d
   | none => .error (lacks (.tuple ts))
 
-def need {α : Type} (what : String) : Option α → Except Refusal α
+def need {α : Type} (r : Refusal) : Option α → Except Refusal α
   | some a => .ok a
-  | none => .error (.outside what)
+  | none => .error r
+
+/-- The datatype index and slot count of a type, refused when the layout lacks it. -/
+abbrev Layout.findE (L : Layout) (t : Ty) : Except Refusal (Nat × Nat) := need (lacks t) (L.find? t)
+
+/-- The term of a code, refused at a type whose values are functions or handles. -/
+abbrev Code.termE (t : Ty) (c : Code t) : Except Refusal Term := need (.limit (.function t)) (Code.term? t c)
+
+/-- The code of a term at the type `t`, refused when `t`'s values are functions or handles. -/
+abbrev Code.ofTermE (t : Ty) (x : Term) : Except Refusal (Code t) := need (.limit (.function t)) (Code.ofTerm? t x)
 
 mutual
 /-- Whether the value coded by `s` matches the pattern, as a Bool term, and the codes of the variables it binds. -/
@@ -315,12 +359,12 @@ def encodePat {t : Ty} {Δ : List Ty} : Pat t Δ → Code t → Except Refusal (
   | .str lit, s => if inDomain lit then .ok (.eq s (.str lit), ()) else .error (.unencodableString lit)
   | @Pat.tuple ts _ ps, s => do
     let d ← tupleD L ts
-    let fs ← need "a tuple item that has no term"
+    let fs ← need (.limit (.function (.tuple ts)))
       (Codes.ofTerms? ts ((List.range ts.length).map fun j => .sel d 0 j s))
     encodePats ps fs
   | @Pat.ctor i args vs _ v ps, s => do
     let (m, fts) ← adtView L i args vs v s
-    let fs ← need "a field that has no term" (Codes.ofTerms? (vs.get v) fts)
+    let fs ← need (.limit (.function (.tuple (vs.get v)))) (Codes.ofTerms? (vs.get v) fts)
     let (m', δ) ← encodePats ps fs
     pure (andT m m', δ)
   | .as p, s => do
@@ -391,6 +435,9 @@ def defaultT : Ty → Option Term :=
     | .effect, [e] => effectDefault L e
     | _, _ => none
 
+/-- The term of a value of `t` that free slots hold, refused when the layout lacks a datatype it needs. -/
+abbrev defaultE (t : Ty) : Except Refusal Term := need (lacks t) (defaultT L t)
+
 /-- The datatype of a bag or table type, its slot count, and the datatype of its slots. -/
 def collD (c : Ty) (item : List Ty) : Except Refusal (Nat × Nat × Nat) :=
   match L.find? c, L.find? (.tuple (Ty.bool :: item)) with
@@ -416,7 +463,7 @@ theorem mapM_some_length {α β : Type} (g : α → Option β) : (xs : List α) 
 def defaultItems (item : List Ty) : Except Refusal (SlotItems item.length) :=
   match h : item.mapM (defaultT L) with
   | some xs => .ok ⟨xs, mapM_some_length _ _ _ h⟩
-  | none => .error (.outside "an item type without a default term")
+  | none => .error (lacks (.tuple item))
 
 /-- `n` free slots. -/
 def emptySlots (item : List Ty) (n : Nat) : Except Refusal (List (Slot item.length)) := do
@@ -433,14 +480,14 @@ def collOf (c : Ty) (item : List Ty) (S : List (Slot item.length)) : Except Refu
 /-- A function's code applied to a slot's items. -/
 def slotApply {ps : List Ty} {r : Ty} {w : Nat} (f : Codes ps → Except Refusal (Code r × Term)) (xs : SlotItems w) :
     Except Refusal (Code r × Term) := do
-  f (← need "an item that has no term" (Codes.ofTerms? ps xs.1))
+  f (← need (.limit (.function (.tuple ps))) (Codes.ofTerms? ps xs.1))
 
 /-- A function's code applied to each slot's items: the term of its result and its condition. -/
 def slotTerms {ps : List Ty} {r : Ty} {w : Nat} (f : Codes ps → Except Refusal (Code r × Term)) (S : List (Slot w)) :
     Except Refusal (List (Term × Term)) :=
   S.mapM fun sl => do
     let (v, c) ← slotApply f sl.2
-    pure (← need "a result that has no term" (Code.term? r v), c)
+    pure (← Code.termE r v, c)
 
 /-- Whether a slot's key differs from `key`, as `table.remove` compares: in either direction. -/
 def keepQs (key : Term) (S : List (Slot 2)) : List Term :=
@@ -451,8 +498,8 @@ def putSlots (S : List (Slot 2)) (k v : Term) : List (Slot 2) × Term :=
   let (S', p) := insertSlots ⟨[k, v], rfl⟩ tt (filterSlots S (keepQs k S))
   (S', .not p)
 
-def need' {α : Type} (what : String) (b : Bool) (a : α) : Except Refusal α :=
-  if b then .ok a else .error (.outside what)
+def need' {α : Type} (r : Refusal) (b : Bool) (a : α) : Except Refusal α :=
+  if b then .ok a else .error r
 
 /-- The slots `T` where `f` holds and `S` where it does not, slot by slot. -/
 def iteSlots {w : Nat} (f : Term) (T S : List (Slot w)) : List (Slot w) :=
@@ -472,7 +519,7 @@ def putFrom (d dt dp : Nat) : List (Slot 2) → List (Slot 1) → List (Slot 2) 
 they fit. -/
 def listOf (t : Ty) (items : List Term) : Except Refusal (Term × Term) := do
   let (d, n, dt) ← collD L (.list t) [t]
-  let dflt ← need "an item type without a default term" (defaultT L t)
+  let dflt ← defaultE L t
   if items.length ≤ n then
     pure (slotsTerm d dt (items.map (tt, ⟨[·], rfl⟩) ++ List.replicate (n - items.length) (.bool false, ⟨[dflt], rfl⟩)), tt)
   else pure (slotsTerm (w := 1) d dt [], .bool false)
@@ -488,8 +535,8 @@ def lookupT (key dv : Term) (S : List (Slot 2)) : Term × Term :=
 /-- The table's slots and the lookup of the key's code in them. -/
 def lookupCode (k v : Ty) (t key : Term) : Except Refusal (Term × Term) := do
   let (d, n, dt) ← collD L (.table k v) [k, v]
-  let kt ← need' "a key type whose == is not SMT-LIB's =" k.eqable key
-  let dv ← need "a value type without a default term" (defaultT L v)
+  let kt ← need' (.limit (.equality k)) k.eqable key
+  let dv ← defaultE L v
   pure (lookupT kt dv (slotsOf d dt n 2 t))
 
 /-- How often `x` occurs among the occupied slots' items, by SMT-LIB's `=`. -/
@@ -509,17 +556,17 @@ def tableEqT (dv : Term) (A B : List (Slot 2)) : Term :=
 /-- Gleam's `==`: SMT-LIB's `=` where codes are unique, and multiset or map equality over the slots of bags and
 tables, whose slots can hold the same items in another order. -/
 def eqCode (t : Ty) (x y : Code t) : Except Refusal Term :=
-  if t.eqable then do .ok (.eq (← need "==" (Code.term? t x)) (← need "==" (Code.term? t y)))
+  if t.eqable then do .ok (.eq (← Code.termE t x) (← Code.termE t y))
   else match t, x, y with
     | .bag a, x, y => do
       let (d, n, dt) ← collD L (.bag a) [a]
-      need' "== on a bag whose items' == is not SMT-LIB's =" a.eqable (bagEqT (slotsOf d dt n 1 x) (slotsOf d dt n 1 y))
+      need' (.limit (.equality a)) a.eqable (bagEqT (slotsOf d dt n 1 x) (slotsOf d dt n 1 y))
     | .table k v, x, y => do
       let (d, n, dt) ← collD L (.table k v) [k, v]
-      let dv ← need "a value type without a default term" (defaultT L v)
-      need' "== on a table whose keys' or values' == is not SMT-LIB's =" (k.eqable && v.eqable)
+      let dv ← defaultE L v
+      need' (.limit (.equality (.table k v))) (k.eqable && v.eqable)
         (tableEqT dv (slotsOf d dt n 2 x) (slotsOf d dt n 2 y))
-    | _, _, _ => .error (.outside "== on this type")
+    | _, _, _ => .error (.limit (.equality t))
 
 def encodeBin {a b c : Ty} : BinOp a b c → Code a → Code b → Except Refusal (Code c)
   | .add, x, y => .ok (.add x y)
@@ -547,7 +594,7 @@ def pickCode (lt : Term → Term → Term) (a : Ty) (b : Term) (f : Codes [a] �
   let R ← slotTerms f S
   let ks := R.map fun r => Term.share r.1
   let ws := ks.map fun k => Term.share (.eq (countT S (ks.map fun k' => .not (lt k k'))) (.int 1))
-  let dv ← need "an item type without a default term" (defaultT L a)
+  let dv ← defaultE L a
   let found ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 0
     [pickT dv (List.zipWith (fun sl w => (sl.1, w, sl.2[0])) S ws)]
   let tie ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 1 [← adtCtor L 4 [] [[], []] 1 []]
@@ -564,8 +611,8 @@ def freshT (step index : Term) : Term :=
 /-- An effect of the kind `key`: its variant of the effect datatype, with the input and the terms of the values the
 `ensures` and `on_answer` sites captured. -/
 def effectT (key : EffectKey) (input : Term) (ens answer : List Term) : Except Refusal Term := do
-  let (d, _) ← need "a layout without the effect type" (L.find? (.dsl .effect [key.event]))
-  let k ← need "an effect of a kind the layout lacks" ((L.effectsOf key.event).findIdx? (·.same key))
+  let (d, _) ← L.findE (.dsl .effect [key.event])
+  let k ← need (.layout (.effectKind key.name)) ((L.effectsOf key.event).findIdx? (·.same key))
   let de ← tupleD L ((key.ensures.map (·.Γ)).getD [])
   let da ← tupleD L key.answer.Γ
   pure (.ctor d k [input, .ctor de 0 ens, .ctor da 0 answer])
@@ -573,8 +620,8 @@ def effectT (key : EffectKey) (input : Term) (ens answer : List Term) : Except R
 /-- An effect of the own kind `key`: its variant of the effect datatype, after the request kinds', with the caller,
 the input and the terms of the values the `on_answer` site captured. -/
 def ownT (key : OwnKey) (caller input : Term) (answer : List Term) : Except Refusal Term := do
-  let (d, _) ← need "a layout without the effect type" (L.find? (.dsl .effect [key.event]))
-  let k ← need "an effect of a kind the layout lacks" ((L.ownsOf key.event).findIdx? (·.same key))
+  let (d, _) ← L.findE (.dsl .effect [key.event])
+  let k ← need (.layout (.effectKind key.name)) ((L.ownsOf key.event).findIdx? (·.same key))
   let da ← tupleD L key.answer.Γ
   pure (.ctor d ((L.effectsOf key.event).length + k) [caller, input, .ctor da 0 answer])
 
@@ -586,7 +633,7 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
   | .dateDaysBetween, _, _ => .ok fun (a, b, ()) => .ok (.sub b a, tt)
   | .require, args, _ => .ok fun (holds, rej, next, ()) => do
     let (v, c) ← next ()
-    let r ← need "a rejection that has no term" (Code.term? _ rej)
+    let r ← Code.termE _ rej
     let a := (Ty.param 0).inst args
     let e := (Ty.param 1).inst args
     let err ← adtCtor L 2 [a, e] [[a], [e]] 1 [r]
@@ -628,13 +675,13 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     pure (allSlotT S (R.map (·.1)), guardsT S (R.map (·.2)))
   | .bagInsert, args, _ => .ok fun (b, x, ()) => do
     let (d, n, dt) ← collD L (.bag ((Ty.param 0).inst args)) [(Ty.param 0).inst args]
-    let xt ← need "an item that has no term" (Code.term? _ x)
+    let xt ← Code.termE _ x
     let (S', p) := insertSlots ⟨[xt], rfl⟩ tt (slotsOf d dt n 1 b)
     pure (slotsTerm d dt S', .not p)
   | .bagContains, args, _ => .ok fun (b, x, ()) => do
     let a := (Ty.param 0).inst args
     let (d, n, dt) ← collD L (.bag a) [a]
-    let xt ← need' "an item type whose == is not SMT-LIB's =" a.eqable (← need "an item that has no term" (Code.term? _ x))
+    let xt ← need' (.limit (.equality a)) a.eqable (← Code.termE _ x)
     let S := slotsOf d dt n 1 b
     pure (anySlotT S (S.map fun sl => .eq xt sl.2[0]), tt)
   | .bagMinBy, args, _ => .ok fun (b, f, ()) => pickCode L (fun k k' => .lt k k') ((Ty.param 0).inst args) b f
@@ -693,15 +740,15 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
   | .tableRemove, args, _ => .ok fun (t, key, ()) => do
     let k := (Ty.param 0).inst args
     let (d, n, dt) ← collD L (.table k ((Ty.param 1).inst args)) [k, (Ty.param 1).inst args]
-    let kt ← need' "a key type whose == is not SMT-LIB's =" k.eqable (← need "a key that has no term" (Code.term? _ key))
+    let kt ← need' (.limit (.equality k)) k.eqable (← Code.termE _ key)
     let S := slotsOf d dt n 2 t
     pure (slotsTerm d dt (filterSlots S (keepQs kt S)), tt)
   | .tableInsert, args, _ => .ok fun (t, key, val, ()) => do
     let k := (Ty.param 0).inst args
     let v := (Ty.param 1).inst args
     let (d, n, dt) ← collD L (.table k v) [k, v]
-    let kt ← need' "a key type whose == is not SMT-LIB's =" k.eqable (← need "a key that has no term" (Code.term? _ key))
-    let vt ← need "a value that has no term" (Code.term? _ val)
+    let kt ← need' (.limit (.equality k)) k.eqable (← Code.termE _ key)
+    let vt ← Code.termE _ val
     let (S', c) := putSlots (slotsOf d dt n 2 t) kt vt
     pure (slotsTerm d dt S', c)
   | .bagFromList, args, _ => .ok fun (items, ()) => do
@@ -713,61 +760,61 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     let v := (Ty.param 1).inst args
     let (d, n, dt) ← collD L (.table k v) [k, v]
     let (dl, nl, dtl) ← collD L (.list (.tuple [k, v])) [.tuple [k, v]]
-    let dp ← need' "a key type whose == is not SMT-LIB's =" k.eqable (← tupleD L [k, v])
+    let dp ← need' (.limit (.equality k)) k.eqable (← tupleD L [k, v])
     let (S, c) := putFrom d dt dp (← emptySlots L [k, v] n) (slotsOf dl dtl nl 1 pairs)
     pure (slotsTerm d dt S, c)
   | .tableGet, args, _ => .ok fun (t, key, ()) => do
     let v := (Ty.param 1).inst args
-    let kt ← need "a key that has no term" (Code.term? _ key)
+    let kt ← Code.termE _ key
     let (hit, found) ← lookupCode L ((Ty.param 0).inst args) v t kt
     pure (.ite hit (← adtCtor L 3 [v] [[v], []] 0 [found]) (← adtCtor L 3 [v] [[v], []] 1 []), tt)
   | .tableLookup, args, _ => .ok fun (t, key, rej, next, ()) => do
-    let kt ← need "a key that has no term" (Code.term? _ key)
+    let kt ← Code.termE _ key
     let (hit, found) ← lookupCode L ((Ty.param 0).inst args) ((Ty.param 1).inst args) t kt
-    let fc ← need "a value that has no term" (Code.ofTerm? ((Ty.param 1).inst args) found)
+    let fc ← Code.ofTermE ((Ty.param 1).inst args) found
     let (r, c) ← next (fc, ())
-    let rt ← need "a rejection that has no term" (Code.term? _ rej)
+    let rt ← Code.termE _ rej
     let a := (Ty.param 2).inst args
     let e := (Ty.param 3).inst args
     pure (.ite hit r (← adtCtor L 2 [a, e] [[a], [e]] 1 [rt]), .ite hit c tt)
   | .fresh, _, _ => .ok fun (step, index, ()) => do
-    let (d, _) ← need "a layout without Id" (L.find? .id)
+    let (d, _) ← L.findE .id
     pure (.ctor d 0 [freshT step index], tt)
   | .externalCommand, _, _ => .ok fun (name, ()) => match name with
     | .str n => .ok (n, tt)
-    | _ => .error (.outside "a handle whose name is no literal")
+    | _ => .error (.limit .dynamicName)
   | .externalQuery, _, _ => .ok fun (name, ens, ()) => match name with
     | .str n => .ok ((n, ens), tt)
-    | _ => .error (.outside "a handle whose name is no literal")
+    | _ => .error (.limit .dynamicName)
   | .requestCommand, args, _ => .ok fun (name, input, oa, ()) => do
-    let it ← need "an input that has no term" (Code.term? _ input)
+    let it ← Code.termE _ input
     let key : EffectKey := ⟨(Ty.param 0).inst args, name, (Ty.param 1).inst args, (Ty.param 2).inst args,
       some ((Ty.param 3).inst args), none, oa.key⟩
     pure (← effectT L key it [] oa.env, tt)
   | .requestQuery, args, _ => .ok fun ((name, ens), input, oa, ()) => do
-    let it ← need "an input that has no term" (Code.term? _ input)
+    let it ← Code.termE _ input
     let key : EffectKey := ⟨(Ty.param 0).inst args, name, (Ty.param 1).inst args, (Ty.param 2).inst args, none,
       some ens.key, oa.key⟩
     pure (← effectT L key it ens.env oa.env, tt)
   | .command, _, _ => .ok fun (name, _, _, _, _, ()) => match name with
     | .str n => .ok (n, tt)
-    | _ => .error (.outside "a command whose name is no literal")
+    | _ => .error (.limit .dynamicName)
   | .query, _, _ => .ok fun (name, _, _, _, ()) => match name with
     | .str n => .ok (n, tt)
-    | _ => .error (.outside "a query whose name is no literal")
+    | _ => .error (.limit .dynamicName)
   | .sendCommand, args, _ => .ok fun (name, caller, input, oa, ()) => do
-    let ct ← need "a caller that has no term" (Code.term? _ caller)
-    let it ← need "an input that has no term" (Code.term? _ input)
+    let ct ← Code.termE _ caller
+    let it ← Code.termE _ input
     let key : OwnKey := .command ((Ty.param 1).inst args) name ((Ty.param 2).inst args) ((Ty.param 3).inst args)
       ((Ty.param 4).inst args) oa.key
     pure (← ownT L key ct it oa.env, tt)
   | .sendQuery, args, _ => .ok fun (name, caller, input, oa, ()) => do
-    let ct ← need "a caller that has no term" (Code.term? _ caller)
-    let it ← need "an input that has no term" (Code.term? _ input)
+    let ct ← Code.termE _ caller
+    let it ← Code.termE _ input
     let key : OwnKey := .query ((Ty.param 1).inst args) name ((Ty.param 2).inst args) ((Ty.param 3).inst args)
       ((Ty.param 4).inst args) oa.key
     pure (← ownT L key ct it oa.env, tt)
-  | p, _, _ => .error (.outside s!"the built-in {p.sig.name}")
+  | p, _, _ => .error (.limit (.builtin p.sig.name))
 
 variable {G : List Ty} (gs : Encs G)
 
@@ -780,23 +827,23 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
   | .global v, _ => v.enc gs
   | @Expr.ctor _ _ i args vs v es, σ => do
     let (ss, c) ← encodes es σ
-    let fs ← need "a constructor with a field that has no term" (Codes.terms? _ ss)
+    let fs ← need (.limit (.function (.tuple (vs.get v)))) (Codes.terms? _ ss)
     pure (← adtCtor L i args vs v.val fs, c)
   | @Expr.field _ _ i args vs ft _ k _ e, σ => do
     let (x, c) ← encode e σ
     match i with
-    | 0 => .error (.outside "a field of ADT 0")
+    | 0 => .error (.unexpected .adtZero)
     | i + 1 => match L.find? (.adt (i + 1) args vs) with
-      | some (d, _) => pure (← need "a field that has no term" (Code.ofTerm? ft (fieldT d k x 0 (vs.length - 1))), c)
+      | some (d, _) => pure (← Code.ofTermE ft (fieldT d k x 0 (vs.length - 1)), c)
       | none => .error (lacks (.adt (i + 1) args vs))
   | @Expr.index _ _ ts e k, σ => do
     let (x, c) ← encode e σ
     let d ← tupleD L ts
-    pure (← need "a tuple item that has no term" (Code.ofTerm? (ts.get k) (.sel d 0 k.val x)), c)
+    pure (← Code.ofTermE (ts.get k) (.sel d 0 k.val x), c)
   | @Expr.update _ _ i args fs e p, σ => do
     let (x, c) ← encode e σ
     match i with
-    | 0 => .error (.outside "an update of ADT 0")
+    | 0 => .error (.unexpected .adtZero)
     | i + 1 => match L.find? (.adt (i + 1) args [fs]) with
       | some (d, _) =>
         let (ys, c') ← encodePatch p σ (fun j => .sel d 0 j x) 0
@@ -816,15 +863,15 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
     let (s, c1) ← encode e σ
     match ← encodeClauses cs σ (Code.share _ s) with
     | some (r, c2) => pure (r, andT c1 c2)
-    | none => .error (.outside "a case without clauses")
+    | none => .error (.unexpected .emptyCase)
   | @Expr.list _ _ t items, σ => do
     let (ss, c1) ← encodeItems items σ
-    let ts ← ss.mapM fun s => need "a list item that has no term" (Code.term? t s)
+    let ts ← ss.mapM fun s => Code.termE t s
     let (r, c2) ← listOf L t ts
     pure (r, andT c1 c2)
   | @Expr.tuple _ _ ts es, σ => do
     let (ss, c) ← encodes es σ
-    let fs ← need "a tuple with an item that has no term" (Codes.terms? _ ss)
+    let fs ← need (.limit (.function (.tuple ts))) (Codes.terms? _ ss)
     pure (.ctor (← tupleD L ts) 0 fs, c)
   | .bin op l r, σ => do
     let (x, c1) ← encode l σ
@@ -839,9 +886,9 @@ def encode {Γ : List Ty} {t : Ty} : Expr G Γ t → Codes Γ → Enc (Code t)
   | .prim p args h, _ => do pure (← primCode L p args h, tt)
   | @Expr.close _ _ Γ' _ site env _ _ _, σ => do
     let (ss, c) ← encodes env σ
-    let ts ← need "a captured value that has no term" (Codes.terms? _ ss)
+    let ts ← need (.limit (.function (.tuple Γ'))) (Codes.terms? _ ss)
     pure (⟨⟨site, Γ'⟩, ts⟩, c)
-  | .closeEffect .., _ => .error (.outside "a kept function that returns effects")
+  | .closeEffect .., _ => .error (.limit .effectClosure)
 def encodes {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Codes Γ → Enc (Codes ts)
   | .nil, _ => .ok ((), tt)
   | .cons e es, σ => do
@@ -862,7 +909,7 @@ def encodePatch {Γ : List Ty} {ts : List Ty} : Patch G Γ ts → Codes Γ → (
     pure (keep j :: ys, c)
   | @Patch.set _ _ t _ e rest, σ, keep, j => do
     let (s, c1) ← encode e σ
-    let y ← need "an update with a field that has no term" (Code.term? t s)
+    let y ← Code.termE t s
     let (ys, c2) ← encodePatch rest σ keep (j + 1)
     pure (y :: ys, andT c1 c2)
 /-- The clauses' value as a chain of `ite` over their match conditions; `none` when there is no clause. The last
@@ -875,7 +922,7 @@ def encodeClauses {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r
     let (vb, cb) ← encode body (Codes.append δ σ)
     match ← encodeClauses rest σ s with
     | none => pure (some (vb, cb))
-    | some (vr, cr) => pure (some (← need "a case whose value has no term" (Code.ite? r m vb vr), .ite m cb cr))
+    | some (vr, cr) => pure (some (← need (.limit (.function r)) (Code.ite? r m vb vr), .ite m cb cr))
   | .guarded p g body rest, σ, s => do
     let (m, δ) ← encodePat L p s
     let (vg, cg) ← encode g (Codes.append δ σ)
@@ -883,7 +930,7 @@ def encodeClauses {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r
     match ← encodeClauses rest σ s with
     | none => pure (some (vb, andT cg cb))
     | some (vr, cr) =>
-      pure (some (← need "a case whose value has no term" (Code.ite? r (.and m vg) vb vr),
+      pure (some (← need (.limit (.function r)) (Code.ite? r (.and m vg) vb vr),
         .ite m (andT cg (.ite vg cb cr)) cr))
 end
 

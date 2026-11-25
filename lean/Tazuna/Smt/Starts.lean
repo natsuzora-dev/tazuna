@@ -32,7 +32,7 @@ plus the number of flagged slots with a smaller key), the key and the effect. -/
 def rankStart (m : MachineV r e) (dopt : Nat) (nextId : Term) (all : List (StartSlot))
     (s : StartSlot) : Except Refusal RankedStart := do
   let below ← all.mapM fun s' => do
-    let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.key s.key)
+    let (lt, _) ← need (lacks m.key) (ordT L T m.key s'.key s.key)
     pure (Term.ite (.and (startFlag dopt s') lt) (.int 1) (.int 0))
   pure ⟨startFlag dopt s, Term.share (.add nextId (sumT below)), s.key, .sel dopt 0 0 s.effect⟩
 
@@ -215,7 +215,7 @@ theorem startCount_den : (startCount dopt all).denote M = .int (items.flatMap fu
 theorem below_sum {s : StartSlot} {a : α}
     (ha : EOpt (L := L) m κ F a (Term.denotes M [s.key, s.effect])) {below : List Term}
     (hb : Forall2 (fun s' t => (do
-      let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.key s.key)
+      let (lt, _) ← need (lacks m.key) (ordT L T m.key s'.key s.key)
       pure (Term.ite (.and (startFlag dopt s') lt) (.int 1) (.int 0))) = Except.ok (ε := Refusal) t) all below) :
     (sumT below).denote M = .int (rankBy (T := T) m κ F items a) := by
   obtain ⟨zk, z, hvs, hk, -⟩ := ha

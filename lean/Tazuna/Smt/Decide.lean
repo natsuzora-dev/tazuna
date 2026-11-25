@@ -30,14 +30,14 @@ def encodeDecide (v : ServiceV) (shs : List (PendingShape v.event)) (senv : Step
     (ctx : Code (Ty.ctx v.records x.input v.caller)) (now records : Term) (xs : PerMachine (fun _ => Term) v.machines) (n q : Term) :
     Except Refusal (DecideOut v × Term) := do
   let (res, c2) ← cc.decide (ctx, ())
-  let rest ← need "a result that has no term" (Code.term? _ res)
-  let (d, _) ← need "a layout without the result type" (L.find? (Ty.result (.list v.event) x.rejection))
+  let rest ← Code.termE _ res
+  let (d, _) ← L.findE (Ty.result (.list v.event) x.rejection)
   let res := Term.share rest
   let ok := Term.is d 0 res
   let evs := Term.sel d 0 0 res
   let (dl, nl, dt) ← collD L (.list v.event) [v.event]
   let (o, c3) ← encodeEvents L T v shs senv apply now (gateSlots ok (slotsOf dl dt nl 1 evs)) records xs n q
-  let rfc ← need "records that have no term" (Code.ofTerm? v.records o.records)
+  let rfc ← Code.ofTermE v.records o.records
   let (ens, c4) ← cc.ensures (ctx, rfc, ())
   let ensures ← ruleTerms L ens
   pure (⟨ok, .sel d 1 0 res, evs, o, ensures⟩, andT c2 (andT c3 (.ite ok c4 tt)))

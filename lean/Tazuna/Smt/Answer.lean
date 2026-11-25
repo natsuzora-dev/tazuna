@@ -71,9 +71,9 @@ def ensuresTerms {e : Ty} (sh : PendingShape e) (de k : Nat) (entry : Term)
   match sh.ensures with
   | none => pure ([], tt)
   | some ⟨Γ, es⟩ => do
-    let (dn, _) ← need "a layout without the captures' tuple" (L.find? (.tuple Γ))
-    let σe ← need "captures that have no term" (tupleCodes dn Γ (.sel de k 2 entry) 0)
-    let ic ← need "an input that has no term" (Code.ofTerm? sh.input (.sel de k 1 entry))
+    let (dn, _) ← L.findE (.tuple Γ)
+    let σe ← need (.limit (.function (.tuple Γ))) (tupleCodes dn Γ (.sel de k 2 entry) 0)
+    let ic ← Code.ofTermE sh.input (.sel de k 1 entry)
     let (oe, c) ← es.code L σe
     let (rs, c') ← oe (ic, vc, ())
     pure (← ruleTerms L rs, andT c c')
@@ -228,13 +228,13 @@ def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat
   let sl := pendingSlotAt senv.dT senv.dtT j S.pending
   let entry := sl.entry
   let hit := Term.and sl.flag (.and (.eq sl.id to) (.is de k entry))
-  let (da, _) ← need "a layout without the captures' tuple" (L.find? (.tuple sh.answerΓ))
-  let σa ← need "captures that have no term" (tupleCodes da sh.answerΓ (.sel de k 3 entry) 0)
-  let vc ← need "an answer that has no term" (Code.ofTerm? _ value)
+  let (da, _) ← L.findE (.tuple sh.answerΓ)
+  let σa ← need (.limit (.function (.tuple sh.answerΓ))) (tupleCodes da sh.answerΓ (.sel de k 3 entry) 0)
+  let vc ← Code.ofTermE _ value
   let (oa, c1) ← sh.onAnswer.code L σa
   let (evs, c2) ← oa (vc, ())
   let (rules, c3) ← ensuresTerms L sh de k entry vc
-  let evt ← need "events that have no term" (Code.term? _ evs)
+  let evt ← Code.termE _ evs
   let (dl, nl, dtl) ← collD L (.list v.event) [v.event]
   let (o, c4) ← encodeEvents L T v shs senv apply S.now (slotsOf dl dtl nl 1 evt) S.records S.machines S.nextId (.int 0)
   let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now S.fresh

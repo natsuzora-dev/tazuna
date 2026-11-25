@@ -53,7 +53,7 @@ def instCheckAt (m : MachineV r e) (inv : Code (Ty.fn [Ty.machineCtx m.key m.sta
     (records now : Term) : InstSlot → Except Refusal (InstCheck × Term)
   | ⟨f, key, entry⟩ => do
     let ctx ← instCtxT L m key (.sel de 0 0 entry) records now
-    let cx ← need "a context that has no term" (Code.ofTerm? _ ctx)
+    let cx ← Code.ofTermE _ ctx
     let (rs, c) ← inv (cx, ())
     pure (⟨f, key, ← ruleTerms L rs⟩, Term.ite f c tt)
 
@@ -64,7 +64,7 @@ def encodeInstInvariants (m : MachineV r e) (inv : Code (Ty.fn [Ty.machineCtx m.
   let (d, n, dt) ← collD L m.table [m.key, instEntry m.state]
   let de ← tupleD L [m.state, Ty.option (.tuple [.int, m.state])]
   let checks ← (instSlotsOf d dt n tbl).mapM (instCheckAt L m inv de records now)
-  let _ ← need "a key type without order terms" (ordT L T m.key tt tt)
+  let _ ← need (lacks m.key) (ordT L T m.key tt tt)
   pure (checks.map (·.1), allT (checks.map (·.2)))
 
 /-- The codes of the functions a machine's reaction to an event reads. -/
@@ -87,16 +87,16 @@ the slots that hold the first occurrence of their item. -/
 def firstSlots (t : Ty) : List (Slot 1) → List (Slot 1) → Except Refusal (List Term)
   | _, [] => pure []
   | prev, (f, xs) :: rest => do
-    let k ← need "an item that has no term" (Code.ofTerm? t xs[0])
+    let k ← Code.ofTermE t xs[0]
     let eqs ← prev.mapM fun (f', xs') => do
-      pure (Term.and f' (← eqCode L t (← need "an item that has no term" (Code.ofTerm? t xs'[0])) k))
+      pure (Term.and f' (← eqCode L t (← Code.ofTermE t xs'[0]) k))
     pure (Term.share (.and f (allT (eqs.map .not))) :: (← firstSlots t (prev ++ [(f, xs)]) rest))
 
 /-- The timer `after` starts, as an entry holds it: the deadline `now` plus the delay, and the state it enters. -/
 def timerT (m : MachineV r e) (now a : Term) : Except Refusal Term := do
-  let (dopt, _) ← need "a layout without the timer option" (L.find? (Ty.option (Ty.timer m.state)))
-  let (dtm, _) ← need "a layout without the timer" (L.find? (Ty.timer m.state))
-  let (dent, _) ← need "a layout without the entry's timer" (L.find? (Ty.option (.tuple [.int, m.state])))
+  let (dopt, _) ← L.findE (Ty.option (Ty.timer m.state))
+  let (dtm, _) ← L.findE (Ty.timer m.state)
+  let (dent, _) ← L.findE (Ty.option (.tuple [.int, m.state]))
   let dp ← tupleD L [.int, m.state]
   let tm := Term.sel dopt 0 0 a
   pure (.ite (.is dopt 0 a) (.ctor dent 0 [.ctor dp 0 [.add now (.sel dtm 0 0 tm), .sel dtm 0 1 tm]]) (.ctor dent 1 []))
@@ -104,7 +104,7 @@ def timerT (m : MachineV r e) (now a : Term) : Except Refusal Term := do
 /-- Whether an old table slot holds the key `kc`: its flag, the equality term, and its entry. -/
 def hitAt (m : MachineV r e) (kc : Code m.key) : InstSlot → Except Refusal (Term × Term × Term)
   | ⟨g, key, entry⟩ => do
-    pure (g, ← eqCode L m.key (← need "a key that has no term" (Code.ofTerm? m.key key)) kc, entry)
+    pure (g, ← eqCode L m.key (← Code.ofTermE m.key key) kc, entry)
 
 /-- The new table's slot for one slot of the instances bag, the effect it starts, and its condition: flagged by
 `first`, it holds the key and the entry of the instance after the event. The effect is the `effect` code's option
@@ -113,22 +113,22 @@ def reactAt (m : MachineV r e) (rc : ReactCode m) (de dn : Nat) (So : List InstS
     (dflt noneT records now : Term) (evc : Code e) : Slot 1 × Term → Except Refusal ((InstSlot × Term) × Term)
   | ((f, xs), first) => do
     let key := xs[0]
-    let kc ← need "a key that has no term" (Code.ofTerm? m.key key)
+    let kc ← Code.ofTermE m.key key
     let hits ← So.mapM (hitAt L m kc)
     let found := anyT (hits.map fun (g, h, _) => .and g h)
     let old := pickT dflt hits
     let oldS := Term.sel de 0 0 old
-    let octx ← need "a context that has no term" (Code.ofTerm? _ (← instCtxT L m key oldS records now))
+    let octx ← Code.ofTermE _ (← instCtxT L m key oldS records now)
     let (o, c1) ← rc.on (octx, evc, ())
-    let ot ← need "a next state that has no term" (Code.term? _ o)
+    let ot ← Code.termE _ o
     let st := Term.ite found (.ite (.is dn 1 ot) (.sel dn 1 0 ot) oldS) init.term
-    let nctx ← need "a context that has no term" (Code.ofTerm? _ (← instCtxT L m key st records now))
+    let nctx ← Code.ofTermE _ (← instCtxT L m key st records now)
     let (a, c2) ← rc.after (nctx, ())
-    let at_ ← need "a timer that has no term" (Code.term? _ a)
+    let at_ ← Code.termE _ a
     let entered := Term.or (.not found) (.is dn 1 ot)
     let tm := Term.ite entered (← timerT L m now at_) (.sel de 0 1 old)
     let (x, c3) ← rc.effect (nctx, ())
-    let xt ← need "an effect that has no term" (Code.term? _ x)
+    let xt ← Code.termE _ x
     pure ((⟨first, key, .ctor de 0 [st, tm]⟩, Term.share (.ite entered xt noneT)),
       Term.ite f (andT (.ite found c1 tt) (.ite entered (andT c2 c3) tt)) tt)
 
@@ -155,22 +155,22 @@ table's slots, else the encoding is refused. -/
 def encodeReact (m : MachineV r e) (rc : ReactCode m) (tbl records now ev : Term) : Except Refusal (ReactOut × Term) := do
   let (d, n, dt) ← collD L m.table [m.key, instEntry m.state]
   let de ← tupleD L [m.state, Ty.option (.tuple [.int, m.state])]
-  let (dn, _) ← need "a layout without the next state" (L.find? (Ty.next m.state))
-  let (dopt, _) ← need "a layout without the effect option" (L.find? (Ty.option (.dsl .effect [e])))
-  let rcd ← need "records that have no term" (Code.ofTerm? r records)
-  let evc ← need "an event that has no term" (Code.ofTerm? e ev)
+  let (dn, _) ← L.findE (Ty.next m.state)
+  let (dopt, _) ← L.findE (Ty.option (.dsl .effect [e]))
+  let rcd ← Code.ofTermE r records
+  let evc ← Code.ofTermE e ev
   let (bag, c0) ← rc.instances (rcd, ())
-  let bagT ← need "a bag that has no term" (Code.term? _ bag)
+  let bagT ← Code.termE _ bag
   let (db, nb, dtb) ← collD L (.bag m.key) [m.key]
   let SB := slotsOf db dtb nb 1 bagT
   let So := instSlotsOf d dt n tbl
-  let init ← need "an initial state without a constant" (embedV L m.state (Ty.up _ m.state_data m.initial))
-  let dflt ← need "an entry without a default term" (defaultT L (instEntry m.state))
+  let init ← need (lacks m.state) (embedV L m.state (Ty.up _ m.state_data m.initial))
+  let dflt ← defaultE L (instEntry m.state)
   let firsts ← firstSlots L m.key [] SB
   let slots ← (SB.zip firsts).mapM (reactAt L m rc de dn So init dflt (.ctor dopt 1 []) records now evc)
-  let _ ← need' "an instance bag with more slots than the instance table" (nb ≤ n) ()
+  let _ ← need' (.layout (.instanceSlots m.table)) (nb ≤ n) ()
   let pad := List.replicate (n - nb)
-    (⟨.bool false, ← need "a key without a default term" (defaultT L m.key), dflt⟩ : InstSlot)
+    (⟨.bool false, ← defaultE L m.key, dflt⟩ : InstSlot)
   pure (⟨slotsTerm d dt ((slots.map (·.1.1) ++ pad).map InstSlot.slot), slots.map fun ((sl, x), _) => ⟨sl.flag, sl.key, x⟩⟩,
     andT c0 (allT (slots.map (·.2))))
 
@@ -922,7 +922,7 @@ theorem prev_eqs (m : MachineV r e) {kc : Code m.key} {k : m.key.den} (hk : Smt.
     (prevS : List (Slot 1)) → (svP : List (Bool × List Val)) → (ysP : List m.key.den) → SlotsDen M prevS svP →
     Holds2 (EBag L m.key) ysP svP → {eqs : List Term} →
     prevS.mapM (fun (f', xs') => do
-      pure (Term.and f' (← eqCode L m.key (← need "an item that has no term" (Code.ofTerm? m.key xs'[0])) kc)))
+      pure (Term.and f' (← eqCode L m.key (← Code.ofTermE m.key xs'[0]) kc)))
       = .ok eqs →
     (allT (eqs.map .not)).denote M = .bool !(ysP.any fun y => Ty.deq m.key y k)
   | [], [], ysP, _, hy, eqs, h => by
