@@ -77,12 +77,6 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 
-/-- An effect option that holds an effect relates the effect to a value. -/
-theorem opt_some_rel {x : (Ty.dsl .effect [e]).den} {z : Val}
-    (h : RelV L (Ty.option (.dsl .effect [e])) (.inl (x, ())) z) : ∃ zx, RelV L (.dsl .effect [e]) x zx := by
-  obtain ⟨_, _, _, vals, -, v1, _, -, hx, -⟩ := h
-  exact ⟨v1, hx⟩
-
 /-- The start slots of one machine's part of an event step hold the effects its instances start. -/
 theorem machine_starts (m : MachineV r e) (hor : m.key.orderable = true)
     (recs : r.den0) (tnow : Int) (ev : e.den0) {records now evT : Term}

@@ -189,12 +189,6 @@ theorem cmp_atom (a b : String) : cmp (.atom a) (.atom b) = compare a b := by
   simp only [cmp, ser, List.compareLex_cons_cons, Tok.cmp, List.compareLex_nil_nil]
   cases compare a b <;> rfl
 
-theorem cmp_atom_tuple (a : String) (ys : List Erl) : cmp (.atom a) (.tuple ys) = .lt := by
-  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
-
-theorem cmp_tuple_atom (xs : List Erl) (b : String) : cmp (.tuple xs) (.atom b) = .gt := by
-  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
-
 /-- Tuples compare by size, then item by item. -/
 theorem cmp_tuple (xs ys : List Erl) :
     cmp (.tuple xs) (.tuple ys) = if xs.length = ys.length then cmps xs ys else compare xs.length ys.length := by
@@ -672,50 +666,10 @@ theorem dedupBy_perm {xs ys : List α} (h : xs.Perm ys) : (dedupBy eq xs).Perm (
 
 end
 
-/-- In a list of distinct values sorted by a total order, the values before `x` are those below it. A step that
-starts effects in the canonical order of keys gives each one's request the next wire id plus the number of effects
-of the keys below its own. -/
-theorem sorted_prefix (cmp : α → α → Ordering) [Std.TransCmp cmp] (xs : List α)
-    (hnd : xs.Pairwise fun a b => cmp a b ≠ .eq) {pre post : List α} {x : α}
-    (h : xs.mergeSort (fun a b => (cmp a b).isLE) = pre ++ x :: post) :
-    pre.Perm (xs.filter fun y => cmp y x == .lt) := by
-  have hp := List.mergeSort_perm xs (fun a b => (cmp a b).isLE)
-  have hle := List.pairwise_mergeSort (le := fun a b => (cmp a b).isLE)
-    (fun _ _ _ h1 h2 => Std.TransCmp.isLE_trans h1 h2)
-    (fun a b => by
-      cases h : cmp a b with
-      | gt => have := Std.OrientedCmp.gt_iff_lt.1 h; simp [this]
-      | _ => simp) xs
-  have hne := hnd.perm hp.symm (fun h e => h (Std.OrientedCmp.eq_symm e))
-  have hlt : (xs.mergeSort fun a b => (cmp a b).isLE).Pairwise fun a b => cmp a b = .lt := by
-    refine (hle.and hne).imp fun ⟨h1, h2⟩ => ?_
-    cases e : cmp _ _ <;> simp_all
-  rw [h] at hlt
-  have hsplit : (pre ++ x :: post).filter (fun y => cmp y x == .lt) = pre := by
-    obtain ⟨hpre, hxpost, hcross⟩ := List.pairwise_append.1 hlt
-    have hx := (List.pairwise_cons.1 hxpost).1
-    rw [List.filter_append, List.filter_cons]
-    have h1 : pre.filter (fun y => cmp y x == .lt) = pre :=
-      List.filter_eq_self.2 fun a ha => by simp [hcross a ha x List.mem_cons_self]
-    have h2 : post.filter (fun y => cmp y x == .lt) = [] :=
-      List.filter_eq_nil_iff.2 fun b hb => by
-        have := Std.OrientedCmp.gt_iff_lt.2 (hx b hb); simp [this]
-    simp [h1, h2, Std.ReflCmp.compare_self]
-  rw [← hsplit, ← h]
-  exact hp.filter _
-
 end
 
 section
 variable (T : List TypeDecl)
-
-/-- The keys of a bag of an ordered type, each once, in the canonical order: the keys before `x` are the bag's
-distinct keys below it. -/
-theorem sortBy_dedup_prefix {t : Ty} (ht : t.ordered T = true) (xs : List t.den0) {pre post : List t.den0} {x : t.den0}
-    (h : Ty.sortBy T t (dedupBy (Ty.semWith Dsl.base t).2 xs) = pre ++ x :: post) :
-    pre.Perm ((dedupBy (Ty.semWith Dsl.base t).2 xs).filter fun y => Ty.cmp T t y x == .lt) :=
-  sorted_prefix (Ty.cmp T t) _ ((dedupBy_pairwise _ xs).imp fun h e =>
-    by rw [(Ty.cmp_eq_iff T ht _ _).1 (Std.OrientedCmp.eq_symm e)] at h; cases h) h
 
 /-- The keys of a bag of an ordered type, each once, in the canonical order, strictly increase. -/
 theorem sortBy_dedup_lt {t : Ty} (ht : t.ordered T = true) (xs : List t.den0) :

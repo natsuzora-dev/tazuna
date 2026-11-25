@@ -104,11 +104,6 @@ abbrev Prim.dn {args : List Ty} (h : ∀ t ∈ args, t.isData = true) (t : Ty) (
     (x : (t.inst args).den) : (t.inst args).den0 :=
   Ty.down _ (Ty.isData_inst h t ht) x
 
-/-- A data value of type `t`, as a function of the spec receives it. -/
-abbrev Prim.upT {args : List Ty} (h : ∀ t ∈ args, t.isData = true) (t : Ty) (ht : t.isData = true := by rfl)
-    (x : (t.inst args).den0) : (t.inst args).den :=
-  Ty.up _ (Ty.isData_inst h t ht) x
-
 /-- A data value handed to a function of the spec. -/
 abbrev Prim.up {args : List Ty} (h : ∀ t ∈ args, t.isData = true) (k : Nat) (x : ((Ty.param k).inst args).den0) :
     ((Ty.param k).inst args).den :=

@@ -15,8 +15,6 @@ def SentBy (v : ServiceV) (snd : Sender) : Prop :=
 /-- The site of a kept function. -/
 def Fun.toSite {t : Ty} (f : Fun t) : Site f.Γ t := ⟨f.site, f.G, f.defs, f.hΓ, f.ht, f.body⟩
 
-theorem Fun.toSite_fn {t : Ty} (f : Fun t) : f.toSite.fn f.env = f := rfl
-
 theorem mem_sitesOf_self {P : List AnySite} {t : Ty} {f : Fun t} (h : f.asSite ∈ P) :
     (⟨f.Γ, f.toSite⟩ : (Γ : List Ty) × Site Γ t) ∈ sitesOf P t := by
   simp only [sitesOf, List.mem_filterMap]

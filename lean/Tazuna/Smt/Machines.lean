@@ -143,10 +143,6 @@ def encodeReact (m : MachineV r e) (rc : ReactCode m) (tbl records now ev : Term
   pure (⟨slotsTerm d dt (slots.map (·.1.1) ++ pad), slots.map fun ((sl, x), _) => (sl.1, sl.2.headD tt, x)⟩,
     andT c0 (allT (slots.map (·.2))))
 
-/-- Whether every instance's invariants hold. -/
-def instOkT (checks : List InstCheck) : Term :=
-  allT (checks.map fun c => .or (.not c.occupied) (allT (c.rules.map (·.2))))
-
 /-- Whether the key of `a` comes no later than the key of `b` in the model, by the order terms. -/
 def keyLEIn (M : Model) (t : Ty) (a b : InstCheck) : Bool :=
   match ordT L T t a.key b.key with
@@ -453,37 +449,6 @@ theorem instBroken_eq (m : MachineV r e) (hko : m.key.ordered T = true)
   exact eq_of_keysUnique _ (fun (k, x) => instOf m k x) Step.Instance.key (fun _ => rfl) tbl.1 tbl.2
     (hperm.mem_iff.1 ((List.mergeSort_perm _ _).mem_iff.1 ha)) ((List.mergeSort_perm _ _).mem_iff.1 hb)
     ((Ty.cmp_eq_iff T hko _ _).1 heq)
-
-theorem instOkT_filter (M : Model) (checks : List InstCheck) :
-    (instOkT checks).denote M =
-      .bool ((checks.filter fun c => (c.occupied.denote M).toBool).all fun c => (brokenIn M c.rules).isEmpty) := by
-  unfold instOkT
-  rw [allT_denote, List.all_map]
-  congr 1
-  induction checks with
-  | nil => rfl
-  | cons c cs ih =>
-    have hb : (brokenIn M c.rules).isEmpty = (c.rules.map (·.2)).all (fun t => (t.denote M).toBool) := by
-      rw [Bool.eq_iff_iff, List.isEmpty_iff]; exact brokenIn_nil c.rules
-    have hc : (Term.denote M (.or (.not c.occupied) (allT (c.rules.map (·.2))))).toBool =
-        (!(c.occupied.denote M).toBool || (brokenIn M c.rules).isEmpty) := by
-      show (!(c.occupied.denote M).toBool || ((allT _).denote M).toBool) = _
-      rw [allT_denote, hb]; rfl
-    rw [List.all_cons, List.filter_cons]
-    simp only [Function.comp_apply] at ih ⊢
-    rw [hc, ih]
-    cases (c.occupied.denote M).toBool <;> simp
-
-/-- The term `instOkT` holds exactly when the model's table has no broken invariant. -/
-theorem instOkT_denote (L : Layout) (T : List TypeDecl) (M : Model) (t : Ty) (checks : List InstCheck) :
-    (instOkT checks).denote M = .bool (instBroken L T M t checks).isEmpty := by
-  rw [instOkT_filter]
-  congr 1
-  unfold instBroken
-  rw [Bool.eq_iff_iff, List.all_eq_true, List.isEmpty_iff, List.flatMap_eq_nil_iff]
-  constructor
-  · intro h c hc; exact List.isEmpty_iff.1 (h c ((List.mergeSort_perm _ _).mem_iff.1 hc))
-  · intro h c hc; exact List.isEmpty_iff.2 (h c ((List.mergeSort_perm _ _).mem_iff.2 hc))
 
 end
 

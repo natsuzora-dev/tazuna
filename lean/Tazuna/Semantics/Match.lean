@@ -111,10 +111,6 @@ theorem matchesAll_append : {fs ts : List Ty} → (A B : List Shape) → (y : Ty
   | [], _, _ :: _, _, _, _, hl, _ => nomatch hl
   | _ :: _, _, [], _, _, _, hl, _ => nomatch hl
 
-theorem matchesAll_anys : {fs : List Ty} → (y : Ty.dens fs) → MatchesAll fs (List.replicate fs.length .any) y
-  | [], () => trivial
-  | _ :: _, (y, ys) => ⟨matches_any y, matchesAll_anys ys⟩
-
 /-- A row of the matrix specialized by variant `k` comes from a row of the original matrix, which matches the whole
 value when the specialized row matches its fields. -/
 theorem specialize_sound {t : Ty} {fs ts : List Ty} (k : Nat) (x : t.den) (y : Ty.dens fs) (xs : Ty.dens ts)

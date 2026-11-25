@@ -128,11 +128,6 @@ theorem holds_or_not (f c : Term) (b : Bool) (hf : f.denote M = .bool b) :
 theorem headD_denote (xs : List Term) : (xs.headD tt).denote M = (Term.denotes M xs).headD (.bool true) := by
   cases xs <;> rfl
 
-theorem getD1_denote (xs : List Term) : (xs.getD 1 tt).denote M = (Term.denotes M xs).getD 1 (.bool true) := by
-  match xs with
-  | [] | [_] => rfl
-  | _ :: _ :: _ => rfl
-
 theorem mapM_isSome {α β : Type} (f : α → Option β) : (xs : List α) → (xs.mapM f).isSome = xs.all fun x => (f x).isSome
   | [] => rfl
   | x :: xs => by

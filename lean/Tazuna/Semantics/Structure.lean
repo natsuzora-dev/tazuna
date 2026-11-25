@@ -291,8 +291,6 @@ theorem Ty.up_inr (k : Nat) (a : List Ty) (fs : List Ty) (vs : List (List Ty)) (
   unfold Ty.up
   exact cast_sumR (congrArg Sigma.fst (Ty.semsWith_data Dsl.val_fresh fs hfs)).symm _ _ y
 
-theorem Ty.up_int (h : Ty.int.isData = true) (n : Ty.int.den0) : Ty.up .int h n = n := rfl
-theorem Ty.up_fresh (h : (Ty.dsl .fresh []).isData = true) (n : (Ty.dsl .fresh []).den0) : Ty.up (.dsl .fresh []) h n = n := rfl
 theorem Ty.up_nil (h : (Ty.tuple []).isData = true) (x : (Ty.tuple []).den0) : Ty.up (.tuple []) h x = () := rfl
 
 theorem Ty.up_list (t : Ty) (h : (Ty.list t).isData = true) (ht : t.isData = true) (xs : (Ty.list t).den0) :

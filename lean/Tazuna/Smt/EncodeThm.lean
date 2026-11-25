@@ -817,11 +817,6 @@ theorem tupleD_ok {ts : List Ty} {d : Nat} (h : tupleD L ts = .ok d) : ∃ n, L.
   · cases h; exact ⟨_, by assumption⟩
   · cases h
 
-theorem denotes_map (ts : List Term) : Term.denotes M ts = ts.map (Term.denote M) := by
-  induction ts with
-  | nil => rfl
-  | cons t ts ih => simp [Term.denotes, ih]
-
 end
 
 section

@@ -368,8 +368,4 @@ theorem run_outcomes (T : List TypeDecl) (v : ServiceV) : (s : State v) → (is 
   | _, [] => rfl
   | s, i :: is => by simp only [run, List.length_cons]; rw [run_outcomes T v _ is]
 
-/-- The run is determined by the start state and the inputs: the canonical order leaves it no choice. -/
-theorem run_deterministic (T : List TypeDecl) (v : ServiceV) (s : State v) (is : List (Input v))
-    (a b : State v × List (Result v)) (ha : run T v s is = a) (hb : run T v s is = b) : a = b := ha ▸ hb
-
 end Tazuna.Ir

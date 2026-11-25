@@ -303,10 +303,6 @@ theorem idle_digit (d : Nat) (h : d < 10) : idleStep (digitChar d) = some (.num 
   have key : ∀ e : Fin 10, idleStep (digitChar e) = some (.num e.val, []) := by decide
   exact key ⟨d, h⟩
 
-theorem lex_space (rest : List Char) : lexFrom .idle (' ' :: rest) = lexFrom .idle rest := by
-  simp only [lexFrom, lexStep, idle_space, Option.bind_eq_bind, Option.bind_some, List.nil_append]
-  cases lexFrom .idle rest <;> rfl
-
 theorem lex_sym_body (acc cs rest : List Char) (h : ∀ x ∈ cs, isSymChar x = true) :
     lexFrom (.sym acc) (cs ++ ' ' :: rest) = (lexFrom .idle rest).map (.sym (String.ofList (acc ++ cs)) :: ·) := by
   induction cs generalizing acc with

@@ -129,13 +129,6 @@ theorem Dens.reach_append : {a b : List Ty} → (xs : Ty.dens a) → (ys : Ty.de
   | [], _, (), _, _, h => h
   | _ :: _, _, (_, xs), ys, h, h' => ⟨h.1, Dens.reach_append xs ys h.2 h'⟩
 
-theorem Dens.reach_append_l : {a b : List Ty} → (xs : Ty.dens a) → (ys : Ty.dens b) →
-    Reaches P (a ++ b) (Dens.append xs ys) → Reaches P a xs ∧ Reaches P b ys
-  | [], _, (), _, h => ⟨trivial, h⟩
-  | _ :: _, _, (_, xs), ys, h => by
-    have := Dens.reach_append_l xs ys h.2
-    exact ⟨⟨h.1, this.1⟩, this.2⟩
-
 theorem Dens.reach_get : {ts : List Ty} → (xs : Ty.dens ts) → (k : Fin ts.length) → Reaches P ts xs →
     Reach P (ts.get k) (Dens.get xs k)
   | _ :: _, (_, _), ⟨0, _⟩, h => h.1

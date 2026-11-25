@@ -290,11 +290,6 @@ theorem ofTerm_notFn : {t : Ty} → {x : Term} → {s : Code t} → Code.ofTerm?
   | .dsl _ _, _, _, _ | .list _, _, _, _ | .int, _, _, _ | .str, _, _, _ | .tuple _, _, _, _ | .adt .., _, _, _
   | .param _, _, _, _ | .bag _, _, _, _ | .table .., _, _, _ | .date, _, _, _ | .id, _, _, _ => rfl
 
-theorem term_notFn : {t : Ty} → {s : Code t} → {x : Term} → Code.term? t s = some x → t.isFn = false
-  | .fn .., _, _, h => nomatch h
-  | .dsl _ _, _, _, _ | .list _, _, _, _ | .int, _, _, _ | .str, _, _, _ | .tuple _, _, _, _ | .adt .., _, _, _
-  | .param _, _, _, _ | .bag _, _, _, _ | .table .., _, _, _ | .date, _, _, _ | .id, _, _, _ => rfl
-
 theorem ofTerms_notFn : {ts : List Ty} → {xs : List Term} → {ss : Codes ts} → Codes.ofTerms? ts xs = some ss →
     ∀ t ∈ ts, t.isFn = false
   | [], _, _, _ => by simp

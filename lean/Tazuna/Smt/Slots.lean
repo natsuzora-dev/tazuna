@@ -60,11 +60,6 @@ def resizeSlots (d dt : Nat) (dflt : List Term) (n : Nat) (S : List Slot) : List
   if S.length ≤ n then (S ++ List.replicate (n - S.length) (.bool false, dflt), tt)
   else moveAll d dt dflt.length (List.replicate n (.bool false, dflt)) S
 
-/-- The term `found xs` of the first occupied slot whose items satisfy `hit`, or `none`. -/
-def firstT (hit : List Term → Term) (found : List Term → Term) (none : Term) : List Slot → Term
-  | [] => none
-  | (f, xs) :: S => .ite (.and f (hit xs)) (found xs) (firstT hit found none S)
-
 /-! What slots denote: each slot's flag a Bool and its items values; the collection is the items of the occupied
 ones. -/
 
@@ -252,21 +247,6 @@ end
 /-- The guards of per-slot conditions: each must hold where its slot is occupied. -/
 def guardsT (S : List Slot) (cs : List Term) : Term := allT (List.zipWith (fun (f, _) c => .or (.not f) c) S cs)
 
-theorem guardsT_holds : {S : List Slot} → {cs : List Term} → {sv : List (Bool × List Val)} → SlotsDen M S sv →
-    S.length = cs.length → ((guardsT S cs).denote M).toBool = true →
-    ∀ i (h : i < sv.length), sv[i].1 = true → ∃ c, cs[i]? = some c ∧ (c.denote M).toBool = true
-  | [], [], [], _, _, _, i, h, _ => nomatch h
-  | (f, _) :: S, c :: cs, (b, _) :: sv, ⟨hf, _, h⟩, hl, hg, i, hi, hb => by
-    simp only [guardsT, allT, List.zipWith_cons_cons, Term.denote, hf, Val.toBool, Bool.and_eq_true] at hg
-    cases i with
-    | zero =>
-      simp only [List.getElem_cons_zero] at hb
-      subst hb
-      simp only [Bool.not_true, Bool.false_or] at hg
-      exact ⟨c, rfl, hg.1⟩
-    | succ i =>
-      exact guardsT_holds h (by simpa using hl) hg.2 i (by simpa using hi) (by simpa using hb)
-
 /-- What inserting `xv` into the slots `sv` gives, with whether it still waits for a slot. -/
 def insertVals (xv : List Val) : Bool → List (Bool × List Val) → List (Bool × List Val) × Bool
   | p, [] => ([], p)
@@ -340,27 +320,6 @@ theorem insertVals_length (xv : List Val) (w : Nat) (hx : xv.length = w) : (pb :
 def pickT (none : Term) : List (Term × Term × Term) → Term
   | [] => none
   | (f, h, r) :: rest => .ite (.and f h) r (pickT none rest)
-
-/-- Per slot: flag `b`, and where occupied, whether it hits and what it gives. -/
-def PickDen (M : Model) : List (Term × Term × Term) → List (Bool × Bool × Val) → Prop
-  | [], [] => True
-  | (f, h, r) :: rest, (b, hb, rv) :: pv =>
-    f.denote M = .bool b ∧ (b = true → h.denote M = .bool hb ∧ r.denote M = rv) ∧ PickDen M rest pv
-  | _, _ => False
-
-theorem pickT_den (none : Term) : {T : List (Term × Term × Term)} → {pv : List (Bool × Bool × Val)} →
-    PickDen M T pv → (pickT none T).denote M =
-      (((pv.filter fun (b, hb, _) => b && hb).head?.map (·.2.2)).getD (none.denote M))
-  | [], [], _ => rfl
-  | (f, h, r) :: rest, (b, hb, rv) :: pv, ⟨hf, hr, hrest⟩ => by
-    simp only [pickT, Term.denote, hf, Val.toBool]
-    cases b
-    · simp [pickT_den none hrest]
-    · obtain ⟨hh, hrv⟩ := hr rfl
-      simp only [hh, Bool.true_and]
-      cases hb
-      · simp [pickT_den none hrest]
-      · simp [hrv]
 
 theorem mapM_ok {ε α β : Type} (g : α → Except ε β) : (xs : List α) → (ys : List β) → xs.mapM g = .ok ys →
     Forall2 (fun x y => g x = .ok y) xs ys

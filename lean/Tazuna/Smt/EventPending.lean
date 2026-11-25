@@ -83,17 +83,6 @@ theorem start_requests (a : Acc v) : (effs : List (Sender × EffectV v.event)) �
   | [], _ :: _, h => h.elim
   | (_, .request _) :: _, [], h => h.elim
 
-/-- Effects written as requests at consecutive ids are all requests: none queues. -/
-theorem reqs_of_writes {ds : List (String × DeclaredV)} {e : Ty} :
-    {effs : List (Sender × EffectV e)} → {n : Nat} → {ps : List (Pending e)} →
-    Tazuna.Smt.Forall2 (Writes ds) (effs.zipIdx n) ps → reqsOf effs = effs ∧ queuedOf effs = []
-  | [], _, _, _ => ⟨rfl, rfl⟩
-  | (snd, eff) :: effs, n, p :: ps, ⟨⟨r, _, he, _⟩, hs⟩ => by
-    simp only at he
-    subst he
-    obtain ⟨h1, h2⟩ := reqs_of_writes (n := n + 1) hs
-    exact ⟨by simp [reqsOf, EffectV.isRequest] at h1 ⊢; exact h1, by simp [queuedOf, EffectV.isRequest] at h2 ⊢; exact h2⟩
-
 end Step
 
 end Tazuna.Ir
@@ -425,10 +414,6 @@ end
 
 section
 variable {L : Layout} {M : Model} {e : Ty}
-
-theorem deq_fresh (a b : (Ty.dsl .fresh []).den) : Ty.deq (.dsl .fresh []) a b = true ↔ a = b := by
-  change @BEq.beq Nat _ a b = true ↔ a = b
-  exact beq_iff_eq
 
 theorem zipIdx_snd {α : Type} : (l : List α) → (n : Nat) → (l.zipIdx n).map (·.2) = List.range' n l.length
   | [], _ => rfl

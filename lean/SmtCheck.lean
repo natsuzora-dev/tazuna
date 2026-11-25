@@ -595,9 +595,13 @@ def evMCase (solver : Solver) (name : String) (goal : List InstCheck → List Te
       | _, _ => fail "the model does not decode"
     | a => fail s!"{repr a}"
 
+/-- A goal that steers the model: every occupied instance keeps its invariants. -/
+def instancesKeep (checks : List InstCheck) : Term :=
+  allT (checks.map fun c => .or (.not c.occupied) (allT (c.rules.map (·.2))))
+
 def evMCases : List (String × (List InstCheck → List Term) × Bool) :=
-  [ ("event with a machine keeps the invariants", (fun cs => [.var 9, instOkT cs]), false),
-    ("event with a machine breaks an instance invariant", (fun cs => [.var 9, .not (instOkT cs)]), true),
+  [ ("event with a machine keeps the invariants", (fun cs => [.var 9, instancesKeep cs]), false),
+    ("event with a machine breaks an instance invariant", (fun cs => [.var 9, .not (instancesKeep cs)]), true),
     ("event with a machine breaks the service invariant", (fun _ => [.not (.var 9)]), false) ]
 
 /-- A clock line on the event service, which has no machine and no pending shape, for `clock_step`: v0..v3 the state,
@@ -1493,8 +1497,6 @@ def invariantCheck (solver : Solver) : IO Bool := do
         IO.println s!"smt-check: machine invariants: read {read}, the step's {step}"; ok := false
       if inSlots == step then
         IO.println "smt-check: machine invariants: slot order passes the comparison"; ok := false
-      if (instOkT checks).denote M != .bool false then
-        IO.println "smt-check: machine invariants: instOkT holds with broken invariants"; ok := false
       return ok
     | a => IO.println s!"smt-check: machine invariants: {repr a}"; return false
 

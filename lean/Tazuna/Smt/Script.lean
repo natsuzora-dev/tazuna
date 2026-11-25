@@ -74,10 +74,6 @@ inductive Answer where
   | unknown (why : String)
 deriving Repr
 
-def Answer.value? : Answer → Nat → Option Val
-  | .sat vs, n => vs.lookup n
-  | _, _ => none
-
 /-- Reads the solver's output. -/
 def Answer.parse (text : String) : Answer :=
   match lex text with

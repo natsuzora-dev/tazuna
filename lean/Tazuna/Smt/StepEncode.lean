@@ -137,9 +137,6 @@ theorem brokenIn_nil (rules : List (Term × Term)) :
     simp only [brokenIn, List.filterMap_cons, List.map_cons, List.all_cons, Bool.and_eq_true] at ih ⊢
     split <;> simp_all
 
-theorem up_id {t : Ty} (h : t.isData = true) (e : t.den0 = (Ty.semWith Dsl.val t).1) (x : t.den0) :
-    Ty.up t h x = cast e x := rfl
-
 /-- The callers' test: an equality term per listed caller, any of which holds when the caller is listed. -/
 theorem callers_any {c : Ty} (hc : c.isData = true) {caller : c.den0} {cc : Code c}
     (hcc : Smt.Rel M L c (Ty.up c hc caller) cc) : (callers : List c.den0) → (ks : List Term) →
@@ -334,15 +331,12 @@ include hd
 
 theorem EventData.apply : (Ty.fn [v.records, v.event] v.records).isData = true := by
   simp [Ty.isData, Ty.isDatas, hd.records, hd.event]
-theorem EventData.applyArgs : (Ty.tuple [v.records, v.event]).isData = true := by
-  simp [Ty.isData, Ty.isDatas, hd.records, hd.event]
 theorem EventData.wrap : (Ty.fn [(v.subscribes.get i).event] v.event).isData = true := by
   simp only [Ty.isData, Ty.isDatas, hd.value, hd.event, Bool.and_self]
 theorem EventData.wrapArgs : (Ty.tuple [(v.subscribes.get i).event]).isData = true := by
   simp only [Ty.isData, Ty.isDatas, hd.value, Bool.and_self]
 theorem EventData.invariants : (Ty.fn [v.records] Ty.rules).isData = true := by
   simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.records]
-theorem EventData.invArgs : (Ty.tuple [v.records]).isData = true := by simp [Ty.isData, Ty.isDatas, hd.records]
 
 end
 
