@@ -32,24 +32,6 @@ theorem comparabless_of_plainss : (vs : List (List Ty)) → Ty.plainss vs = true
 end
 
 mutual
-theorem wire_of_plain : (t : Ty) → t.plain = true → t.wire = true
-  | .int, _ | .date, _ | .str, _ | .id, _ => rfl
-  | .tuple ts, h => wires_of_plains ts h
-  | .adt _ _ vs, h => wiress_of_plainss vs h
-  | .list _, h | .bag _, h | .table .., h | .fn .., h | .param _, h | .dsl .., h => by simp [Ty.plain] at h
-theorem wires_of_plains : (ts : List Ty) → Ty.plains ts = true → Ty.wires ts = true
-  | [], _ => rfl
-  | t :: ts, h => by
-    simp only [Ty.plains, Bool.and_eq_true] at h
-    simp [Ty.wires, wire_of_plain t h.1, wires_of_plains ts h.2]
-theorem wiress_of_plainss : (vs : List (List Ty)) → Ty.plainss vs = true → Ty.wiress vs = true
-  | [], _ => rfl
-  | ts :: vs, h => by
-    simp only [Ty.plainss, Bool.and_eq_true] at h
-    simp [Ty.wiress, wires_of_plains ts h.1, wiress_of_plainss vs h.2]
-end
-
-mutual
 theorem comparable_of_embeddable : (t : Ty) → t.embeddable = true → t.comparable = true
   | .int, _ | .date, _ | .str, _ | .id, _ => rfl
   | .dsl k _, h => h
@@ -99,8 +81,7 @@ theorem diamond_confluent (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.se
       Diamond.Agree Step.Same r (Step.settle c.T fuel a)) ∧
     (∀ fuel (s : State v) {r}, Diamond.Runs (Step.timerSys v) fuel (s, []) r →
       Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1))) :=
-  ⟨fun fuel a ha _ hr => Step.cascade_agrees c.T (c.equivariant v hv)
-      (fun m hm => wire_of_plain _ (Ty.plain_of_orderable _ ((c.checked v hv).keys m hm).1)) hpairs fuel a ha hr,
+  ⟨fun fuel a ha _ hr => Step.cascade_agrees c.T (c.equivariant v hv) hpairs fuel a ha hr,
     fun fuel s _ hr => Step.timers_agree htimers fuel s hr⟩
 
 end Tazuna.Smt

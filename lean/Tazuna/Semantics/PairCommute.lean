@@ -210,12 +210,12 @@ theorem commutes_of_pairs (hv : v.Equivariant)
 /-- Where every two waiting own effects of a step in progress whose names are below its counter commute in the
 canonical sense, every order of the own cascade ends as `settle` does, up to renaming and reading collections as
 multisets, or both fault. -/
-theorem cascade_agrees (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire = true)
+theorem cascade_agrees (hv : v.Equivariant)
     (hP : ∀ a : Acc v, Supp a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
       PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j])
     (fuel : Nat) (a : Acc v) (ha : Supp a) {r : Except Fault (Acc v)} (hr : Diamond.Runs (ownSys T v) fuel a r) :
     Diamond.Agree Same r (settle T fuel a) :=
-  settle_agrees T Diamond.Closure.equiv (ownSys_simulates T hv) (commutes_of_pairs T hv hP) (ownSys_preserved T hv hkw)
+  settle_agrees T Diamond.Closure.equiv (ownSys_simulates T hv) (commutes_of_pairs T hv hP) (ownSys_preserved T hv)
     fuel a ha hr
 
 end Step

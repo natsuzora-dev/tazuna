@@ -42,34 +42,41 @@ theorem Multi.self_of {α β : Type} {r : α → β → Prop} {s : α → α →
 mutual
 /-- Stored data that relates to anything under the renaming keeping the counters below `n` relates to itself under
 every renaming that keeps them. -/
-theorem Ty.self_of_below (hP : P.Fixes n) : (t : Ty) → t.wire = true → {x y : t.den0} → Ty.rel0 (PBij.below n) t x y →
-    Ty.rel0 P t x x
+theorem Ty.self_of_below (hP : P.Fixes n) : (t : Ty) → t.comparable = true → {x y : t.den0} →
+    Ty.rel0 (PBij.below n) t x y → Ty.rel0 P t x x
   | .int, _, _, _, _ | .str, _, _, _, _ | .date, _, _, _, _ => rfl
   | .param _, _, _, _, _ => trivial
   | .list t, hw, _, _, h => forall2_self_of (fun _ _ => Ty.self_of_below hP t hw) h
   | .bag t, hw, _, _, h => Multi.self_of (fun _ _ => Ty.self_of_below hP t hw) h
   | .table k v, hw, _, _, h => by
-    simp only [Ty.wire, Bool.and_eq_true] at hw
+    simp only [Ty.comparable, Bool.and_eq_true] at hw
     exact Multi.self_of (fun _ _ hab => ⟨Ty.self_of_below hP k hw.1 hab.1, Ty.self_of_below hP v hw.2 hab.2⟩) h
   | .tuple ts, hw, _, _, h => Ty.selfs_of_below hP ts hw h
   | .adt _ _ vs, hw, _, _, h => Ty.selfAlts_of_below hP vs hw h
   | .id, _, _, _, h => IdV.self_of_below h hP
-  | .fn .., hw, _, _, _ | .dsl .., hw, _, _, _ => by simp [Ty.wire] at hw
-theorem Ty.selfs_of_below (hP : P.Fixes n) : (ts : List Ty) → Ty.wires ts = true → {x y : (Ty.semsWith Dsl.base ts).1} →
+  | .dsl k _, hw, _, _, h => by
+    simp only [Ty.comparable, beq_iff_eq] at hw
+    subst hw
+    obtain ⟨rfl, hc⟩ := h
+    exact hP _ hc
+  | .fn .., hw, _, _, _ => by simp [Ty.comparable] at hw
+theorem Ty.selfs_of_below (hP : P.Fixes n) : (ts : List Ty) → Ty.comparables ts = true →
+    {x y : (Ty.semsWith Dsl.base ts).1} →
     Ty.relsWith Dsl.base (Dsl.rel0 (PBij.below n)) (PBij.below n) ts x y → Ty.relsWith Dsl.base (Dsl.rel0 P) P ts x x
   | [], _, _, _, _ => trivial
   | t :: ts, hw, _, _, ⟨h, hs⟩ => by
-    simp only [Ty.wires, Bool.and_eq_true] at hw
+    simp only [Ty.comparables, Bool.and_eq_true] at hw
     exact ⟨Ty.self_of_below hP t hw.1 h, Ty.selfs_of_below hP ts hw.2 hs⟩
-theorem Ty.selfAlts_of_below (hP : P.Fixes n) : (vs : List (List Ty)) → Ty.wiress vs = true → {x y : (Ty.semAltsWith Dsl.base vs).1} →
+theorem Ty.selfAlts_of_below (hP : P.Fixes n) : (vs : List (List Ty)) → Ty.comparabless vs = true →
+    {x y : (Ty.semAltsWith Dsl.base vs).1} →
     Ty.relAltsWith Dsl.base (Dsl.rel0 (PBij.below n)) (PBij.below n) vs x y →
     Ty.relAltsWith Dsl.base (Dsl.rel0 P) P vs x x
   | [], _, x, _, _ => nomatch x
   | fs :: _, hw, .inl _, .inl _, h => by
-    simp only [Ty.wiress, Bool.and_eq_true] at hw
+    simp only [Ty.comparabless, Bool.and_eq_true] at hw
     exact Ty.selfs_of_below hP fs hw.1 h
   | _ :: vs, hw, .inr _, .inr _, h => by
-    simp only [Ty.wiress, Bool.and_eq_true] at hw
+    simp only [Ty.comparabless, Bool.and_eq_true] at hw
     exact Ty.selfAlts_of_below hP vs hw.2 h
   | _ :: _, _, .inl _, .inr _, h | _ :: _, _, .inr _, .inl _, h => h.elim
 end
@@ -134,7 +141,7 @@ variable {r e : Ty} {n : Nat}
 
 /-- Every effect a machine starts on an event relates to itself under each renaming that keeps the counters below `n`,
 when the records, the event and the instances do. -/
-theorem machineStep_self {m : MachineV r e} (hm : m.Equi) (hkw : m.key.wire = true) {records : r.den0}
+theorem machineStep_self {m : MachineV r e} (hm : m.Equi) {records : r.den0}
     (hrec : ∀ P : PBij, P.Fixes n → Ty.rel0 P r records records) (now : Int) {ev : e.den0}
     (hev : ∀ P : PBij, P.Fixes n → Ty.rel0 P e ev ev) {insts : List (Instance m)}
     (hl : ∀ P : PBij, P.Fixes n → Insts.Rel P insts insts) :
@@ -148,18 +155,18 @@ theorem machineStep_self {m : MachineV r e} (hm : m.Equi) (hkw : m.key.wire = tr
       (m.instances.fn (records, ())) :=
     (hm.self _).instances _ _ ⟨hrec _ (PBij.below_fixes n), trivial⟩
   obtain ⟨k', -, hkk⟩ := hb.mem_left hk0
-  have hks : Ty.rel0 P m.key k k := Ty.self_of_below hP m.key hkw hkk
+  have hks : Ty.rel0 P m.key k k := Ty.self_of_below hP m.key hm.key hkk
   exact forall2_self (reactKey_rel hm (hl P hP) (hrec P hP) now (hev P hP) hks).2 x hx
 
 theorem reactMachines_self {records : r.den0} (hrec : ∀ P : PBij, P.Fixes n → Ty.rel0 P r records records) (now : Int)
     {ev : e.den0} (hev : ∀ P : PBij, P.Fixes n → Ty.rel0 P e ev ev) : {ms : List (MachineV r e)} →
-    (∀ m ∈ ms, m.Equi ∧ m.key.wire = true) → (l : Machines ms) → (∀ P : PBij, P.Fixes n → Machines.Rel P l l) →
+    (∀ m ∈ ms, m.Equi) → (l : Machines ms) → (∀ P : PBij, P.Fixes n → Machines.Rel P l l) →
     ∀ x ∈ (reactMachines T records now ev l).2, ∀ P : PBij, P.Fixes n → Started.Rel P x x
   | [], _, .nil, _, x, hx => by simp [reactMachines] at hx
   | _ :: _, hms, .cons insts rest, hl, x, hx => by
     simp only [reactMachines, List.mem_append] at hx
     rcases hx with hx | hx
-    · exact machineStep_self T (hms _ List.mem_cons_self).1 (hms _ List.mem_cons_self).2 hrec now hev
+    · exact machineStep_self T (hms _ List.mem_cons_self) hrec now hev
         (fun P hP => (hl P hP).1) x hx
     · exact reactMachines_self hrec now hev (fun m h => hms m (List.mem_cons_of_mem _ h)) rest
         (fun P hP => (hl P hP).2) x hx
@@ -170,7 +177,7 @@ variable {v : ServiceV} {n : Nat}
 
 /-- Every effect an event starts relates to itself under each renaming that keeps the counters below `n`, when the
 records, the instances and the event do. -/
-theorem react_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire = true) {s : State v}
+theorem react_self (hv : v.Equivariant) {s : State v}
     (hs : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.records s.records s.records ∧ Machines.Rel P s.machines s.machines)
     {ev : v.event.den0} (hev : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.event ev ev) :
     ∀ x ∈ (react T s ev).2, ∀ P : PBij, P.Fixes n → Started.Rel P x x := by
@@ -179,7 +186,7 @@ theorem react_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire 
   intro x hx P hP
   simp only [react, List.mem_append] at hx
   rcases hx with hx | hx
-  · exact reactMachines_self T hrec s.now hev (fun m hm => ⟨hv.machines m hm, hkw m hm⟩) s.machines
+  · exact reactMachines_self T hrec s.now hev hv.machines s.machines
       (fun P hP => (hs P hP).2) x hx P hP
   · simp only [List.mem_flatMap, List.mem_map] at hx
     obtain ⟨y, hy, eff, he, rfl⟩ := hx
@@ -203,7 +210,7 @@ theorem lifted_self {a b : Acc v} {P : PBij} {W : PBij} (h : Lifted ⟨P, W⟩ a
     subst hc
     exact ⟨wire, hb⟩
 
-theorem applyEvents_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire = true) (n : Nat) :
+theorem applyEvents_self (hv : v.Equivariant) (n : Nat) :
     (evs : List v.event.den0) → (a : Acc v) → SelfAt n a → (∀ ev ∈ evs, ∀ P : PBij, P.Fixes n → Ty.rel0 P v.event ev ev) →
     ∀ b, applyEvents T a evs = .ok b → SelfAt n b ∧ ∀ x ∈ b.own, x ∈ a.own ∨ OwnAt n x
   | [], a, ha, _, b, h => by
@@ -232,10 +239,10 @@ theorem applyEvents_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key
         rcases start_own_mem _ _ hs x hx with hx | ⟨hr, snd, hx⟩
         · exact .inl hx
         · refine .inr ⟨hr, fun P hP => ?_⟩
-          have hS := react_self T hv hkw (s := a.state) (fun P hP => by
+          have hS := react_self T hv (s := a.state) (fun P hP => by
             obtain ⟨W, hA⟩ := ha P hP; exact ⟨hA.1.1, hA.1.2.1⟩) hev1 _ hx P hP
           exact hS.2
-      obtain ⟨hb, hbo⟩ := applyEvents_self hv hkw n evs a1 h1 (fun e he => hev e (List.mem_cons_of_mem _ he)) b h
+      obtain ⟨hb, hbo⟩ := applyEvents_self hv n evs a1 h1 (fun e he => hev e (List.mem_cons_of_mem _ he)) b h
       refine ⟨hb, fun x hx => ?_⟩
       rcases hbo x hx with hx | hx
       · exact hown1 x hx
@@ -249,7 +256,7 @@ theorem SelfAt.fresh {n k : Nat} {a : Acc v} (h : SelfAt n a) :
   obtain ⟨W, hst, hevs, hout, ho, ho', hown⟩ := h P hP
   exact ⟨W, hst, hevs, hout, ho, ho', hown⟩
 
-theorem runCommand_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire = true) {a : Acc v}
+theorem runCommand_self (hv : v.Equivariant) {a : Acc v}
     (ha : SelfAt (a.state.fresh + 1) a) {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands)
     {c : v.caller.den0} (hc : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.caller c c) {i : x.input.den0}
     (hi : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P x.input i i)
@@ -282,7 +289,7 @@ theorem runCommand_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.
         simp only [h3] at h
         have hevs : ∀ ev ∈ (show List v.event.den0 from evs), ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.event ev ev :=
           fun ev hev P hP => forall2_self (hdec P hP).1 ev hev
-        obtain ⟨hs3, ho3⟩ := applyEvents_self T hv hkw _ evs _ ha1 hevs a3 h3
+        obtain ⟨hs3, ho3⟩ := applyEvents_self T hv _ evs _ ha1 hevs a3 h3
         split at h
         · cases h
         · next r heq =>
@@ -292,7 +299,7 @@ theorem runCommand_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.
           simp only at h
           have hans : ∀ ev ∈ (show List v.event.den0 from f.fn (okNil, ())), ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.event ev ev :=
             fun ev hev P hP => forall2_self (hf P hP (okNil, ()) (okNil, ()) ⟨okNil_rel, trivial⟩) ev hev
-          obtain ⟨hs4, ho4⟩ := applyEvents_self T hv hkw _ _ _ hs3 hans b h
+          obtain ⟨hs4, ho4⟩ := applyEvents_self T hv _ _ _ hs3 hans b h
           refine ⟨hs4, fun y hy => ?_⟩
           rcases ho4 y hy with hy | hy
           · exact ho3 y hy
@@ -304,9 +311,9 @@ theorem runCommand_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.
         fun ev hev P hP => by
           obtain ⟨hj, -⟩ := hdec P hP
           exact forall2_self (hf P hP (.inr (.inl (j, ())), ()) (.inr (.inl (j, ())), ()) ⟨⟨hj, trivial⟩, trivial⟩) ev hev
-      exact applyEvents_self T hv hkw _ _ _ ha1 hans b h
+      exact applyEvents_self T hv _ _ _ ha1 hans b h
 
-theorem runQuery_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire = true) {a : Acc v}
+theorem runQuery_self (hv : v.Equivariant) {a : Acc v}
     (ha : SelfAt (a.state.fresh + 1) a) {x : QueryV v.records v.caller} (hx : x ∈ v.queries)
     {c : v.caller.den0} (hc : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.caller c c) {i : x.input.den0}
     (hi : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P x.input i i)
@@ -326,7 +333,7 @@ theorem runQuery_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wi
       exact forall2_self (hf P hP (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())
         (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ()) ⟨((hv.self P).queries x hx).resolve _ _
         ⟨⟨hA.1.1, hi P hP, hc P hP, rfl, trivial⟩, trivial⟩, trivial⟩) ev hev
-    exact applyEvents_self T hv hkw _ _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ha.fresh hans b h
+    exact applyEvents_self T hv _ _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ha.fresh hans b h
 
 theorem start_fresh : (effs : List (Sender × EffectV v.event)) → (a : Acc v) → {b : Acc v} → start a effs = .ok b →
     b.state.fresh = a.state.fresh
@@ -446,7 +453,7 @@ theorem EffectV.rel_query_inv {P : PBij} {e : Ty} {n : String} {c i o : Ty} {a a
     Ty.rel0 P c a a' ∧ Ty.rel0 P i x x' ∧ Fun.Rel P f f' := by
   cases h; exact ⟨‹_›, ‹_›, ‹_›⟩
 
-theorem runOwn_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire = true) {a : Acc v}
+theorem runOwn_self (hv : v.Equivariant) {a : Acc v}
     (ha : SelfAt (a.state.fresh + 1) a) {e : EffectV v.event}
     (he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → EffectV.Rel P e e) :
     ∀ b, runOwn T a e = .ok b → SelfAt (a.state.fresh + 1) b ∧ ∀ y ∈ b.own, y ∈ a.own ∨ OwnAt (a.state.fresh + 1) y := by
@@ -470,7 +477,7 @@ theorem runOwn_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire
         subst hcp hi hj
         intro h
         change runCommand T a x _ _ _ = _ at h
-        exact runCommand_self T hv hkw ha hmem (fun P hP => (EffectV.rel_command_inv (he P hP)).1)
+        exact runCommand_self T hv ha hmem (fun P hP => (EffectV.rel_command_inv (he P hP)).1)
           (fun P hP => (EffectV.rel_command_inv (he P hP)).2.1) (fun P hP => (EffectV.rel_command_inv (he P hP)).2.2) b h
   | query name c i o caller value onAnswer =>
     dsimp only [runOwn] at h
@@ -489,7 +496,7 @@ theorem runOwn_self (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire
         subst hcp hi ho
         intro h
         change runQuery T a x _ _ _ = _ at h
-        exact runQuery_self T hv hkw ha hmem (fun P hP => (EffectV.rel_query_inv (he P hP)).1)
+        exact runQuery_self T hv ha hmem (fun P hP => (EffectV.rel_query_inv (he P hP)).1)
           (fun P hP => (EffectV.rel_query_inv (he P hP)).2.1) (fun P hP => (EffectV.rel_query_inv (he P hP)).2.2) b h
 
 /-- A step in progress whose names are all below its counter: every renaming that keeps those counters relates its
@@ -522,7 +529,7 @@ theorem mem_eraseIdx {α : Type} {x : α} : {l : List α} → {i : Nat} → x �
     · exact List.mem_cons_of_mem _ (mem_eraseIdx h)
 
 /-- The own cascade keeps every name below the counter. -/
-theorem ownSys_preserved (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key.wire = true) :
+theorem ownSys_preserved (hv : v.Equivariant) :
     Diamond.Preserved (ownSys T v) Supp := by
   intro a i b ha hi hb
   simp only [ownSys, List.getElem?_eq_getElem hi] at hb
@@ -531,7 +538,7 @@ theorem ownSys_preserved (hv : v.Equivariant) (hkw : ∀ m ∈ v.machines, m.key
     (SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (mem_eraseIdx hx)).mono (Nat.le_succ _)
   have he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → EffectV.Rel P a.own[i] a.own[i] :=
     fun P hP => (ha.2 _ hmem).2 P (hP.mono (Nat.le_succ _))
-  obtain ⟨hs, ho⟩ := runOwn_self T hv hkw (a := { a with own := a.own.eraseIdx i }) ha' he b hb
+  obtain ⟨hs, ho⟩ := runOwn_self T hv (a := { a with own := a.own.eraseIdx i }) ha' he b hb
   have hfr : b.state.fresh = a.state.fresh + 1 := runOwn_fresh T (a := { a with own := a.own.eraseIdx i }) (ha.2 _ hmem).1 hb
   rw [Supp, hfr]
   refine ⟨hs.drop, fun y hy => ?_⟩
