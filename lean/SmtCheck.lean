@@ -1,10 +1,4 @@
-import Tazuna.Smt.Bounds
-import Tazuna.Smt.EventStep
-import Tazuna.Smt.Reactions
-import Tazuna.Smt.Answer
-import Tazuna.Smt.Cascade
-import Tazuna.Smt.Clock
-import Tazuna.Smt.Order
+import Tazuna.Smt.Step
 import Tazuna.Smt.Solver
 
 /-! Runs the solver on printed scripts and reads its answers back: the theorems cover printing and reading our own
@@ -255,7 +249,7 @@ def freshScript (step : Nat) (index : Int) : Except String (Layout × Script) :=
   | .error r, _, _ => throw s!"no encoding: {repr r}"
   | _, _, _ => throw "no sort"
 
-/-! A query step on a small service, for `query_step`: the records are a table of Int to Int, the query `get` takes a
+/-! A query step on a small service, for `query_encode`: the records are a table of Int to Int, the query `get` takes a
 key from the caller "alice", accepts a positive key, and answers `table.get(ctx.records, key)`. Each case asks the
 solver for a state and input whose outcome terms meet a goal, decodes them, runs `step` on what they decode to, and
 compares its outcome with what the outcome terms denote in the model. Every code is the service's own: the encoding
@@ -350,7 +344,7 @@ def queryCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
       let o : QueryOut := ⟨.var 6, [(.var 8, .var 7)], .var 9⟩
       let i : Fin querySvc.queries.length := ⟨0, by decide⟩
       match (stateAt 10).decode M L (v := querySvc) rfl prelude [],
-          (SymInput.query i (.var 4) (.var 5)).decode M L (v := querySvc) rfl (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl)
+          (SymInput.query i (.var 4) (.var 5)).decode M L (v := querySvc) [] rfl (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl)
             (fun j => j.elim0) with
       | some s, some x =>
         let r := step prelude querySvc s x
@@ -457,7 +451,7 @@ def eventCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
       let M := modelOf vs
       let L := eventLayout
       match (stateAt 9).decode M L (v := eventSvc) rfl prelude [],
-          (SymInput.event eventI (.var 4)).decode M L (v := eventSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+          (SymInput.event eventI (.var 4)).decode M L (v := eventSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
             (fun | ⟨0, _⟩ => rfl) with
       | some s, some x =>
         let r := step prelude eventSvc s x
@@ -556,7 +550,7 @@ def evMCase (solver : Solver) (name : String) (goal : List InstCheck → List Te
       let M := modelOf vs
       let L := evMLayout
       match (SymState.vars 0 1).decode M L (v := evMSvc) rfl prelude [],
-          (SymInput.event evMI (.var 6)).decode M L (v := evMSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+          (SymInput.event evMI (.var 6)).decode M L (v := evMSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
             (fun | ⟨0, _⟩ => rfl) with
       | some s, some x =>
         let names := brokenIn M [(.var 10, .var 9)] ++ checksBroken L prelude M evMSvc.machines checks
@@ -639,7 +633,7 @@ def clockCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
       let M := modelOf vs
       let L := eventLayout
       match (stateAt 9).decode M L (v := eventSvc) rfl prelude [],
-          (SymInput.clock (.var 4)).decode M L (v := eventSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+          (SymInput.clock (.var 4)).decode M L (v := eventSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
             (fun | ⟨0, _⟩ => rfl),
           decodePending L ([] : List (PendingShape eventSvc.event)) ((Term.var 10).denote M), vs.lookup 11 with
       | some s, some x@(.clock time), some pend', some (.int n') =>
@@ -743,7 +737,7 @@ def commandCase (solver : Solver) (name : String) (goal : List Term) : IO Bool :
       let L := commandLayout
       let i : Fin commandSvc.commands.length := ⟨0, by decide⟩
       match (stateAt 17).decode M L (v := commandSvc) rfl prelude [],
-          (SymInput.command i (.var 4) (.var 5)).decode M L (v := commandSvc) rfl (fun | ⟨0, _⟩ => rfl)
+          (SymInput.command i (.var 4) (.var 5)).decode M L (v := commandSvc) [] rfl (fun | ⟨0, _⟩ => rfl)
             (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl) with
       | some s, some x =>
         let r := step prelude commandSvc s x
@@ -1169,7 +1163,7 @@ def boundAgrees (vs : List (Nat × Val)) (reached : Bool) : Bool :=
   let M := modelOf vs
   let L := boundLayout
   match (stateAt 7).decode M L (v := boundSvc) rfl prelude [],
-      (SymInput.event boundI (.var 4)).decode M L (v := boundSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+      (SymInput.event boundI (.var 4)).decode M L (v := boundSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
         (fun | ⟨0, _⟩ => rfl) with
   | some s, some x =>
     let r := step prelude boundSvc s x
@@ -1875,7 +1869,7 @@ def writeCheck (solver : Solver) : IO Bool := do
       | .sat vs =>
         let M := modelOf vs
         match (SymState.vars 0 1).decode M L (v := writeSvc) rfl prelude writeShapes,
-            (SymInput.event writeI (.var 6)).decode M L (v := writeSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+            (SymInput.event writeI (.var 6)).decode M L (v := writeSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
               (fun | ⟨0, _⟩ => rfl),
             decodePending L writeShapes ((Term.var 7).denote M), (vs.lookup 8) with
         | some s, some x, some pend', some (.int n') =>
@@ -2016,7 +2010,7 @@ def fanCheck (solver : Solver) : IO Bool := do
         let M := modelOf vs
         let L := fanLayout 5
         match (SymState.vars 0 1).decode M L (v := fanSvc) rfl prelude fanShapes,
-            (SymInput.event fanI (.var 6)).decode M L (v := fanSvc) rfl (fun j => j.elim0) (fun j => j.elim0)
+            (SymInput.event fanI (.var 6)).decode M L (v := fanSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
               (fun | ⟨0, _⟩ => rfl),
             decodePending L fanShapes ((Term.var 7).denote M), (vs.lookup 8) with
         | some s, some x, some pend', some (.int n') =>

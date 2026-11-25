@@ -1,77 +1,16 @@
 import Tazuna.Smt.Kept
 import Tazuna.Smt.State
 
-/-! T2, the step encoding: for each step kind, terms for the next state and the outcome, computed from the symbolic
-state and input by the codes of the service's functions, with a condition that holds when no collection outgrew its
-slots. `query_step` proves the query kind: in every model where the condition holds and whose state and input terms
-denote a state and an input, the outcome terms denote the outcome `step` computes, and the state stays. The
-transition is a function of the state and input, so one statement gives both directions: a model's decoded state
-and input step to the outcome its terms denote (a decoded counterexample is a real step), and every concrete state
-and input are some model's (`decode_embedState`), so a script with no model has no step that breaks it.
-
-The codes of a definition's functions are the codes of the sources its structure value keeps (`QueryCode.of` and
-the like), so each theorem rests on `Fun.code_rel` (T1 at those sources), not on an assumed relation. -/
+/-! What the step kinds share before they differ: a request's admission (listed callers, `accepts`, the context), the
+rules' terms, and the codes of the commands' and events' functions. The codes of a definition's functions are the
+codes of the sources its structure value keeps (`CommandCode.of` and the like), so each theorem rests on `Fun.code_rel`
+(T1 at those sources), not on an assumed relation. -/
 
 namespace Tazuna.Smt
 
 variable {T : List Ir.TypeDecl}
 
 open Tazuna.Ir
-
-/-- The codes of a query's functions. -/
-structure QueryCode {r c : Ty} (q : QueryV r c) where
-  accepts : Code (Ty.fn [q.input] Ty.rules)
-  resolve : Code (Ty.fn [Ty.ctx r q.input c] q.output)
-
-/-- A query's types are data, as the `query` built-in demands of its type arguments. -/
-structure QueryData {r c : Ty} (q : QueryV r c) : Prop where
-  records : r.isData = true
-  caller : c.isData = true
-  input : q.input.isData = true
-  output : q.output.isData = true
-
-section
-variable {r c : Ty} {q : QueryV r c} (hd : QueryData q)
-include hd
-
-theorem QueryData.accepts : (Ty.fn [q.input] Ty.rules).isData = true := by
-  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.input]
-theorem QueryData.args : (Ty.tuple [q.input]).isData = true := by simp [Ty.isData, Ty.isDatas, hd.input]
-theorem QueryData.ctx : (Ty.ctx r q.input c).isData = true := by
-  simp [Ty.ctx, Ty.isData, Ty.isDatas, Ty.isDatass, hd.records, hd.input, hd.caller]
-theorem QueryData.resolve : (Ty.fn [Ty.ctx r q.input c] q.output).isData = true := by
-  simp [Ty.isData, Ty.isDatas, hd.ctx, hd.output]
-theorem QueryData.ctxArgs : (Ty.tuple [Ty.ctx r q.input c]).isData = true := by
-  simp [Ty.isData, Ty.isDatas, hd.ctx]
-
-end
-
-/-- The codes relate to the query's functions in the model. -/
-structure QueryCode.Rel (M : Model) (L : Layout) {r c : Ty} {q : QueryV r c} (hd : QueryData q) (qc : QueryCode q) :
-    Prop where
-  accepts : Smt.Rel M L _ (Ty.up _ hd.accepts q.accepts.fn) qc.accepts
-  resolve : Smt.Rel M L _ (Ty.up _ hd.resolve q.resolve.fn) qc.resolve
-
-/-- A query's codes, from the sources it keeps, with their condition. -/
-def QueryCode.of (L : Layout) {r c : Ty} (q : QueryV r c) : Except Refusal (QueryCode q × Term) := do
-  let (a, c1) ← q.accepts.code L
-  let (x, c2) ← q.resolve.code L
-  pure (⟨a, x⟩, andT c1 c2)
-
-theorem QueryCode.rel_of {M : Model} {L : Layout} {r c : Ty} {q : QueryV r c} (hd : QueryData q) {qc : QueryCode q}
-    {cq : Term} (h : QueryCode.of L q = .ok (qc, cq)) (hc : Holds M cq) : qc.Rel M L hd := by
-  obtain ⟨⟨a, c1⟩, h1, h⟩ := bind_ok.1 h
-  obtain ⟨⟨x, c2⟩, h2, h⟩ := bind_ok.1 h
-  cases pure_ok.1 h
-  have hc := (holds_andT _ _).1 hc
-  exact ⟨q.accepts.code_fn _ h1 hc.1, q.resolve.code_fn _ h2 hc.2⟩
-
-/-- The terms of a query step's outcome: whether the caller is one the query lists, each `accepts` rule's name and
-whether it holds, and the output. -/
-structure QueryOut where
-  callerOk : Term
-  rules : List (Term × Term)
-  output : Term
 
 section
 variable (L : Layout)
@@ -108,35 +47,11 @@ def encodeAdmit {r i c : Ty} (accepts : Code (Ty.fn [i] Ty.rules)) (callers : Li
   let cx ← need "a context that has no term" (Code.ofTerm? (Ty.ctx r i c) (Term.share ctx))
   pure (⟨anyT eqs, rules, cx⟩, c1)
 
-/-- A query step's outcome terms and its condition, from the terms of the records, the time, the fresh counter, the
-caller and the input, and the constants of the listed callers. The condition asks only for what the step computes:
-the rules when the caller is listed, the output when the rules hold too. -/
-def encodeQuery {r c : Ty} (q : QueryV r c) (qc : QueryCode q) (callers : List Term)
-    (records now fresh caller input : Term) : Except Refusal (QueryOut × Term) := do
-  let (a, c1) ← encodeAdmit L qc.accepts callers records now fresh caller input
-  let (o, c2) ← qc.resolve (a.ctx, ())
-  let ot ← need "an output that has no term" (Code.term? q.output o)
-  pure (⟨a.callerOk, a.rules, ot⟩, .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) c2 tt)) tt)
-
 end
 
 /-- The names of the rules that do not hold in the model. -/
 def brokenIn (M : Model) (rules : List (Term × Term)) : List String :=
   rules.filterMap fun (n, b) => if (b.denote M).toBool then none else some (n.denote M).toStr
-
-/-- What the outcome terms say in the model: Invalid with the reasons, or none for Answered. -/
-def QueryOut.invalid (M : Model) (o : QueryOut) : Option (List String) :=
-  if (o.callerOk.denote M).toBool then
-    match brokenIn M o.rules with
-    | [] => none
-    | n :: ns => some (n :: ns)
-  else some ["callers"]
-
-/-- The outcome terms denote the outcome: the same reasons for Invalid, or an output the output term codes. -/
-def QueryOut.Rel (M : Model) (L : Layout) {output : Ty} (hout : output.isData = true) (o : QueryOut) : Outcome → Prop
-  | .invalid ns => o.invalid M = some ns
-  | .answered ⟨t, y⟩ => o.invalid M = none ∧ ∃ h : t = output, RelV L output (Ty.up _ hout (h ▸ y)) (o.output.denote M)
-  | _ => False
 
 section
 variable {M : Model} {L : Layout}
@@ -303,53 +218,6 @@ theorem admit_rel {v : ServiceV} {i : Ty} (hr : v.records.isData = true) (hi : i
       ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
     rw [← up_ctx hr hi hc hctx] at hctxT
     exact (rel_ofTerm (need_ok.1 h7) _).2 (by rw [Term.denote_share]; exact hctxT)
-
-/-- T2 for a query: wherever the condition holds, the outcome terms denote the outcome of the step from the state
-and input the terms denote, and the state stays. -/
-theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (caller : v.caller.den0)
-    (input : (v.queries.get i).input.den0) (hd : QueryData (v.queries.get i)) {qc : QueryCode (v.queries.get i)}
-    {cq : Term} (hqc : QueryCode.of L _ = .ok (qc, cq)) (hcq : Holds M cq) {ks : List Term} (hks : callerTerms L hd.caller (v.queries.get i).callers = some ks)
-    {records now fresh sc si : Term}
-    (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
-    (hnow : now.denote M = .int s.now) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
-    (hsc : RelV L v.caller (Ty.up _ hd.caller caller) (sc.denote M))
-    (hsi : RelV L (v.queries.get i).input (Ty.up _ hd.input input) (si.denote M))
-    {o : QueryOut} {cond : Term} (henc : encodeQuery L (v.queries.get i) qc ks records now fresh sc si = .ok (o, cond))
-    (hc : Holds M cond) :
-    (step T v s (.query i caller input)).state = s ∧ o.Rel M L hd.output (step T v s (.query i caller input)).outcome := by
-  have hq := QueryCode.rel_of hd hqc hcq
-  obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨out, c2⟩, h8, henc⟩ := bind_ok.1 henc
-  obtain ⟨ot, h9, henc⟩ := bind_ok.1 henc
-  cases pure_ok.1 henc
-  obtain ⟨hok, hbr, hcx⟩ := admit_rel hd.records hd.input hd.caller hd.ctx _ hd.accepts hq.accepts _ hks s caller input
-    hrec hnow hfresh hsc hsi h1
-  simp only [step]
-  refine ⟨by split <;> rfl, ?_⟩
-  simp only [Step.execQuery, Step.admit]
-  by_cases hin : (v.queries.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true
-  · simp only [hin, ite_true]
-    simp only [Holds, Term.denote, hok, hin, Val.toBool, ite_true] at hc
-    have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2))) c2 tt)) := hc
-    rw [holds_andT] at hc'
-    have hbroken := hbr hc'.1
-    cases hb : Step.broken ((v.queries.get i).accepts.fn (input, ())) with
-    | cons n ns =>
-      simp only [QueryOut.Rel, QueryOut.invalid, hok, hin, Val.toBool, ite_true, hbroken, hb]
-    | nil =>
-      rw [hb] at hbroken
-      have hallT : (allT (adm.rules.map (·.2))).denote M = .bool true := by
-        rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil adm.rules).1 hbroken)
-      have hc2 : Holds M c2 := by
-        have := hc'.2; simp only [Holds, Term.denote, hallT, Val.toBool, ite_true] at this; exact this
-      have hres := hq.resolve _ (adm.ctx, ()) (rels1 hd.ctx hd.ctxArgs hcx) out c2 h8 hc2
-      erw [Ty.up_fn _ _ _ hd.ctxArgs hd.output] at hres
-      simp only [QueryOut.Rel, QueryOut.invalid, hok, hin, Val.toBool, ite_true, hbroken]
-      exact ⟨trivial, trivial, (rel_term (need_ok.1 h9) _).1 hres⟩
-  · have hin' : (v.queries.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = false := by simpa using hin
-    simp only [hin', Bool.false_eq_true, ite_false]
-    simp only [QueryOut.Rel, QueryOut.invalid, hok, hin', Val.toBool]
-    rfl
 
 end
 

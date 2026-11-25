@@ -35,6 +35,23 @@ def encodeFinish (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.e
   let (checks, ck) ← encodeInstChecks L T v.machines so.terms.done.tables so.terms.done.records now
   pure (⟨so, pT, rules, checks⟩, andT cs (.ite so.faultT tt (andT cp (andT ci ck))), cx)
 
+/-- The terms of an event step: the event the subscription wraps the value into, what the events loop over it leaves,
+and the step's end. -/
+structure EventOut where
+  event : Term
+  after : EventsOut
+  finish : FinishOut
+
+/-- An event step's terms, its condition and the codes' condition, from the subscription's and the service's codes
+and the terms of the state and the received value. -/
+def encodeEvent (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (dE dP dopt : Nat)
+    {i : Fin v.subscribes.length} (ec : EventCode v i) (records now fresh nextId pending : Term) (xs : List Term)
+    (value : Term) : Except Refusal (EventOut × Term × Term) := do
+  let (et, cw) ← encodeWrap ec value
+  let (o, c) ← encodeEvents L T v shs dE dP dopt ec.apply now [(tt, [et])] records xs nextId (.int 0)
+  let (fo, cf, cx) ← encodeFinish L T P v shs dE dP dopt ec.apply ec.invariants now fresh pending o
+  pure (⟨et, o, fo⟩, andT cw (andT c cf), cx)
+
 end
 
 section
@@ -411,6 +428,44 @@ theorem event_step_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x �
     have hcw := (e1 hce).2 p1
     have hc := (e2 hce hcw).2 p2
     exact ⟨hce, hcw, hc, (e3 hce hcw hc).2 p3⟩
+
+/-- An event step's condition is exact and gives T2: where the codes' conditions hold, it holds exactly when the wrap
+fits at the value, the event's applications fit and the step's end fits, and then the step ends as the end terms
+say. -/
+theorem event_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
+    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
+    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
+    (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
+    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
+    (s : State v) (hinv : Step.Inv P s) (i : Fin v.subscribes.length)
+    (value : (v.subscribes.get i).event.den0) (hd : EventData v i) {ec : EventCode v i} {ce : Term}
+    (hec : EventCode.of L v i = .ok (ec, ce)) (hce : Holds M ce) {records sv now nextIdT fresh pending : Term}
+    (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
+    (hsv : RelV L _ (Ty.up _ hd.value value) (sv.denote M)) (hnow : now.denote M = .int s.now)
+    (hnid : nextIdT.denote M = .int (Int.ofNat s.nextId)) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
+    (hpend : PendingRel L shs (pending.denote M) s.pending)
+    {xs : List Term} (hms : MachinesRel M L T v.machines xs s.machines)
+    {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
+    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
+    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
+    {o : EventOut} {c cx : Term}
+    (henc : encodeEvent L T P v shs dE dP dopt ec records now fresh nextIdT pending xs sv = .ok (o, c, cx))
+    (hcx : Holds M cx) :
+    let ev := (v.subscribes.get i).wrap.fn (value, ())
+    (Holds M c ↔ (v.subscribes.get i).wrap.appFits L.count (value, ()) ∧ eventsFit L.count T s [ev] ∧
+      finishFits L.count T shs (Step.applyEvents T { state := s } [ev])) ∧
+    (Holds M c → Finished M L T hd.records shs o.finish s { state := s } .accepted (step T v s (.event i value))) := by
+  obtain ⟨⟨et, cw⟩, hwr, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨eo, ce'⟩, hev, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨fo, cf, cx'⟩, hf, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  have hx := event_step_exact hP hvx hshs hor hcd hqd hqout s hinv i value hd hec hrec hsv hnow hnid hfresh hpend hms hwr
+    hE hPE hopt hev hf hcx
+  simp only [holds_andT ce, hce, true_and, (eventCode_exact (M := M) hec).1 hce] at hx
+  refine ⟨hx, fun hc => ?_⟩
+  obtain ⟨hcw, hc', hcf⟩ : Holds M cw ∧ Holds M ce' ∧ Holds M cf := by rw [holds_andT, holds_andT] at hc; exact hc
+  exact event_step hP hvx hshs hor hcd hqd s hinv i value hd hec hce hrec hsv hnow hnid hfresh hpend hms hwr hcw hE hPE
+    hopt hev hc' hf hcf hcx
 
 end
 

@@ -9,21 +9,7 @@ import Tazuna.Semantics.PendingInv
 import Tazuna.Semantics.PendingPerm
 import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Fire
-import Tazuna.Smt.Decode
-import Tazuna.Smt.StepEncode
-import Tazuna.Smt.Bounds
-import Tazuna.Smt.EventStep
-import Tazuna.Smt.EventExact
-import Tazuna.Smt.CommandExact
-import Tazuna.Smt.PendingWrite
-import Tazuna.Smt.EventPending
-import Tazuna.Smt.Reactions
-import Tazuna.Smt.Answer
-import Tazuna.Smt.Cascade
-import Tazuna.Smt.Fire
-import Tazuna.Smt.Clock
-import Tazuna.Smt.ClockExact
-import Tazuna.Smt.Order
+import Tazuna.Smt.Step
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
 import Tazuna.Trace.WireThm
@@ -42,5 +28,8 @@ elab "#check_tazuna_axioms" : command => do
     for a in ← liftCoreM (collectAxioms n) do
       unless allowed.contains a do throwError "{n} depends on the axiom {a}"
   if checked == 0 then throwError "no Tazuna declarations found"
+  -- The theorems the engine's answers rest on: a double-backquoted name that no longer exists fails to elaborate.
+  for n in [``Tazuna.Smt.step_encode] do
+    unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms

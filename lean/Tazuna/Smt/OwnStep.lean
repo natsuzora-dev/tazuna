@@ -147,7 +147,7 @@ section
 variable {v : ServiceV}
 
 /-- Whether an own command's internal step fits from `s`: what `ownCommand_exact` says its condition holds for. -/
-def commandFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : CommandV v.records v.event v.caller)
+def ownCommandFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : CommandV v.records v.event v.caller)
     (caller : v.caller.den0) (input : x.input.den0)
     (oa : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) : Prop :=
   let ctx := Step.ctx s s.records caller input
@@ -157,7 +157,7 @@ def commandFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : CommandV
       x.decide.appFits S (ctx, ()) ∧ ownDecidedFits S T { s with fresh := s.fresh + 1 } x ctx oa (x.decide.fn (ctx, ())))
 
 /-- Whether an own query's internal step fits from `s`: what `ownQuery_exact` says its condition holds for. -/
-def queryFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : QueryV v.records v.caller)
+def ownQueryFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : QueryV v.records v.caller)
     (caller : v.caller.den0) (input : x.input.den0) (oa : Fun (Ty.fn [x.output] (.list v.event))) : Prop :=
   let ctx := Step.ctx s s.records caller input
   x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
@@ -172,12 +172,12 @@ def ownFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) : EffectV v.event
   | .command name c i j caller value onAnswer =>
     match Ty.same c v.caller, Step.ownCommand (v := v) name i j with
     | some ⟨hc⟩, some ⟨x, hi, hj⟩ =>
-      commandFits S T s x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (hj ▸ onAnswer)
+      ownCommandFits S T s x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (hj ▸ onAnswer)
     | _, _ => True
   | .query name c i o caller value onAnswer =>
     match Ty.same c v.caller, Step.ownQuery (v := v) name i o with
     | some ⟨hc⟩, some ⟨x, hi, ho⟩ =>
-      queryFits S T s x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (ho ▸ onAnswer)
+      ownQueryFits S T s x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (ho ▸ onAnswer)
     | _, _ => True
 
 end

@@ -147,16 +147,12 @@ theorem slot_mem : {S : List Slot} → {sv : List (Bool × List Val)} → SlotsD
     · obtain ⟨q, hq, h⟩ := slot_mem hS p hp; exact ⟨q, by simp [hq], h⟩
   | [], _ :: _, h, _, _ | _ :: _, [], h, _, _ => h.elim
 
-/-- T2 for an answer that names no request of a shape whose answers have its type: wherever the term holds, the step
-is `Fault.answerUnmatched`, whatever the records. -/
-theorem answer_unmatched (s : State v) {shs : List (PendingShape v.event)} (to : Nat) (t : Ty) (value : t.den0)
+/-- Where the term holds, the request the wire id names, if any, has answers of another type than `t`. -/
+theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : Nat) (t : Ty)
     {pending toT : Term} (hpend : PendingRel L shs (pending.denote M) s.pending)
     (hto : toT.denote M = .int (Int.ofNat to)) {u : Term} (henc : answerUnmatchedT L shs t pending toT = .ok u)
-    (hu : Holds M u) :
-    step T v s (.answer to ⟨t, value⟩) = ⟨s, .fault .answerUnmatched, [], []⟩ := by
-  cases hf : s.pending.find? (·.id == to) with
-  | none => simp only [step, hf]
-  | some p =>
+    (hu : Holds M u) (p : Step.Pending v.event) (hf : s.pending.find? (·.id == to) = some p) :
+    Ty.same t (answerTy p.request.output p.request.rejection) = none := by
   match shs, hpend, henc with
   | [], ⟨tbl, _, hlist⟩, _ =>
     match tbl, hlist with
@@ -194,7 +190,7 @@ theorem answer_unmatched (s : State v) {shs : List (PendingShape v.event)} (to :
   simp only [List.headD_cons, List.getD_cons_succ, List.getD_cons_zero] at hslot
   have hkey : (y1 : Nat) = to := (pendingOf_id _ _ _).symm.trans hpid
   change zk = Val.int (Int.ofNat y1) at hzk
-  simp only [step, hf]
+  dsimp only
   rw [hpo]
   cases hsame : Ty.same t (answerTy (sh'.pending y1 fx).request.output (sh'.pending y1 fx).request.rejection) with
   | none => rfl
@@ -225,6 +221,17 @@ theorem answer_unmatched (s : State v) {shs : List (PendingShape v.event)} (to :
     have hs' : (Val.bool !(Term.denote M _).toBool).toBool = true := hslot
     rw [hX'] at hs'
     simp [Val.toBool] at hs'
+
+/-- T2 for an answer that names no request of a shape whose answers have its type: wherever the term holds, the step
+is `Fault.answerUnmatched`, whatever the records. -/
+theorem answer_unmatched (s : State v) {shs : List (PendingShape v.event)} (to : Nat) (t : Ty) (value : t.den0)
+    {pending toT : Term} (hpend : PendingRel L shs (pending.denote M) s.pending)
+    (hto : toT.denote M = .int (Int.ofNat to)) {u : Term} (henc : answerUnmatchedT L shs t pending toT = .ok u)
+    (hu : Holds M u) :
+    step T v s (.answer to ⟨t, value⟩) = ⟨s, .fault .answerUnmatched, [], []⟩ := by
+  cases hf : s.pending.find? (·.id == to) with
+  | none => simp only [step, hf]
+  | some p => simp only [step, hf, unmatched_types s to t hpend hto henc hu p hf]
 
 end
 

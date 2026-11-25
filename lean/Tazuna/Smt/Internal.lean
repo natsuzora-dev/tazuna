@@ -1,4 +1,5 @@
 import Tazuna.Smt.Finish
+import Tazuna.Smt.Query
 import Tazuna.Smt.CommandExact
 import Tazuna.Semantics.Settle
 
