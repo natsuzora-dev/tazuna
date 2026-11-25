@@ -90,7 +90,8 @@ theorem diamond_confluent (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.se
       Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a)) ∧
     (∀ fuel (s : State v) {r}, Diamond.Runs (Step.timerSys v) fuel (s, []) r →
       Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1))) :=
-  ⟨fun fuel a ha _ hr => Step.cascade_agrees c.T (c.equivariant v hv) hpairs fuel a ha hr,
+  ⟨fun fuel a ha _ hr => Step.cascade_agrees c.T (c.equivariant v hv) (J := fun _ => True) (fun _ _ _ _ _ _ => trivial)
+      (fun a ha _ => hpairs a ha) fuel a ha trivial hr,
     fun fuel s _ hr => Step.timers_agree htimers fuel s hr⟩
 
 /-- T5 for runs: the cascades `diamond_confluent` speaks about are every cascade a run starts. From the initial state

@@ -297,4 +297,13 @@ theorem Simulates.closure {B : α → α → Prop} (hB : ∀ {a b}, B a b → B 
         exact ⟨i, hi, h2.trans Closure.equiv h1⟩
   exact fun a b h => (both h).1
 
+variable (S) in
+/-- The states runs from `a` pass through, picking any enabled step each time. -/
+inductive Reach (a : α) : α → Prop
+  | refl : Reach a a
+  | step {b c : α} {i : Nat} : Reach a b → i < S.len b → S.pick b i = .ok c → Reach a c
+
+variable (S) in
+theorem reach_preserved (a : α) : Preserved S (Reach S a) := fun _ _ _ hb hi hc => .step hb hi hc
+
 end Tazuna.Ir.Diamond

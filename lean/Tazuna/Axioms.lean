@@ -21,6 +21,8 @@ import Tazuna.Smt.Commute
 import Tazuna.Smt.Pairs
 import Tazuna.Smt.FiresForward
 import Tazuna.Smt.Pair
+import Tazuna.Smt.PairLine
+import Tazuna.Smt.Lines
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -51,6 +53,7 @@ elab "#check_tazuna_axioms" : command => do
   for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound,
       ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent,
       ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete, ``Tazuna.Smt.pairs_sound,
+      ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within,
       ``Tazuna.Ir.Step.timerForward_of_noTimer] do
     unless env.contains n do throwError "{n} is missing"
 
@@ -107,14 +110,10 @@ elab "#check_tazuna_reach" : command => do
     -- T5 for runs: those cascades are every cascade a run on valid inputs starts, since valid inputs keep every name
     -- of a state below its counter.
     ``Tazuna.Smt.runs_confluent,
-    -- T5's pair questions, one per ordered pair of own kinds: unsat answers to a pair's two questions mean its two
-    -- effects commute in the canonical sense from every state a model decodes to whose names are below its counter;
-    -- over every listed pair, any two own effects a model codes (T5b, `ownPairs_complete`).
-    ``Tazuna.Smt.pairs_sound,
-    -- A pair question's condition holds exactly when every internal step its two orders run fits the slots, so its
-    -- bound question decides proved against within the bounds honestly. For the per-line soundness of pair lines
-    -- (not yet built), as the reach check's own precedent for a theorem whose user is the next unit.
-    ``Tazuna.Smt.pair_fits,
+    -- T5 from the pair lines, scoped to the slots: where every pair line reads proved, every order of a cascade
+    -- whose states, in any order, fit the slots ends as the semantics' order does, up to renaming, or both fault; where
+    -- they read within the bounds, the same where the two orders of every pair also run within the slots.
+    ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within,
     -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
     -- forward; unsat answers mean no context within the slots has one.
     ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound]

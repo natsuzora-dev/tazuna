@@ -269,15 +269,15 @@ theorem suppFrom_preserved (hv : v.Equivariant) (f0 n0 : Nat) : Diamond.Preserve
     have := runOwn_nextId T hv ha hi hb
     omega
 
-/-- Pairs that commute at the front of the queue, in the canonical form, make any two waiting own effects commute in
-the cascade, wherever they wait, up to renaming the names made from the cascade's start on. -/
-theorem commutes_of_pairs (hv : v.Equivariant)
-    (hP : ∀ a : Acc v, Supp a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
+/-- Pairs that commute at the front of the queue, in the canonical form, wherever `J` holds, make any two waiting own
+effects commute in the cascade there, wherever they wait, up to renaming the names made from the cascade's start on. -/
+theorem commutes_of_pairs (hv : v.Equivariant) {J : Acc v → Prop}
+    (hP : ∀ a : Acc v, Supp a → J a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
       PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j]) (f0 n0 : Nat) :
-    Diamond.Commutes (ownSys T v) (SuppFrom f0 n0) (Same f0 n0) := by
-  intro a ⟨ha, hf0, hn0⟩ i j hi hj hij b hb
+    Diamond.Commutes (ownSys T v) (fun a => SuppFrom f0 n0 a ∧ J a) (Same f0 n0) := by
+  intro a ⟨⟨ha, hf0, hn0⟩, hJ⟩ i j hi hj hij b hb
   obtain ⟨A1, hA1, hpb, hk⟩ := pick_two T a hi hj hij hb
-  have hp := hP a ha i j hi hj hij A1 hA1
+  have hp := hP a ha hJ i j hi hj hij A1 hA1
   have hsa : SelfAt a.state.fresh { a with own := dropTwo a.own i j } :=
     SelfAt.own ha.1 fun x hx => ha.2 x (mem_dropTwo hx)
   obtain ⟨hl, hac⟩ := actual_canon T hv (a0 := { a with own := dropTwo a.own i j }) hsa
@@ -303,15 +303,18 @@ theorem commutes_of_pairs (hv : v.Equivariant)
     · rw [h0] at h1; cases h1
 
 /-- Where every two waiting own effects of a step in progress whose names are below its counter commute in the
-canonical sense, every order of the own cascade ends as `settle` does, up to renaming the names the cascade made and
-reading collections as multisets, or both fault. -/
-theorem cascade_agrees (hv : v.Equivariant)
-    (hP : ∀ a : Acc v, Supp a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
+canonical sense, at every step in progress where `J` holds, which internal steps keep, every order of the own cascade
+from one where it holds ends as `settle` does, up to renaming the names the cascade made and reading collections as
+multisets, or both fault. -/
+theorem cascade_agrees (hv : v.Equivariant) {J : Acc v → Prop} (hJ : Diamond.Preserved (ownSys T v) J)
+    (hP : ∀ a : Acc v, Supp a → J a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
       PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j])
-    (fuel : Nat) (a : Acc v) (ha : Supp a) {r : Except Fault (Acc v)} (hr : Diamond.Runs (ownSys T v) fuel a r) :
+    (fuel : Nat) (a : Acc v) (ha : Supp a) (haJ : J a) {r : Except Fault (Acc v)}
+    (hr : Diamond.Runs (ownSys T v) fuel a r) :
     Diamond.Agree (Same a.state.fresh a.state.nextId) r (settle T fuel a) :=
   settle_agrees T Diamond.Closure.equiv (ownSys_simulates T hv _ _) (commutes_of_pairs T hv hP _ _)
-    (suppFrom_preserved T hv _ _) fuel a ⟨ha, Nat.le_refl _, Nat.le_refl _⟩ hr
+    (fun b i c hb hi hc => ⟨suppFrom_preserved T hv _ _ b i c hb.1 hi hc, hJ b i c hb.2 hi hc⟩) fuel a
+    ⟨⟨ha, Nat.le_refl _, Nat.le_refl _⟩, haJ⟩ hr
 
 end Step
 
