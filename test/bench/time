@@ -1,0 +1,28 @@
+#!/bin/sh
+# Times `prove` on a synthetic spec as a user runs it: once with an empty cache, then again from the cache. Each
+# directory here is one spec of N alike services (a create-bounded table, three commands with accepts and ensures, a
+# keyed machine with a timer and an external request, a reaction sending an own command, a source subscription).
+# Prints the wall times, how many questions the solver answered (the answers the cache keeps), the cache's size and
+# the kinds of the lines printed.
+# Usage: test/bench/time <spec directory, e.g. 3-services> [jobs, default 4]
+# Needs the engine and the launcher built (scripts/check builds both) and z3 on PATH.
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+repo=$(cd "$here/../.." && pwd)
+spec=$here/$1
+jobs=${2:-4}
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+cp -R "$spec/src" "$work/"
+printf 'import { main } from "%s";\nmain();\n' "$repo/gleam/build/dev/javascript/tazuna/tazuna.mjs" >"$work/run.mjs"
+run() {
+  code=0
+  (cd "$work" && TAZUNA_ENGINE="$repo/lean/.lake/build/bin/tazuna-engine" /usr/bin/time -p node run.mjs prove m \
+    --jobs "$jobs" >out.jsonl 2>time.txt) || code=$?
+  printf '%s: %ss, exit %s\n' "$1" "$(sed -n 's/^real //p' "$work/time.txt")" "$code"
+}
+run cold
+run cached
+cache=$work/build/tazuna/prove-cache
+printf 'questions: %s, cache: %s\n' "$(find "$cache" -name '*.answer' | wc -l | tr -d ' ')" "$(du -sh "$cache" | cut -f1)"
+grep -o '"kind":"[^"]*"' "$work/out.jsonl" | sort | uniq -c
