@@ -570,6 +570,19 @@ def ValidRun : State v → List (Input v) → Prop
   | _, [] => True
   | s, x :: xs => x.Valid s ∧ ValidRun (step T v s x).state xs
 
+/-- An assumption a proof rests on beyond the spec's invariants: what it says of a run, and the words a line's
+`assumes` names it by, kept together so the two cannot part. -/
+inductive Assumption where
+  /-- Every input of a run carries only ids the service made or names from outside (`ValidRun`). -/
+  | validInputs
+
+def Assumption.text : Assumption → String
+  | .validInputs => "inputs carry only ids the service made or names from outside"
+
+/-- What the assumption says of the run from `s` on `xs`. -/
+def Assumption.Holds : Assumption → State v → List (Input v) → Prop
+  | .validInputs => ValidRun T
+
 theorem machines_empty (P : PBij) : (ms : List (MachineV v.records v.event)) →
     Machines.Rel P (PerMachine.ofFn (fun _ => ([] : List (Instance _))) ms : Machines ms)
       (PerMachine.ofFn (fun _ => []) ms)

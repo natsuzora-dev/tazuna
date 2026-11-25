@@ -23,7 +23,7 @@ def _root_.Tazuna.Smt.Target.text : Target → String
   | .cascade => "cascade bound"
   | .effect c => "effect " ++ c ++ " accepted"
   | .timer m => "timers of " ++ m ++ " fire forward"
-  | .pair a b => a ++ " and " ++ b ++ " commute"
+  | .pair a b _ => a ++ " and " ++ b ++ " commute"
 where
   ruleText : Option String → String
     | some r => r
@@ -385,10 +385,13 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
     | .ok more => items := items ++ more
     | .error why => return { internal := some why }
   let owns := L.ownsOf v.event
+  let exact := Layout.exactOwns c.program.defs.parts v
   for (k1, k2) in L.ownPairs v.event do
     let key1 := owns[k1]
     let key2 := owns[k2]
-    let g := Target.pair (ownText owns key1) (ownText owns key2)
+    let widened := [key1, key2].filterMap fun k =>
+      if exact.any (OwnKey.same k) then none else some (ownText owns k)
+    let g := Target.pair (ownText owns key1) (ownText owns key2) widened.eraseDups
     let step := ownText owns key1 ++ " then " ++ ownText owns key2
     match familyItems c v only g step (pairQuestions L c.T c.P v senv k1 k2) (pairReport c v L k1 k2 g step) with
     | .ok more => items := items ++ more
@@ -441,26 +444,31 @@ proved or within the bounds. -/
 def lineOf (unproved : String → List Target) (past : String → String → Option (List Json)) :
     Report → Option (Kind × List (String × Json))
   | .unsat s step (some g) =>
-    let common := [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step), assumes s g]
+    let common := [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step), assumes s g] ++
+      widenedField g
     some <| match past s step with
       | none => (.prove .proved, common)
       | some bs => (.prove .withinBounds, common ++ [("bounds", Json.arr bs.toArray)])
   | .unsat _ _ none | .boundReached .. => none
   | .violated s step g fields =>
     some (.prove .violated, [("service", Json.str s), ("target", Json.str g.text), ("step", Json.str step)] ++ fields ++
-      [assumes s g])
+      [assumes s g] ++ widenedField g)
   | .undecided k s step g fields =>
     some (k, [("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++
-      [("step", Json.str step)] ++ fields)
+      [("step", Json.str step)] ++ fields ++ g.toList.flatMap widenedField)
 where
+  /-- A pair line's own kinds that stand for any handle or site of their type, where it has any. -/
+  widenedField : Target → List (String × Json)
+    | .pair _ _ (w :: ws) => [("widened", Json.arr ((w :: ws).map Json.str).toArray)]
+    | _ => []
   /-- What a line's question assumes: the invariants on the state before the step; none for a timer machine's
-  question, whose context is any key, state, records and time; for a pair's, that every input carries only ids the
-  service made or names from outside (`Input.Valid`), which keeps every name of a state below its counter, as the
-  question's state has them, and no invariant. -/
+  question, whose context is any key, state, records and time; for a pair's, the assumption `run_lines` rests on
+  (`Step.Assumption.validInputs`), which keeps every name of a state below its counter, as the question's state has
+  them, and no invariant. -/
   assumes (s : String) (g : Target) : String × Json :=
     let held : List String := match g with
       | .timer _ => []
-      | .pair .. => ["inputs carry only ids the service made or names from outside"]
+      | .pair .. => [Step.Assumption.validInputs.text]
       | _ => ((unproved s).filter fun g' => g'.isInvariant && g' != g).map (·.text)
     ("assumes", Json.arr (held.map Json.str).toArray)
 

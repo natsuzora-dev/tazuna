@@ -170,8 +170,9 @@ inductive Target where
   deadline of a clock line fire out of the order their deadlines give (T5's `Step.FiresForward`). -/
   | timer (machine : String)
   /-- Two waiting own effects of these kinds, `first` running first, ending otherwise than the other order (T5's
-  `Step.PairCommutes`). -/
-  | pair (first second : String)
+  `Step.PairCommutes`). `widened` names those of the two that only a send whose handle or `on_answer` is not written
+  in place makes: such a send stands for every handle or site of its type, so no send may make the kind. -/
+  | pair (first second : String) (widened : List String)
 deriving DecidableEq, Repr
 
 /-- Whether a step that faults with `f` breaks the target. -/

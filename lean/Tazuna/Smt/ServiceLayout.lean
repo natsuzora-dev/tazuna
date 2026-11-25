@@ -123,6 +123,12 @@ def Layout.kindsOf (p : ProgramParts) (v : ServiceV) : Layout :=
         (rootSends r).flatMap (SendSite.keys (eventTys p v) r.1 r.2.1)).filter
       fun k => Ty.sorteds k.fields && (Ty.tuple k.fields).isData) }
 
+/-- The own kinds that sends naming their handle and writing their `on_answer` in place make. Any other kind of the
+layout comes only from a send that stands for every handle or site of its type (`SendSite.handlesIn`, `sitesIn`). -/
+def Layout.exactOwns (p : ProgramParts) (v : ServiceV) : List OwnKey :=
+  (rootUses v).flatMap fun r => ((rootSends r).filter fun w => w.handles.isSome && w.site.isSome).flatMap
+    (SendSite.keys (eventTys p v) r.1 r.2.1)
+
 /-- The types the step's encoders build beyond the state's: contexts, functions' results, rules, event and effect
 lists, answers and own commands' answers. They are listed after the program's types, which already hold them where a
 function of the program has them, so the layout keeps its order. -/

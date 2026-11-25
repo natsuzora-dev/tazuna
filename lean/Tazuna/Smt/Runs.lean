@@ -112,7 +112,7 @@ one deadline of a clock line ends as `fire` does, wherever every timer set in a 
 has a context that fits. -/
 theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : StepEnv L (shapes v))
     (hinit : Step.invariants (Step.State.init v) = []) (htimers : ∀ m ∈ v.machines, TimerLine L m)
-    {xs : List (Input v)} (hxs : Step.ValidRun c.T (Step.State.init v) xs) :
+    {xs : List (Input v)} (hxs : Step.Assumption.validInputs.Holds c.T (Step.State.init v) xs) :
     (∀ {x : Input v}, x.Valid (run c.T v (Step.State.init v) xs).1 →
       Within L (shapes v) (run c.T v (Step.State.init v) xs).1 →
       (inputVals L (c.checked v hv).callerData x).isSome →
