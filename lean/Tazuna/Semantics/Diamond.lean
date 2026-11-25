@@ -44,16 +44,18 @@ def Faults : Except ε α → Prop
 /-- What two runs of a system whose steps commute end in: equivalent results, or a fault each. -/
 def Agree (E : α → α → Prop) (x y : Except ε α) : Prop := Lift E x y ∨ (Faults x ∧ Faults y)
 
+/-- Steps respect `E`: equivalent states enable as many steps, and each step of one has a step of the other that ends
+in an equivalent state or also faults. Which fault may differ: a step that starts several effects reports the first
+that fails, in an order a renaming of ids can change. -/
+def Simulates (E : α → α → Prop) : Prop :=
+  ∀ a a', E a a' → S.len a = S.len a' ∧ ∀ i < S.len a, ∃ j < S.len a', Agree E (S.pick a i) (S.pick a' j)
+
 /-- An equivalence relation on states. -/
 structure Equiv (E : α → α → Prop) : Prop where
   refl : ∀ a, E a a
   symm : ∀ {a b}, E a b → E b a
   trans : ∀ {a b c}, E a b → E b c → E a c
 
-/-- Steps respect `E`: equivalent states enable as many steps, and each step of one has an equivalent step of the
-other. -/
-def Simulates (E : α → α → Prop) : Prop :=
-  ∀ a a', E a a' → S.len a = S.len a' ∧ ∀ i < S.len a, ∃ j < S.len a', Lift E (S.pick a i) (S.pick a' j)
 
 /-- At every state where `I` holds, two distinct enabled steps commute in one step each: when both succeed, each
 leaves the other enabled and running it gives equivalent results or the same fault; when the second faults, the first
@@ -98,30 +100,34 @@ theorem runs_limit {a : α} {r : Except ε α} (h : S.len a ≠ 0) (hr : Runs S 
   | done h' => exact absurd h' h
   | limit _ => rfl
 
+theorem Agree.ok_left {E : α → α → Prop} {a : α} : {y : Except ε α} → Agree E (.ok a) y → ∃ b, y = .ok b ∧ E a b
+  | .ok _, .inl h => ⟨_, rfl, h⟩
+  | .error _, .inl h => h.elim
+  | _, .inr ⟨h, _⟩ => h.elim
+
+theorem Agree.error_left {E : α → α → Prop} {e : ε} : {y : Except ε α} → Agree E (.error e) y → ∃ e', y = .error e'
+  | .error _, _ => ⟨_, rfl⟩
+  | .ok _, .inl h => h.elim
+  | .ok _, .inr ⟨_, h⟩ => h.elim
+
 theorem runs_sim {E : α → α → Prop} (hS : Simulates S E) {n : Nat} {a : α} {x : Except ε α} (hx : Runs S n a x) :
-    ∀ a', E a a' → ∃ x', Runs S n a' x' ∧ Lift E x x' := by
+    ∀ a', E a a' → ∃ x', Runs S n a' x' ∧ Agree E x x' := by
   induction hx with
-  | done h => intro a' ha; exact ⟨_, .done ((hS _ _ ha).1 ▸ h), ha⟩
-  | limit h => intro a' ha; exact ⟨_, .limit ((hS _ _ ha).1 ▸ h), rfl⟩
+  | done h => intro a' ha; exact ⟨_, .done ((hS _ _ ha).1 ▸ h), .inl ha⟩
+  | limit h => intro a' ha; exact ⟨_, .limit ((hS _ _ ha).1 ▸ h), .inl rfl⟩
   | fault hi he =>
     intro a' ha
     obtain ⟨j, hj, hl⟩ := (hS _ _ ha).2 _ hi
     rw [he] at hl
-    revert hl
-    cases hp : S.pick a' j with
-    | error e' => intro hl; exact ⟨_, .fault hj hp, hl⟩
-    | ok _ => intro hl; exact hl.elim
+    obtain ⟨e', hp⟩ := hl.error_left
+    exact ⟨_, .fault hj hp, .inr ⟨trivial, trivial⟩⟩
   | next hi hb _ ih =>
     intro a' ha
     obtain ⟨j, hj, hl⟩ := (hS _ _ ha).2 _ hi
     rw [hb] at hl
-    revert hl
-    cases hp : S.pick a' j with
-    | error _ => intro hl; exact hl.elim
-    | ok b' =>
-      intro hl
-      obtain ⟨x', hx', hxx⟩ := ih b' hl
-      exact ⟨x', .next hj hp hx', hxx⟩
+    obtain ⟨b', hp, hbb⟩ := hl.ok_left
+    obtain ⟨x', hx', hxx⟩ := ih b' hbb
+    exact ⟨x', .next hj hp hx', hxx⟩
 
 variable {E : α → α → Prop}
 
@@ -241,6 +247,52 @@ theorem runs_agree {I : α → Prop} (hE : Equiv E) (hS : Simulates S E) (hD : C
               obtain ⟨x', hx', hxx⟩ := runs_sim hS hx d' hl
               have h1 := ih b hIb hrb (.next hj' hpb hx)
               have h2 := ih c hIc (.next hi' hpc hx') hrc
-              exact h1.trans hE ((Agree.trans hE (.inl hxx) h2))
+              exact h1.trans hE ((Agree.trans hE hxx h2))
+
+/-- The equivalence `B` generates: what states are once every renaming and reordering `B` allows is chained. -/
+inductive Closure (B : α → α → Prop) : α → α → Prop
+  | base {a b : α} : B a b → Closure B a b
+  | refl (a : α) : Closure B a a
+  | symm {a b : α} : Closure B a b → Closure B b a
+  | trans {a b c : α} : Closure B a b → Closure B b c → Closure B a c
+
+theorem Closure.equiv {B : α → α → Prop} : Equiv (Closure B) := ⟨.refl, .symm, .trans⟩
+
+theorem Agree.mono {E E' : α → α → Prop} (h : ∀ {a b}, E a b → E' a b) : {x y : Except ε α} → Agree E x y → Agree E' x y
+  | .ok _, .ok _, .inl hl => .inl (h hl)
+  | .error _, .error _, .inl hl => .inl hl
+  | .ok _, .error _, .inl hl | .error _, .ok _, .inl hl => hl.elim
+  | _, _, .inr hf => .inr hf
+
+theorem Agree.refl (hE : Equiv E) : (x : Except ε α) → Agree E x x
+  | .ok a => .inl (hE.refl a)
+  | .error _ => .inl rfl
+
+/-- Steps that respect a symmetric relation respect the equivalence it generates, so a simulation needs proving only
+for one renaming at a time. -/
+theorem Simulates.closure {B : α → α → Prop} (hB : ∀ {a b}, B a b → B b a) (hS : Simulates S B) :
+    Simulates S (Closure B) := by
+  have both : ∀ {a b}, Closure B a b →
+      (S.len a = S.len b ∧ ∀ i < S.len a, ∃ j < S.len b, Agree (Closure B) (S.pick a i) (S.pick b j)) ∧
+      (∀ j < S.len b, ∃ i < S.len a, Agree (Closure B) (S.pick b j) (S.pick a i)) := by
+    intro a b h
+    induction h with
+    | base h =>
+      refine ⟨⟨(hS _ _ h).1, fun i hi => ?_⟩, fun j hj => ?_⟩
+      · obtain ⟨j, hj, hl⟩ := (hS _ _ h).2 i hi
+        exact ⟨j, hj, hl.mono .base⟩
+      · obtain ⟨i, hi, hl⟩ := (hS _ _ (hB h)).2 j hj
+        exact ⟨i, hi, hl.mono .base⟩
+    | refl a => exact ⟨⟨rfl, fun i hi => ⟨i, hi, .refl Closure.equiv _⟩⟩, fun j hj => ⟨j, hj, .refl Closure.equiv _⟩⟩
+    | symm _ ih => exact ⟨⟨ih.1.1.symm, ih.2⟩, ih.1.2⟩
+    | trans _ _ ih1 ih2 =>
+      refine ⟨⟨ih1.1.1.trans ih2.1.1, fun i hi => ?_⟩, fun k hk => ?_⟩
+      · obtain ⟨j, hj, h1⟩ := ih1.1.2 i hi
+        obtain ⟨k, hk, h2⟩ := ih2.1.2 j hj
+        exact ⟨k, hk, h1.trans Closure.equiv h2⟩
+      · obtain ⟨j, hj, h2⟩ := ih2.2 k hk
+        obtain ⟨i, hi, h1⟩ := ih1.2 j hj
+        exact ⟨i, hi, h2.trans Closure.equiv h1⟩
+  exact fun a b h => (both h).1
 
 end Tazuna.Ir.Diamond
