@@ -347,19 +347,30 @@ def Acc.Rel (R : Ren) (a a' : Acc v) : Prop :=
 counters as `R` does, having used as many counters and as many wire ids on each side. -/
 def Lifted (R : Ren) (a a' : Acc v) (x x' : Except Fault (Acc v)) : Prop :=
   (Diamond.Faults x ∧ Diamond.Faults x') ∨ ∃ b b' R', x = .ok b ∧ x' = .ok b' ∧ R'.ctr = R.ctr ∧ Acc.Rel R' b b' ∧
-    b.state.fresh + a'.state.fresh = b'.state.fresh + a.state.fresh ∧
+    a.state.fresh ≤ b.state.fresh ∧ b.state.fresh + a'.state.fresh = b'.state.fresh + a.state.fresh ∧
     b.state.nextId + a'.state.nextId = b'.state.nextId + a.state.nextId
 
 theorem Lifted.bind {R : Ren} {a a' : Acc v} {x x' : Except Fault (Acc v)} (h : Lifted R a a' x x')
     {f g : Acc v → Except Fault (Acc v)}
     (hfg : ∀ R' b b', R'.ctr = R.ctr → Acc.Rel R' b b' → Lifted R' b b' (f b) (g b')) :
     Lifted R a a' (x >>= f) (x' >>= g) := by
-  rcases h with ⟨hx, hx'⟩ | ⟨b, b', R', rfl, rfl, hc, hr, hf, hn⟩
+  rcases h with ⟨hx, hx'⟩ | ⟨b, b', R', rfl, rfl, hc, hr, hm, hf, hn⟩
   · left
     cases x <;> cases x' <;> first | exact ⟨trivial, trivial⟩ | exact absurd hx id | exact absurd hx' id
-  · rcases hfg R' b b' hc hr with ⟨h1, h2⟩ | ⟨c, c', R'', h1, h2, hc', hr', hf', hn'⟩
+  · rcases hfg R' b b' hc hr with ⟨h1, h2⟩ | ⟨c, c', R'', h1, h2, hc', hr', hm', hf', hn'⟩
     · exact .inl ⟨h1, h2⟩
-    · exact .inr ⟨c, c', R'', h1, h2, hc'.trans hc, hr', by omega, by omega⟩
+    · exact .inr ⟨c, c', R'', h1, h2, hc'.trans hc, hr', by omega, by omega, by omega⟩
+
+theorem Lifted.refl {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') : Lifted R a a' (.ok a) (.ok a') :=
+  .inr ⟨a, a', R, rfl, rfl, rfl, h, Nat.le_refl _, by omega, by omega⟩
+
+/-- A run from steps that differ from `a` and `a'` by having used `k` more counters each. -/
+theorem Lifted.shift {R : Ren} {a a' a1 a1' : Acc v} {x x' : Except Fault (Acc v)} (h : Lifted R a1 a1' x x') (k : Nat)
+    (hf : a1.state.fresh = a.state.fresh + k) (hf' : a1'.state.fresh = a'.state.fresh + k)
+    (hn : a1.state.nextId = a.state.nextId) (hn' : a1'.state.nextId = a'.state.nextId) : Lifted R a a' x x' := by
+  rcases h with h | ⟨b, b', R', h1, h2, hc, hr, hm, hf2, hn2⟩
+  · exact .inl h
+  · exact .inr ⟨b, b', R', h1, h2, hc, hr, by omega, by omega, by omega⟩
 
 theorem RequestV.ownerIn_rel {R : PBij} {e : Ty} {r r' : RequestV e} (h : RequestV.Rel R r r') (ds : List (String × DeclaredV)) :
     r.ownerIn ds = r'.ownerIn ds := by
@@ -489,7 +500,7 @@ theorem start_rel {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a') {effs effs' : L
         Pending.Rel R' p q := fun hp hq ⟨hid, h2⟩ => ⟨.inl ⟨hb _ hp, hb' _ hq, hid⟩, h2⟩
     have keepO : ∀ {o o' : OutLine}, o ∈ a.out → o' ∈ a'.out → OutLine.Rel R o o' → OutLine.Rel R' o o' :=
       fun hp hq ⟨hid, h2⟩ => ⟨.inl ⟨ho _ hp, ho' _ hq, hid⟩, h2⟩
-    refine .inr ⟨_, _, R', rfl, rfl, rfl, ⟨⟨hrec, hmach, ?_, hnow, ?_, ?_⟩, hev, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩
+    refine .inr ⟨_, _, R', rfl, rfl, rfl, ⟨⟨hrec, hmach, ?_, hnow, ?_, ?_⟩, hev, ?_, ?_, ?_, ?_⟩, ?_, ?_, ?_⟩
     · exact (hpend.imp_mem fun _ hp _ hq h => keep hp hq h).append hnew
     · intro p hp
       rcases List.mem_append.1 hp with hp | hp
@@ -513,10 +524,261 @@ theorem start_rel {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a') {effs effs' : L
         exact (hmem hps' p hp').2
     · exact hown.append ((he.filter (p := (!·.2.isRequest)) (q := (!·.2.isRequest))
         fun _ _ h => by rw [Started.rel_isRequest h]).map fun _ _ h => h.2)
+    · exact Nat.le_refl _
     · show a.state.fresh + a'.state.fresh = a'.state.fresh + a.state.fresh
       omega
     · show a.state.nextId + (reqsOf effs).length + a'.state.nextId = a'.state.nextId + (reqsOf effs').length + a.state.nextId
       omega
+
+end Step
+
+theorem Ty.rel0_deq_right {t : Ty} (hc : t.comparable = true) {x y1 y : t.den0} (h : Ty.rel0 R t x y1)
+    (e : t.deq0 y1 y = true) : Ty.rel0 R t x y :=
+  Ty.rel0_inv.2 (Ty.rel0_deq_left t hc (Ty.deq0_symm hc e) (Ty.rel0_inv.1 h))
+
+theorem Ty.deq0_refl {t : Ty} (hc : t.comparable = true) (x : t.den0) : t.deq0 x x = true :=
+  (Ty.canon_iff t hc x x).2 rfl
+
+theorem forall2_find? {α β : Type} {r : α → β → Prop} {p : α → Bool} {q : β → Bool} (hpq : ∀ a b, r a b → p a = q b) :
+    {xs : List α} → {ys : List β} → Forall2 r xs ys → Option.Rel r (xs.find? p) (ys.find? q)
+  | [], [], _ => .none
+  | a :: _, b :: _, ⟨hab, h⟩ => by
+    simp only [List.find?_cons, hpq a b hab]
+    split
+    · exact .some hab
+    · exact forall2_find? hpq h
+  | [], _ :: _, h | _ :: _, [], h => h.elim
+
+namespace Step
+
+section Machine
+variable {r e : Ty}
+
+/-- A machine whose functions respect every renaming of counters, with a comparable key type. -/
+structure _root_.Tazuna.Ir.MachineV.Equi (m : MachineV r e) : Prop where
+  key : m.key.comparable = true
+  instances : ∀ R, Fun.Rel R m.instances m.instances
+  on : ∀ R, Fun.Rel R m.on m.on
+  after : ∀ R, Fun.Rel R m.after m.after
+  initial : ∀ R, Ty.rel0 R m.state m.initial m.initial
+  effect : ∀ R xs ys, Ty.rel0 R (.tuple [Ty.machineCtx m.key m.state r]) xs ys →
+    Ty.relV R (Ty.option (.dsl .effect [e])) (m.effect.apply xs) (m.effect.apply ys)
+
+theorem toB_rel {a b : Ty.bool.den0} (h : Ty.rel0 R Ty.bool a b) : toB a = toB b := by
+  match a, b, h with
+  | .inl _, .inl _, _ => rfl
+  | .inr _, .inr _, _ => rfl
+
+theorem broken_rel : {xs ys : Ty.rules.den0} → Ty.rel0 R Ty.rules xs ys → broken xs = broken ys
+  | [], [], _ => rfl
+  | (n, b, ()) :: xs, (n', b', ()) :: ys, ⟨⟨hn, hb, _⟩, h⟩ => by
+    have hn : n = n' := hn
+    subst hn
+    have ih := broken_rel h
+    unfold broken at ih ⊢
+    erw [List.filterMap_cons, List.filterMap_cons, ih]
+    dsimp only
+    rw [toB_rel hb]
+  | [], _ :: _, h | _ :: _, [], h => h.elim
+
+theorem timerAt_rel {st : Ty} (now : Int) {x y : (Ty.option (Ty.timer st)).den0}
+    (h : Ty.rel0 R (Ty.option (Ty.timer st)) x y) :
+    Option.Rel (fun a b => a.1 = b.1 ∧ Ty.rel0 R st a.2 b.2) (timerAt now x) (timerAt now y) := by
+  match x, y, h with
+  | .inl (.inl (d, t, ()), ()), .inl (.inl (d', t', ()), ()), ⟨⟨hd, ht, _⟩, _⟩ =>
+    have hd : d = d' := hd
+    subst hd
+    exact .some ⟨rfl, ht⟩
+  | .inr _, .inr _, _ => exact .none
+
+theorem enter_rel {m : MachineV r e} (hm : m.Equi) {records records' : r.den0} (hrec : Ty.rel0 R r records records')
+    (now : Int) {k k' : m.key.den0} (hk : Ty.rel0 R m.key k k') {st st' : m.state.den0}
+    (hst : Ty.rel0 R m.state st st') :
+    Instance.Rel R (enter m records now k st).1 (enter m records' now k' st').1 ∧
+      Multi (Started.Rel R) (enter m records now k st).2 (enter m records' now k' st').2 := by
+  have hctx : Ty.rel0 R (.tuple [Ty.machineCtx m.key m.state r]) (.inl (k, st, records, now, ()), ())
+      (.inl (k', st', records', now, ()), ()) := ⟨⟨hk, hst, hrec, rfl, trivial⟩, trivial⟩
+  refine ⟨⟨hk, hst, timerAt_rel now (hm.after R _ _ hctx)⟩, Multi.of_forall2 ?_⟩
+  have he := hm.effect R _ _ hctx
+  simp only [enter]
+  unfold MachineV.effectAt
+  revert he
+  generalize m.effect.apply (.inl (k, st, records, now, ()), ()) = x
+  generalize m.effect.apply (.inl (k', st', records', now, ()), ()) = y
+  intro he
+  match x, y, he with
+  | .inl (x, ()), .inl (y, ()), ⟨hxy, _⟩ => exact ⟨⟨.machine _ (.mk hk), hxy⟩, trivial⟩
+  | .inr _, .inr _, _ => trivial
+
+theorem find_rel {m : MachineV r e} (hm : m.Equi) {l l' : List (Instance m)} (hl : Insts.Rel R l l')
+    {k k' : m.key.den0} (hk : Ty.rel0 R m.key k k') :
+    Option.Rel (Instance.Rel R) (l.find? (m.key.deq0 k ·.key)) (l'.find? (m.key.deq0 k' ·.key)) := by
+  obtain ⟨⟨zs, h, hz⟩, _, hd'⟩ := hl
+  have h1 := forall2_find? (p := (m.key.deq0 k ·.key)) (q := (m.key.deq0 k' ·.key))
+    (fun a b hab => Ty.rel0_deq m.key hm.key hk hab.1) h
+  rwa [find?_perm_unique hz] at h1
+  intro a ha b hb hpa hpb
+  have hdz : KeysDistinct zs := hd'.perm hz.symm fun {x y} h => by
+    cases e : m.key.deq0 y.key x.key
+    · rfl
+    · rw [Ty.deq0_symm hm.key e] at h; cases h
+  have hab : m.key.deq0 a.key b.key = true := Ty.deq0_trans hm.key (Ty.deq0_symm hm.key hpa) hpb
+  exact pairwise_eq_of hdz ha hb (fun h => by rw [h] at hab; cases hab)
+    (fun h => by rw [Ty.deq0_symm hm.key hab] at h; cases h)
+
+
+/-- What an instance's reaction to an event gives: the instance, and the effects it starts. -/
+def Reacted.Rel (R : PBij) {m : MachineV r e} (p q : Instance m × List (Sender × EffectV e)) : Prop :=
+  Instance.Rel R p.1 q.1 ∧ Multi (Started.Rel R) p.2 q.2
+
+theorem reactKey_rel {m : MachineV r e} (hm : m.Equi) {insts insts' : List (Instance m)} (hl : Insts.Rel R insts insts')
+    {records records' : r.den0} (hrec : Ty.rel0 R r records records') (now : Int) {ev ev' : e.den0}
+    (hev : Ty.rel0 R e ev ev') {k k' : m.key.den0} (hk : Ty.rel0 R m.key k k') :
+    Reacted.Rel R (reactKey m insts records now ev k) (reactKey m insts' records' now ev' k') := by
+  unfold reactKey
+  have hf := find_rel hm hl hk
+  revert hf
+  generalize insts.find? _ = a
+  generalize insts'.find? _ = b
+  intro hf
+  cases hf with
+  | none => exact enter_rel hm hrec now hk (hm.initial R)
+  | @some i i' hi =>
+    dsimp only
+    have hon := hm.on R (.inl (i.key, i.state, records, now, ()), ev, ()) (.inl (i'.key, i'.state, records', now, ()), ev', ())
+      ⟨⟨hi.1, hi.2.1, hrec, rfl, trivial⟩, hev, trivial⟩
+    revert hon
+    generalize m.on.fn (.inl (i.key, i.state, records, now, ()), ev, ()) = x
+    generalize m.on.fn (.inl (i'.key, i'.state, records', now, ()), ev', ()) = y
+    intro hon
+    match x, y, hon with
+    | .inr (.inl (s, ())), .inr (.inl (s', ())), ⟨hs, _⟩ => exact enter_rel hm hrec now hi.1 hs
+    | .inl (), .inl (), _ => exact ⟨hi, Multi.nil⟩
+
+theorem enter_key {m : MachineV r e} (records : r.den0) (now : Int) (k : m.key.den0) (st : m.state.den0) :
+    (enter m records now k st).1.key = k := rfl
+
+theorem reactKey_key {m : MachineV r e} (hm : m.Equi) (insts : List (Instance m)) (records : r.den0) (now : Int)
+    (ev : e.den0) (k : m.key.den0) : m.key.deq0 (reactKey m insts records now ev k).1.key k = true := by
+  unfold reactKey
+  cases hf : insts.find? (m.key.deq0 k ·.key) with
+  | none => exact Ty.deq0_refl hm.key k
+  | some i =>
+    have hki : m.key.deq0 k i.key = true := by simpa using List.find?_some hf
+    dsimp only
+    split <;> exact Ty.deq0_symm hm.key hki
+
+theorem machineStep_rel (T : List TypeDecl) {m : MachineV r e} (hm : m.Equi) {records records' : r.den0}
+    (hrec : Ty.rel0 R r records records') (now : Int) {ev ev' : e.den0} (hev : Ty.rel0 R e ev ev')
+    {insts insts' : List (Instance m)} (hl : Insts.Rel R insts insts') :
+    Insts.Rel R (machineStep T records now ev m insts).1 (machineStep T records' now ev' m insts').1 ∧
+      Multi (Started.Rel R) (machineStep T records now ev m insts).2 (machineStep T records' now ev' m insts').2 := by
+  have hb : Multi (Ty.rel0 R m.key) (m.instances.fn (records, ())) (m.instances.fn (records', ())) :=
+    hm.instances R _ _ ⟨hrec, trivial⟩
+  have hd : Multi (Ty.rel0 R m.key) (dedupBy m.key.deq0 (m.instances.fn (records, ())))
+      (dedupBy m.key.deq0 (m.instances.fn (records', ()))) := by
+    obtain ⟨zs, h, hz⟩ := hb
+    exact ((Multi.of_forall2 (forall2_dedupBy (f := m.key.deq0) (f' := m.key.deq0)
+      (fun _ _ _ _ => Ty.rel0_deq m.key hm.key) h)).comp
+      (dedupBy_perm_multi (Ty.canon_iff m.key hm.key) hz)).imp fun _ _ ⟨_, h1, h2⟩ => Ty.rel0_deq_right hm.key h1 h2
+  have hs : Multi (Ty.rel0 R m.key) (Ty.sortBy T m.key (dedupBy m.key.deq0 (m.instances.fn (records, ()))))
+      (Ty.sortBy T m.key (dedupBy m.key.deq0 (m.instances.fn (records', ())))) :=
+    (hd.perm_left (List.mergeSort_perm _ _).symm).perm_right (List.mergeSort_perm _ _).symm
+  have hr := hs.map (r' := Reacted.Rel R) (fun _ _ hk => reactKey_rel hm hl hrec now hev hk)
+  have hdist : ∀ (rec : r.den0) (ev : e.den0) (l : List (Instance m)), KeysDistinct
+      ((Ty.sortBy T m.key (dedupBy m.key.deq0 (m.instances.fn (rec, ())))).map (reactKey m l rec now ev) |>.map (·.1)) := by
+    intro rec ev l
+    have hp : (Ty.sortBy T m.key (dedupBy m.key.deq0 (m.instances.fn (rec, ())))).Pairwise
+        fun a b => m.key.deq0 a b = false :=
+      ((dedupBy_pairwise _ _).imp fun {a b} h => by
+        cases e : m.key.deq0 a b
+        · rfl
+        · rw [Ty.deq0_symm hm.key e] at h; cases h).perm (List.mergeSort_perm _ _).symm fun {a b} h => by
+          cases e : m.key.deq0 b a
+          · rfl
+          · rw [Ty.deq0_symm hm.key e] at h; cases h
+    unfold KeysDistinct
+    rw [List.map_map, List.pairwise_map]
+    refine hp.imp fun {a b} h => ?_
+    show m.key.deq0 (reactKey m l rec now ev a).1.key (reactKey m l rec now ev b).1.key = false
+    cases e : m.key.deq0 (reactKey m l rec now ev a).1.key (reactKey m l rec now ev b).1.key
+    · rfl
+    · have := Ty.deq0_trans hm.key (Ty.deq0_symm hm.key (reactKey_key hm l rec now ev a))
+        (Ty.deq0_trans hm.key e (reactKey_key hm l rec now ev b))
+      rw [this] at h; cases h
+  exact ⟨⟨hr.map fun _ _ h => h.1, hdist _ _ _, hdist _ _ _⟩, hr.flatMap fun _ _ h => h.2⟩
+
+theorem reactMachines_rel (T : List TypeDecl) {records records' : r.den0} (hrec : Ty.rel0 R r records records')
+    (now : Int) {ev ev' : e.den0} (hev : Ty.rel0 R e ev ev') : {ms : List (MachineV r e)} → (∀ m ∈ ms, m.Equi) →
+    {l l' : Machines ms} → Machines.Rel R l l' →
+    Machines.Rel R (reactMachines T records now ev l).1 (reactMachines T records' now ev' l').1 ∧
+      Multi (Started.Rel R) (reactMachines T records now ev l).2 (reactMachines T records' now ev' l').2
+  | [], _, .nil, .nil, _ => ⟨trivial, Multi.nil⟩
+  | _ :: _, hms, .cons _ _, .cons _ _, h => by
+    obtain ⟨hx, hrest⟩ := h
+    have h1 := machineStep_rel T (hms _ List.mem_cons_self) hrec now hev hx
+    have h2 := reactMachines_rel T hrec now hev (fun m h => hms m (List.mem_cons_of_mem _ h)) hrest
+    simp only [reactMachines]
+    exact ⟨⟨h1.1, h2.1⟩, h1.2.append h2.2⟩
+
+end Machine
+
+variable {v : ServiceV}
+
+/-- A service whose functions respect every renaming of counters: its kept functions, the values they captured, the
+callers it lists and its machines' initial states. Callers and machine keys are comparable, as check requires. -/
+structure _root_.Tazuna.Ir.ServiceV.Equivariant (v : ServiceV) : Prop where
+  caller : v.caller.comparable = true
+  apply : ∀ R, Fun.Rel R v.apply v.apply
+  commands : ∀ x ∈ v.commands, ∀ R, Ty.rel0 R (.list v.caller) x.callers x.callers ∧ Fun.Rel R x.accepts x.accepts ∧
+    Fun.Rel R x.decide x.decide ∧ Fun.Rel R x.ensures x.ensures
+  queries : ∀ x ∈ v.queries, ∀ R, Ty.rel0 R (.list v.caller) x.callers x.callers ∧ Fun.Rel R x.accepts x.accepts ∧
+    Fun.Rel R x.resolve x.resolve
+  machines : ∀ m ∈ v.machines, m.Equi
+  reactions : ∀ x ∈ v.reactions, ∀ R xs ys, Ty.rel0 R (.tuple [Ty.reactionCtx v.records, v.event]) xs ys →
+    Ty.relV R (.list (.dsl .effect [v.event])) (x.react.apply xs) (x.react.apply ys)
+
+theorem react_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {s s' : State v} (hs : StateRel R s s')
+    {ev ev' : v.event.den0} (hev : Ty.rel0 R.ctr v.event ev ev') :
+    StateRel R (react T s ev).1 (react T s' ev').1 ∧
+      Multi (Started.Rel R.ctr) (react T s ev).2 (react T s' ev').2 := by
+  obtain ⟨hrec, hmach, hpend, hnow, hb, hb'⟩ := hs
+  have hrec' : Ty.rel0 R.ctr v.records (v.apply.fn (s.records, ev, ())) (v.apply.fn (s'.records, ev', ())) :=
+    hv.apply R.ctr _ _ ⟨hrec, hev, trivial⟩
+  have hm := reactMachines_rel T hrec' s.now hev hv.machines hmach
+  unfold react
+  dsimp only
+  rw [← hnow]
+  refine ⟨⟨hrec', hm.1, hpend, rfl, hb, hb'⟩, hm.2.append (Multi.of_forall2 ?_)⟩
+  have hx : ∀ x ∈ v.reactions, Forall2 (Started.Rel R.ctr)
+      ((x.effectsAt ev (v.apply.fn (s.records, ev, ())) s.now).map (.reaction x.name, ·))
+      ((x.effectsAt ev' (v.apply.fn (s'.records, ev', ())) s.now).map (.reaction x.name, ·)) := fun x hx =>
+    forall2_map2 (fun _ _ h => ⟨.reaction x.name, h⟩)
+      (hv.reactions x hx R.ctr _ _ ⟨⟨hrec', rfl, trivial⟩, hev, trivial⟩)
+  clear hm hpend
+  revert hx
+  induction v.reactions with
+  | nil => intro; trivial
+  | cons x xs ih =>
+    intro hx
+    simp only [List.flatMap_cons]
+    exact forall2_append (hx x List.mem_cons_self) (ih fun y hy => hx y (List.mem_cons_of_mem _ hy))
+
+theorem applyEvents_rel (T : List TypeDecl) (hv : v.Equivariant) : {evs evs' : List v.event.den0} → (R : Ren) →
+    Forall2 (Ty.rel0 R.ctr v.event) evs evs' → {a a' : Acc v} → Acc.Rel R a a' →
+    Lifted R a a' (applyEvents T a evs) (applyEvents T a' evs')
+  | [], [], R, _, a, a', ha => Lifted.refl ha
+  | ev :: evs, ev' :: evs', R, ⟨hev, h⟩, a, a', ha => by
+    unfold applyEvents
+    rw [List.foldlM_cons, List.foldlM_cons]
+    have hr := react_rel T hv ha.1 hev
+    obtain ⟨_, hevs, hout, ho, ho', hown⟩ := ha
+    refine Lifted.bind ((start_rel (a := { a with state := (react T a.state ev).1, events := a.events ++ [ev] })
+      (a' := { a' with state := (react T a'.state ev').1, events := a'.events ++ [ev'] })
+      ⟨hr.1, hevs.append (Multi.cons hev Multi.nil), hout, ho, ho', hown⟩ hr.2).shift 0 rfl rfl rfl rfl) ?_
+    intro R' b b' hc hb
+    exact applyEvents_rel T hv R' (hc ▸ h) hb
+  | [], _ :: _, _, h, _, _, _ | _ :: _, [], _, h, _, _, _ => h.elim
 
 end Step
 
