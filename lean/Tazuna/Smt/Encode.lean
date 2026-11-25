@@ -31,6 +31,10 @@ inductive Limit where
   /-- A value the spec writes of the type (a listed caller, a machine's initial state) holds a collection with more
   items than the type's slots: a bound is below it. -/
   | slots (t : Ty)
+  /-- Two own steps whose orders differ with each keeping the names it made sent more requests than the search for
+  a renaming of their wire ids takes (`wireSearchCap`), so whether the orders end the same is not known. Never an
+  encoder's refusal: prove reads it from a pair's counterexample. -/
+  | renamings (sends : Nat)
 deriving Repr
 
 /-- What a layout lacks that an encoding needs. A layout built for the program has none of these. -/

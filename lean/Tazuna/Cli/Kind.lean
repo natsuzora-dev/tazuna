@@ -35,13 +35,13 @@ deriving DecidableEq
 inductive Tazuna.UndecidedKind : Type
   /-- The solver answered unknown or ran out of time or resources. -/
   | unknown
-  /-- The spec uses what the encoding has no terms for. -/
+  /-- The spec uses what the encoding has no terms for, or a pair's counterexample needs a search for a renaming
+  larger than prove runs. -/
   | limit
   /-- A string literal holds a code point above U+2FFFF, outside SMT-LIB's strings. -/
   | unencodableString
   /-- Two own steps whose orders the solver found different, with each step keeping the ids it made, end the same
-  once those ids are renamed, as the oracle names ids by first appearance; or they sent too many requests to search
-  every renaming of them. The two orders are shown. -/
+  once those ids are renamed, as the oracle names ids by first appearance. The two orders are shown. -/
   | upToRenaming
 deriving DecidableEq
 

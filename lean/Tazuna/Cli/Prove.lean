@@ -157,6 +157,7 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .effectClosure => "a kept function returns effects"
   | .unsortable t => s!"a value of {tyText T t} holds a type variable or a structure value"
   | .slots t => s!"a value the spec writes of {tyText T t} holds more items than its bounds give"
+  | .renamings n => s!"the two steps sent {n} requests, more than the {wireSearchCap} whose renamings are searched"
 
 /-- Every bound a step of the service can go past: each table and bag type of its layout, with the bound its slots
 come from, and the pending requests where the service has a request shape. A list's slots are its type's longest
@@ -326,11 +327,10 @@ def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : St
       | .ok r =>
         if r.violated then
           .ok (Report.violated v.name step g (shown [("violated", Json.arr #[Json.str "steps do not commute"])]))
-        else
-          let why := match r with
-            | .capped _ => [("why", Json.str s!"the two steps sent more than {wireSearchCap} requests")]
-            | _ => []
-          .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown why))
+        else match r with
+          | .capped n =>
+            .ok (.undecided (.undecided .limit) v.name step (some g) (shown [("limit", Json.str ((Limit.renamings n).text c.T))]))
+          | _ => .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown []))
     | _, _, _ => .error s!"a model of {step} does not decode"
 
 /-- The line of a refused encoding: undecided where the refusal is the spec's, else an engine bug. -/
