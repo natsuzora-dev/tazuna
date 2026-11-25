@@ -2802,7 +2802,8 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
     | a => fail s!"{repr a}"
 
 /-! An own effect's internal step, for `ownStep_rel`: the service lists the command `twice` and the query `next` above,
-and the layout has three own kinds, `twice`, `next` and `gone`, which the service does not list. From the same state,
+and the layout has three own kinds, `twice`, `next` and `gone`, which the service does not list, and a fourth,
+`twice` answered at a site the program lacks, which no effect has and which must not stop the encoding. From the same state,
 the effect term is in turn alice's `twice 3` with 5 captured, her `next 3`, and her `gone 3`. The records, instance
 table, next id, fresh counter and new wire ids read from the model must be what `Step.runOwn` leaves for the effect,
 and must differ from what it leaves for the other kind's effect; `gone` must fault as `Step.runOwn` does. -/
@@ -2816,11 +2817,12 @@ def dispSites : List AnySite := writeSites ++ [⟨[.int], _, answerFive⟩, ⟨[
 def twiceKey : OwnKey := .command .int "twice" .str .int .str ⟨answerFive.site, [.int]⟩
 def nextKey : OwnKey := .query .int "next" .str .int .int ⟨answerIsEvent.site, []⟩
 def goneKey : OwnKey := .command .int "gone" .str .int .str ⟨answerFive.site, [.int]⟩
+def deadKey : OwnKey := .command .int "twice" .str .int .str ⟨⟨"m", 77, 77, 0⟩, [.int]⟩
 
-def dispLayoutOf (slots : Nat) : Layout :=
+def dispLayoutOf (slots : Nat) (dead : List OwnKey := []) : Layout :=
   let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE
   Layout.addTys (listSlots (fun _ => slots) lits)
-    { effects := [sendKey ⟨"m", 3, 7, 0⟩], owns := [twiceKey, nextKey, goneKey] }
+    { effects := [sendKey ⟨"m", 3, 7, 0⟩], owns := [twiceKey, nextKey, goneKey] ++ dead }
     (reactTys ++ [.tuple [.int], .tuple [], .list .int, .id, cctxT, Ty.result (.list .int) .str, pendingTable dispShapes,
       Ty.result Ty.nil .str, Ty.nil] ++
       Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
@@ -2828,9 +2830,9 @@ def dispLayoutOf (slots : Nat) : Layout :=
 
 /-- v0..v5 the state, v6 the effect, v7 the records after, v8 the next id after, v9 the instance table after, v10 the
 fault, v11 the fresh counter after, then per new request slot its flag and id. -/
-def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal : List Term) :
+def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal : List Term) (dead : List OwnKey := []) :
     Except String (Script × Nat × OwnStepOut) := do
-  let L := dispLayoutOf slots
+  let L := dispLayoutOf slots dead
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
   let (apply, ca) ← enc (dispSvc.apply.code L)
@@ -2860,7 +2862,7 @@ def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal :
 
 def dispCheck (solver : Solver) : IO Bool := do
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: an own effect's internal step: {m}"; return false
-  let L := dispLayoutOf 3
+  let L := dispLayoutOf 3 [deadKey]
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dm, nm) := L.find? startM.table | fail "no instance table"
@@ -2882,7 +2884,7 @@ def dispCheck (solver : Solver) : IO Bool := do
      ("gone", fun L => ownT L goneKey (.str "alice") (.int 3) [.int 5], goneFx, twiceFx)]
   let mut ok := true
   for (name, effect, fx, other) in cases do
-    match dispScriptOf 3 effect goal with
+    match dispScriptOf 3 effect goal [deadKey] with
     | .error m => ok ← fail s!"{name}: {m}"
     | .ok (script, nn, o) =>
       match ← solver.run script with

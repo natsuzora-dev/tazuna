@@ -23,21 +23,23 @@ def siteFor (P : List AnySite) (t : Ty) (k : SiteKey) : Option ((Γ : List Ty) �
   (sitesOf P t).find? fun s => siteMatch s.2 k
 
 /-- The shape of an own kind: the command or query `Step.runOwn` runs for its effects, and the site of `P` its
-`on_answer` is written at. A kind whose site `P` lacks is refused: no effect that reaches `P` is of that kind. -/
+`on_answer` is written at. A kind whose site `P` lacks has no effect that reaches `P` (`siteFor_reach`), so its
+terms are never read and it takes the constant terms of `.missing`; a layout may list kinds the program never
+builds. -/
 def ownShape (v : ServiceV) (P : List AnySite) : OwnKey → Except Refusal (OwnShape v)
   | .command _ name c i j a =>
     match Ty.same c v.caller, Step.ownCommand (v := v) name i j with
-    | some _, some ⟨x, _, _⟩ => do
-      let ⟨Γ, s⟩ ← need "an own command whose on_answer site the program lacks"
-        (siteFor P (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event)) a)
-      pure (.command x Γ s)
+    | some _, some ⟨x, _, _⟩ =>
+      match siteFor P (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event)) a with
+      | some gs => pure (.command x gs.1 gs.2)
+      | none => pure (.missing name)
     | _, _ => pure (.missing name)
   | .query _ name c i o a =>
     match Ty.same c v.caller, Step.ownQuery (v := v) name i o with
-    | some _, some ⟨x, _, _⟩ => do
-      let ⟨Γ, s⟩ ← need "an own query whose on_answer site the program lacks"
-        (siteFor P (Ty.fn [x.output] (.list v.event)) a)
-      pure (.query x Γ s)
+    | some _, some ⟨x, _, _⟩ =>
+      match siteFor P (Ty.fn [x.output] (.list v.event)) a with
+      | some gs => pure (.query x gs.1 gs.2)
+      | none => pure (.missing name)
     | _, _ => pure (.missing name)
 
 /-- The outcome terms of one own kind's internal step. -/
@@ -303,6 +305,15 @@ theorem encodeOwnKind_width {P : List AnySite} {shs : List (PendingShape v.event
     cases pure_ok.1 henc
     exact encodeEvents_width _ h13
 
+/-- A function that reaches `P` is found at its own site and captures' types: a kind of an effect that reaches `P`
+always has its site. -/
+theorem siteFor_reach {P : List AnySite} {t : Ty} {k : SiteKey} {f : Fun t} (hP : f.asSite ∈ P)
+    (hs : f.site = k.site) (hΓ : f.Γ = k.Γ) : siteFor P t k ≠ none := by
+  intro h
+  have := List.find?_eq_none.1 h _ (mem_sitesOf_self hP)
+  simp only [siteMatch, Fun.toSite, hs, beq_self_eq_true, Bool.true_and] at this
+  exact this (hΓ ▸ Ty_sames_self _)
+
 theorem siteFor_spec {P : List AnySite} {t : Ty} {k : SiteKey} {Γ : List Ty} {s : Site Γ t}
     (h : siteFor P t k = some ⟨Γ, s⟩) : (⟨Γ, t, s⟩ : AnySite) ∈ P ∧ s.site = k.site ∧ Γ = k.Γ := by
   have hm := List.mem_of_find?_eq_some h
@@ -426,7 +437,13 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     obtain ⟨x, hi, hj⟩ := xx
     subst hc hi hj
     dsimp only at hsh ⊢
-    obtain ⟨⟨Γ, s⟩, hsf, hsh⟩ := bind_ok.1 hsh
+    revert hsh
+    generalize hsf : siteFor P _ a0 = sf
+    intro hsh
+    cases sf with
+    | none => exact absurd hsf (siteFor_reach hreach hsite hΓ)
+    | some gs =>
+    obtain ⟨Γ, s⟩ := gs
     cases pure_ok.1 hsh
     obtain ⟨⟨cc, cx'⟩, hcc, henc⟩ := bind_ok.1 henc
     obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
@@ -435,7 +452,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     have hd := hcd x (ownCommand_mem hox)
-    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec (need_ok.1 hsf)
+    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
     obtain ⟨e, hA⟩ := Fun.eq_siteFn hP ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
@@ -523,7 +540,13 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     obtain ⟨x, hi, hj⟩ := xx
     subst hc hi hj
     dsimp only at hsh ⊢
-    obtain ⟨⟨Γ, s⟩, hsf, hsh⟩ := bind_ok.1 hsh
+    revert hsh
+    generalize hsf : siteFor P _ a0 = sf
+    intro hsh
+    cases sf with
+    | none => exact absurd hsf (siteFor_reach hreach hsite hΓ)
+    | some gs =>
+    obtain ⟨Γ, s⟩ := gs
     cases pure_ok.1 hsh
     obtain ⟨⟨qc, cx'⟩, hqc, henc⟩ := bind_ok.1 henc
     obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
@@ -532,7 +555,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     have hd := hqd x (ownQuery_mem hox)
-    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec (need_ok.1 hsf)
+    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
     obtain ⟨e, hA⟩ := Fun.eq_siteFn hP ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
@@ -908,7 +931,13 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     obtain ⟨x, hi, hj⟩ := xx
     subst hc hi hj
     dsimp only at hsh ⊢
-    obtain ⟨⟨Γ, s⟩, hsf, hsh⟩ := bind_ok.1 hsh
+    revert hsh
+    generalize hsf : siteFor P _ a0 = sf
+    intro hsh
+    cases sf with
+    | none => exact absurd hsf (siteFor_reach hreach hsite hΓ)
+    | some gs =>
+    obtain ⟨Γ, s⟩ := gs
     cases pure_ok.1 hsh
     obtain ⟨⟨cc, cx'⟩, hcc, henc⟩ := bind_ok.1 henc
     obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
@@ -917,7 +946,7 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     have hd := hcd x (ownCommand_mem hox)
-    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec (need_ok.1 hsf)
+    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
     obtain ⟨e, hA⟩ := Fun.eq_siteFn hP ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
@@ -972,7 +1001,13 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     obtain ⟨x, hi, hj⟩ := xx
     subst hc hi hj
     dsimp only at hsh ⊢
-    obtain ⟨⟨Γ, s⟩, hsf, hsh⟩ := bind_ok.1 hsh
+    revert hsh
+    generalize hsf : siteFor P _ a0 = sf
+    intro hsh
+    cases sf with
+    | none => exact absurd hsf (siteFor_reach hreach hsite hΓ)
+    | some gs =>
+    obtain ⟨Γ, s⟩ := gs
     cases pure_ok.1 hsh
     obtain ⟨⟨cc, cx'⟩, hcc, henc⟩ := bind_ok.1 henc
     obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
@@ -981,7 +1016,7 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     have hd := hqd x (ownQuery_mem hox)
-    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec (need_ok.1 hsf)
+    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
     obtain ⟨e, hA⟩ := Fun.eq_siteFn hP ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
