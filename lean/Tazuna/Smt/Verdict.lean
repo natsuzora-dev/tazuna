@@ -399,12 +399,12 @@ def Covered (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (
     (SymState.vars 0).decode M L T (shapes v P) = some s ∧ inp.decode M L hc = some x ∧
     ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case
 
-/-- T4: where the solver answers unsat to an input kind's bound question and to its questions about the invariant
-rules named `n`, no step of a run from an initial state whose invariants hold faults naming `n` at a state and input
-those questions cover. The proved invariants are assumed of the state before each step, which is sound because every
-state such a run reaches has them (`run_invariants`: a step that breaks one leaves the state it began with). A query
-step never faults. -/
-theorem verdict_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P))
+/-- T4 at the states and inputs the questions cover: where the solver answers unsat to an input kind's bound
+question and to its questions about the invariant rules named `n`, no step of a run from an initial state whose
+invariants hold faults naming `n` at a state and input those questions cover. The proved invariants are assumed of
+the state before each step, which is sound because every state such a run reaches has them (`run_invariants`: a step
+that breaks one leaves the state it began with). -/
+theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P))
     (n : String) (hinit : Step.invariants (Step.State.init v) = [])
     (inp : SymInput v (shapes v P) senv.nT) {gs : List Target} {qs : List (Question v (shapes v P) senv.nT)}
     (hq : questions L T P v senv inp = .ok (gs, qs))

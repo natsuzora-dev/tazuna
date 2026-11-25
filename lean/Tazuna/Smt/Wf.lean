@@ -513,11 +513,6 @@ theorem decodeAlts_sorted (d : Nat) : (k : Nat) → (vs : List (List Ty)) → (v
   | _, _ :: _, .int _, _, h | _, _ :: _, .bool _, _, h | _, _ :: _, .str _, _, h => by simp [decodeAlts] at h
 end
 
-/-- Well-formedness loses no value: every value that decodes, every embedded one among them, satisfies it. -/
-theorem wf_of_decode {t : Ty} {x c : Term} (hc : wfT L t x = some c) {y : t.den} (h : decodeV L t (x.denote M) = some y) :
-    Holds M c :=
-  (wf_iff t x c hc (decode_sorted t _ y h)).2 (by rw [h]; rfl)
-
 end
 
 end Tazuna.Smt

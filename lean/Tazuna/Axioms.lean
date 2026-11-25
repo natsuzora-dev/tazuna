@@ -5,7 +5,7 @@ import Tazuna.Cli.Test
 import Tazuna.Cli.Prove
 import Tazuna.Semantics.After
 import Tazuna.Smt.Prove
-import Tazuna.Smt.Verdict
+import Tazuna.Smt.Cover
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
@@ -79,11 +79,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.embedState_ofService, ``Tazuna.Smt.wf_ofService,
     -- In each service's layout, the step encoding meets no layout gap: refusals are the spec's, never the builder's.
     ``Tazuna.Smt.encodeStep_ofService,
-    -- T4: unsat answers to an input kind's bound question and its questions about the rules named n mean no step of
-    -- a run from an initial state whose invariants hold faults naming n where those questions cover the step.
-    ``Tazuna.Smt.verdict_sound,
-    -- For U10, which asserts well-formedness, the wire-id invariant and the create bounds: each loses no model.
-    ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff]
+    -- T4: unsat answers to every input kind's bound question and its questions about the rules named n mean no step
+    -- within the slots of a run from an initial state whose invariants hold faults naming n.
+    ``Tazuna.Smt.verdict_sound]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do
