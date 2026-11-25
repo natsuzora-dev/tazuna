@@ -308,9 +308,9 @@ def stateAt {v : ServiceV} (k : Nat) : SymState v := { SymState.vars 0 with pend
 /-- A step's terms through `encodeStep`, the encoding `step_encode` proves, for the input built at the layout's
 pending table size. -/
 def stepOf (L : Layout) (P : List AnySite) (v : ServiceV) (S : SymState v)
-    (inp : (slots : Nat) → Except String (SymInput v (shapes v P) slots)) : Except String (EncodedStep v) := do
+    (inp : (slots : Nat) → Except String (SymInput v (shapes v) slots)) : Except String (EncodedStep v) := do
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let senv ← enc (StepEnv.of L (shapes v P))
+  let senv ← enc (StepEnv.of L (shapes v))
   enc (encodeStep L prelude P v senv S (← inp senv.nT))
 
 /-- The answer at the `k`-th pending shape and the `j`-th pending slot. -/
@@ -819,7 +819,11 @@ def pendingSites : List AnySite :=
   [⟨[.int], _, ⟨⟨"m", 1, 1, 0⟩, [], .nil, rfl, rfl, payAnswerE⟩⟩, ⟨[.int], _, ⟨⟨"m", 2, 1, 0⟩, [], .nil, rfl, rfl, rateAnswerE⟩⟩,
    ⟨[], _, ⟨⟨"m", 3, 1, 0⟩, [], .nil, rfl, rfl, rateEnsuresE⟩⟩]
 
-def askR : ReactionV recordsT .int := ⟨"ask", .closed (.lam (.list .nil))⟩
+/-- The reaction's source writes the three sites, so its requests can hold them (`senderShapes`); it starts none. -/
+def askR : ReactionV recordsT .int := ⟨"ask", .closed (.lam
+  (.let_ (.close ⟨"m", 1, 1, 0⟩ (.cons (.int 0) .nil) rfl rfl payAnswerE)
+  (.let_ (.close ⟨"m", 2, 1, 0⟩ (.cons (.int 0) .nil) rfl rfl rateAnswerE)
+  (.let_ (.close ⟨"m", 3, 1, 0⟩ .nil rfl rfl rateEnsuresE) (.list .nil)))))⟩
 
 def fxDeclared : List (String × DeclaredV) :=
   [("fx", .externalCommand "pay" .str .int .str), ("fx", .externalQuery "rate" .str .int (.closed rateEnsuresE))]
@@ -828,7 +832,7 @@ def insertSvc : ServiceV := { querySvc with apply := .closed insertE, invariants
 
 def pendingSvc : ServiceV := { insertSvc with name := "p", queries := [], reactions := [askR], declared := fxDeclared }
 
-def pendingShapes : List (PendingShape pendingSvc.event) := shapes pendingSvc pendingSites
+def pendingShapes : List (PendingShape pendingSvc.event) := shapes pendingSvc
 
 def pendingLayout : Layout :=
   let lits := Tazuna.Smt.Expr.lits insertE ++ Tazuna.Smt.Expr.lits invariantsE ++ Tazuna.Smt.Expr.lits payAnswerE ++
@@ -1820,7 +1824,7 @@ def writeSvc : ServiceV := writeSvcOf startM
 
 def writeSites : List AnySite := Tazuna.Ir.Expr.sites .nil startEffectE
 
-def writeShapesOf (m : MachineV recordsT .int) : List (PendingShape (writeSvcOf m).event) := shapes (writeSvcOf m) writeSites
+def writeShapesOf (m : MachineV recordsT .int) : List (PendingShape (writeSvcOf m).event) := shapes (writeSvcOf m)
 
 def writeShapes : List (PendingShape writeSvc.event) := writeShapesOf startM
 
@@ -1915,36 +1919,44 @@ def writeCheck (solver : Solver) : IO Bool := do
     return ok
 
 /-! An event step that can write no request although requests have pending shapes: the service `w` with the
-machine `react`, which starts nothing, and a layout that names no effect kind, as when the program builds an
-`on_answer` closure but never a request. The script must be well-sorted and sat, and the pending table and next id read
+machine `react` whose effect builds an `on_answer` closure but starts nothing, and a layout that names no effect
+kind, as when the program builds an `on_answer` closure but never a request. The script must be well-sorted and sat, and the pending table and next id read
 from the model must be the step's: the one request already pending, next id 40. -/
+
+/-- `react` with an effect whose source builds `send`'s `on_answer` closure but starts nothing: the service can hold
+requests of that shape, yet the machine writes none. -/
+def quietM : MachineV recordsT .int :=
+  let key : Expr [] [invCtxT] .int := .field (ft := .int) "key" 0 (by simp) (.var .here)
+  let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
+  { reactM with effect := .closed (.lam (.let_ (.close ⟨"m", 3, 7, 0⟩ (.cons key .nil) rfl rfl body)
+      (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil))) }
 
 def quietCheck (solver : Solver) : IO Bool := do
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: no effect kinds: {m}"; return false
-  let L := writeLayoutOf reactM [] 3
+  let L := writeLayoutOf quietM [] 3
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
-  let some (dm, nm) := L.find? reactM.table | fail "no instance table"
+  let some (dm, nm) := L.find? quietM.table | fail "no instance table"
   let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
-  match writeScriptOf reactM (writeLayoutOf reactM [] 3) [] with
+  match writeScriptOf quietM (writeLayoutOf quietM [] 3) [] with
   | .error m => fail m
   | .ok (_, Sp) =>
     let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2[0]) (.int 3), .not Sm[0]!.1,
       .not Sm[1]!.1, .not Sm[2]!.1, .eq (.var 6) (.int 5), .eq (.var 3) (.int 40), Sp[0]!.1,
       .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1]
-    match writeScriptOf reactM (writeLayoutOf reactM [] 3) goal with
+    match writeScriptOf quietM (writeLayoutOf quietM [] 3) goal with
     | .error m => fail m
     | .ok (script, _) =>
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        match (SymState.vars 0).decode M L (v := writeSvcOf reactM) prelude (writeShapesOf reactM),
-            decodePending L (writeShapesOf reactM) ((Term.var 7).denote M), vs.lookup 8 with
+        match (SymState.vars 0).decode M L (v := writeSvcOf quietM) prelude (writeShapesOf quietM),
+            decodePending L (writeShapesOf quietM) ((Term.var 7).denote M), vs.lookup 8 with
         | some s, some pend', some (.int n') =>
-          let r := step prelude (writeSvcOf reactM) s (.event ⟨0, by simp [writeSvcOf]⟩ (by exact (5 : Int)))
-          let ids (ps : List (Step.Pending (writeSvcOf reactM).event)) := (ps.map (·.id)).mergeSort (· ≤ ·)
+          let r := step prelude (writeSvcOf quietM) s (.event ⟨0, by simp [writeSvcOf]⟩ (by exact (5 : Int)))
+          let ids (ps : List (Step.Pending (writeSvcOf quietM).event)) := (ps.map (·.id)).mergeSort (· ≤ ·)
           if r.outcome.summary != "accepted" then return ← fail s!"the step says {r.outcome.summary}"
           if ids pend' != ids r.state.pending || n' != r.state.nextId || ids pend' != [2] then
             return ← fail s!"the model's pending ids are {ids pend'} and next id {n'}, the step's {ids r.state.pending} and {r.state.nextId}"
@@ -1957,7 +1969,8 @@ reaction `fan`, which requests `send` with the event's value plus 1 and plus 2, 
 `event writes requests` (key 3 in state 0, request 2 pending, next id 40) the event 5 starts the machine's two
 requests at 40 (key 3) and 41 (key 5), then the reaction's at 42 (input 6) and 43 (input 7). The pending table and
 next id read from the model must be the step's, and swapping the reaction's two ids must not pass the comparison.
-With 4 pending slots, one pending and four new requests do not fit: the script is unsat. -/
+The reaction's `on_answer` is a site of its own, so each sender has one pending shape and its entries skip the
+other's kind. With 4 pending slots, one pending and four new requests do not fit: the script is unsat. -/
 
 def fanSendE (k : Int) : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
   let ev : Expr [] [Ty.reactionCtx recordsT, .int] .int := .var (.there .here)
@@ -1965,7 +1978,7 @@ def fanSendE (k : Int) : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [
     .call (.prim .externalCommand [.int, Ty.nil, Ty.nil] rfl) (.cons (.str "send") .nil)
   let body : Expr [] [.int] answerTyE := .lam (.list (.cons (.var (.there .here)) .nil))
   let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [answerTyE]) :=
-    .close ⟨"m", 3, 7, 0⟩ (.cons ev .nil) rfl rfl body
+    .close ⟨"m", 4, 1, 0⟩ (.cons ev .nil) rfl rfl body
   .call (.prim .requestCommand effArgs rfl) (.cons handle (.cons (.bin .add ev (.int k)) (.cons clo .nil)))
 
 def fanE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
@@ -1975,10 +1988,10 @@ def fanR : ReactionV recordsT .int := ⟨"fan", .closed fanE⟩
 
 def fanSvc : ServiceV := { writeSvc with name := "f", reactions := [fanR] }
 
-def fanShapes : List (PendingShape fanSvc.event) := shapes fanSvc writeSites
+def fanShapes : List (PendingShape fanSvc.event) := shapes fanSvc
 
 def fanLayout (slots : Nat) : Layout :=
-  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m", 3, 7, 0⟩] }
+  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m", 3, 7, 0⟩, sendKey ⟨"m", 4, 1, 0⟩] }
     (reactTys ++ [.tuple [.int], .tuple [], pendingTable fanShapes] ++ Tazuna.Smt.Expr.tys insertE ++
       Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++ Tazuna.Smt.Expr.tys fanE)
 
@@ -2071,7 +2084,7 @@ script must say the bound is exceeded and the step must be the cascade fault. -/
 def clockFireSvc (cascade : Int) : ServiceV := { writeSvc with name := "k", bounds := ⟨[], 0, cascade, 0⟩ }
 
 def clockShapes (cascade : Int) : List (PendingShape (clockFireSvc cascade).event) :=
-  shapes (clockFireSvc cascade) writeSites
+  shapes (clockFireSvc cascade)
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the line's time, v7 the new pending table, v8
 the next id after, v9 the new instance table. -/
@@ -2296,7 +2309,7 @@ def twiceC : CommandV recordsT .int .str :=
 
 def twiceSvc : ServiceV := { writeSvc with name := "t", commands := [twiceC] }
 
-def twiceShapes : List (PendingShape twiceSvc.event) := shapes twiceSvc writeSites
+def twiceShapes : List (PendingShape twiceSvc.event) := shapes twiceSvc
 
 def twiceLayoutOf (slots : Nat) : Layout := svcLayout twiceSvc slots
 
@@ -2487,13 +2500,13 @@ def mixE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect 
 
 def mixSvc : ServiceV := { writeSvc with name := "x", reactions := [⟨"mix", .closed mixE⟩] }
 
-def mixShapes : List (PendingShape mixSvc.event) := shapes mixSvc writeSites
+def mixShapes : List (PendingShape mixSvc.event) := shapes mixSvc
 
 def putKey : OwnKey := .command .int "put" .str .int .str ⟨⟨"m", 21, 1, 0⟩, [.int]⟩
 
 def mixLayout (slots : Nat) : Layout :=
   let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE ++ Tazuna.Smt.Expr.lits mixE
-  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m", 3, 7, 0⟩], owns := [putKey] }
+  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m", 3, 7, 0⟩, sendKey ⟨"m", 4, 1, 0⟩], owns := [putKey] }
     (reactTys ++ [.tuple [.int], .tuple [], .list .int, cctxT, Ty.result (.list .int) .str, pendingTable mixShapes] ++
       Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
       Tazuna.Smt.Expr.tys mixE ++ Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE)
@@ -2796,7 +2809,7 @@ and must differ from what it leaves for the other kind's effect; `gone` must fau
 
 def dispSvc : ServiceV := { twiceSvc with name := "o", queries := [nextQ] }
 
-def dispShapes : List (PendingShape dispSvc.event) := shapes dispSvc writeSites
+def dispShapes : List (PendingShape dispSvc.event) := shapes dispSvc
 
 def dispSites : List AnySite := writeSites ++ [⟨[.int], _, answerFive⟩, ⟨[], _, answerIsEvent⟩]
 
@@ -3065,7 +3078,7 @@ def cascSvc (cascade : Int) : ServiceV :=
   { writeSvc with name := "c", commands := [{ twiceC with name := "put" }], reactions := [⟨"once", .closed onceE⟩],
                   bounds := ⟨[], 0, cascade, 0⟩ }
 
-def cascShapes (cascade : Int) : List (PendingShape (cascSvc cascade).event) := shapes (cascSvc cascade) writeSites
+def cascShapes (cascade : Int) : List (PendingShape (cascSvc cascade).event) := shapes (cascSvc cascade)
 
 def cascSites : List AnySite := writeSites ++ [⟨[], _, onceSite⟩]
 
@@ -3186,7 +3199,7 @@ def tickSvc (cascade : Int) : ServiceV := { cascSvc cascade with name := "tk", m
 /-- The service `tk`'s sites: those of its functions, as its program has. -/
 def tickSites (cascade : Int) : List AnySite := (svcParts (tickSvc cascade)).sites
 
-def tickShapes (cascade : Int) : List (PendingShape (tickSvc cascade).event) := shapes (tickSvc cascade) (tickSites cascade)
+def tickShapes (cascade : Int) : List (PendingShape (tickSvc cascade).event) := shapes (tickSvc cascade)
 
 def tickLayout (cascade : Int) (slots : Nat) : Layout := svcLayout (tickSvc cascade) slots
 
@@ -3317,8 +3330,8 @@ def proveCase (solver : Solver) (name : String) (v : ServiceV) (hc : v.caller.is
     (i : Fin v.subscribes.length) (want asked : List Target) : IO Bool := do
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: prove's questions, {name}: {m}"; return false
   let L := svcLayout v 3
-  let .ok senv := StepEnv.of L (shapes v P) | fail "no step environment"
-  let inp : SymInput v (shapes v P) senv.nT := .event i (.var (5 + v.machines.length))
+  let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
+  let inp : SymInput v (shapes v) senv.nT := .event i (.var (5 + v.machines.length))
   match questions L prelude P v senv inp with
   | .error r => fail s!"no questions: {repr r}"
   | .ok (gs, qs) =>
@@ -3333,7 +3346,7 @@ def proveCase (solver : Solver) (name : String) (v : ServiceV) (hc : v.caller.is
         match ← solver.run { q.script with asserts } with
         | .sat vs =>
           let M := modelOf vs
-          match (SymState.vars (v := v) 0).decode M L prelude (shapes v P), inp.decode M L hc with
+          match (SymState.vars (v := v) 0).decode M L prelude (shapes v), inp.decode M L hc with
           | some st, some x =>
             if settledBreaks v st x g == negated then
               ok ← fail s!"{repr g} (negated {negated}): the step from the model's state and input disagrees"

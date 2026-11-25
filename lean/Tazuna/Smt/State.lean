@@ -328,10 +328,10 @@ the service's shapes and instances in the step's form, so when its values fit th
 hold it and the symbolic state decodes to it. -/
 theorem decode_reachable (b : Nat) (T : List TypeDecl) {P : List AnySite} (s : State v) (hinv : Step.Inv P s)
     (hkeys : Step.KeysOk T s) :
-    ∃ pv : PendingVal (shapes v P), pv.list = s.pending ∧ ∀ vals, embedState L s pv = some vals →
+    ∃ pv : PendingVal (shapes v), pv.list = s.pending ∧ ∀ vals, embedState L s pv = some vals →
       ∀ M : Model, (∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) →
-        (SymState.vars (v := v) b).decode M L T (shapes v P) = some s := by
-  obtain ⟨pv, hpv⟩ := exists_pendingVal (shapes v P) s.pending hinv.shaped hinv.nodup
+        (SymState.vars (v := v) b).decode M L T (shapes v) = some s := by
+  obtain ⟨pv, hpv⟩ := exists_pendingVal (shapes v) s.pending hinv.shaped hinv.nodup
   exact ⟨pv, hpv, fun vals h M hM =>
     decode_embedState b T s pv hpv (fun sm h => (hkeys sm h).2) vals h hM⟩
 
@@ -339,10 +339,10 @@ theorem decode_reachable (b : Nat) (T : List TypeDecl) {P : List AnySite} (s : S
 machine keys are ordered (what check requires): no assumption about the state is left. -/
 theorem decode_run (b : Nat) (T : List TypeDecl) {P : List AnySite} {E : List AnyEffectSite} (hv : v.Reach P E)
     (hord : ∀ m ∈ v.machines, m.key.ordered T = true) (is : List (Input v)) :
-    ∃ pv : PendingVal (shapes v P), pv.list = (run T v (Step.State.init v) is).1.pending ∧
+    ∃ pv : PendingVal (shapes v), pv.list = (run T v (Step.State.init v) is).1.pending ∧
       ∀ vals, embedState L (run T v (Step.State.init v) is).1 pv = some vals →
       ∀ M : Model, (∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) →
-        (SymState.vars (v := v) b).decode M L T (shapes v P) = some (run T v (Step.State.init v) is).1 :=
+        (SymState.vars (v := v) b).decode M L T (shapes v) = some (run T v (Step.State.init v) is).1 :=
   decode_reachable b T _ (run_inv T hv _ Step.init_inv is) (run_keys T _ (Step.init_keys T hord) is)
 
 /-- The instance tables' well-formedness holds exactly when they decode. -/

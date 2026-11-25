@@ -130,7 +130,7 @@ holds, an unlisted caller or a broken `accepts` rule is `Fault.invalidEffect`, a
 acceptance is `Fault.ensures`, and otherwise the internal step runs to its end with what the terms denote (`AccRel`),
 the fresh counter advanced. -/
 theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
-    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (a : Step.Acc v)
+    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared) (a : Step.Acc v)
     (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) {cc : CommandCode x}
     {cx : Term} (hcc : CommandCode.of L x = .ok (cc, cx)) (hccx : Holds M cx)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
@@ -184,7 +184,7 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
   let a1 : Step.Acc v := { a with state := { a.state with fresh := a.state.fresh + 1 } }
   have hfr1 : (Term.add fresh (.int 1)).denote M = .int (Int.ofNat a1.state.fresh) := by
     simp only [Term.denote, hfresh]; rfl
-  have D := decide_encode chk hshs x hcc hccx happ hca senv a1 ctx hcx hnow hrec hms hn hq hfr1 h2
+  have D := decide_encode chk hshs hshp x hcc hccx happ hca senv a1 ctx hcx hnow hrec hms hn hq hfr1 h2
   have hle : (Ty.list v.event).isData = true := x.data.events
   have hrn : (Ty.result Ty.nil x.rejection).isData = true := by
     simp [Ty.result, Ty.nil, Ty.isData, Ty.isDatas, Ty.isDatass, x.data.rejection]
@@ -223,7 +223,7 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
     have e7 : Holds M c5 → Holds M c6 → (Holds M c7 ↔ eventsFit L.count T s ((site.fn env).fn ⟨ans, ()⟩)) :=
       fun hc5 hc6 => by
         obtain ⟨sv2, hS2, hh2⟩ := hview ans hac hc5 hc6
-        exact (events_encode chk hshs happ hca senv _ sv2 hS2 _ hh2 s hnw hr hm h23).1
+        exact (events_encode chk hshs hshp happ hca senv _ sv2 hS2 _ hh2 s hnw hr hm h23).1
     constructor
     · rintro ⟨hc5, hc6, hc7⟩
       exact ⟨e5.1 hc5, (e6 ans hac hc5).1 hc6, (e7 hc5 hc6).1 hc7⟩
@@ -243,7 +243,7 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
       obtain ⟨hc5, hc6, hc7⟩ : Holds M c5 ∧ Holds M c6 ∧ Holds M c7 := by
         rw [holds_andT, holds_andT] at h567; exact h567
       obtain ⟨sv2, hS2, hh2⟩ := hview ans hac hc5 hc6
-      exact loop_acc (T := T) chk hshs happ hca senv a2 hnw hS2 hh2 hr hm hn2 hq2 hf h23 hc7
+      exact loop_acc (T := T) chk hshs hshp happ hca senv a2 hnw hS2 hh2 hr hm hn2 hq2 hf h23 hc7
   have hacR : ∀ j, RelV L x.rejection (Ty.up _ x.data.rejection j) (dc.rejection.denote M) →
       dc.ok.denote M = .bool false → Smt.Rel M L _ (Ty.up _ hrn (.inr (.inl (j, ())))) ac := fun j hrj hokf => by
     have herr := adtCtor_rel (L := L) (M := M) (vs := [[Ty.nil], [x.rejection]]) ⟨1, by simp⟩ _ _ h18
@@ -397,7 +397,7 @@ and, where its rules hold, `resolve` fits at the context and `on_answer`'s part 
 an unlisted caller or a broken `accepts` rule is `Fault.invalidEffect`, and otherwise the internal step runs to its
 end with what the terms denote (`AccRel`); a query leaves the fresh counter as it was. -/
 theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
-    (hshs : ∀ sh ∈ shs, sh.InSites P) (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0)
+    (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared) (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0)
     (input : x.input.den0) {qc : QueryCode x} {cq : Term} (hqc : QueryCode.of L x = .ok (qc, cq)) (hcq : Holds M cq)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
@@ -480,7 +480,7 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
         have hevt := (rel_term (need_ok.1 h11) _).1 hevs
         obtain ⟨sv, hS, -, -, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
         erw [Ty.up_list _ _ v.event_data] at hh
-        exact (events_encode chk hshs happ hca senv _ sv hS _ hh a.state hnow hrec hms h13).1
+        exact (events_encode chk hshs hshp happ hca senv _ sv hS _ hh a.state hnow hrec hms h13).1
       rw [holds_andT, holds_andT]
       constructor
       · rintro ⟨hc3, hc4, hc5⟩
@@ -546,7 +546,7 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     erw [Ty.up_list _ _ v.event_data] at hh
     let evs1 : List v.event.den0 := (site.fn env).fn ⟨x.resolve.fn ⟨Step.ctx a.state a.state.records caller input, ()⟩, ()⟩
     change Holds2 (EBag L v.event) (evs1.map (Ty.up _ v.event_data)) sv at hh
-    exact loop_acc (T := T) chk hshs happ hca senv a hnow hS hh hrec hms hn hq hfresh h13 hc5
+    exact loop_acc (T := T) chk hshs hshp happ hca senv a hnow hS hh hrec hms hn hq hfresh h13 hc5
 
 end
 

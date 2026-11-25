@@ -121,8 +121,8 @@ variable {M : Model} {L : Layout} {T : List TypeDecl}
 
 /-- Exactness of the sites condition for every step kind: a step whose kind ends with a cascade has it exactly when
 every own kind's functions fit wherever the cascade may run; a query and an unmatched answer ask nothing. -/
-theorem step_sites {P : List AnySite} {v : ServiceV} (senv : StepEnv L (shapes v P)) (S : SymState v)
-    {inp : SymInput v (shapes v P) senv.nT} {t : EncodedStep v} (henc : encodeStep L T P v senv S inp = .ok t) :
+theorem step_sites {P : List AnySite} {v : ServiceV} (senv : StepEnv L (shapes v)) (S : SymState v)
+    {inp : SymInput v (shapes v) senv.nT} {t : EncodedStep v} (henc : encodeStep L T P v senv S inp = .ok t) :
     Holds M t.sites ↔ match inp with
       | .query .. | .unmatched .. => True
       | _ => SitesFit L P v := by

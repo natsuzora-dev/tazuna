@@ -222,7 +222,7 @@ def initReports (targets : List Target) : List Report :=
 -- a wire form show as none.
 set_option linter.tazuna.silentDefault false in
 /-- The report of one question's answer. -/
-def answerReport (L : Layout) (senv : StepEnv L (shapes v c.P)) (q : Question v (shapes v c.P) senv.nT)
+def answerReport (L : Layout) (senv : StepEnv L (shapes v)) (q : Question v (shapes v) senv.nT)
     (a : Smt.Answer) : Except String Report :=
   let name := q.input.text
   match a with
@@ -231,7 +231,7 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v c.P)) (q : Question v 
   | .sat vs =>
     let M := modelOf vs
     if hc : v.caller.isData = true then
-      match (SymState.vars (v := v) 0).decode M L c.T (shapes v c.P), q.input.decode M L hc with
+      match (SymState.vars (v := v) 0).decode M L c.T (shapes v), q.input.decode M L hc with
       | some s, some x =>
         let r := step c.T v s x
         let after := Step.settled c.T s x
@@ -249,7 +249,7 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v c.P)) (q : Question v 
         let fields : List (String × Json) := shown.run' {}
         match q.target with
         | none => .ok (.boundReached v.name name
-            ((after.map fun (a : Acc v) => boundsPast c.T L (shapes v c.P) a.state).getD []))
+            ((after.map fun (a : Acc v) => boundsPast c.T L (shapes v) a.state).getD []))
         | some g =>
           let violated := match g, r.outcome with
             | .invariant .., _ => (after.map fun (a : Acc v) => brokenAt a.state g).getD []
@@ -265,12 +265,12 @@ set_option linter.tazuna.silentDefault false in
 /-- Every line of the service in order: the base case, then each input kind's questions. -/
 def serviceItems (only : String → Bool) : ServiceItems := Id.run do
   let L := Layout.ofService c.program.defs v
-  let .ok senv := StepEnv.of L (shapes v c.P)
+  let .ok senv := StepEnv.of L (shapes v)
     | return { internal := some s!"service {v.name}: no step environment in its layout" }
   let b := 5 + v.machines.length
   let mut items : List Item := []
   let mut targets : List Target := []
-  for inp in stepInputs v (shapes v c.P) senv.nT b do
+  for inp in stepInputs v (shapes v) senv.nT b do
     let step := inp.text
     match questions L c.T c.P v senv inp with
     | .error r =>

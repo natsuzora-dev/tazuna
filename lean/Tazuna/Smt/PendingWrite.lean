@@ -124,10 +124,16 @@ theorem mem_sitesOf {sites : List AnySite} {t : Ty} {Γ : List Ty} {s : Site Γ 
 -- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
 set_option linter.tazuna.silentDefault false in
 /-- Every shape a service's states can hold names sites of the program. -/
-theorem shapes_inSites {v : ServiceV} {P : List AnySite} {sh : PendingShape v.event} (h : sh ∈ shapes v P) :
-    sh.InSites P := by
+theorem shapes_inSites {v : ServiceV} {P : List AnySite} {E : List AnyEffectSite} (hv : v.Reach P E)
+    {sh : PendingShape v.event} (h : sh ∈ shapes v) : sh.InSites P := by
   simp only [shapes, List.mem_flatMap] at h
-  obtain ⟨⟨ks, snd⟩, -, h⟩ := h
+  obtain ⟨⟨ks, snd, S⟩, hS, h⟩ := h
+  have hSP : ∀ s ∈ S, s ∈ P := by
+    simp only [senderShapes, List.mem_append, List.mem_map] at hS
+    rcases hS with ⟨m, hm, he⟩ | ⟨x, hx, he⟩ <;> cases he
+    · exact (hv.machines m hm).effect.used
+    · exact (hv.reactions x hx).used
+  suffices hin : sh.InSites S from ⟨hSP _ hin.1, fun s hs => hSP _ (hin.2 s hs)⟩
   split at h
   · simp only [List.mem_map] at h
     obtain ⟨rq, hrq, rfl⟩ := h
@@ -135,11 +141,11 @@ theorem shapes_inSites {v : ServiceV} {P : List AnySite} {sh : PendingShape v.ev
     obtain ⟨⟨x, d⟩, -, hrq⟩ := hrq
     have hmk : ∀ (name : String) (i o : Ty) (j : Option Ty)
         (ens : Option ((Γ : List Ty) × Site Γ (Ty.fn [i, answerTy o j] Ty.rules))),
-        (∀ s ∈ ens, (⟨s.1, _, s.2⟩ : AnySite) ∈ P) → ∀ rq' ∈ ((sitesOf P (Ty.fn [answerTy o j] (.list v.event))).filterMap
+        (∀ s ∈ ens, (⟨s.1, _, s.2⟩ : AnySite) ∈ S) → ∀ rq' ∈ ((sitesOf S (Ty.fn [answerTy o j] (.list v.event))).filterMap
           fun (⟨aΓ, a⟩ : (Γ : List Ty) × Site Γ _) =>
           if h : (Ty.tuple [i, .tuple ((ens.map (·.1)).getD []), .tuple aΓ]).isData = true then
             some (⟨x, name, i, o, j, ens, aΓ, a, h⟩ : RequestShape v.event) else none),
-        (⟨rq'.answerΓ, _, rq'.onAnswer⟩ : AnySite) ∈ P ∧ ∀ s ∈ rq'.ensures, (⟨s.1, _, s.2⟩ : AnySite) ∈ P := by
+        (⟨rq'.answerΓ, _, rq'.onAnswer⟩ : AnySite) ∈ S ∧ ∀ s ∈ rq'.ensures, (⟨s.1, _, s.2⟩ : AnySite) ∈ S := by
       intro name i o j ens hens rq' hrq'
       simp only [List.mem_filterMap] at hrq'
       obtain ⟨⟨aΓ, a⟩, ha, hrq'⟩ := hrq'
@@ -157,10 +163,10 @@ theorem shapes_inSites {v : ServiceV} {P : List AnySite} {sh : PendingShape v.ev
 -- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
 set_option linter.tazuna.silentDefault false in
 /-- A shape has a rejection exactly when it has no `ensures`: a command's request, or a query's. -/
-theorem shapes_rejection {v : ServiceV} {P : List AnySite} {sh : PendingShape v.event} (h : sh ∈ shapes v P) :
+theorem shapes_rejection {v : ServiceV} {sh : PendingShape v.event} (h : sh ∈ shapes v) :
     sh.rejection.isSome = sh.ensures.isNone := by
   simp only [shapes, List.mem_flatMap] at h
-  obtain ⟨⟨ks, snd⟩, -, h⟩ := h
+  obtain ⟨⟨ks, snd, S⟩, -, h⟩ := h
   split at h
   · simp only [List.mem_map] at h
     obtain ⟨rq, hrq, rfl⟩ := h
@@ -168,7 +174,7 @@ theorem shapes_rejection {v : ServiceV} {P : List AnySite} {sh : PendingShape v.
     obtain ⟨⟨x, d⟩, -, hrq⟩ := hrq
     have hmk : ∀ (name : String) (i o : Ty) (j : Option Ty)
         (ens : Option ((Γ : List Ty) × Site Γ (Ty.fn [i, answerTy o j] Ty.rules))), j.isSome = ens.isNone →
-        ∀ rq' ∈ ((sitesOf P (Ty.fn [answerTy o j] (.list v.event))).filterMap
+        ∀ rq' ∈ ((sitesOf S (Ty.fn [answerTy o j] (.list v.event))).filterMap
           fun (⟨aΓ, a⟩ : (Γ : List Ty) × Site Γ _) =>
           if h : (Ty.tuple [i, .tuple ((ens.map (·.1)).getD []), .tuple aΓ]).isData = true then
             some (⟨x, name, i, o, j, ens, aΓ, a, h⟩ : RequestShape v.event) else none),
@@ -332,35 +338,43 @@ theorem relAlts_pendingInj (d : Nat) : (shs : List (PendingShape e)) → (k j : 
     exact this
 
 /-- The shape index of each request kind, for requests the sender `snd` starts: the shape that fits the kind and the
-external that lists it. Own kinds have none: their effects never reach the pending table. -/
+external that lists it, none where no shape of the sender fits (the sender never starts a request of that kind). Own
+kinds have none: their effects never reach the pending table. -/
 def shapeIdxs (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (snd : (ks : List Ty) × SenderShape ks)
-    (keys : List EffectKey) : Except Refusal (List Nat) :=
+    (keys : List EffectKey) : Except Refusal (List (Option Nat)) :=
   keys.mapM fun key => do
     let x ← need (.layout (.effectKind key.name)) (key.owner ds)
-    need (.layout (.effectKind key.name)) (shs.findIdx? (·.fits snd key x))
+    pure (shs.findIdx? (·.fits snd key x))
 
 /-- The pending entry of the effect kind `i`'s value `eff`, with the shape `j` and the sender's key tuple items
 `keyT`. -/
 def entryAt (dE dP dk : Nat) (keyT : List Term) (eff : Term) (i j : Nat) : Term :=
   .ctor dP j [.ctor dk 0 keyT, .sel dE i 0 eff, .sel dE i 1 eff, .sel dE i 2 eff]
 
-/-- The pending entry of the effect `eff`: the entry of its kind, from the kinds' shape indices `js`. With no kind no
-effect has a code, so no slot holding one is read; the entry is then `dflt`, any term of the entry's sort. -/
-def entryT (dE dP dk : Nat) (dflt : Term) (keyT : List Term) (eff : Term) : Nat → List Nat → Term
+/-- The pending entry of the effect `eff`: the entry of its kind, from the kinds' shape indices `js`; a kind the
+sender never starts has no branch. With no such kind no effect has a code, so no slot holding one is read; the entry
+is then `dflt`, any term of the entry's sort. -/
+def entryT (dE dP dk : Nat) (dflt : Term) (keyT : List Term) (eff : Term) : Nat → List (Option Nat) → Term
   | _, [] => dflt
-  | i, [j] => entryAt dE dP dk keyT eff i j
-  | i, j :: js => .ite (.is dE i eff) (entryAt dE dP dk keyT eff i j) (entryT dE dP dk dflt keyT eff (i + 1) js)
+  | i, none :: js => entryT dE dP dk dflt keyT eff (i + 1) js
+  | i, [some j] => entryAt dE dP dk keyT eff i j
+  | i, some j :: js => .ite (.is dE i eff) (entryAt dE dP dk keyT eff i j) (entryT dE dP dk dflt keyT eff (i + 1) js)
 
 theorem entryT_den {M : Model} (dE dP dk : Nat) (dflt : Term) (keyT : List Term) (eff : Term) {vals : List Val} :
-    (js : List Nat) → (i0 i : Nat) → eff.denote M = .ctor dE (i0 + i) vals → (j : Nat) → js[i]? = some j →
+    (js : List (Option Nat)) → (i0 i : Nat) → eff.denote M = .ctor dE (i0 + i) vals → (j : Nat) →
+    js[i]? = some (some j) →
     (entryT dE dP dk dflt keyT eff i0 js).denote M = (entryAt dE dP dk keyT eff (i0 + i) j).denote M
   | [], _, _, _, _, h => by cases h
-  | [j'], i0, 0, _, j, h => by cases h; rfl
-  | [_], _, _ + 1, _, _, h => by cases h
-  | j' :: j'' :: js, i0, 0, he, j, h => by
+  | none :: _, _, 0, _, _, h => by cases h
+  | none :: js, i0, i + 1, he, j, h => by
+    rw [show i0 + (i + 1) = i0 + 1 + i by omega]
+    exact entryT_den dE dP dk dflt keyT eff js (i0 + 1) i (by rw [he]; congr 1; omega) j (by simpa using h)
+  | [some j'], i0, 0, _, j, h => by cases h; rfl
+  | [some _], _, _ + 1, _, _, h => by cases h
+  | some j' :: j'' :: js, i0, 0, he, j, h => by
     cases h
     simp [entryT, Term.denote, he, Val.toBool]
-  | j' :: j'' :: js, i0, i + 1, he, j, h => by
+  | some j' :: j'' :: js, i0, i + 1, he, j, h => by
     have ih := entryT_den dE dP dk dflt keyT eff (j'' :: js) (i0 + 1) i (by rw [he]; congr 1; omega) j (by simpa using h)
     have hne : (Term.is dE i0 eff).denote M = .bool false := by simp [Term.denote, he]
     rw [show i0 + (i + 1) = i0 + 1 + i by omega, ← ih]
@@ -368,16 +382,93 @@ theorem entryT_den {M : Model} (dE dP dk : Nat) (dflt : Term) (keyT : List Term)
     rw [hne]
     rfl
 
+/-- The shapes hold every request the sender `snd` starts for the effect, with the external `x` that lists it. -/
+def ShapedFrom (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (snd : Sender) (eff : EffectV e) :
+    Prop :=
+  ∀ req x, eff = .request req → req.ownerIn ds = some x → ∀ id, AtShapes shs ⟨id, snd, x, req⟩
+
+theorem pendingOf_mem : (shs : List (PendingShape e)) → (id : Nat) → (y : Ty.alts (shs.map PendingShape.fields)) →
+    ∃ sh ∈ shs, ∃ fx, pendingOf shs id y = sh.pending id fx
+  | sh :: _, id, .inl fx => ⟨sh, List.mem_cons_self, fx, rfl⟩
+  | _ :: shs, id, .inr y => by
+    obtain ⟨sh, hm, fx, h⟩ := pendingOf_mem shs id y
+    exact ⟨sh, List.mem_cons_of_mem _ hm, fx, h⟩
+
+theorem senderSame_of_sender : {ks ks' : List Ty} → (a : SenderShape ks) → (b : SenderShape ks') →
+    (ka : (Ty.tuple ks).den0) → (kb : (Ty.tuple ks').den0) → a.sender ka = b.sender kb → senderSame a b = true
+  | _, _, .machine n k, .machine n' k', (_, ()), (_, ()), h => by
+    simp only [SenderShape.sender, Sender.machine.injEq] at h
+    obtain ⟨rfl, h⟩ := h
+    cases h
+    simp [senderSame, Ty_same_self]
+  | _, _, .reaction n, .reaction n', (), (), h => by
+    simp only [SenderShape.sender, Sender.reaction.injEq] at h
+    simp [senderSame, h]
+  | _, _, .machine _ _, .reaction _, (_, ()), (), h | _, _, .reaction _, .machine _ _, (), (_, ()), h => by
+    simp [SenderShape.sender] at h
+
+-- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
+set_option linter.tazuna.silentDefault false in
+/-- A request of a kind that the shapes hold for a sender is of a shape that fits the kind, the sender and the
+external. -/
+theorem fits_of_atShapes {shs : List (PendingShape e)} {ks : List Ty} {sd : SenderShape ks}
+    {kv : (Ty.tuple ks).den0} {x : String} {req : RequestV e} {id : Nat} (hat : AtShapes shs ⟨id, sd.sender kv, x, req⟩)
+    {key : EffectKey} {vals : List Val} (hh : key.Holds L (.request req) vals) :
+    (shs.findIdx? (·.fits ⟨ks, sd⟩ key x)).isSome = true := by
+  obtain ⟨y, hy⟩ := hat
+  obtain ⟨sh, hsh, fx, hp⟩ := pendingOf_mem shs id y
+  rw [hp] at hy
+  rw [List.findIdx?_isSome, List.any_eq_true]
+  refine ⟨sh, hsh, ?_⟩
+  clear hsh hp
+  obtain ⟨⟨ext, name, input, output, rej, ens, aΓ, onA, hf⟩, ks0, snd, hks⟩ := sh
+  simp only [PendingShape.pending, Step.Pending.mk.injEq] at hy
+  obtain ⟨-, hsnd, rfl, rfl⟩ := hy
+  obtain ⟨h1, h2, h3, h4, h5, h6, vi, ve, va, -, -, -, hens⟩ := hh
+  dsimp only at h1 h2 h3 h4 h5 h6 hens hsnd
+  subst h1 h2 h3 h4
+  simp only [PendingShape.fits, Bool.and_eq_true, beq_iff_eq, Ty_same_self, senderSame_of_sender _ _ _ _ hsnd,
+    siteMatch, true_and]
+  refine ⟨⟨?_, ?_⟩, ?_, ?_⟩
+  · cases key.rejection <;> simp [optSame, Ty_same_self]
+  · revert hens
+    cases ens with
+    | none => cases key.ensures <;> simp [ensuresFn]
+    | some s =>
+      obtain ⟨sΓ, s⟩ := s
+      cases key.ensures with
+      | none => simp [ensuresFn]
+      | some sk =>
+        rintro ⟨h7, h8, -⟩
+        simp only [Site.fn] at h7 h8
+        simp only [h7, beq_self_eq_true, Bool.true_and]
+        rw [h8]; exact Ty_sames_self _
+  · exact h5
+  · have h : aΓ = key.answer.Γ := h6
+    rw [← h]; exact Ty_sames_self _
+
+/-- The shapes hold every request a sender of the service starts, with the external `ds` names for it: as the
+service's own shapes do (`shapesHold_shapes`). -/
+def ShapesHold {v : ServiceV} (shs : List (PendingShape v.event)) (ds : List (String × DeclaredV)) : Prop :=
+  ∀ x, Tazuna.Ir.FromSender v x → ShapedFrom shs ds x.1 x.2
+
+theorem shapesHold_shapes (v : ServiceV) : ShapesHold (shapes v) v.declared := by
+  intro ⟨snd, eff⟩ hf req x h hx id
+  dsimp only at h hf
+  subst h
+  exact atShapes_start hf hx id
+
 /-- The pending entry the step writes for an effect a sender starts: wherever the effect's term and the key tuple's
 items denote them, the entry term denotes an entry that codes the request with its sender and the external that lists
 it. -/
 theorem entry_rel {M : Model} {P : List AnySite} (hP : SitesUnique P) {e : Ty} {ks : List Ty} (sd : SenderShape ks)
-    {shs : List (PendingShape e)} (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List Nat}
-    (hjs : shapeIdxs shs ds ⟨ks, sd⟩ (L.effectsOf e) = .ok js)
+    {shs : List (PendingShape e)} (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
+    {js : List (Option Nat)} (hjs : shapeIdxs shs ds ⟨ks, sd⟩ (L.effectsOf e) = .ok js)
     {dE nE dP nP dk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (kv : (Ty.tuple ks).den0) {keyT : List Term} (hK : RelD L (.tuple ks) kv (.ctor dk 0 (Term.denotes M keyT)))
-    {eff : EffectV e} (hr : eff.Reach P) (hreq : eff.isRequest = true) {effT : Term}
+    {eff : EffectV e} (hr : eff.Reach P) (hat : ShapedFrom shs ds (sd.sender kv) eff) (hreq : eff.isRequest = true)
+    {effT : Term}
     (heff : RelV L (.dsl .effect [e]) eff (effT.denote M)) (id : Nat) (dflt : Term) :
     ∃ req x, eff = .request req ∧ req.ownerIn ds = some x ∧ ∃ y,
       RelV L (pendingEntry shs) y ((entryT dE dP dk dflt keyT effT 0 js).denote M) ∧
@@ -393,13 +484,15 @@ theorem entry_rel {M : Model} {P : List AnySite} (hP : SitesUnique P) {e : Ty} {
   | command => exact hh.elim
   | query => exact hh.elim
   | request req =>
-    obtain ⟨j, hj, hbody⟩ := forall2_getElem? (mapM_ok _ _ _ hjs) hki
+    obtain ⟨jo, hj, hbody⟩ := forall2_getElem? (mapM_ok _ _ _ hjs) hki
     obtain ⟨x, hx, hbody⟩ := bind_ok.1 hbody
-    have hfind := need_ok.1 hbody
+    have hown : req.ownerIn ds = some x := (owner_eq hh ds).trans (need_ok.1 hx)
+    obtain ⟨j, hfind⟩ := Option.isSome_iff_exists.1 (fits_of_atShapes (hat req x rfl hown 0) hh)
+    obtain rfl : jo = some j := (pure_ok.1 hbody).symm.trans hfind
     obtain ⟨hlt, hfit, -⟩ := List.findIdx?_eq_some_iff_getElem.1 hfind
     have hsh : shs[j]? = some shs[j] := List.getElem?_eq_getElem hlt
     obtain ⟨fx, hrel, hpend⟩ := fits_pending hP (hshs _ (List.getElem_mem hlt)) hfit hr hh kv hK id
-    refine ⟨req, x, rfl, (owner_eq hh ds).trans (need_ok.1 hx), pendingInj shs j hsh fx, ?_, ?_⟩
+    refine ⟨req, x, rfl, hown, pendingInj shs j hsh fx, ?_, ?_⟩
     · obtain ⟨-, -, -, -, -, -, vi, ve, va, rfl, -⟩ := hh
       rw [entryT_den dE dP dk dflt keyT effT (vals := [vi, ve, va]) js 0 i (by rw [hz, Nat.zero_add]) j hj]
       have := relAlts_pendingInj (L := L) dP shs 0 j hsh fx hrel

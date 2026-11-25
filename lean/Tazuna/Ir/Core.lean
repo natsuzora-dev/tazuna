@@ -26,6 +26,11 @@ def Var.at? : (Γ : List Ty) → Nat → (t : Ty) → Option (Var Γ t)
   | u :: _, 0, t => (Ty.same u t).map fun ⟨h⟩ => h ▸ .here
   | _ :: Γ, i + 1, t => (Var.at? Γ i t).map .there
 
+/-- The variable's position from the innermost. -/
+def Var.idx : {Γ : List Ty} → {t : Ty} → Var Γ t → Nat
+  | _, _, .here => 0
+  | _, _, .there v => v.idx + 1
+
 /-- Operators with their operand and result types. Int arithmetic follows Gleam on Erlang: unbounded, `/` and `%`
 truncate, and dividing by zero gives zero. -/
 inductive BinOp : Ty → Ty → Ty → Type

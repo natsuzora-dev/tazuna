@@ -237,7 +237,7 @@ holds exactly when the internal step `Step.runOwn` runs fits (`ownFits`); wherev
 exactly when the outcome terms name a fault, which is `Step.runOwn`'s, and otherwise the internal step runs to its end
 with what the step terms denote (`AccRel`). -/
 theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
-    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
+    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (a : Step.Acc v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
@@ -328,7 +328,7 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     have hsi : RelV L x.input (Ty.up _ hd.input value)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have E := ownCommand_encode chk hshs a x caller value hcc hcx happ hca s oenv hσ'
+    have E := ownCommand_encode chk hshs hshp a x caller value hcc hcx happ hca s oenv hσ'
       (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
@@ -426,7 +426,7 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     have hsi : RelV L x.input (Ty.up _ hd.input value)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have E := ownQuery_encode chk hshs a x caller value hqc hcx happ hca s oenv hσ'
+    have E := ownQuery_encode chk hshs hshp a x caller value hqc hcx happ hca s oenv hσ'
       (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) (chk.outputs x (ownQuery_mem hox)) hks' senv
       hrec hnow hfresh hn hq hms hsc hsi hoe
     simp only [cast_eq]
@@ -598,7 +598,7 @@ theorem find_hit {α : Type} {k : Nat} : (l : List (Term × α)) → {y : Term �
 step `Step.runOwn` runs fits (`ownFits`); wherever it holds, the fault term holds exactly when the model's kind names a
 fault, which is `Step.runOwn`'s, and otherwise the internal step runs to its end with what the merged terms denote. -/
 theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
-    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
+    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (a : Step.Acc v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
@@ -652,7 +652,7 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     · simp [h, Ne.symm h]
   have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
   refine ⟨?_, fun hc => ?_⟩
-  · rw [← (ownKind_encode chk hshs a happ hca senv hrec hnow hfresh hn hq hms x
+  · rw [← (ownKind_encode chk hshs hshp a happ hca senv hrec hnow hfresh hn hq hms x
       hreach heff' hkey hkind hcxk).1, holds_allT]
     have htk := htests k _ hkk
     simp only [decide_true] at htk
@@ -678,7 +678,7 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     have hck : Holds M c := by
       have := (holds_ite _ _ _).1 hcall
       simpa [htk, toBool_bool] using this
-    obtain ⟨hfault, hrun⟩ := (ownKind_encode chk hshs a happ hca senv hrec hnow hfresh hn hq
+    obtain ⟨hfault, hrun⟩ := (ownKind_encode chk hshs hshp a happ hca senv hrec hnow hfresh hn hq
       hms x hreach heff' hkey hkind hcxk).2 hck
     obtain ⟨hag, htab⟩ := fold_hit (e := v.event) (M := M) (L := L) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩
       (ks.map fun k => (k.1, k.2.out.terms)) k (c := Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)))

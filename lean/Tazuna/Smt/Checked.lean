@@ -44,9 +44,9 @@ def _root_.Tazuna.Ir.BoundsV.Nonneg {r : Ty} (b : BoundsV r) : Prop :=
 /-- Whether the state's types, its events' and its callers' have SMT values and well-formedness terms: no function,
 no type variable, ADT 0 only as Bool, and a plain key for every table but the pending table, whose keys are wire
 ids. -/
-def _root_.Tazuna.Ir.ServiceV.stateTys (P : List AnySite) (v : ServiceV) : Bool :=
+def _root_.Tazuna.Ir.ServiceV.stateTys (v : ServiceV) : Bool :=
   let ok (t : Ty) := t.embeddable && t.plainKeys
-  ok v.records && v.machines.all (ok ·.table) && ok (pendingEntry (shapes v P)) && ok v.event && ok v.caller
+  ok v.records && v.machines.all (ok ·.table) && ok (pendingEntry (shapes v)) && ok v.event && ok v.caller
 
 structure Checked (P : List AnySite) (E : List AnyEffectSite) (T : List TypeDecl) (v : ServiceV) : Prop where
   sites : SitesUnique P
@@ -57,7 +57,7 @@ structure Checked (P : List AnySite) (E : List AnyEffectSite) (T : List TypeDecl
   bounds : v.bounds.Nonneg
   /-- Not a rule of check's: the loader builds every type of a program's values from the type table, whose ADT 0 is
   Bool, and the program from ground instances; check validates the result, so a loader bug is reported, not assumed. -/
-  stateTys : v.stateTys P = true
+  stateTys : v.stateTys = true
 
 theorem Checked.machines {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
     (hk : Checked P E T v) : ∀ m ∈ v.machines, m.Reach P E := hk.reach.machines
@@ -105,7 +105,7 @@ theorem not_of_ite {α : Type} {c : Prop} [Decidable c] {x : α} (h : (if c then
 each fact's failure would be a finding. -/
 theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite} {s : SpecV} {handles : List HandleSite}
     {captures : List (SiteId × List Ty)} (hP : SitesUnique P) (hreach : ∀ v ∈ s.services, v.Reach P E)
-    (htys : ∀ v ∈ s.services, v.stateTys P = true) (h : SpecV.illegal T s handles captures = []) :
+    (htys : ∀ v ∈ s.services, v.stateTys = true) (h : SpecV.illegal T s handles captures = []) :
     ∀ v ∈ s.services, Checked P E T v := by
   intro v hv
   simp only [SpecV.illegal] at h

@@ -447,9 +447,9 @@ theorem command?_of_decode {shs : List (PendingShape v.event)} {n : Nat} {hc : v
 whose invariants hold and to an input of the kind, and the model satisfies the bound question of the kind or a
 question about a target `f` falls under nowhere, the step does not fault with `f`. -/
 theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
-    (senv : StepEnv L (shapes v P)) (inp : SymInput v (shapes v P) senv.nT)
-    {gs : List Target} {qs : List (Question v (shapes v P) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
-    {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v P) = some s)
+    (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
+    {gs : List Target} {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
+    {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hinv : Step.Inv P s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
@@ -539,7 +539,7 @@ codes (no query runs a cascade), the invariants at `s`, and what the step applie
 def StepFits (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (s : State v) (x : Input v) : Prop :=
   inputCodesFit L.count x ∧ inputSitesFit L P x ∧
     (v.invariants.fits L.count).1 ∧ v.invariants.appFits L.count (s.records, ()) ∧
-    instChecksFit L.count s.records s.now s.machines ∧ stepFits L.count T (shapes v P) s x
+    instChecksFit L.count s.records s.now s.machines ∧ stepFits L.count T (shapes v) s x
 
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
@@ -555,8 +555,8 @@ theorem codesFit_of_decode {shs : List (PendingShape v.event)} {n : Nat} {hc : v
   | event => obtain ⟨_, rfl, -⟩ := decode_event hx; exact h
   | clock => obtain ⟨_, rfl, -⟩ := decode_clock hx; exact h
 
-theorem sites_of_decode {P : List AnySite} (senv : StepEnv L (shapes v P)) {S : SymState v}
-    {inp : SymInput v (shapes v P) senv.nT} {t : EncodedStep v} (henc : encodeStep L T P v senv S inp = .ok t)
+theorem sites_of_decode {P : List AnySite} (senv : StepEnv L (shapes v)) {S : SymState v}
+    {inp : SymInput v (shapes v) senv.nT} {t : EncodedStep v} (henc : encodeStep L T P v senv S inp = .ok t)
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x) (h : inputSitesFit L P x) :
     Holds M t.sites := by
   have hs := step_sites (M := M) senv S henc
@@ -573,9 +573,9 @@ right shape whose invariants hold and to an input of the kind whose step stays w
 satisfies no question about a target `f` falls under, the step does not fault with `f`. No bound question is needed:
 within the slots every side condition is exact, so it holds. -/
 theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
-    (senv : StepEnv L (shapes v P)) (inp : SymInput v (shapes v P) senv.nT)
-    {gs : List Target} {qs : List (Question v (shapes v P) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
-    {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v P) = some s)
+    (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
+    {gs : List Target} {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
+    {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hinv : Step.Inv P s) (hheld : Step.invariants s = [])
     {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
@@ -640,11 +640,11 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
 /-- The questions about the input kind `inp` cover the step from `s` on `x`: some model whose variables hold values of
 their sorts holds the state and the input, in the case the questions ask about. A state and an input within the slots
 are some model's (`decode_reachable`, T3). -/
-def Covered (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
-    (inp : SymInput v (shapes v P) senv.nT) (s : State v) (x : Input v) : Prop :=
+def Covered (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
+    (inp : SymInput v (shapes v) senv.nT) (s : State v) (x : Input v) : Prop :=
   ∃ (hc : v.caller.isData = true) (M : Model),
-    (∀ j (h : j < (stateTys v (shapes v P) ++ inp.tys).length), Sorted L (stateTys v (shapes v P) ++ inp.tys)[j] (M.vars j)) ∧
-    (SymState.vars 0).decode M L T (shapes v P) = some s ∧ inp.decode M L hc = some x ∧
+    (∀ j (h : j < (stateTys v (shapes v) ++ inp.tys).length), Sorted L (stateTys v (shapes v) ++ inp.tys)[j] (M.vars j)) ∧
+    (SymState.vars 0).decode M L T (shapes v) = some s ∧ inp.decode M L hc = some x ∧
     ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case
 
 /-- T4 at the states and inputs the questions cover: where the solver answers unsat to an input kind's bound
@@ -652,12 +652,12 @@ question and to its questions about the targets the fault `f` falls under, no st
 whose invariants hold faults with `f` at a state and input those questions cover. The proved invariants are assumed of
 the state before each step, which is sound because every state such a run reaches has them (`run_invariants`: a step
 that breaks one leaves the state it began with). -/
-theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P))
+theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
     (f : Fault) (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
-    (inp : SymInput v (shapes v P) senv.nT) {gs : List Target} {qs : List (Question v (shapes v P) senv.nT)}
+    (inp : SymInput v (shapes v) senv.nT) {gs : List Target} {qs : List (Question v (shapes v) senv.nT)}
     (hq : questions L T P v senv inp = .ok (gs, qs))
     (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
-      Unsat L (stateTys v (shapes v P) ++ inp.tys) q.script)
+      Unsat L (stateTys v (shapes v) ++ inp.tys) q.script)
     (is : List (Input v)) (x : Input v) (hcov : Covered L T P v senv inp (run T v (Step.State.init v) is).1 x) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨hc, M, hM, hS, hx, hcase⟩ := hcov

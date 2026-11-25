@@ -116,6 +116,98 @@ def Defs.effectSites : {G : List Ty} → Defs G → List AnyEffectSite
   | [], .nil => []
   | _ :: _, .snoc defs _ body => defs.effectSites ++ body.effectSites defs
 
+section
+variable {G : List Ty}
+
+mutual
+/-- The globals an expression reads, by position from the innermost, nested functions included. -/
+def Expr.globals {Γ : List Ty} {t : Ty} : Expr G Γ t → List Nat
+  | .int _ | .str _ | .var _ | .prim .. => []
+  | .global v => [v.idx]
+  | .ctor _ es | .tuple es => Exprs.globals es
+  | .field _ _ _ e | .index e _ | .not e | .neg e | .lam e => Expr.globals e
+  | .update e p => Expr.globals e ++ Patch.globals p
+  | .call f args => Expr.globals f ++ Exprs.globals args
+  | .let_ e body | .bin _ e body => Expr.globals e ++ Expr.globals body
+  | .case e cs _ => Expr.globals e ++ Clauses.globals cs
+  | .list items => Items.globals items
+  | .close _ env _ _ body | .closeEffect _ env _ _ body => Exprs.globals env ++ Expr.globals body
+def Exprs.globals {Γ ts : List Ty} : Exprs G Γ ts → List Nat
+  | .nil => []
+  | .cons e es => Expr.globals e ++ Exprs.globals es
+def Items.globals {Γ : List Ty} {t : Ty} : Items G Γ t → List Nat
+  | .nil => []
+  | .cons e es => Expr.globals e ++ Items.globals es
+def Patch.globals {Γ ts : List Ty} : Patch G Γ ts → List Nat
+  | .nil => []
+  | .keep rest => Patch.globals rest
+  | .set e rest => Expr.globals e ++ Patch.globals rest
+def Clauses.globals {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List Nat
+  | .nil => []
+  | .cons _ body rest => Expr.globals body ++ Clauses.globals rest
+  | .guarded _ g body rest => Expr.globals g ++ Expr.globals body ++ Clauses.globals rest
+end
+
+end
+
+/-- What an expression collects of its own source (`f`), its sites or its handles, over the definitions `D`. -/
+abbrev Collect (α : Type) := {G Γ : List Ty} → {t : Ty} → Defs G → Expr G Γ t → List α
+
+-- A global's position is below the table's length, so the empty list is never read.
+set_option linter.tazuna.silentDefault false in
+/-- What `f` collects of an expression and, by the table `tbl` of each global's, of every global it reads. -/
+def Expr.usesWith {α : Type} (f : Collect α) {G Γ : List Ty} {t : Ty} (D : Defs G) (tbl : List (List α))
+    (e : Expr G Γ t) : List α :=
+  f D e ++ e.globals.flatMap fun i => tbl.getD i []
+
+/-- For each global, innermost first, what `f` collects of it and of every global it reads, transitively: the kept
+functions or handles its value can hold or make. -/
+def Defs.uses {α : Type} (f : Collect α) : {G : List Ty} → Defs G → List (List α)
+  | [], .nil => []
+  | _ :: _, .snoc defs _ body => body.usesWith f defs (defs.uses f) :: defs.uses f
+
+-- A global's position is below the table's length, so the empty list is never read.
+set_option linter.tazuna.silentDefault false in
+/-- What `f` collects of the global at position `i` and of every global it reads. -/
+def Defs.usesAt {α : Type} (f : Collect α) {G : List Ty} (D : Defs G) (i : Nat) : List α := (D.uses f).getD i []
+
+/-- What `f` collects of an expression and of every global it reads, transitively. -/
+def Expr.uses {α : Type} (f : Collect α) {G Γ : List Ty} {t : Ty} (D : Defs G) (e : Expr G Γ t) : List α :=
+  e.usesWith f D (D.uses f)
+
+/-- What `f` collects of every global. -/
+def Defs.collect {α : Type} (f : Collect α) : {G : List Ty} → Defs G → List α
+  | [], .nil => []
+  | _ :: _, .snoc defs _ body => defs.collect f ++ f defs body
+
+/-- The kept functions an expression writes. -/
+def sitesC : Collect AnySite := fun D e => e.sites D
+
+/-- The handles an expression makes. -/
+def handlesC : Collect HandleSite := fun _ e => e.handles
+
+theorem Defs.uses_sub {α : Type} (f : Collect α) : {G : List Ty} → (D : Defs G) → (i : Nat) →
+    ∀ x ∈ D.usesAt f i, x ∈ D.collect f
+  | [], .nil, _, x, h => by simp [Defs.usesAt, Defs.uses] at h
+  | _ :: _, .snoc defs _ body, 0, x, h => by
+    simp only [Defs.usesAt, Defs.uses, List.getD_cons_zero, Expr.usesWith, List.mem_append, List.mem_flatMap] at h
+    simp only [Defs.collect, List.mem_append]
+    rcases h with h | ⟨j, -, h⟩
+    · exact .inr h
+    · exact .inl (Defs.uses_sub f defs j x h)
+  | _ :: _, .snoc defs _ _, i + 1, x, h => by
+    simp only [Defs.usesAt, Defs.uses, List.getD_cons_succ] at h
+    simp only [Defs.collect, List.mem_append]
+    exact .inl (Defs.uses_sub f defs i x h)
+
+theorem Defs.collect_sites : {G : List Ty} → (D : Defs G) → D.collect sitesC = D.sites
+  | [], .nil => rfl
+  | _ :: _, .snoc defs _ _ => by simp only [Defs.collect, Defs.sites, Defs.collect_sites defs]; rfl
+
+theorem Defs.collect_handles : {G : List Ty} → (D : Defs G) → D.collect handlesC = D.handles
+  | [], .nil => rfl
+  | _ :: _, .snoc defs _ _ => by simp only [Defs.collect, Defs.handles, Defs.collect_handles defs]; rfl
+
 mutual
 theorem Ty_same_self : (t : Ty) → (Ty.same t t).isSome = true
   | .int | .str | .date | .id => rfl
@@ -220,9 +312,14 @@ def PendingShape.pending {e : Ty} (sh : PendingShape e) (id : Nat) (x : Ty.dens 
     { name := sh.name, input := sh.input, output := sh.output, rejection := sh.rejection, value := y.2.1,
       ensures := ensuresFn sh.ensures y.2.2.1, onAnswer := sh.onAnswer.fn y.2.2.2.1 }⟩
 
-/-- The senders a service's states can name. -/
-def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks) :=
-  v.machines.map (fun m => ⟨[m.key], .machine m.name m.key⟩) ++ v.reactions.map fun x => ⟨[], .reaction x.name⟩
+/-- The kept functions an effect function's source and the globals it reads write: all its effects can hold. -/
+def EffectFun.usedSites {ps : List Ty} {r : Ty} (f : EffectFun ps r) : List AnySite := f.body.uses sitesC f.defs
+
+/-- The senders a service's states can name, each with the kept functions its requests can hold: a machine's
+instance by its key, or a reaction, with the sites its effect function can reach. -/
+def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks × List AnySite) :=
+  v.machines.map (fun m => ⟨[m.key], .machine m.name m.key, m.effect.usedSites⟩) ++
+    v.reactions.map fun x => ⟨[], .reaction x.name, x.react.usedSites⟩
 
 -- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
 set_option linter.tazuna.silentDefault false in
@@ -246,9 +343,10 @@ def requestShapesAt (declared : List (String × DeclaredV)) (e : Ty) (sites : Li
 def requestShapes (v : ServiceV) (sites : List AnySite) : List (RequestShape v.event) :=
   requestShapesAt v.declared v.event sites
 
-/-- Every shape of pending request a service can hold: each sender whose key is data, with each request shape. -/
-def shapes (v : ServiceV) (sites : List AnySite) : List (PendingShape v.event) :=
-  (senderShapes v).flatMap fun ⟨ks, snd⟩ =>
+/-- Every shape of pending request a service can hold: each sender whose key is data, with each request shape of the
+sites it can reach. -/
+def shapes (v : ServiceV) : List (PendingShape v.event) :=
+  (senderShapes v).flatMap fun ⟨ks, snd, sites⟩ =>
     if h : (Ty.tuple ks).isData = true then (requestShapes v sites).map fun r => { r with ks, sender := snd, hks := h }
     else []
 

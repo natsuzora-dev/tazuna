@@ -46,15 +46,15 @@ section
 variable (L : Layout) (T : List TypeDecl)
 
 /-- A step's terms from the symbolic state and input, by the input's kind. -/
-def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
-    (S : SymState v) : SymInput v (shapes v P) senv.nT → Except Refusal (EncodedStep v)
+def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
+    (S : SymState v) : SymInput v (shapes v) senv.nT → Except Refusal (EncodedStep v)
   | .command i caller input => do
     let x := v.commands.get i
     let (cc, cx) ← CommandCode.of L x
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
     let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.caller x.callers)
-    let ⟨o, c, cs⟩ ← encodeCommand L T P v (shapes v P) senv x cc apply inv ks S caller input
+    let ⟨o, c, cs⟩ ← encodeCommand L T P v (shapes v) senv x cc apply inv ks S caller input
     pure ⟨.command o, c, andT cx (andT ca ci), cs⟩
   | .query i caller input => do
     let q := v.queries.get i
@@ -65,17 +65,17 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
   | .answer k j to value => do
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let ⟨o, c, cs⟩ ← encodeAnswer L T P (shapes v P) k (shapes v P)[k] senv j apply inv S to value
+    let ⟨o, c, cs⟩ ← encodeAnswer L T P (shapes v) k (shapes v)[k] senv j apply inv S to value
     pure ⟨.answer o, c, andT ca ci, cs⟩
   | .unmatched t to _ => pure ⟨.unmatched (answerUnmatchedT L senv t S.pending to), tt, tt, tt⟩
   | .event i value => do
     let (ec, ce) ← EventCode.of L v i
-    let ⟨o, c, cs⟩ ← encodeEvent L T P v (shapes v P) senv ec S value
+    let ⟨o, c, cs⟩ ← encodeEvent L T P v (shapes v) senv ec S value
     pure ⟨.event o, c, ce, cs⟩
   | .clock time => do
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let ⟨o, c, cs⟩ ← encodeClock L T P v (shapes v P) senv apply inv S time
+    let ⟨o, c, cs⟩ ← encodeClock L T P v (shapes v) senv apply inv S time
     pure ⟨.clock o, c, andT ca ci, cs⟩
 
 end
@@ -168,14 +168,14 @@ theorem apply_inv_exact {v : ServiceV} {apply : Code (Ty.fn [v.records, v.event]
 the cascade's codes' condition and the case the script asks about hold, the step's condition holds exactly when what
 the step applies fits, and wherever it holds the step from `s` is the one the terms say. -/
 theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (chk : Checked P E T v)
-    (senv : StepEnv L (shapes v P))
-    {S : SymState v} {s : State v} (hS : S.decode M L T (shapes v P) = some s) (hinv : Step.Inv P s)
-    {inp : SymInput v (shapes v P) senv.nT} {hc} {x : Input v} (hx : inp.decode M L hc = some x)
+    (senv : StepEnv L (shapes v))
+    {S : SymState v} {s : State v} (hS : S.decode M L T (shapes v) = some s) (hinv : Step.Inv P s)
+    {inp : SymInput v (shapes v) senv.nT} {hc} {x : Input v} (hx : inp.decode M L hc = some x)
     {t : EncodedStep v} (henc : encodeStep L T P v senv S inp = .ok t) :
     (Holds M t.codes ↔ codesFit L.count inp) ∧
     (Holds M t.codes → Holds M t.sites → Holds M t.out.case →
-      (Holds M t.cond ↔ stepFits L.count T (shapes v P) s x) ∧
-      (Holds M t.cond → t.out.Rel M L T (shapes v P) s x (step T v s x))) := by
+      (Holds M t.cond ↔ stepFits L.count T (shapes v) s x) ∧
+      (Holds M t.cond → t.out.Rel M L T (shapes v) s x (step T v s x))) := by
   have hR := decode_state hS
   cases inp with
   | command i sc si =>
@@ -190,7 +190,7 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     obtain ⟨hcx, hca, hci⟩ : Holds M cx ∧ Holds M ca ∧ Holds M ci := by
       rw [holds_andT, holds_andT] at hcodes; exact hcodes
     have hks' := need_ok.1 hks
-    exact command_encode chk (fun _ => shapes_inSites) s hinv i caller input hcc hcx happ hca hinvc hci hks' senv hR hsc hsi hcmd hcs
+    exact command_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv i caller input hcc hcx happ hca hinvc hci hks' senv hR hsc hsi hcmd hcs
   | query i sc si =>
     obtain ⟨caller, input, rfl, hsc, hsi⟩ := decode_query hx
     obtain ⟨⟨qc, cq⟩, hqc, henc⟩ := bind_ok.1 henc
@@ -200,16 +200,16 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     exact ⟨queryCode_exact hqc, fun hcq _ _ =>
       query_encode s i caller input hqc hcq (need_ok.1 hks) hR hsc hsi hqe⟩
   | answer k j toT valT =>
-    have hk : (shapes v P)[(k : Nat)]? = some (shapes v P)[k] := List.getElem?_eq_getElem k.2
+    have hk : (shapes v)[(k : Nat)]? = some (shapes v)[k] := List.getElem?_eq_getElem k.2
     obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨inv, ci⟩, hinvc, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c, cs⟩, hans, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     refine ⟨apply_inv_exact happ hinvc, fun hcodes hcs hhit => ?_⟩
     obtain ⟨hca, hci⟩ := (holds_andT _ _).1 hcodes
-    have hx' : decodeAnswer M L (answerTy (shapes v P)[k].output (shapes v P)[k].rejection) toT valT = some x := hx
+    have hx' : decodeAnswer M L (answerTy (shapes v)[k].output (shapes v)[k].rejection) toT valT = some x := hx
     obtain ⟨hty, to, value, rfl, hto, hval⟩ := decode_answer hx'
-    have ex := answer_encode chk (fun _ => shapes_inSites) s hinv hk to value happ hca hinvc hci senv j hR hto hty hval hans hcs
+    have ex := answer_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv hk to value happ hca hinvc hci senv j hR hto hty hval hans hcs
     exact ⟨by rw [ex.1]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond => ex.2 hcond hhit⟩
   | unmatched ty toT valT =>
     cases pure_ok.1 henc
@@ -223,7 +223,7 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     obtain ⟨⟨o, c, cs⟩, hev, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     exact ⟨eventCode_exact hec, fun hce hcs _ =>
-      event_encode chk (fun _ => shapes_inSites) s hinv i value hec hce hR hsv senv hev hcs⟩
+      event_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv i value hec hce hR hsv senv hev hcs⟩
   | clock st =>
     obtain ⟨time, rfl, hst⟩ := decode_clock hx
     obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
@@ -232,7 +232,7 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     cases pure_ok.1 henc
     refine ⟨apply_inv_exact happ hinvc, fun hcodes hcs _ => ?_⟩
     obtain ⟨hca, hci⟩ := (holds_andT _ _).1 hcodes
-    exact clock_encode chk (fun _ => shapes_inSites) s hinv time happ hca hinvc hci hR hst senv hcl hcs
+    exact clock_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv time happ hca hinvc hci hR hst senv hcl hcs
 
 end
 

@@ -352,7 +352,7 @@ def stateTys (v : ServiceV) (shs : List (PendingShape v.event)) : List Ty :=
   [v.records, .int, .int, .int, pendingTable shs] ++ v.machines.map (·.table)
 
 section
-variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
+variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
 
 /-- The targets of a service and their questions for one input kind, from the state at `v0` on and the input's
 terms after it. Every question asserts the state's shape (well-formed slots, wire ids below the next) and the case
@@ -360,18 +360,18 @@ it is about; a step question also the side conditions, the invariants on the sta
 the target broken; the bound question that the side conditions fail or, with the invariants, the step's condition.
 So where every question is unsat, no state of that shape with its invariants holding has a step of the kind that
 breaks the target. -/
-def questions (inp : SymInput v (shapes v P) senv.nT) :
-    Except Refusal (List Target × List (Question v (shapes v P) senv.nT)) := do
+def questions (inp : SymInput v (shapes v) senv.nT) :
+    Except Refusal (List Target × List (Question v (shapes v) senv.nT)) := do
   let S : SymState v := SymState.vars 0
   let t ← encodeStep L T P v senv S inp
-  let wf ← need (.layout (.type v.records)) (S.wf L (shapes v P))
-  let below ← pendingBelowT L (shapes v P) S.pending S.nextId
+  let wf ← need (.layout (.type v.records)) (S.wf L (shapes v))
+  let below ← pendingBelowT L (shapes v) S.pending S.nextId
   let (inv, ci0) ← v.invariants.code L
   let (rules, ci) ← encodeInvariants L inv S.records
   let (checks, ck) ← encodeInstChecks L T v.machines S.machines S.records S.now
   let held := andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT))
   let side := andT t.codes (andT t.sites (andT ci0 (andT ci ck)))
-  let tys := stateTys v (shapes v P) ++ inp.tys
+  let tys := stateTys v (shapes v) ++ inp.tys
   let vars ← tys.mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
   let dts ← need (.layout (.type v.records)) L.datatypes?
   let script (asserts : List Term) : Script :=

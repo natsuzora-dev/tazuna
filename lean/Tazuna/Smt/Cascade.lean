@@ -121,7 +121,7 @@ theorem settle_cond_fault {P : List AnySite} {shs : List (PendingShape v.event)}
 runs fits (`settleFits`), and wherever it holds the fault the model names is `Step.settleFrom`'s, and otherwise the
 cascade runs to its end with what the terms denote (`AccRel`, own effects queued from `a`'s queue length). -/
 theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
-    (hshs : ∀ sh ∈ shs, sh.InSites P)
+    (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs) {dflt now : Term} :
@@ -174,7 +174,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       · have hact' := hact
         simp only [hlt, decide_true] at hact'
         obtain ⟨hown, hreach⟩ := hqok _ (List.getElem_mem hlt)
-        have e1 := (ownStep_encode chk hshs a happ hca senv hrec hnow hfr hn hq hms
+        have e1 := (ownStep_encode chk hshs hshp a happ hca senv hrec hnow hfr hn hq hms
           a.own[k] (hk.2 hlt) hown hreach h1 hcx1).1
         have hite : Holds M (.ite (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1)) c1 tt) ↔ Holds M c1 := by
           rw [holds_ite, hact']; simp only [toBool_bool, ite_true]
@@ -184,7 +184,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
             x.denote M := fun x y => by simp [Term.denote, hact', toBool_bool]
         have tail : Holds M c1 → (Holds M c2 ↔ ∀ a', Step.runOwn T a a.own[k] = .ok a' → settleFits L.count T f (k + 1) a') := by
           intro hc1
-          obtain ⟨hfault, hrun⟩ := (ownStep_encode chk hshs a happ hca senv hrec hnow hfr hn hq
+          obtain ⟨hfault, hrun⟩ := (ownStep_encode chk hshs hshp a happ hca senv hrec hnow hfr hn hq
             hms a.own[k] (hk.2 hlt) hown hreach h1 hcx1).2 hc1
           revert hrun
           cases hof : o1.fault? M with
@@ -197,7 +197,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
             have hA1 := AccRel.pick (b := ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩) hact' ⟨rfl, rfl⟩ hdone
             obtain ⟨a1, hrun0⟩ := hA1.ok
             obtain ⟨r1, r2, r3, r4, rnow, os0, hown1, r5, r6⟩ := (hrun0 ▸ hA1).ends
-            rw [(settle_encode chk hshs happ hca senv f (k + 1) _ _ _
+            rw [(settle_encode chk hshs hshp happ hca senv f (k + 1) _ _ _
               (Step.runOwn_inv T chk.reach a hinv _ hrun0)
               (Step.runOwn_queue T chk.reach a hinv hqok _ hrun0)
               (by rw [hown1]; exact ownRel_append hS (by simpa using r6)) (by rw [rnow]; exact hnow)
@@ -226,7 +226,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact'
             (S := o1.terms.done.owns) (0 + a.own.length)) (ownRel_nil _))
           simpa using this
-        have e2 := (settle_encode chk hshs happ hca senv f (k + 1) _ _ _ hinv hqok hS1
+        have e2 := (settle_encode chk hshs hshp happ hca senv f (k + 1) _ _ _ hinv hqok hS1
           hnow (by simp only [pickTerms]; rw [hpick]; exact htf)
           (by simp only [pickTerms]; rw [hpick]; exact hrec)
           (by simp only [pickTerms]; exact machinesRel_congr _ _ _ _ (pick_tables_false hact' _ _).symm hms)
@@ -249,7 +249,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           rw [hact'] at this
           simpa only [toBool_bool, ite_true] using this
         obtain ⟨hown, hreach⟩ := hqok _ (List.getElem_mem hlt)
-        obtain ⟨hfault, hrun⟩ := (ownStep_encode chk hshs a happ hca senv hrec hnow hfr hn hq
+        obtain ⟨hfault, hrun⟩ := (ownStep_encode chk hshs hshp a happ hca senv hrec hnow hfr hn hq
           hms a.own[k] (hk.2 hlt) hown hreach h1 hcx1).2 hc1
         have hsem : Step.settleFrom T (f + 1) k a = (Step.runOwn T a a.own[k]) >>= Step.settleFrom T f (k + 1) := by
           exact Step.settleFrom.eq_3 T k a a.own[k] f (List.getElem?_eq_getElem hlt)
@@ -274,7 +274,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           have hA1 := AccRel.pick (b := ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩) hact' ⟨rfl, rfl⟩ hdone
           obtain ⟨a1, hrun0⟩ := hA1.ok
           obtain ⟨r1, r2, r3, r4, rnow, os0, hown1, r5, r6⟩ := (hrun0 ▸ hA1).ends
-          obtain ⟨IHF, IH⟩ := (settle_encode chk hshs happ hca senv f (k + 1) _ _ _
+          obtain ⟨IHF, IH⟩ := (settle_encode chk hshs hshp happ hca senv f (k + 1) _ _ _
             (Step.runOwn_inv T chk.reach a hinv _ hrun0)
             (Step.runOwn_queue T chk.reach a hinv hqok _ hrun0)
             (by rw [hown1]; exact ownRel_append hS (by simpa using r6)) (by rw [rnow]; exact hnow)
@@ -303,7 +303,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact'
             (S := o1.terms.done.owns) (0 + a.own.length)) (ownRel_nil _))
           simpa using this
-        have IH := (settle_encode chk hshs happ hca senv f (k + 1) _ _ _ hinv hqok hS1
+        have IH := (settle_encode chk hshs hshp happ hca senv f (k + 1) _ _ _ hinv hqok hS1
           hnow (by simp only [pickTerms]; rw [hpick]; exact htf)
           (by simp only [pickTerms]; rw [hpick]; exact hrec)
           (by simp only [pickTerms]; exact machinesRel_congr _ _ _ _ (pick_tables_false hact' _ _).symm hms)

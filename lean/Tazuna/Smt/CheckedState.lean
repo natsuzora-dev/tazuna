@@ -144,10 +144,10 @@ end
 section
 variable {G : List Ty} (defs : Defs G) {T : List TypeDecl} {v : ServiceV}
 
-theorem stateTys_iff {P : List AnySite} : v.stateTys P = true ↔
+theorem stateTys_iff : v.stateTys = true ↔
     (v.records.embeddable = true ∧ v.records.plainKeys = true) ∧
       (∀ m ∈ v.machines, m.table.embeddable = true ∧ m.table.plainKeys = true) ∧
-      (pendingEntry (shapes v P)).embeddable = true ∧ (pendingEntry (shapes v P)).plainKeys = true ∧
+      (pendingEntry (shapes v)).embeddable = true ∧ (pendingEntry (shapes v)).plainKeys = true ∧
       (v.event.embeddable = true ∧ v.event.plainKeys = true) ∧ (v.caller.embeddable = true ∧ v.caller.plainKeys = true) := by
   simp [ServiceV.stateTys, and_assoc]
 
@@ -196,9 +196,9 @@ theorem sortable_of_embeddable (t : Ty) (h : t.embeddable = true) : t.sortable =
   sortable_of_sorted t (sorted_of_embeddable t h)
 
 /-- Every step type of a checked service has a sort, so its datatypes are in the service's layout. -/
-theorem stepTys_has (hk : Checked defs.sites defs.effectSites T v) : ∀ t ∈ stepTys v defs.sites, (Layout.ofService defs v).Has t := by
+theorem stepTys_has (hk : Checked defs.sites defs.effectSites T v) : ∀ t ∈ stepTys v, (Layout.ofService defs v).Has t := by
   obtain ⟨⟨her, -⟩, hms, hep, -, ⟨hee, -⟩, ⟨hec, -⟩⟩ := stateTys_iff.1 hk.stateTys
-  have hsort : ∀ t ∈ stepTys v defs.sites, t.sortable = true := by
+  have hsort : ∀ t ∈ stepTys v, t.sortable = true := by
     intro t ht
     simp only [stepTys, List.mem_append, List.mem_cons, List.mem_map, List.not_mem_nil, or_false] at ht
     rcases ht with ((rfl | rfl | rfl | rfl | rfl | rfl) | ⟨m, hm, rfl⟩) | ⟨m, hm, rfl⟩
@@ -216,7 +216,7 @@ theorem stepTys_has (hk : Checked defs.sites defs.effectSites T v) : ∀ t ∈ s
 
 /-- The well-formedness term of a checked service's symbolic state is always built in its layout. -/
 theorem wf_ofService (hk : Checked defs.sites defs.effectSites T v) (S : SymState v) :
-    (S.wf (Layout.ofService defs v) (shapes v defs.sites)).isSome = true := by
+    (S.wf (Layout.ofService defs v) (shapes v)).isSome = true := by
   have hs := stepTys_has defs hk
   obtain ⟨⟨her, hkr⟩, hms, hep, hkp, -⟩ := stateTys_iff.1 hk.stateTys
   obtain ⟨c, hc⟩ := Option.isSome_iff_exists.1
@@ -229,11 +229,11 @@ theorem wf_ofService (hk : Checked defs.sites defs.effectSites T v) (S : SymStat
 
 /-- A checked service's state embeds in its layout exactly when its records, pending table and instance tables fit
 their slots: no assumption about the types is left. -/
-theorem embedState_ofService (hk : Checked defs.sites defs.effectSites T v) (s : State v) (pv : PendingVal (shapes v defs.sites))
+theorem embedState_ofService (hk : Checked defs.sites defs.effectSites T v) (s : State v) (pv : PendingVal (shapes v))
     (hok : ∀ sm ∈ s.machines.toSigma, InstancesOk T sm.1 sm.2) :
     (embedState (Layout.ofService defs v) s pv).isSome ↔
       FitsV (Layout.ofService defs v) v.records (Ty.up _ v.records_data s.records) ∧
-        FitsV (Layout.ofService defs v) (pendingTable (shapes v defs.sites)) pv ∧
+        FitsV (Layout.ofService defs v) (pendingTable (shapes v)) pv ∧
         MachinesFit (Layout.ofService defs v) s.machines := by
   have hs := stepTys_has defs hk
   obtain ⟨⟨her, -⟩, hms, hep, -, -⟩ := stateTys_iff.1 hk.stateTys
@@ -242,14 +242,14 @@ theorem embedState_ofService (hk : Checked defs.sites defs.effectSites T v) (s :
 
 /-- The service's layout holds every datatype a step script looks up once, so its step environment is found. -/
 theorem stepEnv_ofService (hk : Checked defs.sites defs.effectSites T v) :
-    ∃ senv, StepEnv.of (Layout.ofService defs v) (shapes v defs.sites) = .ok senv := by
+    ∃ senv, StepEnv.of (Layout.ofService defs v) (shapes v) = .ok senv := by
   have hs := stepTys_has defs hk
   have ho := find_of_has_option (e := v.event) (hs _ (by simp [stepTys]))
-  have hp : (Layout.ofService defs v).Has (pendingTable (shapes v defs.sites)) := hs _ (by simp [stepTys])
+  have hp : (Layout.ofService defs v).Has (pendingTable (shapes v)) := hs _ (by simp [stepTys])
   obtain ⟨⟨dE, nE⟩, hE⟩ := Option.isSome_iff_exists.1 ho.1
   obtain ⟨⟨dopt, nopt⟩, hopt⟩ := Option.isSome_iff_exists.1 ho.2
   obtain ⟨⟨dP, nP⟩, hPE⟩ := Option.isSome_iff_exists.1 hp.2.1.2
-  replace hPE : (Layout.ofService defs v).find? (pendingEntry (shapes v defs.sites)) = some (dP, nP) := hPE
+  replace hPE : (Layout.ofService defs v).find? (pendingEntry (shapes v)) = some (dP, nP) := hPE
   obtain ⟨⟨dT, nT, dtT⟩, hT⟩ := collD_of_has_table hp
   unfold StepEnv.of
   split
@@ -258,8 +258,8 @@ theorem stepEnv_ofService (hk : Checked defs.sites defs.effectSites T v) :
 
 /-- The service's layout holds the pending table, so the wire-id invariant's term is built. -/
 theorem pendingBelowT_ofService (hk : Checked defs.sites defs.effectSites T v) (pending nextId : Term) :
-    ∃ t, pendingBelowT (Layout.ofService defs v) (shapes v defs.sites) pending nextId = .ok t := by
-  have hp : (Layout.ofService defs v).Has (pendingTable (shapes v defs.sites)) :=
+    ∃ t, pendingBelowT (Layout.ofService defs v) (shapes v) pending nextId = .ok t := by
+  have hp : (Layout.ofService defs v).Has (pendingTable (shapes v)) :=
     stepTys_has defs hk _ (by simp [stepTys])
   obtain ⟨x, hx⟩ := collD_of_has_table hp
   exact ⟨_, by simp only [pendingBelowT, pendingTable] at hx ⊢; rw [hx]; rfl⟩

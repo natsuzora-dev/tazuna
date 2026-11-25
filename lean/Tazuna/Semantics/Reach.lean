@@ -41,12 +41,12 @@ def Fun.asSite {t : Ty} (f : Fun t) : AnySite := ⟨f.Γ, t, ⟨f.site, f.G, f.d
 def EffectFun.asSite {ps : List Ty} {r : Ty} (f : EffectFun ps r) : AnyEffectSite :=
   ⟨f.Γ, ps, r, ⟨f.site, f.G, f.defs, f.hΓ, f.hps, f.body⟩⟩
 
-/-- A kept function that returns effects is a record of `E`, and its source and definitions write only sites of `P`
-and effect sites of `E`. -/
+/-- A kept function that returns effects is a record of `E`, its source and the globals it reads write only sites of
+`P`, and its source and definitions only effect sites of `E`. -/
 structure EffectFun.Reach {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Prop where
   site : f.asSite ∈ E
-  sites : ∀ s ∈ f.body.sites f.defs, s ∈ P
-  defsSites : ∀ s ∈ f.defs.sites, s ∈ P
+  /-- The kept functions its source writes and those of every global it reads, transitively. -/
+  used : ∀ s ∈ f.usedSites, s ∈ P
   effectSites : ∀ s ∈ f.body.effectSites f.defs, s ∈ E
   defsEffectSites : ∀ s ∈ f.defs.effectSites, s ∈ E
 
@@ -429,119 +429,140 @@ theorem BinOp.data {a b c : Ty} : BinOp a b c → c.isData = true
   | .add | .sub | .mul | .div | .mod | .lt | .le | .gt | .ge | .and | .or | .concat | .eq _ | .ne _ => rfl
 
 section
-variable {G : List Ty} (D : Defs G) (g : Ty.dens G) (hg : Reaches P E G g) (hD : ∀ s ∈ D.sites, s ∈ P)
+variable {G : List Ty} (D : Defs G) (g : Ty.dens G)
+  (hg : ∀ {t : Ty} (v : Var G t), (∀ s ∈ D.usesAt sitesC v.idx, s ∈ P) → Reach P E t (v.get g))
   (hDE : ∀ s ∈ D.effectSites, s ∈ E)
-include hg hD hDE
+include hg hDE
 
 set_option linter.unusedSectionVars false
 
+/-- The kept functions every global of `gs` holds are sites of `P`. -/
+abbrev GlobalsIn (gs : List Nat) : Prop := ∀ i ∈ gs, ∀ s ∈ D.usesAt sitesC i, s ∈ P
+
 mutual
-/-- Evaluation reaches only `P` and `E` when the expression's sites and effect sites, the definitions', the globals
-and the variables do. -/
-theorem Expr.reach {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (∀ s ∈ e.sites D, s ∈ P) →
+/-- Evaluation reaches only `P` and `E` when the expression's sites and effect sites, the globals it reads and the
+variables do. -/
+theorem Expr.reach {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (∀ s ∈ e.sites D, s ∈ P) → GlobalsIn P D e.globals →
     (∀ s ∈ e.effectSites D, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ → Reach P E t (e.eval D g ρ)
-  | .int _, _, _, _, _ | .str _, _, _, _, _ => trivial
-  | .var v, _, _, ρ, hρ => Var.reach P v ρ hρ
-  | .global v, _, _, _, _ => Var.reach P v g hg
-  | .ctor v es, hs, he, ρ, hρ => Alts.reach_inj P v _ (Exprs.reach es hs he ρ hρ)
-  | .field _ k hk e, hs, he, ρ, hρ => by
-    have he := Alts.reach_view P _ (Expr.reach e hs he ρ hρ)
+  | .int _, _, _, _, _, _ | .str _, _, _, _, _, _ => trivial
+  | .var v, _, _, _, ρ, hρ => Var.reach P v ρ hρ
+  | .global v, _, hu, _, _, _ => hg v (hu _ (by simp [Expr.globals]))
+  | .ctor v es, hs, hu, he, ρ, hρ => Alts.reach_inj P v _ (Exprs.reach es hs hu he ρ hρ)
+  | .field _ k hk e, hs, hu, he, ρ, hρ => by
+    have he := Alts.reach_view P _ (Expr.reach e hs hu he ρ hρ)
     simp only [Expr.eval]
     exact Dens.reach_field P _ k _ he
-  | .index e k, hs, he, ρ, hρ => Dens.reach_get P _ k (Expr.reach e hs he ρ hρ)
-  | .update e p, hs, he, ρ, hρ => by
-    have hx := Expr.reach e (sub_l hs) (sub_l he) ρ hρ
+  | .index e k, hs, hu, he, ρ, hρ => Dens.reach_get P _ k (Expr.reach e hs hu he ρ hρ)
+  | .update e p, hs, hu, he, ρ, hρ => by
+    have hx := Expr.reach e (sub_l hs) (sub_l hu) (sub_l he) ρ hρ
     simp only [Expr.eval]
-    refine Alts.reach_inj P ⟨0, by simp⟩ _ (Patch.reach p (sub_r hs) (sub_r he) ρ hρ _ ?_)
+    refine Alts.reach_inj P ⟨0, by simp⟩ _ (Patch.reach p (sub_r hs) (sub_r hu) (sub_r he) ρ hρ _ ?_)
     revert hx
     generalize Expr.eval D g e ρ = x
     match x with
     | .inl y => exact id
-  | .call f args, hs, he, ρ, hρ =>
-    (Expr.reach f (sub_l hs) (sub_l he) ρ hρ) _ (Exprs.reach args (sub_r hs) (sub_r he) ρ hρ)
-  | .lam body, hs, he, ρ, hρ => fun xs hxs => Expr.reach body hs he _ (Dens.reach_append P xs ρ hxs hρ)
-  | .let_ e body, hs, he, ρ, hρ =>
-    Expr.reach body (sub_r hs) (sub_r he) _ ⟨Expr.reach e (sub_l hs) (sub_l he) ρ hρ, hρ⟩
-  | .case e cs hc, hs, he, ρ, hρ =>
-    Clauses.reach cs (sub_r hs) (sub_r he) ρ hρ _ (Expr.reach e (sub_l hs) (sub_l he) ρ hρ) _
-  | .list items, hs, he, ρ, hρ => Items.reach items hs he ρ hρ
-  | .tuple es, hs, he, ρ, hρ => Exprs.reach es hs he ρ hρ
-  | .bin op _ _, _, _, _, _ => reach_data P _ op.data _
-  | .not _, _, _, _, _ => reach_data P _ rfl _
-  | .neg _, _, _, _, _ => trivial
-  | .prim p args h, _, _, _, _ => Prim.reach P p args h
-  | .close site env hΓ ht body, hs, _, _, _ => hs _ List.mem_cons_self
-  | .closeEffect _ _ _ _ body, hs, he, _, _ =>
-    ⟨he _ List.mem_cons_self, sub_r hs, hD, fun _ h => he _ (List.mem_cons_of_mem _ (List.mem_append_right _ h)), hDE⟩
+  | .call f args, hs, hu, he, ρ, hρ =>
+    (Expr.reach f (sub_l hs) (sub_l hu) (sub_l he) ρ hρ) _ (Exprs.reach args (sub_r hs) (sub_r hu) (sub_r he) ρ hρ)
+  | .lam body, hs, hu, he, ρ, hρ => fun xs hxs => Expr.reach body hs hu he _ (Dens.reach_append P xs ρ hxs hρ)
+  | .let_ e body, hs, hu, he, ρ, hρ =>
+    Expr.reach body (sub_r hs) (sub_r hu) (sub_r he) _ ⟨Expr.reach e (sub_l hs) (sub_l hu) (sub_l he) ρ hρ, hρ⟩
+  | .case e cs hc, hs, hu, he, ρ, hρ =>
+    Clauses.reach cs (sub_r hs) (sub_r hu) (sub_r he) ρ hρ _ (Expr.reach e (sub_l hs) (sub_l hu) (sub_l he) ρ hρ) _
+  | .list items, hs, hu, he, ρ, hρ => Items.reach items hs hu he ρ hρ
+  | .tuple es, hs, hu, he, ρ, hρ => Exprs.reach es hs hu he ρ hρ
+  | .bin op _ _, _, _, _, _, _ => reach_data P _ op.data _
+  | .not _, _, _, _, _, _ => reach_data P _ rfl _
+  | .neg _, _, _, _, _, _ => trivial
+  | .prim p args h, _, _, _, _, _ => Prim.reach P p args h
+  | .close site env hΓ ht body, hs, _, _, _, _ => hs _ List.mem_cons_self
+  | .closeEffect _ _ _ _ body, hs, hu, he, _, _ =>
+    ⟨he _ List.mem_cons_self, fun s h => by
+      simp only [EffectFun.usedSites, Expr.uses, Expr.usesWith, List.mem_append, List.mem_flatMap] at h
+      rcases h with h | ⟨i, hi, h⟩
+      · exact sub_r hs s h
+      · exact sub_r hu i hi s h,
+      fun _ h => he _ (List.mem_cons_of_mem _ (List.mem_append_right _ h)), hDE⟩
 theorem Exprs.reach {Γ ts : List Ty} : (es : Exprs G Γ ts) → (∀ s ∈ Exprs.sites D es, s ∈ P) →
-    (∀ s ∈ Exprs.effectSites D es, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ → Reaches P E ts (Exprs.eval D g es ρ)
-  | .nil, _, _, _, _ => trivial
-  | .cons e es, hs, he, ρ, hρ =>
-    ⟨Expr.reach e (sub_l hs) (sub_l he) ρ hρ, Exprs.reach es (sub_r hs) (sub_r he) ρ hρ⟩
+    GlobalsIn P D (Exprs.globals es) → (∀ s ∈ Exprs.effectSites D es, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ →
+    Reaches P E ts (Exprs.eval D g es ρ)
+  | .nil, _, _, _, _, _ => trivial
+  | .cons e es, hs, hu, he, ρ, hρ =>
+    ⟨Expr.reach e (sub_l hs) (sub_l hu) (sub_l he) ρ hρ, Exprs.reach es (sub_r hs) (sub_r hu) (sub_r he) ρ hρ⟩
 theorem Items.reach {Γ : List Ty} {t : Ty} : (items : Items G Γ t) → (∀ s ∈ Items.sites D items, s ∈ P) →
-    (∀ s ∈ Items.effectSites D items, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ →
-    ∀ x ∈ Items.eval D g items ρ, Reach P E t x
-  | .nil, _, _, _, _, _, hx => by cases hx
-  | .cons e es, hs, he, ρ, hρ, x, hx => by
+    GlobalsIn P D (Items.globals items) → (∀ s ∈ Items.effectSites D items, s ∈ E) → (ρ : Ty.dens Γ) →
+    Reaches P E Γ ρ → ∀ x ∈ Items.eval D g items ρ, Reach P E t x
+  | .nil, _, _, _, _, _, _, hx => by cases hx
+  | .cons e es, hs, hu, he, ρ, hρ, x, hx => by
     cases hx with
-    | head => exact Expr.reach e (sub_l hs) (sub_l he) ρ hρ
-    | tail _ hx => exact Items.reach es (sub_r hs) (sub_r he) ρ hρ x hx
+    | head => exact Expr.reach e (sub_l hs) (sub_l hu) (sub_l he) ρ hρ
+    | tail _ hx => exact Items.reach es (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx
 theorem Patch.reach {Γ ts : List Ty} : (p : Patch G Γ ts) → (∀ s ∈ Patch.sites D p, s ∈ P) →
-    (∀ s ∈ Patch.effectSites D p, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ → (xs : Ty.dens ts) →
-    Reaches P E ts xs → Reaches P E ts (Patch.eval D g p ρ xs)
-  | .nil, _, _, _, _, (), _ => trivial
-  | .keep rest, hs, he, ρ, hρ, (_, xs), hx => ⟨hx.1, Patch.reach rest hs he ρ hρ xs hx.2⟩
-  | .set e rest, hs, he, ρ, hρ, (_, xs), hx =>
-    ⟨Expr.reach e (sub_l hs) (sub_l he) ρ hρ, Patch.reach rest (sub_r hs) (sub_r he) ρ hρ xs hx.2⟩
+    GlobalsIn P D (Patch.globals p) → (∀ s ∈ Patch.effectSites D p, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ →
+    (xs : Ty.dens ts) → Reaches P E ts xs → Reaches P E ts (Patch.eval D g p ρ xs)
+  | .nil, _, _, _, _, _, (), _ => trivial
+  | .keep rest, hs, hu, he, ρ, hρ, (_, xs), hx => ⟨hx.1, Patch.reach rest hs hu he ρ hρ xs hx.2⟩
+  | .set e rest, hs, hu, he, ρ, hρ, (_, xs), hx =>
+    ⟨Expr.reach e (sub_l hs) (sub_l hu) (sub_l he) ρ hρ, Patch.reach rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ xs hx.2⟩
 theorem Clauses.reach {Γ : List Ty} {t r : Ty} {sh : List Shape} : (cs : Clauses G Γ t r sh) →
-    (∀ s ∈ Clauses.sites D cs, s ∈ P) → (∀ s ∈ Clauses.effectSites D cs, s ∈ E) → (ρ : Ty.dens Γ) →
+    (∀ s ∈ Clauses.sites D cs, s ∈ P) → GlobalsIn P D (Clauses.globals cs) →
+    (∀ s ∈ Clauses.effectSites D cs, s ∈ E) → (ρ : Ty.dens Γ) →
     Reaches P E Γ ρ → (x : t.den) → Reach P E t x →
     (h : ∃ s ∈ sh, Shape.Matches t s x) → Reach P E r (Clauses.eval D g cs ρ x h)
-  | .nil, _, _, _, _, _, _, h => False.elim (by simp at h)
-  | .cons p body rest, hs, he, ρ, hρ, x, hx, h => by
+  | .nil, _, _, _, _, _, _, _, h => False.elim (by simp at h)
+  | .cons p body rest, hs, hu, he, ρ, hρ, x, hx, h => by
     simp only [Clauses.eval]
     split
     · rename_i δ hm
-      exact Expr.reach body (sub_l hs) (sub_l he) _ (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
-    · exact Clauses.reach rest (sub_r hs) (sub_r he) ρ hρ x hx _
-  | .guarded p guard body rest, hs, he, ρ, hρ, x, hx, h => by
+      exact Expr.reach body (sub_l hs) (sub_l hu) (sub_l he) _ (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
+    · exact Clauses.reach rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx _
+  | .guarded p guard body rest, hs, hu, he, ρ, hρ, x, hx, h => by
     simp only [Clauses.eval]
     split
     · rename_i δ hm
       split
-      · exact Expr.reach body (sub_r (sub_l hs)) (sub_r (sub_l he)) _
+      · exact Expr.reach body (sub_r (sub_l hs)) (sub_r (sub_l hu)) (sub_r (sub_l he)) _
           (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
-      · exact Clauses.reach rest (sub_r hs) (sub_r he) ρ hρ x hx h
-    · exact Clauses.reach rest (sub_r hs) (sub_r he) ρ hρ x hx h
+      · exact Clauses.reach rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx h
+    · exact Clauses.reach rest (sub_r hs) (sub_r hu) (sub_r he) ρ hρ x hx h
 end
 
 end
 
-
-/-- Every global reaches only `P` and `E` when the definitions' sites are in `P` and effect sites in `E`. -/
-theorem Defs.reach : {G : List Ty} → (D : Defs G) → (∀ s ∈ D.sites, s ∈ P) → (∀ s ∈ D.effectSites, s ∈ E) →
-    Reaches P E G D.eval
-  | [], .nil, _, _ => trivial
-  | _ :: _, .snoc defs _ body, hD, hE =>
-    ⟨Expr.reach P defs defs.eval (Defs.reach defs (sub_l hD) (sub_l hE)) (sub_l hD) (sub_l hE) body (sub_r hD)
-      (sub_r hE) () trivial, Defs.reach defs (sub_l hD) (sub_l hE)⟩
+/-- Every global reaches only `P` and `E` when the kept functions it and the globals it reads write are sites of `P`
+and the definitions' effect sites are in `E`. -/
+theorem Defs.reach : {G : List Ty} → (D : Defs G) → (∀ s ∈ D.effectSites, s ∈ E) → {t : Ty} → (v : Var G t) →
+    (∀ s ∈ D.usesAt sitesC v.idx, s ∈ P) → Reach P E t (v.get D.eval)
+  | _ :: _, .snoc defs _ body, hE, _, .here, hu => by
+    simp only [Defs.usesAt, Defs.uses, Var.idx, List.getD_cons_zero, Expr.usesWith, sitesC] at hu
+    exact Expr.reach P defs defs.eval (fun v h => Defs.reach defs (sub_l hE) v h) (sub_l hE) body (sub_l hu)
+      (fun i hi s h => sub_r hu s (List.mem_flatMap.2 ⟨i, hi, h⟩)) (sub_r hE) () trivial
+  | _ :: _, .snoc defs _ _, hE, _, .there v, hu => by
+    simp only [Defs.usesAt, Defs.uses, Var.idx, List.getD_cons_succ] at hu
+    exact Defs.reach defs (sub_l hE) v hu
 
 /-- The structure a program evaluates to reaches only the program's sites and effect sites. -/
 theorem Program.reach {t : Ty} (p : Program t) : Reach p.defs.sites p.defs.effectSites t p.eval :=
-  Var.reach _ p.root _ (Defs.reach _ p.defs (fun _ h => h) fun _ h => h)
+  Defs.reach _ p.defs (fun _ h => h) p.root fun s h => Defs.collect_sites p.defs ▸ Defs.uses_sub sitesC p.defs _ s h
 
 /-- What a kept function that returns effects returns reaches only `P` and `E`. -/
 theorem EffectFun.reach_apply {ps : List Ty} {r : Ty} (f : EffectFun ps r) (hf : f.Reach P E)
-    (xs : (Ty.tuple ps).den0) : Tazuna.Ir.Reach P E r (f.apply xs) :=
-  Expr.reach P f.defs f.defs.eval (Defs.reach P f.defs hf.defsSites hf.defsEffectSites) hf.defsSites
-    hf.defsEffectSites f.body hf.sites hf.effectSites _ (reach_data P (.tuple f.Γ) f.hΓ _) _
-    (reach_data P (.tuple ps) f.hps _)
+    (xs : (Ty.tuple ps).den0) : Tazuna.Ir.Reach P E r (f.apply xs) := by
+  have hu := hf.used
+  simp only [EffectFun.usedSites, Expr.uses, Expr.usesWith, sitesC] at hu
+  exact Expr.reach P f.defs f.defs.eval (fun v h => Defs.reach P f.defs hf.defsEffectSites v h) hf.defsEffectSites
+    f.body (sub_l hu) (fun i hi s h => sub_r hu s (List.mem_flatMap.2 ⟨i, hi, h⟩)) hf.effectSites _
+    (reach_data P (.tuple f.Γ) f.hΓ _) _ (reach_data P (.tuple ps) f.hps _)
+
+/-- A kept function that returns effects reaches the kept functions its source and the globals it reads write. -/
+theorem EffectFun.reach_own {ps : List Ty} {r : Ty} {f : EffectFun ps r} (hf : f.Reach P E) :
+    f.Reach f.usedSites E :=
+  ⟨hf.site, fun _ h => h, hf.effectSites, hf.defsEffectSites⟩
 
 /-- The effect a machine's instance starts names only records of `P`. -/
-theorem MachineV.reach_effectAt {r e : Ty} (m : MachineV r e) (hm : m.Reach P E) (key : m.key.den0) (st : m.state.den0)
-    (records : r.den0) (now : Int) : ∀ eff ∈ m.effectAt key st records now, eff.Reach P := by
+theorem MachineV.reach_effectAt {r e : Ty} (m : MachineV r e) (hm : m.effect.Reach P E) (key : m.key.den0)
+    (st : m.state.den0) (records : r.den0) (now : Int) : ∀ eff ∈ m.effectAt key st records now, eff.Reach P := by
   intro eff heff
-  have h := EffectFun.reach_apply P m.effect hm.effect (.inl (key, st, records, now, ()), ())
+  have h := EffectFun.reach_apply P m.effect hm (.inl (key, st, records, now, ()), ())
   simp only [MachineV.effectAt] at heff
   revert h heff
   generalize m.effect.apply (.inl (key, st, records, now, ()), ()) = x

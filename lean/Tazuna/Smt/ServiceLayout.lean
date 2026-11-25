@@ -49,8 +49,8 @@ def ownKeys (es : List Ty) (P : List AnySite) (h : HandleSite) : List OwnKey :=
 
 /-- The types a step of the service codes beyond its program's expressions: the state's, the input's, what
 `StepEnv` looks up, and the tuple of each sender's key, which a start writes whether or not a request has a shape. -/
-def stepTys (v : ServiceV) (P : List AnySite) : List Ty :=
-  [v.records, v.event, v.caller, Ty.option (.dsl .effect [v.event]), pendingTable (shapes v P), .tuple []] ++
+def stepTys (v : ServiceV) : List Ty :=
+  [v.records, v.event, v.caller, Ty.option (.dsl .effect [v.event]), pendingTable (shapes v), .tuple []] ++
     v.machines.map (·.table) ++ v.machines.map (fun m => .tuple [m.key])
 
 /-- What the layout builder reads of a program: its sites, its handles, the type of every node and every list
@@ -81,7 +81,7 @@ def Layout.kindsOf (p : ProgramParts) (v : ServiceV) : Layout :=
 /-- The types the step's encoders build beyond the state's: contexts, functions' results, rules, event and effect
 lists, answers and own commands' answers. They are listed after the program's types, which already hold them where a
 function of the program has them, so the layout keeps its order. -/
-def useTys (v : ServiceV) (P : List AnySite) (K : Layout) : List Ty :=
+def useTys (v : ServiceV) (K : Layout) : List Ty :=
   [Ty.rules, .list v.event] ++
     v.reactions.flatMap (fun _ => [Ty.reactionCtx v.records, .list (.dsl .effect [v.event])]) ++
     v.machines.flatMap (fun m => [Ty.machineCtx m.key m.state v.records, Ty.next m.state, Ty.option (Ty.timer m.state),
@@ -89,7 +89,7 @@ def useTys (v : ServiceV) (P : List AnySite) (K : Layout) : List Ty :=
     v.commands.flatMap (fun x => [Ty.ctx v.records x.input v.caller, Ty.result (.list v.event) x.rejection]) ++
     v.queries.flatMap (fun q => [Ty.ctx v.records q.input v.caller, q.output]) ++
     v.subscribes.map (·.event) ++
-    (shapes v P).map (fun sh => answerTy sh.output sh.rejection) ++
+    (shapes v).map (fun sh => answerTy sh.output sh.rejection) ++
     K.owns.flatMap fun
       | .command _ _ _ _ j a => [Ty.nil, Ty.result Ty.nil j, .tuple a.Γ]
       | .query _ _ _ _ _ a => [.tuple a.Γ]
@@ -103,7 +103,7 @@ def stepSlots (v : ServiceV) (t : Ty) : Nat :=
 /-- The layout of the service's scripts, from the program it came from: the datatypes of the types with sorts. -/
 def Layout.ofParts (p : ProgramParts) (v : ServiceV) : Layout :=
   Layout.addTys (listSlots (stepSlots v) p.lits) (Layout.kindsOf p v)
-    ((stepTys v p.sites ++ p.tys ++ useTys v p.sites (Layout.kindsOf p v)).filter Ty.sortable)
+    ((stepTys v ++ p.tys ++ useTys v (Layout.kindsOf p v)).filter Ty.sortable)
 
 /-- The layout of the service's scripts, from the program `defs` it came from. -/
 abbrev Layout.ofService {G : List Ty} (defs : Defs G) (v : ServiceV) : Layout := Layout.ofParts defs.parts v
@@ -116,7 +116,7 @@ theorem hasWiths_mem {L : Layout} {D : Dsl → List Ty → Prop} : {ts : List Ty
 /-- Every step type and every expression type of the program that has a sort has its datatypes in the service's
 layout. -/
 theorem ofService_has {G : List Ty} (defs : Defs G) (v : ServiceV) :
-    ∀ t ∈ (stepTys v defs.sites ++ defs.tys ++ useTys v defs.sites (Layout.kindsOf defs.parts v)).filter Ty.sortable,
+    ∀ t ∈ (stepTys v ++ defs.tys ++ useTys v (Layout.kindsOf defs.parts v)).filter Ty.sortable,
       (Layout.ofService defs v).Has t :=
   hasWiths_mem (Layout.addTys_has _ _ _)
 

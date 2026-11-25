@@ -267,10 +267,6 @@ end Patterns
 def irrefutable {t : Ty} {Δ : List Ty} (pos : At) (p : Pat t Δ) : E Unit :=
   if (exhaustive? t [p.shape]).isSome then pure () else fail pos "let pattern can fail to match"
 
-def _root_.Tazuna.Ir.Var.idx : {Γ : List Ty} → {t : Ty} → Var Γ t → Nat
-  | _, _, .here => 0
-  | _, _, .there v => v.idx + 1
-
 mutual
 /-- The positions in `Γ` of the variables an expression uses, under `d` binders of its own. -/
 partial def usesE {G Γ : List Ty} {t : Ty} (d : Nat) : Expr G Γ t → List Nat

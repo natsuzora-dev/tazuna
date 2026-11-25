@@ -291,7 +291,7 @@ answer names, the condition holds exactly when what the step applies for that re
 it holds, a broken `ensures` rule makes the answer Invalid, and otherwise the request leaves the pending table, the
 events of `on_answer` run through the events loop and the step ends as its end terms say (`Finished`). -/
 theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
-    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
+    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (s : State v) (hsinv : Step.Inv P s)
     {k : Nat} {sh : PendingShape v.event} (hk : shs[k]? = some sh)
     (to : Nat) (value : (answerTy sh.output sh.rejection).den0)
@@ -562,11 +562,11 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       let sA := (Step.reactAll T s' evL).1
       have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
       have e4 : Holds M c4 ↔ eventsFit L.count T s' evL :=
-        (events_encode chk hshs happ hca senv _ svl hSl _ hhl s' hR.now hR.records hR.machines h12).1
+        (events_encode chk hshs hshp happ hca senv _ svl hSl _ hhl s' hR.now hR.records hR.machines h12).1
       have hinv' : Step.Inv P s' := hsinv.filterPending _
       have ef : Holds M c4 → (Holds M cf ↔ finishFits L.count T (sh0 :: rest) (Step.applyEvents T { state := s' } evL)) :=
-        fun hc4 => (finish_encode chk hshs happ hca hinv hci senv s .accepted
-          { state := s' } rfl hinv' hR.now hrem (loop_acc (T := T) chk hshs happ hca senv
+        fun hc4 => (finish_encode chk hshs hshp happ hca hinv hci senv s .accepted
+          { state := s' } rfl hinv' hR.now hrem (loop_acc (T := T) chk hshs hshp happ hca senv
             { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4) (applyEvents_ok chk.reach _ rfl hinv' _) h12'
           hcfx).1
       constructor
@@ -774,9 +774,9 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     erw [Ty.up_list _ _ v.event_data] at hhl
     let s' : State v := { s with pending := s.pending.filter (·.id != to) }
     have hinv' : Step.Inv P s' := hsinv.filterPending _
-    have hdone := loop_acc (T := T) chk hshs happ0 hca senv
+    have hdone := loop_acc (T := T) chk hshs hshp happ0 hca senv
       { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4
-    exact (finish_encode chk hshs happ0 hca hinv0 hci senv s
+    exact (finish_encode chk hshs hshp happ0 hca hinv0 hci senv s
       .accepted { state := s' } rfl hinv' hR.now hrem hdone (applyEvents_ok chk.reach _ rfl hinv' _) h12' hcfx).2 hcf
 
 end

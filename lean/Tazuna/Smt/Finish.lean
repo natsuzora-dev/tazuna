@@ -124,7 +124,7 @@ def finishFits (S : Ty → Nat) (T : List TypeDecl) (shs : List (PendingShape v.
 
 /-- A step's end: its condition holds exactly when the step's end fits (`finishFits`), and wherever it holds the result
 `Step.finish` gives for the result `r` of the step's events is what the terms say (`Finished`). -/
-theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
+theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci0 : Term} (hinvc : v.invariants.code L = .ok (inv, ci0))
@@ -164,7 +164,7 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     have e2' : MachinesRel M L T v.machines o.tables a1.state.machines := by rw [← hA]; exact e2
     have e3' : fresh.denote M = .int (Int.ofNat a1.state.fresh) := by rw [← hA]; exact e3
     have hnow1 : now.denote M = .int a1.state.now := by rw [← hA]; exact hnow
-    obtain ⟨es, hrel⟩ := settle_encode chk hshs happ hca senv
+    obtain ⟨es, hrel⟩ := settle_encode chk hshs hshp happ hca senv
       v.bounds.cascadeNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 hS1 hnow1 rfl e1' e2' e3' hn1 hq1' hset hcx
     have hfits : finishFits L.count T shs r ↔ settleFits L.count T v.bounds.cascadeNat 0 a1 ∧
         ∀ a2, Step.settleFrom T v.bounds.cascadeNat 0 a1 = .ok a2 →
@@ -221,7 +221,7 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     have hfd : (Ty.fn [v.records] Ty.rules).isData = true := by
       simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, v.records_data]
     have hinvR := v.invariants.code_fn hfd hinvc hci0
-    obtain ⟨hF, hm⟩ := (settle_encode chk hshs happ hca senv
+    obtain ⟨hF, hm⟩ := (settle_encode chk hshs hshp happ hca senv
       v.bounds.cascadeNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 (by simpa [hown] using e7) hnow rfl e1 e2 e3
       (by rw [e4, ← hl1]; rfl) (by simpa [hown] using e6) hset hcx).2 hcs
     unfold Finished

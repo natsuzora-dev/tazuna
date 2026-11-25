@@ -1508,7 +1508,7 @@ theorem allSorted_ofParts (p : ProgramParts) (v : ServiceV) : Layout.AllSorted (
         List.mem_filter] at hfs
       rcases hfs with ⟨k, ⟨hk, -⟩, rfl⟩ | ⟨k, ⟨hk, -⟩, rfl⟩
       · exact (hK k hk).1
-      · exact (hO k hk).1) ((stepTys v p.sites ++ p.tys ++ useTys v p.sites (Layout.kindsOf p v)).filter Ty.sortable)
+      · exact (hO k hk).1) ((stepTys v ++ p.tys ++ useTys v (Layout.kindsOf p v)).filter Ty.sortable)
       (fun t ht => (List.mem_filter.1 ht).2)
 
 /-- The service's layout covers its program: its datatypes and kinds have sorts, and it holds every kind of effect

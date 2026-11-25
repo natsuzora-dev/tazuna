@@ -250,7 +250,7 @@ every event's reaction in turn, the next id term the id after the requests they 
 flagged, those requests at the ids from `n0`, the queue place term the place after the own commands and queries they
 start, and the own slots hold those at the places from `q0`. -/
 theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
-    (hshs : ∀ sh ∈ shs, sh.InSites P)
+    (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca0 : Term} (hap : v.apply.code L = .ok (apply, ca0))
     (hca0 : Holds M ca0) (senv : StepEnv L shs) {now : Term} :
     (S : List (Slot 1)) → (sv : List (Bool × List Val)) → SlotsDen M S sv →
@@ -299,7 +299,7 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           (by simpa using hms)
         rw [holds_ite_tt (b := false) (by simp [hf, Val.toBool])]
         simp only [Bool.false_eq_true, false_implies, true_and]
-        exact (events_encode chk hshs hap hca0 senv S sv hS evs (by simpa [Holds2, occupied] using hev) s hnow hrec'
+        exact (events_encode chk hshs hshp hap hca0 senv S sv hS evs (by simpa [Holds2, occupied] using hev) s hnow hrec'
           hms' h8).1
       | true =>
         match evs, hev with
@@ -329,7 +329,7 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           have e3 : ∀ hca : Holds M ca, (Holds M cr ↔ ∀ x ∈ v.reactions, (x.react.fits L.count).1 ∧
               x.react.appFits L.count (.inl (recs', s.now, ()), ev, ())) :=
             fun hca => (reactions_encode chk.sites hshs senv.hE senv.hPE recs' s.now ev v.records_data v.event_data
-              (hrt hca) hnow hevT v.reactions chk.reactions h7).1
+              (hrt hca) hnow hevT v.reactions chk.reactions (fun x hx eff he => hshp _ (Step.reaction_from hx he)) h7).1
           have e4 : ∀ (hca : Holds M ca) (hcm : Holds M cm), (Holds M c' ↔ eventsFit L.count T (Step.react T s ev).1 evs) :=
             fun hca hcm => by
               have hrel := (machines_encode (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines
@@ -340,7 +340,7 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
               have hms' := machinesRel_pick (T := T) hf v.machines (outs.map (·.table)) xs _
                 (by simpa using hrel)
               have hre := react_eq (T := T) s ev
-              exact (events_encode chk hshs hap hca0 senv S sv hS evs hrest (Step.react T s ev).1 hnow
+              exact (events_encode chk hshs hshp hap hca0 senv S sv hS evs hrest (Step.react T s ev).1 hnow
                 (by rw [hre]; exact hrec') (by rw [hre]; exact hms') h8).1
           rw [holds_andT, holds_andT]
           constructor
@@ -363,7 +363,7 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           (by simpa using hms)
         have hn' : (Term.share (.ite f nR n)).denote M = .int n0 := by simpa [Term.denote, hf, Val.toBool] using hn
         have hq' : (Term.share (.ite f qR q)).denote M = .int q0 := by simpa [Term.denote, hf, Val.toBool] using hq
-        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hap hca0 senv S sv hS evs
+        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hshp hap hca0 senv S sv hS evs
           (by simpa [Holds2, occupied] using hev) s hnow hrec' hms' h8).2 hn' hq' hc2
         refine ⟨r1, r2, r3, ?_, r5, ?_⟩
         · have := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hf (S := news ++ rnews) n0) (by simpa using r4)
@@ -396,12 +396,21 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
             obtain ⟨effs, he, hx⟩ := List.mem_flatten.1 hx
             obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 he
             exact Step.machineStep_reach T recs' s.now ev sm.1 sm.2 (chk.machines _ (PerMachine.fst_mem hsm)) x hx
-          obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel chk.sites hshs senv v.machines _ _ hstarts hreach hn hq h6
+          have hshaped : ∀ x ∈ effss.toList.flatten, ShapedFrom shs v.declared x.1 x.2 := by
+            intro x hx
+            rw [hfls] at hx
+            obtain ⟨effs, he, hx⟩ := List.mem_flatten.1 hx
+            obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 he
+            exact hshp x (Step.machineStep_from T recs' s.now ev sm.1 sm.2 (PerMachine.fst_mem hsm)
+              (chk.machines _ (PerMachine.fst_mem hsm)) x hx)
+          obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel chk.sites hshs senv v.machines _ _ hstarts hreach hshaped hn hq
+            h6
           rw [hfls] at hnT hnews1 hqT hown1
           have hnews1' : NewsRel M L shs v.declared news (Step.reqsOf (startedBy T s recs' ev)) n0 := hnews1
           have hown1' : OwnRel M L oS (Step.queuedOf (startedBy T s recs' ev)) q0 := hown1
           obtain ⟨hnR, hnews2, hqR, hown2⟩ := (reactions_encode chk.sites hshs senv.hE senv.hPE recs' s.now ev
-            v.records_data v.event_data hrt hnow hevT v.reactions chk.reactions h7).2 hnT hqT hcr
+            v.records_data v.event_data hrt hnow hevT v.reactions chk.reactions
+            (fun x hx eff he => hshp _ (Step.reaction_from hx he)) h7).2 hnT hqT hcr
           have hrec' : RelV L v.records (Ty.up _ v.records_data recs')
               ((Term.share (.ite f (Term.share rt) records)).denote M) := by
             simpa [Term.denote, hf, Val.toBool] using hrt
@@ -423,7 +432,7 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
             congr 2
             omega
           have hre := react_eq (T := T) s ev
-          obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hap hca0 senv S sv hS evs
+          obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hshp hap hca0 senv S sv hS evs
             hrest (Step.react T s ev).1 hnow (by rw [hre]; exact hrec') (by rw [hre]; exact hms')
             h8).2 hn' hq' hc2
           have hlen : (Step.react T s ev).2 = startedBy T s recs' ev ++ reactedBy s recs' ev := by rw [hre]

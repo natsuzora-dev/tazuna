@@ -39,7 +39,7 @@ def loadSpec (root path : String) : IO (Except UInt32 Smt.CheckedSpec) := do
       let captures := p.defs.sites.map fun ⟨Γ, _, s⟩ => (s.site, Γ)
       match h : Ir.SpecV.illegal p.types (p.eval ()) p.defs.handles captures with
       | [] =>
-        if htys : (p.eval ()).services.all (·.stateTys p.defs.sites) = true then
+        if htys : (p.eval ()).services.all (·.stateTys) = true then
           return .ok ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) (by simpa using htys) h, Smt.handles_ok h⟩
         else
           IO.println (invalidIrLine ⟨none, none,

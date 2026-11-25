@@ -16,12 +16,12 @@ variable (L : Layout) {r e : Ty}
 
 /-- The pending table slot of a request with the wire id `id`, the effect `eff` and the sender's key tuple items
 `keyT`. Both items are shared, as moving the slot into the table copies them into every slot. -/
-def pendingSlot (dE dP dk : Nat) (dflt : Term) (js : List Nat) (keyT : List Term) (f id eff : Term) : PendingSlot :=
+def pendingSlot (dE dP dk : Nat) (dflt : Term) (js : List (Option Nat)) (keyT : List Term) (f id eff : Term) : PendingSlot :=
   ⟨f, Term.share id, Term.share (entryT dE dP dk dflt keyT (Term.share eff) 0 js)⟩
 
 /-- A reaction's effect slots as pending table slots, each occupied slot at the id `n` plus the occupied slots before
 it, and the id after them. -/
-def reactSlots (dE dP dk : Nat) (dflt : Term) (js : List Nat) : List (Slot 1) → Term → List PendingSlot × Term
+def reactSlots (dE dP dk : Nat) (dflt : Term) (js : List (Option Nat)) : List (Slot 1) → Term → List PendingSlot × Term
   | [], n => ([], n)
   | (f, xs) :: S, n =>
     let rest := reactSlots dE dP dk dflt js S (Term.share (.add n (.ite f (.int 1) (.int 0))))
@@ -64,21 +64,22 @@ variable {L : Layout} {M : Model} {e : Ty}
 /-- T2 for a reaction's effect slots: the pending slots hold, where occupied, the requests for its effects in list
 order at the ids from `n0`, and the id term after them denotes the id after them. -/
 theorem reactSlots_rel {P : List AnySite} (hP : SitesUnique P) (name : String) {shs : List (PendingShape e)}
-    (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List Nat}
+    (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List (Option Nat)}
     (hjs : shapeIdxs shs ds ⟨[], .reaction name⟩ (L.effectsOf e) = .ok js)
     {dE nE dP nP dk nk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP)) (hdk : L.find? (.tuple []) = some (dk, nk)) (dflt : Term) :
     (S : List (Slot 1)) → (sv : List (Bool × List Val)) → (effs : List (EffectV e)) → SlotsDen M S sv →
-    Holds2 (EBag L (.dsl .effect [e])) effs sv → (∀ x ∈ effs, x.Reach P) → (∀ x ∈ effs, x.isRequest = true) →
+    Holds2 (EBag L (.dsl .effect [e])) effs sv → (∀ x ∈ effs, x.Reach P) →
+    (∀ x ∈ effs, ShapedFrom shs ds (.reaction name) x) → (∀ x ∈ effs, x.isRequest = true) →
     {n : Term} → {n0 : Nat} →
     n.denote M = .int n0 →
     (reactSlots dE dP dk dflt js S n).2.denote M = .int ((n0 + effs.length : Nat) : Int) ∧
       NewsRel M L shs ds (reactSlots dE dP dk dflt js S n).1 (effs.map (Sender.reaction name, ·)) n0
-  | [], [], effs, _, hh, _, _, n, n0, hn => by
+  | [], [], effs, _, hh, _, _, _, n, n0, hn => by
     cases effs with
     | nil => exact ⟨by simpa [reactSlots] using hn, [], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩
     | cons _ _ => exact hh.elim
-  | (f, xs) :: S, (b, vs) :: sv, effs, ⟨hf, hx, hS⟩, hh, hr, hrq, n, n0, hn => by
+  | (f, xs) :: S, (b, vs) :: sv, effs, ⟨hf, hx, hS⟩, hh, hr, hat, hrq, n, n0, hn => by
     have hl : (Term.denotes M (pendingSlot dE dP dk dflt js [] f n xs[0]).slot.2.1).length = 2 := by
       simp [pendingSlot, PendingSlot.slot, Term.denotes]
     cases b with
@@ -86,7 +87,7 @@ theorem reactSlots_rel {P : List AnySite} (hP : SitesUnique P) (name : String) {
       have hn' : (Term.share (.add n (.ite f (.int 1) (.int 0)))).denote M = .int n0 := by
         simp [Term.denote_share, Term.denote, hn, hf, Val.toInt, Val.toBool]
       obtain ⟨h1, sv', zs, hS', hw, hh', xs', hp, hq⟩ :=
-        reactSlots_rel hP name hshs hjs hE hPE hdk dflt S sv effs hS (by simpa [Holds2, occupied] using hh) hr hrq hn'
+        reactSlots_rel hP name hshs hjs hE hPE hdk dflt S sv effs hS (by simpa [Holds2, occupied] using hh) hr hat hrq hn'
       refine ⟨h1, (false, _) :: sv', zs, ⟨hf, rfl, hS'⟩, ?_, by simpa [Holds2, occupied] using hh', xs', hp, hq⟩
       simp only [List.mem_cons, forall_eq_or_imp]
       exact ⟨hl, hw⟩
@@ -97,12 +98,13 @@ theorem reactSlots_rel {P : List AnySite} (hP : SitesUnique P) (name : String) {
           simp [Term.denote_share, Term.denote, hn, hf, Val.toInt, Val.toBool]
         obtain ⟨h1, sv', zs, hS', hw, hh', xs', hp, hq⟩ :=
           reactSlots_rel hP name hshs hjs hE hPE hdk dflt S sv effs hS hh (fun y hy => hr y (by simp [hy]))
-            (fun y hy => hrq y (by simp [hy])) hn'
+            (fun y hy => hat y (by simp [hy])) (fun y hy => hrq y (by simp [hy])) hn'
         rw [hz] at hx
         obtain ⟨t, rfl⟩ := xs.one
         have ht : t.denote M = z := by simpa [Term.denotes] using hx
         obtain ⟨req, o, rfl, ho, y, hyrel, hpend⟩ := entry_rel (M := M) hP (.reaction name) hshs hjs hE hPE ()
-          (keyT := []) ⟨dk, nk, [], hdk, rfl, rfl⟩ (hr x (by simp)) (hrq x (by simp)) (effT := Term.share t)
+          (keyT := []) ⟨dk, nk, [], hdk, rfl, rfl⟩ (hr x (by simp)) (hat x (by simp)) (hrq x (by simp))
+          (effT := Term.share t)
           (by rw [Term.denote_share, ht]; exact hxz) n0 dflt
         refine ⟨by show (reactSlots dE dP dk dflt js S _).2.denote M = _; rw [h1]; simp; omega, (true, _) :: sv',
           ((n0 : Nat), y) :: zs, ⟨hf, rfl, hS'⟩, ?_, ⟨⟨_, _, rfl, by simp only [pendingSlot, Term.denote_share]; exact hn, ?_⟩, hh'⟩,
@@ -113,7 +115,7 @@ theorem reactSlots_rel {P : List AnySite} (hP : SitesUnique P) (name : String) {
           exact hyrel
         · simp only [List.map_cons, List.zipIdx_cons]
           exact hp.cons _
-  | [], _ :: _, _, h, _, _, _, _, _, _ | _ :: _, [], _, h, _, _, _, _, _, _ => h.elim
+  | [], _ :: _, _, h, _, _, _, _, _, _, _ | _ :: _, [], _, h, _, _, _, _, _, _, _ => h.elim
 
 end
 
@@ -155,12 +157,13 @@ theorem react_args (x : ReactionV r e) (recs : r.den0) (tnow : Int) (ev : e.den0
 list order at the ids from `n0`, and the own slots the own commands and queries at the places from `q0`; each term
 after them denotes the id or place after them. -/
 theorem reaction_parts {P : List AnySite} (hP : SitesUnique P) (name : String) {shs : List (PendingShape e)}
-    (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List Nat}
+    (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)} {js : List (Option Nat)}
     (hjs : shapeIdxs shs ds ⟨[], .reaction name⟩ (L.effectsOf e) = .ok js)
     {dE nE dP nP dk nk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP)) (hdk : L.find? (.tuple []) = some (dk, nk)) (dflt : Term)
     {LS : List (Slot 1)} {sv : List (Bool × List Val)} {effs : List (EffectV e)} (hS : SlotsDen M LS sv)
-    (hh : Holds2 (EBag L (.dsl .effect [e])) effs sv) (hr : ∀ x ∈ effs, x.Reach P) {n q : Term} {n0 q0 : Nat}
+    (hh : Holds2 (EBag L (.dsl .effect [e])) effs sv) (hr : ∀ x ∈ effs, x.Reach P)
+    (hat : ∀ x ∈ effs, ShapedFrom shs ds (.reaction name) x) {n q : Term} {n0 q0 : Nat}
     (hn : n.denote M = .int n0) (hq : q.denote M = .int q0) :
     let gate (own : Bool) := gateOwn dE (L.effectsOf e).length (L.ownsOf e).length own LS
     let R := reactSlots dE dP dk dflt js (if (L.ownsOf e).isEmpty then LS else gate false) n
@@ -183,7 +186,7 @@ theorem reaction_parts {P : List AnySite} (hP : SitesUnique P) (name : String) {
     have h1 : effs.filter (·.isRequest) = effs := List.filter_eq_self.2 hall
     have h2 : effs.filter (!·.isRequest) = [] := List.filter_eq_nil_iff.2 fun x hx => by simp [hall x hx]
     simp only [R, O, ho, ↓reduceIte, h1, h2]
-    obtain ⟨r1, r2⟩ := reactSlots_rel hP name hshs hjs hE hPE hdk dflt LS sv effs hS hh hr hall hn
+    obtain ⟨r1, r2⟩ := reactSlots_rel hP name hshs hjs hE hPE hdk dflt LS sv effs hS hh hr hat hall hn
     exact ⟨by simpa using r1, r2, by simpa using hq, ownRel_nil q0⟩
   · simp only [R, O, ho, Bool.false_eq_true, ↓reduceIte]
     obtain ⟨sv1, hS1, hh1⟩ := gateOwn_rel (M := M) hE false LS sv effs hS hh
@@ -195,7 +198,8 @@ theorem reaction_parts {P : List AnySite} (hP : SitesUnique P) (name : String) {
     replace hh1 := (congrArg (fun l : List (EffectV e) => Holds2 (EBag L (.dsl .effect [e])) l sv1) e1).mp hh1
     replace hh2 := (congrArg (fun l : List (EffectV e) => Holds2 (EBag L (.dsl .effect [e])) l sv2) e2).mp hh2
     obtain ⟨r1, r2⟩ := reactSlots_rel hP name hshs hjs hE hPE hdk dflt _ sv1 _ hS1 hh1
-      (fun x hx => hr x (List.mem_filter.1 hx).1) (fun x hx => (List.mem_filter.1 hx).2) hn
+      (fun x hx => hr x (List.mem_filter.1 hx).1) (fun x hx => hat x (List.mem_filter.1 hx).1)
+      (fun x hx => (List.mem_filter.1 hx).2) hn
     obtain ⟨o1, o2⟩ := ownSlots_rel _ sv2 _ hS2 hh2 hq
     exact ⟨by simpa using r1, r2, o1, o2⟩
 
@@ -210,7 +214,9 @@ theorem reactions_encode {P : List AnySite} {E : List AnyEffectSite} (hP : Sites
     (recs : r.den0) (tnow : Int) (ev : e.den0) (hrd : r.isData = true) (hed : e.isData = true)
     {records now evT : Term} (hrec : RelV L r (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hev : RelV L e (Ty.up _ hed ev) (evT.denote M)) :
-    (xs : List (ReactionV r e)) → (∀ x ∈ xs, x.Reach P E) → {n q : Term} → {news : List PendingSlot} → {n' : Term} →
+    (xs : List (ReactionV r e)) → (∀ x ∈ xs, x.Reach P E) →
+    (∀ x ∈ xs, ∀ eff, eff.Reach x.react.usedSites → ShapedFrom shs ds (.reaction x.name) eff) →
+    {n q : Term} → {news : List PendingSlot} → {n' : Term} →
     {owns : List OwnSlot} → {q' c : Term} →
     encodeReactions L shs ds dE dP xs records now evT n q = .ok (news, n', owns, q', c) →
     (Holds M c ↔ ∀ x ∈ xs, (x.react.fits L.count).1 ∧ x.react.appFits L.count (.inl (recs, tnow, ()), ev, ())) ∧
@@ -219,13 +225,13 @@ theorem reactions_encode {P : List AnySite} {E : List AnyEffectSite} (hP : Sites
       NewsRel M L shs ds news (Step.reqsOf (reactionEffects xs ev recs tnow)) n0 ∧
       q'.denote M = .int ((q0 + (Step.queuedOf (reactionEffects xs ev recs tnow)).length : Nat) : Int) ∧
       OwnRel M L owns (Step.queuedOf (reactionEffects xs ev recs tnow)) q0)
-  | [], _, n, q, news, n', owns, q', c, henc => by
+  | [], _, _, n, q, news, n', owns, q', c, henc => by
     simp only [encodeReactions, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := henc
     exact ⟨by simp [holds_tt], fun hn hq _ => ⟨by simpa using hn,
       ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩, by simpa using hq,
       ownRel_nil _⟩⟩
-  | x :: xs, hreach, n, q, news, n', owns, q', c, henc => by
+  | x :: xs, hreach, hshaped, n, q, news, n', owns, q', c, henc => by
     obtain ⟨⟨rc, c0⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨ctxT, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨cx, h3, henc⟩ := bind_ok.1 henc
@@ -239,7 +245,7 @@ theorem reactions_encode {P : List AnySite} {E : List AnyEffectSite} (hP : Sites
     obtain ⟨⟨rest, n'', orest, q'', c2⟩, h10, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     have IH := reactions_encode hP hshs hE hPE recs tnow ev hrd hed hrec hnow hev xs
-      (fun y hy => hreach y (by simp [hy])) h10
+      (fun y hy => hreach y (by simp [hy])) (fun y hy => hshaped y (by simp [hy])) h10
     refine ⟨?_, fun {n0 q0} hn hq hc => ?_⟩
     · have e0 := (x.react.code_exact (M := M) h1).1
       have e1 : ∀ hc0 : Holds M c0, (Holds M c1 ↔ x.react.appFits L.count (.inl (recs, tnow, ()), ev, ())) := fun hc0 =>
@@ -263,7 +269,10 @@ theorem reactions_encode {P : List AnySite} {E : List AnyEffectSite} (hP : Sites
     obtain rfl : l = lt := Option.some.inj (need_ok.1 h6)
     obtain ⟨sv, hS, -, -, hh⟩ := list_view hl h7
     have hr1 := ReactionV.reach_effectsAt P x (hreach x (by simp)) ev recs tnow
-    obtain ⟨hn1, hnews1, hq1, hown1⟩ := reaction_parts hP x.name hshs h9 hE hPE (need_ok.1 h8) dflt (effs := x.effectsAt ev recs tnow) hS hh hr1 hn hq
+    have hat1 : ∀ eff ∈ x.effectsAt ev recs tnow, ShapedFrom shs ds (.reaction x.name) eff := fun eff he =>
+      hshaped x (by simp) eff (ReactionV.reach_effectsAt _ x (EffectFun.reach_own P (hreach x (by simp))) ev recs tnow eff he)
+    obtain ⟨hn1, hnews1, hq1, hown1⟩ := reaction_parts hP x.name hshs h9 hE hPE (need_ok.1 h8) dflt
+      (effs := x.effectsAt ev recs tnow) hS hh hr1 hat1 hn hq
     obtain ⟨hn2, hnews2, hq2, hown2⟩ := IH.2 hn1 hq1 hc2
     have hfl : ∀ a b : List (Sender × EffectV e), Step.reqsOf (a ++ b) = Step.reqsOf a ++ Step.reqsOf b ∧
         Step.queuedOf (a ++ b) = Step.queuedOf a ++ Step.queuedOf b := fun _ _ => by

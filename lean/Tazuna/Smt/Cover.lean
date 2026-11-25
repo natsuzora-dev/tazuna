@@ -156,11 +156,11 @@ end
 
 
 section
-variable {L : Layout} {T : List TypeDecl} {P : List AnySite} {v : ServiceV} {senv : StepEnv L (shapes v P)}
+variable {L : Layout} {T : List TypeDecl} {P : List AnySite} {v : ServiceV} {senv : StepEnv L (shapes v)}
   {S : SymState v}
 
 /-- An answer's script asks about the case that its slot holds the request as an entry of its shape. -/
-theorem encodeStep_answer_case {k : Fin (shapes v P).length} {j : Fin senv.nT} {toT valT : Term} {t : EncodedStep v}
+theorem encodeStep_answer_case {k : Fin (shapes v).length} {j : Fin senv.nT} {toT valT : Term} {t : EncodedStep v}
     (h : encodeStep L T P v senv S (.answer k j toT valT) = .ok t) :
     t.out.case = Term.and (pendingSlotAt senv.dT senv.dtT j S.pending).flag
       (.and (.eq (pendingSlotAt senv.dT senv.dtT j S.pending).id toT)
@@ -175,7 +175,7 @@ theorem encodeStep_answer_case {k : Fin (shapes v P).length} {j : Fin senv.nT} {
   rfl
 
 /-- A command's, query's, event's or clock line's script has one case. -/
-theorem encodeStep_case_tt {inp : SymInput v (shapes v P) senv.nT} {t : EncodedStep v}
+theorem encodeStep_case_tt {inp : SymInput v (shapes v) senv.nT} {t : EncodedStep v}
     (h : encodeStep L T P v senv S inp = .ok t) (ha : ∀ k j to w, inp ≠ .answer k j to w)
     (hu : ∀ ty to w, inp ≠ .unmatched ty to w) : t.out.case = tt := by
   cases inp with
@@ -195,10 +195,10 @@ theorem query_no_fault (T : List TypeDecl) (s : State v) (i : Fin v.queries.leng
 /-- The questions cover every step within the slots from a state whose instances are in the step's form: either some
 input kind's questions cover the state and the input, or the step faults by nothing but `answerUnmatched` (an answer
 that names no request of its type, or a query). -/
-theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P)) {s : State v}
-    (hkeys : Step.KeysOk T s) (hs : Within L (shapes v P) s) (x : Input v) {ivs : List Val}
+theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {s : State v}
+    (hkeys : Step.KeysOk T s) (hs : Within L (shapes v) s) (x : Input v) {ivs : List Val}
     (hx : inputVals L chk.callerData x = some ivs) :
-    (∃ inp ∈ stepInputs v (shapes v P) senv.nT (5 + v.machines.length), Covered L T P v senv inp s x) ∨
+    (∃ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length), Covered L T P v senv inp s x) ∨
       ∀ f, f ≠ .answerUnmatched → (step T v s x).outcome ≠ .fault f := by
   obtain ⟨pv, hpv, hsome⟩ := hs
   obtain ⟨vals, hvals⟩ := Option.isSome_iff_exists.1 hsome
@@ -213,7 +213,7 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
   have hin : ∀ j (hj : j < ivs.length), M.vars (5 + v.machines.length + j) = ivs[j] := fun j hj =>
     coverModel_vars (by rw [← hlen, List.getElem?_append_right (by omega), Nat.add_sub_cancel_left,
       List.getElem?_eq_getElem hj])
-  have hS : (SymState.vars (v := v) 0).decode M L T (shapes v P) = some s :=
+  have hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s :=
     decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2) vals hvals hst
   have hsorted := embedState_sorted hvals
   have hc := chk.callerData
@@ -280,12 +280,12 @@ the fault `f` falls under (an invariant or `ensures` rule of its name, the casca
 names), no step of a run from an initial state whose invariants hold faults with `f`, wherever the state the run
 reached and the input fit the slots. An answer that names no request is the one fault no question is about: it is
 the outside's mistake, not the spec's. -/
-theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P)) (f : Fault)
+theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (f : Fault)
     (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
-    (hq : ∀ inp ∈ stepInputs v (shapes v P) senv.nT (5 + v.machines.length), ∃ gs qs,
+    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length), ∃ gs qs,
       questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
-        Unsat L (stateTys v (shapes v P) ++ inp.tys) q.script)
-    (is : List (Input v)) (x : Input v) (hs : Within L (shapes v P) (run T v (Step.State.init v) is).1)
+        Unsat L (stateTys v (shapes v) ++ inp.tys) q.script)
+    (is : List (Input v)) (x : Input v) (hs : Within L (shapes v) (run T v (Step.State.init v) is).1)
     (hx : (inputVals L chk.callerData x).isSome) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
@@ -300,12 +300,12 @@ theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : S
 targets the fault `f` falls under, whatever the bound questions answer, no step of a run from an initial state whose
 invariants hold faults with `f`, wherever the state the run reached and the input fit the slots and the step stays
 within them. -/
-theorem within_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P)) (f : Fault)
+theorem within_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (f : Fault)
     (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
-    (hq : ∀ inp ∈ stepInputs v (shapes v P) senv.nT (5 + v.machines.length), ∃ gs qs,
+    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length), ∃ gs qs,
       questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (∃ g, q.target = some g ∧ g.covers f = true) →
-        Unsat L (stateTys v (shapes v P) ++ inp.tys) q.script)
-    (is : List (Input v)) (x : Input v) (hs : Within L (shapes v P) (run T v (Step.State.init v) is).1)
+        Unsat L (stateTys v (shapes v) ++ inp.tys) q.script)
+    (is : List (Input v)) (x : Input v) (hs : Within L (shapes v) (run T v (Step.State.init v) is).1)
     (hx : (inputVals L chk.callerData x).isSome) (hfit : StepFits L T P v (run T v (Step.State.init v) is).1 x) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
