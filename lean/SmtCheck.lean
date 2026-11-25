@@ -1,6 +1,7 @@
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.Solver
+import Tazuna.Smt.ServiceLayout
 
 -- Test scaffolding: a value the model leaves out reads as a default that the checks then reject.
 set_option linter.tazuna.silentDefault false
@@ -261,6 +262,36 @@ key from the caller "alice", accepts a positive key, and answers `table.get(ctx.
 solver for a state and input whose outcome terms meet a goal, decodes them, runs `step` on what they decode to, and
 compares its outcome with what the outcome terms denote in the model. Every code is the service's own: the encoding
 of the source its structure value keeps (`QueryCode.of`, `EventCode.of`, `CommandCode.of`, `Fun.code`). -/
+
+/-- What the layout builder reads of a kept function's source. -/
+def funParts {t : Ty} (f : Fun t) : ProgramParts :=
+  ⟨Tazuna.Ir.Expr.sites f.defs f.body, Tazuna.Ir.Expr.handles f.body, Tazuna.Smt.Expr.tys f.body,
+    Tazuna.Smt.Expr.lits f.body⟩
+
+def effParts {ps : List Ty} {r : Ty} (f : EffectFun ps r) : ProgramParts :=
+  ⟨Tazuna.Ir.Expr.sites f.defs f.body, Tazuna.Ir.Expr.handles f.body, Tazuna.Smt.Expr.tys f.body,
+    Tazuna.Smt.Expr.lits f.body⟩
+
+def joinParts (ps : List ProgramParts) : ProgramParts :=
+  ⟨ps.flatMap (·.sites), ps.flatMap (·.handles), ps.flatMap (·.tys), ps.flatMap (·.lits)⟩
+
+/-- The sources of every function a service keeps, which stand for its program: a case has no loaded program. -/
+def svcParts (v : ServiceV) : ProgramParts :=
+  joinParts ([funParts v.apply, funParts v.invariants] ++ v.subscribes.map (funParts ·.wrap) ++
+    v.commands.flatMap (fun c => [funParts c.accepts, funParts c.decide, funParts c.ensures]) ++
+    v.queries.flatMap (fun q => [funParts q.accepts, funParts q.resolve]) ++
+    v.machines.flatMap (fun m => [funParts m.instances, funParts m.on, funParts m.after, effParts m.effect,
+      funParts m.invariants]) ++
+    v.reactions.map (effParts ·.react))
+
+/-- The layout `prove` builds for the service (`Layout.ofParts`), with `slots` for every bag and table; `extra` is
+program code the case writes as terms rather than as the service's functions. -/
+def svcLayout (v : ServiceV) (slots : Nat) (extra : ProgramParts := ⟨[], [], [], []⟩) : Layout :=
+  Layout.ofParts (joinParts [svcParts v, extra]) { v with bounds := { v.bounds with items := slots } }
+
+/-- A site as program code: the site, the type of every node of its source and its list literals. -/
+def siteParts {Γ : List Ty} {t : Ty} (s : Site Γ t) : ProgramParts :=
+  ⟨[⟨Γ, t, s⟩], Tazuna.Ir.Expr.handles s.body, Tazuna.Smt.Expr.tys s.body, Tazuna.Smt.Expr.lits s.body⟩
 
 def recordsT : Ty := .table .int .int
 def ctxT : Ty := Ty.ctx recordsT .int .str
@@ -1796,17 +1827,16 @@ def writeLayoutOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : 
     (reactTys ++ [.tuple [.int], pendingTable (writeShapesOf m)] ++ Tazuna.Smt.Expr.tys insertE ++
       Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE)
 
-def writeLayout (slots : Nat) : Layout := writeLayoutOf startM [sendKey ⟨"m", 3, 7, 0⟩] slots
+def writeLayout (slots : Nat) : Layout := svcLayout writeSvc slots
 
 def writeI : Fin writeSvc.subscribes.length := ⟨0, by decide⟩
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the event value, v7 the new pending table, v8
 the next id after, v9 the records after, v10 the new instance table. -/
-def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : Nat) (goal : List Term) :
+def writeScriptOf (m : MachineV recordsT .int) (L : Layout) (goal : List Term) :
     Except String (Script × List (Slot 2)) := do
   let v := writeSvcOf m
   let shs := writeShapesOf m
-  let L := writeLayoutOf m keys slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
   let (o, t) ← eventTerms L writeSites v ⟨0, by simp [v, writeSvcOf]⟩ S (.var 6)
@@ -1826,7 +1856,7 @@ def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : 
           shows := List.range 11 }, slotsOf dp dt n 2 (.var 4))
 
 def writeScript (slots : Nat) (goal : List Term) : Except String (Script × List (Slot 2)) :=
-  writeScriptOf startM [sendKey ⟨"m", 3, 7, 0⟩] slots goal
+  writeScriptOf startM (writeLayout slots) goal
 
 /-- What the comparison reads of a pending request: id, external, name, the sender's key and the input. -/
 def pendView (p : Step.Pending writeSvc.event) : Nat × String × String × Option Int × Option Int :=
@@ -1896,13 +1926,13 @@ def quietCheck (solver : Solver) : IO Bool := do
   let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
   let Sr := slotsOf dr drt nr 2 (.var 0)
   let Sm := slotsOf dm dmt nm 2 (.var 5)
-  match writeScriptOf reactM [] 3 [] with
+  match writeScriptOf reactM (writeLayoutOf reactM [] 3) [] with
   | .error m => fail m
   | .ok (_, Sp) =>
     let goal := [Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .eq (Sr[0]!.2[0]) (.int 3), .not Sm[0]!.1,
       .not Sm[1]!.1, .not Sm[2]!.1, .eq (.var 6) (.int 5), .eq (.var 3) (.int 40), Sp[0]!.1,
       .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1]
-    match writeScriptOf reactM [] 3 goal with
+    match writeScriptOf reactM (writeLayoutOf reactM [] 3) goal with
     | .error m => fail m
     | .ok (script, _) =>
       match ← solver.run script with
@@ -2167,10 +2197,9 @@ instance and enters 1 (request at 41). The records, instance table, pending tabl
 must be what `applyEvents` leaves; the second event reacting on the instance tables from before the first (key 3
 starting afresh) must not pass the comparison. -/
 
-def eventsLayout (slots : Nat) : Layout :=
-  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m", 3, 7, 0⟩] }
-    (reactTys ++ [.tuple [.int], .tuple [], .list .int, pendingTable writeShapes] ++ Tazuna.Smt.Expr.tys insertE ++
-      Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE)
+/-- The service `w`'s layout, in a program that also writes a list literal of `slots` Ints, as a `decide` returning
+that many events would: the list's slots are its longest literal. -/
+def eventsLayout (slots : Nat) : Layout := svcLayout writeSvc slots ⟨[], [], [], [(.list .int, slots)]⟩
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the event list, v7 the new pending table, v8
 the next id after, v9 the records after, v10 the new instance table. -/
@@ -2267,12 +2296,7 @@ def twiceSvc : ServiceV := { writeSvc with name := "t", commands := [twiceC] }
 
 def twiceShapes : List (PendingShape twiceSvc.event) := shapes twiceSvc writeSites
 
-def twiceLayoutOf (slots : Nat) : Layout :=
-  let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE
-  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m", 3, 7, 0⟩] }
-    (reactTys ++ [.tuple [.int], .tuple [], .list .int, .id, cctxT, Ty.result (.list .int) .str, pendingTable twiceShapes] ++
-      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
-      Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE)
+def twiceLayoutOf (slots : Nat) : Layout := svcLayout twiceSvc slots
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the caller, v7 the input, v8 the new pending
 table, v9 the next id after, v10 the records after, v11 the new instance table. -/
@@ -2352,11 +2376,7 @@ captured key 3. The answer Ok to 2 makes `on_answer` return [3]; applying 3 lets
 and next id read from the model must be the step's; the table before the machine reacts must not pass the
 comparison. -/
 
-def answerMLayoutOf (slots : Nat) : Layout :=
-  Layout.addTys (fun _ => slots) { effects := [sendKey ⟨"m", 3, 7, 0⟩] }
-    (reactTys ++ [.tuple [.int], .tuple [], .list .int, answerTy Ty.nil Ty.nil, pendingTable writeShapes] ++
-      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
-      Tazuna.Smt.Expr.tys startEffectE)
+def answerMLayoutOf (slots : Nat) : Layout := svcLayout writeSvc slots
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the answer, v7 the new pending table, v8 the
 next id after, v9 the records after, v10 the new instance table. -/
@@ -2581,8 +2601,7 @@ def answerFiveE : Expr [] [.int] (.fn [Ty.result Ty.nil .str] (.list .int)) := .
 
 def answerFive : Site [.int] (.fn [Ty.result Ty.nil .str] (.list .int)) := ⟨⟨"m", 22, 1, 0⟩, [], .nil, rfl, rfl, answerFiveE⟩
 
-def internalLayoutOf (slots : Nat) : Layout :=
-  Layout.addTys (fun _ => slots) (twiceLayoutOf slots) [Ty.result Ty.nil .str, Ty.nil]
+def internalLayoutOf (slots : Nat) : Layout := svcLayout twiceSvc slots (siteParts answerFive)
 
 def internalLayout : Layout := internalLayoutOf 3
 
@@ -2784,14 +2803,13 @@ def nextKey : OwnKey := .query .int "next" .str .int .int ⟨answerIsEvent.site,
 def goneKey : OwnKey := .command .int "gone" .str .int .str ⟨answerFive.site, [.int]⟩
 def deadKey : OwnKey := .command .int "twice" .str .int .str ⟨⟨"m", 77, 77, 0⟩, [.int]⟩
 
+/-- The service `o`'s layout, in a program that makes the handles `twice`, `next` and `gone` and writes the
+`on_answer` sites the effects name; `dead` adds own kinds no handle makes, which only a hand-written layout has. -/
 def dispLayoutOf (slots : Nat) (dead : List OwnKey := []) : Layout :=
-  let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE
-  Layout.addTys (listSlots (fun _ => slots) lits)
-    { effects := [sendKey ⟨"m", 3, 7, 0⟩], owns := [twiceKey, nextKey, goneKey] ++ dead }
-    (reactTys ++ [.tuple [.int], .tuple [], .list .int, .id, cctxT, Ty.result (.list .int) .str, pendingTable dispShapes,
-      Ty.result Ty.nil .str, Ty.nil] ++
-      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
-      Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE ++ Tazuna.Smt.Expr.tys nextResolveE)
+  let L := svcLayout dispSvc slots (joinParts [siteParts answerFive, siteParts answerIsEvent,
+    ⟨[], [⟨"command", some "twice", [recordsT, .int, .str, .int, .str]⟩, ⟨"query", some "next", [recordsT, .str, .int, .int]⟩,
+      ⟨"command", some "gone", [recordsT, .int, .str, .int, .str]⟩], [], []⟩])
+  if dead.isEmpty then L else Layout.addTys (fun _ => slots) { L with owns := L.owns ++ dead } []
 
 /-- v0..v5 the state, v6 the effect, v7 the records after, v8 the next id after, v9 the instance table after, v10 the
 fault, v11 the fresh counter after, then per new request slot its flag and id. -/
@@ -3051,13 +3069,7 @@ def cascSites : List AnySite := writeSites ++ [⟨[], _, onceSite⟩]
 
 def onceKey : OwnKey := .command .int "put" .str .int .str ⟨⟨"m", 24, 1, 0⟩, []⟩
 
-def cascLayout (cascade : Int) (slots : Nat) : Layout :=
-  let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE ++ Tazuna.Smt.Expr.lits onceE
-  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m", 3, 7, 0⟩], owns := [onceKey] }
-    (reactTys ++ [.tuple [.int], .tuple [], .list .int, .id, cctxT, Ty.result (.list .int) .str,
-      pendingTable (cascShapes cascade), Ty.result Ty.nil .str, Ty.nil] ++
-      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
-      Tazuna.Smt.Expr.tys onceE ++ Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE)
+def cascLayout (cascade : Int) (slots : Nat) : Layout := svcLayout (cascSvc cascade) slots
 
 /-- v0..v5 the state, v6 the event value, v7 the records after, v8 the fresh counter after, v9 the next id after, v10
 the pending table after, v11 the instance table after. -/
@@ -3147,9 +3159,9 @@ def cascEventCheck (solver : Solver) : IO Bool := do
   return ok
 
 /-! A clock line whose timers queue own commands, for `step_encode`: the machine `tick` is `start` whose effect, for a key
-below 10, is alice's `put (key + 10)` answered with no events, in the service `c` above without its reaction. From the
-state of `clock fires timers` without its record (keys 7 and 3 due at 80 and 90, request 2 pending, next id 40, now
-50), the line at 100
+below 10, is alice's `put (key + 10)` answered with no events, in the service `c` above without its reaction. Its
+program makes no request, so nothing is pending. From the state of `clock fires timers` without its record and its
+request (keys 7 and 3 due at 80 and 90, next id 40, now 50), the line at 100
 fires key 7 then key 3, each round queueing its `put` at the round's queue place; with bound 2 both internal steps run
 and the step is accepted. The records, table, pending ids, next id and fresh counter read from the model must be the
 step's, and must differ from what the rounds alone leave. -/
@@ -3169,15 +3181,12 @@ def tickM : MachineV recordsT .int := { startM with name := "tick", effect := .c
 
 def tickSvc (cascade : Int) : ServiceV := { cascSvc cascade with name := "tk", machines := [tickM], reactions := [] }
 
-def tickShapes (cascade : Int) : List (PendingShape (tickSvc cascade).event) := shapes (tickSvc cascade) writeSites
+/-- The service `tk`'s sites: those of its functions, as its program has. -/
+def tickSites (cascade : Int) : List AnySite := (svcParts (tickSvc cascade)).sites
 
-def tickLayout (cascade : Int) (slots : Nat) : Layout :=
-  let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE ++ Tazuna.Smt.Expr.lits tickEffectE
-  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m", 3, 7, 0⟩], owns := [onceKey] }
-    (reactTys ++ [.tuple [.int], .tuple [], .list .int, .id, cctxT, Ty.result (.list .int) .str,
-      pendingTable (tickShapes cascade), Ty.result Ty.nil .str, Ty.nil] ++
-      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
-      Tazuna.Smt.Expr.tys tickEffectE ++ Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE)
+def tickShapes (cascade : Int) : List (PendingShape (tickSvc cascade).event) := shapes (tickSvc cascade) (tickSites cascade)
+
+def tickLayout (cascade : Int) (slots : Nat) : Layout := svcLayout (tickSvc cascade) slots
 
 /-- v0..v5 the state, v6 the line's time, v7 the records after, v8 the fresh counter after, v9 the next id after, v10
 the pending table after, v11 the instance table after, v12 whether every round fired. -/
@@ -3188,7 +3197,7 @@ def tickClockTermsOf (cascade : Int) (slots : Nat) (goal : List Term) :
   let L := tickLayout cascade slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
-  let t ← stepOf L cascSites v S (fun _ => pure (.clock (.var 6)))
+  let t ← stepOf L (tickSites cascade) v S (fun _ => pure (.clock (.var 6)))
   let .clock o := t.out | throw "not a clock line's terms"
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := v) shs | throw "no well-formedness"
@@ -3225,9 +3234,8 @@ def tickClockCheck (solver : Solver) : IO Bool := do
     .eq (Term.sel de 0 0 (Sm[j]!.2[1])) (.int 0), .is dto 0 (Term.sel de 0 1 (Sm[j]!.2[1])),
     .eq (.sel dp 0 0 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int dl),
     .eq (.sel dp 0 1 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2[1])))) (.int 1)]
-  let goal := [Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2),
-    .eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), .eq (.var 2) (.int 7)] ++
-    ((Sr ++ Sm.drop 2 ++ Sp.drop 1).map fun sl => Term.not sl.1) ++ waits 0 7 80 ++ waits 1 3 90
+  let goal := [.eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), .eq (.var 2) (.int 7)] ++
+    ((Sr ++ Sm.drop 2 ++ Sp).map fun sl => Term.not sl.1) ++ waits 0 7 80 ++ waits 1 3 90
   match tickClockTermsOf 2 5 goal with
   | .error m => fail m
   | .ok (script, _) =>

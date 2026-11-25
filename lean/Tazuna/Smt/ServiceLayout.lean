@@ -78,20 +78,34 @@ def dedupBy {α : Type} (same : α → α → Bool) : List α → List α
   | [] => []
   | x :: xs => x :: (dedupBy same xs).filter (!same x ·)
 
-/-- The types a step of the service codes beyond its program's expressions: the state's, the input's, and what
-`StepEnv` looks up. -/
+/-- The types a step of the service codes beyond its program's expressions: the state's, the input's, what
+`StepEnv` looks up, and the tuple of each sender's key, which a start writes whether or not a request has a shape. -/
 def stepTys (v : ServiceV) (P : List AnySite) : List Ty :=
-  [v.records, v.event, v.caller, Ty.option (.dsl .effect [v.event]), pendingTable (shapes v P)] ++
-    v.machines.map (·.table)
+  [v.records, v.event, v.caller, Ty.option (.dsl .effect [v.event]), pendingTable (shapes v P), .tuple []] ++
+    v.machines.map (·.table) ++ v.machines.map (fun m => .tuple [m.key])
 
-/-- The kinds of effect of the service's scripts, from the program `defs` it came from, before any datatype. -/
-def Layout.kindsOf {G : List Ty} (defs : Defs G) (v : ServiceV) : Layout :=
-  { effects := dedupBy EffectKey.same ((requestShapes v defs.sites).map (·.key)),
-    owns := dedupBy OwnKey.same (defs.handles.flatMap (ownKeys v.event defs.sites)) }
+/-- What the layout builder reads of a program: its sites, its handles, the type of every node and every list
+literal's type and length. -/
+structure ProgramParts where
+  sites : List AnySite
+  handles : List HandleSite
+  tys : List Ty
+  lits : List (Ty × Nat)
+
+def _root_.Tazuna.Ir.Defs.parts {G : List Ty} (defs : Defs G) : ProgramParts :=
+  ⟨defs.sites, defs.handles, defs.tys, defs.lits⟩
+
+/-- The kinds of effect of the service's scripts, from the program it came from, before any datatype. -/
+def Layout.kindsOf (p : ProgramParts) (v : ServiceV) : Layout :=
+  { effects := dedupBy EffectKey.same ((requestShapes v p.sites).map (·.key)),
+    owns := dedupBy OwnKey.same (p.handles.flatMap (ownKeys v.event p.sites)) }
+
+/-- The layout of the service's scripts, from the program it came from. -/
+def Layout.ofParts (p : ProgramParts) (v : ServiceV) : Layout :=
+  Layout.addTys (listSlots (boundSlots v.bounds) p.lits) (Layout.kindsOf p v) (stepTys v p.sites ++ p.tys.filter Ty.sortable)
 
 /-- The layout of the service's scripts, from the program `defs` it came from. -/
-def Layout.ofService {G : List Ty} (defs : Defs G) (v : ServiceV) : Layout :=
-  Layout.addTys (listSlots (boundSlots v.bounds) defs.lits) (Layout.kindsOf defs v) (stepTys v defs.sites ++ defs.tys.filter Ty.sortable)
+abbrev Layout.ofService {G : List Ty} (defs : Defs G) (v : ServiceV) : Layout := Layout.ofParts defs.parts v
 
 theorem hasWiths_mem {L : Layout} {D : Dsl → List Ty → Prop} : {ts : List Ty} → Layout.HasWiths L D ts →
     ∀ t ∈ ts, Layout.HasWith L D t
@@ -237,7 +251,7 @@ theorem count_of_slotted {S : Ty → Nat} {K L : Layout} (h : Slotted S K L) {t 
 theorem ofService_count {G : List Ty} (defs : Defs G) (v : ServiceV) {k w : Ty}
     (hf : ((Layout.ofService defs v).find? (.table k w)).isSome = true) :
     (Layout.ofService defs v).count (.table k w) = boundSlots v.bounds (.table k w) := by
-  have hS : NoSlots (Layout.effectSlots (listSlots (boundSlots v.bounds) defs.lits) (Layout.kindsOf defs v)) := by
+  have hS : NoSlots (Layout.effectSlots (listSlots (boundSlots v.bounds) defs.lits) (Layout.kindsOf defs.parts v)) := by
     intro t hb hl ht
     cases t with
     | bag u => exact absurd rfl (hb u)

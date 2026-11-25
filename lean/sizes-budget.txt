@@ -1,13 +1,13 @@
-event: 1693/4770/15906/58106
-event list: 2911/16245/109218/800284
-command: 3012/8694/29324/107648
-answer: 3039/16429/109512/800798
-clock: 2452/5921/16861/54752
-own command step: 4965/14691/49919/183486
-own effect step (3 kinds): 7592/22218/74787/273193
-cascade of 2: 16171/47422/159094/579110
-cascade at 3 slots (bound, not slots): 29748/59364/120140/247860
-event with a cascade of 1: 8248/23196/76557/277133
-event with a cascade at 3 slots (bound, not slots): 26117/49607/99575/211457
-clock whose timers queue own commands (bound 2): 13933/40378/133698/482052
+event: 1691/4764/15892/58075
+event list: 2901/16232/109197/800247
+command: 2994/8675/29301/107617
+answer: 1794/4904/16105/58435
+clock: 2450/5914/16847/54721
+own command step: 4941/14665/49890/183449
+own effect step (3 kinds): 7569/22193/74757/273155
+cascade of 2: 16147/47397/159064/579072
+cascade at 3 slots (bound, not slots): 29723/59340/120116/247836
+event with a cascade of 1: 8225/23171/76527/277096
+event with a cascade at 3 slots (bound, not slots): 26092/49583/99550/211432
+clock whose timers queue own commands (bound 2): 13555/39662/132305/479305
 re-shared chain (levels, not slots): 17/29/54/102

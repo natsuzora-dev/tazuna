@@ -170,7 +170,7 @@ theorem wf_ofService (hk : Checked defs.sites T v) (S : SymState v) :
   obtain ⟨cp, hcp⟩ := Option.isSome_iff_exists.1
     (wfT_pending_isSome (hs _ (by simp [stepTys])) hep hkp S.pending)
   obtain ⟨cm, hcm⟩ := Option.isSome_iff_exists.1 (wfMachines_isSome v.machines
-    (fun m hm => ⟨hs _ (List.mem_append_left _ (by simp only [stepTys]; exact List.mem_append_right _ (List.mem_map_of_mem hm))), hms m hm⟩) S.machines)
+    (fun m hm => ⟨hs _ (List.mem_append_left _ (by simp only [stepTys]; exact List.mem_append_left _ (List.mem_append_right _ (List.mem_map_of_mem hm)))), hms m hm⟩) S.machines)
   simp only [SymState.wf, wfPending, hc, hcp, hcm, Option.bind_some, Option.isSome_map, Option.isSome_some]
 
 /-- A checked service's state embeds in its layout exactly when its records, pending table and instance tables fit
@@ -184,7 +184,7 @@ theorem embedState_ofService (hk : Checked defs.sites T v) (s : State v) (pv : P
   have hs := ofService_has defs v
   obtain ⟨⟨her, -⟩, hms, hep, -⟩ := stateTys_iff.1 hk.stateTys
   exact embedState_iff T s pv (hs _ (by simp [stepTys])) her (hs _ (by simp [stepTys])) (embeddable_pending hep)
-    (fun m hm => ⟨hs _ (List.mem_append_left _ (by simp only [stepTys]; exact List.mem_append_right _ (List.mem_map_of_mem hm))), (hms m hm).1⟩) hok
+    (fun m hm => ⟨hs _ (List.mem_append_left _ (by simp only [stepTys]; exact List.mem_append_left _ (List.mem_append_right _ (List.mem_map_of_mem hm)))), (hms m hm).1⟩) hok
 
 end
 
