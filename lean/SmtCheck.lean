@@ -3339,6 +3339,8 @@ def sizes : IO UInt32 := do
   row "own effect step (3 kinds)" fun k => (·.1) <$> dispScriptOf k queue[0]! []
   row "cascade of 2" fun k => (·.1) <$> cascadeTermsOf k 2 queue []
   row "cascade at 3 slots (bound, not slots)" fun k => (·.1) <$> cascadeTermsOf 3 k queue []
+  row "event with a cascade of 1" fun k => (·.1) <$> cascEventTermsOf 1 k []
+  row "event with a cascade at 3 slots (bound, not slots)" fun k => (·.1) <$> cascEventTermsOf k 3 []
   row "re-shared chain (levels, not slots)" fun k => pure (reshared k)
   return 0
 
