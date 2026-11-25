@@ -120,17 +120,6 @@ end
 section
 variable {L : Layout} {M : Model} {T : List TypeDecl} {v : ServiceV}
 
-/-- The own effects own slots hold are coded by the slots' values. -/
-theorem ownRel_coded {S : List OwnSlot} {os : List (EffectV v.event)} {q0 : Nat} (h : OwnRel M L S os q0) :
-    ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [v.event]) y z := by
-  intro y hy
-  obtain ⟨sv, zs, -, -, hh, hp⟩ := h
-  obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hy
-  have hm : (os[i], q0 + i) ∈ zs := hp.symm.mem_iff.1 (List.mem_iff_getElem.2 ⟨i, by simpa using hi,
-    by simp [List.getElem_zipIdx]⟩)
-  obtain ⟨vs, -, zx, -, hz⟩ := forall2_mem_left hh _ hm
-  exact ⟨zx, hz⟩
-
 /-- A pair question's encoding of its first step: where the codes hold and the effect's own step fits the slots, each
 own effect the step queues is coded. -/
 theorem pair_queued {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)

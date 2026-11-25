@@ -113,7 +113,7 @@ theorem cti_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
     rfl
   · rw [ht] at ht'
     cases ht'
-    exact ((step_encode chk senv hS hinv hx ht).2 hcodes hsites hcaseH).2 hcond
+    exact ((step_encode chk senv hS hinv hx ht).2 hcodes hsites hcaseH).2.1 hcond
 
 end
 

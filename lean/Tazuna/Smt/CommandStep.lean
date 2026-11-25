@@ -61,7 +61,8 @@ variable {M : Model} {L : Layout} {T : List TypeDecl}
 fits at the input and, where its rules hold, `decide` fits at the context and what follows it fits (`decidedFits`).
 Wherever it holds, the outcome terms decide the step's outcome: an unlisted caller or a broken `accepts` rule is
 Invalid; a rejection is the rejection the terms denote; a broken `ensures` rule is the step's fault; otherwise the
-step ends as its end terms say (`Finished`). The fresh counter advances in every case. -/
+step ends as its end terms say (`Finished`), and the cascade an acceptance starts waits only on own effects the own
+slots code. The fresh counter advances in every case. -/
 theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (s : State v) (hsinv : Step.Inv P s)
@@ -97,7 +98,8 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
             | [] => Finished M L T shs o.finish s' { state := s' } .accepted r
           else r.state = s' ∧ ∃ j, r.outcome = .rejected ⟨(v.commands.get i).rejection, j⟩ ∧
             RelV L _ (Ty.up _ ((v.commands.get i).data).rejection j) (o.decided.rejection.denote M)
-      else r = ⟨s', .invalid ["callers"], [], []⟩) := by
+      else r = ⟨s', .invalid ["callers"], [], []⟩) ∧
+    (Holds M cond → ∀ a, Step.execCommand T { state := s } x caller input = .ok (.accepted a) → QueueCoded L a) := by
   intro x ctx r s'
   have hcR := CommandCode.rel_of hcc hccx
   obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
@@ -118,7 +120,7 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
       (Step.applyEvents T { state := s1 } events)) =>
     finish_encode chk hshs hshp happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hacc
       (applyEvents_ok chk.reach _ rfl hinv1 events) h3 hcfx
-  refine ⟨?_, fun hc => ?_⟩
+  refine ⟨?_, fun hc => ?_, fun hc a hex => ?_⟩
   · obtain ⟨⟨_, c1'⟩, g1, hcc0⟩ := bind_ok.1 hcc
     obtain ⟨_, -, hcc0⟩ := bind_ok.1 hcc0
     obtain ⟨_, -, hcc0⟩ := bind_ok.1 hcc0
@@ -221,6 +223,43 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
           rw [happly] at hacc
           exact (finish_encode chk hshs hshp happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hacc
             (fun a1 h => applyEvents_ok chk.reach _ rfl hinv1 events a1 (happly.trans h)) h3 hcfx).2 hcf
+  · simp only [Step.execCommand, x] at hex
+    split at hex
+    · cases hex
+    rename_i hadm
+    have hin : (v.commands.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true := by
+      cases h : (v.commands.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
+      · rw [Step.admit, h] at hadm; cases hadm
+      · rfl
+    have hb : Step.broken ((v.commands.get i).accepts.fn (input, ())) = [] := by
+      rw [Step.admit, hin] at hadm; exact hadm
+    have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2)))
+        (andT cd (.ite (.and dc.ok (allT (dc.ensures.map (·.2)))) cf tt)) tt)) := by
+      simpa only [Holds, Term.denote, hok, hin, Val.toBool, ite_true] using hc
+    rw [holds_andT] at hc'
+    have hallT : ((allT (adm.rules.map (·.2))).denote M).toBool = true := by
+      rw [toBool_allT_rules, hbr hc'.1, hb]; rfl
+    obtain ⟨hcd, -⟩ := (holds_andT _ _).1 ((holds_ite_tt hallT).1 hc'.2 rfl)
+    have R := D.2 hcd
+    revert R hex
+    cases hdec : (v.commands.get i).decide.fn (Step.ctx s s.records caller input, ()) with
+    | inr q =>
+      match q, hdec with
+      | .inl (j, ()), _ => intro hex; cases hex
+      | .inr e, _ => exact e.elim
+    | inl p =>
+      obtain ⟨events, ⟨⟩⟩ := p
+      rintro hex ⟨-, -, hacc, -⟩
+      simp only [bind, Except.bind] at hex
+      cases happly : Step.applyEvents T { state := s1 } events with
+      | error f => rw [happly] at hex; cases hex
+      | ok a1 =>
+        rw [happly] at hex
+        simp only at hex
+        split at hex
+        · cases hex
+        · cases hex
+          exact hacc.queueCoded rfl _ happly
 
 end
 

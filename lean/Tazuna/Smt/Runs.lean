@@ -24,13 +24,13 @@ theorem begins_keeps (c : CheckedSpec) (hv : v ∈ c.spec.services) {s : State v
   refine ⟨hsupp, ?_, ?_, ?_, hpend⟩
   · cases h with
     | command i caller input a h => exact Step.execCommand_inv c.T hr _ hinv _ _ _ h a (.inl rfl)
-    | answer to value p h a hp happ =>
+    | answer to value p h a hp _ happ =>
       refine Step.applyEvents_inv c.T hr _ _ ?_ happ
       refine ⟨fun p hp => hinv.below p (List.mem_filter.1 hp).1, ?_, fun p hp => hinv.reach p (List.mem_filter.1 hp).1,
         fun p hp => hinv.shaped p (List.mem_filter.1 hp).1⟩
       exact (List.filter_sublist.map _).nodup hinv.nodup
     | event i value a h => exact Step.applyEvents_inv c.T hr _ _ hinv h
-    | clock time s' effs a hf h =>
+    | clock time s' effs a _ hf h =>
       have hf' := Step.fire_inv hr.1 { s with now := time } (Step.Inv.congr hinv rfl rfl) _ hf
       exact Step.start_inv { state := s' } effs hf'.1 hf'.2.1 hf'.2.2 h
   · cases h with
@@ -38,20 +38,20 @@ theorem begins_keeps (c : CheckedSpec) (hv : v ∈ c.spec.services) {s : State v
       rcases Step.execCommand_acc c.T _ _ _ _ h a (.inl rfl) with rfl | ⟨evs, he⟩
       · exact hnil _
       · exact Step.applyEvents_queue c.T hr evs _ he (Step.Inv.congr hinv rfl rfl) (hnil _)
-    | answer to value p h a hp happ =>
+    | answer to value p h a hp _ happ =>
       refine Step.applyEvents_queue c.T hr _ _ happ ?_ (hnil _)
       refine ⟨fun p hp => hinv.below p (List.mem_filter.1 hp).1, ?_, fun p hp => hinv.reach p (List.mem_filter.1 hp).1,
         fun p hp => hinv.shaped p (List.mem_filter.1 hp).1⟩
       exact (List.filter_sublist.map _).nodup hinv.nodup
     | event i value a h => exact Step.applyEvents_queue c.T hr _ _ h hinv (hnil _)
-    | clock time s' effs a hf h =>
+    | clock time s' effs a _ hf h =>
       have hf' := Step.fire_inv hr.1 { s with now := time } (Step.Inv.congr hinv rfl rfl) _ hf
       exact Step.start_queue { state := s' } effs h (hnil _) hf'.2.1
   · cases h with
     | command i caller input a h => exact Step.execCommand_keys c.T _ hk _ _ _ h a (.inl rfl)
-    | answer to value p h a hp happ => exact Step.applyEvents_keys c.T _ _ hk happ
+    | answer to value p h a hp _ happ => exact Step.applyEvents_keys c.T _ _ hk happ
     | event i value a h => exact Step.applyEvents_keys c.T _ _ hk h
-    | clock time s' effs a hf h =>
+    | clock time s' effs a _ hf h =>
       exact (Step.fire_keys c.T { s with now := time } hk _ hf).congr c.T (Step.start_machines { state := s' } effs h)
 
 /-- The state a run on valid inputs reaches from the initial state keeps the run's invariants. -/

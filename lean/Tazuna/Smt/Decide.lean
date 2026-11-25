@@ -136,6 +136,20 @@ def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShap
     NewsRel M L shs v.declared o.news effs a.state.nextId ∧
     o.queued.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L o.owns os q0 ∧ EventsRel M L o.events evs
 
+/-- Every own effect waiting in `a` is coded by some value of the effect datatype. -/
+def QueueCoded (L : Layout) (a : Step.Acc v) : Prop := ∀ y ∈ a.own, ∃ z, RelV L (.dsl .effect [v.event]) y z
+
+/-- A run from a step in progress with no waiting effect leaves, where it ends, only own effects the own slots code. -/
+theorem AccRel.queueCoded {shs : List (PendingShape v.event)} {a : Step.Acc v} {o : EventsOut v} {fresh : Term}
+    {q0 : Nat} {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs a o fresh q0 r) (hown : a.own = []) :
+    ∀ a1, r = .ok a1 → QueueCoded L a1 := by
+  intro a1 hr
+  obtain ⟨_, _, _, _, _, os, hr1, -, -, -, -, e5, -, e7, -⟩ := h
+  obtain ⟨ps, hps⟩ := newsRel_writes e5
+  rw [hr1 ps hps] at hr
+  cases hr
+  simpa [QueueCoded, hown] using ownRel_coded e7
+
 /-- The events loop over a list's slots from a step in progress, as `AccRel` says of `applyEvents`' result. -/
 theorem loop_acc {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)

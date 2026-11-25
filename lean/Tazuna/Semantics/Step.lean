@@ -413,6 +413,31 @@ def step (T : List TypeDecl) (v : ServiceV) (s : State v) : Input v → Result v
     | none => ⟨s, .fault .cascadeLimit, [], []⟩
     | some (s', effs) => finish T s (start { state := s' } effs) .accepted
 
+namespace Step
+
+variable (T : List TypeDecl) {v : ServiceV}
+
+/-- Where a step from `s` on `x` starts its cascade, read off `step`'s branches: the step in progress an accepted
+command, a matched answer whose `ensures` holds, an event or a clock line not before the state's time hands to
+`finish`. -/
+inductive Begins (s : State v) : Input v → Acc v → Prop
+  | command (i : Fin v.commands.length) (caller : v.caller.den0) (input : (v.commands.get i).input.den0) (a : Acc v) :
+      execCommand T { state := s } (v.commands.get i) caller input = .ok (.accepted a) →
+      Begins s (.command i caller input) a
+  | answer (to : Nat) {t : Ty} (value : t.den0) (p : Pending v.event)
+      (h : t = answerTy p.request.output p.request.rejection) (a : Acc v) :
+      s.pending.find? (·.id == to) = some p → broken (p.request.holds (h ▸ value)) = [] →
+      applyEvents T { state := { s with pending := s.pending.filter (·.id != to) } }
+        (p.request.onAnswer.fn (h ▸ value, ())) = .ok a →
+      Begins s (.answer to ⟨t, value⟩) a
+  | event (i : Fin v.subscribes.length) (value : (v.subscribes.get i).event.den0) (a : Acc v) :
+      applyEvents T { state := s } [(v.subscribes.get i).wrap.fn (value, ())] = .ok a → Begins s (.event i value) a
+  | clock (time : Int) (s' : State v) (effs : List (Sender × EffectV v.event)) (a : Acc v) : ¬ time < s.now →
+      fire { s with now := time } (v.bounds.cascadeNat + 1) = some (s', effs) → start { state := s' } effs = .ok a →
+      Begins s (.clock time) a
+
+end Step
+
 /-- Runs the inputs in order from `s`: the final state and every step's result. -/
 def run (T : List TypeDecl) (v : ServiceV) : State v → List (Input v) → State v × List (Result v)
   | s, [] => (s, [])

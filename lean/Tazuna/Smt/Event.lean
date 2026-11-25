@@ -144,7 +144,8 @@ section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- An event step: where the codes' condition holds, its condition holds exactly when the wrap fits at the value, the
-event's applications fit and the step's end fits, and wherever it holds the step ends as the end terms say. -/
+event's applications fit and the step's end fits, and wherever it holds the step ends as the end terms say and the
+cascade it starts waits only on own effects the own slots code. -/
 theorem event_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (s : State v) (hinv : Step.Inv P s) (i : Fin v.subscribes.length)
@@ -158,7 +159,8 @@ theorem event_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
     let ev := (v.subscribes.get i).wrap.fn (value, ())
     (Holds M c ↔ (v.subscribes.get i).wrap.appFits L.count (value, ()) ∧ eventsFit L.count T s [ev] ∧
       finishFits L.count T shs (Step.applyEvents T { state := s } [ev])) ∧
-    (Holds M c → Finished M L T shs o.finish s { state := s } .accepted (step T v s (.event i value))) := by
+    (Holds M c → Finished M L T shs o.finish s { state := s } .accepted (step T v s (.event i value))) ∧
+    (Holds M c → ∀ a, Step.applyEvents T { state := s } [ev] = .ok a → QueueCoded L a) := by
   intro ev
   have he := EventCode.rel_of hec hce
   obtain ⟨⟨a, c1⟩, g1, hec'⟩ := bind_ok.1 hec
@@ -176,16 +178,17 @@ theorem event_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
   have e2 : ∀ hcw : Holds M cw, (Holds M ce' ↔ eventsFit L.count T s [ev]) := fun hcw =>
     (events_encode chk hshs hshp g1 hc1 senv [(tt, ⟨[et], rfl⟩)] [(true, [et.denote M])]
       ⟨rfl, rfl, trivial⟩ [ev] (hevT hcw) s hR.now hR.records hR.machines hev).1
+  have hacc := fun (hcw : Holds M cw) (hc : Holds M ce') =>
+    loop_acc (T := T) chk hshs hshp g1 hc1 senv
+      { state := s } hR.now (S := [(tt, ⟨[et], rfl⟩)]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩
+      (evs := [ev]) (hevT hcw) hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh hev hc
   have ef := fun (hcw : Holds M cw) (hc : Holds M ce') =>
     finish_encode chk hshs hshp g1 hc1 g3 hc3 senv s
-      .accepted { state := s } rfl hinv hR.now hR.pending
-      (loop_acc (T := T) chk hshs hshp g1 hc1 senv
-        { state := s } hR.now (S := [(tt, ⟨[et], rfl⟩)]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩
-        (evs := [ev]) (hevT hcw) hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh hev hc)
+      .accepted { state := s } rfl hinv hR.now hR.pending (hacc hcw hc)
       (applyEvents_ok chk.reach _ rfl hinv _) hf hcx
   rw [holds_andT, holds_andT]
   refine ⟨⟨fun ⟨hcw, hc, hcf⟩ => ⟨ew.1.1 hcw, (e2 hcw).1 hc, ((ef hcw hc).1).1 hcf⟩, fun ⟨p1, p2, p3⟩ => ?_⟩,
-    fun ⟨hcw, hc, hcf⟩ => (ef hcw hc).2 hcf⟩
+    fun ⟨hcw, hc, hcf⟩ => (ef hcw hc).2 hcf, fun ⟨hcw, hc, _⟩ => (hacc hcw hc).queueCoded rfl⟩
   have hcw := ew.1.2 p1
   have hc := (e2 hcw).2 p2
   exact ⟨hcw, hc, (ef hcw hc).1.2 p3⟩

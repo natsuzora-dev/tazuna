@@ -879,7 +879,8 @@ theorem rounds_encode {P : List AnySite} {E : List AnyEffectSite} (hP : SitesUni
 /-- A clock line: where the codes' conditions hold, the condition holds exactly when, for a time not before the
 state's, the rounds' functions fit and the step's end fits; wherever it holds, a time before the state's is Invalid,
 a step where every one of the `cascade + 1` rounds fires is the cascade fault, and otherwise time moves to the line's
-and the step ends as its end terms say (`Finished`). -/
+and the step ends as its end terms say (`Finished`), the cascade the rounds start waiting only on own effects the own
+slots code. -/
 theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (s : State v) (hinv : Step.Inv P s) (time : Int)
@@ -900,12 +901,15 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
       if (o.forward.denote M).toBool then
         if (o.over.denote M).toBool then r = ⟨s, .fault .cascadeLimit, [], []⟩
         else Finished M L T shs o.finish s { state := { s with now := time } } .accepted r
-      else r = ⟨s, .invalid ["time moves forward"], [], []⟩) := by
+      else r = ⟨s, .invalid ["time moves forward"], [], []⟩) ∧
+    (Holds M cond → ¬ time < s.now → ∀ s' effs,
+      Step.fire { s with now := time } (v.bounds.cascadeNat + 1) = some (s', effs) →
+      ∀ a, Step.start { state := s' } effs = .ok a → QueueCoded L a) := by
   intro r
   obtain ⟨⟨ro, cr⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨fo, cf, cfx'⟩, h2, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  refine ⟨?_, fun hc => ?_⟩
+  refine ⟨?_, fun hc => ?_, fun hc hlt s' effs hfire a hstart => ?_⟩
   · have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
     have hfw : ((Term.le S.now st).denote M).toBool = decide (s.now ≤ time) := by
       simp only [Term.denote, hR.now, hst, Val.toInt, Val.toBool]
@@ -991,6 +995,17 @@ theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked 
             Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).2 hrest
     · have hlt : time < s.now := by omega
       simp only [ht, decide_false, Val.toBool, Bool.false_eq_true, ite_false, r, step, hlt, ite_true]
+  · have hfw : (Term.le S.now st).denote M = .bool true := by
+      simp only [Term.denote, hR.now, hst, Val.toInt]; congr 1; simp; omega
+    rw [holds_ite, hfw] at hc
+    simp only [toBool_bool, ite_true] at hc
+    have hro := (rounds_encode chk.sites hshs hshp senv (fun m hm => (chk.keys m hm).2) (v.bounds.cascadeNat + 1)
+      { s with now := time } hR.records hst chk.machines hR.machines (ab := true) rfl h1).2 hR.nextId (q0 := 0) rfl
+      ((holds_andT _ _).1 hc).1
+    simp only [Step.fireFrom, ite_true] at hro
+    rw [hfire] at hro
+    obtain ⟨-, hmach, hs', hnT, hnews, hq, hown⟩ := hro
+    exact (rounds_done (shs := shs) s time hs' hR.records hR.fresh hmach hnT hnews hq hown).queueCoded rfl a hstart
 
 end
 

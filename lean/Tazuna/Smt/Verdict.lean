@@ -516,7 +516,7 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   have hheldH : Holds M (andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT))) :=
     (holds_andT _ _).2 ⟨(holds_allT_rules _).2 (hb.trans hheld.1), instHold_of_nil _ _ (hbs.trans hheld.2)⟩
   have hcond := hcondOf hheldH
-  have hrel := ((step_encode chk senv hS hinv hx ht).2 hcodes hsites hcaseH).2 hcond
+  have hrel := ((step_encode chk senv hS hinv hx ht).2 hcodes hsites hcaseH).2.1 hcond
   obtain ⟨g, hg, hn, hbr⟩ := rel_faults (command?_of_decode hx) hrel hfault hf
   have hkeep : ((t.out.breaks inp.command? g).const?.map Val.toBool != some false) = true := by
     cases hk : (t.out.breaks inp.command? g).const? with
@@ -641,7 +641,7 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   rw [hsplit, List.append_eq_nil_iff] at hheld
   have hheldH : Holds M (andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT))) :=
     (holds_andT _ _).2 ⟨(holds_allT_rules _).2 (hb.trans hheld.1), instHold_of_nil _ _ ((hbs.2 hck).trans hheld.2)⟩
-  have hrel := ((henc.2 hcodes hsites hcaseH).2) hcond
+  have hrel := ((henc.2 hcodes hsites hcaseH).2.1) hcond
   obtain ⟨g, hg, hn, hbr⟩ := rel_faults (command?_of_decode hx) hrel hfault hf
   have hkeep : ((t.out.breaks inp.command? g).const?.map Val.toBool != some false) = true := by
     cases hk : (t.out.breaks inp.command? g).const? with

@@ -289,7 +289,8 @@ variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV}
 /-- An answer at the slot `j` and the shape `sh`: where the codes' conditions hold and the slot holds the request the
 answer names, the condition holds exactly when what the step applies for that request fits (`answerFits`); wherever
 it holds, a broken `ensures` rule makes the answer Invalid, and otherwise the request leaves the pending table, the
-events of `on_answer` run through the events loop and the step ends as its end terms say (`Finished`). -/
+events of `on_answer` run through the events loop and the step ends as its end terms say (`Finished`), the cascade
+it starts waiting only on own effects the own slots code. -/
 theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared)
     (s : State v) (hsinv : Step.Inv P s)
@@ -309,10 +310,15 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     (Holds M cond ↔ (Holds M o.hit →
       ∀ p, s.pending.find? (·.id == to) = some p → answerFits L.count T shs s p to ⟨_, value⟩)) ∧
     (Holds M cond → Holds M o.hit →
-      match brokenIn M o.rules with
+      (match brokenIn M o.rules with
       | n :: ns => r = ⟨s, .invalid (n :: ns), [], []⟩
       | [] => Finished M L T shs o.finish s { state := { s with pending := s.pending.filter (·.id != to) } }
-          .accepted r) := by
+          .accepted r) ∧
+      ∀ p, s.pending.find? (·.id == to) = some p →
+        ∀ h : answerTy sh.output sh.rejection = answerTy p.request.output p.request.rejection,
+        Step.broken (p.request.holds (h ▸ value)) = [] → ∀ a,
+        Step.applyEvents T { state := { s with pending := s.pending.filter (·.id != to) } }
+          (p.request.onAnswer.fn (h ▸ value, ())) = .ok a → QueueCoded L a) := by
   intro r
   unfold encodeAnswer at henc
   have h1 := senv.hT
@@ -750,34 +756,44 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       rw [← hlist]
       exact filter_pendingList (sh0 :: rest) to tbl.1
     -- The step itself: Invalid on a broken rule, else the events run and the invariants decide.
-    have hr : r = _ := hstep
-    rw [hr, hbroken]
-    cases hb : Step.broken ((sh.pending to (f0, f1, f2, f3, ())).request.holds value) with
-    | cons n ns => rfl
-    | nil =>
-    simp only
-    have hall : (allT (rules.map (·.2))).denote M = .bool true := by
-      rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil rules).1 (hbroken.trans hb))
-    obtain ⟨hc4, hcf⟩ : Holds M c4 ∧ Holds M cf := by
-      have := (holds_ite _ _ _).1 hc45; rw [hall] at this
-      simpa [Val.toBool, holds_andT] using this
-    -- The events of `on_answer`, run through the events loop.
-    have hevs' : RelV L (.list v.event) (Ty.up _ hle ((sh.pending to (f0, f1, f2, f3, ())).request.onAnswer.fn (value, ())))
-        (evt.denote M) := by
-      show RelV L (.list v.event) (Ty.up _ hle ((sh.onAnswer.fn
-        (Ty.down (.tuple sh.fields) sh.hdata (f0, f1, f2, f3, ())).2.2.2.1).fn (value, ()))) (evt.denote M)
-      rw [hY3]; exact (rel_term (need_ok.1 h10) _).1 hevs
-    have hlv := (rel_term (need_ok.1 h10) _).2 hevs'
-    have hee : evs = evt := Option.some.inj (need_ok.1 h10)
-    subst hee
-    obtain ⟨svl, hSl, -, -, hhl⟩ := list_view (M := M) hlv h11
-    erw [Ty.up_list _ _ v.event_data] at hhl
     let s' : State v := { s with pending := s.pending.filter (·.id != to) }
+    have hnil : Step.broken ((sh.pending to (f0, f1, f2, f3, ())).request.holds value) = [] →
+        Holds M cf ∧ AccRel M L T (sh0 :: rest) { state := s' } oe S.fresh 0
+          (Step.applyEvents T { state := s' } ((sh.pending to (f0, f1, f2, f3, ())).request.onAnswer.fn (value, ()))) := by
+      intro hb
+      have hall : (allT (rules.map (·.2))).denote M = .bool true := by
+        rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil rules).1 (hbroken.trans hb))
+      obtain ⟨hc4, hcf⟩ : Holds M c4 ∧ Holds M cf := by
+        have := (holds_ite _ _ _).1 hc45; rw [hall] at this
+        simpa [Val.toBool, holds_andT] using this
+      -- The events of `on_answer`, run through the events loop.
+      have hevs' : RelV L (.list v.event) (Ty.up _ hle ((sh.pending to (f0, f1, f2, f3, ())).request.onAnswer.fn (value, ())))
+          (evt.denote M) := by
+        show RelV L (.list v.event) (Ty.up _ hle ((sh.onAnswer.fn
+          (Ty.down (.tuple sh.fields) sh.hdata (f0, f1, f2, f3, ())).2.2.2.1).fn (value, ()))) (evt.denote M)
+        rw [hY3]; exact (rel_term (need_ok.1 h10) _).1 hevs
+      have hlv := (rel_term (need_ok.1 h10) _).2 hevs'
+      have hee : evs = evt := Option.some.inj (need_ok.1 h10)
+      subst hee
+      obtain ⟨svl, hSl, -, -, hhl⟩ := list_view (M := M) hlv h11
+      erw [Ty.up_list _ _ v.event_data] at hhl
+      have hdone := loop_acc (T := T) chk hshs hshp happ0 hca senv
+        { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4
+      exact ⟨hcf, hdone⟩
     have hinv' : Step.Inv P s' := hsinv.filterPending _
-    have hdone := loop_acc (T := T) chk hshs hshp happ0 hca senv
-      { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4
-    exact (finish_encode chk hshs hshp happ0 hca hinv0 hci senv s
-      .accepted { state := s' } rfl hinv' hR.now hrem hdone (applyEvents_ok chk.reach _ rfl hinv' _) h12' hcfx).2 hcf
+    refine ⟨?_, fun p hp h hhold a happly => ?_⟩
+    · have hr : r = _ := hstep
+      rw [hr, hbroken]
+      cases hb : Step.broken ((sh.pending to (f0, f1, f2, f3, ())).request.holds value) with
+      | cons n ns => rfl
+      | nil =>
+      simp only
+      obtain ⟨hcf, hdone⟩ := hnil hb
+      exact (finish_encode chk hshs hshp happ0 hca hinv0 hci senv s
+        .accepted { state := s' } rfl hinv' hR.now hrem hdone (applyEvents_ok chk.reach _ rfl hinv' _) h12' hcfx).2 hcf
+    · rw [hfind] at hp
+      cases hp
+      exact (hnil hhold).2.queueCoded rfl a happly
 
 end
 

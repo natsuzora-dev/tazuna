@@ -67,6 +67,17 @@ some order. -/
 def OwnRel (M : Model) (L : Layout) (S : List OwnSlot) (os : List (EffectV e)) (q0 : Nat) : Prop :=
   ∃ sv zs, SlotsDen M (S.map OwnSlot.slot) sv ∧ (∀ p ∈ sv, p.2.length = 2) ∧ Holds2 (EOwn L e) zs sv ∧ zs.Perm (os.zipIdx q0)
 
+/-- The own effects own slots hold are coded by the slots' values. -/
+theorem ownRel_coded {S : List OwnSlot} {os : List (EffectV e)} {q0 : Nat} (h : OwnRel M L S os q0) :
+    ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [e]) y z := by
+  intro y hy
+  obtain ⟨sv, zs, -, -, hh, hp⟩ := h
+  obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hy
+  have hm : (os[i], q0 + i) ∈ zs := hp.symm.mem_iff.1 (List.mem_iff_getElem.2 ⟨i, by simpa using hi,
+    by simp [List.getElem_zipIdx]⟩)
+  obtain ⟨vs, -, zx, -, hz⟩ := forall2_mem_left hh _ hm
+  exact ⟨zx, hz⟩
+
 /-- The variant test reads whether an effect is an own command or query. -/
 theorem isOwn_den {dE nE : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE)) {x : EffectV e} {t : Term}
     (h : RelV L (.dsl .effect [e]) x (t.denote M)) :

@@ -194,12 +194,12 @@ theorem query_no_fault (T : List TypeDecl) (s : State v) (i : Fin v.queries.leng
 
 /-- The questions cover every step within the slots from a state whose instances are in the step's form: either some
 input kind's questions cover the state and the input, or the step faults by nothing but `answerUnmatched` (an answer
-that names no request of its type, or a query). -/
+that names no request of its type, or a query) and starts no cascade. -/
 theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {s : State v}
     (hkeys : Step.KeysOk T s) (hs : Within L (shapes v) s) (x : Input v) {ivs : List Val}
     (hx : inputVals L chk.callerData x = some ivs) :
     (∃ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length), Covered L T P v senv inp s x) ∨
-      ∀ f, f ≠ .answerUnmatched → (step T v s x).outcome ≠ .fault f := by
+      (∀ f, f ≠ .answerUnmatched → (step T v s x).outcome ≠ .fault f) ∧ ∀ a, ¬ Step.Begins T s x a := by
   obtain ⟨pv, hpv, hsome⟩ := hs
   obtain ⟨vals, hvals⟩ := Option.isSome_iff_exists.1 hsome
   have hlen : vals.length = 5 + v.machines.length := by
@@ -229,7 +229,7 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
     simp only [List.getElem_cons_zero, List.getElem_cons_succ, Nat.add_zero] at h0 h1
     simp [SymInput.decode, Term.denote, h0, h1, decode_embed _ _ _ hc', Ty.down_up]
     exact ⟨_, decode_embed _ _ _ hw, Ty.down_up _ _ _⟩
-  | query i caller input => exact .inr fun f _ => query_no_fault T s i caller input f
+  | query i caller input => exact .inr ⟨fun f _ => query_no_fault T s i caller input f, fun _ hb => nomatch hb⟩
   | event i value =>
     obtain ⟨w, hw, rfl⟩ := map_some.1 hx
     refine .inl ⟨.event i (.var (5 + v.machines.length)), by simp [stepInputs], hc, M,
@@ -254,10 +254,21 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
     · rename_i htd
       obtain ⟨w, hw, rfl⟩ := map_some.1 hx
       cases hf : s.pending.find? (·.id == to) with
-      | none => exact .inr fun f hf' => by simp only [step, hf]; simpa using hf'.symm
+      | none =>
+        refine .inr ⟨fun f hf' => by simp only [step, hf]; simpa using hf'.symm, fun _ hb => ?_⟩
+        cases hb with
+        | answer _ _ p _ _ hp _ _ => rw [hf] at hp; cases hp
       | some p =>
         cases hsame : Ty.same t (answerTy p.request.output p.request.rejection) with
-        | none => exact .inr fun f hf' => by simp only [step, hf, hsame]; simpa using hf'.symm
+        | none =>
+          refine .inr ⟨fun f hf' => by simp only [step, hf, hsame]; simpa using hf'.symm, fun _ hb => ?_⟩
+          cases hb with
+          | answer _ _ p' h _ hp _ _ =>
+            rw [hf] at hp
+            cases hp
+            subst h
+            rw [Ty_same_rfl] at hsame
+            cases hsame
         | some e =>
           obtain ⟨he⟩ := e
           have h0 := hin 0 (by simp)
@@ -294,7 +305,7 @@ theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : S
     with ⟨inp, hmem, hcov⟩ | h
   · obtain ⟨gs, qs, hqs, hun⟩ := hq inp hmem
     exact verdict_covered chk senv f hf hinit inp hqs hun is x hcov
-  · exact h f hf
+  · exact h.1 f hf
 
 /-- The meaning of `Prove.withinBounds`: where the solver answers unsat to every input kind's questions about the
 targets the fault `f` falls under, whatever the bound questions answer, no step of a run from an initial state whose
@@ -315,7 +326,7 @@ theorem within_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : St
   · obtain ⟨gs, qs, hqs, hun⟩ := hq inp hmem
     exact question_within chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is)
       (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg => (hun q hq' hg).noModel M fun n h => varSorted_of_sorted (hM n h)
-  · exact h f hf
+  · exact h.1 f hf
 
 end
 

@@ -166,7 +166,8 @@ theorem apply_inv_exact {v : ServiceV} {apply : Code (Ty.fn [v.records, v.event]
 /-- T2 and exactness for every step kind. Wherever a model's values of the symbolic state and input decode to a state
 `s` that keeps the step invariant and to an input: the codes' condition holds exactly when the codes fit; where it,
 the cascade's codes' condition and the case the script asks about hold, the step's condition holds exactly when what
-the step applies fits, and wherever it holds the step from `s` is the one the terms say. -/
+the step applies fits, and wherever it holds the step from `s` is the one the terms say and the cascade it starts
+waits only on own effects a value codes (`QueueCoded`). -/
 theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v))
     {S : SymState v} {s : State v} (hS : S.decode M L T (shapes v) = some s) (hinv : Step.Inv P s)
@@ -175,7 +176,8 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     (Holds M t.codes ↔ codesFit L.count inp) ∧
     (Holds M t.codes → Holds M t.sites → Holds M t.out.case →
       (Holds M t.cond ↔ stepFits L.count T (shapes v) s x) ∧
-      (Holds M t.cond → t.out.Rel M L T (shapes v) s x (step T v s x))) := by
+      (Holds M t.cond → t.out.Rel M L T (shapes v) s x (step T v s x)) ∧
+      (Holds M t.cond → ∀ a, Step.Begins T s x a → QueueCoded L a)) := by
   have hR := decode_state hS
   cases inp with
   | command i sc si =>
@@ -190,7 +192,11 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     obtain ⟨hcx, hca, hci⟩ : Holds M cx ∧ Holds M ca ∧ Holds M ci := by
       rw [holds_andT, holds_andT] at hcodes; exact hcodes
     have hks' := need_ok.1 hks
-    exact command_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv i caller input hcc hcx happ hca hinvc hci hks' senv hR hsc hsi hcmd hcs
+    have ex := command_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv i caller input hcc hcx
+      happ hca hinvc hci hks' senv hR hsc hsi hcmd hcs
+    refine ⟨ex.1, ex.2.1, fun hcond a hb => ?_⟩
+    cases hb with
+    | command _ _ _ _ h => exact ex.2.2 hcond a h
   | query i sc si =>
     obtain ⟨caller, input, rfl, hsc, hsi⟩ := decode_query hx
     obtain ⟨⟨qc, cq⟩, hqc, henc⟩ := bind_ok.1 henc
@@ -198,7 +204,8 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     obtain ⟨⟨o, c⟩, hqe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     exact ⟨queryCode_exact hqc, fun hcq _ _ =>
-      query_encode s i caller input hqc hcq (need_ok.1 hks) hR hsc hsi hqe⟩
+      ⟨(query_encode s i caller input hqc hcq (need_ok.1 hks) hR hsc hsi hqe).1,
+        (query_encode s i caller input hqc hcq (need_ok.1 hks) hR hsc hsi hqe).2, fun _ _ hb => nomatch hb⟩⟩
   | answer k j toT valT =>
     have hk : (shapes v)[(k : Nat)]? = some (shapes v)[k] := List.getElem?_eq_getElem k.2
     obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
@@ -210,11 +217,21 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     have hx' : decodeAnswer M L (answerTy (shapes v)[k].output (shapes v)[k].rejection) toT valT = some x := hx
     obtain ⟨hty, to, value, rfl, hto, hval⟩ := decode_answer hx'
     have ex := answer_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv hk to value happ hca hinvc hci senv j hR hto hty hval hans hcs
-    exact ⟨by rw [ex.1]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond => ex.2 hcond hhit⟩
+    refine ⟨by rw [ex.1]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond => (ex.2 hcond hhit).1, fun hcond a hb => ?_⟩
+    cases hb with
+    | answer _ _ p h _ hp hhold happ => exact (ex.2 hcond hhit).2 p hp h hhold a happ
   | unmatched ty toT valT =>
     cases pure_ok.1 henc
     obtain ⟨-, to, value, rfl, hto, -⟩ := decode_answer hx
-    refine ⟨by simp [holds_tt, codesFit], fun _ _ hcase => ⟨?_, fun _ => answer_unmatched s to ty value hR.pending hto senv hcase⟩⟩
+    refine ⟨by simp [holds_tt, codesFit], fun _ _ hcase => ⟨?_, fun _ => answer_unmatched s to ty value hR.pending hto senv hcase,
+      fun _ a hb => ?begins⟩⟩
+    case begins =>
+      cases hb with
+      | answer _ _ p h _ hp _ _ =>
+        have hn := unmatched_types s to _ hR.pending hto senv hcase p hp
+        subst h
+        rw [Ty_same_rfl] at hn
+        cases hn
     refine ⟨fun _ p hf => ?_, fun _ => holds_tt⟩
     simp [answerFits, unmatched_types s to ty hR.pending hto senv hcase p hf]
   | event i sv =>
@@ -222,8 +239,11 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     obtain ⟨⟨ec, ce⟩, hec, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c, cs⟩, hev, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
-    exact ⟨eventCode_exact hec, fun hce hcs _ =>
-      event_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv i value hec hce hR hsv senv hev hcs⟩
+    have ex := fun hce => event_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv i value hec
+      hce hR hsv senv hev
+    refine ⟨eventCode_exact hec, fun hce hcs _ => ⟨(ex hce hcs).1, (ex hce hcs).2.1, fun hcond a hb => ?_⟩⟩
+    cases hb with
+    | event _ _ _ h => exact (ex hce hcs).2.2 hcond a h
   | clock st =>
     obtain ⟨time, rfl, hst⟩ := decode_clock hx
     obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
@@ -232,7 +252,11 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
     cases pure_ok.1 henc
     refine ⟨apply_inv_exact happ hinvc, fun hcodes hcs _ => ?_⟩
     obtain ⟨hca, hci⟩ := (holds_andT _ _).1 hcodes
-    exact clock_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv time happ hca hinvc hci hR hst senv hcl hcs
+    have ex := clock_encode chk (fun _ => shapes_inSites chk.reach) (shapesHold_shapes v) s hinv time happ hca hinvc hci
+      hR hst senv hcl hcs
+    refine ⟨ex.1, ex.2.1, fun hcond a hb => ?_⟩
+    cases hb with
+    | clock _ s' effs _ hlt hf h => exact ex.2.2 hcond hlt s' effs hf a h
 
 end
 
