@@ -210,6 +210,273 @@ theorem fire_agrees {I : State v × List (Sender × EffectV v.event) → Prop}
     Diamond.Agree E r (fireResult s (fuel + 1)) :=
   Diamond.runs_agree hE hS hD hI fuel (s, []) hs hr (fire_runs fuel s)
 
+/-! Two timers due at one deadline commute. Firing an instance reads only that instance, the records and the time, and
+writes only that instance, so firing two instances in either order leaves the same instances; the effects they start
+come in the other order, which is the same multiset. What can still go wrong is the deadline: an instance whose timer
+fires may set a timer before the deadline that fired, which then is the earliest and runs first. A service whose
+timers never do so (`FiresForward`) has every order of a clock line's timers end as `fire` does (`timers_agree`). -/
+
+section Timers
+
+/-- A timer that fires sets no timer before its deadline. -/
+def FiresForward (ms : List (MachineV r e)) : Prop :=
+  ∀ m ∈ ms, ∀ (records : r.den0) (now d : Int) (i : Instance m), hitsAt d i = true → d ≤ now →
+    ∀ x ∈ (fired m records now i).1.timer, d ≤ x.1
+
+/-- What firing the `k`-th and then a `j`-th due instance gives, against the other order: the same instances, and the
+same effects in some order. -/
+def FiredBoth {α β : Type} (fireK : Nat → α → α × List β) (count : α → Nat) (l : α) (k1 k2 : Nat) : Prop :=
+  ∃ j < count (fireK k1 l).1, ∃ i < count (fireK k2 l).1,
+    (fireK j (fireK k1 l).1).1 = (fireK i (fireK k2 l).1).1 ∧
+      ((fireK k1 l).2 ++ (fireK j (fireK k1 l).1).2).Perm ((fireK k2 l).2 ++ (fireK i (fireK k2 l).1).2)
+
+theorem FiredBoth.flip {α β : Type} {fireK : Nat → α → α × List β} {count : α → Nat} {l : α} {k1 k2 : Nat} :
+    FiredBoth fireK count l k1 k2 → FiredBoth fireK count l k2 k1
+  | ⟨j, hj, i, hi, he, hp⟩ => ⟨i, hi, j, hj, he.symm, hp.symm⟩
+
+variable (m : MachineV r e) (records : r.den0) (now d : Int)
+
+theorem fireNth_skip {i : Instance m} (h : hitsAt d i = false) (k : Nat) (is : List (Instance m)) :
+    fireNth m records now d k (i :: is) = (i :: (fireNth m records now d k is).1, (fireNth m records now d k is).2) := by
+  simp [fireNth, h]
+
+theorem fireNth_succ {i : Instance m} (h : hitsAt d i = true) (k : Nat) (is : List (Instance m)) :
+    fireNth m records now d (k + 1) (i :: is) = (i :: (fireNth m records now d k is).1, (fireNth m records now d k is).2) := by
+  simp [fireNth, h]
+
+theorem fireNth_zero {i : Instance m} (h : hitsAt d i = true) (is : List (Instance m)) :
+    fireNth m records now d 0 (i :: is) = ((fired m records now i).1 :: is, (fired m records now i).2) := by
+  simp [fireNth, h]
+
+/-- The instance in front fires and one behind it fires: each order fires both. -/
+theorem fireNth_head (i : Instance m) (is : List (Instance m)) (hi : hitsAt d i = true) (k : Nat)
+    (hk : k < is.countP (hitsAt d)) : FiredBoth (fireNth m records now d) (List.countP (hitsAt d)) (i :: is) 0 (k + 1) := by
+  unfold FiredBoth
+  rw [fireNth_zero m records now d hi, fireNth_succ m records now d hi]
+  cases hf : hitsAt d (fired m records now i).1
+  · refine ⟨k, by simp [hf, hk], 0, by simp [hi], ?_⟩
+    rw [fireNth_skip m records now d hf, fireNth_zero m records now d hi]
+    exact ⟨rfl, List.perm_append_comm⟩
+  · refine ⟨k + 1, by simp [hf, hk], 0, by simp [hi], ?_⟩
+    rw [fireNth_succ m records now d hf, fireNth_zero m records now d hi]
+    exact ⟨rfl, List.perm_append_comm⟩
+
+theorem fireNth_comm : (l : List (Instance m)) → (k1 k2 : Nat) → k1 < l.countP (hitsAt d) →
+    k2 < l.countP (hitsAt d) → k1 ≠ k2 → FiredBoth (fireNth m records now d) (List.countP (hitsAt d)) l k1 k2
+  | [], _, _, h, _, _ => by simp at h
+  | i :: is, k1, k2, h1, h2, hne => by
+    cases hi : hitsAt d i with
+    | false =>
+      simp only [List.countP_cons, hi] at h1 h2
+      obtain ⟨j, hj, i', hi', he, hp⟩ := fireNth_comm is k1 k2 (by simpa using h1) (by simpa using h2) hne
+      simp only [FiredBoth, fireNth_skip m records now d hi, List.countP_cons, hi]
+      exact ⟨j, by simpa using hj, i', by simpa using hi', by rw [he], hp⟩
+    | true =>
+      simp only [List.countP_cons, hi, ite_true] at h1 h2
+      match k1, k2, hne with
+      | 0, 0, hne => exact absurd rfl hne
+      | 0, k + 1, _ => exact fireNth_head m records now d i is hi k (by omega)
+      | k + 1, 0, _ => exact (fireNth_head m records now d i is hi k (by omega)).flip
+      | k + 1, k' + 1, hne =>
+        obtain ⟨j, hj, i', hi', he, hp⟩ :=
+          fireNth_comm is k k' (by omega) (by omega) (fun h => hne (congrArg (· + 1) h))
+        simp only [FiredBoth, fireNth_succ m records now d hi, List.countP_cons, hi, ite_true]
+        refine ⟨j + 1, by omega, i' + 1, by omega, ?_⟩
+        rw [fireNth_succ m records now d hi, fireNth_succ m records now d hi, he]
+        exact ⟨rfl, hp⟩
+
+variable {m records now d}
+
+theorem fireMachinesAt_lt {k : Nat} {insts : List (Instance m)} {ms : List (MachineV r e)} (rest : Machines ms)
+    (h : k < insts.countP (hitsAt d)) : fireMachinesAt records now d k (.cons insts rest) =
+      (.cons (fireNth m records now d k insts).1 rest, (fireNth m records now d k insts).2) := by
+  simp [fireMachinesAt, h]
+
+theorem fireMachinesAt_ge {k : Nat} {insts : List (Instance m)} {ms : List (MachineV r e)} (rest : Machines ms)
+    (h : insts.countP (hitsAt d) ≤ k) : fireMachinesAt records now d k (.cons insts rest) =
+      (.cons insts (fireMachinesAt records now d (k - insts.countP (hitsAt d)) rest).1,
+        (fireMachinesAt records now d (k - insts.countP (hitsAt d)) rest).2) := by
+  simp [fireMachinesAt, Nat.not_lt.2 h]
+
+theorem hitCount_cons (insts : List (Instance m)) {ms : List (MachineV r e)} (rest : Machines ms) :
+    hitCount d (.cons insts rest) = insts.countP (hitsAt d) + hitCount d rest := rfl
+
+/-- A timer of the first machine fires and one of a later machine fires: each order fires both. -/
+theorem fireMachinesAt_apart (insts : List (Instance m)) {ms : List (MachineV r e)} (rest : Machines ms) (k1 k2 : Nat)
+    (h1 : k1 < insts.countP (hitsAt d)) (h2 : insts.countP (hitsAt d) ≤ k2)
+    (h2' : k2 < insts.countP (hitsAt d) + hitCount d rest) :
+    FiredBoth (fun k l => fireMachinesAt records now d k l) (fun l => hitCount d l) (.cons insts rest) k1 k2 := by
+  dsimp only [FiredBoth]
+  rw [fireMachinesAt_lt rest h1, fireMachinesAt_ge rest h2]
+  refine ⟨(fireNth m records now d k1 insts).1.countP (hitsAt d) + (k2 - insts.countP (hitsAt d)),
+    by rw [hitCount_cons]; omega, k1, by rw [hitCount_cons]; omega, ?_⟩
+  rw [fireMachinesAt_ge _ (by omega), fireMachinesAt_lt _ h1, Nat.add_sub_cancel_left]
+  exact ⟨rfl, List.perm_append_comm⟩
+
+theorem fireMachinesAt_comm : {ms : List (MachineV r e)} → (l : Machines ms) → (k1 k2 : Nat) → k1 < hitCount d l →
+    k2 < hitCount d l → k1 ≠ k2 → FiredBoth (fun k l => fireMachinesAt records now d k l) (fun l => hitCount d l) l k1 k2
+  | _, .nil, _, _, h, _, _ => by simp [hitCount] at h
+  | _, .cons insts rest, k1, k2, h1, h2, hne => by
+    rw [hitCount_cons] at h1 h2
+    by_cases c1 : k1 < insts.countP (hitsAt d) <;> by_cases c2 : k2 < insts.countP (hitsAt d)
+    · obtain ⟨j, hj, i, hi, he, hp⟩ := fireNth_comm _ records now d insts k1 k2 c1 c2 hne
+      dsimp only [FiredBoth]
+      rw [fireMachinesAt_lt rest c1, fireMachinesAt_lt rest c2]
+      refine ⟨j, by rw [hitCount_cons]; omega, i, by rw [hitCount_cons]; omega, ?_⟩
+      rw [fireMachinesAt_lt rest hj, fireMachinesAt_lt rest hi, he]
+      exact ⟨rfl, hp⟩
+    · exact fireMachinesAt_apart insts rest k1 k2 c1 (by omega) (by omega)
+    · exact (fireMachinesAt_apart insts rest k2 k1 c2 (by omega) (by omega)).flip
+    · obtain ⟨j, hj, i, hi, he, hp⟩ := fireMachinesAt_comm rest (k1 - insts.countP (hitsAt d))
+        (k2 - insts.countP (hitsAt d)) (by omega) (by omega) (by omega)
+      dsimp only at hj hi he hp
+      dsimp only [FiredBoth]
+      rw [fireMachinesAt_ge rest (by omega), fireMachinesAt_ge rest (by omega)]
+      refine ⟨insts.countP (hitsAt d) + j, by rw [hitCount_cons]; omega, insts.countP (hitsAt d) + i,
+        by rw [hitCount_cons]; omega, ?_⟩
+      rw [fireMachinesAt_ge _ (by omega), fireMachinesAt_ge _ (by omega), Nat.add_sub_cancel_left,
+        Nat.add_sub_cancel_left, he]
+      exact ⟨rfl, hp⟩
+
+/-- An instance after `fireNth` was there before, or is one that fired at `d`. -/
+theorem mem_fireNth {k : Nat} : {l : List (Instance m)} → ∀ y ∈ (fireNth m records now d k l).1,
+    y ∈ l ∨ ∃ i ∈ l, hitsAt d i = true ∧ y = (fired m records now i).1
+  | [], _, h => by simp [fireNth] at h
+  | i :: is, y, h => by
+    unfold fireNth at h
+    split at h
+    · next hi =>
+      split at h
+      · rcases List.mem_cons.1 h with rfl | h
+        · exact .inr ⟨i, List.mem_cons_self, hi, rfl⟩
+        · exact .inl (List.mem_cons_of_mem _ h)
+      · rcases List.mem_cons.1 h with rfl | h
+        · exact .inl List.mem_cons_self
+        · rcases mem_fireNth y h with h | ⟨j, hj, hd, rfl⟩
+          · exact .inl (List.mem_cons_of_mem _ h)
+          · exact .inr ⟨j, List.mem_cons_of_mem _ hj, hd, rfl⟩
+    · rcases List.mem_cons.1 h with rfl | h
+      · exact .inl List.mem_cons_self
+      · rcases mem_fireNth y h with h | ⟨j, hj, hd, rfl⟩
+        · exact .inl (List.mem_cons_of_mem _ h)
+        · exact .inr ⟨j, List.mem_cons_of_mem _ hj, hd, rfl⟩
+
+theorem dues_cons (insts : List (Instance m)) {ms : List (MachineV r e)} (rest : Machines ms) :
+    dues (PerMachine.cons insts rest).toSigma now =
+      insts.filterMap (fun i => i.timer.bind fun (d', _) => if d' ≤ now then some d' else none) ++ dues rest.toSigma now := by
+  simp [dues]
+
+theorem mem_dues_filterMap {l : List (Instance m)} {x : Int} :
+    x ∈ l.filterMap (fun i => i.timer.bind fun (d', _) => if d' ≤ now then some d' else none) ↔
+      ∃ i ∈ l, ∃ st, i.timer = some (x, st) ∧ x ≤ now := by
+  simp only [List.mem_filterMap]
+  constructor
+  · rintro ⟨i, hi, h⟩
+    cases ht : i.timer with
+    | none => simp [ht] at h
+    | some p =>
+      obtain ⟨d', st⟩ := p
+      simp only [ht, Option.bind_some] at h
+      split at h
+      · cases h; exact ⟨i, hi, st, ht, by assumption⟩
+      · cases h
+  · rintro ⟨i, hi, st, ht, hx⟩
+    exact ⟨i, hi, by simp [ht, hx]⟩
+
+
+theorem dues_fire_ge {k : Nat} {now0 : Int} (hd0 : d ≤ now) : {ms : List (MachineV r e)} → FiresForward ms →
+    (l : Machines ms) → (∀ x ∈ dues l.toSigma now0, d ≤ x) →
+    ∀ x ∈ dues (fireMachinesAt records now d k l).1.toSigma now0, d ≤ x
+  | _, _, .nil, _, x, hx => by simp [fireMachinesAt, dues] at hx
+  | _, hF, .cons insts rest, hl, x, hx => by
+    rw [dues_cons] at hl
+    by_cases hk : k < insts.countP (hitsAt d)
+    · rw [fireMachinesAt_lt rest hk, dues_cons, List.mem_append, mem_dues_filterMap] at hx
+      rcases hx with ⟨y, hy, st, ht, hx⟩ | hx
+      · rcases mem_fireNth y hy with hy | ⟨i, hi, hh, rfl⟩
+        · exact hl x (List.mem_append_left _ (mem_dues_filterMap.2 ⟨y, hy, st, ht, hx⟩))
+        · exact hF _ List.mem_cons_self records now d i hh hd0 (x, st) ht
+      · exact hl x (List.mem_append_right _ hx)
+    · rw [fireMachinesAt_ge rest (by omega), dues_cons, List.mem_append] at hx
+      rcases hx with hx | hx
+      · exact hl x (List.mem_append_left _ hx)
+      · exact dues_fire_ge hd0 (fun m hm => hF m (List.mem_cons_of_mem _ hm)) rest
+          (fun y hy => hl y (List.mem_append_right _ hy)) x hx
+
+theorem mem_dues_of_hit {now0 : Int} (hd : d ≤ now0) : {ms : List (MachineV r e)} → (l : Machines ms) →
+    0 < hitCount d l → d ∈ dues l.toSigma now0
+  | _, .nil, h => by simp [hitCount] at h
+  | _, .cons insts rest, h => by
+    rw [dues_cons, List.mem_append, mem_dues_filterMap]
+    rw [hitCount_cons] at h
+    by_cases hc : 0 < insts.countP (hitsAt d)
+    · obtain ⟨i, hi, hh⟩ := List.countP_pos_iff.1 hc
+      unfold hitsAt at hh
+      split at hh
+      · next d' st ht => exact .inl ⟨i, hi, st, by simp at hh; rw [ht, hh], hd⟩
+      · cases hh
+    · exact .inr (mem_dues_of_hit hd rest (by omega))
+
+theorem le_of_mem_dues {ms : List (MachineState r e)} {now0 x : Int} (h : x ∈ dues ms now0) : x ≤ now0 := by
+  simp only [dues, List.mem_flatMap, List.mem_filterMap] at h
+  obtain ⟨_, _, i, _, h⟩ := h
+  cases ht : i.timer with
+  | none => simp [ht] at h
+  | some p =>
+    simp only [ht, Option.bind_some] at h
+    split at h
+    · cases h; assumption
+    · cases h
+
+/-- Results of a clock line's timers that are the same state, with the same effects in some order. -/
+def TimerEq {v : ServiceV} (a b : State v × List (Sender × EffectV v.event)) : Prop := a.1 = b.1 ∧ a.2.Perm b.2
+
+theorem timerEq_equiv {v : ServiceV} : Diamond.Equiv (TimerEq (v := v)) :=
+  ⟨fun _ => ⟨rfl, .refl _⟩, fun ⟨h, p⟩ => ⟨h.symm, p.symm⟩, fun ⟨h, p⟩ ⟨h', p'⟩ => ⟨h.trans h', p.trans p'⟩⟩
+
+theorem timerSys_simulates {v : ServiceV} : Diamond.Simulates (timerSys v) TimerEq := by
+  rintro ⟨s, acc⟩ ⟨s', acc'⟩ ⟨rfl, hp⟩
+  refine ⟨rfl, fun i hi => ⟨i, hi, .inl ?_⟩⟩
+  simp only [timerSys]
+  split
+  · exact ⟨rfl, hp⟩
+  · exact ⟨rfl, hp.append_right _⟩
+
+theorem timerSys_commutes {v : ServiceV} (hF : FiresForward v.machines) :
+    Diamond.Commutes (timerSys v) (fun _ => True) TimerEq := by
+  rintro ⟨s, acc⟩ - i j hi hj hij b hb
+  simp only [timerSys] at hi hj hb ⊢
+  cases hm : (dues s.machines.toSigma s.now).min? with
+  | none => rw [hm] at hi; exact absurd hi (Nat.not_lt_zero _)
+  | some d =>
+    rw [hm] at hi hj hb
+    obtain ⟨hdm, hdl⟩ := List.min?_eq_some_iff.1 hm
+    have hdn : d ≤ s.now := le_of_mem_dues hdm
+    obtain ⟨j', hj', i', hi', he, hp⟩ := fireMachinesAt_comm (records := s.records) (now := s.now) s.machines i j hi hj hij
+    dsimp only at hj' hi' he hp
+    cases hb
+    refine ⟨fun c hc => ?_, fun e he => by split at he <;> cases he⟩
+    cases hc
+    have keep : ∀ k, 0 < hitCount d (fireMachinesAt s.records s.now d k s.machines).1 →
+        (dues (fireMachinesAt s.records s.now d k s.machines).1.toSigma s.now).min? = some d := fun k hk =>
+      List.min?_eq_some_iff.2 ⟨mem_dues_of_hit hdn _ hk, dues_fire_ge hdn hF s.machines hdl⟩
+    refine ⟨j', ?_, i', ?_, ?_⟩
+    · simp only [keep i (by omega)]; exact hj'
+    · simp only [keep j (by omega)]; exact hi'
+    · simp only [keep i (by omega), keep j (by omega)]
+      refine ⟨by rw [he], ?_⟩
+      simp only [List.append_assoc]
+      exact hp.append_left acc
+
+/-- Where timers fire forward, every order of the timers due at one deadline of a clock line ends as `fire` does: the
+same state, and the same effects in some order. -/
+theorem timers_agree {v : ServiceV} (hF : FiresForward v.machines) (fuel : Nat) (s : State v)
+    {r : Except Fault (State v × List (Sender × EffectV v.event))} (hr : Diamond.Runs (timerSys v) fuel (s, []) r) :
+    Diamond.Agree TimerEq r (fireResult s (fuel + 1)) :=
+  fire_agrees timerEq_equiv timerSys_simulates (timerSys_commutes hF) (fun _ _ _ _ _ _ => trivial) fuel s trivial hr
+
+end Timers
+
 end Step
 
 end Tazuna.Ir
