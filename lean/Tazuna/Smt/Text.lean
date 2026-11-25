@@ -64,6 +64,53 @@ end
 
 def SExp.print (e : SExp) : String := String.ofList (render e.tokens)
 
+mutual
+/-- `SExp.print` after the text `acc`, appended in place: the compiled printer, since a script's text built as a list
+of characters took most of the time a cache hit spends. -/
+def SExp.write (acc : String) : SExp → String
+  | .sym s => (acc ++ s).push ' '
+  | .num n => (acc ++ String.ofList (Token.num n).chars).push ' '
+  | .str s => (acc ++ String.ofList (Token.str s).chars).push ' '
+  | .list xs => ((SExp.writeList ((acc.push '(').push ' ') xs).push ')').push ' '
+def SExp.writeList (acc : String) : List SExp → String
+  | [] => acc
+  | x :: xs => SExp.writeList (SExp.write acc x) xs
+end
+
+def SExp.printFast (e : SExp) : String := SExp.write "" e
+
+theorem render_append (a b : List Token) : render (a ++ b) = render a ++ render b := List.flatMap_append
+
+mutual
+theorem SExp.write_eq (acc : String) : (e : SExp) → SExp.write acc e = acc ++ String.ofList (render e.tokens)
+  | .sym s => by
+    simp [SExp.write, SExp.tokens, render, Token.chars, String.push_eq_append, String.ofList_append,
+      String.append_assoc, String.ofList_cons]
+  | .num n => by
+    simp [SExp.write, SExp.tokens, render, String.push_eq_append, String.ofList_append, String.append_assoc,
+      String.ofList_cons]
+  | .str s => by
+    simp only [SExp.write, SExp.tokens, render, List.flatMap_cons, List.flatMap_nil, List.append_nil,
+      String.push_eq_append, String.ofList_append, String.append_assoc, String.ofList_cons, String.ofList_nil,
+      String.append_empty]
+  | .list xs => by
+    rw [SExp.write, SExp.writeList_eq]
+    simp [SExp.tokens, render, Token.chars, String.push_eq_append, String.ofList_append, String.append_assoc,
+      String.ofList_cons]
+    rw [← String.append_assoc]
+    rfl
+theorem SExp.writeList_eq (acc : String) : (xs : List SExp) →
+    SExp.writeList acc xs = acc ++ String.ofList (render (SExp.tokensList xs))
+  | [] => by simp [SExp.writeList, SExp.tokensList, render]
+  | x :: xs => by
+    rw [SExp.writeList, SExp.writeList_eq, SExp.write_eq, SExp.tokensList, render_append, String.ofList_append,
+      String.append_assoc]
+end
+
+@[csimp] theorem SExp.print_eq_printFast : @SExp.print = @SExp.printFast := by
+  funext e
+  simp [SExp.print, SExp.printFast, SExp.write_eq]
+
 /-! Reading. -/
 
 /-- Where the reader is inside a string literal's escapes. A backslash that starts no `\u{...}` escape stands for

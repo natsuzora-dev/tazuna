@@ -73,6 +73,8 @@ elab "#check_tazuna_reach" : command => do
     -- SMT-LIB text: printing then parsing gives the terms and values back, and shared definitions keep the meaning.
     ``Tazuna.Smt.Term.parse_print, ``Tazuna.Smt.Val.parse_print, ``Tazuna.Smt.shared_agrees,
     ``Tazuna.Smt.shared_conservative,
+    -- The compiled printer appends to a string in place; it is the printer the theorems above are about.
+    ``Tazuna.Smt.SExp.print_eq_printFast,
     -- The service's layout, derived from its program: the step environment and the wire-id invariant's term are found,
     -- and every create fits its table's slots.
     ``Tazuna.Smt.stepEnv_ofService, ``Tazuna.Smt.pendingBelowT_ofService, ``Tazuna.Smt.atMost_le_count,
