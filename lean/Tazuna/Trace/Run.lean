@@ -2,8 +2,8 @@ import Tazuna.Semantics.Step
 import Tazuna.Trace.Line
 
 /-! Running a scenario: each step becomes one input line, the step runs, and its outputs become out lines. The trace
-names fresh ids `id1`, `id2`, ... in the order they first appear, so a snapshot shows what a reader can compare, not
-the engine's numbering. A scenario never names an id by text: a command step hands the steps after it the source its
+names fresh ids `id1`, `id2`, ... and the requests the service sends `r1`, `r2`, ... in the order they first appear,
+so a snapshot shows what a reader can compare, not the engine's numbering. A scenario never names an id by text: a command step hands the steps after it the source its
 new ids came from. -/
 
 namespace Tazuna.Trace
@@ -15,10 +15,17 @@ by its own name, and a fresh id by the next `idK` no other id is called. -/
 structure Names where
   ids : List (IdV × String) := []
   next : Nat := 1
+  wires : List (Nat × String) := []
 
 def Names.name (ns : Names) (x : IdV) : Option String := ns.ids.lookup x
 
 def Names.taken (ns : Names) (s : String) : Bool := ns.ids.any (·.2 == s)
+
+/-- The name of the service's request with wire id `n`: `rK` for the `K`-th request the trace names. -/
+def Names.wire (ns : Names) (n : Nat) : Names × String :=
+  match ns.wires.lookup n with
+  | some w => (ns, w)
+  | none => let w := s!"r{ns.wires.length + 1}"; ({ ns with wires := ns.wires ++ [(n, w)] }, w)
 
 def Names.bind (ns : Names) (xs : List IdV) : Names :=
   xs.foldl (fun ns x => if ns.ids.any (·.1 == x) then ns else match x with
@@ -87,10 +94,11 @@ def outLines (ns : Names) (answerTo : Option String) (r : Result v) : Names × O
     | some w => lines := lines ++ [.applied t w]
     | none => return (ns, none)
   for o in r.out do
-    let (ns', w) := ns.enc T o.input.1 o.input.2
+    let (ns', id) := ns.wire o.id
+    let (ns', w) := ns'.enc T o.input.1 o.input.2
     ns := ns'
     match w with
-    | some w => lines := lines ++ [.sent t (toString o.id) o.external o.name w]
+    | some w => lines := lines ++ [.sent t id o.external o.name w]
     | none => return (ns, none)
   return (ns, some lines)
 
@@ -135,9 +143,10 @@ def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Exce
     let [p] := ps | throw (.badStep k s!"{ps.length} pending requests to {name} match the sender")
     let some ⟨h⟩ := Ty.same ty (answerTy p.request.output p.request.rejection)
       | throw (.badStep k s!"the answer's type is not the type of answers to {p.external}.{name}")
-    let (ns, w) := run.names.answerWire T p.request.output p.request.rejection (h ▸ value)
+    let (ns, to) := run.names.wire p.id
+    let (ns, w) := ns.answerWire T p.request.output p.request.rejection (h ▸ value)
     let some w := w | throw (.badStep k "the answer has no wire form")
-    { run with names := ns }.finish' T v (.answer p.id ⟨ty, value⟩) [.answer run.state.now (toString p.id) w] none k
+    { run with names := ns }.finish' T v (.answer p.id ⟨ty, value⟩) [.answer run.state.now to w] none k
   | .event name ⟨ty, x⟩ => do
     let some i := finIdx v.subscribes fun sub => sub.name == name && (Ty.same ty sub.event).isSome
       | throw (.badStep k s!"{v.name} subscribes to no source {name} of this event type")

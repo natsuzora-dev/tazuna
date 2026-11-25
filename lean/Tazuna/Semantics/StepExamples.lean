@@ -125,9 +125,9 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run prelude sv
 -- The answer to the pending request becomes events; an answer to no pending request is a fault.
 #guard summary (after s0 [cmd 1 5, cmd 1 1, .clock 10]) (.answer 0 ⟨Ty.result .int .str, .inl ((0 : Int), ())⟩) ==
   "accepted"
-#guard summary s0 (.answer 0 ⟨Ty.result .int .str, .inl ((0 : Int), ())⟩) == "fault answerUnmatched 0"
+#guard summary s0 (.answer 0 ⟨Ty.result .int .str, .inl ((0 : Int), ())⟩) == "fault answerUnmatched"
 -- An answer of the wrong type matches no request.
-#guard summary (after s0 [cmd 1 5, cmd 1 1, .clock 10]) (.answer 0 ⟨.int, (0 : Int)⟩) == "fault answerUnmatched 0"
+#guard summary (after s0 [cmd 1 5, cmd 1 1, .clock 10]) (.answer 0 ⟨.int, (0 : Int)⟩) == "fault answerUnmatched"
 -- A reaction sends the service's own `add` for some events: 7 adds 2, 1 adds 1 again and again, 3 adds 500.
 /-- `send_command(add, 1, n, fn(_) { [] })`. -/
 private def sendE {Γ : List Ty} (n : Int) : Expr [] Γ (.dsl .effect [.int]) :=

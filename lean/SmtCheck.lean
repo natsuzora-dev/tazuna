@@ -1060,7 +1060,7 @@ def answerAgrees (vs : List (Nat × Val)) (unmatched : Bool) : Bool :=
   match (SymState.vars 0).decode M L (v := pendingSvc) rfl prelude pendingShapes, natOf (M.vars 5), intOf (M.vars 6) with
   | some s, some to, some value =>
     let r := step prelude pendingSvc s (.answer to ⟨.int, value⟩)
-    if unmatched then r.outcome.summary == s!"fault answerUnmatched {to}" && r.state.pending.length == s.pending.length
+    if unmatched then r.outcome.summary == "fault answerUnmatched" && r.state.pending.length == s.pending.length
     else
       let one (n h : Nat) := brokenIn M [(.var n, .var h)]
       match one 9 8, one 13 12, r.outcome with

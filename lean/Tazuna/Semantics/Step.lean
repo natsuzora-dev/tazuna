@@ -82,9 +82,9 @@ inductive Fault where
   | ensures (name : String)
   /-- The step took more internal steps than `bounds.cascade`. -/
   | cascadeLimit
-  /-- An answer names no pending request, or not with the types that request has. `to` is the name the input gave
-  the request. -/
-  | answerUnmatched (to : String)
+  /-- An answer names no pending request, or not with the types that request has. The answer's in line names the
+  request, so the fault carries no id: wire ids are names, compared only up to renaming. -/
+  | answerUnmatched
   /-- An effect asked for what its target does not accept: a command or query of the service's own that was Invalid
   (the rules broken, as Invalid names them) or that the service does not list (`service`), or an external's command
   or query that no external of the spec lists with these types (`declared`). -/
@@ -105,7 +105,7 @@ def Outcome.summary : Outcome → String
   | .fault (.invariant n) => s!"fault invariant {n}"
   | .fault (.ensures n) => s!"fault ensures {n}"
   | .fault .cascadeLimit => "fault cascadeLimit"
-  | .fault (.answerUnmatched n) => s!"fault answerUnmatched {n}"
+  | .fault .answerUnmatched => "fault answerUnmatched"
   | .fault (.invalidEffect n rs) => s!"fault invalidEffect {n} {rs}"
 
 /-- What one step yields: the next state, the outcome, every event it applied in order, and the out lines. -/
@@ -338,9 +338,9 @@ def step (T : List TypeDecl) (v : ServiceV) (s : State v) : Input v → Result v
     | [] => ⟨s, .answered ⟨q.output, q.resolve.fn (ctx s s.records caller input, ())⟩, [], []⟩
   | .answer to ⟨t, value⟩ =>
     match s.pending.find? (·.id == to) with
-    | none => ⟨s, .fault (.answerUnmatched (toString to)), [], []⟩
+    | none => ⟨s, .fault .answerUnmatched, [], []⟩
     | some p => match Ty.same t (answerTy p.request.output p.request.rejection) with
-      | none => ⟨s, .fault (.answerUnmatched (toString to)), [], []⟩
+      | none => ⟨s, .fault .answerUnmatched, [], []⟩
       | some ⟨h⟩ => match broken (p.request.holds (h ▸ value)) with
         -- The external broke what its query ensures: the answer is refused and the request stays pending.
         | r :: rs => ⟨s, .invalid (r :: rs), [], []⟩

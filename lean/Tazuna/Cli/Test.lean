@@ -12,8 +12,7 @@ open Tazuna.Ir Tazuna.Trace
 
 def faultFields : Fault → List (String × Json)
   | .invariant n | .ensures n => [("rule", Json.str n)]
-  | .cascadeLimit => []
-  | .answerUnmatched to => [("to", Json.str to)]
+  | .cascadeLimit | .answerUnmatched => []
   | .invalidEffect n rs => [("request", Json.str n), ("rules", Json.arr (rs.map Json.str).toArray)]
 
 def textLines (text : String) : List String := (text.splitOn "\n").filter (!·.isEmpty)

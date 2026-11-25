@@ -50,7 +50,7 @@ def Ir.Fault.kind : Ir.Fault → FaultKind
   | .invariant _ => .invariant
   | .ensures _ => .ensures
   | .cascadeLimit => .cascadeLimit
-  | .answerUnmatched _ => .answerUnmatched
+  | .answerUnmatched => .answerUnmatched
   | .invalidEffect .. => .invalidEffect
 
 def TestKind.all : List TestKind := [.passed, .changed, .written, .badStep]

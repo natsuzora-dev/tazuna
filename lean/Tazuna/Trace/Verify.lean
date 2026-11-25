@@ -204,11 +204,7 @@ def replay (lines : List (Nat × Line)) : Verdict := Id.run do
       | .ok (input, answerTo, ids) =>
         b := b.outside ids
         let r := step T v s input
-        if let .fault f := r.outcome then
-          -- The trace names requests by its own ids, so a fault names the answer's request as the trace does.
-          return .fault n (match f, l with
-            | .answerUnmatched _, .answer _ to _ => .answerUnmatched to
-            | f, _ => f)
+        if let .fault f := r.outcome then return .fault n f
         let es := expects v answerTo r
         let actual := window.map (·.2)
         match bagMatch (matchExpect T v r.state.now) es actual b with

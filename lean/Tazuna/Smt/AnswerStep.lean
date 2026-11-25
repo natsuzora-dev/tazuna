@@ -171,7 +171,7 @@ theorem answer_unmatched (s : State v) {shs : List (PendingShape v.event)} (to :
     {pending toT : Term} (hpend : PendingRel L shs (pending.denote M) s.pending)
     (hto : toT.denote M = .int (Int.ofNat to)) {u : Term} (henc : answerUnmatchedT L shs t pending toT = .ok u)
     (hu : Holds M u) :
-    step T v s (.answer to ⟨t, value⟩) = ⟨s, .fault (.answerUnmatched (toString to)), [], []⟩ := by
+    step T v s (.answer to ⟨t, value⟩) = ⟨s, .fault .answerUnmatched, [], []⟩ := by
   cases hf : s.pending.find? (·.id == to) with
   | none => simp only [step, hf]
   | some p =>
