@@ -9,7 +9,7 @@ renaming. -/
 
 namespace Tazuna.Ir
 
-variable {R : Ren}
+variable {R : PBij}
 
 section Lemmas
 
@@ -380,7 +380,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
 /-! The fundamental lemma. -/
 
 /-- Environments related by `R`. -/
-abbrev Ty.relsV (R : Ren) (ts : List Ty) : Ty.dens ts → Ty.dens ts → Prop := Ty.relsWith Dsl.val (Dsl.relV R) R ts
+abbrev Ty.relsV (R : PBij) (ts : List Ty) : Ty.dens ts → Ty.dens ts → Prop := Ty.relsWith Dsl.val (Dsl.relV R) R ts
 
 section Access
 

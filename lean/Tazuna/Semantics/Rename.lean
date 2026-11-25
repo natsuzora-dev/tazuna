@@ -67,10 +67,10 @@ end FreshId
 
 /-- Ids related by `R`: an id from outside to itself, and the id a step made from counter `c` and index `i` to the id
 made from the counter `R` gives `c` and the same index. -/
-def IdV.Rel (R : Ren) (a b : IdV) : Prop :=
-  (∃ s, a = .named s ∧ b = .named s) ∨ ∃ c c' i, R.ctr.rel c c' ∧ a = freshId c i ∧ b = freshId c' i
+def IdV.Rel (R : PBij) (a b : IdV) : Prop :=
+  (∃ s, a = .named s ∧ b = .named s) ∨ ∃ c c' i, R.rel c c' ∧ a = freshId c i ∧ b = freshId c' i
 
-theorem IdV.rel_inv {R : Ren} {a b : IdV} : IdV.Rel R a b ↔ IdV.Rel R.inv b a := by
+theorem IdV.rel_inv {R : PBij} {a b : IdV} : IdV.Rel R a b ↔ IdV.Rel R.inv b a := by
   constructor <;> rintro (⟨s, rfl, rfl⟩ | ⟨c, c', i, h, rfl, rfl⟩)
   · exact .inl ⟨s, rfl, rfl⟩
   · exact .inr ⟨c', c, i, h, rfl, rfl⟩
@@ -78,15 +78,15 @@ theorem IdV.rel_inv {R : Ren} {a b : IdV} : IdV.Rel R a b ↔ IdV.Rel R.inv b a 
   · exact .inr ⟨c', c, i, h, rfl, rfl⟩
 
 /-- Related ids are equal exactly when the ids they relate to are. -/
-theorem IdV.rel_eq {R : Ren} {a b a' b' : IdV} (h : IdV.Rel R a b) (h' : IdV.Rel R a' b') : a = a' ↔ b = b' := by
+theorem IdV.rel_eq {R : PBij} {a b a' b' : IdV} (h : IdV.Rel R a b) (h' : IdV.Rel R a' b') : a = a' ↔ b = b' := by
   rcases h with ⟨s, rfl, rfl⟩ | ⟨c, c', i, hc, rfl, rfl⟩ <;>
     rcases h' with ⟨s', rfl, rfl⟩ | ⟨d, d', j, hd, rfl, rfl⟩
   · simp
   · simp [freshId]
   · simp [freshId]
   · constructor
-    · intro e; obtain ⟨rfl, rfl⟩ := freshId_inj e; rw [R.ctr.func hc hd]
-    · intro e; obtain ⟨rfl, rfl⟩ := freshId_inj e; rw [R.ctr.inj hc hd]
+    · intro e; obtain ⟨rfl, rfl⟩ := freshId_inj e; rw [R.func hc hd]
+    · intro e; obtain ⟨rfl, rfl⟩ := freshId_inj e; rw [R.inj hc hd]
 
 /-- Lists related as multisets: item by item once the second is reordered. -/
 def Multi {α β : Type} (r : α → β → Prop) (xs : List α) (ys : List β) : Prop := ∃ zs, Forall2 r xs zs ∧ zs.Perm ys
@@ -182,7 +182,7 @@ where
 end Multi
 
 section Relation
-variable (D : Dsl → List Ty → Sem) (RD : (k : Dsl) → (a : List Ty) → (D k a).1 → (D k a).1 → Prop) (R : Ren)
+variable (D : Dsl → List Ty → Sem) (RD : (k : Dsl) → (a : List Ty) → (D k a).1 → (D k a).1 → Prop) (R : PBij)
 
 mutual
 /-- Values of type `t` that are the same up to the renaming `R`, with bags and tables as multisets and structure
@@ -213,15 +213,15 @@ end
 end Relation
 
 /-- What structure types relate by among data: a fresh-id source is a counter, which `R` renames. -/
-def Dsl.rel0 (R : Ren) : (k : Dsl) → (a : List Ty) → (Dsl.base k a).1 → (Dsl.base k a).1 → Prop
-  | .fresh, _, x, y => R.ctr.rel x y
+def Dsl.rel0 (R : PBij) : (k : Dsl) → (a : List Ty) → (Dsl.base k a).1 → (Dsl.base k a).1 → Prop
+  | .fresh, _, x, y => R.rel x y
   | _, _, _, _ => True
 
 /-- Data values related by `R`. -/
-abbrev Ty.rel0 (R : Ren) (t : Ty) : t.den0 → t.den0 → Prop := Ty.relWith Dsl.base (Dsl.rel0 R) R t
+abbrev Ty.rel0 (R : PBij) (t : Ty) : t.den0 → t.den0 → Prop := Ty.relWith Dsl.base (Dsl.rel0 R) R t
 
 section Inverse
-variable {D : Dsl → List Ty → Sem} {RD RD' : (k : Dsl) → (a : List Ty) → (D k a).1 → (D k a).1 → Prop} {R : Ren}
+variable {D : Dsl → List Ty → Sem} {RD RD' : (k : Dsl) → (a : List Ty) → (D k a).1 → (D k a).1 → Prop} {R : PBij}
 
 theorem forall2_swap_iff {α β : Type} {r : α → β → Prop} {r' : β → α → Prop} (h : ∀ a b, r a b ↔ r' b a) :
     {xs : List α} → {ys : List β} → (Forall2 r xs ys ↔ Forall2 r' ys xs)
@@ -265,7 +265,7 @@ end
 
 end Inverse
 
-theorem Dsl.rel0_inv {R : Ren} : ∀ k a x y, Dsl.rel0 R k a x y ↔ Dsl.rel0 R.inv k a y x
+theorem Dsl.rel0_inv {R : PBij} : ∀ k a x y, Dsl.rel0 R k a x y ↔ Dsl.rel0 R.inv k a y x
   | .fresh, _, _, _ => Iff.rfl
   | .spec, _, _, _ | .service, _, _, _ | .command, _, _, _ | .query, _, _, _ | .machine, _, _, _
   | .reaction, _, _, _ | .external, _, _, _ | .externalCommand, _, _, _ | .externalQuery, _, _, _
@@ -273,7 +273,7 @@ theorem Dsl.rel0_inv {R : Ren} : ∀ k a x y, Dsl.rel0 R k a x y ↔ Dsl.rel0 R.
   | .create, _, _, _ | .response, _, _, _ | .scenario, _, _, _ | .step, _, _, _ | .sender, _, _, _
   | .closure, _, _, _ | .effectClosure, _, _, _ => Iff.rfl
 
-theorem Ty.rel0_inv {R : Ren} {t : Ty} {x y : t.den0} : Ty.rel0 R t x y ↔ Ty.rel0 R.inv t y x :=
+theorem Ty.rel0_inv {R : PBij} {t : Ty} {x y : t.den0} : Ty.rel0 R t x y ↔ Ty.rel0 R.inv t y x :=
   Ty.relWith_inv Dsl.rel0_inv t x y
 
 /-! `==` on a comparable type is an equivalence: it is equality of a canonical term, which reads bags and tables in
@@ -491,7 +491,7 @@ end Deq
 
 mutual
 /-- `==` on related values of a comparable type gives the same answer. -/
-theorem Ty.rel0_deq {R : Ren} : (t : Ty) → t.comparable = true → {x y x' y' : t.den0} → Ty.rel0 R t x y →
+theorem Ty.rel0_deq {R : PBij} : (t : Ty) → t.comparable = true → {x y x' y' : t.den0} → Ty.rel0 R t x y →
     Ty.rel0 R t x' y' → t.deq0 x x' = t.deq0 y y'
   | .int, _, _, _, _, _, h, h' | .str, _, _, _, _, _, h, h' | .date, _, _, _, _, _, h, h' => by
     show (_ == _) = (_ == _)
@@ -516,12 +516,12 @@ theorem Ty.rel0_deq {R : Ren} : (t : Ty) → t.comparable = true → {x y x' y' 
   | .dsl k _, hc, x, y, x', y', h, h' => by
     cases k <;> simp [Ty.comparable] at hc
     revert x y x' y'
-    show ∀ x y x' y' : Nat, R.ctr.rel x y → R.ctr.rel x' y' → (x == x') = (y == y')
+    show ∀ x y x' y' : Nat, R.rel x y → R.rel x' y' → (x == x') = (y == y')
     intro x y x' y' h h'
     rw [Bool.eq_iff_iff, beq_iff_eq, beq_iff_eq]
-    exact ⟨fun e => R.ctr.func h (e ▸ h'), fun e => R.ctr.inj h (e ▸ h')⟩
+    exact ⟨fun e => R.func h (e ▸ h'), fun e => R.inj h (e ▸ h')⟩
   | .fn .., hc, _, _, _, _, _, _ => by simp [Ty.comparable] at hc
-theorem Ty.rels0_deq {R : Ren} : (ts : List Ty) → Ty.comparables ts = true → {x y x' y' : (Ty.semsWith Dsl.base ts).1} →
+theorem Ty.rels0_deq {R : PBij} : (ts : List Ty) → Ty.comparables ts = true → {x y x' y' : (Ty.semsWith Dsl.base ts).1} →
     Ty.relsWith Dsl.base (Dsl.rel0 R) R ts x y → Ty.relsWith Dsl.base (Dsl.rel0 R) R ts x' y' →
     (Ty.semsWith Dsl.base ts).2 x x' = (Ty.semsWith Dsl.base ts).2 y y'
   | [], _, _, _, _, _, _, _ => rfl
@@ -529,7 +529,7 @@ theorem Ty.rels0_deq {R : Ren} : (ts : List Ty) → Ty.comparables ts = true →
     simp only [Ty.comparables, Bool.and_eq_true] at hc
     show (Ty.deq0 t _ _ && _) = (Ty.deq0 t _ _ && _)
     rw [Ty.rel0_deq t hc.1 h1 h1', Ty.rels0_deq ts hc.2 h h']
-theorem Ty.relAlts0_deq {R : Ren} : (vs : List (List Ty)) → Ty.comparabless vs = true →
+theorem Ty.relAlts0_deq {R : PBij} : (vs : List (List Ty)) → Ty.comparabless vs = true →
     {x y x' y' : (Ty.semAltsWith Dsl.base vs).1} →
     Ty.relAltsWith Dsl.base (Dsl.rel0 R) R vs x y → Ty.relAltsWith Dsl.base (Dsl.rel0 R) R vs x' y' →
     (Ty.semAltsWith Dsl.base vs).2 x x' = (Ty.semAltsWith Dsl.base vs).2 y y'
@@ -550,16 +550,16 @@ the same thing with the same types and their values and kept functions relate. T
 between internal steps. -/
 
 /-- Kept functions whose meanings relate. -/
-def Fun.Rel (R : Ren) {t : Ty} (f g : Fun t) : Prop := Ty.rel0 R t f.fn g.fn
+def Fun.Rel (R : PBij) {t : Ty} (f g : Fun t) : Prop := Ty.rel0 R t f.fn g.fn
 
-inductive WireVal.Rel (R : Ren) : WireVal → WireVal → Prop
+inductive WireVal.Rel (R : PBij) : WireVal → WireVal → Prop
   | mk {t : Ty} {x y : t.den0} : Ty.rel0 R t x y → WireVal.Rel R ⟨t, x⟩ ⟨t, y⟩
 
-inductive Sender.Rel (R : Ren) : Sender → Sender → Prop
+inductive Sender.Rel (R : PBij) : Sender → Sender → Prop
   | machine (name : String) {k k' : WireVal} : WireVal.Rel R k k' → Sender.Rel R (.machine name k) (.machine name k')
   | reaction (name : String) : Sender.Rel R (.reaction name) (.reaction name)
 
-inductive RequestV.Rel (R : Ren) {e : Ty} : RequestV e → RequestV e → Prop
+inductive RequestV.Rel (R : PBij) {e : Ty} : RequestV e → RequestV e → Prop
   | mk (name : String) (input output : Ty) (rejection : Option Ty) {value value' : input.den0}
       {holds holds' : Option (Fun (Ty.fn [input, answerTy output rejection] Ty.rules))}
       {onAnswer onAnswer' : Fun (Ty.fn [answerTy output rejection] (.list e))} :
@@ -567,7 +567,7 @@ inductive RequestV.Rel (R : Ren) {e : Ty} : RequestV e → RequestV e → Prop
       RequestV.Rel R ⟨name, input, output, rejection, value, holds, onAnswer⟩
         ⟨name, input, output, rejection, value', holds', onAnswer'⟩
 
-inductive EffectV.Rel (R : Ren) {e : Ty} : EffectV e → EffectV e → Prop
+inductive EffectV.Rel (R : PBij) {e : Ty} : EffectV e → EffectV e → Prop
   | request {x y : RequestV e} : RequestV.Rel R x y → EffectV.Rel R (.request x) (.request y)
   | command (name : String) (c input rejection : Ty) {caller caller' : c.den0} {value value' : input.den0}
       {onAnswer onAnswer' : Fun (Ty.fn [Ty.result Ty.nil rejection] (.list e))} :
@@ -582,8 +582,8 @@ inductive EffectV.Rel (R : Ren) {e : Ty} : EffectV e → EffectV e → Prop
 /-- What structure values relate by. A spec, a service and the other values a spec is built from hold no name a step
 makes, so they relate trivially; a command, query, machine or reaction is read only by its name, so it relates by
 its name. -/
-def Dsl.relV (R : Ren) : (k : Dsl) → (a : List Ty) → (Dsl.val k a).1 → (Dsl.val k a).1 → Prop
-  | .fresh, _, x, y => R.ctr.rel x y
+def Dsl.relV (R : PBij) : (k : Dsl) → (a : List Ty) → (Dsl.val k a).1 → (Dsl.val k a).1 → Prop
+  | .fresh, _, x, y => R.rel x y
   | .effect, [_], x, y => EffectV.Rel R x y
   | .closure, [_], f, g => Fun.Rel R f g
   | .sender, _, x, y => Sender.Rel R x y
@@ -597,7 +597,7 @@ def Dsl.relV (R : Ren) : (k : Dsl) → (a : List Ty) → (Dsl.val k a).1 → (Ds
   | _, _, _, _ => True
 
 /-- Values related by `R`, at the level expressions evaluate at. -/
-abbrev Ty.relV (R : Ren) (t : Ty) : t.den → t.den → Prop := Ty.relWith Dsl.val (Dsl.relV R) R t
+abbrev Ty.relV (R : PBij) (t : Ty) : t.den → t.den → Prop := Ty.relWith Dsl.val (Dsl.relV R) R t
 
 section Up
 variable {α β : Type} {r : α → α → Prop}
@@ -633,7 +633,7 @@ theorem Multi.congr {α β : Type} {r r' : α → β → Prop} (h : ∀ a b, r a
 
 mutual
 /-- Data relates alike at both levels. -/
-theorem Ty.relV_up {R : Ren} : (t : Ty) → (h : t.isData = true) → (x y : t.den0) →
+theorem Ty.relV_up {R : PBij} : (t : Ty) → (h : t.isData = true) → (x y : t.den0) →
     (Ty.relV R t (Ty.up t h x) (Ty.up t h y) ↔ Ty.rel0 R t x y)
   | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ | .id, _, _, _ | .param _, _, _, _ => Iff.rfl
   | .list t, h, xs, ys => by
@@ -668,7 +668,7 @@ theorem Ty.relV_up {R : Ren} : (t : Ty) → (h : t.isData = true) → (x y : t.d
       erw [Ty.up_fn ps r h hps hr, Ty.up_fn ps r h hps hr]
       exact (Ty.relV_up r hr _ _).2 (H _ _ ((Ty.relsV_up ps hps _ _).1 hxy))
   | .dsl k _, h, _, _ => by cases k <;> simp [Ty.isData] at h; exact Iff.rfl
-theorem Ty.relsV_up {R : Ren} : (ts : List Ty) → (h : (Ty.tuple ts).isData = true) → (x y : (Ty.tuple ts).den0) →
+theorem Ty.relsV_up {R : PBij} : (ts : List Ty) → (h : (Ty.tuple ts).isData = true) → (x y : (Ty.tuple ts).den0) →
     (Ty.relsWith Dsl.val (Dsl.relV R) R ts (Ty.up (.tuple ts) h x) (Ty.up (.tuple ts) h y) ↔
       Ty.relsWith Dsl.base (Dsl.rel0 R) R ts x y)
   | [], _, _, _ => Iff.rfl
@@ -677,7 +677,7 @@ theorem Ty.relsV_up {R : Ren} : (ts : List Ty) → (h : (Ty.tuple ts).isData = t
     have hts : (Ty.tuple ts).isData = true := (Bool.and_eq_true _ _ ▸ h).2
     rw [Ty.up_tuple t ts h ht hts x, Ty.up_tuple t ts h ht hts y]
     exact and_congr (Ty.relV_up t ht x.1 y.1) (Ty.relsV_up ts hts x.2 y.2)
-theorem Ty.relAltsV_up {R : Ren} (k : Nat) (a : List Ty) : (vs : List (List Ty)) →
+theorem Ty.relAltsV_up {R : PBij} (k : Nat) (a : List Ty) : (vs : List (List Ty)) →
     (h : (Ty.adt k a vs).isData = true) → (x y : (Ty.adt k a vs).den0) →
     (Ty.relAltsWith Dsl.val (Dsl.relV R) R vs (Ty.up _ h x) (Ty.up _ h y) ↔
       Ty.relAltsWith Dsl.base (Dsl.rel0 R) R vs x y)
