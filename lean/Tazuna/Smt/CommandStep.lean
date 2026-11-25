@@ -83,10 +83,8 @@ fits at the input and, where its rules hold, `decide` fits at the context and wh
 Wherever it holds, the outcome terms decide the step's outcome: an unlisted caller or a broken `accepts` rule is
 Invalid; a rejection is the rejection the terms denote; a broken `ensures` rule is the step's fault; otherwise the
 step ends as its end terms say (`Finished`). The fresh counter advances in every case. -/
-theorem command_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx : ∀ x ∈ v.reactions, x.Reach P)
+theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
-    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
     (s : State v) (hsinv : Step.Inv P s)
     (i : Fin v.commands.length) (caller : v.caller.den0) (input : (v.commands.get i).input.den0) {cc : CommandCode (v.commands.get i)} {cx : Term}
     (hcc : CommandCode.of L _ = .ok (cc, cx)) (hccx : Holds M cx)
@@ -213,13 +211,13 @@ theorem command_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (h
           let sA := (Step.reactAll T s1 events).1
           have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
           have e3 : Holds M c3 ↔ eventsFit L.count T s1 events :=
-            events_exact (fun m hm => (hor m hm).1) happ hca _ sv hS hsw events hh s1 hnow hrec hms h12
+            events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv hS hsw events hh s1 hnow hrec hms h12
           have hdone : Holds M c3 → SettleDone M L T shs { state := s1 } ⟨.bool false, oe, .add fresh (.int 1)⟩
               (Step.applyEvents T { state := s1 } events) := fun hc3 =>
-            events_done (T := T) hP hvx hinv1.machinesReach hshs hor happ' senv
+            events_done (T := T) chk hshs happ' senv
               { state := s1 } rfl hnow hS hsw hh hrec hms hnid (by simp [Term.denote, hfresh, s1, Val.toInt]) h12 hc3
           have hrf : Holds M c3 → RelV L v.records (Ty.up _ v.records_data sA.records) (oe.records.denote M) := fun hc3 =>
-            (events_rel hP hvx hinv1.machinesReach hshs hor happ' senv _ sv hS hsw
+            (events_rel chk hshs happ' senv _ sv hS hsw
               events hh s1 hnow hrec hms hnid rfl h12 hc3).1
           have e45 : Holds M c3 → (Holds M c4 ↔ x.ensures.appFits L.count (ctx, sA.records, ())) ∧
               (Holds M c4 → (Holds M (.ite (allT (ensures.map (·.2))) cf tt) ↔
@@ -248,7 +246,7 @@ theorem command_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (h
                 simp [hb]; simpa using this
             rw [holds_ite_tt hallE, decide_eq_true_iff]
             refine imp_congr_right fun _ => ?_
-            exact (finish_encode hP hvx hinv1.machinesReach hshs hor hqout happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hnow hpend (hdone hc3) (applyEvents_ok hvx _ rfl hinv1 events)
+            exact (finish_encode chk hshs happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hnow hpend (hdone hc3) (applyEvents_ok chk.reactions _ rfl hinv1 events)
               h16 hcfx).1
           rw [holds_andT, holds_andT]
           constructor
@@ -341,7 +339,7 @@ theorem command_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (h
         erw [Ty.up_list _ _ v.event_data] at hh
         let s1 : State v := { s with fresh := s.fresh + 1 }
         have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
-        have hdone := events_done (T := T) hP hvx hinv1.machinesReach hshs hor happ senv { state := s1 } rfl hnow hS hsw hh hrec hms hnid (fresh := .add fresh (.int 1))
+        have hdone := events_done (T := T) chk hshs happ senv { state := s1 } rfl hnow hS hsw hh hrec hms hnid (fresh := .add fresh (.int 1))
           (by simp [Term.denote, hfresh, s1, Val.toInt]) h12 hc3
         have hd2 := hdone
         obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, e1, -, -, -, e5, -, -⟩ := hd2
@@ -364,8 +362,8 @@ theorem command_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (h
             have := hc5; simp only [Holds, Term.denote, hallE, Val.toBool, ite_true] at this
             exact this
           rw [happly] at hdone
-          exact (finish_encode hP hvx hinv1.machinesReach hshs hor hqout happ0 hca hinv0 hci senv s1 .accepted { state := s1 } rfl hinv1 hnow hpend hdone
-            (fun a1 h => applyEvents_ok hvx _ rfl hinv1 events a1 (happly.trans h)) h16 hcfx).2 hcf
+          exact (finish_encode chk hshs happ0 hca hinv0 hci senv s1 .accepted { state := s1 } rfl hinv1 hnow hpend hdone
+            (fun a1 h => applyEvents_ok chk.reactions _ rfl hinv1 events a1 (happly.trans h)) h16 hcfx).2 hcf
 end
 
 end Tazuna.Smt

@@ -350,9 +350,8 @@ theorem fault_query (name : String) (o : OwnQueryOut) :
 /-- T2 for one own kind's internal step, for an own effect of the kind: the fault term holds exactly when the
 outcome terms name a fault, which is `Step.runOwn`'s; otherwise the internal step runs to its end with what the step
 terms denote (`InternalDone`), at the fresh counter the fresh term denotes. -/
-theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
+theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     (a : Step.Acc v) (hinv : Step.Inv P a.state)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
@@ -428,7 +427,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
-    obtain ⟨e, hA⟩ := Fun.eq_siteFn hP ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
+    obtain ⟨e, hA⟩ := Fun.eq_siteFn chk.sites ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
     dsimp only at e hA
     subst e
     obtain ⟨d', n', vals', hd', rfl, hrds⟩ := hva
@@ -446,7 +445,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     have hsi : RelV L x.input (Ty.up _ hd.input value)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have H := ownCommand_rel hP hvx hshs hor a hinv x caller value hcc hcx happ hca s oenv hσ' hks' senv
+    have H := ownCommand_rel chk hshs a hinv x caller value hcc hcx happ hca s oenv hσ' hks' senv
       hrec hnow hfresh hn hq hms hsc hsi hoe hc
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
@@ -531,7 +530,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
-    obtain ⟨e, hA⟩ := Fun.eq_siteFn hP ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
+    obtain ⟨e, hA⟩ := Fun.eq_siteFn chk.sites ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
     dsimp only at e hA
     subst e
     obtain ⟨d', n', vals', hd', rfl, hrds⟩ := hva
@@ -549,12 +548,12 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     have hsi : RelV L x.input (Ty.up _ hd.input value)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have hvm : ∀ m ∈ v.machines, m.Reach P := by
+    have chk.machines : ∀ m ∈ v.machines, m.Reach P := by
       intro m hm
       rw [← hinv.machinesOf] at hm
       obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 hm
       exact hinv.machines sm hsm
-    have H := ownQuery_rel hP hvx hvm hshs hor a x caller value hqc hcx happ hca s oenv hσ' hks' senv
+    have H := ownQuery_rel chk hshs a x caller value hqc hcx happ hca s oenv hσ' hks' senv
       hrec hnow hfresh hn hq hms hsc hsi hoe hc
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
@@ -734,9 +733,8 @@ theorem find_hit {α : Type} {k : Nat} : (l : List (Term × α)) → {y : Term �
 
 /-- T2 for an own effect's internal step: the fault term holds exactly when the model's kind names a fault, which is
 `Step.runOwn`'s; otherwise the internal step runs to its end with what the merged terms denote. -/
-theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
+theorem ownStep_rel {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     (a : Step.Acc v) (hinv : Step.Inv P a.state)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
@@ -795,7 +793,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     have := (holds_ite _ _ _).1 hcall
     simpa [htk, toBool_bool] using this
   have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-  obtain ⟨hfault, hrun⟩ := ownKind_rel hP hvx hshs hor a hinv happ hca senv hrec hnow hfresh hn hq
+  obtain ⟨hfault, hrun⟩ := ownKind_rel chk hshs a hinv happ hca senv hrec hnow hfresh hn hq
     hms x hreach heff' hkey hkind hck hcxk
   have hwid : ∀ y ∈ ks.map (fun k => (k.1, k.2.2.1)),
       (∀ sl ∈ y.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ y.2.done.owns, sl.2.length = 2 := by
@@ -837,10 +835,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
 
 /-- The condition of one own kind's internal step is exact: for an own effect of the kind, it holds exactly when the
 internal step `Step.runOwn` runs fits (`ownFits`). -/
-theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
-    (hvm : ∀ m ∈ v.machines, m.Reach P) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true) (a : Step.Acc v)
-    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
+theorem ownKind_exact {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (a : Step.Acc v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
@@ -908,7 +903,7 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
-    obtain ⟨e, hA⟩ := Fun.eq_siteFn hP ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
+    obtain ⟨e, hA⟩ := Fun.eq_siteFn chk.sites ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
     dsimp only at e hA
     subst e
     obtain ⟨d', n', vals', hd', rfl, hrds⟩ := hva
@@ -928,7 +923,7 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       rw [hsel]; exact relD_up _ _ _ _ hvi
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
-    exact ownCommand_exact hP hvx hvm hshs hor a x caller value hcc hcx happ hca s oenv hσ'
+    exact ownCommand_exact chk hshs a x caller value hcc hcx happ hca s oenv hσ'
       (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe
   | query e name c0 i jj a0 =>
     cases x with
@@ -978,7 +973,7 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
-    obtain ⟨e, hA⟩ := Fun.eq_siteFn hP ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
+    obtain ⟨e, hA⟩ := Fun.eq_siteFn chk.sites ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
     dsimp only at e hA
     subst e
     obtain ⟨d', n', vals', hd', rfl, hrds⟩ := hva
@@ -998,15 +993,12 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       rw [hsel]; exact relD_up _ _ _ _ hvi
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
-    exact ownQuery_exact a (fun m hm => (hor m hm).1) x caller value hcc hcx happ hca s oenv hσ'
-      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) (hqout x (ownQuery_mem hox)) hks' hrec hnow hfresh hms hsc hsi hoe
+    exact ownQuery_exact a (fun m hm => (chk.keys m hm).1) x caller value hcc hcx happ hca s oenv hσ'
+      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) (chk.outputs x (ownQuery_mem hox)) hks' hrec hnow hfresh hms hsc hsi hoe
 
 /-- The condition of an own effect's internal step is exact: it holds exactly when the internal step `Step.runOwn`
 runs fits (`ownFits`). -/
-theorem ownStep_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
-    (hvm : ∀ m ∈ v.machines, m.Reach P) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true) (a : Step.Acc v)
-    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
+theorem ownStep_exact {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (a : Step.Acc v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
@@ -1054,7 +1046,7 @@ theorem ownStep_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     · subst h; simp
     · simp [h, Ne.symm h]
   have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-  rw [← ownKind_exact hP hvx hvm hshs hor a hqout happ hca senv hrec hnow hfresh hn hq hms x
+  rw [← ownKind_exact chk hshs a happ hca senv hrec hnow hfresh hn hq hms x
     hreach heff' hkey hkind hcxk, holds_allT]
   have htk := htests k _ hkk
   simp only [decide_true] at htk

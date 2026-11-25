@@ -301,10 +301,8 @@ variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV}
 answer names, the condition holds exactly when what the step applies for that request fits (`answerFits`); wherever
 it holds, a broken `ensures` rule makes the answer Invalid, and otherwise the request leaves the pending table, the
 events of `on_answer` run through the events loop and the step ends as its end terms say (`Finished`). -/
-theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
+theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
-    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
     (s : State v) (hsinv : Step.Inv P s)
     {k : Nat} {sh : PendingShape v.event} (hk : shs[k]? = some sh) (j : Nat)
     (to : Nat) (value : (answerTy sh.output sh.rejection).den0)
@@ -537,7 +535,7 @@ theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       refine ⟨tbl', hrel, ?_⟩
       rw [← hlist]
       exact filter_pendingList (sh0 :: rest) to tbl.1
-    have hvm : ∀ m ∈ v.machines, m.Reach P := by
+    have chk.machines : ∀ m ∈ v.machines, m.Reach P := by
       intro m hm
       rw [← hsinv.machinesOf] at hm
       obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 hm
@@ -582,12 +580,12 @@ theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       let sA := (Step.reactAll T s' evL).1
       have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
       have e4 : Holds M c4 ↔ eventsFit L.count T s' evL :=
-        events_exact (fun m hm => (hor m hm).1) happ hca _ svl hSl hswl _ hhl s' hnow hrec hms h12
+        events_exact (fun m hm => (chk.keys m hm).1) happ hca _ svl hSl hswl _ hhl s' hnow hrec hms h12
       have hinv' : Step.Inv P s' := hsinv.filterPending _
       have ef : Holds M c4 → (Holds M cf ↔ finishFits L.count T (sh0 :: rest) (Step.applyEvents T { state := s' } evL)) :=
-        fun hc4 => (finish_encode hP hvx hvm hshs hor hqout happ hca hinv hci senv s .accepted
-          { state := s' } rfl hinv' hnow hrem (events_done (T := T) hP hvx hvm hshs hor happ' senv
-            { state := s' } rfl hnow hSl hswl hhl hrec hms hnid hfresh h12 hc4) (applyEvents_ok hvx _ rfl hinv' _) h12'
+        fun hc4 => (finish_encode chk hshs happ hca hinv hci senv s .accepted
+          { state := s' } rfl hinv' hnow hrem (events_done (T := T) chk hshs happ' senv
+            { state := s' } rfl hnow hSl hswl hhl hrec hms hnid hfresh h12 hc4) (applyEvents_ok chk.reactions _ rfl hinv' _) h12'
           hcfx).1
       constructor
       · rintro ⟨hc4, hcf⟩
@@ -798,10 +796,10 @@ theorem answer_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     erw [Ty.up_list _ _ v.event_data] at hhl
     let s' : State v := { s with pending := s.pending.filter (·.id != to) }
     have hinv' : Step.Inv P s' := hsinv.filterPending _
-    have hdone := events_done (T := T) hP hvx hinv'.machinesReach hshs hor happ senv
+    have hdone := events_done (T := T) chk hshs happ senv
       { state := s' } rfl hnow hSl hswl hhl hrec hms hnid hfresh h12 hc4
-    exact (finish_encode hP hvx hinv'.machinesReach hshs hor hqout happ0 hca hinv0 hci senv s
-      .accepted { state := s' } rfl hinv' hnow hrem hdone (applyEvents_ok hvx _ rfl hinv' _) h12' hcfx).2 hcf
+    exact (finish_encode chk hshs happ0 hca hinv0 hci senv s
+      .accepted { state := s' } rfl hinv' hnow hrem hdone (applyEvents_ok chk.reactions _ rfl hinv' _) h12' hcfx).2 hcf
 
 end
 

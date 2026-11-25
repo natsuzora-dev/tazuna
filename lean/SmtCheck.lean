@@ -267,9 +267,8 @@ def noPending (v : ServiceV) : Ty := pendingTable ([] : List (PendingShape v.eve
 def stateAt (k : Nat) : SymState := { SymState.vars 0 with pending := .var k }
 
 /-- A step's terms through `encodeStep`, the encoding `step_encode` proves. -/
-def stepOf (L : Layout) (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (S : SymState)
-    (inp : SymInput v) : Except String EncodedStep :=
-  (do encodeStep L prelude P v shs (← StepEnv.of L shs) S inp).mapError fun r => s!"no encoding: {repr r}"
+def stepOf (L : Layout) (P : List AnySite) (v : ServiceV) (S : SymState) (inp : SymInput v) : Except String EncodedStep :=
+  (do encodeStep L prelude P v (← StepEnv.of L (shapes v P)) S inp).mapError fun r => s!"no encoding: {repr r}"
 
 def acceptsE : E (.fn [.int] Ty.rules) :=
   .lam (.list (.cons (.tuple (.cons (.str "positive") (.cons (.bin .gt (.var .here) (.int 0)) .nil))) .nil))
@@ -299,7 +298,7 @@ terms (caller listed, the rule's holds and name, the output), v10 the pending ta
 def queryScript (goal : List Term) : Except String (Script × QueryOut) := do
   let L := queryLayout
   let S := stateAt 10
-  let t ← stepOf L [] querySvc [] S (.query ⟨0, by decide⟩ (.var 4) (.var 5))
+  let t ← stepOf L [] querySvc S (.query ⟨0, by decide⟩ (.var 4) (.var 5))
   let .query o := t.out | throw "not a query's terms"
   let some wf := S.wf L (v := querySvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -408,9 +407,9 @@ def eventLayout : Layout :=
 def eventI : Fin eventSvc.subscribes.length := ⟨0, by decide⟩
 
 /-- An event step's terms through `encodeStep`. -/
-def eventTerms (L : Layout) (P : List AnySite) (v : ServiceV) (i : Fin v.subscribes.length)
-    (shs : List (PendingShape v.event)) (S : SymState) (value : Term) : Except String (EventOut × EncodedStep) := do
-  let t ← stepOf L P v shs S (.event i value)
+def eventTerms (L : Layout) (P : List AnySite) (v : ServiceV) (i : Fin v.subscribes.length) (S : SymState)
+    (value : Term) : Except String (EventOut × EncodedStep) := do
+  let t ← stepOf L P v S (.event i value)
   let .event o := t.out | throw "not an event's terms"
   pure (o, t)
 
@@ -419,7 +418,7 @@ the pending table. -/
 def eventScript (goal : List Term) : Except String Script := do
   let L := eventLayout
   let S := stateAt 9
-  let (o, t) ← eventTerms L [] eventSvc eventI [] S (.var 4)
+  let (o, t) ← eventTerms L [] eventSvc eventI S (.var 4)
   let some wf := S.wf L (v := eventSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some esrt := L.srt? evT | throw "no event sort"
@@ -514,7 +513,7 @@ def evMScript (goal : List InstCheck → List Term) : Except String (Script × L
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
   let shs : List (PendingShape evMSvc.event) := []
-  let (o, t) ← eventTerms L [] evMSvc evMI shs S (.var 6)
+  let (o, t) ← eventTerms L [] evMSvc evMI S (.var 6)
   let d := o.finish.settle.terms.done
   let checks := o.finish.checks
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
@@ -599,7 +598,7 @@ def clockScript (goal : List Term) : Except String Script := do
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let shs : List (PendingShape eventSvc.event) := []
   let S := stateAt 9
-  let t ← stepOf L [] eventSvc shs S (.clock (.var 4))
+  let t ← stepOf L [] eventSvc S (.clock (.var 4))
   let .clock o := t.out | throw "not a clock line's terms"
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := eventSvc) shs | throw "no well-formedness"
@@ -690,7 +689,7 @@ after, v15 and v16 the invariant, v17 the pending table. -/
 def commandScript (goal : List Term) : Except String Script := do
   let L := commandLayout
   let S := stateAt 17
-  let t ← stepOf L [] commandSvc [] S (.command ⟨0, by decide⟩ (.var 4) (.var 5))
+  let t ← stepOf L [] commandSvc S (.command ⟨0, by decide⟩ (.var 4) (.var 5))
   let .command o := t.out | throw "not a command's terms"
   let some wf := S.wf L (v := commandSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -1000,7 +999,7 @@ the `ensures` rule, v10 the events, v11 the records after, v12 and v13 the invar
 def answerScript (shift : Int) (goal : List Term) : Except String Script := do
   let L := pendingLayout
   let S := SymState.vars 0
-  let t ← stepOf L [] pendingSvc pendingShapes S (.answer 1 0 (.var 5) (.add (.var 6) (.int shift)))
+  let t ← stepOf L pendingSites pendingSvc S (.answer 1 0 (.var 5) (.add (.var 6) (.int shift)))
   let .answer o := t.out | throw "not an answer's terms"
   let some wf := S.wf L (v := pendingSvc) pendingShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -1019,7 +1018,7 @@ def answerScript (shift : Int) (goal : List Term) : Except String Script := do
 /-- The script whose goal is that no slot holds a request of the answer's type that the wire id names. -/
 def unmatchedScript : Except String Script := do
   let L := pendingLayout
-  let t ← stepOf L [] pendingSvc pendingShapes (SymState.vars 0) (.unmatched .int (.var 5) (.var 6))
+  let t ← stepOf L pendingSites pendingSvc (SymState.vars 0) (.unmatched .int (.var 5) (.var 6))
   let .unmatched u := t.out | throw "not an unmatched answer's terms"
   let some wf := (SymState.vars 0).wf L (v := pendingSvc) pendingShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -1120,7 +1119,7 @@ def boundScript (atMostB : Int) (withLimits : Bool) (goal : List Term) : Except 
   let L := boundLayout
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := stateAt 7
-  let (o, t) ← eventTerms L [] boundSvc boundI [] S (.var 4)
+  let (o, t) ← eventTerms L [] boundSvc boundI S (.var 4)
   let (pre, cpre) ← enc (createsT L S.records (createsB atMostB))
   let (reached, creached) ← enc (boundReachedT L (createsB atMostB) t.cond o.finish.settle.terms.done.records)
   let some wf := S.wf L (v := boundSvc) [] | throw "no well-formedness"
@@ -1792,7 +1791,7 @@ def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : 
   let L := writeLayoutOf m keys slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let (o, t) ← eventTerms L writeSites v ⟨0, by simp [v, writeSvcOf]⟩ shs S (.var 6)
+  let (o, t) ← eventTerms L writeSites v ⟨0, by simp [v, writeSvcOf]⟩ S (.var 6)
   let d := o.finish.settle.terms.done
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := v) shs | throw "no well-formedness"
@@ -1941,7 +1940,7 @@ def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List S
   let L := fanLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let (o, t) ← eventTerms L writeSites fanSvc fanI fanShapes S (.var 6)
+  let (o, t) ← eventTerms L writeSites fanSvc fanI S (.var 6)
   let below ← enc (pendingBelowT L fanShapes S.pending S.nextId)
   let some wf := S.wf L (v := fanSvc) fanShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -2031,7 +2030,7 @@ def clockFireScript (cascade : Int) (slots : Nat) (goal : List Term) : Except St
   let L := writeLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let t ← stepOf L writeSites v (clockShapes cascade) S (.clock (.var 6))
+  let t ← stepOf L writeSites v S (.clock (.var 6))
   let .clock o := t.out | throw "not a clock line's terms"
   let below ← enc (pendingBelowT L (clockShapes cascade) S.pending S.nextId)
   let some wf := S.wf L (v := v) (clockShapes cascade) | throw "no well-formedness"
@@ -2262,7 +2261,7 @@ def twiceScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Li
   let L := twiceLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let t ← stepOf L writeSites twiceSvc twiceShapes S (.command ⟨0, by decide⟩ (.var 6) (.var 7))
+  let t ← stepOf L writeSites twiceSvc S (.command ⟨0, by decide⟩ (.var 6) (.var 7))
   let .command o := t.out | throw "not a command's terms"
   let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
   let some wf := S.wf L (v := twiceSvc) twiceShapes | throw "no well-formedness"
@@ -2346,7 +2345,7 @@ def answerMScriptOf (slots : Nat) (goal : List Term) : Except String (Script × 
   let L := answerMLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let t ← stepOf L writeSites writeSvc writeShapes S (.answer 0 0 (.int 2) (.var 6))
+  let t ← stepOf L writeSites writeSvc S (.answer 0 0 (.int 2) (.var 6))
   let .answer o := t.out | throw "not an answer's terms"
   let below ← enc (pendingBelowT L writeShapes S.pending S.nextId)
   let some wf := S.wf L (v := writeSvc) writeShapes | throw "no well-formedness"
@@ -3048,7 +3047,7 @@ def cascEventTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except S
   let L := cascLayout cascade slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let (o, t) ← eventTerms L cascSites v ⟨0, by simp [v, cascSvc, writeSvc, writeSvcOf]⟩ shs S (.var 6)
+  let (o, t) ← eventTerms L cascSites v ⟨0, by simp [v, cascSvc, writeSvc, writeSvcOf]⟩ S (.var 6)
   let fo := o.finish
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := v) shs | throw "no well-formedness"
@@ -3167,7 +3166,7 @@ def tickClockTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except S
   let L := tickLayout cascade slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0 1
-  let t ← stepOf L cascSites v shs S (.clock (.var 6))
+  let t ← stepOf L cascSites v S (.clock (.var 6))
   let .clock o := t.out | throw "not a clock line's terms"
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
   let some wf := S.wf L (v := v) shs | throw "no well-formedness"

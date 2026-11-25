@@ -1,3 +1,4 @@
+import Tazuna.Smt.Checked
 import Tazuna.Smt.Reactions
 import Tazuna.Smt.EventMachines
 import Tazuna.Smt.Admit
@@ -344,9 +345,7 @@ theorem one_item {ys : List Term} {z : Val} (h : Term.denotes M ys = [z]) : ∃ 
 after every event's reaction in turn, the next id term the id after the requests they start, the pending slots hold,
 where flagged, those requests at the ids from `n0`, the queue place term the place after the own commands and queries
 they start, and the own slots hold those at the places from `q0`. -/
-theorem events_rel {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx : ∀ x ∈ v.reactions, x.Reach P)
-    (hvm : ∀ m ∈ v.machines, m.Reach P) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
+theorem events_rel {P : List AnySite} {v : ServiceV} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ v.apply.ht v.apply.fn) apply)
     (senv : StepEnv L shs) {now : Term} :
     (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 1) →
@@ -410,7 +409,7 @@ theorem events_rel {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
         (by simpa using hms)
       have hn' : (Term.share (.ite f nR n)).denote M = .int n0 := by simpa [Term.denote, hf, Val.toBool] using hn
       have hq' : (Term.share (.ite f qR q)).denote M = .int q0 := by simpa [Term.denote, hf, Val.toBool] using hq
-      obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel hP hvx hvm hshs hor happ senv S sv hS hw' evs
+      obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel chk hshs happ senv S sv hS hw' evs
         (by simpa [Holds2, occupied] using hev) s hnow hrec' hms' hn' hq' h8 hc2
       refine ⟨r1, r2, r3, ?_, r5, ?_⟩
       · have := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hf hwid n0) (by simpa using r4)
@@ -434,20 +433,20 @@ theorem events_rel {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
         have hrt : RelV L v.records (Ty.up _ v.records_data recs') ((Term.share rt).denote M) := by
           rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
         have hrel := machines_event (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
-          (fun m hm => (hor m hm).1) h5 hcm
+          (fun m hm => (chk.keys m hm).1) h5 hcm
         have hstarts := machines_starts (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
-          hor h5 hcm
+          chk.keys h5 hcm
         have hreach : ∀ effs ∈ s.machines.map (fun sm => (Step.machineStep T recs' s.now ev sm).2),
             ∀ x ∈ effs, x.2.Reach P := by
           intro effs he x hx
           obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 he
           exact (Step.machineStep_reach T recs' s.now ev sm
-            (hvm _ (machinesRel_mem v.machines xs s.machines hms sm hsm))).2 x hx
-        obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel hP hshs senv v.machines _ _ hstarts hreach hn hq h6
+            (chk.machines _ (machinesRel_mem v.machines xs s.machines hms sm hsm))).2 x hx
+        obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel chk.sites hshs senv v.machines _ _ hstarts hreach hn hq h6
         have hnews1' : NewsRel M L shs v.declared news (Step.reqsOf (startedBy T s recs' ev)) n0 := hnews1
         have hown1' : OwnRel M L oS (Step.queuedOf (startedBy T s recs' ev)) q0 := hown1
-        obtain ⟨hnR, hnews2, hqR, hown2⟩ := reactions_rel hP hshs senv.hE senv.hPE recs' s.now ev v.records_data v.event_data hrt hnow hevT v.reactions
-          hvx hnT hqT h7 hcr
+        obtain ⟨hnR, hnews2, hqR, hown2⟩ := reactions_rel chk.sites hshs senv.hE senv.hPE recs' s.now ev v.records_data v.event_data hrt hnow hevT v.reactions
+          chk.reactions hnT hqT h7 hcr
         have hrec' : RelV L v.records (Ty.up _ v.records_data recs')
             ((Term.share (.ite f (Term.share rt) records)).denote M) := by
           simpa [Term.denote, hf, Val.toBool] using hrt
@@ -469,7 +468,7 @@ theorem events_rel {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx :
           congr 2
           omega
         have hre := react_eq (T := T) s ev
-        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel hP hvx hvm hshs hor happ senv S sv hS hw' evs
+        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel chk hshs happ senv S sv hS hw' evs
           hrest (Step.react T s ev).1 hnow (by rw [hre]; exact hrec') (by rw [hre]; exact hms')
           hn' hq' h8 hc2
         have hlen : (Step.react T s ev).2 = startedBy T s recs' ev ++ reactedBy s recs' ev := by rw [hre]

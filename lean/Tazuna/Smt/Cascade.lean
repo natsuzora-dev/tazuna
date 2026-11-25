@@ -150,9 +150,7 @@ theorem settle_fault_stays {P : List AnySite} {shs : List (PendingShape v.event)
 
 /-- T2 for the cascade: wherever the condition holds, the fault the model names is `Step.settleFrom`'s, and otherwise
 the cascade runs to its end with what the terms denote (`SettleDone`). -/
-theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
-    (hvm : ∀ m ∈ v.machines, m.Reach P) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
+theorem settle_rel {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs) {dflt now : Term} :
@@ -207,7 +205,7 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
         rw [hact'] at this
         simpa only [toBool_bool, ite_true] using this
       obtain ⟨hown, hreach⟩ := hqok _ (List.getElem_mem hlt)
-      obtain ⟨hfault, hrun⟩ := ownStep_rel hP hvx hshs hor a hinv happ hca senv hrec hnow hfr hn hq
+      obtain ⟨hfault, hrun⟩ := ownStep_rel chk hshs a hinv happ hca senv hrec hnow hfr hn hq
         hms a.own[k] (hk.2 hlt) hown hreach h1 hc1 hcx1
       have hsem : Step.settleFrom T (f + 1) k a = (Step.runOwn T a a.own[k]) >>= Step.settleFrom T f (k + 1) := by
         exact Step.settleFrom.eq_3 T k a a.own[k] f (List.getElem?_eq_getElem hlt)
@@ -235,8 +233,8 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
         rw [hrun0]
         simp only [bind, Except.bind]
         have hl0 := forall2_zipIdx_length _ _ hps0
-        have hinv1 := Step.runOwn_inv T ⟨hvm, hvx⟩ a hinv _ hrun0
-        have hq1 := Step.runOwn_queue T ⟨hvm, hvx⟩ a hinv hqok _ hrun0
+        have hinv1 := Step.runOwn_inv T ⟨chk.machines, chk.reactions⟩ a hinv _ hrun0
+        have hq1 := Step.runOwn_queue T ⟨chk.machines, chk.reactions⟩ a hinv hqok _ hrun0
         have hlt0 : o1.terms.done.tables.length = t.done.tables.length := by
           rw [machinesRel_length r2, machinesRel_length hms]
         have hS1 : OwnRel M L (S ++ (gateSlots (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
@@ -245,7 +243,7 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
           have := ownRel_append (ownRel_gate (L := L) hact' r6) (ownRel_nil (a.own.length + os0.length))
           rw [List.append_nil] at this
           simpa using this
-        have IH := settle_rel hP hvx hvm hshs hor happ hca senv f (k + 1) _ _ _ hinv1 hq1 hS1
+        have IH := settle_rel chk hshs happ hca senv f (k + 1) _ _ _ hinv1 hq1 hS1
           hnow (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl)
           (by simp only [pickTerms]; rw [hpick]; exact r1)
           (by
@@ -292,7 +290,7 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
         have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' hw1.2 (0 + a.own.length))
           (ownRel_nil _))
         simpa using this
-      have IH := settle_rel hP hvx hvm hshs hor happ hca senv f (k + 1) _ _ _ hinv hqok hS1
+      have IH := settle_rel chk hshs happ hca senv f (k + 1) _ _ _ hinv hqok hS1
         hnow (by simp only [pickTerms]; rw [hpick]; exact htf)
         (by simp only [pickTerms]; rw [hpick]; exact hrec)
         (by simp only [pickTerms]; exact machinesRel_congr _ _ _ _ (pick_tables_false hact' _ _).symm hms)
@@ -347,10 +345,7 @@ theorem settle_cond_fault {P : List AnySite} {shs : List (PendingShape v.event)}
 
 /-- The cascade's condition is exact: it holds exactly when every internal step the cascade runs fits
 (`settleFits`). -/
-theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
-    (hvm : ∀ m ∈ v.machines, m.Reach P) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
-    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
+theorem settle_exact {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs) {dflt now : Term} :
@@ -381,7 +376,7 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
     · have hact' := hact
       simp only [hlt, decide_true] at hact'
       obtain ⟨hown, hreach⟩ := hqok _ (List.getElem_mem hlt)
-      have e1 := ownStep_exact hP hvx hvm hshs hor a hqout happ hca senv hrec hnow hfr hn hq hms
+      have e1 := ownStep_exact chk hshs a happ hca senv hrec hnow hfr hn hq hms
         a.own[k] (hk.2 hlt) hown hreach h1 hcx1
       have hite : Holds M (.ite (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1)) c1 tt) ↔ Holds M c1 := by
         rw [holds_ite, hact']; simp only [toBool_bool, ite_true]
@@ -391,7 +386,7 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
           x.denote M := fun x y => by simp [Term.denote, hact', toBool_bool]
       have tail : Holds M c1 → (Holds M c2 ↔ ∀ a', Step.runOwn T a a.own[k] = .ok a' → settleFits L.count T f (k + 1) a') := by
         intro hc1
-        obtain ⟨hfault, hrun⟩ := ownStep_rel hP hvx hshs hor a hinv happ hca senv hrec hnow hfr hn hq
+        obtain ⟨hfault, hrun⟩ := ownStep_rel chk hshs a hinv happ hca senv hrec hnow hfr hn hq
           hms a.own[k] (hk.2 hlt) hown hreach h1 hc1 hcx1
         revert hrun
         cases hof : o1.fault? M with
@@ -405,8 +400,8 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
           obtain ⟨ps0, hps0⟩ := newsRel_writes r4
           have hrun0 := hr0 ps0 hps0
           have hl0 := forall2_zipIdx_length _ _ hps0
-          have hinv1 := Step.runOwn_inv T ⟨hvm, hvx⟩ a hinv _ hrun0
-          have hq1 := Step.runOwn_queue T ⟨hvm, hvx⟩ a hinv hqok _ hrun0
+          have hinv1 := Step.runOwn_inv T ⟨chk.machines, chk.reactions⟩ a hinv _ hrun0
+          have hq1 := Step.runOwn_queue T ⟨chk.machines, chk.reactions⟩ a hinv hqok _ hrun0
           have hlt0 : o1.terms.done.tables.length = t.done.tables.length := by
             rw [machinesRel_length r2, machinesRel_length hms]
           have hS1 : OwnRel M L (S ++ (gateSlots (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
@@ -415,7 +410,7 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
             have := ownRel_append (ownRel_gate (L := L) hact' r6) (ownRel_nil (a.own.length + os0.length))
             rw [List.append_nil] at this
             simpa using this
-          rw [settle_exact hP hvx hvm hshs hor hqout happ hca senv f (k + 1) _ _ _ hinv1 hq1 hS1
+          rw [settle_exact chk hshs happ hca senv f (k + 1) _ _ _ hinv1 hq1 hS1
             hnow (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl)
             (by simp only [pickTerms]; rw [hpick]; exact r1)
             (by
@@ -448,7 +443,7 @@ theorem settle_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
         have := ownRel_append hS (ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' hw1.2 (0 + a.own.length))
           (ownRel_nil _))
         simpa using this
-      have e2 := settle_exact hP hvx hvm hshs hor hqout happ hca senv f (k + 1) _ _ _ hinv hqok hS1
+      have e2 := settle_exact chk hshs happ hca senv f (k + 1) _ _ _ hinv hqok hS1
         hnow (by simp only [pickTerms]; rw [hpick]; exact htf)
         (by simp only [pickTerms]; rw [hpick]; exact hrec)
         (by simp only [pickTerms]; exact machinesRel_congr _ _ _ _ (pick_tables_false hact' _ _).symm hms)

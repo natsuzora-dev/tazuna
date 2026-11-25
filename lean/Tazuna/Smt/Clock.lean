@@ -922,10 +922,8 @@ theorem rounds_exact {shs : List (PendingShape v.event)} {ds : List (String × D
 state's, the rounds' functions fit and the step's end fits; wherever it holds, a time before the state's is Invalid,
 a step where every one of the `cascade + 1` rounds fires is the cascade fault, and otherwise time moves to the line's
 and the step ends as its end terms say (`Finished`). -/
-theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
+theorem clock_encode {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
-    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
     (s : State v) (hinv : Step.Inv P s) (time : Int)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
@@ -954,7 +952,7 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
   obtain ⟨⟨fo, cf, cfx'⟩, h2, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   refine ⟨?_, fun hc => ?_⟩
-  · have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (hor m hm).2
+  · have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
     have hfw : ((Term.le now st).denote M).toBool = decide (s.now ≤ time) := by
       simp only [Term.denote, hnow, hst, Val.toInt, Val.toBool]
     rw [holds_ite_tt hfw]
@@ -970,7 +968,7 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
           (Holds M (.ite ro.over tt cf) ↔ ∀ s' effs,
             Step.fire s0 (v.bounds.cascade.toNat + 1) = some (s', effs) →
             finishFits L.count T shs (Step.start { state := s' } effs)) := fun hf => by
-        have hro := rounds_rel hP hshs senv hord (v.bounds.cascade.toNat + 1) s0 hrec0 hst hinv.machines hms
+        have hro := rounds_rel chk.sites hshs senv hord (v.bounds.cascade.toNat + 1) s0 hrec0 hst hinv.machines hms
           (ab := true) rfl hnid (q0 := 0) rfl h1 (er.2 hf)
         simp only [Step.fireFrom, ite_true] at hro
         cases hfire : Step.fire s0 (v.bounds.cascade.toNat + 1) with
@@ -987,7 +985,7 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
           simp only [Val.toBool, Bool.false_eq_true, ite_false]
           obtain ⟨hinv', hreach, hfrom⟩ := Step.fire_inv s0 hinv0 _ hfire
           have hdone := rounds_done (shs := shs) s time hs' hrec hfresh hmach hnT hnews hq hown
-          rw [(finish_encode hP hvx hinv0.machinesReach hshs hor hqout happ hca hci hcinv senv s
+          rw [(finish_encode chk hshs happ hca hci hcinv senv s
             .accepted { state := s0 } rfl hinv0 hst hpend hdone
             (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach hfrom h,
               Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).1]
@@ -1012,7 +1010,7 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
       let s0 : State v := { s with now := time }
       have hinv0 : Step.Inv P s0 := hinv.congr rfl rfl rfl
       have hrec0 : RelV L v.records (Ty.up _ v.records_data s0.records) (records.denote M) := hrec
-      have hro := rounds_rel hP hshs senv (fun m hm => (hor m hm).2) (v.bounds.cascade.toNat + 1) s0 hrec0 hst
+      have hro := rounds_rel chk.sites hshs senv (fun m hm => (chk.keys m hm).2) (v.bounds.cascade.toNat + 1) s0 hrec0 hst
         hinv.machines hms (ab := true) rfl hnid (q0 := 0) rfl h1 hcr
       simp only [Step.fireFrom, ite_true] at hro
       cases hfire : Step.fire s0 (v.bounds.cascade.toNat + 1) with
@@ -1033,7 +1031,7 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
         rw [hr]
         obtain ⟨hinv', hreach, -⟩ := Step.fire_inv s0 hinv0 _ hfire
         have hdone := rounds_done (shs := shs) s time hs' hrec hfresh hmach hnT hnews hq hown
-        exact (finish_encode hP hvx hinv0.machinesReach hshs hor hqout happ hca hci hcinv senv s
+        exact (finish_encode chk hshs happ hca hci hcinv senv s
           .accepted { state := s0 } rfl hinv0 hst hpend hdone
           (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach (Step.fire_inv s0 hinv0 _ hfire).2.2 h,
             Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).2 hrest

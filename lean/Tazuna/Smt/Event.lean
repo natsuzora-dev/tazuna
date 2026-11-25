@@ -148,10 +148,8 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- An event step: where the codes' condition holds, its condition holds exactly when the wrap fits at the value, the
 event's applications fit and the step's end fits, and wherever it holds the step ends as the end terms say. -/
-theorem event_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
+theorem event_encode {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
-    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
     (s : State v) (hinv : Step.Inv P s) (i : Fin v.subscribes.length)
     (value : (v.subscribes.get i).event.den0) {ec : EventCode v i} {ce : Term}
     (hec : EventCode.of L v i = .ok (ec, ce)) (hce : Holds M ce) {records sv now nextIdT fresh pending : Term}
@@ -183,15 +181,15 @@ theorem event_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
   have hevT : Holds M cw → Forall2 (fun ev y => ∃ z, y = [z] ∧ RelV L v.event (Ty.up _ v.event_data ev) z) [ev]
       (occupied [(true, [et.denote M])]) := fun hcw => ⟨⟨_, rfl, ew.2 hcw⟩, trivial⟩
   have e2 : ∀ hcw : Holds M cw, (Holds M ce' ↔ eventsFit L.count T s [ev]) := fun hcw =>
-    events_exact (fun m hm => (hor m hm).1) g1 hc1 [(tt, [et])] [(true, [et.denote M])]
+    events_exact (fun m hm => (chk.keys m hm).1) g1 hc1 [(tt, [et])] [(true, [et.denote M])]
       ⟨rfl, rfl, trivial⟩ (by simp) [ev] (hevT hcw) s hnow hrec hms hev
   have ef := fun (hcw : Holds M cw) (hc : Holds M ce') =>
-    finish_encode hP hvx hinv.machinesReach hshs hor hqout g1 hc1 g3 hc3 senv s
+    finish_encode chk hshs g1 hc1 g3 hc3 senv s
       .accepted { state := s } rfl hinv hnow hpend
-      (events_done (T := T) hP hvx hinv.machinesReach hshs hor he.apply senv
+      (events_done (T := T) chk hshs he.apply senv
         { state := s } rfl hnow (S := [(tt, [et])]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩ (by simp)
         (evs := [ev]) (hevT hcw) hrec hms hnid hfresh hev hc)
-      (applyEvents_ok hvx _ rfl hinv _) hf hcx
+      (applyEvents_ok chk.reactions _ rfl hinv _) hf hcx
   rw [holds_andT, holds_andT]
   refine ⟨⟨fun ⟨hcw, hc, hcf⟩ => ⟨ew.1.1 hcw, (e2 hcw).1 hc, ((ef hcw hc).1).1 hcf⟩, fun ⟨p1, p2, p3⟩ => ?_⟩,
     fun ⟨hcw, hc, hcf⟩ => (ef hcw hc).2 hcf⟩
