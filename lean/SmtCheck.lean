@@ -2470,7 +2470,8 @@ reaction `mix`, which returns `[send_command(put, "alice", ev + 1, ..), request_
 send_command(put, "alice", ev + 3, ..)]`. From no records, no instances and next id 40, the event 3 starts key 3,
 whose request takes id 40; the reaction's request takes 41, as own commands take no wire id, and the own commands
 queue at places 0 and 1 in list order (inputs 4 and 6). The ids, the next id, and the own slots' places and inputs read
-from the model must be what `applyEvents` leaves; the queue in the other order must not pass the comparison. -/
+from the model must be what `applyEvents` leaves; the queue in the other order must not pass the comparison. The queue
+read at place 1 (`queueAt`) must hold input 6, not the head's 4, and place 2 must hold nothing. -/
 
 def putHandleE {Γ : List Ty} : Expr [] Γ (.dsl .command [recordsT, .int, .str, .int, .str]) :=
   .call (.prim .command [recordsT, .int, .str, .int, .str] rfl)
@@ -2529,7 +2530,13 @@ def mixScript (slots : Nat) (goal : List Term) : Except String (Script × Nat ×
     [.eq (.var (ob + 3 * j)) f, .eq (.var (ob + 3 * j + 1)) (xs.headD tt), .eq (.var (ob + 3 * j + 2)) (xs.getD 1 tt)]
   let vars := [rsrt, .int, .int, .int, psrt, msrt, .int, .int, .int] ++
     (o.news.map fun _ => [Srt.bool, .int]).flatten ++ (o.owns.map fun _ => [Srt.bool, .int, esrt]).flatten
-  pure ({ datatypes := dts, vars, asserts := [wf, ca, c, .eq (.var 7) o.nextId, .eq (.var 8) o.queued] ++ news ++ owns ++ goal,
+  let hb := vars.length
+  let heads := [1, 2].zipIdx.flatMap fun (k, j) =>
+    let (has, eff) := queueAt (.var (hb + 4)) o.owns (.int k)
+    [.eq (.var (hb + 2 * j)) has, .eq (.var (hb + 2 * j + 1)) eff]
+  let vars := vars ++ [.bool, esrt, .bool, esrt, esrt]
+  pure ({ datatypes := dts, vars, asserts := [wf, ca, c, .eq (.var 7) o.nextId, .eq (.var 8) o.queued] ++ news ++ owns ++
+            heads ++ goal,
           shows := List.range vars.length }, o.news.length, o.owns.length)
 
 def mixCheck (solver : Solver) : IO Bool := do
@@ -2584,6 +2591,12 @@ def mixCheck (solver : Solver) : IO Bool := do
           if queue.map (·.2) != stepQueue || stepQueue != [4, 6] then
             ok ← fail s!"the queue holds {queue.map (·.2)}, the step's {stepQueue}"
           if queue.reverse.map (·.2) == stepQueue then ok ← fail "the queue in the other order passes the comparison"
+          let hb := ob + 3 * no
+          let atOne := (vs.lookup (hb + 1)).bind inputOf
+          if vs.lookup hb != some (.bool true) || atOne != stepQueue[1]? then
+            ok ← fail s!"the queue's place 1 holds {repr atOne}, the step's {stepQueue[1]?}"
+          if atOne == stepQueue[0]? then ok ← fail "the queue's head passes as place 1"
+          if vs.lookup (hb + 2) != some (.bool false) then ok ← fail "the queue has a place 2"
           return ok
     | a => fail s!"{repr a}"
 
