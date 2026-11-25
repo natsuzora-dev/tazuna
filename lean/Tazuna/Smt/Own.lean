@@ -4,7 +4,7 @@ import Tazuna.Smt.Starts
 own command or query waits in the own queue and runs later as an internal step, in the order the step started it
 (`Step.start`). The effect datatype codes the request kinds first and the own kinds after them, so a term tells an own
 effect by its variant (`isOwnT`). Each place where effects start splits its slots by that test: the requests' slots
-are the ones the pending write reads, and the own slots hold each own effect with its place in the queue (`OwnRel`),
+are the ones the pending write reads, and the own slots hold each own effect with its place in the queue (`OwnRelE`),
 numbered as wire ids are. -/
 
 namespace Tazuna.Smt
@@ -62,13 +62,12 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 def EOwn (L : Layout) (e : Ty) : EffectV e × Nat → List Val → Prop :=
   fun x vs => ∃ zx, vs = [.int (x.2 : Int), zx] ∧ RelV L (.dsl .effect [e]) x.1 zx
 
-/-- The own slots hold, where flagged, the own commands and queries `os` with their places in the queue from `q0`, in
-some order. -/
-def OwnRel (M : Model) (L : Layout) (S : List OwnSlot) (os : List (EffectV e)) (q0 : Nat) : Prop :=
+/-- The own slots hold, where flagged, the effects `os` with their places in the queue from `q0`, in some order. -/
+def OwnRelE (M : Model) (L : Layout) (S : List OwnSlot) (os : List (EffectV e)) (q0 : Nat) : Prop :=
   ∃ sv zs, SlotsDen M (S.map OwnSlot.slot) sv ∧ (∀ p ∈ sv, p.2.length = 2) ∧ Holds2 (EOwn L e) zs sv ∧ zs.Perm (os.zipIdx q0)
 
 /-- The own effects own slots hold are coded by the slots' values. -/
-theorem ownRel_coded {S : List OwnSlot} {os : List (EffectV e)} {q0 : Nat} (h : OwnRel M L S os q0) :
+theorem ownRelE_coded {S : List OwnSlot} {os : List (EffectV e)} {q0 : Nat} (h : OwnRelE M L S os q0) :
     ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [e]) y z := by
   intro y hy
   obtain ⟨sv, zs, -, -, hh, hp⟩ := h
@@ -119,11 +118,11 @@ theorem request_of_rel (ho : L.ownsOf e = []) {x : EffectV e} {z : Val} (h : Rel
     | query => exact hh.elim
   · rw [ho] at hk; cases hk
 
-theorem ownRel_nil (q0 : Nat) : OwnRel M L [] ([] : List (EffectV e)) q0 :=
+theorem ownRelE_nil (q0 : Nat) : OwnRelE M L [] ([] : List (EffectV e)) q0 :=
   ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], by simp⟩
 
-theorem ownRel_append {S S' : List OwnSlot} {os os' : List (EffectV e)} {q0 : Nat} (h : OwnRel M L S os q0)
-    (h' : OwnRel M L S' os' (q0 + os.length)) : OwnRel M L (S ++ S') (os ++ os') q0 := by
+theorem ownRelE_append {S S' : List OwnSlot} {os os' : List (EffectV e)} {q0 : Nat} (h : OwnRelE M L S os q0)
+    (h' : OwnRelE M L S' os' (q0 + os.length)) : OwnRelE M L (S ++ S') (os ++ os') q0 := by
   obtain ⟨sv, zs, hS, hw, hh, hp⟩ := h
   obtain ⟨sv', zs', hS', hw', hh', hp'⟩ := h'
   refine ⟨sv ++ sv', zs ++ zs', by rw [List.map_append]; exact slotsDen_append hS hS', ?_, ?_, ?_⟩
@@ -277,12 +276,12 @@ theorem gateOwn_rel {dE nE : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, n
 
 /-- T2 for an effect list's own slots: the own slots hold, where occupied, the effects in list order at the places from
 `q0`, and the place term after them denotes the place after them. -/
-theorem ownSlots_rel : (S : List (Slot 1)) → (sv : List (Bool × List Val)) → (os : List (EffectV e)) → SlotsDen M S sv →
+theorem ownSlots_relE : (S : List (Slot 1)) → (sv : List (Bool × List Val)) → (os : List (EffectV e)) → SlotsDen M S sv →
     Holds2 (EBag L (.dsl .effect [e])) os sv → {q : Term} → {q0 : Nat} → q.denote M = .int q0 →
-    (ownSlots S q).2.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L (ownSlots S q).1 os q0
+    (ownSlots S q).2.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRelE M L (ownSlots S q).1 os q0
   | [], [], os, _, hh, q, q0, hq => by
     cases os with
-    | nil => exact ⟨by simpa [ownSlots] using hq, ownRel_nil q0⟩
+    | nil => exact ⟨by simpa [ownSlots] using hq, ownRelE_nil q0⟩
     | cons _ _ => exact hh.elim
   | (f, xs) :: S, (b, vs) :: sv, os, ⟨hf, hx, hS⟩, hh, q, q0, hq => by
     have hl : (Term.denotes M [q, xs[0]]).length = 2 := rfl
@@ -290,7 +289,7 @@ theorem ownSlots_rel : (S : List (Slot 1)) → (sv : List (Bool × List Val)) �
     | false =>
       have hq' : (Term.share (.add q (.ite f (.int 1) (.int 0)))).denote M = .int q0 := by
         simp [Term.denote_share, Term.denote, hq, hf, Val.toInt, Val.toBool]
-      obtain ⟨h1, sv', zs, hS', hw, hh', hp⟩ := ownSlots_rel S sv os hS (by simpa [Holds2, occupied] using hh) hq'
+      obtain ⟨h1, sv', zs, hS', hw, hh', hp⟩ := ownSlots_relE S sv os hS (by simpa [Holds2, occupied] using hh) hq'
       refine ⟨h1, (false, _) :: sv', zs, ⟨hf, rfl, hS'⟩, ?_, by simpa [Holds2, occupied] using hh', hp⟩
       simp only [List.mem_cons, forall_eq_or_imp]
       exact ⟨hl, hw⟩
@@ -299,7 +298,7 @@ theorem ownSlots_rel : (S : List (Slot 1)) → (sv : List (Bool × List Val)) �
       | x :: os, ⟨⟨z, hz, hxz⟩, hh⟩ =>
         have hq' : (Term.share (.add q (.ite f (.int 1) (.int 0)))).denote M = .int ((q0 + 1 : Nat) : Int) := by
           simp [Term.denote_share, Term.denote, hq, hf, Val.toInt, Val.toBool]
-        obtain ⟨h1, sv', zs, hS', hw, hh', hp⟩ := ownSlots_rel S sv os hS hh hq'
+        obtain ⟨h1, sv', zs, hS', hw, hh', hp⟩ := ownSlots_relE S sv os hS hh hq'
         rw [hz] at hx
         obtain ⟨t, rfl⟩ := xs.one
         have ht : t.denote M = z := by simpa [Term.denotes] using hx
@@ -363,7 +362,7 @@ theorem queueAt_slots (dflt : Term) {k : Term} {K : Int} (hk : k.denote M = .int
 
 /-- T2 for the queue's head at place `q0 + i`: a flagged own slot holds that place exactly when the queue has an `i`-th
 own effect, and then the effect term denotes it. -/
-theorem queueAt_rel (dflt : Term) {S : List OwnSlot} {os : List (EffectV e)} {q0 : Nat} (h : OwnRel M L S os q0)
+theorem queueAt_relE (dflt : Term) {S : List OwnSlot} {os : List (EffectV e)} {q0 : Nat} (h : OwnRelE M L S os q0)
     {k : Term} (i : Nat) (hk : k.denote M = .int ((q0 + i : Nat) : Int)) :
     (queueAt dflt S k).1.denote M = .bool (decide (i < os.length)) ∧
       ∀ hi : i < os.length, RelV L (.dsl .effect [e]) os[i] ((queueAt dflt S k).2.denote M) := by
@@ -400,6 +399,38 @@ theorem queueAt_rel (dflt : Term) {S : List OwnSlot} {os : List (EffectV e)} {q0
     have := h2 z hz
     rw [hzeq] at this
     exact this
+
+/-- The own slots hold, where flagged, the own commands and queries `os` with their places in the queue from `q0`, in
+some order. -/
+abbrev OwnRel (M : Model) (L : Layout) (S : List OwnSlot) (os : List (OwnEffectV e)) (q0 : Nat) : Prop :=
+  OwnRelE M L S (os.map OwnEffectV.effect) q0
+
+theorem ownRel_coded {S : List OwnSlot} {os : List (OwnEffectV e)} {q0 : Nat} (h : OwnRel M L S os q0) :
+    ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [e]) y.effect z :=
+  fun _ hy => ownRelE_coded h _ (List.mem_map_of_mem hy)
+
+theorem ownRel_nil (q0 : Nat) : OwnRel M L [] ([] : List (OwnEffectV e)) q0 := ownRelE_nil q0
+
+theorem ownRel_append {S S' : List OwnSlot} {os os' : List (OwnEffectV e)} {q0 : Nat} (h : OwnRel M L S os q0)
+    (h' : OwnRel M L S' os' (q0 + os.length)) : OwnRel M L (S ++ S') (os ++ os') q0 := by
+  unfold OwnRel; rw [List.map_append]; exact ownRelE_append h (by simpa using h')
+
+theorem ownSlots_rel (S : List (Slot 1)) (sv : List (Bool × List Val)) (os : List (OwnEffectV e)) (hS : SlotsDen M S sv)
+    (hh : Holds2 (EBag L (.dsl .effect [e])) (os.map OwnEffectV.effect) sv) {q : Term} {q0 : Nat}
+    (hq : q.denote M = .int q0) :
+    (ownSlots S q).2.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L (ownSlots S q).1 os q0 := by
+  obtain ⟨h1, h2⟩ := ownSlots_relE S sv _ hS hh hq
+  exact ⟨by rw [h1]; congr 3; exact List.length_map (as := os) OwnEffectV.effect, h2⟩
+
+theorem queueAt_rel (dflt : Term) {S : List OwnSlot} {os : List (OwnEffectV e)} {q0 : Nat} (h : OwnRel M L S os q0)
+    {k : Term} (i : Nat) (hk : k.denote M = .int ((q0 + i : Nat) : Int)) :
+    (queueAt dflt S k).1.denote M = .bool (decide (i < os.length)) ∧
+      ∀ hi : i < os.length, RelV L (.dsl .effect [e]) os[i].effect ((queueAt dflt S k).2.denote M) := by
+  obtain ⟨h1, h2⟩ := queueAt_relE dflt h i hk
+  rw [List.length_map] at h1
+  refine ⟨h1, fun hi => ?_⟩
+  have h3 := h2 (by rw [List.length_map]; exact hi)
+  rwa [List.getElem_map] at h3
 
 end
 

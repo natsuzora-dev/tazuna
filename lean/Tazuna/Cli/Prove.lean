@@ -299,7 +299,7 @@ def orderWire (T : List TypeDecl) {v : ServiceV} : Except Fault (Acc v) → Show
   | .ok a => do
     let st ← stateWire T a.state
     let evs ← a.events.mapM (wireOf T v.event)
-    let own ← a.own.mapM (effectWire T)
+    let own ← a.own.mapM (effectWire T ·.effect)
     pure (.obj [("outcome", .str "accepted"), ("state", st), ("events", .arr evs), ("queued", .arr own)])
 
 /-- The report of a pair's target question (`pairQuestions`): a model is a state and two own effects whose two orders
@@ -317,8 +317,8 @@ def pairReport (L : Layout) (k1 k2 : Nat) (g : Target) (step : String) (a : Smt.
       let a0 : Acc v := { state := s }
       let shown (more : List (String × Json)) : List (String × Json) := (do
         let st ← stateWire c.T s
-        let w1 ← effectWire c.T e1
-        let w2 ← effectWire c.T e2
+        let w1 ← effectWire c.T e1.effect
+        let w2 ← effectWire c.T e2.effect
         let o1 ← orderWire c.T (runOwn c.T a0 e1 >>= fun b => runOwn c.T b e2)
         let o2 ← orderWire c.T (canonPair c.T a0 e1 e2)
         pure ([("from", Json.str "validState"), ("state", st.toJson), ("first", w1.toJson), ("second", w2.toJson),

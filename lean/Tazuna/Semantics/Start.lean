@@ -22,14 +22,37 @@ def Acc.wrote (a : Acc v) (ps : List (Pending v.event)) (n : Nat) : Acc v :=
   { a with state := { a.state with pending := a.state.pending ++ ps, nextId := n }, out := a.out ++ ps.map Pending.line }
 
 /-- The step in progress `a` with the own commands and queries `os` queued after the waiting ones. -/
-def Acc.queued (a : Acc v) (os : List (EffectV v.event)) : Acc v := { a with own := a.own ++ os }
+def Acc.queued (a : Acc v) (os : List (OwnEffectV v.event)) : Acc v := { a with own := a.own ++ os }
 
 /-- The requests among effects, in order. -/
 abbrev reqsOf {e : Ty} (effs : List (Sender × EffectV e)) : List (Sender × EffectV e) := effs.filter (·.2.isRequest)
 
 /-- The own commands and queries among effects, in order: what they queue. -/
-abbrev queuedOf {e : Ty} (effs : List (Sender × EffectV e)) : List (EffectV e) :=
-  (effs.filter (!·.2.isRequest)).map (·.2)
+abbrev queuedOf {e : Ty} (effs : List (Sender × EffectV e)) : List (OwnEffectV e) :=
+  effs.filterMap (·.2.own?)
+
+theorem queuedOf_effect {e : Ty} : (effs : List (Sender × EffectV e)) →
+    (queuedOf effs).map OwnEffectV.effect = (effs.filter (!·.2.isRequest)).map (·.2)
+  | [] => rfl
+  | (_, .request _) :: effs => by simpa [queuedOf, EffectV.own?, EffectV.isRequest] using queuedOf_effect effs
+  | (_, .command ..) :: effs => by
+    simp only [queuedOf, List.filterMap_cons, EffectV.own?, List.map_cons, OwnEffectV.effect, List.filter_cons,
+      EffectV.isRequest, Bool.not_false, ↓reduceIte]
+    exact congrArg _ (queuedOf_effect effs)
+  | (_, .query ..) :: effs => by
+    simp only [queuedOf, List.filterMap_cons, EffectV.own?, List.map_cons, OwnEffectV.effect, List.filter_cons,
+      EffectV.isRequest, Bool.not_false, ↓reduceIte]
+    exact congrArg _ (queuedOf_effect effs)
+
+theorem length_queuedOf {e : Ty} (effs : List (Sender × EffectV e)) :
+    (queuedOf effs).length = (effs.filter (!·.2.isRequest)).length := by
+  simpa using congrArg List.length (queuedOf_effect effs)
+
+theorem queuedOf_eq_nil {e : Ty} {effs : List (Sender × EffectV e)} (h : ∀ x ∈ effs, x.2.isRequest = true) :
+    queuedOf effs = [] := by
+  have hl := length_queuedOf effs
+  rw [List.filter_eq_nil_iff.2 fun x hx => by simp [h x hx], List.length_nil] at hl
+  exact List.eq_nil_of_length_eq_zero hl
 
 /-- Starting effects writes the requests, which externals list, into the pending table at the next ids and sends
 them, and queues the own commands and queries, each in order. -/
@@ -49,7 +72,7 @@ theorem start_requests (a : Acc v) : (effs : List (Sender × EffectV v.event)) �
     rw [h1, start_requests _ effs ps hs]
     have hl : (reqsOf ((snd, EffectV.request r) :: effs)).length = (reqsOf effs).length + 1 := by
       simp [reqsOf, EffectV.isRequest]
-    have hq : queuedOf ((snd, EffectV.request r) :: effs) = queuedOf effs := by simp [queuedOf, EffectV.isRequest]
+    have hq : queuedOf ((snd, EffectV.request r) :: effs) = queuedOf effs := by simp [queuedOf, EffectV.own?]
     rw [hl, hq]
     obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a
     simp only [Acc.wrote, Acc.queued, List.append_assoc, List.cons_append, List.nil_append, List.map_cons,

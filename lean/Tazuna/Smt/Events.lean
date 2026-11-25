@@ -73,7 +73,7 @@ theorem applyEvents_requests : (evs : List v.event.den0) → (a : Acc v) → (ps
     rw [applyEvents_requests evs a' ps2 (by simp only [a', Acc.wrote, Acc.queued, reactAll_with]; exact h2)]
     obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a
     simp only [a', Acc.wrote, Acc.queued, reactAll_with, reactAll, reactAll_pending, reactAll_now, reactAll_fresh,
-      reqsOf, queuedOf, List.filter_append, List.map_append, List.append_assoc, List.length_append,
+      reqsOf, queuedOf, List.filter_append, List.filterMap_append, List.map_append, List.append_assoc, List.length_append,
       List.singleton_append, Except.ok.injEq]
     simp only [Nat.add_assoc]
     rfl
@@ -179,14 +179,14 @@ theorem newsRel_gate_false {shs : List (PendingShape e)} {ds : List (String × D
   obtain ⟨sl, -, rfl⟩ := List.mem_map.1 hp
   simp [denotes_length, sl.2.2]
 
-theorem ownRel_gate {f : Term} (hf : f.denote M = .bool true) {S : List OwnSlot} {os : List (EffectV e)} {q0 : Nat}
+theorem ownRel_gate {f : Term} (hf : f.denote M = .bool true) {S : List OwnSlot} {os : List (OwnEffectV e)} {q0 : Nat}
     (h : OwnRel M L S os q0) : OwnRel M L (gateOwns f S) os q0 := by
   obtain ⟨sv, zs, hS, hw, hh, hp⟩ := h
   exact ⟨sv, zs, by rw [gateOwns_slot]; exact gate_true hf hS, hw, hh, hp⟩
 
 /-- Own slots gated by a false flag hold nothing. -/
 theorem ownRel_gate_false {f : Term} (hf : f.denote M = .bool false) {S : List OwnSlot}
-    (q0 : Nat) : OwnRel M L (gateOwns f S) ([] : List (EffectV e)) q0 := by
+    (q0 : Nat) : OwnRel M L (gateOwns f S) ([] : List (OwnEffectV e)) q0 := by
   have hS : SlotsDen M ((gateOwns f S).map OwnSlot.slot)
       ((S.map OwnSlot.slot).map fun sl => (false, Term.denotes M sl.2.1)) := by
     rw [gateOwns_slot]
@@ -375,7 +375,7 @@ theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     · obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
       have hfl : ∀ a b : List (Sender × EffectV v.event), Step.reqsOf (a ++ b) = Step.reqsOf a ++ Step.reqsOf b ∧
           Step.queuedOf (a ++ b) = Step.queuedOf a ++ Step.queuedOf b := fun _ _ => by
-        simp [Step.reqsOf, Step.queuedOf, List.filter_append]
+        simp [Step.reqsOf, Step.queuedOf, List.filter_append, List.filterMap_append]
       cases b with
       | false =>
         have hrec' : RelV L v.records (Ty.up _ v.records_data s.records)

@@ -58,7 +58,7 @@ def accTerm (a : Acc v) : Erl :=
     .int a.state.now, .int a.state.fresh, .int a.state.nextId,
     .list (Erl.sort (a.events.map (Ty.canonBy σ v.event))),
     .list (Erl.sort (a.out.map fun o => .tuple [.int (τ o.id), .bin o.external, .bin o.name, wireTerm σ o.input])),
-    .list (Erl.sort (a.own.map (effectTerm σ)))]
+    .list (Erl.sort (a.own.map fun x => effectTerm σ x.effect))]
 
 end Terms
 
@@ -88,7 +88,7 @@ after the first, or the two orders end differently under every renaming `sameUpT
 they end the same up to such a renaming, and none where the pair sent more wire ids than the search covers. An error
 names what no counterexample of a pair's target question gives: the first faults, the second faults in both orders,
 or both orders fault. -/
-def pairOrders (T : List TypeDecl) (a0 : Step.Acc v) (e1 e2 : EffectV v.event) : Except String (Option Bool) :=
+def pairOrders (T : List TypeDecl) (a0 : Step.Acc v) (e1 e2 : OwnEffectV v.event) : Except String (Option Bool) :=
   match Step.runOwn T a0 e1 with
   | .error _ => .error "faults in its first step"
   | .ok b =>

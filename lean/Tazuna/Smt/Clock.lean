@@ -431,7 +431,7 @@ theorem own_once (m : MachineV v.records v.event) {dopt nopt : Nat}
     {effs : List (Sender × EffectV v.event)} (h : StartSlots M L T m ws effs) (hone : effs.length ≤ 1) {q : Term}
     {q0 : Nat} (hq : q.denote M = .int (q0 : Int)) :
     (startCount dopt ws).denote M = .int effs.length ∧
-      OwnRel M L (ownItems (ws.map (onceStart dopt q))) (effs.map (·.2)) q0 := by
+      OwnRelE M L (ownItems (ws.map (onceStart dopt q))) (effs.map (·.2)) q0 := by
   obtain ⟨α, κ, F, E, items, svX, hX, hh, hEp, -, rfl⟩ := h
   have hcount := startCount_den m hopt κ F hX hh hEp
   obtain ⟨svS, ys, hS', hyp, hy⟩ := once_starts m hopt κ F hX hh hEp hone hq
@@ -492,8 +492,7 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
       by_cases ho : (L.ownsOf v.event).isEmpty
       · have hall := startSlots_requests (List.isEmpty_iff.1 ho) m hst
         have hr : Step.reqsOf effs = effs := List.filter_eq_self.2 hall
-        have hq0 : Step.queuedOf effs = [] := by
-          simp only [Step.queuedOf, List.map_eq_nil_iff, List.filter_eq_nil_iff]; intro x hx; simp [hall x hx]
+        have hq0 : Step.queuedOf effs = [] := Step.queuedOf_eq_nil hall
         simp only [ho, ↓reduceIte]
         rw [hr, hq0]
         exact ⟨hst, rfl, ownRel_nil q0⟩
@@ -503,8 +502,8 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
           Nat.le_trans (List.length_filter_le _ _) (by omega)
         obtain ⟨hcO, hO⟩ := own_once m senv.hopt (by simpa only [List.map_map, Function.comp_def] using hown) hlen hq
         refine ⟨by simpa only [List.map_map, Function.comp_def] using hreq, ?_, ?_⟩
-        · simpa only [List.map_map, Function.comp_def, Step.queuedOf, List.length_map] using hcO
-        · simpa only [List.map_map, Function.comp_def, Step.queuedOf] using hO
+        · simpa only [List.map_map, Function.comp_def, Step.length_queuedOf] using hcO
+        · unfold OwnRel; rw [Step.queuedOf_effect]; simpa only [List.map_map, Function.comp_def] using hO
     obtain ⟨hR, hcO, hO⟩ := hparts
     obtain ⟨α, κ, F, E, items, svX, hX, hh, hEp, _, heffs⟩ := hR
     have hcount := startCount_den m senv.hopt κ F hX hh hEp
@@ -521,8 +520,8 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     obtain ⟨hk, hnews, hko, hown⟩ := roundStarts_rel hP hshs senv hn hq ms sts effss hrest (by omega)
       (fun x h => hreach x (by simp [h])) (fun x h => hshaped x (by simp [h])) h3
     have hor : effs.length = 0 ∨ effss.toList.flatten.length = 0 := by omega
-    simp only [Step.reqsOf, Step.queuedOf, PerMachine.toList_cons, List.flatten_cons, List.filter_append, List.map_append,
-      List.length_append] at hk hnews hko hown ⊢
+    simp only [Step.reqsOf, Step.queuedOf, PerMachine.toList_cons, List.flatten_cons, List.filter_append,
+      List.filterMap_append, List.length_append] at hk hnews hko hown ⊢
     refine ⟨?_, ?_, ?_, ?_⟩
     · simp only [Term.denote, hcount, hk, Val.toInt]; push_cast; rfl
     · have h1 : NewsRel M L shs ds _ (Step.reqsOf effs) n0 := ⟨sv1, zs1, hS1, hw1, hh1, ys, hyp, hq1⟩
@@ -839,7 +838,7 @@ theorem rounds_encode {P : List AnySite} {E : List AnyEffectSite} (hP : SitesUni
         rw [hg, hs1] at ih
         simp only [Step.fireFrom, Bool.false_eq_true, ite_false] at ih
         obtain ⟨ho, hm, -, hn, hnw, hqq, how⟩ := ih
-        simp only [hro, Step.reqsOf, Step.queuedOf, List.filter_nil, List.map_nil, List.length_nil,
+        simp only [hro, Step.reqsOf, Step.queuedOf, List.filter_nil, List.filterMap_nil, List.length_nil,
           Nat.add_zero] at hn hnw hqq how hnews hown ⊢
         refine ⟨ho, hm, by first | rfl | trivial, hn, ?_, hqq, ?_⟩
         · simpa using newsRel_append hnews (by simpa using hnw)
@@ -871,10 +870,10 @@ theorem rounds_encode {P : List AnySite} {E : List AnyEffectSite} (hP : SitesUni
             have hnw' := newsRel_append hnews hnw
             have how' := ownRel_append hown (by simpa [Step.queuedOf] using how)
             refine ⟨ho, hm', ?_, ?_, by simpa [List.filter_append] using hnw', ?_,
-              by simpa [Step.queuedOf, List.filter_append] using how'⟩
+              by simpa [Step.queuedOf, List.filter_append, List.filterMap_append] using how'⟩
             · rw [hs']
             · rw [hn]; simp [List.filter_append, Nat.add_assoc]
-            · rw [hqq]; simp [List.filter_append, Nat.add_assoc]
+            · rw [hqq]; simp [Nat.add_assoc]
 
 /-- A clock line: where the codes' conditions hold, the condition holds exactly when, for a time not before the
 state's, the rounds' functions fit and the step's end fits; wherever it holds, a time before the state's is Invalid,

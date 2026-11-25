@@ -37,23 +37,20 @@ theorem mem_ownPairs {L : Layout} {e : Ty} {i j : Nat} :
   simp [Layout.ownPairs]
 
 /-- An own effect's code is the variant of an own kind. -/
-theorem own_variant {L : Layout} {e : Ty} {x : EffectV e} {z : Val} (hx : EffRel L x z) (hr : x.isRequest = false) :
+theorem own_variant {L : Layout} {e : Ty} {x : OwnEffectV e} {z : Val} (hx : EffRel L x.effect z) :
     ∃ d n k vals, L.find? (.dsl .effect [e]) = some (d, n) ∧ k < (L.ownsOf e).length ∧
       z = .ctor d ((L.effectsOf e).length + k) vals := by
   obtain ⟨d, n, hd, ⟨_, _, _, -, -, hh⟩ | ⟨k, key, vals, hk, rfl, -⟩⟩ := hx
-  · cases x with
-    | request => simp [EffectV.isRequest] at hr
-    | command => exact hh.elim
-    | query => exact hh.elim
+  · cases x <;> exact hh.elim
   · exact ⟨d, n, k, vals, hd, (List.getElem?_eq_some_iff.1 hk).1, rfl⟩
 
 /-- T5b: any two own effects a model codes are effects of a listed pair of own kinds, in their order. -/
-theorem ownPairs_complete {L : Layout} {e : Ty} {x1 x2 : EffectV e} {z1 z2 : Val} (h1 : EffRel L x1 z1)
-    (h2 : EffRel L x2 z2) (hr1 : x1.isRequest = false) (hr2 : x2.isRequest = false) :
+theorem ownPairs_complete {L : Layout} {e : Ty} {x1 x2 : OwnEffectV e} {z1 z2 : Val} (h1 : EffRel L x1.effect z1)
+    (h2 : EffRel L x2.effect z2) :
     ∃ p ∈ L.ownPairs e, ∃ d n vals1 vals2, L.find? (.dsl .effect [e]) = some (d, n) ∧
       z1 = .ctor d ((L.effectsOf e).length + p.1) vals1 ∧ z2 = .ctor d ((L.effectsOf e).length + p.2) vals2 := by
-  obtain ⟨d, n, k1, vals1, hd, hk1, rfl⟩ := own_variant h1 hr1
-  obtain ⟨d', n', k2, vals2, hd', hk2, rfl⟩ := own_variant h2 hr2
+  obtain ⟨d, n, k1, vals1, hd, hk1, rfl⟩ := own_variant h1
+  obtain ⟨d', n', k2, vals2, hd', hk2, rfl⟩ := own_variant h2
   rw [hd] at hd'
   cases hd'
   exact ⟨(k1, k2), mem_ownPairs.2 ⟨hk1, hk2⟩, d, n, vals1, vals2, hd, rfl, rfl⟩
@@ -131,7 +128,7 @@ def readData (t : Ty) (z : Val) : Option t.den0 :=
 
 /-- The own effect of the `k`-th own kind that a model's value codes: the kind's command or query with the caller and
 input its fields code, answered by the program's site the kind names with the captured values its last field codes. -/
-def decodeOwn (k : Nat) (z : Val) : Option (EffectV v.event) := do
+def decodeOwn (k : Nat) (z : Val) : Option (OwnEffectV v.event) := do
   let key ← (L.ownsOf v.event)[k]?
   let .ctor _ i vals := z | none
   if i ≠ (L.effectsOf v.event).length + k then none
@@ -161,8 +158,8 @@ theorem same_of_parts {a0 A C : Step.Acc v} (h0 : Step.Acc.Rel ⟨PBij.refl, PBi
     (hnA : A.state.now = a0.state.now) (hnC : C.state.now = a0.state.now)
     (hi : A.state.nextId = C.state.nextId) (hiA : a0.state.nextId ≤ A.state.nextId)
     (hoA : A.out = a0.out ++ PA.map Step.Pending.line) (hoC : C.out = a0.out ++ PC.map Step.Pending.line)
-    {OA OC : List (EffectV v.event)} (hwA : A.own = a0.own ++ OA) (hwC : C.own = a0.own ++ OC)
-    (hO : Multi (EffectV.Rel PBij.refl) OA OC)
+    {OA OC : List (OwnEffectV v.event)} (hwA : A.own = a0.own ++ OA) (hwC : C.own = a0.own ++ OC)
+    (hO : Multi (OwnEffectV.Rel PBij.refl) OA OC)
     {EA EC : List v.event.den0} (heA : A.events = a0.events ++ EA) (heC : C.events = a0.events ++ EC)
     (he : Multi (Ty.rel0 PBij.refl v.event) EA EC) (hf : A.state.fresh = C.state.fresh) {f0 : Nat} :
     Step.Same f0 a0.state.nextId A C := by
@@ -198,19 +195,16 @@ theorem multi_rewire {e : Ty} {σ : Nat → Nat} {xs ys : List (Step.Pending e)}
     (g := fun q : Step.Pending e => { q with id := σ q.id }) fun _ _ h => h
 
 /-- The variant test of an own kind's place and an effect's code give the kind's facts of the effect. -/
-theorem own_key {x : EffectV v.event} (hown : x.isRequest = false) {senv : StepEnv L (shapes v)} {z : Val}
-    (hx : RelV L (.dsl .effect [v.event]) x z) {k : Nat} {t : Term}
+theorem own_key {x : OwnEffectV v.event} {senv : StepEnv L (shapes v)} {z : Val}
+    (hx : RelV L (.dsl .effect [v.event]) x.effect z) {k : Nat} {t : Term}
     (ht : Holds M (.is senv.dE ((L.effectsOf v.event).length + k) t)) (hz : t.denote M = z) {key : OwnKey}
     (hkey : (L.ownsOf v.event)[k]? = some key) :
-    ∃ vals, z = .ctor senv.dE ((L.effectsOf v.event).length + k) vals ∧ key.Holds L x vals := by
-  have hx' : EffRel L x z := hx
+    ∃ vals, z = .ctor senv.dE ((L.effectsOf v.event).length + k) vals ∧ key.Holds L x.effect vals := by
+  have hx' : EffRel L x.effect z := hx
   obtain ⟨d, nn, hd, hx'⟩ := hx'
   cases (Prod.mk.inj (Option.some.inj (senv.hE.symm.trans hd))).1
   rcases hx' with ⟨_, _, _, -, -, hh⟩ | ⟨k', key', vals, hk', rfl, hh⟩
-  · cases x with
-    | request => simp [EffectV.isRequest] at hown
-    | command => exact hh.elim
-    | query => exact hh.elim
+  · cases x <;> exact hh.elim
   · simp only [Holds, Term.denote, hz, Val.toBool, beq_self_eq_true, Bool.true_and, beq_iff_eq] at ht
     have hk : k' = k := by omega
     subst hk
@@ -249,9 +243,9 @@ its counters (`Step.PairCommutes`). -/
 theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v))
     {S : SymState v} {a0 : Step.Acc v} (hR : StateRel M L T (shapes v) S a0.state) (hinv : Step.Inv P a0.state)
-    (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0) {t1 t2 : Term} {x1 x2 : EffectV v.event}
-    (hx1 : RelV L (.dsl .effect [v.event]) x1 (t1.denote M)) (hx2 : RelV L (.dsl .effect [v.event]) x2 (t2.denote M))
-    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P)
+    (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0) {t1 t2 : Term} {x1 x2 : OwnEffectV v.event}
+    (hx1 : RelV L (.dsl .effect [v.event]) x1.effect (t1.denote M)) (hx2 : RelV L (.dsl .effect [v.event]) x2.effect (t2.denote M))
+    (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P)
     {k1 k2 : Nat} (ht1 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k1) t1))
     (ht2 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k2) t2))
     {o : PairOut} (henc : encodePair L T P v senv S t1 t2 k1 k2 = .ok o)
@@ -271,8 +265,8 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
   obtain ⟨hca, hy1, hy2, hy3, hy4⟩ := hcodes
   obtain ⟨hc1, hc3, hc2, hc4⟩ := hcond
   have hshs : ∀ sh ∈ shapes v, sh.InSites P := fun _ => shapes_inSites chk.reach
-  obtain ⟨vals1, he1, hk1⟩ := own_key hown1 hx1 ht1 rfl (need_ok.1 hkey1)
-  obtain ⟨vals2, he2, hk2⟩ := own_key hown2 hx2 ht2 rfl (need_ok.1 hkey2)
+  obtain ⟨vals1, he1, hk1⟩ := own_key hx1 ht1 rfl (need_ok.1 hkey1)
+  obtain ⟨vals2, he2, hk2⟩ := own_key hx2 ht2 rfl (need_ok.1 hkey2)
   have hq0 : (Term.int 0).denote M = .int ((0 : Nat) : Int) := rfl
   have eA1 := ownKind_encode chk hshs (shapesHold_shapes v) a0 happ hca senv hR.records hR.now hR.fresh hR.nextId hq0
     hR.machines x1 hreach1 he1 hk1 h1 hy1
@@ -364,11 +358,11 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       have hqA := Step.runOwn_queue T chk.reach _ hinvb hqb x2 (hW2 psA2 hwA2)
       have hqd := Step.runOwn_queue T chk.reach _ hinvc hqc x1 (hW4 psC1 hwC1)
       have hO14 := owns_same chk.sites hO1 hO4 ho14 (fun x hx => hqb x (List.mem_append_right _ hx))
-        (fun x hx => (hqd x (List.mem_append_right _ hx)).2)
+        (fun x hx => hqd x (List.mem_append_right _ hx))
       have hO23 := owns_same chk.sites hO2 hO3 ho23 (fun x hx => hqA x (List.mem_append_right _ hx))
-        (fun x hx => (hqc x (List.mem_append_right _ hx)).2)
-      have hfb := Step.runOwn_fresh T hown1 hb
-      have hfa := Step.runOwn_fresh T hown2 (hW2 psA2 hwA2)
+        (fun x hx => hqc x (List.mem_append_right _ hx))
+      have hfb := Step.runOwn_fresh T hb
+      have hfa := Step.runOwn_fresh T (hW2 psA2 hwA2)
       have hl1 := hP1.length_eq
       have hl2 := hP2.length_eq
       have hiA1 := writes_ids hwA1
@@ -442,7 +436,7 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     trivial
 /-- Every internal step a pair's two orders run fits the slots: each effect where it runs first, and each after the
 other one ran to its end. -/
-def PairFits (S : Ty → Nat) (T : List TypeDecl) (a0 : Step.Acc v) (e1 e2 : EffectV v.event) : Prop :=
+def PairFits (S : Ty → Nat) (T : List TypeDecl) (a0 : Step.Acc v) (e1 e2 : OwnEffectV v.event) : Prop :=
   ownFits S T a0.state e1 ∧ ownFits S T (a0.withFresh (a0.state.fresh + 1)).state e2 ∧
     (∀ b, Step.runOwn T a0 e1 = .ok b → ownFits S T b.state e2) ∧
     ∀ c, Step.runOwn T (a0.withFresh (a0.state.fresh + 1)) e2 = .ok c →
@@ -452,9 +446,9 @@ def PairFits (S : Ty → Nat) (T : List TypeDecl) (a0 : Step.Acc v) (e1 e2 : Eff
 codes' condition holds: what makes its bound question honest. -/
 theorem pair_fits {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v)) {S : SymState v} {a0 : Step.Acc v} (hR : StateRel M L T (shapes v) S a0.state)
-    (hinv : Step.Inv P a0.state) (hqk : Step.QueueOk P a0) {t1 t2 : Term} {x1 x2 : EffectV v.event}
-    (hx1 : RelV L (.dsl .effect [v.event]) x1 (t1.denote M)) (hx2 : RelV L (.dsl .effect [v.event]) x2 (t2.denote M))
-    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P)
+    (hinv : Step.Inv P a0.state) (hqk : Step.QueueOk P a0) {t1 t2 : Term} {x1 x2 : OwnEffectV v.event}
+    (hx1 : RelV L (.dsl .effect [v.event]) x1.effect (t1.denote M)) (hx2 : RelV L (.dsl .effect [v.event]) x2.effect (t2.denote M))
+    (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P)
     {k1 k2 : Nat} (ht1 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k1) t1))
     (ht2 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k2) t2))
     {o : PairOut} (henc : encodePair L T P v senv S t1 t2 k1 k2 = .ok o) (hcodes : Holds M o.codes) :
@@ -472,8 +466,8 @@ theorem pair_fits {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
   simp only [holds_allT, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq] at hcodes ⊢
   obtain ⟨hca, hy1, hy2, hy3, hy4⟩ := hcodes
   have hshs : ∀ sh ∈ shapes v, sh.InSites P := fun _ => shapes_inSites chk.reach
-  obtain ⟨vals1, he1, hk1⟩ := own_key hown1 hx1 ht1 rfl (need_ok.1 hkey1)
-  obtain ⟨vals2, he2, hk2⟩ := own_key hown2 hx2 ht2 rfl (need_ok.1 hkey2)
+  obtain ⟨vals1, he1, hk1⟩ := own_key hx1 ht1 rfl (need_ok.1 hkey1)
+  obtain ⟨vals2, he2, hk2⟩ := own_key hx2 ht2 rfl (need_ok.1 hkey2)
   have hq0 : (Term.int 0).denote M = .int ((0 : Nat) : Int) := rfl
   have eA1 := ownKind_encode chk hshs (shapesHold_shapes v) a0 happ hca senv hR.records hR.now hR.fresh hR.nextId hq0
     hR.machines x1 hreach1 he1 hk1 h1 hy1
@@ -644,13 +638,13 @@ theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
 
 /-- Two own effects a model codes are effects of a listed pair of own kinds, whose tests the model's effect variables
 pass (T5b, `ownPairs_complete`). -/
-theorem pair_kinds (senv : StepEnv L (shapes v)) {x1 x2 : EffectV v.event}
-    (hx1 : RelV L (.dsl .effect [v.event]) x1 (M.vars (pairVar v)))
-    (hx2 : RelV L (.dsl .effect [v.event]) x2 (M.vars (pairVar v + 1)))
-    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) :
+theorem pair_kinds (senv : StepEnv L (shapes v)) {x1 x2 : OwnEffectV v.event}
+    (hx1 : RelV L (.dsl .effect [v.event]) x1.effect (M.vars (pairVar v)))
+    (hx2 : RelV L (.dsl .effect [v.event]) x2.effect (M.vars (pairVar v + 1)))
+    :
     ∃ p ∈ L.ownPairs v.event, Holds M (.is senv.dE ((L.effectsOf v.event).length + p.1) (.var (pairVar v))) ∧
       Holds M (.is senv.dE ((L.effectsOf v.event).length + p.2) (.var (pairVar v + 1))) := by
-  obtain ⟨p, hp, d, n, vals1, vals2, hd, hz1, hz2⟩ := ownPairs_complete hx1 hx2 hown1 hown2
+  obtain ⟨p, hp, d, n, vals1, vals2, hd, hz1, hz2⟩ := ownPairs_complete hx1 hx2
   obtain rfl := find_det hd senv.hE
   have htest : ∀ (j : Nat) (vals : List Val) (i : Nat), M.vars i = .ctor senv.dE ((L.effectsOf v.event).length + j) vals →
       Holds M (.is senv.dE ((L.effectsOf v.event).length + j) (.var i)) := fun j vals i h => by
@@ -662,15 +656,15 @@ slots, the two effects of the pair's kinds commute from every step in progress w
 to, with its pending ids below its next id and its names below its counter, and which relates to itself under every
 renaming keeping its counters. -/
 theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
-    {a0 : Step.Acc v} {x1 x2 : EffectV v.event} {k1 k2 : Nat}
+    {a0 : Step.Acc v} {x1 x2 : OwnEffectV v.event} {k1 k2 : Nat}
     (hl : PairLine L T P v senv (PairFits L.count T a0 x1 x2) (k1, k2))
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
     (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some a0.state)
     (hbelow : ∀ p ∈ a0.state.pending, p.id < a0.state.nextId) (hsupp : Step.StateSupp a0.state)
     (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0)
-    (hx1 : RelV L (.dsl .effect [v.event]) x1 (M.vars (pairVar v)))
-    (hx2 : RelV L (.dsl .effect [v.event]) x2 (M.vars (pairVar v + 1)))
-    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P)
+    (hx1 : RelV L (.dsl .effect [v.event]) x1.effect (M.vars (pairVar v)))
+    (hx2 : RelV L (.dsl .effect [v.event]) x2.effect (M.vars (pairVar v + 1)))
+    (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P)
     (ht1 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k1) (.var (pairVar v))))
     (ht2 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k2) (.var (pairVar v + 1)))) :
     Step.PairCommutes T a0 x1 x2 := by
@@ -680,9 +674,9 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
   have hinv := decode_inv chk.reach hS hbelow
   have hcc : Holds M o.codes ∧ Holds M o.cond := hbq.elim hb fun ⟨hc, hf⟩ =>
     have hcodes := (pair_codes ho).2 hc
-    ⟨hcodes, (pair_fits chk senv hR hinv hqk hx1 hx2 hown1 hown2 hreach1 hreach2 ht1 ht2 ho hcodes).2 hf⟩
-  exact pair_commutes chk senv hR hinv hqk hsa (t1 := .var (pairVar v)) (t2 := .var (pairVar v + 1)) hx1 hx2 hown1
-    hown2 hreach1 hreach2 ht1 ht2 ho hcc.1 hcc.2 (ht htq hcc.1 hcc.2)
+    ⟨hcodes, (pair_fits chk senv hR hinv hqk hx1 hx2 hreach1 hreach2 ht1 ht2 ho hcodes).2 hf⟩
+  exact pair_commutes chk senv hR hinv hqk hsa (t1 := .var (pairVar v)) (t2 := .var (pairVar v + 1)) hx1 hx2
+    hreach1 hreach2 ht1 ht2 ho hcc.1 hcc.2 (ht htq hcc.1 hcc.2)
 
 end
 

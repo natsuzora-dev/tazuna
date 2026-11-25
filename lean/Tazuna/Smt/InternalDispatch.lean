@@ -170,8 +170,7 @@ def ownQueryFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : QueryV 
         eventsFit S T s (oa.fn ⟨x.resolve.fn (ctx, ()), ()⟩))
 
 /-- Whether an own effect's internal step fits from `s`, for the command or query `Step.runOwn` runs. -/
-def ownFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) : EffectV v.event → Prop
-  | .request _ => True
+def ownFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) : OwnEffectV v.event → Prop
   | .command name c i j caller value onAnswer =>
     match Ty.same c v.caller, Step.ownCommand (v := v) name i j with
     | some ⟨hc⟩, some ⟨x, hi, hj⟩ =>
@@ -248,8 +247,8 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
-    {j : Nat} {key : OwnKey} (x : EffectV v.event) (hreach : x.Reach P) {vals : List Val}
-    (heff : eff.denote M = .ctor senv.dE ((L.effectsOf v.event).length + j) vals) (hkey : key.Holds L x vals)
+    {j : Nat} {key : OwnKey} (x : OwnEffectV v.event) (hreach : x.effect.Reach P) {vals : List Val}
+    (heff : eff.denote M = .ctor senv.dE ((L.effectsOf v.event).length + j) vals) (hkey : key.Holds L x.effect vals)
     {ko : OwnKindOut v} {st : StepTerms v} {c cx : Term}
     (henc : encodeOwnKind L T P v shs senv (L.effectsOf v.event).length apply records now fresh n q eff xs j key =
       .ok ⟨⟨ko, st⟩, c, cx⟩)
@@ -266,7 +265,6 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   cases key with
   | command e name c0 i jj a0 =>
     cases x with
-    | request => exact hkey.elim
     | query => exact hkey.elim
     | command name' c' i' j' caller value onAnswer =>
     obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vc, vi, va, rfl, hvc, hvi, hva⟩ := hkey
@@ -364,7 +362,6 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
       exact H
   | query e name c0 i o a0 =>
     cases x with
-    | request => exact hkey.elim
     | command => exact hkey.elim
     | query name' c' i' j' caller value onAnswer =>
     obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vc, vi, va, rfl, hvc, hvi, hva⟩ := hkey
@@ -469,7 +466,7 @@ structure Agrees (M : Model) (L : Layout) (e : Ty) (a b : StepTerms v) : Prop wh
   queued : a.done.queued.denote M = b.done.queued.denote M
   news : ∀ (shs : List (PendingShape e)) ds effs n0, NewsRel M L shs ds b.done.news effs n0 →
     NewsRel M L shs ds a.done.news effs n0
-  owns : ∀ (os : List (EffectV e)) q0, OwnRel M L b.done.owns os q0 → OwnRel M L a.done.owns os q0
+  owns : ∀ (os : List (OwnEffectV e)) q0, OwnRel M L b.done.owns os q0 → OwnRel M L a.done.owns os q0
   events : ∀ evs : List v.event.den0, EventsRel M L b.done.events evs → EventsRel M L a.done.events evs
 
 theorem AccRel.congr {a b : StepTerms v} (hab : Agrees M L v.event a b)
@@ -523,7 +520,7 @@ theorem fold_none {e : Ty} (base : StepTerms v)
       t.done.queued.denote M = base.done.queued.denote M ∧
       Term.denotes M t.done.tables.toList = Term.denotes M base.done.tables.toList ∧
       (∀ (shs : List (PendingShape e)) ds n0, NewsRel M L shs ds t.done.news [] n0) ∧
-      (∀ q0, OwnRel M L t.done.owns ([] : List (EffectV e)) q0) ∧
+      (∀ q0, OwnRel M L t.done.owns ([] : List (OwnEffectV e)) q0) ∧
         EventsRel M L t.done.events ([] : List v.event.den0)
   | [], _ => by
     simp only [List.foldr_nil, hb]
@@ -622,8 +619,7 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
-    (x : EffectV v.event) (hx : RelV L (.dsl .effect [v.event]) x (eff.denote M)) (hown : x.isRequest = false)
-    (hreach : x.Reach P)
+    (x : OwnEffectV v.event) (hx : RelV L (.dsl .effect [v.event]) x.effect (eff.denote M)) (hreach : x.effect.Reach P)
     {o : OwnStepOut v} {cond codes : Term}
     (henc : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok ⟨o, cond, codes⟩)
     (hcodes : Holds M codes) :
@@ -634,14 +630,11 @@ theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     | none => AccRel M L T shs a o.terms.done o.terms.fresh q0 (Step.runOwn T a x)) := by
   obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  have hx' : EffRel L x (eff.denote M) := hx
+  have hx' : EffRel L x.effect (eff.denote M) := hx
   obtain ⟨d, nn, hd, hx'⟩ := hx'
   cases (Prod.mk.inj (Option.some.inj (senv.hE.symm.trans hd))).1
   rcases hx' with ⟨k, key, vals, -, -, hh⟩ | ⟨k, key, vals, hk, heff, hkey⟩
-  · cases x with
-    | request => simp [EffectV.isRequest] at hown
-    | command => exact hh.elim
-    | query => exact hh.elim
+  · cases x <;> exact hh.elim
   have hF := mapM_ok _ _ _ hks
   have heff' : (Term.share eff).denote M = .ctor senv.dE ((L.effectsOf v.event).length + k) vals := by
     rw [Term.denote_share]; exact heff

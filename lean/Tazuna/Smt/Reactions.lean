@@ -174,17 +174,19 @@ theorem reaction_parts {P : List AnySite} (hP : SitesUnique P) (name : String) {
   intro gate R O effs'
   have hreq : Step.reqsOf effs' = (effs.filter (·.isRequest)).map (Sender.reaction name, ·) := by
     simp only [Step.reqsOf, effs', List.filter_map]; rfl
-  have hqd : Step.queuedOf effs' = effs.filter (!·.isRequest) := by
-    simp only [Step.queuedOf, effs', List.filter_map, List.map_map]
+  have hqd : (Step.queuedOf effs').map OwnEffectV.effect = effs.filter (!·.isRequest) := by
+    rw [Step.queuedOf_effect]
+    simp only [effs', List.filter_map, List.map_map]
     exact List.map_id'' (fun _ => rfl) _
-  rw [hreq, hqd]
+  rw [hreq]
   by_cases ho : (L.ownsOf e).isEmpty
   · have hall : ∀ x ∈ effs, x.isRequest = true := by
       intro x hx
       obtain ⟨vs, -, z, -, hz⟩ := forall2_mem_left hh _ hx
       exact request_of_rel (List.isEmpty_iff.1 ho) hz
     have h1 : effs.filter (·.isRequest) = effs := List.filter_eq_self.2 hall
-    have h2 : effs.filter (!·.isRequest) = [] := List.filter_eq_nil_iff.2 fun x hx => by simp [hall x hx]
+    have h2 : Step.queuedOf effs' = [] := Step.queuedOf_eq_nil fun x hx => by
+      obtain ⟨y, hy, rfl⟩ := List.mem_map.1 hx; exact hall y hy
     simp only [R, O, ho, ↓reduceIte, h1, h2]
     obtain ⟨r1, r2⟩ := reactSlots_rel hP name hshs hjs hE hPE hdk dflt LS sv effs hS hh hr hat hall hn
     exact ⟨by simpa using r1, r2, by simpa using hq, ownRel_nil q0⟩
@@ -200,6 +202,7 @@ theorem reaction_parts {P : List AnySite} (hP : SitesUnique P) (name : String) {
     obtain ⟨r1, r2⟩ := reactSlots_rel hP name hshs hjs hE hPE hdk dflt _ sv1 _ hS1 hh1
       (fun x hx => hr x (List.mem_filter.1 hx).1) (fun x hx => hat x (List.mem_filter.1 hx).1)
       (fun x hx => (List.mem_filter.1 hx).2) hn
+    rw [← hqd] at hh2
     obtain ⟨o1, o2⟩ := ownSlots_rel _ sv2 _ hS2 hh2 hq
     exact ⟨by simpa using r1, r2, o1, o2⟩
 
@@ -276,7 +279,7 @@ theorem reactions_encode {P : List AnySite} {E : List AnyEffectSite} (hP : Sites
     obtain ⟨hn2, hnews2, hq2, hown2⟩ := IH.2 hn1 hq1 hc2
     have hfl : ∀ a b : List (Sender × EffectV e), Step.reqsOf (a ++ b) = Step.reqsOf a ++ Step.reqsOf b ∧
         Step.queuedOf (a ++ b) = Step.queuedOf a ++ Step.queuedOf b := fun _ _ => by
-      simp [Step.reqsOf, Step.queuedOf, List.filter_append]
+      simp [Step.reqsOf, Step.queuedOf, List.filter_append, List.filterMap_append]
     simp only [reactionEffects, List.flatMap_cons] at hn2 hnews2 hq2 hown2 ⊢
     rw [(hfl _ _).1, (hfl _ _).2]
     refine ⟨?_, newsRel_append hnews1 hnews2, ?_, ownRel_append hown1 hown2⟩

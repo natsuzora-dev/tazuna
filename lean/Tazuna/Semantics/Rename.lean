@@ -120,6 +120,67 @@ theorem Multi.filter {p : α → Bool} {q : β → Bool} (hpq : ∀ a b, r a b �
     Multi r xs ys → Multi r (xs.filter p) (ys.filter q)
   | ⟨zs, h, hz⟩ => ⟨zs.filter q, forall2_filter hpq h, hz.filter q⟩
 
+theorem forall2_filterMap {r' : γ → δ → Prop} {f : α → Option γ} {g : β → Option δ}
+    (hfg : ∀ a b, r a b → Option.Rel r' (f a) (g b)) :
+    {xs : List α} → {ys : List β} → Forall2 r xs ys → Forall2 r' (xs.filterMap f) (ys.filterMap g)
+  | [], [], _ => trivial
+  | a :: xs, b :: ys, ⟨hab, h⟩ => by
+    have hr := hfg _ _ hab
+    simp only [List.filterMap_cons]
+    revert hr
+    cases f a <;> cases g b <;> intro hr
+    · exact forall2_filterMap hfg h
+    · cases hr
+    · cases hr
+    · cases hr with | some hc => exact ⟨hc, forall2_filterMap hfg h⟩
+  | [], _ :: _, h | _ :: _, [], h => h.elim
+
+theorem Multi.filterMap {r' : γ → δ → Prop} {f : α → Option γ} {g : β → Option δ}
+    (hfg : ∀ a b, r a b → Option.Rel r' (f a) (g b)) {xs : List α} {ys : List β} :
+    Multi r xs ys → Multi r' (xs.filterMap f) (ys.filterMap g)
+  | ⟨zs, h, hz⟩ => ⟨zs.filterMap g, forall2_filterMap hfg h, hz.filterMap g⟩
+
+theorem perm_map_inv {f : α → γ} {m k : List γ} (h : m.Perm k) :
+    ∀ {l : List α}, k = l.map f → ∃ l' : List α, l'.Perm l ∧ m = l'.map f := by
+  induction h with
+  | nil => intro l hl; exact ⟨[], by cases l <;> simp_all, rfl⟩
+  | cons x _ ih =>
+    intro l hl
+    cases l with
+    | nil => cases hl
+    | cons a l =>
+      simp only [List.map_cons, List.cons.injEq] at hl
+      obtain ⟨rfl, hl⟩ := hl
+      obtain ⟨l', hp, rfl⟩ := ih hl
+      exact ⟨a :: l', hp.cons a, rfl⟩
+  | swap x y k =>
+    intro l hl
+    match l, hl with
+    | a :: b :: l, hl =>
+      simp only [List.map_cons, List.cons.injEq] at hl
+      obtain ⟨rfl, rfl, rfl⟩ := hl
+      exact ⟨b :: a :: l, .swap a b l, rfl⟩
+    | [], hl => cases hl
+    | [_], hl => simp at hl
+  | trans _ _ ih1 ih2 =>
+    intro l hl
+    obtain ⟨l2, hp2, rfl⟩ := ih2 hl
+    obtain ⟨l1, hp1, rfl⟩ := ih1 rfl
+    exact ⟨l1, hp1.trans hp2, rfl⟩
+
+theorem forall2_of_map {r' : γ → δ → Prop} {f : α → γ} {g : β → δ} (hfg : ∀ a b, r' (f a) (g b) → r a b) :
+    {xs : List α} → {ys : List β} → Forall2 r' (xs.map f) (ys.map g) → Forall2 r xs ys
+  | [], [], _ => trivial
+  | _ :: _, _ :: _, ⟨hab, h⟩ => ⟨hfg _ _ hab, forall2_of_map hfg h⟩
+  | [], _ :: _, h | _ :: _, [], h => h.elim
+
+/-- Multisets related through maps relate where the relation of the images gives the relation. -/
+theorem Multi.of_map {r' : γ → δ → Prop} {f : α → γ} {g : β → δ} (hfg : ∀ a b, r' (f a) (g b) → r a b)
+    {xs : List α} {ys : List β} : Multi r' (xs.map f) (ys.map g) → Multi r xs ys
+  | ⟨zs, h, hz⟩ => by
+    obtain ⟨ys', hp, rfl⟩ := perm_map_inv hz rfl
+    exact ⟨ys', forall2_of_map hfg h, hp⟩
+
 theorem forall2_any {p : α → Bool} {q : β → Bool} (hpq : ∀ a b, r a b → p a = q b) :
     {xs : List α} → {ys : List β} → Forall2 r xs ys → xs.any p = ys.any q
   | [], [], _ => rfl
@@ -555,6 +616,23 @@ inductive EffectV.Rel (R : PBij) {e : Ty} : EffectV e → EffectV e → Prop
       {onAnswer onAnswer' : Fun (Ty.fn [output] (.list e))} :
       Ty.rel0 R c caller caller' → Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
       EffectV.Rel R (.query name c input output caller value onAnswer) (.query name c input output caller' value' onAnswer')
+
+inductive OwnEffectV.Rel (R : PBij) {e : Ty} : OwnEffectV e → OwnEffectV e → Prop
+  | command (name : String) (c input rejection : Ty) {caller caller' : c.den0} {value value' : input.den0}
+      {onAnswer onAnswer' : Fun (Ty.fn [Ty.result Ty.nil rejection] (.list e))} :
+      Ty.rel0 R c caller caller' → Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
+      OwnEffectV.Rel R (.command name c input rejection caller value onAnswer)
+        (.command name c input rejection caller' value' onAnswer')
+  | query (name : String) (c input output : Ty) {caller caller' : c.den0} {value value' : input.den0}
+      {onAnswer onAnswer' : Fun (Ty.fn [output] (.list e))} :
+      Ty.rel0 R c caller caller' → Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
+      OwnEffectV.Rel R (.query name c input output caller value onAnswer) (.query name c input output caller' value' onAnswer')
+
+theorem OwnEffectV.rel_iff {R : PBij} {e : Ty} {x y : OwnEffectV e} :
+    OwnEffectV.Rel R x y ↔ EffectV.Rel R x.effect y.effect := by
+  constructor
+  · intro h; cases h <;> constructor <;> assumption
+  · intro h; cases x <;> cases y <;> cases h <;> constructor <;> assumption
 
 /-! What a spec's structure values keep, each related to itself by `R`: the functions a step runs and the values a step
 reads. A service whose parts are so for every `R` respects every renaming (`Step.ServiceV.Equivariant`). -/

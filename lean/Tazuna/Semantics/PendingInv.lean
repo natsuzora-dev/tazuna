@@ -340,11 +340,10 @@ theorem runQuery_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : In
   · cases h
   · exact applyEvents_inv T hv _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ⟨ha.1, ha.2, ha.3, ha.4⟩ h
 
-theorem runOwn_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state) (eff : EffectV v.event)
+theorem runOwn_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state) (eff : OwnEffectV v.event)
     {a' : Acc v} (h : runOwn T a eff = .ok a') : Inv P a'.state := by
   revert h
   cases eff with
-  | request => intro h; simp only [runOwn, Except.ok.injEq] at h; exact h ▸ ha
   | command name c i j caller value onAnswer =>
     unfold runOwn
     dsimp only
@@ -402,7 +401,7 @@ theorem finish_inv (T : List TypeDecl) (hv : v.Reach P E) (s0 : State v) (hs : I
 
 /-- The own queue holds own commands and queries whose kept functions are records of `P`: an internal step runs
 each at the site its `on_answer` names. -/
-def QueueOk (P : List AnySite) (a : Acc v) : Prop := ∀ x ∈ a.own, x.isRequest = false ∧ x.Reach P
+def QueueOk (P : List AnySite) (a : Acc v) : Prop := ∀ x ∈ a.own, x.effect.Reach P
 
 theorem start_queue (a : Acc v) (effs : List (Sender × EffectV v.event)) {a' : Acc v} (h : start a effs = .ok a')
     (ha : QueueOk P a) (he : EffsReach P effs) : QueueOk P a' := by
@@ -428,13 +427,13 @@ theorem start_queue (a : Acc v) (effs : List (Sender × EffectV v.event)) {a' : 
         intro y hy
         rcases List.mem_append.1 hy with hy | hy
         · exact ha y hy
-        · simp only [List.mem_singleton] at hy; subst hy; exact ⟨rfl, hx⟩
+        · simp only [List.mem_singleton] at hy; subst hy; exact hx
       | query =>
         intro h1; cases h1
         intro y hy
         rcases List.mem_append.1 hy with hy | hy
         · exact ha y hy
-        · simp only [List.mem_singleton] at hy; subst hy; exact ⟨rfl, hx⟩
+        · simp only [List.mem_singleton] at hy; subst hy; exact hx
 
 theorem applyEvents_queue (T : List TypeDecl) (hv : v.Reach P E) (events : List v.event.den0) :
     (a : Acc v) → {a' : Acc v} → applyEvents T a events = .ok a' → Inv P a.state → QueueOk P a → QueueOk P a' := by
@@ -450,7 +449,7 @@ theorem applyEvents_queue (T : List TypeDecl) (hv : v.Reach P E) (events : List 
       exact ih a1 h (start_inv _ _ hs he hf h1) (start_queue _ _ h1 hq he)
 
 theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state) (hq : QueueOk P a)
-    (eff : EffectV v.event) {a' : Acc v} (h : runOwn T a eff = .ok a') : QueueOk P a' := by
+    (eff : OwnEffectV v.event) {a' : Acc v} (h : runOwn T a eff = .ok a') : QueueOk P a' := by
   have hcmd : ∀ (x : CommandV v.records v.event v.caller) caller input onAnswer,
       runCommand T a x caller input onAnswer = .ok a' → QueueOk P a' := by
     intro x caller input onAnswer h
@@ -478,7 +477,6 @@ theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : In
     · exact applyEvents_queue T hv _ { a with state := { a.state with fresh := a.state.fresh + 1 } } h ⟨ha.1, ha.2, ha.3, ha.4⟩ hq
   revert h
   cases eff with
-  | request => intro h; simp only [runOwn, Except.ok.injEq] at h; exact h ▸ hq
   | command name c i j caller value onAnswer =>
     unfold runOwn
     dsimp only

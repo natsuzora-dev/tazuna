@@ -294,8 +294,8 @@ theorem news_same {e : Ty} {shs : List (PendingShape e)} {ds : List (String × D
 
 /-- Two steps' own slots compared equal hold own commands and queries of the unique sites `P` that relate as
 multisets with every id renamed to itself. -/
-theorem owns_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {A C : List OwnSlot} {osA osC : List (EffectV e)}
-    {qA qC : Nat} (hA : OwnRel M L A osA qA) (hC : OwnRel M L C osC qC) (h : Holds M (ownsEqT A C))
+theorem ownsE_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {A C : List OwnSlot} {osA osC : List (EffectV e)}
+    {qA qC : Nat} (hA : OwnRelE M L A osA qA) (hC : OwnRelE M L C osC qC) (h : Holds M (ownsEqT A C))
     (hrA : ∀ x ∈ osA, x.isRequest = false ∧ x.Reach P) (hrC : ∀ x ∈ osC, x.Reach P) :
     Multi (EffectV.Rel PBij.refl) osA osC := by
   obtain ⟨svA, zsA, hSA, -, hhA, hpA⟩ := hA
@@ -326,6 +326,17 @@ theorem owns_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {A C : List O
     have := hp.map Prod.fst
     rwa [List.zipIdx_map_fst] at this
   exact ((hm.map (f := Prod.fst) (g := Prod.fst) fun _ _ h => h).perm_left (hfst hpA)).perm_right (hfst hpC)
+
+theorem owns_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {A C : List OwnSlot} {osA osC : List (OwnEffectV e)}
+    {qA qC : Nat} (hA : OwnRel M L A osA qA) (hC : OwnRel M L C osC qC) (h : Holds M (ownsEqT A C))
+    (hrA : ∀ x ∈ osA, x.effect.Reach P) (hrC : ∀ x ∈ osC, x.effect.Reach P) :
+    Multi (OwnEffectV.Rel PBij.refl) osA osC :=
+  Multi.of_map (r' := EffectV.Rel PBij.refl) (f := OwnEffectV.effect) (g := OwnEffectV.effect)
+    (fun _ _ h => OwnEffectV.rel_iff.2 h) (ownsE_same hP hA hC h
+    (fun x hx => by
+      obtain ⟨o, ho, rfl⟩ := List.mem_map.1 hx
+      exact ⟨by cases o <;> rfl, hrA o ho⟩)
+    (fun x hx => by obtain ⟨o, ho, rfl⟩ := List.mem_map.1 hx; exact hrC o ho))
 
 end
 

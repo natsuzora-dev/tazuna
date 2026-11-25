@@ -84,47 +84,41 @@ theorem sorted_capRel {t : Ty} {f : Fun t} {z : Val} (h : CapRel L f z) : Sorted
   exact ⟨d, n, vals, hf, hz, sortedVs_of_relDs f.Γ f.env vals hr⟩
 
 /-- A value that codes an own effect has the effect datatype's sort. -/
-theorem effSorted_of_rel {e : Ty} {x : EffectV e} (hown : x.isRequest = false) {z : Val}
-    (h : RelV L (.dsl .effect [e]) x z) : EffSorted L e z := by
+theorem effSorted_of_rel {e : Ty} {x : OwnEffectV e} {z : Val}
+    (h : RelV L (.dsl .effect [e]) x.effect z) : EffSorted L e z := by
   obtain ⟨d, n, hf, hr⟩ := h
   rcases hr with ⟨k, key, vals, -, -, hh⟩ | ⟨k, key, vals, hk, hz, hh⟩
-  · cases x with
-    | request => simp [EffectV.isRequest] at hown
-    | command => exact hh.elim
-    | query => exact hh.elim
+  · cases x <;> exact hh.elim
   refine ⟨d, n, _, vals, hf, hz, .inl ⟨key.fields, ?_, ?_⟩⟩
   · rw [Layout.effectFields, List.getElem?_append_right (by simp)]
     simp [hk]
   · cases key with
     | command e' name c i j a =>
       cases x with
-      | request => exact hh.elim
       | query => exact hh.elim
       | command name' c' i' j' caller value onAnswer =>
         obtain ⟨-, rfl, rfl, -, -, hΓ, vc, vi, va, rfl, hc, hi, hcap⟩ := hh
         exact ⟨sorted_of_relD _ _ _ hc, sorted_of_relD _ _ _ hi, hΓ ▸ sorted_capRel hcap, trivial⟩
     | query e' name c i o a =>
       cases x with
-      | request => exact hh.elim
       | command => exact hh.elim
       | query name' c' i' o' caller value onAnswer =>
         obtain ⟨-, rfl, rfl, -, -, hΓ, vc, vi, va, rfl, hc, hi, hcap⟩ := hh
         exact ⟨sorted_of_relD _ _ _ hc, sorted_of_relD _ _ _ hi, hΓ ▸ sorted_capRel hcap, trivial⟩
 
 /-- A model of a pair question's variables: the state's values, then the two effects'. -/
-theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shapes v) s) {x1 x2 : EffectV v.event}
-    (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1 z) (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2 z)
-    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) :
+theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shapes v) s) {x1 x2 : OwnEffectV v.event}
+    (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1.effect z) (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2.effect z) :
     ∃ M : Model, (∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n)) ∧
       (SymState.vars (v := v) 0).decode M L T (shapes v) = some s ∧
-      RelV L (.dsl .effect [v.event]) x1 (M.vars (pairVar v)) ∧
-      RelV L (.dsl .effect [v.event]) x2 (M.vars (pairVar v + 1)) := by
+      RelV L (.dsl .effect [v.event]) x1.effect (M.vars (pairVar v)) ∧
+      RelV L (.dsl .effect [v.event]) x2.effect (M.vars (pairVar v + 1)) := by
   obtain ⟨pv, hpv, hsome⟩ := hW
   obtain ⟨vals, hvals⟩ := Option.isSome_iff_exists.1 hsome
   obtain ⟨z1, hz1⟩ := he1
   obtain ⟨z2, hz2⟩ := he2
-  have hs1 := effSorted_of_rel hown1 hz1
-  have hs2 := effSorted_of_rel hown2 hz2
+  have hs1 := effSorted_of_rel hz1
+  have hs2 := effSorted_of_rel hz2
   have hsorted := embedState_sorted hvals
   have hlen : vals.length = (stateTys v (shapes v)).length := (forall2_length hsorted).symm
   have hst : ∀ j (hj : j < vals.length), (coverModel (vals ++ [z1, z2])).vars (0 + j) = vals[j] := fun j hj =>
@@ -161,17 +155,17 @@ step in progress whose state fits the slots, whose names are below its counter, 
 effects are the program's, and whose two effects some value codes, where every line reading within the bounds has the
 two orders fit the slots. -/
 theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
-    {a0 : Step.Acc v} {x1 x2 : EffectV v.event}
+    {a0 : Step.Acc v} {x1 x2 : OwnEffectV v.event}
     (hall : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (PairFits L.count T a0 x1 x2) p)
     (hkeys : Step.KeysOk T a0.state) (hW : Within L (shapes v) a0.state)
     (hinv : Step.Inv P a0.state) (hsupp : Step.StateSupp a0.state) (hqk : Step.QueueOk P a0)
-    (hsa : Step.SelfAt a0.state.fresh a0) (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1 z)
-    (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2 z)
-    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P) :
+    (hsa : Step.SelfAt a0.state.fresh a0) (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1.effect z)
+    (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2.effect z)
+    (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P) :
     Step.PairCommutes T a0 x1 x2 := by
-  obtain ⟨M, hM, hS, hx1, hx2⟩ := pair_model hkeys hW he1 he2 hown1 hown2
-  obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2 hown1 hown2
-  exact pair_sound chk senv (hall p hp) hM hS hinv.below hsupp hqk hsa hx1 hx2 hown1 hown2 hreach1 hreach2 ht1 ht2
+  obtain ⟨M, hM, hS, hx1, hx2⟩ := pair_model hkeys hW he1 he2
+  obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
+  exact pair_sound chk senv (hall p hp) hM hS hinv.below hsupp hqk hsa hx1 hx2 hreach1 hreach2 ht1 ht2
 
 end
 

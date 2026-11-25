@@ -334,7 +334,7 @@ multisets. -/
 def Acc.Rel (R : Ren) (a a' : Acc v) : Prop :=
   StateRel R a.state a'.state ∧ Multi (Ty.rel0 R.ctr v.event) a.events a'.events ∧ Multi (OutLine.Rel R) a.out a'.out ∧
     (∀ o ∈ a.out, o.id < a.state.nextId) ∧ (∀ o ∈ a'.out, o.id < a'.state.nextId) ∧
-    Multi (EffectV.Rel R.ctr) a.own a'.own
+    Multi (OwnEffectV.Rel R.ctr) a.own a'.own
 
 /-- `W'` renames the wire ids below `N` and `N'` as `W` does. -/
 def _root_.Tazuna.Ir.PBij.Extends (W W' : PBij) (N N' : Nat) : Prop := ∀ {i j}, i < N → j < N' → W.rel i j → W'.rel i j
@@ -420,6 +420,16 @@ theorem writes_of_declared (ds : List (String × DeclaredV)) {e : Ty} : (l : Lis
       | none => exact absurd ⟨r, rfl, ho⟩ hd
       | some o => exact ⟨⟨N, snd, o, r⟩ :: ps, ⟨⟨r, o, rfl, ho, rfl⟩, hps⟩⟩
     | command | query => simp [EffectV.isRequest] at hreq
+
+theorem Started.rel_own {R : PBij} {e : Ty} {x y : Sender × EffectV e} (h : Started.Rel R x y) :
+    Option.Rel (OwnEffectV.Rel R) x.2.own? y.2.own? := by
+  obtain ⟨_, ex⟩ := x
+  obtain ⟨_, ey⟩ := y
+  rcases h with ⟨_, h⟩
+  cases h with
+  | request => exact .none
+  | command => exact .some (.command _ _ _ _ ‹_› ‹_› ‹_›)
+  | query => exact .some (.query _ _ _ _ ‹_› ‹_› ‹_›)
 
 theorem Started.rel_isRequest {R : PBij} {e : Ty} {x y : Sender × EffectV e} (h : Started.Rel R x y) :
     x.2.isRequest = y.2.isRequest := by
@@ -521,8 +531,7 @@ theorem start_rel {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a') {effs effs' : L
       · exact Nat.lt_of_lt_of_le (ho' o hp) (Nat.le_add_right _ _)
       · obtain ⟨p, hp', rfl⟩ := List.mem_map.1 hp
         exact (hmem hps' p hp').2
-    · exact hown.append ((he.filter (p := (!·.2.isRequest)) (q := (!·.2.isRequest))
-        fun _ _ h => by rw [Started.rel_isRequest h]).map fun _ _ h => h.2)
+    · exact hown.append (he.filterMap fun _ _ h => Started.rel_own h)
     · exact Nat.le_refl _
     · show a.state.fresh + a'.state.fresh = a'.state.fresh + a.state.fresh
       omega
@@ -873,10 +882,9 @@ theorem ownQuery_mem {name : String} {i o : Ty}
 
 /-- Running related own effects from related steps, with related counters, faults on both sides or ends related. -/
 theorem runOwn_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a')
-    (hctr : R.ctr.rel a.state.fresh a'.state.fresh) {eff eff' : EffectV v.event} (he : EffectV.Rel R.ctr eff eff') :
+    (hctr : R.ctr.rel a.state.fresh a'.state.fresh) {eff eff' : OwnEffectV v.event} (he : OwnEffectV.Rel R.ctr eff eff') :
     Lifted R a a' (runOwn T a eff) (runOwn T a' eff') := by
   cases he with
-  | request _ => exact Lifted.refl ha
   | command name c i j hc hval hf =>
     unfold runOwn
     dsimp only
@@ -971,7 +979,7 @@ theorem Acc.rel_inv {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') : Acc.Rel R.in
   exact ⟨⟨Ty.rel0_inv.1 hrec, Machines.rel_inv hmach, hpend.inv fun _ _ h => ⟨h.1, Sender.rel_inv h.2.1, h.2.2.1.symm, RequestV.rel_inv h.2.2.2⟩,
     hnow.symm, hb', hb⟩, hev.inv fun _ _ h => Ty.rel0_inv.1 h,
     hout.inv fun _ _ h => ⟨h.1, h.2.1.symm, h.2.2.1.symm, WireVal.rel_inv h.2.2.2⟩, ho', ho,
-    hown.inv fun _ _ h => EffectV.rel_inv h⟩
+    hown.inv fun _ _ h => OwnEffectV.rel_iff.2 (EffectV.rel_inv (OwnEffectV.rel_iff.1 h))⟩
 
 end Step
 

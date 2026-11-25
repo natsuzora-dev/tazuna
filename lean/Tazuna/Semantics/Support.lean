@@ -82,18 +82,18 @@ namespace Step
 variable {v : ServiceV} (T : List TypeDecl)
 
 theorem start_own_mem : (effs : List (Sender × EffectV v.event)) → (a : Acc v) → {b : Acc v} → start a effs = .ok b →
-    ∀ x ∈ b.own, x ∈ a.own ∨ x.isRequest = false ∧ ∃ s, (s, x) ∈ effs
+    ∀ x ∈ b.own, x ∈ a.own ∨ ∃ s, (s, x.effect) ∈ effs
   | [], a, b, h, x, hx => by
     simp only [start, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h
     subst h; exact .inl hx
   | (snd, eff) :: effs, a, b, h, x, hx => by
     simp only [start, List.foldlM_cons] at h
     have tail : ∀ a', start a' effs = .ok b →
-        (x ∈ a'.own → x ∈ a.own ∨ x.isRequest = false ∧ ∃ s, (s, x) ∈ (snd, eff) :: effs) →
-        x ∈ a.own ∨ x.isRequest = false ∧ ∃ s, (s, x) ∈ (snd, eff) :: effs := fun a' h' k => by
-      rcases start_own_mem effs a' h' x hx with h1 | ⟨hr, s, hs⟩
+        (x ∈ a'.own → x ∈ a.own ∨ ∃ s, (s, x.effect) ∈ (snd, eff) :: effs) →
+        x ∈ a.own ∨ ∃ s, (s, x.effect) ∈ (snd, eff) :: effs := fun a' h' k => by
+      rcases start_own_mem effs a' h' x hx with h1 | ⟨s, hs⟩
       · exact k h1
-      · exact .inr ⟨hr, s, List.mem_cons_of_mem _ hs⟩
+      · exact .inr ⟨s, List.mem_cons_of_mem _ hs⟩
     cases eff with
     | request r =>
       cases ho : r.ownerIn v.declared with
@@ -106,13 +106,13 @@ theorem start_own_mem : (effs : List (Sender × EffectV v.event)) → (a : Acc v
       refine tail _ h fun h1 => ?_
       rcases List.mem_append.1 h1 with h1 | h1
       · exact .inl h1
-      · rw [List.mem_singleton] at h1; subst h1; exact .inr ⟨rfl, snd, List.mem_cons_self⟩
+      · rw [List.mem_singleton] at h1; subst h1; exact .inr ⟨snd, List.mem_cons_self⟩
     | query name c i o caller value onAnswer =>
       simp only [bind, Except.bind] at h
       refine tail _ h fun h1 => ?_
       rcases List.mem_append.1 h1 with h1 | h1
       · exact .inl h1
-      · rw [List.mem_singleton] at h1; subst h1; exact .inr ⟨rfl, snd, List.mem_cons_self⟩
+      · rw [List.mem_singleton] at h1; subst h1; exact .inr ⟨snd, List.mem_cons_self⟩
 
 /-- Starting effects that each relate to themselves keeps a step in progress related to itself with every wire id
 kept: each request it writes relates to itself at its own id. -/
@@ -142,8 +142,8 @@ theorem start_self {P : PBij} {a : Acc v} (ha : Acc.Rel ⟨P, PBij.refl⟩ a a) 
     hev, hout.append (Multi.of_forall2 (forall2_refl_of fun o ho => by
       obtain ⟨p, hp, rfl⟩ := List.mem_map.1 ho; exact Pending.rel_line (hnew p hp).1)), hob, hob,
     hown.append (Multi.of_forall2 (forall2_refl_of fun x hx => ?_))⟩
-  obtain ⟨y, hy, rfl⟩ := List.mem_map.1 hx
-  exact (he y (List.mem_filter.1 hy).1).2
+  obtain ⟨y, hy, hyx⟩ := List.mem_filterMap.1 hx
+  exact OwnEffectV.rel_iff.2 (EffectV.own?_eq_some hyx ▸ (he y hy).2)
 
 theorem mem_foldl_dedup {α : Type} (eq : α → α → Bool) (x : α) : (xs acc : List α) →
     x ∈ xs.foldl (fun ks k => if ks.any (eq k) then ks else ks ++ [k]) acc → x ∈ acc ∨ x ∈ xs
@@ -225,7 +225,7 @@ itself. -/
 def SelfAt (n : Nat) (a : Acc v) : Prop := ∀ P : PBij, P.Fixes n → Acc.Rel ⟨P, PBij.refl⟩ a a
 
 /-- A waiting own effect with names below `n`. -/
-def OwnAt (n : Nat) (x : EffectV v.event) : Prop := x.isRequest = false ∧ ∀ P : PBij, P.Fixes n → EffectV.Rel P x x
+def OwnAt (n : Nat) (x : OwnEffectV v.event) : Prop := ∀ P : PBij, P.Fixes n → OwnEffectV.Rel P x x
 
 theorem applyEvents_self (hv : v.Equivariant) (n : Nat) :
     (evs : List v.event.den0) → (a : Acc v) → SelfAt n a → (∀ ev ∈ evs, ∀ P : PBij, P.Fixes n → Ty.rel0 P v.event ev ev) →
@@ -251,12 +251,12 @@ theorem applyEvents_self (hv : v.Equivariant) (n : Nat) :
           (react_self T hv (s := a.state) (fun P hP => ⟨(ha P hP).1.1, (ha P hP).1.2.1⟩) hev1 · · P hP) hs
       have hown1 : ∀ x ∈ a1.own, x ∈ a.own ∨ OwnAt n x := by
         intro x hx
-        rcases start_own_mem _ _ hs x hx with hx | ⟨hr, snd, hx⟩
+        rcases start_own_mem _ _ hs x hx with hx | ⟨snd, hx⟩
         · exact .inl hx
-        · refine .inr ⟨hr, fun P hP => ?_⟩
+        · refine .inr fun P hP => ?_
           have hS := react_self T hv (s := a.state) (fun P hP => by
             exact ⟨(ha P hP).1.1, (ha P hP).1.2.1⟩) hev1 _ hx P hP
-          exact hS.2
+          exact OwnEffectV.rel_iff.2 hS.2
       obtain ⟨hb, hbo⟩ := applyEvents_self hv n evs a1 h1 (fun e he => hev e (List.mem_cons_of_mem _ he)) b h
       refine ⟨hb, fun x hx => ?_⟩
       rcases hbo x hx with hx | hx
@@ -414,10 +414,9 @@ theorem runCommand_fresh {a b : Acc v} {x : CommandV v.records v.event v.caller}
       exact applyEvents_fresh T _ _ h
 
 /-- An own command or query that runs takes one counter. -/
-theorem runOwn_fresh {a b : Acc v} {e : EffectV v.event} (hr : e.isRequest = false) (h : runOwn T a e = .ok b) :
+theorem runOwn_fresh {a b : Acc v} {e : OwnEffectV v.event} (h : runOwn T a e = .ok b) :
     b.state.fresh = a.state.fresh + 1 := by
   cases e with
-  | request => cases hr
   | command name c i j caller value onAnswer =>
     dsimp only [runOwn] at h
     revert h
@@ -456,25 +455,24 @@ theorem runOwn_fresh {a b : Acc v} {e : EffectV v.event} (hr : e.isRequest = fal
         · cases h
         · exact applyEvents_fresh T _ _ h
 
-theorem EffectV.rel_command_inv {P : PBij} {e : Ty} {n : String} {c i j : Ty} {a a' : c.den0} {x x' : i.den0}
+theorem OwnEffectV.rel_command_inv {P : PBij} {e : Ty} {n : String} {c i j : Ty} {a a' : c.den0} {x x' : i.den0}
     {f f' : Fun (Ty.fn [Ty.result Ty.nil j] (.list e))}
-    (h : EffectV.Rel P (.command n c i j a x f) (.command n c i j a' x' f')) :
+    (h : OwnEffectV.Rel P (.command n c i j a x f) (.command n c i j a' x' f')) :
     Ty.rel0 P c a a' ∧ Ty.rel0 P i x x' ∧ Fun.Rel P f f' := by
   cases h; exact ⟨‹_›, ‹_›, ‹_›⟩
 
-theorem EffectV.rel_query_inv {P : PBij} {e : Ty} {n : String} {c i o : Ty} {a a' : c.den0} {x x' : i.den0}
+theorem OwnEffectV.rel_query_inv {P : PBij} {e : Ty} {n : String} {c i o : Ty} {a a' : c.den0} {x x' : i.den0}
     {f f' : Fun (Ty.fn [o] (.list e))}
-    (h : EffectV.Rel P (.query n c i o a x f) (.query n c i o a' x' f')) :
+    (h : OwnEffectV.Rel P (.query n c i o a x f) (.query n c i o a' x' f')) :
     Ty.rel0 P c a a' ∧ Ty.rel0 P i x x' ∧ Fun.Rel P f f' := by
   cases h; exact ⟨‹_›, ‹_›, ‹_›⟩
 
 theorem runOwn_self (hv : v.Equivariant) {a : Acc v}
-    (ha : SelfAt (a.state.fresh + 1) a) {e : EffectV v.event}
-    (he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → EffectV.Rel P e e) :
+    (ha : SelfAt (a.state.fresh + 1) a) {e : OwnEffectV v.event}
+    (he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → OwnEffectV.Rel P e e) :
     ∀ b, runOwn T a e = .ok b → SelfAt (a.state.fresh + 1) b ∧ ∀ y ∈ b.own, y ∈ a.own ∨ OwnAt (a.state.fresh + 1) y := by
   intro b h
   cases e with
-  | request => cases h; exact ⟨ha, fun y hy => .inl hy⟩
   | command name c i j caller value onAnswer =>
     dsimp only [runOwn] at h
     revert h
@@ -492,8 +490,8 @@ theorem runOwn_self (hv : v.Equivariant) {a : Acc v}
         subst hcp hi hj
         intro h
         change runCommand T a x _ _ _ = _ at h
-        exact runCommand_self T hv ha hmem (fun P hP => (EffectV.rel_command_inv (he P hP)).1)
-          (fun P hP => (EffectV.rel_command_inv (he P hP)).2.1) (fun P hP => (EffectV.rel_command_inv (he P hP)).2.2) b h
+        exact runCommand_self T hv ha hmem (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).1)
+          (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).2.1) (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).2.2) b h
   | query name c i o caller value onAnswer =>
     dsimp only [runOwn] at h
     revert h
@@ -511,20 +509,20 @@ theorem runOwn_self (hv : v.Equivariant) {a : Acc v}
         subst hcp hi ho
         intro h
         change runQuery T a x _ _ _ = _ at h
-        exact runQuery_self T hv ha hmem (fun P hP => (EffectV.rel_query_inv (he P hP)).1)
-          (fun P hP => (EffectV.rel_query_inv (he P hP)).2.1) (fun P hP => (EffectV.rel_query_inv (he P hP)).2.2) b h
+        exact runQuery_self T hv ha hmem (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).1)
+          (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).2.1) (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).2.2) b h
 
 /-- A step in progress whose names are all below its counter: every renaming that keeps those counters relates its
 state to itself, and each waiting own effect to itself. The own cascade keeps it (`ownSys_preserved`). -/
 def Supp (a : Acc v) : Prop := SelfAt a.state.fresh { a with own := [] } ∧ ∀ x ∈ a.own, OwnAt a.state.fresh x
 
-theorem OwnAt.mono {n m : Nat} {x : EffectV v.event} (h : OwnAt n x) (hnm : n ≤ m) : OwnAt m x :=
-  ⟨h.1, fun P hP => h.2 P (hP.mono hnm)⟩
+theorem OwnAt.mono {n m : Nat} {x : OwnEffectV v.event} (h : OwnAt n x) (hnm : n ≤ m) : OwnAt m x :=
+  fun P hP => h P (hP.mono hnm)
 
-theorem SelfAt.own {n : Nat} {a : Acc v} (h : SelfAt n { a with own := [] }) {xs : List (EffectV v.event)}
+theorem SelfAt.own {n : Nat} {a : Acc v} (h : SelfAt n { a with own := [] }) {xs : List (OwnEffectV v.event)}
     (hxs : ∀ x ∈ xs, OwnAt n x) : SelfAt n { a with own := xs } := fun P hP => by
   obtain ⟨hst, hevs, hout, ho, ho', -⟩ := h P hP
-  exact ⟨hst, hevs, hout, ho, ho', Multi.of_forall2 (forall2_refl_of fun x hx => (hxs x hx).2 P hP)⟩
+  exact ⟨hst, hevs, hout, ho, ho', Multi.of_forall2 (forall2_refl_of fun x hx => hxs x hx P hP)⟩
 
 theorem SelfAt.drop {n : Nat} {a : Acc v} (h : SelfAt n a) : SelfAt n { a with own := [] } := fun P hP => by
   obtain ⟨hst, hevs, hout, ho, ho', -⟩ := h P hP
@@ -538,10 +536,10 @@ theorem ownSys_preserved (hv : v.Equivariant) :
   have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
   have ha' : SelfAt (a.state.fresh + 1) { a with own := a.own.eraseIdx i } :=
     (SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (List.mem_of_mem_eraseIdx hx)).mono (Nat.le_succ _)
-  have he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → EffectV.Rel P a.own[i] a.own[i] :=
-    fun P hP => (ha.2 _ hmem).2 P (hP.mono (Nat.le_succ _))
+  have he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → OwnEffectV.Rel P a.own[i] a.own[i] :=
+    fun P hP => ha.2 _ hmem P (hP.mono (Nat.le_succ _))
   obtain ⟨hs, ho⟩ := runOwn_self T hv (a := { a with own := a.own.eraseIdx i }) ha' he b hb
-  have hfr : b.state.fresh = a.state.fresh + 1 := runOwn_fresh T (a := { a with own := a.own.eraseIdx i }) (ha.2 _ hmem).1 hb
+  have hfr : b.state.fresh = a.state.fresh + 1 := runOwn_fresh T (a := { a with own := a.own.eraseIdx i }) hb
   rw [Supp, hfr]
   refine ⟨hs.drop, fun y hy => ?_⟩
   rcases ho y hy with hy | hy

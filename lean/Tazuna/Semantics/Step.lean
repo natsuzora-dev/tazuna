@@ -185,7 +185,7 @@ structure Acc (v : ServiceV) where
   state : State v
   events : List v.event.den0 := []
   out : Bag OutLine := []
-  own : List (EffectV v.event) := []
+  own : List (OwnEffectV v.event) := []
 
 /-- Whether a declaration lists the command or query a request asks for, with its types. -/
 def _root_.Tazuna.Ir.RequestV.declaredBy {e : Ty} (r : RequestV e) (xd : String × DeclaredV) : Bool :=
@@ -213,7 +213,8 @@ def start (a : Acc v) (effs : List (Sender × EffectV v.event)) : Except Fault (
         let s := a.state
         .ok { a with state := { s with pending := s.pending ++ [⟨s.nextId, snd, x, r⟩], nextId := s.nextId + 1 },
                      out := a.out ++ [⟨s.nextId, x, r.name, ⟨r.input, r.value⟩⟩] }
-    | own => .ok { a with own := a.own ++ [own] }) a
+    | .command n c i j caller value f => .ok { a with own := a.own ++ [.command n c i j caller value f] }
+    | .query n c i o caller value f => .ok { a with own := a.own ++ [.query n c i o caller value f] }) a
 
 /-- Applies the events in order, each followed by every machine's and reaction's reaction. -/
 def applyEvents (a : Acc v) (events : List v.event.den0) : Except Fault (Acc v) :=
@@ -299,8 +300,7 @@ def ownQuery (name : String) (i o : Ty) : Option ((x : QueryV v.records v.caller
   else none
 
 /-- Runs an own command or query: the one the service lists by the effect's name and types. -/
-def runOwn (a : Acc v) : EffectV v.event → Except Fault (Acc v)
-  | .request _ => .ok a
+def runOwn (a : Acc v) : OwnEffectV v.event → Except Fault (Acc v)
   | .command name c i j caller value onAnswer =>
     match Ty.same c v.caller, ownCommand (v := v) name i j with
     | some ⟨hc⟩, some ⟨x, hi, hj⟩ =>

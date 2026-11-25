@@ -51,9 +51,9 @@ theorem keeps_preserved {T : List TypeDecl} {P : List AnySite} {E : List AnyEffe
   have ha' : Step.SelfAt (a.state.fresh + 1) { a with own := a.own.eraseIdx i } :=
     (Step.SelfAt.own (a := a) ha.supp.1 fun x hx => ha.supp.2 x (List.mem_of_mem_eraseIdx hx)).mono (Nat.le_succ _)
   have hp1 := Step.runOwn_pend T hv (a := { a with own := a.own.eraseIdx i }) ha' (ha.pend.mono (Nat.le_succ _))
-    (fun P hP => (ha.supp.2 _ hmem).2 P (hP.mono (Nat.le_succ _))) b hb
+    (fun P hP => ha.supp.2 _ hmem P (hP.mono (Nat.le_succ _))) b hb
   have hfr : b.state.fresh = a.state.fresh + 1 :=
-    Step.runOwn_fresh T (a := { a with own := a.own.eraseIdx i }) (ha.supp.2 _ hmem).1 hb
+    Step.runOwn_fresh T (a := { a with own := a.own.eraseIdx i }) hb
   rw [← hfr] at hp1
   exact ⟨hs, Step.runOwn_inv T hr { a with own := a.own.eraseIdx i } ha.inv _ hb,
     Step.runOwn_queue T hr { a with own := a.own.eraseIdx i } ha.inv hq' _ hb,
@@ -77,12 +77,11 @@ theorem pair_pre {T : List TypeDecl} {P : List AnySite} {a : Step.Acc v} (ha : C
       Step.StateSupp { a with own := Step.dropTwo a.own i j }.state ∧
       Step.QueueOk P { a with own := Step.dropTwo a.own i j } ∧
       Step.SelfAt a.state.fresh { a with own := Step.dropTwo a.own i j } ∧
-      a.own[i].isRequest = false ∧ a.own[j].isRequest = false ∧ a.own[i].Reach P ∧ a.own[j].Reach P :=
+      a.own[i].effect.Reach P ∧ a.own[j].effect.Reach P :=
   ⟨ha.keys, Step.StateSupp.of_supp (a := { a with own := Step.dropTwo a.own i j })
       ⟨ha.supp.1, fun x hx => ha.supp.2 x (Step.mem_dropTwo hx)⟩ ha.pend, fun x hx => ha.queue x (Step.mem_dropTwo hx),
     Step.SelfAt.own ha.supp.1 fun x hx => ha.supp.2 x (Step.mem_dropTwo hx),
-    (ha.queue _ (List.getElem_mem hi)).1, (ha.queue _ (List.getElem_mem hj)).1,
-    (ha.queue _ (List.getElem_mem hi)).2, (ha.queue _ (List.getElem_mem hj)).2⟩
+    ha.queue _ (List.getElem_mem hi), ha.queue _ (List.getElem_mem hj)⟩
 
 /-- What `Prove.withinBounds` names for a cascade: every step in progress it reaches in any order runs each of its
 waiting effects, and every two of them in either order, within the slots. -/
@@ -111,9 +110,9 @@ theorem cascade_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : Ste
       coded_preserved chk senv hb.2.1 (hfit b hb.1) hb.2.2 hi
         (fun p hp => (hall p hp).mono fun h => (h b hb.1).1 i hi) hd⟩)
     (fun b _ hb i j hi hj hij => ?_) fuel a ha.supp ⟨.refl, ha, hcoded⟩ hr
-  obtain ⟨hk, hs, hq, hsa, ho1, ho2, hr1, hr2⟩ := pair_pre hb.2.1 hi hj
+  obtain ⟨hk, hs, hq, hsa, hr1, hr2⟩ := pair_pre hb.2.1 hi hj
   exact pairs_at chk senv (fun p hp => (hall p hp).mono fun h => (h b hb.1).2 i j hi hj hij) hk (hfit b hb.1)
-    hb.2.1.inv hs hq hsa (hb.2.2 _ (List.getElem_mem hi)) (hb.2.2 _ (List.getElem_mem hj)) ho1 ho2 hr1 hr2
+    hb.2.1.inv hs hq hsa (hb.2.2 _ (List.getElem_mem hi)) (hb.2.2 _ (List.getElem_mem hj)) hr1 hr2
 
 /-- A timer's context fits the slots: the instance's key, the state its timer moves it to and the records embed. -/
 def CtxFits (L : Layout) {r e : Ty} (m : MachineV r e) (records : r.den0) (key : m.key.den0) (st : m.state.den0) :

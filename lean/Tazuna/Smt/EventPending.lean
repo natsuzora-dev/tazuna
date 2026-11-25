@@ -263,7 +263,7 @@ theorem own_ranked (m : MachineV r e) {dopt nopt : Nat}
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt)) {ws : List (StartSlot)}
     {effs : List (Sender × EffectV e)} (h : StartSlots M L T m ws effs) {q : Term} {q0 : Nat}
     (hq : q.denote M = .int (q0 : Int)) {S : List RankedStart} (hS : rankStarts L T m dopt q ws = .ok S) :
-    (startCount dopt ws).denote M = .int effs.length ∧ OwnRel M L (ownItems S) (effs.map (·.2)) q0 := by
+    (startCount dopt ws).denote M = .int effs.length ∧ OwnRelE M L (ownItems S) (effs.map (·.2)) q0 := by
   obtain ⟨α, κ, F, E, items, svX, hX, hh, hEp, hks, rfl⟩ := h
   obtain ⟨hcount, svS, ys, hS', hyp, hy⟩ := rank_starts (T := T) m hopt κ F hX hh hEp hks hq hS
   refine ⟨hcount, ?_⟩
@@ -324,8 +324,7 @@ theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
       by_cases ho : (L.ownsOf e).isEmpty
       · have hall := startSlots_requests (List.isEmpty_iff.1 ho) m hst
         have hr : Step.reqsOf effs = effs := List.filter_eq_self.2 hall
-        have hq0 : Step.queuedOf effs = [] := by
-          simp only [Step.queuedOf, List.map_eq_nil_iff, List.filter_eq_nil_iff]; intro x hx; simp [hall x hx]
+        have hq0 : Step.queuedOf effs = [] := Step.queuedOf_eq_nil hall
         simp only [ownStarts, ho, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at h5 ⊢
         cases h5
         rw [hr, hq0]
@@ -335,8 +334,9 @@ theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
         obtain ⟨SO, hSO, h5⟩ := bind_ok.1 h5
         cases pure_ok.1 h5
         obtain ⟨hcO, hO⟩ := own_ranked m senv.hopt (by simpa only [List.map_map, Function.comp_def] using hown) hq hSO
-        refine ⟨by simpa only [List.map_map, Function.comp_def] using hreq, ?_, hO⟩
-        simp only [Term.denote, hq, hcO, Val.toInt, Step.queuedOf, List.length_map]; push_cast; rfl
+        refine ⟨by simpa only [List.map_map, Function.comp_def] using hreq, ?_, by
+          unfold OwnRel; rw [Step.queuedOf_effect]; exact hO⟩
+        simp only [Term.denote, hq, hcO, Val.toInt, Step.length_queuedOf]; push_cast; rfl
     obtain ⟨hR, hq1, hO1⟩ := hparts
     obtain ⟨α, κ, F, E, items, svX, hX, hh, hEp, hks, heffs⟩ := hR
     obtain ⟨hcount, svS, ys, hS, hyp, hy⟩ := rank_starts (T := T) m senv.hopt κ F hX hh hEp hks hn h3
@@ -357,7 +357,7 @@ theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
         hn' hq1 h4
     have hfl : ∀ effs' : List (Sender × EffectV e), Step.reqsOf (effs ++ effs') = Step.reqsOf effs ++ Step.reqsOf effs' ∧
         Step.queuedOf (effs ++ effs') = Step.queuedOf effs ++ Step.queuedOf effs' := fun _ => by
-      simp [Step.reqsOf, Step.queuedOf, List.filter_append]
+      simp [Step.reqsOf, Step.queuedOf, List.filter_append, List.filterMap_append]
     rw [PerMachine.toList_cons, List.flatten_cons, (hfl _).1, (hfl _).2]
     refine ⟨?_, newsRel_append ⟨sv1, zs1, hS1, hw1, hh1, ys, hyp, hq1'⟩ hnews2, ?_, ownRel_append hO1 ho2⟩
     · rw [hn2, List.length_append]; congr 2; omega

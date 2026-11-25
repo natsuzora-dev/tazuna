@@ -118,7 +118,7 @@ theorem execCommand_keys (a : Acc v) (ha : KeysOk T a.state) (x : CommandV v.rec
   · exact ha
   · exact applyEvents_keys T _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ha he
 
-theorem runOwn_keys (a : Acc v) (ha : KeysOk T a.state) (eff : EffectV v.event) {a' : Acc v}
+theorem runOwn_keys (a : Acc v) (ha : KeysOk T a.state) (eff : OwnEffectV v.event) {a' : Acc v}
     (h : runOwn T a eff = .ok a') : KeysOk T a'.state := by
   have hcmd : ∀ (x : CommandV v.records v.event v.caller) caller input onAnswer {a' : Acc v},
       runCommand T a x caller input onAnswer = .ok a' → KeysOk T a'.state := by
@@ -141,7 +141,6 @@ theorem runOwn_keys (a : Acc v) (ha : KeysOk T a.state) (eff : EffectV v.event) 
     · exact applyEvents_keys T _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ha h
   revert h
   cases eff with
-  | request => intro h; simp only [runOwn, Except.ok.injEq] at h; exact h ▸ ha
   | command name c i j caller value onAnswer =>
     unfold runOwn
     dsimp only

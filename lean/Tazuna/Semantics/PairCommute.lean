@@ -92,14 +92,14 @@ theorem Acc.Rel.mapWire {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') {σ : Nat 
 
 /-- `e2` then `e1` with each effect's names as they are when `e1` runs first: `e2` takes the counter after `e1`'s, and
 the wire ids `e1` sends come first, then `e2`'s. -/
-def canonPair (a0 : Acc v) (e1 e2 : EffectV v.event) : Except Fault (Acc v) := do
+def canonPair (a0 : Acc v) (e1 e2 : OwnEffectV v.event) : Except Fault (Acc v) := do
   let c ← runOwn T (a0.withFresh (a0.state.fresh + 1)) e2
   let d ← runOwn T (c.withFresh a0.state.fresh) e1
   pure ((d.withFresh (a0.state.fresh + 2)).mapWire (wireSwap a0.state.nextId c.state.nextId d.state.nextId))
 
 /-- Two own effects commute from `a0`: where `e1` runs, `e2` after it ends as the canonical other order does, up to
 renaming the names the two made, or both fault; and if `e2` faults first, it still faults after `e1`. -/
-def PairCommutes (a0 : Acc v) (e1 e2 : EffectV v.event) : Prop :=
+def PairCommutes (a0 : Acc v) (e1 e2 : OwnEffectV v.event) : Prop :=
   ∀ b, runOwn T a0 e1 = .ok b →
     (∀ c, runOwn T (a0.withFresh (a0.state.fresh + 1)) e2 = .ok c →
       Diamond.Agree (Same a0.state.fresh a0.state.nextId) (runOwn T b e2) (canonPair T a0 e1 e2)) ∧
@@ -111,7 +111,7 @@ theorem Acc.Rel.withFresh {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') (k k' : 
 /-- Running `e2` first with its own counter or with the counter it has after `e1` differs by swapping the two
 counters, and the canonical order's wire ids differ from the actual other order's by swapping two blocks, so the two
 orders agree up to renaming the names the two made. -/
-theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fresh a0) {e1 e2 : EffectV v.event}
+theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fresh a0) {e1 e2 : OwnEffectV v.event}
     (he1 : OwnAt a0.state.fresh e1) (he2 : OwnAt a0.state.fresh e2) :
     Lifted ⟨PBij.swap a0.state.fresh, PBij.refl⟩ a0
         (a0.withFresh (a0.state.fresh + 1)) (runOwn T a0 e2) (runOwn T (a0.withFresh (a0.state.fresh + 1)) e2) ∧
@@ -121,15 +121,15 @@ theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fre
   have hA := ha _ (PBij.swap_fixes f)
   have hctr : (PBij.swap f).rel f (f + 1) := by show _ = _; simp [swapFn]
   have hl := runOwn_rel T hv (R := ⟨PBij.swap f, PBij.refl⟩) (a := a0) (a' := a0.withFresh (f + 1))
-    (hA.withFresh f (f + 1)) (by rw [hf]; exact hctr) (he2.2 _ (PBij.swap_fixes f))
+    (hA.withFresh f (f + 1)) (by rw [hf]; exact hctr) (he2 _ (PBij.swap_fixes f))
   refine ⟨hl, fun c1 hc1 => ?_⟩
-  have hfr1 : c1.state.fresh = f + 1 := by rw [runOwn_fresh T he2.1 hc1, hf]
+  have hfr1 : c1.state.fresh = f + 1 := by rw [runOwn_fresh T hc1, hf]
   rcases hl with ⟨h1, -⟩ | ⟨b, c', R', h1, h2, hc, hb, -, -, hn, hl1, hw1⟩
   · rw [hc1] at h1; exact h1.elim
   · rw [hc1] at h1; cases h1
-    have hfr' : c'.state.fresh = f + 2 := runOwn_fresh T he2.1 h2
+    have hfr' : c'.state.fresh = f + 2 := runOwn_fresh T h2
     have hctr2 : R'.ctr.rel (f + 1) f := by rw [hc]; show _ = _; simp [swapFn]
-    have hl2 := runOwn_rel T hv (hb.withFresh (f + 1) f) hctr2 (by rw [hc]; exact he1.2 _ (PBij.swap_fixes f))
+    have hl2 := runOwn_rel T hv (hb.withFresh (f + 1) f) hctr2 (by rw [hc]; exact he1 _ (PBij.swap_fixes f))
     simp only [canonPair, hf, h2, bind, Except.bind]
     have hb1 : c1 = c1.withFresh (f + 1) := by rw [← hfr1]; rfl
     rw [← hb1] at hl2
@@ -140,7 +140,7 @@ theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fre
       · trivial
       · exact h4.elim
     · rw [h3, h4]
-      have hfd : d.state.fresh = f + 2 := by rw [runOwn_fresh T he1.1 h3, hfr1]
+      have hfd : d.state.fresh = f + 2 := by rw [runOwn_fresh T h3, hfr1]
       simp only [Acc.withFresh] at hn hn' hl1 hl2 hw1 hw2
       refine .inl (.base ⟨_, (hd.withFresh d.state.fresh (f + 2)).mapWire wireSwap_inj fun _ => wireSwap_lt,
         ?_, ?_, ?_, fun n hn2 => ?_, fun i hi => ?_⟩)
@@ -194,13 +194,13 @@ theorem getElem_afterErase {α : Type} {l : List α} {i j : Nat} (hi : i < l.len
 theorem mem_dropTwo {α : Type} {l : List α} {i j : Nat} {x : α} (h : x ∈ dropTwo l i j) : x ∈ l :=
   List.mem_of_mem_eraseIdx (List.mem_of_mem_eraseIdx h)
 
-theorem runOwn_frame (a : Acc v) (xs : List (EffectV v.event)) (e : EffectV v.event) :
+theorem runOwn_frame (a : Acc v) (xs : List (OwnEffectV v.event)) (e : OwnEffectV v.event) :
     runOwn T { a with own := xs } e = (runOwn T { a with own := [] } e).map (Acc.ownFront xs) := by
   have h := runOwn_own T xs { a with own := [] } e
   simp only [Acc.ownFront, List.append_nil] at h
   exact h
 
-theorem runOwn_frame_error {a : Acc v} {xs ys : List (EffectV v.event)} {e : EffectV v.event} {f : Fault}
+theorem runOwn_frame_error {a : Acc v} {xs ys : List (OwnEffectV v.event)} {e : OwnEffectV v.event} {f : Fault}
     (h : runOwn T { a with own := xs } e = .error f) : runOwn T { a with own := ys } e = .error f := by
   rw [runOwn_frame] at h ⊢
   cases h0 : runOwn T { a with own := [] } e with
@@ -241,7 +241,7 @@ theorem runOwn_nextId (hv : v.Equivariant) {a : Acc v} (ha : Supp a) {i : Nat} (
   have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
   have hs : SelfAt a.state.fresh { a with own := a.own.eraseIdx i } :=
     SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (List.mem_of_mem_eraseIdx hx)
-  have hl := runOwn_rel T hv (hs PBij.refl fun _ _ => rfl) rfl ((ha.2 _ hmem).2 PBij.refl fun _ _ => rfl)
+  have hl := runOwn_rel T hv (hs PBij.refl fun _ _ => rfl) rfl (ha.2 _ hmem PBij.refl fun _ _ => rfl)
   rw [hb] at hl
   rcases hl with ⟨h, -⟩ | ⟨_, _, _, h1, -, -, -, -, -, -, hl, -⟩
   · exact h.elim
@@ -251,7 +251,7 @@ theorem suppFrom_preserved (hv : v.Equivariant) (f0 n0 : Nat) : Diamond.Preserve
   intro a i b ⟨ha, hf, hn⟩ hi hb
   refine ⟨ownSys_preserved T hv a i b ha hi hb, ?_, ?_⟩
   · simp only [ownSys, List.getElem?_eq_getElem hi] at hb
-    have := runOwn_fresh T (ha.2 _ (List.getElem_mem hi)).1 hb
+    have := runOwn_fresh T hb
     simp only at this; omega
   · simp only [ownSys, List.getElem?_eq_getElem hi] at hb
     have := runOwn_nextId T hv ha hi hb

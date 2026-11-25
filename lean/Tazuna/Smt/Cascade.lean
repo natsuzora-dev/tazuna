@@ -175,9 +175,9 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       by_cases hlt : k < a.own.length
       · have hact' := hact
         simp only [hlt, decide_true] at hact'
-        obtain ⟨hown, hreach⟩ := hqok _ (List.getElem_mem hlt)
+        have hreach := hqok _ (List.getElem_mem hlt)
         have e1 := (ownStep_encode chk hshs hshp a happ hca senv hrec hnow hfr hn hq hms
-          a.own[k] (hk.2 hlt) hown hreach h1 hcx1).1
+          a.own[k] (hk.2 hlt) hreach h1 hcx1).1
         have hite : Holds M (.ite (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1)) c1 tt) ↔ Holds M c1 := by
           rw [holds_ite, hact']; simp only [toBool_bool, ite_true]
         simp only [settleFits, List.getElem?_eq_getElem hlt]
@@ -187,7 +187,7 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
         have tail : Holds M c1 → (Holds M c2 ↔ ∀ a', Step.runOwn T a a.own[k] = .ok a' → settleFits L.count T f (k + 1) a') := by
           intro hc1
           obtain ⟨hfault, hrun⟩ := (ownStep_encode chk hshs hshp a happ hca senv hrec hnow hfr hn hq
-            hms a.own[k] (hk.2 hlt) hown hreach h1 hcx1).2 hc1
+            hms a.own[k] (hk.2 hlt) hreach h1 hcx1).2 hc1
           revert hrun
           cases hof : o1.fault? M with
           | some f' =>
@@ -250,9 +250,9 @@ theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
           have := (holds_ite _ _ _).1 hc1'
           rw [hact'] at this
           simpa only [toBool_bool, ite_true] using this
-        obtain ⟨hown, hreach⟩ := hqok _ (List.getElem_mem hlt)
+        have hreach := hqok _ (List.getElem_mem hlt)
         obtain ⟨hfault, hrun⟩ := (ownStep_encode chk hshs hshp a happ hca senv hrec hnow hfr hn hq
-          hms a.own[k] (hk.2 hlt) hown hreach h1 hcx1).2 hc1
+          hms a.own[k] (hk.2 hlt) hreach h1 hcx1).2 hc1
         have hsem : Step.settleFrom T (f + 1) k a = (Step.runOwn T a a.own[k]) >>= Step.settleFrom T f (k + 1) := by
           exact Step.settleFrom.eq_3 T k a a.own[k] f (List.getElem?_eq_getElem hlt)
         rw [hsem]

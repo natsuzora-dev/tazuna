@@ -17,13 +17,13 @@ variable {L : Layout} {M : Model} {T : List TypeDecl} {v : ServiceV}
 own effect the step queues is coded. -/
 theorem pair_queued {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v)) {S : SymState v} {a0 : Step.Acc v} (hR : StateRel M L T (shapes v) S a0.state)
-    {t1 t2 : Term} {x1 : EffectV v.event}
-    (hx1 : RelV L (.dsl .effect [v.event]) x1 (t1.denote M))
-    (hown1 : x1.isRequest = false) (hreach1 : x1.Reach P)
+    {t1 t2 : Term} {x1 : OwnEffectV v.event}
+    (hx1 : RelV L (.dsl .effect [v.event]) x1.effect (t1.denote M))
+    (hreach1 : x1.effect.Reach P)
     {k1 k2 : Nat} (ht1 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k1) t1))
     {o : PairOut} (henc : encodePair L T P v senv S t1 t2 k1 k2 = .ok o) (hcodes : Holds M o.codes)
     (hfit : ownFits L.count T a0.state x1) :
-    ∀ b, Step.runOwn T a0 x1 = .ok b → ∃ os, b.own = a0.own ++ os ∧ ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [v.event]) y z := by
+    ∀ b, Step.runOwn T a0 x1 = .ok b → ∃ os, b.own = a0.own ++ os ∧ ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [v.event]) y.effect z := by
   obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
   obtain ⟨key1, hkey1, henc⟩ := bind_ok.1 henc
   obtain ⟨key2, -, henc⟩ := bind_ok.1 henc
@@ -37,7 +37,7 @@ theorem pair_queued {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P
   simp only [holds_allT, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq] at hcodes
   obtain ⟨hca, hy1, -, -, -⟩ := hcodes
   have hshs : ∀ sh ∈ shapes v, sh.InSites P := fun _ => shapes_inSites chk.reach
-  obtain ⟨vals1, he1, hk1⟩ := own_key hown1 hx1 ht1 rfl (need_ok.1 hkey1)
+  obtain ⟨vals1, he1, hk1⟩ := own_key hx1 ht1 rfl (need_ok.1 hkey1)
   have hq0 : (Term.int 0).denote M = .int ((0 : Nat) : Int) := rfl
   have eA1 := ownKind_encode chk hshs (shapesHold_shapes v) a0 happ hca senv hR.records hR.now hR.fresh hR.nextId hq0
     hR.machines x1 hreach1 he1 hk1 h1 hy1
@@ -62,20 +62,20 @@ proved, or within the bounds and the step fits, each own effect the step queues 
 theorem queued_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
     {a0 : Step.Acc v} (hkeys : Step.KeysOk T a0.state) (hW : Within L (shapes v) a0.state)
     (hinv : Step.Inv P a0.state) (hsupp : Step.StateSupp a0.state) (hqk : Step.QueueOk P a0)
-    {x : EffectV v.event} (hx : ∃ z, RelV L (.dsl .effect [v.event]) x z) (hown : x.isRequest = false)
-    (hreach : x.Reach P)
+    {x : OwnEffectV v.event} (hx : ∃ z, RelV L (.dsl .effect [v.event]) x.effect z)
+    (hreach : x.effect.Reach P)
     (hcf : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (ownFits L.count T a0.state x) p) :
-    ∀ b, Step.runOwn T a0 x = .ok b → ∃ os, b.own = a0.own ++ os ∧ ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [v.event]) y z := by
-  obtain ⟨M, hM, hS, hx1, hx2⟩ := pair_model hkeys hW hx hx hown hown
-  obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2 hown hown
+    ∀ b, Step.runOwn T a0 x = .ok b → ∃ os, b.own = a0.own ++ os ∧ ∀ y ∈ os, ∃ z, RelV L (.dsl .effect [v.event]) y.effect z := by
+  obtain ⟨M, hM, hS, hx1, hx2⟩ := pair_model hkeys hW hx hx
+  obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
   obtain ⟨bq, tq, hq, -, hor⟩ := hcf p hp
   obtain ⟨o, ho, hb, -⟩ := pair_unfold chk senv hq hM hS hinv.below hsupp ht1 ht2
   have hR := decode_state hS
   have hfit : Holds M o.codes ∧ ownFits L.count T a0.state x := hor.elim
-    (fun h => ⟨(hb h).1, ((pair_fits chk senv hR hinv hqk hx1 hx2 hown hown hreach hreach ht1 ht2 ho (hb h).1).1
+    (fun h => ⟨(hb h).1, ((pair_fits chk senv hR hinv hqk hx1 hx2 hreach hreach ht1 ht2 ho (hb h).1).1
       (hb h).2).1⟩)
     fun ⟨hpc, hof⟩ => ⟨(pair_codes ho).2 hpc, hof⟩
-  exact pair_queued chk senv hR (t1 := .var (pairVar v)) hx1 hown hreach ht1 ho hfit.1 hfit.2
+  exact pair_queued chk senv hR (t1 := .var (pairVar v)) hx1 hreach ht1 ho hfit.1 hfit.2
 
 /-- A cascade's step keeps every waiting own effect coded where the pair lines speak for it (`queued_at`). -/
 theorem coded_step {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
@@ -88,7 +88,7 @@ theorem coded_step {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
   have hq' : Step.QueueOk P { a with own := a.own.eraseIdx i } := fun x hx => hqk x (List.mem_of_mem_eraseIdx hx)
   have hs : Step.StateSupp a.state := Step.StateSupp.of_supp hsupp hpend
   obtain ⟨os, hos, hcod⟩ := queued_at chk senv (a0 := { a with own := a.own.eraseIdx i }) hkeys hW hinv hs hq'
-    (hc _ hmem) (hqk _ hmem).1 (hqk _ hmem).2 hcf d hd
+    (hc _ hmem) (hqk _ hmem) hcf d hd
   intro y hy
   rw [hos] at hy
   rcases List.mem_append.1 hy with h | h

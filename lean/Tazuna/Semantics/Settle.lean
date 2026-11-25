@@ -32,9 +32,9 @@ def Ran.map {j : Ty} (f : Acc v → Acc v) : Ran v j → Ran v j
   | .accepted a => .accepted (f a)
 
 /-- The accumulator with `xs` in front of its own queue. -/
-def Acc.ownFront (xs : List (EffectV v.event)) (a : Acc v) : Acc v := { a with own := xs ++ a.own }
+def Acc.ownFront (xs : List (OwnEffectV v.event)) (a : Acc v) : Acc v := { a with own := xs ++ a.own }
 
-theorem start_own (xs : List (EffectV v.event)) (effs : List (Sender × EffectV v.event)) (a : Acc v) :
+theorem start_own (xs : List (OwnEffectV v.event)) (effs : List (Sender × EffectV v.event)) (a : Acc v) :
     start (a.ownFront xs) effs = (start a effs).map (Acc.ownFront xs) := by
   refine foldlM_map_comm _ (Acc.ownFront xs) ?_ effs a
   rintro a ⟨snd, eff⟩
@@ -47,13 +47,13 @@ theorem start_own (xs : List (EffectV v.event)) (effs : List (Sender × EffectV 
   | command => simp [Except.map, Acc.ownFront]
   | query => simp [Except.map, Acc.ownFront]
 
-theorem applyEvents_own (T : List TypeDecl) (xs : List (EffectV v.event)) (events : List v.event.den0) (a : Acc v) :
+theorem applyEvents_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (events : List v.event.den0) (a : Acc v) :
     applyEvents T (a.ownFront xs) events = (applyEvents T a events).map (Acc.ownFront xs) := by
   unfold applyEvents
   refine foldlM_map_comm _ (Acc.ownFront xs) (fun a ev => ?_) events a
   exact start_own xs (react T a.state ev).2 { a with state := (react T a.state ev).1, events := a.events ++ [ev] }
 
-theorem execCommand_own (T : List TypeDecl) (xs : List (EffectV v.event)) (a : Acc v)
+theorem execCommand_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : Acc v)
     (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) :
     execCommand T (a.ownFront xs) x caller input = (execCommand T a x caller input).map (Ran.map (Acc.ownFront xs)) := by
   unfold execCommand
@@ -71,7 +71,7 @@ theorem execCommand_own (T : List TypeDecl) (xs : List (EffectV v.event)) (a : A
       split <;> rfl
     · rfl
 
-theorem runCommand_own (T : List TypeDecl) (xs : List (EffectV v.event)) (a : Acc v)
+theorem runCommand_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : Acc v)
     (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) :
     runCommand T (a.ownFront xs) x caller input onAnswer =
@@ -84,7 +84,7 @@ theorem runCommand_own (T : List TypeDecl) (xs : List (EffectV v.event)) (a : Ac
   | accepted a1 => exact applyEvents_own T xs _ a1
   | rejected a1 j => exact applyEvents_own T xs _ a1
 
-theorem runQuery_own (T : List TypeDecl) (xs : List (EffectV v.event)) (a : Acc v) (x : QueryV v.records v.caller)
+theorem runQuery_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : Acc v) (x : QueryV v.records v.caller)
     (caller : v.caller.den0) (input : x.input.den0) (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) :
     runQuery T (a.ownFront xs) x caller input onAnswer = (runQuery T a x caller input onAnswer).map (Acc.ownFront xs) := by
   unfold runQuery
@@ -93,10 +93,9 @@ theorem runQuery_own (T : List TypeDecl) (xs : List (EffectV v.event)) (a : Acc 
   · rfl
   · exact applyEvents_own T xs _ { a with state := { a.state with fresh := a.state.fresh + 1 } }
 
-theorem runOwn_own (T : List TypeDecl) (xs : List (EffectV v.event)) (a : Acc v) (eff : EffectV v.event) :
+theorem runOwn_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : Acc v) (eff : OwnEffectV v.event) :
     runOwn T (a.ownFront xs) eff = (runOwn T a eff).map (Acc.ownFront xs) := by
   cases eff with
-  | request => rfl
   | command name c i j caller value onAnswer =>
     unfold runOwn
     dsimp only

@@ -2953,10 +2953,10 @@ def dispCheck (solver : Solver) : IO Bool := do
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
     Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
     .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
-  let twiceFx : EffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
-  let nextFx : EffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
-  let goneFx : EffectV dispSvc.event := .command "gone" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
-  let cases : List (String × (Layout → Except Refusal Term) × EffectV dispSvc.event × EffectV dispSvc.event) :=
+  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
+  let goneFx : OwnEffectV dispSvc.event := .command "gone" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let cases : List (String × (Layout → Except Refusal Term) × OwnEffectV dispSvc.event × OwnEffectV dispSvc.event) :=
     [("twice", fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5], twiceFx, nextFx),
      ("next", fun L => ownT L nextKey (.str "alice") (.int 3) [], nextFx, twiceFx),
      ("gone", fun L => ownT L goneKey (.str "alice") (.int 3) [.int 5], goneFx, twiceFx)]
@@ -3088,10 +3088,10 @@ def cascadeCheck (solver : Solver) : IO Bool := do
   let twiceT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5]
   let nextT : Layout → Except Refusal Term := fun L => ownT L nextKey (.str "alice") (.int 3) []
   let goneT : Layout → Except Refusal Term := fun L => ownT L goneKey (.str "alice") (.int 3) [.int 5]
-  let twiceFx : EffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
-  let nextFx : EffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
-  let goneFx : EffectV dispSvc.event := .command "gone" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
-  let cases : List (String × Nat × List (Layout → Except Refusal Term) × List (EffectV dispSvc.event)) :=
+  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
+  let goneFx : OwnEffectV dispSvc.event := .command "gone" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let cases : List (String × Nat × List (Layout → Except Refusal Term) × List (OwnEffectV dispSvc.event)) :=
     [("two internal steps", 2, [twiceT, nextT], [twiceFx, nextFx]),
      ("one internal step", 1, [twiceT, nextT], [twiceFx, nextFx]),
      ("a faulting head", 2, [goneT, twiceT], [goneFx, twiceFx])]
@@ -3555,7 +3555,7 @@ def pairTarget (slots k1 k2 : Nat) : Except String Script := do
   pure tq
 
 /-- The own command a model's value of the effect datatype codes, by its variant's place among the own kinds. -/
-def pairEffect (L : Layout) : Val → Option (EffectV evT)
+def pairEffect (L : Layout) : Val → Option (OwnEffectV evT)
   | .ctor _ k [.str c, .int i, _] =>
     (["ins", "set", "cap"][k - (L.effectsOf evT).length]?).map fun name =>
       .command name .str .int .str c i (pairOnAnswer.fn ())

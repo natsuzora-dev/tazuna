@@ -125,7 +125,7 @@ and the own commands and queries `os` queued at places from `q0`, as the own slo
 def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShape v.event)) (a : Step.Acc v)
     (o : EventsOut v) (fresh : Term) (q0 : Nat) (r : Except Fault (Step.Acc v)) : Prop :=
   ∃ (recs : v.records.den0) (ms : Step.Machines v.machines) (fr : Nat) (evs : List v.event.den0)
-    (effs : List (Sender × EffectV v.event)) (os : List (EffectV v.event)),
+    (effs : List (Sender × EffectV v.event)) (os : List (OwnEffectV v.event)),
     (∀ ps, Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) ps →
       r = .ok { state := { a.state with records := recs, machines := ms, fresh := fr,
                                          pending := a.state.pending ++ ps, nextId := a.state.nextId + ps.length },
@@ -137,7 +137,7 @@ def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShap
     o.queued.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L o.owns os q0 ∧ EventsRel M L o.events evs
 
 /-- Every own effect waiting in `a` is coded by some value of the effect datatype. -/
-def QueueCoded (L : Layout) (a : Step.Acc v) : Prop := ∀ y ∈ a.own, ∃ z, RelV L (.dsl .effect [v.event]) y z
+def QueueCoded (L : Layout) (a : Step.Acc v) : Prop := ∀ y ∈ a.own, ∃ z, RelV L (.dsl .effect [v.event]) y.effect z
 
 /-- A run from a step in progress with no waiting effect leaves, where it ends, only own effects the own slots code. -/
 theorem AccRel.queueCoded {shs : List (PendingShape v.event)} {a : Step.Acc v} {o : EventsOut v} {fresh : Term}
@@ -216,7 +216,7 @@ two leave together, the news, own and event slots of both. -/
 theorem AccRel.bind {shs : List (PendingShape v.event)} {a : Step.Acc v} {o1 o2 : EventsOut v} {f1 f2 : Term}
     {q0 : Nat} {r : Except Fault (Step.Acc v)} {g : Step.Acc v → Except Fault (Step.Acc v)}
     (h1 : AccRel M L T shs a o1 f1 q0 r)
-    (h2 : ∀ a1 (os : List (EffectV v.event)), r = .ok a1 → a1.own = a.own ++ os →
+    (h2 : ∀ a1 (os : List (OwnEffectV v.event)), r = .ok a1 → a1.own = a.own ++ os →
       RelV L v.records (Ty.up _ v.records_data a1.state.records) (o1.records.denote M) →
       MachinesRel M L T v.machines o1.tables a1.state.machines → f1.denote M = .int (Int.ofNat a1.state.fresh) →
       o1.nextId.denote M = .int (Int.ofNat a1.state.nextId) → o1.queued.denote M = .int ((q0 + os.length : Nat) : Int) →
@@ -335,7 +335,7 @@ theorem decide_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
         refine ⟨by rw [holds_andT, e3]; exact iff_of_true ⟨trivial, hite⟩ trivial, fun hc => ?_⟩
         obtain ⟨p1, p2, p3, p4, p5, p6, -⟩ := loop_apply (T := T) chk hshs hshp happ hca senv a hnow hS1 (evs := [])
           (by simpa using hh1) hrec hms hn hq h12 ((holds_andT _ _).1 hc).1
-        simp only [Step.reactAll, Step.reqsOf, Step.queuedOf, List.filter_nil, List.map_nil, List.length_nil,
+        simp only [Step.reactAll, Step.reqsOf, Step.queuedOf, List.filter_nil, List.filterMap_nil, List.length_nil,
           Nat.add_zero] at p1 p2 p3 p4 p5 p6
         refine ⟨hok', by simpa [Term.denote, hsh, hw] using hrv,
           a.state.records, a.state.machines, a.state.fresh, [], [], [], fun ps hps => ?_, p1, p2, hfresh, p3, p4,

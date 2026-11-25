@@ -164,12 +164,11 @@ theorem runQuery_pend (hv : v.Equivariant) {a : Acc v}
       b h
 
 theorem runOwn_pend (hv : v.Equivariant) {a : Acc v}
-    (ha : SelfAt (a.state.fresh + 1) a) (hp : PendAt (a.state.fresh + 1) a) {e : EffectV v.event}
-    (he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → EffectV.Rel P e e) :
+    (ha : SelfAt (a.state.fresh + 1) a) (hp : PendAt (a.state.fresh + 1) a) {e : OwnEffectV v.event}
+    (he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → OwnEffectV.Rel P e e) :
     ∀ b, runOwn T a e = .ok b → PendAt (a.state.fresh + 1) b := by
   intro b h
   cases e with
-  | request => cases h; exact hp
   | command name c i j caller value onAnswer =>
     dsimp only [runOwn] at h
     revert h
@@ -187,8 +186,8 @@ theorem runOwn_pend (hv : v.Equivariant) {a : Acc v}
         subst hcp hi hj
         intro h
         change runCommand T a x _ _ _ = _ at h
-        exact runCommand_pend T hv ha hp hmem (fun P hP => (EffectV.rel_command_inv (he P hP)).1)
-          (fun P hP => (EffectV.rel_command_inv (he P hP)).2.1) (fun P hP => (EffectV.rel_command_inv (he P hP)).2.2) b h
+        exact runCommand_pend T hv ha hp hmem (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).1)
+          (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).2.1) (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).2.2) b h
   | query name c i o caller value onAnswer =>
     dsimp only [runOwn] at h
     revert h
@@ -206,8 +205,8 @@ theorem runOwn_pend (hv : v.Equivariant) {a : Acc v}
         subst hcp hi ho
         intro h
         change runQuery T a x _ _ _ = _ at h
-        exact runQuery_pend T hv ha hp hmem (fun P hP => (EffectV.rel_query_inv (he P hP)).1)
-          (fun P hP => (EffectV.rel_query_inv (he P hP)).2.1) (fun P hP => (EffectV.rel_query_inv (he P hP)).2.2) b h
+        exact runQuery_pend T hv ha hp hmem (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).1)
+          (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).2.1) (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).2.2) b h
 
 /-- The own cascade keeps every name below the counter, pending requests one by one included. -/
 theorem settle_supp (hv : v.Equivariant) :
@@ -233,9 +232,9 @@ theorem settle_supp (hv : v.Equivariant) :
           (SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (by rw [hown]; exact List.mem_cons_of_mem _ hx)).mono
             (Nat.le_succ _)
         have hp1 := runOwn_pend T hv (a := { a with own := rest }) ha' (hp.mono (Nat.le_succ _))
-          (fun P hP => (ha.2 _ hmem).2 P (hP.mono (Nat.le_succ _))) a1 h1
+          (fun P hP => ha.2 _ hmem P (hP.mono (Nat.le_succ _))) a1 h1
         have hfr : a1.state.fresh = a.state.fresh + 1 :=
-          runOwn_fresh T (a := { a with own := rest }) (ha.2 _ hmem).1 h1
+          runOwn_fresh T (a := { a with own := rest }) h1
         rw [← hfr] at hp1
         exact settle_supp hv f a1 hs1 hp1 b h
 
@@ -500,9 +499,9 @@ theorem clock_begin (hv : v.Equivariant) {s : State v}
   have hsa : SelfAt s'.fresh a := fun P hP => by
     exact start_self (ha0 P hP) (fun x hx => he x hx P (by rw [hfr] at hP; exact hP)) h
   refine ⟨supp_of hsa (fun y hy => ?_) hfa, ?_⟩
-  · rcases start_own_mem _ _ h y hy with hy | ⟨hr', snd, hy⟩
+  · rcases start_own_mem _ _ h y hy with hy | ⟨snd, hy⟩
     · exact nomatch hy
-    · exact ⟨hr', fun P hP => (he _ hy P (by rw [hfr] at hP; exact hP)).2⟩
+    · exact fun P hP => OwnEffectV.rel_iff.2 (he _ hy P (by rw [hfr] at hP; exact hP)).2
   · rw [hfa]
     exact start_pend effs (fun x hx P hP => he x hx P (by rw [hfr] at hP; exact hP)) ({ state := s' } : Acc v)
       hs'.pending h
