@@ -2553,7 +2553,26 @@ def check (z3 : String) : IO Bool := do
   | a => IO.println s!"smt-check: false is not unsat: {repr a}"; ok := false
   return ok
 
+/-- A script's size as the solver reads it: the number of applications in its text, definitions of shared terms
+and declarations included. -/
+def nodes (s : Script) : Nat := ((s.text []).getD "").foldl (fun n c => if c == '(' then n + 1 else n) 0
+
+/-- The step scripts' sizes at 2, 4, 8 and 16 slots, one line each: what the encoding costs as slots grow. -/
+def sizes : IO UInt32 := do
+  let row (name : String) (f : Nat → Except String Script) : IO Unit := do
+    let ns := [2, 4, 8, 16].map fun k => match f k with
+      | .ok s => toString (nodes s)
+      | .error m => s!"({m})"
+    IO.println s!"{name}: {"/".intercalate ns}"
+  row "event" fun k => (·.1) <$> writeScript k []
+  row "event list" fun k => (·.1) <$> eventsScript k []
+  row "command" fun k => (·.1) <$> twiceScriptOf k []
+  row "answer" fun k => (·.1) <$> answerMScriptOf k []
+  row "clock" fun k => (·.1) <$> clockFireScript 2 k []
+  return 0
+
 def main (args : List String) : IO UInt32 := do
   match args with
+  | ["--sizes"] => sizes
   | [z3] => return if ← check z3 then 0 else 1
-  | _ => IO.eprintln "usage: smt-check <z3 executable>"; return 3
+  | _ => IO.eprintln "usage: smt-check <z3 executable> | smt-check --sizes"; return 3
