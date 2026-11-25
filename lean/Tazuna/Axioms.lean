@@ -17,6 +17,7 @@ import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Interleave
 import Tazuna.Semantics.StepRename
 import Tazuna.Smt.Commute
+import Tazuna.Smt.Pairs
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -46,7 +47,7 @@ elab "#check_tazuna_axioms" : command => do
   -- The theorems the engine's answers rest on: a double-backquoted name that no longer exists fails to elaborate.
   for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound,
       ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent,
-      ``Tazuna.Smt.runs_confluent] do
+      ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete] do
     unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms
@@ -101,7 +102,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.diamond_confluent,
     -- T5 for runs: those cascades are every cascade a run on valid inputs starts, since valid inputs keep every name
     -- of a state below its counter.
-    ``Tazuna.Smt.runs_confluent]
+    ``Tazuna.Smt.runs_confluent,
+    -- T5b: the pair questions cover every two own effects a model codes, in both orders, self-pairs included.
+    ``Tazuna.Smt.ownPairs_complete]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do
