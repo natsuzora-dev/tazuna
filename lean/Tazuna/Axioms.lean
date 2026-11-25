@@ -16,7 +16,6 @@ import Tazuna.Semantics.PendingPerm
 import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Interleave
 import Tazuna.Semantics.StepRename
-import Tazuna.Semantics.Support
 import Tazuna.Smt.Commute
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
@@ -46,7 +45,7 @@ elab "#check_tazuna_axioms" : command => do
   if checked == 0 then throwError "no Tazuna declarations found"
   -- The theorems the engine's answers rest on: a double-backquoted name that no longer exists fails to elaborate.
   for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound,
-      ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound] do
+      ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent] do
     unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms
@@ -96,8 +95,9 @@ elab "#check_tazuna_reach" : command => do
     -- A counterexample is honest: a model of a target question decodes to a state with the step invariant and every
     -- invariant holding, whose step in Lean is the one the terms say.
     ``Tazuna.Smt.cti_sound,
-    -- Every service of a checked spec respects every renaming of the ids steps make, which T5 rests on.
-    ``Tazuna.Smt.CheckedSpec.equivariant]
+    -- T5: where every two waiting own effects commute in the canonical sense and timers fire forward, every order of
+    -- a cascade and of a clock line's timers ends as the semantics' order does, up to renaming, or both fault.
+    ``Tazuna.Smt.diamond_confluent]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do

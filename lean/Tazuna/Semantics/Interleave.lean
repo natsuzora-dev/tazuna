@@ -464,7 +464,7 @@ theorem timerSys_commutes {v : ServiceV} (hF : FiresForward v.machines) :
     · simp only [keep i (by omega)]; exact hj'
     · simp only [keep j (by omega)]; exact hi'
     · simp only [keep i (by omega), keep j (by omega)]
-      refine ⟨by rw [he], ?_⟩
+      refine .inl ⟨by rw [he], ?_⟩
       simp only [List.append_assoc]
       exact hp.append_left acc
 

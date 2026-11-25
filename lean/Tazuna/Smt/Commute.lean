@@ -1,10 +1,13 @@
 import Tazuna.Smt.Checked
-import Tazuna.Semantics.StepRename
+import Tazuna.Semantics.PairCommute
 
-/-! T5 for a checked spec. Every service of a spec that passed check respects every renaming of the ids steps make
-(`CheckedSpec.equivariant`): the spec is what a closed program evaluates to, and evaluation relates a closed program's
-value to itself under every renaming (`Expr.eval_rel`), which for structure values says that the functions and
-values they keep relate to themselves. -/
+/-! T5 for a checked spec (`diamond_confluent`): where every two waiting own effects commute in the canonical sense
+(`Step.PairCommutes`) and timers fire forward (`Step.FiresForward`), the order the semantics picks for a cascade and
+for a clock line's timers is not a choice the spec makes: every other order ends the same, up to renaming, or faults
+as well. It needs no hypothesis about the program: every service of a spec that passed check respects every renaming
+of the ids steps make (`CheckedSpec.equivariant`), since the spec is what a closed program evaluates to and evaluation
+relates a closed program's value to itself under every renaming (`Expr.eval_rel`), which for structure values says
+that the functions and values they keep relate to themselves. -/
 
 namespace Tazuna.Smt
 
@@ -26,6 +29,24 @@ theorem comparabless_of_plainss : (vs : List (List Ty)) → Ty.plainss vs = true
   | ts :: vs, h => by
     simp only [Ty.plainss, Bool.and_eq_true] at h
     simp [Ty.comparabless, comparables_of_plains ts h.1, comparabless_of_plainss vs h.2]
+end
+
+mutual
+theorem wire_of_plain : (t : Ty) → t.plain = true → t.wire = true
+  | .int, _ | .date, _ | .str, _ | .id, _ => rfl
+  | .tuple ts, h => wires_of_plains ts h
+  | .adt _ _ vs, h => wiress_of_plainss vs h
+  | .list _, h | .bag _, h | .table .., h | .fn .., h | .param _, h | .dsl .., h => by simp [Ty.plain] at h
+theorem wires_of_plains : (ts : List Ty) → Ty.plains ts = true → Ty.wires ts = true
+  | [], _ => rfl
+  | t :: ts, h => by
+    simp only [Ty.plains, Bool.and_eq_true] at h
+    simp [Ty.wires, wire_of_plain t h.1, wires_of_plains ts h.2]
+theorem wiress_of_plainss : (vs : List (List Ty)) → Ty.plainss vs = true → Ty.wiress vs = true
+  | [], _ => rfl
+  | ts :: vs, h => by
+    simp only [Ty.plainss, Bool.and_eq_true] at h
+    simp [Ty.wiress, wires_of_plains ts h.1, wiress_of_plainss vs h.2]
 end
 
 mutual
@@ -65,5 +86,21 @@ theorem CheckedSpec.equivariant (c : CheckedSpec) : ∀ v ∈ c.spec.services, v
     simp only [ServiceV.stateTys, Bool.and_eq_true] at h
     exact comparable_of_embeddable _ h.2.1
   · exact Var.get_rel c.program.root (Defs.eval_rel (R := R) c.program.defs) () () trivial rfl v hv
+
+/-- T5: in a checked spec's service, where every two own effects waiting in a step in progress whose names are below
+its counter commute in the canonical sense, every order of a cascade ends as `settle` does, up to renaming ids and
+reading collections as multisets, or both fault; and where its timers fire forward, every order of the timers due at
+one deadline of a clock line ends as `fire` does, with the same state and the same effects in some order. -/
+theorem diamond_confluent (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services)
+    (hpairs : ∀ a : Step.Acc v, Step.Supp a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
+      Step.PairCommutes c.T { a with own := Step.dropTwo a.own i j } a.own[i] a.own[j])
+    (htimers : Step.FiresForward v.machines) :
+    (∀ fuel (a : Step.Acc v), Step.Supp a → ∀ {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r →
+      Diamond.Agree Step.Same r (Step.settle c.T fuel a)) ∧
+    (∀ fuel (s : State v) {r}, Diamond.Runs (Step.timerSys v) fuel (s, []) r →
+      Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1))) :=
+  ⟨fun fuel a ha _ hr => Step.cascade_agrees c.T (c.equivariant v hv)
+      (fun m hm => wire_of_plain _ (Ty.plain_of_orderable _ ((c.checked v hv).keys m hm).1)) hpairs fuel a ha hr,
+    fun fuel s _ hr => Step.timers_agree htimers fuel s hr⟩
 
 end Tazuna.Smt

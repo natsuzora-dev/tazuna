@@ -58,11 +58,11 @@ structure Equiv (E : α → α → Prop) : Prop where
 
 
 /-- At every state where `I` holds, two distinct enabled steps commute in one step each: when both succeed, each
-leaves the other enabled and running it gives equivalent results or the same fault; when the second faults, the first
-leaves it enabled and faulting. One order enabled and the other not is not commuting. -/
+leaves the other enabled and running it gives equivalent results or a fault each; when the second faults, the first
+leaves it enabled and faulting. One order faulting and the other not is not commuting. -/
 def Commutes (I : α → Prop) (E : α → α → Prop) : Prop :=
   ∀ a, I a → ∀ i j, i < S.len a → j < S.len a → i ≠ j → ∀ b, S.pick a i = .ok b →
-    (∀ c, S.pick a j = .ok c → ∃ j' < S.len b, ∃ i' < S.len c, Lift E (S.pick b j') (S.pick c i')) ∧
+    (∀ c, S.pick a j = .ok c → ∃ j' < S.len b, ∃ i' < S.len c, Agree E (S.pick b j') (S.pick c i')) ∧
     (∀ e, S.pick a j = .error e → ∃ j' < S.len b, Faults (S.pick b j'))
 
 /-- Steps that succeed keep `I`. -/
@@ -232,19 +232,21 @@ theorem runs_agree {I : α → Prop} (hE : Equiv E) (hS : Simulates S E) (hD : C
           cases hpb : S.pick b j' with
           | error e =>
             cases hpc : S.pick c i' with
-            | ok _ => intro hl; exact hl.elim
+            | ok _ => intro hl; exact ((hl.symm hE).faults hE trivial).elim
             | error e' =>
               intro hl
               have h1 := ih b hIb hrb (.fault hj' hpb)
               have h2 := ih c hIc (.fault hi' hpc) hrc
-              exact h1.trans hE ((Agree.trans hE (.inl hl) h2))
+              exact h1.trans hE ((Agree.trans hE hl h2))
           | ok d =>
             cases hpc : S.pick c i' with
-            | error _ => intro hl; exact hl.elim
+            | error _ => intro hl; exact (hl.faults hE trivial).elim
             | ok d' =>
               intro hl
+              obtain ⟨_, hd, hdd⟩ := hl.ok_left
+              cases hd
               have hx := runs_first S m d
-              obtain ⟨x', hx', hxx⟩ := runs_sim hS hx d' hl
+              obtain ⟨x', hx', hxx⟩ := runs_sim hS hx d' hdd
               have h1 := ih b hIb hrb (.next hj' hpb hx)
               have h2 := ih c hIc (.next hi' hpc hx') hrc
               exact h1.trans hE ((Agree.trans hE hxx h2))
