@@ -14,6 +14,7 @@ import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.Embed
+import Tazuna.Smt.StepSites
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
 import Tazuna.Trace.WireThm
@@ -55,6 +56,8 @@ elab "#check_tazuna_reach" : command => do
   let roots := [
     -- T2 for every step kind, and the bound-reached condition the step scripts ask.
     ``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff,
+    -- The cascade's codes condition `step_encode` assumes holds exactly when every own kind's functions fit.
+    ``Tazuna.Smt.step_sites,
     -- T3: a model's values decode to a state a run reaches, and the well-formedness holds of decoded values.
     ``Tazuna.Smt.decode_run, ``Tazuna.Smt.wf_decode,
     -- What check hands prove: `Checked` of every service from a check with no finding.
