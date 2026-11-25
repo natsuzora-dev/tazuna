@@ -7,6 +7,7 @@ import Tazuna.Semantics.StepExamples
 import Tazuna.Semantics.Reach
 import Tazuna.Semantics.PendingInv
 import Tazuna.Semantics.PendingPerm
+import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Decode
 import Tazuna.Smt.StepEncode
