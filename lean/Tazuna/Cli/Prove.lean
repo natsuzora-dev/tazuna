@@ -3,6 +3,7 @@ import Tazuna.Trace.Run
 import Tazuna.Smt.Prove
 import Tazuna.Semantics.After
 import Tazuna.Smt.ServiceLayout
+import Tazuna.Smt.FiresForward
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
 question per input kind for the step, one line per question. -/
@@ -18,6 +19,7 @@ def _root_.Tazuna.Smt.Target.text : Target → String
   | .ensures c r => c ++ " ensures " ++ ruleText r
   | .cascade => "cascade bound"
   | .effect c => "effect " ++ c ++ " accepted"
+  | .timer m => "timers of " ++ m ++ " fire forward"
 where
   ruleText : Option String → String
     | some r => r
@@ -233,6 +235,43 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v)) (q : Question v (sha
       | _, _ => .error s!"a model of {name} does not decode"
     else .error "the caller type is no data"
 
+/-- The report of a bound question's answer: whether a step of the kind `step` can leave the slots. -/
+def boundReport (service step : String) : Smt.Answer → Except String Report
+  | .unsat => .ok (.unsat service step none)
+  | .sat _ => .ok (.boundReached service step)
+  | .unknown why => .ok (.undecided (.undecided .unknown) service step none [("why", Json.str why)])
+
+/-- The report of a timer machine's target question (`backQuestions`): a model is a context where `after` sets a timer
+before the time it sets it at, recomputed in Lean from the model's values. -/
+def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a : Smt.Answer) :
+    Except String Report :=
+  let g := Target.timer m.name
+  match a with
+  | .unsat => .ok (.unsat v.name step (some g))
+  | .unknown why => .ok (.undecided (.undecided .unknown) v.name step (some g) [("why", Json.str why)])
+  | .sat vs =>
+    let M := modelOf vs
+    let read (t : Ty) (h : t.isData = true) (i : Nat) : Option t.den0 := (decodeV L t (M.vars i)).map (Ty.down t h)
+    match read m.key m.key_data 0, read m.state m.state_data 1, read v.records v.records_data 2,
+        read .int rfl 3 with
+    | some key, some st, some records, some (now : Int) =>
+      match Step.timerAt now (m.after.fn (.inl (key, st, records, now, ()), ())) with
+      | some (d, target) =>
+        if d < now then
+          let shown : Show (List (String × Json)) := do
+            let k ← wireOf c.T m.key key
+            let s ← wireOf c.T m.state st
+            let r ← wireOf c.T v.records records
+            let t ← wireOf c.T m.state target
+            pure [("from", Json.str "validState"), ("instance", Json.mkObj [("key", k.toJson), ("state", s.toJson)]),
+              ("records", r.toJson), ("now", Lean.toJson now),
+              ("timer", Json.mkObj [("deadline", Lean.toJson d), ("state", t.toJson)]),
+              ("violated", Json.arr #[Json.str "timer set before its time"])]
+          .ok (.violated v.name step g (shown.run' {}))
+        else .error s!"a model of {step} sets a timer at {d}, not before {now}"
+      | none => .error s!"a model of {step} sets no timer"
+    | _, _, _, _ => .error s!"a model of {step} does not decode"
+
 -- The bound question has no target, and its name says so.
 set_option linter.tazuna.silentDefault false in
 /-- Every line of the service in order: the base case, then each input kind's questions. -/
@@ -262,6 +301,18 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
       items := items ++ asked.map (fun q => .ask ⟨q.script, answerReport c v L senv q⟩) ++
         (qs.filterMap fun q => q.target.bind fun g => if kept.any (·.target == some g) then none else some g).map
           (.skipped v.name)
+  for m in v.machines do
+    let g := Target.timer m.name
+    let step := "timer " ++ m.name
+    match backQuestions L m with
+    | .error r =>
+      match refusalLine c.T r with
+      | some (k, fields) => items := items ++ [.ready (.undecided k v.name step none fields)]
+      | none => return { internal := some s!"service {v.name}, {step}: the encoding refused: {reprStr r}" }
+    | .ok (bq, tq) =>
+      items := items ++ if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
+        [.ask ⟨bq, boundReport v.name step⟩, .ask ⟨tq, timerReport c v L m step⟩]
+      else [.skipped v.name g]
   let init := (initReports c v targets).map fun r => match r with
     | .unsat _ _ (some g) | .violated _ _ g _ =>
       if only (v.name ++ "/" ++ g.text ++ "/init") then Item.ready r else .skipped v.name g
@@ -322,8 +373,13 @@ def lineOf (unproved : String → List Target) (past : String → String → Opt
     some (k, [("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++
       [("step", Json.str step)] ++ fields)
 where
+  /-- The invariants a line's question assumes on the state before the step; a timer machine's question assumes
+  none, since its context is any key, state, records and time. -/
   assumes (s : String) (g : Target) : String × Json :=
-    ("assumes", Json.arr (((unproved s).filter fun g' => g'.isInvariant && g' != g).map (Json.str ·.text)).toArray)
+    let held : List Target := match g with
+      | .timer _ => []
+      | _ => (unproved s).filter fun g' => g'.isInvariant && g' != g
+    ("assumes", Json.arr (held.map (Json.str ·.text)).toArray)
 
 /-- The options of `prove`: the prefix `--only` keeps questions by, how many solvers run at once, and the cache
 directory. -/
