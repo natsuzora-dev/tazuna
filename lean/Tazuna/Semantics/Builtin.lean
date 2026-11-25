@@ -2,8 +2,8 @@ import Tazuna.Ir.Builtin
 import Tazuna.Semantics.Gleam
 import Tazuna.Semantics.Value
 
-/-! The meaning of each built-in. Bags are lists whose order no operation reveals; tables are lists of pairs whose keys
-differ, which the type of a table demands. Every function here is generic over the values it holds, so the meaning of a built-in is the same at
+/-! The meaning of each built-in. Bags are lists whose order no operation reveals (`Prim.den_rel` proves it, with
+renamed fresh ids); tables are lists of pairs whose keys differ, which the type of a table demands. Every function here is generic over the values it holds, so the meaning of a built-in is the same at
 every instance. -/
 
 namespace Tazuna.Ir

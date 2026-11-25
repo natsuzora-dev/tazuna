@@ -15,6 +15,7 @@ import Tazuna.Semantics.PendingInv
 import Tazuna.Semantics.PendingPerm
 import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Interleave
+import Tazuna.Semantics.Equivariance
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
