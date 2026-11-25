@@ -1,4 +1,4 @@
-import tazuna
+import tazuna.{type Ctx}
 
 pub type Records {
   Records(sent: Int)
@@ -12,6 +12,20 @@ fn apply(r: Records, _e: Event) -> Records {
   Records(sent: r.sent + 1)
 }
 
+pub type Caller {
+  User
+}
+
+fn bump() -> tazuna.Command(Records, Event, Caller, Int, Nil) {
+  tazuna.command(
+    name: "bump",
+    callers: [User],
+    accepts: fn(_n) { [] },
+    decide: fn(_c: Ctx(Records, Int, Caller)) { Ok([Sent]) },
+    ensures: fn(_c, _r) { [] },
+  )
+}
+
 fn ping() -> tazuna.ExternalCommand(Int, Nil, Nil) {
   tazuna.external_command(name: "ping")
 }
@@ -20,7 +34,17 @@ fn again() -> tazuna.Reaction(Records, Event) {
   tazuna.reaction(
     name: "again",
     react: fn(_c: tazuna.ReactionCtx(Records), _e: Event) {
-      [tazuna.request_command(command: ping(), input: 1, on_answer: fn(_a) { [] })]
+      [
+        tazuna.request_command(command: ping(), input: 1, on_answer: fn(_a) {
+          []
+        }),
+        tazuna.send_command(
+          command: bump(),
+          caller: User,
+          input: 1,
+          on_answer: fn(_a) { [] },
+        ),
+      ]
     },
   )
 }

@@ -1,1 +1,2 @@
 {"kind":"Illegal.unknownHandle","message":"no external declares the external command ping with these types; add it to an external's declares"}
+{"kind":"Illegal.unknownHandle","message":"mail sends the command bump, which it does not declare with these types; add it to mail's declares"}

@@ -370,10 +370,23 @@ def Defs.handles : {G : List Ty} → Defs G → List HandleSite
 def tableKeyAdvice : String :=
   "the solver finds an entry by comparing keys, so make the key Int, String, Date, Id, or a custom type or tuple of these"
 
+/-- Whether a service lists the command or query an own handle names, by the name and the types an own effect of it
+carries, as `Step.runOwn` looks it up. Other handles name nothing of the service. -/
+def ServiceV.lists (v : ServiceV) (h : HandleSite) : Bool :=
+  let same (a b : Ty) := (Ty.same a b).isSome
+  match h.name with
+  | none => true
+  | some n => match h.kind, h.types with
+    | "command", [_, _, c, i, j] =>
+      same c v.caller && v.commands.any fun x => x.name == n && same i x.input && same j x.rejection
+    | "query", [_, c, i, o] => same c v.caller && v.queries.any fun x => x.name == n && same i x.input && same o x.output
+    | _, _ => true
+
 /-- Every broken structure rule of `s`, whose user types are `T` and whose program makes `handles` and kept functions
-capturing values of the types `captures`, with a message naming the definition. -/
-def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (captures : List (SiteId × List Ty)) :
-    List (Illegal × String) :=
+capturing values of the types `captures`, and whose service `v`'s own sends can name the handles `sent v`, with a
+message naming the definition. -/
+def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (captures : List (SiteId × List Ty))
+    (sent : ServiceV → List HandleSite) : List (Illegal × String) :=
   let names := s.services.map (·.name) ++ s.externals.map (·.name)
   let topNames := (duplicates names).map fun n => (.wireName, s!"{n} names more than one service or external")
   let entries : List (String × DeclaredV) := s.services.flatMap (fun v => v.declares.map (v.name, ·)) ++
@@ -467,8 +480,14 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
       if !h.kind.startsWith "external" || s.services.all fun v =>
         v.declared.any fun (_, d) => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome then none
       else some (Illegal.unknownHandle, s!"no external declares the {h.kind} {n} with these types; add it to an external's declares")
+  -- An own effect runs the command or query its service lists by the effect's name and types, so a service sends only
+  -- what it lists; another service's command would run on records it does not own.
+  let unlistedSends := s.services.flatMap fun v => (sent v).filterMap fun h => match h.name with
+    | some n => if v.lists h then none else
+      some (Illegal.unknownHandle, s!"{v.name} sends the {h.kind} {n}, which it does not declare with these types; add it to {v.name}'s declares")
+    | none => none
   let capturedKeys := captures.filterMap fun (site, Γ) => if (Ty.tuple Γ).plainKeys then none else
     some (Illegal.tableKey, s!"{site.module}:{site.line}:{site.col}: a function a structure value keeps captures a table whose key is no plain value; {tableKeyAdvice}")
-  topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles ++ capturedKeys
+  topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles ++ unlistedSends ++ capturedKeys
 
 end Tazuna.Ir

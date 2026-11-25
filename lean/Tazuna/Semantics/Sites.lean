@@ -400,6 +400,42 @@ def PendingShape.pending {e : Ty} (sh : PendingShape e) (id : Nat) (x : Ty.dens 
 /-- The kept functions an effect function's source and the globals it reads write: all its effects can hold. -/
 def EffectFun.usedSites {ps : List Ty} {r : Ty} (f : EffectFun ps r) : List AnySite := f.body.uses sitesC f.defs
 
+/-- What a function of the step and the globals it reads write: kept functions, handles and sends. -/
+abbrev Uses := List AnySite × List HandleSite × List SendSite
+
+/-- The kept functions, handles and sends a kept function's source and the globals it reads write. -/
+def Fun.uses {t : Ty} (f : Fun t) : Uses :=
+  (f.body.uses sitesC f.defs, f.body.uses handlesC f.defs, f.body.uses sendsC f.defs)
+
+/-- The kept functions, handles and sends a kept function that returns effects, and the globals it reads, write. -/
+def EffectFun.uses {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Uses :=
+  (f.usedSites, f.body.uses handlesC f.defs, f.body.uses sendsC f.defs)
+
+/-- What each function a step of the service runs uses. A site such a function uses (a pending request's
+`on_answer`, an own command's) uses no more (`Expr.uses_closed`), so these are all the codes a step meets. -/
+def rootUses (v : ServiceV) : List Uses :=
+  [v.apply.uses, v.invariants.uses] ++
+    v.commands.flatMap (fun x => [x.accepts.uses, x.decide.uses, x.ensures.uses]) ++
+    v.queries.flatMap (fun q => [q.accepts.uses, q.resolve.uses]) ++
+    v.machines.flatMap (fun m => [m.instances.uses, m.on.uses, m.after.uses, m.invariants.uses, m.effect.uses]) ++
+    v.reactions.map (·.react.uses) ++ v.subscribes.map (·.wrap.uses)
+
+/-- The handles of `H` a send can make. -/
+def SendSite.handlesIn (w : SendSite) (H : List HandleSite) : List HandleSite :=
+  match w.handles with
+  | some hs => hs
+  | none => H
+
+/-- The sends a function of the step can run: its own, and those of each kept function it uses, which run when an
+answer or an own command's result reaches it. -/
+def rootSends (r : Uses) : List SendSite :=
+  r.2.2 ++ r.1.flatMap fun s => s.2.2.body.uses sendsC s.2.2.defs
+
+/-- The handles the service's own sends can name: each send's own, or for a send whose handle is no global called in
+place, every handle of the function it is in. Every own effect of the service names one of these. -/
+def ServiceV.sentHandles (v : ServiceV) : List HandleSite :=
+  (rootUses v).flatMap fun r => (rootSends r).flatMap (·.handlesIn r.2.1)
+
 /-- The senders a service's states can name, each with the kept functions its requests can hold: a machine's
 instance by its key, or a reaction, with the sites its effect function can reach. -/
 def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks × List AnySite) :=

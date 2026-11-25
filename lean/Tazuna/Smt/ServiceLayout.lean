@@ -71,32 +71,6 @@ def eventTys (p : ProgramParts) (v : ServiceV) : List Ty :=
   dedupBy (fun a b => (Ty.same a b).isSome)
     (v.event :: p.sites.filterMap fun ⟨_, t, _⟩ => match t with | .fn [_] (.list e) => some e | _ => none)
 
-/-- What a function of the step and the globals it reads write: kept functions, handles and sends. -/
-abbrev Uses := List AnySite × List HandleSite × List SendSite
-
-/-- The kept functions, handles and sends a kept function's source and the globals it reads write. -/
-def _root_.Tazuna.Ir.Fun.uses {t : Ty} (f : Fun t) : Uses :=
-  (f.body.uses sitesC f.defs, f.body.uses handlesC f.defs, f.body.uses sendsC f.defs)
-
-/-- The kept functions, handles and sends a kept function that returns effects, and the globals it reads, write. -/
-def _root_.Tazuna.Ir.EffectFun.uses {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Uses :=
-  (f.usedSites, f.body.uses handlesC f.defs, f.body.uses sendsC f.defs)
-
-/-- What each function a step of the service runs uses. A site such a function uses (a pending request's
-`on_answer`, an own command's) uses no more (`Expr.uses_closed`), so these are all the codes a step meets. -/
-def rootUses (v : ServiceV) : List Uses :=
-  [v.apply.uses, v.invariants.uses] ++
-    v.commands.flatMap (fun x => [x.accepts.uses, x.decide.uses, x.ensures.uses]) ++
-    v.queries.flatMap (fun q => [q.accepts.uses, q.resolve.uses]) ++
-    v.machines.flatMap (fun m => [m.instances.uses, m.on.uses, m.after.uses, m.invariants.uses, m.effect.uses]) ++
-    v.reactions.map (·.react.uses) ++ v.subscribes.map (·.wrap.uses)
-
-/-- The handles of `H` a send can make. -/
-def _root_.Tazuna.Ir.SendSite.handlesIn (w : SendSite) (H : List HandleSite) : List HandleSite :=
-  match w.handles with
-  | some hs => hs
-  | none => H
-
 /-- The sites of `P` a send's `on_answer` can be at. -/
 def _root_.Tazuna.Ir.SendSite.sitesIn (w : SendSite) (P : List AnySite) : List AnySite :=
   match w.site with
@@ -106,11 +80,6 @@ def _root_.Tazuna.Ir.SendSite.sitesIn (w : SendSite) (P : List AnySite) : List A
 /-- The own kinds a send can make in a function that uses the sites `P` and the handles `H`. -/
 def _root_.Tazuna.Ir.SendSite.keys (es : List Ty) (P : List AnySite) (H : List HandleSite) (w : SendSite) : List OwnKey :=
   (w.handlesIn H).flatMap (ownKeys es (w.sitesIn P))
-
-/-- The sends a function of the step can run: its own, and those of each kept function it uses, which run when an
-answer or an own command's result reaches it. -/
-def rootSends (r : Uses) : List SendSite :=
-  r.2.2 ++ r.1.flatMap fun s => s.2.2.body.uses sendsC s.2.2.defs
 
 /-- The kinds of effect of the service's scripts, from the program it came from, before any datatype: those whose
 fields are data with sorts, so every datatype of the layout has one. An own kind is what one send of a function of
