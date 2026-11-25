@@ -65,14 +65,14 @@ theorem react_at_exact (m : MachineV r e) (hpl : m.key.plain = true) (rc : React
     (recs : r.den0) (tnow : Int) (ev : e.den0) {records now : Term}
     (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {evc : Code e} (hev : Smt.Rel M L e (Ty.up _ m.event_data ev) evc)
-    (tbl : m.table.den0) {So : List (Slot 2)} {sv : List (Bool × List Val)} {ys : List (m.key.den × (instEntry m.state).den)}
-    (hS : SlotsDen M So sv) (hp : ys.Perm (Ty.up _ m.table_data tbl).1)
+    (tbl : m.table.den0) {So : List InstSlot} {sv : List (Bool × List Val)} {ys : List (m.key.den × (instEntry m.state).den)}
+    (hS : SlotsDen M (So.map InstSlot.slot) sv) (hp : ys.Perm (Ty.up _ m.table_data tbl).1)
     (hh : Holds2 (ETab L m.key (instEntry m.state)) ys sv)
     {de nde dn nn : Nat} (hde : L.find? (instEntry m.state) = some (de, nde)) (hdn : L.find? (Ty.next m.state) = some (dn, nn))
     {init : Val} (hinit : embedV L m.state (Ty.up _ m.state_data m.initial) = some init) (dflt noneT : Term)
     {f first : Term} {xs : SlotItems 1} {zk : Val} (hf : f.denote M = .bool true) (hxs : Term.denotes M xs.1 = [zk])
     (k : m.key.den0) (hk : RelV L m.key (Ty.up _ m.key_data k) zk)
-    {sl : Slot 2} {fx cj : Term}
+    {sl : InstSlot} {fx cj : Term}
     (hg : reactAt L m rc de dn So init dflt noneT records now evc ((f, xs), first) = .ok ((sl, fx), cj)) :
     Holds M cj ↔ keyFits L.count m (instancesOf T m tbl) recs tnow ev k := by
   obtain ⟨kt, rfl⟩ := xs.one
@@ -252,8 +252,8 @@ theorem allT_slots_exact {α : Type} {E : α → List Val → Prop} {P : α → 
     rw [← ih, ← hy, show allT (c :: cs) = .and c (allT cs) from rfl, holds_and]
   | (_, _) :: _, (true, _) :: _, [], _, _, he, _ => by simp [Holds2, occupied, Forall2] at he
 
-theorem reactAt_cond (m : MachineV r e) {rc : ReactCode m} {de dn : Nat} {So : List (Slot 2)} {init : Val}
-    {dflt noneT records now : Term} {evc : Code e} {f first : Term} {xs : SlotItems 1} {sl : Slot 2} {fx cj : Term}
+theorem reactAt_cond (m : MachineV r e) {rc : ReactCode m} {de dn : Nat} {So : List InstSlot} {init : Val}
+    {dflt noneT records now : Term} {evc : Code e} {f first : Term} {xs : SlotItems 1} {sl : InstSlot} {fx cj : Term}
     (hg : reactAt L m rc de dn So init dflt noneT records now evc ((f, xs), first) = .ok ((sl, fx), cj)) :
     ∃ X, cj = .ite f X tt := by
   repeat obtain ⟨_, _, hg⟩ := bind_ok.1 hg
@@ -322,6 +322,7 @@ theorem react_exact (m : MachineV r e) (hpl : m.key.plain = true) {rc : ReactCod
   obtain ⟨svB, ysB, hSB, -, -, hpB, hyB⟩ := bag_view hbag' h8
   have htbl' : Smt.Rel M L (.table m.key (instEntry m.state)) (Ty.up _ m.table_data tbl) x := htbl
   obtain ⟨sv, ys, hS, -, -, hp, hh⟩ := table_view htbl' h1
+  rw [← instSlotsOf_slot] at hS
   have hlen : (slotsOf db dtb nb 1 bagT).length ≤ firsts.length := by
     rw [firstSlots_length (L := L) m.key [] _ firsts h11]; exact Nat.le_refl _
   have hF := forall2_zip_left hlen (mapM_ok _ _ _ h12)

@@ -67,9 +67,9 @@ def dueOf {r e : Ty} {m : MachineV r e} (now : Int) (i : Step.Instance m) : Opti
   i.timer.bind fun (d, _) => if d ≤ now then some d else none
 
 /-- Per slot of a table, whether it holds a timer due at `now`, and its deadline. -/
-def dueSlots (de dent dp : Nat) (So : List (Slot 2)) (now : Term) : List (Term × Term) :=
-  So.map fun (f, xs) =>
-    let tm := Term.sel de 0 1 xs[1]
+def dueSlots (de dent dp : Nat) (So : List InstSlot) (now : Term) : List (Term × Term) :=
+  So.map fun ⟨f, _, entry⟩ =>
+    let tm := Term.sel de 0 1 entry
     let dl := Term.sel dp 0 0 (Term.sel dent 0 0 tm)
     (.and f (.and (.is dent 0 tm) (.le dl now)), dl)
 
@@ -173,11 +173,13 @@ variable {L : Layout} {M : Model} {r e : Ty}
 
 /-- The timer term of a table slot denotes the timer of the instance it holds. -/
 theorem item_timer (m : MachineV r e) {de nde : Nat} (hde : L.find? (instEntry m.state) = some (de, nde))
-    (y : m.key.den × (instEntry m.state).den) (xs : SlotItems 2)
-    (h : ETab L m.key (instEntry m.state) y (Term.denotes M xs.1)) :
-    RelV L _ (Ty.up _ m.timer_data (timerVal (instOfD m y).timer)) ((Term.sel de 0 1 xs[1]).denote M) := by
+    (y : m.key.den × (instEntry m.state).den) (sl : InstSlot)
+    (h : ETab L m.key (instEntry m.state) y (Term.denotes M sl.slot.2.1)) :
+    RelV L _ (Ty.up _ m.timer_data (timerVal (instOfD m y).timer)) ((Term.sel de 0 1 sl.entry).denote M) := by
   obtain ⟨zk, zv, hvs, hk, hv⟩ := h
-  obtain ⟨xk, xe, rfl, hxk, hxe⟩ := pair_terms hvs
+  obtain ⟨f, xk, xe⟩ := sl
+  simp only [InstSlot.slot, Term.denotes, List.cons.injEq, and_true] at hvs
+  obtain ⟨hxk, hxe⟩ := hvs
   have hy2 : Ty.up _ m.entry_data (Ty.down _ m.entry_data y.2) = y.2 := Ty.up_down _ _ _
   generalize hz : Ty.down _ m.entry_data y.2 = z at hy2
   obtain ⟨st, t, u⟩ := z
@@ -186,22 +188,21 @@ theorem item_timer (m : MachineV r e) {de nde : Nat} (hde : L.find? (instEntry m
   rw [← hy2] at hv
   obtain ⟨v0, v1, hzv, -, hv1⟩ := (entry_rel_iff m hde st t zv).1 hv
   have hsel : (Term.sel de 0 1 xe).denote M = v1 := by rw [sel_ctor 1 (hxe.trans hzv)]; rfl
-  simp only [SlotItems.getElem_mk, List.getElem_cons_succ, List.getElem_cons_zero]
   rw [hsel, hinst]; simpa [val_timerOf] using hv1
 
 /-- The due terms of a table's slots denote, slot by slot, the due deadlines of the instances they hold. -/
 theorem dueSlots_rel (m : MachineV r e) {de nde dent nent dp np : Nat} (hde : L.find? (instEntry m.state) = some (de, nde))
     (hdent : L.find? (Ty.option (.tuple [.int, m.state])) = some (dent, nent))
     (hdp : L.find? (.tuple [.int, m.state]) = some (dp, np)) {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
-    {So : List (Slot 2)} → {sv : List (Bool × List Val)} → {ys : List (m.key.den × (instEntry m.state).den)} →
-    SlotsDen M So sv → Holds2 (ETab L m.key (instEntry m.state)) ys sv →
+    {So : List InstSlot} → {sv : List (Bool × List Val)} → {ys : List (m.key.den × (instEntry m.state).den)} →
+    SlotsDen M (So.map InstSlot.slot) sv → Holds2 (ETab L m.key (instEntry m.state)) ys sv →
     ∃ os, Forall2 (DueRel M) (dueSlots de dent dp So now) os ∧
       os.filterMap id = (ys.map (instOfD m)).filterMap (dueOf tnow)
   | [], [], ys, _, hy => by
     cases ys with
     | nil => exact ⟨[], trivial, rfl⟩
     | cons _ _ => exact hy.elim
-  | (f, xs) :: So, (b, vs) :: sv, ys, ⟨hf, hx, hS⟩, hy => by
+  | ⟨f, tk, te⟩ :: So, (b, vs) :: sv, ys, ⟨hf, hx, hS⟩, hy => by
     have hand : ∀ a c : Term, (Term.and a c).denote M = .bool ((a.denote M).toBool && (c.denote M).toBool) :=
       fun _ _ => rfl
     cases b with
@@ -214,7 +215,7 @@ theorem dueSlots_rel (m : MachineV r e) {de nde dent nent dp np : Nat} (hde : L.
       match ys, hy with
       | y :: ys, ⟨hey, hy⟩ =>
         obtain ⟨os, h1, h2⟩ := dueSlots_rel m hde hdent hdp hnow hS hy
-        have ht := item_timer m hde y xs (hx ▸ hey)
+        have ht := item_timer m hde y ⟨f, tk, te⟩ (hx ▸ hey)
         obtain ⟨his, hdl⟩ := timer_view m hdent hdp (instOfD m y) ht
         refine ⟨dueOf tnow (instOfD m y) :: os, ⟨⟨?_, fun d hd => ?_⟩, h1⟩, ?_⟩
         · show (Term.and f (.and (.is dent 0 _) (.le _ now))).denote M = _
@@ -225,7 +226,7 @@ theorem dueSlots_rel (m : MachineV r e) {de nde dent nent dp np : Nat} (hde : L.
           | some p =>
             obtain ⟨dl, tg⟩ := p
             have hX := hdl dl tg htm
-            generalize Term.sel dp 0 0 (Term.sel dent 0 0 (Term.sel de 0 1 xs[1])) = X at hX ⊢
+            generalize Term.sel dp 0 0 (Term.sel dent 0 0 (Term.sel de 0 1 te)) = X at hX ⊢
             simp only [Term.denote, hX, hnow, Val.toBool, Val.toInt, Option.isSome_some, Bool.true_and,
               Option.bind_some]
             by_cases hle : dl ≤ tnow <;> simp [hle]
@@ -268,7 +269,7 @@ def dueAll : (ms : List (MachineV r e)) → PerMachine Term ms → Term → Exce
     let (dent, _) ← need "a layout without the entry's timer" (L.find? (Ty.option (.tuple [.int, m.state])))
     let dp ← tupleD L [.int, m.state]
     let rest ← dueAll ms xs now
-    pure (dueSlots de dent dp (slotsOf dd dt n 2 x) now ++ rest)
+    pure (dueSlots de dent dp (instSlotsOf dd dt n x) now ++ rest)
 
 /-- What a firing round encodes: every machine's part, and whether the round fires (it is active and some timer is
 due). -/
@@ -329,6 +330,7 @@ theorem dueAll_rel {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
     obtain ⟨ndp, hdp⟩ := tupleD_ok h4
     have htbl' : Smt.Rel M L (.table m.key (instEntry m.state)) (Ty.up _ m.table_data tbl) x := htbl
     obtain ⟨sv, ys, hS, -, -, hp, hh⟩ := table_view htbl' h1
+    rw [← instSlotsOf_slot] at hS
     have hperm : (ys.map (instOfD m)).Perm (instancesOf T m tbl) := instancesOf_perm m tbl hp
     obtain ⟨os1, hf1, he1⟩ := dueSlots_rel m hde (need_ok.1 h3) hdp hnow hS hh
     obtain ⟨os2, hf2, he2⟩ := dueAll_rel hnow ms xs sms hrest h5

@@ -370,6 +370,29 @@ theorem aligned_map {α : Type} {E : α → List Val → Prop} {V : α → Val �
     exact ⟨hf, hx, he.1, hQ y xs (by rw [hx]; exact he.1), aligned_map Q hQ h he.2⟩
   | (_, _) :: _, (true, _) :: _, [], _, he => by simp [Holds2, occupied, Forall2] at he
 
+/-- `aligned_map` for records seen as slots, `Q` reading each record. -/
+theorem aligned_mapView {α γ : Type} {E : α → List Val → Prop} {V : α → Val → Prop} (view : γ → Slot w) (Q : γ → Term)
+    (hQ : ∀ y c, E y (Term.denotes M (view c).2.1) → V y ((Q c).denote M)) :
+    {S : List γ} → {sv : List (Bool × List Val)} → {ys : List α} → SlotsDen M (S.map view) sv → Holds2 E ys sv →
+    AlignedV M E V (S.map view) (S.map Q) sv ys
+  | [], [], [], _, _ => trivial
+  | [], [], _ :: _, _, h => nomatch h
+  | c :: S, (b, vs) :: sv, ys, h0, he => by
+    have hQc : ∀ y, E y (Term.denotes M (view c).2.1) → V y ((Q c).denote M) := fun y => hQ y c
+    simp only [List.map_cons] at h0 ⊢
+    rcases hv : view c with ⟨fl, xs⟩
+    rw [hv] at h0 hQc
+    obtain ⟨hf, hx, hS⟩ := h0
+    cases b with
+    | false => exact ⟨hf, hx, aligned_mapView view Q hQ hS (by simpa [Holds2, occupied] using he)⟩
+    | true =>
+      match ys, he with
+      | y :: ys, he =>
+        simp only [Holds2, occupied, ite_true, List.filterMap_cons, Forall2] at he
+        exact ⟨hf, hx, he.1, hQc y (by rw [hx]; exact he.1), aligned_mapView view Q hQ hS he.2⟩
+      | [], he => simp [Holds2, occupied, Forall2] at he
+  | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ => h.elim
+
 theorem alignedV_mono {α : Type} {E : α → List Val → Prop} {V V' : α → Val → Prop} (h : ∀ y v, V y v → V' y v) :
     {S : List (Slot w)} → {qs : List Term} → {sv : List (Bool × List Val)} → {ys : List α} →
     AlignedV M E V S qs sv ys → AlignedV M E V' S qs sv ys
@@ -424,6 +447,51 @@ theorem mapSlots_den {α β : Type} {E : α → List Val → Prop} {V : α → V
       exact ⟨by rw [denotes_eq_map, List.length_map, (N xs q).2], h3⟩
     · simp only [Holds2, occupied, ite_true, List.filterMap_cons, List.map_cons, Forall2] at h4 ⊢
       exact ⟨hN y xs q (hx ▸ he) hq, h4⟩
+
+/-- `mapSlots_den` for records seen as slots: `N` makes from each record and its term a record of another kind with the
+same flag. -/
+theorem zipView_den {α β γ δ : Type} {w' : Nat} {E : α → List Val → Prop} {V : α → Val → Prop}
+    {E' : β → List Val → Prop} (g : α → β) (view : γ → Slot w) (view' : δ → Slot w') (N : γ → Term → δ)
+    (hf : ∀ c q, (view' (N c q)).1 = (view c).1)
+    (hN : ∀ y c q, E y (Term.denotes M (view c).2.1) → V y (q.denote M) →
+      E' (g y) (Term.denotes M (view' (N c q)).2.1)) :
+    {S : List γ} → {qs : List Term} → {sv : List (Bool × List Val)} → {ys : List α} →
+    AlignedV M E V (S.map view) qs sv ys → ∃ sv', SlotsDen M ((List.zipWith N S qs).map view') sv' ∧
+      sv'.length = sv.length ∧ (∀ p ∈ sv', p.2.length = w') ∧ Holds2 E' (ys.map g) sv'
+  | [], [], [], [], _ => ⟨[], trivial, rfl, by simp, by simp [Holds2, occupied, Forall2]⟩
+  | c :: S, q :: qs, (b, vs) :: sv, ys, h0 => by
+    have hl : (Term.denotes M (view' (N c q)).2.1).length = w' := by
+      rw [denotes_eq_map, List.length_map, (view' (N c q)).2.2]
+    have hd : ∀ {sv' : List (Bool × List Val)}, (view c).1.denote M = .bool b →
+        SlotsDen M ((List.zipWith N S qs).map view') sv' →
+        SlotsDen M ((List.zipWith N (c :: S) (q :: qs)).map view') ((b, Term.denotes M (view' (N c q)).2.1) :: sv') := by
+      intro sv' hfc h
+      have hfn : (view' (N c q)).1.denote M = .bool b := by rw [hf]; exact hfc
+      show SlotsDen M (view' (N c q) :: (List.zipWith N S qs).map view') _
+      revert hfn; generalize view' (N c q) = sl; intro hfn; exact ⟨hfn, rfl, h⟩
+    cases b with
+    | false =>
+      obtain ⟨hfc, -, h⟩ : (view c).1.denote M = .bool false ∧ Term.denotes M (view c).2.1 = vs ∧
+          AlignedV M E V (S.map view) qs sv ys := by
+        simp only [List.map_cons] at h0; revert h0; generalize view c = sl; intro h0; exact h0
+      obtain ⟨sv', h1, h2, h3, h4⟩ := zipView_den g view view' N hf hN h
+      refine ⟨_ :: sv', hd hfc h1, by simp [h2], ?_, by simpa [Holds2, occupied] using h4⟩
+      simp only [List.mem_cons, forall_eq_or_imp]
+      exact ⟨hl, h3⟩
+    | true =>
+      match ys, h0 with
+      | y :: ys, h0 =>
+        obtain ⟨hfc, hx, he, hq, h⟩ : (view c).1.denote M = .bool true ∧ Term.denotes M (view c).2.1 = vs ∧ E y vs ∧
+            V y (q.denote M) ∧ AlignedV M E V (S.map view) qs sv ys := by
+          simp only [List.map_cons] at h0; revert h0; generalize view c = sl; intro h0; exact h0
+        obtain ⟨sv', h1, h2, h3, h4⟩ := zipView_den g view view' N hf hN h
+        refine ⟨_ :: sv', hd hfc h1, by simp [h2], ?_, ?_⟩
+        · simp only [List.mem_cons, forall_eq_or_imp]
+          exact ⟨hl, h3⟩
+        · simp only [Holds2, occupied, ite_true, List.filterMap_cons, List.map_cons, Forall2] at h4 ⊢
+          exact ⟨hN y c q (hx ▸ he) hq, h4⟩
+      | [], h0 =>
+        simp only [List.map_cons] at h0; revert h0; generalize view c = sl; intro h0; exact h0.elim
 
 theorem slotsDen_append : {S : List (Slot w)} → {sv : List (Bool × List Val)} → {T : List (Slot w)} →
     {tv : List (Bool × List Val)} → SlotsDen M S sv → SlotsDen M T tv → SlotsDen M (S ++ T) (sv ++ tv)

@@ -18,6 +18,28 @@ structure InstCheck where
   key : Term
   rules : List (Term × Term)
 
+/-- One slot of a machine's instance table: whether it holds an instance, the instance's key and its entry. -/
+structure InstSlot where
+  flag : Term
+  key : Term
+  entry : Term
+
+/-- An instance slot as a slot of width two. -/
+def InstSlot.slot (s : InstSlot) : Slot 2 := (s.flag, ⟨[s.key, s.entry], rfl⟩)
+
+/-- The `n` slots of the instance table `s`, as `slotsOf` reads them. -/
+def instSlotsOf (d dt n : Nat) (s : Term) : List InstSlot :=
+  (List.range n).map fun i =>
+    let x := Term.sel d 0 i s.share
+    ⟨.sel dt 0 0 x, .sel dt 0 1 x, .sel dt 0 2 x⟩
+
+theorem instSlotsOf_slot (d dt n : Nat) (s : Term) :
+    (instSlotsOf d dt n s).map InstSlot.slot = slotsOf d dt n 2 s := by
+  simp only [instSlotsOf, slotsOf, List.map_map]
+  refine List.map_congr_left fun i _ => ?_
+  simp only [Function.comp_apply, InstSlot.slot, Prod.mk.injEq, true_and]
+  exact Subtype.ext (by simp [List.range_succ])
+
 section
 variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
@@ -28,10 +50,9 @@ def instCtxT (m : MachineV r e) (key state records now : Term) : Except Refusal 
 /-- The invariant check of one slot of an instance table, and its condition, which asks for the invariants'
 condition only where the slot holds an instance. `de` is the entry's tuple datatype. -/
 def instCheckAt (m : MachineV r e) (inv : Code (Ty.fn [Ty.machineCtx m.key m.state r] Ty.rules)) (de : Nat)
-    (records now : Term) : Slot 2 → Except Refusal (InstCheck × Term)
-  | (f, xs) => do
-    let key := xs[0]
-    let ctx ← instCtxT L m key (.sel de 0 0 xs[1]) records now
+    (records now : Term) : InstSlot → Except Refusal (InstCheck × Term)
+  | ⟨f, key, entry⟩ => do
+    let ctx ← instCtxT L m key (.sel de 0 0 entry) records now
     let cx ← need "a context that has no term" (Code.ofTerm? _ ctx)
     let (rs, c) ← inv (cx, ())
     pure (⟨f, key, ← ruleTerms L rs⟩, Term.ite f c tt)
@@ -42,7 +63,7 @@ def encodeInstInvariants (m : MachineV r e) (inv : Code (Ty.fn [Ty.machineCtx m.
     (tbl records now : Term) : Except Refusal (List InstCheck × Term) := do
   let (d, n, dt) ← collD L m.table [m.key, instEntry m.state]
   let de ← tupleD L [m.state, Ty.option (.tuple [.int, m.state])]
-  let checks ← (slotsOf d dt n 2 tbl).mapM (instCheckAt L m inv de records now)
+  let checks ← (instSlotsOf d dt n tbl).mapM (instCheckAt L m inv de records now)
   let _ ← need "a key type without order terms" (ordT L T m.key tt tt)
   pure (checks.map (·.1), allT (checks.map (·.2)))
 
@@ -81,15 +102,15 @@ def timerT (m : MachineV r e) (now a : Term) : Except Refusal Term := do
   pure (.ite (.is dopt 0 a) (.ctor dent 0 [.ctor dp 0 [.add now (.sel dtm 0 0 tm), .sel dtm 0 1 tm]]) (.ctor dent 1 []))
 
 /-- Whether an old table slot holds the key `kc`: its flag, the equality term, and its entry. -/
-def hitAt (m : MachineV r e) (kc : Code m.key) : Slot 2 → Except Refusal (Term × Term × Term)
-  | (g, ys) => do
-    pure (g, ← eqCode L m.key (← need "a key that has no term" (Code.ofTerm? m.key ys[0])) kc, ys[1])
+def hitAt (m : MachineV r e) (kc : Code m.key) : InstSlot → Except Refusal (Term × Term × Term)
+  | ⟨g, key, entry⟩ => do
+    pure (g, ← eqCode L m.key (← need "a key that has no term" (Code.ofTerm? m.key key)) kc, entry)
 
 /-- The new table's slot for one slot of the instances bag, the effect it starts, and its condition: flagged by
 `first`, it holds the key and the entry of the instance after the event. The effect is the `effect` code's option
 where the instance enters a state (it starts, or `on` gives Enter), else `noneT`. -/
-def reactAt (m : MachineV r e) (rc : ReactCode m) (de dn : Nat) (So : List (Slot 2)) (init : Val)
-    (dflt noneT records now : Term) (evc : Code e) : Slot 1 × Term → Except Refusal ((Slot 2 × Term) × Term)
+def reactAt (m : MachineV r e) (rc : ReactCode m) (de dn : Nat) (So : List InstSlot) (init : Val)
+    (dflt noneT records now : Term) (evc : Code e) : Slot 1 × Term → Except Refusal ((InstSlot × Term) × Term)
   | ((f, xs), first) => do
     let key := xs[0]
     let kc ← need "a key that has no term" (Code.ofTerm? m.key key)
@@ -108,7 +129,7 @@ def reactAt (m : MachineV r e) (rc : ReactCode m) (de dn : Nat) (So : List (Slot
     let tm := Term.ite entered (← timerT L m now at_) (.sel de 0 1 old)
     let (x, c3) ← rc.effect (nctx, ())
     let xt ← need "an effect that has no term" (Code.term? _ x)
-    pure (((first, ⟨[key, .ctor de 0 [st, tm]], rfl⟩), Term.share (.ite entered xt noneT)),
+    pure ((⟨first, key, .ctor de 0 [st, tm]⟩, Term.share (.ite entered xt noneT)),
       Term.ite f (andT (.ite found c1 tt) (.ite entered (andT c2 c3) tt)) tt)
 
 /-- A slot of the keys a machine's instances start effects at: whether it holds an instance, its key, and the effect
@@ -142,15 +163,15 @@ def encodeReact (m : MachineV r e) (rc : ReactCode m) (tbl records now ev : Term
   let bagT ← need "a bag that has no term" (Code.term? _ bag)
   let (db, nb, dtb) ← collD L (.bag m.key) [m.key]
   let SB := slotsOf db dtb nb 1 bagT
-  let So := slotsOf d dt n 2 tbl
+  let So := instSlotsOf d dt n tbl
   let init ← need "an initial state without a constant" (embedV L m.state (Ty.up _ m.state_data m.initial))
   let dflt ← need "an entry without a default term" (defaultT L (instEntry m.state))
   let firsts ← firstSlots L m.key [] SB
   let slots ← (SB.zip firsts).mapM (reactAt L m rc de dn So init dflt (.ctor dopt 1 []) records now evc)
   let _ ← need' "an instance bag with more slots than the instance table" (nb ≤ n) ()
   let pad := List.replicate (n - nb)
-    (Term.bool false, (⟨[← need "a key without a default term" (defaultT L m.key), dflt], rfl⟩ : SlotItems 2))
-  pure (⟨slotsTerm d dt (slots.map (·.1.1) ++ pad), slots.map fun ((sl, x), _) => ⟨sl.1, sl.2[0], x⟩⟩,
+    (⟨.bool false, ← need "a key without a default term" (defaultT L m.key), dflt⟩ : InstSlot)
+  pure (⟨slotsTerm d dt ((slots.map (·.1.1) ++ pad).map InstSlot.slot), slots.map fun ((sl, x), _) => ⟨sl.flag, sl.key, x⟩⟩,
     andT c0 (allT (slots.map (·.2))))
 
 /-- Whether the key of `a` comes no later than the key of `b` in the model, by the order terms. -/
@@ -262,16 +283,15 @@ theorem inst_check (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.key m.
     (hinv : Smt.Rel M L _ (Ty.up _ m.inv_data m.invariants.fn) inv) (recs : r.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {de : Nat} (hde : tupleD L [m.state, Ty.option (.tuple [.int, m.state])] = .ok de)
-    {f : Term} {xs : SlotItems 2} {zk zv : Val} (hf : f.denote M = .bool true) (hxs : Term.denotes M xs.1 = [zk, zv])
+    {f tk te : Term} {zk zv : Val} (hf : f.denote M = .bool true) (hxs : Term.denotes M [tk, te] = [zk, zv])
     (k0 : m.key.den0) (e0 : (instEntry m.state).den0)
     (hk : RelV L m.key (Ty.up _ m.key_data k0) zk)
     (he : RelV L (instEntry m.state) (Ty.up _ (by simp [instEntry, Ty.option, Ty.isData, Ty.isDatas, Ty.isDatass,
       m.state_data]) e0) zv)
-    {c : InstCheck} {cj : Term} (hg : instCheckAt L m inv de records now (f, xs) = .ok (c, cj))
+    {c : InstCheck} {cj : Term} (hg : instCheckAt L m inv de records now ⟨f, tk, te⟩ = .ok (c, cj))
     (hcj : Holds M cj) :
     c.occupied = f ∧ c.key.denote M = zk ∧
       brokenIn M c.rules = Step.broken (m.invariants.fn (.inl (k0, e0.1, recs, tnow, ()), ())) := by
-  obtain ⟨tk, te, rfl⟩ := xs.two
   simp only [Term.denotes, List.cons.injEq, and_true] at hxs
   obtain ⟨htk, hte⟩ := hxs
   obtain ⟨ctx, h1, hg⟩ := bind_ok.1 hg
@@ -279,7 +299,6 @@ theorem inst_check (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.key m.
   obtain ⟨⟨rs, c1⟩, h3, hg⟩ := bind_ok.1 hg
   obtain ⟨rules, h4, hg⟩ := bind_ok.1 hg
   cases pure_ok.1 hg
-  simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ] at h1
   refine ⟨rfl, htk, ?_⟩
   have hc1 : Holds M c1 := by
     have := (holds_ite _ _ _).1 hcj; simpa [hf, Val.toBool] using this
@@ -312,8 +331,8 @@ theorem inst_check (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.key m.
   exact rules_broken h4 _ hrs
 
 theorem instCheckAt_occupied (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.key m.state r] Ty.rules)}
-    {de : Nat} {records now f : Term} {xs : SlotItems 2} {c : InstCheck} {cj : Term}
-    (hg : instCheckAt L m inv de records now (f, xs) = .ok (c, cj)) : c.occupied = f := by
+    {de : Nat} {records now : Term} {sl : InstSlot} {c : InstCheck} {cj : Term}
+    (hg : instCheckAt L m inv de records now sl = .ok (c, cj)) : c.occupied = sl.flag := by
   obtain ⟨_, _, hg⟩ := bind_ok.1 hg
   obtain ⟨_, _, hg⟩ := bind_ok.1 hg
   obtain ⟨_, _, hg⟩ := bind_ok.1 hg
@@ -329,8 +348,8 @@ theorem occupied_checks (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.k
     (hinv : Smt.Rel M L _ (Ty.up _ m.inv_data m.invariants.fn) inv) (recs : r.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {de : Nat} (hde : tupleD L [m.state, Ty.option (.tuple [.int, m.state])] = .ok de) :
-    (S : List (Slot 2)) → (sv : List (Bool × List Val)) → (cs : List (InstCheck × Term)) →
-    (ys : List (m.key.den × (instEntry m.state).den)) → SlotsDen M S sv →
+    (S : List InstSlot) → (sv : List (Bool × List Val)) → (cs : List (InstCheck × Term)) →
+    (ys : List (m.key.den × (instEntry m.state).den)) → SlotsDen M (S.map InstSlot.slot) sv →
     Forall2 (fun sl y => instCheckAt L m inv de records now sl = .ok y) S cs → (∀ y ∈ cs, Holds M y.2) →
     Forall2 (ETab L m.key (instEntry m.state)) ys (occupied sv) →
     Forall2 (fun c y => RelV L m.key y.1 (c.key.denote M) ∧ brokenIn M c.rules =
@@ -340,7 +359,7 @@ theorem occupied_checks (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.k
     cases ys with
     | nil => trivial
     | cons _ _ => exact hy.elim
-  | (f, xs) :: S, (b, vs) :: sv, (c, cj) :: cs, ys, ⟨hf, hxs, hS⟩, ⟨hg, hgs⟩, hcs, hy => by
+  | ⟨f, tk, te⟩ :: S, (b, vs) :: sv, (c, cj) :: cs, ys, ⟨hf, hxs, hS⟩, ⟨hg, hgs⟩, hcs, hy => by
     have hcs' : ∀ y ∈ cs, Holds M y.2 := fun y hy => hcs y (by simp [hy])
     have hocc := instCheckAt_occupied m hg
     cases b with
@@ -377,6 +396,7 @@ theorem instBroken_eq (m : MachineV r e) (hko : m.key.ordered T = true)
   cases pure_ok.1 henc
   have htbl' : Smt.Rel M L (.table m.key (instEntry m.state)) (Ty.up _ m.table_data tbl) x := htbl
   obtain ⟨sv, ys, hS, -, -, hp, hh⟩ := table_view htbl' h1
+  rw [← instSlotsOf_slot] at hS
   have hQ := occupied_checks m hinv recs tnow hrec hnow h2 _ sv cs ys hS (mapM_ok _ _ _ h3)
     (fun y hy => (holds_allT _).1 hc y.2 (List.mem_map.2 ⟨y, hy, rfl⟩)) hh
   let inst : m.key.den × (instEntry m.state).den → Step.Instance m :=
@@ -432,8 +452,8 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 /-- Looking a key up in the old table's slots: some occupied slot's key equals it exactly when the table's entries
 hold it, and the picked entry is the first such entry's. -/
 theorem lookup_slots (m : MachineV r e) {kc : Code m.key} {k : m.key.den} (hk : Smt.Rel M L m.key k kc) (dflt : Term) :
-    (So : List (Slot 2)) → (sv : List (Bool × List Val)) → (hits : List (Term × Term × Term)) →
-    (ys : List (m.key.den × (instEntry m.state).den)) → SlotsDen M So sv →
+    (So : List InstSlot) → (sv : List (Bool × List Val)) → (hits : List (Term × Term × Term)) →
+    (ys : List (m.key.den × (instEntry m.state).den)) → SlotsDen M (So.map InstSlot.slot) sv →
     Forall2 (fun sl h => hitAt L m kc sl = .ok h) So hits → Forall2 (ETab L m.key (instEntry m.state)) ys (occupied sv) →
     (anyT (hits.map fun (g, h, _) => .and g h)).denote M = .bool (ys.any fun y => Ty.deq m.key y.1 k) ∧
       ∀ y, ys.find? (fun y => Ty.deq m.key y.1 k) = some y →
@@ -442,7 +462,7 @@ theorem lookup_slots (m : MachineV r e) {kc : Code m.key} {k : m.key.den} (hk : 
     cases ys with
     | nil => exact ⟨rfl, fun _ h => by simp at h⟩
     | cons _ _ => exact hy.elim
-  | (g, xs) :: So, (b, vs) :: sv, (g', hq, ent) :: hits, ys, ⟨hg, hxs, hS⟩, ⟨hh, hhs⟩, hy => by
+  | ⟨g, tk, te⟩ :: So, (b, vs) :: sv, (g', hq, ent) :: hits, ys, ⟨hg, hxs, hS⟩, ⟨hh, hhs⟩, hy => by
     obtain ⟨kt, h1, hh⟩ := bind_ok.1 hh
     obtain ⟨q, h2, hh⟩ := bind_ok.1 hh
     cases pure_ok.1 hh
@@ -458,19 +478,16 @@ theorem lookup_slots (m : MachineV r e) {kc : Code m.key} {k : m.key.den} (hk : 
       match ys, hy with
       | y :: ys, ⟨⟨zk, zv, hz, hyk, hye⟩, hys⟩ =>
         obtain ⟨ih1, ih2⟩ := lookup_slots m hk dflt So sv hits ys hS hhs hys
-        obtain ⟨tk, te, rfl⟩ := xs.two
         rw [hz] at hxs
         simp only [Term.denotes, List.cons.injEq, and_true] at hxs
         obtain ⟨htk, hte⟩ := hxs
-        simp only [SlotItems.getElem_mk, List.getElem_cons_zero] at h1
         have hkt : Smt.Rel M L m.key y.1 kt := (rel_ofTerm (need_ok.1 h1) _).2 (htk ▸ hyk)
         have hq := eqCode_rel hkt hk h2
         refine ⟨?_, fun y' hy' => ?_⟩
         · simp only [List.map_cons, anyT_denote, List.any_cons, Term.denote, hg, hq, Val.toBool, Bool.true_and]
             at ih1 ⊢
           rw [Val.bool.inj ih1]
-        · simp only [pickT, Term.denote, hg, hq, Val.toBool, Bool.true_and, SlotItems.getElem_mk,
-            List.getElem_cons_succ, List.getElem_cons_zero]
+        · simp only [pickT, Term.denote, hg, hq, Val.toBool, Bool.true_and]
           simp only [List.find?_cons] at hy'
           cases hd : Ty.deq m.key y.1 k with
           | true =>
@@ -762,8 +779,8 @@ theorem react_at (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
     (recs : r.den0) (tnow : Int) (ev : e.den0) {records now : Term}
     (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {evc : Code e} (hev : Smt.Rel M L e (Ty.up _ m.event_data ev) evc)
-    (tbl : m.table.den0) {So : List (Slot 2)} {sv : List (Bool × List Val)} {ys : List (m.key.den × (instEntry m.state).den)}
-    (hS : SlotsDen M So sv) (hp : ys.Perm (Ty.up _ m.table_data tbl).1)
+    (tbl : m.table.den0) {So : List InstSlot} {sv : List (Bool × List Val)} {ys : List (m.key.den × (instEntry m.state).den)}
+    (hS : SlotsDen M (So.map InstSlot.slot) sv) (hp : ys.Perm (Ty.up _ m.table_data tbl).1)
     (hh : Holds2 (ETab L m.key (instEntry m.state)) ys sv)
     {de nde dn nn : Nat} (hde : L.find? (instEntry m.state) = some (de, nde)) (hdn : L.find? (Ty.next m.state) = some (dn, nn))
     {init : Val} (hinit : embedV L m.state (Ty.up _ m.state_data m.initial) = some init) (dflt : Term)
@@ -771,10 +788,10 @@ theorem react_at (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt))
     {f first : Term} {xs : SlotItems 1} {zk : Val} (hf : f.denote M = .bool true) (hxs : Term.denotes M xs.1 = [zk])
     (k : m.key.den0) (hk : RelV L m.key (Ty.up _ m.key_data k) zk)
-    {sl : Slot 2} {fx cj : Term}
+    {sl : InstSlot} {fx cj : Term}
     (hg : reactAt L m rc de dn So init dflt (.ctor dopt 1 []) records now evc ((f, xs), first) = .ok ((sl, fx), cj))
     (hcj : Holds M cj) :
-    ∃ kt et, sl = (first, ⟨[kt, et], rfl⟩) ∧ kt.denote M = zk ∧
+    ∃ kt et, sl = ⟨first, kt, et⟩ ∧ kt.denote M = zk ∧
       RelV L (instEntry m.state)
         (Ty.up _ m.entry_data (entryOf (Step.reactKey m (instancesOf T m tbl) recs tnow ev k).1)) (et.denote M) ∧
       (Step.reactKey m (instancesOf T m tbl) recs tnow ev k).1.key = k ∧
@@ -887,10 +904,10 @@ theorem react_at (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
         · simpa [Term.denote, hfd, hvs, Val.toBool] using hxo
       | .inr y => nomatch y
 
-theorem reactAt_shape (m : MachineV r e) {rc : ReactCode m} {de dn : Nat} {So : List (Slot 2)} {init : Val}
-    {dflt noneT records now : Term} {evc : Code e} {f first : Term} {xs : SlotItems 1} {sl : Slot 2} {fx cj : Term}
+theorem reactAt_shape (m : MachineV r e) {rc : ReactCode m} {de dn : Nat} {So : List InstSlot} {init : Val}
+    {dflt noneT records now : Term} {evc : Code e} {f first : Term} {xs : SlotItems 1} {sl : InstSlot} {fx cj : Term}
     (hg : reactAt L m rc de dn So init dflt noneT records now evc ((f, xs), first) = .ok ((sl, fx), cj)) :
-    ∃ kt et, sl = (first, ⟨[kt, et], rfl⟩) ∧ xs[0] = kt := by
+    ∃ kt et, sl = ⟨first, kt, et⟩ ∧ xs[0] = kt := by
   repeat obtain ⟨_, _, hg⟩ := bind_ok.1 hg
   cases pure_ok.1 hg
   exact ⟨_, _, rfl, rfl⟩
@@ -975,8 +992,8 @@ theorem assemble (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
     (recs : r.den0) (tnow : Int) (ev : e.den0) {records now : Term}
     (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {evc : Code e} (hev : Smt.Rel M L e (Ty.up _ m.event_data ev) evc)
-    (tbl : m.table.den0) {So : List (Slot 2)} {sv : List (Bool × List Val)} {ys : List (m.key.den × (instEntry m.state).den)}
-    (hS : SlotsDen M So sv) (hp : ys.Perm (Ty.up _ m.table_data tbl).1)
+    (tbl : m.table.den0) {So : List InstSlot} {sv : List (Bool × List Val)} {ys : List (m.key.den × (instEntry m.state).den)}
+    (hS : SlotsDen M (So.map InstSlot.slot) sv) (hp : ys.Perm (Ty.up _ m.table_data tbl).1)
     (hh : Holds2 (ETab L m.key (instEntry m.state)) ys sv)
     {de nde dn nn : Nat} (hde : L.find? (instEntry m.state) = some (de, nde)) (hdn : L.find? (Ty.next m.state) = some (dn, nn))
     {init : Val} (hinit : embedV L m.state (Ty.up _ m.state_data m.initial) = some init) (dflt : Term)
@@ -984,18 +1001,18 @@ theorem assemble (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt)) :
     (SB : List (Slot 1)) → (svB : List (Bool × List Val)) → (ysB : List m.key.den) →
     (prevS : List (Slot 1)) → (svP : List (Bool × List Val)) → (ysP : List m.key.den) →
-    {firsts : List Term} → {outs : List ((Slot 2 × Term) × Term)} →
+    {firsts : List Term} → {outs : List ((InstSlot × Term) × Term)} →
     SlotsDen M SB svB → Holds2 (EBag L m.key) ysB svB →
     SlotsDen M prevS svP → Holds2 (EBag L m.key) ysP svP →
     firstSlots L m.key prevS SB = .ok firsts →
     Forall2 (fun p o => reactAt L m rc de dn So init dflt (.ctor dopt 1 []) records now evc p = .ok o) (SB.zip firsts)
       outs →
     (∀ o ∈ outs, Holds M o.2) →
-    ∃ svN svX E, SlotsDen M (outs.map (·.1.1)) svN ∧ svN.length = SB.length ∧ (∀ p ∈ svN, p.2.length = 2) ∧
+    ∃ svN svX E, SlotsDen M ((outs.map (·.1.1)).map InstSlot.slot) svN ∧ svN.length = SB.length ∧ (∀ p ∈ svN, p.2.length = 2) ∧
       dedupBy (Ty.semWith Dsl.base m.key).2 ((ysP ++ ysB).map (Ty.down _ m.key_data)) =
         dedupBy (Ty.semWith Dsl.base m.key).2 (ysP.map (Ty.down _ m.key_data)) ++ E ∧
       Holds2 (ETab L m.key (instEntry m.state)) (E.map (entryUp m (instancesOf T m tbl) recs tnow ev)) svN ∧
-      SlotsDen M (outs.map fun ((sl, x), _) => (sl.1, (⟨[sl.2[0], x], rfl⟩ : SlotItems 2))) svX ∧
+      SlotsDen M ((outs.map fun ((sl, x), _) => (⟨sl.flag, sl.key, x⟩ : StartSlot)).map StartSlot.slot) svX ∧
       Holds2 (EStart (L := L) m (instancesOf T m tbl) recs tnow ev) E svX
   | [], [], ysB, prevS, svP, ysP, firsts, outs, _, hyB, _, _, hfs, ho, _ => by
     cases ysB with
@@ -1072,8 +1089,8 @@ theorem assemble (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
         have hk : RelV L m.key (Ty.up _ m.key_data (Ty.down _ m.key_data y)) z := by rw [Ty.up_down]; exact hyz
         obtain ⟨kt', et', hsl, hkt, het, -, hfxr⟩ := react_at (T := T) m hpl rc hon haf recs tnow ev hrec hnow hev tbl hS
           hp hh hde hdn hinit dflt hfx hopt hf (by simp [Term.denotes, hxs]) _ hk ho1
-          (hc (((Term.share (.and f (allT (eqs.map .not))), ⟨[kt, et], rfl⟩), fx), cj) (by simp))
-        simp only [Prod.mk.injEq] at hsl
+          (hc ((⟨Term.share (.and f (allT (eqs.map .not))), kt, et⟩, fx), cj) (by simp))
+        simp only [InstSlot.mk.injEq] at hsl
         obtain ⟨-, rfl, rfl⟩ := hsl
         have hf1 : (Term.share (.and f (allT (eqs.map .not)))).denote M = .bool true := by rw [hfirst, hb]; rfl
         refine ⟨(true, [z, et.denote M]) :: svN, (true, [z, fx.denote M]) :: svX, Ty.down _ m.key_data y :: E,
@@ -1170,6 +1187,7 @@ theorem react_step (m : MachineV r e) (hor : m.key.orderable = true) {rc : React
   -- The old table.
   have htbl' : Smt.Rel M L (.table m.key (instEntry m.state)) (Ty.up _ m.table_data tbl) x := htbl
   obtain ⟨sv, ys, hS, -, -, hp, hh⟩ := table_view htbl' h1
+  rw [← instSlotsOf_slot] at hS
   -- The new slots.
   obtain ⟨svN, svX, E, hN, hlN, hwN, hE, hhN, hX, hhX⟩ := assemble (T := T) m hpl _ hon haf recs tnow ev hrec hnow hevc
     tbl hS hp hh hde (need_ok.1 h3) (need_ok.1 h9) dflt hfx (need_ok.1 h3') _ svB ysB [] [] [] hSB hyB trivial trivial h11
@@ -1226,7 +1244,7 @@ theorem react_step (m : MachineV r e) (hor : m.key.orderable = true) {rc : React
   have hpad := slotsDen_replicate (M := M) false (⟨[kd, dflt], rfl⟩ : SlotItems 2) rfl (n - nb)
   have hlS : (slotsOf db dtb nb 1 bagT).length = nb := by simp [slotsOf]
   refine ⟨d, n, dt, m1, svN ++ List.replicate (n - nb) (false, Term.denotes M [kd, dflt]), hf1, hft1, ?_,
-    slotsTerm_den d dt (slotsDen_append hN hpad), ?_, E.map (entryUp m (instancesOf T m tbl) recs tnow ev), ?_, ?_⟩
+    slotsTerm_den d dt (by rw [List.map_append, List.map_replicate]; exact slotsDen_append hN hpad), ?_, E.map (entryUp m (instancesOf T m tbl) recs tnow ev), ?_, ?_⟩
   · simp only [List.length_append, List.length_replicate, hlN, hlS]; omega
   · intro p hp
     rcases List.mem_append.1 hp with hp | hp
