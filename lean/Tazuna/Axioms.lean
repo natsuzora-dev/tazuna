@@ -20,6 +20,7 @@ import Tazuna.Smt.Commute
 import Tazuna.Smt.Pairs
 import Tazuna.Smt.FiresForward
 import Tazuna.Smt.SameCode
+import Tazuna.Smt.Names
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -111,8 +112,9 @@ elab "#check_tazuna_reach" : command => do
     -- forward; unsat answers mean no context within the slots has one.
     ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound,
     -- For the pair questions T5 asks (U11 part c, not yet built): equal codes are the same value up to multisets, so
-    -- comparing codes compares results without searching for a renaming.
-    ``Tazuna.Smt.rel0_same]
+    -- comparing codes compares results without searching for a renaming; and the names term is exact against "names
+    -- below the counter", the support every state on valid inputs has.
+    ``Tazuna.Smt.rel0_same, ``Tazuna.Smt.names_rel0]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do

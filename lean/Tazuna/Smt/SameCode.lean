@@ -92,7 +92,8 @@ theorem relV_same : (t : Ty) → t.isData = true → {x y : t.den} → {z : Val}
         rw [e1, List.cons.injEq, List.cons.injEq] at e2
         exact ⟨relV_same k hd.1 hk1 (e2.1 ▸ hk2), relV_same w hd.2 hw1 (e2.2.1 ▸ hw2)⟩) hh hh'
     exact ((Multi.of_forall2 hs).perm_left hp).perm_right hp'
-  | .list t, hd, _, _, _, ⟨d, _, dt, _, sv, hf, hft, _, hx, _, hh⟩, ⟨d', _, dt', _, sv', hf', hft', _, hy, _, hh'⟩ => by
+  | .list t, hd, _, _, _, ⟨d, _, dt, _, sv, hf, hft, _, hx, _, hh⟩,
+      ⟨d', _, dt', _, sv', hf', hft', _, hy, _, hh'⟩ => by
     obtain rfl := find_det hf hf'
     obtain rfl := find_det hft hft'
     rw [hx] at hy
@@ -116,7 +117,8 @@ theorem relVs_same : (ts : List Ty) → Ty.isDatas ts = true → {x y : Ty.dens 
     rw [e, List.cons.injEq] at e'
     obtain ⟨rfl, rfl⟩ := e'
     exact ⟨relV_same t hd.1 h h', relVs_same ts hd.2 hs hs'⟩
-theorem relAlts_same (d : Nat) : (k : Nat) → (vs : List (List Ty)) → Ty.isDatass vs = true → {x y : Ty.alts vs} →
+theorem relAlts_same (d : Nat) : (k : Nat) → (vs : List (List Ty)) → Ty.isDatass vs = true →
+    {x y : Ty.alts vs} →
     {z : Val} → RelAlts L d k vs x z → RelAlts L d k vs y z →
     Ty.relAltsWith Dsl.val (Dsl.relV PBij.refl) PBij.refl vs x y
   | k, fs :: _, hd, .inl _, .inl _, _, ⟨_, e, h⟩, ⟨_, e', h'⟩ => by
