@@ -16,6 +16,7 @@ import Tazuna.Semantics.PendingPerm
 import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Interleave
 import Tazuna.Semantics.StepRename
+import Tazuna.Semantics.Support
 import Tazuna.Smt.Commute
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step

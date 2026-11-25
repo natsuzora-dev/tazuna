@@ -617,10 +617,10 @@ theorem enter_rel {m : MachineV r e} (hm : m.Equi) {records records' : r.den0} (
     (now : Int) {k k' : m.key.den0} (hk : Ty.rel0 R m.key k k') {st st' : m.state.den0}
     (hst : Ty.rel0 R m.state st st') :
     Instance.Rel R (enter m records now k st).1 (enter m records' now k' st').1 ∧
-      Multi (Started.Rel R) (enter m records now k st).2 (enter m records' now k' st').2 := by
+      Forall2 (Started.Rel R) (enter m records now k st).2 (enter m records' now k' st').2 := by
   have hctx : Ty.rel0 R (.tuple [Ty.machineCtx m.key m.state r]) (.inl (k, st, records, now, ()), ())
       (.inl (k', st', records', now, ()), ()) := ⟨⟨hk, hst, hrec, rfl, trivial⟩, trivial⟩
-  refine ⟨⟨hk, hst, timerAt_rel now ((hm.self R).after _ _ hctx)⟩, Multi.of_forall2 ?_⟩
+  refine ⟨⟨hk, hst, timerAt_rel now ((hm.self R).after _ _ hctx)⟩, ?_⟩
   have he := hm.effect R hctx
   simp only [enter]
   unfold MachineV.effectAt
@@ -649,9 +649,9 @@ theorem find_rel {m : MachineV r e} (hm : m.Equi) {l l' : List (Instance m)} (hl
     (fun h => by rw [Ty.deq0_symm hm.key hab] at h; cases h)
 
 
-/-- What an instance's reaction to an event gives: the instance, and the effects it starts. -/
+/-- What an instance's reaction to an event gives: the instance, and the effects it starts, in order. -/
 def Reacted.Rel (R : PBij) {m : MachineV r e} (p q : Instance m × List (Sender × EffectV e)) : Prop :=
-  Instance.Rel R p.1 q.1 ∧ Multi (Started.Rel R) p.2 q.2
+  Instance.Rel R p.1 q.1 ∧ Forall2 (Started.Rel R) p.2 q.2
 
 theorem reactKey_rel {m : MachineV r e} (hm : m.Equi) {insts insts' : List (Instance m)} (hl : Insts.Rel R insts insts')
     {records records' : r.den0} (hrec : Ty.rel0 R r records records') (now : Int) {ev ev' : e.den0}
@@ -675,7 +675,7 @@ theorem reactKey_rel {m : MachineV r e} (hm : m.Equi) {insts insts' : List (Inst
     intro hon
     match x, y, hon with
     | .inr (.inl (s, ())), .inr (.inl (s', ())), ⟨hs, _⟩ => exact enter_rel hm hrec now hi.1 hs
-    | .inl (), .inl (), _ => exact ⟨hi, Multi.nil⟩
+    | .inl (), .inl (), _ => exact ⟨hi, trivial⟩
 
 theorem enter_key {m : MachineV r e} (records : r.den0) (now : Int) (k : m.key.den0) (st : m.state.den0) :
     (enter m records now k st).1.key = k := rfl
@@ -728,7 +728,7 @@ theorem machineStep_rel (T : List TypeDecl) {m : MachineV r e} (hm : m.Equi) {re
     · have := Ty.deq0_trans hm.key (Ty.deq0_symm hm.key (reactKey_key hm l rec now ev a))
         (Ty.deq0_trans hm.key e (reactKey_key hm l rec now ev b))
       rw [this] at h; cases h
-  exact ⟨⟨hr.map fun _ _ h => h.1, hdist _ _ _, hdist _ _ _⟩, hr.flatMap fun _ _ h => h.2⟩
+  exact ⟨⟨hr.map fun _ _ h => h.1, hdist _ _ _, hdist _ _ _⟩, hr.flatMap fun _ _ h => Multi.of_forall2 h.2⟩
 
 theorem reactMachines_rel (T : List TypeDecl) {records records' : r.den0} (hrec : Ty.rel0 R r records records')
     (now : Int) {ev ev' : e.den0} (hev : Ty.rel0 R e ev ev') : {ms : List (MachineV r e)} → (∀ m ∈ ms, m.Equi) →
