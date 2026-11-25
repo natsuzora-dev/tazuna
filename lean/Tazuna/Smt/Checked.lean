@@ -30,13 +30,15 @@ theorem Checked.machines {P : List AnySite} {T : List TypeDecl} {v : ServiceV} (
 theorem Checked.reactions {P : List AnySite} {T : List TypeDecl} {v : ServiceV} (hk : Checked P T v) :
     ∀ x ∈ v.reactions, x.Reach P := hk.reach.2
 
-/-- A spec that passed check: its program's types and sites, the spec its root evaluates to, and what check
-established of each service. -/
+/-- A spec that passed check: its program, and what check established of each service of the spec the program's root
+evaluates to. -/
 structure CheckedSpec where
-  T : List TypeDecl
-  P : List AnySite
-  spec : SpecV
-  checked : ∀ v ∈ spec.services, Checked P T v
+  program : Program (.fn [] Ty.spec)
+  checked : ∀ v ∈ (program.eval ()).services, Checked program.defs.sites program.types v
+
+abbrev CheckedSpec.T (c : CheckedSpec) : List TypeDecl := c.program.types
+abbrev CheckedSpec.P (c : CheckedSpec) : List AnySite := c.program.defs.sites
+abbrev CheckedSpec.spec (c : CheckedSpec) : SpecV := c.program.eval ()
 
 theorem isFn_of_wire : (t : Ty) → t.wire = true → t.isFn = false
   | .fn .., h => by simp [Ty.wire] at h

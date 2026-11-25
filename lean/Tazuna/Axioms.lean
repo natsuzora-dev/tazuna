@@ -12,6 +12,7 @@ import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
+import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
 import Tazuna.Trace.WireThm
@@ -60,9 +61,11 @@ elab "#check_tazuna_reach" : command => do
     -- SMT-LIB text: printing then parsing gives the terms and values back, and shared definitions keep the meaning.
     ``Tazuna.Smt.Term.parse_print, ``Tazuna.Smt.Val.parse_print, ``Tazuna.Smt.shared_agrees,
     ``Tazuna.Smt.shared_conservative,
+    -- The service's layout, derived from its program: the step environment and the wire-id invariant's term are found,
+    -- and every create fits its table's slots.
+    ``Tazuna.Smt.stepEnv_ofService, ``Tazuna.Smt.pendingBelowT_ofService, ``Tazuna.Smt.atMost_le_count,
     -- For U10, which asserts well-formedness, the wire-id invariant and the create bounds: each loses no model.
-    ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff,
-    ``Tazuna.Smt.atMost_le_slots]
+    ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do

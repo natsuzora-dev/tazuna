@@ -37,7 +37,7 @@ def loadSpec (root path : String) : IO (Except UInt32 Smt.CheckedSpec) := do
   | .ok p =>
     if hP : Ir.SitesUnique p.defs.sites then
       match h : Ir.SpecV.illegal p.types (p.eval ()) p.defs.handles with
-      | [] => return .ok ⟨p.types, p.defs.sites, p.eval (), Smt.check_ok hP (Ir.Program.reach p () trivial) h⟩
+      | [] => return .ok ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) h⟩
       | findings =>
         for (k, message) in findings do
           printLine (.illegal k) [("message", Json.str message)]
