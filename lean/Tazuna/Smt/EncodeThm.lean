@@ -1348,87 +1348,220 @@ theorem lookup_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L 
 theorem natCast_beq (m n : Nat) : ((m : Int) == (n : Int)) = (m == n) := by
   rw [Bool.eq_iff_iff]; simp only [beq_iff_eq]; omega
 
+/-- A builder of `==` terms that is Gleam's `==` on any two terms denoting values of `t`. -/
+def EqOk (M : Model) (L : Layout) (t : Ty) (eq : Term → Term → Term) : Prop :=
+  ∀ (x y : t.den) (a b : Term), RelV L t x (a.denote M) → RelV L t y (b.denote M) →
+    (eq a b).denote M = .bool (Ty.deq t x y)
+
+/-- One `EqOk` builder per type, in order. -/
+def EqsOk (M : Model) (L : Layout) : List Ty → List (Term → Term → Term) → Prop
+  | [], fs => fs = []
+  | t :: ts, fs => ∃ f fs', fs = f :: fs' ∧ EqOk M L t f ∧ EqsOk M L ts fs'
+
+/-- One `EqsOk` list per variant, in order. -/
+def EqssOk (M : Model) (L : Layout) : List (List Ty) → List (List (Term → Term → Term)) → Prop
+  | [], fss => fss = []
+  | ts :: vs, fss => ∃ fs fss', fss = fs :: fss' ∧ EqsOk M L ts fs ∧ EqssOk M L vs fss'
+
+theorem eqOk_eq {t : Ty} (he : t.eqable = true) : EqOk M L t .eq := fun x y _ _ hx hy => by
+  simp only [Term.denote]; exact congrArg Val.bool (relV_beq t he x y _ _ hx hy)
+
 /-- How often an item occurs among a bag's slots. -/
-theorem countEqT_den {a : Ty} (heq : a.eqable = true) {z : a.den} {x : Term} (hz : RelV L a z (x.denote M))
-    {S : List (Slot 1)} {sv : List (Bool × List Val)} {ys : List a.den} (hS : SlotsDen M S sv)
-    (hh : Holds2 (EBag L a) ys sv) : (countEqT x S).denote M = .int (ys.filter (Ty.deq a z)).length := by
-  have ha : Aligned M (EBag L a) (fun y => Ty.deq a z y) S (S.map fun sl => .eq x sl.2[0]) sv ys :=
-    aligned_map (fun xs => .eq x xs[0]) (fun y xs he => by
+theorem countEqT_den {a : Ty} {eq : Term → Term → Term} (heq : EqOk M L a eq) {z : a.den} {x : Term}
+    (hz : RelV L a z (x.denote M)) {S : List (Slot 1)} {sv : List (Bool × List Val)} {ys : List a.den}
+    (hS : SlotsDen M S sv) (hh : Holds2 (EBag L a) ys sv) :
+    (countEqT eq x S).denote M = .int (ys.filter (Ty.deq a z)).length := by
+  have ha : Aligned M (EBag L a) (fun y => Ty.deq a z y) S (S.map fun sl => eq x sl.2[0]) sv ys :=
+    aligned_map (fun xs => eq x xs[0]) (fun y xs he => by
       obtain ⟨w, hw, hyw⟩ := he
       obtain ⟨t, rfl⟩ := xs.one
       simp only [Term.denotes, List.cons.injEq] at hw
-      simp only [SlotItems.getElem_mk, List.getElem_cons_zero, Term.denote, hw.1]
-      exact congrArg Val.bool (relV_beq _ heq z y _ _ hz hyw)) hS hh
+      simp only [SlotItems.getElem_mk, List.getElem_cons_zero]
+      exact heq z y x t hz (hw.1 ▸ hyw)) hS hh
   exact countT_den ha
+
+theorem fieldsEqT_den (d k : Nat) : (ts : List Ty) → {fs : List (Term → Term → Term)} → EqsOk M L ts fs →
+    (j : Nat) → (x y : Ty.dens ts) → (a b : Term) → (pa pb va vb : List Val) → a.denote M = .ctor d k (pa ++ va) →
+    b.denote M = .ctor d k (pb ++ vb) → pa.length = j → pb.length = j → RelVs L ts x va → RelVs L ts y vb →
+    (fieldsEqT d k j fs a b).denote M = .bool ((Ty.semsWith Dsl.val ts).2 x y)
+  | [], _, h, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => by cases h; rfl
+  | t :: ts, _, ⟨f, fs, rfl, hf, hfs⟩, j, (x, xs), (y, ys), a, b, pa, pb, _, _, ha, hb, hpa, hpb, hx, hy => by
+    obtain ⟨v, va, rfl, hx, hxs⟩ := hx
+    obtain ⟨w, vb, rfl, hy, hys⟩ := hy
+    have sa : (Term.sel d k j a).denote M = v := by simp [Term.denote, ha, ← hpa]
+    have sb : (Term.sel d k j b).denote M = w := by simp [Term.denote, hb, ← hpb]
+    have e := fieldsEqT_den d k ts hfs (j + 1) xs ys a b (pa ++ [v]) (pb ++ [w]) va vb (by simpa using ha)
+      (by simpa using hb) (by simp [hpa]) (by simp [hpb]) hxs hys
+    simp only [fieldsEqT, Term.denote, e, hf x y _ _ (sa ▸ hx) (sb ▸ hy), Val.toBool, Ty.semsWith, Sem.pair]
+
+/-- No variant from `k` on matches a value built by an earlier constructor. -/
+theorem altsEqT_early (d : Nat) : (k : Nat) → (fss : List (List (Term → Term → Term))) → (a b : Term) →
+    ((∃ j vs, a.denote M = .ctor d j vs ∧ j < k) ∨ (∃ j vs, b.denote M = .ctor d j vs ∧ j < k)) →
+    (altsEqT d k fss a b).denote M = .bool false
+  | _, [], _, _, _ => rfl
+  | k, _ :: fss, a, b, h => by
+    have e := altsEqT_early d (k + 1) fss a b (by
+      rcases h with ⟨j, vs, h, hj⟩ | ⟨j, vs, h, hj⟩
+      · exact .inl ⟨j, vs, h, by omega⟩
+      · exact .inr ⟨j, vs, h, by omega⟩)
+    rcases h with ⟨j, vs, h, hj⟩ | ⟨j, vs, h, hj⟩ <;>
+      simp [altsEqT, Term.denote, e, h, Val.toBool, Nat.ne_of_lt hj]
+
+theorem altsEqT_den (d : Nat) : (k : Nat) → (vs : List (List Ty)) → {fss : List (List (Term → Term → Term))} →
+    EqssOk M L vs fss → (x y : Ty.alts vs) → (a b : Term) → RelAlts L d k vs x (a.denote M) →
+    RelAlts L d k vs y (b.denote M) → (altsEqT d k fss a b).denote M = .bool ((Ty.semAltsWith Dsl.val vs).2 x y)
+  | k, fs :: _, _, ⟨_, fss, rfl, hfs, _⟩, .inl x, .inl y, a, b, ⟨va, ea, hx⟩, ⟨vb, eb, hy⟩ => by
+    have e1 := fieldsEqT_den d k fs hfs 0 x y a b [] [] va vb ea eb rfl rfl hx hy
+    have e2 := altsEqT_early d (k + 1) fss a b (.inl ⟨k, va, ea, by omega⟩)
+    simp [altsEqT, Term.denote, ea, eb, e1, e2, Val.toBool, Ty.semAltsWith, Sem.sum]
+  | k, _ :: vs, _, ⟨_, fss, rfl, _, hfss⟩, .inr x, .inr y, a, b, hx, hy => by
+    obtain ⟨j, va, ea, hj⟩ := relAlts_index d (k + 1) vs x _ hx
+    have e := altsEqT_den d (k + 1) vs hfss x y a b hx hy
+    simp [altsEqT, Term.denote, ea, e, Val.toBool, Ty.semAltsWith, Sem.sum, show j ≠ k by omega]
+  | k, _ :: vs, _, ⟨_, fss, rfl, _, _⟩, .inl _, .inr y, a, b, ⟨va, ea, _⟩, hy => by
+    obtain ⟨j, vb, eb, hj⟩ := relAlts_index d (k + 1) vs y _ hy
+    have e := altsEqT_early d (k + 1) fss a b (.inl ⟨k, va, ea, by omega⟩)
+    simp [altsEqT, Term.denote, ea, eb, e, Val.toBool, Ty.semAltsWith, Sem.sum, show j ≠ k by omega]
+  | k, _ :: vs, _, ⟨_, fss, rfl, _, _⟩, .inr x, .inl _, a, b, hx, ⟨vb, eb, _⟩ => by
+    obtain ⟨j, va, ea, hj⟩ := relAlts_index d (k + 1) vs x _ hx
+    have e := altsEqT_early d (k + 1) fss a b (.inr ⟨k, vb, eb, by omega⟩)
+    simp [altsEqT, Term.denote, ea, eb, e, Val.toBool, Ty.semAltsWith, Sem.sum, show j ≠ k by omega]
+
+theorem bagEqT_den {a : Ty} {eq : Term → Term → Term} (heq : EqOk M L a eq) {d n dt : Nat}
+    (h1 : collD L (.bag a) [a] = .ok (d, n, dt)) : EqOk M L (.bag a) fun x y =>
+      bagEqT eq (slotsOf d dt n 1 x) (slotsOf d dt n 1 y) := by
+  intro x y sa sb hx hy
+  obtain ⟨svA, ysA, hSA, -, -, hpA, hhA⟩ := bag_view (M := M) (b := sa) hx h1
+  obtain ⟨svB, ysB, hSB, -, -, hpB, hhB⟩ := bag_view (M := M) (b := sb) hy h1
+  show _ = Val.bool (bagBeq (Ty.deq a) x y)
+  rw [← bagBeq_perm _ hpA hpB]
+  have hq : Aligned M (EBag L a) (fun z => countBy (Ty.deq a) z ysA == countBy (Ty.deq a) z ysB) _ _ svA ysA :=
+    aligned_map (fun xs => .eq (countEqT eq xs[0] (slotsOf d dt n 1 sa))
+      (countEqT eq xs[0] (slotsOf d dt n 1 sb))) (fun z xs he => by
+      obtain ⟨w, hw, hzw⟩ := he
+      obtain ⟨t, rfl⟩ := xs.one
+      simp only [Term.denotes, List.cons.injEq] at hw
+      have hz : RelV L a z (t.denote M) := hw.1 ▸ hzw
+      simp only [SlotItems.getElem_mk, List.getElem_cons_zero, Term.denote, countEqT_den heq hz hSA hhA,
+        countEqT_den heq hz hSB hhB]
+      show Val.bool (Val.beq _ _) = _
+      simp only [Val.beq, countBy, natCast_beq]) hSA hhA
+  simp only [bagEqT, Term.denote, sizeT_den hSA, sizeT_den hSB, allSlotT_den hq, ← holds2_length hhA,
+    ← holds2_length hhB, bagBeq]
+  show Val.bool (Val.beq _ _ && _) = _
+  simp only [Val.beq, Val.toBool, natCast_beq]
+
+theorem tableEqT_den {k v : Ty} {eq : Term → Term → Term} (heq : EqOk M L v eq) (hk : k.eqable = true)
+    {d n dt : Nat} (h1 : collD L (.table k v) [k, v] = .ok (d, n, dt)) (dv : Term) : EqOk M L (.table k v) fun x y =>
+      tableEqT eq dv (slotsOf d dt n 2 x) (slotsOf d dt n 2 y) := by
+  intro x y sa sb hx hy
+  obtain ⟨svA, ysA, hSA, -, -, hpA, hhA⟩ := table_view (M := M) (b := sa) hx h1
+  obtain ⟨svB, ysB, hSB, -, -, hpB, hhB⟩ := table_view (M := M) (b := sb) hy h1
+  show _ = Val.bool (tableBeq (Ty.deq k) (Ty.deq v) x.1 y.1)
+  have hq : Aligned M (ETab L k v) (fun (a, b) => match lookupBy (Ty.deq k) a y.1 with
+      | some w => Ty.deq v b w
+      | none => false) _ _ svA ysA :=
+    aligned_map (fun xs => .and (lookupT xs[0] dv (slotsOf d dt n 2 sb)).1
+      (eq xs[1] (lookupT xs[0] dv (slotsOf d dt n 2 sb)).2)) (fun e xs he => by
+      obtain ⟨ek, ev⟩ := e
+      obtain ⟨zk, zv, hxs, hzk, hzv⟩ := he
+      obtain ⟨tk, tv, rfl⟩ := xs.two
+      simp only [Term.denotes, List.cons.injEq] at hxs
+      obtain ⟨hh1, hh2⟩ := lookupT_rel (M := M) (t := sb) hy hk h1 ek tk (hxs.1 ▸ hzk) dv
+      simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ, Term.denote, hh1]
+      cases hl : lookupBy (Ty.deq k) ek y.1 with
+      | none => simp [Val.toBool]
+      | some w =>
+        have := heq ev w tv _ (hxs.2.1 ▸ hzv) (hh2 w hl)
+        simp only [Option.isSome_some, Val.toBool, Bool.true_and, this]) hSA hhA
+  simp only [tableEqT, Term.denote, sizeT_den hSA, sizeT_den hSB, allSlotT_den hq, ← holds2_length hhA,
+    ← holds2_length hhB, tableBeq, hpA.length_eq, hpB.length_eq, hpA.all_eq]
+  show Val.bool (Val.beq _ _ && _) = _
+  simp only [Val.beq, Val.toBool, natCast_beq]
+  congr 2
+  refine congrArg _ (funext fun e => ?_)
+  split <;> split <;> simp_all
+
+mutual
+theorem eqFn_ok : (t : Ty) → {f : Term → Term → Term} → eqFn L t = .ok f → EqOk M L t f
+  | .int, _, h | .str, _, h | .date, _, h | .id, _, h => by cases h; exact eqOk_eq rfl
+  | .dsl k a, _, h => by
+    simp only [eqFn] at h
+    split at h
+    · rename_i hk; simp only [beq_iff_eq] at hk; subst hk; cases h; exact eqOk_eq rfl
+    · cases h
+  | .adt 0 a vs, _, h => by
+    simp only [eqFn] at h
+    split at h
+    · rename_i hb; cases h; exact eqOk_eq (by simpa [Ty.eqable] using hb)
+    · cases h
+  | .tuple ts, _, h => by
+    simp only [eqFn] at h
+    split at h
+    · rename_i he; cases h; exact eqOk_eq (by simpa [Ty.eqable] using he)
+    · obtain ⟨d, h1, h⟩ := bind_ok.1 h
+      obtain ⟨fs, h2, h⟩ := bind_ok.1 h
+      cases pure_ok.1 h
+      obtain ⟨n, hf⟩ := tupleD_ok h1
+      intro x y a b ⟨d1, n1, va, hf1, ea, hx⟩ ⟨d2, n2, vb, hf2, eb, hy⟩
+      obtain rfl := find_det hf hf1
+      obtain rfl := find_det hf hf2
+      exact fieldsEqT_den d 0 ts (eqFns_ok ts h2) 0 x y _ _ [] [] va vb (by simpa using ea) (by simpa using eb)
+        rfl rfl hx hy
+  | .adt (i + 1) a vs, _, h => by
+    simp only [eqFn] at h
+    split at h
+    · rename_i he; cases h; exact eqOk_eq (by simpa [Ty.eqable] using he)
+    · obtain ⟨⟨d, n⟩, h1, h⟩ := bind_ok.1 h
+      obtain ⟨fss, h2, h⟩ := bind_ok.1 h
+      cases pure_ok.1 h
+      have hf := need_ok.1 h1
+      intro x y a b ⟨d1, n1, hf1, hx⟩ ⟨d2, n2, hf2, hy⟩
+      obtain rfl := find_det hf hf1
+      obtain rfl := find_det hf hf2
+      exact altsEqT_den d 0 vs (eqFnss_ok vs h2) x y _ _ (by simpa using hx) (by simpa using hy)
+  | .bag a, _, h => by
+    simp only [eqFn] at h
+    obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
+    obtain ⟨f, h2, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    exact bagEqT_den (eqFn_ok a h2) h1
+  | .table k v, _, h => by
+    simp only [eqFn] at h
+    obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
+    obtain ⟨dv, -, h⟩ := bind_ok.1 h
+    obtain ⟨f, h2, h⟩ := bind_ok.1 h
+    obtain ⟨hk, rfl⟩ := need'_ok h
+    exact tableEqT_den (eqFn_ok v h2) hk h1 dv
+  | .list _, _, h | .fn .., _, h | .param _, _, h => by cases h
+theorem eqFns_ok : (ts : List Ty) → {fs : List (Term → Term → Term)} → eqFns L ts = .ok fs → EqsOk M L ts fs
+  | [], _, h => by cases h; rfl
+  | t :: ts, _, h => by
+    simp only [eqFns] at h
+    obtain ⟨f, h1, h⟩ := bind_ok.1 h
+    obtain ⟨fs, h2, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    exact ⟨f, fs, rfl, eqFn_ok t h1, eqFns_ok ts h2⟩
+theorem eqFnss_ok : (vs : List (List Ty)) → {fss : List (List (Term → Term → Term))} → eqFnss L vs = .ok fss →
+    EqssOk M L vs fss
+  | [], _, h => by cases h; rfl
+  | ts :: vs, _, h => by
+    simp only [eqFnss] at h
+    obtain ⟨fs, h1, h⟩ := bind_ok.1 h
+    obtain ⟨fss, h2, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    exact ⟨fs, fss, rfl, eqFns_ok ts h1, eqFnss_ok vs h2⟩
+end
 
 /-- `==` on codes is Gleam's `==`. -/
 theorem eqCode_rel {t : Ty} {x y : t.den} {sx sy : Code t} (hx : Rel M L t x sx) (hy : Rel M L t y sy) {r : Term}
     (h : eqCode L t sx sy = .ok r) : r.denote M = .bool (Ty.deq t x y) := by
-  unfold eqCode at h
-  split at h
-  · rename_i he
-    obtain ⟨tx, h1, h⟩ := bind_ok.1 h
-    obtain ⟨ty, h2, h⟩ := bind_ok.1 h
-    cases h
-    simp only [Term.denote]
-    exact congrArg Val.bool (relV_beq _ he x y _ _ ((rel_term (need_ok.1 h1) x).1 hx) ((rel_term (need_ok.1 h2) y).1 hy))
-  · split at h
-    · rename_i a sa sb _
-      obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
-      obtain ⟨heq, rfl⟩ := need'_ok h
-      obtain ⟨svA, ysA, hSA, -, -, hpA, hhA⟩ := bag_view hx h1
-      obtain ⟨svB, ysB, hSB, -, -, hpB, hhB⟩ := bag_view hy h1
-      show _ = Val.bool (bagBeq (Ty.deq a) x y)
-      rw [← bagBeq_perm _ hpA hpB]
-      have hq : Aligned M (EBag L a) (fun z => countBy (Ty.deq a) z ysA == countBy (Ty.deq a) z ysB) _ _ svA ysA :=
-        aligned_map (fun xs => .eq (countEqT xs[0] (slotsOf d dt n 1 sa))
-          (countEqT xs[0] (slotsOf d dt n 1 sb))) (fun z xs he => by
-          obtain ⟨w, hw, hzw⟩ := he
-          obtain ⟨t, rfl⟩ := xs.one
-          simp only [Term.denotes, List.cons.injEq] at hw
-          have hz : RelV L a z (t.denote M) := hw.1 ▸ hzw
-          simp only [SlotItems.getElem_mk, List.getElem_cons_zero, Term.denote, countEqT_den heq hz hSA hhA,
-            countEqT_den heq hz hSB hhB]
-          show Val.bool (Val.beq _ _) = _
-          simp only [Val.beq, countBy, natCast_beq]) hSA hhA
-      simp only [bagEqT, Term.denote, sizeT_den hSA, sizeT_den hSB, allSlotT_den hq, ← holds2_length hhA,
-        ← holds2_length hhB, bagBeq]
-      show Val.bool (Val.beq _ _ && _) = _
-      simp only [Val.beq, Val.toBool, natCast_beq]
-    · rename_i k v sa sb _
-      obtain ⟨⟨d, n, dt⟩, h1, h⟩ := bind_ok.1 h
-      obtain ⟨dv, h2, h⟩ := bind_ok.1 h
-      obtain ⟨heq, rfl⟩ := need'_ok h
-      simp only [Bool.and_eq_true] at heq
-      obtain ⟨hk, hv⟩ := heq
-      obtain ⟨svA, ysA, hSA, -, -, hpA, hhA⟩ := table_view hx h1
-      obtain ⟨svB, ysB, hSB, -, -, hpB, hhB⟩ := table_view hy h1
-      show _ = Val.bool (tableBeq (Ty.deq k) (Ty.deq v) x.1 y.1)
-      have hq : Aligned M (ETab L k v) (fun (a, b) => match lookupBy (Ty.deq k) a y.1 with
-          | some w => Ty.deq v b w
-          | none => false) _ _ svA ysA :=
-        aligned_map (fun xs => .and (lookupT xs[0] dv (slotsOf d dt n 2 sb)).1
-          (.eq xs[1] (lookupT xs[0] dv (slotsOf d dt n 2 sb)).2)) (fun e xs he => by
-          obtain ⟨ek, ev⟩ := e
-          obtain ⟨zk, zv, hxs, hzk, hzv⟩ := he
-          obtain ⟨tk, tv, rfl⟩ := xs.two
-          simp only [Term.denotes, List.cons.injEq] at hxs
-          obtain ⟨hh1, hh2⟩ := lookupT_rel hy hk h1 ek tk (hxs.1 ▸ hzk) dv
-          simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ, Term.denote, hh1]
-          cases hl : lookupBy (Ty.deq k) ek y.1 with
-          | none => simp [Val.toBool]
-          | some w =>
-            have := relV_beq v hv ev w _ _ (hxs.2.1 ▸ hzv) (hh2 w hl)
-            simp only [Option.isSome_some, Val.toBool, Bool.true_and]
-            exact congrArg Val.bool this) hSA hhA
-      simp only [tableEqT, Term.denote, sizeT_den hSA, sizeT_den hSB, allSlotT_den hq, ← holds2_length hhA,
-        ← holds2_length hhB, tableBeq, hpA.length_eq, hpB.length_eq, hpA.all_eq]
-      show Val.bool (Val.beq _ _ && _) = _
-      simp only [Val.beq, Val.toBool, natCast_beq]
-      congr 2
-      refine congrArg _ (funext fun e => ?_)
-      split <;> split <;> simp_all
-    · cases h
+  simp only [eqCode] at h
+  obtain ⟨f, h1, h⟩ := bind_ok.1 h
+  obtain ⟨tx, h2, h⟩ := bind_ok.1 h
+  obtain ⟨ty, h3, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  exact eqFn_ok t h1 x y tx ty ((rel_term (need_ok.1 h2) x).1 hx) ((rel_term (need_ok.1 h3) y).1 hy)
 
 theorem encodeBin_agrees {a b c : Ty} (op : BinOp a b c) (sx : Code a) (sy : Code b) (x : a.den) (y : b.den)
     (hx : Rel M L a x sx) (hy : Rel M L b y sy) (r : Code c) (h : encodeBin L op sx sy = .ok r) :

@@ -127,6 +127,30 @@ def tableOfCase (o : E optI) : E (.table .int .str) :=
         (.cons (.ctor (vs := [[.int], []]) ⟨1, by decide⟩ .nil) (.list (.cons (pair 4 "d") .nil)) .nil))
       ⟨10, rfl⟩) .nil)
 
+/-- A record holding a table and an Int. -/
+def recT : Ty := .adt 11 [] [[.table .int .str, .int]]
+def recOf (t : E (.table .int .str)) (n : Int) : E recT := .ctor ⟨0, by decide⟩ (.cons t (.cons (.int n) .nil))
+def someBag (b : E (.bag .int)) : E (Ty.option (.bag .int)) := .ctor (vs := [[.bag .int], []]) ⟨0, by decide⟩ (.cons b .nil)
+def noBag : E (Ty.option (.bag .int)) := .ctor (vs := [[.bag .int], []]) ⟨1, by decide⟩ .nil
+
+/-- `==` through the fields of records, Options and tuples that hold tables and bags: the slots of two equal values
+may hold their entries in another order. -/
+def eqCases : List (String × (t : Ty) × E t) :=
+  [ ("== on records ignores table order", ⟨Ty.bool, .bin (.eq rfl) (recOf (tableOf [(1, "a"), (2, "b")]) 3)
+      (recOf (tableOf [(2, "b"), (1, "a")]) 3)⟩),
+    ("== on records compares table values", ⟨Ty.bool, .bin (.eq rfl) (recOf (tableOf [(1, "a"), (2, "b")]) 3)
+      (recOf (tableOf [(2, "c"), (1, "a")]) 3)⟩),
+    ("== on records compares other fields", ⟨Ty.bool, .bin (.eq rfl) (recOf (tableOf [(1, "a")]) 3)
+      (recOf (tableOf [(1, "a")]) 4)⟩),
+    ("== on Options of bags ignores order", ⟨Ty.bool, .bin (.eq rfl) (someBag b3) (someBag (bagOf [2, 1, 2]))⟩),
+    ("!= on Options of bags across variants", ⟨Ty.bool, .bin (.ne rfl) (someBag b3) noBag⟩),
+    ("== on None of bags", ⟨Ty.bool, .bin (.eq rfl) noBag noBag⟩),
+    ("== on tuples holding bags", ⟨Ty.bool, .bin (.eq rfl) (.tuple (.cons b3 (.cons (.int 1) .nil)))
+      (.tuple (.cons (bagOf [2, 2, 1]) (.cons (.int 1) .nil)))⟩),
+    ("== on bags of bags", ⟨Ty.bool, .bin (.eq rfl)
+      (.call (.prim .bagFromList [.bag .int] rfl) (.cons (.list (.cons b3 (.cons b2 .nil))) .nil))
+      (.call (.prim .bagFromList [.bag .int] rfl) (.cons (.list (.cons b2 (.cons (bagOf [2, 1, 2]) .nil))) .nil))⟩) ]
+
 def listCases : List (String × (t : Ty) × E t) :=
   [ ("a list keeps its order", ⟨.list .int, .list (.cons (.int 3) (.cons (.int 1) (.cons (.int 2) .nil)))⟩),
     ("the longer branch of a list case", ⟨.list .int, twoOrNone some5⟩),
@@ -3434,7 +3458,8 @@ def proveCheck (solver : Solver) : IO Bool := do
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
-  for (slots, list) in [((fun _ => 3 : Ty → Nat), cases), ((fun _ => 3 : Ty → Nat), listCases), (reslots, reslotted)] do
+  for (slots, list) in [((fun _ => 3 : Ty → Nat), cases), ((fun _ => 3 : Ty → Nat), listCases),
+      ((fun _ => 3 : Ty → Nat), eqCases), (reslots, reslotted)] do
     for (name, ⟨t, e⟩) in list do
       match scriptOf slots e with
       | .ok (L, script) =>

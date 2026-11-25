@@ -601,34 +601,71 @@ def lookupCode (k v : Ty) (t key : Term) : Except Refusal (Term × Term) := do
   let dv ← defaultE L v
   pure (lookupT kt dv (slotsOf d dt n 2 t))
 
-/-- How often `x` occurs among the occupied slots' items, by SMT-LIB's `=`. -/
-def countEqT (x : Term) (S : List (Slot 1)) : Term := countT S (S.map fun sl => .eq x sl.2[0])
+/-- How often `x` occurs among the occupied slots' items, by the item equality `eq`. -/
+def countEqT (eq : Term → Term → Term) (x : Term) (S : List (Slot 1)) : Term := countT S (S.map fun sl => eq x sl.2[0])
 
 /-- `==` on bags: as many items, and each item of the first occurs as often in the second. -/
-def bagEqT (A B : List (Slot 1)) : Term :=
+def bagEqT (eq : Term → Term → Term) (A B : List (Slot 1)) : Term :=
   .and (.eq (sizeT A) (sizeT B))
-    (allSlotT A (A.map fun sl => .eq (countEqT sl.2[0] A) (countEqT sl.2[0] B)))
+    (allSlotT A (A.map fun sl => .eq (countEqT eq sl.2[0] A) (countEqT eq sl.2[0] B)))
 
-/-- `==` on tables: as many entries, and each key of the first has an equal value in the second. -/
-def tableEqT (dv : Term) (A B : List (Slot 2)) : Term :=
+/-- `==` on tables: as many entries, and each key of the first has a value in the second that `eq` finds equal. -/
+def tableEqT (eq : Term → Term → Term) (dv : Term) (A B : List (Slot 2)) : Term :=
   .and (.eq (sizeT A) (sizeT B))
     (allSlotT A (A.map fun sl =>
-      .and (lookupT sl.2[0] dv B).1 (.eq sl.2[1] (lookupT sl.2[0] dv B).2)))
+      .and (lookupT sl.2[0] dv B).1 (eq sl.2[1] (lookupT sl.2[0] dv B).2)))
 
-/-- Gleam's `==`: SMT-LIB's `=` where codes are unique, and multiset or map equality over the slots of bags and
-tables, whose slots can hold the same items in another order. -/
-def eqCode (t : Ty) (x y : Code t) : Except Refusal Term :=
-  if t.eqable then do .ok (.eq (← Code.termE t x) (← Code.termE t y))
-  else match t, x, y with
-    | .bag a, x, y => do
-      let (d, n, dt) ← collD L (.bag a) [a]
-      need' (.limit (.equality a)) a.eqable (bagEqT (slotsOf d dt n 1 x) (slotsOf d dt n 1 y))
-    | .table k v, x, y => do
-      let (d, n, dt) ← collD L (.table k v) [k, v]
-      let dv ← defaultE L v
-      need' (.limit (.equality (.table k v))) (k.eqable && v.eqable)
-        (tableEqT dv (slotsOf d dt n 2 x) (slotsOf d dt n 2 y))
-    | _, _, _ => .error (.limit (.equality t))
+/-- `==` on fields `j`, `j + 1`, ... of constructor `k` of datatype `d`, each by its own equality. -/
+def fieldsEqT (d k : Nat) : Nat → List (Term → Term → Term) → Term → Term → Term
+  | _, [], _, _ => tt
+  | j, f :: fs, x, y => .and (f (.sel d k j x) (.sel d k j y)) (fieldsEqT d k (j + 1) fs x y)
+
+/-- `==` on a custom type whose variants are constructors `k`, `k + 1`, ... of datatype `d`: the same constructor
+with equal fields. -/
+def altsEqT (d : Nat) : Nat → List (List (Term → Term → Term)) → Term → Term → Term
+  | _, [], _, _ => .bool false
+  | k, fs :: vs, x, y =>
+    .or (.and (.is d k x) (.and (.is d k y) (fieldsEqT d k 0 fs x y))) (altsEqT d (k + 1) vs x y)
+
+mutual
+/-- Gleam's `==` on two terms of the type: SMT-LIB's `=` where codes are unique, multiset or map equality over the
+slots of bags and tables, whose slots can hold the same items in another order, and field by field through tuples
+and custom types that hold them. A list's free slots may sit between occupied ones, so its code is not unique and
+its `==` is refused. -/
+def eqFn : Ty → Except Refusal (Term → Term → Term)
+  | .int | .str | .date | .id => .ok .eq
+  | .dsl k a => if k == .fresh then .ok .eq else .error (.limit (.equality (.dsl k a)))
+  | .adt 0 a vs => if (boolVs? vs).isSome then .ok .eq else .error (.limit (.equality (.adt 0 a vs)))
+  | .tuple ts => if Ty.eqables ts then .ok .eq else do
+    let d ← tupleD L ts
+    let fs ← eqFns ts
+    pure fun x y => fieldsEqT d 0 0 fs x.share y.share
+  | .adt (i + 1) a vs => if Ty.eqabless vs then .ok .eq else do
+    let (d, _) ← L.findE (.adt (i + 1) a vs)
+    let fss ← eqFnss vs
+    pure fun x y => altsEqT d 0 fss x.share y.share
+  | .bag a => do
+    let (d, n, dt) ← collD L (.bag a) [a]
+    let f ← eqFn a
+    pure fun x y => bagEqT f (slotsOf d dt n 1 x) (slotsOf d dt n 1 y)
+  | .table k v => do
+    let (d, n, dt) ← collD L (.table k v) [k, v]
+    let dv ← defaultE L v
+    let f ← eqFn v
+    need' (.limit (.equality (.table k v))) k.eqable fun x y => tableEqT f dv (slotsOf d dt n 2 x) (slotsOf d dt n 2 y)
+  | t@(.list _) | t@(.fn ..) | t@(.param _) => .error (.limit (.equality t))
+def eqFns : List Ty → Except Refusal (List (Term → Term → Term))
+  | [] => .ok []
+  | t :: ts => do pure ((← eqFn t) :: (← eqFns ts))
+def eqFnss : List (List Ty) → Except Refusal (List (List (Term → Term → Term)))
+  | [] => .ok []
+  | ts :: vs => do pure ((← eqFns ts) :: (← eqFnss vs))
+end
+
+/-- Gleam's `==` on two codes. -/
+def eqCode (t : Ty) (x y : Code t) : Except Refusal Term := do
+  let f ← eqFn L t
+  pure (f (← Code.termE t x) (← Code.termE t y))
 
 def encodeBin {a b c : Ty} : BinOp a b c → Code a → Code b → Except Refusal (Code c)
   | .add, x, y => .ok (.add x y)

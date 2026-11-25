@@ -551,19 +551,59 @@ theorem slotTerms_sound2 {k v r : Ty} {w : Nat} {f : Code (.fn [k, v] r)} (hf : 
     (hk : Got L k) (hv : Got L v) (hr : Avail L r) (S : List (Slot w)) : Sound (fun _ => True) (slotTerms f S) :=
   slotTerms_sound hf (by simp [avail_of_got hk, avail_of_got hv]) hr S
 
+mutual
+theorem eqFn_sound (hL : SortedLayout L) : (t : Ty) → Avail L t → Sound (fun _ => True) (eqFn L t)
+  | .int, _ | .str, _ | .date, _ | .id, _ => trivial
+  | .dsl _ _, _ | .adt 0 _ _, _ => by unfold eqFn; split <;> trivial
+  | .tuple ts, ha => by
+    unfold eqFn; split
+    · trivial
+    · exact sound_bind (tupleD_sound hL ha) fun _ hd =>
+        sound_bind (eqFns_sound hL ts fun t ht => avail_of_got (got_tuple hd.2 t ht)) fun _ _ => trivial
+  | .adt (i + 1) a vs, ha => by
+    unfold eqFn; split
+    · trivial
+    · refine sound_bind (findE_sound hL ha fun h => h.2) fun _ hd => ?_
+      refine sound_bind (eqFnss_sound hL vs fun fs hfs t ht => ?_) fun _ _ => trivial
+      obtain ⟨k, rfl⟩ := List.get_of_mem hfs
+      exact avail_of_got (got_adt hd.2 k t ht)
+  | .bag a, ha => by
+    unfold eqFn
+    refine sound_bind (collD_sound hL ha fun h => ⟨h.2.2, h.2.1⟩) fun _ hr => ?_
+    exact sound_bind (eqFn_sound hL a (avail_of_got (got_bag hr.2).1)) fun _ _ => trivial
+  | .table k v, ha => by
+    unfold eqFn
+    refine sound_bind (collD_sound hL ha fun h => ⟨h.2.2.2, h.2.2.1⟩) fun _ hr => ?_
+    obtain ⟨dv, hdv⟩ := defaultE_ok hL (got_table hr.2).2.1
+    refine sound_bind_ok hdv ?_
+    refine sound_bind (eqFn_sound hL v (avail_of_got (got_table hr.2).2.1)) fun _ _ => ?_
+    exact sound_mono (sound_need' rfl _ _) fun _ _ => trivial
+  | .list _, _ | .fn .., _ | .param _, _ => rfl
+theorem eqFns_sound (hL : SortedLayout L) : (ts : List Ty) → (∀ t ∈ ts, Avail L t) →
+    Sound (fun _ => True) (eqFns L ts)
+  | [], _ => trivial
+  | t :: ts, h => by
+    unfold eqFns
+    exact sound_bind (eqFn_sound hL t (h t (.head _))) fun _ _ =>
+      sound_bind (eqFns_sound hL ts fun t' ht => h t' (.tail _ ht)) fun _ _ => trivial
+theorem eqFnss_sound (hL : SortedLayout L) : (vs : List (List Ty)) → (∀ fs ∈ vs, ∀ t ∈ fs, Avail L t) →
+    Sound (fun _ => True) (eqFnss L vs)
+  | [], _ => trivial
+  | ts :: vs, h => by
+    unfold eqFnss
+    exact sound_bind (eqFns_sound hL ts (h ts (.head _))) fun _ _ =>
+      sound_bind (eqFnss_sound hL vs fun fs hfs => h fs (.tail _ hfs)) fun _ _ => trivial
+end
+
 theorem eqCode_sound (hL : SortedLayout L) {t : Ty} (x y : Code t) (hx : CodeOk L P ds H t x) :
     Sound (fun _ => True) (eqCode L t x y) := by
-  unfold eqCode; split
-  · exact sound_bind sound_termE fun _ _ => sound_bind sound_termE fun _ _ => trivial
-  · split
-    · rename_i a _ _
-      exact sound_bind (collD_sound hL hx fun h => ⟨h.2.2, h.2.1⟩) fun _ _ => sound_mono (sound_need' rfl _ _) fun _ _ => trivial
-    · rename_i k v _ _
-      refine sound_bind (collD_sound hL hx fun h => ⟨h.2.2.2, h.2.2.1⟩) fun _ hr => ?_
-      obtain ⟨dv, hdv⟩ := defaultE_ok hL (got_table hr.2).2.1
-      simp only [hdv]
-      exact sound_mono (sound_need' rfl _ _) fun _ _ => trivial
-    · rfl
+  unfold eqCode
+  have hf : Sound (fun _ => True) (eqFn L t) := by
+    cases t with
+    | dsl k a => unfold eqFn; split <;> trivial
+    | fn => exact rfl
+    | _ => exact eqFn_sound hL _ hx
+  exact sound_bind hf fun _ _ => sound_bind sound_termE fun _ _ => sound_bind sound_termE fun _ _ => trivial
 
 theorem encodeBin_sound (hL : SortedLayout L) {a b c : Ty} (op : BinOp a b c) (x : Code a) (y : Code b)
     (hx : CodeOk L P ds H a x) (hc : Avail L c) : Sound (fun r => CodeOk L P ds H c r) (encodeBin L op x y) := by
