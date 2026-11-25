@@ -146,7 +146,7 @@ theorem encodeMachines_length {ms : List (MachineV r e)} {xs : List Term} {recor
       cases pure_ok.1 h
       simp [ih h2]
 
-theorem ownStarts_width {m : MachineV r e} {dopt : Nat} {none : Bool} {os : List (Term × Term × Term)} {q : Term}
+theorem ownStarts_width {m : MachineV r e} {dopt : Nat} {none : Bool} {os : List (StartSlot)} {q : Term}
     {oS : List Slot} {q' : Term} (h : ownStarts L T m dopt none os q = .ok (oS, q')) : ∀ sl ∈ oS, sl.2.length = 2 := by
   unfold ownStarts at h
   split at h
@@ -158,7 +158,7 @@ theorem ownStarts_width {m : MachineV r e} {dopt : Nat} {none : Bool} {os : List
     rfl
 
 theorem encodeStarts_width {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {senv : StepEnv L shs} :
-    (ms : List (MachineV r e)) → (sts : List (List (Term × Term × Term))) → {n q : Term} → {news : List Slot} →
+    (ms : List (MachineV r e)) → (sts : List (List (StartSlot))) → {n q : Term} → {news : List Slot} →
     {n' : Term} → {owns : List Slot} → {q' : Term} →
     encodeStarts L T shs ds senv ms sts n q = .ok (news, n', owns, q') →
     (∀ sl ∈ news, sl.2.length = 2) ∧ ∀ sl ∈ owns, sl.2.length = 2

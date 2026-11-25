@@ -14,29 +14,29 @@ section
 variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
 /-- Whether a start slot starts an effect: it holds the first occurrence of its key, and its option holds one. -/
-def startFlag (dopt : Nat) (s : Term × Term × Term) : Term := .and s.1 (.is dopt 0 s.2.2)
+def startFlag (dopt : Nat) (s : StartSlot) : Term := .and s.flag (.is dopt 0 s.effect)
 
 /-- One start slot's effect slot, from all the start slots: flagged by `startFlag`, it holds the wire id (`nextId`
 plus the number of flagged slots with a smaller key), the key and the effect. -/
-def rankStart (m : MachineV r e) (dopt : Nat) (nextId : Term) (all : List (Term × Term × Term))
-    (s : Term × Term × Term) : Except Refusal Slot := do
+def rankStart (m : MachineV r e) (dopt : Nat) (nextId : Term) (all : List (StartSlot))
+    (s : StartSlot) : Except Refusal Slot := do
   let below ← all.mapM fun s' => do
-    let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.2.1 s.2.1)
+    let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.key s.key)
     pure (Term.ite (.and (startFlag dopt s') lt) (.int 1) (.int 0))
-  pure (startFlag dopt s, [Term.share (.add nextId (sumT below)), s.2.1, .sel dopt 0 0 s.2.2])
+  pure (startFlag dopt s, [Term.share (.add nextId (sumT below)), s.key, .sel dopt 0 0 s.effect])
 
 /-- The effect slots of a machine's start slots. -/
-def rankStarts (m : MachineV r e) (dopt : Nat) (nextId : Term) (starts : List (Term × Term × Term)) :
+def rankStarts (m : MachineV r e) (dopt : Nat) (nextId : Term) (starts : List (StartSlot)) :
     Except Refusal (List Slot) :=
   starts.mapM (rankStart L T m dopt nextId starts)
 
 /-- A start slot's effect slot where at most one slot starts an effect, so the id needs no rank: flagged by
 `startFlag`, it holds `nextId`, the key and the effect. -/
-def onceStart (dopt : Nat) (nextId : Term) (s : Term × Term × Term) : Slot :=
-  (startFlag dopt s, [nextId, s.2.1, .sel dopt 0 0 s.2.2])
+def onceStart (dopt : Nat) (nextId : Term) (s : StartSlot) : Slot :=
+  (startFlag dopt s, [nextId, s.key, .sel dopt 0 0 s.effect])
 
 /-- How many effects the start slots start. -/
-def startCount (dopt : Nat) (starts : List (Term × Term × Term)) : Term :=
+def startCount (dopt : Nat) (starts : List (StartSlot)) : Term :=
   sumT (starts.map fun s => .ite (startFlag dopt s) (.int 1) (.int 0))
 
 end
@@ -126,10 +126,10 @@ theorem is_opt {dopt nopt : Nat} (hopt : L.find? (Ty.option (.dsl .effect [e])) 
 /-- A sum of 0/1 terms, one per slot, each 1 exactly where its slot is occupied by an item that `Q` holds of, counts
 those items. -/
 theorem sum_countP {α : Type} {R : α → List Val → Prop} {Q : α → Bool} :
-    (ws : List (Term × Term × Term)) → (sv : List (Bool × List Val)) → (E : List α) → (ts : List Term) →
-    SlotsDen M (ws.map fun w => (w.1, [w.2.1, w.2.2])) sv → Holds2 R E sv →
+    (ws : List (StartSlot)) → (sv : List (Bool × List Val)) → (E : List α) → (ts : List Term) →
+    SlotsDen M (ws.map StartSlot.slot) sv → Holds2 R E sv →
     Forall2 (fun w t => ∃ g, t = .ite g (.int 1) (.int 0) ∧ (w.1.denote M = .bool false → g.denote M = .bool false) ∧
-      ∀ a, w.1.denote M = .bool true → R a (Term.denotes M [w.2.1, w.2.2]) → g.denote M = .bool (Q a)) ws ts →
+      ∀ a, w.1.denote M = .bool true → R a (Term.denotes M [w.key, w.effect]) → g.denote M = .bool (Q a)) ws ts →
     (sumT ts).denote M = .int (E.countP Q)
   | [], [], E, [], _, hE, _ => by
     cases E with
@@ -179,8 +179,8 @@ def rankBy (m : MachineV r e) {α : Type} (κ : α → m.key.den0) (F : α → (
 section
 variable (m : MachineV r e) {dopt nopt : Nat} (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt))
   {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den)
-  {all : List (Term × Term × Term)} {svAll : List (Bool × List Val)} {Eall items : List α}
-  (hX : SlotsDen M (all.map fun w => (w.1, [w.2.1, w.2.2])) svAll)
+  {all : List (StartSlot)} {svAll : List (Bool × List Val)} {Eall items : List α}
+  (hX : SlotsDen M (all.map StartSlot.slot) svAll)
   (hh : Holds2 (EOpt (L := L) m κ F) Eall svAll) (hEp : Eall.Perm items)
 include hopt hX hh hEp
 
@@ -191,9 +191,9 @@ theorem startCount_den : (startCount dopt all).denote M = .int (items.flatMap fu
       fun a hf hE => by
         obtain ⟨zk, z, hvs, -, hz⟩ := hE
         simp only [Term.denotes, List.cons.injEq, and_true] at hvs
-        have his := is_opt (M := M) hopt (x := w.2.2) (hvs.2 ▸ hz)
+        have his := is_opt (M := M) hopt (x := w.effect) (hvs.2 ▸ hz)
         rw [show Term.denote M (startFlag dopt w) =
-          .bool ((w.1.denote M).toBool && (Term.denote M (.is dopt 0 w.2.2)).toBool) from rfl, hf, his]
+          .bool ((w.1.denote M).toBool && (Term.denote M (.is dopt 0 w.effect)).toBool) from rfl, hf, his]
         simp only [Val.toBool, Bool.true_and]
         unfold sentBy
         cases Ty.toOption (F a) <;> rfl⟩)
@@ -201,10 +201,10 @@ theorem startCount_den : (startCount dopt all).denote M = .int (items.flatMap fu
   rw [startCount, this, length_flatMap_toList]
 
 /-- The sum of a start slot's effect slot denotes the rank of its item. -/
-theorem below_sum {s : Term × Term × Term} {a : α}
-    (ha : EOpt (L := L) m κ F a (Term.denotes M [s.2.1, s.2.2])) {below : List Term}
+theorem below_sum {s : StartSlot} {a : α}
+    (ha : EOpt (L := L) m κ F a (Term.denotes M [s.key, s.effect])) {below : List Term}
     (hb : Forall2 (fun s' t => (do
-      let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.2.1 s.2.1)
+      let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.key s.key)
       pure (Term.ite (.and (startFlag dopt s') lt) (.int 1) (.int 0))) = Except.ok (ε := Refusal) t) all below) :
     (sumT below).denote M = .int (rankBy (T := T) m κ F items a) := by
   obtain ⟨zk, z, hvs, hk, -⟩ := ha
@@ -217,10 +217,10 @@ theorem below_sum {s : Term × Term × Term} {a : α}
   obtain ⟨zk', z', hvs', hk', hz'⟩ := hE
   simp only [Term.denotes, List.cons.injEq, and_true] at hvs'
   have hord := ordT_rel (M := M) L T m.key _ _ _ (need_ok.1 h1) m.key_data (κ b) (κ a) (hvs'.1 ▸ hk') (hvs.1 ▸ hk)
-  have his := is_opt (M := M) hopt (x := s'.2.2) (hvs'.2 ▸ hz')
-  show Term.denote M (.and (.and s'.1 (.is dopt 0 s'.2.2)) lt) = _
-  rw [show Term.denote M (.and (.and s'.1 (.is dopt 0 s'.2.2)) lt) =
-    .bool (((s'.1.denote M).toBool && (Term.denote M (.is dopt 0 s'.2.2)).toBool) && (lt.denote M).toBool) from rfl,
+  have his := is_opt (M := M) hopt (x := s'.effect) (hvs'.2 ▸ hz')
+  show Term.denote M (.and (.and s'.flag (.is dopt 0 s'.effect)) lt) = _
+  rw [show Term.denote M (.and (.and s'.flag (.is dopt 0 s'.effect)) lt) =
+    .bool (((s'.1.denote M).toBool && (Term.denote M (.is dopt 0 s'.effect)).toBool) && (lt.denote M).toBool) from rfl,
     hf, his, hord.1]
   simp only [Val.toBool, Bool.true_and]
   unfold sentBy
@@ -228,8 +228,8 @@ theorem below_sum {s : Term × Term × Term} {a : α}
 
 /-- The effect slots of start slots hold, where flagged, each effect an item starts, with its wire id. -/
 theorem rank_slots {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int)) :
-    (ws : List (Term × Term × Term)) → (sv : List (Bool × List Val)) → (E : List α) → (S : List Slot) →
-    SlotsDen M (ws.map fun w => (w.1, [w.2.1, w.2.2])) sv → Holds2 (EOpt (L := L) m κ F) E sv →
+    (ws : List (StartSlot)) → (sv : List (Bool × List Val)) → (E : List α) → (S : List Slot) →
+    SlotsDen M (ws.map StartSlot.slot) sv → Holds2 (EOpt (L := L) m κ F) E sv →
     Forall2 (fun s o => rankStart L T m dopt nextId all s = .ok o) ws S →
     ∃ svS, SlotsDen M S svS ∧ Holds2 (EEff (L := L) m) (E.filterMap fun a => (sentBy m κ F a).map
       fun x => (x, n0 + rankBy (T := T) m κ F items a)) svS
@@ -279,8 +279,8 @@ and the count term denotes how many there are. -/
 theorem rank_starts (m : MachineV r e) {dopt nopt : Nat}
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt))
     {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den)
-    {starts : List (Term × Term × Term)} {svX : List (Bool × List Val)} {E items : List α}
-    (hX : SlotsDen M (starts.map fun w => (w.1, [w.2.1, w.2.2])) svX)
+    {starts : List (StartSlot)} {svX : List (Bool × List Val)} {E items : List α}
+    (hX : SlotsDen M (starts.map StartSlot.slot) svX)
     (hh : Holds2 (EOpt (L := L) m κ F) E svX) (hEp : E.Perm items)
     (hks : items.Pairwise fun a b => Ty.cmp T m.key (κ a) (κ b) = .lt)
     {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int))
@@ -302,8 +302,8 @@ theorem once_slots (m : MachineV r e) {dopt nopt : Nat}
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt))
     {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den)
     {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int)) :
-    (ws : List (Term × Term × Term)) → (sv : List (Bool × List Val)) → (E : List α) →
-    SlotsDen M (ws.map fun w => (w.1, [w.2.1, w.2.2])) sv → Holds2 (EOpt (L := L) m κ F) E sv →
+    (ws : List (StartSlot)) → (sv : List (Bool × List Val)) → (E : List α) →
+    SlotsDen M (ws.map StartSlot.slot) sv → Holds2 (EOpt (L := L) m κ F) E sv →
     ∃ svS, SlotsDen M (ws.map (onceStart dopt nextId)) svS ∧
       Holds2 (EEff (L := L) m) (E.filterMap fun a => (sentBy m κ F a).map fun x => (x, n0)) svS
   | [], [], E, _, hE => by
@@ -348,8 +348,8 @@ with the id `nextId`. -/
 theorem once_starts (m : MachineV r e) {dopt nopt : Nat}
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt))
     {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den)
-    {starts : List (Term × Term × Term)} {svX : List (Bool × List Val)} {E items : List α}
-    (hX : SlotsDen M (starts.map fun w => (w.1, [w.2.1, w.2.2])) svX)
+    {starts : List (StartSlot)} {svX : List (Bool × List Val)} {E items : List α}
+    (hX : SlotsDen M (starts.map StartSlot.slot) svX)
     (hh : Holds2 (EOpt (L := L) m κ F) E svX) (hEp : E.Perm items)
     (hone : (items.flatMap fun a => (sentBy m κ F a).toList).length ≤ 1)
     {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int)) :

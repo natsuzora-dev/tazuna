@@ -111,11 +111,20 @@ def reactAt (m : MachineV r e) (rc : ReactCode m) (de dn : Nat) (So : List Slot)
     pure (((first, [key, .ctor de 0 [st, tm]]), Term.share (.ite entered xt noneT)),
       Term.ite f (andT (.ite found c1 tt) (.ite entered (andT c2 c3) tt)) tt)
 
-/-- What a machine's reaction encodes: the new instance table, and per slot of the instances bag its flag (the
-first occurrence of a key), its key and the effect option it starts. -/
+/-- A slot of the keys a machine's instances start effects at: whether it holds an instance, its key, and the effect
+option the instance starts. -/
+structure StartSlot where
+  flag : Term
+  key : Term
+  effect : Term
+
+/-- A start slot as a slot of width two: the key and the effect option. -/
+def StartSlot.slot (s : StartSlot) : Slot := (s.flag, [s.key, s.effect])
+
+/-- What a machine's reaction encodes: the new instance table, and per slot of the instances bag its start slot. -/
 structure ReactOut where
   table : Term
-  starts : List (Term × Term × Term)
+  starts : List StartSlot
 
 /-- The new instance table of a machine after an event, the effects it starts, and its condition, from the instance
 table `tbl`, the records after the event, the time and the event. One slot per slot of the bag `instances` returns:
@@ -140,7 +149,7 @@ def encodeReact (m : MachineV r e) (rc : ReactCode m) (tbl records now ev : Term
   let slots ← (SB.zip firsts).mapM (reactAt L m rc de dn So init dflt (.ctor dopt 1 []) records now evc)
   let _ ← need' "an instance bag with more slots than the instance table" (nb ≤ n) ()
   let pad := List.replicate (n - nb) (Term.bool false, [← need "a key without a default term" (defaultT L m.key), dflt])
-  pure (⟨slotsTerm d dt (slots.map (·.1.1) ++ pad), slots.map fun ((sl, x), _) => (sl.1, sl.2.headD tt, x)⟩,
+  pure (⟨slotsTerm d dt (slots.map (·.1.1) ++ pad), slots.map fun ((sl, x), _) => ⟨sl.1, sl.2.headD tt, x⟩⟩,
     andT c0 (allT (slots.map (·.2))))
 
 /-- Whether the key of `a` comes no later than the key of `b` in the model, by the order terms. -/
@@ -1124,7 +1133,7 @@ theorem react_step (m : MachineV r e) (hor : m.key.orderable = true) {rc : React
     {o : ReactOut} {cond : Term} (henc : encodeReact L m rc x records now evT = .ok (o, cond)) (hc : Holds M cond) :
     (∃ tbl', RelV L m.table (Ty.up _ m.table_data tbl') (o.table.denote M) ∧
       instancesOf T m tbl' = (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).1.2) ∧
-    ∃ svX E, SlotsDen M (o.starts.map fun (f, k, x) => (f, [k, x])) svX ∧
+    ∃ svX E, SlotsDen M (o.starts.map StartSlot.slot) svX ∧
       Holds2 (EStart (L := L) m (instancesOf T m tbl) recs tnow ev) E svX ∧
       E.Perm (Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (recs, ())))) := by
   have hpl := Ty.plain_of_orderable _ hor
@@ -1231,7 +1240,7 @@ theorem react_step (m : MachineV r e) (hor : m.key.orderable = true) {rc : React
     exact (dedupBy_perm (Ty.beq_plain _ hpl) hb).trans
       (List.mergeSort_perm _ (fun a b => (Ty.cmp T m.key a b).isLE)).symm
   refine ⟨⟨m.tableOf O hU, ?_, by rw [hO]; exact instancesOf_entries T m O ⟨hsorted, hU⟩⟩, svX, E,
-    by simpa [List.map_map, Function.comp_def] using hX, hhX, hEp⟩
+    by simpa [List.map_map, Function.comp_def, StartSlot.slot] using hX, hhX, hEp⟩
   -- The new table term.
   obtain ⟨hf1, m1, hft1⟩ := collD_ok h1
   have hpad := slotsDen_replicate (M := M) false [kd, dflt] rfl (n - nb)

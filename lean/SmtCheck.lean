@@ -1729,7 +1729,7 @@ def fireCheck (solver : Solver) : IO Bool := do
       let step := Step.fireFirst m s.records s.now 90 insts
       let bySlot := Step.fireFirst startM s.records s.now 90
         ((Ty.down _ startM.table_data tbl0).1.map fun (k, x) => instOf startM k x)
-      let starts := o.starts.filterMap fun (f, k, x) =>
+      let starts := o.starts.filterMap fun ⟨f, k, x⟩ =>
         if ((Term.and f (.is dxo 0 x)).denote M).toBool then
           match k.denote M, (Term.sel dxo 0 0 x).denote M with
           | .int kv, w => some (kv, w)

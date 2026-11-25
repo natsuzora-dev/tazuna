@@ -17,9 +17,9 @@ def isOwnT (dE nR nO : Nat) (t : Term) : Term := anyT ((List.range nO).map fun k
 
 /-- A start slot (flag, key, effect option) split in two: the first keeps the option where it holds a request, the
 second where it holds an own command or query; each reads none elsewhere. -/
-def splitStart (dE nR nO dopt : Nat) (w : Term × Term × Term) : (Term × Term × Term) × (Term × Term × Term) :=
-  let own := Term.share (isOwnT dE nR nO (.sel dopt 0 0 w.2.2))
-  ((w.1, w.2.1, Term.share (.ite own (.ctor dopt 1 []) w.2.2)), (w.1, w.2.1, Term.share (.ite own w.2.2 (.ctor dopt 1 []))))
+def splitStart (dE nR nO dopt : Nat) (w : StartSlot) : StartSlot × StartSlot :=
+  let own := Term.share (isOwnT dE nR nO (.sel dopt 0 0 w.effect))
+  (⟨w.flag, w.key, Term.share (.ite own (.ctor dopt 1 []) w.effect)⟩, ⟨w.flag, w.key, Term.share (.ite own w.effect (.ctor dopt 1 []))⟩)
 
 /-- The own slots of start slots ranked like wire ids: each flagged slot holds its place in the queue and its effect. -/
 def ownItems (S : List Slot) : List Slot := S.map fun (f, xs) => (f, [xs.headD tt, xs.getD 2 tt])
@@ -122,14 +122,14 @@ def optOwn : (Ty.option (.dsl .effect [e])).den → (Ty.option (.dsl .effect [e]
 /-- The two halves of a split start slot hold the request and the own part of its effect option. -/
 theorem splitStart_rel {dE nE dopt nopt : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt)) {v : (Ty.option (.dsl .effect [e])).den}
-    (w : Term × Term × Term) (h : RelV L (Ty.option (.dsl .effect [e])) v (w.2.2.denote M)) :
+    (w : StartSlot) (h : RelV L (Ty.option (.dsl .effect [e])) v (w.effect.denote M)) :
     RelV L (Ty.option (.dsl .effect [e])) (optReq v)
-        ((splitStart dE (L.effectsOf e).length (L.ownsOf e).length dopt w).1.2.2.denote M) ∧
+        ((splitStart dE (L.effectsOf e).length (L.ownsOf e).length dopt w).1.effect.denote M) ∧
       RelV L (Ty.option (.dsl .effect [e])) (optOwn v)
-        ((splitStart dE (L.effectsOf e).length (L.ownsOf e).length dopt w).2.2.2.denote M) := by
+        ((splitStart dE (L.effectsOf e).length (L.ownsOf e).length dopt w).2.effect.denote M) := by
   rcases opt_view hopt h with ⟨x, zx, rfl, hz, hx⟩ | ⟨rfl, hz⟩
-  · have hsel : (Term.sel dopt 0 0 w.2.2).denote M = zx := by simp [Term.denote, hz]
-    have hown := isOwn_den (M := M) hE (t := .sel dopt 0 0 w.2.2) (by rw [hsel]; exact hx)
+  · have hsel : (Term.sel dopt 0 0 w.effect).denote M = zx := by simp [Term.denote, hz]
+    have hown := isOwn_den (M := M) hE (t := .sel dopt 0 0 w.effect) (by rw [hsel]; exact hx)
     cases hr : x.isRequest
     · simp only [splitStart, Term.denote_share, Term.denote, hown, hr, Bool.not_false, Val.toBool, 
         optReq, optOwn, Bool.false_eq_true]
@@ -137,8 +137,8 @@ theorem splitStart_rel {dE nE dopt nopt : Nat} (hE : L.find? (.dsl .effect [e]) 
     · simp only [splitStart, Term.denote_share, Term.denote, hown, hr, Bool.not_true, Val.toBool,
         ite_false, optReq, optOwn, Bool.false_eq_true]
       exact ⟨h, none_rel hopt⟩
-  · have hn : ∀ c : Term, (Term.ite c (.ctor dopt 1 []) w.2.2).denote M = .ctor dopt 1 [] ∧
-        (Term.ite c w.2.2 (.ctor dopt 1 [])).denote M = .ctor dopt 1 [] := by
+  · have hn : ∀ c : Term, (Term.ite c (.ctor dopt 1 []) w.effect).denote M = .ctor dopt 1 [] ∧
+        (Term.ite c w.effect (.ctor dopt 1 [])).denote M = .ctor dopt 1 [] := by
       intro c; constructor <;> (simp only [Term.denote]; split <;> simp [hz, Term.denotes])
     simp only [splitStart, Term.denote_share, (hn _).1, (hn _).2, optReq, optOwn]
     exact ⟨none_rel hopt, none_rel hopt⟩
@@ -185,12 +185,12 @@ theorem sentBy_optOwn (m : MachineV r e) {α : Type} (κ : α → m.key.den0) (F
 
 /-- Start slots whose effect options a term map rewrites, as `G` rewrites the options' values. -/
 theorem startSlots_map (m : MachineV r e) {α : Type} {κ : α → m.key.den0} {F : α → (Ty.option (.dsl .effect [e])).den}
-    (G : (Ty.option (.dsl .effect [e])).den → (Ty.option (.dsl .effect [e])).den) (g : Term × Term × Term → Term)
-    (hg : ∀ v w, RelV L (Ty.option (.dsl .effect [e])) v (w.2.2.denote M) →
+    (G : (Ty.option (.dsl .effect [e])).den → (Ty.option (.dsl .effect [e])).den) (g : StartSlot → Term)
+    (hg : ∀ v w, RelV L (Ty.option (.dsl .effect [e])) v (w.effect.denote M) →
       RelV L (Ty.option (.dsl .effect [e])) (G v) ((g w).denote M)) :
-    (ws : List (Term × Term × Term)) → (sv : List (Bool × List Val)) → (E : List α) →
-    SlotsDen M (ws.map fun w => (w.1, [w.2.1, w.2.2])) sv → Holds2 (EOpt (L := L) m κ F) E sv →
-    ∃ sv', SlotsDen M (ws.map fun w => (w.1, [w.2.1, g w])) sv' ∧ Holds2 (EOpt (L := L) m κ fun a => G (F a)) E sv'
+    (ws : List StartSlot) → (sv : List (Bool × List Val)) → (E : List α) →
+    SlotsDen M (ws.map StartSlot.slot) sv → Holds2 (EOpt (L := L) m κ F) E sv →
+    ∃ sv', SlotsDen M (ws.map fun w => (w.1, [w.key, g w])) sv' ∧ Holds2 (EOpt (L := L) m κ fun a => G (F a)) E sv'
   | [], [], E, _, hE => by
     cases E with
     | nil => exact ⟨[], trivial, trivial⟩
@@ -208,7 +208,7 @@ theorem startSlots_map (m : MachineV r e) {α : Type} {κ : α → m.key.den0} {
         rw [hden] at hvs
         rw [← hvs] at hz
         simp only [List.cons.injEq, and_true] at hz
-        refine ⟨(true, [w.2.1.denote M, (g w).denote M]) :: sv', ⟨hf, rfl, hS'⟩,
+        refine ⟨(true, [w.key.denote M, (g w).denote M]) :: sv', ⟨hf, rfl, hS'⟩,
           ⟨_, _, rfl, by rw [hz.1]; exact hk, hg _ w (by rw [hz.2]; exact hv)⟩, hh'⟩
   | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ => h.elim
 

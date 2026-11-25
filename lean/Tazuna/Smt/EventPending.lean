@@ -115,7 +115,7 @@ def entrySlots (dE dP dk : Nat) (dflt : Term) (js : List Nat) (S : List Slot) : 
 
 /-- The own slots of a machine's own start slots, ranked from the queue place `q`, and the place after them; none when
 the layout has no own kinds. -/
-def ownStarts (m : MachineV r e) (dopt : Nat) (none : Bool) (os : List (Term × Term × Term)) (q : Term) :
+def ownStarts (m : MachineV r e) (dopt : Nat) (none : Bool) (os : List (StartSlot)) (q : Term) :
     Except Refusal (List Slot × Term) :=
   if none then pure ([], q) else do pure (ownItems (← rankStarts L T m dopt q os), Term.add q (startCount dopt os))
 
@@ -124,7 +124,7 @@ machines before it, the next wire id after them all, the own slots of the own co
 at its place in the queue from `q`, and the place after them. With no own kinds every effect is a request, and the
 start slots are used as they are. -/
 def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (senv : StepEnv L shs) :
-    List (MachineV r e) → List (List (Term × Term × Term)) → (n q : Term) →
+    List (MachineV r e) → List (List (StartSlot)) → (n q : Term) →
     Except Refusal (List Slot × Term × List Slot × Term)
   | [], [], n, q => pure ([], n, [], q)
   | m :: ms, st :: sts, n, q => do
@@ -225,16 +225,16 @@ theorem newsRel_append {shs : List (PendingShape e)} {ds : List (String × Decla
 
 /-- A machine's start slots hold its effects `effs`, in some order: items with distinct keys `κ`, each starting the
 effect option `F`, whose effects in key order are `effs`. -/
-def StartSlots (M : Model) (L : Layout) (T : List TypeDecl) (m : MachineV r e) (starts : List (Term × Term × Term))
+def StartSlots (M : Model) (L : Layout) (T : List TypeDecl) (m : MachineV r e) (starts : List (StartSlot))
     (effs : List (Sender × EffectV e)) : Prop :=
   ∃ (α : Type) (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den) (E items : List α)
-    (svX : List (Bool × List Val)), SlotsDen M (starts.map fun w => (w.1, [w.2.1, w.2.2])) svX ∧
+    (svX : List (Bool × List Val)), SlotsDen M (starts.map StartSlot.slot) svX ∧
     Holds2 (EOpt (L := L) m κ F) E svX ∧ E.Perm items ∧ items.Pairwise (fun a b => Ty.cmp T m.key (κ a) (κ b) = .lt) ∧
     effs = items.flatMap fun a => (sentBy m κ F a).toList
 
 /-- Each machine's start slots hold its effects. -/
 def StartsRel (M : Model) (L : Layout) (T : List TypeDecl) :
-    List (MachineV r e) → List (List (Term × Term × Term)) → List (List (Sender × EffectV e)) → Prop
+    List (MachineV r e) → List (List (StartSlot)) → List (List (Sender × EffectV e)) → Prop
   | [], [], [] => True
   | m :: ms, st :: sts, effs :: effss => StartSlots M L T m st effs ∧ StartsRel M L T ms sts effss
   | _, _, _ => False
@@ -270,15 +270,15 @@ theorem machines_starts {v : ServiceV} (recs : v.records.den0) (tnow : Int) (ev 
 /-- The two halves of split start slots hold the requests and the own commands and queries their slots start. -/
 theorem startSlots_split {dE nE dopt nopt : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt)) (m : MachineV r e)
-    {ws : List (Term × Term × Term)} {effs : List (Sender × EffectV e)} (h : StartSlots M L T m ws effs) :
+    {ws : List (StartSlot)} {effs : List (Sender × EffectV e)} (h : StartSlots M L T m ws effs) :
     StartSlots M L T m (ws.map fun w => (splitStart dE (L.effectsOf e).length (L.ownsOf e).length dopt w).1)
         (Step.reqsOf effs) ∧
       StartSlots M L T m (ws.map fun w => (splitStart dE (L.effectsOf e).length (L.ownsOf e).length dopt w).2)
         (effs.filter (!·.2.isRequest)) := by
   obtain ⟨α, κ, F, E, items, svX, hX, hh, hEp, hks, rfl⟩ := h
-  obtain ⟨sv1, h1, hh1⟩ := startSlots_map (M := M) m optReq (fun w => (splitStart dE _ _ dopt w).1.2.2)
+  obtain ⟨sv1, h1, hh1⟩ := startSlots_map (M := M) m optReq (fun w => (splitStart dE _ _ dopt w).1.effect)
     (fun v w hv => (splitStart_rel hE hopt w hv).1) ws svX E hX hh
-  obtain ⟨sv2, h2, hh2⟩ := startSlots_map (M := M) m optOwn (fun w => (splitStart dE _ _ dopt w).2.2.2)
+  obtain ⟨sv2, h2, hh2⟩ := startSlots_map (M := M) m optOwn (fun w => (splitStart dE _ _ dopt w).2.effect)
     (fun v w hv => (splitStart_rel hE hopt w hv).2) ws svX E hX hh
   refine ⟨⟨α, κ, _, E, items, sv1, by simp only [List.map_map, Function.comp_def]; exact h1, hh1, hEp, hks, ?_⟩,
     ⟨α, κ, _, E, items, sv2, by simp only [List.map_map, Function.comp_def]; exact h2, hh2, hEp, hks, ?_⟩⟩
@@ -286,7 +286,7 @@ theorem startSlots_split {dE nE dopt nopt : Nat} (hE : L.find? (.dsl .effect [e]
   · simp only [List.filter_flatMap, sentBy_optOwn]
 
 /-- With no own kinds a machine's start slots start only requests. -/
-theorem startSlots_requests (ho : L.ownsOf e = []) (m : MachineV r e) {ws : List (Term × Term × Term)}
+theorem startSlots_requests (ho : L.ownsOf e = []) (m : MachineV r e) {ws : List (StartSlot)}
     {effs : List (Sender × EffectV e)} (h : StartSlots M L T m ws effs) : ∀ x ∈ effs, x.2.isRequest = true := by
   obtain ⟨α, κ, F, E, items, svX, -, hh, hEp, -, rfl⟩ := h
   intro x hx
@@ -304,7 +304,7 @@ theorem startSlots_requests (ho : L.ownsOf e = []) (m : MachineV r e) {ws : List
 /-- The own slots of a machine's own start slots ranked from `q0`: each flagged slot holds an own effect the machine
 starts, at its place in the queue. -/
 theorem own_ranked (m : MachineV r e) {dopt nopt : Nat}
-    (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt)) {ws : List (Term × Term × Term)}
+    (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt)) {ws : List (StartSlot)}
     {effs : List (Sender × EffectV e)} (h : StartSlots M L T m ws effs) {q : Term} {q0 : Nat}
     (hq : q.denote M = .int (q0 : Int)) {S : List Slot} (hS : rankStarts L T m dopt q ws = .ok S) :
     (startCount dopt ws).denote M = .int effs.length ∧ OwnRel M L (ownItems S) (effs.map (·.2)) q0 := by
@@ -335,7 +335,7 @@ places from `q0`. -/
 theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape e)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
     (senv : StepEnv L shs) :
-    (ms : List (MachineV r e)) → (sts : List (List (Term × Term × Term))) → (effss : List (List (Sender × EffectV e))) →
+    (ms : List (MachineV r e)) → (sts : List (List (StartSlot))) → (effss : List (List (Sender × EffectV e))) →
     StartsRel M L T ms sts effss → (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
     {n q : Term} → {n0 q0 : Nat} → n.denote M = .int n0 → q.denote M = .int q0 →
     {news : List Slot} → {n' : Term} → {owns : List Slot} → {q' : Term} →

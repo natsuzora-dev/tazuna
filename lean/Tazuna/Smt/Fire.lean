@@ -97,7 +97,7 @@ slot its flag, key and the effect option it starts. -/
 structure FireOut where
   table : Term
   hit : Term
-  starts : List (Term × Term × Term)
+  starts : List StartSlot
 
 /-- One firing round on the instance table `tbl` (`Step.fireFirst`), unless `done`, at the deadline `d`, with its
 condition. Refused when the key type has no order terms. -/
@@ -113,7 +113,7 @@ def encodeFire (m : MachineV r e) (after : Code (Ty.fn [Ty.machineCtx m.key m.st
   let So := slotsOf dd dt n 2 tbl
   let outs ← So.mapM (fireAt L T m after fx de dent dp So done d records now (.ctor dopt 1 []))
   pure (⟨slotsTerm dd dt (mapSlots (fun xs q => [xs.headD tt, q]) So (outs.map (·.1))), anySlotT So (hitsT de dent dp So d),
-      List.zipWith (fun (f, xs) q => (f, xs.headD tt, q)) So (outs.map (·.2.1))⟩,
+      List.zipWith (fun (f, xs) q => ⟨f, xs.headD tt, q⟩) So (outs.map (·.2.1))⟩,
     guardsT So (outs.map (·.2.2)))
 
 end
@@ -324,7 +324,7 @@ theorem fire_table (m : MachineV r e)
       instancesOf T m tbl' = (instancesOf T m tbl).map fun i =>
         if !b && Step.firesIn T m dv (instancesOf T m tbl) i then (Step.fired m recs tnow i).1 else i) ∧
     o.hit.denote M = .bool ((instancesOf T m tbl).any (Step.hitsAt dv)) ∧
-    ∃ svX E, SlotsDen M (o.starts.map fun w => (w.1, [w.2.1, w.2.2])) svX ∧
+    ∃ svX E, SlotsDen M (o.starts.map StartSlot.slot) svX ∧
       Holds2 (EOpt (L := L) m Step.Instance.key
         (fun i => firedOpt m recs tnow (!b && Step.firesIn T m dv (instancesOf T m tbl) i) i)) E svX ∧
       E.Perm (instancesOf T m tbl) := by

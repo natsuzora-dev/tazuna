@@ -461,7 +461,7 @@ structure RoundsOut where
 slots of the own commands and queries they queue, with how many. A round fires at most one instance, so every request
 slot takes the round's next id `nid` and every own slot the round's queue place `q`. -/
 def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (senv : StepEnv L shs) :
-    List (MachineV r e) → List (List (Term × Term × Term)) → (nid q : Term) →
+    List (MachineV r e) → List (List StartSlot) → (nid q : Term) →
     Except Refusal (List Slot × Term × List Slot × Term)
   | [], [], _, _ => pure ([], .int 0, [], .int 0)
   | m :: ms, st :: sts, nid, q => do
@@ -501,7 +501,7 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 /-- A machine's own start slots where they start at most one effect: each flagged slot holds it at the queue place
 `q0`. -/
 theorem own_once (m : MachineV v.records v.event) {dopt nopt : Nat}
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt)) {ws : List (Term × Term × Term)}
+    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt)) {ws : List StartSlot}
     {effs : List (Sender × EffectV v.event)} (h : StartSlots M L T m ws effs) (hone : effs.length ≤ 1) {q : Term}
     {q0 : Nat} (hq : q.denote M = .int (q0 : Int)) :
     (startCount dopt ws).denote M = .int effs.length ∧
@@ -533,7 +533,7 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
     (senv : StepEnv L shs) {nid q : Term} {n0 q0 : Nat}
     (hn : nid.denote M = .int n0) (hq : q.denote M = .int q0) :
-    (ms : List (MachineV v.records v.event)) → (sts : List (List (Term × Term × Term))) →
+    (ms : List (MachineV v.records v.event)) → (sts : List (List StartSlot)) →
     (effss : List (List (Sender × EffectV v.event))) → StartsRel M L T ms sts effss → effss.flatten.length ≤ 1 →
     (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
     {news : List Slot} → {cnt : Term} → {owns : List Slot} → {ocnt : Term} →

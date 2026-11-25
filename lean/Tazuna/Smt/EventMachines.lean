@@ -87,7 +87,7 @@ theorem machine_starts (m : MachineV r e) (hor : m.key.orderable = true)
     (hevT : RelV L e (Ty.up _ m.event_data ev) (evT.denote M))
     (tbl : m.table.den0) {x : Term} (htbl : RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M))
     {mo : ReactOut} {c : Term} (henc : encodeMachine L m x records now evT = .ok (mo, c)) (hc : Holds M c) :
-    ∃ svX E, SlotsDen M (mo.starts.map fun w => (w.1, [w.2.1, w.2.2])) svX ∧
+    ∃ svX E, SlotsDen M (mo.starts.map fun w => (w.1, [w.key, w.effect])) svX ∧
       Holds2 (EStart (L := L) m (instancesOf T m tbl) recs tnow ev) E svX ∧
       E.Perm (Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (recs, ())))) := by
   obtain ⟨⟨rc, c0⟩, h1, henc⟩ := bind_ok.1 henc
