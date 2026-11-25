@@ -126,9 +126,8 @@ def instancesBroken (recs : v.records.den0) (tnow : Int) (sms : List (Step.Machi
 /-- T2 for the machines' part of an event step: wherever the condition holds, the new tables denote the machines
 after the step. -/
 theorem machines_event (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
-    (hrd : v.records.isData = true) (hed : v.event.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    (hevT : RelV L v.event (Ty.up _ hed ev) (evT.denote M)) :
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+    (hevT : RelV L v.event (Ty.up _ v.event_data ev) (evT.denote M)) :
     (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
     (outs : List ReactOut) → {c : Term} → MachinesRel M L T ms xs sms →
     (∀ m ∈ ms, m.key.orderable = true) → encodeMachines L ms xs records now evT = .ok (outs, c) →
@@ -145,15 +144,15 @@ theorem machines_event (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) 
     obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
     subst hsm
     obtain ⟨tbl', ht', hi'⟩ := machine_event (T := T) m (hor m (by simp)) recs tnow ev hrec hnow hevT tbl htbl h1 hc1
-    refine ⟨⟨tbl', ht', ?_⟩, machines_event recs tnow ev hrd hed hrec hnow hevT ms xs sms as hrest
+    refine ⟨⟨tbl', ht', ?_⟩, machines_event recs tnow ev hrec hnow hevT ms xs sms as hrest
       (fun m' hm => hor m' (by simp [hm])) h2 hc2⟩
     rw [hi']; rfl
   | [], [], _ :: _, _, _, h, _, _, _ | [], _ :: _, _, _, _, h, _, _, _ | _ :: _, [], _, _, _, h, _, _, _
   | _ :: _, _ :: _, [], _, _, h, _, _, _ => h.elim
 
 /-- The instance checks name the broken invariants of the machines the tables denote. -/
-theorem instChecks_rel (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd : v.records.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
+theorem instChecks_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
     (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
     MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.ordered T = true) →
     {checks : List (List InstCheck)} → {c : Term} → encodeInstChecks L T ms xs records now = .ok (checks, c) →
@@ -173,7 +172,7 @@ theorem instChecks_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
     have hinv := m.invariants.code_fn m.inv_data h1 hc0
     have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
     have hb := instBroken_eq m (hord m (by simp)) hinv recs tnow hrec' hnow tbl htbl h2 hc1
-    have ih := instChecks_rel recs tnow hrd hrec hnow ms xs sms hrest (fun m' hm => hord m' (by simp [hm])) h3 hc2
+    have ih := instChecks_rel recs tnow hrec hnow ms xs sms hrest (fun m' hm => hord m' (by simp [hm])) h3 hc2
     simp only [checksBroken, List.zip_cons_cons, List.flatMap_cons, instancesBroken] at ih ⊢
     rw [hb]
     exact congrArg _ ih
@@ -326,9 +325,8 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- The condition of the machines' part of an event step is exact: it holds exactly when every machine's part fits. -/
 theorem machines_exact (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
-    (hrd : v.records.isData = true) (hed : v.event.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    (hevT : RelV L v.event (Ty.up _ hed ev) (evT.denote M)) :
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+    (hevT : RelV L v.event (Ty.up _ v.event_data ev) (evT.denote M)) :
     (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
     (outs : List ReactOut) → {c : Term} → MachinesRel M L T ms xs sms →
     (∀ m ∈ ms, m.key.orderable = true) → encodeMachines L ms xs records now evT = .ok (outs, c) →
@@ -343,15 +341,15 @@ theorem machines_exact (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) 
     cases pure_ok.1 henc
     subst hsm
     rw [holds_andT, machine_exact (T := T) m (hor m (by simp)) recs tnow ev hrec hnow hevT tbl htbl h1,
-      machines_exact recs tnow ev hrd hed hrec hnow hevT ms xs sms as hrest (fun m' hm => hor m' (by simp [hm])) h2]
+      machines_exact recs tnow ev hrec hnow hevT ms xs sms as hrest (fun m' hm => hor m' (by simp [hm])) h2]
     simp only [List.mem_cons, forall_eq_or_imp]
     rfl
   | [], [], _ :: _, _, _, h, _, _ | [], _ :: _, _, _, _, h, _, _ | _ :: _, [], _, _, _, h, _, _
   | _ :: _, _ :: _, [], _, _, h, _, _ => h.elim
 
 /-- The instance checks ask exactly that every machine's invariants fit at its instances. -/
-theorem instChecks_exact (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd : v.records.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
+theorem instChecks_exact (recs : v.records.den0) (tnow : Int) {records now : Term}
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
     (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
     MachinesRel M L T ms xs sms →
     {checks : List (List InstCheck)} → {c : Term} → encodeInstChecks L T ms xs records now = .ok (checks, c) →
@@ -369,7 +367,7 @@ theorem instChecks_exact (recs : v.records.den0) (tnow : Int) {records now : Ter
     have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
     have e0 := (m.invariants.code_exact (M := M) h1).1
     simp only [instChecksFit]
-    rw [holds_andT, holds_andT, e0, instChecks_exact recs tnow hrd hrec hnow ms xs sms hrest h3]
+    rw [holds_andT, holds_andT, e0, instChecks_exact recs tnow hrec hnow ms xs sms hrest h3]
     constructor
     · rintro ⟨p0, p1, p2⟩
       exact ⟨p0, (instInvariants_exact m h1 (e0.2 p0) recs tnow hrec' hnow tbl htbl h2).1 p1, p2⟩

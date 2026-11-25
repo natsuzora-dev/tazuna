@@ -241,9 +241,8 @@ def StartsRel (M : Model) (L : Layout) (T : List TypeDecl) :
 
 /-- The machines' parts of an event step hold the effects each machine's instances start. -/
 theorem machines_starts {v : ServiceV} (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
-    (hrd : v.records.isData = true) (hed : v.event.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    (hevT : RelV L v.event (Ty.up _ hed ev) (evT.denote M)) :
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+    (hevT : RelV L v.event (Ty.up _ v.event_data ev) (evT.denote M)) :
     (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
     (outs : List ReactOut) → {c : Term} → MachinesRel M L T ms xs sms →
     (∀ m ∈ ms, m.key.orderable = true ∧ m.key.ordered T = true) →
@@ -264,7 +263,7 @@ theorem machines_starts {v : ServiceV} (recs : v.records.den0) (tnow : Int) (ev 
     refine ⟨⟨m.key.den0, id, startedOf m (instancesOf T m tbl) recs tnow ev, E, _, svX, hX, hh, hEp,
       sortBy_dedup_lt (T := T) hko (m.instances.fn (recs, ())),
       machineStep_effects (T := T) m (Ty.plain_of_orderable _ ho) (instancesOf T m tbl) recs tnow ev⟩,
-      machines_starts recs tnow ev hrd hed hrec hnow hevT ms xs sms as hrest (fun m' hm => hor m' (by simp [hm])) h2 hc2⟩
+      machines_starts recs tnow ev hrec hnow hevT ms xs sms as hrest (fun m' hm => hor m' (by simp [hm])) h2 hc2⟩
   | [], [], _ :: _, _, _, h, _, _, _ | [], _ :: _, _, _, _, h, _, _, _ | _ :: _, [], _, _, _, h, _, _, _
   | _ :: _, _ :: _, [], _, _, h, _, _, _ => h.elim
 

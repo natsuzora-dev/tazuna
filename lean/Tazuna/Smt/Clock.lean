@@ -310,8 +310,8 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- T2 for every machine's part of a firing round: the new tables denote the machines after `Step.fireMachines`, and
 the start slots hold its effects, machine by machine. -/
-theorem fires_rel (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd : v.records.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+theorem fires_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {d : Term} {dv : Int} (hd : d.denote M = .int dv) :
     (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
     MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.ordered T = true) →
@@ -341,7 +341,7 @@ theorem fires_rel (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd
       fire_table (T := T) m haf hfx recs tnow hrec' hnow tbl htbl hdone hd h3 hc2
     have hdone' : (Term.share (.or done o.hit)).denote M = .bool (b || (instancesOf T m tbl).any (Step.hitsAt dv)) := by
       rw [Term.denote_share]; show Val.bool _ = _; rw [hdone, hhit]; rfl
-    obtain ⟨hrel, effss, hst, hfl⟩ := fires_rel recs tnow hrd hrec hnow hd ms xs sms hrest
+    obtain ⟨hrel, effss, hst, hfl⟩ := fires_rel recs tnow hrec hnow hd ms xs sms hrest
       (fun m' hm => hord m' (by simp [hm])) hdone' h4 hc3
     rw [fireMachines_cons (T := T) m ho recs tnow dv b (instancesOf_ok (T := T) m tbl) sms]
     refine ⟨⟨⟨tbl', ht', ?_⟩, hrel⟩, _ :: effss, ⟨⟨_, Step.Instance.key, _, E, _, svX, hX, hhX, hEp,
@@ -381,8 +381,8 @@ theorem dueAll_rel {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
   | [], [], _ :: _, h, _, _ | [], _ :: _, _, h, _, _ | _ :: _, [], _, h, _, _ | _ :: _, _ :: _, [], h, _, _ => h.elim
 
 /-- T2 for a firing round: whether it fires, the new tables, and the effects of `Step.roundOf`, machine by machine. -/
-theorem round_rel (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd : v.records.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+theorem round_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {ms : List (MachineV v.records v.event)} {xs : List Term} {sms : List (Step.MachineState v.records v.event)}
     (hms : MachinesRel M L T ms xs sms) (hord : ∀ m ∈ ms, m.key.ordered T = true)
     {active : Term} {ab : Bool} (hact : active.denote M = .bool ab)
@@ -403,7 +403,7 @@ theorem round_rel (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd
       .bool !(ab && (Step.dues sms tnow).min?.isSome) := by
     show Val.bool _ = _; rw [hgo]; rfl
   have hd : (Term.share (minDueT dues).2).denote M = .int dv := by rw [Term.denote_share, hdv]
-  obtain ⟨hrel, effss, hst, hfl⟩ := fires_rel recs tnow hrd hrec hnow hd ms xs sms hms hord hngo h2 hc
+  obtain ⟨hrel, effss, hst, hfl⟩ := fires_rel recs tnow hrec hnow hd ms xs sms hms hord hngo h2 hc
   refine ⟨hgo, ?_⟩
   unfold Step.roundOf
   cases ab with
@@ -616,8 +616,8 @@ queue place terms are past them. Only the machines change. -/
 theorem rounds_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
     (senv : StepEnv L shs)
-    {records now : Term} (hrd : v.records.isData = true) (hord : ∀ m ∈ v.machines, m.key.ordered T = true) :
-    (k : Nat) → (s : State v) → RelV L v.records (Ty.up _ hrd s.records) (records.denote M) →
+    {records now : Term} (hord : ∀ m ∈ v.machines, m.key.ordered T = true) :
+    (k : Nat) → (s : State v) → RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M) →
     now.denote M = .int s.now → (∀ ms ∈ s.machines, ms.1.Reach P) →
     {xs : List Term} → MachinesRel M L T v.machines xs s.machines →
     {active : Term} → {ab : Bool} → active.denote M = .bool ab →
@@ -646,7 +646,7 @@ theorem rounds_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
     obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-    obtain ⟨hgo, hrel, effss, hst, hfl⟩ := round_rel s.records s.now hrd hrec hnow hms hord hact h1 hc1
+    obtain ⟨hgo, hrel, effss, hst, hfl⟩ := round_rel s.records s.now hrec hnow hms hord hact h1 hc1
     obtain ⟨hr1, hr2⟩ := roundOf_reach s.records s.now ab s.machines hreach
     have hreff : ∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P := fun effs he x hx =>
       hr1 x (hfl ▸ List.mem_flatten.2 ⟨effs, he, hx⟩)
@@ -660,7 +660,7 @@ theorem rounds_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
         .int ((q0 + (Step.queuedOf (Step.roundOf s.records s.now ab s.machines).2).length : Nat) : Int) := by
       rw [Term.denote_share]; simp only [Term.denote, hq, hcntO, Val.toInt]; push_cast; rfl
     let s1 : State v := { s with machines := (Step.roundOf s.records s.now ab s.machines).1 }
-    have ih := rounds_rel hP hshs senv hrd hord k s1 hrec hnow hr2 hrel hgo hnid' hq' h3 hc2
+    have ih := rounds_rel hP hshs senv hord k s1 hrec hnow hr2 hrel hgo hnid' hq' h3 hc2
     -- Rounds that fire nothing: the rest fires nothing either.
     have hidle : (Step.roundOf s.records s.now ab s.machines) = (s.machines, []) →
         (ab && (Step.dues s.machines s.now).min?.isSome) = false →
@@ -749,15 +749,15 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- What the firing rounds leave, in the form the step's end continues: the requests among the effects written at the
 next ids and the own commands and queries queued, from the state at the line's time. -/
-theorem rounds_done {shs : List (PendingShape v.event)} (hrd : v.records.isData = true) (s : State v) (time : Int)
+theorem rounds_done {shs : List (PendingShape v.event)} (s : State v) (time : Int)
     {s' : State v} {effs : List (Sender × EffectV v.event)} (hs' : s' = { s with now := time, machines := s'.machines })
-    {o : RoundsOut} {records fresh : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
+    {o : RoundsOut} {records fresh : Term} (hrec : RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M))
     (hfresh : fresh.denote M = .int (Int.ofNat s.fresh)) (hms : MachinesRel M L T v.machines o.tables s'.machines)
     (hn : o.nextId.denote M = .int ((s.nextId + (Step.reqsOf effs).length : Nat) : Int))
     (hnews : NewsRel M L shs v.declared o.news (Step.reqsOf effs) s.nextId)
     (hq : o.queued.denote M = .int ((0 + (Step.queuedOf effs).length : Nat) : Int))
     (hown : OwnRel M L o.owns (Step.queuedOf effs) 0) :
-    SettleDone M L T hrd shs { state := { s with now := time } }
+    SettleDone M L T shs { state := { s with now := time } }
       ⟨.bool false, ⟨records, o.tables, o.nextId, o.news, o.owns, o.queued⟩, fresh⟩
       (Step.start { state := s' } effs) := by
   refine ⟨s.records, s'.machines, s.fresh, [], Step.reqsOf effs, Step.queuedOf effs, fun ps hps => ?_, hrec, hms,
@@ -810,8 +810,8 @@ section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- Every machine's part of a firing round asks exactly that its functions fit (`firesFit`). -/
-theorem fires_exact (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd : v.records.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+theorem fires_exact (recs : v.records.den0) (tnow : Int) {records now : Term}
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {d : Term} {dv : Int} (hd : d.denote M = .int dv) :
     (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
     MachinesRel M L T ms xs sms →
@@ -844,7 +844,7 @@ theorem fires_exact (recs : v.records.den0) (tnow : Int) {records now : Term} (h
       have hdone' : (Term.share (.or done o.hit)).denote M = .bool (b || (instancesOf T m tbl).any (Step.hitsAt dv)) := by
         rw [Term.denote_share]; show Val.bool _ = _; rw [hdone, hhit]; rfl
       exact ⟨p0, p1, (fire_exact m h1 hc0 h2 hc1 recs tnow hrec' hnow tbl htbl hdone hd h3).1 p2,
-        (fires_exact recs tnow hrd hrec hnow hd ms xs sms hrest hdone' h4).1 p3⟩
+        (fires_exact recs tnow hrec hnow hd ms xs sms hrest hdone' h4).1 p3⟩
     · rintro ⟨p0, p1, p2, p3⟩
       have hc0 := e0.2 p0
       have hc1 := e1.2 p1
@@ -854,13 +854,13 @@ theorem fires_exact (recs : v.records.den0) (tnow : Int) {records now : Term} (h
       obtain ⟨-, hhit, -⟩ := fire_table (T := T) m haf hfx recs tnow hrec' hnow tbl htbl hdone hd h3 hc2
       have hdone' : (Term.share (.or done o.hit)).denote M = .bool (b || (instancesOf T m tbl).any (Step.hitsAt dv)) := by
         rw [Term.denote_share]; show Val.bool _ = _; rw [hdone, hhit]; rfl
-      exact ⟨p0, p1, hc2, (fires_exact recs tnow hrd hrec hnow hd ms xs sms hrest hdone' h4).2 p3⟩
+      exact ⟨p0, p1, hc2, (fires_exact recs tnow hrec hnow hd ms xs sms hrest hdone' h4).2 p3⟩
   | [], [], _ :: _, h, _, _, _, _, _, _ | [], _ :: _, _, h, _, _, _, _, _, _ | _ :: _, [], _, h, _, _, _, _, _, _
   | _ :: _, _ :: _, [], h, _, _, _, _, _, _ => h.elim
 
 /-- A firing round asks exactly that its functions fit (`roundFit`). -/
-theorem round_exact (recs : v.records.den0) (tnow : Int) {records now : Term} (hrd : v.records.isData = true)
-    (hrec : RelV L v.records (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
+theorem round_exact (recs : v.records.den0) (tnow : Int) {records now : Term}
+    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {ms : List (MachineV v.records v.event)} {xs : List Term} {sms : List (Step.MachineState v.records v.event)}
     (hms : MachinesRel M L T ms xs sms) {active : Term} {ab : Bool} (hact : active.denote M = .bool ab)
     {ro : RoundOut} {c : Term} (henc : encodeRound L T ms xs active records now = .ok (ro, c)) :
@@ -876,7 +876,7 @@ theorem round_exact (recs : v.records.den0) (tnow : Int) {records now : Term} (h
       .bool !(ab && (Step.dues sms tnow).min?.isSome) := by
     show Val.bool _ = _; rw [Term.denote_share]; show Val.bool (!(Val.bool _).toBool) = _; rw [hact, hhas]; rfl
   have hd : (Term.share (minDueT dues).2).denote M = .int dv := by rw [Term.denote_share, hdv]
-  rw [fires_exact recs tnow hrd hrec hnow hd ms xs sms hms hngo h2]
+  rw [fires_exact recs tnow hrec hnow hd ms xs sms hms hngo h2]
   unfold roundFit
   cases ab with
   | false => simp only [Bool.false_and, Bool.not_false, Bool.false_eq_true, ite_false]; exact firesFit_true _ T recs tnow dv 0 sms
@@ -891,8 +891,8 @@ theorem round_exact (recs : v.records.den0) (tnow : Int) {records now : Term} (h
 
 /-- The firing rounds ask exactly that every round's functions fit (`roundsFit`). -/
 theorem rounds_exact {shs : List (PendingShape v.event)} {ds : List (String × DeclaredV)} {senv : StepEnv L shs}
-    {records now : Term} (hrd : v.records.isData = true) (hord : ∀ m ∈ v.machines, m.key.ordered T = true) :
-    (k : Nat) → (s : State v) → RelV L v.records (Ty.up _ hrd s.records) (records.denote M) →
+    {records now : Term} (hord : ∀ m ∈ v.machines, m.key.ordered T = true) :
+    (k : Nat) → (s : State v) → RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M) →
     now.denote M = .int s.now → {xs : List Term} → MachinesRel M L T v.machines xs s.machines →
     {active : Term} → {ab : Bool} → active.denote M = .bool ab → {nid q : Term} →
     {o : RoundsOut} → {c : Term} →
@@ -907,14 +907,14 @@ theorem rounds_exact {shs : List (PendingShape v.event)} {ds : List (String × D
     obtain ⟨⟨news, nid', owns, q'⟩, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
-    have e1 := round_exact (T := T) s.records s.now hrd hrec hnow hms hact h1
+    have e1 := round_exact (T := T) s.records s.now hrec hnow hms hact h1
     simp only [roundsFit]
     rw [holds_andT, e1]
     have ih : roundFit L.count T s.records s.now ab s.machines → (Holds M c2 ↔
         roundsFit L.count T { s with machines := (Step.roundOf s.records s.now ab s.machines).1 }
           (ab && (Step.dues s.machines s.now).min?.isSome) k) := fun hf => by
-      obtain ⟨hgo, hrel, -⟩ := round_rel s.records s.now hrd hrec hnow hms hord hact h1 (e1.2 hf)
-      exact rounds_exact hrd hord k ({ s with machines := (Step.roundOf s.records s.now ab s.machines).1 } : State v)
+      obtain ⟨hgo, hrel, -⟩ := round_rel s.records s.now hrec hnow hms hord hact h1 (e1.2 hf)
+      exact rounds_exact hord k ({ s with machines := (Step.roundOf s.records s.now ab s.machines).1 } : State v)
         hrec hnow hrel hgo h3
     exact ⟨fun ⟨p1, p2⟩ => ⟨p1, (ih p1).1 p2⟩, fun ⟨p1, p2⟩ => ⟨p1, (ih p1).2 p2⟩⟩
 
@@ -925,13 +925,12 @@ and the step ends as its end terms say (`Finished`). -/
 theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
-    (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
     (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
-    (s : State v) (hinv : Step.Inv P s) (time : Int) (hrd : v.records.isData = true) (hed : v.event.isData = true)
+    (s : State v) (hinv : Step.Inv P s) (time : Int)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
-    {records now st fresh pending nextIdT : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
+    {records now st fresh pending nextIdT : Term} (hrec : RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M))
     (hnow : now.denote M = .int s.now) (hst : st.denote M = .int time)
     (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
     (hnid : nextIdT.denote M = .int (Int.ofNat s.nextId)) (hpend : PendingRel L shs (pending.denote M) s.pending)
@@ -948,7 +947,7 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
     (Holds M cond →
       if (o.forward.denote M).toBool then
         if (o.over.denote M).toBool then r = ⟨s, .fault .cascadeLimit, [], []⟩
-        else Finished M L T hrd shs o.finish s { state := { s with now := time } } .accepted r
+        else Finished M L T shs o.finish s { state := { s with now := time } } .accepted r
       else r = ⟨s, .invalid ["time moves forward"], [], []⟩) := by
   intro r
   obtain ⟨⟨ro, cr⟩, h1, henc⟩ := bind_ok.1 henc
@@ -963,15 +962,15 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
     · simp only [ht, decide_true, true_implies]
       let s0 : State v := { s with now := time }
       have hinv0 : Step.Inv P s0 := hinv.congr rfl rfl rfl
-      have hrec0 : RelV L v.records (Ty.up _ hrd s0.records) (records.denote M) := hrec
-      have er := rounds_exact (shs := shs) (ds := v.declared) (senv := senv) hrd hord
+      have hrec0 : RelV L v.records (Ty.up _ v.records_data s0.records) (records.denote M) := hrec
+      have er := rounds_exact (shs := shs) (ds := v.declared) (senv := senv) hord
         (v.bounds.cascade.toNat + 1) s0 hrec0 hst hms (ab := true) rfl h1
       rw [holds_andT, er]
       have rest : roundsFit L.count T s0 true (v.bounds.cascade.toNat + 1) →
           (Holds M (.ite ro.over tt cf) ↔ ∀ s' effs,
             Step.fire s0 (v.bounds.cascade.toNat + 1) = some (s', effs) →
             finishFits L.count T shs (Step.start { state := s' } effs)) := fun hf => by
-        have hro := rounds_rel hP hshs senv hrd hord (v.bounds.cascade.toNat + 1) s0 hrec0 hst hinv.machines hms
+        have hro := rounds_rel hP hshs senv hord (v.bounds.cascade.toNat + 1) s0 hrec0 hst hinv.machines hms
           (ab := true) rfl hnid (q0 := 0) rfl h1 (er.2 hf)
         simp only [Step.fireFrom, ite_true] at hro
         cases hfire : Step.fire s0 (v.bounds.cascade.toNat + 1) with
@@ -987,8 +986,8 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
           rw [holds_ite, hover]
           simp only [Val.toBool, Bool.false_eq_true, ite_false]
           obtain ⟨hinv', hreach, hfrom⟩ := Step.fire_inv s0 hinv0 _ hfire
-          have hdone := rounds_done (shs := shs) hrd s time hs' hrec hfresh hmach hnT hnews hq hown
-          rw [(finish_encode hP hvx hinv0.machinesReach hshs hor hcd hqd hqout hrd hed happ hca hci hcinv senv s
+          have hdone := rounds_done (shs := shs) s time hs' hrec hfresh hmach hnT hnews hq hown
+          rw [(finish_encode hP hvx hinv0.machinesReach hshs hor hqout happ hca hci hcinv senv s
             .accepted { state := s0 } rfl hinv0 hst hpend hdone
             (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach hfrom h,
               Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).1]
@@ -1012,8 +1011,8 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
       obtain ⟨hcr, hrest⟩ := (holds_andT _ _).1 hc
       let s0 : State v := { s with now := time }
       have hinv0 : Step.Inv P s0 := hinv.congr rfl rfl rfl
-      have hrec0 : RelV L v.records (Ty.up _ hrd s0.records) (records.denote M) := hrec
-      have hro := rounds_rel hP hshs senv hrd (fun m hm => (hor m hm).2) (v.bounds.cascade.toNat + 1) s0 hrec0 hst
+      have hrec0 : RelV L v.records (Ty.up _ v.records_data s0.records) (records.denote M) := hrec
+      have hro := rounds_rel hP hshs senv (fun m hm => (hor m hm).2) (v.bounds.cascade.toNat + 1) s0 hrec0 hst
         hinv.machines hms (ab := true) rfl hnid (q0 := 0) rfl h1 hcr
       simp only [Step.fireFrom, ite_true] at hro
       cases hfire : Step.fire s0 (v.bounds.cascade.toNat + 1) with
@@ -1033,8 +1032,8 @@ theorem clock_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
           rw [show ({ s with now := time } : State v) = s0 from rfl, hfire]
         rw [hr]
         obtain ⟨hinv', hreach, -⟩ := Step.fire_inv s0 hinv0 _ hfire
-        have hdone := rounds_done (shs := shs) hrd s time hs' hrec hfresh hmach hnT hnews hq hown
-        exact (finish_encode hP hvx hinv0.machinesReach hshs hor hcd hqd hqout hrd hed happ hca hci hcinv senv s
+        have hdone := rounds_done (shs := shs) s time hs' hrec hfresh hmach hnT hnews hq hown
+        exact (finish_encode hP hvx hinv0.machinesReach hshs hor hqout happ hca hci hcinv senv s
           .accepted { state := s0 } rfl hinv0 hst hpend hdone
           (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach (Step.fire_inv s0 hinv0 _ hfire).2.2 h,
             Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).2 hrest

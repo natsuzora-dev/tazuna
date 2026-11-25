@@ -347,9 +347,8 @@ def queryCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
       let L := queryLayout
       let o : QueryOut := ⟨.var 6, [(.var 8, .var 7)], .var 9⟩
       let i : Fin querySvc.queries.length := ⟨0, by decide⟩
-      match (stateAt 10).decode M L (v := querySvc) rfl prelude [],
-          (SymInput.query i (.var 4) (.var 5)).decode M L (v := querySvc) [] rfl (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl)
-            (fun j => j.elim0) with
+      match (stateAt 10).decode M L (v := querySvc) prelude [],
+          (SymInput.query i (.var 4) (.var 5)).decode M L (v := querySvc) [] rfl with
       | some s, some x =>
         let r := step prelude querySvc s x
         let want := match o.invalid M with
@@ -446,9 +445,8 @@ def eventCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
     | .sat vs =>
       let M := modelOf vs
       let L := eventLayout
-      match (stateAt 9).decode M L (v := eventSvc) rfl prelude [],
-          (SymInput.event eventI (.var 4)).decode M L (v := eventSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
-            (fun | ⟨0, _⟩ => rfl) with
+      match (stateAt 9).decode M L (v := eventSvc) prelude [],
+          (SymInput.event eventI (.var 4)).decode M L (v := eventSvc) [] rfl with
       | some s, some x =>
         let r := step prelude eventSvc s x
         let ok := match brokenIn M [(.var 8, .var 7)], r.outcome, r.events with
@@ -545,9 +543,8 @@ def evMCase (solver : Solver) (name : String) (goal : List InstCheck → List Te
     | .sat vs =>
       let M := modelOf vs
       let L := evMLayout
-      match (SymState.vars 0 1).decode M L (v := evMSvc) rfl prelude [],
-          (SymInput.event evMI (.var 6)).decode M L (v := evMSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
-            (fun | ⟨0, _⟩ => rfl) with
+      match (SymState.vars 0 1).decode M L (v := evMSvc) prelude [],
+          (SymInput.event evMI (.var 6)).decode M L (v := evMSvc) [] rfl with
       | some s, some x =>
         let names := brokenIn M [(.var 10, .var 9)] ++ checksBroken L prelude M evMSvc.machines checks
         let view (sms : List (Step.MachineState recordsT evT)) := sms.flatMap fun ⟨_, is⟩ => is.map fun i =>
@@ -623,9 +620,8 @@ def clockCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := 
     | .sat vs =>
       let M := modelOf vs
       let L := eventLayout
-      match (stateAt 9).decode M L (v := eventSvc) rfl prelude [],
-          (SymInput.clock (.var 4)).decode M L (v := eventSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
-            (fun | ⟨0, _⟩ => rfl),
+      match (stateAt 9).decode M L (v := eventSvc) prelude [],
+          (SymInput.clock (.var 4)).decode M L (v := eventSvc) [] rfl,
           decodePending L ([] : List (PendingShape eventSvc.event)) ((Term.var 10).denote M), vs.lookup 11 with
       | some s, some x@(.clock time), some pend', some (.int n') =>
         let r := step prelude eventSvc s x
@@ -721,9 +717,8 @@ def commandCase (solver : Solver) (name : String) (goal : List Term) : IO Bool :
       let M := modelOf vs
       let L := commandLayout
       let i : Fin commandSvc.commands.length := ⟨0, by decide⟩
-      match (stateAt 17).decode M L (v := commandSvc) rfl prelude [],
-          (SymInput.command i (.var 4) (.var 5)).decode M L (v := commandSvc) [] rfl (fun | ⟨0, _⟩ => rfl)
-            (fun j => j.elim0) (fun | ⟨0, _⟩ => rfl) with
+      match (stateAt 17).decode M L (v := commandSvc) prelude [],
+          (SymInput.command i (.var 4) (.var 5)).decode M L (v := commandSvc) [] rfl with
       | some s, some x =>
         let r := step prelude commandSvc s x
         let one (n h : Nat) := brokenIn M [(.var n, .var h)]
@@ -835,7 +830,7 @@ def pendingCheck (solver : Solver) : IO Bool := do
   | .ok script =>
     match ← solver.run script with
     | .sat vs =>
-      match (SymState.vars 0).decode (modelOf vs) pendingLayout (v := pendingSvc) rfl prelude pendingShapes with
+      match (SymState.vars 0).decode (modelOf vs) pendingLayout (v := pendingSvc) prelude pendingShapes with
       | some s =>
         -- The decoded request runs the site's source at the captured value: answering 5 yields [5 + 7].
         let rate := s.pending.find? (·.id == 3)
@@ -908,7 +903,7 @@ def doorCheck (solver : Solver) : IO Bool := do
   | .ok script =>
     match ← solver.run script with
     | .sat vs =>
-      match (SymState.vars 0 1).decode (modelOf vs) doorLayout (v := doorSvc) rfl prelude [] with
+      match (SymState.vars 0 1).decode (modelOf vs) doorLayout (v := doorSvc) prelude [] with
       | some s =>
         -- Slot 0 holds key 3 and slot 1 key 1, yet the instances come in key order.
         let insts := s.machines.map fun ⟨_, is⟩ => is.map fun i =>
@@ -1039,7 +1034,7 @@ def unmatchedScript : Except String Script := do
 def answerAgrees (vs : List (Nat × Val)) (unmatched : Bool) : Bool :=
   let M := modelOf vs
   let L := pendingLayout
-  match (SymState.vars 0).decode M L (v := pendingSvc) rfl prelude pendingShapes, natOf (M.vars 5), intOf (M.vars 6) with
+  match (SymState.vars 0).decode M L (v := pendingSvc) prelude pendingShapes, natOf (M.vars 5), intOf (M.vars 6) with
   | some s, some to, some value =>
     let r := step prelude pendingSvc s (.answer to ⟨.int, value⟩)
     if unmatched then r.outcome.summary == "fault answerUnmatched" && r.state.pending.length == s.pending.length
@@ -1142,9 +1137,8 @@ def boundScript (atMostB : Int) (withLimits : Bool) (goal : List Term) : Except 
 def boundAgrees (vs : List (Nat × Val)) (reached : Bool) : Bool :=
   let M := modelOf vs
   let L := boundLayout
-  match (stateAt 7).decode M L (v := boundSvc) rfl prelude [],
-      (SymInput.event boundI (.var 4)).decode M L (v := boundSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
-        (fun | ⟨0, _⟩ => rfl) with
+  match (stateAt 7).decode M L (v := boundSvc) prelude [],
+      (SymInput.event boundI (.var 4)).decode M L (v := boundSvc) [] rfl with
   | some s, some x =>
     let r := step prelude boundSvc s x
     within boundSvc.bounds.creates s.records && r.outcome.summary == "accepted" &&
@@ -1460,7 +1454,7 @@ def invariantCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := invSvc) rfl prelude []
+      let some s := (SymState.vars 0 1).decode M L (v := invSvc) prelude []
         | IO.println "smt-check: machine invariants: the model does not decode"; return false
       let step := s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i =>
         Step.broken (m.invariants.fn (.inl (i.key, i.state, s.records, s.now, ()), ()))
@@ -1534,7 +1528,7 @@ def reactCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := reactSvc) rfl prelude [] | fail "the model does not decode"
+      let some s := (SymState.vars 0 1).decode M L (v := reactSvc) prelude [] | fail "the model does not decode"
       let some tbl := decodeV L reactM.table ((Term.var 6).denote M) | fail "the new table does not decode"
       let some (.int ev) := vs.lookup 7 | fail "no event"
       let read := instancesOf prelude reactM (Ty.down _ reactM.table_data tbl)
@@ -1595,7 +1589,7 @@ def stayCheck (solver : Solver) : IO Bool := do
     let stayed ← match ← solver.run (script stays) with
     | .sat vs => do
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := staySvc) rfl prelude [] | fail "the model does not decode"
+      let some s := (SymState.vars 0 1).decode M L (v := staySvc) prelude [] | fail "the model does not decode"
       let some tbl := decodeV L stayM.table ((Term.var 6).denote M) | fail "the new table does not decode"
       let some (.int ev) := vs.lookup 7 | fail "no event"
       let read := instancesOf prelude stayM (Ty.down _ stayM.table_data tbl)
@@ -1664,7 +1658,7 @@ def startsCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := startSvc) rfl prelude [] | fail "the model does not decode"
+      let some s := (SymState.vars 0 1).decode M L (v := startSvc) prelude [] | fail "the model does not decode"
       let some (.int ev) := vs.lookup 6 | fail "no event"
       let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
       let effs := (Step.machineStep (e := startSvc.event) prelude s.records s.now ev ⟨m, insts⟩).2.zipIdx s.nextId
@@ -1726,7 +1720,7 @@ def fireCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := startSvc) rfl prelude [] | fail "the model does not decode"
+      let some s := (SymState.vars 0 1).decode M L (v := startSvc) prelude [] | fail "the model does not decode"
       let some tbl := decodeV L startM.table ((Term.var 6).denote M) | fail "the new table does not decode"
       let some tbl0 := decodeV L startM.table ((Term.var 5).denote M) | fail "the old table does not decode"
       let read := instancesOf prelude startM (Ty.down _ startM.table_data tbl)
@@ -1847,9 +1841,8 @@ def writeCheck (solver : Solver) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        match (SymState.vars 0 1).decode M L (v := writeSvc) rfl prelude writeShapes,
-            (SymInput.event writeI (.var 6)).decode M L (v := writeSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
-              (fun | ⟨0, _⟩ => rfl),
+        match (SymState.vars 0 1).decode M L (v := writeSvc) prelude writeShapes,
+            (SymInput.event writeI (.var 6)).decode M L (v := writeSvc) [] rfl,
             decodePending L writeShapes ((Term.var 7).denote M), (vs.lookup 8) with
         | some s, some x, some pend', some (.int n') =>
           let r := step prelude writeSvc s x
@@ -1898,7 +1891,7 @@ def quietCheck (solver : Solver) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        match (SymState.vars 0 1).decode M L (v := writeSvcOf reactM) rfl prelude (writeShapesOf reactM),
+        match (SymState.vars 0 1).decode M L (v := writeSvcOf reactM) prelude (writeShapesOf reactM),
             decodePending L (writeShapesOf reactM) ((Term.var 7).denote M), vs.lookup 8 with
         | some s, some pend', some (.int n') =>
           let r := step prelude (writeSvcOf reactM) s (.event ⟨0, by simp [writeSvcOf]⟩ (by exact (5 : Int)))
@@ -1987,9 +1980,8 @@ def fanCheck (solver : Solver) : IO Bool := do
       | .sat vs =>
         let M := modelOf vs
         let L := fanLayout 5
-        match (SymState.vars 0 1).decode M L (v := fanSvc) rfl prelude fanShapes,
-            (SymInput.event fanI (.var 6)).decode M L (v := fanSvc) [] rfl (fun j => j.elim0) (fun j => j.elim0)
-              (fun | ⟨0, _⟩ => rfl),
+        match (SymState.vars 0 1).decode M L (v := fanSvc) prelude fanShapes,
+            (SymInput.event fanI (.var 6)).decode M L (v := fanSvc) [] rfl,
             decodePending L fanShapes ((Term.var 7).denote M), (vs.lookup 8) with
         | some s, some x, some pend', some (.int n') =>
           let r := step prelude fanSvc s x
@@ -2084,7 +2076,7 @@ def clockFireCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      match (SymState.vars 0 1).decode M L (v := clockFireSvc 2) rfl prelude (clockShapes 2),
+      match (SymState.vars 0 1).decode M L (v := clockFireSvc 2) prelude (clockShapes 2),
           decodePending L (clockShapes 2) ((Term.var 7).denote M), vs.lookup 8,
           decodeV L startM.table ((Term.var 9).denote M) with
       | some s, some pend', some (.int n'), some tbl =>
@@ -2115,7 +2107,7 @@ def clockFireCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      match (SymState.vars 0 1).decode M L (v := clockFireSvc 1) rfl prelude (clockShapes 1) with
+      match (SymState.vars 0 1).decode M L (v := clockFireSvc 1) prelude (clockShapes 1) with
       | some s =>
         let r := step prelude (clockFireSvc 1) s (.clock 100)
         if !(o.over.denote M).toBool then ok ← fail "with cascade 1 the script does not say the bound is exceeded"
@@ -2214,8 +2206,8 @@ def eventsCheck (solver : Solver) : IO Bool := do
         let M := modelOf vs
         let after : SymState := { records := .var 9, now := .var 1, fresh := .var 2, nextId := .var 8,
                                   pending := .var 7, machines := [.var 10] }
-        match (SymState.vars 0 1).decode M L (v := writeSvc) rfl prelude writeShapes,
-            after.decode M L (v := writeSvc) rfl prelude writeShapes, (vs.lookup 6).bind (decodeV L (.list .int)) with
+        match (SymState.vars 0 1).decode M L (v := writeSvc) prelude writeShapes,
+            after.decode M L (v := writeSvc) prelude writeShapes, (vs.lookup 6).bind (decodeV L (.list .int)) with
         | some s, some s', some evs =>
           let evs : List Int := Ty.down (.list .int) rfl evs
           let view (sms : List (Step.MachineState writeSvc.records writeSvc.event)) :=
@@ -2314,8 +2306,8 @@ def twiceCheck (solver : Solver) : IO Bool := do
         let M := modelOf vs
         let after : SymState := { records := .var 10, now := .var 1, fresh := .var 2, nextId := .var 9,
                                   pending := .var 8, machines := [.var 11] }
-        match (SymState.vars 0 1).decode M L (v := twiceSvc) rfl prelude twiceShapes,
-            after.decode M L (v := twiceSvc) rfl prelude twiceShapes with
+        match (SymState.vars 0 1).decode M L (v := twiceSvc) prelude twiceShapes,
+            after.decode M L (v := twiceSvc) prelude twiceShapes with
         | some s, some s' =>
           let r := step prelude twiceSvc s (.command ⟨0, by decide⟩ ("alice" : String) (3 : Int))
           let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
@@ -2406,8 +2398,8 @@ def answerMCheck (solver : Solver) : IO Bool := do
       let M := modelOf vs
       let after : SymState := { records := .var 9, now := .var 1, fresh := .var 2, nextId := .var 8,
                                 pending := .var 7, machines := [.var 10] }
-      match (SymState.vars 0 1).decode M L (v := writeSvc) rfl prelude writeShapes,
-          after.decode M L (v := writeSvc) rfl prelude writeShapes,
+      match (SymState.vars 0 1).decode M L (v := writeSvc) prelude writeShapes,
+          after.decode M L (v := writeSvc) prelude writeShapes,
           (vs.lookup 6).bind (decodeV L (answerTy Ty.nil Ty.nil)) with
       | some s, some s', some y =>
         let r := step prelude writeSvc s (.answer 2 ⟨answerTy Ty.nil Ty.nil, Ty.down _ rfl y⟩)
@@ -2518,7 +2510,7 @@ def mixCheck (solver : Solver) : IO Bool := do
   | .ok (script, nn, no) =>
     match ← solver.run script with
     | .sat vs =>
-      match (SymState.vars 0 1).decode (modelOf vs) L (v := mixSvc) rfl prelude mixShapes with
+      match (SymState.vars 0 1).decode (modelOf vs) L (v := mixSvc) prelude mixShapes with
       | none => fail "the model does not decode"
       | some s =>
         match Step.applyEvents prelude ({ state := s } : Step.Acc mixSvc) [(3 : Int)] with
@@ -2628,8 +2620,8 @@ def internalCheck (solver : Solver) : IO Bool := do
       let M := modelOf vs
       let after : SymState := { records := .var 8, now := .var 1, fresh := .var 2, nextId := .var 9,
                                 pending := .var 4, machines := [.var 10] }
-      match (SymState.vars 0 1).decode M L (v := twiceSvc) rfl prelude twiceShapes,
-          after.decode M L (v := twiceSvc) rfl prelude twiceShapes with
+      match (SymState.vars 0 1).decode M L (v := twiceSvc) prelude twiceShapes,
+          after.decode M L (v := twiceSvc) prelude twiceShapes with
       | some s, some s' =>
         let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
           sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
@@ -2729,8 +2721,8 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
       let M := modelOf vs
       let after : SymState := { records := .var 8, now := .var 1, fresh := .var 2, nextId := .var 9,
                                 pending := .var 4, machines := [.var 10] }
-      match (SymState.vars 0 1).decode M L (v := twiceSvc) rfl prelude twiceShapes,
-          after.decode M L (v := twiceSvc) rfl prelude twiceShapes with
+      match (SymState.vars 0 1).decode M L (v := twiceSvc) prelude twiceShapes,
+          after.decode M L (v := twiceSvc) prelude twiceShapes with
       | some s, some s' =>
         let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
           sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
@@ -2845,8 +2837,8 @@ def dispCheck (solver : Solver) : IO Bool := do
         let M := modelOf vs
         let after : SymState := { records := .var 7, now := .var 1, fresh := .var 11, nextId := .var 8,
                                   pending := .var 4, machines := [.var 9] }
-        match (SymState.vars 0 1).decode M L (v := dispSvc) rfl prelude dispShapes,
-            after.decode M L (v := dispSvc) rfl prelude dispShapes with
+        match (SymState.vars 0 1).decode M L (v := dispSvc) prelude dispShapes,
+            after.decode M L (v := dispSvc) prelude dispShapes with
         | some s, some s' =>
           let view (sms : List (Step.MachineState dispSvc.records dispSvc.event)) :=
             sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
@@ -2979,8 +2971,8 @@ def cascadeCheck (solver : Solver) : IO Bool := do
         let M := modelOf vs
         let after : SymState := { records := .var 6, now := .var 1, fresh := .var 11, nextId := .var 7,
                                   pending := .var 4, machines := [.var 8] }
-        match (SymState.vars 0 1).decode M L (v := dispSvc) rfl prelude dispShapes,
-            after.decode M L (v := dispSvc) rfl prelude dispShapes with
+        match (SymState.vars 0 1).decode M L (v := dispSvc) prelude dispShapes,
+            after.decode M L (v := dispSvc) prelude dispShapes with
         | some s, some s' =>
           let view (sms : List (Step.MachineState dispSvc.records dispSvc.event)) :=
             sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
@@ -3108,7 +3100,7 @@ def cascEventCheck (solver : Solver) : IO Bool := do
         let M := modelOf vs
         let after : SymState := { records := .var 7, now := .var 1, fresh := .var 8, nextId := .var 9,
                                   pending := .var 10, machines := [.var 11] }
-        match (SymState.vars 0 1).decode M L (v := v) rfl prelude shs, after.decode M L (v := v) rfl prelude shs with
+        match (SymState.vars 0 1).decode M L (v := v) prelude shs, after.decode M L (v := v) prelude shs with
         | some s, some s' =>
           let view (sms : List (Step.MachineState v.records v.event)) :=
             sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
@@ -3223,7 +3215,7 @@ def tickClockCheck (solver : Solver) : IO Bool := do
       let M := modelOf vs
       let after : SymState := { records := .var 7, now := .var 6, fresh := .var 8, nextId := .var 9,
                                 pending := .var 10, machines := [.var 11] }
-      match (SymState.vars 0 1).decode M L (v := v) rfl prelude shs, after.decode M L (v := v) rfl prelude shs with
+      match (SymState.vars 0 1).decode M L (v := v) prelude shs, after.decode M L (v := v) prelude shs with
       | some s, some s' =>
         let view (sms : List (Step.MachineState v.records v.event)) :=
           sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>

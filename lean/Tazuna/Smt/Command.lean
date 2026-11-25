@@ -21,6 +21,12 @@ structure CommandData {r e c : Ty} (x : CommandV r e c) : Prop where
   input : x.input.isData = true
   rejection : x.rejection.isData = true
 
+/-- A command's types are data, since its `decide` is. -/
+theorem _root_.Tazuna.Ir.CommandV.data {r e c : Ty} (x : CommandV r e c) : CommandData x := by
+  have h := x.decide.ht
+  simp only [Ty.ctx, Ty.result, Ty.isData, Ty.isDatas, Ty.isDatass, Bool.and_eq_true] at h
+  exact ⟨h.1.1.1.1, h.2.1.1, h.1.1.1.2.2.1, h.1.1.1.2.1, h.2.2.1.1⟩
+
 section
 variable {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
 include hd
@@ -49,11 +55,11 @@ theorem CommandData.invariants : (Ty.fn [r] Ty.rules).isData = true := by
 end
 
 /-- The codes relate to the command's functions in the model. -/
-structure CommandCode.Rel (M : Model) (L : Layout) {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
+structure CommandCode.Rel (M : Model) (L : Layout) {r e c : Ty} {x : CommandV r e c}
     (cc : CommandCode x) : Prop where
-  accepts : Smt.Rel M L _ (Ty.up _ hd.accepts x.accepts.fn) cc.accepts
-  decide : Smt.Rel M L _ (Ty.up _ hd.decide x.decide.fn) cc.decide
-  ensures : Smt.Rel M L _ (Ty.up _ hd.ensures x.ensures.fn) cc.ensures
+  accepts : Smt.Rel M L _ (Ty.up _ x.data.accepts x.accepts.fn) cc.accepts
+  decide : Smt.Rel M L _ (Ty.up _ x.data.decide x.decide.fn) cc.decide
+  ensures : Smt.Rel M L _ (Ty.up _ x.data.ensures x.ensures.fn) cc.ensures
 
 /-- A command's codes, from the sources it keeps, with their condition. -/
 def CommandCode.of (L : Layout) {r e c : Ty} (x : CommandV r e c) : Except Refusal (CommandCode x × Term) := do
@@ -62,8 +68,8 @@ def CommandCode.of (L : Layout) {r e c : Ty} (x : CommandV r e c) : Except Refus
   let (n, c3) ← x.ensures.code L
   pure (⟨a, d, n⟩, andT c1 (andT c2 c3))
 
-theorem CommandCode.rel_of {M : Model} {L : Layout} {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
-    {cc : CommandCode x} {cx : Term} (h : CommandCode.of L x = .ok (cc, cx)) (hc : Holds M cx) : cc.Rel M L hd := by
+theorem CommandCode.rel_of {M : Model} {L : Layout} {r e c : Ty} {x : CommandV r e c}
+    {cc : CommandCode x} {cx : Term} (h : CommandCode.of L x = .ok (cc, cx)) (hc : Holds M cx) : cc.Rel M L := by
   obtain ⟨⟨a, c1⟩, h1, h⟩ := bind_ok.1 h
   obtain ⟨⟨d, c2⟩, h2, h⟩ := bind_ok.1 h
   obtain ⟨⟨n, c3⟩, h3, h⟩ := bind_ok.1 h

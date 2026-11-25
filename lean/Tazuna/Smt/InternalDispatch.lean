@@ -354,13 +354,11 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     (a : Step.Acc v) (hinv : Step.Inv P a.state)
-    (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
-    (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
-    (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
+    (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
@@ -374,7 +372,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     match ko.fault? M with
     | some f => Step.runOwn T a x = .error f
     | none => ∃ fr : Nat, st.fresh.denote M = .int (fr : Int) ∧
-        InternalDone M L T hrd shs a fr st.done st.done.news st.done.owns q0 (Step.runOwn T a x) := by
+        InternalDone M L T shs a fr st.done st.done.news st.done.owns q0 (Step.runOwn T a x) := by
   have hsel : ∀ i, (Term.sel senv.dE ((L.effectsOf v.event).length + j) i eff).denote M = vals[i]?.getD default :=
     fun i => sel_ctor i heff
   obtain ⟨sh, hsh, henc⟩ := bind_ok.1 henc
@@ -426,7 +424,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     obtain ⟨σ, hσ, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
-    have hd := hcd x (ownCommand_mem hox)
+    have hd := CommandV.data x
     obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
@@ -448,7 +446,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     have hsi : RelV L x.input (Ty.up _ hd.input value)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have H := ownCommand_rel hP hvx hshs hor a hinv x caller value hd hcc hcx happ hca s oenv hσ' hks' senv
+    have H := ownCommand_rel hP hvx hshs hor a hinv x caller value hcc hcx happ hca s oenv hσ' hks' senv
       hrec hnow hfresh hn hq hms hsc hsi hoe hc
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
@@ -529,7 +527,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     obtain ⟨σ, hσ, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
-    have hd := hqd x (ownQuery_mem hox)
+    have hd := QueryV.data x
     obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
@@ -556,7 +554,7 @@ theorem ownKind_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
       rw [← hinv.machinesOf] at hm
       obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 hm
       exact hinv.machines sm hsm
-    have H := ownQuery_rel hP hvx hvm hshs hor hed a x caller value hd hqc hcx happ hca s oenv hσ' hks' senv
+    have H := ownQuery_rel hP hvx hvm hshs hor a x caller value hqc hcx happ hca s oenv hσ' hks' senv
       hrec hnow hfresh hn hq hms hsc hsi hoe hc
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
@@ -601,9 +599,9 @@ structure Agrees (M : Model) (L : Layout) (e : Ty) (a b : StepTerms) : Prop wher
 
 theorem internalDone_agrees {a b : StepTerms} (hab : Agrees M L v.event a b)
     (ht : Term.denotes M a.done.tables = Term.denotes M b.done.tables)
-    {hrd : v.records.isData = true} {shs : List (PendingShape v.event)} {acc : Step.Acc v} {fr q0 : Nat}
-    {r : Except Fault (Step.Acc v)} (h : InternalDone M L T hrd shs acc fr b.done b.done.news b.done.owns q0 r) :
-    InternalDone M L T hrd shs acc fr a.done a.done.news a.done.owns q0 r := by
+    {shs : List (PendingShape v.event)} {acc : Step.Acc v} {fr q0 : Nat}
+    {r : Except Fault (Step.Acc v)} (h : InternalDone M L T shs acc fr b.done b.done.news b.done.owns q0 r) :
+    InternalDone M L T shs acc fr a.done a.done.news a.done.owns q0 r := by
   obtain ⟨recs, ms, evs, effs, os, hr, h1, h2, h3, h4, h5, h6⟩ := h
   exact ⟨recs, ms, evs, effs, os, hr, hab.records ▸ h1, machinesRel_congr _ _ _ _ ht.symm h2, hab.nextId ▸ h3,
     hab.news _ _ _ _ h4, hab.queued ▸ h5, hab.owns _ _ h6⟩
@@ -740,13 +738,11 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     (a : Step.Acc v) (hinv : Step.Inv P a.state)
-    (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
-    (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
-    (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
+    (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
@@ -759,7 +755,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     match o.fault? M with
     | some f => Step.runOwn T a x = .error f
     | none => ∃ fr : Nat, o.terms.fresh.denote M = .int (fr : Int) ∧
-        InternalDone M L T hrd shs a fr o.terms.done o.terms.done.news o.terms.done.owns q0 (Step.runOwn T a x) := by
+        InternalDone M L T shs a fr o.terms.done o.terms.done.news o.terms.done.owns q0 (Step.runOwn T a x) := by
   obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   have hx' : EffRel L x (eff.denote M) := hx
@@ -799,7 +795,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
     have := (holds_ite _ _ _).1 hcall
     simpa [htk, toBool_bool] using this
   have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-  obtain ⟨hfault, hrun⟩ := ownKind_rel hP hvx hshs hor a hinv hcd hqd hrd hed happ hca senv hrec hnow hfresh hn hq
+  obtain ⟨hfault, hrun⟩ := ownKind_rel hP hvx hshs hor a hinv happ hca senv hrec hnow hfresh hn hq
     hms x hreach heff' hkey hkind hck hcxk
   have hwid : ∀ y ∈ ks.map (fun k => (k.1, k.2.2.1)),
       (∀ sl ∈ y.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ y.2.done.owns, sl.2.length = 2 := by
@@ -844,14 +840,12 @@ internal step `Step.runOwn` runs fits (`ownFits`). -/
 theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
     (hvm : ∀ m ∈ v.machines, m.Reach P) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true) (a : Step.Acc v)
-    (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
     (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
-    (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
-    (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
+    (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
@@ -910,7 +904,7 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     obtain ⟨σ, hσ, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
-    have hd := hcd x (ownCommand_mem hox)
+    have hd := CommandV.data x
     obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
@@ -934,7 +928,7 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       rw [hsel]; exact relD_up _ _ _ _ hvi
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
-    exact ownCommand_exact hP hvx hvm hshs hor a x caller value hd hcc hcx happ hca s oenv hσ'
+    exact ownCommand_exact hP hvx hvm hshs hor a x caller value hcc hcx happ hca s oenv hσ'
       (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe
   | query e name c0 i jj a0 =>
     cases x with
@@ -980,7 +974,7 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     obtain ⟨σ, hσ, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
-    have hd := hqd x (ownQuery_mem hox)
+    have hd := QueryV.data x
     obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
     obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
     dsimp only at hsite hΓ
@@ -1004,7 +998,7 @@ theorem ownKind_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       rw [hsel]; exact relD_up _ _ _ _ hvi
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
-    exact ownQuery_exact a (fun m hm => (hor m hm).1) hed x caller value hd hcc hcx happ hca s oenv hσ'
+    exact ownQuery_exact a (fun m hm => (hor m hm).1) x caller value hcc hcx happ hca s oenv hσ'
       (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) (hqout x (ownQuery_mem hox)) hks' hrec hnow hfresh hms hsc hsi hoe
 
 /-- The condition of an own effect's internal step is exact: it holds exactly when the internal step `Step.runOwn`
@@ -1012,14 +1006,12 @@ runs fits (`ownFits`). -/
 theorem ownStep_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
     (hvm : ∀ m ∈ v.machines, m.Reach P) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true) (a : Step.Acc v)
-    (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
     (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
-    (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
     {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
-    (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
+    (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
@@ -1062,7 +1054,7 @@ theorem ownStep_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     · subst h; simp
     · simp [h, Ne.symm h]
   have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-  rw [← ownKind_exact hP hvx hvm hshs hor a hcd hqd hqout hrd hed happ hca senv hrec hnow hfresh hn hq hms x
+  rw [← ownKind_exact hP hvx hvm hshs hor a hqout happ hca senv hrec hnow hfresh hn hq hms x
     hreach heff' hkey hkind hcxk, holds_allT]
   have htk := htests k _ hkk
   simp only [decide_true] at htk

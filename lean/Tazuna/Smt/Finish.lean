@@ -91,7 +91,7 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 fault, else the first broken invariant (the service's, then each machine's instances in key order), else the outcome
 with the records, machines and fresh counter the terms denote, the requests `ps` written at the next wire ids and
 sent, and the pending table and next id terms denoting what follows (pending as a multiset). A fault leaves `s0`. -/
-def Finished (M : Model) (L : Layout) (T : List TypeDecl) (hrd : v.records.isData = true)
+def Finished (M : Model) (L : Layout) (T : List TypeDecl)
     (shs : List (PendingShape v.event)) (fo : FinishOut) (s0 : State v) (a : Step.Acc v) (outcome : Outcome)
     (r : Result v) : Prop :=
   match fo.settle.fault? M with
@@ -103,7 +103,7 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl) (hrd : v.records.isDat
         r = ⟨{ a.state with records := recs, machines := ms, fresh := fr, pending := a.state.pending ++ ps,
                             nextId := a.state.nextId + ps.length },
               outcome, a.events ++ evs, a.out ++ ps.map Step.Pending.line⟩ ∧
-        RelV L v.records (Ty.up _ hrd recs) (fo.settle.terms.done.records.denote M) ∧
+        RelV L v.records (Ty.up _ v.records_data recs) (fo.settle.terms.done.records.denote M) ∧
         MachinesRel M L T v.machines fo.settle.terms.done.tables ms ∧
         fo.settle.terms.fresh.denote M = .int (fr : Int) ∧
         fo.settle.terms.done.nextId.denote M = .int ((a.state.nextId + ps.length : Nat) : Int) ∧
@@ -113,21 +113,19 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl) (hrd : v.records.isDat
 theorem events_done {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
     (hvm : ∀ m ∈ v.machines, m.Reach P) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
-    (hrd : v.records.isData = true) (hed : v.event.isData = true)
-    (hap : (Ty.fn [v.records, v.event] v.records).isData = true)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ hap v.apply.fn) apply)
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ v.apply.ht v.apply.fn) apply)
     (senv : StepEnv L shs)
     (a : Step.Acc v) (hown : a.own = []) {now : Term} (hnow : now.denote M = .int a.state.now)
     {S : List Slot} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 1)
-    {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ hed)) sv)
-    {records : Term} (hrec : RelV L v.records (Ty.up _ hrd a.state.records) (records.denote M))
+    {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
+    {records : Term} (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     {xs : List Term} (hms : MachinesRel M L T v.machines xs a.state.machines)
     {n fresh : Term} (hn : n.denote M = .int (Int.ofNat a.state.nextId))
     (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n (.int 0) = .ok (o, c))
     (hc : Holds M c) :
-    SettleDone M L T hrd shs a ⟨.bool false, o, fresh⟩ (Step.applyEvents T a evs) := by
-  obtain ⟨r1, r2, r3, r4, r5, r6, hr⟩ := loop_apply (q := .int 0) (q0 := 0) hP hvx hshs hor hrd hed hap happ senv
+    SettleDone M L T shs a ⟨.bool false, o, fresh⟩ (Step.applyEvents T a evs) := by
+  obtain ⟨r1, r2, r3, r4, r5, r6, hr⟩ := loop_apply (q := .int 0) (q0 := 0) hP hvx hshs hor happ senv
     hvm a hnow hS hw hev hrec hms hn rfl henc hc
   refine ⟨_, _, a.state.fresh, evs, Step.reqsOf (Step.reactAll T a.state evs).2,
     Step.queuedOf (Step.reactAll T a.state evs).2, fun ps hps => ?_, r1, r2, hfresh, r3, r4, by simpa [hown] using r5,
@@ -153,9 +151,7 @@ def finishFits (S : Ty → Nat) (T : List TypeDecl) (shs : List (PendingShape v.
 theorem finish_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
     (hvm : ∀ m ∈ v.machines, m.Reach P) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
-    (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
     (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
-    (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci0 : Term} (hinvc : v.invariants.code L = .ok (inv, ci0))
@@ -164,13 +160,13 @@ theorem finish_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     (s0 : State v) (outcome : Outcome) (a : Step.Acc v) (hown : a.own = []) (hinv : Step.Inv P a.state)
     {now fresh pending : Term} (hnow : now.denote M = .int a.state.now)
     (hpend : PendingRel L shs (pending.denote M) a.state.pending)
-    {o : EventsOut} {r : Except Fault (Step.Acc v)} (hdone : SettleDone M L T hrd shs a ⟨.bool false, o, fresh⟩ r)
+    {o : EventsOut} {r : Except Fault (Step.Acc v)} (hdone : SettleDone M L T shs a ⟨.bool false, o, fresh⟩ r)
     (hr : ∀ a1, r = .ok a1 → Step.Inv P a1.state ∧ Step.QueueOk P a1)
     {fo : FinishOut} {c cx : Term}
     (henc : encodeFinish L T P v shs senv apply inv now fresh pending o = .ok (fo, c, cx))
     (hcx : Holds M cx) :
     (Holds M c ↔ finishFits L.count T shs r) ∧
-    (Holds M c → Finished M L T hrd shs fo s0 a outcome (Step.finish T s0 r outcome)) := by
+    (Holds M c → Finished M L T shs fo s0 a outcome (Step.finish T s0 r outcome)) := by
   obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, e1, e2, e3, e4, e5, e6, e7⟩ := hdone
   obtain ⟨ps1, hps1⟩ := newsRel_writes e5
   have hl1 := forall2_zipIdx_length _ _ hps1
@@ -191,13 +187,13 @@ theorem finish_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
     have hS1 : OwnRel M L o.owns a1.own 0 := by rw [← hA]; simpa [hown] using e7
     have hn1 : o.nextId.denote M = .int (Int.ofNat a1.state.nextId) := by rw [← hA, e4, ← hl1]; rfl
     have hq1' : o.queued.denote M = .int ((a1.own.length : Nat) : Int) := by rw [← hA]; simpa [hown] using e6
-    have e1' : RelV L v.records (Ty.up _ hrd a1.state.records) (o.records.denote M) := by rw [← hA]; exact e1
+    have e1' : RelV L v.records (Ty.up _ v.records_data a1.state.records) (o.records.denote M) := by rw [← hA]; exact e1
     have e2' : MachinesRel M L T v.machines o.tables a1.state.machines := by rw [← hA]; exact e2
     have e3' : fresh.denote M = .int (Int.ofNat a1.state.fresh) := by rw [← hA]; exact e3
     have hnow1 : now.denote M = .int a1.state.now := by rw [← hA]; exact hnow
-    have es := settle_exact hP hvx hvm hshs hor hcd hqd hqout hrd hed happ hca senv
+    have es := settle_exact hP hvx hvm hshs hor hqout happ hca senv
       v.bounds.cascade.toNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 hS1 hnow1 rfl e1' e2' e3' hn1 hq1' hset hcx
-    have hrel := fun hcs : Holds M cs => settle_rel hP hvx hvm hshs hor hcd hqd hrd hed happ hca senv
+    have hrel := fun hcs : Holds M cs => settle_rel hP hvx hvm hshs hor happ hca senv
       v.bounds.cascade.toNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 hS1 hnow1 rfl e1' e2' e3' hn1 hq1' hset hcs hcx
     have hfits : finishFits L.count T shs r ↔ settleFits L.count T v.bounds.cascade.toNat 0 a1 ∧
         ∀ a2, Step.settleFrom T v.bounds.cascade.toNat 0 a1 = .ok a2 →
@@ -236,8 +232,8 @@ theorem finish_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
           newsRel_append e5 (by simpa [hl1] using f5)
         obtain ⟨sv, zs, hS, hw, hh, xs, hp, hq⟩ := hnews
         have ep := pending_exact hpend hS hw hh hp hq hpe
-        have ei := invariants_exact v.invariants hrd hinvc hci0 recs2 f1 hi
-        have ek := instChecks_exact recs2 _ hrd f1 hnow v.machines _ _ f2 hck
+        have ei := invariants_exact v.invariants v.records_data hinvc hci0 recs2 f1 hi
+        have ek := instChecks_exact recs2 _ f1 hnow v.machines _ _ f2 hck
         have hall : ∀ a2, Step.settleFrom T v.bounds.cascade.toNat 0 _ = .ok a2 ↔ a2 = _ := fun a2 => by
           rw [hr2 ps2 hps2]; exact ⟨fun h => by cases h; rfl, fun h => by rw [h]⟩
         simp only [hall, forall_eq]
@@ -252,9 +248,9 @@ theorem finish_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
   · obtain ⟨hinv1, hq1⟩ := hr _ hra
     obtain ⟨hcs, hrest⟩ := (holds_andT _ _).1 hc
     have hfd : (Ty.fn [v.records] Ty.rules).isData = true := by
-      simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hrd]
+      simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, v.records_data]
     have hinvR := v.invariants.code_fn hfd hinvc hci0
-    obtain ⟨hF, hm⟩ := settle_rel hP hvx hvm hshs hor hcd hqd hrd hed happ hca senv
+    obtain ⟨hF, hm⟩ := settle_rel hP hvx hvm hshs hor happ hca senv
       v.bounds.cascade.toNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 (by simpa [hown] using e7) hnow rfl e1 e2 e3
       (by rw [e4, ← hl1]; rfl) (by simpa [hown] using e6) hset hcs hcx
     unfold Finished Step.finish
@@ -290,8 +286,8 @@ theorem finish_encode {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
       obtain ⟨ps1', ps2', rfl, hps1', hps2'⟩ := forall2_split _ _ hps
       obtain rfl := writes_unique hps1 hps1'
       obtain rfl := writes_unique hps2 (by simpa [hl1] using hps2')
-      have hb := invariants_rel v.invariants hrd hfd hinvR recs2 f1 hi hci
-      have hbs := instChecks_rel recs2 a.state.now hrd f1 hnow v.machines _ _ f2 (fun m hm => (hor m hm).2) hck hck'
+      have hb := invariants_rel v.invariants v.records_data hfd hinvR recs2 f1 hi hci
+      have hbs := instChecks_rel recs2 a.state.now f1 hnow v.machines _ _ f2 (fun m hm => (hor m hm).2) hck hck'
       have hinvs : Step.invariants ({ a.state with records := recs2, machines := ms2, fresh := fr2,
                                                    pending := a.state.pending ++ ps1 ++ ps2,
                                                    nextId := a.state.nextId + ps1.length + ps2.length } : State v) =

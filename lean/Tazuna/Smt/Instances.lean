@@ -32,6 +32,27 @@ theorem MachineV.records_data (m : MachineV r e) : r.isData = true := by
 theorem MachineV.table_data (m : MachineV r e) : m.table.isData = true := by
   simp [MachineV.table, instEntry, Ty.option, Ty.isData, Ty.isDatas, Ty.isDatass, m.key_data, m.state_data]
 
+theorem ServiceV.records_data (v : ServiceV) : v.records.isData = true := by
+  have h := v.apply.ht
+  simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at h
+  exact h.2
+theorem ServiceV.event_data (v : ServiceV) : v.event.isData = true := by
+  have h := v.apply.ht
+  simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at h
+  exact h.1.2.1
+theorem CommandV.input_data {r e c : Ty} (x : CommandV r e c) : x.input.isData = true := by
+  have h := x.accepts.ht
+  simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at h
+  exact h.1.1
+theorem QueryV.input_data {r c : Ty} (q : QueryV r c) : q.input.isData = true := by
+  have h := q.accepts.ht
+  simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at h
+  exact h.1.1
+theorem SubscriptionV.event_data {e : Ty} (x : SubscriptionV e) : x.event.isData = true := by
+  have h := x.wrap.ht
+  simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at h
+  exact h.1.1
+
 /-- A timer as an entry holds it. -/
 def timerOf {st : Ty} : (Ty.option (.tuple [.int, st])).den0 → Option (Int × st.den0)
   | .inl ((d, s, ()), ()) => some (d, s)

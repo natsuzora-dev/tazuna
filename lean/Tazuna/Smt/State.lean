@@ -57,7 +57,7 @@ abbrev PendingVal.list {shs : List (PendingShape e)} (tbl : PendingVal shs) : Li
 end
 
 section
-variable (M : Model) (L : Layout) {v : ServiceV} (hr : v.records.isData = true)
+variable (M : Model) (L : Layout) {v : ServiceV}
 
 /-- The pending requests a model's value codes, at the shapes. -/
 def decodePending (shs : List (PendingShape v.event)) (w : Val) : Option (List (Step.Pending v.event)) :=
@@ -111,7 +111,7 @@ def MachinesRel (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) �
 
 /-- The terms denote the state's data. -/
 def StateRel (S : SymState) (s : State v) : Prop :=
-  RelV L v.records (Ty.up _ hr s.records) (S.records.denote M) ∧ S.now.denote M = .int s.now ∧
+  RelV L v.records (Ty.up _ v.records_data s.records) (S.records.denote M) ∧ S.now.denote M = .int s.now ∧
     S.fresh.denote M = .int (Int.ofNat s.fresh) ∧ S.nextId.denote M = .int (Int.ofNat s.nextId)
 
 /-- The pending term denotes the pending requests, at the shapes. -/
@@ -127,7 +127,7 @@ def SymState.decode (S : SymState) (T : List TypeDecl) (shs : List (PendingShape
   (natOf (S.nextId.denote M)).bind fun nextId =>
   (decodePending L shs (S.pending.denote M)).bind fun pending =>
   (decodeMachines M L T v.machines S.machines).map fun machines =>
-  { records := Ty.down _ hr r, machines, pending, now, fresh, nextId }
+  { records := Ty.down _ v.records_data r, machines, pending, now, fresh, nextId }
 
 /-- The well-formedness of the symbolic state, which a script asserts: the records, the pending table and the
 instance tables decode and the counters are not negative. -/
@@ -138,7 +138,7 @@ def SymState.wf (S : SymState) (shs : List (PendingShape v.event)) : Option Term
 
 /-- The values of the state's data, in the order of `SymState.vars`, with the pending requests as `pv`. -/
 def embedState {shs : List (PendingShape v.event)} (s : State v) (pv : PendingVal shs) : Option (List Val) :=
-  (embedV L v.records (Ty.up _ hr s.records)).bind fun r => (embedPending L shs pv).bind fun p =>
+  (embedV L v.records (Ty.up _ v.records_data s.records)).bind fun r => (embedPending L shs pv).bind fun p =>
   (embedMachines L s.machines).map fun ms =>
   [r, .int s.now, .int (Int.ofNat s.fresh), .int (Int.ofNat s.nextId), p] ++ ms
 
@@ -161,19 +161,16 @@ def decodeAnswer (t : Ty) (to value : Term) : Option (Input v) :=
   else none
 
 /-- The input a model's values of the symbolic input denote, at the pending shapes `shs`. -/
-def SymInput.decode (shs : List (PendingShape v.event)) (hc : v.caller.isData = true)
-    (hin : ∀ i : Fin v.commands.length, (v.commands.get i).input.isData = true)
-    (hq : ∀ i : Fin v.queries.length, (v.queries.get i).input.isData = true)
-    (he : ∀ i : Fin v.subscribes.length, (v.subscribes.get i).event.isData = true) : SymInput v → Option (Input v)
+def SymInput.decode (shs : List (PendingShape v.event)) (hc : v.caller.isData = true) : SymInput v → Option (Input v)
   | .answer k _ to value => shs[k]?.bind fun sh => decodeAnswer M L (answerTy sh.output sh.rejection) to value
   | .unmatched t to value => decodeAnswer M L t to value
   | .command i caller input =>
     (decodeV L v.caller (caller.denote M)).bind fun c =>
-    (decodeV L _ (input.denote M)).map fun x => .command i (Ty.down _ hc c) (Ty.down _ (hin i) x)
+    (decodeV L _ (input.denote M)).map fun x => .command i (Ty.down _ hc c) (Ty.down _ (v.commands.get i).input_data x)
   | .query i caller input =>
     (decodeV L v.caller (caller.denote M)).bind fun c =>
-    (decodeV L _ (input.denote M)).map fun x => .query i (Ty.down _ hc c) (Ty.down _ (hq i) x)
-  | .event i value => (decodeV L _ (value.denote M)).map fun x => .event i (Ty.down _ (he i) x)
+    (decodeV L _ (input.denote M)).map fun x => .query i (Ty.down _ hc c) (Ty.down _ (v.queries.get i).input_data x)
+  | .event i value => (decodeV L _ (value.denote M)).map fun x => .event i (Ty.down _ (v.subscribes.get i).event_data x)
   | .clock time => (intOf (time.denote M)).map .clock
 
 end
@@ -190,7 +187,7 @@ theorem natOf_eq {w : Val} {n : Nat} (h : natOf w = some n) : w = .int (Int.ofNa
   · cases h
 
 section
-variable {M : Model} {L : Layout} {v : ServiceV} {hr : v.records.isData = true}
+variable {M : Model} {L : Layout} {v : ServiceV}
 
 /-- T3 for the pending requests: the decoded ones are the ones the value denotes. -/
 theorem decode_pending (shs : List (PendingShape v.event)) {w : Val} {ps : List (Step.Pending v.event)}
@@ -211,8 +208,8 @@ theorem decode_machines (T : List TypeDecl) : (ms : List (MachineV v.records v.e
 
 /-- T3 for the state: the decoded state is the one the model's values denote. -/
 theorem decode_state {S : SymState} {T : List TypeDecl} {shs : List (PendingShape v.event)} {s : State v}
-    (h : S.decode M L hr T shs = some s) :
-    StateRel M L hr S s ∧ PendingRel L shs (S.pending.denote M) s.pending ∧
+    (h : S.decode M L T shs = some s) :
+    StateRel M L S s ∧ PendingRel L shs (S.pending.denote M) s.pending ∧
       MachinesRel M L T v.machines S.machines s.machines := by
   obtain ⟨r, hrec, h⟩ := bind_some.1 h
   obtain ⟨now, hnow, h⟩ := bind_some.1 h
@@ -265,9 +262,9 @@ theorem decode_embedMachines (T : List TypeDecl) : (sms : List (Step.MachineStat
 state whose machines are the service's with their instances in the step's form. -/
 theorem decode_embedState (b : Nat) (T : List TypeDecl) {shs : List (PendingShape v.event)} (s : State v)
     (pv : PendingVal shs) (hpv : pv.list = s.pending) (hms : s.machines.map (·.1) = v.machines)
-    (hok : ∀ sm ∈ s.machines, InstancesOk T sm.1 sm.2) (vals : List Val) (h : embedState L hr s pv = some vals)
+    (hok : ∀ sm ∈ s.machines, InstancesOk T sm.1 sm.2) (vals : List Val) (h : embedState L s pv = some vals)
     (hM : ∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) :
-    (SymState.vars b v.machines.length).decode M L hr T shs = some s := by
+    (SymState.vars b v.machines.length).decode M L T shs = some s := by
   obtain ⟨r, hrec, h⟩ := bind_some.1 h
   obtain ⟨p, hp, h⟩ := bind_some.1 h
   obtain ⟨ws, hws, rfl⟩ := map_some.1 h
@@ -323,9 +320,9 @@ the service's shapes and instances in the step's form, so when its values fit th
 hold it and the symbolic state decodes to it. -/
 theorem decode_reachable (b : Nat) (T : List TypeDecl) {P : List AnySite} (s : State v) (hinv : Step.Inv P s)
     (hkeys : Step.KeysOk T s) :
-    ∃ pv : PendingVal (shapes v P), pv.list = s.pending ∧ ∀ vals, embedState L hr s pv = some vals →
+    ∃ pv : PendingVal (shapes v P), pv.list = s.pending ∧ ∀ vals, embedState L s pv = some vals →
       ∀ M : Model, (∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) →
-        (SymState.vars b v.machines.length).decode M L hr T (shapes v P) = some s := by
+        (SymState.vars b v.machines.length).decode M L T (shapes v P) = some s := by
   obtain ⟨pv, hpv⟩ := exists_pendingVal (shapes v P) s.pending hinv.shaped hinv.nodup
   exact ⟨pv, hpv, fun vals h M hM =>
     decode_embedState b T s pv hpv hinv.machinesOf (fun sm h => (hkeys sm h).2) vals h hM⟩
@@ -335,9 +332,9 @@ machine keys are ordered (what check requires): no assumption about the state is
 theorem decode_run (b : Nat) (T : List TypeDecl) {P : List AnySite} (hv : v.Reach P)
     (hord : ∀ m ∈ v.machines, m.key.ordered T = true) (is : List (Input v)) :
     ∃ pv : PendingVal (shapes v P), pv.list = (run T v (Step.State.init v) is).1.pending ∧
-      ∀ vals, embedState L hr (run T v (Step.State.init v) is).1 pv = some vals →
+      ∀ vals, embedState L (run T v (Step.State.init v) is).1 pv = some vals →
       ∀ M : Model, (∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) →
-        (SymState.vars b v.machines.length).decode M L hr T (shapes v P) = some (run T v (Step.State.init v) is).1 :=
+        (SymState.vars b v.machines.length).decode M L T (shapes v P) = some (run T v (Step.State.init v) is).1 :=
   decode_reachable b T _ (run_inv T hv _ (Step.init_inv hv) is) (run_keys T _ (Step.init_keys T hord) is)
 
 /-- The instance tables' well-formedness holds exactly when they decode. -/
@@ -363,7 +360,7 @@ theorem wf_decode {S : SymState} {T : List TypeDecl} {shs : List (PendingShape v
     (hm : MachinesSorted M L v.machines S.machines)
     (hnow : ∃ n, S.now.denote M = .int n)
     (hfr : ∃ n, S.fresh.denote M = .int n) (hni : ∃ n, S.nextId.denote M = .int n) :
-    Holds M c ↔ (S.decode M L hr T shs).isSome = true := by
+    Holds M c ↔ (S.decode M L T shs).isSome = true := by
   obtain ⟨cr, hcr, h⟩ := bind_some.1 hc
   obtain ⟨cp, hcp, h⟩ := bind_some.1 h
   obtain ⟨cm, hcm, rfl⟩ := map_some.1 h
@@ -396,7 +393,7 @@ theorem sorted_of_decodeMachines (T : List TypeDecl) : (ms : List (MachineV v.re
 
 /-- Every state a model decodes to satisfies the well-formedness, embedded states among them. -/
 theorem wf_of_decodeState {S : SymState} {T : List TypeDecl} {shs : List (PendingShape v.event)} {c : Term}
-    (hc : S.wf L shs = some c) {s : State v} (h : S.decode M L hr T shs = some s) : Holds M c := by
+    (hc : S.wf L shs = some c) {s : State v} (h : S.decode M L T shs = some s) : Holds M c := by
   have h' := h
   obtain ⟨r, hrec, h⟩ := bind_some.1 h
   obtain ⟨now, hnow, h⟩ := bind_some.1 h
@@ -404,39 +401,39 @@ theorem wf_of_decodeState {S : SymState} {T : List TypeDecl} {shs : List (Pendin
   obtain ⟨ni, hni, h⟩ := bind_some.1 h
   obtain ⟨ps, hps, h⟩ := bind_some.1 h
   obtain ⟨sms, hsms, _⟩ := map_some.1 h
-  exact (wf_decode (hr := hr) hc (decode_sorted _ _ r hrec) (sorted_of_decodePending shs hps)
+  exact (wf_decode (T := T) hc (decode_sorted _ _ r hrec) (sorted_of_decodePending shs hps)
     (sorted_of_decodeMachines T _ _ hsms) ⟨now, intOf_eq hnow⟩ ⟨_, natOf_eq hfr⟩ ⟨_, natOf_eq hni⟩).2
     (by rw [h']; rfl)
 
 /-- T3 for a query's input: the decoded caller and input are the values the model's values code. -/
-theorem decode_query {shs : List (PendingShape v.event)} {hc : v.caller.isData = true} {hin hq he}
-    {i : Fin v.queries.length} {sc si : Term} {x : Input v} (h : (SymInput.query i sc si).decode M L shs hc hin hq he = some x) :
+theorem decode_query {shs : List (PendingShape v.event)} {hc : v.caller.isData = true}
+    {i : Fin v.queries.length} {sc si : Term} {x : Input v} (h : (SymInput.query i sc si).decode M L shs hc = some x) :
     ∃ caller input, x = .query i caller input ∧ RelV L v.caller (Ty.up _ hc caller) (sc.denote M) ∧
-      RelV L (v.queries.get i).input (Ty.up _ (hq i) input) (si.denote M) := by
+      RelV L (v.queries.get i).input (Ty.up _ (v.queries.get i).input_data input) (si.denote M) := by
   obtain ⟨c, h1, h⟩ := bind_some.1 h
   obtain ⟨y, h2, rfl⟩ := map_some.1 h
   exact ⟨_, _, rfl, by simpa [Ty.up_down] using decode_rel _ _ _ h1, by simpa [Ty.up_down] using decode_rel _ _ _ h2⟩
 
 /-- T3 for a command's input. -/
-theorem decode_command {shs : List (PendingShape v.event)} {hc : v.caller.isData = true} {hin hq he}
+theorem decode_command {shs : List (PendingShape v.event)} {hc : v.caller.isData = true}
     {i : Fin v.commands.length} {sc si : Term} {x : Input v}
-    (h : (SymInput.command i sc si).decode M L shs hc hin hq he = some x) :
+    (h : (SymInput.command i sc si).decode M L shs hc = some x) :
     ∃ caller input, x = .command i caller input ∧ RelV L v.caller (Ty.up _ hc caller) (sc.denote M) ∧
-      RelV L (v.commands.get i).input (Ty.up _ (hin i) input) (si.denote M) := by
+      RelV L (v.commands.get i).input (Ty.up _ (v.commands.get i).input_data input) (si.denote M) := by
   obtain ⟨c, h1, h⟩ := bind_some.1 h
   obtain ⟨y, h2, rfl⟩ := map_some.1 h
   exact ⟨_, _, rfl, by simpa [Ty.up_down] using decode_rel _ _ _ h1, by simpa [Ty.up_down] using decode_rel _ _ _ h2⟩
 
 /-- T3 for an event's input. -/
-theorem decode_event {shs : List (PendingShape v.event)} {hc : v.caller.isData = true} {hin hq he}
-    {i : Fin v.subscribes.length} {sv : Term} {x : Input v} (h : (SymInput.event i sv).decode M L shs hc hin hq he = some x) :
-    ∃ value, x = .event i value ∧ RelV L (v.subscribes.get i).event (Ty.up _ (he i) value) (sv.denote M) := by
+theorem decode_event {shs : List (PendingShape v.event)} {hc : v.caller.isData = true}
+    {i : Fin v.subscribes.length} {sv : Term} {x : Input v} (h : (SymInput.event i sv).decode M L shs hc = some x) :
+    ∃ value, x = .event i value ∧ RelV L (v.subscribes.get i).event (Ty.up _ (v.subscribes.get i).event_data value) (sv.denote M) := by
   obtain ⟨y, h1, rfl⟩ := map_some.1 h
   exact ⟨_, rfl, by simpa [Ty.up_down] using decode_rel _ _ _ h1⟩
 
 /-- T3 for a clock line's input. -/
-theorem decode_clock {shs : List (PendingShape v.event)} {hc : v.caller.isData = true} {hin hq he} {st : Term}
-    {x : Input v} (h : (SymInput.clock st).decode M L shs hc hin hq he = some x) :
+theorem decode_clock {shs : List (PendingShape v.event)} {hc : v.caller.isData = true} {st : Term}
+    {x : Input v} (h : (SymInput.clock st).decode M L shs hc = some x) :
     ∃ time, x = .clock time ∧ st.denote M = .int time := by
   obtain ⟨n, h1, rfl⟩ := map_some.1 h
   exact ⟨n, rfl, intOf_eq h1⟩
