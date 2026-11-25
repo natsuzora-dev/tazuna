@@ -243,7 +243,7 @@ its counters (`Step.PairCommutes`). -/
 theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v))
     {S : SymState v} {a0 : Step.Acc v} (hR : StateRel M L T (shapes v) S a0.state) (hinv : Step.Inv P a0.state)
-    (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0) {t1 t2 : Term} {x1 x2 : OwnEffectV v.event}
+    (hqk : Step.QueueOk P a0) (hsa : Below Step.Acc.Self a0.state.fresh a0) {t1 t2 : Term} {x1 x2 : OwnEffectV v.event}
     (hx1 : RelV L (.dsl .effect [v.event]) x1.effect (t1.denote M)) (hx2 : RelV L (.dsl .effect [v.event]) x2.effect (t2.denote M))
     (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P)
     {k1 k2 : OwnPlace L v.event} (ht1 : Holds M (.is senv.dE (L.ownCtor v.event k1) t1))
@@ -369,7 +369,7 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       have hiC2 := writes_ids hwC2
       rw [hW2 psA2 hwA2, hW4 psC1 hwC1]
       simp only at hfa hfb hiA2 hiC1 hP1 hP2 ⊢
-      have h0 := hsa PBij.refl fun _ _ => rfl
+      have h0 := (hsa PBij.refl fun _ _ => rfl).1
       have hob := h0.2.2.2.1
       have hpb := hinv.below
       have hfix : ∀ {m k i : Nat}, i < a0.state.nextId → wireSwap a0.state.nextId m k i = i := fun h => by
@@ -652,7 +652,7 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
     (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some a0.state)
     (hbelow : ∀ p ∈ a0.state.pending, p.id < a0.state.nextId) (hsupp : Step.StateSupp a0.state)
-    (hqk : Step.QueueOk P a0) (hsa : Step.SelfAt a0.state.fresh a0)
+    (hqk : Step.QueueOk P a0) (hsa : Below Step.Acc.Self a0.state.fresh a0)
     (hx1 : RelV L (.dsl .effect [v.event]) x1.effect (M.vars (pairVar v)))
     (hx2 : RelV L (.dsl .effect [v.event]) x2.effect (M.vars (pairVar v + 1)))
     (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P)

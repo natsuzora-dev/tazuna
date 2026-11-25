@@ -111,14 +111,15 @@ theorem Acc.Rel.withFresh {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') (k k' : 
 /-- Running `e2` first with its own counter or with the counter it has after `e1` differs by swapping the two
 counters, and the canonical order's wire ids differ from the actual other order's by swapping two blocks, so the two
 orders agree up to renaming the names the two made. -/
-theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fresh a0) {e1 e2 : OwnEffectV v.event}
-    (he1 : OwnAt a0.state.fresh e1) (he2 : OwnAt a0.state.fresh e2) :
+theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : Below Acc.Self a0.state.fresh a0)
+    {e1 e2 : OwnEffectV v.event} (he1 : Below (fun P x => OwnEffectV.Rel P x x) a0.state.fresh e1)
+    (he2 : Below (fun P x => OwnEffectV.Rel P x x) a0.state.fresh e2) :
     Lifted ⟨PBij.swap a0.state.fresh, PBij.refl⟩ a0
         (a0.withFresh (a0.state.fresh + 1)) (runOwn T a0 e2) (runOwn T (a0.withFresh (a0.state.fresh + 1)) e2) ∧
       ∀ c1, runOwn T a0 e2 = .ok c1 →
         Diamond.Agree (Same a0.state.fresh a0.state.nextId) (runOwn T c1 e1) (canonPair T a0 e1 e2) := by
   generalize hf : a0.state.fresh = f at ha he1 he2 ⊢
-  have hA := ha _ (PBij.swap_fixes f)
+  have hA := (ha _ (PBij.swap_fixes f)).1
   have hctr : (PBij.swap f).rel f (f + 1) := by show _ = _; simp [swapFn]
   have hl := runOwn_rel T hv (R := ⟨PBij.swap f, PBij.refl⟩) (a := a0) (a' := a0.withFresh (f + 1))
     (hA.withFresh f (f + 1)) (by rw [hf]; exact hctr) (he2 _ (PBij.swap_fixes f))
@@ -231,23 +232,22 @@ theorem pick_two (a : Acc v) {i j : Nat} (hi : i < a.own.length) (hj : j < a.own
     · show afterErase i j < (a.own.eraseIdx i ++ b0.own).length
       rw [List.length_append]; omega
 
-/-- A step in progress whose names are below its counter, made from the counter `f0` and the next wire id `n0` on:
-what the own cascade from a step with those counters keeps. -/
-def SuppFrom (f0 n0 : Nat) (a : Acc v) : Prop := Supp a ∧ f0 ≤ a.state.fresh ∧ n0 ≤ a.state.nextId
-
 /-- An own step from a step whose names are below its counter sends from the next wire id on. -/
-theorem runOwn_nextId (hv : v.Equivariant) {a : Acc v} (ha : Supp a) {i : Nat} (hi : i < a.own.length) {b : Acc v}
-    (hb : runOwn T { a with own := a.own.eraseIdx i } a.own[i] = .ok b) : a.state.nextId ≤ b.state.nextId := by
-  have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
-  have hs : SelfAt a.state.fresh { a with own := a.own.eraseIdx i } :=
-    SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (List.mem_of_mem_eraseIdx hx)
-  have hl := runOwn_rel T hv (hs PBij.refl fun _ _ => rfl) rfl (ha.2 _ hmem PBij.refl fun _ _ => rfl)
+theorem runOwn_nextId (hv : v.Equivariant) {a : Acc v} (ha : Supp a) {i : Nat}
+    (hi : i < a.own.length) {b : Acc v} (hb : runOwn T { a with own := a.own.eraseIdx i } a.own[i] = .ok b) :
+    a.state.nextId ≤ b.state.nextId := by
+  have hA := ha PBij.refl fun _ _ => rfl
+  have hl := runOwn_rel T hv (hA.sub_own (xs := a.own.eraseIdx i) fun x hx => List.mem_of_mem_eraseIdx hx).1 rfl
+    (hA.2.2 _ (List.getElem_mem hi))
   rw [hb] at hl
   rcases hl with ⟨h, -⟩ | ⟨_, _, _, h1, -, -, -, -, -, -, hl, -⟩
   · exact h.elim
   · cases h1; exact hl
 
-theorem suppFrom_preserved (hv : v.Equivariant) (f0 n0 : Nat) : Diamond.Preserved (ownSys T v) (SuppFrom f0 n0) := by
+/-- The own cascade from a step with the counter `f0` and the next wire id `n0` keeps every name below the counter
+and the two numbers no lower. -/
+theorem suppFrom_preserved (hv : v.Equivariant) (f0 n0 : Nat) : Diamond.Preserved (ownSys T v)
+    fun a => Supp a ∧ f0 ≤ a.state.fresh ∧ n0 ≤ a.state.nextId := by
   intro a i b ⟨ha, hf, hn⟩ hi hb
   refine ⟨ownSys_preserved T hv a i b ha hi hb, ?_, ?_⟩
   · simp only [ownSys, List.getElem?_eq_getElem hi] at hb
@@ -260,16 +260,16 @@ theorem suppFrom_preserved (hv : v.Equivariant) (f0 n0 : Nat) : Diamond.Preserve
 /-- Pairs that commute at the front of the queue, in the canonical form, wherever `J` holds, make any two waiting own
 effects commute in the cascade there, wherever they wait, up to renaming the names made from the cascade's start on. -/
 theorem commutes_of_pairs (hv : v.Equivariant) {J : Acc v → Prop}
-    (hP : ∀ a : Acc v, Supp a → J a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
-      PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j]) (f0 n0 : Nat) :
-    Diamond.Commutes (ownSys T v) (fun a => SuppFrom f0 n0 a ∧ J a) (Same f0 n0) := by
+    (hP : ∀ a : Acc v, Supp a → J a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length),
+      i ≠ j → PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j]) (f0 n0 : Nat) :
+    Diamond.Commutes (ownSys T v)
+      (fun a => (Supp a ∧ f0 ≤ a.state.fresh ∧ n0 ≤ a.state.nextId) ∧ J a) (Same f0 n0) := by
   intro a ⟨⟨ha, hf0, hn0⟩, hJ⟩ i j hi hj hij b hb
   obtain ⟨A1, hA1, hpb, hk⟩ := pick_two T a hi hj hij hb
   have hp := hP a ha hJ i j hi hj hij A1 hA1
-  have hsa : SelfAt a.state.fresh { a with own := dropTwo a.own i j } :=
-    SelfAt.own ha.1 fun x hx => ha.2 x (mem_dropTwo hx)
-  obtain ⟨hl, hac⟩ := actual_canon T hv (a0 := { a with own := dropTwo a.own i j }) hsa
-    (ha.2 _ (List.getElem_mem hi)) (ha.2 _ (List.getElem_mem hj))
+  obtain ⟨hl, hac⟩ := actual_canon T hv (a0 := { a with own := dropTwo a.own i j })
+    (fun P hP => (ha P hP).sub_own fun x hx => mem_dropTwo hx)
+    (fun P hP => (ha P hP).2.2 _ (List.getElem_mem hi)) (fun P hP => (ha P hP).2.2 _ (List.getElem_mem hj))
   refine ⟨fun c hc => ?_, fun e he => ?_⟩
   · obtain ⟨C1, hC1, hpc, hk'⟩ := pick_two T a hj hi (Ne.symm hij) hc
     rw [dropTwo_comm _ (Ne.symm hij)] at hC1
@@ -295,8 +295,8 @@ canonical sense, at every step in progress where `J` holds, which internal steps
 from one where it holds ends as `settle` does, up to renaming the names the cascade made and reading collections as
 multisets, or both fault. -/
 theorem cascade_agrees (hv : v.Equivariant) {J : Acc v → Prop} (hJ : Diamond.Preserved (ownSys T v) J)
-    (hP : ∀ a : Acc v, Supp a → J a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
-      PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j])
+    (hP : ∀ a : Acc v, Supp a → J a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length),
+      i ≠ j → PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j])
     (fuel : Nat) (a : Acc v) (ha : Supp a) (haJ : J a) {r : Except Fault (Acc v)}
     (hr : Diamond.Runs (ownSys T v) fuel a r) :
     Diamond.Agree (Same a.state.fresh a.state.nextId) r (settle T fuel a) :=

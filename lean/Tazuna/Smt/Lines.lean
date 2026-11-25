@@ -32,32 +32,23 @@ theorem CheckedSpec.equivariant (c : CheckedSpec) : ∀ v ∈ c.spec.services, v
 section
 variable {L : Layout} {v : ServiceV}
 
-/-- What a cascade's states keep and a pair question assumes of its state: the counters' invariants, the program's
-sites, instances in the step's form, and every pending request's names below the counter. -/
+/-- What a cascade's states keep and a pair question assumes of its state: names below the counter, the counters'
+invariants, the program's sites, and instances in the step's form. -/
 structure CascadeKeeps (T : List TypeDecl) (P : List AnySite) (a : Step.Acc v) : Prop where
   supp : Step.Supp a
   inv : Step.Inv P a.state
   queue : Step.QueueOk P a
   keys : Step.KeysOk T a.state
-  pend : Step.PendAt a.state.fresh a
 
 theorem keeps_preserved {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite} (hv : v.Equivariant)
     (hr : v.Reach P E) : Diamond.Preserved (Step.ownSys T v) (CascadeKeeps T P) := by
   intro a i b ha hi hb
   have hs := Step.ownSys_preserved T hv a i b ha.supp hi hb
   simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hb
-  have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
   have hq' : Step.QueueOk P { a with own := a.own.eraseIdx i } := fun x hx => ha.queue x (List.mem_of_mem_eraseIdx hx)
-  have ha' : Step.SelfAt (a.state.fresh + 1) { a with own := a.own.eraseIdx i } :=
-    (Step.SelfAt.own (a := a) ha.supp.1 fun x hx => ha.supp.2 x (List.mem_of_mem_eraseIdx hx)).mono (Nat.le_succ _)
-  have hp1 := Step.runOwn_pend T hv (a := { a with own := a.own.eraseIdx i }) ha' (ha.pend.mono (Nat.le_succ _))
-    (fun P hP => ha.supp.2 _ hmem P (hP.mono (Nat.le_succ _))) b hb
-  have hfr : b.state.fresh = a.state.fresh + 1 :=
-    Step.runOwn_fresh T (a := { a with own := a.own.eraseIdx i }) hb
-  rw [← hfr] at hp1
   exact ⟨hs, Step.runOwn_inv T hr { a with own := a.own.eraseIdx i } ha.inv _ hb,
     Step.runOwn_queue T hr { a with own := a.own.eraseIdx i } ha.inv hq' _ hb,
-    Step.runOwn_keys T { a with own := a.own.eraseIdx i } ha.keys _ hb, hp1⟩
+    Step.runOwn_keys T { a with own := a.own.eraseIdx i } ha.keys _ hb⟩
 
 /-- A cascade's step from a step in progress it keeps, whose state fits the slots and whose waiting own effects are
 coded, keeps them coded where the pair lines speak for the step (`coded_step`). -/
@@ -67,7 +58,7 @@ theorem coded_preserved {P : List AnySite} {E : List AnyEffectSite} {T : List Ty
     (hcf : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (ownFits L.count T a.state a.own[i]) p)
     (hb : (Step.ownSys T v).pick a i = .ok b) : QueueCoded L b := by
   simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hb
-  exact coded_step chk senv ha.keys hW ha.inv ha.supp ha.pend ha.queue hc hi hcf hb
+  exact coded_step chk senv ha.keys hW ha.inv ha.supp ha.queue hc hi hcf hb
 
 /-- At a step in progress a cascade keeps, which fits the slots, two of its waiting effects meet a pair question's
 preconditions with the rest of the queue as the step in progress. -/
@@ -76,11 +67,10 @@ theorem pair_pre {T : List TypeDecl} {P : List AnySite} {a : Step.Acc v} (ha : C
     Step.KeysOk T { a with own := Step.dropTwo a.own i j }.state ∧
       Step.StateSupp { a with own := Step.dropTwo a.own i j }.state ∧
       Step.QueueOk P { a with own := Step.dropTwo a.own i j } ∧
-      Step.SelfAt a.state.fresh { a with own := Step.dropTwo a.own i j } ∧
+      Step.Supp { a with own := Step.dropTwo a.own i j } ∧
       a.own[i].effect.Reach P ∧ a.own[j].effect.Reach P :=
-  ⟨ha.keys, Step.StateSupp.of_supp (a := { a with own := Step.dropTwo a.own i j })
-      ⟨ha.supp.1, fun x hx => ha.supp.2 x (Step.mem_dropTwo hx)⟩ ha.pend, fun x hx => ha.queue x (Step.mem_dropTwo hx),
-    Step.SelfAt.own ha.supp.1 fun x hx => ha.supp.2 x (Step.mem_dropTwo hx),
+  ⟨ha.keys, fun P hP => (ha.supp P hP).state, fun x hx => ha.queue x (Step.mem_dropTwo hx),
+    fun P hP => (ha.supp P hP).sub_own fun _ hx => Step.mem_dropTwo hx,
     ha.queue _ (List.getElem_mem hi), ha.queue _ (List.getElem_mem hj)⟩
 
 /-- What `Prove.withinBounds` names for a cascade: every step in progress it reaches in any order runs each of its

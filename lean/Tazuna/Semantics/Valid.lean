@@ -6,9 +6,7 @@ import Tazuna.Semantics.PendingInv
 names from outside (`Input.Valid`): a trace and a scenario can write no others, since a trace names a fresh id only
 after the service made it and an unknown name is an outside id. A state keeps its names below its counter
 (`StateSupp`): its records and instances relate to themselves under each renaming that keeps those counters, and so
-does each pending request on its own. A multiset relation does not give that last part back (two requests may relate
-to each other and not to themselves), so it is carried request by request: a step adds requests only from effects
-that relate to themselves (`start_pend`). -/
+does each pending request on its own, as `Supp` reads a step in progress (`Acc.Self`). -/
 
 namespace Tazuna.Ir
 
@@ -16,206 +14,13 @@ namespace Step
 
 variable (T : List TypeDecl) {v : ServiceV}
 
-/-- A pending request whose names are below `n`. -/
-def PendingAt (n : Nat) (p : Pending v.event) : Prop :=
-  ∀ P : PBij, P.Fixes n → Sender.Rel P p.sender p.sender ∧ RequestV.Rel P p.request p.request
-
-theorem PendingAt.mono {n m : Nat} {p : Pending v.event} (h : PendingAt n p) (hnm : n ≤ m) : PendingAt m p :=
-  fun P hP => h P (hP.mono hnm)
-
-/-- Every pending request of the step in progress has its names below `n`. -/
-def PendAt (n : Nat) (a : Acc v) : Prop := ∀ p ∈ a.state.pending, PendingAt n p
-
-theorem PendAt.mono {n m : Nat} {a : Acc v} (h : PendAt n a) (hnm : n ≤ m) : PendAt m a :=
-  fun p hp => (h p hp).mono hnm
-
-theorem start_pend {n : Nat} : (effs : List (Sender × EffectV v.event)) →
-    (∀ x ∈ effs, ∀ P : PBij, P.Fixes n → Started.Rel P x x) → (a : Acc v) → PendAt n a → {b : Acc v} →
-    start a effs = .ok b → PendAt n b
-  | [], _, a, ha, b, h => by
-    simp only [start, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h
-    subst h; exact ha
-  | (snd, eff) :: effs, he, a, ha, b, h => by
-    simp only [start, List.foldlM_cons] at h
-    have he' : ∀ x ∈ effs, ∀ P : PBij, P.Fixes n → Started.Rel P x x := fun x hx => he x (List.mem_cons_of_mem _ hx)
-    cases eff with
-    | request r =>
-      cases ho : r.ownerIn v.declared with
-      | none => simp only [ho] at h; cases h
-      | some o =>
-        simp only [ho, bind, Except.bind] at h
-        refine start_pend effs he' _ ?_ h
-        intro p hp
-        rcases List.mem_append.1 hp with hp | hp
-        · exact ha p hp
-        · rw [List.mem_singleton] at hp; subst hp
-          intro P hP
-          obtain ⟨hs, hr⟩ := he _ List.mem_cons_self P hP
-          cases hr with
-          | request hr => exact ⟨hs, hr⟩
-    | command name c i j caller value onAnswer =>
-      simp only [bind, Except.bind] at h
-      exact start_pend effs he' { a with own := a.own ++ [.command name c i j caller value onAnswer] } ha h
-    | query name c i o caller value onAnswer =>
-      simp only [bind, Except.bind] at h
-      exact start_pend effs he' { a with own := a.own ++ [.query name c i o caller value onAnswer] } ha h
-
-theorem applyEvents_pend (hv : v.Equivariant) (n : Nat) :
-    (evs : List v.event.den0) → (a : Acc v) → SelfAt n a → PendAt n a →
-    (∀ ev ∈ evs, ∀ P : PBij, P.Fixes n → Ty.rel0 P v.event ev ev) → ∀ b, applyEvents T a evs = .ok b → PendAt n b
-  | [], a, _, hp, _, b, h => by
-    simp only [applyEvents, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h
-    subst h; exact hp
-  | ev :: evs, a, ha, hp, hev, b, h => by
-    unfold applyEvents at h
-    rw [List.foldlM_cons] at h
-    let a2 : Acc v := { a with state := (react T a.state ev).1, events := a.events ++ [ev] }
-    cases hs : start a2 (react T a.state ev).2 with
-    | error e => simp only [a2] at hs; simp [hs, bind, Except.bind] at h
-    | ok a1 =>
-      simp only [a2] at hs
-      simp only [hs, bind, Except.bind] at h
-      have hev1 : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.event ev ev := hev ev List.mem_cons_self
-      have h1 : applyEvents T a [ev] = .ok a1 := by
-        unfold applyEvents
-        simp only [List.foldlM_cons, List.foldlM_nil, hs, bind, Except.bind]
-        rfl
-      have hsa := (applyEvents_self T hv n [ev] a ha (by simpa using hev1) a1 h1).1
-      have hst := react_self T hv (s := a.state) (fun P hP => by
-        exact ⟨(ha P hP).1.1, (ha P hP).1.2.1⟩) hev1
-      have hp1 : PendAt n a1 := start_pend _ hst a2 (fun p hp' => hp p (by simpa [a2, react] using hp')) hs
-      exact applyEvents_pend hv n evs a1 hsa hp1 (fun e he => hev e (List.mem_cons_of_mem _ he)) b h
-
-theorem runCommand_pend (hv : v.Equivariant) {a : Acc v}
-    (ha : SelfAt (a.state.fresh + 1) a) (hp : PendAt (a.state.fresh + 1) a) {x : CommandV v.records v.event v.caller}
-    (hx : x ∈ v.commands) {c : v.caller.den0} (hc : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.caller c c)
-    {i : x.input.den0} (hi : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P x.input i i)
-    {f : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))}
-    (hf : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Fun.Rel P f f) :
-    ∀ b, runCommand T a x c i f = .ok b → PendAt (a.state.fresh + 1) b := by
-  intro b h
-  have hdec : ∀ P : PBij, P.Fixes (a.state.fresh + 1) →
-      Ty.rel0 P (Ty.result (.list v.event) x.rejection) (x.decide.fn (ctx a.state a.state.records c i, ()))
-        (x.decide.fn (ctx a.state a.state.records c i, ())) := fun P hP => by
-    have hA := ha P hP
-    exact ((hv.self P).commands x hx).decide _ _
-      ⟨⟨hA.1.1, hi P hP, hc P hP, rfl, hP _ (Nat.lt_succ_self _), trivial⟩, trivial⟩
-  have ha1 : SelfAt (a.state.fresh + 1) { a with state := { a.state with fresh := a.state.fresh + 1 } } := ha.fresh
-  have hp1 : PendAt (a.state.fresh + 1) { a with state := { a.state with fresh := a.state.fresh + 1 } } := hp
-  unfold runCommand execCommand at h
-  cases had : admit x.callers x.accepts c i with
-  | cons r rs => simp [had, bind, Except.bind] at h
-  | nil =>
-    simp only [had] at h
-    revert hdec h
-    generalize x.decide.fn (ctx a.state a.state.records c i, ()) = d
-    intro hdec h
-    match d, hdec with
-    | .inl (evs, ()), hdec =>
-      simp only [bind, Except.bind] at h
-      cases h3 : applyEvents T { a with state := { a.state with fresh := a.state.fresh + 1 } } evs with
-      | error e => simp [h3] at h
-      | ok a3 =>
-        simp only [h3] at h
-        have hevs : ∀ ev ∈ (show List v.event.den0 from evs), ∀ P : PBij, P.Fixes (a.state.fresh + 1) →
-            Ty.rel0 P v.event ev ev :=
-          fun ev hev P hP => forall2_self (hdec P hP).1 ev hev
-        have hs3 := (applyEvents_self T hv _ evs _ ha1 hevs a3 h3).1
-        have hp3 := applyEvents_pend T hv _ evs _ ha1 hp1 hevs a3 h3
-        split at h
-        · cases h
-        · next r heq =>
-          split at heq
-          · cases heq
-          cases heq
-          simp only at h
-          have hans : ∀ ev ∈ (show List v.event.den0 from f.fn (okNil, ())), ∀ P : PBij,
-              P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.event ev ev :=
-            fun ev hev P hP => forall2_self (hf P hP (okNil, ()) (okNil, ()) ⟨okNil_rel, trivial⟩) ev hev
-          exact applyEvents_pend T hv _ _ _ hs3 hp3 hans b h
-    | .inr (.inl (j, ())), hdec =>
-      simp only [bind, Except.bind] at h
-      have hans : ∀ ev ∈ (show List v.event.den0 from f.fn (.inr (.inl (j, ())), ())), ∀ P : PBij,
-          P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.event ev ev :=
-        fun ev hev P hP => by
-          obtain ⟨hj, -⟩ := hdec P hP
-          exact forall2_self (hf P hP (.inr (.inl (j, ())), ()) (.inr (.inl (j, ())), ()) ⟨⟨hj, trivial⟩, trivial⟩) ev hev
-      exact applyEvents_pend T hv _ _ _ ha1 hp1 hans b h
-
-theorem runQuery_pend (hv : v.Equivariant) {a : Acc v}
-    (ha : SelfAt (a.state.fresh + 1) a) (hp : PendAt (a.state.fresh + 1) a) {x : QueryV v.records v.caller}
-    (hx : x ∈ v.queries) {c : v.caller.den0} (hc : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.caller c c)
-    {i : x.input.den0} (hi : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P x.input i i)
-    {f : Fun (Ty.fn [x.output] (.list v.event))} (hf : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Fun.Rel P f f) :
-    ∀ b, runQuery T a x c i f = .ok b → PendAt (a.state.fresh + 1) b := by
-  intro b h
-  unfold runQuery execQuery at h
-  cases had : admit x.callers x.accepts c i with
-  | cons r rs => simp [had] at h
-  | nil =>
-    simp only [had] at h
-    have hans : ∀ ev ∈ (show List v.event.den0 from f.fn (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())),
-        ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.event ev ev := fun ev hev P hP => by
-      have hA := ha P hP
-      exact forall2_self (hf P hP (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())
-        (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ()) ⟨((hv.self P).queries x hx).resolve _ _
-        ⟨⟨hA.1.1, hi P hP, hc P hP, rfl, trivial⟩, trivial⟩, trivial⟩) ev hev
-    exact applyEvents_pend T hv _ _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ha.fresh hp hans
-      b h
-
-theorem runOwn_pend (hv : v.Equivariant) {a : Acc v}
-    (ha : SelfAt (a.state.fresh + 1) a) (hp : PendAt (a.state.fresh + 1) a) {e : OwnEffectV v.event}
-    (he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → OwnEffectV.Rel P e e) :
-    ∀ b, runOwn T a e = .ok b → PendAt (a.state.fresh + 1) b := by
-  intro b h
-  cases e with
-  | command name c i j caller value onAnswer =>
-    dsimp only [runOwn] at h
-    revert h
-    generalize Ty.same c v.caller = oc
-    generalize hox : ownCommand (v := v) name i j = ox
-    cases oc with
-    | none => intro h; change Except.error _ = _ at h; cases h
-    | some hcp =>
-      cases ox with
-      | none => intro h; change Except.error _ = _ at h; cases h
-      | some x =>
-        obtain ⟨hcp⟩ := hcp
-        have hmem := ownCommand_mem hox
-        obtain ⟨x, hi, hj⟩ := x
-        subst hcp hi hj
-        intro h
-        change runCommand T a x _ _ _ = _ at h
-        exact runCommand_pend T hv ha hp hmem (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).1)
-          (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).2.1) (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).2.2) b h
-  | query name c i o caller value onAnswer =>
-    dsimp only [runOwn] at h
-    revert h
-    generalize Ty.same c v.caller = oc
-    generalize hox : ownQuery (v := v) name i o = ox
-    cases oc with
-    | none => intro h; change Except.error _ = _ at h; cases h
-    | some hcp =>
-      cases ox with
-      | none => intro h; change Except.error _ = _ at h; cases h
-      | some x =>
-        obtain ⟨hcp⟩ := hcp
-        have hmem := ownQuery_mem hox
-        obtain ⟨x, hi, ho⟩ := x
-        subst hcp hi ho
-        intro h
-        change runQuery T a x _ _ _ = _ at h
-        exact runQuery_pend T hv ha hp hmem (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).1)
-          (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).2.1) (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).2.2) b h
-
-/-- The own cascade keeps every name below the counter, pending requests one by one included. -/
+/-- The own cascade keeps every name below the counter. -/
 theorem settle_supp (hv : v.Equivariant) :
-    (fuel : Nat) → (a : Acc v) → Supp a → PendAt a.state.fresh a → ∀ b, settle T fuel a = .ok b →
-      Supp b ∧ PendAt b.state.fresh b
-  | fuel, a, ha, hp, b, h => by
+    (fuel : Nat) → (a : Acc v) → Supp a → ∀ b, settle T fuel a = .ok b → Supp b
+  | fuel, a, ha, b, h => by
     unfold settle at h
     match hown : a.own, fuel, h with
-    | [], _, h => cases h; exact ⟨ha, hp⟩
+    | [], _, h => cases h; exact ha
     | _ :: _, 0, h => cases h
     | e :: rest, f + 1, h =>
       simp only [bind, Except.bind] at h
@@ -226,38 +31,30 @@ theorem settle_supp (hv : v.Equivariant) :
         have hi : 0 < a.own.length := by rw [hown]; simp
         have hpick : (ownSys T v).pick a 0 = .ok a1 := by
           simp only [ownSys, hown, List.getElem?_cons_zero, List.eraseIdx_cons_zero]; exact h1
-        have hs1 := ownSys_preserved T hv a 0 a1 ha hi hpick
-        have hmem : e ∈ a.own := by rw [hown]; exact List.mem_cons_self
-        have ha' : SelfAt (a.state.fresh + 1) { a with own := rest } :=
-          (SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (by rw [hown]; exact List.mem_cons_of_mem _ hx)).mono
-            (Nat.le_succ _)
-        have hp1 := runOwn_pend T hv (a := { a with own := rest }) ha' (hp.mono (Nat.le_succ _))
-          (fun P hP => ha.2 _ hmem P (hP.mono (Nat.le_succ _))) a1 h1
-        have hfr : a1.state.fresh = a.state.fresh + 1 :=
-          runOwn_fresh T (a := { a with own := rest }) h1
-        rw [← hfr] at hp1
-        exact settle_supp hv f a1 hs1 hp1 b h
+        exact settle_supp hv f a1 (ownSys_preserved T hv a 0 a1 ha hi hpick) b h
 
-/-- A state whose names are below its counter: its records and instances relate to themselves under each renaming
-that keeps the counters below it, and so does each pending request on its own. -/
-structure StateSupp (s : State v) : Prop where
-  data : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P v.records s.records s.records ∧ Machines.Rel P s.machines s.machines
-  pending : ∀ p ∈ s.pending, PendingAt s.fresh p
+/-- The state's records and instances related to themselves by `P`, and each pending request on its own. -/
+def State.Self (P : PBij) (s : State v) : Prop :=
+  Ty.rel0 P v.records s.records s.records ∧ Machines.Rel P s.machines s.machines ∧
+    ∀ p ∈ s.pending, Pending.Rel ⟨P, PBij.refl⟩ p p
 
-theorem StateSupp.selfAt {s : State v} (h : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) :
-    SelfAt s.fresh ({ state := s } : Acc v) := fun P hP =>
-  ⟨⟨(h.data P hP).1, (h.data P hP).2,
-    Multi.of_forall2 (forall2_refl_of fun p hp => ⟨rfl, (h.pending p hp P hP).1, rfl, (h.pending p hp P hP).2⟩),
-    rfl, hb, hb⟩, Multi.nil, Multi.nil, nofun, nofun, Multi.nil⟩
+/-- A state whose names are below its counter. -/
+abbrev StateSupp (s : State v) : Prop := Below State.Self s.fresh s
 
-theorem StateSupp.of_supp {a : Acc v} (h : Supp a) (hp : PendAt a.state.fresh a) : StateSupp a.state :=
-  ⟨fun P hP => ⟨(h.1 P hP).1.1, (h.1 P hP).1.2.1⟩, hp⟩
+theorem State.Self.acc {P : PBij} {s : State v} (h : State.Self P s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) :
+    Acc.Self P ({ state := s } : Acc v) :=
+  ⟨⟨⟨h.1, h.2.1, Multi.of_forall2 (forall2_refl_of h.2.2), rfl, hb, hb⟩, Multi.nil, Multi.nil, nofun, nofun, Multi.nil⟩,
+    h.2.2, nofun⟩
+
+theorem Acc.Self.state {P : PBij} {a : Acc v} (h : Acc.Self P a) : State.Self P a.state :=
+  ⟨h.1.1.1, h.1.1.2.1, h.2.1⟩
 
 /-- The same records and instances, a subset of the pending requests, and a counter no lower. -/
 theorem StateSupp.sub {s s' : State v} (h : StateSupp s) (hr : s'.records = s.records)
     (hm : s'.machines = s.machines) (hp : ∀ p ∈ s'.pending, p ∈ s.pending) (hf : s.fresh ≤ s'.fresh) :
-    StateSupp s' :=
-  ⟨fun P hP => by rw [hr, hm]; exact h.data P (hP.mono hf), fun p hp' => (h.pending p (hp p hp')).mono hf⟩
+    StateSupp s' := fun P hP => by
+  obtain ⟨h1, h2, h3⟩ := h P (hP.mono hf)
+  exact ⟨hr ▸ h1, hm ▸ h2, fun p hp' => h3 p (hp p hp')⟩
 
 /-- Every id an input carries is one the service made before (a counter below its own) or a name from outside. A
 query writes nothing, so it asks nothing. -/
@@ -269,12 +66,6 @@ def _root_.Tazuna.Ir.Input.Valid (s : State v) : Input v → Prop
   | .event i value => ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P (v.subscribes.get i).event value value
   | .clock _ => True
 
-/-- What a run of internal steps from `a` starts at, read as `Supp`: the step in progress whose names are below its
-counter, with every waiting own effect's. -/
-theorem supp_of {n : Nat} {a : Acc v} (hs : SelfAt n a) (ho : ∀ y ∈ a.own, OwnAt n y) (hf : a.state.fresh = n) :
-    Supp a := by
-  subst hf; exact ⟨hs.drop, ho⟩
-
 theorem RequestV.Rel.onAnswer_self {R : PBij} {e : Ty} {x : RequestV e} (h : RequestV.Rel R x x) :
     Fun.Rel R x.onAnswer x.onAnswer := by
   obtain ⟨name, input, output, rejection, value, holds, onAnswer⟩ := x
@@ -284,19 +75,17 @@ theorem RequestV.Rel.onAnswer_self {R : PBij} {e : Ty} {x : RequestV e} (h : Req
 theorem command_begin (hv : v.Equivariant) {s : State v} (hs : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId)
     {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) {c : v.caller.den0} {i : x.input.den0}
     (hc : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P v.caller c c) (hi : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P x.input i i)
-    {a : Acc v} (h : execCommand T { state := s } x c i = .ok (.accepted a)) : Supp a ∧ PendAt a.state.fresh a := by
-  have ha0 := hs.selfAt hb
+    {a : Acc v} (h : execCommand T { state := s } x c i = .ok (.accepted a)) : Supp a := by
+  have ha0 : Below Acc.Self s.fresh ({ state := s } : Acc v) := fun P hP => (hs P hP).acc hb
   have hdec : ∀ P : PBij, P.Fixes (s.fresh + 1) →
       Ty.rel0 P (Ty.result (.list v.event) x.rejection) (x.decide.fn (ctx s s.records c i, ()))
         (x.decide.fn (ctx s s.records c i, ())) := fun P hP => by
     have hA := ha0 P (hP.mono (Nat.le_succ _))
     exact ((hv.self P).commands x hx).decide _ _
-      ⟨⟨hA.1.1, hi P (hP.mono (Nat.le_succ _)), hc P (hP.mono (Nat.le_succ _)), rfl, hP _ (Nat.lt_succ_self _),
+      ⟨⟨hA.1.1.1, hi P (hP.mono (Nat.le_succ _)), hc P (hP.mono (Nat.le_succ _)), rfl, hP _ (Nat.lt_succ_self _),
         trivial⟩, trivial⟩
-  have ha1 : SelfAt (s.fresh + 1) ({ state := { s with fresh := s.fresh + 1 } } : Acc v) :=
-    (ha0.mono (Nat.le_succ _)).fresh
-  have hp1 : PendAt (s.fresh + 1) ({ state := { s with fresh := s.fresh + 1 } } : Acc v) :=
-    fun p hp => (hs.pending p hp).mono (Nat.le_succ _)
+  have ha1 : Below Acc.Self (s.fresh + 1) ({ state := { s with fresh := s.fresh + 1 } } : Acc v) :=
+    below_fresh (ha0.mono (Nat.le_succ _))
   unfold execCommand at h
   cases had : admit x.callers x.accepts c i with
   | cons r rs => simp [had] at h
@@ -318,10 +107,8 @@ theorem command_begin (hv : v.Equivariant) {s : State v} (hs : StateSupp s) (hb 
           have hevs : ∀ ev ∈ (show List v.event.den0 from evs), ∀ P : PBij, P.Fixes (s.fresh + 1) →
               Ty.rel0 P v.event ev ev :=
             fun ev hev P hP => forall2_self (hdec P hP).1 ev hev
-          obtain ⟨hs3, ho3⟩ := applyEvents_self T hv _ evs _ ha1 hevs a h3
           have hfr : a.state.fresh = s.fresh + 1 := applyEvents_fresh T _ _ h3
-          refine ⟨supp_of hs3 (fun y hy => (ho3 y hy).resolve_left nofun) hfr, ?_⟩
-          rw [hfr]; exact applyEvents_pend T hv _ evs _ ha1 hp1 hevs a h3
+          rw [Supp, hfr]; exact applyEvents_self T hv _ evs _ ha1 hevs a h3
     | .inr (.inl (j, ())), _ => cases h
 
 /-- An answer's step in progress, before its cascade, has its names below its counter. -/
@@ -330,35 +117,32 @@ theorem answer_begin (hv : v.Equivariant) {s : State v} (hs : StateSupp s) (hb :
     (hval : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P t value value)
     (h : t = answerTy p.request.output p.request.rejection) {a : Acc v}
     (happ : applyEvents T { state := { s with pending := s.pending.filter (·.id != to) } }
-      (p.request.onAnswer.fn (h ▸ value, ())) = .ok a) : Supp a ∧ PendAt a.state.fresh a := by
+      (p.request.onAnswer.fn (h ▸ value, ())) = .ok a) : Supp a := by
   subst h
   let s' : State v := { s with pending := s.pending.filter (·.id != to) }
   have hs' : StateSupp s' := hs.sub rfl rfl (fun q hq => (List.mem_filter.1 hq).1) (Nat.le_refl _)
-  have ha0 : SelfAt s.fresh ({ state := s' } : Acc v) :=
-    hs'.selfAt fun q hq => hb q (List.mem_filter.1 hq).1
+  have ha0 : Below Acc.Self s.fresh ({ state := s' } : Acc v) := fun P hP =>
+    (hs' P hP).acc fun q hq => hb q (List.mem_filter.1 hq).1
   have hevs : ∀ ev ∈ (show List v.event.den0 from p.request.onAnswer.fn (value, ())), ∀ P : PBij, P.Fixes s.fresh →
       Ty.rel0 P v.event ev ev := fun ev hev P hP =>
-    forall2_self (RequestV.Rel.onAnswer_self (hs.pending p hp P hP).2 (value, ()) (value, ()) ⟨hval P hP, trivial⟩) ev hev
-  obtain ⟨hs3, ho3⟩ := applyEvents_self T hv _ _ _ ha0 hevs a happ
+    forall2_self (RequestV.Rel.onAnswer_self ((hs P hP).2.2 p hp).2.2.2 (value, ()) (value, ()) ⟨hval P hP, trivial⟩)
+      ev hev
   have hfr : a.state.fresh = s.fresh := applyEvents_fresh T _ _ happ
-  refine ⟨supp_of hs3 (fun y hy => (ho3 y hy).resolve_left nofun) hfr, ?_⟩
-  rw [hfr]; exact applyEvents_pend T hv _ _ _ ha0 hs'.pending hevs a happ
+  rw [Supp, hfr]; exact applyEvents_self T hv _ _ _ ha0 hevs a happ
 
 /-- An event's step in progress, before its cascade, has its names below its counter. -/
 theorem event_begin (hv : v.Equivariant) {s : State v} (hs : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId)
     (i : Fin v.subscribes.length) {value : (v.subscribes.get i).event.den0}
     (hval : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P (v.subscribes.get i).event value value) {a : Acc v}
     (happ : applyEvents T { state := s } [(v.subscribes.get i).wrap.fn (value, ())] = .ok a) :
-    Supp a ∧ PendAt a.state.fresh a := by
-  have ha0 := hs.selfAt hb
+    Supp a := by
+  have ha0 : Below Acc.Self s.fresh ({ state := s } : Acc v) := fun P hP => (hs P hP).acc hb
   have hevs : ∀ ev ∈ [(v.subscribes.get i).wrap.fn (value, ())], ∀ P : PBij, P.Fixes s.fresh →
       Ty.rel0 P v.event ev ev := fun ev hev P hP => by
     rw [List.mem_singleton] at hev; subst hev
     exact (hv.self P).subscribes _ (List.get_mem _ _) (value, ()) (value, ()) ⟨hval P hP, trivial⟩
-  obtain ⟨hs3, ho3⟩ := applyEvents_self T hv _ _ _ ha0 hevs a happ
   have hfr : a.state.fresh = s.fresh := applyEvents_fresh T _ _ happ
-  refine ⟨supp_of hs3 (fun y hy => (ho3 y hy).resolve_left nofun) hfr, ?_⟩
-  rw [hfr]; exact applyEvents_pend T hv _ _ _ ha0 hs.pending hevs a happ
+  rw [Supp, hfr]; exact applyEvents_self T hv _ _ _ ha0 hevs a happ
 
 section Fire
 variable {r e : Ty} {n : Nat}
@@ -487,27 +271,19 @@ end Fire
 theorem clock_begin (hv : v.Equivariant) {s : State v}
     (hs : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) (time : Int) {fuel : Nat} {s' : State v}
     {effs : List (Sender × EffectV v.event)} (hf : fire { s with now := time } fuel = some (s', effs)) {a : Acc v}
-    (h : start { state := s' } effs = .ok a) : Supp a ∧ PendAt a.state.fresh a := by
+    (h : start { state := s' } effs = .ok a) : Supp a := by
   obtain ⟨hm', he, hr, hp, hfr, hn⟩ := fire_self (n := s.fresh) (fun m hm => ⟨hv.machines m hm, hv.states m hm⟩) fuel
-    { s with now := time } (fun P hP => (hs.data P hP).1) (fun P hP => (hs.data P hP).2) hf
-  have hs' : StateSupp s' := ⟨fun P hP => by
-      rw [hfr] at hP
-      exact ⟨by rw [hr]; exact (hs.data P hP).1, hm' P hP⟩,
-    fun p hp' => by rw [hfr]; exact hs.pending p (by rw [hp] at hp'; exact hp')⟩
-  have ha0 := hs'.selfAt (fun p hp' => by rw [hn]; exact hb p (by rw [hp] at hp'; exact hp'))
+    { s with now := time } (fun P hP => (hs P hP).1) (fun P hP => (hs P hP).2.1) hf
   have hfa : a.state.fresh = s'.fresh := start_fresh _ _ h
-  have hsa : SelfAt s'.fresh a := fun P hP => by
-    exact start_self (ha0 P hP) (fun x hx => he x hx P (by rw [hfr] at hP; exact hP)) h
-  refine ⟨supp_of hsa (fun y hy => ?_) hfa, ?_⟩
-  · rcases start_own_mem _ _ h y hy with hy | ⟨snd, hy⟩
-    · exact nomatch hy
-    · exact fun P hP => OwnEffectV.rel_iff.2 (he _ hy P (by rw [hfr] at hP; exact hP)).2
-  · rw [hfa]
-    exact start_pend effs (fun x hx P hP => he x hx P (by rw [hfr] at hP; exact hP)) ({ state := s' } : Acc v)
-      hs'.pending h
+  rw [Supp, hfa]
+  intro P hP
+  rw [hfr] at hP
+  refine start_self (State.Self.acc ⟨by rw [hr]; exact (hs P hP).1, hm' P (hfr ▸ hP), fun p hp' => (hs P hP).2.2 p
+    (by rw [hp] at hp'; exact hp')⟩ fun p hp' => by rw [hn]; exact hb p (by rw [hp] at hp'; exact hp'))
+    (fun x hx => he x hx P hP) h
 
 theorem finish_supp (hv : v.Equivariant) {s0 : State v} (hs0 : StateSupp s0) (x : Except Fault (Acc v))
-    (hx : ∀ a, x = .ok a → Supp a ∧ PendAt a.state.fresh a) (o : Outcome) : StateSupp (finish T s0 x o).state := by
+    (hx : ∀ a, x = .ok a → Supp a) (o : Outcome) : StateSupp (finish T s0 x o).state := by
   unfold finish
   split
   · exact hs0
@@ -517,9 +293,7 @@ theorem finish_supp (hv : v.Equivariant) {s0 : State v} (hs0 : StateSupp s0) (x 
     · cases x with
       | error e => cases hb
       | ok a =>
-        obtain ⟨ha, hp⟩ := hx a rfl
-        obtain ⟨hb1, hb2⟩ := settle_supp T hv _ a ha hp b hb
-        exact StateSupp.of_supp hb1 hb2
+        exact fun P hP => (settle_supp T hv _ a (hx a rfl) b hb P hP).state
 
 /-- A step on a valid input keeps the state's names below its counter. -/
 theorem step_supp (hv : v.Equivariant) {s : State v}
@@ -590,7 +364,7 @@ theorem machines_empty (P : PBij) : (ms : List (MachineV v.records v.event)) →
   | _ :: ms => ⟨⟨Multi.nil, .nil, .nil⟩, machines_empty P ms⟩
 
 theorem init_supp (hv : v.Equivariant) : StateSupp (State.init v) :=
-  ⟨fun P _ => ⟨(hv.self P).init, machines_empty P v.machines⟩, fun _ h => nomatch h⟩
+  fun P _ => ⟨(hv.self P).init, machines_empty P v.machines, fun _ h => nomatch h⟩
 
 /-- Every state a run on valid inputs reaches from a state whose names are below its counter keeps them so. -/
 theorem run_supp (hv : v.Equivariant) {P : List AnySite}
@@ -601,10 +375,10 @@ theorem run_supp (hv : v.Equivariant) {P : List AnySite}
     run_supp hv hr _ (step_inv T hr s hi x) (step_supp T hv hs hi.below x hx) xs hxs
 
 /-- Every cascade a step on a valid input starts, from a state whose names are below its counter, is one T5 speaks
-about, and its pending requests' names are below its counter. -/
+about. -/
 theorem begins_supp (hv : v.Equivariant) {s : State v}
     (hs : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) {x : Input v} (hx : x.Valid s) {a : Acc v}
-    (h : Begins T s x a) : Supp a ∧ PendAt a.state.fresh a := by
+    (h : Begins T s x a) : Supp a := by
   cases h with
   | command i caller input a h =>
     exact command_begin T hv hs hb (List.get_mem _ _) (fun P hP => (hx P hP).1) (fun P hP => (hx P hP).2) h

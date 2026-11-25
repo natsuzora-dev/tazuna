@@ -327,7 +327,7 @@ theorem stateSupp_names {M : Model} {L : Layout} {T : List TypeDecl} {v : Servic
     {c : Term} (h : namesStateT L S = some c) : Holds M c := by
   obtain ⟨c1, h1, h⟩ := Option.bind_eq_some_iff.1 h
   obtain ⟨c2, h2, rfl⟩ := Option.map_eq_some_iff.1 h
-  obtain ⟨hr, hm⟩ := hs.data (PBij.below s.fresh) (PBij.below_fixes _)
+  obtain ⟨hr, hm, -⟩ := hs (PBij.below s.fresh) (PBij.below_fixes _)
   rw [holds_and]
   exact ⟨(names_rel0 hS.fresh hrc h1 hS.records).2 hr, machines_names hS.fresh _ hms _ _ hS.machines hm h2⟩
 

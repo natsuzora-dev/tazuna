@@ -159,7 +159,7 @@ theorem pairs_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E 
     (hall : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (PairFits L.count T a0 x1 x2) p)
     (hkeys : Step.KeysOk T a0.state) (hW : Within L (shapes v) a0.state)
     (hinv : Step.Inv P a0.state) (hsupp : Step.StateSupp a0.state) (hqk : Step.QueueOk P a0)
-    (hsa : Step.SelfAt a0.state.fresh a0) (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1.effect z)
+    (hsa : Step.Supp a0) (he1 : ∃ z, RelV L (.dsl .effect [v.event]) x1.effect z)
     (he2 : ∃ z, RelV L (.dsl .effect [v.event]) x2.effect z)
     (hreach1 : x1.effect.Reach P) (hreach2 : x2.effect.Reach P) :
     Step.PairCommutes T a0 x1 x2 := by

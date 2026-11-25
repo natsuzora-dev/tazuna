@@ -78,13 +78,13 @@ theorem queued_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
 /-- A cascade's step keeps every waiting own effect coded where the pair lines speak for it (`queued_at`). -/
 theorem coded_step {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
     {a : Step.Acc v} (hkeys : Step.KeysOk T a.state) (hW : Within L (shapes v) a.state) (hinv : Step.Inv P a.state)
-    (hsupp : Step.Supp a) (hpend : Step.PendAt a.state.fresh a) (hqk : Step.QueueOk P a)
+    (hsupp : Step.Supp a) (hqk : Step.QueueOk P a)
     (hc : QueueCoded L a) {i : Nat} (hi : i < a.own.length)
     (hcf : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (ownFits L.count T a.state a.own[i]) p)
     {d : Step.Acc v} (hd : Step.runOwn T { a with own := a.own.eraseIdx i } a.own[i] = .ok d) : QueueCoded L d := by
   have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
   have hq' : Step.QueueOk P { a with own := a.own.eraseIdx i } := fun x hx => hqk x (List.mem_of_mem_eraseIdx hx)
-  have hs : Step.StateSupp a.state := Step.StateSupp.of_supp hsupp hpend
+  have hs : Step.StateSupp a.state := fun P hP => (hsupp P hP).state
   obtain ⟨os, hos, hcod⟩ := queued_at chk senv (a0 := { a with own := a.own.eraseIdx i }) hkeys hW hinv hs hq'
     (hc _ hmem) (hqk _ hmem) hcf d hd
   intro y hy

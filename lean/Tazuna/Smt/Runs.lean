@@ -22,9 +22,9 @@ theorem begins_keeps (c : CheckedSpec) (hv : v ∈ c.spec.services) {s : State v
     (hs : Step.StateSupp s) (hk : Step.KeysOk c.T s) {x : Input v} (hx : x.Valid s) {a : Step.Acc v}
     (h : Step.Begins c.T s x a) : CascadeKeeps c.T c.P a := by
   have hr := (c.checked v hv).reach
-  obtain ⟨hsupp, hpend⟩ := Step.begins_supp c.T (c.equivariant v hv) hs hinv.below hx h
+  have hsupp := Step.begins_supp c.T (c.equivariant v hv) hs hinv.below hx h
   have hnil : ∀ s' : State v, Step.QueueOk c.P ({ state := s' } : Step.Acc v) := fun _ x hx => nomatch hx
-  refine ⟨hsupp, ?_, ?_, ?_, hpend⟩
+  refine ⟨hsupp, ?_, ?_, ?_⟩
   · cases h with
     | command i caller input a h => exact Step.execCommand_inv c.T hr _ hinv _ _ _ h a (.inl rfl)
     | answer to value p h a hp _ happ =>
