@@ -213,10 +213,8 @@ theorem step_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
     obtain ⟨hcx, hca, hci⟩ : Holds M cx ∧ Holds M ca ∧ Holds M ci := by
       rw [holds_andT, holds_andT] at hcodes; exact hcodes
     have hks' := callersOf_ok hd.caller hks
-    exact ⟨command_exact hP hvx hshs hor hcd hqd hqout s hinv i caller input hd hcc hcx happ hca hinvc hci hks' hE hPE hopt
-        hrec hnow hfresh hnid hpend hms hsc hsi hcmd hcs,
-      fun hcond => command_step hP hvx hshs hor hcd hqd hqout s hinv i caller input hd hcc hcx happ hca hinvc hci hks' hE hPE
-        hopt hrec hnow hfresh hnid hpend hms hsc hsi hcmd hcond hcs⟩
+    exact command_encode hP hvx hshs hor hcd hqd hqout s hinv i caller input hd hcc hcx happ hca hinvc hci hks' hE hPE hopt
+      hrec hnow hfresh hnid hpend hms hsc hsi hcmd hcs
   | query i sc si =>
     obtain ⟨caller, input, rfl, hsc, hsi⟩ := decode_query hx
     have hd := hqd _ (List.get_mem _ i)
@@ -238,11 +236,9 @@ theorem step_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
     have hx' : decodeAnswer M L (answerTy sh.output sh.rejection) toT valT = some x := by
       simpa [SymInput.decode, hk] using hx
     obtain ⟨hty, to, value, rfl, hto, hval⟩ := decode_answer hx'
-    have ex := answer_exact hP hvx hshs hor hcd hqd hqout s hinv hrd hk j to value happ hca hinvc hci hE hPE hopt hrec
+    have ex := answer_encode hP hvx hshs hor hcd hqd hqout s hinv hrd hk j to value happ hca hinvc hci hE hPE hopt hrec
       hpend hto hnow hfresh hnid hms hty hval hans hcs
-    exact ⟨by rw [ex]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond =>
-      answer_step hP hvx hshs hor hcd hqd hqout s hinv hrd hk j to value happ hca hinvc hci hE hPE hopt hrec hpend hto hnow
-        hfresh hnid hms hty hval hans hcond hcs hhit⟩
+    exact ⟨by rw [ex.1]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond => ex.2 hcond hhit⟩
   | unmatched ty toT valT =>
     obtain ⟨u, hu, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
@@ -267,10 +263,8 @@ theorem step_encode {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
     cases pure_ok.1 henc
     refine ⟨apply_inv_exact happ hinvc, fun hcodes hcs _ => ?_⟩
     obtain ⟨hca, hci⟩ := (holds_andT _ _).1 hcodes
-    exact ⟨clock_exact hP hvx hshs hor hcd hqd hqout s hinv time hrd hed happ hca hinvc hci hrec hnow hst hfresh hnid
-        hpend hms hE hPE hopt hcl hcs,
-      fun hcond => clock_step hP hvx hshs hor hcd hqd hqout s hinv time hrd hed happ hca hinvc hci hrec hnow hst hfresh hnid
-        hpend hms hE hPE hopt hcl hcond hcs⟩
+    exact clock_encode hP hvx hshs hor hcd hqd hqout s hinv time hrd hed happ hca hinvc hci hrec hnow hst hfresh hnid
+      hpend hms hE hPE hopt hcl hcs
 
 end
 
