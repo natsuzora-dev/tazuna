@@ -278,6 +278,7 @@ theorem answer_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
+    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
     (s : State v) (hsinv : Step.Inv P s) (hrd : v.records.isData = true)
     {k : Nat} {sh : PendingShape v.event} (hk : shs[k]? = some sh) (j : Nat)
     (to : Nat) (value : (answerTy sh.output sh.rejection).den0)
@@ -515,8 +516,8 @@ theorem answer_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
   have hinv' : Step.Inv P s' := hsinv.filterPending _
   have hdone := events_done (T := T) hP hvx hinv'.machinesReach hshs hor hrd hed hap happ hE hPE hopt
     { state := s' } rfl hnow hSl hswl hhl hrec hms hnid hfresh h12 hc4
-  exact finish_rel hP hvx hinv'.machinesReach hshs hor hcd hqd hrd hed happ0 hca hinv0 hci hE hPE hopt s .accepted
-    { state := s' } rfl hinv' hnow hrem hdone (applyEvents_ok hvx _ rfl hinv' _) h12' hcf hcfx
+  exact (finish_encode hP hvx hinv'.machinesReach hshs hor hcd hqd hqout hrd hed happ0 hca hinv0 hci hE hPE hopt s
+    .accepted { state := s' } rfl hinv' hnow hrem hdone (applyEvents_ok hvx _ rfl hinv' _) h12' hcfx).2 hcf
 
 end
 
@@ -826,9 +827,10 @@ theorem answer_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
       events_exact (fun m hm => (hor m hm).1) hrd hed happ hca _ svl hSl hswl _ hhl s' hnow hrec hms h12
     have hinv' : Step.Inv P s' := hsinv.filterPending _
     have ef : Holds M c4 → (Holds M cf ↔ finishFits L.count T (sh0 :: rest) (Step.applyEvents T { state := s' } evL)) :=
-      fun hc4 => finish_exact hP hvx hvm hshs hor hcd hqd hqout hrd hed happ hca hinv hci hE hPE hopt { state := s' } rfl
-        hnow hrem (events_done (T := T) hP hvx hvm hshs hor hrd hed hap happ' hE hPE hopt { state := s' } rfl hnow hSl
-          hswl hhl hrec hms hnid hfresh h12 hc4) (applyEvents_ok hvx _ rfl hinv' _) h12' hcfx
+      fun hc4 => (finish_encode hP hvx hvm hshs hor hcd hqd hqout hrd hed happ hca hinv hci hE hPE hopt s .accepted
+        { state := s' } rfl hinv' hnow hrem (events_done (T := T) hP hvx hvm hshs hor hrd hed hap happ' hE hPE hopt
+          { state := s' } rfl hnow hSl hswl hhl hrec hms hnid hfresh h12 hc4) (applyEvents_ok hvx _ rfl hinv' _) h12'
+        hcfx).1
     constructor
     · rintro ⟨hc4, hcf⟩
       exact ⟨e4.1 hc4, (ef hc4).1 hcf⟩

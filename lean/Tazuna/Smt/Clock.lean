@@ -779,6 +779,7 @@ theorem clock_step {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
+    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
     (s : State v) (hinv : Step.Inv P s) (time : Int) (hrd : v.records.isData = true) (hed : v.event.isData = true)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
@@ -837,10 +838,10 @@ theorem clock_step {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
       rw [hr]
       obtain ⟨hinv', hreach, -⟩ := Step.fire_inv s0 hinv0 _ hfire
       have hdone := rounds_done (shs := shs) hrd s time hs' hrec hfresh hmach hnT hnews hq hown
-      exact finish_rel hP hvx hinv0.machinesReach hshs hor hcd hqd hrd hed happ hca hci hcinv hE hPE hopt s .accepted
-        { state := s0 } rfl hinv0 hst hpend hdone
+      exact (finish_encode hP hvx hinv0.machinesReach hshs hor hcd hqd hqout hrd hed happ hca hci hcinv hE hPE hopt s
+        .accepted { state := s0 } rfl hinv0 hst hpend hdone
         (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach (Step.fire_inv s0 hinv0 _ hfire).2.2 h,
-          Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hrest hcfx
+          Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).2 hrest
   · have hlt : time < s.now := by omega
     simp only [ht, decide_false, Val.toBool, Bool.false_eq_true, ite_false, r, step, hlt, ite_true]
 
@@ -1056,10 +1057,10 @@ theorem clock_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
         simp only [Val.toBool, Bool.false_eq_true, ite_false]
         obtain ⟨hinv', hreach, hfrom⟩ := Step.fire_inv s0 hinv0 _ hfire
         have hdone := rounds_done (shs := shs) hrd s time hs' hrec hfresh hmach hnT hnews hq hown
-        rw [finish_exact hP hvx hinv0.machinesReach hshs hor hcd hqd hqout hrd hed happ hca hci hcinv hE hPE hopt
-          { state := s0 } rfl hst hpend hdone
+        rw [(finish_encode hP hvx hinv0.machinesReach hshs hor hcd hqd hqout hrd hed happ hca hci hcinv hE hPE hopt s
+          .accepted { state := s0 } rfl hinv0 hst hpend hdone
           (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach hfrom h,
-            Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx]
+            Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).1]
         constructor
         · intro h s'' effs' heq
           simp only [Option.some.injEq, Prod.mk.injEq] at heq

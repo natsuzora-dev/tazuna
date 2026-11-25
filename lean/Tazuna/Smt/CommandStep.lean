@@ -62,6 +62,7 @@ theorem command_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
     (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
+    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
     (s : State v) (hinv : Step.Inv P s)
     (i : Fin v.commands.length) (caller : v.caller.den0) (input : (v.commands.get i).input.den0)
     (hd : CommandData (v.commands.get i)) {cc : CommandCode (v.commands.get i)} {cx : Term}
@@ -207,9 +208,9 @@ theorem command_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx
           have := hc5; simp only [Holds, Term.denote, hallE, Val.toBool, ite_true] at this
           exact this
         rw [happly] at hdone
-        exact finish_rel hP hvx hinv1.machinesReach hshs hor hcd hqd hd.records hd.event happ0 hca hinv0 hci hE hPE hopt
-          s1 .accepted { state := s1 } rfl hinv1 hnow hpend hdone
-          (fun a1 h => applyEvents_ok hvx _ rfl hinv1 events a1 (happly.trans h)) h16 hcf hcfx
+        exact (finish_encode hP hvx hinv1.machinesReach hshs hor hcd hqd hqout hd.records hd.event happ0 hca hinv0 hci hE
+          hPE hopt s1 .accepted { state := s1 } rfl hinv1 hnow hpend hdone
+          (fun a1 h => applyEvents_ok hvx _ rfl hinv1 events a1 (happly.trans h)) h16 hcfx).2 hcf
 
 end
 
@@ -390,8 +391,9 @@ theorem command_exact {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hv
               simp [hb]; simpa using this
           rw [holds_ite_tt hallE, decide_eq_true_iff]
           refine imp_congr_right fun _ => ?_
-          exact finish_exact hP hvx hinv1.machinesReach hshs hor hcd hqd hqout hd.records hd.event happ hca hinv hci hE hPE
-            hopt { state := s1 } rfl hnow hpend (hdone hc3) (applyEvents_ok hvx _ rfl hinv1 events) h16 hcfx
+          exact (finish_encode hP hvx hinv1.machinesReach hshs hor hcd hqd hqout hd.records hd.event happ hca hinv hci hE
+            hPE hopt s1 .accepted { state := s1 } rfl hinv1 hnow hpend (hdone hc3) (applyEvents_ok hvx _ rfl hinv1 events)
+            h16 hcfx).1
         rw [holds_andT, holds_andT]
         constructor
         · rintro ⟨hc3, hc4, hc5⟩
