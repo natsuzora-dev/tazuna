@@ -40,9 +40,11 @@ structure Script where
   shows : List Nat := []
 
 /-- The assertions with shared terms as references, and the bodies of the definitions with their sorts, in order.
-`none` when a body has no sort, which the encoding never builds. -/
+`none` when a body has no sort, which the encoding never builds. Lean's runtime first merges equal subterms into one
+object (`shareCommon'`, hash-consing; it is the identity on values), so two equal shared terms are one object and
+`Term.same` answers at once, wherever and however often the encoder built them. -/
 def Script.shared (s : Script) : Option (List Term × List (Term × Srt)) := do
-  let (asserts, D) := Term.extracts s.asserts {}
+  let (asserts, D) := Term.extracts (ShareCommon.shareCommon' s.asserts) {}
   let sorts ← D.entries.foldlM (fun acc (_, b) => do pure (acc.push (← b.srt? s.datatypes s.vars acc))) #[]
   pure (asserts, (D.entries.toList.map (·.2)).zip sorts.toList)
 

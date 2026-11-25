@@ -2464,6 +2464,30 @@ def answerMCheck (solver : Solver) : IO Bool := do
       | _, _, _ => fail "the model does not decode"
     | a => fail s!"{repr a}"
 
+/-- A chain of `depth` levels where each level builds the same shared term twice as two objects over the level
+below: what an encoder does when it shares a term at each use instead of where it is built. Its script has one
+definition per level, and printing it must not compare the copies as trees (exponential in depth). -/
+def reshared (depth : Nat) : Script :=
+  let level (t : Term) : Term := match (List.replicate 2 t).map (fun t => (Term.or t (.not t)).share) with
+    | [a, b] => .and a b
+    | _ => t
+  { vars := [.bool], asserts := [(List.range depth).foldl (fun t _ => level t) (.var 0)] }
+
+/-- Prints `reshared depth` within a second, with one definition per level. On a timeout the process exits at once:
+the printing still runs and might not end. -/
+def reshareCheck (depth : Nat) : IO Bool := do
+  let task := Task.spawn (prio := .dedicated) fun _ => match (reshared depth).shared with
+    | some (_, ds) => ds.length
+    | none => 0
+  let start ← IO.monoMsNow
+  while !(← IO.hasFinished task) && (← IO.monoMsNow) - start < 1000 do IO.sleep 10
+  unless ← IO.hasFinished task do
+    IO.println "smt-check: re-shared chain: printing took over 1000 ms (shared copies compared as trees?)"
+    IO.Process.exit 1
+  if task.get != depth then
+    IO.println s!"smt-check: re-shared chain: {task.get} definitions, want {depth}"; return false
+  return true
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -2541,6 +2565,7 @@ def check (z3 : String) : IO Bool := do
   unless ← eventsCheck solver do ok := false
   unless ← twiceCheck solver do ok := false
   unless ← answerMCheck solver do ok := false
+  unless ← reshareCheck 40 do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
@@ -2569,6 +2594,7 @@ def sizes : IO UInt32 := do
   row "command" fun k => (·.1) <$> twiceScriptOf k []
   row "answer" fun k => (·.1) <$> answerMScriptOf k []
   row "clock" fun k => (·.1) <$> clockFireScript 2 k []
+  row "re-shared chain (levels, not slots)" fun k => pure (reshared k)
   return 0
 
 def main (args : List String) : IO UInt32 := do
