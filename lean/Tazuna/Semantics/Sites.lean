@@ -186,6 +186,91 @@ def sitesC : Collect AnySite := fun D e => e.sites D
 /-- The handles an expression makes. -/
 def handlesC : Collect HandleSite := fun _ e => e.handles
 
+/-- An own command or query a call sends: the handles its first argument can make, when that argument calls a global
+with no arguments (`none`: any of the function's), and the site of its `on_answer`, when written in place (`none`: any
+of its type). The encoder codes a send by the handle's name and that site, so these bound its own kinds. -/
+structure SendSite where
+  handles : Option (List HandleSite)
+  site : Option SiteId
+
+/-- The global a call of no arguments calls. -/
+def Expr.globalCall? {G Γ : List Ty} {t : Ty} : Expr G Γ t → Option Nat
+  | .call (.global v) .nil => some v.idx
+  | _ => none
+
+/-- The site of a kept function written in place. -/
+def Expr.closeSite? {G Γ : List Ty} {t : Ty} : Expr G Γ t → Option SiteId
+  | .close site .. => some site
+  | _ => none
+
+/-- The global the `k`th expression calls with no arguments. -/
+def Exprs.globalCallAt? {G Γ : List Ty} : {ts : List Ty} → Exprs G Γ ts → Nat → Option Nat
+  | _, .nil, _ => none
+  | _, .cons e _, 0 => e.globalCall?
+  | _, .cons _ es, k + 1 => es.globalCallAt? k
+
+/-- The site of the `k`th expression, a kept function written in place. -/
+def Exprs.closeSiteAt? {G Γ : List Ty} : {ts : List Ty} → Exprs G Γ ts → Nat → Option SiteId
+  | _, .nil, _ => none
+  | _, .cons e _, 0 => e.closeSite?
+  | _, .cons _ es, k + 1 => es.closeSiteAt? k
+
+def Prim.sends : Prim → Bool
+  | .sendCommand | .sendQuery => true
+  | _ => false
+
+/-- Whether the function is `send_command` or `send_query`. -/
+def sendPrim {G Γ ps : List Ty} {r : Ty} (f : Expr G Γ (.fn ps r)) : Bool :=
+  match f with
+  | .prim p _ _ => p.sends
+  | _ => false
+
+/-- What a call sends, when it calls `send_command` or `send_query`: the command or query is its first argument, the
+`on_answer` its fourth. -/
+def sendAt {G Γ ps : List Ty} {r : Ty} (D : Defs G) (f : Expr G Γ (.fn ps r)) (args : Exprs G Γ ps) :
+    Option SendSite :=
+  if sendPrim f then some ⟨(args.globalCallAt? 0).map (D.usesAt handlesC), args.closeSiteAt? 3⟩ else none
+
+section
+variable {G : List Ty} (D : Defs G)
+
+mutual
+/-- The own commands and queries an expression sends, nested functions included. A send built-in passed as a value
+sends whatever its caller gives it. -/
+def Expr.sends {Γ : List Ty} {t : Ty} : Expr G Γ t → List SendSite
+  | .int _ | .str _ | .var _ | .global _ => []
+  | .prim p _ _ => if p.sends then [⟨none, none⟩] else []
+  | .ctor _ es | .tuple es => Exprs.sends es
+  | .field _ _ _ e | .index e _ | .not e | .neg e | .lam e => Expr.sends e
+  | .update e p => Expr.sends e ++ Patch.sends p
+  | .call f args => match sendAt D f args with
+    | some w => w :: Exprs.sends args
+    | none => Expr.sends f ++ Exprs.sends args
+  | .let_ e body | .bin _ e body => Expr.sends e ++ Expr.sends body
+  | .case e cs _ => Expr.sends e ++ Clauses.sends cs
+  | .list items => Items.sends items
+  | .close _ env _ _ body | .closeEffect _ env _ _ body => Exprs.sends env ++ Expr.sends body
+def Exprs.sends {Γ ts : List Ty} : Exprs G Γ ts → List SendSite
+  | .nil => []
+  | .cons e es => Expr.sends e ++ Exprs.sends es
+def Items.sends {Γ : List Ty} {t : Ty} : Items G Γ t → List SendSite
+  | .nil => []
+  | .cons e es => Expr.sends e ++ Items.sends es
+def Patch.sends {Γ ts : List Ty} : Patch G Γ ts → List SendSite
+  | .nil => []
+  | .keep rest => Patch.sends rest
+  | .set e rest => Expr.sends e ++ Patch.sends rest
+def Clauses.sends {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List SendSite
+  | .nil => []
+  | .cons _ body rest => Expr.sends body ++ Clauses.sends rest
+  | .guarded _ g body rest => Expr.sends g ++ Expr.sends body ++ Clauses.sends rest
+end
+
+end
+
+/-- The own commands and queries an expression sends. -/
+def sendsC : Collect SendSite := fun D e => e.sends D
+
 theorem Defs.uses_sub {α : Type} (f : Collect α) : {G : List Ty} → (D : Defs G) → (i : Nat) →
     ∀ x ∈ D.usesAt f i, x ∈ D.collect f
   | [], .nil, _, x, h => by simp [Defs.usesAt, Defs.uses] at h

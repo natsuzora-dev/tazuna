@@ -1179,12 +1179,13 @@ theorem own_root {key : OwnKey} (hk : key ∈ (Layout.kindsOf c.program.defs.par
   simp only [Layout.kindsOf] at hk
   rw [mem_dedupBy ownKey_same_iff, List.mem_filter] at hk
   obtain ⟨r, hr, hk⟩ := List.mem_flatMap.1 hk.1
+  obtain ⟨w, -, hk⟩ := List.mem_flatMap.1 hk
   obtain ⟨h, -, hk⟩ := List.mem_flatMap.1 hk
   refine ⟨r, hr, ?_⟩
-  have hfin : ∀ {u : Ty} {s' : (Γ : List Ty) × Site Γ u}, s' ∈ sitesOf r.1 u → s'.2.site = key.answer.site →
-      (⟨Γ, t, site⟩ : AnySite) ∈ r.1 := by
+  have hfin : ∀ {u : Ty} {s' : (Γ : List Ty) × Site Γ u}, s' ∈ sitesOf (w.sitesIn r.1) u →
+      s'.2.site = key.answer.site → (⟨Γ, t, site⟩ : AnySite) ∈ r.1 := by
     intro u s' hs' he
-    have hs'm := mem_sitesOf hs'
+    have hs'm := mem_sitesOf (sitesOf_mono (fun _ h => sitesIn_sub h) hs')
     rw [site_eq chk.sites hm (rootUses_sub hv r hr _ hs'm) (hsite.trans he.symm)]
     exact hs'm
   unfold ownKeys at hk

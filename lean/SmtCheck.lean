@@ -3178,6 +3178,49 @@ def ownKindsCheck : IO Bool := do
   IO.println s!"smt-check: own kinds: {owns.length} kinds, not put at once's site alone"
   return false
 
+/-! Own kinds per send: the reaction `both` sends `dbl` and `inc`, two commands of one type, each with its own
+`on_answer`, naming each handle by a call of the global that makes it, as a loaded program does. Each kind pairs a
+send's handle with that send's site, so the layout has two own kinds where pairing every handle the reaction makes
+with every site it writes had four. -/
+
+def cmdHandleTy : Ty := .dsl .command [recordsT, .int, .str, .int, .str]
+
+def namedHandleE {G : List Ty} (n : String) (line : Nat) : Expr G [] (.fn [] cmdHandleTy) :=
+  .lam (.call (.prim .command [recordsT, .int, .str, .int, .str] rfl)
+    (.cons (.str n) (.cons (.list (.cons (.str "alice") .nil))
+      (.cons (.close ⟨"m", line, 1, 0⟩ .nil rfl rfl (.lam (.list .nil) : Expr G [] (.fn [.int] Ty.rules)))
+        (.cons (.close ⟨"m", line, 2, 0⟩ .nil rfl rfl
+          (.lam (.ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil)) :
+            Expr G [] (.fn [cctxT] (Ty.result (.list .int) .str))))
+          (.cons (.close ⟨"m", line, 3, 0⟩ .nil rfl rfl (.lam (.list .nil) : Expr G [] (.fn [cctxT, recordsT] Ty.rules)))
+            .nil))))))
+
+abbrev bothG : List Ty := [.fn [] cmdHandleTy, .fn [] cmdHandleTy]
+
+def bothDefs : Defs bothG := .snoc (.snoc .nil _ (namedHandleE "dbl" 30)) _ (namedHandleE "inc" 31)
+
+def sendFromE (h : Var bothG (.fn [] cmdHandleTy)) (line : Nat) :
+    Expr bothG [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
+  .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
+    (.cons (.call (.global h) .nil) (.cons (.str "alice") (.cons (.int 1)
+      (.cons (.close ⟨"m", line, 1, 0⟩ .nil rfl rfl (.lam (.list .nil) :
+        Expr bothG [] (.fn [Ty.result Ty.nil .str] (.list .int)))) .nil))))
+
+def bothE : Expr bothG [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
+  .lam (.list (.cons (sendFromE (.there .here) 34) (.cons (sendFromE .here 35) .nil)))
+
+def bothSvc : ServiceV :=
+  { cascSvc 1 with commands := [{ twiceC with name := "dbl" }, { twiceC with name := "inc" }],
+                   reactions := [⟨"both", ⟨⟨"m", 33, 1, 0⟩, _, bothDefs, [], (), rfl, rfl, bothE⟩⟩] }
+
+def perSendCheck : IO Bool := do
+  let owns := (svcLayout bothSvc 2).owns
+  let dbl : OwnKey := .command .int "dbl" .str .int .str ⟨⟨"m", 34, 1, 0⟩, []⟩
+  let inc : OwnKey := .command .int "inc" .str .int .str ⟨⟨"m", 35, 1, 0⟩, []⟩
+  if owns.length == 2 && owns.any (·.same dbl) && owns.any (·.same inc) then return true
+  IO.println s!"smt-check: own kinds per send: {owns.length} kinds, not dbl and inc each at its send's site"
+  return false
+
 /-- v0..v5 the state, v6 the event value, v7 the records after, v8 the fresh counter after, v9 the next id after, v10
 the pending table after, v11 the instance table after. -/
 def cascEventTermsOf (cascade : Int) (slots : Nat) (goal : List Term) :
@@ -3689,6 +3732,7 @@ def check (z3 : String) : IO Bool := do
   unless ← quietCheck solver do ok := false
   unless ← fanCheck solver do ok := false
   unless ← ownKindsCheck do ok := false
+  unless ← perSendCheck do ok := false
   unless ← clockFireCheck solver do ok := false
   unless ← eventsCheck solver do ok := false
   unless ← twiceCheck solver do ok := false
