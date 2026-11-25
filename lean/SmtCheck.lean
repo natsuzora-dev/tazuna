@@ -3495,11 +3495,18 @@ def pairKey (name : String) : OwnKey := .command evT name .str .int .str ⟨pair
 def pairSites : List AnySite := (svcParts pairSvc).sites ++ [⟨[], _, pairOnAnswer⟩]
 
 /-- The service's layout with alice's three own kinds added by hand: no function of the service queues them. -/
-def pairLayout : Layout :=
-  let L := svcLayout pairSvc 3 (joinParts [siteParts pairOnAnswer,
+def pairLayoutOf (slots : Nat) : Layout :=
+  let L := svcLayout pairSvc slots (joinParts [siteParts pairOnAnswer,
     ⟨[], [], [Ty.nil, Ty.result Ty.nil .str, .tuple []], []⟩])
-  Layout.addTys (fun _ => 3) { effects := L.effects, owns := L.owns ++ ["ins", "set", "cap"].map pairKey }
+  Layout.addTys (fun _ => slots) { effects := L.effects, owns := L.owns ++ ["ins", "set", "cap"].map pairKey }
     (L.types.map (·.1))
+
+/-- The target question of the pair of own kinds `k1`, `k2` of the service `p` at `slots`. -/
+def pairTarget (slots k1 k2 : Nat) : Except String Script := do
+  let L := pairLayoutOf slots
+  let senv ← (StepEnv.of L (shapes pairSvc)).mapError fun r => s!"no step environment: {repr r}"
+  let (_, tq) ← (pairQuestions L prelude pairSites pairSvc senv k1 k2).mapError fun r => s!"no questions: {repr r}"
+  pure tq
 
 /-- The own command a model's value of the effect datatype codes, by its variant's place among the own kinds. -/
 def pairEffect (L : Layout) : Val → Option (EffectV evT)
@@ -3523,7 +3530,7 @@ def pairDiffers (a0 : Step.Acc pairSvc) (e1 e2 : EffectV evT) : Bool :=
     | _, _ => true
 
 def pairCheck (solver : Solver) : IO Bool := do
-  let L := pairLayout
+  let L := pairLayoutOf 3
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: pair questions: {m}"; return false
   let .ok senv := StepEnv.of L (shapes pairSvc) | fail "no step environment"
   let mut ok := true
@@ -3666,6 +3673,7 @@ def sizeRows : List (String × (Nat → Except String Script)) :=
    ("event with a cascade of 1", fun k => (·.1) <$> cascEventTermsOf 1 k []),
    ("event with a cascade at 3 slots (bound, not slots)", fun k => (·.1) <$> cascEventTermsOf k 3 []),
    ("clock whose timers queue own commands (bound 2)", fun k => (·.1) <$> tickClockTermsOf 2 k []),
+   ("pair question (insert, capped insert)", fun k => pairTarget k 0 2),
    ("re-shared chain (levels, not slots)", fun k => pure (reshared k))]
 
 /-- Prints the step scripts' sizes at 2, 4, 8 and 16, one row each. With a budget file, whose rows have the same form,
