@@ -23,6 +23,7 @@ import Tazuna.Smt.FiresForward
 import Tazuna.Smt.Pair
 import Tazuna.Smt.PairLine
 import Tazuna.Smt.Lines
+import Tazuna.Smt.Runs
 import Tazuna.Smt.Sorts
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
@@ -55,6 +56,7 @@ elab "#check_tazuna_axioms" : command => do
       ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent,
       ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete, ``Tazuna.Smt.pairs_sound,
       ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within, ``Tazuna.Smt.timers_lines,
+      ``Tazuna.Smt.run_lines, ``Tazuna.Smt.run_within,
       ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.back_sorts,
       ``Tazuna.Ir.Step.timerForward_of_noTimer] do
     unless env.contains n do throwError "{n} is missing"
@@ -120,6 +122,9 @@ elab "#check_tazuna_reach" : command => do
     -- The same of a clock line's timers from the timer lines: where every timer machine's questions are unsat, every
     -- order of the timers due at one deadline ends as the semantics' does, wherever each fired timer's context fits.
     ``Tazuna.Smt.timers_lines,
+    -- The same for runs: from the initial state on valid inputs, every cascade a step starts keeps what a pair question
+    -- assumes of its state, so the pair and timer lines speak for every cascade and clock line of the run.
+    ``Tazuna.Smt.run_lines, ``Tazuna.Smt.run_within,
     -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
     -- forward; unsat answers mean no context within the slots has one.
     ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound,

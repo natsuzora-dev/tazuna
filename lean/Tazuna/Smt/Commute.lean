@@ -110,7 +110,7 @@ theorem runs_confluent (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.servi
   have hr := (c.checked v hv).reach
   have hi := run_inv c.T hr _ Step.init_inv xs
   have hs := Step.run_supp c.T he (c.states hv) hr _ Step.init_inv (Step.init_supp he) xs hxs
-  have hsa := Step.begins_supp c.T he (c.states hv) hs hi.below hx ha
+  have hsa := (Step.begins_supp c.T he (c.states hv) hs hi.below hx ha).1
   exact fun fuel _ hrun => (diamond_confluent c hv hpairs htimers).1 fuel a hsa hrun
 
 end Tazuna.Smt

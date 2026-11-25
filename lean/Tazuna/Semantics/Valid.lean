@@ -607,16 +607,16 @@ inductive Begins (s : State v) : Input v → Acc v → Prop
       Begins s (.clock time) a
 
 /-- Every cascade a step on a valid input starts, from a state whose names are below its counter, is one T5 speaks
-about. -/
+about, and its pending requests' names are below its counter. -/
 theorem begins_supp (hv : v.Equivariant) (hst : ∀ m ∈ v.machines, m.state.comparable = true) {s : State v}
     (hs : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) {x : Input v} (hx : x.Valid s) {a : Acc v}
-    (h : Begins T s x a) : Supp a := by
+    (h : Begins T s x a) : Supp a ∧ PendAt a.state.fresh a := by
   cases h with
   | command i caller input a h =>
-    exact (command_begin T hv hs hb (List.get_mem _ _) (fun P hP => (hx P hP).1) (fun P hP => (hx P hP).2) h).1
-  | answer to value p h a hp happ => exact (answer_begin T hv hs hb (List.mem_of_find?_eq_some hp) to hx h happ).1
-  | event i value a h => exact (event_begin T hv hs hb i hx h).1
-  | clock time s' effs a hf h => exact (clock_begin hv hst hs hb time hf h).1
+    exact command_begin T hv hs hb (List.get_mem _ _) (fun P hP => (hx P hP).1) (fun P hP => (hx P hP).2) h
+  | answer to value p h a hp happ => exact answer_begin T hv hs hb (List.mem_of_find?_eq_some hp) to hx h happ
+  | event i value a h => exact event_begin T hv hs hb i hx h
+  | clock time s' effs a hf h => exact clock_begin hv hst hs hb time hf h
 
 end Step
 
