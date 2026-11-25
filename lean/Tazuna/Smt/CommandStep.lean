@@ -33,15 +33,8 @@ def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (callers : List Term)
     (records now fresh nextId pending caller input : Term) (xs : List Term) :
     Except Refusal (CommandOut × Term × Term) := do
-  let cc0 ← need "a caller that has no term" (Code.ofTerm? v.caller caller)
-  let eqs ← callers.mapM fun k => do eqCode L v.caller cc0 (← need "a caller that has no term" (Code.ofTerm? v.caller k))
-  let ic ← need "an input that has no term" (Code.ofTerm? x.input input)
-  let (rs, c1) ← cc.accepts (ic, ())
-  let rules ← ruleTerms L rs
-  let ctx ← adtCtor L 5 [v.records, x.input, v.caller] [[v.records, x.input, v.caller, .int, .dsl .fresh []]] 0
-    [records, input, caller, now, fresh]
-  let cx ← need "a context that has no term" (Code.ofTerm? (Ty.ctx v.records x.input v.caller) (Term.share ctx))
-  let (res, c2) ← cc.decide (cx, ())
+  let (a, c1) ← encodeAdmit L cc.accepts callers records now fresh caller input
+  let (res, c2) ← cc.decide (a.ctx, ())
   let rest ← need "a result that has no term" (Code.term? _ res)
   let (d, _) ← need "a layout without the result type" (L.find? (Ty.result (.list v.event) x.rejection))
   let res := Term.share rest
@@ -49,13 +42,12 @@ def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
   let (dl, n, dt) ← collD L (.list v.event) [v.event]
   let (o, c3) ← encodeEvents L T v shs dE dP dopt apply now (slotsOf dl dt n 1 evs) records xs nextId (.int 0)
   let rfc ← need "records that have no term" (Code.ofTerm? v.records o.records)
-  let (ens, c4) ← cc.ensures (cx, rfc, ())
+  let (ens, c4) ← cc.ensures (a.ctx, rfc, ())
   let ensures ← ruleTerms L ens
   let (fo, cf, cfx) ← encodeFinish L T P v shs dE dP dopt apply invariants now (.add fresh (.int 1)) pending o
-  let callerOk := anyT eqs
   let ok := Term.is d 0 res
-  pure (⟨callerOk, rules, ok, .sel d 1 0 res, evs, o, ensures, fo⟩,
-    .ite callerOk (andT c1 (.ite (allT (rules.map (·.2))) (andT c2 (.ite ok (andT c3 (andT c4
+  pure (⟨a.callerOk, a.rules, ok, .sel d 1 0 res, evs, o, ensures, fo⟩,
+    .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) (andT c2 (.ite ok (andT c3 (andT c4
       (.ite (allT (ensures.map (·.2))) cf tt))) tt)) tt)) tt, cfx)
 
 end
@@ -110,13 +102,7 @@ theorem command_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx
   have hinv0 := hinv'
   have happ := v.apply.code_fn hd.apply happ hca
   intro r s'
-  obtain ⟨cc0, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc
-  obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨rs, c1⟩, h4, henc⟩ := bind_ok.1 henc
-  obtain ⟨rules, h5, henc⟩ := bind_ok.1 henc
-  obtain ⟨ctx, h6, henc⟩ := bind_ok.1 henc
-  obtain ⟨cx, h7, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨res, c2⟩, h8, henc⟩ := bind_ok.1 henc
   obtain ⟨rest, h9, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨d, dn⟩, h10, henc⟩ := bind_ok.1 henc
@@ -127,40 +113,29 @@ theorem command_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx
   obtain ⟨ensures, h15, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨fo, cf, cfx'⟩, h16, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  have hcc0 : Smt.Rel M L v.caller (Ty.up _ hd.caller caller) cc0 := (rel_ofTerm (need_ok.1 h1) _).2 hsc
-  have hok := callers_any hd.caller hcc0 (v.commands.get i).callers ks hks eqs h2
+  obtain ⟨hok, hbr, hcx⟩ := admit_rel hd.records hd.input hd.caller hd.ctx _ hd.accepts hcc.accepts _ hks s caller input
+    hrec hnow hfresh hsc hsi h1
   simp only [r, s', step, Step.execCommand, Step.admit, bind, Except.bind]
   cases hin : (v.commands.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
   case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
   simp only [hok, hin, Val.toBool, ite_true]
-  have hc' : Holds M (andT c1 (.ite (allT (rules.map (·.2))) (andT c2 (.ite (Term.is d 0 (Term.share rest))
+  have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2))) (andT c2 (.ite (Term.is d 0 (Term.share rest))
       (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) cf tt))) tt)) tt)) := by
     simpa only [Holds, Term.denote, hok, hin, Val.toBool, ite_true] using hc
   rw [holds_andT] at hc'
-  have hic : Smt.Rel M L _ (Ty.up _ hd.input input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
-  have hacc := hcc.accepts _ (ic, ()) (rels1 hd.input hd.args hic) rs c1 h4 hc'.1
-  erw [Ty.up_fn _ Ty.rules _ hd.args rfl] at hacc
-  have hbroken := rules_broken h5 _ hacc
+  have hbroken := hbr hc'.1
   rw [hbroken]
   cases hb : Step.broken ((v.commands.get i).accepts.fn (input, ())) with
   | cons n ns => rfl
   | nil =>
     simp only
-    have hallT : (allT (rules.map (·.2))).denote M = .bool true := by
-      rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil rules).1 (hbroken.trans hb))
+    have hallT : (allT (adm.rules.map (·.2))).denote M = .bool true := by
+      rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil adm.rules).1 (hbroken.trans hb))
     have hc2' : Holds M (andT c2 (.ite (Term.is d 0 (Term.share rest))
         (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) cf tt))) tt)) := by
       have := hc'.2; simp only [Holds, Term.denote, hallT, Val.toBool, ite_true] at this; exact this
     rw [holds_andT] at hc2'
-    have hctx := adtCtor_rel (L := L) (M := M)
-      (vs := [[v.records, (v.commands.get i).input, v.caller, .int, .dsl .fresh []]])
-      ⟨0, by simp⟩ _ _ h6
-      (Ty.up _ hd.records s.records, Ty.up _ hd.input input, Ty.up _ hd.caller caller, s.now, s.fresh, ())
-      ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
-    rw [← up_ctx hd.records hd.input hd.caller hd.ctx] at hctx
-    have hcx : Smt.Rel M L _ (Ty.up _ hd.ctx (Step.ctx s s.records caller input)) cx :=
-      (rel_ofTerm (need_ok.1 h7) _).2 (by rw [Term.denote_share]; exact hctx)
-    have hres := hcc.decide _ (cx, ()) (rels1 hd.ctx hd.ctxArgs hcx) res c2 h8 hc2'.1
+    have hres := hcc.decide _ (adm.ctx, ()) (rels1 hd.ctx hd.ctxArgs hcx) res c2 h8 hc2'.1
     erw [Ty.up_fn _ _ _ hd.ctxArgs hd.result] at hres
     have hres' := (rel_term (need_ok.1 h9) _).1 hres
     have hfd := need_ok.1 h10
@@ -303,13 +278,7 @@ theorem command_exact {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hv
   obtain ⟨hca1, hca23⟩ := (holds_andT _ _).1 hccx
   obtain ⟨hca2, hca3⟩ := (holds_andT _ _).1 hca23
   have happ' := v.apply.code_fn hd.apply happ hca
-  obtain ⟨cc0, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc
-  obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨rs, c1⟩, h4, henc⟩ := bind_ok.1 henc
-  obtain ⟨rules, h5, henc⟩ := bind_ok.1 henc
-  obtain ⟨ctxT, h6, henc⟩ := bind_ok.1 henc
-  obtain ⟨cx, h7, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨res, c2⟩, h8, henc⟩ := bind_ok.1 henc
   obtain ⟨rest, h9, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨d, dn⟩, h10, henc⟩ := bind_ok.1 henc
@@ -320,40 +289,27 @@ theorem command_exact {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hv
   obtain ⟨ensures, h15, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨fo, cf, cfx'⟩, h16, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  have hcc0 : Smt.Rel M L v.caller (Ty.up _ hd.caller caller) cc0 := (rel_ofTerm (need_ok.1 h1) _).2 hsc
-  have hok := callers_any hd.caller hcc0 (v.commands.get i).callers ks hks eqs h2
+  obtain ⟨hok, hbr, hcx⟩ := admit_rel hd.records hd.input hd.caller hd.ctx _ hd.accepts hcc'.accepts _ hks s caller input
+    hrec hnow hfresh hsc hsi h1
   rw [holds_ite_tt (by rw [hok])]
   refine imp_congr_right fun _ => ?_
   rw [holds_andT]
-  have hic : Smt.Rel M L _ (Ty.up _ hd.input input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
-  have hargs := rels1 hd.input hd.args hic
-  have e1 : Holds M c1 ↔ x.accepts.appFits L.count (input, ()) :=
-    x.accepts.app_exact g1 hca1 (by simp only [List.mem_singleton, forall_eq]; exact ofTerm_notFn (need_ok.1 h3)) _ _ hargs h4
-  have hctx := adtCtor_rel (L := L) (M := M)
-    (vs := [[v.records, (v.commands.get i).input, v.caller, .int, .dsl .fresh []]])
-    ⟨0, by simp⟩ _ _ h6
-    (Ty.up _ hd.records s.records, Ty.up _ hd.input input, Ty.up _ hd.caller caller, s.now, s.fresh, ())
-    ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
-  rw [← up_ctx hd.records hd.input hd.caller hd.ctx] at hctx
-  have hcx : Smt.Rel M L _ (Ty.up _ hd.ctx ctx) cx :=
-    (rel_ofTerm (need_ok.1 h7) _).2 (by rw [Term.denote_share]; exact hctx)
+  have e1 := admit_exact hd.input x.accepts g1 hca1 input hsi h1
   have hargs' := rels1 hd.ctx hd.ctxArgs hcx
   have e2 : Holds M c2 ↔ x.decide.appFits L.count (ctx, ()) :=
     x.decide.app_exact g2 hca2 (by simp [Ty.ctx, Ty.isFn]) _ _ hargs' h8
-  have hrest : Holds M c1 → (Holds M (.ite (allT (rules.map (·.2))) (andT c2 (.ite (Term.is d 0 (Term.share rest))
+  have hrest : Holds M c1 → (Holds M (.ite (allT (adm.rules.map (·.2))) (andT c2 (.ite (Term.is d 0 (Term.share rest))
       (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) cf tt))) tt)) tt) ↔
       (Step.broken (x.accepts.fn (input, ())) = [] →
         x.decide.appFits L.count (ctx, ()) ∧
           decidedFits L.count T shs { s with fresh := s.fresh + 1 } x ctx (x.decide.fn (ctx, ())))) := fun hc1 => by
-    have hacc := hcc'.accepts _ (ic, ()) hargs rs c1 h4 hc1
-    erw [Ty.up_fn _ Ty.rules _ hd.args rfl] at hacc
-    have hbroken := rules_broken h5 _ hacc
-    have hall : ((allT (rules.map (·.2))).denote M).toBool = decide (Step.broken (x.accepts.fn (input, ())) = []) := by
+    have hbroken := hbr hc1
+    have hall : ((allT (adm.rules.map (·.2))).denote M).toBool = decide (Step.broken (x.accepts.fn (input, ())) = []) := by
       rw [allT_denote, Val.toBool, ← hbroken]
-      by_cases hb : brokenIn M rules = []
-      · simp [(brokenIn_nil rules).1 hb, hb]
-      · have : (rules.map (·.2)).all (fun t => (t.denote M).toBool) ≠ true := fun h =>
-          hb ((brokenIn_nil (M := M) rules).2 h)
+      by_cases hb : brokenIn M adm.rules = []
+      · simp [(brokenIn_nil adm.rules).1 hb, hb]
+      · have : (adm.rules.map (·.2)).all (fun t => (t.denote M).toBool) ≠ true := fun h =>
+          hb ((brokenIn_nil (M := M) adm.rules).2 h)
         simp [hb]; simpa using this
     rw [holds_ite_tt hall, decide_eq_true_iff]
     refine imp_congr_right fun _ => ?_
@@ -361,7 +317,7 @@ theorem command_exact {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hv
     have hdec : Holds M c2 → (Holds M (.ite (Term.is d 0 (Term.share rest))
         (andT c3 (andT c4 (.ite (allT (ensures.map (·.2))) cf tt))) tt) ↔
         decidedFits L.count T shs { s with fresh := s.fresh + 1 } x ctx (x.decide.fn (ctx, ()))) := fun hc2 => by
-      have hres := hcc'.decide _ (cx, ()) hargs' res c2 h8 hc2
+      have hres := hcc'.decide _ (adm.ctx, ()) hargs' res c2 h8 hc2
       erw [Ty.up_fn _ _ _ hd.ctxArgs hd.result] at hres
       have hres' := (rel_term (need_ok.1 h9) _).1 hres
       have hfd := need_ok.1 h10

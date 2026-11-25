@@ -88,22 +88,35 @@ def ruleTerms (rs : Term) : Except Refusal (List (Term × Term)) := do
   pure ((slotsOf dl dt n 1 rs).map fun sl =>
     (.sel d 0 0 (sl.2.headD tt), .or (.not sl.1) (.sel d 0 1 (sl.2.headD tt))))
 
+/-- The terms of a request's admission, which commands and queries share: whether the caller is listed, the `accepts`
+rules, and the context their functions read. -/
+structure AdmitOut (r i c : Ty) where
+  callerOk : Term
+  rules : List (Term × Term)
+  ctx : Code (Ty.ctx r i c)
+
+/-- A request's admission terms and `accepts`' condition, from its code, the constants of the listed callers, and the
+terms of the records, the time, the fresh counter, the caller and the input. -/
+def encodeAdmit {r i c : Ty} (accepts : Code (Ty.fn [i] Ty.rules)) (callers : List Term)
+    (records now fresh caller input : Term) : Except Refusal (AdmitOut r i c × Term) := do
+  let cc ← need "a caller that has no term" (Code.ofTerm? c caller)
+  let eqs ← callers.mapM fun k => do eqCode L c cc (← need "a caller that has no term" (Code.ofTerm? c k))
+  let ic ← need "an input that has no term" (Code.ofTerm? i input)
+  let (rs, c1) ← accepts (ic, ())
+  let rules ← ruleTerms L rs
+  let ctx ← adtCtor L 5 [r, i, c] [[r, i, c, .int, .dsl .fresh []]] 0 [records, input, caller, now, fresh]
+  let cx ← need "a context that has no term" (Code.ofTerm? (Ty.ctx r i c) (Term.share ctx))
+  pure (⟨anyT eqs, rules, cx⟩, c1)
+
 /-- A query step's outcome terms and its condition, from the terms of the records, the time, the fresh counter, the
 caller and the input, and the constants of the listed callers. The condition asks only for what the step computes:
 the rules when the caller is listed, the output when the rules hold too. -/
 def encodeQuery {r c : Ty} (q : QueryV r c) (qc : QueryCode q) (callers : List Term)
     (records now fresh caller input : Term) : Except Refusal (QueryOut × Term) := do
-  let cc ← need "a caller that has no term" (Code.ofTerm? c caller)
-  let eqs ← callers.mapM fun k => do eqCode L c cc (← need "a caller that has no term" (Code.ofTerm? c k))
-  let ic ← need "an input that has no term" (Code.ofTerm? q.input input)
-  let (rs, c1) ← qc.accepts (ic, ())
-  let rules ← ruleTerms L rs
-  let ctx ← adtCtor L 5 [r, q.input, c] [[r, q.input, c, .int, .dsl .fresh []]] 0 [records, input, caller, now, fresh]
-  let cx ← need "a context that has no term" (Code.ofTerm? (Ty.ctx r q.input c) ctx)
-  let (o, c2) ← qc.resolve (cx, ())
+  let (a, c1) ← encodeAdmit L qc.accepts callers records now fresh caller input
+  let (o, c2) ← qc.resolve (a.ctx, ())
   let ot ← need "an output that has no term" (Code.term? q.output o)
-  let callerOk := anyT eqs
-  pure (⟨callerOk, rules, ot⟩, .ite callerOk (andT c1 (.ite (allT (rules.map (·.2))) c2 tt)) tt)
+  pure (⟨a.callerOk, a.rules, ot⟩, .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) c2 tt)) tt)
 
 end
 
@@ -234,6 +247,47 @@ theorem up_ctx {v : ServiceV} {r i c : Ty} (hr : r.isData = true) (hi : i.isData
   refine (Ty.up_tuple _ _ _ rfl (by simp [Ty.isData, Ty.isDatas]) _).trans (congrArg _ ?_)
   exact (Ty.up_tuple _ _ _ (by simp [Ty.isData]) rfl _)
 
+theorem rels1 {a : Ty} (ha : a.isData = true) (h : (Ty.tuple [a]).isData = true) {x : a.den0} {cx : Code a}
+    (hx : Smt.Rel M L a (Ty.up a ha x) cx) : Smt.Rels M L [a] (Ty.up (.tuple [a]) h (x, ())) (cx, ()) := by
+  show Smt.Rel M L _ (Ty.up (.tuple [a]) h (x, ())).1 cx ∧ True
+  erw [Ty.up_tuple _ _ _ ha rfl]; exact ⟨hx, trivial⟩
+
+/-- What a request's admission terms say: whether the caller is listed, the rules `accepts` breaks wherever its
+condition holds, and the context at the state the terms denote. -/
+theorem admit_rel {v : ServiceV} {i : Ty} (hr : v.records.isData = true) (hi : i.isData = true)
+    (hc : v.caller.isData = true) (hctx : (Ty.ctx v.records i v.caller).isData = true)
+    (accepts : Fun (Ty.fn [i] Ty.rules)) (hA : (Ty.fn [i] Ty.rules).isData = true) {ac : Code (Ty.fn [i] Ty.rules)}
+    (hac : Smt.Rel M L _ (Ty.up _ hA accepts.fn) ac) (callers : List v.caller.den0) {ks : List Term}
+    (hks : callerTerms L hc callers = some ks) (s : State v) (caller : v.caller.den0) (input : i.den0)
+    {records now fresh sc si : Term} (hrec : RelV L v.records (Ty.up _ hr s.records) (records.denote M))
+    (hnow : now.denote M = .int s.now) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
+    (hsc : RelV L v.caller (Ty.up _ hc caller) (sc.denote M)) (hsi : RelV L i (Ty.up _ hi input) (si.denote M))
+    {a : AdmitOut v.records i v.caller} {c1 : Term} (henc : encodeAdmit L ac ks records now fresh sc si = .ok (a, c1)) :
+    a.callerOk.denote M = .bool (callers.any ((Ty.semWith Dsl.base v.caller).2 caller)) ∧
+      (Holds M c1 → brokenIn M a.rules = Step.broken (accepts.fn (input, ()))) ∧
+      Smt.Rel M L _ (Ty.up _ hctx (Step.ctx s s.records caller input)) a.ctx := by
+  obtain ⟨cc0, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨rs, c1'⟩, h4, henc⟩ := bind_ok.1 henc
+  obtain ⟨rules, h5, henc⟩ := bind_ok.1 henc
+  obtain ⟨ctx, h6, henc⟩ := bind_ok.1 henc
+  obtain ⟨cx, h7, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  have hcc0 : Smt.Rel M L v.caller (Ty.up _ hc caller) cc0 := (rel_ofTerm (need_ok.1 h1) _).2 hsc
+  refine ⟨callers_any hc hcc0 callers ks hks eqs h2, fun hc1 => ?_, ?_⟩
+  · have hic : Smt.Rel M L _ (Ty.up _ hi input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
+    have hargs : (Ty.tuple [i]).isData = true := by simp [Ty.isData, Ty.isDatas, hi]
+    have hacc := hac _ (ic, ()) (rels1 hi hargs hic) rs c1 h4 hc1
+    erw [Ty.up_fn _ Ty.rules _ hargs rfl] at hacc
+    exact rules_broken h5 _ hacc
+  · have hctxT := adtCtor_rel (L := L) (M := M) (vs := [[v.records, i, v.caller, .int, .dsl .fresh []]])
+      ⟨0, by simp⟩ _ _ h6
+      (Ty.up _ hr s.records, Ty.up _ hi input, Ty.up _ hc caller, s.now, s.fresh, ())
+      ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
+    rw [← up_ctx hr hi hc hctx] at hctxT
+    exact (rel_ofTerm (need_ok.1 h7) _).2 (by rw [Term.denote_share]; exact hctxT)
+
 /-- T2 for a query: wherever the condition holds, the outcome terms denote the outcome of the step from the state
 and input the terms denote, and the state stays. -/
 theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (caller : v.caller.den0)
@@ -248,58 +302,31 @@ theorem query_step {v : ServiceV} (s : State v) (i : Fin v.queries.length) (call
     (hc : Holds M cond) :
     (step T v s (.query i caller input)).state = s ∧ o.Rel M L hd.output (step T v s (.query i caller input)).outcome := by
   have hq := QueryCode.rel_of hd hqc hcq
-  obtain ⟨cc, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨eqs, h2, henc⟩ := bind_ok.1 henc
-  obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨rs, c1⟩, h4, henc⟩ := bind_ok.1 henc
-  obtain ⟨rules, h5, henc⟩ := bind_ok.1 henc
-  obtain ⟨ctx, h6, henc⟩ := bind_ok.1 henc
-  obtain ⟨cx, h7, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨out, c2⟩, h8, henc⟩ := bind_ok.1 henc
   obtain ⟨ot, h9, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  have hcc : Smt.Rel M L v.caller (Ty.up _ hd.caller caller) cc := (rel_ofTerm (need_ok.1 h1) _).2 hsc
-  have hok := callers_any hd.caller hcc (v.queries.get i).callers ks hks eqs h2
+  obtain ⟨hok, hbr, hcx⟩ := admit_rel hd.records hd.input hd.caller hd.ctx _ hd.accepts hq.accepts _ hks s caller input
+    hrec hnow hfresh hsc hsi h1
   simp only [step]
   refine ⟨by split <;> rfl, ?_⟩
   simp only [Step.execQuery, Step.admit]
   by_cases hin : (v.queries.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true
   · simp only [hin, ite_true]
-    have hic : Smt.Rel M L (v.queries.get i).input (Ty.up _ hd.input input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
     simp only [Holds, Term.denote, hok, hin, Val.toBool, ite_true] at hc
-    have hc' : Holds M (andT c1 (.ite (allT (rules.map (·.2))) c2 tt)) := hc
+    have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2))) c2 tt)) := hc
     rw [holds_andT] at hc'
-    have hargs : Smt.Rels M L [(v.queries.get i).input] (Ty.up (.tuple [(v.queries.get i).input]) hd.args (input, ()))
-        (ic, ()) := by
-      show Smt.Rel M L _ (Ty.up (.tuple [(v.queries.get i).input]) hd.args (input, ())).1 ic ∧ True
-      erw [Ty.up_tuple _ _ _ hd.input rfl]; exact ⟨hic, trivial⟩
-    have hacc := hq.accepts _ (ic, ()) hargs rs c1 h4 hc'.1
-    erw [Ty.up_fn _ Ty.rules _ hd.args rfl] at hacc
-    have hbroken := rules_broken h5 _ hacc
-    have hall := (brokenIn_nil (M := M) rules)
+    have hbroken := hbr hc'.1
     cases hb : Step.broken ((v.queries.get i).accepts.fn (input, ())) with
     | cons n ns =>
       simp only [QueryOut.Rel, QueryOut.invalid, hok, hin, Val.toBool, ite_true, hbroken, hb]
     | nil =>
       rw [hb] at hbroken
-      have hallT : (allT (rules.map (·.2))).denote M = .bool true := by
-        rw [allT_denote]; exact congrArg Val.bool (hall.1 hbroken)
+      have hallT : (allT (adm.rules.map (·.2))).denote M = .bool true := by
+        rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil adm.rules).1 hbroken)
       have hc2 : Holds M c2 := by
         have := hc'.2; simp only [Holds, Term.denote, hallT, Val.toBool, ite_true] at this; exact this
-      have hctx := adtCtor_rel (L := L) (M := M) (vs := [[v.records, (v.queries.get i).input, v.caller, .int, .dsl .fresh []]])
-        ⟨0, by simp⟩ _ _ h6
-        (Ty.up _ hd.records s.records, Ty.up _ hd.input input, Ty.up _ hd.caller caller, s.now, s.fresh, ())
-        ⟨_, _, rfl, hrec, _, _, rfl, hsi, _, _, rfl, hsc, _, _, rfl, hnow, _, _, rfl, hfresh, rfl⟩
-      rw [← up_ctx hd.records hd.input hd.caller hd.ctx] at hctx
-      have hcx : Smt.Rel M L _ (Ty.up _ hd.ctx (Step.ctx s s.records caller input)) cx :=
-        (rel_ofTerm (need_ok.1 h7) _).2 hctx
-      have hargs' : Smt.Rels M L [Ty.ctx v.records (v.queries.get i).input v.caller]
-          (Ty.up (.tuple [Ty.ctx v.records (v.queries.get i).input v.caller]) hd.ctxArgs
-            (Step.ctx s s.records caller input, ())) (cx, ()) := by
-        show Smt.Rel M L _ (Ty.up (.tuple [Ty.ctx v.records (v.queries.get i).input v.caller]) hd.ctxArgs
-          (Step.ctx s s.records caller input, ())).1 cx ∧ True
-        erw [Ty.up_tuple _ _ _ hd.ctx rfl]; exact ⟨hcx, trivial⟩
-      have hres := hq.resolve _ (cx, ()) hargs' out c2 h8 hc2
+      have hres := hq.resolve _ (adm.ctx, ()) (rels1 hd.ctx hd.ctxArgs hcx) out c2 h8 hc2
       erw [Ty.up_fn _ _ _ hd.ctxArgs hd.output] at hres
       simp only [QueryOut.Rel, QueryOut.invalid, hok, hin, Val.toBool, ite_true, hbroken]
       exact ⟨trivial, trivial, (rel_term (need_ok.1 h9) _).1 hres⟩

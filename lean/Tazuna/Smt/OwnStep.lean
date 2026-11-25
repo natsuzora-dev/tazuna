@@ -254,13 +254,7 @@ theorem encodeOwnKind_width {P : List AnySite} {shs : List (PendingShape v.event
     obtain ⟨⟨o, c'⟩, henc, h⟩ := bind_ok.1 h
     cases pure_ok.1 h
     unfold encodeOwnCommand at henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
     obtain ⟨_, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
@@ -289,13 +283,7 @@ theorem encodeOwnKind_width {P : List AnySite} {shs : List (PendingShape v.event
     obtain ⟨⟨o, c'⟩, henc, h⟩ := bind_ok.1 h
     cases pure_ok.1 h
     unfold encodeOwnQuery at henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨_, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨_, _⟩, -, henc⟩ := bind_ok.1 henc

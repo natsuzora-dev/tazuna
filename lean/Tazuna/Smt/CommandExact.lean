@@ -32,15 +32,28 @@ theorem rels2 {a b : Ty} (ha : a.isData = true) (hb : b.isData = true) (h : (Ty.
   show Smt.Rel M L _ (Ty.up (.tuple [b]) (by simp [Ty.isData, Ty.isDatas, hb]) (y, ())).1 cy ∧ True
   erw [Ty.up_tuple _ _ _ hb rfl]; exact ⟨hy, trivial⟩
 
-theorem rels1 {a : Ty} (ha : a.isData = true) (h : (Ty.tuple [a]).isData = true) {x : a.den0} {cx : Code a}
-    (hx : Smt.Rel M L a (Ty.up a ha x) cx) : Smt.Rels M L [a] (Ty.up (.tuple [a]) h (x, ())) (cx, ()) := by
-  show Smt.Rel M L _ (Ty.up (.tuple [a]) h (x, ())).1 cx ∧ True
-  erw [Ty.up_tuple _ _ _ ha rfl]; exact ⟨hx, trivial⟩
-
 end
 
 section
 variable {M : Model} {L : Layout}
+
+/-- `accepts`' condition in a request's admission is exact. -/
+theorem admit_exact {r i c : Ty} (hi : i.isData = true) (accepts : Fun (Ty.fn [i] Ty.rules))
+    {ac : Code (Ty.fn [i] Ty.rules)} {ca : Term} (hcode : accepts.code L = .ok (ac, ca)) (hca : Holds M ca)
+    {ks : List Term} (input : i.den0) {records now fresh sc si : Term} (hsi : RelV L i (Ty.up _ hi input) (si.denote M))
+    {a : AdmitOut r i c} {c1 : Term} (henc : encodeAdmit L ac ks records now fresh sc si = .ok (a, c1)) :
+    Holds M c1 ↔ accepts.appFits L.count (input, ()) := by
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨rs, c1'⟩, h4, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  have hic : Smt.Rel M L _ (Ty.up _ hi input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
+  exact accepts.app_exact hcode hca (by simp only [List.mem_singleton, forall_eq]; exact ofTerm_notFn (need_ok.1 h3))
+    _ _ (rels1 hi accepts.args_data hic) h4
 
 /-- A command's codes' own condition is exact: it holds exactly when its three kept sources fit. -/
 theorem commandCode_exact {r e c : Ty} {x : CommandV r e c} {cc : CommandCode x} {cx : Term}
@@ -85,11 +98,6 @@ variable {v : ServiceV}
 def ensuresFits (S : Ty → Nat) {i a : Ty} : Option (Fun (Ty.fn [i, a] Ty.rules)) → i.den0 → a.den0 → Prop
   | none, _, _ => True
   | some f, x, y => (f.fits S).1 ∧ f.appFits S (x, y, ())
-
-end
-
-section
-variable {M : Model} {L : Layout} {v : ServiceV}
 
 end
 
