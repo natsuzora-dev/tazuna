@@ -48,15 +48,6 @@ theorem tupleCodes_rels {d : Nat} {x : Term} : (Γ : List Ty) → (pre vals : Li
     refine ⟨(rel_ofTerm hc _).2 ?_, tupleCodes_rels Γ (pre ++ [w]) ws ys cs (by simpa using hx) hws (by simpa using hcs)⟩
     rw [sel_ctor _ hx]; simpa using hw
 
-theorem forall2_mem' {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs → ∀ b ∈ bs,
-    ∃ a ∈ as, R a b
-  | [], [], _, _, hb => by simp at hb
-  | a :: as, b :: bs, ⟨h, hs⟩, b', hb => by
-    rcases List.mem_cons.1 hb with rfl | hb
-    · exact ⟨a, by simp, h⟩
-    · obtain ⟨a', ha', h'⟩ := forall2_mem' hs b' hb; exact ⟨a', by simp [ha'], h'⟩
-  | [], _ :: _, h, _, _ | _ :: _, [], h, _, _ => h.elim
-
 theorem slot_at : {S : List Slot} → {sv : List (Bool × List Val)} → SlotsDen M S sv → (j : Nat) → {f : Term} →
     {xs : List Term} → S[j]? = some (f, xs) → ∃ b, (b, Term.denotes M xs) ∈ sv ∧ f.denote M = .bool b
   | [], [], _, _, _, _, h => by simp at h
@@ -147,15 +138,6 @@ theorem filter_pendingList (shs : List (PendingShape v.event)) (to : Nat)
   · simp [h]
   · simp [h, Ne.symm h]
 
-theorem forall2_mem_r {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs → ∀ a ∈ as,
-    ∃ b ∈ bs, R a b
-  | [], [], _, _, ha => by simp at ha
-  | a :: as, b :: bs, ⟨h, hs⟩, a', ha => by
-    rcases List.mem_cons.1 ha with rfl | ha
-    · exact ⟨b, by simp, h⟩
-    · obtain ⟨b', hb', h'⟩ := forall2_mem_r hs a' ha; exact ⟨b', by simp [hb'], h'⟩
-  | [], _ :: _, h, _, _ | _ :: _, [], h, _, _ => h.elim
-
 theorem slot_mem : {S : List Slot} → {sv : List (Bool × List Val)} → SlotsDen M S sv → ∀ p ∈ sv,
     ∃ q ∈ S, q.1.denote M = .bool p.1 ∧ Term.denotes M q.2 = p.2
   | [], [], _, _, hp => by simp at hp
@@ -190,7 +172,7 @@ theorem answer_unmatched (s : State v) {shs : List (PendingShape v.event)} (to :
   rw [← hlist] at hp
   obtain ⟨⟨y1, y2⟩, hy, rfl⟩ := List.mem_map.1 hp
   obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := table_view (M := M) htbl h1
-  obtain ⟨vs, hvs, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_r hh (y1, y2) (hperm.mem_iff.2 hy)
+  obtain ⟨vs, hvs, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_left hh (y1, y2) (hperm.mem_iff.2 hy)
   have hocc : (true, vs) ∈ sv := by
     simp only [occupied, List.mem_filterMap] at hvs
     obtain ⟨⟨b, vs'⟩, hm, he⟩ := hvs

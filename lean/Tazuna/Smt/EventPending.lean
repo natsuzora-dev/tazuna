@@ -294,7 +294,7 @@ theorem startSlots_requests (ho : L.ownsOf e = []) (m : MachineV r e) {ws : List
   obtain ⟨α, κ, F, E, items, svX, -, hh, hEp, -, rfl⟩ := h
   intro x hx
   obtain ⟨a, ha, hx⟩ := List.mem_flatMap.1 hx
-  obtain ⟨vs, -, zk, z, -, -, hz⟩ := forall2_mem_left hh (hEp.mem_iff.2 ha)
+  obtain ⟨vs, -, zk, z, -, -, hz⟩ := forall2_mem_left hh _ (hEp.mem_iff.2 ha)
   unfold sentBy at hx
   generalize hF : F a = o at hz hx
   match o, hz, hx with
@@ -419,21 +419,6 @@ theorem zipIdx_snd {α : Type} : (l : List α) → (n : Nat) → (l.zipIdx n).ma
   | [], _ => rfl
   | _ :: l, n => by simp [List.zipIdx_cons, zipIdx_snd l (n + 1), List.range'_succ]
 
-theorem forall2_flip {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
-    Forall2 (fun b a => R a b) bs as
-  | [], [], _ => trivial
-  | _ :: _, _ :: _, ⟨h, hs⟩ => ⟨h, forall2_flip hs⟩
-
-theorem forall2_map_r {α β γ : Type} {R : α → γ → Prop} (f : β → γ) : {as : List α} → {bs : List β} →
-    Forall2 (fun a b => R a (f b)) as bs → Forall2 R as (bs.map f)
-  | [], [], _ => trivial
-  | _ :: _, _ :: _, ⟨h, hs⟩ => ⟨h, forall2_map_r f hs⟩
-
-theorem forall2_map_eq {α β γ : Type} {R : α → β → Prop} (f : α → γ) (g : β → γ) (h : ∀ a b, R a b → f a = g b) :
-    {as : List α} → {bs : List β} → Forall2 R as bs → as.map f = bs.map g
-  | [], [], _ => rfl
-  | _ :: _, _ :: _, ⟨hab, hs⟩ => by simp only [List.map_cons, h _ _ hab, forall2_map_eq f g h hs]
-
 /-- T2 for writing the new entries into the pending table: wherever the condition holds, the new table denotes the
 state's pending requests with the requests the step writes for the effects (in some order: pending requests are a
 multiset), when the state's wire ids are distinct and below the first new id. -/
@@ -460,7 +445,7 @@ theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : Lis
   -- The requests in the order of the effects.
   obtain ⟨zs'', hzp, hq'⟩ := forall2_perm hxs (forall2_flip hq)
   have hq'' := forall2_flip hq'
-  refine ⟨zs''.map fun y => pendingOf shs y.1 y.2, forall2_map_r _ (forall2_imp (fun _ _ h => h.2) hq''), ?_⟩
+  refine ⟨zs''.map fun y => pendingOf shs y.1 y.2, forall2_map_right (R := fun a y => Step.Writes ds a (pendingOf shs y.1 y.2)) _ (fun _ _ h => h) (forall2_imp (fun _ _ h => h.2) hq''), ?_⟩
   let key : (Ty.dsl .fresh []).den × (pendingEntry shs).den → Nat := fun y => y.1
   have hkeysNew : zs.map key = xs.map (·.2) := (forall2_map_eq (·.2) key (fun _ _ h => h.1.symm) hq).symm
   have hkeysOld : (ys0.map key).Perm (ps0.map (·.id)) := by

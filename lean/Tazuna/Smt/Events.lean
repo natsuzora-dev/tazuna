@@ -49,15 +49,6 @@ theorem reactAll_now (s : State v) (evs : List v.event.den0) : (reactAll T s evs
 theorem reactAll_fresh (s : State v) (evs : List v.event.den0) : (reactAll T s evs).1.fresh = s.fresh := by
   rw [reactAll_keeps]
 
-theorem forall2_split {α β : Type} {R : α → β → Prop} : (as as' : List α) → {bs : List β} →
-    Tazuna.Smt.Forall2 R (as ++ as') bs →
-    ∃ bs1 bs2, bs = bs1 ++ bs2 ∧ Tazuna.Smt.Forall2 R as bs1 ∧ Tazuna.Smt.Forall2 R as' bs2
-  | [], _, bs, h => ⟨[], bs, rfl, trivial, h⟩
-  | _ :: as, as', b :: bs, ⟨h1, h2⟩ => by
-    obtain ⟨bs1, bs2, rfl, h3, h4⟩ := forall2_split as as' h2
-    exact ⟨b :: bs1, bs2, rfl, ⟨h1, h3⟩, h4⟩
-  | _ :: _, _, [], h => h.elim
-
 /-- Events whose machines and reactions start requests that externals list: the records and machines react to each in
 turn, the requests are written at the next ids and sent, and the own commands and queries are queued. -/
 theorem applyEvents_requests : (evs : List v.event.den0) → (a : Acc v) → (ps : List (Pending v.event)) →
@@ -69,7 +60,7 @@ theorem applyEvents_requests : (evs : List v.event.den0) → (a : Acc v) → (ps
     simp [applyEvents, reactAll, Acc.wrote, Acc.queued, pure, Except.pure]
   | ev :: evs, a, ps, hps => by
     simp only [reactAll, reqsOf, List.filter_append, List.zipIdx_append] at hps
-    obtain ⟨ps1, ps2, rfl, h1, h2⟩ := forall2_split _ _ hps
+    obtain ⟨ps1, ps2, rfl, h1, h2⟩ := Tazuna.Smt.forall2_split _ _ hps
     have hs : applyEvents T a (ev :: evs) =
         (start { a with state := (react T a.state ev).1, events := a.events ++ [ev] } (react T a.state ev).2) >>=
           fun a' => applyEvents T a' evs := rfl

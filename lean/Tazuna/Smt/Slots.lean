@@ -1,4 +1,5 @@
 import Tazuna.Smt.Term
+import Tazuna.Smt.Forall2
 
 /-! Bags and tables as slots. A collection of type `c` is a value of datatype `d` with one constructor holding `n`
 slots, the slot count its layout gives `c`; each slot is a tuple `(occupied, item...)` of datatype `dt`, with one item
@@ -62,17 +63,6 @@ def resizeSlots (d dt : Nat) (dflt : List Term) (n : Nat) (S : List Slot) : List
 
 /-! What slots denote: each slot's flag a Bool and its items values; the collection is the items of the occupied
 ones. -/
-
-/-- `R` relates the lists item by item. -/
-def Forall2 {α β : Type} (R : α → β → Prop) : List α → List β → Prop
-  | [], [] => True
-  | a :: as, b :: bs => R a b ∧ Forall2 R as bs
-  | _, _ => False
-
-theorem forall2_length {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
-    as.length = bs.length
-  | [], [], _ => rfl
-  | _ :: _, _ :: _, ⟨_, h⟩ => congrArg (· + 1) (forall2_length h)
 
 /-- The item values of the occupied slots. -/
 def occupied (sv : List (Bool × List Val)) : List (List Val) :=
@@ -320,42 +310,6 @@ theorem insertVals_length (xv : List Val) (w : Nat) (hx : xv.length = w) : (pb :
 def pickT (none : Term) : List (Term × Term × Term) → Term
   | [] => none
   | (f, h, r) :: rest => .ite (.and f h) r (pickT none rest)
-
-theorem mapM_ok {ε α β : Type} (g : α → Except ε β) : (xs : List α) → (ys : List β) → xs.mapM g = .ok ys →
-    Forall2 (fun x y => g x = .ok y) xs ys
-  | [], ys, h => by simp [List.mapM_nil, pure, Except.pure] at h; subst h; trivial
-  | x :: xs, ys, h => by
-    rw [List.mapM_cons] at h
-    cases hx : g x with
-    | error e => simp [hx, bind, Except.bind] at h
-    | ok y =>
-      cases hxs : xs.mapM g with
-      | error e => simp [hx, hxs, bind, Except.bind] at h
-      | ok ys' =>
-        simp [hx, hxs, bind, Except.bind, pure, Except.pure] at h
-        subst h
-        exact ⟨hx, mapM_ok g xs ys' hxs⟩
-
-/-- Forall2 survives reordering the right list, with the left list reordered alike. -/
-theorem forall2_perm {α β : Type} {R : α → β → Prop} {bs bs' : List β} (hp : bs.Perm bs') :
-    ∀ {as : List α}, Forall2 R as bs → ∃ as', as'.Perm as ∧ Forall2 R as' bs' := by
-  induction hp with
-  | nil => intro as h; exact ⟨as, List.Perm.refl _, h⟩
-  | cons b _ ih =>
-    intro as h
-    match as, h with
-    | a :: as, ⟨hab, h⟩ =>
-      obtain ⟨as', hp', h'⟩ := ih h
-      exact ⟨a :: as', hp'.cons a, hab, h'⟩
-  | swap b c l =>
-    intro as h
-    match as, h with
-    | a1 :: a2 :: as, ⟨h1, h2, h⟩ => exact ⟨a2 :: a1 :: as, List.Perm.swap a1 a2 as, h2, h1, h⟩
-  | trans _ _ ih1 ih2 =>
-    intro as h
-    obtain ⟨as1, hp1, h1⟩ := ih1 h
-    obtain ⟨as2, hp2, h2⟩ := ih2 h1
-    exact ⟨as2, hp2.trans hp1, h2⟩
 
 theorem aligned_of {α : Type} {E : α → List Val → Prop} {V : α → Val → Prop} (G : Slot → Term × Term → Prop)
     (hG : ∀ sl r y, G sl r → E y (Term.denotes M sl.2) → (r.2.denote M).toBool = true → V y (r.1.denote M)) :

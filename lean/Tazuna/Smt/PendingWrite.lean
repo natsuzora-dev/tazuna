@@ -337,12 +337,6 @@ theorem entryT_den {M : Model} (dE dP dk : Nat) (dflt : Term) (keyT : List Term)
     rfl
 
 
-theorem forall2_getElem? {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
-    {i : Nat} → {a : α} → as[i]? = some a → ∃ b, bs[i]? = some b ∧ R a b
-  | [], [], _, _, _, h => by cases h
-  | _ :: _, _ :: _, ⟨hab, _⟩, 0, _, h => by cases h; exact ⟨_, rfl, hab⟩
-  | _ :: _, _ :: _, ⟨_, hs⟩, i + 1, _, h => forall2_getElem? hs (i := i) (by simpa using h)
-
 /-- The pending entry the step writes for an effect a sender starts: wherever the effect's term and the key tuple's
 items denote them, the entry term denotes an entry that codes the request with its sender and the external that lists
 it. -/

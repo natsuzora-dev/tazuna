@@ -165,40 +165,6 @@ open Tazuna.Ir
 section
 variable {α β γ : Type}
 
-theorem forall2_zip {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
-    ∀ p ∈ as.zip bs, R p.1 p.2
-  | [], [], _, _, hp => by simp at hp
-  | _ :: _, _ :: _, ⟨h, hs⟩, p, hp => by
-    rcases List.mem_cons.1 hp with rfl | hp
-    · exact h
-    · exact forall2_zip hs p hp
-
-theorem forall2_of_pairs {R : α → β → Prop} : (ps : List (α × β)) → (∀ p ∈ ps, R p.1 p.2) →
-    Forall2 R (ps.map (·.1)) (ps.map (·.2))
-  | [], _ => trivial
-  | p :: ps, h => ⟨h p (by simp), forall2_of_pairs ps fun q hq => h q (by simp [hq])⟩
-
-/-- Sorting two related lists by orders that agree on related items keeps them related. -/
-theorem forall2_mergeSort {R : α → β → Prop} {le : α → α → Bool} {le' : β → β → Bool} {as : List α} {bs : List β}
-    (h : Forall2 R as bs) (hle : ∀ a b a' b', R a a' → R b b' → le a b = le' a' b') :
-    Forall2 R (as.mergeSort le) (bs.mergeSort le') := by
-  have hl := forall2_length h
-  have hz := forall2_zip h
-  let P := as.zip bs
-  have h1 : (P.mergeSort fun p q => le p.1 q.1).map (·.1) = as.mergeSort le := by
-    rw [List.map_mergeSort (s := le) (fun _ _ _ _ => rfl)]
-    simp [P, List.map_fst_zip, hl]
-  have h2 : (P.mergeSort fun p q => le p.1 q.1).map (·.2) = bs.mergeSort le' := by
-    rw [List.map_mergeSort (s := le') (fun p hp q hq => hle _ _ _ _ (hz p hp) (hz q hq))]
-    simp [List.map_snd_zip, hl]
-  rw [← h1, ← h2]
-  exact forall2_of_pairs _ fun p hp => hz p ((List.mem_mergeSort).1 hp)
-
-theorem forall2_flatMap {R : α → β → Prop} {f : α → List γ} {g : β → List γ} (hfg : ∀ a b, R a b → f a = g b) :
-    {as : List α} → {bs : List β} → Forall2 R as bs → as.flatMap f = bs.flatMap g
-  | [], [], _ => rfl
-  | _ :: _, _ :: _, ⟨h, hs⟩ => by simp only [List.flatMap_cons]; rw [hfg _ _ h, forall2_flatMap hfg hs]
-
 /-- In a list with no key twice, two items whose keys are equal are the same item. -/
 theorem eq_of_keysUnique {κ ν : Type} (f : κ → κ → Bool) (g : κ × ν → β) (key : β → κ) (hkey : ∀ p, key (g p) = p.1) :
     (l : List (κ × ν)) → KeysUnique f l → {a b : β} → a ∈ l.map g → b ∈ l.map g → f (key a) (key b) = true → a = b
@@ -385,11 +351,6 @@ theorem occupied_checks (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.k
         exact ⟨⟨hkey ▸ hk, hb⟩, ih⟩
   | [], _ :: _, _, _, h, _, _, _, _ | _ :: _, [], _, _, h, _, _, _, _ => h.elim
   | [], [], _ :: _, _, _, _, h, _, _ | _ :: _, _ :: _, [], _, _, _, h, _, _ => h.elim
-
-theorem forall2_map_right {α β β' : Type} {R : α → β → Prop} {R' : α → β' → Prop} (f : β → β')
-    (hf : ∀ a b, R a b → R' a (f b)) : {as : List α} → {bs : List β} → Forall2 R as bs → Forall2 R' as (bs.map f)
-  | [], [], _ => trivial
-  | _ :: _, _ :: _, ⟨h, hs⟩ => ⟨hf _ _ h, forall2_map_right f hf hs⟩
 
 /-- T2 for machine invariants: wherever the condition holds, the names `instBroken` reads from the model are the
 broken invariants of the table's instances, in the order the step checks them. -/
@@ -989,11 +950,6 @@ theorem deq_down (m : MachineV r e) (a b : m.key.den) :
 theorem holds2_append_unoccupied {α : Type} {E : α → List Val → Prop} {ys : List α} {sv : List (Bool × List Val)}
     (h : Holds2 E ys sv) (vs : List Val) : Holds2 E ys (sv ++ [(false, vs)]) := by
   simpa [Holds2, occupied, List.filterMap_append] using h
-
-theorem forall2_append_one {α β : Type} {R : α → β → Prop} {a : α} {b : β} (hab : R a b) :
-    {as : List α} → {bs : List β} → Forall2 R as bs → Forall2 R (as ++ [a]) (bs ++ [b])
-  | [], [], _ => ⟨hab, trivial⟩
-  | _ :: _, _ :: _, ⟨h, hs⟩ => ⟨h, forall2_append_one hab hs⟩
 
 theorem holds2_append_occupied {α : Type} {E : α → List Val → Prop} {ys : List α} {sv : List (Bool × List Val)}
     (h : Holds2 E ys sv) {y : α} {vs : List Val} (hy : E y vs) : Holds2 E (ys ++ [y]) (sv ++ [(true, vs)]) := by

@@ -179,7 +179,7 @@ theorem reaction_parts {P : List AnySite} (hP : SitesUnique P) (name : String) {
   by_cases ho : (L.ownsOf e).isEmpty
   · have hall : ∀ x ∈ effs, x.isRequest = true := by
       intro x hx
-      obtain ⟨vs, -, z, -, hz⟩ := forall2_mem_left hh hx
+      obtain ⟨vs, -, z, -, hz⟩ := forall2_mem_left hh _ hx
       exact request_of_rel (List.isEmpty_iff.1 ho) hz
     have h1 : effs.filter (·.isRequest) = effs := List.filter_eq_self.2 hall
     have h2 : effs.filter (!·.isRequest) = [] := List.filter_eq_nil_iff.2 fun x hx => by simp [hall x hx]

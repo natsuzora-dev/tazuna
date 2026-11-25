@@ -187,12 +187,6 @@ theorem distinctT_den : (S : List Slot) → (sv : List (Bool × List Val)) → S
 
 theorem isSome_map {α β : Type} (f : α → β) (o : Option α) : (o.map f).isSome = o.isSome := by cases o <;> rfl
 
-theorem forall2_all {α β : Type} {E : α → β → Prop} {P : α → Prop} {R : β → Prop} (hPR : ∀ a b, E a b → (P a ↔ R b)) :
-    (as : List α) → (bs : List β) → Forall2 E as bs → ((∀ a ∈ as, P a) ↔ ∀ b ∈ bs, R b)
-  | [], [], _ => by simp
-  | a :: as, b :: bs, ⟨hab, h⟩ => by simp only [List.mem_cons, forall_eq_or_imp, hPR a b hab, forall2_all hPR as bs h]
-  | [], _ :: _, h | _ :: _, [], h => h.elim
-
 theorem pairwise_forall2 {α β : Type} {E : α → β → Prop} {P : α → α → Prop} {R : β → β → Prop}
     (hPR : ∀ a b a' b', E a b → E a' b' → (P a a' ↔ R b b')) :
     (as : List α) → (bs : List β) → Forall2 E as bs → (as.Pairwise P ↔ bs.Pairwise R)

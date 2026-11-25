@@ -268,16 +268,6 @@ theorem firstSlots_length (t : Ty) : (prev S : List Slot) → (fs : List Term) �
     cases pure_ok.1 h
     simp [firstSlots_length t _ rest fs' h3]
 
-theorem forall2_zip_left {α β γ δ : Type} {R : α × β → γ × δ → Prop} : {as : List α} → {bs : List β} →
-    {cs : List (γ × δ)} → as.length ≤ bs.length → Forall2 R (as.zip bs) cs →
-    Forall2 (fun a d => ∃ b q, R (a, b) q ∧ d = q.2) as (cs.map (·.2))
-  | [], _, [], _, _ => trivial
-  | a :: as, b :: bs, q :: cs, hl, ⟨h, hs⟩ =>
-    ⟨⟨b, q, h, rfl⟩, forall2_zip_left (by simp at hl; omega) hs⟩
-  | _ :: _, [], _, hl, _ => by simp at hl
-  | [], _, _ :: _, _, h => by cases ‹List _› <;> exact h.elim
-  | _ :: _, _ :: _, [], _, h => h.elim
-
 /-- Conditions of the form "where the slot is occupied": their conjunction holds exactly when the property each
 occupied slot's condition decides holds of every item. -/
 theorem allT_slots_exact {α : Type} {E : α → List Val → Prop} {P : α → Prop} (G : Slot → Term → Prop)

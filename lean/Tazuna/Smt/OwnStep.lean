@@ -744,12 +744,6 @@ theorem fold_hit {e : Ty} (base : StepTerms) (hb : base.done.news = [] ∧ base.
       rw [pick_tables_false hc]
       exact h2 hl
 
-theorem forall2_getElem?_r {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
-    {i : Nat} → {b : β} → bs[i]? = some b → ∃ a, as[i]? = some a ∧ R a b
-  | [], [], _, _, _, h => by cases h
-  | _ :: _, _ :: _, ⟨hab, _⟩, 0, _, h => by cases h; exact ⟨_, rfl, hab⟩
-  | _ :: _, _ :: _, ⟨_, hs⟩, i + 1, _, h => forall2_getElem?_r hs (i := i) (by simpa using h)
-
 theorem find_hit {α : Type} {k : Nat} : (l : List (Term × α)) → {y : Term × α} → l[k]? = some y →
     (∀ (i : Nat) (kk : Term × α), l[i]? = some kk → kk.1.denote M = .bool (decide (i = k))) →
     l.find? (fun kk => (kk.1.denote M).toBool) = some y
@@ -814,7 +808,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
   have htests : ∀ (i : Nat) (y : Term × OwnKindOut × StepTerms × Term × Term), ks[i]? = some y →
       y.1.denote M = .bool (decide (i = k)) := by
     intro i y hy
-    obtain ⟨⟨key', i'⟩, hz, hR'⟩ := forall2_getElem?_r hF hy
+    obtain ⟨⟨key', i'⟩, hz, hR'⟩ := forall2_getElem? (forall2_flip hF) hy
     obtain ⟨_, -, hR'⟩ := bind_ok.1 hR'
     cases pure_ok.1 hR'
     rw [List.getElem?_zipIdx] at hz
@@ -838,7 +832,7 @@ theorem ownStep_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.r
       (∀ sl ∈ y.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ y.2.done.owns, sl.2.length = 2 := by
     intro y hy
     obtain ⟨z, hz, rfl⟩ := List.mem_map.1 hy
-    obtain ⟨⟨key', i'⟩, -, hR'⟩ := forall2_mem' hF z hz
+    obtain ⟨⟨key', i'⟩, -, hR'⟩ := forall2_mem_right hF z hz
     obtain ⟨⟨ko', st', c', cx'⟩, hkind', hR'⟩ := bind_ok.1 hR'
     cases pure_ok.1 hR'
     exact encodeOwnKind_width hkind'
@@ -1087,7 +1081,7 @@ theorem ownStep_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v
   have htests : ∀ (i : Nat) (y : Term × OwnKindOut × StepTerms × Term × Term), ks[i]? = some y →
       y.1.denote M = .bool (decide (i = k)) := by
     intro i y hy
-    obtain ⟨⟨key', i'⟩, hz, hR'⟩ := forall2_getElem?_r hF hy
+    obtain ⟨⟨key', i'⟩, hz, hR'⟩ := forall2_getElem? (forall2_flip hF) hy
     obtain ⟨_, -, hR'⟩ := bind_ok.1 hR'
     cases pure_ok.1 hR'
     rw [List.getElem?_zipIdx] at hz

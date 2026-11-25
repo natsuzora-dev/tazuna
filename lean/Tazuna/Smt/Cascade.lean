@@ -72,7 +72,7 @@ def SettleDone (M : Model) (L : Layout) (T : List TypeDecl) (hrd : v.records.isD
     NewsRel M L shs v.declared o.done.news effs a.state.nextId ∧
     o.done.queued.denote M = .int ((a.own.length + os.length : Nat) : Int) ∧ OwnRel M L o.done.owns os a.own.length
 
-theorem newsRel_nil' {e : Ty} {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {n0 : Nat} :
+theorem newsRel_nil {e : Ty} {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {n0 : Nat} :
     NewsRel M L shs ds [] [] n0 :=
   ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩
 
@@ -119,7 +119,7 @@ theorem encodeOwnStep_width {P : List AnySite} {shs : List (PendingShape v.event
   have := fold_width ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩ (ks.map fun k => (k.1, k.2.2.1)) (by
     intro y hy
     obtain ⟨z, hz, rfl⟩ := List.mem_map.1 hy
-    obtain ⟨⟨key', i'⟩, -, hR'⟩ := forall2_mem' hF z hz
+    obtain ⟨⟨key', i'⟩, -, hR'⟩ := forall2_mem_right hF z hz
     obtain ⟨⟨ko', st', c', cx'⟩, hkind', hR'⟩ := bind_ok.1 hR'
     cases pure_ok.1 hR'
     exact encodeOwnKind_width hkind')
@@ -269,14 +269,14 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
           refine ⟨recs1, ms1, fr1, evs0 ++ evs1, effs0 ++ effs1, os0 ++ os1, fun ps hps => ?_, s1, s2, s3, ?_, ?_, ?_,
             ?_⟩
           · rw [List.zipIdx_append] at hps
-            obtain ⟨ps0', ps1, rfl, hps0', hps1⟩ := Step.forall2_split _ _ hps
+            obtain ⟨ps0', ps1, rfl, hps0', hps1⟩ := forall2_split _ _ hps
             obtain rfl := writes_unique hps0' hps0
             rw [hr1 ps1 (by simpa [hl0] using hps1)]
             simp [List.append_assoc, Nat.add_assoc]
           · rw [s4]; simp [hl0, Nat.add_assoc]
           · have h0 : NewsRel M L shs v.declared (gateSlots (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
                 o1.terms.done.news ++ []) effs0 a.state.nextId := by
-              simpa using newsRel_append (newsRel_gate (L := L) hact' r4) (newsRel_nil' (L := L) (M := M))
+              simpa using newsRel_append (newsRel_gate (L := L) hact' r4) (newsRel_nil (L := L) (M := M))
             exact newsRel_append h0 (by simpa [hl0] using s5)
           · rw [s6]; simp [Nat.add_assoc]
           · have h0 : OwnRel M L (gateSlots (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
@@ -314,7 +314,7 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
         rintro ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, s5, s6, s7⟩
         refine ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, ?_, s6, ?_⟩
         · have h0 := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hact' hw1.1
-            a.state.nextId) (newsRel_nil' (L := L) (M := M))
+            a.state.nextId) (newsRel_nil (L := L) (M := M))
           exact newsRel_append h0 s5
         · have h0 := ownRel_append (ownRel_gate_false (L := L) (e := v.event) hact' hw1.2 a.own.length)
             (ownRel_nil _)

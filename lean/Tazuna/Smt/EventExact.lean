@@ -22,11 +22,6 @@ theorem instCheckAt_cond (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.
   cases pure_ok.1 hg
   exact ⟨_, rfl⟩
 
-theorem forall2_snd {α β γ : Type} {R : α → β × γ → Prop} : {as : List α} → {bs : List (β × γ)} → Forall2 R as bs →
-    Forall2 (fun a c => ∃ b, R a (b, c)) as (bs.map (·.2))
-  | [], [], _ => trivial
-  | _ :: _, (b, _) :: _, ⟨h, hs⟩ => ⟨⟨b, h⟩, forall2_snd hs⟩
-
 /-- One occupied slot's instance invariant check: its condition holds exactly when the invariants fit at that
 instance. -/
 theorem instCheck_exact (m : MachineV r e) {inv : Code (Ty.fn [Ty.machineCtx m.key m.state r] Ty.rules)} {ci : Term}

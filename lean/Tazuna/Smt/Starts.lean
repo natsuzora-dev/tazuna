@@ -92,11 +92,6 @@ theorem length_flatMap_toList {α β : Type} (F : α → Option β) :
     rw [List.flatMap_cons, List.length_append, length_flatMap_toList F l, List.countP_cons]
     cases F a <;> simp; omega
 
-theorem forall2_map_self {α β : Type} {R : α → β → Prop} (f : α → β) : (l : List α) → (∀ a ∈ l, R a (f a)) →
-    Forall2 R l (l.map f)
-  | [], _ => trivial
-  | a :: l, h => ⟨h a (by simp), forall2_map_self f l fun b hb => h b (by simp [hb])⟩
-
 /-- An effect option and its value: some effect is constructor 0 with the effect's value, none constructor 1. -/
 theorem opt_view {dopt nopt : Nat} (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt))
     {v : (Ty.option (.dsl .effect [e])).den} {z : Val} (h : RelV L (Ty.option (.dsl .effect [e])) v z) :
@@ -155,11 +150,6 @@ theorem sum_countP {α : Type} {R : α → List Val → Prop} {Q : α → Bool} 
         cases Q a <;> (simp; try omega)
   | [], _ :: _, _, _, h, _, _ | _ :: _, [], _, _, h, _, _ => h.elim
   | [], [], _, _ :: _, _, _, h | _ :: _, _ :: _, _, [], _, _, h => h.elim
-
-theorem forall2_imp {α β : Type} {R R' : α → β → Prop} (h : ∀ a b, R a b → R' a b) :
-    {as : List α} → {bs : List β} → Forall2 R as bs → Forall2 R' as bs
-  | [], [], _ => trivial
-  | _ :: _, _ :: _, ⟨hab, hs⟩ => ⟨h _ _ hab, forall2_imp h hs⟩
 
 /-- The effect an item starts, with its sender: the instance of the item's key. -/
 abbrev sentBy (m : MachineV r e) {α : Type} (κ : α → m.key.den0) (F : α → (Ty.option (.dsl .effect [e])).den) (a : α) :

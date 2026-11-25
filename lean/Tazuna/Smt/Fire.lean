@@ -308,16 +308,6 @@ theorem fireAt_rel (m : MachineV r e)
       · simp only [Term.denote, Term.denotes]
       · exact (rel_term (need_ok.1 g6) _).1 (hfx _ _ hcx' _ _ g5 hcx)
 
-theorem forall2_mapM_map {ε α γ δ : Type} (g : α → Except ε γ) (p : γ → δ) {S : List α} {outs : List γ}
-    (h : S.mapM g = .ok outs) : Forall2 (fun sl r => ∃ o, g sl = .ok o ∧ r = p o) S (outs.map p) :=
-  go (mapM_ok g S outs h)
-where
-  go : {S : List α} → {outs : List γ} → Forall2 (fun x y => g x = .ok y) S outs →
-      Forall2 (fun sl r => ∃ o, g sl = .ok o ∧ r = p o) S (outs.map p)
-    | [], [], _ => trivial
-    | _ :: _, _ :: _, ⟨h, hs⟩ => ⟨⟨_, h, rfl⟩, go hs⟩
-    | [], _ :: _, h | _ :: _, [], h => h.elim
-
 /-- T2 for one firing round on a machine's table: wherever the condition holds, the new table term denotes the
 instances with the one `Step.firesIn` picks entering its timer's state (none where `done`), the hit term says
 whether some instance has the deadline, and the start slots hold each instance's effect option (`firedOpt`). -/

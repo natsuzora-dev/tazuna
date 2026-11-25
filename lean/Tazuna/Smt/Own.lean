@@ -95,18 +95,6 @@ theorem request_of_rel (ho : L.ownsOf e = []) {x : EffectV e} {z : Val} (h : Rel
     | query => exact hh.elim
   · rw [ho] at hk; cases hk
 
-theorem forall2_mem_left {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
-    {a : α} → a ∈ as → ∃ b ∈ bs, R a b
-  | _ :: _, b :: _, ⟨hab, _⟩, _, .head _ => ⟨b, .head _, hab⟩
-  | _ :: _, _ :: _, ⟨_, hs⟩, _, .tail _ h => by
-    obtain ⟨b, hb, hr⟩ := forall2_mem_left hs h
-    exact ⟨b, .tail _ hb, hr⟩
-
-theorem forall2_append {α β : Type} {R : α → β → Prop} : {a a' : List α} → {b b' : List β} → Forall2 R a b →
-    Forall2 R a' b' → Forall2 R (a ++ a') (b ++ b')
-  | [], _, [], _, _, h => h
-  | _ :: _, _, _ :: _, _, ⟨h1, h2⟩, h => ⟨h1, forall2_append h2 h⟩
-
 theorem ownRel_nil (q0 : Nat) : OwnRel M L [] ([] : List (EffectV e)) q0 :=
   ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], by simp⟩
 

@@ -191,12 +191,6 @@ end
 section
 variable {M : Model} {L : Layout}
 
-theorem forall2_map {α α' β : Type} {R : α → β → Prop} {R' : α' → β → Prop} (f : α → α') (hf : ∀ a b, R a b → R' (f a) b) :
-    {as : List α} → {bs : List β} → Forall2 R as bs → Forall2 R' (as.map f) bs
-  | [], [], _ => trivial
-  | _ :: _, _ :: _, ⟨h, hs⟩ => ⟨hf _ _ h, forall2_map f hf hs⟩
-  | [], _ :: _, h | _ :: _, [], h => h.elim
-
 theorem map_down_up (t : Ty) (ht : t.isData = true) (xs : List t.den0) :
     (xs.map (Ty.up t ht)).map (Ty.down t ht) = xs := by
   simp [List.map_map, Function.comp_def, Ty.down_up]
@@ -1286,13 +1280,6 @@ theorem find_perm {α : Type} {P : α → Bool} {xs ys : List α} (hp : xs.Perm 
     have h2 : ys.find? P = none := List.find?_eq_none.2 fun a ha hpa => h ⟨a, hp.mem_iff.2 ha, hpa⟩
     rw [h1, h2]
 
-theorem forall2_mem {α β : Type} {R : α → β → Prop} : {as : List α} → {bs : List β} → Forall2 R as bs →
-    {a : α} → a ∈ as → ∃ b, R a b
-  | x :: _, y :: _, ⟨hxy, h⟩, a, ha => by
-    rcases List.mem_cons.1 ha with rfl | ha'
-    · exact ⟨y, hxy⟩
-    · exact forall2_mem h ha'
-
 /-- The value term of the first occupied slot whose hit holds relates to the first item satisfying `P`. -/
 theorem pick_aligned {α : Type} {E : α → List Val → Prop} {P : α → Bool} (R : List Term → Term)
     (V : α → Val → Prop) (hR : ∀ y xs, E y (Term.denotes M xs) → V y ((R xs).denote M)) (none : Term) :
@@ -1333,8 +1320,8 @@ theorem lookupT_rel {k w : Ty} {x : (Ty.table k w).den} {t : Term} (hb : Rel M L
   have hu : ys.Pairwise (fun a b => ¬(P a = true ∧ P b = true)) := by
     refine (hperm.symm.pairwise x.2 fun h => ⟨h.2, h.1⟩).imp_of_mem ?_
     intro a b ha hb' hab hp
-    obtain ⟨va, zka, zva, rfl, hza, -⟩ := forall2_mem hh ha
-    obtain ⟨vb, zkb, zvb, rfl, hzb, -⟩ := forall2_mem hh hb'
+    obtain ⟨va, -, zka, zva, rfl, hza, -⟩ := forall2_mem_left hh _ ha
+    obtain ⟨vb, -, zkb, zvb, rfl, hzb, -⟩ := forall2_mem_left hh _ hb'
     have e1 := Val.eq_of_beq _ _ ((relV_beq k hk key a.1 _ _ hkt' hza).trans hp.1)
     have e2 := Val.eq_of_beq _ _ ((relV_beq k hk key b.1 _ _ hkt' hzb).trans hp.2)
     have := relV_beq k hk a.1 b.1 _ _ hza hzb

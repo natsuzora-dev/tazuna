@@ -170,10 +170,6 @@ theorem loop_apply {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
   exact ⟨r1, r2, r3, r4, r5, r6, fun ps hps => Step.applyEvents_requests T evs a ps hps⟩
 
 
-theorem forall2_zipIdx_length {α β : Type} {R : α × Nat → β → Prop} (xs : List α) (n0 : Nat) {ps : List β}
-    (h : Forall2 R (xs.zipIdx n0) ps) : ps.length = xs.length := by
-  rw [← forall2_length h, List.length_zipIdx]
-
 theorem up_nil (h : Ty.nil.isData = true) :
     Ty.up Ty.nil h (.inl () : Ty.nil.den0) = Alts.inj (vs := [[]]) ⟨0, by simp⟩ () :=
   (Ty.up_inl 1 [] [] [] h rfl _).trans rfl
@@ -468,7 +464,7 @@ theorem ownCommand_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ 
       Step.queuedOf (Step.reactAll T a1.state events).2 ++ Step.queuedOf (Step.reactAll T sA evs2).2,
       fun ps hps => ?_, q1, q2, ?_, newsRel_append p4 q4, ?_, ownRel_append p6 q6⟩
     · rw [List.zipIdx_append] at hps
-      obtain ⟨ps1, ps2, rfl, hps1, hps2⟩ := Step.forall2_split _ _ hps
+      obtain ⟨ps1, ps2, rfl, hps1, hps2⟩ := forall2_split _ _ hps
       have hl1 := forall2_zipIdx_length _ _ hps1
       let a2' : Step.Acc v := ((({ a1 with state := sA, events := @HAppend.hAppend (List v.event.den0) (List v.event.den0) _ _ a1.events events } : Step.Acc v).wrote ps1
         (a1.state.nextId + reqs1.length)).queued (Step.queuedOf (Step.reactAll T a1.state events).2))

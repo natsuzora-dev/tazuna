@@ -129,7 +129,7 @@ theorem answer_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx 
   obtain ⟨b, hbsv, hfb⟩ := slot_at hS j (need_ok.1 h3)
   have hb : b = true := by simpa [Holds, hfb, Val.toBool] using hhf
   subst hb
-  obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem' hh _ (by
+  obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_right hh _ (by
     simp only [occupied, List.mem_filterMap]; exact ⟨_, hbsv, rfl⟩)
   obtain ⟨tk, te, rfl⟩ : ∃ tk te, xs = [tk, te] := by
     match xs, hxs with
@@ -399,7 +399,7 @@ theorem answer_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
   obtain ⟨b, hbsv, hfb⟩ := slot_at hS j (need_ok.1 h3)
   have hb : b = true := by simpa [Holds, hfb, Val.toBool] using hhf
   subst hb
-  obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem' hh _ (by
+  obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_right hh _ (by
     simp only [occupied, List.mem_filterMap]; exact ⟨_, hbsv, rfl⟩)
   obtain ⟨tk, te, rfl⟩ : ∃ tk te, xs = [tk, te] := by
     match xs, hxs with

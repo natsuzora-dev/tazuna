@@ -163,7 +163,7 @@ theorem finish_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
     obtain ⟨sv, zs, hS, hw, hh, xs, hp, hq⟩ := hnews
     obtain ⟨ps, hps, ps', hperm, hrelP⟩ := pending_rel hpend hinv.below hinv.nodup hS hw hh hp hq hpe hcp
     rw [List.zipIdx_append] at hps
-    obtain ⟨ps1', ps2', rfl, hps1', hps2'⟩ := Step.forall2_split _ _ hps
+    obtain ⟨ps1', ps2', rfl, hps1', hps2'⟩ := forall2_split _ _ hps
     obtain rfl := writes_unique hps1 hps1'
     obtain rfl := writes_unique hps2 (by simpa [hl1] using hps2')
     have hb := invariants_rel v.invariants hrd hfd hinvR recs2 f1 hi hci
