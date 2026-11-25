@@ -3192,6 +3192,11 @@ def sizes : IO UInt32 := do
   row "answer" fun k => (·.1) <$> answerMScriptOf k []
   row "clock" fun k => (·.1) <$> clockFireScript 2 k []
   row "own command step" fun k => (·.1) <$> internalScriptOf k []
+  let queue : List (Layout → Except Refusal Term) :=
+    [fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5], fun L => ownT L nextKey (.str "alice") (.int 3) []]
+  row "own effect step (3 kinds)" fun k => (·.1) <$> dispScriptOf k queue[0]! []
+  row "cascade of 2" fun k => (·.1) <$> cascadeTermsOf k 2 queue []
+  row "cascade at 3 slots (bound, not slots)" fun k => (·.1) <$> cascadeTermsOf 3 k queue []
   row "re-shared chain (levels, not slots)" fun k => pure (reshared k)
   return 0
 
