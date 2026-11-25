@@ -1,12 +1,12 @@
 import Tazuna.Semantics.Equivariance
 import Tazuna.Semantics.Start
-import Tazuna.Semantics.Diamond
+import Tazuna.Semantics.Interleave
 
 /-! The step respects renaming. A state relates to another under a renaming `R` when its records, instances, pending
 requests, applied events, out lines and waiting own effects relate under `R`, each collection as a multiset and wire
-ids through `R.wire`. Running related effects from related states gives related states, under `R` with wire ids
-extended to the requests the effects send, or a fault on both sides (`runOwn_rel`). This is what `Diamond.Simulates`
-asks of the own cascade and of a clock line's timers (`Tazuna.Semantics.Interleave`). -/
+ids through `R.wire`. Running related own effects from related states gives related states, under `R` with wire ids
+extended to the requests the effects send, or a fault on both sides (`runOwn_rel`), so the own cascade respects the
+equivalence the renamings generate (`ownSys_simulates`), which `Diamond.runs_agree` asks of it. -/
 
 namespace Tazuna.Ir
 
@@ -259,6 +259,28 @@ theorem Multi.zipIdx {r : α → β → Prop} : {xs : List α} → {ys : List β
         (r' := fun p q => r p.1 q.1 ∧ ((p.2 = N ∧ q.2 = c) ∨ ∃ j0, τ'.rel p.2 j0 ∧ q.2 = sh j0))
         (fun p q h => ⟨h.1, .inr ⟨q.2, h.2, rfl⟩⟩)
       rwa [List.map_id] at this
+
+theorem eraseIdx_middle {α : Type} (y : α) (l2 : List α) : (l1 : List α) → (l1 ++ y :: l2).eraseIdx l1.length = l1 ++ l2
+  | [] => rfl
+  | x :: l1 => by simp [eraseIdx_middle y l2 l1]
+
+theorem getElem_middle {α : Type} (y : α) (l2 : List α) : (l1 : List α) →
+    (l1 ++ y :: l2)[l1.length]'(by simp) = y
+  | [] => rfl
+  | x :: l1 => by simp
+
+theorem perm_eraseIdx {α : Type} : (xs : List α) → (i : Nat) → (h : i < xs.length) → xs.Perm (xs[i] :: xs.eraseIdx i)
+  | x :: xs, 0, _ => .refl _
+  | x :: xs, i + 1, h => by
+    simp only [List.getElem_cons_succ, List.eraseIdx_cons_succ]
+    exact ((perm_eraseIdx xs i (by simpa using h)).cons x).trans (List.Perm.swap _ _ _)
+
+/-- Taking an item out of one of two lists related as multisets, and its partner out of the other, leaves them
+related. -/
+theorem Multi.eraseIdx {α β : Type} {r : α → β → Prop} {xs : List α} {ys : List β} (h : Multi r xs ys) (i : Nat)
+    (hi : i < xs.length) : ∃ j, ∃ hj : j < ys.length, r xs[i] ys[j] ∧ Multi r (xs.eraseIdx i) (ys.eraseIdx j) := by
+  obtain ⟨l1, y, l2, rfl, hxy, hm⟩ := (h.perm_left (perm_eraseIdx xs i hi)).cons_inv
+  exact ⟨l1.length, by simp, by rw [getElem_middle]; exact hxy, by rw [eraseIdx_middle]; exact hm⟩
 
 end Lists
 
@@ -779,6 +801,236 @@ theorem applyEvents_rel (T : List TypeDecl) (hv : v.Equivariant) : {evs evs' : L
     intro R' b b' hc hb
     exact applyEvents_rel T hv R' (hc ▸ h) hb
   | [], _ :: _, _, h, _, _, _ | _ :: _, [], _, h, _, _, _ => h.elim
+
+theorem admit_rel (hv : v.Equivariant) {R : PBij} {i : Ty} {callers : List v.caller.den0}
+    (hcl : Ty.rel0 R (.list v.caller) callers callers) {accepts : Fun (Ty.fn [i] Ty.rules)}
+    (hacc : Fun.Rel R accepts accepts) {c c' : v.caller.den0} (hc : Ty.rel0 R v.caller c c') {x x' : i.den0}
+    (hx : Ty.rel0 R i x x') : admit callers accepts c x = admit callers accepts c' x' := by
+  unfold admit
+  rw [forall2_any (q := v.caller.deq0 c') (fun a b hab => Ty.rel0_deq v.caller hv.caller hc hab) hcl,
+    broken_rel (hacc (x, ()) (x', ()) ⟨hx, trivial⟩)]
+
+theorem okNil_rel {R : PBij} {j : Ty} : Ty.rel0 R (Ty.result Ty.nil j) okNil okNil := ⟨⟨⟩, trivial⟩
+
+theorem lifted_error {R : Ren} {a a' : Acc v} {e e' : Fault} : Lifted R a a' (.error e) (.error e') :=
+  .inl ⟨trivial, trivial⟩
+
+theorem runCommand_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a')
+    (hctr : R.ctr.rel a.state.fresh a'.state.fresh) {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands)
+    {c c' : v.caller.den0} (hc : Ty.rel0 R.ctr v.caller c c') {i i' : x.input.den0} (hi : Ty.rel0 R.ctr x.input i i')
+    {f f' : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))} (hf : Fun.Rel R.ctr f f') :
+    Lifted R a a' (runCommand T a x c i f) (runCommand T a' x c' i' f') := by
+  obtain ⟨hcl, hacc, hdec, hens⟩ := hv.commands x hx R.ctr
+  unfold runCommand execCommand
+  rw [admit_rel hv hcl hacc hc hi]
+  cases admit x.callers x.accepts c' i' with
+  | cons r rs => exact lifted_error
+  | nil =>
+    dsimp only
+    have hcx : Ty.rel0 R.ctr (Ty.ctx v.records x.input v.caller) (ctx a.state a.state.records c i)
+        (ctx a'.state a'.state.records c' i') := ⟨ha.1.1, hi, hc, ha.1.2.2.2.1, hctr, trivial⟩
+    have hd := hdec (ctx a.state a.state.records c i, ()) (ctx a'.state a'.state.records c' i', ()) ⟨hcx, trivial⟩
+    revert hd
+    generalize x.decide.fn (ctx a.state a.state.records c i, ()) = d
+    generalize x.decide.fn (ctx a'.state a'.state.records c' i', ()) = d'
+    intro hd
+    obtain ⟨hst, hevs0, hout, ho, ho', hown⟩ := ha
+    have ha1 : Acc.Rel R { a with state := { a.state with fresh := a.state.fresh + 1 } }
+        { a' with state := { a'.state with fresh := a'.state.fresh + 1 } } := ⟨hst, hevs0, hout, ho, ho', hown⟩
+    match d, d', hd with
+    | .inl (evs, ()), .inl (evs', ()), ⟨hevs, _⟩ =>
+      dsimp only
+      simp only [bind_assoc]
+      refine Lifted.bind ((applyEvents_rel T hv R hevs ha1).shift 1 rfl rfl rfl rfl) ?_
+      intro R' b b' hcr hb
+      have hbr : Ty.rel0 R.ctr v.records b.state.records b'.state.records := hcr ▸ hb.1.1
+      rw [broken_rel (hens (ctx a.state a.state.records c i, b.state.records, ())
+        (ctx a'.state a'.state.records c' i', b'.state.records, ()) ⟨hcx, hbr, trivial⟩)]
+      cases broken (x.ensures.fn (ctx a'.state a'.state.records c' i', b'.state.records, ())) with
+      | cons n ns => exact lifted_error
+      | nil => exact applyEvents_rel T hv R' (hcr ▸ hf (okNil, ()) (okNil, ()) ⟨okNil_rel, trivial⟩) hb
+    | .inr (.inl (j, ())), .inr (.inl (j', ())), ⟨hj, _⟩ =>
+      exact (applyEvents_rel T hv R (hf (.inr (.inl (j, ())), ()) (.inr (.inl (j', ())), ())
+        ⟨⟨hj, trivial⟩, trivial⟩) ha1).shift 1 rfl rfl rfl rfl
+
+theorem runQuery_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a')
+    (hctr : R.ctr.rel a.state.fresh a'.state.fresh) {x : QueryV v.records v.caller} (hx : x ∈ v.queries)
+    {c c' : v.caller.den0} (hc : Ty.rel0 R.ctr v.caller c c') {i i' : x.input.den0} (hi : Ty.rel0 R.ctr x.input i i')
+    {f f' : Fun (Ty.fn [x.output] (.list v.event))} (hf : Fun.Rel R.ctr f f') :
+    Lifted R a a' (runQuery T a x c i f) (runQuery T a' x c' i' f') := by
+  obtain ⟨hcl, hacc, hres⟩ := hv.queries x hx R.ctr
+  unfold runQuery execQuery
+  rw [admit_rel hv hcl hacc hc hi]
+  cases admit x.callers x.accepts c' i' with
+  | cons r rs => exact lifted_error
+  | nil =>
+    have hcx : Ty.rel0 R.ctr (Ty.ctx v.records x.input v.caller) (ctx a.state a.state.records c i)
+        (ctx a'.state a'.state.records c' i') := ⟨ha.1.1, hi, hc, ha.1.2.2.2.1, hctr, trivial⟩
+    exact applyEvents_rel T hv R (hf _ _ ⟨hres (ctx a.state a.state.records c i, ())
+      (ctx a'.state a'.state.records c' i', ()) ⟨hcx, trivial⟩, trivial⟩) ha
+
+theorem ownCommand_mem {name : String} {i j : Ty}
+    {x : (x : CommandV v.records v.event v.caller) ×' (i = x.input ∧ j = x.rejection)}
+    (h : ownCommand (v := v) name i j = some x) : x.1 ∈ v.commands := by
+  obtain ⟨y, hy, hf⟩ := List.exists_of_findSome?_eq_some h
+  split at hf
+  · split at hf
+    · cases hf; exact hy
+    · cases hf
+  · cases hf
+
+theorem ownQuery_mem {name : String} {i o : Ty}
+    {x : (x : QueryV v.records v.caller) ×' (i = x.input ∧ o = x.output)}
+    (h : ownQuery (v := v) name i o = some x) : x.1 ∈ v.queries := by
+  obtain ⟨y, hy, hf⟩ := List.exists_of_findSome?_eq_some h
+  split at hf
+  · split at hf
+    · cases hf; exact hy
+    · cases hf
+  · cases hf
+
+/-- Running related own effects from related steps, with related counters, faults on both sides or ends related. -/
+theorem runOwn_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a')
+    (hctr : R.ctr.rel a.state.fresh a'.state.fresh) {eff eff' : EffectV v.event} (he : EffectV.Rel R.ctr eff eff') :
+    Lifted R a a' (runOwn T a eff) (runOwn T a' eff') := by
+  cases he with
+  | request _ => exact Lifted.refl ha
+  | command name c i j hc hval hf =>
+    unfold runOwn
+    dsimp only
+    generalize Ty.same c v.caller = oc
+    generalize hox : ownCommand (v := v) name i j = ox
+    cases oc with
+    | none => exact lifted_error
+    | some hcp =>
+      cases ox with
+      | none => exact lifted_error
+      | some x =>
+        obtain ⟨hcp⟩ := hcp
+        have hmem := ownCommand_mem hox
+        obtain ⟨x, hi, hj⟩ := x
+        subst hcp hi hj
+        exact runCommand_rel T hv ha hctr hmem hc hval hf
+  | query name c i o hc hval hf =>
+    unfold runOwn
+    dsimp only
+    generalize Ty.same c v.caller = oc
+    generalize hox : ownQuery (v := v) name i o = ox
+    cases oc with
+    | none => exact lifted_error
+    | some hcp =>
+      cases ox with
+      | none => exact lifted_error
+      | some x =>
+        obtain ⟨hcp⟩ := hcp
+        have hmem := ownQuery_mem hox
+        obtain ⟨x, hi, ho⟩ := x
+        subst hcp hi ho
+        exact runQuery_rel T hv ha hctr hmem hc hval hf
+
+end Step
+
+section Inverse
+
+theorem Multi.inv {α β : Type} {r : α → β → Prop} {r' : β → α → Prop} (h : ∀ a b, r a b → r' b a) {xs : List α}
+    {ys : List β} (m : Multi r xs ys) : Multi r' ys xs :=
+  m.flip.imp fun b a h' => h a b h'
+
+theorem Fun.rel_inv {R : PBij} {t : Ty} {f g : Fun t} (h : Fun.Rel R f g) : Fun.Rel R.inv g f := Ty.rel0_inv.1 h
+
+theorem WireVal.rel_inv {R : PBij} {x y : WireVal} (h : WireVal.Rel R x y) : WireVal.Rel R.inv y x := by
+  cases h with | mk h => exact .mk (Ty.rel0_inv.1 h)
+
+theorem Sender.rel_inv {R : PBij} {x y : Sender} (h : Sender.Rel R x y) : Sender.Rel R.inv y x := by
+  cases h with
+  | machine _ h => exact .machine _ (WireVal.rel_inv h)
+  | reaction _ => exact .reaction _
+
+theorem RequestV.rel_inv {R : PBij} {e : Ty} {x y : RequestV e} (h : RequestV.Rel R x y) : RequestV.Rel R.inv y x := by
+  cases h with
+  | mk _ _ _ _ hv hh ho =>
+    refine .mk _ _ _ _ (Ty.rel0_inv.1 hv) ?_ (Fun.rel_inv ho)
+    cases hh with
+    | none => exact .none
+    | some h => exact .some (Fun.rel_inv h)
+
+theorem EffectV.rel_inv {R : PBij} {e : Ty} {x y : EffectV e} (h : EffectV.Rel R x y) : EffectV.Rel R.inv y x := by
+  cases h with
+  | request h => exact .request (RequestV.rel_inv h)
+  | command _ _ _ _ hc hv hf => exact .command _ _ _ _ (Ty.rel0_inv.1 hc) (Ty.rel0_inv.1 hv) (Fun.rel_inv hf)
+  | query _ _ _ _ hc hv hf => exact .query _ _ _ _ (Ty.rel0_inv.1 hc) (Ty.rel0_inv.1 hv) (Fun.rel_inv hf)
+
+namespace Step
+variable {r e : Ty}
+
+theorem Instance.rel_inv {R : PBij} {m : MachineV r e} {i j : Instance m} (h : Instance.Rel R i j) :
+    Instance.Rel R.inv j i := by
+  obtain ⟨hk, hs, ht⟩ := h
+  refine ⟨Ty.rel0_inv.1 hk, Ty.rel0_inv.1 hs, ?_⟩
+  revert ht
+  generalize i.timer = x
+  generalize j.timer = y
+  intro ht
+  cases ht with
+  | none => exact .none
+  | some h => exact .some ⟨h.1.symm, Ty.rel0_inv.1 h.2⟩
+
+theorem Machines.rel_inv {R : PBij} : {ms : List (MachineV r e)} → {l l' : Machines ms} → Machines.Rel R l l' →
+    Machines.Rel R.inv l' l
+  | [], .nil, .nil, _ => trivial
+  | _ :: _, .cons _ _, .cons _ _, h => by
+    obtain ⟨⟨hm, hd, hd'⟩, h⟩ := h
+    exact ⟨⟨hm.inv fun _ _ => Instance.rel_inv, hd', hd⟩, Machines.rel_inv h⟩
+
+variable {v : ServiceV}
+
+theorem Acc.rel_inv {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') : Acc.Rel R.inv a' a := by
+  obtain ⟨⟨hrec, hmach, hpend, hnow, hb, hb'⟩, hev, hout, ho, ho', hown⟩ := h
+  exact ⟨⟨Ty.rel0_inv.1 hrec, Machines.rel_inv hmach, hpend.inv fun _ _ h => ⟨h.1, Sender.rel_inv h.2.1, h.2.2.1.symm, RequestV.rel_inv h.2.2.2⟩,
+    hnow.symm, hb', hb⟩, hev.inv fun _ _ h => Ty.rel0_inv.1 h,
+    hout.inv fun _ _ h => ⟨h.1, h.2.1.symm, h.2.2.1.symm, WireVal.rel_inv h.2.2.2⟩, ho', ho,
+    hown.inv fun _ _ h => EffectV.rel_inv h⟩
+
+end Step
+
+end Inverse
+
+namespace Step
+
+variable {v : ServiceV}
+
+/-- Steps in progress that are the same up to a renaming of the ids made so far and of wire ids, at the same counter
+and next wire id: the base of the equivalence the own cascade is checked up to. -/
+def OwnRel (a a' : Acc v) : Prop :=
+  ∃ R : Ren, Acc.Rel R a a' ∧ a.state.fresh = a'.state.fresh ∧ a.state.nextId = a'.state.nextId ∧
+    ∀ n, a.state.fresh ≤ n → R.ctr.rel n n
+
+theorem OwnRel.symm {a a' : Acc v} : OwnRel a a' → OwnRel a' a
+  | ⟨R, h, hf, hn, hfix⟩ => ⟨R.inv, Acc.rel_inv h, hf.symm, hn.symm, fun n hn' => hfix n (hf ▸ hn')⟩
+
+/-- The own cascade respects renaming: equivalent steps in progress have as many own effects waiting, and running
+any one of them has a partner on the other side that ends equivalently or also faults. -/
+theorem ownSys_simulates (T : List TypeDecl) (hv : v.Equivariant) :
+    Diamond.Simulates (ownSys T v) (Diamond.Closure (OwnRel (v := v))) := by
+  refine Diamond.Simulates.closure OwnRel.symm ?_
+  intro a a' ⟨R, ha, hf, hn, hfix⟩
+  have hown := ha.2.2.2.2.2
+  refine ⟨hown.length_eq, fun i hi => ?_⟩
+  obtain ⟨j, hj, hij, hm⟩ := hown.eraseIdx i hi
+  refine ⟨j, hj, ?_⟩
+  have ha1 : Acc.Rel R { a with own := a.own.eraseIdx i } { a' with own := a'.own.eraseIdx j } :=
+    ⟨ha.1, ha.2.1, ha.2.2.1, ha.2.2.2.1, ha.2.2.2.2.1, hm⟩
+  have hctr : R.ctr.rel a.state.fresh a'.state.fresh := hf ▸ hfix _ (Nat.le_refl _)
+  have hl := runOwn_rel T hv ha1 hctr hij
+  simp only [ownSys, List.getElem?_eq_getElem hi, List.getElem?_eq_getElem hj]
+  rcases hl with ⟨h1, h2⟩ | ⟨b, b', R', h1, h2, hc, hb, hmono, hfb, hnb⟩
+  · exact .inr ⟨h1, h2⟩
+  · rw [h1, h2]
+    refine .inl ⟨R', hb, ?_, ?_, fun n hn' => hc ▸ hfix n (Nat.le_trans hmono hn')⟩
+    · have : a.state.fresh = a'.state.fresh := hf
+      simp only at hfb; omega
+    · have : a.state.nextId = a'.state.nextId := hn
+      simp only at hnb; omega
 
 end Step
 
