@@ -111,6 +111,10 @@ elab "#check_tazuna_reach" : command => do
     -- effects commute in the canonical sense from every state a model decodes to whose names are below its counter;
     -- over every listed pair, any two own effects a model codes (T5b, `ownPairs_complete`).
     ``Tazuna.Smt.pairs_sound,
+    -- A pair question's condition holds exactly when every internal step its two orders run fits the slots, so its
+    -- bound question decides proved against within the bounds honestly. For the per-line soundness of pair lines
+    -- (not yet built), as the reach check's own precedent for a theorem whose user is the next unit.
+    ``Tazuna.Smt.pair_fits,
     -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
     -- forward; unsat answers mean no context within the slots has one.
     ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound]

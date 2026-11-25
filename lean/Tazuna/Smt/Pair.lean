@@ -407,6 +407,123 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     simp only at hA2
     rw [hA2]
     trivial
+/-- Every internal step a pair's two orders run fits the slots: each effect where it runs first, and each after the
+other one ran to its end. -/
+def PairFits (S : Ty → Nat) (T : List TypeDecl) (a0 : Step.Acc v) (e1 e2 : EffectV v.event) : Prop :=
+  ownFits S T a0.state e1 ∧ ownFits S T (a0.withFresh (a0.state.fresh + 1)).state e2 ∧
+    (∀ b, Step.runOwn T a0 e1 = .ok b → ownFits S T b.state e2) ∧
+    ∀ c, Step.runOwn T (a0.withFresh (a0.state.fresh + 1)) e2 = .ok c →
+      ownFits S T (c.withFresh a0.state.fresh).state e1
+
+/-- A pair question's condition holds exactly when every internal step the two orders run fits the slots, where the
+codes' condition holds: what makes its bound question honest. -/
+theorem pair_fits {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
+    (senv : StepEnv L (shapes v)) {S : SymState v} {a0 : Step.Acc v} (hR : StateRel M L T (shapes v) S a0.state)
+    (hinv : Step.Inv P a0.state) (hqk : Step.QueueOk P a0) {t1 t2 : Term} {x1 x2 : EffectV v.event}
+    (hx1 : RelV L (.dsl .effect [v.event]) x1 (t1.denote M)) (hx2 : RelV L (.dsl .effect [v.event]) x2 (t2.denote M))
+    (hown1 : x1.isRequest = false) (hown2 : x2.isRequest = false) (hreach1 : x1.Reach P) (hreach2 : x2.Reach P)
+    {k1 k2 : Nat} (ht1 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k1) t1))
+    (ht2 : Holds M (.is senv.dE ((L.effectsOf v.event).length + k2) t2))
+    {o : PairOut} (henc : encodePair L T P v senv S t1 t2 k1 k2 = .ok o) (hcodes : Holds M o.codes) :
+    Holds M o.cond ↔ PairFits L.count T a0 x1 x2 := by
+  obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
+  obtain ⟨key1, hkey1, henc⟩ := bind_ok.1 henc
+  obtain ⟨key2, hkey2, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨⟨ko1, a1⟩, c1, y1⟩, h1, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨⟨ko2, a2⟩, c2, y2⟩, h2, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨⟨ko3, b1⟩, c3, y3⟩, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨⟨ko4, b2⟩, c4, y4⟩, h4, henc⟩ := bind_ok.1 henc
+  obtain ⟨recEq, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨tabEq, -, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  simp only [holds_allT, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq] at hcodes ⊢
+  obtain ⟨hca, hy1, hy2, hy3, hy4⟩ := hcodes
+  have hshs : ∀ sh ∈ shapes v, sh.InSites P := fun _ => shapes_inSites chk.reach
+  obtain ⟨vals1, he1, hk1⟩ := own_key hown1 hx1 ht1 rfl (need_ok.1 hkey1)
+  obtain ⟨vals2, he2, hk2⟩ := own_key hown2 hx2 ht2 rfl (need_ok.1 hkey2)
+  have hq0 : (Term.int 0).denote M = .int ((0 : Nat) : Int) := rfl
+  have eA1 := ownKind_encode chk hshs (shapesHold_shapes v) a0 happ hca senv hR.records hR.now hR.fresh hR.nextId hq0
+    hR.machines x1 hreach1 he1 hk1 h1 hy1
+  have hfr1 : (Term.add S.fresh (.int 1)).denote M =
+      .int (Int.ofNat (a0.withFresh (a0.state.fresh + 1)).state.fresh) := by
+    simp only [Term.denote, hR.fresh, Val.toInt, Step.Acc.withFresh]; push_cast; rfl
+  have eC1 := ownKind_encode chk hshs (shapesHold_shapes v) (a0.withFresh (a0.state.fresh + 1)) happ hca senv
+    hR.records hR.now hfr1 hR.nextId hq0 hR.machines x2 hreach2 he2 hk2 h3 hy3
+  -- Where the first step of an order holds its condition, its fault term says whether it faults, and where it runs
+  -- to its end the second step's condition is exact from there.
+  have second1 : Holds M c1 → (Holds M a1.fault ↔ ∃ g, Step.runOwn T a0 x1 = .error g) ∧
+      ∀ b, Step.runOwn T a0 x1 = .ok b → (Holds M c2 ↔ ownFits L.count T b.state x2) := fun hc1 => by
+    obtain ⟨hfA1, hA1⟩ := eA1.2 hc1
+    revert hA1
+    cases hko1 : ko1.fault? M with
+    | some g =>
+      intro hA1
+      refine ⟨⟨fun _ => ⟨g, hA1⟩, fun _ => by rw [fault_true hfA1, hko1]; rfl⟩, fun b hb => ?_⟩
+      rw [hA1] at hb; cases hb
+    | none =>
+      intro hA1
+      refine ⟨⟨fun h => by rw [fault_true hfA1, hko1] at h; simp at h, fun ⟨g, hg⟩ => ?_⟩, fun b hb => ?_⟩
+      · obtain ⟨_, hb⟩ := hA1.ok; rw [hb] at hg; cases hg
+      rw [hb] at hA1
+      obtain ⟨hbr, hbm, hbf, hbn, hbnow, _, -, hbq, -⟩ := hA1.ends
+      have hqb := Step.runOwn_queue T chk.reach a0 hinv hqk x1 hb
+      exact (ownKind_encode chk hshs (shapesHold_shapes v) b happ hca senv hbr (hR.now.trans (by rw [hbnow])) hbf hbn
+        hbq hbm x2 hreach2 he2 hk2 h2 hy2).1
+  have second3 : Holds M c3 → (Holds M b1.fault ↔ ∃ g, Step.runOwn T (a0.withFresh (a0.state.fresh + 1)) x2 = .error g) ∧
+      ∀ c, Step.runOwn T (a0.withFresh (a0.state.fresh + 1)) x2 = .ok c →
+        (Holds M c4 ↔ ownFits L.count T (c.withFresh a0.state.fresh).state x1) := fun hc3 => by
+    obtain ⟨hfC1, hC1⟩ := eC1.2 hc3
+    revert hC1
+    cases hko3 : ko3.fault? M with
+    | some g =>
+      intro hC1
+      refine ⟨⟨fun _ => ⟨g, hC1⟩, fun _ => by rw [fault_true hfC1, hko3]; rfl⟩, fun c hc => ?_⟩
+      rw [hC1] at hc; cases hc
+    | none =>
+      intro hC1
+      refine ⟨⟨fun h => by rw [fault_true hfC1, hko3] at h; simp at h, fun ⟨g, hg⟩ => ?_⟩, fun c hc => ?_⟩
+      · obtain ⟨_, hc⟩ := hC1.ok; rw [hc] at hg; cases hg
+      rw [hc] at hC1
+      obtain ⟨hcr, hcm, -, hcn, hcnow, _, -, hcq, -⟩ := hC1.ends
+      have hqc := Step.runOwn_queue T chk.reach (a0.withFresh (a0.state.fresh + 1)) (hinv.congr rfl rfl) hqk x2 hc
+      have hff : S.fresh.denote M = .int (Int.ofNat (c.withFresh a0.state.fresh).state.fresh) := by
+        simp only [Step.Acc.withFresh]; rw [hR.fresh]
+      have hnow' : S.now.denote M = .int (c.withFresh a0.state.fresh).state.now := by
+        simp only [Step.Acc.withFresh] at hcnow ⊢; rw [hcnow]; exact hR.now
+      exact (ownKind_encode chk hshs (shapesHold_shapes v) (c.withFresh a0.state.fresh) happ hca senv hcr
+        hnow' hff hcn hcq hcm x1 hreach1 he1 hk1 h4 hy4).1
+  have ite_iff : ∀ {f g : Term} {P Q : Prop}, (Holds M f ↔ P) → (¬ P → (Holds M g ↔ Q)) →
+      (Holds M (.ite f tt g) ↔ (¬ P → Q)) := fun {f g P Q} hf hg => by
+    rw [holds_ite]
+    by_cases hp : Holds M f
+    · simp only [show (f.denote M).toBool = true from hp, ↓reduceIte]
+      exact ⟨fun _ hn => absurd (hf.1 hp) hn, fun _ => holds_tt⟩
+    · have hb : (f.denote M).toBool = false := by simpa [Holds] using hp
+      simp only [hb, Bool.false_eq_true, ↓reduceIte]
+      have hnp : ¬ P := fun h => hp (hf.2 h)
+      exact ⟨fun h _ => (hg hnp).1 h, fun h => (hg hnp).2 (h hnp)⟩
+  constructor
+  · rintro ⟨hc1, hc3, hc2, hc4⟩
+    obtain ⟨hf1, hs1⟩ := second1 hc1
+    obtain ⟨hf3, hs3⟩ := second3 hc3
+    refine ⟨(eA1.1).1 hc1, (eC1.1).1 hc3, fun b hb => (hs1 b hb).1 ?_, fun c hc => (hs3 c hc).1 ?_⟩
+    · have := (ite_iff hf1 fun _ => Iff.rfl (a := Holds M c2)).1 hc2
+      exact this fun ⟨g, hg⟩ => by rw [hb] at hg; cases hg
+    · have := (ite_iff hf3 fun _ => Iff.rfl (a := Holds M c4)).1 hc4
+      exact this fun ⟨g, hg⟩ => by rw [hc] at hg; cases hg
+  · rintro ⟨hp1, hp3, hp2, hp4⟩
+    have hc1 := (eA1.1).2 hp1
+    have hc3 := (eC1.1).2 hp3
+    obtain ⟨hf1, hs1⟩ := second1 hc1
+    obtain ⟨hf3, hs3⟩ := second3 hc3
+    refine ⟨hc1, hc3, (ite_iff hf1 fun _ => Iff.rfl).2 fun hn => ?_, (ite_iff hf3 fun _ => Iff.rfl).2 fun hn => ?_⟩
+    · cases hr : Step.runOwn T a0 x1 with
+      | error g => exact absurd ⟨g, hr⟩ hn
+      | ok b => exact (hs1 b hr).2 (hp2 b hr)
+    · cases hr : Step.runOwn T (a0.withFresh (a0.state.fresh + 1)) x2 with
+      | error g => exact absurd ⟨g, hr⟩ hn
+      | ok c => exact (hs3 c hr).2 (hp4 c hr)
+
 /-- T5's pair hypothesis from a pair's questions: where both are unsat, the two effects of the pair's kinds commute from
 every step in progress whose state a model's values decode to, with its pending ids below its next id and its names
 below its counter, and which relates to itself under every renaming keeping its counters. -/
