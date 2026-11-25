@@ -2140,7 +2140,7 @@ def noEffectsCheck (solver : Solver) : IO Bool := do
       return true
     | a => IO.println s!"smt-check: no effects: {repr a}"; return false
 
-/-! A list of events in one step, for `events_rel`: the service `w` above, whose events insert their value as a
+/-! A list of events in one step, for `events_encode`: the service `w` above, whose events insert their value as a
 key and whose machine `start` keeps one instance per key, starts it at 0, enters 1 on any later event (with a timer
 due at now + 5) and requests `send` on entering a state. From no records and no instances, at now 100 and next id 40
 with request 2 pending, the events 3 and 3 run (the list's free third slot holds 9, which must start nothing): the first starts key 3 at 0 (request at 40), the second finds that
@@ -2418,7 +2418,7 @@ def answerMCheck (solver : Solver) : IO Bool := do
       | _, _, _ => fail "the model does not decode"
     | a => fail s!"{repr a}"
 
-/-! An event whose reaction starts own commands beside a request, for `events_rel`: the service `w` above with the
+/-! An event whose reaction starts own commands beside a request, for `events_encode`: the service `w` above with the
 reaction `mix`, which returns `[send_command(put, "alice", ev + 1, ..), request_command(send, ev + 2, ..),
 send_command(put, "alice", ev + 3, ..)]`. From no records, no instances and next id 40, the event 3 starts key 3,
 whose request takes id 40; the reaction's request takes 41, as own commands take no wire id, and the own commands
@@ -2551,7 +2551,7 @@ def mixCheck (solver : Solver) : IO Bool := do
           return ok
     | a => fail s!"{repr a}"
 
-/-! An own command's internal step, for `ownCommand_rel`: the command `twice` above runs as an own effect whose
+/-! An own command's internal step, for `ownCommand_encode`: the command `twice` above runs as an own effect whose
 `on_answer` captured 5 and returns [5] on any answer. From the state of `a command's events reach machines` (no
 records, no instances, request 2 pending, next id 40, now 100), alice's `twice 3` applies 3 twice (key 3 starts with a
 request at 40, then enters 1 with a request at 41), its `ensures` holds, and `on_answer` applies 5. The records,
@@ -2649,7 +2649,7 @@ def internalCheck (solver : Solver) : IO Bool := do
       | _, _ => fail "the model does not decode"
     | a => fail s!"{repr a}"
 
-/-! An own query's internal step, for `ownQuery_rel`: the query `next` answers its input plus one, and its
+/-! An own query's internal step, for `ownQuery_encode`: the query `next` answers its input plus one, and its
 `on_answer` returns the answer as the one event. From the same state, alice's `next 3` answers 4 and applies 4, so
 key 4 starts with a request at 40. The records, instance table, next id and new wire ids read from the model must be
 what `Step.runQuery` leaves; an `on_answer` that returns no event must not pass the comparison. -/
@@ -2747,7 +2747,7 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
       | _, _ => fail "the model does not decode"
     | a => fail s!"{repr a}"
 
-/-! An own effect's internal step, for `ownStep_rel`: the service lists the command `twice` and the query `next` above,
+/-! An own effect's internal step, for `ownStep_encode`: the service lists the command `twice` and the query `next` above,
 and the layout has three own kinds, `twice`, `next` and `gone`, which the service does not list, and a fourth,
 `twice` answered at a site the program lacks, which no effect has and which must not stop the encoding. From the same state,
 the effect term is in turn alice's `twice 3` with 5 captured, her `next 3`, and her `gone 3`. The records, instance
@@ -2866,7 +2866,7 @@ def dispCheck (solver : Solver) : IO Bool := do
       | a => ok ← fail s!"{name}: {repr a}"
   return ok
 
-/-! The cascade, for `settle_rel`: the own queue holds alice's `twice 3` (5 captured) and her `next 3`, at places 0
+/-! The cascade, for `settle_encode`: the own queue holds alice's `twice 3` (5 captured) and her `next 3`, at places 0
 and 1, in the state of the case above. With two internal steps both run, and the records, instance table, next id,
 fresh counter and new wire ids read from the model must be what `Step.settleFrom` leaves, and must differ from what
 the first internal step alone leaves. With one internal step the occupied place 1 is past the bound: the model must
