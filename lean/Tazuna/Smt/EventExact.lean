@@ -1,6 +1,5 @@
 import Tazuna.Smt.ReactExact
 import Tazuna.Smt.EventStep
-import Tazuna.Smt.Bounds
 
 /-! The conditions `event_step` (T2 for an event) takes are exact: each holds exactly when the functions the step
 applies fit the layout's slot counts. The service's part applies the subscription's wrap, `apply` and the invariants;

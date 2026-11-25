@@ -1,4 +1,5 @@
 import Tazuna.Smt.Step
+import Tazuna.Smt.Bounds
 import Tazuna.Smt.Solver
 
 /-! Runs the solver on printed scripts and reads its answers back: the theorems cover printing and reading our own
@@ -1105,7 +1106,7 @@ def answerCheck (solver : Solver) : IO Bool := do
     | a => IO.println s!"smt-check: answer unmatched: {repr a}"; ok := false
   return ok
 
-/-! Bounds, for `createsT_iff` and `boundReached_iff`: records of two tables of Int to Int, `a` created at most 3
+/-! Bounds, for `createsT_encode` and `boundReached_iff`: records of two tables of Int to Int, `a` created at most 3
 times and `b` at most 2, so the table type has 3 slots and `b`'s limit is a term. The event inserts its key and value
 into both. -/
 

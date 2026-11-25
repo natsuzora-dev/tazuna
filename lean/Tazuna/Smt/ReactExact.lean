@@ -10,40 +10,6 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-theorem _root_.Tazuna.Ir.Fun.args_data {ps : List Ty} {r : Ty} (f : Fun (.fn ps r)) : (Ty.tuple ps).isData = true := by
-  have := f.ht
-  simp only [Ty.isData, Bool.and_eq_true] at this ⊢
-  exact this.1
-
-/-- Whether a kept function's application to data fits. -/
-def _root_.Tazuna.Ir.Fun.appFits (S : Ty → Nat) {ps : List Ty} {r : Ty} (f : Fun (.fn ps r))
-    (xs : (Ty.tuple ps).den0) : Prop :=
-  ((f.fits S).2 (Ty.up _ f.args_data xs) (FTs.dflt ps)).1
-
-/-- The same for a kept function that returns effects. -/
-def _root_.Tazuna.Ir.EffectFun.appFits (S : Ty → Nat) {ps : List Ty} {r : Ty} (f : EffectFun ps r)
-    (xs : (Ty.tuple ps).den0) : Prop :=
-  ((f.fits S).2 (Ty.up _ f.hps xs) (FTs.dflt ps)).1
-
-section
-variable {M : Model} {L : Layout}
-
-theorem _root_.Tazuna.Ir.Fun.app_exact {ps : List Ty} {r : Ty} (f : Fun (.fn ps r)) {s : Code (.fn ps r)} {c : Term}
-    (h : f.code L = .ok (s, c)) (hc : Holds M c) (hnf : ∀ t ∈ ps, t.isFn = false) (xs : (Ty.tuple ps).den0)
-    (cs : Codes ps) (hxs : Rels M L ps (Ty.up _ f.args_data xs) cs) {o : Code r} {c' : Term} (ho : s cs = .ok (o, c')) :
-    Holds M c' ↔ f.appFits L.count xs := by
-  have hf := (f.code_exact (M := M) h).2 hc
-  exact (hf _ _ cs hxs (frels_of_notFn hnf _ _ _) o c' ho).1
-
-theorem _root_.Tazuna.Ir.EffectFun.app_exact {ps : List Ty} {r : Ty} (f : EffectFun ps r) {s : Code (.fn ps r)}
-    {c : Term} (h : f.code L = .ok (s, c)) (hc : Holds M c) (hnf : ∀ t ∈ ps, t.isFn = false) (xs : (Ty.tuple ps).den0)
-    (cs : Codes ps) (hxs : Rels M L ps (Ty.up _ f.hps xs) cs) {o : Code r} {c' : Term} (ho : s cs = .ok (o, c')) :
-    Holds M c' ↔ f.appFits L.count xs := by
-  have hf := (f.code_exact (M := M) h).2 hc
-  exact (hf _ _ cs hxs (frels_of_notFn hnf _ _ _) o c' ho).1
-
-end
-
 section
 variable {r e : Ty}
 

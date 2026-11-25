@@ -10,6 +10,7 @@ import Tazuna.Semantics.PendingPerm
 import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
+import Tazuna.Smt.Bounds
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
 import Tazuna.Trace.WireThm
@@ -29,7 +30,7 @@ elab "#check_tazuna_axioms" : command => do
       unless allowed.contains a do throwError "{n} depends on the axiom {a}"
   if checked == 0 then throwError "no Tazuna declarations found"
   -- The theorems the engine's answers rest on: a double-backquoted name that no longer exists fails to elaborate.
-  for n in [``Tazuna.Smt.step_encode] do
+  for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff] do
     unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms
