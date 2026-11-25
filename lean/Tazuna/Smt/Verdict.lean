@@ -33,14 +33,20 @@ theorem varSorted_of_sorted {L : Layout} {t : Ty} {w : Val} (h : Sorted L t w) :
 def SortsInhabited (L : Layout) (tys : List Ty) : Prop :=
   ∃ M : Model, ∀ n (h : n < tys.length), VarSorted L tys[n] (M.vars n)
 
-/-- The solver found no model of the script: no model whose variables hold values of the sorts of the types `tys`
-satisfies every assertion. A model of the script as SMT-LIB reads it is such a model (`Term.denote` states the
+/-- The solver found no model of the question's script: no model whose variables hold values of the sorts of the
+question's types satisfies every assertion. A model of the script as SMT-LIB reads it is such a model (`Term.denote` states the
 standard's meaning), so this is what an unsat answer says. The sorts hold values, as SMT-LIB's do, so an unsat answer
 is never free: a script with no assertion is not unsat, and a sort with no value cannot make a question unsat
 whatever it asks. `sorts_inhabited` proves the sorts of every script an encoder builds hold values. -/
-structure Unsat (L : Layout) (tys : List Ty) (s : Script) : Prop where
-  sorts : SortsInhabited L tys
-  noModel : ∀ M : Model, (∀ n (h : n < tys.length), VarSorted L tys[n] (M.vars n)) → ∃ a ∈ s.asserts, ¬ Holds M a
+structure Unsat (L : Layout) (q : TypedScript) : Prop where
+  sorts : SortsInhabited L q.tys
+  noModel : ∀ M : Model, (∀ n (h : n < q.tys.length), VarSorted L q.tys[n] (M.vars n)) →
+    ∃ a ∈ q.script.asserts, ¬ Holds M a
+
+/-- An unsat question has no model whose variables hold values of the types it was built with. -/
+theorem Unsat.noModel_at {L : Layout} {q : TypedScript} (h : Unsat L q) {tys : List Ty} (ht : q.tys = tys) (M : Model)
+    (hM : ∀ n (h : n < tys.length), VarSorted L tys[n] (M.vars n)) : ∃ a ∈ q.script.asserts, ¬ Holds M a := by
+  subst ht; exact h.noModel M hM
 
 section
 variable {M : Model}
@@ -497,7 +503,8 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   have hbelowH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below
   have hcaseH := hcase t ht
   obtain ⟨a, ha, hna⟩ := hun _ (List.mem_cons_self ..) (.inl rfl)
-  simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+  simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
+    or_false] at ha
   rcases ha with rfl | rfl | rfl | rfl
   · exact hna hwfH
   · exact hna hbelowH
@@ -527,7 +534,8 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
       simp [hbr]
   obtain ⟨a, ha, hna⟩ := hun ⟨inp, some g, _⟩
     (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) (.inr ⟨g, rfl, hn⟩)
-  simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+  simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
+    or_false] at ha
   rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
   · exact hna hbelowH
@@ -564,7 +572,8 @@ theorem bound_cond {P : List AnySite} (senv : StepEnv L (shapes v)) (inp : SymIn
   cases pure_ok.1 hq
   have hR := decode_state hS
   obtain ⟨a, ha, hna⟩ := hun _ (List.mem_cons_self ..) rfl
-  simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+  simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
+    or_false] at ha
   rcases ha with rfl | rfl | rfl | rfl
   · exact (hna (wf_of_decodeState (need_ok.1 hwf) hS)).elim
   · exact (hna ((pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below)).elim
@@ -697,7 +706,8 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
       simp [hbr]
   obtain ⟨a, ha, hna⟩ := hun ⟨inp, some g, _⟩
     (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) ⟨g, rfl, hn⟩
-  simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+  simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
+    or_false] at ha
   rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
   · exact hna hbelowH
@@ -727,12 +737,12 @@ theorem verdict_covered {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (inp : SymInput v (shapes v) senv.nT) {gs : List Target} {qs : List (Question v (shapes v) senv.nT)}
     (hq : questions L T P v senv inp = .ok (gs, qs))
     (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
-      Unsat L (stateTys v (shapes v) ++ inp.tys) q.script)
+      Unsat L q.ask)
     (is : List (Input v)) (x : Input v) (hcov : Covered L T P v senv inp (run T v (Step.State.init v) is).1 x) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨hc, M, hM, hS, hx, hcase⟩ := hcov
   exact question_sound chk senv inp hq hS (run_inv T chk.reach _ Step.init_inv is)
-    (Tazuna.Ir.run_invariants T _ is hinit) hx hcase f hf fun q hq' hrel => (hun q hq' hrel).noModel M fun n h => varSorted_of_sorted (hM n h)
+    (Tazuna.Ir.run_invariants T _ is hinit) hx hcase f hf fun q hq' hrel => (hun q hq' hrel).noModel_at (questions_tys L T P v senv hq q hq') M fun n h => varSorted_of_sorted (hM n h)
 
 end
 

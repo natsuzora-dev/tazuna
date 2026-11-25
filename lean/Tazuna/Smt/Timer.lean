@@ -34,12 +34,12 @@ def timerTys (m : MachineV r e) : List Ty := [m.key, m.state, r, .int]
 /-- A timer machine's two questions, over well-formed variables: the bound question, whether `after` or its code's
 captured values leave the slots at some context; and the target question, whether `after` sets a timer before the time
 it is set at where everything fits. -/
-def timerQuestions (m : MachineV r e) : Except Refusal (Script × Script) := do
+def timerQuestions (m : MachineV r e) : Except Refusal (TypedScript × TypedScript) := do
   let (back, c, c0) ← encodeTimer L m (.var 0) (.var 1) (.var 2) (.var 3)
   let wfs ← (timerTys m).zipIdx.mapM fun (t, i) => need (.layout (.type t)) (wfT L t (.var i))
   let vars ← (timerTys m).mapM fun t => need (.layout (.type t)) (L.srt? t)
   let dts ← need (.layout (.type r)) L.datatypes?
-  let script (asserts : List Term) : Script := { datatypes := dts, vars, asserts := wfs ++ asserts, shows := List.range 4 }
+  let script (asserts : List Term) : TypedScript := ⟨dts, timerTys m, vars, wfs, asserts⟩
   pure (script [.or (.not c0) (.not c)], script [c0, c, back])
 
 end
@@ -149,7 +149,7 @@ theorem wfs_hold (m : MachineV r e) (x : TimerVals L m M) {wfs : List Term}
 /-- What a timer machine's questions say: a model of the target question's assertions holds a context where `after`
 sets a timer before the time it is set at, so the machine's timers do not fire forward (the counterexample is
 honest); and where the target question is unsat, no context whose values fit and at which `after` fits does so. -/
-theorem timer_exact (m : MachineV r e) {bq tq : Script} (hq : timerQuestions L m = .ok (bq, tq)) (x : TimerVals L m M) :
+theorem timer_exact (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestions L m = .ok (bq, tq)) (x : TimerVals L m M) :
     (∀ a ∈ tq.asserts, Holds M a) →
       ∃ y ∈ Step.timerAt x.now (m.after.fn x.ctx), y.1 < x.now := by
   intro hall
@@ -162,12 +162,12 @@ theorem timer_exact (m : MachineV r e) {bq tq : Script} (hq : timerQuestions L m
   have hs := decode_rel _ _ _ x.hstate
   have hr := decode_rel _ _ _ x.hrecords
   have henc := timer_encode m hk hs hr (tnow := x.now) (by simp [Term.denote, x.hnow]) he
-  have hin : ∀ a ∈ [c0, c, back], Holds M a := fun a ha => hall a (List.mem_append_right _ ha)
+  have hin : ∀ a ∈ [c0, c, back], Holds M a := hall
   have hc0 := hin c0 (by simp)
   exact (((henc.2 hc0).2 (hin c (by simp))).1 (hin back (by simp)))
 
 /-- A model of a timer machine's target question is a counterexample to T5's timer hypothesis. -/
-theorem timer_violates {ms : List (MachineV r e)} {m : MachineV r e} (hm : m ∈ ms) {bq tq : Script}
+theorem timer_violates {ms : List (MachineV r e)} {m : MachineV r e} (hm : m ∈ ms) {bq tq : TypedScript}
     (hq : timerQuestions L m = .ok (bq, tq)) (x : TimerVals L m M) (hall : ∀ a ∈ tq.asserts, Holds M a) :
     ¬ Step.FiresForward ms := fun h => by
   obtain ⟨y, hy, hlt⟩ := timer_exact m hq x hall
@@ -176,12 +176,12 @@ theorem timer_violates {ms : List (MachineV r e)} {m : MachineV r e} (hm : m ∈
 /-- Where the target question is unsat, the timer `after` sets at every context whose values fit, where `after` and its
 captured values fit, is no earlier than the time it is set at; where the bound question is unsat too, at every context
 whose values fit. -/
-theorem timer_sound (m : MachineV r e) {bq tq : Script} (hq : timerQuestions L m = .ok (bq, tq))
-    (ht : Unsat L (timerTys m) tq) (hM : ∀ n (h : n < (timerTys m).length), Sorted L (timerTys m)[n] (M.vars n))
+theorem timer_sound (m : MachineV r e) {bq tq : TypedScript} (hq : timerQuestions L m = .ok (bq, tq))
+    (ht : Unsat L tq) (hM : ∀ n (h : n < (timerTys m).length), Sorted L (timerTys m)[n] (M.vars n))
     (x : TimerVals L m M) :
     ((m.after.fits L.count).1 → m.after.appFits L.count x.ctx →
       ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1) ∧
-    (Unsat L (timerTys m) bq → ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1) := by
+    (Unsat L bq → ∀ y ∈ Step.timerAt x.now (m.after.fn x.ctx), x.now ≤ y.1) := by
   obtain ⟨⟨back, c, c0⟩, he, hq'⟩ := bind_ok.1 hq
   obtain ⟨wfs, hwfs, hq'⟩ := bind_ok.1 hq'
   obtain ⟨vars, -, hq'⟩ := bind_ok.1 hq'
@@ -196,7 +196,7 @@ theorem timer_sound (m : MachineV r e) {bq tq : Script} (hq : timerQuestions L m
     intro hc0 hc y hy
     refine Int.not_lt.1 fun hlt => ?_
     obtain ⟨a, ha, hna⟩ := ht.noModel M fun n h => varSorted_of_sorted (hM n h)
-    simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+    simp only [TypedScript.script, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at ha
     rcases ha with ha | rfl | rfl | rfl
     · exact hna (hw a ha)
     · exact hna hc0
@@ -206,7 +206,7 @@ theorem timer_sound (m : MachineV r e) {bq tq : Script} (hq : timerQuestions L m
   · have hc0 := henc.1.2 hf
     exact hfwd hc0 (((henc.2 hc0).1).2 ha)
   · obtain ⟨a, ha, hna⟩ := hb.noModel M fun n h => varSorted_of_sorted (hM n h)
-    simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+    simp only [TypedScript.script, List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at ha
     rcases ha with ha | rfl
     · exact (hna (hw a ha)).elim
     · simp only [holds_or, holds_not, not_or, Classical.not_not] at hna

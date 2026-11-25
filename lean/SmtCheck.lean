@@ -1526,10 +1526,10 @@ def timerCheck (solver : Solver) : IO Bool := do
     match timerQuestions timerLayout (timerM af) with
     | .error r => IO.println s!"smt-check: timer {name}: no questions: {repr r}"; ok := false
     | .ok (bq, tq) =>
-      match ← solver.run bq with
+      match ← solver.run bq.script with
       | .unsat => pure ()
       | a => IO.println s!"smt-check: timer {name}: bound question not unsat: {repr a}"; ok := false
-      match ← solver.run tq, back with
+      match ← solver.run tq.script, back with
       | .unsat, false => pure ()
       | .sat vs, true =>
         match vs.lookup 0, vs.lookup 1, vs.lookup 2, vs.lookup 3 with
@@ -3557,7 +3557,7 @@ def pairTarget (slots k1 k2 : Nat) : Except String Script := do
   let senv ← (StepEnv.of L (shapes pairSvc)).mapError fun r => s!"no step environment: {repr r}"
   let (_, tq) ← (pairQuestions L prelude pairSites pairSvc senv (← ownPlace L _ k1) (← ownPlace L _ k2)).mapError
     fun r => s!"no questions: {repr r}"
-  pure tq
+  pure tq.script
 
 /-- The own command a model's value of the effect datatype codes, by its variant's place among the own kinds. -/
 def pairEffect (L : Layout) : Val → Option (OwnEffectV evT)
@@ -3579,7 +3579,7 @@ def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : L
     match pairQuestions L prelude sites v senv p1 p2 with
     | .error r => ok ← fail s!"{name}: no questions: {repr r}"
     | .ok (_, tq) =>
-      match ← solver.run tq, commutes with
+      match ← solver.run tq.script, commutes with
       | .unsat, true => pure ()
       | .sat vs, false =>
         let M := modelOf vs
@@ -3632,7 +3632,7 @@ def reqTarget (slots : Nat) : Except String Script := do
   let senv ← (StepEnv.of L (shapes v)).mapError fun r => s!"no step environment: {repr r}"
   let k ← ownPlace L v.event 0
   let (_, tq) ← (pairQuestions L prelude (reqSites v) v senv k k).mapError fun r => s!"no questions: {repr r}"
-  pure tq
+  pure tq.script
 
 def pairCheck (solver : Solver) : IO Bool := do
   let a ← pairCases solver pairSvc pairSites [("ins ins", 0, 0, true), ("set set", 1, 1, false),
@@ -3649,8 +3649,9 @@ wire ids and the input's case; a pair question (`set`, `set`) after the state, i
 timer question (`back`) after the well-formed context. A context that no model meets would make each of its family's
 questions unsat for free. -/
 
-/-- A family's question, and how many of its first assertions are the context every question of the family shares. -/
-def familyQuestions : Except String (List (String × Script × Nat)) := do
+/-- A question of each family, with the context every question of its family shares kept apart. The cover family
+asks the step family's questions (`Cover.lean` reads `questions`), so it has none of its own. -/
+def familyQuestions : Except String (List (String × TypedScript)) := do
   let v := evMSvc
   let L := svcLayout v 3
   let senv ← (StepEnv.of L (shapes v)).mapError fun r => s!"no step environment: {repr r}"
@@ -3667,15 +3668,15 @@ def familyQuestions : Except String (List (String × Script × Nat)) := do
   let pk ← ownPlace pL _ 1
   let (_, pq) ← (pairQuestions pL prelude pairSites pairSvc psenv pk pk).mapError fun r => s!"no pair questions: {repr r}"
   let (_, tq) ← (timerQuestions timerLayout (timerM backE)).mapError fun r => s!"no timer questions: {repr r}"
-  pure [("step", target.script, 3), ("bound", bound.script, 3), ("pair", pq, 5), ("timer", tq, 4)]
+  pure [("step", target.ask), ("bound", bound.ask), ("pair", pq), ("timer", tq)]
 
 def familyCheck (solver : Solver) : IO Bool := do
   match familyQuestions with
   | .error m => IO.println s!"smt-check: question families: {m}"; return false
   | .ok fams =>
     let mut ok := true
-    for (name, q, ctx) in fams do
-      for (part, script) in [("context", { q with asserts := q.asserts.take ctx }), ("question", q)] do
+    for (name, q) in fams do
+      for (part, script) in [("context", q.contextScript), ("question", q.script)] do
         match ← solver.run script with
         | .sat _ => pure ()
         | a => IO.println s!"smt-check: {name} family's {part} is not sat: {repr a}"; ok := false

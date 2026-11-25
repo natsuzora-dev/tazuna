@@ -295,7 +295,7 @@ theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : S
     (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
     (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length), ∃ gs qs,
       questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
-        Unsat L (stateTys v (shapes v) ++ inp.tys) q.script)
+        Unsat L q.ask)
     (is : List (Input v)) (x : Input v) (hs : Within L (shapes v) (run T v (Step.State.init v) is).1)
     (hx : (inputVals L chk.callerData x).isSome) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
@@ -315,7 +315,7 @@ theorem within_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : St
     (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
     (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length), ∃ gs qs,
       questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (∃ g, q.target = some g ∧ g.covers f = true) →
-        Unsat L (stateTys v (shapes v) ++ inp.tys) q.script)
+        Unsat L q.ask)
     (is : List (Input v)) (x : Input v) (hs : Within L (shapes v) (run T v (Step.State.init v) is).1)
     (hx : (inputVals L chk.callerData x).isSome) (hfit : StepFits L T P v (run T v (Step.State.init v) is).1 x) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
@@ -325,7 +325,8 @@ theorem within_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : St
     with ⟨inp, hmem, hc, M, hM, hS, hxd, hcase⟩ | h
   · obtain ⟨gs, qs, hqs, hun⟩ := hq inp hmem
     exact question_within chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is)
-      (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg => (hun q hq' hg).noModel M fun n h => varSorted_of_sorted (hM n h)
+      (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg => (hun q hq' hg).noModel_at (questions_tys L T P v senv hqs q hq') M
+        fun n h => varSorted_of_sorted (hM n h)
   · exact h.1 f hf
 
 end

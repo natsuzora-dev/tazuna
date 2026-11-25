@@ -110,7 +110,7 @@ def pairVar : Nat := (stateTys v (shapes v)).length
 /-- A pair's two questions, over a well-formed state whose names are below its counter and pending ids below its next
 id, and effects of the two kinds: the bound question, whether the codes' condition or a step reached leaves the
 slots; and the target question, whether the two orders do not commute where everything fits. -/
-def pairQuestions (k1 k2 : OwnPlace L v.event) : Except Refusal (Script × Script) := do
+def pairQuestions (k1 k2 : OwnPlace L v.event) : Except Refusal (TypedScript × TypedScript) := do
   let S : SymState v := SymState.vars 0
   let n := pairVar v
   let o ← encodePair L T P v senv S (.var n) (.var (n + 1)) k1 k2
@@ -120,8 +120,7 @@ def pairQuestions (k1 k2 : OwnPlace L v.event) : Except Refusal (Script × Scrip
   let tests := [Term.is senv.dE (L.ownCtor v.event k1) (.var n), .is senv.dE (L.ownCtor v.event k2) (.var (n + 1))]
   let vars ← (pairTys v).mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
   let dts ← need (.layout (.type v.records)) L.datatypes?
-  let script (asserts : List Term) : Script :=
-    { datatypes := dts, vars, asserts := [wf, below, names] ++ tests ++ asserts, shows := List.range (pairTys v).length }
+  let script (asserts : List Term) : TypedScript := ⟨dts, pairTys v, vars, [wf, below, names] ++ tests, asserts⟩
   pure (script [.or (.not o.codes) (.not o.cond)], script [o.codes, o.cond, o.viol])
 
 /-- The data value of type `t` an SMT value codes. -/
@@ -574,8 +573,8 @@ unsat (`Prove.proved`) or its codes fit and `F` holds, the fit of the steps the 
 (`Prove.withinBounds`). -/
 def PairLine (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
     (F : Prop) (p : OwnPlace L v.event × OwnPlace L v.event) : Prop :=
-  ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧ Unsat L (pairTys v) tq ∧
-    (Unsat L (pairTys v) bq ∨ PairCodesFit L P v p.1 p.2 ∧ F)
+  ∃ bq tq, pairQuestions L T P v senv p.1 p.2 = .ok (bq, tq) ∧ Unsat L tq ∧
+    (Unsat L bq ∨ PairCodesFit L P v p.1 p.2 ∧ F)
 
 theorem PairLine.mono {P : List AnySite} {senv : StepEnv L (shapes v)} {F G : Prop} (h : F → G) {p : OwnPlace L v.event × OwnPlace L v.event} :
     PairLine L T P v senv F p → PairLine L T P v senv G p
@@ -586,15 +585,15 @@ the next id, names below the counter) and whose effect variables hold the pair's
 so an unsat bound question makes the codes and the condition hold, and an unsat target question leaves only orders
 that agree. -/
 theorem pair_unfold {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v))
-    {k1 k2 : OwnPlace L v.event} {bq tq : Script} (hq : pairQuestions L T P v senv k1 k2 = .ok (bq, tq))
+    {k1 k2 : OwnPlace L v.event} {bq tq : TypedScript} (hq : pairQuestions L T P v senv k1 k2 = .ok (bq, tq))
     (hM : ∀ n (h : n < (pairTys v).length), VarSorted L (pairTys v)[n] (M.vars n))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hbelow : ∀ p ∈ s.pending, p.id < s.nextId) (hsupp : Step.StateSupp s)
     (ht1 : Holds M (.is senv.dE (L.ownCtor v.event k1) (.var (pairVar v))))
     (ht2 : Holds M (.is senv.dE (L.ownCtor v.event k2) (.var (pairVar v + 1)))) :
     ∃ o, encodePair L T P v senv (SymState.vars 0) (.var (pairVar v)) (.var (pairVar v + 1)) k1 k2 = .ok o ∧
-      (Unsat L (pairTys v) bq → Holds M o.codes ∧ Holds M o.cond) ∧
-      (Unsat L (pairTys v) tq → Holds M o.codes → Holds M o.cond → ¬ Holds M o.viol) := by
+      (Unsat L bq → Holds M o.codes ∧ Holds M o.cond) ∧
+      (Unsat L tq → Holds M o.codes → Holds M o.cond → ¬ Holds M o.viol) := by
   obtain ⟨o, ho, hq⟩ := bind_ok.1 hq
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbl, hq⟩ := bind_ok.1 hq

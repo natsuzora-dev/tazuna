@@ -346,12 +346,32 @@ def SymInput.command? {v : ServiceV} {shs : List (PendingShape v.event)} {n : Na
   | .command i .. => some (v.commands.get i).name
   | _ => none
 
+/-- A question's script with the types its variables hold, and the context its family assumes kept apart from the
+question's own assertions: `Unsat` reads the types from it, and smt-check asks the context alone to be sat. The
+builders declare `vars` as the sorts of `tys`. -/
+structure TypedScript where
+  datatypes : List Datatype
+  tys : List Ty
+  vars : List Srt
+  context : List Term
+  asserts : List Term
+
+/-- The script the solver reads: the context, then the question's assertions; a sat answer shows every variable. -/
+def TypedScript.script (q : TypedScript) : Script :=
+  { datatypes := q.datatypes, vars := q.vars, asserts := q.context ++ q.asserts, shows := List.range q.tys.length }
+
+/-- The script of the context alone. -/
+def TypedScript.contextScript (q : TypedScript) : Script := { q.script with asserts := q.context }
+
 /-- One question to the solver: the input kind it is about, the target it asks to break (none: whether a step of
-the kind can leave the slots or a side condition fail), and the script. -/
+the kind can leave the slots or a side condition fail), and its script. -/
 structure Question (v : ServiceV) (shs : List (PendingShape v.event)) (n : Nat) where
   input : SymInput v shs n
   target : Option Target
-  script : Script
+  ask : TypedScript
+
+abbrev Question.script {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat} (q : Question v shs n) : Script :=
+  q.ask.script
 
 /-- The types of the state's terms, in the order of `SymState.vars`. -/
 def stateTys (v : ServiceV) (shs : List (PendingShape v.event)) : List Ty :=
@@ -380,13 +400,22 @@ def questions (inp : SymInput v (shapes v) senv.nT) :
   let tys := stateTys v (shapes v) ++ inp.tys
   let vars ← tys.mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
   let dts ← need (.layout (.type v.records)) L.datatypes?
-  let script (asserts : List Term) : Script :=
-    { datatypes := dts, vars, asserts := [wf, below, t.out.case] ++ asserts, shows := List.range tys.length }
+  let script (asserts : List Term) : TypedScript := ⟨dts, tys, vars, [wf, below, t.out.case], asserts⟩
   let cmd := inp.command?
   let targets := (dedup (t.out.targets cmd)).filter
     fun g => (t.out.breaks cmd g).const?.map Val.toBool != some false
   pure (targets, ⟨inp, none, script [.or (.not side) (andT held (.not t.cond))]⟩ ::
     targets.map fun g => ⟨inp, some g, script [side, held, t.cond, t.out.breaks cmd g]⟩)
+
+/-- Every question about an input kind has the state's variables and then the input's. -/
+theorem questions_tys {inp : SymInput v (shapes v) senv.nT} {gs : List Target} {qs : List (Question v (shapes v) senv.nT)}
+    (hq : questions L T P v senv inp = .ok (gs, qs)) : ∀ q ∈ qs, q.ask.tys = stateTys v (shapes v) ++ inp.tys := by
+  simp only [questions] at hq
+  repeat (obtain ⟨_, -, hq⟩ := bind_ok.1 hq)
+  cases pure_ok.1 hq
+  intro q hq'
+  simp only [List.mem_cons, List.mem_map] at hq'
+  rcases hq' with rfl | ⟨g, -, rfl⟩ <;> rfl
 
 end
 

@@ -73,7 +73,7 @@ question is unsat (`Prove.proved`) or `F` holds, the fit of the step the line's 
 def StepLine (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v)) (F : Prop)
     (inp : SymInput v (shapes v) senv.nT) : Prop :=
   ∃ gs qs, questions L T P v senv inp = .ok (gs, qs) ∧
-    ((∀ q ∈ qs, q.target = none → Unsat L (stateTys v (shapes v) ++ inp.tys) q.script) ∨ F)
+    ((∀ q ∈ qs, q.target = none → Unsat L q.ask) ∨ F)
 
 /-- Every own effect a cascade starts with is coded, where the step that starts it begins at a state and an input
 within the slots and its input kind's step line reads proved, or within the bounds and the step stays within the slots
@@ -92,7 +92,7 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
   · obtain ⟨gs, qs, hqs, hor⟩ := hq inp hmem
     rcases hor with hun | hfit
     · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond senv inp hqs hS hinv hheld hord hcase
-        fun q hq' hn => (hun q hq' hn).noModel M fun n h => varSorted_of_sorted (hM n h)
+        fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') M fun n h => varSorted_of_sorted (hM n h)
       exact ((step_encode chk senv hS hinv hxd ht).2 hcodes hsites (hcase t ht)).2.2 hcond a hb
     · obtain ⟨t, ht, -⟩ := bind_ok.1 hqs
       have henc := step_encode chk senv hS hinv hxd ht

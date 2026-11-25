@@ -129,7 +129,7 @@ def TimersFit (L : Layout) {r e : Ty} (records : r.den0) : {ms : List (MachineV 
 /-- What a timer line's answers say: the machine sets no timer (it gets no line), or both its questions are unsat
 (`Prove.proved`). -/
 def TimerLine (L : Layout) {r e : Ty} (m : MachineV r e) : Prop :=
-  m.noTimer = true ∨ ∃ bq tq, timerQuestions L m = .ok (bq, tq) ∧ Unsat L (timerTys m) bq ∧ Unsat L (timerTys m) tq
+  m.noTimer = true ∨ ∃ bq tq, timerQuestions L m = .ok (bq, tq) ∧ Unsat L bq ∧ Unsat L tq
 
 /-- What a timer line says: the timer `after` sets at a context that fits the slots is no earlier than the time it is
 set at. -/

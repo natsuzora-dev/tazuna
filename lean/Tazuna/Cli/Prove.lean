@@ -343,12 +343,12 @@ def refusedItems (step : String) (r : Refusal) : Except String (List Item) :=
 
 /-- The lines of a question family with one target and two questions (a timer machine, a pair of own kinds): its
 bound question and its target question where `--only` keeps the target, else the target skipped. -/
-def familyItems (only : String → Bool) (g : Target) (step : String) (built : Except Refusal (Script × Script))
+def familyItems (only : String → Bool) (g : Target) (step : String) (built : Except Refusal (TypedScript × TypedScript))
     (report : Smt.Answer → Except String Report) : Except String (List Item) :=
   match built with
   | .error r => refusedItems c v step r
   | .ok (bq, tq) => .ok (if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
-      [.ask ⟨bq, boundReport v.name step⟩, .ask ⟨tq, report⟩]
+      [.ask ⟨bq.script, boundReport v.name step⟩, .ask ⟨tq.script, report⟩]
     else [.skipped v.name g])
 
 -- The bound question has no target, and its name says so.

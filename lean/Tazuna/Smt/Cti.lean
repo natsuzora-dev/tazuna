@@ -91,7 +91,7 @@ theorem cti_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
   obtain ⟨g', -, rfl⟩ := List.mem_map.1 hmem
   have hA := fun a (h : a ∈ [wf, below, t.out.case, andT t.codes (andT t.sites (andT ci0 (andT ci ck))),
     andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT)), t.cond, t.out.breaks inp.command? g']) =>
-    hM a (by simpa using h)
+    hM a (by simpa [Question.script, TypedScript.script] using h)
   have hbelowH := hA below (by simp)
   have hcaseH := hA t.out.case (by simp)
   have hside := hA (andT t.codes (andT t.sites (andT ci0 (andT ci ck)))) (by simp)
