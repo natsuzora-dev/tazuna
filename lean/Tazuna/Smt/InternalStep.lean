@@ -355,7 +355,7 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
         exact hct
       exact AccRel.of_fresh (AccRel.bind (o2 := o2) (f2 := .add fresh (.int 1))
         (g := fun a2 => Step.applyEvents T a2 ((site.fn env).fn ⟨.inr (.inl (j, ())), ()⟩)) hacc
-        fun a2 os hra _ r1 r2 r3 r4 r6 => by
+        fun a2 os hra _ r1 r2 r3 r4 r6 _ => by
         cases hra
         exact erel a1 _ _ (hacR j hrj hokf) hnow r1 r2 r3 r4 r6 h567)
     | inl pr =>
@@ -381,7 +381,7 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
             simp only [Term.denote, hokt, toBool_bool, toBool_allT_rules, hbe]; simp [ctx, hbe']] at hct
           exact hct
         have H := AccRel.of_fresh (AccRel.bind (g := fun a2 => Step.applyEvents T a2 ((site.fn env).fn ⟨Step.okNil, ()⟩))
-          hacc fun a2 os hra _ r1 r2 r3 r4 r6 => by
+          hacc fun a2 os hra _ r1 r2 r3 r4 r6 _ => by
             have hnw : now.denote M = .int a2.state.now := by
               rw [hra] at happly; obtain rfl := Except.ok.inj happly; exact hnow
             exact erel a2 _ _ (hacA hokt) hnw r1 r2 r3 r4 r6 h567)

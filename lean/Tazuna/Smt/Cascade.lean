@@ -193,28 +193,16 @@ theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             refine iff_of_true (settle_cond_fault f (k + 1) _ _ ?_ h2) (fun a' h => by rw [hrun] at h; cases h)
             simp only [pickTerms]; rw [hpick, hfault, hof]; rfl
           | none =>
-            rintro ⟨recs0, ms0, fr, evs0, effs0, os0, hr0, r1, r2, hfr1, r3, r4, r5, r6⟩
-            obtain ⟨ps0, hps0⟩ := newsRel_writes r4
-            have hrun0 := hr0 ps0 hps0
-            have hl0 := forall2_zipIdx_length _ _ hps0
-            have hinv1 := Step.runOwn_inv T ⟨chk.machines, chk.reactions⟩ a hinv _ hrun0
-            have hq1 := Step.runOwn_queue T ⟨chk.machines, chk.reactions⟩ a hinv hqok _ hrun0
-            have hS1 : OwnRel M L (S ++ (gateOwns (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
-                o1.terms.done.owns ++ [])) (a.own ++ os0) 0 := by
-              refine ownRel_append hS ?_
-              have := ownRel_append (ownRel_gate (L := L) hact' r6) (ownRel_nil (a.own.length + os0.length))
-              rw [List.append_nil] at this
-              simpa using this
-            rw [(settle_encode chk hshs happ hca senv f (k + 1) _ _ _ hinv1 hq1 hS1
-              hnow (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl)
-              (by simp only [pickTerms]; rw [hpick]; exact r1)
-              (by
-                simp only [pickTerms]
-                exact machinesRel_congr _ _ _ _ (pick_tables hact' _ _).symm r2)
-              (by simp only [pickTerms]; rw [hpick]; exact hfr1)
-              (by simp only [pickTerms]; rw [hpick, r3, hl0]; rfl)
-              (by simp only [pickTerms]; rw [hpick, r5]; simp)
-              h2 hcx2).1]
+            intro hdone
+            have hA1 := AccRel.pick (b := ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩) hact' ⟨rfl, rfl⟩ hdone
+            obtain ⟨a1, hrun0⟩ := hA1.ok
+            obtain ⟨r1, r2, r3, r4, rnow, os0, hown1, r5, r6⟩ := (hrun0 ▸ hA1).ends
+            rw [(settle_encode chk hshs happ hca senv f (k + 1) _ _ _
+              (Step.runOwn_inv T ⟨chk.machines, chk.reactions⟩ a hinv _ hrun0)
+              (Step.runOwn_queue T ⟨chk.machines, chk.reactions⟩ a hinv hqok _ hrun0)
+              (by rw [hown1]; exact ownRel_append hS (by simpa using r6)) (by rw [rnow]; exact hnow)
+              (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl) r1 r2 r3 r4
+              (by rw [r5, hown1, List.length_append]) h2 hcx2).1]
             constructor
             · intro h a' ha'
               rw [hrun0] at ha'
@@ -280,57 +268,28 @@ theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
           simp only [SettleOut.fault?, List.find?_cons, hact', toBool_bool, hft, Bool.and_self, hof, hrun, bind,
             Except.bind]
         | none =>
-          rintro hdone
+          intro hdone
           have hff : (o1.terms.fault.denote M).toBool = false := by rw [hfault, hof]; rfl
           rw [settle_fault_skip (t' := rest.terms) (by simp [hact', hff, toBool_bool])]
-          obtain ⟨recs0, ms0, fr, evs0, effs0, os0, hr0, r1, r2, hfr1, r3, r4, r5, r6⟩ := hdone
-          obtain ⟨ps0, hps0⟩ := newsRel_writes r4
-          have hrun0 := hr0 ps0 hps0
-          rw [hrun0]
-          simp only [bind, Except.bind]
-          have hl0 := forall2_zipIdx_length _ _ hps0
-          have hinv1 := Step.runOwn_inv T ⟨chk.machines, chk.reactions⟩ a hinv _ hrun0
-          have hq1 := Step.runOwn_queue T ⟨chk.machines, chk.reactions⟩ a hinv hqok _ hrun0
-          have hS1 : OwnRel M L (S ++ (gateOwns (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
-              o1.terms.done.owns ++ [])) (a.own ++ os0) 0 := by
-            refine ownRel_append hS ?_
-            have := ownRel_append (ownRel_gate (L := L) hact' r6) (ownRel_nil (a.own.length + os0.length))
-            rw [List.append_nil] at this
-            simpa using this
-          have IH := (settle_encode chk hshs happ hca senv f (k + 1) _ _ _ hinv1 hq1 hS1
-            hnow (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl)
-            (by simp only [pickTerms]; rw [hpick]; exact r1)
-            (by
-              simp only [pickTerms]
-              exact machinesRel_congr _ _ _ _ (pick_tables hact' _ _).symm r2)
-            (by simp only [pickTerms]; rw [hpick]; exact hfr1)
-            (by simp only [pickTerms]; rw [hpick, r3, hl0]; rfl)
-            (by simp only [pickTerms]; rw [hpick, r5]; simp)
-            h2 hcx2).2 hc2
-          obtain ⟨IHF, IH⟩ := IH
+          have hA1 := AccRel.pick (b := ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩) hact' ⟨rfl, rfl⟩ hdone
+          obtain ⟨a1, hrun0⟩ := hA1.ok
+          obtain ⟨r1, r2, r3, r4, rnow, os0, hown1, r5, r6⟩ := (hrun0 ▸ hA1).ends
+          obtain ⟨IHF, IH⟩ := (settle_encode chk hshs happ hca senv f (k + 1) _ _ _
+            (Step.runOwn_inv T ⟨chk.machines, chk.reactions⟩ a hinv _ hrun0)
+            (Step.runOwn_queue T ⟨chk.machines, chk.reactions⟩ a hinv hqok _ hrun0)
+            (by rw [hown1]; exact ownRel_append hS (by simpa using r6)) (by rw [rnow]; exact hnow)
+            (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl) r1 r2 r3 r4
+            (by rw [r5, hown1, List.length_append]) h2 hcx2).2 hc2
           refine ⟨by simpa [SettleOut.faultT] using IHF, ?_⟩
           revert IH
           cases rest.fault? M with
-          | some f'' => exact id
+          | some f'' => intro IH; rw [hrun0]; exact IH
           | none =>
-            rintro ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, s5, s6, s7⟩
-            refine ⟨recs1, ms1, fr1, evs0 ++ evs1, effs0 ++ effs1, os0 ++ os1, fun ps hps => ?_, s1, s2, s3, ?_, ?_, ?_,
-              ?_⟩
-            · rw [List.zipIdx_append] at hps
-              obtain ⟨ps0', ps1, rfl, hps0', hps1⟩ := forall2_split _ _ hps
-              obtain rfl := writes_unique hps0' hps0
-              rw [hr1 ps1 (by simpa [hl0] using hps1)]
-              simp [List.append_assoc, Nat.add_assoc]
-            · rw [s4]; simp [hl0, Nat.add_assoc]
-            · have h0 : NewsRel M L shs v.declared (gatePending (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
-                  o1.terms.done.news ++ []) effs0 a.state.nextId := by
-                simpa using newsRel_append (newsRel_gate (L := L) hact' r4) (newsRel_nil (L := L) (M := M))
-              exact newsRel_append h0 (by simpa [hl0] using s5)
-            · rw [s6]; simp [Nat.add_assoc]
-            · have h0 : OwnRel M L (gateOwns (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1))
-                  o1.terms.done.owns ++ []) os0 a.own.length := by
-                simpa using ownRel_append (ownRel_gate (L := L) hact' r6) (ownRel_nil (a.own.length + os0.length))
-              exact ownRel_append h0 (by simpa using s7)
+            intro IH
+            refine AccRel.bind hA1 fun a1' os hr hown _ _ _ _ _ _ => ?_
+            obtain rfl := Except.ok.inj (hrun0.symm.trans hr)
+            rw [hown, List.length_append] at IH
+            exact IH
       · have hact' := hact
         simp only [hlt, decide_false] at hact'
         have hnone : a.own[k]? = none := List.getElem?_eq_none (by omega)

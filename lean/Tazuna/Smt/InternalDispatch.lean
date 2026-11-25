@@ -508,6 +508,22 @@ theorem pick_tables_false {r e : Ty} {c : Term} (hc : c.denote M = .bool false) 
     Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c x y)) A B).toList = Term.denotes M B.toList := by
   simpa using pick_tables hc A B
 
+/-- The terms picked where the flag holds, over terms that write nothing, say of a run what the picked terms say. -/
+theorem AccRel.pick {c : Term} (hc : c.denote M = .bool true) {o b : StepTerms v}
+    (hb : b.done.news = [] ∧ b.done.owns = []) {shs : List (PendingShape v.event)} {acc : Step.Acc v} {q0 : Nat}
+    {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs acc o.done o.fresh q0 r) :
+    AccRel M L T shs acc (pickTerms c o b).done (pickTerms c o b).fresh q0 r := by
+  obtain ⟨recs, ms, fr, evs, effs, os, hr, h1, h2, h3, h4, h5, h6, h7⟩ := h
+  have hp (x y : Term) : (Term.share (.ite c x y)).denote M = x.denote M := by simp [Term.denote, hc, toBool_bool]
+  refine ⟨recs, ms, fr, evs, effs, os, hr, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> simp only [pickTerms, hb.1, hb.2, hp]
+  · exact h1
+  · exact machinesRel_congr _ _ _ _ (pick_tables hc _ _).symm h2
+  · exact h3
+  · exact h4
+  · simpa using newsRel_gate hc h5
+  · exact h6
+  · simpa using ownRel_gate hc h7
+
 /-- Step terms of kinds whose tests all fail write no news and no own effect. -/
 theorem fold_none {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ base.done.owns = []) :
     (ks : List (Term × StepTerms v)) → (∀ k ∈ ks, k.1.denote M = .bool false) →

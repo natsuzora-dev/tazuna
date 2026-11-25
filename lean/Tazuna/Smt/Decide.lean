@@ -161,11 +161,18 @@ theorem AccRel.ends {shs : List (PendingShape v.event)} {a a' : Step.Acc v} {o :
     RelV L v.records (Ty.up _ v.records_data a'.state.records) (o.records.denote M) ∧
       MachinesRel M L T v.machines o.tables a'.state.machines ∧ f.denote M = .int (Int.ofNat a'.state.fresh) ∧
       o.nextId.denote M = .int (Int.ofNat a'.state.nextId) ∧ a'.state.now = a.state.now ∧
-      ∃ os, a'.own = a.own ++ os ∧ o.queued.denote M = .int ((q0 + os.length : Nat) : Int) := by
+      ∃ os, a'.own = a.own ++ os ∧ o.queued.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L o.owns os q0 := by
   obtain ⟨recs, ms, fr, evs, effs, os, hr, r1, r2, r3, r4, r5, r6, r7⟩ := h
   obtain ⟨ps, hps⟩ := newsRel_writes r5
   obtain rfl := Except.ok.inj (hr ps hps)
-  exact ⟨r1, r2, r3, by rw [r4, forall2_zipIdx_length _ _ hps]; rfl, rfl, os, rfl, r6⟩
+  exact ⟨r1, r2, r3, by rw [r4, forall2_zipIdx_length _ _ hps]; rfl, rfl, os, rfl, r6, r7⟩
+
+/-- A run that `AccRel` describes ends without a fault. -/
+theorem AccRel.ok {shs : List (PendingShape v.event)} {a : Step.Acc v} {o : EventsOut v} {f : Term} {q0 : Nat}
+    {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs a o f q0 r) : ∃ a', r = .ok a' := by
+  obtain ⟨_, _, _, _, _, _, hr, -, -, -, -, r5, -, -⟩ := h
+  obtain ⟨ps, hps⟩ := newsRel_writes r5
+  exact ⟨_, hr ps hps⟩
 
 /-- Two runs in turn: what the first leaves, then the second from the state the first's terms denote, is what the
 two leave together, the news and own slots of both. -/
@@ -176,14 +183,14 @@ theorem AccRel.bind {shs : List (PendingShape v.event)} {a : Step.Acc v} {o1 o2 
       RelV L v.records (Ty.up _ v.records_data a1.state.records) (o1.records.denote M) →
       MachinesRel M L T v.machines o1.tables a1.state.machines → f1.denote M = .int (Int.ofNat a1.state.fresh) →
       o1.nextId.denote M = .int (Int.ofNat a1.state.nextId) → o1.queued.denote M = .int ((q0 + os.length : Nat) : Int) →
-      AccRel M L T shs a1 o2 f2 (q0 + os.length) (g a1)) :
+      OwnRel M L o1.owns os q0 → AccRel M L T shs a1 o2 f2 (q0 + os.length) (g a1)) :
     AccRel M L T shs a { o2 with news := o1.news ++ o2.news, owns := o1.owns ++ o2.owns } f2 q0 (r >>= g) := by
   obtain ⟨recs0, ms0, fr0, evs0, effs0, os0, hr0, r1, r2, r3, r4, r5, r6, r7⟩ := h1
   obtain ⟨ps0, hps0⟩ := newsRel_writes r5
   have hl0 := forall2_zipIdx_length _ _ hps0
   have hrun0 := hr0 ps0 hps0
   obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, s1, s2, s3, s4, s5, s6, s7⟩ :=
-    h2 _ os0 hrun0 rfl r1 r2 r3 (by rw [r4, hl0]; rfl) r6
+    h2 _ os0 hrun0 rfl r1 r2 r3 (by rw [r4, hl0]; rfl) r6 r7
   refine ⟨recs1, ms1, fr1, evs0 ++ evs1, effs0 ++ effs1, os0 ++ os1, fun ps hps => ?_, s1, s2, s3, ?_,
     newsRel_append r5 (by simpa [hl0] using s5), ?_, ownRel_append r7 (by simpa using s7)⟩
   · rw [List.zipIdx_append] at hps
