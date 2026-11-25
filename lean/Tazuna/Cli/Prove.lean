@@ -375,7 +375,7 @@ def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
         return 4
       items := items ++ r.items
     let asks := (items.filterMap fun | .ask o => some o | _ => none).toArray
-    let cache := opts.cache / s!"{hash (← solver.version)}"
+    let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
     let answers : Array (Except String Report) ← runAll opts.jobs
       (fun o => do pure (o.read (← solver.runCached cache o.script))) asks
     let mut reports : List Report := []
