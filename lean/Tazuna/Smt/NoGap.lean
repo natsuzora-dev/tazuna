@@ -1549,4 +1549,267 @@ theorem globals_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.se
   exact ofService_has c.program.defs v u
     (List.mem_filter.2 ⟨List.mem_append_right _ hu, sortable_of_sorted u hs⟩)
 
+/-! Every site of the program is covered: its captured values' types, its body's node types, sites and handles are
+the program's, over the definitions before its global. -/
+
+section
+variable {G : List Ty}
+
+/-- A site of `D` whose captured types and body's node types are among `T`, whose body's sites are among `S` and
+handles among `Hs`. -/
+def Inside (D : Defs G) (T : List Ty) (S : List AnySite) (Hs : List HandleSite) (s : AnySite) : Prop :=
+  (∀ u ∈ s.1, u ∈ T) ∧ (∀ u ∈ Expr.tys s.2.2.body, u ∈ T) ∧ (∀ x ∈ Expr.sites s.2.2.defs s.2.2.body, x ∈ S) ∧
+    (∀ h ∈ Expr.handles s.2.2.body, h ∈ Hs) ∧ s.2.2.G = G ∧ HEq s.2.2.defs D
+
+theorem Inside.mono {D : Defs G} {T T' : List Ty} {S S' : List AnySite} {Hs Hs' : List HandleSite} {s : AnySite}
+    (h : Inside D T S Hs s) (hT : ∀ u ∈ T, u ∈ T') (hS : ∀ x ∈ S, x ∈ S') (hH : ∀ x ∈ Hs, x ∈ Hs') :
+    Inside D T' S' Hs' s :=
+  ⟨fun u hu => hT u (h.1 u hu), fun u hu => hT u (h.2.1 u hu), fun x hx => hS x (h.2.2.1 x hx),
+    fun x hx => hH x (h.2.2.2.1 x hx), h.2.2.2.2⟩
+
+theorem Expr.tys_head {Γ : List Ty} {t : Ty} (e : Expr G Γ t) : t ∈ Expr.tys e := by
+  cases e <;> simp [Expr.tys]
+
+theorem Exprs.tys_types : {Γ ts : List Ty} → (es : Exprs G Γ ts) → ∀ u ∈ ts, u ∈ Exprs.tys es
+  | _, _, .nil, _, h => nomatch h
+  | _, _, .cons e es, u, h => by
+    rcases List.mem_cons.1 h with rfl | h
+    · simp [Exprs.tys, Expr.tys_head e]
+    · simp [Exprs.tys, Exprs.tys_types es u h]
+
+theorem sites_of_handleAt {Γ ps : List Ty} {r : Ty} (D : Defs G) {f : Expr G Γ (.fn ps r)} {args : Exprs G Γ ps}
+    {h : HandleSite} (hh : handleAt f args = some h) : Expr.sites D f = [] := by
+  unfold handleAt at hh
+  simp only at hh
+  split at hh
+  · rfl
+  · simp at hh
+
+variable (D : Defs G)
+
+mutual
+theorem Expr.inside : {Γ : List Ty} → {t : Ty} → (e : Expr G Γ t) → ∀ s ∈ Expr.sites D e,
+    Inside D (Expr.tys e) (Expr.sites D e) (Expr.handles e) s
+  | _, _, .int _, _, h | _, _, .str _, _, h | _, _, .var _, _, h | _, _, .global _, _, h | _, _, .prim .., _, h => by
+    simp [Expr.sites] at h
+  | _, _, .ctor _ es, s, h => (Exprs.inside es s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .tuple es, s, h => (Exprs.inside es s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .field _ _ _ e, s, h => (Expr.inside e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .index e _, s, h => (Expr.inside e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .not e, s, h => (Expr.inside e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .neg e, s, h => (Expr.inside e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .lam e, s, h => (Expr.inside e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .list items, s, h => (Items.inside items s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .update e p, s, h => by
+    simp only [Expr.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.inside e s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Patch.inside p s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, .let_ e body, s, h => by
+    simp only [Expr.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.inside e s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Expr.inside body s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, .bin _ l r, s, h => by
+    simp only [Expr.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.inside l s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Expr.inside r s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, .case e cs _, s, h => by
+    simp only [Expr.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.inside e s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Clauses.inside cs s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, .call f args, s, h => by
+    simp only [Expr.sites, List.mem_append] at h
+    cases hha : handleAt f args with
+    | some hd =>
+      rcases h with h | h
+      · rw [sites_of_handleAt D hha] at h; cases h
+      · exact (Exprs.inside args s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+          (fun x hx => by simp [Expr.handles, hha, hx])
+    | none =>
+      rcases h with h | h
+      · exact (Expr.inside f s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+          (fun x hx => by simp [Expr.handles, hha, hx])
+      · exact (Exprs.inside args s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+          (fun x hx => by simp [Expr.handles, hha, hx])
+  | _, _, @Expr.close _ _ Γ' t' site env hΓ ht body, s, h => by
+    simp only [Expr.sites, List.mem_cons, List.mem_append] at h
+    rcases h with (rfl | h) | h
+    · exact ⟨fun u hu => by simp [Expr.tys, Exprs.tys_types env u hu], fun u hu => by simp [Expr.tys, hu],
+        fun x hx => by simp [Expr.sites, hx], fun x hx => by simp [Expr.handles, hx], rfl, HEq.rfl⟩
+    · exact (Exprs.inside env s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Expr.inside body s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, .closeEffect _ env _ _ body, s, h => by
+    simp only [Expr.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Exprs.inside env s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Expr.inside body s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+theorem Exprs.inside : {Γ ts : List Ty} → (es : Exprs G Γ ts) → ∀ s ∈ Exprs.sites D es,
+    Inside D (Exprs.tys es) (Exprs.sites D es) (Exprs.handles es) s
+  | _, _, .nil, _, h => nomatch h
+  | _, _, .cons e es, s, h => by
+    simp only [Exprs.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.inside e s h).mono (fun u hu => by simp [Exprs.tys, hu]) (fun x hx => by simp [Exprs.sites, hx])
+        (fun x hx => by simp [Exprs.handles, hx])
+    · exact (Exprs.inside es s h).mono (fun u hu => by simp [Exprs.tys, hu]) (fun x hx => by simp [Exprs.sites, hx])
+        (fun x hx => by simp [Exprs.handles, hx])
+theorem Items.inside : {Γ : List Ty} → {t : Ty} → (es : Items G Γ t) → ∀ s ∈ Items.sites D es,
+    Inside D (Items.tys es) (Items.sites D es) (Items.handles es) s
+  | _, _, .nil, _, h => nomatch h
+  | _, _, .cons e es, s, h => by
+    simp only [Items.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.inside e s h).mono (fun u hu => by simp [Items.tys, hu]) (fun x hx => by simp [Items.sites, hx])
+        (fun x hx => by simp [Items.handles, hx])
+    · exact (Items.inside es s h).mono (fun u hu => by simp [Items.tys, hu]) (fun x hx => by simp [Items.sites, hx])
+        (fun x hx => by simp [Items.handles, hx])
+theorem Patch.inside : {Γ ts : List Ty} → (p : Patch G Γ ts) → ∀ s ∈ Patch.sites D p,
+    Inside D (Patch.tys p) (Patch.sites D p) (Patch.handles p) s
+  | _, _, .nil, _, h => nomatch h
+  | _, _, .keep rest, s, h => (Patch.inside rest s (by simpa [Patch.sites] using h)).mono
+      (fun u hu => by simpa [Patch.tys] using hu) (fun x hx => by simpa [Patch.sites] using hx)
+      (fun x hx => by simpa [Patch.handles] using hx)
+  | _, _, .set e rest, s, h => by
+    simp only [Patch.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.inside e s h).mono (fun u hu => by simp [Patch.tys, hu]) (fun x hx => by simp [Patch.sites, hx])
+        (fun x hx => by simp [Patch.handles, hx])
+    · exact (Patch.inside rest s h).mono (fun u hu => by simp [Patch.tys, hu]) (fun x hx => by simp [Patch.sites, hx])
+        (fun x hx => by simp [Patch.handles, hx])
+theorem Clauses.inside : {Γ : List Ty} → {t r : Ty} → {sh : List Shape} → (cs : Clauses G Γ t r sh) →
+    ∀ s ∈ Clauses.sites D cs, Inside D (Clauses.tys cs) (Clauses.sites D cs) (Clauses.handles cs) s
+  | _, _, _, _, .nil, _, h => nomatch h
+  | _, _, _, _, .cons _ body rest, s, h => by
+    simp only [Clauses.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.inside body s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+    · exact (Clauses.inside rest s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+  | _, _, _, _, .guarded _ g body rest, s, h => by
+    simp only [Clauses.sites, List.mem_append] at h
+    rcases h with (h | h) | h
+    · exact (Expr.inside g s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+    · exact (Expr.inside body s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+    · exact (Clauses.inside rest s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+end
+
+end
+
+section
+variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite}
+
+/-- The definitions are covered: their node types are available, their sites are `P`'s, their handles accepted. -/
+def DefsOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite) {G : List Ty}
+    (D : Defs G) : Prop :=
+  (∀ u ∈ D.tys, Avail L u) ∧ (∀ x ∈ D.sites, x ∈ P) ∧ (∀ h ∈ D.handles, HandleOk ds H h)
+
+/-- The site is covered: its captured types and body's node types are available, its body's sites are `P`'s and
+handles accepted, and the definitions it sees are covered. -/
+def SiteOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite) (s : AnySite) :
+    Prop :=
+  (∀ u ∈ s.1, Avail L u) ∧ (∀ u ∈ Expr.tys s.2.2.body, Avail L u) ∧ (∀ x ∈ Expr.sites s.2.2.defs s.2.2.body, x ∈ P) ∧
+    (∀ h ∈ Expr.handles s.2.2.body, HandleOk ds H h) ∧ DefsOk L P ds H s.2.2.defs
+
+/-- Every site of covered definitions is covered. -/
+theorem siteOk_of : {G : List Ty} → (defs : Defs G) → DefsOk L P ds H defs → ∀ s ∈ defs.sites, SiteOk L P ds H s
+  | [], .nil, _, _, h => nomatch h
+  | _ :: _, .snoc defs _ body, ⟨ht, hs, hh⟩, s, h => by
+    have hd : DefsOk L P ds H defs := ⟨fun u hu => ht u (by simp [Defs.tys, hu]),
+      fun x hx => hs x (by simp [Defs.sites, hx]), fun x hx => hh x (by simp [Defs.handles, hx])⟩
+    simp only [Defs.sites, List.mem_append] at h
+    rcases h with h | h
+    · exact siteOk_of defs hd s h
+    · obtain ⟨hΓ, hb, hbs, hbh, hG, hD⟩ := Expr.inside defs body s h
+      obtain ⟨Γ, t, ⟨site, G', D', hΓ', ht', b⟩⟩ := s
+      simp only at hG hD hΓ hb hbs hbh ⊢
+      subst hG
+      obtain rfl := eq_of_heq hD
+      exact ⟨fun u hu => ht u (by simp [Defs.tys, hΓ u hu]), fun u hu => ht u (by simp [Defs.tys, hb u hu]),
+        fun x hx => hs x (by simp [Defs.sites, hbs x hx]), fun x hx => hh x (by simp [Defs.handles, hbh x hx]), hd⟩
+
+theorem envCodes_ok : (Γ : List Ty) → (ρ : Ty.dens Γ) → (σ : Codes Γ) → envCodes L Γ ρ = some σ →
+    (∀ u ∈ Γ, Avail L u) → CodesOk L P ds H Γ σ
+  | [], (), (), _, _ => trivial
+  | t :: Γ, (x, xs), (c, cs), h, ha => by
+    cases hw : embedV L t x with
+    | none => simp [envCodes, hw] at h
+    | some w =>
+      cases hc : Code.ofTerm? t w.term with
+      | none => simp [envCodes, hw, hc] at h
+      | some c' =>
+        cases hcs : envCodes L Γ xs with
+        | none => simp [envCodes, hw, hcs] at h
+        | some cs' =>
+          simp only [envCodes, hw, hc, hcs, Option.bind_some, Option.pure_def, bind] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact ⟨codeOk_ofTerm hc (ha t (by simp)), envCodes_ok Γ xs _ hcs fun u hu => ha u (by simp [hu])⟩
+
+/-- A covered site's code over related captured values has no gap behind it. -/
+theorem Site.code_sound (hC : Covers L P ds H) {Γ : List Ty} {t : Ty} (s : Site Γ t) (hs : SiteOk L P ds H ⟨Γ, t, s⟩)
+    (σ : Codes Γ) (hσ : CodesOk L P ds H Γ σ) : Sound (fun p => CodeOk L P ds H t p.1) (s.code L σ) :=
+  encode_sound s.defs (s.defs.encode L) hC (Defs.encode_sound hC s.defs hs.2.2.2.2.1 hs.2.2.2.2.2.1 hs.2.2.2.2.2.2)
+    s.body σ hσ hs.2.1 hs.2.2.1 hs.2.2.2.1
+
+/-- A kept function at a covered site has a code with no gap behind it. -/
+theorem Fun.code_sound (hC : Covers L P ds H) {t : Ty} (f : Fun t) (hs : SiteOk L P ds H f.asSite) :
+    Sound (fun p => CodeOk L P ds H t p.1) (f.code L) := by
+  unfold Fun.code
+  refine sound_bind (sound_need fun _ => rfl) fun σ hσ => ?_
+  exact encode_sound f.defs (f.defs.encode L) hC (Defs.encode_sound hC f.defs hs.2.2.2.2.1 hs.2.2.2.2.2.1
+    hs.2.2.2.2.2.2) f.body σ (envCodes_ok _ _ σ hσ hs.1) hs.2.1 hs.2.2.1 hs.2.2.2.1
+
+end
+
+/-- Every site of a checked spec's program is covered in each service's layout, so a kept function at one of them,
+and a pending request's `on_answer` and `ensures`, have codes with no layout gap behind them. -/
+theorem sites_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) :
+    ∀ s ∈ c.P, SiteOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles s :=
+  siteOk_of c.program.defs ⟨fun u hu hs => ofService_has c.program.defs v u
+    (List.mem_filter.2 ⟨List.mem_append_right _ hu, sortable_of_sorted u hs⟩), fun _ h => h,
+    fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩
+
+/-- A kept function at a site of a checked spec's program has a code with no layout gap behind it in each service's
+layout. -/
+theorem Fun.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {t : Ty} (f : Fun t)
+    (hf : f.asSite ∈ c.P) :
+    Sound (fun p => CodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles t p.1)
+      (f.code (Layout.ofService c.program.defs v)) :=
+  Fun.code_sound (covers_ofParts c.program.defs.parts v) f (sites_ofService c hv _ hf)
+
+/-- A site of a checked spec's program, as a pending request's `on_answer` or `ensures` names one, has a code over
+related captured values with no layout gap behind it in each service's layout. -/
+theorem Site.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {Γ : List Ty} {t : Ty}
+    (s : Site Γ t) (hs : (⟨Γ, t, s⟩ : AnySite) ∈ c.P) (σ : Codes Γ)
+    (hσ : CodesOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles Γ σ) :
+    Sound (fun p => CodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles t p.1)
+      (s.code (Layout.ofService c.program.defs v) σ) :=
+  Site.code_sound (covers_ofParts c.program.defs.parts v) s (sites_ofService c hv _ hs) σ hσ
+
 end Tazuna.Smt
