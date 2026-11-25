@@ -3634,8 +3634,8 @@ def pairCheck (solver : Solver) : IO Bool := do
   let c ← pairCases solver (reqSvc "count" countE) (reqSites (reqSvc "count" countE)) [("ins ins", 0, 0, false)] rfl
   return a && b && c
 
-/-! Every question family can be sat (run-log 147: a sort with no value made every pair question unsat whatever it
-asked). For each family, a question of a real layout is sat, and so are the assertions it shares with every question
+/-! Every question family can be sat (a sort with no value, or a context no model meets, would make every question of
+the family unsat whatever it asked). For each family, a question of a real layout is sat, and so are the assertions it shares with every question
 of its family, the context it asks about: an input kind's step question (the event of the service `em` breaks
 `small`) and its bound question (without `small`, the event of `e` inserts a fourth key into three slots) after the well-formed state, its
 wire ids and the input's case; a pair question (`set`, `set`) after the state, its names and the two variant tests; a

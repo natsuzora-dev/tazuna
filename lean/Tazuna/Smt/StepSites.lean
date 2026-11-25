@@ -1,6 +1,7 @@
 import Tazuna.Smt.Step
 
-/-! The cascade's codes condition is exact (entry 63's rule for every side condition). A step's `sites` term is the
+/-! The cascade's codes condition is exact, as every side condition is: it fails only where a
+function the step really applies outgrows a slot. A step's `sites` term is the
 conjunction, over each place of the cascade, of the codes condition of every own kind's command or query, built at
 the closure records the structure holds, so it does not depend on the state: it holds exactly when the cascade may
 run (a positive `cascade` bound) only where every own command's and query's functions fit their slots

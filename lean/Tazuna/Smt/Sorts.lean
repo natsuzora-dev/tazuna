@@ -1,9 +1,11 @@
-import Tazuna.Smt.PairLine
+import Tazuna.Smt.Pair
+import Tazuna.Smt.Cover
 import Tazuna.Smt.FiresForward
 import Tazuna.Smt.NoGap
 
-/-! Every sort a script declares holds a value, so `Unsat`'s premise is never free (run-log 147). A script declares its
-variables at `Layout.srt?` of their types and its datatypes from `Layout.datatypes?`; where both are found, every data
+/-! Every sort a script declares holds a value, so `Unsat`'s premise is never free: a sort with no value would make
+every question over it unsat whatever it asked. A script declares its variables at `Layout.srt?` of their types and
+its datatypes from `Layout.datatypes?`; where both are found, every data
 type's sort holds a value of `Sorted` (`sorted_exists`) and every effect type's a value of `EffSorted`
 (`varSorted_exists`): a constructor whose fields' sorts are found too, or a collection whose slots are all free.
 `sorts_inhabited` gives the `sorts` field of `Unsat` for the scripts of each question family: an input kind's step and

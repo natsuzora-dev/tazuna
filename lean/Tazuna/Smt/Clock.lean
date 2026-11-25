@@ -9,7 +9,7 @@ timer, and every round after it, changes nothing. When every round fires the ste
 fires one instance, so it starts at most one effect, which takes the round's next id (`roundStarts`); the requests are
 written into the pending table in round order.
 
-The condition is exact (run-log entry 63): it fails only where a function the step really applies outgrows a slot
+The condition is exact: it fails only where a function the step really applies outgrows a slot
 count. Every round asks for each machine's `after` and `effect` sources, and for both applied where an instance fires;
 the step's end asks what `finishFits` says. Rounds past the first that fired nothing, and everything after a step that
 exceeds the cascade bound, ask nothing. -/
