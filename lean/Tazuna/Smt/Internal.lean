@@ -1,4 +1,4 @@
-import Tazuna.Smt.CommandStep
+import Tazuna.Smt.Finish
 import Tazuna.Smt.CommandExact
 import Tazuna.Semantics.Settle
 

@@ -23,6 +23,9 @@ def SettleOut.fault? (M : Model) (o : SettleOut) : Option Fault :=
   | some s => s.2.fault? M
   | none => if (o.over.denote M).toBool then some .cascadeLimit else none
 
+/-- Whether the cascade faults: an internal step it runs faults, or a place past the bound is occupied. -/
+def SettleOut.faultT (o : SettleOut) : Term := .or o.terms.fault o.over
+
 section
 variable (L : Layout) (T : List TypeDecl)
 
@@ -123,6 +126,28 @@ theorem encodeOwnStep_width {P : List AnySite} {shs : List (PendingShape v.event
   rw [List.foldr_map] at this
   exact this
 
+/-- Once an internal step faulted, the cascade's fault term stays true. -/
+theorem settle_fault_stays {P : List AnySite} {shs : List (PendingShape v.event)} {dE dP dopt : Nat}
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} {dflt now : Term} :
+    (fuel k : Nat) → (S : List Slot) → (t : StepTerms) → t.fault.denote M = .bool true →
+    {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs dE dP dopt apply dflt now fuel k S t = .ok (o, c, cx) →
+    o.terms.fault.denote M = .bool true
+  | 0, _, _, _, htf, _, _, _, henc => by
+    simp only [encodeSettle, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
+    obtain ⟨rfl, -, -⟩ := henc
+    exact htf
+  | f + 1, k, S, t, htf, _, _, _, henc => by
+    obtain ⟨⟨o1, c1, cx1⟩, -, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨rest, c2, cx2⟩, h2, henc⟩ := bind_ok.1 henc
+    cases pure_ok.1 henc
+    have hact : (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1)).denote M = .bool false := by
+      simp [Term.denote, htf, toBool_bool]
+    have h1 : (pickTerms (Term.share (.and (.not t.fault) (queueAt dflt S (.int k)).1)) o1.terms
+        ⟨t.fault, { t.done with news := [], owns := [] }, t.fresh⟩).fault.denote M = .bool true := by
+      simp only [pickTerms, Term.denote_share, Term.denote, hact, toBool_bool, Bool.false_eq_true, ite_false]; exact htf
+    have h3 := settle_fault_stays f (k + 1) _ _ h1 h2
+    exact h3
+
 /-- T2 for the cascade: wherever the condition holds, the fault the model names is `Step.settleFrom`'s, and otherwise
 the cascade runs to its end with what the terms denote (`SettleDone`). -/
 theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
@@ -143,6 +168,7 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
     t.done.queued.denote M = .int ((a.own.length : Nat) : Int) →
     {o : SettleOut} → {c cx : Term} → encodeSettle L T P v shs dE dP dopt apply dflt now fuel k S t = .ok (o, c, cx) →
     Holds M c → Holds M cx →
+    o.faultT.denote M = .bool (o.fault? M).isSome ∧
     match o.fault? M with
     | some f => Step.settleFrom T fuel k a = .error f
     | none => SettleDone M L T hrd shs a o.terms (Step.settleFrom T fuel k a)
@@ -150,6 +176,9 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
     simp only [encodeSettle, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, rfl, rfl⟩ := henc
     have hk := queueAt_rel dflt hS (k := .int k) k (by simp [Term.denote])
+    refine ⟨?_, ?_⟩
+    · by_cases hlt : k < a.own.length <;>
+        simp [SettleOut.faultT, SettleOut.fault?, Term.denote, htf, hk.1, toBool_bool, hlt]
     simp only [SettleOut.fault?, List.find?_nil, Term.denote, htf, hk.1, toBool_bool, Bool.not_false, Bool.true_and]
     by_cases hlt : k < a.own.length
     · simp only [hlt, decide_true, ite_true]
@@ -194,6 +223,10 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
       | some f' =>
         intro hrun
         have hft : (o1.terms.fault.denote M).toBool = true := by rw [hfault, hof]; rfl
+        have hst := settle_fault_stays (L := L) (T := T) (M := M) f (k + 1) _ _
+          (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl) h2
+        refine ⟨?_, ?_⟩
+        · simp [SettleOut.faultT, SettleOut.fault?, hact', toBool_bool, hft, hof, Term.denote, hst]
         simp only [SettleOut.fault?, List.find?_cons, hact', toBool_bool, hft, Bool.and_self, hof, hrun, bind,
           Except.bind]
       | none =>
@@ -226,6 +259,8 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
           (by simp only [pickTerms]; rw [hpick, r3, hl0]; rfl)
           (by simp only [pickTerms]; rw [hpick, r5]; simp)
           h2 hc2 hcx2
+        obtain ⟨IHF, IH⟩ := IH
+        refine ⟨by simpa [SettleOut.faultT] using IHF, ?_⟩
         revert IH
         cases rest.fault? M with
         | some f'' => exact id
@@ -270,6 +305,8 @@ theorem settle_rel {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.re
         (by simp only [pickTerms]; rw [hpick]; exact hq)
         h2 hc2 hcx2
       rw [settleFrom_none f (k + 1) a hnone1] at IH
+      obtain ⟨IHF, IH⟩ := IH
+      refine ⟨by simpa [SettleOut.faultT] using IHF, ?_⟩
       revert IH
       cases rest.fault? M with
       | some f'' => exact id

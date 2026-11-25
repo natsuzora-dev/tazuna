@@ -3,9 +3,8 @@ import Tazuna.Smt.CommandExact
 
 /-! The condition of a clock line's step is exact (run-log entry 63): it fails only where a function the
 step really applies outgrows a slot count. Every round asks for each machine's `after` and `effect` sources, and for
-both applied where an instance fires; the pending write asks that the requests fit the pending table; the invariants
-are asked at the line's time. Rounds past the first that fired nothing, and everything after a step that exceeds the
-cascade bound, ask nothing. -/
+both applied where an instance fires; the step's end asks what `finishFits` says. Rounds past the first that fired
+nothing, and everything after a step that exceeds the cascade bound, ask nothing. -/
 
 namespace Tazuna.Smt
 
@@ -135,16 +134,17 @@ theorem rounds_exact {shs : List (PendingShape v.event)} {ds : List (String × D
     {records now : Term} (hrd : v.records.isData = true) (hord : ∀ m ∈ v.machines, m.key.ordered T = true) :
     (k : Nat) → (s : State v) → RelV L v.records (Ty.up _ hrd s.records) (records.denote M) →
     now.denote M = .int s.now → {xs : List Term} → MachinesRel M L T v.machines xs s.machines →
-    {active : Term} → {ab : Bool} → active.denote M = .bool ab → {nid : Term} →
-    {o : RoundsOut} → {c : Term} → encodeRounds L T shs ds dE dP dopt v.machines records now k xs active nid = .ok (o, c) →
+    {active : Term} → {ab : Bool} → active.denote M = .bool ab → {nid q : Term} →
+    {o : RoundsOut} → {c : Term} →
+    encodeRounds L T shs ds dE dP dopt v.machines records now k xs active nid q = .ok (o, c) →
     (Holds M c ↔ roundsFit L.count T s ab k)
-  | 0, s, _, _, xs, _, active, ab, _, nid, o, c, henc => by
+  | 0, s, _, _, xs, _, active, ab, _, nid, q, o, c, henc => by
     simp only [encodeRounds, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨-, rfl⟩ := henc
     simp [roundsFit, holds_tt]
-  | k + 1, s, hrec, hnow, xs, hms, active, ab, hact, nid, o, c, henc => by
+  | k + 1, s, hrec, hnow, xs, hms, active, ab, hact, nid, q, o, c, henc => by
     obtain ⟨⟨ro, c1⟩, h1, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨news, nid'⟩, h2, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨news, nid', owns, q'⟩, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     have e1 := round_exact (T := T) s.records s.now hrd hrec hnow hms hact h1
@@ -159,31 +159,34 @@ theorem rounds_exact {shs : List (PendingShape v.event)} {ds : List (String × D
     exact ⟨fun ⟨p1, p2⟩ => ⟨p1, (ih p1).1 p2⟩, fun ⟨p1, p2⟩ => ⟨p1, (ih p1).2 p2⟩⟩
 
 /-- The condition of a clock line's step is exact: it holds exactly when, if time moves forward, every
-firing round's functions fit, and, unless every round fires, the requests fit the pending table, the service's
-invariants fit at the records, and every machine's invariants fit at the instances the rounds leave, at the line's
-time. -/
-theorem clock_exact {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape v.event)}
-    (hshs : ∀ sh ∈ shs, sh.InSites P) (s : State v) (hinv : Step.Inv P s) (time : Int) (hrd : v.records.isData = true)
+firing round's functions fit, and, unless every round fires, the step's end fits (`finishFits`). -/
+theorem clock_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.reactions, x.Reach P)
+    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
+    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
+    (hcd : ∀ x ∈ v.commands, CommandData x) (hqd : ∀ x ∈ v.queries, QueryData x)
+    (hqout : ∀ x ∈ v.queries, x.output.isFn = false)
+    (s : State v) (hinv : Step.Inv P s) (time : Int) (hrd : v.records.isData = true) (hed : v.event.isData = true)
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
-    {records now st pending nextIdT : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
+    {records now st fresh pending nextIdT : Term} (hrec : RelV L v.records (Ty.up _ hrd s.records) (records.denote M))
     (hnow : now.denote M = .int s.now) (hst : st.denote M = .int time)
+    (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
     (hnid : nextIdT.denote M = .int (Int.ofNat s.nextId)) (hpend : PendingRel L shs (pending.denote M) s.pending)
-    {xs : List Term} (hms : MachinesRel M L T v.machines xs s.machines) (hord : ∀ m ∈ v.machines, m.key.ordered T = true)
+    {xs : List Term} (hms : MachinesRel M L T v.machines xs s.machines)
     {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
-    {o : ClockOut} {cond : Term} (henc : encodeClock L T v shs dE dP dopt inv records now st pending nextIdT xs = .ok (o, cond)) :
+    {o : ClockOut} {cond cfx : Term}
+    (henc : encodeClock L T P v shs dE dP dopt apply inv records now st fresh pending nextIdT xs = .ok (o, cond, cfx))
+    (hcfx : Holds M cfx) :
     Holds M cond ↔ (s.now ≤ time →
       roundsFit L.count T { s with now := time } true (v.bounds.cascade.toNat + 1) ∧
       ∀ s' effs, Step.fire { s with now := time } (v.bounds.cascade.toNat + 1) = some (s', effs) →
-        s.pending.length + effs.length ≤ L.count (pendingTable shs) ∧ v.invariants.appFits L.count (s.records, ()) ∧
-        instChecksFit L.count s.records time s'.machines) := by
+        finishFits L.count T shs (Step.start { state := s' } effs)) := by
+  have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (hor m hm).2
   obtain ⟨⟨ro, cr⟩, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨pT, cp⟩, h2, henc⟩ := bind_ok.1 henc
-  obtain ⟨rc, h3, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨invs, ci'⟩, h4, henc⟩ := bind_ok.1 henc
-  obtain ⟨rules, h5, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨checks, cm⟩, h6, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨fo, cf, cfx'⟩, h2, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   have hfw : ((Term.le now st).denote M).toBool = decide (s.now ≤ time) := by
     simp only [Term.denote, hnow, hst, Val.toInt, Val.toBool]
@@ -191,24 +194,17 @@ theorem clock_exact {P : List AnySite} (hP : SitesUnique P) {shs : List (Pending
   by_cases ht : s.now ≤ time
   · simp only [ht, decide_true, true_implies]
     let s0 : State v := { s with now := time }
+    have hinv0 : Step.Inv P s0 := hinv.congr rfl rfl rfl
     have hrec0 : RelV L v.records (Ty.up _ hrd s0.records) (records.denote M) := hrec
     have er := rounds_exact (shs := shs) (ds := v.declared) (dE := dE) (dP := dP) (dopt := dopt) hrd hord
       (v.bounds.cascade.toNat + 1) s0 hrec0 hst hms (ab := true) rfl h1
     rw [holds_andT, er]
-    -- The service's invariants.
-    have hrc : Smt.Rel M L _ (Ty.up _ hrd s.records) rc := (rel_ofTerm (need_ok.1 h3) _).2 hrec
-    have hargs : Smt.Rels M L [v.records] (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hrd])
-        (s.records, ())) (rc, ()) := by
-      show Smt.Rel M L _ (Ty.up (.tuple [v.records]) (by simp [Ty.isData, Ty.isDatas, hrd]) (s.records, ())).1 rc ∧ True
-      erw [Ty.up_tuple _ _ _ hrd rfl]; exact ⟨hrc, trivial⟩
-    have hx := v.invariants.app_exact hci hcinv (by simpa using ofTerm_notFn (need_ok.1 h3)) _ _ hargs h4
     have rest : roundsFit L.count T s0 true (v.bounds.cascade.toNat + 1) →
-        (Holds M (.ite ro.over tt (andT cp (andT ci' cm))) ↔ ∀ s' effs,
+        (Holds M (.ite ro.over tt cf) ↔ ∀ s' effs,
           Step.fire s0 (v.bounds.cascade.toNat + 1) = some (s', effs) →
-          s.pending.length + effs.length ≤ L.count (pendingTable shs) ∧ v.invariants.appFits L.count (s.records, ()) ∧
-          instChecksFit L.count s.records time s'.machines) := fun hf => by
+          finishFits L.count T shs (Step.start { state := s' } effs)) := fun hf => by
       have hro := rounds_rel hP hshs hE hPE hopt hrd hord (v.bounds.cascade.toNat + 1) s0 hrec0 hst hinv.machines hms
-        (ab := true) rfl hnid h1 (er.2 hf)
+        (ab := true) rfl hnid (q0 := 0) rfl h1 (er.2 hf)
       simp only [Step.fireFrom, ite_true] at hro
       cases hfire : Step.fire s0 (v.bounds.cascade.toNat + 1) with
       | none =>
@@ -219,12 +215,15 @@ theorem clock_exact {P : List AnySite} (hP : SitesUnique P) {shs : List (Pending
       | some p =>
         obtain ⟨s', effs⟩ := p
         rw [hfire] at hro
-        obtain ⟨hover, hmach, hs', -, svN, zsN, hSN, hwN, hhN, xsN, hpN, hqN⟩ := hro
+        obtain ⟨hover, hmach, hs', hnT, hnews, hq, hown⟩ := hro
         rw [holds_ite, hover]
         simp only [Val.toBool, Bool.false_eq_true, ite_false]
-        have ep := pending_exact hpend hSN hwN hhN hpN hqN h2
-        have ec := instChecks_exact s.records time hrd hrec hst v.machines ro.tables s'.machines hmach h6
-        rw [holds_andT, holds_andT, ep, hx, ec]
+        obtain ⟨hinv', hreach, hfrom⟩ := Step.fire_inv s0 hinv0 _ hfire
+        have hdone := rounds_done (shs := shs) hrd s time hs' hrec hfresh hmach hnT hnews hq hown
+        rw [finish_exact hP hvx hinv0.machinesReach hshs hor hcd hqd hqout hrd hed happ hca hci hcinv hE hPE hopt
+          { state := s0 } rfl hst hpend hdone
+          (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach hfrom h,
+            Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx]
         constructor
         · intro h s'' effs' heq
           simp only [Option.some.injEq, Prod.mk.injEq] at heq

@@ -151,10 +151,8 @@ def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV))
     pure (entrySlots dE dP dk dflt js S ++ rest, n', oS ++ orest, q'')
   | _, _, _, _ => .error (.outside "machines and start slots that differ in number")
 
-/-- The pending table with the new entries moved into its free slots, and the condition that they fit. Refused while
-the layout has own kinds (`noOwns`). -/
+/-- The pending table with the new entries moved into its free slots, and the condition that they fit. -/
 def encodePending (shs : List (PendingShape e)) (pending : Term) (news : List Slot) : Except Refusal (Term × Term) := do
-  noOwns L e
   let (d, n, dt) ← collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs]
   let (S, c) := moveAll d dt 2 (slotsOf d dt n 2 pending) news
   pure (slotsTerm d dt S, c)
@@ -464,7 +462,6 @@ theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : Lis
     {pT c : Term} (henc : encodePending L shs pending news = .ok (pT, c)) (hc : Holds M c) :
     ∃ ps, Forall2 (Step.Writes ds) (effs.zipIdx n0) ps ∧
       ∃ ps', ps'.Perm (ps0 ++ ps) ∧ PendingRel L shs (pT.denote M) ps' := by
-  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   obtain ⟨tbl, ⟨d', n', dt', m', sv0, hf, hft, hl, hv, hw0, ys0, hp0, hh0⟩, hlist⟩ := hpend
@@ -523,11 +520,6 @@ end
 section
 variable {L : Layout} {M : Model}
 
-theorem encodePending_noOwns {e : Ty} {shs : List (PendingShape e)} {pending : Term} {news : List Slot} {r : Term × Term}
-    (h : encodePending L shs pending news = .ok r) : L.ownsOf e = [] := by
-  obtain ⟨_, h0, -⟩ := bind_ok.1 h
-  exact noOwns_ok h0
-
 /-- The condition of writing the new entries is exact: it holds exactly when the pending requests and the new ones
 together fit the pending table's slots, so a false condition means the step really outgrows the bound. -/
 theorem pending_exact {v : ServiceV} {shs : List (PendingShape v.event)}
@@ -539,7 +531,6 @@ theorem pending_exact {v : ServiceV} {shs : List (PendingShape v.event)}
     {ds : List (String × DeclaredV)} (hq : Forall2 (WritesEntry shs ds) xs zs)
     {pT c : Term} (henc : encodePending L shs pending news = .ok (pT, c)) :
     Holds M c ↔ ps0.length + effs.length ≤ L.count (pendingTable shs) := by
-  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   obtain ⟨tbl, ⟨d', n', dt', m', sv0, hf, hft, hl, hv, hw0, ys0, hp0, hh0⟩, hlist⟩ := hpend

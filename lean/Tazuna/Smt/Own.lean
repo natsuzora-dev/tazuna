@@ -15,17 +15,6 @@ open Tazuna.Ir
 after the `nR` request variants. -/
 def isOwnT (dE nR nO : Nat) (t : Term) : Term := anyT ((List.range nO).map fun k => .is dE (nR + k) t)
 
-/-- Refuses a layout with own kinds: a step that started an own command or query must run it as an internal step,
-which the step encodings do not unroll yet. -/
-def noOwns (L : Layout) (e : Ty) : Except Refusal Unit :=
-  if (L.ownsOf e).isEmpty then pure () else .error (.outside "own commands and queries as internal steps")
-
-theorem noOwns_ok {L : Layout} {e : Ty} {u : Unit} (h : noOwns L e = .ok u) : L.ownsOf e = [] := by
-  unfold noOwns at h
-  split at h
-  · exact List.isEmpty_iff.1 (by assumption)
-  · cases h
-
 /-- A start slot (flag, key, effect option) split in two: the first keeps the option where it holds a request, the
 second where it holds an own command or query; each reads none elsewhere. -/
 def splitStart (dE nR nO dopt : Nat) (w : Term × Term × Term) : (Term × Term × Term) × (Term × Term × Term) :=
@@ -311,19 +300,6 @@ theorem ownSlots_rel : (S : List Slot) → (sv : List (Bool × List Val)) → (o
         · simp only [List.zipIdx_cons]
           exact hp.cons _
   | [], _ :: _, _, h, _, _, _, _ | _ :: _, [], _, h, _, _, _, _ => h.elim
-
-/-- With no own kinds the own slots hold no own command or query. -/
-theorem ownRel_noOwns (ho : L.ownsOf e = []) {S : List Slot} {os : List (EffectV e)} {q0 : Nat}
-    (hos : ∀ x ∈ os, x.isRequest = false) (h : OwnRel M L S os q0) : os = [] := by
-  obtain ⟨sv, zs, -, -, hh, hp⟩ := h
-  cases os with
-  | nil => rfl
-  | cons x os =>
-    have hm : (x, q0) ∈ zs := hp.symm.mem_iff.1 (by simp [List.zipIdx_cons])
-    obtain ⟨vs, -, zx, -, hzx⟩ := forall2_mem_left hh hm
-    have := request_of_rel ho hzx
-    rw [hos x (by simp)] at this
-    cases this
 
 theorem queueAt_slots (dflt : Term) {k : Term} {K : Int} (hk : k.denote M = .int K) :
     (S : List Slot) → (sv : List (Bool × List Val)) → (zs : List (EffectV e × Nat)) → SlotsDen M S sv →
