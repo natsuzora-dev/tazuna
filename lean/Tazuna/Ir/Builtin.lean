@@ -24,7 +24,7 @@ def opaqueTypes : List OpaqueType :=
       fun | [k, v] => some (.table k v) | _ => none⟩,
     ⟨"tazuna/date", "Date", [], "A day. Dates have no calendar: a spec adds days and counts the days between two dates.",
       fun | [] => some .date | _ => none⟩,
-    ⟨"tazuna", "Id", [], "An identifier a step makes fresh, or one from outside the service; ids compare with `==` only.",
+    ⟨"tazuna", "Id", [], "An identifier a step makes fresh, or one from outside the service; ids compare with `==` only. Where tazuna needs an order (machine keys), fresh ids come in the order they were made, by step and then index, before outside ids, which come by name.",
       fun | [] => some .id | _ => none⟩ ] ++
   (Dsl.all.filter (!·.kept)).map fun k => ⟨"tazuna", k.name, k.decl.2.1, k.decl.2.2,
     fun args => if args.length == k.decl.2.1.length then some (.dsl k args) else none⟩

@@ -113,10 +113,8 @@ def Ty.toOption {t : Ty} : (Ty.option t).den → Option t.den
   | .inl (x, ()) => Option.some x
   | .inr _ => Option.none
 
-/-- Distinct ids for distinct pairs of a step's counter and an index. -/
-def freshId (step : Nat) (index : Int) : IdV :=
-  let i := if 0 ≤ index then 2 * index.toNat else 2 * (-index).toNat - 1
-  .fresh ((step + i) * (step + i + 1) / 2 + i)
+/-- The id the step with counter `step` makes for `index`. -/
+def freshId (step : Nat) (index : Int) : IdV := .fresh step index
 
 -- The built-in's arity (`Prim.ok`) guarantees the type argument, so that default is never read. A subscription
 -- whose event no source declares has no owner, which the empty name says.

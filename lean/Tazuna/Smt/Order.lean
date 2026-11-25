@@ -31,14 +31,19 @@ def enumOrd (isK : Nat → Term → Term) (ats : List String) (x y : Term) : Ter
   let anyOf (ps : List (Nat × Nat)) := anyT (ps.map fun (k, j) => Term.and (isK k x) (isK j y))
   (anyOf (atomPairs ats fun a b => decide (a < b)), anyOf (atomPairs ats fun a b => decide (a < b ∨ a = b)))
 
-/-- An id's order: fresh ids by their number, before named ones, which compare by name. -/
+/-- An id's order: fresh ids by their step's counter, then their index, before named ones, which compare by name. -/
 def idOrd (d : Nat) (x y : Term) : Term × Term :=
   let fx := Term.is d 0 x
   let fy := Term.is d 0 y
+  let sx := Term.sel d 0 0 x
+  let sy := Term.sel d 0 0 y
+  let ix := Term.sel d 0 1 x
+  let iy := Term.sel d 0 1 y
+  let fr := lexT (.lt sx sy, .le sx sy) (.lt ix iy, .le ix iy)
   let nx := Term.sel d 1 0 x
   let ny := Term.sel d 1 0 y
-  (.ite fx (.ite fy (.lt (.sel d 0 0 x) (.sel d 0 0 y)) tt) (.ite fy ff (.slt nx ny)),
-   .ite fx (.ite fy (.le (.sel d 0 0 x) (.sel d 0 0 y)) tt) (.ite fy ff (.or (.slt nx ny) (.eq nx ny))))
+  (.ite fx (.ite fy fr.1 tt) (.ite fy ff (.slt nx ny)),
+   .ite fx (.ite fy fr.2 tt) (.ite fy ff (.or (.slt nx ny) (.eq nx ny))))
 
 /-- Whether Bool's value `x` is variant `k`: True is variant 0. -/
 def boolIs (k : Nat) (x : Term) : Term := if k = 0 then x else .not x
@@ -198,9 +203,24 @@ theorem getD_map_range (f : Nat → String) {k n : Nat} (h : k < n) : ((List.ran
 
 theorem id_ord (T : List TypeDecl) {x y : Term} {d : Nat} (a b : IdV) (ha : x.denote M = idVal d a)
     (hb : y.denote M = idVal d b) : OrdDen M (idOrd d x y) (Ty.cmp T .id a b) := by
-  cases a <;> cases b <;> simp only [OrdDen, idOrd, Term.denote, ha, hb, idVal, Ty.cmp, Ty.erl] <;>
-    simp [Val.toBool, Val.toInt, Val.toStr, Term.denote, tt, ff, erl_compare, val_str_beq, Erl.cmp_int, Erl.cmp_bin,
-      Erl.cmp_int_bin, Erl.cmp_bin_int, (int_cmp _ _).1, (int_cmp _ _).2, (string_cmp _ _).1, (string_cmp _ _).2]
+  cases a with
+  | fresh s i =>
+    cases b with
+    | fresh s' i' =>
+      have hl := lexT_den (int_ord (M := M) (x := .sel d 0 0 x) (y := .sel d 0 0 y) (a := s) (b := s')
+          (by simp [Term.denote, ha, idVal]) (by simp [Term.denote, hb, idVal]))
+        (int_ord (M := M) (x := .sel d 0 1 x) (y := .sel d 0 1 y) (a := i) (b := i')
+          (by simp [Term.denote, ha, idVal]) (by simp [Term.denote, hb, idVal]))
+      obtain ⟨h1, h2⟩ := hl
+      simp only [OrdDen, idOrd, Term.denote, ha, hb, idVal, Ty.cmp, Ty.erl, erl_compare, Erl.cmp_pair]
+      simp [Val.toBool, h1, h2]
+    | named n =>
+      simp only [OrdDen, idOrd, Term.denote, ha, hb, idVal, Ty.cmp, Ty.erl]
+      simp [Val.toBool, tt, Term.denote, erl_compare, Erl.cmp_tuple_bin]
+  | named n =>
+    cases b <;> simp only [OrdDen, idOrd, Term.denote, ha, hb, idVal, Ty.cmp, Ty.erl] <;>
+      simp [Val.toBool, Val.toStr, Term.denote, ff, erl_compare, val_str_beq, Erl.cmp_bin, Erl.cmp_bin_tuple,
+        (string_cmp _ _).1, (string_cmp _ _).2]
 
 mutual
 /-- The order terms denote the canonical order of the values the compared terms denote. -/

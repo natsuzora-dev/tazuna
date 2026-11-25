@@ -1025,8 +1025,8 @@ structure OrdCase where
 def ordCases : List OrdCase :=
   [⟨"Int", .int, rfl, [((1 : Int), (2 : Int)), ((2 : Int), (1 : Int)), ((-3 : Int), (-3 : Int))]⟩,
    ⟨"String", .str, rfl, [("a", "b"), ("b", "a"), ("ab", "a"), ("z", "\u00e9"), ("x", "x")]⟩,
-   ⟨"Id", .id, rfl, [(IdV.fresh 3, IdV.fresh 4), (IdV.fresh 9, IdV.named "a"), (IdV.named "a", IdV.fresh 1),
-     (IdV.named "b", IdV.named "a")]⟩,
+   ⟨"Id", .id, rfl, [(IdV.fresh 3 0, IdV.fresh 4 0), (IdV.fresh 2 5, IdV.fresh 3 0), (IdV.fresh 3 1, IdV.fresh 3 (-1)),
+     (IdV.fresh 9 2, IdV.named "a"), (IdV.named "a", IdV.fresh 1 0), (IdV.named "b", IdV.named "a")]⟩,
    ⟨"#(Int, String)", .tuple [.int, .str], rfl, [(((1 : Int), "b", ()), ((1 : Int), "a", ())),
      (((0 : Int), "z", ()), ((1 : Int), "a", ())), (((2 : Int), "a", ()), ((2 : Int), "a", ()))]⟩,
    ⟨"Bool", Ty.bool, rfl, [(.inl (), .inr (.inl ())), (.inr (.inl ()), .inl ()), (.inl (), .inl ())]⟩,

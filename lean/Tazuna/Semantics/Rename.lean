@@ -32,33 +32,9 @@ def Ren.inv (R : Ren) : Ren := ⟨R.ctr.inv, R.wire.inv⟩
 
 section FreshId
 
-theorem tri_succ (n : Nat) : (n + 1) * (n + 1 + 1) / 2 = n * (n + 1) / 2 + (n + 1) := by
-  have h : (n + 1) * (n + 1 + 1) = n * (n + 1) + 2 * (n + 1) := by
-    simp only [Nat.mul_add, Nat.add_mul, Nat.mul_one, Nat.one_mul]; omega
-  rw [h, Nat.add_mul_div_left _ _ (by decide)]
-
-theorem tri_mono {n m : Nat} (h : n < m) : n * (n + 1) / 2 + n < m * (m + 1) / 2 := by
-  induction m with
-  | zero => omega
-  | succ m ih =>
-    rw [tri_succ]
-    rcases Nat.lt_succ_iff_lt_or_eq.1 h with h | rfl
-    · have := ih h; omega
-    · omega
-
-/-- The Cantor pairing is injective. -/
-theorem cantor_inj {a b c d : Nat} (h : (a + b) * (a + b + 1) / 2 + b = (c + d) * (c + d + 1) / 2 + d) :
-    a = c ∧ b = d := by
-  rcases Nat.lt_trichotomy (a + b) (c + d) with hl | he | hl
-  · have := tri_mono hl; omega
-  · rw [he] at h; omega
-  · have := tri_mono hl; omega
-
 /-- Distinct pairs of a step's counter and an index make distinct ids. -/
 theorem freshId_inj {s s' : Nat} {i i' : Int} (h : freshId s i = freshId s' i') : s = s' ∧ i = i' := by
-  simp only [freshId, IdV.fresh.injEq] at h
-  have := cantor_inj h
-  split at this <;> split at this <;> omega
+  simpa only [freshId, IdV.fresh.injEq] using h
 
 theorem freshId_ne_named (s : Nat) (i : Int) (n : String) : freshId s i ≠ .named n := by
   simp [freshId]
@@ -295,7 +271,7 @@ def Ty.canon : (t : Ty) → t.den0 → Erl
     let ps := Erl.sort (x.1.map fun e => (Ty.canon k e.1, Ty.canon v e.2))
     .map (ps.map (·.1)) (ps.map (·.2))
   | .date, d => .int d
-  | .id, .fresh n => .int n
+  | .id, .fresh s i => .tuple [.int s, .int i]
   | .id, .named s => .bin s
   | .dsl .fresh _, n => .int (show Nat from n)
   | .param _, _ | .fn .., _ | .dsl .., _ => .atom ""

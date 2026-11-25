@@ -451,7 +451,7 @@ def defaultWith : Ty → Option Term
     pure (.ctor d 0 (← defaultsWith ts))
   | .id => do
     let (d, _) ← L.find? .id
-    pure (.ctor d 0 [.int 0])
+    pure (.ctor d 0 [.int 0, .int 0])
   | .bag t => do
     let (d, n) ← L.find? (.bag t)
     let (dt, _) ← L.find? (.tuple [Ty.bool, t])
@@ -663,13 +663,6 @@ def pickCode (lt : Term → Term → Term) (a : Ty) (b : Term) (f : Codes [a] �
   let empty ← adtCtor L 2 [a, Ty.pickError] [[a], [Ty.pickError]] 1 [← adtCtor L 4 [] [[], []] 0 []]
   pure (.ite (anySlotT S ws) found (.ite (anySlotT S (S.map fun _ => tt)) tie empty), guardsT S (R.map (·.2)))
 
-/-- `fresh(source, index)`'s number: the Cantor pairing of the step's counter and the index, as `freshId` computes
-it, with the index made a natural number (`2 * index`, or `2 * -index - 1` below zero). -/
-def freshT (step index : Term) : Term :=
-  let i := Term.share (.ite (.le (.int 0) index) (.mul (.int 2) index) (.sub (.mul (.int 2) (.sub (.int 0) index)) (.int 1)))
-  let a := Term.share (.add step i)
-  .add (.div (.mul a (.add a (.int 1))) (.int 2)) i
-
 -- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
 set_option linter.tazuna.silentDefault false in
 /-- An effect of the kind `key`: its variant of the effect datatype, with the input and the terms of the values the
@@ -843,7 +836,7 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
     pure (.ite hit r (← adtCtor L 2 [a, e] [[a], [e]] 1 [rt]), .ite hit c tt)
   | .fresh, _, _ => .ok fun (step, index, ()) => do
     let (d, _) ← L.findE .id
-    pure (.ctor d 0 [freshT step index], tt)
+    pure (.ctor d 0 [step, index], tt)
   | .externalCommand, _, _ => .ok fun (name, ()) => match name with
     | .str n => .ok (n, tt)
     | _ => .error (.limit .dynamicName)
@@ -1075,7 +1068,7 @@ def datatype? (L : Layout) : Ty × Nat → Option Datatype
   -- no value; so does the effect datatype with no kind.
   | (.adt _ _ [], _) => some ⟨[[]]⟩
   | (.adt _ _ vs, _) => do pure ⟨← vs.mapM (·.mapM L.srt?)⟩
-  | (.id, _) => some ⟨[[.int], [.str]]⟩
+  | (.id, _) => some ⟨[[.int, .int], [.str]]⟩
   | (.bag t, n) | (.list t, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, t]))]⟩
   | (.table k v, n) => do pure ⟨[List.replicate n (← L.srt? (.tuple [Ty.bool, k, v]))]⟩
   | (.dsl .effect [e], _) => match L.effectFields e with

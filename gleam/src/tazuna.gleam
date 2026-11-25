@@ -17,7 +17,7 @@ pub fn main() -> Nil {
   launch.main()
 }
 
-/// An identifier a step makes fresh, or one from outside the service; ids compare with `==` only.
+/// An identifier a step makes fresh, or one from outside the service; ids compare with `==` only. Where tazuna needs an order (machine keys), fresh ids come in the order they were made, by step and then index, before outside ids, which come by name.
 pub type Id
 
 /// The services a spec defines and the externals they talk to.

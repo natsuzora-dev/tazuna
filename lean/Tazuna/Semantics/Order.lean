@@ -209,6 +209,18 @@ theorem cmp_tuple (xs ys : List Erl) :
     rw [← hc]
     cases compare (xs.length : Int) ys.length <;> simp_all
 
+/-- Pairs compare by their first item, then their second. -/
+theorem cmp_pair (a b c d : Erl) : cmp (.tuple [a, b]) (.tuple [c, d]) = (cmp a c).then (cmp b d) := by
+  rw [cmp_tuple]
+  simp only [List.length_cons, List.length_nil, ite_true, cmps]
+  cases cmp a c <;> cases cmp b d <;> rfl
+
+theorem cmp_tuple_bin (xs : List Erl) (s : String) : cmp (.tuple xs) (.bin s) = .lt := by
+  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
+
+theorem cmp_bin_tuple (s : String) (xs : List Erl) : cmp (.bin s) (.tuple xs) = .gt := by
+  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
+
 /-- Sorted ascending. -/
 def sort {α : Type} [Ord α] (xs : List α) : List α := xs.mergeSort fun a b => (compare a b).isLE
 
@@ -269,8 +281,9 @@ def Ty.erl : (t : Ty) → t.den0 → Erl
     let ps := Erl.sort (x.1.map fun e => (Ty.erl k e.1, Ty.erl v e.2))
     .map (ps.map (·.1)) (ps.map (·.2))
   | .date, d => .int d
-  -- An id made fresh compares by when it was made, before every id from outside, which compares by its name.
-  | .id, .fresh n => .int n
+  -- An id made fresh compares by when it was made (its step, then its index), before every id from outside, which
+  -- compares by its name.
+  | .id, .fresh s i => .tuple [.int s, .int i]
   | .id, .named s => .bin s
   -- A fresh-id source is a counter.
   | .dsl .fresh _, n => .int (show Nat from n)

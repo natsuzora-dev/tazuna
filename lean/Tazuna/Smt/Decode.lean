@@ -31,9 +31,10 @@ def collView (d dt n w : Nat) : Val → Option (List (Bool × List Val))
 def uniqueKeys {κ ν : Type} (f : κ → κ → Bool) (xs : List (κ × ν)) : Option { xs : List (κ × ν) // KeysUnique f xs } :=
   if h : xs.Pairwise (fun (a b : κ × ν) => f a.1 b.1 = false ∧ f b.1 a.1 = false) then some ⟨xs, h⟩ else none
 
-/-- The id an id's constructor and fields code: a fresh one by its number, an outside one by its name. -/
+/-- The id an id's constructor and fields code: a fresh one by its step's counter and index, an outside one by its
+name. -/
 def decodeId : Nat → List Val → Option IdV
-  | 0, [.int n] => if 0 ≤ n then some (.fresh n.toNat) else none
+  | 0, [.int s, .int i] => if 0 ≤ s then some (.fresh s.toNat i) else none
   | 1, [.str s] => some (.named s)
   | _, _ => none
 

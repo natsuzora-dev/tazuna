@@ -84,7 +84,7 @@ table or list, a declared constructor for an ADT. The items of free slots are le
 def Sorted : Ty → Val → Prop
   | .int, w | .date, w | .dsl .fresh _, w => ∃ n, w = .int n
   | .str, w => ∃ s, w = .str s
-  | .id, w => ∃ d n, L.find? .id = some (d, n) ∧ ((∃ m, w = .ctor d 0 [.int m]) ∨ ∃ s, w = .ctor d 1 [.str s])
+  | .id, w => ∃ d n, L.find? .id = some (d, n) ∧ ((∃ m i, w = .ctor d 0 [.int m, .int i]) ∨ ∃ s, w = .ctor d 1 [.str s])
   | .adt 0 _ vs, w => vs = [[], []] ∧ ∃ b, w = .bool b
   | .adt (i + 1) a vs, w => ∃ d n, L.find? (.adt (i + 1) a vs) = some (d, n) ∧ SortedAlts d 0 vs w
   | .tuple ts, w => ∃ d n vals, L.find? (.tuple ts) = some (d, n) ∧ w = .ctor d 0 vals ∧ SortedVs ts vals
@@ -221,7 +221,7 @@ theorem wf_iff : (t : Ty) → (x : Term) → (c : Term) → wfT L t x = some c �
     split <;> simp_all; rfl
   | .id, x, c, h, ⟨d, n, hf, hw⟩ => by
     simp only [wfT, hf, Option.map_some, Option.some.injEq] at h; subst h
-    rcases hw with ⟨m, hm⟩ | ⟨s, hs⟩
+    rcases hw with ⟨m, i, hm⟩ | ⟨s, hs⟩
     · simp only [Holds, Term.denote, hm, Val.toBool, Val.toInt, decodeV, hf, decodeId, beq_self_eq_true,
         Bool.and_self, Bool.not_true, ite_true, Bool.false_or, decide_eq_true_eq, and_self, List.getElem?_cons_zero,
         Option.getD_some]
@@ -425,7 +425,7 @@ theorem decode_sorted : (t : Ty) → (v : Val) → (x : t.den) → decodeV L t v
         refine ⟨d', n, hf, ?_⟩
         rw [decodeId_val d' h]
         cases x with
-        | fresh m => exact .inl ⟨m, rfl⟩
+        | fresh m i => exact .inl ⟨m, i, rfl⟩
         | named s => exact .inr ⟨s, rfl⟩
       · simp [hd] at h
     · cases h

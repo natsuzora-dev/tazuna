@@ -35,10 +35,10 @@ def listBeq {α : Type} (f : α → α → Bool) : List α → List α → Bool
   | x :: xs, y :: ys => f x y && listBeq f xs ys
   | _, _ => false
 
-/-- An id: one a step made fresh, or one from outside the service, which a trace and a scenario know by its name. The
-two never meet, so no fresh id equals an outside one. -/
+/-- An id: one a step made fresh, by the step's counter and the index the spec gave, or one from outside the service,
+which a trace and a scenario know by its name. The two never meet, so no fresh id equals an outside one. -/
 inductive IdV where
-  | fresh (n : Nat)
+  | fresh (step : Nat) (index : Int)
   | named (name : String)
 deriving DecidableEq, Repr, Inhabited
 

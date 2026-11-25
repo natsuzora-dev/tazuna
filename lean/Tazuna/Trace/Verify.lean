@@ -30,7 +30,7 @@ def Bind.id? (b : Bind) (s : String) : Option IdV := some (((b.ids.find? (·.2 =
 def Bind.outside (b : Bind) (xs : List IdV) : Bind :=
   xs.foldl (fun b x => match x with
     | .named s => if b.ids.any (·.1 == x) then b else { b with ids := b.ids ++ [(x, s)] }
-    | .fresh _ => b) b
+    | .fresh _ _ => b) b
 
 def Bind.wire? (b : Bind) (s : String) : Option Nat := (b.wires.find? (·.2 == s)).map (·.1)
 

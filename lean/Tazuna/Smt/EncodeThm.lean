@@ -22,9 +22,9 @@ def altsBool0 : (Ty.semAltsWith Dsl.base [[], []]).1 → Bool
   | .inl _ => true
   | .inr _ => false
 
-/-- An id as a value of its datatype `d`: a fresh one by its number, an outside one by its name. -/
+/-- An id as a value of its datatype `d`: a fresh one by its step's counter and index, an outside one by its name. -/
 def idVal (d : Nat) : IdV → Val
-  | .fresh n => .ctor d 0 [.int n]
+  | .fresh s i => .ctor d 0 [.int s, .int i]
   | .named s => .ctor d 1 [.str s]
 
 mutual
@@ -709,8 +709,11 @@ theorem relV_beq : (t : Ty) → t.eqable = true → (x y : t.den) → (vx vy : V
   | .id, _, x, y, _, _, ⟨d, n, hf, ex⟩, ⟨d', n', hf', ey⟩ => by
     obtain rfl := find_det hf hf'
     subst ex ey
-    cases x <;> cases y <;> simp [idVal, Val.beq, Val.beqs, Ty.deq, Ty.sem, Ty.semWith] <;>
-      (rename_i a b; by_cases hab : a = b <;> simp [hab] <;> omega)
+    cases x <;> cases y <;> simp [idVal, Val.beq, Val.beqs, Ty.deq, Ty.sem, Ty.semWith]
+    · rename_i a i b j
+      by_cases hab : a = b <;> by_cases hij : i = j <;> simp [hab, hij, Int.natCast_inj]
+    · rename_i a b
+      by_cases hab : a = b <;> simp [hab]
   | .adt 0 _ vs, _, x, y, _, _, ⟨h, ex⟩, ⟨_, ey⟩ => by
     subst h ex ey
     rcases x with _ | _ | e <;> rcases y with _ | _ | e' <;> first | rfl | exact nomatch e | exact nomatch e'
@@ -1704,29 +1707,6 @@ theorem pickCode_rel (lt : Term → Term → Term) (wins : Int → Int → Bool)
       exact adtCtor_rel (vs := [[a], [Ty.pickError]]) ⟨1, by simp⟩ _ tieT h6 (Alts.inj ⟨1, by simp⟩ (), ())
         ⟨_, _, rfl, adtCtor_rel (vs := [[], []]) ⟨1, by simp⟩ [] tieI h5 () rfl, rfl⟩
 
-/-- `freshId`'s number in Int arithmetic. -/
-def freshInt (s x : Int) : Int :=
-  let i := if 0 ≤ x then 2 * x else 2 * (0 - x) - 1
-  (s + i) * (s + i + 1) / 2 + i
-
-theorem freshT_denote (M : Model) {ss si : Term} {s x : Int} (hs : ss.denote M = .int s) (hi : si.denote M = .int x) :
-    (freshT ss si).denote M = .int (freshInt s x) := by
-  unfold freshT freshInt
-  by_cases h : 0 ≤ x
-  · simp [Term.denote, hs, hi, Val.toInt, Val.toBool, h]
-  · simp [Term.denote, hs, hi, Val.toInt, Val.toBool, h]
-
-theorem freshId_int (step : Nat) (index : Int) :
-    ∃ m : Nat, freshId step index = .fresh m ∧ (m : Int) = freshInt step index := by
-  unfold freshId freshInt
-  refine ⟨_, rfl, ?_⟩
-  generalize hN : (if 0 ≤ index then 2 * index.toNat else 2 * (-index).toNat - 1) = iN
-  have hI : (iN : Int) = if 0 ≤ index then 2 * index else 2 * (0 - index) - 1 := by
-    subst hN; split <;> omega
-  rw [← hI]
-  simp only [Int.natCast_add, Int.natCast_ediv, Int.natCast_mul]
-  rfl
-
 /-- Each built-in's code relates to its meaning. -/
 theorem Ty.eq_of_same {a b : Ty} (h : (Ty.same a b).isSome = true) : a = b := by
   obtain ⟨⟨e⟩, _⟩ := Option.isSome_iff_exists.1 h; exact e
@@ -2193,11 +2173,10 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     change RelV L (.dsl .fresh []) step (ss.denote M) at hs
     change RelV L .int index (si.denote M) at hi
     simp only [RelV] at hs hi
-    obtain ⟨m, hm, hmi⟩ := freshId_int step index
     refine ⟨d, n, need_ok.1 h1, ?_⟩
-    show Val.ctor d 0 (Term.denotes M [freshT ss si]) = idVal d (freshId step index)
-    simp only [Term.denotes, freshT_denote M hs hi, hm, idVal]
-    rw [hmi]; rfl
+    show Val.ctor d 0 (Term.denotes M [ss, si]) = idVal d (freshId step index)
+    simp only [Term.denotes, hs, hi, freshId, idVal]
+    rfl
   case externalCommand =>
     simp only [primCode] at h; cases h
     intro ⟨x, ()⟩ ⟨sx, ()⟩ ⟨hx, _⟩ r c hr _

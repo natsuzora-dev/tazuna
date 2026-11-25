@@ -33,7 +33,7 @@ def Names.bind (ns : Names) (xs : List IdV) : Names :=
   xs.foldl (fun ns x => if ns.ids.any (·.1 == x) then ns else match x with
     -- An outside id whose name another id has stays unnamed, so the value has no wire form.
     | .named s => if ns.taken s then ns else { ns with ids := ns.ids ++ [(x, s)] }
-    | .fresh _ =>
+    | .fresh _ _ =>
       -- Of `ids.length + 1` candidates at most `ids.length` are taken.
       let k := ((List.range (ns.ids.length + 1)).find? fun j => !ns.taken s!"id{ns.next + j}").getD 0
       { ids := ns.ids ++ [(x, s!"id{ns.next + k}")], next := ns.next + k + 1 }) ns
