@@ -1,4 +1,4 @@
-import Tazuna.Smt.Wf
+import Tazuna.Smt.State
 import Tazuna.Smt.SameCode
 
 /-! Which names a stored value holds, as a term: every fresh id it holds was made before the counter `n`, and so was
@@ -213,7 +213,8 @@ theorem names_iff (hn : n.denote M = .int (N : Int)) : (t : Ty) → t.comparable
   | .fn .., hc, _, _, _, _, _ | .param _, _, _, _, _, _, hx => by first | simp [Ty.comparable] at hc | exact hx.elim
 theorem namesFields_iff (hn : n.denote M = .int (N : Int)) (d k : Nat) : (ts : List Ty) →
     Ty.comparables ts = true → (x : Term) → (vs : List Val) → x.denote M = .ctor d k vs → (j : Nat) →
-    (c : Term) → namesFields L n d k ts x j = some c → {v : Ty.dens ts} → RelVs L ts v (vs.drop j) → (Holds M c ↔ Ty.relsWith Dsl.val (Dsl.relV (PBij.below N)) (PBij.below N) ts v v)
+    (c : Term) → namesFields L n d k ts x j = some c → {v : Ty.dens ts} → RelVs L ts v (vs.drop j) →
+    (Holds M c ↔ Ty.relsWith Dsl.val (Dsl.relV (PBij.below N)) (PBij.below N) ts v v)
   | [], _, x, vs, hx, j, c, h, _, _ => by
     simp only [namesFields, Option.some.injEq] at h
     subst h
@@ -259,5 +260,92 @@ theorem names_rel0 (hn : n.denote M = .int (N : Int)) {t : Ty} (hc : t.comparabl
   (names_iff hn t hc x c h hv).trans (Ty.relV_up t _ v v)
 
 end
+
+section
+variable (L : Layout) (n : Term)
+
+/-- Every machine's instance table holds only names below `n`. -/
+def namesMachinesT {r e : Ty} : (ms : List (MachineV r e)) → PerMachine (fun _ => Term) ms → Option Term
+  | [], .nil => some tt
+  | m :: ms, .cons x xs => (namesT L n m.table x).bind fun c => (namesMachinesT ms xs).map (.and c)
+
+/-- The symbolic state's records and instance tables hold only names below its counter. Pending requests are not
+read: their table's keys are wire ids, and what a request keeps is related by meaning, not by its captured values. -/
+def namesStateT {v : ServiceV} (S : SymState v) : Option Term :=
+  (namesT L S.fresh v.records S.records).bind fun c => (namesMachinesT L S.fresh v.machines S.machines).map (.and c)
+
+end
+
+section
+variable {M : Model} {L : Layout} {T : List TypeDecl} {N : Nat} {r e : Ty}
+
+theorem instance_self {m : MachineV r e} (hk : m.key.comparable = true) (hs : m.state.comparable = true)
+    {i j : Step.Instance m} (h : Step.Instance.Rel (PBij.below N) i j) : Step.Instance.Rel (PBij.below N) i i := by
+  obtain ⟨h1, h2, h3⟩ := h
+  have ht : ∀ {a b : Option (Int × m.state.den0)},
+      Option.Rel (fun a b => a.1 = b.1 ∧ Ty.rel0 (PBij.below N) m.state a.2 b.2) a b →
+      Option.Rel (fun a b => a.1 = b.1 ∧ Ty.rel0 (PBij.below N) m.state a.2 b.2) a a := by
+    intro a b h
+    cases h with
+    | none => exact .none
+    | some hab => exact .some ⟨rfl, Ty.self_of_below (PBij.below_fixes N) _ hs hab.2⟩
+  exact ⟨Ty.self_of_below (PBij.below_fixes N) _ hk h1, Ty.self_of_below (PBij.below_fixes N) _ hs h2, ht h3⟩
+
+theorem instEntry_comparable {st : Ty} (hs : st.comparable = true) : (instEntry st).comparable = true := by
+  simp [instEntry, Ty.option, Ty.comparable, Ty.comparables, Ty.comparabless, hs]
+
+/-- A table whose instances keep their names below `N` keeps them itself. -/
+theorem table_self {m : MachineV r e} (hk : m.key.comparable = true) (hs : m.state.comparable = true)
+    (tbl : m.table.den0) (h : Step.Insts.Rel (PBij.below N) (instancesOf T m tbl) (instancesOf T m tbl)) :
+    Ty.rel0 (PBij.below N) m.table tbl tbl := by
+  have hi := (multi_self_iff (fun _ _ h => instance_self hk hs h)).1 h.1
+  refine Multi.of_forall2 ((forall2_self_iff fun _ _ hab =>
+    ⟨Ty.self_of_below (PBij.below_fixes N) _ hk hab.1,
+      Ty.self_of_below (PBij.below_fixes N) _ (instEntry_comparable hs) hab.2⟩).2 fun e he => ?_)
+  obtain ⟨h1, h2, h3⟩ := hi (instOf m e.1 e.2) (List.mem_mergeSort.2 (List.mem_map_of_mem he))
+  obtain ⟨k, st, t, ⟨⟩⟩ := e
+  refine ⟨h1, h2, ?_, trivial⟩
+  match t, h3 with
+  | .inl ((_, _, ()), ()), .some hab => exact ⟨⟨rfl, hab.2, trivial⟩, trivial⟩
+  | .inr (.inl ()), _ => trivial
+
+variable {n : Term} {v : ServiceV} (hn : n.denote M = .int (N : Int))
+include hn
+
+/-- Instances whose names are below `N` make the tables' names term hold. -/
+theorem machines_names : (ms : List (MachineV v.records v.event)) →
+    (∀ m ∈ ms, m.key.comparable = true ∧ m.state.comparable = true) →
+    (xs : PerMachine (fun _ => Term) ms) → (sms : Step.Machines ms) → MachinesRel M L T ms xs sms →
+    Step.Machines.Rel (PBij.below N) sms sms → {c : Term} → namesMachinesT L n ms xs = some c → Holds M c
+  | [], _, .nil, .nil, _, _, c, h => by
+    simp only [namesMachinesT, Option.some.injEq] at h
+    subst h
+    exact holds_tt
+  | m :: ms, hc, .cons x xs, .cons insts sms, ⟨⟨tbl, ht, hi⟩, hr⟩, ⟨hrel, hrels⟩, c, h => by
+    obtain ⟨c1, h1, h⟩ := Option.bind_eq_some_iff.1 h
+    obtain ⟨c2, h2, rfl⟩ := Option.map_eq_some_iff.1 h
+    have hm := hc m (List.mem_cons_self ..)
+    have htc : m.table.comparable = true := by
+      simp only [MachineV.table, Ty.comparable, Bool.and_eq_true]
+      exact ⟨hm.1, instEntry_comparable hm.2⟩
+    subst hi
+    rw [holds_and]
+    exact ⟨(names_rel0 hn htc h1 ht).2 (table_self hm.1 hm.2 tbl hrel),
+      machines_names ms (fun m' hm' => hc m' (List.mem_cons_of_mem _ hm')) xs sms hr hrels h2⟩
+
+end
+
+/-- A state whose names are below its counter, as every state on valid inputs is, makes the symbolic state's names
+term hold. -/
+theorem stateSupp_names {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV} {shs : List (PendingShape v.event)}
+    {S : SymState v} {s : State v} (hS : StateRel M L T shs S s) (hs : Step.StateSupp s)
+    (hrc : v.records.comparable = true)
+    (hms : ∀ m ∈ v.machines, m.key.comparable = true ∧ m.state.comparable = true)
+    {c : Term} (h : namesStateT L S = some c) : Holds M c := by
+  obtain ⟨c1, h1, h⟩ := Option.bind_eq_some_iff.1 h
+  obtain ⟨c2, h2, rfl⟩ := Option.map_eq_some_iff.1 h
+  obtain ⟨hr, hm⟩ := hs.data (PBij.below s.fresh) (PBij.below_fixes _)
+  rw [holds_and]
+  exact ⟨(names_rel0 hS.fresh hrc h1 hS.records).2 hr, machines_names hS.fresh _ hms _ _ hS.machines hm h2⟩
 
 end Tazuna.Smt

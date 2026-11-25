@@ -112,9 +112,9 @@ elab "#check_tazuna_reach" : command => do
     -- forward; unsat answers mean no context within the slots has one.
     ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound,
     -- For the pair questions T5 asks (U11 part c, not yet built): equal codes are the same value up to multisets, so
-    -- comparing codes compares results without searching for a renaming; and the names term is exact against "names
-    -- below the counter", the support every state on valid inputs has.
-    ``Tazuna.Smt.rel0_same, ``Tazuna.Smt.names_rel0]
+    -- comparing codes compares results without searching for a renaming; and every state on valid inputs makes the
+    -- names term hold, so the questions may assume it.
+    ``Tazuna.Smt.rel0_same, ``Tazuna.Smt.stateSupp_names]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do
