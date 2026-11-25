@@ -112,7 +112,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
   | .unlisted name | .unreached name => pure ⟨⟨.missing name, ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩, tt, tt⟩
   | .command x Γ site =>
     let (cc, cx) ← CommandCode.of L x
-    let ks ← need (lacks v.caller) (callerTerms L x.data.caller x.callers)
+    let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.caller x.callers)
     let (da, _) ← L.findE (.tuple Γ)
     let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
     let (o, c) ← encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
@@ -122,7 +122,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
       ⟨fault, o.done, .add fresh (.int 1)⟩⟩, c, cx⟩
   | .query x Γ site =>
     let (qc, cq) ← QueryCode.of L x
-    let ks ← need (lacks v.caller) (callerTerms L x.data.caller x.callers)
+    let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.caller x.callers)
     let (da, _) ← L.findE (.tuple Γ)
     let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
     let (o, c) ← encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q (sel 0) (sel 1) xs

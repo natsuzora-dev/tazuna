@@ -212,7 +212,7 @@ theorem stepTys_has (hk : Checked defs.sites defs.effectSites T v) : ∀ t ∈ s
     · have h := sorted_of_embeddable _ (hms m hm).1
       simp only [MachineV.table, Ty.sorted, Bool.and_eq_true] at h
       exact sortable_of_sorted _ (by simp [Ty.sorted, Ty.sorteds, h.1])
-  exact fun t ht => ofService_has defs v t (List.mem_filter.2 ⟨List.mem_append_left _ ht, hsort t ht⟩)
+  exact fun t ht => ofService_has defs v t (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_left _ ht), hsort t ht⟩)
 
 /-- The well-formedness term of a checked service's symbolic state is always built in its layout. -/
 theorem wf_ofService (hk : Checked defs.sites defs.effectSites T v) (S : SymState v) :

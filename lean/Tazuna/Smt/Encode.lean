@@ -28,6 +28,9 @@ inductive Limit where
   | effectClosure
   /-- A value of the type holds a type variable or a structure value (a service, a machine), which have no sort. -/
   | unsortable (t : Ty)
+  /-- A value the spec writes of the type (a listed caller, a machine's initial state) holds a collection with more
+  items than the type's slots: a bound is below it. -/
+  | slots (t : Ty)
 deriving Repr
 
 /-- What a layout lacks that an encoding needs. A layout built for the program has none of these. -/

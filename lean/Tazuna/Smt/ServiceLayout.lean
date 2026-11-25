@@ -78,9 +78,32 @@ def Layout.kindsOf (p : ProgramParts) (v : ServiceV) : Layout :=
       (requestShapesAt v.declared e p.sites).map (·.key)).filter fun k => Ty.sorteds k.fields && (Ty.tuple k.fields).isData),
     owns := dedupBy OwnKey.same ((p.handles.flatMap (ownKeys (eventTys p v) p.sites)).filter fun k => Ty.sorteds k.fields && (Ty.tuple k.fields).isData) }
 
+/-- The types the step's encoders build beyond the state's: contexts, functions' results, rules, event and effect
+lists, answers and own commands' answers. They are listed after the program's types, which already hold them where a
+function of the program has them, so the layout keeps its order. -/
+def useTys (v : ServiceV) (P : List AnySite) (K : Layout) : List Ty :=
+  [Ty.rules, .list v.event] ++
+    v.reactions.flatMap (fun _ => [Ty.reactionCtx v.records, .list (.dsl .effect [v.event])]) ++
+    v.machines.flatMap (fun m => [Ty.machineCtx m.key m.state v.records, Ty.next m.state, Ty.option (Ty.timer m.state),
+      .bag m.key]) ++
+    v.commands.flatMap (fun x => [Ty.ctx v.records x.input v.caller, Ty.result (.list v.event) x.rejection]) ++
+    v.queries.flatMap (fun q => [Ty.ctx v.records q.input v.caller, q.output]) ++
+    v.subscribes.map (·.event) ++
+    (shapes v P).map (fun sh => answerTy sh.output sh.rejection) ++
+    K.owns.flatMap fun
+      | .command _ _ _ _ j a => [Ty.nil, Ty.result Ty.nil j, .tuple a.Γ]
+      | .query _ _ _ _ _ a => [.tuple a.Γ]
+
+/-- The slots of a type: its bound's, and at least `items` for a machine's instance table, which holds an instance
+per key of its instances bag; a records table of the same type shares its datatype. -/
+def stepSlots (v : ServiceV) (t : Ty) : Nat :=
+  if v.machines.any (fun m => (Ty.same m.table t).isSome) then max (boundSlots v.bounds t) v.bounds.itemsNat
+  else boundSlots v.bounds t
+
 /-- The layout of the service's scripts, from the program it came from: the datatypes of the types with sorts. -/
 def Layout.ofParts (p : ProgramParts) (v : ServiceV) : Layout :=
-  Layout.addTys (listSlots (boundSlots v.bounds) p.lits) (Layout.kindsOf p v) ((stepTys v p.sites ++ p.tys).filter Ty.sortable)
+  Layout.addTys (listSlots (stepSlots v) p.lits) (Layout.kindsOf p v)
+    ((stepTys v p.sites ++ p.tys ++ useTys v p.sites (Layout.kindsOf p v)).filter Ty.sortable)
 
 /-- The layout of the service's scripts, from the program `defs` it came from. -/
 abbrev Layout.ofService {G : List Ty} (defs : Defs G) (v : ServiceV) : Layout := Layout.ofParts defs.parts v
@@ -93,7 +116,8 @@ theorem hasWiths_mem {L : Layout} {D : Dsl → List Ty → Prop} : {ts : List Ty
 /-- Every step type and every expression type of the program that has a sort has its datatypes in the service's
 layout. -/
 theorem ofService_has {G : List Ty} (defs : Defs G) (v : ServiceV) :
-    ∀ t ∈ (stepTys v defs.sites ++ defs.tys).filter Ty.sortable, (Layout.ofService defs v).Has t :=
+    ∀ t ∈ (stepTys v defs.sites ++ defs.tys ++ useTys v defs.sites (Layout.kindsOf defs.parts v)).filter Ty.sortable,
+      (Layout.ofService defs v).Has t :=
   hasWiths_mem (Layout.addTys_has _ _ _)
 
 theorem find_of_has_option {L : Layout} {e : Ty} (h : L.Has (Ty.option (.dsl .effect [e]))) :
@@ -201,25 +225,38 @@ theorem count_of_slotted {S : Ty → Nat} {K L : Layout} (h : Slotted S K L) {t 
   subst hu
   exact h.1 _ (List.fst_mem_of_mem_zipIdx (List.mem_of_find?_eq_some hfind))
 
-/-- A table type the service's layout holds gets the slots its creates bound, so every create fits
-(`atMost_le_slots`). -/
-theorem ofService_count {G : List Ty} (defs : Defs G) (v : ServiceV) {k w : Ty}
-    (hf : ((Layout.ofService defs v).find? (.table k w)).isSome = true) :
-    (Layout.ofService defs v).count (.table k w) = boundSlots v.bounds (.table k w) := by
-  have hS : NoSlots (Layout.effectSlots (listSlots (boundSlots v.bounds) defs.lits) (Layout.kindsOf defs.parts v)) := by
+theorem stepSlots_plain (v : ServiceV) {t : Ty} (ht : ∀ k w, t ≠ .table k w) : stepSlots v t = boundSlots v.bounds t := by
+  have : v.machines.any (fun m => (Ty.same m.table t).isSome) = false := by
+    rw [List.any_eq_false]
+    intro m _ h
+    cases t with
+    | table k w => exact ht k w rfl
+    | _ => simp [MachineV.table, Ty.same] at h
+  simp [stepSlots, this]
+
+/-- A collection type the service's layout holds gets the slots of `stepSlots` (a list, its longest literal's). -/
+theorem ofService_count {G : List Ty} (defs : Defs G) (v : ServiceV) {t : Ty}
+    (hf : ((Layout.ofService defs v).find? t).isSome = true) :
+    (Layout.ofService defs v).count t =
+      Layout.effectSlots (listSlots (stepSlots v) defs.lits) (Layout.kindsOf defs.parts v) t := by
+  have hS : NoSlots (Layout.effectSlots (listSlots (stepSlots v) defs.lits) (Layout.kindsOf defs.parts v)) := by
     intro t hb hl ht
     cases t with
     | bag u => exact absurd rfl (hb u)
     | list u => exact absurd rfl (hl u)
     | table k w => exact absurd rfl (ht k w)
-    | _ => rfl
+    | _ => simp [Layout.effectSlots, listSlots, stepSlots_plain v ht, boundSlots]
   exact count_of_slotted (slotted_addTys hS (And.intro (fun p hp => nomatch hp) ⟨rfl, rfl⟩) _) hf
+
+theorem stepSlots_table_ge (v : ServiceV) (k w : Ty) : boundSlots v.bounds (.table k w) ≤ stepSlots v (.table k w) := by
+  unfold stepSlots; split <;> omega
 
 /-- Every create's bound fits the slots of its table type in the service's layout, so asserting the creates of a
 state loses no state within them. -/
 theorem atMost_le_count {G : List Ty} (defs : Defs G) (v : ServiceV) {c : CreateV v.records} (hc : c ∈ v.bounds.creates)
     (hf : ((Layout.ofService defs v).find? (.table c.key c.value)).isSome = true) :
     c.atMostNat ≤ (Layout.ofService defs v).count (.table c.key c.value) := by
-  rw [ofService_count defs v hf]; exact atMost_le_slots v.bounds c hc
+  rw [ofService_count defs v hf]
+  exact Nat.le_trans (atMost_le_slots v.bounds c hc) (stepSlots_table_ge v _ _)
 
 end Tazuna.Smt

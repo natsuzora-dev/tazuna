@@ -15,6 +15,7 @@ import Tazuna.Smt.Bounds
 import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.CheckedState
 import Tazuna.Smt.NoGap
+import Tazuna.Smt.StepNoGap
 import Tazuna.Smt.StepSites
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
@@ -76,6 +77,8 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.globals_ofService,
     -- For the step encoders' part of the same: kept functions and pending requests' sites meet no layout gap.
     ``Tazuna.Smt.Fun.code_ofService, ``Tazuna.Smt.Site.code_ofService, ``Tazuna.Smt.EffectFun.code_ofService,
+    -- The step's encoders refuse only for the spec's reasons in a layout with the step's types and codes.
+    ``Tazuna.Smt.encodeStep_sound,
     -- For U10, which asserts well-formedness, the wire-id invariant and the create bounds: each loses no model.
     ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff]
   let mut used : NameSet := {}

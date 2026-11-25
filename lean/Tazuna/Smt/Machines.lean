@@ -164,7 +164,7 @@ def encodeReact (m : MachineV r e) (rc : ReactCode m) (tbl records now ev : Term
   let (db, nb, dtb) ← collD L (.bag m.key) [m.key]
   let SB := slotsOf db dtb nb 1 bagT
   let So := instSlotsOf d dt n tbl
-  let init ← need (lacks m.state) (embedV L m.state (Ty.up _ m.state_data m.initial))
+  let init ← need (.limit (.slots m.state)) (embedV L m.state (Ty.up _ m.state_data m.initial))
   let dflt ← defaultE L (instEntry m.state)
   let firsts ← firstSlots L m.key [] SB
   let slots ← (SB.zip firsts).mapM (reactAt L m rc de dn So init dflt (.ctor dopt 1 []) records now evc)

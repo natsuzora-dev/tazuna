@@ -53,13 +53,13 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
     let (cc, cx) ← CommandCode.of L x
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let ks ← need (lacks v.caller) (callerTerms L x.data.caller x.callers)
+    let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.caller x.callers)
     let ⟨o, c, cs⟩ ← encodeCommand L T P v (shapes v P) senv x cc apply inv ks S caller input
     pure ⟨.command o, c, andT cx (andT ca ci), cs⟩
   | .query i caller input => do
     let q := v.queries.get i
     let (qc, cq) ← QueryCode.of L q
-    let ks ← need (lacks v.caller) (callerTerms L q.data.caller q.callers)
+    let ks ← need (.limit (.slots v.caller)) (callerTerms L q.data.caller q.callers)
     let (o, c) ← encodeQuery L q qc ks S caller input
     pure ⟨.query o, c, cq, tt⟩
   | .answer k j to value => do

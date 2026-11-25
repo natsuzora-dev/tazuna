@@ -1500,13 +1500,14 @@ theorem covers_ofParts (p : ProgramParts) (v : ServiceV) :
     simp only [Layout.kindsOf] at hk
     rw [mem_dedupBy ownKey_same_iff, List.mem_filter, Bool.and_eq_true] at hk
     exact hk.2
-  have hS := Layout.allSorted_addTys (listSlots (boundSlots v.bounds) p.lits) (Layout.kindsOf p v)
+  have hS := Layout.allSorted_addTys (listSlots (stepSlots v) p.lits) (Layout.kindsOf p v)
     ⟨(fun _ h => nomatch h), rfl, rfl⟩ (fun e fs hfs => by
       simp only [Layout.effectFields, Layout.effectsOf, Layout.ownsOf, List.mem_append, List.mem_map,
         List.mem_filter] at hfs
       rcases hfs with ⟨k, ⟨hk, -⟩, rfl⟩ | ⟨k, ⟨hk, -⟩, rfl⟩
       · exact (hK k hk).1
-      · exact (hO k hk).1) ((stepTys v p.sites ++ p.tys).filter Ty.sortable) (fun t ht => (List.mem_filter.1 ht).2)
+      · exact (hO k hk).1) ((stepTys v p.sites ++ p.tys ++ useTys v p.sites (Layout.kindsOf p v)).filter Ty.sortable)
+      (fun t ht => (List.mem_filter.1 ht).2)
   have hE : (Layout.ofParts p v).effects = (Layout.kindsOf p v).effects := hS.2.1
   have hW : (Layout.ofParts p v).owns = (Layout.kindsOf p v).owns := hS.2.2
   refine ⟨⟨hS.1, fun k hk => hK k (hE ▸ hk), fun k hk => hO k (hW ▸ hk)⟩, ?_, ?_, ?_⟩
@@ -1547,7 +1548,7 @@ theorem globals_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.se
     (fun h hm => handleOk_of_named hv hm (c.handles h hm))
   intro u hu hs
   exact ofService_has c.program.defs v u
-    (List.mem_filter.2 ⟨List.mem_append_right _ hu, sortable_of_sorted u hs⟩)
+    (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_right _ hu), sortable_of_sorted u hs⟩)
 
 /-! Every site of the program is covered: its captured values' types, its body's node types, sites and handles are
 the program's, over the definitions before its global. -/
@@ -1979,7 +1980,7 @@ and a pending request's `on_answer` and `ensures`, have codes with no layout gap
 theorem sites_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) :
     ∀ s ∈ c.P, SiteOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles s :=
   siteOk_of c.program.defs ⟨fun u hu hs => ofService_has c.program.defs v u
-    (List.mem_filter.2 ⟨List.mem_append_right _ hu, sortable_of_sorted u hs⟩), fun _ h => h,
+    (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_right _ hu), sortable_of_sorted u hs⟩), fun _ h => h,
     fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩
 
 /-- A kept function at a site of a checked spec's program has a code with no layout gap behind it in each service's
@@ -2007,7 +2008,7 @@ theorem EffectFun.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.
       (f.code (Layout.ofService c.program.defs v)) :=
   EffectFun.code_sound (covers_ofParts c.program.defs.parts v) f (effectSiteOk_of c.program.defs
     ⟨fun u hu hs => ofService_has c.program.defs v u
-      (List.mem_filter.2 ⟨List.mem_append_right _ hu, sortable_of_sorted u hs⟩), fun _ h => h,
+      (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_right _ hu), sortable_of_sorted u hs⟩), fun _ h => h,
       fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩ _ hf)
 
 end Tazuna.Smt
