@@ -19,6 +19,7 @@ import Tazuna.Semantics.StepRename
 import Tazuna.Smt.Commute
 import Tazuna.Smt.Pairs
 import Tazuna.Smt.FiresForward
+import Tazuna.Smt.SameCode
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -108,7 +109,10 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.ownPairs_complete,
     -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
     -- forward; unsat answers mean no context within the slots has one.
-    ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound]
+    ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound,
+    -- For the pair questions T5 asks (U11 part c, not yet built): equal codes are the same value up to multisets, so
+    -- comparing codes compares results without searching for a renaming.
+    ``Tazuna.Smt.rel0_same]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do
