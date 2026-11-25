@@ -1,4 +1,4 @@
-import Tazuna.Smt.OwnStep
+import Tazuna.Smt.InternalDispatch
 
 /-! The cascade: the internal steps one input takes, unrolled up to `bounds.cascade`. Internal step `i` runs the own
 effect at queue place `k + i` (`queueAt` over every own slot so far) when the place is occupied and no earlier internal

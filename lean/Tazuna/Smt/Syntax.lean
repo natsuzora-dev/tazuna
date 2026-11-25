@@ -373,7 +373,6 @@ theorem simpleSym_fixed : simpleSym "not" ∧ simpleSym "str.len" ∧ simpleSym 
     simpleSym "mod" ∧ simpleSym "str.++" ∧ simpleSym "str.<" ∧ simpleSym "ite" ∧ simpleSym "true" ∧ simpleSym "false" ∧
     simpleSym "_" ∧ simpleSym "is" := by decide
 
-
 mutual
 theorem Term.toSExp_ok : (t : Term) → t.inDomain = true → t.toSExp.ok = true
   | .var n, _ => by simp [Term.toSExp, SExp.ok, simpleSym_name]

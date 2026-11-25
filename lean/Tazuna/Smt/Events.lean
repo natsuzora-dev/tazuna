@@ -1,5 +1,6 @@
 import Tazuna.Smt.Reactions
-import Tazuna.Smt.CommandExact
+import Tazuna.Smt.EventMachines
+import Tazuna.Smt.Admit
 
 /-! A list of events in one step, as a command's events, an answer's or one event: each event in turn is applied, every
 machine reacts to it, then every reaction, and the requests they start are written at the next wire ids. The encoding

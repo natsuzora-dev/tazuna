@@ -1,4 +1,4 @@
-import Tazuna.Smt.AnswerStep
+import Tazuna.Smt.Admit
 import Tazuna.Smt.Order
 
 /-! The step encoding of machine instances. A machine's instances are one table from key to entry

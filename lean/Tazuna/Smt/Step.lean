@@ -1,6 +1,8 @@
-import Tazuna.Smt.Answer
-import Tazuna.Smt.ClockExact
 import Tazuna.Smt.Query
+import Tazuna.Smt.CommandStep
+import Tazuna.Smt.Answer
+import Tazuna.Smt.Event
+import Tazuna.Smt.Clock
 
 /-! The step encoding over every input kind. `encodeStep` hands a symbolic input to its kind's encoder, and
 `step_encode` states for every kind at once, from each kind's theorem, what the terms mean: the codes' condition holds

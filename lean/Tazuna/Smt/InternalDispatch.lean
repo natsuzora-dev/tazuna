@@ -1,4 +1,4 @@
-import Tazuna.Smt.Internal
+import Tazuna.Smt.InternalStep
 
 /-! The internal step for whichever own effect a queue place holds: `Step.runOwn` picks the service's command or query
 by the effect's name and types, and the encoder makes the same choice per own kind, statically (`ownShape`), with the

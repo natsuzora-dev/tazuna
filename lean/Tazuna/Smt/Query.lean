@@ -1,4 +1,4 @@
-import Tazuna.Smt.CommandExact
+import Tazuna.Smt.Admit
 
 /-! The query step: a listed caller's input passes `accepts`, then `resolve` answers at the context, and the state
 stays. `query_encode` proves T2 and the exactness of the condition together. -/

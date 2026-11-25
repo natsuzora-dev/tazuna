@@ -1,5 +1,5 @@
 import Tazuna.Smt.Machines
-import Tazuna.Smt.Exact
+import Tazuna.Smt.EncodeExact
 
 /-! The condition of a machine's reaction is exact: it holds exactly when every function the step applies fits the
 layout's slot counts, where the step applies it: `instances` at the records, `on` at each key with an instance,
@@ -185,7 +185,6 @@ theorem react_at_exact (m : MachineV r e) (hpl : m.key.plain = true) (rc : React
         | .inr y => nomatch y
 
 end
-
 
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}

@@ -1,4 +1,4 @@
-import Tazuna.Smt.Exact
+import Tazuna.Smt.EncodeExact
 import Tazuna.Semantics.Sites
 
 /-! The bounds a script checks within. `create(table:, at_most:)` bounds the records in one table of the records at any

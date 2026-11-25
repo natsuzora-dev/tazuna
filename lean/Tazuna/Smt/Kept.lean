@@ -1,4 +1,5 @@
 import Tazuna.Smt.Wf
+import Tazuna.Semantics.Sites
 
 /-! The code of a function a structure value keeps: its source's encoding over the program's definitions, with each
 captured value as the constant that embeds it. `Fun.code_rel` (T1 at the kept source) proves the code relates to the
@@ -74,6 +75,42 @@ theorem _root_.Tazuna.Ir.EffectFun.code_apply {ps : List Ty} {r : Ty} (f : Effec
   have hf := encode_agrees f.defs f.defs.eval (f.defs.encode L) (Defs.encode_agrees M L f.defs) f.body σ _
     (envCodes_rels _ _ σ (need_ok.1 hσ)) s c h hc
   exact hf _ _ hxs o c' ho hc'
+
+end
+
+section
+variable (L : Layout)
+
+/-- The codes of a tuple's items, each the selector of its field from `x` of the tuple datatype `d`. -/
+def tupleCodes (d : Nat) : (Γ : List Ty) → Term → Nat → Option (Codes Γ)
+  | [], _, _ => some ()
+  | t :: Γ, x, i => do pure ((← Code.ofTerm? t (.sel d 0 i x)), (← tupleCodes d Γ x (i + 1)))
+
+/-- The code of a site's source over the codes of the values it captured. -/
+def _root_.Tazuna.Ir.Site.code {Γ : List Ty} {t : Ty} (s : Site Γ t) (σ : Codes Γ) : Enc (Code t) :=
+  encode L (s.defs.encode L) s.body σ
+
+end
+
+section
+variable {M : Model} {L : Layout}
+
+theorem tupleCodes_rels {d : Nat} {x : Term} : (Γ : List Ty) → (pre vals : List Val) → (ρ : Ty.dens Γ) →
+    (σ : Codes Γ) → x.denote M = .ctor d 0 (pre ++ vals) → RelVs L Γ ρ vals → tupleCodes d Γ x pre.length = some σ →
+    Rels M L Γ ρ σ
+  | [], _, _, _, _, _, _, _ => trivial
+  | t :: Γ, pre, vals, (y, ys), (c, cs), hx, ⟨w, ws, hv, hw, hws⟩, h => by
+    subst hv
+    cases hc : Code.ofTerm? t (Term.sel d 0 pre.length x) with
+    | none => simp [tupleCodes, hc] at h
+    | some c' =>
+    cases hcs : tupleCodes d Γ x (pre.length + 1) with
+    | none => simp [tupleCodes, hc, hcs] at h
+    | some cs' =>
+    simp only [tupleCodes, hc, hcs, Option.bind_eq_bind, Option.bind_some, Option.pure_def] at h
+    obtain ⟨rfl, rfl⟩ := h
+    refine ⟨(rel_ofTerm hc _).2 ?_, tupleCodes_rels Γ (pre ++ [w]) ws ys cs (by simpa using hx) hws (by simpa using hcs)⟩
+    rw [sel_ctor _ hx]; simpa using hw
 
 end
 

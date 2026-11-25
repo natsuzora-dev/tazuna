@@ -1,4 +1,4 @@
-import Tazuna.Smt.StepEnd
+import Tazuna.Smt.Finish
 
 /-! The command kind: the caller and the `accepts` rules admit the input, `decide` accepts with events or rejects,
 the events run through the events loop (each applied, every machine and reaction reacting), then the command's
@@ -414,6 +414,5 @@ theorem command_exact {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hv
     exact ⟨hc1, (hrest hc1).2 px⟩
 
 end
-
 
 end Tazuna.Smt

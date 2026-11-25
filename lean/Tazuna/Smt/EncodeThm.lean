@@ -554,7 +554,6 @@ theorem denote_andT_false (a b : Term) (ha : a.denote M = .bool false) : (andT a
   · exact ha
   · simp [Term.denote, ha, Val.toBool]
 
-
 mutual
 /-- A pattern's condition denotes whether it matches, and its bindings' codes the values it binds. -/
 theorem encodePat_agrees {t : Ty} {Δ : List Ty} : (p : Pat t Δ) → (x : t.den) → (s : Code t) → Rel M L t x s →
@@ -2714,5 +2713,16 @@ theorem Defs.encode_agrees (M : Model) (L : Layout) : {G : List Ty} → (defs : 
     cases v with
     | here => exact Smt.encode_agrees defs _ _ (Defs.encode_agrees M L defs) body () () trivial s c h hc
     | there v => exact Defs.encode_agrees M L defs t v s c h hc
+
+section
+variable {M : Model}
+
+theorem holds_ite_tt {c a : Term} {b : Bool} (h : (c.denote M).toBool = b) : Holds M (.ite c a tt) ↔ (b = true → Holds M a) := by
+  rw [holds_ite, h]; cases b <;> simp [holds_tt]
+
+theorem holds_ite_hit {c a : Term} : Holds M (.ite c a tt) ↔ (Holds M c → Holds M a) := by
+  rw [holds_ite]; unfold Holds; cases (c.denote M).toBool <;> simp; rfl
+
+end
 
 end Tazuna.Smt

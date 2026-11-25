@@ -1,6 +1,6 @@
-import Tazuna.Smt.Finish
+import Tazuna.Smt.Events
 import Tazuna.Smt.Query
-import Tazuna.Smt.CommandExact
+import Tazuna.Smt.Command
 import Tazuna.Semantics.Settle
 
 /-! One internal step: an own command or query the step queued runs as `Step.runCommand` or `Step.runQuery` does. A

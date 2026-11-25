@@ -1,4 +1,4 @@
-import Tazuna.Smt.EventStep
+import Tazuna.Smt.EventMachines
 import Tazuna.Semantics.PendingInv
 
 /-! Writing an effect into the pending table. An effect value is coded by its kind's variant of the effect datatype
@@ -204,7 +204,6 @@ theorem owner_eq {key : EffectKey} {r : RequestV e} {vals : List Val} (h : key.H
   subst h1 h2 h3 h4
   rfl
 
-
 /-- A machine's key as its sender's key tuple. -/
 theorem machineKey_rel {r e : Ty} (m : MachineV r e) (k : m.key.den0) {zk : Val}
     (hzk : RelV L m.key (Ty.up _ m.key_data k) zk) {dk nk : Nat} (hdk : L.find? (.tuple [m.key]) = some (dk, nk)) :
@@ -283,7 +282,6 @@ theorem fits_pending {P : List AnySite} (hP : SitesUnique P) {e : Ty} {sh : Pend
 
 end
 
-
 section
 variable {e : Ty} {L : Layout}
 
@@ -335,7 +333,6 @@ theorem entryT_den {M : Model} (dE dP dk : Nat) (dflt : Term) (keyT : List Term)
     show (if (Term.denote M (.is dE i0 eff)).toBool then _ else _) = _
     rw [hne]
     rfl
-
 
 /-- The pending entry the step writes for an effect a sender starts: wherever the effect's term and the key tuple's
 items denote them, the entry term denotes an entry that codes the request with its sender and the external that lists

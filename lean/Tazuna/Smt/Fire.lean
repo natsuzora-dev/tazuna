@@ -1,4 +1,4 @@
-import Tazuna.Smt.EventStep
+import Tazuna.Smt.EventMachines
 import Tazuna.Smt.ReactExact
 import Tazuna.Semantics.Fire
 

@@ -144,7 +144,6 @@ theorem guards_exact {α : Type} {E : α → List Val → Prop} {P : α → Prop
     simp [guardsT, allT, Holds, Term.denote, hf, Val.toBool]
   | (_, _) :: _, (true, _) :: _, [], _, _, he, _ => by simp [Holds2, occupied, Forall2] at he
 
-
 /-- `table.insert` on slots finds a slot exactly when the table it gives fits them. -/
 theorem put_exact {k w : Ty} (hk : k.eqable = true) {t0 : (Ty.table k w).den} {S : List Slot}
     {sv : List (Bool × List Val)} {ys : List (k.den × w.den)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 2)
@@ -245,7 +244,6 @@ theorem putFrom_exact {k w : Ty} (hk : k.eqable = true) (d dt dp : Nat)
   | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _, _ | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _, _ => h.elim
 
 end
-
 
 section
 variable (M : Model) (L : Layout)
@@ -397,7 +395,6 @@ theorem encodePat_frel {t : Ty} {Δ : List Ty} : (p : Pat t Δ) → (x : t.den) 
       exact frels_append _ _ _ _ _ _ (encodePat_frel p x φ s hx m1 δ1 h1 δ' hpm) ⟨hx, trivial⟩
 
 end
-
 
 section
 variable {M : Model} {L : Layout}
@@ -756,7 +753,6 @@ theorem primCode_exact (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : 
   all_goals simp [primCode] at h
 
 end
-
 
 section
 variable {M : Model} {L : Layout}
@@ -1227,5 +1223,20 @@ theorem _root_.Tazuna.Ir.EffectFun.app_exact {ps : List Ty} {r : Ty} (f : Effect
   exact (hf _ _ cs hxs (frels_of_notFn hnf _ _ _) o c' ho).1
 
 end
+
+theorem tupleCodes_notFn {d : Nat} {x : Term} : (Γ : List Ty) → (i : Nat) → (σ : Codes Γ) →
+    tupleCodes d Γ x i = some σ → ∀ t ∈ Γ, t.isFn = false
+  | [], _, _, _ => by simp
+  | t :: Γ, i, (c, cs), h => by
+    cases hc : Code.ofTerm? t (Term.sel d 0 i x) with
+    | none => simp [tupleCodes, hc] at h
+    | some c' =>
+    cases hcs : tupleCodes d Γ x (i + 1) with
+    | none => simp [tupleCodes, hc, hcs] at h
+    | some cs' =>
+    intro u hu
+    rcases List.mem_cons.1 hu with rfl | hu
+    · exact ofTerm_notFn hc
+    · exact tupleCodes_notFn Γ (i + 1) cs' hcs u hu
 
 end Tazuna.Smt

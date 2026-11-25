@@ -1,6 +1,6 @@
 import Tazuna.Smt.PendingWrite
 import Tazuna.Smt.Own
-import Tazuna.Smt.Exact
+import Tazuna.Smt.EncodeExact
 
 /-! Writing the requests a step starts into the pending table. The step writes each effect at the next wire id, in
 its order (machines in declaration order, instances in key order), and sends it as an out line. The
@@ -101,7 +101,6 @@ abbrev startedBy (T : List TypeDecl) (s : State v) (records : v.records.den0) (e
 
 end
 
-
 section
 variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
@@ -197,7 +196,6 @@ theorem entrySlots_rel {P : List AnySite} (hP : SitesUnique P) (m : MachineV r e
   exact hyrel
 
 end
-
 
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
@@ -411,7 +409,6 @@ theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
 
 end
 
-
 section
 variable {L : Layout} {M : Model} {e : Ty}
 
@@ -486,7 +483,6 @@ theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : Lis
 
 end
 
-
 section
 variable {L : Layout} {M : Model}
 
@@ -517,7 +513,6 @@ theorem pending_exact {v : ServiceV} {shs : List (PendingShape v.event)}
   omega
 
 end
-
 
 section
 variable (L : Layout) {e : Ty}

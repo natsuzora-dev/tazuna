@@ -1,10 +1,9 @@
-import Tazuna.Smt.Kept
+import Tazuna.Smt.EncodeExact
 import Tazuna.Smt.State
 
-/-! What the step kinds share before they differ: a request's admission (listed callers, `accepts`, the context), the
-rules' terms, and the codes of the commands' and events' functions. The codes of a definition's functions are the
-codes of the sources its structure value keeps (`CommandCode.of` and the like), so each theorem rests on `Fun.code_rel`
-(T1 at those sources), not on an assumed relation. -/
+/-! A request's admission, which commands and queries share before they differ: whether the caller is listed, the
+`accepts` rules' terms, and the context their functions read (`encodeAdmit`, `admit_rel`, `admit_exact`), with the
+rules' terms every step kind reads (`ruleTerms`, `brokenIn`). -/
 
 namespace Tazuna.Smt
 
@@ -221,125 +220,45 @@ theorem admit_rel {v : ServiceV} {i : Ty} (hr : v.records.isData = true) (hi : i
 
 end
 
-/-! The event kind's service part: the subscription wraps the value into an event, the records apply it, and the
-service's invariants are checked on the result. `EventStep` adds the machines. -/
-
-/-- The codes of the functions an event step reads. -/
-structure EventCode (v : ServiceV) (i : Fin v.subscribes.length) where
-  apply : Code (Ty.fn [v.records, v.event] v.records)
-  wrap : Code (Ty.fn [(v.subscribes.get i).event] v.event)
-  invariants : Code (Ty.fn [v.records] Ty.rules)
-
-/-- An event step's types are data, as the `service` and `subscription` built-ins demand. -/
-structure EventData (v : ServiceV) (i : Fin v.subscribes.length) : Prop where
-  records : v.records.isData = true
-  event : v.event.isData = true
-  value : (v.subscribes.get i).event.isData = true
-
 section
-variable {v : ServiceV} {i : Fin v.subscribes.length} (hd : EventData v i)
-include hd
+variable {M : Model} {L : Layout}
 
-theorem EventData.apply : (Ty.fn [v.records, v.event] v.records).isData = true := by
-  simp [Ty.isData, Ty.isDatas, hd.records, hd.event]
-theorem EventData.wrap : (Ty.fn [(v.subscribes.get i).event] v.event).isData = true := by
-  simp only [Ty.isData, Ty.isDatas, hd.value, hd.event, Bool.and_self]
-theorem EventData.wrapArgs : (Ty.tuple [(v.subscribes.get i).event]).isData = true := by
-  simp only [Ty.isData, Ty.isDatas, hd.value, Bool.and_self]
-theorem EventData.invariants : (Ty.fn [v.records] Ty.rules).isData = true := by
-  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.records]
+theorem up_app2 {r e : Ty} (hr : r.isData = true) (he : e.isData = true) (h : (Ty.fn [r, e] r).isData = true)
+    (g : (Ty.fn [r, e] r).den0) (x : r.den0) (ev : e.den0) :
+    (Ty.up _ h g) (Ty.up r hr x, Ty.up e he ev, ()) = Ty.up r hr (g (x, ev, ())) := by
+  have hargs : (Ty.tuple [r, e]).isData = true := by simp [Ty.isData, Ty.isDatas, hr, he]
+  have := Ty.up_fn [r, e] r h hargs hr g (x, ev, ())
+  erw [Ty.up_tuple _ _ _ hr (by simp [Ty.isData, Ty.isDatas, he]), Ty.up_tuple _ _ _ he rfl] at this
+  exact this
+
+theorem rels2 {a b : Ty} (ha : a.isData = true) (hb : b.isData = true) (h : (Ty.tuple [a, b]).isData = true)
+    {x : a.den0} {y : b.den0} {cx : Code a} {cy : Code b} (hx : Smt.Rel M L a (Ty.up a ha x) cx)
+    (hy : Smt.Rel M L b (Ty.up b hb y) cy) : Smt.Rels M L [a, b] (Ty.up (.tuple [a, b]) h (x, y, ())) (cx, cy, ()) := by
+  show Smt.Rel M L _ (Ty.up (.tuple [a, b]) h (x, y, ())).1 cx ∧
+    Smt.Rels M L [b] (Ty.up (.tuple [a, b]) h (x, y, ())).2 (cy, ())
+  erw [Ty.up_tuple _ _ _ ha (by simp [Ty.isData, Ty.isDatas, hb])]
+  refine ⟨hx, ?_⟩
+  show Smt.Rel M L _ (Ty.up (.tuple [b]) (by simp [Ty.isData, Ty.isDatas, hb]) (y, ())).1 cy ∧ True
+  erw [Ty.up_tuple _ _ _ hb rfl]; exact ⟨hy, trivial⟩
+
+/-- `accepts`' condition in a request's admission is exact. -/
+theorem admit_exact {r i c : Ty} (hi : i.isData = true) (accepts : Fun (Ty.fn [i] Ty.rules))
+    {ac : Code (Ty.fn [i] Ty.rules)} {ca : Term} (hcode : accepts.code L = .ok (ac, ca)) (hca : Holds M ca)
+    {ks : List Term} (input : i.den0) {records now fresh sc si : Term} (hsi : RelV L i (Ty.up _ hi input) (si.denote M))
+    {a : AdmitOut r i c} {c1 : Term} (henc : encodeAdmit L ac ks records now fresh sc si = .ok (a, c1)) :
+    Holds M c1 ↔ accepts.appFits L.count (input, ()) := by
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨ic, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨rs, c1'⟩, h4, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  obtain ⟨_, -, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  have hic : Smt.Rel M L _ (Ty.up _ hi input) ic := (rel_ofTerm (need_ok.1 h3) _).2 hsi
+  exact accepts.app_exact hcode hca (by simp only [List.mem_singleton, forall_eq]; exact ofTerm_notFn (need_ok.1 h3))
+    _ _ (rels1 hi accepts.args_data hic) h4
 
 end
-
-/-- The codes relate to the service's and the subscription's functions in the model. -/
-structure EventCode.Rel (M : Model) (L : Layout) {v : ServiceV} {i : Fin v.subscribes.length} (hd : EventData v i)
-    (ec : EventCode v i) : Prop where
-  apply : Smt.Rel M L _ (Ty.up _ hd.apply v.apply.fn) ec.apply
-  wrap : Smt.Rel M L _ (Ty.up _ hd.wrap (v.subscribes.get i).wrap.fn) ec.wrap
-  invariants : Smt.Rel M L _ (Ty.up _ hd.invariants v.invariants.fn) ec.invariants
-
-/-- An event step's codes, from the sources the service and the subscription keep, with their condition. -/
-def EventCode.of (L : Layout) (v : ServiceV) (i : Fin v.subscribes.length) : Except Refusal (EventCode v i × Term) := do
-  let (a, c1) ← v.apply.code L
-  let (w, c2) ← (v.subscribes.get i).wrap.code L
-  let (n, c3) ← v.invariants.code L
-  pure (⟨a, w, n⟩, andT c1 (andT c2 c3))
-
-theorem EventCode.rel_of {M : Model} {L : Layout} {v : ServiceV} {i : Fin v.subscribes.length} (hd : EventData v i)
-    {ec : EventCode v i} {ce : Term} (h : EventCode.of L v i = .ok (ec, ce)) (hc : Holds M ce) : ec.Rel M L hd := by
-  obtain ⟨⟨a, c1⟩, h1, h⟩ := bind_ok.1 h
-  obtain ⟨⟨w, c2⟩, h2, h⟩ := bind_ok.1 h
-  obtain ⟨⟨n, c3⟩, h3, h⟩ := bind_ok.1 h
-  cases pure_ok.1 h
-  have hc := (holds_andT _ _).1 hc
-  have hc' := (holds_andT _ _).1 hc.2
-  exact ⟨v.apply.code_fn _ h1 hc.1, (v.subscribes.get i).wrap.code_fn _ h2 hc'.1, v.invariants.code_fn _ h3 hc'.2⟩
-
-/-! A command's codes and the facts its data types give. `Tazuna.Smt.CommandStep` encodes the command kind. -/
-
-/-- The codes of a command's functions. -/
-structure CommandCode {r e c : Ty} (x : CommandV r e c) where
-  accepts : Code (Ty.fn [x.input] Ty.rules)
-  decide : Code (Ty.fn [Ty.ctx r x.input c] (Ty.result (.list e) x.rejection))
-  ensures : Code (Ty.fn [Ty.ctx r x.input c, r] Ty.rules)
-
-/-- A command's types are data, as the `command` built-in demands of its type arguments. -/
-structure CommandData {r e c : Ty} (x : CommandV r e c) : Prop where
-  records : r.isData = true
-  event : e.isData = true
-  caller : c.isData = true
-  input : x.input.isData = true
-  rejection : x.rejection.isData = true
-
-section
-variable {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
-include hd
-
-theorem CommandData.accepts : (Ty.fn [x.input] Ty.rules).isData = true := by
-  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.input]
-theorem CommandData.args : (Ty.tuple [x.input]).isData = true := by simp [Ty.isData, Ty.isDatas, hd.input]
-theorem CommandData.ctx : (Ty.ctx r x.input c).isData = true := by
-  simp [Ty.ctx, Ty.isData, Ty.isDatas, Ty.isDatass, hd.records, hd.input, hd.caller]
-theorem CommandData.ctxArgs : (Ty.tuple [Ty.ctx r x.input c]).isData = true := by
-  simp [Ty.isData, Ty.isDatas, hd.ctx]
-theorem CommandData.events : (Ty.list e).isData = true := by simp [Ty.isData, hd.event]
-theorem CommandData.result : (Ty.result (.list e) x.rejection).isData = true := by
-  simp [Ty.result, Ty.isData, Ty.isDatas, Ty.isDatass, hd.event, hd.rejection]
-theorem CommandData.decide : (Ty.fn [Ty.ctx r x.input c] (Ty.result (.list e) x.rejection)).isData = true := by
-  simp only [Ty.isData, Ty.isDatas, hd.ctx, hd.result, Bool.and_self]
-theorem CommandData.ensures : (Ty.fn [Ty.ctx r x.input c, r] Ty.rules).isData = true := by
-  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.ctx, hd.records]
-theorem CommandData.ensArgs : (Ty.tuple [Ty.ctx r x.input c, r]).isData = true := by
-  simp [Ty.isData, Ty.isDatas, hd.ctx, hd.records]
-theorem CommandData.apply : (Ty.fn [r, e] r).isData = true := by
-  simp [Ty.isData, Ty.isDatas, hd.records, hd.event]
-theorem CommandData.invariants : (Ty.fn [r] Ty.rules).isData = true := by
-  simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.records]
-
-end
-
-/-- The codes relate to the command's functions in the model. -/
-structure CommandCode.Rel (M : Model) (L : Layout) {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
-    (cc : CommandCode x) : Prop where
-  accepts : Smt.Rel M L _ (Ty.up _ hd.accepts x.accepts.fn) cc.accepts
-  decide : Smt.Rel M L _ (Ty.up _ hd.decide x.decide.fn) cc.decide
-  ensures : Smt.Rel M L _ (Ty.up _ hd.ensures x.ensures.fn) cc.ensures
-
-/-- A command's codes, from the sources it keeps, with their condition. -/
-def CommandCode.of (L : Layout) {r e c : Ty} (x : CommandV r e c) : Except Refusal (CommandCode x × Term) := do
-  let (a, c1) ← x.accepts.code L
-  let (d, c2) ← x.decide.code L
-  let (n, c3) ← x.ensures.code L
-  pure (⟨a, d, n⟩, andT c1 (andT c2 c3))
-
-theorem CommandCode.rel_of {M : Model} {L : Layout} {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
-    {cc : CommandCode x} {cx : Term} (h : CommandCode.of L x = .ok (cc, cx)) (hc : Holds M cx) : cc.Rel M L hd := by
-  obtain ⟨⟨a, c1⟩, h1, h⟩ := bind_ok.1 h
-  obtain ⟨⟨d, c2⟩, h2, h⟩ := bind_ok.1 h
-  obtain ⟨⟨n, c3⟩, h3, h⟩ := bind_ok.1 h
-  cases pure_ok.1 h
-  have hc := (holds_andT _ _).1 hc
-  have hc' := (holds_andT _ _).1 hc.2
-  exact ⟨x.accepts.code_fn _ h1 hc.1, x.decide.code_fn _ h2 hc'.1, x.ensures.code_fn _ h3 hc'.2⟩
 
 end Tazuna.Smt
