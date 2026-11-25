@@ -82,7 +82,7 @@ theorem applyEvents_pend (hv : v.Equivariant) (n : Nat) :
         rfl
       have hsa := (applyEvents_self T hv n [ev] a ha (by simpa using hev1) a1 h1).1
       have hst := react_self T hv (s := a.state) (fun P hP => by
-        obtain ⟨W, hA⟩ := ha P hP; exact ⟨hA.1.1, hA.1.2.1⟩) hev1
+        exact ⟨(ha P hP).1.1, (ha P hP).1.2.1⟩) hev1
       have hp1 : PendAt n a1 := start_pend _ hst a2 (fun p hp' => hp p (by simpa [a2, react] using hp')) hs
       exact applyEvents_pend hv n evs a1 hsa hp1 (fun e he => hev e (List.mem_cons_of_mem _ he)) b h
 
@@ -97,7 +97,7 @@ theorem runCommand_pend (hv : v.Equivariant) {a : Acc v}
   have hdec : ∀ P : PBij, P.Fixes (a.state.fresh + 1) →
       Ty.rel0 P (Ty.result (.list v.event) x.rejection) (x.decide.fn (ctx a.state a.state.records c i, ()))
         (x.decide.fn (ctx a.state a.state.records c i, ())) := fun P hP => by
-    obtain ⟨W, hA⟩ := ha P hP
+    have hA := ha P hP
     exact ((hv.self P).commands x hx).decide _ _
       ⟨⟨hA.1.1, hi P hP, hc P hP, rfl, hP _ (Nat.lt_succ_self _), trivial⟩, trivial⟩
   have ha1 : SelfAt (a.state.fresh + 1) { a with state := { a.state with fresh := a.state.fresh + 1 } } := ha.fresh
@@ -156,7 +156,7 @@ theorem runQuery_pend (hv : v.Equivariant) {a : Acc v}
     simp only [had] at h
     have hans : ∀ ev ∈ (show List v.event.den0 from f.fn (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())),
         ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.event ev ev := fun ev hev P hP => by
-      obtain ⟨W, hA⟩ := ha P hP
+      have hA := ha P hP
       exact forall2_self (hf P hP (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())
         (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ()) ⟨((hv.self P).queries x hx).resolve _ _
         ⟨⟨hA.1.1, hi P hP, hc P hP, rfl, trivial⟩, trivial⟩, trivial⟩) ev hev
@@ -239,12 +239,6 @@ theorem settle_supp (hv : v.Equivariant) :
         rw [← hfr] at hp1
         exact settle_supp hv f a1 hs1 hp1 b h
 
-/-- Each wire id to itself. -/
-def _root_.Tazuna.Ir.PBij.refl : PBij where
-  rel a b := a = b
-  func := by rintro _ _ _ rfl rfl; rfl
-  inj := by rintro _ _ _ rfl rfl; rfl
-
 /-- A state whose names are below its counter: its records and instances relate to themselves under each renaming
 that keeps the counters below it, and so does each pending request on its own. -/
 structure StateSupp (s : State v) : Prop where
@@ -253,12 +247,12 @@ structure StateSupp (s : State v) : Prop where
 
 theorem StateSupp.selfAt {s : State v} (h : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId) :
     SelfAt s.fresh ({ state := s } : Acc v) := fun P hP =>
-  ⟨PBij.refl, ⟨(h.data P hP).1, (h.data P hP).2,
+  ⟨⟨(h.data P hP).1, (h.data P hP).2,
     Multi.of_forall2 (forall2_refl_of fun p hp => ⟨rfl, (h.pending p hp P hP).1, rfl, (h.pending p hp P hP).2⟩),
     rfl, hb, hb⟩, Multi.nil, Multi.nil, nofun, nofun, Multi.nil⟩
 
 theorem StateSupp.of_supp {a : Acc v} (h : Supp a) (hp : PendAt a.state.fresh a) : StateSupp a.state :=
-  ⟨fun P hP => by obtain ⟨W, hA⟩ := h.1 P hP; exact ⟨hA.1.1, hA.1.2.1⟩, hp⟩
+  ⟨fun P hP => ⟨(h.1 P hP).1.1, (h.1 P hP).1.2.1⟩, hp⟩
 
 /-- The same records and instances, a subset of the pending requests, and a counter no lower. -/
 theorem StateSupp.sub {s s' : State v} (h : StateSupp s) (hr : s'.records = s.records)
@@ -296,7 +290,7 @@ theorem command_begin (hv : v.Equivariant) {s : State v} (hs : StateSupp s) (hb 
   have hdec : ∀ P : PBij, P.Fixes (s.fresh + 1) →
       Ty.rel0 P (Ty.result (.list v.event) x.rejection) (x.decide.fn (ctx s s.records c i, ()))
         (x.decide.fn (ctx s s.records c i, ())) := fun P hP => by
-    obtain ⟨W, hA⟩ := ha0 P (hP.mono (Nat.le_succ _))
+    have hA := ha0 P (hP.mono (Nat.le_succ _))
     exact ((hv.self P).commands x hx).decide _ _
       ⟨⟨hA.1.1, hi P (hP.mono (Nat.le_succ _)), hc P (hP.mono (Nat.le_succ _)), rfl, hP _ (Nat.lt_succ_self _),
         trivial⟩, trivial⟩
@@ -504,11 +498,7 @@ theorem clock_begin (hv : v.Equivariant) (hst : ∀ m ∈ v.machines, m.state.co
   have ha0 := hs'.selfAt (fun p hp' => by rw [hn]; exact hb p (by rw [hp] at hp'; exact hp'))
   have hfa : a.state.fresh = s'.fresh := start_fresh _ _ h
   have hsa : SelfAt s'.fresh a := fun P hP => by
-    obtain ⟨W, hA⟩ := ha0 P hP
-    have hl := start_rel (a := { state := s' }) (a' := { state := s' }) hA
-      (Multi.of_forall2 (forall2_refl_of fun x hx => he x hx P (by rw [hfr] at hP; exact hP)))
-    rw [h] at hl
-    exact lifted_self hl
+    exact start_self (ha0 P hP) (fun x hx => he x hx P (by rw [hfr] at hP; exact hP)) h
   refine ⟨supp_of hsa (fun y hy => ?_) hfa, ?_⟩
   · rcases start_own_mem _ _ h y hy with hy | ⟨hr', snd, hy⟩
     · exact nomatch hy

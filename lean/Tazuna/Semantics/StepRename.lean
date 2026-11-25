@@ -365,34 +365,40 @@ def Acc.Rel (R : Ren) (a a' : Acc v) : Prop :=
     (∀ o ∈ a.out, o.id < a.state.nextId) ∧ (∀ o ∈ a'.out, o.id < a'.state.nextId) ∧
     Multi (EffectV.Rel R.ctr) a.own a'.own
 
+/-- `W'` renames the wire ids below `N` and `N'` as `W` does. -/
+def _root_.Tazuna.Ir.PBij.Extends (W W' : PBij) (N N' : Nat) : Prop := ∀ {i j}, i < N → j < N' → W.rel i j → W'.rel i j
+
 /-- What related runs from `a` and `a'` end in: a fault on both sides, or states related under a renaming that renames
-counters as `R` does, having used as many counters and as many wire ids on each side. -/
+counters as `R` does and the wire ids that were in use as `R` does, having used as many counters and as many wire ids
+on each side. -/
 def Lifted (R : Ren) (a a' : Acc v) (x x' : Except Fault (Acc v)) : Prop :=
   (Diamond.Faults x ∧ Diamond.Faults x') ∨ ∃ b b' R', x = .ok b ∧ x' = .ok b' ∧ R'.ctr = R.ctr ∧ Acc.Rel R' b b' ∧
     a.state.fresh ≤ b.state.fresh ∧ b.state.fresh + a'.state.fresh = b'.state.fresh + a.state.fresh ∧
-    b.state.nextId + a'.state.nextId = b'.state.nextId + a.state.nextId
+    b.state.nextId + a'.state.nextId = b'.state.nextId + a.state.nextId ∧ a.state.nextId ≤ b.state.nextId ∧
+    R.wire.Extends R'.wire a.state.nextId a'.state.nextId
 
 theorem Lifted.bind {R : Ren} {a a' : Acc v} {x x' : Except Fault (Acc v)} (h : Lifted R a a' x x')
     {f g : Acc v → Except Fault (Acc v)}
     (hfg : ∀ R' b b', R'.ctr = R.ctr → Acc.Rel R' b b' → Lifted R' b b' (f b) (g b')) :
     Lifted R a a' (x >>= f) (x' >>= g) := by
-  rcases h with ⟨hx, hx'⟩ | ⟨b, b', R', rfl, rfl, hc, hr, hm, hf, hn⟩
+  rcases h with ⟨hx, hx'⟩ | ⟨b, b', R', rfl, rfl, hc, hr, hm, hf, hn, hl, hw⟩
   · left
     cases x <;> cases x' <;> first | exact ⟨trivial, trivial⟩ | exact absurd hx id | exact absurd hx' id
-  · rcases hfg R' b b' hc hr with ⟨h1, h2⟩ | ⟨c, c', R'', h1, h2, hc', hr', hm', hf', hn'⟩
+  · rcases hfg R' b b' hc hr with ⟨h1, h2⟩ | ⟨c, c', R'', h1, h2, hc', hr', hm', hf', hn', hl', hw'⟩
     · exact .inl ⟨h1, h2⟩
-    · exact .inr ⟨c, c', R'', h1, h2, hc'.trans hc, hr', by omega, by omega, by omega⟩
+    · exact .inr ⟨c, c', R'', h1, h2, hc'.trans hc, hr', by omega, by omega, by omega, by omega,
+        fun hi hj h => hw' (by omega) (by omega) (hw hi hj h)⟩
 
 theorem Lifted.refl {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') : Lifted R a a' (.ok a) (.ok a') :=
-  .inr ⟨a, a', R, rfl, rfl, rfl, h, Nat.le_refl _, by omega, by omega⟩
+  .inr ⟨a, a', R, rfl, rfl, rfl, h, Nat.le_refl _, by omega, by omega, Nat.le_refl _, fun _ _ h => h⟩
 
 /-- A run from steps that differ from `a` and `a'` by having used `k` more counters each. -/
 theorem Lifted.shift {R : Ren} {a a' a1 a1' : Acc v} {x x' : Except Fault (Acc v)} (h : Lifted R a1 a1' x x') (k : Nat)
     (hf : a1.state.fresh = a.state.fresh + k) (hf' : a1'.state.fresh = a'.state.fresh + k)
     (hn : a1.state.nextId = a.state.nextId) (hn' : a1'.state.nextId = a'.state.nextId) : Lifted R a a' x x' := by
-  rcases h with h | ⟨b, b', R', h1, h2, hc, hr, hm, hf2, hn2⟩
+  rcases h with h | ⟨b, b', R', h1, h2, hc, hr, hm, hf2, hn2, hl, hw⟩
   · exact .inl h
-  · exact .inr ⟨b, b', R', h1, h2, hc, hr, by omega, by omega, by omega⟩
+  · exact .inr ⟨b, b', R', h1, h2, hc, hr, by omega, by omega, by omega, by omega, by rw [← hn, ← hn']; exact hw⟩
 
 theorem RequestV.ownerIn_rel {R : PBij} {e : Ty} {r r' : RequestV e} (h : RequestV.Rel R r r') (ds : List (String × DeclaredV)) :
     r.ownerIn ds = r'.ownerIn ds := by
@@ -522,7 +528,7 @@ theorem start_rel {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a') {effs effs' : L
         Pending.Rel R' p q := fun hp hq ⟨hid, h2⟩ => ⟨.inl ⟨hb _ hp, hb' _ hq, hid⟩, h2⟩
     have keepO : ∀ {o o' : OutLine}, o ∈ a.out → o' ∈ a'.out → OutLine.Rel R o o' → OutLine.Rel R' o o' :=
       fun hp hq ⟨hid, h2⟩ => ⟨.inl ⟨ho _ hp, ho' _ hq, hid⟩, h2⟩
-    refine .inr ⟨_, _, R', rfl, rfl, rfl, ⟨⟨hrec, hmach, ?_, hnow, ?_, ?_⟩, hev, ?_, ?_, ?_, ?_⟩, ?_, ?_, ?_⟩
+    refine .inr ⟨_, _, R', rfl, rfl, rfl, ⟨⟨hrec, hmach, ?_, hnow, ?_, ?_⟩, hev, ?_, ?_, ?_, ?_⟩, ?_, ?_, ?_, ?_, ?_⟩
     · exact (hpend.imp_mem fun _ hp _ hq h => keep hp hq h).append hnew
     · intro p hp
       rcases List.mem_append.1 hp with hp | hp
@@ -551,6 +557,8 @@ theorem start_rel {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a') {effs effs' : L
       omega
     · show a.state.nextId + (reqsOf effs).length + a'.state.nextId = a'.state.nextId + (reqsOf effs').length + a.state.nextId
       omega
+    · exact Nat.le_add_right _ _
+    · exact fun hi hj h => .inl ⟨hi, hj, h⟩
 
 end Step
 
@@ -1000,38 +1008,48 @@ namespace Step
 
 variable {v : ServiceV}
 
-/-- Steps in progress that are the same up to a renaming of the ids made so far and of wire ids, at the same counter
-and next wire id: the base of the equivalence the own cascade is checked up to. -/
-def OwnRel (a a' : Acc v) : Prop :=
+/-- Steps in progress that are the same up to a renaming of the names made from the counter `f0` and the next wire id
+`n0` on, at the same counter and next wire id: the base of the equivalence the own cascade is checked up to. Names
+made before stay as they are, as the oracle keeps the names earlier lines showed. -/
+def OwnRel (f0 n0 : Nat) (a a' : Acc v) : Prop :=
   ∃ R : Ren, Acc.Rel R a a' ∧ a.state.fresh = a'.state.fresh ∧ a.state.nextId = a'.state.nextId ∧
-    ∀ n, a.state.fresh ≤ n → R.ctr.rel n n
+    n0 ≤ a.state.nextId ∧ (∀ n, (n < f0 ∨ a.state.fresh ≤ n) → R.ctr.rel n n) ∧ ∀ i < n0, R.wire.rel i i
 
-theorem OwnRel.symm {a a' : Acc v} : OwnRel a a' → OwnRel a' a
-  | ⟨R, h, hf, hn, hfix⟩ => ⟨R.inv, Acc.rel_inv h, hf.symm, hn.symm, fun n hn' => hfix n (hf ▸ hn')⟩
+theorem OwnRel.symm {f0 n0 : Nat} {a a' : Acc v} : OwnRel f0 n0 a a' → OwnRel f0 n0 a' a
+  | ⟨R, h, hf, hn, hn0, hfix, hw⟩ =>
+    ⟨R.inv, Acc.rel_inv h, hf.symm, hn.symm, hn ▸ hn0, fun n hn' => hfix n (hf ▸ hn'), fun i hi => hw i hi⟩
+
+/-- Fixing more names is a finer equivalence. -/
+theorem OwnRel.mono {f0 n0 f1 n1 : Nat} (hf : f0 ≤ f1) (hn : n0 ≤ n1) {a a' : Acc v} :
+    OwnRel f1 n1 a a' → OwnRel f0 n0 a a'
+  | ⟨R, h, hfr, hni, hn1, hfix, hw⟩ =>
+    ⟨R, h, hfr, hni, Nat.le_trans hn hn1, fun n hn' => hfix n (hn'.imp (fun h => by omega) id),
+      fun i hi => hw i (by omega)⟩
 
 /-- The own cascade respects renaming: equivalent steps in progress have as many own effects waiting, and running
 any one of them has a partner on the other side that ends equivalently or also faults. -/
-theorem ownSys_simulates (T : List TypeDecl) (hv : v.Equivariant) :
-    Diamond.Simulates (ownSys T v) (Diamond.Closure (OwnRel (v := v))) := by
+theorem ownSys_simulates (T : List TypeDecl) (hv : v.Equivariant) (f0 n0 : Nat) :
+    Diamond.Simulates (ownSys T v) (Diamond.Closure (OwnRel (v := v) f0 n0)) := by
   refine Diamond.Simulates.closure OwnRel.symm ?_
-  intro a a' ⟨R, ha, hf, hn, hfix⟩
+  intro a a' ⟨R, ha, hf, hn, hn0, hfix, hw⟩
   have hown := ha.2.2.2.2.2
   refine ⟨hown.length_eq, fun i hi => ?_⟩
   obtain ⟨j, hj, hij, hm⟩ := hown.eraseIdx i hi
   refine ⟨j, hj, ?_⟩
   have ha1 : Acc.Rel R { a with own := a.own.eraseIdx i } { a' with own := a'.own.eraseIdx j } :=
     ⟨ha.1, ha.2.1, ha.2.2.1, ha.2.2.2.1, ha.2.2.2.2.1, hm⟩
-  have hctr : R.ctr.rel a.state.fresh a'.state.fresh := hf ▸ hfix _ (Nat.le_refl _)
+  have hctr : R.ctr.rel a.state.fresh a'.state.fresh := hf ▸ hfix _ (.inr (Nat.le_refl _))
   have hl := runOwn_rel T hv ha1 hctr hij
   simp only [ownSys, List.getElem?_eq_getElem hi, List.getElem?_eq_getElem hj]
-  rcases hl with ⟨h1, h2⟩ | ⟨b, b', R', h1, h2, hc, hb, hmono, hfb, hnb⟩
+  rcases hl with ⟨h1, h2⟩ | ⟨b, b', R', h1, h2, hc, hb, hmono, hfb, hnb, hl, hext⟩
   · exact .inr ⟨h1, h2⟩
   · rw [h1, h2]
-    refine .inl ⟨R', hb, ?_, ?_, fun n hn' => hc ▸ hfix n (Nat.le_trans hmono hn')⟩
-    · have : a.state.fresh = a'.state.fresh := hf
-      simp only at hfb; omega
-    · have : a.state.nextId = a'.state.nextId := hn
-      simp only at hnb; omega
+    have : a.state.fresh = a'.state.fresh := hf
+    have : a.state.nextId = a'.state.nextId := hn
+    simp only at hfb hnb hl hext
+    refine .inl ⟨R', hb, by omega, by omega, by omega,
+      fun n hn' => hc ▸ hfix n (hn'.imp id fun h => Nat.le_trans hmono h), fun i hi => ?_⟩
+    exact hext (by omega) (by omega) (hw i hi)
 
 end Step
 

@@ -4,12 +4,12 @@ import Tazuna.Semantics.Support
 effects `e1` and `e2` commute from a step in progress `a0` (where neither waits any more) when running `e1` then `e2`
 ends as running them the other way round with the names swapped: `e2` takes the counter it gets after `e1`, and `e1`
 the one it gets first, and the wire ids `e1` sends come before `e2`'s (`canonPair`), so each effect makes the same
-names in both orders, and the results are compared up to renaming and reading collections as multisets
-(`PairCommutes`). This is the solver's question: in the canonical order the names already agree, so it has no renaming
+names in both orders, and the results are compared up to renaming the names the two made, every name from before
+kept, and reading collections as multisets (`PairCommutes`). This is the solver's question: in the canonical order the names already agree, so it has no renaming
 to search for. Swapping the names back is a renaming the cascade respects, and the effects that
 still wait are a frame no internal step reads, so pairs that commute at the front of the queue make every two waiting
-effects commute wherever they wait (`commutes_of_pairs`), and every order of the cascade agrees with `settle`
-(`cascade_agrees`). -/
+effects commute wherever they wait (`commutes_of_pairs`), and every order of the cascade agrees with `settle` up to
+renaming the names the cascade made (`cascade_agrees`). -/
 
 namespace Tazuna.Ir
 
@@ -90,8 +90,17 @@ theorem Acc.Rel.mapWire {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') {σ : Nat 
     rintro _ ⟨o, ho, rfl⟩
     exact hlt _ (ho' o ho)
 
-/-- The two orders' equivalence: the same up to renaming wire ids and the ids made so far, collections as multisets. -/
-abbrev Same : Acc v → Acc v → Prop := Diamond.Closure OwnRel
+/-- The two orders' equivalence: the same up to renaming the wire ids and the ids made from the counter `f0` and the
+next wire id `n0` on, collections as multisets. -/
+abbrev Same (f0 n0 : Nat) : Acc v → Acc v → Prop := Diamond.Closure (OwnRel f0 n0)
+
+theorem Same.mono {f0 n0 f1 n1 : Nat} (hf : f0 ≤ f1) (hn : n0 ≤ n1) {a b : Acc v} (h : Same f1 n1 a b) :
+    Same f0 n0 a b := by
+  induction h with
+  | base h => exact .base (h.mono hf hn)
+  | refl a => exact .refl a
+  | symm _ ih => exact .symm ih
+  | trans _ _ ih1 ih2 => exact .trans ih1 ih2
 
 /-- `e2` then `e1` with each effect's names as they are when `e1` runs first: `e2` takes the counter after `e1`'s, and
 the wire ids `e1` sends come first, then `e2`'s. -/
@@ -101,10 +110,11 @@ def canonPair (a0 : Acc v) (e1 e2 : EffectV v.event) : Except Fault (Acc v) := d
   pure ((d.withFresh (a0.state.fresh + 2)).mapWire (wireSwap a0.state.nextId c.state.nextId d.state.nextId))
 
 /-- Two own effects commute from `a0`: where `e1` runs, `e2` after it ends as the canonical other order does, up to
-renaming, or both fault; and if `e2` faults first, it still faults after `e1`. -/
+renaming the names the two made, or both fault; and if `e2` faults first, it still faults after `e1`. -/
 def PairCommutes (a0 : Acc v) (e1 e2 : EffectV v.event) : Prop :=
   ∀ b, runOwn T a0 e1 = .ok b →
-    (∀ c, runOwn T (a0.withFresh (a0.state.fresh + 1)) e2 = .ok c → Diamond.Agree Same (runOwn T b e2) (canonPair T a0 e1 e2)) ∧
+    (∀ c, runOwn T (a0.withFresh (a0.state.fresh + 1)) e2 = .ok c →
+      Diamond.Agree (Same a0.state.fresh a0.state.nextId) (runOwn T b e2) (canonPair T a0 e1 e2)) ∧
     (∀ f, runOwn T (a0.withFresh (a0.state.fresh + 1)) e2 = .error f → Diamond.Faults (runOwn T b e2))
 
 theorem Acc.Rel.withFresh {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') (k k' : Nat) :
@@ -112,20 +122,21 @@ theorem Acc.Rel.withFresh {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') (k k' : 
 
 /-- Running `e2` first with its own counter or with the counter it has after `e1` differs by swapping the two
 counters, and the canonical order's wire ids differ from the actual other order's by swapping two blocks, so the two
-orders agree up to renaming. -/
+orders agree up to renaming the names the two made. -/
 theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fresh a0) {e1 e2 : EffectV v.event}
     (he1 : OwnAt a0.state.fresh e1) (he2 : OwnAt a0.state.fresh e2) :
-    (∃ W, Lifted ⟨PBij.swap a0.state.fresh, W⟩ a0
-        (a0.withFresh (a0.state.fresh + 1)) (runOwn T a0 e2) (runOwn T (a0.withFresh (a0.state.fresh + 1)) e2)) ∧
-      ∀ c1, runOwn T a0 e2 = .ok c1 → Diamond.Agree Same (runOwn T c1 e1) (canonPair T a0 e1 e2) := by
+    Lifted ⟨PBij.swap a0.state.fresh, PBij.refl⟩ a0
+        (a0.withFresh (a0.state.fresh + 1)) (runOwn T a0 e2) (runOwn T (a0.withFresh (a0.state.fresh + 1)) e2) ∧
+      ∀ c1, runOwn T a0 e2 = .ok c1 →
+        Diamond.Agree (Same a0.state.fresh a0.state.nextId) (runOwn T c1 e1) (canonPair T a0 e1 e2) := by
   generalize hf : a0.state.fresh = f at ha he1 he2 ⊢
-  obtain ⟨W, hA⟩ := ha _ (PBij.swap_fixes f)
+  have hA := ha _ (PBij.swap_fixes f)
   have hctr : (PBij.swap f).rel f (f + 1) := by show _ = _; simp [swapFn]
-  have hl := runOwn_rel T hv (R := ⟨PBij.swap f, W⟩) (a := a0) (a' := a0.withFresh (f + 1))
+  have hl := runOwn_rel T hv (R := ⟨PBij.swap f, PBij.refl⟩) (a := a0) (a' := a0.withFresh (f + 1))
     (hA.withFresh f (f + 1)) (by rw [hf]; exact hctr) (he2.2 _ (PBij.swap_fixes f))
-  refine ⟨⟨W, hl⟩, fun c1 hc1 => ?_⟩
+  refine ⟨hl, fun c1 hc1 => ?_⟩
   have hfr1 : c1.state.fresh = f + 1 := by rw [runOwn_fresh T he2.1 hc1, hf]
-  rcases hl with ⟨h1, -⟩ | ⟨b, c', R', h1, h2, hc, hb, -, -, hn⟩
+  rcases hl with ⟨h1, -⟩ | ⟨b, c', R', h1, h2, hc, hb, -, -, hn, hl1, hw1⟩
   · rw [hc1] at h1; exact h1.elim
   · rw [hc1] at h1; cases h1
     have hfr' : c'.state.fresh = f + 2 := runOwn_fresh T he2.1 h2
@@ -134,7 +145,7 @@ theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fre
     simp only [canonPair, hf, h2, bind, Except.bind]
     have hb1 : c1 = c1.withFresh (f + 1) := by rw [← hfr1]; rfl
     rw [← hb1] at hl2
-    rcases hl2 with ⟨h3, h4⟩ | ⟨d, d', R'', h3, h4, hc', hd, -, -, hn'⟩
+    rcases hl2 with ⟨h3, h4⟩ | ⟨d, d', R'', h3, h4, hc', hd, -, -, hn', hl2, hw2⟩
     · refine .inr ⟨h3, ?_⟩
       revert h4
       cases runOwn T (c'.withFresh f) e1 <;> intro h4
@@ -142,14 +153,22 @@ theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fre
       · exact h4.elim
     · rw [h3, h4]
       have hfd : d.state.fresh = f + 2 := by rw [runOwn_fresh T he1.1 h3, hfr1]
+      simp only [Acc.withFresh] at hn hn' hl1 hl2 hw1 hw2
       refine .inl (.base ⟨_, (hd.withFresh d.state.fresh (f + 2)).mapWire wireSwap_inj fun _ => wireSwap_lt,
-        ?_, ?_, fun n hn2 => ?_⟩)
+        ?_, ?_, ?_, fun n hn2 => ?_, fun i hi => ?_⟩)
       · show d.state.fresh = f + 2; exact hfd
       · show d.state.nextId = d'.state.nextId
-        simp only [Acc.withFresh] at hn hn'
+        omega
+      · show a0.state.nextId ≤ d.state.nextId
         omega
       · show R''.ctr.rel n n
-        rw [hc', hc]; exact PBij.swap_above (by omega)
+        rw [hc', hc]
+        rcases hn2 with hn2 | hn2
+        · exact PBij.swap_fixes f n hn2
+        · exact PBij.swap_above (show f + 2 ≤ n by rw [← hfd]; exact hn2)
+      · refine ⟨i, hw2 (by omega) (by omega) (hw1 hi (by omega) rfl), ?_⟩
+        show i = wireSwap a0.state.nextId c'.state.nextId d'.state.nextId i
+        unfold wireSwap; split <;> (try split) <;> omega
 
 /-- Where the place `j` of a list is once the place `i` is taken out. -/
 def afterErase (i j : Nat) : Nat := if j < i then j else j - 1
@@ -224,18 +243,44 @@ theorem pick_two (a : Acc v) {i j : Nat} (hi : i < a.own.length) (hj : j < a.own
     · show afterErase i j < (a.own.eraseIdx i ++ b0.own).length
       rw [List.length_append]; omega
 
+/-- A step in progress whose names are below its counter, made from the counter `f0` and the next wire id `n0` on:
+what the own cascade from a step with those counters keeps. -/
+def SuppFrom (f0 n0 : Nat) (a : Acc v) : Prop := Supp a ∧ f0 ≤ a.state.fresh ∧ n0 ≤ a.state.nextId
+
+/-- An own step from a step whose names are below its counter sends from the next wire id on. -/
+theorem runOwn_nextId (hv : v.Equivariant) {a : Acc v} (ha : Supp a) {i : Nat} (hi : i < a.own.length) {b : Acc v}
+    (hb : runOwn T { a with own := a.own.eraseIdx i } a.own[i] = .ok b) : a.state.nextId ≤ b.state.nextId := by
+  have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
+  have hs : SelfAt a.state.fresh { a with own := a.own.eraseIdx i } :=
+    SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (mem_eraseIdx hx)
+  have hl := runOwn_rel T hv (hs PBij.refl fun _ _ => rfl) rfl ((ha.2 _ hmem).2 PBij.refl fun _ _ => rfl)
+  rw [hb] at hl
+  rcases hl with ⟨h, -⟩ | ⟨_, _, _, h1, -, -, -, -, -, -, hl, -⟩
+  · exact h.elim
+  · cases h1; exact hl
+
+theorem suppFrom_preserved (hv : v.Equivariant) (f0 n0 : Nat) : Diamond.Preserved (ownSys T v) (SuppFrom f0 n0) := by
+  intro a i b ⟨ha, hf, hn⟩ hi hb
+  refine ⟨ownSys_preserved T hv a i b ha hi hb, ?_, ?_⟩
+  · simp only [ownSys, List.getElem?_eq_getElem hi] at hb
+    have := runOwn_fresh T (ha.2 _ (List.getElem_mem hi)).1 hb
+    simp only at this; omega
+  · simp only [ownSys, List.getElem?_eq_getElem hi] at hb
+    have := runOwn_nextId T hv ha hi hb
+    omega
+
 /-- Pairs that commute at the front of the queue, in the canonical form, make any two waiting own effects commute in
-the cascade, wherever they wait. -/
+the cascade, wherever they wait, up to renaming the names made from the cascade's start on. -/
 theorem commutes_of_pairs (hv : v.Equivariant)
     (hP : ∀ a : Acc v, Supp a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
-      PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j]) :
-    Diamond.Commutes (ownSys T v) Supp Same := by
-  intro a ha i j hi hj hij b hb
+      PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j]) (f0 n0 : Nat) :
+    Diamond.Commutes (ownSys T v) (SuppFrom f0 n0) (Same f0 n0) := by
+  intro a ⟨ha, hf0, hn0⟩ i j hi hj hij b hb
   obtain ⟨A1, hA1, hpb, hk⟩ := pick_two T a hi hj hij hb
   have hp := hP a ha i j hi hj hij A1 hA1
   have hsa : SelfAt a.state.fresh { a with own := dropTwo a.own i j } :=
     SelfAt.own ha.1 fun x hx => ha.2 x (mem_dropTwo hx)
-  obtain ⟨⟨W, hl⟩, hac⟩ := actual_canon T hv (a0 := { a with own := dropTwo a.own i j }) hsa
+  obtain ⟨hl, hac⟩ := actual_canon T hv (a0 := { a with own := dropTwo a.own i j }) hsa
     (ha.2 _ (List.getElem_mem hi)) (ha.2 _ (List.getElem_mem hj))
   refine ⟨fun c hc => ?_, fun e he => ?_⟩
   · obtain ⟨C1, hC1, hpc, hk'⟩ := pick_two T a hj hi (Ne.symm hij) hc
@@ -244,7 +289,8 @@ theorem commutes_of_pairs (hv : v.Equivariant)
     rw [hpb, hpc]
     rcases hl with ⟨h1, -⟩ | ⟨_, c', _, h1, h2, -⟩
     · rw [hC1] at h1; exact h1.elim
-    · exact (hp.1 c' h2).trans Diamond.Closure.equiv ((hac C1 hC1).symm Diamond.Closure.equiv)
+    · exact Diamond.Agree.mono (fun h => Same.mono hf0 hn0 h)
+        ((hp.1 c' h2).trans Diamond.Closure.equiv ((hac C1 hC1).symm Diamond.Closure.equiv))
   · refine ⟨_, hk, ?_⟩
     rw [hpb]
     simp only [ownSys, List.getElem?_eq_getElem hj] at he
@@ -257,15 +303,15 @@ theorem commutes_of_pairs (hv : v.Equivariant)
     · rw [h0] at h1; cases h1
 
 /-- Where every two waiting own effects of a step in progress whose names are below its counter commute in the
-canonical sense, every order of the own cascade ends as `settle` does, up to renaming and reading collections as
-multisets, or both fault. -/
+canonical sense, every order of the own cascade ends as `settle` does, up to renaming the names the cascade made and
+reading collections as multisets, or both fault. -/
 theorem cascade_agrees (hv : v.Equivariant)
     (hP : ∀ a : Acc v, Supp a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
       PairCommutes T { a with own := dropTwo a.own i j } a.own[i] a.own[j])
     (fuel : Nat) (a : Acc v) (ha : Supp a) {r : Except Fault (Acc v)} (hr : Diamond.Runs (ownSys T v) fuel a r) :
-    Diamond.Agree Same r (settle T fuel a) :=
-  settle_agrees T Diamond.Closure.equiv (ownSys_simulates T hv) (commutes_of_pairs T hv hP) (ownSys_preserved T hv)
-    fuel a ha hr
+    Diamond.Agree (Same a.state.fresh a.state.nextId) r (settle T fuel a) :=
+  settle_agrees T Diamond.Closure.equiv (ownSys_simulates T hv _ _) (commutes_of_pairs T hv hP _ _)
+    (suppFrom_preserved T hv _ _) fuel a ⟨ha, Nat.le_refl _, Nat.le_refl _⟩ hr
 
 end Step
 

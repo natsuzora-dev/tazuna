@@ -79,15 +79,15 @@ theorem CheckedSpec.states (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.s
   exact comparable_of_embeddable _ hm'.1.2.1
 
 /-- T5: in a checked spec's service, where every two own effects waiting in a step in progress whose names are below
-its counter commute in the canonical sense, every order of a cascade ends as `settle` does, up to renaming ids and
-reading collections as multisets, or both fault; and where its timers fire forward, every order of the timers due at
+its counter commute in the canonical sense, every order of a cascade ends as `settle` does, up to renaming the ids the
+cascade made (names from before it stay as they are) and reading collections as multisets, or both fault; and where its timers fire forward, every order of the timers due at
 one deadline of a clock line ends as `fire` does, with the same state and the same effects in some order. -/
 theorem diamond_confluent (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services)
     (hpairs : ∀ a : Step.Acc v, Step.Supp a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
       Step.PairCommutes c.T { a with own := Step.dropTwo a.own i j } a.own[i] a.own[j])
     (htimers : Step.FiresForward v.machines) :
     (∀ fuel (a : Step.Acc v), Step.Supp a → ∀ {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r →
-      Diamond.Agree Step.Same r (Step.settle c.T fuel a)) ∧
+      Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a)) ∧
     (∀ fuel (s : State v) {r}, Diamond.Runs (Step.timerSys v) fuel (s, []) r →
       Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1))) :=
   ⟨fun fuel a ha _ hr => Step.cascade_agrees c.T (c.equivariant v hv) hpairs fuel a ha hr,
@@ -103,7 +103,8 @@ theorem runs_confluent (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.servi
     (htimers : Step.FiresForward v.machines) {xs : List (Input v)} (hxs : Step.ValidRun c.T (Step.State.init v) xs)
     {x : Input v} (hx : x.Valid (run c.T v (Step.State.init v) xs).1) {a : Step.Acc v}
     (ha : Step.Begins c.T (run c.T v (Step.State.init v) xs).1 x a) :
-    ∀ fuel {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r → Diamond.Agree Step.Same r (Step.settle c.T fuel a) := by
+    ∀ fuel {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r →
+      Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a) := by
   have he := c.equivariant v hv
   have hr := (c.checked v hv).reach
   have hi := run_inv c.T hr _ Step.init_inv xs

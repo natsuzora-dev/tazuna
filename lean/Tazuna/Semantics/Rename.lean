@@ -22,6 +22,12 @@ structure PBij where
 
 def PBij.inv (p : PBij) : PBij := ⟨fun a b => p.rel b a, fun h h' => p.inj h h', fun h h' => p.func h h'⟩
 
+/-- Each number to itself. -/
+def PBij.refl : PBij where
+  rel a b := a = b
+  func := by rintro _ _ _ rfl rfl; rfl
+  inj := by rintro _ _ _ rfl rfl; rfl
+
 /-- A renaming of the names steps make: `ctr` renames the step counters fresh ids are made from, `wire` the wire ids of
 requests. -/
 structure Ren where

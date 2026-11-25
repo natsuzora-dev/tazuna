@@ -92,14 +92,9 @@ end
 section
 variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV}
 
-/-- The wire ids from `n` on, each to itself. -/
-def PBij.from (n : Nat) : PBij :=
-  ⟨fun a b => n ≤ a ∧ a = b, fun h h' => h.2.symm.trans h'.2, fun h h' => h.2.trans h'.2.symm⟩
-
 /-- Two steps in progress that extend `a0` by alike requests at the same ids from `a0`'s next id on (with their out
-lines), by related own effects and events, and whose records and instances relate, are the same up to renaming: the
-renaming keeps `a0`'s names as `a0` relates to itself and every wire id from its next one on. -/
-theorem same_of_parts {a0 A C : Step.Acc v} {W : PBij} (h0 : Step.Acc.Rel ⟨PBij.refl, W⟩ a0 a0)
+lines), by related own effects and events, and whose records and instances relate, are the same with every name kept. -/
+theorem same_of_parts {a0 A C : Step.Acc v} (h0 : Step.Acc.Rel ⟨PBij.refl, PBij.refl⟩ a0 a0)
     (hr : Ty.rel0 PBij.refl v.records A.state.records C.state.records)
     (hm : Step.Machines.Rel PBij.refl A.state.machines C.state.machines)
     {PA PC : List (Step.Pending v.event)} (hpA : A.state.pending = a0.state.pending ++ PA)
@@ -112,17 +107,13 @@ theorem same_of_parts {a0 A C : Step.Acc v} {W : PBij} (h0 : Step.Acc.Rel ⟨PBi
     {OA OC : List (EffectV v.event)} (hwA : A.own = a0.own ++ OA) (hwC : C.own = a0.own ++ OC)
     (hO : Multi (EffectV.Rel PBij.refl) OA OC)
     {EA EC : List v.event.den0} (heA : A.events = a0.events ++ EA) (heC : C.events = a0.events ++ EC)
-    (he : Multi (Ty.rel0 PBij.refl v.event) EA EC) (hf : A.state.fresh = C.state.fresh) : Step.Same A C := by
+    (he : Multi (Ty.rel0 PBij.refl v.event) EA EC) (hf : A.state.fresh = C.state.fresh) {f0 : Nat} :
+    Step.Same f0 a0.state.nextId A C := by
   obtain ⟨⟨-, -, hp, -, hb, -⟩, hev, hout, ho, -, hown⟩ := h0
-  let R : Ren := (⟨PBij.refl, W⟩ : Ren).withWire a0.state.nextId a0.state.nextId (PBij.from a0.state.nextId)
-    fun h => ⟨h.1, h.2 ▸ h.1⟩
-  have hlow : ∀ {i j}, i < a0.state.nextId → j < a0.state.nextId → W.rel i j → R.wire.rel i j :=
-    fun hi hj h => .inl ⟨hi, hj, h⟩
   have hPC : ∀ q ∈ PC, a0.state.nextId ≤ q.id ∧ q.id < A.state.nextId := fun q hq => by
     obtain ⟨p, hp', hpq, -⟩ := hP.flip.mem_left hq
     rw [← hpq]; exact hPn p hp'
-  have hnew : Multi (Step.Pending.Rel R) PA PC :=
-    hP.imp_mem fun p hp' _ _ h => ⟨.inr ⟨(hPn p hp').1, h.1⟩, h.2⟩
+  have hnew : Multi (Step.Pending.Rel ⟨PBij.refl, PBij.refl⟩) PA PC := hP.imp_mem fun _ _ _ _ h => ⟨h.1, h.2⟩
   have hbelow : ∀ {xs : List (Step.Pending v.event)}, (∀ q ∈ xs, q.id < A.state.nextId) →
       ∀ q ∈ a0.state.pending ++ xs, q.id < A.state.nextId := fun hx q hq =>
     (List.mem_append.1 hq).elim (fun h => Nat.lt_of_lt_of_le (hb q h) hiA) (hx q)
@@ -130,15 +121,13 @@ theorem same_of_parts {a0 A C : Step.Acc v} {W : PBij} (h0 : Step.Acc.Rel ⟨PBi
       ∀ o ∈ a0.out ++ xs.map Step.Pending.line, o.id < A.state.nextId := fun hx o hq =>
     (List.mem_append.1 hq).elim (fun h => Nat.lt_of_lt_of_le (ho o h) hiA)
       fun h => by obtain ⟨q, hq', rfl⟩ := List.mem_map.1 h; exact hx q hq'
-  refine .base ⟨R, ⟨⟨hr, hm, ?_, hnA.trans hnC.symm, ?_, ?_⟩, ?_, ?_, ?_, ?_, ?_⟩, hf, hi, fun _ _ => rfl⟩
-  · rw [hpA, hpC]
-    exact (hp.imp_mem fun p hp' q hq h => ⟨hlow (hb p hp') (hb q hq) h.1, h.2⟩).append hnew
+  refine .base ⟨⟨PBij.refl, PBij.refl⟩, ⟨⟨hr, hm, ?_, hnA.trans hnC.symm, ?_, ?_⟩, ?_, ?_, ?_, ?_, ?_⟩, hf, hi, hiA,
+    fun _ _ => rfl, fun _ _ => rfl⟩
+  · rw [hpA, hpC]; exact hp.append hnew
   · rw [hpA]; exact hbelow fun q hq => (hPn q hq).2
   · rw [hpC, ← hi]; exact hbelow fun q hq => (hPC q hq).2
   · rw [heA, heC]; exact hev.append he
-  · rw [hoA, hoC]
-    exact (hout.imp_mem fun o ho' o' ho'' h => ⟨hlow (ho o ho') (ho o' ho'') h.1, h.2⟩).append
-      (hnew.map fun _ _ h => Step.Pending.rel_line h)
+  · rw [hoA, hoC]; exact hout.append (hnew.map fun _ _ h => Step.Pending.rel_line h)
   · rw [hoA]; exact hobelow fun q hq => (hPn q hq).2
   · rw [hoC, ← hi]; exact hobelow fun q hq => (hPC q hq).2
   · rw [hwA, hwC]; exact hown.append hO
@@ -336,16 +325,18 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       have hiC2 := writes_ids hwC2
       rw [hW2 psA2 hwA2, hW4 psC1 hwC1]
       simp only at hfa hfb hiA2 hiC1 hP1 hP2 ⊢
-      obtain ⟨W, h0⟩ := hsa PBij.refl fun _ _ => rfl
+      have h0 := hsa PBij.refl fun _ _ => rfl
       have hob := h0.2.2.2.1
       have hpb := hinv.below
       have hfix : ∀ {m k i : Nat}, i < a0.state.nextId → wireSwap a0.state.nextId m k i = i := fun h => by
         unfold wireSwap; split <;> (try split) <;> omega
-      refine .inl (same_of_parts h0 (rel0_of_eqFn v.records_data hrc hr2 hr4 hrecEq hrq)
+      refine .inl ?_
+      simp only [Diamond.Lift, pure, Except.pure]
+      refine (same_of_parts h0 (rel0_of_eqFn v.records_data hrc hr2 hr4 hrecEq hrq)
         (machines_of_eq v.machines hmc hm2 hm4 htabEq htq) (PA := psA1 ++ psA2)
         (PC := (psC2 ++ psC1).map fun p => { p with id := (wireSwap a0.state.nextId (a0.state.nextId + psC2.length)
           (a0.state.nextId + psC2.length + psC1.length)) p.id })
-        (OA := os1 ++ os2) (OC := os3 ++ os4) (EA := ev1 ++ ev2) (EC := ev3 ++ ev4) ?_ ?_ ?_ ?_ rfl rfl ?_ ?_ ?_ ?_
+        (OA := os1 ++ os2) (OC := os3 ++ os4) (EA := ev1 ++ ev2) (EC := ev3 ++ ev4) ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
         ?_ ?_ ((hO14.append hO23).perm_right List.perm_append_comm) ?_ ?_ ?_ ?_)
       · exact List.append_assoc _ _ _
       · simp only [Step.Acc.mapWire, List.append_assoc, List.map_append]
@@ -366,6 +357,8 @@ theorem pair_commutes {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
         rcases List.mem_append.1 hp with h | h
         · have := hiA1 p h; dsimp only at this ⊢; omega
         · have := hiA2 p h; dsimp only at this ⊢; omega
+      · rfl
+      · rfl
       · simp only [Step.Acc.mapWire]; omega
       · dsimp only; omega
       · simp [List.append_assoc]

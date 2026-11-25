@@ -35,6 +35,10 @@ theorem forall2_self_of {α β : Type} {r : α → β → Prop} {s : α → α �
   | _ :: _, _ :: _, ⟨hx, hxs⟩ => ⟨h _ _ hx, forall2_self_of h hxs⟩
   | [], _ :: _, h | _ :: _, [], h => h.elim
 
+theorem forall2_refl_of {α : Type} {r : α → α → Prop} : {xs : List α} → (∀ x ∈ xs, r x x) → Forall2 r xs xs
+  | [], _ => trivial
+  | _ :: _, h => ⟨h _ List.mem_cons_self, forall2_refl_of fun y hy => h y (List.mem_cons_of_mem _ hy)⟩
+
 theorem Multi.self_of {α β : Type} {r : α → β → Prop} {s : α → α → Prop} (h : ∀ a b, r a b → s a a)
     {xs : List α} {ys : List β} : Multi r xs ys → Multi s xs xs
   | ⟨_, hz, _⟩ => Multi.of_forall2 (forall2_self_of h hz)
@@ -120,6 +124,37 @@ theorem start_own_mem : (effs : List (Sender × EffectV v.event)) → (a : Acc v
       · exact .inl h1
       · rw [List.mem_singleton] at h1; subst h1; exact .inr ⟨rfl, snd, List.mem_cons_self⟩
 
+/-- Starting effects that each relate to themselves keeps a step in progress related to itself with every wire id
+kept: each request it writes relates to itself at its own id. -/
+theorem start_self {P : PBij} {a : Acc v} (ha : Acc.Rel ⟨P, PBij.refl⟩ a a) {effs : List (Sender × EffectV v.event)}
+    (he : ∀ x ∈ effs, Started.Rel P x x) {b : Acc v} (h : start a effs = .ok b) : Acc.Rel ⟨P, PBij.refl⟩ b b := by
+  have hd : ¬ ∃ x ∈ reqsOf effs, Undeclared v.declared x := fun ⟨x, hx, hu⟩ => by
+    have := start_undeclared effs ⟨x, (List.mem_filter.1 hx).1, hu⟩ a
+    rw [h] at this; exact this
+  obtain ⟨ps, hps⟩ := writes_of_declared v.declared (reqsOf effs) a.state.nextId
+    fun x hx => ⟨by simpa using (List.mem_filter.1 hx).2, fun hu => hd ⟨x, hx, hu⟩⟩
+  rw [start_requests a effs ps hps] at h
+  cases h
+  have hnew : ∀ p ∈ ps, Pending.Rel ⟨P, PBij.refl⟩ p p ∧ p.id < a.state.nextId + (reqsOf effs).length := by
+    intro p hp
+    obtain ⟨x, hx, r, o, hr, -, rfl⟩ := forall2_mem_right hps p hp
+    obtain ⟨hs, hrr⟩ := he x.1 (List.mem_filter.1 (List.fst_mem_of_mem_zipIdx hx)).1
+    rw [hr] at hrr
+    cases hrr with
+    | request hrr => exact ⟨⟨rfl, hs, rfl, hrr⟩, (List.mem_zipIdx hx).2.1⟩
+  obtain ⟨⟨hrec, hmach, hpend, hnow, hb, -⟩, hev, hout, ho, -, hown⟩ := ha
+  have hpb : ∀ p ∈ a.state.pending ++ ps, p.id < a.state.nextId + (reqsOf effs).length := fun p hp =>
+    (List.mem_append.1 hp).elim (fun h => Nat.lt_of_lt_of_le (hb p h) (Nat.le_add_right _ _)) fun h => (hnew p h).2
+  have hob : ∀ o ∈ a.out ++ ps.map Pending.line, o.id < a.state.nextId + (reqsOf effs).length := fun o hp =>
+    (List.mem_append.1 hp).elim (fun h => Nat.lt_of_lt_of_le (ho o h) (Nat.le_add_right _ _)) fun h => by
+      obtain ⟨p, hp', rfl⟩ := List.mem_map.1 h; exact (hnew p hp').2
+  refine ⟨⟨hrec, hmach, hpend.append (Multi.of_forall2 (forall2_refl_of fun p hp => (hnew p hp).1)), hnow, hpb, hpb⟩,
+    hev, hout.append (Multi.of_forall2 (forall2_refl_of fun o ho => by
+      obtain ⟨p, hp, rfl⟩ := List.mem_map.1 ho; exact Pending.rel_line (hnew p hp).1)), hob, hob,
+    hown.append (Multi.of_forall2 (forall2_refl_of fun x hx => ?_))⟩
+  obtain ⟨y, hy, rfl⟩ := List.mem_map.1 hx
+  exact (he y (List.mem_filter.1 hy).1).2
+
 theorem mem_foldl_dedup {α : Type} (eq : α → α → Bool) (x : α) : (xs acc : List α) →
     x ∈ xs.foldl (fun ks k => if ks.any (eq k) then ks else ks ++ [k]) acc → x ∈ acc ∨ x ∈ xs
   | [], _, h => .inl h
@@ -195,20 +230,12 @@ theorem react_self (hv : v.Equivariant) {s : State v}
       (ys := (.inl (v.apply.fn (s.records, ev, ()), s.now, ()), ev, ())) ⟨⟨hrec P hP, rfl, trivial⟩, hev P hP, trivial⟩
     exact ⟨.reaction _, forall2_self hl eff he⟩
 
-/-- Names below `n`: every renaming that keeps the counters below `n` relates the step to itself. -/
-def SelfAt (n : Nat) (a : Acc v) : Prop := ∀ P : PBij, P.Fixes n → ∃ W, Acc.Rel ⟨P, W⟩ a a
+/-- Names below `n`: every renaming that keeps the counters below `n`, and every wire id, relates the step to
+itself. -/
+def SelfAt (n : Nat) (a : Acc v) : Prop := ∀ P : PBij, P.Fixes n → Acc.Rel ⟨P, PBij.refl⟩ a a
 
 /-- A waiting own effect with names below `n`. -/
 def OwnAt (n : Nat) (x : EffectV v.event) : Prop := x.isRequest = false ∧ ∀ P : PBij, P.Fixes n → EffectV.Rel P x x
-
-theorem lifted_self {a b : Acc v} {P : PBij} {W : PBij} (h : Lifted ⟨P, W⟩ a a (.ok b) (.ok b)) :
-    ∃ W', Acc.Rel ⟨P, W'⟩ b b := by
-  rcases h with ⟨h, _⟩ | ⟨b1, b2, ⟨ctr, wire⟩, h1, h2, hc, hb, -⟩
-  · exact h.elim
-  · cases h1; cases h2
-    simp only at hc
-    subst hc
-    exact ⟨wire, hb⟩
 
 theorem applyEvents_self (hv : v.Equivariant) (n : Nat) :
     (evs : List v.event.den0) → (a : Acc v) → SelfAt n a → (∀ ev ∈ evs, ∀ P : PBij, P.Fixes n → Ty.rel0 P v.event ev ev) →
@@ -227,20 +254,18 @@ theorem applyEvents_self (hv : v.Equivariant) (n : Nat) :
       simp only [hs, bind, Except.bind] at h
       have hev1 : ∀ P : PBij, P.Fixes n → Ty.rel0 P v.event ev ev := hev ev List.mem_cons_self
       have h1 : SelfAt n a1 := fun P hP => by
-        obtain ⟨W, hA⟩ := ha P hP
-        have hr := react_rel T hv (R := ⟨P, W⟩) hA.1 (hev1 P hP)
+        have hA := ha P hP
+        have hr := react_rel T hv (R := ⟨P, PBij.refl⟩) hA.1 (hev1 P hP)
         obtain ⟨_, hevs, hout, ho, ho', hown⟩ := hA
-        have hl := start_rel (a := a2) (a' := a2) ⟨hr.1, hevs.append (Multi.cons (hev1 P hP) Multi.nil), hout, ho, ho',
-          hown⟩ hr.2
-        rw [hs] at hl
-        exact lifted_self hl
+        exact start_self (a := a2) ⟨hr.1, hevs.append (Multi.cons (hev1 P hP) Multi.nil), hout, ho, ho', hown⟩
+          (react_self T hv (s := a.state) (fun P hP => ⟨(ha P hP).1.1, (ha P hP).1.2.1⟩) hev1 · · P hP) hs
       have hown1 : ∀ x ∈ a1.own, x ∈ a.own ∨ OwnAt n x := by
         intro x hx
         rcases start_own_mem _ _ hs x hx with hx | ⟨hr, snd, hx⟩
         · exact .inl hx
         · refine .inr ⟨hr, fun P hP => ?_⟩
           have hS := react_self T hv (s := a.state) (fun P hP => by
-            obtain ⟨W, hA⟩ := ha P hP; exact ⟨hA.1.1, hA.1.2.1⟩) hev1 _ hx P hP
+            exact ⟨(ha P hP).1.1, (ha P hP).1.2.1⟩) hev1 _ hx P hP
           exact hS.2
       obtain ⟨hb, hbo⟩ := applyEvents_self hv n evs a1 h1 (fun e he => hev e (List.mem_cons_of_mem _ he)) b h
       refine ⟨hb, fun x hx => ?_⟩
@@ -253,8 +278,8 @@ theorem SelfAt.mono {n m : Nat} {a : Acc v} (h : SelfAt n a) (hnm : n ≤ m) : S
 
 theorem SelfAt.fresh {n k : Nat} {a : Acc v} (h : SelfAt n a) :
     SelfAt n { a with state := { a.state with fresh := k } } := fun P hP => by
-  obtain ⟨W, hst, hevs, hout, ho, ho', hown⟩ := h P hP
-  exact ⟨W, hst, hevs, hout, ho, ho', hown⟩
+  obtain ⟨hst, hevs, hout, ho, ho', hown⟩ := h P hP
+  exact ⟨hst, hevs, hout, ho, ho', hown⟩
 
 theorem runCommand_self (hv : v.Equivariant) {a : Acc v}
     (ha : SelfAt (a.state.fresh + 1) a) {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands)
@@ -268,7 +293,7 @@ theorem runCommand_self (hv : v.Equivariant) {a : Acc v}
   have hdec : ∀ P : PBij, P.Fixes (a.state.fresh + 1) →
       Ty.rel0 P (Ty.result (.list v.event) x.rejection) (x.decide.fn (ctx a.state a.state.records c i, ()))
         (x.decide.fn (ctx a.state a.state.records c i, ())) := fun P hP => by
-    obtain ⟨W, hA⟩ := ha P hP
+    have hA := ha P hP
     exact ((hv.self P).commands x hx).decide _ _
       ⟨⟨hA.1.1, hi P hP, hc P hP, rfl, hP _ (Nat.lt_succ_self _), trivial⟩, trivial⟩
   have ha1 : SelfAt (a.state.fresh + 1) { a with state := { a.state with fresh := a.state.fresh + 1 } } := ha.fresh
@@ -329,7 +354,7 @@ theorem runQuery_self (hv : v.Equivariant) {a : Acc v}
     have hans : ∀ ev ∈ (show List v.event.den0 from f.fn (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())),
         ∀ P : PBij,
         P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.event ev ev := fun ev hev P hP => by
-      obtain ⟨W, hA⟩ := ha P hP
+      have hA := ha P hP
       exact forall2_self (hf P hP (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ())
         (x.resolve.fn (queryCtx a.state a.state.records c i, ()), ()) ⟨((hv.self P).queries x hx).resolve _ _
         ⟨⟨hA.1.1, hi P hP, hc P hP, rfl, trivial⟩, trivial⟩, trivial⟩) ev hev
@@ -506,18 +531,14 @@ def Supp (a : Acc v) : Prop := SelfAt a.state.fresh { a with own := [] } ∧ ∀
 theorem OwnAt.mono {n m : Nat} {x : EffectV v.event} (h : OwnAt n x) (hnm : n ≤ m) : OwnAt m x :=
   ⟨h.1, fun P hP => h.2 P (hP.mono hnm)⟩
 
-theorem forall2_refl_of {α : Type} {r : α → α → Prop} : {xs : List α} → (∀ x ∈ xs, r x x) → Forall2 r xs xs
-  | [], _ => trivial
-  | _ :: _, h => ⟨h _ List.mem_cons_self, forall2_refl_of fun y hy => h y (List.mem_cons_of_mem _ hy)⟩
-
 theorem SelfAt.own {n : Nat} {a : Acc v} (h : SelfAt n { a with own := [] }) {xs : List (EffectV v.event)}
     (hxs : ∀ x ∈ xs, OwnAt n x) : SelfAt n { a with own := xs } := fun P hP => by
-  obtain ⟨W, hst, hevs, hout, ho, ho', -⟩ := h P hP
-  exact ⟨W, hst, hevs, hout, ho, ho', Multi.of_forall2 (forall2_refl_of fun x hx => (hxs x hx).2 P hP)⟩
+  obtain ⟨hst, hevs, hout, ho, ho', -⟩ := h P hP
+  exact ⟨hst, hevs, hout, ho, ho', Multi.of_forall2 (forall2_refl_of fun x hx => (hxs x hx).2 P hP)⟩
 
 theorem SelfAt.drop {n : Nat} {a : Acc v} (h : SelfAt n a) : SelfAt n { a with own := [] } := fun P hP => by
-  obtain ⟨W, hst, hevs, hout, ho, ho', -⟩ := h P hP
-  exact ⟨W, hst, hevs, hout, ho, ho', Multi.nil⟩
+  obtain ⟨hst, hevs, hout, ho, ho', -⟩ := h P hP
+  exact ⟨hst, hevs, hout, ho, ho', Multi.nil⟩
 
 theorem mem_eraseIdx {α : Type} {x : α} : {l : List α} → {i : Nat} → x ∈ l.eraseIdx i → x ∈ l
   | [], _, h => by simp at h
