@@ -14,6 +14,7 @@ import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.CheckedState
+import Tazuna.Smt.NoGap
 import Tazuna.Smt.StepSites
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
@@ -60,8 +61,8 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.step_sites,
     -- T3: a model's values decode to a state a run reaches, and the well-formedness holds of decoded values.
     ``Tazuna.Smt.decode_run, ``Tazuna.Smt.wf_decode,
-    -- What check hands prove: `Checked` of every service from a check with no finding.
-    ``Tazuna.Smt.check_ok,
+    -- What check hands prove: `Checked` of every service and a named, declared handle from a check with no finding.
+    ``Tazuna.Smt.check_ok, ``Tazuna.Smt.handles_ok,
     -- SMT-LIB text: printing then parsing gives the terms and values back, and shared definitions keep the meaning.
     ``Tazuna.Smt.Term.parse_print, ``Tazuna.Smt.Val.parse_print, ``Tazuna.Smt.shared_agrees,
     ``Tazuna.Smt.shared_conservative,
@@ -71,6 +72,8 @@ elab "#check_tazuna_reach" : command => do
     -- In a checked service's layout, a state within the slots embeds, so a script without a model has no state within
     -- the bounds, and the state's well-formedness term is always built.
     ``Tazuna.Smt.embedState_ofService, ``Tazuna.Smt.wf_ofService,
+    -- In each service's layout, every global's code meets no layout gap: refusals are the spec's, never the builder's.
+    ``Tazuna.Smt.globals_ofService,
     -- For U10, which asserts well-formedness, the wire-id invariant and the create bounds: each loses no model.
     ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff]
   let mut used : NameSet := {}

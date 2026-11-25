@@ -285,15 +285,16 @@ end Tazuna.Smt
 namespace Tazuna.Ir
 
 mutual
-/-- Whether the type has an SMT sort: data with no function or type variable inside, an effect of such an event type,
-or a fresh-id source. The program's types include those of the spec's structure (lists of declarations, services);
+/-- Whether the type has an SMT sort: data with no function or type variable inside and ADT 0 only as Bool, an effect
+of such an event type, or a fresh-id source. The program's types include those of the spec's structure (lists of declarations, services);
 those values are never coded, so they get no datatype. -/
 def Ty.sorted : Ty → Bool
   | .int | .str | .date | .id => true
   | .param _ | .fn .. => false
   | .list t | .bag t => Ty.sorted t
   | .tuple ts => Ty.sorteds ts
-  | .adt _ _ vs => Ty.sortedss vs
+  | .adt 0 _ vs => (Smt.boolVs? vs).isSome
+  | .adt (_ + 1) _ vs => Ty.sortedss vs
   | .table k v => Ty.sorted k && Ty.sorted v
   | .dsl .effect [e] => Ty.sorted e
   | .dsl k _ => k == .fresh
@@ -341,7 +342,7 @@ namespace Tazuna.Smt
 open Tazuna.Ir
 
 /-- The layout lacks the datatype of `t`: a gap when `t` has a sort, else the limit that it has none. -/
-def lacks (t : Ty) : Refusal := if t.sortable then .layout (.type t) else .limit (.unsortable t)
+def lacks (t : Ty) : Refusal := if t.sorted then .layout (.type t) else .limit (.unsortable t)
 
 /-- The layout lacks the kind of effect with these fields: a gap when they are data with sorts, else the limit. -/
 def lacksKind (name : String) (fields : List Ty) : Refusal :=
@@ -472,16 +473,21 @@ end
 
 end
 
+/-- A fresh-id source's term of its counter's sort; no other structure type has one. -/
+def freshDefault : Dsl → List Ty → Option Term
+  | .fresh, _ => some (.int 0)
+  | _, _ => none
+
 /-- A value of the effect datatype of the event type `e`: its first kind with a term of each field's sort, or the
 datatype's one constructor when no kind exists. -/
 def effectDefault (e : Ty) : Option Term := do
   let (d, _) ← L.find? (.dsl .effect [e])
   match (L.effectFields e).head? with
   | none => pure (.ctor d 0 [])
-  | some fs => pure (.ctor d 0 (← fs.mapM (defaultWith L fun _ _ => none)))
+  | some fs => pure (.ctor d 0 (← fs.mapM (defaultWith L freshDefault)))
 
 /-- A term of the type's sort, for the items of free slots, which no value reads. An effect has one too, any value
-of its datatype, so a list of effects has free slots. -/
+of its datatype, so a list of effects has free slots; a fresh-id source has its counter's, an Int. -/
 def defaultT : Ty → Option Term :=
   defaultWith L fun
     | .effect, [e] => effectDefault L e

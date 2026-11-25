@@ -40,7 +40,7 @@ def loadSpec (root path : String) : IO (Except UInt32 Smt.CheckedSpec) := do
       match h : Ir.SpecV.illegal p.types (p.eval ()) p.defs.handles captures with
       | [] =>
         if htys : (p.eval ()).services.all (·.stateTys p.defs.sites) = true then
-          return .ok ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) (by simpa using htys) h⟩
+          return .ok ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) (by simpa using htys) h, Smt.handles_ok h⟩
         else
           IO.println (invalidIrLine ⟨none, none,
             "a state, event or caller type has a type variable, an ADT 0 that is not Bool or a table with no plain key"⟩).compress

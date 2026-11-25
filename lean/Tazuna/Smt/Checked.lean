@@ -65,11 +65,18 @@ theorem Checked.machines {P : List AnySite} {T : List TypeDecl} {v : ServiceV} (
 theorem Checked.reactions {P : List AnySite} {T : List TypeDecl} {v : ServiceV} (hk : Checked P T v) :
     ∀ x ∈ v.reactions, x.Reach P := hk.reach.2
 
+/-- The handle has a literal name, and an external one is declared in each service's `declared`, as check's
+unknownHandle rule compares them. -/
+def _root_.Tazuna.Ir.HandleSite.Named (s : SpecV) (h : HandleSite) : Prop :=
+  ∃ n, h.name = some n ∧ (!h.kind.startsWith "external" || s.services.all fun v =>
+    v.declared.any fun (_, d) => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome) = true
+
 /-- A spec that passed check: its program, and what check established of each service of the spec the program's root
-evaluates to. -/
+evaluates to and of each handle the program makes. -/
 structure CheckedSpec where
   program : Program (.fn [] Ty.spec)
   checked : ∀ v ∈ (program.eval ()).services, Checked program.defs.sites program.types v
+  handles : ∀ h ∈ program.defs.handles, h.Named (program.eval ())
 
 abbrev CheckedSpec.T (c : CheckedSpec) : List TypeDecl := c.program.types
 abbrev CheckedSpec.P (c : CheckedSpec) : List AnySite := c.program.defs.sites
@@ -121,5 +128,21 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {s : SpecV} {handles : L
       ⟨(v.bounds.creates[k], v.bounds.creates[k].reads (tableProbes T v.records)),
         List.mem_iff_getElem.2 ⟨k, by simpa using hk, by simp⟩, rfl⟩)))
     omega
+
+/-- A check with no finding names every handle by a literal and finds every external one declared. -/
+theorem handles_ok {T : List TypeDecl} {s : SpecV} {handles : List HandleSite} {captures : List (SiteId × List Ty)}
+    (h : SpecV.illegal T s handles captures = []) : ∀ x ∈ handles, x.Named s := by
+  intro x hx
+  simp only [SpecV.illegal] at h
+  have hu := List.filterMap_eq_nil_iff.1 (nilR (nilL h)) x hx
+  cases hn : x.name with
+  | none => simp [hn] at hu
+  | some n =>
+    refine ⟨n, hn, ?_⟩
+    simp only [hn] at hu
+    cases hb : (!x.kind.startsWith "external" || s.services.all fun v =>
+      v.declared.any fun (_, d) => d.kind == x.kind && d.name == n && (Ty.sames d.types x.types).isSome)
+    · simp only [hb] at hu; cases hu
+    · rfl
 
 end Tazuna.Smt

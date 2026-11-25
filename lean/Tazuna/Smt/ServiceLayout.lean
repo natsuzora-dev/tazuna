@@ -47,11 +47,6 @@ def ownKeys (es : List Ty) (P : List AnySite) (h : HandleSite) : List OwnKey :=
     (sitesOf P (Ty.fn [o] (.list e))).map fun s => .query e n c i o ⟨s.2.site, s.1⟩
   | _, _, _ => []
 
-/-- The list without later items that are `same` as an earlier one. -/
-def dedupBy {α : Type} (same : α → α → Bool) : List α → List α
-  | [] => []
-  | x :: xs => x :: (dedupBy same xs).filter (!same x ·)
-
 /-- The types a step of the service codes beyond its program's expressions: the state's, the input's, what
 `StepEnv` looks up, and the tuple of each sender's key, which a start writes whether or not a request has a shape. -/
 def stepTys (v : ServiceV) (P : List AnySite) : List Ty :=
@@ -77,11 +72,11 @@ def eventTys (p : ProgramParts) (v : ServiceV) : List Ty :=
     (v.event :: p.sites.filterMap fun ⟨_, t, _⟩ => match t with | .fn [_] (.list e) => some e | _ => none)
 
 /-- The kinds of effect of the service's scripts, from the program it came from, before any datatype: those whose
-fields have sorts, so every datatype of the layout has one. -/
+fields are data with sorts, so every datatype of the layout has one. -/
 def Layout.kindsOf (p : ProgramParts) (v : ServiceV) : Layout :=
   { effects := dedupBy EffectKey.same (((eventTys p v).flatMap fun e =>
-      (requestShapesAt v.declared e p.sites).map (·.key)).filter (Ty.sorteds ·.fields)),
-    owns := dedupBy OwnKey.same ((p.handles.flatMap (ownKeys (eventTys p v) p.sites)).filter (Ty.sorteds ·.fields)) }
+      (requestShapesAt v.declared e p.sites).map (·.key)).filter fun k => Ty.sorteds k.fields && (Ty.tuple k.fields).isData),
+    owns := dedupBy OwnKey.same ((p.handles.flatMap (ownKeys (eventTys p v) p.sites)).filter fun k => Ty.sorteds k.fields && (Ty.tuple k.fields).isData) }
 
 /-- The layout of the service's scripts, from the program it came from: the datatypes of the types with sorts. -/
 def Layout.ofParts (p : ProgramParts) (v : ServiceV) : Layout :=
