@@ -11,8 +11,17 @@ def main (args : List String) : IO UInt32 := do
   | ["test", root, "--ir", path] => Tazuna.Cli.test root path false
   | ["test", root, "--update", "--ir", path] => Tazuna.Cli.test root path true
   | ["verify", root, dir, "--ir", path] => Tazuna.Cli.verify root dir path
-  | ["prove", root, "--ir", path] => Tazuna.Cli.prove root path none
-  | ["prove", root, "--only", prefix_, "--ir", path] => Tazuna.Cli.prove root path (some prefix_)
-  | _ =>
-    IO.eprintln "usage: tazuna-engine [check <root> | test <root> [--update] | verify <root> <traces-dir> | prove <root> [--only <prefix>]] --ir <ir.json>"
+  | "prove" :: root :: rest =>
+    match Tazuna.Cli.proveArgs rest with
+    | some (opts, path) =>
+      try Tazuna.Cli.prove root path opts
+      catch e =>
+        IO.eprintln s!"tazuna-engine: internal error: {e}"
+        return 4
+    | none => usage
+  | _ => usage
+where
+  usage : IO UInt32 := do
+    IO.eprintln ("usage: tazuna-engine [check <root> | test <root> [--update] | verify <root> <traces-dir> | " ++
+      "prove <root> [--only <prefix>] [--jobs <n>]] --ir <ir.json>")
     return 3

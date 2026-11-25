@@ -116,8 +116,15 @@ inductive Report where
   | undecided (kind : Kind) (service step : String) (command? : Option String) (target : Option Target)
       (fields : List (String × Json))
 
-structure ProveResult where
-  reports : List Report := []
+/-- A line of the report in its place: known at once, or the answer to a question. -/
+inductive Item where
+  | ready (r : Report)
+  | ask (o : Obligation (Except String Report))
+  /-- A question `--only` leaves out: it prints nothing, and its target is not proved. -/
+  | skipped (service : String) (command? : Option String) (target : Option Target)
+
+structure ServiceItems where
+  items : List Item := []
   /-- An engine bug: a state its proofs rule out. -/
   internal : Option String := none
 
@@ -218,36 +225,56 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v c.P)) (q : Question v 
 
 -- The bound question has no target, and its name says so.
 set_option linter.tazuna.silentDefault false in
-/-- Every report of the service: the base case, then each input kind's questions in order. -/
-def serviceReports (only : String → Bool) : IO ProveResult := do
+/-- Every line of the service in order: the base case, then each input kind's questions. -/
+def serviceItems (only : String → Bool) : ServiceItems := Id.run do
   let L := Layout.ofService c.program.defs v
   let .ok senv := StepEnv.of L (shapes v c.P)
     | return { internal := some s!"service {v.name}: no step environment in its layout" }
   let b := 5 + v.machines.length
-  let mut reports : List Report := []
+  let mut items : List Item := []
   let mut targets : List Target := []
   for inp in stepInputs v (shapes v c.P) senv.nT b do
     let step := inp.text
     match questions L c.T c.P v senv inp with
     | .error r =>
       match refusalLine c.T r with
-      | some (k, fields) => reports := reports ++ [.undecided k v.name step inp.command? none fields]
+      | some (k, fields) => items := items ++ [.ready (.undecided k v.name step inp.command? none fields)]
       | none => return { internal := some s!"service {v.name}, {step}: the encoding refused: {reprStr r}" }
     | .ok (gs, qs) =>
       for g in gs do
         unless targets.contains g do targets := targets ++ [g]
       for q in qs do
         let name := v.name ++ "/" ++ ((q.target.map Target.text).getD "bounds") ++ "/" ++ step
-        unless only name do continue
-        match answerReport c v L senv q (← solver.run q.script) with
-        | .ok rep => reports := reports ++ [rep]
-        | .error m => return { internal := some m }
-  let init := (initReports c v targets).filter fun
-    | .unsat _ _ _ (some g) | .violated _ _ g _ => only (v.name ++ "/" ++ g.text ++ "/init")
-    | _ => false
-  return { reports := init ++ reports }
+        items := items ++ [if only name then .ask ⟨q.script, answerReport c v L senv q⟩
+          else .skipped v.name inp.command? q.target]
+  let init := (initReports c v targets).map fun r => match r with
+    | .unsat _ _ _ (some g) | .violated _ _ g _ =>
+      if only (v.name ++ "/" ++ g.text ++ "/init") then Item.ready r else .skipped v.name none (some g)
+    | r => .ready r
+  return { items := init ++ items }
 
 end
+
+/-- `f` at every item, at most `jobs` at a time, results in order. -/
+def runAll {α β : Type} [Inhabited β] (jobs : Nat) (f : α → IO β) (xs : Array α) : IO (Array β) := do
+  let next ← IO.mkRef 0
+  let results ← IO.mkRef (Array.replicate xs.size (none : Option β))
+  let worker : IO Unit := do
+    repeat
+      let i ← next.modifyGet fun i => (i, i + 1)
+      if h : i < xs.size then
+        let r ← f xs[i]
+        results.modify (·.set! i (some r))
+      else break
+  let tasks ← (List.range (max jobs 1)).mapM fun _ => IO.asTask worker (prio := .dedicated)
+  for t in tasks do
+    match ← IO.wait t with
+    | .ok () => pure ()
+    | .error e => throw e
+  return (← results.get).map (·.get!)
+
+def Report.service : Report → String
+  | .unsat s .. | .violated s .. | .boundReached s .. | .undecided _ s .. => s
 
 def targetOf : Report → Option Target
   | .unsat _ _ _ g | .undecided _ _ _ _ g _ => g
@@ -279,31 +306,77 @@ def lineOf (unproved : String → List Target) : Report → Kind × List (String
     (k, [("service", Json.str s)] ++ (g.map fun g => ("target", Json.str g.text)).toList ++
       [("step", Json.str step)] ++ fields)
 
-def prove (root path : String) (only : Option String) : IO UInt32 := do
+/-- The options of `prove`: the prefix `--only` keeps questions by, how many solvers run at once, and the cache
+directory. -/
+structure ProveOptions where
+  only : Option String := none
+  jobs : Nat := 4
+  cache : System.FilePath
+
+def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
   match ← loadSpec root path with
   | .error code => return code
   | .ok c =>
     let solver : Solver := {}
-    let keep (name : String) : Bool := match only with
+    let keep (name : String) : Bool := match opts.only with
       | some p => p.isPrefixOf name
       | none => true
-    let mut reports : List Report := []
+    let mut items : List Item := []
     for v in c.spec.services do
-      let r ← serviceReports solver c v keep
+      let r := serviceItems c v keep
       if let some m := r.internal then
         IO.eprintln s!"tazuna-engine: internal error: {m}"
         return 4
-      reports := reports ++ r.reports
-    let targets := reports.filterMap fun r => (targetOf r).map fun g => (r, g)
+      items := items ++ r.items
+    let asks := (items.filterMap fun | .ask o => some o | _ => none).toArray
+    let cache := opts.cache / s!"{hash (← solver.version)}"
+    let answers : Array (Except String Report) ← runAll opts.jobs
+      (fun o => do pure (o.read (← solver.runCached cache o.script))) asks
+    let mut reports : List Report := []
+    let mut skipped : List (String × Option String × Option Target) := []
+    let mut k := 0
+    for it in items do
+      match it with
+      | .ready r => reports := reports ++ [r]
+      | .skipped s cmd g => skipped := skipped ++ [(s, cmd, g)]
+      | .ask _ =>
+        match (answers[k]? : Option (Except String Report)) with
+        | some (.ok r) => reports := reports ++ [r]
+        | some (.error m) =>
+          IO.eprintln s!"tazuna-engine: internal error: {m}"
+          return 4
+        | none => pure ()
+        k := k + 1
+    let targets := (items.filterMap fun
+      | .ready r => (targetOf r).map (r.service, ·)
+      | .skipped s _ g => g.map (s, ·)
+      | .ask _ => none) ++ reports.filterMap fun r => (targetOf r).map (r.service, ·)
+    let skips (s : String) (g : Target) : Bool := skipped.any fun (s', cmd, g') => s' == s && match g', g with
+      | some g', g => g' == g
+      | none, .ensures c _ => cmd == some c
+      | none, .invariant .. => true
     let unproved (s : String) : List Target :=
-      (targets.filterMap fun (r, g) => match r with
-        | .unsat s' .. | .violated s' .. | .undecided _ s' .. => if s' == s && reports.any (blocks s g) then some g else none
-        | .boundReached .. => none).foldl (fun acc g => if acc.contains g then acc else acc ++ [g]) []
+      (targets.filterMap fun (s', g) => if s' == s && (reports.any (blocks s g) || skips s g) then some g else none).foldl
+        (fun acc g => if acc.contains g then acc else acc ++ [g]) []
     for r in reports do
-      let (k, fields) := lineOf unproved r
-      printLine k fields
+      let (kind, fields) := lineOf unproved r
+      printLine kind fields
     if reports.any fun | .violated .. => true | _ => false then return 1
     if reports.any fun | .boundReached .. | .undecided .. => true | _ => false then return 2
     return 0
+
+-- An IR path without a directory part is in the working directory.
+set_option linter.tazuna.silentDefault false in
+/-- `prove`'s arguments after the root: `--only <prefix>` and `--jobs <n>` in any order, then `--ir <path>`. The
+cache lives beside the IR, in the user's build directory. -/
+def proveArgs : List String → Option (ProveOptions × String) :=
+  go none 4
+where
+  go (only : Option String) (jobs : Nat) : List String → Option (ProveOptions × String)
+    | ["--ir", path] =>
+      some ({ only, jobs, cache := (System.FilePath.mk path).parent.getD "." / "prove-cache" }, path)
+    | "--only" :: p :: rest => go (some p) jobs rest
+    | "--jobs" :: n :: rest => n.toNat?.bind fun j => if j = 0 then none else go only j rest
+    | _ => none
 
 end Tazuna.Cli
