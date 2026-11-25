@@ -115,10 +115,10 @@ def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (senv : Step
   | [], records, xs, n, q => pure (⟨records, xs, n, [], [], q⟩, tt)
   | (f, ys) :: S, records, xs, n, q => do
     let ev := Term.share ys[0]
-    let rc ← Code.ofTermE v.records records
-    let ec ← Code.ofTermE v.event ev
+    let rc ← Code.ofDataE v.records records
+    let ec ← Code.ofDataE v.event ev
     let (r', ca) ← apply (rc, ec, ())
-    let rt ← Code.termE v.records r'
+    let rt ← Code.dataTermE v.records r'
     let rt := Term.share rt
     let (outs, cm) ← encodeMachines L v.machines xs rt now ev
     let (news, nT, oS, qT) ← encodeStarts L T shs v.declared senv v.machines (outs.map (·.starts)) n q

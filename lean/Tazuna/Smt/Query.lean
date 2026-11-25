@@ -86,7 +86,7 @@ def encodeQuery {r c : Ty} {v : ServiceV} (q : QueryV r c) (qc : QueryCode q) (c
     (S : SymState v) (caller input : Term) : Except Refusal (QueryOut × Term) := do
   let (a, c1) ← encodeAdmit L qc.accepts callers S.records S.now S.fresh caller input
   let (o, c2) ← qc.resolve (a.ctx, ())
-  let ot ← Code.termE q.output o
+  let ot ← Code.dataTermE q.output o
   pure (⟨a.callerOk, a.rules, ot⟩, .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) c2 tt)) tt)
 
 end

@@ -40,10 +40,10 @@ def encodeReactions (shs : List (PendingShape e)) (ds : List (String × Declared
   | [], _, _, _, n, q => pure ([], n, [], q, tt)
   | x :: xs, records, now, ev, n, q => do
     let (rc, c0) ← x.react.code L
-    let cx ← Code.ofTermE _ (← reactionCtxT (r := r) L records now)
-    let evc ← Code.ofTermE e ev
+    let cx ← Code.ofDataE _ (← reactionCtxT (r := r) L records now)
+    let evc ← Code.ofDataE e ev
     let (l, c1) ← rc (cx, evc, ())
-    let lt ← Code.termE _ l
+    let lt ← Code.dataTermE _ l
     let (d, nl, dt) ← collD L (.list (.dsl .effect [e])) [.dsl .effect [e]]
     let (dk, _) ← L.findE (.tuple [])
     let js ← shapeIdxs shs ds ⟨[], .reaction x.name⟩ (L.effectsOf e)

@@ -85,11 +85,11 @@ def fireAt (m : MachineV r e) (after : Code (Ty.fn [Ty.machineCtx m.key m.state 
     let les := So.map fun s => Term.or (.not (hitT dent dp (.sel de 0 1 s.entry) d)) (leT L T m.key key s.key)
     let fires := Term.share (.and (.not done) (.and (hitT dent dp tm d) (allSlotT (So.map InstSlot.slot) les)))
     let tg := targetT dent dp tm
-    let nctx ← Code.ofTermE _ (← instCtxT L m key tg records now)
+    let nctx ← Code.ofDataE _ (← instCtxT L m key tg records now)
     let (a, c) ← after (nctx, ())
-    let at_ ← Code.termE _ a
+    let at_ ← Code.dataTermE _ a
     let (x, cx) ← fx (nctx, ())
-    let xt ← Code.termE _ x
+    let xt ← Code.dataTermE _ x
     pure (.ite fires (.ctor de 0 [tg, ← timerT L m now at_]) entry, .ite fires xt noneT, .ite fires (andT c cx) tt)
 
 /-- What a firing round encodes on one machine: the new instance table, whether some slot has the deadline, and per

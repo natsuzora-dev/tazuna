@@ -40,6 +40,9 @@ deriving Repr
 
 /-- A case the program's types rule out but the IR's do not. -/
 inductive Unexpected where
+  /-- A value of a type the step itself codes (the state, an input, a context, a captured value) is a function: check
+  and the loader keep functions out of those types. -/
+  | function (t : Ty)
   /-- ADT 0, which every program's type table declares as Bool, with other variants. -/
   | adtZero
   | emptyCase
@@ -351,6 +354,12 @@ abbrev Code.termE (t : Ty) (c : Code t) : Except Refusal Term := need (.limit (.
 
 /-- The code of a term at the type `t`, refused when `t`'s values are functions or handles. -/
 abbrev Code.ofTermE (t : Ty) (x : Term) : Except Refusal (Code t) := need (.limit (.function t)) (Code.ofTerm? t x)
+
+/-- The term of a code at a type the step itself codes, which holds no function. -/
+abbrev Code.dataTermE (t : Ty) (c : Code t) : Except Refusal Term := need (.unexpected (.function t)) (Code.term? t c)
+
+/-- The code of a term at a type the step itself codes, which holds no function. -/
+abbrev Code.ofDataE (t : Ty) (x : Term) : Except Refusal (Code t) := need (.unexpected (.function t)) (Code.ofTerm? t x)
 
 mutual
 /-- Whether the value coded by `s` matches the pattern, as a Bool term, and the codes of the variables it binds. -/

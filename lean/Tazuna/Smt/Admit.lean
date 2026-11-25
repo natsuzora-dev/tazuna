@@ -37,13 +37,13 @@ structure AdmitOut (r i c : Ty) where
 terms of the records, the time, the fresh counter, the caller and the input. -/
 def encodeAdmit {r i c : Ty} (accepts : Code (Ty.fn [i] Ty.rules)) (callers : List Term)
     (records now fresh caller input : Term) : Except Refusal (AdmitOut r i c × Term) := do
-  let cc ← Code.ofTermE c caller
-  let eqs ← callers.mapM fun k => do eqCode L c cc (← Code.ofTermE c k)
-  let ic ← Code.ofTermE i input
+  let cc ← Code.ofDataE c caller
+  let eqs ← callers.mapM fun k => do eqCode L c cc (← Code.ofDataE c k)
+  let ic ← Code.ofDataE i input
   let (rs, c1) ← accepts (ic, ())
   let rules ← ruleTerms L rs
   let ctx ← adtCtor L 5 [r, i, c] [[r, i, c, .int, .dsl .fresh []]] 0 [records, input, caller, now, fresh]
-  let cx ← Code.ofTermE (Ty.ctx r i c) (Term.share ctx)
+  let cx ← Code.ofDataE (Ty.ctx r i c) (Term.share ctx)
   pure (⟨anyT eqs, rules, cx⟩, c1)
 
 end
@@ -84,7 +84,7 @@ theorem toBool_allT_rules (rules : List (Term × Term)) :
 theorem callers_any {c : Ty} (hc : c.isData = true) {caller : c.den0} {cc : Code c}
     (hcc : Smt.Rel M L c (Ty.up c hc caller) cc) : (callers : List c.den0) → (ks : List Term) →
     callerTerms L hc callers = some ks → (eqs : List Term) →
-    ks.mapM (fun k => do eqCode L c cc (← Code.ofTermE c k)) = .ok eqs →
+    ks.mapM (fun k => do eqCode L c cc (← Code.ofDataE c k)) = .ok eqs →
     (anyT eqs).denote M = .bool (callers.any ((Ty.semWith Dsl.base c).2 caller))
   | [], ks, hk, eqs, he => by
     simp only [callerTerms, List.mapM_nil, Option.pure_def, Option.some.injEq] at hk; subst hk

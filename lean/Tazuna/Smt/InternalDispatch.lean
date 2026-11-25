@@ -114,7 +114,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     let (cc, cx) ← CommandCode.of L x
     let ks ← need (lacks v.caller) (callerTerms L x.data.caller x.callers)
     let (da, _) ← L.findE (.tuple Γ)
-    let σ ← need (.limit (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
+    let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
     let (o, c) ← encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
     let fault := Term.or (.not o.callerOk)
       (.or (.not (allT (o.rules.map (·.2)))) (.and o.decided.ok (.not (allT (o.decided.ensures.map (·.2))))))
@@ -124,7 +124,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     let (qc, cq) ← QueryCode.of L x
     let ks ← need (lacks v.caller) (callerTerms L x.data.caller x.callers)
     let (da, _) ← L.findE (.tuple Γ)
-    let σ ← need (.limit (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
+    let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
     let (o, c) ← encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
     pure ⟨⟨.query x.name o, ⟨.or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))), o.answered, fresh⟩⟩, c, cq⟩
 
