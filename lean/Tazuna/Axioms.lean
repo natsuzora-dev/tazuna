@@ -56,7 +56,7 @@ elab "#check_tazuna_axioms" : command => do
       ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent,
       ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete, ``Tazuna.Smt.pairs_sound,
       ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within, ``Tazuna.Smt.timers_lines,
-      ``Tazuna.Smt.run_lines, ``Tazuna.Smt.run_within,
+      ``Tazuna.Smt.run_lines, ``Tazuna.Smt.run_within, ``Tazuna.Smt.begins_coded, ``Tazuna.Smt.begins_coded_within,
       ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.back_sorts,
       ``Tazuna.Ir.Step.timerForward_of_noTimer] do
     unless env.contains n do throwError "{n} is missing"
@@ -125,6 +125,9 @@ elab "#check_tazuna_reach" : command => do
     -- The same for runs: from the initial state on valid inputs, every cascade a step starts keeps what a pair question
     -- assumes of its state, so the pair and timer lines speak for every cascade and clock line of the run.
     ``Tazuna.Smt.run_lines, ``Tazuna.Smt.run_within,
+    -- A cascade starts with own effects a script can hold wherever the step that starts it is within the slots and its
+    -- step line reads proved, or the step stays within the slots: the step's encoding codes each effect it queues.
+    ``Tazuna.Smt.begins_coded, ``Tazuna.Smt.begins_coded_within,
     -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
     -- forward; unsat answers mean no context within the slots has one.
     ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound,

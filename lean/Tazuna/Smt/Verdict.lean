@@ -540,6 +540,51 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
 end
 
 section
+variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
+
+/-- What an input kind's bound question says where it has no model: wherever the symbolic state decodes to a state of
+the right shape whose invariants hold, in the case the questions ask about, the step's codes, the cascade's codes and
+the step's condition hold, so the step stays within the slots. -/
+theorem bound_cond {P : List AnySite} (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
+    {gs : List Target} {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
+    {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
+    (hinv : Step.Inv P s) (hheld : Step.invariants s = []) (hord : ∀ m ∈ v.machines, m.key.ordered T = true)
+    (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
+    (hun : ∀ q ∈ qs, q.target = none → ∃ a ∈ q.script.asserts, ¬ Holds M a) :
+    ∃ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t ∧ Holds M t.codes ∧ Holds M t.sites ∧
+      Holds M t.cond := by
+  obtain ⟨t, ht, hq⟩ := bind_ok.1 hq
+  obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
+  obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
+  obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
+  obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
+  obtain ⟨⟨checks, ck⟩, hchecks, hq⟩ := bind_ok.1 hq
+  obtain ⟨vars, -, hq⟩ := bind_ok.1 hq
+  obtain ⟨dts, -, hq⟩ := bind_ok.1 hq
+  cases pure_ok.1 hq
+  have hR := decode_state hS
+  obtain ⟨a, ha, hna⟩ := hun _ (List.mem_cons_self ..) rfl
+  simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl | rfl | rfl
+  · exact (hna (wf_of_decodeState (need_ok.1 hwf) hS)).elim
+  · exact (hna ((pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below)).elim
+  · exact (hna (hcase t ht)).elim
+  obtain ⟨hside, hcondOf⟩ := bound_holds hna
+  obtain ⟨hcodes, hsites, hci0, hci, hck⟩ : Holds M t.codes ∧ Holds M t.sites ∧ Holds M ci0 ∧ Holds M ci ∧ Holds M ck := by
+    simpa only [holds_andT] using hside
+  have hfd : (Ty.fn [v.records] Ty.rules).isData = true := by
+    simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, v.records_data]
+  have hb := invariants_rel v.invariants v.records_data hfd (v.invariants.code_fn hfd hinvc hci0) s.records hR.records
+    hrules hci
+  have hbs := (instChecks_encode s.records s.now hR.records hR.now v.machines _ s.machines hR.machines hord hchecks).2 hck
+  have hsplit : Step.invariants s = Step.broken (v.invariants.fn (s.records, ())) ++ instancesBroken s.records s.now s.machines := rfl
+  rw [hsplit, List.append_eq_nil_iff] at hheld
+  exact ⟨t, ht, hcodes, hsites, hcondOf ((holds_andT _ _).2
+    ⟨(holds_allT_rules _).2 (hb.trans hheld.1), instHold_of_nil _ _ (hbs.trans hheld.2)⟩)⟩
+
+end
+
+section
 variable (S : Ty → Nat) {v : ServiceV}
 
 /-- Whether the codes of the functions a step on the input applies fit their slots: `codesFit` of its kind. -/
