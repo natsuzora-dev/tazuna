@@ -105,7 +105,7 @@ def encodePair (S : SymState v) (e1 e2 : Term) (k1 k2 : OwnPlace L v.event) : Ex
 def pairTys : List Ty := stateTys v (shapes v) ++ [.dsl .effect [v.event], .dsl .effect [v.event]]
 
 /-- The place of the first effect's variable, after the state's. -/
-def pairVar : Nat := (stateTys v (shapes v)).length
+def pairVar : Nat := stateWidth v
 
 /-- A pair's two questions, over a well-formed state whose names are below its counter and pending ids below its next
 id, and effects of the two kinds: the bound question, whether the codes' condition or a step reached leaves the

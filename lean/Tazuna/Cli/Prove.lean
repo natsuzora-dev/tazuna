@@ -255,10 +255,8 @@ def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a
   | .unknown why => .ok (.undecided (.undecided .unknown) v.name step (some g) [("why", Json.str why)])
   | .sat vs =>
     let M := modelOf vs
-    let read (t : Ty) (h : t.isData = true) (i : Nat) : Option t.den0 := (decodeV L t (M.vars i)).map (Ty.down t h)
-    match read m.key m.key_data 0, read m.state m.state_data 1, read v.records v.records_data 2,
-        read .int rfl 3 with
-    | some key, some st, some records, some (now : Int) =>
+    match TimerVals.decode L m M with
+    | some ⟨key, st, records, now, _, _, _, _⟩ =>
       match Step.timerAt now (m.after.fn (.inl (key, st, records, now, ()), ())) with
       | some (d, target) =>
         if d < now then
@@ -274,7 +272,7 @@ def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a
           .ok (.violated v.name step g (shown.run' {}))
         else .error s!"a model of {step} sets a timer at {d}, not before {now}"
       | none => .error s!"a model of {step} sets no timer"
-    | _, _, _, _ => .error s!"a model of {step} does not decode"
+    | none => .error s!"a model of {step} does not decode"
 
 /-- An own kind as a line names it: its command or query, and where its `on_answer` is written when another own kind
 has the same name. -/
@@ -358,7 +356,7 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
   let L := Layout.ofService c.program.defs v
   let .ok senv := StepEnv.of L (shapes v)
     | return { internal := some s!"service {v.name}: no step environment in its layout" }
-  let b := 5 + v.machines.length
+  let b := stateWidth v
   let mut items : List Item := []
   let mut targets : List Target := []
   for inp in stepInputs v (shapes v) senv.nT b do

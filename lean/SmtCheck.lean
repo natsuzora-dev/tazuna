@@ -3467,7 +3467,7 @@ def proveCase (solver : Solver) (name : String) (v : ServiceV) (hc : v.caller.is
   let fail (m : String) : IO Bool := do IO.println s!"smt-check: prove's questions, {name}: {m}"; return false
   let L := svcLayout v 3
   let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
-  let inp : SymInput v (shapes v) senv.nT := .event i (.var (5 + v.machines.length))
+  let inp : SymInput v (shapes v) senv.nT := .event i (.var (stateWidth v))
   match questions L prelude P v senv inp with
   | .error r => fail s!"no questions: {repr r}"
   | .ok (gs, qs) =>
@@ -3655,7 +3655,7 @@ def familyQuestions : Except String (List (String × TypedScript)) := do
   let v := evMSvc
   let L := svcLayout v 3
   let senv ← (StepEnv.of L (shapes v)).mapError fun r => s!"no step environment: {repr r}"
-  let inp : SymInput v (shapes v) senv.nT := .event evMI (.var (5 + v.machines.length))
+  let inp : SymInput v (shapes v) senv.nT := .event evMI (.var (stateWidth v))
   let (_, qs) ← (questions L prelude [] v senv inp).mapError fun r => s!"no questions: {repr r}"
   let ov : ServiceV := { eventSvc with name := "open", invariants := .closed noRulesE }
   let oL := svcLayout ov 3

@@ -124,9 +124,9 @@ theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shape
   have hst : ∀ j (hj : j < vals.length), (coverModel (vals ++ [z1, z2])).vars (0 + j) = vals[j] := fun j hj =>
     coverModel_vars (by rw [Nat.zero_add, List.getElem?_append_left hj, List.getElem?_eq_getElem hj])
   have hv1 : (coverModel (vals ++ [z1, z2])).vars (pairVar v) = z1 :=
-    coverModel_vars (by rw [pairVar, ← hlen, List.getElem?_append_right (Nat.le_refl _)]; simp)
+    coverModel_vars (by rw [pairVar, stateWidth, ← hlen, List.getElem?_append_right (Nat.le_refl _)]; simp)
   have hv2 : (coverModel (vals ++ [z1, z2])).vars (pairVar v + 1) = z2 :=
-    coverModel_vars (by rw [pairVar, ← hlen, List.getElem?_append_right (by omega)]; simp)
+    coverModel_vars (by rw [pairVar, stateWidth, ← hlen, List.getElem?_append_right (by omega)]; simp)
   refine ⟨coverModel (vals ++ [z1, z2]), fun n hn => ?_,
     decode_embedState 0 T s pv hpv (fun sm h => (hkeys sm h).2) vals hvals hst, by rw [hv1]; exact hz1, by rw [hv2]; exact hz2⟩
   have hpl : (pairTys v).length = (stateTys v (shapes v)).length + 2 := by simp [pairTys]
@@ -145,9 +145,9 @@ theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shape
     rw [hget]
     simp only [VarSorted]
     rcases Nat.lt_succ_iff_lt_or_eq.1 (show n < (stateTys v (shapes v)).length + 2 by omega) with h | h
-    · have hn : n = pairVar v := by unfold pairVar; omega
+    · have hn : n = pairVar v := by unfold pairVar stateWidth; omega
       rw [hn, hv1]; exact hs1
-    · have hn : n = pairVar v + 1 := by unfold pairVar; omega
+    · have hn : n = pairVar v + 1 := by unfold pairVar stateWidth; omega
       rw [hn, hv2]; exact hs2
 
 /-- What the pair lines say of a state, whichever verdict each reads: any two waiting own effects commute from every

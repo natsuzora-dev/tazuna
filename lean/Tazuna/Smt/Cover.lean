@@ -198,19 +198,19 @@ that names no request of its type, or a query) and starts no cascade. -/
 theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {s : State v}
     (hkeys : Step.KeysOk T s) (hs : Within L (shapes v) s) (x : Input v) {ivs : List Val}
     (hx : inputVals L chk.callerData x = some ivs) :
-    (∃ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length), Covered L T P v senv inp s x) ∨
+    (∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), Covered L T P v senv inp s x) ∨
       (∀ f, f ≠ .answerUnmatched → (step T v s x).outcome ≠ .fault f) ∧ ∀ a, ¬ Step.Begins T s x a := by
   obtain ⟨pv, hpv, hsome⟩ := hs
   obtain ⟨vals, hvals⟩ := Option.isSome_iff_exists.1 hsome
-  have hlen : vals.length = 5 + v.machines.length := by
+  have hlen : vals.length = stateWidth v := by
     obtain ⟨_, -, h⟩ := bind_some.1 hvals
     obtain ⟨_, -, h⟩ := bind_some.1 h
     obtain ⟨ws, hws, rfl⟩ := map_some.1 h
-    simp [embedMachines_length _ ws hws]; omega
+    rw [stateWidth_eq]; simp [embedMachines_length _ ws hws]; omega
   let M := coverModel (vals ++ ivs)
   have hst : ∀ j (hj : j < vals.length), M.vars (0 + j) = vals[j] := fun j hj =>
     coverModel_vars (by rw [Nat.zero_add, List.getElem?_append_left hj, List.getElem?_eq_getElem hj])
-  have hin : ∀ j (hj : j < ivs.length), M.vars (5 + v.machines.length + j) = ivs[j] := fun j hj =>
+  have hin : ∀ j (hj : j < ivs.length), M.vars (stateWidth v + j) = ivs[j] := fun j hj =>
     coverModel_vars (by rw [← hlen, List.getElem?_append_right (by omega), Nat.add_sub_cancel_left,
       List.getElem?_eq_getElem hj])
   have hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s :=
@@ -221,7 +221,7 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
   | command i caller input =>
     obtain ⟨c, hc', h⟩ := bind_some.1 hx
     obtain ⟨w, hw, rfl⟩ := map_some.1 h
-    refine .inl ⟨.command i (.var (5 + v.machines.length)) (.var (5 + v.machines.length + 1)),
+    refine .inl ⟨.command i (.var (stateWidth v)) (.var (stateWidth v + 1)),
       by simp [stepInputs], hc, M, forall2_sorted_vars (forall2_append hsorted ⟨sorted_of_embed hc', sorted_of_embed hw, trivial⟩),
       hS, ?_, fun t ht => by rw [encodeStep_case_tt ht (by simp) (by simp)]; exact holds_tt⟩
     have h0 := hin 0 (by simp)
@@ -232,7 +232,7 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
   | query i caller input => exact .inr ⟨fun f _ => query_no_fault T s i caller input f, fun _ hb => nomatch hb⟩
   | event i value =>
     obtain ⟨w, hw, rfl⟩ := map_some.1 hx
-    refine .inl ⟨.event i (.var (5 + v.machines.length)), by simp [stepInputs], hc, M,
+    refine .inl ⟨.event i (.var (stateWidth v)), by simp [stepInputs], hc, M,
       forall2_sorted_vars (forall2_append hsorted ⟨sorted_of_embed hw, trivial⟩), hS, ?_,
       fun t ht => by rw [encodeStep_case_tt ht (by simp) (by simp)]; exact holds_tt⟩
     have h0 := hin 0 (by simp)
@@ -241,7 +241,7 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
     exact ⟨_, decode_embed _ _ _ hw, Ty.down_up _ _ _⟩
   | clock time =>
     cases hx
-    refine .inl ⟨.clock (.var (5 + v.machines.length)), by simp [stepInputs], hc, M,
+    refine .inl ⟨.clock (.var (stateWidth v)), by simp [stepInputs], hc, M,
       forall2_sorted_vars (forall2_append hsorted ⟨⟨_, rfl⟩, trivial⟩), hS, ?_,
       fun t ht => by rw [encodeStep_case_tt ht (by simp) (by simp)]; exact holds_tt⟩
     have h0 := hin 0 (by simp)
@@ -274,11 +274,11 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
           have h0 := hin 0 (by simp)
           have h1 := hin 1 (by simp)
           simp only [List.getElem_cons_zero, List.getElem_cons_succ, Nat.add_zero] at h0 h1
-          have hto : (Term.var (5 + v.machines.length)).denote M = .int (Int.ofNat to) := by simp [Term.denote, h0]
+          have hto : (Term.var (stateWidth v)).denote M = .int (Int.ofNat to) := by simp [Term.denote, h0]
           obtain ⟨k, j, hout, hrej, hhit⟩ := answer_hit s to (decode_state hS).pending hto senv hf
           rw [hout, hrej] at he
           subst he
-          refine .inl ⟨.answer k j (.var (5 + v.machines.length)) (.var (5 + v.machines.length + 1)),
+          refine .inl ⟨.answer k j (.var (stateWidth v)) (.var (stateWidth v + 1)),
             by simp [stepInputs], hc, M,
             forall2_sorted_vars (forall2_append hsorted ⟨⟨_, rfl⟩, sorted_of_embed hw, trivial⟩), hS, ?_,
             fun t ht => by rw [encodeStep_answer_case ht]; exact hhit⟩
@@ -293,7 +293,7 @@ reached and the input fit the slots. An answer that names no request is the one 
 the outside's mistake, not the spec's. -/
 theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (f : Fault)
     (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
-    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length), ∃ gs qs,
+    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∃ gs qs,
       questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
         Unsat L q.ask)
     (is : List (Input v)) (x : Input v) (hs : Within L (shapes v) (run T v (Step.State.init v) is).1)
@@ -313,7 +313,7 @@ invariants hold faults with `f`, wherever the state the run reached and the inpu
 within them. -/
 theorem within_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (f : Fault)
     (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
-    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length), ∃ gs qs,
+    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∃ gs qs,
       questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (∃ g, q.target = some g ∧ g.covers f = true) →
         Unsat L q.ask)
     (is : List (Input v)) (x : Input v) (hs : Within L (shapes v) (run T v (Step.State.init v) is).1)

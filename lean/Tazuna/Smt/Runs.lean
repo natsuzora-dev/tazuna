@@ -81,7 +81,7 @@ within the slots and its input kind's step line reads proved, or within the boun
 own effect its events or timers queue to a value. -/
 theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v)) {s : State v} {x : Input v}
-    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length),
+    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v),
       StepLine L T P v senv (StepFits L T P v s x) inp)
     (hinv : Step.Inv P s) (hheld : Step.invariants s = []) (hkeys : Step.KeysOk T s)
     (hW : Within L (shapes v) s) (hx : (inputVals L chk.callerData x).isSome) {a : Step.Acc v}
@@ -116,7 +116,7 @@ theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (senv : StepEnv
     (∀ {x : Input v}, x.Valid (run c.T v (Step.State.init v) xs).1 →
       Within L (shapes v) (run c.T v (Step.State.init v) xs).1 →
       (inputVals L (c.checked v hv).callerData x).isSome →
-      (∀ inp ∈ stepInputs v (shapes v) senv.nT (5 + v.machines.length),
+      (∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v),
         StepLine L c.T c.P v senv (StepFits L c.T c.P v (run c.T v (Step.State.init v) xs).1 x) inp) →
       ∀ {a : Step.Acc v}, Step.Begins c.T (run c.T v (Step.State.init v) xs).1 x a →
       (∀ p ∈ L.ownPairs v.event, PairLine L c.T c.P v senv (CascadeFits L c.T a) p) →

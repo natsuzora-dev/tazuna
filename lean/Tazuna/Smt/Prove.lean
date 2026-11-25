@@ -377,6 +377,12 @@ abbrev Question.script {v : ServiceV} {shs : List (PendingShape v.event)} {n : N
 def stateTys (v : ServiceV) (shs : List (PendingShape v.event)) : List Ty :=
   [v.records, .int, .int, .int, pendingTable shs] ++ v.machines.map (·.table)
 
+/-- How many variables the state takes: an input's variables, and a pair's effects, come after them. -/
+def stateWidth (v : ServiceV) : Nat := (stateTys v (shapes v)).length
+
+theorem stateWidth_eq (v : ServiceV) : stateWidth v = 5 + v.machines.length := by
+  simp [stateWidth, stateTys]; omega
+
 section
 variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
 

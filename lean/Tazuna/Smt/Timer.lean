@@ -123,6 +123,15 @@ structure TimerVals (L : Layout) (m : MachineV r e) (M : Model) where
   hrecords : decodeV L r (M.vars 2) = some (Ty.up _ m.records_data records)
   hnow : M.vars 3 = .int now
 
+/-- The values a model gives a timer question's variables, where they decode. -/
+def TimerVals.decode (L : Layout) (m : MachineV r e) (M : Model) : Option (TimerVals L m M) :=
+  match hk : decodeV L m.key (M.vars 0), hs : decodeV L m.state (M.vars 1), hr : decodeV L r (M.vars 2),
+    hn : M.vars 3 with
+  | some k, some st, some rc, .int now =>
+    some ⟨Ty.down _ m.key_data k, Ty.down _ m.state_data st, Ty.down _ m.records_data rc, now,
+      by rw [hk, Ty.up_down], by rw [hs, Ty.up_down], by rw [hr, Ty.up_down], hn⟩
+  | _, _, _, _ => none
+
 /-- The context the values make for `after`. -/
 def TimerVals.ctx {m : MachineV r e} (x : TimerVals L m M) : (Ty.tuple [Ty.machineCtx m.key m.state r]).den0 :=
   (.inl (x.key, x.state, x.records, x.now, ()), ())
