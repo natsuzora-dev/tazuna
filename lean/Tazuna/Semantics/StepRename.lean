@@ -579,12 +579,12 @@ variable {r e : Ty}
 /-- A machine whose functions respect every renaming of counters, with a comparable key type. -/
 structure _root_.Tazuna.Ir.MachineV.Equi (m : MachineV r e) : Prop where
   key : m.key.comparable = true
-  instances : ∀ R, Fun.Rel R m.instances m.instances
-  on : ∀ R, Fun.Rel R m.on m.on
-  after : ∀ R, Fun.Rel R m.after m.after
-  initial : ∀ R, Ty.rel0 R m.state m.initial m.initial
-  effect : ∀ R xs ys, Ty.rel0 R (.tuple [Ty.machineCtx m.key m.state r]) xs ys →
-    Ty.relV R (Ty.option (.dsl .effect [e])) (m.effect.apply xs) (m.effect.apply ys)
+  self : ∀ R, m.Self R
+
+theorem _root_.Tazuna.Ir.MachineV.Equi.effect {m : MachineV r e} (hm : m.Equi) (R : PBij) {xs ys}
+    (h : Ty.rel0 R (.tuple [Ty.machineCtx m.key m.state r]) xs ys) :
+    Ty.relV R (Ty.option (.dsl .effect [e])) (m.effect.apply xs) (m.effect.apply ys) :=
+  EffectFun.apply_rel m.effect (hm.self R).effect h
 
 theorem toB_rel {a b : Ty.bool.den0} (h : Ty.rel0 R Ty.bool a b) : toB a = toB b := by
   match a, b, h with
@@ -620,8 +620,8 @@ theorem enter_rel {m : MachineV r e} (hm : m.Equi) {records records' : r.den0} (
       Multi (Started.Rel R) (enter m records now k st).2 (enter m records' now k' st').2 := by
   have hctx : Ty.rel0 R (.tuple [Ty.machineCtx m.key m.state r]) (.inl (k, st, records, now, ()), ())
       (.inl (k', st', records', now, ()), ()) := ⟨⟨hk, hst, hrec, rfl, trivial⟩, trivial⟩
-  refine ⟨⟨hk, hst, timerAt_rel now (hm.after R _ _ hctx)⟩, Multi.of_forall2 ?_⟩
-  have he := hm.effect R _ _ hctx
+  refine ⟨⟨hk, hst, timerAt_rel now ((hm.self R).after _ _ hctx)⟩, Multi.of_forall2 ?_⟩
+  have he := hm.effect R hctx
   simp only [enter]
   unfold MachineV.effectAt
   revert he
@@ -664,10 +664,10 @@ theorem reactKey_rel {m : MachineV r e} (hm : m.Equi) {insts insts' : List (Inst
   generalize insts'.find? _ = b
   intro hf
   cases hf with
-  | none => exact enter_rel hm hrec now hk (hm.initial R)
+  | none => exact enter_rel hm hrec now hk (hm.self R).initial
   | @some i i' hi =>
     dsimp only
-    have hon := hm.on R (.inl (i.key, i.state, records, now, ()), ev, ()) (.inl (i'.key, i'.state, records', now, ()), ev', ())
+    have hon := (hm.self R).on (.inl (i.key, i.state, records, now, ()), ev, ()) (.inl (i'.key, i'.state, records', now, ()), ev', ())
       ⟨⟨hi.1, hi.2.1, hrec, rfl, trivial⟩, hev, trivial⟩
     revert hon
     generalize m.on.fn (.inl (i.key, i.state, records, now, ()), ev, ()) = x
@@ -696,7 +696,7 @@ theorem machineStep_rel (T : List TypeDecl) {m : MachineV r e} (hm : m.Equi) {re
     Insts.Rel R (machineStep T records now ev m insts).1 (machineStep T records' now ev' m insts').1 ∧
       Multi (Started.Rel R) (machineStep T records now ev m insts).2 (machineStep T records' now ev' m insts').2 := by
   have hb : Multi (Ty.rel0 R m.key) (m.instances.fn (records, ())) (m.instances.fn (records', ())) :=
-    hm.instances R _ _ ⟨hrec, trivial⟩
+    (hm.self R).instances _ _ ⟨hrec, trivial⟩
   have hd : Multi (Ty.rel0 R m.key) (dedupBy m.key.deq0 (m.instances.fn (records, ())))
       (dedupBy m.key.deq0 (m.instances.fn (records', ()))) := by
     obtain ⟨zs, h, hz⟩ := hb
@@ -751,14 +751,11 @@ variable {v : ServiceV}
 callers it lists and its machines' initial states. Callers and machine keys are comparable, as check requires. -/
 structure _root_.Tazuna.Ir.ServiceV.Equivariant (v : ServiceV) : Prop where
   caller : v.caller.comparable = true
-  apply : ∀ R, Fun.Rel R v.apply v.apply
-  commands : ∀ x ∈ v.commands, ∀ R, Ty.rel0 R (.list v.caller) x.callers x.callers ∧ Fun.Rel R x.accepts x.accepts ∧
-    Fun.Rel R x.decide x.decide ∧ Fun.Rel R x.ensures x.ensures
-  queries : ∀ x ∈ v.queries, ∀ R, Ty.rel0 R (.list v.caller) x.callers x.callers ∧ Fun.Rel R x.accepts x.accepts ∧
-    Fun.Rel R x.resolve x.resolve
-  machines : ∀ m ∈ v.machines, m.Equi
-  reactions : ∀ x ∈ v.reactions, ∀ R xs ys, Ty.rel0 R (.tuple [Ty.reactionCtx v.records, v.event]) xs ys →
-    Ty.relV R (.list (.dsl .effect [v.event])) (x.react.apply xs) (x.react.apply ys)
+  keys : ∀ m ∈ v.machines, m.key.comparable = true
+  self : ∀ R, v.Self R
+
+theorem _root_.Tazuna.Ir.ServiceV.Equivariant.machines (hv : v.Equivariant) : ∀ m ∈ v.machines, m.Equi :=
+  fun m hm => ⟨hv.keys m hm, fun R => (hv.self R).machines m hm⟩
 
 theorem react_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {s s' : State v} (hs : StateRel R s s')
     {ev ev' : v.event.den0} (hev : Ty.rel0 R.ctr v.event ev ev') :
@@ -766,7 +763,7 @@ theorem react_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {s s' : Sta
       Multi (Started.Rel R.ctr) (react T s ev).2 (react T s' ev').2 := by
   obtain ⟨hrec, hmach, hpend, hnow, hb, hb'⟩ := hs
   have hrec' : Ty.rel0 R.ctr v.records (v.apply.fn (s.records, ev, ())) (v.apply.fn (s'.records, ev', ())) :=
-    hv.apply R.ctr _ _ ⟨hrec, hev, trivial⟩
+    (hv.self R.ctr).apply _ _ ⟨hrec, hev, trivial⟩
   have hm := reactMachines_rel T hrec' s.now hev hv.machines hmach
   unfold react
   dsimp only
@@ -776,7 +773,7 @@ theorem react_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {s s' : Sta
       ((x.effectsAt ev (v.apply.fn (s.records, ev, ())) s.now).map (.reaction x.name, ·))
       ((x.effectsAt ev' (v.apply.fn (s'.records, ev', ())) s.now).map (.reaction x.name, ·)) := fun x hx =>
     forall2_map2 (fun _ _ h => ⟨.reaction x.name, h⟩)
-      (hv.reactions x hx R.ctr _ _ ⟨⟨hrec', rfl, trivial⟩, hev, trivial⟩)
+      (EffectFun.apply_rel x.react ((hv.self R.ctr).reactions x hx) ⟨⟨hrec', rfl, trivial⟩, hev, trivial⟩)
   clear hm hpend
   revert hx
   induction v.reactions with
@@ -820,7 +817,7 @@ theorem runCommand_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' 
     {c c' : v.caller.den0} (hc : Ty.rel0 R.ctr v.caller c c') {i i' : x.input.den0} (hi : Ty.rel0 R.ctr x.input i i')
     {f f' : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))} (hf : Fun.Rel R.ctr f f') :
     Lifted R a a' (runCommand T a x c i f) (runCommand T a' x c' i' f') := by
-  obtain ⟨hcl, hacc, hdec, hens⟩ := hv.commands x hx R.ctr
+  obtain ⟨hcl, hacc, hdec, hens⟩ := (hv.self R.ctr).commands x hx
   unfold runCommand execCommand
   rw [admit_rel hv hcl hacc hc hi]
   cases admit x.callers x.accepts c' i' with
@@ -858,7 +855,7 @@ theorem runQuery_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : 
     {c c' : v.caller.den0} (hc : Ty.rel0 R.ctr v.caller c c') {i i' : x.input.den0} (hi : Ty.rel0 R.ctr x.input i i')
     {f f' : Fun (Ty.fn [x.output] (.list v.event))} (hf : Fun.Rel R.ctr f f') :
     Lifted R a a' (runQuery T a x c i f) (runQuery T a' x c' i' f') := by
-  obtain ⟨hcl, hacc, hres⟩ := hv.queries x hx R.ctr
+  obtain ⟨hcl, hacc, hres⟩ := (hv.self R.ctr).queries x hx
   unfold runQuery execQuery
   rw [admit_rel hv hcl hacc hc hi]
   cases admit x.callers x.accepts c' i' with

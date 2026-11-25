@@ -16,6 +16,7 @@ import Tazuna.Semantics.PendingPerm
 import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Interleave
 import Tazuna.Semantics.StepRename
+import Tazuna.Smt.Commute
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -93,7 +94,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.within_sound,
     -- A counterexample is honest: a model of a target question decodes to a state with the step invariant and every
     -- invariant holding, whose step in Lean is the one the terms say.
-    ``Tazuna.Smt.cti_sound]
+    ``Tazuna.Smt.cti_sound,
+    -- Every service of a checked spec respects every renaming of the ids steps make, which T5 rests on.
+    ``Tazuna.Smt.CheckedSpec.equivariant]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do

@@ -579,18 +579,69 @@ inductive EffectV.Rel (R : PBij) {e : Ty} : EffectV e → EffectV e → Prop
       Ty.rel0 R c caller caller' → Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
       EffectV.Rel R (.query name c input output caller value onAnswer) (.query name c input output caller' value' onAnswer')
 
-/-- What structure values relate by. A spec, a service and the other values a spec is built from hold no name a step
-makes, so they relate trivially; a command, query, machine or reaction is read only by its name, so it relates by
-its name. -/
+/-! What a spec's structure values keep, each related to itself by `R`: the functions a step runs and the values a step
+reads. A service whose parts are so for every `R` respects every renaming (`Step.ServiceV.Equivariant`). -/
+
+section Self
+variable (R : PBij) {r e c : Ty}
+
+structure CommandV.Self (x : CommandV r e c) : Prop where
+  callers : Ty.rel0 R (.list c) x.callers x.callers
+  accepts : Fun.Rel R x.accepts x.accepts
+  decide : Fun.Rel R x.decide x.decide
+  ensures : Fun.Rel R x.ensures x.ensures
+
+structure QueryV.Self (x : QueryV r c) : Prop where
+  callers : Ty.rel0 R (.list c) x.callers x.callers
+  accepts : Fun.Rel R x.accepts x.accepts
+  resolve : Fun.Rel R x.resolve x.resolve
+
+/-- A machine's functions, its initial state, and the values its effect function captured. -/
+structure MachineV.Self (m : MachineV r e) : Prop where
+  instances : Fun.Rel R m.instances m.instances
+  on : Fun.Rel R m.on m.on
+  after : Fun.Rel R m.after m.after
+  initial : Ty.rel0 R m.state m.initial m.initial
+  effect : Ty.rel0 R (.tuple m.effect.Γ) m.effect.env m.effect.env
+
+/-- The values a reaction's function captured. -/
+def ReactionV.Self (x : ReactionV r e) : Prop := Ty.rel0 R (.tuple x.react.Γ) x.react.env x.react.env
+
+def DeclaredV.Self : DeclaredV → Prop
+  | .command _ _ _ x => x.Self R
+  | .query _ _ x => x.Self R
+  | _ => True
+
+structure ServiceV.Self (v : ServiceV) : Prop where
+  apply : Fun.Rel R v.apply v.apply
+  commands : ∀ x ∈ v.commands, x.Self R
+  queries : ∀ x ∈ v.queries, x.Self R
+  machines : ∀ m ∈ v.machines, m.Self R
+  reactions : ∀ x ∈ v.reactions, x.Self R
+
+end Self
+
+/-- A service without what `spec` fills in, which `ServiceV.Self` does not read. -/
+def ServiceV.stripped (v : ServiceV) : ServiceV := { v with declared := [], subscribes := [] }
+
+/-- What structure values relate by. A command, query, machine or reaction is read by a step through its name, so
+related ones have the same name; a structure value that is the same on both sides keeps parts related to themselves,
+which is all a closed program's spec gives, since evaluating it relates it to itself. A service relates once `spec`'s
+additions are set aside, since `spec` writes them from the other services. The other values a spec is built from hold
+no name a step makes, so they relate trivially. -/
 def Dsl.relV (R : PBij) : (k : Dsl) → (a : List Ty) → (Dsl.val k a).1 → (Dsl.val k a).1 → Prop
   | .fresh, _, x, y => R.rel x y
   | .effect, [_], x, y => EffectV.Rel R x y
   | .closure, [_], f, g => Fun.Rel R f g
+  | .effectClosure, [.fn _ _], f, g => f = g → Ty.rel0 R (.tuple f.Γ) f.env f.env
   | .sender, _, x, y => Sender.Rel R x y
-  | .command, [_, _, _, _, _], x, y => x.1.name = y.1.name
-  | .query, [_, _, _, _], x, y => x.1.name = y.1.name
-  | .machine, [_, _], x, y => x.name = y.name
-  | .reaction, [_, _], x, y => x.name = y.name
+  | .spec, _, s, s' => s = s' → ∀ v ∈ (s : SpecV).services, v.Self R
+  | .service, _, v, w => ServiceV.stripped v = ServiceV.stripped w → ServiceV.Self R v
+  | .declared, _, d, d' => d = d' → DeclaredV.Self R d
+  | .command, [_, _, _, _, _], x, y => x.1.name = y.1.name ∧ (x = y → x.1.Self R)
+  | .query, [_, _, _, _], x, y => x.1.name = y.1.name ∧ (x = y → x.1.Self R)
+  | .machine, [_, _], x, y => x.name = y.name ∧ (x = y → x.Self R)
+  | .reaction, [_, _], x, y => x.name = y.name ∧ (x = y → ReactionV.Self R x)
   | .externalCommand, [_, _, _], x, y => x = y
   | .externalQuery, [_, _], x, y => x.1 = y.1 ∧ Fun.Rel R x.2 y.2
   | .source, [_], x, y => x = y

@@ -216,6 +216,76 @@ theorem Prim.comparable0 {p : Prim} {args : List Ty} (h : p.ok args = true) (hp 
   | some t => rw [e] at this; simpa using this
 
 /-- Every built-in maps related arguments to related results. -/
+theorem forall2_self {α : Type} {r : α → α → Prop} : {xs : List α} → Forall2 r xs xs → ∀ x ∈ xs, r x x
+  | _ :: _, ⟨h, _⟩, _, .head _ => h
+  | _ :: _, ⟨_, h⟩, x, .tail _ hx => forall2_self h x hx
+
+/-- Services whose lists relate, with the same parts once `spec`'s additions are set aside, keep parts related to
+themselves. -/
+theorem Self.of_stripped {vs ws : List ServiceV}
+    (h : Forall2 (fun v w => ServiceV.stripped v = ServiceV.stripped w → ServiceV.Self R v) vs ws)
+    (he : vs.map ServiceV.stripped = ws.map ServiceV.stripped) : ∀ v ∈ vs, ServiceV.Self R v := by
+  induction vs generalizing ws with
+  | nil => intro _ hv; nomatch hv
+  | cons v vs ih =>
+    cases ws with
+    | nil => exact h.elim
+    | cons w ws =>
+      simp only [List.map_cons, List.cons.injEq] at he
+      intro x hx
+      rcases List.mem_cons.1 hx with rfl | hx
+      · exact h.1 he.1
+      · exact ih h.2 he.2 x hx
+
+theorem map_stripped (f : ServiceV → ServiceV) (hf : ∀ v, (f v).stripped = v.stripped) :
+    (l : List ServiceV) → (l.map f).map ServiceV.stripped = l.map ServiceV.stripped
+  | [] => rfl
+  | v :: l => by simp only [List.map_cons, hf, map_stripped f hf l]
+
+theorem stripped_of_map {f g : ServiceV → ServiceV} {l l' : List ServiceV}
+    (hf : ∀ v, (f v).stripped = v.stripped) (hg : ∀ v, (g v).stripped = v.stripped)
+    (h : (l.map f).map ServiceV.stripped = (l'.map g).map ServiceV.stripped) :
+    l.map ServiceV.stripped = l'.map ServiceV.stripped :=
+  (map_stripped f hf l).symm.trans (h.trans (map_stripped g hg l'))
+
+theorem Self.commands_of {r e c : Ty} {ds : List DeclaredV} (h : ∀ d ∈ ds, d = d → DeclaredV.Self R d) :
+    ∀ x ∈ ds.filterMap (fun
+      | .command r' e' c' x => match Ty.same r' r, Ty.same e' e, Ty.same c' c with
+        | some ⟨h1⟩, some ⟨h2⟩, some ⟨h3⟩ => some (h1 ▸ h2 ▸ h3 ▸ x)
+        | _, _, _ => none
+      | _ => none), CommandV.Self R x := by
+  intro x hx
+  obtain ⟨d, hd, hdx⟩ := List.mem_filterMap.1 hx
+  have hs := h d hd rfl
+  match d, hdx, hs with
+  | .command r' e' c' y, hdx, hs =>
+    revert hdx
+    dsimp only
+    split
+    · next h1 h2 h3 _ _ _ =>
+      obtain ⟨⟩ := h1; obtain ⟨⟩ := h2; obtain ⟨⟩ := h3
+      intro hdx; cases hdx; exact hs
+    · intro hdx; cases hdx
+
+theorem Self.queries_of {r c : Ty} {ds : List DeclaredV} (h : ∀ d ∈ ds, d = d → DeclaredV.Self R d) :
+    ∀ x ∈ ds.filterMap (fun
+      | .query r' c' x => match Ty.same r' r, Ty.same c' c with
+        | some ⟨h1⟩, some ⟨h2⟩ => some (h1 ▸ h2 ▸ x)
+        | _, _ => none
+      | _ => none), QueryV.Self R x := by
+  intro x hx
+  obtain ⟨d, hd, hdx⟩ := List.mem_filterMap.1 hx
+  have hs := h d hd rfl
+  match d, hdx, hs with
+  | .query r' c' y, hdx, hs =>
+    revert hdx
+    dsimp only
+    split
+    · next h1 h2 _ _ =>
+      obtain ⟨⟩ := h1; obtain ⟨⟩ := h2
+      intro hdx; cases hdx; exact hs
+    · intro hdx; cases hdx
+
 theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     Ty.relV R (p.ty.inst args) (p.den args h) (p.den args h) := by
   cases p with
@@ -334,10 +404,67 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     rintro ⟨s, i, ⟨⟩⟩ ⟨s', i', ⟨⟩⟩ ⟨hs, hi, -⟩
     obtain rfl : i = i' := hi
     exact .inr ⟨s, s', i, hs, rfl, rfl⟩
-  | command => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
-  | query => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
-  | machine => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
-  | reaction => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
+  | command =>
+    rintro ⟨n, cl, acc, dec, ens, ⟨⟩⟩ ⟨n', cl', acc', dec', ens', ⟨⟩⟩ ⟨hn, hcl, hacc, hdec, hens, -⟩
+    refine ⟨hn, fun he => ?_⟩
+    simp only [Prim.den] at he
+    obtain ⟨-, -, -, hcl', hacc', hdec', hens'⟩ := CommandV.mk.inj (congrArg Subtype.val he)
+    dsimp only at hcl' hacc' hdec' hens'
+    cases eq_of_heq hacc'; cases eq_of_heq hdec'; cases eq_of_heq hens'
+    have hc := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.list (.param 2)) rfl) hcl
+    exact ⟨(congrArg (Ty.rel0 R _ _) hcl').mpr hc, hacc, hdec, hens⟩
+  | query =>
+    rintro ⟨n, cl, acc, res, ⟨⟩⟩ ⟨n', cl', acc', res', ⟨⟩⟩ ⟨hn, hcl, hacc, hres, -⟩
+    refine ⟨hn, fun he => ?_⟩
+    simp only [Prim.den] at he
+    obtain ⟨-, -, -, hcl', hacc', hres'⟩ := QueryV.mk.inj (congrArg Subtype.val he)
+    dsimp only at hcl' hacc' hres'
+    cases eq_of_heq hacc'; cases eq_of_heq hres'
+    have hc := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.list (.param 1)) rfl) hcl
+    exact ⟨(congrArg (Ty.rel0 R _ _) hcl').mpr hc, hacc, hres⟩
+  | machine =>
+    rintro ⟨n, ins, ini, on, aft, eff, inv, ⟨⟩⟩ ⟨n', ins', ini', on', aft', eff', inv', ⟨⟩⟩
+      ⟨hn, hins, hini, hon, haft, heff, -, -⟩
+    refine ⟨hn, fun he => ?_⟩
+    simp only [Prim.den] at he
+    obtain ⟨-, -, -, hins', hini', hon', haft', heff', -⟩ := MachineV.mk.inj he
+    cases eq_of_heq hins'; cases eq_of_heq hon'; cases eq_of_heq haft'; cases eq_of_heq heff'
+    have hi := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.param 3) rfl) hini
+    exact ⟨hins, hon, haft, (congrArg (Ty.rel0 R _ _) (eq_of_heq hini')).mpr hi, heff rfl⟩
+  | reaction =>
+    rintro ⟨n, x, ⟨⟩⟩ ⟨n', x', ⟨⟩⟩ ⟨hn, hx, -⟩
+    refine ⟨hn, fun h => ?_⟩
+    simp only [Prim.den] at h
+    obtain ⟨-, hx'⟩ := ReactionV.mk.inj h
+    exact hx hx'
+  | declareCommand =>
+    rintro ⟨x, ⟨⟩⟩ ⟨x', ⟨⟩⟩ ⟨hx, -⟩ h
+    simp only [Prim.den] at h
+    obtain ⟨-, -, -, h⟩ := DeclaredV.command.inj h
+    exact hx.2 (Subtype.ext (eq_of_heq h))
+  | declareQuery =>
+    rintro ⟨x, ⟨⟩⟩ ⟨x', ⟨⟩⟩ ⟨hx, -⟩ h
+    simp only [Prim.den] at h
+    obtain ⟨-, -, h⟩ := DeclaredV.query.inj h
+    exact hx.2 (Subtype.ext (eq_of_heq h))
+  | declareSource | declareExternalCommand | declareExternalQuery => intro _ _ _ _; trivial
+  | spec =>
+    rintro ⟨vs, xs, ⟨⟩⟩ ⟨vs', xs', ⟨⟩⟩ ⟨hvs, -, -⟩ h
+    simp only [Prim.den] at h
+    have hm := congrArg (List.map ServiceV.stripped) (SpecV.mk.inj h).1
+    replace hm := stripped_of_map (by intro _; rfl) (by intro _; rfl) hm
+    intro v hv
+    obtain ⟨w, hw, rfl⟩ := List.mem_map.1 hv
+    have hs := Self.of_stripped hvs hm w hw
+    exact ⟨hs.apply, hs.commands, hs.queries, hs.machines, hs.reactions⟩
+  | service =>
+    rintro ⟨n, ini, app, subs, ds, ms, xs, inv, rsp, bnd, scs, ⟨⟩⟩
+      ⟨n', ini', app', subs', ds', ms', xs', inv', rsp', bnd', scs', ⟨⟩⟩
+      ⟨-, -, happ, -, hds, hms, hxs, -⟩ h
+    simp only [ServiceV.stripped, ServiceV.mk.injEq] at h
+    obtain ⟨-, -, -, -, -, rfl, -, rfl, -, -, -, rfl, rfl, -⟩ := h
+    exact ⟨happ, Self.commands_of (forall2_self hds), Self.queries_of (forall2_self hds),
+      fun m hm => (forall2_self hms m hm).2 rfl, fun x hx => (forall2_self hxs x hx).2 rfl⟩
   | externalCommand => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
   | externalQuery => rintro ⟨n, f, _⟩ ⟨n', f', _⟩ ⟨hn, hf, -⟩; exact ⟨hn, hf⟩
   | source => rintro ⟨n, _⟩ ⟨n', _⟩ ⟨hn, -⟩; exact hn
@@ -351,30 +478,29 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     exact .request (.mk _ _ _ _ (Ty.rel0_down _ hx) (.some he) hf)
   | sendCommand =>
     rintro ⟨c, a, x, f, ⟨⟩⟩ ⟨c', a', x', f', ⟨⟩⟩ ⟨hc, ha, hx, hf, -⟩
-    have hc : c.1.name = c'.1.name := hc
+    have hc : c.1.name = c'.1.name := hc.1
     show EffectV.Rel R (.command c.1.name _ _ _ _ _ _) (.command c'.1.name _ _ _ _ _ _)
     rw [hc]
     exact .command _ _ _ _ (Ty.rel0_down _ ha) (Ty.rel0_down _ hx) hf
   | sendQuery =>
     rintro ⟨c, a, x, f, ⟨⟩⟩ ⟨c', a', x', f', ⟨⟩⟩ ⟨hc, ha, hx, hf, -⟩
-    have hc : c.1.name = c'.1.name := hc
+    have hc : c.1.name = c'.1.name := hc.1
     show EffectV.Rel R (.query c.1.name _ _ _ _ _ _) (.query c'.1.name _ _ _ _ _ _)
     rw [hc]
     exact .query _ _ _ _ (Ty.rel0_down _ ha) (Ty.rel0_down _ hx) hf
   | fromMachine =>
     rintro ⟨m, k, ⟨⟩⟩ ⟨m', k', ⟨⟩⟩ ⟨hm, hk, -⟩
-    have hm : m.name = m'.name := hm
+    have hm : m.name = m'.name := hm.1
     show Sender.Rel R (.machine m.name _) (.machine m'.name _)
     rw [hm]
     exact .machine _ (.mk (Ty.rel0_down _ hk))
   | fromReaction =>
     rintro ⟨x, ⟨⟩⟩ ⟨x', ⟨⟩⟩ ⟨hx, -⟩
-    have hx : x.name = x'.name := hx
+    have hx : x.name = x'.name := hx.1
     show Sender.Rel R (.reaction x.name) (.reaction x'.name)
     rw [hx]
     exact .reaction _
-  | spec | service | external | declareCommand | declareQuery | declareSource | declareExternalCommand
-  | declareExternalQuery | subscribe | bounds | create | response | scenario | stepCommand | stepQuery | stepWait
+  | external | subscribe | bounds | create | response | scenario | stepCommand | stepQuery | stepWait
   | stepAnswerCommand | stepAnswerQuery | stepEvent | stepCommandThen => intro _ _ _; trivial
 
 /-! The fundamental lemma. -/
@@ -535,7 +661,11 @@ theorem Expr.eval_rel (hD : Ty.relsV R G D.eval D.eval) {Γ : List Ty} {t : Ty} 
     refine Ty.rel0_down ht (Expr.eval_rel hD body ?_)
     erw [Ty.up_down, Ty.up_down]
     exact Exprs.eval_rel hD env h
-  | .closeEffect .., _, _, _ => trivial
+  | .closeEffect _ env hΓ _ _, _, _, h => fun he => by
+    obtain ⟨-, -, -, -, he, -⟩ := EffectFun.mk.inj he
+    have hr := Ty.rel0_down hΓ (Exprs.eval_rel hD env h)
+    rw [← eq_of_heq he] at hr
+    exact hr
 theorem Exprs.eval_rel (hD : Ty.relsV R G D.eval D.eval) {Γ : List Ty} {ts : List Ty} : (es : Exprs G Γ ts) → {ρ ρ' : Ty.dens Γ} →
     Ty.relsV R Γ ρ ρ' → Ty.relsV R ts (Exprs.eval D D.eval es ρ) (Exprs.eval D D.eval es ρ')
   | .nil, _, _, _ => trivial
