@@ -366,10 +366,10 @@ round's wire ids after the earlier rounds'), the next wire id after them, whethe
 slots of the own commands and queries the rounds queue with the queue place after them. -/
 structure RoundsOut (ms : List (MachineV r e)) where
   tables : PerMachine Term ms
-  news : List (Slot 2)
+  news : List PendingSlot
   nextId : Term
   over : Term
-  owns : List (Slot 2)
+  owns : List OwnSlot
   queued : Term
 
 /-- The pending slots of the requests a round's start slots start, machine by machine, with how many, and the own
@@ -377,7 +377,7 @@ slots of the own commands and queries they queue, with how many. A round fires a
 slot takes the round's next id `nid` and every own slot the round's queue place `q`. -/
 def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (senv : StepEnv L shs) :
     (ms : List (MachineV r e)) → PerMachine (List StartSlot) ms → (nid q : Term) →
-    Except Refusal (List (Slot 2) × Term × List (Slot 2) × Term)
+    Except Refusal (List PendingSlot × Term × List OwnSlot × Term)
   | [], .nil, _, _ => pure ([], .int 0, [], .int 0)
   | m :: ms, .cons st sts, nid, q => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
@@ -424,11 +424,12 @@ theorem own_once (m : MachineV v.records v.event) {dopt nopt : Nat}
   have hcount := startCount_den m hopt κ F hX hh hEp
   obtain ⟨svS, ys, hS', hyp, hy⟩ := once_starts m hopt κ F hX hh hEp hone hq
   refine ⟨hcount, ?_⟩
-  obtain ⟨sv', zs, h1, -, h3, h4, h5⟩ := mapItems_den (M := M) (Q := fun (y : (Sender × EffectV v.event) × Nat) z =>
-    z = (y.1.2, y.2)) (E' := EOwn L v.event) (fun xs : SlotItems 3 => (⟨[xs[0], xs[2]], rfl⟩ : SlotItems 2)) (by
-      rintro ⟨⟨snd, eff⟩, id⟩ xs ⟨k, zk, zx, hvs, -, -, hzx⟩
-      obtain ⟨a, b, c, rfl, ha, -, hc⟩ := triple_terms hvs
-      exact ⟨(eff, id), ⟨zx, by simp [Term.denotes, ha, hc], hzx⟩, rfl⟩) hS' hy
+  obtain ⟨sv', zs, h1, -, h3, h4, h5⟩ := mapView_den (M := M) (Q := fun (y : (Sender × EffectV v.event) × Nat) z =>
+    z = (y.1.2, y.2)) (E' := EOwn L v.event) RankedStart.slot OwnSlot.slot (fun s => ⟨s.flag, s.id, s.effect⟩)
+    (fun _ => rfl) (by
+      rintro ⟨⟨snd, eff⟩, id⟩ ⟨f, a, b, c⟩ ⟨k, zk, zx, hvs, -, -, hzx⟩
+      simp only [RankedStart.slot, Term.denotes, List.cons.injEq, and_true] at hvs
+      exact ⟨(eff, id), ⟨zx, by simp [OwnSlot.slot, Term.denotes, hvs.1, hvs.2.2], hzx⟩, rfl⟩) hS' hy
   have key : ∀ (ys : List ((Sender × EffectV v.event) × Nat)) (zs : List (EffectV v.event × Nat)),
       Forall2 (fun y z => z = (y.1.2, y.2)) ys zs → zs = ys.map fun y => (y.1.2, y.2) := by
     intro ys zs h
@@ -450,7 +451,7 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     (ms : List (MachineV v.records v.event)) → (sts : PerMachine (List StartSlot) ms) →
     (effss : List (List (Sender × EffectV v.event))) → StartsRel M L T ms sts effss → effss.flatten.length ≤ 1 →
     (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
-    {news : List (Slot 2)} → {cnt : Term} → {owns : List (Slot 2)} → {ocnt : Term} →
+    {news : List PendingSlot} → {cnt : Term} → {owns : List OwnSlot} → {ocnt : Term} →
     roundStarts L shs ds senv ms sts nid q = .ok (news, cnt, owns, ocnt) →
     cnt.denote M = .int (Step.reqsOf effss.flatten).length ∧ NewsRel M L shs ds news (Step.reqsOf effss.flatten) n0 ∧
       ocnt.denote M = .int (Step.queuedOf effss.flatten).length ∧ OwnRel M L owns (Step.queuedOf effss.flatten) q0

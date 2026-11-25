@@ -94,8 +94,8 @@ structure EventsOut (v : ServiceV) where
   records : Term
   tables : PerMachine Term v.machines
   nextId : Term
-  news : List (Slot 2)
-  owns : List (Slot 2)
+  news : List PendingSlot
+  owns : List OwnSlot
   queued : Term
 
 /-- The slots with each flag and-ed with `f`. -/
@@ -126,7 +126,7 @@ def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (senv : Step
     let pick (a b : Term) := Term.share (.ite f a b)
     let (o, c) ← encodeEvents v shs senv apply now S (pick rt records)
       (PerMachine.zipWith pick (outs.map (·.table)) xs) (pick nR n) (pick qR q)
-    pure (⟨o.records, o.tables, o.nextId, gateSlots f (news ++ rnews) ++ o.news, gateSlots f (oS ++ rown) ++ o.owns,
+    pure (⟨o.records, o.tables, o.nextId, gatePending f (news ++ rnews) ++ o.news, gateOwns f (oS ++ rown) ++ o.owns,
       o.queued⟩, andT (.ite f (andT ca (andT cm cr)) tt) c)
 
 end
@@ -141,11 +141,19 @@ theorem gate_true {f : Term} (hf : f.denote M = .bool true) {w : Nat} :
     ⟨by simp [Term.denote, hf, hg, Val.toBool], hxs, gate_true hf (S := S) (sv := sv) hS⟩
   | [], _ :: _, h | _ :: _, [], h => h.elim
 
+theorem gatePending_slot (f : Term) (S : List PendingSlot) :
+    (gatePending f S).map PendingSlot.slot = gateSlots f (S.map PendingSlot.slot) := by
+  simp [gatePending, gateSlots, PendingSlot.slot]
+
+theorem gateOwns_slot (f : Term) (S : List OwnSlot) :
+    (gateOwns f S).map OwnSlot.slot = gateSlots f (S.map OwnSlot.slot) := by
+  simp [gateOwns, gateSlots, OwnSlot.slot]
+
 theorem newsRel_gate {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {f : Term}
-    (hf : f.denote M = .bool true) {S : List (Slot 2)} {effs : List (Sender × EffectV e)} {n0 : Nat}
-    (h : NewsRel M L shs ds S effs n0) : NewsRel M L shs ds (gateSlots f S) effs n0 := by
+    (hf : f.denote M = .bool true) {S : List PendingSlot} {effs : List (Sender × EffectV e)} {n0 : Nat}
+    (h : NewsRel M L shs ds S effs n0) : NewsRel M L shs ds (gatePending f S) effs n0 := by
   obtain ⟨sv, zs, hS, hw, hh, xs, hp, hq⟩ := h
-  exact ⟨sv, zs, gate_true hf hS, hw, hh, xs, hp, hq⟩
+  exact ⟨sv, zs, by rw [gatePending_slot]; exact gate_true hf hS, hw, hh, xs, hp, hq⟩
 
 theorem denotes_length : (xs : List Term) → (Term.denotes M xs).length = xs.length
   | [] => rfl
@@ -153,38 +161,42 @@ theorem denotes_length : (xs : List Term) → (Term.denotes M xs).length = xs.le
 
 /-- Slots gated by a false flag hold nothing. -/
 theorem newsRel_gate_false {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {f : Term}
-    (hf : f.denote M = .bool false) {S : List (Slot 2)} (n0 : Nat) :
-    NewsRel M L shs ds (gateSlots f S) [] n0 := by
-  have hS : SlotsDen M (gateSlots f S) (S.map fun sl => (false, Term.denotes M sl.2.1)) := by
-    induction S with
+    (hf : f.denote M = .bool false) {S : List PendingSlot} (n0 : Nat) :
+    NewsRel M L shs ds (gatePending f S) [] n0 := by
+  have hS : SlotsDen M ((gatePending f S).map PendingSlot.slot)
+      ((S.map PendingSlot.slot).map fun sl => (false, Term.denotes M sl.2.1)) := by
+    rw [gatePending_slot]
+    induction S.map PendingSlot.slot with
     | nil => trivial
     | cons sl S ih => exact ⟨by simp [Term.denote, hf, Val.toBool], rfl, ih⟩
-  have hocc : occupied (S.map fun sl => (false, Term.denotes M sl.2.1)) = [] := by
+  have hocc : occupied ((S.map PendingSlot.slot).map fun sl => (false, Term.denotes M sl.2.1)) = [] := by
     induction S with
     | nil => rfl
     | cons sl S ih => simp [occupied]
-  refine ⟨_, [], hS, ?_, by simp [Holds2, hocc, Forall2], [], by simp, trivial⟩
+  refine ⟨_, [], hS, ?_, by rw [Holds2, hocc]; trivial, [], by simp, trivial⟩
   intro p hp
   obtain ⟨sl, -, rfl⟩ := List.mem_map.1 hp
   simp [denotes_length, sl.2.2]
 
-theorem ownRel_gate {f : Term} (hf : f.denote M = .bool true) {S : List (Slot 2)} {os : List (EffectV e)} {q0 : Nat}
-    (h : OwnRel M L S os q0) : OwnRel M L (gateSlots f S) os q0 := by
+theorem ownRel_gate {f : Term} (hf : f.denote M = .bool true) {S : List OwnSlot} {os : List (EffectV e)} {q0 : Nat}
+    (h : OwnRel M L S os q0) : OwnRel M L (gateOwns f S) os q0 := by
   obtain ⟨sv, zs, hS, hw, hh, hp⟩ := h
-  exact ⟨sv, zs, gate_true hf hS, hw, hh, hp⟩
+  exact ⟨sv, zs, by rw [gateOwns_slot]; exact gate_true hf hS, hw, hh, hp⟩
 
 /-- Own slots gated by a false flag hold nothing. -/
-theorem ownRel_gate_false {f : Term} (hf : f.denote M = .bool false) {S : List (Slot 2)}
-    (q0 : Nat) : OwnRel M L (gateSlots f S) ([] : List (EffectV e)) q0 := by
-  have hS : SlotsDen M (gateSlots f S) (S.map fun sl => (false, Term.denotes M sl.2.1)) := by
-    induction S with
+theorem ownRel_gate_false {f : Term} (hf : f.denote M = .bool false) {S : List OwnSlot}
+    (q0 : Nat) : OwnRel M L (gateOwns f S) ([] : List (EffectV e)) q0 := by
+  have hS : SlotsDen M ((gateOwns f S).map OwnSlot.slot)
+      ((S.map OwnSlot.slot).map fun sl => (false, Term.denotes M sl.2.1)) := by
+    rw [gateOwns_slot]
+    induction S.map OwnSlot.slot with
     | nil => trivial
     | cons sl S ih => exact ⟨by simp [Term.denote, hf, Val.toBool], rfl, ih⟩
-  have hocc : occupied (S.map fun sl => (false, Term.denotes M sl.2.1)) = [] := by
+  have hocc : occupied ((S.map OwnSlot.slot).map fun sl => (false, Term.denotes M sl.2.1)) = [] := by
     induction S with
     | nil => rfl
     | cons sl S ih => simp [occupied]
-  refine ⟨_, [], hS, ?_, by simp [Holds2, hocc, Forall2], by simp⟩
+  refine ⟨_, [], hS, ?_, by rw [Holds2, hocc]; trivial, by simp⟩
   intro p hp
   obtain ⟨sl, -, rfl⟩ := List.mem_map.1 hp
   simp [denotes_length, sl.2.2]

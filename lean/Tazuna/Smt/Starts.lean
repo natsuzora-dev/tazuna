@@ -16,24 +16,35 @@ variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 /-- Whether a start slot starts an effect: it holds the first occurrence of its key, and its option holds one. -/
 def startFlag (dopt : Nat) (s : StartSlot) : Term := .and s.flag (.is dopt 0 s.effect)
 
+/-- A start slot's effect slot: whether it starts an effect, the wire id (or queue place) the effect gets, the key and
+the effect. -/
+structure RankedStart where
+  flag : Term
+  id : Term
+  key : Term
+  effect : Term
+
+/-- A ranked start as a slot of width three. -/
+def RankedStart.slot (s : RankedStart) : Slot 3 := (s.flag, ⟨[s.id, s.key, s.effect], rfl⟩)
+
 /-- One start slot's effect slot, from all the start slots: flagged by `startFlag`, it holds the wire id (`nextId`
 plus the number of flagged slots with a smaller key), the key and the effect. -/
 def rankStart (m : MachineV r e) (dopt : Nat) (nextId : Term) (all : List (StartSlot))
-    (s : StartSlot) : Except Refusal (Slot 3) := do
+    (s : StartSlot) : Except Refusal RankedStart := do
   let below ← all.mapM fun s' => do
     let (lt, _) ← need "a key type without order terms" (ordT L T m.key s'.key s.key)
     pure (Term.ite (.and (startFlag dopt s') lt) (.int 1) (.int 0))
-  pure (startFlag dopt s, ⟨[Term.share (.add nextId (sumT below)), s.key, .sel dopt 0 0 s.effect], rfl⟩)
+  pure ⟨startFlag dopt s, Term.share (.add nextId (sumT below)), s.key, .sel dopt 0 0 s.effect⟩
 
 /-- The effect slots of a machine's start slots. -/
 def rankStarts (m : MachineV r e) (dopt : Nat) (nextId : Term) (starts : List (StartSlot)) :
-    Except Refusal (List (Slot 3)) :=
+    Except Refusal (List RankedStart) :=
   starts.mapM (rankStart L T m dopt nextId starts)
 
 /-- A start slot's effect slot where at most one slot starts an effect, so the id needs no rank: flagged by
 `startFlag`, it holds `nextId`, the key and the effect. -/
-def onceStart (dopt : Nat) (nextId : Term) (s : StartSlot) : Slot 3 :=
-  (startFlag dopt s, ⟨[nextId, s.key, .sel dopt 0 0 s.effect], rfl⟩)
+def onceStart (dopt : Nat) (nextId : Term) (s : StartSlot) : RankedStart :=
+  ⟨startFlag dopt s, nextId, s.key, .sel dopt 0 0 s.effect⟩
 
 /-- How many effects the start slots start. -/
 def startCount (dopt : Nat) (starts : List (StartSlot)) : Term :=
@@ -228,10 +239,10 @@ theorem below_sum {s : StartSlot} {a : α}
 
 /-- The effect slots of start slots hold, where flagged, each effect an item starts, with its wire id. -/
 theorem rank_slots {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int)) :
-    (ws : List (StartSlot)) → (sv : List (Bool × List Val)) → (E : List α) → (S : List (Slot 3)) →
+    (ws : List (StartSlot)) → (sv : List (Bool × List Val)) → (E : List α) → (S : List RankedStart) →
     SlotsDen M (ws.map StartSlot.slot) sv → Holds2 (EOpt (L := L) m κ F) E sv →
     Forall2 (fun s o => rankStart L T m dopt nextId all s = .ok o) ws S →
-    ∃ svS, SlotsDen M S svS ∧ Holds2 (EEff (L := L) m) (E.filterMap fun a => (sentBy m κ F a).map
+    ∃ svS, SlotsDen M (S.map RankedStart.slot) svS ∧ Holds2 (EEff (L := L) m) (E.filterMap fun a => (sentBy m κ F a).map
       fun x => (x, n0 + rankBy (T := T) m κ F items a)) svS
   | [], [], E, [], _, hE, _ => by
     cases E with
@@ -283,10 +294,11 @@ theorem rank_starts (m : MachineV r e) {dopt nopt : Nat}
     (hh : Holds2 (EOpt (L := L) m κ F) E svX) (hEp : E.Perm items)
     (hks : items.Pairwise fun a b => Ty.cmp T m.key (κ a) (κ b) = .lt)
     {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int))
-    {S : List (Slot 3)} (hS : rankStarts L T m dopt nextId starts = .ok S) :
+    {S : List RankedStart} (hS : rankStarts L T m dopt nextId starts = .ok S) :
     let effs := items.flatMap fun a => (sentBy m κ F a).toList
     (startCount dopt starts).denote M = .int effs.length ∧
-      ∃ svS ys, SlotsDen M S svS ∧ ys.Perm (effs.zipIdx n0) ∧ Holds2 (EEff (L := L) m) ys svS := by
+      ∃ svS ys, SlotsDen M (S.map RankedStart.slot) svS ∧ ys.Perm (effs.zipIdx n0) ∧
+        Holds2 (EEff (L := L) m) ys svS := by
   intro effs
   refine ⟨startCount_den m hopt κ F hX hh hEp, ?_⟩
   · obtain ⟨svS, hS', hh'⟩ := rank_slots (T := T) m hopt κ F hX hh hEp hn starts svX E S hX hh (mapM_ok _ _ _ hS)
@@ -303,7 +315,7 @@ theorem once_slots (m : MachineV r e) {dopt nopt : Nat}
     {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int)) :
     (ws : List (StartSlot)) → (sv : List (Bool × List Val)) → (E : List α) →
     SlotsDen M (ws.map StartSlot.slot) sv → Holds2 (EOpt (L := L) m κ F) E sv →
-    ∃ svS, SlotsDen M (ws.map (onceStart dopt nextId)) svS ∧
+    ∃ svS, SlotsDen M ((ws.map (onceStart dopt nextId)).map RankedStart.slot) svS ∧
       Holds2 (EEff (L := L) m) (E.filterMap fun a => (sentBy m κ F a).map fun x => (x, n0)) svS
   | [], [], E, _, hE => by
     cases E with
@@ -314,7 +326,7 @@ theorem once_slots (m : MachineV r e) {dopt nopt : Nat}
     cases b with
     | false =>
       obtain ⟨svS, hS', hh'⟩ := once_slots m hopt κ F hn ws sv E hS (by simpa [Holds2, occupied] using hE)
-      refine ⟨(false, _) :: svS, ⟨by simp [startFlag, Term.denote, hf, Val.toBool], rfl, hS'⟩, ?_⟩
+      refine ⟨(false, _) :: svS, ⟨by simp [onceStart, startFlag, Term.denote, hf, Val.toBool], rfl, hS'⟩, ?_⟩
       simpa [Holds2, occupied] using hh'
     | true =>
       match E, hE with
@@ -326,12 +338,12 @@ theorem once_slots (m : MachineV r e) {dopt nopt : Nat}
         · have hsent : sentBy m κ F a = some (.machine m.name ⟨m.key, κ a⟩, x') := by
             simp only [sentBy, hv, Ty.toOption]; rfl
           refine ⟨(true, [.int (n0 : Int), zk, zx]) :: svS, ⟨?_, ?_, hS'⟩, ?_⟩
-          · simp [startFlag, Term.denote, hf, hvs.2, hzv, Val.toBool]
-          · simp [Term.denotes, Term.denote, hn, hvs.1, hvs.2, hzv]
+          · simp [onceStart, startFlag, Term.denote, hf, hvs.2, hzv, Val.toBool]
+          · simp [onceStart, Term.denotes, Term.denote, hn, hvs.1, hvs.2, hzv]
           · simp only [List.filterMap_cons, hsent]
             exact ⟨⟨κ a, zk, zx, rfl, rfl, hk, hx'⟩, hh'⟩
         · have hsent : sentBy m κ F a = none := by simp only [sentBy, hv, Ty.toOption]; rfl
-          refine ⟨(false, _) :: svS, ⟨by simp [startFlag, Term.denote, hf, hvs.2, hzv, Val.toBool], rfl, hS'⟩, ?_⟩
+          refine ⟨(false, _) :: svS, ⟨by simp [onceStart, startFlag, Term.denote, hf, hvs.2, hzv, Val.toBool], rfl, hS'⟩, ?_⟩
           simp only [List.filterMap_cons, hsent, Option.map_none]
           simpa [Holds2, occupied] using hh'
   | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ => h.elim
@@ -351,7 +363,7 @@ theorem once_starts (m : MachineV r e) {dopt nopt : Nat}
     (hh : Holds2 (EOpt (L := L) m κ F) E svX) (hEp : E.Perm items)
     (hone : (items.flatMap fun a => (sentBy m κ F a).toList).length ≤ 1)
     {nextId : Term} {n0 : Nat} (hn : nextId.denote M = .int (n0 : Int)) :
-    ∃ svS ys, SlotsDen M (starts.map (onceStart dopt nextId)) svS ∧
+    ∃ svS ys, SlotsDen M ((starts.map (onceStart dopt nextId)).map RankedStart.slot) svS ∧
       ys.Perm ((items.flatMap fun a => (sentBy m κ F a).toList).zipIdx n0) ∧ Holds2 (EEff (L := L) m) ys svS := by
   obtain ⟨svS, hS, hh'⟩ := once_slots m hopt κ F hn starts svX E hX hh
   refine ⟨svS, _, hS, ?_, hh'⟩

@@ -453,35 +453,42 @@ end
 section
 variable {M : Model} {w : Nat}
 
-/-- Slots whose items a function of the item terms rewrites. -/
-theorem mapItems_den {α β : Type} {E : α → List Val → Prop} {E' : β → List Val → Prop} {Q : α → β → Prop}
-    {w' : Nat} (N : SlotItems w → SlotItems w')
-    (hN : ∀ y (xs : SlotItems w), E y (Term.denotes M xs.1) → ∃ z, E' z (Term.denotes M (N xs).1) ∧ Q y z) :
-    {S : List (Slot w)} → {sv : List (Bool × List Val)} → {ys : List α} → SlotsDen M S sv → Holds2 E ys sv →
-    ∃ sv' zs, SlotsDen M (S.map fun (f, xs) => (f, N xs)) sv' ∧ sv'.length = sv.length ∧
+/-- Records seen as slots, each rewritten by `N` into a record of another kind with the same flag. -/
+theorem mapView_den {α β γ δ : Type} {w' : Nat} {E : α → List Val → Prop} {E' : β → List Val → Prop}
+    {Q : α → β → Prop} (view : γ → Slot w) (view' : δ → Slot w') (N : γ → δ) (hf : ∀ c, (view' (N c)).1 = (view c).1)
+    (hN : ∀ y c, E y (Term.denotes M (view c).2.1) → ∃ z, E' z (Term.denotes M (view' (N c)).2.1) ∧ Q y z) :
+    {S : List γ} → {sv : List (Bool × List Val)} → {ys : List α} → SlotsDen M (S.map view) sv → Holds2 E ys sv →
+    ∃ sv' zs, SlotsDen M ((S.map N).map view') sv' ∧ sv'.length = sv.length ∧
       (∀ p ∈ sv', p.2.length = w') ∧ Holds2 E' zs sv' ∧ Forall2 Q ys zs
   | [], [], ys, _, hy => by
     cases ys with
     | nil => exact ⟨[], [], trivial, rfl, by simp, by simp [Holds2, occupied, Forall2], trivial⟩
     | cons _ _ => exact hy.elim
-  | (f, xs) :: S, (b, vs) :: sv, ys, ⟨hf, hx, hS⟩, hy => by
-    have hl : ∀ q, q = (b, Term.denotes M (N xs).1) → q.2.length = w' := by
-      intro q hq; subst hq; rw [denotes_eq_map, List.length_map, (N xs).2]
+  | c :: S, (b, vs) :: sv, ys, h0, hy => by
+    obtain ⟨hfc, hx, hS⟩ : (view c).1.denote M = .bool b ∧ Term.denotes M (view c).2.1 = vs ∧
+        SlotsDen M (S.map view) sv := by
+      simp only [List.map_cons] at h0; revert h0; generalize view c = sl; intro h0; exact h0
+    have hcons : ((c :: S).map N).map view' = view' (N c) :: (S.map N).map view' := rfl
+    have hfn : (view' (N c)).1.denote M = .bool b := by rw [hf]; exact hfc
+    have hl : ((b, Term.denotes M (view' (N c)).2.1).2).length = w' := by
+      rw [denotes_eq_map, List.length_map, (view' (N c)).2.2]
+    have hd : ∀ {sv' : List (Bool × List Val)}, SlotsDen M ((S.map N).map view') sv' →
+        SlotsDen M (((c :: S).map N).map view') ((b, Term.denotes M (view' (N c)).2.1) :: sv') := by
+      intro sv' h; rw [hcons]; revert hfn; generalize view' (N c) = sl; intro hfn; exact ⟨hfn, rfl, h⟩
     cases b with
     | false =>
-      obtain ⟨sv', zs, h1, h2, h3, h4, h5⟩ := mapItems_den N hN hS (by simpa [Holds2, occupied] using hy)
-      refine ⟨(false, Term.denotes M (N xs).1) :: sv', zs, ⟨hf, rfl, h1⟩, by simp [h2], ?_, by
-        simpa [Holds2, occupied] using h4, h5⟩
+      obtain ⟨sv', zs, h1, h2, h3, h4, h5⟩ := mapView_den view view' N hf hN hS (by simpa [Holds2, occupied] using hy)
+      refine ⟨_ :: sv', zs, hd h1, by simp [h2], ?_, by simpa [Holds2, occupied] using h4, h5⟩
       simp only [List.mem_cons, forall_eq_or_imp]
-      exact ⟨hl _ rfl, h3⟩
+      exact ⟨hl, h3⟩
     | true =>
       match ys, hy with
       | y :: ys, ⟨hey, hy⟩ =>
-        obtain ⟨z, hz, hq⟩ := hN y xs (hx ▸ hey)
-        obtain ⟨sv', zs, h1, h2, h3, h4, h5⟩ := mapItems_den N hN hS hy
-        refine ⟨(true, Term.denotes M (N xs).1) :: sv', z :: zs, ⟨hf, rfl, h1⟩, by simp [h2], ?_, ⟨hz, h4⟩, ⟨hq, h5⟩⟩
+        obtain ⟨z, hz, hq⟩ := hN y c (hx ▸ hey)
+        obtain ⟨sv', zs, h1, h2, h3, h4, h5⟩ := mapView_den view view' N hf hN hS hy
+        refine ⟨_ :: sv', z :: zs, hd h1, by simp [h2], ?_, ⟨hz, h4⟩, ⟨hq, h5⟩⟩
         simp only [List.mem_cons, forall_eq_or_imp]
-        exact ⟨hl _ rfl, h3⟩
+        exact ⟨hl, h3⟩
   | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ => h.elim
 
 end

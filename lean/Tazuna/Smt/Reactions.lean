@@ -16,16 +16,16 @@ variable (L : Layout) {r e : Ty}
 
 /-- The pending table slot of a request with the wire id `id`, the effect `eff` and the sender's key tuple items
 `keyT`. Both items are shared, as moving the slot into the table copies them into every slot. -/
-def pendingItems (dE dP dk : Nat) (dflt : Term) (js : List Nat) (keyT : List Term) (id eff : Term) : SlotItems 2 :=
-  ⟨[Term.share id, Term.share (entryT dE dP dk dflt keyT (Term.share eff) 0 js)], rfl⟩
+def pendingSlot (dE dP dk : Nat) (dflt : Term) (js : List Nat) (keyT : List Term) (f id eff : Term) : PendingSlot :=
+  ⟨f, Term.share id, Term.share (entryT dE dP dk dflt keyT (Term.share eff) 0 js)⟩
 
 /-- A reaction's effect slots as pending table slots, each occupied slot at the id `n` plus the occupied slots before
 it, and the id after them. -/
-def reactSlots (dE dP dk : Nat) (dflt : Term) (js : List Nat) : List (Slot 1) → Term → List (Slot 2) × Term
+def reactSlots (dE dP dk : Nat) (dflt : Term) (js : List Nat) : List (Slot 1) → Term → List PendingSlot × Term
   | [], n => ([], n)
   | (f, xs) :: S, n =>
     let rest := reactSlots dE dP dk dflt js S (Term.share (.add n (.ite f (.int 1) (.int 0))))
-    ((f, pendingItems dE dP dk dflt js [] n xs[0]) :: rest.1, rest.2)
+    (pendingSlot dE dP dk dflt js [] f n xs[0] :: rest.1, rest.2)
 
 /-- The context a reaction reads: the records and the time. -/
 def reactionCtxT (records now : Term) : Except Refusal Term :=
@@ -36,7 +36,7 @@ wire id `n` and the id after them, the own slots of the own commands and queries
 after them, and the condition. With no own kinds every effect is a request, and the list's slots are used as they
 are. -/
 def encodeReactions (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (dE dP : Nat) :
-    List (ReactionV r e) → (records now ev n q : Term) → Except Refusal (List (Slot 2) × Term × List (Slot 2) × Term × Term)
+    List (ReactionV r e) → (records now ev n q : Term) → Except Refusal (List PendingSlot × Term × List OwnSlot × Term × Term)
   | [], _, _, _, n, q => pure ([], n, [], q, tt)
   | x :: xs, records, now, ev, n, q => do
     let (rc, c0) ← x.react.code L
@@ -79,8 +79,8 @@ theorem reactSlots_rel {P : List AnySite} (hP : SitesUnique P) (name : String) {
     | nil => exact ⟨by simpa [reactSlots] using hn, [], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩
     | cons _ _ => exact hh.elim
   | (f, xs) :: S, (b, vs) :: sv, effs, ⟨hf, hx, hS⟩, hh, hr, hrq, n, n0, hn => by
-    have hl : (Term.denotes M (pendingItems dE dP dk dflt js [] n xs[0]).1).length = 2 := by
-      simp [pendingItems, Term.denotes]
+    have hl : (Term.denotes M (pendingSlot dE dP dk dflt js [] f n xs[0]).slot.2.1).length = 2 := by
+      simp [pendingSlot, PendingSlot.slot, Term.denotes]
     cases b with
     | false =>
       have hn' : (Term.share (.add n (.ite f (.int 1) (.int 0)))).denote M = .int n0 := by
@@ -105,11 +105,11 @@ theorem reactSlots_rel {P : List AnySite} (hP : SitesUnique P) (name : String) {
           (keyT := []) ⟨dk, nk, [], hdk, rfl, rfl⟩ (hr x (by simp)) (hrq x (by simp)) (effT := Term.share t)
           (by rw [Term.denote_share, ht]; exact hxz) n0 dflt
         refine ⟨by show (reactSlots dE dP dk dflt js S _).2.denote M = _; rw [h1]; simp; omega, (true, _) :: sv',
-          ((n0 : Nat), y) :: zs, ⟨hf, rfl, hS'⟩, ?_, ⟨⟨_, _, rfl, by simp only [Term.denote_share]; exact hn, ?_⟩, hh'⟩,
+          ((n0 : Nat), y) :: zs, ⟨hf, rfl, hS'⟩, ?_, ⟨⟨_, _, rfl, by simp only [pendingSlot, Term.denote_share]; exact hn, ?_⟩, hh'⟩,
           ((Sender.reaction name, .request req), n0) :: xs', ?_, ⟨⟨rfl, req, o, rfl, ho, hpend⟩, hq⟩⟩
         · simp only [List.mem_cons, forall_eq_or_imp]
           exact ⟨hl, hw⟩
-        · simp only [SlotItems.getElem_mk, List.getElem_cons_zero, Term.denote_share]
+        · simp only [pendingSlot, SlotItems.getElem_mk, List.getElem_cons_zero, Term.denote_share]
           exact hyrel
         · simp only [List.map_cons, List.zipIdx_cons]
           exact hp.cons _
@@ -210,8 +210,8 @@ theorem reactions_encode {P : List AnySite} (hP : SitesUnique P) {shs : List (Pe
     (recs : r.den0) (tnow : Int) (ev : e.den0) (hrd : r.isData = true) (hed : e.isData = true)
     {records now evT : Term} (hrec : RelV L r (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hev : RelV L e (Ty.up _ hed ev) (evT.denote M)) :
-    (xs : List (ReactionV r e)) → (∀ x ∈ xs, x.Reach P) → {n q : Term} → {news : List (Slot 2)} → {n' : Term} →
-    {owns : List (Slot 2)} → {q' c : Term} →
+    (xs : List (ReactionV r e)) → (∀ x ∈ xs, x.Reach P) → {n q : Term} → {news : List PendingSlot} → {n' : Term} →
+    {owns : List OwnSlot} → {q' c : Term} →
     encodeReactions L shs ds dE dP xs records now evT n q = .ok (news, n', owns, q', c) →
     (Holds M c ↔ ∀ x ∈ xs, (x.react.fits L.count).1 ∧ x.react.appFits L.count (.inl (recs, tnow, ()), ev, ())) ∧
     (∀ {n0 q0 : Nat}, n.denote M = .int n0 → q.denote M = .int q0 → Holds M c →

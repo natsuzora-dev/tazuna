@@ -1666,10 +1666,10 @@ def startsCheck (solver : Solver) : IO Bool := do
       let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
       let effs := (Step.machineStep (e := startSvc.event) prelude s.records s.now ev ⟨m, insts⟩).2.zipIdx s.nextId
       -- Each flagged effect slot as (wire id, key, effect value), in slot order.
-      let read := S.filterMap fun (f, xs) => if (f.denote M).toBool then
-        match Term.denotes M xs with
-        | [.int id, .int k, w] => some (id, k, w)
-        | _ => none
+      let read := S.filterMap fun r => if (r.flag.denote M).toBool then
+        match r.id.denote M, r.key.denote M with
+        | .int id, .int k => some (id, k, r.effect.denote M)
+        | _, _ => none
         else none
       let agrees (got : List (Int × Int × Val)) : Bool :=
         let sorted := got.mergeSort fun a b => a.1 ≤ b.1
@@ -2479,11 +2479,11 @@ def mixScript (slots : Nat) (goal : List Term) : Except String (Script × Nat ×
   let some esrt := L.srt? (.dsl .effect [.int]) | throw "no effect sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let base := 9
-  let news := o.news.zipIdx.flatMap fun ((f, xs), j) =>
-    [.eq (.var (base + 2 * j)) f, .eq (.var (base + 2 * j + 1)) xs[0]]
+  let news := o.news.zipIdx.flatMap fun (sl, j) =>
+    [.eq (.var (base + 2 * j)) sl.flag, .eq (.var (base + 2 * j + 1)) sl.id]
   let ob := base + 2 * o.news.length
-  let owns := o.owns.zipIdx.flatMap fun ((f, xs), j) =>
-    [.eq (.var (ob + 3 * j)) f, .eq (.var (ob + 3 * j + 1)) xs[0], .eq (.var (ob + 3 * j + 2)) xs[1]]
+  let owns := o.owns.zipIdx.flatMap fun (sl, j) =>
+    [.eq (.var (ob + 3 * j)) sl.flag, .eq (.var (ob + 3 * j + 1)) sl.place, .eq (.var (ob + 3 * j + 2)) sl.effect]
   let vars := [rsrt, .int, .int, .int, psrt, msrt, .int, .int, .int] ++
     (o.news.map fun _ => [Srt.bool, .int]).flatten ++ (o.owns.map fun _ => [Srt.bool, .int, esrt]).flatten
   let hb := vars.length
@@ -2593,7 +2593,7 @@ def internalScriptOf (slots : Nat) (goal : List Term) : Except String (Script ×
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.answered.tables.toList | throw "not one machine"
   let news := o.decided.after.news ++ o.answered.news
-  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) xs[0]]
+  let slots := news.zipIdx.flatMap fun (sl, j) => [.eq (.var (11 + 2 * j)) sl.flag, .eq (.var (12 + 2 * j)) sl.id]
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, .str, .int, rsrt, .int, msrt] ++
             (news.map fun _ => [Srt.bool, .int]).flatten,
@@ -2694,7 +2694,7 @@ def ownQueryScript (goal : List Term) : Except String (Script × Nat) := do
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.answered.tables.toList | throw "not one machine"
   let news := o.answered.news
-  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) xs[0]]
+  let slots := news.zipIdx.flatMap fun (sl, j) => [.eq (.var (11 + 2 * j)) sl.flag, .eq (.var (12 + 2 * j)) sl.id]
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, .str, .int, rsrt, .int, msrt] ++
             (news.map fun _ => [Srt.bool, .int]).flatten,
@@ -2800,7 +2800,7 @@ def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal :
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.terms.done.tables.toList | throw "not one machine"
   let news := o.terms.done.news
-  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (12 + 2 * j)) f, .eq (.var (13 + 2 * j)) xs[0]]
+  let slots := news.zipIdx.flatMap fun (sl, j) => [.eq (.var (12 + 2 * j)) sl.flag, .eq (.var (13 + 2 * j)) sl.id]
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, esrt, rsrt, .int, msrt, .bool, .int] ++
             (news.map fun _ => [Srt.bool, .int]).flatten,
@@ -2913,7 +2913,7 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
   let (apply, ca) ← enc (dispSvc.apply.code L)
   let senv ← enc (StepEnv.of L dispShapes)
   let effs ← effects.mapM fun f => enc (f L)
-  let queue : List (Slot 2) := effs.zipIdx.map fun (e, j) => (tt, ⟨[.int j, e], rfl⟩)
+  let queue : List OwnSlot := effs.zipIdx.map fun (e, j) => ⟨tt, .int j, e⟩
   let t : StepTerms dispSvc := ⟨.bool false, ⟨S.records, S.machines, S.nextId, [], [], .int effs.length⟩, S.fresh⟩
   let ⟨o, cond, codes⟩ ← enc (encodeSettle L prelude dispSites dispSvc dispShapes senv apply (effs.headD tt) S.now
     fuel 0 queue t)
@@ -2925,7 +2925,7 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
   let some dts := L.datatypes? | throw "no datatypes"
   let [tbl] := o.terms.done.tables.toList | throw "not one machine"
   let news := o.terms.done.news
-  let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (12 + 2 * j)) f, .eq (.var (13 + 2 * j)) xs[0]]
+  let slots := news.zipIdx.flatMap fun (sl, j) => [.eq (.var (12 + 2 * j)) sl.flag, .eq (.var (13 + 2 * j)) sl.id]
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, rsrt, .int, msrt, .bool, .bool, .int] ++
             (news.map fun _ => [Srt.bool, .int]).flatten,

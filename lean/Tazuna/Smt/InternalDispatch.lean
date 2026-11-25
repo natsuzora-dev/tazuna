@@ -84,7 +84,7 @@ def pickTerms {v : ServiceV} (c : Term) (a b : StepTerms v) : StepTerms v :=
   let p (x y : Term) := Term.share (.ite c x y)
   ⟨p a.fault b.fault,
     ⟨p a.done.records b.done.records, PerMachine.zipWith p a.done.tables b.done.tables,
-      p a.done.nextId b.done.nextId, gateSlots c a.done.news ++ b.done.news, gateSlots c a.done.owns ++ b.done.owns,
+      p a.done.nextId b.done.nextId, gatePending c a.done.news ++ b.done.news, gateOwns c a.done.owns ++ b.done.owns,
       p a.done.queued b.done.queued⟩,
     p a.fresh b.fresh⟩
 

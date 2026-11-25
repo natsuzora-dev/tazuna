@@ -101,22 +101,48 @@ abbrev startedBy (T : List TypeDecl) (s : State v) (records : v.records.den0) (e
 
 end
 
+/-- A slot of the pending table: whether it holds a request, the request's wire id and its entry. -/
+structure PendingSlot where
+  flag : Term
+  id : Term
+  entry : Term
+
+/-- A pending slot as a slot of width two. -/
+def PendingSlot.slot (s : PendingSlot) : Slot 2 := (s.flag, ⟨[s.id, s.entry], rfl⟩)
+
+/-- The pending slots with each flag and-ed with `f`. -/
+def gatePending (f : Term) (S : List PendingSlot) : List PendingSlot :=
+  S.map fun s => { s with flag := Term.share (.and f s.flag) }
+
+/-- The `n` slots of the pending table `s`, as `slotsOf` reads them. -/
+def pendingSlotsOf (d dt n : Nat) (s : Term) : List PendingSlot :=
+  (List.range n).map fun i =>
+    let x := Term.sel d 0 i s.share
+    ⟨.sel dt 0 0 x, .sel dt 0 1 x, .sel dt 0 2 x⟩
+
+theorem pendingSlotsOf_slot (d dt n : Nat) (s : Term) :
+    (pendingSlotsOf d dt n s).map PendingSlot.slot = slotsOf d dt n 2 s := by
+  simp only [pendingSlotsOf, slotsOf, List.map_map]
+  refine List.map_congr_left fun i _ => ?_
+  simp only [Function.comp_apply, PendingSlot.slot, Prod.mk.injEq, true_and]
+  exact Subtype.ext (by simp [List.range_succ])
+
 section
 variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
 /-- The pending table slot of an effect slot: its wire id and its entry. Both are shared, as are the key and the
 effect the entry reads several times, because moving the slot into the table copies its items into every slot. -/
-def entryItems (dE dP dk : Nat) (dflt : Term) (js : List Nat) (xs : SlotItems 3) : SlotItems 2 :=
-  ⟨[Term.share xs[0], Term.share (entryT dE dP dk dflt [Term.share xs[1]] (Term.share xs[2]) 0 js)], rfl⟩
+def entrySlot (dE dP dk : Nat) (dflt : Term) (js : List Nat) (s : RankedStart) : PendingSlot :=
+  ⟨s.flag, Term.share s.id, Term.share (entryT dE dP dk dflt [Term.share s.key] (Term.share s.effect) 0 js)⟩
 
 /-- A machine's effect slots as pending table slots: each flagged slot holds its wire id and its entry. -/
-def entrySlots (dE dP dk : Nat) (dflt : Term) (js : List Nat) (S : List (Slot 3)) : List (Slot 2) :=
-  S.map fun (f, xs) => (f, entryItems dE dP dk dflt js xs)
+def entrySlots (dE dP dk : Nat) (dflt : Term) (js : List Nat) (S : List RankedStart) : List PendingSlot :=
+  S.map (entrySlot dE dP dk dflt js)
 
 /-- The own slots of a machine's own start slots, ranked from the queue place `q`, and the place after them; none when
 the layout has no own kinds. -/
 def ownStarts (m : MachineV r e) (dopt : Nat) (none : Bool) (os : List (StartSlot)) (q : Term) :
-    Except Refusal (List (Slot 2) × Term) :=
+    Except Refusal (List OwnSlot × Term) :=
   if none then pure ([], q) else do pure (ownItems (← rankStarts L T m dopt q os), Term.add q (startCount dopt os))
 
 /-- The pending slots of the requests the machines' start slots start, each machine's wire ids after the ones of the
@@ -125,7 +151,7 @@ at its place in the queue from `q`, and the place after them. With no own kinds 
 start slots are used as they are. -/
 def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (senv : StepEnv L shs) :
     (ms : List (MachineV r e)) → PerMachine (List StartSlot) ms → (n q : Term) →
-    Except Refusal (List (Slot 2) × Term × List (Slot 2) × Term)
+    Except Refusal (List PendingSlot × Term × List OwnSlot × Term)
   | [], .nil, n, q => pure ([], n, [], q)
   | m :: ms, .cons st sts, n, q => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
@@ -139,21 +165,16 @@ def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV))
     pure (entrySlots senv.dE senv.dP dk dflt js S ++ rest, n', oS ++ orest, q'')
 
 /-- The pending table with the new entries moved into its free slots, and the condition that they fit. -/
-def encodePending (shs : List (PendingShape e)) (pending : Term) (news : List (Slot 2)) :
+def encodePending (shs : List (PendingShape e)) (pending : Term) (news : List PendingSlot) :
     Except Refusal (Term × Term) := do
   let (d, n, dt) ← collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs]
-  let (S, c) := moveAll d dt (slotsOf d dt n 2 pending) news
+  let (S, c) := moveAll d dt (slotsOf d dt n 2 pending) (news.map PendingSlot.slot)
   pure (slotsTerm d dt S, c)
 
 end
 
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
-
-theorem triple_terms {xs : SlotItems 3} {a b c : Val} (h : Term.denotes M xs.1 = [a, b, c]) :
-    ∃ x y z, xs = ⟨[x, y, z], rfl⟩ ∧ x.denote M = a ∧ y.denote M = b ∧ z.denote M = c := by
-  obtain ⟨_ | ⟨x, _ | ⟨y, _ | ⟨z, _ | _⟩⟩⟩, hl⟩ := xs <;> simp at hl
-  simp only [Term.denotes, List.cons.injEq, and_true] at h; exact ⟨x, y, z, rfl, h.1, h.2.1, h.2.2⟩
 
 /-- An entry of the pending table with its wire id is the request the step writes for an effect. -/
 def WritesEntry (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (x : (Sender × EffectV e) × Nat)
@@ -166,10 +187,10 @@ theorem entrySlots_rel {P : List AnySite} (hP : SitesUnique P) (m : MachineV r e
     (hjs : shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e) = .ok js)
     {dE nE dP nP dk nk : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP)) (hdk : L.find? (.tuple [m.key]) = some (dk, nk))
-    {S : List (Slot 3)} {sv : List (Bool × List Val)} {ys : List ((Sender × EffectV e) × Nat)} (dflt : Term)
-    (hS : SlotsDen M S sv) (hy : Holds2 (EEff (L := L) m) ys sv) (hr : ∀ x ∈ ys, x.1.2.Reach P)
+    {S : List RankedStart} {sv : List (Bool × List Val)} {ys : List ((Sender × EffectV e) × Nat)} (dflt : Term)
+    (hS : SlotsDen M (S.map RankedStart.slot) sv) (hy : Holds2 (EEff (L := L) m) ys sv) (hr : ∀ x ∈ ys, x.1.2.Reach P)
     (hreq : ∀ x ∈ ys, x.1.2.isRequest = true) :
-    ∃ sv' zs, SlotsDen M (entrySlots dE dP dk dflt js S) sv' ∧ sv'.length = sv.length ∧ (∀ p ∈ sv', p.2.length = 2) ∧
+    ∃ sv' zs, SlotsDen M ((entrySlots dE dP dk dflt js S).map PendingSlot.slot) sv' ∧ sv'.length = sv.length ∧ (∀ p ∈ sv', p.2.length = 2) ∧
       Holds2 (ETab L (.dsl .fresh []) (pendingEntry shs)) zs sv' ∧ Forall2 (WritesEntry shs ds) ys zs := by
   have hys : Holds2 (fun x vs => EEff (L := L) m x vs ∧ x.1.2.Reach P ∧ x.1.2.isRequest = true) ys sv := by
     unfold Holds2 at hy ⊢
@@ -180,9 +201,10 @@ theorem entrySlots_rel {P : List AnySite} (hP : SitesUnique P) (m : MachineV r e
       match os, hy with
       | o :: os, ⟨h1, h2⟩ => exact ⟨⟨h1, hr x (by simp), hreq x (by simp)⟩,
         ih (fun x' h => hr x' (by simp [h])) (fun x' h => hreq x' (by simp [h])) os h2⟩
-  refine mapItems_den (entryItems dE dP dk dflt js) ?_ hS hys
-  rintro ⟨⟨snd, eff⟩, id⟩ xs ⟨⟨k, zk, zx, hvs, hsnd, hzk, hzx⟩, hre, hrq⟩
-  obtain ⟨a, b, c, rfl, ha, hb, hc⟩ := triple_terms hvs
+  refine mapView_den RankedStart.slot PendingSlot.slot (entrySlot dE dP dk dflt js) (fun _ => rfl) ?_ hS hys
+  rintro ⟨⟨snd, eff⟩, id⟩ ⟨f, a, b, c⟩ ⟨⟨k, zk, zx, hvs, hsnd, hzk, hzx⟩, hre, hrq⟩
+  simp only [RankedStart.slot, Term.denotes, List.cons.injEq, and_true] at hvs
+  obtain ⟨ha, hb, hc⟩ := hvs
   simp only at hsnd hre hzx
   subst hsnd
   obtain ⟨req, o, rfl, ho, y, hyrel, hpend⟩ := entry_rel (M := M) hP (.machine m.name m.key) hshs hjs hE hPE (k, ())
@@ -190,10 +212,9 @@ theorem entrySlots_rel {P : List AnySite} (hP : SitesUnique P) (m : MachineV r e
       rw [show Term.denotes M [Term.share b] = [zk] by simp [Term.denotes, Term.denote_share, hb]]
       exact machineKey_rel m k hzk hdk) hre hrq (effT := Term.share c)
     (by rw [Term.denote_share, hc]; exact hzx) id dflt
-  refine ⟨((id : Nat), y), ⟨_, _, rfl,
-    (by simp only [SlotItems.getElem_mk, List.getElem_cons_zero, Term.denote_share]; exact ha), ?_⟩, rfl, req, o, rfl,
+  refine ⟨((id : Nat), y), ⟨_, _, rfl, (by simp only [entrySlot, Term.denote_share]; exact ha), ?_⟩, rfl, req, o, rfl,
     ho, hpend⟩
-  simp only [SlotItems.getElem_mk, List.getElem_cons_succ, List.getElem_cons_zero, Term.denote_share]
+  simp only [entrySlot, Term.denote_share]
   exact hyrel
 
 end
@@ -209,16 +230,17 @@ theorem holds2_append {α : Type} {E : α → List Val → Prop} {ys zs : List �
 
 /-- The pending slots hold, where flagged, the entries of the requests written for `effs` at ids from `n0`. -/
 def NewsRel (M : Model) (L : Layout) (shs : List (PendingShape e)) (ds : List (String × DeclaredV))
-    (news : List (Slot 2)) (effs : List (Sender × EffectV e)) (n0 : Nat) : Prop :=
-  ∃ sv zs, SlotsDen M news sv ∧ (∀ p ∈ sv, p.2.length = 2) ∧ Holds2 (ETab L (.dsl .fresh []) (pendingEntry shs)) zs sv ∧
+    (news : List PendingSlot) (effs : List (Sender × EffectV e)) (n0 : Nat) : Prop :=
+  ∃ sv zs, SlotsDen M (news.map PendingSlot.slot) sv ∧ (∀ p ∈ sv, p.2.length = 2) ∧ Holds2 (ETab L (.dsl .fresh []) (pendingEntry shs)) zs sv ∧
     ∃ xs, xs.Perm (effs.zipIdx n0) ∧ Forall2 (WritesEntry shs ds) xs zs
 
-theorem newsRel_append {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {S S' : List (Slot 2)}
+theorem newsRel_append {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {S S' : List PendingSlot}
     {effs effs' : List (Sender × EffectV e)} {n0 : Nat} (h : NewsRel M L shs ds S effs n0)
     (h' : NewsRel M L shs ds S' effs' (n0 + effs.length)) : NewsRel M L shs ds (S ++ S') (effs ++ effs') n0 := by
   obtain ⟨sv, zs, hS, hw, hh, xs, hp, hq⟩ := h
   obtain ⟨sv', zs', hS', hw', hh', xs', hp', hq'⟩ := h'
-  refine ⟨sv ++ sv', zs ++ zs', slotsDen_append hS hS', ?_, holds2_append hh hh', xs ++ xs', ?_, forall2_append hq hq'⟩
+  refine ⟨sv ++ sv', zs ++ zs', by rw [List.map_append]; exact slotsDen_append hS hS', ?_, holds2_append hh hh',
+    xs ++ xs', ?_, forall2_append hq hq'⟩
   · intro p hp; rcases List.mem_append.1 hp with hp | hp
     · exact hw p hp
     · exact hw' p hp
@@ -306,16 +328,17 @@ starts, at its place in the queue. -/
 theorem own_ranked (m : MachineV r e) {dopt nopt : Nat}
     (hopt : L.find? (Ty.option (.dsl .effect [e])) = some (dopt, nopt)) {ws : List (StartSlot)}
     {effs : List (Sender × EffectV e)} (h : StartSlots M L T m ws effs) {q : Term} {q0 : Nat}
-    (hq : q.denote M = .int (q0 : Int)) {S : List (Slot 3)} (hS : rankStarts L T m dopt q ws = .ok S) :
+    (hq : q.denote M = .int (q0 : Int)) {S : List RankedStart} (hS : rankStarts L T m dopt q ws = .ok S) :
     (startCount dopt ws).denote M = .int effs.length ∧ OwnRel M L (ownItems S) (effs.map (·.2)) q0 := by
   obtain ⟨α, κ, F, E, items, svX, hX, hh, hEp, hks, rfl⟩ := h
   obtain ⟨hcount, svS, ys, hS', hyp, hy⟩ := rank_starts (T := T) m hopt κ F hX hh hEp hks hq hS
   refine ⟨hcount, ?_⟩
-  obtain ⟨sv', zs, h1, -, h3, h4, h5⟩ := mapItems_den (M := M) (Q := fun (y : (Sender × EffectV e) × Nat) z =>
-    z = (y.1.2, y.2)) (E' := EOwn L e) (fun xs : SlotItems 3 => (⟨[xs[0], xs[2]], rfl⟩ : SlotItems 2)) (by
-      rintro ⟨⟨snd, eff⟩, id⟩ xs ⟨k, zk, zx, hvs, -, -, hzx⟩
-      obtain ⟨a, b, c, rfl, ha, -, hc⟩ := triple_terms hvs
-      exact ⟨(eff, id), ⟨zx, by simp [Term.denotes, ha, hc], hzx⟩, rfl⟩) hS' hy
+  obtain ⟨sv', zs, h1, -, h3, h4, h5⟩ := mapView_den (M := M) (Q := fun (y : (Sender × EffectV e) × Nat) z =>
+    z = (y.1.2, y.2)) (E' := EOwn L e) RankedStart.slot OwnSlot.slot (fun s => ⟨s.flag, s.id, s.effect⟩)
+    (fun _ => rfl) (by
+      rintro ⟨⟨snd, eff⟩, id⟩ ⟨f, a, b, c⟩ ⟨k, zk, zx, hvs, -, -, hzx⟩
+      simp only [RankedStart.slot, Term.denotes, List.cons.injEq, and_true] at hvs
+      exact ⟨(eff, id), ⟨zx, by simp [OwnSlot.slot, Term.denotes, hvs.1, hvs.2.2], hzx⟩, rfl⟩) hS' hy
   have key : ∀ (ys : List ((Sender × EffectV e) × Nat)) (zs : List (EffectV e × Nat)),
       Forall2 (fun y z => z = (y.1.2, y.2)) ys zs → zs = ys.map fun y => (y.1.2, y.2) := by
     intro ys zs h
@@ -338,7 +361,7 @@ theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
     (ms : List (MachineV r e)) → (sts : PerMachine (List StartSlot) ms) →
     (effss : List (List (Sender × EffectV e))) → StartsRel M L T ms sts effss → (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
     {n q : Term} → {n0 q0 : Nat} → n.denote M = .int n0 → q.denote M = .int q0 →
-    {news : List (Slot 2)} → {n' : Term} → {owns : List (Slot 2)} → {q' : Term} →
+    {news : List PendingSlot} → {n' : Term} → {owns : List OwnSlot} → {q' : Term} →
     encodeStarts L T shs ds senv ms sts n q = .ok (news, n', owns, q') →
     n'.denote M = .int ((n0 + (Step.reqsOf effss.flatten).length : Nat) : Int) ∧
       NewsRel M L shs ds news (Step.reqsOf effss.flatten) n0 ∧
@@ -418,8 +441,8 @@ multiset), when the state's wire ids are distinct and below the first new id. -/
 theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : List (String × DeclaredV)}
     {pending : Term} {ps0 : List (Step.Pending v.event)} (hpend : PendingRel L shs (pending.denote M) ps0)
     {n0 : Nat} (hbelow : ∀ p ∈ ps0, p.id < n0) (hnd : (ps0.map (·.id)).Nodup)
-    {effs : List (Sender × EffectV v.event)} {news : List (Slot 2)} {sv : List (Bool × List Val)}
-    {zs : List ((Ty.dsl .fresh []).den × (pendingEntry shs).den)} (hS : SlotsDen M news sv)
+    {effs : List (Sender × EffectV v.event)} {news : List PendingSlot} {sv : List (Bool × List Val)}
+    {zs : List ((Ty.dsl .fresh []).den × (pendingEntry shs).den)} (hS : SlotsDen M (news.map PendingSlot.slot) sv)
     (hw : ∀ p ∈ sv, p.2.length = 2) (hh : Holds2 (ETab L (.dsl .fresh []) (pendingEntry shs)) zs sv)
     {xs : List ((Sender × EffectV v.event) × Nat)} (hxs : xs.Perm (effs.zipIdx n0)) (hq : Forall2 (WritesEntry shs ds) xs zs)
     {pT c : Term} (henc : encodePending L shs pending news = .ok (pT, c)) (hc : Holds M c) :
@@ -486,8 +509,8 @@ variable {L : Layout} {M : Model}
 together fit the pending table's slots, so a false condition means the step really outgrows the bound. -/
 theorem pending_exact {v : ServiceV} {shs : List (PendingShape v.event)}
     {pending : Term} {ps0 : List (Step.Pending v.event)} (hpend : PendingRel L shs (pending.denote M) ps0)
-    {effs : List (Sender × EffectV v.event)} {news : List (Slot 2)} {sv : List (Bool × List Val)}
-    {zs : List ((Ty.dsl .fresh []).den × (pendingEntry shs).den)} (hS : SlotsDen M news sv)
+    {effs : List (Sender × EffectV v.event)} {news : List PendingSlot} {sv : List (Bool × List Val)}
+    {zs : List ((Ty.dsl .fresh []).den × (pendingEntry shs).den)} (hS : SlotsDen M (news.map PendingSlot.slot) sv)
     (hw : ∀ p ∈ sv, p.2.length = 2) (hh : Holds2 (ETab L (.dsl .fresh []) (pendingEntry shs)) zs sv)
     {xs : List ((Sender × EffectV v.event) × Nat)} {n0 : Nat} (hxs : xs.Perm (effs.zipIdx n0))
     {ds : List (String × DeclaredV)} (hq : Forall2 (WritesEntry shs ds) xs zs)
@@ -514,13 +537,13 @@ section
 variable (L : Layout) {e : Ty}
 
 /-- Every occupied slot's key is below `n`. -/
-def belowT (S : List (Slot 2)) (n : Term) : Term := allT (S.map fun (f, xs) => .or (.not f) (.lt xs[0] n))
+def belowT (S : List PendingSlot) (n : Term) : Term := allT (S.map fun s => .or (.not s.flag) (.lt s.id n))
 
 /-- The state invariant a script asserts beside well-formedness: every pending wire id is below the next one
 (`Step.Inv`, which every step keeps). -/
 def pendingBelowT (shs : List (PendingShape e)) (pending nextId : Term) : Except Refusal Term := do
   let (d, n, dt) ← collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs]
-  pure (belowT (slotsOf d dt n 2 pending) nextId)
+  pure (belowT (pendingSlotsOf d dt n pending) nextId)
 
 end
 
@@ -528,16 +551,16 @@ section
 variable {L : Layout} {M : Model}
 
 theorem belowT_iff {w : Ty} {n : Term} {n0 : Nat} (hn : n.denote M = .int (n0 : Int)) :
-    {S : List (Slot 2)} → {sv : List (Bool × List Val)} → {ys : List ((Ty.dsl .fresh []).den × w.den)} →
-    SlotsDen M S sv → Holds2 (ETab L (.dsl .fresh []) w) ys sv →
+    {S : List PendingSlot} → {sv : List (Bool × List Val)} → {ys : List ((Ty.dsl .fresh []).den × w.den)} →
+    SlotsDen M (S.map PendingSlot.slot) sv → Holds2 (ETab L (.dsl .fresh []) w) ys sv →
     (Holds M (belowT S n) ↔ ∀ y ∈ ys, (show Nat from y.1) < n0)
   | [], [], ys, _, hy => by
     cases ys with
     | nil => simp [belowT, allT, Holds, Term.denote, tt, Val.toBool]
     | cons _ _ => exact hy.elim
-  | (f, xs) :: S, (b, vs) :: sv, ys, ⟨hf, hx, hS⟩, hy => by
-    have hcons : Holds M (belowT ((f, xs) :: S) n) ↔
-        Holds M (.or (.not f) (.lt xs[0] n)) ∧ Holds M (belowT S n) := by
+  | ⟨f, a, b'⟩ :: S, (b, vs) :: sv, ys, ⟨hf, hx, hS⟩, hy => by
+    have hcons : Holds M (belowT (⟨f, a, b'⟩ :: S) n) ↔
+        Holds M (.or (.not f) (.lt a n)) ∧ Holds M (belowT S n) := by
       simp only [belowT, List.map_cons]
       exact holds_and _ _
     rw [hcons]
@@ -549,10 +572,10 @@ theorem belowT_iff {w : Ty} {n : Term} {n0 : Nat} (hn : n.denote M = .int (n0 : 
       match ys, hy with
       | y :: ys, ⟨⟨zk, zv, hvs, hk, _⟩, hy⟩ =>
         rw [belowT_iff hn hS hy]
-        obtain ⟨a, b', rfl, ha, -⟩ := pair_terms (hx.trans hvs)
+        have ha : a.denote M = zk := by
+          have := hx.trans hvs; simp only [Term.denotes, List.cons.injEq] at this; exact this.1
         change zk = .int (Int.ofNat y.1) at hk
-        simp only [SlotItems.getElem_mk, List.getElem_cons_zero, Holds, Term.denote, hf, ha, hk, hn, Val.toBool,
-          Val.toInt, List.mem_cons,
+        simp only [Holds, Term.denote, hf, ha, hk, hn, Val.toBool, Val.toInt, List.mem_cons,
           forall_eq_or_imp]
         simp only [Bool.not_true, Bool.false_or, decide_eq_true_eq]
         exact and_congr_left' Int.ofNat_lt
@@ -570,7 +593,7 @@ theorem pendingBelow_iff {v : ServiceV} {shs : List (PendingShape v.event)}
   obtain rfl : n = n' := by have := hf1.symm.trans hf; cases this; rfl
   obtain rfl : dt = dt' := find_det hft1 hft
   have hT := slotsOf_den d dt 2 pending sv0 hv hw0
-  rw [hl] at hT
+  rw [hl, ← pendingSlotsOf_slot] at hT
   rw [belowT_iff hn hT hh0, ← hlist]
   simp only [pendingList, List.mem_map]
   constructor

@@ -85,8 +85,8 @@ def answerUnmatchedT (shs : List (PendingShape v.event)) (t : Ty) (pending to : 
   let typed := (List.range shs.length).filter fun k => match shs[k]? with
     | some sh => (Ty.same (answerTy sh.output sh.rejection) t).isSome
     | none => false
-  pure (allT ((slotsOf d dt n 2 pending).map fun (f, xs) =>
-    .not (.and f (.and (.eq xs[0] to) (anyT (typed.map fun k => .is de k xs[1]))))))
+  pure (allT ((pendingSlotsOf d dt n pending).map fun s =>
+    .not (.and s.flag (.and (.eq s.id to) (anyT (typed.map fun k => .is de k s.entry))))))
 
 end
 
@@ -142,10 +142,11 @@ theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : 
     obtain ⟨⟨b, vs'⟩, hm, he⟩ := hvs
     cases b <;> simp at he
     exact he ▸ hm
-  obtain ⟨⟨f, xs⟩, hq, hf1, hxs2⟩ := slot_mem hS _ hocc
+  rw [← pendingSlotsOf_slot] at hS
+  obtain ⟨q, hq0, hf1, hxs2⟩ := slot_mem hS _ hocc
+  obtain ⟨⟨f, tk, te⟩, hq, rfl⟩ := List.mem_map.1 hq0
   rw [hxs] at hxs2
-  obtain ⟨tk, te, rfl⟩ := xs.two
-  simp only [Term.denotes, List.cons.injEq, and_true] at hxs2
+  simp only [PendingSlot.slot, Term.denotes, List.cons.injEq, and_true] at hxs2 hf1
   obtain ⟨htk, hte⟩ := hxs2
   obtain ⟨d', n', hf', hra⟩ := hzv
   have hde := find_det hf' (need_ok.1 h2)
@@ -153,7 +154,6 @@ theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : 
   obtain ⟨j', sh', fx, vals, hj', hzv', -, hpo⟩ := relAlts_pending (L := L) y1 (sh0 :: rest) 0 y2 zv hra
   -- The slot's test is false, so no shape of the answer's type is that entry's.
   have hslot := (holds_allT _).1 hu _ (List.mem_map_of_mem hq)
-  simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ] at hslot
   have hkey : (y1 : Nat) = to := (pendingOf_id _ _ _).symm.trans hpid
   change zk = Val.int (Int.ofNat y1) at hzk
   dsimp only
@@ -233,9 +233,9 @@ def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat
   let (d, n, dt) ← collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs]
   let (de, _) ← need "a layout without the pending entry" (L.find? (pendingEntry shs))
   let PS := slotsOf d dt n 2 S.pending
-  let (f, xs) ← need "a slot past the pending table" PS[j]?
-  let entry := xs[1]
-  let hit := Term.and f (.and (.eq xs[0] to) (.is de k entry))
+  let sl ← need "a slot past the pending table" (pendingSlotsOf d dt n S.pending)[j]?
+  let entry := sl.entry
+  let hit := Term.and sl.flag (.and (.eq sl.id to) (.is de k entry))
   let (da, _) ← need "a layout without the captures' tuple" (L.find? (.tuple sh.answerΓ))
   let σa ← need "captures that have no term" (tupleCodes da sh.answerΓ (.sel de k 3 entry) 0)
   let vc ← need "an answer that has no term" (Code.ofTerm? _ value)
@@ -324,7 +324,9 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
   intro r
   obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨de, dn⟩, h2, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨f, xs⟩, h3, henc⟩ := bind_ok.1 henc
+  obtain ⟨⟨f, tk, te⟩, h3, henc⟩ := bind_ok.1 henc
+  have h3' : (slotsOf d dt n 2 S.pending)[j]? = some (PendingSlot.slot ⟨f, tk, te⟩) := by
+    rw [← pendingSlotsOf_slot, List.getElem?_map, need_ok.1 h3]; rfl
   obtain ⟨⟨da, dan⟩, h4, henc⟩ := bind_ok.1 henc
   obtain ⟨σa, h5, henc⟩ := bind_ok.1 henc
   obtain ⟨vc, h6, henc⟩ := bind_ok.1 henc
@@ -348,15 +350,13 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     obtain ⟨hhf, hhrest⟩ := (holds_and _ _).1 hhit
     obtain ⟨hheq, hhis⟩ := (holds_and _ _).1 hhrest
     obtain ⟨sv, ys, hS, hl, hw, hperm, hh⟩ := table_view (M := M) htbl h1
-    obtain ⟨b, hbsv, hfb⟩ := slot_at hS j (need_ok.1 h3)
+    obtain ⟨b, hbsv, hfb⟩ := slot_at hS j h3'
     have hb : b = true := by simpa [Holds, hfb, Val.toBool] using hhf
     subst hb
     obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_right hh _ (by
       simp only [occupied, List.mem_filterMap]; exact ⟨_, hbsv, rfl⟩)
-    obtain ⟨tk, te, rfl⟩ := xs.two
     simp only [Term.denotes, List.cons.injEq, and_true] at hxs
     obtain ⟨htk, hte⟩ := hxs
-    simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ] at hheq hhis h5 h9
     have hkey : (y.1 : Nat) = to := by
       have e := Val.eq_of_beq _ _ (by simp only [Holds, Term.denote, Val.toBool] at hheq; exact hheq)
       change zk = Val.int (Int.ofNat y.1) at hzk
@@ -602,15 +602,13 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     obtain ⟨hhf, hhrest⟩ := (holds_and _ _).1 hhit
     obtain ⟨hheq, hhis⟩ := (holds_and _ _).1 hhrest
     obtain ⟨sv, ys, hS, hl, hw, hperm, hh⟩ := table_view (M := M) htbl h1
-    obtain ⟨b, hbsv, hfb⟩ := slot_at hS j (need_ok.1 h3)
+    obtain ⟨b, hbsv, hfb⟩ := slot_at hS j h3'
     have hb : b = true := by simpa [Holds, hfb, Val.toBool] using hhf
     subst hb
     obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_right hh _ (by
       simp only [occupied, List.mem_filterMap]; exact ⟨_, hbsv, rfl⟩)
-    obtain ⟨tk, te, rfl⟩ := xs.two
     simp only [Term.denotes, List.cons.injEq, and_true] at hxs
     obtain ⟨htk, hte⟩ := hxs
-    simp only [SlotItems.getElem_mk, List.getElem_cons_zero, List.getElem_cons_succ] at hheq hhis h5 h9 hc
     have hkey : (y.1 : Nat) = to := by
       have e := Val.eq_of_beq _ _ (by simp only [Holds, Term.denote, Val.toBool] at hheq; exact hheq)
       change zk = Val.int (Int.ofNat y.1) at hzk

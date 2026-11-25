@@ -59,7 +59,7 @@ theorem gate_false_events {f : Term} (hf : f.denote M = .bool false) :
       by simpa [Holds2, occupied] using hh⟩
 
 /-- The news slots name pending requests for the requests they hold: externals list each. -/
-theorem newsRel_writes {shs : List (PendingShape v.event)} {ds : List (String × DeclaredV)} {news : List (Slot 2)}
+theorem newsRel_writes {shs : List (PendingShape v.event)} {ds : List (String × DeclaredV)} {news : List PendingSlot}
     {effs : List (Sender × EffectV v.event)} {n0 : Nat} (h : NewsRel M L shs ds news effs n0) :
     ∃ ps, Forall2 (Step.Writes ds) (effs.zipIdx n0) ps := by
   obtain ⟨sv, zs, -, -, -, xs, hp, hq⟩ := h
