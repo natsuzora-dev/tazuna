@@ -124,10 +124,10 @@ machines before it, the next wire id after them all, the own slots of the own co
 at its place in the queue from `q`, and the place after them. With no own kinds every effect is a request, and the
 start slots are used as they are. -/
 def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (senv : StepEnv L shs) :
-    List (MachineV r e) → List (List (StartSlot)) → (n q : Term) →
+    (ms : List (MachineV r e)) → PerMachine (List StartSlot) ms → (n q : Term) →
     Except Refusal (List Slot × Term × List Slot × Term)
-  | [], [], n, q => pure ([], n, [], q)
-  | m :: ms, st :: sts, n, q => do
+  | [], .nil, n, q => pure ([], n, [], q)
+  | m :: ms, .cons st sts, n, q => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
     let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
     let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
@@ -137,7 +137,6 @@ def encodeStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV))
     let (oS, q') ← ownStarts L T m senv.dopt (L.ownsOf e).isEmpty (sp.map (·.2)) q
     let (rest, n', orest, q'') ← encodeStarts shs ds senv ms sts (.add n (startCount senv.dopt rq)) q'
     pure (entrySlots senv.dE senv.dP dk dflt js S ++ rest, n', oS ++ orest, q'')
-  | _, _, _, _ => .error (.outside "machines and start slots that differ in number")
 
 /-- The pending table with the new entries moved into its free slots, and the condition that they fit. -/
 def encodePending (shs : List (PendingShape e)) (pending : Term) (news : List Slot) : Except Refusal (Term × Term) := do
@@ -234,25 +233,25 @@ def StartSlots (M : Model) (L : Layout) (T : List TypeDecl) (m : MachineV r e) (
 
 /-- Each machine's start slots hold its effects. -/
 def StartsRel (M : Model) (L : Layout) (T : List TypeDecl) :
-    List (MachineV r e) → List (List (StartSlot)) → List (List (Sender × EffectV e)) → Prop
-  | [], [], [] => True
-  | m :: ms, st :: sts, effs :: effss => StartSlots M L T m st effs ∧ StartsRel M L T ms sts effss
+    (ms : List (MachineV r e)) → PerMachine (List StartSlot) ms → List (List (Sender × EffectV e)) → Prop
+  | [], .nil, [] => True
+  | m :: ms, .cons st sts, effs :: effss => StartSlots M L T m st effs ∧ StartsRel M L T ms sts effss
   | _, _, _ => False
 
 /-- The machines' parts of an event step hold the effects each machine's instances start. -/
 theorem machines_starts {v : ServiceV} (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hevT : RelV L v.event (Ty.up _ v.event_data ev) (evT.denote M)) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
-    (outs : List ReactOut) → {c : Term} → MachinesRel M L T ms xs sms →
-    (∀ m ∈ ms, m.key.orderable = true ∧ m.key.ordered T = true) →
+    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
+    (sms : List (Step.MachineState v.records v.event)) → (outs : PerMachine ReactOut ms) → {c : Term} →
+    MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.orderable = true ∧ m.key.ordered T = true) →
     encodeMachines L ms xs records now evT = .ok (outs, c) → Holds M c →
     StartsRel M L T ms (outs.map (·.starts)) (sms.map fun sm => (Step.machineStep T recs tnow ev sm).2)
-  | [], [], [], outs, c, _, _, henc, _ => by
+  | [], .nil, [], outs, c, _, _, henc, _ => by
     simp only [encodeMachines, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, -⟩ := henc
     trivial
-  | m :: ms, x :: xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc, hc => by
+  | m :: ms, .cons x xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc, hc => by
     obtain ⟨⟨a, c1⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨as, c2⟩, h2, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
@@ -264,8 +263,7 @@ theorem machines_starts {v : ServiceV} (recs : v.records.den0) (tnow : Int) (ev 
       sortBy_dedup_lt (T := T) hko (m.instances.fn (recs, ())),
       machineStep_effects (T := T) m (Ty.plain_of_orderable _ ho) (instancesOf T m tbl) recs tnow ev⟩,
       machines_starts recs tnow ev hrec hnow hevT ms xs sms as hrest (fun m' hm => hor m' (by simp [hm])) h2 hc2⟩
-  | [], [], _ :: _, _, _, h, _, _, _ | [], _ :: _, _, _, _, h, _, _, _ | _ :: _, [], _, _, _, h, _, _, _
-  | _ :: _, _ :: _, [], _, _, h, _, _, _ => h.elim
+  | [], .nil, _ :: _, _, _, h, _, _, _ | _ :: _, .cons _ _, [], _, _, h, _, _, _ => h.elim
 
 /-- The two halves of split start slots hold the requests and the own commands and queries their slots start. -/
 theorem startSlots_split {dE nE dopt nopt : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
@@ -335,8 +333,8 @@ places from `q0`. -/
 theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape e)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
     (senv : StepEnv L shs) :
-    (ms : List (MachineV r e)) → (sts : List (List (StartSlot))) → (effss : List (List (Sender × EffectV e))) →
-    StartsRel M L T ms sts effss → (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
+    (ms : List (MachineV r e)) → (sts : PerMachine (List StartSlot) ms) →
+    (effss : List (List (Sender × EffectV e))) → StartsRel M L T ms sts effss → (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
     {n q : Term} → {n0 q0 : Nat} → n.denote M = .int n0 → q.denote M = .int q0 →
     {news : List Slot} → {n' : Term} → {owns : List Slot} → {q' : Term} →
     encodeStarts L T shs ds senv ms sts n q = .ok (news, n', owns, q') →
@@ -344,12 +342,12 @@ theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
       NewsRel M L shs ds news (Step.reqsOf effss.flatten) n0 ∧
       q'.denote M = .int ((q0 + (Step.queuedOf effss.flatten).length : Nat) : Int) ∧
       OwnRel M L owns (Step.queuedOf effss.flatten) q0
-  | [], [], [], _, _, n, q, n0, q0, hn, hq, news, n', owns, q', henc => by
+  | [], .nil, [], _, _, n, q, n0, q0, hn, hq, news, n', owns, q', henc => by
     simp only [encodeStarts, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, rfl, rfl, rfl⟩ := henc
     exact ⟨by simpa using hn, ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩,
       by simpa using hq, ownRel_nil q0⟩
-  | m :: ms, st :: sts, effs :: effss, ⟨hst, hrest⟩, hreach, n, q, n0, q0, hn, hq, news, n', owns, q', henc => by
+  | m :: ms, .cons st sts, effs :: effss, ⟨hst, hrest⟩, hreach, n, q, n0, q0, hn, hq, news, n', owns, q', henc => by
     obtain ⟨⟨dk, nk⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨js, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨dflt, -, henc⟩ := bind_ok.1 henc
@@ -400,9 +398,8 @@ theorem starts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
     refine ⟨?_, newsRel_append ⟨sv1, zs1, hS1, hw1, hh1, ys, hyp, hq1'⟩ hnews2, ?_, ownRel_append hO1 ho2⟩
     · rw [hn2, List.length_append]; congr 2; omega
     · rw [hq2, List.length_append]; congr 2; omega
-  | [], [], _ :: _, h, _, _, _, _, _, _, _, _, _, _, _, _ | [], _ :: _, _, h, _, _, _, _, _, _, _, _, _, _, _, _
-  | _ :: _, [], _, h, _, _, _, _, _, _, _, _, _, _, _, _
-  | _ :: _, _ :: _, [], h, _, _, _, _, _, _, _, _, _, _, _, _ => h.elim
+  | [], .nil, _ :: _, h, _, _, _, _, _, _, _, _, _, _, _, _
+  | _ :: _, .cons _ _, [], h, _, _, _, _, _, _, _, _, _, _, _, _ => h.elim
 
 end
 

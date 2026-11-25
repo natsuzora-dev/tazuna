@@ -43,13 +43,13 @@ def ownShape (v : ServiceV) (P : List AnySite) : OwnKey → Except Refusal (OwnS
     | _, _ => pure (.missing name)
 
 /-- The outcome terms of one own kind's internal step. -/
-inductive OwnKindOut where
-  | command (name : String) (o : OwnCommandOut)
-  | query (name : String) (o : OwnQueryOut)
+inductive OwnKindOut (v : ServiceV) where
+  | command (name : String) (o : OwnCommandOut v)
+  | query (name : String) (o : OwnQueryOut v)
   | missing (name : String)
 
 /-- The fault the outcome terms name in the model, or none when the internal step runs to its end. -/
-def OwnKindOut.fault? (M : Model) : OwnKindOut → Option Fault
+def OwnKindOut.fault? {v : ServiceV} (M : Model) : OwnKindOut v → Option Fault
   | .command name o =>
     if (o.callerOk.denote M).toBool then
       match brokenIn M o.rules with
@@ -69,33 +69,33 @@ def OwnKindOut.fault? (M : Model) : OwnKindOut → Option Fault
 
 /-- What an internal step leaves: whether it faults, the events loop's terms after it (any terms on a fault), with
 the news and own slots of every loop it ran, and the fresh counter. -/
-structure StepTerms where
+structure StepTerms (v : ServiceV) where
   fault : Term
-  done : EventsOut
+  done : EventsOut v
   fresh : Term
 
 /-- One own kind's internal step: its outcome terms and what it leaves. -/
-structure OwnKindStep where
-  kind : OwnKindOut
-  terms : StepTerms
+structure OwnKindStep (v : ServiceV) where
+  kind : OwnKindOut v
+  terms : StepTerms v
 
 /-- The terms of `a` where `c` holds and of `b` elsewhere; the slots of `a` count only where `c` holds. -/
-def pickTerms (c : Term) (a b : StepTerms) : StepTerms :=
+def pickTerms {v : ServiceV} (c : Term) (a b : StepTerms v) : StepTerms v :=
   let p (x y : Term) := Term.share (.ite c x y)
   ⟨p a.fault b.fault,
-    ⟨p a.done.records b.done.records, b.done.tables.mapIdx fun i y => p (a.done.tables.getD i tt) y,
+    ⟨p a.done.records b.done.records, PerMachine.zipWith p a.done.tables b.done.tables,
       p a.done.nextId b.done.nextId, gateSlots c a.done.news ++ b.done.news, gateSlots c a.done.owns ++ b.done.owns,
       p a.done.queued b.done.queued⟩,
     p a.fresh b.fresh⟩
 
 /-- The terms of an own effect's internal step: each own kind's variant test with its outcome terms, and the merged
 terms. -/
-structure OwnStepOut where
-  kinds : List (Term × OwnKindOut)
-  terms : StepTerms
+structure OwnStepOut (v : ServiceV) where
+  kinds : List (Term × OwnKindOut v)
+  terms : StepTerms v
 
 /-- The fault the model's kind names: the outcome terms of the kind whose test holds. -/
-def OwnStepOut.fault? (M : Model) (o : OwnStepOut) : Option Fault :=
+def OwnStepOut.fault? {v : ServiceV} (M : Model) (o : OwnStepOut v) : Option Fault :=
   (o.kinds.find? fun k => (k.1.denote M).toBool).bind fun k => k.2.fault? M
 
 section
@@ -104,8 +104,8 @@ variable (L : Layout) (T : List TypeDecl)
 /-- One own kind's internal step for the effect term `eff`, read as the kind's variant `nR + j`: its outcome and step
 terms, its condition, and the condition of the command's or query's codes. -/
 def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs) (nR : Nat)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : List Term)
-    (j : Nat) (key : OwnKey) : Except Refusal (Encoded OwnKindStep) := do
+    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine Term v.machines)
+    (j : Nat) (key : OwnKey) : Except Refusal (Encoded (OwnKindStep v)) := do
   let sel (i : Nat) := Term.sel senv.dE (nR + j) i eff
   match ← ownShape v P key with
   | .missing name => pure ⟨⟨.missing name, ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩, tt, tt⟩
@@ -132,13 +132,13 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
 /-- The internal step for the own effect term `eff`: every own kind's, merged by the variant tests; its condition
 asks each kind's only where its test holds. The second term is the codes' condition, which holds statically. -/
 def encodeOwnStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : List Term) :
-    Except Refusal (Encoded OwnStepOut) := do
+    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine Term v.machines) :
+    Except Refusal (Encoded (OwnStepOut v)) := do
   let nR := (L.effectsOf v.event).length
   let eff := Term.share eff
   let ks ← (L.ownsOf v.event).zipIdx.mapM fun (key, j) => do
     pure (Term.share (.is senv.dE (nR + j) eff), ← encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key)
-  let base : StepTerms := ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩
+  let base : StepTerms v := ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩
   pure ⟨⟨ks.map fun k => (k.1, k.2.out.kind), ks.foldr (fun k t => pickTerms k.1 k.2.out.terms t) base⟩,
     allT (ks.map fun k => .ite k.1 k.2.cond tt), allT (ks.map (·.2.codes))⟩
 
@@ -191,7 +191,7 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 /-- Every slot an events loop writes, news or own, holds two items. -/
 theorem encodeEvents_width {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {now : Term} :
-    (S : List Slot) → {records : Term} → {xs : List Term} → {n q : Term} → {o : EventsOut} → {c : Term} →
+    (S : List Slot) → {records : Term} → {xs : PerMachine Term v.machines} → {n q : Term} → {o : EventsOut v} → {c : Term} →
     encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
     (∀ sl ∈ o.news, sl.2.length = 2) ∧ ∀ sl ∈ o.owns, sl.2.length = 2
   | [], _, _, _, _, _, _, h => by
@@ -242,8 +242,8 @@ theorem width_gate (f : Term) {A : List Slot} (hA : ∀ sl ∈ A, sl.2.length = 
 
 /-- The step terms of one own kind write slots of two items. -/
 theorem encodeOwnKind_width {P : List AnySite} {shs : List (PendingShape v.event)} {senv : StepEnv L shs} {nR : Nat}
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {records now fresh n q eff : Term} {xs : List Term}
-    {j : Nat} {key : OwnKey} {ko : OwnKindOut} {st : StepTerms} {c cx : Term}
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} {records now fresh n q eff : Term} {xs : PerMachine Term v.machines}
+    {j : Nat} {key : OwnKey} {ko : OwnKindOut v} {st : StepTerms v} {c cx : Term}
     (h : encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key = .ok ⟨⟨ko, st⟩, c, cx⟩) :
     (∀ sl ∈ st.done.news, sl.2.length = 2) ∧ ∀ sl ∈ st.done.owns, sl.2.length = 2 := by
   obtain ⟨sh, -, h⟩ := bind_ok.1 h
@@ -334,7 +334,7 @@ theorem ownQuery_mem {name : String} {i o : Ty} {x : QueryV v.records v.caller}
     · cases hf
   · cases hf
 
-theorem fault_command (name : String) (o : OwnCommandOut) :
+theorem fault_command (name : String) (o : OwnCommandOut v) :
     Term.denote M (.or (.not o.callerOk) (.or (.not (allT (o.rules.map (·.2))))
       (.and o.decided.ok (.not (allT (o.decided.ensures.map (·.2))))))) = .bool ((OwnKindOut.command name o).fault? M).isSome := by
   simp only [Term.denote, allT_rules, OwnKindOut.fault?, toBool_bool]
@@ -344,7 +344,7 @@ theorem fault_command (name : String) (o : OwnCommandOut) :
     | cons n ns => rfl
     | nil => cases (o.decided.ok.denote M).toBool <;> cases brokenIn M o.decided.ensures <;> rfl
 
-theorem fault_query (name : String) (o : OwnQueryOut) :
+theorem fault_query (name : String) (o : OwnQueryOut v) :
     Term.denote M (.or (.not o.callerOk) (.not (allT (o.rules.map (·.2))))) =
       .bool ((OwnKindOut.query name o).fault? M).isSome := by
   simp only [Term.denote, allT_rules, OwnKindOut.fault?, toBool_bool]
@@ -362,14 +362,14 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
-    {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
+    {records now fresh n q eff : Term} {xs : PerMachine Term v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
     {j : Nat} {key : OwnKey} (x : EffectV v.event) (hreach : x.Reach P) {vals : List Val}
     (heff : eff.denote M = .ctor senv.dE ((L.effectsOf v.event).length + j) vals) (hkey : key.Holds L x vals)
-    {ko : OwnKindOut} {st : StepTerms} {c cx : Term}
+    {ko : OwnKindOut v} {st : StepTerms v} {c cx : Term}
     (henc : encodeOwnKind L T P v shs senv (L.effectsOf v.event).length apply records now fresh n q eff xs j key =
       .ok ⟨⟨ko, st⟩, c, cx⟩)
     (hcx : Holds M cx) :
@@ -576,19 +576,18 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
       simp only [hco, Bool.false_eq_true, ite_false]
       exact H
 
-theorem machinesRel_congr : (ms : List (MachineV v.records v.event)) → (xs ys : List Term) →
-    (sms : List (Step.MachineState v.records v.event)) → Term.denotes M xs = Term.denotes M ys →
+theorem machinesRel_congr : (ms : List (MachineV v.records v.event)) → (xs ys : PerMachine Term ms) →
+    (sms : List (Step.MachineState v.records v.event)) → Term.denotes M xs.toList = Term.denotes M ys.toList →
     MachinesRel M L T ms xs sms → MachinesRel M L T ms ys sms
-  | [], [], [], [], _, h => h
-  | [], [], _ :: _, _, he, _ | _ :: _, _ :: _, [], _, he, _ => by simp [Term.denotes] at he
-  | [], _ :: _, _, _, _, h | [], [], [], _ :: _, _, h | _ :: _, [], _, _, _, h | _ :: _, _ :: _, _ :: _, [], _, h =>
-    h.elim
-  | _ :: ms, _ :: xs, _ :: ys, _ :: sms, he, ⟨⟨tbl, ht, hs⟩, h⟩ => by
-    simp only [Term.denotes, List.cons.injEq] at he
+  | [], .nil, .nil, [], _, h => h
+  | [], .nil, .nil, _ :: _, _, h | _ :: _, .cons _ _, .cons _ _, [], _, h => h.elim
+  | _ :: ms, .cons _ xs, .cons _ ys, _ :: sms, he, h => by
+    obtain ⟨⟨tbl, ht, hs⟩, h⟩ := h
+    simp only [PerMachine.toList_cons, Term.denotes, List.cons.injEq] at he
     exact ⟨⟨tbl, he.1 ▸ ht, hs⟩, machinesRel_congr ms xs ys sms he.2 h⟩
 
 /-- Two step terms say the same in the model: the same values, and slots holding the same news and own effects. -/
-structure Agrees (M : Model) (L : Layout) (e : Ty) (a b : StepTerms) : Prop where
+structure Agrees (M : Model) (L : Layout) (e : Ty) (a b : StepTerms v) : Prop where
   fault : a.fault.denote M = b.fault.denote M
   fresh : a.fresh.denote M = b.fresh.denote M
   records : a.done.records.denote M = b.done.records.denote M
@@ -598,8 +597,8 @@ structure Agrees (M : Model) (L : Layout) (e : Ty) (a b : StepTerms) : Prop wher
     NewsRel M L shs ds a.done.news effs n0
   owns : ∀ (os : List (EffectV e)) q0, OwnRel M L b.done.owns os q0 → OwnRel M L a.done.owns os q0
 
-theorem AccRel.congr {a b : StepTerms} (hab : Agrees M L v.event a b)
-    (ht : Term.denotes M a.done.tables = Term.denotes M b.done.tables)
+theorem AccRel.congr {a b : StepTerms v} (hab : Agrees M L v.event a b)
+    (ht : Term.denotes M a.done.tables.toList = Term.denotes M b.done.tables.toList)
     {shs : List (PendingShape v.event)} {acc : Step.Acc v} {q0 : Nat}
     {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs acc b.done b.fresh q0 r) :
     AccRel M L T shs acc a.done a.fresh q0 r := by
@@ -607,46 +606,29 @@ theorem AccRel.congr {a b : StepTerms} (hab : Agrees M L v.event a b)
   exact ⟨recs, ms, fr, evs, effs, os, hr, hab.records ▸ h1, machinesRel_congr _ _ _ _ ht.symm h2, hab.fresh ▸ h3,
     hab.nextId ▸ h4, hab.news _ _ _ _ h5, hab.queued ▸ h6, hab.owns _ _ h7⟩
 
-theorem pick_tables_length (c : Term) (a b : StepTerms) :
-    (pickTerms c a b).done.tables.length = b.done.tables.length := by
-  simp [pickTerms]
+theorem pick_tables {r e : Ty} {c : Term} {bc : Bool} (hc : c.denote M = .bool bc) : {ms : List (MachineV r e)} →
+    (A B : PerMachine Term ms) →
+    Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c x y)) A B).toList =
+      Term.denotes M (if bc then A else B).toList
+  | _, .nil, .nil => by cases bc <;> rfl
+  | _, .cons x A, .cons y B => by
+    have ih := pick_tables hc A B
+    cases bc <;> simp_all [PerMachine.zipWith, Term.denotes, Term.denote, toBool_bool]
 
-theorem fold_tables_length (base : StepTerms) : (ks : List (Term × StepTerms)) →
-    (ks.foldr (fun k t => pickTerms k.1 k.2 t) base).done.tables.length = base.done.tables.length
-  | [] => rfl
-  | k :: ks => by simp only [List.foldr_cons, pick_tables_length, fold_tables_length base ks]
-
-theorem pick_tables {c : Term} {bc : Bool} (hc : c.denote M = .bool bc) (A B : List Term) (hl : A.length = B.length) :
-    Term.denotes M (B.mapIdx fun i y => Term.share (.ite c (A.getD i tt) y)) =
-      Term.denotes M (if bc then A else B) := by
-  rw [denotes_eq_map, denotes_eq_map]
-  apply List.ext_getElem
-  · cases bc <;> simp [hl]
-  · intro i h1 h2
-    simp only [List.getElem_map, List.getElem_mapIdx, Term.denote_share, Term.denote, hc, toBool_bool]
-    cases bc
-    · rfl
-    · simp only [ite_true]
-      have : i < A.length := by simp at h2; exact h2
-      simp [List.getD, List.getElem?_eq_getElem this]
-
-theorem pick_tables_false {c : Term} (hc : c.denote M = .bool false) (A B : List Term) :
-    Term.denotes M (B.mapIdx fun i y => Term.share (.ite c (A.getD i tt) y)) = Term.denotes M B := by
-  rw [denotes_eq_map, denotes_eq_map]
-  apply List.ext_getElem
-  · simp
-  · intro i h1 h2
-    simp [Term.denote, hc, toBool_bool]
+theorem pick_tables_false {r e : Ty} {c : Term} (hc : c.denote M = .bool false) {ms : List (MachineV r e)}
+    (A B : PerMachine Term ms) :
+    Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c x y)) A B).toList = Term.denotes M B.toList := by
+  simpa using pick_tables hc A B
 
 /-- Step terms of kinds whose tests all fail write no news and no own effect. -/
-theorem fold_none {e : Ty} (base : StepTerms) (hb : base.done.news = [] ∧ base.done.owns = []) :
-    (ks : List (Term × StepTerms)) → (∀ k ∈ ks, k.1.denote M = .bool false) →
+theorem fold_none {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ base.done.owns = []) :
+    (ks : List (Term × StepTerms v)) → (∀ k ∈ ks, k.1.denote M = .bool false) →
     (∀ k ∈ ks, (∀ sl ∈ k.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ k.2.done.owns, sl.2.length = 2) →
     let t := ks.foldr (fun k t => pickTerms k.1 k.2 t) base
     t.fault.denote M = base.fault.denote M ∧ t.fresh.denote M = base.fresh.denote M ∧
       t.done.records.denote M = base.done.records.denote M ∧ t.done.nextId.denote M = base.done.nextId.denote M ∧
       t.done.queued.denote M = base.done.queued.denote M ∧
-      Term.denotes M t.done.tables = Term.denotes M base.done.tables ∧
+      Term.denotes M t.done.tables.toList = Term.denotes M base.done.tables.toList ∧
       (∀ (shs : List (PendingShape e)) ds n0, NewsRel M L shs ds t.done.news [] n0) ∧
       ∀ q0, OwnRel M L t.done.owns ([] : List (EffectV e)) q0
   | [], _, _ => by
@@ -669,13 +651,13 @@ theorem fold_none {e : Ty} (base : StepTerms) (hb : base.done.news = [] ∧ base
       exact this
 
 /-- Merged step terms agree with those of the one kind whose test holds. -/
-theorem fold_hit {e : Ty} (base : StepTerms) (hb : base.done.news = [] ∧ base.done.owns = []) :
-    (ks : List (Term × StepTerms)) → (k : Nat) → {c : Term} → {st : StepTerms} → ks[k]? = some (c, st) →
-    (∀ (i : Nat) (kk : Term × StepTerms), ks[i]? = some kk → kk.1.denote M = .bool (decide (i = k))) →
+theorem fold_hit {e : Ty} (base : StepTerms v) (hb : base.done.news = [] ∧ base.done.owns = []) :
+    (ks : List (Term × StepTerms v)) → (k : Nat) → {c : Term} → {st : StepTerms v} → ks[k]? = some (c, st) →
+    (∀ (i : Nat) (kk : Term × StepTerms v), ks[i]? = some kk → kk.1.denote M = .bool (decide (i = k))) →
     (∀ kk ∈ ks, (∀ sl ∈ kk.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ kk.2.done.owns, sl.2.length = 2) →
     let t := ks.foldr (fun k t => pickTerms k.1 k.2 t) base
     Agrees M L e t st ∧
-      (st.done.tables.length = base.done.tables.length → Term.denotes M t.done.tables = Term.denotes M st.done.tables)
+      Term.denotes M t.done.tables.toList = Term.denotes M st.done.tables.toList
   | [], _, _, _, h, _, _ => by simp at h
   | (c', a) :: ks, 0, c, st, hk, ht, hw => by
     simp only [List.getElem?_cons_zero, Option.some.injEq, Prod.mk.injEq] at hk
@@ -689,16 +671,16 @@ theorem fold_hit {e : Ty} (base : StepTerms) (hb : base.done.news = [] ∧ base.
     have hpick : ∀ x y : Term, (Term.share (.ite c' x y)).denote M = x.denote M := fun x y => by
       simp [Term.denote, hc, toBool_bool]
     refine ⟨⟨hpick _ _, hpick _ _, hpick _ _, hpick _ _, hpick _ _, fun shs ds effs n0 h => ?_, fun os q0 h => ?_⟩,
-      fun hl => ?_⟩
+      ?_⟩
     · have := newsRel_append (newsRel_gate (L := L) hc h) (i7 shs ds (n0 + effs.length))
       rw [List.append_nil] at this
       exact this
     · have := ownRel_append (ownRel_gate (L := L) hc h) (i8 (q0 + os.length))
       rw [List.append_nil] at this
       exact this
-    · show Term.denotes M ((List.foldr (fun k t => pickTerms k.1 k.2 t) base ks).done.tables.mapIdx
-        fun i y => Term.share (.ite c' (a.done.tables.getD i tt) y)) = _
-      rw [pick_tables hc _ _ (by rw [fold_tables_length]; exact hl)]
+    · show Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c' x y)) a.done.tables
+        (List.foldr (fun k t => pickTerms k.1 k.2 t) base ks).done.tables).toList = _
+      rw [pick_tables hc]
       rfl
   | (c', a) :: ks, j + 1, c, st, hk, ht, hw => by
     have hc : c'.denote M = .bool false := by simpa using ht 0 (c', a) rfl
@@ -710,13 +692,13 @@ theorem fold_hit {e : Ty} (base : StepTerms) (hb : base.done.news = [] ∧ base.
       simp [Term.denote, hc, toBool_bool]
     refine ⟨⟨(hpick _ _).trans h1.fault, (hpick _ _).trans h1.fresh, (hpick _ _).trans h1.records,
       (hpick _ _).trans h1.nextId, (hpick _ _).trans h1.queued, fun shs ds effs n0 h => ?_, fun os q0 h => ?_⟩,
-      fun hl => ?_⟩
+      ?_⟩
     · exact newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := ds) hc hwa.1 n0) (h1.news shs ds effs n0 h)
     · exact ownRel_append (ownRel_gate_false (L := L) (e := e) hc hwa.2 q0) (h1.owns os q0 h)
-    · show Term.denotes M ((List.foldr (fun k t => pickTerms k.1 k.2 t) base ks).done.tables.mapIdx
-        fun i y => Term.share (.ite c' (a.done.tables.getD i tt) y)) = _
+    · show Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c' x y)) a.done.tables
+        (List.foldr (fun k t => pickTerms k.1 k.2 t) base ks).done.tables).toList = _
       rw [pick_tables_false hc]
-      exact h2 hl
+      exact h2
 
 theorem find_hit {α : Type} {k : Nat} : (l : List (Term × α)) → {y : Term × α} → l[k]? = some y →
     (∀ (i : Nat) (kk : Term × α), l[i]? = some kk → kk.1.denote M = .bool (decide (i = k))) →
@@ -742,14 +724,14 @@ theorem ownStep_encode {P : List AnySite} (chk : Checked P T v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
-    {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
+    {records now fresh n q eff : Term} {xs : PerMachine Term v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
     (x : EffectV v.event) (hx : RelV L (.dsl .effect [v.event]) x (eff.denote M)) (hown : x.isRequest = false)
     (hreach : x.Reach P)
-    {o : OwnStepOut} {cond codes : Term}
+    {o : OwnStepOut v} {cond codes : Term}
     (henc : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok ⟨o, cond, codes⟩)
     (hcodes : Holds M codes) :
     (Holds M cond ↔ ownFits L.count T a.state x) ∧
@@ -775,7 +757,7 @@ theorem ownStep_encode {P : List AnySite} (chk : Checked P T v)
   obtain ⟨kk, hkk, hR⟩ := forall2_getElem? hF hzk
   obtain ⟨⟨⟨ko, st⟩, c, cx⟩, hkind, hR⟩ := bind_ok.1 hR
   cases pure_ok.1 hR
-  have htests : ∀ (i : Nat) (y : Term × Encoded OwnKindStep), ks[i]? = some y →
+  have htests : ∀ (i : Nat) (y : Term × Encoded (OwnKindStep v)), ks[i]? = some y →
       y.1.denote M = .bool (decide (i = k)) := by
     intro i y hy
     obtain ⟨⟨key', i'⟩, hz, hR'⟩ := forall2_getElem? (forall2_flip hF) hy
@@ -853,9 +835,7 @@ theorem ownStep_encode {P : List AnySite} (chk : Checked P T v)
     | some f => exact id
     | none =>
       intro hdone
-      obtain ⟨-, ms, -, -, -, -, -, -, hms', -⟩ := id hdone
-      refine AccRel.congr hag (htab ?_) hdone
-      rw [machinesRel_length hms', machinesRel_length hms]
+      exact AccRel.congr hag htab hdone
 
 end
 

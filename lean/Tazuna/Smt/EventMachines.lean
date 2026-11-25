@@ -23,27 +23,28 @@ def encodeMachine (m : MachineV r e) (tbl records now ev : Term) : Except Refusa
   pure (o, andT c0 c1)
 
 /-- Every machine's reaction to an event, from its instance table, in the service's order. -/
-def encodeMachines : List (MachineV r e) → List Term → (records now ev : Term) → Except Refusal (List ReactOut × Term)
-  | [], [], _, _, _ => pure ([], tt)
-  | m :: ms, x :: xs, records, now, ev => do
+def encodeMachines : (ms : List (MachineV r e)) → PerMachine Term ms → (records now ev : Term) →
+    Except Refusal (PerMachine ReactOut ms × Term)
+  | [], .nil, _, _, _ => pure (.nil, tt)
+  | m :: ms, .cons x xs, records, now, ev => do
     let (a, c) ← encodeMachine L m x records now ev
     let (as, cs) ← encodeMachines ms xs records now ev
-    pure (a :: as, andT c cs)
-  | _, _, _, _, _ => .error (.outside "machines and instance tables that differ in number")
+    pure (.cons a as, andT c cs)
 
 /-- Every machine's instance invariant checks on the tables `xs`, machines in order. -/
-def encodeInstChecks : List (MachineV r e) → List Term → (records now : Term) → Except Refusal (List (List InstCheck) × Term)
-  | [], [], _, _ => pure ([], tt)
-  | m :: ms, x :: xs, records, now => do
+def encodeInstChecks : (ms : List (MachineV r e)) → PerMachine Term ms → (records now : Term) →
+    Except Refusal (PerMachine (List InstCheck) ms × Term)
+  | [], .nil, _, _ => pure (.nil, tt)
+  | m :: ms, .cons x xs, records, now => do
     let (inv, c0) ← m.invariants.code L
     let (cs, c1) ← encodeInstInvariants L T m inv x records now
     let (rest, c2) ← encodeInstChecks ms xs records now
-    pure (cs :: rest, andT c0 (andT c1 c2))
-  | _, _, _, _ => .error (.outside "machines and instance tables that differ in number")
+    pure (.cons cs rest, andT c0 (andT c1 c2))
 
 /-- The names of the broken instance invariants the checks read from the model, machines in order. -/
-def checksBroken (M : Model) (ms : List (MachineV r e)) (checks : List (List InstCheck)) : List String :=
-  (ms.zip checks).flatMap fun (m, cs) => instBroken L T M m.key cs
+def checksBroken (M : Model) : (ms : List (MachineV r e)) → PerMachine (List InstCheck) ms → List String
+  | [], .nil => []
+  | m :: ms, .cons cs rest => instBroken L T M m.key cs ++ checksBroken M ms rest
 
 end
 
@@ -128,16 +129,16 @@ after the step. -/
 theorem machines_event (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hevT : RelV L v.event (Ty.up _ v.event_data ev) (evT.denote M)) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
-    (outs : List ReactOut) → {c : Term} → MachinesRel M L T ms xs sms →
-    (∀ m ∈ ms, m.key.orderable = true) → encodeMachines L ms xs records now evT = .ok (outs, c) →
-    Holds M c →
+    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
+    (sms : List (Step.MachineState v.records v.event)) → (outs : PerMachine ReactOut ms) → {c : Term} →
+    MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.orderable = true) →
+    encodeMachines L ms xs records now evT = .ok (outs, c) → Holds M c →
       MachinesRel M L T ms (outs.map (·.table)) (sms.map fun ms0 => (Step.machineStep T recs tnow ev ms0).1)
-  | [], [], [], outs, c, _, _, henc, _ => by
+  | [], .nil, [], outs, c, _, _, henc, _ => by
     simp only [encodeMachines, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, -⟩ := henc
     trivial
-  | m :: ms, x :: xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc, hc => by
+  | m :: ms, .cons x xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc, hc => by
     obtain ⟨⟨a, c1⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨as, c2⟩, h2, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
@@ -147,21 +148,21 @@ theorem machines_event (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) 
     refine ⟨⟨tbl', ht', ?_⟩, machines_event recs tnow ev hrec hnow hevT ms xs sms as hrest
       (fun m' hm => hor m' (by simp [hm])) h2 hc2⟩
     rw [hi']; rfl
-  | [], [], _ :: _, _, _, h, _, _, _ | [], _ :: _, _, _, _, h, _, _, _ | _ :: _, [], _, _, _, h, _, _, _
-  | _ :: _, _ :: _, [], _, _, h, _, _, _ => h.elim
+  | [], .nil, _ :: _, _, _, h, _, _, _ | _ :: _, .cons _ _, [], _, _, h, _, _, _ => h.elim
 
 /-- The instance checks name the broken invariants of the machines the tables denote. -/
 theorem instChecks_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
-    MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.ordered T = true) →
-    {checks : List (List InstCheck)} → {c : Term} → encodeInstChecks L T ms xs records now = .ok (checks, c) →
+    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
+    (sms : List (Step.MachineState v.records v.event)) → MachinesRel M L T ms xs sms →
+    (∀ m ∈ ms, m.key.ordered T = true) → {checks : PerMachine (List InstCheck) ms} → {c : Term} →
+    encodeInstChecks L T ms xs records now = .ok (checks, c) →
     Holds M c → checksBroken L T M ms checks = instancesBroken recs tnow sms
-  | [], [], [], _, _, checks, c, henc, _ => by
+  | [], .nil, [], _, _, checks, c, henc, _ => by
     simp only [encodeInstChecks, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, -⟩ := henc
     rfl
-  | m :: ms, x :: xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, checks, c, henc, hc => by
+  | m :: ms, .cons x xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, checks, c, henc, hc => by
     obtain ⟨⟨inv, c0⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨cs, c1⟩, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
@@ -173,11 +174,10 @@ theorem instChecks_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
     have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
     have hb := instBroken_eq m (hord m (by simp)) hinv recs tnow hrec' hnow tbl htbl h2 hc1
     have ih := instChecks_rel recs tnow hrec hnow ms xs sms hrest (fun m' hm => hord m' (by simp [hm])) h3 hc2
-    simp only [checksBroken, List.zip_cons_cons, List.flatMap_cons, instancesBroken] at ih ⊢
+    simp only [checksBroken, List.flatMap_cons, instancesBroken] at ih ⊢
     rw [hb]
     exact congrArg _ ih
-  | [], [], _ :: _, h, _, _, _, _, _ | [], _ :: _, _, h, _, _, _, _, _ | _ :: _, [], _, h, _, _, _, _, _
-  | _ :: _, _ :: _, [], h, _, _, _, _, _ => h.elim
+  | [], .nil, _ :: _, h, _, _, _, _, _ | _ :: _, .cons _ _, [], h, _, _, _, _, _ => h.elim
 
 end
 
@@ -327,15 +327,16 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 theorem machines_exact (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hevT : RelV L v.event (Ty.up _ v.event_data ev) (evT.denote M)) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
-    (outs : List ReactOut) → {c : Term} → MachinesRel M L T ms xs sms →
-    (∀ m ∈ ms, m.key.orderable = true) → encodeMachines L ms xs records now evT = .ok (outs, c) →
+    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
+    (sms : List (Step.MachineState v.records v.event)) → (outs : PerMachine ReactOut ms) → {c : Term} →
+    MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.orderable = true) →
+    encodeMachines L ms xs records now evT = .ok (outs, c) →
     (Holds M c ↔ ∀ sm ∈ sms, machineFits L.count sm recs tnow ev)
-  | [], [], [], outs, c, _, _, henc => by
+  | [], .nil, [], outs, c, _, _, henc => by
     simp only [encodeMachines, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨-, rfl⟩ := henc
     simp [holds_tt]
-  | m :: ms, x :: xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc => by
+  | m :: ms, .cons x xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc => by
     obtain ⟨⟨a, c1⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨as, c2⟩, h2, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
@@ -344,21 +345,20 @@ theorem machines_exact (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) 
       machines_exact recs tnow ev hrec hnow hevT ms xs sms as hrest (fun m' hm => hor m' (by simp [hm])) h2]
     simp only [List.mem_cons, forall_eq_or_imp]
     rfl
-  | [], [], _ :: _, _, _, h, _, _ | [], _ :: _, _, _, _, h, _, _ | _ :: _, [], _, _, _, h, _, _
-  | _ :: _, _ :: _, [], _, _, h, _, _ => h.elim
+  | [], .nil, _ :: _, _, _, h, _, _ | _ :: _, .cons _ _, [], _, _, h, _, _ => h.elim
 
 /-- The instance checks ask exactly that every machine's invariants fit at its instances. -/
 theorem instChecks_exact (recs : v.records.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
-    MachinesRel M L T ms xs sms →
-    {checks : List (List InstCheck)} → {c : Term} → encodeInstChecks L T ms xs records now = .ok (checks, c) →
+    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
+    (sms : List (Step.MachineState v.records v.event)) → MachinesRel M L T ms xs sms →
+    {checks : PerMachine (List InstCheck) ms} → {c : Term} → encodeInstChecks L T ms xs records now = .ok (checks, c) →
     (Holds M c ↔ instChecksFit L.count recs tnow sms)
-  | [], [], [], _, checks, c, henc => by
+  | [], .nil, [], _, checks, c, henc => by
     simp only [encodeInstChecks, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨-, rfl⟩ := henc
     simp [instChecksFit, holds_tt]
-  | m :: ms, x :: xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, checks, c, henc => by
+  | m :: ms, .cons x xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, checks, c, henc => by
     obtain ⟨⟨inv, c0⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨cs, c1⟩, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
@@ -373,8 +373,7 @@ theorem instChecks_exact (recs : v.records.den0) (tnow : Int) {records now : Ter
       exact ⟨p0, (instInvariants_exact m h1 (e0.2 p0) recs tnow hrec' hnow tbl htbl h2).1 p1, p2⟩
     · rintro ⟨p0, p1, p2⟩
       exact ⟨p0, (instInvariants_exact m h1 (e0.2 p0) recs tnow hrec' hnow tbl htbl h2).2 p1, p2⟩
-  | [], [], _ :: _, h, _, _, _ | [], _ :: _, _, h, _, _, _ | _ :: _, [], _, h, _, _, _
-  | _ :: _, _ :: _, [], h, _, _, _ => h.elim
+  | [], .nil, _ :: _, h, _, _, _ | _ :: _, .cons _ _, [], h, _, _, _ => h.elim
 
 end
 

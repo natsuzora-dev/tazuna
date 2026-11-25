@@ -15,23 +15,23 @@ open Tazuna.Ir
 
 /-- The terms of an own command's internal step: whether the caller is listed and the `accepts` rules, `decide` and
 what follows it, and what the events loop leaves after `on_answer`'s events. -/
-structure OwnCommandOut where
+structure OwnCommandOut (v : ServiceV) where
   callerOk : Term
   rules : List (Term × Term)
-  decided : DecideOut
-  answered : EventsOut
+  decided : DecideOut v
+  answered : EventsOut v
 
 /-- What an own command's internal step leaves: the loop after `on_answer`, with the news and own slots of both
 loops. -/
-def OwnCommandOut.done (o : OwnCommandOut) : EventsOut :=
+def OwnCommandOut.done {v : ServiceV} (o : OwnCommandOut v) : EventsOut v :=
   { o.answered with news := o.decided.after.news ++ o.answered.news, owns := o.decided.after.owns ++ o.answered.owns }
 
 /-- The terms of an own query's internal step: whether the caller is listed, the `accepts` rules, and what the
 events loop leaves after `on_answer`'s events. -/
-structure OwnQueryOut where
+structure OwnQueryOut (v : ServiceV) where
   callerOk : Term
   rules : List (Term × Term)
-  answered : EventsOut
+  answered : EventsOut v
 
 section
 variable (L : Layout) (T : List TypeDecl)
@@ -43,7 +43,7 @@ def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (senv : 
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) {Γ : List Ty}
     (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (σ : Codes Γ)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
-    (records now fresh n q caller input : Term) (xs : List Term) : Except Refusal (OwnCommandOut × Term) := do
+    (records now fresh n q caller input : Term) (xs : PerMachine Term v.machines) : Except Refusal (OwnCommandOut v × Term) := do
   let (a, c1) ← encodeAdmit L cc.accepts callers records now fresh caller input
   let (dc, cd) ← encodeDecide L T v shs senv x cc apply a.ctx now records xs n q
   let nil ← adtCtor L 1 [] [[]] 0 []
@@ -68,7 +68,7 @@ through the events loop. -/
 def encodeOwnQuery (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : QueryV v.records v.caller) (qc : QueryCode x) {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event)))
     (σ : Codes Γ) (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
-    (records now fresh n q caller input : Term) (xs : List Term) : Except Refusal (OwnQueryOut × Term) := do
+    (records now fresh n q caller input : Term) (xs : PerMachine Term v.machines) : Except Refusal (OwnQueryOut v × Term) := do
   let (a, c1) ← encodeAdmit L qc.accepts callers records now fresh caller input
   let (out, c2) ← qc.resolve (a.ctx, ())
   let (oa, c3) ← site.code L σ
@@ -139,14 +139,14 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
     {ks : List Term} (hks : callerTerms L x.data.caller x.callers = some ks)
     (senv : StepEnv L shs)
-    {records now fresh n q sc si : Term} {xs : List Term} {q0 : Nat}
+    {records now fresh n q sc si : Term} {xs : PerMachine Term v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
     (hsc : RelV L v.caller (Ty.up _ x.data.caller caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ x.data.input input) (si.denote M))
-    {o : OwnCommandOut} {cond : Term}
+    {o : OwnCommandOut v} {cond : Term}
     (henc : encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q sc si xs = .ok (o, cond)) :
     let ctx := Step.ctx a.state a.state.records caller input
     let r := Step.runCommand T a x caller input (site.fn env)
@@ -405,14 +405,14 @@ theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pe
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
     (hout : x.output.isFn = false) {ks : List Term} (hks : callerTerms L x.data.caller x.callers = some ks)
     (senv : StepEnv L shs)
-    {records now fresh n q sc si : Term} {xs : List Term} {q0 : Nat}
+    {records now fresh n q sc si : Term} {xs : PerMachine Term v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
     (hsc : RelV L v.caller (Ty.up _ x.data.caller caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ x.data.input input) (si.denote M))
-    {o : OwnQueryOut} {cond : Term}
+    {o : OwnQueryOut v} {cond : Term}
     (henc : encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q sc si xs = .ok (o, cond)) :
     let ctx := Step.ctx a.state a.state.records caller input
     let r := Step.runQuery T a x caller input (site.fn env)

@@ -58,11 +58,11 @@ end
 
 /-- The terms of a step's end: the cascade, the new pending table, and the invariants and instance checks on the state
 the cascade leaves. -/
-structure FinishOut where
-  settle : SettleOut
+structure FinishOut (v : ServiceV) where
+  settle : SettleOut v
   pending : Term
   invariants : List (Term × Term)
-  checks : List (List InstCheck)
+  checks : PerMachine (List InstCheck) v.machines
 
 section
 variable (L : Layout) (T : List TypeDecl)
@@ -72,7 +72,7 @@ and the codes' condition. The pending write and the invariants are asked only wh
 the step then leaves the state it began with. -/
 def encodeFinish (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (inv : Code (Ty.fn [v.records] Ty.rules))
-    (now fresh pending : Term) (o : EventsOut) : Except Refusal (Encoded FinishOut) := do
+    (now fresh pending : Term) (o : EventsOut v) : Except Refusal (Encoded (FinishOut v)) := do
   -- `queueAt` reads the default only where no own slot holds the place, so its value is never asked.
   let dflt := (effectDefault L v.event).getD tt
   let ⟨so, cs, cx⟩ ← encodeSettle L T P v shs senv apply dflt now v.bounds.cascade.toNat 0 o.owns
@@ -92,7 +92,7 @@ fault, else the first broken invariant (the service's, then each machine's insta
 with the records, machines and fresh counter the terms denote, the requests `ps` written at the next wire ids and
 sent, and the pending table and next id terms denoting what follows (pending as a multiset). A fault leaves `s0`. -/
 def Finished (M : Model) (L : Layout) (T : List TypeDecl)
-    (shs : List (PendingShape v.event)) (fo : FinishOut) (s0 : State v) (a : Step.Acc v) (outcome : Outcome)
+    (shs : List (PendingShape v.event)) (fo : FinishOut v) (s0 : State v) (a : Step.Acc v) (outcome : Outcome)
     (r : Result v) : Prop :=
   match fo.settle.fault? M with
   | some f => r = ⟨s0, .fault f, [], []⟩
@@ -130,9 +130,9 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     (s0 : State v) (outcome : Outcome) (a : Step.Acc v) (hown : a.own = []) (hinv : Step.Inv P a.state)
     {now fresh pending : Term} (hnow : now.denote M = .int a.state.now)
     (hpend : PendingRel L shs (pending.denote M) a.state.pending)
-    {o : EventsOut} {r : Except Fault (Step.Acc v)} (hdone : AccRel M L T shs a o fresh 0 r)
+    {o : EventsOut v} {r : Except Fault (Step.Acc v)} (hdone : AccRel M L T shs a o fresh 0 r)
     (hr : ∀ a1, r = .ok a1 → Step.Inv P a1.state ∧ Step.QueueOk P a1)
-    {fo : FinishOut} {c cx : Term}
+    {fo : FinishOut v} {c cx : Term}
     (henc : encodeFinish L T P v shs senv apply inv now fresh pending o = .ok ⟨fo, c, cx⟩)
     (hcx : Holds M cx) :
     (Holds M c ↔ finishFits L.count T shs r) ∧

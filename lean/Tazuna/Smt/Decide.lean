@@ -12,11 +12,11 @@ open Tazuna.Ir
 
 /-- The terms of `decide` and what follows it: whether it accepted, its rejection and its events, what the events loop
 leaves (nothing on a rejection), and the `ensures` rules on the records after. -/
-structure DecideOut where
+structure DecideOut (v : ServiceV) where
   ok : Term
   rejection : Term
   events : Term
-  after : EventsOut
+  after : EventsOut v
   ensures : List (Term × Term)
 
 section
@@ -27,8 +27,8 @@ the records it leaves, at the context code `ctx`, with the condition: `decide`'s
 `decide` accepted. -/
 def encodeDecide (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [v.records, v.event] v.records))
-    (ctx : Code (Ty.ctx v.records x.input v.caller)) (now records : Term) (xs : List Term) (n q : Term) :
-    Except Refusal (DecideOut × Term) := do
+    (ctx : Code (Ty.ctx v.records x.input v.caller)) (now records : Term) (xs : PerMachine Term v.machines) (n q : Term) :
+    Except Refusal (DecideOut v × Term) := do
   let (res, c2) ← cc.decide (ctx, ())
   let rest ← need "a result that has no term" (Code.term? _ res)
   let (d, _) ← need "a layout without the result type" (L.find? (Ty.result (.list v.event) x.rejection))
@@ -87,9 +87,9 @@ theorem loop_apply {P : List AnySite} (chk : Checked P T v)
     {S : List Slot} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 1)
     {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
     {records : Term} (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
-    {xs : List Term} (hms : MachinesRel M L T v.machines xs a.state.machines)
+    {xs : PerMachine Term v.machines} (hms : MachinesRel M L T v.machines xs a.state.machines)
     {n q : Term} {q0 : Nat} (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
-    {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c))
+    {o : EventsOut v} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c))
     (hc : Holds M c) :
     let effs := (Step.reactAll T a.state evs).2
     RelV L v.records (Ty.up _ v.records_data (Step.reactAll T a.state evs).1.records) (o.records.denote M) ∧
@@ -111,7 +111,7 @@ the fresh counter `fresh` denotes, the events `evs` applied, the requests `effs`
 (for whichever pending requests `ps` the step writes for them, as the news slots hold), and the own commands and
 queries `os` queued at places from `q0`, as the own slots hold. -/
 def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShape v.event)) (a : Step.Acc v)
-    (o : EventsOut) (fresh : Term) (q0 : Nat) (r : Except Fault (Step.Acc v)) : Prop :=
+    (o : EventsOut v) (fresh : Term) (q0 : Nat) (r : Except Fault (Step.Acc v)) : Prop :=
   ∃ (recs : v.records.den0) (ms : List (Step.MachineState v.records v.event)) (fr : Nat) (evs : List v.event.den0)
     (effs : List (Sender × EffectV v.event)) (os : List (EffectV v.event)),
     (∀ ps, Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) ps →
@@ -132,10 +132,10 @@ theorem loop_acc {P : List AnySite} (chk : Checked P T v)
     {S : List Slot} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 1)
     {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
     {records : Term} (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
-    {xs : List Term} (hms : MachinesRel M L T v.machines xs a.state.machines)
+    {xs : PerMachine Term v.machines} (hms : MachinesRel M L T v.machines xs a.state.machines)
     {n q fresh : Term} {q0 : Nat} (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
-    {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c))
+    {o : EventsOut v} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c))
     (hc : Holds M c) :
     AccRel M L T shs a o fresh q0 (Step.applyEvents T a evs) := by
   obtain ⟨r1, r2, r3, r4, r5, r6, hr⟩ := loop_apply chk hshs happ hca senv a hnow hS hw hev hrec hms hn hq henc hc
@@ -161,12 +161,12 @@ theorem writes_unique {ds : List (String × DeclaredV)} {e : Ty} :
 
 /-- A run that sets only the fresh counter of `a` leaves, as `AccRel` says, what it leaves from `a`: the relation sets
 the fresh counter itself. -/
-theorem AccRel.of_fresh {shs : List (PendingShape v.event)} {a : Step.Acc v} {k : Nat} {o : EventsOut} {f : Term}
+theorem AccRel.of_fresh {shs : List (PendingShape v.event)} {a : Step.Acc v} {k : Nat} {o : EventsOut v} {f : Term}
     {q0 : Nat} {r : Except Fault (Step.Acc v)}
     (h : AccRel M L T shs { a with state := { a.state with fresh := k } } o f q0 r) : AccRel M L T shs a o f q0 r := h
 
 /-- What a run that ends at `a'` leaves, as the terms say: the facts the next part of a step continues from. -/
-theorem AccRel.ends {shs : List (PendingShape v.event)} {a a' : Step.Acc v} {o : EventsOut} {f : Term} {q0 : Nat}
+theorem AccRel.ends {shs : List (PendingShape v.event)} {a a' : Step.Acc v} {o : EventsOut v} {f : Term} {q0 : Nat}
     (h : AccRel M L T shs a o f q0 (.ok a')) :
     RelV L v.records (Ty.up _ v.records_data a'.state.records) (o.records.denote M) ∧
       MachinesRel M L T v.machines o.tables a'.state.machines ∧ f.denote M = .int (Int.ofNat a'.state.fresh) ∧
@@ -179,7 +179,7 @@ theorem AccRel.ends {shs : List (PendingShape v.event)} {a a' : Step.Acc v} {o :
 
 /-- Two runs in turn: what the first leaves, then the second from the state the first's terms denote, is what the
 two leave together, the news and own slots of both. -/
-theorem AccRel.bind {shs : List (PendingShape v.event)} {a : Step.Acc v} {o1 o2 : EventsOut} {f1 f2 : Term}
+theorem AccRel.bind {shs : List (PendingShape v.event)} {a : Step.Acc v} {o1 o2 : EventsOut v} {f1 f2 : Term}
     {q0 : Nat} {r : Except Fault (Step.Acc v)} {g : Step.Acc v → Except Fault (Step.Acc v)}
     (h1 : AccRel M L T shs a o1 f1 q0 r)
     (h2 : ∀ a1 (os : List (EffectV v.event)), r = .ok a1 → a1.own = a.own ++ os →
@@ -223,11 +223,11 @@ theorem decide_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca) (senv : StepEnv L shs) (a : Step.Acc v) (cv : (Ty.ctx v.records x.input v.caller).den0)
     {ctx : Code (Ty.ctx v.records x.input v.caller)} (hctx : Smt.Rel M L _ (Ty.up _ x.data.ctx cv) ctx)
-    {now records n q fresh : Term} {xs : List Term} {q0 : Nat} (hnow : now.denote M = .int a.state.now)
+    {now records n q fresh : Term} {xs : PerMachine Term v.machines} {q0 : Nat} (hnow : now.denote M = .int a.state.now)
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hms : MachinesRel M L T v.machines xs a.state.machines) (hn : n.denote M = .int (Int.ofNat a.state.nextId))
     (hq : q.denote M = .int q0) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
-    {o : DecideOut} {c : Term} (henc : encodeDecide L T v shs senv x cc apply ctx now records xs n q = .ok (o, c)) :
+    {o : DecideOut v} {c : Term} (henc : encodeDecide L T v shs senv x cc apply ctx now records xs n q = .ok (o, c)) :
     (Holds M c ↔ x.decide.appFits L.count (cv, ()) ∧ decideFits L.count T a.state x cv (x.decide.fn (cv, ()))) ∧
     (Holds M c → match x.decide.fn (cv, ()) with
       | .inl (events, ()) => o.ok.denote M = .bool true ∧

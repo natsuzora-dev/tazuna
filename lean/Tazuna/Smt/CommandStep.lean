@@ -11,11 +11,11 @@ open Tazuna.Ir
 
 /-- The terms of a command step's outcome: whether the caller is listed and the `accepts` rules, `decide` and what
 follows it, and the step's end. -/
-structure CommandOut where
+structure CommandOut (v : ServiceV) where
   callerOk : Term
   rules : List (Term × Term)
-  decided : DecideOut
-  finish : FinishOut
+  decided : DecideOut v
+  finish : FinishOut v
 
 section
 variable (L : Layout) (T : List TypeDecl)
@@ -26,8 +26,8 @@ condition asks only for what the step computes: the step's end only where `decid
 def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (callers : List Term)
-    (S : SymState) (caller input : Term) :
-    Except Refusal (Encoded CommandOut) := do
+    (S : SymState v) (caller input : Term) :
+    Except Refusal (Encoded (CommandOut v)) := do
   let (a, c1) ← encodeAdmit L cc.accepts callers S.records S.now S.fresh caller input
   let (dc, cd) ← encodeDecide L T v shs senv x cc apply a.ctx S.now S.records S.machines S.nextId (.int 0)
   let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending dc.after
@@ -71,10 +71,10 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hinv : v.invariants.code L = .ok (inv, ci)) (hci : Holds M ci)
     {ks : List Term} (hks : callerTerms L ((v.commands.get i).data).caller (v.commands.get i).callers = some ks)
     (senv : StepEnv L shs)
-    {S : SymState} (hR : StateRel M L T shs S s) {sc si : Term}
+    {S : SymState v} (hR : StateRel M L T shs S s) {sc si : Term}
     (hsc : RelV L v.caller (Ty.up _ ((v.commands.get i).data).caller caller) (sc.denote M))
     (hsi : RelV L (v.commands.get i).input (Ty.up _ ((v.commands.get i).data).input input) (si.denote M))
-    {o : CommandOut} {cond cfx : Term}
+    {o : CommandOut v} {cond cfx : Term}
     (henc : encodeCommand L T P v shs senv (v.commands.get i) cc apply inv ks S sc si = .ok ⟨o, cond, cfx⟩) (hcfx : Holds M cfx) :
     let x := v.commands.get i
     let ctx := Step.ctx s s.records caller input

@@ -19,25 +19,25 @@ namespace Tazuna.Smt
 open Tazuna.Ir
 
 /-- The terms of a step, per input kind. -/
-inductive StepOut where
-  | command (o : CommandOut)
+inductive StepOut (v : ServiceV) where
+  | command (o : CommandOut v)
   | query (o : QueryOut)
-  | answer (o : AnswerOut)
+  | answer (o : AnswerOut v)
   | unmatched (u : Term)
-  | event (o : EventOut)
-  | clock (o : ClockOut)
+  | event (o : EventOut v)
+  | clock (o : ClockOut v)
 
 /-- The case a script asks about, which its theorems assume: for an answer, that the slot holds the request it names
 (`hit`) or that no slot holds one of its type; other kinds have one case. -/
-def StepOut.case : StepOut → Term
+def StepOut.case {v : ServiceV} : StepOut v → Term
   | .answer o => o.hit
   | .unmatched u => u
   | _ => tt
 
 /-- A step's terms and conditions: the step's own (exact, `stepFits`), the codes of the functions it applies (exact,
 `codesFit`), and the codes the cascade's internal steps build at captured values. -/
-structure EncodedStep where
-  out : StepOut
+structure EncodedStep (v : ServiceV) where
+  out : StepOut v
   cond : Term
   codes : Term
   sites : Term
@@ -52,7 +52,7 @@ def callersOf {c : Ty} (callers : List c.den0) : Except Refusal (List Term) :=
 
 /-- A step's terms from the symbolic state and input, by the input's kind. -/
 def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
-    (S : SymState) : SymInput v → Except Refusal EncodedStep
+    (S : SymState v) : SymInput v → Except Refusal (EncodedStep v)
   | .command i caller input => do
     let x := v.commands.get i
     let (cc, cx) ← CommandCode.of L x
@@ -132,7 +132,7 @@ variable (M : Model) (L : Layout) (T : List TypeDecl) {v : ServiceV}
 
 /-- What a step's terms say of its result `r` from the state `s` and the input. -/
 def StepOut.Rel (shs : List (PendingShape v.event)) (s : State v) :
-    StepOut → Input v → Result v → Prop
+    StepOut v → Input v → Result v → Prop
   | .command o, .command i _ _, r =>
     let s' := { s with fresh := s.fresh + 1 }
     if (o.callerOk.denote M).toBool then
@@ -181,9 +181,9 @@ the cascade's codes' condition and the case the script asks about hold, the step
 the step applies fits, and wherever it holds the step from `s` is the one the terms say. -/
 theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     (senv : StepEnv L (shapes v P))
-    {S : SymState} {s : State v} (hS : S.decode M L T (shapes v P) = some s) (hinv : Step.Inv P s)
+    {S : SymState v} {s : State v} (hS : S.decode M L T (shapes v P) = some s) (hinv : Step.Inv P s)
     {inp : SymInput v} {hc} {x : Input v} (hx : inp.decode M L (shapes v P) hc = some x)
-    {t : EncodedStep} (henc : encodeStep L T P v senv S inp = .ok t) :
+    {t : EncodedStep v} (henc : encodeStep L T P v senv S inp = .ok t) :
     (Holds M t.codes ↔ codesFit L.count inp) ∧
     (Holds M t.codes → Holds M t.sites → Holds M t.out.case →
       (Holds M t.cond ↔ stepFits L.count T (shapes v P) s x) ∧

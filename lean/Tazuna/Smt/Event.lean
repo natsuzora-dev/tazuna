@@ -126,15 +126,15 @@ variable (L : Layout) (T : List TypeDecl)
 
 /-- The terms of an event step: the event the subscription wraps the value into, what the events loop over it leaves,
 and the step's end. -/
-structure EventOut where
+structure EventOut (v : ServiceV) where
   event : Term
-  after : EventsOut
-  finish : FinishOut
+  after : EventsOut v
+  finish : FinishOut v
 
 /-- An event step's terms, its condition and the codes' condition, from the subscription's and the service's codes
 and the terms of the state and the received value. -/
 def encodeEvent (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    {i : Fin v.subscribes.length} (ec : EventCode v i) (S : SymState) (value : Term) : Except Refusal (Encoded EventOut) := do
+    {i : Fin v.subscribes.length} (ec : EventCode v i) (S : SymState v) (value : Term) : Except Refusal (Encoded (EventOut v)) := do
   let (et, cw) ← encodeWrap ec value
   let (o, c) ← encodeEvents L T v shs senv ec.apply S.now [(tt, [et])] S.records S.machines S.nextId (.int 0)
   let ⟨fo, cf, cx⟩ ← encodeFinish L T P v shs senv ec.apply ec.invariants S.now S.fresh S.pending o
@@ -151,10 +151,10 @@ theorem event_encode {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (s : State v) (hinv : Step.Inv P s) (i : Fin v.subscribes.length)
     (value : (v.subscribes.get i).event.den0) {ec : EventCode v i} {ce : Term}
-    (hec : EventCode.of L v i = .ok (ec, ce)) (hce : Holds M ce) {S : SymState} (hR : StateRel M L T shs S s) {sv : Term}
+    (hec : EventCode.of L v i = .ok (ec, ce)) (hce : Holds M ce) {S : SymState v} (hR : StateRel M L T shs S s) {sv : Term}
     (hsv : RelV L _ (Ty.up _ ((v.eventData i)).value value) (sv.denote M))
     (senv : StepEnv L shs)
-    {o : EventOut} {c cx : Term}
+    {o : EventOut v} {c cx : Term}
     (henc : encodeEvent L T P v shs senv ec S sv = .ok ⟨o, c, cx⟩)
     (hcx : Holds M cx) :
     let ev := (v.subscribes.get i).wrap.fn (value, ())

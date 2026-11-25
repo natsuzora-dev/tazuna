@@ -264,10 +264,10 @@ empty. -/
 def noPending (v : ServiceV) : Ty := pendingTable ([] : List (PendingShape v.event))
 
 /-- The symbolic state at `v0..v3` with the pending table at `vk`, for scripts whose `v4` holds an input. -/
-def stateAt (k : Nat) : SymState := { SymState.vars 0 with pending := .var k }
+def stateAt {v : ServiceV} (k : Nat) : SymState v := { SymState.vars 0 with pending := .var k }
 
 /-- A step's terms through `encodeStep`, the encoding `step_encode` proves. -/
-def stepOf (L : Layout) (P : List AnySite) (v : ServiceV) (S : SymState) (inp : SymInput v) : Except String EncodedStep :=
+def stepOf (L : Layout) (P : List AnySite) (v : ServiceV) (S : SymState v) (inp : SymInput v) : Except String (EncodedStep v) :=
   (do encodeStep L prelude P v (← StepEnv.of L (shapes v P)) S inp).mapError fun r => s!"no encoding: {repr r}"
 
 def acceptsE : E (.fn [.int] Ty.rules) :=
@@ -407,8 +407,8 @@ def eventLayout : Layout :=
 def eventI : Fin eventSvc.subscribes.length := ⟨0, by decide⟩
 
 /-- An event step's terms through `encodeStep`. -/
-def eventTerms (L : Layout) (P : List AnySite) (v : ServiceV) (i : Fin v.subscribes.length) (S : SymState)
-    (value : Term) : Except String (EventOut × EncodedStep) := do
+def eventTerms (L : Layout) (P : List AnySite) (v : ServiceV) (i : Fin v.subscribes.length) (S : SymState v)
+    (value : Term) : Except String (EventOut v × EncodedStep v) := do
   let t ← stepOf L P v S (.event i value)
   let .event o := t.out | throw "not an event's terms"
   pure (o, t)
@@ -508,10 +508,11 @@ def evMI : Fin evMSvc.subscribes.length := ⟨0, by decide⟩
 /-- v0..v3 the state, v4 the pending table, v5 the instance table, v6 the value, v7 the records after, v8 the event,
 v9 and v10 the service invariant's holds and name, v11 the new instance table, v12 the new pending table, v13 the
 next id after. -/
-def evMScript (goal : List InstCheck → List Term) : Except String (Script × List (List InstCheck)) := do
+def evMScript (goal : List InstCheck → List Term) :
+    Except String (Script × PerMachine (List InstCheck) evMSvc.machines) := do
   let L := evMLayout
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let shs : List (PendingShape evMSvc.event) := []
   let (o, t) ← eventTerms L [] evMSvc evMI S (.var 6)
   let d := o.finish.settle.terms.done
@@ -524,8 +525,8 @@ def evMScript (goal : List InstCheck → List Term) : Except String (Script × L
   let some psrt := L.srt? (noPending evMSvc) | throw "no pending sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let [(name, holds)] := o.finish.invariants | throw "not one invariant"
-  let [tbl] := d.tables | throw "not one machine"
-  let [cs] := checks | throw "not one machine"
+  let [tbl] := d.tables.toList | throw "not one machine"
+  let [cs] := checks.toList | throw "not one machine"
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, esrt, rsrt, esrt, .bool, .str, msrt, psrt, .int],
           asserts := [t.codes, t.sites, t.cond, wf, below, .eq (.var 7) d.records, .eq (.var 8) o.event,
@@ -542,7 +543,7 @@ def evMCase (solver : Solver) (name : String) (goal : List InstCheck → List Te
     | .sat vs =>
       let M := modelOf vs
       let L := evMLayout
-      match (SymState.vars 0 1).decode M L (v := evMSvc) prelude [],
+      match (SymState.vars 0).decode M L (v := evMSvc) prelude [],
           (SymInput.event evMI (.var 6)).decode M L (v := evMSvc) [] rfl with
       | some s, some x =>
         let names := brokenIn M [(.var 10, .var 9)] ++ checksBroken L prelude M evMSvc.machines checks
@@ -868,7 +869,7 @@ def doorLayout : Layout := Layout.addTys (fun _ => 3) {} [recordsT, doorM.table,
 
 def doorScript (withWf : Bool) (goal : List Term) : Except String Script := do
   let L := doorLayout
-  let some wf := (SymState.vars 0 1).wf L (v := doorSvc) [] | throw "no well-formedness"
+  let some wf := (SymState.vars 0).wf L (v := doorSvc) [] | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
   let some msrt := L.srt? doorM.table | throw "no instance table sort"
   let some psrt := L.srt? (noPending doorSvc) | throw "no pending sort"
@@ -902,7 +903,7 @@ def doorCheck (solver : Solver) : IO Bool := do
   | .ok script =>
     match ← solver.run script with
     | .sat vs =>
-      match (SymState.vars 0 1).decode (modelOf vs) doorLayout (v := doorSvc) prelude [] with
+      match (SymState.vars 0).decode (modelOf vs) doorLayout (v := doorSvc) prelude [] with
       | some s =>
         -- Slot 0 holds key 3 and slot 1 key 1, yet the instances come in key order.
         let insts := s.machines.map fun ⟨_, is⟩ => is.map fun i =>
@@ -1433,7 +1434,7 @@ def invariantCheck (solver : Solver) : IO Bool := do
   let some (d, n) := L.find? invM.table | IO.println "smt-check: machine invariants: no table"; return false
   let some (dt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | IO.println "smt-check: machine invariants: no slot"; return false
   let some (de, _) := L.find? (instEntry .int) | IO.println "smt-check: machine invariants: no entry"; return false
-  let some wf := (SymState.vars 0 1).wf L (v := invSvc) [] | IO.println "smt-check: machine invariants: no wf"; return false
+  let some wf := (SymState.vars 0).wf L (v := invSvc) [] | IO.println "smt-check: machine invariants: no wf"; return false
   let some rsrt := L.srt? recordsT | IO.println "smt-check: machine invariants: no records sort"; return false
   let some msrt := L.srt? invM.table | IO.println "smt-check: machine invariants: no table sort"; return false
   let some psrt := L.srt? (noPending querySvc) | IO.println "smt-check: machine invariants: no pending sort"; return false
@@ -1453,7 +1454,7 @@ def invariantCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := invSvc) prelude []
+      let some s := (SymState.vars 0).decode M L (v := invSvc) prelude []
         | IO.println "smt-check: machine invariants: the model does not decode"; return false
       let step := s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i =>
         Step.broken (m.invariants.fn (.inl (i.key, i.state, s.records, s.now, ()), ()))
@@ -1503,7 +1504,7 @@ def reactCheck (solver : Solver) : IO Bool := do
   let some (dopt, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
-  let some wf := (SymState.vars 0 1).wf L (v := reactSvc) [] | fail "no wf"
+  let some wf := (SymState.vars 0).wf L (v := reactSvc) [] | fail "no wf"
   let some rsrt := L.srt? recordsT | fail "no records sort"
   let some msrt := L.srt? reactM.table | fail "no table sort"
   let some psrt := L.srt? (noPending querySvc) | fail "no pending sort"
@@ -1527,7 +1528,7 @@ def reactCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := reactSvc) prelude [] | fail "the model does not decode"
+      let some s := (SymState.vars 0).decode M L (v := reactSvc) prelude [] | fail "the model does not decode"
       let some tbl := decodeV L reactM.table ((Term.var 6).denote M) | fail "the new table does not decode"
       let some (.int ev) := vs.lookup 7 | fail "no event"
       let read := instancesOf prelude reactM (Ty.down _ reactM.table_data tbl)
@@ -1568,7 +1569,7 @@ def stayCheck (solver : Solver) : IO Bool := do
   let some (de, _) := L.find? (instEntry .int) | fail "no entry"
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
-  let some wf := (SymState.vars 0 1).wf L (v := staySvc) [] | fail "no wf"
+  let some wf := (SymState.vars 0).wf L (v := staySvc) [] | fail "no wf"
   let some rsrt := L.srt? recordsT | fail "no records sort"
   let some msrt := L.srt? stayM.table | fail "no table sort"
   let some psrt := L.srt? (noPending querySvc) | fail "no pending sort"
@@ -1588,7 +1589,7 @@ def stayCheck (solver : Solver) : IO Bool := do
     let stayed ← match ← solver.run (script stays) with
     | .sat vs => do
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := staySvc) prelude [] | fail "the model does not decode"
+      let some s := (SymState.vars 0).decode M L (v := staySvc) prelude [] | fail "the model does not decode"
       let some tbl := decodeV L stayM.table ((Term.var 6).denote M) | fail "the new table does not decode"
       let some (.int ev) := vs.lookup 7 | fail "no event"
       let read := instancesOf prelude stayM (Ty.down _ stayM.table_data tbl)
@@ -1638,7 +1639,7 @@ def startsCheck (solver : Solver) : IO Bool := do
   let some (dr, nr) := L.find? recordsT | fail "no records"
   let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
   let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | fail "no effect option"
-  let some wf := (SymState.vars 0 1).wf L (v := startSvc) [] | fail "no wf"
+  let some wf := (SymState.vars 0).wf L (v := startSvc) [] | fail "no wf"
   let some rsrt := L.srt? recordsT | fail "no records sort"
   let some msrt := L.srt? startM.table | fail "no table sort"
   let some psrt := L.srt? (noPending querySvc) | fail "no pending sort"
@@ -1657,7 +1658,7 @@ def startsCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := startSvc) prelude [] | fail "the model does not decode"
+      let some s := (SymState.vars 0).decode M L (v := startSvc) prelude [] | fail "the model does not decode"
       let some (.int ev) := vs.lookup 6 | fail "no event"
       let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
       let effs := (Step.machineStep (e := startSvc.event) prelude s.records s.now ev ⟨m, insts⟩).2.zipIdx s.nextId
@@ -1695,7 +1696,7 @@ def fireCheck (solver : Solver) : IO Bool := do
   let some (dopt, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
   let some (dp, _) := L.find? (.tuple [.int, .int]) | fail "no timer"
   let some (dxo, _) := L.find? (Ty.option (.dsl .effect [.int])) | fail "no effect option"
-  let some wf := (SymState.vars 0 1).wf L (v := startSvc) [] | fail "no wf"
+  let some wf := (SymState.vars 0).wf L (v := startSvc) [] | fail "no wf"
   let some rsrt := L.srt? recordsT | fail "no records sort"
   let some msrt := L.srt? startM.table | fail "no table sort"
   let some psrt := L.srt? (noPending querySvc) | fail "no pending sort"
@@ -1719,7 +1720,7 @@ def fireCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let some s := (SymState.vars 0 1).decode M L (v := startSvc) prelude [] | fail "the model does not decode"
+      let some s := (SymState.vars 0).decode M L (v := startSvc) prelude [] | fail "the model does not decode"
       let some tbl := decodeV L startM.table ((Term.var 6).denote M) | fail "the new table does not decode"
       let some tbl0 := decodeV L startM.table ((Term.var 5).denote M) | fail "the old table does not decode"
       let read := instancesOf prelude startM (Ty.down _ startM.table_data tbl)
@@ -1790,7 +1791,7 @@ def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : 
   let shs := writeShapesOf m
   let L := writeLayoutOf m keys slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let (o, t) ← eventTerms L writeSites v ⟨0, by simp [v, writeSvcOf]⟩ S (.var 6)
   let d := o.finish.settle.terms.done
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
@@ -1799,7 +1800,7 @@ def writeScriptOf (m : MachineV recordsT .int) (keys : List EffectKey) (slots : 
   let some psrt := L.srt? (pendingTable shs) | throw "no pending sort"
   let some msrt := L.srt? m.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [tbl] := d.tables | throw "not one machine"
+  let [tbl] := d.tables.toList | throw "not one machine"
   let some (dp, n) := L.find? (pendingTable shs) | throw "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry shs]) | throw "no pending slot"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int, rsrt, msrt],
@@ -1840,7 +1841,7 @@ def writeCheck (solver : Solver) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        match (SymState.vars 0 1).decode M L (v := writeSvc) prelude writeShapes,
+        match (SymState.vars 0).decode M L (v := writeSvc) prelude writeShapes,
             (SymInput.event writeI (.var 6)).decode M L (v := writeSvc) [] rfl,
             decodePending L writeShapes ((Term.var 7).denote M), (vs.lookup 8) with
         | some s, some x, some pend', some (.int n') =>
@@ -1890,7 +1891,7 @@ def quietCheck (solver : Solver) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        match (SymState.vars 0 1).decode M L (v := writeSvcOf reactM) prelude (writeShapesOf reactM),
+        match (SymState.vars 0).decode M L (v := writeSvcOf reactM) prelude (writeShapesOf reactM),
             decodePending L (writeShapesOf reactM) ((Term.var 7).denote M), vs.lookup 8 with
         | some s, some pend', some (.int n') =>
           let r := step prelude (writeSvcOf reactM) s (.event ⟨0, by simp [writeSvcOf]⟩ (by exact (5 : Int)))
@@ -1939,7 +1940,7 @@ the next id after. -/
 def fanScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot) := do
   let L := fanLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let (o, t) ← eventTerms L writeSites fanSvc fanI S (.var 6)
   let below ← enc (pendingBelowT L fanShapes S.pending S.nextId)
   let some wf := S.wf L (v := fanSvc) fanShapes | throw "no well-formedness"
@@ -1979,7 +1980,7 @@ def fanCheck (solver : Solver) : IO Bool := do
       | .sat vs =>
         let M := modelOf vs
         let L := fanLayout 5
-        match (SymState.vars 0 1).decode M L (v := fanSvc) prelude fanShapes,
+        match (SymState.vars 0).decode M L (v := fanSvc) prelude fanShapes,
             (SymInput.event fanI (.var 6)).decode M L (v := fanSvc) [] rfl,
             decodePending L fanShapes ((Term.var 7).denote M), (vs.lookup 8) with
         | some s, some x, some pend', some (.int n') =>
@@ -2025,11 +2026,12 @@ def clockShapes (cascade : Int) : List (PendingShape (clockFireSvc cascade).even
 
 /-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the line's time, v7 the new pending table, v8
 the next id after, v9 the new instance table. -/
-def clockFireScript (cascade : Int) (slots : Nat) (goal : List Term) : Except String (Script × ClockOut) := do
+def clockFireScript (cascade : Int) (slots : Nat) (goal : List Term) :
+    Except String (Script × ClockOut (clockFireSvc cascade)) := do
   let v := clockFireSvc cascade
   let L := writeLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let t ← stepOf L writeSites v S (.clock (.var 6))
   let .clock o := t.out | throw "not a clock line's terms"
   let below ← enc (pendingBelowT L (clockShapes cascade) S.pending S.nextId)
@@ -2038,7 +2040,7 @@ def clockFireScript (cascade : Int) (slots : Nat) (goal : List Term) : Except St
   let some psrt := L.srt? (pendingTable (clockShapes cascade)) | throw "no pending sort"
   let some msrt := L.srt? startM.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [tbl] := o.finish.settle.terms.done.tables | throw "not one machine"
+  let [tbl] := o.finish.settle.terms.done.tables.toList | throw "not one machine"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, psrt, .int, msrt],
           asserts := [wf, below, t.codes, t.sites, t.cond, .eq (.var 7) o.finish.pending,
             .eq (.var 8) o.finish.settle.terms.done.nextId, .eq (.var 9) tbl] ++ goal,
@@ -2075,7 +2077,7 @@ def clockFireCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      match (SymState.vars 0 1).decode M L (v := clockFireSvc 2) prelude (clockShapes 2),
+      match (SymState.vars 0).decode M L (v := clockFireSvc 2) prelude (clockShapes 2),
           decodePending L (clockShapes 2) ((Term.var 7).denote M), vs.lookup 8,
           decodeV L startM.table ((Term.var 9).denote M) with
       | some s, some pend', some (.int n'), some tbl =>
@@ -2106,7 +2108,7 @@ def clockFireCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      match (SymState.vars 0 1).decode M L (v := clockFireSvc 1) prelude (clockShapes 1) with
+      match (SymState.vars 0).decode M L (v := clockFireSvc 1) prelude (clockShapes 1) with
       | some s =>
         let r := step prelude (clockFireSvc 1) s (.clock 100)
         if !(o.over.denote M).toBool then ok ← fail "with cascade 1 the script does not say the bound is exceeded"
@@ -2158,7 +2160,7 @@ the next id after, v9 the records after, v10 the new instance table. -/
 def eventsScript (slots : Nat) (goal : List Term) : Except String (Script × List Slot × List Slot) := do
   let L := eventsLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let (apply, ca) ← enc (writeSvc.apply.code L)
   let (dl, nl, dlt) ← enc (collD L (.list .int) [.int])
   let senv ← enc (StepEnv.of L writeShapes)
@@ -2173,7 +2175,7 @@ def eventsScript (slots : Nat) (goal : List Term) : Except String (Script × Lis
   let some msrt := L.srt? startM.table | throw "no table sort"
   let some lsrt := L.srt? (.list .int) | throw "no list sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [tbl] := o.tables | throw "not one machine"
+  let [tbl] := o.tables.toList | throw "not one machine"
   let some (d, n) := L.find? (pendingTable writeShapes) | throw "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry writeShapes]) | throw "no pending slot"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, lsrt, psrt, .int, rsrt, msrt],
@@ -2203,9 +2205,9 @@ def eventsCheck (solver : Solver) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        let after : SymState := { records := .var 9, now := .var 1, fresh := .var 2, nextId := .var 8,
-                                  pending := .var 7, machines := [.var 10] }
-        match (SymState.vars 0 1).decode M L (v := writeSvc) prelude writeShapes,
+        let after : SymState writeSvc := { records := .var 9, now := .var 1, fresh := .var 2, nextId := .var 8,
+                                           pending := .var 7, machines := .cons (.var 10) .nil }
+        match (SymState.vars 0).decode M L (v := writeSvc) prelude writeShapes,
             after.decode M L (v := writeSvc) prelude writeShapes, (vs.lookup 6).bind (decodeV L (.list .int)) with
         | some s, some s', some evs =>
           let evs : List Int := Ty.down (.list .int) rfl evs
@@ -2260,7 +2262,7 @@ table, v9 the next id after, v10 the records after, v11 the new instance table. 
 def twiceScriptOf (slots : Nat) (goal : List Term) : Except String (Script × List Slot) := do
   let L := twiceLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let t ← stepOf L writeSites twiceSvc S (.command ⟨0, by decide⟩ (.var 6) (.var 7))
   let .command o := t.out | throw "not a command's terms"
   let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
@@ -2270,7 +2272,7 @@ def twiceScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Li
   let some msrt := L.srt? startM.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let d := o.finish.settle.terms.done
-  let [tbl] := d.tables | throw "not one machine"
+  let [tbl] := d.tables.toList | throw "not one machine"
   let some (dp, n) := L.find? (pendingTable twiceShapes) | throw "no pending table"
   let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry twiceShapes]) | throw "no pending slot"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .str, .int, psrt, .int, rsrt, msrt],
@@ -2303,9 +2305,9 @@ def twiceCheck (solver : Solver) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        let after : SymState := { records := .var 10, now := .var 1, fresh := .var 2, nextId := .var 9,
-                                  pending := .var 8, machines := [.var 11] }
-        match (SymState.vars 0 1).decode M L (v := twiceSvc) prelude twiceShapes,
+        let after : SymState twiceSvc := { records := .var 10, now := .var 1, fresh := .var 2, nextId := .var 9,
+                                           pending := .var 8, machines := .cons (.var 11) .nil }
+        match (SymState.vars 0).decode M L (v := twiceSvc) prelude twiceShapes,
             after.decode M L (v := twiceSvc) prelude twiceShapes with
         | some s, some s' =>
           let r := step prelude twiceSvc s (.command ⟨0, by decide⟩ ("alice" : String) (3 : Int))
@@ -2344,7 +2346,7 @@ next id after, v9 the records after, v10 the new instance table. -/
 def answerMScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Term) := do
   let L := answerMLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let t ← stepOf L writeSites writeSvc S (.answer 0 0 (.int 2) (.var 6))
   let .answer o := t.out | throw "not an answer's terms"
   let below ← enc (pendingBelowT L writeShapes S.pending S.nextId)
@@ -2356,7 +2358,7 @@ def answerMScriptOf (slots : Nat) (goal : List Term) : Except String (Script × 
   let some asrt := L.srt? (answerTy Ty.nil Ty.nil) | throw "no answer sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let d := o.finish.settle.terms.done
-  let [tbl] := d.tables | throw "not one machine"
+  let [tbl] := d.tables.toList | throw "not one machine"
   pure ({ datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, asrt, psrt, .int, rsrt, msrt],
           asserts := [wf, wfa, below, t.codes, t.sites, t.cond, o.hit, .eq (.var 7) o.finish.pending, .eq (.var 8) d.nextId,
             .eq (.var 9) d.records, .eq (.var 10) tbl] ++ goal,
@@ -2395,9 +2397,9 @@ def answerMCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let after : SymState := { records := .var 9, now := .var 1, fresh := .var 2, nextId := .var 8,
-                                pending := .var 7, machines := [.var 10] }
-      match (SymState.vars 0 1).decode M L (v := writeSvc) prelude writeShapes,
+      let after : SymState writeSvc := { records := .var 9, now := .var 1, fresh := .var 2, nextId := .var 8,
+                                         pending := .var 7, machines := .cons (.var 10) .nil }
+      match (SymState.vars 0).decode M L (v := writeSvc) prelude writeShapes,
           after.decode M L (v := writeSvc) prelude writeShapes,
           (vs.lookup 6).bind (decodeV L (answerTy Ty.nil Ty.nil)) with
       | some s, some s', some y =>
@@ -2462,7 +2464,7 @@ per request slot its flag and id, and per own slot its flag, place and effect. -
 def mixScript (slots : Nat) (goal : List Term) : Except String (Script × Nat × Nat) := do
   let L := mixLayout slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let (apply, ca) ← enc (mixSvc.apply.code L)
   let senv ← enc (StepEnv.of L mixShapes)
   let (o, c) ← enc (encodeEvents L prelude mixSvc mixShapes senv apply S.now [(tt, [.var 6])] S.records
@@ -2509,7 +2511,7 @@ def mixCheck (solver : Solver) : IO Bool := do
   | .ok (script, nn, no) =>
     match ← solver.run script with
     | .sat vs =>
-      match (SymState.vars 0 1).decode (modelOf vs) L (v := mixSvc) prelude mixShapes with
+      match (SymState.vars 0).decode (modelOf vs) L (v := mixSvc) prelude mixShapes with
       | none => fail "the model does not decode"
       | some s =>
         match Step.applyEvents prelude ({ state := s } : Step.Acc mixSvc) [(3 : Int)] with
@@ -2572,7 +2574,7 @@ after, v9 the next id after, v10 the instance table after, then per new request 
 def internalScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Nat) := do
   let L := internalLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let (cc, cx) ← enc (CommandCode.of L twiceC)
   let (apply, ca) ← enc (twiceSvc.apply.code L)
   let some ks := callerTerms L rfl twiceC.callers | throw "no caller terms"
@@ -2586,7 +2588,7 @@ def internalScriptOf (slots : Nat) (goal : List Term) : Except String (Script ×
   let some psrt := L.srt? (pendingTable twiceShapes) | throw "no pending sort"
   let some msrt := L.srt? startM.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [tbl] := o.answered.tables | throw "not one machine"
+  let [tbl] := o.answered.tables.toList | throw "not one machine"
   let news := o.decided.after.news ++ o.answered.news
   let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) (xs.headD tt)]
   pure ({ datatypes := dts,
@@ -2617,9 +2619,9 @@ def internalCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let after : SymState := { records := .var 8, now := .var 1, fresh := .var 2, nextId := .var 9,
-                                pending := .var 4, machines := [.var 10] }
-      match (SymState.vars 0 1).decode M L (v := twiceSvc) prelude twiceShapes,
+      let after : SymState twiceSvc := { records := .var 8, now := .var 1, fresh := .var 2, nextId := .var 9,
+                                         pending := .var 4, machines := .cons (.var 10) .nil }
+      match (SymState.vars 0).decode M L (v := twiceSvc) prelude twiceShapes,
           after.decode M L (v := twiceSvc) prelude twiceShapes with
       | some s, some s' =>
         let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
@@ -2674,7 +2676,7 @@ after, then per new request slot its flag and id. -/
 def ownQueryScript (goal : List Term) : Except String (Script × Nat) := do
   let L := ownQueryLayout
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let (qc, cq) ← enc (QueryCode.of L nextQ)
   let (apply, ca) ← enc (twiceSvc.apply.code L)
   let some ks := callerTerms L rfl nextQ.callers | throw "no caller terms"
@@ -2687,7 +2689,7 @@ def ownQueryScript (goal : List Term) : Except String (Script × Nat) := do
   let some psrt := L.srt? (pendingTable twiceShapes) | throw "no pending sort"
   let some msrt := L.srt? startM.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [tbl] := o.answered.tables | throw "not one machine"
+  let [tbl] := o.answered.tables.toList | throw "not one machine"
   let news := o.answered.news
   let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (11 + 2 * j)) f, .eq (.var (12 + 2 * j)) (xs.headD tt)]
   pure ({ datatypes := dts,
@@ -2718,9 +2720,9 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let after : SymState := { records := .var 8, now := .var 1, fresh := .var 2, nextId := .var 9,
-                                pending := .var 4, machines := [.var 10] }
-      match (SymState.vars 0 1).decode M L (v := twiceSvc) prelude twiceShapes,
+      let after : SymState twiceSvc := { records := .var 8, now := .var 1, fresh := .var 2, nextId := .var 9,
+                                         pending := .var 4, machines := .cons (.var 10) .nil }
+      match (SymState.vars 0).decode M L (v := twiceSvc) prelude twiceShapes,
           after.decode M L (v := twiceSvc) prelude twiceShapes with
       | some s, some s' =>
         let view (sms : List (Step.MachineState twiceSvc.records twiceSvc.event)) :=
@@ -2777,10 +2779,10 @@ def dispLayoutOf (slots : Nat) (dead : List OwnKey := []) : Layout :=
 /-- v0..v5 the state, v6 the effect, v7 the records after, v8 the next id after, v9 the instance table after, v10 the
 fault, v11 the fresh counter after, then per new request slot its flag and id. -/
 def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal : List Term) (dead : List OwnKey := []) :
-    Except String (Script × Nat × OwnStepOut) := do
+    Except String (Script × Nat × OwnStepOut dispSvc) := do
   let L := dispLayoutOf slots dead
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let (apply, ca) ← enc (dispSvc.apply.code L)
   let senv ← enc (StepEnv.of L dispShapes)
   let eff ← enc (effect L)
@@ -2793,7 +2795,7 @@ def dispScriptOf (slots : Nat) (effect : Layout → Except Refusal Term) (goal :
   let some msrt := L.srt? startM.table | throw "no table sort"
   let some esrt := L.srt? (.dsl .effect [.int]) | throw "no effect sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [tbl] := o.terms.done.tables | throw "not one machine"
+  let [tbl] := o.terms.done.tables.toList | throw "not one machine"
   let news := o.terms.done.news
   let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (12 + 2 * j)) f, .eq (.var (13 + 2 * j)) (xs.headD tt)]
   pure ({ datatypes := dts,
@@ -2834,9 +2836,9 @@ def dispCheck (solver : Solver) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        let after : SymState := { records := .var 7, now := .var 1, fresh := .var 11, nextId := .var 8,
-                                  pending := .var 4, machines := [.var 9] }
-        match (SymState.vars 0 1).decode M L (v := dispSvc) prelude dispShapes,
+        let after : SymState dispSvc := { records := .var 7, now := .var 1, fresh := .var 11, nextId := .var 8,
+                                          pending := .var 4, machines := .cons (.var 9) .nil }
+        match (SymState.vars 0).decode M L (v := dispSvc) prelude dispShapes,
             after.decode M L (v := dispSvc) prelude dispShapes with
         | some s, some s' =>
           let view (sms : List (Step.MachineState dispSvc.records dispSvc.event)) :=
@@ -2882,7 +2884,7 @@ def named (srt : Srt) (t : Term) : Named Term := modifyGet fun (n, vs, eqs) =>
 def namedRules (rs : List (Term × Term)) : Named (List (Term × Term)) :=
   rs.mapM fun (n, b) => do pure (← named .str n, ← named .bool b)
 
-def namedKind : OwnKindOut → Named OwnKindOut
+def namedKind {v : ServiceV} : OwnKindOut v → Named (OwnKindOut v)
   | .command name o => do
     pure (.command name { o with callerOk := ← named .bool o.callerOk, rules := ← namedRules o.rules,
                                  decided := { o.decided with ok := ← named .bool o.decided.ok,
@@ -2891,7 +2893,7 @@ def namedKind : OwnKindOut → Named OwnKindOut
     pure (.query name { o with callerOk := ← named .bool o.callerOk, rules := ← namedRules o.rules })
   | .missing name => pure (.missing name)
 
-def namedSettle (o : SettleOut) : Named SettleOut := do
+def namedSettle {v : ServiceV} (o : SettleOut v) : Named (SettleOut v) := do
   let steps ← o.steps.mapM fun (act, so) => do
     let kinds ← so.kinds.mapM fun (t, k) => do pure (← named .bool t, ← namedKind k)
     pure (← named .bool act, { so with kinds, terms := { so.terms with fault := ← named .bool so.terms.fault } })
@@ -2901,15 +2903,15 @@ def namedSettle (o : SettleOut) : Named SettleOut := do
 step faults, v10 whether a place past the bound is occupied, v11 the fresh counter after, then per new request slot
 its flag and id. -/
 def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal Term)) (goal : List Term) :
-    Except String (Script × Nat × SettleOut) := do
+    Except String (Script × Nat × SettleOut dispSvc) := do
   let L := dispLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let (apply, ca) ← enc (dispSvc.apply.code L)
   let senv ← enc (StepEnv.of L dispShapes)
   let effs ← effects.mapM fun f => enc (f L)
   let queue : List Slot := effs.zipIdx.map fun (e, j) => (tt, [.int j, e])
-  let t : StepTerms := ⟨.bool false, ⟨S.records, S.machines, S.nextId, [], [], .int effs.length⟩, S.fresh⟩
+  let t : StepTerms dispSvc := ⟨.bool false, ⟨S.records, S.machines, S.nextId, [], [], .int effs.length⟩, S.fresh⟩
   let ⟨o, cond, codes⟩ ← enc (encodeSettle L prelude dispSites dispSvc dispShapes senv apply (effs.headD tt) S.now
     fuel 0 queue t)
   let below ← enc (pendingBelowT L dispShapes S.pending S.nextId)
@@ -2918,7 +2920,7 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
   let some psrt := L.srt? (pendingTable dispShapes) | throw "no pending sort"
   let some msrt := L.srt? startM.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
-  let [tbl] := o.terms.done.tables | throw "not one machine"
+  let [tbl] := o.terms.done.tables.toList | throw "not one machine"
   let news := o.terms.done.news
   let slots := news.zipIdx.flatMap fun ((f, xs), j) => [.eq (.var (12 + 2 * j)) f, .eq (.var (13 + 2 * j)) (xs.headD tt)]
   pure ({ datatypes := dts,
@@ -2930,7 +2932,7 @@ def cascadeTermsOf (slots fuel : Nat) (effects : List (Layout → Except Refusal
           shows := List.range (12 + 2 * news.length) }, news.length, o)
 
 def cascadeScriptOf (slots fuel : Nat) (effects : List (Layout → Except Refusal Term)) (goal : List Term) :
-    Except String (Script × Nat × SettleOut) := do
+    Except String (Script × Nat × SettleOut dispSvc) := do
   let (script, nn, o) ← cascadeTermsOf slots fuel effects goal
   let (o', (_, vs, eqs)) := (namedSettle o).run (script.vars.length, [], [])
   pure ({ script with vars := script.vars ++ vs, asserts := script.asserts ++ eqs,
@@ -2969,9 +2971,9 @@ def cascadeCheck (solver : Solver) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        let after : SymState := { records := .var 6, now := .var 1, fresh := .var 11, nextId := .var 7,
-                                  pending := .var 4, machines := [.var 8] }
-        match (SymState.vars 0 1).decode M L (v := dispSvc) prelude dispShapes,
+        let after : SymState dispSvc := { records := .var 6, now := .var 1, fresh := .var 11, nextId := .var 7,
+                                          pending := .var 4, machines := .cons (.var 8) .nil }
+        match (SymState.vars 0).decode M L (v := dispSvc) prelude dispShapes,
             after.decode M L (v := dispSvc) prelude dispShapes with
         | some s, some s' =>
           let view (sms : List (Step.MachineState dispSvc.records dispSvc.event)) :=
@@ -3042,12 +3044,13 @@ def cascLayout (cascade : Int) (slots : Nat) : Layout :=
 
 /-- v0..v5 the state, v6 the event value, v7 the records after, v8 the fresh counter after, v9 the next id after, v10
 the pending table after, v11 the instance table after. -/
-def cascEventTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except String (Script × FinishOut) := do
+def cascEventTermsOf (cascade : Int) (slots : Nat) (goal : List Term) :
+    Except String (Script × FinishOut (cascSvc cascade)) := do
   let v := cascSvc cascade
   let shs := cascShapes cascade
   let L := cascLayout cascade slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let (o, t) ← eventTerms L cascSites v ⟨0, by simp [v, cascSvc, writeSvc, writeSvcOf]⟩ S (.var 6)
   let fo := o.finish
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
@@ -3057,7 +3060,7 @@ def cascEventTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except S
   let some msrt := L.srt? startM.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let d := fo.settle.terms.done
-  let [tbl] := d.tables | throw "not one machine"
+  let [tbl] := d.tables.toList | throw "not one machine"
   let script : Script :=
     { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt, msrt, .int, rsrt, .int, .int, psrt, msrt],
       asserts := [wf, below, t.codes, t.cond, t.sites, .eq (.var 7) d.records, .eq (.var 8) fo.settle.terms.fresh,
@@ -3066,7 +3069,7 @@ def cascEventTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except S
 
 /-- `cascEventTermsOf` with the cascade's and the invariants' terms named after its variables. -/
 def cascEventScriptOf (cascade : Int) (slots : Nat) (goal : List Term) :
-    Except String (Script × FinishOut × List (Term × Term)) := do
+    Except String (Script × FinishOut (cascSvc cascade) × List (Term × Term)) := do
   let (script, fo) ← cascEventTermsOf cascade slots goal
   let ((so, invs), (_, vs, eqs)) := (do pure (← namedSettle fo.settle, ← namedRules fo.invariants)).run
     (script.vars.length, [], [])
@@ -3098,9 +3101,9 @@ def cascEventCheck (solver : Solver) : IO Bool := do
       match ← solver.run script with
       | .sat vs =>
         let M := modelOf vs
-        let after : SymState := { records := .var 7, now := .var 1, fresh := .var 8, nextId := .var 9,
-                                  pending := .var 10, machines := [.var 11] }
-        match (SymState.vars 0 1).decode M L (v := v) prelude shs, after.decode M L (v := v) prelude shs with
+        let after : SymState v := { records := .var 7, now := .var 1, fresh := .var 8, nextId := .var 9,
+                                    pending := .var 10, machines := .cons (.var 11) .nil }
+        match (SymState.vars 0).decode M L (v := v) prelude shs, after.decode M L (v := v) prelude shs with
         | some s, some s' =>
           let view (sms : List (Step.MachineState v.records v.event)) :=
             sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
@@ -3161,12 +3164,13 @@ def tickLayout (cascade : Int) (slots : Nat) : Layout :=
 
 /-- v0..v5 the state, v6 the line's time, v7 the records after, v8 the fresh counter after, v9 the next id after, v10
 the pending table after, v11 the instance table after, v12 whether every round fired. -/
-def tickClockTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except String (Script × ClockOut) := do
+def tickClockTermsOf (cascade : Int) (slots : Nat) (goal : List Term) :
+    Except String (Script × ClockOut (tickSvc cascade)) := do
   let v := tickSvc cascade
   let shs := tickShapes cascade
   let L := tickLayout cascade slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
-  let S := SymState.vars 0 1
+  let S := SymState.vars 0
   let t ← stepOf L cascSites v S (.clock (.var 6))
   let .clock o := t.out | throw "not a clock line's terms"
   let below ← enc (pendingBelowT L shs S.pending S.nextId)
@@ -3176,7 +3180,7 @@ def tickClockTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except S
   let some msrt := L.srt? tickM.table | throw "no table sort"
   let some dts := L.datatypes? | throw "no datatypes"
   let d := o.finish.settle.terms.done
-  let [tbl] := d.tables | throw "not one machine"
+  let [tbl] := d.tables.toList | throw "not one machine"
   pure ({ datatypes := dts,
           vars := [rsrt, .int, .int, .int, psrt, msrt, .int, rsrt, .int, .int, psrt, msrt, .bool],
           asserts := [wf, below, t.codes, t.sites, t.cond, .eq (.var 7) d.records, .eq (.var 8) o.finish.settle.terms.fresh,
@@ -3213,9 +3217,9 @@ def tickClockCheck (solver : Solver) : IO Bool := do
     match ← solver.run script with
     | .sat vs =>
       let M := modelOf vs
-      let after : SymState := { records := .var 7, now := .var 6, fresh := .var 8, nextId := .var 9,
-                                pending := .var 10, machines := [.var 11] }
-      match (SymState.vars 0 1).decode M L (v := v) prelude shs, after.decode M L (v := v) prelude shs with
+      let after : SymState v := { records := .var 7, now := .var 6, fresh := .var 8, nextId := .var 9,
+                                  pending := .var 10, machines := .cons (.var 11) .nil }
+      match (SymState.vars 0).decode M L (v := v) prelude shs, after.decode M L (v := v) prelude shs with
       | some s, some s' =>
         let view (sms : List (Step.MachineState v.records v.event)) :=
           sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>

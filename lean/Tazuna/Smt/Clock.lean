@@ -248,38 +248,37 @@ variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
 /-- Every machine's part of a firing round, machines in order: each fires unless `done`, and passes on whether some
 machine so far has an instance with the deadline. -/
-def encodeFires : List (MachineV r e) → List Term → (done d records now : Term) → Except Refusal (List FireOut × Term)
-  | [], [], _, _, _, _ => pure ([], tt)
-  | m :: ms, x :: xs, done, d, records, now => do
+def encodeFires : (ms : List (MachineV r e)) → PerMachine Term ms → (done d records now : Term) →
+    Except Refusal (PerMachine FireOut ms × Term)
+  | [], .nil, _, _, _, _ => pure (.nil, tt)
+  | m :: ms, .cons x xs, done, d, records, now => do
     let (af, c0) ← m.after.code L
     let (fx, c1) ← m.effect.code L
     let (o, c) ← encodeFire L T m af fx x done d records now
     let (os, cs) ← encodeFires ms xs (.share (.or done o.hit)) d records now
-    pure (o :: os, andT c0 (andT c1 (andT c cs)))
-  | _, _, _, _, _, _ => .error (.outside "machines and instance tables that differ in number")
+    pure (.cons o os, andT c0 (andT c1 (andT c cs)))
 
 /-- The due slots of every machine's table, machines in order. -/
-def dueAll : List (MachineV r e) → List Term → Term → Except Refusal (List (Term × Term))
-  | [], [], _ => pure []
-  | m :: ms, x :: xs, now => do
+def dueAll : (ms : List (MachineV r e)) → PerMachine Term ms → Term → Except Refusal (List (Term × Term))
+  | [], .nil, _ => pure []
+  | m :: ms, .cons x xs, now => do
     let (dd, n, dt) ← collD L m.table [m.key, instEntry m.state]
     let de ← tupleD L [m.state, Ty.option (.tuple [.int, m.state])]
     let (dent, _) ← need "a layout without the entry's timer" (L.find? (Ty.option (.tuple [.int, m.state])))
     let dp ← tupleD L [.int, m.state]
     let rest ← dueAll ms xs now
     pure (dueSlots de dent dp (slotsOf dd dt n 2 x) now ++ rest)
-  | _, _, _ => .error (.outside "machines and instance tables that differ in number")
 
 /-- What a firing round encodes: every machine's part, and whether the round fires (it is active and some timer is
 due). -/
-structure RoundOut where
-  fires : List FireOut
+structure RoundOut (ms : List (MachineV r e)) where
+  fires : PerMachine FireOut ms
   go : Term
 
 /-- One firing round, where `active`: at the earliest due deadline, every machine's part in order. A round that is
 not active, or has no due timer, fires nothing. -/
-def encodeRound (ms : List (MachineV r e)) (xs : List Term) (active records now : Term) :
-    Except Refusal (RoundOut × Term) := do
+def encodeRound (ms : List (MachineV r e)) (xs : PerMachine Term ms) (active records now : Term) :
+    Except Refusal (RoundOut ms × Term) := do
   let dues ← dueAll L ms xs now
   let go := Term.share (.and active (minDueT dues).1)
   let (os, c) ← encodeFires L T ms xs (.not go) (Term.share (minDueT dues).2) records now
@@ -313,17 +312,17 @@ the start slots hold its effects, machine by machine. -/
 theorem fires_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {d : Term} {dv : Int} (hd : d.denote M = .int dv) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
+    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) → (sms : List (Step.MachineState v.records v.event)) →
     MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.ordered T = true) →
     {done : Term} → {b : Bool} → done.denote M = .bool b →
-    {os : List FireOut} → {c : Term} → encodeFires L T ms xs done d records now = .ok (os, c) → Holds M c →
+    {os : PerMachine FireOut ms} → {c : Term} → encodeFires L T ms xs done d records now = .ok (os, c) → Holds M c →
     MachinesRel M L T ms (os.map (·.table)) (Step.fireMachines recs tnow dv b sms).1 ∧
       ∃ effss, StartsRel M L T ms (os.map (·.starts)) effss ∧ effss.flatten = (Step.fireMachines recs tnow dv b sms).2.1
-  | [], [], [], _, _, done, b, hdone, os, c, henc, _ => by
+  | [], .nil, [], _, _, done, b, hdone, os, c, henc, _ => by
     simp only [encodeFires, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, -⟩ := henc
     exact ⟨trivial, [], trivial, by simp [Step.fireMachines]⟩
-  | m :: ms, x :: xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, done, b, hdone, os, c, henc, hc => by
+  | m :: ms, .cons x xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, done, b, hdone, os, c, henc, hc => by
     obtain ⟨⟨af, c0⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨fx, c1⟩, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c2⟩, h3, henc⟩ := bind_ok.1 henc
@@ -348,19 +347,18 @@ theorem fires_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
       instancesOk_lt (T := T) m ho (instancesOf_ok (T := T) m tbl), rfl⟩, hst⟩, ?_⟩
     · rw [hi']
     · rw [List.flatten_cons, hfl]
-  | [], [], _ :: _, h, _, _, _, _, _, _, _, _ | [], _ :: _, _, h, _, _, _, _, _, _, _, _
-  | _ :: _, [], _, h, _, _, _, _, _, _, _, _ | _ :: _, _ :: _, [], h, _, _, _, _, _, _, _, _ => h.elim
+  | [], .nil, _ :: _, h, _, _, _, _, _, _, _, _ | _ :: _, .cons _ _, [], h, _, _, _, _, _, _, _, _ => h.elim
 
 /-- The due terms of every machine's table denote the due deadlines of the machines' instances, in some order. -/
 theorem dueAll_rel {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
+    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) → (sms : List (Step.MachineState v.records v.event)) →
     MachinesRel M L T ms xs sms → {dues : List (Term × Term)} → dueAll L ms xs now = .ok dues →
     ∃ os, Forall2 (DueRel M) dues os ∧ (os.filterMap id).Perm (Step.dues sms tnow)
-  | [], [], [], _, dues, henc => by
+  | [], .nil, [], _, dues, henc => by
     simp only [dueAll, pure, Except.pure, Except.ok.injEq] at henc
     subst henc
     exact ⟨[], trivial, by simp [Step.dues]⟩
-  | m :: ms, x :: xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, dues, henc => by
+  | m :: ms, .cons x xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, dues, henc => by
     obtain ⟨⟨dd, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨de, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨dent, nent⟩, h3, henc⟩ := bind_ok.1 henc
@@ -378,15 +376,15 @@ theorem dueAll_rel {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
     refine ⟨os1 ++ os2, forall2_append hf1 hf2, ?_⟩
     rw [List.filterMap_append, he1]
     exact (hperm.filterMap _).append he2
-  | [], [], _ :: _, h, _, _ | [], _ :: _, _, h, _, _ | _ :: _, [], _, h, _, _ | _ :: _, _ :: _, [], h, _, _ => h.elim
+  | [], .nil, _ :: _, h, _, _ | _ :: _, .cons _ _, [], h, _, _ => h.elim
 
 /-- T2 for a firing round: whether it fires, the new tables, and the effects of `Step.roundOf`, machine by machine. -/
 theorem round_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    {ms : List (MachineV v.records v.event)} {xs : List Term} {sms : List (Step.MachineState v.records v.event)}
+    {ms : List (MachineV v.records v.event)} {xs : PerMachine Term ms} {sms : List (Step.MachineState v.records v.event)}
     (hms : MachinesRel M L T ms xs sms) (hord : ∀ m ∈ ms, m.key.ordered T = true)
     {active : Term} {ab : Bool} (hact : active.denote M = .bool ab)
-    {ro : RoundOut} {c : Term} (henc : encodeRound L T ms xs active records now = .ok (ro, c)) (hc : Holds M c) :
+    {ro : RoundOut ms} {c : Term} (henc : encodeRound L T ms xs active records now = .ok (ro, c)) (hc : Holds M c) :
     ro.go.denote M = .bool (ab && (Step.dues sms tnow).min?.isSome) ∧
       MachinesRel M L T ms (ro.fires.map (·.table)) (Step.roundOf recs tnow ab sms).1 ∧
       ∃ effss, StartsRel M L T ms (ro.fires.map (·.starts)) effss ∧ effss.flatten = (Step.roundOf recs tnow ab sms).2 := by
@@ -449,8 +447,8 @@ variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 /-- What the firing rounds encode: the final instance tables, the pending slots of the requests the rounds start (each
 round's wire ids after the earlier rounds'), the next wire id after them, whether every round fired, and the own
 slots of the own commands and queries the rounds queue with the queue place after them. -/
-structure RoundsOut where
-  tables : List Term
+structure RoundsOut (ms : List (MachineV r e)) where
+  tables : PerMachine Term ms
   news : List Slot
   nextId : Term
   over : Term
@@ -461,10 +459,10 @@ structure RoundsOut where
 slots of the own commands and queries they queue, with how many. A round fires at most one instance, so every request
 slot takes the round's next id `nid` and every own slot the round's queue place `q`. -/
 def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (senv : StepEnv L shs) :
-    List (MachineV r e) → List (List StartSlot) → (nid q : Term) →
+    (ms : List (MachineV r e)) → PerMachine (List StartSlot) ms → (nid q : Term) →
     Except Refusal (List Slot × Term × List Slot × Term)
-  | [], [], _, _ => pure ([], .int 0, [], .int 0)
-  | m :: ms, st :: sts, nid, q => do
+  | [], .nil, _, _ => pure ([], .int 0, [], .int 0)
+  | m :: ms, .cons st sts, nid, q => do
     let (dk, _) ← need "a layout without the sender's key tuple" (L.find? (.tuple [m.key]))
     let js ← shapeIdxs shs ds ⟨[m.key], .machine m.name m.key⟩ (L.effectsOf e)
     let dflt ← need "a pending entry without a default term" (defaultT L (pendingEntry shs))
@@ -474,12 +472,11 @@ def roundStarts (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) 
     let (rest, k, orest, ko) ← roundStarts shs ds senv ms sts nid q
     pure (entrySlots senv.dE senv.dP dk dflt js (rq.map (onceStart senv.dopt nid)) ++ rest, .add (startCount senv.dopt rq) k,
       ownItems (oq.map (onceStart senv.dopt q)) ++ orest, .add (startCount senv.dopt oq) ko)
-  | _, _, _, _ => .error (.outside "machines and start slots that differ in number")
 
 /-- `k` firing rounds from the tables `xs`, the first where `active`, each next one where the one before fired. -/
 def encodeRounds (shs : List (PendingShape e)) (ds : List (String × DeclaredV)) (senv : StepEnv L shs)
-    (ms : List (MachineV r e)) (records now : Term) : Nat → List Term → (active nid q : Term) →
-    Except Refusal (RoundsOut × Term)
+    (ms : List (MachineV r e)) (records now : Term) : Nat → PerMachine Term ms → (active nid q : Term) →
+    Except Refusal (RoundsOut ms × Term)
   | 0, xs, active, nid, q => pure (⟨xs, [], nid, active, [], q⟩, tt)
   | k + 1, xs, active, nid, q => do
     let (ro, c) ← encodeRound L T ms xs active records now
@@ -533,18 +530,18 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
     (senv : StepEnv L shs) {nid q : Term} {n0 q0 : Nat}
     (hn : nid.denote M = .int n0) (hq : q.denote M = .int q0) :
-    (ms : List (MachineV v.records v.event)) → (sts : List (List StartSlot)) →
+    (ms : List (MachineV v.records v.event)) → (sts : PerMachine (List StartSlot) ms) →
     (effss : List (List (Sender × EffectV v.event))) → StartsRel M L T ms sts effss → effss.flatten.length ≤ 1 →
     (∀ effs ∈ effss, ∀ x ∈ effs, x.2.Reach P) →
     {news : List Slot} → {cnt : Term} → {owns : List Slot} → {ocnt : Term} →
     roundStarts L shs ds senv ms sts nid q = .ok (news, cnt, owns, ocnt) →
     cnt.denote M = .int (Step.reqsOf effss.flatten).length ∧ NewsRel M L shs ds news (Step.reqsOf effss.flatten) n0 ∧
       ocnt.denote M = .int (Step.queuedOf effss.flatten).length ∧ OwnRel M L owns (Step.queuedOf effss.flatten) q0
-  | [], [], [], _, _, _, news, cnt, owns, ocnt, henc => by
+  | [], .nil, [], _, _, _, news, cnt, owns, ocnt, henc => by
     simp only [roundStarts, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨rfl, rfl, rfl, rfl⟩ := henc
     exact ⟨rfl, ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩, rfl, ownRel_nil q0⟩
-  | m :: ms, st :: sts, effs :: effss, ⟨hst, hrest⟩, hone, hreach, news, cnt, owns, ocnt, henc => by
+  | m :: ms, .cons st sts, effs :: effss, ⟨hst, hrest⟩, hone, hreach, news, cnt, owns, ocnt, henc => by
     obtain ⟨⟨dk, nk⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨js, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨dflt, -, henc⟩ := bind_ok.1 henc
@@ -606,8 +603,7 @@ theorem roundStarts_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pen
       · rw [List.length_eq_zero_iff.1 h0] at hown ⊢
         obtain ⟨a, b, c, d, e, f⟩ := hown
         exact ownRel_append hO ⟨a, b, c, d, e, by simpa using f⟩
-  | [], [], _ :: _, h, _, _, _, _, _, _, _ | [], _ :: _, _, h, _, _, _, _, _, _, _
-  | _ :: _, [], _, h, _, _, _, _, _, _, _ | _ :: _, _ :: _, [], h, _, _, _, _, _, _, _ => h.elim
+  | [], .nil, _ :: _, h, _, _, _, _, _, _, _ | _ :: _, .cons _ _, [], h, _, _, _, _, _, _, _ => h.elim
 
 /-- T2 for the firing rounds: where `Step.fireFrom` gives none (every round fired) the over term holds; otherwise it
 does not, the tables denote the machines after the rounds, the pending slots hold the requests among their effects at
@@ -619,10 +615,10 @@ theorem rounds_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
     {records now : Term} (hord : ∀ m ∈ v.machines, m.key.ordered T = true) :
     (k : Nat) → (s : State v) → RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M) →
     now.denote M = .int s.now → (∀ ms ∈ s.machines, ms.1.Reach P) →
-    {xs : List Term} → MachinesRel M L T v.machines xs s.machines →
+    {xs : PerMachine Term v.machines} → MachinesRel M L T v.machines xs s.machines →
     {active : Term} → {ab : Bool} → active.denote M = .bool ab →
     {nid q : Term} → {n0 q0 : Nat} → nid.denote M = .int n0 → q.denote M = .int q0 →
-    {o : RoundsOut} → {c : Term} →
+    {o : RoundsOut v.machines} → {c : Term} →
     encodeRounds L T shs ds senv v.machines records now k xs active nid q = .ok (o, c) → Holds M c →
     match Step.fireFrom s ab k with
     | none => o.over.denote M = .bool true
@@ -723,18 +719,18 @@ variable (L : Layout) (T : List TypeDecl) {r e : Ty}
 
 /-- What a clock line's step encodes: whether time moves forward, whether every round fired (the cascade bound is
 exceeded), the firing rounds, and the step's end. -/
-structure ClockOut where
+structure ClockOut (v : ServiceV) where
   forward : Term
   over : Term
-  rounds : RoundsOut
-  finish : FinishOut
+  rounds : RoundsOut v.machines
+  finish : FinishOut v
 
 /-- A clock line's step from the state terms: `cascade + 1` firing rounds at the line's time `time`, then the step's end
 from the requests and own effects the rounds start. Each part's condition is asked only where the step reaches it;
 the second term is the codes' condition. -/
 def encodeClock (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (invariants : Code (Ty.fn [v.records] Ty.rules))
-    (S : SymState) (time : Term) : Except Refusal (Encoded ClockOut) := do
+    (S : SymState v) (time : Term) : Except Refusal (Encoded (ClockOut v)) := do
   let (ro, cr) ← encodeRounds L T shs v.declared senv v.machines S.records time (v.bounds.cascade.toNat + 1) S.machines tt
     S.nextId (.int 0)
   let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants time S.fresh S.pending
@@ -751,7 +747,7 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 next ids and the own commands and queries queued, from the state at the line's time. -/
 theorem rounds_done {shs : List (PendingShape v.event)} (s : State v) (time : Int)
     {s' : State v} {effs : List (Sender × EffectV v.event)} (hs' : s' = { s with now := time, machines := s'.machines })
-    {o : RoundsOut} {records fresh : Term} (hrec : RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M))
+    {o : RoundsOut v.machines} {records fresh : Term} (hrec : RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M))
     (hfresh : fresh.denote M = .int (Int.ofNat s.fresh)) (hms : MachinesRel M L T v.machines o.tables s'.machines)
     (hn : o.nextId.denote M = .int ((s.nextId + (Step.reqsOf effs).length : Nat) : Int))
     (hnews : NewsRel M L shs v.declared o.news (Step.reqsOf effs) s.nextId)
@@ -812,16 +808,16 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 theorem fires_exact (recs : v.records.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     {d : Term} {dv : Int} (hd : d.denote M = .int dv) :
-    (ms : List (MachineV v.records v.event)) → (xs : List Term) → (sms : List (Step.MachineState v.records v.event)) →
+    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) → (sms : List (Step.MachineState v.records v.event)) →
     MachinesRel M L T ms xs sms →
     {done : Term} → {b : Bool} → done.denote M = .bool b →
-    {os : List FireOut} → {c : Term} → encodeFires L T ms xs done d records now = .ok (os, c) →
+    {os : PerMachine FireOut ms} → {c : Term} → encodeFires L T ms xs done d records now = .ok (os, c) →
     (Holds M c ↔ firesFit L.count T recs tnow dv b sms)
-  | [], [], [], _, done, b, hdone, os, c, henc => by
+  | [], .nil, [], _, done, b, hdone, os, c, henc => by
     simp only [encodeFires, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
     obtain ⟨-, rfl⟩ := henc
     simp [firesFit, holds_tt]
-  | m :: ms, x :: xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, done, b, hdone, os, c, henc => by
+  | m :: ms, .cons x xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, done, b, hdone, os, c, henc => by
     obtain ⟨⟨af, c0⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨fx, c1⟩, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c2⟩, h3, henc⟩ := bind_ok.1 henc
@@ -854,15 +850,14 @@ theorem fires_exact (recs : v.records.den0) (tnow : Int) {records now : Term}
       have hdone' : (Term.share (.or done o.hit)).denote M = .bool (b || (instancesOf T m tbl).any (Step.hitsAt dv)) := by
         rw [Term.denote_share]; show Val.bool _ = _; rw [hdone, hhit]; rfl
       exact ⟨p0, p1, hc2, (fires_exact recs tnow hrec hnow hd ms xs sms hrest hdone' h4).2 p3⟩
-  | [], [], _ :: _, h, _, _, _, _, _, _ | [], _ :: _, _, h, _, _, _, _, _, _ | _ :: _, [], _, h, _, _, _, _, _, _
-  | _ :: _, _ :: _, [], h, _, _, _, _, _, _ => h.elim
+  | [], .nil, _ :: _, h, _, _, _, _, _, _ | _ :: _, .cons _ _, [], h, _, _, _, _, _, _ => h.elim
 
 /-- A firing round asks exactly that its functions fit (`roundFit`). -/
 theorem round_exact (recs : v.records.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    {ms : List (MachineV v.records v.event)} {xs : List Term} {sms : List (Step.MachineState v.records v.event)}
+    {ms : List (MachineV v.records v.event)} {xs : PerMachine Term ms} {sms : List (Step.MachineState v.records v.event)}
     (hms : MachinesRel M L T ms xs sms) {active : Term} {ab : Bool} (hact : active.denote M = .bool ab)
-    {ro : RoundOut} {c : Term} (henc : encodeRound L T ms xs active records now = .ok (ro, c)) :
+    {ro : RoundOut ms} {c : Term} (henc : encodeRound L T ms xs active records now = .ok (ro, c)) :
     Holds M c ↔ roundFit L.count T recs tnow ab sms := by
   obtain ⟨dues, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨os, c'⟩, h2, henc⟩ := bind_ok.1 henc
@@ -892,9 +887,9 @@ theorem round_exact (recs : v.records.den0) (tnow : Int) {records now : Term}
 theorem rounds_exact {shs : List (PendingShape v.event)} {ds : List (String × DeclaredV)} {senv : StepEnv L shs}
     {records now : Term} (hord : ∀ m ∈ v.machines, m.key.ordered T = true) :
     (k : Nat) → (s : State v) → RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M) →
-    now.denote M = .int s.now → {xs : List Term} → MachinesRel M L T v.machines xs s.machines →
+    now.denote M = .int s.now → {xs : PerMachine Term v.machines} → MachinesRel M L T v.machines xs s.machines →
     {active : Term} → {ab : Bool} → active.denote M = .bool ab → {nid q : Term} →
-    {o : RoundsOut} → {c : Term} →
+    {o : RoundsOut v.machines} → {c : Term} →
     encodeRounds L T shs ds senv v.machines records now k xs active nid q = .ok (o, c) →
     (Holds M c ↔ roundsFit L.count T s ab k)
   | 0, s, _, _, xs, _, active, ab, _, nid, q, o, c, henc => by
@@ -927,9 +922,9 @@ theorem clock_encode {P : List AnySite} (chk : Checked P T v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
-    {S : SymState} (hR : StateRel M L T shs S s) {st : Term} (hst : st.denote M = .int time)
+    {S : SymState v} (hR : StateRel M L T shs S s) {st : Term} (hst : st.denote M = .int time)
     (senv : StepEnv L shs)
-    {o : ClockOut} {cond cfx : Term}
+    {o : ClockOut v} {cond cfx : Term}
     (henc : encodeClock L T P v shs senv apply inv S st = .ok ⟨o, cond, cfx⟩)
     (hcfx : Holds M cfx) :
     let r := step T v s (.clock time)

@@ -83,8 +83,8 @@ variable (L : Layout)
 /-- A query step's outcome terms and its condition, from the terms of the records, the time, the fresh counter, the
 caller and the input, and the constants of the listed callers. The condition asks only for what the step computes:
 the rules when the caller is listed, the output when the rules hold too. -/
-def encodeQuery {r c : Ty} (q : QueryV r c) (qc : QueryCode q) (callers : List Term)
-    (S : SymState) (caller input : Term) : Except Refusal (QueryOut × Term) := do
+def encodeQuery {r c : Ty} {v : ServiceV} (q : QueryV r c) (qc : QueryCode q) (callers : List Term)
+    (S : SymState v) (caller input : Term) : Except Refusal (QueryOut × Term) := do
   let (a, c1) ← encodeAdmit L qc.accepts callers S.records S.now S.fresh caller input
   let (o, c2) ← qc.resolve (a.ctx, ())
   let ot ← need "an output that has no term" (Code.term? q.output o)
@@ -123,7 +123,7 @@ the state stays. -/
 theorem query_encode {v : ServiceV} (s : State v) (i : Fin v.queries.length) (caller : v.caller.den0)
     (input : (v.queries.get i).input.den0) {qc : QueryCode (v.queries.get i)}
     {cq : Term} (hqc : QueryCode.of L _ = .ok (qc, cq)) (hcq : Holds M cq) {ks : List Term}
-    (hks : callerTerms L ((v.queries.get i).data).caller (v.queries.get i).callers = some ks) {shs : List (PendingShape v.event)} {S : SymState} (hR : StateRel M L T shs S s) {sc si : Term}
+    (hks : callerTerms L ((v.queries.get i).data).caller (v.queries.get i).callers = some ks) {shs : List (PendingShape v.event)} {S : SymState v} (hR : StateRel M L T shs S s) {sc si : Term}
     (hsc : RelV L v.caller (Ty.up _ ((v.queries.get i).data).caller caller) (sc.denote M))
     (hsi : RelV L (v.queries.get i).input (Ty.up _ ((v.queries.get i).data).input input) (si.denote M))
     {o : QueryOut} {cond : Term} (henc : encodeQuery L (v.queries.get i) qc ks S sc si = .ok (o, cond)) :

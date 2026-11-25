@@ -216,12 +216,12 @@ end
 /-- The terms of an answer step at one slot: whether the slot holds the request `to` names as an entry of the shape,
 the `ensures` rules, the events of `on_answer`, what the events loop leaves, and the step's end from the pending table
 without the request. -/
-structure AnswerOut where
+structure AnswerOut (v : ServiceV) where
   hit : Term
   rules : List (Term × Term)
   events : Term
-  after : EventsOut
-  finish : FinishOut
+  after : EventsOut v
+  finish : FinishOut v
 
 section
 variable (L : Layout) (T : List TypeDecl) {v : ServiceV}
@@ -231,7 +231,7 @@ codes' condition, from the codes of the service's `apply` and `invariants` and t
 the answer names and the answer. -/
 def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat) (sh : PendingShape v.event) (j : Nat)
     (senv : StepEnv L shs) (apply : Code (Ty.fn [v.records, v.event] v.records))
-    (invariants : Code (Ty.fn [v.records] Ty.rules)) (S : SymState) (to value : Term) : Except Refusal (Encoded AnswerOut) := do
+    (invariants : Code (Ty.fn [v.records] Ty.rules)) (S : SymState v) (to value : Term) : Except Refusal (Encoded (AnswerOut v)) := do
   let (d, n, dt) ← collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs]
   let (de, _) ← need "a layout without the pending entry" (L.find? (pendingEntry shs))
   let PS := slotsOf d dt n 2 S.pending
@@ -309,10 +309,10 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hinv : v.invariants.code L = .ok (inv, ci)) (hci : Holds M ci)
     (senv : StepEnv L shs)
-    {S : SymState} (hR : StateRel M L T shs S s) {toT valT : Term} (hto : toT.denote M = .int (Int.ofNat to))
+    {S : SymState v} (hR : StateRel M L T shs S s) {toT valT : Term} (hto : toT.denote M = .int (Int.ofNat to))
     (hans : (answerTy sh.output sh.rejection).isData = true)
     (hval : RelV L _ (Ty.up _ hans value) (valT.denote M))
-    {o : AnswerOut} {cond cfx : Term}
+    {o : AnswerOut v} {cond cfx : Term}
     (henc : encodeAnswer L T P shs k sh j senv apply inv S toT valT =
       .ok ⟨o, cond, cfx⟩) (hcfx : Holds M cfx) :
     let r := step T v s (.answer to ⟨_, value⟩)
