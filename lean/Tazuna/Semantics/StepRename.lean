@@ -549,6 +549,41 @@ theorem Ty.rel0_deq_right {t : Ty} (hc : t.comparable = true) {x y1 y : t.den0} 
 theorem Ty.deq0_refl {t : Ty} (hc : t.comparable = true) (x : t.den0) : t.deq0 x x = true :=
   (Ty.canon_iff t hc x x).2 rfl
 
+mutual
+/-- Every comparable value relates to itself with every name kept. -/
+theorem Ty.rel0_refl : (t : Ty) → t.comparable = true → (x : t.den0) → Ty.rel0 PBij.refl t x x
+  | .int, _, _ | .str, _, _ | .date, _, _ => rfl
+  | .param _, _, _ => trivial
+  | .id, _, .named _ => .inl ⟨_, rfl, rfl⟩
+  | .id, _, .fresh _ _ => .inr ⟨_, _, _, rfl, rfl, rfl⟩
+  | .list t, h, _ => forall2_refl_of fun y _ => Ty.rel0_refl t h y
+  | .bag t, h, _ => Multi.of_forall2 (forall2_refl_of fun y _ => Ty.rel0_refl t h y)
+  | .table k w, h, _ => by
+    simp only [Ty.comparable, Bool.and_eq_true] at h
+    exact Multi.of_forall2 (forall2_refl_of fun e _ => ⟨Ty.rel0_refl k h.1 e.1, Ty.rel0_refl w h.2 e.2⟩)
+  | .tuple ts, h, x => Ty.rels0_refl ts h x
+  | .adt _ _ vs, h, x => Ty.relAlts0_refl vs h x
+  | .fn .., h, _ => by simp [Ty.comparable] at h
+  | .dsl k _, h, _ => by
+    simp only [Ty.comparable, beq_iff_eq] at h
+    subst h; rfl
+theorem Ty.rels0_refl : (ts : List Ty) → Ty.comparables ts = true → (x : (Ty.semsWith Dsl.base ts).1) →
+    Ty.relsWith Dsl.base (Dsl.rel0 PBij.refl) PBij.refl ts x x
+  | [], _, _ => trivial
+  | t :: ts, h, x => by
+    simp only [Ty.comparables, Bool.and_eq_true] at h
+    exact ⟨Ty.rel0_refl t h.1 x.1, Ty.rels0_refl ts h.2 x.2⟩
+theorem Ty.relAlts0_refl : (vs : List (List Ty)) → Ty.comparabless vs = true →
+    (x : (Ty.semAltsWith Dsl.base vs).1) → Ty.relAltsWith Dsl.base (Dsl.rel0 PBij.refl) PBij.refl vs x x
+  | [], _, x => nomatch x
+  | fs :: _, h, .inl x => by
+    simp only [Ty.comparabless, Bool.and_eq_true] at h
+    exact Ty.rels0_refl fs h.1 x
+  | _ :: vs, h, .inr x => by
+    simp only [Ty.comparabless, Bool.and_eq_true] at h
+    exact Ty.relAlts0_refl vs h.2 x
+end
+
 theorem forall2_find? {α β : Type} {r : α → β → Prop} {p : α → Bool} {q : β → Bool} (hpq : ∀ a b, r a b → p a = q b) :
     {xs : List α} → {ys : List β} → Forall2 r xs ys → Option.Rel r (xs.find? p) (ys.find? q)
   | [], [], _ => .none

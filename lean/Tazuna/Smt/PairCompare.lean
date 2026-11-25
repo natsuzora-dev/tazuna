@@ -98,7 +98,7 @@ theorem rel0_of_eqFn {t : Ty} (hd : t.isData = true) (hc : t.comparable = true) 
   have h := eqFn_ok t hf _ _ a b hx hy
   simp only [Holds, h, Val.toBool] at he
   rw [show Ty.deq t (Ty.up t hd x) (Ty.up t hd y) = Ty.deq0 t x y from Ty.deq_up t hd x y] at he
-  exact Ty.rel0_deq_right hc (rel0_same hd hx hx) he
+  exact Ty.rel0_deq_right hc (Ty.rel0_refl t hc x) he
 
 /-- An instance from related table entries. -/
 theorem instOf_rel {r e : Ty} {m : MachineV r e} {R : PBij} {k k' : m.key.den0} {x x' : (instEntry m.state).den0}
