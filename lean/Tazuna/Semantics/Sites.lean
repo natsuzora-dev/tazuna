@@ -200,6 +200,10 @@ def shapes (v : ServiceV) (sites : List AnySite) : List (PendingShape v.event) :
 names no type of the program; the variants tell it apart. -/
 def pendingEntry {e : Ty} (shs : List (PendingShape e)) : Ty := .adt 1000000 [] (shs.map PendingShape.fields)
 
+/-- The table type that codes pending requests of the shapes: wire ids to entries. Wire ids are naturals, as the
+fresh counter's values are, so the keys have the counter's type. -/
+def pendingTable {e : Ty} (shs : List (PendingShape e)) : Ty := .table (.dsl .fresh []) (pendingEntry shs)
+
 /-- The pending request a value of `pendingEntry shs` codes, with the wire id `id`. -/
 def pendingOf {e : Ty} : (shs : List (PendingShape e)) → Nat → Ty.alts (shs.map PendingShape.fields) → Step.Pending e
   | sh :: _, id, .inl x => sh.pending id x

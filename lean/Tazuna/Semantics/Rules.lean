@@ -40,13 +40,16 @@ inductive Illegal where
   /-- The program makes a command, query, external command or external query handle whose name is no string literal:
   a wire name is written once where it is defined, so check and the step encoding see which request a handle names. -/
   | handleName
+  /-- A table inside the stored state, a type that crosses the wire or the values a kept function captures has a key
+  that is no plain value (`Ty.plain`): an entry is found by comparing keys, which the solver does on plain values. -/
+  | tableKey
 deriving Repr, DecidableEq
 
 namespace Illegal
 
 def all : List Illegal :=
   [wireName, owner, unknownSource, creates, wireType, stateType, bounds, scenario, rejection, machineKey, unknownHandle,
-    handleName]
+    handleName, tableKey]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -63,6 +66,7 @@ def name : Illegal → String
   | machineKey => "machineKey"
   | unknownHandle => "unknownHandle"
   | handleName => "handleName"
+  | tableKey => "tableKey"
 
 end Illegal
 
@@ -111,6 +115,22 @@ def Ty.plains : List Ty → Bool
 def Ty.plainss : List (List Ty) → Bool
   | [] => true
   | ts :: vs => Ty.plains ts && Ty.plainss vs
+end
+
+mutual
+/-- Whether every table inside a value of the type has a plain key (`Ty.plain`). -/
+def Ty.plainKeys : Ty → Bool
+  | .list t | .bag t => Ty.plainKeys t
+  | .tuple ts => Ty.plainKeyss ts
+  | .adt _ _ vs => Ty.plainKeysss vs
+  | .table k v => Ty.plain k && Ty.plainKeys v
+  | _ => true
+def Ty.plainKeyss : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.plainKeys t && Ty.plainKeyss ts
+def Ty.plainKeysss : List (List Ty) → Bool
+  | [] => true
+  | ts :: vs => Ty.plainKeyss ts && Ty.plainKeysss vs
 end
 
 mutual
@@ -337,9 +357,13 @@ def Defs.handles : {G : List Ty} → Defs G → List HandleSite
   | [], .nil => []
   | _ :: _, .snoc defs _ body => defs.handles ++ body.handles
 
-/-- Every broken structure rule of `s`, whose user types are `T` and whose program makes `handles`, with a message
-naming the definition. -/
-def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : List (Illegal × String) :=
+def tableKeyAdvice : String :=
+  "the solver finds an entry by comparing keys, so make the key Int, String, Date, Id, or a custom type or tuple of these"
+
+/-- Every broken structure rule of `s`, whose user types are `T` and whose program makes `handles` and kept functions
+capturing values of the types `captures`, with a message naming the definition. -/
+def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (captures : List (SiteId × List Ty)) :
+    List (Illegal × String) :=
   let names := s.services.map (·.name) ++ s.externals.map (·.name)
   let topNames := (duplicates names).map fun n => (.wireName, s!"{n} names more than one service or external")
   let entries : List (String × DeclaredV) := s.services.flatMap (fun v => v.declares.map (v.name, ·)) ++
@@ -358,12 +382,14 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : 
       | .externalCommand n .. | .externalQuery n .. =>
         some (Illegal.owner, s!"{v.name} declares {n}, an external's command or query")
       | _ => none
-    let wireTypes := ([("caller", v.caller), ("event", v.event)] ++
+    let wireList := [("caller", v.caller), ("event", v.event)] ++
         v.commands.flatMap (fun c => [(c.name ++ " input", c.input), (c.name ++ " rejection", c.rejection)]) ++
         v.queries.flatMap (fun q => [(q.name ++ " input", q.input), (q.name ++ " output", q.output)]) ++
-        v.sources.map (fun (n, t) => (n ++ " event", t))).filterMap
+        v.sources.map (fun (n, t) => (n ++ " event", t))
+    let wireTypes := wireList.filterMap
       fun (what, t) => if t.wire then none else some (Illegal.wireType, s!"{v.name}: the {what} type crosses the wire, so it holds no functions")
-    let stateTypes := (("records", v.records) :: v.machines.map fun m => (m.name ++ " state", m.state)).filterMap
+    let stateList := ("records", v.records) :: v.machines.map fun m => (m.name ++ " state", m.state)
+    let stateTypes := stateList.filterMap
       fun (what, t) => if t.wire then none else some (Illegal.stateType, s!"{v.name}: the {what} type is stored state, so it holds no functions")
     let unknown := v.subscribes.filterMap fun sub =>
       if sources.any fun (n, t) => n == sub.name && (Ty.same t sub.event).isSome then none
@@ -401,7 +427,11 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : 
             (Ty.same q.output x.output).isSome then none else unlisted "query" x.name
         | _ => none
       fileName ++ steps
-    wireNames ++ owners ++ wireTypes ++ stateTypes ++ unknown ++ rejections ++ keys ++ creates ++ negative ++ scenarioNames ++ perScenario
+    let tableKeys := (wireList ++ stateList ++ v.machines.map fun m => (m.name ++ " key", m.key)).filterMap
+      fun (what, t) => if t.plainKeys then none else
+        some (Illegal.tableKey, s!"{v.name}: the {what} type holds a table whose key is no plain value; {tableKeyAdvice}")
+    wireNames ++ owners ++ wireTypes ++ stateTypes ++ unknown ++ rejections ++ keys ++ creates ++ negative ++ scenarioNames ++ perScenario ++
+      tableKeys
   let perExternal := s.externals.flatMap fun x =>
     let all := x.declares
     let wireNames := (duplicates (all.map (·.name))).map fun n =>
@@ -416,7 +446,9 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : 
       | .externalCommand n _ _ j => if j.customOrNil then none else
         some (Illegal.rejection, s!"{x.name}.{n}: the rejection type is no custom type or Nil")
       | _ => none
-    wireNames ++ owners ++ wireTypes ++ rejections
+    let tableKeys := (all.filter fun d => !d.wireTypes.all Ty.plainKeys).map fun d =>
+      (Illegal.tableKey, s!"{x.name}.{d.name}: its types hold a table whose key is no plain value; {tableKeyAdvice}")
+    wireNames ++ owners ++ wireTypes ++ rejections ++ tableKeys
   let declared := s.externals.flatMap (·.declares)
   let unknownHandles := handles.filterMap fun h => match h.name with
     | none => some (Illegal.handleName, s!"one {h.kind} handle's name is no string literal; write it as one, so check can see which request it names")
@@ -424,6 +456,8 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : 
       if !h.kind.startsWith "external" ||
         declared.any fun d => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome then none
       else some (Illegal.unknownHandle, s!"no external declares the {h.kind} {n} with these types; add it to an external's declares")
-  topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles
+  let capturedKeys := captures.filterMap fun (site, Γ) => if (Ty.tuple Γ).plainKeys then none else
+    some (Illegal.tableKey, s!"{site.module}:{site.line}:{site.col}: a function a structure value keeps captures a table whose key is no plain value; {tableKeyAdvice}")
+  topNames ++ sharedOwners ++ perService ++ perExternal ++ unknownHandles ++ capturedKeys
 
 end Tazuna.Ir

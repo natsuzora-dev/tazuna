@@ -1,0 +1,1 @@
+{"kind":"Illegal.tableKey","message":"tasks: the records type holds a table whose key is no plain value; the solver finds an entry by comparing keys, so make the key Int, String, Date, Id, or a custom type or tuple of these"}

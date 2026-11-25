@@ -20,7 +20,7 @@ structure OpaqueType where
 def opaqueTypes : List OpaqueType :=
   [ ⟨"tazuna/bag", "Bag", ["a"], "A multiset: two bags are equal when each value occurs as often in both. Where tazuna puts values in an order the spec does not write, it uses Erlang term order, the order Gleam's Erlang target compares values in; a bag compares as the list of its items in ascending order.",
       fun | [t] => some (.bag t) | _ => none⟩,
-    ⟨"tazuna/table", "Table", ["k", "v"], "A finite map from keys to values; at most one value per key.",
+    ⟨"tazuna/table", "Table", ["k", "v"], "A finite map from keys to values; at most one value per key. A table in the records, a machine state, a type that crosses the wire or what a kept function captures has a plain key: Int, String, Date, Id, or a custom type or tuple of these.",
       fun | [k, v] => some (.table k v) | _ => none⟩,
     ⟨"tazuna/date", "Date", [], "A day. Dates have no calendar: a spec adds days and counts the days between two dates.",
       fun | [] => some .date | _ => none⟩,

@@ -46,9 +46,6 @@ def natOf : Val → Option Nat
 section
 variable {e : Ty}
 
-/-- The table type that codes pending requests of the shapes: wire ids to entries. Wire ids are naturals, as the
-fresh counter's values are, so the keys have the counter's type. -/
-def pendingTable (shs : List (PendingShape e)) : Ty := .table (.dsl .fresh []) (pendingEntry shs)
 
 /-- The pending requests' value at the shapes. With no shape the entry type has no value, so the table is empty. -/
 abbrev PendingVal (shs : List (PendingShape e)) : Type := (pendingTable shs).den

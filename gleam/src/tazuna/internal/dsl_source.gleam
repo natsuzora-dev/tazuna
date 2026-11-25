@@ -526,7 +526,7 @@ pub fn max_by(_bag: Bag(a), by _by: fn(a) -> Int) -> Result(a, PickError) {
 import gleam/option.{type Option}
 import tazuna/bag.{type Bag}
 
-/// A finite map from keys to values; at most one value per key.
+/// A finite map from keys to values; at most one value per key. A table in the records, a machine state, a type that crosses the wire or what a kept function captures has a plain key: Int, String, Date, Id, or a custom type or tuple of these.
 pub type Table(k, v)
 
 /// The table without keys.

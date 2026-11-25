@@ -1,12 +1,37 @@
 import Tazuna.Smt.EncodeExact
 import Tazuna.Semantics.Reach
 import Tazuna.Semantics.Rules
+import Tazuna.Smt.Instances
 
 /-! What `check` establishes about a service and the sites `P` of its program, which every step theorem rests on: the
 sites are told apart by name, every effect function of a machine or reaction is a record of one of them, machine keys
-have the canonical order, no query answers a function, the stored state holds no function, and no bound is negative,
-so each bound's count is the bound. `check_ok` derives it from a check with no finding, so `prove` starts from these
+have the canonical order, no query answers a function, the stored state holds no function, no bound is negative, so
+each bound's count is the bound, and the state's types (records, instance tables, pending table) have SMT values
+whose tables have plain keys. `check_ok` derives it from a check with no finding, so `prove` starts from these
 facts rather than assuming them (parse, don't validate). -/
+
+namespace Tazuna.Ir
+
+mutual
+/-- Whether a value of the type has an SMT value: data without functions or type variables, ADT 0 only as Bool. -/
+def Ty.embeddable : Ty → Bool
+  | .int | .str | .date | .id => true
+  | .dsl k _ => k == .fresh
+  | .adt 0 _ vs => (Tazuna.Smt.boolVs? vs).isSome
+  | .adt (_ + 1) _ vs => Ty.embeddabless vs
+  | .tuple ts => Ty.embeddables ts
+  | .list t | .bag t => Ty.embeddable t
+  | .table k v => Ty.embeddable k && Ty.embeddable v
+  | .fn .. | .param _ => false
+def Ty.embeddables : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.embeddable t && Ty.embeddables ts
+def Ty.embeddabless : List (List Ty) → Bool
+  | [] => true
+  | ts :: vs => Ty.embeddables ts && Ty.embeddabless vs
+end
+
+end Tazuna.Ir
 
 namespace Tazuna.Smt
 
@@ -16,6 +41,12 @@ open Tazuna.Ir
 def _root_.Tazuna.Ir.BoundsV.Nonneg {r : Ty} (b : BoundsV r) : Prop :=
   0 ≤ b.items ∧ 0 ≤ b.cascade ∧ 0 ≤ b.steps ∧ ∀ c ∈ b.creates, 0 ≤ c.atMost
 
+/-- Whether the state's types have SMT values and well-formedness terms: no function, no type variable, ADT 0 only as
+Bool, and a plain key for every table but the pending table, whose keys are wire ids. -/
+def _root_.Tazuna.Ir.ServiceV.stateTys (P : List AnySite) (v : ServiceV) : Bool :=
+  let ok (t : Ty) := t.embeddable && t.plainKeys
+  ok v.records && v.machines.all (ok ·.table) && ok (pendingEntry (shapes v P))
+
 structure Checked (P : List AnySite) (T : List TypeDecl) (v : ServiceV) : Prop where
   sites : SitesUnique P
   reach : v.Reach P
@@ -23,6 +54,9 @@ structure Checked (P : List AnySite) (T : List TypeDecl) (v : ServiceV) : Prop w
   outputs : ∀ x ∈ v.queries, x.output.isFn = false
   stored : v.records.wire = true ∧ ∀ m ∈ v.machines, m.state.wire = true
   bounds : v.bounds.Nonneg
+  /-- Not a rule of check's: the loader builds every type of a program's values from the type table, whose ADT 0 is
+  Bool, and the program from ground instances; check validates the result, so a loader bug is reported, not assumed. -/
+  stateTys : v.stateTys P = true
 
 theorem Checked.machines {P : List AnySite} {T : List TypeDecl} {v : ServiceV} (hk : Checked P T v) :
     ∀ m ∈ v.machines, m.Reach P := hk.reach.1
@@ -60,16 +94,19 @@ theorem not_of_ite {α : Type} {c : Prop} [Decidable c] {x : α} (h : (if c then
 
 /-- A check with no finding establishes `Checked` of every service, at the sites of the program the spec came from:
 each fact's failure would be a finding. -/
-theorem check_ok {T : List TypeDecl} {P : List AnySite} {s : SpecV} {handles : List HandleSite} (hP : SitesUnique P)
-    (hreach : ∀ v ∈ s.services, v.Reach P) (h : SpecV.illegal T s handles = []) : ∀ v ∈ s.services, Checked P T v := by
+theorem check_ok {T : List TypeDecl} {P : List AnySite} {s : SpecV} {handles : List HandleSite}
+    {captures : List (SiteId × List Ty)} (hP : SitesUnique P) (hreach : ∀ v ∈ s.services, v.Reach P)
+    (htys : ∀ v ∈ s.services, v.stateTys P = true) (h : SpecV.illegal T s handles captures = []) :
+    ∀ v ∈ s.services, Checked P T v := by
   intro v hv
   simp only [SpecV.illegal] at h
-  have hs := List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL h))) v hv
-  have hneg := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL hs)))
-  have hkeys := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL hs)))))
-  have hstate := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))
-  have hwire := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))
-  refine ⟨hP, hreach v hv, fun m hm => ?_, fun q hq => ?_, ⟨?_, fun m hm => ?_⟩, ⟨?_, ?_, ?_, fun c hc => ?_⟩⟩
+  have hs := List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL h)))) v hv
+  have hneg := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL hs))))
+  have hkeys := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL hs))))))
+  have hstate := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))
+  have hwire := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))
+  refine ⟨hP, hreach v hv, fun m hm => ?_, fun q hq => ?_, ⟨?_, fun m hm => ?_⟩, ⟨?_, ?_, ?_, fun c hc => ?_⟩,
+    htys v hv⟩
   · simpa using none_of_ite (hkeys m hm)
   · exact isFn_of_wire _ (none_of_ite (hwire (q.name ++ " output", q.output)
       (List.mem_append_left _ (List.mem_append_right _ (List.mem_flatMap.2 ⟨q, hq, by simp⟩)))))

@@ -1,33 +1,11 @@
 import Tazuna.Smt.State
 import Tazuna.Smt.Layout
+import Tazuna.Smt.Checked
 
 /-! Embedding is exact: a value embeds exactly when every bag, list and table inside it has at most the slots its type
 gets (`FitsV`), wherever the layout holds the type's datatypes (`Layout.HasWith`). With `decode_embed`, every value
 within the slots is some model's, so a script with no model has no value within the bounds that breaks it: "no
 model" means a bound is exceeded, never a gap in the encoding (Alloy's scope completeness). -/
-
-namespace Tazuna.Ir
-
-mutual
-/-- Whether a value of the type has an SMT value: data without functions or type variables, ADT 0 only as Bool. -/
-def Ty.embeddable : Ty → Bool
-  | .int | .str | .date | .id => true
-  | .dsl k _ => k == .fresh
-  | .adt 0 _ vs => (Tazuna.Smt.boolVs? vs).isSome
-  | .adt (_ + 1) _ vs => Ty.embeddabless vs
-  | .tuple ts => Ty.embeddables ts
-  | .list t | .bag t => Ty.embeddable t
-  | .table k v => Ty.embeddable k && Ty.embeddable v
-  | .fn .. | .param _ => false
-def Ty.embeddables : List Ty → Bool
-  | [] => true
-  | t :: ts => Ty.embeddable t && Ty.embeddables ts
-def Ty.embeddabless : List (List Ty) → Bool
-  | [] => true
-  | ts :: vs => Ty.embeddables ts && Ty.embeddabless vs
-end
-
-end Tazuna.Ir
 
 namespace Tazuna.Smt
 

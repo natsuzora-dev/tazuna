@@ -13,7 +13,7 @@ import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.ServiceLayout
-import Tazuna.Smt.Embed
+import Tazuna.Smt.CheckedState
 import Tazuna.Smt.StepSites
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
@@ -68,8 +68,9 @@ elab "#check_tazuna_reach" : command => do
     -- The service's layout, derived from its program: the step environment and the wire-id invariant's term are found,
     -- and every create fits its table's slots.
     ``Tazuna.Smt.stepEnv_ofService, ``Tazuna.Smt.pendingBelowT_ofService, ``Tazuna.Smt.atMost_le_count,
-    -- A state within the slots embeds, so a script without a model has no state within the bounds.
-    ``Tazuna.Smt.embedState_iff,
+    -- In a checked service's layout, a state within the slots embeds, so a script without a model has no state within
+    -- the bounds, and the state's well-formedness term is always built.
+    ``Tazuna.Smt.embedState_ofService, ``Tazuna.Smt.wf_ofService,
     -- For U10, which asserts well-formedness, the wire-id invariant and the create bounds: each loses no model.
     ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff]
   let mut used : NameSet := {}
