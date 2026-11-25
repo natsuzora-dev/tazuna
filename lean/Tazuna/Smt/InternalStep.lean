@@ -393,16 +393,18 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
         rw [hbe'']
         exact H
 
-/-- T2 for an own query's internal step: wherever the condition holds, an unlisted caller or a broken `accepts` rule
-is `Fault.invalidEffect`, and otherwise the internal step runs to its end with what the terms denote
-(`AccRel`); a query leaves the fresh counter as it was. -/
-theorem ownQuery_rel {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0) {qc : QueryCode x} {cq : Term} (hqc : QueryCode.of L x = .ok (qc, cq)) (hcq : Holds M cq)
+/-- An own query's internal step: the condition holds exactly when, for a listed caller, `accepts` fits at the input
+and, where its rules hold, `resolve` fits at the context and `on_answer`'s part for the output fits. Wherever it holds,
+an unlisted caller or a broken `accepts` rule is `Fault.invalidEffect`, and otherwise the internal step runs to its
+end with what the terms denote (`AccRel`); a query leaves the fresh counter as it was. -/
+theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)}
+    (hshs : ∀ sh ∈ shs, sh.InSites P) (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0)
+    (input : x.input.den0) {qc : QueryCode x} {cq : Term} (hqc : QueryCode.of L x = .ok (qc, cq)) (hcq : Holds M cq)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event))) (env : (Ty.tuple Γ).den0)
-    {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ)
-    {ks : List Term} (hks : callerTerms L x.data.caller x.callers = some ks)
+    {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
+    (hout : x.output.isFn = false) {ks : List Term} (hks : callerTerms L x.data.caller x.callers = some ks)
     (senv : StepEnv L shs)
     {records now fresh n q sc si : Term} {xs : List Term} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
@@ -412,97 +414,22 @@ theorem ownQuery_rel {P : List AnySite} (chk : Checked P T v) {shs : List (Pendi
     (hsc : RelV L v.caller (Ty.up _ x.data.caller caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ x.data.input input) (si.denote M))
     {o : OwnQueryOut} {cond : Term}
-    (henc : encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q sc si xs = .ok (o, cond))
-    (hc : Holds M cond) :
-    let r := Step.runQuery T a x caller input (site.fn env)
-    if (o.callerOk.denote M).toBool then
-      match brokenIn M o.rules with
-      | n :: ns => r = .error (.invalidEffect x.name (n :: ns))
-      | [] => AccRel M L T shs a o.answered fresh q0 r
-    else r = .error (.invalidEffect x.name ["callers"]) := by
-  have hqc := QueryCode.rel_of hqc hcq
-  have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
-  have happ := v.apply.code_fn v.apply.ht happ hca
-  intro r
-  obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨out, c2⟩, h8, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨oa, c3⟩, h9, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨evs, c4⟩, h10, henc⟩ := bind_ok.1 henc
-  obtain ⟨evt, h11, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨dl, nl, dt⟩, h12, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨o1, c5⟩, h13, henc⟩ := bind_ok.1 henc
-  cases pure_ok.1 henc
-  obtain ⟨hok, hbr, hcx⟩ := admit_rel v.records_data x.data.input x.data.caller x.data.ctx _ x.data.accepts hqc.accepts _ hks a.state caller
-    input hrec hnow hfresh hsc hsi h1
-  simp only [r, Step.runQuery, Step.execQuery, Step.admit]
-  cases hin : x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
-  case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
-  simp only [hok, hin, Val.toBool, ite_true]
-  have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2))) (andT c2 (andT c3 (andT c4 c5))) tt)) := by
-    simpa only [Holds, Term.denote, hok, hin, Val.toBool, ite_true] using hc
-  rw [holds_andT] at hc'
-  have hbroken := hbr hc'.1
-  rw [hbroken]
-  cases hb : Step.broken (x.accepts.fn (input, ())) with
-  | cons n ns => rfl
-  | nil =>
-  simp only
-  have hallT : (allT (adm.rules.map (·.2))).denote M = .bool true := by
-    rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil adm.rules).1 (hbroken.trans hb))
-  obtain ⟨hc2, hc3, hc4, hc5⟩ : Holds M c2 ∧ Holds M c3 ∧ Holds M c4 ∧ Holds M c5 := by
-    have := hc'.2; simp only [Holds, Term.denote, hallT, Val.toBool, ite_true] at this
-    have h : Holds M (andT c2 (andT c3 (andT c4 c5))) := this
-    rw [holds_andT, holds_andT, holds_andT] at h; exact h
-  have hres := hqc.resolve _ (adm.ctx, ()) (rels1 x.data.ctx x.data.ctxArgs hcx) out c2 h8 hc2
-  erw [Ty.up_fn _ _ _ x.data.ctxArgs x.data.output] at hres
-  have hle : (Ty.list v.event).isData = true := by simp [Ty.isData, v.event_data]
-  have hta : (Ty.tuple [x.output]).isData = true := by simp [Ty.isData, Ty.isDatas, x.data.output]
-  have hoa := encode_agrees site.defs site.defs.eval (site.defs.encode L) (Defs.encode_agrees M L site.defs) site.body
-    σ _ hσ oa c3 h9 hc3
-  have hoa' : Rel M L _ (Ty.up _ site.ht (site.fn env).fn) oa := by
-    rw [Fun.fn, Ty.up_down]; simp only [Fun.eval, Site.fn]; exact hoa
-  have hevs := hoa' _ (out, ()) (rels1 x.data.output hta hres) evs c4 h10 hc4
-  erw [Ty.up_fn _ _ _ hta hle] at hevs
-  have hevt := (rel_term (need_ok.1 h11) _).1 hevs
-  obtain ⟨sv, hS, -, hsw, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
-  erw [Ty.up_list _ _ v.event_data] at hh
-  let evs1 : List v.event.den0 := (site.fn env).fn ⟨x.resolve.fn ⟨Step.ctx a.state a.state.records caller input, ()⟩, ()⟩
-  change Holds2 (EBag L v.event) (evs1.map (Ty.up _ v.event_data)) sv at hh
-  obtain ⟨q1, q2, q3, q4, q5, q6, q7⟩ := loop_apply (T := T) chk hshs happ senv a hnow hS hsw hh hrec hms hn hq h13 hc5
-  have hkeep := Step.reactAll_keeps T a.state evs1
-  refine ⟨_, _, a.state.fresh, evs1, _, _, fun ps hps => ?_, q1, q2, hfresh, q3, q4, q5, q6⟩
-  erw [q7 ps hps]
-  rw [forall2_zipIdx_length _ _ hps, hkeep]
-  simp [Step.Acc.wrote, Step.Acc.queued]
-
-/-- The condition of an own query's internal step is exact: for a listed caller, it holds exactly when `accepts`
-fits at the input and, where its rules hold, `resolve` fits at the context, and the `on_answer` source, its
-application to the output and the answer's events in turn fit. -/
-theorem ownQuery_exact (a : Step.Acc v) (hor : ∀ m ∈ v.machines, m.key.orderable = true)
-    (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0) {qc : QueryCode x} {cq : Term} (hqc : QueryCode.of L x = .ok (qc, cq)) (hcq : Holds M cq)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
-    (hca : Holds M ca)
-    {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event))) (env : (Ty.tuple Γ).den0)
-    {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
-    (hout : x.output.isFn = false) {ks : List Term} (hks : callerTerms L x.data.caller x.callers = some ks)
-    {shs : List (PendingShape v.event)} {senv : StepEnv L shs}
-    {records now fresh n q sc si : Term} {xs : List Term}
-    (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
-    (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
-    (hms : MachinesRel M L T v.machines xs a.state.machines)
-    (hsc : RelV L v.caller (Ty.up _ x.data.caller caller) (sc.denote M))
-    (hsi : RelV L x.input (Ty.up _ x.data.input input) (si.denote M))
-    {o : OwnQueryOut} {cond : Term}
     (henc : encodeOwnQuery L T v shs senv x qc site σ apply ks records now fresh n q sc si xs = .ok (o, cond)) :
     let ctx := Step.ctx a.state a.state.records caller input
-    Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
+    let r := Step.runQuery T a x caller input (site.fn env)
+    (Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
       x.accepts.appFits L.count (input, ()) ∧
       (Step.broken (x.accepts.fn (input, ())) = [] →
-        x.resolve.appFits L.count (ctx, ()) ∧ ((site.fn env).fits L.count).1 ∧
-          (site.fn env).appFits L.count ⟨x.resolve.fn (ctx, ()), ()⟩ ∧
-          eventsFit L.count T a.state ((site.fn env).fn ⟨x.resolve.fn (ctx, ()), ()⟩))) := by
-  intro ctx
+        x.resolve.appFits L.count (ctx, ()) ∧ onAnswerFits L.count T a.state (site.fn env) (x.resolve.fn (ctx, ()))))) ∧
+    (Holds M cond →
+      if (o.callerOk.denote M).toBool then
+        match brokenIn M o.rules with
+        | n :: ns => r = .error (.invalidEffect x.name (n :: ns))
+        | [] => AccRel M L T shs a o.answered fresh q0 r
+      else r = .error (.invalidEffect x.name ["callers"])) := by
+  intro ctx r
   have hqc' := QueryCode.rel_of hqc hcq
+  have happ' := v.apply.code_fn v.apply.ht happ hca
   obtain ⟨⟨_, c1'⟩, g1, hqc0⟩ := bind_ok.1 hqc
   obtain ⟨⟨_, c2'⟩, g2, hqc0⟩ := bind_ok.1 hqc0
   cases pure_ok.1 hqc0
@@ -515,76 +442,114 @@ theorem ownQuery_exact (a : Step.Acc v) (hor : ∀ m ∈ v.machines, m.key.order
   obtain ⟨⟨dl, nl, dt⟩, h12, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨o1, c5⟩, h13, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨hok, hbr, hcx⟩ := admit_rel v.records_data x.data.input x.data.caller x.data.ctx _ x.data.accepts hqc'.accepts _ hks a.state caller
-    input hrec hnow hfresh hsc hsi h1
-  rw [holds_ite_tt (by rw [hok])]
-  refine imp_congr_right fun _ => ?_
-  rw [holds_andT]
-  have e1 := admit_exact x.data.input x.accepts g1 hca1 input hsi h1
-  have hargs' := rels1 x.data.ctx x.data.ctxArgs hcx
-  have e2 : Holds M c2 ↔ x.resolve.appFits L.count (ctx, ()) :=
-    x.resolve.app_exact g2 hca2 (by simp [Ty.ctx, Ty.isFn]) _ _ hargs' h8
-  have hta : (Ty.tuple [x.output]).isData = true := by simp [Ty.isData, Ty.isDatas, x.data.output]
-  have hle : (Ty.list v.event).isData = true := by simp [Ty.isData, v.event_data]
-  have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
-  have x1 := encode_exact site.defs site.defs.eval (site.defs.encode L) (site.defs.fits L.count)
-    (Defs.encode_agrees M L site.defs) (Defs.encode_exact M L site.defs) site.body σ _ (FTs.dflt _) hσ
-    (frels_of_notFn hΓf _ _ _) oa c3 h9
-  have hfit : (site.fn env).fits L.count = Expr.fits L.count site.defs site.defs.eval (site.defs.fits L.count) site.body
-      (Ty.up _ site.hΓ env) (FTs.dflt _) := by
-    simp only [Fun.fits, Site.fn]
-  have e3 : Holds M c3 ↔ ((site.fn env).fits L.count).1 := by rw [hfit]; exact x1.1
-  have hrest : Holds M c2 → (Holds M (andT c3 (andT c4 c5)) ↔ ((site.fn env).fits L.count).1 ∧
-      (site.fn env).appFits L.count ⟨x.resolve.fn (ctx, ()), ()⟩ ∧
-      eventsFit L.count T a.state ((site.fn env).fn ⟨x.resolve.fn (ctx, ()), ()⟩)) := fun hc2 => by
-    have hres := hqc'.resolve _ (adm.ctx, ()) hargs' out c2 h8 hc2
-    erw [Ty.up_fn _ _ _ x.data.ctxArgs x.data.output] at hres
-    have e4 : Holds M c3 → (Holds M c4 ↔ (site.fn env).appFits L.count ⟨x.resolve.fn (ctx, ()), ()⟩) := fun hc3 => by
-      have := (x1.2 hc3 _ (FTs.dflt _) (out, ()) (rels1 x.data.output hta hres)
-        (frels_of_notFn (by simp only [List.mem_singleton, forall_eq]; exact hout) _ _ _) evs c4 h10).1
-      rw [this]; unfold Fun.appFits; rw [hfit]
-    have e5 : Holds M c3 → Holds M c4 →
-        (Holds M c5 ↔ eventsFit L.count T a.state ((site.fn env).fn ⟨x.resolve.fn (ctx, ()), ()⟩)) := fun hc3 hc4 => by
-      have hoa := encode_agrees site.defs site.defs.eval (site.defs.encode L) (Defs.encode_agrees M L site.defs)
-        site.body σ _ hσ oa c3 h9 hc3
-      have hoa' : Rel M L _ (Ty.up _ site.ht (site.fn env).fn) oa := by
-        rw [Fun.fn, Ty.up_down]; simp only [Fun.eval, Site.fn]; exact hoa
-      have hevs := hoa' _ (out, ()) (rels1 x.data.output hta hres) evs c4 h10 hc4
-      erw [Ty.up_fn _ _ _ hta hle] at hevs
-      have hevt := (rel_term (need_ok.1 h11) _).1 hevs
-      obtain ⟨sv, hS, -, hsw, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
-      erw [Ty.up_list _ _ v.event_data] at hh
-      exact events_exact hor happ hca _ sv hS hsw _ hh a.state hnow hrec hms h13
-    rw [holds_andT, holds_andT]
-    constructor
-    · rintro ⟨hc3, hc4, hc5⟩
-      exact ⟨e3.1 hc3, (e4 hc3).1 hc4, (e5 hc3 hc4).1 hc5⟩
-    · rintro ⟨p3, p4, p5⟩
-      have hc3 := e3.2 p3
-      have hc4 := (e4 hc3).2 p4
-      exact ⟨hc3, hc4, (e5 hc3 hc4).2 p5⟩
-  have hrules : Holds M c1 → (Holds M (.ite (allT (adm.rules.map (·.2))) (andT c2 (andT c3 (andT c4 c5))) tt) ↔
-      (Step.broken (x.accepts.fn (input, ())) = [] → x.resolve.appFits L.count (ctx, ()) ∧
-        ((site.fn env).fits L.count).1 ∧ (site.fn env).appFits L.count ⟨x.resolve.fn (ctx, ()), ()⟩ ∧
-        eventsFit L.count T a.state ((site.fn env).fn ⟨x.resolve.fn (ctx, ()), ()⟩))) := fun hc1 => by
-    have hbroken := hbr hc1
-    have hall : ((allT (adm.rules.map (·.2))).denote M).toBool = decide (Step.broken (x.accepts.fn (input, ())) = []) := by
-      rw [toBool_allT_rules, hbroken]
-    rw [holds_ite_tt hall, decide_eq_true_iff]
+  obtain ⟨hok, hbr, hcx⟩ := admit_rel v.records_data x.data.input x.data.caller x.data.ctx _ x.data.accepts
+    hqc'.accepts _ hks a.state caller input hrec hnow hfresh hsc hsi h1
+  refine ⟨?_, fun hc => ?_⟩
+  · unfold onAnswerFits
+    rw [holds_ite_tt (by rw [hok])]
     refine imp_congr_right fun _ => ?_
     rw [holds_andT]
+    have e1 := admit_exact x.data.input x.accepts g1 hca1 input hsi h1
+    have hargs' := rels1 x.data.ctx x.data.ctxArgs hcx
+    have e2 : Holds M c2 ↔ x.resolve.appFits L.count (ctx, ()) :=
+      x.resolve.app_exact g2 hca2 (by simp [Ty.ctx, Ty.isFn]) _ _ hargs' h8
+    have hta : (Ty.tuple [x.output]).isData = true := by simp [Ty.isData, Ty.isDatas, x.data.output]
+    have hle : (Ty.list v.event).isData = true := by simp [Ty.isData, v.event_data]
+    have x1 := encode_exact site.defs site.defs.eval (site.defs.encode L) (site.defs.fits L.count)
+      (Defs.encode_agrees M L site.defs) (Defs.encode_exact M L site.defs) site.body σ _ (FTs.dflt _) hσ
+      (frels_of_notFn hΓf _ _ _) oa c3 h9
+    have hfit : (site.fn env).fits L.count = Expr.fits L.count site.defs site.defs.eval (site.defs.fits L.count) site.body
+        (Ty.up _ site.hΓ env) (FTs.dflt _) := by
+      simp only [Fun.fits, Site.fn]
+    have e3 : Holds M c3 ↔ ((site.fn env).fits L.count).1 := by rw [hfit]; exact x1.1
+    have hrest : Holds M c2 → (Holds M (andT c3 (andT c4 c5)) ↔ ((site.fn env).fits L.count).1 ∧
+        (site.fn env).appFits L.count ⟨x.resolve.fn (ctx, ()), ()⟩ ∧
+        eventsFit L.count T a.state ((site.fn env).fn ⟨x.resolve.fn (ctx, ()), ()⟩)) := fun hc2 => by
+      have hres := hqc'.resolve _ (adm.ctx, ()) hargs' out c2 h8 hc2
+      erw [Ty.up_fn _ _ _ x.data.ctxArgs x.data.output] at hres
+      have e4 : Holds M c3 → (Holds M c4 ↔ (site.fn env).appFits L.count ⟨x.resolve.fn (ctx, ()), ()⟩) := fun hc3 => by
+        have := (x1.2 hc3 _ (FTs.dflt _) (out, ()) (rels1 x.data.output hta hres)
+          (frels_of_notFn (by simp only [List.mem_singleton, forall_eq]; exact hout) _ _ _) evs c4 h10).1
+        rw [this]; unfold Fun.appFits; rw [hfit]
+      have e5 : Holds M c3 → Holds M c4 →
+          (Holds M c5 ↔ eventsFit L.count T a.state ((site.fn env).fn ⟨x.resolve.fn (ctx, ()), ()⟩)) := fun hc3 hc4 => by
+        have hoa := encode_agrees site.defs site.defs.eval (site.defs.encode L) (Defs.encode_agrees M L site.defs)
+          site.body σ _ hσ oa c3 h9 hc3
+        have hoa' : Rel M L _ (Ty.up _ site.ht (site.fn env).fn) oa := by
+          rw [Fun.fn, Ty.up_down]; simp only [Fun.eval, Site.fn]; exact hoa
+        have hevs := hoa' _ (out, ()) (rels1 x.data.output hta hres) evs c4 h10 hc4
+        erw [Ty.up_fn _ _ _ hta hle] at hevs
+        have hevt := (rel_term (need_ok.1 h11) _).1 hevs
+        obtain ⟨sv, hS, -, hsw, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
+        erw [Ty.up_list _ _ v.event_data] at hh
+        exact events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv hS hsw _ hh a.state hnow hrec hms h13
+      rw [holds_andT, holds_andT]
+      constructor
+      · rintro ⟨hc3, hc4, hc5⟩
+        exact ⟨e3.1 hc3, (e4 hc3).1 hc4, (e5 hc3 hc4).1 hc5⟩
+      · rintro ⟨p3, p4, p5⟩
+        have hc3 := e3.2 p3
+        have hc4 := (e4 hc3).2 p4
+        exact ⟨hc3, hc4, (e5 hc3 hc4).2 p5⟩
+    have hrules : Holds M c1 → (Holds M (.ite (allT (adm.rules.map (·.2))) (andT c2 (andT c3 (andT c4 c5))) tt) ↔
+        (Step.broken (x.accepts.fn (input, ())) = [] → x.resolve.appFits L.count (ctx, ()) ∧
+          ((site.fn env).fits L.count).1 ∧ (site.fn env).appFits L.count ⟨x.resolve.fn (ctx, ()), ()⟩ ∧
+          eventsFit L.count T a.state ((site.fn env).fn ⟨x.resolve.fn (ctx, ()), ()⟩))) := fun hc1 => by
+      have hbroken := hbr hc1
+      have hall : ((allT (adm.rules.map (·.2))).denote M).toBool = decide (Step.broken (x.accepts.fn (input, ())) = []) := by
+        rw [toBool_allT_rules, hbroken]
+      rw [holds_ite_tt hall, decide_eq_true_iff]
+      refine imp_congr_right fun _ => ?_
+      rw [holds_andT]
+      constructor
+      · rintro ⟨hc2, hx⟩
+        exact ⟨e2.1 hc2, (hrest hc2).1 hx⟩
+      · rintro ⟨p2, px⟩
+        have hc2 := e2.2 p2
+        exact ⟨hc2, (hrest hc2).2 px⟩
     constructor
-    · rintro ⟨hc2, hx⟩
-      exact ⟨e2.1 hc2, (hrest hc2).1 hx⟩
-    · rintro ⟨p2, px⟩
-      have hc2 := e2.2 p2
-      exact ⟨hc2, (hrest hc2).2 px⟩
-  constructor
-  · rintro ⟨hc1, hx⟩
-    exact ⟨e1.1 hc1, (hrules hc1).1 hx⟩
-  · rintro ⟨p1, px⟩
-    have hc1 := e1.2 p1
-    exact ⟨hc1, (hrules hc1).2 px⟩
+    · rintro ⟨hc1, hx⟩
+      exact ⟨e1.1 hc1, (hrules hc1).1 hx⟩
+    · rintro ⟨p1, px⟩
+      have hc1 := e1.2 p1
+      exact ⟨hc1, (hrules hc1).2 px⟩
+  · have hqc := hqc'
+    have happ := happ'
+    simp only [r, Step.runQuery, Step.execQuery, Step.admit]
+    cases hin : x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
+    case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
+    simp only [hok, hin, Val.toBool, ite_true]
+    have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2))) (andT c2 (andT c3 (andT c4 c5))) tt)) := by
+      simpa only [Holds, Term.denote, hok, hin, Val.toBool, ite_true] using hc
+    rw [holds_andT] at hc'
+    have hbroken := hbr hc'.1
+    rw [hbroken]
+    cases hb : Step.broken (x.accepts.fn (input, ())) with
+    | cons n ns => rfl
+    | nil =>
+    simp only
+    have hallT : (allT (adm.rules.map (·.2))).denote M = .bool true := by
+      rw [allT_denote]; exact congrArg Val.bool ((brokenIn_nil adm.rules).1 (hbroken.trans hb))
+    obtain ⟨hc2, hc3, hc4, hc5⟩ : Holds M c2 ∧ Holds M c3 ∧ Holds M c4 ∧ Holds M c5 := by
+      have := hc'.2; simp only [Holds, Term.denote, hallT, Val.toBool, ite_true] at this
+      have h : Holds M (andT c2 (andT c3 (andT c4 c5))) := this
+      rw [holds_andT, holds_andT, holds_andT] at h; exact h
+    have hres := hqc.resolve _ (adm.ctx, ()) (rels1 x.data.ctx x.data.ctxArgs hcx) out c2 h8 hc2
+    erw [Ty.up_fn _ _ _ x.data.ctxArgs x.data.output] at hres
+    have hle : (Ty.list v.event).isData = true := by simp [Ty.isData, v.event_data]
+    have hta : (Ty.tuple [x.output]).isData = true := by simp [Ty.isData, Ty.isDatas, x.data.output]
+    have hoa := encode_agrees site.defs site.defs.eval (site.defs.encode L) (Defs.encode_agrees M L site.defs) site.body
+      σ _ hσ oa c3 h9 hc3
+    have hoa' : Rel M L _ (Ty.up _ site.ht (site.fn env).fn) oa := by
+      rw [Fun.fn, Ty.up_down]; simp only [Fun.eval, Site.fn]; exact hoa
+    have hevs := hoa' _ (out, ()) (rels1 x.data.output hta hres) evs c4 h10 hc4
+    erw [Ty.up_fn _ _ _ hta hle] at hevs
+    have hevt := (rel_term (need_ok.1 h11) _).1 hevs
+    obtain ⟨sv, hS, -, hsw, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
+    erw [Ty.up_list _ _ v.event_data] at hh
+    let evs1 : List v.event.den0 := (site.fn env).fn ⟨x.resolve.fn ⟨Step.ctx a.state a.state.records caller input, ()⟩, ()⟩
+    change Holds2 (EBag L v.event) (evs1.map (Ty.up _ v.event_data)) sv at hh
+    exact loop_acc (T := T) chk hshs happ senv a hnow hS hsw hh hrec hms hn hq hfresh h13 hc5
 
 end
 

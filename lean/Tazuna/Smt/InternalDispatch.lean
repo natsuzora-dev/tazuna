@@ -159,7 +159,7 @@ def ownCommandFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : Comma
     (Step.broken (x.accepts.fn (input, ())) = [] →
       x.decide.appFits S (ctx, ()) ∧ ownDecidedFits S T { s with fresh := s.fresh + 1 } x ctx oa (x.decide.fn (ctx, ())))
 
-/-- Whether an own query's internal step fits from `s`: what `ownQuery_exact` says its condition holds for. -/
+/-- Whether an own query's internal step fits from `s`: what `ownQuery_encode` says its condition holds for. -/
 def ownQueryFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : QueryV v.records v.caller)
     (caller : v.caller.den0) (input : x.input.den0) (oa : Fun (Ty.fn [x.output] (.list v.event))) : Prop :=
   let ctx := Step.ctx s s.records caller input
@@ -352,12 +352,13 @@ theorem fault_query (name : String) (o : OwnQueryOut) :
   · rfl
   · cases brokenIn M o.rules <;> rfl
 
-/-- T2 for one own kind's internal step, for an own effect of the kind: the fault term holds exactly when the
-outcome terms name a fault, which is `Step.runOwn`'s; otherwise the internal step runs to its end with what the step
-terms denote (`AccRel`). -/
-theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
+/-- One own kind's internal step, for an own effect of the kind: where the codes' condition holds, the condition
+holds exactly when the internal step `Step.runOwn` runs fits (`ownFits`); wherever it holds, the fault term holds
+exactly when the outcome terms name a fault, which is `Step.runOwn`'s, and otherwise the internal step runs to its end
+with what the step terms denote (`AccRel`). -/
+theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (a : Step.Acc v) (hinv : Step.Inv P a.state)
+    (a : Step.Acc v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
@@ -371,11 +372,12 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
     {ko : OwnKindOut} {st : StepTerms} {c cx : Term}
     (henc : encodeOwnKind L T P v shs senv (L.effectsOf v.event).length apply records now fresh n q eff xs j key =
       .ok ⟨⟨ko, st⟩, c, cx⟩)
-    (hc : Holds M c) (hcx : Holds M cx) :
-    st.fault.denote M = .bool (ko.fault? M).isSome ∧
-    match ko.fault? M with
-    | some f => Step.runOwn T a x = .error f
-    | none => AccRel M L T shs a st.done st.fresh q0 (Step.runOwn T a x) := by
+    (hcx : Holds M cx) :
+    (Holds M c ↔ ownFits L.count T a.state x) ∧
+    (Holds M c → st.fault.denote M = .bool (ko.fault? M).isSome ∧
+      match ko.fault? M with
+      | some f => Step.runOwn T a x = .error f
+      | none => AccRel M L T shs a st.done st.fresh q0 (Step.runOwn T a x)) := by
   have hsel : ∀ i, (Term.sel senv.dE ((L.effectsOf v.event).length + j) i eff).denote M = vals[i]?.getD default :=
     fun i => sel_ctor i heff
   obtain ⟨sh, hsh, henc⟩ := bind_ok.1 henc
@@ -387,27 +389,27 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
     | command name' c' i' j' caller value onAnswer =>
     obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vc, vi, va, rfl, hvc, hvi, hva⟩ := hkey
     unfold ownShape at hsh
-    unfold Step.runOwn
+    unfold Step.runOwn ownFits
     dsimp only at hsh ⊢
     revert hsh
     generalize hoc : Ty.same c' v.caller = oc
     generalize hox : Step.ownCommand (v := v) name' i' j' = ox
     intro hsh
-    have miss : ∀ (h : sh = .missing name'), Term.denote M st.fault = .bool (ko.fault? M).isSome ∧
+    have miss : ∀ (h : sh = .missing name'), Holds M c ∧ Term.denote M st.fault = .bool (ko.fault? M).isSome ∧
         ko.fault? M = some (.invalidEffect name' ["service"]) := by
-      intro h; subst h; cases pure_ok.1 henc; exact ⟨rfl, rfl⟩
+      intro h; subst h; cases pure_ok.1 henc; exact ⟨holds_tt, rfl, rfl⟩
     cases oc with
     | none =>
       cases ox <;>
       · dsimp only at hsh ⊢
-        obtain ⟨h1, h2⟩ := miss (pure_ok.1 hsh).symm
-        rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩
+        obtain ⟨h0, h1, h2⟩ := miss (pure_ok.1 hsh).symm
+        exact ⟨iff_of_true h0 trivial, fun _ => by rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩⟩
     | some hc =>
     cases ox with
     | none =>
       dsimp only at hsh ⊢
-      obtain ⟨h1, h2⟩ := miss (pure_ok.1 hsh).symm
-      rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩
+      obtain ⟨h0, h1, h2⟩ := miss (pure_ok.1 hsh).symm
+      exact ⟨iff_of_true h0 trivial, fun _ => by rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩⟩
     | some xx =>
     obtain ⟨hc⟩ := hc
     obtain ⟨x, hi, hj⟩ := xx
@@ -449,10 +451,12 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
     have hsi : RelV L x.input (Ty.up _ hd.input value)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have H := (ownCommand_encode chk hshs a x caller value hcc hcx happ hca s oenv hσ'
-      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe).2 hc
+    have E := ownCommand_encode chk hshs a x caller value hcc hcx happ hca s oenv hσ'
+      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
+    refine ⟨E.1, fun hc => ?_⟩
+    have H := E.2 hc
     refine ⟨fault_command x.name o, ?_⟩
     simp only [OwnKindOut.fault?]
     split at H
@@ -487,27 +491,27 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
     | query name' c' i' j' caller value onAnswer =>
     obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vc, vi, va, rfl, hvc, hvi, hva⟩ := hkey
     unfold ownShape at hsh
-    unfold Step.runOwn
+    unfold Step.runOwn ownFits
     dsimp only at hsh ⊢
     revert hsh
     generalize hoc : Ty.same c' v.caller = oc
     generalize hox : Step.ownQuery (v := v) name' i' j' = ox
     intro hsh
-    have miss : ∀ (h : sh = .missing name'), Term.denote M st.fault = .bool (ko.fault? M).isSome ∧
+    have miss : ∀ (h : sh = .missing name'), Holds M c ∧ Term.denote M st.fault = .bool (ko.fault? M).isSome ∧
         ko.fault? M = some (.invalidEffect name' ["service"]) := by
-      intro h; subst h; cases pure_ok.1 henc; exact ⟨rfl, rfl⟩
+      intro h; subst h; cases pure_ok.1 henc; exact ⟨holds_tt, rfl, rfl⟩
     cases oc with
     | none =>
       cases ox <;>
       · dsimp only at hsh ⊢
-        obtain ⟨h1, h2⟩ := miss (pure_ok.1 hsh).symm
-        rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩
+        obtain ⟨h0, h1, h2⟩ := miss (pure_ok.1 hsh).symm
+        exact ⟨iff_of_true h0 trivial, fun _ => by rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩⟩
     | some hc =>
     cases ox with
     | none =>
       dsimp only at hsh ⊢
-      obtain ⟨h1, h2⟩ := miss (pure_ok.1 hsh).symm
-      rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩
+      obtain ⟨h0, h1, h2⟩ := miss (pure_ok.1 hsh).symm
+      exact ⟨iff_of_true h0 trivial, fun _ => by rw [h2]; exact ⟨h1.trans (by rw [h2]), rfl⟩⟩
     | some xx =>
     obtain ⟨hc⟩ := hc
     obtain ⟨x, hi, hj⟩ := xx
@@ -549,18 +553,15 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
     have hsi : RelV L x.input (Ty.up _ hd.input value)
         ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have chk.machines : ∀ m ∈ v.machines, m.Reach P := by
-      intro m hm
-      rw [← hinv.machinesOf] at hm
-      obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 hm
-      exact hinv.machines sm hsm
-    have H := ownQuery_rel chk hshs a x caller value hqc hcx happ hca s oenv hσ' hks' senv
-      hrec hnow hfresh hn hq hms hsc hsi hoe hc
+    have E := ownQuery_encode chk hshs a x caller value hqc hcx happ hca s oenv hσ'
+      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) (chk.outputs x (ownQuery_mem hox)) hks' senv
+      hrec hnow hfresh hn hq hms hsc hsi hoe
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
+    refine ⟨E.1, fun hc => ?_⟩
+    have H := E.2 hc
     refine ⟨fault_query x.name o, ?_⟩
     simp only [OwnKindOut.fault?]
-    dsimp only at H
     split at H
     · rename_i hco
       simp only [hco, ite_true]
@@ -732,273 +733,12 @@ theorem find_hit {α : Type} {k : Nat} : (l : List (Term × α)) → {y : Term �
       rw [List.find?_cons, hz]
       exact find_hit (k := k) l (by simpa using hy) (fun i kk h => by simpa using ht (i + 1) kk (by simpa using h))
 
-/-- T2 for an own effect's internal step: the fault term holds exactly when the model's kind names a fault, which is
-`Step.runOwn`'s; otherwise the internal step runs to its end with what the merged terms denote. -/
-theorem ownStep_rel {P : List AnySite} (chk : Checked P T v)
+/-- An own effect's internal step: where the codes' condition holds, the condition holds exactly when the internal
+step `Step.runOwn` runs fits (`ownFits`); wherever it holds, the fault term holds exactly when the model's kind names a
+fault, which is `Step.runOwn`'s, and otherwise the internal step runs to its end with what the merged terms denote. -/
+theorem ownStep_encode {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (a : Step.Acc v) (hinv : Step.Inv P a.state)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
-    (hca : Holds M ca)
-    (senv : StepEnv L shs)
-    {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
-    (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
-    (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
-    (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
-    (hms : MachinesRel M L T v.machines xs a.state.machines)
-    (x : EffectV v.event) (hx : RelV L (.dsl .effect [v.event]) x (eff.denote M)) (hown : x.isRequest = false)
-    (hreach : x.Reach P)
-    {o : OwnStepOut} {cond codes : Term}
-    (henc : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok ⟨o, cond, codes⟩)
-    (hc : Holds M cond) (hcodes : Holds M codes) :
-    o.terms.fault.denote M = .bool (o.fault? M).isSome ∧
-    match o.fault? M with
-    | some f => Step.runOwn T a x = .error f
-    | none => AccRel M L T shs a o.terms.done o.terms.fresh q0 (Step.runOwn T a x) := by
-  obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
-  cases pure_ok.1 henc
-  have hx' : EffRel L x (eff.denote M) := hx
-  obtain ⟨d, nn, hd, hx'⟩ := hx'
-  cases (Prod.mk.inj (Option.some.inj (senv.hE.symm.trans hd))).1
-  rcases hx' with ⟨k, key, vals, -, -, hh⟩ | ⟨k, key, vals, hk, heff, hkey⟩
-  · cases x with
-    | request => simp [EffectV.isRequest] at hown
-    | command => exact hh.elim
-    | query => exact hh.elim
-  have hF := mapM_ok _ _ _ hks
-  have heff' : (Term.share eff).denote M = .ctor senv.dE ((L.effectsOf v.event).length + k) vals := by
-    rw [Term.denote_share]; exact heff
-  have hzk : ((L.ownsOf v.event).zipIdx)[k]? = some (key, k) := by
-    rw [List.getElem?_zipIdx, hk]; simp
-  obtain ⟨kk, hkk, hR⟩ := forall2_getElem? hF hzk
-  obtain ⟨⟨⟨ko, st⟩, c, cx⟩, hkind, hR⟩ := bind_ok.1 hR
-  cases pure_ok.1 hR
-  have htests : ∀ (i : Nat) (y : Term × Encoded OwnKindStep), ks[i]? = some y →
-      y.1.denote M = .bool (decide (i = k)) := by
-    intro i y hy
-    obtain ⟨⟨key', i'⟩, hz, hR'⟩ := forall2_getElem? (forall2_flip hF) hy
-    obtain ⟨_, -, hR'⟩ := bind_ok.1 hR'
-    cases pure_ok.1 hR'
-    rw [List.getElem?_zipIdx] at hz
-    obtain ⟨key'', -, he⟩ := Option.map_eq_some_iff.1 hz
-    cases he
-    simp only [Term.denote_share, Term.denote, heff', beq_self_eq_true, Bool.true_and, Nat.zero_add]
-    congr 1
-    by_cases h : i = k
-    · subst h; simp
-    · simp [h, Ne.symm h]
-  have hcall := (holds_allT _).1 hc _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-  have htk := htests k _ hkk
-  simp only [decide_true] at htk
-  have hck : Holds M c := by
-    have := (holds_ite _ _ _).1 hcall
-    simpa [htk, toBool_bool] using this
-  have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-  obtain ⟨hfault, hrun⟩ := ownKind_rel chk hshs a hinv happ hca senv hrec hnow hfresh hn hq
-    hms x hreach heff' hkey hkind hck hcxk
-  have hwid : ∀ y ∈ ks.map (fun k => (k.1, k.2.out.terms)),
-      (∀ sl ∈ y.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ y.2.done.owns, sl.2.length = 2 := by
-    intro y hy
-    obtain ⟨z, hz, rfl⟩ := List.mem_map.1 hy
-    obtain ⟨⟨key', i'⟩, -, hR'⟩ := forall2_mem_right hF z hz
-    obtain ⟨⟨⟨ko', st'⟩, c', cx'⟩, hkind', hR'⟩ := bind_ok.1 hR'
-    cases pure_ok.1 hR'
-    exact encodeOwnKind_width hkind'
-  obtain ⟨hag, htab⟩ := fold_hit (e := v.event) (M := M) (L := L) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩
-    (ks.map fun k => (k.1, k.2.out.terms)) k (c := Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)))
-    (st := st) (by simp [hkk])
-    (fun i y hy => by
-      rw [List.getElem?_map] at hy
-      obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.1 hy
-      exact htests i z hz)
-    hwid
-  rw [List.foldr_map] at hag htab
-  have hfk : (OwnStepOut.fault? M ⟨ks.map fun k => (k.1, k.2.out.kind),
-      ks.foldr (fun k t => pickTerms k.1 k.2.out.terms t) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩) = ko.fault? M := by
-    unfold OwnStepOut.fault?
-    rw [find_hit (k := k) (ks.map fun k => (k.1, k.2.out.kind))
-      (y := (Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)), ko)) (by simp [hkk])
-      (fun i y hy => by
-        rw [List.getElem?_map] at hy
-        obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.1 hy
-        exact htests i z hz)]
-    rfl
-  rw [hfk]
-  refine ⟨hag.fault.trans hfault, ?_⟩
-  revert hrun
-  cases ko.fault? M with
-  | some f => exact id
-  | none =>
-    intro hdone
-    obtain ⟨-, ms, -, -, -, -, -, -, hms', -⟩ := id hdone
-    refine AccRel.congr hag (htab ?_) hdone
-    rw [machinesRel_length hms', machinesRel_length hms]
-
-/-- The condition of one own kind's internal step is exact: for an own effect of the kind, it holds exactly when the
-internal step `Step.runOwn` runs fits (`ownFits`). -/
-theorem ownKind_exact {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (a : Step.Acc v)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
-    (hca : Holds M ca)
-    (senv : StepEnv L shs)
-    {records now fresh n q eff : Term} {xs : List Term} {q0 : Nat}
-    (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
-    (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
-    (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
-    (hms : MachinesRel M L T v.machines xs a.state.machines)
-    {j : Nat} {key : OwnKey} (x : EffectV v.event) (hreach : x.Reach P) {vals : List Val}
-    (heff : eff.denote M = .ctor senv.dE ((L.effectsOf v.event).length + j) vals) (hkey : key.Holds L x vals)
-    {ko : OwnKindOut} {st : StepTerms} {c cx : Term}
-    (henc : encodeOwnKind L T P v shs senv (L.effectsOf v.event).length apply records now fresh n q eff xs j key =
-      .ok ⟨⟨ko, st⟩, c, cx⟩)
-    (hcx : Holds M cx) :
-    Holds M c ↔ ownFits L.count T a.state x := by
-  have hsel : ∀ i, (Term.sel senv.dE ((L.effectsOf v.event).length + j) i eff).denote M = vals[i]?.getD default :=
-    fun i => sel_ctor i heff
-  obtain ⟨sh, hsh, henc⟩ := bind_ok.1 henc
-  cases key with
-  | command e name c0 i jj a0 =>
-    cases x with
-    | request => exact hkey.elim
-    | query => exact hkey.elim
-    | command name' c' i' j' caller value onAnswer =>
-    obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vc, vi, va, rfl, hvc, hvi, hva⟩ := hkey
-    unfold ownShape at hsh
-    unfold ownFits
-    dsimp only at hsh ⊢
-    revert hsh
-    generalize hoc : Ty.same c' v.caller = oc
-    generalize hox : Step.ownCommand (v := v) name' i' j' = ox
-    intro hsh
-    have miss : ∀ (h : sh = .missing name'), Holds M c := by
-      intro h; subst h; cases pure_ok.1 henc; exact holds_tt
-    cases oc with
-    | none =>
-      cases ox <;>
-      · dsimp only at hsh ⊢
-        exact iff_of_true (miss (pure_ok.1 hsh).symm) trivial
-    | some hc =>
-    cases ox with
-    | none =>
-      dsimp only at hsh ⊢
-      exact iff_of_true (miss (pure_ok.1 hsh).symm) trivial
-    | some xx =>
-    obtain ⟨hc⟩ := hc
-    obtain ⟨x, hi, hj⟩ := xx
-    subst hc hi hj
-    dsimp only at hsh ⊢
-    revert hsh
-    generalize hsf : siteFor P _ a0 = sf
-    intro hsh
-    cases sf with
-    | none => exact absurd hsf (siteFor_reach hreach hsite hΓ)
-    | some gs =>
-    obtain ⟨Γ, s⟩ := gs
-    cases pure_ok.1 hsh
-    obtain ⟨⟨cc, cx'⟩, hcc, henc⟩ := bind_ok.1 henc
-    obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨da, dn⟩, hda, henc⟩ := bind_ok.1 henc
-    obtain ⟨σ, hσ, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    have hd := CommandV.data x
-    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
-    obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
-    dsimp only at hsite hΓ
-    obtain ⟨e, hA⟩ := Fun.eq_siteFn chk.sites ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
-    dsimp only at e hA
-    subst e
-    obtain ⟨d', n', vals', hd', rfl, hrds⟩ := hva
-    obtain rfl := find_det hd' (need_ok.1 hda)
-    have hσ' : Rels M L _ (Ty.up _ s.hΓ oenv) σ :=
-      tupleCodes_rels _ [] vals' _ σ (by rw [hsel]; rfl) (relDs_up _ s.hΓ oenv vals' hrds) (need_ok.1 hσ)
-    have hks' : callerTerms L hd.caller x.callers = some ks := by
-      have h := need_ok.1 hks
-      split at h
-      · exact h
-      · cases h
-    have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
-        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
-      rw [hsel]; exact relD_up _ _ _ _ hvc
-    have hsi : RelV L x.input (Ty.up _ hd.input value)
-        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
-      rw [hsel]; exact relD_up _ _ _ _ hvi
-    simp only [cast_eq]
-    rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
-    exact (ownCommand_encode chk hshs a x caller value hcc hcx happ hca s oenv hσ'
-      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe).1
-  | query e name c0 i jj a0 =>
-    cases x with
-    | request => exact hkey.elim
-    | command => exact hkey.elim
-    | query name' c' i' j' caller value onAnswer =>
-    obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vc, vi, va, rfl, hvc, hvi, hva⟩ := hkey
-    unfold ownShape at hsh
-    unfold ownFits
-    dsimp only at hsh ⊢
-    revert hsh
-    generalize hoc : Ty.same c' v.caller = oc
-    generalize hox : Step.ownQuery (v := v) name' i' j' = ox
-    intro hsh
-    have miss : ∀ (h : sh = .missing name'), Holds M c := by
-      intro h; subst h; cases pure_ok.1 henc; exact holds_tt
-    cases oc with
-    | none =>
-      cases ox <;>
-      · dsimp only at hsh ⊢
-        exact iff_of_true (miss (pure_ok.1 hsh).symm) trivial
-    | some hc =>
-    cases ox with
-    | none =>
-      dsimp only at hsh ⊢
-      exact iff_of_true (miss (pure_ok.1 hsh).symm) trivial
-    | some xx =>
-    obtain ⟨hc⟩ := hc
-    obtain ⟨x, hi, hj⟩ := xx
-    subst hc hi hj
-    dsimp only at hsh ⊢
-    revert hsh
-    generalize hsf : siteFor P _ a0 = sf
-    intro hsh
-    cases sf with
-    | none => exact absurd hsf (siteFor_reach hreach hsite hΓ)
-    | some gs =>
-    obtain ⟨Γ, s⟩ := gs
-    cases pure_ok.1 hsh
-    obtain ⟨⟨cc, cx'⟩, hcc, henc⟩ := bind_ok.1 henc
-    obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨da, dn⟩, hda, henc⟩ := bind_ok.1 henc
-    obtain ⟨σ, hσ, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    have hd := QueryV.data x
-    obtain ⟨hsP, hss, hsΓ⟩ := siteFor_spec hsf
-    obtain ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ := onAnswer
-    dsimp only at hsite hΓ
-    obtain ⟨e, hA⟩ := Fun.eq_siteFn chk.sites ⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ s hreach hsP (hsite.trans hss.symm)
-    dsimp only at e hA
-    subst e
-    obtain ⟨d', n', vals', hd', rfl, hrds⟩ := hva
-    obtain rfl := find_det hd' (need_ok.1 hda)
-    have hσ' : Rels M L _ (Ty.up _ s.hΓ oenv) σ :=
-      tupleCodes_rels _ [] vals' _ σ (by rw [hsel]; rfl) (relDs_up _ s.hΓ oenv vals' hrds) (need_ok.1 hσ)
-    have hks' : callerTerms L hd.caller x.callers = some ks := by
-      have h := need_ok.1 hks
-      split at h
-      · exact h
-      · cases h
-    have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
-        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
-      rw [hsel]; exact relD_up _ _ _ _ hvc
-    have hsi : RelV L x.input (Ty.up _ hd.input value)
-        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
-      rw [hsel]; exact relD_up _ _ _ _ hvi
-    simp only [cast_eq]
-    rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
-    exact ownQuery_exact a (fun m hm => (chk.keys m hm).1) x caller value hcc hcx happ hca s oenv hσ'
-      (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) (chk.outputs x (ownQuery_mem hox)) hks' hrec hnow hfresh hms hsc hsi hoe
-
-/-- The condition of an own effect's internal step is exact: it holds exactly when the internal step `Step.runOwn`
-runs fits (`ownFits`). -/
-theorem ownStep_exact {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (a : Step.Acc v)
+    (a : Step.Acc v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
@@ -1012,7 +752,11 @@ theorem ownStep_exact {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     {o : OwnStepOut} {cond codes : Term}
     (henc : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok ⟨o, cond, codes⟩)
     (hcodes : Holds M codes) :
-    Holds M cond ↔ ownFits L.count T a.state x := by
+    (Holds M cond ↔ ownFits L.count T a.state x) ∧
+    (Holds M cond → o.terms.fault.denote M = .bool (o.fault? M).isSome ∧
+    match o.fault? M with
+    | some f => Step.runOwn T a x = .error f
+    | none => AccRel M L T shs a o.terms.done o.terms.fresh q0 (Step.runOwn T a x)) := by
   obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   have hx' : EffRel L x (eff.denote M) := hx
@@ -1046,26 +790,72 @@ theorem ownStep_exact {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     · subst h; simp
     · simp [h, Ne.symm h]
   have hcxk : Holds M cx := (holds_allT _).1 hcodes _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
-  rw [← ownKind_exact chk hshs a happ hca senv hrec hnow hfresh hn hq hms x
-    hreach heff' hkey hkind hcxk, holds_allT]
-  have htk := htests k _ hkk
-  simp only [decide_true] at htk
-  constructor
-  · intro h
-    have := (holds_ite _ _ _).1 (h _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩))
-    simpa [htk, toBool_bool] using this
-  · intro h t ht
-    obtain ⟨y, hy, rfl⟩ := List.mem_map.1 ht
-    obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hy
-    have hti := htests i ks[i] (List.getElem?_eq_getElem hi)
-    rw [holds_ite, hti, toBool_bool]
-    by_cases hik : i = k
-    · subst hik
-      rw [List.getElem?_eq_getElem hi, Option.some.injEq] at hkk
-      simp only [decide_true, ite_true]
-      rw [hkk]; exact h
-    · simp only [hik, decide_false, Bool.false_eq_true, ite_false]
-      exact holds_tt
+  refine ⟨?_, fun hc => ?_⟩
+  · rw [← (ownKind_encode chk hshs a happ hca senv hrec hnow hfresh hn hq hms x
+      hreach heff' hkey hkind hcxk).1, holds_allT]
+    have htk := htests k _ hkk
+    simp only [decide_true] at htk
+    constructor
+    · intro h
+      have := (holds_ite _ _ _).1 (h _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩))
+      simpa [htk, toBool_bool] using this
+    · intro h t ht
+      obtain ⟨y, hy, rfl⟩ := List.mem_map.1 ht
+      obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hy
+      have hti := htests i ks[i] (List.getElem?_eq_getElem hi)
+      rw [holds_ite, hti, toBool_bool]
+      by_cases hik : i = k
+      · subst hik
+        rw [List.getElem?_eq_getElem hi, Option.some.injEq] at hkk
+        simp only [decide_true, ite_true]
+        rw [hkk]; exact h
+      · simp only [hik, decide_false, Bool.false_eq_true, ite_false]
+        exact holds_tt
+  · have hcall := (holds_allT _).1 hc _ (List.mem_map.2 ⟨_, List.mem_of_getElem? hkk, rfl⟩)
+    have htk := htests k _ hkk
+    simp only [decide_true] at htk
+    have hck : Holds M c := by
+      have := (holds_ite _ _ _).1 hcall
+      simpa [htk, toBool_bool] using this
+    obtain ⟨hfault, hrun⟩ := (ownKind_encode chk hshs a happ hca senv hrec hnow hfresh hn hq
+      hms x hreach heff' hkey hkind hcxk).2 hck
+    have hwid : ∀ y ∈ ks.map (fun k => (k.1, k.2.out.terms)),
+        (∀ sl ∈ y.2.done.news, sl.2.length = 2) ∧ ∀ sl ∈ y.2.done.owns, sl.2.length = 2 := by
+      intro y hy
+      obtain ⟨z, hz, rfl⟩ := List.mem_map.1 hy
+      obtain ⟨⟨key', i'⟩, -, hR'⟩ := forall2_mem_right hF z hz
+      obtain ⟨⟨⟨ko', st'⟩, c', cx'⟩, hkind', hR'⟩ := bind_ok.1 hR'
+      cases pure_ok.1 hR'
+      exact encodeOwnKind_width hkind'
+    obtain ⟨hag, htab⟩ := fold_hit (e := v.event) (M := M) (L := L) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩ ⟨rfl, rfl⟩
+      (ks.map fun k => (k.1, k.2.out.terms)) k (c := Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)))
+      (st := st) (by simp [hkk])
+      (fun i y hy => by
+        rw [List.getElem?_map] at hy
+        obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.1 hy
+        exact htests i z hz)
+      hwid
+    rw [List.foldr_map] at hag htab
+    have hfk : (OwnStepOut.fault? M ⟨ks.map fun k => (k.1, k.2.out.kind),
+        ks.foldr (fun k t => pickTerms k.1 k.2.out.terms t) ⟨tt, ⟨records, xs, n, [], [], q⟩, fresh⟩⟩) = ko.fault? M := by
+      unfold OwnStepOut.fault?
+      rw [find_hit (k := k) (ks.map fun k => (k.1, k.2.out.kind))
+        (y := (Term.share (.is senv.dE ((L.effectsOf v.event).length + k) (Term.share eff)), ko)) (by simp [hkk])
+        (fun i y hy => by
+          rw [List.getElem?_map] at hy
+          obtain ⟨z, hz, rfl⟩ := Option.map_eq_some_iff.1 hy
+          exact htests i z hz)]
+      rfl
+    rw [hfk]
+    refine ⟨hag.fault.trans hfault, ?_⟩
+    revert hrun
+    cases ko.fault? M with
+    | some f => exact id
+    | none =>
+      intro hdone
+      obtain ⟨-, ms, -, -, -, -, -, -, hms', -⟩ := id hdone
+      refine AccRel.congr hag (htab ?_) hdone
+      rw [machinesRel_length hms', machinesRel_length hms]
 
 end
 

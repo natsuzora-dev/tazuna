@@ -161,10 +161,8 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     have e2' : MachinesRel M L T v.machines o.tables a1.state.machines := by rw [← hA]; exact e2
     have e3' : fresh.denote M = .int (Int.ofNat a1.state.fresh) := by rw [← hA]; exact e3
     have hnow1 : now.denote M = .int a1.state.now := by rw [← hA]; exact hnow
-    have es := settle_exact chk hshs happ hca senv
+    obtain ⟨es, hrel⟩ := settle_encode chk hshs happ hca senv
       v.bounds.cascade.toNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 hS1 hnow1 rfl e1' e2' e3' hn1 hq1' hset hcx
-    have hrel := fun hcs : Holds M cs => settle_rel chk hshs happ hca senv
-      v.bounds.cascade.toNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 hS1 hnow1 rfl e1' e2' e3' hn1 hq1' hset hcs hcx
     have hfits : finishFits L.count T shs r ↔ settleFits L.count T v.bounds.cascade.toNat 0 a1 ∧
         ∀ a2, Step.settleFrom T v.bounds.cascade.toNat 0 a1 = .ok a2 →
           a2.state.pending.length ≤ L.count (pendingTable shs) ∧ v.invariants.appFits L.count (a2.state.records, ()) ∧
@@ -220,9 +218,9 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     have hfd : (Ty.fn [v.records] Ty.rules).isData = true := by
       simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, v.records_data]
     have hinvR := v.invariants.code_fn hfd hinvc hci0
-    obtain ⟨hF, hm⟩ := settle_rel chk hshs happ hca senv
+    obtain ⟨hF, hm⟩ := (settle_encode chk hshs happ hca senv
       v.bounds.cascade.toNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 (by simpa [hown] using e7) hnow rfl e1 e2 e3
-      (by rw [e4, ← hl1]; rfl) (by simpa [hown] using e6) hset hcs hcx
+      (by rw [e4, ← hl1]; rfl) (by simpa [hown] using e6) hset hcx).2 hcs
     unfold Finished Step.finish
     rw [hra]
     simp only [bind, Except.bind]
