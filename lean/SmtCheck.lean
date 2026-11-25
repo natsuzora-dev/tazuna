@@ -3197,6 +3197,123 @@ def cascEventCheck (solver : Solver) : IO Bool := do
       | a => ok ← fail s!"{name}: {repr a}"
   return ok
 
+/-! A clock line whose timers queue own commands, for `clock_step`: the machine `tick` is `start` whose effect, for a key
+below 10, is alice's `put (key + 10)` answered with no events, in the service `c` above without its reaction. From the
+state of `clock fires timers` without its record (keys 7 and 3 due at 80 and 90, request 2 pending, next id 40, now
+50), the line at 100
+fires key 7 then key 3, each round queueing its `put` at the round's queue place; with bound 2 both internal steps run
+and the step is accepted. The records, table, pending ids, next id and fresh counter read from the model must be the
+step's, and must differ from what the rounds alone leave. -/
+
+def tickEffectE : Expr [] [] (.fn [invCtxT] (Ty.option (.dsl .effect [.int]))) :=
+  let ctx : Expr [] [invCtxT] invCtxT := .var .here
+  let key : Expr [] [invCtxT] .int := .field (ft := .int) "key" 0 (by simp) ctx
+  let clo : Expr [] [invCtxT] (.dsl .closure [.fn [Ty.result Ty.nil .str] (.list .int)]) :=
+    .close ⟨"m", 24, 1, 0⟩ .nil rfl rfl onceBodyE
+  let put : Expr [] [invCtxT] (.dsl .effect [.int]) :=
+    .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
+      (.cons putHandleE (.cons (.str "alice") (.cons (.bin .add key (.int 10)) (.cons clo .nil))))
+  .lam (boolCase (.bin .lt key (.int 10)) (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨0, by decide⟩ (.cons put .nil))
+    (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil))
+
+def tickM : MachineV recordsT .int := { startM with name := "tick", effect := .closed tickEffectE }
+
+def tickSvc (cascade : Int) : ServiceV := { cascSvc cascade with name := "tk", machines := [tickM], reactions := [] }
+
+def tickShapes (cascade : Int) : List (PendingShape (tickSvc cascade).event) := shapes (tickSvc cascade) writeSites
+
+def tickLayout (cascade : Int) (slots : Nat) : Layout :=
+  let lits := Tazuna.Smt.Expr.lits acceptsE ++ Tazuna.Smt.Expr.lits twiceDecideE ++ Tazuna.Smt.Expr.lits tickEffectE
+  Layout.addTys (listSlots (fun _ => slots) lits) { effects := [sendKey ⟨"m", 3, 7, 0⟩], owns := [onceKey] }
+    (reactTys ++ [.tuple [.int], .tuple [], .list .int, .id, cctxT, Ty.result (.list .int) .str,
+      pendingTable (tickShapes cascade), Ty.result Ty.nil .str, Ty.nil] ++
+      Tazuna.Smt.Expr.tys insertE ++ Tazuna.Smt.Expr.tys invariantsE ++ Tazuna.Smt.Expr.tys wrapIntE ++
+      Tazuna.Smt.Expr.tys tickEffectE ++ Tazuna.Smt.Expr.tys acceptsE ++ Tazuna.Smt.Expr.tys twiceDecideE)
+
+/-- v0..v5 the state, v6 the line's time, v7 the records after, v8 the fresh counter after, v9 the next id after, v10
+the pending table after, v11 the instance table after, v12 whether every round fired. -/
+def tickClockTermsOf (cascade : Int) (slots : Nat) (goal : List Term) : Except String (Script × ClockOut) := do
+  let v := tickSvc cascade
+  let shs := tickShapes cascade
+  let L := tickLayout cascade slots
+  let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
+  let S := SymState.vars 0 1
+  let (apply, ca) ← enc (v.apply.code L)
+  let (inv, ci) ← enc (v.invariants.code L)
+  let some (dE, _) := L.find? (.dsl .effect [.int]) | throw "no effect datatype"
+  let some (dP, _) := L.find? (pendingEntry shs) | throw "no pending entry"
+  let some (dopt, _) := L.find? (Ty.option (.dsl .effect [.int])) | throw "no effect option"
+  let (o, cond, cfx) ← enc (encodeClock L prelude cascSites v shs dE dP dopt apply inv S.records S.now (.var 6) S.fresh
+    S.pending S.nextId S.machines)
+  let below ← enc (pendingBelowT L shs S.pending S.nextId)
+  let some wf := S.wf L (v := v) shs | throw "no well-formedness"
+  let some rsrt := L.srt? recordsT | throw "no records sort"
+  let some psrt := L.srt? (pendingTable shs) | throw "no pending sort"
+  let some msrt := L.srt? tickM.table | throw "no table sort"
+  let some dts := L.datatypes? | throw "no datatypes"
+  let d := o.finish.settle.terms.done
+  let [tbl] := d.tables | throw "not one machine"
+  pure ({ datatypes := dts,
+          vars := [rsrt, .int, .int, .int, psrt, msrt, .int, rsrt, .int, .int, psrt, msrt, .bool],
+          asserts := [wf, below, ca, ci, cfx, cond, .eq (.var 7) d.records, .eq (.var 8) o.finish.settle.terms.fresh,
+            .eq (.var 9) d.nextId, .eq (.var 10) o.finish.pending, .eq (.var 11) tbl, .eq (.var 12) o.over] ++ goal,
+          shows := List.range 13 }, o)
+
+def tickClockCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: timers queue own commands: {m}"; return false
+  let v := tickSvc 2
+  let shs := tickShapes 2
+  let L := tickLayout 2 5
+  let some (dr, nr) := L.find? recordsT | fail "no records"
+  let some (drt, _) := L.find? (.tuple [Ty.bool, .int, .int]) | fail "no records slot"
+  let some (dm, nm) := L.find? tickM.table | fail "no instance table"
+  let some (dmt, _) := L.find? (.tuple [Ty.bool, .int, instEntry .int]) | fail "no instance slot"
+  let some (de, _) := L.find? (instEntry .int) | fail "no instance entry"
+  let some (dto, _) := L.find? (Ty.option (.tuple [.int, .int])) | fail "no timer option"
+  let some (dp, _) := L.find? (.tuple [.int, .int]) | fail "no timer"
+  let some (d, n) := L.find? (pendingTable shs) | fail "no pending table"
+  let some (dt, _) := L.find? (.tuple [Ty.bool, .dsl .fresh [], pendingEntry shs]) | fail "no pending slot"
+  let Sr := slotsOf dr drt nr 2 (.var 0)
+  let Sm := slotsOf dm dmt nm 2 (.var 5)
+  let Sp := slotsOf d dt n 2 (.var 4)
+  let waits (j : Nat) (key dl : Int) := [Sm[j]!.1, .eq (Sm[j]!.2.headD tt) (.int key),
+    .eq (Term.sel de 0 0 (Sm[j]!.2.getD 1 tt)) (.int 0), .is dto 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)),
+    .eq (.sel dp 0 0 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)))) (.int dl),
+    .eq (.sel dp 0 1 (.sel dto 0 0 (Term.sel de 0 1 (Sm[j]!.2.getD 1 tt)))) (.int 1)]
+  let goal := [Sp[0]!.1, .eq (Sp[0]!.2.headD tt) (.int 2),
+    .eq (.var 1) (.int 50), .eq (.var 6) (.int 100), .eq (.var 3) (.int 40), .eq (.var 2) (.int 7)] ++
+    ((Sr ++ Sm.drop 2 ++ Sp.drop 1).map fun sl => Term.not sl.1) ++ waits 0 7 80 ++ waits 1 3 90
+  match tickClockTermsOf 2 5 goal with
+  | .error m => fail m
+  | .ok (script, _) =>
+    match ← solver.run script with
+    | .sat vs =>
+      let M := modelOf vs
+      let after : SymState := { records := .var 7, now := .var 6, fresh := .var 8, nextId := .var 9,
+                                pending := .var 10, machines := [.var 11] }
+      match (SymState.vars 0 1).decode M L (v := v) rfl prelude shs, after.decode M L (v := v) rfl prelude shs with
+      | some s, some s' =>
+        let view (sms : List (Step.MachineState v.records v.event)) :=
+          sms.map fun ⟨m, is⟩ => is.map fun (i : Step.Instance m) =>
+            (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
+        let ids (st : State v) := (st.pending.map (·.id)).mergeSort (· ≤ ·)
+        let same (st : State v) : Bool :=
+          sameAs L recordsT rfl st.records (vs.lookup 7) && view s'.machines == view st.machines &&
+            s'.nextId == st.nextId && s'.fresh == st.fresh && ids s' == ids st
+        let r := step prelude v s (.clock 100)
+        let mut ok := true
+        if vs.lookup 12 == some (.bool true) then ok ← fail "the script says every round fired"
+        if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
+        if r.state.fresh != s.fresh + 2 then ok ← fail s!"the step ran {r.state.fresh - s.fresh} internal steps, not 2"
+        if !same r.state then
+          ok ← fail s!"the model's state (next id {s'.nextId}, fresh {s'.fresh}, ids {ids s'}, table {view s'.machines}) is not the step's (next id {r.state.nextId}, fresh {r.state.fresh}, ids {ids r.state}, table {view r.state.machines})"
+        match Step.fire { s with now := 100 } (v.bounds.cascade.toNat + 1) with
+        | some (s1, _) => if same s1 then ok ← fail "the rounds without the cascade pass the comparison"
+        | none => ok ← fail "the rounds exceed the bound"
+        return ok
+      | _, _ => fail "the model does not decode"
+    | a => fail s!"{repr a}"
+
 /-- A chain of `depth` levels where each level builds the same shared term twice as two objects over the level
 below: what an encoder does when it shares a term at each use instead of where it is built. Its script has one
 definition per level, and printing it must not compare the copies as trees (exponential in depth). -/
@@ -3305,6 +3422,7 @@ def check (z3 : String) : IO Bool := do
   unless ← dispCheck solver do ok := false
   unless ← cascadeCheck solver do ok := false
   unless ← cascEventCheck solver do ok := false
+  unless ← tickClockCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
@@ -3341,6 +3459,7 @@ def sizes : IO UInt32 := do
   row "cascade at 3 slots (bound, not slots)" fun k => (·.1) <$> cascadeTermsOf 3 k queue []
   row "event with a cascade of 1" fun k => (·.1) <$> cascEventTermsOf 1 k []
   row "event with a cascade at 3 slots (bound, not slots)" fun k => (·.1) <$> cascEventTermsOf k 3 []
+  row "clock whose timers queue own commands (bound 2)" fun k => (·.1) <$> tickClockTermsOf 2 k []
   row "re-shared chain (levels, not slots)" fun k => pure (reshared k)
   return 0
 
