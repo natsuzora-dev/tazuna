@@ -162,12 +162,9 @@ theorem fire_prepend (q : Bag (Pending v.event)) :
   | 0, _ => rfl
   | fuel + 1, s => by
     simp only [fire, State.prepend]
-    split <;> rename_i hd <;> split <;> rename_i hd'
+    split
     · rfl
-    · exact absurd (hd.symm.trans hd') nofun
-    · exact absurd (hd.symm.trans hd') nofun
-    · obtain rfl : _ = _ := Option.some.inj (hd.symm.trans hd')
-      generalize List.foldl _ ([], [], false) s.machines = R
+    · generalize fireMachines s.records s.now _ false s.machines = R
       have hR : ({ records := s.records, machines := R.1, pending := q ++ s.pending, now := s.now,
                    fresh := s.fresh, nextId := s.nextId } : State v) = State.prepend q { s with machines := R.1 } := rfl
       rw [hR, fire_prepend q fuel]

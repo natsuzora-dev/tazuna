@@ -54,18 +54,6 @@ theorem machineStep_ok (records : r.den0) (now : Int) (ev : e.den0) (m : Machine
   simp only [Function.comp_def, Ty.cmp] at hab ⊢
   rw [reactKey_erl T m ho, reactKey_erl T m ho]; exact hab
 
-/-- A fold that appends one instance per instance with its key keeps the keys. -/
-theorem foldl_keys {β : Type} (m : MachineV r e) (G : List (Step.Instance m) × β → Step.Instance m →
-      List (Step.Instance m) × β)
-    (hG : ∀ acc i, ∃ i' : Step.Instance m, (G acc i).1 = acc.1 ++ [i'] ∧ i'.key = i.key) :
-    (insts : List (Step.Instance m)) → (acc : List (Step.Instance m) × β) →
-    (insts.foldl G acc).1.map (·.key) = acc.1.map (·.key) ++ insts.map (·.key)
-  | [], _ => by simp
-  | i :: insts, acc => by
-    obtain ⟨i', h1, h2⟩ := hG acc i
-    rw [List.foldl_cons, foldl_keys m G hG insts, h1]
-    simp [h2]
-
 end
 
 namespace Step
@@ -225,36 +213,12 @@ theorem fire_keys (s : State v) (hs : KeysOk T s) : (fuel : Nat) → {r : State 
     split at h
     · cases h; exact hs
     · rename_i d _
-      let Ok := fun sm : MachineState v.records v.event => sm.1.key.ordered T = true ∧ InstancesOk T sm.1 sm.2
-      have key : ∀ (F : FireAcc v → MachineState v.records v.event → FireAcc v),
-          (∀ b ms0, (∀ sm ∈ b.1, Ok sm) → Ok ms0 → ∀ sm ∈ (F b ms0).1, Ok sm) →
-          ∀ {mach effs done}, s.machines.foldl F ([], [], false) = (mach, effs, done) →
-          ∀ {r : State v × List (Sender × EffectV v.event)},
-            Option.map (fun x => (x.1, effs ++ x.2)) (fire { s with machines := mach } fuel) = some r →
-            KeysOk T r.1 := by
-        intro F hF mach effs done hR r h
-        have hfold := foldl_inv (fun b : FireAcc v => ∀ sm ∈ b.1, Ok sm) Ok F hF s.machines ([], [], false) hs
-          (by intro sm h; cases h)
-        rw [hR] at hfold
-        obtain ⟨r', hr, rfl⟩ := Option.map_eq_some_iff.1 h
-        exact fire_keys { s with machines := mach } hfold fuel (r := r') hr
-      split at h
-      rename_i heq
-      refine key _ ?_ heq h
-      rintro ⟨ms, effs, done⟩ ⟨m, insts⟩ h1 ⟨ho, hok⟩ sm hsm
-      simp only at hsm
-      rcases List.mem_append.1 hsm with h | h
-      · exact h1 sm h
-      · simp only [List.mem_singleton] at h; subst h
-        refine ⟨ho, instancesOk_keys T m ?_ hok⟩
-        refine (foldl_keys m _ ?_ insts ([], effs, done)).trans (by simp)
-        rintro ⟨acc, effs, done⟩ i
-        dsimp only
-        split
-        · split
-          · exact ⟨_, rfl, rfl⟩
-          · exact ⟨_, rfl, rfl⟩
-        · exact ⟨_, rfl, rfl⟩
+      obtain ⟨⟨s', es⟩, hr, rfl⟩ := Option.map_eq_some_iff.1 h
+      refine fire_keys { s with machines := (fireMachines s.records s.now d false s.machines).1 } ?_ fuel (r := (s', es)) hr
+      intro sm' hsm'
+      obtain ⟨sm, hsm, he | rfl⟩ := mem_fireMachines s.records s.now d false s.machines sm' hsm'
+      · exact he ▸ hs sm hsm
+      · exact ⟨(hs sm hsm).1, instancesOk_keys T sm.1 (fireFirst_keys sm.1 _ _ _ sm.2) (hs sm hsm).2⟩
 
 end Step
 

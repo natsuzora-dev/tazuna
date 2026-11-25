@@ -1,4 +1,5 @@
 import Tazuna.Semantics.Reach
+import Tazuna.Semantics.Fire
 
 /-! What every state a step reaches keeps: pending wire ids are distinct and below the next wire id, every pending
 request's kept functions are records of the program's sites `P`, and so are the machines' effect functions. The
@@ -524,11 +525,6 @@ theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv 
         obtain ⟨x, hi, ho⟩ := x
         exact hqry _ _ _ _
 
-abbrev FireAcc (v : ServiceV) := List (MachineState v.records v.event) × List (Sender × EffectV v.event) × Bool
-
-def FireOk (P : List AnySite) {v : ServiceV} (acc : FireAcc v) : Prop :=
-  (∀ ms ∈ acc.1, ms.1.Reach P) ∧ EffsReach P acc.2.1 ∧ EffsFrom v acc.2.1
-
 theorem fire_inv (s : State v) (hs : Inv P s) : (fuel : Nat) → {r : State v × List (Sender × EffectV v.event)} →
     fire s fuel = some r → Inv P r.1 ∧ EffsReach P r.2 ∧ EffsFrom v r.2
   | 0, _, h => by cases h
@@ -537,64 +533,21 @@ theorem fire_inv (s : State v) (hs : Inv P s) : (fuel : Nat) → {r : State v ×
     split at h
     · cases h; exact ⟨hs, (by intro x hx; cases hx), (by intro x hx; cases hx)⟩
     · rename_i d _
-      have key : ∀ (F : FireAcc v → MachineState v.records v.event → FireAcc v),
-          (∀ b ms0, FireOk P b → ms0.1.Reach P ∧ ms0.1 ∈ v.machines → FireOk P (F b ms0)) →
-          (∀ acc ms0, ∃ m', (F acc ms0).1 = acc.1 ++ [m'] ∧ m'.1 = ms0.1) →
-          ∀ {mach effs done}, s.machines.foldl F ([], [], false) = (mach, effs, done) →
-          ∀ {r : State v × List (Sender × EffectV v.event)},
-            Option.map (fun x => (x.1, effs ++ x.2)) (fire { s with machines := mach } fuel) = some r →
-            Inv P r.1 ∧ EffsReach P r.2 ∧ EffsFrom v r.2 := by
-        intro F hF hFst mach effs done hR r h
-        have hfold := foldl_inv (FireOk P) (fun ms0 => ms0.1.Reach P ∧ ms0.1 ∈ v.machines) F hF s.machines
-          ([], [], false) (fun ms h => ⟨hs.machines ms h, hs.mem h⟩)
-          ⟨by simp, (by intro x hx; cases hx), (by intro x hx; cases hx)⟩
-        have hfst := foldl_fst F hFst s.machines ([], [], false)
-        rw [hR] at hfold hfst
-        obtain ⟨r', hr, rfl⟩ := Option.map_eq_some_iff.1 h
-        obtain ⟨h1, h2, h3⟩ := fire_inv { s with machines := mach }
-          ⟨hs.below, hs.nodup, hs.reach, hfold.1, by simpa using hfst.trans (by simpa using hs.machinesOf), hs.shaped⟩
-          fuel hr
-        exact ⟨h1, fun x hx => (List.mem_append.1 hx).elim (hfold.2.1 x) (h2 x),
-          fun x hx => (List.mem_append.1 hx).elim (hfold.2.2 x) (h3 x)⟩
-      have hinner : ∀ (m : MachineV v.records v.event) (Q : List (Sender × EffectV v.event) → Prop)
-          (G : List (Instance m) × List (Sender × EffectV v.event) × Bool → Instance m →
-            List (Instance m) × List (Sender × EffectV v.event) × Bool),
-          (∀ b i, Q b.2.1 → Q (G b i).2.1) → ∀ (insts : List (Instance m))
-            (acc : List (Instance m) × List (Sender × EffectV v.event) × Bool), Q acc.2.1 →
-            Q (insts.foldl G acc).2.1 := fun m Q G hG insts acc h0 =>
-        foldl_inv (fun acc => Q acc.2.1) (fun _ => True) G (fun b i h _ => hG b i h) insts acc
-          (fun _ _ => trivial) h0
-      split at h
-      rename_i heq
-      refine key _ ?_ (by rintro ⟨ms, effs, done⟩ ⟨m, insts⟩; exact ⟨_, rfl, rfl⟩) heq h
-      rintro ⟨ms, effs, done⟩ ⟨m, insts⟩ ⟨h1, h2, h3⟩ ⟨h0, hm0⟩
-      refine ⟨fun ms' hms' => ?_, ?_, ?_⟩
-      · simp only at hms'
-        rcases List.mem_append.1 hms' with h | h
-        · exact h1 ms' h
-        · simp only [List.mem_singleton] at h; subst h; exact h0
-      · refine hinner m (EffsReach P) _ ?_ insts _ h2
-        rintro ⟨acc, effs, done⟩ i h
-        dsimp only
-        split
-        · split
-          · intro x hx
-            rcases List.mem_append.1 hx with hx | hx
-            · exact h x hx
-            · exact enter_reach m h0 _ _ _ _ x hx
-          · exact h
-        · exact h
-      · refine hinner m (EffsFrom v) _ ?_ insts _ h3
-        rintro ⟨acc, effs, done⟩ i h
-        dsimp only
-        split
-        · split
-          · intro x hx
-            rcases List.mem_append.1 hx with hx | hx
-            · exact h x hx
-            · exact enter_from hm0 _ _ _ _ x hx
-          · exact h
-        · exact h
+      obtain ⟨r', hr, rfl⟩ := Option.map_eq_some_iff.1 h
+      have hfst := fireMachines_fst s.records s.now d false s.machines
+      have hmach : ∀ ms ∈ (fireMachines s.records s.now d false s.machines).1, ms.1.Reach P := by
+        intro ms' hms'
+        obtain ⟨ms, hms, he | he⟩ := mem_fireMachines s.records s.now d false s.machines ms' hms' <;>
+          exact he ▸ hs.machines ms hms
+      obtain ⟨h1, h2, h3⟩ := fire_inv { s with machines := (fireMachines s.records s.now d false s.machines).1 }
+        ⟨hs.below, hs.nodup, hs.reach, hmach, hfst.trans hs.machinesOf, hs.shaped⟩ fuel hr
+      have hfx := mem_fireMachines_effs s.records s.now d false s.machines
+      refine ⟨h1, fun x hx => (List.mem_append.1 hx).elim (fun hx => ?_) (h2 x),
+        fun x hx => (List.mem_append.1 hx).elim (fun hx => ?_) (h3 x)⟩
+      · obtain ⟨ms, hms, k, st, hx⟩ := hfx x hx
+        exact enter_reach ms.1 (hs.machines ms hms) _ _ _ _ x hx
+      · obtain ⟨ms, hms, k, st, hx⟩ := hfx x hx
+        exact enter_from (hs.mem hms) _ _ _ _ x hx
 
 end Step
 

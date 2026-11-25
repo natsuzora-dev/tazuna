@@ -290,25 +290,53 @@ def finish (s0 : State v) (a : Except Fault (Acc v)) (outcome : Outcome) : Resul
     | n :: _ => ⟨s0, .fault (.invariant n), [], []⟩
     | [] => ⟨a.state, outcome, a.events, a.out⟩
 
-/-- Fires the timers due at `now`, earliest deadline first, then machines in order and instances in key order. Entering a state
-may start another due timer; the cascade bound limits how many fire. -/
+/-- Whether an instance's timer has the deadline `d`. -/
+def hitsAt {r e : Ty} {m : MachineV r e} (d : Int) (i : Instance m) : Bool :=
+  match i.timer with
+  | some (d', _) => decide (d' = d)
+  | none => false
+
+/-- An instance whose timer fires: it enters the state its timer names. -/
+def fired {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (i : Instance m) :
+    Instance m × List (Sender × EffectV e) :=
+  match i.timer with
+  | some (_, target) => enter m records now i.key target
+  | none => (i, [])
+
+/-- The first instance whose timer has the deadline `d` fires; the flag says whether one did. -/
+def fireFirst {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (d : Int) :
+    List (Instance m) → List (Instance m) × List (Sender × EffectV e) × Bool
+  | [] => ([], [], false)
+  | i :: is =>
+    if hitsAt d i then ((fired m records now i).1 :: is, (fired m records now i).2, true)
+    else let x := fireFirst m records now d is; (i :: x.1, x.2.1, x.2.2)
+
+/-- One round over the machines in order: unless an earlier one fired (`done`), a machine's first instance with the
+deadline `d` fires. -/
+def fireMachines {r e : Ty} (records : r.den0) (now : Int) (d : Int) :
+    Bool → List (MachineState r e) → List (MachineState r e) × List (Sender × EffectV e) × Bool
+  | done, [] => ([], [], done)
+  | true, ms :: rest => let x := fireMachines records now d true rest; (ms :: x.1, x.2.1, true)
+  | false, ⟨m, insts⟩ :: rest =>
+    let y := fireFirst m records now d insts
+    let x := fireMachines records now d y.2.2 rest
+    (⟨m, y.1⟩ :: x.1, y.2.1 ++ x.2.1, x.2.2)
+
+/-- The deadlines of the timers due at `now`. -/
+def dues {r e : Ty} (machines : List (MachineState r e)) (now : Int) : List Int :=
+  machines.flatMap fun ⟨_, insts⟩ => insts.filterMap fun i => i.timer.bind fun (d, _) => if d ≤ now then some d else none
+
+/-- Fires the timers due at `now`, earliest deadline first, then machines in order and instances in key order (one
+`fireMachines` round per timer). Entering a state may start another due timer; the cascade bound limits how many
+fire. -/
 def fire (s : State v) : (fuel : Nat) → Option (State v × List (Sender × EffectV v.event))
   | 0 => none
   | fuel + 1 =>
-    let due := s.machines.flatMap fun ⟨_, insts⟩ => insts.filterMap fun i => i.timer.bind fun (d, _) =>
-      if d ≤ s.now then some d else none
-    match due.min? with
+    match (dues s.machines s.now).min? with
     | none => some (s, [])
     | some d =>
-      let (machines, effs, _) := s.machines.foldl (fun (ms, effs, done) ⟨m, insts⟩ =>
-        let (insts, effs, done) := insts.foldl (fun (acc, effs, done) i =>
-          match done, i.timer with
-          | false, some (d', target) =>
-            if d' = d then let (i', es) := enter m s.records s.now i.key target; (acc ++ [i'], effs ++ es, true)
-            else (acc ++ [i], effs, done)
-          | _, _ => (acc ++ [i], effs, done)) ([], effs, done)
-        (ms ++ [⟨m, insts⟩], effs, done)) ([], [], false)
-      (fire { s with machines } fuel).map fun (s, es) => (s, effs ++ es)
+      let x := fireMachines s.records s.now d false s.machines
+      (fire { s with machines := x.1 } fuel).map fun (s', es) => (s', x.2.1 ++ es)
 
 end Step
 

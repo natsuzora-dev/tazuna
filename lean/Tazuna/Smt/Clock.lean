@@ -422,33 +422,6 @@ end
 section
 variable {P : List AnySite} {r e : Ty}
 
-theorem fireFirst_reach (m : MachineV r e) (hm : m.Reach P) (recs : r.den0) (now d : Int) :
-    (insts : List (Step.Instance m)) → Step.EffsReach P (Step.fireFirst m recs now d insts).2.1
-  | [] => (fun _ h => nomatch h)
-  | i :: is => by
-    unfold Step.fireFirst
-    split
-    · unfold Step.fired
-      split
-      · exact Step.enter_reach (P := P) m hm recs now _ _
-      · exact (fun _ h => nomatch h)
-    · exact fireFirst_reach m hm recs now d is
-
-/-- The effects a firing round starts reach the program's sites, and the machines stay the same. -/
-theorem fireMachines_reach (recs : r.den0) (now d : Int) : (b : Bool) → (sms : List (Step.MachineState r e)) →
-    (∀ ms ∈ sms, ms.1.Reach P) →
-      Step.EffsReach P (Step.fireMachines recs now d b sms).2.1 ∧ (Step.fireMachines recs now d b sms).1.map (·.1) = sms.map (·.1)
-  | b, [], _ => by cases b <;> exact ⟨(fun _ h => nomatch h), rfl⟩
-  | true, ms :: rest, _ => by rw [Step.fireMachines_true]; exact ⟨(fun _ h => nomatch h), rfl⟩
-  | false, ⟨m, insts⟩ :: rest, h => by
-    obtain ⟨h1, h2⟩ := fireMachines_reach recs now d (Step.fireFirst m recs now d insts).2.2 rest
-      fun ms hm => h ms (by simp [hm])
-    simp only [Step.fireMachines, List.map_cons, h2]
-    refine ⟨fun x hx => ?_, trivial⟩
-    rcases List.mem_append.1 hx with hx | hx
-    · exact fireFirst_reach m (h ⟨m, insts⟩ (by simp)) recs now d insts x hx
-    · exact h1 x hx
-
 theorem roundOf_reach (recs : r.den0) (now : Int) (ab : Bool) (sms : List (Step.MachineState r e))
     (h : ∀ ms ∈ sms, ms.1.Reach P) :
     Step.EffsReach P (Step.roundOf recs now ab sms).2 ∧ ∀ ms ∈ (Step.roundOf recs now ab sms).1, ms.1.Reach P := by
@@ -457,11 +430,10 @@ theorem roundOf_reach (recs : r.den0) (now : Int) (ab : Bool) (sms : List (Step.
   · split
     · exact ⟨(fun _ h => nomatch h), h⟩
     · rename_i d _
-      obtain ⟨h1, h2⟩ := fireMachines_reach recs now d false sms h
-      refine ⟨h1, fun ms hm => ?_⟩
-      have : ms.1 ∈ sms.map (·.1) := h2 ▸ List.mem_map_of_mem hm
-      obtain ⟨ms', hms', heq⟩ := List.mem_map.1 this
-      exact heq ▸ h ms' hms'
+      refine ⟨fun x hx => ?_, fun ms' hm => ?_⟩
+      · obtain ⟨ms, hms, k, st, hx⟩ := Step.mem_fireMachines_effs recs now d false sms x hx
+        exact Step.enter_reach ms.1 (h ms hms) _ _ _ _ x hx
+      · obtain ⟨ms, hms, he | he⟩ := Step.mem_fireMachines recs now d false sms ms' hm <;> exact he ▸ h ms hms
   · exact ⟨(fun _ h => nomatch h), h⟩
 
 end
@@ -717,14 +689,14 @@ theorem rounds_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingS
     | true =>
       cases hm : (Step.dues s.machines s.now).min? with
       | none =>
-        exact hidle (by simp [Step.roundOf, hm]) (by simp [hm]) (by simp [Step.fireFrom, Step.fire_succ, hm])
+        exact hidle (by simp [Step.roundOf, hm]) (by simp [hm]) (by simp [Step.fireFrom, Step.fire, hm])
       | some d =>
         have hro : Step.roundOf s.records s.now true s.machines =
             ((Step.fireMachines s.records s.now d false s.machines).1, (Step.fireMachines s.records s.now d false s.machines).2.1) := by
           simp [Step.roundOf, hm]
         have hff : Step.fireFrom s true (k + 1) = (Step.fire s1 k).map fun (s', es) =>
             (s', (Step.fireMachines s.records s.now d false s.machines).2.1 ++ es) := by
-          simp only [Step.fireFrom, ite_true, Step.fire_succ, hm, s1, hro]
+          simp only [Step.fireFrom, ite_true, Step.fire, hm, s1, hro]
         rw [hff]
         simp only [hm, Option.isSome_some, Bool.and_self, Step.fireFrom, ite_true] at ih
         cases hf : Step.fire s1 k with

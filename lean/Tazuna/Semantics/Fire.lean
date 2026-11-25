@@ -1,10 +1,10 @@
 import Tazuna.Semantics.Step
 
-/-! What one round of `fire` does, in the form a table encoding reads. The step visits machines in order and each
+/-! What one round of `fire` does, in the form a table encoding reads. The round visits machines in order and each
 machine's instances in key order, and the first instance whose deadline is the earliest due one fires (`fireFirst`,
-`fireMachines`, `fire_succ`). Instances are kept in key order with no key twice, so within a machine the instance that
-fires is the one with that deadline and the least key (`fireFirst_eq`): a condition on each instance and the set of
-all of them, which a table, whose slots have no order, can state slot by slot. -/
+`fireMachines`). Instances are kept in key order with no key twice, so within a machine the instance that fires is the
+one with that deadline and the least key (`fireFirst_eq`): a condition on each instance and the set of all of them,
+which a table, whose slots have no order, can state slot by slot. -/
 
 namespace Tazuna.Ir
 
@@ -12,142 +12,67 @@ namespace Step
 
 variable {r e : Ty}
 
-/-- Whether an instance's timer has the deadline `d`. -/
-def hitsAt {m : MachineV r e} (d : Int) (i : Instance m) : Bool :=
-  match i.timer with
-  | some (d', _) => decide (d' = d)
-  | none => false
-
-/-- An instance whose timer fires: it enters the state its timer names. -/
-def fired (m : MachineV r e) (records : r.den0) (now : Int) (i : Instance m) : Instance m × List (Sender × EffectV e) :=
-  match i.timer with
-  | some (_, target) => enter m records now i.key target
-  | none => (i, [])
-
 theorem fired_key (m : MachineV r e) (records : r.den0) (now : Int) (i : Instance m) :
     (fired m records now i).1.key = i.key := by
   unfold fired; split <;> rfl
-
-/-- The first instance whose timer has the deadline `d` fires; the flag says whether one did. -/
-def fireFirst (m : MachineV r e) (records : r.den0) (now : Int) (d : Int) :
-    List (Instance m) → List (Instance m) × List (Sender × EffectV e) × Bool
-  | [] => ([], [], false)
-  | i :: is =>
-    if hitsAt d i then ((fired m records now i).1 :: is, (fired m records now i).2, true)
-    else let x := fireFirst m records now d is; (i :: x.1, x.2.1, x.2.2)
-
-/-- One round over the machines in order: unless an earlier one fired (`done`), a machine's first instance with the
-deadline `d` fires. -/
-def fireMachines (records : r.den0) (now : Int) (d : Int) :
-    Bool → List (MachineState r e) → List (MachineState r e) × List (Sender × EffectV e) × Bool
-  | done, [] => ([], [], done)
-  | true, ms :: rest => let x := fireMachines records now d true rest; (ms :: x.1, x.2.1, true)
-  | false, ⟨m, insts⟩ :: rest =>
-    let y := fireFirst m records now d insts
-    let x := fireMachines records now d y.2.2 rest
-    (⟨m, y.1⟩ :: x.1, y.2.1 ++ x.2.1, x.2.2)
-
-/-- The deadlines of the timers due at `now`. -/
-def dues (machines : List (MachineState r e)) (now : Int) : List Int :=
-  machines.flatMap fun ⟨_, insts⟩ => insts.filterMap fun i => i.timer.bind fun (d, _) => if d ≤ now then some d else none
 
 theorem fireMachines_true (records : r.den0) (now d : Int) :
     (l : List (MachineState r e)) → fireMachines records now d true l = (l, [], true)
   | [] => rfl
   | ms :: l => by simp [fireMachines, fireMachines_true records now d l]
 
-theorem fireFirst_fold {m : MachineV r e} {records : r.den0} {now d : Int}
-    (G : List (Instance m) × List (Sender × EffectV e) × Bool → Instance m →
-      List (Instance m) × List (Sender × EffectV e) × Bool)
-    (h1 : ∀ acc effs i, G (acc, effs, true) i = (acc ++ [i], effs, true))
-    (h2 : ∀ acc effs i, G (acc, effs, false) i = if hitsAt d i then
-      (acc ++ [(fired m records now i).1], effs ++ (fired m records now i).2, true) else (acc ++ [i], effs, false)) :
-    (insts : List (Instance m)) → (acc : List (Instance m)) → (effs : List (Sender × EffectV e)) → (done : Bool) →
-      insts.foldl G (acc, effs, done) = if done then (acc ++ insts, effs, true) else
-        (acc ++ (fireFirst m records now d insts).1, effs ++ (fireFirst m records now d insts).2.1,
-          (fireFirst m records now d insts).2.2)
-  | [], acc, effs, done => by cases done <;> simp [fireFirst]
-  | i :: is, acc, effs, true => by
-    rw [List.foldl_cons, h1, fireFirst_fold G h1 h2 is]; simp
-  | i :: is, acc, effs, false => by
-    rw [List.foldl_cons, h2]
+theorem fireFirst_keys (m : MachineV r e) (records : r.den0) (now d : Int) :
+    (insts : List (Instance m)) → (fireFirst m records now d insts).1.map (·.key) = insts.map (·.key)
+  | [] => rfl
+  | i :: is => by
     unfold fireFirst
     split
-    · rw [fireFirst_fold G h1 h2 is]; simp
-    · rw [fireFirst_fold G h1 h2 is]; simp
+    · simp [fired_key]
+    · simp [fireFirst_keys m records now d is]
 
-/-- A round of `fire`: no timer due ends it, else the instance `fireMachines` picks at the earliest due deadline
-enters its timer's state and the rounds go on. -/
-theorem fire_succ {v : ServiceV} (s : State v) (fuel : Nat) :
-    fire s (fuel + 1) = match (dues s.machines s.now).min? with
-      | none => some (s, [])
-      | some d =>
-        let x := fireMachines s.records s.now d false s.machines
-        (fire { s with machines := x.1 } fuel).map fun (s', es) => (s', x.2.1 ++ es) := by
-  rw [fire]
-  show (match (dues s.machines s.now).min? with | none => _ | some d => _) = _
-  split
-  · rfl
-  · rename_i d _
-    have outer : ∀ (F : List (MachineState v.records v.event) × List (Sender × EffectV v.event) × Bool →
-        MachineState v.records v.event → List (MachineState v.records v.event) × List (Sender × EffectV v.event) × Bool),
-        (∀ acc effs ms, F (acc, effs, true) ms = (acc ++ [ms], effs, true)) →
-        (∀ acc effs m insts, F (acc, effs, false) ⟨m, insts⟩ = (acc ++ [⟨m, (fireFirst m s.records s.now d insts).1⟩],
-          effs ++ (fireFirst m s.records s.now d insts).2.1, (fireFirst m s.records s.now d insts).2.2)) →
-        ∀ (l : List (MachineState v.records v.event)) acc effs done, l.foldl F (acc, effs, done) =
-          (acc ++ (fireMachines s.records s.now d done l).1, effs ++ (fireMachines s.records s.now d done l).2.1,
-            (fireMachines s.records s.now d done l).2.2) := by
-      intro F g1 g2 l
-      induction l with
-      | nil => intro acc effs done; simp [fireMachines]
-      | cons ms l ih =>
-        intro acc effs done
-        cases done with
-        | true => rw [List.foldl_cons, g1, ih]; simp [fireMachines, fireMachines_true]
-        | false => obtain ⟨m, insts⟩ := ms; rw [List.foldl_cons, g2, ih]; simp [fireMachines]
-    have inner : ∀ (m : MachineV v.records v.event) (G : List (Instance m) × List (Sender × EffectV v.event) × Bool →
-        Instance m → List (Instance m) × List (Sender × EffectV v.event) × Bool),
-        (∀ acc effs i, G (acc, effs, true) i = (acc ++ [i], effs, true)) →
-        (∀ acc effs i, G (acc, effs, false) i = match i.timer with
-          | some (d', target) => if d' = d then
-              let x := enter m s.records s.now i.key target; (acc ++ [x.1], effs ++ x.2, true)
-            else (acc ++ [i], effs, false)
-          | none => (acc ++ [i], effs, false)) →
-        ∀ (insts : List (Instance m)) acc effs (done : Bool), insts.foldl G (acc, effs, done) = if done then (acc ++ insts, effs, true) else
-          (acc ++ (fireFirst m s.records s.now d insts).1, effs ++ (fireFirst m s.records s.now d insts).2.1,
-            (fireFirst m s.records s.now d insts).2.2) := by
-      intro m G g1 g2
-      refine fireFirst_fold G g1 fun acc effs i => ?_
-      rw [g2]
-      obtain ⟨k, st, t⟩ := i
-      cases t with
-      | none => rfl
-      | some p =>
-        obtain ⟨d', tg⟩ := p
-        by_cases h : d' = d <;> simp [h, hitsAt, fired]
-    rw [outer]
-    · simp
-    · intro acc effs ms
-      obtain ⟨m, insts⟩ := ms
-      simp only
-      rw [inner m]
-      · simp
-      all_goals
-        intro acc effs i
-        obtain ⟨k, st, t⟩ := i
-        cases t with
-        | none => rfl
-        | some p => obtain ⟨d', tg⟩ := p; rfl
-    · intro acc effs m insts
-      simp only
-      rw [inner m]
-      · simp
-      all_goals
-        intro acc effs i
-        obtain ⟨k, st, t⟩ := i
-        cases t with
-        | none => rfl
-        | some p => obtain ⟨d', tg⟩ := p; rfl
+/-- A round changes a machine's instances only by `fireFirst`. -/
+theorem mem_fireMachines (records : r.den0) (now d : Int) : (b : Bool) → (sms : List (MachineState r e)) →
+    ∀ sm' ∈ (fireMachines records now d b sms).1, ∃ sm ∈ sms, sm' = sm ∨ sm' = ⟨sm.1, (fireFirst sm.1 records now d sm.2).1⟩
+  | b, [], _, h => by cases b <;> simp [fireMachines] at h
+  | true, ms :: rest, sm', h => by
+    rw [fireMachines_true] at h
+    exact ⟨sm', h, .inl rfl⟩
+  | false, ⟨m, insts⟩ :: rest, sm', h => by
+    simp only [fireMachines, List.mem_cons] at h
+    rcases h with rfl | h
+    · exact ⟨⟨m, insts⟩, List.mem_cons_self, .inr rfl⟩
+    · obtain ⟨sm, hsm, he⟩ := mem_fireMachines records now d _ rest sm' h
+      exact ⟨sm, List.mem_cons_of_mem _ hsm, he⟩
+
+theorem mem_fireFirst_effs (m : MachineV r e) (records : r.den0) (now d : Int) : (insts : List (Instance m)) →
+    ∀ x ∈ (fireFirst m records now d insts).2.1, ∃ k st, x ∈ (enter m records now k st).2
+  | [], _, h => nomatch h
+  | i :: is, x, h => by
+    unfold fireFirst at h
+    split at h
+    · unfold fired at h
+      split at h
+      · exact ⟨_, _, h⟩
+      · nomatch h
+    · exact mem_fireFirst_effs m records now d is x h
+
+/-- Every effect a round starts is one an instance's entering a state starts. -/
+theorem mem_fireMachines_effs (records : r.den0) (now d : Int) : (b : Bool) → (sms : List (MachineState r e)) →
+    ∀ x ∈ (fireMachines records now d b sms).2.1, ∃ sm ∈ sms, ∃ k st, x ∈ (enter sm.1 records now k st).2
+  | b, [], _, h => by cases b <;> simp [fireMachines] at h
+  | true, ms :: rest, x, h => by rw [fireMachines_true] at h; nomatch h
+  | false, ⟨m, insts⟩ :: rest, x, h => by
+    simp only [fireMachines, List.mem_append] at h
+    rcases h with h | h
+    · exact ⟨⟨m, insts⟩, List.mem_cons_self, mem_fireFirst_effs m records now d insts x h⟩
+    · obtain ⟨sm, hsm, he⟩ := mem_fireMachines_effs records now d _ rest x h
+      exact ⟨sm, List.mem_cons_of_mem _ hsm, he⟩
+
+theorem fireMachines_fst (records : r.den0) (now d : Int) : (b : Bool) → (sms : List (MachineState r e)) →
+    (fireMachines records now d b sms).1.map (·.1) = sms.map (·.1)
+  | b, [] => by cases b <;> rfl
+  | true, ms :: rest => by rw [fireMachines_true]
+  | false, ⟨m, insts⟩ :: rest => by simp [fireMachines, fireMachines_fst records now d _ rest]
 
 section
 variable (T : List TypeDecl)
