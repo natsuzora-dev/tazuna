@@ -4,6 +4,7 @@ import Tazuna.Smt.Prove
 import Tazuna.Semantics.After
 import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.FiresForward
+import Tazuna.Semantics.NoTimer
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
 question per input kind for the step, one line per question. -/
@@ -301,7 +302,8 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
       items := items ++ asked.map (fun q => .ask ⟨q.script, answerReport c v L senv q⟩) ++
         (qs.filterMap fun q => q.target.bind fun g => if kept.any (·.target == some g) then none else some g).map
           (.skipped v.name)
-  for m in v.machines do
+  -- A machine whose `after` never sets a timer fires forward by itself (`timerForward_of_noTimer`), so it gets no line.
+  for m in v.machines.filter (!·.noTimer) do
     let g := Target.timer m.name
     let step := "timer " ++ m.name
     match backQuestions L m with

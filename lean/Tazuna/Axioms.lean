@@ -15,6 +15,7 @@ import Tazuna.Semantics.PendingInv
 import Tazuna.Semantics.PendingPerm
 import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Interleave
+import Tazuna.Semantics.NoTimer
 import Tazuna.Semantics.StepRename
 import Tazuna.Smt.Commute
 import Tazuna.Smt.Pairs
@@ -49,7 +50,8 @@ elab "#check_tazuna_axioms" : command => do
   -- The theorems the engine's answers rest on: a double-backquoted name that no longer exists fails to elaborate.
   for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound,
       ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent,
-      ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete, ``Tazuna.Smt.pairs_sound] do
+      ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete, ``Tazuna.Smt.pairs_sound,
+      ``Tazuna.Ir.Step.timerForward_of_noTimer] do
     unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms
