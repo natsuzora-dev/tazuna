@@ -550,7 +550,7 @@ theorem pair_fits {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
 /-- What a pair question's codes condition says: `apply` fits, and so do the functions of each of the two own kinds
 the question names. -/
 def PairCodesFit (L : Layout) (P : List AnySite) (v : ServiceV) (k1 k2 : OwnPlace L v.event) : Prop :=
-  (v.apply.fits L.count).1 ∧ ∀ k ∈ [k1, k2], (ownShape v P (L.ownsOf v.event)[k]).CodesFit L.count
+  (v.apply.fits L.count).1 ∧ ∀ k ∈ [k1, k2], ownCodesFit L.count (ownShape v P (L.ownsOf v.event)[k])
 
 theorem pair_codes {P : List AnySite} {senv : StepEnv L (shapes v)} {S : SymState v} {t1 t2 : Term}
     {k1 k2 : OwnPlace L v.event} {o : PairOut} (henc : encodePair L T P v senv S t1 t2 k1 k2 = .ok o) :

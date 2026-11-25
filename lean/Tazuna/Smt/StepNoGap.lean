@@ -420,10 +420,11 @@ structure QueryOk (L : Layout) (P : List AnySite) (ds : List (String × Declared
 def OwnOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite) (v : ServiceV)
     (key : OwnKey) : Prop :=
   match ownShape v P key with
-  | .command x Γ site => CommandOk L P ds H v x ∧ Got L (.tuple Γ) ∧ SiteCodeOk L P ds H ⟨Γ, _, site⟩ ∧
+  | some (.command x Γ site) => CommandOk L P ds H v x ∧ Got L (.tuple Γ) ∧ SiteCodeOk L P ds H ⟨Γ, _, site⟩ ∧
       Avail L Ty.nil ∧ Avail L (Ty.result Ty.nil x.rejection)
-  | .query x Γ site => QueryOk L P ds H v x ∧ Got L (.tuple Γ) ∧ SiteCodeOk L P ds H ⟨Γ, _, site⟩
-  | _ => True
+  | some (.query x Γ site) => QueryOk L P ds H v x ∧ Got L (.tuple Γ) ∧ SiteCodeOk L P ds H ⟨Γ, _, site⟩
+  | some (.unreached _) => True
+  | none => False
 
 /-- Everything a step of the service looks up is in the layout, and every code it applies has no gap behind it. -/
 structure ServiceGot (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite)
@@ -583,11 +584,14 @@ theorem encodeOwnKind_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
   have ho := h.owns key hk
   unfold OwnOk at ho
   unfold encodeOwnKind
-  split
-  · trivial
-  · trivial
-  · rename_i x Γ site hsh
-    rw [hsh] at ho
+  cases hsh : ownShape v P key with
+  | none => rw [hsh] at ho; exact ho.elim
+  | some sh =>
+  rw [hsh] at ho
+  refine sound_bind_ok rfl ?_
+  cases sh with
+  | unreached _ => trivial
+  | command x Γ site =>
     obtain ⟨hx, hg, hs, hnil, hans⟩ := ho
     refine sound_bind (commandCode_sound hx) fun _ ⟨h1, h2, h3⟩ => ?_
     refine sound_bind sound_need_limit fun _ _ => ?_
@@ -595,8 +599,7 @@ theorem encodeOwnKind_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
     refine sound_bind (capturedCodes_sound (P := P) (ds := ds) (H := H) hg _ _) fun σ hσ => ?_
     exact sound_bind (encodeOwnCommand_sound h T senv hx h1 h2 h3 site hs hnil hans hσ happ _ _ _ _ _ _ _ _ _)
       fun _ _ => trivial
-  · rename_i x Γ site hsh
-    rw [hsh] at ho
+  | query x Γ site =>
     obtain ⟨hx, hg, hs⟩ := ho
     refine sound_bind (queryCode_sound hx) fun _ ⟨h1, h2⟩ => ?_
     refine sound_bind sound_need_limit fun _ _ => ?_
@@ -1004,7 +1007,7 @@ theorem ownCommand_mem {v : ServiceV} {n : String} {i j : Ty} {x : CommandV v.re
 
 theorem ownShape_command {v : ServiceV} {P : List AnySite} {key : OwnKey} {x : CommandV v.records v.event v.caller}
     {Γ : List Ty} {site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))}
-    (h : ownShape v P key = .command x Γ site) :
+    (h : ownShape v P key = some (.command x Γ site)) :
     x ∈ v.commands ∧ (⟨Γ, _, site⟩ : AnySite) ∈ P ∧
       ∃ e n c i a, key = .command e n c i x.rejection a ∧ Γ = a.Γ ∧ site.site = a.site := by
   cases key with
@@ -1053,7 +1056,7 @@ theorem ownShape_command {v : ServiceV} {P : List AnySite} {key : OwnKey} {x : C
         cases sf <;> (dsimp only at h; cases h)
 
 theorem ownShape_query {v : ServiceV} {P : List AnySite} {key : OwnKey} {x : QueryV v.records v.caller}
-    {Γ : List Ty} {site : Site Γ (Ty.fn [x.output] (.list v.event))} (h : ownShape v P key = .query x Γ site) :
+    {Γ : List Ty} {site : Site Γ (Ty.fn [x.output] (.list v.event))} (h : ownShape v P key = some (.query x Γ site)) :
     x ∈ v.queries ∧ (⟨Γ, _, site⟩ : AnySite) ∈ P ∧
       ∃ e n c i o a, key = .query e n c i o a ∧ Γ = a.Γ ∧ site.site = a.site := by
   cases key with
@@ -1197,6 +1200,38 @@ theorem own_root {key : OwnKey} (hk : key ∈ (Layout.kindsOf c.program.defs.par
     exact hfin hs' rfl
   · cases hk
 
+/-- Every own kind of a checked service's layout names a command or query the service lists: the kinds come from the
+handles its sends can name, which check's unknownHandle rule compares with what it lists. -/
+theorem ownShape_some {key : OwnKey} (hk : key ∈ (Layout.kindsOf c.program.defs.parts v).owns) (P : List AnySite) :
+    ownShape v P key ≠ none := by
+  have chk := c.checked v hv
+  simp only [Layout.kindsOf] at hk
+  rw [mem_dedupBy ownKey_same_iff, List.mem_filter] at hk
+  obtain ⟨r, hr, hk⟩ := List.mem_flatMap.1 hk.1
+  obtain ⟨w, hw, hk⟩ := List.mem_flatMap.1 hk
+  obtain ⟨h, hh, hk⟩ := List.mem_flatMap.1 hk
+  have hl := chk.sends h (List.mem_flatMap.2 ⟨r, hr, List.mem_flatMap.2 ⟨w, hw, hh⟩⟩)
+  unfold ownKeys at hk
+  split at hk
+  · rename_i n e cc i j hkind hname htys
+    obtain ⟨s', -, rfl⟩ := List.mem_map.1 hk
+    simp only [ServiceV.lists, hname, hkind, htys, Bool.and_eq_true] at hl
+    obtain ⟨⟨hc⟩, ec⟩ := Option.isSome_iff_exists.1 hl.1
+    obtain ⟨⟨x, hx⟩, ex⟩ := Option.isSome_iff_exists.1 (ownCommand_isSome hl.2)
+    unfold ownShape
+    simp only [ec, ex]
+    split <;> simp
+  · rename_i n cc i o hkind hname htys
+    obtain ⟨e, -, hk⟩ := List.mem_flatMap.1 hk
+    obtain ⟨s', -, rfl⟩ := List.mem_map.1 hk
+    simp only [ServiceV.lists, hname, hkind, htys, Bool.and_eq_true] at hl
+    obtain ⟨⟨hc⟩, ec⟩ := Option.isSome_iff_exists.1 hl.1
+    obtain ⟨⟨x, hx⟩, ex⟩ := Option.isSome_iff_exists.1 (ownQuery_isSome hl.2)
+    unfold ownShape
+    simp only [ec, ex]
+    split <;> simp
+  · cases hk
+
 theorem ownOk_ofService {key : OwnKey} (hk : key ∈ (Layout.ofService c.program.defs v).ownsOf v.event) :
     OwnOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles v key := by
   have hkK : key ∈ (Layout.kindsOf c.program.defs.parts v).owns := by
@@ -1221,6 +1256,8 @@ theorem ownOk_ofService {key : OwnKey} (hk : key ∈ (Layout.ofService c.program
     exact ⟨queryOk_ofService hv hx, got_of_avail (avail_use c v (hu _ (by simp))) (by simpa [Ty.sorted] using hf.2.2.1),
       Site.code_ofService c hv _ hm (own_root hv hkK hm hsite)⟩
   · trivial
+  · rename_i hsh
+    exact ownShape_some hv hkK _ hsh
 
 omit hv in
 /-- A pending request's `on_answer` and `ensures` sites are ones its sender's effect function uses. -/

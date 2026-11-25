@@ -2883,11 +2883,11 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
     | a => fail s!"{repr a}"
 
 /-! An own effect's internal step, for `ownStep_encode`: the service lists the command `twice` and the query `next` above,
-and the layout has three own kinds, `twice`, `next` and `gone`, which the service does not list, and a fourth,
-`twice` answered at a site the program lacks, which no effect has and which must not stop the encoding. From the same state,
-the effect term is in turn alice's `twice 3` with 5 captured, her `next 3`, and her `gone 3`. The records, instance
-table, next id, fresh counter and new wire ids read from the model must be what `Step.runOwn` leaves for the effect,
-and must differ from what it leaves for the other kind's effect; `gone` must fault as `Step.runOwn` does. -/
+and the layout has two own kinds, `twice` and `next`, and a third, `twice` answered at a site the program lacks, which
+no effect has and which must not stop the encoding. From the same state, the effect term is in turn alice's `twice 3`
+with 5 captured, her `next 3`, and bob's `twice 3`. The records, instance table, next id, fresh counter and new wire
+ids read from the model must be what `Step.runOwn` leaves for the effect, and must differ from what it leaves for the
+other kind's effect; bob's, from a caller `twice` does not list, must fault as `Step.runOwn` does. -/
 
 def dispSvc : ServiceV := { twiceSvc with name := "o", queries := [nextQ] }
 
@@ -2897,16 +2897,15 @@ def dispSites : List AnySite := writeSites ++ [⟨[.int], _, answerFive⟩, ⟨[
 
 def twiceKey : OwnKey := .command .int "twice" .str .int .str ⟨answerFive.site, [.int]⟩
 def nextKey : OwnKey := .query .int "next" .str .int .int ⟨answerIsEvent.site, []⟩
-def goneKey : OwnKey := .command .int "gone" .str .int .str ⟨answerFive.site, [.int]⟩
 def deadKey : OwnKey := .command .int "twice" .str .int .str ⟨⟨"m", 77, 77, 0⟩, [.int]⟩
 
 /-- The service `o`'s layout, in a program that writes the `on_answer` sites the effects name, with the own kinds
-`twice`, `next` and `gone` added by hand: the effects are terms of the case, not of a function the service keeps, so
+`twice` and `next` added by hand: the effects are terms of the case, not of a function the service keeps, so
 the builder makes none of them. `dead` adds own kinds no handle makes. -/
 def dispLayoutOf (slots : Nat) (dead : List OwnKey := []) : Layout :=
   let L := svcLayout dispSvc slots (joinParts [siteParts answerFive, siteParts answerIsEvent,
     ⟨[], [], [Ty.nil, Ty.result Ty.nil .str, .tuple [.int], .tuple []], []⟩])
-  Layout.addTys (fun _ => slots) { L with owns := L.owns ++ [twiceKey, nextKey, goneKey] ++ dead } []
+  Layout.addTys (fun _ => slots) { L with owns := L.owns ++ [twiceKey, nextKey] ++ dead } []
 
 /-- v0..v5 the state, v6 the effect, v7 the records after, v8 the next id after, v9 the instance table after, v10 the
 fault, v11 the fresh counter after, then per new request slot its flag and id. -/
@@ -2955,11 +2954,11 @@ def dispCheck (solver : Solver) : IO Bool := do
     .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
   let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
   let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
-  let goneFx : OwnEffectV dispSvc.event := .command "gone" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("bob" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
   let cases : List (String × (Layout → Except Refusal Term) × OwnEffectV dispSvc.event × OwnEffectV dispSvc.event) :=
     [("twice", fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5], twiceFx, nextFx),
      ("next", fun L => ownT L nextKey (.str "alice") (.int 3) [], nextFx, twiceFx),
-     ("gone", fun L => ownT L goneKey (.str "alice") (.int 3) [.int 5], goneFx, twiceFx)]
+     ("bob's twice", fun L => ownT L twiceKey (.str "bob") (.int 3) [.int 5], bobFx, twiceFx)]
   let mut ok := true
   for (name, effect, fx, other) in cases do
     match dispScriptOf 3 effect goal [deadKey] with
@@ -3004,7 +3003,7 @@ def dispCheck (solver : Solver) : IO Bool := do
 and 1, in the state of the case above. With two internal steps both run, and the records, instance table, next id,
 fresh counter and new wire ids read from the model must be what `Step.settleFrom` leaves, and must differ from what
 the first internal step alone leaves. With one internal step the occupied place 1 is past the bound: the model must
-name `Fault.cascadeLimit`. A queue whose head is `gone 3` faults there, and the step after it does not run. -/
+name `Fault.cascadeLimit`. A queue whose head is bob's `twice 3` faults there, and the step after it does not run. -/
 
 /-- Names each term the cascade's fault reads by a fresh variable, so the fault is read from the solver's values instead
 of evaluating the terms in Lean, which unfolds their shared subterms into trees. -/
@@ -3087,14 +3086,14 @@ def cascadeCheck (solver : Solver) : IO Bool := do
     .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
   let twiceT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str "alice") (.int 3) [.int 5]
   let nextT : Layout → Except Refusal Term := fun L => ownT L nextKey (.str "alice") (.int 3) []
-  let goneT : Layout → Except Refusal Term := fun L => ownT L goneKey (.str "alice") (.int 3) [.int 5]
+  let bobT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str "bob") (.int 3) [.int 5]
   let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
   let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int ("alice" : String) (3 : Int) (answerIsEvent.fn ())
-  let goneFx : OwnEffectV dispSvc.event := .command "gone" .str .int .str ("alice" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str ("bob" : String) (3 : Int) (answerFive.fn ((5 : Int), ()))
   let cases : List (String × Nat × List (Layout → Except Refusal Term) × List (OwnEffectV dispSvc.event)) :=
     [("two internal steps", 2, [twiceT, nextT], [twiceFx, nextFx]),
      ("one internal step", 1, [twiceT, nextT], [twiceFx, nextFx]),
-     ("a faulting head", 2, [goneT, twiceT], [goneFx, twiceFx])]
+     ("a faulting head", 2, [bobT, twiceT], [bobFx, twiceFx])]
   let mut ok := true
   for (name, fuel, effects, fxs) in cases do
     match cascadeScriptOf 3 fuel effects goal with
@@ -3800,7 +3799,7 @@ def sizeRows : List (String × (Nat → Except String Script)) :=
    ("answer", fun k => (·.1) <$> answerMScriptOf k []),
    ("clock", fun k => (·.1) <$> clockFireScript 2 k []),
    ("own command step", fun k => (·.1) <$> internalScriptOf k []),
-   ("own effect step (3 kinds)", fun k => (·.1) <$> dispScriptOf k queue[0]! []),
+   ("own effect step (2 kinds)", fun k => (·.1) <$> dispScriptOf k queue[0]! []),
    ("cascade of 2", fun k => (·.1) <$> cascadeTermsOf k 2 queue []),
    ("cascade at 3 slots (bound, not slots)", fun k => (·.1) <$> cascadeTermsOf 3 k queue []),
    ("event with a cascade of 1", fun k => (·.1) <$> cascEventTermsOf 1 k []),

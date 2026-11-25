@@ -37,8 +37,8 @@ def _root_.Tazuna.Ir.RequestShape.key {e : Ty} (sh : RequestShape e) : EffectKey
     ⟨sh.onAnswer.site, sh.answerΓ⟩⟩
 
 /-- The own kinds of effect that a command or query handle makes, of each event type `es` lists for a query, one per
-`on_answer` site of its type. A handle of a command the service does not list still gets its kinds: its effects run
-as `Fault.invalidEffect`, and the encoder needs their variant to say so. -/
+`on_answer` site of its type. Check rejects a send of a command or query the service does not list
+(`Checked.sends`), so every kind of a checked service's layout names one it lists. -/
 def ownKeys (es : List Ty) (P : List AnySite) (h : HandleSite) : List OwnKey :=
   match h.kind, h.name, h.types with
   | "command", some n, [_, e, c, i, j] =>

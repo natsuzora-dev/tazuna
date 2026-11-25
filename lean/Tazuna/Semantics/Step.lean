@@ -92,7 +92,8 @@ inductive Fault where
   | answerUnmatched
   /-- An effect asked for what its target does not accept: a command or query of the service's own that was Invalid
   (the rules broken, as Invalid names them) or that the service does not list (`service`), or an external's command
-  or query that no external of the spec lists with these types (`declared`). -/
+  or query that no external of the spec lists with these types (`declared`). Check's unknownHandle rule keeps the
+  last two out of checked specs; the step is defined for every service, so they stay faults. -/
   | invalidEffect (name : String) (rules : List String)
 
 inductive Outcome where

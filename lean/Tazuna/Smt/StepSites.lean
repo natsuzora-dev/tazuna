@@ -15,16 +15,16 @@ open Tazuna.Ir
 section
 variable {v : ServiceV}
 
-/-- Whether the functions of the command or query an own kind runs fit their slots; a kind that runs none asks
-nothing. -/
-def OwnShape.CodesFit (S : Ty → Nat) : OwnShape v → Prop
-  | .command x _ _ => (x.accepts.fits S).1 ∧ (x.decide.fits S).1 ∧ (x.ensures.fits S).1
-  | .query x _ _ => (x.accepts.fits S).1 ∧ (x.resolve.fits S).1
-  | .unlisted _ | .unreached _ => True
+/-- Whether the functions of the command or query an own kind runs fit their slots; a kind that runs none, or that
+the encoder refuses, asks nothing. -/
+def ownCodesFit (S : Ty → Nat) : Option (OwnShape v) → Prop
+  | some (.command x _ _) => (x.accepts.fits S).1 ∧ (x.decide.fits S).1 ∧ (x.ensures.fits S).1
+  | some (.query x _ _) => (x.accepts.fits S).1 ∧ (x.resolve.fits S).1
+  | some (.unreached _) | none => True
 
 /-- Whether every own kind of the layout runs functions that fit, wherever the cascade may run. -/
 def SitesFit (L : Layout) (P : List AnySite) (v : ServiceV) : Prop :=
-  v.bounds.cascadeNat ≠ 0 → ∀ key ∈ L.ownsOf v.event, (ownShape v P key).CodesFit L.count
+  v.bounds.cascadeNat ≠ 0 → ∀ key ∈ L.ownsOf v.event, ownCodesFit L.count (ownShape v P key)
 
 end
 
@@ -48,11 +48,12 @@ variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV} {P : List A
 theorem ownKind_codes {nR : Nat} {records now fresh n q eff : Term} {xs : PerMachine (fun _ => Term) v.machines}
     {j : Nat} {key : OwnKey} {k : Encoded (OwnKindStep v)}
     (h : encodeOwnKind L T P v shs senv nR apply records now fresh n q eff xs j key = .ok k) :
-    Holds M k.codes ↔ (ownShape v P key).CodesFit L.count := by
+    Holds M k.codes ↔ ownCodesFit L.count (ownShape v P key) := by
   unfold encodeOwnKind at h
-  generalize ownShape v P key = sh at h ⊢
+  obtain ⟨sh, hsh, h⟩ := bind_ok.1 h
+  rw [need_ok.1 hsh]
   cases sh with
-  | unlisted _ | unreached _ => cases pure_ok.1 h; exact iff_of_true holds_tt trivial
+  | unreached _ => cases pure_ok.1 h; exact iff_of_true holds_tt trivial
   | command x Γ site =>
     obtain ⟨⟨cc, cx⟩, hcc, h⟩ := bind_ok.1 h
     obtain ⟨_, -, h⟩ := bind_ok.1 h
@@ -73,13 +74,13 @@ theorem ownKind_codes {nR : Nat} {records now fresh n q eff : Term} {xs : PerMac
 theorem ownStep_codes {records now fresh n q eff : Term} {xs : PerMachine (fun _ => Term) v.machines}
     {o : OwnStepOut v} {c cx : Term}
     (h : encodeOwnStep L T P v shs senv apply records now fresh n q eff xs = .ok ⟨o, c, cx⟩) :
-    Holds M cx ↔ ∀ key ∈ L.ownsOf v.event, (ownShape v P key).CodesFit L.count := by
+    Holds M cx ↔ ∀ key ∈ L.ownsOf v.event, ownCodesFit L.count (ownShape v P key) := by
   unfold encodeOwnStep at h
   obtain ⟨ks, hks, h⟩ := bind_ok.1 h
   cases pure_ok.1 h
   rw [holds_allT, List.forall_mem_map,
-    ← forall_zipIdx_iff (fun key => (ownShape v P key).CodesFit L.count) (L.ownsOf v.event)]
-  refine (forall2_forall_iff (p := fun kj => (ownShape v P kj.1).CodesFit L.count)
+    ← forall_zipIdx_iff (fun key => ownCodesFit L.count (ownShape v P key)) (L.ownsOf v.event)]
+  refine (forall2_forall_iff (p := fun kj => ownCodesFit L.count (ownShape v P kj.1))
     (q := fun y => Holds M y.2.codes) ?_ (mapM_ok _ _ _ hks)).symm
   intro kj y hy
   obtain ⟨r, hr, hy⟩ := bind_ok.1 hy
@@ -91,7 +92,7 @@ fit. -/
 theorem settle_codes {dflt now : Term} :
     (fuel k : Nat) → (S : List OwnSlot) → (t : StepTerms v) → {o : SettleOut v} → {c cx : Term} →
     encodeSettle L T P v shs senv apply dflt now fuel k S t = .ok ⟨o, c, cx⟩ →
-    (Holds M cx ↔ (fuel ≠ 0 → ∀ key ∈ L.ownsOf v.event, (ownShape v P key).CodesFit L.count))
+    (Holds M cx ↔ (fuel ≠ 0 → ∀ key ∈ L.ownsOf v.event, ownCodesFit L.count (ownShape v P key)))
   | 0, _, _, _, _, _, _, h => by
     simp only [encodeSettle] at h
     cases pure_ok.1 h
