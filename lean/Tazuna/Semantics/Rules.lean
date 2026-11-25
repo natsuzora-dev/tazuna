@@ -307,16 +307,22 @@ def _root_.Tazuna.Ir.Expr.lit? {G Γ : List Ty} {t : Ty} : Expr G Γ t → Optio
   | .str s => some s
   | _ => none
 
+/-- The handle `command`, `query`, `external_command` or `external_query` makes with the name `name`. -/
+def handleOf (p : Prim) (ts : List Ty) (name : Option String) : Option HandleSite :=
+  match p with
+  | .externalCommand => some ⟨"external command", name, ts⟩
+  | .externalQuery => some ⟨"external query", name, ts⟩
+  | .command => some ⟨"command", name, ts⟩
+  | .query => some ⟨"query", name, ts⟩
+  | _ => none
+
 /-- The handle a call makes, when it calls `command`, `query`, `external_command` or `external_query`. -/
 def handleAt {G Γ : List Ty} {ps : List Ty} {r : Ty} (f : Expr G Γ (.fn ps r)) (args : Exprs G Γ ps) : Option HandleSite :=
   let name : Option String := match args with
     | .cons e _ => e.lit?
     | .nil => none
   match f with
-  | .prim .externalCommand ts _ => some ⟨"external command", name, ts⟩
-  | .prim .externalQuery ts _ => some ⟨"external query", name, ts⟩
-  | .prim .command ts _ => some ⟨"command", name, ts⟩
-  | .prim .query ts _ => some ⟨"query", name, ts⟩
+  | .prim p ts _ => handleOf p ts name
   | _ => none
 
 section
@@ -325,11 +331,15 @@ variable {G : List Ty}
 mutual
 /-- The handles an expression makes, nested functions included. -/
 def Expr.handles {Γ : List Ty} {t : Ty} : Expr G Γ t → List HandleSite
-  | .int _ | .str _ | .var _ | .global _ | .prim .. => []
+  | .int _ | .str _ | .var _ | .global _ => []
+  -- A handle built-in passed as a value names whatever its caller gives it, which check cannot see.
+  | .prim p ts _ => (handleOf p ts none).toList
   | .ctor _ es | .tuple es => Exprs.handles es
   | .field _ _ _ e | .index e _ | .not e | .neg e | .lam e => Expr.handles e
   | .update e p => Expr.handles e ++ Patch.handles p
-  | .call f args => (handleAt f args).toList ++ Expr.handles f ++ Exprs.handles args
+  | .call f args => match handleAt f args with
+    | some h => h :: Exprs.handles args
+    | none => Expr.handles f ++ Exprs.handles args
   | .let_ e body | .bin _ e body => Expr.handles e ++ Expr.handles body
   | .case e cs _ => Expr.handles e ++ Clauses.handles cs
   | .list items => Items.handles items
