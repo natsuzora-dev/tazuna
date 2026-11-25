@@ -200,29 +200,33 @@ theorem reaction_parts {P : List AnySite} (hP : SitesUnique P) (name : String) {
     obtain ⟨o1, o2⟩ := ownSlots_rel _ sv2 _ hS2 hh2 hq
     exact ⟨by simpa using r1, r2, o1, o2⟩
 
-/-- T2 for the reactions' effects: wherever the condition holds, the pending slots hold, where occupied, the requests
-among the reactions' effects in the step's order at the ids from `n0`, and the own slots the own commands and queries
-at the places from `q0`; each term after them denotes the id or place after them. -/
-theorem reactions_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape e)}
+/-- The reactions' effects: the condition holds exactly when every reaction's kept source fits and its application
+to the event fits, and wherever it holds the pending slots hold, where occupied, the requests among the reactions'
+effects in the step's order at the ids from `n0`, and the own slots the own commands and queries at the places from
+`q0`; each term after them denotes the id or place after them. -/
+theorem reactions_encode {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape e)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
     {dE nE dP nP : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (recs : r.den0) (tnow : Int) (ev : e.den0) (hrd : r.isData = true) (hed : e.isData = true)
     {records now evT : Term} (hrec : RelV L r (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hev : RelV L e (Ty.up _ hed ev) (evT.denote M)) :
-    (xs : List (ReactionV r e)) → (∀ x ∈ xs, x.Reach P) → {n q : Term} → {n0 q0 : Nat} → n.denote M = .int n0 →
-    q.denote M = .int q0 → {news : List Slot} → {n' : Term} → {owns : List Slot} → {q' c : Term} →
-    encodeReactions L shs ds dE dP xs records now evT n q = .ok (news, n', owns, q', c) → Holds M c →
-    n'.denote M = .int ((n0 + (Step.reqsOf (reactionEffects xs ev recs tnow)).length : Nat) : Int) ∧
+    (xs : List (ReactionV r e)) → (∀ x ∈ xs, x.Reach P) → {n q : Term} → {news : List Slot} → {n' : Term} →
+    {owns : List Slot} → {q' c : Term} →
+    encodeReactions L shs ds dE dP xs records now evT n q = .ok (news, n', owns, q', c) →
+    (Holds M c ↔ ∀ x ∈ xs, (x.react.fits L.count).1 ∧ x.react.appFits L.count (.inl (recs, tnow, ()), ev, ())) ∧
+    (∀ {n0 q0 : Nat}, n.denote M = .int n0 → q.denote M = .int q0 → Holds M c →
+      n'.denote M = .int ((n0 + (Step.reqsOf (reactionEffects xs ev recs tnow)).length : Nat) : Int) ∧
       NewsRel M L shs ds news (Step.reqsOf (reactionEffects xs ev recs tnow)) n0 ∧
       q'.denote M = .int ((q0 + (Step.queuedOf (reactionEffects xs ev recs tnow)).length : Nat) : Int) ∧
-      OwnRel M L owns (Step.queuedOf (reactionEffects xs ev recs tnow)) q0
-  | [], _, n, q, n0, q0, hn, hq, news, n', owns, q', c, henc, _ => by
+      OwnRel M L owns (Step.queuedOf (reactionEffects xs ev recs tnow)) q0)
+  | [], _, n, q, news, n', owns, q', c, henc => by
     simp only [encodeReactions, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-    obtain ⟨rfl, rfl, rfl, rfl, -⟩ := henc
-    exact ⟨by simpa using hn, ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩,
-      by simpa using hq, ownRel_nil q0⟩
-  | x :: xs, hreach, n, q, n0, q0, hn, hq, news, n', owns, q', c, henc, hc => by
+    obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := henc
+    exact ⟨by simp [holds_tt], fun hn hq _ => ⟨by simpa using hn,
+      ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩, by simpa using hq,
+      ownRel_nil _⟩⟩
+  | x :: xs, hreach, n, q, news, n', owns, q', c, henc => by
     obtain ⟨⟨rc, c0⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨ctxT, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨cx, h3, henc⟩ := bind_ok.1 henc
@@ -235,6 +239,24 @@ theorem reactions_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pendi
     obtain ⟨dflt, -, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨rest, n'', orest, q'', c2⟩, h10, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
+    have IH := reactions_encode hP hshs hE hPE recs tnow ev hrd hed hrec hnow hev xs
+      (fun y hy => hreach y (by simp [hy])) h10
+    refine ⟨?_, fun {n0 q0} hn hq hc => ?_⟩
+    · have e0 := (x.react.code_exact (M := M) h1).1
+      have e1 : ∀ hc0 : Holds M c0, (Holds M c1 ↔ x.react.appFits L.count (.inl (recs, tnow, ()), ev, ())) := fun hc0 =>
+        x.react.app_exact h1 hc0 (fun t ht => by
+          simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
+          rcases ht with rfl | rfl
+          · exact ofTerm_notFn (need_ok.1 h3)
+          · exact ofTerm_notFn (need_ok.1 h4)) _ _
+          (react_args x recs tnow ev hrd hed hrec hnow hev h2 (need_ok.1 h3) (need_ok.1 h4)) h5
+      rw [holds_andT, holds_andT, e0, IH.1]
+      simp only [List.mem_cons, forall_eq_or_imp]
+      constructor
+      · rintro ⟨p0, p1, p2⟩
+        exact ⟨⟨p0, (e1 (e0.2 p0)).1 p1⟩, p2⟩
+      · rintro ⟨⟨p0, p1⟩, p2⟩
+        exact ⟨p0, (e1 (e0.2 p0)).2 p1, p2⟩
     obtain ⟨hc0, hc12⟩ := (holds_andT _ _).1 hc
     obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc12
     have hl := x.react.code_apply h1 hc0 _ _ (react_args x recs tnow ev hrd hed hrec hnow hev h2 (need_ok.1 h3)
@@ -243,8 +265,7 @@ theorem reactions_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pendi
     obtain ⟨sv, hS, -, -, hh⟩ := list_view hl h7
     have hr1 := ReactionV.reach_effectsAt P x (hreach x (by simp)) ev recs tnow
     obtain ⟨hn1, hnews1, hq1, hown1⟩ := reaction_parts hP x.name hshs h9 hE hPE (need_ok.1 h8) dflt (effs := x.effectsAt ev recs tnow) hS hh hr1 hn hq
-    obtain ⟨hn2, hnews2, hq2, hown2⟩ := reactions_rel hP hshs hE hPE recs tnow ev hrd hed hrec hnow hev xs
-      (fun y hy => hreach y (by simp [hy])) hn1 hq1 h10 hc2
+    obtain ⟨hn2, hnews2, hq2, hown2⟩ := IH.2 hn1 hq1 hc2
     have hfl : ∀ a b : List (Sender × EffectV e), Step.reqsOf (a ++ b) = Step.reqsOf a ++ Step.reqsOf b ∧
         Step.queuedOf (a ++ b) = Step.queuedOf a ++ Step.queuedOf b := fun _ _ => by
       simp [Step.reqsOf, Step.queuedOf, List.filter_append]
@@ -253,54 +274,6 @@ theorem reactions_rel {P : List AnySite} (hP : SitesUnique P) {shs : List (Pendi
     refine ⟨?_, newsRel_append hnews1 hnews2, ?_, ownRel_append hown1 hown2⟩
     · rw [hn2, List.length_append]; congr 2; omega
     · rw [hq2, List.length_append]; congr 2; omega
-
-end
-
-section
-variable {L : Layout} {M : Model} {r e : Ty}
-
-/-- The reactions' condition is exact: it holds exactly when every reaction's kept source fits and its application to
-the event fits. -/
-theorem reactions_exact {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {dE dP : Nat}
-    (recs : r.den0) (tnow : Int) (ev : e.den0) (hrd : r.isData = true) (hed : e.isData = true)
-    {records now evT : Term} (hrec : RelV L r (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    (hev : RelV L e (Ty.up _ hed ev) (evT.denote M)) :
-    (xs : List (ReactionV r e)) → {n q : Term} → {news : List Slot} → {n' : Term} → {owns : List Slot} →
-    {q' c : Term} → encodeReactions L shs ds dE dP xs records now evT n q = .ok (news, n', owns, q', c) →
-    (Holds M c ↔ ∀ x ∈ xs, (x.react.fits L.count).1 ∧ x.react.appFits L.count (.inl (recs, tnow, ()), ev, ()))
-  | [], n, q, news, n', owns, q', c, henc => by
-    simp only [encodeReactions, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-    obtain ⟨-, -, -, -, rfl⟩ := henc
-    simp [holds_tt]
-  | x :: xs, n, q, news, n', owns, q', c, henc => by
-    obtain ⟨⟨rc, c0⟩, h1, henc⟩ := bind_ok.1 henc
-    obtain ⟨ctxT, h2, henc⟩ := bind_ok.1 henc
-    obtain ⟨cx, h3, henc⟩ := bind_ok.1 henc
-    obtain ⟨evc, h4, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨l, c1⟩, h5, henc⟩ := bind_ok.1 henc
-    obtain ⟨lt, h6, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨d, nl, dt⟩, h7, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨dk, nk⟩, h8, henc⟩ := bind_ok.1 henc
-    obtain ⟨js, h9, henc⟩ := bind_ok.1 henc
-    obtain ⟨dflt, -, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨rest, n'', orest, q'', c2⟩, h10, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    have e0 := (x.react.code_exact (M := M) h1).1
-    have e1 : ∀ hc0 : Holds M c0, (Holds M c1 ↔ x.react.appFits L.count (.inl (recs, tnow, ()), ev, ())) := fun hc0 =>
-      x.react.app_exact h1 hc0 (fun t ht => by
-        simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
-        rcases ht with rfl | rfl
-        · exact ofTerm_notFn (need_ok.1 h3)
-        · exact ofTerm_notFn (need_ok.1 h4)) _ _
-        (react_args x recs tnow ev hrd hed hrec hnow hev h2 (need_ok.1 h3) (need_ok.1 h4)) h5
-    have e2 := reactions_exact recs tnow ev hrd hed hrec hnow hev xs h10
-    rw [holds_andT, holds_andT, e0, e2]
-    simp only [List.mem_cons, forall_eq_or_imp]
-    constructor
-    · rintro ⟨p0, p1, p2⟩
-      exact ⟨⟨p0, (e1 (e0.2 p0)).1 p1⟩, p2⟩
-    · rintro ⟨⟨p0, p1⟩, p2⟩
-      exact ⟨p0, (e1 (e0.2 p0)).2 p1, p2⟩
 
 end
 

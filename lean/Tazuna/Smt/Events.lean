@@ -418,15 +418,16 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             rw [up_app2 v.records_data v.event_data v.apply.ht] at hr'
             rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
           have e2 : ∀ hca : Holds M ca, (Holds M cm ↔ ∀ sm ∈ s.machines, machineFits L.count sm recs' s.now ev) :=
-            fun hca => machines_exact (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines outs hms
-              hor h5
+            fun hca => (machines_encode (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines outs hms
+              hor h5).1
           have e3 : ∀ hca : Holds M ca, (Holds M cr ↔ ∀ x ∈ v.reactions, (x.react.fits L.count).1 ∧
               x.react.appFits L.count (.inl (recs', s.now, ()), ev, ())) :=
-            fun hca => reactions_exact recs' s.now ev v.records_data v.event_data (hrt hca) hnow hevT v.reactions h7
+            fun hca => (reactions_encode chk.sites hshs senv.hE senv.hPE recs' s.now ev v.records_data v.event_data
+              (hrt hca) hnow hevT v.reactions chk.reactions h7).1
           have e4 : ∀ (hca : Holds M ca) (hcm : Holds M cm), (Holds M c' ↔ eventsFit L.count T (Step.react T s ev).1 evs) :=
             fun hca hcm => by
-              have hrel := machines_event (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines
-                outs hms hor h5 hcm
+              have hrel := (machines_encode (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines
+                outs hms hor h5).2 hcm
               have hrec' : RelV L v.records (Ty.up _ v.records_data recs')
                   ((Term.share (.ite f (Term.share rt) records)).denote M) := by
                 simpa [Term.denote, hf, Val.toBool] using hrt hca
@@ -491,8 +492,8 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
           rw [up_app2 v.records_data v.event_data v.apply.ht] at hr'
           have hrt : RelV L v.records (Ty.up _ v.records_data recs') ((Term.share rt).denote M) := by
             rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
-          have hrel := machines_event (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
-            (fun m hm => (chk.keys m hm).1) h5 hcm
+          have hrel := (machines_encode (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
+            (fun m hm => (chk.keys m hm).1) h5).2 hcm
           have hstarts := machines_starts (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
             chk.keys h5 hcm
           have hreach : ∀ effs ∈ s.machines.map (fun sm => (Step.machineStep T recs' s.now ev sm).2),
@@ -504,8 +505,8 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
           obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel chk.sites hshs senv v.machines _ _ hstarts hreach hn hq h6
           have hnews1' : NewsRel M L shs v.declared news (Step.reqsOf (startedBy T s recs' ev)) n0 := hnews1
           have hown1' : OwnRel M L oS (Step.queuedOf (startedBy T s recs' ev)) q0 := hown1
-          obtain ⟨hnR, hnews2, hqR, hown2⟩ := reactions_rel chk.sites hshs senv.hE senv.hPE recs' s.now ev v.records_data v.event_data hrt hnow hevT v.reactions
-            chk.reactions hnT hqT h7 hcr
+          obtain ⟨hnR, hnews2, hqR, hown2⟩ := (reactions_encode chk.sites hshs senv.hE senv.hPE recs' s.now ev
+            v.records_data v.event_data hrt hnow hevT v.reactions chk.reactions h7).2 hnT hqT hcr
           have hrec' : RelV L v.records (Ty.up _ v.records_data recs')
               ((Term.share (.ite f (Term.share rt) records)).denote M) := by
             simpa [Term.denote, hf, Val.toBool] using hrt

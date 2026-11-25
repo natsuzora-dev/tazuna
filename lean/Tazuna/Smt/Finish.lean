@@ -201,7 +201,7 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
         obtain ⟨sv, zs, hS, hw, hh, xs, hp, hq⟩ := hnews
         have ep := pending_exact hpend hS hw hh hp hq hpe
         have ei := invariants_exact v.invariants v.records_data hinvc hci0 recs2 f1 hi
-        have ek := instChecks_exact recs2 _ f1 hnow v.machines _ _ f2 hck
+        have ek := (instChecks_encode recs2 _ f1 hnow v.machines _ _ f2 (fun m hm => (chk.keys m hm).2) hck).1
         have hall : ∀ a2, Step.settleFrom T v.bounds.cascade.toNat 0 _ = .ok a2 ↔ a2 = _ := fun a2 => by
           rw [hr2 ps2 hps2]; exact ⟨fun h => by cases h; rfl, fun h => by rw [h]⟩
         simp only [hall, forall_eq]
@@ -255,7 +255,7 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
       obtain rfl := writes_unique hps1 hps1'
       obtain rfl := writes_unique hps2 (by simpa [hl1] using hps2')
       have hb := invariants_rel v.invariants v.records_data hfd hinvR recs2 f1 hi hci
-      have hbs := instChecks_rel recs2 a.state.now f1 hnow v.machines _ _ f2 (fun m hm => (chk.keys m hm).2) hck hck'
+      have hbs := (instChecks_encode recs2 a.state.now f1 hnow v.machines _ _ f2 (fun m hm => (chk.keys m hm).2) hck).2 hck'
       have hinvs : Step.invariants ({ a.state with records := recs2, machines := ms2, fresh := fr2,
                                                    pending := a.state.pending ++ ps1 ++ ps2,
                                                    nextId := a.state.nextId + ps1.length + ps2.length } : State v) =

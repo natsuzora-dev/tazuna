@@ -97,22 +97,6 @@ theorem machine_starts (m : MachineV r e) (hor : m.key.orderable = true)
   obtain ⟨hc0, hc1⟩ := (holds_andT _ _).1 hc
   exact (react_step (T := T) m hor h1 hc0 recs tnow ev hrec hnow hevT tbl htbl h2 hc1).2
 
-/-- T2 for one machine's reaction to an event: wherever the condition holds, its new table term denotes the
-instances after the step. -/
-theorem machine_event (m : MachineV r e) (hor : m.key.orderable = true)
-    (recs : r.den0) (tnow : Int) (ev : e.den0) {records now evT : Term}
-    (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    (hevT : RelV L e (Ty.up _ m.event_data ev) (evT.denote M))
-    (tbl : m.table.den0) {x : Term} (htbl : RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M))
-    {mo : ReactOut} {c : Term} (henc : encodeMachine L m x records now evT = .ok (mo, c)) (hc : Holds M c) :
-    ∃ tbl', RelV L m.table (Ty.up _ m.table_data tbl') (mo.table.denote M) ∧
-      instancesOf T m tbl' = (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).1.2 := by
-  obtain ⟨⟨rc, c0⟩, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨o, c1⟩, h2, henc⟩ := bind_ok.1 henc
-  cases pure_ok.1 henc
-  obtain ⟨hc0, hc1⟩ := (holds_andT _ _).1 hc
-  exact (react_step (T := T) m hor h1 hc0 recs tnow ev hrec hnow hevT tbl htbl h2 hc1).1
-
 end
 
 section
@@ -123,61 +107,6 @@ them. -/
 def instancesBroken (recs : v.records.den0) (tnow : Int) (sms : List (Step.MachineState v.records v.event)) :
     List String :=
   sms.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => Step.broken (m.invariants.fn (.inl (i.key, i.state, recs, tnow, ()), ()))
-
-/-- T2 for the machines' part of an event step: wherever the condition holds, the new tables denote the machines
-after the step. -/
-theorem machines_event (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
-    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
-    (hevT : RelV L v.event (Ty.up _ v.event_data ev) (evT.denote M)) :
-    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
-    (sms : List (Step.MachineState v.records v.event)) → (outs : PerMachine ReactOut ms) → {c : Term} →
-    MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.orderable = true) →
-    encodeMachines L ms xs records now evT = .ok (outs, c) → Holds M c →
-      MachinesRel M L T ms (outs.map (·.table)) (sms.map fun ms0 => (Step.machineStep T recs tnow ev ms0).1)
-  | [], .nil, [], outs, c, _, _, henc, _ => by
-    simp only [encodeMachines, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-    obtain ⟨rfl, -⟩ := henc
-    trivial
-  | m :: ms, .cons x xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc, hc => by
-    obtain ⟨⟨a, c1⟩, h1, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨as, c2⟩, h2, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-    subst hsm
-    obtain ⟨tbl', ht', hi'⟩ := machine_event (T := T) m (hor m (by simp)) recs tnow ev hrec hnow hevT tbl htbl h1 hc1
-    refine ⟨⟨tbl', ht', ?_⟩, machines_event recs tnow ev hrec hnow hevT ms xs sms as hrest
-      (fun m' hm => hor m' (by simp [hm])) h2 hc2⟩
-    rw [hi']; rfl
-  | [], .nil, _ :: _, _, _, h, _, _, _ | _ :: _, .cons _ _, [], _, _, h, _, _, _ => h.elim
-
-/-- The instance checks name the broken invariants of the machines the tables denote. -/
-theorem instChecks_rel (recs : v.records.den0) (tnow : Int) {records now : Term}
-    (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
-    (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
-    (sms : List (Step.MachineState v.records v.event)) → MachinesRel M L T ms xs sms →
-    (∀ m ∈ ms, m.key.ordered T = true) → {checks : PerMachine (List InstCheck) ms} → {c : Term} →
-    encodeInstChecks L T ms xs records now = .ok (checks, c) →
-    Holds M c → checksBroken L T M ms checks = instancesBroken recs tnow sms
-  | [], .nil, [], _, _, checks, c, henc, _ => by
-    simp only [encodeInstChecks, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-    obtain ⟨rfl, -⟩ := henc
-    rfl
-  | m :: ms, .cons x xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, checks, c, henc, hc => by
-    obtain ⟨⟨inv, c0⟩, h1, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨cs, c1⟩, h2, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    obtain ⟨hc0, hc12⟩ := (holds_andT _ _).1 hc
-    obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc12
-    subst hsm
-    have hinv := m.invariants.code_fn m.inv_data h1 hc0
-    have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
-    have hb := instBroken_eq m (hord m (by simp)) hinv recs tnow hrec' hnow tbl htbl h2 hc1
-    have ih := instChecks_rel recs tnow hrec hnow ms xs sms hrest (fun m' hm => hord m' (by simp [hm])) h3 hc2
-    simp only [checksBroken, List.flatMap_cons, instancesBroken] at ih ⊢
-    rw [hb]
-    exact congrArg _ ih
-  | [], .nil, _ :: _, h, _, _, _, _, _ | _ :: _, .cons _ _, [], h, _, _, _, _, _ => h.elim
 
 end
 
@@ -281,25 +210,30 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
 
-/-- The condition of one machine's reaction to an event is exact: it holds exactly when the machine's kept sources
-fit and its reaction fits (`react_exact`). -/
-theorem machine_exact (m : MachineV r e) (hor : m.key.orderable = true)
+/-- One machine's reaction to an event: the condition holds exactly when the machine's kept sources fit and its
+reaction fits (`react_exact`), and wherever it holds the new table term denotes the instances after the step. -/
+theorem machine_encode (m : MachineV r e) (hor : m.key.orderable = true)
     (recs : r.den0) (tnow : Int) (ev : e.den0) {records now evT : Term}
     (hrec : RelV L r (Ty.up _ m.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hevT : RelV L e (Ty.up _ m.event_data ev) (evT.denote M))
     (tbl : m.table.den0) {x : Term} (htbl : RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M))
     {mo : ReactOut} {c : Term} (henc : encodeMachine L m x records now evT = .ok (mo, c)) :
-    Holds M c ↔ ((m.instances.fits L.count).1 ∧ (m.on.fits L.count).1 ∧ (m.after.fits L.count).1 ∧
+    (Holds M c ↔ ((m.instances.fits L.count).1 ∧ (m.on.fits L.count).1 ∧ (m.after.fits L.count).1 ∧
         (m.effect.fits L.count).1) ∧
       (m.instances.appFits L.count (recs, ()) ∧
-        allFit (m.instances.fn (recs, ())) (keyFits L.count m (instancesOf T m tbl) recs tnow ev)) := by
+        allFit (m.instances.fn (recs, ())) (keyFits L.count m (instancesOf T m tbl) recs tnow ev))) ∧
+    (Holds M c → ∃ tbl', RelV L m.table (Ty.up _ m.table_data tbl') (mo.table.denote M) ∧
+      instancesOf T m tbl' = (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).1.2) := by
   have hpl := Ty.plain_of_orderable _ hor
   obtain ⟨⟨rc, c0⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨o, c1⟩, h2, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  rw [holds_andT, ← reactCode_exact (M := M) m h1]
-  exact ⟨fun ⟨hc0, hc1⟩ => ⟨hc0, (react_exact (T := T) m hpl h1 hc0 recs tnow ev hrec hnow hevT tbl htbl h2).1 hc1⟩,
-    fun ⟨hc0, p1⟩ => ⟨hc0, (react_exact (T := T) m hpl h1 hc0 recs tnow ev hrec hnow hevT tbl htbl h2).2 p1⟩⟩
+  refine ⟨?_, fun hc => ?_⟩
+  · rw [holds_andT, ← reactCode_exact (M := M) m h1]
+    exact ⟨fun ⟨hc0, hc1⟩ => ⟨hc0, (react_exact (T := T) m hpl h1 hc0 recs tnow ev hrec hnow hevT tbl htbl h2).1 hc1⟩,
+      fun ⟨hc0, p1⟩ => ⟨hc0, (react_exact (T := T) m hpl h1 hc0 recs tnow ev hrec hnow hevT tbl htbl h2).2 p1⟩⟩
+  · obtain ⟨hc0, hc1⟩ := (holds_andT _ _).1 hc
+    exact (react_step (T := T) m hor h1 hc0 recs tnow ev hrec hnow hevT tbl htbl h2 hc1).1
 
 end
 
@@ -323,42 +257,53 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
-/-- The condition of the machines' part of an event step is exact: it holds exactly when every machine's part fits. -/
-theorem machines_exact (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
+/-- The machines' part of an event step: the condition holds exactly when every machine's part fits, and wherever it
+holds the new tables denote the machines after the step. -/
+theorem machines_encode (recs : v.records.den0) (tnow : Int) (ev : v.event.den0) {records now evT : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hevT : RelV L v.event (Ty.up _ v.event_data ev) (evT.denote M)) :
     (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
     (sms : List (Step.MachineState v.records v.event)) → (outs : PerMachine ReactOut ms) → {c : Term} →
     MachinesRel M L T ms xs sms → (∀ m ∈ ms, m.key.orderable = true) →
     encodeMachines L ms xs records now evT = .ok (outs, c) →
-    (Holds M c ↔ ∀ sm ∈ sms, machineFits L.count sm recs tnow ev)
+    (Holds M c ↔ ∀ sm ∈ sms, machineFits L.count sm recs tnow ev) ∧
+    (Holds M c → MachinesRel M L T ms (outs.map (·.table)) (sms.map fun ms0 => (Step.machineStep T recs tnow ev ms0).1))
   | [], .nil, [], outs, c, _, _, henc => by
     simp only [encodeMachines, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-    obtain ⟨-, rfl⟩ := henc
-    simp [holds_tt]
+    obtain ⟨rfl, rfl⟩ := henc
+    exact ⟨by simp [holds_tt], fun _ => trivial⟩
   | m :: ms, .cons x xs, sm :: sms, outs, c, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hor, henc => by
     obtain ⟨⟨a, c1⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨as, c2⟩, h2, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     subst hsm
-    rw [holds_andT, machine_exact (T := T) m (hor m (by simp)) recs tnow ev hrec hnow hevT tbl htbl h1,
-      machines_exact recs tnow ev hrec hnow hevT ms xs sms as hrest (fun m' hm => hor m' (by simp [hm])) h2]
-    simp only [List.mem_cons, forall_eq_or_imp]
-    rfl
+    have E := machine_encode (T := T) m (hor m (by simp)) recs tnow ev hrec hnow hevT tbl htbl h1
+    have IH := machines_encode recs tnow ev hrec hnow hevT ms xs sms as hrest (fun m' hm => hor m' (by simp [hm])) h2
+    refine ⟨?_, fun hc => ?_⟩
+    · rw [holds_andT, E.1, IH.1]
+      simp only [List.mem_cons, forall_eq_or_imp]
+      rfl
+    · obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
+      obtain ⟨tbl', ht', hi'⟩ := E.2 hc1
+      refine ⟨⟨tbl', ht', ?_⟩, IH.2 hc2⟩
+      rw [hi']; rfl
   | [], .nil, _ :: _, _, _, h, _, _ | _ :: _, .cons _ _, [], _, _, h, _, _ => h.elim
 
-/-- The instance checks ask exactly that every machine's invariants fit at its instances. -/
-theorem instChecks_exact (recs : v.records.den0) (tnow : Int) {records now : Term}
+/-- The instance checks: the condition holds exactly when every machine's invariants fit at its instances, and
+wherever it holds the checks name the broken invariants of the machines the tables denote. -/
+theorem instChecks_encode (recs : v.records.den0) (tnow : Int) {records now : Term}
     (hrec : RelV L v.records (Ty.up _ v.records_data recs) (records.denote M)) (hnow : now.denote M = .int tnow) :
     (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
     (sms : List (Step.MachineState v.records v.event)) → MachinesRel M L T ms xs sms →
-    {checks : PerMachine (List InstCheck) ms} → {c : Term} → encodeInstChecks L T ms xs records now = .ok (checks, c) →
-    (Holds M c ↔ instChecksFit L.count recs tnow sms)
-  | [], .nil, [], _, checks, c, henc => by
+    (∀ m ∈ ms, m.key.ordered T = true) → {checks : PerMachine (List InstCheck) ms} → {c : Term} →
+    encodeInstChecks L T ms xs records now = .ok (checks, c) →
+    (Holds M c ↔ instChecksFit L.count recs tnow sms) ∧
+    (Holds M c → checksBroken L T M ms checks = instancesBroken recs tnow sms)
+  | [], .nil, [], _, _, checks, c, henc => by
     simp only [encodeInstChecks, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-    obtain ⟨-, rfl⟩ := henc
-    simp [instChecksFit, holds_tt]
-  | m :: ms, .cons x xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, checks, c, henc => by
+    obtain ⟨rfl, rfl⟩ := henc
+    exact ⟨by simp [instChecksFit, holds_tt], fun _ => rfl⟩
+  | m :: ms, .cons x xs, sm :: sms, ⟨⟨tbl, htbl, hsm⟩, hrest⟩, hord, checks, c, henc => by
     obtain ⟨⟨inv, c0⟩, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨cs, c1⟩, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨rest, c2⟩, h3, henc⟩ := bind_ok.1 henc
@@ -366,14 +311,24 @@ theorem instChecks_exact (recs : v.records.den0) (tnow : Int) {records now : Ter
     subst hsm
     have hrec' : RelV L v.records (Ty.up _ m.records_data recs) (records.denote M) := hrec
     have e0 := (m.invariants.code_exact (M := M) h1).1
-    simp only [instChecksFit]
-    rw [holds_andT, holds_andT, e0, instChecks_exact recs tnow hrec hnow ms xs sms hrest h3]
-    constructor
-    · rintro ⟨p0, p1, p2⟩
-      exact ⟨p0, (instInvariants_exact m h1 (e0.2 p0) recs tnow hrec' hnow tbl htbl h2).1 p1, p2⟩
-    · rintro ⟨p0, p1, p2⟩
-      exact ⟨p0, (instInvariants_exact m h1 (e0.2 p0) recs tnow hrec' hnow tbl htbl h2).2 p1, p2⟩
-  | [], .nil, _ :: _, h, _, _, _ | _ :: _, .cons _ _, [], h, _, _, _ => h.elim
+    have IH := instChecks_encode recs tnow hrec hnow ms xs sms hrest (fun m' hm => hord m' (by simp [hm])) h3
+    refine ⟨?_, fun hc => ?_⟩
+    · simp only [instChecksFit]
+      rw [holds_andT, holds_andT, e0, IH.1]
+      constructor
+      · rintro ⟨p0, p1, p2⟩
+        exact ⟨p0, (instInvariants_exact m h1 (e0.2 p0) recs tnow hrec' hnow tbl htbl h2).1 p1, p2⟩
+      · rintro ⟨p0, p1, p2⟩
+        exact ⟨p0, (instInvariants_exact m h1 (e0.2 p0) recs tnow hrec' hnow tbl htbl h2).2 p1, p2⟩
+    · obtain ⟨hc0, hc12⟩ := (holds_andT _ _).1 hc
+      obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc12
+      have hinv := m.invariants.code_fn m.inv_data h1 hc0
+      have hb := instBroken_eq m (hord m (by simp)) hinv recs tnow hrec' hnow tbl htbl h2 hc1
+      have ih := IH.2 hc2
+      simp only [checksBroken, List.flatMap_cons, instancesBroken] at ih ⊢
+      rw [hb]
+      exact congrArg _ ih
+  | [], .nil, _ :: _, h, _, _, _, _ | _ :: _, .cons _ _, [], h, _, _, _, _ => h.elim
 
 end
 
