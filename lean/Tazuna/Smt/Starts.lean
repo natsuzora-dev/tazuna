@@ -175,7 +175,7 @@ abbrev sentOf (m : MachineV r e) (insts : List (Step.Instance m)) (recs : r.den0
 /-- A machine's effects on an event: each key's, in the canonical order of the keys. -/
 theorem machineStep_effects (m : MachineV r e) (hpl : m.key.plain = true) (insts : List (Step.Instance m))
     (recs : r.den0) (tnow : Int) (ev : e.den0) :
-    (Step.machineStep T recs tnow ev ⟨m, insts⟩).2 =
+    (Step.machineStep T recs tnow ev m insts).2 =
       (Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (recs, ())))).flatMap
         fun k => (sentOf m insts recs tnow ev k).toList := by
   simp only [Step.machineStep, List.flatMap_map]

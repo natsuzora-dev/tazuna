@@ -1,6 +1,7 @@
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.Order
 import Tazuna.Semantics.Rules
+import Tazuna.Semantics.PerMachine
 
 /-! The step semantics of one service. A step takes one input line and yields exactly one outcome, the events it
 applied, the out lines and the next state. Inside a step the cascade runs to completion: each event is applied, then
@@ -32,6 +33,9 @@ structure Instance {r e : Ty} (m : MachineV r e) where
 /-- A machine with its live instances, in the canonical order of their keys. -/
 abbrev MachineState (r e : Ty) := (m : MachineV r e) × List (Instance m)
 
+/-- The live instances of each machine of `ms`, each machine's in the canonical order of their keys. -/
+abbrev Machines {r e : Ty} (ms : List (MachineV r e)) := PerMachine (fun m => List (Instance m)) ms
+
 /-- An out line: a request to an external, with the wire id its answer names in `to`. -/
 structure OutLine where
   id : Nat
@@ -56,7 +60,7 @@ open Step
 /-- What a service is between two inputs. -/
 structure State (v : ServiceV) where
   records : v.records.den0
-  machines : List (MachineState v.records v.event)
+  machines : Machines v.machines
   /-- Requests sent and not yet answered: a multiset. -/
   pending : Bag (Pending v.event)
   now : Int
@@ -120,7 +124,7 @@ namespace Step
 variable {v : ServiceV}
 
 def State.init (v : ServiceV) : State v :=
-  { records := v.init, machines := v.machines.map (⟨·, []⟩), pending := [], now := 0, fresh := 0, nextId := 0 }
+  { records := v.init, machines := PerMachine.ofFn (fun _ => []) v.machines, pending := [], now := 0, fresh := 0, nextId := 0 }
 
 /-- The timer `after` asks for at `now`: due after its delay, entering its state. -/
 def timerAt {st : Ty} (now : Int) : (Ty.option (Ty.timer st)).den0 → Option (Int × st.den0)
@@ -147,25 +151,32 @@ def reactKey {r e : Ty} (m : MachineV r e) (insts : List (Instance m)) (records 
 
 /-- A machine after an event: instances whose key left go, and each key `instances` lists reacts alone
 (`reactKey`), in the canonical order of the keys. The instances stay in that order, and so do their effects. -/
-def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) : MachineState r e →
-    MachineState r e × List (Sender × EffectV e)
-  | ⟨m, insts⟩ =>
-    let keys := Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (records, ())))
-    let rs := keys.map (reactKey m insts records now ev)
-    (⟨m, rs.map (·.1)⟩, rs.flatMap (·.2))
+def machineStep {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) (m : MachineV r e) (insts : List (Instance m)) :
+    List (Instance m) × List (Sender × EffectV e) :=
+  let keys := Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (records, ())))
+  let rs := keys.map (reactKey m insts records now ev)
+  (rs.map (·.1), rs.flatMap (·.2))
+
+/-- Every machine after an event, in order, and the effects they start, in that order. -/
+def reactMachines {r e : Ty} (records : r.den0) (now : Int) (ev : e.den0) :
+    {ms : List (MachineV r e)} → Machines ms → Machines ms × List (Sender × EffectV e)
+  | _, .nil => (.nil, [])
+  | _, .cons insts rest =>
+    let x := machineStep T records now ev _ insts
+    let y := reactMachines records now ev rest
+    (.cons x.1 y.1, x.2 ++ y.2)
 
 /-- One event: apply it, then let every machine and reaction react. -/
 def react (s : State v) (ev : v.event.den0) : State v × List (Sender × EffectV v.event) :=
   let records := v.apply.fn (s.records, ev, ())
-  let (machines, effs) := s.machines.foldl (fun (ms, effs) ms0 =>
-    let (m', es) := machineStep T records s.now ev ms0; (ms ++ [m'], effs ++ es)) ([], [])
-  let effs := effs ++ v.reactions.flatMap fun x => (x.effectsAt ev records s.now).map (.reaction x.name, ·)
-  ({ s with records, machines }, effs)
+  let x := reactMachines T records s.now ev s.machines
+  let effs := x.2 ++ v.reactions.flatMap fun x => (x.effectsAt ev records s.now).map (.reaction x.name, ·)
+  ({ s with records, machines := x.1 }, effs)
 
 /-- The broken invariants of the service and of every machine instance. -/
 def invariants (s : State v) : List String :=
   broken (v.invariants.fn (s.records, ())) ++
-    s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => broken (m.invariants.fn (.inl (i.key, i.state, s.records, s.now, ()), ()))
+    s.machines.toSigma.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i => broken (m.invariants.fn (.inl (i.key, i.state, s.records, s.now, ()), ()))
 
 /-- A step in progress: the state, the events applied and the out lines so far, and the own commands and queries
 waiting to run. -/
@@ -336,13 +347,13 @@ def fireFirst {r e : Ty} (m : MachineV r e) (records : r.den0) (now : Int) (d : 
 /-- One round over the machines in order: unless an earlier one fired (`done`), a machine's first instance with the
 deadline `d` fires. -/
 def fireMachines {r e : Ty} (records : r.den0) (now : Int) (d : Int) :
-    Bool → List (MachineState r e) → List (MachineState r e) × List (Sender × EffectV e) × Bool
-  | done, [] => ([], [], done)
-  | true, ms :: rest => let x := fireMachines records now d true rest; (ms :: x.1, x.2.1, true)
-  | false, ⟨m, insts⟩ :: rest =>
-    let y := fireFirst m records now d insts
+    Bool → {ms : List (MachineV r e)} → Machines ms → Machines ms × List (Sender × EffectV e) × Bool
+  | done, _, .nil => (.nil, [], done)
+  | true, _, .cons insts rest => let x := fireMachines records now d true rest; (.cons insts x.1, x.2.1, true)
+  | false, _, .cons insts rest =>
+    let y := fireFirst _ records now d insts
     let x := fireMachines records now d y.2.2 rest
-    (⟨m, y.1⟩ :: x.1, y.2.1 ++ x.2.1, x.2.2)
+    (.cons y.1 x.1, y.2.1 ++ x.2.1, x.2.2)
 
 /-- The deadlines of the timers due at `now`. -/
 def dues {r e : Ty} (machines : List (MachineState r e)) (now : Int) : List Int :=
@@ -354,7 +365,7 @@ fire. -/
 def fire (s : State v) : (fuel : Nat) → Option (State v × List (Sender × EffectV v.event))
   | 0 => none
   | fuel + 1 =>
-    match (dues s.machines s.now).min? with
+    match (dues s.machines.toSigma s.now).min? with
     | none => some (s, [])
     | some d =>
       let x := fireMachines s.records s.now d false s.machines

@@ -62,7 +62,7 @@ structure FinishOut (v : ServiceV) where
   settle : SettleOut v
   pending : Term
   invariants : List (Term × Term)
-  checks : PerMachine (List InstCheck) v.machines
+  checks : PerMachine (fun _ => List InstCheck) v.machines
 
 section
 variable (L : Layout) (T : List TypeDecl)
@@ -98,7 +98,7 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl)
   | some f => r = ⟨s0, .fault f, [], []⟩
   | none => match brokenIn M fo.invariants ++ checksBroken L T M v.machines fo.checks with
     | n :: _ => r = ⟨s0, .fault (.invariant n), [], []⟩
-    | [] => ∃ (recs : v.records.den0) (ms : List (Step.MachineState v.records v.event)) (fr : Nat)
+    | [] => ∃ (recs : v.records.den0) (ms : Step.Machines v.machines) (fr : Nat)
         (evs : List v.event.den0) (ps : List (Step.Pending v.event)),
         r = ⟨{ a.state with records := recs, machines := ms, fresh := fr, pending := a.state.pending ++ ps,
                             nextId := a.state.nextId + ps.length },
@@ -273,20 +273,13 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
         · simp [hl1, hl2]
         · rw [f4]; simp [hl1, hl2, Nat.add_assoc]
 
-/-- The machines of a state that keeps the step invariant reach the program's sites. -/
-theorem _root_.Tazuna.Ir.Step.Inv.machinesReach {P : List AnySite} {s : State v} (hinv : Step.Inv P s) : ∀ m ∈ v.machines, m.Reach P := by
-  intro m hm
-  rw [← hinv.machinesOf] at hm
-  obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 hm
-  exact hinv.machines sm hsm
-
 /-- What `finish_encode` asks of a list of events' result besides the terms: the step invariant and a queue of own
 effects that reach the program, which `applyEvents` keeps. -/
-theorem applyEvents_ok {P : List AnySite} (hvx : ∀ x ∈ v.reactions, x.Reach P) (a : Step.Acc v) (hown : a.own = [])
+theorem applyEvents_ok {P : List AnySite} (hv : v.Reach P) (a : Step.Acc v) (hown : a.own = [])
     (hinv : Step.Inv P a.state) (evs : List v.event.den0) :
     ∀ a1, Step.applyEvents T a evs = .ok a1 → Step.Inv P a1.state ∧ Step.QueueOk P a1 := fun _ h =>
-  ⟨Step.applyEvents_inv T ⟨hinv.machinesReach, hvx⟩ evs a hinv h,
-    Step.applyEvents_queue T ⟨hinv.machinesReach, hvx⟩ evs a h hinv (by simp [Step.QueueOk, hown])⟩
+  ⟨Step.applyEvents_inv T hv evs a hinv h,
+    Step.applyEvents_queue T hv evs a h hinv (by simp [Step.QueueOk, hown])⟩
 
 end
 

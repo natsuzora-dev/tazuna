@@ -1129,7 +1129,7 @@ theorem react_step (m : MachineV r e) (hor : m.key.orderable = true) {rc : React
     (tbl : m.table.den0) {x : Term} (htbl : RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M))
     {o : ReactOut} {cond : Term} (henc : encodeReact L m rc x records now evT = .ok (o, cond)) (hc : Holds M cond) :
     (∃ tbl', RelV L m.table (Ty.up _ m.table_data tbl') (o.table.denote M) ∧
-      instancesOf T m tbl' = (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).1.2) ∧
+      instancesOf T m tbl' = (Step.machineStep T recs tnow ev m (instancesOf T m tbl)).1) ∧
     ∃ svX E, SlotsDen M (o.starts.map StartSlot.slot) svX ∧
       Holds2 (EStart (L := L) m (instancesOf T m tbl) recs tnow ev) E svX ∧
       E.Perm (Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (recs, ())))) := by
@@ -1197,7 +1197,7 @@ theorem react_step (m : MachineV r e) (hor : m.key.orderable = true) {rc : React
   -- The step's instances.
   let keys := Ty.sortBy T m.key (dedupBy (Ty.semWith Dsl.base m.key).2 (m.instances.fn (recs, ())))
   let O := keys.map fun k => (Step.reactKey m (instancesOf T m tbl) recs tnow ev k).1
-  have hO : (Step.machineStep T recs tnow ev ⟨m, instancesOf T m tbl⟩).1.2 = O := by
+  have hO : (Step.machineStep T recs tnow ev m (instancesOf T m tbl)).1 = O := by
     simp [Step.machineStep, O, keys, List.map_map]
   have hentries : instEntries m O = keys.map fun k => (k, entryOf (Step.reactKey m (instancesOf T m tbl) recs tnow ev k).1) := by
     simp only [instEntries, O, List.map_map]

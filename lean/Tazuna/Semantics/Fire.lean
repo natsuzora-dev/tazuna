@@ -17,9 +17,9 @@ theorem fired_key (m : MachineV r e) (records : r.den0) (now : Int) (i : Instanc
   unfold fired; split <;> rfl
 
 theorem fireMachines_true (records : r.den0) (now d : Int) :
-    (l : List (MachineState r e)) → fireMachines records now d true l = (l, [], true)
-  | [] => rfl
-  | ms :: l => by simp [fireMachines, fireMachines_true records now d l]
+    {ms : List (MachineV r e)} → (l : Machines ms) → fireMachines records now d true l = (l, [], true)
+  | _, .nil => rfl
+  | _, .cons _ l => by simp [fireMachines, fireMachines_true records now d l]
 
 theorem fireFirst_keys (m : MachineV r e) (records : r.den0) (now d : Int) :
     (insts : List (Instance m)) → (fireFirst m records now d insts).1.map (·.key) = insts.map (·.key)
@@ -31,16 +31,17 @@ theorem fireFirst_keys (m : MachineV r e) (records : r.den0) (now d : Int) :
     · simp [fireFirst_keys m records now d is]
 
 /-- A round changes a machine's instances only by `fireFirst`. -/
-theorem mem_fireMachines (records : r.den0) (now d : Int) : (b : Bool) → (sms : List (MachineState r e)) →
-    ∀ sm' ∈ (fireMachines records now d b sms).1, ∃ sm ∈ sms, sm' = sm ∨ sm' = ⟨sm.1, (fireFirst sm.1 records now d sm.2).1⟩
-  | b, [], _, h => by cases b <;> simp [fireMachines] at h
-  | true, ms :: rest, sm', h => by
+theorem mem_fireMachines (records : r.den0) (now d : Int) : (b : Bool) → {ms : List (MachineV r e)} →
+    (sms : Machines ms) → ∀ sm' ∈ (fireMachines records now d b sms).1.toSigma,
+    ∃ sm ∈ sms.toSigma, sm' = sm ∨ sm' = ⟨sm.1, (fireFirst sm.1 records now d sm.2).1⟩
+  | b, _, .nil, _, h => by cases b <;> simp [fireMachines] at h
+  | true, _, .cons _ _, sm', h => by
     rw [fireMachines_true] at h
     exact ⟨sm', h, .inl rfl⟩
-  | false, ⟨m, insts⟩ :: rest, sm', h => by
-    simp only [fireMachines, List.mem_cons] at h
+  | false, _, .cons insts rest, sm', h => by
+    simp only [fireMachines, PerMachine.toSigma_cons, List.mem_cons] at h
     rcases h with rfl | h
-    · exact ⟨⟨m, insts⟩, List.mem_cons_self, .inr rfl⟩
+    · exact ⟨⟨_, insts⟩, List.mem_cons_self, .inr rfl⟩
     · obtain ⟨sm, hsm, he⟩ := mem_fireMachines records now d _ rest sm' h
       exact ⟨sm, List.mem_cons_of_mem _ hsm, he⟩
 
@@ -57,22 +58,17 @@ theorem mem_fireFirst_effs (m : MachineV r e) (records : r.den0) (now d : Int) :
     · exact mem_fireFirst_effs m records now d is x h
 
 /-- Every effect a round starts is one an instance's entering a state starts. -/
-theorem mem_fireMachines_effs (records : r.den0) (now d : Int) : (b : Bool) → (sms : List (MachineState r e)) →
-    ∀ x ∈ (fireMachines records now d b sms).2.1, ∃ sm ∈ sms, ∃ k st, x ∈ (enter sm.1 records now k st).2
-  | b, [], _, h => by cases b <;> simp [fireMachines] at h
-  | true, ms :: rest, x, h => by rw [fireMachines_true] at h; nomatch h
-  | false, ⟨m, insts⟩ :: rest, x, h => by
+theorem mem_fireMachines_effs (records : r.den0) (now d : Int) : (b : Bool) → {ms : List (MachineV r e)} →
+    (sms : Machines ms) → ∀ x ∈ (fireMachines records now d b sms).2.1,
+    ∃ sm ∈ sms.toSigma, ∃ k st, x ∈ (enter sm.1 records now k st).2
+  | b, _, .nil, _, h => by cases b <;> simp [fireMachines] at h
+  | true, _, .cons _ _, x, h => by rw [fireMachines_true] at h; nomatch h
+  | false, _, .cons insts rest, x, h => by
     simp only [fireMachines, List.mem_append] at h
     rcases h with h | h
-    · exact ⟨⟨m, insts⟩, List.mem_cons_self, mem_fireFirst_effs m records now d insts x h⟩
+    · exact ⟨⟨_, insts⟩, List.mem_cons_self, mem_fireFirst_effs _ records now d insts x h⟩
     · obtain ⟨sm, hsm, he⟩ := mem_fireMachines_effs records now d _ rest x h
       exact ⟨sm, List.mem_cons_of_mem _ hsm, he⟩
-
-theorem fireMachines_fst (records : r.den0) (now d : Int) : (b : Bool) → (sms : List (MachineState r e)) →
-    (fireMachines records now d b sms).1.map (·.1) = sms.map (·.1)
-  | b, [] => by cases b <;> rfl
-  | true, ms :: rest => by rw [fireMachines_true]
-  | false, ⟨m, insts⟩ :: rest => by simp [fireMachines, fireMachines_fst records now d _ rest]
 
 section
 variable (T : List TypeDecl)
@@ -155,13 +151,13 @@ theorem fireFirst_effs (m : MachineV r e) (records : r.den0) (now d : Int) :
 
 /-- A round fires at most one instance, so it starts at most one effect. -/
 theorem fireMachines_effs (records : r.den0) (now d : Int) :
-    (b : Bool) → (sms : List (MachineState r e)) → (fireMachines records now d b sms).2.1.length ≤ 1
-  | b, [] => by cases b <;> simp [fireMachines]
-  | true, ms :: rest => by rw [fireMachines_true]; simp
-  | false, ⟨m, insts⟩ :: rest => by
-    obtain ⟨h1, h2⟩ := fireFirst_effs m records now d insts
+    (b : Bool) → {ms : List (MachineV r e)} → (sms : Machines ms) → (fireMachines records now d b sms).2.1.length ≤ 1
+  | b, _, .nil => by cases b <;> simp [fireMachines]
+  | true, _, .cons _ _ => by rw [fireMachines_true]; simp
+  | false, _, .cons insts rest => by
+    obtain ⟨h1, h2⟩ := fireFirst_effs _ records now d insts
     simp only [fireMachines, List.length_append]
-    cases hb : (fireFirst m records now d insts).2.2 with
+    cases hb : (fireFirst _ records now d insts).2.2 with
     | true => rw [fireMachines_true]; simpa using h1
     | false => rw [h2 hb]; simpa using fireMachines_effs records now d false rest
 

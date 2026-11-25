@@ -104,7 +104,7 @@ variable (L : Layout) (T : List TypeDecl)
 /-- One own kind's internal step for the effect term `eff`, read as the kind's variant `nR + j`: its outcome and step
 terms, its condition, and the condition of the command's or query's codes. -/
 def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs) (nR : Nat)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine Term v.machines)
+    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines)
     (j : Nat) (key : OwnKey) : Except Refusal (Encoded (OwnKindStep v)) := do
   let sel (i : Nat) := Term.sel senv.dE (nR + j) i eff
   match ← ownShape v P key with
@@ -132,7 +132,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
 /-- The internal step for the own effect term `eff`: every own kind's, merged by the variant tests; its condition
 asks each kind's only where its test holds. The second term is the codes' condition, which holds statically. -/
 def encodeOwnStep (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine Term v.machines) :
+    (apply : Code (Ty.fn [v.records, v.event] v.records)) (records now fresh n q eff : Term) (xs : PerMachine (fun _ => Term) v.machines) :
     Except Refusal (Encoded (OwnStepOut v)) := do
   let nR := (L.effectsOf v.event).length
   let eff := Term.share eff
@@ -250,7 +250,7 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
-    {records now fresh n q eff : Term} {xs : PerMachine Term v.machines} {q0 : Nat}
+    {records now fresh n q eff : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
@@ -464,12 +464,11 @@ theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
       simp only [hco, Bool.false_eq_true, ite_false]
       exact H
 
-theorem machinesRel_congr : (ms : List (MachineV v.records v.event)) → (xs ys : PerMachine Term ms) →
-    (sms : List (Step.MachineState v.records v.event)) → Term.denotes M xs.toList = Term.denotes M ys.toList →
+theorem machinesRel_congr : (ms : List (MachineV v.records v.event)) → (xs ys : PerMachine (fun _ => Term) ms) →
+    (sms : Step.Machines ms) → Term.denotes M xs.toList = Term.denotes M ys.toList →
     MachinesRel M L T ms xs sms → MachinesRel M L T ms ys sms
-  | [], .nil, .nil, [], _, h => h
-  | [], .nil, .nil, _ :: _, _, h | _ :: _, .cons _ _, .cons _ _, [], _, h => h.elim
-  | _ :: ms, .cons _ xs, .cons _ ys, _ :: sms, he, h => by
+  | [], .nil, .nil, .nil, _, h => h
+  | _ :: ms, .cons _ xs, .cons _ ys, .cons _ sms, he, h => by
     obtain ⟨⟨tbl, ht, hs⟩, h⟩ := h
     simp only [PerMachine.toList_cons, Term.denotes, List.cons.injEq] at he
     exact ⟨⟨tbl, he.1 ▸ ht, hs⟩, machinesRel_congr ms xs ys sms he.2 h⟩
@@ -495,7 +494,7 @@ theorem AccRel.congr {a b : StepTerms v} (hab : Agrees M L v.event a b)
     hab.nextId ▸ h4, hab.news _ _ _ _ h5, hab.queued ▸ h6, hab.owns _ _ h7⟩
 
 theorem pick_tables {r e : Ty} {c : Term} {bc : Bool} (hc : c.denote M = .bool bc) : {ms : List (MachineV r e)} →
-    (A B : PerMachine Term ms) →
+    (A B : PerMachine (fun _ => Term) ms) →
     Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c x y)) A B).toList =
       Term.denotes M (if bc then A else B).toList
   | _, .nil, .nil => by cases bc <;> rfl
@@ -504,7 +503,7 @@ theorem pick_tables {r e : Ty} {c : Term} {bc : Bool} (hc : c.denote M = .bool b
     cases bc <;> simp_all [PerMachine.zipWith, Term.denotes, Term.denote, toBool_bool]
 
 theorem pick_tables_false {r e : Ty} {c : Term} (hc : c.denote M = .bool false) {ms : List (MachineV r e)}
-    (A B : PerMachine Term ms) :
+    (A B : PerMachine (fun _ => Term) ms) :
     Term.denotes M (PerMachine.zipWith (fun x y => Term.share (.ite c x y)) A B).toList = Term.denotes M B.toList := by
   simpa using pick_tables hc A B
 
@@ -619,7 +618,7 @@ theorem ownStep_encode {P : List AnySite} (chk : Checked P T v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     (senv : StepEnv L shs)
-    {records now fresh n q eff : Term} {xs : PerMachine Term v.machines} {q0 : Nat}
+    {records now fresh n q eff : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)

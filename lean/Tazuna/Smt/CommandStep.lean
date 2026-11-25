@@ -107,14 +107,14 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     ((v.commands.get i).data).ctx _ ((v.commands.get i).data).accepts hcR.accepts _ hks s caller input
     hR.records hR.now hR.fresh hsc hsi h1
   let s1 : State v := { s with fresh := s.fresh + 1 }
-  have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
+  have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl
   have D := decide_encode chk hshs x hcc hccx happ hca senv { state := s1 } ctx hcx hR.now hR.records hR.machines
     hR.nextId (q := .int 0) (q0 := 0) rfl (fresh := .add S.fresh (.int 1)) (by simp [Term.denote, hR.fresh, s1, Val.toInt])
     h2
   have hfin := fun events (hacc : AccRel M L T shs { state := s1 } dc.after (.add S.fresh (.int 1)) 0
       (Step.applyEvents T { state := s1 } events)) =>
     finish_encode chk hshs happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hacc
-      (applyEvents_ok chk.reactions _ rfl hinv1 events) h3 hcfx
+      (applyEvents_ok chk.reach _ rfl hinv1 events) h3 hcfx
   refine ⟨?_, fun hc => ?_⟩
   · obtain ⟨⟨_, c1'⟩, g1, hcc0⟩ := bind_ok.1 hcc
     obtain ⟨_, -, hcc0⟩ := bind_ok.1 hcc0
@@ -217,7 +217,7 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
               exact decide_eq_true (by rw [← hr]; exact hbe'))).1 hct rfl
           rw [happly] at hacc
           exact (finish_encode chk hshs happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hacc
-            (fun a1 h => applyEvents_ok chk.reactions _ rfl hinv1 events a1 (happly.trans h)) h3 hcfx).2 hcf
+            (fun a1 h => applyEvents_ok chk.reach _ rfl hinv1 events a1 (happly.trans h)) h3 hcfx).2 hcf
 
 end
 

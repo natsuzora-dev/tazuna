@@ -43,7 +43,7 @@ def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (senv : 
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) {Γ : List Ty}
     (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (σ : Codes Γ)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
-    (records now fresh n q caller input : Term) (xs : PerMachine Term v.machines) : Except Refusal (OwnCommandOut v × Term) := do
+    (records now fresh n q caller input : Term) (xs : PerMachine (fun _ => Term) v.machines) : Except Refusal (OwnCommandOut v × Term) := do
   let (a, c1) ← encodeAdmit L cc.accepts callers records now fresh caller input
   let (dc, cd) ← encodeDecide L T v shs senv x cc apply a.ctx now records xs n q
   let nil ← adtCtor L 1 [] [[]] 0 []
@@ -68,7 +68,7 @@ through the events loop. -/
 def encodeOwnQuery (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : QueryV v.records v.caller) (qc : QueryCode x) {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event)))
     (σ : Codes Γ) (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
-    (records now fresh n q caller input : Term) (xs : PerMachine Term v.machines) : Except Refusal (OwnQueryOut v × Term) := do
+    (records now fresh n q caller input : Term) (xs : PerMachine (fun _ => Term) v.machines) : Except Refusal (OwnQueryOut v × Term) := do
   let (a, c1) ← encodeAdmit L qc.accepts callers records now fresh caller input
   let (out, c2) ← qc.resolve (a.ctx, ())
   let (oa, c3) ← site.code L σ
@@ -139,7 +139,7 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
     {ks : List Term} (hks : callerTerms L x.data.caller x.callers = some ks)
     (senv : StepEnv L shs)
-    {records now fresh n q sc si : Term} {xs : PerMachine Term v.machines} {q0 : Nat}
+    {records now fresh n q sc si : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
@@ -405,7 +405,7 @@ theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pe
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
     (hout : x.output.isFn = false) {ks : List Term} (hks : callerTerms L x.data.caller x.callers = some ks)
     (senv : StepEnv L shs)
-    {records now fresh n q sc si : Term} {xs : PerMachine Term v.machines} {q0 : Nat}
+    {records now fresh n q sc si : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)

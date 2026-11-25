@@ -552,9 +552,9 @@ theorem firedOpt_false (m : MachineV r e) (recs : r.den0) (now : Int) (i : Step.
 picks enters its timer's state and starts its effect option (`firedOpt`), and the flag says whether some machine so
 far has an instance with the deadline. -/
 theorem fireMachines_cons (m : MachineV r e) (ho : m.key.ordered T = true) (recs : r.den0) (now d : Int) (b : Bool)
-    {insts : List (Step.Instance m)} (h : InstancesOk T m insts) (rest : List (Step.MachineState r e)) :
-    Step.fireMachines recs now d b (⟨m, insts⟩ :: rest) =
-      (⟨m, insts.map fun i => if !b && Step.firesIn T m d insts i then (Step.fired m recs now i).1 else i⟩ ::
+    {insts : List (Step.Instance m)} (h : InstancesOk T m insts) {ms : List (MachineV r e)} (rest : Step.Machines ms) :
+    Step.fireMachines recs now d b (.cons insts rest) =
+      (.cons (insts.map fun i => if !b && Step.firesIn T m d insts i then (Step.fired m recs now i).1 else i)
           (Step.fireMachines recs now d (b || insts.any (Step.hitsAt d)) rest).1,
         insts.flatMap (fun i => (sentBy m Step.Instance.key
           (fun i => firedOpt m recs now (!b && Step.firesIn T m d insts i) i) i).toList) ++

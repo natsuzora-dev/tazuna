@@ -46,7 +46,7 @@ theorem reactKey_erl (m : MachineV r e) (ho : m.key.ordered T = true) (insts : L
   · rfl
 
 theorem machineStep_ok (records : r.den0) (now : Int) (ev : e.den0) (m : MachineV r e) (ho : m.key.ordered T = true)
-    (insts : List (Step.Instance m)) : InstancesOk T m (Step.machineStep T records now ev ⟨m, insts⟩).1.2 := by
+    (insts : List (Step.Instance m)) : InstancesOk T m (Step.machineStep T records now ev m insts).1 := by
   apply instancesOk_of_lt T m ho
   simp only [Step.machineStep, List.map_map]
   rw [List.pairwise_map]
@@ -61,14 +61,14 @@ namespace Step
 variable (T : List TypeDecl) {v : ServiceV}
 
 /-- Every machine's key type is ordered and its instances are in the step's form. -/
-def KeysOk (s : State v) : Prop := ∀ sm ∈ s.machines, sm.1.key.ordered T = true ∧ InstancesOk T sm.1 sm.2
+def KeysOk (s : State v) : Prop := ∀ sm ∈ s.machines.toSigma, sm.1.key.ordered T = true ∧ InstancesOk T sm.1 sm.2
 
 theorem KeysOk.congr {s s' : State v} (h : KeysOk T s) (hm : s'.machines = s.machines) : KeysOk T s' :=
   fun sm hsm => h sm (hm ▸ hsm)
 
 theorem init_keys (hord : ∀ m ∈ v.machines, m.key.ordered T = true) : KeysOk T (State.init v) := by
   intro sm h
-  simp only [State.init, List.mem_map] at h
+  simp only [State.init, PerMachine.toSigma_ofFn, List.mem_map] at h
   obtain ⟨m, hm, rfl⟩ := h
   exact ⟨hord m hm, .nil, .nil⟩
 
@@ -94,20 +94,10 @@ theorem start_machines (a : Acc v) (effs : List (Sender × EffectV v.event)) {a'
       | query => intro h1; cases h1; rfl
 
 theorem react_keys (s : State v) (ev : v.event.den0) (hs : KeysOk T s) : KeysOk T (react T s ev).1 := by
-  let records := v.apply.fn (s.records, ev, ())
-  let f := fun (acc : List (MachineState v.records v.event) × List (Sender × EffectV v.event)) ms0 =>
-    let (m', es) := machineStep T records s.now ev ms0; (acc.1 ++ [m'], acc.2 ++ es)
-  let Ok := fun sm : MachineState v.records v.event => sm.1.key.ordered T = true ∧ InstancesOk T sm.1 sm.2
-  have hm : (react T s ev).1.machines = (s.machines.foldl f ([], [])).1 := rfl
-  rw [KeysOk, hm]
-  exact foldl_inv (fun (acc : List (MachineState v.records v.event) × List (Sender × EffectV v.event)) =>
-      ∀ sm ∈ acc.1, Ok sm) Ok f
-    (fun ⟨ms, effs⟩ ⟨m, insts⟩ h1 ⟨ho, _⟩ sm hsm => by
-      rcases List.mem_append.1 hsm with h | h
-      · exact h1 sm h
-      · simp only [List.mem_singleton] at h; subst h
-        exact ⟨ho, machineStep_ok T records s.now ev m ho insts⟩)
-    s.machines ([], []) hs (by intro sm h; cases h)
+  intro sm' hsm'
+  simp only [react, (reactMachines_toSigma T _ s.now ev s.machines).1, List.mem_map] at hsm'
+  obtain ⟨sm, hsm, rfl⟩ := hsm'
+  exact ⟨(hs sm hsm).1, machineStep_ok T _ s.now ev sm.1 (hs sm hsm).1 sm.2⟩
 
 theorem applyEvents_keys (events : List v.event.den0) :
     (a : Acc v) → KeysOk T a.state → {a' : Acc v} → applyEvents T a events = .ok a' → KeysOk T a'.state := by

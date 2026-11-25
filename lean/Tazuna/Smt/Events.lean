@@ -92,7 +92,7 @@ they start, those requests' pending slots, the own slots of the own commands and
 place after them. -/
 structure EventsOut (v : ServiceV) where
   records : Term
-  tables : PerMachine Term v.machines
+  tables : PerMachine (fun _ => Term) v.machines
   nextId : Term
   news : List PendingSlot
   owns : List OwnSlot
@@ -110,7 +110,7 @@ place (own commands and queries), then every reaction's effects follow; the cond
 applications. -/
 def encodeEvents (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (now : Term) :
-    List (Slot 1) → (records : Term) → (xs : PerMachine Term v.machines) → (n q : Term) →
+    List (Slot 1) → (records : Term) → (xs : PerMachine (fun _ => Term) v.machines) → (n q : Term) →
     Except Refusal (EventsOut v × Term)
   | [], records, xs, n, q => pure (⟨records, xs, n, [], [], q⟩, tt)
   | (f, ys) :: S, records, xs, n, q => do
@@ -201,31 +201,20 @@ theorem ownRel_gate_false {f : Term} (hf : f.denote M = .bool false) {S : List O
   obtain ⟨sl, -, rfl⟩ := List.mem_map.1 hp
   simp [denotes_length, sl.2.2]
 
-theorem machinesRel_mem {v : ServiceV} : (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
-    (sms : List (Step.MachineState v.records v.event)) → MachinesRel M L T ms xs sms → ∀ sm ∈ sms, sm.1 ∈ ms
-  | [], .nil, [], _ => by simp
-  | m :: ms, .cons x xs, sm :: sms, ⟨⟨_, _, hsm⟩, hrest⟩ => by
-    intro sm' h
-    rcases List.mem_cons.1 h with rfl | h
-    · subst hsm; simp
-    · exact List.mem_cons_of_mem _ (machinesRel_mem ms xs sms hrest sm' h)
-  | [], .nil, _ :: _, h | _ :: _, .cons _ _, [], h => h.elim
-
 /-- Tables picked by a flag denote the first tables where it is true and the second where it is false. -/
 theorem machinesRel_pick {v : ServiceV} {f : Term} {b : Bool} (hf : f.denote M = .bool b) :
-    (ms : List (MachineV v.records v.event)) → (as xs : PerMachine Term ms) →
-    (sms : List (Step.MachineState v.records v.event)) → MachinesRel M L T ms (if b then as else xs) sms →
+    (ms : List (MachineV v.records v.event)) → (as xs : PerMachine (fun _ => Term) ms) →
+    (sms : Step.Machines ms) → MachinesRel M L T ms (if b then as else xs) sms →
     MachinesRel M L T ms (PerMachine.zipWith (fun a x => Term.share (.ite f a x)) as xs) sms
-  | [], .nil, .nil, [], _ => trivial
-  | m :: ms, .cons a as, .cons x xs, sm :: sms, h => by
+  | [], .nil, .nil, .nil, _ => trivial
+  | m :: ms, .cons a as, .cons x xs, .cons insts sms, h => by
     have hd : (Term.share (.ite f a x)).denote M = (if b then a else x).denote M := by
       cases b <;> simp [Term.denote, hf, Val.toBool]
     have h' : (∃ tbl, RelV L m.table (Ty.up _ m.table_data tbl) ((if b then a else x).denote M) ∧
-        sm = ⟨m, instancesOf T m tbl⟩) ∧ MachinesRel M L T ms (if b then as else xs) sms := by
+        insts = instancesOf T m tbl) ∧ MachinesRel M L T ms (if b then as else xs) sms := by
       cases b <;> exact h
     obtain ⟨⟨tbl, htbl, hsm⟩, hrest⟩ := h'
     exact ⟨⟨tbl, hd ▸ htbl, hsm⟩, machinesRel_pick hf ms as xs sms hrest⟩
-  | [], .nil, .nil, _ :: _, h | _ :: _, .cons _ _, .cons _ _, [], h => by cases b <;> exact h.elim
 
 end
 
@@ -250,7 +239,7 @@ def eventsFit (S : Ty → Nat) (T : List TypeDecl) : State v → List v.event.de
   | _, [] => True
   | s, ev :: evs =>
     (v.apply.appFits S (s.records, ev, ()) ∧
-      (∀ sm ∈ s.machines, machineFits S sm (v.apply.fn (s.records, ev, ())) s.now ev) ∧
+      (∀ sm ∈ s.machines.toSigma, machineFits S sm (v.apply.fn (s.records, ev, ())) s.now ev) ∧
       ∀ x ∈ v.reactions, (x.react.fits S).1 ∧
         x.react.appFits S (.inl (v.apply.fn (s.records, ev, ()), s.now, ()), ev, ())) ∧
     eventsFit S T (Step.react T s ev).1 evs
@@ -268,7 +257,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     (evs : List v.event.den0) → Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv →
     (s : State v) → now.denote M = .int s.now →
     {records : Term} → RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M) →
-    {xs : PerMachine Term v.machines} → MachinesRel M L T v.machines xs s.machines → {n q : Term} →
+    {xs : PerMachine (fun _ => Term) v.machines} → MachinesRel M L T v.machines xs s.machines → {n q : Term} →
     {o : EventsOut v} → {c : Term} → encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
     (Holds M c ↔ eventsFit L.count T s evs) ∧
     (∀ {n0 q0 : Nat}, n.denote M = .int n0 → q.denote M = .int q0 → Holds M c →
@@ -334,7 +323,7 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             have hr' := happ (Ty.up _ v.records_data s.records, Ty.up _ v.event_data ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' ca h3 hca
             rw [up_app2 v.records_data v.event_data v.apply.ht] at hr'
             rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
-          have e2 : ∀ hca : Holds M ca, (Holds M cm ↔ ∀ sm ∈ s.machines, machineFits L.count sm recs' s.now ev) :=
+          have e2 : ∀ hca : Holds M ca, (Holds M cm ↔ ∀ sm ∈ s.machines.toSigma, machineFits L.count sm recs' s.now ev) :=
             fun hca => (machines_encode (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines outs hms
               hor h5).1
           have e3 : ∀ hca : Holds M ca, (Holds M cr ↔ ∀ x ∈ v.reactions, (x.react.fits L.count).1 ∧
@@ -401,12 +390,11 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             (fun m hm => (chk.keys m hm).1) h5).2 hcm
           have hstarts := machines_starts (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
             chk.keys h5 hcm
-          have hreach : ∀ effs ∈ s.machines.map (fun sm => (Step.machineStep T recs' s.now ev sm).2),
+          have hreach : ∀ effs ∈ s.machines.toSigma.map (fun sm => (Step.machineStep T recs' s.now ev sm.1 sm.2).2),
               ∀ x ∈ effs, x.2.Reach P := by
             intro effs he x hx
             obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 he
-            exact (Step.machineStep_reach T recs' s.now ev sm
-              (chk.machines _ (machinesRel_mem v.machines xs s.machines hms sm hsm))).2 x hx
+            exact Step.machineStep_reach T recs' s.now ev sm.1 sm.2 (chk.machines _ (PerMachine.fst_mem hsm)) x hx
           obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel chk.sites hshs senv v.machines _ _ hstarts hreach hn hq h6
           have hnews1' : NewsRel M L shs v.declared news (Step.reqsOf (startedBy T s recs' ev)) n0 := hnews1
           have hown1' : OwnRel M L oS (Step.queuedOf (startedBy T s recs' ev)) q0 := hown1
@@ -418,9 +406,9 @@ theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
           have hms' := machinesRel_pick (T := T) hf v.machines (outs.map (·.table)) xs _
             (by simpa using hrel)
           have e1 : (Step.reqsOf (startedBy T s recs' ev)).length =
-              (Step.reqsOf (s.machines.map fun sm => (Step.machineStep T recs' s.now ev sm).2).flatten).length := rfl
+              (Step.reqsOf (s.machines.toSigma.map fun sm => (Step.machineStep T recs' s.now ev sm.1 sm.2).2).flatten).length := rfl
           have e2 : (Step.queuedOf (startedBy T s recs' ev)).length =
-              (Step.queuedOf (s.machines.map fun sm => (Step.machineStep T recs' s.now ev sm).2).flatten).length := rfl
+              (Step.queuedOf (s.machines.toSigma.map fun sm => (Step.machineStep T recs' s.now ev sm.1 sm.2).2).flatten).length := rfl
           have e3 : reactedBy s recs' ev = reactionEffects v.reactions ev recs' s.now := rfl
           have hn' : (Term.share (.ite f nR n)).denote M =
               .int ((n0 + (Step.reqsOf (startedBy T s recs' ev ++ reactedBy s recs' ev)).length : Nat) : Int) := by

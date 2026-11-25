@@ -115,8 +115,8 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run prelude sv
 -- A peer event arrives as one of the service's events.
 #guard I (after s0 [.event ⟨0, by decide⟩ (7 : Int)]).records == 7
 -- The first event starts the machine's instance; the next enters state 1, which sets a timer for 10 ms later.
-#guard (after s0 [cmd 1 5]).machines.map (·.2.map (·.timer.isSome)) == [[false]]
-#guard (after s0 [cmd 1 5, cmd 1 1]).machines.map (·.2.map (·.timer.map (·.1))) == [[some 10]]
+#guard (after s0 [cmd 1 5]).machines.toSigma.map (·.2.map (·.timer.isSome)) == [[false]]
+#guard (after s0 [cmd 1 5, cmd 1 1]).machines.toSigma.map (·.2.map (·.timer.map (·.1))) == [[some 10]]
 -- A clock line before the deadline fires nothing; at it, the instance enters 5, whose effect sends a request.
 #guard (step prelude svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 9)).out.length == 0
 #guard (step prelude svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 10)).out.map (·.name) == ["ping"]

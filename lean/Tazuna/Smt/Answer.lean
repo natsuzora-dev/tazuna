@@ -258,7 +258,7 @@ variable {P : List AnySite} {v : ServiceV}
 theorem _root_.Tazuna.Ir.Step.Inv.filterPending {s : State v} (h : Step.Inv P s) (q : Step.Pending v.event → Bool) :
     Step.Inv P { s with pending := s.pending.filter q } :=
   ⟨fun p hp => h.below p ((List.mem_filter.1 hp).1), h.nodup.sublist ((List.filter_sublist).map _),
-    fun p hp => h.reach p ((List.mem_filter.1 hp).1), h.machines, h.machinesOf,
+    fun p hp => h.reach p ((List.mem_filter.1 hp).1),
     fun p hp => h.shaped p ((List.mem_filter.1 hp).1)⟩
 
 end
@@ -529,11 +529,6 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
       refine ⟨tbl', hrel, ?_⟩
       rw [← hlist]
       exact filter_pendingList (sh0 :: rest) to tbl.1
-    have chk.machines : ∀ m ∈ v.machines, m.Reach P := by
-      intro m hm
-      rw [← hsinv.machinesOf] at hm
-      obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 hm
-      exact hsinv.machines sm hsm
     have e45 : Holds M c1 → Holds M c2 → Holds M c3 →
         (Holds M (.ite (allT (rules.map (·.2))) (andT c4 cf) tt) ↔
         (Step.broken (match ensuresFn sh.ensures (Ty.down _ hd2 f2) with
@@ -579,7 +574,7 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
       have ef : Holds M c4 → (Holds M cf ↔ finishFits L.count T (sh0 :: rest) (Step.applyEvents T { state := s' } evL)) :=
         fun hc4 => (finish_encode chk hshs happ hca hinv hci senv s .accepted
           { state := s' } rfl hinv' hR.now hrem (loop_acc (T := T) chk hshs happ hca senv
-            { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4) (applyEvents_ok chk.reactions _ rfl hinv' _) h12'
+            { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4) (applyEvents_ok chk.reach _ rfl hinv' _) h12'
           hcfx).1
       constructor
       · rintro ⟨hc4, hcf⟩
@@ -789,7 +784,7 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     have hdone := loop_acc (T := T) chk hshs happ0 hca senv
       { state := s' } hR.now hSl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4
     exact (finish_encode chk hshs happ0 hca hinv0 hci senv s
-      .accepted { state := s' } rfl hinv' hR.now hrem hdone (applyEvents_ok chk.reactions _ rfl hinv' _) h12' hcfx).2 hcf
+      .accepted { state := s' } rfl hinv' hR.now hrem hdone (applyEvents_ok chk.reach _ rfl hinv' _) h12' hcfx).2 hcf
 
 end
 

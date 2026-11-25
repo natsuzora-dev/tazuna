@@ -523,7 +523,7 @@ def evMI : Fin evMSvc.subscribes.length := ⟨0, by decide⟩
 v9 and v10 the service invariant's holds and name, v11 the new instance table, v12 the new pending table, v13 the
 next id after. -/
 def evMScript (goal : List InstCheck → List Term) :
-    Except String (Script × PerMachine (List InstCheck) evMSvc.machines) := do
+    Except String (Script × PerMachine (fun _ => List InstCheck) evMSvc.machines) := do
   let L := evMLayout
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
   let S := SymState.vars 0
@@ -579,13 +579,13 @@ def evMCase (solver : Solver) (name : String) (goal : List InstCheck → List Te
           | some [], some (.int n) => n == s.nextId && r.state.pending.isEmpty && r.state.nextId == s.nextId
           | _, _ => false
         let mut ok := true
-        if !agrees r.outcome r.state.records r.events r.state.machines then
+        if !agrees r.outcome r.state.records r.events r.state.machines.toSigma then
           ok ← fail s!"step says {r.outcome.summary}, the terms give {names}"
         if names.isEmpty && !pendingOk then ok ← fail "the pending table or next id differs from the step's"
         if machineFault && names.isEmpty then ok ← fail "no instance breaks its invariant"
         if machineFault then
           let s0 : State eventSvc :=
-            { records := s.records, machines := [], pending := [], now := s.now, fresh := s.fresh, nextId := s.nextId }
+            { records := s.records, machines := .nil, pending := [], now := s.now, fresh := s.fresh, nextId := s.nextId }
           let x0 : Input eventSvc := match x with
             | .event ⟨0, _⟩ value => .event eventI value
             | _ => .clock 0
@@ -920,7 +920,7 @@ def doorCheck (solver : Solver) : IO Bool := do
       match (SymState.vars 0).decode (modelOf vs) doorLayout (v := doorSvc) prelude [] with
       | some s =>
         -- Slot 0 holds key 3 and slot 1 key 1, yet the instances come in key order.
-        let insts := s.machines.map fun ⟨_, is⟩ => is.map fun i =>
+        let insts := s.machines.toSigma.map fun ⟨_, is⟩ => is.map fun i =>
           (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
         if insts != [[(some 1, some 0, none), (some 3, some 1, some (10, some 2))]] then
           IO.println s!"smt-check: instances: the decoded instances differ from the model: {insts}"; ok := false
@@ -1470,7 +1470,7 @@ def invariantCheck (solver : Solver) : IO Bool := do
       let M := modelOf vs
       let some s := (SymState.vars 0).decode M L (v := invSvc) prelude []
         | IO.println "smt-check: machine invariants: the model does not decode"; return false
-      let step := s.machines.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i =>
+      let step := s.machines.toSigma.flatMap fun ⟨m, insts⟩ => insts.flatMap fun i =>
         Step.broken (m.invariants.fn (.inl (i.key, i.state, s.records, s.now, ()), ()))
       let read := instBroken L prelude M invM.key checks
       let inSlots := (checks.filter fun c => (c.occupied.denote M).toBool).flatMap (brokenIn M ·.rules)
@@ -1546,11 +1546,11 @@ def reactCheck (solver : Solver) : IO Bool := do
       let some tbl := decodeV L reactM.table ((Term.var 6).denote M) | fail "the new table does not decode"
       let some (.int ev) := vs.lookup 7 | fail "no event"
       let read := instancesOf prelude reactM (Ty.down _ reactM.table_data tbl)
-      let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
+      let some [⟨m, insts⟩] := some s.machines.toSigma | fail "not one machine"
       let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
         (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
       let step (insts : List (Step.Instance m)) :=
-        view m (Step.machineStep (e := reactSvc.event) prelude s.records s.now ev ⟨m, insts⟩).1.2
+        view m (Step.machineStep (e := reactSvc.event) prelude s.records s.now ev m insts).1
       let mut ok := true
       if view reactM read != step insts || view reactM read != [(some 3, some 1, some (105, some 2)), (some 5, some 0, none)] then
         ok ← fail s!"the new table holds {view reactM read}, the step {step insts}"
@@ -1607,11 +1607,11 @@ def stayCheck (solver : Solver) : IO Bool := do
       let some tbl := decodeV L stayM.table ((Term.var 6).denote M) | fail "the new table does not decode"
       let some (.int ev) := vs.lookup 7 | fail "no event"
       let read := instancesOf prelude stayM (Ty.down _ stayM.table_data tbl)
-      let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
+      let some [⟨m, insts⟩] := some s.machines.toSigma | fail "not one machine"
       let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
         (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
       let step (insts : List (Step.Instance m)) :=
-        view m (Step.machineStep (e := staySvc.event) prelude s.records s.now ev ⟨m, insts⟩).1.2
+        view m (Step.machineStep (e := staySvc.event) prelude s.records s.now ev m insts).1
       if view stayM read != step insts || (view stayM read).map (fun (k, st, _) => (k, st)) != [((some 3 : Option Int), (some 1 : Option Int))] then
         return ← fail s!"the new table holds {view stayM read}, the step {step insts}"
       if view stayM read == step [] then return ← fail "the step from no instances passes the comparison"
@@ -1674,8 +1674,8 @@ def startsCheck (solver : Solver) : IO Bool := do
       let M := modelOf vs
       let some s := (SymState.vars 0).decode M L (v := startSvc) prelude [] | fail "the model does not decode"
       let some (.int ev) := vs.lookup 6 | fail "no event"
-      let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
-      let effs := (Step.machineStep (e := startSvc.event) prelude s.records s.now ev ⟨m, insts⟩).2.zipIdx s.nextId
+      let some [⟨m, insts⟩] := some s.machines.toSigma | fail "not one machine"
+      let effs := (Step.machineStep (e := startSvc.event) prelude s.records s.now ev m insts).2.zipIdx s.nextId
       -- Each flagged effect slot as (wire id, key, effect value), in slot order.
       let read := S.filterMap fun r => if (r.flag.denote M).toBool then
         match r.id.denote M, r.key.denote M with
@@ -1740,7 +1740,7 @@ def fireCheck (solver : Solver) : IO Bool := do
       let read := instancesOf prelude startM (Ty.down _ startM.table_data tbl)
       let view {r e : Ty} (m : MachineV r e) (is : List (Step.Instance m)) := is.map fun i =>
         (intDen _ i.key, intDen _ i.state, i.timer.map fun (d, st) => (d, intDen _ st))
-      let some [⟨m, insts⟩] := some s.machines | fail "not one machine"
+      let some [⟨m, insts⟩] := some s.machines.toSigma | fail "not one machine"
       let step := Step.fireFirst m s.records s.now 90 insts
       let bySlot := Step.fireFirst startM s.records s.now 90
         ((Ty.down _ startM.table_data tbl0).1.map fun (k, x) => instOf startM k x)
@@ -2100,7 +2100,7 @@ def clockFireCheck (solver : Solver) : IO Bool := do
         let outs := (r.out.map fun l => (l.id, l.external, l.name)).mergeSort fun a b => a.1 ≤ b.1
         let newOnes := (sorted pend').filter (·.1 ≥ s.nextId) |>.map fun (id, x, nm, _, _) => (id, x, nm)
         let read := view startM (instancesOf prelude startM (Ty.down _ startM.table_data tbl))
-        let stepTable := match r.state.machines with
+        let stepTable := match r.state.machines.toSigma with
           | [⟨m, insts⟩] => view m insts
           | _ => []
         let keyOrder := (sorted pend').map fun (id, x, nm, k, i) =>
@@ -2234,12 +2234,12 @@ def eventsCheck (solver : Solver) : IO Bool := do
           | .ok a, .ok b =>
             let mut ok := true
             if !sameAs L recordsT rfl a.state.records (vs.lookup 9) then ok ← fail "the records differ from the step's"
-            if view s'.machines != view a.state.machines || view s'.machines != [[(some 3, some 1, some (105, some 2))]] then
-              ok ← fail s!"the new table holds {view s'.machines}, the step {view a.state.machines}"
+            if view s'.machines.toSigma != view a.state.machines.toSigma || view s'.machines.toSigma != [[(some 3, some 1, some (105, some 2))]] then
+              ok ← fail s!"the new table holds {view s'.machines.toSigma}, the step {view a.state.machines.toSigma}"
             if sorted s'.pending != sorted a.state.pending || s'.nextId != a.state.nextId then
               ok ← fail s!"the model's pending table holds {sorted s'.pending} and next id {s'.nextId}, the step {sorted a.state.pending} and {a.state.nextId}"
             if (sorted s'.pending).map (·.1) != [2, 40, 41] then ok ← fail s!"the wire ids are {(sorted s'.pending).map (·.1)}"
-            if view s'.machines == view b.state.machines then
+            if view s'.machines.toSigma == view b.state.machines.toSigma then
               ok ← fail "the second event reacting on the tables from before the first passes the comparison"
             return ok
           | _, _ => fail "the step faults"
@@ -2331,12 +2331,12 @@ def twiceCheck (solver : Solver) : IO Bool := do
           let mut ok := true
           if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
           if !sameAs L recordsT rfl r.state.records (vs.lookup 10) then ok ← fail "the records differ from the step's"
-          if view s'.machines != view r.state.machines || view s'.machines != [[(some 3, some 1, some (105, some 2))]] then
-            ok ← fail s!"the new table holds {view s'.machines}, the step {view r.state.machines}"
+          if view s'.machines.toSigma != view r.state.machines.toSigma || view s'.machines.toSigma != [[(some 3, some 1, some (105, some 2))]] then
+            ok ← fail s!"the new table holds {view s'.machines.toSigma}, the step {view r.state.machines.toSigma}"
           if ids s'.pending != ids r.state.pending || s'.nextId != r.state.nextId || ids s'.pending != [2, 40, 41] then
             ok ← fail s!"the model's pending ids are {ids s'.pending} and next id {s'.nextId}, the step's {ids r.state.pending} and {r.state.nextId}"
           match Step.applyEvents prelude ({ state := s } : Step.Acc twiceSvc) [(3 : Int)] with
-          | .ok b => if view s'.machines == view b.state.machines then ok ← fail "applying only the first event passes the comparison"
+          | .ok b => if view s'.machines.toSigma == view b.state.machines.toSigma then ok ← fail "applying only the first event passes the comparison"
           | .error _ => ok ← fail "one event faults"
           return ok
         | _, _ => fail "the model does not decode"
@@ -2424,12 +2424,12 @@ def answerMCheck (solver : Solver) : IO Bool := do
         let mut ok := true
         if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
         if !sameAs L recordsT rfl r.state.records (vs.lookup 9) then ok ← fail "the records differ from the step's"
-        if view s'.machines != view r.state.machines || view s'.machines != [[(some 3, some 1, some (105, some 2))]] then
-          ok ← fail s!"the new table holds {view s'.machines}, the step {view r.state.machines}"
+        if view s'.machines.toSigma != view r.state.machines.toSigma || view s'.machines.toSigma != [[(some 3, some 1, some (105, some 2))]] then
+          ok ← fail s!"the new table holds {view s'.machines.toSigma}, the step {view r.state.machines.toSigma}"
         if sorted s'.pending != sorted r.state.pending || s'.nextId != r.state.nextId ||
             (sorted s'.pending).map (·.1) != [40] then
           ok ← fail s!"the model's pending table holds {sorted s'.pending} and next id {s'.nextId}, the step {sorted r.state.pending} and {r.state.nextId}"
-        if view s'.machines == view s.machines then ok ← fail "the table before the machine reacts passes the comparison"
+        if view s'.machines.toSigma == view s.machines.toSigma then ok ← fail "the table before the machine reacts passes the comparison"
         return ok
       | _, _, _ => fail "the model does not decode"
     | a => fail s!"{repr a}"
@@ -2651,14 +2651,14 @@ def internalCheck (solver : Solver) : IO Bool := do
           let stepIds := ((a.state.pending.filter (·.id != 2)).map (·.id)).mergeSort (· ≤ ·)
           let mut ok := true
           if !sameAs L recordsT rfl a.state.records (vs.lookup 8) then ok ← fail "the records differ from the step's"
-          if view s'.machines != view a.state.machines then
-            ok ← fail s!"the new table holds {view s'.machines}, the step {view a.state.machines}"
+          if view s'.machines.toSigma != view a.state.machines.toSigma then
+            ok ← fail s!"the new table holds {view s'.machines.toSigma}, the step {view a.state.machines.toSigma}"
           if ids != stepIds || vs.lookup 9 != some (.int a.state.nextId) || ids.take 2 != [40, 41] then
             ok ← fail s!"the new wire ids are {ids} and next id {repr (vs.lookup 9)}, the step's {stepIds} and {a.state.nextId}"
           if a.state.fresh != s.fresh + 1 then ok ← fail "the fresh counter did not advance"
           match Step.applyEvents prelude ({ state := s } : Step.Acc twiceSvc) [(3 : Int), (3 : Int)] with
           | .ok b =>
-            if sameAs L recordsT rfl b.state.records (vs.lookup 8) && view s'.machines == view b.state.machines then
+            if sameAs L recordsT rfl b.state.records (vs.lookup 8) && view s'.machines.toSigma == view b.state.machines.toSigma then
               ok ← fail "applying only decide's events passes the comparison"
           | .error _ => ok ← fail "decide's events fault"
           return ok
@@ -2752,11 +2752,11 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
           let stepIds := ((a.state.pending.filter (·.id != 2)).map (·.id)).mergeSort (· ≤ ·)
           let mut ok := true
           if !sameAs L recordsT rfl a.state.records (vs.lookup 8) then ok ← fail "the records differ from the step's"
-          if view s'.machines != view a.state.machines then
-            ok ← fail s!"the new table holds {view s'.machines}, the step {view a.state.machines}"
+          if view s'.machines.toSigma != view a.state.machines.toSigma then
+            ok ← fail s!"the new table holds {view s'.machines.toSigma}, the step {view a.state.machines.toSigma}"
           if ids != stepIds || vs.lookup 9 != some (.int a.state.nextId) || ids != [40] then
             ok ← fail s!"the new wire ids are {ids} and next id {repr (vs.lookup 9)}, the step's {stepIds} and {a.state.nextId}"
-          if sameAs L recordsT rfl b.state.records (vs.lookup 8) && view s'.machines == view b.state.machines then
+          if sameAs L recordsT rfl b.state.records (vs.lookup 8) && view s'.machines.toSigma == view b.state.machines.toSigma then
             ok ← fail "an on_answer without events passes the comparison"
           return ok
         | _, _ => fail "the internal step faults"
@@ -2862,7 +2862,7 @@ def dispCheck (solver : Solver) : IO Bool := do
           let ids := ((List.range nn).filterMap fun j =>
             if flag (12 + 2 * j) then natOf ((vs.lookup (13 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
           let same (a : Step.Acc dispSvc) : Bool :=
-            sameAs L recordsT rfl a.state.records (vs.lookup 7) && view s'.machines == view a.state.machines &&
+            sameAs L recordsT rfl a.state.records (vs.lookup 7) && view s'.machines.toSigma == view a.state.machines.toSigma &&
               vs.lookup 8 == some (.int a.state.nextId) && vs.lookup 11 == some (.int a.state.fresh) &&
               ids == ((a.state.pending.filter (·.id != 2)).map (·.id)).mergeSort (· ≤ ·)
           let faults := flag 10
@@ -2997,7 +2997,7 @@ def cascadeCheck (solver : Solver) : IO Bool := do
           let ids := ((List.range nn).filterMap fun j =>
             if flag (12 + 2 * j) then natOf ((vs.lookup (13 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
           let same (a : Step.Acc dispSvc) : Bool :=
-            sameAs L recordsT rfl a.state.records (vs.lookup 6) && view s'.machines == view a.state.machines &&
+            sameAs L recordsT rfl a.state.records (vs.lookup 6) && view s'.machines.toSigma == view a.state.machines.toSigma &&
               vs.lookup 7 == some (.int a.state.nextId) && vs.lookup 11 == some (.int a.state.fresh) &&
               ids == ((a.state.pending.filter (·.id != 2)).map (·.id)).mergeSort (· ≤ ·)
           let a0 : Step.Acc dispSvc := { state := s, own := fxs }
@@ -3124,7 +3124,7 @@ def cascEventCheck (solver : Solver) : IO Bool := do
               (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
           let ids (st : State v) := (st.pending.map (·.id)).mergeSort (· ≤ ·)
           let same (st : State v) : Bool :=
-            sameAs L recordsT rfl st.records (vs.lookup 7) && view s'.machines == view st.machines &&
+            sameAs L recordsT rfl st.records (vs.lookup 7) && view s'.machines.toSigma == view st.machines.toSigma &&
               s'.nextId == st.nextId && s'.fresh == st.fresh && ids s' == ids st
           let r := step prelude v s (.event ⟨0, by simp [v, cascSvc, writeSvc, writeSvcOf]⟩ (3 : Int))
           let got := (fo.settle.fault? M).map fun g => (Outcome.fault g).summary
@@ -3240,7 +3240,7 @@ def tickClockCheck (solver : Solver) : IO Bool := do
             (intDen _ i.key, intDen _ i.state, i.timer.map fun (p : Int × m.state.den0) => (p.1, intDen _ p.2))
         let ids (st : State v) := (st.pending.map (·.id)).mergeSort (· ≤ ·)
         let same (st : State v) : Bool :=
-          sameAs L recordsT rfl st.records (vs.lookup 7) && view s'.machines == view st.machines &&
+          sameAs L recordsT rfl st.records (vs.lookup 7) && view s'.machines.toSigma == view st.machines.toSigma &&
             s'.nextId == st.nextId && s'.fresh == st.fresh && ids s' == ids st
         let r := step prelude v s (.clock 100)
         let mut ok := true
@@ -3248,7 +3248,7 @@ def tickClockCheck (solver : Solver) : IO Bool := do
         if r.outcome.summary != "accepted" then ok ← fail s!"the step says {r.outcome.summary}"
         if r.state.fresh != s.fresh + 2 then ok ← fail s!"the step ran {r.state.fresh - s.fresh} internal steps, not 2"
         if !same r.state then
-          ok ← fail s!"the model's state (next id {s'.nextId}, fresh {s'.fresh}, ids {ids s'}, table {view s'.machines}) is not the step's (next id {r.state.nextId}, fresh {r.state.fresh}, ids {ids r.state}, table {view r.state.machines})"
+          ok ← fail s!"the model's state (next id {s'.nextId}, fresh {s'.fresh}, ids {ids s'}, table {view s'.machines.toSigma}) is not the step's (next id {r.state.nextId}, fresh {r.state.fresh}, ids {ids r.state}, table {view r.state.machines.toSigma})"
         match Step.fire { s with now := 100 } (v.bounds.cascade.toNat + 1) with
         | some (s1, _) => if same s1 then ok ← fail "the rounds without the cascade pass the comparison"
         | none => ok ← fail "the rounds exceed the bound"

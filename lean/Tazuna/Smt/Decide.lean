@@ -27,7 +27,7 @@ the records it leaves, at the context code `ctx`, with the condition: `decide`'s
 `decide` accepted. -/
 def encodeDecide (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [v.records, v.event] v.records))
-    (ctx : Code (Ty.ctx v.records x.input v.caller)) (now records : Term) (xs : PerMachine Term v.machines) (n q : Term) :
+    (ctx : Code (Ty.ctx v.records x.input v.caller)) (now records : Term) (xs : PerMachine (fun _ => Term) v.machines) (n q : Term) :
     Except Refusal (DecideOut v × Term) := do
   let (res, c2) ← cc.decide (ctx, ())
   let rest ← need "a result that has no term" (Code.term? _ res)
@@ -77,7 +77,7 @@ theorem loop_apply {P : List AnySite} (chk : Checked P T v)
     {S : List (Slot 1)} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv)
     {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
     {records : Term} (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
-    {xs : PerMachine Term v.machines} (hms : MachinesRel M L T v.machines xs a.state.machines)
+    {xs : PerMachine (fun _ => Term) v.machines} (hms : MachinesRel M L T v.machines xs a.state.machines)
     {n q : Term} {q0 : Nat} (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     {o : EventsOut v} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c))
     (hc : Holds M c) :
@@ -102,7 +102,7 @@ the fresh counter `fresh` denotes, the events `evs` applied, the requests `effs`
 queries `os` queued at places from `q0`, as the own slots hold. -/
 def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShape v.event)) (a : Step.Acc v)
     (o : EventsOut v) (fresh : Term) (q0 : Nat) (r : Except Fault (Step.Acc v)) : Prop :=
-  ∃ (recs : v.records.den0) (ms : List (Step.MachineState v.records v.event)) (fr : Nat) (evs : List v.event.den0)
+  ∃ (recs : v.records.den0) (ms : Step.Machines v.machines) (fr : Nat) (evs : List v.event.den0)
     (effs : List (Sender × EffectV v.event)) (os : List (EffectV v.event)),
     (∀ ps, Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) ps →
       r = .ok { state := { a.state with records := recs, machines := ms, fresh := fr,
@@ -122,7 +122,7 @@ theorem loop_acc {P : List AnySite} (chk : Checked P T v)
     {S : List (Slot 1)} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv)
     {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
     {records : Term} (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
-    {xs : PerMachine Term v.machines} (hms : MachinesRel M L T v.machines xs a.state.machines)
+    {xs : PerMachine (fun _ => Term) v.machines} (hms : MachinesRel M L T v.machines xs a.state.machines)
     {n q fresh : Term} {q0 : Nat} (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     {o : EventsOut v} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c))
@@ -220,7 +220,7 @@ theorem decide_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca) (senv : StepEnv L shs) (a : Step.Acc v) (cv : (Ty.ctx v.records x.input v.caller).den0)
     {ctx : Code (Ty.ctx v.records x.input v.caller)} (hctx : Smt.Rel M L _ (Ty.up _ x.data.ctx cv) ctx)
-    {now records n q fresh : Term} {xs : PerMachine Term v.machines} {q0 : Nat} (hnow : now.denote M = .int a.state.now)
+    {now records n q fresh : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat} (hnow : now.denote M = .int a.state.now)
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hms : MachinesRel M L T v.machines xs a.state.machines) (hn : n.denote M = .int (Int.ofNat a.state.nextId))
     (hq : q.denote M = .int q0) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))

@@ -1,5 +1,5 @@
 import Tazuna.Smt.KeysInv
-import Tazuna.Smt.PerMachine
+import Tazuna.Semantics.PerMachine
 
 /-! The symbolic state: a service's state between two inputs as terms, so a script can ask about every state at once.
 The records are one term of the records' sort, with each table in the slots its layout gives it; the time, the fresh
@@ -23,10 +23,10 @@ structure SymState (v : ServiceV) where
   fresh : Term
   nextId : Term
   pending : Term
-  machines : PerMachine Term v.machines
+  machines : PerMachine (fun _ => Term) v.machines
 
 /-- The constants `v<k>`, `v<k + 1>`, ..., one per machine. -/
-def machineVars {r e : Ty} : (ms : List (MachineV r e)) → Nat → PerMachine Term ms
+def machineVars {r e : Ty} : (ms : List (MachineV r e)) → Nat → PerMachine (fun _ => Term) ms
   | [], _ => .nil
   | _ :: ms, k => .cons (.var k) (machineVars ms (k + 1))
 
@@ -78,38 +78,37 @@ def PendingSorted (shs : List (PendingShape v.event)) (w : Val) : Prop := Sorted
 def embedPending (shs : List (PendingShape v.event)) (tbl : PendingVal shs) : Option Val := embedV L (pendingTable shs) tbl
 
 /-- The machines' instances the tables' values code, one table per machine. -/
-def decodeMachines (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → PerMachine Term ms →
-    Option (List (Step.MachineState v.records v.event))
-  | [], .nil => some []
-  | m :: ms, .cons x xs => (decodeV L m.table (x.denote M)).bind fun tbl =>
-    (decodeMachines T ms xs).map fun rest => ⟨m, instancesOf T m (Ty.down _ m.table_data tbl)⟩ :: rest
+def decodeMachines (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → PerMachine (fun _ => Term) ms →
+    Option (Step.Machines ms)
+  | [], .nil => some .nil
+  | m :: _, .cons x xs => (decodeV L m.table (x.denote M)).bind fun tbl =>
+    (decodeMachines T _ xs).map (.cons (instancesOf T m (Ty.down _ m.table_data tbl)))
 
 /-- The instance tables' well-formedness: each table's. -/
-def wfMachines : (ms : List (MachineV v.records v.event)) → PerMachine Term ms → Option Term
+def wfMachines : (ms : List (MachineV v.records v.event)) → PerMachine (fun _ => Term) ms → Option Term
   | [], .nil => some tt
   | m :: ms, .cons x xs => (wfT L m.table x).bind fun c => (wfMachines ms xs).map (.and c ·)
 
 /-- The instance tables' values have their sorts' shape, as in every well-sorted model. -/
-def MachinesSorted : (ms : List (MachineV v.records v.event)) → PerMachine Term ms → Prop
+def MachinesSorted : (ms : List (MachineV v.records v.event)) → PerMachine (fun _ => Term) ms → Prop
   | [], .nil => True
   | m :: ms, .cons x xs => Sorted L m.table (x.denote M) ∧ MachinesSorted ms xs
 
 /-- The SMT values of the machines' instance tables: none when some machine has a key twice. -/
-def embedMachines : List (Step.MachineState v.records v.event) → Option (List Val)
-  | [] => some []
-  | ⟨m, insts⟩ :: sms =>
+def embedMachines : {ms : List (MachineV v.records v.event)} → Step.Machines ms → Option (List Val)
+  | _, .nil => some []
+  | m :: _, .cons insts sms =>
     if h : KeysUnique (Ty.semWith Dsl.base m.key).2 (instEntries m insts) then
       (embedV L m.table (Ty.up _ m.table_data (m.tableOf insts h))).bind fun w => (embedMachines sms).map (w :: ·)
     else none
 
 /-- The tables denote the machines' instances: each table's entries, in key order. -/
-def MachinesRel (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → PerMachine Term ms →
-    List (Step.MachineState v.records v.event) → Prop
-  | [], .nil, [] => True
-  | m :: ms, .cons x xs, sm :: sms =>
-    (∃ tbl, RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M) ∧ sm = ⟨m, instancesOf T m tbl⟩) ∧
+def MachinesRel (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → PerMachine (fun _ => Term) ms →
+    Step.Machines ms → Prop
+  | [], .nil, .nil => True
+  | m :: ms, .cons x xs, .cons insts sms =>
+    (∃ tbl, RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M) ∧ insts = instancesOf T m tbl) ∧
       MachinesRel T ms xs sms
-  | _, _, _ => False
 
 /-- The pending term denotes the pending requests, at the shapes. -/
 def PendingRel (shs : List (PendingShape v.event)) (w : Val) (ps : List (Step.Pending v.event)) : Prop :=
@@ -204,8 +203,8 @@ theorem decode_pending (shs : List (PendingShape v.event)) {w : Val} {ps : List 
   exact ⟨tbl, decode_rel _ _ _ ht, rfl⟩
 
 /-- T3 for the instances: the decoded instances are the ones the tables denote. -/
-theorem decode_machines (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
-    {sms : List (Step.MachineState v.records v.event)} → decodeMachines M L T ms xs = some sms → MachinesRel M L T ms xs sms
+theorem decode_machines (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → (xs : PerMachine (fun _ => Term) ms) →
+    {sms : Step.Machines ms} → decodeMachines M L T ms xs = some sms → MachinesRel M L T ms xs sms
   | [], .nil, _, h => by simp only [decodeMachines, Option.some.injEq] at h; subst h; trivial
   | m :: ms, .cons x xs, _, h => by
     obtain ⟨tbl, ht, h⟩ := bind_some.1 h
@@ -229,10 +228,10 @@ theorem decode_embedPending (shs : List (PendingShape v.event)) (pv : PendingVal
     (h : embedPending L shs pv = some w) : decodePending L shs w = some pv.list := by
   simp only [decodePending, decode_embed _ _ _ h, PendingVal.list]; rfl
 
-theorem embedMachines_length : (sms : List (Step.MachineState v.records v.event)) → (ws : List Val) →
-    embedMachines L sms = some ws → ws.length = sms.length
-  | [], _, h => by simp only [embedMachines, Option.some.injEq] at h; subst h; rfl
-  | ⟨_, _⟩ :: sms, _, h => by
+theorem embedMachines_length : {ms : List (MachineV v.records v.event)} → (sms : Step.Machines ms) → (ws : List Val) →
+    embedMachines L sms = some ws → ws.length = ms.length
+  | _, .nil, _, h => by simp only [embedMachines, Option.some.injEq] at h; subst h; rfl
+  | _ :: _, .cons _ sms, _, h => by
     simp only [embedMachines] at h
     split at h
     · obtain ⟨_, _, h⟩ := bind_some.1 h
@@ -241,12 +240,12 @@ theorem embedMachines_length : (sms : List (Step.MachineState v.records v.event)
     · cases h
 
 /-- T3 for the instances: decoding inverts the embedding of instances in the step's form. -/
-theorem decode_embedMachines (T : List TypeDecl) : (sms : List (Step.MachineState v.records v.event)) →
-    (∀ sm ∈ sms, InstancesOk T sm.1 sm.2) → (xs : PerMachine Term (sms.map (·.1))) → (ws : List Val) →
-    embedMachines L sms = some ws → xs.toList.map (Term.denote M) = ws → decodeMachines M L T (sms.map (·.1)) xs = some sms
-  | [], _, .nil, ws, h, _ => by
+theorem decode_embedMachines (T : List TypeDecl) : {ms : List (MachineV v.records v.event)} → (sms : Step.Machines ms) →
+    (∀ sm ∈ sms.toSigma, InstancesOk T sm.1 sm.2) → (xs : PerMachine (fun _ => Term) ms) → (ws : List Val) →
+    embedMachines L sms = some ws → xs.toList.map (Term.denote M) = ws → decodeMachines M L T ms xs = some sms
+  | _, .nil, _, .nil, ws, h, _ => by
     simp only [embedMachines, Option.some.injEq] at h; subst h; rfl
-  | ⟨m, insts⟩ :: sms, hok, .cons x xs, ws, h, hx => by
+  | m :: _, .cons insts sms, hok, .cons x xs, ws, h, hx => by
     simp only [embedMachines] at h
     split at h
     · rename_i hu
@@ -254,7 +253,6 @@ theorem decode_embedMachines (T : List TypeDecl) : (sms : List (Step.MachineStat
       obtain ⟨ws', hws', rfl⟩ := map_some.1 h
       simp only [PerMachine.toList_cons, List.map_cons, List.cons.injEq] at hx
       have hrest := decode_embedMachines T sms (fun sm h => hok sm (by simp [h])) xs ws' hws' hx.2
-      show decodeMachines M L T (m :: sms.map (·.1)) (.cons x xs) = _
       simp only [decodeMachines, hx.1, decode_embed _ _ _ hw, Option.bind_some, hrest, Option.map_some]
       rw [Ty.down_up]
       have he := instancesOf_entries T m insts ⟨(hok ⟨m, insts⟩ (by simp)).1, hu⟩
@@ -273,17 +271,11 @@ theorem machineVars_toList {r e : Ty} : (ms : List (MachineV r e)) → (k : Nat)
     simp only [Function.comp, Term.var.injEq]
     omega
 
-theorem toList_cast {β : Type} {r e : Ty} {ms ms' : List (MachineV r e)} (h : ms = ms') (xs : PerMachine β ms) :
-    (h ▸ xs).toList = xs.toList := by subst h; rfl
-
-theorem decodeMachines_cast {T : List TypeDecl} {ms ms' : List (MachineV v.records v.event)} (h : ms = ms')
-    (xs : PerMachine Term ms) : decodeMachines M L T ms' (h ▸ xs) = decodeMachines M L T ms xs := by subst h; rfl
-
 /-- T3 for the state: decoding inverts the embedding, in any model whose constants hold the embedded values, for a
-state whose machines are the service's with their instances in the step's form. -/
+state whose instances are in the step's form. -/
 theorem decode_embedState (b : Nat) (T : List TypeDecl) {shs : List (PendingShape v.event)} (s : State v)
-    (pv : PendingVal shs) (hpv : pv.list = s.pending) (hms : s.machines.map (·.1) = v.machines)
-    (hok : ∀ sm ∈ s.machines, InstancesOk T sm.1 sm.2) (vals : List Val) (h : embedState L s pv = some vals)
+    (pv : PendingVal shs) (hpv : pv.list = s.pending)
+    (hok : ∀ sm ∈ s.machines.toSigma, InstancesOk T sm.1 sm.2) (vals : List Val) (h : embedState L s pv = some vals)
     (hM : ∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) :
     (SymState.vars (v := v) b).decode M L T shs = some s := by
   obtain ⟨r, hrec, h⟩ := bind_some.1 h
@@ -295,9 +287,7 @@ theorem decode_embedState (b : Nat) (T : List TypeDecl) {shs : List (PendingShap
   have h3 := hM 3 (by simp)
   have h4 := hM 4 (by simp)
   simp only [List.cons_append, List.getElem_cons_zero, List.getElem_cons_succ, Nat.add_zero] at h0 h1 h2 h3 h4
-  have hlen : ws.length = v.machines.length := by
-    rw [← hms, List.length_map]
-    exact embedMachines_length s.machines ws hws
+  have hlen : ws.length = v.machines.length := embedMachines_length s.machines ws hws
   have hx : (machineVars v.machines (b + 5)).toList.map (Term.denote M) = ws := by
     rw [machineVars_toList]
     apply List.ext_getElem (by simp [hlen])
@@ -307,9 +297,7 @@ theorem decode_embedState (b : Nat) (T : List TypeDecl) {shs : List (PendingShap
     simp only [List.getElem_map, List.getElem_range, Term.denote]
     rw [show b + 5 + j = b + (5 + j) by omega, this]
     simp [List.getElem_cons_succ, show 5 + j = j + 1 + 1 + 1 + 1 + 1 by omega]
-  have hdm := decode_embedMachines (M := M) T s.machines hok (hms.symm ▸ machineVars v.machines (b + 5)) ws hws
-    (by rw [toList_cast hms.symm]; exact hx)
-  rw [decodeMachines_cast hms.symm] at hdm
+  have hdm := decode_embedMachines (M := M) T s.machines hok (machineVars v.machines (b + 5)) ws hws hx
   simp only [SymState.decode, SymState.vars, Term.denote, h0, h1, h2, h3, h4, decode_embed _ _ _ hrec,
     Option.bind_some, intOf, natOf, Int.ofNat_eq_natCast, Int.natCast_nonneg, ite_true, Int.toNat_natCast,
     decode_embedPending shs pv p hp, hpv, hdm, Option.map_some, Ty.down_up]
@@ -348,7 +336,7 @@ theorem decode_reachable (b : Nat) (T : List TypeDecl) {P : List AnySite} (s : S
         (SymState.vars (v := v) b).decode M L T (shapes v P) = some s := by
   obtain ⟨pv, hpv⟩ := exists_pendingVal (shapes v P) s.pending hinv.shaped hinv.nodup
   exact ⟨pv, hpv, fun vals h M hM =>
-    decode_embedState b T s pv hpv hinv.machinesOf (fun sm h => (hkeys sm h).2) vals h hM⟩
+    decode_embedState b T s pv hpv (fun sm h => (hkeys sm h).2) vals h hM⟩
 
 /-- T3 for every state a run reaches from the initial state of a service whose program reaches only `P` and whose
 machine keys are ordered (what check requires): no assumption about the state is left. -/
@@ -358,10 +346,10 @@ theorem decode_run (b : Nat) (T : List TypeDecl) {P : List AnySite} (hv : v.Reac
       ∀ vals, embedState L (run T v (Step.State.init v) is).1 pv = some vals →
       ∀ M : Model, (∀ j (hj : j < vals.length), M.vars (b + j) = vals[j]) →
         (SymState.vars (v := v) b).decode M L T (shapes v P) = some (run T v (Step.State.init v) is).1 :=
-  decode_reachable b T _ (run_inv T hv _ (Step.init_inv hv) is) (run_keys T _ (Step.init_keys T hord) is)
+  decode_reachable b T _ (run_inv T hv _ Step.init_inv is) (run_keys T _ (Step.init_keys T hord) is)
 
 /-- The instance tables' well-formedness holds exactly when they decode. -/
-theorem wfMachines_iff (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → (xs : PerMachine Term ms) →
+theorem wfMachines_iff (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → (xs : PerMachine (fun _ => Term) ms) →
     {c : Term} → wfMachines L ms xs = some c → MachinesSorted M L ms xs →
     (Holds M c ↔ (decodeMachines M L T ms xs).isSome = true)
   | [], .nil, _, hc, _ => by
@@ -405,7 +393,7 @@ theorem sorted_of_decodePending (shs : List (PendingShape v.event)) {w : Val} {p
   obtain ⟨tbl, ht, -⟩ := map_some.1 h; exact decode_sorted _ _ tbl ht
 
 theorem sorted_of_decodeMachines (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) →
-    (xs : PerMachine Term ms) → {sms : List (Step.MachineState v.records v.event)} →
+    (xs : PerMachine (fun _ => Term) ms) → {sms : Step.Machines ms} →
     decodeMachines M L T ms xs = some sms → MachinesSorted M L ms xs
   | [], .nil, _, _ => trivial
   | _ :: ms, .cons _ xs, _, h => by
