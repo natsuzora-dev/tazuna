@@ -10,6 +10,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
@@ -21,5 +22,15 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
       - name: Install z3
-        run: sudo apt-get install -y z3
+        env:
+          Z3_VERSION: "5.4.1"
+          Z3_SHA256: b548bac48ef2452b4e09ea2945cf4b011d5f43fcf39e4799df268ee7e0769d85
+        run: |
+          curl -sSfL -o z3.zip "https://github.com/Z3Prover/z3/releases/download/z3-$Z3_VERSION/z3-$Z3_VERSION-x64-glibc-2.39.zip"
+          echo "$Z3_SHA256  z3.zip" | sha256sum -c -
+          unzip -q z3.zip -d "$RUNNER_TEMP/z3"
+          rm z3.zip
+          bin="$(dirname "$(find "$RUNNER_TEMP/z3" -type f -name z3 -path '*/bin/*')")"
+          "$bin/z3" --version | grep -qF "$Z3_VERSION"
+          echo "$bin" >> "$GITHUB_PATH"
       - run: scripts/check
