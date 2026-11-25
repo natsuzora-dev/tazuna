@@ -148,14 +148,15 @@ def embedState {shs : List (PendingShape v.event)} (s : State v) (pv : PendingVa
   (embedMachines L s.machines).map fun ms =>
   [r, .int s.now, .int (Int.ofNat s.fresh), .int (Int.ofNat s.nextId), p] ++ ms
 
-/-- An input as terms. Which command, query or subscription an input names is fixed, so each has its own script; the
-values it carries are terms. An answer's script fixes the case it asks about: that the `j`-th pending slot holds the
-request it names as an entry of the `k`-th pending shape (`answer`), or that no slot holds it as an entry of a shape
-whose answers have its type `t` (`unmatched`). -/
-inductive SymInput (v : ServiceV) where
+/-- An input as terms, at the pending shapes `shs` and a pending table of `slots` slots. Which command, query or
+subscription an input names is fixed, so each has its own script; the values it carries are terms. An answer's script
+fixes the case it asks about: that the `j`-th pending slot holds the request it names as an entry of the `k`-th
+pending shape (`answer`), or that no slot holds it as an entry of a shape whose answers have its type `t`
+(`unmatched`). -/
+inductive SymInput (v : ServiceV) (shs : List (PendingShape v.event)) (slots : Nat) where
   | command (i : Fin v.commands.length) (caller input : Term)
   | query (i : Fin v.queries.length) (caller input : Term)
-  | answer (k j : Nat) (to value : Term)
+  | answer (k : Fin shs.length) (j : Fin slots) (to value : Term)
   | unmatched (t : Ty) (to value : Term)
   | event (i : Fin v.subscribes.length) (value : Term)
   | clock (time : Term)
@@ -166,9 +167,10 @@ def decodeAnswer (t : Ty) (to value : Term) : Option (Input v) :=
     (natOf (to.denote M)).bind fun n => (decodeV L t (value.denote M)).map fun x => .answer n ⟨t, Ty.down _ h x⟩
   else none
 
-/-- The input a model's values of the symbolic input denote, at the pending shapes `shs`. -/
-def SymInput.decode (shs : List (PendingShape v.event)) (hc : v.caller.isData = true) : SymInput v → Option (Input v)
-  | .answer k _ to value => shs[k]?.bind fun sh => decodeAnswer M L (answerTy sh.output sh.rejection) to value
+/-- The input a model's values of the symbolic input denote. -/
+def SymInput.decode {shs : List (PendingShape v.event)} {n : Nat} (hc : v.caller.isData = true) :
+    SymInput v shs n → Option (Input v)
+  | .answer k _ to value => decodeAnswer M L (answerTy shs[k].output shs[k].rejection) to value
   | .unmatched t to value => decodeAnswer M L t to value
   | .command i caller input =>
     (decodeV L v.caller (caller.denote M)).bind fun c =>
@@ -426,8 +428,9 @@ theorem wf_of_decodeState {S : SymState v} {T : List TypeDecl} {shs : List (Pend
     (by rw [h']; rfl)
 
 /-- T3 for a query's input: the decoded caller and input are the values the model's values code. -/
-theorem decode_query {shs : List (PendingShape v.event)} {hc : v.caller.isData = true}
-    {i : Fin v.queries.length} {sc si : Term} {x : Input v} (h : (SymInput.query i sc si).decode M L shs hc = some x) :
+theorem decode_query {shs : List (PendingShape v.event)} {n : Nat} {hc : v.caller.isData = true}
+    {i : Fin v.queries.length} {sc si : Term} {x : Input v}
+    (h : (SymInput.query (shs := shs) (slots := n) i sc si).decode M L hc = some x) :
     ∃ caller input, x = .query i caller input ∧ RelV L v.caller (Ty.up _ hc caller) (sc.denote M) ∧
       RelV L (v.queries.get i).input (Ty.up _ (v.queries.get i).input_data input) (si.denote M) := by
   obtain ⟨c, h1, h⟩ := bind_some.1 h
@@ -435,9 +438,9 @@ theorem decode_query {shs : List (PendingShape v.event)} {hc : v.caller.isData =
   exact ⟨_, _, rfl, by simpa [Ty.up_down] using decode_rel _ _ _ h1, by simpa [Ty.up_down] using decode_rel _ _ _ h2⟩
 
 /-- T3 for a command's input. -/
-theorem decode_command {shs : List (PendingShape v.event)} {hc : v.caller.isData = true}
+theorem decode_command {shs : List (PendingShape v.event)} {n : Nat} {hc : v.caller.isData = true}
     {i : Fin v.commands.length} {sc si : Term} {x : Input v}
-    (h : (SymInput.command i sc si).decode M L shs hc = some x) :
+    (h : (SymInput.command (shs := shs) (slots := n) i sc si).decode M L hc = some x) :
     ∃ caller input, x = .command i caller input ∧ RelV L v.caller (Ty.up _ hc caller) (sc.denote M) ∧
       RelV L (v.commands.get i).input (Ty.up _ (v.commands.get i).input_data input) (si.denote M) := by
   obtain ⟨c, h1, h⟩ := bind_some.1 h
@@ -445,15 +448,16 @@ theorem decode_command {shs : List (PendingShape v.event)} {hc : v.caller.isData
   exact ⟨_, _, rfl, by simpa [Ty.up_down] using decode_rel _ _ _ h1, by simpa [Ty.up_down] using decode_rel _ _ _ h2⟩
 
 /-- T3 for an event's input. -/
-theorem decode_event {shs : List (PendingShape v.event)} {hc : v.caller.isData = true}
-    {i : Fin v.subscribes.length} {sv : Term} {x : Input v} (h : (SymInput.event i sv).decode M L shs hc = some x) :
+theorem decode_event {shs : List (PendingShape v.event)} {n : Nat} {hc : v.caller.isData = true}
+    {i : Fin v.subscribes.length} {sv : Term} {x : Input v}
+    (h : (SymInput.event (shs := shs) (slots := n) i sv).decode M L hc = some x) :
     ∃ value, x = .event i value ∧ RelV L (v.subscribes.get i).event (Ty.up _ (v.subscribes.get i).event_data value) (sv.denote M) := by
   obtain ⟨y, h1, rfl⟩ := map_some.1 h
   exact ⟨_, rfl, by simpa [Ty.up_down] using decode_rel _ _ _ h1⟩
 
 /-- T3 for a clock line's input. -/
-theorem decode_clock {shs : List (PendingShape v.event)} {hc : v.caller.isData = true} {st : Term}
-    {x : Input v} (h : (SymInput.clock st).decode M L shs hc = some x) :
+theorem decode_clock {shs : List (PendingShape v.event)} {n : Nat} {hc : v.caller.isData = true} {st : Term}
+    {x : Input v} (h : (SymInput.clock (shs := shs) (slots := n) st).decode M L hc = some x) :
     ∃ time, x = .clock time ∧ st.denote M = .int time := by
   obtain ⟨n, h1, rfl⟩ := map_some.1 h
   exact ⟨n, rfl, intOf_eq h1⟩

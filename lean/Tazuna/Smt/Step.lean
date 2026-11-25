@@ -52,7 +52,7 @@ def callersOf {c : Ty} (callers : List c.den0) : Except Refusal (List Term) :=
 
 /-- A step's terms from the symbolic state and input, by the input's kind. -/
 def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
-    (S : SymState v) : SymInput v → Except Refusal (EncodedStep v)
+    (S : SymState v) : SymInput v (shapes v P) senv.nT → Except Refusal (EncodedStep v)
   | .command i caller input => do
     let x := v.commands.get i
     let (cc, cx) ← CommandCode.of L x
@@ -68,10 +68,9 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
     let (o, c) ← encodeQuery L q qc ks S caller input
     pure ⟨.query o, c, cq, tt⟩
   | .answer k j to value => do
-    let sh ← need "an answer shape past the pending shapes" (shapes v P)[k]?
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let ⟨o, c, cs⟩ ← encodeAnswer L T P (shapes v P) k sh j senv apply inv S to value
+    let ⟨o, c, cs⟩ ← encodeAnswer L T P (shapes v P) k (shapes v P)[k] senv j apply inv S to value
     pure ⟨.answer o, c, andT ca ci, cs⟩
   | .unmatched t to _ => do
     let u ← answerUnmatchedT L (shapes v P) t S.pending to
@@ -92,7 +91,7 @@ section
 variable (S : Ty → Nat) (T : List TypeDecl) {v : ServiceV}
 
 /-- Whether the codes of the functions a step of the input's kind applies fit their slots. -/
-def codesFit : SymInput v → Prop
+def codesFit {shs : List (PendingShape v.event)} {n : Nat} : SymInput v shs n → Prop
   | .command i _ _ =>
     let x := v.commands.get i
     ((x.accepts.fits S).1 ∧ (x.decide.fits S).1 ∧ (x.ensures.fits S).1) ∧ (v.apply.fits S).1 ∧ (v.invariants.fits S).1
@@ -182,7 +181,7 @@ the step applies fits, and wherever it holds the step from `s` is the one the te
 theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     (senv : StepEnv L (shapes v P))
     {S : SymState v} {s : State v} (hS : S.decode M L T (shapes v P) = some s) (hinv : Step.Inv P s)
-    {inp : SymInput v} {hc} {x : Input v} (hx : inp.decode M L (shapes v P) hc = some x)
+    {inp : SymInput v (shapes v P) senv.nT} {hc} {x : Input v} (hx : inp.decode M L hc = some x)
     {t : EncodedStep v} (henc : encodeStep L T P v senv S inp = .ok t) :
     (Holds M t.codes ↔ codesFit L.count inp) ∧
     (Holds M t.codes → Holds M t.sites → Holds M t.out.case →
@@ -212,18 +211,16 @@ theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     exact ⟨queryCode_exact hqc, fun hcq _ _ =>
       query_encode s i caller input hqc hcq (callersOf_ok (v.queries.get i).data.caller hks) hR hsc hsi hqe⟩
   | answer k j toT valT =>
-    obtain ⟨sh, hk, henc⟩ := bind_ok.1 henc
-    have hk := need_ok.1 hk
+    have hk : (shapes v P)[(k : Nat)]? = some (shapes v P)[k] := List.getElem?_eq_getElem k.2
     obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨inv, ci⟩, hinvc, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c, cs⟩, hans, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     refine ⟨apply_inv_exact happ hinvc, fun hcodes hcs hhit => ?_⟩
     obtain ⟨hca, hci⟩ := (holds_andT _ _).1 hcodes
-    have hx' : decodeAnswer M L (answerTy sh.output sh.rejection) toT valT = some x := by
-      simpa [SymInput.decode, hk] using hx
+    have hx' : decodeAnswer M L (answerTy (shapes v P)[k].output (shapes v P)[k].rejection) toT valT = some x := hx
     obtain ⟨hty, to, value, rfl, hto, hval⟩ := decode_answer hx'
-    have ex := answer_encode chk (fun _ => shapes_inSites) s hinv hk j to value happ hca hinvc hci senv hR hto hty hval hans hcs
+    have ex := answer_encode chk (fun _ => shapes_inSites) s hinv hk to value happ hca hinvc hci senv j hR hto hty hval hans hcs
     exact ⟨by rw [ex.1]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond => ex.2 hcond hhit⟩
   | unmatched ty toT valT =>
     obtain ⟨u, hu, henc⟩ := bind_ok.1 henc

@@ -114,18 +114,25 @@ def PendingSlot.slot (s : PendingSlot) : Slot 2 := (s.flag, ⟨[s.id, s.entry], 
 def gatePending (f : Term) (S : List PendingSlot) : List PendingSlot :=
   S.map fun s => { s with flag := Term.share (.and f s.flag) }
 
-/-- The `n` slots of the pending table `s`, as `slotsOf` reads them. -/
+/-- The `i`-th slot of the pending table `s`, as `slotsOf` reads it. -/
+def pendingSlotAt (d dt i : Nat) (s : Term) : PendingSlot :=
+  let x := Term.sel d 0 i s.share
+  ⟨.sel dt 0 0 x, .sel dt 0 1 x, .sel dt 0 2 x⟩
+
+/-- The `n` slots of the pending table `s`. -/
 def pendingSlotsOf (d dt n : Nat) (s : Term) : List PendingSlot :=
-  (List.range n).map fun i =>
-    let x := Term.sel d 0 i s.share
-    ⟨.sel dt 0 0 x, .sel dt 0 1 x, .sel dt 0 2 x⟩
+  (List.range n).map fun i => pendingSlotAt d dt i s
 
 theorem pendingSlotsOf_slot (d dt n : Nat) (s : Term) :
     (pendingSlotsOf d dt n s).map PendingSlot.slot = slotsOf d dt n 2 s := by
-  simp only [pendingSlotsOf, slotsOf, List.map_map]
+  simp only [pendingSlotsOf, pendingSlotAt, slotsOf, List.map_map]
   refine List.map_congr_left fun i _ => ?_
   simp only [Function.comp_apply, PendingSlot.slot, Prod.mk.injEq, true_and]
   exact Subtype.ext (by simp [List.range_succ])
+
+theorem pendingSlot_at {d dt n i : Nat} (hi : i < n) (s : Term) :
+    (slotsOf d dt n 2 s)[i]? = some (pendingSlotAt d dt i s).slot := by
+  rw [← pendingSlotsOf_slot, List.getElem?_map]; simp [pendingSlotsOf, hi]
 
 section
 variable (L : Layout) (T : List TypeDecl) {r e : Ty}

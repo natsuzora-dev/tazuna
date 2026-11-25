@@ -227,13 +227,12 @@ variable (L : Layout) (T : List TypeDecl) {v : ServiceV}
 /-- An answer step's terms at slot `j` for requests of the shape `sh`, the `k`-th of `shs`, its condition and the
 codes' condition, from the codes of the service's `apply` and `invariants` and the terms of the state, the wire id
 the answer names and the answer. -/
-def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat) (sh : PendingShape v.event) (j : Nat)
-    (senv : StepEnv L shs) (apply : Code (Ty.fn [v.records, v.event] v.records))
+def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat) (sh : PendingShape v.event)
+    (senv : StepEnv L shs) (j : Fin senv.nT) (apply : Code (Ty.fn [v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (S : SymState v) (to value : Term) : Except Refusal (Encoded (AnswerOut v)) := do
-  let (d, n, dt) ← collD L (pendingTable shs) [.dsl .fresh [], pendingEntry shs]
-  let (de, _) ← need "a layout without the pending entry" (L.find? (pendingEntry shs))
-  let PS := slotsOf d dt n 2 S.pending
-  let sl ← need "a slot past the pending table" (pendingSlotsOf d dt n S.pending)[j]?
+  let de := senv.dP
+  let PS := slotsOf senv.dT senv.dtT senv.nT 2 S.pending
+  let sl := pendingSlotAt senv.dT senv.dtT j S.pending
   let entry := sl.entry
   let hit := Term.and sl.flag (.and (.eq sl.id to) (.is de k entry))
   let (da, _) ← need "a layout without the captures' tuple" (L.find? (.tuple sh.answerΓ))
@@ -246,7 +245,7 @@ def encodeAnswer (P : List AnySite) (shs : List (PendingShape v.event)) (k : Nat
   let (dl, nl, dtl) ← collD L (.list v.event) [v.event]
   let (o, c4) ← encodeEvents L T v shs senv apply S.now (slotsOf dl dtl nl 1 evt) S.records S.machines S.nextId (.int 0)
   let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now S.fresh
-    (slotsTerm d dt (filterSlots PS (keepQs to PS))) o
+    (slotsTerm senv.dT senv.dtT (filterSlots PS (keepQs to PS))) o
   pure ⟨⟨hit, rules, evt, o, fo⟩,
     .ite hit (andT c1 (andT c2 (andT c3 (.ite (allT (rules.map (·.2))) (andT c4 cf) tt)))) tt, cfx⟩
 
@@ -301,17 +300,17 @@ events of `on_answer` run through the events loop and the step ends as its end t
 theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (s : State v) (hsinv : Step.Inv P s)
-    {k : Nat} {sh : PendingShape v.event} (hk : shs[k]? = some sh) (j : Nat)
+    {k : Nat} {sh : PendingShape v.event} (hk : shs[k]? = some sh)
     (to : Nat) (value : (answerTy sh.output sh.rejection).den0)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hinv : v.invariants.code L = .ok (inv, ci)) (hci : Holds M ci)
-    (senv : StepEnv L shs)
+    (senv : StepEnv L shs) (j : Fin senv.nT)
     {S : SymState v} (hR : StateRel M L T shs S s) {toT valT : Term} (hto : toT.denote M = .int (Int.ofNat to))
     (hans : (answerTy sh.output sh.rejection).isData = true)
     (hval : RelV L _ (Ty.up _ hans value) (valT.denote M))
     {o : AnswerOut v} {cond cfx : Term}
-    (henc : encodeAnswer L T P shs k sh j senv apply inv S toT valT =
+    (henc : encodeAnswer L T P shs k sh senv j apply inv S toT valT =
       .ok ⟨o, cond, cfx⟩) (hcfx : Holds M cfx) :
     let r := step T v s (.answer to ⟨_, value⟩)
     (Holds M cond ↔ (Holds M o.hit →
@@ -322,11 +321,17 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
       | [] => Finished M L T shs o.finish s { state := { s with pending := s.pending.filter (·.id != to) } }
           .accepted r) := by
   intro r
-  obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨de, dn⟩, h2, henc⟩ := bind_ok.1 henc
-  obtain ⟨⟨f, tk, te⟩, h3, henc⟩ := bind_ok.1 henc
-  have h3' : (slotsOf d dt n 2 S.pending)[j]? = some (PendingSlot.slot ⟨f, tk, te⟩) := by
-    rw [← pendingSlotsOf_slot, List.getElem?_map, need_ok.1 h3]; rfl
+  unfold encodeAnswer at henc
+  have h1 := senv.hT
+  have h2 := senv.hPE
+  have h3' := pendingSlot_at (d := senv.dT) (dt := senv.dtT) j.2 S.pending
+  generalize pendingSlotAt senv.dT senv.dtT j S.pending = sl at h3' henc
+  obtain ⟨f, tk, te⟩ := sl
+  generalize (j : Nat) = jn at h3'
+  generalize senv.dT = d at h1 h3' henc
+  generalize senv.dtT = dt at h1 h3' henc
+  generalize senv.nT = n at h1 h3' henc
+  generalize senv.dP = de at h2 henc
   obtain ⟨⟨da, dan⟩, h4, henc⟩ := bind_ok.1 henc
   obtain ⟨σa, h5, henc⟩ := bind_ok.1 henc
   obtain ⟨vc, h6, henc⟩ := bind_ok.1 henc
@@ -350,7 +355,7 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     obtain ⟨hhf, hhrest⟩ := (holds_and _ _).1 hhit
     obtain ⟨hheq, hhis⟩ := (holds_and _ _).1 hhrest
     obtain ⟨sv, ys, hS, hl, hw, hperm, hh⟩ := table_view (M := M) htbl h1
-    obtain ⟨b, hbsv, hfb⟩ := slot_at hS j h3'
+    obtain ⟨b, hbsv, hfb⟩ := slot_at hS jn h3'
     have hb : b = true := by simpa [Holds, hfb, Val.toBool] using hhf
     subst hb
     obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_right hh _ (by
@@ -363,7 +368,7 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
       rw [htk, hzk, hto] at e
       exact Int.ofNat.inj (Val.int.inj e)
     obtain ⟨d', n', hf', hra⟩ := hzv
-    have hde := find_det hf' (need_ok.1 h2)
+    have hde := find_det hf' h2
     subst d'
     obtain ⟨j', sh', fx, vals, hj', hzv', hfx, hpo⟩ := relAlts_pending (L := L) to (sh0 :: rest) 0 y.2 zv hra
     have hjk : j' = k := by
@@ -602,7 +607,7 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     obtain ⟨hhf, hhrest⟩ := (holds_and _ _).1 hhit
     obtain ⟨hheq, hhis⟩ := (holds_and _ _).1 hhrest
     obtain ⟨sv, ys, hS, hl, hw, hperm, hh⟩ := table_view (M := M) htbl h1
-    obtain ⟨b, hbsv, hfb⟩ := slot_at hS j h3'
+    obtain ⟨b, hbsv, hfb⟩ := slot_at hS jn h3'
     have hb : b = true := by simpa [Holds, hfb, Val.toBool] using hhf
     subst hb
     obtain ⟨y, hy, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_right hh _ (by
@@ -615,7 +620,7 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
       rw [htk, hzk, hto] at e
       exact Int.ofNat.inj (Val.int.inj e)
     obtain ⟨d', n', hf', hra⟩ := hzv
-    have hde := find_det hf' (need_ok.1 h2)
+    have hde := find_det hf' h2
     subst d'
     obtain ⟨j', sh', fx, vals, hj', hzv', hfx, hpo⟩ := relAlts_pending (L := L) to (sh0 :: rest) 0 y.2 zv hra
     have hjk : j' = k := by
