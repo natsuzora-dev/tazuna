@@ -160,11 +160,6 @@ def CodesOk : (ts : List Ty) → Codes ts → Prop
   | t :: ts, (c, cs) => CodeOk t c ∧ CodesOk ts cs
 end
 
-/-- Each global's code has no gap behind it. -/
-def EncsOk : (G : List Ty) → Encs G → Prop
-  | [], () => True
-  | t :: G, (e, es) => Sound (fun p => CodeOk L P ds H t p.1) e ∧ EncsOk G es
-
 end
 
 section
@@ -220,11 +215,6 @@ theorem codeOk_var : {Γ : List Ty} → {t : Ty} → (v : Var Γ t) → (σ : Co
     CodeOk L P ds H t (v.code σ)
   | _ :: _, _, .here, (_, _), ⟨h, _⟩ => h
   | _ :: _, _, .there v, (_, ss), ⟨_, h⟩ => codeOk_var v ss h
-
-theorem encOk_var : {G : List Ty} → {t : Ty} → (v : Var G t) → (gs : Encs G) → EncsOk L P ds H G gs →
-    Sound (fun p => CodeOk L P ds H t p.1) (v.enc gs)
-  | _ :: _, _, .here, (_, _), ⟨h, _⟩ => h
-  | _ :: _, _, .there v, (_, ss), ⟨_, h⟩ => encOk_var v ss h
 
 theorem avail_int : Avail L .int := fun _ => trivial
 theorem avail_str : Avail L .str := fun _ => trivial
@@ -1124,30 +1114,35 @@ theorem handleOf_name {p : Prim} {ts : List Ty} {h : HandleSite} (hh : handleOf 
 
 variable {G : List Ty} (D : Defs G) (gs : Encs G)
 
+/-- The globals at the positions `is` have codes with no gap behind them. -/
+def GlobsOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite) {G : List Ty}
+    (gs : Encs G) (is : List Nat) : Prop :=
+  ∀ {u : Ty} (w : Var G u), w.idx ∈ is → Sound (fun p => CodeOk L P ds H u p.1) (w.enc gs)
+
 mutual
 /-- The expression encoder meets no layout gap: in a layout that covers the program, an expression whose node types
 are available, whose kept functions are the program's sites and whose handles check accepted has a code with no gap
 behind it. -/
-theorem encode_sound (hC : Covers L P ds H) (hgs : EncsOk L P ds H G gs) : {Γ : List Ty} → {t : Ty} → (e : Expr G Γ t) → (σ : Codes Γ) → CodesOk L P ds H Γ σ →
-    (∀ u ∈ Expr.tys e, Avail L u) → (∀ s ∈ Expr.sites D e, s ∈ P) → (∀ h ∈ e.handles, HandleOk ds H h) →
+theorem encode_sound (hC : Covers L P ds H) : {Γ : List Ty} → {t : Ty} → (e : Expr G Γ t) → (σ : Codes Γ) → CodesOk L P ds H Γ σ →
+    (∀ u ∈ Expr.tys e, Avail L u) → (∀ s ∈ Expr.sites D e, s ∈ P) → (∀ h ∈ e.handles, HandleOk ds H h) → GlobsOk L P ds H gs e.globals →
     Sound (fun p => CodeOk L P ds H t p.1) (encode L gs e σ)
-  | _, _, .int _, _, _, _, _, _ => avail_int
-  | _, _, .str s, _, _, _, _, _ => by
+  | _, _, .int _, _, _, _, _, _, _ => avail_int
+  | _, _, .str s, _, _, _, _, _, _ => by
     simp only [encode]; split
     · exact avail_str
     · rfl
-  | _, _, .var v, σ, hσ, _, _, _ => codeOk_var v σ hσ
-  | _, _, .global v, _, _, _, _, _ => encOk_var v gs hgs
-  | _, _, .ctor v es, σ, hσ, ht, hs, hh => by
+  | _, _, .var v, σ, hσ, _, _, _, _ => codeOk_var v σ hσ
+  | _, _, .global v, _, _, _, _, _, hg => hg v (by simp [Expr.globals])
+  | _, _, .ctor v es, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encodes_sound hC hgs es σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)))
+    refine sound_bind (encodes_sound hC es σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)) (fun w hw => hg w (by simpa [Expr.globals] using hw)))
       fun _ _ => sound_bind sound_need_limit fun _ _ => ?_
     exact sound_bind (adtCtor_sound (ht _ (by simp [Expr.tys])) _ _) fun _ _ => ht _ (by simp [Expr.tys])
-  | _, _, @Expr.field _ _ i args vs ft _ k _ e, σ, hσ, ht, hs, hh => by
+  | _, _, @Expr.field _ _ i args vs ft _ k _ e, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)))
+    refine sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)) (fun w hw => hg w (by simpa [Expr.globals] using hw)))
       fun ⟨x, c⟩ hx => ?_
     rcases i with _ | i
     · rfl
@@ -1155,92 +1150,92 @@ theorem encode_sound (hC : Covers L P ds H) (hgs : EncsOk L P ds H G gs) : {Γ :
       split
       · exact sound_bind sound_need_limit fun _ hc => codeOk_ofTerm hc (ht _ (by simp [Expr.tys]))
       · rename_i hn; exact lacks_of_avail hx hn fun h => h.2
-  | _, _, @Expr.index _ _ ts e k, σ, hσ, ht, hs, hh => by
+  | _, _, @Expr.index _ _ ts e k, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)))
+    refine sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)) (fun w hw => hg w (by simpa [Expr.globals] using hw)))
       fun ⟨x, c⟩ hx => ?_
     exact sound_bind (tupleD_sound hC.sorted hx) fun _ _ =>
       sound_bind sound_need_limit fun _ hc => codeOk_ofTerm hc (ht _ (by simp [Expr.tys]))
-  | _, _, @Expr.update _ _ i args fs e p, σ, hσ, ht, hs, hh => by
+  | _, _, @Expr.update _ _ i args fs e p, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])))
+    refine sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])) (fun w hw => hg w (by simp [Expr.globals, hw])))
       fun ⟨x, c⟩ hx => ?_
     rcases i with _ | i
     · rfl
     · simp only
       split
-      · exact sound_bind (encodePatch_sound hC hgs p σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-          (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm]))
+      · exact sound_bind (encodePatch_sound hC p σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+          (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])) (fun w hw => hg w (by simp [Expr.globals, hw]))
           (fun j => _) 0) fun _ _ => ht _ (by simp [Expr.tys])
       · rename_i hn; exact lacks_of_avail hx hn fun h => h.2
-  | _, r, .call f args, σ, hσ, ht, hs, hh => by
-    have hargs := encodes_sound hC hgs args σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+  | _, r, .call f args, σ, hσ, ht, hs, hh, hg => by
+    have hargs := encodes_sound hC args σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
       (fun s h => hs s (by simp [Expr.sites, h]))
-      (fun h hm => hh h (by simp only [Expr.handles]; split <;> simp [hm]))
+      (fun h hm => hh h (by simp only [Expr.handles]; split <;> simp [hm])) (fun w hw => hg w (by simp [Expr.globals, hw]))
     cases hha : handleAt f args with
     | some h =>
       exact handleCall_sound gs σ f args hha (hh h (by simp [Expr.handles, hha])) hargs
     | none =>
       simp only [encode]
-      refine sound_bind (encode_sound hC hgs f σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-        (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hha, hm])))
+      refine sound_bind (encode_sound hC f σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+        (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hha, hm])) (fun w hw => hg w (by simp [Expr.globals, hw])))
         fun ⟨sf, c1⟩ hf => sound_bind hargs fun ⟨ss, c2⟩ hss => ?_
       exact sound_bind (hf _ (codesOk_share _ _ hss) (ht r (by simp [Expr.tys]))) fun _ hr => hr
-  | _, _, .lam body, σ, hσ, ht, hs, hh => by
+  | _, _, .lam body, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
     intro xs hxs _
-    exact encode_sound hC hgs body _ (codesOk_append xs σ hxs hσ) (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm))
-  | _, _, .let_ e body, σ, hσ, ht, hs, hh => by
+    exact encode_sound hC body _ (codesOk_append xs σ hxs hσ) (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)) (fun w hw => hg w (by simpa [Expr.globals] using hw))
+  | _, _, .let_ e body, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])))
+    refine sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])) (fun w hw => hg w (by simp [Expr.globals, hw])))
       fun ⟨x, c⟩ hx => ?_
-    exact sound_bind (encode_sound hC hgs body _ ⟨codeOk_share _ _ hx, hσ⟩ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm]))) fun _ hr => hr
-  | _, _, .case e cs _, σ, hσ, ht, hs, hh => by
+    exact sound_bind (encode_sound hC body _ ⟨codeOk_share _ _ hx, hσ⟩ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])) (fun w hw => hg w (by simp [Expr.globals, hw]))) fun _ hr => hr
+  | _, _, .case e cs _, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])))
+    refine sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])) (fun w hw => hg w (by simp [Expr.globals, hw])))
       fun ⟨x, c⟩ hx => ?_
-    refine sound_bind (encodeClauses_sound hC hgs cs σ hσ _ (codeOk_share _ _ hx) (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm]))) fun o ho => ?_
+    refine sound_bind (encodeClauses_sound hC cs σ hσ _ (codeOk_share _ _ hx) (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])) (fun w hw => hg w (by simp [Expr.globals, hw]))) fun o ho => ?_
     cases o with
     | none => rfl
     | some p => obtain ⟨r, c2⟩ := p; exact ho (r, c2) rfl
-  | _, _, .list items, σ, hσ, ht, hs, hh => by
+  | _, _, .list items, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encodeItems_sound hC hgs items σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)))
+    refine sound_bind (encodeItems_sound hC items σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)) (fun w hw => hg w (by simpa [Expr.globals] using hw)))
       fun ⟨ss, c⟩ _ => sound_bind (sound_mapM ss fun _ _ => sound_mono sound_termE fun _ _ => trivial) fun _ _ => ?_
     exact sound_bind (listOf_sound hC.sorted _ (ht _ (by simp [Expr.tys]))) fun _ _ => ht _ (by simp [Expr.tys])
-  | _, _, .tuple es, σ, hσ, ht, hs, hh => by
+  | _, _, .tuple es, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encodes_sound hC hgs es σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)))
+    refine sound_bind (encodes_sound hC es σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)) (fun w hw => hg w (by simpa [Expr.globals] using hw)))
       fun _ _ => sound_bind sound_need_limit fun _ _ => ?_
     exact sound_bind (tupleD_sound hC.sorted (ht _ (by simp [Expr.tys]))) fun _ _ => ht _ (by simp [Expr.tys])
-  | _, _, .bin op l r, σ, hσ, ht, hs, hh => by
+  | _, _, .bin op l r, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encode_sound hC hgs l σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])))
-      fun ⟨x, _⟩ hx => sound_bind (encode_sound hC hgs r σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-        (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])))
+    refine sound_bind (encode_sound hC l σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])) (fun w hw => hg w (by simp [Expr.globals, hw])))
+      fun ⟨x, _⟩ hx => sound_bind (encode_sound hC r σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+        (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])) (fun w hw => hg w (by simp [Expr.globals, hw])))
       fun ⟨y, _⟩ _ => ?_
     exact sound_bind (encodeBin_sound hC.sorted op x y hx (ht _ (by simp [Expr.tys]))) fun _ hr => hr
-  | _, _, .not e, σ, hσ, ht, hs, hh => by
+  | _, _, .not e, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    exact sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)))
+    exact sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)) (fun w hw => hg w (by simpa [Expr.globals] using hw)))
       fun _ _ => avail_bool
-  | _, _, .neg e, σ, hσ, ht, hs, hh => by
+  | _, _, .neg e, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    exact sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)))
+    exact sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simpa [Expr.sites] using h)) (fun h hm => hh h (by simpa [Expr.handles] using hm)) (fun w hw => hg w (by simpa [Expr.globals] using hw)))
       fun _ _ => avail_int
-  | _, _, .prim p args hp, _, _, _, _, hh => by
+  | _, _, .prim p args hp, _, _, _, _, hh, hg => by
     simp only [encode]
     have hnone : handleOf p args none = none := by
       cases hx : handleOf p args none with
@@ -1249,82 +1244,82 @@ theorem encode_sound (hC : Covers L P ds H) (hgs : EncsOk L P ds H G gs) : {Γ :
         have := (hh x (by simp [Expr.handles, hx])).2.1
         simp [handleOf_name hx] at this
     exact sound_bind (primCode_sound hC p args hp hnone) fun _ hc => hc
-  | _, _, @Expr.close _ _ Γ' t' site env hΓ' ht' body, σ, hσ, ht, hs, hh => by
+  | _, _, @Expr.close _ _ Γ' t' site env hΓ' ht' body, σ, hσ, ht, hs, hh, hg => by
     simp only [encode]
-    refine sound_bind (encodes_sound hC hgs env σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
-      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])))
+    refine sound_bind (encodes_sound hC env σ hσ (fun u hu => ht u (by simp [Expr.tys, hu]))
+      (fun s h => hs s (by simp [Expr.sites, h])) (fun h hm => hh h (by simp [Expr.handles, hm])) (fun w hw => hg w (by simp [Expr.globals, hw])))
       fun _ _ => sound_bind sound_need_limit fun _ _ => ?_
     exact ⟨_, sitesOf_mem (s := ⟨site, G, D, hΓ', ht', body⟩) (hs _ (by simp [Expr.sites])), rfl, rfl⟩
-  | _, _, .closeEffect .., _, _, _, _, _ => rfl
-theorem encodes_sound (hC : Covers L P ds H) (hgs : EncsOk L P ds H G gs) : {Γ : List Ty} → {ts : List Ty} → (es : Exprs G Γ ts) → (σ : Codes Γ) →
+  | _, _, .closeEffect .., _, _, _, _, _, _ => rfl
+theorem encodes_sound (hC : Covers L P ds H) : {Γ : List Ty} → {ts : List Ty} → (es : Exprs G Γ ts) → (σ : Codes Γ) →
     CodesOk L P ds H Γ σ → (∀ u ∈ Exprs.tys es, Avail L u) → (∀ s ∈ Exprs.sites D es, s ∈ P) →
-    (∀ h ∈ es.handles, HandleOk ds H h) → Sound (fun p => CodesOk L P ds H ts p.1) (encodes L gs es σ)
-  | _, _, .nil, _, _, _, _, _ => trivial
-  | _, _, .cons e es, σ, hσ, ht, hs, hh => by
+    (∀ h ∈ es.handles, HandleOk ds H h) → GlobsOk L P ds H gs es.globals → Sound (fun p => CodesOk L P ds H ts p.1) (encodes L gs es σ)
+  | _, _, .nil, _, _, _, _, _, _ => trivial
+  | _, _, .cons e es, σ, hσ, ht, hs, hh, hg => by
     simp only [encodes]
-    exact sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Exprs.tys, hu]))
-      (fun s h => hs s (by simp [Exprs.sites, h])) (fun h hm => hh h (by simp [Exprs.handles, hm])))
-      fun _ h1 => sound_bind (encodes_sound hC hgs es σ hσ (fun u hu => ht u (by simp [Exprs.tys, hu]))
-        (fun s h => hs s (by simp [Exprs.sites, h])) (fun h hm => hh h (by simp [Exprs.handles, hm])))
+    exact sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Exprs.tys, hu]))
+      (fun s h => hs s (by simp [Exprs.sites, h])) (fun h hm => hh h (by simp [Exprs.handles, hm])) (fun w hw => hg w (by simp [Exprs.globals, hw])))
+      fun _ h1 => sound_bind (encodes_sound hC es σ hσ (fun u hu => ht u (by simp [Exprs.tys, hu]))
+        (fun s h => hs s (by simp [Exprs.sites, h])) (fun h hm => hh h (by simp [Exprs.handles, hm])) (fun w hw => hg w (by simp [Exprs.globals, hw])))
       fun _ h2 => ⟨h1, h2⟩
-theorem encodeItems_sound (hC : Covers L P ds H) (hgs : EncsOk L P ds H G gs) : {Γ : List Ty} → {t : Ty} → (es : Items G Γ t) → (σ : Codes Γ) →
+theorem encodeItems_sound (hC : Covers L P ds H) : {Γ : List Ty} → {t : Ty} → (es : Items G Γ t) → (σ : Codes Γ) →
     CodesOk L P ds H Γ σ → (∀ u ∈ Items.tys es, Avail L u) → (∀ s ∈ Items.sites D es, s ∈ P) →
-    (∀ h ∈ es.handles, HandleOk ds H h) → Sound (fun _ => True) (encodeItems L gs es σ)
-  | _, _, .nil, _, _, _, _, _ => trivial
-  | _, _, .cons e es, σ, hσ, ht, hs, hh => by
+    (∀ h ∈ es.handles, HandleOk ds H h) → GlobsOk L P ds H gs es.globals → Sound (fun _ => True) (encodeItems L gs es σ)
+  | _, _, .nil, _, _, _, _, _, _ => trivial
+  | _, _, .cons e es, σ, hσ, ht, hs, hh, hg => by
     simp only [encodeItems]
-    exact sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Items.tys, hu]))
-      (fun s h => hs s (by simp [Items.sites, h])) (fun h hm => hh h (by simp [Items.handles, hm])))
-      fun _ _ => sound_bind (encodeItems_sound hC hgs es σ hσ (fun u hu => ht u (by simp [Items.tys, hu]))
-        (fun s h => hs s (by simp [Items.sites, h])) (fun h hm => hh h (by simp [Items.handles, hm])))
+    exact sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Items.tys, hu]))
+      (fun s h => hs s (by simp [Items.sites, h])) (fun h hm => hh h (by simp [Items.handles, hm])) (fun w hw => hg w (by simp [Items.globals, hw])))
+      fun _ _ => sound_bind (encodeItems_sound hC es σ hσ (fun u hu => ht u (by simp [Items.tys, hu]))
+        (fun s h => hs s (by simp [Items.sites, h])) (fun h hm => hh h (by simp [Items.handles, hm])) (fun w hw => hg w (by simp [Items.globals, hw])))
       fun _ _ => trivial
-theorem encodePatch_sound (hC : Covers L P ds H) (hgs : EncsOk L P ds H G gs) : {Γ : List Ty} → {ts : List Ty} → (p : Patch G Γ ts) → (σ : Codes Γ) →
+theorem encodePatch_sound (hC : Covers L P ds H) : {Γ : List Ty} → {ts : List Ty} → (p : Patch G Γ ts) → (σ : Codes Γ) →
     CodesOk L P ds H Γ σ → (∀ u ∈ Patch.tys p, Avail L u) → (∀ s ∈ Patch.sites D p, s ∈ P) →
-    (∀ h ∈ p.handles, HandleOk ds H h) → (keep : Nat → Term) → (j : Nat) →
+    (∀ h ∈ p.handles, HandleOk ds H h) → GlobsOk L P ds H gs p.globals → (keep : Nat → Term) → (j : Nat) →
     Sound (fun _ => True) (encodePatch L gs p σ keep j)
-  | _, _, .nil, _, _, _, _, _, _, _ => trivial
-  | _, _, .keep rest, σ, hσ, ht, hs, hh, keep, j => by
+  | _, _, .nil, _, _, _, _, _, _, _, _ => trivial
+  | _, _, .keep rest, σ, hσ, ht, hs, hh, hg, keep, j => by
     simp only [encodePatch]
-    exact sound_bind (encodePatch_sound hC hgs rest σ hσ (fun u hu => ht u (by simpa [Patch.tys] using hu))
-      (fun s h => hs s (by simpa [Patch.sites] using h)) (fun h hm => hh h (by simpa [Patch.handles] using hm)) keep _)
+    exact sound_bind (encodePatch_sound hC rest σ hσ (fun u hu => ht u (by simpa [Patch.tys] using hu))
+      (fun s h => hs s (by simpa [Patch.sites] using h)) (fun h hm => hh h (by simpa [Patch.handles] using hm)) (fun w hw => hg w (by simpa [Patch.globals] using hw)) keep _)
       fun _ _ => trivial
-  | _, _, .set e rest, σ, hσ, ht, hs, hh, keep, j => by
+  | _, _, .set e rest, σ, hσ, ht, hs, hh, hg, keep, j => by
     simp only [encodePatch]
-    exact sound_bind (encode_sound hC hgs e σ hσ (fun u hu => ht u (by simp [Patch.tys, hu]))
-      (fun s h => hs s (by simp [Patch.sites, h])) (fun h hm => hh h (by simp [Patch.handles, hm])))
+    exact sound_bind (encode_sound hC e σ hσ (fun u hu => ht u (by simp [Patch.tys, hu]))
+      (fun s h => hs s (by simp [Patch.sites, h])) (fun h hm => hh h (by simp [Patch.handles, hm])) (fun w hw => hg w (by simp [Patch.globals, hw])))
       fun _ _ => sound_bind sound_termE fun _ _ =>
-        sound_bind (encodePatch_sound hC hgs rest σ hσ (fun u hu => ht u (by simp [Patch.tys, hu]))
-          (fun s h => hs s (by simp [Patch.sites, h])) (fun h hm => hh h (by simp [Patch.handles, hm])) keep _)
+        sound_bind (encodePatch_sound hC rest σ hσ (fun u hu => ht u (by simp [Patch.tys, hu]))
+          (fun s h => hs s (by simp [Patch.sites, h])) (fun h hm => hh h (by simp [Patch.handles, hm])) (fun w hw => hg w (by simp [Patch.globals, hw])) keep _)
         fun _ _ => trivial
-theorem encodeClauses_sound (hC : Covers L P ds H) (hgs : EncsOk L P ds H G gs) : {Γ : List Ty} → {t r : Ty} → {sh : List Shape} → (cs : Clauses G Γ t r sh) →
+theorem encodeClauses_sound (hC : Covers L P ds H) : {Γ : List Ty} → {t r : Ty} → {sh : List Shape} → (cs : Clauses G Γ t r sh) →
     (σ : Codes Γ) → CodesOk L P ds H Γ σ → (s : Code t) → CodeOk L P ds H t s → (∀ u ∈ Clauses.tys cs, Avail L u) →
-    (∀ x ∈ Clauses.sites D cs, x ∈ P) → (∀ h ∈ cs.handles, HandleOk ds H h) →
+    (∀ x ∈ Clauses.sites D cs, x ∈ P) → (∀ h ∈ cs.handles, HandleOk ds H h) → GlobsOk L P ds H gs cs.globals →
     Sound (fun o => ∀ p, o = some p → CodeOk L P ds H r p.1) (encodeClauses L gs cs σ s)
-  | _, _, _, _, .nil, _, _, _, _, _, _, _ => fun _ h => nomatch h
-  | _, _, _, _, .cons p body rest, σ, hσ, s, hs0, ht, hs, hh => by
+  | _, _, _, _, .nil, _, _, _, _, _, _, _, _ => fun _ h => nomatch h
+  | _, _, _, _, .cons p body rest, σ, hσ, s, hs0, ht, hs, hh, hg => by
     simp only [encodeClauses]
     refine sound_bind (encodePat_sound hC.sorted p s hs0) fun ⟨m, δ⟩ hδ => ?_
-    refine sound_bind (encode_sound hC hgs body _ (codesOk_append _ σ hδ hσ) (fun u hu => ht u (by simp [Clauses.tys, hu]))
-      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])))
+    refine sound_bind (encode_sound hC body _ (codesOk_append _ σ hδ hσ) (fun u hu => ht u (by simp [Clauses.tys, hu]))
+      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])) (fun w hw => hg w (by simp [Clauses.globals, hw])))
       fun ⟨vb, cb⟩ hb => ?_
-    refine sound_bind (encodeClauses_sound hC hgs rest σ hσ s hs0 (fun u hu => ht u (by simp [Clauses.tys, hu]))
-      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])))
+    refine sound_bind (encodeClauses_sound hC rest σ hσ s hs0 (fun u hu => ht u (by simp [Clauses.tys, hu]))
+      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])) (fun w hw => hg w (by simp [Clauses.globals, hw])))
       fun o _ => ?_
     cases o with
     | none => intro p hp; cases hp; exact hb
     | some q =>
       exact sound_bind sound_need_limit fun c hc => fun p hp => by cases hp; exact codeOk_ite hc hb
-  | _, _, _, _, .guarded p g body rest, σ, hσ, s, hs0, ht, hs, hh => by
+  | _, _, _, _, .guarded p g body rest, σ, hσ, s, hs0, ht, hs, hh, hg => by
     simp only [encodeClauses]
     refine sound_bind (encodePat_sound hC.sorted p s hs0) fun ⟨m, δ⟩ hδ => ?_
-    refine sound_bind (encode_sound hC hgs g _ (codesOk_append _ σ hδ hσ) (fun u hu => ht u (by simp [Clauses.tys, hu]))
-      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])))
+    refine sound_bind (encode_sound hC g _ (codesOk_append _ σ hδ hσ) (fun u hu => ht u (by simp [Clauses.tys, hu]))
+      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])) (fun w hw => hg w (by simp [Clauses.globals, hw])))
       fun _ _ => ?_
-    refine sound_bind (encode_sound hC hgs body _ (codesOk_append _ σ hδ hσ) (fun u hu => ht u (by simp [Clauses.tys, hu]))
-      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])))
+    refine sound_bind (encode_sound hC body _ (codesOk_append _ σ hδ hσ) (fun u hu => ht u (by simp [Clauses.tys, hu]))
+      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])) (fun w hw => hg w (by simp [Clauses.globals, hw])))
       fun ⟨vb, cb⟩ hb => ?_
-    refine sound_bind (encodeClauses_sound hC hgs rest σ hσ s hs0 (fun u hu => ht u (by simp [Clauses.tys, hu]))
-      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])))
+    refine sound_bind (encodeClauses_sound hC rest σ hσ s hs0 (fun u hu => ht u (by simp [Clauses.tys, hu]))
+      (fun x h => hs x (by simp [Clauses.sites, h])) (fun h hm => hh h (by simp [Clauses.handles, hm])) (fun w hw => hg w (by simp [Clauses.globals, hw])))
       fun o _ => ?_
     cases o with
     | none => intro p hp; cases hp; exact hb
@@ -1337,16 +1332,34 @@ end
 section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite}
 
-/-- Every global's code has no gap behind it, in a layout that covers the program: each body's node types are
-available, its kept functions are sites of `P` and its handles are ones check accepted. -/
+/-- The global at `v` has a code with no gap behind it, in a layout that covers the kept functions and handles it and
+the globals it reads write: the definitions' node types are available, those kept functions are sites of `P` and
+those handles ones check accepted. -/
 theorem Defs.encode_sound (hC : Covers L P ds H) : {G : List Ty} → (defs : Defs G) → (∀ u ∈ defs.tys, Avail L u) →
-    (∀ s ∈ defs.sites, s ∈ P) → (∀ h ∈ defs.handles, HandleOk ds H h) → EncsOk L P ds H G (defs.encode L)
-  | [], .nil, _, _, _ => trivial
-  | _ :: _, .snoc defs _ body, ht, hs, hh => by
-    have ih := Defs.encode_sound hC defs (fun u hu => ht u (by simp [Defs.tys, hu]))
-      (fun s h => hs s (by simp [Defs.sites, h])) (fun h hm => hh h (by simp [Defs.handles, hm]))
-    exact ⟨Tazuna.Smt.encode_sound defs (defs.encode L) hC ih body () trivial (fun u hu => ht u (by simp [Defs.tys, hu]))
-      (fun s h => hs s (by simp [Defs.sites, h])) (fun h hm => hh h (by simp [Defs.handles, hm])), ih⟩
+    {t : Ty} → (v : Var G t) → (∀ s ∈ defs.usesAt sitesC v.idx, s ∈ P) →
+    (∀ h ∈ defs.usesAt handlesC v.idx, HandleOk ds H h) → Sound (fun p => CodeOk L P ds H t p.1) (v.enc (defs.encode L))
+  | _ :: _, .snoc defs _ body, ht, _, .here, hs, hh => by
+    simp only [Defs.usesAt, Defs.uses, Var.idx, List.getD_cons_zero, Expr.usesWith, sitesC, handlesC] at hs hh
+    have htd : ∀ u ∈ defs.tys, Avail L u := fun u hu => ht u (by simp [Defs.tys, hu])
+    exact Tazuna.Smt.encode_sound defs (defs.encode L) hC body () trivial (fun u hu => ht u (by simp [Defs.tys, hu]))
+      (fun s h => hs s (List.mem_append_left _ h)) (fun h hm => hh h (List.mem_append_left _ hm))
+      (fun w hw => Defs.encode_sound hC defs htd w (fun s h => hs s (List.mem_append_right _ (List.mem_flatMap.2 ⟨_, hw, h⟩)))
+        (fun h hm => hh h (List.mem_append_right _ (List.mem_flatMap.2 ⟨_, hw, hm⟩))))
+  | _ :: _, .snoc defs _ _, ht, _, .there v, hs, hh => by
+    simp only [Defs.usesAt, Defs.uses, Var.idx, List.getD_cons_succ] at hs hh
+    exact Defs.encode_sound hC defs (fun u hu => ht u (by simp [Defs.tys, hu])) v hs hh
+
+/-- The definitions' node types are available, and the kept functions and handles an expression and the globals it
+reads write are sites of `P` and handles check accepted. -/
+def UsesOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite) {G Γ : List Ty}
+    {t : Ty} (D : Defs G) (e : Expr G Γ t) : Prop :=
+  (∀ u ∈ D.tys, Avail L u) ∧ (∀ x ∈ e.uses sitesC D, x ∈ P) ∧ (∀ h ∈ e.uses handlesC D, HandleOk ds H h)
+
+theorem globs_of_uses (hC : Covers L P ds H) {G Γ : List Ty} {t : Ty} {D : Defs G} {e : Expr G Γ t}
+    (hu : UsesOk L P ds H D e) : GlobsOk L P ds H (D.encode L) e.globals :=
+  fun w hw => Defs.encode_sound hC D hu.1 w
+    (fun s h => hu.2.1 s (List.mem_append_right _ (List.mem_flatMap.2 ⟨_, hw, h⟩)))
+    (fun h hm => hu.2.2 h (List.mem_append_right _ (List.mem_flatMap.2 ⟨_, hw, hm⟩)))
 
 end
 
@@ -1511,34 +1524,63 @@ theorem allSorted_ofParts (p : ProgramParts) (v : ServiceV) : Layout.AllSorted (
       · exact (hO k hk).1) ((stepTys v ++ p.tys ++ useTys v (Layout.kindsOf p v)).filter Ty.sortable)
       (fun t ht => (List.mem_filter.1 ht).2)
 
-/-- The service's layout covers its program: its datatypes and kinds have sorts, and it holds every kind of effect
-the program can make whose fields are data with sorts. -/
-theorem covers_ofParts (p : ProgramParts) (v : ServiceV) :
-    Covers (Layout.ofParts p v) p.sites v.declared p.handles := by
+theorem sorted_ofParts (p : ProgramParts) (v : ServiceV) : SortedLayout (Layout.ofParts p v) := by
   obtain ⟨hK, hO⟩ := kindsOf_fields p v
   have hS := allSorted_ofParts p v
-  have hE : (Layout.ofParts p v).effects = (Layout.kindsOf p v).effects := hS.2.1
-  have hW : (Layout.ofParts p v).owns = (Layout.kindsOf p v).owns := hS.2.2
-  refine ⟨⟨hS.1, fun k hk => hK k (hE ▸ hk), fun k hk => hO k (hW ▸ hk)⟩, ?_, ?_, ?_⟩
+  exact ⟨hS.1, fun k hk => hK k (hS.2.1 ▸ hk), fun k hk => hO k (hS.2.2 ▸ hk)⟩
+
+theorem sitesOf_mono {S S' : List AnySite} (h : ∀ s ∈ S, s ∈ S') {t : Ty} {x : (Γ : List Ty) × Site Γ t}
+    (hx : x ∈ sitesOf S t) : x ∈ sitesOf S' t := by
+  simp only [sitesOf, List.mem_filterMap] at hx ⊢
+  obtain ⟨a, ha, he⟩ := hx
+  exact ⟨a, h a ha, he⟩
+
+theorem requestShapesAt_mono {ds : List (String × DeclaredV)} {e : Ty} {S S' : List AnySite} (h : ∀ s ∈ S, s ∈ S')
+    {sh : RequestShape e} (hsh : sh ∈ requestShapesAt ds e S) : sh ∈ requestShapesAt ds e S' := by
+  simp only [requestShapesAt, List.mem_flatMap] at hsh ⊢
+  obtain ⟨⟨x, d⟩, hxd, hsh⟩ := hsh
+  refine ⟨(x, d), hxd, ?_⟩
+  cases d with
+  | externalCommand =>
+    simp only [List.mem_filterMap] at hsh ⊢
+    obtain ⟨a, ha, he⟩ := hsh
+    exact ⟨a, sitesOf_mono h ha, he⟩
+  | externalQuery =>
+    obtain ⟨es, hes, hsh⟩ := List.mem_flatMap.1 hsh
+    obtain ⟨a, ha, he⟩ := List.mem_filterMap.1 hsh
+    exact List.mem_flatMap.2 ⟨es, sitesOf_mono h hes, List.mem_filterMap.2 ⟨a, sitesOf_mono h ha, he⟩⟩
+  | command | query | source => simp at hsh
+
+/-- The layout covers what one function of the step uses, and anything within it that is the program's: its kinds of
+effect have the request shapes of those sites and the own kinds of those handles with those sites. -/
+theorem covers_uses (p : ProgramParts) (v : ServiceV) {S : List AnySite} {Hs : List HandleSite}
+    {r : List AnySite × List HandleSite} (hr : r ∈ rootUses v) (hS : ∀ s ∈ S, s ∈ r.1) (hH : ∀ h ∈ Hs, h ∈ r.2)
+    (hP : ∀ s ∈ S, s ∈ p.sites) : Covers (Layout.ofParts p v) S v.declared Hs := by
+  have hS' := allSorted_ofParts p v
+  have hE : (Layout.ofParts p v).effects = (Layout.kindsOf p v).effects := hS'.2.1
+  have hW : (Layout.ofParts p v).owns = (Layout.kindsOf p v).owns := hS'.2.2
+  refine ⟨sorted_ofParts p v, ?_, ?_, ?_⟩
   · intro e sh hsh hs hd
+    have hsh := requestShapesAt_mono hP hsh
     rw [hE]
     simp only [Layout.kindsOf]
     rw [mem_dedupBy effectKey_same_iff, List.mem_filter, Bool.and_eq_true]
     exact ⟨List.mem_flatMap.2 ⟨e, mem_eventTys (requestShapesAt_site hsh), List.mem_map_of_mem hsh⟩, hs, hd⟩
-  · intro n r e c i j hh s hs hso hd
+  · intro n rt e c i j hh s hs hso hd
     rw [hW]
     simp only [Layout.kindsOf]
     rw [mem_dedupBy ownKey_same_iff, List.mem_filter, Bool.and_eq_true]
-    refine ⟨List.mem_flatMap.2 ⟨_, hh, ?_⟩, hso, hd⟩
+    refine ⟨List.mem_flatMap.2 ⟨r, hr, List.mem_flatMap.2 ⟨_, hH _ hh, ?_⟩⟩, hso, hd⟩
     simp only [ownKeys]
-    exact List.mem_map.2 ⟨s, hs, rfl⟩
-  · intro n r e c i o hh s hs hso hd
+    exact List.mem_map.2 ⟨s, sitesOf_mono hS hs, rfl⟩
+  · intro n rt e c i o hh s hs hso hd
     rw [hW]
     simp only [Layout.kindsOf]
     rw [mem_dedupBy ownKey_same_iff, List.mem_filter, Bool.and_eq_true]
-    refine ⟨List.mem_flatMap.2 ⟨_, hh, ?_⟩, hso, hd⟩
+    refine ⟨List.mem_flatMap.2 ⟨r, hr, List.mem_flatMap.2 ⟨_, hH _ hh, ?_⟩⟩, hso, hd⟩
     simp only [ownKeys]
-    exact List.mem_flatMap.2 ⟨e, mem_eventTys (mem_sitesOf hs), List.mem_map.2 ⟨s, hs, rfl⟩⟩
+    exact List.mem_flatMap.2 ⟨e, mem_eventTys (mem_sitesOf (sitesOf_mono hP hs)),
+      List.mem_map.2 ⟨s, sitesOf_mono hS hs, rfl⟩⟩
 
 theorem handleOk_of_named {s : SpecV} {v : ServiceV} (hv : v ∈ s.services) {H : List HandleSite} {h : HandleSite}
     (hm : h ∈ H) (hn : h.Named s) : HandleOk v.declared H h := by
@@ -1876,6 +1918,202 @@ end
 end
 
 section
+variable {G : List Ty} (D : Defs G)
+
+mutual
+/-- The globals a site's body reads are among the ones the expression that writes it reads. -/
+theorem Expr.globals_inside : {Γ : List Ty} → {t : Ty} → (e : Expr G Γ t) → ∀ s ∈ Expr.sites D e,
+    ∀ i ∈ Expr.globals s.2.2.body, i ∈ e.globals
+  | _, _, .int _, _, h, _, _ | _, _, .str _, _, h, _, _ | _, _, .var _, _, h, _, _ | _, _, .global _, _, h, _, _
+  | _, _, .prim .., _, h, _, _ => by simp [Expr.sites] at h
+  | _, _, .ctor _ es, s, h, i, hi | _, _, .tuple es, s, h, i, hi => Exprs.globals_inside es s h i hi
+  | _, _, .field _ _ _ e, s, h, i, hi | _, _, .index e _, s, h, i, hi | _, _, .not e, s, h, i, hi
+  | _, _, .neg e, s, h, i, hi | _, _, .lam e, s, h, i, hi => Expr.globals_inside e s h i hi
+  | _, _, .list items, s, h, i, hi => Items.globals_inside items s h i hi
+  | _, _, .update e p, s, h, i, hi => by
+    simp only [Expr.sites, List.mem_append] at h; simp only [Expr.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Expr.globals_inside e s h i hi)) (fun h => .inr (Patch.globals_inside p s h i hi))
+  | _, _, .call f args, s, h, i, hi => by
+    simp only [Expr.sites, List.mem_append] at h; simp only [Expr.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Expr.globals_inside f s h i hi)) (fun h => .inr (Exprs.globals_inside args s h i hi))
+  | _, _, .let_ e body, s, h, i, hi => by
+    simp only [Expr.sites, List.mem_append] at h; simp only [Expr.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Expr.globals_inside e s h i hi)) (fun h => .inr (Expr.globals_inside body s h i hi))
+  | _, _, .bin _ l r, s, h, i, hi => by
+    simp only [Expr.sites, List.mem_append] at h; simp only [Expr.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Expr.globals_inside l s h i hi)) (fun h => .inr (Expr.globals_inside r s h i hi))
+  | _, _, .case e cs _, s, h, i, hi => by
+    simp only [Expr.sites, List.mem_append] at h; simp only [Expr.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Expr.globals_inside e s h i hi)) (fun h => .inr (Clauses.globals_inside cs s h i hi))
+  | _, _, .close _ env _ _ body, s, h, i, hi => by
+    simp only [Expr.sites, List.mem_cons, List.mem_append] at h; simp only [Expr.globals, List.mem_append]
+    rcases h with (rfl | h) | h
+    · exact .inr hi
+    · exact .inl (Exprs.globals_inside env s h i hi)
+    · exact .inr (Expr.globals_inside body s h i hi)
+  | _, _, .closeEffect _ env _ _ body, s, h, i, hi => by
+    simp only [Expr.sites, List.mem_append] at h; simp only [Expr.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Exprs.globals_inside env s h i hi)) (fun h => .inr (Expr.globals_inside body s h i hi))
+theorem Exprs.globals_inside : {Γ ts : List Ty} → (es : Exprs G Γ ts) → ∀ s ∈ Exprs.sites D es,
+    ∀ i ∈ Expr.globals s.2.2.body, i ∈ Exprs.globals es
+  | _, _, .nil, _, h, _, _ => nomatch h
+  | _, _, .cons e es, s, h, i, hi => by
+    simp only [Exprs.sites, List.mem_append] at h; simp only [Exprs.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Expr.globals_inside e s h i hi)) (fun h => .inr (Exprs.globals_inside es s h i hi))
+theorem Items.globals_inside : {Γ : List Ty} → {t : Ty} → (es : Items G Γ t) → ∀ s ∈ Items.sites D es,
+    ∀ i ∈ Expr.globals s.2.2.body, i ∈ Items.globals es
+  | _, _, .nil, _, h, _, _ => nomatch h
+  | _, _, .cons e es, s, h, i, hi => by
+    simp only [Items.sites, List.mem_append] at h; simp only [Items.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Expr.globals_inside e s h i hi)) (fun h => .inr (Items.globals_inside es s h i hi))
+theorem Patch.globals_inside : {Γ ts : List Ty} → (p : Patch G Γ ts) → ∀ s ∈ Patch.sites D p,
+    ∀ i ∈ Expr.globals s.2.2.body, i ∈ Patch.globals p
+  | _, _, .nil, _, h, _, _ => nomatch h
+  | _, _, .keep rest, s, h, i, hi => Patch.globals_inside rest s h i hi
+  | _, _, .set e rest, s, h, i, hi => by
+    simp only [Patch.sites, List.mem_append] at h; simp only [Patch.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Expr.globals_inside e s h i hi)) (fun h => .inr (Patch.globals_inside rest s h i hi))
+theorem Clauses.globals_inside : {Γ : List Ty} → {t r : Ty} → {sh : List Shape} → (cs : Clauses G Γ t r sh) →
+    ∀ s ∈ Clauses.sites D cs, ∀ i ∈ Expr.globals s.2.2.body, i ∈ Clauses.globals cs
+  | _, _, _, _, .nil, _, h, _, _ => nomatch h
+  | _, _, _, _, .cons _ body rest, s, h, i, hi => by
+    simp only [Clauses.sites, List.mem_append] at h; simp only [Clauses.globals, List.mem_append]
+    exact h.elim (fun h => .inl (Expr.globals_inside body s h i hi)) (fun h => .inr (Clauses.globals_inside rest s h i hi))
+  | _, _, _, _, .guarded _ g body rest, s, h, i, hi => by
+    simp only [Clauses.sites, List.mem_append] at h; simp only [Clauses.globals, List.mem_append]
+    rcases h with (h | h) | h
+    · exact .inl (.inl (Expr.globals_inside g s h i hi))
+    · exact .inl (.inr (Expr.globals_inside body s h i hi))
+    · exact .inr (Clauses.globals_inside rest s h i hi)
+end
+
+end
+
+/-- What `f` collects of a site's body is among what it collects of the expression that writes it: true of the sites
+and of the handles (`Expr.inside`). -/
+def Nested {α : Type} (f : Collect α) : Prop :=
+  ∀ {G Γ : List Ty} {t : Ty} (D : Defs G) (e : Expr G Γ t), ∀ s ∈ Expr.sites D e, ∀ y ∈ f s.2.2.defs s.2.2.body,
+    y ∈ f D e
+
+theorem nested_sites : Nested sitesC := fun D e s hs y hy => (Expr.inside D e s hs).2.2.1 y hy
+
+theorem nested_handles : Nested handlesC := fun D e s hs y hy => (Expr.inside D e s hs).2.2.2.1 y hy
+
+theorem inside_defs {G Γ : List Ty} {t : Ty} {D : Defs G} {e : Expr G Γ t} {s : AnySite} (hs : s ∈ Expr.sites D e) :
+    s.2.2.G = G ∧ HEq s.2.2.defs D := (Expr.inside D e s hs).2.2.2.2
+
+/-- What a site that a global's value holds uses is among what that global uses. -/
+theorem Defs.usesAt_closed {α : Type} {f : Collect α} (hf : Nested f) : {G : List Ty} → (D : Defs G) → (i : Nat) →
+    ∀ s ∈ D.usesAt sitesC i, ∀ y ∈ s.2.2.body.uses f s.2.2.defs, y ∈ D.usesAt f i
+  | [], .nil, _, s, hs, _, _ => by simp [Defs.usesAt, Defs.uses] at hs
+  | _ :: _, .snoc defs _ body, 0, s, hs, y, hy => by
+    simp only [Defs.usesAt, Defs.uses, List.getD_cons_zero, Expr.usesWith, sitesC, List.mem_append,
+      List.mem_flatMap] at hs ⊢
+    rcases hs with hs | ⟨j, hj, hs⟩
+    · obtain ⟨hG, hD⟩ := inside_defs hs
+      obtain ⟨Γ', t', ⟨site, G', D', hΓ', ht', b⟩⟩ := s
+      simp only at hG hD hy ⊢
+      subst hG
+      obtain rfl := eq_of_heq hD
+      simp only [Expr.uses, Expr.usesWith, List.mem_append, List.mem_flatMap] at hy
+      rcases hy with hy | ⟨k, hk, hy⟩
+      · exact .inl (hf D' body _ hs y hy)
+      · exact .inr ⟨k, Expr.globals_inside D' body _ hs k hk, hy⟩
+    · exact .inr ⟨j, hj, Defs.usesAt_closed hf defs j s hs y hy⟩
+  | _ :: _, .snoc defs _ _, i + 1, s, hs, y, hy => by
+    simp only [Defs.usesAt, Defs.uses, List.getD_cons_succ] at hs ⊢
+    exact Defs.usesAt_closed hf defs i s hs y hy
+
+/-- What a site an expression uses uses is among what the expression uses. -/
+theorem Expr.uses_closed {α : Type} {f : Collect α} (hf : Nested f) {G Γ : List Ty} {t : Ty} {D : Defs G}
+    {e : Expr G Γ t} {s : AnySite} (hs : s ∈ e.uses sitesC D) : ∀ y ∈ s.2.2.body.uses f s.2.2.defs, y ∈ e.uses f D := by
+  intro y hy
+  simp only [Expr.uses, Expr.usesWith, sitesC, List.mem_append, List.mem_flatMap] at hs ⊢
+  rcases hs with hs | ⟨j, hj, hs⟩
+  · obtain ⟨hG, hD⟩ := inside_defs hs
+    obtain ⟨Γ', t', ⟨site, G', D', hΓ', ht', b⟩⟩ := s
+    simp only at hG hD hy ⊢
+    subst hG
+    obtain rfl := eq_of_heq hD
+    simp only [Expr.uses, Expr.usesWith, List.mem_append, List.mem_flatMap] at hy
+    rcases hy with hy | ⟨k, hk, hy⟩
+    · exact .inl (hf D' e _ hs y hy)
+    · exact .inr ⟨k, Expr.globals_inside D' e _ hs k hk, hy⟩
+  · exact .inr ⟨j, hj, Defs.usesAt_closed hf D j s hs y hy⟩
+
+end Tazuna.Smt
+
+namespace Tazuna.Ir
+
+mutual
+/-- Whether a code's no-gap fact at the type reads no sites or handles: no kept function, handle of the program's or
+function over those inside. -/
+def Ty.phFree : Ty → Bool
+  | .fn ps r => Ty.phFrees ps && Ty.phFree r
+  | .dsl .closure _ | .dsl .externalQuery _ | .dsl .command _ | .dsl .query _ => false
+  | _ => true
+def Ty.phFrees : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.phFree t && Ty.phFrees ts
+end
+
+end Tazuna.Ir
+
+namespace Tazuna.Smt
+
+open Tazuna.Ir
+
+section
+variable {L : Layout} {P P' : List AnySite} {ds : List (String × DeclaredV)} {H H' : List HandleSite}
+
+mutual
+/-- At such a type a code has no gap behind it whatever sites and handles it is read against. -/
+theorem codeOk_free : (t : Ty) → t.phFree = true → (c : Code t) → (CodeOk L P ds H t c ↔ CodeOk L P' ds H' t c)
+  | .fn ps r, h, f => by
+    simp only [Ty.phFree, Bool.and_eq_true] at h
+    simp only [CodeOk]
+    constructor
+    · intro hf xs hxs ha
+      exact sound_mono (hf xs ((codesOk_free ps h.1 xs).2 hxs) ha) fun p hp => (codeOk_free r h.2 p.1).1 hp
+    · intro hf xs hxs ha
+      exact sound_mono (hf xs ((codesOk_free ps h.1 xs).1 hxs) ha) fun p hp => (codeOk_free r h.2 p.1).2 hp
+  | .dsl k a, h, c => by
+    cases k <;> simp only [Ty.phFree, Bool.false_eq_true] at h <;> simp [CodeOk, DslOk]
+  | .int, _, _ | .str, _, _ | .date, _, _ | .id, _, _ | .param _, _, _ | .list _, _, _ | .bag _, _, _
+  | .tuple _, _, _ | .adt .., _, _ | .table .., _, _ => Iff.rfl
+theorem codesOk_free : (ts : List Ty) → Ty.phFrees ts = true → (cs : Codes ts) →
+    (CodesOk L P ds H ts cs ↔ CodesOk L P' ds H' ts cs)
+  | [], _, () => Iff.rfl
+  | t :: ts, h, (c, cs) => by
+    simp only [Ty.phFrees, Bool.and_eq_true] at h
+    simp only [CodesOk]
+    exact and_congr (codeOk_free t h.1 c) (codesOk_free ts h.2 cs)
+end
+
+mutual
+theorem phFree_of_data : (t : Ty) → t.isData = true → t.phFree = true
+  | .fn ps r, h => by
+    simp only [Ty.isData, Bool.and_eq_true] at h
+    simp [Ty.phFree, phFrees_of_data ps h.1, phFree_of_data r h.2]
+  | .dsl k _, h => by
+    obtain rfl := sorted_dsl_data h
+    rfl
+  | .int, _ | .str, _ | .date, _ | .id, _ | .param _, _ | .list _, _ | .bag _, _ | .tuple _, _ | .adt .., _
+  | .table .., _ => rfl
+theorem phFrees_of_data : (ts : List Ty) → Ty.isDatas ts = true → Ty.phFrees ts = true
+  | [], _ => rfl
+  | t :: ts, h => by
+    simp only [Ty.isDatas, Bool.and_eq_true] at h
+    simp [Ty.phFrees, phFree_of_data t h.1, phFrees_of_data ts h.2]
+end
+
+theorem sound_free {t : Ty} (h : t.phFree = true) {x : Except Refusal (Code t × Term)}
+    (hx : Sound (fun p => CodeOk L P ds H t p.1) x) : Sound (fun p => CodeOk L P' ds H' t p.1) x :=
+  sound_mono hx fun p hp => (codeOk_free t h p.1).1 hp
+
+end
+
+section
 variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite}
 
 /-- The definitions are covered: their node types are available, their sites are `P`'s, their handles accepted. -/
@@ -1949,27 +2187,47 @@ theorem envCodes_ok : (Γ : List Ty) → (ρ : Ty.dens Γ) → (σ : Codes Γ) �
           obtain ⟨rfl, rfl⟩ := h
           exact ⟨codeOk_ofTerm hc (ha t (by simp)), envCodes_ok Γ xs _ hcs fun u hu => ha u (by simp [hu])⟩
 
-/-- A covered site's code over related captured values has no gap behind it. -/
-theorem Site.code_sound (hC : Covers L P ds H) {Γ : List Ty} {t : Ty} (s : Site Γ t) (hs : SiteOk L P ds H ⟨Γ, t, s⟩)
+/-- A site's code over related captured values has no gap behind it, where its body's node types are available and
+what it uses is covered. -/
+theorem Site.code_sound (hC : Covers L P ds H) {Γ : List Ty} {t : Ty} (s : Site Γ t)
+    (hb : ∀ u ∈ Expr.tys s.body, Avail L u) (hu : UsesOk L P ds H s.defs s.body)
     (σ : Codes Γ) (hσ : CodesOk L P ds H Γ σ) : Sound (fun p => CodeOk L P ds H t p.1) (s.code L σ) :=
-  encode_sound s.defs (s.defs.encode L) hC (Defs.encode_sound hC s.defs hs.2.2.2.2.1 hs.2.2.2.2.2.1 hs.2.2.2.2.2.2)
-    s.body σ hσ hs.2.1 hs.2.2.1 hs.2.2.2.1
+  encode_sound s.defs (s.defs.encode L) hC s.body σ hσ hb (fun x h => hu.2.1 x (List.mem_append_left _ h))
+    (fun h hm => hu.2.2 h (List.mem_append_left _ hm)) (globs_of_uses hC hu)
 
-/-- A kept function at a covered site has a code with no gap behind it. -/
-theorem Fun.code_sound (hC : Covers L P ds H) {t : Ty} (f : Fun t) (hs : SiteOk L P ds H f.asSite) :
+/-- A kept function has a code with no gap behind it, where its captured types and body's node types are available
+and what it uses is covered. -/
+theorem Fun.code_sound (hC : Covers L P ds H) {t : Ty} (f : Fun t) (hΓ : ∀ u ∈ f.Γ, Avail L u)
+    (hb : ∀ u ∈ Expr.tys f.body, Avail L u) (hu : UsesOk L P ds H f.defs f.body) :
     Sound (fun p => CodeOk L P ds H t p.1) (f.code L) := by
   unfold Fun.code
   refine sound_bind (sound_need fun _ => rfl) fun σ hσ => ?_
-  exact encode_sound f.defs (f.defs.encode L) hC (Defs.encode_sound hC f.defs hs.2.2.2.2.1 hs.2.2.2.2.2.1
-    hs.2.2.2.2.2.2) f.body σ (envCodes_ok _ _ σ hσ hs.1) hs.2.1 hs.2.2.1 hs.2.2.2.1
+  exact encode_sound f.defs (f.defs.encode L) hC f.body σ (envCodes_ok _ _ σ hσ hΓ) hb
+    (fun x h => hu.2.1 x (List.mem_append_left _ h)) (fun h hm => hu.2.2 h (List.mem_append_left _ hm))
+    (globs_of_uses hC hu)
 
-/-- A kept function that returns effects at a covered effect site has a code with no gap behind it. -/
+/-- A kept function that returns effects has a code with no gap behind it, as `Fun.code_sound` says. -/
 theorem EffectFun.code_sound (hC : Covers L P ds H) {ps : List Ty} {r : Ty} (f : EffectFun ps r)
-    (hs : EffectSiteOk L P ds H f.asSite) : Sound (fun p => CodeOk L P ds H (.fn ps r) p.1) (f.code L) := by
+    (hΓ : ∀ u ∈ f.Γ, Avail L u) (hb : ∀ u ∈ Expr.tys f.body, Avail L u) (hu : UsesOk L P ds H f.defs f.body) :
+    Sound (fun p => CodeOk L P ds H (.fn ps r) p.1) (f.code L) := by
   unfold EffectFun.code
   refine sound_bind (sound_need fun _ => rfl) fun σ hσ => ?_
-  exact encode_sound f.defs (f.defs.encode L) hC (Defs.encode_sound hC f.defs hs.2.2.2.2.1 hs.2.2.2.2.2.1
-    hs.2.2.2.2.2.2) f.body σ (envCodes_ok _ _ σ hσ hs.1) hs.2.1 hs.2.2.1 hs.2.2.2.1
+  exact encode_sound f.defs (f.defs.encode L) hC f.body σ (envCodes_ok _ _ σ hσ hΓ) hb
+    (fun x h => hu.2.1 x (List.mem_append_left _ h)) (fun h hm => hu.2.2 h (List.mem_append_left _ hm))
+    (globs_of_uses hC hu)
+
+/-- What covered definitions' site uses is covered. -/
+theorem usesOk_of_defsOk {G Γ : List Ty} {t : Ty} {D : Defs G} {e : Expr G Γ t} (hD : DefsOk L P ds H D)
+    (hs : ∀ x ∈ Expr.sites D e, x ∈ P) (hh : ∀ h ∈ Expr.handles e, HandleOk ds H h) : UsesOk L P ds H D e := by
+  refine ⟨hD.1, fun x hx => ?_, fun h hm => ?_⟩
+  · simp only [Expr.uses, Expr.usesWith, sitesC, List.mem_append, List.mem_flatMap] at hx
+    rcases hx with hx | ⟨i, -, hx⟩
+    · exact hs x hx
+    · exact hD.2.1 x (Defs.collect_sites D ▸ Defs.uses_sub sitesC D i x hx)
+  · simp only [Expr.uses, Expr.usesWith, handlesC, List.mem_append, List.mem_flatMap] at hm
+    rcases hm with hm | ⟨i, -, hm⟩
+    · exact hh h hm
+    · exact hD.2.2 h (Defs.collect_handles D ▸ Defs.uses_sub handlesC D i h hm)
 
 end
 
@@ -1981,23 +2239,101 @@ theorem sites_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.serv
     (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_right _ hu), sortable_of_sorted u hs⟩), fun _ h => h,
     fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩
 
-/-- A kept function at a site of a checked spec's program has a code with no layout gap behind it in each service's
-layout. -/
-theorem Fun.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {t : Ty} (f : Fun t)
-    (hf : f.asSite ∈ c.P) :
-    Sound (fun p => CodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles t p.1)
-      (f.code (Layout.ofService c.program.defs v)) :=
-  Fun.code_sound (covers_ofParts c.program.defs.parts v) f (sites_ofService c hv _ hf)
+/-- A site's code over related captured values has no gap behind it. -/
+def SiteCodeOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite) (s : AnySite) :
+    Prop :=
+  ∀ σ : Codes s.1, CodesOk L P ds H s.1 σ → Sound (fun p => CodeOk L P ds H s.2.1 p.1) (s.2.2.code L σ)
 
-/-- A kept function that returns effects at an effect site of a checked spec's program has a code with no layout gap
-behind it in each service's layout. -/
+/-- What some expression and the globals it reads write. -/
+def UsesForm (r : List AnySite × List HandleSite) : Prop :=
+  ∃ (G Γ : List Ty) (t : Ty) (D : Defs G) (e : Expr G Γ t), r = (e.uses sitesC D, e.uses handlesC D)
+
+theorem rootUses_form {v : ServiceV} : ∀ r ∈ rootUses v, UsesForm r := by
+  intro r hr
+  simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
+    or_assoc] at hr
+  rcases hr with rfl | rfl | ⟨_, -, rfl | rfl | rfl⟩ | ⟨_, -, rfl | rfl⟩ | ⟨_, -, rfl | rfl | rfl | rfl | rfl⟩ |
+    ⟨_, -, rfl⟩ | ⟨_, -, rfl⟩ <;> exact ⟨_, _, _, _, _, rfl⟩
+
+section
+variable {v : ServiceV}
+
+theorem root_apply : v.apply.uses ∈ rootUses v := by simp [rootUses]
+
+theorem root_invariants : v.invariants.uses ∈ rootUses v := by simp [rootUses]
+
+theorem root_command {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) :
+    x.accepts.uses ∈ rootUses v ∧ x.decide.uses ∈ rootUses v ∧ x.ensures.uses ∈ rootUses v := by
+  simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.not_mem_nil, or_false, or_assoc]
+  exact ⟨.inr (.inr (.inl ⟨x, hx, .inl rfl⟩)), .inr (.inr (.inl ⟨x, hx, .inr (.inl rfl)⟩)),
+    .inr (.inr (.inl ⟨x, hx, .inr (.inr rfl)⟩))⟩
+
+theorem root_query {q : QueryV v.records v.caller} (hq : q ∈ v.queries) :
+    q.accepts.uses ∈ rootUses v ∧ q.resolve.uses ∈ rootUses v := by
+  simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.not_mem_nil, or_false, or_assoc]
+  exact ⟨.inr (.inr (.inr (.inl ⟨q, hq, .inl rfl⟩))), .inr (.inr (.inr (.inl ⟨q, hq, .inr rfl⟩)))⟩
+
+theorem root_machine {m : MachineV v.records v.event} (hm : m ∈ v.machines) :
+    m.instances.uses ∈ rootUses v ∧ m.on.uses ∈ rootUses v ∧ m.after.uses ∈ rootUses v ∧
+      m.invariants.uses ∈ rootUses v ∧ m.effect.uses ∈ rootUses v := by
+  simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.not_mem_nil, or_false, or_assoc]
+  exact ⟨.inr (.inr (.inr (.inr (.inl ⟨m, hm, .inl rfl⟩)))), .inr (.inr (.inr (.inr (.inl ⟨m, hm, .inr (.inl rfl)⟩)))),
+    .inr (.inr (.inr (.inr (.inl ⟨m, hm, .inr (.inr (.inl rfl))⟩)))),
+    .inr (.inr (.inr (.inr (.inl ⟨m, hm, .inr (.inr (.inr (.inl rfl)))⟩)))),
+    .inr (.inr (.inr (.inr (.inl ⟨m, hm, .inr (.inr (.inr (.inr rfl)))⟩))))⟩
+
+theorem root_reaction {x : ReactionV v.records v.event} (hx : x ∈ v.reactions) : x.react.uses ∈ rootUses v := by
+  simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
+    or_assoc]
+  exact .inr (.inr (.inr (.inr (.inr (.inl ⟨x, hx, rfl⟩)))))
+
+theorem root_subscribe {x : SubscriptionV v.event} (hx : x ∈ v.subscribes) : x.wrap.uses ∈ rootUses v := by
+  simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
+    or_assoc]
+  exact .inr (.inr (.inr (.inr (.inr (.inr ⟨x, hx, rfl⟩)))))
+
+end
+
+/-- A site of a checked spec's program that a function of the step uses, as a pending request's `on_answer` and
+`ensures` and an own command's `on_answer` are, has a code with no layout gap behind it in each service's layout: it
+is read against what it uses, which the layout covers, and its type reads none of the program's sites or handles. -/
+theorem Site.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) (s : AnySite) (hs : s ∈ c.P)
+    (hr : ∃ r ∈ rootUses v, s ∈ r.1) :
+    SiteCodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles s := fun σ hσ => by
+  obtain ⟨r, hr, hsr⟩ := hr
+  obtain ⟨G, Γ, t, D, e, rfl⟩ := rootUses_form r hr
+  have h := sites_ofService c hv _ hs
+  have hu := usesOk_of_defsOk h.2.2.2.2 h.2.2.1 h.2.2.2.1
+  have hC := covers_uses c.program.defs.parts v hr (Expr.uses_closed nested_sites hsr)
+    (Expr.uses_closed nested_handles hsr) hu.2.1
+  have hΓ : Ty.isDatas s.1 = true := s.2.2.hΓ
+  exact sound_free (phFree_of_data _ s.2.2.ht) (Site.code_sound hC s.2.2 h.2.1
+    ⟨hu.1, fun _ h => h, fun x hx => ⟨hx, (hu.2.2 x hx).2⟩⟩ σ ((codesOk_free s.1 (phFrees_of_data _ hΓ) σ).1 hσ))
+
+/-- A function the step runs, at a site of a checked spec's program, has a code with no layout gap behind it in each
+service's layout, as `Site.code_ofService` says. -/
+theorem Fun.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {t : Ty} (f : Fun t)
+    (hf : f.asSite ∈ c.P) (hr : f.uses ∈ rootUses v) :
+    Sound (fun p => CodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles t p.1)
+      (f.code (Layout.ofService c.program.defs v)) := by
+  have h := sites_ofService c hv _ hf
+  have hu := usesOk_of_defsOk h.2.2.2.2 h.2.2.1 h.2.2.2.1
+  have hC := covers_uses c.program.defs.parts v hr (fun _ h => h) (fun _ h => h) hu.2.1
+  exact sound_free (phFree_of_data t f.ht) (Fun.code_sound hC f h.1 h.2.1
+    ⟨hu.1, fun _ h => h, fun x hx => ⟨hx, (hu.2.2 x hx).2⟩⟩)
+
+/-- A function returning effects that the step runs, at an effect site of a checked spec's program, has a code with
+no layout gap behind it in each service's layout, where its type reads none of the program's sites or handles. -/
 theorem EffectFun.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {ps : List Ty} {r : Ty}
-    (f : EffectFun ps r) (hf : f.asSite ∈ c.E) :
+    (f : EffectFun ps r) (hf : f.asSite ∈ c.E) (hr : f.uses ∈ rootUses v) (hfree : (Ty.fn ps r).phFree = true) :
     Sound (fun p => CodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles (.fn ps r) p.1)
-      (f.code (Layout.ofService c.program.defs v)) :=
-  EffectFun.code_sound (covers_ofParts c.program.defs.parts v) f (effectSiteOk_of c.program.defs
+      (f.code (Layout.ofService c.program.defs v)) := by
+  have h := effectSiteOk_of c.program.defs
     ⟨fun u hu hs => ofService_has c.program.defs v u
       (List.mem_filter.2 ⟨List.mem_append_left _ (List.mem_append_right _ hu), sortable_of_sorted u hs⟩), fun _ h => h,
-      fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩ _ hf)
+      fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩ _ hf
+  have hu := usesOk_of_defsOk h.2.2.2.2 h.2.2.1 h.2.2.2.1
+  have hC := covers_uses c.program.defs.parts v hr (fun _ h => h) (fun _ h => h) hu.2.1
+  exact sound_free hfree (EffectFun.code_sound hC f h.1 h.2.1 ⟨hu.1, fun _ h => h, fun x hx => ⟨hx, (hu.2.2 x hx).2⟩⟩)
 
 end Tazuna.Smt

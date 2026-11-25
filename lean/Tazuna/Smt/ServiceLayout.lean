@@ -71,12 +71,32 @@ def eventTys (p : ProgramParts) (v : ServiceV) : List Ty :=
   dedupBy (fun a b => (Ty.same a b).isSome)
     (v.event :: p.sites.filterMap fun ⟨_, t, _⟩ => match t with | .fn [_] (.list e) => some e | _ => none)
 
+/-- The kept functions and handles a kept function's source and the globals it reads write. -/
+def _root_.Tazuna.Ir.Fun.uses {t : Ty} (f : Fun t) : List AnySite × List HandleSite :=
+  (f.body.uses sitesC f.defs, f.body.uses handlesC f.defs)
+
+/-- The kept functions and handles a kept function that returns effects, and the globals it reads, write. -/
+def _root_.Tazuna.Ir.EffectFun.uses {ps : List Ty} {r : Ty} (f : EffectFun ps r) : List AnySite × List HandleSite :=
+  (f.usedSites, f.body.uses handlesC f.defs)
+
+/-- What each function a step of the service runs uses. A site such a function uses (a pending request's
+`on_answer`, an own command's) uses no more (`Expr.uses_closed`), so these are all the codes a step meets. -/
+def rootUses (v : ServiceV) : List (List AnySite × List HandleSite) :=
+  [v.apply.uses, v.invariants.uses] ++
+    v.commands.flatMap (fun x => [x.accepts.uses, x.decide.uses, x.ensures.uses]) ++
+    v.queries.flatMap (fun q => [q.accepts.uses, q.resolve.uses]) ++
+    v.machines.flatMap (fun m => [m.instances.uses, m.on.uses, m.after.uses, m.invariants.uses, m.effect.uses]) ++
+    v.reactions.map (·.react.uses) ++ v.subscribes.map (·.wrap.uses)
+
 /-- The kinds of effect of the service's scripts, from the program it came from, before any datatype: those whose
-fields are data with sorts, so every datatype of the layout has one. -/
+fields are data with sorts, so every datatype of the layout has one. An own kind pairs a handle with an `on_answer`
+site that one function of the step uses, with the globals it reads: a handle no step function makes (a command only
+declared) has none. -/
 def Layout.kindsOf (p : ProgramParts) (v : ServiceV) : Layout :=
   { effects := dedupBy EffectKey.same (((eventTys p v).flatMap fun e =>
       (requestShapesAt v.declared e p.sites).map (·.key)).filter fun k => Ty.sorteds k.fields && (Ty.tuple k.fields).isData),
-    owns := dedupBy OwnKey.same ((p.handles.flatMap (ownKeys (eventTys p v) p.sites)).filter fun k => Ty.sorteds k.fields && (Ty.tuple k.fields).isData) }
+    owns := dedupBy OwnKey.same (((rootUses v).flatMap fun r => r.2.flatMap (ownKeys (eventTys p v) r.1)).filter
+      fun k => Ty.sorteds k.fields && (Ty.tuple k.fields).isData) }
 
 /-- The types the step's encoders build beyond the state's: contexts, functions' results, rules, event and effect
 lists, answers and own commands' answers. They are listed after the program's types, which already hold them where a

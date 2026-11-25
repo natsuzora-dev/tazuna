@@ -2818,13 +2818,13 @@ def nextKey : OwnKey := .query .int "next" .str .int .int ⟨answerIsEvent.site,
 def goneKey : OwnKey := .command .int "gone" .str .int .str ⟨answerFive.site, [.int]⟩
 def deadKey : OwnKey := .command .int "twice" .str .int .str ⟨⟨"m", 77, 77, 0⟩, [.int]⟩
 
-/-- The service `o`'s layout, in a program that makes the handles `twice`, `next` and `gone` and writes the
-`on_answer` sites the effects name; `dead` adds own kinds no handle makes, which only a hand-written layout has. -/
+/-- The service `o`'s layout, in a program that writes the `on_answer` sites the effects name, with the own kinds
+`twice`, `next` and `gone` added by hand: the effects are terms of the case, not of a function the service keeps, so
+the builder makes none of them. `dead` adds own kinds no handle makes. -/
 def dispLayoutOf (slots : Nat) (dead : List OwnKey := []) : Layout :=
   let L := svcLayout dispSvc slots (joinParts [siteParts answerFive, siteParts answerIsEvent,
-    ⟨[], [⟨"command", some "twice", [recordsT, .int, .str, .int, .str]⟩, ⟨"query", some "next", [recordsT, .str, .int, .int]⟩,
-      ⟨"command", some "gone", [recordsT, .int, .str, .int, .str]⟩], [], []⟩])
-  if dead.isEmpty then L else Layout.addTys (fun _ => slots) { L with owns := L.owns ++ dead } []
+    ⟨[], [], [Ty.nil, Ty.result Ty.nil .str, .tuple [.int], .tuple []], []⟩])
+  Layout.addTys (fun _ => slots) { L with owns := L.owns ++ [twiceKey, nextKey, goneKey] ++ dead } []
 
 /-- v0..v5 the state, v6 the effect, v7 the records after, v8 the next id after, v9 the instance table after, v10 the
 fault, v11 the fresh counter after, then per new request slot its flag and id. -/
@@ -3085,6 +3085,17 @@ def cascSites : List AnySite := writeSites ++ [⟨[], _, onceSite⟩]
 def onceKey : OwnKey := .command .int "put" .str .int .str ⟨⟨"m", 24, 1, 0⟩, []⟩
 
 def cascLayout (cascade : Int) (slots : Nat) : Layout := svcLayout (cascSvc cascade) slots
+
+/-- The builder's own kinds are the handles a function of the step makes, each with the `on_answer` sites that
+function writes: `once` sends `put` with its site, so `put` at that site is the only kind, even with `twice` listed
+too and other sites of the same type in the program. -/
+def unsentSvc : ServiceV := { cascSvc 1 with commands := [{ twiceC with name := "put" }, twiceC] }
+
+def ownKindsCheck : IO Bool := do
+  let owns := (svcLayout unsentSvc 2 (siteParts answerFive)).owns
+  if owns.length == 1 && owns.all (·.same onceKey) then return true
+  IO.println s!"smt-check: own kinds: {owns.length} kinds, not put at once's site alone"
+  return false
 
 /-- v0..v5 the state, v6 the event value, v7 the records after, v8 the fresh counter after, v9 the next id after, v10
 the pending table after, v11 the instance table after. -/
@@ -3437,6 +3448,7 @@ def check (z3 : String) : IO Bool := do
   unless ← writeCheck solver do ok := false
   unless ← quietCheck solver do ok := false
   unless ← fanCheck solver do ok := false
+  unless ← ownKindsCheck do ok := false
   unless ← clockFireCheck solver do ok := false
   unless ← eventsCheck solver do ok := false
   unless ← twiceCheck solver do ok := false

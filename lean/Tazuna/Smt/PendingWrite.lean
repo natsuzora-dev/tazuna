@@ -123,17 +123,12 @@ theorem mem_sitesOf {sites : List AnySite} {t : Ty} {Γ : List Ty} {s : Site Γ 
 
 -- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
 set_option linter.tazuna.silentDefault false in
-/-- Every shape a service's states can hold names sites of the program. -/
-theorem shapes_inSites {v : ServiceV} {P : List AnySite} {E : List AnyEffectSite} (hv : v.Reach P E)
-    {sh : PendingShape v.event} (h : sh ∈ shapes v) : sh.InSites P := by
+/-- Every shape a service's states can hold names sites its sender reaches. -/
+theorem shapes_inSender {v : ServiceV} {sh : PendingShape v.event} (h : sh ∈ shapes v) :
+    ∃ x ∈ senderShapes v, sh.InSites x.2.2 := by
   simp only [shapes, List.mem_flatMap] at h
   obtain ⟨⟨ks, snd, S⟩, hS, h⟩ := h
-  have hSP : ∀ s ∈ S, s ∈ P := by
-    simp only [senderShapes, List.mem_append, List.mem_map] at hS
-    rcases hS with ⟨m, hm, he⟩ | ⟨x, hx, he⟩ <;> cases he
-    · exact (hv.machines m hm).effect.used
-    · exact (hv.reactions x hx).used
-  suffices hin : sh.InSites S from ⟨hSP _ hin.1, fun s hs => hSP _ (hin.2 s hs)⟩
+  refine ⟨⟨ks, snd, S⟩, hS, ?_⟩
   split at h
   · simp only [List.mem_map] at h
     obtain ⟨rq, hrq, rfl⟩ := h
@@ -159,6 +154,17 @@ theorem shapes_inSites {v : ServiceV} {P : List AnySite} {E : List AnyEffectSite
         intro s hs; simp only [Option.mem_def, Option.some.injEq] at hs; subst hs; exact mem_sitesOf hes) rq hrq
     · cases hrq
   · cases h
+
+/-- Every shape a service's states can hold names sites of the program. -/
+theorem shapes_inSites {v : ServiceV} {P : List AnySite} {E : List AnyEffectSite} (hv : v.Reach P E)
+    {sh : PendingShape v.event} (h : sh ∈ shapes v) : sh.InSites P := by
+  obtain ⟨⟨ks, snd, S⟩, hS, hin⟩ := shapes_inSender h
+  have hSP : ∀ s ∈ S, s ∈ P := by
+    simp only [senderShapes, List.mem_append, List.mem_map] at hS
+    rcases hS with ⟨m, hm, he⟩ | ⟨x, hx, he⟩ <;> cases he
+    · exact (hv.machines m hm).effect.used
+    · exact (hv.reactions x hx).used
+  exact ⟨hSP _ hin.1, fun s hs => hSP _ (hin.2 s hs)⟩
 
 -- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
 set_option linter.tazuna.silentDefault false in
