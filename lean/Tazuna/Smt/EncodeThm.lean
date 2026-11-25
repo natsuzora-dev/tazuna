@@ -2307,8 +2307,8 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     change RelV L .int index (si.denote M) at hi
     simp only [RelV] at hs hi
     refine ⟨d, n, need_ok.1 h1, ?_⟩
-    show Val.ctor d 0 (Term.denotes M [ss, si]) = idVal d (freshId step index)
-    simp only [Term.denotes, hs, hi, freshId, idVal]
+    show Val.ctor d 0 (Term.denotes M [ss, si]) = idVal d (.fresh step index)
+    simp only [Term.denotes, hs, hi, idVal]
     rfl
   case externalCommand =>
     simp only [primCode] at h; cases h

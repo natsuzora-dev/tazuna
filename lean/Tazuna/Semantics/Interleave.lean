@@ -214,7 +214,8 @@ theorem fire_agrees {I : State v × List (Sender × EffectV v.event) → Prop}
 writes only that instance, so firing two instances in either order leaves the same instances; the effects they start
 come in the other order, which is the same multiset. What can still go wrong is the deadline: an instance whose timer
 fires may set a timer before the deadline that fired, which then is the earliest and runs first. A service whose
-timers never do so (`FiresForward`) has every order of a clock line's timers end as `fire` does (`timers_agree`). -/
+timers never do so has every order of a clock line's timers end as `fire` does (`timers_agree`): it needs only
+that the instances each state the firing reaches holds fire forward there (`FiresAt`). -/
 
 section Timers
 
@@ -409,12 +410,6 @@ def FiresAt (records : r.den0) (now : Int) : {ms : List (MachineV r e)} → Mach
   | m :: _, .cons insts rest => (∀ i ∈ insts, ∀ d : Int, hitsAt d i = true → d ≤ now →
       ∀ x ∈ (fired m records now i).1.timer, d ≤ x.1) ∧ FiresAt records now rest
 
-theorem firesAt_of {ms : List (MachineV r e)} (hF : FiresForward ms) (records : r.den0) (now : Int) :
-    (l : Machines ms) → FiresAt records now l
-  | .nil => trivial
-  | .cons _ rest => ⟨fun i _ d hd hdn => hF _ List.mem_cons_self records now d i hd hdn,
-      firesAt_of (fun m hm => hF m (List.mem_cons_of_mem _ hm)) records now rest⟩
-
 theorem dues_fireAt_ge {k : Nat} {now0 : Int} (hd0 : d ≤ now) : {ms : List (MachineV r e)} → (l : Machines ms) →
     FiresAt records now l → (∀ x ∈ dues l.toSigma now0, d ≤ x) →
     ∀ x ∈ dues (fireMachinesAt records now d k l).1.toSigma now0, d ≤ x
@@ -499,18 +494,9 @@ theorem timerSys_commutes {v : ServiceV} {I : State v × List (Sender × EffectV
       simp only [List.append_assoc]
       exact hp.append_left acc
 
-/-- Where timers fire forward, every order of the timers due at one deadline of a clock line ends as `fire` does: the
-same state, and the same effects in some order. -/
-theorem timers_agree {v : ServiceV} (hF : FiresForward v.machines) (fuel : Nat) (s : State v)
-    {r : Except Fault (State v × List (Sender × EffectV v.event))} (hr : Diamond.Runs (timerSys v) fuel (s, []) r) :
-    Diamond.Agree TimerEq r (fireResult s (fuel + 1)) :=
-  fire_agrees timerEq_equiv timerSys_simulates (I := fun _ => True)
-    (timerSys_commutes fun a _ => firesAt_of hF a.1.records a.1.now a.1.machines) (fun _ _ _ _ _ _ => trivial) fuel s
-    trivial hr
-
 /-- Where the timers of every state a clock line's firing reaches in any order fire forward there, every order of the
 timers due at one deadline ends as `fire` does: the same state, and the same effects in some order. -/
-theorem timers_agree_at {v : ServiceV} (fuel : Nat) (s : State v)
+theorem timers_agree {v : ServiceV} (fuel : Nat) (s : State v)
     (hF : ∀ a, Diamond.Reach (timerSys v) (s, []) a → FiresAt a.1.records a.1.now a.1.machines)
     {r : Except Fault (State v × List (Sender × EffectV v.event))} (hr : Diamond.Runs (timerSys v) fuel (s, []) r) :
     Diamond.Agree TimerEq r (fireResult s (fuel + 1)) :=

@@ -1,13 +1,10 @@
 import Tazuna.Smt.Checked
 import Tazuna.Semantics.Valid
 
-/-! T5 for a checked spec (`diamond_confluent`): where every two waiting own effects commute in the canonical sense
-(`Step.PairCommutes`) and timers fire forward (`Step.FiresForward`), the order the semantics picks for a cascade and
-for a clock line's timers is not a choice the spec makes: every other order ends the same, up to renaming, or faults
-as well. It needs no hypothesis about the program: every service of a spec that passed check respects every renaming
-of the ids steps make (`CheckedSpec.equivariant`), since the spec is what a closed program evaluates to and evaluation
+/-! What a spec that passed check gives every T5 theorem about its services: every service respects every renaming of
+the ids steps make (`CheckedSpec.equivariant`), since the spec is what a closed program evaluates to and evaluation
 relates a closed program's value to itself under every renaming (`Expr.eval_rel`), which for structure values says
-that the functions and values they keep relate to themselves. -/
+that the functions and values they keep relate to themselves; and the types renaming compares are comparable. -/
 
 namespace Tazuna.Smt
 
@@ -77,40 +74,5 @@ theorem CheckedSpec.states (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.s
   have hm' := (h.1.1.1.2 m hm)
   simp only [MachineV.table, instEntry, Ty.embeddable, Ty.embeddables, Bool.and_eq_true] at hm'
   exact comparable_of_embeddable _ hm'.1.2.1
-
-/-- T5: in a checked spec's service, where every two own effects waiting in a step in progress whose names are below
-its counter commute in the canonical sense, every order of a cascade ends as `settle` does, up to renaming the ids the
-cascade made (names from before it stay as they are) and reading collections as multisets, or both fault; and where its timers fire forward, every order of the timers due at
-one deadline of a clock line ends as `fire` does, with the same state and the same effects in some order. -/
-theorem diamond_confluent (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services)
-    (hpairs : ∀ a : Step.Acc v, Step.Supp a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
-      Step.PairCommutes c.T { a with own := Step.dropTwo a.own i j } a.own[i] a.own[j])
-    (htimers : Step.FiresForward v.machines) :
-    (∀ fuel (a : Step.Acc v), Step.Supp a → ∀ {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r →
-      Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a)) ∧
-    (∀ fuel (s : State v) {r}, Diamond.Runs (Step.timerSys v) fuel (s, []) r →
-      Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1))) :=
-  ⟨fun fuel a ha _ hr => Step.cascade_agrees c.T (c.equivariant v hv) (J := fun _ => True) (fun _ _ _ _ _ _ => trivial)
-      (fun a ha _ => hpairs a ha) fuel a ha trivial hr,
-    fun fuel s _ hr => Step.timers_agree htimers fuel s hr⟩
-
-/-- T5 for runs: the cascades `diamond_confluent` speaks about are every cascade a run starts. From the initial state
-on valid inputs (each carries only ids the service made before or names from outside, which traces and scenarios
-guarantee by how they name ids), every state keeps its names below its counter, so every cascade a step starts
-(`Step.Begins`) ends, in every order, as `settle` does, up to renaming, or faults in both. -/
-theorem runs_confluent (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services)
-    (hpairs : ∀ a : Step.Acc v, Step.Supp a → ∀ i j (hi : i < a.own.length) (hj : j < a.own.length), i ≠ j →
-      Step.PairCommutes c.T { a with own := Step.dropTwo a.own i j } a.own[i] a.own[j])
-    (htimers : Step.FiresForward v.machines) {xs : List (Input v)} (hxs : Step.ValidRun c.T (Step.State.init v) xs)
-    {x : Input v} (hx : x.Valid (run c.T v (Step.State.init v) xs).1) {a : Step.Acc v}
-    (ha : Step.Begins c.T (run c.T v (Step.State.init v) xs).1 x a) :
-    ∀ fuel {r}, Diamond.Runs (Step.ownSys c.T v) fuel a r →
-      Diamond.Agree (Step.Same a.state.fresh a.state.nextId) r (Step.settle c.T fuel a) := by
-  have he := c.equivariant v hv
-  have hr := (c.checked v hv).reach
-  have hi := run_inv c.T hr _ Step.init_inv xs
-  have hs := Step.run_supp c.T he (c.states hv) hr _ Step.init_inv (Step.init_supp he) xs hxs
-  have hsa := (Step.begins_supp c.T he (c.states hv) hs hi.below hx ha).1
-  exact fun fuel _ hrun => (diamond_confluent c hv hpairs htimers).1 fuel a hsa hrun
 
 end Tazuna.Smt

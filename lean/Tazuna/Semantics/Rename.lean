@@ -36,21 +36,10 @@ structure Ren where
 
 def Ren.inv (R : Ren) : Ren := ⟨R.ctr.inv, R.wire.inv⟩
 
-section FreshId
-
-/-- Distinct pairs of a step's counter and an index make distinct ids. -/
-theorem freshId_inj {s s' : Nat} {i i' : Int} (h : freshId s i = freshId s' i') : s = s' ∧ i = i' := by
-  simpa only [freshId, IdV.fresh.injEq] using h
-
-theorem freshId_ne_named (s : Nat) (i : Int) (n : String) : freshId s i ≠ .named n := by
-  simp [freshId]
-
-end FreshId
-
 /-- Ids related by `R`: an id from outside to itself, and the id a step made from counter `c` and index `i` to the id
 made from the counter `R` gives `c` and the same index. -/
 def IdV.Rel (R : PBij) (a b : IdV) : Prop :=
-  (∃ s, a = .named s ∧ b = .named s) ∨ ∃ c c' i, R.rel c c' ∧ a = freshId c i ∧ b = freshId c' i
+  (∃ s, a = .named s ∧ b = .named s) ∨ ∃ c c' i, R.rel c c' ∧ a = .fresh c i ∧ b = .fresh c' i
 
 theorem IdV.rel_inv {R : PBij} {a b : IdV} : IdV.Rel R a b ↔ IdV.Rel R.inv b a := by
   constructor <;> rintro (⟨s, rfl, rfl⟩ | ⟨c, c', i, h, rfl, rfl⟩)
@@ -64,11 +53,11 @@ theorem IdV.rel_eq {R : PBij} {a b a' b' : IdV} (h : IdV.Rel R a b) (h' : IdV.Re
   rcases h with ⟨s, rfl, rfl⟩ | ⟨c, c', i, hc, rfl, rfl⟩ <;>
     rcases h' with ⟨s', rfl, rfl⟩ | ⟨d, d', j, hd, rfl, rfl⟩
   · simp
-  · simp [freshId]
-  · simp [freshId]
+  · simp
+  · simp
   · constructor
-    · intro e; obtain ⟨rfl, rfl⟩ := freshId_inj e; rw [R.func hc hd]
-    · intro e; obtain ⟨rfl, rfl⟩ := freshId_inj e; rw [R.inj hc hd]
+    · intro e; obtain ⟨rfl, rfl⟩ := IdV.fresh.inj e; rw [R.func hc hd]
+    · intro e; obtain ⟨rfl, rfl⟩ := IdV.fresh.inj e; rw [R.inj hc hd]
 
 /-- Lists related as multisets: item by item once the second is reordered. -/
 def Multi {α β : Type} (r : α → β → Prop) (xs : List α) (ys : List β) : Prop := ∃ zs, Forall2 r xs zs ∧ zs.Perm ys

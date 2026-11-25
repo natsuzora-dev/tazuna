@@ -204,7 +204,7 @@ theorem timers_lines {v : ServiceV}
     (hfit : ∀ a, Diamond.Reach (Step.timerSys v) (s, []) a → TimersFit L a.1.records a.1.machines)
     {r : Except Fault (State v × List (Sender × EffectV v.event))} (hr : Diamond.Runs (Step.timerSys v) fuel (s, []) r) :
     Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1)) :=
-  Step.timers_agree_at fuel s (fun a ha => firesAt_of_lines hq a.1.machines (hfit a ha)) hr
+  Step.timers_agree fuel s (fun a ha => firesAt_of_lines hq a.1.machines (hfit a ha)) hr
 
 end
 

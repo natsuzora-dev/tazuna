@@ -89,8 +89,4 @@ theorem Ty.deq_bag_perm (t : Ty) {xs ys : List t.den} (h : xs.Perm ys) : Ty.deq 
   simp only [bagBeq, countBy, Bool.and_eq_true, beq_iff_eq, List.all_eq_true]
   exact ⟨h.length_eq, fun x _ => (h.filter _).length_eq⟩
 
-/-- `==` on Int and String is Lean's equality. -/
-theorem Ty.deq_int (a b : Int) : Ty.deq .int a b = true ↔ a = b := by simp [Ty.deq, Ty.sem, Ty.semWith]
-theorem Ty.deq_str (a b : String) : Ty.deq .str a b = true ↔ a = b := by simp [Ty.deq, Ty.sem, Ty.semWith]
-
 end Tazuna.Ir

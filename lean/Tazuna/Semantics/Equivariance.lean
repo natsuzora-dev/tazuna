@@ -750,11 +750,6 @@ theorem Defs.eval_rel : {G : List Ty} → (D : Defs G) → Ty.relsV R G D.eval D
   | [], .nil => trivial
   | _ :: _, .snoc defs _ body => ⟨Expr.eval_rel defs (Defs.eval_rel defs) body trivial, Defs.eval_rel defs⟩
 
-/-- A kept function relates to itself when the values it captured do. -/
-theorem Fun.rel_of_env {t : Ty} (f : Fun t) (h : Ty.rel0 R (.tuple f.Γ) f.env f.env) : Fun.Rel R f f := by
-  refine Ty.rel0_down f.ht (Expr.eval_rel f.defs (Defs.eval_rel f.defs) f.body ?_)
-  exact (Ty.relsV_up f.Γ f.hΓ f.env f.env).2 h
-
 /-- A kept function that returns effects maps related arguments to related effects when the values it captured relate
 to themselves. -/
 theorem EffectFun.apply_rel {ps : List Ty} {r : Ty} (f : EffectFun ps r) (h : Ty.rel0 R (.tuple f.Γ) f.env f.env)

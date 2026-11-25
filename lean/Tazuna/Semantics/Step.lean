@@ -446,10 +446,4 @@ def run (T : List TypeDecl) (v : ServiceV) : State v → List (Input v) → Stat
     let (s', rest) := run T v r.state is
     (s', r :: rest)
 
-/-- Every input yields exactly one outcome. -/
-theorem run_outcomes (T : List TypeDecl) (v : ServiceV) : (s : State v) → (is : List (Input v)) →
-    (run T v s is).2.length = is.length
-  | _, [] => rfl
-  | s, i :: is => by simp only [run, List.length_cons]; rw [run_outcomes T v _ is]
-
 end Tazuna.Ir

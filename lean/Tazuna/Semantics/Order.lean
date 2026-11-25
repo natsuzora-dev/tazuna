@@ -179,12 +179,6 @@ theorem cmp_bin (a b : String) : cmp (.bin a) (.bin b) = compare a b := by
   simp only [cmp, ser, List.compareLex_cons_cons, Tok.cmp, List.compareLex_nil_nil]
   cases compare a b <;> rfl
 
-theorem cmp_int_bin (a : Int) (b : String) : cmp (.int a) (.bin b) = .lt := by
-  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
-
-theorem cmp_bin_int (a : String) (b : Int) : cmp (.bin a) (.int b) = .gt := by
-  simp [cmp, ser, List.compareLex_cons_cons, Tok.cmp]; rfl
-
 theorem cmp_atom (a b : String) : cmp (.atom a) (.atom b) = compare a b := by
   simp only [cmp, ser, List.compareLex_cons_cons, Tok.cmp, List.compareLex_nil_nil]
   cases compare a b <;> rfl

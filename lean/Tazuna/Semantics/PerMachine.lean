@@ -64,16 +64,6 @@ def zipWith (f : β → γ → δ) : {ms : List (MachineV r e)} → PerMachine (
 @[simp] theorem toList_cons {m : MachineV r e} {ms : List (MachineV r e)} (x : β) (xs : PerMachine (fun _ => β) ms) :
     (PerMachine.cons (m := m) x xs).toList = x :: xs.toList := rfl
 
-@[simp] theorem length_toList : {ms : List (MachineV r e)} → (xs : PerMachine (fun _ => β) ms) →
-    xs.toList.length = ms.length
-  | _, .nil => rfl
-  | _, .cons _ xs => by simp [length_toList xs]
-
-@[simp] theorem toList_map (f : β → γ) : {ms : List (MachineV r e)} → (xs : PerMachine (fun _ => β) ms) →
-    (xs.map f).toList = xs.toList.map f
-  | _, .nil => rfl
-  | _, .cons x xs => by simp [map, toList_map f xs]
-
 @[simp] theorem toList_zipWith (f : β → γ → δ) : {ms : List (MachineV r e)} → (xs : PerMachine (fun _ => β) ms) →
     (ys : PerMachine (fun _ => γ) ms) → (zipWith f xs ys).toList = List.zipWith f xs.toList ys.toList
   | _, .nil, .nil => rfl

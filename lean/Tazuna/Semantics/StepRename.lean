@@ -182,22 +182,6 @@ where
         go h fun a ha b hb => hr a (List.mem_cons_of_mem _ ha) b (List.mem_cons_of_mem _ hb)⟩
     | [], _ :: _, h, _ | _ :: _, [], h, _ => h.elim
 
-theorem Multi.filterMap {r : α → β → Prop} {r' : γ → δ → Prop} {f : α → Option γ} {g : β → Option δ}
-    (hfg : ∀ a b, r a b → Option.Rel r' (f a) (g b)) {xs : List α} {ys : List β} :
-    Multi r xs ys → Multi r' (xs.filterMap f) (ys.filterMap g)
-  | ⟨zs, h, hz⟩ => ⟨zs.filterMap g, go h, hz.filterMap g⟩
-where
-  go : {xs : List α} → {zs : List β} → Forall2 r xs zs → Forall2 r' (xs.filterMap f) (zs.filterMap g)
-    | [], [], _ => trivial
-    | a :: _, b :: _, ⟨h1, h⟩ => by
-      simp only [List.filterMap_cons]
-      have := hfg a b h1
-      revert this
-      cases f a <;> cases g b <;> intro hr <;> cases hr
-      · exact go h
-      · exact ⟨by assumption, go h⟩
-    | [], _ :: _, h | _ :: _, [], h => h.elim
-
 theorem zipIdx_shift (l : List α) (k : Nat) : (l.zipIdx k).map (fun q => (q.1, q.2 + 1)) = l.zipIdx (k + 1) := by
   induction l generalizing k with
   | nil => rfl

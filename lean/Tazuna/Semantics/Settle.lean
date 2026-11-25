@@ -1,4 +1,4 @@
-import Tazuna.Semantics.PendingPerm
+import Tazuna.Semantics.PendingInv
 
 /-! The own queue read as an append-only list. `settle` pops the queue's head before each internal step, and an
 internal step only appends to the queue (`runOwn_own`), so the internal step `k` runs the `k`-th own effect queued in
@@ -11,6 +11,25 @@ namespace Tazuna.Ir
 variable {v : ServiceV}
 
 namespace Step
+
+theorem foldlM_map_comm {ε α β : Type} (g : α → β → Except ε α) (h : α → α) (hg : ∀ a x, g (h a) x = (g a x).map h) :
+    (xs : List β) → (a : α) → xs.foldlM g (h a) = (xs.foldlM g a).map h
+  | [], _ => rfl
+  | x :: xs, a => by
+    simp only [List.foldlM_cons, hg, bind, Except.bind, Except.map]
+    cases g a x with
+    | error e => rfl
+    | ok a' => exact foldlM_map_comm g h hg xs a'
+
+theorem map_bind_comm {ε α β : Type} (x : Except ε α) (f : α → α) (g g' : α → Except ε β) (h : β → β)
+    (hg : ∀ a, g (f a) = (g' a).map h) : (x.map f >>= g) = (x >>= g').map h := by
+  cases x <;> simp [Except.map, bind, Except.bind, hg]
+
+/-- A command's run with `f` applied to the step in progress it leaves. -/
+def Ran.map {j : Ty} (f : Acc v → Acc v) : Ran v j → Ran v j
+  | .invalid rs => .invalid rs
+  | .rejected a k => .rejected (f a) k
+  | .accepted a => .accepted (f a)
 
 /-- The accumulator with `xs` in front of its own queue. -/
 def Acc.ownFront (xs : List (EffectV v.event)) (a : Acc v) : Acc v := { a with own := xs ++ a.own }

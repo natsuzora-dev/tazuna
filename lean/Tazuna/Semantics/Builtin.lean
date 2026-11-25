@@ -113,9 +113,6 @@ def Ty.toOption {t : Ty} : (Ty.option t).den → Option t.den
   | .inl (x, ()) => Option.some x
   | .inr _ => Option.none
 
-/-- The id the step with counter `step` makes for `index`. -/
-def freshId (step : Nat) (index : Int) : IdV := .fresh step index
-
 -- The built-in's arity (`Prim.ok`) guarantees the type argument, so that default is never read. A subscription
 -- whose event no source declares has no owner, which the empty name says.
 set_option linter.tazuna.silentDefault false in
@@ -279,7 +276,7 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
   | .fromReaction, args, _ => fun (x, ()) =>
     let x : ReactionV ((Ty.param 0).inst args) ((Ty.param 1).inst args) := x
     .reaction x.name
-  | .fresh, _, _ => fun (step, index, ()) => freshId step index
+  | .fresh, _, _ => fun (step, index, ()) => IdV.fresh step index
   | .tableLookup, args, _ => fun (t, k, rejection, next, ()) => match lookupBy (Ty.deq (args[0]?.getD (.param 0))) k t.1 with
     | .some v => next (v, ())
     | .none => Ty.error rejection

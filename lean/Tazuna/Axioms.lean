@@ -12,7 +12,6 @@ import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
 import Tazuna.Semantics.Reach
 import Tazuna.Semantics.PendingInv
-import Tazuna.Semantics.PendingPerm
 import Tazuna.Semantics.Settle
 import Tazuna.Semantics.Interleave
 import Tazuna.Semantics.NoTimer
@@ -51,43 +50,47 @@ elab "#check_tazuna_axioms" : command => do
     for a in ← liftCoreM (collectAxioms n) do
       unless allowed.contains a do throwError "{n} depends on the axiom {a}"
   if checked == 0 then throwError "no Tazuna declarations found"
-  -- The theorems the engine's answers rest on: a double-backquoted name that no longer exists fails to elaborate.
-  for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound,
-      ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent,
-      ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete, ``Tazuna.Smt.pairs_sound,
-      ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within, ``Tazuna.Smt.timers_lines,
-      ``Tazuna.Smt.run_lines, ``Tazuna.Smt.run_within, ``Tazuna.Smt.begins_coded, ``Tazuna.Smt.begins_coded_within,
-      ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.back_sorts,
-      ``Tazuna.Ir.Step.timerForward_of_noTimer] do
-    unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms
 
-/-- Whether a theorem is one Lean generates for a definition or a structure, rather than one written in the source. -/
+/-- Whether a theorem is one Lean generates for a definition, an inductive type or a structure, rather than one written
+in the source. -/
 def generatedTheorem (env : Lean.Environment) : Lean.Name → Bool
-  | n@(.str p s) => s.startsWith "eq_" || s ∈ ["eq", "inj", "injEq", "sizeOf_spec", "congr_simp"] || n.isInternal ||
+  | n@(.str p s) => s.startsWith "eq_" ||
+    s ∈ ["eq", "inj", "injEq", "sizeOf_spec", "congr_simp", "brecOn", "ofNat_ctorIdx"] || n.isInternal ||
     (Lean.getStructureInfo? env p).any (·.fieldNames.contains (.mkSimple s))
   | _ => true
 
-/-! Every theorem of the SMT layer is used by a root: a theorem the engine's answers rest on, or one listed below for
-what U10 will use. A theorem nothing uses is dead or has lost its user, as the step's exactness did when per-kind
-theorems were deleted without notice. `simp` uses a lemma proved by `rfl` without naming it in the proof, so those
-are not checked. -/
+/-! Every theorem of tazuna is used by a root: what the engine runs, a theorem its answers rest on, or a statement of
+meaning a reader checks the definitions against. A theorem nothing uses is dead or has lost its user, as the step's
+exactness did when per-kind theorems were deleted without notice. A root another root uses is not a root: listing it
+would keep it alive after the top statement stops using it, so the check fails on it too. `simp` uses a lemma proved
+by `rfl` without naming it in the proof, so those are not checked. -/
 
 open Lean Elab Command in
 elab "#check_tazuna_reach" : command => do
   let env ← getEnv
   let roots := [
-    -- T2 for every step kind, and the bound-reached condition the step scripts ask.
-    ``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff,
-    -- The cascade's codes condition `step_encode` assumes holds exactly when every own kind's functions fit.
-    ``Tazuna.Smt.step_sites,
-    -- T3: a model's values decode to a state a run reaches, and the well-formedness holds of decoded values.
-    ``Tazuna.Smt.decode_run, ``Tazuna.Smt.wf_decode,
-    -- What check hands prove: `Checked` of every service and a named, declared handle from a check with no finding.
-    ``Tazuna.Smt.check_ok, ``Tazuna.Smt.handles_ok,
-    -- SMT-LIB text: printing then parsing gives the terms and values back, and shared definitions keep the meaning.
-    ``Tazuna.Smt.Term.parse_print, ``Tazuna.Smt.Val.parse_print, ``Tazuna.Smt.shared_agrees,
+    -- What the engine runs: each command, and the lists the e2e harness and gen-dsl print, which hold every output
+    -- kind, built-in and DSL type.
+    ``Tazuna.Cli.check, ``Tazuna.Cli.test, ``Tazuna.Cli.verify, ``Tazuna.Cli.prove, ``Tazuna.Cli.proveArgs,
+    ``Tazuna.Kind.mem_all, ``Tazuna.Ir.Prim.mem_all, ``Tazuna.Ir.Dsl.mem_all,
+    -- Gleam's meaning where languages differ, and literals: reading back a printed literal gives it back.
+    ``Tazuna.Gleam.div_zero, ``Tazuna.Gleam.mod_zero, ``Tazuna.Gleam.div_add_mod, ``Tazuna.Gleam.mod_neg_left,
+    ``Tazuna.Gleam.mod_neg_right, ``Tazuna.Gleam.div_neg_right, ``Tazuna.Gleam.length_eq_codepoints,
+    ``Tazuna.Ir.Ty.deq_bag_perm, ``Tazuna.Ir.Literal.parseInt_printInt, ``Tazuna.Ir.Literal.parseStr_printStr,
+    -- Traces: reading back a written line or value gives it back, and a date label and its day number are one value.
+    ``Tazuna.Trace.Line.ofWire_toWire, ``Tazuna.Trace.dec_enc, ``Tazuna.Trace.DateThm.render_parse,
+    ``Tazuna.Trace.DateThm.labelled_range,
+    -- A counterexample's `after` is the state the step reaches before its invariant check.
+    ``Tazuna.Ir.step_settled,
+    -- The bound-reached condition the step scripts ask. T2 (`step_encode`) is what the verdict theorems below rest on.
+    ``Tazuna.Smt.boundReached_iff,
+    -- T3: a model's values decode to a state a run reaches.
+    ``Tazuna.Smt.decode_run,
+    -- SMT-LIB text: printing then parsing gives the values back (and the terms, which values rest on), and shared
+    -- definitions keep the meaning.
+    ``Tazuna.Smt.Val.parse_print, ``Tazuna.Smt.shared_agrees,
     ``Tazuna.Smt.shared_conservative,
     -- The compiled printer appends to a string in place; it is the printer the theorems above are about.
     ``Tazuna.Smt.SExp.print_eq_printFast,
@@ -108,33 +111,18 @@ elab "#check_tazuna_reach" : command => do
     -- A counterexample is honest: a model of a target question decodes to a state with the step invariant and every
     -- invariant holding, whose step in Lean is the one the terms say.
     ``Tazuna.Smt.cti_sound,
-    -- T5: where every two waiting own effects commute in the canonical sense and timers fire forward, every order of
-    -- a cascade and of a clock line's timers ends as the semantics' order does, up to renaming, or both fault.
-    ``Tazuna.Smt.diamond_confluent,
-    -- T5 for runs: those cascades are every cascade a run on valid inputs starts, since valid inputs keep every name
-    -- of a state below its counter.
-    ``Tazuna.Smt.runs_confluent,
-    -- T5 from the pair lines, scoped to the slots: where every pair line reads proved, every order of a cascade
-    -- that starts with own effects a script can hold and whose states, in any order, fit the slots ends as the
-    -- semantics' order does, up to renaming, or both fault; where they read within the bounds, the same where its
-    -- steps and the two orders of every pair also run within the slots.
-    ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within,
-    -- The same of a clock line's timers from the timer lines: where every timer machine's questions are unsat, every
-    -- order of the timers due at one deadline ends as the semantics' does, wherever each fired timer's context fits.
-    ``Tazuna.Smt.timers_lines,
-    -- The same for runs: from the initial state on valid inputs, every cascade a step starts keeps what a pair question
-    -- assumes of its state, so the pair and timer lines speak for every cascade and clock line of the run.
+    -- T5 for runs, scoped to the slots: from the initial state on valid inputs, where the step, pair and timer lines
+    -- read proved (or within the bounds, where the steps fit), every order of every cascade a step starts, and of every
+    -- clock line's timers, ends as the semantics' order does, up to renaming, or both fault.
     ``Tazuna.Smt.run_lines, ``Tazuna.Smt.run_within,
-    -- A cascade starts with own effects a script can hold wherever the step that starts it is within the slots and its
-    -- step line reads proved, or the step stays within the slots: the step's encoding codes each effect it queues.
-    ``Tazuna.Smt.begins_coded, ``Tazuna.Smt.begins_coded_within,
-    -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
-    -- forward; unsat answers mean no context within the slots has one.
-    ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound,
+    -- A timer line's counterexample is honest: a model is a context whose timer falls back, so timers do not fire
+    -- forward.
+    ``Tazuna.Smt.back_violates,
     -- No unsat answer is free and none is out of reach: `Unsat` asks that the sorts hold values, and the sorts of every
     -- question an encoder builds in a layout whose datatypes have sorts (as `Layout.ofParts`'s, `sorted_ofParts`) do.
     ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.back_sorts]
   let mut used : NameSet := {}
+  let mut usedByOther : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do
     let n := todo.head!
@@ -142,13 +130,20 @@ elab "#check_tazuna_reach" : command => do
     if used.contains n then continue
     used := used.insert n
     let some ci := env.find? n | throwError "{n} is missing"
-    let next := match ci with
-      | .thmInfo t => ci.getUsedConstantsAsSet.toList ++ t.all
-      | _ => ci.getUsedConstantsAsSet.toList
-    todo := next.filter (!used.contains ·) ++ todo
+    -- A theorem proved in a mutual block uses the block's other theorems; that use is not another root's.
+    let block := match ci with
+      | .thmInfo t => t.all
+      | _ => [n]
+    let uses := ci.getUsedConstantsAsSet.toList
+    usedByOther := uses.foldl (fun acc m => if !block.contains m && roots.contains m then acc.insert m else acc)
+      usedByOther
+    todo := (uses ++ block).filter (!used.contains ·) ++ todo
+  let inner := roots.filter usedByOther.contains
+  unless inner.isEmpty do
+    throwError "another root uses these roots, so they are not tops; drop them from the roots: {inner}"
   let mut unused := #[]
   for (n, ci) in env.constants.toList do
-    unless (`Tazuna.Smt).isPrefixOf n && ci matches .thmInfo _ do continue
+    unless (`Tazuna).isPrefixOf n && ci matches .thmInfo _ do continue
     if used.contains n || generatedTheorem env n then continue
     if (← liftCoreM (Meta.isRflTheorem n)) then continue
     unused := unused.push n
