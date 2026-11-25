@@ -1,0 +1,40 @@
+#!/bin/sh
+# prove's lines do not depend on how many solvers run at once, nor on --only beyond what it leaves out. The prove
+# e2e spec with a violation, proved from an empty cache with --jobs 1 and with --jobs 4, must print the same bytes and
+# exit with the same code. The one where everything is proved, proved with --only, must print some of the full run's
+# lines, each the same apart from `assumes`: an invariant --only leaves out is not proved in that run, so it is
+# assumed.
+# Usage: test/determinism/check <engine> <the Gleam package's build/dev directory>
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+engine=$1
+dev=$2
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+printf 'import { main } from "%s";\nmain();\n' "$dev/javascript/tazuna/tazuna.mjs" >"$work/run.mjs"
+prove() {
+  name=$1
+  case=$2
+  shift 2
+  mkdir "$work/$name"
+  cp -R "$here/../e2e/$case/src" "$work/$name/"
+  code=0
+  (cd "$work/$name" && TAZUNA_ENGINE="$engine" node "$work/run.mjs" prove m "$@" >out.jsonl) || code=$?
+  echo "$code" >"$work/$name/exit"
+}
+prove one Prove.violated --jobs 1
+prove four Prove.violated --jobs 4
+if ! cmp -s "$work/one/out.jsonl" "$work/four/out.jsonl" || ! cmp -s "$work/one/exit" "$work/four/exit"; then
+  echo "determinism: prove printed other lines or exited otherwise with --jobs 1 than with --jobs 4:"
+  diff "$work/one/out.jsonl" "$work/four/out.jsonl" || true
+  exit 1
+fi
+prove all Prove.proved
+prove only Prove.proved --only "counter/add ensures"
+strip() { sed 's/"assumes":\[[^]]*\],\{0,1\}//' "$1"; }
+strip "$work/all/out.jsonl" >"$work/full"
+strip "$work/only/out.jsonl" >"$work/kept"
+[ -s "$work/kept" ] || { echo "determinism: prove --only printed no line"; exit 1; }
+while IFS= read -r line; do
+  grep -qxF "$line" "$work/full" || { printf 'determinism: prove --only printed a line the full run lacks:\n%s\n' "$line"; exit 1; }
+done <"$work/kept"

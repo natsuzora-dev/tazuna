@@ -43,3 +43,6 @@ kinds=$(mktemp)
 trap 'rm -f "$kinds"' EXIT
 (cd lean && lake exe kinds) >"$kinds"
 test/e2e/check "$kinds" "$PWD/lean/.lake/build/bin/tazuna-engine" "$PWD/gleam/build/dev"
+
+# prove prints the same lines whatever --jobs is, and --only keeps the full run's lines.
+test/determinism/check "$PWD/lean/.lake/build/bin/tazuna-engine" "$PWD/gleam/build/dev"
