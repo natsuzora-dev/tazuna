@@ -4,8 +4,7 @@ import Tazuna.Smt.ReactExact
 /-! The requests an event's reactions start. A reaction returns a list of effects, coded as list slots in order; every
 effect value the layout codes is a request, so each occupied slot is written into the pending table. The step starts
 them after the machines' effects, reactions in order and each reaction's effects in list order, so a slot's wire id is
-the id after the effects before it: a running count over the slots (`reactSlots`), linear in the slots.
-`event_step` is T2 for the whole event step: machines, reactions, the pending write and the invariants. -/
+the id after the effects before it: a running count over the slots (`reactSlots`), linear in the slots. -/
 
 namespace Tazuna.Smt
 
@@ -248,90 +247,6 @@ theorem reactions_exact {shs : List (PendingShape e)} {ds : List (String × Decl
       exact ⟨⟨p0, (e1 (e0.2 p0)).1 p1⟩, p2⟩
     · rintro ⟨⟨p0, p1⟩, p2⟩
       exact ⟨p0, (e1 (e0.2 p0)).2 p1, p2⟩
-
-end
-
-section
-variable {L : Layout} {T : List TypeDecl} {M : Model}
-
-/-- T2 for an event: wherever the conditions hold, a broken invariant's name (the service's first, then each machine's
-instances in key order) is the step's fault, and otherwise the step is accepted with the records, the instance tables
-and the event the terms denote; it writes the requests `ps` (machines' first, then reactions') at the next wire ids
-and sends them as its out lines, the pending table term denotes the pending requests (as a multiset) and the next id
-term the next wire id. -/
-theorem event_step {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx : ∀ x ∈ v.reactions, x.Reach P)
-    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    (s : State v) (hinv : Step.Inv P s) (i : Fin v.subscribes.length)
-    (value : (v.subscribes.get i).event.den0) (hd : EventData v i) {ec : EventCode v i} {ce : Term}
-    (hec : EventCode.of L v i = .ok (ec, ce)) (hce : Holds M ce) {records sv now nextIdT pending : Term}
-    (hrec : RelV L v.records (Ty.up _ hd.records s.records) (records.denote M))
-    (hsv : RelV L _ (Ty.up _ hd.value value) (sv.denote M)) (hnow : now.denote M = .int s.now)
-    (hnid : nextIdT.denote M = .int (Int.ofNat s.nextId)) (hpend : PendingRel L shs (pending.denote M) s.pending)
-    {xs : List Term} (hms : MachinesRel M L T v.machines xs s.machines)
-    (hor : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true)
-    {o : EventOut} {cond : Term} (henc : encodeEvent L ec records sv = .ok (o, cond)) (hc : Holds M cond)
-    {outs : List ReactOut} {cm : Term} (hm : encodeMachines L v.machines xs o.records now o.event = .ok (outs, cm))
-    (hcm : Holds M cm) {checks : List (List InstCheck)} {ck : Term}
-    (hck : encodeInstChecks L T v.machines (outs.map (·.table)) o.records now = .ok (checks, ck)) (hcck : Holds M ck) {dE nE dP nP dopt nopt : Nat} (hE : L.find? (.dsl .effect [v.event]) = some (dE, nE))
-    (hPE : L.find? (pendingEntry shs) = some (dP, nP))
-    (hopt : L.find? (Ty.option (.dsl .effect [v.event])) = some (dopt, nopt))
-    {news : List Slot} {nT : Term} (hst : encodeStarts L T shs v.declared dE dP dopt v.machines (outs.map (·.starts)) nextIdT = .ok (news, nT))
-    {rnews : List Slot} {nR cr : Term}
-    (hrx : encodeReactions L shs v.declared dE dP v.reactions o.records now o.event nT = .ok (rnews, nR, cr))
-    (hcr : Holds M cr) {pT cp : Term} (hpe : encodePending L shs pending (news ++ rnews) = .ok (pT, cp)) (hcp : Holds M cp) :
-    let r := step T v s (.event i value)
-    match brokenIn M o.invariants ++ checksBroken L T M v.machines checks with
-    | n :: _ => r = ⟨s, .fault (.invariant n), [], []⟩
-    | [] => r.outcome = .accepted ∧
-        (∃ ps, r.out = ps.map Step.Pending.line ∧ r.state.pending = s.pending ++ ps ∧
-          r.state.nextId = s.nextId + ps.length ∧ ∃ ps', ps'.Perm r.state.pending ∧ PendingRel L shs (pT.denote M) ps') ∧
-        nR.denote M = .int (Int.ofNat r.state.nextId) ∧
-        r.state = { s with records := r.state.records, machines := r.state.machines,
-                           pending := r.state.pending, nextId := r.state.nextId } ∧
-        RelV L v.records (Ty.up _ hd.records r.state.records) (o.records.denote M) ∧
-        MachinesRel M L T v.machines (outs.map (·.table)) r.state.machines ∧
-        ∃ e, r.events = [e] ∧ RelV L v.event (Ty.up _ hd.event e) (o.event.denote M) := by
-  intro r
-  obtain ⟨hr', he', hb'⟩ := event_rel i value hd hec hce hrec hsv henc hc
-  let ev := (v.subscribes.get i).wrap.fn (value, ())
-  let recs' := v.apply.fn (s.records, ev, ())
-  have hrel := machines_event (T := T) recs' s.now ev hd.records hd.event hr' hnow he' v.machines xs
-    s.machines outs hms (fun m hm => (hor m hm).1) hm hcm
-  have hbs := instChecks_rel recs' s.now hd.records hr' hnow v.machines _ _ hrel
-    (by simpa using fun m hm => (hor m hm).2) hck hcck
-  have hstarts := machines_starts (T := T) recs' s.now ev hd.records hd.event hr' hnow he' v.machines xs s.machines
-    outs hms hor hm hcm
-  have hreach : ∀ effs ∈ s.machines.map (fun sm => (Step.machineStep T recs' s.now ev sm).2), ∀ x ∈ effs, x.2.Reach P := by
-    intro effs he x hx
-    obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 he
-    exact (Step.machineStep_reach T recs' s.now ev sm (hinv.machines sm hsm)).2 x hx
-  obtain ⟨hnT, svN, zs, hSN, hwN, hhN, xs', hxp, hq⟩ := starts_rel hP hshs hE hPE hopt v.machines _ _ hstarts hreach
-    hnid hst
-  have hnews1 : NewsRel M L shs v.declared news (startedBy T s recs' ev) s.nextId := ⟨svN, zs, hSN, hwN, hhN, xs', hxp, hq⟩
-  obtain ⟨hnR, hnews2⟩ := reactions_rel hP hshs hE hPE recs' s.now ev hd.records hd.event hr' hnow he' v.reactions hvx
-    hnT hrx hcr
-  obtain ⟨svA, zsA, hSA, hwA, hhA, xsA, hxpA, hqA⟩ := newsRel_append hnews1 hnews2
-  obtain ⟨ps, hps, ps', hperm, hrelP⟩ := pending_rel hpend hinv.below hinv.nodup hSA hwA hhA hxpA hqA hpe hcp
-  have hlen : ps.length = (startedBy T s recs' ev ++ reactedBy s recs' ev).length := by
-    rw [← forall2_length hps, List.length_zipIdx]
-  simp only [r]
-  rw [step_event_requests s i value ps hps]
-  let ms' := s.machines.map fun ms0 => (Step.machineStep T recs' s.now ev ms0).1
-  let s' : State v := { s with records := recs', machines := ms', pending := s.pending ++ ps,
-                               nextId := s.nextId + (startedBy T s recs' ev ++ reactedBy s recs' ev).length }
-  have hinvs : Step.invariants s' =
-      brokenIn M o.invariants ++ checksBroken L T M v.machines checks := by
-    simp only [Step.invariants]
-    rw [hb', hbs]
-    rfl
-  rw [hinvs]
-  cases brokenIn M o.invariants ++ checksBroken L T M v.machines checks with
-  | cons n ns => rfl
-  | nil =>
-    refine ⟨rfl, ⟨ps, rfl, rfl, by rw [hlen], ps', hperm.trans (List.Perm.refl _), hrelP⟩, ?_, rfl, hr', hrel, _, rfl, he'⟩
-    rw [hnR]
-    simp only [List.length_append, Int.ofNat_eq_natCast, Nat.add_assoc]
-    rfl
 
 end
 
