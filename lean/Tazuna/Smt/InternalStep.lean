@@ -25,6 +25,11 @@ structure OwnCommandOut where
   decided : EventsOut
   answered : EventsOut
 
+/-- What an own command's internal step leaves: the loop after `on_answer`, with the news and own slots of both
+loops. -/
+def OwnCommandOut.done (o : OwnCommandOut) : EventsOut :=
+  { o.answered with news := o.decided.news ++ o.answered.news, owns := o.decided.owns ++ o.answered.owns }
+
 /-- The terms of an own query's internal step: whether the caller is listed, the `accepts` rules, and what the
 events loop leaves after `on_answer`'s events. -/
 structure OwnQueryOut where
@@ -170,27 +175,50 @@ theorem up_err {j : Ty} (h : (Ty.result Ty.nil j).isData = true) (hj : j.isData 
   show Sum.inl _ = Sum.inl _
   exact congrArg _ (Ty.up_tuple _ _ _ hj rfl _)
 
-/-- An internal step that ran to its end from `a`: the records and machines that `o` denotes, the fresh counter
-`fresh`, the events `evs` applied, the requests `effs` started at wire ids from `a`'s next id (for whichever pending
-requests `ps` the step writes for them, as the news slots hold), and the own commands and queries `os` queued at
-places from `q0`, as the own slots hold. -/
-def InternalDone (M : Model) (L : Layout) (T : List TypeDecl)
-    (shs : List (PendingShape v.event)) (a : Step.Acc v) (fresh : Nat) (o : EventsOut) (news owns : List Slot)
-    (q0 : Nat) (r : Except Fault (Step.Acc v)) : Prop :=
-  ∃ (recs : v.records.den0) (ms : List (Step.MachineState v.records v.event)) (evs : List v.event.den0)
+/-- What a run from `a` leaves when it ends without a fault, as the terms say: the records and machines `o` denotes,
+the fresh counter `fresh` denotes, the events `evs` applied, the requests `effs` started at wire ids from `a`'s next id
+(for whichever pending requests `ps` the step writes for them, as the news slots hold), and the own commands and
+queries `os` queued at places from `q0`, as the own slots hold. -/
+def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShape v.event)) (a : Step.Acc v)
+    (o : EventsOut) (fresh : Term) (q0 : Nat) (r : Except Fault (Step.Acc v)) : Prop :=
+  ∃ (recs : v.records.den0) (ms : List (Step.MachineState v.records v.event)) (fr : Nat) (evs : List v.event.den0)
     (effs : List (Sender × EffectV v.event)) (os : List (EffectV v.event)),
     (∀ ps, Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) ps →
-      r = .ok { state := { a.state with records := recs, machines := ms, fresh := fresh,
+      r = .ok { state := { a.state with records := recs, machines := ms, fresh := fr,
                                          pending := a.state.pending ++ ps, nextId := a.state.nextId + ps.length },
                 events := a.events ++ evs, out := a.out ++ ps.map Step.Pending.line, own := a.own ++ os }) ∧
     RelV L v.records (Ty.up _ v.records_data recs) (o.records.denote M) ∧ MachinesRel M L T v.machines o.tables ms ∧
+    fresh.denote M = .int (fr : Int) ∧
     o.nextId.denote M = .int ((a.state.nextId + effs.length : Nat) : Int) ∧
-    NewsRel M L shs v.declared news effs a.state.nextId ∧
-    o.queued.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L owns os q0
+    NewsRel M L shs v.declared o.news effs a.state.nextId ∧
+    o.queued.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L o.owns os q0
+
+/-- The events loop over a list's slots from a step in progress, as `AccRel` says of `applyEvents`' result. -/
+theorem loop_acc {P : List AnySite} (chk : Checked P T v)
+    {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ v.apply.ht v.apply.fn) apply)
+    (senv : StepEnv L shs) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
+    {S : List Slot} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 1)
+    {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
+    {records : Term} (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
+    {xs : List Term} (hms : MachinesRel M L T v.machines xs a.state.machines)
+    {n q fresh : Term} {q0 : Nat} (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
+    (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
+    {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c))
+    (hc : Holds M c) :
+    AccRel M L T shs a o fresh q0 (Step.applyEvents T a evs) := by
+  obtain ⟨r1, r2, r3, r4, r5, r6, hr⟩ := loop_apply chk hshs happ senv a hnow hS hw hev hrec hms hn hq henc hc
+  refine ⟨_, _, a.state.fresh, evs, Step.reqsOf (Step.reactAll T a.state evs).2,
+    Step.queuedOf (Step.reactAll T a.state evs).2, fun ps hps => ?_, r1, r2, hfresh, r3, r4, r5, r6⟩
+  rw [hr ps hps]
+  have hl := forall2_zipIdx_length _ _ hps
+  have hk := Step.reactAll_keeps T a.state evs
+  simp only [Step.Acc.wrote, Step.Acc.queued, hl, Step.reactAll_pending]
+  rw [hk]
 
 /-- T2 for an own command's internal step: wherever the condition holds, an unlisted caller or a broken `accepts`
 rule is `Fault.invalidEffect`, a broken `ensures` rule after an acceptance is `Fault.ensures`, and otherwise the
-internal step runs to its end with what the terms denote (`InternalDone`), the fresh counter advanced. -/
+internal step runs to its end with what the terms denote (`AccRel`), the fresh counter advanced. -/
 theorem ownCommand_rel {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (a : Step.Acc v) (hinv : Step.Inv P a.state)
@@ -218,8 +246,7 @@ theorem ownCommand_rel {P : List AnySite} (chk : Checked P T v)
       | [] =>
         match (o.ok.denote M).toBool, brokenIn M o.ensures with
         | true, n :: _ => r = .error (.ensures n)
-        | _, _ => InternalDone M L T shs a (a.state.fresh + 1) o.answered
-            (o.decided.news ++ o.answered.news) (o.decided.owns ++ o.answered.owns) q0 r
+        | _, _ => AccRel M L T shs a o.done (.add fresh (.int 1)) q0 r
     else r = .error (.invalidEffect x.name ["callers"]) := by
   have hcc := CommandCode.rel_of hcc hccx
   have happ := v.apply.code_fn v.apply.ht happ hca
@@ -336,13 +363,13 @@ theorem ownCommand_rel {P : List AnySite} (chk : Checked P T v)
     obtain ⟨q1, q2, q3, q4, q5, q6, q7⟩ := loop_apply (T := T) chk hshs happ senv a1 hnow hS2 hsw2 hh2 p1 p2 p3 p5 h23 hc7
     have hkeep := Step.reactAll_keeps T a1.state
       ((site.fn env).fn ((.inr (.inl (j, ())) : (Ty.result Ty.nil x.rejection).den0), ()))
-    refine ⟨_, _, (site.fn env).fn ((.inr (.inl (j, ())) : (Ty.result Ty.nil x.rejection).den0), ()), _, _, ?_, q1, q2,
-      q3, ?_, q5, ?_⟩
+    refine ⟨_, _, a.state.fresh + 1, (site.fn env).fn ((.inr (.inl (j, ())) : (Ty.result Ty.nil x.rejection).den0), ()),
+      _, _, ?_, q1, q2, by simp only [Term.denote, hfresh]; rfl, q3, ?_, q5, ?_⟩
     · intro ps hps
       rw [q7 ps hps, forall2_zipIdx_length _ _ hps, hkeep]
       simp [a1, Step.Acc.wrote, Step.Acc.queued]
-    · simpa using newsRel_append p4 q4
-    · simpa using ownRel_append p6 q6
+    · simpa [OwnCommandOut.done] using newsRel_append p4 q4
+    · simpa [OwnCommandOut.done] using ownRel_append p6 q6
   | inl pr =>
     obtain ⟨events, ⟨⟩⟩ := pr
     rw [hdec] at hres'
@@ -413,11 +440,12 @@ theorem ownCommand_rel {P : List AnySite} (chk : Checked P T v)
     obtain ⟨q1, q2, q3, q4, q5, q6, -⟩ := loop_apply (T := T) chk hshs happ senv a2 (by rw [← hnA] at hnow; exact hnow) hS2 hsw2 hh2 p1 p2 p3 p5 h23 hc7
     dsimp only [a2] at q1 q2 q3 q4 q5 q6
     erw [Step.reactAll_with T sA sA.pending N1] at q1 q2 q3 q4 q5 q6
-    refine ⟨(Step.reactAll T sA evs2).1.records, (Step.reactAll T sA evs2).1.machines,
+    refine ⟨(Step.reactAll T sA evs2).1.records, (Step.reactAll T sA evs2).1.machines, a.state.fresh + 1,
       List.append events evs2,
       reqs1 ++ Step.reqsOf (Step.reactAll T sA evs2).2,
       Step.queuedOf (Step.reactAll T a1.state events).2 ++ Step.queuedOf (Step.reactAll T sA evs2).2,
-      fun ps hps => ?_, q1, q2, ?_, newsRel_append p4 q4, ?_, ownRel_append p6 q6⟩
+      fun ps hps => ?_, q1, q2, by simp only [Term.denote, hfresh]; rfl, ?_, newsRel_append p4 q4, ?_,
+      ownRel_append p6 q6⟩
     · rw [List.zipIdx_append] at hps
       obtain ⟨ps1, ps2, rfl, hps1, hps2⟩ := forall2_split _ _ hps
       have hl1 := forall2_zipIdx_length _ _ hps1
@@ -443,8 +471,8 @@ theorem ownCommand_rel {P : List AnySite} (chk : Checked P T v)
         Nat.add_assoc]
       congr 1
       exact List.append_assoc _ _ _
-    · rw [q3]; simp only [N1, List.length_append, Nat.add_assoc]
-    · rw [q5]; simp only [List.length_append, Nat.add_assoc]
+    · simp only [OwnCommandOut.done]; rw [q3]; simp only [N1, List.length_append, Nat.add_assoc]
+    · simp only [OwnCommandOut.done]; rw [q5]; simp only [List.length_append, Nat.add_assoc]
 
 
 /-- Whether what an own command's internal step does after `decide` fits, for what `decide` returned: on acceptance,
@@ -732,7 +760,7 @@ theorem ownCommand_exact {P : List AnySite} (chk : Checked P T v) {shs : List (P
 
 /-- T2 for an own query's internal step: wherever the condition holds, an unlisted caller or a broken `accepts` rule
 is `Fault.invalidEffect`, and otherwise the internal step runs to its end with what the terms denote
-(`InternalDone`); a query leaves the fresh counter as it was. -/
+(`AccRel`); a query leaves the fresh counter as it was. -/
 theorem ownQuery_rel {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0) {qc : QueryCode x} {cq : Term} (hqc : QueryCode.of L x = .ok (qc, cq)) (hcq : Holds M cq)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
@@ -755,7 +783,7 @@ theorem ownQuery_rel {P : List AnySite} (chk : Checked P T v) {shs : List (Pendi
     if (o.callerOk.denote M).toBool then
       match brokenIn M o.rules with
       | n :: ns => r = .error (.invalidEffect x.name (n :: ns))
-      | [] => InternalDone M L T shs a a.state.fresh o.answered o.answered.news o.answered.owns q0 r
+      | [] => AccRel M L T shs a o.answered fresh q0 r
     else r = .error (.invalidEffect x.name ["callers"]) := by
   have hqc := QueryCode.rel_of hqc hcq
   have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
@@ -807,7 +835,7 @@ theorem ownQuery_rel {P : List AnySite} (chk : Checked P T v) {shs : List (Pendi
   change Holds2 (EBag L v.event) (evs1.map (Ty.up _ v.event_data)) sv at hh
   obtain ⟨q1, q2, q3, q4, q5, q6, q7⟩ := loop_apply (T := T) chk hshs happ senv a hnow hS hsw hh hrec hms hn hq h13 hc5
   have hkeep := Step.reactAll_keeps T a.state evs1
-  refine ⟨_, _, evs1, _, _, fun ps hps => ?_, q1, q2, q3, q4, q5, q6⟩
+  refine ⟨_, _, a.state.fresh, evs1, _, _, fun ps hps => ?_, q1, q2, hfresh, q3, q4, q5, q6⟩
   erw [q7 ps hps]
   rw [forall2_zipIdx_length _ _ hps, hkeep]
   simp [Step.Acc.wrote, Step.Acc.queued]

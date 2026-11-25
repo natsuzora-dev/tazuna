@@ -119,8 +119,7 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
     let fault := Term.or (.not o.callerOk)
       (.or (.not (allT (o.rules.map (·.2)))) (.and o.ok (.not (allT (o.ensures.map (·.2))))))
     pure ⟨⟨.command x.name o,
-      ⟨fault, { o.answered with news := o.decided.news ++ o.answered.news, owns := o.decided.owns ++ o.answered.owns },
-        .add fresh (.int 1)⟩⟩, c, cx⟩
+      ⟨fault, o.done, .add fresh (.int 1)⟩⟩, c, cx⟩
   | .query x Γ site =>
     let (qc, cq) ← QueryCode.of L x
     let ks ← need "callers that have no term"
@@ -353,7 +352,7 @@ theorem fault_query (name : String) (o : OwnQueryOut) :
 
 /-- T2 for one own kind's internal step, for an own effect of the kind: the fault term holds exactly when the
 outcome terms name a fault, which is `Step.runOwn`'s; otherwise the internal step runs to its end with what the step
-terms denote (`InternalDone`), at the fresh counter the fresh term denotes. -/
+terms denote (`AccRel`). -/
 theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (a : Step.Acc v) (hinv : Step.Inv P a.state)
@@ -374,8 +373,7 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
     st.fault.denote M = .bool (ko.fault? M).isSome ∧
     match ko.fault? M with
     | some f => Step.runOwn T a x = .error f
-    | none => ∃ fr : Nat, st.fresh.denote M = .int (fr : Int) ∧
-        InternalDone M L T shs a fr st.done st.done.news st.done.owns q0 (Step.runOwn T a x) := by
+    | none => AccRel M L T shs a st.done st.fresh q0 (Step.runOwn T a x) := by
   have hsel : ∀ i, (Term.sel senv.dE ((L.effectsOf v.event).length + j) i eff).denote M = vals[i]?.getD default :=
     fun i => sel_ctor i heff
   obtain ⟨sh, hsh, henc⟩ := bind_ok.1 henc
@@ -477,9 +475,7 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
             · rename_i n ns hok hb'; exact (hne n ns hok hb').elim
             · rfl
           rw [hnone]
-          refine ⟨a.state.fresh + 1, ?_, H⟩
-          simp only [Term.denote, hfresh]
-          rfl
+          exact H
     · rename_i hco
       simp only [hco, Bool.false_eq_true, ite_false]
       exact H
@@ -573,7 +569,7 @@ theorem ownKind_rel {P : List AnySite} (chk : Checked P T v)
         exact H
       · rename_i hb
         simp only [hb]
-        exact ⟨a.state.fresh, hfresh, H⟩
+        exact H
     · rename_i hco
       simp only [hco, Bool.false_eq_true, ite_false]
       exact H
@@ -600,14 +596,14 @@ structure Agrees (M : Model) (L : Layout) (e : Ty) (a b : StepTerms) : Prop wher
     NewsRel M L shs ds a.done.news effs n0
   owns : ∀ (os : List (EffectV e)) q0, OwnRel M L b.done.owns os q0 → OwnRel M L a.done.owns os q0
 
-theorem internalDone_agrees {a b : StepTerms} (hab : Agrees M L v.event a b)
+theorem AccRel.congr {a b : StepTerms} (hab : Agrees M L v.event a b)
     (ht : Term.denotes M a.done.tables = Term.denotes M b.done.tables)
-    {shs : List (PendingShape v.event)} {acc : Step.Acc v} {fr q0 : Nat}
-    {r : Except Fault (Step.Acc v)} (h : InternalDone M L T shs acc fr b.done b.done.news b.done.owns q0 r) :
-    InternalDone M L T shs acc fr a.done a.done.news a.done.owns q0 r := by
-  obtain ⟨recs, ms, evs, effs, os, hr, h1, h2, h3, h4, h5, h6⟩ := h
-  exact ⟨recs, ms, evs, effs, os, hr, hab.records ▸ h1, machinesRel_congr _ _ _ _ ht.symm h2, hab.nextId ▸ h3,
-    hab.news _ _ _ _ h4, hab.queued ▸ h5, hab.owns _ _ h6⟩
+    {shs : List (PendingShape v.event)} {acc : Step.Acc v} {q0 : Nat}
+    {r : Except Fault (Step.Acc v)} (h : AccRel M L T shs acc b.done b.fresh q0 r) :
+    AccRel M L T shs acc a.done a.fresh q0 r := by
+  obtain ⟨recs, ms, fr, evs, effs, os, hr, h1, h2, h3, h4, h5, h6, h7⟩ := h
+  exact ⟨recs, ms, fr, evs, effs, os, hr, hab.records ▸ h1, machinesRel_congr _ _ _ _ ht.symm h2, hab.fresh ▸ h3,
+    hab.nextId ▸ h4, hab.news _ _ _ _ h5, hab.queued ▸ h6, hab.owns _ _ h7⟩
 
 theorem pick_tables_length (c : Term) (a b : StepTerms) :
     (pickTerms c a b).done.tables.length = b.done.tables.length := by
@@ -756,8 +752,7 @@ theorem ownStep_rel {P : List AnySite} (chk : Checked P T v)
     o.terms.fault.denote M = .bool (o.fault? M).isSome ∧
     match o.fault? M with
     | some f => Step.runOwn T a x = .error f
-    | none => ∃ fr : Nat, o.terms.fresh.denote M = .int (fr : Int) ∧
-        InternalDone M L T shs a fr o.terms.done o.terms.done.news o.terms.done.owns q0 (Step.runOwn T a x) := by
+    | none => AccRel M L T shs a o.terms.done o.terms.fresh q0 (Step.runOwn T a x) := by
   obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   have hx' : EffRel L x (eff.denote M) := hx
@@ -832,9 +827,9 @@ theorem ownStep_rel {P : List AnySite} (chk : Checked P T v)
   cases ko.fault? M with
   | some f => exact id
   | none =>
-    rintro ⟨fr, hfr, hdone⟩
-    obtain ⟨-, ms, -, -, -, -, -, hms', -⟩ := id hdone
-    refine ⟨fr, hag.fresh.trans hfr, internalDone_agrees hag (htab ?_) hdone⟩
+    intro hdone
+    obtain ⟨-, ms, -, -, -, -, -, -, hms', -⟩ := id hdone
+    refine AccRel.congr hag (htab ?_) hdone
     rw [machinesRel_length hms', machinesRel_length hms]
 
 /-- The condition of one own kind's internal step is exact: for an own effect of the kind, it holds exactly when the

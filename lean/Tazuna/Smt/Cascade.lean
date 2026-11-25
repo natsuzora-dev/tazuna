@@ -54,24 +54,6 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
-/-- What the cascade from `a` leaves when no internal step faults and the bound holds: the records, machines and fresh
-counter the terms denote, the events applied, the requests `effs` started at wire ids from `a`'s next id (for
-whichever pending requests the step writes for them, as the news slots hold), and the own effects `os` queued at
-places from `a`'s queue length, as the own slots hold. -/
-def SettleDone (M : Model) (L : Layout) (T : List TypeDecl)
-    (shs : List (PendingShape v.event)) (a : Step.Acc v) (o : StepTerms) (r : Except Fault (Step.Acc v)) : Prop :=
-  ∃ (recs : v.records.den0) (ms : List (Step.MachineState v.records v.event)) (fr : Nat) (evs : List v.event.den0)
-    (effs : List (Sender × EffectV v.event)) (os : List (EffectV v.event)),
-    (∀ ps, Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) ps →
-      r = .ok { state := { a.state with records := recs, machines := ms, fresh := fr,
-                                         pending := a.state.pending ++ ps, nextId := a.state.nextId + ps.length },
-                events := a.events ++ evs, out := a.out ++ ps.map Step.Pending.line, own := a.own ++ os }) ∧
-    RelV L v.records (Ty.up _ v.records_data recs) (o.done.records.denote M) ∧ MachinesRel M L T v.machines o.done.tables ms ∧
-    o.fresh.denote M = .int (fr : Int) ∧
-    o.done.nextId.denote M = .int ((a.state.nextId + effs.length : Nat) : Int) ∧
-    NewsRel M L shs v.declared o.done.news effs a.state.nextId ∧
-    o.done.queued.denote M = .int ((a.own.length + os.length : Nat) : Int) ∧ OwnRel M L o.done.owns os a.own.length
-
 theorem newsRel_nil {e : Ty} {shs : List (PendingShape e)} {ds : List (String × DeclaredV)} {n0 : Nat} :
     NewsRel M L shs ds [] [] n0 :=
   ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2], [], by simp, trivial⟩
@@ -149,7 +131,7 @@ theorem settle_fault_stays {P : List AnySite} {shs : List (PendingShape v.event)
     exact h3
 
 /-- T2 for the cascade: wherever the condition holds, the fault the model names is `Step.settleFrom`'s, and otherwise
-the cascade runs to its end with what the terms denote (`SettleDone`). -/
+the cascade runs to its end with what the terms denote (`AccRel`, own effects queued from `a`'s queue length). -/
 theorem settle_rel {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
@@ -165,7 +147,7 @@ theorem settle_rel {P : List AnySite} (chk : Checked P T v) {shs : List (Pending
     o.faultT.denote M = .bool (o.fault? M).isSome ∧
     match o.fault? M with
     | some f => Step.settleFrom T fuel k a = .error f
-    | none => SettleDone M L T shs a o.terms (Step.settleFrom T fuel k a)
+    | none => AccRel M L T shs a o.terms.done o.terms.fresh a.own.length (Step.settleFrom T fuel k a)
   | 0, k, S, t, a, _, _, hS, _, htf, hrec, hms, hfr, hn, hq, o, c, cx, henc, _, _ => by
     simp only [encodeSettle, pure, Except.pure, Except.ok.injEq] at henc
     obtain ⟨rfl, rfl, rfl⟩ := henc
@@ -224,10 +206,10 @@ theorem settle_rel {P : List AnySite} (chk : Checked P T v) {shs : List (Pending
         simp only [SettleOut.fault?, List.find?_cons, hact', toBool_bool, hft, Bool.and_self, hof, hrun, bind,
           Except.bind]
       | none =>
-        rintro ⟨fr, hfr1, hdone⟩
+        rintro hdone
         have hff : (o1.terms.fault.denote M).toBool = false := by rw [hfault, hof]; rfl
         rw [settle_fault_skip (t' := rest.terms) (by simp [hact', hff, toBool_bool])]
-        obtain ⟨recs0, ms0, evs0, effs0, os0, hr0, r1, r2, r3, r4, r5, r6⟩ := hdone
+        obtain ⟨recs0, ms0, fr, evs0, effs0, os0, hr0, r1, r2, hfr1, r3, r4, r5, r6⟩ := hdone
         obtain ⟨ps0, hps0⟩ := newsRel_writes r4
         have hrun0 := hr0 ps0 hps0
         rw [hrun0]
@@ -395,8 +377,7 @@ theorem settle_exact {P : List AnySite} (chk : Checked P T v) {shs : List (Pendi
           refine iff_of_true (settle_cond_fault f (k + 1) _ _ ?_ h2) (fun a' h => by rw [hrun] at h; cases h)
           simp only [pickTerms]; rw [hpick, hfault, hof]; rfl
         | none =>
-          rintro ⟨fr, hfr1, hdone⟩
-          obtain ⟨recs0, ms0, evs0, effs0, os0, hr0, r1, r2, r3, r4, r5, r6⟩ := hdone
+          rintro ⟨recs0, ms0, fr, evs0, effs0, os0, hr0, r1, r2, hfr1, r3, r4, r5, r6⟩
           obtain ⟨ps0, hps0⟩ := newsRel_writes r4
           have hrun0 := hr0 ps0 hps0
           have hl0 := forall2_zipIdx_length _ _ hps0

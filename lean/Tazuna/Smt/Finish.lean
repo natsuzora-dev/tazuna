@@ -3,7 +3,7 @@ import Tazuna.Smt.Cascade
 /-! How a step that applies events ends, as `Step.finish` says: the cascade runs the own commands and queries the
 events queued (`encodeSettle`), every request the events and the internal steps start is written into the pending table
 in one pass, and the service's and every machine's invariants are checked on the state the cascade leaves. The step
-kinds differ only in what comes before (`events_done` for a list of events). -/
+kinds differ only in what comes before (`loop_acc` for a list of events). -/
 
 namespace Tazuna.Smt
 
@@ -109,31 +109,6 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl)
         fo.settle.terms.done.nextId.denote M = .int ((a.state.nextId + ps.length : Nat) : Int) ∧
         ∃ ps', ps'.Perm (a.state.pending ++ ps) ∧ PendingRel L shs (fo.pending.denote M) ps'
 
-/-- The events loop from a step in progress with an empty queue: what it leaves, in the form the cascade continues. -/
-theorem events_done {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ v.apply.ht v.apply.fn) apply)
-    (senv : StepEnv L shs)
-    (a : Step.Acc v) (hown : a.own = []) {now : Term} (hnow : now.denote M = .int a.state.now)
-    {S : List Slot} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 1)
-    {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
-    {records : Term} (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
-    {xs : List Term} (hms : MachinesRel M L T v.machines xs a.state.machines)
-    {n fresh : Term} (hn : n.denote M = .int (Int.ofNat a.state.nextId))
-    (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
-    {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n (.int 0) = .ok (o, c))
-    (hc : Holds M c) :
-    SettleDone M L T shs a ⟨.bool false, o, fresh⟩ (Step.applyEvents T a evs) := by
-  obtain ⟨r1, r2, r3, r4, r5, r6, hr⟩ := loop_apply (q := .int 0) (q0 := 0) chk hshs happ senv
-    a hnow hS hw hev hrec hms hn rfl henc hc
-  refine ⟨_, _, a.state.fresh, evs, Step.reqsOf (Step.reactAll T a.state evs).2,
-    Step.queuedOf (Step.reactAll T a.state evs).2, fun ps hps => ?_, r1, r2, hfresh, r3, r4, by simpa [hown] using r5,
-    by simpa [hown] using r6⟩
-  rw [hr ps hps]
-  have hl := forall2_zipIdx_length _ _ hps
-  have hk := Step.reactAll_keeps T a.state evs
-  simp only [Step.Acc.wrote, Step.Acc.queued, hl, Step.reactAll_pending, hown, List.nil_append]
-  rw [hk]
-
 /-- Whether a step's end fits, for the result `r` of its events: the internal steps the cascade runs
 (`settleFits`) and, where it does not fault, every pending request in the pending table and the service's and every
 machine's invariants on the state it leaves. -/
@@ -155,7 +130,7 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
     (s0 : State v) (outcome : Outcome) (a : Step.Acc v) (hown : a.own = []) (hinv : Step.Inv P a.state)
     {now fresh pending : Term} (hnow : now.denote M = .int a.state.now)
     (hpend : PendingRel L shs (pending.denote M) a.state.pending)
-    {o : EventsOut} {r : Except Fault (Step.Acc v)} (hdone : SettleDone M L T shs a ⟨.bool false, o, fresh⟩ r)
+    {o : EventsOut} {r : Except Fault (Step.Acc v)} (hdone : AccRel M L T shs a o fresh 0 r)
     (hr : ∀ a1, r = .ok a1 → Step.Inv P a1.state ∧ Step.QueueOk P a1)
     {fo : FinishOut} {c cx : Term}
     (henc : encodeFinish L T P v shs senv apply inv now fresh pending o = .ok ⟨fo, c, cx⟩)
@@ -307,7 +282,7 @@ theorem _root_.Tazuna.Ir.Step.Inv.machinesReach {P : List AnySite} {s : State v}
   obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 hm
   exact hinv.machines sm hsm
 
-/-- What `events_done` asks of a list of events' result besides the terms: the step invariant and a queue of own
+/-- What `finish_encode` asks of a list of events' result besides the terms: the step invariant and a queue of own
 effects that reach the program, which `applyEvents` keeps. -/
 theorem applyEvents_ok {P : List AnySite} (hvx : ∀ x ∈ v.reactions, x.Reach P) (a : Step.Acc v) (hown : a.own = [])
     (hinv : Step.Inv P a.state) (evs : List v.event.den0) :

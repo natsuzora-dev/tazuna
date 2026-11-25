@@ -181,9 +181,9 @@ theorem event_encode {P : List AnySite} (chk : Checked P T v)
   have ef := fun (hcw : Holds M cw) (hc : Holds M ce') =>
     finish_encode chk hshs g1 hc1 g3 hc3 senv s
       .accepted { state := s } rfl hinv hR.now hR.pending
-      (events_done (T := T) chk hshs he.apply senv
-        { state := s } rfl hR.now (S := [(tt, [et])]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩ (by simp)
-        (evs := [ev]) (hevT hcw) hR.records hR.machines hR.nextId hR.fresh hev hc)
+      (loop_acc (T := T) chk hshs he.apply senv
+        { state := s } hR.now (S := [(tt, [et])]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩ (by simp)
+        (evs := [ev]) (hevT hcw) hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh hev hc)
       (applyEvents_ok chk.reactions _ rfl hinv _) hf hcx
   rw [holds_andT, holds_andT]
   refine ⟨⟨fun ⟨hcw, hc, hcf⟩ => ⟨ew.1.1 hcw, (e2 hcw).1 hc, ((ef hcw hc).1).1 hcf⟩, fun ⟨p1, p2, p3⟩ => ?_⟩,

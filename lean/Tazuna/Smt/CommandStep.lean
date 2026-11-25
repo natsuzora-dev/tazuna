@@ -207,10 +207,11 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
           have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
           have e3 : Holds M c3 ↔ eventsFit L.count T s1 events :=
             events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv hS hsw events hh s1 hR.now hR.records hR.machines h12
-          have hdone : Holds M c3 → SettleDone M L T shs { state := s1 } ⟨.bool false, oe, .add S.fresh (.int 1)⟩
+          have hdone : Holds M c3 → AccRel M L T shs { state := s1 } oe (.add S.fresh (.int 1)) 0
               (Step.applyEvents T { state := s1 } events) := fun hc3 =>
-            events_done (T := T) chk hshs happ' senv
-              { state := s1 } rfl hR.now hS hsw hh hR.records hR.machines hR.nextId (by simp [Term.denote, hR.fresh, s1, Val.toInt]) h12 hc3
+            loop_acc (T := T) chk hshs happ' senv
+              { state := s1 } hR.now hS hsw hh hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl
+              (by simp [Term.denote, hR.fresh, s1, Val.toInt]) h12 hc3
           have hrf : Holds M c3 → RelV L v.records (Ty.up _ v.records_data sA.records) (oe.records.denote M) := fun hc3 =>
             (events_rel chk hshs happ' senv _ sv hS hsw
               events hh s1 hR.now hR.records hR.machines hR.nextId rfl h12 hc3).1
@@ -334,7 +335,8 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
         erw [Ty.up_list _ _ v.event_data] at hh
         let s1 : State v := { s with fresh := s.fresh + 1 }
         have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
-        have hdone := events_done (T := T) chk hshs happ senv { state := s1 } rfl hR.now hS hsw hh hR.records hR.machines hR.nextId (fresh := .add S.fresh (.int 1))
+        have hdone := loop_acc (T := T) chk hshs happ senv { state := s1 } hR.now hS hsw hh hR.records hR.machines hR.nextId
+          (q := .int 0) (q0 := 0) rfl (fresh := .add S.fresh (.int 1))
           (by simp [Term.denote, hR.fresh, s1, Val.toInt]) h12 hc3
         have hd2 := hdone
         obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, e1, -, -, -, e5, -, -⟩ := hd2

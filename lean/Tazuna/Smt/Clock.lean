@@ -757,8 +757,7 @@ theorem rounds_done {shs : List (PendingShape v.event)} (s : State v) (time : In
     (hnews : NewsRel M L shs v.declared o.news (Step.reqsOf effs) s.nextId)
     (hq : o.queued.denote M = .int ((0 + (Step.queuedOf effs).length : Nat) : Int))
     (hown : OwnRel M L o.owns (Step.queuedOf effs) 0) :
-    SettleDone M L T shs { state := { s with now := time } }
-      ⟨.bool false, ⟨records, o.tables, o.nextId, o.news, o.owns, o.queued⟩, fresh⟩
+    AccRel M L T shs { state := { s with now := time } } ⟨records, o.tables, o.nextId, o.news, o.owns, o.queued⟩ fresh 0
       (Step.start { state := s' } effs) := by
   refine ⟨s.records, s'.machines, s.fresh, [], Step.reqsOf effs, Step.queuedOf effs, fun ps hps => ?_, hrec, hms,
     hfresh, hn, hnews, by simpa using hq, by simpa using hown⟩
