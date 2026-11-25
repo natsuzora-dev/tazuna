@@ -332,6 +332,22 @@ def pairReport (L : Layout) (k1 k2 : Nat) (g : Target) (step : String) (a : Smt.
           (shown [("why", Json.str s!"the two steps sent more than {wireSearchCap} requests")]))
     | _, _, _ => .error s!"a model of {step} does not decode"
 
+/-- The line of a refused encoding: undecided where the refusal is the spec's, else an engine bug. -/
+def refusedItems (step : String) (r : Refusal) : Except String (List Item) :=
+  match refusalLine c.T r with
+  | some (k, fields) => .ok [.ready (.undecided k v.name step none fields)]
+  | none => .error s!"service {v.name}, {step}: the encoding refused: {reprStr r}"
+
+/-- The lines of a question family with one target and two questions (a timer machine, a pair of own kinds): its
+bound question and its target question where `--only` keeps the target, else the target skipped. -/
+def familyItems (only : String → Bool) (g : Target) (step : String) (built : Except Refusal (Script × Script))
+    (report : Smt.Answer → Except String Report) : Except String (List Item) :=
+  match built with
+  | .error r => refusedItems c v step r
+  | .ok (bq, tq) => .ok (if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
+      [.ask ⟨bq, boundReport v.name step⟩, .ask ⟨tq, report⟩]
+    else [.skipped v.name g])
+
 -- The bound question has no target, and its name says so.
 set_option linter.tazuna.silentDefault false in
 /-- Every line of the service in order: the base case, then each input kind's questions. -/
@@ -346,9 +362,9 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
     let step := inp.text
     match questions L c.T c.P v senv inp with
     | .error r =>
-      match refusalLine c.T r with
-      | some (k, fields) => items := items ++ [.ready (.undecided k v.name step none fields)]
-      | none => return { internal := some s!"service {v.name}, {step}: the encoding refused: {reprStr r}" }
+      match refusedItems c v step r with
+      | .ok more => items := items ++ more
+      | .error why => return { internal := some why }
     | .ok (gs, qs) =>
       for g in gs do
         unless targets.contains g do targets := targets ++ [g]
@@ -363,32 +379,19 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
           (.skipped v.name)
   -- A machine whose `after` never sets a timer fires forward by itself (`timerForward_of_noTimer`), so it gets no line.
   for m in v.machines.filter (!·.noTimer) do
-    let g := Target.timer m.name
     let step := "timer " ++ m.name
-    match timerQuestions L m with
-    | .error r =>
-      match refusalLine c.T r with
-      | some (k, fields) => items := items ++ [.ready (.undecided k v.name step none fields)]
-      | none => return { internal := some s!"service {v.name}, {step}: the encoding refused: {reprStr r}" }
-    | .ok (bq, tq) =>
-      items := items ++ if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
-        [.ask ⟨bq, boundReport v.name step⟩, .ask ⟨tq, timerReport c v L m step⟩]
-      else [.skipped v.name g]
+    match familyItems c v only (.timer m.name) step (timerQuestions L m) (timerReport c v L m step) with
+    | .ok more => items := items ++ more
+    | .error why => return { internal := some why }
   let owns := L.ownsOf v.event
   for (k1, k2) in L.ownPairs v.event do
     let (some key1, some key2) := (owns[k1]?, owns[k2]?)
       | return { internal := some s!"service {v.name}: own kind {k1} or {k2} missing" }
     let g := Target.pair (ownText owns key1) (ownText owns key2)
     let step := ownText owns key1 ++ " then " ++ ownText owns key2
-    match pairQuestions L c.T c.P v senv k1 k2 with
-    | .error r =>
-      match refusalLine c.T r with
-      | some (k, fields) => items := items ++ [.ready (.undecided k v.name step none fields)]
-      | none => return { internal := some s!"service {v.name}, {step}: the encoding refused: {reprStr r}" }
-    | .ok (bq, tq) =>
-      items := items ++ if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
-        [.ask ⟨bq, boundReport v.name step⟩, .ask ⟨tq, pairReport c v L k1 k2 g step⟩]
-      else [.skipped v.name g]
+    match familyItems c v only g step (pairQuestions L c.T c.P v senv k1 k2) (pairReport c v L k1 k2 g step) with
+    | .ok more => items := items ++ more
+    | .error why => return { internal := some why }
   let init := (initReports c v targets).map fun r => match r with
     | .unsat _ _ (some g) | .violated _ _ g _ =>
       if only (v.name ++ "/" ++ g.text ++ "/init") then Item.ready r else .skipped v.name g
