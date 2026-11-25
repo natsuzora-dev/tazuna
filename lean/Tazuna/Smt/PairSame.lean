@@ -2,6 +2,7 @@ import Tazuna.Smt.SameCode
 import Tazuna.Smt.Fire
 import Tazuna.Smt.Decide
 import Tazuna.Smt.Verdict
+import Tazuna.Semantics.StepRename
 
 /-! What the pair questions compare, and what a comparison that holds says of the two results. Records and instance
 tables are compared by Gleam's `==` (`eqFn`), which reads bags and tables as multisets, so two results that hold the
@@ -63,11 +64,6 @@ theorem occupied_cmp {w : Nat} {cmp : SlotItems w → SlotItems w → Term} {Rv 
   | [], _ :: _, _, _, _, _, he | _ :: _, [], _, _, _, _, he => by simp [slotsCmpT, Holds, Term.denote, Val.toBool] at he
   | [], [], _ :: _, _, h, _, _ | _ :: _, _ :: _, [], _, h, _, _ => nomatch h
   | [], [], [], _ :: _, _, h', _ | _ :: _, _ :: _, _ :: _, [], _, h', _ => nomatch h'
-
-theorem forall2_eq {α : Type} : {xs ys : List α} → Forall2 (· = ·) xs ys → xs = ys
-  | [], [], _ => rfl
-  | _ :: _, _ :: _, ⟨rfl, h⟩ => by rw [forall2_eq h]
-  | [], _ :: _, h | _ :: _, [], h => h.elim
 
 /-- Slots compared equal hold the same items where occupied. -/
 theorem occupied_of_slotsEq {S S' : List (Slot 1)} {sv sv' : List (Bool × List Val)} (h : SlotsDen M S sv)

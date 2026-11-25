@@ -204,7 +204,7 @@ theorem getElem_afterErase {α : Type} {l : List α} {i j : Nat} (hi : i < l.len
   · simp only [show ¬ (j - 1 < i) by omega, ↓reduceDIte]; congr 1; omega
 
 theorem mem_dropTwo {α : Type} {l : List α} {i j : Nat} {x : α} (h : x ∈ dropTwo l i j) : x ∈ l :=
-  mem_eraseIdx (mem_eraseIdx h)
+  List.mem_of_mem_eraseIdx (List.mem_of_mem_eraseIdx h)
 
 theorem runOwn_frame (a : Acc v) (xs : List (EffectV v.event)) (e : EffectV v.event) :
     runOwn T { a with own := xs } e = (runOwn T { a with own := [] } e).map (Acc.ownFront xs) := by
@@ -252,7 +252,7 @@ theorem runOwn_nextId (hv : v.Equivariant) {a : Acc v} (ha : Supp a) {i : Nat} (
     (hb : runOwn T { a with own := a.own.eraseIdx i } a.own[i] = .ok b) : a.state.nextId ≤ b.state.nextId := by
   have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
   have hs : SelfAt a.state.fresh { a with own := a.own.eraseIdx i } :=
-    SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (mem_eraseIdx hx)
+    SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (List.mem_of_mem_eraseIdx hx)
   have hl := runOwn_rel T hv (hs PBij.refl fun _ _ => rfl) rfl ((ha.2 _ hmem).2 PBij.refl fun _ _ => rfl)
   rw [hb] at hl
   rcases hl with ⟨h, -⟩ | ⟨_, _, _, h1, -, -, -, -, -, -, hl, -⟩

@@ -32,13 +32,6 @@ theorem perm_map_multi {g : α → β} : {xs ys : List α} → (xs.map g).Perm (
     obtain ⟨zs, hz, hp⟩ := perm_map_multi h'
     exact ⟨y :: zs, ⟨hyx.symm, hz⟩, (hp.cons y).trans List.perm_middle.symm⟩
 
-theorem forall2_comp {r1 : α → β → Prop} {r2 : β → γ → Prop} :
-    {xs : List α} → {ys : List β} → {zs : List γ} → Forall2 r1 xs ys → Forall2 r2 ys zs →
-    Forall2 (fun a c => ∃ b, r1 a b ∧ r2 b c) xs zs
-  | [], [], [], _, _ => trivial
-  | _ :: _, _ :: _, _ :: _, ⟨h1, h⟩, ⟨h1', h'⟩ => ⟨⟨_, h1, h1'⟩, forall2_comp h h'⟩
-  | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ | _, [], _ :: _, _, h | _, _ :: _, [], _, h => h.elim
-
 theorem Multi.comp {r1 : α → β → Prop} {r2 : β → γ → Prop} {xs : List α} {ys : List β} {zs : List γ} :
     Multi r1 xs ys → Multi r2 ys zs → Multi (fun a c => ∃ b, r1 a b ∧ r2 b c) xs zs
   | ⟨_, h1, hw⟩, ⟨_, h2, hu⟩ =>
@@ -252,12 +245,6 @@ theorem getElem_middle {α : Type} (y : α) (l2 : List α) : (l1 : List α) →
     (l1 ++ y :: l2)[l1.length]'(by simp) = y
   | [] => rfl
   | x :: l1 => by simp
-
-theorem perm_eraseIdx {α : Type} : (xs : List α) → (i : Nat) → (h : i < xs.length) → xs.Perm (xs[i] :: xs.eraseIdx i)
-  | x :: xs, 0, _ => .refl _
-  | x :: xs, i + 1, h => by
-    simp only [List.getElem_cons_succ, List.eraseIdx_cons_succ]
-    exact ((perm_eraseIdx xs i (by simpa using h)).cons x).trans (List.Perm.swap _ _ _)
 
 /-- Taking an item out of one of two lists related as multisets, and its partner out of the other, leaves them
 related. -/

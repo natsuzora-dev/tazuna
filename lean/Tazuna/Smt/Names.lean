@@ -1,5 +1,6 @@
 import Tazuna.Smt.State
 import Tazuna.Smt.SameCode
+import Tazuna.Semantics.Valid
 
 /-! Which names a stored value holds, as a term: every fresh id it holds was made before the counter `n`, and so was
 every counter it holds (`namesT`). A state on valid inputs holds no other names (`Step.StateSupp`), which the
@@ -51,28 +52,12 @@ end
 section
 variable {M : Model} {L : Layout} {N : Nat}
 
-theorem forall2_self_iff {α : Type} {r : α → α → Prop} (hs : ∀ a b, r a b → r a a) :
-    {xs : List α} → (Forall2 r xs xs ↔ ∀ y ∈ xs, r y y)
-  | [] => by simp [Forall2]
-  | x :: xs => by
-    simp only [Forall2, List.mem_cons, forall_eq_or_imp]
-    exact and_congr Iff.rfl (forall2_self_iff hs)
-
-theorem forall2_left_mem {α β : Type} {r : α → β → Prop} : {xs : List α} → {ys : List β} →
-    Forall2 r xs ys → ∀ x ∈ xs, ∃ y, r x y
-  | [], [], _, _, h => nomatch h
-  | _ :: _, _ :: _, ⟨h1, h2⟩, _, hx => by
-    rcases List.mem_cons.1 hx with rfl | hx
-    · exact ⟨_, h1⟩
-    · exact forall2_left_mem h2 _ hx
-  | [], _ :: _, h, _, _ | _ :: _, [], h, _, _ => h.elim
-
 /-- A relation whose related values relate to themselves holds of a list against itself as a multiset exactly when it
 holds of each item against itself. -/
 theorem multi_self_iff {α : Type} {r : α → α → Prop} (hs : ∀ a b, r a b → r a a) {xs : List α} :
     Multi r xs xs ↔ ∀ y ∈ xs, r y y :=
-  ⟨fun ⟨_, h, _⟩ y hy => let ⟨_, hz⟩ := forall2_left_mem h y hy; hs _ _ hz,
-    fun h => Multi.of_forall2 ((forall2_self_iff hs).2 h)⟩
+  ⟨fun ⟨_, h, _⟩ y hy => let ⟨_, _, hz⟩ := forall2_mem_left h y hy; hs _ _ hz,
+    fun h => Multi.of_forall2 (forall2_refl_of h)⟩
 
 /-- Values related under the renaming that keeps the counters below `N` each relate to themselves. -/
 theorem relV_self_below {t : Ty} (hc : t.comparable = true) {x y : t.den} (h : Ty.relV (PBij.below N) t x y) :
@@ -188,7 +173,7 @@ theorem names_iff (hn : n.denote M = .int (N : Int)) : (t : Ty) → t.comparable
         obtain ⟨x0, rfl, hx0⟩ := singleton_terms hz
         simp only [SlotItems.getElem_mk, List.getElem_cons_zero] at hc'
         exact names_iff hn t hc x0 c' hc' (hx0 ▸ hyz)) _ sv hS v hh cs hcs]
-    exact (forall2_self_iff (r := Ty.relV (PBij.below N) t) (fun _ _ h => relV_self_below (t := t) hc h) (xs := v)).symm
+    exact ⟨forall2_refl_of, forall2_self⟩
   | .table k w, hc, x, c, h, v, ⟨d, m, dt, _, sv, hf, hft, hm, hx, hw, ys, hp, hh⟩ => by
     simp only [Ty.comparable, Bool.and_eq_true] at hc
     simp only [namesT, hf, hft] at h
@@ -299,9 +284,7 @@ theorem table_self {m : MachineV r e} (hk : m.key.comparable = true) (hs : m.sta
     (tbl : m.table.den0) (h : Step.Insts.Rel (PBij.below N) (instancesOf T m tbl) (instancesOf T m tbl)) :
     Ty.rel0 (PBij.below N) m.table tbl tbl := by
   have hi := (multi_self_iff (fun _ _ h => instance_self hk hs h)).1 h.1
-  refine Multi.of_forall2 ((forall2_self_iff fun _ _ hab =>
-    ⟨Ty.self_of_below (PBij.below_fixes N) _ hk hab.1,
-      Ty.self_of_below (PBij.below_fixes N) _ (instEntry_comparable hs) hab.2⟩).2 fun e he => ?_)
+  refine Multi.of_forall2 (forall2_refl_of fun e he => ?_)
   obtain ⟨h1, h2, h3⟩ := hi (instOf m e.1 e.2) (List.mem_mergeSort.2 (List.mem_map_of_mem he))
   obtain ⟨k, st, t, ⟨⟩⟩ := e
   refine ⟨h1, h2, ?_, trivial⟩

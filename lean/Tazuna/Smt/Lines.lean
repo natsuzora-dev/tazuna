@@ -47,9 +47,9 @@ theorem keeps_preserved {T : List TypeDecl} {P : List AnySite} {E : List AnyEffe
   have hs := Step.ownSys_preserved T hv a i b ha.supp hi hb
   simp only [Step.ownSys, List.getElem?_eq_getElem hi] at hb
   have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
-  have hq' : Step.QueueOk P { a with own := a.own.eraseIdx i } := fun x hx => ha.queue x (Step.mem_eraseIdx hx)
+  have hq' : Step.QueueOk P { a with own := a.own.eraseIdx i } := fun x hx => ha.queue x (List.mem_of_mem_eraseIdx hx)
   have ha' : Step.SelfAt (a.state.fresh + 1) { a with own := a.own.eraseIdx i } :=
-    (Step.SelfAt.own (a := a) ha.supp.1 fun x hx => ha.supp.2 x (Step.mem_eraseIdx hx)).mono (Nat.le_succ _)
+    (Step.SelfAt.own (a := a) ha.supp.1 fun x hx => ha.supp.2 x (List.mem_of_mem_eraseIdx hx)).mono (Nat.le_succ _)
   have hp1 := Step.runOwn_pend T hv (a := { a with own := a.own.eraseIdx i }) ha' (ha.pend.mono (Nat.le_succ _))
     (fun P hP => (ha.supp.2 _ hmem).2 P (hP.mono (Nat.le_succ _))) b hb
   have hfr : b.state.fresh = a.state.fresh + 1 :=

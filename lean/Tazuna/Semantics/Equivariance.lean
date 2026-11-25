@@ -215,11 +215,6 @@ theorem Prim.comparable0 {p : Prim} {args : List Ty} (h : p.ok args = true) (hp 
   | none => rw [e] at this; cases this
   | some t => rw [e] at this; simpa using this
 
-/-- Every built-in maps related arguments to related results. -/
-theorem forall2_self {α : Type} {r : α → α → Prop} : {xs : List α} → Forall2 r xs xs → ∀ x ∈ xs, r x x
-  | _ :: _, ⟨h, _⟩, _, .head _ => h
-  | _ :: _, ⟨_, h⟩, x, .tail _ hx => forall2_self h x hx
-
 /-- Services whose lists relate, with the same parts once `spec`'s additions are set aside, keep parts related to
 themselves. -/
 theorem Self.of_stripped {vs ws : List ServiceV}

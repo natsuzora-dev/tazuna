@@ -151,10 +151,6 @@ theorem same_of_parts {a0 A C : Step.Acc v} (h0 : Step.Acc.Rel ⟨PBij.refl, PBi
   · rw [hoC, ← hi]; exact hobelow fun q hq => (hPC q hq).2
   · rw [hwA, hwC]; exact hown.append hO
 
-theorem map_self {α : Type} {f : α → α} : {l : List α} → (∀ a ∈ l, f a = a) → l.map f = l
-  | [], _ => rfl
-  | a :: l, h => by rw [List.map_cons, h a List.mem_cons_self, map_self fun b hb => h b (List.mem_cons_of_mem _ hb)]
-
 /-- Requests alike, each at the id `σ` gives the other's, are alike at the same ids once the second side's ids are
 renamed by `σ`. -/
 theorem multi_rewire {e : Ty} {σ : Nat → Nat} {xs ys : List (Step.Pending e)}

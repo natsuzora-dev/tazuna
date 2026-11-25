@@ -85,14 +85,14 @@ theorem coded_step {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     (hcf : ∀ p ∈ L.ownPairs v.event, PairLine L T P v senv (ownFits L.count T a.state a.own[i]) p)
     {d : Step.Acc v} (hd : Step.runOwn T { a with own := a.own.eraseIdx i } a.own[i] = .ok d) : QueueCoded L d := by
   have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
-  have hq' : Step.QueueOk P { a with own := a.own.eraseIdx i } := fun x hx => hqk x (Step.mem_eraseIdx hx)
+  have hq' : Step.QueueOk P { a with own := a.own.eraseIdx i } := fun x hx => hqk x (List.mem_of_mem_eraseIdx hx)
   have hs : Step.StateSupp a.state := Step.StateSupp.of_supp hsupp hpend
   obtain ⟨os, hos, hcod⟩ := queued_at chk senv (a0 := { a with own := a.own.eraseIdx i }) hkeys hW hinv hs hq'
     (hc _ hmem) (hqk _ hmem).1 (hqk _ hmem).2 hcf d hd
   intro y hy
   rw [hos] at hy
   rcases List.mem_append.1 hy with h | h
-  · exact hc y (Step.mem_eraseIdx h)
+  · exact hc y (List.mem_of_mem_eraseIdx h)
   · exact hcod y h
 
 end

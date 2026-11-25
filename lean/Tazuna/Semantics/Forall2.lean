@@ -197,6 +197,42 @@ where
     | _ :: _, _ :: _, ⟨h, hs⟩ => ⟨⟨_, h, rfl⟩, go hs⟩
     | [], _ :: _, h | _ :: _, [], h => h.elim
 
+theorem forall2_comp {r1 : α → β → Prop} {r2 : β → γ → Prop} :
+    {xs : List α} → {ys : List β} → {zs : List γ} → Forall2 r1 xs ys → Forall2 r2 ys zs →
+    Forall2 (fun a c => ∃ b, r1 a b ∧ r2 b c) xs zs
+  | [], [], [], _, _ => trivial
+  | _ :: _, _ :: _, _ :: _, ⟨h1, h⟩, ⟨h1', h'⟩ => ⟨⟨_, h1, h1'⟩, forall2_comp h h'⟩
+  | [], _ :: _, _, h, _ | _ :: _, [], _, h, _ | _, [], _ :: _, _, h | _, _ :: _, [], _, h => h.elim
+
+theorem perm_eraseIdx {α : Type} : (xs : List α) → (i : Nat) → (h : i < xs.length) → xs.Perm (xs[i] :: xs.eraseIdx i)
+  | x :: xs, 0, _ => .refl _
+  | x :: xs, i + 1, h => by
+    simp only [List.getElem_cons_succ, List.eraseIdx_cons_succ]
+    exact ((perm_eraseIdx xs i (by simpa using h)).cons x).trans (List.Perm.swap _ _ _)
+
+theorem forall2_self {α : Type} {r : α → α → Prop} : {xs : List α} → Forall2 r xs xs → ∀ x ∈ xs, r x x
+  | _ :: _, ⟨h, _⟩, _, .head _ => h
+  | _ :: _, ⟨_, h⟩, x, .tail _ hx => forall2_self h x hx
+
+theorem forall2_self_of {α β : Type} {r : α → β → Prop} {s : α → α → Prop} (h : ∀ a b, r a b → s a a) :
+    {xs : List α} → {ys : List β} → Forall2 r xs ys → Forall2 s xs xs
+  | [], [], _ => trivial
+  | _ :: _, _ :: _, ⟨hx, hxs⟩ => ⟨h _ _ hx, forall2_self_of h hxs⟩
+  | [], _ :: _, h | _ :: _, [], h => h.elim
+
+theorem forall2_refl_of {α : Type} {r : α → α → Prop} : {xs : List α} → (∀ x ∈ xs, r x x) → Forall2 r xs xs
+  | [], _ => trivial
+  | _ :: _, h => ⟨h _ List.mem_cons_self, forall2_refl_of fun y hy => h y (List.mem_cons_of_mem _ hy)⟩
+
+theorem forall2_eq {α : Type} : {xs ys : List α} → Forall2 (· = ·) xs ys → xs = ys
+  | [], [], _ => rfl
+  | _ :: _, _ :: _, ⟨rfl, h⟩ => by rw [forall2_eq h]
+  | [], _ :: _, h | _ :: _, [], h => h.elim
+
+theorem map_self {α : Type} {f : α → α} : {l : List α} → (∀ a ∈ l, f a = a) → l.map f = l
+  | [], _ => rfl
+  | a :: l, h => by rw [List.map_cons, h a List.mem_cons_self, map_self fun b hb => h b (List.mem_cons_of_mem _ hb)]
+
 end
 
 end Tazuna.Ir

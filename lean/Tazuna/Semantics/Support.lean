@@ -29,16 +29,6 @@ theorem IdV.self_of_below {a b : IdV} (h : IdV.Rel (PBij.below n) a b) (hP : P.F
   · exact .inl ⟨s, rfl, rfl⟩
   · exact .inr ⟨c, c, i, hP c hc, rfl, rfl⟩
 
-theorem forall2_self_of {α β : Type} {r : α → β → Prop} {s : α → α → Prop} (h : ∀ a b, r a b → s a a) :
-    {xs : List α} → {ys : List β} → Forall2 r xs ys → Forall2 s xs xs
-  | [], [], _ => trivial
-  | _ :: _, _ :: _, ⟨hx, hxs⟩ => ⟨h _ _ hx, forall2_self_of h hxs⟩
-  | [], _ :: _, h | _ :: _, [], h => h.elim
-
-theorem forall2_refl_of {α : Type} {r : α → α → Prop} : {xs : List α} → (∀ x ∈ xs, r x x) → Forall2 r xs xs
-  | [], _ => trivial
-  | _ :: _, h => ⟨h _ List.mem_cons_self, forall2_refl_of fun y hy => h y (List.mem_cons_of_mem _ hy)⟩
-
 theorem Multi.self_of {α β : Type} {r : α → β → Prop} {s : α → α → Prop} (h : ∀ a b, r a b → s a a)
     {xs : List α} {ys : List β} : Multi r xs ys → Multi s xs xs
   | ⟨_, hz, _⟩ => Multi.of_forall2 (forall2_self_of h hz)
@@ -540,15 +530,6 @@ theorem SelfAt.drop {n : Nat} {a : Acc v} (h : SelfAt n a) : SelfAt n { a with o
   obtain ⟨hst, hevs, hout, ho, ho', -⟩ := h P hP
   exact ⟨hst, hevs, hout, ho, ho', Multi.nil⟩
 
-theorem mem_eraseIdx {α : Type} {x : α} : {l : List α} → {i : Nat} → x ∈ l.eraseIdx i → x ∈ l
-  | [], _, h => by simp at h
-  | _ :: _, 0, h => List.mem_cons_of_mem _ (by simpa using h)
-  | y :: l, i + 1, h => by
-    simp only [List.eraseIdx_cons_succ, List.mem_cons] at h
-    rcases h with rfl | h
-    · exact List.mem_cons_self
-    · exact List.mem_cons_of_mem _ (mem_eraseIdx h)
-
 /-- The own cascade keeps every name below the counter. -/
 theorem ownSys_preserved (hv : v.Equivariant) :
     Diamond.Preserved (ownSys T v) Supp := by
@@ -556,7 +537,7 @@ theorem ownSys_preserved (hv : v.Equivariant) :
   simp only [ownSys, List.getElem?_eq_getElem hi] at hb
   have hmem : a.own[i] ∈ a.own := List.getElem_mem hi
   have ha' : SelfAt (a.state.fresh + 1) { a with own := a.own.eraseIdx i } :=
-    (SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (mem_eraseIdx hx)).mono (Nat.le_succ _)
+    (SelfAt.own (a := a) ha.1 fun x hx => ha.2 x (List.mem_of_mem_eraseIdx hx)).mono (Nat.le_succ _)
   have he : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → EffectV.Rel P a.own[i] a.own[i] :=
     fun P hP => (ha.2 _ hmem).2 P (hP.mono (Nat.le_succ _))
   obtain ⟨hs, ho⟩ := runOwn_self T hv (a := { a with own := a.own.eraseIdx i }) ha' he b hb
@@ -564,7 +545,7 @@ theorem ownSys_preserved (hv : v.Equivariant) :
   rw [Supp, hfr]
   refine ⟨hs.drop, fun y hy => ?_⟩
   rcases ho y hy with hy | hy
-  · exact (ha.2 y (mem_eraseIdx hy)).mono (Nat.le_succ _)
+  · exact (ha.2 y (List.mem_of_mem_eraseIdx hy)).mono (Nat.le_succ _)
   · exact hy
 
 end Step
