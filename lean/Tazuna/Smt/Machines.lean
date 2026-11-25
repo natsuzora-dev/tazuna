@@ -69,7 +69,7 @@ def firstSlots (t : Ty) : List Slot → List Slot → Except Refusal (List Term)
     let k ← need "an item that has no term" (Code.ofTerm? t (xs.headD tt))
     let eqs ← prev.mapM fun (f', xs') => do
       pure (Term.and f' (← eqCode L t (← need "an item that has no term" (Code.ofTerm? t (xs'.headD tt))) k))
-    pure (Term.and f (allT (eqs.map .not)) :: (← firstSlots t (prev ++ [(f, xs)]) rest))
+    pure (Term.share (.and f (allT (eqs.map .not))) :: (← firstSlots t (prev ++ [(f, xs)]) rest))
 
 /-- The timer `after` starts, as an entry holds it: the deadline `now` plus the delay, and the state it enters. -/
 def timerT (m : MachineV r e) (now a : Term) : Except Refusal Term := do
@@ -108,7 +108,7 @@ def reactAt (m : MachineV r e) (rc : ReactCode m) (de dn : Nat) (So : List Slot)
     let tm := Term.ite entered (← timerT L m now at_) (.sel de 0 1 old)
     let (x, c3) ← rc.effect (nctx, ())
     let xt ← need "an effect that has no term" (Code.term? _ x)
-    pure (((first, [key, .ctor de 0 [st, tm]]), .ite entered xt noneT),
+    pure (((first, [key, .ctor de 0 [st, tm]]), Term.share (.ite entered xt noneT)),
       Term.ite f (andT (.ite found c1 tt) (.ite entered (andT c2 c3) tt)) tt)
 
 /-- What a machine's reaction encodes: the new instance table, and per slot of the instances bag its flag (the
@@ -905,7 +905,7 @@ theorem react_at (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
       refine ⟨_, _, rfl, by rw [hst]; exact hstr, ?_⟩
       simp only [Term.denote, hfd, Val.toBool, Bool.not_false, Bool.true_or, ite_true]
       exact htm
-    · simp only [Term.denote, hfd, Val.toBool, Bool.not_false, Bool.true_or, ite_true]
+    · simp only [Term.denote_share, Term.denote, hfd, Val.toBool, Bool.not_false, Bool.true_or, ite_true]
       exact hxo
   | some i =>
     rw [hfind] at hfound hlook
@@ -1113,7 +1113,7 @@ theorem assemble (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
       obtain ⟨svN, svX, E, hN, hl, hwN, hE, hhN, hX, hhX⟩ := assemble m hpl rc hon haf recs tnow ev hrec hnow hev tbl hS hw
         hp hh hde hdn hinit dflt hfx hopt SB svB ysB _ _ ysP hSB hwB' (by simpa [Holds2, occupied] using hyB) hSP' hwP'
         (holds2_append_unoccupied hyP vs) h3 hos hc'
-      have hf0 : (Term.and f (allT (eqs.map .not))).denote M = .bool false := by simp [Term.denote, hf, Val.toBool]
+      have hf0 : (Term.share (.and f (allT (eqs.map .not)))).denote M = .bool false := by simp [Term.denote, hf, Val.toBool]
       refine ⟨(false, [kt.denote M, et.denote M]) :: svN, (false, [kt.denote M, fx.denote M]) :: svX, E, ⟨hf0, hden2, hN⟩,
         by simp [hl], ?_, hE, ?_, ⟨hf0, rfl, hX⟩, by simpa [Holds2, occupied] using hhX⟩
       · intro p hp; rcases List.mem_cons.1 hp with rfl | hp
@@ -1147,11 +1147,11 @@ theorem assemble (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
       have hsplit : (ysP ++ y :: ysB).map (Ty.down _ m.key_data) =
           ((ysP ++ [y]) ++ ysB).map (Ty.down _ m.key_data) := by simp
       rw [hsplit, hE, List.map_append, List.map_singleton, dedupBy_append_one, hany]
-      have hfirst : (Term.and f (allT (eqs.map .not))).denote M = .bool !(ysP.any fun y' => Ty.deq m.key y' y) := by
-        simp only [Term.denote, hf, hprev, Val.toBool, Bool.true_and]
+      have hfirst : (Term.share (.and f (allT (eqs.map .not)))).denote M = .bool !(ysP.any fun y' => Ty.deq m.key y' y) := by
+        simp only [Term.denote_share, Term.denote, hf, hprev, Val.toBool, Bool.true_and]
       cases hb : ysP.any fun y' => Ty.deq m.key y' y with
       | true =>
-        have hf0 : (Term.and f (allT (eqs.map .not))).denote M = .bool false := by rw [hfirst, hb]; rfl
+        have hf0 : (Term.share (.and f (allT (eqs.map .not)))).denote M = .bool false := by rw [hfirst, hb]; rfl
         refine ⟨(false, [kt.denote M, et.denote M]) :: svN, (false, [kt.denote M, fx.denote M]) :: svX, E,
           ⟨hf0, hden2, hN⟩, by simp [hl], ?_, by simp, ?_, ⟨hf0, rfl, hX⟩, by simpa [Holds2, occupied] using hhX⟩
         · intro p hp; rcases List.mem_cons.1 hp with rfl | hp
@@ -1162,10 +1162,10 @@ theorem assemble (m : MachineV r e) (hpl : m.key.plain = true) (rc : ReactCode m
         have hk : RelV L m.key (Ty.up _ m.key_data (Ty.down _ m.key_data y)) z := by rw [Ty.up_down]; exact hyz
         obtain ⟨kt', et', hsl, hkt, het, -, hfxr⟩ := react_at (T := T) m hpl rc hon haf recs tnow ev hrec hnow hev tbl hS
           hw hp hh hde hdn hinit dflt hfx hopt hf (by simp [Term.denotes, hxs]) _ hk ho1
-          (hc (((f.and (allT (eqs.map .not)), [kt, et]), fx), cj) (by simp))
+          (hc (((Term.share (.and f (allT (eqs.map .not))), [kt, et]), fx), cj) (by simp))
         simp only [Prod.mk.injEq, List.cons.injEq, and_true] at hsl
         obtain ⟨-, rfl, rfl⟩ := hsl
-        have hf1 : (Term.and f (allT (eqs.map .not))).denote M = .bool true := by rw [hfirst, hb]; rfl
+        have hf1 : (Term.share (.and f (allT (eqs.map .not)))).denote M = .bool true := by rw [hfirst, hb]; rfl
         refine ⟨(true, [z, et.denote M]) :: svN, (true, [z, fx.denote M]) :: svX, Ty.down _ m.key_data y :: E,
           ⟨hf1, by simp [Term.denotes, hkt], hN⟩, by simp [hl], ?_, by simp, ?_,
           ⟨hf1, by simp [Term.denotes, hkt], hX⟩, ⟨⟨z, fx.denote M, rfl, hk, hfxr⟩, hhX⟩⟩
