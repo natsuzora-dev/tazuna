@@ -305,12 +305,7 @@ theorem command_exact {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hv
           decidedFits L.count T shs { s with fresh := s.fresh + 1 } x ctx (x.decide.fn (ctx, ())))) := fun hc1 => by
     have hbroken := hbr hc1
     have hall : ((allT (adm.rules.map (·.2))).denote M).toBool = decide (Step.broken (x.accepts.fn (input, ())) = []) := by
-      rw [allT_denote, Val.toBool, ← hbroken]
-      by_cases hb : brokenIn M adm.rules = []
-      · simp [(brokenIn_nil adm.rules).1 hb, hb]
-      · have : (adm.rules.map (·.2)).all (fun t => (t.denote M).toBool) ≠ true := fun h =>
-          hb ((brokenIn_nil (M := M) adm.rules).2 h)
-        simp [hb]; simpa using this
+      rw [toBool_allT_rules, hbroken]
     rw [holds_ite_tt hall, decide_eq_true_iff]
     refine imp_congr_right fun _ => ?_
     rw [holds_andT]

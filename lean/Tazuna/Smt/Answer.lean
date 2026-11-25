@@ -610,12 +610,7 @@ theorem answer_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x ∈ v.
         (Ty.down _ hd2 f2) with
           | some f => f.fn (Ty.down _ hd1 f1, value, ())
           | none => []) = []) := by
-      rw [allT_denote, Val.toBool, ← hbroken]
-      by_cases hb : brokenIn M rules = []
-      · simp [(brokenIn_nil rules).1 hb, hb]
-      · have : (rules.map (·.2)).all (fun t => (t.denote M).toBool) ≠ true := fun h =>
-          hb ((brokenIn_nil (M := M) rules).2 h)
-        simp [hb]; simpa using this
+      rw [toBool_allT_rules, hbroken]
     rw [holds_ite_tt hall, decide_eq_true_iff]
     refine imp_congr_right fun _ => ?_
     rw [holds_andT]

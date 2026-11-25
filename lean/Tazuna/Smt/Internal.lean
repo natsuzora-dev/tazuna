@@ -597,12 +597,7 @@ theorem ownCommand_exact {P : List AnySite} (hP : SitesUnique P) (hvx : ∀ x �
       fun hc1 => by
     have hbroken := hbr hc1
     have hall : ((allT (adm.rules.map (·.2))).denote M).toBool = decide (Step.broken (x.accepts.fn (input, ())) = []) := by
-      rw [allT_denote, Val.toBool, ← hbroken]
-      by_cases hb : brokenIn M adm.rules = []
-      · simp [(brokenIn_nil adm.rules).1 hb, hb]
-      · have : (adm.rules.map (·.2)).all (fun t => (t.denote M).toBool) ≠ true := fun h =>
-          hb ((brokenIn_nil (M := M) adm.rules).2 h)
-        simp [hb]; simpa using this
+      rw [toBool_allT_rules, hbroken]
     rw [holds_ite_tt hall, decide_eq_true_iff]
     refine imp_congr_right fun _ => ?_
     rw [holds_andT]
@@ -937,12 +932,7 @@ theorem ownQuery_exact (a : Step.Acc v) (hor : ∀ m ∈ v.machines, m.key.order
         eventsFit L.count T a.state ((site.fn env).fn ⟨x.resolve.fn (ctx, ()), ()⟩))) := fun hc1 => by
     have hbroken := hbr hc1
     have hall : ((allT (adm.rules.map (·.2))).denote M).toBool = decide (Step.broken (x.accepts.fn (input, ())) = []) := by
-      rw [allT_denote, Val.toBool, ← hbroken]
-      by_cases hb : brokenIn M adm.rules = []
-      · simp [(brokenIn_nil adm.rules).1 hb, hb]
-      · have : (adm.rules.map (·.2)).all (fun t => (t.denote M).toBool) ≠ true := fun h =>
-          hb ((brokenIn_nil (M := M) adm.rules).2 h)
-        simp [hb]; simpa using this
+      rw [toBool_allT_rules, hbroken]
     rw [holds_ite_tt hall, decide_eq_true_iff]
     refine imp_congr_right fun _ => ?_
     rw [holds_andT]

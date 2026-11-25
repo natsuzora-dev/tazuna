@@ -327,17 +327,6 @@ theorem ownQuery_mem {name : String} {i o : Ty} {x : QueryV v.records v.caller}
     · cases hf
   · cases hf
 
-theorem allT_rules (rules : List (Term × Term)) :
-    (allT (rules.map (·.2))).denote M = .bool (brokenIn M rules).isEmpty := by
-  rw [allT_denote]
-  congr 1
-  cases h : brokenIn M rules with
-  | nil => exact (brokenIn_nil rules).1 h
-  | cons n ns =>
-    have : ¬ (rules.map (·.2)).all (fun t => (t.denote M).toBool) = true := fun h' => by
-      rw [(brokenIn_nil rules).2 h'] at h; cases h
-    simpa using this
-
 theorem toBool_bool (b : Bool) : (Val.bool b).toBool = b := rfl
 
 theorem fault_command (name : String) (o : OwnCommandOut) :

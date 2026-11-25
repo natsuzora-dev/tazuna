@@ -150,6 +150,22 @@ theorem brokenIn_nil (rules : List (Term × Term)) :
     simp only [brokenIn, List.filterMap_cons, List.map_cons, List.all_cons, Bool.and_eq_true] at ih ⊢
     split <;> simp_all
 
+/-- The rules' conjunction holds exactly when none is broken. -/
+theorem allT_rules (rules : List (Term × Term)) :
+    (allT (rules.map (·.2))).denote M = .bool (brokenIn M rules).isEmpty := by
+  rw [allT_denote]
+  congr 1
+  cases h : brokenIn M rules with
+  | nil => exact (brokenIn_nil rules).1 h
+  | cons n ns =>
+    have : ¬ (rules.map (·.2)).all (fun t => (t.denote M).toBool) = true := fun h' => by
+      rw [(brokenIn_nil rules).2 h'] at h; cases h
+    simpa using this
+
+theorem toBool_allT_rules (rules : List (Term × Term)) :
+    ((allT (rules.map (·.2))).denote M).toBool = decide (brokenIn M rules = []) := by
+  rw [allT_rules]; cases brokenIn M rules <;> rfl
+
 /-- The callers' test: an equality term per listed caller, any of which holds when the caller is listed. -/
 theorem callers_any {c : Ty} (hc : c.isData = true) {caller : c.den0} {cc : Code c}
     (hcc : Smt.Rel M L c (Ty.up c hc caller) cc) : (callers : List c.den0) → (ks : List Term) →
