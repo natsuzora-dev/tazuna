@@ -59,28 +59,29 @@ theorem forall2_split {α β : Type} {R : α → β → Prop} : (as as' : List �
   | _ :: _, _, [], h => h.elim
 
 /-- Events whose machines and reactions start requests that externals list: the records and machines react to each in
-turn, and the requests are written at the next ids and sent. -/
+turn, the requests are written at the next ids and sent, and the own commands and queries are queued. -/
 theorem applyEvents_requests : (evs : List v.event.den0) → (a : Acc v) → (ps : List (Pending v.event)) →
-    Tazuna.Smt.Forall2 (Writes v.declared) ((reactAll T a.state evs).2.zipIdx a.state.nextId) ps →
-    applyEvents T a evs = .ok ({ a with state := (reactAll T a.state evs).1, events := a.events ++ evs }.wrote ps
-      (a.state.nextId + (reactAll T a.state evs).2.length))
+    Tazuna.Smt.Forall2 (Writes v.declared) ((reqsOf (reactAll T a.state evs).2).zipIdx a.state.nextId) ps →
+    applyEvents T a evs = .ok (({ a with state := (reactAll T a.state evs).1, events := a.events ++ evs }.wrote ps
+      (a.state.nextId + (reqsOf (reactAll T a.state evs).2).length)).queued (queuedOf (reactAll T a.state evs).2))
   | [], a, [], _ => by
     obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a
-    simp [applyEvents, reactAll, Acc.wrote, pure, Except.pure]
+    simp [applyEvents, reactAll, Acc.wrote, Acc.queued, pure, Except.pure]
   | ev :: evs, a, ps, hps => by
-    simp only [reactAll, List.zipIdx_append] at hps
+    simp only [reactAll, reqsOf, List.filter_append, List.zipIdx_append] at hps
     obtain ⟨ps1, ps2, rfl, h1, h2⟩ := forall2_split _ _ hps
     have hs : applyEvents T a (ev :: evs) =
         (start { a with state := (react T a.state ev).1, events := a.events ++ [ev] } (react T a.state ev).2) >>=
           fun a' => applyEvents T a' evs := rfl
     rw [hs, start_requests { a with state := (react T a.state ev).1, events := a.events ++ [ev] } _ ps1 h1]
     simp only [bind, Except.bind]
-    let a' := ({ a with state := (react T a.state ev).1, events := a.events ++ [ev] } : Acc v).wrote ps1
-      ((react T a.state ev).1.nextId + (react T a.state ev).2.length)
-    rw [applyEvents_requests evs a' ps2 (by simp only [a', Acc.wrote, reactAll_with]; exact h2)]
+    let a' := (({ a with state := (react T a.state ev).1, events := a.events ++ [ev] } : Acc v).wrote ps1
+      ((react T a.state ev).1.nextId + (reqsOf (react T a.state ev).2).length)).queued (queuedOf (react T a.state ev).2)
+    rw [applyEvents_requests evs a' ps2 (by simp only [a', Acc.wrote, Acc.queued, reactAll_with]; exact h2)]
     obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a
-    simp only [a', Acc.wrote, reactAll_with, reactAll, reactAll_pending, reactAll_now, reactAll_fresh,
-      List.append_assoc, List.map_append, List.length_append, List.singleton_append, Except.ok.injEq]
+    simp only [a', Acc.wrote, Acc.queued, reactAll_with, reactAll, reactAll_pending, reactAll_now, reactAll_fresh,
+      reqsOf, queuedOf, List.filter_append, List.map_append, List.append_assoc, List.length_append,
+      List.singleton_append, Except.ok.injEq]
     simp only [Nat.add_assoc]
     rfl
   | [], _, _ :: _, h => h.elim

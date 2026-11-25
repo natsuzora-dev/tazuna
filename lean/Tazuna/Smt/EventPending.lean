@@ -24,26 +24,79 @@ def Writes (ds : List (String × DeclaredV)) {e : Ty} (x : (Sender × EffectV e)
 def Acc.wrote (a : Acc v) (ps : List (Pending v.event)) (n : Nat) : Acc v :=
   { a with state := { a.state with pending := a.state.pending ++ ps, nextId := n }, out := a.out ++ ps.map Pending.line }
 
-/-- Starting requests that externals list writes them into the pending table at the next ids and sends them. -/
+/-- The step in progress `a` with the own commands and queries `os` queued after the waiting ones. -/
+def Acc.queued (a : Acc v) (os : List (EffectV v.event)) : Acc v := { a with own := a.own ++ os }
+
+/-- Whether an effect is a request to an external, which goes out at once; the others wait in the own queue. -/
+def _root_.Tazuna.Ir.EffectV.isRequest {e : Ty} : EffectV e → Bool
+  | .request _ => true
+  | _ => false
+
+/-- The requests among effects, in order. -/
+abbrev reqsOf {e : Ty} (effs : List (Sender × EffectV e)) : List (Sender × EffectV e) := effs.filter (·.2.isRequest)
+
+/-- The own commands and queries among effects, in order: what they queue. -/
+abbrev queuedOf {e : Ty} (effs : List (Sender × EffectV e)) : List (EffectV e) :=
+  (effs.filter (!·.2.isRequest)).map (·.2)
+
+/-- Starting effects writes the requests, which externals list, into the pending table at the next ids and sends
+them, and queues the own commands and queries, each in order. -/
 theorem start_requests (a : Acc v) : (effs : List (Sender × EffectV v.event)) → (ps : List (Pending v.event)) →
-    Tazuna.Smt.Forall2 (Writes v.declared) (effs.zipIdx a.state.nextId) ps →
-    start a effs = .ok (a.wrote ps (a.state.nextId + effs.length))
+    Tazuna.Smt.Forall2 (Writes v.declared) ((reqsOf effs).zipIdx a.state.nextId) ps →
+    start a effs = .ok ((a.wrote ps (a.state.nextId + (reqsOf effs).length)).queued (queuedOf effs))
   | [], [], _ => by
     obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a
-    simp [start, pure, Except.pure, Acc.wrote]
-  | (snd, eff) :: effs, p :: ps, ⟨⟨r, o, he, ho, hp⟩, hs⟩ => by
+    simp [start, pure, Except.pure, Acc.wrote, Acc.queued]
+  | (snd, .request r) :: effs, p :: ps, ⟨⟨r', o, he, ho, hp⟩, hs⟩ => by
     simp only at he hp
-    subst he hp
+    cases he
+    subst hp
     have h1 : start a ((snd, .request r) :: effs) =
         start (a.wrote [⟨a.state.nextId, snd, o, r⟩] (a.state.nextId + 1)) effs := by
       simp only [start, List.foldlM_cons, ho, bind, Except.bind]; rfl
     rw [h1, start_requests _ effs ps hs]
+    have hl : (reqsOf ((snd, EffectV.request r) :: effs)).length = (reqsOf effs).length + 1 := by
+      simp [reqsOf, EffectV.isRequest]
+    have hq : queuedOf ((snd, EffectV.request r) :: effs) = queuedOf effs := by simp [queuedOf, EffectV.isRequest]
+    rw [hl, hq]
     obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a
-    simp only [Acc.wrote, List.append_assoc, List.cons_append, List.nil_append, List.map_cons, List.length_cons,
+    simp only [Acc.wrote, Acc.queued, List.append_assoc, List.cons_append, List.nil_append, List.map_cons,
       Pending.line, Except.ok.injEq]
     congr 2
     omega
-  | [], _ :: _, h | _ :: _, [], h => h.elim
+  | (snd, .command n c i j caller value f) :: effs, ps, hs => by
+    have h1 : start a ((snd, .command n c i j caller value f) :: effs) =
+        start (a.queued [.command n c i j caller value f]) effs := rfl
+    have hr : reqsOf ((snd, EffectV.command n c i j caller value f) :: effs) = reqsOf effs := rfl
+    have hq : queuedOf ((snd, EffectV.command n c i j caller value f) :: effs) =
+        .command n c i j caller value f :: queuedOf effs := rfl
+    rw [hr] at hs
+    rw [h1, start_requests (a.queued _) effs ps hs, hr, hq]
+    obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a
+    simp [Acc.wrote, Acc.queued]
+  | (snd, .query n c i j caller value f) :: effs, ps, hs => by
+    have h1 : start a ((snd, .query n c i j caller value f) :: effs) =
+        start (a.queued [.query n c i j caller value f]) effs := rfl
+    have hr : reqsOf ((snd, EffectV.query n c i j caller value f) :: effs) = reqsOf effs := rfl
+    have hq : queuedOf ((snd, EffectV.query n c i j caller value f) :: effs) =
+        .query n c i j caller value f :: queuedOf effs := rfl
+    rw [hr] at hs
+    rw [h1, start_requests (a.queued _) effs ps hs, hr, hq]
+    obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a
+    simp [Acc.wrote, Acc.queued]
+  | [], _ :: _, h => h.elim
+  | (_, .request _) :: _, [], h => h.elim
+
+/-- Effects written as requests at consecutive ids are all requests: none queues. -/
+theorem reqs_of_writes {ds : List (String × DeclaredV)} {e : Ty} :
+    {effs : List (Sender × EffectV e)} → {n : Nat} → {ps : List (Pending e)} →
+    Tazuna.Smt.Forall2 (Writes ds) (effs.zipIdx n) ps → reqsOf effs = effs ∧ queuedOf effs = []
+  | [], _, _, _ => ⟨rfl, rfl⟩
+  | (snd, eff) :: effs, n, p :: ps, ⟨⟨r, _, he, _⟩, hs⟩ => by
+    simp only at he
+    subst he
+    obtain ⟨h1, h2⟩ := reqs_of_writes (n := n + 1) hs
+    exact ⟨by simp [reqsOf, EffectV.isRequest] at h1 ⊢; exact h1, by simp [queuedOf, EffectV.isRequest] at h2 ⊢; exact h2⟩
 
 end Step
 
@@ -60,28 +113,6 @@ variable {T : List TypeDecl} {v : ServiceV}
 abbrev startedBy (T : List TypeDecl) (s : State v) (records : v.records.den0) (ev : v.event.den0) :
     List (Sender × EffectV v.event) :=
   s.machines.flatMap fun ms0 => (Step.machineStep T records s.now ev ms0).2
-
-/-- An event's step whose machines and reactions start requests that externals list, computed: the requests are
-written at the next ids and sent. -/
-theorem step_event_requests (s : State v) (i : Fin v.subscribes.length)
-    (value : (v.subscribes.get i).event.den0) (ps : List (Step.Pending v.event))
-    (hps : Forall2 (Step.Writes v.declared)
-      ((startedBy T s (v.apply.fn (s.records, (v.subscribes.get i).wrap.fn (value, ()), ())) ((v.subscribes.get i).wrap.fn
-        (value, ())) ++ reactedBy s (v.apply.fn (s.records, (v.subscribes.get i).wrap.fn (value, ()), ()))
-          ((v.subscribes.get i).wrap.fn (value, ()))).zipIdx s.nextId) ps) :
-    let ev := (v.subscribes.get i).wrap.fn (value, ())
-    let records := v.apply.fn (s.records, ev, ())
-    let ms := s.machines.map fun ms0 => (Step.machineStep T records s.now ev ms0).1
-    let n := s.nextId + (startedBy T s records ev ++ reactedBy s records ev).length
-    let s' : State v := { s with records, machines := ms, pending := s.pending ++ ps, nextId := n }
-    step T v s (.event i value) = match Step.invariants s' with
-      | n :: _ => ⟨s, .fault (.invariant n), [], []⟩
-      | [] => ⟨s', .accepted, [ev], ps.map Step.Pending.line⟩ := by
-  intro ev records ms n s'
-  simp only [step, Step.finish, Step.applyEvents, List.foldlM, react_eq]
-  rw [Step.start_requests _ _ ps hps]
-  simp only [bind, Except.bind, pure, Except.pure, Step.settle, Step.Acc.wrote]
-  rfl
 
 end
 

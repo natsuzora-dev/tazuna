@@ -704,8 +704,9 @@ theorem step_clock_requests (s : State v) (time : Int) (ht : ¬time < s.now) {s'
       | [] => ⟨s'', .accepted, [], ps.map Step.Pending.line⟩ := by
   intro s''
   simp only [step, ht, ite_false, hf]
-  rw [Step.finish, Step.start_requests _ _ ps hps]
-  simp only [bind, Except.bind, Step.settle, Step.Acc.wrote]
+  obtain ⟨hr, hq⟩ := Step.reqs_of_writes hps
+  rw [Step.finish, Step.start_requests _ _ ps (by rw [hr]; exact hps), hr, hq]
+  simp only [bind, Except.bind, Step.settle, Step.Acc.wrote, Step.Acc.queued, List.append_nil]
   rfl
 
 /-- T2 for a clock line: wherever the conditions hold, a time before the state's is Invalid; when every one of the

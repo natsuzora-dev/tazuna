@@ -153,7 +153,9 @@ theorem events_apply {P : List AnySite} (hP : SitesUnique P) {v : ServiceV} (hvx
   have hlen : ps.length = (Step.reactAll T a.state evs).2.length := by
     rw [← forall2_length hps, List.length_zipIdx]
   refine ⟨ps, ?_, ⟨ps', hperm, hrelP⟩, r1, r2, ?_⟩
-  · rw [Step.applyEvents_requests T evs a ps hps, hlen]
+  · obtain ⟨hr, hq⟩ := Step.reqs_of_writes hps
+    rw [Step.applyEvents_requests T evs a ps (by rw [hr]; exact hps), hr, hq, hlen]
+    simp [Step.Acc.queued]
   · rw [r3, hlen]; rfl
 
 /-- T2 for an event: wherever the conditions hold, a broken invariant's name (the service's first, then each machine's
