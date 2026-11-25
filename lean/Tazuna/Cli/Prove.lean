@@ -333,10 +333,11 @@ def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : St
           | _ => .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown []))
     | _, _, _ => .error s!"a model of {step} does not decode"
 
-/-- The line of a refused encoding: undecided where the refusal is the spec's, else an engine bug. -/
-def refusedItems (step : String) (r : Refusal) : Except String (List Item) :=
+/-- The line of a refused encoding of the step's questions about `g` (none: all of the step's): undecided where the
+refusal is the spec's, else an engine bug. -/
+def refusedItems (step : String) (g : Option Target) (r : Refusal) : Except String (List Item) :=
   match refusalLine c.T r with
-  | some (k, fields) => .ok [.ready (.undecided k v.name step none fields)]
+  | some (k, fields) => .ok [.ready (.undecided k v.name step g fields)]
   | none => .error s!"service {v.name}, {step}: the encoding refused: {reprStr r}"
 
 /-- The lines of a question family with one target and two questions (a timer machine, a pair of own kinds): its
@@ -344,7 +345,7 @@ bound question and its target question where `--only` keeps the target, else the
 def familyItems (only : String → Bool) (g : Target) (step : String) (built : Except Refusal (TypedScript × TypedScript))
     (report : Smt.Answer → Except String Report) : Except String (List Item) :=
   match built with
-  | .error r => refusedItems c v step r
+  | .error r => refusedItems c v step (some g) r
   | .ok (bq, tq) => .ok (if only (v.name ++ "/" ++ g.text ++ "/" ++ step) then
       [.ask ⟨bq.script, boundReport v.name step⟩, .ask ⟨tq.script, report⟩]
     else [.skipped v.name g])
@@ -363,7 +364,7 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
     let step := inp.text
     match questions L c.T c.P v senv inp with
     | .error r =>
-      match refusedItems c v step r with
+      match refusedItems c v step none r with
       | .ok more => items := items ++ more
       | .error why => return { internal := some why }
     | .ok (gs, qs) =>
