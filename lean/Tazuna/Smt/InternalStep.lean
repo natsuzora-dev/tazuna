@@ -167,7 +167,6 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
       else r = .error (.invalidEffect x.name ["callers"])) := by
   intro ctx r
   have hcc' := CommandCode.rel_of hcc hccx
-  have happ' := v.apply.code_fn v.apply.ht happ hca
   obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨dc, cd⟩, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨nil, h16, henc⟩ := bind_ok.1 henc
@@ -224,7 +223,7 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
     have e7 : Holds M c5 → Holds M c6 → (Holds M c7 ↔ eventsFit L.count T s ((site.fn env).fn ⟨ans, ()⟩)) :=
       fun hc5 hc6 => by
         obtain ⟨sv2, hS2, hsw2, hh2⟩ := hview ans hac hc5 hc6
-        exact events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv2 hS2 hsw2 _ hh2 s hnw hr hm h23
+        exact (events_encode chk hshs happ hca senv _ sv2 hS2 hsw2 _ hh2 s hnw hr hm h23).1
     constructor
     · rintro ⟨hc5, hc6, hc7⟩
       exact ⟨e5.1 hc5, (e6 ans hac hc5).1 hc6, (e7 hc5 hc6).1 hc7⟩
@@ -244,7 +243,7 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
       obtain ⟨hc5, hc6, hc7⟩ : Holds M c5 ∧ Holds M c6 ∧ Holds M c7 := by
         rw [holds_andT, holds_andT] at h567; exact h567
       obtain ⟨sv2, hS2, hsw2, hh2⟩ := hview ans hac hc5 hc6
-      exact loop_acc (T := T) chk hshs happ' senv a2 hnw hS2 hsw2 hh2 hr hm hn2 hq2 hf h23 hc7
+      exact loop_acc (T := T) chk hshs happ hca senv a2 hnw hS2 hsw2 hh2 hr hm hn2 hq2 hf h23 hc7
   have hacR : ∀ j, RelV L x.rejection (Ty.up _ x.data.rejection j) (dc.rejection.denote M) →
       dc.ok.denote M = .bool false → Smt.Rel M L _ (Ty.up _ hrn (.inr (.inl (j, ())))) ac := fun j hrj hokf => by
     have herr := adtCtor_rel (L := L) (M := M) (vs := [[Ty.nil], [x.rejection]]) ⟨1, by simp⟩ _ _ h18
@@ -429,7 +428,6 @@ theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pe
       else r = .error (.invalidEffect x.name ["callers"])) := by
   intro ctx r
   have hqc' := QueryCode.rel_of hqc hcq
-  have happ' := v.apply.code_fn v.apply.ht happ hca
   obtain ⟨⟨_, c1'⟩, g1, hqc0⟩ := bind_ok.1 hqc
   obtain ⟨⟨_, c2'⟩, g2, hqc0⟩ := bind_ok.1 hqc0
   cases pure_ok.1 hqc0
@@ -482,7 +480,7 @@ theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pe
         have hevt := (rel_term (need_ok.1 h11) _).1 hevs
         obtain ⟨sv, hS, -, hsw, hh⟩ := list_view (show Smt.Rel M L (.list v.event) (Ty.up _ hle _) evt from hevt) h12
         erw [Ty.up_list _ _ v.event_data] at hh
-        exact events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv hS hsw _ hh a.state hnow hrec hms h13
+        exact (events_encode chk hshs happ hca senv _ sv hS hsw _ hh a.state hnow hrec hms h13).1
       rw [holds_andT, holds_andT]
       constructor
       · rintro ⟨hc3, hc4, hc5⟩
@@ -514,7 +512,6 @@ theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pe
       have hc1 := e1.2 p1
       exact ⟨hc1, (hrules hc1).2 px⟩
   · have hqc := hqc'
-    have happ := happ'
     simp only [r, Step.runQuery, Step.execQuery, Step.admit]
     cases hin : x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
     case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
@@ -549,7 +546,7 @@ theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pe
     erw [Ty.up_list _ _ v.event_data] at hh
     let evs1 : List v.event.den0 := (site.fn env).fn ⟨x.resolve.fn ⟨Step.ctx a.state a.state.records caller input, ()⟩, ()⟩
     change Holds2 (EBag L v.event) (evs1.map (Ty.up _ v.event_data)) sv at hh
-    exact loop_acc (T := T) chk hshs happ senv a hnow hS hsw hh hrec hms hn hq hfresh h13 hc5
+    exact loop_acc (T := T) chk hshs happ hca senv a hnow hS hsw hh hrec hms hn hq hfresh h13 hc5
 
 end
 

@@ -176,12 +176,12 @@ theorem event_encode {P : List AnySite} (chk : Checked P T v)
   have hevT : Holds M cw → Forall2 (fun ev y => ∃ z, y = [z] ∧ RelV L v.event (Ty.up _ v.event_data ev) z) [ev]
       (occupied [(true, [et.denote M])]) := fun hcw => ⟨⟨_, rfl, ew.2 hcw⟩, trivial⟩
   have e2 : ∀ hcw : Holds M cw, (Holds M ce' ↔ eventsFit L.count T s [ev]) := fun hcw =>
-    events_exact (fun m hm => (chk.keys m hm).1) g1 hc1 [(tt, [et])] [(true, [et.denote M])]
-      ⟨rfl, rfl, trivial⟩ (by simp) [ev] (hevT hcw) s hR.now hR.records hR.machines hev
+    (events_encode chk hshs g1 hc1 senv [(tt, [et])] [(true, [et.denote M])]
+      ⟨rfl, rfl, trivial⟩ (by simp) [ev] (hevT hcw) s hR.now hR.records hR.machines hev).1
   have ef := fun (hcw : Holds M cw) (hc : Holds M ce') =>
     finish_encode chk hshs g1 hc1 g3 hc3 senv s
       .accepted { state := s } rfl hinv hR.now hR.pending
-      (loop_acc (T := T) chk hshs he.apply senv
+      (loop_acc (T := T) chk hshs g1 hc1 senv
         { state := s } hR.now (S := [(tt, [et])]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩ (by simp)
         (evs := [ev]) (hevT hcw) hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh hev hc)
       (applyEvents_ok chk.reactions _ rfl hinv _) hf hcx

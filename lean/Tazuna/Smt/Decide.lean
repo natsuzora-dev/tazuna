@@ -78,12 +78,12 @@ theorem newsRel_writes {shs : List (PendingShape v.event)} {ds : List (String ×
   obtain ⟨ps, -, h2⟩ := forall2_perm hp (forall2_flip h1)
   exact ⟨ps, forall2_flip h2⟩
 
-/-- The events loop over a list's slots from a step in progress: what `events_rel` says of the terms, and, for
+/-- The events loop over a list's slots from a step in progress: what `events_encode` says of the terms, and, for
 whichever pending requests the step writes for the requests the events start, `applyEvents`' result. -/
 theorem loop_apply {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ v.apply.ht v.apply.fn) apply)
-    (senv : StepEnv L shs) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    (hca : Holds M ca) (senv : StepEnv L shs) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
     {S : List Slot} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 1)
     {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
     {records : Term} (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
@@ -101,8 +101,8 @@ theorem loop_apply {P : List AnySite} (chk : Checked P T v)
       ∀ ps, Forall2 (Step.Writes v.declared) ((Step.reqsOf effs).zipIdx a.state.nextId) ps →
         Step.applyEvents T a evs = .ok (({ a with state := (Step.reactAll T a.state evs).1, events := a.events ++ evs }.wrote
           ps (a.state.nextId + (Step.reqsOf effs).length)).queued (Step.queuedOf effs)) := by
-  obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel chk hshs happ senv S sv hS hw evs hev
-    a.state hnow hrec hms hn hq henc hc
+  obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs happ hca senv S sv hS hw evs hev
+    a.state hnow hrec hms henc).2 hn hq hc
   exact ⟨r1, r2, r3, r4, r5, r6, fun ps hps => Step.applyEvents_requests T evs a ps hps⟩
 
 
@@ -127,8 +127,8 @@ def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShap
 /-- The events loop over a list's slots from a step in progress, as `AccRel` says of `applyEvents`' result. -/
 theorem loop_acc {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ v.apply.ht v.apply.fn) apply)
-    (senv : StepEnv L shs) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
+    (hca : Holds M ca) (senv : StepEnv L shs) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
     {S : List Slot} {sv : List (Bool × List Val)} (hS : SlotsDen M S sv) (hw : ∀ p ∈ sv, p.2.length = 1)
     {evs : List v.event.den0} (hev : Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv)
     {records : Term} (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
@@ -138,7 +138,7 @@ theorem loop_acc {P : List AnySite} (chk : Checked P T v)
     {o : EventsOut} {c : Term} (henc : encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c))
     (hc : Holds M c) :
     AccRel M L T shs a o fresh q0 (Step.applyEvents T a evs) := by
-  obtain ⟨r1, r2, r3, r4, r5, r6, hr⟩ := loop_apply chk hshs happ senv a hnow hS hw hev hrec hms hn hq henc hc
+  obtain ⟨r1, r2, r3, r4, r5, r6, hr⟩ := loop_apply chk hshs happ hca senv a hnow hS hw hev hrec hms hn hq henc hc
   refine ⟨_, _, a.state.fresh, evs, Step.reqsOf (Step.reactAll T a.state evs).2,
     Step.queuedOf (Step.reactAll T a.state evs).2, fun ps hps => ?_, r1, r2, hfresh, r3, r4, r5, r6⟩
   rw [hr ps hps]
@@ -246,7 +246,6 @@ theorem decide_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
   cases pure_ok.1 hcc0
   obtain ⟨-, hca23⟩ := (holds_andT _ _).1 hccx
   obtain ⟨hca2, hca3⟩ := (holds_andT _ _).1 hca23
-  have happ' := v.apply.code_fn v.apply.ht happ hca
   obtain ⟨⟨res, c2⟩, h8, henc⟩ := bind_ok.1 henc
   obtain ⟨rest, h9, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨d, dn⟩, h10, henc⟩ := bind_ok.1 henc
@@ -294,12 +293,12 @@ theorem decide_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
         have hok' : (Term.is d 0 (Term.share rest)).denote M = .bool false := by simp [Term.denote, hsh, hw]
         obtain ⟨sv1, hS1, hw1, hh1⟩ := gate_false_events (L := L) (v := v) hok' _
           (slotsOf_width dl dt nl 1 (.sel d 0 0 (Term.share rest)))
-        have e3 := events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv1 hS1 hw1 []
-          (by simpa using hh1) a.state hnow hrec hms h12
+        have e3 := (events_encode chk hshs happ hca senv _ sv1 hS1 hw1 []
+          (by simpa using hh1) a.state hnow hrec hms h12).1
         have hite : Holds M (.ite (Term.is d 0 (Term.share rest)) c4 tt) := by
           rw [holds_ite, hok']; exact holds_tt
         refine ⟨by rw [holds_andT, e3]; exact iff_of_true ⟨trivial, hite⟩ trivial, fun hc => ?_⟩
-        obtain ⟨p1, p2, p3, p4, p5, p6, -⟩ := loop_apply (T := T) chk hshs happ' senv a hnow hS1 hw1 (evs := [])
+        obtain ⟨p1, p2, p3, p4, p5, p6, -⟩ := loop_apply (T := T) chk hshs happ hca senv a hnow hS1 hw1 (evs := [])
           (by simpa using hh1) hrec hms hn hq h12 ((holds_andT _ _).1 hc).1
         simp only [Step.reactAll, Step.reqsOf, Step.queuedOf, List.filter_nil, List.map_nil, List.length_nil,
           Nat.add_zero] at p1 p2 p3 p4 p5 p6
@@ -324,11 +323,11 @@ theorem decide_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
       obtain ⟨sv, hS, -, hsw, hh⟩ := list_view hevs h11
       erw [Ty.up_list _ _ v.event_data] at hh
       have hS' := gate_true hok' hS
-      have e3 := events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv hS' hsw events hh a.state hnow hrec hms h12
+      have e3 := (events_encode chk hshs happ hca senv _ sv hS' hsw events hh a.state hnow hrec hms h12).1
       have hite : Holds M (.ite (Term.is d 0 (Term.share rest)) c4 tt) ↔ Holds M c4 := by
         rw [holds_ite, hok']; rfl
       have hloop := fun hc3 : Holds M c3 =>
-        loop_apply (T := T) chk hshs happ' senv a hnow hS' hsw hh hrec hms hn hq h12 hc3
+        loop_apply (T := T) chk hshs happ hca senv a hnow hS' hsw hh hrec hms hn hq h12 hc3
       have hens : Holds M c3 → (Holds M c4 ↔ x.ensures.appFits L.count (cv, (Step.reactAll T a.state events).1.records, ())) ∧
           (Holds M c4 → brokenIn M ensures = Step.broken (x.ensures.fn (cv, (Step.reactAll T a.state events).1.records, ()))) := by
         intro hc3
@@ -349,7 +348,7 @@ theorem decide_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
         fun ⟨p3, hc4⟩ => ?_⟩
       have hc3 := e3.2 p3
       refine ⟨hok', (hens hc3).2 hc4,
-        loop_acc (T := T) chk hshs happ' senv a hnow hS' hsw hh hrec hms hn hq hfresh h12 hc3, fun a' ha' => ?_,
+        loop_acc (T := T) chk hshs happ hca senv a hnow hS' hsw hh hrec hms hn hq hfresh h12 hc3, fun a' ha' => ?_,
         (hloop hc3).1, (hloop hc3).2.1⟩
       obtain ⟨-, -, -, p4, -, -, p7⟩ := hloop hc3
       obtain ⟨ps, hps⟩ := newsRel_writes p4

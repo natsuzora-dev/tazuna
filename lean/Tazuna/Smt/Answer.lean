@@ -341,7 +341,6 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
   refine ⟨?_, fun hc hhit => ?_⟩
   · have v.event_data : v.event.isData = true := by
       have := sh.onAnswer.ht; simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true] at this; exact this.2
-    have happ' := v.apply.code_fn (by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]) happ hca
     have hinv' := v.invariants.code_fn (by simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, v.records_data]) hinv hci
     match shs, hk, hR.pending, henc, hshs, senv with
     | sh0 :: rest, hk, ⟨tbl, htbl, hlist⟩, henc, hshs, senv =>
@@ -574,11 +573,11 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
       let sA := (Step.reactAll T s' evL).1
       have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
       have e4 : Holds M c4 ↔ eventsFit L.count T s' evL :=
-        events_exact (fun m hm => (chk.keys m hm).1) happ hca _ svl hSl hswl _ hhl s' hR.now hR.records hR.machines h12
+        (events_encode chk hshs happ hca senv _ svl hSl hswl _ hhl s' hR.now hR.records hR.machines h12).1
       have hinv' : Step.Inv P s' := hsinv.filterPending _
       have ef : Holds M c4 → (Holds M cf ↔ finishFits L.count T (sh0 :: rest) (Step.applyEvents T { state := s' } evL)) :=
         fun hc4 => (finish_encode chk hshs happ hca hinv hci senv s .accepted
-          { state := s' } rfl hinv' hR.now hrem (loop_acc (T := T) chk hshs happ' senv
+          { state := s' } rfl hinv' hR.now hrem (loop_acc (T := T) chk hshs happ hca senv
             { state := s' } hR.now hSl hswl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4) (applyEvents_ok chk.reactions _ rfl hinv' _) h12'
           hcfx).1
       constructor
@@ -790,7 +789,7 @@ theorem answer_encode {P : List AnySite} (chk : Checked P T v)
     erw [Ty.up_list _ _ v.event_data] at hhl
     let s' : State v := { s with pending := s.pending.filter (·.id != to) }
     have hinv' : Step.Inv P s' := hsinv.filterPending _
-    have hdone := loop_acc (T := T) chk hshs happ senv
+    have hdone := loop_acc (T := T) chk hshs happ0 hca senv
       { state := s' } hR.now hSl hswl hhl hR.records hR.machines hR.nextId (q := .int 0) (q0 := 0) rfl hR.fresh h12 hc4
     exact (finish_encode chk hshs happ0 hca hinv0 hci senv s
       .accepted { state := s' } rfl hinv' hR.now hrem hdone (applyEvents_ok chk.reactions _ rfl hinv' _) h12' hcfx).2 hcf

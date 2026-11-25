@@ -341,158 +341,6 @@ theorem one_item {ys : List Term} {z : Val} (h : Term.denotes M ys = [z]) : ∃ 
   match ys, h with
   | [t], h => simp only [Term.denotes, List.cons.injEq, and_true] at h; exact ⟨t, rfl, h⟩
 
-/-- T2 for a list of events: wherever the condition holds, the records and instance table terms denote the state
-after every event's reaction in turn, the next id term the id after the requests they start, the pending slots hold,
-where flagged, those requests at the ids from `n0`, the queue place term the place after the own commands and queries
-they start, and the own slots hold those at the places from `q0`. -/
-theorem events_rel {P : List AnySite} {v : ServiceV} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} (happ : Smt.Rel M L _ (Ty.up _ v.apply.ht v.apply.fn) apply)
-    (senv : StepEnv L shs) {now : Term} :
-    (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 1) →
-    (evs : List v.event.den0) → Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv →
-    (s : State v) → now.denote M = .int s.now →
-    {records : Term} → RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M) →
-    {xs : List Term} → MachinesRel M L T v.machines xs s.machines →
-    {n q : Term} → {n0 q0 : Nat} → n.denote M = .int n0 → q.denote M = .int q0 →
-    {o : EventsOut} → {c : Term} → encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
-    Holds M c →
-    RelV L v.records (Ty.up _ v.records_data (Step.reactAll T s evs).1.records) (o.records.denote M) ∧
-      MachinesRel M L T v.machines o.tables (Step.reactAll T s evs).1.machines ∧
-      o.nextId.denote M = .int ((n0 + (Step.reqsOf (Step.reactAll T s evs).2).length : Nat) : Int) ∧
-      NewsRel M L shs v.declared o.news (Step.reqsOf (Step.reactAll T s evs).2) n0 ∧
-      o.queued.denote M = .int ((q0 + (Step.queuedOf (Step.reactAll T s evs).2).length : Nat) : Int) ∧
-      OwnRel M L o.owns (Step.queuedOf (Step.reactAll T s evs).2) q0
-  | [], [], _, _, evs, hev, s, _, records, hrec, xs, hms, n, q, n0, q0, hn, hq, o, c, henc, _ => by
-    cases evs with
-    | cons _ _ => exact hev.elim
-    | nil =>
-      simp only [encodeEvents, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-      obtain ⟨rfl, -⟩ := henc
-      exact ⟨hrec, hms, by simpa [Step.reactAll] using hn, ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2],
-        [], by simp [Step.reactAll], trivial⟩, by simpa [Step.reactAll] using hq, ownRel_nil q0⟩
-  | (f, ys) :: S, (b, vs) :: sv, ⟨hf, hys, hS⟩, hw, evs, hev, s, hnow, records, hrec, xs, hms, n, q, n0, q0, hn, hq, o,
-      c, henc, hc => by
-    obtain ⟨rc, h1, henc⟩ := bind_ok.1 henc
-    obtain ⟨ec, h2, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨r', ca⟩, h3, henc⟩ := bind_ok.1 henc
-    obtain ⟨rt, h4, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨outs, cm⟩, h5, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨news, nT, oS, qT⟩, h6, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨rnews, nR, rown, qR, cr⟩, h7, henc⟩ := bind_ok.1 henc
-    obtain ⟨⟨o', c'⟩, h8, henc⟩ := bind_ok.1 henc
-    cases pure_ok.1 henc
-    obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
-    have hw' : ∀ p ∈ sv, p.2.length = 1 := fun p hp => hw p (by simp [hp])
-    have hlo := encodeMachines_length h5
-    have hlx := machinesRel_length hms
-    have hw6 := encodeStarts_width _ _ h6
-    have hw7 := encodeReactions_width _ h7
-    have hwid : ∀ sl ∈ news ++ rnews, sl.2.length = 2 := by
-      intro sl hsl
-      rcases List.mem_append.1 hsl with hsl | hsl
-      · exact hw6.1 sl hsl
-      · exact hw7.1 sl hsl
-    have howid : ∀ sl ∈ oS ++ rown, sl.2.length = 2 := by
-      intro sl hsl
-      rcases List.mem_append.1 hsl with hsl | hsl
-      · exact hw6.2 sl hsl
-      · exact hw7.2 sl hsl
-    have hfl : ∀ a b : List (Sender × EffectV v.event), Step.reqsOf (a ++ b) = Step.reqsOf a ++ Step.reqsOf b ∧
-        Step.queuedOf (a ++ b) = Step.queuedOf a ++ Step.queuedOf b := fun _ _ => by
-      simp [Step.reqsOf, Step.queuedOf, List.filter_append]
-    cases b with
-    | false =>
-      have hrec' : RelV L v.records (Ty.up _ v.records_data s.records)
-          ((Term.share (.ite f (Term.share rt) records)).denote M) := by
-        simpa [Term.denote, hf, Val.toBool] using hrec
-      have hms' := machinesRel_pick (T := T) hf v.machines (outs.map (·.table)) xs s.machines (by simpa using hlo) hlx
-        (by simpa using hms)
-      have hn' : (Term.share (.ite f nR n)).denote M = .int n0 := by simpa [Term.denote, hf, Val.toBool] using hn
-      have hq' : (Term.share (.ite f qR q)).denote M = .int q0 := by simpa [Term.denote, hf, Val.toBool] using hq
-      obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel chk hshs happ senv S sv hS hw' evs
-        (by simpa [Holds2, occupied] using hev) s hnow hrec' hms' hn' hq' h8 hc2
-      refine ⟨r1, r2, r3, ?_, r5, ?_⟩
-      · have := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hf hwid n0) (by simpa using r4)
-        simpa using this
-      · have := ownRel_append (ownRel_gate_false (M := M) (L := L) (e := v.event) hf howid q0) (by simpa using r6)
-        simpa using this
-    | true =>
-      match evs, hev with
-      | ev :: evs, ⟨⟨z, hz, hez⟩, hrest⟩ =>
-        obtain ⟨t, rfl, ht⟩ := one_item (hys.trans hz)
-        have hc1' : Holds M (andT ca (andT cm cr)) := by simpa [Holds, Term.denote, hf, Val.toBool] using hc1
-        obtain ⟨hca, hcm, hcr⟩ : Holds M ca ∧ Holds M cm ∧ Holds M cr := by
-          rw [holds_andT, holds_andT] at hc1'; exact hc1'
-        have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share ([t].headD tt)).denote M) := by
-          simpa [ht] using hez
-        let recs' := v.apply.fn (s.records, ev, ())
-        have hrc : Smt.Rel M L v.records (Ty.up _ v.records_data s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
-        have hec : Smt.Rel M L v.event (Ty.up _ v.event_data ev) ec := (rel_ofTerm (need_ok.1 h2) _).2 hevT
-        have hr' := happ (Ty.up _ v.records_data s.records, Ty.up _ v.event_data ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' ca h3 hca
-        rw [up_app2 v.records_data v.event_data v.apply.ht] at hr'
-        have hrt : RelV L v.records (Ty.up _ v.records_data recs') ((Term.share rt).denote M) := by
-          rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
-        have hrel := machines_event (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
-          (fun m hm => (chk.keys m hm).1) h5 hcm
-        have hstarts := machines_starts (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
-          chk.keys h5 hcm
-        have hreach : ∀ effs ∈ s.machines.map (fun sm => (Step.machineStep T recs' s.now ev sm).2),
-            ∀ x ∈ effs, x.2.Reach P := by
-          intro effs he x hx
-          obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 he
-          exact (Step.machineStep_reach T recs' s.now ev sm
-            (chk.machines _ (machinesRel_mem v.machines xs s.machines hms sm hsm))).2 x hx
-        obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel chk.sites hshs senv v.machines _ _ hstarts hreach hn hq h6
-        have hnews1' : NewsRel M L shs v.declared news (Step.reqsOf (startedBy T s recs' ev)) n0 := hnews1
-        have hown1' : OwnRel M L oS (Step.queuedOf (startedBy T s recs' ev)) q0 := hown1
-        obtain ⟨hnR, hnews2, hqR, hown2⟩ := reactions_rel chk.sites hshs senv.hE senv.hPE recs' s.now ev v.records_data v.event_data hrt hnow hevT v.reactions
-          chk.reactions hnT hqT h7 hcr
-        have hrec' : RelV L v.records (Ty.up _ v.records_data recs')
-            ((Term.share (.ite f (Term.share rt) records)).denote M) := by
-          simpa [Term.denote, hf, Val.toBool] using hrt
-        have hms' := machinesRel_pick (T := T) hf v.machines (outs.map (·.table)) xs _ (by simpa using hlo) hlx
-          (by simpa using hrel)
-        have e1 : (Step.reqsOf (startedBy T s recs' ev)).length =
-            (Step.reqsOf (s.machines.map fun sm => (Step.machineStep T recs' s.now ev sm).2).flatten).length := rfl
-        have e2 : (Step.queuedOf (startedBy T s recs' ev)).length =
-            (Step.queuedOf (s.machines.map fun sm => (Step.machineStep T recs' s.now ev sm).2).flatten).length := rfl
-        have e3 : reactedBy s recs' ev = reactionEffects v.reactions ev recs' s.now := rfl
-        have hn' : (Term.share (.ite f nR n)).denote M =
-            .int ((n0 + (Step.reqsOf (startedBy T s recs' ev ++ reactedBy s recs' ev)).length : Nat) : Int) := by
-          simp only [Term.denote_share, Term.denote, hf, Val.toBool, ite_true, hnR, (hfl _ _).1, List.length_append, e3]
-          congr 2
-          omega
-        have hq' : (Term.share (.ite f qR q)).denote M =
-            .int ((q0 + (Step.queuedOf (startedBy T s recs' ev ++ reactedBy s recs' ev)).length : Nat) : Int) := by
-          simp only [Term.denote_share, Term.denote, hf, Val.toBool, ite_true, hqR, (hfl _ _).2, List.length_append, e3]
-          congr 2
-          omega
-        have hre := react_eq (T := T) s ev
-        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := events_rel chk hshs happ senv S sv hS hw' evs
-          hrest (Step.react T s ev).1 hnow (by rw [hre]; exact hrec') (by rw [hre]; exact hms')
-          hn' hq' h8 hc2
-        have hlen : (Step.react T s ev).2 = startedBy T s recs' ev ++ reactedBy s recs' ev := by rw [hre]
-        simp only [Step.reactAll]
-        rw [(hfl _ _).1, (hfl _ _).2]
-        refine ⟨r1, r2, ?_, ?_, ?_, ?_⟩
-        · rw [r3, hlen]
-          simp only [List.length_append]
-          congr 2
-          omega
-        · rw [hlen]
-          have hA := newsRel_append hnews1' (e3 ▸ hnews2)
-          rw [← (hfl _ _).1] at hA
-          exact newsRel_append (newsRel_gate hf hA) r4
-        · rw [r5, hlen]
-          simp only [List.length_append]
-          congr 2
-          omega
-        · rw [hlen]
-          have hA := ownRel_append hown1' (e3 ▸ hown2)
-          rw [← (hfl _ _).2] at hA
-          exact ownRel_append (ownRel_gate hf hA) r6
-  | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _
-  | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => h.elim
 
 end
 
@@ -510,28 +358,41 @@ def eventsFit (S : Ty → Nat) (T : List TypeDecl) : State v → List v.event.de
         x.react.appFits S (.inl (v.apply.fn (s.records, ev, ()), s.now, ()), ev, ())) ∧
     eventsFit S T (Step.react T s ev).1 evs
 
-/-- `encodeEvents`' condition is exact: it holds exactly when the functions every event applies fit, on the state
-the events before it left. -/
-theorem events_exact {shs : List (PendingShape v.event)} (hor : ∀ m ∈ v.machines, m.key.orderable = true)
-    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca0 : Term} (hf : v.apply.code L = .ok (apply, ca0))
-    (hca0 : Holds M ca0) {senv : StepEnv L shs} {now : Term} :
+/-- A list of events: the condition holds exactly when the functions every event applies fit, on the state the
+events before it left (`eventsFit`); wherever it holds, the records and instance table terms denote the state after
+every event's reaction in turn, the next id term the id after the requests they start, the pending slots hold, where
+flagged, those requests at the ids from `n0`, the queue place term the place after the own commands and queries they
+start, and the own slots hold those at the places from `q0`. -/
+theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)}
+    (hshs : ∀ sh ∈ shs, sh.InSites P)
+    {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca0 : Term} (hap : v.apply.code L = .ok (apply, ca0))
+    (hca0 : Holds M ca0) (senv : StepEnv L shs) {now : Term} :
     (S : List Slot) → (sv : List (Bool × List Val)) → SlotsDen M S sv → (∀ p ∈ sv, p.2.length = 1) →
     (evs : List v.event.den0) → Holds2 (EBag L v.event) (evs.map (Ty.up _ v.event_data)) sv →
     (s : State v) → now.denote M = .int s.now →
     {records : Term} → RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M) →
     {xs : List Term} → MachinesRel M L T v.machines xs s.machines → {n q : Term} →
     {o : EventsOut} → {c : Term} → encodeEvents L T v shs senv apply now S records xs n q = .ok (o, c) →
-    (Holds M c ↔ eventsFit L.count T s evs)
-  | [], [], _, _, evs, hev, s, _, records, _, xs, _, n, q, o, c, henc => by
+    (Holds M c ↔ eventsFit L.count T s evs) ∧
+    (∀ {n0 q0 : Nat}, n.denote M = .int n0 → q.denote M = .int q0 → Holds M c →
+      RelV L v.records (Ty.up _ v.records_data (Step.reactAll T s evs).1.records) (o.records.denote M) ∧
+      MachinesRel M L T v.machines o.tables (Step.reactAll T s evs).1.machines ∧
+      o.nextId.denote M = .int ((n0 + (Step.reqsOf (Step.reactAll T s evs).2).length : Nat) : Int) ∧
+      NewsRel M L shs v.declared o.news (Step.reqsOf (Step.reactAll T s evs).2) n0 ∧
+      o.queued.denote M = .int ((q0 + (Step.queuedOf (Step.reactAll T s evs).2).length : Nat) : Int) ∧
+      OwnRel M L o.owns (Step.queuedOf (Step.reactAll T s evs).2) q0)
+  | [], [], _, _, evs, hev, s, _, records, hrec, xs, hms, n, q, o, c, henc => by
     cases evs with
     | cons _ _ => exact hev.elim
     | nil =>
       simp only [encodeEvents, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at henc
-      obtain ⟨-, rfl⟩ := henc
-      simp [holds_tt, eventsFit]
-  | (f, ys) :: S, (b, vs) :: sv, ⟨hfl, hys, hS⟩, hw, evs, hev, s, hnow, records, hrec, xs, hms, n, q, o, c, henc => by
-    have v.apply.ht : (Ty.fn [v.records, v.event] v.records).isData = true := by simp [Ty.isData, Ty.isDatas, v.records_data, v.event_data]
-    have happ := v.apply.code_fn v.apply.ht hf hca0
+      obtain ⟨rfl, rfl⟩ := henc
+      refine ⟨by simp [holds_tt, eventsFit], fun hn hq _ => ?_⟩
+      exact ⟨hrec, hms, by simpa [Step.reactAll] using hn, ⟨[], [], trivial, by simp, by simp [Holds2, occupied, Forall2],
+        [], by simp [Step.reactAll], trivial⟩, by simpa [Step.reactAll] using hq, ownRel_nil _⟩
+  | (f, ys) :: S, (b, vs) :: sv, ⟨hf, hys, hS⟩, hw, evs, hev, s, hnow, records, hrec, xs, hms, n, q, o, c, henc => by
+    have hor : ∀ m ∈ v.machines, m.key.orderable = true := fun m hm => (chk.keys m hm).1
+    have happ := v.apply.code_fn v.apply.ht hap hca0
     obtain ⟨rc, h1, henc⟩ := bind_ok.1 henc
     obtain ⟨ec, h2, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨r', ca⟩, h3, henc⟩ := bind_ok.1 henc
@@ -541,69 +402,177 @@ theorem events_exact {shs : List (PendingShape v.event)} (hor : ∀ m ∈ v.mach
     obtain ⟨⟨rnews, nR, rown, qR, cr⟩, h7, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o', c'⟩, h8, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
-    rw [holds_andT]
     have hw' : ∀ p ∈ sv, p.2.length = 1 := fun p hp => hw p (by simp [hp])
     have hlo := encodeMachines_length h5
     have hlx := machinesRel_length hms
-    cases b with
-    | false =>
-      have hrec' : RelV L v.records (Ty.up _ v.records_data s.records)
-          ((Term.share (.ite f (Term.share rt) records)).denote M) := by
-        simpa [Term.denote, hfl, Val.toBool] using hrec
-      have hms' := machinesRel_pick (T := T) hfl v.machines (outs.map (·.table)) xs s.machines (by simpa using hlo) hlx
-        (by simpa using hms)
-      rw [holds_ite_tt (b := false) (by simp [hfl, Val.toBool])]
-      simp only [Bool.false_eq_true, false_implies, true_and]
-      exact events_exact hor hf hca0 S sv hS hw' evs (by simpa [Holds2, occupied] using hev) s hnow hrec'
-        hms' h8
-    | true =>
-      match evs, hev with
-      | ev :: evs, ⟨⟨z, hz, hez⟩, hrest⟩ =>
-        obtain ⟨t, rfl, ht⟩ := one_item (hys.trans hz)
-        rw [holds_ite_tt (b := true) (by simp [hfl, Val.toBool])]
-        simp only [true_implies, eventsFit]
-        have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share ([t].headD tt)).denote M) := by
-          simpa [ht] using hez
-        let recs' := v.apply.fn (s.records, ev, ())
-        have hrc : Smt.Rel M L v.records (Ty.up _ v.records_data s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
-        have hec : Smt.Rel M L v.event (Ty.up _ v.event_data ev) ec := (rel_ofTerm (need_ok.1 h2) _).2 hevT
-        have e1 : Holds M ca ↔ v.apply.appFits L.count (s.records, ev, ()) :=
-          v.apply.app_exact hf hca0 (by
-            intro t ht
-            simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
-            rcases ht with rfl | rfl
-            · exact ofTerm_notFn (need_ok.1 h1)
-            · exact ofTerm_notFn (need_ok.1 h2)) _ _ (rels2 v.records_data v.event_data v.apply.args_data hrc hec) h3
-        have hrt : Holds M ca → RelV L v.records (Ty.up _ v.records_data recs') ((Term.share rt).denote M) := fun hca => by
+    refine ⟨?_, fun {n0 q0} hn hq hc => ?_⟩
+    · rw [holds_andT]
+      cases b with
+      | false =>
+        have hrec' : RelV L v.records (Ty.up _ v.records_data s.records)
+            ((Term.share (.ite f (Term.share rt) records)).denote M) := by
+          simpa [Term.denote, hf, Val.toBool] using hrec
+        have hms' := machinesRel_pick (T := T) hf v.machines (outs.map (·.table)) xs s.machines (by simpa using hlo) hlx
+          (by simpa using hms)
+        rw [holds_ite_tt (b := false) (by simp [hf, Val.toBool])]
+        simp only [Bool.false_eq_true, false_implies, true_and]
+        exact (events_encode chk hshs hap hca0 senv S sv hS hw' evs (by simpa [Holds2, occupied] using hev) s hnow hrec'
+          hms' h8).1
+      | true =>
+        match evs, hev with
+        | ev :: evs, ⟨⟨z, hz, hez⟩, hrest⟩ =>
+          obtain ⟨t, rfl, ht⟩ := one_item (hys.trans hz)
+          rw [holds_ite_tt (b := true) (by simp [hf, Val.toBool])]
+          simp only [true_implies, eventsFit]
+          have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share ([t].headD tt)).denote M) := by
+            simpa [ht] using hez
+          let recs' := v.apply.fn (s.records, ev, ())
+          have hrc : Smt.Rel M L v.records (Ty.up _ v.records_data s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
+          have hec : Smt.Rel M L v.event (Ty.up _ v.event_data ev) ec := (rel_ofTerm (need_ok.1 h2) _).2 hevT
+          have e1 : Holds M ca ↔ v.apply.appFits L.count (s.records, ev, ()) :=
+            v.apply.app_exact hap hca0 (by
+              intro t ht
+              simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
+              rcases ht with rfl | rfl
+              · exact ofTerm_notFn (need_ok.1 h1)
+              · exact ofTerm_notFn (need_ok.1 h2)) _ _ (rels2 v.records_data v.event_data v.apply.args_data hrc hec) h3
+          have hrt : Holds M ca → RelV L v.records (Ty.up _ v.records_data recs') ((Term.share rt).denote M) := fun hca => by
+            have hr' := happ (Ty.up _ v.records_data s.records, Ty.up _ v.event_data ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' ca h3 hca
+            rw [up_app2 v.records_data v.event_data v.apply.ht] at hr'
+            rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
+          have e2 : ∀ hca : Holds M ca, (Holds M cm ↔ ∀ sm ∈ s.machines, machineFits L.count sm recs' s.now ev) :=
+            fun hca => machines_exact (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines outs hms
+              hor h5
+          have e3 : ∀ hca : Holds M ca, (Holds M cr ↔ ∀ x ∈ v.reactions, (x.react.fits L.count).1 ∧
+              x.react.appFits L.count (.inl (recs', s.now, ()), ev, ())) :=
+            fun hca => reactions_exact recs' s.now ev v.records_data v.event_data (hrt hca) hnow hevT v.reactions h7
+          have e4 : ∀ (hca : Holds M ca) (hcm : Holds M cm), (Holds M c' ↔ eventsFit L.count T (Step.react T s ev).1 evs) :=
+            fun hca hcm => by
+              have hrel := machines_event (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines
+                outs hms hor h5 hcm
+              have hrec' : RelV L v.records (Ty.up _ v.records_data recs')
+                  ((Term.share (.ite f (Term.share rt) records)).denote M) := by
+                simpa [Term.denote, hf, Val.toBool] using hrt hca
+              have hms' := machinesRel_pick (T := T) hf v.machines (outs.map (·.table)) xs _ (by simpa using hlo) hlx
+                (by simpa using hrel)
+              have hre := react_eq (T := T) s ev
+              exact (events_encode chk hshs hap hca0 senv S sv hS hw' evs hrest (Step.react T s ev).1 hnow
+                (by rw [hre]; exact hrec') (by rw [hre]; exact hms') h8).1
+          rw [holds_andT, holds_andT]
+          constructor
+          · rintro ⟨⟨p0, p1, p2⟩, p3⟩
+            exact ⟨⟨e1.1 p0, (e2 p0).1 p1, (e3 p0).1 p2⟩, (e4 p0 p1).1 p3⟩
+          · rintro ⟨⟨p0, p1, p2⟩, p3⟩
+            have hca := e1.2 p0
+            have hcm := (e2 hca).2 p1
+            exact ⟨⟨hca, hcm, (e3 hca).2 p2⟩, (e4 hca hcm).2 p3⟩
+    · obtain ⟨hc1, hc2⟩ := (holds_andT _ _).1 hc
+      have hw6 := encodeStarts_width _ _ h6
+      have hw7 := encodeReactions_width _ h7
+      have hwid : ∀ sl ∈ news ++ rnews, sl.2.length = 2 := by
+        intro sl hsl
+        rcases List.mem_append.1 hsl with hsl | hsl
+        · exact hw6.1 sl hsl
+        · exact hw7.1 sl hsl
+      have howid : ∀ sl ∈ oS ++ rown, sl.2.length = 2 := by
+        intro sl hsl
+        rcases List.mem_append.1 hsl with hsl | hsl
+        · exact hw6.2 sl hsl
+        · exact hw7.2 sl hsl
+      have hfl : ∀ a b : List (Sender × EffectV v.event), Step.reqsOf (a ++ b) = Step.reqsOf a ++ Step.reqsOf b ∧
+          Step.queuedOf (a ++ b) = Step.queuedOf a ++ Step.queuedOf b := fun _ _ => by
+        simp [Step.reqsOf, Step.queuedOf, List.filter_append]
+      cases b with
+      | false =>
+        have hrec' : RelV L v.records (Ty.up _ v.records_data s.records)
+            ((Term.share (.ite f (Term.share rt) records)).denote M) := by
+          simpa [Term.denote, hf, Val.toBool] using hrec
+        have hms' := machinesRel_pick (T := T) hf v.machines (outs.map (·.table)) xs s.machines (by simpa using hlo) hlx
+          (by simpa using hms)
+        have hn' : (Term.share (.ite f nR n)).denote M = .int n0 := by simpa [Term.denote, hf, Val.toBool] using hn
+        have hq' : (Term.share (.ite f qR q)).denote M = .int q0 := by simpa [Term.denote, hf, Val.toBool] using hq
+        obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hap hca0 senv S sv hS hw' evs
+          (by simpa [Holds2, occupied] using hev) s hnow hrec' hms' h8).2 hn' hq' hc2
+        refine ⟨r1, r2, r3, ?_, r5, ?_⟩
+        · have := newsRel_append (newsRel_gate_false (L := L) (shs := shs) (ds := v.declared) hf hwid n0) (by simpa using r4)
+          simpa using this
+        · have := ownRel_append (ownRel_gate_false (M := M) (L := L) (e := v.event) hf howid q0) (by simpa using r6)
+          simpa using this
+      | true =>
+        match evs, hev with
+        | ev :: evs, ⟨⟨z, hz, hez⟩, hrest⟩ =>
+          obtain ⟨t, rfl, ht⟩ := one_item (hys.trans hz)
+          have hc1' : Holds M (andT ca (andT cm cr)) := by simpa [Holds, Term.denote, hf, Val.toBool] using hc1
+          obtain ⟨hca, hcm, hcr⟩ : Holds M ca ∧ Holds M cm ∧ Holds M cr := by
+            rw [holds_andT, holds_andT] at hc1'; exact hc1'
+          have hevT : RelV L v.event (Ty.up _ v.event_data ev) ((Term.share ([t].headD tt)).denote M) := by
+            simpa [ht] using hez
+          let recs' := v.apply.fn (s.records, ev, ())
+          have hrc : Smt.Rel M L v.records (Ty.up _ v.records_data s.records) rc := (rel_ofTerm (need_ok.1 h1) _).2 hrec
+          have hec : Smt.Rel M L v.event (Ty.up _ v.event_data ev) ec := (rel_ofTerm (need_ok.1 h2) _).2 hevT
           have hr' := happ (Ty.up _ v.records_data s.records, Ty.up _ v.event_data ev, ()) (rc, ec, ()) ⟨hrc, hec, trivial⟩ r' ca h3 hca
           rw [up_app2 v.records_data v.event_data v.apply.ht] at hr'
-          rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
-        have e2 : ∀ hca : Holds M ca, (Holds M cm ↔ ∀ sm ∈ s.machines, machineFits L.count sm recs' s.now ev) :=
-          fun hca => machines_exact (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines outs hms
-            hor h5
-        have e3 : ∀ hca : Holds M ca, (Holds M cr ↔ ∀ x ∈ v.reactions, (x.react.fits L.count).1 ∧
-            x.react.appFits L.count (.inl (recs', s.now, ()), ev, ())) :=
-          fun hca => reactions_exact recs' s.now ev v.records_data v.event_data (hrt hca) hnow hevT v.reactions h7
-        have e4 : ∀ (hca : Holds M ca) (hcm : Holds M cm), (Holds M c' ↔ eventsFit L.count T (Step.react T s ev).1 evs) :=
-          fun hca hcm => by
-            have hrel := machines_event (T := T) recs' s.now ev (hrt hca) hnow hevT v.machines xs s.machines
-              outs hms hor h5 hcm
-            have hrec' : RelV L v.records (Ty.up _ v.records_data recs')
-                ((Term.share (.ite f (Term.share rt) records)).denote M) := by
-              simpa [Term.denote, hfl, Val.toBool] using hrt hca
-            have hms' := machinesRel_pick (T := T) hfl v.machines (outs.map (·.table)) xs _ (by simpa using hlo) hlx
-              (by simpa using hrel)
-            have hre := react_eq (T := T) s ev
-            exact events_exact hor hf hca0 S sv hS hw' evs hrest (Step.react T s ev).1 hnow
-              (by rw [hre]; exact hrec') (by rw [hre]; exact hms') h8
-        rw [holds_andT, holds_andT]
-        constructor
-        · rintro ⟨⟨p0, p1, p2⟩, p3⟩
-          exact ⟨⟨e1.1 p0, (e2 p0).1 p1, (e3 p0).1 p2⟩, (e4 p0 p1).1 p3⟩
-        · rintro ⟨⟨p0, p1, p2⟩, p3⟩
-          have hca := e1.2 p0
-          have hcm := (e2 hca).2 p1
-          exact ⟨⟨hca, hcm, (e3 hca).2 p2⟩, (e4 hca hcm).2 p3⟩
+          have hrt : RelV L v.records (Ty.up _ v.records_data recs') ((Term.share rt).denote M) := by
+            rw [Term.denote_share]; exact (rel_term (need_ok.1 h4) _).1 hr'
+          have hrel := machines_event (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
+            (fun m hm => (chk.keys m hm).1) h5 hcm
+          have hstarts := machines_starts (T := T) recs' s.now ev hrt hnow hevT v.machines xs s.machines outs hms
+            chk.keys h5 hcm
+          have hreach : ∀ effs ∈ s.machines.map (fun sm => (Step.machineStep T recs' s.now ev sm).2),
+              ∀ x ∈ effs, x.2.Reach P := by
+            intro effs he x hx
+            obtain ⟨sm, hsm, rfl⟩ := List.mem_map.1 he
+            exact (Step.machineStep_reach T recs' s.now ev sm
+              (chk.machines _ (machinesRel_mem v.machines xs s.machines hms sm hsm))).2 x hx
+          obtain ⟨hnT, hnews1, hqT, hown1⟩ := starts_rel chk.sites hshs senv v.machines _ _ hstarts hreach hn hq h6
+          have hnews1' : NewsRel M L shs v.declared news (Step.reqsOf (startedBy T s recs' ev)) n0 := hnews1
+          have hown1' : OwnRel M L oS (Step.queuedOf (startedBy T s recs' ev)) q0 := hown1
+          obtain ⟨hnR, hnews2, hqR, hown2⟩ := reactions_rel chk.sites hshs senv.hE senv.hPE recs' s.now ev v.records_data v.event_data hrt hnow hevT v.reactions
+            chk.reactions hnT hqT h7 hcr
+          have hrec' : RelV L v.records (Ty.up _ v.records_data recs')
+              ((Term.share (.ite f (Term.share rt) records)).denote M) := by
+            simpa [Term.denote, hf, Val.toBool] using hrt
+          have hms' := machinesRel_pick (T := T) hf v.machines (outs.map (·.table)) xs _ (by simpa using hlo) hlx
+            (by simpa using hrel)
+          have e1 : (Step.reqsOf (startedBy T s recs' ev)).length =
+              (Step.reqsOf (s.machines.map fun sm => (Step.machineStep T recs' s.now ev sm).2).flatten).length := rfl
+          have e2 : (Step.queuedOf (startedBy T s recs' ev)).length =
+              (Step.queuedOf (s.machines.map fun sm => (Step.machineStep T recs' s.now ev sm).2).flatten).length := rfl
+          have e3 : reactedBy s recs' ev = reactionEffects v.reactions ev recs' s.now := rfl
+          have hn' : (Term.share (.ite f nR n)).denote M =
+              .int ((n0 + (Step.reqsOf (startedBy T s recs' ev ++ reactedBy s recs' ev)).length : Nat) : Int) := by
+            simp only [Term.denote_share, Term.denote, hf, Val.toBool, ite_true, hnR, (hfl _ _).1, List.length_append, e3]
+            congr 2
+            omega
+          have hq' : (Term.share (.ite f qR q)).denote M =
+              .int ((q0 + (Step.queuedOf (startedBy T s recs' ev ++ reactedBy s recs' ev)).length : Nat) : Int) := by
+            simp only [Term.denote_share, Term.denote, hf, Val.toBool, ite_true, hqR, (hfl _ _).2, List.length_append, e3]
+            congr 2
+            omega
+          have hre := react_eq (T := T) s ev
+          obtain ⟨r1, r2, r3, r4, r5, r6⟩ := (events_encode chk hshs hap hca0 senv S sv hS hw' evs
+            hrest (Step.react T s ev).1 hnow (by rw [hre]; exact hrec') (by rw [hre]; exact hms')
+            h8).2 hn' hq' hc2
+          have hlen : (Step.react T s ev).2 = startedBy T s recs' ev ++ reactedBy s recs' ev := by rw [hre]
+          simp only [Step.reactAll]
+          rw [(hfl _ _).1, (hfl _ _).2]
+          refine ⟨r1, r2, ?_, ?_, ?_, ?_⟩
+          · rw [r3, hlen]
+            simp only [List.length_append]
+            congr 2
+            omega
+          · rw [hlen]
+            have hA := newsRel_append hnews1' (e3 ▸ hnews2)
+            rw [← (hfl _ _).1] at hA
+            exact newsRel_append (newsRel_gate hf hA) r4
+          · rw [r5, hlen]
+            simp only [List.length_append]
+            congr 2
+            omega
+          · rw [hlen]
+            have hA := ownRel_append hown1' (e3 ▸ hown2)
+            rw [← (hfl _ _).2] at hA
+            exact ownRel_append (ownRel_gate hf hA) r6
   | [], _ :: _, h, _, _, _, _, _, _, _, _, _, _, _, _, _, _
   | _ :: _, [], h, _, _, _, _, _, _, _, _, _, _, _, _, _, _ => h.elim
 
