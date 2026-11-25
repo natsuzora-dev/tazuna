@@ -129,7 +129,7 @@ and, where its rules hold, `decide` fits at the context and what follows it fits
 holds, an unlisted caller or a broken `accepts` rule is `Fault.invalidEffect`, a broken `ensures` rule after an
 acceptance is `Fault.ensures`, and otherwise the internal step runs to its end with what the terms denote (`AccRel`),
 the fresh counter advanced. -/
-theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
+theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (a : Step.Acc v)
     (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) {cc : CommandCode x}
     {cx : Term} (hcc : CommandCode.of L x = .ok (cc, cx)) (hccx : Holds M cx)
@@ -396,7 +396,7 @@ theorem ownCommand_encode {P : List AnySite} (chk : Checked P T v)
 and, where its rules hold, `resolve` fits at the context and `on_answer`'s part for the output fits. Wherever it holds,
 an unlisted caller or a broken `accepts` rule is `Fault.invalidEffect`, and otherwise the internal step runs to its
 end with what the terms denote (`AccRel`); a query leaves the fresh counter as it was. -/
-theorem ownQuery_encode {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)}
+theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0)
     (input : x.input.den0) {qc : QueryCode x} {cq : Term} (hqc : QueryCode.of L x = .ok (qc, cq)) (hcq : Holds M cq)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))

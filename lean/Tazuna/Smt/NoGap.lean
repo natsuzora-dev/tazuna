@@ -1585,6 +1585,27 @@ theorem sites_of_handleAt {Γ ps : List Ty} {r : Ty} (D : Defs G) {f : Expr G Γ
   · rfl
   · simp at hh
 
+/-- An effect site of `D` whose captured types and body's node types are among `T`, whose body's sites are among `S`
+and handles among `Hs`. -/
+def InsideE (D : Defs G) (T : List Ty) (S : List AnySite) (Hs : List HandleSite) (s : AnyEffectSite) : Prop :=
+  (∀ u ∈ s.1, u ∈ T) ∧ (∀ u ∈ Expr.tys s.2.2.2.body, u ∈ T) ∧
+    (∀ x ∈ Expr.sites s.2.2.2.defs s.2.2.2.body, x ∈ S) ∧ (∀ h ∈ Expr.handles s.2.2.2.body, h ∈ Hs) ∧
+    s.2.2.2.G = G ∧ HEq s.2.2.2.defs D
+
+theorem InsideE.mono {D : Defs G} {T T' : List Ty} {S S' : List AnySite} {Hs Hs' : List HandleSite}
+    {s : AnyEffectSite} (h : InsideE D T S Hs s) (hT : ∀ u ∈ T, u ∈ T') (hS : ∀ x ∈ S, x ∈ S')
+    (hH : ∀ x ∈ Hs, x ∈ Hs') : InsideE D T' S' Hs' s :=
+  ⟨fun u hu => hT u (h.1 u hu), fun u hu => hT u (h.2.1 u hu), fun x hx => hS x (h.2.2.1 x hx),
+    fun x hx => hH x (h.2.2.2.1 x hx), h.2.2.2.2⟩
+
+theorem effectSites_of_handleAt {Γ ps : List Ty} {r : Ty} (D : Defs G) {f : Expr G Γ (.fn ps r)}
+    {args : Exprs G Γ ps} {h : HandleSite} (hh : handleAt f args = some h) : Expr.effectSites D f = [] := by
+  unfold handleAt at hh
+  simp only at hh
+  split at hh
+  · rfl
+  · simp at hh
+
 variable (D : Defs G)
 
 mutual
@@ -1720,6 +1741,139 @@ theorem Clauses.inside : {Γ : List Ty} → {t r : Ty} → {sh : List Shape} →
         (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
 end
 
+mutual
+theorem Expr.insideE : {Γ : List Ty} → {t : Ty} → (e : Expr G Γ t) → ∀ s ∈ Expr.effectSites D e,
+    InsideE D (Expr.tys e) (Expr.sites D e) (Expr.handles e) s
+  | _, _, .int _, _, h | _, _, .str _, _, h | _, _, .var _, _, h | _, _, .global _, _, h | _, _, .prim .., _, h => by
+    simp [Expr.effectSites] at h
+  | _, _, .ctor _ es, s, h => (Exprs.insideE es s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .tuple es, s, h => (Exprs.insideE es s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .field _ _ _ e, s, h => (Expr.insideE e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .index e _, s, h => (Expr.insideE e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .not e, s, h => (Expr.insideE e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .neg e, s, h => (Expr.insideE e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .lam e, s, h => (Expr.insideE e s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .list items, s, h => (Items.insideE items s h).mono (fun u hu => by simp [Expr.tys, hu])
+      (fun x hx => by simpa [Expr.sites] using hx) (fun x hx => by simpa [Expr.handles] using hx)
+  | _, _, .update e p, s, h => by
+    simp only [Expr.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.insideE e s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Patch.insideE p s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, .let_ e body, s, h => by
+    simp only [Expr.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.insideE e s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Expr.insideE body s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, .bin _ l r, s, h => by
+    simp only [Expr.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.insideE l s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Expr.insideE r s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, .case e cs _, s, h => by
+    simp only [Expr.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.insideE e s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Clauses.insideE cs s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, .call f args, s, h => by
+    simp only [Expr.effectSites, List.mem_append] at h
+    cases hha : handleAt f args with
+    | some hd =>
+      rcases h with h | h
+      · rw [effectSites_of_handleAt D hha] at h; cases h
+      · exact (Exprs.insideE args s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+          (fun x hx => by simp [Expr.handles, hha, hx])
+    | none =>
+      rcases h with h | h
+      · exact (Expr.insideE f s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+          (fun x hx => by simp [Expr.handles, hha, hx])
+      · exact (Exprs.insideE args s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+          (fun x hx => by simp [Expr.handles, hha, hx])
+  | _, _, .close _ env _ _ body, s, h => by
+    simp only [Expr.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Exprs.insideE env s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Expr.insideE body s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+  | _, _, @Expr.closeEffect _ _ Γ' ps r site env hΓ hps body, s, h => by
+    simp only [Expr.effectSites, List.mem_cons, List.mem_append] at h
+    rcases h with (rfl | h) | h
+    · exact ⟨fun u hu => by simp [Expr.tys, Exprs.tys_types env u hu], fun u hu => by simp [Expr.tys, hu],
+        fun x hx => by simp [Expr.sites, hx], fun x hx => by simp [Expr.handles, hx], rfl, HEq.rfl⟩
+    · exact (Exprs.insideE env s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+    · exact (Expr.insideE body s h).mono (fun u hu => by simp [Expr.tys, hu]) (fun x hx => by simp [Expr.sites, hx])
+        (fun x hx => by simp [Expr.handles, hx])
+theorem Exprs.insideE : {Γ ts : List Ty} → (es : Exprs G Γ ts) → ∀ s ∈ Exprs.effectSites D es,
+    InsideE D (Exprs.tys es) (Exprs.sites D es) (Exprs.handles es) s
+  | _, _, .nil, _, h => nomatch h
+  | _, _, .cons e es, s, h => by
+    simp only [Exprs.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.insideE e s h).mono (fun u hu => by simp [Exprs.tys, hu]) (fun x hx => by simp [Exprs.sites, hx])
+        (fun x hx => by simp [Exprs.handles, hx])
+    · exact (Exprs.insideE es s h).mono (fun u hu => by simp [Exprs.tys, hu]) (fun x hx => by simp [Exprs.sites, hx])
+        (fun x hx => by simp [Exprs.handles, hx])
+theorem Items.insideE : {Γ : List Ty} → {t : Ty} → (es : Items G Γ t) → ∀ s ∈ Items.effectSites D es,
+    InsideE D (Items.tys es) (Items.sites D es) (Items.handles es) s
+  | _, _, .nil, _, h => nomatch h
+  | _, _, .cons e es, s, h => by
+    simp only [Items.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.insideE e s h).mono (fun u hu => by simp [Items.tys, hu]) (fun x hx => by simp [Items.sites, hx])
+        (fun x hx => by simp [Items.handles, hx])
+    · exact (Items.insideE es s h).mono (fun u hu => by simp [Items.tys, hu]) (fun x hx => by simp [Items.sites, hx])
+        (fun x hx => by simp [Items.handles, hx])
+theorem Patch.insideE : {Γ ts : List Ty} → (p : Patch G Γ ts) → ∀ s ∈ Patch.effectSites D p,
+    InsideE D (Patch.tys p) (Patch.sites D p) (Patch.handles p) s
+  | _, _, .nil, _, h => nomatch h
+  | _, _, .keep rest, s, h => (Patch.insideE rest s (by simpa [Patch.effectSites] using h)).mono
+      (fun u hu => by simpa [Patch.tys] using hu) (fun x hx => by simpa [Patch.sites] using hx)
+      (fun x hx => by simpa [Patch.handles] using hx)
+  | _, _, .set e rest, s, h => by
+    simp only [Patch.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.insideE e s h).mono (fun u hu => by simp [Patch.tys, hu]) (fun x hx => by simp [Patch.sites, hx])
+        (fun x hx => by simp [Patch.handles, hx])
+    · exact (Patch.insideE rest s h).mono (fun u hu => by simp [Patch.tys, hu]) (fun x hx => by simp [Patch.sites, hx])
+        (fun x hx => by simp [Patch.handles, hx])
+theorem Clauses.insideE : {Γ : List Ty} → {t r : Ty} → {sh : List Shape} → (cs : Clauses G Γ t r sh) →
+    ∀ s ∈ Clauses.effectSites D cs, InsideE D (Clauses.tys cs) (Clauses.sites D cs) (Clauses.handles cs) s
+  | _, _, _, _, .nil, _, h => nomatch h
+  | _, _, _, _, .cons _ body rest, s, h => by
+    simp only [Clauses.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact (Expr.insideE body s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+    · exact (Clauses.insideE rest s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+  | _, _, _, _, .guarded _ g body rest, s, h => by
+    simp only [Clauses.effectSites, List.mem_append] at h
+    rcases h with (h | h) | h
+    · exact (Expr.insideE g s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+    · exact (Expr.insideE body s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+    · exact (Clauses.insideE rest s h).mono (fun u hu => by simp [Clauses.tys, hu])
+        (fun x hx => by simp [Clauses.sites, hx]) (fun x hx => by simp [Clauses.handles, hx])
+end
+
 end
 
 section
@@ -1748,6 +1902,31 @@ theorem siteOk_of : {G : List Ty} → (defs : Defs G) → DefsOk L P ds H defs �
     · exact siteOk_of defs hd s h
     · obtain ⟨hΓ, hb, hbs, hbh, hG, hD⟩ := Expr.inside defs body s h
       obtain ⟨Γ, t, ⟨site, G', D', hΓ', ht', b⟩⟩ := s
+      simp only at hG hD hΓ hb hbs hbh ⊢
+      subst hG
+      obtain rfl := eq_of_heq hD
+      exact ⟨fun u hu => ht u (by simp [Defs.tys, hΓ u hu]), fun u hu => ht u (by simp [Defs.tys, hb u hu]),
+        fun x hx => hs x (by simp [Defs.sites, hbs x hx]), fun x hx => hh x (by simp [Defs.handles, hbh x hx]), hd⟩
+
+/-- The effect site is covered, as `SiteOk` says of a site. -/
+def EffectSiteOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H : List HandleSite)
+    (s : AnyEffectSite) : Prop :=
+  (∀ u ∈ s.1, Avail L u) ∧ (∀ u ∈ Expr.tys s.2.2.2.body, Avail L u) ∧
+    (∀ x ∈ Expr.sites s.2.2.2.defs s.2.2.2.body, x ∈ P) ∧ (∀ h ∈ Expr.handles s.2.2.2.body, HandleOk ds H h) ∧
+    DefsOk L P ds H s.2.2.2.defs
+
+/-- Every effect site of covered definitions is covered. -/
+theorem effectSiteOk_of : {G : List Ty} → (defs : Defs G) → DefsOk L P ds H defs → ∀ s ∈ defs.effectSites,
+    EffectSiteOk L P ds H s
+  | [], .nil, _, _, h => nomatch h
+  | _ :: _, .snoc defs _ body, ⟨ht, hs, hh⟩, s, h => by
+    have hd : DefsOk L P ds H defs := ⟨fun u hu => ht u (by simp [Defs.tys, hu]),
+      fun x hx => hs x (by simp [Defs.sites, hx]), fun x hx => hh x (by simp [Defs.handles, hx])⟩
+    simp only [Defs.effectSites, List.mem_append] at h
+    rcases h with h | h
+    · exact effectSiteOk_of defs hd s h
+    · obtain ⟨hΓ, hb, hbs, hbh, hG, hD⟩ := Expr.insideE defs body s h
+      obtain ⟨Γ, ps, r, ⟨site, G', D', hΓ', hps', b⟩⟩ := s
       simp only at hG hD hΓ hb hbs hbh ⊢
       subst hG
       obtain rfl := eq_of_heq hD
@@ -1785,6 +1964,14 @@ theorem Fun.code_sound (hC : Covers L P ds H) {t : Ty} (f : Fun t) (hs : SiteOk 
   exact encode_sound f.defs (f.defs.encode L) hC (Defs.encode_sound hC f.defs hs.2.2.2.2.1 hs.2.2.2.2.2.1
     hs.2.2.2.2.2.2) f.body σ (envCodes_ok _ _ σ hσ hs.1) hs.2.1 hs.2.2.1 hs.2.2.2.1
 
+/-- A kept function that returns effects at a covered effect site has a code with no gap behind it. -/
+theorem EffectFun.code_sound (hC : Covers L P ds H) {ps : List Ty} {r : Ty} (f : EffectFun ps r)
+    (hs : EffectSiteOk L P ds H f.asSite) : Sound (fun p => CodeOk L P ds H (.fn ps r) p.1) (f.code L) := by
+  unfold EffectFun.code
+  refine sound_bind (sound_need fun _ => rfl) fun σ hσ => ?_
+  exact encode_sound f.defs (f.defs.encode L) hC (Defs.encode_sound hC f.defs hs.2.2.2.2.1 hs.2.2.2.2.2.1
+    hs.2.2.2.2.2.2) f.body σ (envCodes_ok _ _ σ hσ hs.1) hs.2.1 hs.2.2.1 hs.2.2.2.1
+
 end
 
 /-- Every site of a checked spec's program is covered in each service's layout, so a kept function at one of them,
@@ -1811,5 +1998,16 @@ theorem Site.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.
     Sound (fun p => CodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles t p.1)
       (s.code (Layout.ofService c.program.defs v) σ) :=
   Site.code_sound (covers_ofParts c.program.defs.parts v) s (sites_ofService c hv _ hs) σ hσ
+
+/-- A kept function that returns effects at an effect site of a checked spec's program has a code with no layout gap
+behind it in each service's layout. -/
+theorem EffectFun.code_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {ps : List Ty} {r : Ty}
+    (f : EffectFun ps r) (hf : f.asSite ∈ c.E) :
+    Sound (fun p => CodeOk (Layout.ofService c.program.defs v) c.P v.declared c.program.defs.handles (.fn ps r) p.1)
+      (f.code (Layout.ofService c.program.defs v)) :=
+  EffectFun.code_sound (covers_ofParts c.program.defs.parts v) f (effectSiteOk_of c.program.defs
+    ⟨fun u hu hs => ofService_has c.program.defs v u
+      (List.mem_filter.2 ⟨List.mem_append_right _ hu, sortable_of_sorted u hs⟩), fun _ h => h,
+      fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩ _ hf)
 
 end Tazuna.Smt

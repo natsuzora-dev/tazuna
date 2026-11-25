@@ -249,7 +249,7 @@ events before it left (`eventsFit`); wherever it holds, the records and instance
 every event's reaction in turn, the next id term the id after the requests they start, the pending slots hold, where
 flagged, those requests at the ids from `n0`, the queue place term the place after the own commands and queries they
 start, and the own slots hold those at the places from `q0`. -/
-theorem events_encode {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)}
+theorem events_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca0 : Term} (hap : v.apply.code L = .ok (apply, ca0))
     (hca0 : Holds M ca0) (senv : StepEnv L shs) {now : Term} :

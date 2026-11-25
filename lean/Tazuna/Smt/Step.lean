@@ -167,7 +167,7 @@ theorem apply_inv_exact {v : ServiceV} {apply : Code (Ty.fn [v.records, v.event]
 `s` that keeps the step invariant and to an input: the codes' condition holds exactly when the codes fit; where it,
 the cascade's codes' condition and the case the script asks about hold, the step's condition holds exactly when what
 the step applies fits, and wherever it holds the step from `s` is the one the terms say. -/
-theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
+theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v P))
     {S : SymState v} {s : State v} (hS : S.decode M L T (shapes v P) = some s) (hinv : Step.Inv P s)
     {inp : SymInput v (shapes v P) senv.nT} {hc} {x : Input v} (hx : inp.decode M L hc = some x)

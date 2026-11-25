@@ -61,7 +61,7 @@ fits at the input and, where its rules hold, `decide` fits at the context and wh
 Wherever it holds, the outcome terms decide the step's outcome: an unlisted caller or a broken `accepts` rule is
 Invalid; a rejection is the rejection the terms denote; a broken `ensures` rule is the step's fault; otherwise the
 step ends as its end terms say (`Finished`). The fresh counter advances in every case. -/
-theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
+theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (s : State v) (hsinv : Step.Inv P s)
     (i : Fin v.commands.length) (caller : v.caller.den0) (input : (v.commands.get i).input.den0) {cc : CommandCode (v.commands.get i)} {cx : Term}

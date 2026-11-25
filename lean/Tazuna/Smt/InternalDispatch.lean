@@ -236,7 +236,7 @@ set_option linter.tazuna.silentDefault false in
 holds exactly when the internal step `Step.runOwn` runs fits (`ownFits`); wherever it holds, the fault term holds
 exactly when the outcome terms name a fault, which is `Step.runOwn`'s, and otherwise the internal step runs to its end
 with what the step terms denote (`AccRel`). -/
-theorem ownKind_encode {P : List AnySite} (chk : Checked P T v)
+theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (a : Step.Acc v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
@@ -597,7 +597,7 @@ theorem find_hit {α : Type} {k : Nat} : (l : List (Term × α)) → {y : Term �
 /-- An own effect's internal step: where the codes' condition holds, the condition holds exactly when the internal
 step `Step.runOwn` runs fits (`ownFits`); wherever it holds, the fault term holds exactly when the model's kind names a
 fault, which is `Step.runOwn`'s, and otherwise the internal step runs to its end with what the merged terms denote. -/
-theorem ownStep_encode {P : List AnySite} (chk : Checked P T v)
+theorem ownStep_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (a : Step.Acc v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))

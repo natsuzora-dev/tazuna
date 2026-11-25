@@ -145,7 +145,7 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- An event step: where the codes' condition holds, its condition holds exactly when the wrap fits at the value, the
 event's applications fit and the step's end fits, and wherever it holds the step ends as the end terms say. -/
-theorem event_encode {P : List AnySite} (chk : Checked P T v)
+theorem event_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (s : State v) (hinv : Step.Inv P s) (i : Fin v.subscribes.length)
     (value : (v.subscribes.get i).event.den0) {ec : EventCode v i} {ce : Term}

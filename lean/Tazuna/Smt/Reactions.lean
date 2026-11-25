@@ -203,14 +203,14 @@ theorem reaction_parts {P : List AnySite} (hP : SitesUnique P) (name : String) {
 to the event fits, and wherever it holds the pending slots hold, where occupied, the requests among the reactions'
 effects in the step's order at the ids from `n0`, and the own slots the own commands and queries at the places from
 `q0`; each term after them denotes the id or place after them. -/
-theorem reactions_encode {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape e)}
+theorem reactions_encode {P : List AnySite} {E : List AnyEffectSite} (hP : SitesUnique P) {shs : List (PendingShape e)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
     {dE nE dP nP : Nat} (hE : L.find? (.dsl .effect [e]) = some (dE, nE))
     (hPE : L.find? (pendingEntry shs) = some (dP, nP))
     (recs : r.den0) (tnow : Int) (ev : e.den0) (hrd : r.isData = true) (hed : e.isData = true)
     {records now evT : Term} (hrec : RelV L r (Ty.up _ hrd recs) (records.denote M)) (hnow : now.denote M = .int tnow)
     (hev : RelV L e (Ty.up _ hed ev) (evT.denote M)) :
-    (xs : List (ReactionV r e)) → (∀ x ∈ xs, x.Reach P) → {n q : Term} → {news : List PendingSlot} → {n' : Term} →
+    (xs : List (ReactionV r e)) → (∀ x ∈ xs, x.Reach P E) → {n q : Term} → {news : List PendingSlot} → {n' : Term} →
     {owns : List OwnSlot} → {q' c : Term} →
     encodeReactions L shs ds dE dP xs records now evT n q = .ok (news, n', owns, q', c) →
     (Holds M c ↔ ∀ x ∈ xs, (x.react.fits L.count).1 ∧ x.react.appFits L.count (.inl (recs, tnow, ()), ev, ())) ∧

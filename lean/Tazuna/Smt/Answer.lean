@@ -290,7 +290,7 @@ variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV}
 answer names, the condition holds exactly when what the step applies for that request fits (`answerFits`); wherever
 it holds, a broken `ensures` rule makes the answer Invalid, and otherwise the request leaves the pending table, the
 events of `on_answer` run through the events loop and the step ends as its end terms say (`Finished`). -/
-theorem answer_encode {P : List AnySite} (chk : Checked P T v)
+theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (s : State v) (hsinv : Step.Inv P s)
     {k : Nat} {sh : PendingShape v.event} (hk : shs[k]? = some sh)

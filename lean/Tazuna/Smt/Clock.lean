@@ -342,10 +342,10 @@ theorem dueAll_rel {now : Term} {tnow : Int} (hnow : now.denote M = .int tnow) :
 end
 
 section
-variable {P : List AnySite} {r e : Ty}
+variable {P : List AnySite} {E : List AnyEffectSite} {r e : Ty}
 
 theorem roundOf_reach (recs : r.den0) (now : Int) (ab : Bool) {ms : List (MachineV r e)} (sms : Step.Machines ms)
-    (h : ∀ m ∈ ms, m.Reach P) : Step.EffsReach P (Step.roundOf recs now ab sms).2 := by
+    (h : ∀ m ∈ ms, m.Reach P E) : Step.EffsReach P (Step.roundOf recs now ab sms).2 := by
   unfold Step.roundOf
   split
   · split
@@ -742,12 +742,12 @@ theorem round_encode (recs : v.records.den0) (tnow : Int) {records now : Term}
 holds, where `Step.fireFrom` gives none (every round fired) the over term holds; otherwise it does not, the tables denote the machines after the rounds, the pending slots hold the requests among their effects at
 ids from the next id, the own slots the own commands and queries at places from the queue place, and the next id and
 queue place terms are past them. Only the machines change. -/
-theorem rounds_encode {P : List AnySite} (hP : SitesUnique P) {shs : List (PendingShape v.event)}
+theorem rounds_encode {P : List AnySite} {E : List AnyEffectSite} (hP : SitesUnique P) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) {ds : List (String × DeclaredV)}
     (senv : StepEnv L shs)
     {records now : Term} (hord : ∀ m ∈ v.machines, m.key.ordered T = true) :
     (k : Nat) → (s : State v) → RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M) →
-    now.denote M = .int s.now → (∀ m ∈ v.machines, m.Reach P) →
+    now.denote M = .int s.now → (∀ m ∈ v.machines, m.Reach P E) →
     {xs : PerMachine (fun _ => Term) v.machines} → MachinesRel M L T v.machines xs s.machines →
     {active : Term} → {ab : Bool} → active.denote M = .bool ab →
     {nid q : Term} → {o : RoundsOut v.machines} → {c : Term} →
@@ -862,7 +862,7 @@ theorem rounds_encode {P : List AnySite} (hP : SitesUnique P) {shs : List (Pendi
 state's, the rounds' functions fit and the step's end fits; wherever it holds, a time before the state's is Invalid,
 a step where every one of the `cascade + 1` rounds fires is the cascade fault, and otherwise time moves to the line's
 and the step ends as its end terms say (`Finished`). -/
-theorem clock_encode {P : List AnySite} (chk : Checked P T v)
+theorem clock_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (s : State v) (hinv : Step.Inv P s) (time : Int)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))

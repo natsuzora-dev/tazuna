@@ -123,7 +123,7 @@ def finishFits (S : Ty → Nat) (T : List TypeDecl) (shs : List (PendingShape v.
 
 /-- A step's end: its condition holds exactly when the step's end fits (`finishFits`), and wherever it holds the result
 `Step.finish` gives for the result `r` of the step's events is what the terms say (`Finished`). -/
-theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
+theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci0 : Term} (hinvc : v.invariants.code L = .ok (inv, ci0))
@@ -277,7 +277,7 @@ theorem finish_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
 
 /-- What `finish_encode` asks of a list of events' result besides the terms: the step invariant and a queue of own
 effects that reach the program, which `applyEvents` keeps. -/
-theorem applyEvents_ok {P : List AnySite} (hv : v.Reach P) (a : Step.Acc v) (hown : a.own = [])
+theorem applyEvents_ok {P : List AnySite} {E : List AnyEffectSite} (hv : v.Reach P E) (a : Step.Acc v) (hown : a.own = [])
     (hinv : Step.Inv P a.state) (evs : List v.event.den0) :
     ∀ a1, Step.applyEvents T a evs = .ok a1 → Step.Inv P a1.state ∧ Step.QueueOk P a1 := fun _ h =>
   ⟨Step.applyEvents_inv T hv evs a hinv h,

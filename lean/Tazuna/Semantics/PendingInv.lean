@@ -121,7 +121,7 @@ structure Inv (s : State v) : Prop where
   /-- Every pending request is of the service's shapes, so a symbolic state can hold it. -/
   shaped : ∀ p ∈ s.pending, AtShapes (shapes v P) p
 
-variable {P}
+variable {P} {E : List AnyEffectSite}
 
 theorem Inv.congr {s s' : State v} (h : Inv P s) (hp : s'.pending = s.pending) (hn : s'.nextId = s.nextId) :
     Inv P s' :=
@@ -196,14 +196,14 @@ theorem start_inv (a : Acc v) (effs : List (Sender × EffectV v.event)) (ha : In
       | command => intro h1; cases h1; exact ha
       | query => intro h1; cases h1; exact ha
 
-theorem enter_reach {r e : Ty} (m : MachineV r e) (hm : m.Reach P) (records : r.den0) (now : Int)
+theorem enter_reach {r e : Ty} (m : MachineV r e) (hm : m.Reach P E) (records : r.den0) (now : Int)
     (key : m.key.den0) (st : m.state.den0) : EffsReach P (enter m records now key st).2 := by
   intro x hx
   simp only [enter, List.mem_map, Option.mem_toList] at hx
   obtain ⟨eff, heff, rfl⟩ := hx
   exact MachineV.reach_effectAt P m hm key st records now eff heff
 
-theorem reactKey_reach {r e : Ty} (m : MachineV r e) (hm : m.Reach P) (insts : List (Instance m))
+theorem reactKey_reach {r e : Ty} (m : MachineV r e) (hm : m.Reach P E) (insts : List (Instance m))
     (records : r.den0) (now : Int) (ev : e.den0) (k : m.key.den0) : EffsReach P (reactKey m insts records now ev k).2 := by
   unfold reactKey
   split
@@ -213,7 +213,7 @@ theorem reactKey_reach {r e : Ty} (m : MachineV r e) (hm : m.Reach P) (insts : L
   · exact enter_reach m hm _ _ _ _
 
 theorem machineStep_reach {r e : Ty} (T : List TypeDecl) (records : r.den0) (now : Int) (ev : e.den0)
-    (m : MachineV r e) (insts : List (Instance m)) (hm : m.Reach P) : EffsReach P (machineStep T records now ev m insts).2 := by
+    (m : MachineV r e) (insts : List (Instance m)) (hm : m.Reach P E) : EffsReach P (machineStep T records now ev m insts).2 := by
   intro x hx
   simp only [machineStep, List.mem_flatMap, List.mem_map] at hx
   obtain ⟨_, ⟨k, -, rfl⟩, hx⟩ := hx
@@ -256,24 +256,24 @@ theorem machineStep_from (T : List TypeDecl) (records : v.records.den0) (now : I
     · intro hx; cases hx
   · exact enter_from hm _ _ _ _ x
 
-theorem react_inv (T : List TypeDecl) (hv : v.Reach P) (s : State v) (ev : v.event.den0) (hs : Inv P s) :
+theorem react_inv (T : List TypeDecl) (hv : v.Reach P E) (s : State v) (ev : v.event.den0) (hs : Inv P s) :
     Inv P (react T s ev).1 ∧ EffsReach P (react T s ev).2 ∧ EffsFrom v (react T s ev).2 := by
   let records := v.apply.fn (s.records, ev, ())
   have hm := mem_reactMachines_effs T records s.now ev s.machines
   refine ⟨⟨hs.below, hs.nodup, hs.reach, hs.shaped⟩, fun x hx => ?_, fun x hx => ?_⟩ <;>
     rcases List.mem_append.1 hx with h | h
   · obtain ⟨sm, hsm, h⟩ := hm x h
-    exact machineStep_reach T records s.now ev sm.1 sm.2 (hv.1 _ (PerMachine.fst_mem hsm)) x h
+    exact machineStep_reach T records s.now ev sm.1 sm.2 (hv.machines _ (PerMachine.fst_mem hsm)) x h
   · simp only [List.mem_flatMap, List.mem_map] at h
     obtain ⟨y, hy, eff, heff, rfl⟩ := h
-    exact ReactionV.reach_effectsAt P y (hv.2 y hy) ev records s.now eff heff
+    exact ReactionV.reach_effectsAt P y (hv.reactions y hy) ev records s.now eff heff
   · obtain ⟨sm, hsm, h⟩ := hm x h
     exact machineStep_from T records s.now ev sm.1 sm.2 (PerMachine.fst_mem hsm) x h
   · simp only [List.mem_flatMap, List.mem_map] at h
     obtain ⟨y, hy, eff, -, rfl⟩ := h
     exact reaction_sentBy hy
 
-theorem applyEvents_inv (T : List TypeDecl) (hv : v.Reach P) (events : List v.event.den0) :
+theorem applyEvents_inv (T : List TypeDecl) (hv : v.Reach P E) (events : List v.event.den0) :
     (a : Acc v) → Inv P a.state → {a' : Acc v} → applyEvents T a events = .ok a' → Inv P a'.state := by
   induction events with
   | nil => intro a ha a' h; simp only [applyEvents, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h; exact h ▸ ha
@@ -305,7 +305,7 @@ theorem execCommand_acc (T : List TypeDecl) (a : Acc v) (x : CommandV v.records 
         · cases h; rcases ha' with h | ⟨_, h⟩ <;> cases h; exact .inr ⟨_, h1⟩
     · cases h; rcases ha' with h | ⟨_, h⟩ <;> cases h; exact .inl rfl
 
-theorem execCommand_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state)
+theorem execCommand_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state)
     (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) {r : Ran v x.rejection}
     (h : execCommand T a x caller input = .ok r) (a' : Acc v) (ha' : r = .accepted a' ∨ ∃ j, r = .rejected a' j) :
     Inv P a'.state := by
@@ -313,7 +313,7 @@ theorem execCommand_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : I
   · exact Inv.congr ha rfl rfl
   · exact applyEvents_inv T hv _ { a with state := { a.state with fresh := a.state.fresh + 1 } } (Inv.congr ha rfl rfl) he
 
-theorem runCommand_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state)
+theorem runCommand_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state)
     (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) {a' : Acc v}
     (h : runCommand T a x caller input onAnswer = .ok a') : Inv P a'.state := by
@@ -327,7 +327,7 @@ theorem runCommand_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : In
     · exact applyEvents_inv T hv _ _ (hi _ (.inl rfl)) h
     · exact applyEvents_inv T hv _ _ (hi _ (.inr ⟨_, rfl⟩)) h
 
-theorem runQuery_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state)
+theorem runQuery_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state)
     (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) {a' : Acc v}
     (h : runQuery T a x caller input onAnswer = .ok a') : Inv P a'.state := by
@@ -336,7 +336,7 @@ theorem runQuery_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv 
   · cases h
   · exact applyEvents_inv T hv _ _ ha h
 
-theorem runOwn_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state) (eff : EffectV v.event)
+theorem runOwn_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state) (eff : EffectV v.event)
     {a' : Acc v} (h : runOwn T a eff = .ok a') : Inv P a'.state := by
   revert h
   cases eff with
@@ -370,7 +370,7 @@ theorem runOwn_inv (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P 
         obtain ⟨x, hi, ho⟩ := x
         exact fun h => runQuery_inv T hv a ha x _ _ _ h
 
-theorem settle_inv (T : List TypeDecl) (hv : v.Reach P) : (fuel : Nat) → (a : Acc v) → Inv P a.state →
+theorem settle_inv (T : List TypeDecl) (hv : v.Reach P E) : (fuel : Nat) → (a : Acc v) → Inv P a.state →
     {a' : Acc v} → settle T fuel a = .ok a' → Inv P a'.state
   | fuel, a, ha, a', h => by
     unfold settle at h
@@ -384,7 +384,7 @@ theorem settle_inv (T : List TypeDecl) (hv : v.Reach P) : (fuel : Nat) → (a : 
       · rename_i a1 h1
         exact settle_inv T hv f a1 (runOwn_inv T hv { a with own := rest } (Inv.congr ha rfl rfl) eff h1) h
 
-theorem finish_inv (T : List TypeDecl) (hv : v.Reach P) (s0 : State v) (hs : Inv P s0) (x : Except Fault (Acc v))
+theorem finish_inv (T : List TypeDecl) (hv : v.Reach P E) (s0 : State v) (hs : Inv P s0) (x : Except Fault (Acc v))
     (hx : ∀ a, x = .ok a → Inv P a.state) (o : Outcome) : Inv P (finish T s0 x o).state := by
   unfold finish
   split
@@ -432,7 +432,7 @@ theorem start_queue (a : Acc v) (effs : List (Sender × EffectV v.event)) {a' : 
         · exact ha y hy
         · simp only [List.mem_singleton] at hy; subst hy; exact ⟨rfl, hx⟩
 
-theorem applyEvents_queue (T : List TypeDecl) (hv : v.Reach P) (events : List v.event.den0) :
+theorem applyEvents_queue (T : List TypeDecl) (hv : v.Reach P E) (events : List v.event.den0) :
     (a : Acc v) → {a' : Acc v} → applyEvents T a events = .ok a' → Inv P a.state → QueueOk P a → QueueOk P a' := by
   induction events with
   | nil => intro a a' h _ hq; simp only [applyEvents, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h; exact h ▸ hq
@@ -445,7 +445,7 @@ theorem applyEvents_queue (T : List TypeDecl) (hv : v.Reach P) (events : List v.
       obtain ⟨hs, he, hf⟩ := react_inv T hv a.state ev ha
       exact ih a1 h (start_inv _ _ hs he hf h1) (start_queue _ _ h1 hq he)
 
-theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state) (hq : QueueOk P a)
+theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state) (hq : QueueOk P a)
     (eff : EffectV v.event) {a' : Acc v} (h : runOwn T a eff = .ok a') : QueueOk P a' := by
   have hcmd : ∀ (x : CommandV v.records v.event v.caller) caller input onAnswer,
       runCommand T a x caller input onAnswer = .ok a' → QueueOk P a' := by
@@ -504,7 +504,7 @@ theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv 
         obtain ⟨x, hi, ho⟩ := x
         exact hqry _ _ _ _
 
-theorem fire_inv (hm : ∀ m ∈ v.machines, m.Reach P) (s : State v) (hs : Inv P s) : (fuel : Nat) → {r : State v × List (Sender × EffectV v.event)} →
+theorem fire_inv (hm : ∀ m ∈ v.machines, m.Reach P E) (s : State v) (hs : Inv P s) : (fuel : Nat) → {r : State v × List (Sender × EffectV v.event)} →
     fire s fuel = some r → Inv P r.1 ∧ EffsReach P r.2 ∧ EffsFrom v r.2
   | 0, _, h => by cases h
   | fuel + 1, r, h => by
@@ -528,7 +528,7 @@ end Step
 open Step
 
 /-- Every step keeps the invariant. -/
-theorem step_inv (T : List TypeDecl) {P : List AnySite} {v : ServiceV} (hv : v.Reach P) (s : State v)
+theorem step_inv (T : List TypeDecl) {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (hv : v.Reach P E) (s : State v)
     (hs : Inv P s) (i : Input v) : Inv P (step T v s i).state := by
   have hfresh : ∀ k, Inv P ({ s with fresh := k } : State v) := fun _ => Inv.congr hs rfl rfl
   cases i with
@@ -570,7 +570,7 @@ theorem step_inv (T : List TypeDecl) {P : List AnySite} {v : ServiceV} (hv : v.R
           start_inv { state := s' } effs hf.1 hf.2.1 hf.2.2 h) _
 
 /-- Every state a run reaches from an invariant state keeps the invariant. -/
-theorem run_inv (T : List TypeDecl) {P : List AnySite} {v : ServiceV} (hv : v.Reach P) :
+theorem run_inv (T : List TypeDecl) {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (hv : v.Reach P E) :
     (s : State v) → Inv P s → (is : List (Input v)) → Inv P (run T v s is).1
   | _, hs, [] => hs
   | s, hs, i :: is => run_inv T hv _ (step_inv T hv s hs i) is

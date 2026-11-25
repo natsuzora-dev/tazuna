@@ -65,6 +65,57 @@ def Defs.sites : {G : List Ty} → Defs G → List AnySite
   | [], .nil => []
   | _ :: _, .snoc defs _ body => defs.sites ++ body.sites defs
 
+/-- Where a program writes a kept function that returns effects (`Expr.closeEffect`): like a site, but what it returns
+holds effects, so it is no site a pending request or code names; its records are `EffectFun`s. -/
+structure EffectSite (Γ ps : List Ty) (r : Ty) where
+  site : SiteId
+  G : List Ty
+  defs : Defs G
+  hΓ : (Ty.tuple Γ).isData = true
+  hps : (Ty.tuple ps).isData = true
+  body : Expr G Γ (.fn ps r)
+
+abbrev AnyEffectSite := (Γ : List Ty) × (ps : List Ty) × (r : Ty) × EffectSite Γ ps r
+
+section
+variable {G : List Ty} (D : Defs G)
+
+mutual
+/-- The kept functions returning effects an expression writes, nested ones included, each over the definitions `D`. -/
+def Expr.effectSites {Γ : List Ty} {t : Ty} : Expr G Γ t → List AnyEffectSite
+  | .int _ | .str _ | .var _ | .global _ | .prim .. => []
+  | .ctor _ es | .tuple es => Exprs.effectSites es
+  | .field _ _ _ e | .index e _ | .not e | .neg e | .lam e => Expr.effectSites e
+  | .update e p => Expr.effectSites e ++ Patch.effectSites p
+  | .call f args => Expr.effectSites f ++ Exprs.effectSites args
+  | .let_ e body | .bin _ e body => Expr.effectSites e ++ Expr.effectSites body
+  | .case e cs _ => Expr.effectSites e ++ Clauses.effectSites cs
+  | .list items => Items.effectSites items
+  | .close _ env _ _ body => Exprs.effectSites env ++ Expr.effectSites body
+  | @Expr.closeEffect _ _ Γ' ps r site env hΓ hps body =>
+    ⟨Γ', ps, r, ⟨site, G, D, hΓ, hps, body⟩⟩ :: Exprs.effectSites env ++ Expr.effectSites body
+def Exprs.effectSites {Γ ts : List Ty} : Exprs G Γ ts → List AnyEffectSite
+  | .nil => []
+  | .cons e es => Expr.effectSites e ++ Exprs.effectSites es
+def Items.effectSites {Γ : List Ty} {t : Ty} : Items G Γ t → List AnyEffectSite
+  | .nil => []
+  | .cons e es => Expr.effectSites e ++ Items.effectSites es
+def Patch.effectSites {Γ ts : List Ty} : Patch G Γ ts → List AnyEffectSite
+  | .nil => []
+  | .keep rest => Patch.effectSites rest
+  | .set e rest => Expr.effectSites e ++ Patch.effectSites rest
+def Clauses.effectSites {Γ : List Ty} {t r : Ty} {sh : List Shape} : Clauses G Γ t r sh → List AnyEffectSite
+  | .nil => []
+  | .cons _ body rest => Expr.effectSites body ++ Clauses.effectSites rest
+  | .guarded _ g body rest => Expr.effectSites g ++ Expr.effectSites body ++ Clauses.effectSites rest
+end
+
+end
+
+def Defs.effectSites : {G : List Ty} → Defs G → List AnyEffectSite
+  | [], .nil => []
+  | _ :: _, .snoc defs _ body => defs.effectSites ++ body.effectSites defs
+
 mutual
 theorem Ty_same_self : (t : Ty) → (Ty.same t t).isSome = true
   | .int | .str | .date | .id => rfl

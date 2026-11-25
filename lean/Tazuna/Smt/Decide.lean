@@ -70,7 +70,7 @@ theorem newsRel_writes {shs : List (PendingShape v.event)} {ds : List (String ×
 
 /-- The events loop over a list's slots from a step in progress: what `events_encode` says of the terms, and, for
 whichever pending requests the step writes for the requests the events start, `applyEvents`' result. -/
-theorem loop_apply {P : List AnySite} (chk : Checked P T v)
+theorem loop_apply {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca) (senv : StepEnv L shs) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
@@ -115,7 +115,7 @@ def AccRel (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShap
     o.queued.denote M = .int ((q0 + os.length : Nat) : Int) ∧ OwnRel M L o.owns os q0
 
 /-- The events loop over a list's slots from a step in progress, as `AccRel` says of `applyEvents`' result. -/
-theorem loop_acc {P : List AnySite} (chk : Checked P T v)
+theorem loop_acc {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca) (senv : StepEnv L shs) (a : Step.Acc v) {now : Term} (hnow : now.denote M = .int a.state.now)
@@ -214,7 +214,7 @@ def decideFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : CommandV 
 when `decide` fits at the context and what follows fits (`decideFits`); wherever it holds, an acceptance runs the
 events from `a` as the loop's terms say (`AccRel`) with the `ensures` rules the records after it break, and a
 rejection is the one the terms denote and leaves `a` as it was. -/
-theorem decide_encode {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)}
+theorem decide_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P) (x : CommandV v.records v.event v.caller) {cc : CommandCode x} {cx : Term}
     (hcc : CommandCode.of L x = .ok (cc, cx)) (hccx : Holds M cx)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))

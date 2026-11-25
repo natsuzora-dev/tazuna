@@ -337,7 +337,7 @@ theorem decode_reachable (b : Nat) (T : List TypeDecl) {P : List AnySite} (s : S
 
 /-- T3 for every state a run reaches from the initial state of a service whose program reaches only `P` and whose
 machine keys are ordered (what check requires): no assumption about the state is left. -/
-theorem decode_run (b : Nat) (T : List TypeDecl) {P : List AnySite} (hv : v.Reach P)
+theorem decode_run (b : Nat) (T : List TypeDecl) {P : List AnySite} {E : List AnyEffectSite} (hv : v.Reach P E)
     (hord : ∀ m ∈ v.machines, m.key.ordered T = true) (is : List (Input v)) :
     ∃ pv : PendingVal (shapes v P), pv.list = (run T v (Step.State.init v) is).1.pending ∧
       ∀ vals, embedState L (run T v (Step.State.init v) is).1 pv = some vals →

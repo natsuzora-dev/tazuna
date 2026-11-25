@@ -295,7 +295,7 @@ theorem step_perm (T : List TypeDecl) {v : ServiceV} {s t : State v} (h : s.Equi
         exact finish_equiv T (State.Equiv.prepend (s := e) hp) _ hp _
 
 /-- Runs from two states equal up to the order of pending requests agree step by step up to that order. -/
-theorem run_perm (T : List TypeDecl) {P : List AnySite} {v : ServiceV} (hv : v.Reach P) :
+theorem run_perm (T : List TypeDecl) {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (hv : v.Reach P E) :
     {s t : State v} → s.Equiv t → Inv P s → (is : List (Input v)) →
       (run T v s is).1.Equiv (run T v t is).1 ∧
         ∀ x ∈ (run T v s is).2.zip (run T v t is).2, x.1.Equiv x.2

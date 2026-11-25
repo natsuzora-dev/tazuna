@@ -75,7 +75,7 @@ elab "#check_tazuna_reach" : command => do
     -- In each service's layout, every global's code meets no layout gap: refusals are the spec's, never the builder's.
     ``Tazuna.Smt.globals_ofService,
     -- For the step encoders' part of the same: kept functions and pending requests' sites meet no layout gap.
-    ``Tazuna.Smt.Fun.code_ofService, ``Tazuna.Smt.Site.code_ofService,
+    ``Tazuna.Smt.Fun.code_ofService, ``Tazuna.Smt.Site.code_ofService, ``Tazuna.Smt.EffectFun.code_ofService,
     -- For U10, which asserts well-formedness, the wire-id invariant and the create bounds: each loses no model.
     ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff]
   let mut used : NameSet := {}

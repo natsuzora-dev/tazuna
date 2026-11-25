@@ -2,9 +2,10 @@ import Tazuna.Semantics.Sites
 import Tazuna.Semantics.Eval
 
 /-! Every kept function a program builds is one of the program's sites: a closure record whose site, definitions and
-source are the site's, with the values it captured (the label invariant of defunctionalization). `Reach P t x` says
-that every kept function the value `x` holds, or a function value returns, is such a record of the sites `P`; data
-holds none. `eval_reach` proves evaluation keeps it, so with unique site ids a closure's id fixes its source. -/
+source are the site's, with the values it captured (the label invariant of defunctionalization). `Reach P E t x`
+says that every kept function the value `x` holds, or a function value returns, is such a record of the sites `P`, or
+of the effect sites `E` when it returns effects; data holds none. `Expr.reach` proves evaluation keeps it, so with
+unique site ids a closure's id fixes its source, and a record's source is covered wherever its site is. -/
 
 namespace Tazuna.Ir
 
@@ -31,14 +32,23 @@ theorem site_eq {P : List AnySite} (hP : SitesUnique P) {a b : AnySite} (ha : a 
   nodup_map_inj _ P hP ha hb h
 
 section
-variable (P : List AnySite)
+variable (P : List AnySite) (E : List AnyEffectSite)
 
 /-- The site record of a kept function. -/
 def Fun.asSite {t : Ty} (f : Fun t) : AnySite := ⟨f.Γ, t, ⟨f.site, f.G, f.defs, f.hΓ, f.ht, f.body⟩⟩
 
-/-- A kept function that returns effects reaches only sites of `P`: its source's and its definitions'. -/
-def EffectFun.Reach {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Prop :=
-  (∀ s ∈ f.body.sites f.defs, s ∈ P) ∧ ∀ s ∈ f.defs.sites, s ∈ P
+/-- The effect site record of a kept function that returns effects. -/
+def EffectFun.asSite {ps : List Ty} {r : Ty} (f : EffectFun ps r) : AnyEffectSite :=
+  ⟨f.Γ, ps, r, ⟨f.site, f.G, f.defs, f.hΓ, f.hps, f.body⟩⟩
+
+/-- A kept function that returns effects is a record of `E`, and its source and definitions write only sites of `P`
+and effect sites of `E`. -/
+structure EffectFun.Reach {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Prop where
+  site : f.asSite ∈ E
+  sites : ∀ s ∈ f.body.sites f.defs, s ∈ P
+  defsSites : ∀ s ∈ f.defs.sites, s ∈ P
+  effectSites : ∀ s ∈ f.body.effectSites f.defs, s ∈ E
+  defsEffectSites : ∀ s ∈ f.defs.effectSites, s ∈ E
 
 /-- An effect's kept functions are records of `P`. -/
 def EffectV.Reach {e : Ty} : EffectV e → Prop
@@ -47,9 +57,38 @@ def EffectV.Reach {e : Ty} : EffectV e → Prop
   | .command _ _ _ _ _ _ onAnswer => onAnswer.asSite ∈ P
   | .query _ _ _ _ _ _ onAnswer => onAnswer.asSite ∈ P
 
-def MachineV.Reach {r e : Ty} (m : MachineV r e) : Prop := m.effect.Reach P
-def ReactionV.Reach {r e : Ty} (x : ReactionV r e) : Prop := x.react.Reach P
-def ServiceV.Reach (v : ServiceV) : Prop := (∀ m ∈ v.machines, m.Reach P) ∧ ∀ x ∈ v.reactions, x.Reach P
+structure CommandV.Reach {r e c : Ty} (x : CommandV r e c) : Prop where
+  accepts : x.accepts.asSite ∈ P
+  decide : x.decide.asSite ∈ P
+  ensures : x.ensures.asSite ∈ P
+
+structure QueryV.Reach {r c : Ty} (x : QueryV r c) : Prop where
+  accepts : x.accepts.asSite ∈ P
+  resolve : x.resolve.asSite ∈ P
+
+def DeclaredV.Reach : DeclaredV → Prop
+  | .command _ _ _ x => x.Reach P
+  | .query _ _ x => x.Reach P
+  | _ => True
+
+structure MachineV.Reach {r e : Ty} (m : MachineV r e) : Prop where
+  effect : m.effect.Reach P E
+  instances : m.instances.asSite ∈ P
+  on : m.on.asSite ∈ P
+  after : m.after.asSite ∈ P
+  invariants : m.invariants.asSite ∈ P
+
+def ReactionV.Reach {r e : Ty} (x : ReactionV r e) : Prop := x.react.Reach P E
+
+/-- Every function the service keeps is a record of `P` or `E`. -/
+structure ServiceV.Reach (v : ServiceV) : Prop where
+  machines : ∀ m ∈ v.machines, m.Reach P E
+  reactions : ∀ x ∈ v.reactions, x.Reach P E
+  apply : v.apply.asSite ∈ P
+  invariants : v.invariants.asSite ∈ P
+  commands : ∀ x ∈ v.commands, x.Reach P
+  queries : ∀ x ∈ v.queries, x.Reach P
+  subscribes : ∀ x ∈ v.subscribes, x.wrap.asSite ∈ P
 
 def Ty.listItems {t : Ty} (xs : (Ty.list t).den) : List t.den := xs
 def Ty.bagItems {t : Ty} (xs : (Ty.bag t).den) : List t.den := xs
@@ -70,11 +109,15 @@ def Reach : (t : Ty) → t.den → Prop
   | .dsl .closure [t], f => Fun.asSite (t := t) f ∈ P
   | .dsl .externalQuery [_, _], x => x.2.asSite ∈ P
   | .dsl .effect [_], x => EffectV.Reach P x
-  | .dsl .effectClosure [.fn _ _], f => EffectFun.Reach P f
-  | .dsl .machine [_, _], m => MachineV.Reach P m
-  | .dsl .reaction [_, _], x => ReactionV.Reach P x
-  | .dsl .service _, v => ServiceV.Reach P v
-  | .dsl .spec _, s => ∀ v ∈ (s : SpecV).services, ServiceV.Reach P v
+  | .dsl .effectClosure [.fn _ _], f => EffectFun.Reach P E f
+  | .dsl .command [_, _, _, _, _], x => CommandV.Reach P x.1
+  | .dsl .query [_, _, _, _], x => QueryV.Reach P x.1
+  | .dsl .declared _, d => DeclaredV.Reach P d
+  | .dsl .subscription [_], x => (x : SubscriptionV _).wrap.asSite ∈ P
+  | .dsl .machine [_, _], m => MachineV.Reach P E m
+  | .dsl .reaction [_, _], x => ReactionV.Reach P E x
+  | .dsl .service _, v => ServiceV.Reach P E v
+  | .dsl .spec _, s => ∀ v ∈ (s : SpecV).services, ServiceV.Reach P E v
   | .dsl _ _, _ => True
 def Reaches : (ts : List Ty) → Ty.dens ts → Prop
   | [], _ => True
@@ -85,10 +128,12 @@ def ReachAlts : (vs : List (List Ty)) → Ty.alts vs → Prop
   | _ :: vs, .inr y => ReachAlts vs y
 end
 
+variable {E}
+
 
 mutual
 /-- Data holds no kept function. -/
-theorem reach_data : (t : Ty) → t.isData = true → (x : t.den) → Reach P t x
+theorem reach_data : (t : Ty) → t.isData = true → (x : t.den) → Reach P E t x
   | .int, _, _ | .str, _, _ | .param _, _, _ | .date, _, _ | .id, _, _ => trivial
   | .list t, h, xs => fun x _ => reach_data t (by simpa [Ty.isData] using h) x
   | .bag t, h, xs => fun x _ => reach_data t (by simpa [Ty.isData] using h) x
@@ -104,12 +149,12 @@ theorem reach_data : (t : Ty) → t.isData = true → (x : t.den) → Reach P t 
     simp only [Ty.isData, beq_iff_eq] at h
     subst h
     simp [Reach]
-theorem reaches_data : (ts : List Ty) → Ty.isDatas ts = true → (xs : Ty.dens ts) → Reaches P ts xs
+theorem reaches_data : (ts : List Ty) → Ty.isDatas ts = true → (xs : Ty.dens ts) → Reaches P E ts xs
   | [], _, _ => trivial
   | t :: ts, h, (x, xs) => by
     simp only [Ty.isDatas, Bool.and_eq_true] at h
     exact ⟨reach_data t h.1 x, reaches_data ts h.2 xs⟩
-theorem reachAlts_data : (vs : List (List Ty)) → Ty.isDatass vs = true → (x : Ty.alts vs) → ReachAlts P vs x
+theorem reachAlts_data : (vs : List (List Ty)) → Ty.isDatass vs = true → (x : Ty.alts vs) → ReachAlts P E vs x
   | [], _, e => nomatch e
   | fs :: _, h, .inl x => by
     simp only [Ty.isDatass, Bool.and_eq_true] at h
@@ -120,22 +165,22 @@ theorem reachAlts_data : (vs : List (List Ty)) → Ty.isDatass vs = true → (x 
 end
 
 
-theorem Var.reach : {Γ : List Ty} → {t : Ty} → (v : Var Γ t) → (ρ : Ty.dens Γ) → Reaches P Γ ρ → Reach P t (v.get ρ)
+theorem Var.reach : {Γ : List Ty} → {t : Ty} → (v : Var Γ t) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ → Reach P E t (v.get ρ)
   | _ :: _, _, .here, (_, _), h => h.1
   | _ :: _, _, .there v, (_, _), h => Var.reach v _ h.2
 
-theorem Dens.reach_append : {a b : List Ty} → (xs : Ty.dens a) → (ys : Ty.dens b) → Reaches P a xs → Reaches P b ys →
-    Reaches P (a ++ b) (Dens.append xs ys)
+theorem Dens.reach_append : {a b : List Ty} → (xs : Ty.dens a) → (ys : Ty.dens b) → Reaches P E a xs → Reaches P E b ys →
+    Reaches P E (a ++ b) (Dens.append xs ys)
   | [], _, (), _, _, h => h
   | _ :: _, _, (_, xs), ys, h, h' => ⟨h.1, Dens.reach_append xs ys h.2 h'⟩
 
-theorem Dens.reach_get : {ts : List Ty} → (xs : Ty.dens ts) → (k : Fin ts.length) → Reaches P ts xs →
-    Reach P (ts.get k) (Dens.get xs k)
+theorem Dens.reach_get : {ts : List Ty} → (xs : Ty.dens ts) → (k : Fin ts.length) → Reaches P E ts xs →
+    Reach P E (ts.get k) (Dens.get xs k)
   | _ :: _, (_, _), ⟨0, _⟩, h => h.1
   | _ :: _, (_, xs), ⟨k + 1, hk⟩, h => Dens.reach_get xs ⟨k, Nat.lt_of_succ_lt_succ hk⟩ h.2
 
 theorem Dens.reach_field : {ts : List Ty} → {t : Ty} → (xs : Ty.dens ts) → (k : Nat) → (hk : ts[k]? = some t) →
-    Reaches P ts xs → Reach P t (Dens.field xs k hk)
+    Reaches P E ts xs → Reach P E t (Dens.field xs k hk)
   | [], _, _, _, hk, _ => nomatch hk
   | u :: _, t, (x, _), 0, hk, h => by
     simp only [List.getElem?_cons_zero, Option.some.injEq] at hk
@@ -143,18 +188,18 @@ theorem Dens.reach_field : {ts : List Ty} → {t : Ty} → (xs : Ty.dens ts) →
   | _ :: _, _, (_, xs), k + 1, hk, h => Dens.reach_field xs k _ h.2
 
 theorem Alts.reach_inj : {vs : List (List Ty)} → (v : Fin vs.length) → (x : Ty.dens (vs.get v)) →
-    Reaches P (vs.get v) x → ReachAlts P vs (Alts.inj v x)
+    Reaches P E (vs.get v) x → ReachAlts P E vs (Alts.inj v x)
   | _ :: _, ⟨0, _⟩, _, h => h
   | _ :: _, ⟨k + 1, hk⟩, x, h => Alts.reach_inj (vs := _) ⟨k, Nat.lt_of_succ_lt_succ hk⟩ x h
 
-theorem Alts.reach_view : {vs : List (List Ty)} → (x : Ty.alts vs) → ReachAlts P vs x →
-    Reaches P (vs.get (Alts.view x).1) (Alts.view x).2
+theorem Alts.reach_view : {vs : List (List Ty)} → (x : Ty.alts vs) → ReachAlts P E vs x →
+    Reaches P E (vs.get (Alts.view x).1) (Alts.view x).2
   | [], e, _ => nomatch e
   | _ :: _, .inl _, h => h
   | _ :: _, .inr y, h => Alts.reach_view y h
 
 theorem Alts.reach_proj : {vs : List (List Ty)} → (x : Ty.alts vs) → (v : Fin vs.length) → {y : Ty.dens (vs.get v)} →
-    Alts.proj x v = some y → ReachAlts P vs x → Reaches P (vs.get v) y
+    Alts.proj x v = some y → ReachAlts P E vs x → Reaches P E (vs.get v) y
   | _ :: _, .inl _, ⟨0, _⟩, _, hp, h => by simp only [Alts.proj, Option.some.injEq] at hp; subst hp; exact h
   | _ :: _, .inr y, ⟨k + 1, hk⟩, _, hp, h => Alts.reach_proj y ⟨k, Nat.lt_of_succ_lt_succ hk⟩ hp h
   | _ :: _, .inl _, ⟨_ + 1, _⟩, _, hp, _ => by cases hp
@@ -162,7 +207,7 @@ theorem Alts.reach_proj : {vs : List (List Ty)} → (x : Ty.alts vs) → (v : Fi
 
 mutual
 theorem Pat.reach_match {t : Ty} {Δ : List Ty} : (p : Pat t Δ) → (x : t.den) → {δ : Ty.dens Δ} → p.match x = some δ →
-    Reach P t x → Reaches P Δ δ
+    Reach P E t x → Reaches P E Δ δ
   | .wild, _, _, _, _ => trivial
   | .bind, _, _, hm, h => by cases hm; exact ⟨h, trivial⟩
   | .int _, _, _, _, _ | .str _, _, _, _, _ => trivial
@@ -176,7 +221,7 @@ theorem Pat.reach_match {t : Ty} {Δ : List Ty} : (p : Pat t Δ) → (x : t.den)
     obtain ⟨δ, hδ, rfl⟩ := hm
     exact Dens.reach_append P (b := [t]) δ (x, ()) (Pat.reach_match p x hδ h) ⟨h, trivial⟩
 theorem Pats.reach_match {ts : List Ty} {Δ : List Ty} : (ps : Pats ts Δ) → (xs : Ty.dens ts) → {δ : Ty.dens Δ} →
-    Pats.match ps xs = some δ → Reaches P ts xs → Reaches P Δ δ
+    Pats.match ps xs = some δ → Reaches P E ts xs → Reaches P E Δ δ
   | .nil, (), _, _, _ => trivial
   | .cons p ps, (x, xs), _, hm, h => by
     simp only [Pats.match, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hm
@@ -184,7 +229,7 @@ theorem Pats.reach_match {ts : List Ty} {Δ : List Ty} : (ps : Pats ts Δ) → (
     exact Dens.reach_append P a b (Pat.reach_match p x ha h.1) (Pats.reach_match ps xs hb h.2)
 end
 
-theorem reach_fn_data {ps : List Ty} {r : Ty} (hr : r.isData = true) (f : (Ty.fn ps r).den) : Reach P (.fn ps r) f :=
+theorem reach_fn_data {ps : List Ty} {r : Ty} (hr : r.isData = true) (f : (Ty.fn ps r).den) : Reach P E (.fn ps r) f :=
   fun xs _ => reach_data P r hr (f xs)
 
 theorem lookupBy_mem {κ ν : Type} (f : κ → κ → Bool) (k : κ) : (xs : List (κ × ν)) → {v : ν} → lookupBy f k xs = some v →
@@ -209,9 +254,9 @@ theorem pick_mem {α : Type} (wins : Int → Int → Bool) (key : α → Int) (x
       exact (List.mem_filter.1 hm).1
     · cases h
 
-theorem reach_insert {k v : Ty} (key : k.den) (val : v.den) (t : (Ty.table k v).den) (hk : Reach P k key)
-    (hv : Reach P v val) (ht : ∀ e ∈ Ty.entries t, Reach P k e.1 ∧ Reach P v e.2) :
-    ∀ e ∈ Ty.entries (Builtin.tableInsert key val t), Reach P k e.1 ∧ Reach P v e.2 := by
+theorem reach_insert {k v : Ty} (key : k.den) (val : v.den) (t : (Ty.table k v).den) (hk : Reach P E k key)
+    (hv : Reach P E v val) (ht : ∀ e ∈ Ty.entries t, Reach P E k e.1 ∧ Reach P E v e.2) :
+    ∀ e ∈ Ty.entries (Builtin.tableInsert key val t), Reach P E k e.1 ∧ Reach P E v e.2 := by
   intro e he
   simp only [Ty.entries, Builtin.tableInsert, Builtin.tableRemove, List.mem_append, List.mem_filter,
     List.mem_singleton] at he
@@ -226,12 +271,12 @@ theorem foldl_inv {α β : Type} (Q : β → Prop) (R : α → Prop) (f : β →
       (hf b a hb (hx a List.mem_cons_self))
 
 /-- Every built-in reaches only `P`: it builds no kept function, so what it returns holds only what its arguments do. -/
-theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P (p.ty.inst args) (p.den args h) := by
+theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P E (p.ty.inst args) (p.den args h) := by
   cases p
   all_goals simp only [Prim.ty, Prim.sig, List.map, Ty.inst, Ty.insts]
   all_goals first
     | exact reach_fn_data P rfl _
-    | (simp only [Reach]; intro _ _; trivial)
+    | (simp only [Reach, DeclaredV.Reach]; intro _ _; trivial)
     | skip
   case bagFromList => exact fun ⟨xs, ()⟩ hx => hx.1
   case bagInsert =>
@@ -249,7 +294,7 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
     exact hf (x, ()) ⟨hb x hx, trivial⟩
   case bagMinBy | bagMaxBy =>
     rintro ⟨xs, f, ⟨⟩⟩ ⟨hb, -, -⟩
-    change ReachAlts P _ (Ty.ofPick (Builtin.pick _ (fun x => f (x, ())) xs))
+    change ReachAlts P E _ (Ty.ofPick (Builtin.pick _ (fun x => f (x, ())) xs))
     cases hp : Builtin.pick _ (fun x => f (x, ())) xs with
     | ok w => exact ⟨hb w (pick_mem _ _ _ hp), trivial⟩
     | error b => cases b <;> exact ⟨reach_data P _ rfl _, trivial⟩
@@ -257,7 +302,7 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
   case tableFromList =>
     rintro ⟨pairs, ⟨⟩⟩ ⟨hp, -⟩
     dsimp only [Prim.den]
-    refine foldl_inv (fun t => ∀ e ∈ Ty.entries t, Reach P _ e.1 ∧ Reach P _ e.2) (Reaches P [_, _]) _ ?_ pairs _ hp
+    refine foldl_inv (fun t => ∀ e ∈ Ty.entries t, Reach P E _ e.1 ∧ Reach P E _ e.2) (Reaches P E [_, _]) _ ?_ pairs _ hp
       (fun e he => by cases he)
     rintro t ⟨k, v, ⟨⟩⟩ ht hkv
     exact reach_insert P k v t hkv.1 hkv.2.1 ht
@@ -269,7 +314,7 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
     exact ht e (List.mem_filter.1 he).1
   case tableGet =>
     rintro ⟨t, k, ⟨⟩⟩ ⟨ht, -, -⟩
-    change ReachAlts P _ (match lookupBy _ k t.1 with | .some v => Ty.some v | .none => Ty.none)
+    change ReachAlts P E _ (match lookupBy _ k t.1 with | .some v => Ty.some v | .none => Ty.none)
     cases hl : lookupBy _ k t.1 with
     | some v =>
       obtain ⟨e, he, rfl⟩ := lookupBy_mem _ _ _ hl
@@ -293,7 +338,7 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
   case require =>
     rintro ⟨b, rej, next, ⟨⟩⟩ ⟨-, hr, hn, -⟩
     dsimp only [Prim.den]
-    have key : ∀ c : Bool, Reach P (Ty.inst args ((Ty.param 0).result (Ty.param 1)))
+    have key : ∀ c : Bool, Reach P E (Ty.inst args ((Ty.param 0).result (Ty.param 1)))
         (if c = true then next () else Ty.error rej) := fun c => by
       cases c
       · exact ⟨hr, trivial⟩
@@ -301,25 +346,60 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
     exact key _
   case tableLookup =>
     rintro ⟨t, k, rej, next, ⟨⟩⟩ ⟨ht, -, hr, hn, -⟩
-    change ReachAlts P _ (match lookupBy _ k t.1 with | .some v => next (v, ()) | .none => Ty.error rej)
+    change ReachAlts P E _ (match lookupBy _ k t.1 with | .some v => next (v, ()) | .none => Ty.error rej)
     cases hl : lookupBy _ k t.1 with
     | some v =>
       obtain ⟨e, he, rfl⟩ := lookupBy_mem _ _ _ hl
       exact hn (e.2, ()) ⟨(ht e he).2, trivial⟩
     | none => exact ⟨hr, trivial⟩
   case machine =>
-    rintro ⟨name, inst, init, on, after, eff, inv, ⟨⟩⟩ ⟨-, -, -, -, -, he, -, -⟩
-    exact he
+    rintro ⟨name, inst, init, on, after, eff, inv, ⟨⟩⟩ ⟨-, hi, -, ho, ha, he, hv, -⟩
+    exact ⟨he, hi, ho, ha, hv⟩
   case reaction =>
     rintro ⟨name, react, ⟨⟩⟩ ⟨-, hr, -⟩
     exact hr
+  case command =>
+    rintro ⟨name, callers, accepts, decide, ensures, ⟨⟩⟩ ⟨-, -, ha, hd, he, -⟩
+    exact ⟨ha, hd, he⟩
+  case query =>
+    rintro ⟨name, callers, accepts, resolve, ⟨⟩⟩ ⟨-, -, ha, hr, -⟩
+    exact ⟨ha, hr⟩
+  case declareCommand | declareQuery =>
+    rintro ⟨x, ⟨⟩⟩ ⟨hx, -⟩
+    exact hx
+  case subscribe =>
+    rintro ⟨name, wrap, ⟨⟩⟩ ⟨-, hw, -⟩
+    exact hw
   case service =>
-    rintro ⟨name, init, apply, subs, decl, ms, xs, inv, resp, bnds, scs, ⟨⟩⟩ ⟨-, -, -, -, -, hm, hx, -⟩
-    exact ⟨hm, hx⟩
+    rintro ⟨name, init, apply, subs, decl, ms, xs, inv, resp, bnds, scs, ⟨⟩⟩ ⟨-, -, ha, hs, hd, hm, hx, hi, -⟩
+    refine ⟨hm, hx, ha, hi, fun x hx' => ?_, fun x hx' => ?_, hs⟩
+    · obtain ⟨d, hdm, hdx⟩ := List.mem_filterMap.1 hx'
+      have hdr := hd d hdm
+      cases d with
+      | command r e c y =>
+        dsimp only at hdx
+        split at hdx
+        · rename_i h1 h2 h3 _ _ _
+          cases hdx; subst h1 h2 h3; exact hdr
+        · cases hdx
+      | _ => cases hdx
+    · obtain ⟨d, hdm, hdx⟩ := List.mem_filterMap.1 hx'
+      have hdr := hd d hdm
+      cases d with
+      | query r c y =>
+        dsimp only at hdx
+        split at hdx
+        · rename_i h1 h2 _ _
+          cases hdx; subst h1 h2; exact hdr
+        · cases hdx
+      | _ => cases hdx
   case spec =>
     rintro ⟨services, externals, ⟨⟩⟩ ⟨hs, -, -⟩ v hv
     obtain ⟨w, hw, rfl⟩ := List.mem_map.1 hv
-    exact hs w hw
+    have h : ServiceV.Reach P E w := hs w hw
+    refine ⟨h.machines, h.reactions, h.apply, h.invariants, h.commands, h.queries, fun x hx => ?_⟩
+    obtain ⟨y, hy, rfl⟩ := List.mem_map.1 hx
+    exact h.subscribes y hy
   case externalQuery =>
     rintro ⟨name, ens, ⟨⟩⟩ ⟨-, he, -⟩
     exact he
@@ -349,107 +429,119 @@ theorem BinOp.data {a b c : Ty} : BinOp a b c → c.isData = true
   | .add | .sub | .mul | .div | .mod | .lt | .le | .gt | .ge | .and | .or | .concat | .eq _ | .ne _ => rfl
 
 section
-variable {G : List Ty} (D : Defs G) (g : Ty.dens G) (hg : Reaches P G g) (hD : ∀ s ∈ D.sites, s ∈ P)
-include hg hD
+variable {G : List Ty} (D : Defs G) (g : Ty.dens G) (hg : Reaches P E G g) (hD : ∀ s ∈ D.sites, s ∈ P)
+  (hDE : ∀ s ∈ D.effectSites, s ∈ E)
+include hg hD hDE
 
 set_option linter.unusedSectionVars false
 
 mutual
-/-- Evaluation reaches only `P` when the expression's sites, the definitions' sites, the globals and the variables
-do. -/
-theorem Expr.reach {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (∀ s ∈ e.sites D, s ∈ P) → (ρ : Ty.dens Γ) →
-    Reaches P Γ ρ → Reach P t (e.eval D g ρ)
-  | .int _, _, _, _ | .str _, _, _, _ => trivial
-  | .var v, _, ρ, hρ => Var.reach P v ρ hρ
-  | .global v, _, _, _ => Var.reach P v g hg
-  | .ctor v es, hs, ρ, hρ => Alts.reach_inj P v _ (Exprs.reach es hs ρ hρ)
-  | .field _ k hk e, hs, ρ, hρ => by
-    have he := Alts.reach_view P _ (Expr.reach e hs ρ hρ)
+/-- Evaluation reaches only `P` and `E` when the expression's sites and effect sites, the definitions', the globals
+and the variables do. -/
+theorem Expr.reach {Γ : List Ty} {t : Ty} : (e : Expr G Γ t) → (∀ s ∈ e.sites D, s ∈ P) →
+    (∀ s ∈ e.effectSites D, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ → Reach P E t (e.eval D g ρ)
+  | .int _, _, _, _, _ | .str _, _, _, _, _ => trivial
+  | .var v, _, _, ρ, hρ => Var.reach P v ρ hρ
+  | .global v, _, _, _, _ => Var.reach P v g hg
+  | .ctor v es, hs, he, ρ, hρ => Alts.reach_inj P v _ (Exprs.reach es hs he ρ hρ)
+  | .field _ k hk e, hs, he, ρ, hρ => by
+    have he := Alts.reach_view P _ (Expr.reach e hs he ρ hρ)
     simp only [Expr.eval]
     exact Dens.reach_field P _ k _ he
-  | .index e k, hs, ρ, hρ => Dens.reach_get P _ k (Expr.reach e hs ρ hρ)
-  | .update e p, hs, ρ, hρ => by
-    have he := Expr.reach e (sub_l hs) ρ hρ
+  | .index e k, hs, he, ρ, hρ => Dens.reach_get P _ k (Expr.reach e hs he ρ hρ)
+  | .update e p, hs, he, ρ, hρ => by
+    have hx := Expr.reach e (sub_l hs) (sub_l he) ρ hρ
     simp only [Expr.eval]
-    refine Alts.reach_inj P ⟨0, by simp⟩ _ (Patch.reach p (sub_r hs) ρ hρ _ ?_)
-    revert he
+    refine Alts.reach_inj P ⟨0, by simp⟩ _ (Patch.reach p (sub_r hs) (sub_r he) ρ hρ _ ?_)
+    revert hx
     generalize Expr.eval D g e ρ = x
     match x with
     | .inl y => exact id
-  | .call f args, hs, ρ, hρ => (Expr.reach f (sub_l hs) ρ hρ) _ (Exprs.reach args (sub_r hs) ρ hρ)
-  | .lam body, hs, ρ, hρ => fun xs hxs => Expr.reach body hs _ (Dens.reach_append P xs ρ hxs hρ)
-  | .let_ e body, hs, ρ, hρ => Expr.reach body (sub_r hs) _ ⟨Expr.reach e (sub_l hs) ρ hρ, hρ⟩
-  | .case e cs hc, hs, ρ, hρ => Clauses.reach cs (sub_r hs) ρ hρ _ (Expr.reach e (sub_l hs) ρ hρ) _
-  | .list items, hs, ρ, hρ => Items.reach items hs ρ hρ
-  | .tuple es, hs, ρ, hρ => Exprs.reach es hs ρ hρ
-  | .bin op _ _, _, _, _ => reach_data P _ op.data _
-  | .not _, _, _, _ => reach_data P _ rfl _
-  | .neg _, _, _, _ => trivial
-  | .prim p args h, _, _, _ => Prim.reach P p args h
-  | .close site env hΓ ht body, hs, _, _ => hs _ List.mem_cons_self
-  | .closeEffect _ _ _ _ body, hs, _, _ => ⟨sub_r hs, hD⟩
-theorem Exprs.reach {Γ ts : List Ty} : (es : Exprs G Γ ts) → (∀ s ∈ Exprs.sites D es, s ∈ P) → (ρ : Ty.dens Γ) →
-    Reaches P Γ ρ → Reaches P ts (Exprs.eval D g es ρ)
-  | .nil, _, _, _ => trivial
-  | .cons e es, hs, ρ, hρ => ⟨Expr.reach e (sub_l hs) ρ hρ, Exprs.reach es (sub_r hs) ρ hρ⟩
+  | .call f args, hs, he, ρ, hρ =>
+    (Expr.reach f (sub_l hs) (sub_l he) ρ hρ) _ (Exprs.reach args (sub_r hs) (sub_r he) ρ hρ)
+  | .lam body, hs, he, ρ, hρ => fun xs hxs => Expr.reach body hs he _ (Dens.reach_append P xs ρ hxs hρ)
+  | .let_ e body, hs, he, ρ, hρ =>
+    Expr.reach body (sub_r hs) (sub_r he) _ ⟨Expr.reach e (sub_l hs) (sub_l he) ρ hρ, hρ⟩
+  | .case e cs hc, hs, he, ρ, hρ =>
+    Clauses.reach cs (sub_r hs) (sub_r he) ρ hρ _ (Expr.reach e (sub_l hs) (sub_l he) ρ hρ) _
+  | .list items, hs, he, ρ, hρ => Items.reach items hs he ρ hρ
+  | .tuple es, hs, he, ρ, hρ => Exprs.reach es hs he ρ hρ
+  | .bin op _ _, _, _, _, _ => reach_data P _ op.data _
+  | .not _, _, _, _, _ => reach_data P _ rfl _
+  | .neg _, _, _, _, _ => trivial
+  | .prim p args h, _, _, _, _ => Prim.reach P p args h
+  | .close site env hΓ ht body, hs, _, _, _ => hs _ List.mem_cons_self
+  | .closeEffect _ _ _ _ body, hs, he, _, _ =>
+    ⟨he _ List.mem_cons_self, sub_r hs, hD, fun _ h => he _ (List.mem_cons_of_mem _ (List.mem_append_right _ h)), hDE⟩
+theorem Exprs.reach {Γ ts : List Ty} : (es : Exprs G Γ ts) → (∀ s ∈ Exprs.sites D es, s ∈ P) →
+    (∀ s ∈ Exprs.effectSites D es, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ → Reaches P E ts (Exprs.eval D g es ρ)
+  | .nil, _, _, _, _ => trivial
+  | .cons e es, hs, he, ρ, hρ =>
+    ⟨Expr.reach e (sub_l hs) (sub_l he) ρ hρ, Exprs.reach es (sub_r hs) (sub_r he) ρ hρ⟩
 theorem Items.reach {Γ : List Ty} {t : Ty} : (items : Items G Γ t) → (∀ s ∈ Items.sites D items, s ∈ P) →
-    (ρ : Ty.dens Γ) → Reaches P Γ ρ → ∀ x ∈ Items.eval D g items ρ, Reach P t x
-  | .nil, _, _, _, _, hx => by cases hx
-  | .cons e es, hs, ρ, hρ, x, hx => by
+    (∀ s ∈ Items.effectSites D items, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ →
+    ∀ x ∈ Items.eval D g items ρ, Reach P E t x
+  | .nil, _, _, _, _, _, hx => by cases hx
+  | .cons e es, hs, he, ρ, hρ, x, hx => by
     cases hx with
-    | head => exact Expr.reach e (sub_l hs) ρ hρ
-    | tail _ hx => exact Items.reach es (sub_r hs) ρ hρ x hx
-theorem Patch.reach {Γ ts : List Ty} : (p : Patch G Γ ts) → (∀ s ∈ Patch.sites D p, s ∈ P) → (ρ : Ty.dens Γ) →
-    Reaches P Γ ρ → (xs : Ty.dens ts) → Reaches P ts xs → Reaches P ts (Patch.eval D g p ρ xs)
-  | .nil, _, _, _, (), _ => trivial
-  | .keep rest, hs, ρ, hρ, (_, xs), hx => ⟨hx.1, Patch.reach rest hs ρ hρ xs hx.2⟩
-  | .set e rest, hs, ρ, hρ, (_, xs), hx => ⟨Expr.reach e (sub_l hs) ρ hρ, Patch.reach rest (sub_r hs) ρ hρ xs hx.2⟩
+    | head => exact Expr.reach e (sub_l hs) (sub_l he) ρ hρ
+    | tail _ hx => exact Items.reach es (sub_r hs) (sub_r he) ρ hρ x hx
+theorem Patch.reach {Γ ts : List Ty} : (p : Patch G Γ ts) → (∀ s ∈ Patch.sites D p, s ∈ P) →
+    (∀ s ∈ Patch.effectSites D p, s ∈ E) → (ρ : Ty.dens Γ) → Reaches P E Γ ρ → (xs : Ty.dens ts) →
+    Reaches P E ts xs → Reaches P E ts (Patch.eval D g p ρ xs)
+  | .nil, _, _, _, _, (), _ => trivial
+  | .keep rest, hs, he, ρ, hρ, (_, xs), hx => ⟨hx.1, Patch.reach rest hs he ρ hρ xs hx.2⟩
+  | .set e rest, hs, he, ρ, hρ, (_, xs), hx =>
+    ⟨Expr.reach e (sub_l hs) (sub_l he) ρ hρ, Patch.reach rest (sub_r hs) (sub_r he) ρ hρ xs hx.2⟩
 theorem Clauses.reach {Γ : List Ty} {t r : Ty} {sh : List Shape} : (cs : Clauses G Γ t r sh) →
-    (∀ s ∈ Clauses.sites D cs, s ∈ P) → (ρ : Ty.dens Γ) → Reaches P Γ ρ → (x : t.den) → Reach P t x →
-    (h : ∃ s ∈ sh, Shape.Matches t s x) → Reach P r (Clauses.eval D g cs ρ x h)
-  | .nil, _, _, _, _, _, h => False.elim (by simp at h)
-  | .cons p body rest, hs, ρ, hρ, x, hx, h => by
+    (∀ s ∈ Clauses.sites D cs, s ∈ P) → (∀ s ∈ Clauses.effectSites D cs, s ∈ E) → (ρ : Ty.dens Γ) →
+    Reaches P E Γ ρ → (x : t.den) → Reach P E t x →
+    (h : ∃ s ∈ sh, Shape.Matches t s x) → Reach P E r (Clauses.eval D g cs ρ x h)
+  | .nil, _, _, _, _, _, _, h => False.elim (by simp at h)
+  | .cons p body rest, hs, he, ρ, hρ, x, hx, h => by
     simp only [Clauses.eval]
     split
     · rename_i δ hm
-      exact Expr.reach body (sub_l hs) _ (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
-    · exact Clauses.reach rest (sub_r hs) ρ hρ x hx _
-  | .guarded p guard body rest, hs, ρ, hρ, x, hx, h => by
+      exact Expr.reach body (sub_l hs) (sub_l he) _ (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
+    · exact Clauses.reach rest (sub_r hs) (sub_r he) ρ hρ x hx _
+  | .guarded p guard body rest, hs, he, ρ, hρ, x, hx, h => by
     simp only [Clauses.eval]
     split
     · rename_i δ hm
       split
-      · exact Expr.reach body (sub_r (sub_l hs)) _
+      · exact Expr.reach body (sub_r (sub_l hs)) (sub_r (sub_l he)) _
           (Dens.reach_append P δ ρ (Pat.reach_match P p x hm hx) hρ)
-      · exact Clauses.reach rest (sub_r hs) ρ hρ x hx h
-    · exact Clauses.reach rest (sub_r hs) ρ hρ x hx h
+      · exact Clauses.reach rest (sub_r hs) (sub_r he) ρ hρ x hx h
+    · exact Clauses.reach rest (sub_r hs) (sub_r he) ρ hρ x hx h
 end
 
 end
 
 
-/-- Every global reaches only `P` when the definitions' sites are in `P`. -/
-theorem Defs.reach : {G : List Ty} → (D : Defs G) → (∀ s ∈ D.sites, s ∈ P) → Reaches P G D.eval
-  | [], .nil, _ => trivial
-  | _ :: _, .snoc defs _ body, hD =>
-    ⟨Expr.reach P defs defs.eval (Defs.reach defs (sub_l hD)) (sub_l hD) body (sub_r hD) () trivial,
-      Defs.reach defs (sub_l hD)⟩
+/-- Every global reaches only `P` and `E` when the definitions' sites are in `P` and effect sites in `E`. -/
+theorem Defs.reach : {G : List Ty} → (D : Defs G) → (∀ s ∈ D.sites, s ∈ P) → (∀ s ∈ D.effectSites, s ∈ E) →
+    Reaches P E G D.eval
+  | [], .nil, _, _ => trivial
+  | _ :: _, .snoc defs _ body, hD, hE =>
+    ⟨Expr.reach P defs defs.eval (Defs.reach defs (sub_l hD) (sub_l hE)) (sub_l hD) (sub_l hE) body (sub_r hD)
+      (sub_r hE) () trivial, Defs.reach defs (sub_l hD) (sub_l hE)⟩
 
-/-- The structure a program evaluates to reaches only the program's sites. -/
-theorem Program.reach {t : Ty} (p : Program t) : Reach p.defs.sites t p.eval :=
-  Var.reach _ p.root _ (Defs.reach _ p.defs fun _ h => h)
+/-- The structure a program evaluates to reaches only the program's sites and effect sites. -/
+theorem Program.reach {t : Ty} (p : Program t) : Reach p.defs.sites p.defs.effectSites t p.eval :=
+  Var.reach _ p.root _ (Defs.reach _ p.defs (fun _ h => h) fun _ h => h)
 
-/-- What a kept function that returns effects returns reaches only `P`. -/
-theorem EffectFun.reach_apply {ps : List Ty} {r : Ty} (f : EffectFun ps r) (hf : f.Reach P)
-    (xs : (Ty.tuple ps).den0) : Tazuna.Ir.Reach P r (f.apply xs) :=
-  Expr.reach P f.defs f.defs.eval (Defs.reach P f.defs hf.2) hf.2 f.body hf.1 _
-    (reach_data P (.tuple f.Γ) f.hΓ _) _ (reach_data P (.tuple ps) f.hps _)
+/-- What a kept function that returns effects returns reaches only `P` and `E`. -/
+theorem EffectFun.reach_apply {ps : List Ty} {r : Ty} (f : EffectFun ps r) (hf : f.Reach P E)
+    (xs : (Ty.tuple ps).den0) : Tazuna.Ir.Reach P E r (f.apply xs) :=
+  Expr.reach P f.defs f.defs.eval (Defs.reach P f.defs hf.defsSites hf.defsEffectSites) hf.defsSites
+    hf.defsEffectSites f.body hf.sites hf.effectSites _ (reach_data P (.tuple f.Γ) f.hΓ _) _
+    (reach_data P (.tuple ps) f.hps _)
 
 /-- The effect a machine's instance starts names only records of `P`. -/
-theorem MachineV.reach_effectAt {r e : Ty} (m : MachineV r e) (hm : m.Reach P) (key : m.key.den0) (st : m.state.den0)
+theorem MachineV.reach_effectAt {r e : Ty} (m : MachineV r e) (hm : m.Reach P E) (key : m.key.den0) (st : m.state.den0)
     (records : r.den0) (now : Int) : ∀ eff ∈ m.effectAt key st records now, eff.Reach P := by
   intro eff heff
-  have h := EffectFun.reach_apply P m.effect hm (.inl (key, st, records, now, ()), ())
+  have h := EffectFun.reach_apply P m.effect hm.effect (.inl (key, st, records, now, ()), ())
   simp only [MachineV.effectAt] at heff
   revert h heff
   generalize m.effect.apply (.inl (key, st, records, now, ()), ()) = x
@@ -458,7 +550,7 @@ theorem MachineV.reach_effectAt {r e : Ty} (m : MachineV r e) (hm : m.Reach P) (
   | .inr _ => intro heff _; cases heff
 
 /-- So do the effects a reaction starts. -/
-theorem ReactionV.reach_effectsAt {r e : Ty} (x : ReactionV r e) (hx : x.Reach P) (ev : e.den0) (records : r.den0)
+theorem ReactionV.reach_effectsAt {r e : Ty} (x : ReactionV r e) (hx : x.Reach P E) (ev : e.den0) (records : r.den0)
     (now : Int) : ∀ eff ∈ x.effectsAt ev records now, eff.Reach P :=
   EffectFun.reach_apply P x.react hx ((.inl (records, now, ()), ev, ()))
 

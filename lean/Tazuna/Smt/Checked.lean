@@ -3,8 +3,8 @@ import Tazuna.Semantics.Reach
 import Tazuna.Semantics.Rules
 import Tazuna.Smt.Instances
 
-/-! What `check` establishes about a service and the sites `P` of its program, which every step theorem rests on: the
-sites are told apart by name, every effect function of a machine or reaction is a record of one of them, machine keys
+/-! What `check` establishes about a service and the sites `P` and effect sites `E` of its program, which every step
+theorem rests on: the sites are told apart by name, every function the service keeps is a record of one of them, machine keys
 have the canonical order, no query answers a function, the stored state holds no function, no bound is negative, so
 each bound's count is the bound, and the state's types (records, instance tables, pending table) have SMT values
 whose tables have plain keys. `check_ok` derives it from a check with no finding, so `prove` starts from these
@@ -48,9 +48,9 @@ def _root_.Tazuna.Ir.ServiceV.stateTys (P : List AnySite) (v : ServiceV) : Bool 
   let ok (t : Ty) := t.embeddable && t.plainKeys
   ok v.records && v.machines.all (ok ·.table) && ok (pendingEntry (shapes v P)) && ok v.event && ok v.caller
 
-structure Checked (P : List AnySite) (T : List TypeDecl) (v : ServiceV) : Prop where
+structure Checked (P : List AnySite) (E : List AnyEffectSite) (T : List TypeDecl) (v : ServiceV) : Prop where
   sites : SitesUnique P
-  reach : v.Reach P
+  reach : v.Reach P E
   keys : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true
   outputs : ∀ x ∈ v.queries, x.output.isFn = false
   stored : v.records.wire = true ∧ ∀ m ∈ v.machines, m.state.wire = true
@@ -59,11 +59,11 @@ structure Checked (P : List AnySite) (T : List TypeDecl) (v : ServiceV) : Prop w
   Bool, and the program from ground instances; check validates the result, so a loader bug is reported, not assumed. -/
   stateTys : v.stateTys P = true
 
-theorem Checked.machines {P : List AnySite} {T : List TypeDecl} {v : ServiceV} (hk : Checked P T v) :
-    ∀ m ∈ v.machines, m.Reach P := hk.reach.1
+theorem Checked.machines {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
+    (hk : Checked P E T v) : ∀ m ∈ v.machines, m.Reach P E := hk.reach.machines
 
-theorem Checked.reactions {P : List AnySite} {T : List TypeDecl} {v : ServiceV} (hk : Checked P T v) :
-    ∀ x ∈ v.reactions, x.Reach P := hk.reach.2
+theorem Checked.reactions {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
+    (hk : Checked P E T v) : ∀ x ∈ v.reactions, x.Reach P E := hk.reach.reactions
 
 /-- The handle has a literal name, and an external one is declared in each service's `declared`, as check's
 unknownHandle rule compares them. -/
@@ -75,11 +75,12 @@ def _root_.Tazuna.Ir.HandleSite.Named (s : SpecV) (h : HandleSite) : Prop :=
 evaluates to and of each handle the program makes. -/
 structure CheckedSpec where
   program : Program (.fn [] Ty.spec)
-  checked : ∀ v ∈ (program.eval ()).services, Checked program.defs.sites program.types v
+  checked : ∀ v ∈ (program.eval ()).services, Checked program.defs.sites program.defs.effectSites program.types v
   handles : ∀ h ∈ program.defs.handles, h.Named (program.eval ())
 
 abbrev CheckedSpec.T (c : CheckedSpec) : List TypeDecl := c.program.types
 abbrev CheckedSpec.P (c : CheckedSpec) : List AnySite := c.program.defs.sites
+abbrev CheckedSpec.E (c : CheckedSpec) : List AnyEffectSite := c.program.defs.effectSites
 abbrev CheckedSpec.spec (c : CheckedSpec) : SpecV := c.program.eval ()
 
 theorem isFn_of_wire : (t : Ty) → t.wire = true → t.isFn = false
@@ -102,10 +103,10 @@ theorem not_of_ite {α : Type} {c : Prop} [Decidable c] {x : α} (h : (if c then
 
 /-- A check with no finding establishes `Checked` of every service, at the sites of the program the spec came from:
 each fact's failure would be a finding. -/
-theorem check_ok {T : List TypeDecl} {P : List AnySite} {s : SpecV} {handles : List HandleSite}
-    {captures : List (SiteId × List Ty)} (hP : SitesUnique P) (hreach : ∀ v ∈ s.services, v.Reach P)
+theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite} {s : SpecV} {handles : List HandleSite}
+    {captures : List (SiteId × List Ty)} (hP : SitesUnique P) (hreach : ∀ v ∈ s.services, v.Reach P E)
     (htys : ∀ v ∈ s.services, v.stateTys P = true) (h : SpecV.illegal T s handles captures = []) :
-    ∀ v ∈ s.services, Checked P T v := by
+    ∀ v ∈ s.services, Checked P E T v := by
   intro v hv
   simp only [SpecV.illegal] at h
   have hs := List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL h)))) v hv

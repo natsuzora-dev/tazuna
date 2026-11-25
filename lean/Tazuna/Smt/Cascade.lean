@@ -120,7 +120,7 @@ theorem settle_cond_fault {P : List AnySite} {shs : List (PendingShape v.event)}
 /-- The cascade: where the codes' condition holds, the condition holds exactly when every internal step the cascade
 runs fits (`settleFits`), and wherever it holds the fault the model names is `Step.settleFrom`'s, and otherwise the
 cascade runs to its end with what the terms denote (`AccRel`, own effects queued from `a`'s queue length). -/
-theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (PendingShape v.event)}
+theorem settle_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
     (hshs : ∀ sh ∈ shs, sh.InSites P)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
@@ -198,8 +198,8 @@ theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
             obtain ⟨a1, hrun0⟩ := hA1.ok
             obtain ⟨r1, r2, r3, r4, rnow, os0, hown1, r5, r6⟩ := (hrun0 ▸ hA1).ends
             rw [(settle_encode chk hshs happ hca senv f (k + 1) _ _ _
-              (Step.runOwn_inv T ⟨chk.machines, chk.reactions⟩ a hinv _ hrun0)
-              (Step.runOwn_queue T ⟨chk.machines, chk.reactions⟩ a hinv hqok _ hrun0)
+              (Step.runOwn_inv T chk.reach a hinv _ hrun0)
+              (Step.runOwn_queue T chk.reach a hinv hqok _ hrun0)
               (by rw [hown1]; exact ownRel_append hS (by simpa using r6)) (by rw [rnow]; exact hnow)
               (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl) r1 r2 r3 r4
               (by rw [r5, hown1, List.length_append]) h2 hcx2).1]
@@ -275,8 +275,8 @@ theorem settle_encode {P : List AnySite} (chk : Checked P T v) {shs : List (Pend
           obtain ⟨a1, hrun0⟩ := hA1.ok
           obtain ⟨r1, r2, r3, r4, rnow, os0, hown1, r5, r6⟩ := (hrun0 ▸ hA1).ends
           obtain ⟨IHF, IH⟩ := (settle_encode chk hshs happ hca senv f (k + 1) _ _ _
-            (Step.runOwn_inv T ⟨chk.machines, chk.reactions⟩ a hinv _ hrun0)
-            (Step.runOwn_queue T ⟨chk.machines, chk.reactions⟩ a hinv hqok _ hrun0)
+            (Step.runOwn_inv T chk.reach a hinv _ hrun0)
+            (Step.runOwn_queue T chk.reach a hinv hqok _ hrun0)
             (by rw [hown1]; exact ownRel_append hS (by simpa using r6)) (by rw [rnow]; exact hnow)
             (by simp only [pickTerms]; rw [hpick, hfault, hof]; rfl) r1 r2 r3 r4
             (by rw [r5, hown1, List.length_append]) h2 hcx2).2 hc2
