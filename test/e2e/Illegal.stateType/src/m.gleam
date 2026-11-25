@@ -1,0 +1,47 @@
+import tazuna.{type Ctx}
+
+pub type Records {
+  Records(rank: fn(Int) -> Int)
+}
+
+pub type Event {
+  Ranked
+}
+
+pub type Caller {
+  User
+}
+
+fn apply(r: Records, _e: Event) -> Records {
+  r
+}
+
+fn rank() -> tazuna.Command(Records, Event, Caller, Int, Nil) {
+  tazuna.command(
+    name: "rank",
+    callers: [User],
+    accepts: fn(_n: Int) { [] },
+    decide: fn(_c: Ctx(Records, Int, Caller)) { Ok([Ranked]) },
+    ensures: fn(_c, _r) { [] },
+  )
+}
+
+fn tasks(name: String) -> tazuna.Service {
+  tazuna.service(
+    name: name,
+    init: Records(rank: fn(n: Int) { n }),
+    apply: apply,
+    subscribes: [],
+    declares: [tazuna.declare_command(rank())],
+    machines: [],
+    reactions: [],
+    invariants: fn(_r) { [] },
+    responses: [],
+    bounds: tazuna.bounds(creates: [], items: 3, cascade: 10, steps: 5),
+    scenarios: [],
+  )
+}
+
+pub fn spec() -> tazuna.Spec {
+  tazuna.spec(services: [tasks("tasks")], externals: [])
+}

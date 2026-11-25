@@ -58,11 +58,11 @@ def testScenario (T : List TypeDecl) (v : ServiceV) (sc : ScenarioV v.records v.
 def test (root path : String) (update : Bool) : IO UInt32 := do
   match ← loadSpec root path with
   | .error code => return code
-  | .ok (T, spec) =>
+  | .ok c =>
     let mut ok := true
-    for v in spec.services do
+    for v in c.spec.services do
       for sc in v.scenarios do
-        ok := (← testScenario T v sc update) && ok
+        ok := (← testScenario c.T v sc update) && ok
     return if ok then 0 else 1
 
 /-- Reads the lines of a trace after its header, each with its line number, and the service it names. -/
@@ -85,7 +85,7 @@ def readTrace (spec : SpecV) (text : String) : Except (Nat × String) ((_ : Serv
 def verify (root dir path : String) : IO UInt32 := do
   match ← loadSpec root path with
   | .error code => return code
-  | .ok (T, spec) =>
+  | .ok c =>
     let entries ← System.FilePath.readDir dir
     let files := (entries.toList.map (·.path)).filter (·.extension == some "jsonl") |>.mergeSort
       fun a b => a.toString ≤ b.toString
@@ -93,12 +93,12 @@ def verify (root dir path : String) : IO UInt32 := do
     for file in files do
       let at_ := ("trace", Json.str file.toString)
       let text ← IO.FS.readFile file
-      match readTrace spec text with
+      match readTrace c.spec text with
       | .error (n, m) =>
         printLine .traceInvalid [at_, ("line", Json.num n), ("message", Json.str m)]
         ok := false
       | .ok ⟨v, lines⟩ =>
-        match replay T v lines with
+        match replay c.T v lines with
         | .passed => printLine .verifyPassed [at_]
         | .differs n expected actual =>
           let texts (ws : List Wire) := Json.arr (ws.map (Json.str ·.text)).toArray

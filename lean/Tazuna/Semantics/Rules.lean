@@ -20,6 +20,9 @@ inductive Illegal where
   | creates
   /-- A type that crosses the wire holds a function or a fresh-id source. -/
   | wireType
+  /-- The records type or a machine's state type holds a function or a fresh-id source: the state is durable data, so
+  every value of it can be written down, as a wire value can. -/
+  | stateType
   /-- A bound is negative. -/
   | bounds
   /-- A scenario step sends a request its service does not declare, two scenarios of a service share a name, or a
@@ -42,7 +45,7 @@ deriving Repr, DecidableEq
 namespace Illegal
 
 def all : List Illegal :=
-  [wireName, owner, unknownSource, creates, wireType, bounds, scenario, rejection, machineKey, unknownHandle,
+  [wireName, owner, unknownSource, creates, wireType, stateType, bounds, scenario, rejection, machineKey, unknownHandle,
     handleName]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
@@ -53,6 +56,7 @@ def name : Illegal → String
   | unknownSource => "unknownSource"
   | creates => "creates"
   | wireType => "wireType"
+  | stateType => "stateType"
   | bounds => "bounds"
   | scenario => "scenario"
   | rejection => "rejection"
@@ -377,12 +381,14 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : 
         v.queries.flatMap (fun q => [(q.name ++ " input", q.input), (q.name ++ " output", q.output)]) ++
         v.sources.map (fun (n, t) => (n ++ " event", t))).filterMap
       fun (what, t) => if t.wire then none else some (Illegal.wireType, s!"{v.name}: the {what} type crosses the wire, so it holds no functions")
+    let stateTypes := (("records", v.records) :: v.machines.map fun m => (m.name ++ " state", m.state)).filterMap
+      fun (what, t) => if t.wire then none else some (Illegal.stateType, s!"{v.name}: the {what} type is stored state, so it holds no functions")
     let unknown := v.subscribes.filterMap fun sub =>
       if sources.any fun (n, t) => n == sub.name && (Ty.same t sub.event).isSome then none
       else some (Illegal.unknownSource, s!"{v.name} subscribes to the source {sub.name}, which no service or external declares with its event type")
     let rejections := v.commands.filterMap fun c => if c.rejection.customOrNil then none else
       some (Illegal.rejection, s!"{v.name}.{c.name}: the rejection type is no custom type or Nil")
-    let keys := v.machines.filterMap fun m => if m.key.orderable then none else
+    let keys := v.machines.filterMap fun m => if m.key.orderable && m.key.ordered T then none else
       some (Illegal.machineKey, s!"{v.name}.{m.name}: the instance key type has no canonical order the solver can compare; use Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these")
     let probes := tableProbes T v.records
     let reads := v.bounds.creates.map (·.reads probes)
@@ -413,7 +419,7 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) : 
             (Ty.same q.output x.output).isSome then none else unlisted "query" x.name
         | _ => none
       fileName ++ steps
-    wireNames ++ owners ++ wireTypes ++ unknown ++ rejections ++ keys ++ creates ++ negative ++ scenarioNames ++ perScenario
+    wireNames ++ owners ++ wireTypes ++ stateTypes ++ unknown ++ rejections ++ keys ++ creates ++ negative ++ scenarioNames ++ perScenario
   let perExternal := s.externals.flatMap fun x =>
     let all := x.declares
     let wireNames := (duplicates (all.map (·.name))).map fun n =>

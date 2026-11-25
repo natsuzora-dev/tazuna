@@ -55,6 +55,8 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff,
     -- T3: a model's values decode to a state a run reaches, and the well-formedness holds of decoded values.
     ``Tazuna.Smt.decode_run, ``Tazuna.Smt.wf_decode,
+    -- What check hands prove: `Checked` of every service from a check with no finding.
+    ``Tazuna.Smt.check_ok,
     -- SMT-LIB text: printing then parsing gives the terms and values back, and shared definitions keep the meaning.
     ``Tazuna.Smt.Term.parse_print, ``Tazuna.Smt.Val.parse_print, ``Tazuna.Smt.shared_agrees,
     ``Tazuna.Smt.shared_conservative,
