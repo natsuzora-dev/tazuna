@@ -417,6 +417,115 @@ theorem finish_inv (T : List TypeDecl) (hv : v.Reach P) (s0 : State v) (hs : Inv
       | error e => cases ha
       | ok a0 => exact settle_inv T hv _ a0 (hx a0 rfl) ha
 
+/-- The own queue holds own commands and queries whose kept functions are records of `P`: an internal step runs
+each at the site its `on_answer` names. -/
+def QueueOk (P : List AnySite) (a : Acc v) : Prop := ∀ x ∈ a.own, x.isRequest = false ∧ x.Reach P
+
+theorem start_queue (a : Acc v) (effs : List (Sender × EffectV v.event)) {a' : Acc v} (h : start a effs = .ok a')
+    (ha : QueueOk P a) (he : EffsReach P effs) : QueueOk P a' := by
+  induction effs generalizing a with
+  | nil => simp only [start, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h; exact h ▸ ha
+  | cons x effs ih =>
+    obtain ⟨snd, eff⟩ := x
+    simp only [start, List.foldlM_cons, bind, Except.bind] at h
+    split at h
+    · cases h
+    · rename_i a1 h1
+      refine ih a1 h ?_ (fun y hy => he y (by simp [hy]))
+      have hx : eff.Reach P := he (snd, eff) (by simp)
+      revert h1
+      cases eff with
+      | request r =>
+        simp only
+        split
+        · intro h1; cases h1
+        · intro h1; cases h1; exact ha
+      | command =>
+        intro h1; cases h1
+        intro y hy
+        rcases List.mem_append.1 hy with hy | hy
+        · exact ha y hy
+        · simp only [List.mem_singleton] at hy; subst hy; exact ⟨rfl, hx⟩
+      | query =>
+        intro h1; cases h1
+        intro y hy
+        rcases List.mem_append.1 hy with hy | hy
+        · exact ha y hy
+        · simp only [List.mem_singleton] at hy; subst hy; exact ⟨rfl, hx⟩
+
+theorem applyEvents_queue (T : List TypeDecl) (hv : v.Reach P) (events : List v.event.den0) :
+    (a : Acc v) → {a' : Acc v} → applyEvents T a events = .ok a' → Inv P a.state → QueueOk P a → QueueOk P a' := by
+  induction events with
+  | nil => intro a a' h _ hq; simp only [applyEvents, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h; exact h ▸ hq
+  | cons ev events ih =>
+    intro a a' h ha hq
+    simp only [applyEvents, List.foldlM_cons, bind, Except.bind] at h
+    split at h
+    · cases h
+    · rename_i a1 h1
+      obtain ⟨hs, he, hf⟩ := react_inv T hv a.state ev ha
+      exact ih a1 h (start_inv _ _ hs he hf h1) (start_queue _ _ h1 hq he)
+
+theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P) (a : Acc v) (ha : Inv P a.state) (hq : QueueOk P a)
+    (eff : EffectV v.event) {a' : Acc v} (h : runOwn T a eff = .ok a') : QueueOk P a' := by
+  have hfresh : ∀ k, Inv P ({ a with state := { a.state with fresh := k } } : Acc v).state :=
+    fun _ => Inv.congr ha rfl rfl rfl
+  have hcmd : ∀ (x : CommandV v.records v.event v.caller) caller input onAnswer,
+      runCommand T a x caller input onAnswer = .ok a' → QueueOk P a' := by
+    intro x caller input onAnswer h
+    simp only [runCommand] at h
+    split at h
+    · cases h
+    · simp only [bind, Except.bind] at h
+      split at h
+      · split at h
+        · cases h
+        · rename_i a1 h1
+          have h1i := applyEvents_inv T hv _ _ (hfresh _) h1
+          have h1q := applyEvents_queue T hv _ _ h1 (hfresh _) hq
+          split at h
+          · cases h
+          · exact applyEvents_queue T hv _ _ h h1i h1q
+      · exact applyEvents_queue T hv _ _ h (hfresh _) hq
+  have hqry : ∀ (x : QueryV v.records v.caller) caller input onAnswer,
+      runQuery T a x caller input onAnswer = .ok a' → QueueOk P a' := by
+    intro x caller input onAnswer h
+    simp only [runQuery] at h
+    split at h
+    · cases h
+    · exact applyEvents_queue T hv _ _ h ha hq
+  revert h
+  cases eff with
+  | request => intro h; simp only [runOwn, Except.ok.injEq] at h; exact h ▸ hq
+  | command name c i j caller value onAnswer =>
+    unfold runOwn
+    dsimp only
+    generalize Ty.same c v.caller = oc
+    generalize ownCommand (v := v) name i j = ox
+    cases oc with
+    | none => intro h; cases h
+    | some hc =>
+      cases ox with
+      | none => intro h; cases h
+      | some x =>
+        obtain ⟨hc⟩ := hc
+        obtain ⟨x, hi, hj⟩ := x
+        exact hcmd _ _ _ _
+  | query name c i o caller value onAnswer =>
+    unfold runOwn
+    dsimp only
+    generalize Ty.same c v.caller = oc
+    generalize ownQuery (v := v) name i o = ox
+    cases oc with
+    | none => intro h; cases h
+    | some hc =>
+      cases ox with
+      | none => intro h; cases h
+      | some x =>
+        obtain ⟨hc⟩ := hc
+        obtain ⟨x, hi, ho⟩ := x
+        exact hqry _ _ _ _
+
 abbrev FireAcc (v : ServiceV) := List (MachineState v.records v.event) × List (Sender × EffectV v.event) × Bool
 
 def FireOk (P : List AnySite) {v : ServiceV} (acc : FireAcc v) : Prop :=

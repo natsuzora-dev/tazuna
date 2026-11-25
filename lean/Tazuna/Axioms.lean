@@ -19,7 +19,7 @@ import Tazuna.Smt.PendingWrite
 import Tazuna.Smt.EventPending
 import Tazuna.Smt.Reactions
 import Tazuna.Smt.Answer
-import Tazuna.Smt.OwnStep
+import Tazuna.Smt.Cascade
 import Tazuna.Smt.Fire
 import Tazuna.Smt.Clock
 import Tazuna.Smt.ClockExact
