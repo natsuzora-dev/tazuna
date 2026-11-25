@@ -6,7 +6,7 @@ whose values fit theirs are some well-sorted model's, in the case one of the inp
 an answer that case is the shape and the slot that hold the request it names; an answer that names no request of its
 type is `Fault.answerUnmatched`, and a query never faults. So T4 needs no hypothesis about models: where the solver
 answers unsat, no step within the slots of a run from an initial state whose invariants hold faults naming the rule
-(`verdict_sound`). -/
+(`fault_sound`). -/
 
 namespace Tazuna.Smt
 
@@ -286,47 +286,41 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
           exact ⟨htd, _, decode_embed _ _ _ hw, Ty.down_up _ _ _⟩
     · cases hx
 
-/-- T4: where the solver answers unsat to every input kind's bound question and to its questions about the targets
-the fault `f` falls under (an invariant or `ensures` rule of its name, the cascade bound, the own command or query it
-names), no step of a run from an initial state whose invariants hold faults with `f`, wherever the state the run
+/-- What an input kind's lines about the fault `f` say, whichever verdict they read: its questions are built, each
+question about a target `f` falls under (an invariant or `ensures` rule of its name, the cascade bound, the own command
+or query it names) is unsat, and its bound question is unsat (`Prove.proved`) or `F` holds, the fit of the step the
+line's scope names (`Prove.withinBounds`). -/
+def FaultLine (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
+    (f : Fault) (F : Prop) (inp : SymInput v (shapes v) senv.nT) : Prop :=
+  ∃ gs qs, questions L T P v senv inp = .ok (gs, qs) ∧
+    (∀ q ∈ qs, (∃ g, q.target = some g ∧ g.covers f = true) → Unsat L q.ask) ∧
+    ((∀ q ∈ qs, q.target = none → Unsat L q.ask) ∨ F)
+
+/-- T4: where every input kind's lines about the fault `f` read proved, or within the bounds where the step fits the
+slots, no step of a run from an initial state whose invariants hold faults with `f`, wherever the state the run
 reached and the input fit the slots. An answer that names no request is the one fault no question is about: it is
 the outside's mistake, not the spec's. -/
-theorem verdict_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (f : Fault)
+theorem fault_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (f : Fault)
     (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
-    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∃ gs qs,
-      questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.covers f = true) →
-        Unsat L q.ask)
-    (is : List (Input v)) (x : Input v) (hs : Within L (shapes v) (run T v (Step.State.init v) is).1)
-    (hx : (inputVals L chk.callerData x).isSome) :
+    (is : List (Input v)) (x : Input v)
+    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v),
+      FaultLine L T P v senv f (StepFits L T P v (run T v (Step.State.init v) is).1 x) inp)
+    (hs : Within L (shapes v) (run T v (Step.State.init v) is).1) (hx : (inputVals L chk.callerData x).isSome) :
     (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
   obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
   have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
   rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hs x hivs
     with ⟨inp, hmem, hcov⟩ | h
-  · obtain ⟨gs, qs, hqs, hun⟩ := hq inp hmem
-    exact verdict_covered chk senv f hf hinit inp hqs hun is x hcov
-  · exact h.1 f hf
-
-/-- The meaning of `Prove.withinBounds`: where the solver answers unsat to every input kind's questions about the
-targets the fault `f` falls under, whatever the bound questions answer, no step of a run from an initial state whose
-invariants hold faults with `f`, wherever the state the run reached and the input fit the slots and the step stays
-within them. -/
-theorem within_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (f : Fault)
-    (hf : f ≠ .answerUnmatched) (hinit : Step.invariants (Step.State.init v) = [])
-    (hq : ∀ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), ∃ gs qs,
-      questions L T P v senv inp = .ok (gs, qs) ∧ ∀ q ∈ qs, (∃ g, q.target = some g ∧ g.covers f = true) →
-        Unsat L q.ask)
-    (is : List (Input v)) (x : Input v) (hs : Within L (shapes v) (run T v (Step.State.init v) is).1)
-    (hx : (inputVals L chk.callerData x).isSome) (hfit : StepFits L T P v (run T v (Step.State.init v) is).1 x) :
-    (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault f := by
-  obtain ⟨ivs, hivs⟩ := Option.isSome_iff_exists.1 hx
-  have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
-  rcases covered chk senv (run_keys T _ (Step.init_keys T hord) is) hs x hivs
-    with ⟨inp, hmem, hc, M, hM, hS, hxd, hcase⟩ | h
-  · obtain ⟨gs, qs, hqs, hun⟩ := hq inp hmem
-    exact question_within chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is)
-      (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg => (hun q hq' hg).noModel_at (questions_tys L T P v senv hqs q hq') M
-        fun n h => varSorted_of_sorted (hM n h)
+  · obtain ⟨gs, qs, hqs, htg, hor⟩ := hq inp hmem
+    rcases hor with hb | hfit
+    · refine verdict_covered chk senv f hf hinit inp hqs (fun q hq' h => ?_) is x hcov
+      rcases h with h | h
+      · exact hb q hq' h
+      · exact htg q hq' h
+    · obtain ⟨hc, M, hM, hS, hxd, hcase⟩ := hcov
+      exact question_within chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is)
+        (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg =>
+          (htg q hq' hg).noModel_at (questions_tys L T P v senv hqs q hq') M fun n h => varSorted_of_sorted (hM n h)
   · exact h.1 f hf
 
 end

@@ -100,12 +100,10 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.embedState_ofService, ``Tazuna.Smt.wf_ofService,
     -- In each service's layout, the step encoding meets no layout gap: refusals are the spec's, never the builder's.
     ``Tazuna.Smt.encodeStep_ofService,
-    -- T4: unsat answers to every input kind's bound question and its questions about the rules named n mean no step
-    -- within the slots of a run from an initial state whose invariants hold faults naming n.
-    ``Tazuna.Smt.verdict_sound,
-    -- What Prove.withinBounds says: unsat questions about the rules named n, whatever the bound questions answer, mean
-    -- no step of such a run that stays within the slots faults naming n.
-    ``Tazuna.Smt.within_sound,
+    -- T4: where every input kind's questions about the rules named n are unsat, and its bound question is unsat or
+    -- the step fits the slots (Prove.withinBounds), no step within the slots of a run from an initial state whose
+    -- invariants hold faults naming n.
+    ``Tazuna.Smt.fault_sound,
     -- A counterexample is honest: a model of a target question decodes to a state with the step invariant and every
     -- invariant holding, whose step in Lean is the one the terms say.
     ``Tazuna.Smt.cti_sound,
