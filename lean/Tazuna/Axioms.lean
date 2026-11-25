@@ -5,6 +5,7 @@ import Tazuna.Cli.Test
 import Tazuna.Cli.Prove
 import Tazuna.Semantics.After
 import Tazuna.Smt.Prove
+import Tazuna.Smt.Verdict
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
@@ -39,7 +40,7 @@ elab "#check_tazuna_axioms" : command => do
       unless allowed.contains a do throwError "{n} depends on the axiom {a}"
   if checked == 0 then throwError "no Tazuna declarations found"
   -- The theorems the engine's answers rest on: a double-backquoted name that no longer exists fails to elaborate.
-  for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff] do
+  for n in [``Tazuna.Smt.step_encode, ``Tazuna.Smt.boundReached_iff, ``Tazuna.Smt.verdict_sound] do
     unless env.contains n do throwError "{n} is missing"
 
 #check_tazuna_axioms
@@ -78,8 +79,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.embedState_ofService, ``Tazuna.Smt.wf_ofService,
     -- In each service's layout, the step encoding meets no layout gap: refusals are the spec's, never the builder's.
     ``Tazuna.Smt.encodeStep_ofService,
-    -- A rule's name read from its terms is the literal the terms hold in every model, so a target names its rules.
-    ``Tazuna.Smt.Term.const?_denote,
+    -- T4: unsat answers to an input kind's bound question and its questions about the rules named n mean no step of
+    -- a run from an initial state whose invariants hold faults naming n where those questions cover the step.
+    ``Tazuna.Smt.verdict_sound,
     -- For U10, which asserts well-formedness, the wire-id invariant and the create bounds: each loses no model.
     ``Tazuna.Smt.wf_of_decode, ``Tazuna.Smt.wf_of_decodeState, ``Tazuna.Smt.pendingBelow_iff]
   let mut used : NameSet := {}

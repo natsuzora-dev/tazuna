@@ -89,13 +89,14 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
-/-- What a step's end terms say of its result `r`, from the step in progress `a` before its events: the cascade's
-fault, else the first broken invariant (the service's, then each machine's instances in key order), else the outcome
+/-- What a step's end terms say of its result `r`, from the step in progress `a` before its events: whether the cascade
+faults, as its term says; the cascade's fault, else the first broken invariant (the service's, then each machine's instances in key order), else the outcome
 with the records, machines and fresh counter the terms denote, the requests `ps` written at the next wire ids and
 sent, and the pending table and next id terms denoting what follows (pending as a multiset). A fault leaves `s0`. -/
 def Finished (M : Model) (L : Layout) (T : List TypeDecl)
     (shs : List (PendingShape v.event)) (fo : FinishOut v) (s0 : State v) (a : Step.Acc v) (outcome : Outcome)
     (r : Result v) : Prop :=
+  fo.settle.faultT.denote M = .bool (fo.settle.fault? M).isSome ∧
   match fo.settle.fault? M with
   | some f => r = ⟨s0, .fault f, [], []⟩
   | none => match brokenIn M fo.invariants ++ checksBroken L T M v.machines fo.checks with
@@ -223,7 +224,9 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     obtain ⟨hF, hm⟩ := (settle_encode chk hshs happ hca senv
       v.bounds.cascadeNat 0 o.owns ⟨.bool false, o, fresh⟩ _ hinv1 hq1 (by simpa [hown] using e7) hnow rfl e1 e2 e3
       (by rw [e4, ← hl1]; rfl) (by simpa [hown] using e6) hset hcx).2 hcs
-    unfold Finished Step.finish
+    unfold Finished
+    refine ⟨hF, ?_⟩
+    unfold Step.finish
     rw [hra]
     simp only [bind, Except.bind]
     rw [Step.settle_eq_from]

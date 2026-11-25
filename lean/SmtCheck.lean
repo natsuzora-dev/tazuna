@@ -1,4 +1,6 @@
 import Tazuna.Smt.Step
+import Tazuna.Smt.Prove
+import Tazuna.Semantics.After
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.Solver
 import Tazuna.Smt.ServiceLayout
@@ -3291,6 +3293,48 @@ def reshareCheck (depth : Nat) : IO Bool := do
     IO.println s!"smt-check: re-shared chain: {task.get} definitions, want {depth}"; return false
   return true
 
+/-! prove's questions (`questions`, `question_sound`): on the event service with the machine `calm`, each target's
+question is sat, and the step from the state and input the model decodes to reaches its end in a state that breaks the
+target's rule (`Step.settled`). A question asking the target's terms not to hold must not pass that comparison. -/
+
+def settledBreaks (v : ServiceV) (s : State v) (x : Input v) : Target → Bool
+  | .invariant none (some r) => match Step.settled prelude s x with
+    | some a => (Step.broken (v.invariants.fn (a.state.records, ()))).contains r
+    | none => false
+  | .invariant (some m) (some r) => match Step.settled prelude s x with
+    | some a => a.state.machines.toSigma.any fun ⟨m', insts⟩ => m'.name == m && insts.any fun i =>
+        (Step.broken (m'.invariants.fn (.inl (i.key, i.state, a.state.records, a.state.now, ()), ()))).contains r
+    | none => false
+  | _ => false
+
+def proveCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: prove's questions: {m}"; return false
+  let v := evMSvc
+  let L := svcLayout v 3
+  let .ok senv := StepEnv.of L (shapes v []) | fail "no step environment"
+  let inp : SymInput v (shapes v []) senv.nT := .event evMI (.var (5 + v.machines.length))
+  match questions L prelude [] v senv inp with
+  | .error r => fail s!"no questions: {repr r}"
+  | .ok (gs, qs) =>
+    unless gs == [.invariant none (some "small"), .invariant (some "calm") (some "calm")] do
+      return ← fail s!"the targets are {repr gs}"
+    let mut ok := true
+    for q in qs do
+      let some g := q.target | continue
+      for negated in [false, true] do
+        let asserts := if negated then q.script.asserts.dropLast ++ q.script.asserts.getLast?.toList.map .not
+          else q.script.asserts
+        match ← solver.run { q.script with asserts } with
+        | .sat vs =>
+          let M := modelOf vs
+          match (SymState.vars (v := v) 0).decode M L prelude (shapes v []), inp.decode M L rfl with
+          | some st, some x =>
+            if settledBreaks v st x g == negated then
+              ok ← fail s!"{repr g} (negated {negated}): the step from the model's state and input disagrees"
+          | _, _ => ok ← fail s!"{repr g}: the model does not decode"
+        | a => ok ← fail s!"{repr g} (negated {negated}): {repr a}"
+    return ok
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -3376,6 +3420,7 @@ def check (z3 : String) : IO Bool := do
   unless ← cascadeCheck solver do ok := false
   unless ← cascEventCheck solver do ok := false
   unless ← tickClockCheck solver do ok := false
+  unless ← proveCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>

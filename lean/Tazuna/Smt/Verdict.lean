@@ -1,0 +1,421 @@
+import Tazuna.Smt.Prove
+import Tazuna.Semantics.After
+
+/-! T4 for a step: where the solver finds no model of an input kind's bound question and of its questions about the
+invariant rules named `r`, no step of that kind from a state of the right shape whose invariants hold faults naming
+`r`. Steps that fault leave the state they began with, and the others commit only states whose invariants hold, so
+every state a run reaches from an initial state whose invariants hold is such a state. -/
+
+namespace Tazuna.Smt
+
+open Tazuna.Ir
+
+/-- The solver found no model of the script: no model whose variables hold values of the sorts of the types `tys`
+satisfies every assertion. A model of the script as SMT-LIB reads it is such a model (`Term.denote` states the
+standard's meaning), so this is what an unsat answer says. -/
+def Unsat (L : Layout) (tys : List Ty) (s : Script) : Prop :=
+  ∀ M : Model, (∀ n (h : n < tys.length), Sorted L tys[n] (M.vars n)) → ∃ a ∈ s.asserts, ¬ Holds M a
+
+section
+variable {M : Model}
+
+theorem holds_not (a : Term) : Holds M (.not a) ↔ ¬ Holds M a := by
+  simp [Holds, Term.denote, Val.toBool]
+
+theorem holds_or (a b : Term) : Holds M (.or a b) ↔ Holds M a ∨ Holds M b := by
+  simp [Holds, Term.denote, Val.toBool]
+
+theorem holds_anyT (ts : List Term) : Holds M (anyT ts) ↔ ∃ t ∈ ts, Holds M t := by
+  simp [Holds, anyT_denote, Val.toBool]
+
+theorem holds_allT_rules (rules : List (Term × Term)) : Holds M (allT (rules.map (·.2))) ↔ brokenIn M rules = [] := by
+  rw [brokenIn_nil]; simp [Holds, allT_denote, Val.toBool]
+
+/-- A name `brokenIn` reports is a rule whose holds term is false and whose name term has that string. -/
+theorem mem_brokenIn {rules : List (Term × Term)} {n : String} (h : n ∈ brokenIn M rules) :
+    ∃ rule ∈ rules, ¬ Holds M rule.2 ∧ (rule.1.denote M).toStr = n := by
+  simp only [brokenIn, List.mem_filterMap] at h
+  obtain ⟨⟨a, b⟩, hm, h⟩ := h
+  split at h
+  · cases h
+  · rename_i hb
+    cases h
+    exact ⟨(a, b), hm, by simpa [Holds] using hb, rfl⟩
+
+theorem mem_ruleNames {rules : List (Term × Term)} {rule : Term × Term} {g : Option String} (hm : rule ∈ rules)
+    (hg : ruleName? rule = some g) : g ∈ ruleNames rules := by
+  have key : ∀ (xs acc : List (Option String)), (g ∈ acc ∨ g ∈ xs) →
+      g ∈ xs.foldl (fun acc n => if acc.contains n then acc else acc ++ [n]) acc := by
+    intro xs
+    induction xs with
+    | nil => intro acc h; simpa using h
+    | cons y ys ih =>
+      intro acc h
+      apply ih
+      by_cases hy : acc.contains y = true
+      · simp only [hy, ite_true]
+        rcases h with h | h
+        · exact .inl h
+        · rcases List.mem_cons.1 h with rfl | h
+          · exact .inl (by simpa using hy)
+          · exact .inr h
+      · simp only [hy, Bool.false_eq_true, ite_false]
+        rcases h with h | h
+        · exact .inl (List.mem_append_left _ h)
+        · rcases List.mem_cons.1 h with rfl | h
+          · exact .inl (by simp)
+          · exact .inr h
+  exact key _ [] (.inr (List.mem_filterMap.2 ⟨rule, hm, hg⟩))
+
+/-- A broken rule's name, as its terms give it, is the string the model gives or one the model decides. -/
+theorem ruleName_of_broken {rule : Term × Term} {r : String} (hb : ¬ Holds M rule.2) (hn : (rule.1.denote M).toStr = r) :
+    ∃ g, (g = some r ∨ g = none) ∧ ruleName? rule = some g := by
+  unfold ruleName?
+  split
+  · rename_i ht
+    obtain ⟨w, hw, hwt⟩ := Option.map_eq_some_iff.1 ht
+    exact absurd (by simp [Holds, Term.const?_denote M _ hw, hwt]) hb
+  · split
+    · rename_i s hs
+      refine ⟨some s, .inl ?_, rfl⟩
+      rw [Term.const?_denote M _ hs] at hn
+      simpa [Val.toStr] using hn
+    · exact ⟨none, .inr rfl, rfl⟩
+
+theorem holds_brokenT {rules : List (Term × Term)} {rule : Term × Term} {g : Option String} (hm : rule ∈ rules)
+    (hg : ruleName? rule = some g) (hb : ¬ Holds M rule.2) : Holds M (brokenT g rules) := by
+  unfold brokenT
+  rw [holds_anyT]
+  exact ⟨.not rule.2, List.mem_filterMap.2 ⟨rule, hm, by simp [hg]⟩, (holds_not _).2 hb⟩
+
+/-- A broken rule named `r` makes the question of its name true: the literal's when the terms hold it, else the
+question of the names the model decides. -/
+theorem brokenT_of_mem {rules : List (Term × Term)} {r : String} (h : r ∈ brokenIn M rules) :
+    ∃ g, (g = some r ∨ g = none) ∧ g ∈ ruleNames rules ∧ Holds M (brokenT g rules) := by
+  obtain ⟨rule, hm, hb, hn⟩ := mem_brokenIn h
+  obtain ⟨g, hg, hr⟩ := ruleName_of_broken hb hn
+  exact ⟨g, hg, mem_ruleNames hm hr, holds_brokenT hm hr hb⟩
+
+end
+
+section
+variable {L : Layout} {T : List TypeDecl} {M : Model} {r e : Ty}
+
+theorem mem_instBroken {t : Ty} {cs : List InstCheck} {n : String} (h : n ∈ instBroken L T M t cs) :
+    ∃ c ∈ cs, Holds M c.occupied ∧ n ∈ brokenIn M c.rules := by
+  simp only [instBroken, List.mem_flatMap, List.mem_mergeSort, List.mem_filter] at h
+  obtain ⟨c, ⟨hc, ho⟩, hn⟩ := h
+  exact ⟨c, hc, ho, hn⟩
+
+theorem instBroken_nil {t : Ty} {cs : List InstCheck} (h : instBroken L T M t cs = []) :
+    ∀ c ∈ cs, Holds M c.occupied → brokenIn M c.rules = [] := by
+  intro c hc ho
+  apply List.eq_nil_iff_forall_not_mem.2
+  intro n hn
+  have : n ∈ instBroken L T M t cs := by
+    simp only [instBroken, List.mem_flatMap, List.mem_mergeSort, List.mem_filter]
+    exact ⟨c, ⟨hc, ho⟩, hn⟩
+  rw [h] at this
+  cases this
+
+/-- Where no instance's rule is broken, every instance's rules hold. -/
+theorem instHold_of_nil : (ms : List (MachineV r e)) → (checks : PerMachine (fun _ => List InstCheck) ms) →
+    checksBroken L T M ms checks = [] → Holds M (allT (checks.toList.map instHoldT))
+  | [], .nil, _ => holds_tt
+  | m :: ms, .cons cs rest, h => by
+    simp only [checksBroken, List.append_eq_nil_iff] at h
+    simp only [PerMachine.toList, List.map_cons]
+    rw [show allT (instHoldT cs :: rest.toList.map instHoldT) = .and (instHoldT cs) (allT (rest.toList.map instHoldT))
+      from rfl, holds_and]
+    refine ⟨?_, instHold_of_nil ms rest h.2⟩
+    unfold instHoldT
+    rw [holds_allT]
+    intro x hx
+    obtain ⟨c, hc, rfl⟩ := List.mem_map.1 hx
+    rw [holds_or, holds_not, holds_allT_rules]
+    by_cases ho : Holds M c.occupied
+    · exact .inr (instBroken_nil h.1 c hc ho)
+    · exact .inl ho
+
+/-- An instance rule named `n` broken at a step's end makes the question of its machine and name true. -/
+theorem instBrokenT_of_mem : (ms : List (MachineV r e)) → (checks : PerMachine (fun _ => List InstCheck) ms) →
+    {n : String} → n ∈ checksBroken L T M ms checks →
+    ∃ mc ∈ checks.toSigma, ∃ g, (g = some n ∨ g = none) ∧ g ∈ ruleNames (mc.2.flatMap (·.rules)) ∧
+      Holds M (instBrokenT g mc.2)
+  | [], .nil, _, h => by cases h
+  | m :: ms, .cons cs rest, n, h => by
+    simp only [checksBroken, List.mem_append] at h
+    rcases h with h | h
+    · obtain ⟨c, hc, ho, hn⟩ := mem_instBroken h
+      obtain ⟨rule, hm, hb, hname⟩ := mem_brokenIn hn
+      obtain ⟨g, hg, hr⟩ := ruleName_of_broken hb hname
+      refine ⟨⟨m, cs⟩, by simp [PerMachine.toSigma], g, hg,
+        mem_ruleNames (List.mem_flatMap.2 ⟨c, hc, hm⟩) hr, ?_⟩
+      unfold instBrokenT
+      rw [holds_anyT]
+      exact ⟨_, List.mem_map_of_mem hc, (holds_and _ _).2 ⟨ho, holds_brokenT hm hr hb⟩⟩
+    · obtain ⟨mc, hmc, rest'⟩ := instBrokenT_of_mem ms rest h
+      exact ⟨mc, by simp [hmc], rest'⟩
+
+end
+
+section
+variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
+
+/-- An internal step faults by its admission or its `ensures`, never by an invariant: those are checked once, at the
+step's end. -/
+theorem settle_fault_ne (o : SettleOut v) (n : String) : o.fault? M ≠ some (.invariant n) := by
+  unfold SettleOut.fault?
+  split
+  · rename_i st _
+    unfold OwnStepOut.fault?
+    intro h
+    obtain ⟨k, -, hk⟩ := Option.bind_eq_some_iff.1 h
+    obtain ⟨_, ko⟩ := k
+    cases ko with
+    | command name o =>
+      simp only [OwnKindOut.fault?] at hk
+      split at hk
+      · split at hk
+        · cases hk
+        · split at hk <;> cases hk
+      · cases hk
+    | query name o =>
+      simp only [OwnKindOut.fault?] at hk
+      split at hk
+      · split at hk <;> cases hk
+      · cases hk
+    | missing name => simp [OwnKindOut.fault?] at hk
+  · split <;> simp
+
+theorem instBrokenT_mono {g : Option String} {cs cs' : List InstCheck} (hsub : ∀ c ∈ cs, c ∈ cs')
+    (h : Holds M (instBrokenT g cs)) : Holds M (instBrokenT g cs') := by
+  unfold instBrokenT at h ⊢
+  rw [holds_anyT] at h ⊢
+  obtain ⟨x, hx, hh⟩ := h
+  obtain ⟨c, hc, rfl⟩ := List.mem_map.1 hx
+  exact ⟨_, List.mem_map_of_mem (hsub c hc), hh⟩
+
+/-- Whether the target is an invariant rule named `n` or one whose name the model decides. -/
+def Target.Names (n : String) : Target → Prop
+  | .invariant _ (some r) => r = n
+  | .invariant _ none => True
+  | .ensures .. => False
+
+/-- Where a step's end faults naming the invariant `n`, the cascade does not fault and the end breaks a target of
+that name. -/
+theorem finished_breaks {shs : List (PendingShape v.event)} {fo : FinishOut v} {s0 : State v} {a : Step.Acc v}
+    {outcome : Outcome} {res : Result v} {n : String} (hf : Finished M L T shs fo s0 a outcome res)
+    (ho : res.outcome = .fault (.invariant n)) (hacc : outcome ≠ .fault (.invariant n)) :
+    ¬ Holds M fo.settle.faultT ∧ ∃ g ∈ invariantTargets fo.invariants fo.checks, g.Names n ∧
+      ∃ mach rule, g = .invariant mach rule ∧ Holds M (fo.broken mach rule) := by
+  obtain ⟨hF, hm⟩ := hf
+  cases hfo : fo.settle.fault? M with
+  | some f =>
+    rw [hfo] at hm
+    simp only at hm
+    subst hm
+    cases ho
+    exact absurd hfo (settle_fault_ne _ n)
+  | none =>
+    rw [hfo] at hm hF
+    refine ⟨by simp [Holds, hF, Val.toBool], ?_⟩
+    simp only at hm
+    split at hm
+    · rename_i n' rest hl
+      subst hm
+      cases ho
+      have hmem : n ∈ brokenIn M fo.invariants ++ checksBroken L T M v.machines fo.checks := by rw [hl]; simp
+      rcases List.mem_append.1 hmem with h | h
+      · obtain ⟨g, hg, hmemg, hb⟩ := brokenT_of_mem h
+        refine ⟨.invariant none g, List.mem_append_left _ (List.mem_map_of_mem hmemg), ?_, none, g, rfl, hb⟩
+        rcases hg with rfl | rfl <;> simp [Target.Names]
+      · obtain ⟨mc, hmc, g, hg, hmemg, hb⟩ := instBrokenT_of_mem v.machines fo.checks h
+        refine ⟨.invariant (some mc.1.name) g,
+          List.mem_append_right _ (List.mem_flatMap.2 ⟨mc, hmc, List.mem_map_of_mem hmemg⟩), ?_, some mc.1.name, g, rfl, ?_⟩
+        · rcases hg with rfl | rfl <;> simp [Target.Names]
+        · refine instBrokenT_mono (fun c hc => ?_) hb
+          simp only [machineChecks, List.mem_flatMap]
+          exact ⟨mc, hmc, by simp [hc]⟩
+    · obtain ⟨_, _, _, _, _, hr, -⟩ := hm
+      rw [hr] at ho
+      exact absurd ho hacc
+
+theorem breaks_of_finished {o : StepOut v} {fo : FinishOut v} (hfo : o.finish? = some fo) (hreach : Holds M o.reached)
+    {shs : List (PendingShape v.event)} {s0 : State v} {a : Step.Acc v} {res : Result v} {n : String}
+    (hf : Finished M L T shs fo s0 a .accepted res) (ho : res.outcome = .fault (.invariant n)) :
+    ∃ g ∈ o.invTargets, g.Names n ∧ Holds M (o.breaks g) := by
+  obtain ⟨hF, g, hg, hn, mach, rule, rfl, hb⟩ := finished_breaks hf ho (by simp)
+  refine ⟨_, by simp [StepOut.invTargets, hfo, hg], hn, ?_⟩
+  simp only [StepOut.breaks, hfo]
+  exact (holds_andT _ _).2 ⟨hreach, (holds_andT _ _).2 ⟨(holds_not _).2 hF, hb⟩⟩
+
+/-- Where a step's terms say what its result is and the result faults naming the invariant `n`, the step breaks a
+target of that name. -/
+theorem rel_breaks {shs : List (PendingShape v.event)} {s : State v} {o : StepOut v} {x : Input v} {res : Result v}
+    {n : String} (hrel : o.Rel M L T shs s x res) (ho : res.outcome = .fault (.invariant n)) :
+    ∃ g ∈ o.invTargets, g.Names n ∧ Holds M (o.breaks g) := by
+  cases o with
+  | command co =>
+    cases x with
+    | command i caller input =>
+      simp only [StepOut.Rel] at hrel
+      split at hrel
+      · rename_i hcall
+        split at hrel
+        · subst hrel; cases ho
+        · rename_i hrules
+          split at hrel
+          · rename_i hok
+            split at hrel
+            · subst hrel; cases ho
+            · rename_i hens
+              refine breaks_of_finished rfl ?_ hrel ho
+              simp only [StepOut.reached]
+              exact (holds_andT _ _).2 ⟨hcall, (holds_andT _ _).2 ⟨(holds_allT_rules _).2 hrules,
+                (holds_andT _ _).2 ⟨hok, (holds_allT_rules _).2 hens⟩⟩⟩
+          · obtain ⟨-, j, hj, -⟩ := hrel
+            rw [hj] at ho; cases ho
+      · subst hrel; cases ho
+    | _ => cases hrel
+  | query qo =>
+    cases x with
+    | query i caller input =>
+      obtain ⟨-, hq⟩ := hrel
+      rw [ho] at hq
+      cases hq
+    | _ => cases hrel
+  | answer ao =>
+    cases x with
+    | answer to value =>
+      simp only [StepOut.Rel] at hrel
+      split at hrel
+      · subst hrel; cases ho
+      · rename_i hrules
+        exact breaks_of_finished rfl ((holds_allT_rules _).2 hrules) hrel ho
+    | _ => cases hrel
+  | unmatched u =>
+    cases x with
+    | answer to value => simp only [StepOut.Rel] at hrel; subst hrel; cases ho
+    | _ => cases hrel
+  | event eo =>
+    cases x with
+    | event i value => exact breaks_of_finished rfl holds_tt hrel ho
+    | _ => cases hrel
+  | clock co =>
+    cases x with
+    | clock time =>
+      simp only [StepOut.Rel] at hrel
+      split at hrel
+      · rename_i hfw
+        split at hrel
+        · subst hrel; cases ho
+        · rename_i hover
+          refine breaks_of_finished rfl ?_ hrel ho
+          simp only [StepOut.reached]
+          exact (holds_andT _ _).2 ⟨hfw, (holds_not _).2 (by simpa [Holds] using hover)⟩
+      · subst hrel; cases ho
+    | _ => cases hrel
+
+end
+
+section
+variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
+
+theorem bound_holds {side held cond : Term} (h : ¬ Holds M (.or (.not side) (andT held (.not cond)))) :
+    Holds M side ∧ (Holds M held → Holds M cond) := by
+  rw [holds_or, holds_not, holds_andT, holds_not] at h
+  exact ⟨Classical.byContradiction fun h' => h (.inl h'),
+    fun hh => Classical.byContradiction fun h' => h (.inr ⟨hh, h'⟩)⟩
+
+/-- T4 for one input kind, in one model: where the symbolic state and input decode to a state of the right shape
+whose invariants hold and to an input of the kind, and the model satisfies the bound question of the kind or a
+question about a rule named `n` nowhere, the step faults naming no invariant `n`. -/
+theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
+    (senv : StepEnv L (shapes v P)) (inp : SymInput v (shapes v P) senv.nT)
+    {gs : List Target} {qs : List (Question v (shapes v P) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
+    {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v P) = some s)
+    (hinv : Step.Inv P s) (hheld : Step.invariants s = [])
+    {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
+    (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
+    (n : String)
+    (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.Names n) → ∃ a ∈ q.script.asserts, ¬ Holds M a) :
+    (step T v s x).outcome ≠ .fault (.invariant n) := by
+  intro hfault
+  obtain ⟨t, ht, hq⟩ := bind_ok.1 hq
+  obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
+  obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
+  obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
+  obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
+  obtain ⟨⟨checks, ck⟩, hchecks, hq⟩ := bind_ok.1 hq
+  obtain ⟨vars, -, hq⟩ := bind_ok.1 hq
+  obtain ⟨dts, -, hq⟩ := bind_ok.1 hq
+  cases pure_ok.1 hq
+  have hR := decode_state hS
+  have hwfH : Holds M wf := wf_of_decodeState (need_ok.1 hwf) hS
+  have hbelowH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below
+  have hcaseH := hcase t ht
+  obtain ⟨a, ha, hna⟩ := hun _ (List.mem_cons_self ..) (.inl rfl)
+  simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl | rfl | rfl
+  · exact hna hwfH
+  · exact hna hbelowH
+  · exact hna hcaseH
+  obtain ⟨hside, hcondOf⟩ := bound_holds hna
+  obtain ⟨hcodes, hsites, hci0, hci, hck⟩ : Holds M t.codes ∧ Holds M t.sites ∧ Holds M ci0 ∧ Holds M ci ∧ Holds M ck := by
+    simpa only [holds_andT] using hside
+  have hfd : (Ty.fn [v.records] Ty.rules).isData = true := by
+    simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, v.records_data]
+  have hb := invariants_rel v.invariants v.records_data hfd (v.invariants.code_fn hfd hinvc hci0) s.records hR.records
+    hrules hci
+  have hbs := (instChecks_encode s.records s.now hR.records hR.now v.machines _ s.machines hR.machines
+    (fun m hm => (chk.keys m hm).2) hchecks).2 hck
+  have hsplit : Step.invariants s = Step.broken (v.invariants.fn (s.records, ())) ++ instancesBroken s.records s.now s.machines := rfl
+  rw [hsplit, List.append_eq_nil_iff] at hheld
+  have hheldH : Holds M (andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT))) :=
+    (holds_andT _ _).2 ⟨(holds_allT_rules _).2 (hb.trans hheld.1), instHold_of_nil _ _ (hbs.trans hheld.2)⟩
+  have hcond := hcondOf hheldH
+  have hrel := ((step_encode chk senv hS hinv hx ht).2 hcodes hsites hcaseH).2 hcond
+  obtain ⟨g, hg, hn, hbr⟩ := rel_breaks hrel hfault
+  obtain ⟨a, ha, hna⟩ := hun ⟨inp, some g, _⟩ (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_append_left _ hg, rfl⟩))
+    (.inr ⟨g, rfl, hn⟩)
+  simp only [List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  · exact hna hwfH
+  · exact hna hbelowH
+  · exact hna hcaseH
+  · exact hna hside
+  · exact hna hheldH
+  · exact hna hcond
+  · exact hna hbr
+
+/-- The questions about the input kind `inp` cover the step from `s` on `x`: some model whose variables hold values of
+their sorts holds the state and the input, in the case the questions ask about. A state and an input within the slots
+are some model's (`decode_reachable`, T3). -/
+def Covered (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
+    (inp : SymInput v (shapes v P) senv.nT) (s : State v) (x : Input v) : Prop :=
+  ∃ (hc : v.caller.isData = true) (M : Model),
+    (∀ j (h : j < (stateTys v (shapes v P) ++ inp.tys).length), Sorted L (stateTys v (shapes v P) ++ inp.tys)[j] (M.vars j)) ∧
+    (SymState.vars 0).decode M L T (shapes v P) = some s ∧ inp.decode M L hc = some x ∧
+    ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case
+
+/-- T4: where the solver answers unsat to an input kind's bound question and to its questions about the invariant
+rules named `n`, no step of a run from an initial state whose invariants hold faults naming `n` at a state and input
+those questions cover. The proved invariants are assumed of the state before each step, which is sound because every
+state such a run reaches has them (`run_invariants`: a step that breaks one leaves the state it began with). A query
+step never faults. -/
+theorem verdict_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv L (shapes v P))
+    (n : String) (hinit : Step.invariants (Step.State.init v) = [])
+    (inp : SymInput v (shapes v P) senv.nT) {gs : List Target} {qs : List (Question v (shapes v P) senv.nT)}
+    (hq : questions L T P v senv inp = .ok (gs, qs))
+    (hun : ∀ q ∈ qs, (q.target = none ∨ ∃ g, q.target = some g ∧ g.Names n) →
+      Unsat L (stateTys v (shapes v P) ++ inp.tys) q.script)
+    (is : List (Input v)) (x : Input v) (hcov : Covered L T P v senv inp (run T v (Step.State.init v) is).1 x) :
+    (step T v (run T v (Step.State.init v) is).1 x).outcome ≠ .fault (.invariant n) := by
+  obtain ⟨hc, M, hM, hS, hx, hcase⟩ := hcov
+  exact question_sound chk senv inp hq hS (run_inv T chk.reach _ Step.init_inv is)
+    (Tazuna.Ir.run_invariants T _ is hinit) hx hcase n fun q hq' hrel => hun q hq' hrel M hM
+
+end
+
+end Tazuna.Smt

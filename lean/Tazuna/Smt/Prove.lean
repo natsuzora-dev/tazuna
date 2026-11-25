@@ -185,7 +185,8 @@ def instBrokenT (sel : Option String) (checks : List InstCheck) : Term :=
 def instHoldT (checks : List InstCheck) : Term :=
   allT (checks.map fun c => .or (.not c.occupied) (allT (c.rules.map (·.2))))
 
-/-- The invariant targets of a service: its own rules' names, then each machine's. -/
+/-- The invariant targets of a step's end: the names of the service's rules, then each machine's. They are read from
+the end, not from the state before, since a rule broken there is what the step's fault names. -/
 def invariantTargets {v : ServiceV} (rules : List (Term × Term)) (checks : PerMachine (fun _ => List InstCheck) v.machines) :
     List Target :=
   (ruleNames rules).map (.invariant none) ++
@@ -236,12 +237,22 @@ def machineChecks {v : ServiceV} (name : String) (checks : PerMachine (fun _ => 
     List InstCheck :=
   checks.toSigma.flatMap fun ⟨m, cs⟩ => if m.name = name then cs else []
 
+/-- Whether a step's end breaks the invariant rule `rule` of the service (`mach` none) or of the machine `mach`. -/
+def FinishOut.broken {v : ServiceV} (fo : FinishOut v) (mach rule : Option String) : Term :=
+  match mach with
+  | none => brokenT rule fo.invariants
+  | some m => instBrokenT rule (machineChecks m fo.checks)
+
+/-- The invariant targets of a step's terms: those of its end. -/
+def StepOut.invTargets {v : ServiceV} (o : StepOut v) : List Target :=
+  match o.finish? with
+  | some fo => invariantTargets fo.invariants fo.checks
+  | none => []
+
 /-- Whether the step breaks the target. -/
 def StepOut.breaks {v : ServiceV} (o : StepOut v) : Target → Term
   | .invariant mach rule => match o.finish? with
-    | some fo => andT o.reached (andT (.not fo.settle.faultT) (match mach with
-        | none => brokenT rule fo.invariants
-        | some m => instBrokenT rule (machineChecks m fo.checks)))
+    | some fo => andT o.reached (andT (.not fo.settle.faultT) (fo.broken mach rule))
     | none => .bool false
   | .ensures _ rule => match o with
     | .command co => andT co.callerOk (andT (allT (co.rules.map (·.2))) (andT co.decided.ok (brokenT rule co.decided.ensures)))
@@ -286,7 +297,7 @@ def questions (inp : SymInput v (shapes v P) senv.nT) :
   let ensures := match inp, t.out with
     | .command i .., .command o => (ruleNames o.decided.ensures).map (.ensures (v.commands.get i).name)
     | _, _ => []
-  let targets := invariantTargets rules checks ++ ensures
+  let targets := t.out.invTargets ++ ensures
   pure (targets, ⟨inp, none, script [.or (.not side) (andT held (.not t.cond))]⟩ ::
     targets.map fun g => ⟨inp, some g, script [side, held, t.cond, t.out.breaks g]⟩)
 

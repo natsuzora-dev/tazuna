@@ -95,4 +95,55 @@ theorem step_settled (T : List TypeDecl) {v : ServiceV} (s : State v) (x : Input
         rw [fin _ _ _ h]
         split <;> rfl
 
+/-- A step keeps a state whose invariants hold: a step that faults, or ends before its end, leaves the state it began
+with (the fresh counter aside, which no invariant reads), and one that ends commits only a state whose invariants
+hold. So every state a run reaches from a state whose invariants hold is one. -/
+theorem step_invariants (T : List TypeDecl) {v : ServiceV} (s : State v) (x : Input v) (h : Step.invariants s = []) :
+    Step.invariants (step T v s x).state = [] := by
+  have fin : ∀ (s0 : State v) (r : Except Fault (Step.Acc v)) (o : Outcome), Step.invariants s0 = [] →
+      Step.invariants (Step.finish T s0 r o).state = [] := by
+    intro s0 r o h0
+    unfold Step.finish
+    split
+    · exact h0
+    · split
+      · exact h0
+      · assumption
+  have hs' : Step.invariants { s with fresh := s.fresh + 1 } = [] := h
+  cases x with
+  | command i caller input =>
+    simp only [step]
+    split
+    · exact hs'
+    · exact hs'
+    · exact hs'
+    · exact fin _ _ _ hs'
+  | query i caller input =>
+    simp only [step]
+    split <;> exact h
+  | answer to w =>
+    obtain ⟨t, value⟩ := w
+    simp only [step]
+    split
+    · exact h
+    · split
+      · exact h
+      · split
+        · exact h
+        · exact fin _ _ _ h
+  | event i value => exact fin _ _ _ h
+  | clock time =>
+    simp only [step]
+    split
+    · exact h
+    · split
+      · exact h
+      · exact fin _ _ _ h
+
+/-- Every state a run reaches from a state whose invariants hold is one whose invariants hold. -/
+theorem run_invariants (T : List TypeDecl) {v : ServiceV} : (s : State v) → (is : List (Input v)) →
+    Step.invariants s = [] → Step.invariants (run T v s is).1 = []
+  | _, [], h => h
+  | s, x :: is, h => run_invariants T (step T v s x).state is (step_invariants T s x h)
+
 end Tazuna.Ir
