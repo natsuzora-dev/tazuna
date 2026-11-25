@@ -158,11 +158,13 @@ set_option linter.tazuna.silentDefault false in
 /-- The outcome of the last of the inputs, run from the initial state. -/
 def last (v : ServiceV) (is : List (Input v)) : String :=
   (((run prelude v (State.init v) is).2.getLast?).map (·.outcome.summary)).getD ""
--- The handle `pingE` makes: check compares it with what the externals declare.
+-- The handle `pingE` makes: check compares it with what each service's `declared` lists, which the spec built from
+-- the externals' declarations.
 #guard (pingE (Γ := [])).handles.map (fun h => (h.kind, h.name)) == [("external command", some "ping")]
 #guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .str]⟩]⟩ (pingE (Γ := [])).handles []).filter
   (·.1 == .unknownHandle)).isEmpty
-#guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .int]⟩]⟩ (pingE (Γ := [])).handles []).filter
+#guard ((SpecV.illegal prelude ⟨[{ svc with declared := [("mail", .externalCommand "ping" .str .int .int)] }],
+    [⟨"mail", [.externalCommand "ping" .str .int .int]⟩]⟩ (pingE (Γ := [])).handles []).filter
   (·.1 == .unknownHandle)).length == 1
 -- A handle built-in passed as a value has no name check can read, so it is Illegal.handleName too.
 #guard ((SpecV.illegal prelude ⟨[svc], [⟨"mail", [.externalCommand "ping" .str .int .str]⟩]⟩

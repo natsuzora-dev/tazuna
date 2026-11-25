@@ -131,7 +131,7 @@ theorem shapes_inSites {v : ServiceV} {P : List AnySite} {sh : PendingShape v.ev
   split at h
   · simp only [List.mem_map] at h
     obtain ⟨rq, hrq, rfl⟩ := h
-    simp only [requestShapes, List.mem_flatMap] at hrq
+    simp only [requestShapes, requestShapesAt, List.mem_flatMap] at hrq
     obtain ⟨⟨x, d⟩, -, hrq⟩ := hrq
     have hmk : ∀ (name : String) (i o : Ty) (j : Option Ty)
         (ens : Option ((Γ : List Ty) × Site Γ (Ty.fn [i, answerTy o j] Ty.rules))),

@@ -459,12 +459,13 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
     let tableKeys := (all.filter fun d => !d.wireTypes.all Ty.plainKeys).map fun d =>
       (Illegal.tableKey, s!"{x.name}.{d.name}: its types hold a table whose key is no plain value; {tableKeyAdvice}")
     wireNames ++ owners ++ wireTypes ++ rejections ++ tableKeys
-  let declared := s.externals.flatMap (·.declares)
+  -- Each service's `declared` lists every external's declarations; reading it, not `s.externals`, checks the list the
+  -- step encodes requests from.
   let unknownHandles := handles.filterMap fun h => match h.name with
     | none => some (Illegal.handleName, s!"one {h.kind} handle's name is no string literal; write it as one, so check can see which request it names")
     | some n =>
-      if !h.kind.startsWith "external" ||
-        declared.any fun d => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome then none
+      if !h.kind.startsWith "external" || s.services.all fun v =>
+        v.declared.any fun (_, d) => d.kind == h.kind && d.name == n && (Ty.sames d.types h.types).isSome then none
       else some (Illegal.unknownHandle, s!"no external declares the {h.kind} {n} with these types; add it to an external's declares")
   let capturedKeys := captures.filterMap fun (site, Γ) => if (Ty.tuple Γ).plainKeys then none else
     some (Illegal.tableKey, s!"{site.module}:{site.line}:{site.col}: a function a structure value keeps captures a table whose key is no plain value; {tableKeyAdvice}")

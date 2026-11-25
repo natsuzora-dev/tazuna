@@ -175,13 +175,14 @@ def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks) :=
 
 -- No `ensures` site means no captured values: the empty list is the meaning, not a fallback.
 set_option linter.tazuna.silentDefault false in
-/-- Every shape of request a service's effects can make, given the program's sites: each external command or query
-the service may request, and each site of the type its `on_answer` and `ensures` must have, whose fields are data. -/
-def requestShapes (v : ServiceV) (sites : List AnySite) : List (RequestShape v.event) :=
-  v.declared.flatMap fun (x, d) =>
+/-- Every shape of request the effects of the event type `e` can make, given the program's sites: each external
+command or query `declared` lists, and each site of the type its `on_answer` and `ensures` must have, whose fields
+are data. -/
+def requestShapesAt (declared : List (String × DeclaredV)) (e : Ty) (sites : List AnySite) : List (RequestShape e) :=
+  declared.flatMap fun (x, d) =>
     let mk (name : String) (i o : Ty) (j : Option Ty)
-        (ens : Option ((Γ : List Ty) × Site Γ (Ty.fn [i, answerTy o j] Ty.rules))) : List (RequestShape v.event) :=
-      (sitesOf sites (Ty.fn [answerTy o j] (.list v.event))).filterMap fun ⟨aΓ, a⟩ =>
+        (ens : Option ((Γ : List Ty) × Site Γ (Ty.fn [i, answerTy o j] Ty.rules))) : List (RequestShape e) :=
+      (sitesOf sites (Ty.fn [answerTy o j] (.list e))).filterMap fun ⟨aΓ, a⟩ =>
         if h : (Ty.tuple [i, .tuple ((ens.map (·.1)).getD []), .tuple aΓ]).isData = true then
           some ⟨x, name, i, o, j, ens, aΓ, a, h⟩
         else none
@@ -189,6 +190,10 @@ def requestShapes (v : ServiceV) (sites : List AnySite) : List (RequestShape v.e
     | .externalCommand n i o j => mk n i o (some j) none
     | .externalQuery n i o _ => (sitesOf sites (Ty.fn [i, o] Ty.rules)).flatMap fun s => mk n i o none (some s)
     | _ => []
+
+/-- Every shape of request a service's effects can make, given the program's sites. -/
+def requestShapes (v : ServiceV) (sites : List AnySite) : List (RequestShape v.event) :=
+  requestShapesAt v.declared v.event sites
 
 /-- Every shape of pending request a service can hold: each sender whose key is data, with each request shape. -/
 def shapes (v : ServiceV) (sites : List AnySite) : List (PendingShape v.event) :=

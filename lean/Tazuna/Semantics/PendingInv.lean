@@ -71,7 +71,7 @@ theorem atShapes_start {P : List AnySite} {v : ServiceV} {snd : Sender} (hs : Se
           have h1 := onA.hΓ; simp only [Ty.isData, Ty.isDatas] at h1 ⊢; simp [hin, h1]
         let rq : RequestShape v.event := ⟨x, n, i, o, some j, none, onA.Γ, onA.toSite, hf⟩
         have hrq : rq ∈ requestShapes v P := by
-          simp only [requestShapes, List.mem_flatMap]
+          simp only [requestShapes, requestShapesAt, List.mem_flatMap]
           refine ⟨(x, .externalCommand n i o j), hd, ?_⟩
           simp only [List.mem_filterMap]
           exact ⟨⟨onA.Γ, onA.toSite⟩, mem_sitesOf_self hA, by split <;> first | rfl | contradiction⟩
@@ -97,7 +97,7 @@ theorem atShapes_start {P : List AnySite} {v : ServiceV} {snd : Sender} (hs : Se
           simp only [Ty.isData, Ty.isDatas] at h1 h2 ⊢; simp [hin, h1, h2]
         let rq : RequestShape v.event := ⟨x, n, i, o, none, some ⟨f.Γ, f.toSite⟩, onA.Γ, onA.toSite, hf⟩
         have hrq : rq ∈ requestShapes v P := by
-          simp only [requestShapes, List.mem_flatMap]
+          simp only [requestShapes, requestShapesAt, List.mem_flatMap]
           refine ⟨(x, .externalQuery n i o _), hd, ?_⟩
           refine List.mem_flatMap.2 ⟨⟨f.Γ, f.toSite⟩, mem_sitesOf_self (hE f rfl), ?_⟩
           simp only [List.mem_filterMap]

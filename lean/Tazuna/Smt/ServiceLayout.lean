@@ -11,32 +11,6 @@ follows whole-program type collection as in monomorphization; the order puts eac
 use, as SMT-LIB's declarations need. `ofService_has` proves every one of those types has its datatypes, so the step
 environment is found (`stepEnv_ofService`). -/
 
-namespace Tazuna.Ir
-
-mutual
-/-- Whether every datatype of the type has an SMT sort: no type variable, and no structure value but effects and
-fresh-id sources. The program's types include those of the spec's structure (lists of declarations, services); those
-values are never coded, so they get no datatype. -/
-def Ty.sortable : Ty → Bool
-  | .int | .str | .date | .id => true
-  | .param _ => false
-  | .list t | .bag t => Ty.sortable t
-  | .tuple ts => Ty.sortables ts
-  | .fn ps r => Ty.sortables ps && Ty.sortable r
-  | .adt _ _ vs => Ty.sortabless vs
-  | .table k v => Ty.sortable k && Ty.sortable v
-  | .dsl .effect [e] => Ty.sortable e
-  | .dsl k _ => k == .fresh
-def Ty.sortables : List Ty → Bool
-  | [] => true
-  | t :: ts => Ty.sortable t && Ty.sortables ts
-def Ty.sortabless : List (List Ty) → Bool
-  | [] => true
-  | ts :: vs => Ty.sortables ts && Ty.sortabless vs
-end
-
-end Tazuna.Ir
-
 namespace Tazuna.Smt
 
 open Tazuna.Ir
@@ -62,14 +36,14 @@ def _root_.Tazuna.Ir.RequestShape.key {e : Ty} (sh : RequestShape e) : EffectKey
   ⟨e, sh.name, sh.input, sh.output, sh.rejection, sh.ensures.map (fun s => ⟨s.2.site, s.1⟩),
     ⟨sh.onAnswer.site, sh.answerΓ⟩⟩
 
-/-- The own kinds of effect of the event type `e` that a command or query handle makes, one per `on_answer` site of
-its type. A handle of a command the service does not list still gets its kinds: its effects run as
-`Fault.invalidEffect`, and the encoder needs their variant to say so. -/
-def ownKeys (e : Ty) (P : List AnySite) (h : HandleSite) : List OwnKey :=
+/-- The own kinds of effect that a command or query handle makes, of each event type `es` lists for a query, one per
+`on_answer` site of its type. A handle of a command the service does not list still gets its kinds: its effects run
+as `Fault.invalidEffect`, and the encoder needs their variant to say so. -/
+def ownKeys (es : List Ty) (P : List AnySite) (h : HandleSite) : List OwnKey :=
   match h.kind, h.name, h.types with
-  | "command", some n, [_, _, c, i, j] =>
+  | "command", some n, [_, e, c, i, j] =>
     (sitesOf P (Ty.fn [Ty.result Ty.nil j] (.list e))).map fun s => .command e n c i j ⟨s.2.site, s.1⟩
-  | "query", some n, [_, c, i, o] =>
+  | "query", some n, [_, c, i, o] => es.flatMap fun e =>
     (sitesOf P (Ty.fn [o] (.list e))).map fun s => .query e n c i o ⟨s.2.site, s.1⟩
   | _, _, _ => []
 
@@ -95,14 +69,21 @@ structure ProgramParts where
 def _root_.Tazuna.Ir.Defs.parts {G : List Ty} (defs : Defs G) : ProgramParts :=
   ⟨defs.sites, defs.handles, defs.tys, defs.lits⟩
 
-/-- The kinds of effect of the service's scripts, from the program it came from, before any datatype. -/
-def Layout.kindsOf (p : ProgramParts) (v : ServiceV) : Layout :=
-  { effects := dedupBy EffectKey.same ((requestShapes v p.sites).map (·.key)),
-    owns := dedupBy OwnKey.same (p.handles.flatMap (ownKeys v.event p.sites)) }
+/-- The event types whose effects the program codes: the service's first, then each effect type's. Any code of the
+program may run in a step, another service's included. -/
+def eventTys (p : ProgramParts) (v : ServiceV) : List Ty :=
+  dedupBy (fun a b => (Ty.same a b).isSome) (v.event :: p.tys.filterMap fun | .dsl .effect [e] => some e | _ => none)
 
-/-- The layout of the service's scripts, from the program it came from. -/
+/-- The kinds of effect of the service's scripts, from the program it came from, before any datatype: those whose
+fields have sorts, so every datatype of the layout has one. -/
+def Layout.kindsOf (p : ProgramParts) (v : ServiceV) : Layout :=
+  { effects := dedupBy EffectKey.same (((eventTys p v).flatMap fun e =>
+      (requestShapesAt v.declared e p.sites).map (·.key)).filter (Ty.sortables ·.fields)),
+    owns := dedupBy OwnKey.same ((p.handles.flatMap (ownKeys (eventTys p v) p.sites)).filter (Ty.sortables ·.fields)) }
+
+/-- The layout of the service's scripts, from the program it came from: the datatypes of the types with sorts. -/
 def Layout.ofParts (p : ProgramParts) (v : ServiceV) : Layout :=
-  Layout.addTys (listSlots (boundSlots v.bounds) p.lits) (Layout.kindsOf p v) (stepTys v p.sites ++ p.tys.filter Ty.sortable)
+  Layout.addTys (listSlots (boundSlots v.bounds) p.lits) (Layout.kindsOf p v) ((stepTys v p.sites ++ p.tys).filter Ty.sortable)
 
 /-- The layout of the service's scripts, from the program `defs` it came from. -/
 abbrev Layout.ofService {G : List Ty} (defs : Defs G) (v : ServiceV) : Layout := Layout.ofParts defs.parts v
@@ -112,9 +93,10 @@ theorem hasWiths_mem {L : Layout} {D : Dsl → List Ty → Prop} : {ts : List Ty
   | _ :: _, ⟨h, _⟩, _, .head _ => h
   | _ :: _, ⟨_, h⟩, t, .tail _ ht => hasWiths_mem h t ht
 
-/-- Every step type and every expression type of the program has its datatypes in the service's layout. -/
+/-- Every step type and every expression type of the program that has a sort has its datatypes in the service's
+layout. -/
 theorem ofService_has {G : List Ty} (defs : Defs G) (v : ServiceV) :
-    ∀ t ∈ stepTys v defs.sites ++ defs.tys.filter Ty.sortable, (Layout.ofService defs v).Has t :=
+    ∀ t ∈ (stepTys v defs.sites ++ defs.tys).filter Ty.sortable, (Layout.ofService defs v).Has t :=
   hasWiths_mem (Layout.addTys_has _ _ _)
 
 theorem find_of_has_option {L : Layout} {e : Ty} (h : L.Has (Ty.option (.dsl .effect [e]))) :
@@ -126,30 +108,6 @@ theorem collD_of_has_table {L : Layout} {k w : Ty} (h : L.Has (.table k w)) : �
   obtain ⟨⟨d, n⟩, hd⟩ := Option.isSome_iff_exists.1 hc
   obtain ⟨⟨dt, m⟩, hdt⟩ := Option.isSome_iff_exists.1 ht
   exact ⟨(d, n, dt), by simp [collD, hd, hdt]⟩
-
-/-- The service's layout holds every datatype a step script looks up once, so its step environment is found. -/
-theorem stepEnv_ofService {G : List Ty} (defs : Defs G) (v : ServiceV) :
-    ∃ senv, StepEnv.of (Layout.ofService defs v) (shapes v defs.sites) = .ok senv := by
-  have hs := ofService_has defs v
-  have ho := find_of_has_option (e := v.event) (hs _ (by simp [stepTys]))
-  have hp : (Layout.ofService defs v).Has (pendingTable (shapes v defs.sites)) := hs _ (by simp [stepTys])
-  obtain ⟨⟨dE, nE⟩, hE⟩ := Option.isSome_iff_exists.1 ho.1
-  obtain ⟨⟨dopt, nopt⟩, hopt⟩ := Option.isSome_iff_exists.1 ho.2
-  obtain ⟨⟨dP, nP⟩, hPE⟩ := Option.isSome_iff_exists.1 hp.2.1.2
-  replace hPE : (Layout.ofService defs v).find? (pendingEntry (shapes v defs.sites)) = some (dP, nP) := hPE
-  obtain ⟨⟨dT, nT, dtT⟩, hT⟩ := collD_of_has_table hp
-  unfold StepEnv.of
-  split
-  · exact ⟨_, rfl⟩
-  all_goals simp_all [pendingTable]
-
-/-- The service's layout holds the pending table, so the wire-id invariant's term is built. -/
-theorem pendingBelowT_ofService {G : List Ty} (defs : Defs G) (v : ServiceV) (pending nextId : Term) :
-    ∃ t, pendingBelowT (Layout.ofService defs v) (shapes v defs.sites) pending nextId = .ok t := by
-  have hp : (Layout.ofService defs v).Has (pendingTable (shapes v defs.sites)) :=
-    ofService_has defs v _ (by simp [stepTys])
-  obtain ⟨x, hx⟩ := collD_of_has_table hp
-  exact ⟨_, by simp only [pendingBelowT, pendingTable] at hx ⊢; rw [hx]; rfl⟩
 
 /-- Every datatype of the layout holds the slots `S` gives its type, and its kinds of effect are `K`'s. -/
 def Slotted (S : Ty → Nat) (K L : Layout) : Prop := (∀ p ∈ L.types, p.2 = S p.1) ∧ L.effects = K.effects ∧ L.owns = K.owns

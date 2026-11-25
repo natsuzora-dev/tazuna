@@ -41,11 +41,12 @@ open Tazuna.Ir
 def _root_.Tazuna.Ir.BoundsV.Nonneg {r : Ty} (b : BoundsV r) : Prop :=
   0 ≤ b.items ∧ 0 ≤ b.cascade ∧ 0 ≤ b.steps ∧ ∀ c ∈ b.creates, 0 ≤ c.atMost
 
-/-- Whether the state's types have SMT values and well-formedness terms: no function, no type variable, ADT 0 only as
-Bool, and a plain key for every table but the pending table, whose keys are wire ids. -/
+/-- Whether the state's types, its events' and its callers' have SMT values and well-formedness terms: no function,
+no type variable, ADT 0 only as Bool, and a plain key for every table but the pending table, whose keys are wire
+ids. -/
 def _root_.Tazuna.Ir.ServiceV.stateTys (P : List AnySite) (v : ServiceV) : Bool :=
   let ok (t : Ty) := t.embeddable && t.plainKeys
-  ok v.records && v.machines.all (ok ·.table) && ok (pendingEntry (shapes v P))
+  ok v.records && v.machines.all (ok ·.table) && ok (pendingEntry (shapes v P)) && ok v.event && ok v.caller
 
 structure Checked (P : List AnySite) (T : List TypeDecl) (v : ServiceV) : Prop where
   sites : SitesUnique P

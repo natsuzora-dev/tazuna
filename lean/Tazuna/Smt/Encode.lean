@@ -26,6 +26,8 @@ inductive Limit where
   | builtin (name : String)
   /-- A kept function whose result is effects. -/
   | effectClosure
+  /-- A value of the type holds a type variable or a structure value (a service, a machine), which have no sort. -/
+  | unsortable (t : Ty)
 deriving Repr
 
 /-- What a layout lacks that an encoding needs. A layout built for the program has none of these. -/
@@ -283,6 +285,29 @@ end Tazuna.Smt
 namespace Tazuna.Ir
 
 mutual
+/-- Whether every datatype of the type has an SMT sort: no type variable, and no structure value but effects and
+fresh-id sources. The program's types include those of the spec's structure (lists of declarations, services); those
+values are never coded, so they get no datatype. -/
+def Ty.sortable : Ty → Bool
+  | .int | .str | .date | .id => true
+  | .param _ => false
+  | .list t | .bag t => Ty.sortable t
+  | .tuple ts => Ty.sortables ts
+  | .fn ps r => Ty.sortables ps && Ty.sortable r
+  | .adt _ _ vs => Ty.sortabless vs
+  | .table k v => Ty.sortable k && Ty.sortable v
+  | .dsl .effect [e] => Ty.sortable e
+  | .dsl k _ => k == .fresh
+def Ty.sortables : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.sortable t && Ty.sortables ts
+def Ty.sortabless : List (List Ty) → Bool
+  | [] => true
+  | ts :: vs => Ty.sortables ts && Ty.sortabless vs
+end
+
+
+mutual
 /-- Whether SMT-LIB's `=` on codes is Gleam's `==`: the code of a value is unique, so no bag or table (whose slots
 can hold the same items in another order) and nothing without a term. -/
 def Ty.eqable : Ty → Bool
@@ -305,7 +330,12 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-def lacks (t : Ty) : Refusal := .layout (.type t)
+/-- The layout lacks the datatype of `t`: a gap when `t` has a sort, else the limit that it has none. -/
+def lacks (t : Ty) : Refusal := if t.sortable then .layout (.type t) else .limit (.unsortable t)
+
+/-- The layout lacks the kind of effect with these fields: a gap when they have sorts, else the limit. -/
+def lacksKind (name : String) (fields : List Ty) : Refusal :=
+  if Ty.sortables fields then .layout (.effectKind name) else .limit (.unsortable (.tuple fields))
 
 /-- Selects field `j` of whichever of the constructors `k`, `k + 1`, ..., `k + n` built `x`; every one of them has
 the field. -/
@@ -444,6 +474,7 @@ of its datatype, so a list of effects has free slots. -/
 def defaultT : Ty → Option Term :=
   defaultWith L fun
     | .effect, [e] => effectDefault L e
+    | .fresh, _ => some (.int 0)
     | _, _ => none
 
 /-- The term of a value of `t` that free slots hold, refused when the layout lacks a datatype it needs. -/
@@ -625,7 +656,7 @@ set_option linter.tazuna.silentDefault false in
 `ensures` and `on_answer` sites captured. -/
 def effectT (key : EffectKey) (input : Term) (ens answer : List Term) : Except Refusal Term := do
   let (d, _) ← L.findE (.dsl .effect [key.event])
-  let k ← need (.layout (.effectKind key.name)) ((L.effectsOf key.event).findIdx? (·.same key))
+  let k ← need (lacksKind key.name key.fields) ((L.effectsOf key.event).findIdx? (·.same key))
   let de ← tupleD L ((key.ensures.map (·.Γ)).getD [])
   let da ← tupleD L key.answer.Γ
   pure (.ctor d k [input, .ctor de 0 ens, .ctor da 0 answer])
@@ -634,7 +665,7 @@ def effectT (key : EffectKey) (input : Term) (ens answer : List Term) : Except R
 the input and the terms of the values the `on_answer` site captured. -/
 def ownT (key : OwnKey) (caller input : Term) (answer : List Term) : Except Refusal Term := do
   let (d, _) ← L.findE (.dsl .effect [key.event])
-  let k ← need (.layout (.effectKind key.name)) ((L.ownsOf key.event).findIdx? (·.same key))
+  let k ← need (lacksKind key.name key.fields) ((L.ownsOf key.event).findIdx? (·.same key))
   let da ← tupleD L key.answer.Γ
   pure (.ctor d ((L.effectsOf key.event).length + k) [caller, input, .ctor da 0 answer])
 

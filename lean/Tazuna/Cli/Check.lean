@@ -43,7 +43,7 @@ def loadSpec (root path : String) : IO (Except UInt32 Smt.CheckedSpec) := do
           return .ok ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) (by simpa using htys) h⟩
         else
           IO.println (invalidIrLine ⟨none, none,
-            "a state type has a type variable, an ADT 0 that is not Bool or a table with no plain key"⟩).compress
+            "a state, event or caller type has a type variable, an ADT 0 that is not Bool or a table with no plain key"⟩).compress
           return .error 4
       | findings =>
         for (k, message) in findings do
