@@ -23,6 +23,7 @@ import Tazuna.Smt.FiresForward
 import Tazuna.Smt.Pair
 import Tazuna.Smt.PairLine
 import Tazuna.Smt.Lines
+import Tazuna.Smt.Sorts
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -54,6 +55,7 @@ elab "#check_tazuna_axioms" : command => do
       ``Tazuna.Smt.within_sound, ``Tazuna.Smt.cti_sound, ``Tazuna.Smt.diamond_confluent,
       ``Tazuna.Smt.runs_confluent, ``Tazuna.Smt.ownPairs_complete, ``Tazuna.Smt.pairs_sound,
       ``Tazuna.Smt.cascade_lines, ``Tazuna.Smt.cascade_within, ``Tazuna.Smt.timers_lines,
+      ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.back_sorts,
       ``Tazuna.Ir.Step.timerForward_of_noTimer] do
     unless env.contains n do throwError "{n} is missing"
 
@@ -119,7 +121,10 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.timers_lines,
     -- T5's timer questions, one per timer machine: a model is a context whose timer falls back, so timers do not fire
     -- forward; unsat answers mean no context within the slots has one.
-    ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound]
+    ``Tazuna.Smt.back_violates, ``Tazuna.Smt.back_sound,
+    -- No unsat answer is free and none is out of reach: `Unsat` asks that the sorts hold values, and the sorts of every
+    -- question an encoder builds in a layout whose datatypes have sorts (as `Layout.ofParts`'s, `sorted_ofParts`) do.
+    ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.back_sorts]
   let mut used : NameSet := {}
   let mut todo := roots
   while !todo.isEmpty do

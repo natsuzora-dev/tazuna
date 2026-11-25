@@ -562,13 +562,13 @@ theorem pair_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P 
     · exact hnH
     · exact ht1
     · exact ht2
-  obtain ⟨a, ha, hna⟩ := hbq M hM
+  obtain ⟨a, ha, hna⟩ := hbq.noModel M hM
   rcases List.mem_append.1 ha with ha | ha
   · exact (hna (hpre a ha)).elim
   simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
   subst ha
   simp only [holds_or, holds_not, not_or, Classical.not_not] at hna
-  obtain ⟨a, ha, hna'⟩ := htq M hM
+  obtain ⟨a, ha, hna'⟩ := htq.noModel M hM
   rcases List.mem_append.1 ha with ha | ha
   · exact (hna' (hpre a ha)).elim
   simp only [List.mem_cons, List.not_mem_nil, or_false] at ha

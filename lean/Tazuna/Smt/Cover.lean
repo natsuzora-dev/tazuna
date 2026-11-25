@@ -314,7 +314,7 @@ theorem within_sound {E : List AnyEffectSite} (chk : Checked P E T v) (senv : St
     with ⟨inp, hmem, hc, M, hM, hS, hxd, hcase⟩ | h
   · obtain ⟨gs, qs, hqs, hun⟩ := hq inp hmem
     exact question_within chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is)
-      (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg => hun q hq' hg M fun n h => varSorted_of_sorted (hM n h)
+      (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg => (hun q hq' hg).noModel M fun n h => varSorted_of_sorted (hM n h)
   · exact h f hf
 
 end

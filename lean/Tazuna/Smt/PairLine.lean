@@ -148,7 +148,7 @@ theorem pairsWithin_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     · exact stateSupp_names hR hsupp hrc hmc (need_ok.1 hnames)
     · exact ht1
     · exact ht2
-  obtain ⟨a, ha, hna⟩ := ht M hM
+  obtain ⟨a, ha, hna⟩ := ht.noModel M hM
   rcases List.mem_append.1 ha with ha | ha
   · exact (hna (hpre a ha)).elim
   simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
