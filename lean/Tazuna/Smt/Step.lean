@@ -59,34 +59,31 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v P))
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
     let ks ← callersOf L x.callers
-    let (o, c, cs) ← encodeCommand L T P v (shapes v P) senv x cc apply inv ks S.records S.now S.fresh S.nextId S.pending
-      caller input S.machines
+    let (o, c, cs) ← encodeCommand L T P v (shapes v P) senv x cc apply inv ks S caller input
     pure ⟨.command o, c, andT cx (andT ca ci), cs⟩
   | .query i caller input => do
     let q := v.queries.get i
     let (qc, cq) ← QueryCode.of L q
     let ks ← callersOf L q.callers
-    let (o, c) ← encodeQuery L q qc ks S.records S.now S.fresh caller input
+    let (o, c) ← encodeQuery L q qc ks S caller input
     pure ⟨.query o, c, cq, tt⟩
   | .answer k j to value => do
     let sh ← need "an answer shape past the pending shapes" (shapes v P)[k]?
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let (o, c, cs) ← encodeAnswer L T P (shapes v P) k sh j senv apply inv S.records S.pending to value S.now S.fresh
-      S.nextId S.machines
+    let (o, c, cs) ← encodeAnswer L T P (shapes v P) k sh j senv apply inv S to value
     pure ⟨.answer o, c, andT ca ci, cs⟩
   | .unmatched t to _ => do
     let u ← answerUnmatchedT L (shapes v P) t S.pending to
     pure ⟨.unmatched u, tt, tt, tt⟩
   | .event i value => do
     let (ec, ce) ← EventCode.of L v i
-    let (o, c, cs) ← encodeEvent L T P v (shapes v P) senv ec S.records S.now S.fresh S.nextId S.pending S.machines value
+    let (o, c, cs) ← encodeEvent L T P v (shapes v P) senv ec S value
     pure ⟨.event o, c, ce, cs⟩
   | .clock time => do
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let (o, c, cs) ← encodeClock L T P v (shapes v P) senv apply inv S.records S.now time S.fresh S.pending S.nextId
-      S.machines
+    let (o, c, cs) ← encodeClock L T P v (shapes v P) senv apply inv S time
     pure ⟨.clock o, c, andT ca ci, cs⟩
 
 end
@@ -191,7 +188,7 @@ theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     (Holds M t.codes → Holds M t.sites → Holds M t.out.case →
       (Holds M t.cond ↔ stepFits L.count T (shapes v P) s x) ∧
       (Holds M t.cond → t.out.Rel M L T (shapes v P) s x (step T v s x))) := by
-  obtain ⟨⟨hrec, hnow, hfresh, hnid⟩, hpend, hms⟩ := decode_state hS
+  have hR := decode_state hS
   cases inp with
   | command i sc si =>
     obtain ⟨caller, input, rfl, hsc, hsi⟩ := decode_command hx
@@ -205,8 +202,7 @@ theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     obtain ⟨hcx, hca, hci⟩ : Holds M cx ∧ Holds M ca ∧ Holds M ci := by
       rw [holds_andT, holds_andT] at hcodes; exact hcodes
     have hks' := callersOf_ok (v.commands.get i).data.caller hks
-    exact command_encode chk (fun _ => shapes_inSites) s hinv i caller input hcc hcx happ hca hinvc hci hks' senv
-      hrec hnow hfresh hnid hpend hms hsc hsi hcmd hcs
+    exact command_encode chk (fun _ => shapes_inSites) s hinv i caller input hcc hcx happ hca hinvc hci hks' senv hR hsc hsi hcmd hcs
   | query i sc si =>
     obtain ⟨caller, input, rfl, hsc, hsi⟩ := decode_query hx
     obtain ⟨⟨qc, cq⟩, hqc, henc⟩ := bind_ok.1 henc
@@ -214,7 +210,7 @@ theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     obtain ⟨⟨o, c⟩, hqe, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     exact ⟨queryCode_exact hqc, fun hcq _ _ =>
-      query_encode s i caller input hqc hcq (callersOf_ok (v.queries.get i).data.caller hks) hrec hnow hfresh hsc hsi hqe⟩
+      query_encode s i caller input hqc hcq (callersOf_ok (v.queries.get i).data.caller hks) hR hsc hsi hqe⟩
   | answer k j toT valT =>
     obtain ⟨sh, hk, henc⟩ := bind_ok.1 henc
     have hk := need_ok.1 hk
@@ -227,24 +223,22 @@ theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     have hx' : decodeAnswer M L (answerTy sh.output sh.rejection) toT valT = some x := by
       simpa [SymInput.decode, hk] using hx
     obtain ⟨hty, to, value, rfl, hto, hval⟩ := decode_answer hx'
-    have ex := answer_encode chk (fun _ => shapes_inSites) s hinv hk j to value happ hca hinvc hci senv hrec
-      hpend hto hnow hfresh hnid hms hty hval hans hcs
+    have ex := answer_encode chk (fun _ => shapes_inSites) s hinv hk j to value happ hca hinvc hci senv hR hto hty hval hans hcs
     exact ⟨by rw [ex.1]; exact ⟨fun h => h hhit, fun h _ => h⟩, fun hcond => ex.2 hcond hhit⟩
   | unmatched ty toT valT =>
     obtain ⟨u, hu, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     obtain ⟨-, to, value, rfl, hto, -⟩ := decode_answer hx
-    refine ⟨by simp [holds_tt, codesFit], fun _ _ hcase => ⟨?_, fun _ => answer_unmatched s to ty value hpend hto hu hcase⟩⟩
+    refine ⟨by simp [holds_tt, codesFit], fun _ _ hcase => ⟨?_, fun _ => answer_unmatched s to ty value hR.pending hto hu hcase⟩⟩
     refine ⟨fun _ p hf => ?_, fun _ => holds_tt⟩
-    simp [answerFits, unmatched_types s to ty hpend hto hu hcase p hf]
+    simp [answerFits, unmatched_types s to ty hR.pending hto hu hcase p hf]
   | event i sv =>
     obtain ⟨value, rfl, hsv⟩ := decode_event hx
     obtain ⟨⟨ec, ce⟩, hec, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c, cs⟩, hev, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     exact ⟨eventCode_exact hec, fun hce hcs _ =>
-      event_encode chk (fun _ => shapes_inSites) s hinv i value hec hce hrec hsv hnow hnid hfresh hpend hms senv
-        hev hcs⟩
+      event_encode chk (fun _ => shapes_inSites) s hinv i value hec hce hR hsv senv hev hcs⟩
   | clock st =>
     obtain ⟨time, rfl, hst⟩ := decode_clock hx
     obtain ⟨⟨apply, ca⟩, happ, henc⟩ := bind_ok.1 henc
@@ -253,8 +247,7 @@ theorem step_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     cases pure_ok.1 henc
     refine ⟨apply_inv_exact happ hinvc, fun hcodes hcs _ => ?_⟩
     obtain ⟨hca, hci⟩ := (holds_andT _ _).1 hcodes
-    exact clock_encode chk (fun _ => shapes_inSites) s hinv time happ hca hinvc hci hrec hnow hst hfresh hnid
-      hpend hms senv hcl hcs
+    exact clock_encode chk (fun _ => shapes_inSites) s hinv time happ hca hinvc hci hR hst senv hcl hcs
 
 end
 

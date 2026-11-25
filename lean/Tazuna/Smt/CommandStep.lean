@@ -31,20 +31,20 @@ condition asks only for what the step computes. -/
 def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (callers : List Term)
-    (records now fresh nextId pending caller input : Term) (xs : List Term) :
+    (S : SymState) (caller input : Term) :
     Except Refusal (CommandOut × Term × Term) := do
-  let (a, c1) ← encodeAdmit L cc.accepts callers records now fresh caller input
+  let (a, c1) ← encodeAdmit L cc.accepts callers S.records S.now S.fresh caller input
   let (res, c2) ← cc.decide (a.ctx, ())
   let rest ← need "a result that has no term" (Code.term? _ res)
   let (d, _) ← need "a layout without the result type" (L.find? (Ty.result (.list v.event) x.rejection))
   let res := Term.share rest
   let evs := Term.sel d 0 0 res
   let (dl, n, dt) ← collD L (.list v.event) [v.event]
-  let (o, c3) ← encodeEvents L T v shs senv apply now (slotsOf dl dt n 1 evs) records xs nextId (.int 0)
+  let (o, c3) ← encodeEvents L T v shs senv apply S.now (slotsOf dl dt n 1 evs) S.records S.machines S.nextId (.int 0)
   let rfc ← need "records that have no term" (Code.ofTerm? v.records o.records)
   let (ens, c4) ← cc.ensures (a.ctx, rfc, ())
   let ensures ← ruleTerms L ens
-  let (fo, cf, cfx) ← encodeFinish L T P v shs senv apply invariants now (.add fresh (.int 1)) pending o
+  let (fo, cf, cfx) ← encodeFinish L T P v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending o
   let ok := Term.is d 0 res
   pure (⟨a.callerOk, a.rules, ok, .sel d 1 0 res, evs, o, ensures, fo⟩,
     .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) (andT c2 (.ite ok (andT c3 (andT c4
@@ -93,16 +93,11 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hinv : v.invariants.code L = .ok (inv, ci)) (hci : Holds M ci)
     {ks : List Term} (hks : callerTerms L ((v.commands.get i).data).caller (v.commands.get i).callers = some ks)
     (senv : StepEnv L shs)
-    {records now fresh nextIdT pending sc si : Term} {xs : List Term}
-    (hrec : RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M))
-    (hnow : now.denote M = .int s.now) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
-    (hnid : nextIdT.denote M = .int (Int.ofNat s.nextId)) (hpend : PendingRel L shs (pending.denote M) s.pending)
-    (hms : MachinesRel M L T v.machines xs s.machines)
+    {S : SymState} (hR : StateRel M L T shs S s) {sc si : Term}
     (hsc : RelV L v.caller (Ty.up _ ((v.commands.get i).data).caller caller) (sc.denote M))
     (hsi : RelV L (v.commands.get i).input (Ty.up _ ((v.commands.get i).data).input input) (si.denote M))
     {o : CommandOut} {cond cfx : Term}
-    (henc : encodeCommand L T P v shs senv (v.commands.get i) cc apply inv ks records now fresh nextIdT pending sc
-      si xs = .ok (o, cond, cfx)) (hcfx : Holds M cfx) :
+    (henc : encodeCommand L T P v shs senv (v.commands.get i) cc apply inv ks S sc si = .ok (o, cond, cfx)) (hcfx : Holds M cfx) :
     let x := v.commands.get i
     let ctx := Step.ctx s s.records caller input
     let r := step T v s (.command i caller input)
@@ -138,7 +133,7 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
   obtain ⟨⟨fo, cf, cfx'⟩, h16, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   obtain ⟨hok, hbr, hcx⟩ := admit_rel v.records_data ((v.commands.get i).data).input ((v.commands.get i).data).caller ((v.commands.get i).data).ctx _ ((v.commands.get i).data).accepts hcR.accepts _ hks s caller input
-    hrec hnow hfresh hsc hsi h1
+    hR.records hR.now hR.fresh hsc hsi h1
   refine ⟨?_, fun hc => ?_⟩
   · obtain ⟨⟨a, c1'⟩, g1, hcc0⟩ := bind_ok.1 hcc
     obtain ⟨⟨d', c2'⟩, g2, hcc0⟩ := bind_ok.1 hcc0
@@ -211,14 +206,14 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
           let sA := (Step.reactAll T s1 events).1
           have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
           have e3 : Holds M c3 ↔ eventsFit L.count T s1 events :=
-            events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv hS hsw events hh s1 hnow hrec hms h12
-          have hdone : Holds M c3 → SettleDone M L T shs { state := s1 } ⟨.bool false, oe, .add fresh (.int 1)⟩
+            events_exact (fun m hm => (chk.keys m hm).1) happ hca _ sv hS hsw events hh s1 hR.now hR.records hR.machines h12
+          have hdone : Holds M c3 → SettleDone M L T shs { state := s1 } ⟨.bool false, oe, .add S.fresh (.int 1)⟩
               (Step.applyEvents T { state := s1 } events) := fun hc3 =>
             events_done (T := T) chk hshs happ' senv
-              { state := s1 } rfl hnow hS hsw hh hrec hms hnid (by simp [Term.denote, hfresh, s1, Val.toInt]) h12 hc3
+              { state := s1 } rfl hR.now hS hsw hh hR.records hR.machines hR.nextId (by simp [Term.denote, hR.fresh, s1, Val.toInt]) h12 hc3
           have hrf : Holds M c3 → RelV L v.records (Ty.up _ v.records_data sA.records) (oe.records.denote M) := fun hc3 =>
             (events_rel chk hshs happ' senv _ sv hS hsw
-              events hh s1 hnow hrec hms hnid rfl h12 hc3).1
+              events hh s1 hR.now hR.records hR.machines hR.nextId rfl h12 hc3).1
           have e45 : Holds M c3 → (Holds M c4 ↔ x.ensures.appFits L.count (ctx, sA.records, ())) ∧
               (Holds M c4 → (Holds M (.ite (allT (ensures.map (·.2))) cf tt) ↔
                 (Step.broken (x.ensures.fn (ctx, sA.records, ())) = [] →
@@ -246,7 +241,7 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
                 simp [hb]; simpa using this
             rw [holds_ite_tt hallE, decide_eq_true_iff]
             refine imp_congr_right fun _ => ?_
-            exact (finish_encode chk hshs happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hnow hpend (hdone hc3) (applyEvents_ok chk.reactions _ rfl hinv1 events)
+            exact (finish_encode chk hshs happ hca hinv hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending (hdone hc3) (applyEvents_ok chk.reactions _ rfl hinv1 events)
               h16 hcfx).1
           rw [holds_andT, holds_andT]
           constructor
@@ -339,8 +334,8 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
         erw [Ty.up_list _ _ v.event_data] at hh
         let s1 : State v := { s with fresh := s.fresh + 1 }
         have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl rfl
-        have hdone := events_done (T := T) chk hshs happ senv { state := s1 } rfl hnow hS hsw hh hrec hms hnid (fresh := .add fresh (.int 1))
-          (by simp [Term.denote, hfresh, s1, Val.toInt]) h12 hc3
+        have hdone := events_done (T := T) chk hshs happ senv { state := s1 } rfl hR.now hS hsw hh hR.records hR.machines hR.nextId (fresh := .add S.fresh (.int 1))
+          (by simp [Term.denote, hR.fresh, s1, Val.toInt]) h12 hc3
         have hd2 := hdone
         obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, e1, -, -, -, e5, -, -⟩ := hd2
         obtain ⟨ps1, hps1⟩ := newsRel_writes e5
@@ -362,7 +357,7 @@ theorem command_encode {P : List AnySite} {v : ServiceV} (chk : Checked P T v)
             have := hc5; simp only [Holds, Term.denote, hallE, Val.toBool, ite_true] at this
             exact this
           rw [happly] at hdone
-          exact (finish_encode chk hshs happ0 hca hinv0 hci senv s1 .accepted { state := s1 } rfl hinv1 hnow hpend hdone
+          exact (finish_encode chk hshs happ0 hca hinv0 hci senv s1 .accepted { state := s1 } rfl hinv1 hR.now hR.pending hdone
             (fun a1 h => applyEvents_ok chk.reactions _ rfl hinv1 events a1 (happly.trans h)) h16 hcfx).2 hcf
 end
 

@@ -109,14 +109,18 @@ def MachinesRel (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) �
       MachinesRel T ms xs sms
   | _, _, _ => False
 
-/-- The terms denote the state's data. -/
-def StateRel (S : SymState) (s : State v) : Prop :=
-  RelV L v.records (Ty.up _ v.records_data s.records) (S.records.denote M) ∧ S.now.denote M = .int s.now ∧
-    S.fresh.denote M = .int (Int.ofNat s.fresh) ∧ S.nextId.denote M = .int (Int.ofNat s.nextId)
-
 /-- The pending term denotes the pending requests, at the shapes. -/
 def PendingRel (shs : List (PendingShape v.event)) (w : Val) (ps : List (Step.Pending v.event)) : Prop :=
   ∃ tbl, RelV L (pendingTable shs) tbl w ∧ pendingList _ tbl = ps
+
+/-- The terms denote the state: what decoding gives (`decode_state`) and what every step theorem starts from. -/
+structure StateRel (T : List TypeDecl) (shs : List (PendingShape v.event)) (S : SymState) (s : State v) : Prop where
+  records : RelV L v.records (Ty.up _ v.records_data s.records) (S.records.denote M)
+  now : S.now.denote M = .int s.now
+  fresh : S.fresh.denote M = .int (Int.ofNat s.fresh)
+  nextId : S.nextId.denote M = .int (Int.ofNat s.nextId)
+  pending : PendingRel L shs (S.pending.denote M) s.pending
+  machines : MachinesRel M L T v.machines S.machines s.machines
 
 /-- The state whose data a model's values of the symbolic state are, with the pending requests of the shapes `shs`
 and the instances in the canonical order of the type table `T`. -/
@@ -208,16 +212,14 @@ theorem decode_machines (T : List TypeDecl) : (ms : List (MachineV v.records v.e
 
 /-- T3 for the state: the decoded state is the one the model's values denote. -/
 theorem decode_state {S : SymState} {T : List TypeDecl} {shs : List (PendingShape v.event)} {s : State v}
-    (h : S.decode M L T shs = some s) :
-    StateRel M L S s ∧ PendingRel L shs (S.pending.denote M) s.pending ∧
-      MachinesRel M L T v.machines S.machines s.machines := by
+    (h : S.decode M L T shs = some s) : StateRel M L T shs S s := by
   obtain ⟨r, hrec, h⟩ := bind_some.1 h
   obtain ⟨now, hnow, h⟩ := bind_some.1 h
   obtain ⟨fr, hfr, h⟩ := bind_some.1 h
   obtain ⟨ni, hni, h⟩ := bind_some.1 h
   obtain ⟨ps, hps, h⟩ := bind_some.1 h
   obtain ⟨sms, hsms, rfl⟩ := map_some.1 h
-  refine ⟨⟨?_, intOf_eq hnow, natOf_eq hfr, natOf_eq hni⟩, decode_pending shs hps, decode_machines T _ _ hsms⟩
+  refine ⟨?_, intOf_eq hnow, natOf_eq hfr, natOf_eq hni, decode_pending shs hps, decode_machines T _ _ hsms⟩
   simpa [Ty.up_down] using decode_rel _ _ _ hrec
 
 theorem decode_embedPending (shs : List (PendingShape v.event)) (pv : PendingVal shs) (w : Val)

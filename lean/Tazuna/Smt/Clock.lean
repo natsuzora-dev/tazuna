@@ -734,12 +734,12 @@ from the requests and own effects the rounds start. Each part's condition is ask
 the second term is the codes' condition. -/
 def encodeClock (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (invariants : Code (Ty.fn [v.records] Ty.rules))
-    (records now time fresh pending nextId : Term) (xs : List Term) : Except Refusal (ClockOut × Term × Term) := do
-  let (ro, cr) ← encodeRounds L T shs v.declared senv v.machines records time (v.bounds.cascade.toNat + 1) xs tt
-    nextId (.int 0)
-  let (fo, cf, cfx) ← encodeFinish L T P v shs senv apply invariants time fresh pending
-    ⟨records, ro.tables, ro.nextId, ro.news, ro.owns, ro.queued⟩
-  let forward := Term.le now time
+    (S : SymState) (time : Term) : Except Refusal (ClockOut × Term × Term) := do
+  let (ro, cr) ← encodeRounds L T shs v.declared senv v.machines S.records time (v.bounds.cascade.toNat + 1) S.machines tt
+    S.nextId (.int 0)
+  let (fo, cf, cfx) ← encodeFinish L T P v shs senv apply invariants time S.fresh S.pending
+    ⟨S.records, ro.tables, ro.nextId, ro.news, ro.owns, ro.queued⟩
+  let forward := Term.le S.now time
   pure (⟨forward, ro.over, ro, fo⟩, .ite forward (andT cr (.ite ro.over tt cf)) tt, cfx)
 
 end
@@ -928,14 +928,10 @@ theorem clock_encode {P : List AnySite} (chk : Checked P T v)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hci : v.invariants.code L = .ok (inv, ci)) (hcinv : Holds M ci)
-    {records now st fresh pending nextIdT : Term} (hrec : RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M))
-    (hnow : now.denote M = .int s.now) (hst : st.denote M = .int time)
-    (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
-    (hnid : nextIdT.denote M = .int (Int.ofNat s.nextId)) (hpend : PendingRel L shs (pending.denote M) s.pending)
-    {xs : List Term} (hms : MachinesRel M L T v.machines xs s.machines)
+    {S : SymState} (hR : StateRel M L T shs S s) {st : Term} (hst : st.denote M = .int time)
     (senv : StepEnv L shs)
     {o : ClockOut} {cond cfx : Term}
-    (henc : encodeClock L T P v shs senv apply inv records now st fresh pending nextIdT xs = .ok (o, cond, cfx))
+    (henc : encodeClock L T P v shs senv apply inv S st = .ok (o, cond, cfx))
     (hcfx : Holds M cfx) :
     let r := step T v s (.clock time)
     (Holds M cond ↔ (s.now ≤ time →
@@ -953,23 +949,23 @@ theorem clock_encode {P : List AnySite} (chk : Checked P T v)
   cases pure_ok.1 henc
   refine ⟨?_, fun hc => ?_⟩
   · have hord : ∀ m ∈ v.machines, m.key.ordered T = true := fun m hm => (chk.keys m hm).2
-    have hfw : ((Term.le now st).denote M).toBool = decide (s.now ≤ time) := by
-      simp only [Term.denote, hnow, hst, Val.toInt, Val.toBool]
+    have hfw : ((Term.le S.now st).denote M).toBool = decide (s.now ≤ time) := by
+      simp only [Term.denote, hR.now, hst, Val.toInt, Val.toBool]
     rw [holds_ite_tt hfw]
     by_cases ht : s.now ≤ time
     · simp only [ht, decide_true, true_implies]
       let s0 : State v := { s with now := time }
       have hinv0 : Step.Inv P s0 := hinv.congr rfl rfl rfl
-      have hrec0 : RelV L v.records (Ty.up _ v.records_data s0.records) (records.denote M) := hrec
+      have hrec0 : RelV L v.records (Ty.up _ v.records_data s0.records) (S.records.denote M) := hR.records
       have er := rounds_exact (shs := shs) (ds := v.declared) (senv := senv) hord
-        (v.bounds.cascade.toNat + 1) s0 hrec0 hst hms (ab := true) rfl h1
+        (v.bounds.cascade.toNat + 1) s0 hrec0 hst hR.machines (ab := true) rfl h1
       rw [holds_andT, er]
       have rest : roundsFit L.count T s0 true (v.bounds.cascade.toNat + 1) →
           (Holds M (.ite ro.over tt cf) ↔ ∀ s' effs,
             Step.fire s0 (v.bounds.cascade.toNat + 1) = some (s', effs) →
             finishFits L.count T shs (Step.start { state := s' } effs)) := fun hf => by
-        have hro := rounds_rel chk.sites hshs senv hord (v.bounds.cascade.toNat + 1) s0 hrec0 hst hinv.machines hms
-          (ab := true) rfl hnid (q0 := 0) rfl h1 (er.2 hf)
+        have hro := rounds_rel chk.sites hshs senv hord (v.bounds.cascade.toNat + 1) s0 hrec0 hst hinv.machines hR.machines
+          (ab := true) rfl hR.nextId (q0 := 0) rfl h1 (er.2 hf)
         simp only [Step.fireFrom, ite_true] at hro
         cases hfire : Step.fire s0 (v.bounds.cascade.toNat + 1) with
         | none =>
@@ -984,9 +980,9 @@ theorem clock_encode {P : List AnySite} (chk : Checked P T v)
           rw [holds_ite, hover]
           simp only [Val.toBool, Bool.false_eq_true, ite_false]
           obtain ⟨hinv', hreach, hfrom⟩ := Step.fire_inv s0 hinv0 _ hfire
-          have hdone := rounds_done (shs := shs) s time hs' hrec hfresh hmach hnT hnews hq hown
+          have hdone := rounds_done (shs := shs) s time hs' hR.records hR.fresh hmach hnT hnews hq hown
           rw [(finish_encode chk hshs happ hca hci hcinv senv s
-            .accepted { state := s0 } rfl hinv0 hst hpend hdone
+            .accepted { state := s0 } rfl hinv0 hst hR.pending hdone
             (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach hfrom h,
               Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).1]
           constructor
@@ -997,8 +993,8 @@ theorem clock_encode {P : List AnySite} (chk : Checked P T v)
           · intro h; exact h s' effs rfl
       exact ⟨fun ⟨p1, p2⟩ => ⟨p1, (rest p1).1 p2⟩, fun ⟨p1, p2⟩ => ⟨p1, (rest p1).2 p2⟩⟩
     · simp only [ht, decide_false, Bool.false_eq_true, false_implies]
-  · have hfw : (Term.le now st).denote M = .bool (decide (s.now ≤ time)) := by
-      simp only [Term.denote, hnow, hst, Val.toInt]
+  · have hfw : (Term.le S.now st).denote M = .bool (decide (s.now ≤ time)) := by
+      simp only [Term.denote, hR.now, hst, Val.toInt]
     simp only
     rw [hfw]
     by_cases ht : s.now ≤ time
@@ -1009,9 +1005,9 @@ theorem clock_encode {P : List AnySite} (chk : Checked P T v)
       obtain ⟨hcr, hrest⟩ := (holds_andT _ _).1 hc
       let s0 : State v := { s with now := time }
       have hinv0 : Step.Inv P s0 := hinv.congr rfl rfl rfl
-      have hrec0 : RelV L v.records (Ty.up _ v.records_data s0.records) (records.denote M) := hrec
+      have hrec0 : RelV L v.records (Ty.up _ v.records_data s0.records) (S.records.denote M) := hR.records
       have hro := rounds_rel chk.sites hshs senv (fun m hm => (chk.keys m hm).2) (v.bounds.cascade.toNat + 1) s0 hrec0 hst
-        hinv.machines hms (ab := true) rfl hnid (q0 := 0) rfl h1 hcr
+        hinv.machines hR.machines (ab := true) rfl hR.nextId (q0 := 0) rfl h1 hcr
       simp only [Step.fireFrom, ite_true] at hro
       cases hfire : Step.fire s0 (v.bounds.cascade.toNat + 1) with
       | none =>
@@ -1030,9 +1026,9 @@ theorem clock_encode {P : List AnySite} (chk : Checked P T v)
           rw [show ({ s with now := time } : State v) = s0 from rfl, hfire]
         rw [hr]
         obtain ⟨hinv', hreach, -⟩ := Step.fire_inv s0 hinv0 _ hfire
-        have hdone := rounds_done (shs := shs) s time hs' hrec hfresh hmach hnT hnews hq hown
+        have hdone := rounds_done (shs := shs) s time hs' hR.records hR.fresh hmach hnT hnews hq hown
         exact (finish_encode chk hshs happ hca hci hcinv senv s
-          .accepted { state := s0 } rfl hinv0 hst hpend hdone
+          .accepted { state := s0 } rfl hinv0 hst hR.pending hdone
           (fun a1 h => ⟨Step.start_inv { state := s' } effs hinv' hreach (Step.fire_inv s0 hinv0 _ hfire).2.2 h,
             Step.start_queue { state := s' } effs h (by simp [Step.QueueOk]) hreach⟩) h2 hcfx).2 hrest
     · have hlt : time < s.now := by omega

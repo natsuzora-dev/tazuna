@@ -84,8 +84,8 @@ variable (L : Layout)
 caller and the input, and the constants of the listed callers. The condition asks only for what the step computes:
 the rules when the caller is listed, the output when the rules hold too. -/
 def encodeQuery {r c : Ty} (q : QueryV r c) (qc : QueryCode q) (callers : List Term)
-    (records now fresh caller input : Term) : Except Refusal (QueryOut × Term) := do
-  let (a, c1) ← encodeAdmit L qc.accepts callers records now fresh caller input
+    (S : SymState) (caller input : Term) : Except Refusal (QueryOut × Term) := do
+  let (a, c1) ← encodeAdmit L qc.accepts callers S.records S.now S.fresh caller input
   let (o, c2) ← qc.resolve (a.ctx, ())
   let ot ← need "an output that has no term" (Code.term? q.output o)
   pure (⟨a.callerOk, a.rules, ot⟩, .ite a.callerOk (andT c1 (.ite (allT (a.rules.map (·.2))) c2 tt)) tt)
@@ -123,12 +123,10 @@ the state stays. -/
 theorem query_encode {v : ServiceV} (s : State v) (i : Fin v.queries.length) (caller : v.caller.den0)
     (input : (v.queries.get i).input.den0) {qc : QueryCode (v.queries.get i)}
     {cq : Term} (hqc : QueryCode.of L _ = .ok (qc, cq)) (hcq : Holds M cq) {ks : List Term}
-    (hks : callerTerms L ((v.queries.get i).data).caller (v.queries.get i).callers = some ks) {records now fresh sc si : Term}
-    (hrec : RelV L v.records (Ty.up _ ((v.queries.get i).data).records s.records) (records.denote M))
-    (hnow : now.denote M = .int s.now) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
+    (hks : callerTerms L ((v.queries.get i).data).caller (v.queries.get i).callers = some ks) {shs : List (PendingShape v.event)} {S : SymState} (hR : StateRel M L T shs S s) {sc si : Term}
     (hsc : RelV L v.caller (Ty.up _ ((v.queries.get i).data).caller caller) (sc.denote M))
     (hsi : RelV L (v.queries.get i).input (Ty.up _ ((v.queries.get i).data).input input) (si.denote M))
-    {o : QueryOut} {cond : Term} (henc : encodeQuery L (v.queries.get i) qc ks records now fresh sc si = .ok (o, cond)) :
+    {o : QueryOut} {cond : Term} (henc : encodeQuery L (v.queries.get i) qc ks S sc si = .ok (o, cond)) :
     (Holds M cond ↔ queryFits L.count s (v.queries.get i) caller input) ∧
     (Holds M cond → (step T v s (.query i caller input)).state = s ∧
       o.Rel M L ((v.queries.get i).data).output (step T v s (.query i caller input)).outcome) := by
@@ -142,7 +140,7 @@ theorem query_encode {v : ServiceV} (s : State v) (i : Fin v.queries.length) (ca
   obtain ⟨ot, h9, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   obtain ⟨hok, hbr, hcx⟩ := admit_rel ((v.queries.get i).data).records ((v.queries.get i).data).input ((v.queries.get i).data).caller ((v.queries.get i).data).ctx _ ((v.queries.get i).data).accepts hq.accepts _ hks s caller input
-    hrec hnow hfresh hsc hsi h1
+    hR.records hR.now hR.fresh hsc hsi h1
   have e1 := admit_exact ((v.queries.get i).data).input (v.queries.get i).accepts g1 hca1 input hsi h1
   have e2 : Holds M c2 ↔ (v.queries.get i).resolve.appFits L.count (Step.ctx s s.records caller input, ()) :=
     (v.queries.get i).resolve.app_exact g2 hca2 (by simp [Ty.ctx, Ty.isFn]) _ _ (rels1 ((v.queries.get i).data).ctx ((v.queries.get i).data).ctxArgs hcx) h8

@@ -134,11 +134,10 @@ structure EventOut where
 /-- An event step's terms, its condition and the codes' condition, from the subscription's and the service's codes
 and the terms of the state and the received value. -/
 def encodeEvent (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
-    {i : Fin v.subscribes.length} (ec : EventCode v i) (records now fresh nextId pending : Term) (xs : List Term)
-    (value : Term) : Except Refusal (EventOut × Term × Term) := do
+    {i : Fin v.subscribes.length} (ec : EventCode v i) (S : SymState) (value : Term) : Except Refusal (EventOut × Term × Term) := do
   let (et, cw) ← encodeWrap ec value
-  let (o, c) ← encodeEvents L T v shs senv ec.apply now [(tt, [et])] records xs nextId (.int 0)
-  let (fo, cf, cx) ← encodeFinish L T P v shs senv ec.apply ec.invariants now fresh pending o
+  let (o, c) ← encodeEvents L T v shs senv ec.apply S.now [(tt, [et])] S.records S.machines S.nextId (.int 0)
+  let (fo, cf, cx) ← encodeFinish L T P v shs senv ec.apply ec.invariants S.now S.fresh S.pending o
   pure (⟨et, o, fo⟩, andT cw (andT c cf), cx)
 
 end
@@ -152,15 +151,11 @@ theorem event_encode {P : List AnySite} (chk : Checked P T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P)
     (s : State v) (hinv : Step.Inv P s) (i : Fin v.subscribes.length)
     (value : (v.subscribes.get i).event.den0) {ec : EventCode v i} {ce : Term}
-    (hec : EventCode.of L v i = .ok (ec, ce)) (hce : Holds M ce) {records sv now nextIdT fresh pending : Term}
-    (hrec : RelV L v.records (Ty.up _ v.records_data s.records) (records.denote M))
-    (hsv : RelV L _ (Ty.up _ ((v.eventData i)).value value) (sv.denote M)) (hnow : now.denote M = .int s.now)
-    (hnid : nextIdT.denote M = .int (Int.ofNat s.nextId)) (hfresh : fresh.denote M = .int (Int.ofNat s.fresh))
-    (hpend : PendingRel L shs (pending.denote M) s.pending)
-    {xs : List Term} (hms : MachinesRel M L T v.machines xs s.machines)
+    (hec : EventCode.of L v i = .ok (ec, ce)) (hce : Holds M ce) {S : SymState} (hR : StateRel M L T shs S s) {sv : Term}
+    (hsv : RelV L _ (Ty.up _ ((v.eventData i)).value value) (sv.denote M))
     (senv : StepEnv L shs)
     {o : EventOut} {c cx : Term}
-    (henc : encodeEvent L T P v shs senv ec records now fresh nextIdT pending xs sv = .ok (o, c, cx))
+    (henc : encodeEvent L T P v shs senv ec S sv = .ok (o, c, cx))
     (hcx : Holds M cx) :
     let ev := (v.subscribes.get i).wrap.fn (value, ())
     (Holds M c ↔ (v.subscribes.get i).wrap.appFits L.count (value, ()) ∧ eventsFit L.count T s [ev] ∧
@@ -182,13 +177,13 @@ theorem event_encode {P : List AnySite} (chk : Checked P T v)
       (occupied [(true, [et.denote M])]) := fun hcw => ⟨⟨_, rfl, ew.2 hcw⟩, trivial⟩
   have e2 : ∀ hcw : Holds M cw, (Holds M ce' ↔ eventsFit L.count T s [ev]) := fun hcw =>
     events_exact (fun m hm => (chk.keys m hm).1) g1 hc1 [(tt, [et])] [(true, [et.denote M])]
-      ⟨rfl, rfl, trivial⟩ (by simp) [ev] (hevT hcw) s hnow hrec hms hev
+      ⟨rfl, rfl, trivial⟩ (by simp) [ev] (hevT hcw) s hR.now hR.records hR.machines hev
   have ef := fun (hcw : Holds M cw) (hc : Holds M ce') =>
     finish_encode chk hshs g1 hc1 g3 hc3 senv s
-      .accepted { state := s } rfl hinv hnow hpend
+      .accepted { state := s } rfl hinv hR.now hR.pending
       (events_done (T := T) chk hshs he.apply senv
-        { state := s } rfl hnow (S := [(tt, [et])]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩ (by simp)
-        (evs := [ev]) (hevT hcw) hrec hms hnid hfresh hev hc)
+        { state := s } rfl hR.now (S := [(tt, [et])]) (sv := [(true, [et.denote M])]) ⟨rfl, rfl, trivial⟩ (by simp)
+        (evs := [ev]) (hevT hcw) hR.records hR.machines hR.nextId hR.fresh hev hc)
       (applyEvents_ok chk.reactions _ rfl hinv _) hf hcx
   rw [holds_andT, holds_andT]
   refine ⟨⟨fun ⟨hcw, hc, hcf⟩ => ⟨ew.1.1 hcw, (e2 hcw).1 hc, ((ef hcw hc).1).1 hcf⟩, fun ⟨p1, p2, p3⟩ => ?_⟩,
