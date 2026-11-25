@@ -2,10 +2,11 @@ import Tazuna.Semantics.Support
 
 /-! The question T5 asks of two waiting own effects, and why its answer covers every order of a cascade. Two own
 effects `e1` and `e2` commute from a step in progress `a0` (where neither waits any more) when running `e1` then `e2`
-ends as running them the other way round with the counters swapped: `e2` takes the counter it gets after `e1`, and
-`e1` the one it gets first (`canonPair`), so each effect makes the same names in both orders, and the results are
-compared up to renaming wire ids and reading collections as multisets (`PairCommutes`). This is the solver's question:
-it has no renaming to search for. Swapping the counters back is a renaming the cascade respects, and the effects that
+ends as running them the other way round with the names swapped: `e2` takes the counter it gets after `e1`, and `e1`
+the one it gets first, and the wire ids `e1` sends come before `e2`'s (`canonPair`), so each effect makes the same
+names in both orders, and the results are compared up to renaming and reading collections as multisets
+(`PairCommutes`). This is the solver's question: in the canonical order the names already agree, so it has no renaming
+to search for. Swapping the names back is a renaming the cascade respects, and the effects that
 still wait are a frame no internal step reads, so pairs that commute at the front of the queue make every two waiting
 effects commute wherever they wait (`commutes_of_pairs`), and every order of the cascade agrees with `settle`
 (`cascade_agrees`). -/
@@ -38,6 +39,27 @@ theorem PBij.swap_fixes (f : Nat) : (PBij.swap f).Fixes f := fun _ hc => (swapFn
 
 theorem PBij.swap_above {f n : Nat} (h : f + 2 ≤ n) : (PBij.swap f).rel n n := (swapFn_of_ge h).symm
 
+/-- The wire ids from `n` to `m` and from `m` to `k` swapped as blocks, every other id kept: what two internal steps
+sent from `n` on, renumbered as if the second had sent first. -/
+def wireSwap (n m k i : Nat) : Nat :=
+  if n ≤ i ∧ i < m then i + (k - m) else if m ≤ i ∧ i < k then i - (m - n) else i
+
+theorem wireSwap_inj {n m k i j : Nat} (h : wireSwap n m k i = wireSwap n m k j) : i = j := by
+  unfold wireSwap at h
+  repeat' split at h
+  all_goals omega
+
+theorem wireSwap_lt {n m k i : Nat} (h : i < k) : wireSwap n m k i < k := by
+  unfold wireSwap
+  repeat' split
+  all_goals omega
+
+/-- `P` followed by the injective `σ`. -/
+def PBij.post (P : PBij) (σ : Nat → Nat) (hσ : ∀ {i j}, σ i = σ j → i = j) : PBij where
+  rel a b := ∃ c, P.rel a c ∧ b = σ c
+  func := by rintro _ _ _ ⟨c, hc, rfl⟩ ⟨c', hc', rfl⟩; rw [P.func hc hc']
+  inj := by rintro _ _ _ ⟨c, hc, rfl⟩ ⟨c', hc', h⟩; exact P.inj hc (hσ h ▸ hc')
+
 namespace Step
 
 variable {v : ServiceV} (T : List TypeDecl)
@@ -45,14 +67,38 @@ variable {v : ServiceV} (T : List TypeDecl)
 /-- The step in progress with the counter `k`. -/
 def Acc.withFresh (a : Acc v) (k : Nat) : Acc v := { a with state := { a.state with fresh := k } }
 
+/-- The step in progress with its wire ids renamed by `σ`. -/
+def Acc.mapWire (σ : Nat → Nat) (a : Acc v) : Acc v :=
+  { a with state := { a.state with pending := a.state.pending.map fun p => { p with id := σ p.id } },
+           out := a.out.map fun o => { o with id := σ o.id } }
+
+/-- Renaming the wire ids of one side by an injective `σ` that keeps them below the next one keeps the two related. -/
+theorem Acc.Rel.mapWire {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') {σ : Nat → Nat}
+    (hσ : ∀ {i j}, σ i = σ j → i = j) (hlt : ∀ i < a'.state.nextId, σ i < a'.state.nextId) :
+    Acc.Rel ⟨R.ctr, R.wire.post σ hσ⟩ a (a'.mapWire σ) := by
+  obtain ⟨⟨hrec, hmach, hpend, hnow, hb, hb'⟩, hev, hout, ho, ho', hown⟩ := h
+  have hp := hpend.map (f := id) (r' := Pending.Rel ⟨R.ctr, R.wire.post σ hσ⟩)
+    (g := fun p => { p with id := σ p.id }) fun _ _ hpq => ⟨⟨_, hpq.1, rfl⟩, hpq.2⟩
+  have hq := hout.map (f := id) (r' := OutLine.Rel ⟨R.ctr, R.wire.post σ hσ⟩)
+    (g := fun o => { o with id := σ o.id }) fun _ _ hpq => ⟨⟨_, hpq.1, rfl⟩, hpq.2⟩
+  rw [List.map_id] at hp hq
+  refine ⟨⟨hrec, hmach, hp, hnow, hb, ?_⟩, hev, hq, ho, ?_, hown⟩
+  · simp only [Acc.mapWire, List.mem_map]
+    rintro _ ⟨p, hp, rfl⟩
+    exact hlt _ (hb' p hp)
+  · simp only [Acc.mapWire, List.mem_map]
+    rintro _ ⟨o, ho, rfl⟩
+    exact hlt _ (ho' o ho)
+
 /-- The two orders' equivalence: the same up to renaming wire ids and the ids made so far, collections as multisets. -/
 abbrev Same : Acc v → Acc v → Prop := Diamond.Closure OwnRel
 
-/-- `e2` then `e1` with each effect's counter as it is when `e1` runs first. -/
+/-- `e2` then `e1` with each effect's names as they are when `e1` runs first: `e2` takes the counter after `e1`'s, and
+the wire ids `e1` sends come first, then `e2`'s. -/
 def canonPair (a0 : Acc v) (e1 e2 : EffectV v.event) : Except Fault (Acc v) := do
   let c ← runOwn T (a0.withFresh (a0.state.fresh + 1)) e2
   let d ← runOwn T (c.withFresh a0.state.fresh) e1
-  pure (d.withFresh (a0.state.fresh + 2))
+  pure ((d.withFresh (a0.state.fresh + 2)).mapWire (wireSwap a0.state.nextId c.state.nextId d.state.nextId))
 
 /-- Two own effects commute from `a0`: where `e1` runs, `e2` after it ends as the canonical other order does, up to
 renaming, or both fault; and if `e2` faults first, it still faults after `e1`. -/
@@ -65,7 +111,8 @@ theorem Acc.Rel.withFresh {R : Ren} {a a' : Acc v} (h : Acc.Rel R a a') (k k' : 
     Acc.Rel R (a.withFresh k) (a'.withFresh k') := h
 
 /-- Running `e2` first with its own counter or with the counter it has after `e1` differs by swapping the two
-counters, so the actual other order and the canonical one agree up to renaming. -/
+counters, and the canonical order's wire ids differ from the actual other order's by swapping two blocks, so the two
+orders agree up to renaming. -/
 theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fresh a0) {e1 e2 : EffectV v.event}
     (he1 : OwnAt a0.state.fresh e1) (he2 : OwnAt a0.state.fresh e2) :
     (∃ W, Lifted ⟨PBij.swap a0.state.fresh, W⟩ a0
@@ -95,12 +142,14 @@ theorem actual_canon (hv : v.Equivariant) {a0 : Acc v} (ha : SelfAt a0.state.fre
       · exact h4.elim
     · rw [h3, h4]
       have hfd : d.state.fresh = f + 2 := by rw [runOwn_fresh T he1.1 h3, hfr1]
-      refine .inl (.base ⟨R'', hd.withFresh d.state.fresh (f + 2), ?_, ?_, fun n hn2 => ?_⟩)
+      refine .inl (.base ⟨_, (hd.withFresh d.state.fresh (f + 2)).mapWire wireSwap_inj fun _ => wireSwap_lt,
+        ?_, ?_, fun n hn2 => ?_⟩)
       · show d.state.fresh = f + 2; exact hfd
       · show d.state.nextId = d'.state.nextId
         simp only [Acc.withFresh] at hn hn'
         omega
-      · rw [hc', hc]; exact PBij.swap_above (by omega)
+      · show R''.ctr.rel n n
+        rw [hc', hc]; exact PBij.swap_above (by omega)
 
 /-- Where the place `j` of a list is once the place `i` is taken out. -/
 def afterErase (i j : Nat) : Nat := if j < i then j else j - 1
