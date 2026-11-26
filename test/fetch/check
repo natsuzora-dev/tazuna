@@ -1,0 +1,84 @@
+#!/bin/sh
+# A user needs only Gleam and Erlang or Node: the launcher fetches the engine and z3 from the release its package pins,
+# checks them, keeps them in the user cache directory, and runs the engine, which finds z3 beside it. The release here
+# is a directory of this tree's engine and the z3 on PATH, gzipped as the release workflow does, pinned by the same
+# scripts/engine-pin into a copy of the Gleam package: the launcher's code is the released one, only the URL differs.
+# With no Lean, lake or z3 on PATH, a spec proved on each target must print the e2e case's lines. A release whose engine
+# is not the pinned one is refused and nothing is cached; with the release gone, the cache is enough.
+# Usage: test/fetch/check <engine>
+set -eu
+here=$(cd "$(dirname "$0")" && pwd)
+root=$(cd "$here/../.." && pwd)
+engine=$1
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+case $(uname -s)-$(uname -m) in
+  Darwin-arm64) platform=darwin-arm64 ;;
+  Darwin-x86_64) platform=darwin-x64 ;;
+  Linux-aarch64) platform=linux-arm64 ;;
+  Linux-x86_64) platform=linux-x64 ;;
+  *) echo "fetch: no platform name for $(uname -s)-$(uname -m)"; exit 1 ;;
+esac
+
+mkdir "$work/release" "$work/bin"
+gzip -1 -c "$engine" >"$work/release/tazuna-engine-$platform.gz"
+gzip -1 -c "$(command -v z3)" >"$work/release/z3-$platform.gz"
+mkdir "$work/package"
+cp -R "$root/gleam/gleam.toml" "$root/gleam/manifest.toml" "$root/gleam/src" "$work/package/"
+mkdir "$work/package/build"
+cp -R "$root/gleam/build/packages" "$work/package/build/"
+pin=$work/package/src/tazuna/internal/engine_pin.gleam
+"$root/scripts/engine-pin" "file://$work/release" "$work/release" >"$pin"
+(cd "$work/package" && gleam format --check src/tazuna/internal/engine_pin.gleam &&
+  gleam build --target javascript --warnings-as-errors >/dev/null && gleam build --target erlang --warnings-as-errors >/dev/null)
+dev=$work/package/build/dev
+printf 'import { main } from "%s";\nmain();\n' "$dev/javascript/tazuna/tazuna.mjs" >"$work/run.mjs"
+
+ln -s "$(command -v node)" "$work/bin/node"
+ln -s "$(command -v erl)" "$work/bin/erl"
+path=$work/bin:/usr/bin:/bin
+for tool in lean lake z3; do
+  if (PATH=$path; command -v $tool >/dev/null); then echo "fetch: $tool is on $path, so the test proves nothing"; exit 1; fi
+done
+# Runs the launcher on a target in a fresh copy of the e2e case's spec, with HOME as the user's home.
+prove() {
+  target=$1
+  home=$2
+  dir=$(mktemp -d "$work/spec.XXXXXX")
+  cp -R "$root/test/e2e/Prove.proved/src" "$dir/"
+  code=0
+  # shellcheck disable=SC2046 # one -pa directory per package
+  (cd "$dir" && case $target in
+    javascript) env -i HOME="$home" PATH="$path" node "$work/run.mjs" prove m ;;
+    erlang) env -i HOME="$home" PATH="$path" erl -noshell -pa $(printf '%s ' "$dev"/erlang/*/ebin) -eval 'tazuna:main()' -extra prove m ;;
+  esac) >"$work/out" 2>"$work/err" || code=$?
+  echo "$code" >"$work/exit"
+}
+expect() {
+  if ! cmp -s "$work/out" "$root/test/e2e/Prove.proved/stdout" || ! cmp -s "$work/exit" "$root/test/e2e/Prove.proved/exit"; then
+    printf 'fetch: %s printed, with exit code %s:\n' "$1" "$(cat "$work/exit")"
+    cat "$work/out" "$work/err"
+    exit 1
+  fi
+}
+cached=Library/Caches
+[ "$platform" = "${platform#linux}" ] || cached=.cache
+cached=$cached/tazuna/$(sed -n 's/^version = "\(.*\)"$/\1/p' "$root/gleam/gleam.toml")/$platform
+
+mv "$work/release/tazuna-engine-$platform.gz" "$work/good.gz"
+gzip -1 -c "$(command -v z3)" >"$work/release/tazuna-engine-$platform.gz"
+prove erlang "$work/home-erlang"
+if [ "$(cat "$work/exit")" != 3 ] || ! grep -q '^{"kind":"Usage.system","message":".*this package pins"}$' "$work/out" ||
+  [ -e "$work/home-erlang/$cached/tazuna-engine" ]; then
+  echo "fetch: an engine other than the pinned one was not refused, or was cached:"
+  cat "$work/out" "$work/err"
+  exit 1
+fi
+mv "$work/good.gz" "$work/release/tazuna-engine-$platform.gz"
+prove erlang "$work/home-erlang"
+expect "a first run on Erlang"
+prove javascript "$work/home-node"
+expect "a first run on Node"
+rm -r "$work/release"
+prove javascript "$work/home-node"
+expect "a run on Node with the release gone"

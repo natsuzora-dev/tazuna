@@ -45,6 +45,7 @@ sizes=$(lean/.lake/build/bin/smt-check --sizes lean/sizes-budget.txt) || {
 }
 
 test/e2e/check "$PWD/lean/.lake/build/bin/kinds" "$PWD/lean/.lake/build/bin/tazuna-engine" "$PWD/gleam/build/dev"
+test/fetch/check "$PWD/lean/.lake/build/bin/tazuna-engine"
 
 # prove and generate print the same lines whatever --jobs is, and --only keeps the full run's lines and files.
 test/determinism/check "$PWD/lean/.lake/build/bin/tazuna-engine" "$PWD/gleam/build/dev"
