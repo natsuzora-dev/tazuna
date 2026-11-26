@@ -54,13 +54,22 @@ inductive LayoutGap where
   | instanceSlots (t : Ty)
 deriving Repr
 
-/-- A case the program's types rule out but the IR's do not. -/
+/-- A case the loaded program's types rule out but the IR's types do not. Prove and generate report it as
+Internal.engine (exit 4), never as a spec's line. It stays a refusal rather than a theorem: each variant is excluded by
+a fact the loader or check establishes about the whole program, and the encoders' no-gap theorems (`Sound`) take every
+non-layout refusal as allowed, so ruling these out would thread those facts through every builder's theorem (est.
+1-2k lines over Smt/NoGap and Smt/StepNoGap) or change the IR's types: a Bool type of its own for `adtZero`, a
+non-empty clause list for `emptyCase`. -/
 inductive Unexpected where
-  /-- A value of a type the step itself codes (the state, an input, a context, a captured value) is a function: check
-  and the loader keep functions out of those types. -/
+  /-- A value of a type the step itself codes (the state, an input, a context, a captured value) is a function: check's
+  stateType and wireType rules (`wireTys_wire`) and the converter's keptCapture rule keep functions out of those
+  types. -/
   | function (t : Ty)
-  /-- ADT 0, which every program's type table declares as Bool, with other variants. -/
+  /-- ADT 0, which every program's type table declares as Bool, with other variants: the loader builds the table's
+  prelude, but `Ty.adt 0` does not say it is Bool. -/
   | adtZero
+  /-- A case with no clauses. Gleam has no such case, so the converter writes none; the IR types one over a type with no
+  variants (`Exhaustive t []`). -/
   | emptyCase
 deriving Repr
 

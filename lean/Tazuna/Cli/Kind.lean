@@ -100,6 +100,9 @@ inductive Tazuna.Kind : Type
   | prove (k : Tazuna.ProveKind)
   | generate (k : Tazuna.GenerateKind)
   | undecided (k : Tazuna.UndecidedKind)
+  /-- What a kind of line means, as `explain` prints it: the line's meaning, the theorems it rests on (as
+  lean/Tazuna/Axioms.lean names its roots), its fields and its exit code. -/
+  | explain
 
 namespace Tazuna
 
@@ -213,11 +216,12 @@ def name : Kind → String
   | prove k => "Prove." ++ k.name
   | generate k => "Generate." ++ k.name
   | undecided k => "Undecided." ++ k.name
+  | explain => "Explain.kind"
 
 def all : List Kind :=
   InternalKind.all.map internal ++ UsageKind.all.map usage ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ FaultKind.all.map fault ++ TestKind.all.map test ++
     [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++
-    GenerateKind.all.map generate ++ UndecidedKind.all.map undecided
+    GenerateKind.all.map generate ++ UndecidedKind.all.map undecided ++ [explain]
 
 theorem mem_all (k : Kind) : k ∈ all := by
   cases k with
@@ -237,7 +241,7 @@ instead, one per kind of the launcher's generated table; a converter bug has no 
 def e2e : Kind → Bool
   | restricted _ | internal .convert | internal .engine => false
   | internal .invalidIr | usage _ | illegal _ | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
-  | generate _ | undecided _ => true
+  | generate _ | undecided _ | explain => true
 
 /-- The outcome a line of the kind gives its command; the command exits with its worst line's (`Exit.max`). -/
 def exit : Kind → Exit
@@ -246,7 +250,7 @@ def exit : Kind → Exit
   | restricted _ | illegal _ | fault _ | verifyDiffers | traceInvalid => .violation
   | test .passed | test .written => .ok
   | test .changed | test .badStep => .violation
-  | verifyPassed => .ok
+  | verifyPassed | explain => .ok
   | prove .proved | prove .withinBounds => .ok
   | prove .violated => .violation
   | generate .reached | generate .unreached => .ok

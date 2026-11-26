@@ -39,10 +39,7 @@ sizes=$(lean/.lake/build/bin/smt-check --sizes lean/sizes-budget.txt) || {
   exit 1
 }
 
-kinds=$(mktemp)
-trap 'rm -f "$kinds"' EXIT
-(cd lean && lake exe kinds) >"$kinds"
-test/e2e/check "$kinds" "$PWD/lean/.lake/build/bin/tazuna-engine" "$PWD/gleam/build/dev"
+test/e2e/check "$PWD/lean/.lake/build/bin/kinds" "$PWD/lean/.lake/build/bin/tazuna-engine" "$PWD/gleam/build/dev"
 
 # prove and generate print the same lines whatever --jobs is, and --only keeps the full run's lines and files.
 test/determinism/check "$PWD/lean/.lake/build/bin/tazuna-engine" "$PWD/gleam/build/dev"

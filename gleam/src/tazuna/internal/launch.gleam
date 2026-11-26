@@ -3,7 +3,7 @@
 //// writes the IR to `build/tazuna/<root>.ir.json`, and runs the engine with
 //// the arguments as given plus `--ir <path>`, passing on its output and exit
 //// code. The engine owns what the arguments mean; the launcher reads only
-//// the root.
+//// the root, and passes `explain` on as it is.
 
 import glance
 import gleam/io
@@ -28,6 +28,8 @@ fn run(args: List(String)) -> Int {
       )
     Ok(engine) ->
       case args {
+        // explain reads no spec, so there is nothing to convert.
+        ["explain", ..] -> run_engine(engine, args)
         [_command, root, ..] -> check(engine, args, root)
         // No root: the engine prints its version or its usage.
         _ -> run_engine(engine, args)

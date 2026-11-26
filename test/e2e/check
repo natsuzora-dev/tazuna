@@ -5,14 +5,16 @@
 # stdout and exit with the code in its exit file. A case with written/ must leave a directory written/ equal to it,
 # as generate writes its traces there. A kind
 # no spec can reach (a converter or launcher bug) has an ir.json instead of src/, which the engine reads directly.
-# Usage: test/e2e/check <file listing the kinds, one per line> <engine> <the Gleam package's build/dev directory>
+# Every line a case expects names a kind and carries only the fields explain names for it.
+# Usage: test/e2e/check <the kinds executable> <engine> <the Gleam package's build/dev directory>
 set -eu
 cd "$(dirname "$0")"
-kinds=$1
-engine=$2
-dev=$3
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+kinds=$work/kinds
+"$1" >"$kinds"
+engine=$2
+dev=$3
 printf 'import { main } from "%s";\nmain();\n' "$dev/javascript/tazuna/tazuna.mjs" >"$work/run.mjs"
 launch() {
   case $1 in
@@ -22,6 +24,7 @@ launch() {
   esac
 }
 status=0
+"$1" --lines */stdout || status=1
 while read -r kind; do
   [ -d "$kind" ] || { echo "e2e: kind $kind has no case. Add the directory test/e2e/$kind."; status=1; }
 done <"$kinds"

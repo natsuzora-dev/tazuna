@@ -4,6 +4,7 @@ import Lean.Meta.Tactic.Simp.SimpTheorems
 import Tazuna.Cli.Test
 import Tazuna.Cli.Prove
 import Tazuna.Cli.Generate
+import Tazuna.Cli.Explain
 import Tazuna.Semantics.After
 import Tazuna.Smt.Prove
 import Tazuna.Smt.Cover
@@ -79,7 +80,7 @@ elab "#check_tazuna_reach" : command => do
     -- What the engine runs: each command, and the lists the e2e harness and gen-dsl print, which hold every output
     -- kind, built-in and DSL type.
     ``Tazuna.Cli.check, ``Tazuna.Cli.test, ``Tazuna.Cli.verify, ``Tazuna.Cli.prove, ``Tazuna.Cli.optionsOf,
-    ``Tazuna.Cli.generate,
+    ``Tazuna.Cli.generate, ``Tazuna.Cli.explain,
     ``Tazuna.Kind.mem_all, ``Tazuna.Ir.Prim.mem_all, ``Tazuna.Ir.Dsl.mem_all,
     -- Gleam's meaning where languages differ, and literals: reading back a printed literal gives it back.
     ``Tazuna.Gleam.div_zero, ``Tazuna.Gleam.mod_zero, ``Tazuna.Gleam.div_add_mod, ``Tazuna.Gleam.mod_neg_left,
@@ -170,6 +171,12 @@ elab "#check_tazuna_reach" : command => do
     -- Check's wireType rule reads every wire type, so a user's spec never fails `Checked.wire`: a function on the wire
     -- is Illegal.wireType, and only a loader bug is left to break it (exit 4).
     ``Tazuna.Smt.wireTys_wire]
+  -- explain names the theorems a line rests on; each must be a root, so a renamed or demoted theorem fails here.
+  let backing ← match unsafe env.evalConst (List Name) (← getOptions) ``Tazuna.Kind.backing with
+    | .ok b => pure b
+    | .error e => throwError "could not read the theorems explain names: {e}"
+  let notRoots := backing.eraseDups.filter (!roots.contains ·)
+  unless notRoots.isEmpty do throwError "explain names theorems that are no roots: {notRoots}"
   let mut used : NameSet := {}
   let mut usedByOther : NameSet := {}
   let mut todo := roots

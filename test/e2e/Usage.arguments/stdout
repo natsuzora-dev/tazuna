@@ -1,1 +1,1 @@
-{"kind":"Usage.arguments","message":"usage: check <root> | test <root> [--update] | verify <root> <traces-dir> | prove <root> [--only <prefix>] [--jobs <n>] | generate <root> <dir> [--only <prefix>] [--jobs <n>]"}
+{"kind":"Usage.arguments","message":"usage: check <root> | test <root> [--update] | verify <root> <traces-dir> | prove <root> [--only <prefix>] [--jobs <n>] | generate <root> <dir> [--only <prefix>] [--jobs <n>] | explain [<kind>]"}
