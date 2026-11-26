@@ -26,7 +26,7 @@ That rule shapes the values a spec holds:
 - Numbers are integers. Hold an amount in its smallest unit, such as cents.
 - An `Instant` and a `Duration` are milliseconds.
 - A `Date` is a day with no calendar. A spec adds days and counts the days between two dates, and converts neither between instants and dates nor between time zones. Ask an external for a business day.
-- A `String` supports `==`, `<>`, and `tazuna.length`, which counts code points. Its code points stop at U+2FFFF, as SMT strings do. A literal above that is `Restricted.highCodePoint`, and a trace string above it makes the line `Trace.invalid`.
+- A `String` supports `==`, `<>`, and `tazuna.length`, which counts code points. Its code points stop at U+2FFFF, as SMT strings do.
 
 ## The spec writes every order
 
@@ -51,7 +51,7 @@ Everything a verdict depends on appears in the spec or in the output:
 - The spec writes its bounds. No command-line flag changes them, so the spec under review is the scope of every verdict.
 - A verdict prints what it assumes in `assumes`.
 - An undecided line says why it has no verdict, such as the solver's answer or the limit a search hit.
-- No counterexample within the bounds is a success, `Prove.withinBounds`, as Alloy reports no counterexample within its scope. The line names the bounds, and the command exits 0. Otherwise every spec with a growing table would exit 2.
+- No counterexample within the bounds is a success, `Prove.withinBounds`, as Alloy reports no counterexample within its scope. Otherwise every spec with a growing table would exit 2.
 - `generate` says unreached, never unreachable.
 
 ## Illegal states are unrepresentable

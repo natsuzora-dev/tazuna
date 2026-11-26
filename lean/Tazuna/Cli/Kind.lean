@@ -28,8 +28,7 @@ inductive Tazuna.ProveKind : Type
   but such a step can go past them: the line names every bound a step of the service can go past (its tables and
   bags, and its pending requests where it sends any), the same for every run. For a bounded response: no run from the
   initial state of at most the spec's `steps` inputs within the slots, on which its `assumes` hold (valid inputs, no
-  step faults, timely clock lines), violates it; the line names those bounds and `steps`. A success, as Alloy reports
-  no counterexample within its scope. -/
+  step faults, timely clock lines), violates it; the line names those bounds and `steps`. -/
   | withinBounds
   /-- A state and input whose step breaks the target, or for a bounded response a run from the initial state that
   violates it. -/
@@ -84,8 +83,7 @@ inductive Tazuna.UsageKind : Type
   | system
 deriving DecidableEq
 
-/-- Every kind of line tazuna writes to stdout, the launcher's included. test/e2e holds one case per kind it covers
-(`Kind.e2e`), enumerated from `Kind.all`. -/
+/-- Every kind of line tazuna writes to stdout, the launcher's included. -/
 inductive Tazuna.Kind : Type
   | internal (k : Tazuna.InternalKind)
   | usage (k : Tazuna.UsageKind)
@@ -107,8 +105,7 @@ inductive Tazuna.Kind : Type
   | prove (k : Tazuna.ProveKind)
   | generate (k : Tazuna.GenerateKind)
   | undecided (k : Tazuna.UndecidedKind)
-  /-- What a kind of line means, as `explain` prints it: the line's meaning, the theorems it rests on (as
-  lean/Tazuna/Axioms.lean names its roots), its fields and its exit code. -/
+  /-- What a kind of line means, as `explain` prints it. -/
   | explain
 
 namespace Tazuna
@@ -134,7 +131,7 @@ def UsageKind.name : UsageKind → String
 inductive Exit : Type
   | ok | undecided | violation | usage | internal
 
-/-- The exit code. Undecided ranks below a violation: one violated line decides the run. -/
+/-- Undecided ranks below a violation: one violated line decides the run. -/
 def Exit.code : Exit → UInt32
   | .ok => 0
   | .violation => 1
