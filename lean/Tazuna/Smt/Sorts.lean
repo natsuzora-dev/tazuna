@@ -20,7 +20,7 @@ variable {L : Layout}
 
 theorem datatype_of_find {dts : List Datatype} (hd : L.datatypes? = some dts) {t : Ty} {x : Nat × Nat}
     (h : L.find? t = some x) : (L.datatype? (t, x.2)).isSome = true := by
-  simp only [Layout.find?, Option.map_eq_some_iff] at h
+  simp only [Layout.find?_eq, Option.map_eq_some_iff] at h
   obtain ⟨⟨⟨u, m⟩, j⟩, hfind, rfl⟩ := h
   have hu := eq_of_same (by simpa using List.find?_some hfind)
   subst hu

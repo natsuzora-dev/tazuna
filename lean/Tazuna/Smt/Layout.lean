@@ -27,7 +27,7 @@ theorem Le.trans {L₁ L₂ L₃ : Layout} (a : Le L₁ L₂) (b : Le L₂ L₃)
 theorem find?_le {L L' : Layout} (h : Le L L') {t : Ty} {x : Nat × Nat} (hx : L.find? t = some x) :
     L'.find? t = some x := by
   obtain ⟨-, -, more, hm⟩ := h
-  simp only [find?, hm, List.zipIdx_append, List.find?_append] at hx ⊢
+  simp only [find?_eq, hm, List.zipIdx_append, List.find?_append] at hx ⊢
   obtain ⟨y, hy, rfl⟩ := Option.map_eq_some_iff.1 hx
   simp [hy]
 
@@ -46,7 +46,7 @@ theorem find?_push (L : Layout) (t : Ty) (n : Nat) : (L.push t n |>.find? t).isS
   · assumption
   · rename_i h
     simp only [Bool.not_eq_true, Option.isSome_eq_false_iff, Option.isNone_iff_eq_none] at h
-    simp only [find?, List.zipIdx_append, List.find?_append] at h ⊢
+    simp only [find?_eq, List.zipIdx_append, List.find?_append] at h ⊢
     rw [Option.map_eq_none_iff.1 h]
     simp [List.zipIdx, Ty_same_self]
 

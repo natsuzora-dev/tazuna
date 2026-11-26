@@ -67,7 +67,7 @@ section
 variable {L : Layout}
 
 theorem sorted_of_find (hL : SortedLayout L) {t : Ty} {x : Nat × Nat} (h : L.find? t = some x) : t.sorted = true := by
-  simp only [Layout.find?, Option.map_eq_some_iff] at h
+  simp only [Layout.find?_eq, Option.map_eq_some_iff] at h
   obtain ⟨⟨⟨u, m⟩, j⟩, hfind, -⟩ := h
   have hs := List.find?_some hfind
   have hu := eq_of_same (by simpa using hs)

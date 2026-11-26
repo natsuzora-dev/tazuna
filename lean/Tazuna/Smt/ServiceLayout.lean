@@ -245,7 +245,7 @@ theorem count_of_slotted {S : Ty → Nat} {K L : Layout} (h : Slotted S K L) {t 
     L.count t = S t := by
   obtain ⟨⟨d, n⟩, hx⟩ := Option.isSome_iff_exists.1 hf
   simp only [Layout.count, hx]
-  simp only [Layout.find?, Option.map_eq_some_iff] at hx
+  simp only [Layout.find?_eq, Option.map_eq_some_iff] at hx
   obtain ⟨⟨⟨u, m⟩, j⟩, hfind, he⟩ := hx
   cases he
   have hs := List.find?_some hfind

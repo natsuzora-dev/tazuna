@@ -170,9 +170,29 @@ def OwnKey.same : OwnKey → OwnKey → Bool
       a.same a'
   | _, _ => false
 
-/-- The datatype index and slot count of a type. -/
-def Layout.find? (L : Layout) (t : Ty) : Option (Nat × Nat) :=
-  (L.types.zipIdx.find? fun ((u, _), _) => (Ty.same u t).isSome).map fun ((_, n), d) => (d, n)
+/-- The datatype index and slot count of the first type of `ts` the same as `t`, counting indices from `d`. -/
+def Layout.findFrom (t : Ty) : List (Ty × Nat) → Nat → Option (Nat × Nat)
+  | [], _ => none
+  | (u, n) :: ts, d => if (Ty.same u t).isSome then some (d, n) else findFrom t ts (d + 1)
+
+/-- The datatype index and slot count of a type. It walks the table counting indices instead of pairing them first
+with `zipIdx`, whose list was rebuilt on every call and took most of the engine's time on a large spec;
+`Layout.find?_eq` states it as that pairing. -/
+def Layout.find? (L : Layout) (t : Ty) : Option (Nat × Nat) := Layout.findFrom t L.types 0
+
+theorem Layout.findFrom_eq (t : Ty) (ts : List (Ty × Nat)) (d : Nat) :
+    Layout.findFrom t ts d =
+      ((ts.zipIdx d).find? fun ((u, _), _) => (Ty.same u t).isSome).map fun ((_, n), d) => (d, n) := by
+  induction ts generalizing d with
+  | nil => rfl
+  | cons x ts ih =>
+    obtain ⟨u, n⟩ := x
+    simp only [Layout.findFrom, List.zipIdx_cons, List.find?_cons]
+    split <;> simp_all
+
+theorem Layout.find?_eq (L : Layout) (t : Ty) :
+    L.find? t = (L.types.zipIdx.find? fun ((u, _), _) => (Ty.same u t).isSome).map fun ((_, n), d) => (d, n) :=
+  Layout.findFrom_eq t L.types 0
 
 /-- Evidence that an ADT's variants are Bool's. ADT 0 is Bool in every program's type table. -/
 def boolVs? : (vs : List (List Ty)) → Option (PLift (vs = [[], []]))
