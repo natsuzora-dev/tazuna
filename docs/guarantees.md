@@ -30,6 +30,7 @@ Every command but `explain` runs `check` first and stops at a finding.
 
 `wireTys_wire`: when `check` finds nothing, every type that crosses the wire holds no function and no fresh-id source.
 The other rules have no theorem beyond their definition in `Tazuna.Ir.Illegal`.
+`Illegal.callers` reads the sends in the spec's source, so a send whose handle it cannot pin down (a handle passed as a value) can still reach a command or query without `Own`, which is `Fault.invalidEffect` at run time.
 
 ## test
 
@@ -112,6 +113,9 @@ A response is judged per step, so a `then` event in the same step as its trigger
 ## generate (T6)
 
 `generate <root> <dir>` aims at each class of out line a service can show: `<command> accepted`, `<command> rejected <Variant>`, `<request> invalid <rule>`, `<query> answered`, `event <Variant>`, and `request <external>.<name>`.
+Answers are to request lines, which come from outside, so the targets follow `callers`.
+A command or query that lists no `Outside` caller has only `<request> invalid callers`: an outside request must be refused.
+`<request> invalid callers` is left out when `callers` lists `Outside` of every value of a caller type whose variants have no fields, since no request line can then be refused for its caller.
 `targets_cover`: every class of out line a step can show is aimed at by one of these targets.
 For each target, `generate` searches runs from the initial state, one input longer each time, up to `steps` inputs.
 

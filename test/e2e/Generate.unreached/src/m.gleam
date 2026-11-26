@@ -12,6 +12,10 @@ pub type Caller {
   User
 }
 
+pub type Rejection {
+  Full
+}
+
 fn send() -> tazuna.ExternalCommand(Int, Nil, Nil) {
   tazuna.external_command(name: "send")
 }
@@ -22,7 +26,7 @@ fn apply(r: Records, e: Event) -> Records {
   }
 }
 
-fn add() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
+fn add() -> tazuna.Command(Records, Event, Caller, Int, Rejection) {
   tazuna.command(
     name: "add",
     callers: [tazuna.Outside(User)],

@@ -34,6 +34,16 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   )
 }
 
+fn audit() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
+  tazuna.command(
+    name: "audit",
+    callers: [tazuna.Own],
+    accepts: fn(_n: Int) { [] },
+    decide: fn(_c: Ctx(Records, Int, Caller)) { Ok([]) },
+    ensures: fn(_c, _r) { [] },
+  )
+}
+
 fn notify() -> tazuna.Reaction(Records, Event) {
   tazuna.reaction(
     name: "notify",
@@ -41,6 +51,9 @@ fn notify() -> tazuna.Reaction(Records, Event) {
       case e {
         Added(n) -> [
           tazuna.request_command(command: send(), input: n, on_answer: fn(_a) {
+            []
+          }),
+          tazuna.send_command(command: audit(), input: n, on_answer: fn(_a) {
             []
           }),
         ]
@@ -55,7 +68,7 @@ fn counter() -> tazuna.Service {
     init: Records(total: 0),
     apply: apply,
     subscribes: [],
-    declares: [tazuna.declare_command(add())],
+    declares: [tazuna.declare_command(add()), tazuna.declare_command(audit())],
     machines: [],
     reactions: [notify()],
     invariants: fn(r: Records) { [#("not negative", r.total >= 0)] },

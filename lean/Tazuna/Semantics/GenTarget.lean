@@ -48,6 +48,61 @@ theorem variantOf_mem : (t : Ty) → (x : t.den0) → variantOf T t x ∈ varian
 
 end Variants
 
+section Origins
+
+/-- Every value of a custom type whose variants have no fields; none when one has a field. -/
+def nullaryVals : (vs : List (List Ty)) → Option (List (Ty.semAltsWith Dsl.base vs).1)
+  | [] => some []
+  | [] :: vs => (nullaryVals vs).map fun xs => .inl () :: xs.map .inr
+  | (_ :: _) :: _ => none
+
+theorem mem_nullaryVals : (vs : List (List Ty)) → {xs : List (Ty.semAltsWith Dsl.base vs).1} →
+    nullaryVals vs = some xs → ∀ x, x ∈ xs
+  | [], _, _, x => nomatch x
+  | [] :: vs, xs, h, x => by
+    simp only [nullaryVals, Option.map_eq_some_iff] at h
+    obtain ⟨ys, hys, rfl⟩ := h
+    match x with
+    | .inl () => exact List.mem_cons_self
+    | .inr y => exact List.mem_cons_of_mem _ (List.mem_map_of_mem (mem_nullaryVals vs hys y))
+  | (_ :: _) :: _, _, h, _ => by simp [nullaryVals] at h
+
+/-- Whether `callers` lists `Outside` of every value of the caller type `c`. Only a custom type whose variants have
+no fields is read as listed whole; for any other type a target stays, at worst unreachable. -/
+def coversOutside : (c : Ty) → List (Ty.origin c).den0 → Bool
+  | .adt _ _ vs, callers => match nullaryVals vs with
+    | some xs => xs.all fun x => callers.any ((Ty.semWith Dsl.base (Ty.origin (.adt _ _ vs))).2 (Step.outside x))
+    | none => false
+  | _, _ => false
+
+theorem coversOutside_sound : (c : Ty) → {callers : List (Ty.origin c).den0} → coversOutside c callers = true →
+    ∀ x : c.den0, callers.any ((Ty.semWith Dsl.base (Ty.origin c)).2 (Step.outside x)) = true
+  | .adt _ _ vs, callers, h, x => by
+    simp only [coversOutside] at h
+    cases hxs : nullaryVals vs with
+    | none => rw [hxs] at h; cases h
+    | some xs => rw [hxs] at h; exact List.all_eq_true.1 h x (mem_nullaryVals vs hxs x)
+  | .int, _, h, _ | .str, _, h, _ | .list _, _, h, _ | .tuple _, _, h, _ | .fn _ _, _, h, _ | .param _, _, h, _
+  | .bag _, _, h, _ | .table _ _, _, h, _ | .date, _, h, _ | .id, _, h, _ | .dsl _ _, _, h, _ => by
+    simp [coversOutside] at h
+
+/-- Whether `callers` lists some outside caller. -/
+def hasOutside {c : Ty} (callers : List (Ty.origin c).den0) : Bool :=
+  callers.any fun
+    | .inl _ => true
+    | .inr _ => false
+
+/-- An outside request a list admits lists some outside caller. -/
+theorem hasOutside_of_any {c : Ty} {callers : List (Ty.origin c).den0} {x : c.den0}
+    (h : callers.any ((Ty.semWith Dsl.base (Ty.origin c)).2 (Step.outside x)) = true) : hasOutside callers = true := by
+  obtain ⟨o, ho, he⟩ := List.any_eq_true.1 h
+  refine List.any_eq_true.2 ⟨o, ho, ?_⟩
+  match o, he with
+  | .inl _, _ => rfl
+  | .inr _, he => cases he
+
+end Origins
+
 /-- One class of out line, as a log shows it. -/
 inductive OutClass where
   /-- The answer `accepted` to the command. -/
@@ -112,17 +167,26 @@ def classes (x : Input v) (r : Result v) : List OutClass :=
   answerClasses T v x r.outcome ++ r.events.map (fun ev => .event (variantOf T v.event ev)) ++
     r.out.map fun o => .request o.external o.name
 
-/-- The invalid targets of a command or query: admission's `callers`, then each rule name. -/
-def invalidTargets (rules : RuleNames) (request : String) : List GenTarget :=
-  (some "callers" :: rules request).map (.invalid request)
+/-- The invalid targets of a command or query listing `callers`, whose outside callers are of the type `c`:
+admission's `callers` unless every outside caller is listed (`coversOutside`) and no rule's name is computed (one may
+compute that name), then each rule name when an outside caller is listed, since no outside request runs the rules
+otherwise. -/
+def invalidTargets (rules : RuleNames) (request : String) (c : Ty) (callers : List (Ty.origin c).den0) :
+    List GenTarget :=
+  (if coversOutside c callers && !(rules request).contains none then [] else [.invalid request (some "callers")]) ++
+  (if hasOutside callers then (rules request).map (.invalid request) else [])
 
-/-- Every target of the service, in a fixed order: per command its accepted, rejected per constructor and invalid
-targets; per query its answered and invalid targets; an event per constructor; a request per external command or
-query some sender can send (`shapes`), once however many senders can. -/
+/-- Every target of the service, in a fixed order: per command its accepted and rejected per constructor targets
+when an outside caller is listed, and its invalid targets; per query its answered target likewise, and its invalid
+targets; an event per constructor; a request per external command or query some sender can send (`shapes`), once
+however many senders can. Targets are answers to request lines, so a request only the service sends has only the
+Invalid `callers` one: an outside request must be refused. -/
 def targets (rules : RuleNames) : List GenTarget :=
-  (v.commands.flatMap fun x => .accepted x.name :: (variantsOf T x.rejection).map (.rejected x.name) ++
-    invalidTargets rules x.name) ++
-  (v.queries.flatMap fun q => .answered q.name :: invalidTargets rules q.name) ++
+  (v.commands.flatMap fun x =>
+    (if hasOutside x.callers then .accepted x.name :: (variantsOf T x.rejection).map (.rejected x.name) else []) ++
+      invalidTargets rules x.name v.caller x.callers) ++
+  (v.queries.flatMap fun q =>
+    (if hasOutside q.callers then [.answered q.name] else []) ++ invalidTargets rules q.name v.caller q.callers) ++
   (variantsOf T v.event).map .event ++
   dedupBy (· == ·) ((shapes v).map fun sh => .request sh.external sh.name)
 
@@ -517,14 +581,6 @@ theorem pendingOf_shape {e : Ty} : (shs : List (PendingShape e)) → (id : Nat) 
 section
 variable {T : List TypeDecl} {v : ServiceV}
 
-theorem mem_admit {i : Ty} {callers : List (Ty.origin v.caller).den0} {accepts : Fun (Ty.fn [i] Ty.rules)} {caller : (Ty.origin v.caller).den0}
-    {input : i.den0} {n : String} (h : n ∈ admit callers accepts caller input) :
-    n = "callers" ∨ n ∈ broken (accepts.fn (input, ())) := by
-  unfold admit at h
-  split at h
-  · exact .inr h
-  · exact .inl (List.mem_singleton.1 h)
-
 theorem finish_outcome (s0 : State v) (r : Except Fault (Acc v)) (o : Outcome) :
     (finish T s0 r o).outcome = o ∨ ∃ f, (finish T s0 r o).outcome = .fault f := by
   unfold finish
@@ -587,25 +643,77 @@ theorem step_query_outcome (s : State v) (i : Fin v.queries.length) (caller : v.
     · cases he
   · cases h
 
+
+theorem admit_cases {i : Ty} {callers : List (Ty.origin v.caller).den0} {accepts : Fun (Ty.fn [i] Ty.rules)}
+    {caller : (Ty.origin v.caller).den0} {input : i.den0} {n : String} (h : n ∈ admit callers accepts caller input) :
+    (n = "callers" ∧ callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 caller) = false) ∨
+      (callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 caller) = true ∧
+        n ∈ broken (accepts.fn (input, ()))) := by
+  unfold admit at h
+  split at h
+  · rename_i ha; exact .inr ⟨ha, h⟩
+  · rename_i ha; exact .inl ⟨List.mem_singleton.1 h, by simpa using ha⟩
+
+/-- A command step whose answer is not Invalid admitted its outside caller. -/
+theorem step_command_admitted (s : State v) (i : Fin v.commands.length) (caller : v.caller.den0)
+    (input : (v.commands.get i).input.den0) (h : ∀ rs, (step T v s (.command i caller input)).outcome ≠ .invalid rs) :
+    (v.commands.get i).callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 (outside caller)) = true := by
+  cases hany : (v.commands.get i).callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 (outside caller))
+  · have had : admit (v.commands.get i).callers (v.commands.get i).accepts (outside caller) input = ["callers"] := by
+      unfold admit; rw [hany]; rfl
+    have hex : execCommand T { state := s } (v.commands.get i) (outside caller) input = .ok (.invalid ["callers"]) := by
+      unfold execCommand; rw [had]
+    exact absurd (by simp only [step, hex]) (h ["callers"])
+  · rfl
+
+/-- A query step whose answer is not Invalid admitted its outside caller. -/
+theorem step_query_admitted (s : State v) (i : Fin v.queries.length) (caller : v.caller.den0)
+    (input : (v.queries.get i).input.den0) (h : ∀ rs, (step T v s (.query i caller input)).outcome ≠ .invalid rs) :
+    (v.queries.get i).callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 (outside caller)) = true := by
+  cases hany : (v.queries.get i).callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 (outside caller))
+  · have had : admit (v.queries.get i).callers (v.queries.get i).accepts (outside caller) input = ["callers"] := by
+      unfold admit; rw [hany]; rfl
+    have hex : execQuery s (v.queries.get i) (outside caller) input = .error ["callers"] := by
+      unfold execQuery; rw [had]
+    exact absurd (by simp only [step, hex]) (h ["callers"])
+  · rfl
+
 end
 
-theorem invalid_covered {rules : RuleNames} {name : String} {n : String}
-    (hn : n = "callers" ∨ some n ∈ rules name ∨ none ∈ rules name) :
-    ∃ g ∈ invalidTargets rules name, g.covers rules (.invalid name n) = true := by
-  by_cases hl : n ∈ rules.literals name
-  · refine ⟨.invalid name (some n), ?_, by simp [GenTarget.covers]⟩
-    rcases List.mem_cons.1 hl with rfl | hl
-    · exact List.mem_map.2 ⟨some "callers", List.mem_cons_self, rfl⟩
-    · obtain ⟨o, ho, he⟩ := List.mem_filterMap.1 hl
-      cases he
-      exact List.mem_map.2 ⟨_, List.mem_cons_of_mem _ ho, rfl⟩
-  · have hnone : none ∈ rules name := by
-      rcases hn with rfl | hs | hn
-      · exact absurd List.mem_cons_self hl
-      · exact absurd (List.mem_cons_of_mem _ ((List.mem_filterMap (f := id)).2 ⟨some n, hs, rfl⟩)) hl
-      · exact hn
-    refine ⟨.invalid name none, List.mem_map.2 ⟨none, List.mem_cons_of_mem _ hnone, rfl⟩, ?_⟩
-    simp [GenTarget.covers, hl]
+theorem invalid_covered {rules : RuleNames} {name n : String} {c : Ty} {callers : List (Ty.origin c).den0}
+    {x : c.den0}
+    (hn : (n = "callers" ∧ callers.any ((Ty.semWith Dsl.base (Ty.origin c)).2 (Step.outside x)) = false) ∨
+      (callers.any ((Ty.semWith Dsl.base (Ty.origin c)).2 (Step.outside x)) = true ∧
+        (some n ∈ rules name ∨ none ∈ rules name))) :
+    ∃ g ∈ invalidTargets rules name c callers, g.covers rules (.invalid name n) = true := by
+  have hcallers : (coversOutside c callers && !(rules name).contains none) = false →
+      GenTarget.invalid name (some "callers") ∈ invalidTargets rules name c callers := fun h => by
+    simp only [invalidTargets, h]
+    exact List.mem_append_left _ List.mem_cons_self
+  have hrule : hasOutside callers = true → ∀ o ∈ rules name,
+      GenTarget.invalid name o ∈ invalidTargets rules name c callers := fun h o ho => by
+    simp only [invalidTargets, h, ↓reduceIte]
+    exact List.mem_append_right _ (List.mem_map.2 ⟨o, ho, rfl⟩)
+  rcases hn with ⟨rfl, hany⟩ | ⟨hany, hn⟩
+  · have hc : coversOutside c callers = false := by
+      cases hcv : coversOutside c callers
+      · rfl
+      · rw [coversOutside_sound c hcv x] at hany; cases hany
+    exact ⟨_, hcallers (by simp [hc]), by simp [GenTarget.covers]⟩
+  · have ho := hasOutside_of_any hany
+    by_cases hs : some n ∈ rules name
+    · exact ⟨_, hrule ho _ hs, by simp [GenTarget.covers]⟩
+    · have hnone : none ∈ rules name := hn.resolve_left hs
+      by_cases hl : n ∈ rules.literals name
+      · rcases List.mem_cons.1 hl with rfl | hl
+        · refine ⟨_, hcallers ?_, by simp [GenTarget.covers]⟩
+          simp [hnone]
+        · obtain ⟨o, ho', he⟩ := List.mem_filterMap.1 hl
+          simp only [id] at he
+          subst he
+          exact absurd ho' hs
+      · exact ⟨_, hrule ho _ hnone, by simp [GenTarget.covers, hl]⟩
+
 
 /-- The targets miss no class: every class of out line a step from a state the step invariant holds of shows is aimed
 at by some target, given rule names that list every rule an admission can name. -/
@@ -618,40 +726,48 @@ theorem classes_covered (T : List TypeDecl) {P : List AnySite} {E : List AnyEffe
   · cases x with
     | command i caller input =>
       obtain ⟨hinv, hrej⟩ := step_command_outcome (T := T) s i caller input
-      have inCmd : ∀ g, g ∈ (GenTarget.accepted (v.commands.get i).name ::
-          (variantsOf T (v.commands.get i).rejection).map (.rejected (v.commands.get i).name) ++
-          invalidTargets rules (v.commands.get i).name) → g ∈ targets T v rules := fun g hg =>
-        List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
+      have inCmd : ∀ g, g ∈ (if hasOutside (v.commands.get i).callers then
+          GenTarget.accepted (v.commands.get i).name ::
+            (variantsOf T (v.commands.get i).rejection).map (.rejected (v.commands.get i).name) else []) ++
+          invalidTargets rules (v.commands.get i).name v.caller (v.commands.get i).callers → g ∈ targets T v rules :=
+        fun g hg => List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
           (List.mem_flatMap.2 ⟨_, List.get_mem _ _, hg⟩)))
+      have hout : (∀ rs, (step T v s (.command i caller input)).outcome ≠ .invalid rs) →
+          hasOutside (v.commands.get i).callers = true :=
+        fun h => hasOutside_of_any (step_command_admitted (T := T) s i caller input h)
       cases ho : (step T v s (.command i caller input)).outcome with
       | accepted =>
         rw [ho] at hc
         simp only [answerClasses, List.mem_singleton] at hc
         subst hc
-        exact ⟨_, inCmd _ List.mem_cons_self, by simp [GenTarget.covers]⟩
+        have hO := hout fun rs h => by rw [ho] at h; cases h
+        refine ⟨.accepted (v.commands.get i).name, inCmd _ (List.mem_append_left _ ?_), by simp [GenTarget.covers]⟩
+        simp only [hO, ↓reduceIte]; exact List.mem_cons_self
       | rejected w =>
         rw [ho] at hc
         simp only [answerClasses, List.mem_singleton] at hc
         subst hc
+        have hO := hout fun rs h => by rw [ho] at h; cases h
         have h1 := hrej w ho
         obtain ⟨t, j⟩ := w
         simp only at h1
         subst h1
-        exact ⟨_, inCmd _ (List.mem_cons_of_mem _ (List.mem_append_left _
-          (List.mem_map.2 ⟨_, variantOf_mem T _ j, rfl⟩))), by simp [GenTarget.covers]⟩
+        refine ⟨.rejected (v.commands.get i).name (variantOf T _ j), inCmd _ (List.mem_append_left _ ?_),
+          by simp [GenTarget.covers]⟩
+        simp only [hO, ↓reduceIte]
+        exact List.mem_cons_of_mem _ (List.mem_map.2 ⟨_, variantOf_mem T _ j, rfl⟩)
       | invalid rs =>
         rw [ho] at hc
         simp only [answerClasses] at hc
         obtain ⟨n, hn, rfl⟩ := List.mem_map.1 hc
         rw [hinv rs ho] at hn
-        have hn' : n = "callers" ∨ some n ∈ rules (v.commands.get i).name ∨ none ∈ rules (v.commands.get i).name :=
-          (mem_admit hn).elim .inl fun hb => .inr (hr.1 i input n hb)
-        obtain ⟨g, hg, hcov⟩ := invalid_covered hn'
-        exact ⟨g, inCmd _ (List.mem_cons_of_mem _ (List.mem_append_right _ hg)), hcov⟩
+        obtain ⟨g, hg, hcov⟩ := invalid_covered ((admit_cases hn).imp id fun h => ⟨h.1, hr.1 i input n h.2⟩)
+        exact ⟨g, inCmd _ (List.mem_append_right _ hg), hcov⟩
       | answered _ => rw [ho] at hc; simp [answerClasses] at hc
       | fault _ => rw [ho] at hc; simp [answerClasses] at hc
     | query i caller input =>
-      have inQ : ∀ g, g ∈ (GenTarget.answered (v.queries.get i).name :: invalidTargets rules (v.queries.get i).name) →
+      have inQ : ∀ g, g ∈ (if hasOutside (v.queries.get i).callers then [GenTarget.answered (v.queries.get i).name]
+          else []) ++ invalidTargets rules (v.queries.get i).name v.caller (v.queries.get i).callers →
           g ∈ targets T v rules := fun g hg =>
         List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _
           (List.mem_flatMap.2 ⟨_, List.get_mem _ _, hg⟩)))
@@ -660,16 +776,16 @@ theorem classes_covered (T : List TypeDecl) {P : List AnySite} {E : List AnyEffe
         rw [ho] at hc
         simp only [answerClasses, List.mem_singleton] at hc
         subst hc
-        exact ⟨_, inQ _ List.mem_cons_self, by simp [GenTarget.covers]⟩
+        have hO := hasOutside_of_any (step_query_admitted (T := T) s i caller input fun rs h => by rw [ho] at h; cases h)
+        refine ⟨.answered (v.queries.get i).name, inQ _ (List.mem_append_left _ ?_), by simp [GenTarget.covers]⟩
+        simp only [hO, ↓reduceIte]; exact List.mem_cons_self
       | invalid rs =>
         rw [ho] at hc
         simp only [answerClasses] at hc
         obtain ⟨n, hn, rfl⟩ := List.mem_map.1 hc
         rw [step_query_outcome (T := T) s i caller input rs ho] at hn
-        have hn' : n = "callers" ∨ some n ∈ rules (v.queries.get i).name ∨ none ∈ rules (v.queries.get i).name :=
-          (mem_admit hn).elim .inl fun hb => .inr (hr.2 i input n hb)
-        obtain ⟨g, hg, hcov⟩ := invalid_covered hn'
-        exact ⟨g, inQ _ (List.mem_cons_of_mem _ hg), hcov⟩
+        obtain ⟨g, hg, hcov⟩ := invalid_covered ((admit_cases hn).imp id fun h => ⟨h.1, hr.2 i input n h.2⟩)
+        exact ⟨g, inQ _ (List.mem_append_right _ hg), hcov⟩
       | accepted => rw [ho] at hc; simp [answerClasses] at hc
       | rejected _ => rw [ho] at hc; simp [answerClasses] at hc
       | fault _ => rw [ho] at hc; simp [answerClasses] at hc
