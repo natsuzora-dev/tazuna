@@ -91,6 +91,8 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Ir.step_settled,
     -- generate's targets, from the checked IR's rule names, miss no class of out line a step can show.
     ``Tazuna.Ir.targets_cover,
+    -- The layout's roots read every kept function of a service: its structures are matched whole, field by field.
+    ``Tazuna.Ir.rootUses_eq,
     -- The bound-reached condition the step scripts ask. T2 (`step_encode`) is what the verdict theorems below rest on.
     ``Tazuna.Smt.boundReached_iff,
     -- T3: a model's values decode to a state a run reaches.

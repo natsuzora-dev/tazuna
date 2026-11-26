@@ -1157,7 +1157,7 @@ theorem rootUses_sub : ∀ r ∈ rootUses v, ∀ s ∈ r.1, s ∈ c.P := by
   simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
     or_assoc] at hr
   rcases hr with rfl | rfl | ⟨x, hx, rfl | rfl | rfl⟩ | ⟨q, hq, rfl | rfl⟩ | ⟨m, hm, rfl | rfl | rfl | rfl | rfl⟩ |
-    ⟨x, hx, rfl⟩ | ⟨x, hx, rfl⟩ | ⟨x, hx, rfl | rfl⟩
+    ⟨x, hx, rfl⟩ | ⟨x, hx, rfl⟩ | ⟨x, hx, rfl | rfl⟩ | ⟨x, hx, rfl⟩
   · exact Fun.uses_sub hv chk.reach.apply
   · exact Fun.uses_sub hv chk.reach.invariants
   · exact Fun.uses_sub hv (chk.reach.commands x hx).accepts
@@ -1174,6 +1174,7 @@ theorem rootUses_sub : ∀ r ∈ rootUses v, ∀ s ∈ r.1, s ∈ c.P := by
   · exact Fun.uses_sub hv (chk.reach.subscribes x hx)
   · exact Fun.uses_sub hv (chk.reach.responses x hx).1
   · exact Fun.uses_sub hv (chk.reach.responses x hx).2
+  · exact Fun.uses_sub hv (chk.reach.creates x hx)
 
 /-- A site of the program at an own kind's `on_answer` is one a function of the step uses: the kind pairs a handle with
 a site that function uses, and the program's sites are unique. -/
