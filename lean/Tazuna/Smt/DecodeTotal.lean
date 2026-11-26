@@ -157,17 +157,21 @@ theorem questions_decode (senv : StepEnv L (shapes v)) {inp : SymInput v (shapes
   have hin := stepInputs_data hc hmem
   have hst := sorted_append_left hM (stateTys_data v)
   have hip := sorted_append_right hM hin
-  obtain ⟨t, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
-  obtain ⟨iwf, hiwf, hq⟩ := bind_ok.1 hq
-  obtain ⟨below, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨names, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
+  simp only [questions] at hq
+  obtain ⟨a, ha, hq⟩ := bind_ok.1 hq
   cases pure_ok.1 hq
+  simp only [stepAsk] at ha
+  obtain ⟨t, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨wf, hwf, ha⟩ := bind_ok.1 ha
+  obtain ⟨iwf, hiwf, ha⟩ := bind_ok.1 ha
+  obtain ⟨below, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨names, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  cases pure_ok.1 ha
   have hcx : q.ask.context = [wf, iwf, below, names, t.out.case] := by
     rcases List.mem_cons.1 hqm with rfl | hqm
     · rfl

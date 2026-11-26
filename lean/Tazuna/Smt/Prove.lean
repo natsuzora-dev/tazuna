@@ -427,15 +427,19 @@ end
 section
 variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
 
-/-- The targets of a service and their questions for one input kind, from the state at `v0` on and the input's
-terms after it. Every question asserts the state's and the input's shape (well-formed slots, wire ids below the
-next, names below the counter as every state on valid inputs keeps them, `Step.run_supp`), so each model decodes and
-no fresh name meets one the state holds, and the case it is about; a step question also the side conditions, the invariants on the state and the step's condition, and
-the target broken; the bound question that the side conditions fail or, with the invariants, the step's condition.
-So where every question is unsat, no state of that shape with its invariants holding has a step of the kind that
-breaks the target. -/
-def questions (inp : SymInput v (shapes v) senv.nT) :
-    Except Refusal (List Target × List (Question v (shapes v) senv.nT)) := do
+/-- What every question about an input kind shares, from the state at `v0` on and the input's terms after it: the
+step's terms, the side conditions (the codes and sites fit, the invariants' codes and instance checks run), the
+invariants holding on the state, and the script around a question's own assertions. Its context asserts the state's
+and the input's shape (well-formed slots, wire ids below the next, names below the counter as every state on valid
+inputs keeps them, `Step.run_supp`), so each model decodes and no fresh name meets one the state holds, and the case
+the questions are about. -/
+structure StepAsk (v : ServiceV) where
+  t : EncodedStep v
+  side : Term
+  held : Term
+  script : List Term → TypedScript
+
+def stepAsk (inp : SymInput v (shapes v) senv.nT) : Except Refusal (StepAsk v) := do
   let S : SymState v := SymState.vars 0
   let t ← encodeStep L T P v senv S inp
   let wf ← need (.layout (.type v.records)) (S.wf L (shapes v))
@@ -450,22 +454,44 @@ def questions (inp : SymInput v (shapes v) senv.nT) :
   let tys := stateTys v (shapes v) ++ inp.tys
   let vars ← tys.mapM fun ty => need (lacks ty) (L.srt? ty)
   let dts ← need (.layout (.type v.records)) L.datatypes?
-  let script (asserts : List Term) : TypedScript := ⟨dts, tys, vars, [wf, iwf, below, names, t.out.case], asserts⟩
+  pure ⟨t, side, held, fun asserts => ⟨dts, tys, vars, [wf, iwf, below, names, t.out.case], asserts⟩⟩
+
+/-- The bound question of an input kind: the side conditions fail or, with the invariants, the step's condition. -/
+def StepAsk.bound {w : ServiceV} (a : StepAsk w) : TypedScript := a.script [.or (.not a.side) (andT a.held (.not a.t.cond))]
+
+/-- A question that the step from a state whose invariants hold, within the side conditions and the step's
+condition, does what `goal` says. -/
+def StepAsk.ask {w : ServiceV} (a : StepAsk w) (goal : Term) : TypedScript := a.script [a.side, a.held, a.t.cond, goal]
+
+/-- The targets of a service and their questions for one input kind: the bound question, and for each target a step
+question that the step breaks it. So where every question is unsat, no state of that shape with its invariants
+holding has a step of the kind that breaks the target. -/
+def questions (inp : SymInput v (shapes v) senv.nT) :
+    Except Refusal (List Target × List (Question v (shapes v) senv.nT)) := do
+  let a ← stepAsk L T P v senv inp
   let cmd := inp.command?
-  let targets := (dedup (t.out.targets cmd)).filter
-    fun g => (t.out.breaks cmd g).const?.map Val.toBool != some false
-  pure (targets, ⟨inp, none, script [.or (.not side) (andT held (.not t.cond))]⟩ ::
-    targets.map fun g => ⟨inp, some g, script [side, held, t.cond, t.out.breaks cmd g]⟩)
+  let targets := (dedup (a.t.out.targets cmd)).filter
+    fun g => (a.t.out.breaks cmd g).const?.map Val.toBool != some false
+  pure (targets, ⟨inp, none, a.bound⟩ :: targets.map fun g => ⟨inp, some g, a.ask (a.t.out.breaks cmd g)⟩)
 
 /-- Every question about an input kind has the state's variables and then the input's. -/
+theorem stepAsk_tys {inp : SymInput v (shapes v) senv.nT} {a : StepAsk v} (ha : stepAsk L T P v senv inp = .ok a)
+    (X : List Term) : (a.script X).tys = stateTys v (shapes v) ++ inp.tys := by
+  simp only [stepAsk] at ha
+  repeat (obtain ⟨_, -, ha⟩ := bind_ok.1 ha)
+  cases pure_ok.1 ha
+  rfl
+
 theorem questions_tys {inp : SymInput v (shapes v) senv.nT} {gs : List Target} {qs : List (Question v (shapes v) senv.nT)}
     (hq : questions L T P v senv inp = .ok (gs, qs)) : ∀ q ∈ qs, q.ask.tys = stateTys v (shapes v) ++ inp.tys := by
   simp only [questions] at hq
-  repeat (obtain ⟨_, -, hq⟩ := bind_ok.1 hq)
+  obtain ⟨a, ha, hq⟩ := bind_ok.1 hq
   cases pure_ok.1 hq
   intro q hq'
   simp only [List.mem_cons, List.mem_map] at hq'
-  rcases hq' with rfl | ⟨g, -, rfl⟩ <;> rfl
+  rcases hq' with rfl | ⟨g, -, rfl⟩
+  · exact stepAsk_tys L T P v senv ha _
+  · exact stepAsk_tys L T P v senv ha _
 
 end
 

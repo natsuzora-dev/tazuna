@@ -91,15 +91,16 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
   rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hS, hxd, hcase⟩ | h
   · obtain ⟨gs, qs, hqs, hor⟩ := hq inp hmem
     rcases hor with hun | hfit
-    · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hheld hord hxd hcase
+    · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond chk senv inp hqs hS hinv hsupp hheld hxd hcase
         fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') M fun n h => varSorted_of_sorted (hM n h)
       exact ((step_encode chk senv (decode_state hS) hinv hxd ht).2 hcodes hsites (hcase t ht)).2.2 hcond a hb
-    · obtain ⟨t, ht, -⟩ := bind_ok.1 hqs
+    · obtain ⟨a, ha, -⟩ := bind_ok.1 hqs
+      have ht := stepAsk_t ha
       have henc := step_encode chk senv (decode_state hS) hinv hxd ht
       have hcodes := henc.1.2 (codesFit_of_decode hxd hfit.1)
       have hsites := sites_of_decode senv ht hxd hfit.2.1
-      have E := henc.2 hcodes hsites (hcase t ht)
-      exact E.2.2 (E.1.2 hfit.2.2.2.2.2) a hb
+      have E := henc.2 hcodes hsites (hcase _ ht)
+      exact E.2.2 (E.1.2 hfit.2.2.2.2.2) _ hb
   · exact (h.2.1 a hb).elim
 
 /-- T5 for runs, scoped to the slots: in a checked spec's service whose initial state keeps its invariants, and a layout

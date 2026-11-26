@@ -865,14 +865,14 @@ variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services) (T : List
   (senv : StepEnv (Layout.ofService c.program.defs v) (shapes v))
 include hv
 
-/-- In each service's layout, prove's questions about an input kind never refuse with a layout gap. -/
-theorem questions_ofService (inp : SymInput v (shapes v) senv.nT)
+/-- In each service's layout, what prove's questions about an input kind share never refuses with a layout gap. -/
+theorem stepAsk_ofService (inp : SymInput v (shapes v) senv.nT)
     (hinp : inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v)) :
-    Sound (fun _ => True) (questions (Layout.ofService c.program.defs v) T c.P v senv inp) := by
+    Sound (fun _ => True) (stepAsk (Layout.ofService c.program.defs v) T c.P v senv inp) := by
   have h := serviceGot_ofService hv
   have chk := c.checked v hv
   have ha := stepInputs_avail c v inp hinp
-  unfold questions
+  unfold stepAsk
   refine sound_bind (encodeStep_ofService hv T senv _ inp) fun t _ => ?_
   refine sound_bind (sound_need fun hn => by
     have := wf_ofService c.program.defs chk (SymState.vars 0 : SymState v); rw [hn] at this; cases this) fun wf _ => ?_
@@ -899,6 +899,12 @@ theorem questions_ofService (inp : SymInput v (shapes v) senv.nT)
     · exact ha.1 ty hty)) fun _ _ => trivial) fun vars _ => ?_
   obtain ⟨dts, hdts⟩ := datatypes_ofParts c.program.defs.parts v
   exact sound_bind_ok (need_ok.2 hdts) trivial
+
+/-- In each service's layout, prove's questions about an input kind never refuse with a layout gap. -/
+theorem questions_ofService (inp : SymInput v (shapes v) senv.nT)
+    (hinp : inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v)) :
+    Sound (fun _ => True) (questions (Layout.ofService c.program.defs v) T c.P v senv inp) :=
+  sound_bind (stepAsk_ofService hv T senv inp hinp) fun _ _ => trivial
 
 end
 

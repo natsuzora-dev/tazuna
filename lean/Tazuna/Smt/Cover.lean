@@ -325,8 +325,8 @@ theorem fault_sound {E : List AnyEffectSite} (chk : Checked P E T v) (he : v.Equ
       · exact hb q hq' h
       · exact htg q hq' h
     · obtain ⟨hc, M, hM, hS, hxd, hcase⟩ := hcov
-      exact question_within chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is) hsupp
-        (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase hfit f hf fun q hq' hg =>
+      exact question_fault chk senv inp hqs hS (run_inv T chk.reach _ Step.init_inv is) hsupp
+        (Tazuna.Ir.run_invariants T _ is hinit) hxd hcase (.inr hfit) f hf fun q hq' hg =>
           (htg q hq' hg).noModel_at (questions_tys L T P v senv hqs q hq') M fun n h => varSorted_of_sorted (hM n h)
   · exact h.1 f hf
 

@@ -204,16 +204,18 @@ theorem questions_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnyS
     (hin : inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v)) :
     SortsInhabited L (stateTys v (shapes v) ++ inp.tys) := by
   simp only [questions] at hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨_, -, hq⟩ := bind_ok.1 hq
-  obtain ⟨vars, hvars, hq⟩ := bind_ok.1 hq
-  obtain ⟨dts, hdts, -⟩ := bind_ok.1 hq
+  obtain ⟨a, ha, -⟩ := bind_ok.1 hq
+  simp only [stepAsk] at ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨_, -, ha⟩ := bind_ok.1 ha
+  obtain ⟨vars, hvars, ha⟩ := bind_ok.1 ha
+  obtain ⟨dts, hdts, -⟩ := bind_ok.1 ha
   refine sorts_inhabited hL (need_ok.1 hdts) (mapM_need hvars) fun t ht => .inl ?_
   rcases List.mem_append.1 ht with ht | ht
   · exact stateTys_data v t ht
