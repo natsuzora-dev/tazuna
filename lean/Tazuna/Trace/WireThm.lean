@@ -143,9 +143,9 @@ theorem dec_enc : (t : Ty) → t.ordered T = true → (x : t.den0) → (w : Wire
       simp only [P] at hs
       rw [hs]
   | .date, _, x, w, h => by
-    simp only [enc, Option.map_eq_some_iff] at h
-    obtain ⟨s, hs, rfl⟩ := h
-    exact ⟨x, DateThm.parse_render x s hs, rfl⟩
+    simp only [enc, Option.some.injEq] at h
+    subst h
+    exact ⟨x, DateThm.parse_render x, rfl⟩
   | .id, _, x, w, h => by
     simp only [enc, Option.map_eq_some_iff] at h
     obtain ⟨s, hs, rfl⟩ := h

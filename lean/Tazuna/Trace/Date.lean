@@ -1,10 +1,12 @@
-import Tazuna.Linter
+import Tazuna.Ir.Literal
 
-/-! Dates on the wire. A date is its day number since 1970-01-01; a trace writes it as the label `YYYY-MM-DD` of a
-proleptic Gregorian day in years 0000 through 9999. Carried over from smt-foundation with its proof
-(`Tazuna.Trace.DateThm`). -/
+/-! Dates on the wire. A date is its day number since 1970-01-01; a trace writes it as the ISO 8601 label of its
+proleptic Gregorian day, `YYYY-MM-DD` for years 0000 through 9999 and the expanded year form outside them, so every
+day has a label (`Tazuna.Trace.DateThm`). -/
 
 namespace Tazuna.Trace
+
+open Tazuna.Ir.Literal (decimalDigits digitChar digitsFrom)
 
 /-- Days since 1970-01-01 of a proleptic Gregorian date (Howard Hinnant's days_from_civil). -/
 def daysFromCivil (y m d : Int) : Int :=
@@ -27,51 +29,47 @@ def civilFromDays (z : Int) : Int × Int × Int :=
   let m := if decide (mp < 10) then mp + 3 else mp - 9
   (if decide (m ≤ 2) then yoe + era * 400 + 1 else yoe + era * 400, m, d)
 
--- A position past the string reads as -1, which no digit test accepts.
-set_option linter.tazuna.silentDefault false in
-/-- The code point of character `i` of `s`, or -1 past its end. -/
-def codeAt (s : String) (i : Nat) : Int := (s.toList[i]?.map (fun c => (c.toNat : Int))).getD (-1)
-
-/-- The digit that character `i` of `s` is, when it is one. -/
-def digitAt (s : String) (i : Nat) : Int := codeAt s i - 48
-
-def isDigitAt (s : String) (i : Nat) : Bool := 0 ≤ digitAt s i && digitAt s i ≤ 9
-
 def isLeap (y : Int) : Bool := y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)
 
 def monthDays (y m : Int) : Int :=
   if m == 2 then (if isLeap y then 29 else 28) else if m == 4 || m == 6 || m == 9 || m == 11 then 30 else 31
 
-/-- The year, month and day that the digits of a label `YYYY-MM-DD` write. -/
-def labelYear (s : String) : Int := digitAt s 0 * 1000 + digitAt s 1 * 100 + digitAt s 2 * 10 + digitAt s 3
-def labelMonth (s : String) : Int := digitAt s 5 * 10 + digitAt s 6
-def labelDay (s : String) : Int := digitAt s 8 * 10 + digitAt s 9
+/-- The digits of `n`, with zeros in front up to `width` digits. -/
+def padded (width n : Nat) : List Char :=
+  (List.replicate (width - (decimalDigits n).length) 0 ++ decimalDigits n).map digitChar
 
-/-- Whether `s` is a label `YYYY-MM-DD` of a real day in years 0000 through 9999. -/
-def isDateLabel (s : String) : Bool :=
-  s.length == 10 && isDigitAt s 0 && isDigitAt s 1 && isDigitAt s 2 && isDigitAt s 3 && codeAt s 4 == 45 &&
-    isDigitAt s 5 && isDigitAt s 6 && codeAt s 7 == 45 && isDigitAt s 8 && isDigitAt s 9 &&
-    1 ≤ labelMonth s && labelMonth s ≤ 12 && 1 ≤ labelDay s && labelDay s ≤ monthDays (labelYear s) (labelMonth s)
+/-- A year from 0000 through 9999 is four digits; any other year is a sign and at least six digits, the ISO 8601
+expanded form that JavaScript's toISOString writes (`+275760`, `-000001`). -/
+def yearChars (y : Int) : List Char :=
+  if 0 ≤ y ∧ y ≤ 9999 then padded 4 y.toNat else if y < 0 then '-' :: padded 6 y.natAbs else '+' :: padded 6 y.toNat
 
-/-- The days since 1970-01-01 of a date label `YYYY-MM-DD` of a real day in years 0000 through 9999. -/
-def parseDate? (text : String) : Option Int :=
-  if isDateLabel text then some (daysFromCivil (labelYear text) (labelMonth text) (labelDay text)) else none
+def twoDigits (n : Nat) : List Char := [digitChar (n / 10), digitChar (n % 10)]
 
-/-- The one-digit string of the last decimal digit of `n`. -/
-def digitChar (n : Int) : String := String.singleton (Char.ofNat (48 + n % 10).toNat)
-
-/-- The label `YYYY-MM-DD` of a year from 0000 through 9999, a month and a day. -/
-def dateLabel (y m d : Int) : String :=
-  digitChar (y / 1000) ++ digitChar (y / 100) ++ digitChar (y / 10) ++ digitChar y ++ "-" ++ digitChar (m / 10) ++
-    digitChar m ++ "-" ++ digitChar (d / 10) ++ digitChar d
-
-/-- The label `YYYY-MM-DD` of the day `days` after 1970-01-01, when its year is 0000 through 9999. -/
-def renderDate? (days : Int) : Option String :=
+/-- The label of the day `days` after 1970-01-01: its year, then `-MM-DD`. Every day has one. -/
+def renderDate (days : Int) : String :=
   let (y, m, d) := civilFromDays days
-  if 0 ≤ y && y ≤ 9999 then some (dateLabel y m d) else none
+  String.ofList (yearChars y ++ '-' :: twoDigits m.toNat ++ '-' :: twoDigits d.toNat)
 
-/-- The first and the last day that a label names, 0000-01-01 and 9999-12-31. -/
-def firstDay : Int := -719528
-def lastDay : Int := 2932896
+/-- The year that a year's characters write, read loosely; `parseDate?` keeps only the text `renderDate` writes. -/
+def readYear : List Char → Option Int
+  | [] => none
+  | c :: cs =>
+    if c = '-' then (digitsFrom 10 0 cs).map fun n => -Int.ofNat n
+    else if c = '+' then (digitsFrom 10 0 cs).map Int.ofNat
+    else (digitsFrom 10 0 (c :: cs)).map Int.ofNat
+
+/-- The day that a label's year and its last six characters `-MM-DD` write, read loosely. -/
+def readDate (cs : List Char) : Option Int :=
+  match cs.reverse with
+  | d2 :: d1 :: '-' :: m2 :: m1 :: '-' :: year => do
+    let y ← readYear year.reverse
+    let m ← digitsFrom 10 0 [m1, m2]
+    let d ← digitsFrom 10 0 [d1, d2]
+    pure (daysFromCivil y m d)
+  | _ => none
+
+/-- The day a label names, when the label is the one `renderDate` writes for it. -/
+def parseDate? (text : String) : Option Int :=
+  (readDate text.toList).filter fun z => renderDate z == text
 
 end Tazuna.Trace

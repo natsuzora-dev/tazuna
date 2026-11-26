@@ -12,7 +12,7 @@ JSON library.
 - A Bool is `true` or `false`, and Nil is `null`: JSON's own literals.
 - A value of any other custom type, `Option` and `Result` included, is an object: `"tag"` names the variant, and each
   field sits under its label, or under its position (`"0"`, `"1"`) when it has none.
-- A Date is its label `YYYY-MM-DD`.
+- A Date is its ISO 8601 label: `YYYY-MM-DD`, with a sign and six or more year digits outside years 0000 to 9999.
 - An Id is a string a binding names it by: a trace names a fresh id by its first appearance, never by the engine's
   numbers, and an id from outside the service by its own name.
 
@@ -81,7 +81,7 @@ def enc : (t : Ty) → t.den0 → Option Wire
     if i = 0 then encBool vs x else if i = 1 then encNil vs x
     else encAlts ((T[i]?.map (·.variants)).getD []) 0 vs x
   | .table k v, x => ((Ty.sortKeys T k v x.1).mapM fun (a, b) => do pure (Wire.arr [← enc k a, ← enc v b])).map .arr
-  | .date, d => (renderDate? d).map .str
+  | .date, d => some (.str (renderDate d))
   | .id, n => (name n).map .str
   | .fn .., _ | .param _, _ | .dsl .., _ => none
 def encs : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → Option (List Wire)

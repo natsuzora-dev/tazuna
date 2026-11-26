@@ -85,9 +85,8 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Gleam.mod_neg_right, ``Tazuna.Gleam.div_neg_right, ``Tazuna.Gleam.length_eq_codepoints,
     ``Tazuna.Ir.Ty.deq_bag_perm, ``Tazuna.Ir.Literal.parseInt_printInt, ``Tazuna.Ir.Literal.parseStr_printStr,
     -- Traces: reading back a written trace's header and lines, or a written value, gives it back, and a date label and
-    -- its day number are one value.
+    -- its day number are one value, every day having a label.
     ``Tazuna.Trace.TraceFile.read_wires, ``Tazuna.Trace.dec_enc, ``Tazuna.Trace.DateThm.render_parse,
-    ``Tazuna.Trace.DateThm.labelled_range,
     -- The trace writer's names: a fresh id is never called by an outside id's name the run carries, and an outside id
     -- the writer was told of always has its own name.
     ``Tazuna.Trace.Names.bind_ok, ``Tazuna.Trace.Names.ok_avoid,

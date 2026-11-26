@@ -1,12 +1,12 @@
 import Tazuna.Trace.Date
 
 /-!
-A date label and its day number are one value written two ways: on years 0000 through 9999, parseDate? and renderDate?
-are inverse (`render_parse`, `parse_render`), and a day number has a label exactly from firstDay through lastDay
-(`labelled_range`). A trace's dates rest on these: a date is its day number, and its label is what a trace writes.
+A date label and its day number are one value written two ways: every day has a label, and parseDate? and renderDate
+are inverse (`render_parse`, `parse_render`). A trace's dates rest on these: a date is its day number, and its label is
+what a trace writes.
 
 The calendar repeats every 400 years. Within one cycle, the kernel checks each year's first and last day and each day of
-a year that starts March 1 (`years`, `monthsForward`, `monthsBack`), and monotonicity of the year count covers the days
+a year that starts March 1 (`years`, `monthsForward`), and monotonicity of the year count covers the days
 between.
 -/
 
@@ -57,16 +57,6 @@ theorem monthsForward : allBelow (fun n => allBelow (fun l =>
     !(decide (doy ≤ 364 + l)) || (decide (1 ≤ m) && decide (m ≤ 12) && decide (1 ≤ d) &&
       decide (d ≤ monthDays (if leap then 4 else 1) m) && (153 * marchMonth m + 2) / 5 + d - 1 == doy &&
       decide (m ≤ 2) == decide (306 ≤ doy))) 2) 366 = true := by decide +kernel
-
-/-- Each real date of a year that starts March 1: its day of the year, whose month and day give the date back. -/
-theorem monthsBack : allBelow (fun m0 => allBelow (fun d0 => allBelow (fun l =>
-    let m : Int := m0 + 1
-    let d : Int := d0 + 1
-    let doy := (153 * marchMonth m + 2) / 5 + d - 1
-    let mp := (5 * doy + 2) / 153
-    !(decide (d ≤ monthDays (if l == 1 then 4 else 1) m)) ||
-      (decide (0 ≤ doy) && decide (doy ≤ 364 + l) && monthOf mp == m && doy - (153 * mp + 2) / 5 + 1 == d)) 2) 31) 12
-    = true := by decide +kernel
 
 def stepSum (x : Int) : Int := x - x / 1460 + x / 36524 - x / 146096
 
@@ -133,22 +123,6 @@ theorem yoe_bounds (doe : Int) (h0 : 0 ≤ doe) (h1 : doe ≤ 146096) :
         have := yoeOf_mono (yearStart (y + 1)) doe (by simpa [yearStart] using h0') (by omega) h1
         omega
 
-/-- A day within year `y` of a cycle is in year `y`. -/
-theorem yoeOf_within (y doy : Int) (h0 : 0 ≤ y) (h1 : y ≤ 399) (h2 : 0 ≤ doy) (h3 : doy ≤ yearLength y - 1) :
-    yoeOf (yearStart y + doy) = y := by
-  have ⟨hs, he, _⟩ := year_facts y h0 (by omega)
-  have hb : yearStart y + yearLength y - 1 ≤ 146096 := by
-    have := yearLength_bounds y
-    by_cases hy : y = 399
-    · subst hy; simp [yearStart, yearLength, isLeap]
-    · have ⟨_, _, hn⟩ := year_facts y h0 (by omega)
-      have := yearLength_bounds (y + 1)
-      unfold yearStart at hn ⊢; omega
-  have hs0 : 0 ≤ yearStart y := by unfold yearStart; omega
-  have a := yoeOf_mono (yearStart y) (yearStart y + doy) hs0 (by omega) (by omega)
-  have b := yoeOf_mono (yearStart y + doy) (yearStart y + yearLength y - 1) (by omega) (by omega) hb
-  omega
-
 theorem monthDays_leap (y m : Int) : monthDays y m = monthDays (if isLeap y then 4 else 1) m := by
   unfold monthDays; cases isLeap y <;> rfl
 
@@ -167,20 +141,6 @@ theorem forward (doy : Int) (leap : Bool) (h0 : 0 ≤ doy) (h1 : doy ≤ 364 + (
   have h := of_allBelow (of_allBelow monthsForward doy.toNat (by cases leap <;> simp at h1 <;> omega))
     (if leap then 1 else 0) (by cases leap <;> simp)
   rw [Int.toNat_of_nonneg h0] at h
-  cases leap <;> simp_all
-
-theorem back (m d : Int) (leap : Bool) (hm1 : 1 ≤ m) (hm2 : m ≤ 12) (hd1 : 1 ≤ d)
-    (hd2 : d ≤ monthDays (if leap then 4 else 1) m) :
-    let doy := (153 * marchMonth m + 2) / 5 + d - 1
-    let mp := (5 * doy + 2) / 153
-    0 ≤ doy ∧ doy ≤ 364 + (if leap then 1 else 0) ∧ monthOf mp = m ∧ doy - (153 * mp + 2) / 5 + 1 = d := by
-  have hmd : monthDays (if leap then 4 else 1) m ≤ 31 := by
-    simp only [monthDays]; split <;> (try split) <;> (try split) <;> omega
-  have h := of_allBelow (of_allBelow (of_allBelow monthsBack (m - 1).toNat (by omega)) (d - 1).toNat (by omega))
-    (if leap then 1 else 0) (by cases leap <;> simp)
-  have em : (((m - 1).toNat : Nat) : Int) + 1 = m := by omega
-  have ed : (((d - 1).toNat : Nat) : Int) + 1 = d := by omega
-  simp only [em, ed] at h
   cases leap <;> simp_all
 
 theorem civil_eq (z : Int) :
@@ -241,203 +201,84 @@ theorem civil_valid (z : Int) :
       have e2 : yoe + q * 400 - q * 400 = yoe := by omega
       rw [e1, e2, back]; omega
 
-/-- A real date is the civil date of its days from civil. -/
-theorem days_valid (y m d : Int) (hm1 : 1 ≤ m) (hm2 : m ≤ 12) (hd1 : 1 ≤ d) (hd2 : d ≤ monthDays y m) :
-    civilFromDays (daysFromCivil y m d) = (y, m, d) := by
-  rw [days_eq]
-  dsimp only
-  generalize hy' : (if m ≤ 2 then y - 1 else y) = y'
-  generalize hq : y' / 400 = q
-  generalize hyoe : y' - q * 400 = yoe
-  have y0 : 0 ≤ yoe := by omega
-  have y1 : yoe ≤ 399 := by omega
-  have hleap : monthDays y m = monthDays (if isLeap (yoe + 1) then 4 else 1) m := by
-    by_cases h2 : m ≤ 2
-    · rw [monthDays_leap]
-      have : y = (yoe + 1) + 400 * q := by simp only [h2, ite_true] at hy'; omega
-      rw [this, isLeap_shift]
-    · have hm2 : m ≠ 2 := by omega
-      simp only [monthDays, show (m == 2) = false by simp [hm2], Bool.false_eq_true, ite_false]
-  rw [hleap] at hd2
-  have hbk := back m d (isLeap (yoe + 1)) hm1 hm2 hd1 hd2
-  dsimp only at hbk
-  have ⟨b0, b1, bm, bd⟩ := hbk
-  generalize hdoy : (153 * marchMonth m + 2) / 5 + d - 1 = doy at b0 b1 bm bd
-  have hlen : doy ≤ yearLength yoe - 1 := by
-    unfold yearLength; split <;> rename_i h <;> simp [h] at b1 <;> omega
-  have hw := yoeOf_within yoe doy y0 y1 b0 hlen
-  have hb : yearStart yoe + yearLength yoe - 1 ≤ 146096 := by
-    by_cases h : yoe = 399
-    · subst h; simp [yearStart, yearLength, isLeap]
-    · have ⟨_, _, hn⟩ := year_facts yoe y0 (by omega)
-      have := yearStart_le (yoe + 1) 399 (by omega)
-      have h399 : yearStart 399 = 145731 := by decide
-      have := yearLength_bounds yoe
-      omega
-  have hs0 : 0 ≤ yearStart yoe := by unfold yearStart; omega
-  rw [civil_eq]
-  dsimp only
-  have e1 : (q * 146097 + yearStart yoe + doy - 719468 + 719468) / 146097 = q := by omega
-  have e2 : q * 146097 + yearStart yoe + doy - 719468 + 719468 - q * 146097 = yearStart yoe + doy := by omega
-  rw [e1, e2, hw, show yearStart yoe + doy - yearStart yoe = doy by omega, bm, bd]
-  simp only [Prod.mk.injEq, and_true]
-  by_cases h2 : m ≤ 2
-  · simp only [h2, decide_true, ite_true] at hy' ⊢; omega
-  · simp only [h2, decide_false, ite_false, Bool.false_eq_true] at hy' ⊢; omega
+open Tazuna.Ir.Literal (decimalDigits digitChar digitsFrom decimalDigits_lt digitsFrom_map foldl_decimalDigits)
 
-/-- A day number has a label exactly from 0000-01-01 through 9999-12-31. -/
-theorem civil_year_range (z : Int) :
-    (0 ≤ (civilFromDays z).1 ∧ (civilFromDays z).1 ≤ 9999) ↔ (firstDay ≤ z ∧ z ≤ lastDay) := by
-  rw [civil_eq]
-  dsimp only
-  generalize hq : (z + 719468) / 146097 = q
-  generalize hdoe : z + 719468 - q * 146097 = doe
-  have hd0 : 0 ≤ doe := by omega
-  have hd1 : doe ≤ 146096 := by omega
-  have ⟨y0, y1, ys, ye⟩ := yoe_bounds doe hd0 hd1
-  generalize hy : yoeOf doe = yoe at y0 y1 ys ye
-  have hl := forward (doe - yearStart yoe) (isLeap (yoe + 1)) (by omega) (by
-    unfold yearLength at ye; split at ye <;> rename_i h <;> simp [h] <;> omega)
-  dsimp only at hl
-  generalize hdoy : doe - yearStart yoe = doy at hl ⊢
-  generalize hmp : (5 * doy + 2) / 153 = mp at hl ⊢
-  generalize hm : monthOf mp = m at hl ⊢
-  obtain ⟨-, -, -, -, -, feb⟩ := hl
-  have h399 : yearStart 399 = 145731 := by decide
-  have hlast : (yoe = 399 ∧ 306 ≤ doy) ↔ 146037 ≤ doe := by
-    constructor
-    · intro ⟨a, b⟩; subst a; omega
-    · intro h
-      have : yoe = 399 := by
-        apply Decidable.byContradiction; intro hne
-        have ⟨_, _, hn⟩ := year_facts yoe y0 (by omega)
-        have := yearStart_le (yoe + 1) 399 (by omega)
-        have := yearLength_bounds yoe
-        omega
-      exact ⟨this, by subst this; omega⟩
-  simp only [firstDay, lastDay]
-  by_cases h2 : m ≤ 2
-  · simp only [h2, decide_true, ite_true]; omega
-  · simp only [h2, decide_false, ite_false, Bool.false_eq_true]; omega
+theorem digitChar_sign (d : Nat) (h : d < 10) : digitChar d ≠ '-' ∧ digitChar d ≠ '+' := by
+  match d, h with
+  | 0, _ | 1, _ | 2, _ | 3, _ | 4, _ | 5, _ | 6, _ | 7, _ | 8, _ | 9, _ => decide
 
-theorem digitChar_toList (n : Int) : (digitChar n).toList = [Char.ofNat (48 + n % 10).toNat] := by
-  simp [digitChar]
+theorem foldl_zeros (k : Nat) : (List.replicate k 0).foldl (fun a d => a * 10 + d) 0 = 0 := by
+  induction k with
+  | zero => rfl
+  | succ k ih => simpa [List.replicate_succ] using ih
 
-theorem digitChar_toNat (n : Int) : ((Char.ofNat (48 + n % 10).toNat).toNat : Int) = 48 + n % 10 := by
-  have h0 : 0 ≤ n % 10 := Int.emod_nonneg _ (by decide)
-  have h1 : n % 10 < 10 := Int.emod_lt_of_pos _ (by decide)
-  have : n % 10 = 0 ∨ n % 10 = 1 ∨ n % 10 = 2 ∨ n % 10 = 3 ∨ n % 10 = 4 ∨ n % 10 = 5 ∨ n % 10 = 6 ∨ n % 10 = 7 ∨
-    n % 10 = 8 ∨ n % 10 = 9 := by omega
-  rcases this with h | h | h | h | h | h | h | h | h | h <;> rw [h] <;> rfl
+theorem read_padded (w n : Nat) : digitsFrom 10 0 (padded w n) = some n := by
+  have hlt : ∀ d ∈ List.replicate (w - (decimalDigits n).length) 0 ++ decimalDigits n, d < 10 := by
+    intro d hd
+    simp only [List.mem_append, List.mem_replicate] at hd
+    rcases hd with ⟨-, rfl⟩ | hd
+    · omega
+    · exact decimalDigits_lt n d hd
+  rw [padded, digitsFrom_map 0 _ hlt, List.foldl_append, foldl_zeros, foldl_decimalDigits]
 
-theorem dateLabel_toList (y m d : Int) : (dateLabel y m d).toList =
-    [Char.ofNat (48 + y / 1000 % 10).toNat, Char.ofNat (48 + y / 100 % 10).toNat, Char.ofNat (48 + y / 10 % 10).toNat,
-      Char.ofNat (48 + y % 10).toNat, '-', Char.ofNat (48 + m / 10 % 10).toNat, Char.ofNat (48 + m % 10).toNat, '-',
-      Char.ofNat (48 + d / 10 % 10).toNat, Char.ofNat (48 + d % 10).toNat] := by
-  simp [dateLabel, String.toList_append, digitChar_toList]
+theorem padded_head (w n : Nat) : ∃ d cs, d < 10 ∧ padded w n = digitChar d :: cs := by
+  have hlt : ∀ d ∈ List.replicate (w - (decimalDigits n).length) 0 ++ decimalDigits n, d < 10 := by
+    intro d hd
+    simp only [List.mem_append, List.mem_replicate] at hd
+    rcases hd with ⟨-, rfl⟩ | hd
+    · omega
+    · exact decimalDigits_lt n d hd
+  cases h : List.replicate (w - (decimalDigits n).length) 0 ++ decimalDigits n with
+  | nil =>
+    have : decimalDigits n ≠ [] := by rw [decimalDigits]; split <;> simp
+    simp_all
+  | cons d ds => exact ⟨d, ds.map digitChar, hlt d (by simp [h]), by simp [padded, h]⟩
 
-/-- The digits of a label give back its year, month and day, and the label is a date label when the day is real. -/
-theorem label_parts (y m d : Int) (hy0 : 0 ≤ y) (hy1 : y ≤ 9999) (hm1 : 1 ≤ m) (hm2 : m ≤ 12) (hd1 : 1 ≤ d)
-    (hd2 : d ≤ monthDays y m) :
-    labelYear (dateLabel y m d) = y ∧ labelMonth (dateLabel y m d) = m ∧ labelDay (dateLabel y m d) = d ∧
-      isDateLabel (dateLabel y m d) = true := by
-  have hmd : monthDays y m ≤ 31 := by simp only [monthDays]; split <;> (try split) <;> omega
-  have hdig : ∀ i, i < 10 → i ≠ 4 → i ≠ 7 → 0 ≤ digitAt (dateLabel y m d) i ∧ digitAt (dateLabel y m d) i ≤ 9 := by
-    intro i hi h4 h7
-    simp only [digitAt, codeAt, dateLabel_toList]
-    have : i = 0 ∨ i = 1 ∨ i = 2 ∨ i = 3 ∨ i = 5 ∨ i = 6 ∨ i = 8 ∨ i = 9 := by omega
-    rcases this with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-      simp only [List.getElem?_cons_zero, List.getElem?_cons_succ, Option.map_some, Option.getD_some,
-        digitChar_toNat] <;> omega
-  have hd : ∀ (n : Int), (Char.ofNat (48 + n % 10).toNat).toNat - (48 : Int) = n % 10 := by
-    intro n; rw [digitChar_toNat]; omega
-  have hY : labelYear (dateLabel y m d) = y := by
-    simp only [labelYear, digitAt, codeAt, dateLabel_toList, List.getElem?_cons_zero, List.getElem?_cons_succ,
-      Option.map_some, Option.getD_some, hd]
-    omega
-  have hM : labelMonth (dateLabel y m d) = m := by
-    simp only [labelMonth, digitAt, codeAt, dateLabel_toList, List.getElem?_cons_zero, List.getElem?_cons_succ,
-      Option.map_some, Option.getD_some, hd]
-    omega
-  have hD : labelDay (dateLabel y m d) = d := by
-    simp only [labelDay, digitAt, codeAt, dateLabel_toList, List.getElem?_cons_zero, List.getElem?_cons_succ,
-      Option.map_some, Option.getD_some, hd]
-    omega
-  refine ⟨hY, hM, hD, ?_⟩
-  have hlen : (dateLabel y m d).length = 10 := by rw [← String.length_toList, dateLabel_toList]; rfl
-  have h4 : codeAt (dateLabel y m d) 4 = 45 := by simp only [codeAt, dateLabel_toList]; rfl
-  have h7 : codeAt (dateLabel y m d) 7 = 45 := by simp only [codeAt, dateLabel_toList]; rfl
-  simp only [isDateLabel, isDigitAt, hlen, h4, h7, hY, hM, hD, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq]
-  have := hdig 0; have := hdig 1; have := hdig 2; have := hdig 3; have := hdig 5; have := hdig 6; have := hdig 8
-  have := hdig 9
-  simp_all
-
-/-- A date label is the label of its own year, month and day, a year from 0000 through 9999. -/
-theorem label_of_parts (s : String) (h : isDateLabel s = true) :
-    dateLabel (labelYear s) (labelMonth s) (labelDay s) = s ∧ 0 ≤ labelYear s ∧ labelYear s ≤ 9999 := by
-  simp only [isDateLabel, isDigitAt, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hlen, h0⟩, h1⟩, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩, -⟩, -⟩, -⟩, -⟩ := h
-  rw [← String.length_toList] at hlen
-  match hs : s.toList, hlen with
-  | [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9], _ =>
-    simp only [digitAt, codeAt, hs, List.getElem?_cons_zero, List.getElem?_cons_succ, Option.map_some,
-      Option.getD_some] at h0 h1 h2 h3 h4 h5 h6 h7 h8 h9
-    have hY : labelYear s = (c0.toNat - 48) * 1000 + (c1.toNat - 48) * 100 + (c2.toNat - 48) * 10 + (c3.toNat - 48) := by
-      simp [labelYear, digitAt, codeAt, hs]
-    have hM : labelMonth s = (c5.toNat - 48) * 10 + (c6.toNat - 48) := by simp [labelMonth, digitAt, codeAt, hs]
-    have hD : labelDay s = (c8.toNat - 48) * 10 + (c9.toNat - 48) := by simp [labelDay, digitAt, codeAt, hs]
-    have hc : ∀ (c : Char) (n : Int), (c.toNat : Int) - 48 = n % 10 → Char.ofNat (48 + n % 10).toNat = c := by
-      intro c n hn
-      have : (48 + n % 10).toNat = c.toNat := by omega
-      rw [this, Char.ofNat_toNat]
-    refine ⟨String.ext ?_, by omega, by omega⟩
-    rw [dateLabel_toList, hs, hY, hM, hD]
-    have e4 : c4 = '-' := by
-      apply Char.ext; apply UInt32.toNat_inj.mp; show c4.toNat = 45; omega
-    have e7 : c7 = '-' := by
-      apply Char.ext; apply UInt32.toNat_inj.mp; show c7.toNat = 45; omega
-    rw [e4, e7]
-    simp only [List.cons.injEq, and_true]
-    refine ⟨hc _ _ ?_, hc _ _ ?_, hc _ _ ?_, hc _ _ ?_, trivial, hc _ _ ?_, hc _ _ ?_, trivial, hc _ _ ?_, hc _ _ ?_⟩ <;>
-      omega
-
-/-- Rendering a day number and parsing the label gives the day number back. -/
-theorem parse_render (z : Int) (s : String) (h : renderDate? z = some s) : parseDate? s = some z := by
-  simp only [renderDate?] at h
-  have hv := civil_valid z
-  generalize hc : civilFromDays z = c at h hv
-  obtain ⟨y, m, d⟩ := c
-  simp only at h hv
-  obtain ⟨hm1, hm2, hd1, hd2, hdays⟩ := hv
-  split at h
+theorem read_year (y : Int) : readYear (yearChars y) = some y := by
+  unfold yearChars
+  split
   · rename_i hy
-    simp only [Bool.and_eq_true, decide_eq_true_eq] at hy
-    cases h
-    obtain ⟨hY, hM, hD, hl⟩ := label_parts y m d hy.1 hy.2 hm1 hm2 hd1 hd2
-    simp only [parseDate?, hl, ite_true, hY, hM, hD, hdays]
-  · cases h
+    obtain ⟨d, cs, hd, hp⟩ := padded_head 4 y.toNat
+    have hs := digitChar_sign d hd
+    have hr := read_padded 4 y.toNat
+    rw [hp] at hr ⊢
+    simp only [readYear, hs.1, hs.2, ite_false, hr, Option.map_some, Int.ofNat_eq_natCast, Option.some.injEq]
+    omega
+  · split
+    · simp only [readYear, ite_true, read_padded, Option.map_some, Int.ofNat_eq_natCast, Option.some.injEq]
+      omega
+    · simp only [readYear, show ('+' = '-') = False by decide, ite_false, ite_true, read_padded, Option.map_some,
+        Int.ofNat_eq_natCast, Option.some.injEq]
+      omega
 
-/-- Parsing a date label and rendering the day number gives the label back. -/
-theorem render_parse (s : String) (z : Int) (h : parseDate? s = some z) : renderDate? z = some s := by
-  simp only [parseDate?] at h
-  split at h
-  · rename_i hl
-    cases h
-    obtain ⟨hs, hy0, hy1⟩ := label_of_parts s hl
-    simp only [isDateLabel, Bool.and_eq_true, decide_eq_true_eq] at hl
-    have hdv := days_valid (labelYear s) (labelMonth s) (labelDay s) hl.1.1.1.2 hl.1.1.2 hl.1.2 hl.2
-    simp only [renderDate?, hdv, hy0, hy1, decide_true, Bool.and_self, ite_true, hs]
-  · cases h
+theorem read_two (n : Nat) (h : n < 100) : digitsFrom 10 0 (twoDigits n) = some n := by
+  have e := digitsFrom_map 0 [n / 10, n % 10] (by intro d hd; simp at hd; omega)
+  simp only [List.map_cons, List.map_nil, List.foldl_cons, List.foldl_nil] at e
+  rw [twoDigits, e]
+  congr 1; omega
 
-/-- A day number has a label exactly from 0000-01-01 through 9999-12-31. -/
-theorem labelled_range (z : Int) : (renderDate? z).isSome = (decide (firstDay ≤ z) && decide (z ≤ lastDay)) := by
-  have h := civil_year_range z
-  simp only [renderDate?]
-  generalize civilFromDays z = c at h
-  obtain ⟨y, m, d⟩ := c
-  have e : (decide (0 ≤ y) && decide (y ≤ 9999)) = (decide (firstDay ≤ z) && decide (z ≤ lastDay)) := by
-    rw [← Bool.decide_and, ← Bool.decide_and]; exact decide_eq_decide.mpr h
-  rw [← e]
-  split <;> rename_i hb <;> simp [hb]
+/-- Every day has a label, and reading it gives the day back. -/
+theorem parse_render (z : Int) : parseDate? (renderDate z) = some z := by
+  have hv := civil_valid z
+  have hread : readDate (renderDate z).toList = some z := by
+    simp only [renderDate]
+    generalize hc : civilFromDays z = c at hv
+    obtain ⟨y, m, d⟩ := c
+    simp only at hv
+    obtain ⟨hm1, hm2, hd1, hd2, hdays⟩ := hv
+    have hmd : monthDays y m ≤ 31 := by simp only [monthDays]; split <;> (try split) <;> omega
+    simp only [String.toList_ofList, readDate, twoDigits, List.reverse_append, List.reverse_cons, List.reverse_nil,
+      List.nil_append, List.cons_append, List.reverse_reverse]
+    have hm := read_two m.toNat (by omega)
+    have hd := read_two d.toNat (by omega)
+    simp only [twoDigits] at hm hd
+    simp only [read_year, hm, hd, Option.bind_eq_bind, Option.bind_some, Option.pure_def]
+    rw [show (m.toNat : Int) = m by omega, show (d.toNat : Int) = d by omega, hdays]
+  simp [parseDate?, hread]
+
+/-- A text that reads as a day is that day's label. -/
+theorem render_parse (s : String) (z : Int) (h : parseDate? s = some z) : renderDate z = s := by
+  simp only [parseDate?, Option.filter_eq_some_iff, beq_iff_eq] at h
+  exact h.2
 
 end Tazuna.Trace.DateThm

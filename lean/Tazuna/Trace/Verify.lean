@@ -78,7 +78,7 @@ def matchVal : (t : Ty) → t.den0 → Wire → Bind → List Bind
   | .table k v, x, .arr ws, b => bagMatch (fun (p : k.den0 × v.den0) w b => match w with
       | .arr [wk, wv] => (matchVal k p.1 wk b).flatMap (matchVal v p.2 wv)
       | _ => []) (Ty.sortKeys T k v x.1) ws b
-  | .date, d, .str s, b => if renderDate? d == some s then [b] else []
+  | .date, d, .str s, b => if renderDate d == s then [b] else []
   | .id, n, .str s, b => ((bindPair b.ids n s).map fun ids => { b with ids }).toList
   | _, _, _, _ => []
 def matchs : (ts : List Ty) → (Ty.semsWith Dsl.base ts).1 → List Wire → Bind → List Bind

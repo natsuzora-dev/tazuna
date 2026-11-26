@@ -19,7 +19,7 @@ Everything else comes from outside the spec, from an external service or from th
 That rule shapes the values a spec can hold:
 
 - Numbers are integers. A spec holds an amount in its smallest unit, such as cents, as Cedar, TLA+, and Alloy do. `check` reports `z.number()` without `.int()` as `Restricted.schema`.
-- An instant is milliseconds since the Unix epoch, within the range of a JavaScript `Date`, and a duration is milliseconds. A date is a `YYYY-MM-DD` label that a spec compares and adds days to. A spec converts neither between instants and dates nor between time zones. The ToDo sample asks its `calendar` service for the next business day instead.
+- An instant is milliseconds since the Unix epoch, within the range of a JavaScript `Date`, and a duration is milliseconds. A date is a day that a spec compares and adds days to; a trace writes it as its ISO 8601 label, `YYYY-MM-DD`, or `+275760-09-13` and `-000001-01-01` for years outside 0000 to 9999. A spec converts neither between instants and dates nor between time zones. The ToDo sample asks its `calendar` service for the next business day instead.
 - A spec builds no text for people. It sends a structured value, such as `{ id: "reminder", values: { title } }`, and the implementation renders it. `check` reports a template literal as `Restricted.function`.
 
 `check` reports any code that the translation cannot turn into an expression as a `Restricted` kind, and the violation names the form to use instead.
