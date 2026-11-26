@@ -2,6 +2,7 @@ import Tazuna.Cli.Check
 import Tazuna.Smt.Unroll
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.PairOrders
+import Tazuna.Smt.Cover
 
 /-! What `prove` and `generate` share: their options, the solver pool, the lines of a refused encoding and of a
 service's scope, and the search of a service's unrolled run depth by depth for a model of a goal, with each depth's
@@ -11,6 +12,28 @@ namespace Tazuna.Cli
 
 open Lean (Json)
 open Tazuna.Ir Tazuna.Ir.Step Tazuna.Smt
+
+/-- A service of a checked spec with what its checks give the commands: its membership, so `c.checked` applies, and its
+layout's step environment, which `stepEnv_ofService` proves is found. -/
+structure CheckedService (c : CheckedSpec) where
+  v : ServiceV
+  mem : v ∈ c.spec.services
+  senv : StepEnv (Layout.ofService c.program.defs v) (shapes v)
+
+/-- The step environment a found one proves exists. -/
+def stepEnvOf {L : Layout} {v : ServiceV} (h : ∃ senv, StepEnv.of L (shapes v) = .ok senv) : StepEnv L (shapes v) :=
+  match e : StepEnv.of L (shapes v) with
+  | .ok senv => senv
+  | .error _ => False.elim (by obtain ⟨_, h⟩ := h; rw [e] at h; cases h)
+
+/-- Each service of the spec, in order. -/
+def _root_.Tazuna.Smt.CheckedSpec.services (c : CheckedSpec) : List (CheckedService c) :=
+  c.spec.services.attach.map fun ⟨v, hv⟩ => ⟨v, hv, stepEnvOf (stepEnv_ofService c.program.defs (c.checked v hv))⟩
+
+abbrev CheckedService.L {c : CheckedSpec} (s : CheckedService c) : Layout := Layout.ofService c.program.defs s.v
+
+theorem CheckedService.callerData {c : CheckedSpec} (s : CheckedService c) : s.v.caller.isData = true :=
+  (c.checked s.v s.mem).callerData
 
 section
 variable {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat}
@@ -175,10 +198,8 @@ for a model of the goal each depth's steps give, stopping at the first, whose de
 encoding of the run or of the goal ends the search undecided; a refused input kind (which the script then lacks)
 leaves it undecided unless a model is found. `what` names the search in an engine bug's message. -/
 def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth v senv.nT))))
-    (goal : List (UnrollStep v senv.nT) → Except Refusal Term) (play : List (Input v) → Except String α) :
-    IO (Except String (SearchResult α)) := do
-  if hc : v.caller.isData = false then return .error "the caller type is no data" else
-  have hc : v.caller.isData = true := by simpa using hc
+    (hc : v.caller.isData = true) (goal : List (UnrollStep v senv.nT) → Except Refusal Term)
+    (play : List (Input v) → Except String α) : IO (Except String (SearchResult α)) := do
   let fail (m : String) : Except String (SearchResult α) := .error s!"service {v.name}, {what}: {m}"
   let refusedLine (step : Option String) (r : Refusal) : Except String (SearchResult α) :=
     match refusalLine T r with

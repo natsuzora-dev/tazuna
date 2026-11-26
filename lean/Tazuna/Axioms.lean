@@ -106,9 +106,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.Term.denote_eq_denoteFast, ``Tazuna.Smt.Term.beq_eq_beqFast,
     -- Compiled code extends a script's shared definitions in place; it is the extension the sharing theorems are about.
     ``Tazuna.Smt.Defs.add_eq_addFast,
-    -- The service's layout, derived from its program: the step environment and the wire-id invariant's term are found,
-    -- and every create fits its table's slots.
-    ``Tazuna.Smt.stepEnv_ofService, ``Tazuna.Smt.pendingBelowT_ofService, ``Tazuna.Smt.atMost_le_count,
+    -- The service's layout, derived from its program: the wire-id invariant's term is found, and every create fits its
+    -- table's slots. (Its step environment is found by `stepEnv_ofService`, which the commands use.)
+    ``Tazuna.Smt.pendingBelowT_ofService, ``Tazuna.Smt.atMost_le_count,
     -- In a checked service's layout, a state within the slots embeds, so a script without a model has no state within
     -- the bounds, and the state's well-formedness term is always built.
     ``Tazuna.Smt.embedState_ofService, ``Tazuna.Smt.wf_ofService,

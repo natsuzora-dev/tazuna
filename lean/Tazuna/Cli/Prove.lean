@@ -131,43 +131,41 @@ def initReports (targets : List Target) : List Report :=
 -- a wire form show as none.
 set_option linter.tazuna.silentDefault false in
 /-- The report of one question's answer. -/
-def answerReport (L : Layout) (senv : StepEnv L (shapes v)) (q : Question v (shapes v) senv.nT)
-    (a : Smt.Answer) : Except String Report :=
+def answerReport (L : Layout) (senv : StepEnv L (shapes v)) (hc : v.caller.isData = true)
+    (q : Question v (shapes v) senv.nT) (a : Smt.Answer) : Except String Report :=
   let name := q.input.text
   match a with
   | .unsat => .ok (.unsat v.name name q.target)
   | .unknown why => .ok (.undecided (.undecided .unknown) v.name name q.target [("why", Json.str why)])
   | .sat vs =>
     let M := modelOf vs
-    if hc : v.caller.isData = true then
-      match (SymState.vars (v := v) 0).decode M L c.T (shapes v), q.input.decode M L hc with
-      | some s, some x =>
-        let r := step c.T v s x
-        let after := Step.settled c.T s x
-        let shown : Show (List (String × Json)) := do
-          let st ← stateWire c.T s
-          let inp ← inputWire c.T x
-          let aft ← match after with
-            | some a => do pure (← stateWire c.T a.state).toJson
-            | none => pure Json.null
-          let (ns, outs) := outLines c.T v (← get) none r
-          set ns
-          pure [("from", Json.str "validState"), ("state", st.toJson), ("input", inp.toJson), ("after", aft),
-            ("outcome", Json.str r.outcome.summary),
-            ("out", Json.arr ((outs.getD []).map (·.toWire.toJson)).toArray)]
-        let fields : List (String × Json) := shown.run' {}
-        match q.target with
-        | none => .ok (.boundReached v.name name)
-        | some g =>
-          let violated := match g, r.outcome with
-            | .invariant .., _ => (after.map fun (a : Acc v) => brokenAt a.state g).getD []
-            | _, .fault (.ensures n) => [n]
-            | _, .fault (.invalidEffect _ rs) => rs
-            | _, _ => []
-          .ok (.violated v.name name g (fields ++ [("violated", Json.arr (violated.map Json.str).toArray)]))
-      -- Unreachable while the solver answers as SMT-LIB says (`questions_decode`).
-      | _, _ => .error s!"a model of {name} does not decode"
-    else .error "the caller type is no data"
+    match (SymState.vars (v := v) 0).decode M L c.T (shapes v), q.input.decode M L hc with
+    | some s, some x =>
+      let r := step c.T v s x
+      let after := Step.settled c.T s x
+      let shown : Show (List (String × Json)) := do
+        let st ← stateWire c.T s
+        let inp ← inputWire c.T x
+        let aft ← match after with
+          | some a => do pure (← stateWire c.T a.state).toJson
+          | none => pure Json.null
+        let (ns, outs) := outLines c.T v (← get) none r
+        set ns
+        pure [("from", Json.str "validState"), ("state", st.toJson), ("input", inp.toJson), ("after", aft),
+          ("outcome", Json.str r.outcome.summary),
+          ("out", Json.arr ((outs.getD []).map (·.toWire.toJson)).toArray)]
+      let fields : List (String × Json) := shown.run' {}
+      match q.target with
+      | none => .ok (.boundReached v.name name)
+      | some g =>
+        let violated := match g, r.outcome with
+          | .invariant .., _ => (after.map fun (a : Acc v) => brokenAt a.state g).getD []
+          | _, .fault (.ensures n) => [n]
+          | _, .fault (.invalidEffect _ rs) => rs
+          | _, _ => []
+        .ok (.violated v.name name g (fields ++ [("violated", Json.arr (violated.map Json.str).toArray)]))
+    -- Unreachable while the solver answers as SMT-LIB says (`questions_decode`).
+    | _, _ => .error s!"a model of {name} does not decode"
 
 /-- The report of a bound question's answer: whether a step of the kind `step` can leave the slots. -/
 def boundReport (service step : String) : Smt.Answer → Except String Report
@@ -287,10 +285,10 @@ def familyItems (only : String → Bool) (g : Target) (step : String) (built : E
 -- The bound question has no target, and its name says so.
 set_option linter.tazuna.silentDefault false in
 /-- Every line of the service in order: the base case, then each input kind's questions. -/
-def serviceItems (only : String → Bool) : ServiceItems := Id.run do
-  let L := Layout.ofService c.program.defs v
-  let .ok senv := StepEnv.of L (shapes v)
-    | return { internal := some s!"service {v.name}: no step environment in its layout" }
+def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems := Id.run do
+  let v := sv.v
+  let L := sv.L
+  let senv := sv.senv
   let b := stateWidth v
   let mut items : List Item := []
   let mut targets : List Target := []
@@ -310,7 +308,7 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
       -- The bound question decides whether a kept target's lines say proved or within the bounds, so it is asked
       -- whenever a target question of its kind is.
       let asked := if kept.any (·.target.isSome) then kept else []
-      items := items ++ asked.map (fun q => .ask ⟨q.script, answerReport c v L senv q⟩) ++
+      items := items ++ asked.map (fun q => .ask ⟨q.script, answerReport c v L senv sv.callerData q⟩) ++
         (qs.filterMap fun q => q.target.bind fun g => if kept.any (·.target == some g) then none else some g).map
           (.skipped v.name)
   -- A machine whose `after` never sets a timer fires forward by itself (`timerForward_of_noTimer`), so it gets no line.
@@ -436,27 +434,27 @@ def prove (root path : String) (opts : Options) : IO UInt32 := do
       return 4
     let mut items : List Item := []
     let mut scopes : List (String × List Json) := []
-    for v in c.spec.services do
-      let r := serviceItems c v opts.keeps
+    for sv in c.services do
+      let r := serviceItems c sv opts.keeps
       if let some m := r.internal then return ← internal m
       items := items ++ r.items
-      scopes := scopes ++ [(v.name, r.scope)]
+      scopes := scopes ++ [(sv.v.name, r.scope)]
     let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
     -- Each response's search is one job; a service's depths are built once for all its responses (`depthJobs`).
     let mut builds : Array Job := #[]
     let mut searches : Array Job := #[]
     let mut responses : Array (String × String × List Json × IO.Ref (Option (Except String (SearchResult (List Wire))))) := #[]
-    for v in c.spec.services do
+    for sv in c.services do
+      let v := sv.v
       let resps := v.responses.filter fun r => opts.keeps (v.name ++ "/" ++ r.text)
       if resps.isEmpty then continue
-      let L := Layout.ofService c.program.defs v
-      let .ok senv := StepEnv.of L (shapes v)
-        | return ← internal s!"service {v.name}: no step environment in its layout"
+      let L := sv.L
+      let senv := sv.senv
       let (bs, ds) ← depthJobs solver c v L senv v.bounds.steps.toNat
       builds := builds ++ bs
       for resp in resps do
         -- `respGoalE_ofService`: the goal's refusal is the spec's, never a layout gap.
-        let (j, r) ← Job.of (searchDepths solver cache c.T v L senv resp.text ds (respGoalE L v resp)
+        let (j, r) ← Job.of (searchDepths solver cache c.T v L senv resp.text ds sv.callerData (respGoalE L v resp)
           (responsePlay c.T v resp))
         searches := searches.push j
         responses := responses.push (v.name, resp.name, scopeBounds c.T L v, r)
