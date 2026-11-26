@@ -332,11 +332,11 @@ pub fn create(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// After an event satisfying `after`, one satisfying `then` within the duration `within`.
+/// After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`. A response that does not tie the two ignores `trigger`.
 pub fn response(
   name _name: String,
   after _after: fn(event) -> Bool,
-  then _then: fn(event) -> Bool,
+  then _then: fn(event, event) -> Bool,
   within _within: Duration,
 ) -> Response(event) {
   panic as "tazuna's built-ins run only in the engine"

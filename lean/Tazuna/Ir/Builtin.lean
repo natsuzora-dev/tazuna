@@ -284,9 +284,10 @@ def sig : Prim → PrimSig :=
       tvars := ["records", "k", "v"], dataArgs := true,
       params := [l "table" (kept (.fn [a] (.table b (param 2)))), l "at_most" .int], ret := .dsl .create [a] }
   | .response =>
-    { name := "response", doc := "After an event satisfying `after`, one satisfying `then` within the duration `within`.",
+    { name := "response",
+      doc := "After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`. A response that does not tie the two ignores `trigger`.",
       tvars := ["event"], dataArgs := true,
-      params := [l "name" .str, l "after" (kept (.fn [a] .bool)), l "then" (kept (.fn [a] .bool)), l "within" .int],
+      params := [l "name" .str, l "after" (kept (.fn [a] .bool)), l "then" (kept (.fn [a, a] .bool)), l "within" .int],
       ret := .dsl .response [a] }
   | .scenario =>
     { name := "scenario",

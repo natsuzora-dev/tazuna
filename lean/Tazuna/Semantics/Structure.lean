@@ -179,7 +179,7 @@ def BoundsV.stepsNat {r : Ty} (b : BoundsV r) : Nat := b.steps.toNat
 structure ResponseV (e : Ty) where
   name : String
   after : Fun (Ty.fn [e] Ty.bool)
-  then_ : Fun (Ty.fn [e] Ty.bool)
+  then_ : Fun (Ty.fn [e, e] Ty.bool)
   within : Int
 
 /-- A response's time limit as a count, for everything after check, which rejects a negative one

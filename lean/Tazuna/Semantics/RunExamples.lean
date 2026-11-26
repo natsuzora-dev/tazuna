@@ -13,7 +13,12 @@ open StepExamples
 /-- After an event `a`, an event `b` within 10 ms. -/
 def resp (a b : Int) : ResponseV .int :=
   { name := "r", after := .closed (.lam (.bin (.eq rfl) (.var .here) (.int a))),
-    then_ := .closed (.lam (.bin (.eq rfl) (.var .here) (.int b))), within := 10 }
+    then_ := .closed (.lam (.bin (.eq rfl) (.var (.there .here)) (.int b))), within := 10 }
+
+/-- After any event, the event one above it within 10 ms: `then` ties the answer to its trigger. -/
+def respNext : ResponseV .int :=
+  { name := "r", after := .closed (.lam (.bin (.eq rfl) (.var .here) (.var .here))),
+    then_ := .closed (.lam (.bin (.eq rfl) (.var (.there .here)) (.bin .add (.var .here) (.int 1)))), within := 10 }
 
 def at_ (t : Int) (evs : List Int) : Moment .int := ⟨t, evs⟩
 
@@ -29,6 +34,12 @@ def at_ (t : Int) (evs : List Int) : Moment .int := ⟨t, evs⟩
 #guard !(resp 1 2).violated [at_ 0 [1], at_ 3 []]
 -- A later opening is judged on its own.
 #guard (resp 1 2).violated [at_ 0 [1], at_ 5 [2], at_ 6 [1], at_ 17 []]
+-- Each trigger waits for its own answer: 2 answers 1 but nothing answers 2, and then the run comes late for 2.
+#guard !respNext.violated [at_ 0 [1], at_ 5 [2], at_ 15 [3]]
+#guard respNext.violated [at_ 0 [1], at_ 5 [2], at_ 16 []]
+-- Two triggers in one step make two deadlines; an answer to one does not close the other.
+#guard respNext.violated [at_ 0 [1, 5], at_ 5 [2], at_ 11 []]
+#guard !respNext.violated [at_ 0 [1, 5], at_ 5 [2, 6], at_ 11 []]
 
 -- On `sum`: `add 5` applies 5 at time 0; a clock line at 11 is past the deadline of "after 5, 99 within 10", one at 10
 -- is not.

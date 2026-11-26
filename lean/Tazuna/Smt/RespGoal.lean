@@ -2,13 +2,16 @@ import Tazuna.Smt.GenGoal
 import Tazuna.Smt.StepNoGap
 import Tazuna.Semantics.Response
 
-/-! A bounded response's goal on an unrolled run: the run violates the response (`respGoalE`). Per step it reads the
-kind the step takes: whether some event the step applies satisfies `after` (opens) or `then` (answers), read off the
-event slots of the step's end where the step reaches it, as generate's event goal reads them; the time the state after
-the step holds; and, for a clock line, that it passes no timer that waits (`Step.timely`, the stated assumption
-`timelyClock`). Over those moments the goal is `ResponseV.violated` written as terms (`violT`), so its exactness is
-the computed form's. The response's functions are encoded as every kept function is, with conditions: the goal asks
-that they hold for every event a step applies, so a model's terms say what the functions return.
+/-! A bounded response's goal on an unrolled run: the run violates the response (`respGoalE`). A trigger is an event
+a step applies, read off the event slots of the step's end where the step reaches it, as generate's event goal reads
+them, for the kind the step takes. For each slot the goal keeps the slot's term as the trigger and asks whether it
+satisfies `after`, whether the step or a later one applies an event that `then` ties to it (`ansT`, `then` applied to
+the trigger's term and each later slot's), and whether a later step comes past the trigger's time plus `within` first
+(`lateT`). Time is the state's after each step; a clock line must pass no timer that waits (`Step.timely`, the stated
+assumption `timelyClock`). The goal is `ResponseV.violated` written as terms (`violT`), so its exactness is the
+computed form's. The response's functions are encoded as every kept function is, with conditions: the goal asks that
+`after` holds at every event a step applies and `then` at every trigger with every event from its step on, so a
+model's terms say what the functions return.
 
 With `runs_covered` this gives T7 (`response_within`): a depth with no model has no run of that many valid inputs,
 within the slots, faulting nowhere and with timely clock lines, that violates the response. Every model decodes to a
@@ -57,38 +60,67 @@ def kindTimelyT (S : SymState v) : SymInput v (shapes v) n → Except Refusal Te
 
 end
 
-/-- From the moment `t0`, some later moment comes past `t0 + within` with no moment before it answering
-(`ResponseV.late`); each moment is whether it opens, whether it answers, and its time. -/
-def lateT (within : Int) (t0 : Term) : List (Term × Term × Term) → Term
-  | [] => ff
-  | (_, a, t) :: ms => .or (.lt (.add t0 (.int within)) t) (andT (.not a) (lateT within t0 ms))
+/-- A response's `then` code applied to the trigger term `tr` and the event term `ev`: whether it holds, and its
+condition. -/
+def pred2T {e : Ty} (f : Code (Ty.fn [e, e] Ty.bool)) (tr ev : Term) : Except Refusal (Term × Term) := do
+  let tc ← Code.ofDataE e tr
+  let ec ← Code.ofDataE e ev
+  f (tc, ec, ())
 
-/-- The moments violate the response (`ResponseV.violated`). -/
-def violT (within : Int) : List (Term × Term × Term) → Term
-  | [] => ff
-  | (o, a, t) :: ms => .or (andT o (andT (.not a) (lateT within t ms))) (violT within ms)
+/-- `kindHitsT pred` of the kind the step takes: whether some event it applies satisfies `pred`, and the condition. -/
+def pickHitsT (pred : Term → Except Refusal (Term × Term)) (st : UnrollStep v n) : Except Refusal (Term × Term) := do
+  let hs ← st.kindTerms fun k => kindHitsT pred k.2.out
+  pure (st.pickedT ff (hs.map fun p => (p.1, p.2.1)), st.pickedT tt (hs.map fun p => (p.1, p.2.2)))
+
+section
+variable (fa : Code (Ty.fn [v.event] Ty.bool)) (fq : Code (Ty.fn [v.event, v.event] Ty.bool)) (within : Int)
+
+/-- Whether the step applies an event that `then` ties to the trigger term `tr` (`ResponseV.answers`). -/
+def ansT (tr : Term) (st : UnrollStep v n) : Except Refusal (Term × Term) := pickHitsT (pred2T fq tr) st
+
+/-- From the trigger `tr` at time `t0`, some later step comes past `t0 + within` with no step before it answering
+`tr` (`ResponseV.late`). -/
+def lateT (tr t0 : Term) : List (UnrollStep v n) → Except Refusal (Term × Term)
+  | [] => pure (ff, tt)
+  | st :: sts => do
+    let (a, ca) ← ansT fq tr st
+    let (l, cl) ← lateT tr t0 sts
+    pure (.or (.lt (.add t0 (.int within)) st.after.now) (andT (.not a) l), andT ca cl)
+
+/-- The event term `tr` of the step `st`, followed by `sts`, is a trigger that its step does not answer and that
+comes late. -/
+def trigT (st : UnrollStep v n) (sts : List (UnrollStep v n)) (tr : Term) : Except Refusal (Term × Term) := do
+  let (o, co) ← predT fa tr
+  let (a, ca) ← ansT fq tr st
+  let (l, cl) ← lateT fq within tr st.after.now sts
+  pure (andT o (andT (.not a) l), andT co (andT ca cl))
+
+/-- The steps violate the response (`ResponseV.violated`): some step applies a trigger as `trigT` reads it. -/
+def violT : List (UnrollStep v n) → Except Refusal (Term × Term)
+  | [] => pure (ff, tt)
+  | st :: sts => do
+    let (h, c) ← pickHitsT (trigT fa fq within st sts) st
+    let (h', c') ← violT sts
+    pure (.or h h', andT c c')
+
+end
 
 section
 variable (L : Layout) (T : List TypeDecl) (v : ServiceV)
 
-/-- One step's part of the goal: its moment (opens, answers, the time after it) and its condition (the response's
-functions are exact at every event it applies, and a clock line is timely). -/
-def stepRespT (fa fq : Code (Ty.fn [v.event] Ty.bool)) (st : UnrollStep v n) :
-    Except Refusal ((Term × Term × Term) × Term) := do
-  let os ← st.kindTerms fun k => kindHitsT (predT fa) k.2.out
-  let as ← st.kindTerms fun k => kindHitsT (predT fq) k.2.out
+/-- A clock line the step takes is timely. -/
+def timelyT (st : UnrollStep v n) : Except Refusal Term := do
   let tms ← st.kindTerms fun k => kindTimelyT L st.before k.1
-  pure ((st.pickedT ff (os.map fun p => (p.1, p.2.1)), st.pickedT ff (as.map fun p => (p.1, p.2.1)), st.after.now),
-    andT (st.pickedT tt (os.map fun p => (p.1, p.2.2)))
-      (andT (st.pickedT tt (as.map fun p => (p.1, p.2.2))) (st.pickedT tt (tms.map fun p => (p.1, p.2)))))
+  pure (st.pickedT tt (tms.map fun p => (p.1, p.2)))
 
-/-- The response's goal on an unrolled run's steps: the functions' sources fit, every step's condition holds, and the
-moments violate the response. -/
+/-- The response's goal on an unrolled run's steps: the functions' sources fit, the conditions hold, every clock line
+is timely, and the steps violate the response. -/
 def respGoalE (resp : ResponseV v.event) (sts : List (UnrollStep v n)) : Except Refusal Term := do
   let (fa, ca) ← resp.after.code L
   let (fq, cq) ← resp.then_.code L
-  let ms ← sts.mapM (stepRespT L v fa fq)
-  pure (andT (andT ca cq) (andT (allT (ms.map (·.2))) (violT (resp.withinNat : Int) (ms.map (·.1)))))
+  let (h, c) ← violT fa fq (resp.withinNat : Int) sts
+  let tms ← sts.mapM (timelyT L v)
+  pure (andT (andT ca cq) (andT c (andT (allT tms) h)))
 
 end
 
@@ -99,10 +131,16 @@ end
 section
 variable (L : Layout) (T : List TypeDecl) {v : ServiceV}
 
-/-- The response's functions fit the slots at every event each step of the run applies. -/
-abbrev RespFits (resp : ResponseV v.event) : State v → List (Input v) → Prop :=
-  Step.EachStep T fun s x => ∀ ev ∈ (step T v s x).events, resp.after.appFits L.count (ev, ()) ∧
-    resp.then_.appFits L.count (ev, ())
+/-- The response's functions fit the slots on the moments: `after` at every event, and `then` at every event as the
+trigger with every event of its step and of the steps after. -/
+def _root_.Tazuna.Ir.ResponseV.FitsOn {e : Ty} (resp : ResponseV e) : List (Moment e) → Prop
+  | [] => True
+  | m :: ms => (∀ ev ∈ m.events, resp.after.appFits L.count (ev, ()) ∧
+      ∀ m' ∈ m :: ms, ∀ ev' ∈ m'.events, resp.then_.appFits L.count (ev, ev', ())) ∧ resp.FitsOn ms
+
+/-- The response's functions fit the slots on the run's moments. -/
+abbrev RespFits (resp : ResponseV v.event) (s : State v) (xs : List (Input v)) : Prop :=
+  resp.FitsOn L ((run T v s xs).2.map Result.moment)
 
 end
 
@@ -124,6 +162,26 @@ theorem predT_encode {e : Ty} (he : e.isData = true) (f : Fun (Ty.fn [e] Ty.bool
   have hb' := (rel_bool _ _).1 hb
   simp only [Holds, hb', Val.toBool]
   generalize f.fn (x, ()) = y
+  rcases y with _ | _ | e <;> rfl
+
+theorem pred2T_encode {e : Ty} (he : e.isData = true) (f : Fun (Ty.fn [e, e] Ty.bool))
+    {s : Code (Ty.fn [e, e] Ty.bool)} {c1 : Term} (hf : f.code L = .ok (s, c1)) (hc1 : Holds M c1) (x y : e.den0)
+    {tr ev : Term} (hx : RelV L e (Ty.up e he x) (tr.denote M)) (hy : RelV L e (Ty.up e he y) (ev.denote M))
+    {t c : Term} (h : pred2T s tr ev = .ok (t, c)) :
+    (Holds M c ↔ f.appFits L.count (x, y, ())) ∧ (Holds M c → (Holds M t ↔ Step.toB (f.fn (x, y, ())) = true)) := by
+  obtain ⟨tc, h1, h⟩ := bind_ok.1 h
+  obtain ⟨ec, h2, h⟩ := bind_ok.1 h
+  have hrt : Smt.Rel M L e (Ty.up e he x) tc := (rel_ofTerm (need_ok.1 h1) _).2 hx
+  have hre : Smt.Rel M L e (Ty.up e he y) ec := (rel_ofTerm (need_ok.1 h2) _).2 hy
+  have hargs : (Ty.tuple [e, e]).isData = true := by simp [Ty.isData, Ty.isDatas, he]
+  have hnf : ∀ t ∈ [e, e], t.isFn = false := by simpa using ofTerm_notFn (need_ok.1 h1)
+  refine ⟨f.app_exact hf hc1 hnf _ _ (rels2 he he hargs hrt hre) h, fun hc => ?_⟩
+  have hfn := f.code_fn f.ht hf hc1
+  have hb := hfn _ _ (rels2 he he hargs hrt hre) t c h hc
+  erw [Ty.up_fn _ Ty.bool _ hargs rfl] at hb
+  have hb' := (rel_bool _ _).1 hb
+  simp only [Holds, hb', Val.toBool]
+  generalize f.fn (x, y, ()) = y
   rcases y with _ | _ | e <;> rfl
 
 /-- What `pred` says of an event term that denotes `ev`: its condition holds exactly when `F ev`, and then it holds
@@ -242,123 +300,155 @@ theorem kindTimelyT_iff {hc : v.caller.isData = true} {S : SymState v} {s : Stat
   | unmatched t' to w =>
     obtain ⟨_, _, _, rfl, -⟩ := decode_answer hx; cases pure_ok.1 henc; exact iff_of_true holds_tt rfl
 
-/-- A step's moment terms relate to its moment: opens and answers as the response reads them, and its time. -/
-def MomentRel (M : Model) (resp : ResponseV v.event) (t : Term × Term × Term) (m : Moment v.event) : Prop :=
-  (Holds M t.1 ↔ resp.opens m = true) ∧ (Holds M t.2.1 ↔ resp.answers m = true) ∧ t.2.2.denote M = .int m.time
-
-theorem lateT_iff (resp : ResponseV v.event) {t0 : Term} {x : Int} (h0 : t0.denote M = .int x) :
-    {ts : List (Term × Term × Term)} → {ms : List (Moment v.event)} → Forall2 (MomentRel M resp) ts ms →
-    (Holds M (lateT (resp.withinNat : Int) t0 ts) ↔ resp.late x ms = true)
-  | [], [], _ => by simp [lateT, ResponseV.late, ff, Holds, Term.denote, Val.toBool]
-  | (o, a, t) :: ts, m :: ms, ⟨⟨_, ha, ht⟩, hr⟩ => by
-    simp only [lateT, ResponseV.late, holds_or, holds_andT, holds_not, lateT_iff resp h0 hr, ha, Bool.or_eq_true,
-      Bool.and_eq_true, Bool.not_eq_true', decide_eq_true_eq]
-    simp only [Holds, Term.denote, h0, ht, Val.toInt, Val.toBool, decide_eq_true_eq, Bool.not_eq_true]
-
-theorem violT_iff (resp : ResponseV v.event) : {ts : List (Term × Term × Term)} → {ms : List (Moment v.event)} →
-    Forall2 (MomentRel M resp) ts ms → (Holds M (violT (resp.withinNat : Int) ts) ↔ resp.violated ms = true)
-  | [], [], _ => by simp [violT, ResponseV.violated, ff, Holds, Term.denote, Val.toBool]
-  | (o, a, t) :: ts, m :: ms, ⟨⟨ho, ha, ht⟩, hr⟩ => by
-    simp only [violT, ResponseV.violated, holds_or, holds_andT, holds_not, violT_iff resp hr,
-      lateT_iff resp ht hr, ho, ha, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true', and_assoc, Bool.not_eq_true]
-
-section
-variable {resp : ResponseV v.event} {fa fq : Code (Ty.fn [v.event] Ty.bool)} {ca cq : Term}
-
-/-- One step's part of the goal, at a step a model takes: its condition holds exactly when the response's functions
-fit at every event the step applies and a clock line is timely, and then its moment terms relate to the step's
-moment. -/
-theorem stepRespT_iff (ha : resp.after.code L = .ok (fa, ca)) (hq : resp.then_.code L = .ok (fq, cq))
-    (hca : Holds M ca) (hcq : Holds M cq) {hc : v.caller.isData = true} {st : UnrollStep v n} {s : State v}
-    {x : Input v} (hat : StepAt L T M hc st s x) {mt : Term × Term × Term} {cond : Term}
-    (henc : stepRespT L v fa fq st = .ok (mt, cond)) :
-    (Holds M cond ↔ (∀ ev ∈ (step T v s x).events, resp.after.appFits L.count (ev, ()) ∧
-        resp.then_.appFits L.count (ev, ())) ∧ Step.timelyAt s x = true) ∧
-      (Holds M cond → MomentRel M resp mt (step T v s x).moment) := by
-  obtain ⟨⟨k, hk, hdec, hrel⟩, hno, hafter, hbefore⟩ := hat
-  obtain ⟨os, e1, henc⟩ := bind_ok.1 henc
-  obtain ⟨as, e2, henc⟩ := bind_ok.1 henc
-  obtain ⟨tms, e3, henc⟩ := bind_ok.1 henc
+/-- At a step a model takes, `pickHitsT` reads the kind it takes as `kindHitsT_iff` says. -/
+theorem pickHitsT_iff {pred : Term → Except Refusal (Term × Term)} {p : v.event.den0 → Bool}
+    {F : v.event.den0 → Prop} (hp : PredExact M L v pred p F) {hc : v.caller.isData = true} {st : UnrollStep v n}
+    {s : State v} {x : Input v} (hat : StepAt L T M hc st s x) {h c : Term} (henc : pickHitsT pred st = .ok (h, c)) :
+    (Holds M c ↔ ∀ ev ∈ (step T v s x).events, F ev) ∧
+      (Holds M c → (Holds M h ↔ ∃ ev ∈ (step T v s x).events, p ev = true)) := by
+  obtain ⟨⟨k, hk, hdec, hrel⟩, hno, -, -⟩ := hat
+  obtain ⟨hs, e1, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  have hpA : PredExact M L v (predT fa) (fun ev => Step.toB (resp.after.fn (ev, ())))
-      (fun ev => resp.after.appFits L.count (ev, ())) := fun _ _ _ h ev hr =>
-    predT_encode v.event_data resp.after ha hca ev hr h
-  have hpQ : PredExact M L v (predT fq) (fun ev => Step.toB (resp.then_.fn (ev, ())))
-      (fun ev => resp.then_.appFits L.count (ev, ())) := fun _ _ _ h ev hr =>
-    predT_encode v.event_data resp.then_ hq hcq ev hr h
-  obtain ⟨⟨hk1, ck1⟩, f1, ho⟩ := kindTerms_taken st e1 hk (fun p => p.1) ff
-  obtain ⟨⟨_, _⟩, f1', hco⟩ := kindTerms_taken st e1 hk (fun p => p.2) tt
+  obtain ⟨⟨h1, c1⟩, f1, hh⟩ := kindTerms_taken st e1 hk (fun p => p.1) ff
+  obtain ⟨⟨_, _⟩, f1', hcc⟩ := kindTerms_taken st e1 hk (fun p => p.2) tt
   rw [f1] at f1'; cases f1'
-  obtain ⟨⟨hk2, ck2⟩, f2, hA⟩ := kindTerms_taken st e2 hk (fun p => p.1) ff
-  obtain ⟨⟨_, _⟩, f2', hcA⟩ := kindTerms_taken st e2 hk (fun p => p.2) tt
-  rw [f2] at f2'; cases f2'
-  obtain ⟨tk, f3, htm⟩ := kindTerms_taken st e3 hk (fun t => t) tt
-  have x1 := kindHitsT_iff hpA hdec hrel hno f1
-  have x2 := kindHitsT_iff hpQ hdec hrel hno f2
-  have x3 := kindTimelyT_iff hbefore hdec f3
-  rw [holds_andT, holds_andT, hco, hcA, htm, x1.1, x2.1, x3]
-  refine ⟨⟨fun ⟨h1, h2, h3⟩ => ⟨fun ev hev => ⟨h1 ev hev, h2 ev hev⟩, h3⟩,
-    fun ⟨h12, h3⟩ => ⟨fun ev hev => (h12 ev hev).1, fun ev hev => (h12 ev hev).2, h3⟩⟩, fun ⟨h1, h2, _⟩ => ?_⟩
-  refine ⟨?_, ?_, hafter.now⟩
-  · rw [ho, x1.2 (x1.1.2 h1)]
-    simp [ResponseV.opens, Result.moment, List.any_eq_true]
-  · rw [hA, x2.2 (x2.1.2 h2)]
-    simp [ResponseV.answers, Result.moment, List.any_eq_true]
+  rw [hcc, hh]
+  exact kindHitsT_iff hp hdec hrel hno f1
 
-/-- Over a model's run: the steps' conditions all hold exactly when the response's functions fit at every event the
-run applies and every clock line is timely, and then the moment terms relate to the run's moments. -/
-theorem stepsRespT_iff (ha : resp.after.code L = .ok (fa, ca)) (hq : resp.then_.code L = .ok (fq, cq))
-    (hca : Holds M ca) (hcq : Holds M cq) {hc : v.caller.isData = true} :
-    (s : State v) → (sts : List (UnrollStep v n)) → (xs : List (Input v)) → UnrollRun L T M hc s sts xs →
-    {ms : List ((Term × Term × Term) × Term)} → sts.mapM (stepRespT L v fa fq) = .ok ms →
-    (Holds M (allT (ms.map (·.2))) ↔ RespFits L T resp s xs ∧ Step.TimelyRun T s xs) ∧
-      (Holds M (allT (ms.map (·.2))) →
-        Forall2 (MomentRel M resp) (ms.map (·.1)) ((run T v s xs).2.map Result.moment))
-  | _, [], [], _, ms, h => by
-    cases pure_ok.1 h
-    simp [holds_allT, Step.EachStep, run, Forall2]
+theorem timelyT_iff {hc : v.caller.isData = true} {st : UnrollStep v n} {s : State v} {x : Input v}
+    (hat : StepAt L T M hc st s x) {t : Term} (henc : timelyT L v st = .ok t) : Holds M t ↔ Step.timelyAt s x = true := by
+  obtain ⟨⟨k, hk, hdec, -⟩, -, -, hbefore⟩ := hat
+  obtain ⟨tms, e1, henc⟩ := bind_ok.1 henc
+  cases pure_ok.1 henc
+  obtain ⟨tk, f1, htm⟩ := kindTerms_taken st e1 hk (fun t => t) tt
+  rw [htm]
+  exact kindTimelyT_iff hbefore hdec f1
+
+theorem timelysT_iff {hc : v.caller.isData = true} : (s : State v) → (sts : List (UnrollStep v n)) →
+    (xs : List (Input v)) → UnrollRun L T M hc s sts xs → {ts : List Term} → sts.mapM (timelyT L v) = .ok ts →
+    (Holds M (allT ts) ↔ Step.TimelyRun T s xs)
+  | _, [], [], _, ts, h => by cases pure_ok.1 h; simp [holds_allT, Step.EachStep]
   | _, [], _ :: _, h, _, _ => h.elim
   | _, _ :: _, [], h, _, _ => h.elim
-  | s, st :: sts, x :: xs, ⟨_, hat, hrun⟩, ms, h => by
+  | s, st :: sts, x :: xs, ⟨_, hat, hrun⟩, ts, h => by
     rw [List.mapM_cons] at h
-    obtain ⟨m1, e1, h⟩ := bind_ok.1 h
-    obtain ⟨ms', e2, h⟩ := bind_ok.1 h
+    obtain ⟨t, e1, h⟩ := bind_ok.1 h
+    obtain ⟨ts', e2, h⟩ := bind_ok.1 h
     cases pure_ok.1 h
-    have x1 := stepRespT_iff ha hq hca hcq hat e1
-    have ih := stepsRespT_iff ha hq hca hcq _ sts xs hrun e2
-    simp only [List.map_cons, holds_allT, List.mem_cons, forall_eq_or_imp] at ih ⊢
-    refine ⟨?_, fun ⟨h1, h2⟩ => ?_⟩
-    · rw [x1.1, ih.1]
-      simp only [Step.EachStep]
-      constructor
-      · rintro ⟨⟨hf, ht⟩, hf', ht'⟩; exact ⟨⟨hf, hf'⟩, ht, ht'⟩
-      · rintro ⟨⟨hf, hf'⟩, ht, ht'⟩; exact ⟨⟨hf, ht⟩, hf', ht'⟩
-    · simp only [run, List.map_cons]
-      exact ⟨x1.2 h1, ih.2 h2⟩
+    have ih := timelysT_iff _ sts xs hrun e2
+    simp only [holds_allT, List.mem_cons, forall_eq_or_imp] at ih ⊢
+    rw [timelyT_iff hat e1, ih]
+    rfl
 
-/-- The goal on a model's run: it holds exactly when the response's functions fit (their sources, and at every event
-the run applies), every clock line is timely and the run violates the response. -/
-theorem respGoal_iff {hc : v.caller.isData = true} {s : State v} {sts : List (UnrollStep v n)}
-    {xs : List (Input v)} (hrun : UnrollRun L T M hc s sts xs) {g : Term} (hg : respGoalE L v resp sts = .ok g) :
+section
+variable {resp : ResponseV v.event} {fa : Code (Ty.fn [v.event] Ty.bool)}
+  {fq : Code (Ty.fn [v.event, v.event] Ty.bool)} {ca cq : Term}
+  (ha : resp.after.code L = .ok (fa, ca)) (hq : resp.then_.code L = .ok (fq, cq)) (hca : Holds M ca)
+  (hcq : Holds M cq)
+
+include hq hcq in
+theorem ansT_exact {tv : v.event.den0} {tr : Term} (hr : RelV L v.event (Ty.up _ v.event_data tv) (tr.denote M)) :
+    PredExact M L v (pred2T fq tr) (fun ev => Step.toB (resp.then_.fn (tv, ev, ())))
+      (fun ev => resp.then_.appFits L.count (tv, ev, ())) :=
+  fun _ _ _ h ev hr' => pred2T_encode v.event_data resp.then_ hq hcq tv ev hr hr' h
+
+include hq hcq in
+theorem lateT_iff {hc : v.caller.isData = true} {tv : v.event.den0} {tr : Term}
+    (hr : RelV L v.event (Ty.up _ v.event_data tv) (tr.denote M)) {t0 : Term} {x0 : Int} (h0 : t0.denote M = .int x0) :
+    (s : State v) → (sts : List (UnrollStep v n)) → (xs : List (Input v)) → UnrollRun L T M hc s sts xs →
+    {l cl : Term} → lateT fq (resp.withinNat : Int) tr t0 sts = .ok (l, cl) →
+    (Holds M cl ↔ ∀ m ∈ (run T v s xs).2.map Result.moment, ∀ ev ∈ m.events, resp.then_.appFits L.count (tv, ev, ())) ∧
+      (Holds M cl → (Holds M l ↔ resp.late tv x0 ((run T v s xs).2.map Result.moment) = true))
+  | _, [], [], _, l, cl, h => by
+    cases pure_ok.1 h
+    simp [run, ResponseV.late, tt, ff, Holds, Term.denote, Val.toBool]
+  | _, [], _ :: _, h, _, _, _ => h.elim
+  | _, _ :: _, [], h, _, _, _ => h.elim
+  | s, st :: sts, x :: xs, ⟨_, hat, hrun⟩, l, cl, h => by
+    obtain ⟨⟨a, ca'⟩, e1, h⟩ := bind_ok.1 h
+    obtain ⟨⟨l', cl'⟩, e2, h⟩ := bind_ok.1 h
+    cases pure_ok.1 h
+    have x1 := pickHitsT_iff (ansT_exact hq hcq hr) hat e1
+    have ih := lateT_iff hr h0 _ sts xs hrun e2
+    have hnow := hat.2.2.1.now
+    simp only [run, List.map_cons, Result.moment, List.mem_cons, forall_eq_or_imp, holds_andT, holds_or, holds_not]
+    refine ⟨by rw [x1.1, ih.1], fun ⟨hc1, hc2⟩ => ?_⟩
+    rw [x1.2 hc1, ih.2 hc2]
+    simp only [ResponseV.late, ResponseV.answers, Bool.or_eq_true, Bool.and_eq_true, Bool.not_eq_true',
+      decide_eq_true_eq]
+    simp only [Holds, Term.denote, h0, hnow, Val.toInt, Val.toBool, decide_eq_true_eq]
+    simp
+
+include ha hq hca hcq in
+theorem trigT_exact {hc : v.caller.isData = true} {st : UnrollStep v n} {sts : List (UnrollStep v n)} {s : State v}
+    {x : Input v} {xs : List (Input v)} (hat : StepAt L T M hc st s x)
+    (hrun : UnrollRun L T M hc (step T v s x).state sts xs) :
+    PredExact M L v (trigT fa fq (resp.withinNat : Int) st sts)
+      (fun ev => resp.opens ev && !resp.answers ev (step T v s x).moment &&
+        resp.late ev (step T v s x).moment.time ((run T v (step T v s x).state xs).2.map Result.moment))
+      (fun ev => resp.after.appFits L.count (ev, ()) ∧ ∀ m ∈ (step T v s x).moment ::
+        (run T v (step T v s x).state xs).2.map Result.moment, ∀ ev' ∈ m.events,
+          resp.then_.appFits L.count (ev, ev', ())) := by
+  intro a t c h ev hr
+  obtain ⟨⟨o, co⟩, e1, h⟩ := bind_ok.1 h
+  obtain ⟨⟨an, can⟩, e2, h⟩ := bind_ok.1 h
+  obtain ⟨⟨l, cl⟩, e3, h⟩ := bind_ok.1 h
+  cases pure_ok.1 h
+  have x1 := predT_encode v.event_data resp.after ha hca ev hr e1
+  have x2 := pickHitsT_iff (ansT_exact hq hcq hr) hat e2
+  have x3 := lateT_iff hq hcq hr hat.2.2.1.now _ sts xs hrun e3
+  simp only [holds_andT, holds_not, List.mem_cons, forall_eq_or_imp, Result.moment]
+  refine ⟨by rw [x1.1, x2.1, x3.1], fun ⟨hc1, hc2, hc3⟩ => ?_⟩
+  rw [x1.2 hc1, x2.2 hc2, x3.2 hc3]
+  simp [ResponseV.opens, ResponseV.answers, and_assoc]
+
+include ha hq hca hcq in
+/-- Over a model's run: the violation's condition holds exactly when the response's functions fit on the run's
+moments, and then its term holds exactly when the run violates the response. -/
+theorem violT_iff {hc : v.caller.isData = true} : (s : State v) → (sts : List (UnrollStep v n)) →
+    (xs : List (Input v)) → UnrollRun L T M hc s sts xs → {h c : Term} →
+    violT fa fq (resp.withinNat : Int) sts = .ok (h, c) →
+    (Holds M c ↔ RespFits L T resp s xs) ∧ (Holds M c → (Holds M h ↔ resp.violated ((run T v s xs).2.map Result.moment)))
+  | _, [], [], _, h, c, henc => by
+    cases pure_ok.1 henc
+    simp [RespFits, run, ResponseV.FitsOn, ResponseV.violated, tt, ff, Holds, Term.denote, Val.toBool]
+  | _, [], _ :: _, h, _, _, _ => h.elim
+  | _, _ :: _, [], h, _, _, _ => h.elim
+  | s, st :: sts, x :: xs, ⟨_, hat, hrun⟩, h, c, henc => by
+    obtain ⟨⟨h1, c1⟩, e1, henc⟩ := bind_ok.1 henc
+    obtain ⟨⟨h2, c2⟩, e2, henc⟩ := bind_ok.1 henc
+    cases pure_ok.1 henc
+    have x1 := pickHitsT_iff (trigT_exact ha hq hca hcq hat hrun) hat e1
+    have ih := violT_iff _ sts xs hrun e2
+    simp only [RespFits, run, List.map_cons, ResponseV.FitsOn, ResponseV.violated, holds_andT, holds_or] at ih ⊢
+    refine ⟨by rw [x1.1, ih.1]; exact Iff.rfl, fun ⟨hc1, hc2⟩ => ?_⟩
+    rw [x1.2 hc1, ih.2 hc2]
+    simp [Result.moment, List.any_eq_true]
+
+end
+
+/-- The goal on a model's run: it holds exactly when the response's functions fit (their sources, and on the run's
+moments), every clock line is timely and the run violates the response. -/
+theorem respGoal_iff {resp : ResponseV v.event} {hc : v.caller.isData = true} {s : State v}
+    {sts : List (UnrollStep v n)} {xs : List (Input v)} (hrun : UnrollRun L T M hc s sts xs) {g : Term}
+    (hg : respGoalE L v resp sts = .ok g) :
     Holds M g ↔ ((resp.after.fits L.count).1 ∧ (resp.then_.fits L.count).1) ∧ RespFits L T resp s xs ∧
       Step.TimelyRun T s xs ∧ resp.Violated ((run T v s xs).2.map Result.moment) := by
-  obtain ⟨⟨fa', ca'⟩, ha, hg⟩ := bind_ok.1 hg
-  obtain ⟨⟨fq', cq'⟩, hq, hg⟩ := bind_ok.1 hg
-  obtain ⟨ms, hms, hg⟩ := bind_ok.1 hg
+  obtain ⟨⟨fa, ca⟩, ha, hg⟩ := bind_ok.1 hg
+  obtain ⟨⟨fq, cq⟩, hq, hg⟩ := bind_ok.1 hg
+  obtain ⟨⟨h, c⟩, hv, hg⟩ := bind_ok.1 hg
+  obtain ⟨tms, ht, hg⟩ := bind_ok.1 hg
   cases pure_ok.1 hg
   have ea := (resp.after.code_exact (M := M) ha).1
   have eq := (resp.then_.code_exact (M := M) hq).1
-  rw [holds_andT, holds_andT, holds_andT, ea, eq, ← resp.violated_iff]
+  rw [holds_andT, holds_andT, holds_andT, holds_andT, ea, eq, timelysT_iff s sts xs hrun ht, ← resp.violated_iff]
   constructor
-  · rintro ⟨⟨h1, h2⟩, h3, h4⟩
-    have x := stepsRespT_iff ha hq (ea.2 h1) (eq.2 h2) s sts xs hrun hms
-    exact ⟨⟨h1, h2⟩, (x.1.1 h3).1, (x.1.1 h3).2, (violT_iff resp (x.2 h3)).1 h4⟩
   · rintro ⟨⟨h1, h2⟩, h3, h4, h5⟩
-    have x := stepsRespT_iff ha hq (ea.2 h1) (eq.2 h2) s sts xs hrun hms
-    have hc3 := x.1.2 ⟨h3, h4⟩
-    exact ⟨⟨h1, h2⟩, hc3, (violT_iff resp (x.2 hc3)).2 h5⟩
-
-end
+    have x := violT_iff ha hq (ea.2 h1) (eq.2 h2) s sts xs hrun hv
+    exact ⟨⟨h1, h2⟩, x.1.1 h3, h4, (x.2 h3).1 h5⟩
+  · rintro ⟨⟨h1, h2⟩, h3, h4, h5⟩
+    have x := violT_iff ha hq (ea.2 h1) (eq.2 h2) s sts xs hrun hv
+    exact ⟨⟨h1, h2⟩, x.1.2 h3, h4, (x.2 (x.1.2 h3)).2 h5⟩
 
 variable {P : List AnySite} {E : List AnyEffectSite}
 
@@ -412,6 +502,12 @@ theorem predT_sound {e : Ty} {f : Code (Ty.fn [e] Ty.bool)} (hf : CodeOk L P ds 
   sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) ev he) fun _ hec =>
     sound_mono (apply_sound hf ⟨hec, trivial⟩ avail_bool) fun _ _ => trivial
 
+theorem pred2T_sound {e : Ty} {f : Code (Ty.fn [e, e] Ty.bool)} (hf : CodeOk L P ds H _ f) (he : Avail L e)
+    (tr ev : Term) : Sound (fun _ => True) (pred2T f tr ev) :=
+  sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) tr he) fun _ htc =>
+    sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) ev he) fun _ hec =>
+    sound_mono (apply_sound hf ⟨htc, hec, trivial⟩ avail_bool) fun _ _ => trivial
+
 variable {pred : Term → Except Refusal (Term × Term)} (hp : ∀ ev, Sound (fun _ => True) (pred ev))
 include hp
 
@@ -439,6 +535,33 @@ theorem kindTerms_sound {v : ServiceV} {n : Nat} {α : Type} (st : UnrollStep v 
     Sound (fun _ => True) (st.kindTerms h) :=
   sound_mapM _ fun k _ => sound_bind (hh k) fun _ _ => trivial
 
+theorem pickHitsT_sound {v : ServiceV} {n : Nat} {pred : Term → Except Refusal (Term × Term)}
+    (hp : ∀ ev, Sound (fun _ => True) (pred ev)) (st : UnrollStep v n) : Sound (fun _ => True) (pickHitsT pred st) :=
+  sound_bind (kindTerms_sound st fun k => kindHitsT_sound hp k.2.out) fun _ _ => trivial
+
+section
+variable {v : ServiceV} {n : Nat} {fa : Code (Ty.fn [v.event] Ty.bool)} {fq : Code (Ty.fn [v.event, v.event] Ty.bool)}
+  {w : Int} (ha : ∀ tr, Sound (fun _ => True) (predT fa tr)) (hq : ∀ tr ev, Sound (fun _ => True) (pred2T fq tr ev))
+
+include hq in
+theorem lateT_sound (tr t0 : Term) : (sts : List (UnrollStep v n)) → Sound (fun _ => True) (lateT fq w tr t0 sts)
+  | [] => trivial
+  | st :: sts => sound_bind (pickHitsT_sound (hq tr) st) fun _ _ => sound_bind (lateT_sound tr t0 sts) fun _ _ => trivial
+
+include ha hq in
+theorem trigT_sound (st : UnrollStep v n) (sts : List (UnrollStep v n)) (tr : Term) :
+    Sound (fun _ => True) (trigT fa fq w st sts tr) :=
+  sound_bind (ha tr) fun _ _ => sound_bind (pickHitsT_sound (hq tr) st) fun _ _ =>
+    sound_bind (lateT_sound hq tr _ sts) fun _ _ => trivial
+
+include ha hq in
+theorem violT_sound : (sts : List (UnrollStep v n)) → Sound (fun _ => True) (violT fa fq w sts)
+  | [] => trivial
+  | st :: sts => sound_bind (pickHitsT_sound (trigT_sound ha hq st sts) st) fun _ _ =>
+    sound_bind (violT_sound sts) fun _ _ => trivial
+
+end
+
 /-- In each service's layout, built from a checked spec's program, a response's goal never refuses with a layout gap,
 on any unrolled run: every refusal is the spec's (a limit, a string outside SMT-LIB's). -/
 theorem respGoalE_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {resp : ResponseV v.event}
@@ -450,9 +573,8 @@ theorem respGoalE_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.
   have hm : ∀ m ∈ v.machines, MachineGot _ m := fun m hm => (h.machines m hm).1.1
   refine sound_bind (Fun.code_ofService c hv _ (chk.reach.responses resp hr).1 (root_response hr).1)
     fun ⟨fa, _⟩ ha => sound_bind (Fun.code_ofService c hv _ (chk.reach.responses resp hr).2 (root_response hr).2)
-    fun ⟨fq, _⟩ hq => sound_bind (sound_mapM sts fun st _ => ?_) fun _ _ => trivial
-  exact sound_bind (kindTerms_sound st fun k => kindHitsT_sound (predT_sound ha hev) k.2.out) fun _ _ =>
-    sound_bind (kindTerms_sound st fun k => kindHitsT_sound (predT_sound hq hev) k.2.out) fun _ _ =>
-    sound_bind (kindTerms_sound st fun k => kindTimelyT_sound h.sorted hm st.before k.1) fun _ _ => trivial
+    fun ⟨fq, _⟩ hq => sound_bind (violT_sound (predT_sound ha hev) (pred2T_sound hq hev) sts) fun _ _ =>
+    sound_bind (sound_mapM sts fun st _ => ?_) fun _ _ => trivial
+  exact sound_bind (kindTerms_sound st fun k => kindTimelyT_sound h.sorted hm st.before k.1) fun _ _ => trivial
 
 end Tazuna.Smt

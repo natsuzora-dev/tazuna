@@ -3895,10 +3895,13 @@ def genGoalCheck (solver : Solver) : IO Bool := do
 no model at depth 1, one at depth 2 whose run, played back in Lean, violates it with timely clock lines. A last step
 at time 10 is in time, so asking for one is unsat; dropping the deadline's strictness (within 9 over Ints) makes it
 sat. A clock line past a waiting timer is ruled out (timelyClock): after adds of 5 and 1, which set a timer due at 10,
-a violation of "after any event, 99 within 5" whose third step comes at 11 is unsat, and at 10 sat. -/
+a violation of "after any event, 99 within 5" whose third step comes at 11 is unsat, and at 10 sat. `then` sees the
+trigger: "after any event, the same event within 5" is answered by its trigger, so it has no model; "after 5, the event
+one above the trigger within 10" has one at depth 2. -/
 
-/-- After an event satisfying `p`, an event satisfying `q` within `within` ms, on `sum`'s Int events. -/
-def sumResp (p q : Expr [] [Ty.int] Ty.bool) (within : Int) : ResponseV .int :=
+/-- After an event satisfying `p`, an event satisfying `q` (of the trigger, then the event) within `within` ms, on
+`sum`'s Int events. -/
+def sumResp (p : Expr [] [Ty.int] Ty.bool) (q : Expr [] [Ty.int, Ty.int] Ty.bool) (within : Int) : ResponseV .int :=
   { name := "r", after := .closed (.lam p), then_ := .closed (.lam q), within }
 
 def respGoalCheck (solver : Solver) : IO Bool := do
@@ -3908,8 +3911,12 @@ def respGoalCheck (solver : Solver) : IO Bool := do
   let P := (svcParts v).sites
   let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
   let is (n : Int) : Expr [] [Ty.int] Ty.bool := .bin (.eq rfl) (.var .here) (.int n)
-  let fiveThen99 := sumResp (is 5) (is 99) 10
-  let anyThen99 := sumResp (.bin (.eq rfl) (.var .here) (.var .here)) (is 99) 5
+  let evIs (n : Int) : Expr [] [Ty.int, Ty.int] Ty.bool := .bin (.eq rfl) (.var (.there .here)) (.int n)
+  let any : Expr [] [Ty.int] Ty.bool := .bin (.eq rfl) (.var .here) (.var .here)
+  let fiveThen99 := sumResp (is 5) (evIs 99) 10
+  let anyThen99 := sumResp any (evIs 99) 5
+  let anyThenSame := sumResp any (.bin (.eq rfl) (.var (.there .here)) (.var .here)) 5
+  let fiveThenNext := sumResp (is 5) (.bin (.eq rfl) (.var (.there .here)) (.bin .add (.var .here) (.int 1))) 10
   let lastAt (t : Int) (sts : List (UnrollStep v senv.nT)) : Term := match sts.getLast? with
     | some st => .eq st.after.now (.int t)
     | none => .bool false
@@ -3921,9 +3928,11 @@ def respGoalCheck (solver : Solver) : IO Bool := do
     [("violated at depth 1", fiveThen99, 1, fun _ => tt, false),
      ("violated at depth 2", fiveThen99, 2, fun _ => tt, true),
      ("violated at the deadline", fiveThen99, 2, lastAt 10, false),
-     ("violated at the deadline, strictness dropped", sumResp (is 5) (is 99) 9, 2, lastAt 10, true),
+     ("violated at the deadline, strictness dropped", sumResp (is 5) (evIs 99) 9, 2, lastAt 10, true),
      ("a clock line past a waiting timer", anyThen99, 3, fun sts => andT (fiveThenSix sts) (lastAt 11 sts), false),
-     ("a clock line at a waiting timer", anyThen99, 3, fun sts => andT (fiveThenSix sts) (lastAt 10 sts), true)]
+     ("a clock line at a waiting timer", anyThen99, 3, fun sts => andT (fiveThenSix sts) (lastAt 10 sts), true),
+     ("a trigger that answers itself", anyThenSame, 3, fun _ => tt, false),
+     ("an answer tied to the trigger", fiveThenNext, 2, fun _ => tt, true)]
   let mut ok := true
   for (name, resp, d, more, want) in cases do
     match unroll L prelude P v senv d (fun sts => (andT · (more sts)) <$> respGoalE L v resp sts) with

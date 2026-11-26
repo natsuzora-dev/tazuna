@@ -81,14 +81,14 @@ A violated pair or timer line rests on these theorems:
 
 ## prove: responses (T7)
 
-A response states "after an event satisfying `after`, one satisfying `then` within `within` ms".
+A response states "after each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within `within` ms".
 `prove` searches the runs from the initial state of 1 to `steps` inputs for one that violates it.
 A response line never reads `Prove.proved`.
 
 - `Prove.violated`: `response_sound`: the run's inputs satisfy `validInputs`, its clock lines are timely, and it violates the response.
 - `Prove.withinBounds`: `response_within` (T7), at each depth up to `steps`: no run of that many inputs within the slots, on which the line's `assumes` hold and at whose events the response's functions fit the slots, violates it.
 
-A response is judged per step, so a `then` event in the same step as the `after` event counts.
+A response is judged per step, so a `then` event in the same step as its trigger counts.
 
 ## generate (T6)
 

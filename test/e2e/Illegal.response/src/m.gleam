@@ -41,13 +41,13 @@ fn tasks(name: String) -> tazuna.Service {
       tazuna.response(
         name: "added",
         after: fn(_e: Event) { True },
-        then: fn(_e: Event) { True },
+        then: fn(_trigger: Event, _e: Event) { True },
         within: -1,
       ),
       tazuna.response(
         name: "added",
         after: fn(_e: Event) { True },
-        then: fn(_e: Event) { True },
+        then: fn(_trigger: Event, _e: Event) { True },
         within: 5,
       ),
     ],

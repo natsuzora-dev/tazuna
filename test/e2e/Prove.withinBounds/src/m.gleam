@@ -43,7 +43,7 @@ fn tasks() -> tazuna.Service {
       tazuna.response(
         name: "every task is titled",
         after: fn(_e: Event) { True },
-        then: fn(e: Event) {
+        then: fn(_trigger: Event, e: Event) {
           case e {
             Added(_, t) -> t == "task"
           }

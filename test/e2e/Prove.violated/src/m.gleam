@@ -48,7 +48,7 @@ fn counter() -> tazuna.Service {
             Added(n) -> n > 10
           }
         },
-        then: fn(e: Event) {
+        then: fn(_trigger: Event, e: Event) {
           case e {
             Added(n) -> n == 1
           }
