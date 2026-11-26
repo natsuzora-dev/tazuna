@@ -1,7 +1,8 @@
 # Guarantees
 
 Lean definitions in `lean/Tazuna` give a spec its meaning, and Lean theorems prove what each command's output says about that meaning.
-This page is that contract: what each verdict claims, what it assumes, and what you trust.
+This page is that contract.
+It states what each verdict claims, what it assumes, and what you trust.
 Each claim names its theorem as `lean/Tazuna/Axioms.lean` lists the roots.
 The build fails when a root is missing, when a proof uses `sorry`, or when a declaration rests on an axiom beyond Lean's standard three.
 
@@ -22,7 +23,8 @@ This page does not repeat that table.
 
 A verdict speaks only of states and inputs that fit the slots.
 `Prove.withinBounds` and `Generate.unreached` list in `bounds` every bound a step of the service can go past.
-That list is the service's static scope, the same in every run: each table, bag, and list type of its layout, and its pending requests when it sends any.
+That list is the service's static scope, the same in every run.
+It holds each table, bag, and list type of the service's layout, and its pending requests when it sends any.
 
 ## check
 
@@ -51,12 +53,12 @@ For each target it prints one line per input kind: each command, each answer to 
 A step line asks the solver for a state of the right shape where every invariant holds, and an input, whose step breaks the target.
 With no such model, the line reads one of two verdicts:
 
-- `Prove.proved` when the kind's bound question has no model either: no step of the kind that starts within the slots leaves them.
+- `Prove.proved` when the kind's bound question has no model either, so no step of the kind that starts within the slots leaves them.
 - `Prove.withinBounds` when a step of the kind can leave the slots.
 
 `fault_sound` (T4): where every input kind's lines about a fault read one of these, no step of a run from the initial state faults with it, wherever the state the run reached and the input fit the slots.
 The proof is by induction, so it also needs the initial state's invariants to hold, which the `init` lines check.
-`Fault.answerUnmatched` is no target: an answer that names no request is the outside's mistake.
+`Fault.answerUnmatched` is no target, because an answer that names no request is the outside's mistake.
 
 A step line's `assumes` lists the invariants the induction took as holding that this run did not prove: the violated ones, the undecided ones, and the ones `--only` left out.
 An empty list means the verdict rests on no unproved invariant.
@@ -143,7 +145,7 @@ Guarding against a guessed id is the implementation's job.
 
 The model itself assumes more, and no line prints it:
 
-- An implementation finishes an input before the next `in` line: all of an input's `out` lines come before the next `in` line. Inside a step, the cascade runs to completion.
+- An implementation finishes an input before the next `in` line, so all of an input's `out` lines come before it. Inside a step, the cascade runs to completion.
 - Time moves and timers fire only on clock lines (`{"in":"clock"}`). A trace that wants a timer to fire writes a clock line.
 - State is durable. The inputs are requests, answers, events, and clock lines, with no restart. To specify a restart that loses state, write the loss as an event from a declared external.
 - Every value a spec stores or sends can be written down: `Illegal.wireType` and `Illegal.stateType` reject functions and fresh-id sources there.
@@ -153,12 +155,12 @@ The model itself assumes more, and no line prints it:
 You trust these programs and documents.
 Everything between them is proved or checked.
 
-- Gleam: `gleam build` type-checks the spec before the converter reads it.
-- glance: the converter parses each module with it. On every conversion, the converter prints the IR back as Gleam and compares what glance reads from that text with what it read from the source.
+- Gleam. `gleam build` type-checks the spec before the converter reads it.
+- glance. The converter parses each module with it. On every conversion, the converter prints the IR back as Gleam and compares what glance reads from that text with what it read from the source.
 - The Lean kernel checks every proof, and the Lean compiler builds the engine. Where compiled code uses a faster form, a root proves the two equal: `SExp.print_eq_printFast`, `Term.denote_eq_denoteFast`, `Term.beq_eq_beqFast`, and `Defs.add_eq_addFast`.
 - Lean's JSON printer and parser stand between wire values and a trace's text.
-- Z3: an unsat answer is trusted. A sat answer is not: Lean decodes the model and recomputes the counterexample or replays the run. The answer cache, keyed by SHA-256 digests of the script and of the solver's version, holds answers you trust in the same way.
-- SMT-LIB: `Term.denote` states the standard's meaning of each term, and you trust that Z3 implements it. Division and remainder by 0 are free in the model, as the standard leaves them.
+- Z3. An unsat answer is trusted. A sat answer is not, because Lean decodes the model and recomputes the counterexample or replays the run. The answer cache, keyed by SHA-256 digests of the script and of the solver's version, holds answers you trust in the same way.
+- SMT-LIB. `Term.denote` states the standard's meaning of each term, and you trust that Z3 implements it. Division and remainder by 0 are free in the model, as the standard leaves them.
 
 ## Not guaranteed
 
