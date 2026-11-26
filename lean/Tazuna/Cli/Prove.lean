@@ -344,20 +344,16 @@ end
 def _root_.Tazuna.Ir.ResponseV.text {e : Ty} (resp : ResponseV e) : String := "response " ++ resp.name
 
 /-- A response's model played back in Lean: its run must have timely clock lines and violate the response, which
-`response_sound` proves of every model, so this check never fails; writing the run as trace lines (the header
-dropped) is checked, not proved. -/
+`response_sound` proves of every model, so this check never fails; its trace is `foundTrace`'s. -/
 def responsePlay (T : List TypeDecl) (v : ServiceV) (resp : ResponseV v.event) (xs : List (Input v)) :
-    Except String (List Wire) :=
-  if resp.violatedBy T (State.init v) xs && decide (Step.TimelyRun T (State.init v) xs) then
-    match traceOf T v xs with
-    | .ok ws => .ok ws.tail
-    | .error _ => .error "does not write as a trace"
+    Except String TraceFile :=
+  if resp.violatedBy T (State.init v) xs && decide (Step.TimelyRun T (State.init v) xs) then foundTrace T v xs
   else .error "does not violate it"
 
 /-- The line of a response's search. -/
-def responseLine (service name : String) (scope : List Json) : SearchResult (List Wire) → Kind × List (String × Json)
-  | .found d ws => (.prove .violated, common ++ [("from", Json.str "init"), ("steps", Lean.toJson d),
-      ("run", Json.arr (ws.map (·.toJson)).toArray), ("violated", Json.arr #[Json.str name]), assumes])
+def responseLine (service name : String) (scope : List Json) : SearchResult TraceFile → Kind × List (String × Json)
+  | .found d tr => (.prove .violated, common ++ [("from", Json.str "init"), ("steps", Lean.toJson d),
+      ("run", Json.arr (tr.lines.map (·.toWire.toJson)).toArray), ("violated", Json.arr #[Json.str name]), assumes])
   -- T7 (`response_within`) at each depth up to `k`: no run of at most `k` inputs, within the bounds, violates it.
   | .noModel k => (.prove .withinBounds, common ++ [assumes,
       ("bounds", Json.arr (scope ++ [Json.mkObj [("bound", Json.str "steps"), ("size", Lean.toJson k)]]).toArray)])
@@ -444,7 +440,7 @@ def prove (root path : String) (opts : Options) : IO UInt32 := do
     -- Each response's search is one job; a service's depths are built once for all its responses (`depthJobs`).
     let mut builds : Array Job := #[]
     let mut searches : Array Job := #[]
-    let mut responses : Array (String × String × List Json × IO.Ref (Option (Except String (SearchResult (List Wire))))) := #[]
+    let mut responses : Array (String × String × List Json × IO.Ref (Option (Except String (SearchResult TraceFile)))) := #[]
     for sv in c.services do
       let v := sv.v
       let resps := v.responses.attach.filter fun r => opts.keeps (v.name ++ "/" ++ r.1.text)

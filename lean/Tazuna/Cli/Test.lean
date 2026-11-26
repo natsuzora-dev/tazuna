@@ -30,8 +30,8 @@ def testScenario (T : List TypeDecl) (v : ServiceV) (sc : ScenarioV v.records v.
   | .error (.badStep k m) =>
     printLine (.test .badStep) (at_ ++ [("step", Json.num k), ("message", Json.str m)])
     return false
-  | .ok wires =>
-    let lines := wires.map Wire.text
+  | .ok tr =>
+    let lines := tr.wires.map Wire.text
     let dir : System.FilePath := "snapshots" / v.name
     let path := dir / (sc.name ++ ".jsonl")
     if update then
@@ -69,11 +69,8 @@ def test (root path : String) (update : Bool) : IO UInt32 := do
 def readTrace (spec : SpecV) (text : String) : Except (Nat × String) ((_ : ServiceV) × List (Nat × Line)) := do
   let raw := (text.splitOn "\n").zipIdx.filterMap fun (l, k) => if l.isEmpty then none else some (k + 1, l)
   let (n, first) :: rest := raw | throw (1, "the trace is empty")
-  let service ← match Wire.parse first with
-    | .ok (.obj kvs) => match kvs.lookup "trace", kvs.lookup "service" with
-      | some (.num 1), some (.str s) => pure s
-      | _, _ => throw (n, "the first line is no header {\"trace\":1,\"service\":...}")
-    | _ => throw (n, "the first line is no header {\"trace\":1,\"service\":...}")
+  let some service := (Wire.parse first).toOption.bind headerService?
+    | throw (n, "the first line is no header {\"trace\":1,\"service\":...}")
   let some v := spec.services.find? (·.name == service) | throw (n, s!"the spec has no service {service}")
   let lines ← rest.mapM fun (k, l) => match Wire.parse l with
     | .ok w => match Line.ofWire w with

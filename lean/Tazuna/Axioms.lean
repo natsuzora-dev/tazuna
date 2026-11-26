@@ -84,8 +84,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Gleam.div_zero, ``Tazuna.Gleam.mod_zero, ``Tazuna.Gleam.div_add_mod, ``Tazuna.Gleam.mod_neg_left,
     ``Tazuna.Gleam.mod_neg_right, ``Tazuna.Gleam.div_neg_right, ``Tazuna.Gleam.length_eq_codepoints,
     ``Tazuna.Ir.Ty.deq_bag_perm, ``Tazuna.Ir.Literal.parseInt_printInt, ``Tazuna.Ir.Literal.parseStr_printStr,
-    -- Traces: reading back a written line or value gives it back, and a date label and its day number are one value.
-    ``Tazuna.Trace.Line.ofWire_toWire, ``Tazuna.Trace.dec_enc, ``Tazuna.Trace.DateThm.render_parse,
+    -- Traces: reading back a written trace's header and lines, or a written value, gives it back, and a date label and
+    -- its day number are one value.
+    ``Tazuna.Trace.TraceFile.read_wires, ``Tazuna.Trace.dec_enc, ``Tazuna.Trace.DateThm.render_parse,
     ``Tazuna.Trace.DateThm.labelled_range,
     -- A counterexample's `after` is the state the step reaches before its invariant check.
     ``Tazuna.Ir.step_settled,
@@ -145,8 +146,8 @@ elab "#check_tazuna_reach" : command => do
     -- initial state takes the kinds the model picks and faults nowhere (`unroll_decode`), and its last step answers
     -- in the target's class.
     ``Tazuna.Smt.generate_sound,
-    -- T6: a trace generate writes reaches its target: read back, verify replays it as passed, and its last step
-    -- answers in the target's class.
+    -- T6: a trace generate writes reaches its target: verify replays its lines as passed, and its last step answers
+    -- in the target's class.
     ``Tazuna.Cli.generate_reaches,
     -- T6b: generate's "unreached within k steps": where its script at a depth has no model, no run of that many valid
     -- inputs within the slots that faults nowhere answers at its last step in the target's class (from

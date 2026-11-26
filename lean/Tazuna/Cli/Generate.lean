@@ -5,7 +5,7 @@ import Tazuna.Trace.Verify
 /-! The `generate` command: for each target of each service (`targets`), the shortest run from the initial state whose
 last step shows the target's class of out line, found by deepening an unrolled run (`unrollBase` with `genGoal`) from one
 step to the spec's `steps` bound. A model is played back in Lean: its inputs are decoded, written with the trace
-writer scenarios use, read back and replayed by verify's own replay, and the trace is written only when that replay
+writer scenarios use and replayed by verify's own replay (`foundTrace`), and the trace is written only when that replay
 passes and its last step shows the target (`generate_reaches`). A target with no model at any depth is unreached
 within the steps (`generate_unreached`). The targets of a service share each depth's run (`unrollBase`), built once;
 only the goal differs, so an answer is looked up under a key read off the shared prefix's digest and the goal
@@ -46,48 +46,42 @@ def lastHits (xs : List (Input v)) : Bool :=
   | some x => (classes T v x (step T v (run T v (State.init v) xs.dropLast).1 x)).any (g.covers rules)
   | none => false
 
-/-- The trace generate writes for the inputs: their trace, where verify replays it, read back from its text, as passed
-and its last step shows the target; else what failed. -/
-def genTrace (xs : List (Input v)) : Except String (List Wire) :=
-  match traceOf T v xs with
-  | .error (.fault k _) => .error s!"faults at step {k} when written as a trace"
-  | .error (.badStep k m) => .error s!"does not write as a trace at step {k}: {m}"
-  | .ok ws => match reread ws with
-    | none => .error "does not read back from its trace"
-    | some lines => match replay T v lines with
-      | .passed => if lastHits T v rules g xs then .ok ws else .error "misses the target"
-      | _ => .error "does not replay as passed"
+/-- The trace generate writes for the inputs: their trace (`foundTrace`, which verify replays as passed) where the
+last step shows the target. -/
+def genTrace (xs : List (Input v)) : Except String TraceFile := do
+  let tr ← foundTrace T v xs
+  if lastHits T v rules g xs then .ok tr else .error "misses the target"
 
-/-- T6: a written trace reaches its target. Read back from its text, verify replays it as passed, and the last step of
-its run from the initial state shows a class the target aims at. -/
-theorem generate_reaches {xs : List (Input v)} {ws : List Wire} (h : genTrace T v rules g xs = .ok ws) :
-    ∃ lines, reread ws = some lines ∧ replay T v lines = .passed ∧
+/-- T6: a written trace reaches its target. Verify replays its lines as passed, and the last step of its run from the
+initial state shows a class the target aims at. -/
+theorem generate_reaches {xs : List (Input v)} {tr : TraceFile} (h : genTrace T v rules g xs = .ok tr) :
+    replay T v tr.numbered = .passed ∧
       ∃ ys x, xs = ys ++ [x] ∧ Hits T v rules g x (step T v (run T v (State.init v) ys).1 x) := by
-  unfold genTrace at h
+  simp only [genTrace, bind, Except.bind] at h
   split at h
   · cases h
-  · cases h
-  · rename_i ws' hws
+  · rename_i tr' htr
     split at h
+    · rename_i hit
+      cases h
+      refine ⟨?_, ?_⟩
+      · unfold foundTrace at htr
+        split at htr
+        · cases htr
+        · cases htr
+        · split at htr
+          · rename_i hp; cases htr; exact hp
+          · cases htr
+      · unfold lastHits at hit
+        split at hit
+        · rename_i x hx
+          obtain ⟨ys, rfl⟩ := List.getLast?_eq_some_iff.1 hx
+          refine ⟨ys, x, rfl, ?_⟩
+          obtain ⟨c, hc, hcov⟩ := List.any_eq_true.1 hit
+          simp only [List.dropLast_concat] at hc
+          exact ⟨c, hc, hcov⟩
+        · cases hit
     · cases h
-    · rename_i lines hl
-      split at h
-      · rename_i hp
-        split at h
-        · rename_i hit
-          cases h
-          refine ⟨lines, hl, hp, ?_⟩
-          unfold lastHits at hit
-          split at hit
-          · rename_i x hx
-            obtain ⟨ys, rfl⟩ := List.getLast?_eq_some_iff.1 hx
-            refine ⟨ys, x, rfl, ?_⟩
-            obtain ⟨c, hc, hcov⟩ := List.any_eq_true.1 hit
-            simp only [List.dropLast_concat] at hc
-            exact ⟨c, hc, hcov⟩
-          · cases hit
-        · cases h
-      · cases h
 
 end
 
@@ -104,7 +98,7 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
     -- files are written in target order once all are done.
     let mut builds : Array Job := #[]
     let mut searches : Array Job := #[]
-    let mut jobs : Array (String × GenTarget × List Json × IO.Ref (Option (Except String (SearchResult (List Wire))))) := #[]
+    let mut jobs : Array (String × GenTarget × List Json × IO.Ref (Option (Except String (SearchResult TraceFile)))) := #[]
     for sv in c.services do
       let v := sv.v
       let L := sv.L
@@ -128,9 +122,9 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
       match ← r.get with
       | none => return ← internal s!"service {service}, {g.text}: its search never ran"
       | some (.error m) => return ← internal m
-      | some (.ok (.found d ws)) =>
+      | some (.ok (.found d tr)) =>
         IO.FS.createDirAll (System.FilePath.mk dir / service)
-        IO.FS.writeFile file (String.join (ws.map (·.text ++ "\n")))
+        IO.FS.writeFile file (String.join (tr.wires.map (·.text ++ "\n")))
         printLine (.generate .reached) (common ++
           [("file", Json.str (service ++ "/" ++ fileName g.text)), ("steps", Lean.toJson d)])
       | some (.ok res) =>

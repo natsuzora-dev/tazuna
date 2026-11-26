@@ -183,12 +183,41 @@ end
 /-- The header line of a trace of `service`. -/
 def header (service : String) : Wire := .obj [("trace", .num 1), ("service", .str service)]
 
-/-- The trace of a run of the inputs from the initial state, header first: what generate writes, in the format of
-snapshots, or why a step stopped. -/
-def traceOf (T : List TypeDecl) (v : ServiceV) (xs : List (Input v)) : Except Stop (List Wire) := do
+/-- The service a header line names. -/
+def headerService? : Wire → Option String
+  | .obj kvs => match kvs.lookup "trace", kvs.lookup "service" with
+    | some (.num 1), some (.str s) => some s
+    | _, _ => none
+  | _ => none
+
+/-- A trace: the service its header names, and its lines after the header. -/
+structure TraceFile where
+  service : String
+  lines : List Line
+
+/-- The trace as its file holds it, one wire value per line: the header, then each line. -/
+def TraceFile.wires (tr : TraceFile) : List Wire := header tr.service :: tr.lines.map Line.toWire
+
+/-- The lines, each with its line number in the trace's file, where the header is line 1: as verify numbers them. -/
+def TraceFile.numbered (tr : TraceFile) : List (Nat × Line) := tr.lines.zipIdx.map fun (l, k) => (k + 2, l)
+
+/-- Reading a trace's wire values back gives what was written: the header names its service, and every line after it
+reads as itself (`Line.ofWire_toWire`). Between the wire values and the file's text stands only Lean's JSON printer
+and parser. -/
+theorem TraceFile.read_wires (tr : TraceFile) :
+    tr.wires = header tr.service :: tr.lines.map Line.toWire ∧ headerService? (header tr.service) = some tr.service ∧
+      (tr.lines.map Line.toWire).mapM Line.ofWire = some tr.lines := by
+  refine ⟨rfl, by simp [headerService?, header, List.lookup], ?_⟩
+  induction tr.lines with
+  | nil => rfl
+  | cons l ls ih => simp [List.mapM_cons, Line.ofWire_toWire, ih]
+
+/-- The trace of a run of the inputs from the initial state: what generate writes, in the format of snapshots, or why
+a step stopped. -/
+def traceOf (T : List TypeDecl) (v : ServiceV) (xs : List (Input v)) : Except Stop TraceFile := do
   let (run, _) ← xs.foldlM (fun (run, k) x => do pure (← run.input T v (k + 1) x, k + 1))
     (({ state := State.init v } : Run v), 0)
-  pure (header v.name :: run.lines.map Line.toWire)
+  pure ⟨v.name, run.lines⟩
 
 instance : Inhabited Stop := ⟨.badStep 0 ""⟩
 
@@ -206,10 +235,10 @@ partial def runSteps (T : List TypeDecl) (v : ServiceV) (run : Run v) (k : Nat) 
       runSteps T v run k rest
     | _ => runSteps T v run (k + 1) rest
 
-/-- The trace of a scenario, header first, or why it stopped. -/
+/-- The trace of a scenario, or why it stopped. -/
 def runScenario (T : List TypeDecl) (v : ServiceV) (steps : List (StepV v.records v.event v.caller)) :
-    Except Stop (List Wire) := do
+    Except Stop TraceFile := do
   let (run, _) ← runSteps T v ({ state := State.init v } : Run v) 0 steps
-  pure (header v.name :: run.lines.map Line.toWire)
+  pure ⟨v.name, run.lines⟩
 
 end Tazuna.Trace

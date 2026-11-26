@@ -2,20 +2,23 @@ import Tazuna.Trace.Verify
 import Tazuna.Semantics.StepExamples
 
 /-! The trace writer and verify agree: a trace written from inputs (`traceOf`, what generate writes), printed as text
-and read back, replays as passed, header and all. -/
+and read back as verify reads a file, replays as passed. -/
 
 namespace Tazuna.Trace.Examples
 
 open Tazuna.Ir Tazuna.Ir.StepExamples
 
-/-- Whether the trace of the inputs replays as passed. -/
+/-- Whether the trace of the inputs, printed and parsed again, replays as passed. -/
 def replays (xs : List (Input svc)) : Bool :=
   match traceOf prelude svc xs with
-  | .ok ws => match reread ws with
-    | some lines => match replay prelude svc lines with
-      | .passed => (ws.head?.map Wire.text) == some (header "sum").text
+  | .ok tr =>
+    let text (w : Wire) := (Wire.parse w.text).toOption
+    let read := tr.numbered.mapM fun (k, l) => (text l.toWire >>= Line.ofWire).map (k, ·)
+    match (text (header tr.service) >>= headerService?), read with
+    | some "sum", some lines => match replay prelude svc lines with
+      | .passed => true
       | _ => false
-    | none => false
+    | _, _ => false
   | .error _ => false
 
 -- Commands (accepted, invalid, rejected), a query, an event, which sets the machine's timer, a clock line firing it

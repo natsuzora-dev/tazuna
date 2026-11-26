@@ -4,6 +4,7 @@ import Tazuna.Smt.Bounds
 import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Cover
 import Tazuna.Smt.Boundary
+import Tazuna.Trace.Verify
 
 /-! What `prove` and `generate` share: their options, the solver pool, the lines of a refused encoding and of a
 service's scope, and the search of a service's unrolled run depth by depth for a model of a goal, with each depth's
@@ -12,7 +13,7 @@ run built once for every search over it. -/
 namespace Tazuna.Cli
 
 open Lean (Json)
-open Tazuna.Ir Tazuna.Ir.Step Tazuna.Smt
+open Tazuna.Ir Tazuna.Ir.Step Tazuna.Smt Tazuna.Trace
 
 /-- A service of a checked spec with what its checks give the commands: its membership, so `c.checked` applies, and its
 layout's step environment, which `stepEnv_ofService` proves is found. -/
@@ -189,6 +190,18 @@ def depthJobs (k : Nat) : IO (Array Job × Array (Task (Option (Depth s.v s.senv
   return (jobs, ds)
 
 end
+
+/-- The trace of a run a search found (`unroll_decode`: a run that faults nowhere), which verify replays as passed;
+else an engine bug. No theorem yet says every such run writes and replays so: a value can have no wire form (a date
+past 9999, a field labelled `tag`, an outside id named like a fresh id the trace named before), and a trace names an
+input's fresh id the service never showed as verify reads an outside id. -/
+def foundTrace (T : List TypeDecl) (v : ServiceV) (xs : List (Input v)) : Except String TraceFile :=
+  match traceOf T v xs with
+  | .error (.fault k _) => .error s!"faults at step {k} when written as a trace, which unroll_decode rules out"
+  | .error (.badStep k m) => .error s!"does not write as a trace at step {k}: {m} (unproved: a found run writes)"
+  | .ok tr => match replay T v tr.numbered with
+    | .passed => .ok tr
+    | _ => .error "does not replay as passed (unproved: verify replays a found run's trace as passed)"
 
 /-- What a search over depths found. -/
 inductive SearchResult (α : Type) where
