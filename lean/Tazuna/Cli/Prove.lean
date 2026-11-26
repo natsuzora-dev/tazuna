@@ -11,7 +11,7 @@ import Tazuna.Smt.RespGoal
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
 question per input kind for the step, one line per question; then each bounded response, searched for a violation by
-deepening an unrolled run from the initial state (`unroll` with `respGoal`) up to the spec's `steps` bound, one line
+deepening an unrolled run from the initial state (`unrollBase` with `respGoalE`) up to the spec's `steps` bound, one line
 per response. -/
 
 namespace Tazuna.Cli
@@ -421,7 +421,7 @@ variable (solver : Solver) (c : CheckedSpec) (v : ServiceV) (L : Layout) (senv :
 /-- One depth's unrolled run as every target's goal at that depth shares it: its base, merged into one object per
 equal subterm (`shareCommon'`, the identity on values) so a goal built from its steps finds its shared terms among
 the assertions' at once, and the prefix of its scripts (`ScriptPrefix`), read once; or the refusal of its
-encoding. `unroll` at that depth with a goal is the base with the goal. -/
+encoding. -/
 abbrev Depth (v : ServiceV) (n : Nat) := Except Refusal (UnrollBase v n × Option ScriptPrefix)
 
 /-- The run at depth `d`, each target's goal aside. -/
@@ -478,8 +478,7 @@ def searchResponse (ds : List (Task (Depth v senv.nT))) (resp : ResponseV v.even
       match respGoalE L v resp B.steps with
       | .error r => return refusedLine none r
       | .ok g =>
-        -- `unroll` at depth `d` with the response's goal, which is `g` on these steps (`respGoal_ok`).
-        let U := B.withGoal (respGoal L v resp)
+        let U := B.withGoal g
         if refused.isNone then refused := U.refused.head?
         let unsorted : RespResult := .undecided (.undecided .unknown) [("depth", Lean.toJson d),
           ("why", Json.str "a shared term of the script has no sort")]

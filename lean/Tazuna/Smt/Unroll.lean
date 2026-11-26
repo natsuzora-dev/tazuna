@@ -11,7 +11,7 @@ often later steps read it, and its only constants are the selectors and the inpu
 one: so every run is a model without any argument about which constants a term reads (`runs_covered`). An answer's
 kinds (one per pending shape and slot) share one selector value and are told apart by the case each asks about, so
 the selector's value is the input's kind, whichever slot holds the request. A goal on the steps (what generate or a
-response asks) is the only part callers add. -/
+response asks) is the only part callers add, as the last assertion (`UnrollBase.withGoal`). -/
 
 namespace Tazuna.Smt
 
@@ -135,10 +135,15 @@ structure UnrollBase (v : ServiceV) (n : Nat) where
   steps : List (UnrollStep v n)
   refused : List (SymInput v (shapes v) n × Refusal)
 
-/-- The unrolled run with `goal` on its steps as its last assertion. -/
-def UnrollBase.withGoal {v : ServiceV} {n : Nat} (B : UnrollBase v n) (goal : List (UnrollStep v n) → Term) :
-    Unrolled v n :=
-  ⟨⟨B.datatypes, B.tys, B.vars, [], B.asserts ++ [goal B.steps]⟩, B.steps, B.refused⟩
+/-- The unrolled run with `goal`, a term on its steps, as its last assertion. -/
+def UnrollBase.withGoal {v : ServiceV} {n : Nat} (B : UnrollBase v n) (goal : Term) : Unrolled v n :=
+  ⟨⟨B.datatypes, B.tys, B.vars, [], B.asserts ++ [goal]⟩, B.steps, B.refused⟩
+
+/-- The goal is the unrolled script's last assertion: a model of the script's assertions is one of the run's and of the
+goal, and back. -/
+theorem UnrollBase.holds_withGoal {v : ServiceV} {n : Nat} {M : Model} (B : UnrollBase v n) (goal : Term) :
+    (∀ a ∈ (B.withGoal goal).ask.script.asserts, Holds M a) ↔ (∀ a ∈ B.asserts, Holds M a) ∧ Holds M goal := by
+  simp [UnrollBase.withGoal, TypedScript.script, or_imp, forall_and]
 
 section
 variable (L : Layout)
@@ -244,11 +249,6 @@ def unrollBase (d : Nat) : Except Refusal (UnrollBase v senv.nT) := do
   let r := unrollSteps L T P v senv S0 0 0 d
   let vars ← r.1.mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
   pure ⟨dts, r.1, vars, r.2.1, r.2.2.1, r.2.2.2⟩
-
-/-- The script of runs of `d` inputs from the initial state, with `goal` on its steps. -/
-def unroll (d : Nat) (goal : List (UnrollStep v senv.nT) → Term) : Except Refusal (Unrolled v senv.nT) := do
-  let B ← unrollBase L T P v senv d
-  pure (B.withGoal goal)
 
 end
 

@@ -3781,6 +3781,12 @@ run of one input leaves 50 or more (unsat; without the no-fault condition it is 
 takes an id, the first input carries no fresh id, since the service has made none (unsat; without the names
 condition it is sat). -/
 
+/-- The unrolled run of `d` inputs with the goal its steps give as its last assertion. -/
+def unroll (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v)) (d : Nat)
+    (goal : List (UnrollStep v senv.nT) → Except Refusal Term) : Except Refusal (Unrolled v senv.nT) := do
+  let B ← unrollBase L T P v senv d
+  pure (B.withGoal (← goal B.steps))
+
 /-- Whether the last step takes an answer whose rules hold. -/
 def answeredLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term :=
   match steps.getLast? with
@@ -3820,7 +3826,7 @@ def unrollCheck (solver : Solver) : IO Bool := do
   let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
   let mut ok := true
   for (d, want) in [(3, false), (4, true)] do
-    match unroll L prelude P v senv d answeredLast with
+    match unroll L prelude P v senv d (pure ∘ answeredLast) with
     | .error r => ok ← fail s!"depth {d}: {repr r}"
     | .ok u =>
       unless u.refused.isEmpty do ok ← fail s!"depth {d}: a kind was refused"
@@ -3839,7 +3845,7 @@ def unrollCheck (solver : Solver) : IO Bool := do
   let over50 (steps : List (UnrollStep v senv.nT)) : Term := match steps.getLast? with
     | some st => .le (.int 50) st.after.records
     | none => .bool false
-  match unroll L prelude P v senv 1 over50 with
+  match unroll L prelude P v senv 1 (pure ∘ over50) with
   | .ok u =>
     match ← solver.run u.ask.script with
     | .unsat => pure ()
@@ -3854,7 +3860,7 @@ def unrollCheck (solver : Solver) : IO Bool := do
         | .command _ _ x => some (andT (st.picks k) (.is dId 0 x))
         | _ => none)
     | none => .bool false
-  match unroll tL prelude (svcParts tv).sites tv tsenv 1 freshInput with
+  match unroll tL prelude (svcParts tv).sites tv tsenv 1 (pure ∘ freshInput) with
   | .ok u =>
     match ← solver.run u.ask.script with
     | .unsat => pure ()
@@ -3876,7 +3882,7 @@ def genGoalCheck (solver : Solver) : IO Bool := do
   let mut ok := true
   for (g, d, want) in [(GenTarget.event none, 1, true), (.request "mail" "ping", 2, false),
       (.request "mail" "ping", 3, true)] do
-    match unroll L prelude P v senv d (genGoal L prelude rules g) with
+    match unroll L prelude P v senv d (pure ∘ genGoal L prelude rules g) with
     | .error r => ok ← fail s!"{reprStr g} at depth {d}: {repr r}"
     | .ok u =>
       match ← solver.run u.ask.script, want with
@@ -3890,7 +3896,7 @@ def genGoalCheck (solver : Solver) : IO Bool := do
       | a, _ => ok ← fail s!"{reprStr g} at depth {d}: {repr a}, want sat {want}"
   return ok
 
-/-! A response's goal on `sum` (`respGoal`). "After 5, 99 within 10" is violated by add 5 then a clock line past 10:
+/-! A response's goal on `sum` (`respGoalE`). "After 5, 99 within 10" is violated by add 5 then a clock line past 10:
 no model at depth 1, one at depth 2 whose run, played back in Lean, violates it with timely clock lines. A last step
 at time 10 is in time, so asking for one is unsat; dropping the deadline's strictness (within 9 over Ints) makes it
 sat. A clock line past a waiting timer is ruled out (timelyClock): after adds of 5 and 1, which set a timer due at 10,
@@ -3925,10 +3931,9 @@ def respGoalCheck (solver : Solver) : IO Bool := do
      ("a clock line at a waiting timer", anyThen99, 3, fun sts => andT (fiveThenSix sts) (lastAt 10 sts), true)]
   let mut ok := true
   for (name, resp, d, more, want) in cases do
-    match unroll L prelude P v senv d (fun sts => andT (respGoal L v resp sts) (more sts)) with
+    match unroll L prelude P v senv d (fun sts => (andT · (more sts)) <$> respGoalE L v resp sts) with
     | .error r => ok ← fail s!"{name}: {repr r}"
     | .ok u =>
-      unless (respGoalE L v resp u.steps).toOption.isSome do ok ← fail s!"{name}: the goal's encoding is refused"
       match ← solver.run u.ask.script, want with
       | .unsat, false => pure ()
       | .sat vs, true =>
@@ -4058,7 +4063,7 @@ def unrolledSum (d : Nat) : Except String Script := do
   let v := StepExamples.svc
   let L := svcLayout v 3
   let senv ← (StepEnv.of L (shapes v)).mapError fun r => s!"no step environment: {repr r}"
-  let u ← (unroll L prelude (svcParts v).sites v senv d fun _ => tt).mapError fun r => s!"no unrolling: {repr r}"
+  let u ← (unroll L prelude (svcParts v).sites v senv d fun _ => pure tt).mapError fun r => s!"no unrolling: {repr r}"
   pure u.ask.script
 
 /-- The step scripts whose sizes are measured, each as a function of the slots (or the bound, or the levels). -/

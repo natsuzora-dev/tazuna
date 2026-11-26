@@ -553,20 +553,19 @@ theorem unrollSteps_run : (d : Nat) → (S : SymState v) → (i b : Nat) → {s 
 the steps decode to inputs whose run from the initial state takes, at each step, a kind whose terms say what the step
 is, faults nowhere, and leaves the state the step's end terms denote. So generate's playback of a model always
 replays, and its "does not decode" line is unreachable. -/
-theorem unroll_decode {d : Nat} {goal : List (UnrollStep v senv.nT) → Term} {U : Unrolled v senv.nT}
-    (hu : unroll L T P v senv d goal = .ok U)
-    (hM : ∀ n (h : n < U.ask.tys.length), VarSorted L U.ask.tys[n] (M.vars n)) (hA : ∀ a ∈ U.ask.asserts, Holds M a) :
-    ∃ xs, UnrollRun L T M chk.callerData (Step.State.init v) U.steps xs := by
-  have hD := unroll_inputs_decode senv chk.callerData hu hM hA
-  simp only [unroll, unrollBase, bind_assoc, pure_bind, UnrollBase.withGoal] at hu
-  obtain ⟨S0, hS0, hu⟩ := bind_ok.1 hu
-  obtain ⟨dts, -, hu⟩ := bind_ok.1 hu
+theorem unroll_decode {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B)
+    (hM : ∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n)) (hA : ∀ a ∈ B.asserts, Holds M a) :
+    ∃ xs, UnrollRun L T M chk.callerData (Step.State.init v) B.steps xs := by
+  have hD := unroll_inputs_decode senv chk.callerData hB hM hA
+  simp only [unrollBase] at hB
+  obtain ⟨S0, hS0, hB⟩ := bind_ok.1 hB
+  obtain ⟨dts, -, hB⟩ := bind_ok.1 hB
   rcases hr : unrollSteps L T P v senv S0 0 0 d with ⟨tys, asserts, steps, refused⟩
-  rw [hr] at hu
-  obtain ⟨vars, -, hu⟩ := bind_ok.1 hu
-  cases pure_ok.1 hu
+  rw [hr] at hB
+  obtain ⟨vars, -, hB⟩ := bind_ok.1 hB
+  cases pure_ok.1 hB
   have h := unrollSteps_run chk senv d S0 0 0 (init_rel (need_ok.1 hS0)) Step.init_inv
-    (by rw [hr]; exact fun a ha => hA a (List.mem_append_left _ ha)) (by rw [hr]; exact hD)
+    (by rw [hr]; exact hA) (by rw [hr]; exact hD)
   rw [hr] at h
   exact h
 

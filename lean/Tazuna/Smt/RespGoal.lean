@@ -2,7 +2,7 @@ import Tazuna.Smt.GenGoal
 import Tazuna.Smt.StepNoGap
 import Tazuna.Semantics.Response
 
-/-! A bounded response's goal on an unrolled run: the run violates the response (`respGoal`). Per step it reads the
+/-! A bounded response's goal on an unrolled run: the run violates the response (`respGoalE`). Per step it reads the
 kind the step takes: whether some event the step applies satisfies `after` (opens) or `then` (answers), read off the
 event slots of the step's end where the step reaches it, as generate's event goal reads them; the time the state after
 the step holds; and, for a clock line, that it passes no timer that waits (`Step.timely`, the stated assumption
@@ -104,12 +104,6 @@ def respGoalE (resp : ResponseV v.event) (sts : List (UnrollStep v n)) : Except 
   let (fq, cq) ← resp.then_.code L
   let ms ← sts.mapM (stepRespT L v fa fq)
   pure (andT (andT ca cq) (andT (allT (ms.map (·.2))) (violT resp.within (ms.map (·.1)))))
-
-/-- `respGoalE` as a goal; false where its encoding is refused, which prove reports before asking. -/
-def respGoal (resp : ResponseV v.event) (sts : List (UnrollStep v n)) : Term :=
-  match respGoalE L v resp sts with
-  | .ok g => g
-  | .error _ => ff
 
 end
 
@@ -428,47 +422,35 @@ end
 
 variable {P : List AnySite} {E : List AnyEffectSite}
 
-theorem respGoal_ok {resp : ResponseV v.event} {n : Nat} {sts : List (UnrollStep v n)} {g : Term}
-    (hg : respGoalE L v resp sts = .ok g) : respGoal L v resp sts = g := by
-  simp [respGoal, hg]
-
 /-- T7: where prove's script for the response at depth `d` has no input kind refused, its goal is encoded and it has
 no model, no run from the initial state of `d` inputs that fit the slots and are valid, whose steps stay within the
 slots and fault nowhere, whose clock lines are timely and at whose events the response's functions fit, violates the
 response. prove's "within the bounds" for a response is this at every depth up to the spec's steps, so no such run of
 at most that many inputs violates it. -/
 theorem response_within (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L)
-    {resp : ResponseV v.event} {d : Nat} {U : Unrolled v senv.nT} (hu : unroll L T P v senv d (respGoal L v resp) = .ok U)
-    {g : Term} (hg : respGoalE L v resp U.steps = .ok g) (hnr : U.refused = []) (hun : Unsat L U.ask)
+    {resp : ResponseV v.event} {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B)
+    {g : Term} (hg : respGoalE L v resp B.steps = .ok g) (hnr : B.refused = []) (hun : Unsat L (B.withGoal g).ask)
     {xs : List (Input v)} (hlen : xs.length = d) (hfits : RunFits L T P v chk.callerData (Step.State.init v) xs)
     (hsrc : (resp.after.fits L.count).1 ∧ (resp.then_.fits L.count).1)
     (hrf : RespFits L T resp (Step.State.init v) xs) (htime : Step.TimelyRun T (Step.State.init v) xs) :
     ¬ resp.Violated ((run T v (Step.State.init v) xs).2.map Result.moment) := by
   intro hviol
-  obtain ⟨M, hM, hrun, hiff⟩ := runs_covered chk senv hL hu hnr hlen hfits
+  obtain ⟨M, hM, hrun, hA⟩ := runs_covered chk senv hL hB hnr hlen hfits
   obtain ⟨a, ha, hna⟩ := hun.noModel M hM
-  refine hna (hiff.2 ?_ a ha)
-  rw [respGoal_ok hg]
-  exact (respGoal_iff hrun hg).2 ⟨hsrc, hrf, htime, hviol⟩
+  exact hna (((B.holds_withGoal g).2 ⟨hA, (respGoal_iff hrun hg).2 ⟨hsrc, hrf, htime, hviol⟩⟩) a ha)
 
 /-- Goal soundness: in every model of prove's script for the response whose variables hold values of their sorts, the
 steps decode to inputs whose run from the initial state has timely clock lines and violates the response. So a found
 model always replays to a violation; prove's check of that is never the one that fails. -/
 theorem response_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {M : Model}
-    {resp : ResponseV v.event} {d : Nat} {U : Unrolled v senv.nT} (hu : unroll L T P v senv d (respGoal L v resp) = .ok U)
-    {g : Term} (hg : respGoalE L v resp U.steps = .ok g)
-    (hM : ∀ n (h : n < U.ask.tys.length), VarSorted L U.ask.tys[n] (M.vars n)) (hA : ∀ a ∈ U.ask.asserts, Holds M a) :
-    ∃ xs, U.steps.mapM (·.decode M L chk.callerData) = some xs ∧ Step.TimelyRun T (Step.State.init v) xs ∧
+    {resp : ResponseV v.event} {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B)
+    {g : Term} (hg : respGoalE L v resp B.steps = .ok g)
+    (hM : ∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n))
+    (hA : ∀ a ∈ (B.withGoal g).ask.script.asserts, Holds M a) :
+    ∃ xs, B.steps.mapM (·.decode M L chk.callerData) = some xs ∧ Step.TimelyRun T (Step.State.init v) xs ∧
       resp.Violated ((run T v (Step.State.init v) xs).2.map Result.moment) := by
-  obtain ⟨xs, hrun⟩ := unroll_decode chk senv hu hM hA
-  have hgoal : Holds M (respGoal L v resp U.steps) := by
-    simp only [unroll, unrollBase, bind_assoc, pure_bind, UnrollBase.withGoal] at hu
-    obtain ⟨S0, -, hu⟩ := bind_ok.1 hu
-    obtain ⟨dts, -, hu⟩ := bind_ok.1 hu
-    obtain ⟨vars, -, hu⟩ := bind_ok.1 hu
-    cases pure_ok.1 hu
-    exact hA _ (List.mem_append_right _ (List.mem_singleton_self _))
-  rw [respGoal_ok hg] at hgoal
+  obtain ⟨hA, hgoal⟩ := (B.holds_withGoal g).1 hA
+  obtain ⟨xs, hrun⟩ := unroll_decode chk senv hB hM hA
   obtain ⟨-, -, ht, hv⟩ := (respGoal_iff hrun hg).1 hgoal
   exact ⟨xs, unrollRun_decode _ _ _ hrun, ht, hv⟩
 

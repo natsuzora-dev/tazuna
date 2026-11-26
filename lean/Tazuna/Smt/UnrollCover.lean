@@ -830,37 +830,30 @@ variable {L : Layout} {T : List TypeDecl} {v : ServiceV} {P : List AnySite} {E :
 /-- Every run is a model of its unrolled script: where no input kind's encoding was refused, a run of `d` inputs from
 the initial state whose inputs fit the slots and are valid, whose steps stay within the slots and do not fault, gives a
 model whose variables hold values of their sorts, whose steps are that run, and which satisfies every assertion of the
-script but the goal. So the script with a goal has no model exactly when no such run satisfies the goal: generate's
-"unreached within `d` steps" rests on this. -/
-theorem runs_covered (hL : SortedLayout L) {d : Nat} {goal : List (UnrollStep v senv.nT) → Term}
-    {U : Unrolled v senv.nT} (hu : unroll L T P v senv d goal = .ok U) (hnr : U.refused = [])
+run. So the run with a goal has no model exactly when no such run satisfies the goal (`UnrollBase.holds_withGoal`):
+generate's "unreached within `d` steps" rests on this. -/
+theorem runs_covered (hL : SortedLayout L) {d : Nat} {B : UnrollBase v senv.nT}
+    (hB : unrollBase L T P v senv d = .ok B) (hnr : B.refused = [])
     {xs : List (Input v)} (hlen : xs.length = d) (hfits : RunFits L T P v chk.callerData (Step.State.init v) xs) :
-    ∃ M : Model, (∀ n (h : n < U.ask.tys.length), VarSorted L U.ask.tys[n] (M.vars n)) ∧
-      UnrollRun L T M chk.callerData (Step.State.init v) U.steps xs ∧
-      ((∀ a ∈ U.ask.script.asserts, Holds M a) ↔ Holds M (goal U.steps)) := by
+    ∃ M : Model, (∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n)) ∧
+      UnrollRun L T M chk.callerData (Step.State.init v) B.steps xs ∧ ∀ a ∈ B.asserts, Holds M a := by
   subst hlen
-  simp only [unroll, unrollBase, bind_assoc, pure_bind, UnrollBase.withGoal] at hu
-  obtain ⟨S0, hS0, hu⟩ := bind_ok.1 hu
-  obtain ⟨dts, hdts, hu⟩ := bind_ok.1 hu
+  simp only [unrollBase] at hB
+  obtain ⟨S0, hS0, hB⟩ := bind_ok.1 hB
+  obtain ⟨dts, hdts, hB⟩ := bind_ok.1 hB
   have hv := unrollSteps_vals chk senv xs S0 0 0
   have hcov := unrollSteps_covers (M := coverModel (runVals L v chk.callerData senv.nT 0 0 xs)) chk senv hL xs S0 0 0
     (init_rel (need_ok.1 hS0)) Step.init_inv (fun _ => rfl)
   rcases hr : unrollSteps L T P v senv S0 0 0 xs.length with ⟨tys, asserts, steps, refused⟩
-  rw [hr] at hu hv hcov
-  obtain ⟨vars, hvars, hu⟩ := bind_ok.1 hu
-  cases pure_ok.1 hu
+  rw [hr] at hB hv hcov
+  obtain ⟨vars, hvars, hB⟩ := bind_ok.1 hB
+  cases pure_ok.1 hB
   have hsrt : ∀ t ∈ tys, (L.srt? t).isSome = true := mapM_some_mem (by rw [mapM_need hvars]; rfl)
   have hsorted := forall2_sorted_of hv.1 fun t ht => sorted_exists (need_ok.1 hdts) t (hsrt t ht) (hv.2 t ht)
   have hc := hcov hsrt hnr hfits fun q h => by
     rw [Nat.zero_add]
     exact coverModel_vars (List.getElem?_eq_getElem h)
-  refine ⟨_, fun n h => varSorted_of_sorted (forall2_sorted_vars hsorted n h), hc.2,
-    ⟨fun h => h _ (by simp [TypedScript.script]), ?_⟩⟩
-  intro hg a ha
-  simp only [TypedScript.script, List.nil_append, List.mem_append, List.mem_singleton] at ha
-  rcases ha with ha | rfl
-  · exact hc.1 a ha
-  · exact hg
+  exact ⟨_, fun n h => varSorted_of_sorted (forall2_sorted_vars hsorted n h), hc.2, hc.1⟩
 
 end
 

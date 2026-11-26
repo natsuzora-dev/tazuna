@@ -3,7 +3,7 @@ import Tazuna.Smt.GenGoal
 import Tazuna.Trace.Verify
 
 /-! The `generate` command: for each target of each service (`targets`), the shortest run from the initial state whose
-last step shows the target's class of out line, found by deepening an unrolled run (`unroll` with `genGoal`) from one
+last step shows the target's class of out line, found by deepening an unrolled run (`unrollBase` with `genGoal`) from one
 step to the spec's `steps` bound. A model is played back in Lean: its inputs are decoded, written with the trace
 writer scenarios use, read back and replayed by verify's own replay, and the trace is written only when that replay
 passes and its last step shows the target (`generate_reaches`). A target with no model at any depth is unreached
@@ -134,12 +134,12 @@ def searchTarget (ds : List (Depth v senv.nT)) (g : GenTarget) : IO (Except Stri
       | some (kind, fields) => return .ok (.undecided kind fields)
       | none => return .error s!"service {v.name}, {g.text}: the encoding refused: {reprStr r}"
     | .ok (B, pre) =>
-      -- `unroll` at depth `d` with this goal.
-      let U := B.withGoal (genGoal L c.T rules g)
+      let goal := genGoal L c.T rules g B.steps
+      let U := B.withGoal goal
       if refused.isNone then refused := U.refused.head?
       let some pre := pre | return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d),
         ("why", Json.str "a shared term of the script has no sort")])
-      let some key := pre.key (genGoal L c.T rules g U.steps) | return .ok (.undecided (.undecided .unknown)
+      let some key := pre.key goal | return .ok (.undecided (.undecided .unknown)
         [("depth", Lean.toJson d), ("why", Json.str "a shared term of the script has no sort")])
       match ← solver.runKeyed cache key fun _ => U.ask.script.text solver.header with
       | .unsat => pure ()

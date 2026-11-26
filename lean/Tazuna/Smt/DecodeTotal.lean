@@ -495,18 +495,18 @@ theorem unrollKind_ok {S : SymState v} {sel : Term} {inp : SymInput v (shapes v)
 
 /-- An unrolled run never yields a model whose inputs do not decode: in a model of its assertions whose variables
 hold values of their sorts, the input each step's selector picks decodes. -/
-theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {goal : List (UnrollStep v senv.nT) → Term}
-    {U : Unrolled v senv.nT} (hu : unroll L T P v senv d goal = .ok U)
-    (hM : ∀ n (h : n < U.ask.tys.length), VarSorted L U.ask.tys[n] (M.vars n)) (hA : ∀ a ∈ U.ask.asserts, Holds M a) :
-    ∀ st ∈ U.steps, ∃ x, st.decode M L hc = some x := by
-  simp only [unroll, unrollBase, bind_assoc, pure_bind, UnrollBase.withGoal] at hu
-  obtain ⟨S0, -, hu⟩ := bind_ok.1 hu
-  obtain ⟨dts, -, hu⟩ := bind_ok.1 hu
+theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {B : UnrollBase v senv.nT}
+    (hB : unrollBase L T P v senv d = .ok B)
+    (hM : ∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n)) (hA : ∀ a ∈ B.asserts, Holds M a) :
+    ∀ st ∈ B.steps, ∃ x, st.decode M L hc = some x := by
+  simp only [unrollBase] at hB
+  obtain ⟨S0, -, hB⟩ := bind_ok.1 hB
+  obtain ⟨dts, -, hB⟩ := bind_ok.1 hB
   rcases hr : unrollSteps L T P v senv S0 0 0 d with ⟨tys, asserts, steps, refused⟩
   have hat := unrollSteps_at (T := T) (P := P) senv d S0 0 0
-  rw [hr] at hu hat
-  obtain ⟨vars, -, hu⟩ := bind_ok.1 hu
-  cases pure_ok.1 hu
+  rw [hr] at hB hat
+  obtain ⟨vars, -, hB⟩ := bind_ok.1 hB
+  cases pure_ok.1 hB
   intro st hst
   obtain ⟨S, i, bs, -, hst, hty, has⟩ := hat st hst
   subst hst
@@ -530,7 +530,7 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {goal : Lis
   let rs := inps.map fun inp => unrollKind L T P v senv S (.var bs) inp
   let oks := rs.filterMap fun | .ok x => some x | .error _ => none
   have hany : Holds M (anyT (oks.map (·.2.1))) :=
-    hA _ (List.mem_append_left _ (has _ (List.mem_append_right _ (List.mem_singleton.2 rfl))))
+    hA _ (has _ (List.mem_append_right _ (List.mem_singleton.2 rfl)))
   obtain ⟨_, hx, hxe⟩ := (holds_anyT _).1 hany
   obtain ⟨x, hxo, rfl⟩ := List.mem_map.1 hx
   have hok : ∀ y ∈ oks, ∃ inp ∈ inps, unrollKind L T P v senv S (.var bs) inp = .ok y := fun y hy => by
@@ -550,7 +550,7 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {goal : Lis
   obtain ⟨x', hx'o, rfl⟩ := List.mem_map.1 (List.mem_of_find?_eq_some hy)
   obtain ⟨inp, hik, hkind⟩ := hok x' hx'o
   obtain ⟨t, valid, wf, -, -, hwf, hx'⟩ := unrollKind_ok senv hkind
-  have hassert : Holds M x'.2.2.1 := hA _ (List.mem_append_left _ (has _ (List.mem_append_left _ (List.mem_map_of_mem hx'o))))
+  have hassert : Holds M x'.2.2.1 := hA _ (has _ (List.mem_append_left _ (List.mem_map_of_mem hx'o)))
   subst hx'
   have hwfH : Holds M wf := by
     simp only [holds_or, holds_not, holds_andT] at hassert

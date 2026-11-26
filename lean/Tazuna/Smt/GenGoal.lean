@@ -1032,15 +1032,16 @@ initial state of `d` inputs that fit the slots and are valid, whose steps stay w
 answers at its last step in a class the target aims at. generate's "unreached within k steps" is this at every depth up
 to k, so no such run of at most k inputs answers in that class at any step. -/
 theorem generate_unreached (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L)
-    {rules : RuleNames} {g : GenTarget} {d : Nat} {U : Unrolled v senv.nT}
-    (hu : unroll L T P v senv d (genGoal L T rules g) = .ok U) (hnr : U.refused = []) (hun : Unsat L U.ask)
+    {rules : RuleNames} {g : GenTarget} {d : Nat} {B : UnrollBase v senv.nT}
+    (hB : unrollBase L T P v senv d = .ok B) (hnr : B.refused = [])
+    (hun : Unsat L (B.withGoal (genGoal L T rules g B.steps)).ask)
     {ys : List (Input v)} {x : Input v} (hlen : ys.length + 1 = d)
     (hfits : RunFits L T P v chk.callerData (Step.State.init v) (ys ++ [x])) :
     ¬ Hits T v rules g x (step T v (run T v (Step.State.init v) ys).1 x) := by
   intro hhit
-  obtain ⟨M, hM, hrun, hiff⟩ := runs_covered chk senv hL hu hnr (by simp [hlen]) hfits
+  obtain ⟨M, hM, hrun, hA⟩ := runs_covered chk senv hL hB hnr (by simp [hlen]) hfits
   obtain ⟨a, ha, hna⟩ := hun.noModel M hM
-  refine hna (hiff.2 ?_ a ha)
+  refine hna (((B.holds_withGoal _).2 ⟨hA, ?_⟩) a ha)
   obtain ⟨st, hlast, ⟨k, hk, hdec, hrel⟩, hno, -⟩ := unrollRun_last x ys _ _ hrun
   simp only [genGoal, hlast]
   exact (holds_takenT _ _).2 ⟨k, hk, kindHitT_holds hdec hrel hno hhit⟩
@@ -1058,24 +1059,19 @@ theorem unrollRun_decode {M : Model} {hc : v.caller.isData = true} {n : Nat} :
 their sorts, the steps decode to inputs whose run from the initial state answers at its last step in a class the
 target aims at. So a found model always replays to its target; generate's check of that is never the one that fails. -/
 theorem generate_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {M : Model}
-    {rules : RuleNames} {g : GenTarget} {d : Nat} {U : Unrolled v senv.nT}
-    (hu : unroll L T P v senv d (genGoal L T rules g) = .ok U)
-    (hM : ∀ n (h : n < U.ask.tys.length), VarSorted L U.ask.tys[n] (M.vars n)) (hA : ∀ a ∈ U.ask.asserts, Holds M a) :
-    ∃ ys x, U.steps.mapM (·.decode M L chk.callerData) = some (ys ++ [x]) ∧
+    {rules : RuleNames} {g : GenTarget} {d : Nat} {B : UnrollBase v senv.nT}
+    (hB : unrollBase L T P v senv d = .ok B)
+    (hM : ∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n))
+    (hA : ∀ a ∈ (B.withGoal (genGoal L T rules g B.steps)).ask.script.asserts, Holds M a) :
+    ∃ ys x, B.steps.mapM (·.decode M L chk.callerData) = some (ys ++ [x]) ∧
       Hits T v rules g x (step T v (run T v (Step.State.init v) ys).1 x) := by
-  obtain ⟨xs, hrun⟩ := unroll_decode chk senv hu hM hA
-  have hgoal : Holds M (genGoal L T rules g U.steps) := by
-    simp only [unroll, unrollBase, bind_assoc, pure_bind, UnrollBase.withGoal] at hu
-    obtain ⟨S0, -, hu⟩ := bind_ok.1 hu
-    obtain ⟨dts, -, hu⟩ := bind_ok.1 hu
-    obtain ⟨vars, -, hu⟩ := bind_ok.1 hu
-    cases pure_ok.1 hu
-    exact hA _ (List.mem_append_right _ (List.mem_singleton_self _))
+  obtain ⟨hA, hgoal⟩ := (B.holds_withGoal _).1 hA
+  obtain ⟨xs, hrun⟩ := unroll_decode chk senv hB hM hA
   have hdec := unrollRun_decode _ _ _ hrun
   cases hx : xs.getLast? with
   | none =>
     obtain rfl := List.getLast?_eq_none_iff.1 hx
-    cases hs : U.steps with
+    cases hs : B.steps with
     | nil => simp [genGoal, hs, ff, Holds, Term.denote, Val.toBool] at hgoal
     | cons st sts => rw [hs] at hrun; exact hrun.elim
   | some x =>
