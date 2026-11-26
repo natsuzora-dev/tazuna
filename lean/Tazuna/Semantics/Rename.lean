@@ -702,6 +702,7 @@ structure MachineV.Self (m : MachineV r e) : Prop where
   after : Fun.Rel R m.after m.after
   initial : Ty.rel0 R m.state m.initial m.initial
   effect : Ty.rel0 R (.tuple m.effect.Γ) m.effect.env m.effect.env
+  invariants : Fun.Rel R m.invariants m.invariants
 
 /-- The values a reaction's function captured. -/
 def ReactionV.Self (x : ReactionV r e) : Prop := Ty.rel0 R (.tuple x.react.Γ) x.react.env x.react.env
@@ -719,6 +720,7 @@ structure ServiceV.Self (v : ServiceV) : Prop where
   queries : ∀ x ∈ v.queries, x.Self R
   machines : ∀ m ∈ v.machines, m.Self R
   reactions : ∀ x ∈ v.reactions, x.Self R
+  invariants : Fun.Rel R v.invariants v.invariants
 
 end Self
 

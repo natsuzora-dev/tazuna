@@ -434,13 +434,13 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     exact ⟨(congrArg (Ty.rel0 R _ _) hcl').mpr hc, hacc, hres⟩
   | machine =>
     rintro ⟨n, ins, ini, on, aft, eff, inv, ⟨⟩⟩ ⟨n', ins', ini', on', aft', eff', inv', ⟨⟩⟩
-      ⟨hn, hins, hini, hon, haft, heff, -, -⟩
+      ⟨hn, hins, hini, hon, haft, heff, hinv, -⟩
     refine ⟨hn, fun he => ?_⟩
     simp only [Prim.den] at he
-    obtain ⟨-, -, -, hins', hini', hon', haft', heff', -⟩ := MachineV.mk.inj he
-    cases eq_of_heq hins'; cases eq_of_heq hon'; cases eq_of_heq haft'; cases eq_of_heq heff'
+    obtain ⟨-, -, -, hins', hini', hon', haft', heff', hinv'⟩ := MachineV.mk.inj he
+    cases eq_of_heq hins'; cases eq_of_heq hon'; cases eq_of_heq haft'; cases eq_of_heq heff'; cases eq_of_heq hinv'
     have hi := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.param 3) rfl) hini
-    exact ⟨hins, hon, haft, (congrArg (Ty.rel0 R _ _) (eq_of_heq hini')).mpr hi, heff rfl⟩
+    exact ⟨hins, hon, haft, (congrArg (Ty.rel0 R _ _) (eq_of_heq hini')).mpr hi, heff rfl, hinv⟩
   | reaction =>
     rintro ⟨n, x, ⟨⟩⟩ ⟨n', x', ⟨⟩⟩ ⟨hn, hx, -⟩
     refine ⟨hn, fun h => ?_⟩
@@ -467,19 +467,19 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     intro v hv
     obtain ⟨w, hw, rfl⟩ := List.mem_map.1 hv
     have hs := Self.of_stripped hvs hm w hw
-    refine ⟨hs.init, hs.apply, fun s hs' => ?_, hs.commands, hs.queries, hs.machines, hs.reactions⟩
+    refine ⟨hs.init, hs.apply, fun s hs' => ?_, hs.commands, hs.queries, hs.machines, hs.reactions, hs.invariants⟩
     obtain ⟨s0, hs0, rfl⟩ := List.mem_map.1 hs'
     exact hs.subscribes s0 hs0
   | service =>
     rintro ⟨n, ini, app, subs, ds, ms, xs, inv, rsp, bnd, scs, ⟨⟩⟩
       ⟨n', ini', app', subs', ds', ms', xs', inv', rsp', bnd', scs', ⟨⟩⟩
-      ⟨-, hini, happ, hsubs, hds, hms, hxs, -⟩ h
+      ⟨-, hini, happ, hsubs, hds, hms, hxs, hinv, -⟩ h
     simp only [ServiceV.stripped, ServiceV.mk.injEq] at h
-    obtain ⟨-, -, -, -, hini', rfl, hsubs', rfl, -, -, -, rfl, rfl, -⟩ := h
+    obtain ⟨-, -, -, -, hini', rfl, hsubs', rfl, -, -, -, rfl, rfl, rfl, -⟩ := h
     have hi := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.param 0) rfl) hini
     exact ⟨(congrArg (Ty.rel0 R _ _) (eq_of_heq hini')).mpr hi, happ, self_of_map hsubs (eq_of_heq hsubs'),
       Self.commands_of (forall2_self hds), Self.queries_of (forall2_self hds),
-      fun m hm => (forall2_self hms m hm).2 rfl, fun x hx => (forall2_self hxs x hx).2 rfl⟩
+      fun m hm => (forall2_self hms m hm).2 rfl, fun x hx => (forall2_self hxs x hx).2 rfl, hinv⟩
   | subscribe =>
     rintro ⟨n, w, ⟨⟩⟩ ⟨n', w', ⟨⟩⟩ ⟨-, hw, -⟩ h
     simp only [Prim.den, SubscriptionV.stripped] at h
