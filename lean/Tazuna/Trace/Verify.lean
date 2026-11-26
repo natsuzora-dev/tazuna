@@ -165,7 +165,8 @@ def decAnswer (b : Bind) (o : Ty) : (rj : Option Ty) → Except Wire Wire → Op
 
 /-- The input an in line writes, read with the binding so far, the id its answer names, and the ids it holds. -/
 def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option String × List IdV)
-  | .clock t => if t < s.now then .error "time moves back" else .ok (.clock t, none, [])
+  -- A clock line before the state's time is the step's own Invalid, as the semantics reads it, not a misread line.
+  | .clock t => .ok (.clock t, none, [])
   | .request t id name c i => do
     if t != s.now then throw s!"the request is at {t}, but a clock line brought time only to {s.now}"
     let caller ← (dec T b.id? v.caller c).elim (.error "the caller does not read as the service's caller type") .ok

@@ -1,1 +1,1 @@
-{"kind":"Trace.invalid","line":3,"message":"time moves back","trace":"traces/basic.jsonl"}
+{"kind":"Trace.invalid","line":4,"message":"the request is at 5, but a clock line brought time only to 10","trace":"traces/basic.jsonl"}

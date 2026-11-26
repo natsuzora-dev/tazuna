@@ -1,3 +1,4 @@
 {"service":"counter","trace":1}
 {"in":"clock","time":10}
 {"in":"clock","time":5}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":1,"name":"add","time":5}
