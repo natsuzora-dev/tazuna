@@ -1,11 +1,11 @@
-import Tazuna.Smt.Prove
-import Tazuna.Smt.Names
+import Tazuna.Smt.ShownStep
 
 /-! The unrolled run: a script whose models are runs of `d` inputs from the initial state (bounded model checking,
 as CBMC and Kani unroll). The initial state is constants, so the solver folds the first step. Each step is one input
 kind chosen by a selector: the chosen kind's step encoding (`encodeStep`, T2) holds from the state before, its input
-carries only names the service made or names from outside (`namesT`, `Input.Valid`), the step stays within the slots
-(its condition) and does not fault. The state after is the chosen kind's end terms, one shared term per component,
+carries only names the service made or names from outside (`namesT`, `Input.Valid`), every id it carries that the
+service made is one an earlier step's out lines showed (`SymInput.knownT`, `Input.Shown`), the step stays within the
+slots (its condition) and does not fault. The state after is the chosen kind's end terms, one shared term per component,
 which the next step reads as its state. A script stays linear in `d` because each component is defined once however
 often later steps read it, and its only constants are the selectors and the inputs, whose values a run fixes one by
 one: so every run is a model without any argument about which constants a term reads (`runs_covered`). An answer's
@@ -130,15 +130,31 @@ def SymInput.validT (fresh : Term) : SymInput v (shapes v) n → Except Refusal 
     need (lacksData t) (namesT L fresh t value)
   | .event i value => need (lacksData (v.subscribes.get i).event) (namesT L fresh (v.subscribes.get i).event value)
 
+/-- Every id the input's terms carry that the service made is the value of a position of `shown` whose condition
+holds (`Input.Shown`). -/
+def SymInput.knownT (shown : List (Term × Term)) : SymInput v (shapes v) n → Term
+  | .command i caller input => andT (Smt.knownT L shown v.caller caller) (Smt.knownT L shown (v.commands.get i).input input)
+  | .query i caller input => andT (Smt.knownT L shown v.caller caller) (Smt.knownT L shown (v.queries.get i).input input)
+  | .answer k _ _ value => Smt.knownT L shown (answerTy (shapes v)[k].output (shapes v)[k].rejection) value
+  | .event i value => Smt.knownT L shown (v.subscribes.get i).event value
+  | .clock _ | .unmatched .. => tt
+
 end
 
-/-- One step of an unrolled run: its selector, the states before and after, and each kind it may take, with the
-kind's terms. -/
+/-- Each condition and-ed with none of the ones before it holding: the first that holds is the only one whose result
+holds. -/
+def firstPicks : List Term → Term → List Term
+  | [], _ => []
+  | p :: ps, before => andT before p :: firstPicks ps (Term.share (andT before (.not p)))
+
+/-- One step of an unrolled run: its selector, the states before and after, each kind it may take, with the kind's
+terms, and the id positions its out lines show, each under the condition that the step takes the kind that shows it. -/
 structure UnrollStep (v : ServiceV) (n : Nat) where
   sel : Term
   before : SymState v
   after : SymState v
   kinds : List (SymInput v (shapes v) n × EncodedStep v)
+  shows : List (Term × Term)
 
 /-- Whether the selector `sel` takes the kind: it names the kind's input kind and the model is in the case the kind's
 terms ask about (for an answer, that its slot holds the request). -/
@@ -241,41 +257,47 @@ end
 section
 variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
 
-/-- What one input kind adds to a step of an unrolled run from `S` with the selector `sel`: the kind and the
-condition that it is the one taken (`picks`), the assertion that where it is taken its step from `S` holds with a
-well-formed input of valid names, stays within the slots and does not fault, and the state its step leaves; or the
-refusal of its encoding. -/
-def unrollKind (S : SymState v) (sel : Term) (inp : SymInput v (shapes v) senv.nT) :
+/-- What one input kind adds to a step of an unrolled run from `S` with the selector `sel`, after the steps whose out
+lines show `shown`: the kind and the condition that it is the one taken (`picks`), the assertion that where it is taken
+its step from `S` holds with a well-formed input of valid names whose made ids are shown, stays within the slots and
+does not fault, and the state its step leaves; or the refusal of its encoding. -/
+def unrollKind (S : SymState v) (shown : List (Term × Term)) (sel : Term) (inp : SymInput v (shapes v) senv.nT) :
     Except (SymInput v (shapes v) senv.nT × Refusal) ((SymInput v (shapes v) senv.nT × EncodedStep v) × Term × Term ×
       SymState v) :=
   match encodeStep L T P v senv S inp, inp.validT L S.fresh, need (lacksDatas inp.dataTys) (inp.wf L) with
   | .ok t, .ok valid, .ok wf =>
     let (ok, after) := t.out.after S inp
     let picks := selectsT sel (inp, t)
-    .ok ((inp, t), picks, .or (.not picks) (andT wf (andT t.codes (andT t.sites (andT t.cond (andT ok valid))))), after)
+    .ok ((inp, t), picks,
+      .or (.not picks) (andT wf (andT t.codes (andT t.sites (andT t.cond (andT ok (andT valid (inp.knownT L shown))))))),
+      after)
   | .error r, _, _ | _, .error r, _ | _, _, .error r => .error (inp, r)
 
-/-- One step of an unrolled run, step `i` (from 0) from `S` with its selector at the constant `b`, then its kinds'
-inputs: the types of its constants, its assertions (each kind's, then that one kind is taken), the step, the kinds
-refused, and the constant after its last. The state after is the taken kind's (`S` where none is, which the last
-assertion rules out). Answers are no kind of the first step, since no request waits in the initial state. -/
-def unrollOne (S : SymState v) (i b : Nat) :
+/-- One step of an unrolled run, step `i` (from 0) from `S` after steps whose out lines show `shown`, with its selector
+at the constant `b`, then its kinds' inputs: the types of its constants, its assertions (each kind's, then that one
+kind is taken), the step, the kinds refused, and the constant after its last. The state after is the taken kind's (`S`
+where none is, which the last assertion rules out), and so are the ids it shows. Answers are no kind of the first
+step, since no request waits in the initial state. -/
+def unrollOne (S : SymState v) (shown : List (Term × Term)) (i b : Nat) :
     List Ty × List Term × UnrollStep v senv.nT × List (SymInput v (shapes v) senv.nT × Refusal) × Nat :=
   let sel : Term := .var b
   let (inps, e) := placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1)
-  let rs := inps.map fun inp => unrollKind L T P v senv S sel inp
+  let rs := inps.map fun inp => unrollKind L T P v senv S shown sel inp
   let oks := rs.filterMap fun | .ok x => some x | .error _ => none
   let refused := rs.filterMap fun | .error x => some x | .ok _ => none
   let S' := (oks.foldr (fun x r => SymState.ite x.2.1 x.2.2.2 r) S).share
-  ([.int] ++ inps.flatMap (·.tys), oks.map (·.2.2.1) ++ [anyT (oks.map (·.2.1))], ⟨sel, S, S', oks.map (·.1)⟩, refused, e)
+  let shows := (oks.zip (firstPicks (oks.map (·.2.1)) tt)).flatMap fun (x, g) => guardIds g (x.1.2.out.shownT L x.1.1)
+  ([.int] ++ inps.flatMap (·.tys), oks.map (·.2.2.1) ++ [anyT (oks.map (·.2.1))], ⟨sel, S, S', oks.map (·.1), shows⟩,
+    refused, e)
 
-/-- The `d` steps of an unrolled run from step `i`, from `S` with the first selector at the constant `b`. -/
-def unrollSteps (S : SymState v) (i b : Nat) :
+/-- The `d` steps of an unrolled run from step `i`, from `S` after steps whose out lines show `shown`, with the first
+selector at the constant `b`. -/
+def unrollSteps (S : SymState v) (shown : List (Term × Term)) (i b : Nat) :
     Nat → List Ty × List Term × List (UnrollStep v senv.nT) × List (SymInput v (shapes v) senv.nT × Refusal)
   | 0 => ([], [], [], [])
   | d + 1 =>
-    let (tys, asserts, st, refused, b') := unrollOne L T P v senv S i b
-    let (tys', asserts', sts, refused') := unrollSteps st.after (i + 1) b' d
+    let (tys, asserts, st, refused, b') := unrollOne L T P v senv S shown i b
+    let (tys', asserts', sts, refused') := unrollSteps st.after (shown ++ st.shows) (i + 1) b' d
     (tys ++ tys', asserts ++ asserts', st :: sts, refused ++ refused')
 
 /-- The runs of `d` inputs from the initial state, before a goal: what every goal at that depth shares. -/
@@ -284,7 +306,7 @@ def unrollBase (d : Nat) : Except Refusal (UnrollBase v senv.nT) := do
   let S0 ← need (if (embedV L v.records (Ty.up _ v.records_data v.init)).isSome then .layout (.type v.records)
     else .limit (.slots v.records)) (initState L v)
   let dts ← need (.layout (.type v.records)) L.datatypes?
-  let r := unrollSteps L T P v senv S0 0 0 d
+  let r := unrollSteps L T P v senv S0 [] 0 0 d
   let vars ← r.1.mapM fun ty => need (lacks ty) (L.srt? ty)
   pure ⟨dts, r.1, vars, r.2.1, r.2.2.1, r.2.2.2⟩
 

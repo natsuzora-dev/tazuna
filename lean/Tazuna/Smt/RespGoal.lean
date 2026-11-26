@@ -383,19 +383,20 @@ theorem response_within (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (h
   exact hna (((B.holds_withGoal g).2 ⟨hA, (respGoal_iff hrun hg).2 ⟨hsrc, hrf, htime, hviol⟩⟩) a ha)
 
 /-- Goal soundness: in every model of prove's script for the response whose variables hold values of their sorts, the
-steps decode to inputs whose run from the initial state has timely clock lines and violates the response. So a found
+steps decode to inputs that `validInputs` allows whose run from the initial state has timely clock lines and violates
+the response. So a found
 model always replays to a violation; prove's check of that is never the one that fails. -/
-theorem response_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {M : Model}
+theorem response_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L) {M : Model}
     {resp : ResponseV v.event} {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B)
     {g : Term} (hg : respGoalE L v resp B.steps = .ok g)
     (hM : ∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n))
     (hA : ∀ a ∈ (B.withGoal g).ask.script.asserts, Holds M a) :
-    ∃ xs, B.steps.mapM (·.decode M L chk.callerData) = some xs ∧ Step.TimelyRun T (Step.State.init v) xs ∧
-      resp.Violated ((run T v (Step.State.init v) xs).2.map Result.moment) := by
+    ∃ xs, B.steps.mapM (·.decode M L chk.callerData) = some xs ∧ Step.ShownRun T [] (Step.State.init v) xs ∧
+      Step.TimelyRun T (Step.State.init v) xs ∧ resp.Violated ((run T v (Step.State.init v) xs).2.map Result.moment) := by
   obtain ⟨hA, hgoal⟩ := (B.holds_withGoal g).1 hA
-  obtain ⟨xs, hrun⟩ := unroll_decode chk senv hB hM hA
+  obtain ⟨xs, hrun, hshown⟩ := unroll_decode chk senv hL hB hM hA
   obtain ⟨-, -, ht, hv⟩ := (respGoal_iff hrun hg).1 hgoal
-  exact ⟨xs, unrollRun_decode _ _ _ hrun, ht, hv⟩
+  exact ⟨xs, unrollRun_decode _ _ _ hrun, hshown, ht, hv⟩
 
 end
 

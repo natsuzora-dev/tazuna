@@ -762,9 +762,9 @@ variable {c : CheckedSpec} {v : ServiceV} (hv : v ∈ c.spec.services) (T : List
   (senv : StepEnv (Layout.ofService c.program.defs v) (shapes v))
 include hv
 
-theorem unrollKind_gap (S : SymState v) (sel : Term) (inp : SymInput v (shapes v) senv.nT) (ha : KindAvail c v inp)
+theorem unrollKind_gap (S : SymState v) (shown : List (Term × Term)) (sel : Term) (inp : SymInput v (shapes v) senv.nT) (ha : KindAvail c v inp)
     {x : SymInput v (shapes v) senv.nT × Refusal}
-    (h : unrollKind (Layout.ofService c.program.defs v) T c.P v senv S sel inp = .error x) : x.2.gap = false := by
+    (h : unrollKind (Layout.ofService c.program.defs v) T c.P v senv S shown sel inp = .error x) : x.2.gap = false := by
   unfold unrollKind at h
   cases h1 : encodeStep (Layout.ofService c.program.defs v) T c.P v senv S inp with
   | error r => simp only [h1] at h; cases h; exact sound_error (encodeStep_ofService hv T senv S inp) h1
@@ -776,20 +776,20 @@ theorem unrollKind_gap (S : SymState v) (sel : Term) (inp : SymInput v (shapes v
       | error r => simp only [h1, h2, h3] at h; cases h; exact sound_error (wfIn_sound inp ha.2) h3
       | ok wf => simp only [h1, h2, h3] at h; cases h
 
-theorem unrollOne_gap (S : SymState v) (i b : Nat) :
-    ∀ p ∈ (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S i b).2.2.2.1, p.2.gap = false := by
+theorem unrollOne_gap (S : SymState v) (shown : List (Term × Term)) (i b : Nat) :
+    ∀ p ∈ (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b).2.2.2.1, p.2.gap = false := by
   intro p hp
   simp only [unrollOne, List.mem_filterMap, List.mem_map] at hp
   obtain ⟨r, ⟨inp, hinp, rfl⟩, hr⟩ := hp
   split at hr
   · rename_i x hx; cases hr
     obtain ⟨k, hk, b', rfl⟩ := mem_placeKinds _ _ inp hinp
-    exact unrollKind_gap hv T senv S _ _ (unrollKinds_avail c v k hk b') hx
+    exact unrollKind_gap hv T senv S shown _ _ (unrollKinds_avail c v k hk b') hx
   · cases hr
 
 omit hv in
-theorem unrollOne_avail (S : SymState v) (i b : Nat) :
-    ∀ t ∈ (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S i b).1, Avail (Layout.ofService c.program.defs v) t := by
+theorem unrollOne_avail (S : SymState v) (shown : List (Term × Term)) (i b : Nat) :
+    ∀ t ∈ (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b).1, Avail (Layout.ofService c.program.defs v) t := by
   intro t ht
   simp only [unrollOne, List.mem_append, List.mem_singleton, List.mem_flatMap] at ht
   rcases ht with rfl | ⟨inp, hinp, ht⟩
@@ -797,22 +797,23 @@ theorem unrollOne_avail (S : SymState v) (i b : Nat) :
   · obtain ⟨k, hk, b', rfl⟩ := mem_placeKinds _ _ inp hinp
     exact (unrollKinds_avail c v k hk b').1 t ht
 
-theorem unrollSteps_gap : (S : SymState v) → (i b d : Nat) →
-    (∀ p ∈ (unrollSteps (Layout.ofService c.program.defs v) T c.P v senv S i b d).2.2.2, p.2.gap = false) ∧
-      ∀ t ∈ (unrollSteps (Layout.ofService c.program.defs v) T c.P v senv S i b d).1,
+theorem unrollSteps_gap : (S : SymState v) → (shown : List (Term × Term)) → (i b d : Nat) →
+    (∀ p ∈ (unrollSteps (Layout.ofService c.program.defs v) T c.P v senv S shown i b d).2.2.2, p.2.gap = false) ∧
+      ∀ t ∈ (unrollSteps (Layout.ofService c.program.defs v) T c.P v senv S shown i b d).1,
         Avail (Layout.ofService c.program.defs v) t
-  | _, _, _, 0 => ⟨fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
-  | S, i, b, d + 1 => by
-    have ih := unrollSteps_gap (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S i b).2.2.1.after (i + 1)
-      (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S i b).2.2.2.2 d
+  | _, _, _, _, 0 => ⟨fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
+  | S, shown, i, b, d + 1 => by
+    have ih := unrollSteps_gap (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b).2.2.1.after
+      (shown ++ (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b).2.2.1.shows) (i + 1)
+      (unrollOne (Layout.ofService c.program.defs v) T c.P v senv S shown i b).2.2.2.2 d
     refine ⟨fun p hp => ?_, fun t ht => ?_⟩
     · simp only [unrollSteps, List.mem_append] at hp
       rcases hp with hp | hp
-      · exact unrollOne_gap hv T senv S i b p hp
+      · exact unrollOne_gap hv T senv S shown i b p hp
       · exact ih.1 p hp
     · simp only [unrollSteps, List.mem_append] at ht
       rcases ht with ht | ht
-      · exact unrollOne_avail T senv S i b t ht
+      · exact unrollOne_avail T senv S shown i b t ht
       · exact ih.2 t ht
 
 /-- In each service's layout, the unrolled run never refuses with a layout gap, nor does any input kind it leaves out:
@@ -828,7 +829,7 @@ theorem unrollBase_ofService (d : Nat) :
     · rfl
   obtain ⟨dts, hdts⟩ := datatypes_ofParts c.program.defs.parts v
   refine sound_bind_ok (need_ok.2 hdts) ?_
-  have hu := unrollSteps_gap hv T senv S0 0 0 d
+  have hu := unrollSteps_gap hv T senv S0 [] 0 0 d
   exact sound_bind (sound_mapM _ fun t ht => sound_mono (sound_srt (hu.2 t ht)) fun _ _ => trivial)
     fun _ _ => hu.1
 

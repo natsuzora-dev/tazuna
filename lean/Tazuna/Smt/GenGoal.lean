@@ -1114,17 +1114,19 @@ theorem unrollRun_decode {M : Model} {hc : v.caller.isData = true} {n : Nat} :
     simp only [List.mapM_cons, hd, unrollRun_decode _ sts xs h]; rfl
 
 /-- Goal soundness: in every model of generate's script for the target at depth `d` whose variables hold values of
-their sorts, the steps decode to inputs whose run from the initial state answers at its last step in a class the
-target aims at. So a found model always replays to its target; generate's check of that is never the one that fails. -/
-theorem generate_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {M : Model}
+their sorts, the steps decode to inputs that `validInputs` allows (`Step.ShownRun`) whose run from the initial state
+answers at its last step in a class the target aims at. So a found model always replays to its target; generate's
+check of that is never the one that fails. -/
+theorem generate_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L) {M : Model}
     {rules : RuleNames} {g : GenTarget} {d : Nat} {B : UnrollBase v senv.nT}
     (hB : unrollBase L T P v senv d = .ok B)
     (hM : ∀ n (h : n < B.tys.length), VarSorted L B.tys[n] (M.vars n))
     (hA : ∀ a ∈ (B.withGoal (genGoal L T rules g B.steps)).ask.script.asserts, Holds M a) :
     ∃ ys x, B.steps.mapM (·.decode M L chk.callerData) = some (ys ++ [x]) ∧
+      Step.ShownRun T [] (Step.State.init v) (ys ++ [x]) ∧
       Hits T v rules g x (step T v (run T v (Step.State.init v) ys).1 x) := by
   obtain ⟨hA, hgoal⟩ := (B.holds_withGoal _).1 hA
-  obtain ⟨xs, hrun⟩ := unroll_decode chk senv hB hM hA
+  obtain ⟨xs, hrun, hshown⟩ := unroll_decode chk senv hL hB hM hA
   have hdec := unrollRun_decode _ _ _ hrun
   cases hx : xs.getLast? with
   | none =>
@@ -1134,7 +1136,7 @@ theorem generate_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {M 
     | cons st sts => rw [hs] at hrun; exact hrun.elim
   | some x =>
     obtain ⟨ys, rfl⟩ := List.getLast?_eq_some_iff.1 hx
-    refine ⟨ys, x, hdec, ?_⟩
+    refine ⟨ys, x, hdec, hshown, ?_⟩
     obtain ⟨st, hlast, ⟨k, hk, hkd, hrel⟩, hno, -⟩ := unrollRun_last x ys _ _ hrun
     simp only [genGoal, hlast] at hgoal
     obtain ⟨k', hk', hh⟩ := (holds_takenT _ _).1 hgoal

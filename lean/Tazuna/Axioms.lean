@@ -147,8 +147,9 @@ elab "#check_tazuna_reach" : command => do
     -- decode" lines are unreachable.
     ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode,
     -- A model generate finds is a run to its target: every model's steps decode to inputs whose run from the
-    -- initial state takes the kinds the model picks and faults nowhere (`unroll_decode`), and its last step answers
-    -- in the target's class.
+    -- initial state takes the kinds the model picks and faults nowhere, each input carrying only ids from outside or
+    -- ones an earlier out line showed (`unroll_decode`, `Step.ShownRun`), and its last step answers in the target's
+    -- class.
     ``Tazuna.Smt.generate_sound,
     -- T6: a trace generate writes reaches its target: verify replays its lines as passed, and its last step answers
     -- in the target's class.
@@ -161,7 +162,8 @@ elab "#check_tazuna_reach" : command => do
     -- many valid inputs within the slots, faulting nowhere, with timely clock lines and the response's functions
     -- fitting at its events, violates it (from `runs_covered`).
     ``Tazuna.Smt.response_within,
-    -- A response's model decodes to a run from the initial state with timely clock lines that violates it.
+    -- A response's model decodes to a run from the initial state on inputs `validInputs` allows, with timely clock
+    -- lines, that violates it.
     ``Tazuna.Smt.response_sound]
   let mut used : NameSet := {}
   let mut usedByOther : NameSet := {}

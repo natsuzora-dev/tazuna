@@ -442,8 +442,8 @@ theorem unrollKinds_terms {ans : Bool} :
   · exact ⟨rfl, rfl⟩
 
 /-- An unrolled step's constants: its selector, then its kinds' terms, so the next step starts past them. -/
-theorem unrollOne_next (S : SymState v) (i b : Nat) :
-    (unrollOne L T P v senv S i b).2.2.2.2 = b + (unrollOne L T P v senv S i b).1.length := by
+theorem unrollOne_next (S : SymState v) (shown : List (Term × Term)) (i b : Nat) :
+    (unrollOne L T P v senv S shown i b).2.2.2.2 = b + (unrollOne L T P v senv S shown i b).1.length := by
   have hk := placeKinds_at (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1) (unrollKinds_terms senv)
   rcases hp : placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1) with ⟨inps, e⟩
   rw [hp] at hk
@@ -453,38 +453,40 @@ theorem unrollOne_next (S : SymState v) (i b : Nat) :
 
 /-- Each step of an unrolled run is one `unrollOne` at a base constant, whose types sit at that base in the run's
 types and whose assertions are among the run's. -/
-theorem unrollSteps_at : (d : Nat) → (S : SymState v) → (i b : Nat) →
-    ∀ st ∈ (unrollSteps L T P v senv S i b d).2.2.1, ∃ S' i' bs, b ≤ bs ∧ (unrollOne L T P v senv S' i' bs).2.2.1 = st ∧
-      (∀ p (h : p < (unrollOne L T P v senv S' i' bs).1.length),
-        (unrollSteps L T P v senv S i b d).1[bs - b + p]? = some (unrollOne L T P v senv S' i' bs).1[p]) ∧
-      ∀ a ∈ (unrollOne L T P v senv S' i' bs).2.1, a ∈ (unrollSteps L T P v senv S i b d).2.1
-  | 0, _, _, _, st, h => by cases h
-  | d + 1, S, i, b, st, h => by
-    have hn := unrollOne_next (T := T) (P := P) senv S i b
-    rcases h1 : unrollOne L T P v senv S i b with ⟨tys, asserts, st0, refused, b'⟩
+theorem unrollSteps_at : (d : Nat) → (S : SymState v) → (shown : List (Term × Term)) → (i b : Nat) →
+    ∀ st ∈ (unrollSteps L T P v senv S shown i b d).2.2.1, ∃ S' shown' i' bs, b ≤ bs ∧
+      (unrollOne L T P v senv S' shown' i' bs).2.2.1 = st ∧
+      (∀ p (h : p < (unrollOne L T P v senv S' shown' i' bs).1.length),
+        (unrollSteps L T P v senv S shown i b d).1[bs - b + p]? = some (unrollOne L T P v senv S' shown' i' bs).1[p]) ∧
+      ∀ a ∈ (unrollOne L T P v senv S' shown' i' bs).2.1, a ∈ (unrollSteps L T P v senv S shown i b d).2.1
+  | 0, _, _, _, _, st, h => by cases h
+  | d + 1, S, shown, i, b, st, h => by
+    have hn := unrollOne_next (T := T) (P := P) senv S shown i b
+    rcases h1 : unrollOne L T P v senv S shown i b with ⟨tys, asserts, st0, refused, b'⟩
     rw [h1] at hn
     simp only at hn
-    have ih := unrollSteps_at d st0.after (i + 1) b'
-    rcases h2 : unrollSteps L T P v senv st0.after (i + 1) b' d with ⟨tys', asserts', sts, refused'⟩
+    have ih := unrollSteps_at d st0.after (shown ++ st0.shows) (i + 1) b'
+    rcases h2 : unrollSteps L T P v senv st0.after (shown ++ st0.shows) (i + 1) b' d with ⟨tys', asserts', sts, refused'⟩
     rw [h2] at ih
     simp only [unrollSteps, h1, h2, List.mem_cons] at h ⊢
     rcases h with rfl | h
-    · refine ⟨S, i, b, Nat.le_refl _, by rw [h1], fun p hp => ?_, fun a ha => ?_⟩
+    · refine ⟨S, shown, i, b, Nat.le_refl _, by rw [h1], fun p hp => ?_, fun a ha => ?_⟩
       · have hp' : p < tys.length := by rw [h1] at hp; exact hp
         simp [h1, List.getElem?_append_left hp']
       · rw [h1] at ha; exact List.mem_append_left _ ha
-    · obtain ⟨S', i', bs, hle, hst, hty, has⟩ := ih st h
-      refine ⟨S', i', bs, by omega, hst, fun p hp => ?_, fun a ha => List.mem_append_right _ (has a ha)⟩
+    · obtain ⟨S', shown', i', bs, hle, hst, hty, has⟩ := ih st h
+      refine ⟨S', shown', i', bs, by omega, hst, fun p hp => ?_, fun a ha => List.mem_append_right _ (has a ha)⟩
       rw [List.getElem?_append_right (by omega), show bs - b + p - tys.length = bs - b' + p by omega]
       exact hty p hp
 
-theorem unrollKind_ok {S : SymState v} {sel : Term} {inp : SymInput v (shapes v) senv.nT}
+theorem unrollKind_ok {S : SymState v} {shown : List (Term × Term)} {sel : Term} {inp : SymInput v (shapes v) senv.nT}
     {x : (SymInput v (shapes v) senv.nT × EncodedStep v) × Term × Term × SymState v}
-    (h : unrollKind L T P v senv S sel inp = .ok x) :
+    (h : unrollKind L T P v senv S shown sel inp = .ok x) :
     ∃ t valid wf, encodeStep L T P v senv S inp = .ok t ∧ inp.validT L S.fresh = .ok valid ∧ inp.wf L = some wf ∧
       x = ((inp, t), selectsT sel (inp, t),
         .or (.not (selectsT sel (inp, t)))
-          (andT wf (andT t.codes (andT t.sites (andT t.cond (andT (t.out.after S inp).1 valid))))),
+          (andT wf (andT t.codes (andT t.sites (andT t.cond (andT (t.out.after S inp).1 (andT valid
+            (inp.knownT L shown))))))),
         (t.out.after S inp).2) := by
   unfold unrollKind at h
   split at h
@@ -502,13 +504,13 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {B : Unroll
   simp only [unrollBase] at hB
   obtain ⟨S0, -, hB⟩ := bind_ok.1 hB
   obtain ⟨dts, -, hB⟩ := bind_ok.1 hB
-  rcases hr : unrollSteps L T P v senv S0 0 0 d with ⟨tys, asserts, steps, refused⟩
-  have hat := unrollSteps_at (T := T) (P := P) senv d S0 0 0
+  rcases hr : unrollSteps L T P v senv S0 [] 0 0 d with ⟨tys, asserts, steps, refused⟩
+  have hat := unrollSteps_at (T := T) (P := P) senv d S0 [] 0 0
   rw [hr] at hB hat
   obtain ⟨vars, -, hB⟩ := bind_ok.1 hB
   cases pure_ok.1 hB
   intro st hst
-  obtain ⟨S, i, bs, -, hst, hty, has⟩ := hat st hst
+  obtain ⟨S, shown, i, bs, -, hst, hty, has⟩ := hat st hst
   subst hst
   simp only [Nat.sub_zero] at hty
   have hk := placeKinds_at (unrollKinds v (shapes v) senv.nT (i != 0)) (bs + 1) (unrollKinds_terms senv)
@@ -527,17 +529,17 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {B : Unroll
     simp only at this
     rw [(List.getElem?_eq_some_iff.1 hq).2] at this
     exact sorted_of_varSorted hd this
-  let rs := inps.map fun inp => unrollKind L T P v senv S (.var bs) inp
+  let rs := inps.map fun inp => unrollKind L T P v senv S shown (.var bs) inp
   let oks := rs.filterMap fun | .ok x => some x | .error _ => none
   have hany : Holds M (anyT (oks.map (·.2.1))) :=
     hA _ (has _ (List.mem_append_right _ (List.mem_singleton.2 rfl)))
   obtain ⟨_, hx, hxe⟩ := (holds_anyT _).1 hany
   obtain ⟨x, hxo, rfl⟩ := List.mem_map.1 hx
-  have hok : ∀ y ∈ oks, ∃ inp ∈ inps, unrollKind L T P v senv S (.var bs) inp = .ok y := fun y hy => by
+  have hok : ∀ y ∈ oks, ∃ inp ∈ inps, unrollKind L T P v senv S shown (.var bs) inp = .ok y := fun y hy => by
     obtain ⟨r, hrm, hro⟩ := List.mem_filterMap.1 hy
     obtain ⟨inp, hi, rfl⟩ := List.mem_map.1 hrm
     refine ⟨inp, hi, ?_⟩
-    cases hu : unrollKind L T P v senv S (.var bs) inp with
+    cases hu : unrollKind L T P v senv S shown (.var bs) inp with
     | error _ => simp [hu] at hro
     | ok x0 => simp [hu] at hro; rw [hro]
   have hpick : ∀ y ∈ oks, y.2.1 = selectsT (.var bs) y.1 := fun y hy => by
@@ -570,7 +572,7 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {B : Unroll
     simpa [Nat.add_assoc] using this
   obtain ⟨z, hz⟩ := SymInput.decode_total hc hdata hwf hwfH (hterms ▸ forall2_vars _ (bs + 1 + j) hs)
   refine ⟨z, ?_⟩
-  change UnrollStep.decode M L hc ⟨.var bs, S, _, oks.map (·.1)⟩ = some z
+  change UnrollStep.decode M L hc ⟨.var bs, S, _, oks.map (·.1), _⟩ = some z
   simp only [UnrollStep.decode, UnrollStep.taken, UnrollStep.picks]
   rw [hy]
   exact hz
