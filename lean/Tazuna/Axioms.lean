@@ -10,7 +10,7 @@ import Tazuna.Smt.Cti
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
 import Tazuna.Semantics.StepExamples
-import Tazuna.Semantics.ResponseExamples
+import Tazuna.Semantics.RunExamples
 import Tazuna.Semantics.Reach
 import Tazuna.Semantics.PendingInv
 import Tazuna.Semantics.Settle
@@ -86,6 +86,8 @@ elab "#check_tazuna_reach" : command => do
     -- A bounded response's violation, computed, is its meaning: a step opens it and a later one comes past the
     -- deadline with no step between answering it.
     ``Tazuna.Ir.ResponseV.violated_iff,
+    -- generate's targets miss no class of out line a step can show.
+    ``Tazuna.Ir.classes_covered,
     -- The bound-reached condition the step scripts ask. T2 (`step_encode`) is what the verdict theorems below rest on.
     ``Tazuna.Smt.boundReached_iff,
     -- T3: a model's values decode to a state a run reaches.

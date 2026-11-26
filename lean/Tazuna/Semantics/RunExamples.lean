@@ -1,11 +1,12 @@
 import Tazuna.Semantics.StepExamples
 import Tazuna.Semantics.Response
 import Tazuna.Semantics.Valid
+import Tazuna.Semantics.GenTarget
 
-/-! Examples of responses on hand-written steps and on runs of the example service `sum`, and of the timely-clock
-assumption. -/
+/-! Examples of what runs mean beyond one step, on hand-written steps and on runs of the example service `sum`:
+responses, the timely-clock assumption, and generate's targets. -/
 
-namespace Tazuna.Ir.ResponseExamples
+namespace Tazuna.Ir.RunExamples
 
 open StepExamples
 
@@ -37,4 +38,25 @@ def at_ (t : Int) (evs : List Int) : Moment .int := ⟨t, evs⟩
 #guard Step.timely (after s0 [cmd 1 5, cmd 1 1]) 10
 #guard !Step.timely (after s0 [cmd 1 5, cmd 1 1]) 11
 
-end Tazuna.Ir.ResponseExamples
+/-- `sum`'s literal rule names: `add` names `small`; `total` names none. -/
+def rules : RuleNames := fun n => if n == "add" then [some "small"] else []
+
+def targetTexts : List GenTarget := targets prelude svc rules
+
+-- Per command its outcomes (String rejections have no constructor), per query its own, an event of a type with no
+-- constructors, and the request the machine can send.
+#guard targetTexts == [.accepted "add", .rejected "add" none, .invalid "add" (some "callers"),
+  .invalid "add" (some "small"), .answered "total", .invalid "total" (some "callers"), .event none,
+  .request "mail" "ping"]
+
+/-- Whether some target aims at each class the last input's step shows. -/
+def covered (xs : List (Input svc)) (x : Input svc) : Bool :=
+  (classes prelude svc x (step prelude svc (after s0 xs) x)).all fun c => targetTexts.any (·.covers rules c)
+
+#guard (classes prelude svc (cmd 1 500) (step prelude svc s0 (cmd 1 500))) == [.invalid "add" "small"]
+#guard covered [] (cmd 2 5) && covered [] (cmd 1 0) && covered [] (cmd 1 5)
+-- The clock line at the deadline sends `ping`.
+#guard (classes prelude svc (.clock 10) (step prelude svc (after s0 [cmd 1 5, cmd 1 1]) (.clock 10))) ==
+  [.request "mail" "ping"]
+
+end Tazuna.Ir.RunExamples
