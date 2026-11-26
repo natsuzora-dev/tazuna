@@ -42,7 +42,9 @@ The other rules have no theorem beyond their definition in `Tazuna.Ir.Illegal`.
 `test` runs each scenario in the semantics, from `init` at time 0, and compares its trace with `snapshots/<service>/<scenario>.jsonl` line by line as text.
 `Test.passed` means every line is equal.
 `test --update` writes the snapshot instead.
-Before either, `test` replays the trace with the same function `verify` runs on a file, and prints `Test.badStep` when it does not pass.
+Before either, `test` replays the trace with the same function `verify` runs on a file.
+No theorem says that a scenario's trace passes, so a trace that does not pass is a tazuna bug: `test` prints `Internal.engine` naming that unproved fact and exits 4.
+When the replay runs out of tries, `test` prints `Undecided.limit`.
 
 `TraceFile.read_wires`: reading a written trace back gives its header and lines back.
 So with `replay_iff` (see verify), a snapshot that `test` wrote or passed is one `verify` passes.

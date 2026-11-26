@@ -50,7 +50,8 @@ def testScenario (T : List TypeDecl) (v : ServiceV) (sc : ScenarioV v.records v.
       printLine (.undecided .limit) (at_ ++ [("line", Json.num n), ("limit", Json.str why)])
       return
     | r =>
-      printLine (.test .badStep) (at_ ++ [("message", Json.str s!"verify would not pass the scenario's trace: {Verdict.why r}")])
+      internal s!"service {v.name}, scenario {sc.name}: verify would not pass the scenario's trace ({Verdict.why r}). \
+        That a scenario's trace replays as passed is not proved (runScenario has no theorem), and this run breaks it."
       return
     if update then
       IO.FS.createDirAll dir

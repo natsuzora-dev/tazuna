@@ -14,8 +14,7 @@ inductive Tazuna.TestKind : Type
   | changed
   /-- `test --update` wrote the snapshot, a trace verify passes. -/
   | written
-  /-- A step cannot run, such as an answer that matches no pending request, or verify would not pass the scenario's
-  trace. -/
+  /-- A step cannot run, such as an answer that matches no pending request. -/
   | badStep
 deriving DecidableEq
 
@@ -71,8 +70,9 @@ inductive Tazuna.InternalKind : Type
   | invalidIr
   /-- The converter could not make sense of a module that `gleam build` accepted: a converter bug. -/
   | convert
-  /-- The engine met a state its proofs rule out: a search's job never ran, a solver's model does not decode, or an
-  encoder refused for a case the loaded program's types rule out (`Smt.Unexpected`). -/
+  /-- The engine met a state its proofs rule out, or that it checks at run time where no proof exists yet: a search's
+  job never ran, a solver's model does not decode, an encoder refused for a case the loaded program's types rule out
+  (`Smt.Unexpected`), or verify would not pass the trace of one of tazuna's own scenario runs. -/
   | engine
 deriving DecidableEq
 
