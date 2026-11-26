@@ -31,7 +31,12 @@ def _root_.Tazuna.Ir.GenTarget.text : GenTarget → String
 section
 variable (T : List TypeDecl) (v : ServiceV) (rules : RuleNames) (g : GenTarget)
 
-/-- Whether the last step of the run on `xs` from the initial state shows a class the target aims at. -/
+/-- Whether the last step of the run on `xs` from the initial state shows a class the target aims at, by running the
+decoded run in Lean. It stays because the solver's model is not the model the decoded run is read in: `modelOf` sets
+`(div a 0)`, `(mod a 0)` and a selector on a value of another constructor to fixed defaults, where z3 picks its own
+values, and no theorem shows a goal's assertions never read them. `generate_sound` needs every assertion to hold in the
+model it reads, which z3's answer gives only under z3's own values, so this check is what keeps a written trace from
+missing its target. -/
 def lastHits (xs : List (Input v)) : Bool :=
   match xs.getLast? with
   | some x => (classes T v x (step T v (run T v (State.init v) xs.dropLast).1 x)).any (g.covers rules)
@@ -100,7 +105,8 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
       let (bs, ds) ← depthJobs solver sv v.bounds.stepsNat
       builds := builds ++ bs
       for g in gs do
-        -- `generate_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable.
+        -- `generate_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable unless the
+        -- goal read z3's values for division by zero or a selector on another constructor (`lastHits`).
         let (j, r) ← Job.of (searchDepths solver cache sv g.text ds (fun sts => .ok (genGoal L c.T rules g sts))
           (genTrace c.T v rules g))
         searches := searches.push j
