@@ -80,6 +80,10 @@ pub fn ir_json_escapes_control_characters_test() {
 fn example(k: Restricted) -> #(String, Int) {
   case k {
     kind.Float -> #("pub fn f() -> Int {\n  let _ = 1.5\n  2\n}", 2)
+    kind.HighCodePoint -> #(
+      "pub fn f(s: String) -> Int {\n  case s {\n    \"a\\u{30000}\" -> 1\n    _ -> 0\n  }\n}",
+      3,
+    )
     kind.BitArray -> #("pub fn f() -> Int {\n  let _ = <<1>>\n  1\n}", 2)
     kind.Panic -> #("pub fn f() -> Int {\n  panic\n}", 2)
     kind.Todo -> #("pub fn f() -> Int {\n  todo\n}", 2)
@@ -176,6 +180,24 @@ pub fn each_restricted_kind_is_found_where_it_is_written_test() {
       })
     assert found == [#(kind.name(kind.Restricted(k)), line)]
   })
+}
+
+pub fn high_code_points_are_found_raw_or_escaped_test() {
+  let kinds = fn(literal) {
+    let text = "pub fn f() -> String {\n  " <> literal <> "\n}"
+    case convert.convert([Source("m", "src/m.gleam", text)], "m") {
+      Ok(_) -> []
+      Error(findings) ->
+        list.map(findings, fn(f) {
+          let convert.Finding(found, ..) = f
+          kind.name(found)
+        })
+    }
+  }
+  assert kinds("\"\u{30000}\"") == ["Restricted.highCodePoint"]
+  assert kinds("\"a\\u{2FFFF}\\u{30000}\"") == ["Restricted.highCodePoint"]
+  assert kinds("\"\u{2FFFF}\"") == []
+  assert kinds("\"\\\\u{30000}\"") == []
 }
 
 pub fn a_finding_is_one_json_line_test() {

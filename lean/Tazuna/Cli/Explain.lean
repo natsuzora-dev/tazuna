@@ -96,6 +96,7 @@ def UsageKind.explanation : UsageKind → Explanation
 
 def Restricted.means : Restricted → String
   | .float => docOf% Restricted.float
+  | .highCodePoint => docOf% Restricted.highCodePoint
   | .bitArray => docOf% Restricted.bitArray
   | .panic => docOf% Restricted.panic
   | .todo => docOf% Restricted.todo

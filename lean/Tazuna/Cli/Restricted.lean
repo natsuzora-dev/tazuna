@@ -5,6 +5,8 @@ sees such a spec, so the spec must change. The launcher's copy of this table is 
 inductive Tazuna.Restricted : Type
   /-- A Float: SMT reals are not IEEE floats, so a spec counts in Int. -/
   | float
+  /-- A String literal holding a code point above U+2FFFF: SMT-LIB strings stop there, so tazuna's strings do too. -/
+  | highCodePoint
   /-- A bit array, as a value or a pattern. -/
   | bitArray
   /-- `panic`: a spec names its failures as rejections. -/
@@ -60,7 +62,7 @@ deriving DecidableEq
 namespace Tazuna.Restricted
 
 def all : List Restricted :=
-  [float, bitArray, panic, todo, echo, letAssert, assert, listSpread, listPattern, stringPrefixPattern, external,
+  [float, highCodePoint, bitArray, panic, todo, echo, letAssert, assert, listSpread, listPattern, stringPrefixPattern, external,
     foreignFunction, foreignType, recursion, recursiveType, incomparable, keptCapture, shadowedImport, mixedReference,
     multiVariantUpdate, variantField, constructorValue, annotationNeeded, rootSpec]
 
@@ -68,6 +70,7 @@ theorem mem_all (k : Restricted) : k ∈ all := by cases k <;> simp [all]
 
 def name : Restricted → String
   | float => "float"
+  | highCodePoint => "highCodePoint"
   | bitArray => "bitArray"
   | panic => "panic"
   | todo => "todo"

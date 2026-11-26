@@ -22,9 +22,9 @@ import tazuna/internal/kept
 import tazuna/internal/kind.{
   type Kind, type Restricted, AnnotationNeeded, Assert, BitArray,
   ConstructorValue, Echo, External, Float, ForeignFunction, ForeignType,
-  Incomparable, KeptCapture, LetAssert, ListPattern, ListSpread, MixedReference,
-  MultiVariantUpdate, Panic, Recursion, RecursiveType, RootSpec, ShadowedImport,
-  StringPrefixPattern, Todo, VariantField,
+  HighCodePoint, Incomparable, KeptCapture, LetAssert, ListPattern, ListSpread,
+  MixedReference, MultiVariantUpdate, Panic, Recursion, RecursiveType, RootSpec,
+  ShadowedImport, StringPrefixPattern, Todo, VariantField,
 }
 import tazuna/internal/names.{type Imports}
 import tazuna/internal/print
@@ -1007,6 +1007,40 @@ const bool_ty = Con("Bool", [])
 
 const str_ty = Con("String", [])
 
+const high_code_point =
+  "String literal above U+2FFFF: SMT-LIB strings stop there"
+
+/// Whether a String token's body holds a code point above U+2FFFF, written
+/// as itself or as a `\u{...}` escape.
+fn above_smt_strings(body: String) -> Bool {
+  body
+  |> string.to_utf_codepoints
+  |> list.map(string.utf_codepoint_to_int)
+  |> above_smt
+}
+
+fn above_smt(cs: List(Int)) -> Bool {
+  case cs {
+    [] -> False
+    // `\u{`
+    [0x5C, 0x75, 0x7B, ..rest] -> {
+      let #(digits, rest) = list.split_while(rest, fn(c) { c != 0x7D })
+      list.fold(digits, 0, fn(n, c) { n * 16 + hex_digit(c) }) > 0x2FFFF
+      || above_smt(rest)
+    }
+    [0x5C, _, ..rest] -> above_smt(rest)
+    [c, ..rest] -> c > 0x2FFFF || above_smt(rest)
+  }
+}
+
+fn hex_digit(c: Int) -> Int {
+  case c {
+    _ if c >= 0x61 -> c - 0x61 + 10
+    _ if c >= 0x41 -> c - 0x41 + 10
+    _ -> c - 0x30
+  }
+}
+
 /// `hint` is the type the context wants; only a lambda uses it, to type its
 /// parameters before its body.
 fn expr(cx: Cx, st: St, e: g.Expression, hint: Option(Ty)) -> R(Expr) {
@@ -1014,7 +1048,11 @@ fn expr(cx: Cx, st: St, e: g.Expression, hint: Option(Ty)) -> R(Expr) {
   case e {
     g.Int(span, text) -> Ok(#(node(cx, span, int_ty, ir.IntLit(text)), st))
     g.String(span, text) ->
-      Ok(#(node(cx, span, str_ty, ir.StrLit("\"" <> text <> "\"")), st))
+      case above_smt_strings(text) {
+        True -> restrict(HighCodePoint, span, high_code_point)
+        False ->
+          Ok(#(node(cx, span, str_ty, ir.StrLit("\"" <> text <> "\"")), st))
+      }
     g.Float(span, _) ->
       restrict(Float, span, "Float: SMT reals are not IEEE floats; use Int")
     g.Panic(span, _) ->
@@ -2116,10 +2154,14 @@ fn pattern(
       use st <- result.map(expect(cx, st, span, int_ty, t))
       #(#(pat(span, ir.PInt(text)), []), st)
     }
-    g.PatternString(span, text) -> {
-      use st <- result.map(expect(cx, st, span, str_ty, t))
-      #(#(pat(span, ir.PStr("\"" <> text <> "\"")), []), st)
-    }
+    g.PatternString(span, text) ->
+      case above_smt_strings(text) {
+        True -> restrict(HighCodePoint, span, high_code_point)
+        False -> {
+          use st <- result.map(expect(cx, st, span, str_ty, t))
+          #(#(pat(span, ir.PStr("\"" <> text <> "\"")), []), st)
+        }
+      }
     g.PatternFloat(span, _) -> restrict(Float, span, "Float pattern: use Int")
     g.PatternDiscard(span, name) ->
       Ok(#(#(pat(span, ir.PDiscard("_" <> name)), []), st))

@@ -24,6 +24,7 @@ pub type Usage {
 
 pub type Restricted {
   Float
+  HighCodePoint
   BitArray
   Panic
   Todo
@@ -52,6 +53,7 @@ pub type Restricted {
 /// Every Restricted kind.
 pub const restricted = [
   Float,
+  HighCodePoint,
   BitArray,
   Panic,
   Todo,
@@ -86,6 +88,7 @@ pub fn name(kind: Kind) -> String {
     Usage(Arguments) -> "Usage.arguments"
     Usage(System) -> "Usage.system"
     Restricted(Float) -> "Restricted.float"
+    Restricted(HighCodePoint) -> "Restricted.highCodePoint"
     Restricted(BitArray) -> "Restricted.bitArray"
     Restricted(Panic) -> "Restricted.panic"
     Restricted(Todo) -> "Restricted.todo"
@@ -134,6 +137,7 @@ fn outcome(kind: Kind) -> #(Int, Int) {
     Usage(Arguments) -> #(3, 3)
     Usage(System) -> #(3, 3)
     Restricted(Float) -> #(2, 1)
+    Restricted(HighCodePoint) -> #(2, 1)
     Restricted(BitArray) -> #(2, 1)
     Restricted(Panic) -> #(2, 1)
     Restricted(Todo) -> #(2, 1)

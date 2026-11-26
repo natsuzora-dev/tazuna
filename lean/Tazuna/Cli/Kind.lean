@@ -248,12 +248,13 @@ theorem mem_all (k : Kind) : k ∈ all := by
   | _ => simp [all]
 
 /-- Whether test/e2e has a case of the kind. A Restricted kind has its unit test in gleam/test/convert_test.gleam
-instead, one per kind of the launcher's generated table; a converter bug has no input that reaches it, and a solver
-past the wall clock none that reaches it on every machine. -/
+instead, one per kind of the launcher's generated table; a converter bug has no input that reaches it, a solver
+past the wall clock none that reaches it on every machine, and a string literal above U+2FFFF is
+`Restricted.highCodePoint` before any encoder sees it. -/
 def e2e : Kind → Bool
-  | restricted _ | internal .convert | internal .engine | undecided .timeout => false
+  | restricted _ | internal .convert | internal .engine | undecided .timeout | undecided .unencodableString => false
   | internal .invalidIr | usage _ | illegal _ | checkPassed | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
-  | generate _ | undecided .unknown | undecided .limit | undecided .unencodableString | undecided .upToRenaming
+  | generate _ | undecided .unknown | undecided .limit | undecided .upToRenaming
   | explain => true
 
 /-- The outcome a line of the kind gives its command; the command exits with its worst line's (`Exit.max`). -/
