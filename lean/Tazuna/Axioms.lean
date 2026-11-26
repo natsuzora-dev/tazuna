@@ -114,6 +114,8 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.embedState_ofService, ``Tazuna.Smt.wf_ofService,
     -- In each service's layout, the step encoding meets no layout gap: refusals are the spec's, never the builder's.
     ``Tazuna.Smt.encodeStep_ofService,
+    -- Nor does a response's goal on an unrolled run, so prove never reads a response's refusal as an engine bug.
+    ``Tazuna.Smt.respGoalE_ofService,
     -- T4: where every input kind's questions about the rules named n are unsat, and its bound question is unsat or
     -- the step fits the slots (Prove.withinBounds), no step within the slots of a run from an initial state whose
     -- invariants hold faults naming n.

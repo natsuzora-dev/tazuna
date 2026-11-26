@@ -411,14 +411,16 @@ def Fun.uses {t : Ty} (f : Fun t) : Uses :=
 def EffectFun.uses {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Uses :=
   (f.usedSites, f.body.uses handlesC f.defs, f.body.uses sendsC f.defs)
 
-/-- What each function a step of the service runs uses. A site such a function uses (a pending request's
-`on_answer`, an own command's) uses no more (`Expr.uses_closed`), so these are all the codes a step meets. -/
+/-- What each function a step of the service runs, and each response function a run's goal applies, uses. A site such
+a function uses (a pending request's `on_answer`, an own command's) uses no more (`Expr.uses_closed`), so these are
+all the codes a step or a response goal meets. -/
 def rootUses (v : ServiceV) : List Uses :=
   [v.apply.uses, v.invariants.uses] ++
     v.commands.flatMap (fun x => [x.accepts.uses, x.decide.uses, x.ensures.uses]) ++
     v.queries.flatMap (fun q => [q.accepts.uses, q.resolve.uses]) ++
     v.machines.flatMap (fun m => [m.instances.uses, m.on.uses, m.after.uses, m.invariants.uses, m.effect.uses]) ++
-    v.reactions.map (·.react.uses) ++ v.subscribes.map (·.wrap.uses)
+    v.reactions.map (·.react.uses) ++ v.subscribes.map (·.wrap.uses) ++
+    v.responses.flatMap (fun r => [r.after.uses, r.then_.uses])
 
 /-- The handles of `H` a send can make. -/
 def SendSite.handlesIn (w : SendSite) (H : List HandleSite) : List HandleSite :=

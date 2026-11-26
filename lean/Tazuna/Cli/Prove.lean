@@ -459,8 +459,8 @@ variable (solver : Solver) (cache : System.FilePath) (c : CheckedSpec) (v : Serv
 
 /-- The response's search over the depths 1, 2, ... (`ds`), stopping at the first model, which is played back in Lean:
 its run must have timely clock lines and violate the response (`response_sound`). A refused encoding of the run, of
-the goal, or of an input kind (which the script then lacks) leaves the response undecided unless a model is found. An
-error is an engine bug. -/
+the goal, or of an input kind (which the script then lacks) leaves the response undecided unless a model is found; the
+goal's refusal is never a layout gap (`respGoalE_ofService`). An error is an engine bug. -/
 def searchResponse (ds : List (Depth v senv.nT)) (resp : ResponseV v.event) : IO (Except String RespResult) := do
   if hc : v.caller.isData = false then return .error "the caller type is no data" else
   have hc : v.caller.isData = true := by simpa using hc

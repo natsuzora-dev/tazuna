@@ -1,4 +1,5 @@
 import Tazuna.Smt.GenGoal
+import Tazuna.Smt.StepNoGap
 import Tazuna.Semantics.Response
 
 /-! A bounded response's goal on an unrolled run: the run violates the response (`respGoal`). Per step it reads the
@@ -472,5 +473,62 @@ theorem response_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {M 
   exact ⟨xs, unrollRun_decode _ _ _ hrun, ht, hv⟩
 
 end
+
+/-! No layout gap in a response's goal: the service's layout holds every type and kind the goal's codes need, since
+the response's functions are among the functions the layout is built from (`rootUses`), so a refusal is the spec's,
+never the builder's, and prove never reads one as an engine bug. -/
+
+section
+variable {L : Layout} {P : List AnySite} {ds : List (String × DeclaredV)} {H : List HandleSite} {v : ServiceV} {n : Nat}
+
+theorem predT_sound {e : Ty} {f : Code (Ty.fn [e] Ty.bool)} (hf : CodeOk L P ds H _ f) (he : Avail L e) (ev : Term) :
+    Sound (fun _ => True) (predT f ev) :=
+  sound_bind (ofDataE_sound (P := P) (ds := ds) (H := H) ev he) fun _ hec =>
+    sound_mono (apply_sound hf ⟨hec, trivial⟩ avail_bool) fun _ _ => trivial
+
+variable {pred : Term → Except Refusal (Term × Term)} (hp : ∀ ev, Sound (fun _ => True) (pred ev))
+include hp
+
+theorem slotHitsT_sound : (S : List (Slot 1)) → Sound (fun _ => True) (slotHitsT pred S)
+  | [] => trivial
+  | (_, xs) :: S => sound_bind (hp xs[0]) fun _ _ => sound_bind (slotHitsT_sound S) fun _ _ => trivial
+
+theorem kindsHitsT_sound (picks : SymInput v (shapes v) n × EncodedStep v → Term) :
+    (ks : List (SymInput v (shapes v) n × EncodedStep v)) → Sound (fun _ => True) (kindsHitsT pred picks ks)
+  | [] => trivial
+  | k :: ks => by
+    refine sound_bind (p := fun _ => True) ?_ fun _ _ => sound_bind (kindsHitsT_sound picks ks) fun _ _ => trivial
+    unfold kindHitsT
+    split
+    · exact sound_bind (slotHitsT_sound hp _) fun _ _ => trivial
+    · trivial
+
+end
+
+theorem kindsTimelyT_sound {L : Layout} {v : ServiceV} {n : Nat} (hL : SortedLayout L)
+    (hm : ∀ m ∈ v.machines, MachineGot L m) (st : UnrollStep v n) :
+    (ks : List (SymInput v (shapes v) n × EncodedStep v)) → Sound (fun _ => True) (kindsTimelyT L st ks)
+  | [] => trivial
+  | (inp, _) :: ks => by
+    refine sound_bind (p := fun _ => True) ?_ fun _ _ => sound_bind (kindsTimelyT_sound hL hm st ks) fun _ _ => trivial
+    cases inp with
+    | clock time => exact sound_bind (dueAll_sound hL _ hm _ _) fun _ _ => trivial
+    | _ => trivial
+
+/-- In each service's layout, built from a checked spec's program, a response's goal never refuses with a layout gap,
+on any unrolled run: every refusal is the spec's (a limit, a string outside SMT-LIB's). -/
+theorem respGoalE_ofService (c : CheckedSpec) {v : ServiceV} (hv : v ∈ c.spec.services) {resp : ResponseV v.event}
+    (hr : resp ∈ v.responses) {n : Nat} (sts : List (UnrollStep v n)) :
+    Sound (fun _ => True) (respGoalE (Layout.ofService c.program.defs v) v resp sts) := by
+  have h := serviceGot_ofService hv
+  have chk := c.checked v hv
+  have hev := avail_of_got h.event
+  have hm : ∀ m ∈ v.machines, MachineGot _ m := fun m hm => (h.machines m hm).1.1
+  refine sound_bind (Fun.code_ofService c hv _ (chk.reach.responses resp hr).1 (root_response hr).1)
+    fun ⟨fa, _⟩ ha => sound_bind (Fun.code_ofService c hv _ (chk.reach.responses resp hr).2 (root_response hr).2)
+    fun ⟨fq, _⟩ hq => sound_bind (sound_mapM sts fun st _ => ?_) fun _ _ => trivial
+  exact sound_bind (kindsHitsT_sound (predT_sound ha hev) _ _) fun _ _ =>
+    sound_bind (kindsHitsT_sound (predT_sound hq hev) _ _) fun _ _ =>
+    sound_bind (kindsTimelyT_sound h.sorted hm st _) fun _ _ => trivial
 
 end Tazuna.Smt

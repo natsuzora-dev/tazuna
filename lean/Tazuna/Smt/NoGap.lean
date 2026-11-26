@@ -2528,7 +2528,7 @@ theorem rootUses_form {v : ServiceV} : ∀ r ∈ rootUses v, UsesForm r := by
   simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
     or_assoc] at hr
   rcases hr with rfl | rfl | ⟨_, -, rfl | rfl | rfl⟩ | ⟨_, -, rfl | rfl⟩ | ⟨_, -, rfl | rfl | rfl | rfl | rfl⟩ |
-    ⟨_, -, rfl⟩ | ⟨_, -, rfl⟩ <;> exact ⟨_, _, _, _, _, rfl⟩
+    ⟨_, -, rfl⟩ | ⟨_, -, rfl⟩ | ⟨_, -, rfl | rfl⟩ <;> exact ⟨_, _, _, _, _, rfl⟩
 
 section
 variable {v : ServiceV}
@@ -2565,7 +2565,14 @@ theorem root_reaction {x : ReactionV v.records v.event} (hx : x ∈ v.reactions)
 theorem root_subscribe {x : SubscriptionV v.event} (hx : x ∈ v.subscribes) : x.wrap.uses ∈ rootUses v := by
   simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
     or_assoc]
-  exact .inr (.inr (.inr (.inr (.inr (.inr ⟨x, hx, rfl⟩)))))
+  exact .inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨x, hx, rfl⟩))))))
+
+theorem root_response {r : ResponseV v.event} (hr : r ∈ v.responses) :
+    r.after.uses ∈ rootUses v ∧ r.then_.uses ∈ rootUses v := by
+  simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
+    or_assoc]
+  exact ⟨.inr (.inr (.inr (.inr (.inr (.inr (.inr ⟨r, hr, .inl rfl⟩)))))),
+    .inr (.inr (.inr (.inr (.inr (.inr (.inr ⟨r, hr, .inr rfl⟩))))))⟩
 
 end
 

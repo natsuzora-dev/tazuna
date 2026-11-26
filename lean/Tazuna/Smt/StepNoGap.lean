@@ -1150,14 +1150,14 @@ theorem EffectFun.uses_sub {ps : List Ty} {r : Ty} {f : EffectFun ps r} (hf : f.
       fun h hm => handleOk_of_named hv hm (c.handles h hm)⟩ _ hf
   exact (usesOk_of_defsOk h.2.2.2.2 h.2.2.1 h.2.2.2.1).2.1
 
-/-- What the step's functions use is the program's. -/
+/-- What the step's and the response goals' functions use is the program's. -/
 theorem rootUses_sub : ∀ r ∈ rootUses v, ∀ s ∈ r.1, s ∈ c.P := by
   have chk := c.checked v hv
   intro r hr
   simp only [rootUses, List.mem_append, List.mem_cons, List.mem_flatMap, List.mem_map, List.not_mem_nil, or_false,
     or_assoc] at hr
   rcases hr with rfl | rfl | ⟨x, hx, rfl | rfl | rfl⟩ | ⟨q, hq, rfl | rfl⟩ | ⟨m, hm, rfl | rfl | rfl | rfl | rfl⟩ |
-    ⟨x, hx, rfl⟩ | ⟨x, hx, rfl⟩
+    ⟨x, hx, rfl⟩ | ⟨x, hx, rfl⟩ | ⟨x, hx, rfl | rfl⟩
   · exact Fun.uses_sub hv chk.reach.apply
   · exact Fun.uses_sub hv chk.reach.invariants
   · exact Fun.uses_sub hv (chk.reach.commands x hx).accepts
@@ -1172,6 +1172,8 @@ theorem rootUses_sub : ∀ r ∈ rootUses v, ∀ s ∈ r.1, s ∈ c.P := by
   · exact EffectFun.uses_sub hv (chk.reach.machines m hm).effect.site
   · exact EffectFun.uses_sub hv (chk.reach.reactions x hx).site
   · exact Fun.uses_sub hv (chk.reach.subscribes x hx)
+  · exact Fun.uses_sub hv (chk.reach.responses x hx).1
+  · exact Fun.uses_sub hv (chk.reach.responses x hx).2
 
 /-- A site of the program at an own kind's `on_answer` is one a function of the step uses: the kind pairs a handle with
 a site that function uses, and the program's sites are unique. -/

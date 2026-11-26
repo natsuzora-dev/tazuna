@@ -89,6 +89,7 @@ structure ServiceV.Reach (v : ServiceV) : Prop where
   commands : ∀ x ∈ v.commands, x.Reach P
   queries : ∀ x ∈ v.queries, x.Reach P
   subscribes : ∀ x ∈ v.subscribes, x.wrap.asSite ∈ P
+  responses : ∀ r ∈ v.responses, r.after.asSite ∈ P ∧ r.then_.asSite ∈ P
 
 def Ty.listItems {t : Ty} (xs : (Ty.list t).den) : List t.den := xs
 def Ty.bagItems {t : Ty} (xs : (Ty.bag t).den) : List t.den := xs
@@ -114,6 +115,7 @@ def Reach : (t : Ty) → t.den → Prop
   | .dsl .query [_, _, _, _], x => QueryV.Reach P x.1
   | .dsl .declared _, d => DeclaredV.Reach P d
   | .dsl .subscription [_], x => (x : SubscriptionV _).wrap.asSite ∈ P
+  | .dsl .response [_], r => (r : ResponseV _).after.asSite ∈ P ∧ r.then_.asSite ∈ P
   | .dsl .machine [_, _], m => MachineV.Reach P E m
   | .dsl .reaction [_, _], x => ReactionV.Reach P E x
   | .dsl .service _, v => ServiceV.Reach P E v
@@ -358,6 +360,9 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
   case reaction =>
     rintro ⟨name, react, ⟨⟩⟩ ⟨-, hr, -⟩
     exact hr
+  case response =>
+    rintro ⟨name, after, then_, within, ⟨⟩⟩ ⟨-, ha, ht, -⟩
+    exact ⟨ha, ht⟩
   case command =>
     rintro ⟨name, callers, accepts, decide, ensures, ⟨⟩⟩ ⟨-, -, ha, hd, he, -⟩
     exact ⟨ha, hd, he⟩
@@ -371,8 +376,8 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
     rintro ⟨name, wrap, ⟨⟩⟩ ⟨-, hw, -⟩
     exact hw
   case service =>
-    rintro ⟨name, init, apply, subs, decl, ms, xs, inv, resp, bnds, scs, ⟨⟩⟩ ⟨-, -, ha, hs, hd, hm, hx, hi, -⟩
-    refine ⟨hm, hx, ha, hi, fun x hx' => ?_, fun x hx' => ?_, hs⟩
+    rintro ⟨name, init, apply, subs, decl, ms, xs, inv, resp, bnds, scs, ⟨⟩⟩ ⟨-, -, ha, hs, hd, hm, hx, hi, hr, -⟩
+    refine ⟨hm, hx, ha, hi, fun x hx' => ?_, fun x hx' => ?_, hs, hr⟩
     · obtain ⟨d, hdm, hdx⟩ := List.mem_filterMap.1 hx'
       have hdr := hd d hdm
       cases d with
@@ -397,7 +402,7 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
     rintro ⟨services, externals, ⟨⟩⟩ ⟨hs, -, -⟩ v hv
     obtain ⟨w, hw, rfl⟩ := List.mem_map.1 hv
     have h : ServiceV.Reach P E w := hs w hw
-    refine ⟨h.machines, h.reactions, h.apply, h.invariants, h.commands, h.queries, fun x hx => ?_⟩
+    refine ⟨h.machines, h.reactions, h.apply, h.invariants, h.commands, h.queries, fun x hx => ?_, h.responses⟩
     obtain ⟨y, hy, rfl⟩ := List.mem_map.1 hx
     exact h.subscribes y hy
   case externalQuery =>
