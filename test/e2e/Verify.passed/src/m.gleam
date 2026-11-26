@@ -1,14 +1,15 @@
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import tazuna.{type Ctx, type Id, type QueryCtx}
 import tazuna/bag
 
 pub type Records {
-  Records(total: Int)
+  Records(total: Int, first: Option(Id))
 }
 
 pub type Event {
   Added(amount: Int)
   Tagged(id: Id)
+  Made(id: Id)
   Pinged
 }
 
@@ -31,9 +32,10 @@ fn send() -> tazuna.ExternalCommand(Int, Nil, Nil) {
 }
 
 fn apply(r: Records, e: Event) -> Records {
-  case e {
-    Added(n) -> Records(total: r.total + n)
-    Tagged(_) | Pinged -> r
+  case e, r.first {
+    Added(n), _ -> Records(..r, total: r.total + n)
+    Made(id), None -> Records(..r, first: Some(id))
+    Made(_), Some(_) | Tagged(_), _ | Pinged, _ -> r
   }
 }
 
@@ -48,6 +50,29 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, Rejection) {
     },
     ensures: fn(c: Ctx(Records, Int, Caller), r: Records) {
       [#("grows", r.total > c.records.total)]
+    },
+  )
+}
+
+fn pair() -> tazuna.Command(Records, Event, Caller, Nil, Rejection) {
+  tazuna.command(
+    name: "pair",
+    callers: [User],
+    accepts: fn(_n) { [] },
+    decide: fn(c: Ctx(Records, Nil, Caller)) {
+      Ok([Made(tazuna.fresh(c.fresh, 0)), Made(tazuna.fresh(c.fresh, 1))])
+    },
+    ensures: fn(_c: Ctx(Records, Nil, Caller), _r: Records) { [] },
+  )
+}
+
+fn is_first() -> tazuna.Query(Records, Caller, Id, Bool) {
+  tazuna.query(
+    name: "is_first",
+    callers: [User],
+    accepts: fn(_n) { [] },
+    resolve: fn(c: QueryCtx(Records, Id, Caller)) {
+      c.records.first == Some(c.input)
     },
   )
 }
@@ -108,10 +133,15 @@ fn watch() -> tazuna.Machine(Records, Event) {
 fn counter() -> tazuna.Service {
   tazuna.service(
     name: "counter",
-    init: Records(total: 0),
+    init: Records(total: 0, first: None),
     apply: apply,
     subscribes: [],
-    declares: [tazuna.declare_command(add()), tazuna.declare_query(total())],
+    declares: [
+      tazuna.declare_command(add()),
+      tazuna.declare_query(total()),
+      tazuna.declare_command(pair()),
+      tazuna.declare_query(is_first()),
+    ],
     machines: [watch()],
     reactions: [],
     invariants: fn(r: Records) { [#("under 50", r.total < 50)] },

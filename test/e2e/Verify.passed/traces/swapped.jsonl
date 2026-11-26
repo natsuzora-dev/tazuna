@@ -1,0 +1,7 @@
+{"service":"counter","trace":1}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":null,"name":"pair","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"1"}
+{"out":"event","time":0,"value":{"id":"b","tag":"Made"}}
+{"out":"event","time":0,"value":{"id":"a","tag":"Made"}}
+{"caller":{"tag":"User"},"id":"2","in":"request","input":"a","name":"is_first","time":0}
+{"out":"answer","outcome":"answered","output":true,"time":0,"to":"2"}

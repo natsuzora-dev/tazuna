@@ -87,6 +87,7 @@ def verify (root dir path : String) : IO UInt32 := do
     let files := (entries.toList.map (·.path)).filter (·.extension == some "jsonl") |>.mergeSort
       fun a b => a.toString ≤ b.toString
     let mut ok := true
+    let mut undecided := false
     for file in files do
       let at_ := ("trace", Json.str file.toString)
       let text ← IO.FS.readFile file
@@ -107,6 +108,11 @@ def verify (root dir path : String) : IO UInt32 := do
         | .fault n f =>
           printLine (.fault f.kind) ([at_, ("line", Json.num n)] ++ faultFields f)
           ok := false
-    return if ok then 0 else 1
+        | .limit n =>
+          let why := s!"verify made {tryCap} tries to bind the trace's names to the spec's ids, and no binding read \
+            every window"
+          printLine (.undecided .limit) [at_, ("line", Json.num n), ("limit", Json.str why)]
+          undecided := true
+    return if !ok then 1 else if undecided then 2 else 0
 
 end Tazuna.Cli

@@ -90,6 +90,8 @@ elab "#check_tazuna_reach" : command => do
     -- The trace writer's names: a fresh id is never called by an outside id's name the run carries, and an outside id
     -- the writer was told of always has its own name.
     ``Tazuna.Trace.Names.bind_ok, ``Tazuna.Trace.Names.ok_avoid,
+    -- verify, unless out of tries, passes a trace exactly when one bijection of ids reads every window as the spec's.
+    ``Tazuna.Trace.replay_iff,
     -- A counterexample's `after` is the state the step reaches before its invariant check.
     ``Tazuna.Ir.step_settled,
     -- generate's targets, from the checked IR's rule names, miss no class of out line a step can show.

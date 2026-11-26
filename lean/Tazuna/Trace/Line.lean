@@ -17,7 +17,12 @@ inductive Answer where
   | answered (output : Wire)
   | rejected (rejection : Wire)
   | invalid (rules : List String)
-deriving Inhabited
+deriving Inhabited, DecidableEq
+
+instance {ε α : Type} [DecidableEq ε] [DecidableEq α] : DecidableEq (Except ε α)
+  | .ok a, .ok b => if h : a = b then isTrue (h ▸ rfl) else isFalse fun e => by cases e; exact h rfl
+  | .error a, .error b => if h : a = b then isTrue (h ▸ rfl) else isFalse fun e => by cases e; exact h rfl
+  | .ok _, .error _ | .error _, .ok _ => isFalse nofun
 
 inductive Line where
   | clock (time : Int)
@@ -27,7 +32,7 @@ inductive Line where
   | answered (time : Int) (to : String) (answer : Answer)
   | applied (time : Int) (value : Wire)
   | sent (time : Int) (id external name : String) (input : Wire)
-deriving Inhabited
+deriving Inhabited, DecidableEq
 
 /-- Whether the line is an input, which opens the window of outputs that follow it. -/
 def Line.isIn : Line → Bool

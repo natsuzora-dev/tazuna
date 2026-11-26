@@ -3,7 +3,9 @@ import Tazuna.Trace.Run
 /-! Replaying a trace against the spec. Each in line runs as the spec's input; the out lines up to the next in line
 form its window, which must equal the spec's out lines as a multiset. An implementation names its own ids and wire
 ids: each binds to the spec's at its first appearance in an out line, and the binding stays one to one. An id an in
-line names before any out line showed it is an id from outside the service, called by that name. -/
+line names before any out line showed it is an id from outside the service, called by that name. A window can bind
+its new names in several ways, as when two alike events each show a new id; a later window may tell them apart, so
+replay tries every way, depth first (`replay_iff`). -/
 
 namespace Tazuna.Trace
 
@@ -40,13 +42,49 @@ def seqMatch {α : Type} (f : α → Wire → Bind → List Bind) : List α → 
   | x :: xs, w :: ws, b => (f x w b).flatMap (seqMatch f xs ws)
   | _, _, _ => []
 
-/-- Every way to match the values with the written items in some order: a multiset. -/
-def bagMatch {α β : Type} (f : α → β → Bind → List Bind) : List α → List β → Bind → List Bind
+/-- `xs` match `ys` pair by pair in order, each pair extending the binding: `b` grows to `b'`. -/
+inductive Chain {α β : Type} (f : α → β → Bind → List Bind) : Bind → List α → List β → Bind → Prop
+  | nil (b : Bind) : Chain f b [] [] b
+  | cons {b b₁ b' : Bind} {x : α} {y : β} {xs : List α} {ys : List β} :
+    b₁ ∈ f x y b → Chain f b₁ xs ys b' → Chain f b (x :: xs) (y :: ys) b'
+
+/-- Every way to match the values with the written items in some order: a multiset. Equal items are tried once, so
+`k` equal lines cost one try, not `k!`. -/
+def bagMatch {α β : Type} [DecidableEq β] (f : α → β → Bind → List Bind) : List α → List β → Bind → List Bind
   | [], [], b => [b]
-  | x :: xs, ws, b => (List.range ws.length).flatMap fun i => match ws[i]? with
-    | some w => (f x w b).flatMap (bagMatch f xs (ws.eraseIdx i))
-    | none => []
+  | x :: xs, ws, b => ws.eraseDups.flatMap fun w => (f x w b).flatMap (bagMatch f xs (ws.erase w))
   | _, _, _ => []
+
+/-- How many matches of one value with one item `bagMatch` makes, counted from `acc` and given up once past `cap`:
+the work of the window before its bindings are built, so a window with too many ways to bind costs no more than
+`cap`. -/
+def bagCost {α β : Type} [DecidableEq β] (f : α → β → Bind → List Bind) (cap : Nat) :
+    List α → List β → Bind → Nat → Nat
+  | x :: xs, ws, b, acc => ws.eraseDups.foldl (fun acc w =>
+      (f x w b).foldl (fun acc b₁ => if cap < acc then acc else bagCost f cap xs (ws.erase w) b₁ (acc + 1)) acc) acc
+  | [], _, _, acc => acc
+
+/-- `bagMatch` finds every binding under which the values match the items in some order. -/
+theorem mem_bagMatch {α β : Type} [DecidableEq β] (f : α → β → Bind → List Bind) :
+    (xs : List α) → (ws : List β) → (b b' : Bind) →
+    (b' ∈ bagMatch f xs ws b ↔ ∃ ws', ws'.Perm ws ∧ Chain f b xs ws' b')
+  | [], [], b, b' => by
+    simp only [bagMatch, List.mem_singleton]
+    refine ⟨fun h => ⟨[], .nil, h ▸ .nil _⟩, fun ⟨ws', hp, hc⟩ => ?_⟩
+    cases hc; rfl
+  | [], w :: ws, b, b' => by
+    simp only [bagMatch, List.not_mem_nil, false_iff]
+    rintro ⟨ws', hp, hc⟩
+    cases hc; exact absurd hp.symm.length_eq (by simp)
+  | x :: xs, ws, b, b' => by
+    simp only [bagMatch, List.mem_flatMap, List.mem_eraseDups, mem_bagMatch f xs]
+    constructor
+    · rintro ⟨w, hw, b₁, h₁, ws'', hp, hc⟩
+      exact ⟨w :: ws'', (hp.cons w).trans (List.perm_cons_erase hw).symm, .cons h₁ hc⟩
+    · rintro ⟨_, hp, hc⟩
+      obtain _ | @⟨_, b₁, _, _, w, _, ws'', h₁, hc⟩ := hc
+      have hw : w ∈ ws := hp.mem_iff.1 List.mem_cons_self
+      exact ⟨w, hw, _, h₁, ws'', (hp.trans (List.perm_cons_erase hw)).cons_inv, hc⟩
 
 /-- Whether a Bool's or Nil's wire form is the one written. -/
 def matchLiteral (expected : Option Wire) (w : Wire) (b : Bind) : List Bind :=
@@ -61,9 +99,8 @@ variable (T : List TypeDecl)
 -- A type index past the table has no variants, so no tag matches.
 set_option linter.tazuna.silentDefault false in
 mutual
-/-- Every extension of the binding under which the wire form writes the value. A bag's or table's items are tried in
-the canonical order the trace writer writes them in, so the first binding found for a written trace is the writer's
-own: replay keeps the first and never comes back to another. -/
+/-- Every extension of the binding under which the wire form writes the value; a bag's or table's items match in any
+order. -/
 def matchVal : (t : Ty) → t.den0 → Wire → Bind → List Bind
   | .int, n, .num m, b => if @BEq.beq Int _ n m then [b] else []
   | .str, s, .str s', b => if @BEq.beq String _ s s' then [b] else []
@@ -157,6 +194,24 @@ inductive Verdict where
   | differs (line : Nat) (expected actual : List Wire)
   | invalid (line : Nat) (message : String)
   | fault (line : Nat) (f : Fault)
+  /-- Verify made `tryCap` tries, reaching the in line at `line`, and no binding read every window. -/
+  | limit (line : Nat)
+
+/-- Whether the verdict ends the search: passed, or out of tries. -/
+def Verdict.settled : Verdict → Bool
+  | .passed | .limit _ => true
+  | .differs .. | .invalid .. | .fault .. => false
+
+def Verdict.line : Verdict → Nat
+  | .passed => 0
+  | .differs n .. | .invalid n _ | .fault n _ | .limit n => n
+
+/-- Of two failed bindings, the one that got further, the first on a tie. -/
+def Verdict.further (v v' : Verdict) : Verdict := if v.line < v'.line then v' else v
+
+/-- How many tries verify makes for a trace before it answers Undecided.limit (`readFrom`). A window of `k` alike
+lines that each show a new id has `k!` bindings. -/
+def tryCap : Nat := 100000
 
 /-- An answer to a request, read from its wire form: a command's output or rejection, a query's output. -/
 def decAnswer (b : Bind) (o : Ty) : (rj : Option Ty) → Except Wire Wire → Option (answerTy o rj).den0
@@ -199,29 +254,188 @@ def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option 
     | none => .error s!"the event does not read as {src}.{name}'s type"
   | _ => .error "an out line where an in line belongs"
 
+/-- The window an in line opens: the out lines up to the next in line. -/
+def window (more : List (Nat × Line)) : List Line := (more.takeWhile (!·.2.isIn)).map (·.2)
+
+/-- The lines after the window. -/
+def afterWindow (more : List (Nat × Line)) : List (Nat × Line) := more.dropWhile (!·.2.isIn)
+
+/-- What the spec steps to from `s` on the in line `l`, read under `b`: the result, the binding with the line's
+outside ids named, and the out lines it expects; or how the line failed. -/
+def stepIn (s : State v) (b : Bind) (n : Nat) (l : Line) : Except Verdict (Result v × Bind × List (Expect v)) :=
+  match readIn T v s b l with
+  | .error m => .error (.invalid n m)
+  | .ok (input, answerTo, ids) =>
+    let r := step T v s input
+    match r.outcome with
+    | .fault f => .error (.fault n f)
+    | _ => .ok (r, b.outside ids, expects v answerTo r)
+
+/-- The trace reads as the spec from `s` under `b`: each in line reads as an input under the binding so far, its step
+does not fault, and its window's out lines, in some order, are the spec's out lines, each written under a binding that
+extends the one so far one to one. The bindings grow line by line into one bijection of the spec's ids and wire ids
+with the trace's names. -/
+inductive Reads : State v → Bind → List (Nat × Line) → Prop
+  | nil (s : State v) (b : Bind) : Reads s b []
+  | cons {s : State v} {b b' : Bind} {n : Nat} {l : Line} {more : List (Nat × Line)} {r : Result v}
+    {b₀ : Bind} {es : List (Expect v)} {ls : List Line} :
+    stepIn T v s b n l = .ok (r, b₀, es) → ls.Perm (window more) → Chain (matchExpect T v r.state.now) b₀ es ls b' →
+    Reads r.state b' (afterWindow more) → Reads s b ((n, l) :: more)
+
+theorem afterWindow_length (more : List (Nat × Line)) : (afterWindow more).length ≤ more.length :=
+  (List.dropWhile_suffix _).length_le
+
+mutual
+/-- Reads the lines from `s` under `b`, trying every binding of each window depth first, with `fuel` tries left: the
+verdict and the fuel left. A try matches one line on the way to a window's bindings, or reads the rest under one of
+them. -/
+def readFrom (fuel : Nat) (s : State v) (b : Bind) : List (Nat × Line) → Verdict × Nat
+  | [] => (.passed, fuel)
+  | (n, l) :: more =>
+    match stepIn T v s b n l with
+    | .error e => (e, fuel)
+    | .ok (r, b₀, es) =>
+      let cost := bagCost (matchExpect T v r.state.now) fuel es (window more) b₀ 0
+      if fuel < cost then (.limit n, 0) else
+      match bagMatch (matchExpect T v r.state.now) es (window more) b₀ with
+      | [] => (.differs n ((es.filterMap (·.toLine T v r.state.now b₀)).map Line.toWire)
+          ((window more).map Line.toWire), fuel - cost)
+      | c :: cs => readEach (fuel - cost) n r.state (afterWindow more) c cs
+termination_by ls => (ls.length, 0)
+decreasing_by have := afterWindow_length more; simp only [List.length_cons]; exact Prod.Lex.left _ _ (by omega)
+/-- Reads `rest` from `s` under each of the bindings `c :: cs` in turn until one passes or the fuel runs out; when all
+fail, the failure that got furthest. -/
+def readEach (fuel n : Nat) (s : State v) (rest : List (Nat × Line)) (c : Bind) (cs : List Bind) : Verdict × Nat :=
+  if fuel = 0 then (.limit n, 0) else
+  let r₁ := readFrom (fuel - 1) s c rest
+  if r₁.1.settled then r₁ else
+  match cs with
+  | [] => r₁
+  | c' :: cs' =>
+    let r₂ := readEach r₁.2 n s rest c' cs'
+    if r₂.1.settled then r₂ else (r₁.1.further r₂.1, r₂.2)
+termination_by (rest.length, cs.length + 1)
+decreasing_by
+  · exact Prod.Lex.right _ (by omega)
+  · exact Prod.Lex.right _ (by simp)
+end
+
 /-- Replays the lines after the header, each with its line number. -/
-def replay (lines : List (Nat × Line)) : Verdict := Id.run do
-  let mut s := State.init v
-  let mut b : Bind := {}
-  let mut rest := lines
-  while true do
-    match rest with
-    | [] => return .passed
-    | (n, l) :: more =>
-      let window := more.takeWhile (!·.2.isIn)
-      rest := more.drop window.length
-      match readIn T v s b l with
-      | .error m => return .invalid n m
-      | .ok (input, answerTo, ids) =>
-        b := b.outside ids
-        let r := step T v s input
-        if let .fault f := r.outcome then return .fault n f
-        let es := expects v answerTo r
-        let actual := window.map (·.2)
-        match bagMatch (matchExpect T v r.state.now) es actual b with
-        | b' :: _ => b := b'; s := r.state
-        | [] => return .differs n ((es.filterMap (·.toLine T v r.state.now b)).map Line.toWire) (actual.map Line.toWire)
-  return .passed
+def replay (lines : List (Nat × Line)) : Verdict := (readFrom T v tryCap (State.init v) {} lines).1
+
+theorem further_ne_passed {v₁ v₂ : Verdict} (h₁ : v₁ ≠ .passed) (h₂ : v₂ ≠ .passed) : v₁.further v₂ ≠ .passed := by
+  unfold Verdict.further; split <;> assumption
+
+theorem ne_passed_of_not_settled {x : Verdict} (h : x.settled = false) : x ≠ .passed := by
+  rintro rfl; cases h
+
+theorem stepIn_error {s : State v} {b : Bind} {n : Nat} {l : Line} {e : Verdict}
+    (h : stepIn T v s b n l = .error e) : e.settled = false := by
+  unfold stepIn at h
+  split at h
+  · cases h; rfl
+  · dsimp only at h
+    split at h
+    · cases h; rfl
+    · cases h
+
+theorem readEach_sound {n : Nat} {s : State v} {rest : List (Nat × Line)}
+    (ih : ∀ fuel b, (readFrom T v fuel s b rest).1 = .passed → Reads T v s b rest) :
+    (cs : List Bind) → (fuel : Nat) → (c : Bind) → (readEach T v fuel n s rest c cs).1 = .passed →
+      ∃ b ∈ c :: cs, Reads T v s b rest
+  | cs, fuel, c, h => by
+    unfold readEach at h
+    split at h
+    · cases h
+    · dsimp only at h
+      split at h
+      · exact ⟨c, List.mem_cons_self, ih _ _ h⟩
+      · rename_i hs
+        match cs, h with
+        | [], h => exact absurd h (ne_passed_of_not_settled (by simpa using hs))
+        | c' :: cs', h =>
+          dsimp only at h
+          split at h
+          · obtain ⟨b, hb, hr'⟩ := readEach_sound ih cs' _ c' h
+            exact ⟨b, List.mem_cons_of_mem _ hb, hr'⟩
+          · rename_i hs₂
+            exact absurd h (further_ne_passed (ne_passed_of_not_settled (by simpa using hs))
+              (ne_passed_of_not_settled (by simpa using hs₂)))
+
+/-- A passed verdict reads the trace as the spec. -/
+theorem readFrom_sound : (lines : List (Nat × Line)) → (fuel : Nat) → (s : State v) → (b : Bind) →
+    (readFrom T v fuel s b lines).1 = .passed → Reads T v s b lines
+  | [], _, s, b, _ => .nil s b
+  | (n, l) :: more, fuel, s, b, h => by
+    unfold readFrom at h
+    split at h
+    · rename_i e he
+      exact absurd (stepIn_error T v he) (by simp only at h; subst h; simp [Verdict.settled])
+    · rename_i r b₀ es hstep
+      dsimp only at h
+      split at h
+      · cases h
+      split at h
+      · cases h
+      · rename_i c cs hcs
+        have ih : ∀ fuel b, (readFrom T v fuel r.state b (afterWindow more)).1 = .passed →
+            Reads T v r.state b (afterWindow more) := fun fuel b h =>
+          have := afterWindow_length more
+          readFrom_sound (afterWindow more) fuel r.state b h
+        obtain ⟨b', hb', hreads⟩ := readEach_sound T v ih cs _ c h
+        rw [← hcs, mem_bagMatch] at hb'
+        obtain ⟨ls, hp, hc⟩ := hb'
+        exact .cons hstep hp hc hreads
+termination_by lines => lines.length
+
+theorem readEach_complete {n : Nat} {s : State v} {rest : List (Nat × Line)} {b : Bind}
+    (ih : ∀ fuel, (readFrom T v fuel s b rest).1.settled = true) :
+    (cs : List Bind) → (fuel : Nat) → (c : Bind) → b ∈ c :: cs → (readEach T v fuel n s rest c cs).1.settled = true
+  | cs, fuel, c, hb => by
+    unfold readEach
+    split
+    · rfl
+    · dsimp only
+      split
+      · assumption
+      · rename_i hs
+        have hc : c ≠ b := by rintro rfl; exact hs (ih _)
+        match cs, hb with
+        | [], hb => exact absurd (List.mem_singleton.1 hb).symm hc
+        | c' :: cs', hb =>
+          have hb' : b ∈ c' :: cs' := (List.mem_cons.1 hb).resolve_left (Ne.symm hc)
+          dsimp only
+          have := readEach_complete (n := n) ih cs' (readFrom T v (fuel - 1) s c rest).2 c' hb'
+          simp [this]
+
+/-- A trace that reads as the spec is passed, unless the tries run out first. -/
+theorem readFrom_complete {s : State v} {b : Bind} {lines : List (Nat × Line)} (h : Reads T v s b lines) :
+    ∀ fuel, (readFrom T v fuel s b lines).1.settled = true := by
+  induction h with
+  | nil => intro; simp [readFrom, Verdict.settled]
+  | @cons s b b' n l more r b₀ es ls hstep hp hc _ ih =>
+    intro fuel
+    unfold readFrom
+    rw [hstep]
+    dsimp only
+    have hm : b' ∈ bagMatch (matchExpect T v r.state.now) es (window more) b₀ :=
+      (mem_bagMatch _ _ _ _ _).2 ⟨ls, hp, hc⟩
+    split
+    · rfl
+    split
+    · rename_i hnil; rw [hnil] at hm; cases hm
+    · rename_i c cs hcs; rw [hcs] at hm; exact readEach_complete T v ih cs _ c hm
+
+/-- Verify's oracle comparison: unless it runs out of tries (`tryCap`), it reads a trace as passed exactly
+when some bijection of the spec's ids and wire ids with the trace's names, grown window by window, reads every window
+as the spec's out lines in some order. -/
+theorem replay_iff (lines : List (Nat × Line)) (h : ∀ k, replay T v lines ≠ .limit k) :
+    replay T v lines = .passed ↔ Reads T v (State.init v) {} lines := by
+  refine ⟨readFrom_sound T v lines _ _ _, fun hr => ?_⟩
+  have := readFrom_complete T v hr tryCap
+  unfold replay at h ⊢
+  revert this h
+  cases (readFrom T v tryCap (State.init v) {} lines).1 <;> simp [Verdict.settled]
 
 end
 

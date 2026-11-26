@@ -31,6 +31,44 @@ inductive Wire where
   | obj (kvs : List (String × Wire))
 deriving Inhabited, Repr
 
+-- Lean derives no DecidableEq for a type nested in List.
+mutual
+def Wire.decEq : (a b : Wire) → Decidable (a = b)
+  | .null, .null => isTrue rfl
+  | .bool x, .bool y => if h : x = y then isTrue (h ▸ rfl) else isFalse fun e => by cases e; exact h rfl
+  | .num x, .num y => if h : x = y then isTrue (h ▸ rfl) else isFalse fun e => by cases e; exact h rfl
+  | .str x, .str y => if h : x = y then isTrue (h ▸ rfl) else isFalse fun e => by cases e; exact h rfl
+  | .arr xs, .arr ys => match Wire.decEqs xs ys with
+    | isTrue h => isTrue (h ▸ rfl)
+    | isFalse h => isFalse fun e => by cases e; exact h rfl
+  | .obj xs, .obj ys => match Wire.decEqKvs xs ys with
+    | isTrue h => isTrue (h ▸ rfl)
+    | isFalse h => isFalse fun e => by cases e; exact h rfl
+  | .null, .bool _ | .null, .num _ | .null, .str _ | .null, .arr _ | .null, .obj _ => isFalse nofun
+  | .bool _, .null | .bool _, .num _ | .bool _, .str _ | .bool _, .arr _ | .bool _, .obj _ => isFalse nofun
+  | .num _, .null | .num _, .bool _ | .num _, .str _ | .num _, .arr _ | .num _, .obj _ => isFalse nofun
+  | .str _, .null | .str _, .bool _ | .str _, .num _ | .str _, .arr _ | .str _, .obj _ => isFalse nofun
+  | .arr _, .null | .arr _, .bool _ | .arr _, .num _ | .arr _, .str _ | .arr _, .obj _ => isFalse nofun
+  | .obj _, .null | .obj _, .bool _ | .obj _, .num _ | .obj _, .str _ | .obj _, .arr _ => isFalse nofun
+def Wire.decEqs : (a b : List Wire) → Decidable (a = b)
+  | [], [] => isTrue rfl
+  | x :: xs, y :: ys => match Wire.decEq x y, Wire.decEqs xs ys with
+    | isTrue h, isTrue h' => isTrue (h ▸ h' ▸ rfl)
+    | isFalse h, _ => isFalse fun e => by cases e; exact h rfl
+    | _, isFalse h => isFalse fun e => by cases e; exact h rfl
+  | [], _ :: _ | _ :: _, [] => isFalse nofun
+def Wire.decEqKvs : (a b : List (String × Wire)) → Decidable (a = b)
+  | [], [] => isTrue rfl
+  | (k, x) :: xs, (k', y) :: ys => if hk : k = k' then match Wire.decEq x y, Wire.decEqKvs xs ys with
+    | isTrue h, isTrue h' => isTrue (hk ▸ h ▸ h' ▸ rfl)
+    | isFalse h, _ => isFalse fun e => by cases e; exact h rfl
+    | _, isFalse h => isFalse fun e => by cases e; exact h rfl
+    else isFalse fun e => by cases e; exact hk rfl
+  | [], _ :: _ | _ :: _, [] => isFalse nofun
+end
+
+instance : DecidableEq Wire := Wire.decEq
+
 -- A field without a label is keyed by its position, as Gleam writes it.
 set_option linter.tazuna.silentDefault false in
 /-- The keys a variant's fields sit under: their labels, or their positions. -/
