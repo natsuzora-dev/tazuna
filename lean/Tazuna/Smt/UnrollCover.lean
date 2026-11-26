@@ -1,4 +1,4 @@
-import Tazuna.Smt.UnrollThm
+import Tazuna.Smt.UnrollDecode
 
 /-! Every run is a model of its unrolled script (`runs_covered`), the converse of `unroll_decode`. A run whose inputs
 fit the slots, are valid, do not fault and whose steps stay within the slots gives a model: each step's selector holds

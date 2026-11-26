@@ -493,8 +493,6 @@ theorem unrollKind_ok {S : SymState v} {sel : Term} {inp : SymInput v (shapes v)
     exact ⟨t, valid, wf, he, hv, need_ok.1 hw, rfl⟩
   all_goals cases h
 
-theorem holds_anyT_mem {ts : List Term} (h : Holds M (anyT ts)) : ∃ t ∈ ts, Holds M t := (holds_anyT ts).1 h
-
 /-- An unrolled run never yields a model whose inputs do not decode: in a model of its assertions whose variables
 hold values of their sorts, the input each step's selector picks decodes. -/
 theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {goal : List (UnrollStep v senv.nT) → Term}
@@ -533,7 +531,7 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {goal : Lis
   let oks := rs.filterMap fun | .ok x => some x | .error _ => none
   have hany : Holds M (anyT (oks.map (·.2.1))) :=
     hA _ (List.mem_append_left _ (has _ (List.mem_append_right _ (List.mem_singleton.2 rfl))))
-  obtain ⟨_, hx, hxe⟩ := holds_anyT_mem hany
+  obtain ⟨_, hx, hxe⟩ := (holds_anyT _).1 hany
   obtain ⟨x, hxo, rfl⟩ := List.mem_map.1 hx
   have hok : ∀ y ∈ oks, ∃ inp ∈ inps, unrollKind L T P v senv S (.var bs) inp = .ok y := fun y hy => by
     obtain ⟨r, hrm, hro⟩ := List.mem_filterMap.1 hy

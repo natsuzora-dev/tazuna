@@ -3789,20 +3789,6 @@ def answeredLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term
       | _ => none)
   | none => .bool false
 
-/-- Whether the last step sends a request. -/
-def sentLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term :=
-  match steps.getLast? with
-  | some st => .lt st.before.nextId st.after.nextId
-  | none => .bool false
-
-/-- Whether the last step is a command from a caller it does not list. -/
-def callerRefusedLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term :=
-  match steps.getLast? with
-  | some st => anyT (st.kinds.filterMap fun k => match k.2.out with
-      | .command o => some (andT (st.picks k) (.not o.callerOk))
-      | _ => none)
-  | none => .bool false
-
 def stateText (T : List TypeDecl) {v : ServiceV} (s : State v) : String := ((Tazuna.Cli.stateWire T s).run' {}).text
 
 /-- The model's run: its inputs decoded, run in Lean from the initial state, and whether each state the model holds
@@ -4126,49 +4112,9 @@ def sizes (budget : Option System.FilePath) : IO UInt32 := do
     unless sizeRows.any (·.1 == name) do IO.println s!"smt-check: the budget of {name} measures no row"; ok := false
   return if ok then 0 else 1
 
-/-- Measures unrolled runs of a loaded spec: for each service, depth from 1 to `kmax` and goal, the script's size
-and the solver's time and answer, and whether a model's run, played back in Lean, faults nowhere and holds the model's
-states. Not part of the check: it informs the choice of depth and search order. -/
-def unrollBench (z3 ir root : String) (kmax : Nat) (timeoutMs : Nat) : IO UInt32 := do
-  match ← Tazuna.Cli.loadSpec root ir with
-  | .error code => return code
-  | .ok c =>
-    let solver : Solver := { path := z3, timeoutMs }
-    IO.println "service\tdepth\tgoal\tKB\tnodes\tms\tanswer\tplayback"
-    for v in c.spec.services do
-      let L := Layout.ofService c.program.defs v
-      let .ok senv := StepEnv.of L (shapes v) | IO.println s!"{v.name}: no step environment"; return 4
-      let goals : List (String × (List (UnrollStep v senv.nT) → Term)) :=
-        [("any", fun _ => tt), ("sent", sentLast), ("answered", answeredLast), ("caller refused", callerRefusedLast)]
-      for d in (List.range kmax).map (· + 1) do
-        for (g, goal) in goals do
-          match unroll L c.T c.P v senv d goal with
-          | .error r => IO.println s!"{v.name}\t{d}\t{g}\trefused {repr r}"
-          | .ok u =>
-            let script := u.ask.script
-            let kb := ((script.text solver.header).map (·.length)).getD 0 / 1024
-            let t0 ← IO.monoMsNow
-            let a ← solver.run script
-            let t1 ← IO.monoMsNow
-            let (answer, pb) := match a with
-              | .sat vs =>
-                let pb := if hc : v.caller.isData = true then
-                    match playback c.T L hc (modelOf vs) u.steps with
-                    | some (rs, same) =>
-                      if rs.any (fun r => match r.outcome with | .fault _ => true | _ => false) then "fault"
-                      else if same then "ok" else "states differ"
-                    | none => "no decode"
-                  else "caller no data"
-                ("sat", pb)
-              | .unsat => ("unsat", "")
-              | .unknown why => (s!"unknown {why}", "")
-            IO.println s!"{v.name}\t{d}\t{g}\t{kb}\t{nodes script}\t{t1 - t0}\t{answer}\t{pb}{if u.refused.isEmpty then "" else s!" ({u.refused.length} kinds refused)"}"
-    return 0
-
 def main (args : List String) : IO UInt32 := do
   match args with
   | ["--sizes"] => sizes none
   | ["--sizes", budget] => sizes (some budget)
   | [z3] => return if ← check z3 then 0 else 1
-  | ["--unroll", z3, ir, root, kmax, ms] => unrollBench z3 ir root kmax.toNat! ms.toNat!
   | _ => IO.eprintln "usage: smt-check <z3 executable> | smt-check --sizes [budget file]"; return 3

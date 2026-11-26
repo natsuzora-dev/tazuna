@@ -862,11 +862,6 @@ theorem finished_events {shs : List (PendingShape v.event)} {fo : FinishOut v} {
     · obtain ⟨_, _, _, evs, _, rfl, -, -, -, -, -, he, -⟩ := hm
       exact ⟨evs, rfl, he⟩
 
-theorem hits_of_answer {rules : RuleNames} {g : GenTarget} {x : Input v} {r : Result v}
-    (h : AnswerHits T v rules g x r) : Hits T v rules g x r := by
-  obtain ⟨c, hc, hcov⟩ := h
-  exact ⟨c, List.mem_append_left _ (List.mem_append_left _ hc), hcov⟩
-
 theorem finished_out {shs : List (PendingShape v.event)} {fo : FinishOut v} {s0 : State v} {a : Step.Acc v}
     {outcome : Outcome} {r : Result v} (hf : Finished M L T shs fo s0 a outcome r) (hno : ∀ f, r.outcome ≠ .fault f) :
     ∃ ps effs, r.out = a.out ++ ps.map Step.Pending.line ∧ NewsRel M L shs v.declared fo.news effs a.state.nextId ∧
@@ -1006,7 +1001,10 @@ theorem kindHitT_sound {rules : RuleNames} {g : GenTarget} {n : Nat} {hc : v.cal
       obtain ⟨p, hpm, rfl, rfl⟩ := requestHitT_sound hN hW hrq
       exact hits_request.2 ⟨p.line, by rw [hout, hao, List.nil_append]; exact List.mem_map_of_mem hpm, rfl, rfl⟩
     · simp [ff, Holds, Term.denote, Val.toBool] at hh
-  | accepted _ | rejected _ _ | invalid _ _ | answered _ => exact hits_of_answer (answerHitT_sound hx hrel hno hh)
+  | accepted _ | rejected _ _ | invalid _ _ | answered _ =>
+    simp only [kindHitT] at hh
+    obtain ⟨c, hc, hcov⟩ := answerHitT_sound hx hrel hno hh
+    exact ⟨c, List.mem_append_left _ (List.mem_append_left _ hc), hcov⟩
 
 end
 

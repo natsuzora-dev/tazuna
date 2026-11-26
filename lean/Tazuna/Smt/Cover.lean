@@ -51,8 +51,9 @@ variable (L : Layout) {v : ServiceV}
 def Within (shs : List (PendingShape v.event)) (s : State v) : Prop :=
   ∃ pv : PendingVal shs, pv.list = s.pending ∧ (embedState L s pv).isSome
 
-/-- The values of an input's terms, in the order of `SymInput.tys`, where they fit the slots. A query has no
-questions and no terms. An answer of a type with no SMT value is none: it has no wire form. -/
+/-- The values of an input's terms in a step question, in the order of `SymInput.tys`, where they fit the slots. A
+query gets no step question, so none of its terms here; an unrolled step, of which a query is a kind, reads its values
+from `unrollVals`. An answer of a type with no SMT value is none: it has no wire form. -/
 def inputVals (hc : v.caller.isData = true) : Input v → Option (List Val)
   | .command i caller input => (embedV L v.caller (Ty.up _ hc caller)).bind fun c =>
     (embedV L _ (Ty.up _ (v.commands.get i).input_data input)).map fun x => [c, x]
