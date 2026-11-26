@@ -8,6 +8,8 @@ import Tazuna.Semantics.NoTimer
 import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Pair
 import Tazuna.Smt.RespGoal
+import Tazuna.Smt.Dead
+import Tazuna.Cli.Generate
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
 question per input kind for the step, one line per question; then each bounded response, searched for a violation by
@@ -100,8 +102,17 @@ inductive Item where
   /-- A question `--only` leaves out: it prints nothing, and its target is not proved. -/
   | skipped (service : String) (target : Target)
 
+/-- A dead-target question family: one of generate's targets and, per input kind whose terms do not rule it out, the
+question whether the kind's step shows a class the target aims at (`showsAsk`). -/
+structure ShowsItem where
+  target : GenTarget
+  asks : List TypedScript
+
 structure ServiceItems where
   items : List Item := []
+  /-- The dead-target questions, empty where an input kind's questions are refused or the initial state breaks an
+  invariant: `unshown_within` rests on every kind's questions and on the initial state's invariants. -/
+  shows : List ShowsItem := []
   /-- The bounds of the service's scope (`scopeBounds`). -/
   scope : List Json := []
   /-- The bounds the service's inputs can go past (`inputBounds`). -/
@@ -302,8 +313,15 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
   let b := stateWidth v
   let mut items : List Item := []
   let mut targets : List Target := []
+  let rules := ruleNamesOf v
+  let goals := (Tazuna.Ir.targets c.T v rules).filter fun g => !g.byQuery v && only (v.name ++ "/" ++ g.text)
+  let mut shows : Option (List (GenTarget × List TypedScript)) :=
+    if (Step.invariants (Step.State.init v)).isEmpty then some (goals.map (·, [])) else none
   for ⟨inp, hinp⟩ in (stepInputs v (shapes v) senv.nT b).attach do
     let step := inp.text
+    shows := match shows, Sound.get (stepAsk L c.T c.P v senv inp) (stepAsk_ofService sv.mem c.T senv inp hinp) with
+      | some acc, .ok ⟨a, _⟩ => some (acc.map fun (g, qs) => (g, qs ++ (showsAsk L c.T rules g a inp).toList))
+      | _, _ => none
     match Sound.get (questions L c.T c.P v senv inp) (questions_ofService sv.mem c.T senv inp hinp) with
     | .error r =>
       match refusedItems c v step none r with
@@ -348,7 +366,14 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
     | r => .ready r
   let steps := (stepInputs v (shapes v) senv.nT b).map (·.text)
   let fits := inputsFit L v && initFits L v
-  return { items := init ++ items, scope := scopeBounds c.T L v, inputScope := inputBounds c.T L v, steps, fits }
+  let dead : List ShowsItem := (shows.getD []).map fun (g, asks) => { target := g, asks }
+  return {
+    items := init ++ items
+    shows := dead
+    scope := scopeBounds c.T L v
+    inputScope := inputBounds c.T L v
+    steps
+    fits }
 
 end
 
@@ -467,6 +492,15 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
         responses := responses.push (v.name, resp.name, scopeBounds c.T L v, r)
     let mut questions : Array Job := #[]
     let mut placed : Array Placed := #[]
+    let mut deads : Array (String × GenTarget × List (IO.Ref (Option (Except String Smt.Answer)))) := #[]
+    for (s, sc) in scopes do
+      for it in sc.shows do
+        let mut refs := []
+        for q in it.asks do
+          let (j, r) ← Job.of (solver.runCached cache q.script)
+          questions := questions.push j
+          refs := refs ++ [r]
+        deads := deads.push (s, it.target, refs)
     for it in items do
       match it with
       | .ready r => placed := placed.push (.ready r)
@@ -511,11 +545,12 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
       return ← internal s!"service {s}, {step}: a step left the slots of a layout with no collection"
     -- A line rests on the states runs reach. They stay within the slots only where no input kind's step leaves them,
     -- every input fits and the initial state does (`run_within`); the initial state's line rests on no input.
-    let past (s step : String) : Option (List Json) :=
-      if step == "init" then none
-      else if left s (· == step) || left s (steps s).contains then some (scope s)
+    let reach (s : String) (here : Bool) : Option (List Json) :=
+      if here || left s (steps s).contains then some (scope s)
       else if fits s then none
       else if (inputScope s).isEmpty then some (scope s) else some (inputScope s)
+    let past (s step : String) : Option (List Json) :=
+      if step == "init" then none else reach s (left s (· == step))
     let mut rlines : List (Kind × List (String × Json)) := []
     for (service, name, scope, r) in responses do
       match ← r.get with
@@ -525,5 +560,19 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     for r in reports do
       if let some (kind, fields) := lineOf unproved past r then printLine kind fields
     for (kind, fields) in rlines do printLine kind fields
+    -- A dead target is a fact, not a verdict: only where every kind's question is unsat (`unshown_within`, at any
+    -- depth `unshown_sound`); a model or no answer says nothing.
+    for (s, g, refs) in deads do
+      let mut dead := true
+      for r in refs do
+        match ← r.get with
+        | some (.ok .unsat) => pure ()
+        | some (.ok _) => dead := false
+        | some (.error m) => return ← internal m
+        | none => return ← internal "a question's job never ran"
+      if dead then
+        let fields := [("service", Json.str s), ("target", Json.str g.text),
+          ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)]
+        printLine (.prove .unreachable) (fields ++ ((reach s false).map fun bs => ("bounds", Json.arr bs.toArray)).toList)
 
 end Tazuna.Cli

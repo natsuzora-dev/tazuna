@@ -52,7 +52,7 @@ Everything a verdict depends on appears in the spec or in the output:
 - A verdict prints what it assumes in `assumes`.
 - An undecided line says why it has no verdict, such as the solver's answer or the limit a search hit.
 - No counterexample within the bounds is a success, `Prove.withinBounds`, as Alloy reports no counterexample within its scope. Otherwise every spec with a growing table would exit 2.
-- `generate` says unreached, never unreachable.
+- `generate` says unreached, never unreachable. `prove` says `Prove.unreachable` only where every input kind's one-step question proves that no reachable step shows the class.
 
 ## Illegal states are unrepresentable
 
@@ -146,7 +146,7 @@ A command exits with the code of its worst line:
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Every line is a success. `Prove.withinBounds` and `Generate.unreached` count. |
+| 0 | Every line is a success. `Prove.withinBounds`, `Prove.unreachable` and `Generate.unreached` count. |
 | 1 | A line is a violation. |
 | 2 | A line is undecided and none is a violation. |
 | 3 | The command did not run as asked, for a usage or system error. The spec is not judged. |

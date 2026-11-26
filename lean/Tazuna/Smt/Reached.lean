@@ -371,7 +371,7 @@ theorem within_step {E : List AnyEffectSite} (chk : Checked P E T v) (senv : Ste
           fun n h => varSorted_of_sorted (hM n h)
       have E := (step_encode chk senv (decode_state hS) hinv hxd ht).2 hcodes hsites (hcase t ht)
       exact within_stepRel chk.embeddable (E.2.1 hcond) hW
-    · rw [h.2.2]; exact hW
+    · rw [h.2.2.1]; exact hW
   · rw [h]; exact hW
 
 /-- Every state a run on valid inputs reaches from the initial state is within the slots, where the initial state is, every input

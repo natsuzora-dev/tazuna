@@ -132,6 +132,11 @@ elab "#check_tazuna_reach" : command => do
     -- initial state whose invariants hold faults naming n. The bound questions keep every reached state within the slots
     -- (`run_within`, by induction over the run).
     ``Tazuna.Smt.proved_sound,
+    -- Dead targets (Prove.unreachable): where every input kind's question whether its step, from a state of the right
+    -- shape whose invariants hold, shows a generate target's class is unsat, no step of a run on valid inputs that
+    -- faults nowhere shows it: within the slots, and at any depth where the bound questions read proved and every
+    -- input and the initial state fit.
+    ``Tazuna.Smt.unshown_within, ``Tazuna.Smt.unshown_sound,
     -- A counterexample is honest: a model of a target question decodes to a state with the step invariant and every
     -- invariant holding, whose step in Lean is the one the terms say.
     ``Tazuna.Smt.cti_sound,

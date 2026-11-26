@@ -33,6 +33,12 @@ inductive Tazuna.ProveKind : Type
   /-- A state and input whose step breaks the target, or for a bounded response a run from the initial state that
   violates it. -/
   | violated
+  /-- No step from a state of the right shape whose invariants hold, of any input kind, shows the class of out line
+  the generate target aims at unless it faults: no run on valid inputs that faults nowhere ever shows it, at any depth
+  where no step goes past the slots and every input and the initial state fit them, else within the slots the line
+  names. A fact about the spec, not a violation: a defensive branch may be meant never to run. A target only a query's
+  answer shows gets no line, nor does a target whose question has a model, which may be a state no run reaches. -/
+  | unreachable
 deriving DecidableEq
 
 /-- What `generate` found for one target. -/
@@ -180,7 +186,7 @@ def TestKind.name : TestKind → String
   | .written => "written"
   | .badStep => "badStep"
 
-def ProveKind.all : List ProveKind := [.proved, .withinBounds, .violated]
+def ProveKind.all : List ProveKind := [.proved, .withinBounds, .violated, .unreachable]
 
 theorem ProveKind.mem_all (k : ProveKind) : k ∈ ProveKind.all := by cases k <;> simp [ProveKind.all]
 
@@ -188,6 +194,7 @@ def ProveKind.name : ProveKind → String
   | .proved => "proved"
   | .withinBounds => "withinBounds"
   | .violated => "violated"
+  | .unreachable => "unreachable"
 
 def GenerateKind.all : List GenerateKind := [.reached, .unreached]
 
@@ -262,7 +269,7 @@ def exit : Kind → Exit
   | test .passed | test .written => .ok
   | test .changed | test .badStep => .violation
   | checkPassed | verifyPassed | explain | version => .ok
-  | prove .proved | prove .withinBounds => .ok
+  | prove .proved | prove .withinBounds | prove .unreachable => .ok
   | prove .violated => .violation
   | generate .reached | generate .unreached => .ok
   | undecided _ => .undecided

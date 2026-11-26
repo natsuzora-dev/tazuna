@@ -2,3 +2,4 @@
 {"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"counter","step":"command add","target":"invariant not negative"}
 {"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"counter","step":"command add","target":"add ensures grows"}
 {"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"counter","step":"clock","target":"invariant not negative"}
+{"assumes":["ids the service made are used only after they appeared on an out line","no step of the run faults"],"kind":"Prove.unreachable","service":"counter","target":"add invalid callers"}

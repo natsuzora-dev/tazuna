@@ -168,6 +168,8 @@ def ProveKind.explanation : ProveKind → Explanation
       `Tazuna.Smt.response_sound],
     questionFields ++ [fromField, state, input, after, outcome, out, inst, records, now, timer, first, second,
       firstThenSecond, secondThenFirst, steps, run, Field.violated, assumes, widened]⟩
+  | .unreachable => ⟨docOf% ProveKind.unreachable, [`Tazuna.Smt.unshown_sound, `Tazuna.Smt.unshown_within],
+    [service, target, assumes, bounds]⟩
 
 def GenerateKind.explanation : GenerateKind → Explanation
   | .reached => ⟨docOf% GenerateKind.reached,

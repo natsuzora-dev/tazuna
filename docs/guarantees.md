@@ -62,6 +62,20 @@ A step line's `assumes` lists `validInputs` and the invariants the induction too
 `cti_sound`, for `Prove.violated` with `"from":"validState"`: the state keeps the step invariant and every invariant, and the step Lean computes from it is the one the solver's terms describe.
 `step_settled`: `after` is the state the step reaches before its invariant check.
 
+## prove: dead targets
+
+For each of `generate`'s targets, `prove` asks per input kind whether a step from a state of the right shape where every invariant holds shows the target's class, the same question as a T4 step line with that goal in place of a broken rule.
+It prints `Prove.unreachable` only where every input kind's question is unsat, and nothing otherwise: a model's state may be one no run reaches.
+A target that only a query's answer shows gets no question, since no step question is about a query.
+Nor does any target of a service whose initial state breaks an invariant or one of whose input kinds is refused.
+
+- `unshown_sound`: where every bound question reads proved and every input and the initial state fit the slots, no step of any run from the initial state, on inputs that satisfy `validInputs`, that faults nowhere shows the class. The line has no `bounds`.
+- `unshown_within`: otherwise, the same for every step within the slots, and the line names the `bounds` as a `Prove.withinBounds` line does.
+
+Both rest on `run_invariants` and `run_supp`: every state such a run reaches has the shape the question assumes, whether or not the invariants were proved.
+The line exits 0, like a compiler warning, because a defensive branch may be meant never to run.
+`Generate.unreached` still has a job: a target whose question has a model, from a state no run reaches, gets no `Prove.unreachable` line, but `generate` can still find no run of at most `steps` inputs to it.
+
 ## prove: order of own steps and timers (T5)
 
 Two kinds of line check that no outcome depends on the order in which the semantics runs own steps and timers ([Concepts](concepts.md#the-spec-writes-every-order)):
@@ -120,8 +134,8 @@ Three assumptions appear in `assumes`, in these words.
 
 | Text in `assumes` | Lines that print it |
 | --- | --- |
-| `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Generate.unreached` |
-| `no step of the run faults` | responses, `Generate.unreached` |
+| `ids the service made are used only after they appeared on an out line` | step lines, pair lines, responses, `Prove.unreachable`, `Generate.unreached` |
+| `no step of the run faults` | responses, `Prove.unreachable`, `Generate.unreached` |
 | `no clock line moves time past a timer that waits` | responses |
 
 The first leaves ids from outside the service unrestricted.
