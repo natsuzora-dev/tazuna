@@ -93,7 +93,7 @@ Such a send stands for every handle or site of its type.
 
 A violated pair or timer line rests on these theorems:
 
-- `pair_violates`: a pair's counterexample in which one order faults or disables the other step, and the other order does not, is honest.
+- `pair_violates`: a pair's counterexample shows that the pair does not commute. Either one order faults or disables the other step and the other order does not, or both orders finish and no renaming of the ids the pair made gives them the same data. Lean searches every such renaming, both counters kept or swapped and each wire id the pair made mapped one to one onto the other order's, so finding none means none exists.
 - `timer_violates`: a timer line's counterexample is a context whose `after` sets a timer before the current time.
 
 A pair can also end undecided:
@@ -170,7 +170,7 @@ Everything between them is proved or checked.
 ## Not guaranteed
 
 - A pair line that reads `Prove.proved` covers every run only where every order of a cascade stays within the slots. `run_within` keeps the states between inputs within them, but no theorem yet keeps the cascade's other orders there.
-- A violated pair line whose two orders both finish with different states rests on Lean's search over renamings of request ids. `pair_violates` does not cover that case.
+- `Undecided.upToRenaming` says the two orders end the same once renamed. That rests on Lean's comparison of their terms under the renaming it found, and no theorem yet says such orders are the same as the oracle sees them. The line is undecided, so no verdict rests on it.
 - `Generate.unreached` does not mean unreachable. A longer run or more slots may reach the target.
 - The `bounds` list over-states lists. Every list type of the layout appears with its longest literal, though a list that only literals build cannot grow.
 - SMT-LIB strings hold code points up to U+2FFFF. A string literal above that is `Undecided.unencodableString`. Lean's model of a string holds any code point, so an unsat answer about inputs whose strings go above U+2FFFF rests on Z3 beyond its string domain.

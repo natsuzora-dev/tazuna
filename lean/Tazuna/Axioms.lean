@@ -143,8 +143,9 @@ elab "#check_tazuna_reach" : command => do
     -- A timer line's counterexample is honest: a model is a context whose timer falls back, so timers do not fire
     -- forward.
     ``Tazuna.Smt.timer_violates,
-    -- A pair line's counterexample whose orders show a disabling or a fault in one order only is honest: the pair does
-    -- not commute. Orders that end differently under every renaming searched are not covered.
+    -- A pair line's counterexample is honest: the pair does not commute. Its orders show a disabling, a fault in one
+    -- order only, or different data under every renaming the search tries, which is every renaming `Same` allows
+    -- (`data_of_same`); a search past its cap is no violation.
     ``Tazuna.Smt.pair_violates,
     -- No unsat answer is free and none is out of reach: `Unsat` asks that the sorts hold values, and the sorts of every
     -- question an encoder builds in a layout whose datatypes have sorts (as `Layout.ofParts`'s, `sorted_ofParts`) do.
