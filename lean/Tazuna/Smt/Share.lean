@@ -30,13 +30,27 @@ set_option linter.tazuna.silentDefault false in
 def Defs.add (D : Defs) (h : UInt64) (t b : Term) : Defs :=
   { entries := D.entries.push (t, b), index := D.index.insert h (D.entries.size :: D.index.getD h []) }
 
+-- A hash with no bucket has no entries.
+set_option linter.tazuna.silentDefault false in
+/-- `Defs.add` taking the definitions apart first, so neither the entries nor the index is still shared with them
+when it is extended and both are extended in place; built from the record's fields, each would be copied. -/
+def Defs.addFast : Defs → UInt64 → Term → Term → Defs
+  | ⟨entries, index⟩, h, t, b =>
+    let n := entries.size
+    let index := index.insert h (n :: index.getD h [])
+    ⟨entries.push (t, b), index⟩
+
+/-- Compiled code adds with `addFast` (`csimp`, as the printer's `print_eq_printFast`). -/
+@[csimp] theorem Defs.add_eq_addFast : @Defs.add = @Defs.addFast := by
+  funext D h t b; cases D; rfl
+
 mutual
 /-- The term with each shared term replaced by a reference to its definition, and the definitions extended with the
 shared terms seen for the first time, inner ones first. -/
 def Term.extract : Term → Defs → Term × Defs
   | .shared h t, D => match D.find? h t with
     | some i => (.ref i, D)
-    | none => let (b, D) := t.extract D; (.ref D.entries.size, D.add h t b)
+    | none => let (b, D) := t.extract D; let i := D.entries.size; (.ref i, D.add h t b)
   | .not a, D => let (a, D) := a.extract D; (.not a, D)
   | .len a, D => let (a, D) := a.extract D; (.len a, D)
   | .is d k a, D => let (a, D) := a.extract D; (.is d k a, D)

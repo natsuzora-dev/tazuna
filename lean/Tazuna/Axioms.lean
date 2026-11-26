@@ -106,6 +106,8 @@ elab "#check_tazuna_reach" : command => do
     -- Compiled code evaluates a term with each shared term once, and compares terms stopping at shared terms that are
     -- one object; they are the evaluation and equality the theorems are about.
     ``Tazuna.Smt.Term.denote_eq_denoteFast, ``Tazuna.Smt.Term.beq_eq_beqFast,
+    -- Compiled code extends a script's shared definitions in place; it is the extension the sharing theorems are about.
+    ``Tazuna.Smt.Defs.add_eq_addFast,
     -- The service's layout, derived from its program: the step environment and the wire-id invariant's term are found,
     -- and every create fits its table's slots.
     ``Tazuna.Smt.stepEnv_ofService, ``Tazuna.Smt.pendingBelowT_ofService, ``Tazuna.Smt.atMost_le_count,
