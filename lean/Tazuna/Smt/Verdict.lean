@@ -346,8 +346,8 @@ theorem finished_faults {shs : List (PendingShape v.event)} {fo : FinishOut v} {
         · refine instBrokenT_mono (fun c hc => ?_) hb
           simp only [machineChecks, List.mem_flatMap]
           exact ⟨mc, hmc, by simp [hc]⟩
-    · obtain ⟨_, _, _, _, _, hr, -⟩ := hm
-      rw [hr] at ho
+    · obtain ⟨_, h⟩ := hm
+      rw [h.result] at ho
       exact absurd ho hacc
 
 theorem breaks_of_finished {o : StepOut v} {cmd : Option String} {fo : FinishOut v} (hfo : o.finish? = some fo)

@@ -346,7 +346,7 @@ theorem finished_outcome {shs : List (PendingShape v.event)} {fo : FinishOut v} 
   · subst hm; exact absurd rfl (hno _)
   · split at hm
     · subst hm; exact absurd rfl (hno _)
-    · obtain ⟨_, _, _, _, _, rfl, -⟩ := hm; rfl
+    · obtain ⟨_, h⟩ := hm; rw [h.result]; rfl
 
 /-- Where a kind's terms say what the step's result is and the step does not fault, the kind's hit term holds when the
 answer is in a class the target aims at. -/
@@ -859,8 +859,8 @@ theorem finished_events {shs : List (PendingShape v.event)} {fo : FinishOut v} {
   · subst hm; exact absurd rfl (hno _)
   · split at hm
     · subst hm; exact absurd rfl (hno _)
-    · obtain ⟨_, _, _, evs, _, rfl, -, -, -, -, -, he, -⟩ := hm
-      exact ⟨evs, rfl, he⟩
+    · obtain ⟨e, h⟩ := hm
+      exact ⟨e.events, by rw [h.result]; rfl, h.events⟩
 
 theorem finished_out {shs : List (PendingShape v.event)} {fo : FinishOut v} {s0 : State v} {a : Step.Acc v}
     {outcome : Outcome} {r : Result v} (hf : Finished M L T shs fo s0 a outcome r) (hno : ∀ f, r.outcome ≠ .fault f) :
@@ -871,8 +871,9 @@ theorem finished_out {shs : List (PendingShape v.event)} {fo : FinishOut v} {s0 
   · subst hm; exact absurd rfl (hno _)
   · split at hm
     · subst hm; exact absurd rfl (hno _)
-    · obtain ⟨_, _, _, _, ps, rfl, -, -, -, -, -, -, effs, hN, hW⟩ := hm
-      exact ⟨ps, effs, rfl, hN, hW⟩
+    · obtain ⟨e, h⟩ := hm
+      obtain ⟨effs, hN, hW⟩ := h.news
+      exact ⟨e.written, effs, by rw [h.result]; rfl, hN, hW⟩
 
 theorem writes_det {ds : List (String × DeclaredV)} {e : Ty} {x : (Sender × EffectV e) × Nat} {p q : Step.Pending e}
     (hp : Step.Writes ds x p) (hq : Step.Writes ds x q) : p = q := by

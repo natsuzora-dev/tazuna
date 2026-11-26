@@ -92,12 +92,40 @@ end
 section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
-/-- What a step's end terms say of its result `r`, from the step in progress `a` before its events: whether the cascade
-faults, as its term says; the cascade's fault, else the first broken invariant (the service's, then each machine's instances in key order), else the outcome
-with the records, machines and fresh counter the terms denote, the events `evs` applied as the event slots hold, the
-requests `ps` written for the requests `effs` the step starts, at wire ids from the next id in order, and sent, as the
-news slots hold, and the pending table and next id terms denoting what follows (pending as a multiset). A fault leaves
-`s0`. -/
+/-- The values a step's end that does not fault leaves: the records, machines and fresh counter, the events applied
+and the requests written. -/
+structure EndVals (v : ServiceV) where
+  records : v.records.den0
+  machines : Step.Machines v.machines
+  fresh : Nat
+  events : List v.event.den0
+  written : List (Step.Pending v.event)
+
+/-- The result of a step in progress `a` whose end leaves `e` with the outcome. -/
+def EndVals.result {v : ServiceV} (e : EndVals v) (a : Step.Acc v) (outcome : Outcome) : Result v :=
+  ⟨{ a.state with records := e.records, machines := e.machines, fresh := e.fresh, pending := a.state.pending ++ e.written,
+                  nextId := a.state.nextId + e.written.length },
+    outcome, a.events ++ e.events, a.out ++ e.written.map Step.Pending.line⟩
+
+/-- What a step's end terms say of its result `r` where the step does not fault, from the step in progress `a` before
+its events: the outcome with the records, machines and fresh counter the terms denote, the events applied as the event
+slots hold, the requests written for the requests `effs` the step starts, at wire ids from the next id in order, and
+sent, as the news slots hold, and the pending table and next id terms denoting what follows (pending as a multiset). -/
+structure Ended (M : Model) (L : Layout) (T : List TypeDecl) (shs : List (PendingShape v.event)) (fo : FinishOut v)
+    (a : Step.Acc v) (outcome : Outcome) (r : Result v) (e : EndVals v) : Prop where
+  result : r = e.result a outcome
+  records : RelV L v.records (Ty.up _ v.records_data e.records) (fo.settle.terms.done.records.denote M)
+  machines : MachinesRel M L T v.machines fo.settle.terms.done.tables e.machines
+  fresh : fo.settle.terms.fresh.denote M = .int (e.fresh : Int)
+  nextId : fo.settle.terms.done.nextId.denote M = .int ((a.state.nextId + e.written.length : Nat) : Int)
+  pending : PendingRel L shs (fo.pending.denote M) (a.state.pending ++ e.written)
+  events : EventsRel M L fo.events e.events
+  news : ∃ effs, NewsRel M L shs v.declared fo.news effs a.state.nextId ∧
+    Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) e.written
+
+/-- What a step's end terms say of its result `r`: whether the cascade faults, as its term says; the cascade's fault,
+else the first broken invariant (the service's, then each machine's instances in key order), else what the step's end
+leaves (`Ended`). A fault leaves `s0`. -/
 def Finished (M : Model) (L : Layout) (T : List TypeDecl)
     (shs : List (PendingShape v.event)) (fo : FinishOut v) (s0 : State v) (a : Step.Acc v) (outcome : Outcome)
     (r : Result v) : Prop :=
@@ -106,19 +134,7 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl)
   | some f => r = ⟨s0, .fault f, [], []⟩
   | none => match brokenIn M fo.invariants ++ checksBroken L T M v.machines fo.checks with
     | n :: _ => r = ⟨s0, .fault (.invariant n), [], []⟩
-    | [] => ∃ (recs : v.records.den0) (ms : Step.Machines v.machines) (fr : Nat)
-        (evs : List v.event.den0) (ps : List (Step.Pending v.event)),
-        r = ⟨{ a.state with records := recs, machines := ms, fresh := fr, pending := a.state.pending ++ ps,
-                            nextId := a.state.nextId + ps.length },
-              outcome, a.events ++ evs, a.out ++ ps.map Step.Pending.line⟩ ∧
-        RelV L v.records (Ty.up _ v.records_data recs) (fo.settle.terms.done.records.denote M) ∧
-        MachinesRel M L T v.machines fo.settle.terms.done.tables ms ∧
-        fo.settle.terms.fresh.denote M = .int (fr : Int) ∧
-        fo.settle.terms.done.nextId.denote M = .int ((a.state.nextId + ps.length : Nat) : Int) ∧
-        PendingRel L shs (fo.pending.denote M) (a.state.pending ++ ps) ∧
-        EventsRel M L fo.events evs ∧
-        ∃ effs, NewsRel M L shs v.declared fo.news effs a.state.nextId ∧
-          Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) ps
+    | [] => ∃ e, Ended M L T shs fo a outcome r e
 
 /-- Whether a step's end fits, for the result `r` of its events: the internal steps the cascade runs
 (`settleFits`) and, where it does not fault, every pending request in the pending table and the service's and every
@@ -284,9 +300,9 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       cases brokenIn M rules ++ checksBroken L T M v.machines checks with
       | cons n ns => rfl
       | nil =>
-        refine ⟨recs2, ms2, fr2, evs1 ++ evs2, ps1 ++ ps2, ?_, f1, f2, f3, ?_, ⟨ps', by simpa using hperm, hrelP⟩,
+        refine ⟨⟨recs2, ms2, fr2, evs1 ++ evs2, ps1 ++ ps2⟩, ?_, f1, f2, f3, ?_, ⟨ps', by simpa using hperm, hrelP⟩,
           eventsRel_append e8 f8, _, hnews', hps0⟩
-        · simp [hl1, hl2]
+        · simp [EndVals.result, hl1, hl2]
         · rw [f4]; simp [hl1, hl2, Nat.add_assoc]
 
 /-- What `finish_encode` asks of a list of events' result besides the terms: the step invariant and a queue of own
