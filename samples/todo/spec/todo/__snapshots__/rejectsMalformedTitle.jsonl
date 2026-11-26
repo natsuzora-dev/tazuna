@@ -1,2 +1,0 @@
-{"time":1792890000000,"dir":"in","type":"command","id":"addTask#1","name":"addTask","input":{"taskId":"task-1","title":7},"caller":{"service":"screens"}}
-{"time":1792890000000,"dir":"out","type":"answer","id":"answer#1","to":"addTask#1","answer":{"result":"rejected","rejection":{"kind":"invalid-input"}}}

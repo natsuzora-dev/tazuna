@@ -1,8 +1,0 @@
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.reminderSettings#1","name":"todo.reminderSettings","input":{},"caller":{"service":"screens"}}
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"},"caller":{"service":"screens"}}
-{"time":1792890000000,"dir":"in","type":"answer","id":"todo/answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"task-1","title":"Buy milk","dueAt":1793005200000,"completedAt":null}]}}}
-{"time":1792890000000,"dir":"in","type":"answer","id":"todo/answer#2","to":"todo.reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":true}}}
-{"time":1792890000000,"dir":"in","type":"operation","id":"taskListScreen.openTask#1","name":"taskListScreen.openTask","payload":{"taskId":"task-1","title":"Buy milk"}}
-{"time":1792890000000,"dir":"out","type":"subscribe","id":"todo.taskDetail#1","name":"todo.taskDetail","input":{"taskId":"task-1"},"caller":{"service":"screens"}}
-{"time":1792890000000,"dir":"in","type":"event","id":"todo/taskDeleted#1","name":"todo.taskDeleted","payload":{"taskId":"task-1","at":1792890000000}}
-{"time":1792890000000,"dir":"out","type":"unsubscribe","id":"unsubscribe#1","to":"todo.taskDetail#1"}

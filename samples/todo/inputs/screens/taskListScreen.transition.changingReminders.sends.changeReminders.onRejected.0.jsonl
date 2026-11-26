@@ -1,6 +1,0 @@
-{"time":0,"dir":"out","type":"subscribe","id":"todo.reminderSettings#1","name":"todo.reminderSettings","input":{},"caller":{"service":"screens"}}
-{"time":0,"dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"},"caller":{"service":"screens"}}
-{"time":0,"dir":"in","type":"answer","id":"todo/answer#1","to":"todo.reminderSettings#1","answer":{"result":"fulfilled","output":{"shouldRemind":false}}}
-{"time":0,"dir":"in","type":"operation","id":"taskListScreen.remindersToggle#1","name":"taskListScreen.remindersToggle","payload":{"shouldRemind":true}}
-{"time":0,"dir":"out","type":"command","id":"todo.changeReminders#1","name":"todo.changeReminders","input":{"shouldRemind":true},"caller":{"service":"screens"}}
-{"time":0,"dir":"in","type":"answer","id":"todo/answer#2","to":"todo.changeReminders#1","answer":{"result":"rejected","rejection":{"kind":"already-exists"}}}

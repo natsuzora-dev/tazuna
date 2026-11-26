@@ -1,6 +1,0 @@
-{"time":0,"dir":"out","type":"subscribe","id":"todo.reminderSettings#1","name":"todo.reminderSettings","input":{},"caller":{"service":"screens"}}
-{"time":0,"dir":"out","type":"subscribe","id":"todo.tasks#1","name":"todo.tasks","input":{"filter":"open"},"caller":{"service":"screens"}}
-{"time":0,"dir":"in","type":"answer","id":"todo/answer#1","to":"todo.tasks#1","answer":{"result":"fulfilled","output":{"tasks":[{"taskId":"A","title":"A","dueAt":-8639999999985320,"completedAt":-8639999999991635}]}}}
-{"time":0,"dir":"in","type":"operation","id":"taskListScreen.reopen#1","name":"taskListScreen.reopen","payload":{"taskId":"A"}}
-{"time":0,"dir":"out","type":"command","id":"todo.reopenTask#1","name":"todo.reopenTask","input":{"taskId":"A"},"caller":{"service":"screens"}}
-{"time":0,"dir":"in","type":"answer","id":"todo/answer#2","to":"todo.reopenTask#1","answer":{"result":"accepted"}}
