@@ -34,6 +34,7 @@ import Tazuna.Smt.StepSites
 import Tazuna.Smt.Solver
 import Tazuna.Trace.Line
 import Tazuna.Trace.WireThm
+import Tazuna.Trace.Examples
 
 /-! Every declaration of the engine rests on Lean's standard axioms only, so no `sorry` or added axiom hides a gap. The
 build fails otherwise. -/

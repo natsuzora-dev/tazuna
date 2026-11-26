@@ -120,43 +120,26 @@ def Run.finish' (run : Run v) (input : Input v) (inLines : List Line) (answerTo 
   let some outs := outs | throw (.badStep k "an output has no wire form")
   pure { run with state := r.state, names := ns, lines := run.lines ++ inLines ++ outs }
 
-/-- One scenario step: its input, run, and its in and out lines. -/
-def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Except Stop (Run v)
-  | .command x caller input _ => do
-    let some i := finIdx v.commands fun c => c.name == x.name | throw (.badStep k s!"{v.name} lists no command {x.name}")
-    let some ⟨h⟩ := Ty.same x.input (v.commands.get i).input | throw (.badStep k s!"{x.name} has another input type")
-    request x.name (.command i caller (h ▸ input)) caller ⟨x.input, input⟩
-  | .query x caller input => do
-    let some i := finIdx v.queries fun q => q.name == x.name | throw (.badStep k s!"{v.name} lists no query {x.name}")
-    let some ⟨h⟩ := Ty.same x.input (v.queries.get i).input | throw (.badStep k s!"{x.name} has another input type")
-    request x.name (.query i caller (h ▸ input)) caller ⟨x.input, input⟩
-  | .wait ms => do
-    if ms < 0 then throw (.badStep k "a step waits a negative time")
-    let t := run.state.now + ms
-    finish (.clock t) [.clock t] none
-  | .answer name input output rejection snd ⟨ty, value⟩ => do
-    let same (a b : Ty) := (Ty.same a b).isSome
-    let ps := run.state.pending.filter fun p =>
-      p.request.name == name && same p.request.input input && same p.request.output output &&
-        (match p.request.rejection, rejection with
-          | some a, some b => same a b
-          | none, none => true
-          | _, _ => false) && p.sender.matches snd
-    let [p] := ps | throw (.badStep k s!"{ps.length} pending requests to {name} match the sender")
+/-- One input, written as its in line, run, and its out lines: what scenarios and generate's traces share, so the two
+cannot write an input differently. A request's id is the count of requests so far; an answer names the request by the
+name the trace gave its wire id. -/
+def Run.input (run : Run v) (k : Nat) : Input v → Except Stop (Run v)
+  | .command i caller input => request (v.commands.get i).name (.command i caller input) caller ⟨_, input⟩
+  | .query i caller input => request (v.queries.get i).name (.query i caller input) caller ⟨_, input⟩
+  | .answer to ⟨ty, value⟩ => do
+    let some p := run.state.pending.find? (·.id == to) | throw (.badStep k s!"no pending request has wire id {to}")
     let some ⟨h⟩ := Ty.same ty (answerTy p.request.output p.request.rejection)
-      | throw (.badStep k s!"the answer's type is not the type of answers to {p.external}.{name}")
-    let (ns, to) := run.names.wire p.id
-    let (ns, w) := ns.answerWire T p.request.output p.request.rejection (h ▸ value)
-    let some w := w | throw (.badStep k "the answer has no wire form")
-    { run with names := ns }.finish' T v (.answer p.id ⟨ty, value⟩) [.answer run.state.now to w] none k
-  | .event name ⟨ty, x⟩ => do
-    let some i := finIdx v.subscribes fun sub => sub.name == name && (Ty.same ty sub.event).isSome
-      | throw (.badStep k s!"{v.name} subscribes to no source {name} of this event type")
-    let some ⟨h⟩ := Ty.same ty (v.subscribes.get i).event | throw (.badStep k s!"{name} has another type")
-    let (ns, w) := run.names.enc T ty x
+      | throw (.badStep k s!"the answer's type is not the type of answers to {p.external}.{p.request.name}")
+    let (ns, w) := run.names.wire p.id
+    let (ns, a) := ns.answerWire T p.request.output p.request.rejection (h ▸ value)
+    let some a := a | throw (.badStep k "the answer has no wire form")
+    { run with names := ns }.finish' T v (.answer to ⟨ty, value⟩) [.answer run.state.now w a] none k
+  | .event i value => do
+    let sub := v.subscribes.get i
+    let (ns, w) := run.names.enc T sub.event value
     let some w := w | throw (.badStep k "the event has no wire form")
-    let src := (v.subscribes.get i).source
-    { run with names := ns }.finish' T v (.event i (h ▸ x)) [.event run.state.now src name w] none k
+    { run with names := ns }.finish' T v (.event i value) [.event run.state.now sub.source sub.name w] none k
+  | .clock t => run.finish' T v (.clock t) [.clock t] none k
 where
   request (name : String) (input : Input v) (caller : v.caller.den0) (value : WireVal) : Except Stop (Run v) := do
     let id := toString (run.requests + 1)
@@ -165,10 +148,47 @@ where
     let (some c, some i) := (c, i) | throw (.badStep k "the request has no wire form")
     { run with names := ns, requests := run.requests + 1 }.finish' T v input
       [.request run.state.now id name c i] (some id) k
-  finish (input : Input v) (inLines : List Line) (answerTo : Option String) : Except Stop (Run v) :=
-    run.finish' T v input inLines answerTo k
+
+/-- One scenario step: the input it names, through `Run.input`. -/
+def Run.step (run : Run v) (k : Nat) : StepV v.records v.event v.caller → Except Stop (Run v)
+  | .command x caller input _ => do
+    let some i := finIdx v.commands fun c => c.name == x.name | throw (.badStep k s!"{v.name} lists no command {x.name}")
+    let some ⟨h⟩ := Ty.same x.input (v.commands.get i).input | throw (.badStep k s!"{x.name} has another input type")
+    run.input T v k (.command i caller (h ▸ input))
+  | .query x caller input => do
+    let some i := finIdx v.queries fun q => q.name == x.name | throw (.badStep k s!"{v.name} lists no query {x.name}")
+    let some ⟨h⟩ := Ty.same x.input (v.queries.get i).input | throw (.badStep k s!"{x.name} has another input type")
+    run.input T v k (.query i caller (h ▸ input))
+  | .wait ms => do
+    if ms < 0 then throw (.badStep k "a step waits a negative time")
+    run.input T v k (.clock (run.state.now + ms))
+  | .answer name input output rejection snd w => do
+    let same (a b : Ty) := (Ty.same a b).isSome
+    let ps := run.state.pending.filter fun p =>
+      p.request.name == name && same p.request.input input && same p.request.output output &&
+        (match p.request.rejection, rejection with
+          | some a, some b => same a b
+          | none, none => true
+          | _, _ => false) && p.sender.matches snd
+    let [p] := ps | throw (.badStep k s!"{ps.length} pending requests to {name} match the sender")
+    run.input T v k (.answer p.id w)
+  | .event name ⟨ty, x⟩ => do
+    let some i := finIdx v.subscribes fun sub => sub.name == name && (Ty.same ty sub.event).isSome
+      | throw (.badStep k s!"{v.name} subscribes to no source {name} of this event type")
+    let some ⟨h⟩ := Ty.same ty (v.subscribes.get i).event | throw (.badStep k s!"{name} has another type")
+    run.input T v k (.event i (h ▸ x))
 
 end
+
+/-- The header line of a trace of `service`. -/
+def header (service : String) : Wire := .obj [("trace", .num 1), ("service", .str service)]
+
+/-- The trace of a run of the inputs from the initial state, header first: what generate writes, in the format of
+snapshots, or why a step stopped. -/
+def traceOf (T : List TypeDecl) (v : ServiceV) (xs : List (Input v)) : Except Stop (List Wire) := do
+  let (run, _) ← xs.foldlM (fun (run, k) x => do pure (← run.input T v (k + 1) x, k + 1))
+    (({ state := State.init v } : Run v), 0)
+  pure (header v.name :: run.lines.map Line.toWire)
 
 instance : Inhabited Stop := ⟨.badStep 0 ""⟩
 
@@ -185,9 +205,6 @@ partial def runSteps (T : List TypeDecl) (v : ServiceV) (run : Run v) (k : Nat) 
       let (run, k) ← runSteps T v run (k + 1) (next fresh)
       runSteps T v run k rest
     | _ => runSteps T v run (k + 1) rest
-
-/-- The header line of a trace of `service`. -/
-def header (service : String) : Wire := .obj [("trace", .num 1), ("service", .str service)]
 
 /-- The trace of a scenario, header first, or why it stopped. -/
 def runScenario (T : List TypeDecl) (v : ServiceV) (steps : List (StepV v.records v.event v.caller)) :
