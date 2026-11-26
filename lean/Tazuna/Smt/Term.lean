@@ -1,4 +1,5 @@
 import Tazuna.Linter
+import Std.Data.HashMap
 
 /-! The SMT-LIB terms tazuna sends to a solver, and what each means in a model (`Term.denote`). The solver is any that
 reads standard SMT-LIB 2.6 with the theories of Ints and Strings and declared datatypes; `denote` states the
@@ -134,6 +135,47 @@ theorem Term.eq_of_beqs : (as bs : List Term) → Term.beqs as bs = true → as 
     simp only [Term.beqs, Bool.and_eq_true] at h; rw [Term.eq_of_beq a b h.1, Term.eq_of_beqs as bs h.2]
   | [], _ :: _, h | _ :: _, [], h => by simp [Term.beqs] at h
 end
+
+mutual
+/-- `Term.beq` that answers at once wherever two shared terms below are the same object in memory, with its
+equality to `Term.beq` carried along. Encodings build equal shared terms as separate objects, and comparing them as
+trees costs time exponential in how deeply shared terms nest. -/
+def Term.beqS : (a b : Term) → {r : Bool // r = a.beq b}
+  | .shared h a, .shared h' b => ⟨h == h' && withPtrEq a b (fun _ => (Term.beqS a b).1)
+      (fun e => by subst e; rw [(Term.beqS a a).2]; exact Term.beq_refl a),
+    by simp [Term.beq, withPtrEq, (Term.beqS a b).2]⟩
+  | .not a, .not b => ⟨(Term.beqS a b).1, by simp [Term.beq, (Term.beqS a b).2]⟩
+  | .len a, .len b => ⟨(Term.beqS a b).1, by simp [Term.beq, (Term.beqS a b).2]⟩
+  | .and a b, .and c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .or a b, .or c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .eq a b, .eq c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .lt a b, .lt c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .le a b, .le c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .add a b, .add c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .sub a b, .sub c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .mul a b, .mul c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .div a b, .div c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .mod a b, .mod c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .cat a b, .cat c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .slt a b, .slt c d => ⟨(Term.beqS a c).1 && (Term.beqS b d).1, by simp [Term.beq, (Term.beqS a c).2, (Term.beqS b d).2]⟩
+  | .ite a b c, .ite a' b' c' => ⟨(Term.beqS a a').1 && (Term.beqS b b').1 && (Term.beqS c c').1,
+    by simp [Term.beq, (Term.beqS a a').2, (Term.beqS b b').2, (Term.beqS c c').2]⟩
+  | .ctor d k as, .ctor d' k' bs => ⟨d == d' && k == k' && (Term.beqsS as bs).1,
+    by simp [Term.beq, (Term.beqsS as bs).2]⟩
+  | .is d k a, .is d' k' b => ⟨d == d' && k == k' && (Term.beqS a b).1, by simp [Term.beq, (Term.beqS a b).2]⟩
+  | .sel d k j a, .sel d' k' j' b => ⟨d == d' && k == k' && j == j' && (Term.beqS a b).1,
+    by simp [Term.beq, (Term.beqS a b).2]⟩
+  | a, b => ⟨a.beq b, rfl⟩
+def Term.beqsS : (as bs : List Term) → {r : Bool // r = Term.beqs as bs}
+  | a :: as, b :: bs => ⟨(Term.beqS a b).1 && (Term.beqsS as bs).1, by simp [Term.beqs, (Term.beqS a b).2, (Term.beqsS as bs).2]⟩
+  | as, bs => ⟨Term.beqs as bs, rfl⟩
+end
+
+def Term.beqFast (a b : Term) : Bool := (Term.beqS a b).1
+
+/-- Compiled code compares terms with `beqFast` (`csimp`, as the printer's `print_eq_printFast`). -/
+@[csimp] theorem Term.beq_eq_beqFast : @Term.beq = @Term.beqFast := by
+  funext a b; exact (Term.beqS a b).2.symm
 
 /-- Equality of terms that answers at once when both are the same object in memory, as a repeated shared term
 is. -/
@@ -278,5 +320,156 @@ def maxChar : Nat := 0x2FFFF
 
 /-- Whether a string lies in SMT-LIB's string domain: every character at most U+2FFFF. -/
 def inDomain (s : String) : Bool := s.toList.all (·.toNat ≤ maxChar)
+
+/-! Evaluation with sharing. `Term.denote` follows the tree, so a term whose shared parts nest (an unrolled run's
+states, each read by the next step) costs time exponential in the nesting. `Term.evalC` gives each shared term its
+value once, kept by the stored hash and confirmed by `Term.same`, as extraction does; `evalC_ok` proves it is
+`Term.denote`, and `denote_eq_denoteFast` makes compiled code use it (`csimp`, as the printer's `print_eq_printFast`). -/
+
+/-- Values of shared terms already evaluated, by the shared term's hash. -/
+abbrev EvalCache := Std.HashMap UInt64 (List (Term × Val))
+
+/-- Every value in the cache is its term's in the model. -/
+def EvalCache.Ok (M : Model) (c : EvalCache) : Prop :=
+  ∀ (h : UInt64) (l : List (Term × Val)), c[h]? = some l → ∀ p ∈ l, p.2 = p.1.denote M
+
+def EvalCache.find? (c : EvalCache) (h : UInt64) (t : Term) : Option Val :=
+  match c[h]? with
+  | some l => (l.find? fun p => p.1.same t).map (·.2)
+  | none => none
+
+def EvalCache.add (c : EvalCache) (h : UInt64) (t : Term) (w : Val) : EvalCache :=
+  match c[h]? with
+  | some l => c.insert h ((t, w) :: l)
+  | none => c.insert h [(t, w)]
+
+-- SMT-LIB leaves a selector on a field its constructor lacks to the model, and the default stands for that value, as
+-- in `Term.denote`.
+set_option linter.tazuna.silentDefault false in
+mutual
+/-- The term's value, as `Term.denote` gives it, with each shared term evaluated once. -/
+def Term.evalC (M : Model) : Term → EvalCache → Val × EvalCache
+  | .shared h t, c => match c.find? h t with
+    | some w => (w, c)
+    | none => let (w, c) := t.evalC M c; (w, c.add h t w)
+  | .var n, c => (M.vars n, c)
+  | .int n, c => (.int n, c)
+  | .str s, c => (.str s, c)
+  | .bool b, c => (.bool b, c)
+  | .ref i, c => (M.defs i, c)
+  | .not a, c => let (x, c) := a.evalC M c; (.bool !x.toBool, c)
+  | .len a, c => let (x, c) := a.evalC M c; (.int x.toStr.length, c)
+  | .is d k a, c => let (x, c) := a.evalC M c
+    (.bool (match x with | .ctor d' k' _ => d' == d && k' == k | _ => false), c)
+  | .sel d k j a, c => let (x, c) := a.evalC M c
+    (match x with
+      | .ctor d' k' vs => if d' = d ∧ k' = k then vs[j]?.getD default else M.selOther d k j (.ctor d' k' vs)
+      | v => M.selOther d k j v, c)
+  | .and a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.bool (x.toBool && y.toBool), c)
+  | .or a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.bool (x.toBool || y.toBool), c)
+  | .eq a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.bool (x == y), c)
+  | .lt a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.bool (decide (x.toInt < y.toInt)), c)
+  | .le a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.bool (decide (x.toInt ≤ y.toInt)), c)
+  | .add a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.int (x.toInt + y.toInt), c)
+  | .sub a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.int (x.toInt - y.toInt), c)
+  | .mul a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.int (x.toInt * y.toInt), c)
+  | .div a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c
+    (.int (if y.toInt = 0 then M.divZero x.toInt else x.toInt / y.toInt), c)
+  | .mod a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c
+    (.int (if y.toInt = 0 then M.modZero x.toInt else x.toInt % y.toInt), c)
+  | .cat a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.str (x.toStr ++ y.toStr), c)
+  | .slt a b, c => let (x, c) := a.evalC M c; let (y, c) := b.evalC M c; (.bool (decide (x.toStr < y.toStr)), c)
+  | .ite a b e, c => let (x, c) := a.evalC M c; if x.toBool then b.evalC M c else e.evalC M c
+  | .ctor d k args, c => let (xs, c) := Term.evalsC M args c; (.ctor d k xs, c)
+def Term.evalsC (M : Model) : List Term → EvalCache → List Val × EvalCache
+  | [], c => ([], c)
+  | t :: ts, c => let (x, c) := t.evalC M c; let (xs, c) := Term.evalsC M ts c; (x :: xs, c)
+end
+
+theorem EvalCache.find?_ok {M : Model} {c : EvalCache} (hc : c.Ok M) {h : UInt64} {t : Term} {w : Val}
+    (hf : c.find? h t = some w) : w = t.denote M := by
+  unfold EvalCache.find? at hf
+  split at hf
+  · rename_i l hl
+    obtain ⟨p, hp, rfl⟩ := Option.map_eq_some_iff.1 hf
+    have hs : p.1.same t = true := by simpa using List.find?_some hp
+    rw [hc h l hl p (List.mem_of_find?_eq_some hp), Term.eq_of_same hs]
+  · cases hf
+
+theorem EvalCache.add_ok {M : Model} {c : EvalCache} (hc : c.Ok M) (h : UInt64) (t : Term) :
+    (c.add h t (t.denote M)).Ok M := by
+  intro h' l hl p hp
+  unfold EvalCache.add at hl
+  by_cases hh : h = h'
+  · subst hh
+    split at hl
+    · rename_i l0 heq
+      simp only [Std.HashMap.getElem?_insert_self, Option.some.injEq] at hl
+      subst hl
+      rcases List.mem_cons.1 hp with rfl | hp
+      · rfl
+      · exact hc h l0 heq p hp
+    · simp only [Std.HashMap.getElem?_insert_self, Option.some.injEq] at hl
+      subst hl
+      rcases List.mem_cons.1 hp with rfl | hp
+      · rfl
+      · cases hp
+  · split at hl <;> simp [Std.HashMap.getElem?_insert, hh] at hl <;> exact hc h' l hl p hp
+
+mutual
+theorem Term.evalC_ok (M : Model) : (t : Term) → (c : EvalCache) → c.Ok M →
+    (t.evalC M c).1 = t.denote M ∧ (t.evalC M c).2.Ok M
+  | .shared h t, c, hc => by
+    unfold Term.evalC
+    split
+    · rename_i w hf; exact ⟨(EvalCache.find?_ok hc hf).trans rfl, hc⟩
+    · have ih := Term.evalC_ok M t c hc
+      refine ⟨by simp [Term.denote, ih.1], ?_⟩
+      simp only
+      rw [ih.1]
+      exact EvalCache.add_ok ih.2 h t
+  | .var _, c, hc | .int _, c, hc | .str _, c, hc | .bool _, c, hc | .ref _, c, hc => ⟨rfl, hc⟩
+  | .not a, c, hc | .len a, c, hc | .is _ _ a, c, hc | .sel _ _ _ a, c, hc => by
+    have ih := Term.evalC_ok M a c hc
+    simp only [Term.evalC, Term.denote, ih.1]
+    exact ⟨by first | rfl | trivial, ih.2⟩
+  | .and a b, c, hc | .or a b, c, hc | .eq a b, c, hc | .lt a b, c, hc | .le a b, c, hc | .add a b, c, hc
+  | .sub a b, c, hc | .mul a b, c, hc | .div a b, c, hc | .mod a b, c, hc | .cat a b, c, hc
+  | .slt a b, c, hc => by
+    have ha := Term.evalC_ok M a c hc
+    have hb := Term.evalC_ok M b _ ha.2
+    simp only [Term.evalC, Term.denote, ha.1, hb.1]
+    exact ⟨by first | rfl | trivial, hb.2⟩
+  | .ite a b e, c, hc => by
+    have ha := Term.evalC_ok M a c hc
+    simp only [Term.evalC, Term.denote, ha.1]
+    split
+    · exact Term.evalC_ok M b _ ha.2
+    · exact Term.evalC_ok M e _ ha.2
+  | .ctor d k args, c, hc => by
+    have h := Term.evalsC_ok M args c hc
+    simp only [Term.evalC, Term.denote, h.1]
+    exact ⟨by first | rfl | trivial, h.2⟩
+theorem Term.evalsC_ok (M : Model) : (ts : List Term) → (c : EvalCache) → c.Ok M →
+    (Term.evalsC M ts c).1 = Term.denotes M ts ∧ (Term.evalsC M ts c).2.Ok M
+  | [], c, hc => ⟨rfl, hc⟩
+  | t :: ts, c, hc => by
+    have ht := Term.evalC_ok M t c hc
+    have hs := Term.evalsC_ok M ts _ ht.2
+    simp only [Term.evalsC, Term.denotes, ht.1, hs.1]
+    exact ⟨by first | rfl | trivial, hs.2⟩
+end
+
+theorem EvalCache.ok_empty (M : Model) : ({} : EvalCache).Ok M := by
+  intro h l hl; simp at hl
+
+/-- The term's value, each shared term in it evaluated once. -/
+def Term.denoteFast (M : Model) (t : Term) : Val := (t.evalC M {}).1
+
+/-- Compiled code evaluates terms with sharing: a model read off an unrolled run's states costs their size as
+definitions, not as trees. The theorems are about `Term.denote`, which this makes the code compute. -/
+@[csimp] theorem Term.denote_eq_denoteFast : @Term.denote = @Term.denoteFast := by
+  funext M t
+  exact (Term.evalC_ok M t {} (EvalCache.ok_empty M)).1.symm
 
 end Tazuna.Smt

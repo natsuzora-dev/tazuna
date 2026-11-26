@@ -100,6 +100,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.shared_conservative,
     -- The compiled printer appends to a string in place; it is the printer the theorems above are about.
     ``Tazuna.Smt.SExp.print_eq_printFast,
+    -- Compiled code evaluates a term with each shared term once, and compares terms stopping at shared terms that are
+    -- one object; they are the evaluation and equality the theorems are about.
+    ``Tazuna.Smt.Term.denote_eq_denoteFast, ``Tazuna.Smt.Term.beq_eq_beqFast,
     -- The service's layout, derived from its program: the step environment and the wire-id invariant's term are found,
     -- and every create fits its table's slots.
     ``Tazuna.Smt.stepEnv_ofService, ``Tazuna.Smt.pendingBelowT_ofService, ``Tazuna.Smt.atMost_le_count,
