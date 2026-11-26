@@ -179,10 +179,29 @@ theorem stateTys_data (v : ServiceV) : ∀ t ∈ stateTys v (shapes v), t.isData
   · simp [pendingTable, Ty.isData, pendingEntry_data]
   · exact m.table_data
 
-/-- The sorts of an input kind's step and bound questions hold values where the input's types are data. -/
+/-- The types of the inputs a step question asks about are data: the answer shapes are those whose answers are. -/
+theorem stepInputs_data {v : ServiceV} {shs : List (PendingShape v.event)} {n b : Nat} (hc : v.caller.isData = true)
+    {inp : SymInput v shs n} (h : inp ∈ stepInputs v shs n b) :
+    ∀ t ∈ inp.tys, t.isData = true := by
+  simp only [stepInputs, List.mem_append, List.mem_map, List.mem_flatMap, List.mem_cons, List.not_mem_nil,
+    or_false] at h
+  rcases h with ((⟨i, -, rfl⟩ | ⟨k, hk, j, -, rfl⟩) | ⟨i, -, rfl⟩) | rfl <;>
+    simp only [SymInput.tys, List.mem_cons, List.not_mem_nil, or_false]
+  · rintro t (rfl | rfl)
+    · exact hc
+    · exact CommandV.input_data _
+  · simp only [answerShapes, List.mem_filter] at hk
+    rintro t (rfl | rfl)
+    · rfl
+    · exact hk.2
+  · rintro t rfl; exact SubscriptionV.event_data _
+  · rintro t rfl; rfl
+
+/-- The sorts of an input kind's step and bound questions hold values: the input's types are data. -/
 theorem questions_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnySite} {v : ServiceV}
     {senv : StepEnv L (shapes v)} {inp : SymInput v (shapes v) senv.nT} {r}
-    (hq : questions L T P v senv inp = .ok r) (hin : ∀ t ∈ inp.tys, t.isData = true) :
+    (hq : questions L T P v senv inp = .ok r) (hc : v.caller.isData = true)
+    (hin : inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v)) :
     SortsInhabited L (stateTys v (shapes v) ++ inp.tys) := by
   simp only [questions] at hq
   obtain ⟨_, -, hq⟩ := bind_ok.1 hq
@@ -197,7 +216,7 @@ theorem questions_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnyS
   refine sorts_inhabited hL (need_ok.1 hdts) (mapM_need hvars) fun t ht => .inl ?_
   rcases List.mem_append.1 ht with ht | ht
   · exact stateTys_data v t ht
-  · exact hin t ht
+  · exact stepInputs_data hc hin t ht
 
 /-- The sorts of a pair of own kinds' questions hold values: the state's, and the effect datatype's twice. -/
 theorem pair_sorts (hL : SortedLayout L) {T : List TypeDecl} {P : List AnySite} {v : ServiceV}

@@ -24,6 +24,7 @@ import Tazuna.Smt.Lines
 import Tazuna.Smt.Runs
 import Tazuna.Smt.Sorts
 import Tazuna.Smt.DecodeTotal
+import Tazuna.Smt.UnrollThm
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -137,8 +138,9 @@ elab "#check_tazuna_reach" : command => do
     -- of their sorts decodes to the state, input, effects or instance context the report shows, so prove's "does not
     -- decode" lines are unreachable.
     ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode,
-    -- The same for an unrolled run, which generate reads: the input each step's selector picks decodes.
-    ``Tazuna.Smt.unroll_inputs_decode]
+    -- An unrolled run, which generate reads, is a run: every model's steps decode to inputs whose run from the
+    -- initial state takes the kinds the model picks, faults nowhere, and leaves the states the terms denote.
+    ``Tazuna.Smt.unroll_decode]
   let mut used : NameSet := {}
   let mut usedByOther : NameSet := {}
   let mut todo := roots

@@ -138,22 +138,6 @@ theorem stepInputs_terms {inp : SymInput v shs n} (h : inp ∈ stepInputs v shs 
     or_false] at h
   rcases h with ((⟨i, -, rfl⟩ | ⟨k, -, j, -, rfl⟩) | ⟨i, -, rfl⟩) | rfl <;> rfl
 
-/-- The types of the inputs a step question asks about are data: the answer shapes are those whose answers are. -/
-theorem stepInputs_data (hc : v.caller.isData = true) {inp : SymInput v shs n} (h : inp ∈ stepInputs v shs n b) :
-    ∀ t ∈ inp.tys, t.isData = true := by
-  simp only [stepInputs, List.mem_append, List.mem_map, List.mem_flatMap, List.mem_cons, List.not_mem_nil,
-    or_false] at h
-  rcases h with ((⟨i, -, rfl⟩ | ⟨k, hk, j, -, rfl⟩) | ⟨i, -, rfl⟩) | rfl <;>
-    simp only [SymInput.tys, List.mem_cons, List.not_mem_nil, or_false]
-  · rintro t (rfl | rfl)
-    · exact hc
-    · exact CommandV.input_data _
-  · simp only [answerShapes, List.mem_filter] at hk
-    rintro t (rfl | rfl)
-    · rfl
-    · exact hk.2
-  · rintro t rfl; exact SubscriptionV.event_data _
-  · rintro t rfl; rfl
 
 end
 
