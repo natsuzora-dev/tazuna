@@ -92,18 +92,29 @@ inductive Answer where
   /-- Satisfiable, with the value of each variable asked for. -/
   | sat (values : List (Nat × Val))
   | unsat
-  /-- No verdict: the solver said unknown, which its resource limit decides the same way on every machine, or printed
-  something else. -/
+  /-- No verdict: the solver said unknown (`solverUnknown`), which its resource limit decides the same way on every
+  machine, or printed something else. -/
   | unknown (why : String)
   /-- No verdict: the solver ran past the wall-clock safety net, which depends on the machine. -/
   | timeout (ms : Nat)
 deriving Repr
 
+/-- Why an answer is unknown when the solver itself printed unknown. -/
+def solverUnknown : String := "the solver answered unknown"
+
+/-- Whether the answer is a function of the script's text and the solver's version alone: sat, unsat, or the solver's
+own unknown, which its resource limit and seeds, set in the text's header, decide the same way on every machine. A
+crash's output and a run past the wall clock depend on the machine. -/
+def Answer.decided : Answer → Bool
+  | .sat _ | .unsat => true
+  | .unknown why => why == solverUnknown
+  | .timeout _ => false
+
 /-- Reads the solver's output. -/
 def Answer.parse (text : String) : Answer :=
   match lex text with
   | some (.sym "unsat" :: _) => .unsat
-  | some (.sym "unknown" :: _) => .unknown "the solver answered unknown"
+  | some (.sym "unknown" :: _) => .unknown solverUnknown
   | some [.sym "sat"] => .sat []
   | some (.sym "sat" :: rest) =>
     let pair : SExp → Option (Nat × Val)

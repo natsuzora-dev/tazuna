@@ -97,7 +97,8 @@ def Script.keyed (s : Script) (header : List String) : Option Keyed :=
 
 /-- Runs the keyed script, or reads its answer from the cache directory `dir` under its key, as ccache and Bazel key
 results by a digest of their inputs, so the cache keeps no script. The text holds the solver's header (resource limit,
-seeds), so the same text gets the same answer. Only a sat or unsat answer is kept. -/
+seeds) and `dir` is the solver version's, so a raised limit or another z3 asks again. Only a decided answer is kept
+(`Answer.decided`): never a timeout nor output that does not read. -/
 def Solver.runKeyed (s : Solver) (dir : System.FilePath) (q : Keyed) : IO Answer := do
   let answerFile := dir / (q.key ++ ".answer")
   if ← answerFile.pathExists then
@@ -106,9 +107,7 @@ def Solver.runKeyed (s : Solver) (dir : System.FilePath) (q : Keyed) : IO Answer
   | .error a => return a
   | .ok out =>
     let a := Answer.parse out
-    match a with
-    | .unknown _ => pure ()
-    | _ =>
+    if a.decided then
       IO.FS.createDirAll dir
       -- A run stopped mid-write leaves no answer file to misread.
       let partFile := answerFile.withExtension "part"
