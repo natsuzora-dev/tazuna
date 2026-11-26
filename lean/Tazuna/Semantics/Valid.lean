@@ -344,18 +344,37 @@ def ValidRun : State v → List (Input v) → Prop
   | _, [] => True
   | s, x :: xs => x.Valid s ∧ ValidRun (step T v s x).state xs
 
+/-- Whether a clock line at `time` passes no timer that waits: every instance's timer is due at `time` or later. -/
+def timely (s : State v) (time : Int) : Bool :=
+  s.machines.toSigma.all fun ⟨_, insts⟩ => insts.all fun i => match i.timer with
+    | some (d, _) => decide (time ≤ d)
+    | none => true
+
+/-- Clock lines each timely at the state the run has reached when they come; other inputs ask nothing. Without it the
+environment breaks every timed response by moving the clock past the timer that would answer in time, since a timer
+fired late carries the late time (timed automata block time from passing a deadline in the same way). -/
+def TimelyRun : State v → List (Input v) → Prop
+  | _, [] => True
+  | s, x :: xs => (match x with
+    | .clock time => timely s time = true
+    | _ => True) ∧ TimelyRun (step T v s x).state xs
+
 /-- An assumption a proof rests on beyond the spec's invariants: what it says of a run, and the words a line's
 `assumes` names it by, kept together so the two cannot part. -/
 inductive Assumption where
   /-- Every input of a run carries only ids the service made or names from outside (`ValidRun`). -/
   | validInputs
+  /-- No clock line of a run moves time past a timer that waits (`TimelyRun`). -/
+  | timelyClock
 
 def Assumption.text : Assumption → String
   | .validInputs => "inputs carry only ids the service made or names from outside"
+  | .timelyClock => "no clock line moves time past a timer that waits"
 
 /-- What the assumption says of the run from `s` on `xs`. -/
 def Assumption.Holds : Assumption → State v → List (Input v) → Prop
   | .validInputs => ValidRun T
+  | .timelyClock => TimelyRun T
 
 theorem machines_empty (P : PBij) : (ms : List (MachineV v.records v.event)) →
     Machines.Rel P (PerMachine.ofFn (fun _ => ([] : List (Instance _))) ms : Machines ms)
