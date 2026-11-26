@@ -3643,6 +3643,41 @@ def pairCases (solver : Solver) (v : ServiceV) (sites : List AnySite) (cases : L
       | a, _ => ok ← fail s!"{name}: {repr a}"
   return ok
 
+/-! A pair question's model decodes to its effects: on the service `pt`, whose own command `take` takes a table,
+the pair (`take`, `take`) asserts each effect's fields well formed (`ownWf`, the last two of its context), so no model
+has a key twice in the first effect's input (unsat); without that assertion one does (sat). -/
+
+def pairTakeSvc : ServiceV := { pairSvc with name := "pt", commands := pairCommands ++ [takeC] }
+
+def pairTakeLayout : Layout :=
+  let L := svcLayout pairTakeSvc 3 (joinParts [siteParts pairOnAnswer,
+    ⟨[], [], [Ty.nil, Ty.result Ty.nil .str, .tuple []], []⟩])
+  Layout.addTys (fun _ => 3)
+    { effects := L.effects, owns := L.owns ++ [.command evT "take" .str recordsT .str ⟨pairOnAnswer.site, []⟩] }
+    (L.types.map (·.1))
+
+def pairWfCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: pair effect well-formedness: {m}"; return false
+  let v := pairTakeSvc
+  let L := pairTakeLayout
+  let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
+  let .ok k := ownPlace L v.event ((L.ownsOf v.event).length - 1) | fail "no own kind take"
+  let .ok (_, tq) := pairQuestions L prelude ((svcParts v).sites ++ [⟨[], _, pairOnAnswer⟩]) v senv k k
+    | fail "no pair questions"
+  let (some (d, n), some (dt, _)) := (L.find? recordsT, L.find? (.tuple [Ty.bool, .int, .int]))
+    | fail "no table datatype"
+  let S := slotsOf d dt n 2 (.sel senv.dE (L.ownCtor v.event k) 1 (.var (pairVar v)))
+  let twice : Term := .and (.and S[0]!.1 S[1]!.1) (.eq (S[0]!.2[0]) (S[1]!.2[0]))
+  let mut ok := true
+  for (withWf, want) in [(true, "unsat"), (false, "sat")] do
+    let context := if withWf then tq.context else tq.context.eraseIdx 5
+    let got := match ← solver.run { tq.contextScript with asserts := context ++ [twice] } with
+      | .unsat => "unsat"
+      | .sat _ => "sat"
+      | _ => "unknown"
+    if got != want then ok ← fail s!"a key twice in the first effect's input (well-formedness {withWf}): {got}"
+  return ok
+
 /-! Pair questions whose steps send requests: the service `p` with the reaction `echo`, which asks `mail` to `send`
 the event's key, or `count`, which sends how many rows the records hold, each `on_answer` capturing the event's key.
 Two `ins` with `echo` commute: each sends the same request at the same wire id counted from where its step starts,
@@ -3908,6 +3943,7 @@ def check (z3 : String) : IO Bool := do
   unless ← machineEffectCheck solver do ok := false
   unless ← timerCheck solver do ok := false
   unless ← pairCheck solver do ok := false
+  unless ← pairWfCheck solver do ok := false
   unless ← noEffectsCheck solver do ok := false
   unless ← invariantCheck solver do ok := false
   unless ← reactCheck solver do ok := false
