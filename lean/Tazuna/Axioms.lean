@@ -24,7 +24,7 @@ import Tazuna.Smt.Lines
 import Tazuna.Smt.Runs
 import Tazuna.Smt.Sorts
 import Tazuna.Smt.DecodeTotal
-import Tazuna.Smt.UnrollThm
+import Tazuna.Smt.UnrollCover
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -140,7 +140,10 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode,
     -- An unrolled run, which generate reads, is a run: every model's steps decode to inputs whose run from the
     -- initial state takes the kinds the model picks, faults nowhere, and leaves the states the terms denote.
-    ``Tazuna.Smt.unroll_decode]
+    ``Tazuna.Smt.unroll_decode,
+    -- And every run is one: a fitting run of valid inputs that faults nowhere is a model of every assertion but the
+    -- goal, so a script with no model has no such run that meets its goal.
+    ``Tazuna.Smt.runs_covered]
   let mut used : NameSet := {}
   let mut usedByOther : NameSet := {}
   let mut todo := roots
