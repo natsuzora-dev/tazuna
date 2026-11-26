@@ -177,8 +177,8 @@ def BoundsV.cascadeNat {r : Ty} (b : BoundsV r) : Nat := b.cascade.toNat
 
 structure ResponseV (e : Ty) where
   name : String
-  after : (Ty.fn [e] Ty.bool).den0
-  then_ : (Ty.fn [e] Ty.bool).den0
+  after : Fun (Ty.fn [e] Ty.bool)
+  then_ : Fun (Ty.fn [e] Ty.bool)
   within : Int
 
 /-- One step of a scenario, typed by its service's records, event and caller. -/

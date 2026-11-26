@@ -286,7 +286,7 @@ def sig : Prim → PrimSig :=
   | .response =>
     { name := "response", doc := "After an event satisfying `after`, one satisfying `then` within the duration `within`.",
       tvars := ["event"], dataArgs := true,
-      params := [l "name" .str, l "after" (.fn [a] .bool), l "then" (.fn [a] .bool), l "within" .int],
+      params := [l "name" .str, l "after" (kept (.fn [a] .bool)), l "then" (kept (.fn [a] .bool)), l "within" .int],
       ret := .dsl .response [a] }
   | .scenario =>
     { name := "scenario",

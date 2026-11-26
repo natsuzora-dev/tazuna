@@ -751,6 +751,8 @@ pub const kept = [
   #("tazuna.send_query", 3, "on_answer"),
   #("tazuna.subscribe", 1, "wrap"),
   #("tazuna.create", 0, "table"),
+  #("tazuna.response", 1, "after"),
+  #("tazuna.response", 2, "then"),
 ]
 
 /// The types whose values are structure values, not data.

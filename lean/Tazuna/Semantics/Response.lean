@@ -23,10 +23,10 @@ namespace ResponseV
 variable {e : Ty} (resp : ResponseV e)
 
 /-- Whether a step applies an event satisfying `after`. -/
-def opens (m : Moment e) : Bool := m.events.any fun ev => Step.toB (resp.after (ev, ()))
+def opens (m : Moment e) : Bool := m.events.any fun ev => Step.toB (resp.after.fn (ev, ()))
 
 /-- Whether a step applies an event satisfying `then`. -/
-def answers (m : Moment e) : Bool := m.events.any fun ev => Step.toB (resp.then_ (ev, ()))
+def answers (m : Moment e) : Bool := m.events.any fun ev => Step.toB (resp.then_.fn (ev, ()))
 
 /-- The run's steps `ms` violate the response: step `i` opens it, a later step `j` comes past `i`'s time plus
 `within`, and no step from `i` up to (not including) `j` answers it. -/

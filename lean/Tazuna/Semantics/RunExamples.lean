@@ -12,8 +12,8 @@ open StepExamples
 
 /-- After an event `a`, an event `b` within 10 ms. -/
 def resp (a b : Int) : ResponseV .int :=
-  { name := "r", after := fun (x, ()) => Ty.ofBool ((show Int from x) == a),
-    then_ := fun (x, ()) => Ty.ofBool ((show Int from x) == b), within := 10 }
+  { name := "r", after := .closed (.lam (.bin (.eq rfl) (.var .here) (.int a))),
+    then_ := .closed (.lam (.bin (.eq rfl) (.var .here) (.int b))), within := 10 }
 
 def at_ (t : Int) (evs : List Int) : Moment .int := ⟨t, evs⟩
 
