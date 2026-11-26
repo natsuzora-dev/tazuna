@@ -61,12 +61,14 @@ variable (T : List TypeDecl)
 -- A type index past the table has no variants, so no tag matches.
 set_option linter.tazuna.silentDefault false in
 mutual
-/-- Every extension of the binding under which the wire form writes the value. -/
+/-- Every extension of the binding under which the wire form writes the value. A bag's or table's items are tried in
+the canonical order the trace writer writes them in, so the first binding found for a written trace is the writer's
+own: replay keeps the first and never comes back to another. -/
 def matchVal : (t : Ty) → t.den0 → Wire → Bind → List Bind
   | .int, n, .num m, b => if @BEq.beq Int _ n m then [b] else []
   | .str, s, .str s', b => if @BEq.beq String _ s s' then [b] else []
   | .list t, xs, .arr ws, b => seqMatch (matchVal t) xs ws b
-  | .bag t, xs, .arr ws, b => bagMatch (matchVal t) xs ws b
+  | .bag t, xs, .arr ws, b => bagMatch (matchVal t) (Ty.sortBy T t xs) ws b
   | .tuple ts, x, .arr ws, b => matchs ts x ws b
   | .adt i _ vs, x, w, b =>
     if i = 0 then matchLiteral (encBool vs x) w b else if i = 1 then matchLiteral (encNil vs x) w b
@@ -75,7 +77,7 @@ def matchVal : (t : Ty) → t.den0 → Wire → Bind → List Bind
       | _ => []
   | .table k v, x, .arr ws, b => bagMatch (fun (p : k.den0 × v.den0) w b => match w with
       | .arr [wk, wv] => (matchVal k p.1 wk b).flatMap (matchVal v p.2 wv)
-      | _ => []) x.1 ws b
+      | _ => []) (Ty.sortKeys T k v x.1) ws b
   | .date, d, .str s, b => if renderDate? d == some s then [b] else []
   | .id, n, .str s, b => ((bindPair b.ids n s).map fun ids => { b with ids }).toList
   | _, _, _, _ => []
