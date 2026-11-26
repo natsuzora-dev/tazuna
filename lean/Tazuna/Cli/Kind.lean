@@ -1,4 +1,5 @@
 import Tazuna.Semantics.Step
+import Tazuna.Cli.Restricted
 
 /-- A step that cannot happen in a correct spec, by kind (`Tazuna.Ir.Fault` without its details). -/
 inductive Tazuna.FaultKind : Type
@@ -57,10 +58,21 @@ inductive Tazuna.UndecidedKind : Type
   | upToRenaming
 deriving DecidableEq
 
-/-- Every kind of line the engine writes to stdout. test/e2e holds one case per kind, enumerated from `Kind.all`. -/
-inductive Tazuna.Kind : Type
-  /-- The IR the launcher handed over does not load: a converter bug, reported with exit code 4. -/
+/-- A bug of tazuna's own: no spec reaches it. -/
+inductive Tazuna.InternalKind : Type
+  /-- The IR the launcher handed over does not load: a converter bug. -/
   | invalidIr
+  /-- The converter could not make sense of a module that `gleam build` accepted: a converter bug. -/
+  | convert
+deriving DecidableEq
+
+/-- Every kind of line tazuna writes to stdout, the launcher's included. test/e2e holds one case per kind it covers
+(`Kind.e2e`), enumerated from `Kind.all`. -/
+inductive Tazuna.Kind : Type
+  | internal (k : Tazuna.InternalKind)
+  /-- Gleam outside the spec subset, which the launcher reports before Lean sees the spec: the spec must change, exit
+  code 1. -/
+  | restricted (k : Tazuna.Restricted)
   /-- The spec's structure breaks a rule: the spec must change, exit code 1. -/
   | illegal (k : Tazuna.Ir.Illegal)
   /-- A scenario or a trace made the spec fault: the spec must change, exit code 1. -/
@@ -77,6 +89,14 @@ inductive Tazuna.Kind : Type
   | undecided (k : Tazuna.UndecidedKind)
 
 namespace Tazuna
+
+def InternalKind.all : List InternalKind := [.invalidIr, .convert]
+
+theorem InternalKind.mem_all (k : InternalKind) : k ∈ InternalKind.all := by cases k <;> simp [InternalKind.all]
+
+def InternalKind.name : InternalKind → String
+  | .invalidIr => "invalidIr"
+  | .convert => "convert"
 
 def FaultKind.all : List FaultKind := [.invariant, .ensures, .cascadeLimit, .answerUnmatched, .invalidEffect]
 
@@ -137,7 +157,8 @@ namespace Kind
 
 /-- The name a line carries as its `kind`, such as `Illegal.wireName`. -/
 def name : Kind → String
-  | invalidIr => "Internal.invalidIr"
+  | internal k => "Internal." ++ k.name
+  | restricted k => "Restricted." ++ k.name
   | illegal k => "Illegal." ++ k.name
   | fault k => "Fault." ++ k.name
   | test k => "Test." ++ k.name
@@ -149,12 +170,14 @@ def name : Kind → String
   | undecided k => "Undecided." ++ k.name
 
 def all : List Kind :=
-  invalidIr :: Ir.Illegal.all.map illegal ++ FaultKind.all.map fault ++ TestKind.all.map test ++
+  InternalKind.all.map internal ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ FaultKind.all.map fault ++ TestKind.all.map test ++
     [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++
     GenerateKind.all.map generate ++ UndecidedKind.all.map undecided
 
 theorem mem_all (k : Kind) : k ∈ all := by
   cases k with
+  | internal k => simp [all, InternalKind.mem_all]
+  | restricted k => simp [all, Restricted.mem_all]
   | illegal k => simp [all, Ir.Illegal.mem_all]
   | fault k => simp [all, FaultKind.mem_all]
   | test k => simp [all, TestKind.mem_all]
@@ -162,6 +185,13 @@ theorem mem_all (k : Kind) : k ∈ all := by
   | generate k => simp [all, GenerateKind.mem_all]
   | undecided k => simp [all, UndecidedKind.mem_all]
   | _ => simp [all]
+
+/-- Whether test/e2e has a case of the kind. A Restricted kind has its unit test in gleam/test/convert_test.gleam
+instead, one per kind of the launcher's generated table; a converter bug has no input that reaches it. -/
+def e2e : Kind → Bool
+  | restricted _ | internal .convert => false
+  | internal .invalidIr | illegal _ | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
+  | generate _ | undecided _ => true
 
 end Kind
 

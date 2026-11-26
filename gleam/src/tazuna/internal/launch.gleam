@@ -12,6 +12,7 @@ import gleam/result
 import gleam/string
 import simplifile
 import tazuna/internal/convert.{type Finding, type Source, Source}
+import tazuna/internal/kind
 
 pub fn main() -> Nil {
   exit(run(argv()))
@@ -102,7 +103,7 @@ fn imports(text: String) -> List(String) {
 }
 
 fn findings_code(findings: List(Finding)) -> Int {
-  case list.any(findings, fn(f) { f.kind == convert.Internal }) {
+  case list.any(findings, fn(f) { f.kind == kind.Internal(kind.Convert) }) {
     True -> internal
     False -> violation
   }

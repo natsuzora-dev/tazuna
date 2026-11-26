@@ -3,8 +3,9 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import simplifile
-import tazuna/internal/convert.{type Restricted, Source}
+import tazuna/internal/convert.{Source}
 import tazuna/internal/ir
+import tazuna/internal/kind.{type Restricted}
 import tazuna/internal/names
 import tazuna/internal/print
 
@@ -76,80 +77,80 @@ pub fn ir_json_escapes_control_characters_test() {
 }
 
 /// A source that triggers the kind, and the line the finding points at.
-fn example(kind: Restricted) -> #(String, Int) {
-  case kind {
-    convert.Float -> #("pub fn f() -> Int {\n  let _ = 1.5\n  2\n}", 2)
-    convert.BitArray -> #("pub fn f() -> Int {\n  let _ = <<1>>\n  1\n}", 2)
-    convert.Panic -> #("pub fn f() -> Int {\n  panic\n}", 2)
-    convert.Todo -> #("pub fn f() -> Int {\n  todo\n}", 2)
-    convert.Echo -> #("pub fn f() -> Int {\n  echo 1\n}", 2)
-    convert.LetAssert -> #(
+fn example(k: Restricted) -> #(String, Int) {
+  case k {
+    kind.Float -> #("pub fn f() -> Int {\n  let _ = 1.5\n  2\n}", 2)
+    kind.BitArray -> #("pub fn f() -> Int {\n  let _ = <<1>>\n  1\n}", 2)
+    kind.Panic -> #("pub fn f() -> Int {\n  panic\n}", 2)
+    kind.Todo -> #("pub fn f() -> Int {\n  todo\n}", 2)
+    kind.Echo -> #("pub fn f() -> Int {\n  echo 1\n}", 2)
+    kind.LetAssert -> #(
       "pub fn f(o: Result(Int, Nil)) -> Int {\n  let assert Ok(x) = o\n  x\n}",
       2,
     )
-    convert.Assert -> #("pub fn f() -> Int {\n  assert 1 == 1\n  2\n}", 2)
-    convert.ListSpread -> #(
+    kind.Assert -> #("pub fn f() -> Int {\n  assert 1 == 1\n  2\n}", 2)
+    kind.ListSpread -> #(
       "pub fn f(xs: List(Int)) -> List(Int) {\n  [1, ..xs]\n}",
       2,
     )
-    convert.ListPattern -> #(
+    kind.ListPattern -> #(
       "pub fn f(xs: List(Int)) -> Int {\n  case xs {\n    [] -> 0\n    _ -> 1\n  }\n}",
       3,
     )
-    convert.StringPrefixPattern -> #(
+    kind.StringPrefixPattern -> #(
       "pub fn f(s: String) -> Int {\n  case s {\n    \"a\" <> _ -> 1\n    _ -> 0\n  }\n}",
       3,
     )
-    convert.External -> #(
+    kind.External -> #(
       "@external(javascript, \"./x.mjs\", \"f\")\npub fn f() -> Int",
       2,
     )
-    convert.ForeignFunction -> #(
+    kind.ForeignFunction -> #(
       "import gleam/int\n\npub fn f() -> String {\n  int.to_string(1)\n}",
       4,
     )
-    convert.ForeignType -> #(
+    kind.ForeignType -> #(
       "import gleam/dict\n\npub fn f(d: dict.Dict(Int, Int)) -> Int {\n  1\n}",
       3,
     )
-    convert.Recursion -> #(
+    kind.Recursion -> #(
       "pub fn f(n: Int) -> Int {\n  g(n)\n}\n\npub fn g(n: Int) -> Int {\n  f(n)\n}",
       2,
     )
-    convert.RecursiveType -> #(
+    kind.RecursiveType -> #(
       "pub type Tree {\n  Leaf\n  Node(Forest)\n}\n\npub type Forest {\n  Forest(trees: List(Tree))\n}",
       1,
     )
-    convert.Incomparable -> #(
+    kind.Incomparable -> #(
       "import tazuna/table\n\npub fn f(t: table.Table(fn() -> Int, Int)) -> Int {\n  table.size(table.remove(t, fn() { 1 }))\n}",
       4,
     )
-    convert.KeptCapture -> #(
+    kind.KeptCapture -> #(
       "import tazuna\n\npub fn f() -> tazuna.Query(Int, Int, Int, Int) {\n  let twice = fn(n) { n * 2 }\n  tazuna.query(name: \"q\", callers: [], accepts: fn(_) { [] }, resolve: fn(cx) {\n    twice(cx.input)\n  })\n}",
       6,
     )
-    convert.ShadowedImport -> #(
+    kind.ShadowedImport -> #(
       "import gleam/int.{to_string}\n\npub fn to_string() -> Int {\n  1\n}",
       3,
     )
-    convert.MixedReference -> #(
+    kind.MixedReference -> #(
       "import gleam/option.{type Option, Some}\n\npub fn f() -> Option(Int) {\n  option.Some(1)\n}",
       4,
     )
-    convert.MultiVariantUpdate -> #(
+    kind.MultiVariantUpdate -> #(
       "pub type S {\n  A(n: Int)\n  B(n: Int)\n}\n\npub fn f(s: S) -> S {\n  case s {\n    A(..) as a -> A(..a, n: 1)\n    _ -> s\n  }\n}",
       8,
     )
-    convert.VariantField -> #(
+    kind.VariantField -> #(
       "pub type S {\n  A(n: Int, m: Int)\n  B(n: Int)\n}\n\npub fn f(s: S) -> Int {\n  case s {\n    A(..) as a -> a.m\n    _ -> 0\n  }\n}",
       8,
     )
-    convert.ConstructorValue -> #(
+    kind.ConstructorValue -> #(
       "pub type P {\n  P(a: Int, b: Int)\n}\n\npub fn f() -> P {\n  1 |> P(2)\n}",
       6,
     )
-    convert.AnnotationNeeded -> #("pub fn f(x) -> Int {\n  1\n}", 1)
-    convert.RootSpec -> #(
+    kind.AnnotationNeeded -> #("pub fn f(x) -> Int {\n  1\n}", 1)
+    kind.RootSpec -> #(
       "import tazuna\n\npub fn spec(s: tazuna.Spec) -> tazuna.Spec {\n  s\n}",
       3,
     )
@@ -157,8 +158,8 @@ fn example(kind: Restricted) -> #(String, Int) {
 }
 
 pub fn each_restricted_kind_is_found_where_it_is_written_test() {
-  list.each(convert.restricted, fn(kind) {
-    let #(text, line) = example(kind)
+  list.each(kind.restricted, fn(k) {
+    let #(text, line) = example(k)
     let findings = case
       convert.convert([Source("m", "src/m.gleam", text)], "m")
     {
@@ -167,13 +168,13 @@ pub fn each_restricted_kind_is_found_where_it_is_written_test() {
     }
     let found =
       list.map(findings, fn(f) {
-        let assert convert.Finding(k, "src/m.gleam", option_at, _) = f
-        #(convert.kind_name(k), case option_at {
+        let assert convert.Finding(found, "src/m.gleam", option_at, _) = f
+        #(kind.name(found), case option_at {
           Some(at) -> at.line
           None -> 0
         })
       })
-    assert found == [#(convert.kind_name(convert.Restricted(kind)), line)]
+    assert found == [#(kind.name(kind.Restricted(k)), line)]
   })
 }
 
@@ -189,7 +190,7 @@ pub fn tazuna_functions_besides_built_ins_are_foreign_test() {
   let text = "import tazuna\n\npub fn f() -> Nil {\n  tazuna.main()\n}"
   let assert Error([f]) =
     convert.convert([Source("m", "src/m.gleam", text)], "m")
-  assert convert.kind_name(f.kind) == "Restricted.foreignFunction"
+  assert kind.name(f.kind) == "Restricted.foreignFunction"
   assert f.at == Some(ir.At(4, 3))
 }
 
@@ -200,7 +201,7 @@ pub fn equality_demands_flow_through_generic_functions_test() {
     "pub fn same(a: x, b: x) -> Bool {\n  a == b\n}\n\npub fn twice(a: y) -> Bool {\n  same(a, a)\n}\n\npub fn ints() -> Bool {\n  twice(1)\n}\n\npub fn fns() -> Bool {\n  twice(ints)\n}"
   let assert Error([f]) =
     convert.convert([Source("m", "src/m.gleam", text)], "m")
-  assert convert.kind_name(f.kind) == "Restricted.incomparable"
+  assert kind.name(f.kind) == "Restricted.incomparable"
   assert f.at == Some(ir.At(14, 3))
 }
 
@@ -213,7 +214,7 @@ fn kept_findings(body: String) -> List(#(Int, String)) {
     convert.convert([Source("m", "src/m.gleam", text)], "m")
   list.map(findings, fn(f) {
     let assert Some(at) = f.at
-    assert convert.kind_name(f.kind) == "Restricted.keptCapture"
+    assert kind.name(f.kind) == "Restricted.keptCapture"
     #(at.line, f.message)
   })
 }

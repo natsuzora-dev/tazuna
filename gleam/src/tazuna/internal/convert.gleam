@@ -2,7 +2,7 @@
 //// every node, and builds the IR. It decides no meaning; Lean does. Gleam
 //// outside the subset Lean gives meaning to is a `Restricted` finding.
 //// The input has passed `gleam build`, so a name or type the converter cannot
-//// make sense of is its own bug, reported as `Internal`.
+//// make sense of is its own bug, reported as `Internal.convert`.
 
 import glance as g
 import gleam/bit_array
@@ -19,6 +19,13 @@ import tazuna/internal/ir.{
 }
 import tazuna/internal/json
 import tazuna/internal/kept
+import tazuna/internal/kind.{
+  type Kind, type Restricted, AnnotationNeeded, Assert, BitArray,
+  ConstructorValue, Echo, External, Float, ForeignFunction, ForeignType,
+  Incomparable, KeptCapture, LetAssert, ListPattern, ListSpread, MixedReference,
+  MultiVariantUpdate, Panic, Recursion, RecursiveType, RootSpec, ShadowedImport,
+  StringPrefixPattern, Todo, VariantField,
+}
 import tazuna/internal/names.{type Imports}
 import tazuna/internal/print
 
@@ -26,103 +33,8 @@ pub type Source {
   Source(module: String, path: String, text: String)
 }
 
-/// Gleam the IR has no node for, or that the converter cannot type alone.
-pub type Restricted {
-  Float
-  BitArray
-  Panic
-  Todo
-  Echo
-  LetAssert
-  Assert
-  ListSpread
-  ListPattern
-  StringPrefixPattern
-  External
-  ForeignFunction
-  ForeignType
-  Recursion
-  RecursiveType
-  Incomparable
-  KeptCapture
-  ShadowedImport
-  MixedReference
-  MultiVariantUpdate
-  VariantField
-  ConstructorValue
-  AnnotationNeeded
-  RootSpec
-}
-
-pub const restricted = [
-  Float,
-  BitArray,
-  Panic,
-  Todo,
-  Echo,
-  LetAssert,
-  Assert,
-  ListSpread,
-  ListPattern,
-  StringPrefixPattern,
-  External,
-  ForeignFunction,
-  ForeignType,
-  Recursion,
-  RecursiveType,
-  Incomparable,
-  KeptCapture,
-  ShadowedImport,
-  MixedReference,
-  MultiVariantUpdate,
-  VariantField,
-  ConstructorValue,
-  AnnotationNeeded,
-  RootSpec,
-]
-
-pub type Kind {
-  Restricted(Restricted)
-  /// A converter bug.
-  Internal
-}
-
 pub type Finding {
   Finding(kind: Kind, file: String, at: Option(ir.At), message: String)
-}
-
-pub fn kind_name(kind: Kind) -> String {
-  case kind {
-    Internal -> "Internal.convert"
-    Restricted(r) ->
-      "Restricted."
-      <> case r {
-        Float -> "float"
-        BitArray -> "bitArray"
-        Panic -> "panic"
-        Todo -> "todo"
-        Echo -> "echo"
-        LetAssert -> "letAssert"
-        Assert -> "assert"
-        ListSpread -> "listSpread"
-        ListPattern -> "listPattern"
-        StringPrefixPattern -> "stringPrefixPattern"
-        External -> "external"
-        ForeignFunction -> "foreignFunction"
-        ForeignType -> "foreignType"
-        Recursion -> "recursion"
-        RecursiveType -> "recursiveType"
-        Incomparable -> "incomparable"
-        KeptCapture -> "keptCapture"
-        ShadowedImport -> "shadowedImport"
-        MixedReference -> "mixedReference"
-        MultiVariantUpdate -> "multiVariantUpdate"
-        VariantField -> "variantField"
-        ConstructorValue -> "constructorValue"
-        AnnotationNeeded -> "annotationNeeded"
-        RootSpec -> "rootSpec"
-      }
-  }
 }
 
 /// One JSON line, shaped like the engine's lines.
@@ -134,7 +46,7 @@ pub fn finding_line(f: Finding) -> String {
   json.encode(
     json.Object(
       list.flatten([
-        [#("kind", json.Str(kind_name(f.kind))), #("file", json.Str(f.file))],
+        [#("kind", json.Str(kind.name(f.kind))), #("file", json.Str(f.file))],
         at,
         [#("message", json.Str(f.message))],
       ]),
@@ -222,10 +134,15 @@ fn load(s: Source) -> Result(Mod, Finding) {
   case g.module(s.text) {
     Ok(ast) -> Ok(Mod(..m, ast:, imports: names.imports(s.module, ast.imports)))
     Error(g.UnexpectedEndOfInput) ->
-      Error(Finding(Internal, s.path, None, "glance: unexpected end of input"))
+      Error(Finding(
+        kind.Internal(kind.Convert),
+        s.path,
+        None,
+        "glance: unexpected end of input",
+      ))
     Error(g.UnexpectedToken(_, p)) ->
       Error(Finding(
-        Internal,
+        kind.Internal(kind.Convert),
         s.path,
         Some(position(m, p.byte_offset)),
         "glance: unexpected token",
@@ -249,12 +166,17 @@ fn position(m: Mod, offset: Int) -> ir.At {
   At(line, col + 1)
 }
 
-fn finding(m: Mod, kind: Restricted, span: g.Span, message: String) -> Finding {
-  Finding(Restricted(kind), m.path, Some(position(m, span.start)), message)
+fn finding(m: Mod, k: Restricted, span: g.Span, message: String) -> Finding {
+  Finding(kind.Restricted(k), m.path, Some(position(m, span.start)), message)
 }
 
 fn bug(m: Mod, span: g.Span, message: String) -> Finding {
-  Finding(Internal, m.path, Some(position(m, span.start)), message)
+  Finding(
+    kind.Internal(kind.Convert),
+    m.path,
+    Some(position(m, span.start)),
+    message,
+  )
 }
 
 /// Converts the spec's modules beside the `tazuna` modules, whose types and
@@ -417,7 +339,7 @@ pub fn convert(
       let path =
         list.key_find(program.sources, names.split(site.function).0)
         |> result.unwrap(site.function)
-      Finding(Restricted(Incomparable), path, Some(site.at), site.message)
+      Finding(kind.Restricted(Incomparable), path, Some(site.at), site.message)
     }),
   )
   use <- bail(
@@ -425,7 +347,7 @@ pub fn convert(
       let path =
         list.key_find(program.sources, names.split(site.function).0)
         |> result.unwrap(site.function)
-      Finding(Restricted(KeptCapture), path, Some(site.at), site.message)
+      Finding(kind.Restricted(KeptCapture), path, Some(site.at), site.message)
     }),
   )
   use <- bail(list.filter_map(mods, round_trip(program, _)))
@@ -440,7 +362,7 @@ pub fn root_findings(p: ir.Program) -> List(Finding) {
   case list.find(p.functions, fn(f) { f.name == p.root }) {
     Error(Nil) -> [
       Finding(
-        Restricted(RootSpec),
+        kind.Restricted(RootSpec),
         path,
         None,
         "the root module defines no spec() -> tazuna.Spec",
@@ -451,7 +373,7 @@ pub fn root_findings(p: ir.Program) -> List(Finding) {
         [], Con("tazuna.Spec", []) -> []
         _, _ -> [
           Finding(
-            Restricted(RootSpec),
+            kind.Restricted(RootSpec),
             path,
             Some(f.at),
             "spec must be spec() -> tazuna.Spec, the function the engine evaluates",
@@ -517,7 +439,8 @@ fn round_trip(p: ir.Program, m: Mod) -> Result(Finding, Nil) {
     )
   {
     Ok(Nil) -> Error(Nil)
-    Error(message) -> Ok(Finding(Internal, m.path, None, message))
+    Error(message) ->
+      Ok(Finding(kind.Internal(kind.Convert), m.path, None, message))
   }
 }
 
@@ -1087,9 +1010,7 @@ const str_ty = Con("String", [])
 /// `hint` is the type the context wants; only a lambda uses it, to type its
 /// parameters before its body.
 fn expr(cx: Cx, st: St, e: g.Expression, hint: Option(Ty)) -> R(Expr) {
-  let restrict = fn(kind, span, message) {
-    Error(finding(cx.m, kind, span, message))
-  }
+  let restrict = fn(k, span, message) { Error(finding(cx.m, k, span, message)) }
   case e {
     g.Int(span, text) -> Ok(#(node(cx, span, int_ty, ir.IntLit(text)), st))
     g.String(span, text) ->
@@ -2189,9 +2110,7 @@ fn pattern(
   t: Ty,
 ) -> R(#(Pat, List(#(String, Ty)))) {
   let pat = fn(span: g.Span, n) { Pat(at(cx, span), t, n) }
-  let restrict = fn(kind, span, message) {
-    Error(finding(cx.m, kind, span, message))
-  }
+  let restrict = fn(k, span, message) { Error(finding(cx.m, k, span, message)) }
   case p {
     g.PatternInt(span, text) -> {
       use st <- result.map(expect(cx, st, span, int_ty, t))
