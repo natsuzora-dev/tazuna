@@ -465,6 +465,41 @@ place, every handle of the function it is in. Every own effect of the service na
 def ServiceV.sentHandles (v : ServiceV) : List HandleSite :=
   (rootUses v).flatMap fun r => (rootSends r).flatMap (·.handlesIn r.2.1)
 
+/-- The handles the service's own sends name for certain: each send whose handle is a global called in place that
+makes exactly one handle. -/
+def ServiceV.definiteSends (v : ServiceV) : List HandleSite :=
+  (rootUses v).flatMap fun r => (rootSends r).filterMap fun w => match w.handles with
+    | some [h] => some h
+    | _ => none
+
+/-- Whether a handle names the command, by the name and types an own effect of it carries. -/
+def _root_.Tazuna.Ir.CommandV.namedBy {r e c : Ty} (x : CommandV r e c) (h : HandleSite) : Bool :=
+  h.kind == "command" && h.name == some x.name && match h.types with
+    | [_, _, _, i, j] => (Ty.same i x.input).isSome && (Ty.same j x.rejection).isSome
+    | _ => false
+
+/-- Whether a handle names the query, by the name and types an own effect of it carries. -/
+def _root_.Tazuna.Ir.QueryV.namedBy {r c : Ty} (x : QueryV r c) (h : HandleSite) : Bool :=
+  h.kind == "query" && h.name == some x.name && match h.types with
+    | [_, _, i, o] => (Ty.same i x.input).isSome && (Ty.same o x.output).isSome
+    | _ => false
+
+/-- The findings of `Illegal.callers` for a service: `Own` listed exactly when one of its sends may name the request,
+read on `sentHandles` (every handle a send may name, so a request it lacks is never sent) and `definiteSends` (the
+handles a send names for certain). -/
+def ServiceV.callerRules (v : ServiceV) : List (Illegal × String) :=
+  let rule (kind name : String) (callers : List (Ty.origin v.caller).den0) (named : HandleSite → Bool) :=
+    let own := callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 Step.own)
+    if callers.isEmpty then
+      [(Illegal.callers, s!"{v.name}.{name}: callers is empty, so nothing may run the {kind}; list Outside for each outside caller that may send it, and Own if the service sends it")]
+    else if own && !v.sentHandles.any named then
+      [(Illegal.callers, s!"{v.name}.{name} lists Own, but nothing in {v.name} sends it; remove Own")]
+    else if !own && v.definiteSends.any named then
+      [(Illegal.callers, s!"{v.name} sends the {kind} {name}, whose callers lack Own; add Own to its callers")]
+    else []
+  v.commands.flatMap (fun x => rule "command" x.name x.callers x.namedBy) ++
+    v.queries.flatMap fun q => rule "query" q.name q.callers q.namedBy
+
 /-- The senders a service's states can name, each with the kept functions its requests can hold: a machine's
 instance by its key, or a reaction, with the sites its effect function can reach. -/
 def senderShapes (v : ServiceV) : List ((ks : List Ty) × SenderShape ks × List AnySite) :=

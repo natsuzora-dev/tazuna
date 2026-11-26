@@ -1,0 +1,3 @@
+{"kind":"Illegal.callers","message":"counter.nobody: callers is empty, so nothing may run the command; list Outside for each outside caller that may send it, and Own if the service sends it"}
+{"kind":"Illegal.callers","message":"counter.unsent lists Own, but nothing in counter sends it; remove Own"}
+{"kind":"Illegal.callers","message":"counter sends the command outside, whose callers lack Own; add Own to its callers"}

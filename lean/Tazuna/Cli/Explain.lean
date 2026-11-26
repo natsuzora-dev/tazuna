@@ -136,6 +136,7 @@ def Ir.Illegal.means : Ir.Illegal → String
   | .handleName => docOf% Ir.Illegal.handleName
   | .tableKey => docOf% Ir.Illegal.tableKey
   | .response => docOf% Ir.Illegal.response
+  | .callers => docOf% Ir.Illegal.callers
   | .tagLabel => docOf% Ir.Illegal.tagLabel
 
 /-- A fault's line comes from test (at a scenario step) or verify (at a trace line). -/

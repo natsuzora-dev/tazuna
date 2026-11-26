@@ -50,13 +50,18 @@ inductive Illegal where
   /-- A field of a custom type is labelled `tag`: on the wire a variant's name sits under the key `tag`, beside its
   fields under their labels, so a field labelled so has no place. -/
   | tagLabel
+  /-- A command's or query's `callers` is empty, lists `Own` while nothing in its service can send it, or lacks `Own`
+  while a send names it for certain: the list says who may run the request, and every send of the service's own is in
+  its source. A send whose handle check cannot pin down (a handle passed as a value, or a function that makes more
+  than one) is not checked here; running it without `Own` listed is `Fault.invalidEffect`. -/
+  | callers
 deriving Repr, DecidableEq
 
 namespace Illegal
 
 def all : List Illegal :=
   [wireName, owner, unknownSource, creates, wireType, stateType, bounds, scenario, rejection, machineKey, unknownHandle,
-    handleName, tableKey, response, tagLabel]
+    handleName, tableKey, response, tagLabel, callers]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -76,6 +81,7 @@ def name : Illegal → String
   | tableKey => "tableKey"
   | response => "response"
   | tagLabel => "tagLabel"
+  | callers => "callers"
 
 end Illegal
 

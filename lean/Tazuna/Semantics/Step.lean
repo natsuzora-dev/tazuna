@@ -91,9 +91,11 @@ inductive Fault where
   request, so the fault carries no id: wire ids are names, compared only up to renaming. -/
   | answerUnmatched
   /-- An effect asked for what its target does not accept: a command or query of the service's own that was Invalid
-  (the rules broken, as Invalid names them) or that the service does not list (`service`), or an external's command
-  or query that no external of the spec lists with these types (`declared`). Check's unknownHandle rule keeps the
-  last two out of checked specs; the step is defined for every service, so they stay faults. -/
+  (the rules broken, as Invalid names them; `callers` when it does not list `Own`) or that the service does not list
+  (`service`), or an external's command or query that no external of the spec lists with these types (`declared`).
+  Check's unknownHandle rule keeps the last two out of checked specs, and its callers rule keeps out `callers` for
+  every send whose handle it can pin down; a send it cannot (a handle passed as a value, or a function that makes
+  more than one) can still run without `Own` listed. The step is defined for every service, so they stay faults. -/
   | invalidEffect (name : String) (rules : List String)
 
 inductive Outcome where

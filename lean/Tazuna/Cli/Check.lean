@@ -53,8 +53,14 @@ def loadSpec (root path : String) : Cmd (Option Smt.CheckedSpec) := do
   | .ok p =>
     if hP : Ir.SitesUnique p.defs.sites then
       let captures := p.defs.sites.map fun ⟨Γ, _, s⟩ => (s.site, Γ)
+      -- No proof reads the callers rule: a send it misses is still a fault, `Fault.invalidEffect`.
+      let callerFindings := (p.eval ()).services.flatMap Ir.ServiceV.callerRules
       match h : Ir.SpecV.illegal p.types (p.eval ()) p.defs.handles captures Ir.ServiceV.sentHandles with
       | [] =>
+        if !callerFindings.isEmpty then
+          for (k, message) in callerFindings do
+            printLine (.illegal k) [("message", Json.str message)]
+          return none
         if htys : (p.eval ()).services.all (·.stateTys) = true then
           if hw : (p.eval ()).services.all (·.wireOk p.types) = true then
             return some ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) (by simpa using htys) (by simpa using hw) h,
@@ -68,7 +74,7 @@ def loadSpec (root path : String) : Cmd (Option Smt.CheckedSpec) := do
             "a state, event or caller type has a type variable, an ADT 0 that is not Bool or a table with no plain key"⟩
           return none
       | findings =>
-        for (k, message) in findings do
+        for (k, message) in findings ++ callerFindings do
           printLine (.illegal k) [("message", Json.str message)]
         return none
     else
