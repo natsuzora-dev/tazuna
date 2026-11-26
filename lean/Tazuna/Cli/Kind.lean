@@ -31,6 +31,15 @@ inductive Tazuna.ProveKind : Type
   | violated
 deriving DecidableEq
 
+/-- What `generate` found for one target. -/
+inductive Tazuna.GenerateKind : Type
+  /-- A run from the initial state whose last step shows the target's class of out line: its trace is written. -/
+  | reached
+  /-- No run of at most the spec's steps, of valid inputs within the slots and faulting nowhere, shows the target's
+  class at any step. Not "unreachable": a longer run or larger slots may reach it. -/
+  | unreached
+deriving DecidableEq
+
 /-- Why `prove` has no verdict for a question: exit code 2 when nothing is violated. -/
 inductive Tazuna.UndecidedKind : Type
   /-- The solver answered unknown or ran out of time or resources. -/
@@ -61,6 +70,7 @@ inductive Tazuna.Kind : Type
   /-- A trace line does not read as a line of the service, or breaks the order of time: exit code 1. -/
   | traceInvalid
   | prove (k : Tazuna.ProveKind)
+  | generate (k : Tazuna.GenerateKind)
   | undecided (k : Tazuna.UndecidedKind)
 
 namespace Tazuna
@@ -102,6 +112,14 @@ def ProveKind.name : ProveKind → String
   | .withinBounds => "withinBounds"
   | .violated => "violated"
 
+def GenerateKind.all : List GenerateKind := [.reached, .unreached]
+
+theorem GenerateKind.mem_all (k : GenerateKind) : k ∈ GenerateKind.all := by cases k <;> simp [GenerateKind.all]
+
+def GenerateKind.name : GenerateKind → String
+  | .reached => "reached"
+  | .unreached => "unreached"
+
 def UndecidedKind.all : List UndecidedKind := [.unknown, .limit, .unencodableString, .upToRenaming]
 
 theorem UndecidedKind.mem_all (k : UndecidedKind) : k ∈ UndecidedKind.all := by cases k <;> simp [UndecidedKind.all]
@@ -124,11 +142,13 @@ def name : Kind → String
   | verifyDiffers => "Verify.differs"
   | traceInvalid => "Trace.invalid"
   | prove k => "Prove." ++ k.name
+  | generate k => "Generate." ++ k.name
   | undecided k => "Undecided." ++ k.name
 
 def all : List Kind :=
   invalidIr :: Ir.Illegal.all.map illegal ++ FaultKind.all.map fault ++ TestKind.all.map test ++
-    [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++ UndecidedKind.all.map undecided
+    [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++
+    GenerateKind.all.map generate ++ UndecidedKind.all.map undecided
 
 theorem mem_all (k : Kind) : k ∈ all := by
   cases k with
@@ -136,6 +156,7 @@ theorem mem_all (k : Kind) : k ∈ all := by
   | fault k => simp [all, FaultKind.mem_all]
   | test k => simp [all, TestKind.mem_all]
   | prove k => simp [all, ProveKind.mem_all]
+  | generate k => simp [all, GenerateKind.mem_all]
   | undecided k => simp [all, UndecidedKind.mem_all]
   | _ => simp [all]
 

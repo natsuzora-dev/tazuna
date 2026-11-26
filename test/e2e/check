@@ -2,7 +2,8 @@
 # Each kind of output line has one end-to-end case, a directory named after the kind. Fails when a kind has no case or
 # a case names no kind, and runs each case as a user would, once per target: the launcher, run in a copy of the case's
 # src/ (and snapshots/ and traces/, when the case has them) with the arguments in its args file, must print the case's
-# stdout and exit with the code in its exit file. A kind
+# stdout and exit with the code in its exit file. A case with written/ must leave a directory written/ equal to it,
+# as generate writes its traces there. A kind
 # no spec can reach (a converter or launcher bug) has an ir.json instead of src/, which the engine reads directly.
 # Usage: test/e2e/check <file listing the kinds, one per line> <engine> <the Gleam package's build/dev directory>
 set -eu
@@ -48,6 +49,10 @@ for dir in */; do
     [ "$out" = "$(cat "$case/stdout")" ] || { printf 'e2e: %s on %s printed\n%s\n' "$case" "$target" "$out"; status=1; }
     [ "$code" = "$(cat "$case/exit")" ] ||
       { echo "e2e: $case on $target exited $code, expected $(cat "$case/exit")"; status=1; }
+    if [ -d "$case/written" ]; then
+      diff -r "$case/written" "$work/$case-$target/written" >/dev/null ||
+        { echo "e2e: $case on $target wrote other files than $case/written"; status=1; }
+    fi
   done
 done
 exit $status

@@ -3,6 +3,7 @@ import Lean.Util.CollectAxioms
 import Lean.Meta.Tactic.Simp.SimpTheorems
 import Tazuna.Cli.Test
 import Tazuna.Cli.Prove
+import Tazuna.Cli.Generate
 import Tazuna.Semantics.After
 import Tazuna.Smt.Prove
 import Tazuna.Smt.Cover
@@ -76,6 +77,7 @@ elab "#check_tazuna_reach" : command => do
     -- What the engine runs: each command, and the lists the e2e harness and gen-dsl print, which hold every output
     -- kind, built-in and DSL type.
     ``Tazuna.Cli.check, ``Tazuna.Cli.test, ``Tazuna.Cli.verify, ``Tazuna.Cli.prove, ``Tazuna.Cli.proveArgs,
+    ``Tazuna.Cli.generate,
     ``Tazuna.Kind.mem_all, ``Tazuna.Ir.Prim.mem_all, ``Tazuna.Ir.Dsl.mem_all,
     -- Gleam's meaning where languages differ, and literals: reading back a printed literal gives it back.
     ``Tazuna.Gleam.div_zero, ``Tazuna.Gleam.mod_zero, ``Tazuna.Gleam.div_add_mod, ``Tazuna.Gleam.mod_neg_left,
@@ -141,6 +143,9 @@ elab "#check_tazuna_reach" : command => do
     -- An unrolled run, which generate reads, is a run: every model's steps decode to inputs whose run from the
     -- initial state takes the kinds the model picks, faults nowhere, and leaves the states the terms denote.
     ``Tazuna.Smt.unroll_decode,
+    -- T6: a trace generate writes reaches its target: read back, verify replays it as passed, and its last step
+    -- answers in the target's class.
+    ``Tazuna.Cli.generate_reaches,
     -- T6b: generate's "unreached within k steps": where its script at a depth has no model, no run of that many valid
     -- inputs within the slots that faults nowhere answers at its last step in the target's class (from
     -- `runs_covered`: every such run is a model of every assertion but the goal).

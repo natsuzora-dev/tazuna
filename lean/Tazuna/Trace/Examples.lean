@@ -8,12 +8,6 @@ namespace Tazuna.Trace.Examples
 
 open Tazuna.Ir Tazuna.Ir.StepExamples
 
-/-- The lines of a written trace after its header, printed and parsed again, numbered as verify numbers them. -/
-def reread (ws : List Wire) : Option (List (Nat × Line)) :=
-  (ws.drop 1).zipIdx.mapM fun (w, k) => match Wire.parse w.text with
-    | .ok w' => (Line.ofWire w').map (k + 2, ·)
-    | .error _ => none
-
 /-- Whether the trace of the inputs replays as passed. -/
 def replays (xs : List (Input svc)) : Bool :=
   match traceOf prelude svc xs with

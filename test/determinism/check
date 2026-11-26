@@ -3,7 +3,8 @@
 # e2e spec with a violation, proved from an empty cache with --jobs 1 and with --jobs 4, must print the same bytes and
 # exit with the same code. The one where everything is proved, proved with --only, must print some of the full run's
 # lines, each the same apart from `assumes`: an invariant --only leaves out is not proved in that run, so it is
-# assumed.
+# assumed. generate, run the same ways, must print the same lines and write the same files, and with --only the files
+# it writes must be the full run's.
 # Usage: test/determinism/check <engine> <the Gleam package's build/dev directory>
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -38,3 +39,33 @@ strip "$work/only/out.jsonl" >"$work/kept"
 while IFS= read -r line; do
   grep -qxF "$line" "$work/full" || { printf 'determinism: prove --only printed a line the full run lacks:\n%s\n' "$line"; exit 1; }
 done <"$work/kept"
+
+generate() {
+  name=$1
+  shift
+  mkdir "$work/$name"
+  cp -R "$here/../e2e/Generate.reached/src" "$work/$name/"
+  code=0
+  (cd "$work/$name" && TAZUNA_ENGINE="$engine" node "$work/run.mjs" generate m written "$@" >out.jsonl) || code=$?
+  echo "$code" >"$work/$name/exit"
+}
+generate gone --jobs 1
+generate gfour --jobs 4
+if ! cmp -s "$work/gone/out.jsonl" "$work/gfour/out.jsonl" || ! cmp -s "$work/gone/exit" "$work/gfour/exit" ||
+  ! diff -r "$work/gone/written" "$work/gfour/written" >/dev/null; then
+  echo "determinism: generate printed other lines, exited otherwise or wrote other files with --jobs 1 than with --jobs 4"
+  exit 1
+fi
+generate gonly --only "counter/add invalid"
+[ -s "$work/gonly/out.jsonl" ] || { echo "determinism: generate --only printed no line"; exit 1; }
+while IFS= read -r line; do
+  grep -qxF "$line" "$work/gone/out.jsonl" ||
+    { printf 'determinism: generate --only printed a line the full run lacks:\n%s\n' "$line"; exit 1; }
+done <"$work/gonly/out.jsonl"
+for f in "$work/gonly/written"/*/*; do
+  cmp -s "$f" "$work/gone/written/${f#"$work/gonly/written/"}" ||
+    { echo "determinism: generate --only wrote $f unlike the full run"; exit 1; }
+done
+# A written trace is one verify passes.
+(cd "$work/gone" && TAZUNA_ENGINE="$engine" node "$work/run.mjs" verify m written/counter >verify.jsonl) ||
+  { echo "determinism: verify did not pass the traces generate wrote:"; cat "$work/gone/verify.jsonl"; exit 1; }

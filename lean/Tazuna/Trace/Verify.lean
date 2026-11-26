@@ -222,4 +222,10 @@ def replay (lines : List (Nat × Line)) : Verdict := Id.run do
 
 end
 
+/-- The lines of a written trace after its header, printed and parsed again, numbered as verify numbers them. -/
+def reread (ws : List Wire) : Option (List (Nat × Line)) :=
+  (ws.drop 1).zipIdx.mapM fun (w, k) => match Wire.parse w.text with
+    | .ok w' => (Line.ofWire w').map (k + 2, ·)
+    | .error _ => none
+
 end Tazuna.Trace
