@@ -58,6 +58,12 @@ def proj : {vs : List (List Ty)} → Ty.alts vs → (v : Fin vs.length) → Opti
 def only {fs : List Ty} : Ty.alts [fs] → Ty.dens fs
   | .inl x => x
 
+theorem view_inj : {vs : List (List Ty)} → (v : Fin vs.length) → (x : Ty.dens (vs.get v)) → (view (inj v x)).1 = v
+  | _ :: _, ⟨0, _⟩, _ => rfl
+  | _ :: _, ⟨k + 1, h⟩, x => by
+    have := view_inj (v := ⟨k, Nat.lt_of_succ_lt_succ h⟩) x
+    simp only [inj, view, this]
+
 theorem inj_view : {vs : List (List Ty)} → (x : Ty.alts vs) → inj (view x).1 (view x).2 = x
   | [], e => nomatch e
   | _ :: _, .inl _ => rfl

@@ -94,7 +94,8 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Trace.replay_iff,
     -- A counterexample's `after` is the state the step reaches before its invariant check.
     ``Tazuna.Ir.step_settled,
-    -- generate's targets, from the checked IR's rule names, miss no class of out line a step can show.
+    -- generate's targets, from the checked IR's rule names and the rejections each `decide`'s source may return, miss
+    -- no class of out line a step can show.
     ``Tazuna.Ir.targets_cover,
     -- generate writes distinct targets of distinct services to distinct files, so none overwrites or removes another's.
     ``Tazuna.Cli.targetFile_inj,

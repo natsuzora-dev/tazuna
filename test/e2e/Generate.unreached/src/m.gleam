@@ -31,7 +31,10 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, Rejection) {
     name: "add",
     callers: [tazuna.Outside(User)],
     accepts: fn(n: Int) { [#("positive", n > 0)] },
-    decide: fn(c: Ctx(Records, Int, Caller)) { Ok([Added(c.input)]) },
+    decide: fn(c: Ctx(Records, Int, Caller)) {
+      use <- tazuna.require(c.records.total >= 0, Full)
+      Ok([Added(c.input)])
+    },
     ensures: fn(c: Ctx(Records, Int, Caller), r: Records) {
       [#("grows", r.total > c.records.total)]
     },

@@ -29,13 +29,6 @@ def LaterVariant : (t : Ty) → t.den → Prop
   | .adt _ _ _, x => (Alts.view x).1.val ≠ 0
   | _, _ => True
 
-theorem Alts.view_inj : {vs : List (List Ty)} → (v : Fin vs.length) → (x : Ty.dens (vs.get v)) →
-    (Alts.view (Alts.inj v x)).1 = v
-  | _ :: _, ⟨0, _⟩, _ => rfl
-  | _ :: _, ⟨k + 1, h⟩, x => by
-    have := Alts.view_inj (v := ⟨k, Nat.lt_of_succ_lt_succ h⟩) x
-    simp only [Alts.inj, Alts.view, this]
-
 variable (D : Defs G) (g : Ty.dens G)
 
 mutual

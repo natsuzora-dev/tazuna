@@ -1,14 +1,15 @@
 import Tazuna.Semantics.PendingInv
+import Tazuna.Semantics.Rejects
 import Tazuna.Semantics.Start
 
 /-! What `generate` aims at. verify judges an implementation by its out lines, so a test input is worth writing when
 it makes the service show a class of out line: an answer's outcome to a command or query, an event by its variant, a
 request to an external's command or query (`OutClass`). Machine states show in no out line, so they are no targets.
-The targets are enumerated from the spec's declarations (`targets`); `classes_covered` says the enumeration misses
-no class a step can show. Rule names are the one part a spec can compute: a rule whose name is no literal is aimed at
-as "a rule of a computed name" (`GenTarget.invalid _ none`), and the literal names are read off the checked IR's
-`accepts` sources (`ruleNamesOf`), so every target exists whether or not a step's encoding is refused
-(`targets_cover`). -/
+The targets are enumerated from the spec's declarations (`targets`), a command's rejections from what its `decide`'s
+source may return (`rejectionsOf`); `classes_covered` says the enumeration misses no class a step can show. Rule names
+are the one part a spec can compute: a rule whose name is no literal is aimed at as "a rule of a computed name"
+(`GenTarget.invalid _ none`), and the literal names are read off the checked IR's `accepts` sources (`ruleNamesOf`),
+so every target exists whether or not a step's encoding is refused (`targets_cover`). -/
 
 namespace Tazuna.Ir
 
@@ -45,6 +46,24 @@ theorem variantOf_mem : (t : Ty) → (x : t.den0) → variantOf T t x ∈ varian
   | .adt _ _ vs, x => List.mem_map.2 ⟨altIndex vs x, List.mem_range.2 (altIndex_lt vs x), rfl⟩
   | .int, _ | .str, _ | .list _, _ | .tuple _, _ | .fn _ _, _ | .param _, _ | .bag _, _ | .table _ _, _
   | .date, _ | .id, _ | .dsl _ _, _ => List.mem_singleton.2 rfl
+
+/-- A value's constructor is the same as data and as evaluation holds it. -/
+theorem view_up (i : Nat) (as : List Ty) : (vs : List (List Ty)) → (h : (Ty.adt i as vs).isData = true) →
+    (j : (Ty.adt i as vs).den0) → (Alts.view (Ty.up (.adt i as vs) h j)).1.val = altIndex vs j
+  | [], _, j => nomatch j
+  | fs :: _, h, .inl x => by
+    have hfs : (Ty.tuple fs).isData = true := by simp_all [Ty.isData, Ty.isDatass]
+    rw [Ty.up_inl i as fs _ h hfs x]
+    rfl
+  | _ :: vs, h, .inr y => by
+    have hvs : (Ty.adt i as vs).isData = true := by simp_all [Ty.isData, Ty.isDatass]
+    rw [Ty.up_inr i as _ vs h hvs y]
+    have := view_up i as vs hvs y
+    simp only [Alts.view, altIndex]
+    revert this
+    generalize Alts.view (Ty.up (.adt i as vs) hvs y) = w
+    obtain ⟨⟨k, hk⟩, z⟩ := w
+    simp
 
 end Variants
 
@@ -176,14 +195,21 @@ def invalidTargets (rules : RuleNames) (request : String) (c : Ty) (callers : Li
   (if coversOutside c callers && !(rules request).contains none then [] else [.invalid request (some "callers")]) ++
   (if hasOutside callers then (rules request).map (.invalid request) else [])
 
-/-- Every target of the service, in a fixed order: per command its accepted and rejected per constructor targets
-when an outside caller is listed, and its invalid targets; per query its answered target likewise, and its invalid
-targets; an event per constructor; a request per external command or query some sender can send (`shapes`), once
-however many senders can. Targets are answers to request lines, so a request only the service sends has only the
-Invalid `callers` one: an outside request must be refused. -/
+/-- The constructors of its rejection a command's answers can name: those its `decide`'s source names
+(`Expr.rejects`), or every one where the source does not say (`rejected_mem`). -/
+def rejectionsOf {r e c : Ty} (x : CommandV r e c) : List (Option String) :=
+  match x.rejection, x.decide.body.thenRejects with
+  | .adt i _ _, some ks => dedupBy (· == ·) (ks.map (variantName T i))
+  | t, _ => variantsOf T t
+
+/-- Every target of the service, in a fixed order: per command its accepted target and a rejected target per
+constructor its answers can name (`rejectionsOf`) when an outside caller is listed, and its invalid targets; per query
+its answered target likewise, and its invalid targets; an event per constructor; a request per external command or
+query some sender can send (`shapes`), once however many senders can. Targets are answers to request lines, so a
+request only the service sends has only the Invalid `callers` one: an outside request must be refused. -/
 def targets (rules : RuleNames) : List GenTarget :=
   (v.commands.flatMap fun x =>
-    (if hasOutside x.callers then .accepted x.name :: (variantsOf T x.rejection).map (.rejected x.name) else []) ++
+    (if hasOutside x.callers then .accepted x.name :: (rejectionsOf T x).map (.rejected x.name) else []) ++
       invalidTargets rules x.name v.caller x.callers) ++
   (v.queries.flatMap fun q =>
     (if hasOutside q.callers then [.answered q.name] else []) ++ invalidTargets rules q.name v.caller q.callers) ++
@@ -317,6 +343,50 @@ theorem Fun.fn_app {ps : List Ty} {r : Ty} (f : Fun (.fn ps r)) (hps : (Ty.tuple
   rw [Fun.fn, Ty.up_down] at this
   rw [this, Ty.down_up]
   rfl
+
+/-- A kept `decide` that returns the rejection `j` returns a constructor its source names (`Expr.rejects_sound`). -/
+theorem Fun.rejects_mem {ctx a : Ty} {i : Nat} {as : List Ty} {vs : List (List Ty)}
+    (f : Fun (.fn [ctx] (.result a (.adt i as vs)))) {ks : List Nat} (hk : f.body.thenRejects = some ks)
+    (cx : ctx.den0) (j : (Ty.adt i as vs).den0) (hd : f.fn (cx, ()) = .inr (.inl (j, ()))) : altIndex vs j ∈ ks := by
+  have ht := f.ht
+  simp only [Ty.isData, Ty.isDatas, Bool.and_eq_true, Bool.and_true] at ht
+  have hps : (Ty.tuple [ctx]).isData = true := by simpa [Ty.isData, Ty.isDatas] using ht.1
+  have hres : (Ty.result a (.adt i as vs)).isData = true := ht.2
+  have hR : (Ty.adt i as vs).isData = true := by simp_all [Ty.result, Ty.isData, Ty.isDatass, Ty.isDatas]
+  have happ := Fun.fn_app f hps hres (cx, ())
+  rw [happ] at hd
+  have hy := congrArg (Ty.up _ hres) hd
+  rw [Ty.up_down] at hy
+  have h1 : (Ty.adt 2 [a, .adt i as vs] [[.adt i as vs]]).isData = true := by
+    simp_all [Ty.result, Ty.isData, Ty.isDatass, Ty.isDatas]
+  have h2 : (Ty.tuple [Ty.adt i as vs]).isData = true := by simp_all [Ty.isData, Ty.isDatas]
+  have hup : Ty.up (Ty.result a (.adt i as vs)) hres (.inr (.inl (j, ()))) =
+      (.inr (.inl (Ty.up _ hR j, ())) : (Ty.result a (.adt i as vs)).den) := by
+    have := Ty.up_inr 2 [a, .adt i as vs] [a] [[.adt i as vs]] hres h1 (.inl (j, ()))
+    erw [Ty.up_inl 2 _ [.adt i as vs] [] h1 h2, Ty.up_tuple _ [] h2 hR rfl] at this
+    exact this
+  rw [hup] at hy
+  have hn := Expr.thenRejects_sound f.defs f.defs.eval f.body hk rfl (Ty.up _ f.hΓ f.env)
+    (Ty.up (.tuple [ctx]) hps (cx, ())) (Alts.view (Ty.up _ hR j)).1.val
+  rw [← view_up i as vs hR j]
+  apply hn
+  change errIndex _ (f.eval _) = _
+  rw [hy]
+  rfl
+
+/-- A command's rejection is one of the constructors `rejectionsOf` lists. -/
+theorem rejected_mem (T : List TypeDecl) {r e c : Ty} (x : CommandV r e c) (cx : (Ty.ctx r x.input c).den0)
+    (j : x.rejection.den0) (hd : x.decide.fn (cx, ()) = .inr (.inl (j, ()))) :
+    variantOf T x.rejection j ∈ rejectionsOf T x := by
+  obtain ⟨name, input, rejection, callers, accepts, decide, ensures⟩ := x
+  unfold rejectionsOf
+  cases rejection
+  case adt i as vs =>
+    cases hk : decide.body.thenRejects with
+    | none => exact variantOf_mem T _ j
+    | some ks =>
+      exact (mem_dedupBy (fun _ _ => beq_iff_eq) _ _).2 (List.mem_map.2 ⟨_, Fun.rejects_mem decide hk cx j hd, rfl⟩)
+  all_goals exact variantOf_mem T _ j
 
 /-- Every rule an `accepts` function breaks is named by a literal its source writes, or the source computes a name. -/
 theorem Fun.ruleNames_listed {i : Ty} (f : Fun (.fn [i] Ty.rules)) (x : i.den0) :
@@ -609,19 +679,43 @@ theorem execCommand_invalid {a : Acc v} {x : CommandV v.records v.event v.caller
       | ok a3 => simp only [h3] at h; split at h <;> cases h
     | .inr (.inl (j, ())) => cases h
 
+/-- A command rejects with what its `decide` returned. -/
+theorem execCommand_rejected {a b : Acc v} {x : CommandV v.records v.event v.caller} {c : (Ty.origin v.caller).den0}
+    {i : x.input.den0} {j : x.rejection.den0} (h : execCommand T a x c i = .ok (.rejected b j)) :
+    ∃ cx, x.decide.fn (cx, ()) = .inr (.inl (j, ())) := by
+  unfold execCommand at h
+  cases had : admit x.callers x.accepts c i with
+  | cons r rs' => simp [had] at h
+  | nil =>
+    simp only [had] at h
+    refine ⟨ctx a.state a.state.records c i, ?_⟩
+    generalize x.decide.fn (ctx a.state a.state.records c i, ()) = d at h ⊢
+    match d with
+    | .inl (evs, ()) =>
+      simp only [bind, Except.bind] at h
+      cases h3 : applyEvents T { a with state := { a.state with fresh := a.state.fresh + 1 } } evs with
+      | error e => simp [h3] at h
+      | ok a3 => simp only [h3] at h; split at h <;> cases h
+    | .inr (.inl (j', ())) => cases h; rfl
+
 theorem step_command_outcome (s : State v) (i : Fin v.commands.length) (caller : v.caller.den0)
     (input : (v.commands.get i).input.den0) :
     (∀ rs, (step T v s (.command i caller input)).outcome = .invalid rs →
       rs = admit (v.commands.get i).callers (v.commands.get i).accepts (outside caller) input) ∧
-    (∀ w, (step T v s (.command i caller input)).outcome = .rejected w → w.1 = (v.commands.get i).rejection) := by
+    (∀ w, (step T v s (.command i caller input)).outcome = .rejected w →
+      ∃ cx j, w = ⟨(v.commands.get i).rejection, j⟩ ∧
+        (v.commands.get i).decide.fn (cx, ()) = .inr (.inl (j, ()))) := by
   simp only [step]
   split
   · rename_i rs h
     refine ⟨fun _ h' => ?_, fun _ h' => nomatch h'⟩
     cases h'
     exact execCommand_invalid h
-  · refine ⟨fun _ h => (nomatch h), fun _ h => ?_⟩
-    cases h; rfl
+  · rename_i b j h
+    refine ⟨fun _ h => (nomatch h), fun _ h' => ?_⟩
+    cases h'
+    obtain ⟨cx, hd⟩ := execCommand_rejected h
+    exact ⟨cx, j, rfl, hd⟩
   · exact ⟨fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
   · rename_i a _
     rcases finish_outcome (T := T) { s with fresh := s.fresh + 1 } (.ok a) .accepted with h | ⟨f, h⟩
@@ -728,7 +822,7 @@ theorem classes_covered (T : List TypeDecl) {P : List AnySite} {E : List AnyEffe
       obtain ⟨hinv, hrej⟩ := step_command_outcome (T := T) s i caller input
       have inCmd : ∀ g, g ∈ (if hasOutside (v.commands.get i).callers then
           GenTarget.accepted (v.commands.get i).name ::
-            (variantsOf T (v.commands.get i).rejection).map (.rejected (v.commands.get i).name) else []) ++
+            (rejectionsOf T (v.commands.get i)).map (.rejected (v.commands.get i).name) else []) ++
           invalidTargets rules (v.commands.get i).name v.caller (v.commands.get i).callers → g ∈ targets T v rules :=
         fun g hg => List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
           (List.mem_flatMap.2 ⟨_, List.get_mem _ _, hg⟩)))
@@ -748,14 +842,11 @@ theorem classes_covered (T : List TypeDecl) {P : List AnySite} {E : List AnyEffe
         simp only [answerClasses, List.mem_singleton] at hc
         subst hc
         have hO := hout fun rs h => by rw [ho] at h; cases h
-        have h1 := hrej w ho
-        obtain ⟨t, j⟩ := w
-        simp only at h1
-        subst h1
+        obtain ⟨cx, j, rfl, hd⟩ := hrej w ho
         refine ⟨.rejected (v.commands.get i).name (variantOf T _ j), inCmd _ (List.mem_append_left _ ?_),
           by simp [GenTarget.covers]⟩
         simp only [hO, ↓reduceIte]
-        exact List.mem_cons_of_mem _ (List.mem_map.2 ⟨_, variantOf_mem T _ j, rfl⟩)
+        exact List.mem_cons_of_mem _ (List.mem_map.2 ⟨_, rejected_mem T _ cx j hd, rfl⟩)
       | invalid rs =>
         rw [ho] at hc
         simp only [answerClasses] at hc
@@ -801,7 +892,7 @@ theorem classes_covered (T : List TypeDecl) {P : List AnySite} {E : List AnyEffe
       by simp [GenTarget.covers, Step.Pending.line, hx, hn]⟩
 
 /-- generate's targets miss no class: every class of out line a step from a state the step invariant holds of shows is
-aimed at by one of the targets generate makes from the checked IR (`ruleNamesOf`). -/
+aimed at by one of the targets generate makes from the checked IR (`ruleNamesOf`, `rejectionsOf`). -/
 theorem targets_cover (T : List TypeDecl) {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV}
     (hv : v.Reach P E) {s : State v} (hs : Step.Inv P s) (x : Input v) :
     ∀ c ∈ classes T v x (step T v s x), ∃ g ∈ targets T v (ruleNamesOf v), g.covers (ruleNamesOf v) c = true :=

@@ -116,6 +116,8 @@ A response is judged per step, so a `then` event in the same step as its trigger
 Answers are to request lines, which come from outside, so the targets follow `callers`.
 A command or query that lists no `Outside` caller has only `<request> invalid callers`: an outside request must be refused.
 `<request> invalid callers` is left out when `callers` lists `Outside` of every value of a caller type whose variants have no fields, since no request line can then be refused for its caller.
+A command gets `<command> rejected <Variant>` only for the constructors its `decide` may return.
+Where `decide` writes every rejection in place as a constructor, in `require`, `lookup` or `Error(..)`, through `let` and `case`, those are the constructors it names (`Expr.rejects_sound`); anywhere else, such as a rejection held in a variable or returned by a helper function, every constructor of the rejection type stays a target.
 `targets_cover`: every class of out line a step can show is aimed at by one of these targets.
 For each target, `generate` searches runs from the initial state, one input longer each time, up to `steps` inputs.
 

@@ -1,4 +1,3 @@
 {"assumes":[],"kind":"Prove.proved","service":"cubes","step":"init","target":"invariant no cube sum"}
 {"kind":"Undecided.unknown","service":"cubes","step":"command set","target":"invariant no cube sum","why":"the solver answered unknown"}
 {"assumes":["ids the service made are used only after they appeared on an out line"],"kind":"Prove.proved","service":"cubes","step":"clock","target":"invariant no cube sum"}
-{"assumes":["ids the service made are used only after they appeared on an out line","no step of the run faults"],"kind":"Prove.unreachable","service":"cubes","target":"set rejected Nil"}
