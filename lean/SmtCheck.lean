@@ -3502,6 +3502,41 @@ def proveCheck (solver : Solver) : IO Bool := do
     [.invariant none (some "small"), .invariant (some "start") none, .cascade] [.cascade]
   return a && b && c
 
+/-! A question's model decodes to its input: on a service whose command `take` takes a table, every question of the
+command asserts the input's well-formedness (`SymInput.wf`, second in its context), so no model has a key twice in the input (unsat); without
+it one does (sat), and decoding that model fails, which `prove` reported as an internal error. -/
+
+def takeC : CommandV recordsT evT .str :=
+  { name := "take", input := recordsT, rejection := .str, callers := ["alice"],
+    accepts := .closed (.lam (.list .nil)),
+    decide := .closed (.lam (.ctor (vs := [[.list evT], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil))),
+    ensures := .closed (.lam (.list .nil)) }
+
+def takeSvc : ServiceV := { eventSvc with name := "t", commands := [takeC] }
+
+def inputWfCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: input well-formedness: {m}"; return false
+  let v := takeSvc
+  let L := svcLayout v 3
+  let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
+  let w := stateWidth v
+  let inp : SymInput v (shapes v) senv.nT := .command ⟨0, by decide⟩ (.var w) (.var (w + 1))
+  let (some (d, n), some (dt, _)) := (L.find? recordsT, L.find? (.tuple [Ty.bool, .int, .int]))
+    | fail "no table datatype"
+  let S := slotsOf d dt n 2 (.var (w + 1))
+  let twice : Term := .and (.and S[0]!.1 S[1]!.1) (.eq (S[0]!.2[0]) (S[1]!.2[0]))
+  let .ok (_, qs) := questions L prelude [] v senv inp | fail "no questions"
+  let mut ok := true
+  for q in qs do
+    for (withWf, want) in [(true, "unsat"), (false, "sat")] do
+      let context := if withWf then q.ask.context else q.ask.context.eraseIdx 1
+      let got := match ← solver.run { q.ask.contextScript with asserts := context ++ [twice] } with
+        | .unsat => "unsat"
+        | .sat _ => "sat"
+        | _ => "unknown"
+      if got != want then ok ← fail s!"a key twice in the input (well-formedness {withWf}): {got}"
+  return ok
+
 /-! T5's pair questions (`pairQuestions`, `pair_sound`): the service `p` keeps rows of `#(key, value)`, and alice's
 own commands are `ins k`, which inserts `#(k, k)`, `set k`, which writes `#(0, k)`, and `cap k`, which inserts
 `#(k, k)` and ensures at most one row. Two `ins` commute from every state (rows in other slots are the same table), so
@@ -3897,6 +3932,7 @@ def check (z3 : String) : IO Bool := do
   unless ← cascEventCheck solver do ok := false
   unless ← tickClockCheck solver do ok := false
   unless ← proveCheck solver do ok := false
+  unless ← inputWfCheck solver do ok := false
   unless ← unrollCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with

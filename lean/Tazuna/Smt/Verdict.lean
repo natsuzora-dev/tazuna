@@ -491,6 +491,7 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   intro hfault
   obtain ⟨t, ht, hq⟩ := bind_ok.1 hq
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
+  obtain ⟨iwf, hiwf, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
@@ -501,12 +502,14 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   have hR := decode_state hS
   have hwfH : Holds M wf := wf_of_decodeState (need_ok.1 hwf) hS
   have hbelowH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below
+  have hiwfH : Holds M iwf := SymInput.wf_of_decode (need_ok.1 hiwf) hx
   have hcaseH := hcase t ht
   obtain ⟨a, ha, hna⟩ := hun _ (List.mem_cons_self ..) (.inl rfl)
   simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
     or_false] at ha
-  rcases ha with rfl | rfl | rfl | rfl
+  rcases ha with rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
+  · exact hna hiwfH
   · exact hna hbelowH
   · exact hna hcaseH
   obtain ⟨hside, hcondOf⟩ := bound_holds hna
@@ -536,8 +539,9 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) (.inr ⟨g, rfl, hn⟩)
   simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
     or_false] at ha
-  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
+  · exact hna hiwfH
   · exact hna hbelowH
   · exact hna hcaseH
   · exact hna hside
@@ -551,18 +555,20 @@ section
 variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- What an input kind's bound question says where it has no model: wherever the symbolic state decodes to a state of
-the right shape whose invariants hold, in the case the questions ask about, the step's codes, the cascade's codes and
+the right shape whose invariants hold and the symbolic input to an input, in the case the questions ask about, the step's codes, the cascade's codes and
 the step's condition hold, so the step stays within the slots. -/
 theorem bound_cond {P : List AnySite} (senv : StepEnv L (shapes v)) (inp : SymInput v (shapes v) senv.nT)
     {gs : List Target} {qs : List (Question v (shapes v) senv.nT)} (hq : questions L T P v senv inp = .ok (gs, qs))
     {s : State v} (hS : (SymState.vars (v := v) 0).decode M L T (shapes v) = some s)
     (hinv : Step.Inv P s) (hheld : Step.invariants s = []) (hord : ∀ m ∈ v.machines, m.key.ordered T = true)
+    {hc : v.caller.isData = true} {x : Input v} (hx : inp.decode M L hc = some x)
     (hcase : ∀ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t → Holds M t.out.case)
     (hun : ∀ q ∈ qs, q.target = none → ∃ a ∈ q.script.asserts, ¬ Holds M a) :
     ∃ t, encodeStep L T P v senv (SymState.vars 0) inp = .ok t ∧ Holds M t.codes ∧ Holds M t.sites ∧
       Holds M t.cond := by
   obtain ⟨t, ht, hq⟩ := bind_ok.1 hq
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
+  obtain ⟨iwf, hiwf, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
@@ -574,8 +580,9 @@ theorem bound_cond {P : List AnySite} (senv : StepEnv L (shapes v)) (inp : SymIn
   obtain ⟨a, ha, hna⟩ := hun _ (List.mem_cons_self ..) rfl
   simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
     or_false] at ha
-  rcases ha with rfl | rfl | rfl | rfl
+  rcases ha with rfl | rfl | rfl | rfl | rfl
   · exact (hna (wf_of_decodeState (need_ok.1 hwf) hS)).elim
+  · exact (hna (SymInput.wf_of_decode (need_ok.1 hiwf) hx)).elim
   · exact (hna ((pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below)).elim
   · exact (hna (hcase t ht)).elim
   obtain ⟨hside, hcondOf⟩ := bound_holds hna
@@ -665,6 +672,7 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   obtain ⟨hcf, hsf, hif, haf, hkf, hstf⟩ := hfit
   obtain ⟨t, ht, hq⟩ := bind_ok.1 hq
   obtain ⟨wf, hwf, hq⟩ := bind_ok.1 hq
+  obtain ⟨iwf, hiwf, hq⟩ := bind_ok.1 hq
   obtain ⟨below, hbelow, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨inv, ci0⟩, hinvc, hq⟩ := bind_ok.1 hq
   obtain ⟨⟨rules, ci⟩, hrules, hq⟩ := bind_ok.1 hq
@@ -675,6 +683,7 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   have hR := decode_state hS
   have hwfH : Holds M wf := wf_of_decodeState (need_ok.1 hwf) hS
   have hbelowH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below
+  have hiwfH : Holds M iwf := SymInput.wf_of_decode (need_ok.1 hiwf) hx
   have hcaseH := hcase t ht
   have henc := step_encode chk senv hS hinv hx ht
   have hcodes := henc.1.2 (codesFit_of_decode hx hcf)
@@ -708,8 +717,9 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
     (List.mem_cons_of_mem _ (List.mem_map.2 ⟨g, List.mem_filter.2 ⟨mem_dedup hg, hkeep⟩, rfl⟩)) ⟨g, rfl, hn⟩
   simp only [Question.script, TypedScript.script, List.cons_append, List.nil_append, List.mem_cons, List.not_mem_nil,
     or_false] at ha
-  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  rcases ha with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
   · exact hna hwfH
+  · exact hna hiwfH
   · exact hna hbelowH
   · exact hna hcaseH
   · exact hna hside

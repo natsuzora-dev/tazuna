@@ -91,7 +91,7 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
   rcases covered chk senv hkeys hW x hivs with ⟨inp, hmem, _, M, hM, hS, hxd, hcase⟩ | h
   · obtain ⟨gs, qs, hqs, hor⟩ := hq inp hmem
     rcases hor with hun | hfit
-    · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond senv inp hqs hS hinv hheld hord hcase
+    · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond senv inp hqs hS hinv hheld hord hxd hcase
         fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') M fun n h => varSorted_of_sorted (hM n h)
       exact ((step_encode chk senv hS hinv hxd ht).2 hcodes hsites (hcase t ht)).2.2 hcond a hb
     · obtain ⟨t, ht, -⟩ := bind_ok.1 hqs

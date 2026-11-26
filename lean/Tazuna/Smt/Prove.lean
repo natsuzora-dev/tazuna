@@ -388,8 +388,8 @@ section
 variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
 
 /-- The targets of a service and their questions for one input kind, from the state at `v0` on and the input's
-terms after it. Every question asserts the state's shape (well-formed slots, wire ids below the next) and the case
-it is about; a step question also the side conditions, the invariants on the state and the step's condition, and
+terms after it. Every question asserts the state's and the input's shape (well-formed slots, wire ids below the
+next), so each model decodes, and the case it is about; a step question also the side conditions, the invariants on the state and the step's condition, and
 the target broken; the bound question that the side conditions fail or, with the invariants, the step's condition.
 So where every question is unsat, no state of that shape with its invariants holding has a step of the kind that
 breaks the target. -/
@@ -398,6 +398,7 @@ def questions (inp : SymInput v (shapes v) senv.nT) :
   let S : SymState v := SymState.vars 0
   let t ← encodeStep L T P v senv S inp
   let wf ← need (.layout (.type v.records)) (S.wf L (shapes v))
+  let iwf ← need (.layout (.type v.records)) (inp.wf L)
   let below ← pendingBelowT L (shapes v) S.pending S.nextId
   let (inv, ci0) ← v.invariants.code L
   let (rules, ci) ← encodeInvariants L inv S.records
@@ -407,7 +408,7 @@ def questions (inp : SymInput v (shapes v) senv.nT) :
   let tys := stateTys v (shapes v) ++ inp.tys
   let vars ← tys.mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
   let dts ← need (.layout (.type v.records)) L.datatypes?
-  let script (asserts : List Term) : TypedScript := ⟨dts, tys, vars, [wf, below, t.out.case], asserts⟩
+  let script (asserts : List Term) : TypedScript := ⟨dts, tys, vars, [wf, iwf, below, t.out.case], asserts⟩
   let cmd := inp.command?
   let targets := (dedup (t.out.targets cmd)).filter
     fun g => (t.out.breaks cmd g).const?.map Val.toBool != some false

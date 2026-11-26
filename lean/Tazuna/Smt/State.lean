@@ -461,4 +461,60 @@ theorem decode_answer {t : Ty} {toT valT : Term} {x : Input v} (h : decodeAnswer
 
 end
 
+section
+variable (L : Layout) {v : ServiceV}
+
+/-- The input's terms are well formed, as a state's are (`SymState.wf`): each value's slots and ids, and an answer's
+wire id not negative. Every script whose models are read as inputs asserts it, so a model's values decode to an
+input; every input a model decodes to satisfies it (`SymInput.wf_of_decode`), so no input is lost. -/
+def SymInput.wf {shs : List (PendingShape v.event)} {n : Nat} : SymInput v shs n → Option Term
+  | .command i caller input => (wfT L v.caller caller).bind fun c => (wfT L (v.commands.get i).input input).map (andT c)
+  | .query i caller input => (wfT L v.caller caller).bind fun c => (wfT L (v.queries.get i).input input).map (andT c)
+  | .answer k _ to value => (wfT L (answerTy shs[k].output shs[k].rejection) value).map (andT (.le (.int 0) to))
+  | .unmatched t to value => (wfT L t value).map (andT (.le (.int 0) to))
+  | .event i value => wfT L (v.subscribes.get i).event value
+  | .clock _ => some tt
+
+end
+
+section
+variable {M : Model} {L : Layout} {v : ServiceV}
+
+theorem wfT_of_decodeV {t : Ty} {x : Term} {c : Term} {y : t.den} (hc : wfT L t x = some c)
+    (h : decodeV L t (x.denote M) = some y) : Holds M c :=
+  (wf_iff t x c hc (decode_sorted t _ y h)).2 (by rw [h]; rfl)
+
+theorem natOf_holds {to : Term} {k : Nat} (h : natOf (to.denote M) = some k) : Holds M (.le (.int 0) to) := by
+  simp [Holds, Term.denote, natOf_eq h, Val.toBool, Val.toInt]
+
+theorem answer_wf_of_decode {t : Ty} {to value c : Term} {x : Input v} (hc : (wfT L t value).map (andT (.le (.int 0) to)) = some c)
+    (h : decodeAnswer M L t to value = some x) : Holds M c := by
+  obtain ⟨cv, hcv, rfl⟩ := map_some.1 hc
+  unfold decodeAnswer at h
+  split at h
+  · obtain ⟨k, h1, h⟩ := bind_some.1 h
+    obtain ⟨y, h2, -⟩ := map_some.1 h
+    exact (holds_andT _ _).2 ⟨natOf_holds h1, wfT_of_decodeV hcv h2⟩
+  · cases h
+
+/-- Every input a model decodes to satisfies the input's well-formedness. -/
+theorem SymInput.wf_of_decode {shs : List (PendingShape v.event)} {n : Nat} {hc : v.caller.isData = true}
+    {inp : SymInput v shs n} {c : Term} (hw : inp.wf L = some c) {x : Input v} (h : inp.decode M L hc = some x) :
+    Holds M c := by
+  cases inp with
+  | command i caller input | query i caller input =>
+    obtain ⟨c1, hc1, hw⟩ := bind_some.1 hw
+    obtain ⟨c2, hc2, rfl⟩ := map_some.1 hw
+    obtain ⟨y1, h1, h⟩ := bind_some.1 h
+    obtain ⟨y2, h2, -⟩ := map_some.1 h
+    exact (holds_andT _ _).2 ⟨wfT_of_decodeV hc1 h1, wfT_of_decodeV hc2 h2⟩
+  | answer k j to value => exact answer_wf_of_decode hw h
+  | unmatched t to value => exact answer_wf_of_decode hw h
+  | event i value =>
+    obtain ⟨y, h1, -⟩ := map_some.1 h
+    exact wfT_of_decodeV hw h1
+  | clock time => cases hw; exact holds_tt
+
+end
+
 end Tazuna.Smt

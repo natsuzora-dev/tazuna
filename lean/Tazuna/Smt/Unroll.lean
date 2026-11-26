@@ -92,22 +92,6 @@ def SymInput.validT (fresh : Term) : SymInput v (shapes v) n → Except Refusal 
     need (.layout (.type t)) (namesT L fresh t value)
   | .event i value => need (.layout (.type (v.subscribes.get i).event)) (namesT L fresh (v.subscribes.get i).event value)
 
-/-- The input's terms are well formed, as a state's are (`SymState.wf`), so a model's values decode to an input. -/
-def SymInput.wfT : SymInput v (shapes v) n → Except Refusal Term
-  | .command i caller input => do
-    let c ← need (.layout (.type v.caller)) (Smt.wfT L v.caller caller)
-    let x ← need (.layout (.type (v.commands.get i).input)) (Smt.wfT L (v.commands.get i).input input)
-    pure (andT c x)
-  | .query i caller input => do
-    let c ← need (.layout (.type v.caller)) (Smt.wfT L v.caller caller)
-    let x ← need (.layout (.type (v.queries.get i).input)) (Smt.wfT L (v.queries.get i).input input)
-    pure (andT c x)
-  | .clock _ | .unmatched .. => pure tt
-  | .answer k _ _ value =>
-    let t := answerTy (shapes v)[k].output (shapes v)[k].rejection
-    need (.layout (.type t)) (Smt.wfT L t value)
-  | .event i value => need (.layout (.type (v.subscribes.get i).event)) (Smt.wfT L (v.subscribes.get i).event value)
-
 end
 
 /-- One step of an unrolled run: its selector, the states before and after, and each kind it may take, with the
@@ -204,7 +188,7 @@ def unroll (d : Nat) (goal : List (UnrollStep v senv.nT) → Term) : Except Refu
     let mut kinds : List (Nat × SymInput v (shapes v) senv.nT × EncodedStep v) := []
     let mut picks : List Term := []
     for (inp, k) in inps.zipIdx do
-      match encodeStep L T P v senv S inp, inp.validT L S.fresh, inp.wfT L with
+      match encodeStep L T P v senv S inp, inp.validT L S.fresh, need (.layout (.type v.records)) (inp.wf L) with
       | .ok t, .ok valid, .ok wf =>
         let (ok, after) := t.out.after S inp
         kinds := kinds ++ [(k, inp, t)]
