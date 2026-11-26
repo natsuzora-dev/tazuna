@@ -10,6 +10,7 @@ import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Unroll
 import Tazuna.Semantics.StepExamples
 import Tazuna.Cli.Prove
+import Tazuna.Cli.Generate
 
 -- Test scaffolding: a value the model leaves out reads as a default that the checks then reject.
 set_option linter.tazuna.silentDefault false
@@ -3875,6 +3876,84 @@ def unrollCheck (solver : Solver) : IO Bool := do
   | .error r => ok ← fail s!"no run of tagging: {repr r}"
   return ok
 
+/-! generate's event and request goals on `sum`: an event is first applied at one input (add), the request `ping` first
+sent at three (two adds start the machine and set its timer, a clock line at the deadline fires it), so the request
+goal is unsat at depth 2 and sat at 3, and each model's run, played back in Lean, shows the target at its last step. -/
+
+def genGoalCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: generate goal: {m}"; return false
+  let v := StepExamples.svc
+  let L := svcLayout v 3
+  let P := (svcParts v).sites
+  let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
+  let rules : RuleNames := fun _ => []
+  let mut ok := true
+  for (g, d, want) in [(GenTarget.event none, 1, true), (.request "mail" "ping", 2, false),
+      (.request "mail" "ping", 3, true)] do
+    match unroll L prelude P v senv d (genGoal L prelude rules g) with
+    | .error r => ok ← fail s!"{reprStr g} at depth {d}: {repr r}"
+    | .ok u =>
+      match ← solver.run u.ask.script, want with
+      | .unsat, false => pure ()
+      | .sat vs, true =>
+        match u.steps.mapM (·.decode (modelOf vs) L rfl) with
+        | some xs =>
+          unless Tazuna.Cli.lastHits prelude v rules g xs do
+            ok ← fail s!"{reprStr g} at depth {d}: the model's last step misses the target"
+        | none => ok ← fail s!"{reprStr g} at depth {d}: the model's inputs do not decode"
+      | a, _ => ok ← fail s!"{reprStr g} at depth {d}: {repr a}, want sat {want}"
+  return ok
+
+/-! A response's goal on `sum` (`respGoal`). "After 5, 99 within 10" is violated by add 5 then a clock line past 10:
+no model at depth 1, one at depth 2 whose run, played back in Lean, violates it with timely clock lines. A last step
+at time 10 is in time, so asking for one is unsat; dropping the deadline's strictness (within 9 over Ints) makes it
+sat. A clock line past a waiting timer is ruled out (timelyClock): after adds of 5 and 1, which set a timer due at 10,
+a violation of "after any event, 99 within 5" whose third step comes at 11 is unsat, and at 10 sat. -/
+
+/-- After an event satisfying `p`, an event satisfying `q` within `within` ms, on `sum`'s Int events. -/
+def sumResp (p q : Expr [] [Ty.int] Ty.bool) (within : Int) : ResponseV .int :=
+  { name := "r", after := .closed (.lam p), then_ := .closed (.lam q), within }
+
+def respGoalCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: response goal: {m}"; return false
+  let v := StepExamples.svc
+  let L := svcLayout v 3
+  let P := (svcParts v).sites
+  let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
+  let is (n : Int) : Expr [] [Ty.int] Ty.bool := .bin (.eq rfl) (.var .here) (.int n)
+  let fiveThen99 := sumResp (is 5) (is 99) 10
+  let anyThen99 := sumResp (.bin (.eq rfl) (.var .here) (.var .here)) (is 99) 5
+  let lastAt (t : Int) (sts : List (UnrollStep v senv.nT)) : Term := match sts.getLast? with
+    | some st => .eq st.after.now (.int t)
+    | none => .bool false
+  -- Records after the first two steps: 5, then 6, so each step applied an event.
+  let fiveThenSix (sts : List (UnrollStep v senv.nT)) : Term := match sts with
+    | a :: b :: _ => andT (.eq a.after.records (.int 5)) (.eq b.after.records (.int 6))
+    | _ => .bool false
+  let cases : List (String × ResponseV .int × Nat × (List (UnrollStep v senv.nT) → Term) × Bool) :=
+    [("violated at depth 1", fiveThen99, 1, fun _ => tt, false),
+     ("violated at depth 2", fiveThen99, 2, fun _ => tt, true),
+     ("violated at the deadline", fiveThen99, 2, lastAt 10, false),
+     ("violated at the deadline, strictness dropped", sumResp (is 5) (is 99) 9, 2, lastAt 10, true),
+     ("a clock line past a waiting timer", anyThen99, 3, fun sts => andT (fiveThenSix sts) (lastAt 11 sts), false),
+     ("a clock line at a waiting timer", anyThen99, 3, fun sts => andT (fiveThenSix sts) (lastAt 10 sts), true)]
+  let mut ok := true
+  for (name, resp, d, more, want) in cases do
+    match unroll L prelude P v senv d (fun sts => andT (respGoal L v resp sts) (more sts)) with
+    | .error r => ok ← fail s!"{name}: {repr r}"
+    | .ok u =>
+      unless (respGoalE L v resp u.steps).toOption.isSome do ok ← fail s!"{name}: the goal's encoding is refused"
+      match ← solver.run u.ask.script, want with
+      | .unsat, false => pure ()
+      | .sat vs, true =>
+        match u.steps.mapM (·.decode (modelOf vs) L rfl) with
+        | some xs =>
+          unless resp.violatedBy prelude (Step.State.init v) xs && Tazuna.Cli.timelyRun prelude v (Step.State.init v) xs do
+            ok ← fail s!"{name}: the model's run does not violate the response with timely clock lines"
+        | none => ok ← fail s!"{name}: the model's inputs do not decode"
+      | a, _ => ok ← fail s!"{name}: {repr a}, want sat {want}"
+  return ok
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -3970,6 +4049,8 @@ def check (z3 : String) : IO Bool := do
   unless ← proveCheck solver do ok := false
   unless ← inputWfCheck solver do ok := false
   unless ← unrollCheck solver do ok := false
+  unless ← genGoalCheck solver do ok := false
+  unless ← respGoalCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
