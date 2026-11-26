@@ -187,19 +187,19 @@ fn todo_service() -> tazuna.Service {
     },
     responses: [
       tazuna.response(
-        // after and then are separate predicates, so this cannot tie the
-        // reminder or the completion to the task that was added.
-        name: "something is reminded or done within an hour of an add",
+        name: "an added task is reminded or done within an hour",
         after: fn(event) {
           case event {
             Added(..) -> True
             _ -> False
           }
         },
-        then: fn(event) {
-          case event {
-            ReminderDue(..) | Completed(..) -> True
-            _ -> False
+        then: fn(trigger, event) {
+          case trigger, event {
+            Added(task:, ..), ReminderDue(task: reminded, ..) ->
+              reminded == task
+            Added(task:, ..), Completed(task: done) -> done == task
+            _, _ -> False
           }
         },
         within: hour,

@@ -162,7 +162,7 @@ fn s1() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E1) {
+        then: fn(_trigger: E1, e: E1) {
           case e {
             Ping1 -> True
             _ -> False
@@ -178,7 +178,7 @@ fn s1() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E1) {
+        then: fn(_trigger: E1, e: E1) {
           case e {
             Bumped1(_) -> True
             _ -> False

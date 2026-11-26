@@ -162,7 +162,7 @@ fn s1() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E1) {
+        then: fn(_trigger: E1, e: E1) {
           case e {
             Ping1 -> True
             _ -> False
@@ -178,7 +178,7 @@ fn s1() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E1) {
+        then: fn(_trigger: E1, e: E1) {
           case e {
             Bumped1(_) -> True
             _ -> False
@@ -338,7 +338,7 @@ fn s2() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E2) {
+        then: fn(_trigger: E2, e: E2) {
           case e {
             Ping2 -> True
             _ -> False
@@ -354,7 +354,7 @@ fn s2() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E2) {
+        then: fn(_trigger: E2, e: E2) {
           case e {
             Bumped2(_) -> True
             _ -> False
@@ -514,7 +514,7 @@ fn s3() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E3) {
+        then: fn(_trigger: E3, e: E3) {
           case e {
             Ping3 -> True
             _ -> False
@@ -530,7 +530,7 @@ fn s3() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E3) {
+        then: fn(_trigger: E3, e: E3) {
           case e {
             Bumped3(_) -> True
             _ -> False
@@ -690,7 +690,7 @@ fn s4() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E4) {
+        then: fn(_trigger: E4, e: E4) {
           case e {
             Ping4 -> True
             _ -> False
@@ -706,7 +706,7 @@ fn s4() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E4) {
+        then: fn(_trigger: E4, e: E4) {
           case e {
             Bumped4(_) -> True
             _ -> False
@@ -866,7 +866,7 @@ fn s5() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E5) {
+        then: fn(_trigger: E5, e: E5) {
           case e {
             Ping5 -> True
             _ -> False
@@ -882,7 +882,7 @@ fn s5() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E5) {
+        then: fn(_trigger: E5, e: E5) {
           case e {
             Bumped5(_) -> True
             _ -> False
@@ -1042,7 +1042,7 @@ fn s6() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E6) {
+        then: fn(_trigger: E6, e: E6) {
           case e {
             Ping6 -> True
             _ -> False
@@ -1058,7 +1058,7 @@ fn s6() -> tazuna.Service {
             _ -> False
           }
         },
-        then: fn(e: E6) {
+        then: fn(_trigger: E6, e: E6) {
           case e {
             Bumped6(_) -> True
             _ -> False

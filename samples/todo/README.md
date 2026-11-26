@@ -50,8 +50,7 @@ The other 18 lines read `Prove.withinBounds`, and the command exits 0.
 No step breaks its target while the state fits the spec's `bounds`, but a step can grow the task table past the two tasks that `creates` allows.
 Each line lists those bounds.
 
-The response `something is reminded or done within an hour of an add` reads `Prove.withinBounds` as well.
-As its name says, it does not tie the reminder or the completion to the task that was added.
+The response `an added task is reminded or done within an hour` reads `Prove.withinBounds` as well.
 
 ## Test the scenario
 
