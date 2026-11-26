@@ -465,7 +465,7 @@ def prove (root path : String) (opts : Options) : IO UInt32 := do
       | .ready r => placed := placed.push (.ready r)
       | .skipped s g => placed := placed.push (.skipped s g)
       | .ask o =>
-        let (j, r) ← Job.of do pure (o.read (← solver.runCached cache o.script))
+        let (j, r) ← Job.of do pure ((← solver.runCached cache o.script) >>= o.read)
         questions := questions.push j
         placed := placed.push (.asked r)
     -- One pool for all: the builds first, so a search waits only on a build some worker runs, then the searches,

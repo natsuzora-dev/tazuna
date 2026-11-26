@@ -60,9 +60,13 @@ def modelOf (vs : List (Nat × Val)) : Model :=
   { vars := fun n => (vs.lookup n).getD default, divZero := fun _ => 0, modZero := fun _ => 0,
     selOther := fun _ _ _ _ => default, defs := fun _ => default }
 
-/-- Runs one script and reads the answer. -/
+/-- Why a script has no text: a shared term without a sort. The encoder builds only sorted terms, but no theorem
+states it, so where it happens it is an engine bug, never a spec's undecided line. -/
+def noSort : String := "a shared term of the script has no sort; the encoder builds only sorted terms (unproved)"
+
+/-- Runs one script and reads the answer; smt-check's runner, which reads a script without text as unknown. -/
 def Solver.run (s : Solver) (script : Script) : IO Answer := do
-  let some text := script.text s.header | return .unknown "a shared term of the script has no sort"
+  let some text := script.text s.header | return .unknown noSort
   match ← s.runText text with
   | .ok out => return Answer.parse out
   | .error why => return .unknown why
@@ -105,10 +109,11 @@ def Solver.runKeyed (s : Solver) (dir : System.FilePath) (q : Keyed) : IO Answer
       IO.FS.rename partFile answerFile
     return a
 
-/-- Runs one script, or reads its answer from the cache directory `dir`, keyed by its whole text. -/
-def Solver.runCached (s : Solver) (dir : System.FilePath) (script : Script) : IO Answer := do
-  let some q := script.keyed s.header | return .unknown "a shared term of the script has no sort"
-  s.runKeyed dir q
+/-- Runs one script, or reads its answer from the cache directory `dir`, keyed by its whole text; an engine bug where
+the script has no text (`noSort`). -/
+def Solver.runCached (s : Solver) (dir : System.FilePath) (script : Script) : IO (Except String Answer) := do
+  let some q := script.keyed s.header | return .error noSort
+  return .ok (← s.runKeyed dir q)
 
 /-- A script's text parts with their shared definitions found, the definitions' sorts and the SHA-256 of the framed
 parts: what scripts that add one goal assertion share (the goals of generate's targets and of a service's responses at
@@ -147,8 +152,5 @@ answers with questions by position. -/
 structure Obligation (α : Type) where
   script : Script
   read : Answer → α
-
-def Obligation.run {α : Type} (s : Solver) (o : Obligation α) : IO α := do
-  return o.read (← s.run o.script)
 
 end Tazuna.Smt

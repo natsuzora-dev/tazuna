@@ -217,9 +217,7 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth v 
       | .ok g => pure g
     let U := B.withGoal g
     if refused.isNone then refused := U.refused.head?
-    let unsorted : SearchResult α := .undecided (.undecided .unknown) [("depth", Lean.toJson d),
-      ("why", Json.str "a shared term of the script has no sort")]
-    let some q := pre.bind (·.ask g) | return .ok unsorted
+    let some q := pre.bind (·.ask g) | return fail s!"depth {d}: {noSort}"
     match ← solver.runKeyed cache q with
     | .unsat => pure ()
     | .unknown why => return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])
