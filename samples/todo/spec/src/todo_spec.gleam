@@ -187,7 +187,9 @@ fn todo_service() -> tazuna.Service {
     },
     responses: [
       tazuna.response(
-        name: "an added task is reminded or done within an hour",
+        // after and then are separate predicates, so this cannot tie the
+        // reminder or the completion to the task that was added.
+        name: "something is reminded or done within an hour of an add",
         after: fn(event) {
           case event {
             Added(..) -> True
@@ -215,8 +217,9 @@ fn todo_service() -> tazuna.Service {
   )
 }
 
-/// Two tasks are added and one is completed; an hour later only the open one
-/// is reminded.
+/// An add with an empty title is Invalid on purpose, to show the rule's name
+/// in the answer. Then two tasks are added and one is completed; an hour later
+/// only the open one is reminded.
 fn remind_the_open_task() -> tazuna.Scenario(Records, Event, Caller) {
   tazuna.scenario(name: "remind the open task", steps: [
     tazuna.step_command(command: add(), caller: User, input: ""),
