@@ -93,9 +93,9 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
     rcases hor with hun | hfit
     · obtain ⟨t, ht, hcodes, hsites, hcond⟩ := bound_cond senv inp hqs hS hinv hheld hord hxd hcase
         fun q hq' hn => (hun q hq' hn).noModel_at (questions_tys L T P v senv hqs q hq') M fun n h => varSorted_of_sorted (hM n h)
-      exact ((step_encode chk senv hS hinv hxd ht).2 hcodes hsites (hcase t ht)).2.2 hcond a hb
+      exact ((step_encode chk senv (decode_state hS) hinv hxd ht).2 hcodes hsites (hcase t ht)).2.2 hcond a hb
     · obtain ⟨t, ht, -⟩ := bind_ok.1 hqs
-      have henc := step_encode chk senv hS hinv hxd ht
+      have henc := step_encode chk senv (decode_state hS) hinv hxd ht
       have hcodes := henc.1.2 (codesFit_of_decode hxd hfit.1)
       have hsites := sites_of_decode senv ht hxd hfit.2.1
       have E := henc.2 hcodes hsites (hcase t ht)

@@ -526,7 +526,7 @@ theorem question_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   have hheldH : Holds M (andT (allT (rules.map (·.2))) (allT (checks.toList.map instHoldT))) :=
     (holds_andT _ _).2 ⟨(holds_allT_rules _).2 (hb.trans hheld.1), instHold_of_nil _ _ (hbs.trans hheld.2)⟩
   have hcond := hcondOf hheldH
-  have hrel := ((step_encode chk senv hS hinv hx ht).2 hcodes hsites hcaseH).2.1 hcond
+  have hrel := ((step_encode chk senv (decode_state hS) hinv hx ht).2 hcodes hsites hcaseH).2.1 hcond
   obtain ⟨g, hg, hn, hbr⟩ := rel_faults (command?_of_decode hx) hrel hfault hf
   have hkeep : ((t.out.breaks inp.command? g).const?.map Val.toBool != some false) = true := by
     cases hk : (t.out.breaks inp.command? g).const? with
@@ -685,7 +685,7 @@ theorem question_within {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   have hbelowH : Holds M below := (pendingBelow_iff hR.pending hR.nextId hbelow).2 hinv.below
   have hiwfH : Holds M iwf := SymInput.wf_of_decode (need_ok.1 hiwf) hx
   have hcaseH := hcase t ht
-  have henc := step_encode chk senv hS hinv hx ht
+  have henc := step_encode chk senv (decode_state hS) hinv hx ht
   have hcodes := henc.1.2 (codesFit_of_decode hx hcf)
   have hsites := sites_of_decode senv ht hx hsf
   have hci0 := (v.invariants.code_exact (M := M) hinvc).1.2 hif

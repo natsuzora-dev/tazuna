@@ -110,7 +110,7 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl)
         MachinesRel M L T v.machines fo.settle.terms.done.tables ms ∧
         fo.settle.terms.fresh.denote M = .int (fr : Int) ∧
         fo.settle.terms.done.nextId.denote M = .int ((a.state.nextId + ps.length : Nat) : Int) ∧
-        ∃ ps', ps'.Perm (a.state.pending ++ ps) ∧ PendingRel L shs (fo.pending.denote M) ps'
+        PendingRel L shs (fo.pending.denote M) (a.state.pending ++ ps)
 
 /-- Whether a step's end fits, for the result `r` of its events: the internal steps the cascade runs
 (`settleFits`) and, where it does not fault, every pending request in the pending table and the service's and every

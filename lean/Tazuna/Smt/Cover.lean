@@ -117,7 +117,7 @@ theorem answer_hit (s : State v) {shs : List (PendingShape v.event)} (to : Nat) 
   obtain ⟨tbl, htbl, hlist⟩ := hpend
   have hp := List.mem_of_find?_eq_some hf
   have hpid : p.id = to := by simpa using List.find?_some hf
-  rw [← hlist] at hp
+  replace hp := hlist.mem_iff.2 hp
   obtain ⟨⟨y1, y2⟩, hy, rfl⟩ := List.mem_map.1 hp
   obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := table_view (M := M) htbl senv.hT
   obtain ⟨vs, hvs, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_left hh (y1, y2) (hperm.mem_iff.2 hy)

@@ -52,16 +52,17 @@ theorem decode_inv {P : List AnySite} {E : List AnyEffectSite} (hv : v.Reach P E
   · have e : (pendingList (shapes v) tbl).map (·.id) = tbl.1.map (·.1) := by
       rw [pendingList, List.map_map]
       exact List.map_congr_left fun y _ => pendingOf_id _ y.1 y.2
-    rw [← htbl, e]
+    refine (htbl.map _).nodup_iff.1 ?_
+    rw [e]
     have hu : List.Pairwise (fun a b => (@BEq.beq Nat _ a.1 b.1) = false ∧ (@BEq.beq Nat _ b.1 a.1) = false) tbl.1 :=
       tbl.2
     refine List.pairwise_map.2 (hu.imp fun h e => ?_)
     have h1 : (@BEq.beq Nat _ _ _) = false := h.1
     exact Nat.ne_of_beq_eq_false h1 e
-  · rw [← htbl] at hp
+  · replace hp := htbl.mem_iff.2 hp
     obtain ⟨⟨id, x⟩, -, rfl⟩ := List.mem_map.1 hp
     exact pendingOf_reach hv _ (fun _ h => h) id x
-  · rw [← htbl] at hp
+  · replace hp := htbl.mem_iff.2 hp
     obtain ⟨⟨id, x⟩, -, rfl⟩ := List.mem_map.1 hp
     exact ⟨x, congrArg (fun n => pendingOf (shapes v) n x) (pendingOf_id (shapes v) id x)⟩
 
@@ -114,7 +115,7 @@ theorem cti_sound {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
     rfl
   · rw [ht] at ht'
     cases ht'
-    exact ((step_encode chk senv hS hinv hx ht).2 hcodes hsites hcaseH).2.1 hcond
+    exact ((step_encode chk senv (decode_state hS) hinv hx ht).2 hcodes hsites hcaseH).2.1 hcond
 
 end
 

@@ -163,14 +163,15 @@ theorem apply_inv_exact {v : ServiceV} {apply : Code (Ty.fn [v.records, v.event]
     Holds M (andT ca ci) ↔ (v.apply.fits L.count).1 ∧ (v.invariants.fits L.count).1 := by
   rw [holds_andT, (v.apply.code_exact (M := M) happ).1, (v.invariants.code_exact (M := M) hinv).1]
 
-/-- T2 and exactness for every step kind. Wherever a model's values of the symbolic state and input decode to a state
-`s` that keeps the step invariant and to an input: the codes' condition holds exactly when the codes fit; where it,
+/-- T2 and exactness for every step kind. Wherever a model's values of the symbolic state denote a state `s` that
+keeps the step invariant (a decoded state, or the state a step's end terms denote, `StateRel`) and the input's decode
+to an input: the codes' condition holds exactly when the codes fit; where it,
 the cascade's codes' condition and the case the script asks about hold, the step's condition holds exactly when what
 the step applies fits, and wherever it holds the step from `s` is the one the terms say and the cascade it starts
 waits only on own effects a value codes (`QueueCoded`). -/
 theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (chk : Checked P E T v)
     (senv : StepEnv L (shapes v))
-    {S : SymState v} {s : State v} (hS : S.decode M L T (shapes v) = some s) (hinv : Step.Inv P s)
+    {S : SymState v} {s : State v} (hR : StateRel M L T (shapes v) S s) (hinv : Step.Inv P s)
     {inp : SymInput v (shapes v) senv.nT} {hc} {x : Input v} (hx : inp.decode M L hc = some x)
     {t : EncodedStep v} (henc : encodeStep L T P v senv S inp = .ok t) :
     (Holds M t.codes ↔ codesFit L.count inp) ∧
@@ -178,7 +179,6 @@ theorem step_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV} (
       (Holds M t.cond ↔ stepFits L.count T (shapes v) s x) ∧
       (Holds M t.cond → t.out.Rel M L T (shapes v) s x (step T v s x)) ∧
       (Holds M t.cond → ∀ a, Step.Begins T s x a → QueueCoded L a)) := by
-  have hR := decode_state hS
   cases inp with
   | command i sc si =>
     obtain ⟨caller, input, rfl, hsc, hsi⟩ := decode_command hx

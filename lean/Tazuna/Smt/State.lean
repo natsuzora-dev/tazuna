@@ -107,9 +107,11 @@ def MachinesRel (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) �
     (∃ tbl, RelV L m.table (Ty.up _ m.table_data tbl) (x.denote M) ∧ insts = instancesOf T m tbl) ∧
       MachinesRel T ms xs sms
 
-/-- The pending term denotes the pending requests, at the shapes. -/
+/-- The pending term denotes the pending requests, at the shapes, as a multiset: the table keeps a request in its
+slot while the step appends new ones after the others, and no step reads their order (an answer finds its request by
+its wire id, which is unique). -/
 def PendingRel (shs : List (PendingShape v.event)) (w : Val) (ps : List (Step.Pending v.event)) : Prop :=
-  ∃ tbl, RelV L (pendingTable shs) tbl w ∧ pendingList _ tbl = ps
+  ∃ tbl, RelV L (pendingTable shs) tbl w ∧ (pendingList _ tbl).Perm ps
 
 /-- The terms denote the state: what decoding gives (`decode_state`) and what every step theorem starts from. -/
 structure StateRel (T : List TypeDecl) (shs : List (PendingShape v.event)) (S : SymState v) (s : State v) : Prop where
@@ -197,7 +199,7 @@ variable {M : Model} {L : Layout} {v : ServiceV}
 theorem decode_pending (shs : List (PendingShape v.event)) {w : Val} {ps : List (Step.Pending v.event)}
     (h : decodePending L shs w = some ps) : PendingRel L shs w ps := by
   obtain ⟨tbl, ht, rfl⟩ := map_some.1 h
-  exact ⟨tbl, decode_rel _ _ _ ht, rfl⟩
+  exact ⟨tbl, decode_rel _ _ _ ht, .refl _⟩
 
 /-- T3 for the instances: the decoded instances are the ones the tables denote. -/
 theorem decode_machines (T : List TypeDecl) : (ms : List (MachineV v.records v.event)) → (xs : PerMachine (fun _ => Term) ms) →

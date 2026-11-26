@@ -37,6 +37,48 @@ theorem relAlts_pending {e : Ty} {d : Nat} (id : Nat) : (shs : List (PendingShap
     obtain ⟨j, sh, fx, vals, hj, e, h, hp⟩ := relAlts_pending id shs (k0 + 1) y w h
     exact ⟨j + 1, sh, fx, vals, by simpa using hj, by rw [e]; congr 1; omega, h, hp⟩
 
+theorem eq_of_nodup_map {α β : Type} {f : α → β} {a b : α} : {l : List α} → (l.map f).Nodup → a ∈ l → b ∈ l →
+    f a = f b → a = b
+  | x :: l, hnd, ha, hb, he => by
+    rw [List.map_cons, List.nodup_cons] at hnd
+    rcases List.mem_cons.1 ha with h1 | h1 <;> rcases List.mem_cons.1 hb with h2 | h2
+    · exact h1.trans h2.symm
+    · subst h1; exact absurd (he ▸ List.mem_map_of_mem h2) hnd.1
+    · subst h2; exact absurd (he.symm ▸ List.mem_map_of_mem h1) hnd.1
+    · exact eq_of_nodup_map hnd.2 h1 h2 he
+
+/-- Finding a request by its wire id does not read the order of requests whose wire ids are distinct. -/
+theorem find?_perm_ids {e : Ty} {l l' : List (Step.Pending e)} (h : l.Perm l') (hnd : (l.map (·.id)).Nodup)
+    (to : Nat) : l'.find? (·.id == to) = l.find? (·.id == to) := by
+  cases hf : l.find? (·.id == to) with
+  | none => exact List.find?_eq_none.2 fun x hx => List.find?_eq_none.1 hf x (h.mem_iff.2 hx)
+  | some a =>
+    have ha := List.mem_of_find?_eq_some hf
+    have hpa := List.find?_some hf
+    cases hf' : l'.find? (·.id == to) with
+    | none => exact absurd hpa (List.find?_eq_none.1 hf' a (h.mem_iff.1 ha))
+    | some b =>
+      have hb := h.mem_iff.2 (List.mem_of_find?_eq_some hf')
+      have hpb := List.find?_some hf'
+      simp only [beq_iff_eq] at hpa hpb
+      exact congrArg some (eq_of_nodup_map hnd hb ha (hpb.trans hpa.symm))
+
+/-- A pending table's requests have distinct wire ids. -/
+theorem pendingList_ids {e : Ty} (shs : List (PendingShape e)) :
+    (tbl : List (Nat × Ty.alts (shs.map PendingShape.fields))) →
+    tbl.Pairwise (fun a b => (a.1 == b.1) = false ∧ (b.1 == a.1) = false) →
+    ((tbl.map fun x => pendingOf shs x.1 x.2).map (·.id)).Nodup
+  | [], _ => List.nodup_nil
+  | b :: tbl, hu => by
+    rw [List.pairwise_cons] at hu
+    rw [List.map_cons, List.map_cons, List.nodup_cons]
+    refine ⟨fun hm => ?_, pendingList_ids shs tbl hu.2⟩
+    obtain ⟨p, hp, he⟩ := List.mem_map.1 hm
+    obtain ⟨a, ha, rfl⟩ := List.mem_map.1 hp
+    have := (hu.1 a ha).1
+    rw [pendingOf_id, pendingOf_id] at he
+    simp [he] at this
+
 theorem find_pending {e : Ty} (shs : List (PendingShape e)) :
     (tbl : List (Nat × Ty.alts (shs.map PendingShape.fields))) →
     tbl.Pairwise (fun a b => (a.1 == b.1) = false ∧ (b.1 == a.1) = false) → (a : Nat × _) → a ∈ tbl →
@@ -121,13 +163,13 @@ theorem unmatched_types (s : State v) {shs : List (PendingShape v.event)} (to : 
   match shs, hpend, senv, hu with
   | [], ⟨tbl, _, hlist⟩, _, _ =>
     match tbl, hlist with
-    | ⟨[], _⟩, hlist => simp only [pendingList, List.map_nil] at hlist; simp [← hlist] at hf
+    | ⟨[], _⟩, hlist => simp only [pendingList, List.map_nil, List.nil_perm] at hlist; simp [hlist] at hf
     | ⟨(_, x) :: _, _⟩, _ => exact nomatch x
   | sh0 :: rest, ⟨tbl, htbl, hlist⟩, senv, hu =>
   -- The request found sits in an occupied slot with its wire id.
   have hp := List.mem_of_find?_eq_some hf
   have hpid : p.id = to := by simpa using List.find?_some hf
-  rw [← hlist] at hp
+  replace hp := hlist.mem_iff.2 hp
   obtain ⟨⟨y1, y2⟩, hy, rfl⟩ := List.mem_map.1 hp
   obtain ⟨sv, ys, hS, -, -, hperm, hh⟩ := table_view (M := M) htbl senv.hT
   obtain ⟨vs, hvs, zk, zv, hxs, hzk, hzv⟩ := forall2_mem_left hh (y1, y2) (hperm.mem_iff.2 hy)
@@ -378,7 +420,7 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     rw [hk] at hj'
     cases hj'
     have hfind : s.pending.find? (·.id == to) = some (sh.pending to fx) := by
-      rw [← hlist, ← hpo, ← hkey]
+      rw [find?_perm_ids hlist (pendingList_ids _ tbl.1 tbl.2), ← hpo, ← hkey]
       exact find_pending (sh0 :: rest) tbl.1 tbl.2 y (hperm.mem_iff.1 hy)
     -- The entry's fields: the sender's key, the input, and each site's captured values.
     obtain ⟨f0, f1, f2, f3, ⟨⟩⟩ := fx
@@ -526,8 +568,7 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       let tbl' : (pendingTable (sh0 :: rest)).den := ⟨tbl.1.filter Q, tbl.2.filter Q⟩
       have hrel := table_mk (x := tbl') h1 hS' hl' hw' (hperm.filter _) hh'
       refine ⟨tbl', hrel, ?_⟩
-      rw [← hlist]
-      exact filter_pendingList (sh0 :: rest) to tbl.1
+      exact (List.Perm.of_eq (filter_pendingList (sh0 :: rest) to tbl.1)).trans (hlist.filter _)
     have e45 : Holds M c1 → Holds M c2 → Holds M c3 →
         (Holds M (.ite (allT (rules.map (·.2))) (andT c4 cf) tt) ↔
         (Step.broken (match ensuresFn sh.ensures (Ty.down _ hd2 f2) with
@@ -625,7 +666,7 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     rw [hk] at hj'
     cases hj'
     have hfind : s.pending.find? (·.id == to) = some (sh.pending to fx) := by
-      rw [← hlist, ← hpo, ← hkey]
+      rw [find?_perm_ids hlist (pendingList_ids _ tbl.1 tbl.2), ← hpo, ← hkey]
       exact find_pending (sh0 :: rest) tbl.1 tbl.2 y (hperm.mem_iff.1 hy)
     have hstep : step T v s (.answer to ⟨_, value⟩) = match Step.broken ((sh.pending to fx).request.holds value) with
         | r :: rs => ⟨s, .invalid (r :: rs), [], []⟩
@@ -753,8 +794,7 @@ theorem answer_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       let tbl' : (pendingTable (sh0 :: rest)).den := ⟨tbl.1.filter Q, tbl.2.filter Q⟩
       have hrel := table_mk (x := tbl') h1 hS' hl' hw' (hperm.filter _) hh'
       refine ⟨tbl', hrel, ?_⟩
-      rw [← hlist]
-      exact filter_pendingList (sh0 :: rest) to tbl.1
+      exact (List.Perm.of_eq (filter_pendingList (sh0 :: rest) to tbl.1)).trans (hlist.filter _)
     -- The step itself: Invalid on a broken rule, else the events run and the invariants decide.
     let s' : State v := { s with pending := s.pending.filter (·.id != to) }
     have hnil : Step.broken ((sh.pending to (f0, f1, f2, f3, ())).request.holds value) = [] →

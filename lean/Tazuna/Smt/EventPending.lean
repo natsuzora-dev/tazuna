@@ -384,7 +384,7 @@ theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : Lis
     {xs : List ((Sender × EffectV v.event) × Nat)} (hxs : xs.Perm (effs.zipIdx n0)) (hq : Forall2 (WritesEntry shs ds) xs zs)
     {pT c : Term} (henc : encodePending L shs pending news = .ok (pT, c)) (hc : Holds M c) :
     ∃ ps, Forall2 (Step.Writes ds) (effs.zipIdx n0) ps ∧
-      ∃ ps', ps'.Perm (ps0 ++ ps) ∧ PendingRel L shs (pT.denote M) ps' := by
+      PendingRel L shs (pT.denote M) (ps0 ++ ps) := by
   obtain ⟨⟨d, n, dt⟩, h1, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
   obtain ⟨tbl, ⟨d', n', dt', m', sv0, hf, hft, hl, hv, hw0, ys0, hp0, hh0⟩, hlist⟩ := hpend
@@ -402,7 +402,7 @@ theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : Lis
   let key : (Ty.dsl .fresh []).den × (pendingEntry shs).den → Nat := fun y => y.1
   have hkeysNew : zs.map key = xs.map (·.2) := (forall2_map_eq (·.2) key (fun _ _ h => h.1.symm) hq).symm
   have hkeysOld : (ys0.map key).Perm (ps0.map (·.id)) := by
-    rw [← hlist]
+    refine List.Perm.trans ?_ (hlist.map _)
     simp only [pendingList, List.map_map]
     have : ((·.id) ∘ fun y : (Ty.dsl .fresh []).den × (pendingEntry shs).den =>
       pendingOf shs y.1 y.2) = key := funext fun y => pendingOf_id _ _ _
@@ -429,13 +429,12 @@ theorem pending_rel {v : ServiceV} {shs : List (PendingShape v.event)} {ds : Lis
       exact beq_false_of_ne h1
     · change (@BEq.beq Nat _ b.1 a.1) = false
       exact beq_false_of_ne (Ne.symm h1)⟩
-  refine ⟨pendingList _ tbl', ?_, tbl', ?_, rfl⟩
-  · simp only [pendingList]
-    refine (hperm.map _).trans ?_
-    rw [List.map_append, ← hlist]
-    refine (List.perm_append_comm).trans (List.Perm.append (hp0.map _) ?_)
-    exact (hzp.map _).symm
-  · exact (table_mk (x := tbl') h1 hS' (by rw [hl', ← hl]) hw' (List.Perm.refl _) hh' :)
+  refine ⟨tbl', (table_mk (x := tbl') h1 hS' (by rw [hl', ← hl]) hw' (List.Perm.refl _) hh' :), ?_⟩
+  simp only [pendingList]
+  refine (hperm.map _).trans ?_
+  rw [List.map_append]
+  refine (List.perm_append_comm).trans (List.Perm.append ((hp0.map _).trans hlist) ?_)
+  exact (hzp.map _).symm
 
 end
 
@@ -463,7 +462,7 @@ theorem pending_exact {v : ServiceV} {shs : List (PendingShape v.event)}
   have hT := slotsOf_den d dt 2 pending sv0 hv hw0
   rw [hl] at hT
   rw [moveAll_exact d dt hS hw hT hw0, ← holds2_length hh, ← holds2_length hh0, ← forall2_length hq, hxs.length_eq,
-    List.length_zipIdx, hp0.length_eq, hl, ← hlist, pendingList, List.length_map]
+    List.length_zipIdx, hp0.length_eq, hl, ← hlist.length_eq, pendingList, List.length_map]
   have hc : L.count (pendingTable shs) = n := by simp [Layout.count, hf1]
   rw [hc]
   omega
@@ -531,8 +530,8 @@ theorem pendingBelow_iff {v : ServiceV} {shs : List (PendingShape v.event)}
   obtain rfl : dt = dt' := find_det hft1 hft
   have hT := slotsOf_den d dt 2 pending sv0 hv hw0
   rw [hl, ← pendingSlotsOf_slot] at hT
-  rw [belowT_iff hn hT hh0, ← hlist]
-  simp only [pendingList, List.mem_map]
+  rw [belowT_iff hn hT hh0]
+  simp only [← hlist.mem_iff, pendingList, List.mem_map]
   constructor
   · rintro h _ ⟨y, hy, rfl⟩
     exact lt_of_eq_of_lt (pendingOf_id _ _ _) (h y (hp0.mem_iff.2 hy))
