@@ -16,10 +16,9 @@ pub type Event {
   ReminderDue(task: Id, title: String)
 }
 
-/// Who sends a request. The reminder machine sends `remind` as `Reminder`.
+/// Who sends a request from outside.
 pub type Caller {
   User
-  Reminder
 }
 
 pub type Rejection {
@@ -54,7 +53,7 @@ fn apply(records: Records, event: Event) -> Records {
 fn add() -> tazuna.Command(Records, Event, Caller, String, tazuna.Never) {
   tazuna.command(
     name: "add",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(title) { [#("title is not empty", title != "")] },
     decide: fn(ctx: Ctx(Records, String, Caller)) {
       Ok([Added(tazuna.fresh(ctx.fresh, 0), ctx.input)])
@@ -73,7 +72,7 @@ fn add() -> tazuna.Command(Records, Event, Caller, String, tazuna.Never) {
 fn complete() -> tazuna.Command(Records, Event, Caller, Id, Rejection) {
   tazuna.command(
     name: "complete",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_id) { [] },
     decide: fn(ctx: Ctx(Records, Id, Caller)) {
       use _title <- table.lookup(ctx.records.tasks, ctx.input, or: NoSuchTask)
@@ -90,7 +89,7 @@ fn complete() -> tazuna.Command(Records, Event, Caller, Id, Rejection) {
 fn remind() -> tazuna.Command(Records, Event, Caller, Id, Rejection) {
   tazuna.command(
     name: "remind",
-    callers: [Reminder],
+    callers: [tazuna.Own],
     accepts: fn(_id) { [] },
     decide: fn(ctx: Ctx(Records, Id, Caller)) {
       use title <- table.lookup(ctx.records.tasks, ctx.input, or: NoSuchTask)
@@ -103,7 +102,7 @@ fn remind() -> tazuna.Command(Records, Event, Caller, Id, Rejection) {
 fn open_tasks() -> tazuna.Query(Records, Caller, Nil, Int) {
   tazuna.query(
     name: "open tasks",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_input) { [] },
     resolve: fn(ctx: QueryCtx(Records, Nil, Caller)) {
       table.size(ctx.records.tasks)
@@ -136,7 +135,6 @@ fn reminder() -> tazuna.Machine(Records, Event) {
           Some(
             tazuna.send_command(
               command: remind(),
-              caller: Reminder,
               input: ctx.key,
               on_answer: fn(_answer) { [] },
             ),

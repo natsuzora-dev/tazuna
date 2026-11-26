@@ -85,9 +85,8 @@ gleam run -m tazuna -- generate todo_spec inputs
 Every target is reached.
 `add` never rejects, so its rejection type is `tazuna.Never`, which has no values and so makes no rejected target.
 
-The inputs show one thing the spec allows that you may not expect.
-In `remind accepted.jsonl` an outside request sends `remind` with the caller `Reminder`.
-The spec accepts it, because `remind` lists `Reminder` in `callers`.
+`remind` lists only `tazuna.Own` in `callers`, so only the service itself runs it, through the `reminder` machine.
+Its one target, `remind invalid callers`, is an outside request that the implementation must refuse.
 
 ## Verify an implementation's log
 

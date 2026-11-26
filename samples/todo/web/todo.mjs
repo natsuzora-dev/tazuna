@@ -3,6 +3,8 @@
 
 const hour = 3_600_000;
 const rejected = { outcome: "rejected", rejection: { tag: "NoSuchTask" } };
+// The requests outside callers may send. Reminders run only from the clock.
+const publicRequests = new Set(["add", "complete", "open tasks"]);
 
 export function createTodo(record) {
   const tasks = new Map();
@@ -29,8 +31,9 @@ export function createTodo(record) {
   return {
     request({ id: to, name, caller, input, time }) {
       now = time;
-      const allowed = name === "remind" ? "Reminder" : "User";
-      if (caller.tag !== allowed) return answer(to, { outcome: "invalid", rules: ["callers"] });
+      if (!publicRequests.has(name) || caller.tag !== "User") {
+        return answer(to, { outcome: "invalid", rules: ["callers"] });
+      }
       switch (name) {
         case "add": {
           if (input === "") return answer(to, { outcome: "invalid", rules: ["title is not empty"] });
@@ -43,10 +46,6 @@ export function createTodo(record) {
           if (!tasks.delete(input)) return answer(to, rejected);
           answer(to, { outcome: "accepted" });
           return event({ tag: "Completed", task: input });
-        case "remind":
-          if (!tasks.has(input)) return answer(to, rejected);
-          answer(to, { outcome: "accepted" });
-          return remind(input);
         case "open tasks":
           return answer(to, { outcome: "answered", output: tasks.size });
       }

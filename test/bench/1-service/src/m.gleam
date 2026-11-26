@@ -44,7 +44,7 @@ fn apply1(r: R1, e: E1) -> R1 {
 fn put1() -> tazuna.Command(R1, E1, Caller, Int, Nil) {
   tazuna.command(
     name: "put1",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(k: Int) { [#("small key", k < 10)] },
     decide: fn(c: Ctx(R1, Int, Caller)) { Ok([Put1(c.input, 1)]) },
     ensures: fn(c: Ctx(R1, Int, Caller), r: R1) {
@@ -56,7 +56,7 @@ fn put1() -> tazuna.Command(R1, E1, Caller, Int, Nil) {
 fn del1() -> tazuna.Command(R1, E1, Caller, Int, Nil) {
   tazuna.command(
     name: "del1",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_k: Int) { [] },
     decide: fn(c: Ctx(R1, Int, Caller)) { Ok([Del1(c.input)]) },
     ensures: fn(_c, _r) { [] },
@@ -66,7 +66,7 @@ fn del1() -> tazuna.Command(R1, E1, Caller, Int, Nil) {
 fn bump1() -> tazuna.Command(R1, E1, Caller, Int, Nil) {
   tazuna.command(
     name: "bump1",
-    callers: [User],
+    callers: [tazuna.Outside(User), tazuna.Own],
     accepts: fn(n: Int) { [#("positive", n > 0)] },
     decide: fn(c: Ctx(R1, Int, Caller)) { Ok([Bumped1(c.input)]) },
     ensures: fn(c: Ctx(R1, Int, Caller), r: R1) {
@@ -122,7 +122,6 @@ fn again1() -> tazuna.Reaction(R1, E1) {
       Put1(k, _) -> [
         tazuna.send_command(
           command: bump1(),
-          caller: User,
           input: k,
           on_answer: fn(_a) { [] },
         ),
