@@ -837,7 +837,7 @@ theorem runs_covered (hL : SortedLayout L) {d : Nat} {goal : List (UnrollStep v 
     {xs : List (Input v)} (hlen : xs.length = d) (hfits : RunFits L T P v chk.callerData (Step.State.init v) xs) :
     ∃ M : Model, (∀ n (h : n < U.ask.tys.length), VarSorted L U.ask.tys[n] (M.vars n)) ∧
       UnrollRun L T M chk.callerData (Step.State.init v) U.steps xs ∧
-      ((∀ a ∈ U.ask.asserts, Holds M a) ↔ Holds M (goal U.steps)) := by
+      ((∀ a ∈ U.ask.script.asserts, Holds M a) ↔ Holds M (goal U.steps)) := by
   subst hlen
   simp only [unroll] at hu
   obtain ⟨S0, hS0, hu⟩ := bind_ok.1 hu
@@ -854,9 +854,10 @@ theorem runs_covered (hL : SortedLayout L) {d : Nat} {goal : List (UnrollStep v 
   have hc := hcov hsrt hnr hfits fun q h => by
     rw [Nat.zero_add]
     exact coverModel_vars (List.getElem?_eq_getElem h)
-  refine ⟨_, fun n h => varSorted_of_sorted (forall2_sorted_vars hsorted n h), hc.2, ⟨fun h => h _ (by simp), ?_⟩⟩
+  refine ⟨_, fun n h => varSorted_of_sorted (forall2_sorted_vars hsorted n h), hc.2,
+    ⟨fun h => h _ (by simp [TypedScript.script]), ?_⟩⟩
   intro hg a ha
-  simp only [List.mem_append, List.mem_singleton] at ha
+  simp only [TypedScript.script, List.nil_append, List.mem_append, List.mem_singleton] at ha
   rcases ha with ha | rfl
   · exact hc.1 a ha
   · exact hg
