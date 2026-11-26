@@ -125,6 +125,21 @@ structure Unrolled (v : ServiceV) (n : Nat) where
   steps : List (UnrollStep v n)
   refused : List (SymInput v (shapes v) n × Refusal)
 
+/-- An unrolled run before its goal: the datatypes, the types and sorts of its constants, its assertions, its steps
+and the input kinds refused. -/
+structure UnrollBase (v : ServiceV) (n : Nat) where
+  datatypes : List Datatype
+  tys : List Ty
+  vars : List Srt
+  asserts : List Term
+  steps : List (UnrollStep v n)
+  refused : List (SymInput v (shapes v) n × Refusal)
+
+/-- The unrolled run with `goal` on its steps as its last assertion. -/
+def UnrollBase.withGoal {v : ServiceV} {n : Nat} (B : UnrollBase v n) (goal : List (UnrollStep v n) → Term) :
+    Unrolled v n :=
+  ⟨⟨B.datatypes, B.tys, B.vars, [], B.asserts ++ [goal B.steps]⟩, B.steps, B.refused⟩
+
 section
 variable (L : Layout)
 
@@ -222,13 +237,18 @@ def unrollSteps (S : SymState v) (i b : Nat) :
     let (tys', asserts', sts, refused') := unrollSteps st.after (i + 1) b' d
     (tys ++ tys', asserts ++ asserts', st :: sts, refused ++ refused')
 
-/-- The script of runs of `d` inputs from the initial state, with `goal` on its steps. -/
-def unroll (d : Nat) (goal : List (UnrollStep v senv.nT) → Term) : Except Refusal (Unrolled v senv.nT) := do
+/-- The runs of `d` inputs from the initial state, before a goal: what every goal at that depth shares. -/
+def unrollBase (d : Nat) : Except Refusal (UnrollBase v senv.nT) := do
   let S0 ← need (.layout (.type v.records)) (initState L v)
   let dts ← need (.layout (.type v.records)) L.datatypes?
-  let (tys, asserts, steps, refused) := unrollSteps L T P v senv S0 0 0 d
-  let vars ← tys.mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
-  pure ⟨⟨dts, tys, vars, [], asserts ++ [goal steps]⟩, steps, refused⟩
+  let r := unrollSteps L T P v senv S0 0 0 d
+  let vars ← r.1.mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
+  pure ⟨dts, r.1, vars, r.2.1, r.2.2.1, r.2.2.2⟩
+
+/-- The script of runs of `d` inputs from the initial state, with `goal` on its steps. -/
+def unroll (d : Nat) (goal : List (UnrollStep v senv.nT) → Term) : Except Refusal (Unrolled v senv.nT) := do
+  let B ← unrollBase L T P v senv d
+  pure (B.withGoal goal)
 
 end
 

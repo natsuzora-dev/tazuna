@@ -501,7 +501,7 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {goal : Lis
     {U : Unrolled v senv.nT} (hu : unroll L T P v senv d goal = .ok U)
     (hM : ∀ n (h : n < U.ask.tys.length), VarSorted L U.ask.tys[n] (M.vars n)) (hA : ∀ a ∈ U.ask.asserts, Holds M a) :
     ∀ st ∈ U.steps, ∃ x, st.decode M L hc = some x := by
-  simp only [unroll] at hu
+  simp only [unroll, unrollBase, bind_assoc, pure_bind, UnrollBase.withGoal] at hu
   obtain ⟨S0, -, hu⟩ := bind_ok.1 hu
   obtain ⟨dts, -, hu⟩ := bind_ok.1 hu
   rcases hr : unrollSteps L T P v senv S0 0 0 d with ⟨tys, asserts, steps, refused⟩

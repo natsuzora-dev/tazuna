@@ -556,7 +556,7 @@ theorem unroll_decode {d : Nat} {goal : List (UnrollStep v senv.nT) → Term} {U
     (hM : ∀ n (h : n < U.ask.tys.length), VarSorted L U.ask.tys[n] (M.vars n)) (hA : ∀ a ∈ U.ask.asserts, Holds M a) :
     ∃ xs, UnrollRun L T M chk.callerData (Step.State.init v) U.steps xs := by
   have hD := unroll_inputs_decode senv chk.callerData hu hM hA
-  simp only [unroll] at hu
+  simp only [unroll, unrollBase, bind_assoc, pure_bind, UnrollBase.withGoal] at hu
   obtain ⟨S0, hS0, hu⟩ := bind_ok.1 hu
   obtain ⟨dts, -, hu⟩ := bind_ok.1 hu
   rcases hr : unrollSteps L T P v senv S0 0 0 d with ⟨tys, asserts, steps, refused⟩

@@ -839,7 +839,7 @@ theorem runs_covered (hL : SortedLayout L) {d : Nat} {goal : List (UnrollStep v 
       UnrollRun L T M chk.callerData (Step.State.init v) U.steps xs ∧
       ((∀ a ∈ U.ask.script.asserts, Holds M a) ↔ Holds M (goal U.steps)) := by
   subst hlen
-  simp only [unroll] at hu
+  simp only [unroll, unrollBase, bind_assoc, pure_bind, UnrollBase.withGoal] at hu
   obtain ⟨S0, hS0, hu⟩ := bind_ok.1 hu
   obtain ⟨dts, hdts, hu⟩ := bind_ok.1 hu
   have hv := unrollSteps_vals chk senv xs S0 0 0

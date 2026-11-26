@@ -1066,7 +1066,7 @@ theorem generate_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {M 
       Hits T v rules g x (step T v (run T v (Step.State.init v) ys).1 x) := by
   obtain ⟨xs, hrun⟩ := unroll_decode chk senv hu hM hA
   have hgoal : Holds M (genGoal L T rules g U.steps) := by
-    simp only [unroll] at hu
+    simp only [unroll, unrollBase, bind_assoc, pure_bind, UnrollBase.withGoal] at hu
     obtain ⟨S0, -, hu⟩ := bind_ok.1 hu
     obtain ⟨dts, -, hu⟩ := bind_ok.1 hu
     obtain ⟨vars, -, hu⟩ := bind_ok.1 hu

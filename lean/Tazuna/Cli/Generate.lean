@@ -7,7 +7,9 @@ last step shows the target's class of out line, found by deepening an unrolled r
 step to the spec's `steps` bound. A model is played back in Lean: its inputs are decoded, written with the trace
 writer scenarios use, read back and replayed by verify's own replay, and the trace is written only when that replay
 passes and its last step shows the target (`generate_reaches`). A target with no model at any depth is unreached
-within the steps (`generate_unreached`). -/
+within the steps (`generate_unreached`). The targets of a service share each depth's run (`unrollBase`), built once;
+only the goal differs, so an answer is looked up under a key read off the shared prefix's digest and the goal
+(`ScriptPrefix.key`), and a script's text is printed only for the solver. -/
 
 namespace Tazuna.Cli
 
@@ -117,22 +119,42 @@ section
 variable (solver : Solver) (cache : System.FilePath) (c : CheckedSpec) (v : ServiceV) (L : Layout)
   (senv : StepEnv L (shapes v)) (rules : RuleNames)
 
-/-- The target's search: depth 1, 2, ... up to `k`, stopping at the first model, which is played back. A refused
+/-- One depth's unrolled run as every target's goal at that depth shares it: its base, merged into one object per
+equal subterm (`shareCommon'`, the identity on values) so a goal built from its steps finds its shared terms among
+the assertions' at once, and the prefix of its scripts (`ScriptPrefix`), read once; or the refusal of its
+encoding. `unroll` at that depth with a goal is the base with the goal. -/
+abbrev Depth (v : ServiceV) (n : Nat) := Except Refusal (UnrollBase v n × Option ScriptPrefix)
+
+/-- The run at depth `d`, each target's goal aside. -/
+def depthAt (d : Nat) : Depth v senv.nT :=
+  (unrollBase L c.T c.P v senv d).map fun B =>
+    let B := ShareCommon.shareCommon' B
+    (B, ({ datatypes := B.datatypes, vars := B.vars, asserts := B.asserts, shows := List.range B.tys.length } : Script).prefix?
+      solver.header)
+
+/-- The target's search over the depths 1, 2, ... (`ds`), stopping at the first model, which is played back. A refused
 encoding of the run, or of an input kind (which the script then lacks), leaves the target undecided unless a model is
 found. An error is an engine bug. -/
-def searchTarget (k : Nat) (g : GenTarget) : IO (Except String GenResult) := do
+def searchTarget (ds : List (Depth v senv.nT)) (g : GenTarget) : IO (Except String GenResult) := do
   if hc : v.caller.isData = false then return .error "the caller type is no data" else
   have hc : v.caller.isData = true := by simpa using hc
   let mut refused : Option (SymInput v (shapes v) senv.nT × Refusal) := none
-  for d in List.range' 1 k do
-    match unroll L c.T c.P v senv d (genGoal L c.T rules g) with
+  for (t, i) in ds.zipIdx do
+    let d := i + 1
+    match t with
     | .error r =>
       match refusalLine c.T r with
       | some (kind, fields) => return .ok (.undecided kind fields)
       | none => return .error s!"service {v.name}, {g.text}: the encoding refused: {reprStr r}"
-    | .ok U =>
+    | .ok (B, pre) =>
+      -- `unroll` at depth `d` with this goal.
+      let U := B.withGoal (genGoal L c.T rules g)
       if refused.isNone then refused := U.refused.head?
-      match ← solver.runCached cache U.ask.script with
+      let some pre := pre | return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d),
+        ("why", Json.str "a shared term of the script has no sort")])
+      let some key := pre.key (genGoal L c.T rules g U.steps) | return .ok (.undecided (.undecided .unknown)
+        [("depth", Lean.toJson d), ("why", Json.str "a shared term of the script has no sort")])
+      match ← solver.runKeyed cache key fun _ => U.ask.script.text solver.header with
       | .unsat => pure ()
       | .unknown why =>
         return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])
@@ -150,7 +172,7 @@ def searchTarget (k : Nat) (g : GenTarget) : IO (Except String GenResult) := do
   | some (inp, r) => match refusalLine c.T r with
     | some (kind, fields) => return .ok (.undecided kind (("step", Json.str inp.text) :: fields))
     | none => return .error s!"service {v.name}, {inp.text}: the encoding refused: {reprStr r}"
-  | none => return .ok (.unreached k)
+  | none => return .ok (.unreached ds.length)
 
 end
 
@@ -167,6 +189,7 @@ def generate (root dir path : String) (opts : ProveOptions) : IO UInt32 := do
       | none => true
     -- Each job is one target's search; its lines and file are written in target order once all are done.
     let mut jobs : Array (String × GenTarget × List Json × IO (Except String GenResult)) := #[]
+    let mut builds : Array (Nat × (Nat → IO Unit)) := #[]
     for v in c.spec.services do
       let L := Layout.ofService c.program.defs v
       let .ok senv := StepEnv.of L (shapes v)
@@ -174,9 +197,18 @@ def generate (root dir path : String) (opts : ProveOptions) : IO UInt32 := do
           return 4
       let rules := ruleNamesOf L c v senv
       let scope := scopeBounds c.T L v
-      for g in targets c.T v rules do
-        unless keep (v.name ++ "/" ++ g.text) do continue
-        jobs := jobs.push (v.name, g, scope, searchTarget solver cache c v L senv rules v.bounds.steps.toNat g)
+      let gs := (targets c.T v rules).filter fun g => keep (v.name ++ "/" ++ g.text)
+      if gs.isEmpty then continue
+      -- Each depth's run is built once for every target of the service, before any search.
+      let k := v.bounds.steps.toNat
+      let built ← IO.mkRef (Array.replicate k (none : Option (Depth v senv.nT)))
+      -- The depth is the job's argument, so building its run waits for the job.
+      for d in List.range' 1 k do
+        builds := builds.push (d, fun d => built.modify (·.set! (d - 1) (some (depthAt solver c v L senv d))))
+      for g in gs do
+        jobs := jobs.push (v.name, g, scope, do
+          searchTarget solver cache c v L senv rules ((← built.get).toList.filterMap id) g)
+    let _ ← runAll opts.jobs (fun (d, build) => build d) builds
     let results ← runAll opts.jobs (fun (_, _, _, job) => job) jobs
     let mut undecided := false
     for ((service, g, scope, _), res) in jobs.zip results do

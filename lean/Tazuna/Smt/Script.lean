@@ -48,17 +48,24 @@ def Script.shared (s : Script) : Option (List Term × List (Term × Srt)) := do
   let sorts ← D.entries.foldlM (fun acc (_, b) => do pure (acc.push (← b.srt? s.datatypes s.vars acc))) #[]
   pure (asserts, (D.entries.toList.map (·.2)).zip sorts.toList)
 
-/-- The script's text after the solver's header lines; `none` as `Script.shared`. -/
-def Script.text (s : Script) (header : List String) : Option String := do
-  let (asserts, defs) ← s.shared
+/-- The line defining `s<i>` as the body `b` of the sort `srt`. -/
+def defineLine (i : Nat) (b : Term) (srt : Srt) : String := s!"(define-fun {(Name.def_ i).text} () {srt.text} {b.print})"
+
+/-- The script's text after the solver's header lines, from its shared assertions and definitions. -/
+def Script.render (s : Script) (header : List String) (asserts : List Term) (defs : List (Term × Srt)) : String :=
   let lines := header ++ ["(set-option :produce-models true)", "(set-logic ALL)"] ++
     s.datatypes.zipIdx.map (fun (d, i) => d.text i) ++
     s.vars.zipIdx.map (fun (srt, n) => s!"(declare-const {(Name.var n).text} {srt.text})") ++
-    defs.zipIdx.map (fun ((b, srt), i) => s!"(define-fun {(Name.def_ i).text} () {srt.text} {b.print})") ++
+    defs.zipIdx.map (fun ((b, srt), i) => defineLine i b srt) ++
     asserts.map (fun t => s!"(assert {t.print})") ++ ["(check-sat)"] ++
     (if s.shows.isEmpty then [] else
       [s!"(get-value ({" ".intercalate (s.shows.map fun n => (Name.var n).text)}))"])
-  pure ("\n".intercalate lines ++ "\n")
+  "\n".intercalate lines ++ "\n"
+
+/-- The script's text after the solver's header lines; `none` as `Script.shared`. -/
+def Script.text (s : Script) (header : List String) : Option String := do
+  let (asserts, defs) ← s.shared
+  pure (s.render header asserts defs)
 
 /-- Whether the printer writes every term of the script as itself: every string lies in the SMT-LIB domain. -/
 def Script.inDomain (s : Script) : Bool :=
