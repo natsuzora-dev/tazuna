@@ -26,11 +26,12 @@ def Solver.find : IO Solver := do
   let beside := (← IO.appDir) / (if System.Platform.isWindows then "z3.exe" else "z3")
   return { path := if ← beside.pathExists then beside.toString else "z3" }
 
-/-- Beyond depth 5 z3 prints a value with `let` aliases, which values in SMT-LIB's model syntax do not have; the
-depth limit is raised so every value prints as a term. -/
+/-- z3 prints a value with `let` aliases, which values in SMT-LIB's model syntax do not have, beyond depth 5 and for a
+part of size 10 or more that occurs twice; both limits are raised so every value prints as a term. -/
 def Solver.header (s : Solver) : List String :=
   [s!"(set-option :rlimit {s.rlimit})", s!"(set-option :smt.random_seed {s.seed})",
-    s!"(set-option :sat.random_seed {s.seed})", "(set-option :pp.max_depth 1000000)"]
+    s!"(set-option :sat.random_seed {s.seed})", "(set-option :pp.max_depth 4294967295)",
+    "(set-option :pp.min_alias_size 4294967295)"]
 
 /-- Runs one script's text: what the solver printed, or why it printed nothing to read. z3 reads a file about twice as
 fast as the same text on stdin with `-in`, so the text goes to a temporary file. -/

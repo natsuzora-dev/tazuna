@@ -31,6 +31,10 @@ def optI : Ty := Ty.option .int
 /-- A record with two variants that share an Int field `id` at index 0. -/
 def shape : Ty := .adt 8 [] [[.int, .str], [.int]]
 
+/-- A tuple of ten Ints. A value holding it twice is one z3 prints with a `let` unless its header says otherwise. -/
+def ten : Ty := .tuple [.int, .int, .int, .int, .int, .int, .int, .int, .int, .int]
+def tenE : E ten := .tuple (.cons (.int 1) (.cons (.int 2) (.cons (.int 3) (.cons (.int 4) (.cons (.int 5)
+  (.cons (.int 6) (.cons (.int 7) (.cons (.int 8) (.cons (.int 9) (.cons (.int 10) .nil))))))))))
 def tru : E Ty.bool := .ctor ⟨0, by decide⟩ .nil
 def some5 : E optI := .ctor (vs := [[.int], []]) ⟨0, by decide⟩ (.cons (.int 5) .nil)
 def none' : E optI := .ctor (vs := [[.int], []]) ⟨1, by decide⟩ .nil
@@ -187,6 +191,7 @@ def cases : List (String × (t : Ty) × E t) :=
     ("shared field of another variant", ⟨.int, .field "id" 0 (fun fs h => by simp at h; rcases h with rfl | rfl <;> rfl) circle⟩),
     ("tuple index", ⟨.str, .index (.tuple (.cons (.int 1) (.cons (.str (str! "a")) .nil))) ⟨1, by decide⟩⟩),
     ("tuple value", ⟨.tuple [.int, Ty.bool], .tuple (.cons (.int 1) (.cons tru .nil))⟩),
+    ("a value that repeats a large part", ⟨.tuple [ten, ten], .tuple (.cons tenE (.cons tenE .nil))⟩),
     ("record update", ⟨.adt 9 [] [[.int, .str]],
       .update (.ctor ⟨0, by decide⟩ (.cons (.int 1) (.cons (.str (str! "a")) .nil))) (.keep (.set (.str (str! "b")) .nil))⟩),
     ("lambda call", ⟨.int, .call (.lam (.bin .add (.var .here) (.var (.there .here)))) (.cons (.int 2) (.cons (.int 40) .nil))⟩),
