@@ -173,7 +173,7 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
     (h : SpecV.illegal T s handles captures ServiceV.sentHandles = []) : ∀ v ∈ s.services, Checked P E T v := by
   intro v hv
   simp only [SpecV.illegal] at h
-  have hs := List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL h))))) v hv
+  have hs := nilL (List.flatMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL h))))) v hv)
   have hsent := List.filterMap_eq_nil_iff.1 (List.flatMap_eq_nil_iff.1 (nilR (nilL h)) v hv)
   have hneg := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL hs))))
   have hkeys := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL hs))))))

@@ -43,13 +43,16 @@ inductive Illegal where
   /-- A table inside the stored state, a type that crosses the wire or the values a kept function captures has a key
   that is no plain value (`Ty.plain`): an entry is found by comparing keys, which the solver does on plain values. -/
   | tableKey
+  /-- Two responses of a service share a name, or a response's `within` is negative: a response line names its
+  target by the response's name, and a deadline before the opening event is no deadline. -/
+  | response
 deriving Repr, DecidableEq
 
 namespace Illegal
 
 def all : List Illegal :=
   [wireName, owner, unknownSource, creates, wireType, stateType, bounds, scenario, rejection, machineKey, unknownHandle,
-    handleName, tableKey]
+    handleName, tableKey, response]
 
 theorem mem_all (k : Illegal) : k ∈ all := by cases k <;> simp [all]
 
@@ -67,6 +70,7 @@ def name : Illegal → String
   | unknownHandle => "unknownHandle"
   | handleName => "handleName"
   | tableKey => "tableKey"
+  | response => "response"
 
 end Illegal
 
@@ -453,8 +457,12 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
     let tableKeys := (wireList ++ stateList ++ v.machines.map fun m => (m.name ++ " key", m.key)).filterMap
       fun (what, t) => if t.plainKeys then none else
         some (Illegal.tableKey, s!"{v.name}: the {what} type holds a table whose key is no plain value; {tableKeyAdvice}")
+    let responses := (duplicates (v.responses.map (·.name))).map (fun n =>
+        (Illegal.response, s!"{v.name}, response {n}: more than one response has this name")) ++
+      v.responses.filterMap fun r => if r.within < 0 then
+        some (Illegal.response, s!"{v.name}, response {r.name}: the within is negative") else none
     wireNames ++ owners ++ wireTypes ++ stateTypes ++ unknown ++ rejections ++ keys ++ creates ++ negative ++ scenarioNames ++ perScenario ++
-      tableKeys
+      tableKeys ++ responses
   let perExternal := s.externals.flatMap fun x =>
     let all := x.declares
     let wireNames := (duplicates (all.map (·.name))).map fun n =>
