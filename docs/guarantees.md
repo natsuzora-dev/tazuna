@@ -22,7 +22,6 @@ For what one kind of line means, run `gleam run -m tazuna -- explain <kind>`; th
 A verdict speaks only of states and inputs that fit the slots.
 `Prove.withinBounds` and `Generate.unreached` list in `bounds` every bound a step of the service can go past.
 That list is the service's static scope, the same in every run.
-It holds each table, bag, and list type of the service's layout, and its pending requests when it sends any.
 
 ## check
 

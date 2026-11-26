@@ -25,8 +25,8 @@ inductive Tazuna.ProveKind : Type
   the slots, and the line speaks of every run. -/
   | proved
   /-- No step of the input kind from a state of the right shape breaks the target while it stays within the slots,
-  but such a step can go past them: the line names every bound a step of the service can go past (its tables and
-  bags, and its pending requests where it sends any), the same for every run. For a bounded response: no run from the
+  but such a step can go past them: the line names every bound a step of the service can go past (its tables, bags
+  and list types, and its pending requests where it sends any), the same for every run. For a bounded response: no run from the
   initial state of at most the spec's `steps` inputs within the slots, on which its `assumes` hold (valid inputs, no
   step faults, timely clock lines), violates it; the line names those bounds and `steps`. -/
   | withinBounds
