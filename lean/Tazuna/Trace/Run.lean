@@ -36,7 +36,7 @@ def Names.bind (ns : Names) (xs : List IdV) : Names :=
     | .fresh _ _ =>
       -- Of `ids.length + 1` candidates at most `ids.length` are taken.
       let k := ((List.range (ns.ids.length + 1)).find? fun j => !ns.taken s!"id{ns.next + j}").getD 0
-      { ids := ns.ids ++ [(x, s!"id{ns.next + k}")], next := ns.next + k + 1 }) ns
+      { ns with ids := ns.ids ++ [(x, s!"id{ns.next + k}")], next := ns.next + k + 1 }) ns
 
 /-- The wire form of a value, naming the ids it holds first. -/
 def Names.enc (ns : Names) (T : List TypeDecl) (t : Ty) (x : t.den0) : Names × Option Wire :=
