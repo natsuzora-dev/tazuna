@@ -2,4 +2,4 @@
 {"assumes":["inputs carry only ids the service made or names from outside"],"bounds":[],"kind":"Generate.unreached","service":"counter","steps":5,"target":"add rejected Nil"}
 {"assumes":["inputs carry only ids the service made or names from outside"],"bounds":[],"kind":"Generate.unreached","service":"counter","steps":5,"target":"add invalid callers"}
 {"file":"counter/add invalid positive.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"add invalid positive"}
-{"kind":"Undecided.limit","limit":"generate has no terms yet for the events a step applies or the requests it sends","service":"counter","target":"event Added"}
+{"file":"counter/event Added.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"event Added"}

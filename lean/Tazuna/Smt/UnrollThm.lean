@@ -98,7 +98,7 @@ theorem finished_after {fo : FinishOut v} {s0 : State v} {a : Step.Acc v} {outco
         cases hl
       exact ⟨⟨fun h => absurd h hn, fun h => absurd rfl (h _)⟩, fun h => absurd h hn⟩
     · rename_i hl
-      obtain ⟨recs, ms, fr, evs, ps, rfl, hrec, hms, hfr, hni, hpend⟩ := hm
+      obtain ⟨recs, ms, fr, evs, ps, rfl, hrec, hms, hfr, hni, hpend, -⟩ := hm
       have hok' : Holds M fo.ok := hok.2 ⟨hF', List.append_eq_nil_iff.1 hl⟩
       refine ⟨⟨fun _ f h => hacc f h, fun _ => hok'⟩, fun _ => ⟨hrec, hnow, ?_, hni, hpend, hms⟩⟩
       simpa [FinishOut.state] using hfr

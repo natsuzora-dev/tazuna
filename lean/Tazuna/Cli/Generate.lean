@@ -25,9 +25,9 @@ def _root_.Tazuna.Ir.GenTarget.text : GenTarget → String
   | .event none => "event"
   | .request x n => "request " ++ x ++ "." ++ n
 
-/-- Whether the unrolled run has a goal for the target: the classes an answer line shows. -/
+/-- Whether the unrolled run has a goal for the target: every class but a request's. -/
 def _root_.Tazuna.Ir.GenTarget.hasGoal : GenTarget → Bool
-  | .event _ | .request .. => false
+  | .request .. => false
   | _ => true
 
 /-- A target's file: its text with every byte outside `[A-Za-z0-9 ._-]` percent-encoded, `%` too, so distinct targets
@@ -43,10 +43,10 @@ def fileName (target : String) : String :=
 section
 variable (T : List TypeDecl) (v : ServiceV) (rules : RuleNames) (g : GenTarget)
 
-/-- Whether the last step of the run on `xs` from the initial state answers in a class the target aims at. -/
+/-- Whether the last step of the run on `xs` from the initial state shows a class the target aims at. -/
 def lastHits (xs : List (Input v)) : Bool :=
   match xs.getLast? with
-  | some x => (answerClasses T v x (step T v (run T v (State.init v) xs.dropLast).1 x).outcome).any (g.covers rules)
+  | some x => (classes T v x (step T v (run T v (State.init v) xs.dropLast).1 x)).any (g.covers rules)
   | none => false
 
 /-- The trace generate writes for the inputs: their trace, where verify replays it, read back from its text, as passed
@@ -62,7 +62,7 @@ def genTrace (xs : List (Input v)) : Except String (List Wire) :=
       | _ => .error "does not replay as passed"
 
 /-- T6: a written trace reaches its target. Read back from its text, verify replays it as passed, and the last step of
-its run from the initial state answers in a class the target aims at. -/
+its run from the initial state shows a class the target aims at. -/
 theorem generate_reaches {xs : List (Input v)} {ws : List Wire} (h : genTrace T v rules g xs = .ok ws) :
     ∃ lines, reread ws = some lines ∧ replay T v lines = .passed ∧
       ∃ ys x, xs = ys ++ [x] ∧ Hits T v rules g x (step T v (run T v (State.init v) ys).1 x) := by

@@ -56,11 +56,12 @@ theorem invariants_exact {r : Ty} (f : Fun (Ty.fn [r] Ty.rules)) (hr : r.isData 
 
 end
 
-/-- The terms of a step's end: the cascade, the new pending table, and the invariants and instance checks on the state
-the cascade leaves. -/
+/-- The terms of a step's end: the cascade, the new pending table, the invariants and instance checks on the state
+the cascade leaves, and the slots of every event the step applies, in order (the events loop's, then the cascade's). -/
 structure FinishOut (v : ServiceV) where
   settle : SettleOut v
   pending : Term
+  events : List (Slot 1)
   invariants : List (Term × Term)
   checks : PerMachine (fun _ => List InstCheck) v.machines
 
@@ -82,7 +83,7 @@ def encodeFinish (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.e
   let (pT, cp) ← encodePending L shs pending (o.news ++ so.terms.done.news)
   let (rules, ci) ← encodeInvariants L inv so.terms.done.records
   let (checks, ck) ← encodeInstChecks L T v.machines so.terms.done.tables so.terms.done.records now
-  pure ⟨⟨so, pT, rules, checks⟩, andT cs (.ite so.faultT tt (andT cp (andT ci ck))), cx⟩
+  pure ⟨⟨so, pT, o.events ++ so.terms.done.events, rules, checks⟩, andT cs (.ite so.faultT tt (andT cp (andT ci ck))), cx⟩
 
 end
 
@@ -91,8 +92,9 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 
 /-- What a step's end terms say of its result `r`, from the step in progress `a` before its events: whether the cascade
 faults, as its term says; the cascade's fault, else the first broken invariant (the service's, then each machine's instances in key order), else the outcome
-with the records, machines and fresh counter the terms denote, the requests `ps` written at the next wire ids and
-sent, and the pending table and next id terms denoting what follows (pending as a multiset). A fault leaves `s0`. -/
+with the records, machines and fresh counter the terms denote, the events `evs` applied as the event slots hold, the
+requests `ps` written at the next wire ids and sent, and the pending table and next id terms denoting what follows
+(pending as a multiset). A fault leaves `s0`. -/
 def Finished (M : Model) (L : Layout) (T : List TypeDecl)
     (shs : List (PendingShape v.event)) (fo : FinishOut v) (s0 : State v) (a : Step.Acc v) (outcome : Outcome)
     (r : Result v) : Prop :=
@@ -110,7 +112,8 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl)
         MachinesRel M L T v.machines fo.settle.terms.done.tables ms ∧
         fo.settle.terms.fresh.denote M = .int (fr : Int) ∧
         fo.settle.terms.done.nextId.denote M = .int ((a.state.nextId + ps.length : Nat) : Int) ∧
-        PendingRel L shs (fo.pending.denote M) (a.state.pending ++ ps)
+        PendingRel L shs (fo.pending.denote M) (a.state.pending ++ ps) ∧
+        EventsRel M L fo.events evs
 
 /-- Whether a step's end fits, for the result `r` of its events: the internal steps the cascade runs
 (`settleFits`) and, where it does not fault, every pending request in the pending table and the service's and every
@@ -140,7 +143,7 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
     (hcx : Holds M cx) :
     (Holds M c ↔ finishFits L.count T shs r) ∧
     (Holds M c → Finished M L T shs fo s0 a outcome (Step.finish T s0 r outcome)) := by
-  obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, e1, e2, e3, e4, e5, e6, e7, -⟩ := hdone
+  obtain ⟨recs1, ms1, fr1, evs1, effs1, os1, hr1, e1, e2, e3, e4, e5, e6, e7, e8⟩ := hdone
   obtain ⟨ps1, hps1⟩ := newsRel_writes e5
   have hl1 := forall2_zipIdx_length _ _ hps1
   have hra := hr1 ps1 hps1
@@ -239,7 +242,7 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       rfl
     | none =>
       intro hm
-      obtain ⟨recs2, ms2, fr2, evs2, effs2, os2, hr2, f1, f2, f3, f4, f5, -, -⟩ := hm
+      obtain ⟨recs2, ms2, fr2, evs2, effs2, os2, hr2, f1, f2, f3, f4, f5, -, -, f8⟩ := hm
       obtain ⟨ps2, hps2⟩ := newsRel_writes f5
       have hl2 := forall2_zipIdx_length _ _ hps2
       rw [hr2 ps2 hps2]
@@ -274,7 +277,8 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       cases brokenIn M rules ++ checksBroken L T M v.machines checks with
       | cons n ns => rfl
       | nil =>
-        refine ⟨recs2, ms2, fr2, evs1 ++ evs2, ps1 ++ ps2, ?_, f1, f2, f3, ?_, ps', by simpa using hperm, hrelP⟩
+        refine ⟨recs2, ms2, fr2, evs1 ++ evs2, ps1 ++ ps2, ?_, f1, f2, f3, ?_, ⟨ps', by simpa using hperm, hrelP⟩,
+          eventsRel_append e8 f8⟩
         · simp [hl1, hl2]
         · rw [f4]; simp [hl1, hl2, Nat.add_assoc]
 
