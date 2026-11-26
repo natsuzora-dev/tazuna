@@ -119,19 +119,6 @@ section
 variable (solver : Solver) (cache : System.FilePath) (c : CheckedSpec) (v : ServiceV) (L : Layout)
   (senv : StepEnv L (shapes v)) (rules : RuleNames)
 
-/-- One depth's unrolled run as every target's goal at that depth shares it: its base, merged into one object per
-equal subterm (`shareCommon'`, the identity on values) so a goal built from its steps finds its shared terms among
-the assertions' at once, and the prefix of its scripts (`ScriptPrefix`), read once; or the refusal of its
-encoding. `unroll` at that depth with a goal is the base with the goal. -/
-abbrev Depth (v : ServiceV) (n : Nat) := Except Refusal (UnrollBase v n × Option ScriptPrefix)
-
-/-- The run at depth `d`, each target's goal aside. -/
-def depthAt (d : Nat) : Depth v senv.nT :=
-  (unrollBase L c.T c.P v senv d).map fun B =>
-    let B := ShareCommon.shareCommon' B
-    (B, ({ datatypes := B.datatypes, vars := B.vars, asserts := B.asserts, shows := List.range B.tys.length } : Script).prefix?
-      solver.header)
-
 /-- The target's search over the depths 1, 2, ... (`ds`), stopping at the first model, which is played back. A refused
 encoding of the run, or of an input kind (which the script then lacks), leaves the target undecided unless a model is
 found. An error is an engine bug. -/

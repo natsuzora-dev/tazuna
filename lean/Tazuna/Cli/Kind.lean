@@ -24,10 +24,12 @@ inductive Tazuna.ProveKind : Type
   | proved
   /-- No step of the input kind from a state of the right shape breaks the target while it stays within the slots,
   but such a step can go past them: the line names every bound a step of the service can go past (its tables and
-  bags, and its pending requests where it sends any), the same for every run. A success, as Alloy reports no
-  counterexample within its scope. -/
+  bags, and its pending requests where it sends any), the same for every run. For a bounded response: no run from the
+  initial state of at most the spec's `steps` inputs, within the slots and faulting nowhere, violates it; the line
+  names those bounds and `steps`. A success, as Alloy reports no counterexample within its scope. -/
   | withinBounds
-  /-- A state and input whose step breaks the target: exit code 1. -/
+  /-- A state and input whose step breaks the target, or for a bounded response a run from the initial state that
+  violates it: exit code 1. -/
   | violated
 deriving DecidableEq
 

@@ -7,9 +7,12 @@ import Tazuna.Smt.Timer
 import Tazuna.Semantics.NoTimer
 import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Pair
+import Tazuna.Smt.RespGoal
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
-question per input kind for the step, one line per question. -/
+question per input kind for the step, one line per question; then each bounded response, searched for a violation by
+deepening an unrolled run from the initial state (`unroll` with `respGoal`) up to the spec's `steps` bound, one line
+per response. -/
 
 namespace Tazuna.Cli
 
@@ -412,6 +415,107 @@ def serviceItems (only : String → Bool) : ServiceItems := Id.run do
 
 end
 
+section
+variable (solver : Solver) (c : CheckedSpec) (v : ServiceV) (L : Layout) (senv : StepEnv L (shapes v))
+
+/-- One depth's unrolled run as every target's goal at that depth shares it: its base, merged into one object per
+equal subterm (`shareCommon'`, the identity on values) so a goal built from its steps finds its shared terms among
+the assertions' at once, and the prefix of its scripts (`ScriptPrefix`), read once; or the refusal of its
+encoding. `unroll` at that depth with a goal is the base with the goal. -/
+abbrev Depth (v : ServiceV) (n : Nat) := Except Refusal (UnrollBase v n × Option ScriptPrefix)
+
+/-- The run at depth `d`, each target's goal aside. -/
+def depthAt (d : Nat) : Depth v senv.nT :=
+  (unrollBase L c.T c.P v senv d).map fun B =>
+    let B := ShareCommon.shareCommon' B
+    (B, ({ datatypes := B.datatypes, vars := B.vars, asserts := B.asserts, shows := List.range B.tys.length } : Script).prefix?
+      solver.header)
+
+end
+
+/-- What prove found for one response. -/
+inductive RespResult where
+  /-- A run from the initial state, of the steps it took, that violates the response. -/
+  | violated (steps : Nat) (run : List Wire)
+  /-- No run of at most `steps` inputs violates it. -/
+  | within (steps : Nat)
+  | undecided (kind : Kind) (fields : List (String × Json))
+
+/-- Whether every clock line of the run from `s` is timely (`Step.TimelyRun`). -/
+def timelyRun (T : List TypeDecl) (v : ServiceV) : State v → List (Input v) → Bool
+  | _, [] => true
+  | s, x :: xs => (match x with
+    | .clock time => Step.timely s time
+    | _ => true) && timelyRun T v (step T v s x).state xs
+
+/-- The words an assumption is named by in a response line. -/
+def responseAssumes : List String := [Step.Assumption.validInputs.text, Step.Assumption.timelyClock.text]
+
+def _root_.Tazuna.Ir.ResponseV.text {e : Ty} (resp : ResponseV e) : String := "response " ++ resp.name
+
+section
+variable (solver : Solver) (cache : System.FilePath) (c : CheckedSpec) (v : ServiceV) (L : Layout)
+  (senv : StepEnv L (shapes v))
+
+/-- The response's search over the depths 1, 2, ... (`ds`), stopping at the first model, which is played back in Lean:
+its run must have timely clock lines and violate the response (`response_sound`). A refused encoding of the run, of
+the goal, or of an input kind (which the script then lacks) leaves the response undecided unless a model is found. An
+error is an engine bug. -/
+def searchResponse (ds : List (Depth v senv.nT)) (resp : ResponseV v.event) : IO (Except String RespResult) := do
+  if hc : v.caller.isData = false then return .error "the caller type is no data" else
+  have hc : v.caller.isData = true := by simpa using hc
+  let mut refused : Option (SymInput v (shapes v) senv.nT × Refusal) := none
+  let refusedLine (step : Option String) (r : Refusal) : Except String RespResult :=
+    match refusalLine c.T r with
+    | some (kind, fields) => .ok (.undecided kind (step.toList.map (("step", Json.str ·)) ++ fields))
+    | none => .error s!"service {v.name}, {resp.text}: the encoding refused: {reprStr r}"
+  for (t, i) in ds.zipIdx do
+    let d := i + 1
+    match t with
+    | .error r => return refusedLine none r
+    | .ok (B, pre) =>
+      match respGoalE L v resp B.steps with
+      | .error r => return refusedLine none r
+      | .ok g =>
+        -- `unroll` at depth `d` with the response's goal, which is `g` on these steps (`respGoal_ok`).
+        let U := B.withGoal (respGoal L v resp)
+        if refused.isNone then refused := U.refused.head?
+        let unsorted : RespResult := .undecided (.undecided .unknown) [("depth", Lean.toJson d),
+          ("why", Json.str "a shared term of the script has no sort")]
+        let some pre := pre | return .ok unsorted
+        let some key := pre.key g | return .ok unsorted
+        match ← solver.runKeyed cache key fun _ => U.ask.script.text solver.header with
+        | .unsat => pure ()
+        | .unknown why =>
+          return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])
+        | .sat vs =>
+          let M := modelOf vs
+          -- `unroll_decode`: every model's steps decode to a run that faults nowhere.
+          let some xs := U.steps.mapM (·.decode M L hc)
+            | return .error s!"service {v.name}, {resp.text}: a model of depth {d} does not decode"
+          -- `response_sound`: the decoded run has timely clock lines and violates the response, so this check never
+          -- fails; writing the run as a trace is checked, not proved.
+          unless resp.violatedBy c.T (State.init v) xs && timelyRun c.T v (State.init v) xs do
+            return .error s!"service {v.name}, {resp.text}: a model of depth {d} does not violate it"
+          match traceOf c.T v xs with
+          | .ok ws => return .ok (.violated d ws.tail)
+          | .error _ => return .error s!"service {v.name}, {resp.text}: a model of depth {d} does not write as a trace"
+  match refused with
+  | some (inp, r) => return refusedLine (some inp.text) r
+  | none => return .ok (.within ds.length)
+
+end
+
+/-- The line of a response's result. -/
+def responseLine (service : String) (name : String) (scope : List Json) : RespResult → Kind × List (String × Json)
+  | .violated d ws => (.prove .violated, [("service", Json.str service), ("target", Json.str ("response " ++ name)),
+      ("from", Json.str "init"), ("steps", Lean.toJson d), ("run", Json.arr (ws.map (·.toJson)).toArray),
+      ("violated", Json.arr #[Json.str name]), ("assumes", Json.arr (responseAssumes.map Json.str).toArray)])
+  | .within k => (.prove .withinBounds, [("service", Json.str service), ("target", Json.str ("response " ++ name)),
+      ("assumes", Json.arr (responseAssumes.map Json.str).toArray),
+      ("bounds", Json.arr (scope ++ [Json.mkObj [("bound", Json.str "steps"), ("size", Lean.toJson k)]]).toArray)])
+  | .undecided kind fields => (kind, [("service", Json.str service), ("target", Json.str ("response " ++ name))] ++ fields)
+
 /-- `f` at every item, at most `jobs` at a time, results in order. -/
 def runAll {α β : Type} [Inhabited β] (jobs : Nat) (f : α → IO β) (xs : Array α) : IO (Array β) := do
   let next ← IO.mkRef 0
@@ -544,10 +648,37 @@ def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
       IO.eprintln s!"tazuna-engine: internal error: service {s}, {step}: a step left the slots of a layout with no collection"
       return 4
     let past (s step : String) : Option (List Json) := if left s step then some (scope s) else none
+    -- Each response's search is one job; a service's depths are built once for all its responses, before any search.
+    let mut rjobs : Array (String × String × List Json × IO (Except String RespResult)) := #[]
+    let mut builds : Array (Nat × (Nat → IO Unit)) := #[]
+    for v in c.spec.services do
+      let resps := v.responses.filter fun r => keep (v.name ++ "/" ++ r.text)
+      if resps.isEmpty then continue
+      let L := Layout.ofService c.program.defs v
+      let .ok senv := StepEnv.of L (shapes v)
+        | IO.eprintln s!"tazuna-engine: internal error: service {v.name}: no step environment in its layout"
+          return 4
+      let steps := v.bounds.steps.toNat
+      let built ← IO.mkRef (Array.replicate steps (none : Option (Depth v senv.nT)))
+      for d in List.range' 1 steps do
+        builds := builds.push (d, fun d => built.modify (·.set! (d - 1) (some (depthAt solver c v L senv d))))
+      for resp in resps do
+        rjobs := rjobs.push (v.name, resp.name, scopeBounds c.T L v, do
+          searchResponse solver cache c v L senv ((← built.get).toList.filterMap id) resp)
+    let _ ← runAll opts.jobs (fun (d, build) => build d) builds
+    let rresults ← runAll opts.jobs (fun (_, _, _, job) => job) rjobs
+    let mut rlines : List (Kind × List (String × Json)) := []
+    for ((service, name, scope, _), res) in rjobs.zip rresults do
+      match res with
+      | .error m =>
+        IO.eprintln s!"tazuna-engine: internal error: {m}"
+        return 4
+      | .ok r => rlines := rlines ++ [responseLine service name scope r]
     for r in reports do
       if let some (kind, fields) := lineOf unproved past r then printLine kind fields
-    if reports.any fun | .violated .. => true | _ => false then return 1
-    if reports.any fun | .undecided .. => true | _ => false then return 2
+    for (kind, fields) in rlines do printLine kind fields
+    if reports.any (fun | .violated .. => true | _ => false) || rlines.any (·.1 matches .prove .violated) then return 1
+    if reports.any (fun | .undecided .. => true | _ => false) || rlines.any (·.1 matches .undecided _) then return 2
     return 0
 
 -- An IR path without a directory part is in the working directory.

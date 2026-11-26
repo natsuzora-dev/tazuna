@@ -39,7 +39,18 @@ fn tasks() -> tazuna.Service {
     machines: [],
     reactions: [],
     invariants: fn(r: Records) { [#("at most 2", table.size(r.tasks) <= 2)] },
-    responses: [],
+    responses: [
+      tazuna.response(
+        name: "every task is titled",
+        after: fn(_e: Event) { True },
+        then: fn(e: Event) {
+          case e {
+            Added(_, t) -> t == "task"
+          }
+        },
+        within: 0,
+      ),
+    ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: Records) { r.tasks }, at_most: 2)],
       items: 1,

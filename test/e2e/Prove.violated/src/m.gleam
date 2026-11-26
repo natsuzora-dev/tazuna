@@ -40,7 +40,22 @@ fn counter() -> tazuna.Service {
     machines: [],
     reactions: [],
     invariants: fn(r: Records) { [#("under 50", r.total < 50)] },
-    responses: [],
+    responses: [
+      tazuna.response(
+        name: "a big add is followed by a one",
+        after: fn(e: Event) {
+          case e {
+            Added(n) -> n > 10
+          }
+        },
+        then: fn(e: Event) {
+          case e {
+            Added(n) -> n == 1
+          }
+        },
+        within: 5,
+      ),
+    ],
     bounds: tazuna.bounds(creates: [], items: 1, cascade: 1, steps: 5),
     scenarios: [],
   )
