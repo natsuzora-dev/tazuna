@@ -87,20 +87,54 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .keptFunctions => "the two orders end with the same data but keep different functions, whose results are not compared"
   | .tableKey t => s!"a value of {tyText T t} holds a table whose key is no plain value"
 
-/-- Every bound a step of the service can go past: each table, bag and list type of its layout, and the pending
+/-- Every bound of the service's layout among the types `keep` holds: each table, bag and list type, and the pending
 requests where the service has a request shape, with the bound its slots come from (`stepBound`; a list's, its type's
 longest literal) and its slots as `Layout.count` gives them, the function every slot-fit premise (`StepFits`, `RunIn`,
-`RespFits`) reads. A list from an input can be longer than every literal of its type, so lists are named too. -/
-def scopeBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
+`RespFits`, `inputVals`) reads. -/
+def boundsOf (T : List TypeDecl) (L : Layout) (v : ServiceV) (keep : Ty → Bool) : List Json :=
   L.types.filterMap fun (t, _) =>
     let line (name bound : String) : Option Json :=
       some (Json.mkObj [("type", Json.str name), ("bound", Json.str bound), ("slots", Lean.toJson (L.count t))])
-    if (Ty.same t (pendingTable (shapes v))).isSome then
+    if !keep t then none
+    else if (Ty.same t (pendingTable (shapes v))).isSome then
       if (shapes v).isEmpty then none else line "pending requests" (stepBound v t)
     else match t with
       | .table .. | .bag _ => line (tyText T t) (stepBound v t)
       | .list _ => line (tyText T t) "longest literal"
       | _ => none
+
+/-- Every bound a step of the service can go past: each bound of its layout. A list from an input can be longer than
+every literal of its type, so lists are named too. -/
+def scopeBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json := boundsOf T L v fun _ => true
+
+mutual
+/-- The lists, bags and tables a value of the type can hold, the type itself first. -/
+def Ty.collections : Ty → List Ty
+  | .list a => .list a :: Ty.collections a
+  | .bag a => .bag a :: Ty.collections a
+  | .table k w => .table k w :: Ty.collections k ++ Ty.collections w
+  | .tuple ts => Ty.collectionsOf ts
+  | .adt _ _ vs => Ty.collectionsOfAlts vs
+  | _ => []
+def Ty.collectionsOf : List Ty → List Ty
+  | [] => []
+  | t :: ts => Ty.collections t ++ Ty.collectionsOf ts
+def Ty.collectionsOfAlts : List (List Ty) → List Ty
+  | [] => []
+  | ts :: vs => Ty.collectionsOf ts ++ Ty.collectionsOfAlts vs
+end
+
+/-- The types of what the service's inputs carry into a step's slots, as `inputVals` embeds them: the caller, each
+command's input, each answer's value and each event. -/
+def inputTys (v : ServiceV) : List Ty :=
+  v.caller :: v.commands.map (·.input) ++ (shapes v).map (fun sh => answerTy sh.output sh.rejection) ++
+    v.subscribes.map (·.event)
+
+/-- The bounds an input of the service can go past: the lists, bags and tables its inputs carry. A verdict over runs
+covers only runs whose inputs fit them (`fault_sound` takes the input's embedding), so it names them. -/
+def inputBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
+  let held := Ty.collectionsOf (inputTys v)
+  boundsOf T L v fun t => held.any fun u => (Ty.same t u).isSome
 
 /-- The kind and fields of the line of a refusal that is the spec's: undecided, with its reason. -/
 def refusalLine (T : List TypeDecl) : SpecRefusal → Kind × List (String × Json)

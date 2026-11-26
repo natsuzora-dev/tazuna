@@ -104,6 +104,8 @@ structure ServiceItems where
   items : List Item := []
   /-- The bounds of the service's scope (`scopeBounds`). -/
   scope : List Json := []
+  /-- The bounds the service's inputs can go past (`inputBounds`). -/
+  inputScope : List Json := []
   /-- An engine bug: a state its proofs rule out. -/
   internal : Option String := none
 
@@ -336,7 +338,7 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
     | .unsat _ _ (some g) | .violated _ _ g _ =>
       if only (v.name ++ "/" ++ g.text ++ "/init") then Item.ready r else .skipped v.name g
     | r => .ready r
-  return { items := init ++ items, scope := scopeBounds c.T L v }
+  return { items := init ++ items, scope := scopeBounds c.T L v, inputScope := inputBounds c.T L v }
 
 end
 
@@ -430,12 +432,12 @@ def prove (root path : String) (opts : Options) : IO UInt32 := do
       IO.eprintln s!"tazuna-engine: internal error: {m}"
       return 4
     let mut items : List Item := []
-    let mut scopes : List (String × List Json) := []
+    let mut scopes : List (String × List Json × List Json) := []
     for sv in c.services do
       let r := serviceItems c sv opts.keeps
       if let some m := r.internal then return ← internal m
       items := items ++ r.items
-      scopes := scopes ++ [(sv.v.name, r.scope)]
+      scopes := scopes ++ [(sv.v.name, r.scope, r.inputScope)]
     let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
     -- Each response's search is one job; a service's depths are built once for all its responses (`depthJobs`).
     let mut builds : Array Job := #[]
@@ -490,12 +492,17 @@ def prove (root path : String) (opts : Options) : IO UInt32 := do
     let left (s step : String) : Bool := reports.any fun
       | .boundReached s' step' | .undecided _ s' step' none _ => s' == s && step' == step
       | _ => false
-    let scope (s : String) : List Json := (scopes.lookup s).getD []
+    let scope (s : String) : List Json := ((scopes.lookup s).map (·.1)).getD []
+    let inputScope (s : String) : List Json := ((scopes.lookup s).map (·.2)).getD []
     if let some (s, step) := reports.findSome? (fun r => match r with
         | .boundReached s step => if (scope s).isEmpty then some (s, step) else none
         | _ => none) then
       return ← internal s!"service {s}, {step}: a step left the slots of a layout with no collection"
-    let past (s step : String) : Option (List Json) := if left s step then some (scope s) else none
+    -- A line rests on the states runs reach, which only runs whose inputs fit the slots are searched for; the initial
+    -- state's line rests on no input.
+    let past (s step : String) : Option (List Json) :=
+      if left s step then some (scope s)
+      else if step == "init" || (inputScope s).isEmpty then none else some (inputScope s)
     let mut rlines : List (Kind × List (String × Json)) := []
     for (service, name, scope, r) in responses do
       match ← r.get with
