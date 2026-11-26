@@ -1,4 +1,5 @@
 import Tazuna.Cli.Search
+import Tazuna.Cli.TargetFile
 import Tazuna.Smt.GenGoal
 import Tazuna.Trace.Verify
 
@@ -26,16 +27,6 @@ def _root_.Tazuna.Ir.GenTarget.text : GenTarget → String
   | .event (some k) => "event " ++ k
   | .event none => "event"
   | .request x n => "request " ++ x ++ "." ++ n
-
-/-- A target's file: its text with every byte outside `[A-Za-z0-9 ._-]` percent-encoded, `%` too, so distinct targets
-get distinct names on any file system. -/
-def fileName (target : String) : String :=
-  let hex := "0123456789ABCDEF".toList
-  let byte (b : UInt8) : String :=
-    let c := Char.ofNat b.toNat
-    if b < 128 && (c.isAlphanum || c == ' ' || c == '.' || c == '_' || c == '-') then c.toString
-    else "%" ++ String.ofList [hex[b.toNat / 16]!, hex[b.toNat % 16]!]
-  String.join (target.toUTF8.toList.map byte) ++ ".jsonl"
 
 section
 variable (T : List TypeDecl) (v : ServiceV) (rules : RuleNames) (g : GenTarget)
@@ -103,7 +94,8 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
       let v := sv.v
       let L := sv.L
       let rules := ruleNamesOf v
-      let gs := (targets c.T v rules).filter fun g => opts.keeps (v.name ++ "/" ++ g.text)
+      -- Each target once (a rule named `callers` repeats admission's), so with `targetFile_inj` no two share a file.
+      let gs := dedupBy (· == ·) ((targets c.T v rules).filter fun g => opts.keeps (v.name ++ "/" ++ g.text))
       if gs.isEmpty then continue
       let (bs, ds) ← depthJobs solver sv v.bounds.stepsNat
       builds := builds ++ bs
@@ -117,16 +109,16 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
     runAll opts.jobs (builds ++ searches)
     let mut undecided := false
     for (service, g, scope, r) in jobs do
-      let file := System.FilePath.mk dir / service / fileName g.text
+      let file := System.FilePath.mk dir / targetFile service g
       let common := [("service", Json.str service), ("target", Json.str g.text)]
       match ← r.get with
       | none => return ← internal s!"service {service}, {g.text}: its search never ran"
       | some (.error m) => return ← internal m
       | some (.ok (.found d tr)) =>
-        IO.FS.createDirAll (System.FilePath.mk dir / service)
+        if let some d := file.parent then IO.FS.createDirAll d
         IO.FS.writeFile file (String.join (tr.wires.map (·.text ++ "\n")))
         printLine (.generate .reached) (common ++
-          [("file", Json.str (service ++ "/" ++ fileName g.text)), ("steps", Lean.toJson d)])
+          [("file", Json.str (targetFile service g)), ("steps", Lean.toJson d)])
       | some (.ok res) =>
         if ← file.pathExists then IO.FS.removeFile file
         match res with
