@@ -6,8 +6,9 @@ it makes the service show a class of out line: an answer's outcome to a command 
 request to an external's command or query (`OutClass`). Machine states show in no out line, so they are no targets.
 The targets are enumerated from the spec's declarations (`targets`); `classes_covered` says the enumeration misses
 no class a step can show. Rule names are the one part a spec can compute: a rule whose name is no literal is aimed at
-as "a rule of a computed name" (`GenTarget.invalid _ none`), and the literal names are given by whoever reads them
-(the encoding reads them as `prove` does). -/
+as "a rule of a computed name" (`GenTarget.invalid _ none`), and the literal names are read off the checked IR's
+`accepts` sources (`ruleNamesOf`), so every target exists whether or not a step's encoding is refused
+(`targets_cover`). -/
 
 namespace Tazuna.Ir
 
@@ -134,6 +135,157 @@ def RulesListed (v : ServiceV) (rules : RuleNames) : Prop :=
     some n ∈ rules (v.commands.get i).name ∨ none ∈ rules (v.commands.get i).name) ∧
   (∀ i : Fin v.queries.length, ∀ input, ∀ n ∈ broken ((v.queries.get i).accepts.fn (input, ())),
     some n ∈ rules (v.queries.get i).name ∨ none ∈ rules (v.queries.get i).name)
+
+section
+variable {G : List Ty}
+
+/-- A string literal's text. -/
+def Expr.strLit? {Γ : List Ty} {t : Ty} : Expr G Γ t → Option String
+  | .str s => some s
+  | _ => none
+
+/-- The first expression's text where it is a string literal. -/
+def Exprs.headStr? {Γ : List Ty} {ts : List Ty} : Exprs G Γ ts → Option String
+  | .cons e _ => e.strLit?
+  | .nil => none
+
+/-- A rule's name as written: the literal of a rule written as the tuple `#("name", cond)`. -/
+def Expr.ruleName? {Γ : List Ty} {t : Ty} : Expr G Γ t → Option String
+  | .tuple es => es.headStr?
+  | _ => none
+
+/-- The names of a list literal's rules: each one's literal, or none. -/
+def Items.ruleNames {Γ : List Ty} {t : Ty} : Items G Γ t → List (Option String)
+  | .nil => []
+  | .cons e es => e.ruleName? :: es.ruleNames
+
+/-- The names of the rules a list expression gives: its items' where it is a list literal, else one computed name. -/
+def Expr.ruleNames {Γ : List Ty} {t : Ty} : Expr G Γ t → List (Option String)
+  | .list items => items.ruleNames
+  | _ => [none]
+
+/-- The names of the rules a function gives, read off its body where it is a lambda, else one computed name. -/
+def Expr.lamRuleNames {Γ : List Ty} {t : Ty} : Expr G Γ t → List (Option String)
+  | .lam body => body.ruleNames
+  | _ => [none]
+
+variable (D : Defs G) (g : Ty.dens G)
+
+theorem Expr.ruleName?_eval {Γ : List Ty} : {t : Ty} → (e : Expr G Γ t) → (h : t = .tuple [.str, .bool]) →
+    (s : String) → e.ruleName? = some s → (ρ : Ty.dens Γ) → (h ▸ e.eval D g ρ : (Ty.tuple [.str, .bool]).den).1 = s := by
+  intro t e h s hs ρ
+  cases e with
+  | tuple es =>
+    cases es with
+    | nil => cases hs
+    | cons e1 rest =>
+      cases e1 with
+      | str s' =>
+        simp only [Expr.ruleName?, Exprs.headStr?, Expr.strLit?, Option.some.injEq] at hs
+        subst hs
+        injection h with h1
+        injection h1 with _ h2
+        subst h2
+        rfl
+      | _ => cases hs
+  | _ => cases hs
+
+theorem Items.ruleNames_mem {Γ : List Ty} (ρ : Ty.dens Γ) (items : Items G Γ (.tuple [.str, .bool])) :
+    ∀ a ∈ Items.eval D g items ρ, some a.1 ∈ items.ruleNames ∨ none ∈ items.ruleNames := by
+  generalize hl : Items.eval D g items ρ = xs
+  induction xs generalizing items with
+  | nil => simp
+  | cons x xs ih =>
+    cases items with
+    | nil => simp [Items.eval] at hl
+    | cons e es =>
+      simp only [Items.eval, List.cons.injEq] at hl
+      obtain ⟨rfl, hl⟩ := hl
+      intro a ha
+      rcases List.mem_cons.1 ha with rfl | ha
+      · cases hr : e.ruleName? with
+        | none => simp [Items.ruleNames, hr]
+        | some s =>
+          have := Expr.ruleName?_eval D g e rfl s hr ρ
+          simp only [Items.ruleNames, hr, ← this]
+          exact Or.inl List.mem_cons_self
+      · rcases ih es hl a ha with h | h
+        · exact Or.inl (List.mem_cons_of_mem _ h)
+        · exact Or.inr (List.mem_cons_of_mem _ h)
+
+theorem Expr.ruleNames_listed {Γ : List Ty} (ρ : Ty.dens Γ) : {t : Ty} → (e : Expr G Γ t) → (h : t = Ty.rules) →
+    ∀ n ∈ broken (h ▸ e.eval D g ρ : Ty.rules.den), some n ∈ e.ruleNames ∨ none ∈ e.ruleNames := by
+  intro t e h n hn
+  cases e with
+  | list items =>
+    injection h with h1
+    subst h1
+    obtain ⟨⟨m, b, ⟨⟩⟩, ha, hf⟩ := List.mem_filterMap.1 hn
+    have hm : m = n := by
+      simp only at hf
+      split at hf
+      · cases hf
+      · cases hf; rfl
+    subst hm
+    exact Items.ruleNames_mem D g ρ items _ ha
+  | _ => exact Or.inr (by simp [Expr.ruleNames])
+
+theorem Expr.lamRuleNames_listed {Γ : List Ty} {i : Ty} (ρ : Ty.dens Γ) : {t : Ty} → (e : Expr G Γ t) →
+    (h : t = .fn [i] Ty.rules) → ∀ ys, ∀ n ∈ broken ((h ▸ e.eval D g ρ : (Ty.fn [i] Ty.rules).den) ys : Ty.rules.den),
+      some n ∈ e.lamRuleNames ∨ none ∈ e.lamRuleNames := by
+  intro t e h ys n hn
+  cases e with
+  | lam body =>
+    injection h with h1 h2
+    subst h1; subst h2
+    exact Expr.ruleNames_listed D g _ body rfl n hn
+  | _ => exact Or.inr (by simp [Expr.lamRuleNames])
+
+end
+
+/-- The names of the rules a kept `accepts` function gives, read off its source as `Step.broken` reads them. -/
+def Fun.ruleNames {t : Ty} (f : Fun t) : List (Option String) := f.body.lamRuleNames
+
+theorem Fun.fn_app {ps : List Ty} {r : Ty} (f : Fun (.fn ps r)) (hps : (Ty.tuple ps).isData = true)
+    (hr : r.isData = true) (xs : (Ty.tuple ps).den0) : f.fn xs = Ty.down r hr (f.eval (Ty.up (.tuple ps) hps xs)) := by
+  have := Ty.up_fn ps r f.ht hps hr f.fn xs
+  rw [Fun.fn, Ty.up_down] at this
+  rw [this, Ty.down_up]
+  rfl
+
+/-- Every rule an `accepts` function breaks is named by a literal its source writes, or the source computes a name. -/
+theorem Fun.ruleNames_listed {i : Ty} (f : Fun (.fn [i] Ty.rules)) (x : i.den0) :
+    ∀ n ∈ broken (f.fn (x, ())), some n ∈ f.ruleNames ∨ none ∈ f.ruleNames := by
+  have hps : (Ty.tuple [i]).isData = true := by
+    have := f.ht; simp only [Ty.isData, Bool.and_eq_true] at this; simpa [Ty.isData] using this.1
+  intro n hn
+  have e := Fun.fn_app f hps rfl (x, ())
+  erw [e] at hn
+  exact Expr.lamRuleNames_listed f.defs f.defs.eval _ f.body rfl _ n hn
+
+/-- The rule names of each command and query, read off the checked IR's `accepts` (`Fun.ruleNames`), so they exist
+whether or not a step's encoding is refused. -/
+def ruleNamesOf (v : ServiceV) : RuleNames := fun name =>
+  dedupBy (· == ·) ((v.commands.filter (·.name == name)).flatMap (·.accepts.ruleNames) ++
+    (v.queries.filter (·.name == name)).flatMap (·.accepts.ruleNames))
+
+theorem rulesListed_ofIr (v : ServiceV) : RulesListed v (ruleNamesOf v) := by
+  have mem : ∀ {name : String} {o : Option String} {fs : List (List (Option String))},
+      (∃ l ∈ fs, o ∈ l) → (fs.flatten ⊆ (ruleNamesOf v name)) → o ∈ ruleNamesOf v name :=
+    fun ⟨l, hl, ho⟩ hs => hs (List.mem_flatten.2 ⟨l, hl, ho⟩)
+  refine ⟨fun i input n hn => ?_, fun i input n hn => ?_⟩
+  · have hin : ∀ o ∈ (v.commands.get i).accepts.ruleNames, o ∈ ruleNamesOf v (v.commands.get i).name := fun o ho =>
+      (mem_dedupBy (fun _ _ => beq_iff_eq) _ _).2 (List.mem_append_left _
+        (List.mem_flatMap.2 ⟨_, List.mem_filter.2 ⟨List.get_mem _ i, by simp⟩, ho⟩))
+    rcases Fun.ruleNames_listed _ input n hn with h | h
+    · exact .inl (hin _ h)
+    · exact .inr (hin _ h)
+  · have hin : ∀ o ∈ (v.queries.get i).accepts.ruleNames, o ∈ ruleNamesOf v (v.queries.get i).name := fun o ho =>
+      (mem_dedupBy (fun _ _ => beq_iff_eq) _ _).2 (List.mem_append_right _
+        (List.mem_flatMap.2 ⟨_, List.mem_filter.2 ⟨List.get_mem _ i, by simp⟩, ho⟩))
+    rcases Fun.ruleNames_listed _ input n hn with h | h
+    · exact .inl (hin _ h)
+    · exact .inr (hin _ h)
 
 namespace Step
 
@@ -502,5 +654,12 @@ theorem classes_covered (T : List TypeDecl) {P : List AnySite} {E : List AnyEffe
     exact ⟨.request sh.external sh.name, List.mem_append_right _
       ((mem_dedupBy (fun _ _ => beq_iff_eq) _ _).2 (List.mem_map.2 ⟨sh, hsh, rfl⟩)),
       by simp [GenTarget.covers, Step.Pending.line, hx, hn]⟩
+
+/-- generate's targets miss no class: every class of out line a step from a state the step invariant holds of shows is
+aimed at by one of the targets generate makes from the checked IR (`ruleNamesOf`). -/
+theorem targets_cover (T : List TypeDecl) {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV}
+    (hv : v.Reach P E) {s : State v} (hs : Step.Inv P s) (x : Input v) :
+    ∀ c ∈ classes T v x (step T v s x), ∃ g ∈ targets T v (ruleNamesOf v), g.covers (ruleNamesOf v) c = true :=
+  classes_covered T hv (rulesListed_ofIr v) hs x
 
 end Tazuna.Ir

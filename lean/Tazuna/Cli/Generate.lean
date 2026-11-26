@@ -91,24 +91,6 @@ theorem generate_reaches {xs : List (Input v)} {ws : List Wire} (h : genTrace T 
 
 end
 
-/-- The literal names of the rules a command's or query's `accepts` can break, read off its step's terms as prove
-reads rule names; none for a rule whose name the model decides. -/
-def ruleNamesOf (L : Layout) (c : CheckedSpec) (v : ServiceV) (senv : StepEnv L (shapes v)) : RuleNames := fun name =>
-  let w := stateWidth v
-  let cmds := (List.finRange v.commands.length).filterMap fun i =>
-    if (v.commands.get i).name == name then
-      match encodeStep L c.T c.P v senv (SymState.vars 0) (.command i (.var w) (.var (w + 1))) with
-      | .ok ⟨.command o, _, _, _⟩ => some (ruleNames o.rules)
-      | _ => none
-    else none
-  let qs := (List.finRange v.queries.length).filterMap fun i =>
-    if (v.queries.get i).name == name then
-      match encodeStep L c.T c.P v senv (SymState.vars 0) (.query i (.var w) (.var (w + 1))) with
-      | .ok ⟨.query o, _, _, _⟩ => some (ruleNames o.rules)
-      | _ => none
-    else none
-  dedup (cmds ++ qs).flatten
-
 def generate (root dir path : String) (opts : Options) : IO UInt32 := do
   match ← loadSpec root path with
   | .error code => return code
@@ -127,7 +109,7 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
       let v := sv.v
       let L := sv.L
       let senv := sv.senv
-      let rules := ruleNamesOf L c v senv
+      let rules := ruleNamesOf v
       let gs := (targets c.T v rules).filter fun g => opts.keeps (v.name ++ "/" ++ g.text)
       if gs.isEmpty then continue
       let (bs, ds) ← depthJobs solver c v L senv v.bounds.steps.toNat
