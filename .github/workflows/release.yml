@@ -1,0 +1,134 @@
+name: release
+
+# The owner pushes the tag v<version> of a commit whose gleam/gleam.toml has that version. This workflow builds the
+# engine for each platform, takes the official z3 build of the pinned version, and drafts the GitHub release with both
+# gzipped, the third-party notices, and the engine_pin.gleam that pins them. It never moves a tag, never publishes the
+# draft and never publishes to Hex: the owner commits engine_pin.gleam, publishes the draft, then runs gleam publish.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  Z3_VERSION: "5.4.1"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: darwin-arm64
+            runner: macos-15
+            z3: arm64-osx-13.3
+            z3_sha256: a4a878121e81dfc297d027dd0b51dc4f08feb4296d6ecace42bfbc87a29d6d58
+          - platform: darwin-x64
+            runner: macos-15-intel
+            z3: x64-osx-13.3
+            z3_sha256: 79e93b0564b82bf2c1b355df130bab543b1ff88d597c985632770fea05f1b249
+          - platform: linux-x64
+            runner: ubuntu-24.04
+            z3: x64-glibc-2.39
+            z3_sha256: b548bac48ef2452b4e09ea2945cf4b011d5f43fcf39e4799df268ee7e0769d85
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            z3: arm64-glibc-2.38
+            z3_sha256: 9e8f781f15a423ede5bd491b665966dbb607d9f9c4f9f9b502116f271d1b050f
+          - platform: win32-x64
+            runner: windows-2025
+            z3: x64-win
+            z3_sha256: f16e991e1c883b0cee30c78eb445343e1a3f49c142aa7dead7d6c35f9cc44934
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      EXE: ${{ startsWith(matrix.platform, 'win32') && '.exe' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag names the package's version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' gleam/gleam.toml)
+          [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "tag $GITHUB_REF_NAME, but gleam.toml has $version"; exit 1; }
+      - name: Build the engine
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh |
+            sh -s -- -y --default-toolchain none --no-modify-path
+          export PATH="$HOME/.elan/bin:$PATH"
+          cd lean
+          lake build tazuna-engine
+          mkdir -p ../out
+          cp ".lake/build/bin/tazuna-engine$EXE" ../out/
+          cp "$(lean --print-prefix)/LICENSE" ../out/lean-LICENSE
+          cp "$(lean --print-prefix)/LICENSES" ../out/lean-LICENSES
+      - name: Take the official z3 build
+        run: |
+          curl -sSfL -o z3.zip "https://github.com/Z3Prover/z3/releases/download/z3-$Z3_VERSION/z3-$Z3_VERSION-${{ matrix.z3 }}.zip"
+          echo "${{ matrix.z3_sha256 }}  z3.zip" | shasum -a 256 -c -
+          if [ -n "$EXE" ]; then 7z x -oz3 z3.zip >/dev/null; else unzip -q z3.zip -d z3; fi
+          cp z3/*/bin/z3$EXE out/
+          cp z3/*/LICENSE.txt out/z3-LICENSE.txt
+      - name: Run both without the toolchain
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' gleam/gleam.toml)
+          if [ -n "$EXE" ]; then path=/c/Windows/System32; else path=/usr/bin:/bin; fi
+          line=$(env PATH="$path" "out/tazuna-engine$EXE")
+          [ "$line" = "{\"kind\":\"Engine.version\",\"version\":\"$version\"}" ] || { echo "the engine printed $line"; exit 1; }
+          env PATH="$path" "out/z3$EXE" --version | grep -F "$Z3_VERSION"
+      - name: Record the glibc each needs
+        if: startsWith(matrix.platform, 'linux')
+        run: |
+          for f in tazuna-engine z3; do
+            needs=$(objdump -T "out/$f" | grep -o 'GLIBC_[0-9.]*\|GLIBCXX_[0-9.]*' | sort -u -V | awk -F_ '{m[$1]=$0} END {print m["GLIBC"], m["GLIBCXX"]}')
+            echo "${{ matrix.platform }} $f needs $needs" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Gzip the assets
+        run: |
+          mkdir dist
+          gzip -9 -c "out/tazuna-engine$EXE" >"dist/tazuna-engine-${{ matrix.platform }}.gz"
+          gzip -9 -c "out/z3$EXE" >"dist/z3-${{ matrix.platform }}.gz"
+          if [ "${{ matrix.platform }}" = linux-x64 ]; then cp out/lean-LICENSE out/lean-LICENSES out/z3-LICENSE.txt dist/; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Write the notices and the pin
+        run: |
+          cd dist
+          {
+            echo "tazuna-engine-* is tazuna (MIT, the LICENSE below) compiled by Lean $(sed 's/.*://' ../lean/lean-toolchain),"
+            echo "whose runtime it links statically: Lean (Apache 2.0) and the libraries listed in Lean's LICENSES,"
+            echo "among them GMP (LGPL 3.0). The engine's source is the tagged commit of github.com/$GITHUB_REPOSITORY."
+            echo "z3-* is the official Z3 $Z3_VERSION build from github.com/Z3Prover/z3, unchanged (MIT)."
+            echo "UNVERIFIED: the engine also links libuv (MIT), which Lean's LICENSES does not list, and Lake links"
+            echo "OpenSSL (Apache 2.0), which dead stripping removed on darwin-arm64 but is unchecked elsewhere."
+            for f in ../LICENSE lean-LICENSE lean-LICENSES z3-LICENSE.txt; do
+              printf '\n==============================================================================\n%s\n\n' "${f##*/}"
+              cat "$f"
+            done
+          } >THIRD-PARTY-NOTICES.txt
+          rm lean-LICENSE lean-LICENSES z3-LICENSE.txt
+          ../scripts/engine-pin "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" . >engine_pin.gleam
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "$GITHUB_REF_NAME" \
+            --notes "Before publishing: commit engine_pin.gleam to gleam/src/tazuna/internal/, publish this draft, then gleam publish." \
+            dist/*
