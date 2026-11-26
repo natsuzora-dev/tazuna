@@ -411,11 +411,6 @@ def illFormedScript (withWf : Bool) (goal : Term) : Except String Script := do
   let some dts := L.datatypes? | throw "no datatypes"
   pure { datatypes := dts, vars := [rsrt, .int, .int, .int, psrt], asserts := (if withWf then [wf] else []) ++ [goal] }
 
-/-- The model of the solver's values, as far as the variables go. -/
-def modelOf (vs : List (Nat × Val)) : Model :=
-  { vars := fun n => (vs.lookup n).getD default, divZero := fun _ => 0, modZero := fun _ => 0,
-    selOther := fun _ _ _ _ => default, defs := fun _ => default }
-
 /-- Runs one query case: the outcome `step` computes from the decoded state and input against the outcome terms. -/
 def queryCase (solver : Solver) (name : String) (goal : List Term) : IO Bool := do
   match queryScript goal with

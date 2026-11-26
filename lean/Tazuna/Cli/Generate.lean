@@ -1,4 +1,4 @@
-import Tazuna.Cli.Prove
+import Tazuna.Cli.Search
 import Tazuna.Smt.GenGoal
 import Tazuna.Trace.Verify
 
@@ -109,117 +109,61 @@ def ruleNamesOf (L : Layout) (c : CheckedSpec) (v : ServiceV) (senv : StepEnv L 
     else none
   dedup (cmds ++ qs).flatten
 
-/-- What generate found for one target. -/
-inductive GenResult where
-  | reached (steps : Nat) (trace : List Wire)
-  | unreached (steps : Nat)
-  | undecided (kind : Kind) (fields : List (String × Json))
-
-section
-variable (solver : Solver) (cache : System.FilePath) (c : CheckedSpec) (v : ServiceV) (L : Layout)
-  (senv : StepEnv L (shapes v)) (rules : RuleNames)
-
-/-- The target's search over the depths 1, 2, ... (`ds`), stopping at the first model, which is played back. A refused
-encoding of the run, or of an input kind (which the script then lacks), leaves the target undecided unless a model is
-found. An error is an engine bug. -/
-def searchTarget (ds : List (Depth v senv.nT)) (g : GenTarget) : IO (Except String GenResult) := do
-  if hc : v.caller.isData = false then return .error "the caller type is no data" else
-  have hc : v.caller.isData = true := by simpa using hc
-  let mut refused : Option (SymInput v (shapes v) senv.nT × Refusal) := none
-  for (t, i) in ds.zipIdx do
-    let d := i + 1
-    match t with
-    | .error r =>
-      match refusalLine c.T r with
-      | some (kind, fields) => return .ok (.undecided kind fields)
-      | none => return .error s!"service {v.name}, {g.text}: the encoding refused: {reprStr r}"
-    | .ok (B, pre) =>
-      let goal := genGoal L c.T rules g B.steps
-      let U := B.withGoal goal
-      if refused.isNone then refused := U.refused.head?
-      let some pre := pre | return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d),
-        ("why", Json.str "a shared term of the script has no sort")])
-      let some q := pre.ask goal | return .ok (.undecided (.undecided .unknown)
-        [("depth", Lean.toJson d), ("why", Json.str "a shared term of the script has no sort")])
-      match ← solver.runKeyed cache q with
-      | .unsat => pure ()
-      | .unknown why =>
-        return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])
-      | .sat vs =>
-        let M := modelOf vs
-        -- `unroll_decode`: every model's steps decode to a run that faults nowhere.
-        let some xs := U.steps.mapM (·.decode M L hc)
-          | return .error s!"service {v.name}, {g.text}: a model of depth {d} does not decode"
-        -- `generate_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable.
-        -- Writing, reading back and replaying the trace are checked here, not proved.
-        match genTrace c.T v rules g xs with
-        | .ok ws => return .ok (.reached d ws)
-        | .error why => return .error s!"service {v.name}, {g.text}: a model of depth {d} {why}"
-  match refused with
-  | some (inp, r) => match refusalLine c.T r with
-    | some (kind, fields) => return .ok (.undecided kind (("step", Json.str inp.text) :: fields))
-    | none => return .error s!"service {v.name}, {inp.text}: the encoding refused: {reprStr r}"
-  | none => return .ok (.unreached ds.length)
-
-end
-
-/-- `generate`'s options are `prove`'s: the prefix `--only` keeps targets by, how many solvers run at once, the
-cache directory. -/
-def generate (root dir path : String) (opts : ProveOptions) : IO UInt32 := do
+def generate (root dir path : String) (opts : Options) : IO UInt32 := do
   match ← loadSpec root path with
   | .error code => return code
   | .ok c =>
     let solver : Solver := {}
     let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
-    let keep (name : String) : Bool := match opts.only with
-      | some p => p.isPrefixOf name
-      | none => true
-    -- Each job is one target's search; its lines and file are written in target order once all are done.
-    let mut jobs : Array (String × GenTarget × List Json × IO (Except String GenResult)) := #[]
-    let mut builds : Array (Nat × (Nat → IO Unit)) := #[]
+    let internal (m : String) : IO UInt32 := do
+      IO.eprintln s!"tazuna-engine: internal error: {m}"
+      return 4
+    -- Each target's search is one job; a service's depths are built once for all its targets (`depthJobs`). Lines and
+    -- files are written in target order once all are done.
+    let mut builds : Array Job := #[]
+    let mut searches : Array Job := #[]
+    let mut jobs : Array (String × GenTarget × List Json × IO.Ref (Option (Except String (SearchResult (List Wire))))) := #[]
     for v in c.spec.services do
       let L := Layout.ofService c.program.defs v
       let .ok senv := StepEnv.of L (shapes v)
-        | IO.eprintln s!"tazuna-engine: internal error: service {v.name}: no step environment in its layout"
-          return 4
+        | return ← internal s!"service {v.name}: no step environment in its layout"
       let rules := ruleNamesOf L c v senv
-      let scope := scopeBounds c.T L v
-      let gs := (targets c.T v rules).filter fun g => keep (v.name ++ "/" ++ g.text)
+      let gs := (targets c.T v rules).filter fun g => opts.keeps (v.name ++ "/" ++ g.text)
       if gs.isEmpty then continue
-      -- Each depth's run is built once for every target of the service, before any search.
-      let k := v.bounds.steps.toNat
-      let built ← IO.mkRef (Array.replicate k (none : Option (Depth v senv.nT)))
-      -- The depth is the job's argument, so building its run waits for the job.
-      for d in List.range' 1 k do
-        builds := builds.push (d, fun d => built.modify (·.set! (d - 1) (some (depthAt solver c v L senv d))))
+      let (bs, ds) ← depthJobs solver c v L senv v.bounds.steps.toNat
+      builds := builds ++ bs
       for g in gs do
-        jobs := jobs.push (v.name, g, scope, do
-          searchTarget solver cache c v L senv rules ((← built.get).toList.filterMap id) g)
-    let _ ← runAll opts.jobs (fun (d, build) => build d) builds
-    let results ← runAll opts.jobs (fun (_, _, _, job) => job) jobs
+        -- `generate_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable.
+        let (j, r) ← Job.of (searchDepths solver cache c.T v L senv g.text ds (fun sts => .ok (genGoal L c.T rules g sts))
+          (genTrace c.T v rules g))
+        searches := searches.push j
+        jobs := jobs.push (v.name, g, scopeBounds c.T L v, r)
+    -- One pool: the builds first, so a search waits only on a build some worker runs.
+    runAll opts.jobs (builds ++ searches)
     let mut undecided := false
-    for ((service, g, scope, _), res) in jobs.zip results do
+    for (service, g, scope, r) in jobs do
       let file := System.FilePath.mk dir / service / fileName g.text
       let common := [("service", Json.str service), ("target", Json.str g.text)]
-      match res with
-      | .error m =>
-        IO.eprintln s!"tazuna-engine: internal error: {m}"
-        return 4
-      | .ok (.reached d ws) =>
+      match ← r.get with
+      | none => return ← internal s!"service {service}, {g.text}: its search never ran"
+      | some (.error m) => return ← internal m
+      | some (.ok (.found d ws)) =>
         IO.FS.createDirAll (System.FilePath.mk dir / service)
         IO.FS.writeFile file (String.join (ws.map (·.text ++ "\n")))
         printLine (.generate .reached) (common ++
           [("file", Json.str (service ++ "/" ++ fileName g.text)), ("steps", Lean.toJson d)])
-      | .ok res =>
+      | some (.ok res) =>
         if ← file.pathExists then IO.FS.removeFile file
         match res with
-        | .unreached k =>
+        -- T6b (`generate_unreached`) at each depth up to `k`: no run of at most `k` inputs, within the bounds, shows
+        -- the target at its last step.
+        | .noModel k =>
           printLine (.generate .unreached) (common ++ [("steps", Lean.toJson k), ("bounds", Json.arr scope.toArray),
             ("assumes", Json.arr #[Json.str Step.Assumption.validInputs.text])])
         | .undecided kind fields =>
           undecided := true
           printLine kind (common ++ fields)
-        | .reached .. => pure ()
+        | .found .. => pure ()
     return if undecided then 2 else 0
 
 end Tazuna.Cli

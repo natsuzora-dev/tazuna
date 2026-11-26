@@ -13,7 +13,7 @@ def main (args : List String) : IO UInt32 := do
   | ["test", root, "--update", "--ir", path] => Tazuna.Cli.test root path true
   | ["verify", root, dir, "--ir", path] => Tazuna.Cli.verify root dir path
   | "prove" :: root :: rest =>
-    match Tazuna.Cli.proveArgs rest with
+    match Tazuna.Cli.optionsOf rest with
     | some (opts, path) =>
       try Tazuna.Cli.prove root path opts
       catch e =>
@@ -21,7 +21,7 @@ def main (args : List String) : IO UInt32 := do
         return 4
     | none => usage
   | "generate" :: root :: dir :: rest =>
-    match Tazuna.Cli.proveArgs rest with
+    match Tazuna.Cli.optionsOf rest with
     | some (opts, path) =>
       try Tazuna.Cli.generate root dir path opts
       catch e =>

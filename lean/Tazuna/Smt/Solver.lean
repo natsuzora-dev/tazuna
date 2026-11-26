@@ -53,6 +53,13 @@ def Solver.version (s : Solver) : IO String := do
   let out ← IO.Process.output { cmd := s.path, args := #["-version"] }
   return out.stdout.trimAscii.toString
 
+-- A script's answer reports every variable it declares, so the default is never read.
+set_option linter.tazuna.silentDefault false in
+/-- The values the solver gave, as a model. -/
+def modelOf (vs : List (Nat × Val)) : Model :=
+  { vars := fun n => (vs.lookup n).getD default, divZero := fun _ => 0, modZero := fun _ => 0,
+    selOther := fun _ _ _ _ => default, defs := fun _ => default }
+
 /-- Runs one script and reads the answer. -/
 def Solver.run (s : Solver) (script : Script) : IO Answer := do
   let some text := script.text s.header | return .unknown "a shared term of the script has no sort"

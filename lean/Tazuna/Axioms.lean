@@ -77,7 +77,7 @@ elab "#check_tazuna_reach" : command => do
   let roots := [
     -- What the engine runs: each command, and the lists the e2e harness and gen-dsl print, which hold every output
     -- kind, built-in and DSL type.
-    ``Tazuna.Cli.check, ``Tazuna.Cli.test, ``Tazuna.Cli.verify, ``Tazuna.Cli.prove, ``Tazuna.Cli.proveArgs,
+    ``Tazuna.Cli.check, ``Tazuna.Cli.test, ``Tazuna.Cli.verify, ``Tazuna.Cli.prove, ``Tazuna.Cli.optionsOf,
     ``Tazuna.Cli.generate,
     ``Tazuna.Kind.mem_all, ``Tazuna.Ir.Prim.mem_all, ``Tazuna.Ir.Dsl.mem_all,
     -- Gleam's meaning where languages differ, and literals: reading back a printed literal gives it back.
