@@ -185,7 +185,7 @@ def sig : Prim → PrimSig :=
       ret := .dsl .query [a, b, param 2, param 3] }
   | .machine =>
     { name := "machine",
-      doc := "A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect. A machine's instances react, start and fire in Erlang term order of their keys, so the key type is Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these.",
+      doc := "A machine: one instance per key in `instances`, starting at `initial` when its key appears; `on` reacts to each event with `Stay` or `Enter`, and a due timer enters its state on a clock line. Each entry into a state, the start included, sets the timer `after` gives and runs `effect` once; `Stay` runs neither, and `Enter` of the current state enters it again. A machine's instances react, start and fire in Erlang term order of their keys, so the key type is Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these.",
       tvars := ["records", "event", "key", "state"], dataArgs := true, needsEq := [2],
       params := [l "name" .str, l "instances" (kept (.fn [a] (.bag (param 2)))), l "initial" (param 3),
         l "on" (kept (.fn [.machineCtx (param 2) (param 3) a, b] (.next (param 3)))),
@@ -274,7 +274,7 @@ def sig : Prim → PrimSig :=
       params := [l "to" (.dsl .source [b]), l "wrap" (kept (.fn [b] a))], ret := .dsl .subscription [a] }
   | .bounds =>
     { name := "bounds",
-      doc := "How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run (at least 1).",
+      doc := "How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run (at least 1). `cascade` is also part of the meaning: an input that needs more internal steps than `cascade` faults, in `test` and `verify` as in `prove`.",
       tvars := ["records"], dataArgs := true,
       params := [l "creates" (.list (.dsl .create [a])), l "items" .int, l "cascade" .int, l "steps" .int],
       ret := .dsl .bounds [a] }
@@ -285,7 +285,7 @@ def sig : Prim → PrimSig :=
       params := [l "table" (kept (.fn [a] (.table b (param 2)))), l "at_most" .int], ret := .dsl .create [a] }
   | .response =>
     { name := "response",
-      doc := "After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`. A response that does not tie the two ignores `trigger`.",
+      doc := "After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`, the deadline included: an answer exactly `within` after the trigger is in time, one a millisecond later is not. A response that does not tie the two ignores `trigger`.",
       tvars := ["event"], dataArgs := true,
       params := [l "name" .str, l "after" (kept (.fn [a] .bool)), l "then" (kept (.fn [a, a] .bool)), l "within" .int],
       ret := .dsl .response [a] }
@@ -302,7 +302,7 @@ def sig : Prim → PrimSig :=
         l "input" (param 3)],
       ret := .dsl .step [a, b, param 2] }
   | .stepQuery =>
-    { name := "step_query", doc := "A step: the caller sends the query.",
+    { name := "step_query", doc := "A step: the caller sends the query. The scenario states no expected answer: `test` checks the answer as a line of the trace it compares with the snapshot.",
       tvars := ["records", "event", "caller", "input", "output"], dataArgs := true,
       params := [l "query" (.dsl .query [a, param 2, param 3, param 4]), l "caller" (param 2), l "input" (param 3)],
       ret := .dsl .step [a, b, param 2] }

@@ -184,7 +184,7 @@ pub fn query(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// A machine: one instance per key in `instances`, starting at `initial`; `on` reacts to each event, a due timer enters its state on a clock line, and entering a state may start an effect. A machine's instances react, start and fire in Erlang term order of their keys, so the key type is Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these.
+/// A machine: one instance per key in `instances`, starting at `initial` when its key appears; `on` reacts to each event with `Stay` or `Enter`, and a due timer enters its state on a clock line. Each entry into a state, the start included, sets the timer `after` gives and runs `effect` once; `Stay` runs neither, and `Enter` of the current state enters it again. A machine's instances react, start and fire in Erlang term order of their keys, so the key type is Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these.
 pub fn machine(
   name _name: String,
   instances _instances: fn(records) -> Bag(key),
@@ -314,7 +314,7 @@ pub fn subscribe(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run (at least 1).
+/// How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run (at least 1). `cascade` is also part of the meaning: an input that needs more internal steps than `cascade` faults, in `test` and `verify` as in `prove`.
 pub fn bounds(
   creates _creates: List(Create(records)),
   items _items: Int,
@@ -332,7 +332,7 @@ pub fn create(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`. A response that does not tie the two ignores `trigger`.
+/// After each event `trigger` satisfying `after`, an event satisfying `then(trigger, event)` within the duration `within`, the deadline included: an answer exactly `within` after the trigger is in time, one a millisecond later is not. A response that does not tie the two ignores `trigger`.
 pub fn response(
   name _name: String,
   after _after: fn(event) -> Bool,
@@ -359,7 +359,7 @@ pub fn step_command(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// A step: the caller sends the query.
+/// A step: the caller sends the query. The scenario states no expected answer: `test` checks the answer as a line of the trace it compares with the snapshot.
 pub fn step_query(
   query _query: Query(records, caller, input, output),
   caller _caller: caller,
