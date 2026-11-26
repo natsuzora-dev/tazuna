@@ -1,15 +1,16 @@
 import Tazuna.Semantics.PairCommute
 import Tazuna.Semantics.PendingInv
+import Tazuna.Trace.Wire
 
 /-! Valid inputs keep every name of a state below its counter, so every cascade a run starts is one T5 speaks about
 (`Supp`). What a line's `assumes` states (`Assumption.text`) is that ids the service made are used only after they
 appeared on an out line, and outside ids are unrestricted: guarding against guessed ids is the implementation's job.
-`Input.Valid`, which the proofs and the searches read, is weaker: an id the service made counts once its counter is
-below the state's, shown or not. So every verdict over all runs on valid inputs holds of the runs the stated sentence
-allows; a run a search finds may still use a made id no out line showed, until `Input.Valid` asks for shown ids (the
-trace writer names such an id as verify reads an outside id). A state keeps its names below its counter
-(`StateSupp`): its records and instances relate to themselves under each renaming that keeps those counters, and so
-does each pending request on its own, as `Supp` reads a step in progress (`Acc.Self`). -/
+`ShownRun` is that sentence: it follows the ids each step's out lines show (`Result.shownIds`), and an input may carry
+an id the service made only once one of them showed it (`Input.Shown`). It implies `ValidRun` (an id counts once its
+counter is below the state's, shown or not), which the inductive proofs read, so every verdict over all runs on
+valid inputs holds of the runs the sentence allows. A state keeps its names below its counter (`StateSupp`): its
+records and instances relate to themselves under each renaming that keeps those counters, and so does each pending
+request on its own, as `Supp` reads a step in progress (`Acc.Self`). -/
 
 namespace Tazuna.Ir
 
@@ -375,11 +376,47 @@ abbrev TimelyRun : State v → List (Input v) → Prop := EachStep T fun s x => 
 through one out. -/
 abbrev NoFaultRun : State v → List (Input v) → Prop := EachStep T fun s x => ∀ f, (step T v s x).outcome ≠ .fault f
 
+/-- The ids an input carries, in the order its in line writes them: a request's caller and input, an answer's value,
+an event's value. -/
+def _root_.Tazuna.Ir.Input.ids : Input v → List IdV
+  | .command i caller input => Trace.idsOf T v.caller caller ++ Trace.idsOf T (v.commands.get i).input input
+  | .query i caller input => Trace.idsOf T v.caller caller ++ Trace.idsOf T (v.queries.get i).input input
+  | .answer _ ⟨t, value⟩ => Trace.idsOf T t value
+  | .event i value => Trace.idsOf T (v.subscribes.get i).event value
+  | .clock _ => []
+
+/-- The ids a step's out lines show: its answer's output or rejection, its events, the inputs of the requests it
+sends. -/
+def _root_.Tazuna.Ir.Result.shownIds (r : Result v) : List IdV :=
+  (match r.outcome with
+    | .answered ⟨t, x⟩ | .rejected ⟨t, x⟩ => Trace.idsOf T t x
+    | _ => []) ++ r.events.flatMap (Trace.idsOf T v.event) ++ r.out.flatMap fun o => Trace.idsOf T o.input.1 o.input.2
+
+/-- Whether an id is from outside the service, or one of `seen`. -/
+def _root_.Tazuna.Ir.IdV.Known (seen : List IdV) : IdV → Prop
+  | .named _ => True
+  | i => i ∈ seen
+
+/-- The input carries only ids from outside and ids among `seen`, and its names are below the counter (`Input.Valid`,
+which a wire value's ids already give when every id in `seen` is). -/
+def _root_.Tazuna.Ir.Input.Shown (seen : List IdV) (s : State v) (x : Input v) : Prop :=
+  x.Valid s ∧ ∀ i ∈ x.ids T, i.Known seen
+
+/-- Inputs each carrying only ids from outside and ids an earlier step's out lines showed, after `seen`. -/
+def ShownRun : List IdV → State v → List (Input v) → Prop
+  | _, _, [] => True
+  | seen, s, x :: xs => x.Shown T seen s ∧ ShownRun (seen ++ (step T v s x).shownIds T) (step T v s x).state xs
+
+theorem ShownRun.valid : {seen : List IdV} → {s : State v} → {xs : List (Input v)} → ShownRun T seen s xs →
+    ValidRun T s xs
+  | _, _, [], _ => trivial
+  | _, _, _ :: _, ⟨hx, hxs⟩ => ⟨hx.1, ShownRun.valid hxs⟩
+
 /-- An assumption a proof rests on beyond the spec's invariants: what it says of a run, and the words a line's
 `assumes` names it by, kept together so the two cannot part. -/
 inductive Assumption where
-  /-- Ids the service made are used only after they appeared on an out line; outside ids are unrestricted. It implies
-  `ValidRun`, the weaker condition the proofs read. -/
+  /-- Ids the service made are used only after they appeared on an out line; outside ids are unrestricted
+  (`ShownRun` from the initial state, which implies `ValidRun`, the weaker condition the inductive proofs read). -/
   | validInputs
   /-- No clock line of a run moves time past a timer that waits (`TimelyRun`). -/
   | timelyClock
@@ -393,7 +430,7 @@ def Assumption.text : Assumption → String
 
 /-- What the assumption says of the run from `s` on `xs`. -/
 def Assumption.Holds : Assumption → State v → List (Input v) → Prop
-  | .validInputs => ValidRun T
+  | .validInputs => ShownRun T []
   | .timelyClock => TimelyRun T
   | .noFault => NoFaultRun T
 

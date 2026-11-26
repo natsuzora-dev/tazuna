@@ -126,7 +126,7 @@ theorem run_lines (c : CheckedSpec) (hv : v ∈ c.spec.services) (hL : SortedLay
     (∀ (time : Int) fuel, let s := { (run c.T v (Step.State.init v) xs).1 with now := time }
       (∀ b, Diamond.Reach (Step.timerSys v) (s, []) b → TimersFit L b.1.records b.1.machines) →
       ∀ {r}, Diamond.Runs (Step.timerSys v) fuel (s, []) r → Diamond.Agree Step.TimerEq r (Step.fireResult s (fuel + 1))) := by
-  obtain ⟨hinv, hs, hk⟩ := run_keeps c hv hxs
+  obtain ⟨hinv, hs, hk⟩ := run_keeps c hv (Step.ShownRun.valid c.T hxs)
   refine ⟨fun hx hW hvals hsteps _ ha hpairs hfit => ?_, fun _ fuel hfit _ hr => timers_lines htimers fuel _ hfit hr⟩
   exact cascade_lines c hv hL senv (begins_keeps c hv hinv hs hk hx ha) (begins_coded (c.checked v hv) senv hsteps hinv
     (Tazuna.Ir.run_invariants c.T _ xs hinit) hk hW hvals ha) hpairs hfit

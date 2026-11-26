@@ -1,4 +1,4 @@
-import Tazuna.Semantics.Step
+import Tazuna.Semantics.Valid
 import Tazuna.Trace.Line
 
 /-! Running a scenario: each step becomes one input line, the step runs, and its outputs become out lines. The trace
@@ -360,14 +360,6 @@ theorem TraceFile.read_wires (tr : TraceFile) :
   induction tr.lines with
   | nil => rfl
   | cons l ls ih => simp [List.mapM_cons, Line.ofWire_toWire, ih]
-
-/-- The ids an input carries, in the order its in line writes them. -/
-def _root_.Tazuna.Ir.Input.ids (T : List TypeDecl) {v : ServiceV} : Input v → List IdV
-  | .command i caller input => idsOf T v.caller caller ++ idsOf T (v.commands.get i).input input
-  | .query i caller input => idsOf T v.caller caller ++ idsOf T (v.queries.get i).input input
-  | .answer _ ⟨t, value⟩ => idsOf T t value
-  | .event i value => idsOf T (v.subscribes.get i).event value
-  | .clock _ => []
 
 /-- The names of the outside ids the inputs carry. -/
 def outsideNames (T : List TypeDecl) {v : ServiceV} (xs : List (Input v)) : List String :=
