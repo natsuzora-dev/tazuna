@@ -22,7 +22,8 @@ deriving DecidableEq
 inductive Tazuna.ProveKind : Type
   /-- No step of the input kind from a state of the right shape breaks the target, and no step of any kind goes past
   the slots the bounds give, while every input and the initial state fit them; so every state a run reaches is within
-  the slots, and the line speaks of every run. -/
+  the slots, and the line speaks of every run. For a bounded response: every step of any kind from such a state
+  answers each trigger it applies in that step, so no run violates it. -/
   | proved
   /-- No step of the input kind from a state of the right shape breaks the target while it stays within the slots,
   but such a step can go past them: the line names every bound a step of the service can go past (its tables, bags

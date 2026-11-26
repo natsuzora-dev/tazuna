@@ -40,7 +40,14 @@ fn counter() -> tazuna.Service {
     machines: [],
     reactions: [],
     invariants: fn(r: Records) { [#("not negative", r.total >= 0)] },
-    responses: [],
+    responses: [
+      tazuna.response(
+        name: "an add shows its own amount",
+        after: fn(_e) { True },
+        then: fn(trigger, e) { trigger == e },
+        within: 0,
+      ),
+    ],
     bounds: tazuna.bounds(creates: [], items: 1, cascade: 1, steps: 5),
     scenarios: [],
   )

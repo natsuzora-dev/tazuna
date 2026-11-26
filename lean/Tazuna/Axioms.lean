@@ -177,6 +177,10 @@ elab "#check_tazuna_reach" : command => do
     -- many valid inputs within the slots, faulting nowhere, with timely clock lines and the response's functions
     -- fitting at its events, violates it (from `runs_covered`).
     ``Tazuna.Smt.response_within,
+    -- A bounded response proved in one step (Prove.proved): where every input kind's question whether its step from a
+    -- state of the right shape applies a trigger it does not answer, and every bound question, is unsat, and every
+    -- input and the initial state fit, no run on valid inputs violates the response.
+    ``Tazuna.Smt.response_proved,
     -- A response's model decodes to a run from the initial state on inputs `validInputs` allows, with timely clock
     -- lines, that violates it.
     ``Tazuna.Smt.response_sound,

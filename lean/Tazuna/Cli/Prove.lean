@@ -9,6 +9,7 @@ import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Pair
 import Tazuna.Smt.RespGoal
 import Tazuna.Smt.Dead
+import Tazuna.Smt.RespStep
 import Tazuna.Cli.Generate
 
 /-! The `prove` command: for each target of each service, the base case by evaluating the initial state and one
@@ -473,23 +474,60 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
       items := items ++ r.items
       scopes := scopes ++ [(sv.v.name, { r with items := [] })]
     let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
+    -- A `within 0` response is first asked in one step from every state of the right shape (`response_proved`): where
+    -- every kind's response and bound questions are unsat and every input and the initial state fit, it is proved and
+    -- needs no search. Those few questions run before the rest, so a proved response starts no search.
+    let mut proved : List (String × String) := []
+    for sv in c.services do
+      let v := sv.v
+      if !(inputsFit sv.L v && initFits sv.L v && (Step.invariants (Step.State.init v)).isEmpty) then continue
+      for ⟨resp, hr⟩ in v.responses.attach.filter fun r => r.1.withinNat == 0 && opts.keeps (v.name ++ "/" ++ r.1.text) do
+        let mut asks : Array Job := #[]
+        let mut refs : List (IO.Ref (Option (Except String Smt.Answer))) := []
+        let mut built := true
+        for ⟨inp, hinp⟩ in (stepInputs v (shapes v) sv.senv.nT (stateWidth v)).attach do
+          match Sound.get (stepAsk sv.L c.T c.P v sv.senv inp) (stepAsk_ofService sv.mem c.T sv.senv inp hinp) with
+          | .error _ => built := false
+          | .ok ⟨a, _⟩ =>
+            match Sound.get (respStep sv.L resp a) (respStep_ofService c sv.mem hr a) with
+            | .error _ => built := false
+            | .ok ⟨q, _⟩ =>
+              for script in [a.bound.script, q.script] do
+                let (j, r) ← Job.of (solver.runCached cache script)
+                asks := asks.push j
+                refs := refs ++ [r]
+        if !built then continue
+        runAll opts.jobs asks
+        let mut all := true
+        for r in refs do
+          match ← r.get with
+          | some (.ok .unsat) => pure ()
+          | some (.ok _) => all := false
+          | some (.error m) => return ← internal m
+          | none => return ← internal "a question's job never ran"
+        if all then proved := proved ++ [(v.name, resp.name)]
     -- Each response's search is one job; a service's depths are built once for all its responses (`depthJobs`).
     let mut builds : Array Job := #[]
     let mut searches : Array Job := #[]
-    let mut responses : Array (String × String × List Json × IO.Ref (Option (Except String (SearchResult TraceFile)))) := #[]
+    let mut responses : Array (String × String × List Json ×
+      Option (IO.Ref (Option (Except String (SearchResult TraceFile))))) := #[]
     for sv in c.services do
       let v := sv.v
       let resps := v.responses.attach.filter fun r => opts.keeps (v.name ++ "/" ++ r.1.text)
       if resps.isEmpty then continue
       let L := sv.L
-      let (bs, ds) ← depthJobs solver sv v.bounds.stepsNat
+      let searched := resps.filter fun r => !proved.contains (v.name, r.1.name)
+      let (bs, ds) ← if searched.isEmpty then pure (#[], #[]) else depthJobs solver sv v.bounds.stepsNat
       builds := builds ++ bs
       for ⟨resp, hr⟩ in resps do
+        if proved.contains (v.name, resp.name) then
+          responses := responses.push (v.name, resp.name, [], none)
+          continue
         let (j, r) ← Job.of (searchDepths solver cache sv resp.text ds
           (fun sts => (Sound.get (respGoalE L v resp sts) (respGoalE_ofService c sv.mem hr sts)).map (·.1))
           (responsePlay (c.checked v sv.mem) resp))
         searches := searches.push j
-        responses := responses.push (v.name, resp.name, scopeBounds c.T L v, r)
+        responses := responses.push (v.name, resp.name, scopeBounds c.T L v, some r)
     let mut questions : Array Job := #[]
     let mut placed : Array Placed := #[]
     let mut deads : Array (String × GenTarget × List (IO.Ref (Option (Except String Smt.Answer)))) := #[]
@@ -552,11 +590,16 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
     let past (s step : String) : Option (List Json) :=
       if step == "init" then none else reach s (left s (· == step))
     let mut rlines : List (Kind × List (String × Json)) := []
-    for (service, name, scope, r) in responses do
-      match ← r.get with
-      | some (.ok res) => rlines := rlines ++ [responseLine service name scope res]
-      | some (.error m) => return ← internal m
-      | none => return ← internal s!"service {service}, response {name}: its search never ran"
+    for (service, name, scope, r?) in responses do
+      match r? with
+      | none => rlines := rlines ++ [(.prove .proved, [("service", Json.str service),
+          ("target", Json.str ("response " ++ name)),
+          ("assumes", Json.arr #[Json.str Step.Assumption.validInputs.text])])]
+      | some r =>
+        match ← r.get with
+        | some (.ok res) => rlines := rlines ++ [responseLine service name scope res]
+        | some (.error m) => return ← internal m
+        | none => return ← internal s!"service {service}, response {name}: its search never ran"
     for r in reports do
       if let some (kind, fields) := lineOf unproved past r then printLine kind fields
     for (kind, fields) in rlines do printLine kind fields

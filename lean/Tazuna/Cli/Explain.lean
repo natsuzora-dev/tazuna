@@ -158,7 +158,7 @@ def TestKind.explanation : TestKind → Explanation
   | .badStep => ⟨docOf% TestKind.badStep, [], [service, scenario, step, message]⟩
 
 def ProveKind.explanation : ProveKind → Explanation
-  | .proved => ⟨docOf% ProveKind.proved, [`Tazuna.Smt.proved_sound, `Tazuna.Smt.run_lines],
+  | .proved => ⟨docOf% ProveKind.proved, [`Tazuna.Smt.proved_sound, `Tazuna.Smt.run_lines, `Tazuna.Smt.response_proved],
     questionFields ++ [assumes, widened]⟩
   | .withinBounds => ⟨docOf% ProveKind.withinBounds,
     [`Tazuna.Smt.fault_sound, `Tazuna.Smt.run_lines, `Tazuna.Smt.response_within, `Tazuna.Smt.boundReached_iff],
