@@ -21,7 +21,7 @@ fn apply(r: Records, e: Event) -> Records {
 fn label() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: "label",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n: Int) { [] },
     decide: fn(c: Ctx(Records, Int, Caller)) { Ok([Labelled(tag: c.input)]) },
     ensures: fn(_c: Ctx(Records, Int, Caller), _r: Records) { [] },

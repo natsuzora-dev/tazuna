@@ -201,10 +201,11 @@ theorem stepTys_has (hk : Checked defs.sites defs.effectSites T v) : ∀ t ∈ s
   have hsort : ∀ t ∈ stepTys v, t.sortable = true := by
     intro t ht
     simp only [stepTys, List.mem_append, List.mem_cons, List.mem_map, List.not_mem_nil, or_false] at ht
-    rcases ht with ((rfl | rfl | rfl | rfl | rfl | rfl) | ⟨m, hm, rfl⟩) | ⟨m, hm, rfl⟩
+    rcases ht with ((rfl | rfl | rfl | rfl | rfl | rfl | rfl) | ⟨m, hm, rfl⟩) | ⟨m, hm, rfl⟩
     · exact sortable_of_embeddable _ her
     · exact sortable_of_embeddable _ hee
     · exact sortable_of_embeddable _ hec
+    · exact sortable_of_sorted _ (by simp [Ty.origin, Ty.sorted, Ty.sorteds, Ty.sortedss, sorted_of_embeddable _ hec])
     · exact sortable_of_sorted _ (by simp [Ty.option, Ty.sorted, Ty.sorteds, Ty.sortedss, sorted_of_embeddable _ hee])
     · exact sortable_of_embeddable _ (embeddable_pending hep)
     · rfl

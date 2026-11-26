@@ -24,8 +24,8 @@ structure CommandData {r e c : Ty} (x : CommandV r e c) : Prop where
 /-- A command's types are data, since its `decide` is. -/
 theorem _root_.Tazuna.Ir.CommandV.data {r e c : Ty} (x : CommandV r e c) : CommandData x := by
   have h := x.decide.ht
-  simp only [Ty.ctx, Ty.result, Ty.isData, Ty.isDatas, Ty.isDatass, Bool.and_eq_true] at h
-  exact ⟨h.1.1.1.1, h.2.1.1, h.1.1.1.2.2.1, h.1.1.1.2.1, h.2.2.1.1⟩
+  simp only [Ty.ctx, Ty.origin, Ty.result, Ty.isData, Ty.isDatas, Ty.isDatass, Bool.and_eq_true] at h
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;> simp_all
 
 section
 variable {r e c : Ty} {x : CommandV r e c} (hd : CommandData x)
@@ -33,8 +33,10 @@ include hd
 
 theorem CommandData.accepts : (Ty.fn [x.input] Ty.rules).isData = true := by
   simp [Ty.isData, Ty.isDatas, Ty.isDatass, Ty.rules, Ty.bool, hd.input]
+theorem CommandData.origin : (Ty.origin c).isData = true := by
+  simp [Ty.origin, Ty.isData, Ty.isDatas, Ty.isDatass, hd.caller]
 theorem CommandData.ctx : (Ty.ctx r x.input c).isData = true := by
-  simp [Ty.ctx, Ty.isData, Ty.isDatas, Ty.isDatass, hd.records, hd.input, hd.caller]
+  simp [Ty.ctx, Ty.origin, Ty.isData, Ty.isDatas, Ty.isDatass, hd.records, hd.input, hd.caller]
 theorem CommandData.ctxArgs : (Ty.tuple [Ty.ctx r x.input c]).isData = true := by
   simp [Ty.isData, Ty.isDatas, hd.ctx]
 theorem CommandData.events : (Ty.list e).isData = true := by simp [Ty.isData, hd.event]

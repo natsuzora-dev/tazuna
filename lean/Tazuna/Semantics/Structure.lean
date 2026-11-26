@@ -64,7 +64,7 @@ structure CommandV (r e c : Ty) where
   name : String
   input : Ty
   rejection : Ty
-  callers : List c.den0
+  callers : List (Ty.origin c).den0
   accepts : Fun (Ty.fn [input] Ty.rules)
   decide : Fun (Ty.fn [Ty.ctx r input c] (Ty.result (.list e) rejection))
   ensures : Fun (Ty.fn [Ty.ctx r input c, r] Ty.rules)
@@ -74,7 +74,7 @@ structure QueryV (r c : Ty) where
   name : String
   input : Ty
   output : Ty
-  callers : List c.den0
+  callers : List (Ty.origin c).den0
   accepts : Fun (Ty.fn [input] Ty.rules)
   resolve : Fun (Ty.fn [Ty.queryCtx r input c] output)
 
@@ -86,31 +86,31 @@ abbrev QueryOf (r c i o : Ty) := { x : QueryV r c // x.input = i ∧ x.output = 
 
 /-- What a machine or reaction starts: a request to an external, or a command or query of its own service run inside
 the same step. An own command or query is named, with its types, as a handle's code names it: the step runs the one
-its service lists. An own command's answer is `Ok(Nil)` once its events are applied, or its rejection. -/
+its service lists, as the origin `Own`, so it carries no caller. An own command's answer is `Ok(Nil)` once its events are applied, or its rejection. -/
 inductive EffectV (e : Ty) where
   | request (x : RequestV e)
-  | command (name : String) (c input rejection : Ty) (caller : c.den0) (value : input.den0)
+  | command (name : String) (c input rejection : Ty) (value : input.den0)
       (onAnswer : Fun (Ty.fn [Ty.result Ty.nil rejection] (.list e)))
-  | query (name : String) (c input output : Ty) (caller : c.den0) (value : input.den0)
+  | query (name : String) (c input output : Ty) (value : input.den0)
       (onAnswer : Fun (Ty.fn [output] (.list e)))
 
 /-- An own command or query an effect starts: what waits in the own queue, so the queue holds no request. -/
 inductive OwnEffectV (e : Ty) where
-  | command (name : String) (c input rejection : Ty) (caller : c.den0) (value : input.den0)
+  | command (name : String) (c input rejection : Ty) (value : input.den0)
       (onAnswer : Fun (Ty.fn [Ty.result Ty.nil rejection] (.list e)))
-  | query (name : String) (c input output : Ty) (caller : c.den0) (value : input.den0)
+  | query (name : String) (c input output : Ty) (value : input.den0)
       (onAnswer : Fun (Ty.fn [output] (.list e)))
 
 /-- The effect an own command or query is. -/
 def OwnEffectV.effect {e : Ty} : OwnEffectV e → EffectV e
-  | .command n c i j caller value f => .command n c i j caller value f
-  | .query n c i o caller value f => .query n c i o caller value f
+  | .command n c i j value f => .command n c i j value f
+  | .query n c i o value f => .query n c i o value f
 
 /-- The own command or query an effect is, or none for a request. -/
 def EffectV.own? {e : Ty} : EffectV e → Option (OwnEffectV e)
   | .request _ => none
-  | .command n c i j caller value f => some (.command n c i j caller value f)
-  | .query n c i o caller value f => some (.query n c i o caller value f)
+  | .command n c i j value f => some (.command n c i j value f)
+  | .query n c i o value f => some (.query n c i o value f)
 
 theorem EffectV.own?_eq_some {e : Ty} {x : EffectV e} {o : OwnEffectV e} (h : x.own? = some o) : o.effect = x := by
   cases x <;> simp [EffectV.own?] at h <;> subst h <;> rfl

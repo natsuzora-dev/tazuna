@@ -23,7 +23,7 @@ const add_name: String = "add"
 fn add() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: add_name,
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n) { [] },
     decide: fn(c: Ctx(Records, Int, Caller)) { Ok([Added(c.input)]) },
     ensures: fn(_c, _r) { [] },

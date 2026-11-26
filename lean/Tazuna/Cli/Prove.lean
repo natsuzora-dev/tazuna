@@ -236,10 +236,8 @@ def ownText (owns : List OwnKey) (key : OwnKey) : String :=
 
 def effectWire (T : List TypeDecl) {e : Ty} : EffectV e → Show Wire
   | .request r => do pure (.obj [("request", .str r.name), ("input", ← wireOf T r.input r.value)])
-  | .command name c i _ caller value _ => do
-    pure (.obj [("command", .str name), ("caller", ← wireOf T c caller), ("input", ← wireOf T i value)])
-  | .query name c i _ caller value _ => do
-    pure (.obj [("query", .str name), ("caller", ← wireOf T c caller), ("input", ← wireOf T i value)])
+  | .command name _ i _ value _ => do pure (.obj [("command", .str name), ("input", ← wireOf T i value)])
+  | .query name _ i _ value _ => do pure (.obj [("query", .str name), ("input", ← wireOf T i value)])
 
 /-- Where one order of a pair ends: its fault, or the state with the events it applied and the own effects it queued. -/
 def orderWire (T : List TypeDecl) {v : ServiceV} : Except Fault (Acc v) → Show Wire

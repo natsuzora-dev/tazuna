@@ -9,7 +9,7 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-/-- The terms of a command step's outcome: whether the caller is listed and the `accepts` rules, `decide` and what
+/-- The terms of a command step's outcome: whether the origin is listed and the `accepts` rules, `decide` and what
 follows it, and the step's end. -/
 structure CommandOut (v : ServiceV) where
   callerOk : Term
@@ -21,15 +21,16 @@ section
 variable (L : Layout) (T : List TypeDecl)
 
 /-- A command step's outcome terms, its condition and the codes' condition, from the codes of the command's and the
-service's functions, the terms of the state, the caller and the input, and the listed callers' constants. The
+service's functions, the terms of the state, the outside caller and the input, and the listed origins' constants. The
 condition asks only for what the step computes: the step's end only where `decide` accepted and `ensures` held. -/
 def encodeCommand (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.event)) (senv : StepEnv L shs)
     (x : CommandV v.records v.event v.caller) (cc : CommandCode x) (apply : Code (Ty.fn [v.records, v.event] v.records))
     (invariants : Code (Ty.fn [v.records] Ty.rules)) (callers : List Term)
     (S : SymState v) (caller input : Term) :
     Except Refusal (Encoded (CommandOut v)) := do
-  let (a, c1) ← encodeAdmit (c := v.caller) L cc.accepts callers caller input
-  let cx ← encodeCtx L S.records S.now S.fresh caller input
+  let origin ← outsideT L (c := v.caller) caller
+  let (a, c1) ← encodeAdmit (c := Ty.origin v.caller) L cc.accepts callers origin input
+  let cx ← encodeCtx L S.records S.now S.fresh origin input
   let (dc, cd) ← encodeDecide L T v shs senv x cc apply cx S.now S.records S.machines S.nextId (.int 0)
   let ⟨fo, cf, cfx⟩ ← encodeFinish L T P v shs senv apply invariants S.now (.add S.fresh (.int 1)) S.pending dc.after
   pure ⟨⟨a.callerOk, a.rules, dc, fo⟩,
@@ -57,9 +58,9 @@ end
 section
 variable {M : Model} {L : Layout} {T : List TypeDecl}
 
-/-- A command step: where the codes' conditions hold, the condition holds exactly when, for a listed caller, `accepts`
+/-- A command step: where the codes' conditions hold, the condition holds exactly when, for a listed origin, `accepts`
 fits at the input and, where its rules hold, `decide` fits at the context and what follows it fits (`decidedFits`).
-Wherever it holds, the outcome terms decide the step's outcome: an unlisted caller or a broken `accepts` rule is
+Wherever it holds, the outcome terms decide the step's outcome: an unlisted origin or a broken `accepts` rule is
 Invalid; a rejection is the rejection the terms denote; a broken `ensures` rule is the step's fault; otherwise the
 step ends as its end terms say (`Finished`), and the cascade an acceptance starts waits only on own effects the own
 slots code. The fresh counter advances in every case. -/
@@ -71,7 +72,7 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {inv : Code (Ty.fn [v.records] Ty.rules)} {ci : Term} (hinv : v.invariants.code L = .ok (inv, ci)) (hci : Holds M ci)
-    {ks : List Term} (hks : callerTerms L ((v.commands.get i).data).caller (v.commands.get i).callers = some ks)
+    {ks : List Term} (hks : callerTerms L ((v.commands.get i).data).origin (v.commands.get i).callers = some ks)
     (senv : StepEnv L shs)
     {S : SymState v} (hR : StateRel M L T shs S s) {sc si : Term}
     (hsc : RelV L v.caller (Ty.up _ ((v.commands.get i).data).caller caller) (sc.denote M))
@@ -79,10 +80,10 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
     {o : CommandOut v} {cond cfx : Term}
     (henc : encodeCommand L T P v shs senv (v.commands.get i) cc apply inv ks S sc si = .ok ⟨o, cond, cfx⟩) (hcfx : Holds M cfx) :
     let x := v.commands.get i
-    let ctx := Step.ctx s s.records caller input
+    let ctx := Step.ctx s s.records (Step.outside caller) input
     let r := step T v s (.command i caller input)
     let s' := { s with fresh := s.fresh + 1 }
-    (Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
+    (Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 (Step.outside caller)) = true →
       x.accepts.appFits L.count (input, ()) ∧
       (Step.broken (x.accepts.fn (input, ())) = [] →
         x.decide.appFits L.count (ctx, ()) ∧
@@ -99,18 +100,21 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
           else r.state = s' ∧ ∃ j, r.outcome = .rejected ⟨(v.commands.get i).rejection, j⟩ ∧
             RelV L _ (Ty.up _ ((v.commands.get i).data).rejection j) (o.decided.rejection.denote M)
       else r = ⟨s', .invalid ["callers"], [], []⟩) ∧
-    (Holds M cond → ∀ a, Step.execCommand T { state := s } x caller input = .ok (.accepted a) → QueueCoded L a) := by
+    (Holds M cond → ∀ a, Step.execCommand T { state := s } x (Step.outside caller) input = .ok (.accepted a) →
+      QueueCoded L a) := by
   intro x ctx r s'
   have hcR := CommandCode.rel_of hcc hccx
+  obtain ⟨sco, h0, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨adm, c1⟩, h1, henc⟩ := bind_ok.1 henc
   obtain ⟨cx, h1', henc⟩ := bind_ok.1 henc
   obtain ⟨⟨dc, cd⟩, h2, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨fo, cf, cfx'⟩, h3, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨hok, hbr⟩ := admit_rel ((v.commands.get i).data).input ((v.commands.get i).data).caller _
-    ((v.commands.get i).data).accepts hcR.accepts _ hks caller input hsc hsi h1
-  have hcx := commandCtx_rel v.records_data ((v.commands.get i).data).input ((v.commands.get i).data).caller
-    ((v.commands.get i).data).ctx s caller input hR.records hR.now hR.fresh hsc hsi h1'
+  have hso := outsideT_rel ((v.commands.get i).data).caller ((v.commands.get i).data).origin hsc h0
+  obtain ⟨hok, hbr⟩ := admit_rel ((v.commands.get i).data).input ((v.commands.get i).data).origin _
+    ((v.commands.get i).data).accepts hcR.accepts _ hks (Step.outside caller) input hso hsi h1
+  have hcx := commandCtx_rel v.records_data ((v.commands.get i).data).input ((v.commands.get i).data).origin
+    ((v.commands.get i).data).ctx s (Step.outside caller) input hR.records hR.now hR.fresh hso hsi h1'
   let s1 : State v := { s with fresh := s.fresh + 1 }
   have hinv1 : Step.Inv P s1 := hsinv.congr rfl rfl
   have D := decide_encode chk hshs hshp x hcc hccx happ hca senv { state := s1 } ctx hcx hR.now hR.records hR.machines
@@ -174,7 +178,7 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
       have hc1 := e1.2 p1
       exact ⟨hc1, (hrest hc1).2 px⟩
   · simp only [r, s', step, Step.execCommand, Step.admit, bind, Except.bind]
-    cases hin : (v.commands.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
+    cases hin : (v.commands.get i).callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 (Step.outside caller))
     case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
     simp only [hok, hin, Val.toBool, ite_true]
     have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2)))
@@ -193,7 +197,7 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
       obtain ⟨hcd, hct⟩ := (holds_andT _ _).1 hcd'
       have R := D.2 hcd
       revert R
-      cases hdec : (v.commands.get i).decide.fn (Step.ctx s s.records caller input, ()) with
+      cases hdec : (v.commands.get i).decide.fn (Step.ctx s s.records (Step.outside caller) input, ()) with
       | inr q =>
         match q, hdec with
         | .inl (j, ()), _ =>
@@ -212,7 +216,7 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
         rw [happly]
         dsimp only at hr ⊢
         rw [hbe, ← hr]
-        cases hbe' : Step.broken ((v.commands.get i).ensures.fn (Step.ctx s s.records caller input, recs1, ())) with
+        cases hbe' : Step.broken ((v.commands.get i).ensures.fn (Step.ctx s s.records (Step.outside caller) input, recs1, ())) with
         | cons n ns => rfl
         | nil =>
           simp only
@@ -227,8 +231,8 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
     split at hex
     · cases hex
     rename_i hadm
-    have hin : (v.commands.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true := by
-      cases h : (v.commands.get i).callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
+    have hin : (v.commands.get i).callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 (Step.outside caller)) = true := by
+      cases h : (v.commands.get i).callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 (Step.outside caller))
       · rw [Step.admit, h] at hadm; cases hadm
       · rfl
     have hb : Step.broken ((v.commands.get i).accepts.fn (input, ())) = [] := by
@@ -242,7 +246,7 @@ theorem command_encode {P : List AnySite} {E : List AnyEffectSite} {v : ServiceV
     obtain ⟨hcd, -⟩ := (holds_andT _ _).1 ((holds_ite_tt hallT).1 hc'.2 rfl)
     have R := D.2 hcd
     revert R hex
-    cases hdec : (v.commands.get i).decide.fn (Step.ctx s s.records caller input, ()) with
+    cases hdec : (v.commands.get i).decide.fn (Step.ctx s s.records (Step.outside caller) input, ()) with
     | inr q =>
       match q, hdec with
       | .inl (j, ()), _ => intro hex; cases hex

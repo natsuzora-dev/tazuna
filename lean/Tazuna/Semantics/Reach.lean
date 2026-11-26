@@ -54,8 +54,8 @@ structure EffectFun.Reach {ps : List Ty} {r : Ty} (f : EffectFun ps r) : Prop wh
 def EffectV.Reach {e : Ty} : EffectV e → Prop
   | .request r => r.onAnswer.asSite ∈ P ∧ (∀ f ∈ r.ensures, f.asSite ∈ P) ∧ r.input.isData = true ∧
       r.rejection.isSome = r.ensures.isNone
-  | .command _ _ _ _ _ _ onAnswer => onAnswer.asSite ∈ P
-  | .query _ _ _ _ _ _ onAnswer => onAnswer.asSite ∈ P
+  | .command _ _ _ _ _ onAnswer => onAnswer.asSite ∈ P
+  | .query _ _ _ _ _ onAnswer => onAnswer.asSite ∈ P
 
 structure CommandV.Reach {r e c : Ty} (x : CommandV r e c) : Prop where
   accepts : x.accepts.asSite ∈ P
@@ -425,10 +425,10 @@ theorem Prim.reach (p : Prim) (args : List Ty) (h : p.ok args = true) : Reach P 
     rintro ⟨⟨name, ens⟩, input, oa, ⟨⟩⟩ ⟨he, -, ho, -⟩
     exact ⟨ho, (fun f hf => by cases hf; exact he), Ty.isData_inst (Prim.dataOf h rfl) (.param 1) rfl, rfl⟩
   case sendCommand =>
-    rintro ⟨c, caller, input, oa, ⟨⟩⟩ ⟨-, -, -, ho, -⟩
+    rintro ⟨c, input, oa, ⟨⟩⟩ ⟨-, -, ho, -⟩
     exact ho
   case sendQuery =>
-    rintro ⟨c, caller, input, oa, ⟨⟩⟩ ⟨-, -, -, ho, -⟩
+    rintro ⟨c, input, oa, ⟨⟩⟩ ⟨-, -, ho, -⟩
     exact ho
 
 

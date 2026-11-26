@@ -150,18 +150,18 @@ def pairQuestions (k1 k2 : OwnPlace L v.event) : Except Refusal (TypedScript × 
 def readData (t : Ty) (z : Val) : Option t.den0 :=
   if h : t.isData = true then (decodeV L t z).map (Ty.down t h) else none
 
-/-- The own effect of the `k`-th own kind that a model's value codes: the kind's command or query with the caller and
-input its fields code, answered by the program's site the kind names with the captured values its last field codes. -/
+/-- The own effect of the `k`-th own kind that a model's value codes: the kind's command or query with the input its
+fields code, answered by the program's site the kind names with the captured values its last field codes. -/
 def decodeOwn (k : OwnPlace L v.event) (z : Val) : Option (OwnEffectV v.event) := do
   let .ctor _ i vals := z | none
   if i ≠ L.ownCtor v.event k then none
   match (L.ownsOf v.event)[k], vals with
-  | .command _ name c j rj a, [vc, vi, va] =>
+  | .command _ name c j rj a, [vi, va] =>
     let ⟨Γ, site⟩ ← siteFor P (Ty.fn [Ty.result Ty.nil rj] (.list v.event)) a
-    pure (.command name c j rj (← readData L c vc) (← readData L j vi) (site.fn (← readData L (.tuple Γ) va)))
-  | .query _ name c j o a, [vc, vi, va] =>
+    pure (.command name c j rj (← readData L j vi) (site.fn (← readData L (.tuple Γ) va)))
+  | .query _ name c j o a, [vi, va] =>
     let ⟨Γ, site⟩ ← siteFor P (Ty.fn [o] (.list v.event)) a
-    pure (.query name c j o (← readData L c vc) (← readData L j vi) (site.fn (← readData L (.tuple Γ) va)))
+    pure (.query name c j o (← readData L j vi) (site.fn (← readData L (.tuple Γ) va)))
   | _, _ => none
 
 end
@@ -176,19 +176,19 @@ theorem ownFields_rel {e : Ty} {key : OwnKey} {x : OwnEffectV e} {vals : List Va
   | command e' name c i j a =>
     cases x with
     | query => exact hh.elim
-    | command name' c' i' j' caller value onAnswer =>
-      obtain ⟨-, rfl, rfl, -, -, hΓ, vc, vi, va, rfl, hc, hi, hcap⟩ := hh
+    | command name' c' i' j' value onAnswer =>
+      obtain ⟨-, rfl, rfl, -, -, hΓ, vi, va, rfl, hi, hcap⟩ := hh
       have hv : ∃ y, RelD L (.tuple onAnswer.Γ) y va := ⟨_, hcap⟩
       rw [hΓ] at hv
-      exact ⟨⟨_, hc⟩, ⟨_, hi⟩, hv, trivial⟩
+      exact ⟨⟨_, hi⟩, hv, trivial⟩
   | query e' name c i o a =>
     cases x with
     | command => exact hh.elim
-    | query name' c' i' o' caller value onAnswer =>
-      obtain ⟨-, rfl, rfl, -, -, hΓ, vc, vi, va, rfl, hc, hi, hcap⟩ := hh
+    | query name' c' i' o' value onAnswer =>
+      obtain ⟨-, rfl, rfl, -, -, hΓ, vi, va, rfl, hi, hcap⟩ := hh
       have hv : ∃ y, RelD L (.tuple onAnswer.Γ) y va := ⟨_, hcap⟩
       rw [hΓ] at hv
-      exact ⟨⟨_, hc⟩, ⟨_, hi⟩, hv, trivial⟩
+      exact ⟨⟨_, hi⟩, hv, trivial⟩
 
 /-- A model's value of an own kind's variant that codes an own effect has well-formed fields (`ownWf`), so a pair
 question's context, which asserts them, holds at every pair of effects a step can queue. The fields are comparable

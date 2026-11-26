@@ -77,8 +77,8 @@ theorem RequestV.Rel.onAnswer_self {R : PBij} {e : Ty} {x : RequestV e} (h : Req
 
 /-- An accepted command's step in progress, before its cascade, has its names below its counter. -/
 theorem command_begin (hv : v.Equivariant) {s : State v} (hs : StateSupp s) (hb : ∀ p ∈ s.pending, p.id < s.nextId)
-    {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) {c : v.caller.den0} {i : x.input.den0}
-    (hc : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P v.caller c c) (hi : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P x.input i i)
+    {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) {c : (Ty.origin v.caller).den0} {i : x.input.den0}
+    (hc : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P (Ty.origin v.caller) c c) (hi : ∀ P : PBij, P.Fixes s.fresh → Ty.rel0 P x.input i i)
     {a : Acc v} (h : execCommand T { state := s } x c i = .ok (.accepted a)) : Supp a := by
   have ha0 : Below Acc.Self s.fresh ({ state := s } : Acc v) := fun P hP => (hs P hP).acc hb
   have hdec : ∀ P : PBij, P.Fixes (s.fresh + 1) →
@@ -315,7 +315,7 @@ theorem step_supp (hv : v.Equivariant) {s : State v}
     · rename_i a ha
       exact finish_supp T hv hfresh _ (fun a' h => by
         cases h
-        exact command_begin T hv hs hb (List.get_mem _ _) (fun P hP => (hx P hP).1) (fun P hP => (hx P hP).2) ha) _
+        exact command_begin T hv hs hb (List.get_mem _ _) (fun P hP => rel0_outside (hx P hP).1) (fun P hP => (hx P hP).2) ha) _
   | query i caller input =>
     simp only [step]
     split <;> exact hs
@@ -465,7 +465,7 @@ theorem begins_supp (hv : v.Equivariant) {s : State v}
     (h : Begins T s x a) : Supp a := by
   cases h with
   | command i caller input a h =>
-    exact command_begin T hv hs hb (List.get_mem _ _) (fun P hP => (hx P hP).1) (fun P hP => (hx P hP).2) h
+    exact command_begin T hv hs hb (List.get_mem _ _) (fun P hP => rel0_outside (hx P hP).1) (fun P hP => (hx P hP).2) h
   | answer to value p h a hp _ happ => exact answer_begin T hv hs hb (List.mem_of_find?_eq_some hp) to hx h happ
   | event i value a h => exact event_begin T hv hs hb i hx h
   | clock time s' effs a _ hf h => exact clock_begin hv hs hb time hf h

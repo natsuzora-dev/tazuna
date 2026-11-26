@@ -214,8 +214,8 @@ def start (a : Acc v) (effs : List (Sender × EffectV v.event)) : Except Fault (
         let s := a.state
         .ok { a with state := { s with pending := s.pending ++ [⟨s.nextId, snd, x, r⟩], nextId := s.nextId + 1 },
                      out := a.out ++ [⟨s.nextId, x, r.name, ⟨r.input, r.value⟩⟩] }
-    | .command n c i j caller value f => .ok { a with own := a.own ++ [.command n c i j caller value f] }
-    | .query n c i o caller value f => .ok { a with own := a.own ++ [.query n c i o caller value f] }) a
+    | .command n c i j value f => .ok { a with own := a.own ++ [.command n c i j value f] }
+    | .query n c i o value f => .ok { a with own := a.own ++ [.query n c i o value f] }) a
 
 /-- Applies the events in order, each followed by every machine's and reaction's reaction. -/
 def applyEvents (a : Acc v) (events : List v.event.den0) : Except Fault (Acc v) :=
@@ -223,17 +223,25 @@ def applyEvents (a : Acc v) (events : List v.event.den0) : Except Fault (Acc v) 
     let (s, effs) := react T a.state ev
     start { a with state := s, events := a.events ++ [ev] } effs) a
 
-def ctx {r i c : Ty} (s : State v) (records : r.den0) (caller : c.den0) (input : i.den0) : (Ty.ctx r i c).den0 :=
+/-- The origin of a request line from the outside caller `c`. -/
+def outside {c : Ty} (x : c.den0) : (Ty.origin c).den0 := .inl (x, ())
+
+/-- The origin of an own effect. -/
+def own {c : Ty} : (Ty.origin c).den0 := .inr (.inl ())
+
+def ctx {r i c : Ty} (s : State v) (records : r.den0) (caller : (Ty.origin c).den0) (input : i.den0) :
+    (Ty.ctx r i c).den0 :=
   .inl (records, input, caller, s.now, s.fresh, ())
 
-def queryCtx {r i c : Ty} (s : State v) (records : r.den0) (caller : c.den0) (input : i.den0) :
+def queryCtx {r i c : Ty} (s : State v) (records : r.den0) (caller : (Ty.origin c).den0) (input : i.den0) :
     (Ty.queryCtx r i c).den0 :=
   .inl (records, input, caller, s.now, ())
 
-/-- Why a request is Invalid: a caller it does not list, or the input's broken `accepts` rules. -/
-def admit {i : Ty} (callers : List v.caller.den0) (accepts : Fun (Ty.fn [i] Ty.rules)) (caller : v.caller.den0)
-    (input : i.den0) : List String :=
-  if callers.any ((Ty.semWith Dsl.base v.caller).2 caller) then broken (accepts.fn (input, ())) else ["callers"]
+/-- Why a request is Invalid: an origin it does not list, or the input's broken `accepts` rules. -/
+def admit {i : Ty} (callers : List (Ty.origin v.caller).den0) (accepts : Fun (Ty.fn [i] Ty.rules))
+    (caller : (Ty.origin v.caller).den0) (input : i.den0) : List String :=
+  if callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 caller) then broken (accepts.fn (input, ()))
+  else ["callers"]
 
 def okNil {j : Ty} : (Ty.result Ty.nil j).den0 := .inl (.inl (), ())
 
@@ -246,7 +254,8 @@ inductive Ran (v : ServiceV) (j : Ty) where
   | accepted (a : Acc v)
 
 /-- Runs a command from the step in progress `a`, for the step's input and for an own command alike. -/
-def execCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) :
+def execCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : (Ty.origin v.caller).den0)
+    (input : x.input.den0) :
     Except Fault (Ran v x.rejection) :=
   match admit x.callers x.accepts caller input with
   | r :: rs => .ok (.invalid (r :: rs))
@@ -262,14 +271,15 @@ def execCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : 
     | .inr (.inl (j, ())) => .ok (.rejected a j)
 
 /-- Runs a query at the state `s`: its answer, or the broken rules that make it Invalid. -/
-def execQuery (s : State v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0) :
+def execQuery (s : State v) (x : QueryV v.records v.caller) (caller : (Ty.origin v.caller).den0) (input : x.input.den0) :
     Except (List String) x.output.den0 :=
   match admit x.callers x.accepts caller input with
   | r :: rs => .error (r :: rs)
   | [] => .ok (x.resolve.fn (queryCtx s s.records caller input, ()))
 
 /-- Runs an own command as an internal step: its answer's events are applied after it runs. -/
-def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
+def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : (Ty.origin v.caller).den0)
+    (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) : Except Fault (Acc v) := do
   match ← execCommand T a x caller input with
   | .invalid rs => .error (.invalidEffect x.name rs)
@@ -277,7 +287,7 @@ def runCommand (a : Acc v) (x : CommandV v.records v.event v.caller) (caller : v
   | .rejected a j => applyEvents T a (onAnswer.fn (.inr (.inl (j, ())), ()))
 
 /-- Runs an own query as an internal step: its answer's events are applied. -/
-def runQuery (a : Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0)
+def runQuery (a : Acc v) (x : QueryV v.records v.caller) (caller : (Ty.origin v.caller).den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) : Except Fault (Acc v) :=
   match execQuery a.state x caller input with
   | .error rs => .error (.invalidEffect x.name rs)
@@ -300,17 +310,15 @@ def ownQuery (name : String) (i o : Ty) : Option ((x : QueryV v.records v.caller
     | _, _ => none
   else none
 
-/-- Runs an own command or query: the one the service lists by the effect's name and types. -/
+/-- Runs an own command or query: the one the service lists by the effect's name and types, as `Own`. -/
 def runOwn (a : Acc v) : OwnEffectV v.event → Except Fault (Acc v)
-  | .command name c i j caller value onAnswer =>
+  | .command name c i j value onAnswer =>
     match Ty.same c v.caller, ownCommand (v := v) name i j with
-    | some ⟨hc⟩, some ⟨x, hi, hj⟩ =>
-      runCommand T a x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (hj ▸ onAnswer)
+    | some _, some ⟨x, hi, hj⟩ => runCommand T a x own (cast (congrArg Ty.den0 hi) value) (hj ▸ onAnswer)
     | _, _ => .error (.invalidEffect name ["service"])
-  | .query name c i o caller value onAnswer =>
+  | .query name c i o value onAnswer =>
     match Ty.same c v.caller, ownQuery (v := v) name i o with
-    | some ⟨hc⟩, some ⟨x, hi, ho⟩ =>
-      runQuery T a x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (ho ▸ onAnswer)
+    | some _, some ⟨x, hi, ho⟩ => runQuery T a x own (cast (congrArg Ty.den0 hi) value) (ho ▸ onAnswer)
     | _, _ => .error (.invalidEffect name ["service"])
 
 /-- Runs the waiting own commands and queries in order, one internal step each, until none waits; more than `fuel`
@@ -386,14 +394,14 @@ def step (T : List TypeDecl) (v : ServiceV) (s : State v) : Input v → Result v
   | .command i caller input =>
     let c := v.commands.get i
     let s' := { s with fresh := s.fresh + 1 }
-    match execCommand T { state := s } c caller input with
+    match execCommand T { state := s } c (outside caller) input with
     | .ok (.invalid rs) => ⟨s', .invalid rs, [], []⟩
     | .ok (.rejected _ j) => ⟨s', .rejected ⟨c.rejection, j⟩, [], []⟩
     | .error f => ⟨s', .fault f, [], []⟩
     | .ok (.accepted a) => finish T s' (.ok a) .accepted
   | .query i caller input =>
     let q := v.queries.get i
-    match execQuery s q caller input with
+    match execQuery s q (outside caller) input with
     | .error rs => ⟨s, .invalid rs, [], []⟩
     | .ok o => ⟨s, .answered ⟨q.output, o⟩, [], []⟩
   | .answer to ⟨t, value⟩ =>
@@ -423,7 +431,7 @@ command, a matched answer whose `ensures` holds, an event or a clock line not be
 `finish`. -/
 inductive Begins (s : State v) : Input v → Acc v → Prop
   | command (i : Fin v.commands.length) (caller : v.caller.den0) (input : (v.commands.get i).input.den0) (a : Acc v) :
-      execCommand T { state := s } (v.commands.get i) caller input = .ok (.accepted a) →
+      execCommand T { state := s } (v.commands.get i) (outside caller) input = .ok (.accepted a) →
       Begins s (.command i caller input) a
   | answer (to : Nat) {t : Ty} (value : t.den0) (p : Pending v.event)
       (h : t = answerTy p.request.output p.request.rejection) (a : Acc v) :

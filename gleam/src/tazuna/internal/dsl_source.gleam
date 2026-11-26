@@ -92,7 +92,7 @@ pub type Ctx(records, input, caller) {
   Ctx(
     records: records,
     input: input,
-    caller: caller,
+    caller: Origin(caller),
     now: Instant,
     fresh: Fresh,
   )
@@ -116,11 +116,17 @@ pub type ReactionCtx(records) {
 }
 
 pub type QueryCtx(records, input, caller) {
-  QueryCtx(records: records, input: input, caller: caller, now: Instant)
+  QueryCtx(records: records, input: input, caller: Origin(caller), now: Instant)
 }
 
 /// A type with no values. As a command's rejection type it says the command never rejects: `decide` can return no `Error`, and no rejected outcome exists to reach.
 pub type Never
+
+/// Who runs a command or query: `Outside(caller)` for a request line from outside, whose `caller` is the value the line names, or `Own` for the service itself, through a machine's or reaction's `send_command` or `send_query`. A `callers` list holds origins, and `ctx.caller` is the one that ran.
+pub type Origin(caller) {
+  Outside(caller)
+  Own
+}
 
 /// A point in time, in milliseconds.
 pub type Instant =
@@ -173,10 +179,10 @@ pub fn service(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A command, named by a string literal: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects. The service that lists it owns it.
+/// A command, named by a string literal: an origin `callers` does not list or input breaking `accepts` makes it Invalid; `decide` accepts with events or rejects. `callers` lists `Outside` for each outside caller that may send it and `Own` when the service sends it itself; check rejects an empty list, `Own` with no `send_command` of it, and a `send_command` of it without `Own`. The service that lists it owns it.
 pub fn command(
   name _name: String,
-  callers _callers: List(caller),
+  callers _callers: List(Origin(caller)),
   accepts _accepts: fn(input) -> Rules,
   decide _decide: fn(Ctx(records, input, caller)) ->
     Result(List(event), rejection),
@@ -185,10 +191,10 @@ pub fn command(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// A query, named by a string literal: it answers from the records, writes nothing and makes no ids, so `resolve` sees no source of fresh ids. The service that lists it owns it.
+/// A query, named by a string literal: it answers from the records, writes nothing and makes no ids, so `resolve` sees no source of fresh ids. `callers` works as a command's does, with `send_query`. The service that lists it owns it.
 pub fn query(
   name _name: String,
-  callers _callers: List(caller),
+  callers _callers: List(Origin(caller)),
   accepts _accepts: fn(input) -> Rules,
   resolve _resolve: fn(QueryCtx(records, input, caller)) -> output,
 ) -> Query(records, caller, input, output) {
@@ -297,20 +303,18 @@ pub fn request_query(
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// An effect: the service runs its own command within the same step; `on_answer` gets Ok(Nil) once the command's events are applied, or its rejection.
+/// An effect: the service runs its own command within the same step, as `Own`; `on_answer` gets Ok(Nil) once the command's events are applied, or its rejection.
 pub fn send_command(
   command _command: Command(records, event, caller, input, rejection),
-  caller _caller: caller,
   input _input: input,
   on_answer _on_answer: fn(Result(Nil, rejection)) -> List(event),
 ) -> Effect(event) {
   panic as \"tazuna's built-ins run only in the engine\"
 }
 
-/// An effect: the service runs its own query within the same step.
+/// An effect: the service runs its own query within the same step, as `Own`.
 pub fn send_query(
   query _query: Query(records, caller, input, output),
-  caller _caller: caller,
   input _input: input,
   on_answer _on_answer: fn(output) -> List(event),
 ) -> Effect(event) {
@@ -750,8 +754,8 @@ pub const kept = [
   #("tazuna.external_query", 1, "ensures"),
   #("tazuna.request_command", 2, "on_answer"),
   #("tazuna.request_query", 2, "on_answer"),
-  #("tazuna.send_command", 3, "on_answer"),
-  #("tazuna.send_query", 3, "on_answer"),
+  #("tazuna.send_command", 2, "on_answer"),
+  #("tazuna.send_query", 2, "on_answer"),
   #("tazuna.subscribe", 1, "wrap"),
   #("tazuna.create", 0, "table"),
   #("tazuna.response", 1, "after"),

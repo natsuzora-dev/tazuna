@@ -211,12 +211,12 @@ theorem start_same : {effs effs' : List (Sender × EffectV v.event)} → Forall2
           | mk _ _ _ _ hv _ _ => exact ⟨hn, rfl, rfl, .mk hv⟩
         exact start_same h ⟨⟨hrec, hmach, forall2_append hpend ⟨⟨hn, hs, rfl, hrr⟩, trivial⟩, hnow, hf,
           by simp only [hn]⟩, hev, forall2_append hout ⟨hline, trivial⟩, hown⟩
-    | command name c i j hc hval hf =>
+    | command name c i j hval hf =>
       obtain ⟨hst, hev, hout, hown⟩ := ha
-      exact start_same h ⟨hst, hev, hout, forall2_append hown ⟨.command _ _ _ _ hc hval hf, trivial⟩⟩
-    | query name c i o hc hval hf =>
+      exact start_same h ⟨hst, hev, hout, forall2_append hown ⟨.command _ _ _ _ hval hf, trivial⟩⟩
+    | query name c i o hval hf =>
       obtain ⟨hst, hev, hout, hown⟩ := ha
-      exact start_same h ⟨hst, hev, hout, forall2_append hown ⟨.query _ _ _ _ hc hval hf, trivial⟩⟩
+      exact start_same h ⟨hst, hev, hout, forall2_append hown ⟨.query _ _ _ _ hval hf, trivial⟩⟩
   | [], _ :: _, h, _, _, _ | _ :: _, [], h, _, _, _ => h.elim
 
 theorem applyEvents_same (ho : Ordered T v) : {evs evs' : List v.event.den0} → Forall2 (Ty.Same v.event) evs evs' →
@@ -242,7 +242,7 @@ def RanSame {j : Ty} : Except Fault (Ran v j) → Except Fault (Ran v j) → Pro
   | _, _ => False
 
 theorem execCommand_same (ho : Ordered T v) {a a' : Acc v} (ha : AccSame a a')
-    {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) {c c' : v.caller.den0} (hc : Ty.Same v.caller c c')
+    {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) {c c' : (Ty.origin v.caller).den0} (hc : Ty.Same (Ty.origin v.caller) c c')
     {i i' : x.input.den0} (hi : Ty.Same x.input i i') :
     RanSame (execCommand T a x c i) (execCommand T a' x c' i') := by
   obtain ⟨hcl, hacc, hdec, hens⟩ := (ho.equi.self PBij.refl).commands x hx
@@ -283,7 +283,7 @@ theorem execCommand_same (ho : Ordered T v) {a a' : Acc v} (ha : AccSame a a')
     | .inr (.inl (j, ())), .inr (.inl (j', ())), ⟨hj, _⟩ => exact ⟨ha1, hj⟩
 
 theorem runCommand_same (ho : Ordered T v) {a a' : Acc v} (ha : AccSame a a')
-    {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) {c c' : v.caller.den0} (hc : Ty.Same v.caller c c')
+    {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands) {c c' : (Ty.origin v.caller).den0} (hc : Ty.Same (Ty.origin v.caller) c c')
     {i i' : x.input.den0} (hi : Ty.Same x.input i i')
     {f f' : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))} (hf : Fun.Rel PBij.refl f f') :
     ExSame (runCommand T a x c i f) (runCommand T a' x c' i' f') := by
@@ -302,7 +302,7 @@ theorem runCommand_same (ho : Ordered T v) {a a' : Acc v} (ha : AccSame a a')
     exact applyEvents_same ho (hf (.inr (.inl (j, ())), ()) (.inr (.inl (j', ())), ()) ⟨⟨hj, trivial⟩, trivial⟩) hb
 
 theorem execQuery_same (ho : Ordered T v) {s s' : State v} (hs : StateSame s s') {x : QueryV v.records v.caller}
-    (hx : x ∈ v.queries) {c c' : v.caller.den0} (hc : Ty.Same v.caller c c') {i i' : x.input.den0}
+    (hx : x ∈ v.queries) {c c' : (Ty.origin v.caller).den0} (hc : Ty.Same (Ty.origin v.caller) c c') {i i' : x.input.den0}
     (hi : Ty.Same x.input i i') :
     match execQuery s x c i, execQuery s' x c' i' with
     | .error rs, .error rs' => rs = rs'
@@ -318,7 +318,7 @@ theorem execQuery_same (ho : Ordered T v) {s s' : State v} (hs : StateSame s s')
       ⟨⟨hs.1, hi, hc, hs.2.2.2.1, trivial⟩, trivial⟩
 
 theorem runQuery_same (ho : Ordered T v) {a a' : Acc v} (ha : AccSame a a') {x : QueryV v.records v.caller}
-    (hx : x ∈ v.queries) {c c' : v.caller.den0} (hc : Ty.Same v.caller c c') {i i' : x.input.den0}
+    (hx : x ∈ v.queries) {c c' : (Ty.origin v.caller).den0} (hc : Ty.Same (Ty.origin v.caller) c c') {i i' : x.input.den0}
     (hi : Ty.Same x.input i i') {f f' : Fun (Ty.fn [x.output] (.list v.event))} (hf : Fun.Rel PBij.refl f f') :
     ExSame (runQuery T a x c i f) (runQuery T a' x c' i' f') := by
   have he := execQuery_same ho ha.1 hx hc hi
@@ -337,7 +337,7 @@ theorem runQuery_same (ho : Ordered T v) {a a' : Acc v} (ha : AccSame a a') {x :
 theorem runOwn_same (ho : Ordered T v) {a a' : Acc v} (ha : AccSame a a') {eff eff' : OwnEffectV v.event}
     (he : OwnEffectV.Rel PBij.refl eff eff') : ExSame (runOwn T a eff) (runOwn T a' eff') := by
   cases he with
-  | command name c i j hc hval hf =>
+  | command name c i j hval hf =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc
@@ -352,8 +352,8 @@ theorem runOwn_same (ho : Ordered T v) {a a' : Acc v} (ha : AccSame a a') {eff e
         have hmem := ownCommand_mem hox
         obtain ⟨x, hi, hj⟩ := x
         subst hcp hi hj
-        exact runCommand_same ho ha hmem hc hval hf
-  | query name c i o hc hval hf =>
+        exact runCommand_same ho ha hmem rel0_own hval hf
+  | query name c i o hval hf =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc
@@ -368,7 +368,7 @@ theorem runOwn_same (ho : Ordered T v) {a a' : Acc v} (ha : AccSame a a') {eff e
         have hmem := ownQuery_mem hox
         obtain ⟨x, hi, ho'⟩ := x
         subst hcp hi ho'
-        exact runQuery_same ho ha hmem hc hval hf
+        exact runQuery_same ho ha hmem rel0_own hval hf
 
 theorem settle_same (ho : Ordered T v) : (fuel : Nat) → {a a' : Acc v} → AccSame a a' →
     ExSame (settle T fuel a) (settle T fuel a')
@@ -622,7 +622,8 @@ theorem step_same (ho : Ordered T v) {s s' : State v} (hs : StateSame s s') {x x
     obtain ⟨hrec, hmach, hpend, hnow, hfr, hn⟩ := hs
     have hs1 : StateSame { s with fresh := s.fresh + 1 } { s' with fresh := s'.fresh + 1 } :=
       ⟨hrec, hmach, hpend, hnow, by simp only [hfr], hn⟩
-    have he := execCommand_same ho (AccSame.ofState ⟨hrec, hmach, hpend, hnow, hfr, hn⟩) (List.get_mem _ _) hc hi
+    have he := execCommand_same ho (AccSame.ofState ⟨hrec, hmach, hpend, hnow, hfr, hn⟩) (List.get_mem _ _)
+      (rel0_outside hc) hi
     simp only [step]
     revert he
     generalize execCommand T _ _ _ _ = y
@@ -634,7 +635,7 @@ theorem step_same (ho : Ordered T v) {s s' : State v} (hs : StateSame s s') {x x
     | .ok (.rejected _ _), .ok (.rejected _ _), ⟨_, hj⟩ => exact ⟨hs1, .mk hj, trivial, trivial⟩
     | .ok (.accepted _), .ok (.accepted _), hb => exact finish_same ho hs1 (a := .ok _) (a' := .ok _) hb trivial
   | query i hc hi =>
-    have he := execQuery_same ho hs (List.get_mem _ _) hc hi
+    have he := execQuery_same ho hs (List.get_mem _ _) (rel0_outside hc) hi
     simp only [step]
     revert he
     generalize execQuery s _ _ _ = y

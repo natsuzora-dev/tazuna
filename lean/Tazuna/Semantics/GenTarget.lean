@@ -330,7 +330,7 @@ theorem applyEvents_sent {base : List (Pending v.event)} : (evs : List v.event.d
       exact h
 
 theorem execCommand_sent {base : List (Pending v.event)} (a : Acc v) (x : CommandV v.records v.event v.caller)
-    (c : v.caller.den0) (i : x.input.den0) (h : Sent base a) :
+    (c : (Ty.origin v.caller).den0) (i : x.input.den0) (h : Sent base a) :
     (∀ b, execCommand T a x c i = .ok (.accepted b) → Sent base b) ∧
     (∀ b j, execCommand T a x c i = .ok (.rejected b j) → Sent base b) := by
   have ha : Sent base ({ a with state := { a.state with fresh := a.state.fresh + 1 } } : Acc v) := h
@@ -355,7 +355,7 @@ theorem execCommand_sent {base : List (Pending v.event)} (a : Acc v) (x : Comman
     | .inr (.inl (j, ())) => exact ⟨fun _ hb => (by cases hb), fun b j hb => (by cases hb; exact ha)⟩
 
 theorem runCommand_sent {base : List (Pending v.event)} {a b : Acc v} {x : CommandV v.records v.event v.caller}
-    {c : v.caller.den0} {i : x.input.den0} {f : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))}
+    {c : (Ty.origin v.caller).den0} {i : x.input.den0} {f : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))}
     (h : Sent base a) (hb : runCommand T a x c i f = .ok b) : Sent base b := by
   unfold runCommand at hb
   simp only [bind, Except.bind] at hb
@@ -371,7 +371,7 @@ theorem runOwn_sent {base : List (Pending v.event)} (a : Acc v) (e : OwnEffectV 
     ∀ b, runOwn T a e = .ok b → Sent base b := by
   intro b hb
   cases e with
-  | command name c i j caller value onAnswer =>
+  | command name c i j value onAnswer =>
     dsimp only [runOwn] at hb
     revert hb
     generalize Ty.same c v.caller = oc
@@ -388,7 +388,7 @@ theorem runOwn_sent {base : List (Pending v.event)} (a : Acc v) (e : OwnEffectV 
         intro hb
         change runCommand T a x _ _ _ = _ at hb
         exact runCommand_sent T h hb
-  | query name c i o caller value onAnswer =>
+  | query name c i o value onAnswer =>
     dsimp only [runOwn] at hb
     revert hb
     generalize Ty.same c v.caller = oc
@@ -517,7 +517,7 @@ theorem pendingOf_shape {e : Ty} : (shs : List (PendingShape e)) → (id : Nat) 
 section
 variable {T : List TypeDecl} {v : ServiceV}
 
-theorem mem_admit {i : Ty} {callers : List v.caller.den0} {accepts : Fun (Ty.fn [i] Ty.rules)} {caller : v.caller.den0}
+theorem mem_admit {i : Ty} {callers : List (Ty.origin v.caller).den0} {accepts : Fun (Ty.fn [i] Ty.rules)} {caller : (Ty.origin v.caller).den0}
     {input : i.den0} {n : String} (h : n ∈ admit callers accepts caller input) :
     n = "callers" ∨ n ∈ broken (accepts.fn (input, ())) := by
   unfold admit at h
@@ -536,7 +536,7 @@ theorem finish_outcome (s0 : State v) (r : Except Fault (Acc v)) (o : Outcome) :
 
 /-- A command's answer: Invalid with admission's rules, or rejected with a value of its rejection type, or accepted,
 or a fault. -/
-theorem execCommand_invalid {a : Acc v} {x : CommandV v.records v.event v.caller} {c : v.caller.den0}
+theorem execCommand_invalid {a : Acc v} {x : CommandV v.records v.event v.caller} {c : (Ty.origin v.caller).den0}
     {i : x.input.den0} {rs : List String} (h : execCommand T a x c i = .ok (.invalid rs)) :
     rs = admit x.callers x.accepts c i := by
   unfold execCommand at h
@@ -556,7 +556,7 @@ theorem execCommand_invalid {a : Acc v} {x : CommandV v.records v.event v.caller
 theorem step_command_outcome (s : State v) (i : Fin v.commands.length) (caller : v.caller.den0)
     (input : (v.commands.get i).input.den0) :
     (∀ rs, (step T v s (.command i caller input)).outcome = .invalid rs →
-      rs = admit (v.commands.get i).callers (v.commands.get i).accepts caller input) ∧
+      rs = admit (v.commands.get i).callers (v.commands.get i).accepts (outside caller) input) ∧
     (∀ w, (step T v s (.command i caller input)).outcome = .rejected w → w.1 = (v.commands.get i).rejection) := by
   simp only [step]
   split
@@ -576,7 +576,7 @@ theorem step_command_outcome (s : State v) (i : Fin v.commands.length) (caller :
 theorem step_query_outcome (s : State v) (i : Fin v.queries.length) (caller : v.caller.den0)
     (input : (v.queries.get i).input.den0) (rs : List String)
     (h : (step T v s (.query i caller input)).outcome = .invalid rs) :
-    rs = admit (v.queries.get i).callers (v.queries.get i).accepts caller input := by
+    rs = admit (v.queries.get i).callers (v.queries.get i).accepts (outside caller) input := by
   simp only [step] at h
   split at h
   · rename_i rs' he

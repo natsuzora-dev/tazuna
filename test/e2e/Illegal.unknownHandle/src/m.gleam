@@ -19,7 +19,7 @@ pub type Caller {
 fn bump() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: "bump",
-    callers: [User],
+    callers: [tazuna.Outside(User), tazuna.Own],
     accepts: fn(_n) { [] },
     decide: fn(_c: Ctx(Records, Int, Caller)) { Ok([Sent]) },
     ensures: fn(_c, _r) { [] },
@@ -40,7 +40,6 @@ fn again() -> tazuna.Reaction(Records, Event) {
         }),
         tazuna.send_command(
           command: bump(),
-          caller: User,
           input: 1,
           on_answer: fn(_a) { [] },
         ),

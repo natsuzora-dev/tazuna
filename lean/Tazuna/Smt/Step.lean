@@ -53,13 +53,13 @@ def encodeStep (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
     let (cc, cx) ← CommandCode.of L x
     let (apply, ca) ← v.apply.code L
     let (inv, ci) ← v.invariants.code L
-    let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.caller x.callers)
+    let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.origin x.callers)
     let ⟨o, c, cs⟩ ← encodeCommand L T P v (shapes v) senv x cc apply inv ks S caller input
     pure ⟨.command o, c, andT cx (andT ca ci), cs⟩
   | .query i caller input => do
     let q := v.queries.get i
     let (qc, cq) ← QueryCode.of L q
-    let ks ← need (.limit (.slots v.caller)) (callerTerms L q.data.caller q.callers)
+    let ks ← need (.limit (.slots v.caller)) (callerTerms L q.data.origin q.callers)
     let (o, c) ← encodeQuery L q qc ks S caller input
     pure ⟨.query o, c, cq, tt⟩
   | .answer k j to value => do
@@ -100,8 +100,8 @@ wrap, its applications and the step's end; a clock line's rounds and the step's 
 def stepFits (shs : List (PendingShape v.event)) (s : State v) : Input v → Prop
   | .command i caller input =>
     let x := v.commands.get i
-    let ctx := Step.ctx s s.records caller input
-    x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
+    let ctx := Step.ctx s s.records (Step.outside caller) input
+    x.callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 (Step.outside caller)) = true →
       x.accepts.appFits S (input, ()) ∧
       (Step.broken (x.accepts.fn (input, ())) = [] →
         x.decide.appFits S (ctx, ()) ∧ decidedFits S T shs { s with fresh := s.fresh + 1 } x ctx (x.decide.fn (ctx, ())))

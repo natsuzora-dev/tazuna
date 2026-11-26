@@ -60,10 +60,12 @@ theorem ownKind_codes {nR : Nat} {records now fresh n q eff : Term} {xs : PerMac
     obtain ⟨_, -, h⟩ := bind_ok.1 h
     obtain ⟨_, -, h⟩ := bind_ok.1 h
     obtain ⟨_, -, h⟩ := bind_ok.1 h
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
     cases pure_ok.1 h
     exact commandCode_exact hcc
   | query x Γ site =>
     obtain ⟨⟨qc, cq⟩, hqc, h⟩ := bind_ok.1 h
+    obtain ⟨_, -, h⟩ := bind_ok.1 h
     obtain ⟨_, -, h⟩ := bind_ok.1 h
     obtain ⟨_, -, h⟩ := bind_ok.1 h
     obtain ⟨_, -, h⟩ := bind_ok.1 h
@@ -137,6 +139,7 @@ theorem step_sites {P : List AnySite} {v : ServiceV} (senv : StepEnv L (shapes v
     obtain ⟨⟨o, c, cs⟩, hcmd, henc⟩ := bind_ok.1 henc
     cases pure_ok.1 henc
     unfold encodeCommand at hcmd
+    obtain ⟨_, -, hcmd⟩ := bind_ok.1 hcmd
     obtain ⟨_, -, hcmd⟩ := bind_ok.1 hcmd
     obtain ⟨_, -, hcmd⟩ := bind_ok.1 hcmd
     obtain ⟨_, -, hcmd⟩ := bind_ok.1 hcmd

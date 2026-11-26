@@ -78,15 +78,15 @@ def EffectKey.Holds {e : Ty} (key : EffectKey) : EffectV e → List Val → Prop
       | _, _ => False
   | _, _ => False
 
-/-- An effect of the own kind `key` and its variant's fields: the same command or query, with its caller, its input
-and its `on_answer`'s captured values coded by the fields, and its `on_answer` written at the kind's site. -/
+/-- An effect of the own kind `key` and its variant's fields: the same command or query, with its input and its
+`on_answer`'s captured values coded by the fields, and its `on_answer` written at the kind's site. -/
 def OwnKey.Holds {e : Ty} : OwnKey → EffectV e → List Val → Prop
-  | .command _ name c i j a, .command name' c' i' j' caller value onAnswer, vals =>
+  | .command _ name c i j a, .command name' c' i' j' value onAnswer, vals =>
       name' = name ∧ c' = c ∧ i' = i ∧ j' = j ∧ onAnswer.site = a.site ∧ onAnswer.Γ = a.Γ ∧
-      ∃ vc vi va, vals = [vc, vi, va] ∧ RelD L c' caller vc ∧ RelD L i' value vi ∧ CapRel L onAnswer va
-  | .query _ name c i o a, .query name' c' i' o' caller value onAnswer, vals =>
+      ∃ vi va, vals = [vi, va] ∧ RelD L i' value vi ∧ CapRel L onAnswer va
+  | .query _ name c i o a, .query name' c' i' o' value onAnswer, vals =>
       name' = name ∧ c' = c ∧ i' = i ∧ o' = o ∧ onAnswer.site = a.site ∧ onAnswer.Γ = a.Γ ∧
-      ∃ vc vi va, vals = [vc, vi, va] ∧ RelD L c' caller vc ∧ RelD L i' value vi ∧ CapRel L onAnswer va
+      ∃ vi va, vals = [vi, va] ∧ RelD L i' value vi ∧ CapRel L onAnswer va
   | _, _, _ => False
 
 /-- An effect and the SMT value that codes it: the variant of its kind in the effect datatype of its event type,
@@ -1892,12 +1892,12 @@ theorem OwnKey.eq_of_same : {a b : OwnKey} → a.same b = true → a = b
     rw [Ty.eq_of_same he, hn, Ty.eq_of_same hc, Ty.eq_of_same hi, Ty.eq_of_same hj, SiteKey.eq_of_same ha]
   | .command .., .query .., h | .query .., .command .., h => by simp [OwnKey.same] at h
 
-/-- An own effect's code is its kind's variant after the request kinds', with the caller, the input and the captured
-values' tuple as its fields. -/
-theorem ownT_ok {key : OwnKey} {ct it : Term} {ans : List Term} {t : Term} (h : ownT L key ct it ans = .ok t) :
+/-- An own effect's code is its kind's variant after the request kinds', with the input and the captured values'
+tuple as its fields. -/
+theorem ownT_ok {key : OwnKey} {it : Term} {ans : List Term} {t : Term} (h : ownT L key it ans = .ok t) :
     ∃ d n k da, L.find? (.dsl .effect [key.event]) = some (d, n) ∧ (L.ownsOf key.event)[k]? = some key ∧
       (∃ m, L.find? (.tuple key.answer.Γ) = some (da, m)) ∧
-      t = .ctor d ((L.effectsOf key.event).length + k) [ct, it, .ctor da 0 ans] := by
+      t = .ctor d ((L.effectsOf key.event).length + k) [it, .ctor da 0 ans] := by
   simp only [ownT] at h
   obtain ⟨⟨d, n⟩, h1, h⟩ := bind_ok.1 h
   obtain ⟨k, h2, h⟩ := bind_ok.1 h
@@ -2387,41 +2387,33 @@ theorem primCode_agrees (p : Prim) (args : List Ty) (hp : p.ok args = true) (s :
     · cases hr
   case sendCommand =>
     simp only [primCode] at h; cases h
-    intro ⟨cmd, cl, x, f, ()⟩ ⟨sn, scl, sx, cf, ()⟩ ⟨hn, hcl, hx, hf, _⟩ r c hr _
+    intro ⟨cmd, x, f, ()⟩ ⟨sn, sx, cf, ()⟩ ⟨hn, hx, hf, _⟩ r c hr _
     change cmd.1.name = sn at hn
     change ClosureRel M L f cf at hf
     dsimp only at hr
-    obtain ⟨ct, h0, hr⟩ := bind_ok.1 hr
     obtain ⟨it, h1, hr⟩ := bind_ok.1 hr
     obtain ⟨t, h2, e⟩ := map_ok.1 hr
     cases e
     obtain ⟨d, n, k, da, hd, hk, ⟨m', hda⟩, rfl⟩ := ownT_ok h2
     have hd0 := Prim.dataOf hp rfl
-    have hc := (rel_term (need_ok.1 h0) cl).1 hcl
     have hi := (rel_term (need_ok.1 h1) x).1 hx
-    refine ⟨d, n, hd, .inr ⟨k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩⟩
-    · have hdc := Ty.isData_inst hd0 (.param 2) rfl
-      exact relV_up _ hdc (Ty.down _ hdc cl) _ (by rw [Ty.up_down]; exact hc)
+    refine ⟨d, n, hd, .inr ⟨k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, rfl, ?_, ?_⟩⟩
     · have hdi := Ty.isData_inst hd0 (.param 3) rfl
       exact relV_up _ hdi (Ty.down _ hdi x) _ (by rw [Ty.up_down]; exact hi)
     · exact ⟨da, m', _, hf.2.1 ▸ hda, rfl, hf.2.2⟩
   case sendQuery =>
     simp only [primCode] at h; cases h
-    intro ⟨qry, cl, x, f, ()⟩ ⟨sn, scl, sx, cf, ()⟩ ⟨hn, hcl, hx, hf, _⟩ r c hr _
+    intro ⟨qry, x, f, ()⟩ ⟨sn, sx, cf, ()⟩ ⟨hn, hx, hf, _⟩ r c hr _
     change qry.1.name = sn at hn
     change ClosureRel M L f cf at hf
     dsimp only at hr
-    obtain ⟨ct, h0, hr⟩ := bind_ok.1 hr
     obtain ⟨it, h1, hr⟩ := bind_ok.1 hr
     obtain ⟨t, h2, e⟩ := map_ok.1 hr
     cases e
     obtain ⟨d, n, k, da, hd, hk, ⟨m', hda⟩, rfl⟩ := ownT_ok h2
     have hd0 := Prim.dataOf hp rfl
-    have hc := (rel_term (need_ok.1 h0) cl).1 hcl
     have hi := (rel_term (need_ok.1 h1) x).1 hx
-    refine ⟨d, n, hd, .inr ⟨k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, _, rfl, ?_, ?_, ?_⟩⟩
-    · have hdc := Ty.isData_inst hd0 (.param 2) rfl
-      exact relV_up _ hdc (Ty.down _ hdc cl) _ (by rw [Ty.up_down]; exact hc)
+    refine ⟨d, n, hd, .inr ⟨k, _, _, hk, rfl, hn, rfl, rfl, rfl, hf.1, hf.2.1, _, _, rfl, ?_, ?_⟩⟩
     · have hdi := Ty.isData_inst hd0 (.param 3) rfl
       exact relV_up _ hdi (Ty.down _ hdi x) _ (by rw [Ty.up_down]; exact hi)
     · exact ⟨da, m', _, hf.2.1 ▸ hda, rfl, hf.2.2⟩

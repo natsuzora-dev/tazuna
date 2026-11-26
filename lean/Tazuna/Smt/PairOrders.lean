@@ -43,8 +43,8 @@ def requestTerm {e : Ty} (r : RequestV e) : Erl :=
   .tuple [.bin r.name, Ty.canonBy σ r.input r.value, .list (r.ensures.toList.map fun f => fn f), fn r.onAnswer]
 
 def ownTerm {e : Ty} : OwnEffectV e → Erl
-  | .command n c i _ caller value f => .tuple [.atom "command", .bin n, Ty.canonBy σ c caller, Ty.canonBy σ i value, fn f]
-  | .query n c i _ caller value f => .tuple [.atom "query", .bin n, Ty.canonBy σ c caller, Ty.canonBy σ i value, fn f]
+  | .command n _ i _ value f => .tuple [.atom "command", .bin n, Ty.canonBy σ i value, fn f]
+  | .query n _ i _ value f => .tuple [.atom "query", .bin n, Ty.canonBy σ i value, fn f]
 
 def instTerm {r e : Ty} {m : MachineV r e} (i : Instance m) : Erl :=
   .tuple [Ty.canonBy σ m.key i.key, Ty.canonBy σ m.state i.state, match i.timer with
@@ -229,8 +229,8 @@ theorem dataTerm_rel {R : Ren} {σ σ' τ τ' : Nat → Nat} (hσ : ∀ {c c'}, 
   have hq := Multi.sort_map (f := ownTerm σ' (fun _ => .atom "")) (g := ownTerm σ (fun _ => .atom ""))
     (fun x y hxy => by
       cases hxy with
-      | command n c i j hc hv _ => simp only [ownTerm, Ty.canonBy_rel hσ _ _ _ hc, Ty.canonBy_rel hσ _ _ _ hv]
-      | query n c i o hc hv _ => simp only [ownTerm, Ty.canonBy_rel hσ _ _ _ hc, Ty.canonBy_rel hσ _ _ _ hv]) hown
+      | command n c i j hv _ => simp only [ownTerm, Ty.canonBy_rel hσ _ _ _ hv]
+      | query n c i o hv _ => simp only [ownTerm, Ty.canonBy_rel hσ _ _ _ hv]) hown
   simp only [dataTerm, accTerm, Ty.canonBy_rel hσ _ _ _ hrec, machinesTerm_rel hσ _ _ hmach, hp, hnow, hf, hn,
     Multi.sort_map (fun x y => Ty.canonBy_rel hσ v.event x y) hev, ho, hq]
 

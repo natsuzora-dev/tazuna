@@ -244,7 +244,7 @@ theorem Acc.Self.sub_own {P : PBij} {a : Acc v} (h : Acc.Self P a) {xs : List (O
 
 theorem runCommand_self (hv : v.Equivariant) {a : Acc v}
     (ha : Below Acc.Self (a.state.fresh + 1) a) {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands)
-    {c : v.caller.den0} (hc : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.caller c c) {i : x.input.den0}
+    {c : (Ty.origin v.caller).den0} (hc : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P (Ty.origin v.caller) c c) {i : x.input.den0}
     (hi : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P x.input i i)
     {f : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))}
     (hf : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Fun.Rel P f f) :
@@ -297,7 +297,7 @@ theorem runCommand_self (hv : v.Equivariant) {a : Acc v}
 
 theorem runQuery_self (hv : v.Equivariant) {a : Acc v}
     (ha : Below Acc.Self (a.state.fresh + 1) a) {x : QueryV v.records v.caller} (hx : x ∈ v.queries)
-    {c : v.caller.den0} (hc : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P v.caller c c) {i : x.input.den0}
+    {c : (Ty.origin v.caller).den0} (hc : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P (Ty.origin v.caller) c c) {i : x.input.den0}
     (hi : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Ty.rel0 P x.input i i)
     {f : Fun (Ty.fn [x.output] (.list v.event))} (hf : ∀ P : PBij, P.Fixes (a.state.fresh + 1) → Fun.Rel P f f) :
     ∀ b, runQuery T a x c i f = .ok b → Below Acc.Self (a.state.fresh + 1) b := by
@@ -351,7 +351,7 @@ theorem applyEvents_fresh : (evs : List v.event.den0) → (a : Acc v) → {b : A
       rw [applyEvents_fresh evs a1 h, start_fresh _ _ hs]
       rfl
 
-theorem runCommand_fresh {a b : Acc v} {x : CommandV v.records v.event v.caller} {c : v.caller.den0}
+theorem runCommand_fresh {a b : Acc v} {x : CommandV v.records v.event v.caller} {c : (Ty.origin v.caller).den0}
     {i : x.input.den0} {f : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))}
     (h : runCommand T a x c i f = .ok b) : b.state.fresh = a.state.fresh + 1 := by
   unfold runCommand execCommand at h
@@ -384,7 +384,7 @@ theorem runCommand_fresh {a b : Acc v} {x : CommandV v.records v.event v.caller}
 theorem runOwn_fresh {a b : Acc v} {e : OwnEffectV v.event} (h : runOwn T a e = .ok b) :
     b.state.fresh = a.state.fresh + 1 := by
   cases e with
-  | command name c i j caller value onAnswer =>
+  | command name c i j value onAnswer =>
     dsimp only [runOwn] at h
     revert h
     generalize Ty.same c v.caller = oc
@@ -401,7 +401,7 @@ theorem runOwn_fresh {a b : Acc v} {e : OwnEffectV v.event} (h : runOwn T a e = 
         intro h
         change runCommand T a x _ _ _ = _ at h
         exact runCommand_fresh T h
-  | query name c i o caller value onAnswer =>
+  | query name c i o value onAnswer =>
     dsimp only [runOwn] at h
     revert h
     generalize Ty.same c v.caller = oc
@@ -422,17 +422,17 @@ theorem runOwn_fresh {a b : Acc v} {e : OwnEffectV v.event} (h : runOwn T a e = 
         · cases h
         · exact applyEvents_fresh T _ _ h
 
-theorem OwnEffectV.rel_command_inv {P : PBij} {e : Ty} {n : String} {c i j : Ty} {a a' : c.den0} {x x' : i.den0}
+theorem OwnEffectV.rel_command_inv {P : PBij} {e : Ty} {n : String} {c i j : Ty} {x x' : i.den0}
     {f f' : Fun (Ty.fn [Ty.result Ty.nil j] (.list e))}
-    (h : OwnEffectV.Rel P (.command n c i j a x f) (.command n c i j a' x' f')) :
-    Ty.rel0 P c a a' ∧ Ty.rel0 P i x x' ∧ Fun.Rel P f f' := by
-  cases h; exact ⟨‹_›, ‹_›, ‹_›⟩
+    (h : OwnEffectV.Rel P (.command n c i j x f) (.command n c i j x' f')) :
+    Ty.rel0 P i x x' ∧ Fun.Rel P f f' := by
+  cases h; exact ⟨‹_›, ‹_›⟩
 
-theorem OwnEffectV.rel_query_inv {P : PBij} {e : Ty} {n : String} {c i o : Ty} {a a' : c.den0} {x x' : i.den0}
+theorem OwnEffectV.rel_query_inv {P : PBij} {e : Ty} {n : String} {c i o : Ty} {x x' : i.den0}
     {f f' : Fun (Ty.fn [o] (.list e))}
-    (h : OwnEffectV.Rel P (.query n c i o a x f) (.query n c i o a' x' f')) :
-    Ty.rel0 P c a a' ∧ Ty.rel0 P i x x' ∧ Fun.Rel P f f' := by
-  cases h; exact ⟨‹_›, ‹_›, ‹_›⟩
+    (h : OwnEffectV.Rel P (.query n c i o x f) (.query n c i o x' f')) :
+    Ty.rel0 P i x x' ∧ Fun.Rel P f f' := by
+  cases h; exact ⟨‹_›, ‹_›⟩
 
 theorem runOwn_self (hv : v.Equivariant) {a : Acc v}
     (ha : Below Acc.Self (a.state.fresh + 1) a) {e : OwnEffectV v.event}
@@ -440,7 +440,7 @@ theorem runOwn_self (hv : v.Equivariant) {a : Acc v}
     ∀ b, runOwn T a e = .ok b → Below Acc.Self (a.state.fresh + 1) b := by
   intro b h
   cases e with
-  | command name c i j caller value onAnswer =>
+  | command name c i j value onAnswer =>
     dsimp only [runOwn] at h
     revert h
     generalize Ty.same c v.caller = oc
@@ -457,9 +457,9 @@ theorem runOwn_self (hv : v.Equivariant) {a : Acc v}
         subst hcp hi hj
         intro h
         change runCommand T a x _ _ _ = _ at h
-        exact runCommand_self T hv ha hmem (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).1)
-          (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).2.1) (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).2.2) b h
-  | query name c i o caller value onAnswer =>
+        exact runCommand_self T hv ha hmem (fun _ _ => rel0_own)
+          (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).1) (fun P hP => (OwnEffectV.rel_command_inv (he P hP)).2) b h
+  | query name c i o value onAnswer =>
     dsimp only [runOwn] at h
     revert h
     generalize Ty.same c v.caller = oc
@@ -476,8 +476,8 @@ theorem runOwn_self (hv : v.Equivariant) {a : Acc v}
         subst hcp hi ho
         intro h
         change runQuery T a x _ _ _ = _ at h
-        exact runQuery_self T hv ha hmem (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).1)
-          (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).2.1) (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).2.2) b h
+        exact runQuery_self T hv ha hmem (fun _ _ => rel0_own)
+          (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).1) (fun P hP => (OwnEffectV.rel_query_inv (he P hP)).2) b h
 
 /-- A step in progress whose names are all below its counter. The own cascade keeps it (`ownSys_preserved`). -/
 abbrev Supp (a : Acc v) : Prop := Below Acc.Self a.state.fresh a

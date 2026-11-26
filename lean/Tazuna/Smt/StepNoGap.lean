@@ -108,11 +108,12 @@ theorem encodeInvariants_sound (hL : SortedLayout L) {r : Ty} {inv : Code (Ty.fn
   exact sound_bind (ruleTerms_sound hL hR _) fun _ _ => trivial
 
 theorem encodeQuery_sound (hL : SortedLayout L) {r c : Ty} {v : ServiceV} (q : QueryV r c) (qc : QueryCode q)
-    (hacc : CodeOk L P ds H _ qc.accepts) (hres : CodeOk L P ds H _ qc.resolve) (hc : Avail L c)
+    (hacc : CodeOk L P ds H _ qc.accepts) (hres : CodeOk L P ds H _ qc.resolve) (hc : Avail L (Ty.origin c))
     (hi : Avail L q.input) (ho : Avail L q.output) (hr : Got L Ty.rules) (hctx : Avail L (Ty.queryCtx r q.input c))
     (callers : List Term) (S : SymState v) (caller input : Term) :
     Sound (fun _ => True) (encodeQuery L q qc callers S caller input) := by
   unfold encodeQuery
+  refine sound_bind (adtCtor_sound hc _ _) fun _ _ => ?_
   refine sound_bind (encodeAdmit_sound hL hacc hc hi hr _ _ _) fun _ _ => ?_
   refine sound_bind (encodeQueryCtx_sound (P := P) (ds := ds) (H := H) hctx _ _ _ _) fun a ha => ?_
   refine sound_bind (apply_sound hres ⟨ha, trivial⟩ ho) fun _ _ => ?_
@@ -433,6 +434,7 @@ structure ServiceGot (L : Layout) (P : List AnySite) (ds : List (String × Decla
   records : Got L v.records
   event : Got L v.event
   caller : Got L v.caller
+  origin : Got L (Ty.origin v.caller)
   rules : Got L Ty.rules
   events : Got L (.list v.event)
   unit : Got L (.tuple [])
@@ -542,7 +544,7 @@ theorem encodeOwnCommand_sound {shs : List (PendingShape v.event)} (h : ServiceG
       (encodeOwnCommand L T v shs senv x cc site σ apply callers records now fresh n q caller input xs) := by
   have hL := h.sorted
   unfold encodeOwnCommand
-  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.caller) hx.input h.rules _ _ _) fun _ _ => ?_
+  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.origin) hx.input h.rules _ _ _) fun _ _ => ?_
   refine sound_bind (encodeCtx_sound (P := P) (ds := ds) (H := H) hx.ctx _ _ _ _ _) fun a ha => ?_
   refine sound_bind (encodeDecide_sound h T senv hx hdec hens happ ha _ _ _ _ _) fun _ _ => ?_
   refine sound_bind (adtCtor_sound hnil _ _) fun _ _ => ?_
@@ -566,7 +568,7 @@ theorem encodeOwnQuery_sound {shs : List (PendingShape v.event)} (h : ServiceGot
       (encodeOwnQuery L T v shs senv x qc site σ apply callers records now n q caller input xs) := by
   have hL := h.sorted
   unfold encodeOwnQuery
-  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.caller) hx.input h.rules _ _ _) fun _ _ => ?_
+  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.origin) hx.input h.rules _ _ _) fun _ _ => ?_
   refine sound_bind (encodeQueryCtx_sound (P := P) (ds := ds) (H := H) hx.ctx _ _ _ _) fun a ha => ?_
   refine sound_bind (apply_sound hres ⟨ha, trivial⟩ hx.output) fun _ hout => ?_
   refine sound_bind (hs σ hσ) fun _ hoa => ?_
@@ -595,6 +597,7 @@ theorem encodeOwnKind_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
     obtain ⟨hx, hg, hs, hnil, hans⟩ := ho
     refine sound_bind (commandCode_sound hx) fun _ ⟨h1, h2, h3⟩ => ?_
     refine sound_bind sound_need_limit fun _ _ => ?_
+    refine sound_bind (adtCtor_sound (avail_of_got h.origin) _ _) fun _ _ => ?_
     refine sound_bind (findE_sound hL (avail_of_got hg) has_find_tuple) fun _ _ => ?_
     refine sound_bind (capturedCodes_sound (P := P) (ds := ds) (H := H) hg _ _) fun σ hσ => ?_
     exact sound_bind (encodeOwnCommand_sound h T senv hx h1 h2 h3 site hs hnil hans hσ happ _ _ _ _ _ _ _ _ _)
@@ -603,6 +606,7 @@ theorem encodeOwnKind_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
     obtain ⟨hx, hg, hs⟩ := ho
     refine sound_bind (queryCode_sound hx) fun _ ⟨h1, h2⟩ => ?_
     refine sound_bind sound_need_limit fun _ _ => ?_
+    refine sound_bind (adtCtor_sound (avail_of_got h.origin) _ _) fun _ _ => ?_
     refine sound_bind (findE_sound hL (avail_of_got hg) has_find_tuple) fun _ _ => ?_
     refine sound_bind (capturedCodes_sound (P := P) (ds := ds) (H := H) hg _ _) fun σ hσ => ?_
     exact sound_bind (encodeOwnQuery_sound h T senv hx h1 h2 site hs hσ happ _ _ _ _ _ _ _ _) fun _ _ => trivial
@@ -651,7 +655,8 @@ theorem encodeCommand_sound {shs : List (PendingShape v.event)} (h : ServiceGot 
     Sound (fun _ => True) (encodeCommand L T P v shs senv x cc apply inv callers S caller input) := by
   have hL := h.sorted
   unfold encodeCommand
-  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.caller) hx.input h.rules _ _ _) fun _ _ => ?_
+  refine sound_bind (adtCtor_sound (avail_of_got h.origin) _ _) fun _ _ => ?_
+  refine sound_bind (encodeAdmit_sound hL hacc (avail_of_got h.origin) hx.input h.rules _ _ _) fun _ _ => ?_
   refine sound_bind (encodeCtx_sound (P := P) (ds := ds) (H := H) hx.ctx _ _ _ _ _) fun a ha => ?_
   refine sound_bind (encodeDecide_sound h T senv hx hdec hens happ ha _ _ _ _ _) fun _ _ => ?_
   exact sound_bind (encodeFinish_sound h T senv happ hinv _ _ _ _) fun _ _ => trivial
@@ -858,7 +863,7 @@ theorem encodeStep_sound (h : ServiceGot L P ds H v (shapes v))
     simp only [encodeStep]
     refine sound_bind (queryCode_sound hq) fun _ ⟨h1, h2⟩ => ?_
     refine sound_bind sound_need_limit fun _ _ => ?_
-    exact sound_bind (encodeQuery_sound h.sorted _ _ h1 h2 (avail_of_got h.caller) hq.input hq.output h.rules hq.ctx
+    exact sound_bind (encodeQuery_sound h.sorted _ _ h1 h2 (avail_of_got h.origin) hq.input hq.output h.rules hq.ctx
       _ _ _ _) fun _ _ => trivial
   | answer k j to value =>
     simp only [encodeStep]
@@ -902,13 +907,13 @@ end
 theorem sorted_avail_ctx {L : Layout} {r i c : Ty} (h : Avail L (Ty.ctx r i c)) (hr : r.sorted = true)
     (hc : c.sorted = true) : Avail L i := fun hi => by
   have hs : (Ty.ctx r i c).sorted = true := by
-    simp [Ty.ctx, Ty.sorted, Ty.sortedss, Ty.sorteds, hr, hi, hc]
+    simp [Ty.ctx, Ty.origin, Ty.sorted, Ty.sortedss, Ty.sorteds, hr, hi, hc]
   exact (got_adt ⟨h hs, hs⟩ ⟨0, by simp⟩ i (by simp)).1
 
 theorem sorted_avail_queryCtx {L : Layout} {r i c : Ty} (h : Avail L (Ty.queryCtx r i c)) (hr : r.sorted = true)
     (hc : c.sorted = true) : Avail L i := fun hi => by
   have hs : (Ty.queryCtx r i c).sorted = true := by
-    simp [Ty.queryCtx, Ty.sorted, Ty.sortedss, Ty.sorteds, hr, hi, hc]
+    simp [Ty.queryCtx, Ty.origin, Ty.sorted, Ty.sortedss, Ty.sorteds, hr, hi, hc]
   exact (got_adt ⟨h hs, hs⟩ ⟨0, by simp⟩ i (by simp)).1
 
 section
@@ -1250,13 +1255,13 @@ theorem ownOk_ofService {key : OwnKey} (hk : key ∈ (Layout.ofService c.program
   · rename_i x Γ site hsh
     obtain ⟨hx, hm, e, n, cc, i, a, rfl, rfl, hsite⟩ := ownShape_command hsh
     simp only [OwnKey.fields, Ty.sorteds, Bool.and_eq_true] at hf
-    exact ⟨commandOk_ofService hv hx, got_of_avail (avail_use c v (hu _ (by simp))) (by simpa [Ty.sorted] using hf.2.2.1),
+    exact ⟨commandOk_ofService hv hx, got_of_avail (avail_use c v (hu _ (by simp))) (by simpa [Ty.sorted] using hf.2.1),
       Site.code_ofService c hv _ hm (own_root hv hkK hm hsite), avail_use c v (hu _ (by simp)),
       avail_use c v (hu _ (by simp))⟩
   · rename_i x Γ site hsh
     obtain ⟨hx, hm, e, n, cc, i, o, a, rfl, rfl, hsite⟩ := ownShape_query hsh
     simp only [OwnKey.fields, Ty.sorteds, Bool.and_eq_true] at hf
-    exact ⟨queryOk_ofService hv hx, got_of_avail (avail_use c v (hu _ (by simp))) (by simpa [Ty.sorted] using hf.2.2.1),
+    exact ⟨queryOk_ofService hv hx, got_of_avail (avail_use c v (hu _ (by simp))) (by simpa [Ty.sorted] using hf.2.1),
       Site.code_ofService c hv _ hm (own_root hv hkK hm hsite)⟩
   · trivial
   · rename_i hsh
@@ -1276,7 +1281,7 @@ theorem entry_ofService : Got (Layout.ofService c.program.defs v) (pendingEntry 
   have chk := c.checked v hv
   obtain ⟨-, -, hep, -, -, -⟩ := stateTys_iff.1 chk.stateTys
   exact (got_table (got_of_avail (avail_stepTy c v (t := pendingTable (shapes v)) (List.mem_append_left _ (List.mem_append_left _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
-    (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)))))))
+    (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self))))))))
     (sorted_of_embeddable _ (embeddable_pending hep)))).2.1
 
 theorem answerOk_ofService {sh : PendingShape v.event} (hsh : sh ∈ shapes v) :
@@ -1299,11 +1304,13 @@ theorem serviceGot_ofService :
   refine ⟨sorted_ofParts _ v, got_of_avail (avail_stepTy c v (by simp [stepTys])) (sorted_of_embeddable _ her),
     got_of_avail (avail_stepTy c v (by simp [stepTys])) hev,
     got_of_avail (avail_stepTy c v (by simp [stepTys])) (sorted_of_embeddable _ hec),
+    got_of_avail (avail_stepTy c v (by simp [stepTys]))
+      (by simp [Ty.origin, Ty.sorted, Ty.sortedss, Ty.sorteds, sorted_of_embeddable _ hec]),
     got_of_avail (avail_use c v (by simp [useTys])) (by decide),
     got_of_avail (avail_use c v (by simp [useTys])) (by simpa [Ty.sorted] using hev),
     got_of_avail (avail_stepTy c v (by simp [stepTys])) rfl,
     got_of_avail (avail_stepTy c v (t := pendingTable (shapes v)) (List.mem_append_left _ (List.mem_append_left _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _
-      (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self)))))))
+      (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self))))))))
       (sorted_of_embeddable _ (embeddable_pending hep)),
     Fun.code_ofService c hv _ chk.reach.apply root_apply, Fun.code_ofService c hv _ chk.reach.invariants root_invariants,
     fun m hm => ?_, fun x hx => ?_, fun x hx => commandOk_ofService hv hx, fun q hq => queryOk_ofService hv hq,

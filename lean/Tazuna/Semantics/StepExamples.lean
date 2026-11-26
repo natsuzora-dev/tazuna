@@ -76,17 +76,18 @@ private def addEnsures : Expr [] [] (Ty.fn [Ty.ctx .int .int .int, .int] Ty.rule
   .lam (ruleE "grows" (.bin .le (recordsE (.var .here)) (.var (.there .here))))
 
 def add : CommandV .int .int .int :=
-  { name := "add", input := .int, rejection := .str, callers := [(1 : Int)],
+  { name := "add", input := .int, rejection := .str, callers := [Step.outside (c := .int) (1 : Int), Step.own],
     accepts := .closed addAccepts, decide := .closed addDecide, ensures := .closed addEnsures }
 
 /-- The command `add` as a spec writes it. -/
 private def addE {Γ : List Ty} : Expr [] Γ (.dsl .command [.int, .int, .int, .int, .str]) :=
   .call (.prim .command [.int, .int, .int, .int, .str] rfl)
-    (.cons (.str (str! "add")) (.cons (.list (.cons (.int 1) .nil))
+    (.cons (.str (str! "add")) (.cons (.list (.cons (.ctor (i := 12) (args := [.int]) ⟨0, by decide⟩ (.cons (.int 1) .nil))
+        (.cons (.ctor (i := 12) (args := [.int]) ⟨1, by decide⟩ .nil) .nil)))
       (.cons (keptE 2 addAccepts) (.cons (keptE 3 addDecide) (.cons (keptE 4 addEnsures) .nil)))))
 
 def total : QueryV .int .int :=
-  { name := "total", input := .int, output := .int, callers := [(1 : Int)], accepts := .closed (.lam (.list .nil)),
+  { name := "total", input := .int, output := .int, callers := [Step.outside (c := .int) (1 : Int)], accepts := .closed (.lam (.list .nil)),
     resolve := .closed (.lam (queryRecordsE (.var .here))) }
 
 def svc : ServiceV :=
@@ -132,10 +133,10 @@ def after (s : State svc) (is : List (Input svc)) : State svc := (run prelude sv
 -- An answer of the wrong type matches no request.
 #guard summary (after s0 [cmd 1 5, cmd 1 1, .clock 10]) (.answer 0 ⟨.int, (0 : Int)⟩) == "fault answerUnmatched"
 -- A reaction sends the service's own `add` for some events: 7 adds 2, 1 adds 1 again and again, 3 adds 500.
-/-- `send_command(add, 1, n, fn(_) { [] })`. -/
+/-- `send_command(add, n, fn(_) { [] })`. -/
 private def sendE {Γ : List Ty} (n : Int) : Expr [] Γ (.dsl .effect [.int]) :=
   .call (.prim .sendCommand [.int, .int, .int, .int, .str] rfl)
-    (.cons addE (.cons (.int 1) (.cons (.int n) (.cons (keptE 5 (.lam (.list .nil))) .nil))))
+    (.cons addE (.cons (.int n) (.cons (keptE 5 (.lam (.list .nil))) .nil)))
 def again : ReactionV .int .int :=
   { name := "again", react := .closed (.lam
       (let e : Expr [] ([Ty.reactionCtx .int, .int] ++ []) .int := .var (.there .here)

@@ -294,24 +294,22 @@ theorem decodeOwn_total (hL : SortedLayout L) {d n : Nat} (hE : L.find? (.dsl .e
     obtain ⟨⟨Γ, site⟩, hs⟩ := Option.isSome_iff_exists.1 hf
     obtain ⟨-, -, rfl⟩ := siteFor_spec hs
     match vals, hsv with
-    | [vc, vi, va], _ =>
-      obtain ⟨_, h0, x0, hx0⟩ := hdec 0 c rfl
-      obtain ⟨_, h1, x1, hx1⟩ := hdec 1 j rfl
-      obtain ⟨_, h2, x2, hx2⟩ := hdec 2 (.tuple a.Γ) rfl
-      cases h0; cases h1; cases h2
+    | [vi, va], _ =>
+      obtain ⟨_, h1, x1, hx1⟩ := hdec 0 j rfl
+      obtain ⟨_, h2, x2, hx2⟩ := hdec 1 (.tuple a.Γ) rfl
+      cases h1; cases h2
       simp only [OwnKey.answerFn, OwnKey.answer] at hs
-      exact ⟨_, by simp [hs, hx0, hx1, hx2]; rfl⟩
+      exact ⟨_, by simp [hs, hx1, hx2]; rfl⟩
   | query e name c j o a =>
     obtain ⟨⟨Γ, site⟩, hs⟩ := Option.isSome_iff_exists.1 hf
     obtain ⟨-, -, rfl⟩ := siteFor_spec hs
     match vals, hsv with
-    | [vc, vi, va], _ =>
-      obtain ⟨_, h0, x0, hx0⟩ := hdec 0 c rfl
-      obtain ⟨_, h1, x1, hx1⟩ := hdec 1 j rfl
-      obtain ⟨_, h2, x2, hx2⟩ := hdec 2 (.tuple a.Γ) rfl
-      cases h0; cases h1; cases h2
+    | [vi, va], _ =>
+      obtain ⟨_, h1, x1, hx1⟩ := hdec 0 j rfl
+      obtain ⟨_, h2, x2, hx2⟩ := hdec 1 (.tuple a.Γ) rfl
+      cases h1; cases h2
       simp only [OwnKey.answerFn, OwnKey.answer] at hs
-      exact ⟨_, by simp [hs, hx0, hx1, hx2]; rfl⟩
+      exact ⟨_, by simp [hs, hx1, hx2]; rfl⟩
 
 
 /-- A pair of own kinds' questions never yield a model that does not decode: a model of their context whose variables

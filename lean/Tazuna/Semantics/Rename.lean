@@ -651,26 +651,26 @@ inductive RequestV.Rel (R : PBij) {e : Ty} : RequestV e → RequestV e → Prop
 
 inductive EffectV.Rel (R : PBij) {e : Ty} : EffectV e → EffectV e → Prop
   | request {x y : RequestV e} : RequestV.Rel R x y → EffectV.Rel R (.request x) (.request y)
-  | command (name : String) (c input rejection : Ty) {caller caller' : c.den0} {value value' : input.den0}
+  | command (name : String) (c input rejection : Ty) {value value' : input.den0}
       {onAnswer onAnswer' : Fun (Ty.fn [Ty.result Ty.nil rejection] (.list e))} :
-      Ty.rel0 R c caller caller' → Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
-      EffectV.Rel R (.command name c input rejection caller value onAnswer)
-        (.command name c input rejection caller' value' onAnswer')
-  | query (name : String) (c input output : Ty) {caller caller' : c.den0} {value value' : input.den0}
+      Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
+      EffectV.Rel R (.command name c input rejection value onAnswer)
+        (.command name c input rejection value' onAnswer')
+  | query (name : String) (c input output : Ty) {value value' : input.den0}
       {onAnswer onAnswer' : Fun (Ty.fn [output] (.list e))} :
-      Ty.rel0 R c caller caller' → Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
-      EffectV.Rel R (.query name c input output caller value onAnswer) (.query name c input output caller' value' onAnswer')
+      Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
+      EffectV.Rel R (.query name c input output value onAnswer) (.query name c input output value' onAnswer')
 
 inductive OwnEffectV.Rel (R : PBij) {e : Ty} : OwnEffectV e → OwnEffectV e → Prop
-  | command (name : String) (c input rejection : Ty) {caller caller' : c.den0} {value value' : input.den0}
+  | command (name : String) (c input rejection : Ty) {value value' : input.den0}
       {onAnswer onAnswer' : Fun (Ty.fn [Ty.result Ty.nil rejection] (.list e))} :
-      Ty.rel0 R c caller caller' → Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
-      OwnEffectV.Rel R (.command name c input rejection caller value onAnswer)
-        (.command name c input rejection caller' value' onAnswer')
-  | query (name : String) (c input output : Ty) {caller caller' : c.den0} {value value' : input.den0}
+      Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
+      OwnEffectV.Rel R (.command name c input rejection value onAnswer)
+        (.command name c input rejection value' onAnswer')
+  | query (name : String) (c input output : Ty) {value value' : input.den0}
       {onAnswer onAnswer' : Fun (Ty.fn [output] (.list e))} :
-      Ty.rel0 R c caller caller' → Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
-      OwnEffectV.Rel R (.query name c input output caller value onAnswer) (.query name c input output caller' value' onAnswer')
+      Ty.rel0 R input value value' → Fun.Rel R onAnswer onAnswer' →
+      OwnEffectV.Rel R (.query name c input output value onAnswer) (.query name c input output value' onAnswer')
 
 theorem OwnEffectV.rel_iff {R : PBij} {e : Ty} {x y : OwnEffectV e} :
     OwnEffectV.Rel R x y ↔ EffectV.Rel R x.effect y.effect := by
@@ -685,13 +685,13 @@ section Self
 variable (R : PBij) {r e c : Ty}
 
 structure CommandV.Self (x : CommandV r e c) : Prop where
-  callers : Ty.rel0 R (.list c) x.callers x.callers
+  callers : Ty.rel0 R (.list (Ty.origin c)) x.callers x.callers
   accepts : Fun.Rel R x.accepts x.accepts
   decide : Fun.Rel R x.decide x.decide
   ensures : Fun.Rel R x.ensures x.ensures
 
 structure QueryV.Self (x : QueryV r c) : Prop where
-  callers : Ty.rel0 R (.list c) x.callers x.callers
+  callers : Ty.rel0 R (.list (Ty.origin c)) x.callers x.callers
   accepts : Fun.Rel R x.accepts x.accepts
   resolve : Fun.Rel R x.resolve x.resolve
 

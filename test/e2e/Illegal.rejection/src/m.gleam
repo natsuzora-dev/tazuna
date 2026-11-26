@@ -24,7 +24,7 @@ fn apply(r: Records, _e: Event) -> Records {
 fn add() -> tazuna.Command(Records, Event, Caller, String, String) {
   tazuna.command(
     name: "add",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_t: String) { [] },
     decide: fn(c: Ctx(Records, String, Caller)) { Ok([Added(c.input)]) },
     ensures: fn(_c, _r) { [] },

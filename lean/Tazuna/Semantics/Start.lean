@@ -79,22 +79,22 @@ theorem start_requests (a : Acc v) : (effs : List (Sender × EffectV v.event)) �
       Pending.line, Except.ok.injEq]
     congr 2
     omega
-  | (snd, .command n c i j caller value f) :: effs, ps, hs => by
-    have h1 : start a ((snd, .command n c i j caller value f) :: effs) =
-        start (a.queued [.command n c i j caller value f]) effs := rfl
-    have hr : reqsOf ((snd, EffectV.command n c i j caller value f) :: effs) = reqsOf effs := rfl
-    have hq : queuedOf ((snd, EffectV.command n c i j caller value f) :: effs) =
-        .command n c i j caller value f :: queuedOf effs := rfl
+  | (snd, .command n c i j value f) :: effs, ps, hs => by
+    have h1 : start a ((snd, .command n c i j value f) :: effs) =
+        start (a.queued [.command n c i j value f]) effs := rfl
+    have hr : reqsOf ((snd, EffectV.command n c i j value f) :: effs) = reqsOf effs := rfl
+    have hq : queuedOf ((snd, EffectV.command n c i j value f) :: effs) =
+        .command n c i j value f :: queuedOf effs := rfl
     rw [hr] at hs
     rw [h1, start_requests (a.queued _) effs ps hs, hr, hq]
     obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a
     simp [Acc.wrote, Acc.queued]
-  | (snd, .query n c i j caller value f) :: effs, ps, hs => by
-    have h1 : start a ((snd, .query n c i j caller value f) :: effs) =
-        start (a.queued [.query n c i j caller value f]) effs := rfl
-    have hr : reqsOf ((snd, EffectV.query n c i j caller value f) :: effs) = reqsOf effs := rfl
-    have hq : queuedOf ((snd, EffectV.query n c i j caller value f) :: effs) =
-        .query n c i j caller value f :: queuedOf effs := rfl
+  | (snd, .query n c i j value f) :: effs, ps, hs => by
+    have h1 : start a ((snd, .query n c i j value f) :: effs) =
+        start (a.queued [.query n c i j value f]) effs := rfl
+    have hr : reqsOf ((snd, EffectV.query n c i j value f) :: effs) = reqsOf effs := rfl
+    have hq : queuedOf ((snd, EffectV.query n c i j value f) :: effs) =
+        .query n c i j value f :: queuedOf effs := rfl
     rw [hr] at hs
     rw [h1, start_requests (a.queued _) effs ps hs, hr, hq]
     obtain ⟨⟨_, _, _, _, _, _⟩, _, _, _⟩ := a

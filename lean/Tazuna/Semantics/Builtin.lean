@@ -186,13 +186,13 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     fun (name, callers, accepts, decide, ensures, ()) =>
     Subtype.mk (p := fun (x : CommandV _ _ _) => x.input = (Ty.param 3).inst args ∧ x.rejection = (Ty.param 4).inst args)
     { name := name.1, input := (Ty.param 3).inst args, rejection := (Ty.param 4).inst args,
-      callers := Prim.dn d (.list (.param 2)) rfl callers,
+      callers := Prim.dn d (.list (.origin (.param 2))) rfl callers,
       accepts, decide, ensures } ⟨rfl, rfl⟩
   | .query, args, h => let d := Prim.dataOf h rfl
     fun (name, callers, accepts, resolve, ()) =>
     Subtype.mk (p := fun (x : QueryV _ _) => x.input = (Ty.param 2).inst args ∧ x.output = (Ty.param 3).inst args)
     { name := name.1, input := (Ty.param 2).inst args, output := (Ty.param 3).inst args,
-      callers := Prim.dn d (.list (.param 1)) rfl callers,
+      callers := Prim.dn d (.list (.origin (.param 1))) rfl callers,
       accepts, resolve } ⟨rfl, rfl⟩
   | .declareCommand, args, _ => fun (x, ()) =>
     .command ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args) x.1
@@ -223,15 +223,15 @@ def Prim.den : (p : Prim) → (args : List Ty) → p.ok args = true → (p.ty.in
     { name, input := (Ty.param 1).inst args, output := (Ty.param 2).inst args, rejection := none,
       value := Prim.dn d (.param 1) rfl input, ensures := some ensures, onAnswer }
   | .sendCommand, args, h => let d := Prim.dataOf h rfl
-    fun (c, caller, input, onAnswer, ()) =>
+    fun (c, input, onAnswer, ()) =>
     let c : CommandOf ((Ty.param 0).inst args) ((Ty.param 1).inst args) ((Ty.param 2).inst args)
       ((Ty.param 3).inst args) ((Ty.param 4).inst args) := c
-    .command c.1.name _ _ _ (Prim.dn d (.param 2) rfl caller) (Prim.dn d (.param 3) rfl input) onAnswer
+    .command c.1.name ((Ty.param 2).inst args) _ _ (Prim.dn d (.param 3) rfl input) onAnswer
   | .sendQuery, args, h => let d := Prim.dataOf h rfl
-    fun (q, caller, input, onAnswer, ()) =>
+    fun (q, input, onAnswer, ()) =>
     let q : QueryOf ((Ty.param 0).inst args) ((Ty.param 2).inst args) ((Ty.param 3).inst args)
       ((Ty.param 4).inst args) := q
-    .query q.1.name _ _ _ (Prim.dn d (.param 2) rfl caller) (Prim.dn d (.param 3) rfl input) onAnswer
+    .query q.1.name ((Ty.param 2).inst args) _ _ (Prim.dn d (.param 3) rfl input) onAnswer
   | .subscribe, args, _ => fun (name, wrap, ()) =>
     { source := "", name, event := (Ty.param 1).inst args, wrap }
   | .bounds, _, _ => fun (creates, items, cascade, steps, ()) => { creates, items, cascade, steps }

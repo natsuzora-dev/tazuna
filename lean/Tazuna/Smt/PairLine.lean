@@ -96,15 +96,15 @@ theorem effSorted_of_rel {e : Ty} {x : OwnEffectV e} {z : Val}
     | command e' name c i j a =>
       cases x with
       | query => exact hh.elim
-      | command name' c' i' j' caller value onAnswer =>
-        obtain ⟨-, rfl, rfl, -, -, hΓ, vc, vi, va, rfl, hc, hi, hcap⟩ := hh
-        exact ⟨sorted_of_relD _ _ _ hc, sorted_of_relD _ _ _ hi, hΓ ▸ sorted_capRel hcap, trivial⟩
+      | command name' c' i' j' value onAnswer =>
+        obtain ⟨-, rfl, rfl, -, -, hΓ, vi, va, rfl, hi, hcap⟩ := hh
+        exact ⟨sorted_of_relD _ _ _ hi, hΓ ▸ sorted_capRel hcap, trivial⟩
     | query e' name c i o a =>
       cases x with
       | command => exact hh.elim
-      | query name' c' i' o' caller value onAnswer =>
-        obtain ⟨-, rfl, rfl, -, -, hΓ, vc, vi, va, rfl, hc, hi, hcap⟩ := hh
-        exact ⟨sorted_of_relD _ _ _ hc, sorted_of_relD _ _ _ hi, hΓ ▸ sorted_capRel hcap, trivial⟩
+      | query name' c' i' o' value onAnswer =>
+        obtain ⟨-, rfl, rfl, -, -, hΓ, vi, va, rfl, hi, hcap⟩ := hh
+        exact ⟨sorted_of_relD _ _ _ hi, hΓ ▸ sorted_capRel hcap, trivial⟩
 
 /-- A model of a pair question's variables: the state's values, then the two effects'. -/
 theorem pair_model {s : State v} (hkeys : Step.KeysOk T s) (hW : Within L (shapes v) s) {x1 x2 : OwnEffectV v.event}

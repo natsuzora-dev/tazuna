@@ -115,7 +115,7 @@ def EffectKey.fields (k : EffectKey) : List Ty :=
 /-- One kind of effect that runs a command or query of the service's own: its name, the types of its caller and
 input, its rejection (a command) or output (a query), and the site of its `on_answer`, from the event type `event`.
 An effect of the kind is coded by its variant of the effect datatype, after the request kinds' variants; its fields
-are the caller, the input and the values the site captured. -/
+are the input and the values the site captured (the origin is always `Own`). -/
 inductive OwnKey where
   | command (event : Ty) (name : String) (caller input rejection : Ty) (answer : SiteKey)
   | query (event : Ty) (name : String) (caller input output : Ty) (answer : SiteKey)
@@ -131,7 +131,7 @@ def OwnKey.answer : OwnKey → SiteKey
 
 /-- The types of what varies among the effects of a kind. -/
 def OwnKey.fields : OwnKey → List Ty
-  | .command _ _ c i _ a | .query _ _ c i _ a => [c, i, .tuple a.Γ]
+  | .command _ _ _ i _ a | .query _ _ _ i _ a => [i, .tuple a.Γ]
 
 /-- The datatypes a script declares: each type in the list is datatype `D<i>` by its position, with the number of
 slots it holds when it is a bag, a table or a list. `effects` and `owns` list the kinds of effect values the script
@@ -789,13 +789,13 @@ def effectT (key : EffectKey) (input : Term) (ens answer : List Term) : Except R
   let da ← tupleD L key.answer.Γ
   pure (.ctor d k [input, .ctor de 0 ens, .ctor da 0 answer])
 
-/-- An effect of the own kind `key`: its variant of the effect datatype, after the request kinds', with the caller,
-the input and the terms of the values the `on_answer` site captured. -/
-def ownT (key : OwnKey) (caller input : Term) (answer : List Term) : Except Refusal Term := do
+/-- An effect of the own kind `key`: its variant of the effect datatype, after the request kinds', with the input and
+the terms of the values the `on_answer` site captured. -/
+def ownT (key : OwnKey) (input : Term) (answer : List Term) : Except Refusal Term := do
   let (d, _) ← L.findE (.dsl .effect [key.event])
   let k ← need (lacksKind key.name key.fields) ((L.ownsOf key.event).findIdx? (·.same key))
   let da ← tupleD L key.answer.Γ
-  pure (.ctor d ((L.effectsOf key.event).length + k) [caller, input, .ctor da 0 answer])
+  pure (.ctor d ((L.effectsOf key.event).length + k) [input, .ctor da 0 answer])
 
 /-- The code of each built-in that has an exact encoding: a table of term builders indexed by the built-in. -/
 def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal (Code (p.ty.inst args)) :=
@@ -974,18 +974,16 @@ def primCode (p : Prim) (args : List Ty) (h : p.ok args = true) : Except Refusal
   | .query, _, _ => .ok fun (name, _, _, _, ()) => match name with
     | .str n => .ok (n, tt)
     | _ => .error (.limit .dynamicName)
-  | .sendCommand, args, _ => .ok fun (name, caller, input, oa, ()) => do
-    let ct ← Code.termE _ caller
+  | .sendCommand, args, _ => .ok fun (name, input, oa, ()) => do
     let it ← Code.termE _ input
     let key : OwnKey := .command ((Ty.param 1).inst args) name ((Ty.param 2).inst args) ((Ty.param 3).inst args)
       ((Ty.param 4).inst args) oa.key
-    pure (← ownT L key ct it oa.env, tt)
-  | .sendQuery, args, _ => .ok fun (name, caller, input, oa, ()) => do
-    let ct ← Code.termE _ caller
+    pure (← ownT L key it oa.env, tt)
+  | .sendQuery, args, _ => .ok fun (name, input, oa, ()) => do
     let it ← Code.termE _ input
     let key : OwnKey := .query ((Ty.param 1).inst args) name ((Ty.param 2).inst args) ((Ty.param 3).inst args)
       ((Ty.param 4).inst args) oa.key
-    pure (← ownT L key ct it oa.env, tt)
+    pure (← ownT L key it oa.env, tt)
   | p, _, _ => .error (.limit (.builtin p.sig.name))
 
 variable {G : List Ty} (gs : Encs G)

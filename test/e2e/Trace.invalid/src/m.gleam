@@ -40,7 +40,7 @@ fn apply(r: Records, e: Event) -> Records {
 fn add() -> tazuna.Command(Records, Event, Caller, Int, Rejection) {
   tazuna.command(
     name: "add",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(n: Int) { [#("positive", n > 0)] },
     decide: fn(c: Ctx(Records, Int, Caller)) {
       use <- tazuna.require(c.input < 100, or: TooBig)
@@ -55,7 +55,7 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, Rejection) {
 fn total() -> tazuna.Query(Records, Caller, Nil, Int) {
   tazuna.query(
     name: "total",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n) { [] },
     resolve: fn(c: QueryCtx(Records, Nil, Caller)) { c.records.total },
   )
@@ -64,7 +64,7 @@ fn total() -> tazuna.Query(Records, Caller, Nil, Int) {
 fn find() -> tazuna.Query(Records, Caller, String, Int) {
   tazuna.query(
     name: "find",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_s) { [] },
     resolve: fn(c: QueryCtx(Records, String, Caller)) { c.records.total },
   )

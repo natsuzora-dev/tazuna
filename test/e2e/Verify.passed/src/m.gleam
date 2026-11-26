@@ -42,7 +42,7 @@ fn apply(r: Records, e: Event) -> Records {
 fn add() -> tazuna.Command(Records, Event, Caller, Int, Rejection) {
   tazuna.command(
     name: "add",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(n: Int) { [#("positive", n > 0)] },
     decide: fn(c: Ctx(Records, Int, Caller)) {
       use <- tazuna.require(c.input < 100, or: TooBig)
@@ -57,7 +57,7 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, Rejection) {
 fn pair() -> tazuna.Command(Records, Event, Caller, Nil, Rejection) {
   tazuna.command(
     name: "pair",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n) { [] },
     decide: fn(c: Ctx(Records, Nil, Caller)) {
       Ok([Made(tazuna.fresh(c.fresh, 0)), Made(tazuna.fresh(c.fresh, 1))])
@@ -69,7 +69,7 @@ fn pair() -> tazuna.Command(Records, Event, Caller, Nil, Rejection) {
 fn is_first() -> tazuna.Query(Records, Caller, Id, Bool) {
   tazuna.query(
     name: "is_first",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n) { [] },
     resolve: fn(c: QueryCtx(Records, Id, Caller)) {
       c.records.first == Some(c.input)
@@ -80,7 +80,7 @@ fn is_first() -> tazuna.Query(Records, Caller, Id, Bool) {
 fn total() -> tazuna.Query(Records, Caller, Nil, Int) {
   tazuna.query(
     name: "total",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n) { [] },
     resolve: fn(c: QueryCtx(Records, Nil, Caller)) { c.records.total },
   )

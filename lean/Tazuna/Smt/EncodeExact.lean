@@ -725,9 +725,8 @@ theorem primCode_exact (p : Prim) (args : List Ty) (hp : p.ok args = true) (s : 
   case sendCommand | sendQuery =>
     simp only [primCode] at h; cases h
     refine frel_tt rfl fun ss s c hr => ?_
-    obtain ⟨_, _, _, _, _⟩ := ss
+    obtain ⟨_, _, _, _⟩ := ss
     dsimp only at hr
-    obtain ⟨ct, -, hr⟩ := bind_ok.1 hr
     obtain ⟨it, -, hr⟩ := bind_ok.1 hr
     obtain ⟨t, -, e⟩ := map_ok.1 hr
     cases e; rfl

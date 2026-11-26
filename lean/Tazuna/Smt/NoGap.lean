@@ -635,11 +635,11 @@ structure Covers (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV
 with sorts: each handle it can name with each site its `on_answer` can be at. -/
 def _root_.Tazuna.Ir.SendSite.Covered (L : Layout) (P : List AnySite) (H : List HandleSite) (w : SendSite) : Prop :=
   (∀ n r e c i j, (⟨"command", some n, [r, e, c, i, j]⟩ : HandleSite) ∈ w.handlesIn H →
-    ∀ s ∈ sitesOf (w.sitesIn P) (Ty.fn [Ty.result Ty.nil j] (.list e)), Ty.sorteds [c, i, .tuple s.1] = true →
-      (Ty.tuple [c, i, .tuple s.1]).isData = true → OwnKey.command e n c i j ⟨s.2.site, s.1⟩ ∈ L.owns) ∧
+    ∀ s ∈ sitesOf (w.sitesIn P) (Ty.fn [Ty.result Ty.nil j] (.list e)), Ty.sorteds [i, .tuple s.1] = true →
+      (Ty.tuple [i, .tuple s.1]).isData = true → OwnKey.command e n c i j ⟨s.2.site, s.1⟩ ∈ L.owns) ∧
   (∀ n r e c i o, (⟨"query", some n, [r, c, i, o]⟩ : HandleSite) ∈ w.handlesIn H →
-    ∀ s ∈ sitesOf (w.sitesIn P) (Ty.fn [o] (.list e)), Ty.sorteds [c, i, .tuple s.1] = true →
-      (Ty.tuple [c, i, .tuple s.1]).isData = true → OwnKey.query e n c i o ⟨s.2.site, s.1⟩ ∈ L.owns)
+    ∀ s ∈ sitesOf (w.sitesIn P) (Ty.fn [o] (.list e)), Ty.sorteds [i, .tuple s.1] = true →
+      (Ty.tuple [i, .tuple s.1]).isData = true → OwnKey.query e n c i o ⟨s.2.site, s.1⟩ ∈ L.owns)
 
 theorem sitesIn_mono {w : SendSite} {P P' : List AnySite} (h : ∀ s ∈ P', s ∈ P) : ∀ s ∈ w.sitesIn P', s ∈ w.sitesIn P := by
   intro s hs
@@ -715,10 +715,10 @@ theorem effectT_sound (hL : SortedLayout L) (key : EffectKey) (input : Term) (en
     simp only [hde, hda]; trivial
 
 /-- An effect of an own kind the layout must have: its variant is found, else its fields are no data with sorts. -/
-theorem ownT_sound (hL : SortedLayout L) (key : OwnKey) (caller input : Term) (answer : List Term)
+theorem ownT_sound (hL : SortedLayout L) (key : OwnKey) (input : Term) (answer : List Term)
     (he : Avail L (.dsl .effect [key.event]))
     (hk : Ty.sorteds key.fields = true → (Ty.tuple key.fields).isData = true → key ∈ L.owns) :
-    Sound (fun _ => True) (ownT L key caller input answer) := by
+    Sound (fun _ => True) (ownT L key input answer) := by
   unfold ownT
   refine sound_bind (findE_sound hL he fun h => h.2) fun ⟨d, n⟩ hd => ?_
   refine sound_bind (sound_need fun hn => ?_) fun k hk' => ?_
@@ -735,7 +735,7 @@ theorem ownT_sound (hL : SortedLayout L) (key : OwnKey) (caller input : Term) (a
     have hf : Layout.HasWiths L (fun _ _ => True) x.fields :=
       hasWithss_mem hd.2.1.1 _ (List.mem_append_right _ (List.mem_map_of_mem hx))
     have ha : (L.find? (.tuple x.answer.Γ)).isSome = true := by
-      cases x <;> exact hf.2.2.1.2
+      cases x <;> exact hf.2.1.2
     obtain ⟨da, hda⟩ := tupleD_of_find ha
     simp only [hda]; trivial
 
@@ -1007,18 +1007,18 @@ theorem primCode_sound (hC : Covers L P ds) (p : Prim) (args : List Ty) (h : p.o
     rw [← hk] at hs hd ⊢
     exact hC.requests _ sh hsh hs hd
   | .sendCommand, args, _ =>
-    intro ⟨name, caller, input, oa, ()⟩ ⟨hn, _, _, ho, _⟩ hr
-    refine sound_bind sound_termE fun _ _ => sound_bind sound_termE fun _ _ =>
-      sound_bind (ownT_sound hL _ _ _ oa.env hr fun hs hd => ?_) fun _ _ => hr
+    intro ⟨name, input, oa, ()⟩ ⟨hn, _, ho, _⟩ hr
+    refine sound_bind sound_termE fun _ _ =>
+      sound_bind (ownT_sound hL _ _ oa.env hr fun hs hd => ?_) fun _ _ => hr
     obtain ⟨s, hs', hsite, hΓ⟩ := ho
     obtain ⟨⟨site, Γ⟩, env⟩ := oa
     simp only at hsite hΓ hs hd ⊢
     subst hsite hΓ
     exact (hany rfl).1 name _ _ _ _ _ hn s hs' hs hd
   | .sendQuery, args, _ =>
-    intro ⟨name, caller, input, oa, ()⟩ ⟨hn, _, _, ho, _⟩ hr
-    refine sound_bind sound_termE fun _ _ => sound_bind sound_termE fun _ _ =>
-      sound_bind (ownT_sound hL _ _ _ oa.env hr fun hs hd => ?_) fun _ _ => hr
+    intro ⟨name, input, oa, ()⟩ ⟨hn, _, ho, _⟩ hr
+    refine sound_bind sound_termE fun _ _ =>
+      sound_bind (ownT_sound hL _ _ oa.env hr fun hs hd => ?_) fun _ _ => hr
     obtain ⟨s, hs', hsite, hΓ⟩ := ho
     obtain ⟨⟨site, Γ⟩, env⟩ := oa
     simp only at hsite hΓ hs hd ⊢
@@ -1180,7 +1180,7 @@ def GlobsOk (L : Layout) (P : List AnySite) (ds : List (String × DeclaredV)) (H
 
 theorem sendAt_prim {Γ ps : List Ty} {r : Ty} {f : Expr G Γ (.fn ps r)} {args : Exprs G Γ ps} {w : SendSite}
     (h : sendAt D f args = some w) : sendPrim f = true ∧
-      w = ⟨(args.globalCallAt? 0).map (D.usesAt handlesC), args.closeSiteAt? 3⟩ := by
+      w = ⟨(args.globalCallAt? 0).map (D.usesAt handlesC), args.closeSiteAt? 2⟩ := by
   unfold sendAt at h
   split at h
   · cases h; exact ⟨by assumption, rfl⟩
@@ -1270,20 +1270,19 @@ theorem sendCall_sound (hC : Covers L P ds) {Γ ps : List Ty} {r : Ty} (σ : Cod
   · rename_i p ts hp
     cases p <;> simp only [Prim.sends, Bool.false_eq_true] at hsp
     case sendCommand =>
-      rcases args with _ | ⟨n, _ | ⟨c, _ | ⟨i, _ | ⟨oa, _ | ⟨_, _⟩⟩⟩⟩⟩
+      rcases args with _ | ⟨n, _ | ⟨i, _ | ⟨oa, _ | ⟨_, _⟩⟩⟩⟩
       simp only [Exprs.globalCallAt?, Exprs.closeSiteAt?] at hw
       simp only [encode, primCode]
       refine sound_bind_ok rfl ?_
       refine sound_bind (sound_and_ok hargs fun a h => h) fun ⟨ss, c2⟩ ⟨hss, heq⟩ => ?_
-      obtain ⟨name, caller, input, oaC, ⟨⟩⟩ := ss
+      obtain ⟨name, input, oaC, ⟨⟩⟩ := ss
       obtain ⟨an, b1, hn_eq, hb1, he1⟩ := encodes_cons_ok gs heq
       obtain ⟨_, b2, _, hb2, he2⟩ := encodes_cons_ok gs hb1
-      obtain ⟨_, b3, _, hb3, he3⟩ := encodes_cons_ok gs hb2
-      obtain ⟨ao, _, ho_eq, _, he4⟩ := encodes_cons_ok gs hb3
-      rw [he2, he3, he4] at he1
+      obtain ⟨ao, _, ho_eq, _, he3⟩ := encodes_cons_ok gs hb2
+      rw [he2, he3] at he1
       have hname : name = an.1 := congrArg Prod.fst he1
-      have hoa : oaC = ao.1 := congrArg (fun x => x.2.2.2.1) he1
-      obtain ⟨hn, -, -, ho, -⟩ := hss
+      have hoa : oaC = ao.1 := congrArg (fun x => x.2.2.1) he1
+      obtain ⟨hn, -, ho, -⟩ := hss
       obtain ⟨s, hs', hsite, hΓ⟩ := ho
       have hsIn : s ∈ sitesOf (SendSite.sitesIn
           ⟨Option.map (D.usesAt handlesC) n.globalCall?, oa.closeSite?⟩ P) _ := by
@@ -1295,7 +1294,7 @@ theorem sendCall_sound (hC : Covers L P ds) {Γ ps : List Ty} {r : Ty} (σ : Cod
           rw [hoa]
           exact closeSite_code gs σ oa hcs ao ho_eq
       refine sound_bind (p := fun x => CodeOk L P ds H (Ty.inst ts Prim.sendCommand.sig.ret) x.1) (sound_bind sound_termE fun _ _ =>
-        sound_bind sound_termE fun _ _ => sound_bind (ownT_sound hL _ _ _ oaC.env hr fun hs hd => ?_) fun _ _ => hr)
+        sound_bind (ownT_sound hL _ _ oaC.env hr fun hs hd => ?_) fun _ _ => hr)
         fun _ h => h
       obtain ⟨⟨site, Γ⟩, env⟩ := oaC
       simp only at hsite hΓ hs hd ⊢
@@ -1311,20 +1310,19 @@ theorem sendCall_sound (hC : Covers L P ds) {Γ ps : List Ty} {r : Ty} (σ : Cod
         rw [hname]
         exact h1
     case sendQuery =>
-      rcases args with _ | ⟨n, _ | ⟨c, _ | ⟨i, _ | ⟨oa, _ | ⟨_, _⟩⟩⟩⟩⟩
+      rcases args with _ | ⟨n, _ | ⟨i, _ | ⟨oa, _ | ⟨_, _⟩⟩⟩⟩
       simp only [Exprs.globalCallAt?, Exprs.closeSiteAt?] at hw
       simp only [encode, primCode]
       refine sound_bind_ok rfl ?_
       refine sound_bind (sound_and_ok hargs fun a h => h) fun ⟨ss, c2⟩ ⟨hss, heq⟩ => ?_
-      obtain ⟨name, caller, input, oaC, ⟨⟩⟩ := ss
+      obtain ⟨name, input, oaC, ⟨⟩⟩ := ss
       obtain ⟨an, b1, hn_eq, hb1, he1⟩ := encodes_cons_ok gs heq
       obtain ⟨_, b2, _, hb2, he2⟩ := encodes_cons_ok gs hb1
-      obtain ⟨_, b3, _, hb3, he3⟩ := encodes_cons_ok gs hb2
-      obtain ⟨ao, _, ho_eq, _, he4⟩ := encodes_cons_ok gs hb3
-      rw [he2, he3, he4] at he1
+      obtain ⟨ao, _, ho_eq, _, he3⟩ := encodes_cons_ok gs hb2
+      rw [he2, he3] at he1
       have hname : name = an.1 := congrArg Prod.fst he1
-      have hoa : oaC = ao.1 := congrArg (fun x => x.2.2.2.1) he1
-      obtain ⟨hn, -, -, ho, -⟩ := hss
+      have hoa : oaC = ao.1 := congrArg (fun x => x.2.2.1) he1
+      obtain ⟨hn, -, ho, -⟩ := hss
       obtain ⟨s, hs', hsite, hΓ⟩ := ho
       have hsIn : s ∈ sitesOf (SendSite.sitesIn
           ⟨Option.map (D.usesAt handlesC) n.globalCall?, oa.closeSite?⟩ P) _ := by
@@ -1336,7 +1334,7 @@ theorem sendCall_sound (hC : Covers L P ds) {Γ ps : List Ty} {r : Ty} (σ : Cod
           rw [hoa]
           exact closeSite_code gs σ oa hcs ao ho_eq
       refine sound_bind (p := fun x => CodeOk L P ds H (Ty.inst ts Prim.sendQuery.sig.ret) x.1) (sound_bind sound_termE fun _ _ =>
-        sound_bind sound_termE fun _ _ => sound_bind (ownT_sound hL _ _ _ oaC.env hr fun hs hd => ?_) fun _ _ => hr)
+        sound_bind (ownT_sound hL _ _ oaC.env hr fun hs hd => ?_) fun _ _ => hr)
         fun _ h => h
       obtain ⟨⟨site, Γ⟩, env⟩ := oaC
       simp only at hsite hΓ hs hd ⊢

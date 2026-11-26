@@ -54,7 +54,7 @@ theorem applyEvents_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (ev
   exact start_own xs (react T a.state ev).2 { a with state := (react T a.state ev).1, events := a.events ++ [ev] }
 
 theorem execCommand_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : Acc v)
-    (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) :
+    (x : CommandV v.records v.event v.caller) (caller : (Ty.origin v.caller).den0) (input : x.input.den0) :
     execCommand T (a.ownFront xs) x caller input = (execCommand T a x caller input).map (Ran.map (Acc.ownFront xs)) := by
   unfold execCommand
   rw [show ctx (a.ownFront xs).state (a.ownFront xs).state.records caller input =
@@ -72,7 +72,7 @@ theorem execCommand_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a 
     · rfl
 
 theorem runCommand_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : Acc v)
-    (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
+    (x : CommandV v.records v.event v.caller) (caller : (Ty.origin v.caller).den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) :
     runCommand T (a.ownFront xs) x caller input onAnswer =
       (runCommand T a x caller input onAnswer).map (Acc.ownFront xs) := by
@@ -85,7 +85,7 @@ theorem runCommand_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a :
   | rejected a1 j => exact applyEvents_own T xs _ a1
 
 theorem runQuery_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : Acc v) (x : QueryV v.records v.caller)
-    (caller : v.caller.den0) (input : x.input.den0) (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) :
+    (caller : (Ty.origin v.caller).den0) (input : x.input.den0) (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) :
     runQuery T (a.ownFront xs) x caller input onAnswer = (runQuery T a x caller input onAnswer).map (Acc.ownFront xs) := by
   unfold runQuery
   rw [show execQuery (a.ownFront xs).state x caller input = execQuery a.state x caller input from rfl]
@@ -96,7 +96,7 @@ theorem runQuery_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : A
 theorem runOwn_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : Acc v) (eff : OwnEffectV v.event) :
     runOwn T (a.ownFront xs) eff = (runOwn T a eff).map (Acc.ownFront xs) := by
   cases eff with
-  | command name c i j caller value onAnswer =>
+  | command name c i j value onAnswer =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc
@@ -110,7 +110,7 @@ theorem runOwn_own (T : List TypeDecl) (xs : List (OwnEffectV v.event)) (a : Acc
         obtain ⟨hc⟩ := hc
         obtain ⟨x, hi, hj⟩ := x
         exact runCommand_own T xs a x _ _ _
-  | query name c i o caller value onAnswer =>
+  | query name c i o value onAnswer =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc

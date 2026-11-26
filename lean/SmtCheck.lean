@@ -317,6 +317,11 @@ def svcParts (v : ServiceV) : ProgramParts :=
       funParts m.invariants]) ++
     v.reactions.map (effParts ·.react))
 
+/-- The listed origins `[Outside("alice"), Own]` as a spec writes them. -/
+def aliceOwnE {G Γ : List Ty} : Expr G Γ (.list (Ty.origin .str)) :=
+  .list (.cons (.ctor (i := 12) (args := [.str]) ⟨0, by decide⟩ (.cons (.str (str! "alice")) .nil))
+    (.cons (.ctor (i := 12) (args := [.str]) ⟨1, by decide⟩ .nil) .nil))
+
 /-- The layout `prove` builds for the service (`Layout.ofParts`), with `slots` for every bag and table; `extra` is
 program code the case writes as terms rather than as the service's functions. -/
 def svcLayout (v : ServiceV) (slots : Nat) (extra : ProgramParts := ⟨[], [], [], []⟩) : Layout :=
@@ -360,7 +365,7 @@ def resolveE : E (.fn [qctxT] (Ty.option .int)) :=
       (.cons (.field (ft := .int) "input" 1 (by simp) (.var .here)) .nil)))
 
 def getQ : QueryV recordsT .str :=
-  { name := "get", input := .int, output := Ty.option .int, callers := [str! "alice"],
+  { name := "get", input := .int, output := Ty.option .int, callers := [Step.outside (c := .str) (str! "alice"), Step.own],
     accepts := .closed acceptsE, resolve := .closed resolveE }
 
 def querySvc : ServiceV :=
@@ -746,7 +751,7 @@ def ensuresE : E (.fn [cctxT, recordsT] Ty.rules) :=
       .nil))) .nil))
 
 def putC : CommandV recordsT evT .str :=
-  { name := "put", input := .int, rejection := .str, callers := [str! "alice"],
+  { name := "put", input := .int, rejection := .str, callers := [Step.outside (c := .str) (str! "alice"), Step.own],
     accepts := .closed acceptsE, decide := .closed decideE,
     ensures := .closed ensuresE }
 
@@ -1321,11 +1326,11 @@ def effectCheck (solver : Solver) : IO Bool := do
       | _, _ => IO.println "smt-check: effect: no values"; return false
     | a => IO.println s!"smt-check: effect: {repr a}"; return false
 
-/-! An own effect as its kind's variant: `send_command(put, "alice", x + k, fn(_) { [#(x, x)] })` with `put` the
+/-! An own effect as its kind's variant: `send_command(put, x + k, fn(_) { [#(x, x)] })` with `put` the
 command above and `x` free, the `on_answer` site m:4:2 capturing `x`. The layout lists a request kind of the same
 event type and another own kind first, so the variant index is past both by construction, not by accident. The
 solver's value must be the variant of the effect `eval` builds at the solver's `x`: the command's name and the site,
-the caller, the input and the captured value. -/
+the input and the captured value. -/
 
 def putHandleT : Ty := .dsl .command [recordsT, evT, .str, .int, .str]
 def putAnswerT : Ty := .fn [Ty.result Ty.nil .str] (.list evT)
@@ -1336,7 +1341,7 @@ def sendPutE (k : Int) : Expr [] [putHandleT, .int] (.dsl .effect [evT]) :=
     .lam (.list (.cons (.tuple (.cons (.var (.there .here)) (.cons (.var (.there .here)) .nil))) .nil))
   let clo : Expr [] [putHandleT, .int] (.dsl .closure [putAnswerT]) := .close ⟨"m", 4, 2, 0⟩ (.cons x .nil) rfl rfl body
   .call (.prim .sendCommand [recordsT, evT, .str, .int, .str] rfl)
-    (.cons (.var .here) (.cons (.str (str! "alice")) (.cons (.bin .add x (.int k)) (.cons clo .nil))))
+    (.cons (.var .here) (.cons (.bin .add x (.int k)) (.cons clo .nil)))
 
 def ownLayout : Layout :=
   Layout.addEffects (fun _ => 2) (Layout.addTys (fun _ => 2)
@@ -1346,19 +1351,17 @@ def ownLayout : Layout :=
     [.dsl .effect [evT], .int, evT, .tuple [.int]])
 
 /-- Whether the solver's value `v` is the variant of the own effect `eff`: its kind's name and site after the request
-kinds, its caller, its input and the value its `on_answer` captured. -/
+kinds, its input and the value its `on_answer` captured. -/
 def ownMatches (L : Layout) (eff : EffectV evT) (v : Val) : Bool :=
   match eff, v with
-  | .command name c i _ caller value onAnswer, .ctor _ idx [vc, vi, .ctor _ 0 va] =>
-    match (L.ownsOf evT)[idx - (L.effectsOf evT).length]?, Ty.same c .str, Ty.same i .int,
-        Ty.sames onAnswer.Γ [.int] with
-    | some (.command _ kn _ _ _ ka), some ⟨hc⟩, some ⟨hi⟩, some ⟨hg⟩ =>
-      let cl : String := (cast (congrArg Ty.den0 hc) caller : Str).1
+  | .command name _ i _ value onAnswer, .ctor _ idx [vi, .ctor _ 0 va] =>
+    match (L.ownsOf evT)[idx - (L.effectsOf evT).length]?, Ty.same i .int, Ty.sames onAnswer.Γ [.int] with
+    | some (.command _ kn _ _ _ ka), some ⟨hi⟩, some ⟨hg⟩ =>
       let x : Int := cast (congrArg Ty.den0 hi) value
       let env : Int := (cast (congrArg (fun Γ => (Ty.tuple Γ).den0) hg) onAnswer.env).1
-      idx ≥ (L.effectsOf evT).length && kn == name && ka.site == onAnswer.site && vc.print == (Val.str cl).print &&
+      idx ≥ (L.effectsOf evT).length && kn == name && ka.site == onAnswer.site &&
         vi.print == (Val.int x).print && (va.map (·.print)) == [(Val.int env).print]
-    | _, _, _, _ => false
+    | _, _, _ => false
   | _, _ => false
 
 def ownEffectCheck (solver : Solver) : IO Bool := do
@@ -2384,7 +2387,7 @@ def twiceDecideE : E (.fn [cctxT] (Ty.result (.list .int) .str)) :=
   .lam (.ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (.list (.cons inputOf (.cons inputOf .nil))) .nil))
 
 def twiceC : CommandV recordsT .int .str :=
-  { name := "twice", input := .int, rejection := .str, callers := [str! "alice"], accepts := .closed acceptsE,
+  { name := "twice", input := .int, rejection := .str, callers := [Step.outside (c := .str) (str! "alice"), Step.own], accepts := .closed acceptsE,
     decide := .closed twiceDecideE, ensures := .closed (.lam (.list .nil)) }
 
 def twiceSvc : ServiceV := { writeSvc with name := "t", commands := [twiceC] }
@@ -2553,8 +2556,8 @@ def answerMCheck (solver : Solver) : IO Bool := do
     | a => fail s!"{repr a}"
 
 /-! An event whose reaction starts own commands beside a request, for `events_encode`: the service `w` above with the
-reaction `mix`, which returns `[send_command(put, "alice", ev + 1, ..), request_command(send, ev + 2, ..),
-send_command(put, "alice", ev + 3, ..)]`. From no records, no instances and next id 40, the event 3 starts key 3,
+reaction `mix`, which returns `[send_command(put, ev + 1, ..), request_command(send, ev + 2, ..),
+send_command(put, ev + 3, ..)]`. From no records, no instances and next id 40, the event 3 starts key 3,
 whose request takes id 40; the reaction's request takes 41, as own commands take no wire id, and the own commands
 queue at places 0 and 1 in list order (inputs 4 and 6). The ids, the next id, and the own slots' places and inputs read
 from the model must be what `applyEvents` leaves; the queue in the other order must not pass the comparison. The queue
@@ -2562,7 +2565,7 @@ read at place 1 (`queueAt`) must hold input 6, not the head's 4, and place 2 mus
 
 def putHandleE {Γ : List Ty} : Expr [] Γ (.dsl .command [recordsT, .int, .str, .int, .str]) :=
   .call (.prim .command [recordsT, .int, .str, .int, .str] rfl)
-    (.cons (.str (str! "put")) (.cons (.list (.cons (.str (str! "alice")) .nil))
+    (.cons (.str (str! "put")) (.cons aliceOwnE
       (.cons (.close ⟨"m", 20, 1, 0⟩ .nil rfl rfl acceptsE)
         (.cons (.close ⟨"m", 20, 2, 0⟩ .nil rfl rfl twiceDecideE)
           (.cons (.close ⟨"m", 20, 3, 0⟩ .nil rfl rfl (.lam (.list .nil) : E (.fn [cctxT, recordsT] Ty.rules))) .nil)))))
@@ -2573,7 +2576,7 @@ def mixPutE (k : Int) : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.
   let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [.fn [Ty.result Ty.nil .str] (.list .int)]) :=
     .close ⟨"m", 21, 1, 0⟩ (.cons ev .nil) rfl rfl body
   .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
-    (.cons putHandleE (.cons (.str (str! "alice")) (.cons (.bin .add ev (.int k)) (.cons clo .nil))))
+    (.cons putHandleE (.cons (.bin .add ev (.int k)) (.cons clo .nil)))
 
 def mixE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
   .lam (.list (.cons (mixPutE 1) (.cons (fanSendE 2) (.cons (mixPutE 3) .nil))))
@@ -2654,7 +2657,7 @@ def mixCheck (solver : Solver) : IO Bool := do
             if flag (9 + 2 * j) then natOf ((vs.lookup (10 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
           let ob := 9 + 2 * nn
           let inputOf : Val → Option Int
-            | .ctor _ _ [_, .int x, _] => some x
+            | .ctor _ _ [.int x, _] => some x
             | _ => none
           let queue := (((List.range no).filterMap fun j =>
             if flag (ob + 3 * j) then
@@ -2664,7 +2667,7 @@ def mixCheck (solver : Solver) : IO Bool := do
             else none).mergeSort fun a b => a.1 ≤ b.1)
           let stepIds := ((a.state.pending.map (·.id)).mergeSort (· ≤ ·))
           let stepQueue : List Int := a.own.filterMap fun
-            | .command _ _ i _ _ value _ => match Ty.same i .int with
+            | .command _ _ i _ value _ => match Ty.same i .int with
               | some ⟨h⟩ => some (cast (congrArg Ty.den0 h) value)
               | none => none
             | _ => none
@@ -2700,8 +2703,9 @@ def internalLayoutOf (slots : Nat) : Layout := svcLayout twiceSvc slots (sitePar
 
 def internalLayout : Layout := internalLayoutOf 3
 
-/-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 the caller, v7 the input, v8 the records
-after, v9 the next id after, v10 the instance table after, then per new request slot its flag and id. -/
+/-- v0..v5 the state (v4 the pending table, v5 the instance table), v6 unused (an own step runs as `Own`), v7 the
+input, v8 the records after, v9 the next id after, v10 the instance table after, then per new request slot its flag
+and id. -/
 def internalScriptOf (slots : Nat) (goal : List Term) : Except String (Script × Nat) := do
   let L := internalLayoutOf slots
   let enc {α : Type} (x : Except Refusal α) : Except String α := x.mapError fun r => s!"no encoding: {repr r}"
@@ -2712,7 +2716,7 @@ def internalScriptOf (slots : Nat) (goal : List Term) : Except String (Script ×
   let senv ← enc (StepEnv.of L twiceShapes)
   let some five := Code.ofTerm? .int (.int 5) | throw "no capture code"
   let (o, cond) ← enc (encodeOwnCommand L prelude twiceSvc twiceShapes senv twiceC cc answerFive (five, ()) apply
-    ks S.records S.now S.fresh S.nextId (.int 0) (.var 6) (.var 7) S.machines)
+    ks S.records S.now S.fresh S.nextId (.int 0) (← enc (ownOriginT L .str)) (.var 7) S.machines)
   let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
   let some wf := S.wf L (v := twiceSvc) twiceShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -2743,7 +2747,7 @@ def internalCheck (solver : Solver) : IO Bool := do
   let Sp := slotsOf dp dpt np 2 (.var 4)
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
     Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
-    .eq (.var 3) (.int 40), .eq (.var 6) (.str (str! "alice")), .eq (.var 7) (.int 3)]
+    .eq (.var 3) (.int 40), .eq (.var 7) (.int 3)]
   match internalScriptOf 3 goal with
   | .error m => fail m
   | .ok (script, nn) =>
@@ -2761,7 +2765,7 @@ def internalCheck (solver : Solver) : IO Bool := do
         let flag (n : Nat) := vs.lookup n == some (.bool true)
         let ids := ((List.range nn).filterMap fun j =>
           if flag (11 + 2 * j) then natOf ((vs.lookup (12 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
-        match Step.runCommand prelude ({ state := s } : Step.Acc twiceSvc) twiceC (str! "alice") (3 : Int)
+        match Step.runCommand prelude ({ state := s } : Step.Acc twiceSvc) twiceC Step.own (3 : Int)
             (answerFive.fn ((5 : Int), ())) with
         | .error _ => fail "the internal step faults"
         | .ok a =>
@@ -2791,7 +2795,7 @@ def nextResolveE : E (.fn [qctxT] .int) :=
   .lam (.bin .add (.field (ft := .int) "input" 1 (by simp) (.var .here)) (.int 1))
 
 def nextQ : QueryV recordsT .str :=
-  { name := "next", input := .int, output := .int, callers := [str! "alice"], accepts := .closed acceptsE,
+  { name := "next", input := .int, output := .int, callers := [Step.outside (c := .str) (str! "alice"), Step.own], accepts := .closed acceptsE,
     resolve := .closed nextResolveE }
 
 def answerIsEventE : Expr [] [] (.fn [.int] (.list .int)) := .lam (.list (.cons (.var .here) .nil))
@@ -2803,7 +2807,7 @@ def answerNone : Site [] (.fn [.int] (.list .int)) := ⟨⟨"m", 23, 2, 0⟩, []
 def ownQueryLayout : Layout :=
   Layout.addTys (fun _ => 3) twiceLayout (Tazuna.Smt.Expr.tys nextResolveE)
 
-/-- v0..v5 the state, v6 the caller, v7 the input, v8 the records after, v9 the next id after, v10 the instance table
+/-- v0..v5 the state, v6 unused, v7 the input, v8 the records after, v9 the next id after, v10 the instance table
 after, then per new request slot its flag and id. -/
 def ownQueryScript (goal : List Term) : Except String (Script × Nat) := do
   let L := ownQueryLayout
@@ -2814,7 +2818,7 @@ def ownQueryScript (goal : List Term) : Except String (Script × Nat) := do
   let some ks := callerTerms L rfl nextQ.callers | throw "no caller terms"
   let senv ← enc (StepEnv.of L twiceShapes)
   let (o, cond) ← enc (encodeOwnQuery L prelude twiceSvc twiceShapes senv nextQ qc answerIsEvent () apply ks
-    S.records S.now S.nextId (.int 0) (.var 6) (.var 7) S.machines)
+    S.records S.now S.nextId (.int 0) (← enc (ownOriginT L .str)) (.var 7) S.machines)
   let below ← enc (pendingBelowT L twiceShapes S.pending S.nextId)
   let some wf := S.wf L (v := twiceSvc) twiceShapes | throw "no well-formedness"
   let some rsrt := L.srt? recordsT | throw "no records sort"
@@ -2845,7 +2849,7 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
   let Sp := slotsOf dp dpt np 2 (.var 4)
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
     Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
-    .eq (.var 3) (.int 40), .eq (.var 6) (.str (str! "alice")), .eq (.var 7) (.int 3)]
+    .eq (.var 3) (.int 40), .eq (.var 7) (.int 3)]
   match ownQueryScript goal with
   | .error m => fail m
   | .ok (script, nn) =>
@@ -2864,7 +2868,7 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
         let ids := ((List.range nn).filterMap fun j =>
           if flag (11 + 2 * j) then natOf ((vs.lookup (12 + 2 * j)).getD (.int (-1))) else none).mergeSort (· ≤ ·)
         let run (site : Site [] (.fn [.int] (.list .int))) :=
-          Step.runQuery prelude ({ state := s } : Step.Acc twiceSvc) nextQ (str! "alice") (3 : Int) (site.fn ())
+          Step.runQuery prelude ({ state := s } : Step.Acc twiceSvc) nextQ Step.own (3 : Int) (site.fn ())
         match run answerIsEvent, run answerNone with
         | .ok a, .ok b =>
           let stepIds := ((a.state.pending.filter (·.id != 2)).map (·.id)).mergeSort (· ≤ ·)
@@ -2883,10 +2887,10 @@ def ownQueryCheck (solver : Solver) : IO Bool := do
 
 /-! An own effect's internal step, for `ownStep_encode`: the service lists the command `twice` and the query `next` above,
 and the layout has two own kinds, `twice` and `next`, and a third, `twice` answered at a site the program lacks, which
-no effect has and which must not stop the encoding. From the same state, the effect term is in turn alice's `twice 3`
-with 5 captured, her `next 3`, and bob's `twice 3`. The records, instance table, next id, fresh counter and new wire
+no effect has and which must not stop the encoding. From the same state, the effect term is in turn `twice 3`
+with 5 captured, `next 3`, and a `twice -3`. The records, instance table, next id, fresh counter and new wire
 ids read from the model must be what `Step.runOwn` leaves for the effect, and must differ from what it leaves for the
-other kind's effect; bob's, from a caller `twice` does not list, must fault as `Step.runOwn` does. -/
+other kind's effect; the negative one, which breaks `twice`'s `accepts`, must fault as `Step.runOwn` does. -/
 
 def dispSvc : ServiceV := { twiceSvc with name := "o", queries := [nextQ] }
 
@@ -2951,13 +2955,13 @@ def dispCheck (solver : Solver) : IO Bool := do
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
     Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
     .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
-  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (str! "alice") (3 : Int) (answerFive.fn ((5 : Int), ()))
-  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int (str! "alice") (3 : Int) (answerIsEvent.fn ())
-  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (str! "bob") (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int (3 : Int) (answerIsEvent.fn ())
+  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (-3 : Int) (answerFive.fn ((5 : Int), ()))
   let cases : List (String × (Layout → Except Refusal Term) × OwnEffectV dispSvc.event × OwnEffectV dispSvc.event) :=
-    [("twice", fun L => ownT L twiceKey (.str (str! "alice")) (.int 3) [.int 5], twiceFx, nextFx),
-     ("next", fun L => ownT L nextKey (.str (str! "alice")) (.int 3) [], nextFx, twiceFx),
-     ("bob's twice", fun L => ownT L twiceKey (.str (str! "bob")) (.int 3) [.int 5], bobFx, twiceFx)]
+    [("twice", fun L => ownT L twiceKey (.int 3) [.int 5], twiceFx, nextFx),
+     ("next", fun L => ownT L nextKey (.int 3) [], nextFx, twiceFx),
+     ("a negative twice", fun L => ownT L twiceKey (.int (-3)) [.int 5], bobFx, twiceFx)]
   let mut ok := true
   for (name, effect, fx, other) in cases do
     match dispScriptOf 3 effect goal [deadKey] with
@@ -3083,12 +3087,12 @@ def cascadeCheck (solver : Solver) : IO Bool := do
   let goal := [.not Sr[0]!.1, .not Sr[1]!.1, .not Sr[2]!.1, .not Sm[0]!.1, .not Sm[1]!.1, .not Sm[2]!.1,
     Sp[0]!.1, .eq (Sp[0]!.2[0]) (.int 2), .not Sp[1]!.1, .not Sp[2]!.1, .eq (.var 1) (.int 100),
     .eq (.var 2) (.int 7), .eq (.var 3) (.int 40)]
-  let twiceT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str (str! "alice")) (.int 3) [.int 5]
-  let nextT : Layout → Except Refusal Term := fun L => ownT L nextKey (.str (str! "alice")) (.int 3) []
-  let bobT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.str (str! "bob")) (.int 3) [.int 5]
-  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (str! "alice") (3 : Int) (answerFive.fn ((5 : Int), ()))
-  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int (str! "alice") (3 : Int) (answerIsEvent.fn ())
-  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (str! "bob") (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let twiceT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.int 3) [.int 5]
+  let nextT : Layout → Except Refusal Term := fun L => ownT L nextKey (.int 3) []
+  let bobT : Layout → Except Refusal Term := fun L => ownT L twiceKey (.int (-3)) [.int 5]
+  let twiceFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (3 : Int) (answerFive.fn ((5 : Int), ()))
+  let nextFx : OwnEffectV dispSvc.event := .query "next" .str .int .int (3 : Int) (answerIsEvent.fn ())
+  let bobFx : OwnEffectV dispSvc.event := .command "twice" .str .int .str (-3 : Int) (answerFive.fn ((5 : Int), ()))
   let cases : List (String × Nat × List (Layout → Except Refusal Term) × List (OwnEffectV dispSvc.event)) :=
     [("two internal steps", 2, [twiceT, nextT], [twiceFx, nextFx]),
      ("one internal step", 1, [twiceT, nextT], [twiceFx, nextFx]),
@@ -3149,7 +3153,7 @@ def oncePutE : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
   let clo : Expr [] [Ty.reactionCtx recordsT, .int] (.dsl .closure [.fn [Ty.result Ty.nil .str] (.list .int)]) :=
     .close ⟨"m", 24, 1, 0⟩ .nil rfl rfl onceBodyE
   .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
-    (.cons putHandleE (.cons (.str (str! "alice")) (.cons (.bin .add ev (.int 10)) (.cons clo .nil))))
+    (.cons putHandleE (.cons (.bin .add ev (.int 10)) (.cons clo .nil)))
 
 def onceE : Expr [] [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
   .lam (boolCase (.bin .lt (.var (.there .here)) (.int 5)) (.list (.cons oncePutE .nil)) (.list .nil))
@@ -3186,7 +3190,7 @@ def cmdHandleTy : Ty := .dsl .command [recordsT, .int, .str, .int, .str]
 
 def namedHandleE {G : List Ty} (n : Str) (line : Nat) : Expr G [] (.fn [] cmdHandleTy) :=
   .lam (.call (.prim .command [recordsT, .int, .str, .int, .str] rfl)
-    (.cons (.str n) (.cons (.list (.cons (.str (str! "alice")) .nil))
+    (.cons (.str n) (.cons aliceOwnE
       (.cons (.close ⟨"m", line, 1, 0⟩ .nil rfl rfl (.lam (.list .nil) : Expr G [] (.fn [.int] Ty.rules)))
         (.cons (.close ⟨"m", line, 2, 0⟩ .nil rfl rfl
           (.lam (.ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil)) :
@@ -3201,9 +3205,9 @@ def bothDefs : Defs bothG := .snoc (.snoc .nil _ (namedHandleE (str! "dbl") 30))
 def sendFromE (h : Var bothG (.fn [] cmdHandleTy)) (line : Nat) :
     Expr bothG [Ty.reactionCtx recordsT, .int] (.dsl .effect [.int]) :=
   .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
-    (.cons (.call (.global h) .nil) (.cons (.str (str! "alice")) (.cons (.int 1)
+    (.cons (.call (.global h) .nil) (.cons (.int 1)
       (.cons (.close ⟨"m", line, 1, 0⟩ .nil rfl rfl (.lam (.list .nil) :
-        Expr bothG [] (.fn [Ty.result Ty.nil .str] (.list .int)))) .nil))))
+        Expr bothG [] (.fn [Ty.result Ty.nil .str] (.list .int)))) .nil)))
 
 def bothE : Expr bothG [] (.fn [Ty.reactionCtx recordsT, .int] (.list (.dsl .effect [.int]))) :=
   .lam (.list (.cons (sendFromE (.there .here) 34) (.cons (sendFromE .here 35) .nil)))
@@ -3322,7 +3326,7 @@ def tickEffectE : Expr [] [] (.fn [invCtxT] (Ty.option (.dsl .effect [.int]))) :
     .close ⟨"m", 24, 1, 0⟩ .nil rfl rfl onceBodyE
   let put : Expr [] [invCtxT] (.dsl .effect [.int]) :=
     .call (.prim .sendCommand [recordsT, .int, .str, .int, .str] rfl)
-      (.cons putHandleE (.cons (.str (str! "alice")) (.cons (.bin .add key (.int 10)) (.cons clo .nil))))
+      (.cons putHandleE (.cons (.bin .add key (.int 10)) (.cons clo .nil)))
   .lam (boolCase (.bin .lt key (.int 10)) (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨0, by decide⟩ (.cons put .nil))
     (.ctor (vs := [[Ty.dsl .effect [.int]], []]) ⟨1, by decide⟩ .nil))
 
@@ -3503,7 +3507,7 @@ command asserts the input's well-formedness (`SymInput.wf`, second in its contex
 it one does (sat), and decoding that model fails, which `prove` reported as an internal error. -/
 
 def takeC : CommandV recordsT evT .str :=
-  { name := "take", input := recordsT, rejection := .str, callers := [str! "alice"],
+  { name := "take", input := recordsT, rejection := .str, callers := [Step.outside (c := .str) (str! "alice"), Step.own],
     accepts := .closed (.lam (.list .nil)),
     decide := .closed (.lam (.ctor (vs := [[.list evT], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil))),
     ensures := .closed (.lam (.list .nil)) }
@@ -3554,7 +3558,7 @@ def atMostOneE : E (.fn [cctxT, recordsT] Ty.rules) :=
 
 def rowC (name : String) (key : Expr [] [cctxT] .int) (ens : E (.fn [cctxT, recordsT] Ty.rules)) :
     CommandV recordsT evT .str :=
-  { name := name, input := .int, rejection := .str, callers := [str! "alice"], accepts := .closed (.lam (.list .nil)),
+  { name := name, input := .int, rejection := .str, callers := [Step.outside (c := .str) (str! "alice"), Step.own], accepts := .closed (.lam (.list .nil)),
     decide := .closed (rowDecideE key), ensures := .closed ens }
 
 def noRulesE : E (.fn [recordsT] Ty.rules) := .lam (.list .nil)
@@ -3594,9 +3598,9 @@ def pairTarget (slots k1 k2 : Nat) : Except String Script := do
 
 /-- The own command a model's value of the effect datatype codes, by its variant's place among the own kinds. -/
 def pairEffect (L : Layout) : Val → Option (OwnEffectV evT)
-  | .ctor _ k [.str c, .int i, _] => (Str.of? c).bind fun c =>
+  | .ctor _ k [.int i, _] =>
     (["ins", "set", "cap"][k - (L.effectsOf evT).length]?).map fun name =>
-      .command name .str .int .str c i (pairOnAnswer.fn ())
+      .command name .str .int .str i (pairOnAnswer.fn ())
   | _ => none
 
 /-- What a fixture's pair question must give: unsat, or a model whose two orders Lean finds not commuting
@@ -3662,7 +3666,7 @@ def pairWfCheck (solver : Solver) : IO Bool := do
     | fail "no pair questions"
   let (some (d, n), some (dt, _)) := (L.find? recordsT, L.find? (.tuple [Ty.bool, .int, .int]))
     | fail "no table datatype"
-  let S := slotsOf d dt n 2 (.sel senv.dE (L.ownCtor v.event k) 1 (.var (pairVar v)))
+  let S := slotsOf d dt n 2 (.sel senv.dE (L.ownCtor v.event k) 0 (.var (pairVar v)))
   let twice : Term := .and (.and S[0]!.1 S[1]!.1) (.eq (S[0]!.2[0]) (S[1]!.2[0]))
   let mut ok := true
   for (withWf, want) in [(true, "unsat"), (false, "sat")] do
@@ -3803,7 +3807,7 @@ def playback {v : ServiceV} {n : Nat} (T : List TypeDecl) (L : Layout) (hc : v.c
     | none => false)
 
 def tagC : CommandV .int .int .int :=
-  { name := "tag", input := .id, rejection := .str, callers := [(1 : Int)], accepts := .closed (.lam (.list .nil)),
+  { name := "tag", input := .id, rejection := .str, callers := [Step.outside (c := .int) (1 : Int), Step.own], accepts := .closed (.lam (.list .nil)),
     decide := .closed (.lam (.ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil))),
     ensures := .closed (.lam (.list .nil)) }
 
@@ -4073,7 +4077,7 @@ def unrolledSum (d : Nat) : Except String Script := do
 /-- The step scripts whose sizes are measured, each as a function of the slots (or the bound, or the levels). -/
 def sizeRows : List (String × (Nat → Except String Script)) :=
   let queue : List (Layout → Except Refusal Term) :=
-    [fun L => ownT L twiceKey (.str (str! "alice")) (.int 3) [.int 5], fun L => ownT L nextKey (.str (str! "alice")) (.int 3) []]
+    [fun L => ownT L twiceKey (.int 3) [.int 5], fun L => ownT L nextKey (.int 3) []]
   [("event", fun k => (·.1) <$> writeScript k []),
    ("event list", fun k => (·.1) <$> eventsScript k []),
    ("command", fun k => (·.1) <$> twiceScriptOf k []),

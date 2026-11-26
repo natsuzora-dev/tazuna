@@ -35,7 +35,8 @@ def opaqueTy? (name : String) (args : List Ty) : Option Ty :=
 
 /-- The documentation of the prelude's types that `tazuna` declares, by name. -/
 def preludeDocs : List (String × String) :=
-  [ ("tazuna.Never", "A type with no values. As a command's rejection type it says the command never rejects: `decide` can return no `Error`, and no rejected outcome exists to reach.") ]
+  [ ("tazuna.Origin", "Who runs a command or query: `Outside(caller)` for a request line from outside, whose `caller` is the value the line names, or `Own` for the service itself, through a machine's or reaction's `send_command` or `send_query`. A `callers` list holds origins, and `ctx.caller` is the one that ran."),
+    ("tazuna.Never", "A type with no values. As a command's rejection type it says the command never rejects: `decide` can return no `Error`, and no rejected outcome exists to reach.") ]
 
 /-- Aliases `tazuna` declares, with their documentation. -/
 def builtinAliases : List (Surface.AliasDef × String) :=
@@ -175,16 +176,16 @@ def sig : Prim → PrimSig :=
       ret := .dsl .service [] }
   | .command =>
     { name := "command",
-      doc := "A command, named by a string literal: callers outside `callers` or input breaking `accepts` make it Invalid; `decide` accepts with events or rejects. The service that lists it owns it.",
+      doc := "A command, named by a string literal: an origin `callers` does not list or input breaking `accepts` makes it Invalid; `decide` accepts with events or rejects. `callers` lists `Outside` for each outside caller that may send it and `Own` when the service sends it itself; check rejects an empty list, `Own` with no `send_command` of it, and a `send_command` of it without `Own`. The service that lists it owns it.",
       tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true, needsEq := [2],
-      params := [l "name" .str, l "callers" (.list (param 2)), l "accepts" (kept (.fn [param 3] Ty.rules)),
+      params := [l "name" .str, l "callers" (.list (.origin (param 2))), l "accepts" (kept (.fn [param 3] Ty.rules)),
         l "decide" (kept (.fn [.ctx a (param 3) (param 2)] (.result (.list b) (param 4)))),
         l "ensures" (kept (.fn [.ctx a (param 3) (param 2), a] Ty.rules))],
       ret := .dsl .command [a, b, param 2, param 3, param 4] }
   | .query =>
-    { name := "query", doc := "A query, named by a string literal: it answers from the records, writes nothing and makes no ids, so `resolve` sees no source of fresh ids. The service that lists it owns it.",
+    { name := "query", doc := "A query, named by a string literal: it answers from the records, writes nothing and makes no ids, so `resolve` sees no source of fresh ids. `callers` works as a command's does, with `send_query`. The service that lists it owns it.",
       tvars := ["records", "caller", "input", "output"], dataArgs := true, needsEq := [1],
-      params := [l "name" .str, l "callers" (.list b), l "accepts" (kept (.fn [param 2] Ty.rules)),
+      params := [l "name" .str, l "callers" (.list (.origin b)), l "accepts" (kept (.fn [param 2] Ty.rules)),
         l "resolve" (kept (.fn [.queryCtx a (param 2) b] (param 3)))],
       ret := .dsl .query [a, b, param 2, param 3] }
   | .machine =>
@@ -261,15 +262,15 @@ def sig : Prim → PrimSig :=
       ret := .dsl .effect [a] }
   | .sendCommand =>
     { name := "send_command",
-      doc := "An effect: the service runs its own command within the same step; `on_answer` gets Ok(Nil) once the command's events are applied, or its rejection.",
+      doc := "An effect: the service runs its own command within the same step, as `Own`; `on_answer` gets Ok(Nil) once the command's events are applied, or its rejection.",
       tvars := ["records", "event", "caller", "input", "rejection"], dataArgs := true,
-      params := [l "command" (.dsl .command [a, b, param 2, param 3, param 4]), l "caller" (param 2),
+      params := [l "command" (.dsl .command [a, b, param 2, param 3, param 4]),
         l "input" (param 3), l "on_answer" (kept (.fn [.result Ty.nil (param 4)] (.list b)))],
       ret := .dsl .effect [b] }
   | .sendQuery =>
-    { name := "send_query", doc := "An effect: the service runs its own query within the same step.",
+    { name := "send_query", doc := "An effect: the service runs its own query within the same step, as `Own`.",
       tvars := ["records", "event", "caller", "input", "output"], dataArgs := true,
-      params := [l "query" (.dsl .query [a, param 2, param 3, param 4]), l "caller" (param 2),
+      params := [l "query" (.dsl .query [a, param 2, param 3, param 4]),
         l "input" (param 3), l "on_answer" (kept (.fn [param 4] (.list b)))],
       ret := .dsl .effect [b] }
   | .subscribe =>

@@ -113,20 +113,22 @@ def encodeOwnKind (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.
   | .unreached name => pure ⟨⟨.missing name, ⟨tt, ⟨records, xs, n, [], [], q, []⟩, fresh⟩⟩, tt, tt⟩
   | .command x Γ site =>
     let (cc, cx) ← CommandCode.of L x
-    let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.caller x.callers)
+    let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.origin x.callers)
+    let ot ← ownOriginT L v.caller
     let (da, _) ← L.findE (.tuple Γ)
-    let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
-    let (o, c) ← encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q (sel 0) (sel 1) xs
+    let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 1) 0)
+    let (o, c) ← encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q ot (sel 0) xs
     let fault := Term.or (.not o.callerOk)
       (.or (.not (allT (o.rules.map (·.2)))) (.and o.decided.ok (.not (allT (o.decided.ensures.map (·.2))))))
     pure ⟨⟨.command x.name o,
       ⟨fault, o.done, .add fresh (.int 1)⟩⟩, c, cx⟩
   | .query x Γ site =>
     let (qc, cq) ← QueryCode.of L x
-    let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.caller x.callers)
+    let ks ← need (.limit (.slots v.caller)) (callerTerms L x.data.origin x.callers)
+    let ot ← ownOriginT L v.caller
     let (da, _) ← L.findE (.tuple Γ)
-    let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 2) 0)
-    let (o, c) ← encodeOwnQuery L T v shs senv x qc site σ apply ks records now n q (sel 0) (sel 1) xs
+    let σ ← need (.unexpected (.function (.tuple Γ))) (tupleCodes da Γ (sel 1) 0)
+    let (o, c) ← encodeOwnQuery L T v shs senv x qc site σ apply ks records now n q ot (sel 0) xs
     pure ⟨⟨.query x.name o, ⟨.or (.not o.callerOk) (.not (allT (o.rules.map (·.2)))), o.answered, .add fresh (.int 1)⟩⟩,
       c, cq⟩
 
@@ -152,19 +154,19 @@ variable {v : ServiceV}
 
 /-- Whether an own command's internal step fits from `s`: what `ownCommand_encode` says its condition holds for. -/
 def ownCommandFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : CommandV v.records v.event v.caller)
-    (caller : v.caller.den0) (input : x.input.den0)
+    (caller : (Ty.origin v.caller).den0) (input : x.input.den0)
     (oa : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) : Prop :=
   let ctx := Step.ctx s s.records caller input
-  x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
+  x.callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 caller) = true →
     x.accepts.appFits S (input, ()) ∧
     (Step.broken (x.accepts.fn (input, ())) = [] →
       x.decide.appFits S (ctx, ()) ∧ ownDecidedFits S T { s with fresh := s.fresh + 1 } x ctx oa (x.decide.fn (ctx, ())))
 
 /-- Whether an own query's internal step fits from `s`: what `ownQuery_encode` says its condition holds for. -/
 def ownQueryFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : QueryV v.records v.caller)
-    (caller : v.caller.den0) (input : x.input.den0) (oa : Fun (Ty.fn [x.output] (.list v.event))) : Prop :=
+    (caller : (Ty.origin v.caller).den0) (input : x.input.den0) (oa : Fun (Ty.fn [x.output] (.list v.event))) : Prop :=
   let ctx := Step.queryCtx s s.records caller input
-  x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
+  x.callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 caller) = true →
     x.accepts.appFits S (input, ()) ∧
     (Step.broken (x.accepts.fn (input, ())) = [] →
       x.resolve.appFits S (ctx, ()) ∧ (oa.fits S).1 ∧ oa.appFits S ⟨x.resolve.fn (ctx, ()), ()⟩ ∧
@@ -172,15 +174,13 @@ def ownQueryFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : QueryV 
 
 /-- Whether an own effect's internal step fits from `s`, for the command or query `Step.runOwn` runs. -/
 def ownFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) : OwnEffectV v.event → Prop
-  | .command name c i j caller value onAnswer =>
+  | .command name c i j value onAnswer =>
     match Ty.same c v.caller, Step.ownCommand (v := v) name i j with
-    | some ⟨hc⟩, some ⟨x, hi, hj⟩ =>
-      ownCommandFits S T s x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (hj ▸ onAnswer)
+    | some _, some ⟨x, hi, hj⟩ => ownCommandFits S T s x Step.own (cast (congrArg Ty.den0 hi) value) (hj ▸ onAnswer)
     | _, _ => True
-  | .query name c i o caller value onAnswer =>
+  | .query name c i o value onAnswer =>
     match Ty.same c v.caller, Step.ownQuery (v := v) name i o with
-    | some ⟨hc⟩, some ⟨x, hi, ho⟩ =>
-      ownQueryFits S T s x (cast (congrArg Ty.den0 hc) caller) (cast (congrArg Ty.den0 hi) value) (ho ▸ onAnswer)
+    | some _, some ⟨x, hi, ho⟩ => ownQueryFits S T s x Step.own (cast (congrArg Ty.den0 hi) value) (ho ▸ onAnswer)
     | _, _ => True
 
 end
@@ -294,8 +294,8 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   | command e name c0 i jj a0 =>
     cases x with
     | query => exact hkey.elim
-    | command name' c' i' j' caller value onAnswer =>
-    obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vc, vi, va, rfl, hvc, hvi, hva⟩ := hkey
+    | command name' c' i' j' value onAnswer =>
+    obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vi, va, rfl, hvi, hva⟩ := hkey
     unfold ownShape at hsh
     unfold Step.runOwn ownFits
     dsimp only at hsh ⊢
@@ -323,6 +323,7 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     cases hsh
     obtain ⟨⟨cc, cx'⟩, hcc, henc⟩ := bind_ok.1 henc
     obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
+    obtain ⟨ot, hot, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨da, dn⟩, hda, henc⟩ := bind_ok.1 henc
     obtain ⟨σ, hσ, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
@@ -338,14 +339,12 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     obtain rfl := find_det hd' (need_ok.1 hda)
     have hσ' : Rels M L _ (Ty.up _ s.hΓ oenv) σ :=
       tupleCodes_rels _ [] vals' _ σ (by rw [hsel]; rfl) (relDs_up _ s.hΓ oenv vals' hrds) (need_ok.1 hσ)
-    have hks' : callerTerms L hd.caller x.callers = some ks := need_ok.1 hks
-    have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
-        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
-      rw [hsel]; exact relD_up _ _ _ _ hvc
+    have hks' : callerTerms L hd.origin x.callers = some ks := need_ok.1 hks
+    have hsc := ownOriginT_rel hd.origin hot (M := M)
     have hsi : RelV L x.input (Ty.up _ hd.input value)
-        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have E := ownCommand_encode chk hshs hshp a x caller value hcc hcx happ hca s oenv hσ'
+    have E := ownCommand_encode chk hshs hshp a x Step.own value hcc hcx happ hca s oenv hσ'
       (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) hks' senv hrec hnow hfresh hn hq hms hsc hsi hoe
     simp only [cast_eq]
     rw [show (⟨os, oG, odefs, oΓ, oenv, ohΓ, oht, obody⟩ : Fun _) = s.fn oenv from hA]
@@ -381,8 +380,8 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
   | query e name c0 i o a0 =>
     cases x with
     | command => exact hkey.elim
-    | query name' c' i' j' caller value onAnswer =>
-    obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vc, vi, va, rfl, hvc, hvi, hva⟩ := hkey
+    | query name' c' i' j' value onAnswer =>
+    obtain ⟨rfl, rfl, rfl, rfl, hsite, hΓ, vi, va, rfl, hvi, hva⟩ := hkey
     unfold ownShape at hsh
     unfold Step.runOwn ownFits
     dsimp only at hsh ⊢
@@ -410,6 +409,7 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     cases hsh
     obtain ⟨⟨qc, cx'⟩, hqc, henc⟩ := bind_ok.1 henc
     obtain ⟨ks, hks, henc⟩ := bind_ok.1 henc
+    obtain ⟨ot, hot, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨da, dn⟩, hda, henc⟩ := bind_ok.1 henc
     obtain ⟨σ, hσ, henc⟩ := bind_ok.1 henc
     obtain ⟨⟨o, c'⟩, hoe, henc⟩ := bind_ok.1 henc
@@ -425,14 +425,12 @@ theorem ownKind_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checke
     obtain rfl := find_det hd' (need_ok.1 hda)
     have hσ' : Rels M L _ (Ty.up _ s.hΓ oenv) σ :=
       tupleCodes_rels _ [] vals' _ σ (by rw [hsel]; rfl) (relDs_up _ s.hΓ oenv vals' hrds) (need_ok.1 hσ)
-    have hks' : callerTerms L hd.caller x.callers = some ks := need_ok.1 hks
-    have hsc : RelV L v.caller (Ty.up _ hd.caller caller)
-        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
-      rw [hsel]; exact relD_up _ _ _ _ hvc
+    have hks' : callerTerms L hd.origin x.callers = some ks := need_ok.1 hks
+    have hsc := ownOriginT_rel hd.origin hot (M := M)
     have hsi : RelV L x.input (Ty.up _ hd.input value)
-        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 1 eff).denote M) := by
+        ((Term.sel senv.dE ((L.effectsOf v.event).length + j) 0 eff).denote M) := by
       rw [hsel]; exact relD_up _ _ _ _ hvi
-    have E := ownQuery_encode chk hshs hshp a x caller value hqc hcx happ hca s oenv hσ'
+    have E := ownQuery_encode chk hshs hshp a x Step.own value hqc hcx happ hca s oenv hσ'
       (tupleCodes_notFn _ _ _ (need_ok.1 hσ)) (chk.outputs x (ownQuery_mem hox)) hks' senv
       hrec hnow hfresh hn hq hms hsc hsi hoe
     simp only [cast_eq]

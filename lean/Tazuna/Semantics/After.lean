@@ -11,7 +11,7 @@ variable (T : List TypeDecl) {v : ServiceV}
 it: Invalid, rejected, a fault, a query, time moving back. -/
 def settled (s : State v) : Input v → Option (Acc v)
   | .command i caller input =>
-    match execCommand T { state := s } (v.commands.get i) caller input with
+    match execCommand T { state := s } (v.commands.get i) (outside caller) input with
     | .ok (.accepted a) => (settle T v.bounds.cascadeNat a).toOption
     | _ => none
   | .query .. => none

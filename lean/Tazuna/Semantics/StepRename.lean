@@ -428,8 +428,8 @@ theorem Started.rel_own {R : PBij} {e : Ty} {x y : Sender × EffectV e} (h : Sta
   rcases h with ⟨_, h⟩
   cases h with
   | request => exact .none
-  | command => exact .some (.command _ _ _ _ ‹_› ‹_› ‹_›)
-  | query => exact .some (.query _ _ _ _ ‹_› ‹_› ‹_›)
+  | command => exact .some (.command _ _ _ _ ‹_› ‹_›)
+  | query => exact .some (.query _ _ _ _ ‹_› ‹_›)
 
 theorem Started.rel_isRequest {R : PBij} {e : Ty} {x y : Sender × EffectV e} (h : Started.Rel R x y) :
     x.2.isRequest = y.2.isRequest := by
@@ -824,12 +824,22 @@ theorem applyEvents_rel (T : List TypeDecl) (hv : v.Equivariant) : {evs evs' : L
     exact applyEvents_rel T hv R' (hc ▸ h) hb
   | [], _ :: _, _, h, _, _, _ | _ :: _, [], _, h, _, _, _ => h.elim
 
-theorem admit_rel (hv : v.Equivariant) {R : PBij} {i : Ty} {callers : List v.caller.den0}
-    (hcl : Ty.rel0 R (.list v.caller) callers callers) {accepts : Fun (Ty.fn [i] Ty.rules)}
-    (hacc : Fun.Rel R accepts accepts) {c c' : v.caller.den0} (hc : Ty.rel0 R v.caller c c') {x x' : i.den0}
+theorem _root_.Tazuna.Ir.Ty.origin_comparable {c : Ty} (h : c.comparable = true) :
+    (Ty.origin c).comparable = true := by
+  simp [Ty.origin, Ty.comparable, Ty.comparables, Ty.comparabless, h]
+
+theorem rel0_outside {R : PBij} {c : Ty} {x y : c.den0} (h : Ty.rel0 R c x y) :
+    Ty.rel0 R (Ty.origin c) (outside x) (outside y) := ⟨h, trivial⟩
+
+theorem rel0_own {R : PBij} {c : Ty} : Ty.rel0 R (Ty.origin c) own own := ⟨⟩
+
+theorem admit_rel (hv : v.Equivariant) {R : PBij} {i : Ty} {callers : List (Ty.origin v.caller).den0}
+    (hcl : Ty.rel0 R (.list (Ty.origin v.caller)) callers callers) {accepts : Fun (Ty.fn [i] Ty.rules)}
+    (hacc : Fun.Rel R accepts accepts) {c c' : (Ty.origin v.caller).den0} (hc : Ty.rel0 R (Ty.origin v.caller) c c') {x x' : i.den0}
     (hx : Ty.rel0 R i x x') : admit callers accepts c x = admit callers accepts c' x' := by
   unfold admit
-  rw [forall2_any (q := v.caller.deq0 c') (fun a b hab => Ty.rel0_deq v.caller hv.caller hc hab) hcl,
+  rw [forall2_any (q := (Ty.origin v.caller).deq0 c')
+    (fun a b hab => Ty.rel0_deq (Ty.origin v.caller) (Ty.origin_comparable hv.caller) hc hab) hcl,
     broken_rel (hacc (x, ()) (x', ()) ⟨hx, trivial⟩)]
 
 theorem okNil_rel {R : PBij} {j : Ty} : Ty.rel0 R (Ty.result Ty.nil j) okNil okNil := ⟨⟨⟩, trivial⟩
@@ -839,7 +849,7 @@ theorem lifted_error {R : Ren} {a a' : Acc v} {e e' : Fault} : Lifted R a a' (.e
 
 theorem runCommand_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a')
     (hctr : R.ctr.rel a.state.fresh a'.state.fresh) {x : CommandV v.records v.event v.caller} (hx : x ∈ v.commands)
-    {c c' : v.caller.den0} (hc : Ty.rel0 R.ctr v.caller c c') {i i' : x.input.den0} (hi : Ty.rel0 R.ctr x.input i i')
+    {c c' : (Ty.origin v.caller).den0} (hc : Ty.rel0 R.ctr (Ty.origin v.caller) c c') {i i' : x.input.den0} (hi : Ty.rel0 R.ctr x.input i i')
     {f f' : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))} (hf : Fun.Rel R.ctr f f') :
     Lifted R a a' (runCommand T a x c i f) (runCommand T a' x c' i' f') := by
   obtain ⟨hcl, hacc, hdec, hens⟩ := (hv.self R.ctr).commands x hx
@@ -877,7 +887,7 @@ theorem runCommand_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' 
 
 theorem runQuery_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Acc v} (ha : Acc.Rel R a a')
     {x : QueryV v.records v.caller} (hx : x ∈ v.queries)
-    {c c' : v.caller.den0} (hc : Ty.rel0 R.ctr v.caller c c') {i i' : x.input.den0} (hi : Ty.rel0 R.ctr x.input i i')
+    {c c' : (Ty.origin v.caller).den0} (hc : Ty.rel0 R.ctr (Ty.origin v.caller) c c') {i i' : x.input.den0} (hi : Ty.rel0 R.ctr x.input i i')
     {f f' : Fun (Ty.fn [x.output] (.list v.event))} (hf : Fun.Rel R.ctr f f') :
     Lifted R a a' (runQuery T a x c i f) (runQuery T a' x c' i' f') := by
   obtain ⟨hcl, hacc, hres⟩ := (hv.self R.ctr).queries x hx
@@ -920,7 +930,7 @@ theorem runOwn_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Ac
     (hctr : R.ctr.rel a.state.fresh a'.state.fresh) {eff eff' : OwnEffectV v.event} (he : OwnEffectV.Rel R.ctr eff eff') :
     Lifted R a a' (runOwn T a eff) (runOwn T a' eff') := by
   cases he with
-  | command name c i j hc hval hf =>
+  | command name c i j hval hf =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc
@@ -935,8 +945,8 @@ theorem runOwn_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Ac
         have hmem := ownCommand_mem hox
         obtain ⟨x, hi, hj⟩ := x
         subst hcp hi hj
-        exact runCommand_rel T hv ha hctr hmem hc hval hf
-  | query name c i o hc hval hf =>
+        exact runCommand_rel T hv ha hctr hmem rel0_own hval hf
+  | query name c i o hval hf =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc
@@ -951,7 +961,7 @@ theorem runOwn_rel (T : List TypeDecl) (hv : v.Equivariant) {R : Ren} {a a' : Ac
         have hmem := ownQuery_mem hox
         obtain ⟨x, hi, ho⟩ := x
         subst hcp hi ho
-        exact runQuery_rel T hv ha hmem hc hval hf
+        exact runQuery_rel T hv ha hmem rel0_own hval hf
 
 end Step
 
@@ -982,8 +992,8 @@ theorem RequestV.rel_inv {R : PBij} {e : Ty} {x y : RequestV e} (h : RequestV.Re
 theorem EffectV.rel_inv {R : PBij} {e : Ty} {x y : EffectV e} (h : EffectV.Rel R x y) : EffectV.Rel R.inv y x := by
   cases h with
   | request h => exact .request (RequestV.rel_inv h)
-  | command _ _ _ _ hc hv hf => exact .command _ _ _ _ (Ty.rel0_inv.1 hc) (Ty.rel0_inv.1 hv) (Fun.rel_inv hf)
-  | query _ _ _ _ hc hv hf => exact .query _ _ _ _ (Ty.rel0_inv.1 hc) (Ty.rel0_inv.1 hv) (Fun.rel_inv hf)
+  | command _ _ _ _ hv hf => exact .command _ _ _ _ (Ty.rel0_inv.1 hv) (Fun.rel_inv hf)
+  | query _ _ _ _ hv hf => exact .query _ _ _ _ (Ty.rel0_inv.1 hv) (Fun.rel_inv hf)
 
 namespace Step
 variable {r e : Ty}

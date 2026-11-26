@@ -292,7 +292,7 @@ theorem applyEvents_inv (T : List TypeDecl) (hv : v.Reach P E) (events : List v.
 
 /-- What a command leaves: its events applied after the fresh counter advances, or that alone on a rejection. -/
 theorem execCommand_acc (T : List TypeDecl) (a : Acc v) (x : CommandV v.records v.event v.caller)
-    (caller : v.caller.den0) (input : x.input.den0) {r : Ran v x.rejection} (h : execCommand T a x caller input = .ok r)
+    (caller : (Ty.origin v.caller).den0) (input : x.input.den0) {r : Ran v x.rejection} (h : execCommand T a x caller input = .ok r)
     (a' : Acc v) (ha' : r = .accepted a' ∨ ∃ j, r = .rejected a' j) :
     a' = { a with state := { a.state with fresh := a.state.fresh + 1 } } ∨
       ∃ evs, applyEvents T { a with state := { a.state with fresh := a.state.fresh + 1 } } evs = .ok a' := by
@@ -310,7 +310,7 @@ theorem execCommand_acc (T : List TypeDecl) (a : Acc v) (x : CommandV v.records 
     · cases h; rcases ha' with h | ⟨_, h⟩ <;> cases h; exact .inl rfl
 
 theorem execCommand_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state)
-    (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) {r : Ran v x.rejection}
+    (x : CommandV v.records v.event v.caller) (caller : (Ty.origin v.caller).den0) (input : x.input.den0) {r : Ran v x.rejection}
     (h : execCommand T a x caller input = .ok r) (a' : Acc v) (ha' : r = .accepted a' ∨ ∃ j, r = .rejected a' j) :
     Inv P a'.state := by
   rcases execCommand_acc T a x caller input h a' ha' with rfl | ⟨_, he⟩
@@ -318,7 +318,7 @@ theorem execCommand_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha :
   · exact applyEvents_inv T hv _ { a with state := { a.state with fresh := a.state.fresh + 1 } } (Inv.congr ha rfl rfl) he
 
 theorem runCommand_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state)
-    (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0)
+    (x : CommandV v.records v.event v.caller) (caller : (Ty.origin v.caller).den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) {a' : Acc v}
     (h : runCommand T a x caller input onAnswer = .ok a') : Inv P a'.state := by
   simp only [runCommand, bind, Except.bind] at h
@@ -332,7 +332,7 @@ theorem runCommand_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : 
     · exact applyEvents_inv T hv _ _ (hi _ (.inr ⟨_, rfl⟩)) h
 
 theorem runQuery_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv P a.state)
-    (x : QueryV v.records v.caller) (caller : v.caller.den0) (input : x.input.den0)
+    (x : QueryV v.records v.caller) (caller : (Ty.origin v.caller).den0) (input : x.input.den0)
     (onAnswer : Fun (Ty.fn [x.output] (.list v.event))) {a' : Acc v}
     (h : runQuery T a x caller input onAnswer = .ok a') : Inv P a'.state := by
   simp only [runQuery] at h
@@ -344,7 +344,7 @@ theorem runOwn_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv 
     {a' : Acc v} (h : runOwn T a eff = .ok a') : Inv P a'.state := by
   revert h
   cases eff with
-  | command name c i j caller value onAnswer =>
+  | command name c i j value onAnswer =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc
@@ -358,7 +358,7 @@ theorem runOwn_inv (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : Inv 
         obtain ⟨hc⟩ := hc
         obtain ⟨x, hi, hj⟩ := x
         exact fun h => runCommand_inv T hv a ha x _ _ _ h
-  | query name c i o caller value onAnswer =>
+  | query name c i o value onAnswer =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc
@@ -477,7 +477,7 @@ theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : In
     · exact applyEvents_queue T hv _ { a with state := { a.state with fresh := a.state.fresh + 1 } } h ⟨ha.1, ha.2, ha.3, ha.4⟩ hq
   revert h
   cases eff with
-  | command name c i j caller value onAnswer =>
+  | command name c i j value onAnswer =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc
@@ -491,7 +491,7 @@ theorem runOwn_queue (T : List TypeDecl) (hv : v.Reach P E) (a : Acc v) (ha : In
         obtain ⟨hc⟩ := hc
         obtain ⟨x, hi, hj⟩ := x
         exact hcmd _ _ _ _
-  | query name c i o caller value onAnswer =>
+  | query name c i o value onAnswer =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc

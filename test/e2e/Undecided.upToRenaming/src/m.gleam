@@ -24,7 +24,7 @@ fn apply(r: Records, e: Event) -> Records {
 fn go() -> tazuna.Command(Records, Event, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "go",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n: Nil) { [] },
     decide: fn(_c: Ctx(Records, Nil, Caller)) { Ok([Went]) },
     ensures: fn(_c: Ctx(Records, Nil, Caller), _r: Records) { [] },
@@ -34,7 +34,7 @@ fn go() -> tazuna.Command(Records, Event, Caller, Nil, tazuna.Never) {
 fn mark() -> tazuna.Command(Records, Event, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "mark",
-    callers: [User],
+    callers: [tazuna.Outside(User), tazuna.Own],
     accepts: fn(_n: Nil) { [] },
     decide: fn(c: Ctx(Records, Nil, Caller)) {
       Ok([Marked(tazuna.fresh(c.fresh, 0))])
@@ -56,7 +56,7 @@ fn twice() -> tazuna.Reaction(Records, Event) {
 }
 
 fn send_mark() -> tazuna.Effect(Event) {
-  tazuna.send_command(command: mark(), caller: User, input: Nil, on_answer: fn(_a) { [] })
+  tazuna.send_command(command: mark(), input: Nil, on_answer: fn(_a) { [] })
 }
 
 fn marks() -> tazuna.Service {

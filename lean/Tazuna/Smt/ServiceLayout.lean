@@ -50,7 +50,7 @@ def ownKeys (es : List Ty) (P : List AnySite) (h : HandleSite) : List OwnKey :=
 /-- The types a step of the service codes beyond its program's expressions: the state's, the input's, what
 `StepEnv` looks up, and the tuple of each sender's key, which a start writes whether or not a request has a shape. -/
 def stepTys (v : ServiceV) : List Ty :=
-  [v.records, v.event, v.caller, Ty.option (.dsl .effect [v.event]), pendingTable (shapes v), .tuple []] ++
+  [v.records, v.event, v.caller, Ty.origin v.caller, Ty.option (.dsl .effect [v.event]), pendingTable (shapes v), .tuple []] ++
     v.machines.map (·.table) ++ v.machines.map (fun m => .tuple [m.key])
 
 /-- What the layout builder reads of a program: its sites, its handles, the type of every node and every list

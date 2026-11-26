@@ -3,7 +3,7 @@ import Tazuna.Smt.Query
 import Tazuna.Semantics.Settle
 
 /-! One internal step: an own command or query the step queued runs as `Step.runCommand` or `Step.runQuery` does. A
-command's caller and `accepts` rules admit the input, `decide` accepts with events or rejects, the events run through
+command's origin (`Own`) and `accepts` rules admit the input, `decide` accepts with events or rejects, the events run through
 the events loop from the running records, tables, next id and queue place, `ensures` is checked on the records they
 leave, and `on_answer` (the program's site at the values the effect captured) turns the answer into events that run
 through the loop again. Requests the loops start are not written into the pending table here: the step writes every
@@ -13,7 +13,7 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-/-- The terms of an own command's internal step: whether the caller is listed and the `accepts` rules, `decide` and
+/-- The terms of an own command's internal step: whether the origin is listed and the `accepts` rules, `decide` and
 what follows it, and what the events loop leaves after `on_answer`'s events. -/
 structure OwnCommandOut (v : ServiceV) where
   callerOk : Term
@@ -27,7 +27,7 @@ def OwnCommandOut.done {v : ServiceV} (o : OwnCommandOut v) : EventsOut v :=
   { o.answered with news := o.decided.after.news ++ o.answered.news, owns := o.decided.after.owns ++ o.answered.owns,
                     events := o.decided.after.events ++ o.answered.events }
 
-/-- The terms of an own query's internal step: whether the caller is listed, the `accepts` rules, and what the
+/-- The terms of an own query's internal step: whether the origin is listed, the `accepts` rules, and what the
 events loop leaves after `on_answer`'s events. -/
 structure OwnQueryOut (v : ServiceV) where
   callerOk : Term
@@ -45,7 +45,7 @@ def encodeOwnCommand (v : ServiceV) (shs : List (PendingShape v.event)) (senv : 
     (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (σ : Codes Γ)
     (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
     (records now fresh n q caller input : Term) (xs : PerMachine (fun _ => Term) v.machines) : Except Refusal (OwnCommandOut v × Term) := do
-  let (a, c1) ← encodeAdmit (c := v.caller) L cc.accepts callers caller input
+  let (a, c1) ← encodeAdmit (c := Ty.origin v.caller) L cc.accepts callers caller input
   let cx ← encodeCtx L records now fresh caller input
   let (dc, cd) ← encodeDecide L T v shs senv x cc apply cx now records xs n q
   let nil ← adtCtor L 1 [] [[]] 0 []
@@ -71,7 +71,7 @@ def encodeOwnQuery (v : ServiceV) (shs : List (PendingShape v.event)) (senv : St
     (x : QueryV v.records v.caller) (qc : QueryCode x) {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event)))
     (σ : Codes Γ) (apply : Code (Ty.fn [v.records, v.event] v.records)) (callers : List Term)
     (records now n q caller input : Term) (xs : PerMachine (fun _ => Term) v.machines) : Except Refusal (OwnQueryOut v × Term) := do
-  let (a, c1) ← encodeAdmit (c := v.caller) L qc.accepts callers caller input
+  let (a, c1) ← encodeAdmit (c := Ty.origin v.caller) L qc.accepts callers caller input
   let cx ← encodeQueryCtx L records now caller input
   let (out, c2) ← qc.resolve (cx, ())
   let (oa, c3) ← site.code L σ
@@ -127,33 +127,33 @@ def ownDecidedFits (S : Ty → Nat) (T : List TypeDecl) (s : State v) (x : Comma
   | .inr (.inl (j, ())) => onAnswerFits S T s oa (.inr (.inl (j, ())))
   | .inr (.inr e) => e.elim
 
-/-- An own command's internal step: the condition holds exactly when, for a listed caller, `accepts` fits at the input
+/-- An own command's internal step: the condition holds exactly when, for a listed origin, `accepts` fits at the input
 and, where its rules hold, `decide` fits at the context and what follows it fits (`ownDecidedFits`). Wherever it
-holds, an unlisted caller or a broken `accepts` rule is `Fault.invalidEffect`, a broken `ensures` rule after an
+holds, an unlisted origin or a broken `accepts` rule is `Fault.invalidEffect`, a broken `ensures` rule after an
 acceptance is `Fault.ensures`, and otherwise the internal step runs to its end with what the terms denote (`AccRel`),
 the fresh counter advanced. -/
 theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v)
     {shs : List (PendingShape v.event)} (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared) (a : Step.Acc v)
-    (x : CommandV v.records v.event v.caller) (caller : v.caller.den0) (input : x.input.den0) {cc : CommandCode x}
+    (x : CommandV v.records v.event v.caller) (caller : (Ty.origin v.caller).den0) (input : x.input.den0) {cc : CommandCode x}
     {cx : Term} (hcc : CommandCode.of L x = .ok (cc, cx)) (hccx : Holds M cx)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {Γ : List Ty} (site : Site Γ (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))) (env : (Ty.tuple Γ).den0)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
-    {ks : List Term} (hks : callerTerms L x.data.caller x.callers = some ks)
+    {ks : List Term} (hks : callerTerms L x.data.origin x.callers = some ks)
     (senv : StepEnv L shs)
     {records now fresh n q sc si : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
-    (hsc : RelV L v.caller (Ty.up _ x.data.caller caller) (sc.denote M))
+    (hsc : RelV L (Ty.origin v.caller) (Ty.up _ x.data.origin caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ x.data.input input) (si.denote M))
     {o : OwnCommandOut v} {cond : Term}
     (henc : encodeOwnCommand L T v shs senv x cc site σ apply ks records now fresh n q sc si xs = .ok (o, cond)) :
     let ctx := Step.ctx a.state a.state.records caller input
     let r := Step.runCommand T a x caller input (site.fn env)
-    (Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
+    (Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 caller) = true →
       x.accepts.appFits L.count (input, ()) ∧
       (Step.broken (x.accepts.fn (input, ())) = [] →
         x.decide.appFits L.count (ctx, ()) ∧
@@ -183,8 +183,8 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
   obtain ⟨⟨dl, nl, dt⟩, h11, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨o2, c7⟩, h23, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨hok, hbr⟩ := admit_rel x.data.input x.data.caller _ x.data.accepts hcc'.accepts _ hks caller input hsc hsi h1
-  have hcx := commandCtx_rel v.records_data x.data.input x.data.caller x.data.ctx a.state caller input hrec hnow hfresh hsc hsi
+  obtain ⟨hok, hbr⟩ := admit_rel x.data.input x.data.origin _ x.data.accepts hcc'.accepts _ hks caller input hsc hsi h1
+  have hcx := commandCtx_rel v.records_data x.data.input x.data.origin x.data.ctx a.state caller input hrec hnow hfresh hsc hsi
     h1'
   let a1 : Step.Acc v := { a with state := { a.state with fresh := a.state.fresh + 1 } }
   have hfr1 : (Term.add fresh (.int 1)).denote M = .int (Int.ofNat a1.state.fresh) := by
@@ -329,7 +329,7 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
       have hc1 := e1.2 p1
       exact ⟨hc1, (hrest hc1).2 px⟩
   · simp only [r, Step.runCommand, Step.execCommand, Step.admit, bind, Except.bind]
-    cases hin : x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
+    cases hin : x.callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 caller)
     case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
     simp only [hok, hin, Val.toBool, ite_true]
     have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2))) (andT cd
@@ -397,31 +397,31 @@ theorem ownCommand_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Che
         rw [hbe'']
         exact H
 
-/-- An own query's internal step: the condition holds exactly when, for a listed caller, `accepts` fits at the input
+/-- An own query's internal step: the condition holds exactly when, for a listed origin, `accepts` fits at the input
 and, where its rules hold, `resolve` fits at the context and `on_answer`'s part for the output fits. Wherever it holds,
-an unlisted caller or a broken `accepts` rule is `Fault.invalidEffect`, and otherwise the internal step runs to its
+an unlisted origin or a broken `accepts` rule is `Fault.invalidEffect`, and otherwise the internal step runs to its
 end with what the terms denote (`AccRel`), the fresh counter advanced as for a command. -/
 theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) {shs : List (PendingShape v.event)}
-    (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared) (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : v.caller.den0)
+    (hshs : ∀ sh ∈ shs, sh.InSites P) (hshp : ShapesHold shs v.declared) (a : Step.Acc v) (x : QueryV v.records v.caller) (caller : (Ty.origin v.caller).den0)
     (input : x.input.den0) {qc : QueryCode x} {cq : Term} (hqc : QueryCode.of L x = .ok (qc, cq)) (hcq : Holds M cq)
     {apply : Code (Ty.fn [v.records, v.event] v.records)} {ca : Term} (happ : v.apply.code L = .ok (apply, ca))
     (hca : Holds M ca)
     {Γ : List Ty} (site : Site Γ (Ty.fn [x.output] (.list v.event))) (env : (Ty.tuple Γ).den0)
     {σ : Codes Γ} (hσ : Rels M L Γ (Ty.up _ site.hΓ env) σ) (hΓf : ∀ t ∈ Γ, t.isFn = false)
-    (hout : x.output.isFn = false) {ks : List Term} (hks : callerTerms L x.data.caller x.callers = some ks)
+    (hout : x.output.isFn = false) {ks : List Term} (hks : callerTerms L x.data.origin x.callers = some ks)
     (senv : StepEnv L shs)
     {records now fresh n q sc si : Term} {xs : PerMachine (fun _ => Term) v.machines} {q0 : Nat}
     (hrec : RelV L v.records (Ty.up _ v.records_data a.state.records) (records.denote M))
     (hnow : now.denote M = .int a.state.now) (hfresh : fresh.denote M = .int (Int.ofNat a.state.fresh))
     (hn : n.denote M = .int (Int.ofNat a.state.nextId)) (hq : q.denote M = .int q0)
     (hms : MachinesRel M L T v.machines xs a.state.machines)
-    (hsc : RelV L v.caller (Ty.up _ x.data.caller caller) (sc.denote M))
+    (hsc : RelV L (Ty.origin v.caller) (Ty.up _ x.data.origin caller) (sc.denote M))
     (hsi : RelV L x.input (Ty.up _ x.data.input input) (si.denote M))
     {o : OwnQueryOut v} {cond : Term}
     (henc : encodeOwnQuery L T v shs senv x qc site σ apply ks records now n q sc si xs = .ok (o, cond)) :
     let ctx := Step.queryCtx a.state a.state.records caller input
     let r := Step.runQuery T a x caller input (site.fn env)
-    (Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller) = true →
+    (Holds M cond ↔ (x.callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 caller) = true →
       x.accepts.appFits L.count (input, ()) ∧
       (Step.broken (x.accepts.fn (input, ())) = [] →
         x.resolve.appFits L.count (ctx, ()) ∧ onAnswerFits L.count T a.state (site.fn env) (x.resolve.fn (ctx, ()))))) ∧
@@ -446,8 +446,8 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
   obtain ⟨⟨dl, nl, dt⟩, h12, henc⟩ := bind_ok.1 henc
   obtain ⟨⟨o1, c5⟩, h13, henc⟩ := bind_ok.1 henc
   cases pure_ok.1 henc
-  obtain ⟨hok, hbr⟩ := admit_rel x.data.input x.data.caller _ x.data.accepts hqc'.accepts _ hks caller input hsc hsi h1
-  have hcx := queryCtx_rel v.records_data x.data.input x.data.caller x.data.ctx a.state caller input hrec hnow hsc hsi
+  obtain ⟨hok, hbr⟩ := admit_rel x.data.input x.data.origin _ x.data.accepts hqc'.accepts _ hks caller input hsc hsi h1
+  have hcx := queryCtx_rel v.records_data x.data.input x.data.origin x.data.ctx a.state caller input hrec hnow hsc hsi
     h1'
   refine ⟨?_, fun hc => ?_⟩
   · unfold onAnswerFits
@@ -520,7 +520,7 @@ theorem ownQuery_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Check
       exact ⟨hc1, (hrules hc1).2 px⟩
   · have hqc := hqc'
     simp only [r, Step.runQuery, Step.execQuery, Step.admit]
-    cases hin : x.callers.any ((Ty.semWith Dsl.base v.caller).2 caller)
+    cases hin : x.callers.any ((Ty.semWith Dsl.base (Ty.origin v.caller)).2 caller)
     case false => simp only [hok, hin, Val.toBool, Bool.false_eq_true, ite_false]
     simp only [hok, hin, Val.toBool, ite_true]
     have hc' : Holds M (andT c1 (.ite (allT (adm.rules.map (·.2))) (andT c2 (andT c3 (andT c4 c5))) tt)) := by

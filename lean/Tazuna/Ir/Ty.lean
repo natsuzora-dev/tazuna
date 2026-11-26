@@ -241,7 +241,8 @@ def prelude : List TypeDecl :=
       variants := [⟨"Some", [⟨none, .param 0⟩]⟩, ⟨"None", []⟩] },
     { name := "tazuna/bag.PickError", params := [], variants := [⟨"Empty", []⟩, ⟨"Tie", []⟩] },
     { name := "tazuna.Ctx", params := ["records", "input", "caller"],
-      variants := [⟨"Ctx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩, ⟨some "caller", .param 2⟩,
+      variants := [⟨"Ctx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩,
+        ⟨some "caller", .adt 12 [.param 2] [[.param 2], []]⟩,
         ⟨some "now", .int⟩, ⟨some "fresh", .dsl .fresh []⟩]⟩] },
     { name := "tazuna.Next", params := ["state"], variants := [⟨"Stay", []⟩, ⟨"Enter", [⟨none, .param 0⟩]⟩] },
     { name := "tazuna.Timer", params := ["state"],
@@ -252,9 +253,12 @@ def prelude : List TypeDecl :=
     { name := "tazuna.ReactionCtx", params := ["records"],
       variants := [⟨"ReactionCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] },
     { name := "tazuna.QueryCtx", params := ["records", "input", "caller"],
-      variants := [⟨"QueryCtx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩, ⟨some "caller", .param 2⟩,
+      variants := [⟨"QueryCtx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩,
+        ⟨some "caller", .adt 12 [.param 2] [[.param 2], []]⟩,
         ⟨some "now", .int⟩]⟩] },
-    { name := "tazuna.Never", params := [], variants := [] } ]
+    { name := "tazuna.Never", params := [], variants := [] },
+    { name := "tazuna.Origin", params := ["caller"],
+      variants := [⟨"Outside", [⟨none, .param 0⟩]⟩, ⟨"Own", []⟩] } ]
 
 def Ty.bool : Ty := .adt 0 [] [[], []]
 def Ty.nil : Ty := .adt 1 [] [[]]
@@ -262,7 +266,9 @@ def Ty.spec : Ty := .dsl .spec []
 def Ty.pickError : Ty := .adt 4 [] [[], []]
 def Ty.result (a e : Ty) : Ty := .adt 2 [a, e] [[a], [e]]
 def Ty.option (a : Ty) : Ty := .adt 3 [a] [[a], []]
-def Ty.ctx (r i c : Ty) : Ty := .adt 5 [r, i, c] [[r, i, c, .int, .dsl .fresh []]]
+/-- Who runs a command or query: an outside caller, or the service itself through an effect. -/
+def Ty.origin (c : Ty) : Ty := .adt 12 [c] [[c], []]
+def Ty.ctx (r i c : Ty) : Ty := .adt 5 [r, i, c] [[r, i, Ty.origin c, .int, .dsl .fresh []]]
 def Ty.next (s : Ty) : Ty := .adt 6 [s] [[], [s]]
 def Ty.timer (s : Ty) : Ty := .adt 7 [s] [[.int, s]]
 /-- What a machine's functions see of one instance: its key and state, the records, and the time. -/
@@ -270,7 +276,7 @@ def Ty.machineCtx (k s r : Ty) : Ty := .adt 8 [k, s, r] [[k, s, r, .int]]
 /-- What a reaction sees: the records and the time. -/
 def Ty.reactionCtx (r : Ty) : Ty := .adt 9 [r] [[r, .int]]
 /-- What a query's `resolve` sees: a command's context without the source of fresh ids, since a query makes none. -/
-def Ty.queryCtx (r i c : Ty) : Ty := .adt 10 [r, i, c] [[r, i, c, .int]]
+def Ty.queryCtx (r i c : Ty) : Ty := .adt 10 [r, i, c] [[r, i, Ty.origin c, .int]]
 /-- The type with no values, `tazuna.Never`. -/
 def Ty.never : Ty := .adt 11 [] []
 /-- Named rules, as `invariants`, `accepts` and `ensures` return them. -/
@@ -309,6 +315,7 @@ example (r i c : Ty) : prelude[10]?.map (fun d => Ty.adt 10 [r, i, c] (d.variant
   some (Ty.queryCtx r i c) := rfl
 example (a e : Ty) : prelude[2]?.map (fun d => Ty.adt 2 [a, e] (d.variantTys [a, e])) = some (Ty.result a e) := rfl
 example : prelude[11]?.map (fun d => Ty.adt 11 [] (d.variantTys [])) = some Ty.never := rfl
+example (c : Ty) : prelude[12]?.map (fun d => Ty.adt 12 [c] (d.variantTys [c])) = some (Ty.origin c) := rfl
 example (a : Ty) : prelude[3]?.map (fun d => Ty.adt 3 [a] (d.variantTys [a])) = some (Ty.option a) := rfl
 
 end Tazuna.Ir

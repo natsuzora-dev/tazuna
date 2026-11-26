@@ -112,7 +112,7 @@ theorem applyEvents_keys (events : List v.event.den0) :
       exact ih a1 ((react_keys T a.state ev ha).congr T (start_machines _ _ h1)) h
 
 theorem execCommand_keys (a : Acc v) (ha : KeysOk T a.state) (x : CommandV v.records v.event v.caller)
-    (caller : v.caller.den0) (input : x.input.den0) {r : Ran v x.rejection} (h : execCommand T a x caller input = .ok r)
+    (caller : (Ty.origin v.caller).den0) (input : x.input.den0) {r : Ran v x.rejection} (h : execCommand T a x caller input = .ok r)
     (a' : Acc v) (ha' : r = .accepted a' ∨ ∃ j, r = .rejected a' j) : KeysOk T a'.state := by
   rcases execCommand_acc T a x caller input h a' ha' with rfl | ⟨_, he⟩
   · exact ha
@@ -141,7 +141,7 @@ theorem runOwn_keys (a : Acc v) (ha : KeysOk T a.state) (eff : OwnEffectV v.even
     · exact applyEvents_keys T _ { a with state := { a.state with fresh := a.state.fresh + 1 } } ha h
   revert h
   cases eff with
-  | command name c i j caller value onAnswer =>
+  | command name c i j value onAnswer =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc
@@ -155,7 +155,7 @@ theorem runOwn_keys (a : Acc v) (ha : KeysOk T a.state) (eff : OwnEffectV v.even
         obtain ⟨hc⟩ := hc
         obtain ⟨x, hi, hj⟩ := x
         exact fun h => hcmd x _ _ _ h
-  | query name c i o caller value onAnswer =>
+  | query name c i o value onAnswer =>
     unfold runOwn
     dsimp only
     generalize Ty.same c v.caller = oc

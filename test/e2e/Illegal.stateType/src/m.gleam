@@ -19,7 +19,7 @@ fn apply(r: Records, _e: Event) -> Records {
 fn rank() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: "rank",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n: Int) { [] },
     decide: fn(_c: Ctx(Records, Int, Caller)) { Ok([Ranked]) },
     ensures: fn(_c, _r) { [] },

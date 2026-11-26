@@ -21,7 +21,7 @@ fn apply(_r: Records, e: Event) -> Records {
 fn set() -> tazuna.Command(Records, Event, Caller, #(Int, Int, Int), Nil) {
   tazuna.command(
     name: "set",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(x: #(Int, Int, Int)) {
       [#("positive", x.0 > 0 && x.1 > 0 && x.2 > 0)]
     },

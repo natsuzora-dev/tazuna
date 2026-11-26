@@ -231,12 +231,12 @@ theorem eff_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {x y : EffectV
     | command =>
       cases y with
       | command =>
-        obtain ⟨rfl, rfl, rfl, rfl, hs, -, vc, vi, va, rfl, hc, hv, ha⟩ := hh
-        obtain ⟨h1, h2, h3, h4, hs', -, vc', vi', va', e, hc', hv', ha'⟩ := hh'
+        obtain ⟨rfl, rfl, rfl, rfl, hs, -, vi, va, rfl, hv, ha⟩ := hh
+        obtain ⟨h1, h2, h3, h4, hs', -, vi', va', e, hv', ha'⟩ := hh'
         subst h1 h2 h3 h4
         simp only [List.cons.injEq, and_true] at e
-        obtain ⟨rfl, rfl, rfl⟩ := e
-        exact .command _ _ _ _ (relD_same _ hc hc') (relD_same _ hv hv') (fun_same hP hrx hry (hs.trans hs'.symm) ha ha')
+        obtain ⟨rfl, rfl⟩ := e
+        exact .command _ _ _ _ (relD_same _ hv hv') (fun_same hP hrx hry (hs.trans hs'.symm) ha ha')
       | _ => exact hh'.elim
     | _ => exact hh.elim
   | query =>
@@ -244,12 +244,12 @@ theorem eff_same {P : List AnySite} (hP : SitesUnique P) {e : Ty} {x y : EffectV
     | query =>
       cases y with
       | query =>
-        obtain ⟨rfl, rfl, rfl, rfl, hs, -, vc, vi, va, rfl, hc, hv, ha⟩ := hh
-        obtain ⟨h1, h2, h3, h4, hs', -, vc', vi', va', e, hc', hv', ha'⟩ := hh'
+        obtain ⟨rfl, rfl, rfl, rfl, hs, -, vi, va, rfl, hv, ha⟩ := hh
+        obtain ⟨h1, h2, h3, h4, hs', -, vi', va', e, hv', ha'⟩ := hh'
         subst h1 h2 h3 h4
         simp only [List.cons.injEq, and_true] at e
-        obtain ⟨rfl, rfl, rfl⟩ := e
-        exact .query _ _ _ _ (relD_same _ hc hc') (relD_same _ hv hv') (fun_same hP hrx hry (hs.trans hs'.symm) ha ha')
+        obtain ⟨rfl, rfl⟩ := e
+        exact .query _ _ _ _ (relD_same _ hv hv') (fun_same hP hrx hry (hs.trans hs'.symm) ha ha')
       | _ => exact hh'.elim
     | _ => exact hh.elim
 

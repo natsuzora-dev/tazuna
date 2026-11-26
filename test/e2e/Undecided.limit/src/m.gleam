@@ -26,7 +26,7 @@ fn apply(r: Records, e: Event) -> Records {
 fn see() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: "see",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n: Int) { [] },
     decide: fn(c: Ctx(Records, Int, Caller)) { Ok([Seen(c.input)]) },
     ensures: fn(_c, _r) { [] },
@@ -79,7 +79,7 @@ fn ask_apply(r: AskRecords, e: AskEvent) -> AskRecords {
 fn go() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "go",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n: Nil) { [] },
     decide: fn(_c: Ctx(AskRecords, Nil, Caller)) { Ok([Went]) },
     ensures: fn(_c, _r) { [] },
@@ -89,7 +89,7 @@ fn go() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, tazuna.Never) {
 fn set() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "set",
-    callers: [User],
+    callers: [tazuna.Outside(User), tazuna.Own],
     accepts: fn(_n: Nil) { [] },
     decide: fn(_c: Ctx(AskRecords, Nil, Caller)) { Ok([Set]) },
     ensures: fn(_c, _r) { [] },
@@ -99,7 +99,7 @@ fn set() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, tazuna.Never) {
 fn ask() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "ask",
-    callers: [User],
+    callers: [tazuna.Outside(User), tazuna.Own],
     accepts: fn(_n: Nil) { [] },
     decide: fn(_c: Ctx(AskRecords, Nil, Caller)) { Ok([Asked]) },
     ensures: fn(_c, _r) { [] },
@@ -118,13 +118,11 @@ fn both() -> tazuna.Reaction(AskRecords, AskEvent) {
         Went -> [
           tazuna.send_command(
             command: set(),
-            caller: User,
             input: Nil,
             on_answer: fn(_a) { [] },
           ),
           tazuna.send_command(
             command: ask(),
-            caller: User,
             input: Nil,
             on_answer: fn(_a) { [] },
           ),

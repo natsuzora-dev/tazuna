@@ -421,7 +421,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     obtain ⟨-, -, -, hcl', hacc', hdec', hens'⟩ := CommandV.mk.inj (congrArg Subtype.val he)
     dsimp only at hcl' hacc' hdec' hens'
     cases eq_of_heq hacc'; cases eq_of_heq hdec'; cases eq_of_heq hens'
-    have hc := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.list (.param 2)) rfl) hcl
+    have hc := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.list (.origin (.param 2))) rfl) hcl
     exact ⟨(congrArg (Ty.rel0 R _ _) hcl').mpr hc, hacc, hdec, hens⟩
   | query =>
     rintro ⟨n, cl, acc, res, ⟨⟩⟩ ⟨n', cl', acc', res', ⟨⟩⟩ ⟨hn, hcl, hacc, hres, -⟩
@@ -430,7 +430,7 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     obtain ⟨-, -, -, hcl', hacc', hres'⟩ := QueryV.mk.inj (congrArg Subtype.val he)
     dsimp only at hcl' hacc' hres'
     cases eq_of_heq hacc'; cases eq_of_heq hres'
-    have hc := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.list (.param 1)) rfl) hcl
+    have hc := Ty.rel0_down (Ty.isData_inst (Prim.dataOf h rfl) (.list (.origin (.param 1))) rfl) hcl
     exact ⟨(congrArg (Ty.rel0 R _ _) hcl').mpr hc, hacc, hres⟩
   | machine =>
     rintro ⟨n, ins, ini, on, aft, eff, inv, ⟨⟩⟩ ⟨n', ins', ini', on', aft', eff', inv', ⟨⟩⟩
@@ -498,17 +498,17 @@ theorem Prim.den_rel (p : Prim) (args : List Ty) (h : p.ok args = true) :
     obtain rfl : n = n' := hn
     exact .request (.mk _ _ _ _ (Ty.rel0_down _ hx) (.some he) hf)
   | sendCommand =>
-    rintro ⟨c, a, x, f, ⟨⟩⟩ ⟨c', a', x', f', ⟨⟩⟩ ⟨hc, ha, hx, hf, -⟩
+    rintro ⟨c, x, f, ⟨⟩⟩ ⟨c', x', f', ⟨⟩⟩ ⟨hc, hx, hf, -⟩
     have hc : c.1.name = c'.1.name := hc.1
-    show EffectV.Rel R (.command c.1.name _ _ _ _ _ _) (.command c'.1.name _ _ _ _ _ _)
+    show EffectV.Rel R (.command c.1.name _ _ _ _ _) (.command c'.1.name _ _ _ _ _)
     rw [hc]
-    exact .command _ _ _ _ (Ty.rel0_down _ ha) (Ty.rel0_down _ hx) hf
+    exact .command _ _ _ _ (Ty.rel0_down _ hx) hf
   | sendQuery =>
-    rintro ⟨c, a, x, f, ⟨⟩⟩ ⟨c', a', x', f', ⟨⟩⟩ ⟨hc, ha, hx, hf, -⟩
+    rintro ⟨c, x, f, ⟨⟩⟩ ⟨c', x', f', ⟨⟩⟩ ⟨hc, hx, hf, -⟩
     have hc : c.1.name = c'.1.name := hc.1
-    show EffectV.Rel R (.query c.1.name _ _ _ _ _ _) (.query c'.1.name _ _ _ _ _ _)
+    show EffectV.Rel R (.query c.1.name _ _ _ _ _) (.query c'.1.name _ _ _ _ _)
     rw [hc]
-    exact .query _ _ _ _ (Ty.rel0_down _ ha) (Ty.rel0_down _ hx) hf
+    exact .query _ _ _ _ (Ty.rel0_down _ hx) hf
   | fromMachine =>
     rintro ⟨m, k, ⟨⟩⟩ ⟨m', k', ⟨⟩⟩ ⟨hm, hk, -⟩
     have hm : m.name = m'.name := hm.1

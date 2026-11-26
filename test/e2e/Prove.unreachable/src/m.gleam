@@ -25,7 +25,7 @@ fn apply(r: Records, e: Event) -> Records {
 fn add() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: "add",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(n: Int) { [#("positive", n > 0)] },
     decide: fn(c: Ctx(Records, Int, Caller)) { Ok([Added(c.input)]) },
     ensures: fn(_c, _r) { [] },
@@ -35,7 +35,7 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
 fn check() -> tazuna.Command(Records, Event, Caller, Nil, Rejection) {
   tazuna.command(
     name: "check",
-    callers: [User],
+    callers: [tazuna.Outside(User)],
     accepts: fn(_n) { [] },
     decide: fn(c: Ctx(Records, Nil, Caller)) {
       use <- tazuna.require(c.records.total >= 0, Negative)

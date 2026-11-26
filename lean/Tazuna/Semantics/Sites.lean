@@ -226,10 +226,10 @@ def sendPrim {G Γ ps : List Ty} {r : Ty} (f : Expr G Γ (.fn ps r)) : Bool :=
   | _ => false
 
 /-- What a call sends, when it calls `send_command` or `send_query`: the command or query is its first argument, the
-`on_answer` its fourth. -/
+`on_answer` its third. -/
 def sendAt {G Γ ps : List Ty} {r : Ty} (D : Defs G) (f : Expr G Γ (.fn ps r)) (args : Exprs G Γ ps) :
     Option SendSite :=
-  if sendPrim f then some ⟨(args.globalCallAt? 0).map (D.usesAt handlesC), args.closeSiteAt? 3⟩ else none
+  if sendPrim f then some ⟨(args.globalCallAt? 0).map (D.usesAt handlesC), args.closeSiteAt? 2⟩ else none
 
 section
 variable {G : List Ty} (D : Defs G)
