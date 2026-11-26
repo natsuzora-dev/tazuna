@@ -5,10 +5,10 @@ import Tazuna.Trace.Verify
 
 /-! The `generate` command: for each target of each service (`targets`), the shortest run from the initial state whose
 last step shows the target's class of out line, found by deepening an unrolled run (`unrollBase` with `genGoal`) from one
-step to the spec's `steps` bound. A model is played back in Lean: its inputs are decoded, written with the trace
-writer scenarios use and replayed by verify's own replay (`foundTrace`), and the trace is written only when that replay
-passes and its last step shows the target (`generate_reaches`). A target with no model at any depth is unreached
-within the steps (`generate_unreached`). The targets of a service share each depth's run (`unrollBase`), built once;
+step to the spec's `steps` bound. A model is played back in Lean: its inputs are decoded and written with the trace
+writer scenarios use (`foundTrace`), whose lines read as the spec, so verify replays them as passed unless it runs out
+of tries, and the trace is written only when its last step shows the target (`generate_reaches`). A target with no
+model at any depth is unreached within the steps (`generate_unreached`). The targets of a service share each depth's run (`unrollBase`), built once;
 only the goal differs, so an answer is looked up under a key read off the shared prefix's digest and the goal
 (`ScriptPrefix.ask`), and a script's text is printed only for the solver. -/
 
@@ -42,18 +42,19 @@ def lastHits (xs : List (Input v)) : Bool :=
   | some x => (classes T v x (step T v (run T v (State.init v) xs.dropLast).1 x)).any (g.covers rules)
   | none => false
 
-/-- The trace generate writes for the inputs: their trace (`foundTrace`, which verify replays as passed) where the
-last step shows the target. -/
+/-- The trace generate writes for the inputs: their trace (`foundTrace`, which reads as the spec) where the last step
+shows the target. -/
 def genTrace {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E T v) (xs : List (Input v)) :
     Except String TraceFile := do
   let tr ← foundTrace chk xs
   if lastHits T v rules g xs then .ok tr else .error "misses the target"
 
-/-- T6: a written trace reaches its target. Verify replays its lines as passed, and the last step of its run from the
-initial state shows a class the target aims at. -/
-theorem generate_reaches {P : List AnySite} {E : List AnyEffectSite} {chk : Checked P E T v} {xs : List (Input v)}
-    {tr : TraceFile} (h : genTrace T v rules g chk xs = .ok tr) :
-    replay T v tr.numbered = .passed ∧
+/-- T6: a written trace reaches its target. Its lines read as the spec from the initial state, so verify replays them
+as passed unless it runs out of tries (`replay_iff`), and the last step of its run from the initial state shows a
+class the target aims at. -/
+theorem generate_reaches {P : List AnySite} {E : List AnyEffectSite} {chk : Checked P E T v} (hv : v.Equivariant)
+    {xs : List (Input v)} {tr : TraceFile} (h : genTrace T v rules g chk xs = .ok tr) :
+    Reads T v (State.init v) {} tr.numbered ∧
       ∃ ys x, xs = ys ++ [x] ∧ Hits T v rules g x (step T v (run T v (State.init v) ys).1 x) := by
   simp only [genTrace, bind, Except.bind] at h
   split at h
@@ -62,7 +63,7 @@ theorem generate_reaches {P : List AnySite} {E : List AnyEffectSite} {chk : Chec
     split at h
     · rename_i hit
       cases h
-      refine ⟨foundTrace_passed htr, ?_⟩
+      refine ⟨foundTrace_reads hv htr, ?_⟩
       unfold lastHits at hit
       split at hit
       · rename_i x hx

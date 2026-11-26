@@ -291,11 +291,13 @@ namespace Step
 
 variable {v : ServiceV} (T : List TypeDecl)
 
-/-- Every out line of a step in progress is the line of a request that waits. -/
-def OutsWait (a : Acc v) : Prop := ∀ o ∈ a.out, ∃ p ∈ a.state.pending, o = p.line
+/-- What a step in progress sent: the requests it added to the pending table after `base`, in order, are its out
+lines. -/
+def Sent (base : List (Pending v.event)) (a : Acc v) : Prop :=
+  ∃ ps, a.state.pending = base ++ ps ∧ a.out = ps.map Pending.line
 
-theorem start_outsWait : (effs : List (Sender × EffectV v.event)) → (a : Acc v) → OutsWait a →
-    ∀ b, start a effs = .ok b → OutsWait b
+theorem start_sent {base : List (Pending v.event)} : (effs : List (Sender × EffectV v.event)) → (a : Acc v) →
+    Sent base a → ∀ b, start a effs = .ok b → Sent base b
   | [], a, h, b, hs => by
     simp only [start, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at hs; exact hs ▸ h
   | (snd, eff) :: effs, a, h, b, hs => by
@@ -306,17 +308,14 @@ theorem start_outsWait : (effs : List (Sender × EffectV v.event)) → (a : Acc 
       | none => simp only [ho] at hs; cases hs
       | some x =>
         simp only [ho, bind, Except.bind] at hs
-        refine start_outsWait effs _ (fun o ho' => ?_) b hs
-        rcases List.mem_append.1 ho' with ho' | ho'
-        · obtain ⟨p, hp, rfl⟩ := h o ho'
-          exact ⟨p, List.mem_append_left _ hp, rfl⟩
-        · rw [List.mem_singleton] at ho'
-          exact ⟨_, List.mem_append_right _ List.mem_cons_self, ho'⟩
-    | command => simp only [bind, Except.bind] at hs; refine start_outsWait effs _ ?_ b hs; exact h
-    | query => simp only [bind, Except.bind] at hs; refine start_outsWait effs _ ?_ b hs; exact h
+        refine start_sent effs _ ?_ b hs
+        obtain ⟨ps, hp, hout⟩ := h
+        exact ⟨ps ++ [⟨a.state.nextId, snd, x, r⟩], by simp [hp], by simp [hout, Pending.line]⟩
+    | command => simp only [bind, Except.bind] at hs; refine start_sent effs _ ?_ b hs; exact h
+    | query => simp only [bind, Except.bind] at hs; refine start_sent effs _ ?_ b hs; exact h
 
-theorem applyEvents_outsWait : (evs : List v.event.den0) → (a : Acc v) → OutsWait a →
-    ∀ b, applyEvents T a evs = .ok b → OutsWait b
+theorem applyEvents_sent {base : List (Pending v.event)} : (evs : List v.event.den0) → (a : Acc v) → Sent base a →
+    ∀ b, applyEvents T a evs = .ok b → Sent base b
   | [], a, h, b, hs => by
     simp only [applyEvents, List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at hs; exact hs ▸ h
   | ev :: evs, a, h, b, hs => by
@@ -326,14 +325,14 @@ theorem applyEvents_outsWait : (evs : List v.event.den0) → (a : Acc v) → Out
     | error e => simp [h1, bind, Except.bind] at hs
     | ok a1 =>
       simp only [h1, bind, Except.bind] at hs
-      refine applyEvents_outsWait evs a1 (start_outsWait _ _ ?_ a1 h1) b hs
+      refine applyEvents_sent evs a1 (start_sent _ _ ?_ a1 h1) b hs
       exact h
 
-theorem execCommand_outsWait (a : Acc v) (x : CommandV v.records v.event v.caller) (c : v.caller.den0)
-    (i : x.input.den0) (h : OutsWait a) :
-    (∀ b, execCommand T a x c i = .ok (.accepted b) → OutsWait b) ∧
-    (∀ b j, execCommand T a x c i = .ok (.rejected b j) → OutsWait b) := by
-  have ha : OutsWait ({ a with state := { a.state with fresh := a.state.fresh + 1 } } : Acc v) := h
+theorem execCommand_sent {base : List (Pending v.event)} (a : Acc v) (x : CommandV v.records v.event v.caller)
+    (c : v.caller.den0) (i : x.input.den0) (h : Sent base a) :
+    (∀ b, execCommand T a x c i = .ok (.accepted b) → Sent base b) ∧
+    (∀ b j, execCommand T a x c i = .ok (.rejected b j) → Sent base b) := by
+  have ha : Sent base ({ a with state := { a.state with fresh := a.state.fresh + 1 } } : Acc v) := h
   unfold execCommand
   cases had : admit x.callers x.accepts c i with
   | cons r rs => exact ⟨fun _ hb => by simp at hb, fun _ _ hb => by simp at hb⟩
@@ -351,12 +350,12 @@ theorem execCommand_outsWait (a : Acc v) (x : CommandV v.records v.event v.calle
         | nil =>
           refine ⟨fun b hb => ?_, fun b j hb => by simp [hen] at hb⟩
           simp only [hen, Except.ok.injEq, Ran.accepted.injEq] at hb
-          exact hb ▸ applyEvents_outsWait T _ _ ha _ h3
+          exact hb ▸ applyEvents_sent T _ _ ha _ h3
     | .inr (.inl (j, ())) => exact ⟨fun _ hb => (by cases hb), fun b j hb => (by cases hb; exact ha)⟩
 
-theorem runCommand_outsWait {a b : Acc v} {x : CommandV v.records v.event v.caller} {c : v.caller.den0}
-    {i : x.input.den0} {f : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))} (h : OutsWait a)
-    (hb : runCommand T a x c i f = .ok b) : OutsWait b := by
+theorem runCommand_sent {base : List (Pending v.event)} {a b : Acc v} {x : CommandV v.records v.event v.caller}
+    {c : v.caller.den0} {i : x.input.den0} {f : Fun (Ty.fn [Ty.result Ty.nil x.rejection] (.list v.event))}
+    (h : Sent base a) (hb : runCommand T a x c i f = .ok b) : Sent base b := by
   unfold runCommand at hb
   simp only [bind, Except.bind] at hb
   split at hb
@@ -364,11 +363,11 @@ theorem runCommand_outsWait {a b : Acc v} {x : CommandV v.records v.event v.call
   · rename_i r hr
     cases r with
     | invalid => cases hb
-    | accepted a1 => exact applyEvents_outsWait T _ _ ((execCommand_outsWait T a _ _ _ h).1 a1 hr) b hb
-    | rejected a1 j => exact applyEvents_outsWait T _ _ ((execCommand_outsWait T a _ _ _ h).2 a1 j hr) b hb
+    | accepted a1 => exact applyEvents_sent T _ _ ((execCommand_sent T a _ _ _ h).1 a1 hr) b hb
+    | rejected a1 j => exact applyEvents_sent T _ _ ((execCommand_sent T a _ _ _ h).2 a1 j hr) b hb
 
-theorem runOwn_outsWait (a : Acc v) (e : OwnEffectV v.event) (h : OutsWait a) :
-    ∀ b, runOwn T a e = .ok b → OutsWait b := by
+theorem runOwn_sent {base : List (Pending v.event)} (a : Acc v) (e : OwnEffectV v.event) (h : Sent base a) :
+    ∀ b, runOwn T a e = .ok b → Sent base b := by
   intro b hb
   cases e with
   | command name c i j caller value onAnswer =>
@@ -387,7 +386,7 @@ theorem runOwn_outsWait (a : Acc v) (e : OwnEffectV v.event) (h : OutsWait a) :
         subst hcp hi hj
         intro hb
         change runCommand T a x _ _ _ = _ at hb
-        exact runCommand_outsWait T h hb
+        exact runCommand_sent T h hb
   | query name c i o caller value onAnswer =>
     dsimp only [runOwn] at hb
     revert hb
@@ -407,10 +406,11 @@ theorem runOwn_outsWait (a : Acc v) (e : OwnEffectV v.event) (h : OutsWait a) :
         unfold runQuery at hb
         split at hb
         · cases hb
-        · refine applyEvents_outsWait T _ _ ?_ b hb
+        · refine applyEvents_sent T _ _ ?_ b hb
           exact h
 
-theorem settle_outsWait : (fuel : Nat) → (a : Acc v) → OutsWait a → ∀ b, settle T fuel a = .ok b → OutsWait b
+theorem settle_sent {base : List (Pending v.event)} : (fuel : Nat) → (a : Acc v) → Sent base a →
+    ∀ b, settle T fuel a = .ok b → Sent base b
   | fuel, a, h, b, hb => by
     unfold settle at hb
     match hown : a.own, fuel, hb with
@@ -421,59 +421,87 @@ theorem settle_outsWait : (fuel : Nat) → (a : Acc v) → OutsWait a → ∀ b,
       split at hb
       · cases hb
       · rename_i a1 h1
-        refine settle_outsWait f a1 (runOwn_outsWait T _ e ?_ a1 h1) b hb
+        refine settle_sent f a1 (runOwn_sent T _ e ?_ a1 h1) b hb
         exact h
 
-theorem finish_outsWait (s0 : State v) (r : Except Fault (Acc v)) (o : Outcome)
-    (hr : ∀ a, r = .ok a → OutsWait a) :
-    ∀ l ∈ (finish T s0 r o).out, ∃ p ∈ (finish T s0 r o).state.pending, l = p.line := by
+theorem finish_sent (s0 : State v) (r : Except Fault (Acc v)) (o : Outcome) {base : List (Pending v.event)}
+    (h0 : base.Sublist s0.pending) (hr : ∀ a, r = .ok a → Sent base a) :
+    ∃ base' ps, base'.Sublist s0.pending ∧ (finish T s0 r o).state.pending = base' ++ ps ∧
+      (finish T s0 r o).out = ps.map Pending.line := by
   unfold finish
   split
-  · simp
+  · exact ⟨_, [], .refl _, by simp, rfl⟩
   · rename_i a h
     split
-    · simp
+    · exact ⟨_, [], .refl _, by simp, rfl⟩
     · cases r with
       | error => simp [bind, Except.bind] at h
       | ok a0 =>
         simp only [bind, Except.bind] at h
-        exact settle_outsWait T _ a0 (hr a0 rfl) a h
+        obtain ⟨ps, h1, h2⟩ := settle_sent T _ a0 (hr a0 rfl) a h
+        exact ⟨base, ps, h0, h1, h2⟩
 
-/-- Every out line of a step is the line of a request that waits after it. -/
-theorem step_outsWait (s : State v) (x : Input v) :
-    ∀ l ∈ (step T v s x).out, ∃ p ∈ (step T v s x).state.pending, l = p.line := by
-  have h0 : ∀ s' : State v, OutsWait ({ state := s' } : Acc v) := fun _ _ h => nomatch h
+theorem fire_pending : (fuel : Nat) → (s : State v) → ∀ s' effs, fire s fuel = some (s', effs) → s'.pending = s.pending
+  | 0, _, _, _, h => by simp [fire] at h
+  | fuel + 1, s, s', effs, h => by
+    unfold fire at h
+    split at h
+    · cases h; rfl
+    · obtain ⟨p, h1, he⟩ := Option.map_eq_some_iff.1 h
+      obtain ⟨s1, e1⟩ := p
+      simp only [Prod.mk.injEq] at he
+      obtain ⟨rfl, -⟩ := he
+      have := fire_pending fuel _ s1 e1 h1
+      exact this
+
+/-- A step keeps some of the requests that waited, in order, and adds the ones it sends: its out lines. -/
+theorem step_sent (s : State v) (x : Input v) :
+    ∃ base ps, base.Sublist s.pending ∧ (step T v s x).state.pending = base ++ ps ∧
+      (step T v s x).out = ps.map Pending.line := by
+  have h0 : ∀ s' : State v, Sent s'.pending ({ state := s' } : Acc v) := fun s' => ⟨[], by simp, rfl⟩
   cases x with
   | command i caller input =>
     simp only [step]
     split
-    · simp
-    · simp
-    · simp
+    · exact ⟨_, [], .refl _, by simp, rfl⟩
+    · exact ⟨_, [], .refl _, by simp, rfl⟩
+    · exact ⟨_, [], .refl _, by simp, rfl⟩
     · rename_i a ha
-      exact finish_outsWait T _ _ _ fun b hb => by
-        cases hb; exact (execCommand_outsWait T _ _ _ _ (h0 s)).1 a ha
+      exact finish_sent T { s with fresh := s.fresh + 1 } _ _ (base := s.pending) (.refl _) fun b hb => by
+        obtain rfl := Except.ok.inj hb; exact (execCommand_sent T _ _ _ _ (h0 s)).1 a ha
   | query i caller input =>
     simp only [step]
-    split <;> simp
+    split <;> exact ⟨_, [], .refl _, by simp, rfl⟩
   | answer to w =>
     obtain ⟨t, value⟩ := w
     simp only [step]
     split
-    · simp
+    · exact ⟨_, [], .refl _, by simp, rfl⟩
     · split
-      · simp
+      · exact ⟨_, [], .refl _, by simp, rfl⟩
       · split
-        · simp
-        · exact finish_outsWait T _ _ _ fun b hb => applyEvents_outsWait T _ _ (h0 _) b hb
-  | event i value => exact finish_outsWait T _ _ _ fun b hb => applyEvents_outsWait T _ _ (h0 _) b hb
+        · exact ⟨_, [], .refl _, by simp, rfl⟩
+        · exact finish_sent T s _ .accepted List.filter_sublist fun b hb => applyEvents_sent T _ _ (h0 _) b hb
+  | event i value =>
+    exact finish_sent T s _ .accepted (.refl _) fun b hb => applyEvents_sent T _ _ (h0 _) b hb
   | clock time =>
     simp only [step]
     split
-    · simp
+    · exact ⟨_, [], .refl _, by simp, rfl⟩
     · split
-      · simp
-      · exact finish_outsWait T _ _ _ fun b hb => start_outsWait _ _ (h0 _) b hb
+      · exact ⟨_, [], .refl _, by simp, rfl⟩
+      · rename_i s' effs hf
+        exact finish_sent T s _ .accepted (base := s.pending) (.refl _) fun b hb =>
+          start_sent _ _ (by have := h0 s'; rwa [fire_pending _ _ s' effs hf] at this) b hb
+
+/-- Every out line of a step is the line of a request that waits after it. -/
+theorem step_outsWait (s : State v) (x : Input v) :
+    ∀ l ∈ (step T v s x).out, ∃ p ∈ (step T v s x).state.pending, l = p.line := by
+  obtain ⟨_base, ps, _, hp, ho⟩ := step_sent T s x
+  intro l hl
+  rw [ho] at hl
+  obtain ⟨p, hpm, rfl⟩ := List.mem_map.1 hl
+  exact ⟨p, hp ▸ List.mem_append_right _ hpm, rfl⟩
 
 end Step
 

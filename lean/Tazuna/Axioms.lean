@@ -85,9 +85,9 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Gleam.div_zero, ``Tazuna.Gleam.mod_zero, ``Tazuna.Gleam.div_add_mod, ``Tazuna.Gleam.mod_neg_left,
     ``Tazuna.Gleam.mod_neg_right, ``Tazuna.Gleam.div_neg_right, ``Tazuna.Gleam.length_eq_codepoints,
     ``Tazuna.Ir.Ty.deq_bag_perm, ``Tazuna.Ir.Literal.parseInt_printInt, ``Tazuna.Ir.Literal.parseStr_printStr,
-    -- Traces: reading back a written trace's header and lines, or a written value, gives it back, and a date label and
-    -- its day number are one value, every day having a label.
-    ``Tazuna.Trace.TraceFile.read_wires, ``Tazuna.Trace.dec_enc, ``Tazuna.Trace.DateThm.render_parse,
+    -- Traces: reading back a written trace's header and lines gives them back, and a date label and its day number are
+    -- one value, every day having a label. (Reading back a written value, `dec_enc`, is T6's.)
+    ``Tazuna.Trace.TraceFile.read_wires, ``Tazuna.Trace.DateThm.render_parse,
     -- verify, unless out of tries, passes a trace exactly when one bijection of ids reads every window as the spec's.
     ``Tazuna.Trace.replay_iff,
     -- A counterexample's `after` is the state the step reaches before its invariant check.
@@ -151,8 +151,9 @@ elab "#check_tazuna_reach" : command => do
     -- ones an earlier out line showed (`unroll_decode`, `Step.ShownRun`), and its last step answers in the target's
     -- class.
     ``Tazuna.Smt.generate_sound,
-    -- T6: a trace generate writes reaches its target: verify replays its lines as passed, and its last step answers
-    -- in the target's class.
+    -- T6: a trace generate writes reaches its target: its lines read as the spec, so verify replays them as passed
+    -- unless out of tries, and its last step answers in the target's class. Its chain: `traceOf_reads` (Trace/ReplayOk),
+    -- on `dec_enc` and `Step.step_same`.
     ``Tazuna.Cli.generate_reaches,
     -- T6b: generate's "unreached within k steps": where its script at a depth has no model, no run of that many valid
     -- inputs within the slots that faults nowhere answers at its last step in the target's class (from
@@ -167,10 +168,7 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.response_sound,
     -- Check's wireType rule reads every wire type, so a user's spec never fails `Checked.wire`: a function on the wire
     -- is Illegal.wireType, and only a loader bug is left to break it (exit 4).
-    ``Tazuna.Smt.wireTys_wire,
-    -- The step reads no bag's or table's order: from states and on inputs that differ only in how bags and tables are
-    -- stored, it steps to results that differ only so, every other order kept.
-    ``Tazuna.Ir.Step.step_same]
+    ``Tazuna.Smt.wireTys_wire]
   let mut used : NameSet := {}
   let mut usedByOther : NameSet := {}
   let mut todo := roots

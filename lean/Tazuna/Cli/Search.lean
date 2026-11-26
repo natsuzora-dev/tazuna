@@ -4,8 +4,7 @@ import Tazuna.Smt.Bounds
 import Tazuna.Smt.PairOrders
 import Tazuna.Smt.Cover
 import Tazuna.Smt.Boundary
-import Tazuna.Trace.Verify
-import Tazuna.Trace.WriteOk
+import Tazuna.Trace.ReplayOk
 
 /-! What `prove` and `generate` share: their options, the solver pool, the lines of a refused encoding and of a
 service's scope, and the search of a service's unrolled run depth by depth for a model of a goal, with each depth's
@@ -233,36 +232,41 @@ instance (o : Outcome) : Decidable (∀ f, o ≠ .fault f) :=
   | .fault f => isFalse fun h => h f rfl
   | .accepted | .answered _ | .rejected _ | .invalid _ => isTrue nofun
 
-/-- The trace of a run a search found, which verify replays as passed; else an engine bug. A run that faults nowhere,
-as `unroll_decode` proves of every model's run, always writes (`traceOf_ok`). No theorem yet says verify replays it
-as passed. -/
+/-- The trace of a run a search found; else an engine bug. A run that faults nowhere and whose inputs carry only ids
+from outside or ones an earlier out line showed, as `unroll_decode` proves of every model's run, always writes
+(`traceOf_ok`), and its trace reads as the spec (`foundTrace_reads`). -/
 def foundTrace {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
     (chk : Smt.Checked P E T v) (xs : List (Input v)) : Except String TraceFile :=
   if hnf : NoFaultRun T (State.init v) xs then
-    match h : traceOf T v xs with
-    | .ok tr => match replay T v tr.numbered with
-      | .passed => .ok tr
-      | _ => .error "does not replay as passed (unproved: verify replays a found run's trace as passed)"
-    | .error _ => absurd h (by obtain ⟨tr, h'⟩ := traceOf_ok chk hnf; rw [h']; nofun)
+    if knownRun T [] (State.init v) xs then
+      match h : traceOf T v xs with
+      | .ok tr => .ok tr
+      | .error _ => absurd h (by obtain ⟨tr, h'⟩ := traceOf_ok chk hnf; rw [h']; nofun)
+    else .error "carries an id no earlier out line showed, which unroll_decode rules out"
   else
     let k := (run T v (State.init v) xs).2.findIdx fun r => match r.outcome with
       | .fault _ => true
       | _ => false
     .error s!"faults at step {k + 1}, which unroll_decode rules out"
 
-theorem foundTrace_passed {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
-    {chk : Smt.Checked P E T v} {xs : List (Input v)} {tr : TraceFile} (h : foundTrace chk xs = .ok tr) :
-    replay T v tr.numbered = .passed := by
+/-- A found run's trace reads as the spec from the initial state, so verify replays it as passed unless it runs out
+of tries (`replay_iff`). -/
+theorem foundTrace_reads {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
+    {chk : Smt.Checked P E T v} (hv : v.Equivariant) {xs : List (Input v)} {tr : TraceFile}
+    (h : foundTrace chk xs = .ok tr) : Reads T v (State.init v) {} tr.numbered := by
   unfold foundTrace at h
   split at h
-  · split at h
-    · rename_i tr' _
+  · rename_i hnf
+    split at h
+    · rename_i hkn
       split at h
-      · rename_i hp; cases h; exact hp
-      · cases h
-    · next hnf _ h' =>
-      obtain ⟨tr'', h''⟩ := traceOf_ok chk hnf
-      rw [h''] at h'; cases h'
+      · rename_i tr' htr
+        cases h
+        exact traceOf_reads chk ⟨hv, fun m hm => (chk.keys m hm).2⟩ hnf hkn htr
+      · rename_i htr
+        obtain ⟨tr'', h''⟩ := traceOf_ok chk hnf
+        rw [h''] at htr; cases htr
+    · cases h
   · cases h
 
 /-- What a search over depths found. -/
