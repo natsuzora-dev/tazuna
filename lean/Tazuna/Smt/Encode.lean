@@ -2,8 +2,8 @@ import Tazuna.Semantics.Eval
 import Tazuna.Smt.Slots
 
 /-! The encoding of typed IR expressions as SMT terms. It follows `eval` clause by clause: a value of a first-order
-type is coded as a term, a list too (slots in order, sized by its type's longest literal, since every list is a
-literal), and a function as a Lean function on codes, so lambdas, calls, globals and built-ins encode the way they evaluate. Each code comes with a
+type is coded as a term, a list too (slots in order, sized by its type's longest literal), and a function as a Lean
+function on codes, so lambdas, calls, globals and built-ins encode the way they evaluate. Each code comes with a
 condition, a Bool term that holds when no collection outgrew the slots its layout gives it; a caller states it as
 the bound it checks within. Whatever has no exact encoding is refused with a reason, never approximated.
 
@@ -1230,8 +1230,8 @@ section
 variable {G : List Ty}
 
 mutual
-/-- The type and length of every list literal of an expression. Every list is a literal, so a list type's longest
-literal bounds every list of that type: its slot count, derived, with no bound to state. -/
+/-- The type and length of every list literal of an expression. A list type's longest literal is its slot count;
+a list from an input can be longer, so a verdict's bounds name it. -/
 def Expr.lits {Γ : List Ty} {t : Ty} : Expr G Γ t → List (Ty × Nat)
   | .list items => (t, Items.len items) :: Items.lits items
   | .ctor _ es | .tuple es => Exprs.lits es

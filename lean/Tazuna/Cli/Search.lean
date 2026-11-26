@@ -87,18 +87,19 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .keptFunctions => "the two orders end with the same data but keep different functions, whose results are not compared"
   | .tableKey t => s!"a value of {tyText T t} holds a table whose key is no plain value"
 
-/-- Every bound a step of the service can go past: each table and bag type of its layout, and the pending requests
-where the service has a request shape, with the bound its slots come from (`stepBound`) and its slots as
-`Layout.count` gives them, the function every slot-fit premise (`StepFits`, `RunIn`, `RespFits`) reads. A list's slots
-are its type's longest literal and no built-in makes a longer list, so no list bound is ever past. -/
+/-- Every bound a step of the service can go past: each table, bag and list type of its layout, and the pending
+requests where the service has a request shape, with the bound its slots come from (`stepBound`; a list's, its type's
+longest literal) and its slots as `Layout.count` gives them, the function every slot-fit premise (`StepFits`, `RunIn`,
+`RespFits`) reads. A list from an input can be longer than every literal of its type, so lists are named too. -/
 def scopeBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
   L.types.filterMap fun (t, _) =>
-    let line (name : String) : Option Json :=
-      some (Json.mkObj [("type", Json.str name), ("bound", Json.str (stepBound v t)), ("slots", Lean.toJson (L.count t))])
+    let line (name bound : String) : Option Json :=
+      some (Json.mkObj [("type", Json.str name), ("bound", Json.str bound), ("slots", Lean.toJson (L.count t))])
     if (Ty.same t (pendingTable (shapes v))).isSome then
-      if (shapes v).isEmpty then none else line "pending requests"
+      if (shapes v).isEmpty then none else line "pending requests" (stepBound v t)
     else match t with
-      | .table .. | .bag _ => line (tyText T t)
+      | .table .. | .bag _ => line (tyText T t) (stepBound v t)
+      | .list _ => line (tyText T t) "longest literal"
       | _ => none
 
 /-- The kind and fields of the line of a refusal that is the spec's: undecided, with its reason. -/
