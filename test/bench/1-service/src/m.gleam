@@ -153,7 +153,40 @@ fn s1() -> tazuna.Service {
         #("few items", table.size(r.items) <= 2),
       ]
     },
-    responses: [],
+    responses: [
+      tazuna.response(
+        name: "a put is pinged",
+        after: fn(e: E1) {
+          case e {
+            Put1(_, _) -> True
+            _ -> False
+          }
+        },
+        then: fn(e: E1) {
+          case e {
+            Ping1 -> True
+            _ -> False
+          }
+        },
+        within: 20,
+      ),
+      tazuna.response(
+        name: "a positive put is bumped",
+        after: fn(e: E1) {
+          case e {
+            Put1(k, _) -> k > 0
+            _ -> False
+          }
+        },
+        then: fn(e: E1) {
+          case e {
+            Bumped1(_) -> True
+            _ -> False
+          }
+        },
+        within: 0,
+      ),
+    ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: R1) { r.items }, at_most: 2)],
       items: 2,

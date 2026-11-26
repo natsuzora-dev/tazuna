@@ -1,7 +1,8 @@
 #!/bin/sh
 # Times `prove` on a synthetic spec as a user runs it: once with an empty cache, then again from the cache. Each
 # directory here is one spec of N alike services (a create-bounded table, three commands with accepts and ensures, a
-# keyed machine with a timer and an external request, a reaction sending an own command, a source subscription).
+# keyed machine with a timer and an external request, a reaction sending an own command, a source subscription, two
+# bounded responses).
 # Prints the wall times, how many questions the solver answered (the answers the cache keeps), the cache's size and
 # the kinds of the lines printed.
 # Usage: test/bench/time <spec directory, e.g. 3-services> [jobs, default 4]

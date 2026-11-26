@@ -153,7 +153,40 @@ fn s1() -> tazuna.Service {
         #("few items", table.size(r.items) <= 2),
       ]
     },
-    responses: [],
+    responses: [
+      tazuna.response(
+        name: "a put is pinged",
+        after: fn(e: E1) {
+          case e {
+            Put1(_, _) -> True
+            _ -> False
+          }
+        },
+        then: fn(e: E1) {
+          case e {
+            Ping1 -> True
+            _ -> False
+          }
+        },
+        within: 20,
+      ),
+      tazuna.response(
+        name: "a positive put is bumped",
+        after: fn(e: E1) {
+          case e {
+            Put1(k, _) -> k > 0
+            _ -> False
+          }
+        },
+        then: fn(e: E1) {
+          case e {
+            Bumped1(_) -> True
+            _ -> False
+          }
+        },
+        within: 0,
+      ),
+    ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: R1) { r.items }, at_most: 2)],
       items: 2,
@@ -296,7 +329,40 @@ fn s2() -> tazuna.Service {
         #("few items", table.size(r.items) <= 2),
       ]
     },
-    responses: [],
+    responses: [
+      tazuna.response(
+        name: "a put is pinged",
+        after: fn(e: E2) {
+          case e {
+            Put2(_, _) -> True
+            _ -> False
+          }
+        },
+        then: fn(e: E2) {
+          case e {
+            Ping2 -> True
+            _ -> False
+          }
+        },
+        within: 20,
+      ),
+      tazuna.response(
+        name: "a positive put is bumped",
+        after: fn(e: E2) {
+          case e {
+            Put2(k, _) -> k > 0
+            _ -> False
+          }
+        },
+        then: fn(e: E2) {
+          case e {
+            Bumped2(_) -> True
+            _ -> False
+          }
+        },
+        within: 0,
+      ),
+    ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: R2) { r.items }, at_most: 2)],
       items: 2,
@@ -439,7 +505,40 @@ fn s3() -> tazuna.Service {
         #("few items", table.size(r.items) <= 2),
       ]
     },
-    responses: [],
+    responses: [
+      tazuna.response(
+        name: "a put is pinged",
+        after: fn(e: E3) {
+          case e {
+            Put3(_, _) -> True
+            _ -> False
+          }
+        },
+        then: fn(e: E3) {
+          case e {
+            Ping3 -> True
+            _ -> False
+          }
+        },
+        within: 20,
+      ),
+      tazuna.response(
+        name: "a positive put is bumped",
+        after: fn(e: E3) {
+          case e {
+            Put3(k, _) -> k > 0
+            _ -> False
+          }
+        },
+        then: fn(e: E3) {
+          case e {
+            Bumped3(_) -> True
+            _ -> False
+          }
+        },
+        within: 0,
+      ),
+    ],
     bounds: tazuna.bounds(
       creates: [tazuna.create(table: fn(r: R3) { r.items }, at_most: 2)],
       items: 2,
