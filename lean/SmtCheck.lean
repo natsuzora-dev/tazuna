@@ -7,6 +7,9 @@ import Tazuna.Smt.ServiceLayout
 import Tazuna.Smt.Timer
 import Tazuna.Smt.Pair
 import Tazuna.Smt.PairOrders
+import Tazuna.Smt.Unroll
+import Tazuna.Semantics.StepExamples
+import Tazuna.Cli.Prove
 
 -- Test scaffolding: a value the model leaves out reads as a default that the checks then reject.
 set_option linter.tazuna.silentDefault false
@@ -3698,6 +3701,110 @@ def familyCheck (solver : Solver) : IO Bool := do
         | a => IO.println s!"smt-check: {name} family's {part} is not sat: {repr a}"; ok := false
     return ok
 
+/-! The unrolled run (`unroll`): on the example service `sum` (Semantics/StepExamples), the shortest run whose last
+step is an accepted answer takes four inputs (two that move the total, which start the machine and set its timer, a
+clock line that fires it and sends `ping`, the answer), so depth 3 is unsat and depth 4 sat, and the model's inputs,
+run in Lean from the initial state, are that run: no step faults, the last is an accepted answer, and every state the
+model holds after a step is the run's state, as a report shows it. A step whose end breaks `under 50` faults, so no
+run of one input leaves 50 or more (unsat; without the no-fault condition it is sat). On `tagging`, whose command `tag`
+takes an id, the first input carries no fresh id, since the service has made none (unsat; without the names
+condition it is sat). -/
+
+/-- Whether the last step takes an answer whose rules hold. -/
+def answeredLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term :=
+  match steps.getLast? with
+  | some st => anyT (st.kinds.filterMap fun (k, _, t) => match t.out with
+      | .answer o => some (andT (.eq st.sel (.int k)) (allT (o.rules.map (·.2))))
+      | _ => none)
+  | none => .bool false
+
+/-- Whether the last step sends a request. -/
+def sentLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term :=
+  match steps.getLast? with
+  | some st => .lt st.before.nextId st.after.nextId
+  | none => .bool false
+
+/-- Whether the last step is a command from a caller it does not list. -/
+def callerRefusedLast {v : ServiceV} {n : Nat} (steps : List (UnrollStep v n)) : Term :=
+  match steps.getLast? with
+  | some st => anyT (st.kinds.filterMap fun (k, _, t) => match t.out with
+      | .command o => some (andT (.eq st.sel (.int k)) (.not o.callerOk))
+      | _ => none)
+  | none => .bool false
+
+def stateText (T : List TypeDecl) {v : ServiceV} (s : State v) : String := ((Tazuna.Cli.stateWire T s).run' {}).text
+
+/-- The model's run: its inputs decoded, run in Lean from the initial state, and whether each state the model holds
+after a step is the run's; none where an input does not decode. -/
+def playback {v : ServiceV} {n : Nat} (T : List TypeDecl) (L : Layout) (hc : v.caller.isData = true) (M : Model)
+    (steps : List (UnrollStep v n)) : Option (List (Result v) × Bool) := do
+  let xs ← steps.mapM (·.decode M L hc)
+  let rs := (run T v (Step.State.init v) xs).2
+  pure (rs, (steps.zip rs).all fun (st, r) => match st.after.decode M L T (shapes v) with
+    | some s => stateText T s == stateText T r.state
+    | none => false)
+
+def tagC : CommandV .int .int .int :=
+  { name := "tag", input := .id, rejection := .str, callers := [(1 : Int)], accepts := .closed (.lam (.list .nil)),
+    decide := .closed (.lam (.ctor (vs := [[.list .int], [.str]]) ⟨0, by decide⟩ (.cons (.list .nil) .nil))),
+    ensures := .closed (.lam (.list .nil)) }
+
+def taggingSvc : ServiceV :=
+  { name := "tagging", records := .int, event := .int, caller := .int, init := (0 : Int),
+    apply := .closed (.lam (.var .here)), subscribes := [], declares := [], commands := [tagC], queries := [],
+    sources := [], machines := [], reactions := [], invariants := .closed (.lam (.list .nil)), responses := [],
+    bounds := ⟨[], 3, 2, 5⟩, scenarios := [], declared := [] }
+
+def unrollCheck (solver : Solver) : IO Bool := do
+  let fail (m : String) : IO Bool := do IO.println s!"smt-check: unrolled run: {m}"; return false
+  let v := StepExamples.svc
+  let L := svcLayout v 3
+  let P := (svcParts v).sites
+  let .ok senv := StepEnv.of L (shapes v) | fail "no step environment"
+  let mut ok := true
+  for (d, want) in [(3, false), (4, true)] do
+    match unroll L prelude P v senv d answeredLast with
+    | .error r => ok ← fail s!"depth {d}: {repr r}"
+    | .ok u =>
+      unless u.refused.isEmpty do ok ← fail s!"depth {d}: a kind was refused"
+      match ← solver.run u.ask.script, want with
+      | .unsat, false => pure ()
+      | .sat vs, true =>
+        match playback prelude L rfl (modelOf vs) u.steps with
+        | some (rs, same) =>
+          unless rs.all (fun r => match r.outcome with | .fault _ => false | _ => true) do
+            ok ← fail s!"depth {d}: a step of the model's run faults"
+          unless (match rs.getLast? with | some r => r.outcome.summary == "accepted" | none => false) do
+            ok ← fail s!"depth {d}: the model's last step is not accepted"
+          unless same do ok ← fail s!"depth {d}: a state the model holds is not the run's"
+        | none => ok ← fail s!"depth {d}: the model's inputs do not decode"
+      | a, _ => ok ← fail s!"depth {d}: {repr a}, want sat {want}"
+  let over50 (steps : List (UnrollStep v senv.nT)) : Term := match steps.getLast? with
+    | some st => .le (.int 50) st.after.records
+    | none => .bool false
+  match unroll L prelude P v senv 1 over50 with
+  | .ok u =>
+    match ← solver.run u.ask.script with
+    | .unsat => pure ()
+    | a => ok ← fail s!"a run of one input leaves 50 or more: {repr a}"
+  | .error r => ok ← fail s!"no run of one input: {repr r}"
+  let tv := taggingSvc
+  let tL := svcLayout tv 3
+  let .ok tsenv := StepEnv.of tL (shapes tv) | fail "no step environment for tagging"
+  let some (dId, _) := tL.find? .id | fail "no id datatype"
+  let freshInput (steps : List (UnrollStep tv tsenv.nT)) : Term := match steps.head? with
+    | some st => anyT (st.kinds.filterMap fun (k, inp, _) => match inp with
+        | .command _ _ x => some (andT (.eq st.sel (.int k)) (.is dId 0 x))
+        | _ => none)
+    | none => .bool false
+  match unroll tL prelude (svcParts tv).sites tv tsenv 1 freshInput with
+  | .ok u =>
+    match ← solver.run u.ask.script with
+    | .unsat => pure ()
+    | a => ok ← fail s!"the first input carries a fresh id: {repr a}"
+  | .error r => ok ← fail s!"no run of tagging: {repr r}"
+  return ok
+
 def check (z3 : String) : IO Bool := do
   let solver : Solver := { path := z3, timeoutMs := 10000 }
   let mut ok := true
@@ -3790,6 +3897,7 @@ def check (z3 : String) : IO Bool := do
   unless ← cascEventCheck solver do ok := false
   unless ← tickClockCheck solver do ok := false
   unless ← proveCheck solver do ok := false
+  unless ← unrollCheck solver do ok := false
   -- A datatype value with a negative field and an empty constructor.
   match ← solver.run dt with
   | .sat vs =>
@@ -3805,6 +3913,14 @@ def check (z3 : String) : IO Bool := do
 /-- A script's size as the solver reads it: the number of applications in its text, definitions of shared terms
 and declarations included. -/
 def nodes (s : Script) : Nat := ((s.text []).getD "").foldl (fun n c => if c == '(' then n + 1 else n) 0
+
+/-- The unrolled run of `sum` at depth `d` with no goal: fresh constants per state keep it linear in `d`. -/
+def unrolledSum (d : Nat) : Except String Script := do
+  let v := StepExamples.svc
+  let L := svcLayout v 3
+  let senv ← (StepEnv.of L (shapes v)).mapError fun r => s!"no step environment: {repr r}"
+  let u ← (unroll L prelude (svcParts v).sites v senv d fun _ => tt).mapError fun r => s!"no unrolling: {repr r}"
+  pure u.ask.script
 
 /-- The step scripts whose sizes are measured, each as a function of the slots (or the bound, or the levels). -/
 def sizeRows : List (String × (Nat → Except String Script)) :=
@@ -3824,7 +3940,8 @@ def sizeRows : List (String × (Nat → Except String Script)) :=
    ("clock whose timers queue own commands (bound 2)", fun k => (·.1) <$> tickClockTermsOf 2 k []),
    ("pair question (insert, capped insert)", fun k => pairTarget k 0 2),
    ("pair question (insert, insert) sending requests", reqTarget),
-   ("re-shared chain (levels, not slots)", fun k => pure (reshared k))]
+   ("re-shared chain (levels, not slots)", fun k => pure (reshared k)),
+   ("unrolled run of sum (depth, not slots)", unrolledSum)]
 
 /-- Prints the step scripts' sizes at 2, 4, 8 and 16, one row each. With a budget file, whose rows have the same form,
 a size above its budget, a row without a budget or a budget without a row fails: the size of what the solver reads is
@@ -3856,9 +3973,49 @@ def sizes (budget : Option System.FilePath) : IO UInt32 := do
     unless sizeRows.any (·.1 == name) do IO.println s!"smt-check: the budget of {name} measures no row"; ok := false
   return if ok then 0 else 1
 
+/-- Measures unrolled runs of a loaded spec: for each service, depth from 1 to `kmax` and goal, the script's size
+and the solver's time and answer, and whether a model's run, played back in Lean, faults nowhere and holds the model's
+states. Not part of the check: it informs the choice of depth and search order. -/
+def unrollBench (z3 ir root : String) (kmax : Nat) (timeoutMs : Nat) : IO UInt32 := do
+  match ← Tazuna.Cli.loadSpec root ir with
+  | .error code => return code
+  | .ok c =>
+    let solver : Solver := { path := z3, timeoutMs }
+    IO.println "service\tdepth\tgoal\tKB\tnodes\tms\tanswer\tplayback"
+    for v in c.spec.services do
+      let L := Layout.ofService c.program.defs v
+      let .ok senv := StepEnv.of L (shapes v) | IO.println s!"{v.name}: no step environment"; return 4
+      let goals : List (String × (List (UnrollStep v senv.nT) → Term)) :=
+        [("any", fun _ => tt), ("sent", sentLast), ("answered", answeredLast), ("caller refused", callerRefusedLast)]
+      for d in (List.range kmax).map (· + 1) do
+        for (g, goal) in goals do
+          match unroll L c.T c.P v senv d goal with
+          | .error r => IO.println s!"{v.name}\t{d}\t{g}\trefused {repr r}"
+          | .ok u =>
+            let script := u.ask.script
+            let kb := ((script.text solver.header).map (·.length)).getD 0 / 1024
+            let t0 ← IO.monoMsNow
+            let a ← solver.run script
+            let t1 ← IO.monoMsNow
+            let (answer, pb) := match a with
+              | .sat vs =>
+                let pb := if hc : v.caller.isData = true then
+                    match playback c.T L hc (modelOf vs) u.steps with
+                    | some (rs, same) =>
+                      if rs.any (fun r => match r.outcome with | .fault _ => true | _ => false) then "fault"
+                      else if same then "ok" else "states differ"
+                    | none => "no decode"
+                  else "caller no data"
+                ("sat", pb)
+              | .unsat => ("unsat", "")
+              | .unknown why => (s!"unknown {why}", "")
+            IO.println s!"{v.name}\t{d}\t{g}\t{kb}\t{nodes script}\t{t1 - t0}\t{answer}\t{pb}{if u.refused.isEmpty then "" else s!" ({u.refused.length} kinds refused)"}"
+    return 0
+
 def main (args : List String) : IO UInt32 := do
   match args with
   | ["--sizes"] => sizes none
   | ["--sizes", budget] => sizes (some budget)
   | [z3] => return if ← check z3 then 0 else 1
+  | ["--unroll", z3, ir, root, kmax, ms] => unrollBench z3 ir root kmax.toNat! ms.toNat!
   | _ => IO.eprintln "usage: smt-check <z3 executable> | smt-check --sizes [budget file]"; return 3

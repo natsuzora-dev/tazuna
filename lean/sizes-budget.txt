@@ -13,3 +13,4 @@ clock whose timers queue own commands (bound 2): 13555/39662/132305/479305
 pair question (insert, capped insert): 3207/9403/32149/119061
 pair question (insert, insert) sending requests: 5032/16424/59745/228543
 re-shared chain (levels, not slots): 17/29/54/102
+unrolled run of sum (depth, not slots): 28930/67110/143480/296220
