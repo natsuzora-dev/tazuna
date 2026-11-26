@@ -133,7 +133,9 @@ elab "#check_tazuna_reach" : command => do
     -- Every model a question family's report reads decodes: a model of the family's context whose variables hold values
     -- of their sorts decodes to the state, input, effects or instance context the report shows, so prove's "does not
     -- decode" lines are unreachable.
-    ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode]
+    ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode,
+    -- The same for an unrolled run, which generate reads: the input each step's selector picks decodes.
+    ``Tazuna.Smt.unroll_inputs_decode]
   let mut used : NameSet := {}
   let mut usedByOther : NameSet := {}
   let mut todo := roots
