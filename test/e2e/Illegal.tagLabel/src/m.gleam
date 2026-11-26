@@ -18,7 +18,7 @@ fn apply(r: Records, e: Event) -> Records {
   }
 }
 
-fn label() -> tazuna.Command(Records, Event, Caller, Int, Nil) {
+fn label() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: "label",
     callers: [User],

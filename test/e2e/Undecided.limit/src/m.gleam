@@ -23,7 +23,7 @@ fn apply(r: Records, e: Event) -> Records {
   }
 }
 
-fn see() -> tazuna.Command(Records, Event, Caller, Int, Nil) {
+fn see() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: "see",
     callers: [User],
@@ -76,7 +76,7 @@ fn ask_apply(r: AskRecords, e: AskEvent) -> AskRecords {
   }
 }
 
-fn go() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, Nil) {
+fn go() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "go",
     callers: [User],
@@ -86,7 +86,7 @@ fn go() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, Nil) {
   )
 }
 
-fn set() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, Nil) {
+fn set() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "set",
     callers: [User],
@@ -96,7 +96,7 @@ fn set() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, Nil) {
   )
 }
 
-fn ask() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, Nil) {
+fn ask() -> tazuna.Command(AskRecords, AskEvent, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "ask",
     callers: [User],

@@ -29,8 +29,8 @@ inductive Illegal where
   /-- A scenario step sends a request its service does not declare, two scenarios of a service share a name, or a
   scenario's name is no file name. -/
   | scenario
-  /-- A command's rejection type is neither a custom type nor Nil: a rejection names its reason in a type of the
-  spec's own. -/
+  /-- A command's rejection type is neither a custom type, Nil nor Never: a rejection names its reason in a type of
+  the spec's own, and Never says the command never rejects. -/
   | rejection
   /-- A machine's instance key type has no order the solver can encode (`Ty.orderable`): the canonical order of the
   keys decides which instance reacts, starts and fires first, so the step encoding must compare keys. -/
@@ -244,9 +244,9 @@ def DeclaredV.wireTypes : DeclaredV → List Ty
 def DeclaredV.same (a b : DeclaredV) : Bool :=
   a.kind == b.kind && a.name == b.name && (Ty.sames a.types b.types).isSome
 
-/-- A custom type of the spec's own, or Nil: what a rejection may be. -/
-def Ty.customOrNil : Ty → Bool
-  | .adt i _ _ => i == 1 || prelude.length ≤ i
+/-- What a rejection may be: a custom type of the spec's own, Nil, or Never for a command that never rejects. -/
+def Ty.rejectable : Ty → Bool
+  | .adt i _ _ => i == 1 || i == 11 || prelude.length ≤ i
   | _ => false
 
 mutual
@@ -432,8 +432,8 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
     let unknown := v.subscribes.filterMap fun sub =>
       if sources.any fun (n, t) => n == sub.name && (Ty.same t sub.event).isSome then none
       else some (Illegal.unknownSource, s!"{v.name} subscribes to the source {sub.name}, which no service or external declares with its event type")
-    let rejections := v.commands.filterMap fun c => if c.rejection.customOrNil then none else
-      some (Illegal.rejection, s!"{v.name}.{c.name}: the rejection type is no custom type or Nil")
+    let rejections := v.commands.filterMap fun c => if c.rejection.rejectable then none else
+      some (Illegal.rejection, s!"{v.name}.{c.name}: the rejection type is no custom type, Nil or Never")
     let keys := v.machines.filterMap fun m => if m.key.orderable && m.key.ordered T then none else
       some (Illegal.machineKey, s!"{v.name}.{m.name}: the instance key type has no canonical order the solver can compare; use Int, String, Date, Id, Bool, an enumeration, or a tuple or one-variant record of these")
     let probes := tableProbes T v.records
@@ -488,8 +488,8 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
     let wireTypes := (all.filter fun d => !d.wireTypes.all Ty.wire).map fun d =>
       (Illegal.wireType, s!"{x.name}.{d.name}: its types cross the wire, so they hold no functions")
     let rejections := all.filterMap fun
-      | .externalCommand n _ _ j => if j.customOrNil then none else
-        some (Illegal.rejection, s!"{x.name}.{n}: the rejection type is no custom type or Nil")
+      | .externalCommand n _ _ j => if j.rejectable then none else
+        some (Illegal.rejection, s!"{x.name}.{n}: the rejection type is no custom type, Nil or Never")
       | _ => none
     let tableKeys := (all.filter fun d => !d.wireTypes.all Ty.plainKeys).map fun d =>
       (Illegal.tableKey, s!"{x.name}.{d.name}: its types hold a table whose key is no plain value; {tableKeyAdvice}")

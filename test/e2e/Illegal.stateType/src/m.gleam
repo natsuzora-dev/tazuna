@@ -16,7 +16,7 @@ fn apply(r: Records, _e: Event) -> Records {
   r
 }
 
-fn rank() -> tazuna.Command(Records, Event, Caller, Int, Nil) {
+fn rank() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: "rank",
     callers: [User],

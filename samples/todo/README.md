@@ -82,8 +82,8 @@ gleam run -m tazuna -- generate todo_spec inputs
 {"file":"todo/add accepted.jsonl","kind":"Generate.reached","service":"todo","steps":1,"target":"add accepted"}
 ```
 
-One target reads `Generate.unreached`: `add rejected Nil`.
-`add` never rejects, and its rejection type `Nil` still makes a target.
+Every target is reached.
+`add` never rejects, so its rejection type is `tazuna.Never`, which has no values and so makes no rejected target.
 
 The inputs show one thing the spec allows that you may not expect.
 In `remind accepted.jsonl` an outside request sends `remind` with the caller `Reminder`.

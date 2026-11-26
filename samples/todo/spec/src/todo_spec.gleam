@@ -51,7 +51,7 @@ fn apply(records: Records, event: Event) -> Records {
   }
 }
 
-fn add() -> tazuna.Command(Records, Event, Caller, String, Nil) {
+fn add() -> tazuna.Command(Records, Event, Caller, String, tazuna.Never) {
   tazuna.command(
     name: "add",
     callers: [User],

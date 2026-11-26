@@ -16,7 +16,7 @@ pub type Caller {
   User
 }
 
-fn bump() -> tazuna.Command(Records, Event, Caller, Int, Nil) {
+fn bump() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: "bump",
     callers: [User],

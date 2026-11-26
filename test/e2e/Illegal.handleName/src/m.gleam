@@ -20,7 +20,7 @@ fn apply(r: Records, e: Event) -> Records {
 
 const add_name: String = "add"
 
-fn add() -> tazuna.Command(Records, Event, Caller, Int, Nil) {
+fn add() -> tazuna.Command(Records, Event, Caller, Int, tazuna.Never) {
   tazuna.command(
     name: add_name,
     callers: [User],

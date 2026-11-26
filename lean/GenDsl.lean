@@ -113,7 +113,9 @@ def gleamSection (m : String) : String :=
       let one := s!"  {v.name}(" ++ ", ".intercalate fs ++ ")"
       if one.length ≤ 80 then one ++ "\n"
       else s!"  {v.name}(\n" ++ String.join (fs.map (s!"    {·},\n")) ++ "  )\n"
-    s!"pub type {n}{typeParams d.params} \{\n" ++ String.join (d.variants.map variant) ++ "}\n"
+    let doc := ((preludeDocs.lookup d.name).map docLines).getD ""
+    if d.variants.isEmpty then doc ++ s!"pub type {n}{typeParams d.params}\n" else
+    doc ++ s!"pub type {n}{typeParams d.params} \{\n" ++ String.join (d.variants.map variant) ++ "}\n"
   let aliases := (builtinAliases.filter (·.1.name.startsWith (m ++ "."))).map fun (a, doc) =>
     let body := surfaceTy a.ty
     docLines doc ++ s!"pub type {(a.name.splitOn ".").getLast!} =\n  {body}\n"

@@ -33,6 +33,10 @@ def opaqueTypes : List OpaqueType :=
 def opaqueTy? (name : String) (args : List Ty) : Option Ty :=
   (opaqueTypes.find? (fun t => t.module ++ "." ++ t.name == name)).bind (·.make args)
 
+/-- The documentation of the prelude's types that `tazuna` declares, by name. -/
+def preludeDocs : List (String × String) :=
+  [ ("tazuna.Never", "A type with no values. As a command's rejection type it says the command never rejects: `decide` can return no `Error`, and no rejected outcome exists to reach.") ]
+
 /-- Aliases `tazuna` declares, with their documentation. -/
 def builtinAliases : List (Surface.AliasDef × String) :=
   [ (⟨"tazuna.Instant", [], .con "Int" [], ⟨0, 0⟩⟩, "A point in time, in milliseconds."),

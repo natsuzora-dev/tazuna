@@ -253,7 +253,8 @@ def prelude : List TypeDecl :=
       variants := [⟨"ReactionCtx", [⟨some "records", .param 0⟩, ⟨some "now", .int⟩]⟩] },
     { name := "tazuna.QueryCtx", params := ["records", "input", "caller"],
       variants := [⟨"QueryCtx", [⟨some "records", .param 0⟩, ⟨some "input", .param 1⟩, ⟨some "caller", .param 2⟩,
-        ⟨some "now", .int⟩]⟩] } ]
+        ⟨some "now", .int⟩]⟩] },
+    { name := "tazuna.Never", params := [], variants := [] } ]
 
 def Ty.bool : Ty := .adt 0 [] [[], []]
 def Ty.nil : Ty := .adt 1 [] [[]]
@@ -270,6 +271,8 @@ def Ty.machineCtx (k s r : Ty) : Ty := .adt 8 [k, s, r] [[k, s, r, .int]]
 def Ty.reactionCtx (r : Ty) : Ty := .adt 9 [r] [[r, .int]]
 /-- What a query's `resolve` sees: a command's context without the source of fresh ids, since a query makes none. -/
 def Ty.queryCtx (r i c : Ty) : Ty := .adt 10 [r, i, c] [[r, i, c, .int]]
+/-- The type with no values, `tazuna.Never`. -/
+def Ty.never : Ty := .adt 11 [] []
 /-- Named rules, as `invariants`, `accepts` and `ensures` return them. -/
 def Ty.rules : Ty := .list (.tuple [.str, .bool])
 
@@ -305,6 +308,7 @@ example (r : Ty) : prelude[9]?.map (fun d => Ty.adt 9 [r] (d.variantTys [r])) = 
 example (r i c : Ty) : prelude[10]?.map (fun d => Ty.adt 10 [r, i, c] (d.variantTys [r, i, c])) =
   some (Ty.queryCtx r i c) := rfl
 example (a e : Ty) : prelude[2]?.map (fun d => Ty.adt 2 [a, e] (d.variantTys [a, e])) = some (Ty.result a e) := rfl
+example : prelude[11]?.map (fun d => Ty.adt 11 [] (d.variantTys [])) = some Ty.never := rfl
 example (a : Ty) : prelude[3]?.map (fun d => Ty.adt 3 [a] (d.variantTys [a])) = some (Ty.option a) := rfl
 
 end Tazuna.Ir

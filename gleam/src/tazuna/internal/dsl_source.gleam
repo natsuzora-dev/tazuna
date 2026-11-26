@@ -119,6 +119,9 @@ pub type QueryCtx(records, input, caller) {
   QueryCtx(records: records, input: input, caller: caller, now: Instant)
 }
 
+/// A type with no values. As a command's rejection type it says the command never rejects: `decide` can return no `Error`, and no rejected outcome exists to reach.
+pub type Never
+
 /// A point in time, in milliseconds.
 pub type Instant =
   Int

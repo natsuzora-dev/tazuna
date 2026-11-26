@@ -134,7 +134,7 @@ def tableOfCase (o : E optI) : E (.table .int .str) :=
       ⟨10, rfl⟩) .nil)
 
 /-- A record holding a table and an Int. -/
-def recT : Ty := .adt 11 [] [[.table .int .str, .int]]
+def recT : Ty := .adt prelude.length [] [[.table .int .str, .int]]
 def recOf (t : E (.table .int .str)) (n : Int) : E recT := .ctor ⟨0, by decide⟩ (.cons t (.cons (.int n) .nil))
 def someBag (b : E (.bag .int)) : E (Ty.option (.bag .int)) := .ctor (vs := [[.bag .int], []]) ⟨0, by decide⟩ (.cons b .nil)
 def noBag : E (Ty.option (.bag .int)) := .ctor (vs := [[.bag .int], []]) ⟨1, by decide⟩ .nil

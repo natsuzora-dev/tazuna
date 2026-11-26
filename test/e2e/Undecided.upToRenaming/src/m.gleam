@@ -21,7 +21,7 @@ fn apply(r: Records, e: Event) -> Records {
   }
 }
 
-fn go() -> tazuna.Command(Records, Event, Caller, Nil, Nil) {
+fn go() -> tazuna.Command(Records, Event, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "go",
     callers: [User],
@@ -31,7 +31,7 @@ fn go() -> tazuna.Command(Records, Event, Caller, Nil, Nil) {
   )
 }
 
-fn mark() -> tazuna.Command(Records, Event, Caller, Nil, Nil) {
+fn mark() -> tazuna.Command(Records, Event, Caller, Nil, tazuna.Never) {
   tazuna.command(
     name: "mark",
     callers: [User],
