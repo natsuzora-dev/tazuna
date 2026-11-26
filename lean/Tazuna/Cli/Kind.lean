@@ -92,6 +92,8 @@ inductive Tazuna.Kind : Type
   | restricted (k : Tazuna.Restricted)
   /-- The spec's structure breaks a rule: the spec must change. -/
   | illegal (k : Tazuna.Ir.Illegal)
+  /-- The spec breaks no structure rule; `check` prints one line per service. -/
+  | checkPassed
   /-- A scenario or a trace made the spec fault: the spec must change. -/
   | fault (k : Tazuna.FaultKind)
   | test (k : Tazuna.TestKind)
@@ -213,6 +215,7 @@ def name : Kind → String
   | usage k => "Usage." ++ k.name
   | restricted k => "Restricted." ++ k.name
   | illegal k => "Illegal." ++ k.name
+  | checkPassed => "Check.passed"
   | fault k => "Fault." ++ k.name
   | test k => "Test." ++ k.name
   | verifyPassed => "Verify.passed"
@@ -224,7 +227,7 @@ def name : Kind → String
   | explain => "Explain.kind"
 
 def all : List Kind :=
-  InternalKind.all.map internal ++ UsageKind.all.map usage ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ FaultKind.all.map fault ++ TestKind.all.map test ++
+  InternalKind.all.map internal ++ UsageKind.all.map usage ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ [checkPassed] ++ FaultKind.all.map fault ++ TestKind.all.map test ++
     [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++
     GenerateKind.all.map generate ++ UndecidedKind.all.map undecided ++ [explain]
 
@@ -246,7 +249,7 @@ instead, one per kind of the launcher's generated table; a converter bug has no 
 past the wall clock none that reaches it on every machine. -/
 def e2e : Kind → Bool
   | restricted _ | internal .convert | internal .engine | undecided .timeout => false
-  | internal .invalidIr | usage _ | illegal _ | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
+  | internal .invalidIr | usage _ | illegal _ | checkPassed | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
   | generate _ | undecided .unknown | undecided .limit | undecided .unencodableString | undecided .upToRenaming
   | explain => true
 
@@ -257,7 +260,7 @@ def exit : Kind → Exit
   | restricted _ | illegal _ | fault _ | verifyDiffers | traceInvalid => .violation
   | test .passed | test .written => .ok
   | test .changed | test .badStep => .violation
-  | verifyPassed | explain => .ok
+  | checkPassed | verifyPassed | explain => .ok
   | prove .proved | prove .withinBounds => .ok
   | prove .violated => .violation
   | generate .reached | generate .unreached => .ok

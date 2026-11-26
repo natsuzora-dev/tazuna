@@ -76,8 +76,9 @@ def loadSpec (root path : String) : Cmd (Option Smt.CheckedSpec) := do
       return none
 
 /-- Loads the IR at `path`, which the launcher converted from the root module `root`, printing one line per
-finding. -/
+finding, or one line per service when there is none. -/
 def check (root path : String) : Cmd Unit := do
-  let _ ← loadSpec root path
+  if let some c ← loadSpec root path then
+    c.spec.services.forM fun v => printLine .checkPassed [("service", Json.str v.name)]
 
 end Tazuna.Cli

@@ -188,6 +188,7 @@ def explanation : Kind → Explanation
   | usage k => k.explanation
   | restricted k => ⟨k.means, [], [file, line, col, message]⟩
   | illegal k => ⟨k.means, if k = .wireType then [`Tazuna.Smt.wireTys_wire] else [], [message]⟩
+  | checkPassed => ⟨docOf% Kind.checkPassed, [`Tazuna.Smt.wireTys_wire], [service]⟩
   | fault k => k.explanation
   | test k => k.explanation
   | verifyPassed => ⟨docOf% Kind.verifyPassed, [`Tazuna.Trace.replay_iff], [trace]⟩

@@ -30,7 +30,7 @@ It holds each table, bag, and list type of the service's layout, and its pending
 
 `check` loads the IR and evaluates `spec()`.
 It prints one `Illegal.*` line per broken structure rule, and the launcher prints one `Restricted.*` line per Gleam construct outside the spec subset before Lean sees the spec.
-A spec with no finding prints nothing and exits 0.
+A spec with no finding prints one `Check.passed` line per service and exits 0.
 Every command but `explain` runs `check` first and stops at a finding.
 
 `wireTys_wire`: when `check` finds nothing, every type that crosses the wire holds no function and no fresh-id source.
