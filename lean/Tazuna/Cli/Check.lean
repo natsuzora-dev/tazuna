@@ -9,19 +9,35 @@ namespace Tazuna.Cli
 
 open Lean (Json)
 
+/-- A command: it prints its lines and keeps the worst outcome they give, which is its exit code (`Kind.exit`). -/
+abbrev Cmd := ReaderT (IO.Ref Exit) IO
+
+/-- Prints one line of the kind with its fields. -/
+def printLine (kind : Kind) (fields : List (String × Json)) : Cmd Unit := do
+  IO.println (Json.mkObj (("kind", Json.str kind.name) :: fields)).compress
+  (← read).modify (·.max kind.exit)
+
+/-- Runs a command; its exit code. An error the system raises (a file that does not read, a program that does not
+start) is a Usage.system line: none of the engine's own checks throws. -/
+def Cmd.exitCode (c : Cmd Unit) : IO UInt32 := do
+  let worst ← IO.mkRef Exit.ok
+  try c.run worst
+  catch e => (printLine (.usage .system) [("message", Json.str (toString e))]).run worst
+  return (← worst.get).code
+
+/-- Prints the engine's bug: a state its proofs rule out. The command stops after it. -/
+def internal (message : String) : Cmd Unit := printLine (.internal .engine) [("message", Json.str message)]
+
 -- An error without a position has no line or column fields.
 set_option linter.tazuna.silentDefault false in
-def invalidIrLine (e : Ir.Elab.LoadError) : Json :=
-  Json.mkObj ([("kind", Json.str (Kind.internal .invalidIr).name)] ++ (e.file.map fun f => ("file", Json.str f)).toList ++
+def invalidIr (e : Ir.Elab.LoadError) : Cmd Unit :=
+  printLine (.internal .invalidIr) ((e.file.map fun f => ("file", Json.str f)).toList ++
     (e.pos.map fun p => [("line", Json.num p.line), ("col", Json.num p.col)]).getD [] ++
     [("message", Json.str e.message)])
 
-def printLine (kind : Kind) (fields : List (String × Json)) : IO Unit :=
-  IO.println (Json.mkObj (("kind", Json.str kind.name) :: fields)).compress
-
 /-- The spec with what check established of it (`Smt.check_ok`), when the IR at `path` loads, `root` is its root, and
-the structure breaks no rule; otherwise the lines are printed and the result is the exit code. -/
-def loadSpec (root path : String) : IO (Except UInt32 Smt.CheckedSpec) := do
+the structure breaks no rule; otherwise none, and the lines are printed. -/
+def loadSpec (root path : String) : Cmd (Option Smt.CheckedSpec) := do
   let text ← IO.FS.readFile path
   let result : Except Ir.Elab.LoadError (Ir.Program (.fn [] Ir.Ty.spec)) := match Json.parse text with
     | .ok j => match j.getObjValAs? String "root" with
@@ -32,8 +48,8 @@ def loadSpec (root path : String) : IO (Except UInt32 Smt.CheckedSpec) := do
     | .error e => .error ⟨none, none, s!"not JSON: {e}"⟩
   match result with
   | .error e =>
-    IO.println (invalidIrLine e).compress
-    return .error 4
+    invalidIr e
+    return none
   | .ok p =>
     if hP : Ir.SitesUnique p.defs.sites then
       let captures := p.defs.sites.map fun ⟨Γ, _, s⟩ => (s.site, Γ)
@@ -41,29 +57,27 @@ def loadSpec (root path : String) : IO (Except UInt32 Smt.CheckedSpec) := do
       | [] =>
         if htys : (p.eval ()).services.all (·.stateTys) = true then
           if hw : (p.eval ()).services.all (·.wireOk p.types) = true then
-            return .ok ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) (by simpa using htys) (by simpa using hw) h,
+            return some ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) (by simpa using htys) (by simpa using hw) h,
               Smt.handles_ok h⟩
           else
-            IO.println (invalidIrLine ⟨none, none,
-              "a wire type has a type variable, a variant without a key per field, or no canonical order"⟩).compress
-            return .error 4
+            invalidIr ⟨none, none,
+              "a wire type has a type variable, a variant without a key per field, or no canonical order"⟩
+            return none
         else
-          IO.println (invalidIrLine ⟨none, none,
-            "a state, event or caller type has a type variable, an ADT 0 that is not Bool or a table with no plain key"⟩).compress
-          return .error 4
+          invalidIr ⟨none, none,
+            "a state, event or caller type has a type variable, an ADT 0 that is not Bool or a table with no plain key"⟩
+          return none
       | findings =>
         for (k, message) in findings do
           printLine (.illegal k) [("message", Json.str message)]
-        return .error 1
+        return none
     else
-      IO.println (invalidIrLine ⟨none, none, "two kept functions share a site id"⟩).compress
-      return .error 4
+      invalidIr ⟨none, none, "two kept functions share a site id"⟩
+      return none
 
-/-- Loads the IR at `path`, which the launcher converted from the root module `root`, printing one line per finding;
-returns the exit code. -/
-def check (root path : String) : IO UInt32 := do
-  match ← loadSpec root path with
-  | .ok _ => return 0
-  | .error code => return code
+/-- Loads the IR at `path`, which the launcher converted from the root module `root`, printing one line per
+finding. -/
+def check (root path : String) : Cmd Unit := do
+  let _ ← loadSpec root path
 
 end Tazuna.Cli

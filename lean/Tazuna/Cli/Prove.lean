@@ -423,14 +423,11 @@ inductive Placed where
 
 -- Every service a report names has a scope, so the empty list is never read.
 set_option linter.tazuna.silentDefault false in
-def prove (root path : String) (opts : Options) : IO UInt32 := do
+def prove (root path : String) (opts : Options) : Cmd Unit := do
   match ← loadSpec root path with
-  | .error code => return code
-  | .ok c =>
+  | none => pure ()
+  | some c =>
     let solver : Solver := {}
-    let internal (m : String) : IO UInt32 := do
-      IO.eprintln s!"tazuna-engine: internal error: {m}"
-      return 4
     let mut items : List Item := []
     let mut scopes : List (String × List Json × List Json) := []
     for sv in c.services do
@@ -512,8 +509,5 @@ def prove (root path : String) (opts : Options) : IO UInt32 := do
     for r in reports do
       if let some (kind, fields) := lineOf unproved past r then printLine kind fields
     for (kind, fields) in rlines do printLine kind fields
-    if reports.any (fun | .violated .. => true | _ => false) || rlines.any (·.1 matches .prove .violated) then return 1
-    if reports.any (fun | .undecided .. => true | _ => false) || rlines.any (·.1 matches .undecided _) then return 2
-    return 0
 
 end Tazuna.Cli

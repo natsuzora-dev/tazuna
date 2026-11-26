@@ -77,15 +77,12 @@ theorem generate_reaches {P : List AnySite} {E : List AnyEffectSite} {chk : Chec
 
 end
 
-def generate (root dir path : String) (opts : Options) : IO UInt32 := do
+def generate (root dir path : String) (opts : Options) : Cmd Unit := do
   match ← loadSpec root path with
-  | .error code => return code
-  | .ok c =>
+  | none => pure ()
+  | some c =>
     let solver : Solver := {}
     let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
-    let internal (m : String) : IO UInt32 := do
-      IO.eprintln s!"tazuna-engine: internal error: {m}"
-      return 4
     -- Each target's search is one job; a service's depths are built once for all its targets (`depthJobs`). Lines and
     -- files are written in target order once all are done.
     let mut builds : Array Job := #[]
@@ -109,7 +106,6 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
         jobs := jobs.push (v.name, g, scopeBounds c.T L v, r)
     -- One pool: the builds first, so a search waits only on a build some worker runs.
     runAll opts.jobs (builds ++ searches)
-    let mut undecided := false
     for (service, g, scope, r) in jobs do
       let file := System.FilePath.mk dir / targetFile service g
       let common := [("service", Json.str service), ("target", Json.str g.text)]
@@ -129,10 +125,7 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
         | .noModel k =>
           printLine (.generate .unreached) (common ++ [("steps", Lean.toJson k), ("bounds", Json.arr scope.toArray),
             ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)])
-        | .undecided kind fields =>
-          undecided := true
-          printLine kind (common ++ fields)
+        | .undecided kind fields => printLine kind (common ++ fields)
         | .found .. => pure ()
-    return if undecided then 2 else 0
 
 end Tazuna.Cli

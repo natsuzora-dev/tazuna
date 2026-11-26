@@ -10,11 +10,11 @@ deriving DecidableEq
 inductive Tazuna.TestKind : Type
   /-- The trace equals the snapshot. -/
   | passed
-  /-- The trace differs from the snapshot, or there is no snapshot: exit code 1. -/
+  /-- The trace differs from the snapshot, or there is no snapshot. -/
   | changed
   /-- `test --update` wrote the snapshot. -/
   | written
-  /-- A step cannot run, such as an answer that matches no pending request: exit code 1. -/
+  /-- A step cannot run, such as an answer that matches no pending request. -/
   | badStep
 deriving DecidableEq
 
@@ -31,7 +31,7 @@ inductive Tazuna.ProveKind : Type
   no counterexample within its scope. -/
   | withinBounds
   /-- A state and input whose step breaks the target, or for a bounded response a run from the initial state that
-  violates it: exit code 1. -/
+  violates it. -/
   | violated
 deriving DecidableEq
 
@@ -44,7 +44,7 @@ inductive Tazuna.GenerateKind : Type
   | unreached
 deriving DecidableEq
 
-/-- Why `prove` has no verdict for a question: exit code 2 when nothing is violated. -/
+/-- Why a question or a trace has no verdict. -/
 inductive Tazuna.UndecidedKind : Type
   /-- The solver answered unknown or ran out of time or resources. -/
   | unknown
@@ -64,25 +64,38 @@ inductive Tazuna.InternalKind : Type
   | invalidIr
   /-- The converter could not make sense of a module that `gleam build` accepted: a converter bug. -/
   | convert
+  /-- The engine met a state its proofs rule out: a search's job never ran, a solver's model does not decode, or an
+  encoder refused for a case the loaded program's types rule out (`Smt.Unexpected`). -/
+  | engine
+deriving DecidableEq
+
+/-- Why a command did not run as asked; the spec is not judged. -/
+inductive Tazuna.UsageKind : Type
+  /-- The command line names no command, or its arguments do not read as the command's: a missing root, an unknown
+  option or kind. -/
+  | arguments
+  /-- The system refused what the command needs: a file or directory to read or write, a program to run (the engine,
+  z3), or `TAZUNA_ENGINE` is not set. -/
+  | system
 deriving DecidableEq
 
 /-- Every kind of line tazuna writes to stdout, the launcher's included. test/e2e holds one case per kind it covers
 (`Kind.e2e`), enumerated from `Kind.all`. -/
 inductive Tazuna.Kind : Type
   | internal (k : Tazuna.InternalKind)
-  /-- Gleam outside the spec subset, which the launcher reports before Lean sees the spec: the spec must change, exit
-  code 1. -/
+  | usage (k : Tazuna.UsageKind)
+  /-- Gleam outside the spec subset, which the launcher reports before Lean sees the spec: the spec must change. -/
   | restricted (k : Tazuna.Restricted)
-  /-- The spec's structure breaks a rule: the spec must change, exit code 1. -/
+  /-- The spec's structure breaks a rule: the spec must change. -/
   | illegal (k : Tazuna.Ir.Illegal)
-  /-- A scenario or a trace made the spec fault: the spec must change, exit code 1. -/
+  /-- A scenario or a trace made the spec fault: the spec must change. -/
   | fault (k : Tazuna.FaultKind)
   | test (k : Tazuna.TestKind)
   /-- Every window of the trace equals the spec's out lines. -/
   | verifyPassed
-  /-- A window of the trace differs from the spec's out lines: exit code 1. -/
+  /-- A window of the trace differs from the spec's out lines. -/
   | verifyDiffers
-  /-- A trace line does not read as a line of the service, or breaks the order of time: exit code 1. -/
+  /-- A trace line does not read as a line of the service, or breaks the order of time. -/
   | traceInvalid
   | prove (k : Tazuna.ProveKind)
   | generate (k : Tazuna.GenerateKind)
@@ -90,13 +103,44 @@ inductive Tazuna.Kind : Type
 
 namespace Tazuna
 
-def InternalKind.all : List InternalKind := [.invalidIr, .convert]
+def InternalKind.all : List InternalKind := [.invalidIr, .convert, .engine]
 
 theorem InternalKind.mem_all (k : InternalKind) : k ∈ InternalKind.all := by cases k <;> simp [InternalKind.all]
 
 def InternalKind.name : InternalKind → String
   | .invalidIr => "invalidIr"
   | .convert => "convert"
+  | .engine => "engine"
+
+def UsageKind.all : List UsageKind := [.arguments, .system]
+
+theorem UsageKind.mem_all (k : UsageKind) : k ∈ UsageKind.all := by cases k <;> simp [UsageKind.all]
+
+def UsageKind.name : UsageKind → String
+  | .arguments => "arguments"
+  | .system => "system"
+
+/-- What a command's run comes to, by its worst line: the exit code. -/
+inductive Exit : Type
+  | ok | undecided | violation | usage | internal
+
+/-- The exit code. Undecided ranks below a violation: one violated line decides the run. -/
+def Exit.code : Exit → UInt32
+  | .ok => 0
+  | .violation => 1
+  | .undecided => 2
+  | .usage => 3
+  | .internal => 4
+
+def Exit.rank : Exit → Nat
+  | .ok => 0
+  | .undecided => 1
+  | .violation => 2
+  | .usage => 3
+  | .internal => 4
+
+/-- The worse of two outcomes. -/
+def Exit.max (a b : Exit) : Exit := if a.rank < b.rank then b else a
 
 def FaultKind.all : List FaultKind := [.invariant, .ensures, .cascadeLimit, .answerUnmatched, .invalidEffect]
 
@@ -158,6 +202,7 @@ namespace Kind
 /-- The name a line carries as its `kind`, such as `Illegal.wireName`. -/
 def name : Kind → String
   | internal k => "Internal." ++ k.name
+  | usage k => "Usage." ++ k.name
   | restricted k => "Restricted." ++ k.name
   | illegal k => "Illegal." ++ k.name
   | fault k => "Fault." ++ k.name
@@ -170,13 +215,14 @@ def name : Kind → String
   | undecided k => "Undecided." ++ k.name
 
 def all : List Kind :=
-  InternalKind.all.map internal ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ FaultKind.all.map fault ++ TestKind.all.map test ++
+  InternalKind.all.map internal ++ UsageKind.all.map usage ++ Restricted.all.map restricted ++ Ir.Illegal.all.map illegal ++ FaultKind.all.map fault ++ TestKind.all.map test ++
     [verifyPassed, verifyDiffers, traceInvalid] ++ ProveKind.all.map prove ++
     GenerateKind.all.map generate ++ UndecidedKind.all.map undecided
 
 theorem mem_all (k : Kind) : k ∈ all := by
   cases k with
   | internal k => simp [all, InternalKind.mem_all]
+  | usage k => simp [all, UsageKind.mem_all]
   | restricted k => simp [all, Restricted.mem_all]
   | illegal k => simp [all, Ir.Illegal.mem_all]
   | fault k => simp [all, FaultKind.mem_all]
@@ -189,9 +235,22 @@ theorem mem_all (k : Kind) : k ∈ all := by
 /-- Whether test/e2e has a case of the kind. A Restricted kind has its unit test in gleam/test/convert_test.gleam
 instead, one per kind of the launcher's generated table; a converter bug has no input that reaches it. -/
 def e2e : Kind → Bool
-  | restricted _ | internal .convert => false
-  | internal .invalidIr | illegal _ | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
+  | restricted _ | internal .convert | internal .engine => false
+  | internal .invalidIr | usage _ | illegal _ | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
   | generate _ | undecided _ => true
+
+/-- The outcome a line of the kind gives its command; the command exits with its worst line's (`Exit.max`). -/
+def exit : Kind → Exit
+  | internal _ => .internal
+  | usage _ => .usage
+  | restricted _ | illegal _ | fault _ | verifyDiffers | traceInvalid => .violation
+  | test .passed | test .written => .ok
+  | test .changed | test .badStep => .violation
+  | verifyPassed => .ok
+  | prove .proved | prove .withinBounds => .ok
+  | prove .violated => .violation
+  | generate .reached | generate .unreached => .ok
+  | undecided _ => .undecided
 
 end Kind
 

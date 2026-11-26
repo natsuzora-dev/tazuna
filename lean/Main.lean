@@ -3,35 +3,25 @@ import Tazuna.Cli.Prove
 import Tazuna.Cli.Generate
 import Tazuna.Version
 
-/-- `tazuna-engine` prints the version. The launcher runs `tazuna-engine <command> <root> [...] --ir <path>`, with the
-user's arguments as given and the IR it converted from them. -/
+open Tazuna.Cli in
+/-- The command the arguments name, or none when they name none. The launcher runs `tazuna-engine <command> <root>
+[...] --ir <path>`, with the user's arguments as given and the IR it converted from them. -/
+def commandOf : List String → Option (Cmd Unit)
+  | ["check", root, "--ir", path] => some (check root path)
+  | ["test", root, "--ir", path] => some (test root path false)
+  | ["test", root, "--update", "--ir", path] => some (test root path true)
+  | ["verify", root, dir, "--ir", path] => some (verify root dir path)
+  | "prove" :: root :: rest => (optionsOf rest).map fun (opts, path) => prove root path opts
+  | "generate" :: root :: dir :: rest => (optionsOf rest).map fun (opts, path) => generate root dir path opts
+  | _ => none
+
+/-- `tazuna-engine` alone prints the version. -/
 def main (args : List String) : IO UInt32 := do
-  match args with
-  | [] => IO.println Tazuna.version; return 0
-  | ["check", root, "--ir", path] => Tazuna.Cli.check root path
-  | ["test", root, "--ir", path] => Tazuna.Cli.test root path false
-  | ["test", root, "--update", "--ir", path] => Tazuna.Cli.test root path true
-  | ["verify", root, dir, "--ir", path] => Tazuna.Cli.verify root dir path
-  | "prove" :: root :: rest =>
-    match Tazuna.Cli.optionsOf rest with
-    | some (opts, path) =>
-      try Tazuna.Cli.prove root path opts
-      catch e =>
-        IO.eprintln s!"tazuna-engine: internal error: {e}"
-        return 4
-    | none => usage
-  | "generate" :: root :: dir :: rest =>
-    match Tazuna.Cli.optionsOf rest with
-    | some (opts, path) =>
-      try Tazuna.Cli.generate root dir path opts
-      catch e =>
-        IO.eprintln s!"tazuna-engine: internal error: {e}"
-        return 4
-    | none => usage
-  | _ => usage
-where
-  usage : IO UInt32 := do
-    IO.eprintln ("usage: tazuna-engine [check <root> | test <root> [--update] | verify <root> <traces-dir> | " ++
-      "prove <root> [--only <prefix>] [--jobs <n>] | generate <root> <dir> [--only <prefix>] [--jobs <n>]] " ++
-      "--ir <ir.json>")
-    return 3
+  if args.isEmpty then
+    IO.println Tazuna.version
+    return 0
+  Tazuna.Cli.Cmd.exitCode <| match commandOf args with
+    | some c => c
+    | none => Tazuna.Cli.printLine (.usage .arguments) [("message", Lean.Json.str
+        ("usage: check <root> | test <root> [--update] | verify <root> <traces-dir> | " ++
+          "prove <root> [--only <prefix>] [--jobs <n>] | generate <root> <dir> [--only <prefix>] [--jobs <n>]"))]

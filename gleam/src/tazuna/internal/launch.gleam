@@ -11,26 +11,20 @@ import gleam/list
 import gleam/result
 import gleam/string
 import simplifile
-import tazuna/internal/convert.{type Finding, type Source, Source}
+import tazuna/internal/convert.{type Source, Source}
+import tazuna/internal/json
 import tazuna/internal/kind
 
 pub fn main() -> Nil {
   exit(run(argv()))
 }
 
-/// Exit codes the launcher itself gives; every other code is the engine's.
-const usage = 3
-
-const internal = 4
-
-const violation = 1
-
 fn run(args: List(String)) -> Int {
   case getenv("TAZUNA_ENGINE") {
     Error(_) ->
       fail(
+        kind.System,
         "Set TAZUNA_ENGINE to the path of the tazuna-engine executable.",
-        usage,
       )
     Ok(engine) ->
       case args {
@@ -56,7 +50,7 @@ fn check(engine: String, args: List(String), root: String) -> Int {
       {
         Error(findings) -> {
           list.each(findings, fn(f) { io.println(convert.finding_line(f)) })
-          findings_code(findings)
+          kind.exit_code(list.map(findings, fn(f) { f.kind }))
         }
         Ok(program) -> {
           let ir = "build/tazuna/" <> root <> ".ir.json"
@@ -64,13 +58,13 @@ fn check(engine: String, args: List(String), root: String) -> Int {
             Ok(Nil) -> run_engine(engine, list.append(args, ["--ir", ir]))
             Error(e) ->
               fail(
+                kind.System,
                 "could not write " <> ir <> ": " <> simplifile.describe_error(e),
-                internal,
               )
           }
         }
       }
-    _ -> fail("There is no root module " <> path <> ".", usage)
+    _ -> fail(kind.Arguments, "There is no root module " <> path <> ".")
   }
 }
 
@@ -102,13 +96,6 @@ fn imports(text: String) -> List(String) {
   }
 }
 
-fn findings_code(findings: List(Finding)) -> Int {
-  case list.any(findings, fn(f) { f.kind == kind.Internal(kind.Convert) }) {
-    True -> internal
-    False -> violation
-  }
-}
-
 fn write(path: String, text: String) -> Result(Nil, simplifile.FileError) {
   let parts = string.split(path, "/")
   let dir = list.take(parts, list.length(parts) - 1) |> string.join("/")
@@ -122,13 +109,22 @@ fn run_engine(engine: String, args: List(String)) -> Int {
   case spawn(engine, args) {
     Ok(code) -> code
     Error(message) ->
-      fail("could not run " <> engine <> ": " <> message, internal)
+      fail(kind.System, "could not run " <> engine <> ": " <> message)
   }
 }
 
-fn fail(message: String, code: Int) -> Int {
-  io.println_error("tazuna: " <> message)
-  code
+/// Prints the launcher's own line of the kind; the exit code it gives.
+fn fail(usage: kind.Usage, message: String) -> Int {
+  let k = kind.Usage(usage)
+  io.println(
+    json.encode(
+      json.Object([
+        #("kind", json.Str(kind.name(k))),
+        #("message", json.Str(message)),
+      ]),
+    ),
+  )
+  kind.exit_code([k])
 }
 
 @external(erlang, "tazuna_launch_ffi", "argv")
