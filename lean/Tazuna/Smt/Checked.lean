@@ -5,7 +5,7 @@ import Tazuna.Smt.Instances
 
 /-! What `check` establishes about a service and the sites `P` and effect sites `E` of its program, which every step
 theorem rests on: the sites are told apart by name, every function the service keeps is a record of one of them, machine keys
-have the canonical order, no query answers a function, the stored state holds no function, no bound is negative, so
+have the canonical order, no query answers a function, the stored state holds no function, no bound is negative and `steps` is at least 1, so
 each bound's count is the bound, and the state's types (records, instance tables, pending table) have SMT values
 whose tables have plain keys. `check_ok` derives it from a check with no finding, so `prove` starts from these
 facts rather than assuming them (parse, don't validate). -/
@@ -37,9 +37,9 @@ namespace Tazuna.Smt
 
 open Tazuna.Ir
 
-/-- No bound is negative. -/
-def _root_.Tazuna.Ir.BoundsV.Nonneg {r : Ty} (b : BoundsV r) : Prop :=
-  0 ≤ b.items ∧ 0 ≤ b.cascade ∧ 0 ≤ b.steps ∧ ∀ c ∈ b.creates, 0 ≤ c.atMost
+/-- No bound is negative, and `steps` is at least 1. -/
+def _root_.Tazuna.Ir.BoundsV.Legal {r : Ty} (b : BoundsV r) : Prop :=
+  0 ≤ b.items ∧ 0 ≤ b.cascade ∧ 1 ≤ b.steps ∧ ∀ c ∈ b.creates, 0 ≤ c.atMost
 
 /-- Whether the state's types, its events' and its callers' have SMT values and well-formedness terms: no function,
 no type variable, ADT 0 only as Bool, and a plain key for every table but the pending table, whose keys are wire
@@ -54,7 +54,7 @@ structure Checked (P : List AnySite) (E : List AnyEffectSite) (T : List TypeDecl
   keys : ∀ m ∈ v.machines, m.key.orderable = true ∧ m.key.ordered T = true
   outputs : ∀ x ∈ v.queries, x.output.isFn = false
   stored : v.records.wire = true ∧ ∀ m ∈ v.machines, m.state.wire = true
-  bounds : v.bounds.Nonneg
+  bounds : v.bounds.Legal
   sends : ∀ h ∈ v.sentHandles, v.lists h = true
   /-- Not a rule of check's: the loader builds every type of a program's values from the type table, whose ADT 0 is
   Bool, and the program from ground instances; check validates the result, so a loader bug is reported, not assumed. -/
@@ -186,13 +186,14 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
       (List.mem_append_left _ (List.mem_append_right _ (List.mem_flatMap.2 ⟨q, hq, by simp⟩)))))
   · exact none_of_ite (hstate ("records", v.records) (by simp))
   · exact none_of_ite (hstate (m.name ++ " state", m.state) (List.mem_cons_of_mem _ (List.mem_map_of_mem hm)))
-  · have := not_of_ite (hneg ("items", v.bounds.items) (by simp)); omega
-  · have := not_of_ite (hneg ("cascade", v.bounds.cascade) (by simp)); omega
-  · have := not_of_ite (hneg ("steps", v.bounds.steps) (by simp)); omega
+  · have := not_of_ite (hneg ("items", v.bounds.items, 0) (by simp)); simp only at this; omega
+  · have := not_of_ite (hneg ("cascade", v.bounds.cascade, 0) (by simp)); simp only at this; omega
+  · have := not_of_ite (hneg ("steps", v.bounds.steps, 1) (by simp)); simp only at this; omega
   · obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hc
-    have := not_of_ite (hneg (_, v.bounds.creates[k].atMost) (List.mem_append_right _ (List.mem_map.2
+    have := not_of_ite (hneg (_, v.bounds.creates[k].atMost, 0) (List.mem_append_right _ (List.mem_map.2
       ⟨(v.bounds.creates[k], v.bounds.creates[k].reads (tableProbes T v.records)),
         List.mem_iff_getElem.2 ⟨k, by simpa using hk, by simp⟩, rfl⟩)))
+    simp only at this
     omega
   · have hu := hsent x hx
     cases hn : x.name with

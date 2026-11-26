@@ -120,6 +120,15 @@ def stepSlots (v : ServiceV) (t : Ty) : Nat :=
   if v.machines.any (fun m => (Ty.same m.table t).isSome) then max (boundSlots v.bounds t) v.bounds.itemsNat
   else boundSlots v.bounds t
 
+/-- The bound of the spec `stepSlots` takes a type's slots from, as a line names it: `creates` where a create bounds
+the table and gives the slots, else `items`. -/
+def stepBound (v : ServiceV) (t : Ty) : String :=
+  let created := match t with
+    | .table k w => v.bounds.creates.any (·.bounds (.table k w))
+    | _ => false
+  let instances := v.machines.any (fun m => (Ty.same m.table t).isSome) && boundSlots v.bounds t < v.bounds.itemsNat
+  if created && !instances then "creates" else "items"
+
 /-- The layout of the service's scripts, from the program it came from: the datatypes of the types with sorts. -/
 def Layout.ofParts (p : ProgramParts) (v : ServiceV) : Layout :=
   Layout.addTys (listSlots (stepSlots v) p.lits) (Layout.kindsOf p v)

@@ -1093,10 +1093,11 @@ theorem generate_unreached (chk : Checked P E T v) (senv : StepEnv L (shapes v))
     (hB : unrollBase L T P v senv d = .ok B) (hnr : B.refused = [])
     (hun : Unsat L (B.withGoal (genGoal L T rules g B.steps)).ask)
     {ys : List (Input v)} {x : Input v} (hlen : ys.length + 1 = d)
-    (hfits : RunFits L T P v chk.callerData (Step.State.init v) (ys ++ [x])) :
+    (hin : RunIn L T P v chk.callerData (Step.State.init v) (ys ++ [x]))
+    (has : ∀ a ∈ Step.Assumption.ofRuns, a.Holds T (Step.State.init v) (ys ++ [x])) :
     ¬ Hits T v rules g x (step T v (run T v (Step.State.init v) ys).1 x) := by
   intro hhit
-  obtain ⟨M, hM, hrun, hA⟩ := runs_covered chk senv hL hB hnr (by simp [hlen]) hfits
+  obtain ⟨M, hM, hrun, hA⟩ := runs_covered chk senv hL hB hnr (by simp [hlen]) (runFits_of _ _ _ _ _ _ _ hin has)
   obtain ⟨a, ha, hna⟩ := hun.noModel M hM
   refine hna (((B.holds_withGoal _).2 ⟨hA, ?_⟩) a ha)
   obtain ⟨st, hlast, ⟨k, hk, hdec, hrel⟩, hno, -⟩ := unrollRun_last x ys _ _ hrun

@@ -112,7 +112,7 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
       let rules := ruleNamesOf v
       let gs := (targets c.T v rules).filter fun g => opts.keeps (v.name ++ "/" ++ g.text)
       if gs.isEmpty then continue
-      let (bs, ds) ← depthJobs solver c v L senv v.bounds.steps.toNat
+      let (bs, ds) ← depthJobs solver c v L senv v.bounds.stepsNat
       builds := builds ++ bs
       for g in gs do
         -- `generate_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable.
@@ -141,7 +141,7 @@ def generate (root dir path : String) (opts : Options) : IO UInt32 := do
         -- the target at its last step.
         | .noModel k =>
           printLine (.generate .unreached) (common ++ [("steps", Lean.toJson k), ("bounds", Json.arr scope.toArray),
-            ("assumes", Json.arr #[Json.str Step.Assumption.validInputs.text])])
+            ("assumes", Json.arr (Step.Assumption.ofRuns.map (Json.str ·.text)).toArray)])
         | .undecided kind fields =>
           undecided := true
           printLine kind (common ++ fields)

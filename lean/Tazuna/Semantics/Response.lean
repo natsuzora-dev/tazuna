@@ -31,13 +31,13 @@ def answers (m : Moment e) : Bool := m.events.any fun ev => Step.toB (resp.then_
 /-- The run's steps `ms` violate the response: step `i` opens it, a later step `j` comes past `i`'s time plus
 `within`, and no step from `i` up to (not including) `j` answers it. -/
 def Violated (ms : List (Moment e)) : Prop :=
-  ∃ i j, ∃ (hij : i < j) (hj : j < ms.length), resp.opens ms[i] = true ∧ ms[j].time > ms[i].time + resp.within ∧
+  ∃ i j, ∃ (hij : i < j) (hj : j < ms.length), resp.opens ms[i] = true ∧ ms[j].time > ms[i].time + (resp.withinNat : Int) ∧
     ∀ m (_ : i ≤ m) (hm : m < j), resp.answers ms[m] = false
 
 /-- Whether some step of `ms` comes past `t0 + within` with no step before it answering. -/
 def late (t0 : Int) : List (Moment e) → Bool
   | [] => false
-  | m :: ms => decide (m.time > t0 + resp.within) || (!resp.answers m && late t0 ms)
+  | m :: ms => decide (m.time > t0 + (resp.withinNat : Int)) || (!resp.answers m && late t0 ms)
 
 /-- `Violated`, computed. -/
 def violated : List (Moment e) → Bool
@@ -45,7 +45,7 @@ def violated : List (Moment e) → Bool
   | m :: ms => (resp.opens m && !resp.answers m && resp.late m.time ms) || violated ms
 
 theorem late_iff (t0 : Int) : (ms : List (Moment e)) → (resp.late t0 ms = true ↔
-    ∃ j, ∃ (hj : j < ms.length), ms[j].time > t0 + resp.within ∧ ∀ m (hm : m < j), resp.answers ms[m] = false)
+    ∃ j, ∃ (hj : j < ms.length), ms[j].time > t0 + (resp.withinNat : Int) ∧ ∀ m (hm : m < j), resp.answers ms[m] = false)
   | [] => by simp [late]
   | m :: ms => by
     simp only [late, Bool.or_eq_true, decide_eq_true_eq, Bool.and_eq_true, Bool.not_eq_true', late_iff t0 ms]

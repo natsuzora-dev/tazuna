@@ -84,18 +84,18 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .renamings n => s!"the two steps sent {n} requests, more than the {wireSearchCap} whose renamings are searched"
   | .keptFunctions => "the two orders end with the same data but keep different functions, whose results are not compared"
 
-/-- Every bound a step of the service can go past: each table and bag type of its layout, with the bound its slots
-come from, and the pending requests where the service has a request shape. A list's slots are its type's longest
-literal and no built-in makes a longer list, so no list bound is ever past. -/
+/-- Every bound a step of the service can go past: each table and bag type of its layout, and the pending requests
+where the service has a request shape, with the bound its slots come from (`stepBound`) and its slots as
+`Layout.count` gives them, the function every slot-fit premise (`StepFits`, `RunIn`, `RespFits`) reads. A list's slots
+are its type's longest literal and no built-in makes a longer list, so no list bound is ever past. -/
 def scopeBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
-  L.types.filterMap fun (t, n) =>
-    let line (name bound : String) : Option Json :=
-      some (Json.mkObj [("type", Json.str name), ("bound", Json.str bound), ("slots", Lean.toJson n)])
+  L.types.filterMap fun (t, _) =>
+    let line (name : String) : Option Json :=
+      some (Json.mkObj [("type", Json.str name), ("bound", Json.str (stepBound v t)), ("slots", Lean.toJson (L.count t))])
     if (Ty.same t (pendingTable (shapes v))).isSome then
-      if (shapes v).isEmpty then none else line "pending requests" "items"
+      if (shapes v).isEmpty then none else line "pending requests"
     else match t with
-      | .table k w => line (tyText T t) (if v.bounds.creates.any (·.bounds (.table k w)) then "creates" else "items")
-      | .bag _ => line (tyText T t) "items"
+      | .table .. | .bag _ => line (tyText T t)
       | _ => none
 
 /-- The kind and fields of a refused encoding's line where the refusal is the spec's; none for an engine gap. -/

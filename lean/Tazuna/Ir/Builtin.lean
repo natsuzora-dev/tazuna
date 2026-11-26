@@ -274,7 +274,7 @@ def sig : Prim → PrimSig :=
       params := [l "to" (.dsl .source [b]), l "wrap" (kept (.fn [b] a))], ret := .dsl .subscription [a] }
   | .bounds =>
     { name := "bounds",
-      doc := "How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run.",
+      doc := "How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run (at least 1).",
       tvars := ["records"], dataArgs := true,
       params := [l "creates" (.list (.dsl .create [a])), l "items" .int, l "cascade" .int, l "steps" .int],
       ret := .dsl .bounds [a] }

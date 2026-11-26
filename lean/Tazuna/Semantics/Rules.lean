@@ -434,9 +434,12 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
       ((reads.filter (·.isEmpty)).map fun _ =>
         (Illegal.creates, s!"{v.name}: a create bound reads no table field of the records"))
     let b := v.bounds
-    let negative := ([("items", (b.items : Int)), ("cascade", b.cascade), ("steps", b.steps)] ++
-        (v.bounds.creates.zip reads).map (fun (c, ts) => ("create " ++ ", ".intercalate ts, c.atMost))).filterMap
-      fun (what, n) => if n < 0 then some (Illegal.bounds, s!"{v.name}: the {what} bound is negative") else none
+    -- Each bound with its least legal value: `steps` 1, since a search of no depth would read as a verdict.
+    let negative := ([("items", (b.items : Int), (0 : Int)), ("cascade", b.cascade, 0), ("steps", b.steps, 1)] ++
+        (v.bounds.creates.zip reads).map (fun (c, ts) => ("create " ++ ", ".intercalate ts, c.atMost, 0))).filterMap
+      fun (what, n, least) => if n < least then
+        some (Illegal.bounds, if least = 0 then s!"{v.name}: the {what} bound is negative"
+          else s!"{v.name}: the {what} bound is below {least}") else none
     let scenarioNames := (duplicates (v.scenarios.map (·.name))).map fun n =>
       (Illegal.scenario, s!"{v.name}/{n} names more than one scenario")
     let perScenario := v.scenarios.flatMap fun sc =>

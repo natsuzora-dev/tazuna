@@ -1,6 +1,6 @@
 {"file":"counter/add accepted.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"add accepted"}
-{"assumes":["inputs carry only ids the service made or names from outside"],"bounds":[{"bound":"items","slots":1,"type":"pending requests"}],"kind":"Generate.unreached","service":"counter","steps":5,"target":"add rejected Nil"}
-{"assumes":["inputs carry only ids the service made or names from outside"],"bounds":[{"bound":"items","slots":1,"type":"pending requests"}],"kind":"Generate.unreached","service":"counter","steps":5,"target":"add invalid callers"}
+{"assumes":["inputs carry only ids the service made or names from outside","no step of the run faults"],"bounds":[{"bound":"items","slots":1,"type":"pending requests"}],"kind":"Generate.unreached","service":"counter","steps":5,"target":"add rejected Nil"}
+{"assumes":["inputs carry only ids the service made or names from outside","no step of the run faults"],"bounds":[{"bound":"items","slots":1,"type":"pending requests"}],"kind":"Generate.unreached","service":"counter","steps":5,"target":"add invalid callers"}
 {"file":"counter/add invalid positive.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"add invalid positive"}
 {"file":"counter/event Added.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"event Added"}
 {"file":"counter/request mail.send.jsonl","kind":"Generate.reached","service":"counter","steps":1,"target":"request mail.send"}

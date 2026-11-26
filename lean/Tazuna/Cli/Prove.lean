@@ -337,8 +337,6 @@ def serviceItems (sv : CheckedService c) (only : String → Bool) : ServiceItems
 
 end
 
-/-- The words an assumption is named by in a response line. -/
-def responseAssumes : List String := [Step.Assumption.validInputs.text, Step.Assumption.timelyClock.text]
 
 def _root_.Tazuna.Ir.ResponseV.text {e : Ty} (resp : ResponseV e) : String := "response " ++ resp.name
 
@@ -363,7 +361,7 @@ def responseLine (service name : String) (scope : List Json) : SearchResult (Lis
   | .undecided kind fields => (kind, common ++ fields)
 where
   common : List (String × Json) := [("service", Json.str service), ("target", Json.str ("response " ++ name))]
-  assumes : String × Json := ("assumes", Json.arr (responseAssumes.map Json.str).toArray)
+  assumes : String × Json := ("assumes", Json.arr (Step.Assumption.ofResponses.map (Json.str ·.text)).toArray)
 
 def Report.service : Report → String
   | .unsat s .. | .violated s .. | .boundReached s .. | .undecided _ s .. => s
@@ -450,7 +448,7 @@ def prove (root path : String) (opts : Options) : IO UInt32 := do
       if resps.isEmpty then continue
       let L := sv.L
       let senv := sv.senv
-      let (bs, ds) ← depthJobs solver c v L senv v.bounds.steps.toNat
+      let (bs, ds) ← depthJobs solver c v L senv v.bounds.stepsNat
       builds := builds ++ bs
       for resp in resps do
         -- `respGoalE_ofService`: the goal's refusal is the spec's, never a layout gap.

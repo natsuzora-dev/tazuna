@@ -368,6 +368,10 @@ timed response by moving the clock past the timer that would answer in time, sin
 time (timed automata block time from passing a deadline in the same way). -/
 abbrev TimelyRun : State v → List (Input v) → Prop := EachStep T fun s x => timelyAt s x = true
 
+/-- No step of the run faults. A fault is a spec bug that prove reports on its own; a search over runs leaves runs
+through one out. -/
+abbrev NoFaultRun : State v → List (Input v) → Prop := EachStep T fun s x => ∀ f, (step T v s x).outcome ≠ .fault f
+
 /-- An assumption a proof rests on beyond the spec's invariants: what it says of a run, and the words a line's
 `assumes` names it by, kept together so the two cannot part. -/
 inductive Assumption where
@@ -375,15 +379,26 @@ inductive Assumption where
   | validInputs
   /-- No clock line of a run moves time past a timer that waits (`TimelyRun`). -/
   | timelyClock
+  /-- No step of a run faults (`NoFaultRun`). -/
+  | noFault
 
 def Assumption.text : Assumption → String
   | .validInputs => "inputs carry only ids the service made or names from outside"
   | .timelyClock => "no clock line moves time past a timer that waits"
+  | .noFault => "no step of the run faults"
 
 /-- What the assumption says of the run from `s` on `xs`. -/
 def Assumption.Holds : Assumption → State v → List (Input v) → Prop
   | .validInputs => ValidRun T
   | .timelyClock => TimelyRun T
+  | .noFault => NoFaultRun T
+
+/-- What a search over the runs from the initial state assumes of them: generate's unreached targets rest on it. -/
+def Assumption.ofRuns : List Assumption := [.validInputs, .noFault]
+
+/-- What a search for a response's violation assumes of the runs: a response within its bounds rests on it, and a
+violating run satisfies it. -/
+def Assumption.ofResponses : List Assumption := Assumption.ofRuns ++ [.timelyClock]
 
 theorem machines_empty (P : PBij) : (ms : List (MachineV v.records v.event)) →
     Machines.Rel P (PerMachine.ofFn (fun _ => ([] : List (Instance _))) ms : Machines ms)

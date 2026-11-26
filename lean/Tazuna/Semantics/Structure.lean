@@ -174,12 +174,17 @@ loses nothing there; these are the only places that convert. -/
 def CreateV.atMostNat {r : Ty} (c : CreateV r) : Nat := c.atMost.toNat
 def BoundsV.itemsNat {r : Ty} (b : BoundsV r) : Nat := b.items.toNat
 def BoundsV.cascadeNat {r : Ty} (b : BoundsV r) : Nat := b.cascade.toNat
+def BoundsV.stepsNat {r : Ty} (b : BoundsV r) : Nat := b.steps.toNat
 
 structure ResponseV (e : Ty) where
   name : String
   after : Fun (Ty.fn [e] Ty.bool)
   then_ : Fun (Ty.fn [e] Ty.bool)
   within : Int
+
+/-- A response's time limit as a count, for everything after check, which rejects a negative one
+(`Illegal.response`); the only place that converts. -/
+def ResponseV.withinNat {e : Ty} (r : ResponseV e) : Nat := r.within.toNat
 
 /-- One step of a scenario, typed by its service's records, event and caller. -/
 inductive StepV (r e c : Ty) where

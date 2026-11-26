@@ -88,7 +88,7 @@ def respGoalE (resp : ResponseV v.event) (sts : List (UnrollStep v n)) : Except 
   let (fa, ca) ← resp.after.code L
   let (fq, cq) ← resp.then_.code L
   let ms ← sts.mapM (stepRespT L v fa fq)
-  pure (andT (andT ca cq) (andT (allT (ms.map (·.2))) (violT resp.within (ms.map (·.1)))))
+  pure (andT (andT ca cq) (andT (allT (ms.map (·.2))) (violT (resp.withinNat : Int) (ms.map (·.1)))))
 
 end
 
@@ -248,7 +248,7 @@ def MomentRel (M : Model) (resp : ResponseV v.event) (t : Term × Term × Term) 
 
 theorem lateT_iff (resp : ResponseV v.event) {t0 : Term} {x : Int} (h0 : t0.denote M = .int x) :
     {ts : List (Term × Term × Term)} → {ms : List (Moment v.event)} → Forall2 (MomentRel M resp) ts ms →
-    (Holds M (lateT resp.within t0 ts) ↔ resp.late x ms = true)
+    (Holds M (lateT (resp.withinNat : Int) t0 ts) ↔ resp.late x ms = true)
   | [], [], _ => by simp [lateT, ResponseV.late, ff, Holds, Term.denote, Val.toBool]
   | (o, a, t) :: ts, m :: ms, ⟨⟨_, ha, ht⟩, hr⟩ => by
     simp only [lateT, ResponseV.late, holds_or, holds_andT, holds_not, lateT_iff resp h0 hr, ha, Bool.or_eq_true,
@@ -256,7 +256,7 @@ theorem lateT_iff (resp : ResponseV v.event) {t0 : Term} {x : Int} (h0 : t0.deno
     simp only [Holds, Term.denote, h0, ht, Val.toInt, Val.toBool, decide_eq_true_eq, Bool.not_eq_true]
 
 theorem violT_iff (resp : ResponseV v.event) : {ts : List (Term × Term × Term)} → {ms : List (Moment v.event)} →
-    Forall2 (MomentRel M resp) ts ms → (Holds M (violT resp.within ts) ↔ resp.violated ms = true)
+    Forall2 (MomentRel M resp) ts ms → (Holds M (violT (resp.withinNat : Int) ts) ↔ resp.violated ms = true)
   | [], [], _ => by simp [violT, ResponseV.violated, ff, Holds, Term.denote, Val.toBool]
   | (o, a, t) :: ts, m :: ms, ⟨⟨ho, ha, ht⟩, hr⟩ => by
     simp only [violT, ResponseV.violated, holds_or, holds_andT, holds_not, violT_iff resp hr,
@@ -370,12 +370,15 @@ at most that many inputs violates it. -/
 theorem response_within (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L)
     {resp : ResponseV v.event} {d : Nat} {B : UnrollBase v senv.nT} (hB : unrollBase L T P v senv d = .ok B)
     {g : Term} (hg : respGoalE L v resp B.steps = .ok g) (hnr : B.refused = []) (hun : Unsat L (B.withGoal g).ask)
-    {xs : List (Input v)} (hlen : xs.length = d) (hfits : RunFits L T P v chk.callerData (Step.State.init v) xs)
+    {xs : List (Input v)} (hlen : xs.length = d) (hin : RunIn L T P v chk.callerData (Step.State.init v) xs)
     (hsrc : (resp.after.fits L.count).1 ∧ (resp.then_.fits L.count).1)
-    (hrf : RespFits L T resp (Step.State.init v) xs) (htime : Step.TimelyRun T (Step.State.init v) xs) :
+    (hrf : RespFits L T resp (Step.State.init v) xs)
+    (has : ∀ a ∈ Step.Assumption.ofResponses, a.Holds T (Step.State.init v) xs) :
     ¬ resp.Violated ((run T v (Step.State.init v) xs).2.map Result.moment) := by
   intro hviol
-  obtain ⟨M, hM, hrun, hA⟩ := runs_covered chk senv hL hB hnr hlen hfits
+  have htime : Step.TimelyRun T (Step.State.init v) xs := has .timelyClock (by simp [Step.Assumption.ofResponses])
+  obtain ⟨M, hM, hrun, hA⟩ := runs_covered chk senv hL hB hnr hlen
+    (runFits_of _ _ _ _ _ _ _ hin fun a ha => has a (List.mem_append_left _ ha))
   obtain ⟨a, ha, hna⟩ := hun.noModel M hM
   exact hna (((B.holds_withGoal g).2 ⟨hA, (respGoal_iff hrun hg).2 ⟨hsrc, hrf, htime, hviol⟩⟩) a ha)
 

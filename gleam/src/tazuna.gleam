@@ -314,7 +314,7 @@ pub fn subscribe(
   panic as "tazuna's built-ins run only in the engine"
 }
 
-/// How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run.
+/// How far checking goes: records per table (`creates`), items per bag and per table no create bounds, internal steps per input, steps per run (at least 1).
 pub fn bounds(
   creates _creates: List(Create(records)),
   items _items: Int,

@@ -707,6 +707,24 @@ variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (hc 
 /-- Every step of the run is one an unrolled step can take (`RunStep`). -/
 abbrev RunFits : State v → List (Input v) → Prop := Step.EachStep T (RunStep L T P v hc)
 
+/-- Every step of the run is within the slots: its input's values fit them and the step stays within them. The part of
+`RunStep` that is the bounds; the rest is what `Step.Assumption.ofRuns` names. -/
+abbrev RunIn : State v → List (Input v) → Prop :=
+  Step.EachStep T fun s x => (unrollVals L hc x).isSome ∧ StepFits L T P v s x
+
+/-- A run within the slots on which `Step.Assumption.ofRuns` holds is one an unrolled run can take. -/
+theorem runFits_of : (s : State v) → (xs : List (Input v)) → RunIn L T P v hc s xs →
+    (∀ a ∈ Step.Assumption.ofRuns, a.Holds T s xs) → RunFits L T P v hc s xs
+  | _, [], _, _ => trivial
+  | s, x :: xs, ⟨hin, hins⟩, hA => by
+    have hv : Step.ValidRun T s (x :: xs) := hA .validInputs (by simp [Step.Assumption.ofRuns])
+    have hn : Step.NoFaultRun T s (x :: xs) := hA .noFault (by simp [Step.Assumption.ofRuns])
+    refine ⟨⟨hin.1, hin.2, hv.1, hn.1⟩, runFits_of _ xs hins fun a ha => ?_⟩
+    simp only [Step.Assumption.ofRuns, List.mem_cons, List.not_mem_nil, or_false] at ha
+    rcases ha with rfl | rfl
+    · exact hv.2
+    · exact hn.2
+
 /-- The values of an unrolled run's constants, from step `i` with its selector at the constant `b`, in the model of the
 run on the inputs `xs`. -/
 noncomputable def runVals (n : Nat) : Nat → Nat → List (Input v) → List Val
