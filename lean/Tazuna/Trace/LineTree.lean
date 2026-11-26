@@ -3,9 +3,8 @@ import Tazuna.Trace.Cands
 
 /-! Out lines as trees, the form verify compares them in. The spec's expected lines become trees with the spec's ids and
 wire ids at their leaves (`Expect.tree`); a trace's out line, read with the type of its value, becomes a tree with the
-trace's names there (`lineTree`). A trace line writes an expected line under a binding when the two trees are the same
-once the binding names the keys (`LineW`): the line's value is the spec's, its bags and tables in any order. Both sides
-read a value as `enc` writes it and `dec` reads it: an object's tag and fields by their keys, no key missing or extra. -/
+trace's names there (`lineTree`). Verify matches a trace line to an expected line when the two trees are the same once
+a binding names the keys (`TreeW`), which is what the line writes by decoding (`LineW`, `lineW_iff`). -/
 
 namespace Tazuna.Trace
 
@@ -197,9 +196,9 @@ def lineTree (ty : Option Ty) (l : Line) : Option (Tree Name) := do
 
 variable (v : ServiceV)
 
-/-- The trace line `l` writes the expected line `e` with the keys named by `β`: read with the type of `e`'s value, its
+/-- The trace line `l` matches the expected line `e` with the keys named by `β`: read with the type of `e`'s value, its
 tree is `e`'s once `β` names `e`'s keys, up to the order of bag and table items. -/
-def LineW (β : Key → Name) (now : Int) (e : Expect v) (l : Line) : Prop :=
+def TreeW (β : Key → Name) (now : Int) (e : Expect v) (l : Line) : Prop :=
   ∃ te tl, e.tree T v now = some te ∧ lineTree T (Expect.ty v e) l = some tl ∧ Tree.Same (te.map β) tl
 
 end

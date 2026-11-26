@@ -11,7 +11,7 @@ JSON library.
 - A Table is an array of `[key, value]` pairs, written in the canonical order of the keys.
 - A Bool is `true` or `false`, and Nil is `null`: JSON's own literals.
 - A value of any other custom type, `Option` and `Result` included, is an object: `"tag"` names the variant, and each
-  field sits under its label, or under its position (`"0"`, `"1"`) when it has none.
+  field sits under its label, or under its position (`"0"`, `"1"`) when it has none, with no other key.
 - A Date is its ISO 8601 label: `YYYY-MM-DD`, with a sign and six or more year digits outside years 0000 to 9999.
 - An Id is a string a binding names it by: a trace names a fresh id by its first appearance, never by the engine's
   numbers, and an id from outside the service by its own name.
@@ -247,14 +247,16 @@ def decFields (kvs : List (String × Wire)) : (fs : List Ty) → List String →
   | [], [] => some ()
   | f :: fs, key :: keys => do pure (← dec f (← kvs.lookup key), ← decFields kvs fs keys)
   | _, _ => none
-/-- Variant `k` of the variants `vs`, which are the declaration's variants from index `j` on. -/
+/-- Variant `k` of the variants `vs`, which are the declaration's variants from index `j` on, when `enc` can write it:
+its fields, with no key beside them and the tag. -/
 def decAlts (decl : List Variant) (kvs : List (String × Wire)) (k : Nat) (j : Nat) :
     (vs : List (List Ty)) → Option (Ty.semAltsWith Dsl.base vs).1
   | [] => none
   | fs :: vs =>
     if k = j then do
       let var ← decl[j]?
-      pure (.inl (← decFields kvs fs (fieldKeys var.fields)))
+      let keys := fieldKeys var.fields
+      if writable decl j var && kvs.length == keys.length + 1 then pure (.inl (← decFields kvs fs keys)) else none
     else (decAlts decl kvs k (j + 1) vs).map .inr
 end
 

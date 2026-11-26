@@ -85,10 +85,11 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Gleam.div_zero, ``Tazuna.Gleam.mod_zero, ``Tazuna.Gleam.div_add_mod, ``Tazuna.Gleam.mod_neg_left,
     ``Tazuna.Gleam.mod_neg_right, ``Tazuna.Gleam.div_neg_right, ``Tazuna.Gleam.length_eq_codepoints,
     ``Tazuna.Ir.Ty.deq_bag_perm, ``Tazuna.Ir.Literal.parseInt_printInt, ``Tazuna.Ir.Literal.parseStr_printStr,
-    -- Traces: reading back a written trace's header and lines gives them back, and a date label and its day number are
-    -- one value, every day having a label. (Reading back a written value, `dec_enc`, is T6's.)
-    ``Tazuna.Trace.TraceFile.read_wires, ``Tazuna.Trace.DateThm.render_parse,
-    -- verify, unless out of tries, passes a trace exactly when one bijection of ids reads every window as the spec's.
+    -- Traces: reading back a written trace's header and lines gives them back. (Reading back a written value,
+    -- `dec_enc`, is T6's.)
+    ``Tazuna.Trace.TraceFile.read_wires,
+    -- verify, unless out of tries, passes a trace exactly when one bijection of ids reads every window as the spec's,
+    -- each out line decoding to the spec's (a date label and its day number being one value, `render_parse`).
     ``Tazuna.Trace.replay_iff,
     -- A counterexample's `after` is the state the step reaches before its invariant check.
     ``Tazuna.Ir.step_settled,

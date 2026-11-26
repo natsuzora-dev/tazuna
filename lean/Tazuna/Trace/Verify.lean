@@ -1,4 +1,4 @@
-import Tazuna.Trace.LineTree
+import Tazuna.Trace.LineDec
 
 /-! Replaying a trace against the spec. Each in line runs as the spec's input; the out lines up to the next in line
 form its window, which must be the spec's out lines in some order. An implementation names its own ids and wire ids:
@@ -19,10 +19,13 @@ structure Bind where
   ids : List (IdV × String) := []
   wires : List (Nat × String) := []
 
+/-- The id bound to the name, if one is. -/
+def Bind.idOf (b : Bind) (s : String) : Option IdV := (b.ids.find? (·.2 == s)).map (·.1)
+
 -- An id the trace has not bound is a named id.
 set_option linter.tazuna.silentDefault false in
 /-- The id an in line names: the one bound to the name, or else the outside id of that name. -/
-def Bind.id? (b : Bind) (s : String) : Option IdV := some (((b.ids.find? (·.2 == s)).map (·.1)).getD (.named s))
+def Bind.id? (b : Bind) (s : String) : Option IdV := some ((b.idOf s).getD (.named s))
 
 def Bind.wire? (b : Bind) (s : String) : Option Nat := (b.wires.find? (·.2 == s)).map (·.1)
 
@@ -152,6 +155,25 @@ set_option linter.tazuna.silentDefault false in
 /-- The keys an expected line shows. -/
 def Expect.keys (now : Int) (e : Expect v) : List Key := ((e.tree T v now).map Tree.leaves).getD []
 
+/-- The wire form `w` writes the value `x` of type `t` under the binding: decoded with the binding's names for ids, it
+is `x` up to the order of its bags and tables. -/
+def Bind.Writes (b : Bind) (t : Ty) (x : t.den0) (w : Wire) : Prop := ∃ y, dec T b.idOf t w = some y ∧ Ty.Same t x y
+
+-- A trace line of another kind than the expected line writes nothing of it.
+set_option linter.tazuna.silentDefault false in
+/-- The trace line `l` writes the expected line `e` under the binding `b`: a line of `e`'s kind at `e`'s time naming
+what `e` names, whose value `b` reads as `e`'s, whose rules are `e`'s in some order, and whose request id `b` names
+as `e`'s. -/
+def LineW (b : Bind) (now : Int) : Expect v → Line → Prop
+  | .answered to o, .answered t to' a => t = now ∧ to' = to ∧ match o, a with
+    | .accepted, .accepted => True
+    | .answered ⟨ty, x⟩, .answered w | .rejected ⟨ty, x⟩, .rejected w => b.Writes T ty x w
+    | .invalid rs, .invalid rs' => rs.Perm rs'
+    | _, _ => False
+  | .applied ev, .applied t w => t = now ∧ b.Writes T v.event ev w
+  | .sent id x n ⟨ty, i⟩, .sent t wn x' n' w => t = now ∧ x' = x ∧ n' = n ∧ b.wire? wn = some id ∧ b.Writes T ty i w
+  | _, _ => False
+
 /-- The trace reads as the spec from `s` under `b`: each in line reads as an input under the binding so far, with the
 outside ids it names bound to their names, and its step does not fault; the binding grows one to one by the keys the
 spec's out lines show; and the window's out lines, in some order, write the spec's out lines under it. -/
@@ -160,7 +182,7 @@ inductive Reads : State v → Bind → List (Nat × Line) → Prop
   | cons {s : State v} {b b' : Bind} {n : Nat} {l : Line} {more : List (Nat × Line)} {r : Result v}
     {ids : List IdV} {es : List (Expect v)} :
     stepIn T v s b n l = .ok (r, ids, es) → Grows (b.outside ids) (es.flatMap (Expect.keys T v r.state.now)) b' →
-    Multi (LineW T v b'.name r.state.now) es (window more) → Reads r.state b' (afterWindow more) →
+    Multi (LineW T v b' r.state.now) es (window more) → Reads r.state b' (afterWindow more) →
     Reads s b ((n, l) :: more)
 
 mutual
@@ -313,17 +335,10 @@ theorem decAlts_congr (decl : List Variant) (kvs : List (String × Wire)) (k : N
     decAlts T f decl kvs k j vs = decAlts T g decl kvs k j vs
   | _, [], _ => rfl
   | j, fs :: vs, h => by
-    show ((if k = j then do
-      let var ← decl[j]?
-      pure (Sum.inl (← decFields T f kvs fs (fieldKeys var.fields)))
-    else (decAlts T f decl kvs k (j + 1) vs).map Sum.inr) : Option (Ty.semAltsWith Dsl.base (fs :: vs)).1) =
-      (if k = j then do
-      let var ← decl[j]?
-      pure (Sum.inl (← decFields T g kvs fs (fieldKeys var.fields)))
-    else (decAlts T g decl kvs k (j + 1) vs).map Sum.inr)
+    simp only [decAlts]
     split
-    · congr 1; funext var; simp only [decFields_congr kvs h fs]; rfl
-    · rw [decAlts_congr decl kvs k (j + 1) vs h]; rfl
+    · simp only [decFields_congr kvs h fs]
+    · rw [decAlts_congr decl kvs k (j + 1) vs h]
 end
 
 end
@@ -555,7 +570,7 @@ theorem mem_bind_wires {n : Nat} {s : String} : (n, s) ∈ C.bind.wires ↔ ([.w
 do. -/
 theorem id?_bind (hC : C.Ok) (h : C.Has β) {b : Bind} (ha : Agrees b β C) {x : String}
     (hd : Name.id x ∈ C.names → ∃ k, ([k], [Name.id x]) ∈ C.blocks) : b.id? x = C.bind.id? x := by
-  simp only [Bind.id?]
+  simp only [Bind.id?, Bind.idOf]
   by_cases hx : Name.id x ∈ C.names
   · obtain ⟨k, hk⟩ := hd hx
     have hkm : k ∈ C.keys := mem_keys hk (by simp)
@@ -825,11 +840,185 @@ theorem tree_heads {v : ServiceV} {T : List TypeDecl} {β : Key → Name} {now :
 section
 variable {T : List TypeDecl} {v : ServiceV}
 
-theorem mapM_of_forall2 {α γ : Type} {f : α → Option γ} : {xs : List α} → {ys : List γ} →
-    Forall2 (fun x y => f x = some y) xs ys → xs.mapM f = some ys
-  | [], [], _ => rfl
-  | _ :: _, _ :: _, ⟨h, hs⟩ => by simp [List.mapM_cons, h, mapM_of_forall2 hs]
-  | [], _ :: _, h | _ :: _, [], h => h.elim
+theorem Tree.map_atoms {α γ : Type} (f : α → γ) (hs : List Erl) :
+    Tree.map f (.seq (hs.map Tree.atom)) = .seq (hs.map Tree.atom) := by
+  simp only [Tree.map, Tree.maps_eq, List.map_map]; rfl
+
+theorem leavess_atoms {α : Type} (hs : List Erl) : Tree.leavess (hs.map (Tree.atom (α := α))) = [] := by
+  induction hs with
+  | nil => rfl
+  | cons h hs ih => simp [Tree.leavess, Tree.leaves, ih]
+
+theorem keys_of {now : Int} {e : Expect v} {b : List (Tree Key)} (hb : e.body T v = some b) :
+    Expect.keys T v now e = Tree.leavess b := by
+  simp [Expect.keys, Expect.tree, hb, Tree.leaves, Tree.leavess, leavess_atoms]
+
+theorem treeW_of {β : Key → Name} {now : Int} {e : Expect v} {l : Line} {b : List (Tree Key)} {bl : List (Tree Name)}
+    (hb : e.body T v = some b) (hh : l.head = some (e.head v now)) (hl : l.body T (Expect.ty v e) = some bl)
+    (hs : Forall2 Tree.Same (b.map (Tree.map β)) bl) : TreeW T v β now e l := by
+  refine ⟨.seq [.seq ((e.head v now).map .atom), .seq b], .seq [.seq ((e.head v now).map .atom), .seq bl],
+    by simp [Expect.tree, hb], by simp [lineTree, hh, hl], ?_⟩
+  simp only [Tree.map, Tree.maps_eq, List.map_cons, List.map_nil]
+  refine Tree.same_seq.2 ⟨?_, Tree.same_seq.2 hs, trivial⟩
+  rw [← Tree.maps_eq, ← Tree.map, Tree.map_atoms]
+  rfl
+
+theorem treeW_body {β : Key → Name} {now : Int} {e : Expect v} {l : Line} (h : TreeW T v β now e l) :
+    l.head = some (e.head v now) ∧ ∃ b bl, e.body T v = some b ∧ l.body T (Expect.ty v e) = some bl ∧
+      Forall2 Tree.Same (b.map (Tree.map β)) bl := by
+  obtain ⟨te, tl, he, hl, hs⟩ := h
+  refine ⟨tree_heads he hl hs, ?_⟩
+  simp only [Expect.tree, Option.map_eq_some_iff] at he
+  obtain ⟨b, hb, rfl⟩ := he
+  simp only [lineTree, Option.bind_eq_bind, Option.bind_eq_some_iff, Option.pure_def, Option.some.injEq] at hl
+  obtain ⟨hd, -, bl, hbl, rfl⟩ := hl
+  simp only [Tree.map, Tree.maps_eq, List.map_cons, List.map_nil, Tree.same_seq, Forall2] at hs
+  exact ⟨b, bl, hb, hbl, hs.2.1⟩
+
+theorem Bind.idOf_mem {b : Bind} {s : String} {i : IdV} (h : b.idOf s = some i) : (i, s) ∈ b.ids := by
+  simp only [Bind.idOf, Option.map_eq_some_iff] at h
+  obtain ⟨p, hp, rfl⟩ := h
+  have h2 : p.2 = s := by simpa using List.find?_some hp
+  rw [← h2]; exact List.mem_of_find?_eq_some hp
+
+theorem Bind.wire?_mem {b : Bind} {s : String} {n : Nat} (h : b.wire? s = some n) : (n, s) ∈ b.wires := by
+  simp only [Bind.wire?, Option.map_eq_some_iff] at h
+  obtain ⟨p, hp, rfl⟩ := h
+  have h2 : p.2 = s := by simpa using List.find?_some hp
+  rw [← h2]; exact List.mem_of_find?_eq_some hp
+
+/-- Where the binding names every id among `ks`, it reads each back by its name. -/
+theorem Bind.undoes {b : Bind} (hone : b.OneToOne) {ks : List Key} (hk : ∀ k ∈ ks, b.Binds k) :
+    Undoes b.idOf b.name ks := fun i s hi he => by
+  obtain ⟨t, ht⟩ := hk _ hi
+  rw [Bind.name_id hone ht] at he
+  have hts : t = s := by injection he
+  subst hts
+  exact find_pair ht fun y hy => hone.idNames y i t hy ht
+
+theorem writes_of_tree {b : Bind} (hone : b.OneToOne) {t : Ty} (hc : t.comparable = true) {x : t.den0} {w : Wire}
+    {te : Tree Key} {tl : Tree Name} (h1 : valTree T t x = some te) (h2 : wireTree T t w = some tl)
+    (h3 : Tree.Same (te.map b.name) tl) (hk : ∀ k ∈ te.leaves, b.Binds k) : b.Writes T t x w :=
+  tree_dec T b.idOf b.name t hc x w te tl h1 h2 h3 (Bind.undoes hone hk)
+
+theorem tree_of_writes {b : Bind} (hone : b.OneToOne) {t : Ty} {x : t.den0} {w : Wire} (h : b.Writes T t x w) :
+    ∃ te tl, valTree T t x = some te ∧ wireTree T t w = some tl ∧ Tree.Same (te.map b.name) tl := by
+  obtain ⟨y, hy, hs⟩ := h
+  obtain ⟨te, tl, h1, h2, h3⟩ := dec_tree T b.idOf b.name (fun _ _ h => Bind.name_id hone (Bind.idOf_mem h)) t w y hy
+  obtain ⟨te', h1', hs'⟩ := valTree_same T t y x (Ty.same_symm hs) te h1
+  exact ⟨te', tl, h1', h2, (Tree.Same.map b.name hs').symm.trans h3⟩
+
+theorem same_rules {rs rs' : List String} {f : Key → Name} :
+    Tree.Same ((Tree.bag (rs.map (Tree.atom ∘ Erl.bin))).map f) (.bag (rs'.map (Tree.atom ∘ Erl.bin))) ↔
+      rs.Perm rs' := by
+  have hm : (Tree.bag (rs.map (Tree.atom ∘ Erl.bin))).map f = .bag (rs.map (Tree.atom ∘ Erl.bin)) := by
+    simp only [Tree.map, Tree.maps_eq, List.map_map]; rfl
+  rw [hm]
+  simp only [Tree.Same, Tree.erl, Tree.erls_eq, List.map_map, Erl.tuple.injEq, List.cons.injEq, Erl.list.injEq,
+    true_and, and_true, Erl.sort_eq_iff]
+  constructor
+  · intro h
+    obtain ⟨l', hl', he⟩ := perm_map_inv h rfl
+    rw [map_inj_of (fun a b e => by simpa [Tree.erl] using e) he]; exact hl'
+  · intro h; exact h.map _
+
+/-- A trace line that matches an expected line as verify compares them writes it, where the binding names the
+line's keys one to one and its value's type is comparable. -/
+theorem lineW_of_treeW {b : Bind} (hone : b.OneToOne) {now : Int} {e : Expect v} {l : Line}
+    (hk : ∀ k ∈ Expect.keys T v now e, b.Binds k) (hc : ∀ t, Expect.ty v e = some t → t.comparable = true)
+    (h : TreeW T v b.name now e l) : LineW T v b now e l := by
+  obtain ⟨hh, bs, bl, hb, hl, hs⟩ := treeW_body h
+  rw [keys_of hb] at hk
+  cases e with
+  | answered to o =>
+    cases l <;> simp [Line.head, Expect.head] at hh
+    rename_i t to' a
+    obtain ⟨rfl, rfl, htag⟩ := hh
+    refine ⟨rfl, rfl, ?_⟩
+    cases o <;> cases a <;> simp [outcomeTag, answerTag] at htag
+    · trivial
+    · rename_i x w
+      obtain ⟨ty, x⟩ := x
+      simp only [Expect.body, Option.map_eq_some_iff] at hb
+      obtain ⟨te, hte, rfl⟩ := hb
+      simp only [Line.body, Expect.ty, Option.bind_some, Option.map_eq_some_iff] at hl
+      obtain ⟨tl, htl, rfl⟩ := hl
+      exact writes_of_tree hone (hc ty rfl) hte htl hs.1 (by simpa [Tree.leavess] using hk)
+    · rename_i x w
+      obtain ⟨ty, x⟩ := x
+      simp only [Expect.body, Option.map_eq_some_iff] at hb
+      obtain ⟨te, hte, rfl⟩ := hb
+      simp only [Line.body, Expect.ty, Option.bind_some, Option.map_eq_some_iff] at hl
+      obtain ⟨tl, htl, rfl⟩ := hl
+      exact writes_of_tree hone (hc ty rfl) hte htl hs.1 (by simpa [Tree.leavess] using hk)
+    · simp only [Expect.body, Option.some.injEq] at hb
+      simp only [Line.body, Option.some.injEq] at hl
+      subst hb hl
+      exact same_rules.1 hs.1
+  | applied ev =>
+    cases l <;> simp [Line.head, Expect.head] at hh
+    rename_i t w
+    refine ⟨hh, ?_⟩
+    simp only [Expect.body, Option.map_eq_some_iff] at hb
+    obtain ⟨te, hte, rfl⟩ := hb
+    simp only [Line.body, Expect.ty, Option.bind_some, Option.map_eq_some_iff] at hl
+    obtain ⟨tl, htl, rfl⟩ := hl
+    exact writes_of_tree hone (hc _ rfl) hte htl hs.1 (by simpa [Tree.leavess] using hk)
+  | sent id x n i =>
+    obtain ⟨ty, i⟩ := i
+    cases l <;> simp [Line.head, Expect.head] at hh
+    rename_i t wn x' n' w
+    obtain ⟨rfl, rfl, rfl⟩ := hh
+    simp only [Expect.body, Option.map_eq_some_iff] at hb
+    obtain ⟨te, hte, rfl⟩ := hb
+    simp only [Line.body, Expect.ty, Option.bind_some, Option.map_eq_some_iff] at hl
+    obtain ⟨tl, htl, rfl⟩ := hl
+    simp only [List.map_cons, List.map_nil, Forall2, Tree.map] at hs
+    obtain ⟨⟨m, hm⟩, -⟩ : b.Binds (.wire id) ∧ True := ⟨hk _ (by simp [Tree.leavess, Tree.leaves]), trivial⟩
+    have hw : b.name (.wire id) = .wire wn := Tree.same_leaf.1 hs.1
+    rw [Bind.name_wire hone hm] at hw
+    have hmw : m = wn := by injection hw
+    subst hmw
+    exact ⟨rfl, rfl, rfl, find_pair hm fun y hy => hone.wireNames y id m hy hm,
+      writes_of_tree hone (hc ty rfl) hte htl hs.2.1 fun k hk' => hk k (by simp [Tree.leavess, Tree.leaves, hk'])⟩
+
+/-- A trace line that writes an expected line matches it as verify compares them, where the binding is one to one. -/
+theorem treeW_of_lineW {b : Bind} (hone : b.OneToOne) {now : Int} {e : Expect v} {l : Line}
+    (h : LineW T v b now e l) : TreeW T v b.name now e l := by
+  cases e with
+  | answered to o =>
+    cases l <;> simp only [LineW] at h
+    rename_i t to' a
+    obtain ⟨rfl, rfl, h⟩ := h
+    cases o <;> cases a <;> simp only at h
+    · exact treeW_of (b := []) rfl rfl rfl trivial
+    · rename_i x w
+      obtain ⟨ty, x⟩ := x
+      obtain ⟨te, tl, h1, h2, h3⟩ := tree_of_writes hone h
+      exact treeW_of (b := [te]) (bl := [tl]) (by simp [Expect.body, h1]) rfl (by simp [Line.body, Expect.ty, h2])
+        ⟨h3, trivial⟩
+    · rename_i x w
+      obtain ⟨ty, x⟩ := x
+      obtain ⟨te, tl, h1, h2, h3⟩ := tree_of_writes hone h
+      exact treeW_of (b := [te]) (bl := [tl]) (by simp [Expect.body, h1]) rfl (by simp [Line.body, Expect.ty, h2])
+        ⟨h3, trivial⟩
+    · exact treeW_of rfl rfl rfl ⟨same_rules.2 h, trivial⟩
+  | applied ev =>
+    cases l <;> simp only [LineW] at h
+    obtain ⟨rfl, h⟩ := h
+    obtain ⟨te, tl, h1, h2, h3⟩ := tree_of_writes hone h
+    exact treeW_of (b := [te]) (bl := [tl]) (by simp [Expect.body, h1]) rfl (by simp [Line.body, Expect.ty, h2])
+      ⟨h3, trivial⟩
+  | sent id x n i =>
+    obtain ⟨ty, i⟩ := i
+    cases l <;> simp only [LineW] at h
+    rename_i wn _ _ _
+    obtain ⟨rfl, rfl, rfl, hw, h⟩ := h
+    obtain ⟨te, tl, h1, h2, h3⟩ := tree_of_writes hone h
+    refine treeW_of (b := [.leaf (.wire id), te]) (bl := [.leaf (.wire wn), tl]) (by simp [Expect.body, h1]) rfl
+      (by simp [Line.body, Expect.ty, h2]) ⟨?_, h3, trivial⟩
+    show Tree.Same (.leaf (b.name (.wire id))) _
+    rw [Bind.name_wire hone (Bind.wire?_mem hw)]; rfl
 
 theorem winTree_map {α γ : Type} (tys : List (Option Ty)) (ty : Option Ty) (f : α → γ) (t : Tree α) :
     (winTree tys ty t).map f = winTree tys ty (t.map f) := rfl
@@ -859,7 +1048,7 @@ theorem expTrees_spec {now : Int} {es : List (Expect v)} {ets : List (Tree Key)}
 /-- A reading under which the expected trees are the trace's makes the window's lines write the expected lines. -/
 theorem readings_sound {β : Key → Name} {now : Int} {es : List (Expect v)} {ls : List Line} {R : List (Tree Name)}
     {ets : List (Tree Key)} (hR : R ∈ readings T v now es ls) (he : expTrees T v now es = some ets)
-    (hm : Multi (fun a b => Tree.Same (a.map β) b) ets R) : Multi (LineW T v β now) es ls := by
+    (hm : Multi (fun a b => Tree.Same (a.map β) b) ets R) : Multi (TreeW T v β now) es ls := by
   have h1 := forall2_multi_comp (expTrees_spec he) hm
   have h2 := multi_forall2_comp h1 (mem_readings.1 hR)
   refine Multi.imp_mem (fun e he' l _ h => ?_) h2
@@ -870,11 +1059,11 @@ theorem readings_sound {β : Key → Name} {now : Int} {es : List (Expect v)} {l
 
 /-- Lines that write the expected lines give a reading under which the expected trees are the trace's. -/
 theorem readings_complete {β : Key → Name} {now : Int} {es : List (Expect v)} {ls : List Line}
-    (hm : Multi (LineW T v β now) es ls) :
+    (hm : Multi (TreeW T v β now) es ls) :
     ∃ ets, expTrees T v now es = some ets ∧ ∃ R ∈ readings T v now es ls,
       Multi (fun a b => Tree.Same (a.map β) b) ets R := by
   obtain ⟨ls', hf, hp⟩ := hm
-  have build : ∀ (es' : List (Expect v)) (ls'' : List Line), (∀ e ∈ es', e ∈ es) → Forall2 (LineW T v β now) es' ls'' →
+  have build : ∀ (es' : List (Expect v)) (ls'' : List Line), (∀ e ∈ es', e ∈ es) → Forall2 (TreeW T v β now) es' ls'' →
       ∃ ets R', Forall2 (fun e t => (e.tree T v now).map (winTree (Expect.tys v es) (Expect.ty v e)) = some t) es' ets ∧
         Forall2 (fun a b => Tree.Same (a.map β) b) ets R' ∧
         Forall2 (fun l r => ∃ ty, (∃ e ∈ es, l.head = some (e.head v now) ∧ Expect.ty v e = ty) ∧
@@ -1026,8 +1215,8 @@ theorem leavess_ets {now : Int} {es : List (Expect v)} {ets : List (Tree Key)} (
         List.append_nil, Expect.keys, hte, Option.map_some, Option.getD_some]
       rw [ih hs]
 
-theorem lineW_congr {β β' : Key → Name} {now : Int} {e : Expect v} {l : Line}
-    (hβ : ∀ k ∈ Expect.keys T v now e, β k = β' k) (h : LineW T v β now e l) : LineW T v β' now e l := by
+theorem treeW_congr {β β' : Key → Name} {now : Int} {e : Expect v} {l : Line}
+    (hβ : ∀ k ∈ Expect.keys T v now e, β k = β' k) (h : TreeW T v β now e l) : TreeW T v β' now e l := by
   obtain ⟨te, tl, hte, htl, hs⟩ := h
   refine ⟨te, tl, hte, htl, ?_⟩
   rw [← Tree.map_congr te fun k hk => hβ k (by simp [Expect.keys, hte, hk])]
@@ -1136,22 +1325,58 @@ def replay (lines : List (Nat × Line)) : Verdict := (readFrom T v tryCap (State
 section
 variable (T : List TypeDecl) (v : ServiceV)
 
+/-- Every value a result's out lines carry has a comparable type. -/
+def OutComparable (r : Result v) : Prop :=
+  v.event.comparable = true ∧ (∀ w, r.outcome = .answered w → w.1.comparable = true) ∧
+    (∀ w, r.outcome = .rejected w → w.1.comparable = true) ∧ ∀ o ∈ r.out, o.input.1.comparable = true
+
+theorem expects_comparable {r : Result v} (hr : OutComparable v r) (a : Option String) :
+    ∀ e ∈ expects v a r, ∀ t, Expect.ty v e = some t → t.comparable = true := by
+  intro e he t ht
+  simp only [expects, List.mem_append, List.mem_map] at he
+  rcases he with (he | ⟨ev, -, rfl⟩) | ⟨o, ho, rfl⟩
+  · cases a <;> simp at he
+    subst he
+    cases hout : r.outcome <;> simp [Expect.ty, hout] at ht
+    · subst ht; exact hr.2.1 _ hout
+    · subst ht; exact hr.2.2.1 _ hout
+  · simp only [Expect.ty, Option.some.injEq] at ht; subst ht; exact hr.1
+  · simp only [Expect.ty, Option.some.injEq] at ht; subst ht; exact hr.2.2.2 o ho
+
+theorem stepIn_ok {s : State v} {b : Bind} {n : Nat} {l : Line} {r : Result v} {ids : List IdV}
+    {es : List (Expect v)} (h : stepIn T v s b n l = .ok (r, ids, es)) :
+    ∃ x a, r = step T v s x ∧ es = expects v a r := by
+  unfold stepIn at h
+  split at h
+  · cases h
+  · rename_i input answerTo ids' _
+    dsimp only at h
+    split at h
+    · cases h
+    · cases h; exact ⟨input, answerTo, rfl, rfl⟩
+
+variable {T v} {I : State v → Prop} (hI : ∀ s x, I s → I (step T v s x).state ∧ OutComparable v (step T v s x))
+include hI
+
+-- One mutual block proves the theorems together; `windowFrom_sound` passes the invariant on without using it.
+set_option linter.unusedSectionVars false in
 mutual
-/-- A passed verdict reads the trace as the spec: some binding the blocks hold possible reads it from any binding that
-names the blocks' keys as it does. -/
-theorem readFrom_sound : (lines : List (Nat × Line)) → (fuel : Nat) → (s : State v) → (C : Cands) → C.Ok →
+/-- A passed verdict reads the trace as the spec, from a state of an invariant `I` whose steps' out lines carry values
+of comparable types: some binding the blocks hold possible reads it from any binding that names the blocks' keys as
+it does. -/
+theorem readFrom_sound : (lines : List (Nat × Line)) → (fuel : Nat) → (s : State v) → I s → (C : Cands) → C.Ok →
     (readFrom T v fuel s C lines).1 = .passed → ∃ β, C.Has β ∧ ∀ b, Agrees b β C → Reads T v s b lines
-  | [], _, s, C, hC, _ => by
+  | [], _, s, _, C, hC, _ => by
     obtain ⟨β, hβ⟩ := hC.exists_has
     exact ⟨β, hβ, fun b _ => .nil s b⟩
-  | (n, l) :: more, fuel, s, C, hC, h => by
+  | (n, l) :: more, fuel, s, hs, C, hC, h => by
     unfold readFrom at h
     split at h
     · rename_i nm bl hu
       obtain ⟨-, hbl, hnb, h2⟩ := undecidedIn_some hu
       obtain ⟨⟨k, hk⟩, -, fuel', h'⟩ := tryAll_sound (by simp) _ _ h
       obtain ⟨hok, hkeys, -⟩ := Cands.narrow_ok hC hbl hk hnb
-      obtain ⟨β, hβ, hr⟩ := readFrom_sound ((n, l) :: more) fuel' s (C.narrow k nm) hok h'
+      obtain ⟨β, hβ, hr⟩ := readFrom_sound ((n, l) :: more) fuel' s hs (C.narrow k nm) hok h'
       exact ⟨β, ((Cands.narrow_has hC hbl hk hnb).1 hβ).1,
         fun b ha => hr b (Cands.agrees_keys (fun x => hkeys.mem_iff.symm) ha)⟩
     · rename_i hu
@@ -1169,7 +1394,10 @@ theorem readFrom_sound : (lines : List (Nat × Line)) → (fuel : Nat) → (s : 
           · rename_i C₁ hC₁
             have hC₀ := Cands.outside_ok ids hC
             obtain ⟨hok₁, hsub₁, hkeys₁, hnames₁, -⟩ := Cands.addNew_ok (β := fun _ => default) hC₀.1 hC₁
-            obtain ⟨β, hβ, hsame, hr⟩ := windowFrom_sound fuel' n _ r.state C₁ ets R (afterWindow more) h'
+            obtain ⟨x, a, hrx, hes⟩ := stepIn_ok T v hstep
+            have hIr := hI s x hs
+            rw [← hrx] at hIr
+            obtain ⟨β, hβ, hsame, hr⟩ := windowFrom_sound fuel' n _ r.state hIr.1 C₁ ets R (afterWindow more) h'
               (by simp) hok₁ (fun k hk => (hkeys₁ k).2 (.inr hk)) (fun x hx => (hnames₁ x).2 (.inr hx))
             have hβ₀ : (C.outside ids).Has β := fun bl hbl => hβ bl (hsub₁ bl hbl)
             have hβC : C.Has β := fun bl hbl => hβ₀ bl (hC₀.2.1 bl hbl)
@@ -1182,12 +1410,14 @@ theorem readFrom_sound : (lines : List (Nat × Line)) → (fuel : Nat) → (s : 
             have ha₁ : Agrees (Cands.bindOf β C₁) β C₁ := Cands.bindOf_agrees
             have hks : ∀ k, k ∈ C₁.keys ↔ k ∈ (C.outside ids).keys ∨ k ∈ es.flatMap (Expect.keys T v r.state.now) :=
               fun k => by rw [← leavess_ets hets]; exact hkeys₁ k
-            refine .cons (hst.trans hstep) (Cands.grows_of hok₁ hβ ha₀ ha₁ hks) ?_ (hr _ ha₁)
-            refine Multi.imp_mem (fun e he l _ hw => lineW_congr (fun k hk => ?_) hw)
-              (readings_sound hR hets (same_bag_map.1 hsame))
+            have hg := Cands.grows_of hok₁ hβ ha₀ ha₁ hks
+            refine .cons (hst.trans hstep) hg ?_ (hr _ ha₁)
+            refine Multi.imp_mem (fun e he l _ hw => lineW_of_treeW hg.one
+              (fun k hk => hg.covers k (List.mem_flatMap.2 ⟨e, he, hk⟩)) (expects_comparable v hIr.2 a e (hes ▸ he))
+              (treeW_congr (fun k hk => ?_) hw)) (readings_sound hR hets (same_bag_map.1 hsame))
             exact (Cands.name_eq hok₁ hβ ha₁ ((hks k).2 (.inr (List.mem_flatMap.2 ⟨e, he, hk⟩)))).symm
           · cases h'
-termination_by lines _ _ C => (lines.length, 1, C.weight)
+termination_by lines _ _ _ C => (lines.length, 1, C.weight)
 decreasing_by
   · exact Prod.Lex.right _ (Prod.Lex.right _ (Cands.narrow_lt hbl hk h2))
   · have := afterWindow_length more
@@ -1195,17 +1425,17 @@ decreasing_by
     rcases Nat.lt_or_eq_of_le this with h | h
     · exact Prod.Lex.left _ _ (by omega)
     · rw [h]; exact Prod.Lex.left _ _ (by omega)
-theorem windowFrom_sound : (fuel n : Nat) → (fail : Verdict) → (s : State v) → (C : Cands) →
+theorem windowFrom_sound : (fuel n : Nat) → (fail : Verdict) → (s : State v) → I s → (C : Cands) →
     (ets : List (Tree Key)) → (R : List (Tree Name)) → (rest : List (Nat × Line)) →
     (windowFrom T v fuel n fail s C ets R rest).1 = .passed → fail ≠ .passed → C.Ok →
     (∀ k ∈ Tree.leavess ets, k ∈ C.keys) → (∀ x ∈ Tree.leavess R, x ∈ C.names) →
     ∃ β, C.Has β ∧ Tree.Same ((Tree.bag ets).map β) (Tree.bag R) ∧ ∀ b, Agrees b β C → Reads T v s b rest
-  | fuel, n, fail, s, C, ets, R, rest, h, hf, hC, hes, hRs => by
+  | fuel, n, fail, s, hs, C, ets, R, rest, h, hf, hC, hes, hRs => by
     unfold windowFrom at h
     split at h
     · rename_i C' hw
       obtain ⟨hok, hk, -, -⟩ := Cands.window_done (β := fun _ => default) hC hes hRs hw
-      obtain ⟨β, hβ, hr⟩ := readFrom_sound rest fuel s C' hok h
+      obtain ⟨β, hβ, hr⟩ := readFrom_sound rest fuel s hs C' hok h
       obtain ⟨h1, h2⟩ := ((Cands.window_done (β := β) hC hes hRs hw).2.2.2).1 hβ
       exact ⟨β, h1, h2, fun b ha => hr b (Cands.agrees_keys (fun x => hk.mem_iff.symm) ha)⟩
     · exact absurd h hf
@@ -1213,11 +1443,11 @@ theorem windowFrom_sound : (fuel n : Nat) → (fail : Verdict) → (s : State v)
       obtain ⟨hbl, hkb, h2⟩ := Cands.window_decide hw
       obtain ⟨⟨nm, hnm⟩, -, fuel', h'⟩ := tryAll_sound hf _ _ h
       obtain ⟨hok, hkeys, hnames⟩ := Cands.narrow_ok hC hbl hkb hnm
-      obtain ⟨β, hβ, hs, hr⟩ := windowFrom_sound fuel' n fail s (C.narrow k nm) ets R rest h' hf hok
+      obtain ⟨β, hβ, hs', hr⟩ := windowFrom_sound fuel' n fail s hs (C.narrow k nm) ets R rest h' hf hok
         (fun x hx => hkeys.mem_iff.2 (hes x hx)) (fun x hx => hnames.mem_iff.2 (hRs x hx))
-      exact ⟨β, ((Cands.narrow_has hC hbl hkb hnm).1 hβ).1, hs,
+      exact ⟨β, ((Cands.narrow_has hC hbl hkb hnm).1 hβ).1, hs',
         fun b ha => hr b (Cands.agrees_keys (fun x => hkeys.mem_iff.symm) ha)⟩
-termination_by _ _ _ _ C _ _ rest => (rest.length, 2, C.weight)
+termination_by _ _ _ _ _ C _ _ rest => (rest.length, 2, C.weight)
 decreasing_by
   · exact Prod.Lex.right _ (Prod.Lex.left _ _ (by omega))
   · exact Prod.Lex.right _ (Prod.Lex.right _ (Cands.narrow_lt hbl hkb h2))
@@ -1339,7 +1569,7 @@ theorem readFrom_complete {s : State v} {b : Bind} {lines : List (Nat × Line)} 
         Cands.outside_complete ids hC hβC haC fun p hp => Bind.name_id hone (hgrow.ids p hp)
       have hC₀ := Cands.outside_ok ids hC
       have ha₀ : Agrees (b.outside ids) b'.name (C.outside ids) := Cands.outside_agrees ids hC hβ₀ haC
-      obtain ⟨ets, hets, R, hR, hsame⟩ := readings_complete hm
+      obtain ⟨ets, hets, R, hR, hsame⟩ := readings_complete (Multi.imp (fun _ _ h => treeW_of_lineW hone h) hm)
       rw [hets]
       dsimp only
       have hks := leavess_ets hets
@@ -1381,16 +1611,16 @@ theorem readFrom_complete {s : State v} {b : Bind} {lines : List (Nat × Line)} 
       exact windowFrom_complete T v ih _ C₁ b'.name rfl hok₁ hβ₁ ha₁ (fun k hk => (hkeys₁ k).2 (.inr hk))
         (fun x hx => (hnames₁ x).2 (.inr hx)) hsame' fuel
 
-/-- Verify's oracle comparison: unless it runs out of tries (`tryCap`), it reads a trace as passed exactly when some
-binding reads it: one bijection of the spec's ids and wire ids with the trace's names, grown window by window, under
-which every in line reads as the spec's input and every window's out lines write the spec's out lines in some
-order. -/
-theorem replay_iff (lines : List (Nat × Line)) (h : ∀ k, replay T v lines ≠ .limit k) :
+/-- Verify's oracle comparison, for a service whose reachable states keep an invariant `I` under which every step's out
+lines carry values of comparable types: unless it runs out of tries (`tryCap`), it reads a trace as passed exactly when
+some binding reads it. -/
+theorem replay_iff_of {I : State v → Prop} (hI : ∀ s x, I s → I (step T v s x).state ∧ OutComparable v (step T v s x))
+    (h0 : I (State.init v)) (lines : List (Nat × Line)) (h : ∀ k, replay T v lines ≠ .limit k) :
     replay T v lines = .passed ↔ Reads T v (State.init v) {} lines := by
   have hok : Cands.Ok {} := ⟨by simp [Cands.keys], by simp [Cands.names], by simp, by simp⟩
   have hag : ∀ β, Agrees {} β {} := fun β => ⟨by simp [Cands.keys], by simp [Cands.keys]⟩
   refine ⟨fun hp => ?_, fun hr => ?_⟩
-  · obtain ⟨β, -, hr⟩ := readFrom_sound T v lines _ _ _ hok hp
+  · obtain ⟨β, -, hr⟩ := readFrom_sound hI lines _ _ h0 _ hok hp
     exact hr {} (hag β)
   · have := readFrom_complete T v hr {} (fun _ => default) hok (fun _ h => by simp at h) (hag _) tryCap
     unfold replay at h ⊢

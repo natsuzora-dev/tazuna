@@ -211,7 +211,8 @@ theorem decAlts_encAlts : (vs : List (List Ty)) → (decl : List Variant) → (j
         have hk : (k == "tag") = false := by simp [hk']
         simp only [List.lookup_cons, hk]; exact lookup_zip _ ws hnd k w hm
       obtain ⟨y, hy, e⟩ := decFields_encs fs ho.1 x ws hws _ _ hlen hkv
-      refine ⟨.inl y, by simp [decAlts, hvar, hy], ?_⟩
+      have hw : writable decl j var = true := by simp [writable, hidx, hnd, hnotag]
+      refine ⟨.inl y, by simp [decAlts, hvar, hy, hw, hlen], ?_⟩
       cases fs with
       | nil => rfl
       | cons => simp only [Ty.erlAlts, e]
