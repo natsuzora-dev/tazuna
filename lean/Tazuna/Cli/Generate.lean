@@ -81,7 +81,7 @@ def generate (root dir path : String) (opts : Options) : Cmd Unit := do
   match ← loadSpec root path with
   | none => pure ()
   | some c =>
-    let solver : Solver := {}
+    let solver ← Solver.find
     let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
     -- Each target's search is one job; a service's depths are built once for all its targets (`depthJobs`). Lines and
     -- files are written in target order once all are done.

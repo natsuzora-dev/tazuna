@@ -4,6 +4,10 @@ description = "Write service specs in Gleam; check, test, and prove them with Le
 licences = ["MIT"]
 repository = { type = "github", user = "natsuzora-dev", repo = "tazuna" }
 
+# Fetching the engine on first run uses httpc over TLS, and crypto for SHA-256.
+[erlang]
+extra_applications = ["crypto", "inets", "ssl"]
+
 [dependencies]
 gleam_stdlib = ">= 1.0.0 and < 2.0.0"
 glance = ">= 7.0.0 and < 8.0.0"

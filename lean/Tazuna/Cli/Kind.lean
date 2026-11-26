@@ -79,7 +79,8 @@ inductive Tazuna.UsageKind : Type
   option or kind. -/
   | arguments
   /-- The system refused what the command needs: a file or directory to read or write, a program to run (the engine,
-  z3), or `TAZUNA_ENGINE` is not set. -/
+  z3), or the engine and z3 the launcher fetches on first run from the release of its version (none for the platform,
+  a failed download, or a SHA-256 other than the one the package pins). -/
   | system
 deriving DecidableEq
 

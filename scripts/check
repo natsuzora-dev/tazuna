@@ -23,6 +23,11 @@ if [ "$gleam_version" != "$lean_version" ]; then
   echo "gleam/gleam.toml has version $gleam_version but the engine prints $lean_version. Make them the same."
   exit 1
 fi
+pin_version=$(sed -n 's/^pub const version = "\(.*\)"$/\1/p' gleam/src/tazuna/internal/engine_pin.gleam)
+if [ "$gleam_version" != "$pin_version" ]; then
+  echo "gleam/gleam.toml has version $gleam_version but engine_pin.gleam pins $pin_version. Run scripts/engine-pin."
+  exit 1
+fi
 
 # Lean must load all of the corpus.
 lean/.lake/build/bin/tazuna-engine check corpus/main --ir gleam/build/corpus.ir.json ||

@@ -437,7 +437,7 @@ def prove (root path : String) (opts : Options) : Cmd Unit := do
   match ← loadSpec root path with
   | none => pure ()
   | some c =>
-    let solver : Solver := {}
+    let solver ← Solver.find
     let mut items : List Item := []
     let mut scopes : List (String × ServiceItems) := []
     for sv in c.services do

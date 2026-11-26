@@ -140,6 +140,7 @@ Everything between them is proved or checked.
 - The Lean kernel checks every proof, and the Lean compiler builds the engine. Where compiled code uses a faster form, a root proves the two equal: `SExp.print_eq_printFast`, `Term.denote_eq_denoteFast`, `Term.beq_eq_beqFast`, and `Defs.add_eq_addFast`.
 - Lean's JSON printer and parser stand between wire values and a trace's text.
 - Z3. An unsat answer is trusted. A sat answer is not, because Lean decodes the model and recomputes the counterexample or replays the run. The answer cache, keyed by SHA-256 digests of the script and of the solver's version, holds answers you trust in the same way.
+- The release. On first run the launcher fetches the engine and z3 from the GitHub release of its own version and refuses any file whose SHA-256 differs from the one the Hex package pins, so you trust the release workflow that built and pinned them. With `TAZUNA_ENGINE` set you trust that engine instead, and the z3 on PATH.
 - SMT-LIB. `Term.denote` states the standard's meaning of each term, and you trust that Z3 implements it. Division and remainder by 0 are free in the model, as the standard leaves them. Strings hold code points up to U+2FFFF, the standard's string domain. A Lean string value is a `Tazuna.Str`, which holds no other, and `Smt.Unsat` quantifies over models whose strings stay in that domain, so an unsat answer covers exactly the strings Z3 searched.
 
 ## Not guaranteed

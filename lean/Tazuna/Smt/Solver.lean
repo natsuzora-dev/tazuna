@@ -9,7 +9,7 @@ its resource limit and its random seeds. -/
 namespace Tazuna.Smt
 
 structure Solver where
-  path : String := "z3"
+  path : String
   /-- z3's deterministic resource limit, so the same script gets the same verdict on any machine. About 6 s of z3 on a
   laptop; the largest question of the 3-service benchmark takes a third of it. -/
   rlimit : Nat := 50000000
@@ -19,6 +19,12 @@ structure Solver where
   /-- The wall-clock safety net: the process is killed after this many ms, a hundred times what the resource limit
   takes on a laptop, so the resource limit stops z3 first on any machine that runs it. -/
   timeoutMs : Nat := 600000
+
+/-- z3 beside the engine's executable, where the launcher puts the z3 it fetched with the engine; else z3 on PATH, as
+for an engine built from lean/ that `TAZUNA_ENGINE` names. -/
+def Solver.find : IO Solver := do
+  let beside := (← IO.appDir) / (if System.Platform.isWindows then "z3.exe" else "z3")
+  return { path := if ← beside.pathExists then beside.toString else "z3" }
 
 /-- Beyond depth 5 z3 prints a value with `let` aliases, which values in SMT-LIB's model syntax do not have; the
 depth limit is raised so every value prints as a term. -/
