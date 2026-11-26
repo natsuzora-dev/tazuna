@@ -1,0 +1,5 @@
+{"service":"counter","trace":1}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":1,"name":"add","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"1"}
+{"out":"event","time":0,"value":{"amount":1,"tag":"Added"}}
+{"external":"mail","id":"r1","input":1,"name":"send","out":"request","time":0}

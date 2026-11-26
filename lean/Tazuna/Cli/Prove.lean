@@ -159,7 +159,6 @@ def _root_.Tazuna.Smt.Limit.text (T : List TypeDecl) : Limit → String
   | .slots t => s!"a value the spec writes of {tyText T t} holds more items than its bounds give"
   | .renamings n => s!"the two steps sent {n} requests, more than the {wireSearchCap} whose renamings are searched"
   | .keptFunctions => "the two orders end with the same data but keep different functions, whose results are not compared"
-  | .unobserved => "generate has no terms yet for the requests a step sends"
 
 /-- Every bound a step of the service can go past: each table and bag type of its layout, with the bound its slots
 come from, and the pending requests where the service has a request shape. A list's slots are its type's longest

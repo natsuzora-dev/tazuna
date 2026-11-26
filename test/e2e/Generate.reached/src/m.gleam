@@ -12,6 +12,10 @@ pub type Caller {
   User
 }
 
+fn send() -> tazuna.ExternalCommand(Int, Nil, Nil) {
+  tazuna.external_command(name: "send")
+}
+
 fn apply(r: Records, e: Event) -> Records {
   case e {
     Added(n) -> Records(total: r.total + n)
@@ -30,6 +34,21 @@ fn add() -> tazuna.Command(Records, Event, Caller, Int, Nil) {
   )
 }
 
+fn notify() -> tazuna.Reaction(Records, Event) {
+  tazuna.reaction(
+    name: "notify",
+    react: fn(_c: tazuna.ReactionCtx(Records), e: Event) {
+      case e {
+        Added(n) -> [
+          tazuna.request_command(command: send(), input: n, on_answer: fn(_a) {
+            []
+          }),
+        ]
+      }
+    },
+  )
+}
+
 fn counter() -> tazuna.Service {
   tazuna.service(
     name: "counter",
@@ -38,7 +57,7 @@ fn counter() -> tazuna.Service {
     subscribes: [],
     declares: [tazuna.declare_command(add())],
     machines: [],
-    reactions: [],
+    reactions: [notify()],
     invariants: fn(r: Records) { [#("not negative", r.total >= 0)] },
     responses: [],
     bounds: tazuna.bounds(creates: [], items: 1, cascade: 1, steps: 5),
@@ -47,5 +66,9 @@ fn counter() -> tazuna.Service {
 }
 
 pub fn spec() -> tazuna.Spec {
-  tazuna.spec(services: [counter()], externals: [])
+  tazuna.spec(services: [counter()], externals: [
+    tazuna.external(name: "mail", declares: [
+      tazuna.declare_external_command(send()),
+    ]),
+  ])
 }

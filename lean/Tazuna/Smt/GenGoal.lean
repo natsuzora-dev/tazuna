@@ -5,7 +5,8 @@ import Tazuna.Semantics.GenTarget
 answer's class is read off the step's terms: a command's admission, `decide` and `ensures`, a query's admission, and
 the names of the rules a request breaks. A rule's name term is compared as SMT-LIB strings compare (`nameIsT`), which
 holds of every value exactly when its string is the name, so the goal misses no run. An event's class is read off the
-event slots of the step's end (`Finished` relates them to the events applied), where the step reaches its end. With
+event slots of the step's end and a request's off its news slots (`Finished` relates them to the events applied and
+the requests written), where the step reaches its end. With
 `runs_covered` this gives T6b (`generate_unreached`): a depth with no model has no run of that many valid inputs,
 within the slots and faulting nowhere, whose last step shows the target's class. The goal reads the kind the step
 takes, the one decoding reads, so it holds only of runs that show that class (`generate_sound`). -/
@@ -64,6 +65,18 @@ end
 def eventsHitT (L : Layout) (T : List TypeDecl) (v : ServiceV) (S : List (Slot 1)) (V : Option String) : Term :=
   anyT (S.map fun sl => andT sl.1 (variantT L T v.event V sl.2[0]))
 
+/-- The entry term `x` is a pending request of a shape to the external's command or query `n`. -/
+def shapeIsT (L : Layout) (v : ServiceV) (e n : String) (x : Term) : Term :=
+  match L.find? (pendingEntry (shapes v)) with
+  | some (dP, _) => anyT ((List.range (shapes v).length).filterMap fun k => match (shapes v)[k]? with
+    | some sh => if sh.external == e && sh.name == n then some (.is dP k x) else none
+    | none => none)
+  | none => ff
+
+/-- Some occupied news slot holds a request to the external's command or query `n`. -/
+def requestHitT (L : Layout) (v : ServiceV) (news : List PendingSlot) (e n : String) : Term :=
+  anyT ((news.map PendingSlot.slot).map fun sl => andT sl.1 (shapeIsT L v e n sl.2[1]))
+
 section
 variable (L : Layout) (T : List TypeDecl) {v : ServiceV} (rules : RuleNames) (g : GenTarget)
 
@@ -95,10 +108,12 @@ def endHitT (out : StepOut v) (hit : FinishOut v → Term) : Term :=
   | none => ff
 
 /-- Where a step of the kind shows a class of out line the target aims at, by the kind's terms: for an event, some
-event the step applies is built with the target's constructor; otherwise the step's answer. -/
+event the step applies is built with the target's constructor; for a request, some request the step writes is to the
+target's command or query; otherwise the step's answer. -/
 def kindHitT {n : Nat} (inp : SymInput v (shapes v) n) (out : StepOut v) : Term :=
   match g with
   | .event V => endHitT out fun fo => eventsHitT L T v fo.events V
+  | .request e n => endHitT out fun fo => requestHitT L v fo.news e n
   | _ => answerHitT L T rules g inp out
 
 /-- generate's goal: the kind the last step takes answers in a class the target aims at. -/
@@ -299,6 +314,19 @@ theorem hits_event {rules : RuleNames} {V : Option String} {x : Input v} {r : Re
     · simp [GenTarget.covers] at hcov
   · rintro ⟨ev, hev, rfl⟩
     exact ⟨_, .inl (.inr ⟨ev, hev, rfl⟩), by simp [GenTarget.covers]⟩
+
+theorem hits_request {rules : RuleNames} {e n : String} {x : Input v} {r : Result v} :
+    Hits T v rules (.request e n) x r ↔ ∃ o ∈ r.out, o.external = e ∧ o.name = n := by
+  simp only [Hits, classes, List.mem_append, List.mem_map]
+  constructor
+  · rintro ⟨c, (hc | ⟨ev, -, rfl⟩) | ⟨o, ho, rfl⟩, hcov⟩
+    · cases x <;> cases hr : r.outcome <;> simp [answerClasses, hr] at hc <;>
+        first | (subst hc; simp [GenTarget.covers] at hcov) | (obtain ⟨_, -, rfl⟩ := hc; simp [GenTarget.covers] at hcov)
+    · simp [GenTarget.covers] at hcov
+    · simp only [GenTarget.covers, Bool.and_eq_true, beq_iff_eq] at hcov
+      exact ⟨o, ho, hcov.1.symm, hcov.2.symm⟩
+  · rintro ⟨o, ho, rfl, rfl⟩
+    exact ⟨_, .inr ⟨o, ho, rfl⟩, by simp [GenTarget.covers]⟩
 
 theorem covers_invalid {rules : RuleNames} {g : GenTarget} {q r' : String}
     (h : g.covers rules (.invalid q r') = true) :
@@ -831,7 +859,7 @@ theorem finished_events {shs : List (PendingShape v.event)} {fo : FinishOut v} {
   · subst hm; exact absurd rfl (hno _)
   · split at hm
     · subst hm; exact absurd rfl (hno _)
-    · obtain ⟨_, _, _, evs, _, rfl, -, -, -, -, -, he⟩ := hm
+    · obtain ⟨_, _, _, evs, _, rfl, -, -, -, -, -, he, -⟩ := hm
       exact ⟨evs, rfl, he⟩
 
 theorem hits_of_answer {rules : RuleNames} {g : GenTarget} {x : Input v} {r : Result v}
@@ -839,9 +867,92 @@ theorem hits_of_answer {rules : RuleNames} {g : GenTarget} {x : Input v} {r : Re
   obtain ⟨c, hc, hcov⟩ := h
   exact ⟨c, List.mem_append_left _ (List.mem_append_left _ hc), hcov⟩
 
+theorem finished_out {shs : List (PendingShape v.event)} {fo : FinishOut v} {s0 : State v} {a : Step.Acc v}
+    {outcome : Outcome} {r : Result v} (hf : Finished M L T shs fo s0 a outcome r) (hno : ∀ f, r.outcome ≠ .fault f) :
+    ∃ ps effs, r.out = a.out ++ ps.map Step.Pending.line ∧ NewsRel M L shs v.declared fo.news effs a.state.nextId ∧
+      Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) ps := by
+  obtain ⟨-, hm⟩ := hf
+  split at hm
+  · subst hm; exact absurd rfl (hno _)
+  · split at hm
+    · subst hm; exact absurd rfl (hno _)
+    · obtain ⟨_, _, _, _, ps, rfl, -, -, -, -, -, -, effs, hN, hW⟩ := hm
+      exact ⟨ps, effs, rfl, hN, hW⟩
+
+theorem writes_det {ds : List (String × DeclaredV)} {e : Ty} {x : (Sender × EffectV e) × Nat} {p q : Step.Pending e}
+    (hp : Step.Writes ds x p) (hq : Step.Writes ds x q) : p = q := by
+  have := writes_unique (xs := [x]) (ps := [p]) (qs := [q]) ⟨hp, trivial⟩ ⟨hq, trivial⟩
+  simpa using this
+
+/-- A pending entry's value: the entry term holds a request of the shape at its constructor's index. -/
+theorem entry_shape {z : (Ty.dsl .fresh []).den × (pendingEntry (shapes v)).den} {zv : Val}
+    (hz : RelV L (pendingEntry (shapes v)) z.2 zv) :
+    ∃ dP nP j sh fx vals, L.find? (pendingEntry (shapes v)) = some (dP, nP) ∧ (shapes v)[j]? = some sh ∧
+      zv = .ctor dP j vals ∧ pendingOf (shapes v) z.1 z.2 = sh.pending z.1 fx := by
+  obtain ⟨d, n, hf, hra⟩ := hz
+  obtain ⟨j, sh, fx, vals, hj, hzv, -, hpo⟩ := relAlts_pending (L := L) z.1 (shapes v) 0 z.2 zv hra
+  exact ⟨d, n, j, sh, fx, vals, hf, hj, by simpa using hzv, hpo⟩
+
+theorem requestHitT_sound {news : List PendingSlot} {effs : List (Sender × EffectV v.event)} {n0 : Nat}
+    {ps : List (Step.Pending v.event)} (hN : NewsRel M L (shapes v) v.declared news effs n0)
+    (hW : Forall2 (Step.Writes v.declared) (effs.zipIdx n0) ps) {e n : String}
+    (hh : Holds M (requestHitT L v news e n)) : ∃ p ∈ ps, p.external = e ∧ p.request.name = n := by
+  obtain ⟨sv, zs, hS, -, h2, xs, hp, hq⟩ := hN
+  unfold requestHitT at hh
+  obtain ⟨z, hz, items, ⟨zk, zv, hvs, -, hzv⟩, hQ⟩ := anySlots_sound (fun xs : SlotItems 2 => shapeIsT L v e n xs[1])
+    hS h2 hh
+  obtain ⟨a, b, rfl⟩ := SlotItems.two items
+  simp only [Term.denotes, List.cons.injEq, and_true] at hvs
+  obtain ⟨-, rfl⟩ := hvs
+  obtain ⟨dP, nP, j, sh, fx, vals, hf, hj, hzv', hpo⟩ := entry_shape hzv
+  simp only [shapeIsT, hf, SlotItems.getElem_mk, List.getElem_cons_succ, List.getElem_cons_zero] at hQ
+  obtain ⟨_, hm, ht⟩ := (holds_anyT _).1 hQ
+  obtain ⟨k, -, hk⟩ := List.mem_filterMap.1 hm
+  split at hk
+  · rename_i sh' hsh'
+    split at hk
+    · rename_i hc
+      cases hk
+      simp only [Holds, Term.denote, hzv', Val.toBool, beq_self_eq_true, Bool.true_and, beq_iff_eq] at ht
+      subst ht
+      rw [hj] at hsh'
+      cases hsh'
+      obtain ⟨x, hx, hxz⟩ := forall2_mem_right hq z hz
+      obtain ⟨p, hpm, hwp⟩ := forall2_mem_left hW x (hp.mem_iff.1 hx)
+      have := writes_det hwp hxz.2
+      rw [hpo] at this
+      subst this
+      simp only [Bool.and_eq_true, beq_iff_eq] at hc
+      exact ⟨_, hpm, by simp [PendingShape.pending, hc.1], by simp [PendingShape.pending, hc.2]⟩
+    · cases hk
+  · cases hk
+
+theorem requestHitT_holds {news : List PendingSlot} {effs : List (Sender × EffectV v.event)} {n0 : Nat}
+    {ps : List (Step.Pending v.event)} (hN : NewsRel M L (shapes v) v.declared news effs n0)
+    (hW : Forall2 (Step.Writes v.declared) (effs.zipIdx n0) ps) {p : Step.Pending v.event} (hpm : p ∈ ps) :
+    Holds M (requestHitT L v news p.external p.request.name) := by
+  obtain ⟨sv, zs, hS, -, h2, xs, hp, hq⟩ := hN
+  obtain ⟨x, hx, hwx⟩ := forall2_mem_right hW p hpm
+  obtain ⟨z, hz, hxz⟩ := forall2_mem_left hq x (hp.mem_iff.2 hx)
+  have hpz := writes_det hwx hxz.2
+  unfold requestHitT
+  refine anySlots_holds (fun xs : SlotItems 2 => shapeIsT L v p.external p.request.name xs[1]) (y := z)
+    (fun items hE => ?_) hS h2 hz
+  obtain ⟨zk, zv, hvs, -, hzv⟩ := hE
+  obtain ⟨a, b, rfl⟩ := SlotItems.two items
+  simp only [Term.denotes, List.cons.injEq, and_true] at hvs
+  obtain ⟨-, rfl⟩ := hvs
+  obtain ⟨dP, nP, j, sh, fx, vals, hf, hj, hzv', hpo⟩ := entry_shape hzv
+  rw [hpo] at hpz
+  subst hpz
+  simp only [shapeIsT, hf, SlotItems.getElem_mk, List.getElem_cons_succ, List.getElem_cons_zero]
+  refine (holds_anyT _).2 ⟨.is dP j b, List.mem_filterMap.2 ⟨j, List.mem_range.2 (List.getElem?_eq_some_iff.1 hj).1,
+    by simp [hj, PendingShape.pending]⟩, ?_⟩
+  simp [Holds, Term.denote, hzv', Val.toBool]
+
 /-- Where a kind's terms say what the step's result is and the step does not fault, the kind's hit term holds when
 the step shows a class the target aims at. -/
-theorem kindHitT_holds {rules : RuleNames} {g : GenTarget} (hrq : ∀ e n, g ≠ .request e n) {n : Nat}
+theorem kindHitT_holds {rules : RuleNames} {g : GenTarget} {n : Nat}
     {hc : v.caller.isData = true} {inp : SymInput v (shapes v) n} {out : StepOut v} {s : State v} {x : Input v}
     (hx : inp.decode M L hc = some x) (hrel : out.Rel M L T (shapes v) s x (step T v s x))
     (hno : ∀ f, (step T v s x).outcome ≠ .fault f) (hhit : Hits T v rules g x (step T v s x)) :
@@ -855,7 +966,15 @@ theorem kindHitT_holds {rules : RuleNames} {g : GenTarget} (hrq : ∀ e n, g ≠
     rw [hevs, hae, List.nil_append] at hev
     simp only [kindHitT, endHitT, hfo]
     exact (holds_andT _ _).2 ⟨hre, eventsHitT_holds hE hev⟩
-  | request e n => exact absurd rfl (hrq e n)
+  | request e n =>
+    obtain ⟨o, ho, rfl, rfl⟩ := hits_request.1 hhit
+    obtain ⟨fo, hfo, hre⟩ := (rel_end hx hrel hno).2 (.inr (List.ne_nil_of_mem ho))
+    obtain ⟨s0, a, -, hao, hf⟩ := (rel_end hx hrel hno).1 fo hfo hre
+    obtain ⟨ps, effs, hout, hN, hW⟩ := finished_out hf hno
+    rw [hout, hao, List.nil_append] at ho
+    obtain ⟨p, hpm, rfl⟩ := List.mem_map.1 ho
+    simp only [kindHitT, endHitT, hfo]
+    exact (holds_andT _ _).2 ⟨hre, requestHitT_holds hN hW hpm⟩
   | accepted _ | rejected _ _ | invalid _ _ | answered _ =>
     exact answerHitT_holds hx hrel hno ((hits_answer (fun _ h => by cases h) (fun _ _ h => by cases h)).1 hhit)
 
@@ -877,7 +996,16 @@ theorem kindHitT_sound {rules : RuleNames} {g : GenTarget} {n : Nat} {hc : v.cal
       obtain ⟨ev, hm, rfl⟩ := eventsHitT_sound hE hev
       exact hits_event.2 ⟨ev, by rw [hevs, hae, List.nil_append]; exact hm, rfl⟩
     · simp [ff, Holds, Term.denote, Val.toBool] at hh
-  | request e n => exact hits_of_answer (answerHitT_sound hx hrel hno hh)
+  | request e n =>
+    simp only [kindHitT, endHitT] at hh
+    split at hh
+    · rename_i fo hfo
+      obtain ⟨hre, hrq⟩ := (holds_andT _ _).1 hh
+      obtain ⟨s0, a, -, hao, hf⟩ := (rel_end hx hrel hno).1 fo hfo hre
+      obtain ⟨ps, effs, hout, hN, hW⟩ := finished_out hf hno
+      obtain ⟨p, hpm, rfl, rfl⟩ := requestHitT_sound hN hW hrq
+      exact hits_request.2 ⟨p.line, by rw [hout, hao, List.nil_append]; exact List.mem_map_of_mem hpm, rfl, rfl⟩
+    · simp [ff, Holds, Term.denote, Val.toBool] at hh
   | accepted _ | rejected _ _ | invalid _ _ | answered _ => exact hits_of_answer (answerHitT_sound hx hrel hno hh)
 
 end
@@ -905,7 +1033,7 @@ initial state of `d` inputs that fit the slots and are valid, whose steps stay w
 answers at its last step in a class the target aims at. generate's "unreached within k steps" is this at every depth up
 to k, so no such run of at most k inputs answers in that class at any step. -/
 theorem generate_unreached (chk : Checked P E T v) (senv : StepEnv L (shapes v)) (hL : SortedLayout L)
-    {rules : RuleNames} {g : GenTarget} (hrq : ∀ e n, g ≠ .request e n) {d : Nat} {U : Unrolled v senv.nT}
+    {rules : RuleNames} {g : GenTarget} {d : Nat} {U : Unrolled v senv.nT}
     (hu : unroll L T P v senv d (genGoal L T rules g) = .ok U) (hnr : U.refused = []) (hun : Unsat L U.ask)
     {ys : List (Input v)} {x : Input v} (hlen : ys.length + 1 = d)
     (hfits : RunFits L T P v chk.callerData (Step.State.init v) (ys ++ [x])) :
@@ -916,7 +1044,7 @@ theorem generate_unreached (chk : Checked P E T v) (senv : StepEnv L (shapes v))
   refine hna (hiff.2 ?_ a ha)
   obtain ⟨st, hlast, ⟨k, hk, hdec, hrel⟩, hno, -⟩ := unrollRun_last x ys _ _ hrun
   simp only [genGoal, hlast]
-  exact (holds_takenT _ _).2 ⟨k, hk, kindHitT_holds hrq hdec hrel hno hhit⟩
+  exact (holds_takenT _ _).2 ⟨k, hk, kindHitT_holds hdec hrel hno hhit⟩
 
 theorem unrollRun_decode {M : Model} {hc : v.caller.isData = true} {n : Nat} :
     (s : State v) → (sts : List (UnrollStep v n)) → (xs : List (Input v)) → UnrollRun L T M hc s sts xs →

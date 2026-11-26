@@ -39,9 +39,6 @@ inductive Limit where
   values), and what functions do is not compared, so whether the orders end the same is not known. Never an encoder's
   refusal: prove reads it from a pair's counterexample. -/
   | keptFunctions
-  /-- generate's target is a class of out line that the step's terms do not show with a theorem yet: the requests a
-  step sends. Never an encoder's refusal: generate reads it from the target. -/
-  | unobserved
 deriving Repr
 
 /-- What a layout lacks that an encoding needs. A layout built for the program has none of these. -/

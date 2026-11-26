@@ -25,11 +25,6 @@ def _root_.Tazuna.Ir.GenTarget.text : GenTarget → String
   | .event none => "event"
   | .request x n => "request " ++ x ++ "." ++ n
 
-/-- Whether the unrolled run has a goal for the target: every class but a request's. -/
-def _root_.Tazuna.Ir.GenTarget.hasGoal : GenTarget → Bool
-  | .request .. => false
-  | _ => true
-
 /-- A target's file: its text with every byte outside `[A-Za-z0-9 ._-]` percent-encoded, `%` too, so distinct targets
 get distinct names on any file system. -/
 def fileName (target : String) : String :=
@@ -181,10 +176,7 @@ def generate (root dir path : String) (opts : ProveOptions) : IO UInt32 := do
       let scope := scopeBounds c.T L v
       for g in targets c.T v rules do
         unless keep (v.name ++ "/" ++ g.text) do continue
-        let job : IO (Except String GenResult) :=
-          if g.hasGoal then searchTarget solver cache c v L senv rules v.bounds.steps.toNat g
-          else pure (.ok (.undecided (.undecided .limit) [("limit", Json.str (Limit.unobserved.text c.T))]))
-        jobs := jobs.push (v.name, g, scope, job)
+        jobs := jobs.push (v.name, g, scope, searchTarget solver cache c v L senv rules v.bounds.steps.toNat g)
     let results ← runAll opts.jobs (fun (_, _, _, job) => job) jobs
     let mut undecided := false
     for ((service, g, scope, _), res) in jobs.zip results do

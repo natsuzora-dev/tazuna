@@ -57,11 +57,13 @@ theorem invariants_exact {r : Ty} (f : Fun (Ty.fn [r] Ty.rules)) (hr : r.isData 
 end
 
 /-- The terms of a step's end: the cascade, the new pending table, the invariants and instance checks on the state
-the cascade leaves, and the slots of every event the step applies, in order (the events loop's, then the cascade's). -/
+the cascade leaves, and the slots of every event the step applies and of every request it writes, each in order (the
+events loop's, then the cascade's). -/
 structure FinishOut (v : ServiceV) where
   settle : SettleOut v
   pending : Term
   events : List (Slot 1)
+  news : List PendingSlot
   invariants : List (Term × Term)
   checks : PerMachine (fun _ => List InstCheck) v.machines
 
@@ -83,7 +85,7 @@ def encodeFinish (P : List AnySite) (v : ServiceV) (shs : List (PendingShape v.e
   let (pT, cp) ← encodePending L shs pending (o.news ++ so.terms.done.news)
   let (rules, ci) ← encodeInvariants L inv so.terms.done.records
   let (checks, ck) ← encodeInstChecks L T v.machines so.terms.done.tables so.terms.done.records now
-  pure ⟨⟨so, pT, o.events ++ so.terms.done.events, rules, checks⟩, andT cs (.ite so.faultT tt (andT cp (andT ci ck))), cx⟩
+  pure ⟨⟨so, pT, o.events ++ so.terms.done.events, o.news ++ so.terms.done.news, rules, checks⟩, andT cs (.ite so.faultT tt (andT cp (andT ci ck))), cx⟩
 
 end
 
@@ -93,8 +95,9 @@ variable {L : Layout} {T : List TypeDecl} {M : Model} {v : ServiceV}
 /-- What a step's end terms say of its result `r`, from the step in progress `a` before its events: whether the cascade
 faults, as its term says; the cascade's fault, else the first broken invariant (the service's, then each machine's instances in key order), else the outcome
 with the records, machines and fresh counter the terms denote, the events `evs` applied as the event slots hold, the
-requests `ps` written at the next wire ids and sent, and the pending table and next id terms denoting what follows
-(pending as a multiset). A fault leaves `s0`. -/
+requests `ps` written for the requests `effs` the step starts, at wire ids from the next id in order, and sent, as the
+news slots hold, and the pending table and next id terms denoting what follows (pending as a multiset). A fault leaves
+`s0`. -/
 def Finished (M : Model) (L : Layout) (T : List TypeDecl)
     (shs : List (PendingShape v.event)) (fo : FinishOut v) (s0 : State v) (a : Step.Acc v) (outcome : Outcome)
     (r : Result v) : Prop :=
@@ -113,7 +116,9 @@ def Finished (M : Model) (L : Layout) (T : List TypeDecl)
         fo.settle.terms.fresh.denote M = .int (fr : Int) ∧
         fo.settle.terms.done.nextId.denote M = .int ((a.state.nextId + ps.length : Nat) : Int) ∧
         PendingRel L shs (fo.pending.denote M) (a.state.pending ++ ps) ∧
-        EventsRel M L fo.events evs
+        EventsRel M L fo.events evs ∧
+        ∃ effs, NewsRel M L shs v.declared fo.news effs a.state.nextId ∧
+          Forall2 (Step.Writes v.declared) (effs.zipIdx a.state.nextId) ps
 
 /-- Whether a step's end fits, for the result `r` of its events: the internal steps the cascade runs
 (`settleFits`) and, where it does not fault, every pending request in the pending table and the service's and every
@@ -256,8 +261,10 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
         exact this
       have hnews : NewsRel M L shs v.declared (o.news ++ so.terms.done.news) (effs1 ++ effs2) a.state.nextId :=
         newsRel_append e5 (by simpa [hl1] using f5)
+      have hnews' := hnews
       obtain ⟨sv, zs, hS, hw, hh, xs, hp, hq⟩ := hnews
       obtain ⟨ps, hps, ps', hperm, hrelP⟩ := pending_rel hpend hinv.below hinv.nodup hS hw hh hp hq hpe hcp
+      have hps0 := hps
       rw [List.zipIdx_append] at hps
       obtain ⟨ps1', ps2', rfl, hps1', hps2'⟩ := forall2_split _ _ hps
       obtain rfl := writes_unique hps1 hps1'
@@ -278,7 +285,7 @@ theorem finish_encode {P : List AnySite} {E : List AnyEffectSite} (chk : Checked
       | cons n ns => rfl
       | nil =>
         refine ⟨recs2, ms2, fr2, evs1 ++ evs2, ps1 ++ ps2, ?_, f1, f2, f3, ?_, ⟨ps', by simpa using hperm, hrelP⟩,
-          eventsRel_append e8 f8⟩
+          eventsRel_append e8 f8, _, hnews', hps0⟩
         · simp [hl1, hl2]
         · rw [f4]; simp [hl1, hl2, Nat.add_assoc]
 

@@ -117,13 +117,13 @@ def invalidTargets (rules : RuleNames) (request : String) : List GenTarget :=
 
 /-- Every target of the service, in a fixed order: per command its accepted, rejected per constructor and invalid
 targets; per query its answered and invalid targets; an event per constructor; a request per external command or
-query some sender can send (`shapes`). -/
+query some sender can send (`shapes`), once however many senders can. -/
 def targets (rules : RuleNames) : List GenTarget :=
   (v.commands.flatMap fun x => .accepted x.name :: (variantsOf T x.rejection).map (.rejected x.name) ++
     invalidTargets rules x.name) ++
   (v.queries.flatMap fun q => .answered q.name :: invalidTargets rules q.name) ++
   (variantsOf T v.event).map .event ++
-  (shapes v).map fun sh => .request sh.external sh.name
+  dedupBy (· == ·) ((shapes v).map fun sh => .request sh.external sh.name)
 
 end
 
@@ -499,7 +499,8 @@ theorem classes_covered (T : List TypeDecl) {P : List AnySite} {E : List AnyEffe
     obtain ⟨y, hy⟩ := (step_inv T hv s hs x).shaped p hp
     obtain ⟨sh, hsh, hx, hn⟩ := pendingOf_shape (shapes v) p.id y
     rw [hy] at hx hn
-    exact ⟨.request sh.external sh.name, List.mem_append_right _ (List.mem_map.2 ⟨sh, hsh, rfl⟩),
+    exact ⟨.request sh.external sh.name, List.mem_append_right _
+      ((mem_dedupBy (fun _ _ => beq_iff_eq) _ _).2 (List.mem_map.2 ⟨sh, hsh, rfl⟩)),
       by simp [GenTarget.covers, Step.Pending.line, hx, hn]⟩
 
 end Tazuna.Ir
