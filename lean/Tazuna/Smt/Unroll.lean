@@ -169,38 +169,48 @@ end
 section
 variable (L : Layout) (T : List TypeDecl) (P : List AnySite) (v : ServiceV) (senv : StepEnv L (shapes v))
 
-/-- The script of runs of `d` inputs from the initial state, with `goal` on its steps. Step `i` (from 0) has its
-selector at the constant `b`, then its kinds' inputs, then the state after it. Answers are no kind of the first step,
-since no request waits in the initial state. -/
+/-- What one input kind adds to a step of an unrolled run from `S` to `S'`, its selector `sel` at the value `k`: the
+kind with the assertion that, where the selector picks it, its step from `S` holds with a well-formed input of valid
+names, stays within the slots, does not fault and leaves `S'`; or the refusal of its encoding. -/
+def unrollKind (S S' : SymState v) (sel : Term) (inp : SymInput v (shapes v) senv.nT) (k : Nat) :
+    Except (SymInput v (shapes v) senv.nT × Refusal) ((Nat × SymInput v (shapes v) senv.nT × EncodedStep v) × Term) :=
+  match encodeStep L T P v senv S inp, inp.validT L S.fresh, need (.layout (.type v.records)) (inp.wf L) with
+  | .ok t, .ok valid, .ok wf =>
+    let (ok, after) := t.out.after S inp
+    .ok ((k, inp, t), .or (.not (.eq sel (.int k)))
+      (andT wf (andT t.codes (andT t.sites (andT t.out.case (andT t.cond (andT ok (andT valid (S'.eqT after)))))))))
+  | .error r, _, _ | _, .error r, _ | _, _, .error r => .error (inp, r)
+
+/-- One step of an unrolled run, step `i` (from 0) from `S` with its selector at the constant `b`, then its kinds'
+inputs, then the state after it: the types of its constants, its assertions (each kind's, then that the selector picks
+one), the step, the kinds refused, and the constant after its last. Answers are no kind of the first step, since no
+request waits in the initial state. -/
+def unrollOne (S : SymState v) (i b : Nat) :
+    List Ty × List Term × UnrollStep v senv.nT × List (SymInput v (shapes v) senv.nT × Refusal) × Nat :=
+  let sel : Term := .var b
+  let (inps, e) := placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1)
+  let S' : SymState v := SymState.vars e
+  let rs := inps.zipIdx.map fun (inp, k) => unrollKind L T P v senv S S' sel inp k
+  let oks := rs.filterMap fun | .ok x => some x | .error _ => none
+  let refused := rs.filterMap fun | .error x => some x | .ok _ => none
+  ([.int] ++ inps.flatMap (·.tys) ++ stateTys v (shapes v),
+    oks.map (·.2) ++ [anyT (oks.map fun x => .eq sel (.int x.1.1))],
+    ⟨sel, S, S', oks.map (·.1)⟩, refused, e + stateWidth v)
+
+/-- The `d` steps of an unrolled run from step `i`, from `S` with the first selector at the constant `b`. -/
+def unrollSteps (S : SymState v) (i b : Nat) :
+    Nat → List Ty × List Term × List (UnrollStep v senv.nT) × List (SymInput v (shapes v) senv.nT × Refusal)
+  | 0 => ([], [], [], [])
+  | d + 1 =>
+    let (tys, asserts, st, refused, b') := unrollOne L T P v senv S i b
+    let (tys', asserts', sts, refused') := unrollSteps st.after (i + 1) b' d
+    (tys ++ tys', asserts ++ asserts', st :: sts, refused ++ refused')
+
+/-- The script of runs of `d` inputs from the initial state, with `goal` on its steps. -/
 def unroll (d : Nat) (goal : List (UnrollStep v senv.nT) → Term) : Except Refusal (Unrolled v senv.nT) := do
   let S0 ← need (.layout (.type v.records)) (initState L v)
   let dts ← need (.layout (.type v.records)) L.datatypes?
-  let mut S := S0
-  let mut b := 0
-  let mut tys : List Ty := []
-  let mut asserts : List Term := []
-  let mut steps : List (UnrollStep v senv.nT) := []
-  let mut refused : List (SymInput v (shapes v) senv.nT × Refusal) := []
-  for i in List.range d do
-    let sel : Term := .var b
-    let (inps, e) := placeKinds (unrollKinds v (shapes v) senv.nT (i != 0)) (b + 1)
-    let S' : SymState v := SymState.vars e
-    let mut kinds : List (Nat × SymInput v (shapes v) senv.nT × EncodedStep v) := []
-    let mut picks : List Term := []
-    for (inp, k) in inps.zipIdx do
-      match encodeStep L T P v senv S inp, inp.validT L S.fresh, need (.layout (.type v.records)) (inp.wf L) with
-      | .ok t, .ok valid, .ok wf =>
-        let (ok, after) := t.out.after S inp
-        kinds := kinds ++ [(k, inp, t)]
-        picks := picks ++ [.eq sel (.int k)]
-        asserts := asserts ++ [.or (.not (.eq sel (.int k)))
-          (andT wf (andT t.codes (andT t.sites (andT t.out.case (andT t.cond (andT ok (andT valid (S'.eqT after))))))))]
-      | .error r, _, _ | _, .error r, _ | _, _, .error r => refused := refused ++ [(inp, r)]
-    asserts := asserts ++ [anyT picks]
-    tys := tys ++ [.int] ++ inps.flatMap (·.tys) ++ stateTys v (shapes v)
-    steps := steps ++ [⟨sel, S, S', kinds⟩]
-    S := S'
-    b := e + stateWidth v
+  let (tys, asserts, steps, refused) := unrollSteps L T P v senv S0 0 0 d
   let vars ← tys.mapM fun ty => need (.layout (.type ty)) (L.srt? ty)
   pure ⟨⟨dts, tys, vars, [], asserts ++ [goal steps]⟩, steps, refused⟩
 
