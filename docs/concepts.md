@@ -1,189 +1,155 @@
 # Concepts
 
-[Guarantees](guarantees.md) defines the terms and states what each command proves.
+This page explains why tazuna's rules are what they are, and the model a spec describes.
+[Guarantees](guarantees.md) states what each command proves.
+`gleam run -m tazuna -- explain <kind>` says what one kind of output line means.
 
-## A spec is data that Lean runs
+## Lean alone gives a spec its meaning
 
-You write a spec in TypeScript, and tazuna turns it into data: the structure of each service, and each spec function as an expression tree, as LINQ turns a C# lambda into an expression tree.
-Lean is the only place that gives this data a meaning.
-The Lean engine runs it for `test`, `verify`, and `generate`, encodes it as SMT formulas for `prove` and `generate`, and reads the solver's answers back.
-A Lean theorem proves that the encoding of each expression agrees with its evaluation, as Cedar proves its encoding against its evaluator.
+You write a spec in Gleam.
+The launcher converts its modules to an IR, and the Lean engine gives the IR its meaning.
+It runs the IR for `test`, `verify`, and `generate`, and encodes it as SMT-LIB for `prove` and `generate`.
+Gleam never runs a spec's meaning, so the bodies of tazuna's built-ins only panic.
+Trust flows one way, from Gleam to the IR to Lean to the solver, and no second interpreter can disagree with the definitions the theorems are about.
 
-With one meaning, no second interpreter can disagree with the definitions that the theorems are about.
-Lean decides what a spec means. TypeScript types and translates the spec, and reports only the rules about source text, files, and loading.
+Where Gleam's two targets differ, Lean follows the Erlang target.
+An `Int` has no bound, division truncates, and `x / 0` is 0 (`Gleam.div_zero` and the other `Gleam.*` roots).
 
-## tazuna owns only what it can run, encode, and prove
+## tazuna owns only what it can run, encode exactly, and prove
 
-A construct belongs in the DSL only if Lean can run it, encode it exactly as SMT, and prove that encoding.
-Everything else comes from outside the spec, from an external service or from the input.
-That rule shapes the values a spec can hold:
+A construct belongs in a spec only if Lean can run it, encode it exactly as SMT, and prove the encoding.
+The converter reports anything else as a `Restricted.*` line that names the construct, such as a `Float` or a recursive function.
+Domain knowledge stays outside the spec, in an external service or in the input.
 
-- Numbers are integers. A spec holds an amount in its smallest unit, such as cents, as Cedar, TLA+, and Alloy do. `check` reports `z.number()` without `.int()` as `Restricted.schema`.
-- An instant is milliseconds since the Unix epoch, within the range of a JavaScript `Date`, and a duration is milliseconds. A date is a day that a spec compares and adds days to; a trace writes it as its ISO 8601 label, `YYYY-MM-DD`, or `+275760-09-13` and `-000001-01-01` for years outside 0000 to 9999. A spec converts neither between instants and dates nor between time zones. The ToDo sample asks its `calendar` service for the next business day instead.
-- A spec builds no text for people. It sends a structured value, such as `{ id: "reminder", values: { title } }`, and the implementation renders it. `check` reports a template literal as `Restricted.function`.
+That rule shapes the values a spec holds:
 
-`check` reports any code that the translation cannot turn into an expression as a `Restricted` kind, and the violation names the form to use instead.
+- Numbers are integers. Hold an amount in its smallest unit, such as cents.
+- An `Instant` and a `Duration` are milliseconds.
+- A `Date` is a day with no calendar. A spec adds days and counts the days between two dates, and converts neither between instants and dates nor between time zones. Ask an external for a business day.
+- A `String` supports `==`, `<>`, and `tazuna.length`, which counts code points.
 
-## The spec decides every choice
+## The spec writes every order
 
-No outcome may depend on an order that no line of the spec or scenario writes.
-That makes the spec a test oracle: for the inputs of any log, the spec gives exactly one set of outputs, and `verify` can compare an implementation's outputs with it.
-If tazuna resolved such a choice silently, the spec and an implementation could disagree for a reason that nobody wrote down.
+For the inputs of any log, the spec gives exactly one set of outputs.
+That makes the spec a test oracle, and `verify` can compare an implementation's log with it.
+If an outcome depended on an order nobody wrote, the spec and an implementation could disagree for a reason nobody wrote down.
 
-Records have no order, because a database returns rows in an order that the spec does not control.
-Spec functions receive the records of an entity as a `Bag`, and a spec that needs an order sorts by a key with `sortedBy`.
-`minBy` and `maxBy` pick one record by a key, and a tie is `Fault.notOnly`, as `only` reports a bag with more than one value.
+So a spec cannot read an order it does not own:
 
-Some steps have no cause that orders them: two own commands that wait in one round, such as those of two automations that react to one message, deadlines of one service due at the same time, and events or answers from other services that arrive at once.
-Whether their order changes the outcome is a property of the whole spec, so `prove` checks it, not `test`.
-Parallel regions of one chart are the exception: their transitions on one event run in one step, and `test` and `verify` report `RegionOrderDependent` when two of them in a run that they execute both assign a context field, or one assigns a field that the other reads.
-`prove` runs both orders from any state within the bounds and reports `ChoiceDependent.stepOrder` when they end differently.
-A pair that `prove` does not compare yet is an undecided property, as [Orders that `prove` compares](guarantees.md#orders-that-prove-compares) lists.
-To fix the violation, make the definition order the steps, for example by guarding one transition on the state of the other chart.
+- A `Bag` is a multiset and offers no order to read. `bag.min_by` and `bag.max_by` return `Error(Tie)` instead of picking one of two equal items.
+- A `Table` maps keys to values, with at most one value per key.
+- Out lines and pending requests are multisets, and ids are compared up to renaming.
 
-Whether two orders give the same outcome depends on what each step changes:
+The engine still computes in one fixed order: machines and reactions in declaration order, a machine's instances by key, own commands in queue order, and timers due at one deadline one at a time.
+`prove`'s pair and timer lines check that no outcome depends on that order.
+A pair whose orders differ is a violation in the spec, and the fix writes the order into the spec.
 
-- Two deadlines that each send one request give the same outcome, because the requests keep no order between them.
-- Two deadlines that each write the same field with a different value do not, because the one that fires last decides the record.
-- Two events that move one machine to different states do not, because the next event finds the machine in a different state.
+## Explicit over implicit
 
-## A scenario states the whole world
+Everything a verdict depends on appears in the spec or in the output:
 
-A scenario writes everything outside the services that it runs: the start time, the records, every request and operation, every move of the clock, every restart, and the fate of every message.
-A message that no line delivers, loses, refuses, or leaves in flight is `InvalidScenario.leftInFlight`, not a message that arrives by default.
+- The spec writes its bounds. No command-line flag changes them, so the spec under review is the scope of every verdict.
+- A verdict prints what it assumes in `assumes`.
+- An undecided line says why it has no verdict, such as the solver's answer or the limit a search hit.
+- No counterexample within the bounds is a success, `Prove.withinBounds`, as Alloy reports no counterexample within its scope. The line names the bounds, and the command exits 0. Otherwise every spec with a growing table would exit 2.
+- `generate` says unreached, never unreachable.
 
-The run is deterministic, so a snapshot depends only on what the scenario wrote, and `test` can compare a run with it line by line.
-`drive`, from `@natsuzora-dev/tazuna/verify`, puts the implementation in the same world: the same start, the same clock, and the same inputs in the same order.
-If tazuna picked a delivery order or a default record, the implementation would face a world that nobody wrote down.
+## Illegal states are unrepresentable
 
-That world is the only control tazuna has over an implementation.
-The implementation creates its keys and request ids in its own way, and `verify` binds them to the spec's values by where they first appear.
-When a window can bind them in more than one way, as when it shows several alike new ids, `verify` keeps those ways open and decides an id only where a later line tells it apart, so the order in which the implementation writes a window or a bag never decides the verdict.
-A request id is only a name: a snapshot names the spec's outgoing requests `r1`, `r2`, ... by first appearance, as it names fresh ids `id1`, `id2`, ..., and a fault for an answer that matches no request names the answer's line, not its id.
+Types and structure come first, then proof, then tests.
+`check` turns what Gleam's types cannot say into `Illegal.*` rules.
+A wire name is a string literal written once, a type that crosses the wire holds no function, and a machine's key type has an order the solver can encode.
 
-## The own service and its peers follow one set of rules
+tazuna applies the same rule to itself.
+Every kind of output line is a constructor of one Lean type.
+`explain` is total over it, the theorems it names must be roots of `Axioms.lean`, and `test/e2e` holds one case per kind.
 
-A scenario has one *own* service, whose behavior it states.
-Every other service that the own service exchanges messages with is a peer, and Given lists each peer as running (`run`), external (`external`), or skipped (`skip`).
-A skipped peer takes no part in the run: a message to it stays in its sender's trace and is then dropped, and no line may act for the peer.
+## The spec model
 
-Apart from what the role decides, the own service and its peers follow the same rules.
-A message to or from the own service, a running peer, or an external peer arrives only by a line of the scenario, and a running peer's lines state the messages that its run sent.
-That symmetry lets one scenario check both sides of an exchange.
+A spec is a list of services and the externals they talk to.
+A service has:
 
-tazuna checks an external peer's lines against its contract once, at the end of the scenario or trace, as a Pact provider verification replays its recorded interactions.
-A result event may arrive before or after its request's answer, so a check in the middle of the exchange would read an incomplete record.
+- records, starting at `init`, and events, which `apply` folds into the records. Events are the only writes.
+- commands. A caller outside `callers`, or input that breaks an `accepts` rule, makes the request invalid. `decide` accepts with events or rejects with a reason, and `ensures` states what must hold after the events.
+- queries, which answer from the records, write nothing, and make no ids.
+- machines and reactions, which react to each event.
+- invariants and responses, which `prove` checks.
+- bounds and scenarios.
 
-## A line names earlier messages through handles
+A step takes one input and gives one outcome: accepted, answered, rejected, invalid, or fault.
+A fault is a bug in the spec, never a rejection: a broken invariant or `ensures` rule, more internal steps than `cascade`, an own effect that asks for what its target does not accept, or an answer that names no pending request.
+A step that faults leaves the state as it was.
 
-Each line returns a *handle*, and a later line refers to what an earlier line caused only through that handle.
-A handle names messages by their definition and, when needed, by their content, as a Playwright locator filters elements: `add.request(calendar.reserve, { day: "Mon" })`.
-When nothing matches, or the matches differ, tazuna reports it instead of picking one.
+Inside a step the cascade runs to completion.
+Each event is applied, then every machine instance and reaction reacts to it.
+A request to an external goes out at once and waits as a pending request until an answer names it.
+A command or query of the service's own waits in a queue and runs as one internal step.
 
-A scenario never names a message by its position, such as "the second request that this command sent".
-A command that sends one more request shifts every later position, and the scenario then names a different message without any error.
-A handle that names content fails loudly instead.
+A machine has one instance per key that its `instances` function returns from the records.
+On each event an instance stays or enters a state.
+`after` may set a timer, which enters its state when a clock line reaches its deadline, and entering a state may start an effect.
 
-A scenario also never writes a key that a running service creates with `createKey`.
-The created key is the run's choice, and the implementation chooses differently, so the scenario reads the key through the handle of the line that returned it.
+A command makes new ids with `tazuna.fresh` from its context.
+An `Id` compares with `==` only, and an id from outside the service comes by its name.
+An external is a service outside the spec, known by the commands, queries, and events it declares.
 
-## Messages travel on channels
+A scenario is a list of steps from `init` at time 0, and `test` compares its run with a snapshot.
 
-While a message is in flight, other lines can run.
-That is how a scenario states a slow network, a lost answer, or a restart in the middle of an exchange.
+## Traces
 
-Messages on one channel arrive in the order in which they were sent, as on one TCP connection or one Kafka partition, and nothing orders two channels.
-The result events of a request travel on a channel of their own, as a Stripe webhook may arrive before the API response.
-The spec orders two events on one channel only when one happens before the other, as in Lamport's happens-before.
-Two steps that no cause chain links, such as the steps of two parallel regions, could run in two processes of a deployed system, so neither the snapshot nor `verify` records an order between their messages.
-[Steps and channels](guarantees.md#steps-and-channels) gives the exact rules.
+Snapshots, `generate`'s output, and `verify`'s input share one format of JSON lines.
+A header line names the service.
+Each later line is an input (`in`) or an output (`out`) of the service, with the service's time in milliseconds:
 
-A message carries its value as the sender wrote it, and only the receiver parses it, as in a web API.
-If the sender checked or normalized the value first, the spec would accept a message that the deployed receiver rejects.
-A value fails its schema when it has a field that the schema does not name, at any depth, because a field that nothing reads is the writer's mistake.
+```json
+{"service":"counter","trace":1}
+{"caller":{"tag":"User"},"id":"1","in":"request","input":5,"name":"add","time":0}
+{"out":"answer","outcome":"accepted","time":0,"to":"1"}
+{"out":"event","time":0,"value":{"amount":5,"tag":"Added"}}
+{"in":"clock","time":10}
+{"external":"mail","id":"r1","input":6,"name":"send","out":"request","time":10}
+{"in":"answer","ok":null,"time":10,"to":"r1"}
+```
 
-A subscription lives as long as the process that serves it, as a WebSocket does, so a restart ends it.
+The inputs are requests, answers to the service's requests, subscribed events, and clock lines.
+A custom type's value is an object whose `tag` names the variant.
+A bag or a table is an array, and a date is its ISO 8601 label.
+A trace names fresh ids `id1`, `id2`, and the service's requests `r1`, `r2`, in the order they first appear.
+An implementation names them its own way, and `verify` binds its names to the spec's ids.
 
-## Every request names its caller
-
-Each command and query lists its `callers`: entities whose records act as users, such as `User`, and services, such as `"notifier"`.
-Spec functions read the `caller` beside the input, so a `requires` can let only a task's owner complete it.
-A scenario states who sends each request, as in `w.client.as("screens").send(...)`.
-
-The spec decides who may do what, and authentication stays outside it, as a Cedar policy reads a principal that something else signed in.
-The list also tells `generate` which requests an outsider can send.
-
-## A record is named by its key
-
-An entity's `key` can be a tuple of fields, such as `key: ["userId", "groupId"]`.
-A composite key states what makes a record unique, so a spec never builds an id from parts as text.
-
-An input field of type `ref(E)` names a record, and spec functions read that record as `refs.<field>`, as Laravel binds a route parameter to its model.
-A command that reads `refs.taskId` needs no lookup that may miss, and its rejection for a missing record is the service's `not-found`.
-
-## Bounds set how far `prove` and `generate` look
-
-`prove` proves each property for every state within the service's [bounds](guarantees.md#bounds), and `generate` searches inputs within them.
-A small bound usually finds what a large one finds, as Alloy's small-scope hypothesis says, so start with two or three records per entity.
-The bounds are typed by the entities that they name and reviewed with the spec, as TLA+ keeps its bounds in the model's configuration.
-
-## Invariants and responses state what must hold
-
-An invariant holds of a record, or of the whole service, in every state.
-A response states a bounded promise, which a record keeps in time or by leaving.
-A spec has no unbounded liveness, such as "eventually", because no finite run shows it broken.
+The `out` lines after an `in` line, up to the next one, form its window.
+`verify` compares each window as a multiset, so the order in which an implementation writes a window never decides the verdict.
 
 ## A counterexample is a decision about the spec
 
-`prove` checks each invariant by induction.
-It holds of the initial records, and it survives each step from any records within the bounds where every invariant holds.
-The second part also starts from states that no run reaches, so a counterexample is one of two things:
+`prove` checks an invariant by induction.
+It holds in the initial state, and each step from any state within the bounds where every invariant holds keeps it.
+That second part also starts from states no run reaches, so a counterexample with `"from":"validState"` is one of two things:
 
 - A real bug. Fix the behavior.
-- A state that no run reaches. State the fact that rules it out as another invariant, or stop storing the value that can contradict another.
+- A state no run reaches. State the fact that rules it out as another invariant.
 
-[Prove the invariants](../README.md#prove-the-invariants) in the README walks through a counterexample of the second kind in the ToDo sample.
+## Each command reports one kind of mistake
 
-tazuna never asks you for a fact about its own semantics, such as that the clock never moves back.
-It assumes such facts, and [Assumptions](guarantees.md#assumptions) lists them.
+- `check` reports the structure of the spec.
+- `test` reports what a scenario's run shows against its snapshot.
+- `prove` reports what holds in every state within the bounds.
+- `generate` writes inputs that reach each class of out line, for an implementation's tests.
+- `verify` reports what an implementation's log shows.
 
-## Every command writes structured output
+Every command writes JSON lines to stdout, its errors included, because the usual reader is a program or a coding agent.
+tazuna transforms a result only when a later step needs it, and never only for readability, so it does not shrink a counterexample.
 
-Every command writes JSON lines, because the usual reader is a program or a coding agent.
-tazuna transforms a result only when a later step needs it, as `prove` decodes a solver's model to replay it in the semantics, and never only for readability: it does not shrink a counterexample.
+## Exit codes
 
-## Each tool reports one kind of mistake
+A command exits with the code of its worst line:
 
-The TypeScript type checker reports a value of the wrong shape, such as a guard that reads a field that its state does not have.
-`check` reports the rules that need the whole spec, such as whether the target of a request may reject, and every form that has a canonical alternative.
-`test` reports what a scenario's run shows, `prove` what holds in every state within the bounds, and `verify` what an implementation's trace shows.
-`generate` reports nothing wrong: it writes inputs that reach the parts no scenario reaches, for an implementation's tests to send.
+| Code | Meaning |
+| --- | --- |
+| 0 | Every line is a success. `Prove.withinBounds` and `Generate.unreached` count. |
+| 1 | A line is a violation. |
+| 2 | A line is undecided and none is a violation. |
+| 3 | The command did not run as asked, for a usage or system error. The spec is not judged. |
+| 4 | tazuna has a bug. No spec reaches it. |
 
-Each rule lives in one tool.
-The earlier tools report a mistake closer to the line that causes it, and they need no implementation.
-
-Some violations point at the spec or the scenario even when nothing in them is wrong as written, because the run leaves open a choice that no comparison can settle.
-`ChoiceDependent`, `RegionOrderDependent`, and `Uncomparable.ambiguous` are such violations.
-The fix writes the choice into the spec or the scenario, so that the spec and the implementation make it alike.
-
-## Any log of the implementation can be checked
-
-`verify` compares the `out` lines of a trace with the spec's for the trace's `in` lines, so the trace can come from anywhere: `drive` running a scenario's snapshot or a generated input, or the implementation's own tests.
-
-## Then states the intent, and the snapshot records the run
-
-Then lists the facts that the scenario exists to check, and it does not have to list everything.
-The snapshot records every message of the run, and `test` compares the run with it exactly, so a change in a message that Then leaves out still fails `test`.
-Then is for a reviewer, and the snapshot is for `test`.
-
-## Each meaning has one form
-
-tazuna accepts one form for each meaning, and `check` reports a form that has a canonical alternative as `NonCanonical`.
-The author of a spec is often an LLM.
-Each variant that a language allows is a choice that the author makes without meaning to, and a reviewer then has to ask whether two forms mean the same thing.
-
-For the same reason, a spec writes a choice to do nothing, such as `onRejected: []` for a rejection that it ignores on purpose.
-An omitted handler would read the same whether the author decided to ignore the rejection or forgot it.
-
-Data in a chart has one form per lifetime: `context` for what spans states, and `held` for one visit of a state, as a state carries its data in Erlang's gen_statem and in an Elm variant.
-Because `held` stays fixed for the visit, a deadline's time and a guard of the state read the same value.
+`explain` prints each kind's exit code.
