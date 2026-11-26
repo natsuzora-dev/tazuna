@@ -1,1 +1,2 @@
 {"kind":"Trace.invalid","line":4,"message":"the request is at 5, but a clock line brought time only to 10","trace":"traces/basic.jsonl"}
+{"kind":"Trace.invalid","line":2,"message":"the string \"𰀀\" holds a code point above U+2FFFF, outside tazuna's strings","trace":"traces/wide.jsonl"}

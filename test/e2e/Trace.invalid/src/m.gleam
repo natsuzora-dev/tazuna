@@ -61,6 +61,15 @@ fn total() -> tazuna.Query(Records, Caller, Nil, Int) {
   )
 }
 
+fn find() -> tazuna.Query(Records, Caller, String, Int) {
+  tazuna.query(
+    name: "find",
+    callers: [User],
+    accepts: fn(_s) { [] },
+    resolve: fn(c: QueryCtx(Records, String, Caller)) { c.records.total },
+  )
+}
+
 fn watch() -> tazuna.Machine(Records, Event) {
   tazuna.machine(
     name: "watch",
@@ -111,7 +120,11 @@ fn counter() -> tazuna.Service {
     init: Records(total: 0),
     apply: apply,
     subscribes: [],
-    declares: [tazuna.declare_command(add()), tazuna.declare_query(total())],
+    declares: [
+      tazuna.declare_command(add()),
+      tazuna.declare_query(total()),
+      tazuna.declare_query(find()),
+    ],
     machines: [watch()],
     reactions: [],
     invariants: fn(r: Records) { [#("under 50", r.total < 50)] },

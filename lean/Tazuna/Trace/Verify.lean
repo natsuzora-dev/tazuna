@@ -91,6 +91,27 @@ def tryCap : Nat := 100000
 
 variable (T : List TypeDecl) (v : ServiceV)
 
+mutual
+/-- The strings a wire form holds as values: every name it can read an id by. -/
+def Wire.strs : Wire → List String
+  | .str s => [s]
+  | .arr ws => Wire.strss ws
+  | .obj kvs => Wire.strsKvs kvs
+  | .null | .bool _ | .num _ => []
+def Wire.strss : List Wire → List String
+  | [] => []
+  | w :: ws => w.strs ++ Wire.strss ws
+def Wire.strsKvs : List (String × Wire) → List String
+  | [] => []
+  | (_, w) :: kvs => w.strs ++ Wire.strsKvs kvs
+end
+
+/-- Why a value of an in line does not read: a string outside tazuna's strings (`Str`), or else not the type. -/
+def unreadable (w : Wire) (notType : String) : String :=
+  match w.strs.find? (!inDomain ·) with
+  | some s => s!"the string {(Lean.Json.str s).compress} holds a code point above U+2FFFF, outside tazuna's strings"
+  | none => notType
+
 /-- An answer to a request, read from its wire form: a command's output or rejection, a query's output. -/
 def decAnswer (b : Bind) (o : Ty) : (rj : Option Ty) → Except Wire Wire → Option (answerTy o rj).den0
   | some _, .ok w => (dec T b.id? o w).map fun x => .inl (x, ())
@@ -104,14 +125,15 @@ def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option 
   | .clock t => .ok (.clock t, none, [])
   | .request t id name c i => do
     if t != s.now then throw s!"the request is at {t}, but a clock line brought time only to {s.now}"
-    let caller ← (dec T b.id? v.caller c).elim (.error "the caller does not read as the service's caller type") .ok
+    let caller ← (dec T b.id? v.caller c).elim
+      (.error (unreadable c "the caller does not read as the service's caller type")) .ok
     match finIdx v.commands (·.name == name), finIdx v.queries (·.name == name) with
     | some k, _ => match dec T b.id? (v.commands.get k).input i with
       | some x => .ok (.command k caller x, some id, idsOf T v.caller caller ++ idsOf T _ x)
-      | none => .error s!"the input does not read as {name}'s input type"
+      | none => .error (unreadable i s!"the input does not read as {name}'s input type")
     | none, some k => match dec T b.id? (v.queries.get k).input i with
       | some x => .ok (.query k caller x, some id, idsOf T v.caller caller ++ idsOf T _ x)
-      | none => .error s!"the input does not read as {name}'s input type"
+      | none => .error (unreadable i s!"the input does not read as {name}'s input type")
     | none, none => .error s!"{v.name} has no request {name}"
   | .answer t to res => do
     if t != s.now then throw s!"the answer is at {t}, but a clock line brought time only to {s.now}"
@@ -122,14 +144,15 @@ def readIn (s : State v) (b : Bind) : Line → Except String (Input v × Option 
     | some p =>
       match decAnswer T b p.request.output p.request.rejection res with
       | some x => .ok (.answer id ⟨_, x⟩, none, idsOf T _ x)
-      | none => .error "the answer does not read as an answer to the request: an output, or a command's rejection"
+      | none => .error (unreadable (match res with | .ok w | .error w => w)
+          "the answer does not read as an answer to the request: an output, or a command's rejection")
   | .event t src name w => do
     if t != s.now then throw s!"the event is at {t}, but a clock line brought time only to {s.now}"
     let some k := finIdx v.subscribes fun sub => sub.source == src && sub.name == name
       | throw s!"{v.name} subscribes to no event {src}.{name}"
     match dec T b.id? (v.subscribes.get k).event w with
     | some x => .ok (.event k x, none, idsOf T _ x)
-    | none => .error s!"the event does not read as {src}.{name}'s type"
+    | none => .error (unreadable w s!"the event does not read as {src}.{name}'s type")
   | _ => .error "an out line where an in line belongs"
 
 /-- The window an in line opens: the out lines up to the next in line. -/
@@ -184,20 +207,6 @@ inductive Reads : State v → Bind → List (Nat × Line) → Prop
     Multi (LineW T v b' r.state.now) es (window more) → Reads r.state b' (afterWindow more) →
     Reads s b ((n, l) :: more)
 
-mutual
-/-- The strings a wire form holds as values: every name it can read an id by. -/
-def Wire.strs : Wire → List String
-  | .str s => [s]
-  | .arr ws => Wire.strss ws
-  | .obj kvs => Wire.strsKvs kvs
-  | .null | .bool _ | .num _ => []
-def Wire.strss : List Wire → List String
-  | [] => []
-  | w :: ws => w.strs ++ Wire.strss ws
-def Wire.strsKvs : List (String × Wire) → List String
-  | [] => []
-  | (_, w) :: kvs => w.strs ++ Wire.strsKvs kvs
-end
 
 /-- The names an in line can read ids and a wire id by: every string of its values, and an answer's `to`. -/
 def Line.inNames : Line → List Name
