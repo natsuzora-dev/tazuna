@@ -814,7 +814,7 @@ theorem unrollSteps_covers (hL : SortedLayout L) : (xs : List (Input v)) → (S 
     dsimp only at hc1
     have hat := unrollOne_at chk senv S i b hR hinv (by rw [ho]; exact hc1.1) (by rw [ho]; exact hc1.2)
     rw [ho] at hat
-    have ih := unrollSteps_covers hL xs st.after (i + 1) b' hat.2.2 (step_inv T chk.reach s hinv x) (fun h => by omega)
+    have ih := unrollSteps_covers hL xs st.after (i + 1) b' hat.2.2.1 (step_inv T chk.reach s hinv x) (fun h => by omega)
       (fun t ht => hsrt t (List.mem_append_right _ ht)) (List.append_eq_nil_iff.1 hnr).2 hfits fun q h => by
         have e : b' + q = b + ((stepVals L v chk.callerData senv.nT i b x).length + q) := by omega
         rw [e, hvars _ (by simp; omega), List.getElem_append_right (by omega)]

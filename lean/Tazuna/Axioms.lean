@@ -26,6 +26,7 @@ import Tazuna.Smt.Runs
 import Tazuna.Smt.Sorts
 import Tazuna.Smt.DecodeTotal
 import Tazuna.Smt.GenGoal
+import Tazuna.Smt.RespGoal
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -88,9 +89,6 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Trace.DateThm.labelled_range,
     -- A counterexample's `after` is the state the step reaches before its invariant check.
     ``Tazuna.Ir.step_settled,
-    -- A bounded response's violation, computed, is its meaning: a step opens it and a later one comes past the
-    -- deadline with no step between answering it.
-    ``Tazuna.Ir.ResponseV.violated_iff,
     -- generate's targets miss no class of out line a step can show.
     ``Tazuna.Ir.classes_covered,
     -- The bound-reached condition the step scripts ask. T2 (`step_encode`) is what the verdict theorems below rest on.
@@ -152,7 +150,13 @@ elab "#check_tazuna_reach" : command => do
     -- T6b: generate's "unreached within k steps": where its script at a depth has no model, no run of that many valid
     -- inputs within the slots that faults nowhere answers at its last step in the target's class (from
     -- `runs_covered`: every such run is a model of every assertion but the goal).
-    ``Tazuna.Smt.generate_unreached]
+    ``Tazuna.Smt.generate_unreached,
+    -- T7: a bounded response "within the bounds": where prove's script for it at a depth has no model, no run of that
+    -- many valid inputs within the slots, faulting nowhere, with timely clock lines and the response's functions
+    -- fitting at its events, violates it (from `runs_covered`).
+    ``Tazuna.Smt.response_within,
+    -- A response's model decodes to a run from the initial state with timely clock lines that violates it.
+    ``Tazuna.Smt.response_sound]
   let mut used : NameSet := {}
   let mut usedByOther : NameSet := {}
   let mut todo := roots

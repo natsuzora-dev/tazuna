@@ -411,12 +411,14 @@ theorem foldr_ite_rel {α : Type} {shs : List (PendingShape v.event)} (g : α �
 
 variable (L T) in
 /-- What a model says of an unrolled step from `s` on `x`: it takes a kind whose input decodes to `x` and whose terms
-say what the step's result is, the step does not fault, and the state after the step denotes the result's state. -/
+say what the step's result is, the step does not fault, the state after the step denotes the result's state, and the
+state before it denotes `s`. -/
 def StepAt (M : Model) (hc : v.caller.isData = true) {n : Nat} (st : UnrollStep v n) (s : State v) (x : Input v) :
     Prop :=
   (∃ k, st.taken M = some k ∧ k.1.decode M L hc = some x ∧
     k.2.out.Rel M L T (shapes v) s x (step T v s x)) ∧
-  (∀ f, (step T v s x).outcome ≠ .fault f) ∧ StateRel M L T (shapes v) st.after (step T v s x).state
+  (∀ f, (step T v s x).outcome ≠ .fault f) ∧ StateRel M L T (shapes v) st.after (step T v s x).state ∧
+  StateRel M L T (shapes v) st.before s
 
 variable (L T) in
 /-- A model's unrolled steps from `s` are a run on the inputs `xs`: each step decodes to its input and is that step. -/
@@ -482,7 +484,7 @@ theorem unrollOne_at (S : SymState v) (i b : Nat) {s : State v} (hR : StateRel M
   have hrel := ((ex.2 hcodes hsites hcase).2.1) hcond
   have hafter := after_rel hR hdec hrel
   refine ⟨⟨_, htaken, hdec, hrel⟩, hafter.1.1 hokH,
-    stateRel_share ?_⟩
+    stateRel_share ?_, hR⟩
   exact foldr_ite_rel (fun x => x.2.1) (fun x => x.2.2.2) S oks hfind (hafter.2 hokH)
 end
 
@@ -540,7 +542,7 @@ theorem unrollSteps_run : (d : Nat) → (S : SymState v) → (i b : Nat) → {s 
     have hat := unrollOne_at chk senv S i b hR hinv (by rw [h1]; exact fun a ha => hA a (List.mem_append_left _ ha))
       (by rw [h1]; exact hx)
     rw [h1] at hat
-    have ih := unrollSteps_run d st0.after (i + 1) b' hat.2.2 (step_inv T chk.reach s hinv x)
+    have ih := unrollSteps_run d st0.after (i + 1) b' hat.2.2.1 (step_inv T chk.reach s hinv x)
       (by rw [h2]; exact fun a ha => hA a (List.mem_append_right _ ha))
       (by rw [h2]; exact fun st hst => hD st (List.mem_cons_of_mem _ hst))
     rw [h2] at ih
