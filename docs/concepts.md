@@ -58,7 +58,7 @@ If tazuna picked a delivery order or a default record, the implementation would 
 
 That world is the only control tazuna has over an implementation.
 The implementation creates its keys and request ids in its own way, and `verify` binds them to the spec's values by where they first appear.
-When a window can bind them in more than one way, `verify` tries each, so the order in which the implementation writes a window or a bag never decides the verdict.
+When a window can bind them in more than one way, as when it shows several alike new ids, `verify` keeps those ways open and decides an id only where a later line tells it apart, so the order in which the implementation writes a window or a bag never decides the verdict.
 A request id is only a name: a snapshot names the spec's outgoing requests `r1`, `r2`, ... by first appearance, as it names fresh ids `id1`, `id2`, ..., and a fault for an answer that matches no request names the answer's line, not its id.
 
 ## The own service and its peers follow one set of rules
