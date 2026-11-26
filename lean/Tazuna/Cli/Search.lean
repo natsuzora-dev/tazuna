@@ -2,7 +2,7 @@ import Tazuna.Cli.Check
 import Tazuna.Smt.Unroll
 import Tazuna.Smt.Bounds
 import Tazuna.Smt.PairOrders
-import Tazuna.Smt.Cover
+import Tazuna.Smt.Reached
 import Tazuna.Smt.Boundary
 import Tazuna.Trace.ReplayOk
 
@@ -128,14 +128,8 @@ def Ty.collectionsOfAlts : List (List Ty) → List Ty
   | ts :: vs => Ty.collectionsOf ts ++ Ty.collectionsOfAlts vs
 end
 
-/-- The types of what the service's inputs carry into a step's slots, as `inputVals` embeds them: the caller, each
-command's input, each answer's value and each event. -/
-def inputTys (v : ServiceV) : List Ty :=
-  v.caller :: v.commands.map (·.input) ++ (shapes v).map (fun sh => answerTy sh.output sh.rejection) ++
-    v.subscribes.map (·.event)
-
 /-- The bounds an input of the service can go past: the lists, bags and tables its inputs carry. A verdict over runs
-covers only runs whose inputs fit them (`fault_sound` takes the input's embedding), so it names them. -/
+covers every run only where every input fits them (`proved_sound`), so a line whose inputs may not fit names them. -/
 def inputBounds (T : List TypeDecl) (L : Layout) (v : ServiceV) : List Json :=
   let held := Ty.collectionsOf (inputTys v)
   boundsOf T L v fun t => held.any fun u => (Ty.same t u).isSome

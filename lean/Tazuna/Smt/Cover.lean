@@ -200,7 +200,8 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
     (hkeys : Step.KeysOk T s) (hs : Within L (shapes v) s) (x : Input v) {ivs : List Val}
     (hx : inputVals L chk.callerData x = some ivs) :
     (∃ inp ∈ stepInputs v (shapes v) senv.nT (stateWidth v), Covered L T P v senv inp s x) ∨
-      (∀ f, f ≠ .answerUnmatched → (step T v s x).outcome ≠ .fault f) ∧ ∀ a, ¬ Step.Begins T s x a := by
+      (∀ f, f ≠ .answerUnmatched → (step T v s x).outcome ≠ .fault f) ∧ (∀ a, ¬ Step.Begins T s x a) ∧
+        (step T v s x).state = s := by
   obtain ⟨pv, hpv, hsome⟩ := hs
   obtain ⟨vals, hvals⟩ := Option.isSome_iff_exists.1 hsome
   have hlen : vals.length = stateWidth v := by
@@ -230,7 +231,10 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
     simp only [List.getElem_cons_zero, List.getElem_cons_succ, Nat.add_zero] at h0 h1
     simp [SymInput.decode, Term.denote, h0, h1, decode_embed _ _ _ hc', Ty.down_up]
     exact ⟨_, decode_embed _ _ _ hw, Ty.down_up _ _ _⟩
-  | query i caller input => exact .inr ⟨fun f _ => query_no_fault T s i caller input f, fun _ hb => nomatch hb⟩
+  | query i caller input =>
+    refine .inr ⟨fun f _ => query_no_fault T s i caller input f, fun _ hb => (nomatch hb), ?_⟩
+    simp only [step]
+    split <;> rfl
   | event i value =>
     obtain ⟨w, hw, rfl⟩ := map_some.1 hx
     refine .inl ⟨.event i (.var (stateWidth v)), by simp [stepInputs], hc, M,
@@ -256,13 +260,14 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
       obtain ⟨w, hw, rfl⟩ := map_some.1 hx
       cases hf : s.pending.find? (·.id == to) with
       | none =>
-        refine .inr ⟨fun f hf' => by simp only [step, hf]; simpa using hf'.symm, fun _ hb => ?_⟩
+        refine .inr ⟨fun f hf' => by simp only [step, hf]; simpa using hf'.symm, fun _ hb => ?_, by simp only [step, hf]⟩
         cases hb with
         | answer _ _ p _ _ hp _ _ => rw [hf] at hp; cases hp
       | some p =>
         cases hsame : Ty.same t (answerTy p.request.output p.request.rejection) with
         | none =>
-          refine .inr ⟨fun f hf' => by simp only [step, hf, hsame]; simpa using hf'.symm, fun _ hb => ?_⟩
+          refine .inr ⟨fun f hf' => by simp only [step, hf, hsame]; simpa using hf'.symm, fun _ hb => ?_,
+            by simp only [step, hf, hsame]⟩
           cases hb with
           | answer _ _ p' h _ hp _ _ =>
             rw [hf] at hp

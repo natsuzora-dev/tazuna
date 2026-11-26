@@ -22,6 +22,7 @@ This page does not repeat that table.
 - `steps` limits the inputs of a run that `generate` and a response's search unroll.
 
 A verdict speaks only of states and inputs that fit the slots.
+`Prove.proved` on a step line is printed only where every state a run reaches fits them, so it speaks of every run.
 `Prove.withinBounds` and `Generate.unreached` list in `bounds` every bound a step of the service can go past.
 That list is the service's static scope, the same in every run.
 It holds each table, bag, and list type of the service's layout, and its pending requests when it sends any.
@@ -55,11 +56,13 @@ For each target it prints one line per input kind: each command, each answer to 
 A step line asks the solver for a state of the right shape where every invariant holds, and an input, whose step breaks the target.
 With no such model, the line reads one of two verdicts:
 
-- `Prove.proved` when the kind's bound question has no model either, so no step of the kind that starts within the slots leaves them.
-- `Prove.withinBounds` when a step of the kind can leave the slots.
+- `Prove.proved` when no input kind's bound question has a model, every value an input carries fits the slots, and the initial state fits them. Then no step that starts within the slots leaves them, so every state a run reaches is within them.
+- `Prove.withinBounds` otherwise: some step can leave the slots, an input can carry a list, bag or table, or the initial state holds more than its slots.
 
-`fault_sound` (T4): where every input kind's lines about a fault read one of these, no step of a run from the initial state faults with it, wherever the state the run reached and the input fit the slots.
-The proof is by induction, so it also needs the initial state's invariants to hold, which the `init` lines check.
+`proved_sound` (T4): where every input kind's lines about a fault read proved, no step of any run from the initial state faults with it.
+`run_within` gives its induction over the run: each step from a state within the slots leaves a state within them, and an answer that fits no slot names no pending request of its type, so it changes nothing.
+`fault_sound` (T4): where every input kind's lines about a fault read proved or within the bounds, no step of a run from the initial state faults with it, wherever the state the run reached and the input fit the slots.
+Both proofs are by induction, so they also need the initial state's invariants to hold, which the `init` lines check.
 `Fault.answerUnmatched` is no target, because an answer that names no request is the outside's mistake.
 
 A step line's `assumes` lists the invariants the induction took as holding that this run did not prove: the violated ones, the undecided ones, and the ones `--only` left out.
@@ -166,7 +169,7 @@ Everything between them is proved or checked.
 
 ## Not guaranteed
 
-- `Prove.proved` covers every run only by an induction no root states. `fault_sound` speaks of states within the slots, and the bound questions say that no step leaves them. That the two together cover every reachable state is not yet a theorem.
+- A pair line that reads `Prove.proved` covers every run only where every order of a cascade stays within the slots. `run_within` keeps the states between inputs within them, but no theorem yet keeps the cascade's other orders there.
 - A violated pair line whose two orders both finish with different states rests on Lean's search over renamings of request ids. `pair_violates` does not cover that case.
 - `Generate.unreached` does not mean unreachable. A longer run or more slots may reach the target.
 - The `bounds` list over-states lists. Every list type of the layout appears with its longest literal, though a list that only literals build cannot grow.

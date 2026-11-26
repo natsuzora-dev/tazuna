@@ -100,7 +100,7 @@ theorem begins_coded {P : List AnySite} {E : List AnyEffectSite} {T : List TypeD
       have hsites := sites_of_decode senv ht hxd hfit.2.1
       have E := henc.2 hcodes hsites (hcase t ht)
       exact E.2.2 (E.1.2 hfit.2.2.2.2.2) a hb
-  · exact (h.2 a hb).elim
+  · exact (h.2.1 a hb).elim
 
 /-- T5 for runs, scoped to the slots: in a checked spec's service whose initial state keeps its invariants, and a layout
 whose datatypes have sorts (as the service's, `sorted_ofParts`), take a run from the initial state on valid inputs. Every cascade a step of the run starts, at a state and an input within the

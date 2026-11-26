@@ -7,7 +7,7 @@ import Tazuna.Cli.Generate
 import Tazuna.Cli.Explain
 import Tazuna.Semantics.After
 import Tazuna.Smt.Prove
-import Tazuna.Smt.Cover
+import Tazuna.Smt.Reached
 import Tazuna.Smt.Cti
 import Tazuna.Ir.Examples
 import Tazuna.Semantics.Eval
@@ -126,6 +126,11 @@ elab "#check_tazuna_reach" : command => do
     -- the step fits the slots (Prove.withinBounds), no step within the slots of a run from an initial state whose
     -- invariants hold faults naming n.
     ``Tazuna.Smt.fault_sound,
+    -- T4 for every run (Prove.proved): where every input kind's lines about the rules named n read proved, the
+    -- initial state fits the slots and every value an input carries does, no step of any run from an initial state
+    -- whose invariants hold faults naming n. The bound questions keep every reached state within the slots
+    -- (`run_within`, by induction over the run).
+    ``Tazuna.Smt.proved_sound,
     -- A counterexample is honest: a model of a target question decodes to a state with the step invariant and every
     -- invariant holding, whose step in Lean is the one the terms say.
     ``Tazuna.Smt.cti_sound,
