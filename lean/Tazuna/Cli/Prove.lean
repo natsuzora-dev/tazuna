@@ -457,11 +457,12 @@ section
 variable (solver : Solver) (cache : System.FilePath) (c : CheckedSpec) (v : ServiceV) (L : Layout)
   (senv : StepEnv L (shapes v))
 
-/-- The response's search over the depths 1, 2, ... (`ds`), stopping at the first model, which is played back in Lean:
-its run must have timely clock lines and violate the response (`response_sound`). A refused encoding of the run, of
-the goal, or of an input kind (which the script then lacks) leaves the response undecided unless a model is found; the
-goal's refusal is never a layout gap (`respGoalE_ofService`). An error is an engine bug. -/
-def searchResponse (ds : List (Depth v senv.nT)) (resp : ResponseV v.event) : IO (Except String RespResult) := do
+/-- The response's search over the depths 1, 2, ... (`ds`, each awaited when the search reaches it), stopping at the
+first model, which is played back in Lean: its run must have timely clock lines and violate the response
+(`response_sound`). A refused encoding of the run, of the goal, or of an input kind (which the script then lacks)
+leaves the response undecided unless a model is found; the goal's refusal is never a layout gap
+(`respGoalE_ofService`). An error is an engine bug. -/
+def searchResponse (ds : List (Task (Depth v senv.nT))) (resp : ResponseV v.event) : IO (Except String RespResult) := do
   if hc : v.caller.isData = false then return .error "the caller type is no data" else
   have hc : v.caller.isData = true := by simpa using hc
   let mut refused : Option (SymInput v (shapes v) senv.nT × Refusal) := none
@@ -471,7 +472,7 @@ def searchResponse (ds : List (Depth v senv.nT)) (resp : ResponseV v.event) : IO
     | none => .error s!"service {v.name}, {resp.text}: the encoding refused: {reprStr r}"
   for (t, i) in ds.zipIdx do
     let d := i + 1
-    match t with
+    match ← IO.wait t with
     | .error r => return refusedLine none r
     | .ok (B, pre) =>
       match respGoalE L v resp B.steps with
@@ -515,6 +516,13 @@ def responseLine (service : String) (name : String) (scope : List Json) : RespRe
       ("assumes", Json.arr (responseAssumes.map Json.str).toArray),
       ("bounds", Json.arr (scope ++ [Json.mkObj [("bound", Json.str "steps"), ("size", Lean.toJson k)]]).toArray)])
   | .undecided kind fields => (kind, [("service", Json.str service), ("target", Json.str ("response " ++ name))] ++ fields)
+
+/-- What one job of prove's pool gives: nothing (a depth built), a step question's report, or a response's result. -/
+inductive Done where
+  | built
+  | answer (r : Except String Report)
+  | response (r : Except String RespResult)
+deriving Inhabited
 
 /-- `f` at every item, at most `jobs` at a time, results in order. -/
 def runAll {α β : Type} [Inhabited β] (jobs : Nat) (f : α → IO β) (xs : Array α) : IO (Array β) := do
@@ -612,8 +620,36 @@ def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
       scopes := scopes ++ [(v.name, r.scope)]
     let asks := (items.filterMap fun | .ask o => some o | _ => none).toArray
     let cache := opts.cache / Sha256.hex (← solver.version).toUTF8
-    let answers : Array (Except String Report) ← runAll opts.jobs
-      (fun o => do pure (o.read (← solver.runCached cache o.script))) asks
+    -- Each response's search is one job; a service's depths are built once for all its responses, each as one job
+    -- that resolves a promise the searches wait on when they reach that depth. A build takes its depth as the job's
+    -- argument: a build closed over it would have its pure work floated out of the job by the compiler, onto this
+    -- thread.
+    let mut rjobs : Array (String × String × List Json × IO (Except String RespResult)) := #[]
+    let mut builds : Array (Nat × (Nat → IO Done)) := #[]
+    for v in c.spec.services do
+      let resps := v.responses.filter fun r => keep (v.name ++ "/" ++ r.text)
+      if resps.isEmpty then continue
+      let L := Layout.ofService c.program.defs v
+      let .ok senv := StepEnv.of L (shapes v)
+        | IO.eprintln s!"tazuna-engine: internal error: service {v.name}: no step environment in its layout"
+          return 4
+      have : Nonempty (Depth v senv.nT) := ⟨.error (.limit .dynamicName)⟩
+      let mut depths : Array (Task (Depth v senv.nT)) := #[]
+      for d in List.range' 1 v.bounds.steps.toNat do
+        let p ← IO.Promise.new
+        builds := builds.push (d, fun d => do p.resolve (depthAt solver c v L senv d); pure .built)
+        depths := depths.push p.result!
+      for resp in resps do
+        rjobs := rjobs.push (v.name, resp.name, scopeBounds c.T L v,
+          searchResponse solver cache c v L senv depths.toList resp)
+    -- One pool for all: the builds first, so a search waits only on a build some worker runs, then the searches,
+    -- the longest jobs, then the step questions, which fill the workers while the searches deepen.
+    let searches : Array (Nat × (Nat → IO Done)) := rjobs.map fun (_, _, _, job) => (0, fun _ => Done.response <$> job)
+    let questions : Array (Nat × (Nat → IO Done)) :=
+      asks.map fun o => (0, fun _ => do pure (.answer (o.read (← solver.runCached cache o.script))))
+    let done ← runAll opts.jobs (fun (d, job) => job d) (builds ++ searches ++ questions)
+    let answers := done.filterMap fun | .answer r => some r | _ => none
+    let rresults := done.filterMap fun | .response r => some r | _ => none
     let mut reports : List Report := []
     let mut skipped : List (String × Target) := []
     let mut k := 0
@@ -648,25 +684,6 @@ def prove (root path : String) (opts : ProveOptions) : IO UInt32 := do
       IO.eprintln s!"tazuna-engine: internal error: service {s}, {step}: a step left the slots of a layout with no collection"
       return 4
     let past (s step : String) : Option (List Json) := if left s step then some (scope s) else none
-    -- Each response's search is one job; a service's depths are built once for all its responses, before any search.
-    let mut rjobs : Array (String × String × List Json × IO (Except String RespResult)) := #[]
-    let mut builds : Array (Nat × (Nat → IO Unit)) := #[]
-    for v in c.spec.services do
-      let resps := v.responses.filter fun r => keep (v.name ++ "/" ++ r.text)
-      if resps.isEmpty then continue
-      let L := Layout.ofService c.program.defs v
-      let .ok senv := StepEnv.of L (shapes v)
-        | IO.eprintln s!"tazuna-engine: internal error: service {v.name}: no step environment in its layout"
-          return 4
-      let steps := v.bounds.steps.toNat
-      let built ← IO.mkRef (Array.replicate steps (none : Option (Depth v senv.nT)))
-      for d in List.range' 1 steps do
-        builds := builds.push (d, fun d => built.modify (·.set! (d - 1) (some (depthAt solver c v L senv d))))
-      for resp in resps do
-        rjobs := rjobs.push (v.name, resp.name, scopeBounds c.T L v, do
-          searchResponse solver cache c v L senv ((← built.get).toList.filterMap id) resp)
-    let _ ← runAll opts.jobs (fun (d, build) => build d) builds
-    let rresults ← runAll opts.jobs (fun (_, _, _, job) => job) rjobs
     let mut rlines : List (Kind × List (String × Json)) := []
     for ((service, name, scope, _), res) in rjobs.zip rresults do
       match res with
