@@ -232,10 +232,16 @@ def unroll (d : Nat) (goal : List (UnrollStep v senv.nT) → Term) : Except Refu
 
 end
 
+/-- The kind a step of an unrolled run takes in the model: the first it picks. The state after the step is that
+kind's, and a goal reads that kind's terms. -/
+def UnrollStep.taken {v : ServiceV} {n : Nat} (M : Model) (st : UnrollStep v n) :
+    Option (SymInput v (shapes v) n × EncodedStep v) :=
+  st.kinds.find? fun k => (st.picks k).denote M |>.toBool
+
 /-- The input each step of an unrolled run took in the model: the kind it takes, decoded. -/
 def UnrollStep.decode {v : ServiceV} {n : Nat} (M : Model) (L : Layout) (hc : v.caller.isData = true)
     (st : UnrollStep v n) : Option (Input v) := do
-  let (inp, _) ← st.kinds.find? fun k => (st.picks k).denote M |>.toBool
+  let (inp, _) ← st.taken M
   inp.decode M L hc
 
 end Tazuna.Smt

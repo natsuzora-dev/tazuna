@@ -695,7 +695,7 @@ theorem unrollOne_covers (hL : SortedLayout L) (S : SymState v) (i b : Nat) {s :
     rcases ha with ⟨y, hy, rfl⟩ | rfl
     · exact hassert y hy
     · exact (holds_anyT _).2 ⟨_, List.mem_map_of_mem hy0, hpick0⟩
-  · simp only [UnrollStep.decode, UnrollStep.picks, Option.bind_eq_bind]
+  · simp only [UnrollStep.decode, UnrollStep.taken, UnrollStep.picks, Option.bind_eq_bind]
     obtain ⟨k', hk'⟩ : ∃ k', (oks.map (·.1)).find? (fun k =>
         ((andT (.eq (.var b) (.int k.1.pick)) k.2.out.case).denote M).toBool) = some k' :=
       Option.isSome_iff_exists.1 (List.find?_isSome.2 ⟨_, List.mem_map_of_mem hy0, hpick1⟩)

@@ -140,9 +140,10 @@ elab "#check_tazuna_reach" : command => do
     -- of their sorts decodes to the state, input, effects or instance context the report shows, so prove's "does not
     -- decode" lines are unreachable.
     ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode,
-    -- An unrolled run, which generate reads, is a run: every model's steps decode to inputs whose run from the
-    -- initial state takes the kinds the model picks, faults nowhere, and leaves the states the terms denote.
-    ``Tazuna.Smt.unroll_decode,
+    -- A model generate finds is a run to its target: every model's steps decode to inputs whose run from the
+    -- initial state takes the kinds the model picks and faults nowhere (`unroll_decode`), and its last step answers
+    -- in the target's class.
+    ``Tazuna.Smt.generate_sound,
     -- T6: a trace generate writes reaches its target: read back, verify replays it as passed, and its last step
     -- answers in the target's class.
     ``Tazuna.Cli.generate_reaches,

@@ -573,7 +573,7 @@ theorem unroll_inputs_decode (hc : v.caller.isData = true) {d : Nat} {goal : Lis
   obtain ⟨z, hz⟩ := SymInput.decode_total hc hdata hwf hwfH (hterms ▸ forall2_vars _ (bs + 1 + j) hs)
   refine ⟨z, ?_⟩
   change UnrollStep.decode M L hc ⟨.var bs, S, _, oks.map (·.1)⟩ = some z
-  simp only [UnrollStep.decode, UnrollStep.picks]
+  simp only [UnrollStep.decode, UnrollStep.taken, UnrollStep.picks]
   rw [hy]
   exact hz
 

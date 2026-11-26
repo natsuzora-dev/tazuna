@@ -414,7 +414,7 @@ variable (L T) in
 say what the step's result is, the step does not fault, and the state after the step denotes the result's state. -/
 def StepAt (M : Model) (hc : v.caller.isData = true) {n : Nat} (st : UnrollStep v n) (s : State v) (x : Input v) :
     Prop :=
-  (∃ k ∈ st.kinds, Holds M (st.picks k) ∧ k.1.decode M L hc = some x ∧
+  (∃ k, st.taken M = some k ∧ k.1.decode M L hc = some x ∧
     k.2.out.Rel M L T (shapes v) s x (step T v s x)) ∧
   (∀ f, (step T v s x).outcome ≠ .fault f) ∧ StateRel M L T (shapes v) st.after (step T v s x).state
 
@@ -451,8 +451,10 @@ theorem unrollOne_at (S : SymState v) (i b : Nat) {s : State v} (hR : StateRel M
     obtain ⟨inp, -, hu⟩ := hok y hy
     obtain ⟨t, -, -, -, -, -, rfl⟩ := unrollKind_ok senv hu
     rfl
-  simp only [UnrollStep.decode, UnrollStep.picks, Option.bind_eq_bind, Option.bind_eq_some_iff] at hx
+  simp only [UnrollStep.decode, Option.bind_eq_bind, Option.bind_eq_some_iff] at hx
   obtain ⟨⟨inp, t⟩, hy, hdec⟩ := hx
+  have htaken := hy
+  simp only [UnrollStep.taken, UnrollStep.picks] at hy
   rw [List.find?_map] at hy
   obtain ⟨y, hyf, hyeq⟩ := Option.map_eq_some_iff.1 hy
   have hym := List.mem_of_find?_eq_some hyf
@@ -479,7 +481,7 @@ theorem unrollOne_at (S : SymState v) (i b : Nat) {s : State v} (hR : StateRel M
   have ex := step_encode chk senv hR hinv hdec henc
   have hrel := ((ex.2 hcodes hsites hcase).2.1) hcond
   have hafter := after_rel hR hdec hrel
-  refine ⟨⟨_, List.mem_map_of_mem (hyv ▸ hym), by simpa [UnrollStep.picks] using hyp, hdec, hrel⟩, hafter.1.1 hokH,
+  refine ⟨⟨_, htaken, hdec, hrel⟩, hafter.1.1 hokH,
     stateRel_share ?_⟩
   exact foldr_ite_rel (fun x => x.2.1) (fun x => x.2.2.2) S oks hfind (hafter.2 hokH)
 end

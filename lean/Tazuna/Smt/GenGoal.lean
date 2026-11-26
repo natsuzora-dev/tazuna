@@ -6,7 +6,8 @@ class is read off the step's terms: a command's admission, `decide` and `ensures
 of the rules a request breaks. A rule's name term is compared as SMT-LIB strings compare (`nameIsT`), which holds of
 every value exactly when its string is the name, so the goal misses no run. With `runs_covered` this gives T6b
 (`generate_unreached`): a depth with no model has no run of that many valid inputs, within the slots and faulting
-nowhere, whose last step answers in the target's class. Events and requests are classes too; their goals need the
+nowhere, whose last step answers in the target's class. The goal reads the kind the step takes, the one decoding
+reads, so it holds only of runs that answer in that class (`generate_sound`). Events and requests are classes too; their goals need the
 events and requests a step's terms show, which the step's theorems do not relate yet. -/
 
 namespace Tazuna.Smt
@@ -42,6 +43,24 @@ def variantT (L : Layout) (T : List TypeDecl) (t : Ty) (V : Option String) (x : 
   | _ => .bool (V == none)
 
 section
+variable {v : ServiceV} {n : Nat}
+
+/-- `h` of the kind the step takes (`UnrollStep.taken`): of the first kind it picks; false where it picks none. -/
+def UnrollStep.takenT (st : UnrollStep v n) (h : SymInput v (shapes v) n × EncodedStep v → Term) : Term :=
+  st.kinds.foldr (fun k r => .ite (st.picks k) (h k) r) ff
+
+theorem holds_takenT {M : Model} (st : UnrollStep v n) (h : SymInput v (shapes v) n × EncodedStep v → Term) :
+    Holds M (st.takenT h) ↔ ∃ k, st.taken M = some k ∧ Holds M (h k) := by
+  simp only [UnrollStep.takenT, UnrollStep.taken]
+  induction st.kinds with
+  | nil => simp [ff, Holds, Term.denote, Val.toBool]
+  | cons k ks ih =>
+    simp only [List.foldr_cons, List.find?_cons, holds_ite]
+    cases (st.picks k).denote M |>.toBool <;> simp [ih]
+
+end
+
+section
 variable (L : Layout) (T : List TypeDecl) {v : ServiceV} (rules : RuleNames) (g : GenTarget)
 
 /-- Where a step of the kind answers in a class the target aims at, by the kind's terms: a command's or query's answer;
@@ -65,13 +84,14 @@ def kindHitT {shs : List (PendingShape v.event)} {n : Nat} : SymInput v shs n �
     | _ => ff
   | _, _ => ff
 
-/-- generate's goal: the last step takes a kind whose step answers in a class the target aims at. -/
+/-- generate's goal: the kind the last step takes answers in a class the target aims at. -/
 def genGoal {n : Nat} (sts : List (UnrollStep v n)) : Term :=
   match sts.getLast? with
-  | some st => anyT (st.kinds.map fun k => andT (st.picks k) (kindHitT L T rules g k.1 k.2.out))
+  | some st => st.takenT fun k => kindHitT L T rules g k.1 k.2.out
   | none => ff
 
 end
+
 
 section
 variable {M : Model} {L : Layout} {T : List TypeDecl} {v : ServiceV}
@@ -154,6 +174,82 @@ theorem invalidT_holds {lits : List String} {callerOk : Term} {rules : List (Ter
       subst hcov
       exact (holds_or _ _).2 (.inl ((holds_andT _ _).2 ⟨(holds_not _).2 hc, by simp [Holds, Term.denote, Val.toBool]⟩))
     | none => simp [hlit] at hcov
+
+theorem brokenIn_mem {rules : List (Term × Term)} {rule : Term × Term} (hm : rule ∈ rules) (hb : ¬ Holds M rule.2) :
+    (rule.1.denote M).toStr ∈ brokenIn M rules :=
+  List.mem_filterMap.2 ⟨rule, hm, by simp only [Holds] at hb; simp [hb]⟩
+
+/-- The variant term holds only of the constructor a value is built with. -/
+theorem variantT_sound (t : Ty) (h : t.isData = true) (y : t.den0) {x : Term} {V : Option String}
+    (hr : RelV L t (Ty.up _ h y) (x.denote M)) (hv : Holds M (variantT L T t V x)) : variantOf T t y = V := by
+  match t, h, y, hr with
+  | .adt 0 a vs, h, y, hr =>
+    obtain ⟨rfl, hx⟩ := hr
+    simp only [variantT, variantOf] at hv ⊢
+    obtain ⟨_, hm, ht⟩ := (holds_anyT _).1 hv
+    obtain ⟨k, hk, hkt⟩ := List.mem_filterMap.1 hm
+    split at hkt
+    · rename_i hV
+      cases hkt
+      simp only [Holds, Term.denote, hx, altsBool_up, Val.toBool, BEq.beq, Val.beq] at ht
+      have hk2 := List.mem_range.1 hk
+      have hy2 := altIndex_lt [[], []] y
+      have : k = altIndex [[], []] y := by
+        simp only [List.length_cons, List.length_nil] at hy2
+        revert ht; generalize altIndex [[], []] y = m at hy2 ⊢
+        rcases k with _ | _ | k <;> rcases m with _ | _ | m <;> simp <;> omega
+      subst this
+      simpa using hV
+    · cases hkt
+  | .adt (i + 1) a vs, h, y, hr =>
+    obtain ⟨d, n, hf, hra⟩ := hr
+    obtain ⟨vals, hval⟩ := altIndex_rel 0 (i + 1) a vs h y hra
+    simp only [variantT, variantOf, hf] at hv ⊢
+    obtain ⟨_, hm, ht⟩ := (holds_anyT _).1 hv
+    obtain ⟨k, -, hkt⟩ := List.mem_filterMap.1 hm
+    split at hkt
+    · rename_i hV
+      cases hkt
+      simp only [Holds, Term.denote, hval, Val.toBool, beq_self_eq_true, Bool.true_and, beq_iff_eq, Nat.zero_add] at ht
+      subst ht
+      simpa using hV
+    · cases hkt
+  | .int, _, _, _ | .str, _, _, _ | .date, _, _, _ | .id, _, _, _ | .list _, _, _, _ | .tuple _, _, _, _
+  | .fn _ _, _, _, _ | .param _, _, _, _ | .bag _, _, _, _ | .table _ _, _, _, _ | .dsl _ _, _, _, _ =>
+    simp only [variantT, variantOf, Holds, Term.denote, Val.toBool, beq_iff_eq] at hv ⊢
+    exact hv.symm
+
+/-- The invalid term holds only where the step names a rule the target aims at: admission's `callers`, else a broken
+rule. -/
+theorem invalidT_sound {lits : List String} {callerOk : Term} {rules : List (Term × Term)} {r : Option String}
+    (h : Holds M (invalidT lits callerOk rules r)) :
+    ∃ r' ∈ (if (callerOk.denote M).toBool then brokenIn M rules else ["callers"]),
+      (match r with | some r => r == r' | none => !lits.contains r') = true := by
+  have hrule : ∀ {want : Term → Term}, Holds M callerOk → Holds M (brokenAnyT rules want) →
+      ∃ rule ∈ rules, (rule.1.denote M).toStr ∈ brokenIn M rules ∧ Holds M (want rule.1) := fun hc hb => by
+    obtain ⟨_, hm1, ht⟩ := (holds_anyT _).1 hb
+    obtain ⟨rule, hm2, rfl⟩ := List.mem_map.1 hm1
+    obtain ⟨hnb, hw⟩ := (holds_andT _ _).1 ht
+    exact ⟨rule, hm2, brokenIn_mem hm2 ((holds_not _).1 hnb), hw⟩
+  cases r with
+  | some r =>
+    rcases (holds_or _ _).1 h with h | h
+    · obtain ⟨hnc, hr⟩ := (holds_andT _ _).1 h
+      have hf : (callerOk.denote M).toBool = false := by simpa [Holds] using (holds_not _).1 hnc
+      simp only [Holds, Term.denote, Val.toBool] at hr
+      exact ⟨"callers", by simp [hf], hr⟩
+    · obtain ⟨hc, hb⟩ := (holds_andT _ _).1 h
+      obtain ⟨rule, -, hm, hn⟩ := hrule hc hb
+      refine ⟨_, by simpa [show (callerOk.denote M).toBool = true from hc] using hm, ?_⟩
+      simp [(holds_nameIsT _ _).1 hn]
+  | none =>
+    obtain ⟨hc, hb⟩ := (holds_andT _ _).1 h
+    obtain ⟨rule, -, hm, hn⟩ := hrule hc hb
+    refine ⟨_, by simpa [show (callerOk.denote M).toBool = true from hc] using hm, ?_⟩
+    simp only [Bool.not_eq_true', List.contains_eq_any_beq, List.any_eq_false, beq_iff_eq]
+    intro l hl heq
+    have := (holds_allT _).1 hn _ (List.mem_map_of_mem hl)
+    exact (holds_not _).1 this ((holds_nameIsT _ _).2 heq)
 
 /-- Whether the step's answer is in a class the target aims at. -/
 def Hits (T : List TypeDecl) (v : ServiceV) (rules : RuleNames) (g : GenTarget) (x : Input v) (r : Result v) : Prop :=
@@ -297,6 +393,126 @@ theorem kindHitT_holds {rules : RuleNames} {g : GenTarget} {n : Nat} {hc : v.cal
     obtain ⟨time, rfl, -⟩ := decode_clock hx
     simp [answerClasses] at hcm
 
+/-- The converse of `kindHitT_holds`: where a kind's terms say what the step's result is and the step does not fault,
+the kind's hit term holds only when the answer is in a class the target aims at. -/
+theorem kindHitT_sound {rules : RuleNames} {g : GenTarget} {n : Nat} {hc : v.caller.isData = true}
+    {inp : SymInput v (shapes v) n} {out : StepOut v} {s : State v} {x : Input v}
+    (hx : inp.decode M L hc = some x) (hrel : out.Rel M L T (shapes v) s x (step T v s x))
+    (hno : ∀ f, (step T v s x).outcome ≠ .fault f) (hh : Holds M (kindHitT L T rules g inp out)) :
+    Hits T v rules g x (step T v s x) := by
+  generalize step T v s x = r at hrel hno
+  have hff : ¬ Holds M ff := by simp [ff, Holds, Term.denote, Val.toBool]
+  cases inp with
+  | command i sc si =>
+    obtain ⟨caller, input, rfl, -, -⟩ := decode_command hx
+    cases out with
+    | command o =>
+      simp only [StepOut.Rel] at hrel
+      have hinv : ∀ {c rr}, g = .invalid c rr → c = (v.commands.get i).name →
+          Holds M (invalidT (rules.literals c) o.callerOk o.rules rr) → Hits T v rules g (.command i caller input) r :=
+        fun {c rr} hg hcn hi => by
+          subst hg hcn
+          obtain ⟨r', hr', hcov⟩ := invalidT_sound hi
+          refine ⟨.invalid (v.commands.get i).name r', ?_, by cases rr <;> simpa [GenTarget.covers] using hcov⟩
+          split at hrel
+          · rename_i hcall
+            simp only [hcall, ite_true] at hr'
+            split at hrel
+            · rename_i m ms hb; subst hrel; rw [hb] at hr'; simpa [answerClasses] using hr'
+            · rename_i hb; rw [hb] at hr'; cases hr'
+          · rename_i hcall
+            simp only [hcall, Bool.false_eq_true, ite_false] at hr'
+            subst hrel; simpa [answerClasses] using hr'
+      cases g with
+      | invalid c rr =>
+        simp only [kindHitT] at hh
+        split at hh
+        · rename_i hcn
+          exact hinv rfl (by simpa using hcn) hh
+        · exact absurd hh hff
+      | accepted c =>
+        simp only [kindHitT] at hh
+        split at hh
+        · rename_i hcn
+          obtain ⟨⟨hcall, hrules⟩, hok, hens⟩ := by simpa only [holds_andT] using hh
+          simp only [show (o.callerOk.denote M).toBool = true from hcall, ite_true,
+            (holds_allT_rules _).1 hrules, show (o.decided.ok.denote M).toBool = true from hok,
+            (holds_allT_rules _).1 hens] at hrel
+          refine ⟨.accepted (v.commands.get i).name, ?_, by simpa [GenTarget.covers] using hcn⟩
+          rw [finished_outcome hrel hno]
+          simp [answerClasses]
+        · exact absurd hh hff
+      | rejected c V =>
+        simp only [kindHitT] at hh
+        split at hh
+        · rename_i hcn
+          obtain ⟨⟨hcall, hrules⟩, hok, hv⟩ := by simpa only [holds_andT, holds_not] using hh
+          have hok' : (o.decided.ok.denote M).toBool = false := by simpa [Holds] using hok
+          simp only [show (o.callerOk.denote M).toBool = true from hcall, ite_true,
+            (holds_allT_rules _).1 hrules, hok', Bool.false_eq_true, ite_false] at hrel
+          obtain ⟨-, j, hj, hjr⟩ := hrel
+          refine ⟨.rejected (v.commands.get i).name (variantOf T _ j), by simp [hj, answerClasses], ?_⟩
+          simp only [GenTarget.covers, Bool.and_eq_true, beq_iff_eq]
+          exact ⟨by simpa using hcn, (variantT_sound _ _ j hjr hv).symm⟩
+        · exact absurd hh hff
+      | _ => exact absurd hh hff
+    | _ => simp only [StepOut.Rel] at hrel
+  | query i sc si =>
+    obtain ⟨caller, input, rfl, -, -⟩ := decode_query hx
+    cases out with
+    | query o =>
+      obtain ⟨-, hq⟩ := hrel
+      cases g with
+      | answered c =>
+        simp only [kindHitT] at hh
+        split at hh
+        · rename_i hcn
+          obtain ⟨hcall, hrules⟩ := (holds_andT _ _).1 hh
+          have hnone : o.invalid M = none := by
+            simp only [QueryOut.invalid, show (o.callerOk.denote M).toBool = true from hcall, ite_true,
+              (holds_allT_rules _).1 hrules]
+          cases hro : r.outcome with
+          | answered w =>
+            exact ⟨.answered (v.queries.get i).name, by simp [answerClasses, hro],
+              by simpa [GenTarget.covers] using hcn⟩
+          | invalid ns => rw [hro] at hq; simp only [QueryOut.Rel] at hq; rw [hnone] at hq; cases hq
+          | _ => rw [hro] at hq; exact hq.elim
+        · exact absurd hh hff
+      | invalid c rr =>
+        simp only [kindHitT] at hh
+        split at hh
+        · rename_i hcn
+          obtain ⟨r', hr', hcov⟩ := invalidT_sound hh
+          have hsome : o.invalid M = some (if (o.callerOk.denote M).toBool then brokenIn M o.rules else ["callers"]) := by
+            simp only [QueryOut.invalid]
+            split
+            · rename_i hcall
+              simp only [hcall, ite_true] at hr' ⊢
+              split
+              · rename_i hb; rw [hb] at hr'; cases hr'
+              · rename_i m ms hb; rw [hb]
+            · rename_i hcall; simp
+          cases hro : r.outcome with
+          | invalid ns =>
+            rw [hro] at hq
+            simp only [QueryOut.Rel, hsome, Option.some.injEq] at hq
+            subst hq
+            refine ⟨.invalid (v.queries.get i).name r', ?_,
+              by cases rr <;> simpa [GenTarget.covers, beq_iff_eq.1 hcn] using hcov⟩
+            simp only [answerClasses, hro, List.mem_map]
+            exact ⟨r', hr', rfl⟩
+          | answered w =>
+            obtain ⟨t, y⟩ := w
+            rw [hro] at hq; obtain ⟨hq, -⟩ := hq; rw [hsome] at hq; cases hq
+          | _ => rw [hro] at hq; exact hq.elim
+        · exact absurd hh hff
+      | _ => exact absurd hh hff
+    | _ => simp only [StepOut.Rel] at hrel
+  | answer k j to w => cases out <;> exact absurd hh hff
+  | unmatched t to w => cases out <;> exact absurd hh hff
+  | event i w => cases out <;> exact absurd hh hff
+  | clock w => cases out <;> exact absurd hh hff
+
 end
 
 section
@@ -331,9 +547,52 @@ theorem generate_unreached (chk : Checked P E T v) (senv : StepEnv L (shapes v))
   obtain ⟨M, hM, hrun, hiff⟩ := runs_covered chk senv hL hu hnr (by simp [hlen]) hfits
   obtain ⟨a, ha, hna⟩ := hun.noModel M hM
   refine hna (hiff.2 ?_ a ha)
-  obtain ⟨st, hlast, ⟨k, hk, hpk, hdec, hrel⟩, hno, -⟩ := unrollRun_last x ys _ _ hrun
+  obtain ⟨st, hlast, ⟨k, hk, hdec, hrel⟩, hno, -⟩ := unrollRun_last x ys _ _ hrun
   simp only [genGoal, hlast]
-  exact (holds_anyT _).2 ⟨_, List.mem_map_of_mem hk, (holds_andT _ _).2 ⟨hpk, kindHitT_holds hdec hrel hno hhit⟩⟩
+  exact (holds_takenT _ _).2 ⟨k, hk, kindHitT_holds hdec hrel hno hhit⟩
+
+theorem unrollRun_decode {M : Model} {hc : v.caller.isData = true} {n : Nat} :
+    (s : State v) → (sts : List (UnrollStep v n)) → (xs : List (Input v)) → UnrollRun L T M hc s sts xs →
+    sts.mapM (·.decode M L hc) = some xs
+  | _, [], [], _ => rfl
+  | _, [], _ :: _, h => h.elim
+  | _, _ :: _, [], h => h.elim
+  | s, st :: sts, x :: xs, ⟨hd, _, h⟩ => by
+    simp only [List.mapM_cons, hd, unrollRun_decode _ sts xs h]; rfl
+
+/-- Goal soundness: in every model of generate's script for the target at depth `d` whose variables hold values of
+their sorts, the steps decode to inputs whose run from the initial state answers at its last step in a class the
+target aims at. So a found model always replays to its target; generate's check of that is never the one that fails. -/
+theorem generate_sound (chk : Checked P E T v) (senv : StepEnv L (shapes v)) {M : Model}
+    {rules : RuleNames} {g : GenTarget} {d : Nat} {U : Unrolled v senv.nT}
+    (hu : unroll L T P v senv d (genGoal L T rules g) = .ok U)
+    (hM : ∀ n (h : n < U.ask.tys.length), VarSorted L U.ask.tys[n] (M.vars n)) (hA : ∀ a ∈ U.ask.asserts, Holds M a) :
+    ∃ ys x, U.steps.mapM (·.decode M L chk.callerData) = some (ys ++ [x]) ∧
+      Hits T v rules g x (step T v (run T v (Step.State.init v) ys).1 x) := by
+  obtain ⟨xs, hrun⟩ := unroll_decode chk senv hu hM hA
+  have hgoal : Holds M (genGoal L T rules g U.steps) := by
+    simp only [unroll] at hu
+    obtain ⟨S0, -, hu⟩ := bind_ok.1 hu
+    obtain ⟨dts, -, hu⟩ := bind_ok.1 hu
+    obtain ⟨vars, -, hu⟩ := bind_ok.1 hu
+    cases pure_ok.1 hu
+    exact hA _ (List.mem_append_right _ (List.mem_singleton_self _))
+  have hdec := unrollRun_decode _ _ _ hrun
+  cases hx : xs.getLast? with
+  | none =>
+    obtain rfl := List.getLast?_eq_none_iff.1 hx
+    cases hs : U.steps with
+    | nil => simp [genGoal, hs, ff, Holds, Term.denote, Val.toBool] at hgoal
+    | cons st sts => rw [hs] at hrun; exact hrun.elim
+  | some x =>
+    obtain ⟨ys, rfl⟩ := List.getLast?_eq_some_iff.1 hx
+    refine ⟨ys, x, hdec, ?_⟩
+    obtain ⟨st, hlast, ⟨k, hk, hkd, hrel⟩, hno, -⟩ := unrollRun_last x ys _ _ hrun
+    simp only [genGoal, hlast] at hgoal
+    obtain ⟨k', hk', hh⟩ := (holds_takenT _ _).1 hgoal
+    rw [hk] at hk'
+    cases hk'
+    exact kindHitT_sound hkd hrel hno hh
 
 end
 

@@ -50,23 +50,25 @@ def lastHits (xs : List (Input v)) : Bool :=
   | none => false
 
 /-- The trace generate writes for the inputs: their trace, where verify replays it, read back from its text, as passed
-and its last step shows the target. -/
-def genTrace (xs : List (Input v)) : Option (List Wire) :=
+and its last step shows the target; else what failed. -/
+def genTrace (xs : List (Input v)) : Except String (List Wire) :=
   match traceOf T v xs with
-  | .error _ => none
+  | .error (.fault k _) => .error s!"faults at step {k} when written as a trace"
+  | .error (.badStep k m) => .error s!"does not write as a trace at step {k}: {m}"
   | .ok ws => match reread ws with
-    | none => none
+    | none => .error "does not read back from its trace"
     | some lines => match replay T v lines with
-      | .passed => if lastHits T v rules g xs then some ws else none
-      | _ => none
+      | .passed => if lastHits T v rules g xs then .ok ws else .error "misses the target"
+      | _ => .error "does not replay as passed"
 
 /-- T6: a written trace reaches its target. Read back from its text, verify replays it as passed, and the last step of
 its run from the initial state answers in a class the target aims at. -/
-theorem generate_reaches {xs : List (Input v)} {ws : List Wire} (h : genTrace T v rules g xs = some ws) :
+theorem generate_reaches {xs : List (Input v)} {ws : List Wire} (h : genTrace T v rules g xs = .ok ws) :
     ∃ lines, reread ws = some lines ∧ replay T v lines = .passed ∧
       ∃ ys x, xs = ys ++ [x] ∧ Hits T v rules g x (step T v (run T v (State.init v) ys).1 x) := by
   unfold genTrace at h
   split at h
+  · cases h
   · cases h
   · rename_i ws' hws
     split at h
@@ -144,9 +146,11 @@ def searchTarget (k : Nat) (g : GenTarget) : IO (Except String GenResult) := do
         -- `unroll_decode`: every model's steps decode to a run that faults nowhere.
         let some xs := U.steps.mapM (·.decode M L hc)
           | return .error s!"service {v.name}, {g.text}: a model of depth {d} does not decode"
-        let some ws := genTrace c.T v rules g xs
-          | return .error s!"service {v.name}, {g.text}: a model of depth {d} does not replay to the target"
-        return .ok (.reached d ws)
+        -- `generate_sound`: the decoded run's last step shows the target, so "misses the target" is unreachable.
+        -- Writing, reading back and replaying the trace are checked here, not proved.
+        match genTrace c.T v rules g xs with
+        | .ok ws => return .ok (.reached d ws)
+        | .error why => return .error s!"service {v.name}, {g.text}: a model of depth {d} {why}"
   match refused with
   | some (inp, r) => match refusalLine c.T r with
     | some (kind, fields) => return .ok (.undecided kind (("step", Json.str inp.text) :: fields))
