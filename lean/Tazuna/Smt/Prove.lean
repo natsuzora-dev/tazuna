@@ -231,12 +231,24 @@ def SymInput.tys : SymInput v shs n → List Ty
   | .event i _ => [(v.subscribes.get i).event]
   | .clock _ => [.int]
 
+/-- The terms of an input, in the order of `SymInput.tys`. -/
+def SymInput.terms : SymInput v shs n → List Term
+  | .command _ caller input | .query _ caller input => [caller, input]
+  | .answer _ _ to value | .unmatched _ to value => [to, value]
+  | .event _ value => [value]
+  | .clock time => [time]
+
+/-- The pending shapes an answer can be to: those whose answers are data. An answer is an input, whose values are
+data, so an answer to another shape is never one a run takes. -/
+def answerShapes (shs : List (PendingShape v.event)) : List (Fin shs.length) :=
+  (List.finRange shs.length).filter fun k => (answerTy shs[k].output shs[k].rejection).isData
+
 /-- The inputs whose step can break a rule, with their terms the constants from `v<b>` on: each command, an answer
-at each pending shape and slot, each subscription, a clock line. A query or an answer that matches no request leaves
-the state as it is. -/
+at each pending shape an answer can be to and each slot, each subscription, a clock line. A query or an answer that
+matches no request leaves the state as it is. -/
 def stepInputs (v : ServiceV) (shs : List (PendingShape v.event)) (n b : Nat) : List (SymInput v shs n) :=
   (List.finRange v.commands.length).map (fun i => .command i (.var b) (.var (b + 1))) ++
-    (List.finRange shs.length).flatMap (fun k => (List.finRange n).map fun j => .answer k j (.var b) (.var (b + 1))) ++
+    (answerShapes shs).flatMap (fun k => (List.finRange n).map fun j => .answer k j (.var b) (.var (b + 1))) ++
     (List.finRange v.subscribes.length).map (fun i => .event i (.var b)) ++ [.clock (.var b)]
 
 end

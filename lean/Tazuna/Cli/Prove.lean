@@ -238,6 +238,7 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v)) (q : Question v (sha
             | _, .fault (.invalidEffect _ rs) => rs
             | _, _ => []
           .ok (.violated v.name name g (fields ++ [("violated", Json.arr (violated.map Json.str).toArray)]))
+      -- Unreachable while the solver answers as SMT-LIB says (`questions_decode`).
       | _, _ => .error s!"a model of {name} does not decode"
     else .error "the caller type is no data"
 
@@ -274,6 +275,7 @@ def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a
           .ok (.violated v.name step g (shown.run' {}))
         else .error s!"a model of {step} sets a timer at {d}, not before {now}"
       | none => .error s!"a model of {step} sets no timer"
+    -- Unreachable while the solver answers as SMT-LIB says (`timer_decode`).
     | none => .error s!"a model of {step} does not decode"
 
 /-- An own kind as a line names it: its command or query, and where its `on_answer` is written when another own kind
@@ -335,6 +337,7 @@ def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : St
           | .keptDiffer =>
             .ok (.undecided (.undecided .limit) v.name step (some g) (shown [("limit", Json.str (Limit.keptFunctions.text c.T))]))
           | _ => .ok (.undecided (.undecided .upToRenaming) v.name step (some g) (shown []))
+    -- Unreachable while the solver answers as SMT-LIB says (`pair_decode`).
     | _, _, _ => .error s!"a model of {step} does not decode"
 
 /-- The line of a refused encoding of the step's questions about `g` (none: all of the step's): undecided where the

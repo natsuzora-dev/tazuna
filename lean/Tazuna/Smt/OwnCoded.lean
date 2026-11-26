@@ -68,7 +68,7 @@ theorem queued_at {P : List AnySite} {E : List AnyEffectSite} (chk : Checked P E
   obtain ⟨M, hM, hS, hx1, hx2⟩ := pair_model hkeys hW hx hx
   obtain ⟨p, hp, ht1, ht2⟩ := pair_kinds senv hx1 hx2
   obtain ⟨bq, tq, hq, -, hor⟩ := hcf p hp
-  obtain ⟨o, ho, hb, -⟩ := pair_unfold chk hL senv hq hM hS hinv.below hsupp hx1 hx2 ht1 ht2
+  obtain ⟨o, ho, hb, -⟩ := pair_unfold chk hL senv hq hM hS hinv.below hsupp hx1 hx2 ht1 ht2 hreach hreach
   have hR := decode_state hS
   have hfit : Holds M o.codes ∧ ownFits L.count T a0.state x := hor.elim
     (fun h => ⟨(hb h).1, ((pair_fits chk senv hR hinv hqk hx1 hx2 hreach hreach ht1 ht2 ho (hb h).1).1

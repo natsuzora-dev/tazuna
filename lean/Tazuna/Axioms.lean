@@ -23,6 +23,7 @@ import Tazuna.Smt.PairLine
 import Tazuna.Smt.Lines
 import Tazuna.Smt.Runs
 import Tazuna.Smt.Sorts
+import Tazuna.Smt.DecodeTotal
 import Tazuna.Semantics.Fire
 import Tazuna.Smt.Step
 import Tazuna.Smt.Bounds
@@ -128,7 +129,11 @@ elab "#check_tazuna_reach" : command => do
     ``Tazuna.Smt.pair_violates,
     -- No unsat answer is free and none is out of reach: `Unsat` asks that the sorts hold values, and the sorts of every
     -- question an encoder builds in a layout whose datatypes have sorts (as `Layout.ofParts`'s, `sorted_ofParts`) do.
-    ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.timer_sorts]
+    ``Tazuna.Smt.questions_sorts, ``Tazuna.Smt.pair_sorts, ``Tazuna.Smt.timer_sorts,
+    -- Every model a question family's report reads decodes: a model of the family's context whose variables hold values
+    -- of their sorts decodes to the state, input, effects or instance context the report shows, so prove's "does not
+    -- decode" lines are unreachable.
+    ``Tazuna.Smt.questions_decode, ``Tazuna.Smt.pair_decode, ``Tazuna.Smt.timer_decode]
   let mut used : NameSet := {}
   let mut usedByOther : NameSet := {}
   let mut todo := roots

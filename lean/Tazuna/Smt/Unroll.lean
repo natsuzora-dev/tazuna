@@ -20,13 +20,13 @@ variable {v : ServiceV} {shs : List (PendingShape v.event)} {n : Nat}
 
 /-- The input kinds a step of an unrolled run can take, each with how many constants its terms take and its terms
 from a given constant on: each command, each query (which writes nothing, but answers), an answer at each pending
-shape and slot where requests can wait (`answers`), each subscription, a clock line. An answer that matches no request
+shape an answer can be to and slot where requests can wait (`answers`), each subscription, a clock line. An answer that matches no request
 always faults, so it is no kind. -/
 def unrollKinds (v : ServiceV) (shs : List (PendingShape v.event)) (n : Nat) (answers : Bool) :
     List (Nat × (Nat → SymInput v shs n)) :=
   (List.finRange v.commands.length).map (fun i => (2, fun b => .command i (.var b) (.var (b + 1)))) ++
     (List.finRange v.queries.length).map (fun i => (2, fun b => .query i (.var b) (.var (b + 1)))) ++
-    (if answers then (List.finRange shs.length).flatMap fun k => (List.finRange n).map fun j =>
+    (if answers then (answerShapes shs).flatMap fun k => (List.finRange n).map fun j =>
       (2, fun b => .answer k j (.var b) (.var (b + 1))) else []) ++
     (List.finRange v.subscribes.length).map (fun i => (1, fun b => .event i (.var b))) ++ [(1, fun b => .clock (.var b))]
 

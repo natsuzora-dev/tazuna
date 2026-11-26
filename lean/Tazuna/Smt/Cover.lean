@@ -279,7 +279,7 @@ theorem covered {E : List AnyEffectSite} (chk : Checked P E T v) (senv : StepEnv
           rw [hout, hrej] at he
           subst he
           refine .inl ⟨.answer k j (.var (stateWidth v)) (.var (stateWidth v + 1)),
-            by simp [stepInputs], hc, M,
+            by simp only [stepInputs, answerShapes]; simpa using htd, hc, M,
             forall2_sorted_vars (forall2_append hsorted ⟨⟨_, rfl⟩, sorted_of_embed hw, trivial⟩), hS, ?_,
             fun t ht => by rw [encodeStep_answer_case ht]; exact hhit⟩
           simp [SymInput.decode, decodeAnswer, Term.denote, h0, h1, natOf]
