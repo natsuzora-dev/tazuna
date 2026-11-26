@@ -2,9 +2,12 @@ import Tazuna.Semantics.PairCommute
 import Tazuna.Semantics.PendingInv
 
 /-! Valid inputs keep every name of a state below its counter, so every cascade a run starts is one T5 speaks about
-(`Supp`). An input is valid when the ids it carries are ones the service made before (counters below its own) or
-names from outside (`Input.Valid`): a trace and a scenario can write no others, since a trace names a fresh id only
-after the service made it and an unknown name is an outside id. A state keeps its names below its counter
+(`Supp`). What a line's `assumes` states (`Assumption.text`) is that ids the service made are used only after they
+appeared on an out line, and outside ids are unrestricted: guarding against guessed ids is the implementation's job.
+`Input.Valid`, which the proofs and the searches read, is weaker: an id the service made counts once its counter is
+below the state's, shown or not. So every verdict over all runs on valid inputs holds of the runs the stated sentence
+allows; a run a search finds may still use a made id no out line showed, until `Input.Valid` asks for shown ids (the
+trace writer names such an id as verify reads an outside id). A state keeps its names below its counter
 (`StateSupp`): its records and instances relate to themselves under each renaming that keeps those counters, and so
 does each pending request on its own, as `Supp` reads a step in progress (`Acc.Self`). -/
 
@@ -56,8 +59,8 @@ theorem StateSupp.sub {s s' : State v} (h : StateSupp s) (hr : s'.records = s.re
   obtain ⟨h1, h2, h3⟩ := h P (hP.mono hf)
   exact ⟨hr ▸ h1, hm ▸ h2, fun p hp' => h3 p (hp p hp')⟩
 
-/-- Every id an input carries is one the service made before (a counter below its own) or a name from outside. A
-query writes nothing, so it asks nothing. -/
+/-- Every id an input carries is one the service made before (a counter below its own), shown on an out line or not, or
+a name from outside. A query writes nothing, so it asks nothing. -/
 def _root_.Tazuna.Ir.Input.Valid (s : State v) : Input v → Prop
   | .command i caller input => ∀ P : PBij, P.Fixes s.fresh →
       Ty.rel0 P v.caller caller caller ∧ Ty.rel0 P (v.commands.get i).input input input
@@ -375,7 +378,8 @@ abbrev NoFaultRun : State v → List (Input v) → Prop := EachStep T fun s x =>
 /-- An assumption a proof rests on beyond the spec's invariants: what it says of a run, and the words a line's
 `assumes` names it by, kept together so the two cannot part. -/
 inductive Assumption where
-  /-- Every input of a run carries only ids the service made or names from outside (`ValidRun`). -/
+  /-- Ids the service made are used only after they appeared on an out line; outside ids are unrestricted. It implies
+  `ValidRun`, the weaker condition the proofs read. -/
   | validInputs
   /-- No clock line of a run moves time past a timer that waits (`TimelyRun`). -/
   | timelyClock
@@ -383,7 +387,7 @@ inductive Assumption where
   | noFault
 
 def Assumption.text : Assumption → String
-  | .validInputs => "inputs carry only ids the service made or names from outside"
+  | .validInputs => "ids the service made are used only after they appeared on an out line"
   | .timelyClock => "no clock line moves time past a timer that waits"
   | .noFault => "no step of the run faults"
 
