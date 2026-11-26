@@ -92,8 +92,11 @@ inductive Answer where
   /-- Satisfiable, with the value of each variable asked for. -/
   | sat (values : List (Nat × Val))
   | unsat
-  /-- No verdict: the solver said unknown, ran out of time or resources, or printed something else. -/
+  /-- No verdict: the solver said unknown, which its resource limit decides the same way on every machine, or printed
+  something else. -/
   | unknown (why : String)
+  /-- No verdict: the solver ran past the wall-clock safety net, which depends on the machine. -/
+  | timeout (ms : Nat)
 deriving Repr
 
 /-- Reads the solver's output. -/

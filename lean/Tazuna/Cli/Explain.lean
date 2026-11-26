@@ -175,6 +175,7 @@ def GenerateKind.explanation : GenerateKind → Explanation
 
 def UndecidedKind.explanation : UndecidedKind → Explanation
   | .unknown => ⟨docOf% UndecidedKind.unknown, [], questionFields ++ [depth, why]⟩
+  | .timeout => ⟨docOf% UndecidedKind.timeout, [], questionFields ++ [depth, why]⟩
   | .limit => ⟨docOf% UndecidedKind.limit, [`Tazuna.Trace.replay_iff],
     questionFields ++ [trace, line, Field.limit] ++ pairFields⟩
   | .unencodableString => ⟨docOf% UndecidedKind.unencodableString, [], questionFields ++ [string]⟩

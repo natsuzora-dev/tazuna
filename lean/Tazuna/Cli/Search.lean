@@ -15,6 +15,10 @@ namespace Tazuna.Cli
 open Lean (Json)
 open Tazuna.Ir Tazuna.Ir.Step Tazuna.Smt Tazuna.Trace
 
+/-- The `why` of a question the wall-clock safety net stopped. -/
+def timeoutWhy (ms : Nat) : String :=
+  s!"the solver ran past {ms} ms of wall clock before its resource limit, which decides every other answer"
+
 /-- A service of a checked spec with what its checks give the commands: its membership, so `c.checked` applies, and its
 layout's step environment, which `stepEnv_ofService` proves is found. -/
 structure CheckedService (c : CheckedSpec) where
@@ -308,6 +312,8 @@ def searchDepths {α : Type} (what : String) (ds : Array (Task (Option (Depth s.
     match ← solver.runKeyed cache q with
     | .unsat => pure ()
     | .unknown why => return .ok (.undecided (.undecided .unknown) [("depth", Lean.toJson d), ("why", Json.str why)])
+    | .timeout ms =>
+      return .ok (.undecided (.undecided .timeout) [("depth", Lean.toJson d), ("why", Json.str (timeoutWhy ms))])
     | .sat vs =>
       -- `unroll_decode`: every model's steps decode to a run that faults nowhere.
       let some xs := U.steps.mapM (·.decode (modelOf vs) s.L s.callerData)

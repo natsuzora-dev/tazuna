@@ -46,8 +46,12 @@ deriving DecidableEq
 
 /-- Why a question or a trace has no verdict. -/
 inductive Tazuna.UndecidedKind : Type
-  /-- The solver answered unknown or ran out of time or resources. -/
+  /-- The solver answered unknown, or ran out of its resource limit, which stops it at the same point on every
+  machine. -/
   | unknown
+  /-- The solver ran past the wall-clock safety net before its resource limit stopped it: a solver fault, and the one
+  line whose verdict may depend on the machine. -/
+  | timeout
   /-- The spec uses what the encoding has no terms for, or a pair's counterexample needs a search for a renaming
   larger than prove runs or a comparison of the functions its two orders keep. -/
   | limit
@@ -190,12 +194,13 @@ def GenerateKind.name : GenerateKind → String
   | .reached => "reached"
   | .unreached => "unreached"
 
-def UndecidedKind.all : List UndecidedKind := [.unknown, .limit, .unencodableString, .upToRenaming]
+def UndecidedKind.all : List UndecidedKind := [.unknown, .timeout, .limit, .unencodableString, .upToRenaming]
 
 theorem UndecidedKind.mem_all (k : UndecidedKind) : k ∈ UndecidedKind.all := by cases k <;> simp [UndecidedKind.all]
 
 def UndecidedKind.name : UndecidedKind → String
   | .unknown => "unknown"
+  | .timeout => "timeout"
   | .limit => "limit"
   | .unencodableString => "unencodableString"
   | .upToRenaming => "upToRenaming"
@@ -237,11 +242,13 @@ theorem mem_all (k : Kind) : k ∈ all := by
   | _ => simp [all]
 
 /-- Whether test/e2e has a case of the kind. A Restricted kind has its unit test in gleam/test/convert_test.gleam
-instead, one per kind of the launcher's generated table; a converter bug has no input that reaches it. -/
+instead, one per kind of the launcher's generated table; a converter bug has no input that reaches it, and a solver
+past the wall clock none that reaches it on every machine. -/
 def e2e : Kind → Bool
-  | restricted _ | internal .convert | internal .engine => false
+  | restricted _ | internal .convert | internal .engine | undecided .timeout => false
   | internal .invalidIr | usage _ | illegal _ | fault _ | test _ | verifyPassed | verifyDiffers | traceInvalid | prove _
-  | generate _ | undecided _ | explain => true
+  | generate _ | undecided .unknown | undecided .limit | undecided .unencodableString | undecided .upToRenaming
+  | explain => true
 
 /-- The outcome a line of the kind gives its command; the command exits with its worst line's (`Exit.max`). -/
 def exit : Kind → Exit

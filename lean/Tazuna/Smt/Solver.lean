@@ -10,13 +10,15 @@ namespace Tazuna.Smt
 
 structure Solver where
   path : String := "z3"
-  /-- z3's deterministic resource limit, so the same script gets the same verdict on any machine. -/
+  /-- z3's deterministic resource limit, so the same script gets the same verdict on any machine. About 6 s of z3 on a
+  laptop; the largest question of the 3-service benchmark takes a third of it. -/
   rlimit : Nat := 50000000
   /-- z3's random seeds, fixed so the same script gets the same answer, model included, on every run (Boogie sets
   the same two options). -/
   seed : Nat := 0
-  /-- Wall-clock limit: the process is killed after this many ms. -/
-  timeoutMs : Nat := 30000
+  /-- The wall-clock safety net: the process is killed after this many ms, a hundred times what the resource limit
+  takes on a laptop, so the resource limit stops z3 first on any machine that runs it. -/
+  timeoutMs : Nat := 600000
 
 /-- Beyond depth 5 z3 prints a value with `let` aliases, which values in SMT-LIB's model syntax do not have; the
 depth limit is raised so every value prints as a term. -/
@@ -26,13 +28,13 @@ def Solver.header (s : Solver) : List String :=
 
 /-- Runs one script's text: what the solver printed, or why it printed nothing to read. z3 reads a file about twice as
 fast as the same text on stdin with `-in`, so the text goes to a temporary file. -/
-def Solver.runText (s : Solver) (text : String) : IO (Except String String) :=
+def Solver.runText (s : Solver) (text : String) : IO (Except Answer String) :=
   IO.FS.withTempFile fun h path => do
     h.putStr text
     h.flush
     runFile path
 where
-  runFile (path : System.FilePath) : IO (Except String String) := do
+  runFile (path : System.FilePath) : IO (Except Answer String) := do
     let child ← IO.Process.spawn
       { cmd := s.path, args := #["-smt2", path.toString], stdin := .null, stdout := .piped, stderr := .null }
     let out ← IO.asTask (prio := .dedicated) child.stdout.readToEnd
@@ -42,11 +44,11 @@ where
     if !(← IO.hasFinished out) then
       child.kill
       let _ ← child.wait
-      return .error s!"the solver ran past {s.timeoutMs} ms"
+      return .error (.timeout s.timeoutMs)
     let _ ← child.wait
     match out.get with
     | .ok text => return .ok text
-    | .error e => return .error s!"the solver's output did not read: {e}"
+    | .error e => return .error (.unknown s!"the solver's output did not read: {e}")
 
 /-- What the solver says its version is: the cache keeps each version's answers apart. -/
 def Solver.version (s : Solver) : IO String := do
@@ -69,7 +71,7 @@ def Solver.run (s : Solver) (script : Script) : IO Answer := do
   let some text := script.text s.header | return .unknown noSort
   match ← s.runText text with
   | .ok out => return Answer.parse out
-  | .error why => return .unknown why
+  | .error a => return a
 
 /-- Strings joined so the parts can be read back: each prefixed by its length. -/
 def frame (parts : List String) : String := String.join (parts.map fun p => s!"{p.length}:{p}")
@@ -89,14 +91,13 @@ def Script.keyed (s : Script) (header : List String) : Option Keyed :=
 
 /-- Runs the keyed script, or reads its answer from the cache directory `dir` under its key, as ccache and Bazel key
 results by a digest of their inputs, so the cache keeps no script. The text holds the solver's header (resource limit,
-seeds), so the same text gets the same answer. A sat or unsat answer is kept; an unknown answer, which a wall-clock
-limit may give, is not. -/
+seeds), so the same text gets the same answer. Only a sat or unsat answer is kept. -/
 def Solver.runKeyed (s : Solver) (dir : System.FilePath) (q : Keyed) : IO Answer := do
   let answerFile := dir / (q.key ++ ".answer")
   if ← answerFile.pathExists then
     return Answer.parse (← IO.FS.readFile answerFile)
   match ← s.runText (q.text ()) with
-  | .error why => return .unknown why
+  | .error a => return a
   | .ok out =>
     let a := Answer.parse out
     match a with

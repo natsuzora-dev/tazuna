@@ -139,6 +139,7 @@ def answerReport (L : Layout) (senv : StepEnv L (shapes v)) (hc : v.caller.isDat
   match a with
   | .unsat => .ok (.unsat v.name name q.target)
   | .unknown why => .ok (.undecided (.undecided .unknown) v.name name q.target [("why", Json.str why)])
+  | .timeout ms => .ok (.undecided (.undecided .timeout) v.name name q.target [("why", Json.str (timeoutWhy ms))])
   | .sat vs =>
     let M := modelOf vs
     match (SymState.vars (v := v) 0).decode M L c.T (shapes v), q.input.decode M L hc with
@@ -174,6 +175,7 @@ def boundReport (service step : String) : Smt.Answer → Except String Report
   | .unsat => .ok (.unsat service step none)
   | .sat _ => .ok (.boundReached service step)
   | .unknown why => .ok (.undecided (.undecided .unknown) service step none [("why", Json.str why)])
+  | .timeout ms => .ok (.undecided (.undecided .timeout) service step none [("why", Json.str (timeoutWhy ms))])
 
 /-- The report of a timer machine's target question (`timerQuestions`): a model is a context where `after` sets a timer
 before the time it sets it at, recomputed in Lean from the model's values. -/
@@ -183,6 +185,7 @@ def timerReport (L : Layout) (m : MachineV v.records v.event) (step : String) (a
   match a with
   | .unsat => .ok (.unsat v.name step (some g))
   | .unknown why => .ok (.undecided (.undecided .unknown) v.name step (some g) [("why", Json.str why)])
+  | .timeout ms => .ok (.undecided (.undecided .timeout) v.name step (some g) [("why", Json.str (timeoutWhy ms))])
   | .sat vs =>
     let M := modelOf vs
     match TimerVals.decode L m M with
@@ -239,6 +242,7 @@ def pairReport (L : Layout) (k1 k2 : OwnPlace L v.event) (g : Target) (step : St
   match a with
   | .unsat => .ok (.unsat v.name step (some g))
   | .unknown why => .ok (.undecided (.undecided .unknown) v.name step (some g) [("why", Json.str why)])
+  | .timeout ms => .ok (.undecided (.undecided .timeout) v.name step (some g) [("why", Json.str (timeoutWhy ms))])
   | .sat vs =>
     let M := modelOf vs
     match (SymState.vars (v := v) 0).decode M L c.T (shapes v), decodeOwn L c.P v k1 (M.vars (pairVar v)),

@@ -4,7 +4,9 @@
 # --jobs 4, must print the same bytes and exit with the same code. The one where everything is proved, proved with
 # --only, must print some of the full run's lines, each the same apart from `assumes`: an invariant --only leaves out
 # is not proved in that run, so it is assumed. generate, run the same ways, must print the same lines and write the
-# same files, and with --only the files it writes must be the full run's.
+# same files, and with --only the files it writes must be the full run's. A question that exhausts z3's resource limit
+# is undecided the same way on a loaded machine: the e2e spec whose question does so, proved while the --jobs 4 run
+# loads the machine, must print the e2e case's lines.
 # Usage: test/determinism/check <engine> <the Gleam package's build/dev directory>
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -24,7 +26,15 @@ prove() {
   echo "$code" >"$work/$name/exit"
 }
 prove one Prove.violated --jobs 1
-prove four Prove.violated --jobs 4
+prove four Prove.violated --jobs 4 &
+loader=$!
+prove loaded Undecided.unknown --jobs 4
+wait "$loader"
+if ! cmp -s "$work/loaded/out.jsonl" "$here/../e2e/Undecided.unknown/stdout"; then
+  echo "determinism: a question past the solver's resource limit printed other lines on a loaded machine:"
+  diff "$here/../e2e/Undecided.unknown/stdout" "$work/loaded/out.jsonl" || true
+  exit 1
+fi
 if ! cmp -s "$work/one/out.jsonl" "$work/four/out.jsonl" || ! cmp -s "$work/one/exit" "$work/four/exit"; then
   echo "determinism: prove printed other lines or exited otherwise with --jobs 1 than with --jobs 4:"
   diff "$work/one/out.jsonl" "$work/four/out.jsonl" || true
