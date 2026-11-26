@@ -9,7 +9,8 @@ namespace Tazuna.Ir
 /-- The structure rules. -/
 inductive Illegal where
   /-- Two services or externals share a name, or two commands or queries of one service, or two entries of one
-  external. -/
+  external, or a service subscribes to one source's event twice: an in line names what it asks or reports by these
+  names, so each must pick one. -/
   | wireName
   /-- A service declares an external's command or query, or an external a service's; or two owners declare the same
   handle (same kind, name and types). -/
@@ -411,8 +412,10 @@ def SpecV.illegal (T : List TypeDecl) (s : SpecV) (handles : List HandleSite) (c
     s.externals.flatMap fun x => x.declares.filterMap fun | .source n t => some (n, t) | _ => none
   let perService := s.services.flatMap fun v =>
     let requests := v.commands.map (·.name) ++ v.queries.map (·.name)
-    let wireNames := (duplicates requests ++ duplicates (v.sources.map (·.1))).map fun n =>
-      (Illegal.wireName, s!"{v.name}.{n} names more than one request or source")
+    let wireNames := (duplicates requests ++ duplicates (v.sources.map (·.1))).map (fun n =>
+      (Illegal.wireName, s!"{v.name}.{n} names more than one request or source")) ++
+      if (v.subscribes.map fun sub => (sub.source, sub.name)).Nodup then [] else
+        [(Illegal.wireName, s!"{v.name} subscribes to one source's event more than once")]
     let owners := v.declares.filterMap fun
       | .externalCommand n .. | .externalQuery n .. =>
         some (Illegal.owner, s!"{v.name} declares {n}, an external's command or query")

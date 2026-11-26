@@ -2,6 +2,7 @@ import Tazuna.Smt.EncodeExact
 import Tazuna.Semantics.Reach
 import Tazuna.Semantics.Rules
 import Tazuna.Smt.Instances
+import Tazuna.Trace.Wire
 
 /-! What `check` establishes about a service and the sites `P` and effect sites `E` of its program, which every step
 theorem rests on: the sites are told apart by name, every function the service keeps is a record of one of them, machine keys
@@ -48,6 +49,22 @@ def _root_.Tazuna.Ir.ServiceV.stateTys (v : ServiceV) : Bool :=
   let ok (t : Ty) := t.embeddable && t.plainKeys
   ok v.records && v.machines.all (ok ·.table) && ok (pendingEntry (shapes v)) && ok v.event && ok v.caller
 
+/-- The types whose values cross the wire into or out of the service: its caller, its event, its commands' inputs and
+rejections, its queries' inputs and outputs, its subscriptions' events, and the inputs, outputs and rejections of what
+it may request. -/
+def _root_.Tazuna.Ir.ServiceV.wireTys (v : ServiceV) : List Ty :=
+  v.caller :: v.event :: v.commands.flatMap (fun c => [c.input, c.rejection]) ++
+    v.queries.flatMap (fun q => [q.input, q.output]) ++ v.subscribes.map (·.event) ++
+    v.declared.flatMap fun (_, d) => match d with
+      | .externalCommand _ i o j => [i, o, j]
+      | .externalQuery _ i o _ => [i, o]
+      | _ => []
+
+/-- Whether every wire type has a wire form for each of its values (`Ty.encodes`) and the canonical order with `==`
+as its equality, so a value written reads back as the same value. -/
+def _root_.Tazuna.Ir.ServiceV.wireOk (T : List TypeDecl) (v : ServiceV) : Bool :=
+  v.wireTys.all fun t => t.encodes T && t.ordered T && t.comparable
+
 structure Checked (P : List AnySite) (E : List AnyEffectSite) (T : List TypeDecl) (v : ServiceV) : Prop where
   sites : SitesUnique P
   reach : v.Reach P E
@@ -59,6 +76,12 @@ structure Checked (P : List AnySite) (E : List AnyEffectSite) (T : List TypeDecl
   /-- Not a rule of check's: the loader builds every type of a program's values from the type table, whose ADT 0 is
   Bool, and the program from ground instances; check validates the result, so a loader bug is reported, not assumed. -/
   stateTys : v.stateTys = true
+  /-- Not a rule of check's either: check's wireType and tagLabel rules leave only a loader bug to break it. -/
+  wire : v.wireOk T = true
+  /-- No two commands or queries share a name, so an in line's name picks one. -/
+  requests : (v.commands.map (·.name) ++ v.queries.map (·.name)).Nodup
+  /-- No two subscriptions name one source's event, so an event line picks one. -/
+  subscriptions : (v.subscribes.map fun sub => (sub.source, sub.name)).Nodup
 
 theorem Checked.machines {P : List AnySite} {E : List AnyEffectSite} {T : List TypeDecl} {v : ServiceV}
     (hk : Checked P E T v) : ∀ m ∈ v.machines, m.Reach P E := hk.reach.machines
@@ -165,11 +188,25 @@ theorem not_of_ite {α : Type} {c : Prop} [Decidable c] {x : α} (h : (if c then
   · cases h
   · assumption
 
+theorem nodup_of_duplicates {l : List String} (h : duplicates l = []) : l.Nodup := by
+  unfold duplicates at h
+  have hf : l.filter (fun n => l.count n > 1) = [] := by
+    cases e : l.filter (fun n => l.count n > 1) with
+    | nil => rfl
+    | cons a as => rw [e] at h; simp [List.eraseDups_cons] at h
+  rw [List.nodup_iff_count]
+  intro a
+  by_cases ha : a ∈ l
+  · have := List.filter_eq_nil_iff.1 hf a ha
+    simp only [decide_eq_true_eq, Nat.not_lt] at this
+    exact this
+  · rw [List.count_eq_zero_of_not_mem ha]; omega
+
 /-- A check with no finding establishes `Checked` of every service, at the sites of the program the spec came from:
 each fact's failure would be a finding. -/
 theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite} {s : SpecV} {handles : List HandleSite}
     {captures : List (SiteId × List Ty)} (hP : SitesUnique P) (hreach : ∀ v ∈ s.services, v.Reach P E)
-    (htys : ∀ v ∈ s.services, v.stateTys = true)
+    (htys : ∀ v ∈ s.services, v.stateTys = true) (hok : ∀ v ∈ s.services, v.wireOk T = true)
     (h : SpecV.illegal T s handles captures ServiceV.sentHandles = []) : ∀ v ∈ s.services, Checked P E T v := by
   intro v hv
   simp only [SpecV.illegal] at h
@@ -179,8 +216,9 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
   have hkeys := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL hs))))))
   have hstate := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs)))))))))
   have hwire := List.filterMap_eq_nil_iff.1 (nilR (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))
+  have hnames := nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL (nilL hs))))))))))
   refine ⟨hP, hreach v hv, fun m hm => ?_, fun q hq => ?_, ⟨?_, fun m hm => ?_⟩, ⟨?_, ?_, ?_, fun c hc => ?_⟩,
-    fun x hx => ?_, htys v hv⟩
+    fun x hx => ?_, htys v hv, hok v hv, ?_, ?_⟩
   · simpa using none_of_ite (hkeys m hm)
   · exact isFn_of_wire _ (none_of_ite (hwire (q.name ++ " output", q.output)
       (List.mem_append_left _ (List.mem_append_right _ (List.mem_flatMap.2 ⟨q, hq, by simp⟩)))))
@@ -203,6 +241,11 @@ theorem check_ok {T : List TypeDecl} {P : List AnySite} {E : List AnyEffectSite}
       cases hb : v.lists x
       · simp [hb] at hu
       · rfl
+  · exact nodup_of_duplicates (nilL (List.map_eq_nil_iff.1 (nilL hnames)))
+  · have h2 := nilR hnames
+    split at h2
+    · assumption
+    · cases h2
 
 /-- A check with no finding names every handle by a literal and finds every external one declared. -/
 theorem handles_ok {T : List TypeDecl} {s : SpecV} {handles : List HandleSite} {captures : List (SiteId × List Ty)}

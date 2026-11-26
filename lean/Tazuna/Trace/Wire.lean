@@ -139,6 +139,51 @@ end
 
 end
 
+end Tazuna.Trace
+
+namespace Tazuna.Ir
+
+section
+variable (T : List TypeDecl)
+
+-- A type index past the table has no variants, so no variant passes.
+set_option linter.tazuna.silentDefault false in
+mutual
+/-- Whether every value of the type has a wire form once its ids have names: no function, type variable or fresh-id
+source, Bool and Nil as the prelude declares them, and every variant of a custom type `writable` with a key for each
+field. -/
+def Ty.encodes : Ty → Bool
+  | .int | .str | .date | .id => true
+  | .list t | .bag t => Ty.encodes t
+  | .tuple ts => Ty.encodess ts
+  | .adt 0 _ vs => match vs with
+    | [[], []] => true
+    | _ => false
+  | .adt 1 _ vs => match vs with
+    | [[]] => true
+    | _ => false
+  | .adt (i + 2) _ vs => Ty.encodesAlts ((T[i + 2]?.map (·.variants)).getD []) 0 vs
+  | .table k v => Ty.encodes k && Ty.encodes v
+  | .fn .. | .param _ | .dsl .. => false
+def Ty.encodess : List Ty → Bool
+  | [] => true
+  | t :: ts => Ty.encodes t && Ty.encodess ts
+/-- The variants `vs`, which are the declaration's variants from index `k` on. -/
+def Ty.encodesAlts (decl : List Variant) (k : Nat) : List (List Ty) → Bool
+  | [] => true
+  | fs :: vs => (match decl[k]? with
+      | some var => Trace.writable decl k var && (Trace.fieldKeys var.fields).length == fs.length
+      | none => false) && Ty.encodess fs && Ty.encodesAlts decl (k + 1) vs
+end
+
+end
+
+end Tazuna.Ir
+
+namespace Tazuna.Trace
+
+open Tazuna.Ir
+
 section
 variable (T : List TypeDecl)
 

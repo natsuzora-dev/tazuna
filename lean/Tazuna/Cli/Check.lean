@@ -40,7 +40,13 @@ def loadSpec (root path : String) : IO (Except UInt32 Smt.CheckedSpec) := do
       match h : Ir.SpecV.illegal p.types (p.eval ()) p.defs.handles captures Ir.ServiceV.sentHandles with
       | [] =>
         if htys : (p.eval ()).services.all (·.stateTys) = true then
-          return .ok ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) (by simpa using htys) h, Smt.handles_ok h⟩
+          if hw : (p.eval ()).services.all (·.wireOk p.types) = true then
+            return .ok ⟨p, Smt.check_ok hP (Ir.Program.reach p () trivial) (by simpa using htys) (by simpa using hw) h,
+              Smt.handles_ok h⟩
+          else
+            IO.println (invalidIrLine ⟨none, none,
+              "a wire type has a type variable, a variant without a key per field, or no canonical order"⟩).compress
+            return .error 4
         else
           IO.println (invalidIrLine ⟨none, none,
             "a state, event or caller type has a type variable, an ADT 0 that is not Bool or a table with no plain key"⟩).compress
