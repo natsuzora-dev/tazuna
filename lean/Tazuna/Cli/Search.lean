@@ -193,9 +193,8 @@ def depthJobs (k : Nat) : IO (Array Job × Array (Task (Option (Depth s.v s.senv
 end
 
 /-- The trace of a run a search found (`unroll_decode`: a run that faults nowhere), which verify replays as passed;
-else an engine bug. No theorem yet says every such run writes and replays so: a value can have no wire form (a date
-past 9999, a field labelled `tag`, an outside id named like a fresh id the trace named before), and a trace names an
-input's fresh id the service never showed as verify reads an outside id. -/
+else an engine bug. No theorem yet says every such run writes and replays so: a date past 9999 has no wire form, and a
+trace names an input's fresh id the service never showed as verify reads an outside id. -/
 def foundTrace (T : List TypeDecl) (v : ServiceV) (xs : List (Input v)) : Except String TraceFile :=
   match traceOf T v xs with
   | .error (.fault k _) => .error s!"faults at step {k} when written as a trace, which unroll_decode rules out"

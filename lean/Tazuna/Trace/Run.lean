@@ -11,15 +11,21 @@ namespace Tazuna.Trace
 open Tazuna.Ir Tazuna.Ir.Step
 
 /-- The names a trace gives ids, one to one, each from its first appearance: an id from outside the service is called
-by its own name, and a fresh id by the next `idK` no other id is called. -/
+by its own name, and a fresh id by the next `idK` that no other id is called and that is not `avoid`ed. The writer of
+a run avoids every outside id's name its inputs hold before it starts (`traceOf`), so a fresh id's name never meets
+an outside id the run names later (`Names.bind_ok`). -/
 structure Names where
   ids : List (IdV × String) := []
   next : Nat := 1
   wires : List (Nat × String) := []
+  avoid : List String := []
 
 def Names.name (ns : Names) (x : IdV) : Option String := ns.ids.lookup x
 
 def Names.taken (ns : Names) (s : String) : Bool := ns.ids.any (·.2 == s)
+
+/-- Whether a fresh id may take the name: no id has it and it is not avoided. -/
+def Names.free (ns : Names) (s : String) : Bool := !ns.taken s && !ns.avoid.contains s
 
 /-- The name of the service's request with wire id `n`: `rK` for the `K`-th request the trace names. -/
 def Names.wire (ns : Names) (n : Nat) : Names × String :=
@@ -27,16 +33,159 @@ def Names.wire (ns : Names) (n : Nat) : Names × String :=
   | some w => (ns, w)
   | none => let w := s!"r{ns.wires.length + 1}"; ({ ns with wires := ns.wires ++ [(n, w)] }, w)
 
--- One of ids.length + 1 candidate names is free, so the default is never read.
+/-- A name longer than every name taken or avoided, so free. -/
+def Names.long (ns : Names) : String :=
+  String.ofList (List.replicate ((ns.ids.map (·.2.length) ++ ns.avoid.map (·.length)).sum + 1) '0')
+
+theorem le_sum_of_mem : {l : List Nat} → {a : Nat} → a ∈ l → a ≤ l.sum
+  | _ :: _, _, .head _ => by simp
+  | _ :: _, _, .tail _ h => by have := le_sum_of_mem h; simp; omega
+
+theorem Names.free_long (ns : Names) : ns.free ns.long = true := by
+  have hlen : ∀ s ∈ ns.ids.map (·.2) ++ ns.avoid, s ≠ ns.long := fun s hs he => by
+    have h1 : s.length ∈ ns.ids.map (·.2.length) ++ ns.avoid.map (·.length) := by
+      simp only [List.mem_append, List.mem_map] at hs ⊢
+      rcases hs with ⟨p, hp, rfl⟩ | hs
+      · exact .inl ⟨p, hp, rfl⟩
+      · exact .inr ⟨s, hs, rfl⟩
+    have h2 := le_sum_of_mem h1
+    rw [he] at h2
+    simp [Names.long] at h2
+    omega
+  simp only [Names.free, Names.taken, Bool.and_eq_true, Bool.not_eq_true', List.any_eq_false, beq_iff_eq]
+  refine ⟨fun p hp he => hlen p.2 (List.mem_append_left _ (List.mem_map_of_mem hp)) he, ?_⟩
+  cases h : ns.avoid.contains ns.long
+  · rfl
+  · exact absurd rfl (hlen _ (List.mem_append_right _ (List.elem_iff.1 h)))
+
+-- Of the `ids.length + avoid.length + 1` candidates at most `ids.length + avoid.length` are taken or avoided, so
+-- `long` stands in only where that count fails; it is free either way.
 set_option linter.tazuna.silentDefault false in
-def Names.bind (ns : Names) (xs : List IdV) : Names :=
-  xs.foldl (fun ns x => if ns.ids.any (·.1 == x) then ns else match x with
-    -- An outside id whose name another id has stays unnamed, so the value has no wire form.
+/-- The name of the next fresh id, free by construction, and the counter after it: the first free `idK` from `next`
+on. -/
+def Names.freshName (ns : Names) : { s : String // ns.free s = true } × Nat :=
+  match h : (List.range (ns.ids.length + ns.avoid.length + 1)).find? fun j => ns.free s!"id{ns.next + j}" with
+  | some k => (⟨s!"id{ns.next + k}", by simpa using List.find?_some h⟩, ns.next + k + 1)
+  | none => (⟨ns.long, ns.free_long⟩, ns.next)
+
+/-- The names with the id `x` named, unless it has a name. An outside id whose name another id has stays unnamed, so a
+value holding it has no wire form; a run's writer avoids every outside name of its inputs, so this never happens to
+them (`Names.bind_ok`). -/
+def Names.bindOne (ns : Names) (x : IdV) : Names :=
+  if ns.ids.any (·.1 == x) then ns else match x with
     | .named s => if ns.taken s then ns else { ns with ids := ns.ids ++ [(x, s)] }
-    | .fresh _ _ =>
-      -- Of `ids.length + 1` candidates at most `ids.length` are taken.
-      let k := ((List.range (ns.ids.length + 1)).find? fun j => !ns.taken s!"id{ns.next + j}").getD 0
-      { ns with ids := ns.ids ++ [(x, s!"id{ns.next + k}")], next := ns.next + k + 1 }) ns
+    | .fresh .. => { ns with ids := ns.ids ++ [(x, ns.freshName.1.1)], next := ns.freshName.2 }
+
+def Names.bind (ns : Names) (xs : List IdV) : Names := xs.foldl Names.bindOne ns
+
+/-- What the names keep: an id named by an avoided name is the outside id of that name, an outside id is named by its
+own name, and no two ids share a name. -/
+structure Names.Ok (ns : Names) : Prop where
+  avoided : ∀ p ∈ ns.ids, ns.avoid.contains p.2 = true → p.1 = .named p.2
+  named : ∀ s n, (IdV.named s, n) ∈ ns.ids → n = s
+  nodup : (ns.ids.map (·.2)).Nodup
+
+theorem Names.ok_avoid (avoid : List String) : ({ avoid } : Names).Ok :=
+  ⟨nofun, nofun, .nil⟩
+
+theorem lookup_of_any {x : IdV} : {l : List (IdV × String)} → l.any (·.1 == x) = true → (l.lookup x).isSome
+  | [], h => by simp at h
+  | (a, b) :: ps, h => by
+    by_cases hx : x = a
+    · subst hx; simp [List.lookup]
+    · have hax : (x == a) = false := by simp [hx]
+      simp only [List.any_cons] at h
+      simp only [List.lookup, hax]
+      exact lookup_of_any (by simpa [Ne.symm hx] using h)
+
+theorem Names.not_taken {ns : Names} {s : String} (h : ns.taken s = false) : ∀ p ∈ ns.ids, p.2 ≠ s := by
+  intro p hp he
+  have : ns.taken s = true := List.any_eq_true.2 ⟨p, hp, by simp [he]⟩
+  rw [h] at this; cases this
+
+theorem Names.bindOne_ok {ns : Names} (h : ns.Ok) (x : IdV) : (ns.bindOne x).Ok ∧ (ns.bindOne x).avoid = ns.avoid ∧
+    ∀ y n, ns.name y = some n → (ns.bindOne x).name y = some n := by
+  have keep : ∀ (q : IdV × String), ∀ y n, ns.name y = some n → (ns.ids ++ [q]).lookup y = some n :=
+    fun q y n hy => by rw [List.lookup_append]; simp [Names.name] at hy; simp [hy]
+  unfold Names.bindOne
+  split
+  · exact ⟨h, rfl, fun _ _ hy => hy⟩
+  · rename_i hx
+    match x with
+    | .named s =>
+      dsimp only
+      split
+      · exact ⟨h, rfl, fun _ _ hy => hy⟩
+      · rename_i ht
+        refine ⟨⟨fun p hp ha => ?_, fun s' n hp => ?_, ?_⟩, rfl, keep _⟩
+        · rcases List.mem_append.1 hp with hp | hp
+          · exact h.avoided p hp ha
+          · simp at hp; subst hp; rfl
+        · rcases List.mem_append.1 hp with hp | hp
+          · exact h.named s' n hp
+          · simp at hp; obtain ⟨rfl, rfl⟩ := hp; rfl
+        · simp only [List.map_append, List.map_cons, List.map_nil]
+          refine List.nodup_append.2 ⟨h.nodup, List.nodup_cons.2 ⟨List.not_mem_nil, .nil⟩, fun a ha b hb => ?_⟩
+          simp at hb; subst hb
+          obtain ⟨p, hp, rfl⟩ := List.mem_map.1 ha
+          exact Names.not_taken (by simpa using ht) p hp
+    | .fresh a b =>
+      dsimp only
+      have hf := ns.freshName.1.2
+      simp only [Names.free, Bool.and_eq_true, Bool.not_eq_true'] at hf
+      refine ⟨⟨fun p hp ha => ?_, fun s' n hp => ?_, ?_⟩, rfl, keep _⟩
+      · rcases List.mem_append.1 hp with hp | hp
+        · exact h.avoided p hp ha
+        · simp at hp; subst hp; simp_all
+      · rcases List.mem_append.1 hp with hp | hp
+        · exact h.named s' n hp
+        · simp at hp
+      · simp only [List.map_append, List.map_cons, List.map_nil]
+        refine List.nodup_append.2 ⟨h.nodup, List.nodup_cons.2 ⟨List.not_mem_nil, .nil⟩, fun a ha b hb => ?_⟩
+        simp at hb; subst hb
+        obtain ⟨p, hp, rfl⟩ := List.mem_map.1 ha
+        exact Names.not_taken hf.1 p hp
+
+theorem Names.bindOne_names {ns : Names} (h : ns.Ok) {x : IdV} (hx : ∀ s, x = .named s → ns.avoid.contains s = true) :
+    ((ns.bindOne x).name x).isSome := by
+  unfold Names.bindOne
+  split
+  · exact lookup_of_any (by assumption)
+  · rename_i hn
+    match x with
+    | .named s =>
+      dsimp only
+      have ht : ns.taken s = false := by
+        simp only [Names.taken, List.any_eq_false, beq_iff_eq]
+        intro p hp he
+        have hp' := h.avoided p hp (by rw [he]; exact hx s rfl)
+        rw [he] at hp'
+        apply hn
+        exact List.any_eq_true.2 ⟨p, hp, by simp [hp']⟩
+      simp only [ht]
+      simp [Names.name, List.lookup_append, List.lookup]
+    | .fresh a b =>
+      dsimp only
+      simp [Names.name, List.lookup_append, List.lookup]
+
+/-- The names of a trace never fail an id and never mix fresh ids with outside ones: binding ids whose outside names
+are all avoided keeps `Names.Ok` and names each of them, every fresh id by a name no avoided name is (so by none the
+run's outside ids carry) and every outside id by its own name, no two alike; ids named before keep their names. -/
+theorem Names.bind_ok {ns : Names} (h : ns.Ok) :
+    (xs : List IdV) → (∀ s, .named s ∈ xs → ns.avoid.contains s = true) →
+    (ns.bind xs).Ok ∧ (ns.bind xs).avoid = ns.avoid ∧ (∀ y n, ns.name y = some n → (ns.bind xs).name y = some n) ∧
+      ∀ x ∈ xs, ((ns.bind xs).name x).isSome
+  | [], _ => ⟨h, rfl, fun _ _ hy => hy, nofun⟩
+  | x :: xs, hx => by
+    obtain ⟨h1, ha1, hk1⟩ := Names.bindOne_ok h x
+    have hn1 := Names.bindOne_names h (x := x) fun s hs => hx s (by rw [hs]; exact List.mem_cons_self)
+    obtain ⟨h2, ha2, hk2, hn2⟩ := Names.bind_ok h1 xs fun s hs => ha1 ▸ hx s (List.mem_cons_of_mem _ hs)
+    refine ⟨h2, ha2.trans ha1, fun y n hy => hk2 y n (hk1 y n hy), fun y hy => ?_⟩
+    rcases List.mem_cons.1 hy with rfl | hy
+    · obtain ⟨n, hn⟩ := Option.isSome_iff_exists.1 hn1
+      show (((ns.bindOne _).bind xs).name _).isSome
+      rw [hk2 _ n hn]; rfl
+    · exact hn2 y hy
 
 /-- The wire form of a value, naming the ids it holds first. -/
 def Names.enc (ns : Names) (T : List TypeDecl) (t : Ty) (x : t.den0) : Names × Option Wire :=
@@ -212,11 +361,24 @@ theorem TraceFile.read_wires (tr : TraceFile) :
   | nil => rfl
   | cons l ls ih => simp [List.mapM_cons, Line.ofWire_toWire, ih]
 
+/-- The ids an input carries, in the order its in line writes them. -/
+def _root_.Tazuna.Ir.Input.ids (T : List TypeDecl) {v : ServiceV} : Input v → List IdV
+  | .command i caller input => idsOf T v.caller caller ++ idsOf T (v.commands.get i).input input
+  | .query i caller input => idsOf T v.caller caller ++ idsOf T (v.queries.get i).input input
+  | .answer _ ⟨t, value⟩ => idsOf T t value
+  | .event i value => idsOf T (v.subscribes.get i).event value
+  | .clock _ => []
+
+/-- The names of the outside ids the inputs carry. -/
+def outsideNames (T : List TypeDecl) {v : ServiceV} (xs : List (Input v)) : List String :=
+  xs.flatMap fun x => (x.ids T).filterMap fun | .named s => some s | .fresh .. => none
+
 /-- The trace of a run of the inputs from the initial state: what generate writes, in the format of snapshots, or why
-a step stopped. -/
+a step stopped. Its names avoid every outside id's name the inputs carry, so a fresh id is never called like an
+outside id the run names later (`Names.bind_ok`). -/
 def traceOf (T : List TypeDecl) (v : ServiceV) (xs : List (Input v)) : Except Stop TraceFile := do
   let (run, _) ← xs.foldlM (fun (run, k) x => do pure (← run.input T v (k + 1) x, k + 1))
-    (({ state := State.init v } : Run v), 0)
+    (({ state := State.init v, names := { avoid := outsideNames T xs } } : Run v), 0)
   pure ⟨v.name, run.lines⟩
 
 instance : Inhabited Stop := ⟨.badStep 0 ""⟩
