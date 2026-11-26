@@ -17,9 +17,19 @@ def faultFields : Fault → List (String × Json)
 
 def textLines (text : String) : List String := (text.splitOn "\n").filter (!·.isEmpty)
 
+/-- Why verify would not pass a trace, in words. -/
+def Verdict.why : Trace.Verdict → String
+  | .passed => "it passes"
+  | .differs n .. => s!"the window after line {n} differs from the spec's out lines"
+  | .invalid n m => s!"line {n} does not read: {m}"
+  | .fault n f => s!"line {n} faults: {(Outcome.fault f).summary}"
+  | .limit n => s!"verify ran out of tries at line {n}"
+
 -- Report text: an absent line shows as empty or null.
 set_option linter.tazuna.silentDefault false in
-/-- Runs one scenario and compares or writes its snapshot. -/
+/-- Runs one scenario and compares or writes its snapshot. The trace is first replayed as verify replays a file, so a
+snapshot test writes or passes is one verify passes (`replay_iff` says what passing means). A scenario can name an
+outside id the way the trace names a fresh one, which verify reads as the fresh one. -/
 def testScenario (T : List TypeDecl) (v : ServiceV) (sc : ScenarioV v.records v.event v.caller) (update : Bool) :
     Cmd Unit := do
   let at_ := [("service", Json.str v.name), ("scenario", Json.str sc.name)]
@@ -32,6 +42,16 @@ def testScenario (T : List TypeDecl) (v : ServiceV) (sc : ScenarioV v.records v.
     let lines := tr.wires.map Wire.text
     let dir : System.FilePath := "snapshots" / v.name
     let path := dir / (sc.name ++ ".jsonl")
+    match replay T v tr.numbered with
+    | .passed => pure ()
+    | .limit n =>
+      let why := s!"verify made {tryCap} tries to bind the scenario's trace's names to the spec's ids, and no binding \
+        read every window"
+      printLine (.undecided .limit) (at_ ++ [("line", Json.num n), ("limit", Json.str why)])
+      return
+    | r =>
+      printLine (.test .badStep) (at_ ++ [("message", Json.str s!"verify would not pass the scenario's trace: {Verdict.why r}")])
+      return
     if update then
       IO.FS.createDirAll dir
       IO.FS.writeFile path (String.intercalate "\n" lines ++ "\n")

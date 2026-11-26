@@ -41,8 +41,10 @@ The other rules have no theorem beyond their definition in `Tazuna.Ir.Illegal`.
 `test` runs each scenario in the semantics, from `init` at time 0, and compares its trace with `snapshots/<service>/<scenario>.jsonl` line by line as text.
 `Test.passed` means every line is equal.
 `test --update` writes the snapshot instead.
+Before either, `test` replays the trace with the same function `verify` runs on a file, and prints `Test.badStep` when it does not pass.
 
 `TraceFile.read_wires`: reading a written trace back gives its header and lines back.
+So with `replay_iff` (see verify), a snapshot that `test` wrote or passed is one `verify` passes.
 
 ## prove: invariants, ensures, and the cascade (T4)
 
@@ -167,7 +169,6 @@ Everything between them is proved or checked.
 - `Prove.proved` covers every run only by an induction no root states. `fault_sound` speaks of states within the slots, and the bound questions say that no step leaves them. That the two together cover every reachable state is not yet a theorem.
 - A violated pair line whose two orders both finish with different states rests on Lean's search over renamings of request ids. `pair_violates` does not cover that case.
 - `Generate.unreached` does not mean unreachable. A longer run or more slots may reach the target.
-- A snapshot is not proved to replay as passed in `verify`. Only `generate`'s traces carry that theorem.
 - The `bounds` list over-states lists. Every list type of the layout appears with its longest literal, though a list that only literals build cannot grow.
 - SMT-LIB strings hold code points up to U+2FFFF. A string literal above that is `Undecided.unencodableString`. Lean's model of a string holds any code point, so an unsat answer about inputs whose strings go above U+2FFFF rests on Z3 beyond its string domain.
 - `Undecided.timeout` depends on the machine. Z3 ran past a 10-minute wall clock before its resource limit stopped it, though the limit takes about 6 seconds on a laptop. Every other answer, `Undecided.unknown` included, comes from Z3's fixed resource limit and seeds, so it is the same on every machine.

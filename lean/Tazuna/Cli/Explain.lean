@@ -148,10 +148,12 @@ where
   at_ : List Field := [service, scenario, step, trace, line]
 
 def TestKind.explanation : TestKind → Explanation
-  | .passed => ⟨docOf% TestKind.passed, [`Tazuna.Trace.TraceFile.read_wires], [service, scenario]⟩
+  | .passed => ⟨docOf% TestKind.passed, [`Tazuna.Trace.TraceFile.read_wires, `Tazuna.Trace.replay_iff],
+    [service, scenario]⟩
   | .changed => ⟨docOf% TestKind.changed, [`Tazuna.Trace.TraceFile.read_wires],
     [service, scenario, path, line, expected, actual]⟩
-  | .written => ⟨docOf% TestKind.written, [`Tazuna.Trace.TraceFile.read_wires], [service, scenario, path]⟩
+  | .written => ⟨docOf% TestKind.written, [`Tazuna.Trace.TraceFile.read_wires, `Tazuna.Trace.replay_iff],
+    [service, scenario, path]⟩
   | .badStep => ⟨docOf% TestKind.badStep, [], [service, scenario, step, message]⟩
 
 def ProveKind.explanation : ProveKind → Explanation
@@ -177,7 +179,7 @@ def UndecidedKind.explanation : UndecidedKind → Explanation
   | .unknown => ⟨docOf% UndecidedKind.unknown, [], questionFields ++ [depth, why]⟩
   | .timeout => ⟨docOf% UndecidedKind.timeout, [], questionFields ++ [depth, why]⟩
   | .limit => ⟨docOf% UndecidedKind.limit, [`Tazuna.Trace.replay_iff],
-    questionFields ++ [trace, line, Field.limit] ++ pairFields⟩
+    questionFields ++ [scenario, trace, line, Field.limit] ++ pairFields⟩
   | .unencodableString => ⟨docOf% UndecidedKind.unencodableString, [], questionFields ++ [string]⟩
   | .upToRenaming => ⟨docOf% UndecidedKind.upToRenaming, [`Tazuna.Smt.run_lines], questionFields ++ pairFields⟩
 

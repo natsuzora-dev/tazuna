@@ -8,13 +8,14 @@ deriving DecidableEq
 
 /-- What `test` found for one scenario. -/
 inductive Tazuna.TestKind : Type
-  /-- The trace equals the snapshot. -/
+  /-- The trace equals the snapshot, and verify passes it. -/
   | passed
   /-- The trace differs from the snapshot, or there is no snapshot. -/
   | changed
-  /-- `test --update` wrote the snapshot. -/
+  /-- `test --update` wrote the snapshot, a trace verify passes. -/
   | written
-  /-- A step cannot run, such as an answer that matches no pending request. -/
+  /-- A step cannot run, such as an answer that matches no pending request, or verify would not pass the scenario's
+  trace. -/
   | badStep
 deriving DecidableEq
 
@@ -53,7 +54,8 @@ inductive Tazuna.UndecidedKind : Type
   line whose verdict may depend on the machine. -/
   | timeout
   /-- The spec uses what the encoding has no terms for, or a pair's counterexample needs a search for a renaming
-  larger than prove runs or a comparison of the functions its two orders keep. -/
+  larger than prove runs or a comparison of the functions its two orders keep, or verify, or test replaying a
+  scenario's trace, ran out of tries to bind the trace's names to the spec's ids. -/
   | limit
   /-- A string literal holds a code point above U+2FFFF, outside SMT-LIB's strings. -/
   | unencodableString
